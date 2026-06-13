@@ -1,0 +1,13 @@
+# Kern van NoochVillage + groei-puls
+requests>=2.31
+pytrends>=4.9
+pandas>=2.0          # dependency van pytrends
+
+# Optioneel: één LLM-key in .env geeft een rijkere, missie-gedreven Field Note
+# anthropic          # met ANTHROPIC_API_KEY -> claude-sonnet
+# google-genai       # met GEMINI_API_KEY    -> gemini
+
+# Extra skills om later uit je oude repo te porten:
+# google-api-python-client + google-auth-oauthlib   # GSC / Drive
+# beautifulsoup4                                     # trustpilot
+# pydantic                                           # SeoOpportunity-datamodel

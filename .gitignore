@@ -1,0 +1,24 @@
+# Secrets & tokens — nooit committen
+.env
+*.json.bak
+*token*.json
+gsc_token.json
+client_secret*.json
+
+# Runtime-data
+data/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+dist/
+build/
+*.log
+
+# OS
+.DS_Store
