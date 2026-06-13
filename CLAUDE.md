@@ -126,6 +126,34 @@ open('gsc_token.json', 'w').write(creds.to_json())
 ```
 Zet daarna `GSC_TOKEN_PATH=./gsc_token.json` en `GSC_SITE=sc-domain:jouwsite.nl` in `.env`.
 
+## Intentielaag — missie, strategie, doelen en prioritering
+
+De intentielaag maakt duidelijk waarom het dorp bestaat en hoe agents keuzes maken.
+Ze bestaat uit vijf lagen, van zwaar naar licht:
+
+| Laag | Wat | Eigenaar | Hoe afgedwongen |
+|------|-----|----------|-----------------|
+| **Missie** | Anchor Circle purpose: het duurzaamste schoenenmerk ter wereld zijn, om een industrie vol menselijk, dierlijk en planetair leed te laten zien dat meliorisme echt kan | Founder | G4-guard: elk voorstel dat de Anchor-purpose raakt escaleert ALTIJD naar de mens |
+| **Policies** | Harde grenzen op de Anchor Circle: geen advertising, alleen nooch.earth, on-demand productie, geen plastic/leer | Founder via records | G4-poort + `intent.prioritize()` markeert overtredingen als `dropped` |
+| **Strategie** | Heuristieken: organisch boven betaald, langetermijn-keywords, eigen website | Founder | `config/strategy.json` — bewerkt direct, niet via governance |
+| **Doelen** | Tijdgebonden targets: 1000 paar schoenen Q4 2026 via nooch.earth | Founder | `config/strategy.json` — agents rangschikken acties op doelbijdrage |
+| **Structuur** | Rollen, cirkels, accountabilities | Agents via governance | G0-G4-poort + Secretary + Reconciler |
+| **Operatie** | Dagelijks autonoom werk binnen de rol | Agents | Vrij binnen bovenstaande kaders |
+
+**Prioriteitsvolgorde (hard ingebakken):**
+Missie > Policy > Strategie > Doel. Een doel mag nooit een policy of de missie overrulen.
+Botst een doel met een policy (bijv. verkoopdoel dreigt niet gehaald zonder advertising),
+dan escaleert de agent naar de mens — de strategie wordt nooit gebroken.
+
+**`config/strategy.json`** is mens-bewerkbaar en wordt bij elke `load_context` ingeladen in `context.strategy`.
+Het bevat `strategy` (lijst heuristieken) en `goals` (lijst tijdgebonden targets met `metric`, `target`, `window_start/end`, `active`, `contributes_via`).
+
+**`nooch_village/intent.py`** — `prioritize(actions, context) -> list[dict]`:
+- Acties met een policy-schending (`_POLICY_VIOLATIONS`) krijgen `dropped=True`.
+- Overige acties scoren op doelbijdrage (`contributes_via`-signalen) + strategie-afstemming.
+- Gesorteerd: niet-afgevallen eerst (op score desc), afgevallen achteraan.
+- GrowthAnalyst gebruikt dit om gerelateerde Trends-keywords te rangschikken vóór ze worden voorgesteld.
+
 ## Triage — hoe een inwoner een spanning classificeert en routeert
 
 `Inhabitant.triage(tension)` classificeert in deze volgorde (eerste match wint):

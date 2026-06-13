@@ -21,7 +21,11 @@ _HARD_VIOLATION_RE = re.compile(
     r"leer.{0,35}goed|goed.{0,35}leer|"
     r"leather.{0,35}approv|approv.{0,35}leather|"
     r"\bpvc\b|\bkunstleer\b|\bpu-leer\b|"
-    r"massaproduct\w*|overproduct\w*|"
+    r"massaproduct\w*|overproduct\w*|voorraadopbouw\w*|"
+    r"advertis\w*.{0,30}autoris|autoris\w*.{0,30}advertis|"
+    r"reclame.{0,25}autoris|autoris.{0,25}reclame|"
+    r"betaald.{0,30}adverteer|adverteer.{0,30}betaald|"
+    r"google.{0,10}ads.{0,20}autoris|facebook.{0,10}ads|"
     r"missie.{0,25}toets.{0,25}verwijder|verwijder.{0,25}missie",
     re.I | re.S,
 )
@@ -187,6 +191,14 @@ class Gate:
     # G4: missie-poort — deterministisch + optioneel LLM bij twijfel
     def _g4(self, p: Proposal, records: "Records", context) -> tuple[bool, str]:
         c = p.change
+        # Anchor Circle purpose is mens-eigendom: elk voorstel dat de purpose raakt escaleert altijd
+        if c.purpose and c.role_id:
+            root = records.root() if records else None
+            if root and c.role_id == root.id:
+                return False, (
+                    "Anchor Circle purpose is mens-eigendom (founder-only); "
+                    "structuurwijzigingen van de wortelcirkel escaleren altijd naar de mens"
+                )
         all_text = " ".join([
             c.purpose or "",
             *c.add_accountabilities,

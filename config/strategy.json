@@ -1,0 +1,30 @@
+{
+  "_comment": "Strategische heuristieken en tijdgebonden doelen. Bewerkt door de founder, niet via governance.",
+  "strategy": [
+    "Verkies organische groei boven betaald bereik (advertising is verboden via Anchor-policy)",
+    "Verkies missie-passende langetermijn-keywords boven kortetermijn-volume",
+    "Verkies verkeer naar en conversie op nooch.earth (eigen website, geen marktplaatsen)",
+    "Verkies on-demand productie; verbied elke actie die voorraadopbouw of overproductie vereist"
+  ],
+  "goals": [
+    {
+      "id": "verkoopdoel_2026_q4",
+      "description": "1000 paar schoenen verkopen via nooch.earth",
+      "metric": "pairs_sold",
+      "target": 1000,
+      "unit": "paar schoenen",
+      "window_start": "2026-09-01",
+      "window_end": "2026-12-31",
+      "active": true,
+      "contributes_via": [
+        "organisch verkeer",
+        "missie-keywords",
+        "conversie nooch.earth",
+        "biobased",
+        "duurzaam",
+        "plasticvrij",
+        "vegan"
+      ]
+    }
+  ]
+}

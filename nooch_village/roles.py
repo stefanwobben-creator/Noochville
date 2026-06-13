@@ -66,23 +66,37 @@ class GrowthAnalyst(Inhabitant):
             self._busy = False
 
     def _propose_related(self, trends: dict) -> None:
+        from nooch_village.intent import prioritize
         lib = self.context.library
-        proposed = 0
+        candidates = []
         for parent_kw, kw_data in (trends.get("keywords") or {}).items():
             for related in kw_data.get("top_related") or []:
                 term = related["query"] if isinstance(related, dict) else related
                 value = related.get("value", 0) if isinstance(related, dict) else 0
-                if lib.status(term) is not None:  # elke bekende status, ook 'escalated'
+                if lib.status(term) is not None:
                     continue
-                self.bus.publish(Event("keyword_proposed", {
-                    "word": term,
-                    "demand": {"signal": "positive", "interest": value,
-                               "source": "google_trends_related", "parent_keyword": parent_kw},
-                    "from": self.id,
-                }, self.id))
-                proposed += 1
+                candidates.append({
+                    "label": term,
+                    "description": f"organisch verkeer via missie-keyword {term} op nooch.earth",
+                    "_value": value,
+                    "_parent": parent_kw,
+                })
+        ranked = prioritize(candidates, self.context)
+        proposed = 0
+        for action in ranked:
+            if action["dropped"]:
+                self.log.info("⏭️ keyword '%s' afgevallen: %s", action["label"], action["drop_reason"])
+                continue
+            self.bus.publish(Event("keyword_proposed", {
+                "word": action["label"],
+                "demand": {"signal": "positive", "interest": action.get("_value", 0),
+                           "source": "google_trends_related",
+                           "parent_keyword": action.get("_parent", "")},
+                "from": self.id,
+            }, self.id))
+            proposed += 1
         if proposed:
-            self.log.info("🔍 %d nieuwe kandidaat-woorden doorgestuurd naar de Librarian", proposed)
+            self.log.info("🔍 %d kandidaat-woorden doorgestuurd (gerangschikt op doelbijdrage)", proposed)
 
 
 class PerformanceScout(Inhabitant):

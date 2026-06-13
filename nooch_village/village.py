@@ -39,13 +39,20 @@ _ANCHOR_POLICIES = [
     "dierlijk-leer materiaal als on-mission goedkeurt.",
     "De missie-toetsing (KeywordReview, G4-poort) mag nooit als accountability "
     "worden verwijderd zonder een gelijkwaardig alternatief in hetzelfde voorstel.",
+    "Geen enkele rol mag uitgaven aan advertising autoriseren of plannen; "
+    "betaald bereik is verboden als groeistrategie.",
+    "Verkoop loopt uitsluitend via de eigen website nooch.earth; "
+    "geen enkele rol mag externe verkoopkanalen of marktplaatsen autoriseren.",
+    "Productie is on demand; geen enkele rol mag voorraadopbouw of "
+    "overproductie autoriseren of plannen.",
 ]
 
 _ANCHOR_PURPOSE = (
-    "Nooch.earth bewijst dat ethisch en duurzaam ondernemen winstgevend is. "
-    "Kernwaarden: geen plastic, geen leer, in Europa geproduceerd, op bestelling, "
-    "eerlijke prijs, transparantie. Doel: organische groei richting 1000 klanten "
-    "per jaar via missie-gedreven keywords."
+    "Nooch.earth is het duurzaamste schoenenmerk ter wereld — om een industrie vol "
+    "menselijk, dierlijk en planetair leed te inspireren dat meliorisme (altijd beter kunnen) "
+    "echt kan, en om klanten en anderen te inspireren iets positiefs op gang te brengen. "
+    "Kernwaarden: geen plastic, geen leer, in Europa geproduceerd, op bestelling, eerlijke prijs, "
+    "transparantie. Groei via missie-gedreven organische content op nooch.earth."
 )
 
 
@@ -114,9 +121,15 @@ def migrate_records(records: Records) -> None:
     if "facilitator" not in root.members:
         root.members.append("facilitator")
         changed = True
-    # Zorg dat anchor-policies aanwezig zijn
-    if not root.definition.policies:
-        root.definition.policies = list(_ANCHOR_POLICIES)
+    # Zorg dat alle anchor-policies aanwezig zijn (idempotent per policy-tekst)
+    existing_policies = set(root.definition.policies)
+    for policy in _ANCHOR_POLICIES:
+        if policy not in existing_policies:
+            root.definition.policies.append(policy)
+            changed = True
+    # Bijwerk anchor-purpose naar de huidige volledige missietekst
+    if root.definition.purpose != _ANCHOR_PURPOSE:
+        root.definition.purpose = _ANCHOR_PURPOSE
         changed = True
     if changed:
         records.put(root)
@@ -359,6 +372,101 @@ def governance_demo():
     print("\n================ einde governance demo ================")
 
 
+def intent_demo():
+    """Demonstreer de intentielaag: prioritering van acties tegen strategie en doelen.
+
+    Actie 1: organisch keyword-artikel → bijdraagt aan verkoopdoel + binnen strategie → wint
+    Actie 2: Google Ads campagne → vereist advertising → policy-violation → valt af
+    Actie 3: conversie verbeteren op nooch.earth → doel-bijdrage → tweede positie
+    Bonus: G4-poort blokkeert governance-voorstel dat advertising toevoegt.
+    """
+    from nooch_village.intent import prioritize
+
+    v = Village(heartbeat_seconds=86400)
+    v.start()
+    time.sleep(0.1)   # geef inwoners de tijd om op te starten
+
+    actions = [
+        {
+            "label": "schrijf missie-keyword artikel: biobased sneakers",
+            "description": (
+                "organisch verkeer genereren via missie-keyword artikel over biobased "
+                "duurzame sneakers op nooch.earth — bijdraagt aan conversie en verkoop"
+            ),
+        },
+        {
+            "label": "lanceer Google Ads campagne voor schoenen",
+            "description": (
+                "betaald adverteren via Google Ads om snel verkeer en conversie te verhogen; "
+                "advertising budget inzetten voor bereik"
+            ),
+        },
+        {
+            "label": "verbeter productpagina conversie op nooch.earth",
+            "description": (
+                "conversie nooch.earth verhogen via betere productpaginateksten en afbeeldingen "
+                "zodat meer bezoekers een paar schoenen bestellen"
+            ),
+        },
+    ]
+
+    ranked = prioritize(actions, v.context)
+
+    print("\n================ DEMO: intentielaag prioritering ================\n")
+    print(f"{'#':<3} {'Actie':<52} {'Score':>6}  Status")
+    print("-" * 95)
+    for i, a in enumerate(ranked, 1):
+        if a["dropped"]:
+            status = f"✘ afgevallen: {a['drop_reason'][:45]}"
+        else:
+            status = "✔ toegestaan"
+        print(f"{i:<3} {a['label']:<52} {a['score']:>6.1f}  {status}")
+
+    allowed = [a for a in ranked if not a["dropped"]]
+    dropped = [a for a in ranked if a["dropped"]]
+    print(f"\n✔ {len(allowed)} toegestaan, ✘ {len(dropped)} afgevallen door policy")
+    if allowed:
+        print(f"→ Winnaar: \"{allowed[0]['label']}\" (score {allowed[0]['score']:.1f})")
+
+    # G4-poort: proposal dat advertising-accountability toevoegt wordt geblokkeerd
+    print("\n── G4-poort: kan advertising via governance worden toegevoegd? ──")
+    ad_proposal = Proposal(
+        proposer_role="analyst",
+        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="analyst",
+                                add_accountabilities=[
+                                    "advertising campagnes autoriseren voor snellere groei"]),
+        tension="Verkoopdoel dreigt niet gehaald zonder extra bereik via advertising",
+        trigger_example="analyst:verkoopdoel_2026_q4 dreigt te missen",
+        rationale="Advertising als tijdelijke maatregel om 1000 paar te halen",
+    )
+    from nooch_village.governance import Gate
+    gate = Gate()
+    passed, gate_name, gate_reason = gate.check(ad_proposal, v.records, v.context)
+    if passed:
+        print("  ✘ G4-poort liet advertising door — dit is een bug!")
+    else:
+        print(f"  ✔ G4-poort blokkeert ({gate_name}): {gate_reason[:70]}")
+
+    # Anchor-purpose guard: proposal dat de missie-tekst van de wortelcirkel wijzigt
+    print("\n── Anchor-purpose guard: kan de missie via governance worden gewijzigd? ──")
+    mission_proposal = Proposal(
+        proposer_role="analyst",
+        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="noochville",
+                                purpose="Nooch.earth: maximale winstgevendheid als primair doel"),
+        tension="Missie te vaag voor commerciële groei",
+        trigger_example="analyst:missie_herformulering",
+        rationale="Scherpere commerciële focus",
+    )
+    passed2, gate_name2, gate_reason2 = gate.check(mission_proposal, v.records, v.context)
+    if passed2:
+        print("  ✘ Guard liet missie-wijziging door — dit is een bug!")
+    else:
+        print(f"  ✔ Guard blokkeert ({gate_name2}): {gate_reason2[:70]}")
+
+    v.stop()
+    print("\n================ einde intent demo ================")
+
+
 def triage_demo():
     """Vier spanningen die elk een ander triage-pad bewandelen.
 
@@ -470,5 +578,7 @@ if __name__ == "__main__":
         governance_demo()
     elif mode == "triage":
         triage_demo()
+    elif mode == "intent":
+        intent_demo()
     else:
         demo()

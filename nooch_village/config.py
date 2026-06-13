@@ -1,6 +1,6 @@
 from __future__ import annotations
-import os, configparser
-from dataclasses import dataclass
+import json, os, configparser
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -9,7 +9,8 @@ class Context:
     settings: dict
     data_dir: str
     library: object = None
-    records: object = None  # read-only verwijzing naar Records, voor Facilitator/Gate
+    records: object = None   # read-only verwijzing naar Records, voor Facilitator/Gate
+    strategy: dict = field(default_factory=dict)  # geladen uit config/strategy.json
 
 
 def load_context(base_dir: str) -> Context:
@@ -31,4 +32,12 @@ def load_context(base_dir: str) -> Context:
                 os.environ.setdefault(k.strip(), v.strip())
     data_dir = os.path.join(base_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
-    return Context(settings=settings, data_dir=data_dir)
+
+    strategy: dict = {}
+    strategy_path = os.path.join(base_dir, "config", "strategy.json")
+    if os.path.exists(strategy_path):
+        with open(strategy_path) as f:
+            raw = json.load(f)
+        strategy = {k: v for k, v in raw.items() if not k.startswith("_")}
+
+    return Context(settings=settings, data_dir=data_dir, strategy=strategy)
