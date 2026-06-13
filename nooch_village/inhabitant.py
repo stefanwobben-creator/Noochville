@@ -69,6 +69,13 @@ class Inhabitant(threading.Thread):
         Inwoners die zichzelf wakker maken (zoals TimeKeeper) overschrijven dit."""
         pass
 
+    def react(self, event_name: str, handler) -> None:
+        """Abonneer op een event en laat het werk op de eigen thread draaien.
+        De wrapper keert meteen terug; de handler draait asynchroon via de inbox."""
+        def _enqueue(event: Event) -> None:
+            self.inbox.enqueue(lambda e=event: handler(e))
+        self.bus.subscribe(event_name, _enqueue)
+
     def run(self) -> None:
         self.log.info("ontwaakt | purpose=%s | skills=%s", self.dna.purpose, self.dna.skills)
         while not self._stop.is_set():
@@ -76,15 +83,21 @@ class Inhabitant(threading.Thread):
                 self.tick()
             except Exception as e:
                 self.log.error("tick faalde: %s", e)
-            task = self.inbox.take(timeout=0.5)
-            if task is None:
+            item = self.inbox.take(timeout=0.5)
+            if item is None:
                 continue
-            self.log.info("taak ontvangen: %s", task.capability)
-            resp = self.handle(task)
-            self.bus.publish(Event("task_completed", {
-                "task_id": task.id, "by": self.id, "capability": task.capability,
-                "success": resp.success, "data": resp.data, "error": resp.error,
-                "request_id": task.request_id}, self.id))
+            if isinstance(item, Task):
+                self.log.info("taak ontvangen: %s", item.capability)
+                resp = self.handle(item)
+                self.bus.publish(Event("task_completed", {
+                    "task_id": item.id, "by": self.id, "capability": item.capability,
+                    "success": resp.success, "data": resp.data, "error": resp.error,
+                    "request_id": item.request_id}, self.id))
+            else:  # event-job: callable die de handler met het event aanroept
+                try:
+                    item()
+                except Exception as e:
+                    self.log.error("event-handler faalde: %s", e)
             self.inbox.done()
 
     def reload(self, record: Record) -> None:

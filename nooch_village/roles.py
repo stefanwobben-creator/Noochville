@@ -40,7 +40,7 @@ class GrowthAnalyst(Inhabitant):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.bus.subscribe("dag_begint", self._morning_pulse)
+        self.react("dag_begint", self._morning_pulse)
         self._busy = False
 
     def _morning_pulse(self, event: Event) -> None:
@@ -90,7 +90,7 @@ class PerformanceScout(Inhabitant):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.bus.subscribe("dag_begint", self._on_dag_begint)
+        self.react("dag_begint", self._on_dag_begint)
         self._busy = False
 
     def _on_dag_begint(self, event: Event) -> None:
@@ -151,8 +151,8 @@ class Librarian(Inhabitant):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.bus.subscribe("keyword_proposed", self._on_proposal)
-        self.bus.subscribe("human_keyword_verdict", self._on_human_verdict)
+        self.react("keyword_proposed", self._on_proposal)
+        self.react("human_keyword_verdict", self._on_human_verdict)
 
     def _on_proposal(self, event: Event) -> None:
         word = event.data.get("word")

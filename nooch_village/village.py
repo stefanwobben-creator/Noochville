@@ -179,9 +179,13 @@ def librarian_demo():
     for c in candidates:
         v.bus.publish(Event("keyword_proposed", {**c, "from": "demo"}, "demo"))
 
-    time.sleep(0.2)
+    # wacht tot alle beslissingen binnen zijn (react() verwerkt asynchroon)
+    for _ in range(100):
+        if len(decisions) + len(escalations) >= len(candidates):
+            break
+        time.sleep(0.1)
     v.stop()
-    time.sleep(0.2)
+    time.sleep(0.1)
 
     all_results = {**{d["word"]: d for d in decisions.values()},
                    **{e["word"]: {**e, "status": "escalated"} for e in escalations}}

@@ -32,7 +32,7 @@ Niet `python nooch_village/village.py` (dan breken de imports). Laat de `__init_
 
 Kerncomponenten:
 - `models.py` — `RoleDefinition` (DNA), `Record` (de waarheid), `Task`, `Response`, `Tension`, `RecordType`.
-- `inhabitant.py` — `Inhabitant` (leaf, één rol) en `Circle` (composite). Methodes: `handle`, `ask`, `use_skill`, `sense_tension`, `tick`, `reload`.
+- `inhabitant.py` — `Inhabitant` (leaf, één rol) en `Circle` (composite). Methodes: `handle`, `ask`, `use_skill`, `sense_tension`, `tick`, `react`, `reload`.
 - `roles.py` — gespecialiseerde inwoners: `TimeKeeper` (hartslag → `dag_begint`), `GrowthAnalyst` (ochtend-puls).
 - `governance.py` — `Records` (json, de waarheid), `Secretary` (records bijhouden, geen veto), `Reconciler` (bouwt het levende dorp uit de records).
 - `skills.py` — `Skill` (ABC) + `SkillRegistry`. `skills_impl/` bevat de echte skills.
@@ -54,6 +54,7 @@ Data (allemaal in `data/`, gitignored):
 6. **Inbox = toegewezen werk** (via de matchmaker). **Events = aankondigingen** (autonomie). **`tick()` = zelf-geinitieerd werk** (hartslag). Houd die drie gescheiden.
 7. **Een cirkel heeft geen handen: hij delegeert.** Laat een `Circle` nooit zelf werk uitvoeren in `handle`; hij routeert naar een member.
 8. **Niet de oude `src/`-generaties terughalen.** Die repo had drie onderling botsende base-classes (`Role` vs `BaseAgent`), drie versies van het datamodel, en een Plausible-agent met de echte API-call dood-gecodeerd áchter een `return` met mock-data. Dat is bewust vervangen.
+9. **Inwoners reageren op events via `self.react(event_name, handler)`, nooit direct via `self.bus.subscribe`.** De `react()`-wrapper deponeert het event-job in de eigen inbox; de handler draait dan op de eigen thread van de inwoner, niet op die van de afzender. Zo blokkeert een `publish()` nooit en werken inwoners parallel. Uitzonderingen (infra): `Matchmaker`, `Secretary`, `Reconciler` mogen direct subscriben — ze hebben lichte, snelle handlers zonder blocking I/O.
 
 ## Een nieuwe skill toevoegen
 
@@ -134,6 +135,19 @@ Zet daarna `GSC_TOKEN_PATH=./gsc_token.json` en `GSC_SITE=sc-domain:jouwsite.nl`
 5. **Mens in het dorp**: een `HumanProxy`-inwoner die taken naar een UI stuurt en op het antwoord-event wacht. Voor de rest van het dorp niet te onderscheiden van een agent.
 
 Principe: maak eerst één inwoner één ding echt waardevol doen (de groei-puls is het sjabloon), bewijs de waarde, en schaal pas daarna in de breedte.
+
+## Schaal-naden (grenzen die je later kunt opentrekken, nu niet schenden)
+
+Dit zijn de vier plekken waar de architectuur later kan groeien zonder bestaande code te herschrijven:
+
+| Naad | Nu | Later |
+|------|----|-------|
+| `EventBus` | in-memory, gesynchroniseerd | WebSocket/SSE netwerk-bus; geen wijziging aan inwoners |
+| `Inbox` | `Queue` per thread | Redis/SQS server-queue; interface ongewijzigd (`deliver`, `enqueue`, `take`, `done`) |
+| `Library` | JSON-bestand | database of API; achter dezelfde `Library`-interface |
+| Cirkel-scope | één wortelcirkel | geneste cirkels; de `inner_bus`-injectie maakt dit gratis |
+
+Discipline: schrijf nooit code die aanneemt dat de bus in-memory is, dat de inbox een lokale queue is, of dat er maar één cirkel-niveau bestaat.
 
 ## Conventies
 
