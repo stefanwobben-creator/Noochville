@@ -197,6 +197,13 @@ class Village:
         except KeyboardInterrupt:
             self.stop()
 
+    def submit_proposal(self, proposal: Proposal) -> str:
+        """Human-ingang voor governance-voorstellen. Publiceert proposal_raised op de bus.
+        De Facilitator pakt het op en draait de G0-G4-poort. Geeft het proposal_id terug."""
+        self.bus.publish(Event("proposal_raised",
+                               {"proposal": proposal_to_dict(proposal)}, "human"))
+        return proposal.id
+
 
 def demo():
     # snelle hartslag voor de demo; in productie 0 = één keer per echte dag
@@ -378,6 +385,122 @@ def governance_demo():
             print(f"  → {new_acc}")
 
     print("\n================ einde governance demo ================")
+
+
+def proposal_demo():
+    """Eerste echte governance-voorstel van de human: de TijdgeestWachter.
+
+    De human dient een add_role-voorstel in via Village.submit_proposal().
+    Het voorstel doorloopt de volledige G0-G4-poort en wordt (verwacht) aangenomen.
+    De rol wordt onbemand geboren — er draait geen thread totdat de founder code schrijft.
+    """
+    v = Village(heartbeat_seconds=86400)
+    outcome: dict = {}
+    born: dict = {}
+
+    v.bus.subscribe("governance_changed",
+                    lambda e: outcome.update({"status": "aangenomen", **e.data}))
+    v.bus.subscribe("governance_review_requested",
+                    lambda e: outcome.update({"status": "geëscaleerd",
+                                              "gate": e.data.get("gate"),
+                                              "reason": e.data.get("reason"), **e.data}))
+    v.bus.subscribe("proposal_invalid",
+                    lambda e: outcome.update({"status": "ongeldig",
+                                              "gate": "G0",
+                                              "reason": e.data.get("reason"), **e.data}))
+    v.bus.subscribe("role_born", lambda e: born.update(e.data))
+
+    v.start()
+
+    voorstel = Proposal(
+        proposer_role="human",
+        change=GovernanceChange(
+            kind=ChangeKind.ADD_ROLE,
+            role_id="tijdgeest_wachter",
+            purpose=(
+                "De lange culturele taalverschuiving volgen die voor de missie relevant is: "
+                "zien of de wereldtaal over de lange boog richting of weg van het burgerframe beweegt."
+            ),
+            add_accountabilities=[
+                "de lange-termijn frequentie van missie-relevante termen in het boekencorpus "
+                "periodiek volgen via Google Books Ngram Viewer",
+                "culturele verschuivingen richting of weg van het burgerframe signaleren "
+                "aan GrowthAnalyst en Librarian",
+                "periodiek de tijdgeest-richting aan het dorp rapporteren",
+            ],
+            add_domains=["tijdgeest-observaties"],   # smal domein; lexicon blijft van Librarian
+            new_role_parent="noochville",
+        ),
+        tension=(
+            "Het dorp ziet nu alleen huidige zoekvraag (Trends) en is blind voor de lange "
+            "culturele boog die de missie juist probeert te buigen."
+        ),
+        trigger_example=(
+            "Dit ontwerpgesprek, de Scheffer-methode voor n-gram cultuuranalyse, "
+            "en de werkende ngram-code als bewijs van haalbaarheid. "
+            "Dit is een doorlopende sensorfunctie, geen eenmalige opzoeking."
+        ),
+        rationale=(
+            "Een doorlopende sensorfunctie die het gat dicht tussen recente vraag "
+            "en culturele richting. Geen eenmalige opzoeking maar een staande accountability: "
+            "de tijdgeest verandert langzaam en vereist periodiek meten om trends "
+            "vroeg te signaleren."
+        ),
+    )
+
+    print("\n================ VOORSTEL: TijdgeestWachter ================\n")
+    print(f"Proposer : {voorstel.proposer_role}")
+    print(f"Soort    : {voorstel.change.kind.value}")
+    print(f"Rol-ID   : {voorstel.change.role_id}")
+    print(f"Purpose  : {voorstel.change.purpose[:80]}…")
+    print(f"Domein   : {voorstel.change.add_domains}")
+    print("Accountabilities:")
+    for a in voorstel.change.add_accountabilities:
+        print(f"  · {a}")
+    print(f"\nTension  : {voorstel.tension[:90]}…")
+    print(f"Trigger  : {voorstel.trigger_example[:90]}…")
+    print(f"Rationale: {voorstel.rationale[:90]}…")
+    print(f"\nVoorstel-ID: {voorstel.id}")
+
+    pid = v.submit_proposal(voorstel)   # human dient in via de officiële route
+
+    print("\n─── Facilitator draait de G0-G4-poort… ───\n")
+    for _ in range(100):
+        if outcome:
+            break
+        time.sleep(0.05)
+    time.sleep(0.2)
+
+    v.stop()
+    time.sleep(0.1)
+
+    status = outcome.get("status", "?")
+    gate   = outcome.get("gate", "-")
+    reason = outcome.get("reason", "")
+
+    print(f"Uitkomst : {status}")
+    if status != "aangenomen":
+        print(f"Poort    : {gate}")
+        print(f"Reden    : {reason}")
+    else:
+        rec = v.records.get("tijdgeest_wachter")
+        print(f"Record   : tijdgeest_wachter v{rec.version if rec else '?'} opgeslagen in governance_records.json")
+        unmanned = "tijdgeest_wachter" in v.reconciler.unmanned
+        print(f"Status   : {'onbemand (wacht op implementatie)' if unmanned else 'live — onverwacht!'}")
+        print(f"Domein   : {rec.definition.domains if rec else '?'}")
+        print()
+        if "tijdgeest_wachter" in born:
+            print("Groeidagboek-entry:")
+            print(f"  trigger: {born.get('trigger_example','')[:80]}")
+            print(f"  by     : {born.get('by','?')}")
+
+        # Laat zien dat de accountabilities netjes belegd staan
+        if rec:
+            print("\nAccountabilities in record:")
+            for a in rec.definition.accountabilities:
+                print(f"  · {a}")
+
+    print("\n================ einde voorstel-demo ================")
 
 
 def lifecycle_demo():
@@ -692,5 +815,7 @@ if __name__ == "__main__":
         intent_demo()
     elif mode == "lifecycle":
         lifecycle_demo()
+    elif mode == "proposal":
+        proposal_demo()
     else:
         demo()

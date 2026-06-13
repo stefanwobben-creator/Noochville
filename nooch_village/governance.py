@@ -36,6 +36,8 @@ _REPETITION_KW = frozenset([
     "meerdere incidenten", "structureel", "terugkerend", "wekelijks", "dagelijks",
     "maandelijks", "voortdurend", "steeds", "meerdere malen", "chronisch",
     "elke week", "elke maand", "elke dag", "regelmatig",
+    # doorlopende/staande work — evengoed bewijs van een beoogde permanente accountability
+    "doorlopend", "periodiek", "staande", "continu",
 ])
 
 # Verdachte patronen die de LLM extra toetst (alleen als er een LLM-sleutel is)
