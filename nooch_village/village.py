@@ -15,8 +15,10 @@ from nooch_village.skills import SkillRegistry
 from nooch_village.matchmaker import Matchmaker
 from nooch_village.governance import Records, Secretary, Reconciler
 from nooch_village.models import Record, RoleDefinition, RecordType
-from nooch_village.roles import TimeKeeper, GrowthAnalyst, Librarian, PerformanceScout
+from nooch_village.roles import TimeKeeper, GrowthAnalyst, Librarian, PerformanceScout, Facilitator
 from nooch_village.library import Library
+from nooch_village.models import Proposal, GovernanceChange, ChangeKind
+from nooch_village.governance import proposal_to_dict
 from nooch_village.skills_impl.site_health import SiteHealthSkill
 from nooch_village.skills_impl.budget import BudgetSkill
 from nooch_village.skills_impl.plausible import PlausibleSkill
@@ -28,15 +30,33 @@ from nooch_village.skills_impl.gsc import GscPerformanceSkill
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 CLASS_MAP = {"timekeeper": TimeKeeper, "analyst": GrowthAnalyst,
-             "librarian": Librarian, "scout": PerformanceScout}
+             "librarian": Librarian, "scout": PerformanceScout,
+             "facilitator": Facilitator}
+
+
+_ANCHOR_POLICIES = [
+    "Geen enkele rol mag een accountability hebben die plastic-gebaseerd of "
+    "dierlijk-leer materiaal als on-mission goedkeurt.",
+    "De missie-toetsing (KeywordReview, G4-poort) mag nooit als accountability "
+    "worden verwijderd zonder een gelijkwaardig alternatief in hetzelfde voorstel.",
+]
+
+_ANCHOR_PURPOSE = (
+    "Nooch.earth bewijst dat ethisch en duurzaam ondernemen winstgevend is. "
+    "Kernwaarden: geen plastic, geen leer, in Europa geproduceerd, op bestelling, "
+    "eerlijke prijs, transparantie. Doel: organische groei richting 1000 klanten "
+    "per jaar via missie-gedreven keywords."
+)
 
 
 def seed_records(records: Records) -> None:
     if records.root() is not None:
         return
     root = Record(id="noochville", type=RecordType.CIRCLE, parent=None,
-                  definition=RoleDefinition(purpose="Het dorp Nooch.earth", skills=[]),
-                  members=["timekeeper", "analyst", "librarian", "scout"])
+                  definition=RoleDefinition(
+                      purpose=_ANCHOR_PURPOSE, skills=[],
+                      policies=_ANCHOR_POLICIES),
+                  members=["timekeeper", "analyst", "librarian", "scout", "facilitator"])
     timekeeper = Record(id="timekeeper", type=RecordType.ROLE, parent="noochville",
                         definition=RoleDefinition(
                             purpose="De dorpsomroeper: markeert de dagcyclus",
@@ -60,8 +80,46 @@ def seed_records(records: Records) -> None:
                        accountabilities=["GSC-queries ophalen",
                                          "high_potential queries voorstellen aan de Librarian"],
                        skills=["gsc_performance"]))
-    for r in (root, timekeeper, analyst, librarian, scout):
+    facilitator = Record(id="facilitator", type=RecordType.ROLE, parent="noochville",
+                         definition=RoleDefinition(
+                             purpose="Bewaakt de geldigheid van governance-voorstellen "
+                                     "zonder inhoudelijk te oordelen",
+                             accountabilities=["voorstellen toetsen op G0-G4",
+                                               "geldige voorstellen direct aannemen",
+                                               "risicovolle voorstellen escaleren naar de mens"],
+                             skills=[]))
+    for r in (root, timekeeper, analyst, librarian, scout, facilitator):
         records.put(r)
+
+
+def migrate_records(records: Records) -> None:
+    """Voeg ontbrekende leden + records toe aan bestaande governance-files (idempotent)."""
+    root = records.root()
+    if root is None:
+        return
+    changed = False
+    # Zorg dat facilitator-record bestaat
+    if records.get("facilitator") is None:
+        facilitator = Record(id="facilitator", type=RecordType.ROLE, parent=root.id,
+                             definition=RoleDefinition(
+                                 purpose="Bewaakt de geldigheid van governance-voorstellen "
+                                         "zonder inhoudelijk te oordelen",
+                                 accountabilities=["voorstellen toetsen op G0-G4",
+                                                   "geldige voorstellen direct aannemen",
+                                                   "risicovolle voorstellen escaleren naar de mens"],
+                                 skills=[]))
+        records.put(facilitator)
+        changed = True
+    # Zorg dat facilitator in de wortelcirkel zit
+    if "facilitator" not in root.members:
+        root.members.append("facilitator")
+        changed = True
+    # Zorg dat anchor-policies aanwezig zijn
+    if not root.definition.policies:
+        root.definition.policies = list(_ANCHOR_POLICIES)
+        changed = True
+    if changed:
+        records.put(root)
 
 
 class Village:
@@ -80,6 +138,8 @@ class Village:
             self.registry.register(skill)
         self.records = Records(os.path.join(self.context.data_dir, "governance_records.json"))
         seed_records(self.records)
+        migrate_records(self.records)
+        self.context.records = self.records
         self.matchmaker = Matchmaker(self.bus)
         self.secretary = Secretary(self.records, self.bus)
         self.reconciler = Reconciler(self.records, self.bus, self.registry, self.context,
@@ -90,6 +150,10 @@ class Village:
         self.bus.subscribe("keyword_decided", self._observe)
         self.bus.subscribe("human_decision_needed", self._observe)
         self.bus.subscribe("gsc_pulse_completed", self._observe)
+        self.bus.subscribe("governance_changed", self._observe)
+        self.bus.subscribe("governance_review_requested", self._observe)
+        self.bus.subscribe("proposal_invalid", self._observe)
+        self.bus.subscribe("governance_rejected", self._observe)
         self.root = self.reconciler.build()
 
     def _observe(self, e: Event) -> None:
@@ -205,6 +269,94 @@ def librarian_demo():
     print("\n================ einde demo ================")
 
 
+def governance_demo():
+    """Drie voorstellen: onschuldig (aangenomen), duplicaat-accountability (escaleert G2),
+    en plastic-goedkeurend (escaleert G4). Bewijst de adopt-by-default poort."""
+    v = Village(heartbeat_seconds=86400)
+    results: dict = {}
+
+    def _record(outcome):
+        def _handler(e):
+            pid = e.data.get("proposal_id", e.data.get("id", "?"))
+            results[pid] = {"outcome": outcome,
+                            "gate": e.data.get("gate", "-"),
+                            "reason": e.data.get("reason", "")}
+        return _handler
+
+    v.bus.subscribe("governance_changed",          _record("aangenomen"))
+    v.bus.subscribe("governance_review_requested", _record("geëscaleerd"))
+    v.bus.subscribe("proposal_invalid",            _record("ongeldig"))
+
+    v.start()
+
+    # Voorstel 1: onschuldige rolwijziging — slaagt G0-G4, direct aangenomen
+    p1 = Proposal(
+        proposer_role="analyst",
+        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="analyst",
+                                add_accountabilities=["maandrapportage opstellen voor stakeholders"]),
+        tension="Analyst mist formele verantwoordelijkheid voor periodieke rapportage",
+        trigger_example="field_note_2026-06-13: geen structurele terugkoppeling vastgelegd",
+        rationale="Transparantie-waarde vraagt om periodieke verslaglegging",
+    )
+
+    # Voorstel 2: dupliceert bestaande accountability van analyst → escaleert G2
+    p2 = Proposal(
+        proposer_role="scout",
+        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="scout",
+                                add_accountabilities=["dagelijkse Field Note schrijven"]),
+        tension="Scout wil ook Field Notes schrijven vanuit GSC-perspectief",
+        trigger_example="dag_begint: geen Field Note vanuit GSC-data",
+        rationale="GSC-data verdient eigen duiding in een Field Note",
+    )
+
+    # Voorstel 3: plastic-goedkeurende accountability → escaleert G4 (missie-poort)
+    p3 = Proposal(
+        proposer_role="analyst",
+        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="analyst",
+                                add_accountabilities=[
+                                    "plastic-vriendelijke producten goedkeuren voor promotie"]),
+        tension="Analyst wil plastic alternatieven promoten voor groter bereik",
+        trigger_example="field_note_2026-06-13: lage interesse in plastic-free keywords",
+        rationale="Bredere markt via plastic producten kan bereik verhogen",
+    )
+
+    print("\n================ DEMO: async governance-poort ================\n")
+    for p in (p1, p2, p3):
+        v.bus.publish(Event("proposal_raised", {"proposal": proposal_to_dict(p)}, "demo"))
+
+    # Wacht tot alle 3 resultaten binnen zijn (max 5s)
+    for _ in range(100):
+        if len(results) >= 3:
+            break
+        time.sleep(0.05)
+
+    v.stop()
+    time.sleep(0.1)
+
+    print(f"\n{'Voorstel (rol → change)':<42} {'Uitkomst':<14} {'Poort':<6} Reden")
+    print("-" * 100)
+    proposals = [
+        (p1.id, f"analyst → maandrapportage opstellen"),
+        (p2.id, f"scout → Field Note schrijven (dup)"),
+        (p3.id, f"analyst → plastic goedkeuren (G4)"),
+    ]
+    for pid, label in proposals:
+        r = results.get(pid, {})
+        print(f"{label:<42} {r.get('outcome','?'):<14} {r.get('gate','-'):<6} "
+              f"{r.get('reason','')[:45]}")
+
+    # Verifieer dat analyst nu de nieuwe accountability heeft (voorstel 1)
+    rec = v.records.get("analyst")
+    if rec:
+        new_acc = "maandrapportage opstellen voor stakeholders"
+        heeft = new_acc in rec.definition.accountabilities
+        print(f"\n✔ analyst-record bevat nieuwe accountability: {heeft} (v{rec.version})")
+        if heeft:
+            print(f"  → {new_acc}")
+
+    print("\n================ einde governance demo ================")
+
+
 def once():
     """Eén echte puls en dan stoppen. Ideaal voor een cron-job ('s ochtends)."""
     v = Village(heartbeat_seconds=0)
@@ -229,5 +381,7 @@ if __name__ == "__main__":
         Village(heartbeat_seconds=0).run_forever()
     elif mode == "librarian":
         librarian_demo()
+    elif mode == "governance":
+        governance_demo()
     else:
         demo()

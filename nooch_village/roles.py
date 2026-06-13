@@ -4,6 +4,7 @@ import time
 from datetime import date
 from nooch_village.inhabitant import Inhabitant
 from nooch_village.event_bus import Event
+from nooch_village.governance import Gate, proposal_from_dict, proposal_to_dict
 
 
 class TimeKeeper(Inhabitant):
@@ -167,6 +168,9 @@ class Librarian(Inhabitant):
 
         if decision == "known":
             self.log.info("ℹ️ '%s' al bekend: %s", word, v.get("status"))
+            self.bus.publish(Event("keyword_decided",
+                {"word": word, "status": v.get("status"), "reason": "al vastgelegd in bibliotheek"},
+                self.id))
             return
         if decision == "approve":
             lib.curate(word, "approved", rationale=reason, evidence=demand, by=self.id)
@@ -193,3 +197,58 @@ class Librarian(Inhabitant):
         self.log.info("👤 mens besliste over '%s': %s (%s)", word, decision, reason)
         self.bus.publish(Event("keyword_decided",
             {"word": word, "status": decision, "reason": reason, "by": "human"}, self.id))
+
+
+class Facilitator(Inhabitant):
+    """Bewaakt de geldigheid van governance-voorstellen zonder inhoudelijk te oordelen.
+    Draait de poort G0-G4 en beslist adopt-by-default of escaleren naar de mens.
+    Integreert bezwaren NOOIT automatisch: alleen de mens kan dat doen."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._gate = Gate()
+        self.react("proposal_raised", self._on_proposal_raised)
+
+    def _on_proposal_raised(self, event: Event) -> None:
+        proposal = proposal_from_dict(event.data["proposal"])
+        self.log.info("📋 voorstel ontvangen van '%s': %s %s",
+                      proposal.proposer_role, proposal.change.kind.value,
+                      proposal.change.role_id or "")
+
+        passed, gate_name, gate_reason = self._gate.check(
+            proposal, self.context.records, self.context)
+
+        if not passed and gate_name == "G0":
+            # G0-fout: structureel ongeldig, terug naar proposer — geen menselijk oordeel
+            self.log.warning("❌ G0 ongeldig: %s", gate_reason)
+            self.bus.publish(Event("proposal_invalid", {
+                "proposal_id": proposal.id,
+                "proposer_role": proposal.proposer_role,
+                "gate": "G0",
+                "reason": gate_reason,
+            }, self.id))
+            return
+
+        if not passed:
+            # G1-G4: escaleren naar mens
+            proposal.status = "escalated"
+            proposal.escalation_gate = gate_name
+            proposal.escalation_reason = gate_reason
+            self.log.warning("🙋 escaleert naar mens (poort %s): %s", gate_name, gate_reason)
+            # Sla op bij Secretary zodat governance_verdict het kan ophalen
+            self.bus.publish(Event("_store_pending_proposal",
+                                   {"proposal": proposal_to_dict(proposal)}, self.id))
+            self.bus.publish(Event("governance_review_requested", {
+                "proposal_id": proposal.id,
+                "proposal": proposal_to_dict(proposal),
+                "gate": gate_name,
+                "reason": gate_reason,
+                "trigger_example": proposal.trigger_example,
+            }, self.id))
+            return
+
+        # Alles slaagt → direct aannemen
+        proposal.status = "adopted"
+        self.log.info("✅ voorstel aangenomen via poort (alle G0-G4 geslaagd)")
+        self.bus.publish(Event("proposal_gate_passed",
+                               {"proposal": proposal_to_dict(proposal)}, self.id))

@@ -9,6 +9,7 @@ class Context:
     settings: dict
     data_dir: str
     library: object = None
+    records: object = None  # read-only verwijzing naar Records, voor Facilitator/Gate
 
 
 def load_context(base_dir: str) -> Context:

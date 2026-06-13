@@ -136,6 +136,41 @@ Zet daarna `GSC_TOKEN_PATH=./gsc_token.json` en `GSC_SITE=sc-domain:jouwsite.nl`
 
 Principe: maak eerst één inwoner één ding echt waardevol doen (de groei-puls is het sjabloon), bewijs de waarde, en schaal pas daarna in de breedte.
 
+## Governance: async en adopt-by-default
+
+### Rolverdeling
+- **Facilitator** draait het proces: ontvangt `proposal_raised` via `self.react()`, voert de G0-G4 poort uit, beslist adopt of escaleren. Oordeelt NOOIT over inhoud, alleen over de deterministische poort.
+- **Secretary** bezit de records en de adoptie-schrijfactie: schrijft de change, verhoogt de versie, publiceert `governance_changed`. Direct `bus.subscribe` (infra, lichte handler).
+- **Reconciler** herbouwt het levende dorp na `role_adopted` (compat) en `governance_changed`.
+
+### De poort G0-G4 (goedkoop-eerst, deterministisch tegen de records)
+| Poort | Wat | Uitkomst bij falen |
+|-------|-----|--------------------|
+| G0 | Veldgeldigheid: change.kind ∈ scope, verplichte velden aanwezig | `proposal_invalid` terug naar proposer, geen mens |
+| G1 | Domein-botsing: nieuw domein overlapt met bestaande rol | Escaleer naar mens |
+| G2 | Accountability-duplicaat: al bij een andere rol | Escaleer naar mens |
+| G3 | Verweesd werk: verwijdering zonder elders te beleggen | Escaleer naar mens |
+| G4 | Missie-poort: plastic/leer-goedkeuring of overproductie + optioneel LLM | Escaleer naar mens |
+
+Slaagt alles: direct aannemen. **Bezwaren worden NOOIT automatisch geïntegreerd** — alleen de mens kan een geëscaleerd voorstel goedkeuren (via `governance_verdict: approve`).
+
+### Proposal-model
+`Proposal` heeft: `proposer_role`, `change` (GovernanceChange met `kind` ∈ {add_role, amend_role, remove_role, add_policy, amend_policy, remove_policy}), `tension`, `trigger_example` (VERPLICHT audittrail), `rationale`, `status`, `created_at`. Escalaties bewaren `escalation_gate` en `escalation_reason`.
+
+### De missie leeft in de Anchor Circle
+De wortelcirkel heeft een `purpose` die de Nooch-missie verwoordt en `policies` (harde policies waartegen G4 toetst). Governance wijzigt alleen structuur; operatie blijft autonoom binnen de rol (artikel 4 van Holacracy).
+
+### Events
+| Event | Wie publiceert | Betekenis |
+|-------|---------------|-----------|
+| `proposal_raised` | iedereen | Nieuw voorstel, Facilitator reageert |
+| `proposal_gate_passed` | Facilitator | Alle G0-G4 geslaagd → Secretary adopteert |
+| `proposal_invalid` | Facilitator | G0 faalde, terug naar proposer |
+| `governance_review_requested` | Facilitator | G1-G4 faalde, wacht op menselijk oordeel |
+| `governance_verdict` | mens/proxy | `{proposal_id, decision: approve|reject, reason}` |
+| `governance_changed` | Secretary | Change aangenomen en geschreven naar records |
+| `governance_rejected` | Secretary | Mens wees voorstel af |
+
 ## Schaal-naden (grenzen die je later kunt opentrekken, nu niet schenden)
 
 Dit zijn de vier plekken waar de architectuur later kan groeien zonder bestaande code te herschrijven:
