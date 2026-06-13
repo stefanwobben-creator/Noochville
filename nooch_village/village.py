@@ -169,11 +169,19 @@ class Village:
         self.bus.subscribe("governance_rejected", self._observe)
         self.bus.subscribe("tension_triaged", self._observe)
         self.bus.subscribe("human_intervention_needed", self._observe)
+        self.bus.subscribe("role_born", self._observe)
+        self.bus.subscribe("role_born", self._on_role_born)
         self.root = self.reconciler.build()
 
     def _observe(self, e: Event) -> None:
         with open(os.path.join(self.context.data_dir, "system_log.jsonl"), "a") as f:
             f.write(json.dumps({"event": e.name, **e.data}, ensure_ascii=False, default=str) + "\n")
+
+    def _on_role_born(self, e: Event) -> None:
+        """Schrijft de geboorte van een rol naar het groeidagboek (audittrail)."""
+        dagboek = os.path.join(self.context.data_dir, "groeidagboek.jsonl")
+        with open(dagboek, "a") as f:
+            f.write(json.dumps({"ts": time.time(), **e.data}, ensure_ascii=False, default=str) + "\n")
 
     def start(self):
         self.root.start()
@@ -370,6 +378,108 @@ def governance_demo():
             print(f"  → {new_acc}")
 
     print("\n================ einde governance demo ================")
+
+
+def lifecycle_demo():
+    """Bewijst het add_role-addendum:
+    1. add_role zónder herhalingsbewijs → G0 invalid (terug naar proposer, geen mens)
+    2. add_role mét herhalingsbewijs → aangenomen, role_born event, onbemand in Reconciler
+    3. Groeidagboek bevat het trigger_example van de geboren rol
+    """
+    v = Village(heartbeat_seconds=86400)
+    results: dict = {}
+    born: dict = {}
+
+    def _record(outcome):
+        def _h(e):
+            pid = e.data.get("proposal_id", e.data.get("id", "?"))
+            results[pid] = {"outcome": outcome,
+                            "gate": e.data.get("gate", "-"),
+                            "reason": e.data.get("reason", "")}
+        return _h
+
+    v.bus.subscribe("governance_changed",          _record("aangenomen"))
+    v.bus.subscribe("governance_review_requested", _record("geëscaleerd"))
+    v.bus.subscribe("proposal_invalid",            _record("ongeldig"))
+    v.bus.subscribe("role_born", lambda e: born.update({e.data["role_id"]: e.data}))
+
+    v.start()
+
+    # Voorstel 1: add_role ZONDER herhalingsbewijs → G0 ongeldig
+    p1 = Proposal(
+        proposer_role="analyst",
+        change=GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id="content_writer",
+                                purpose="Schrijft SEO-artikelen voor nooch.earth",
+                                add_accountabilities=["SEO-artikelen schrijven"],
+                                new_role_parent="noochville"),
+        tension="Er is één keer een contentverzoek binnengekomen",
+        trigger_example="analyst:2026-06-13 één contentverzoek",
+        rationale="Content schrijven kost veel tijd",
+    )
+
+    # Voorstel 2: add_role MÉT herhalingsbewijs → aangenomen, onbemand geboren
+    p2 = Proposal(
+        proposer_role="analyst",
+        change=GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id="content_strategist",
+                                purpose="Vertaalt missie-inzichten structureel naar content-kalender",
+                                add_accountabilities=["content-kalender bijhouden",
+                                                      "missie-keywords omzetten naar artikel-briefs"],
+                                new_role_parent="noochville"),
+        tension="Elke week hetzelfde gat: geen eigenaar voor content-planning",
+        trigger_example="analyst:meermaals terugkerend wekelijks — elke week geen contentplanning",
+        rationale="Structureel elke week hetzelfde probleem. Meermaals gesignaleerd.",
+    )
+
+    print("\n================ DEMO: rol-lifecycle (add_role addendum) ================\n")
+    for p in (p1, p2):
+        v.bus.publish(Event("proposal_raised", {"proposal": proposal_to_dict(p)}, "demo"))
+
+    for _ in range(100):
+        if len(results) >= 2:
+            break
+        time.sleep(0.05)
+    time.sleep(0.2)
+
+    v.stop()
+    time.sleep(0.1)
+
+    print(f"\n{'Voorstel':<42} {'Uitkomst':<12} {'Poort':<6} Reden")
+    print("-" * 100)
+    for pid, label in [(p1.id, "add_role zónder herhalingsbewijs"),
+                       (p2.id, "add_role mét herhalingsbewijs")]:
+        r = results.get(pid, {})
+        print(f"{label:<42} {r.get('outcome','?'):<12} {r.get('gate','-'):<6} "
+              f"{r.get('reason','')[:48]}")
+
+    # Verifieer born + unmanned
+    print(f"\nGeboren rollen (role_born event):    {list(born.keys()) or '(geen)'}")
+    unmanned = list(v.reconciler.unmanned.keys())
+    print(f"Onbemand in Reconciler:              {unmanned or '(geen)'}")
+
+    checks = [
+        ("G0 blokkeert zonder herhalingsbewijs",
+         results.get(p1.id, {}).get("outcome") == "ongeldig"),
+        ("G0 passeert met herhalingsbewijs",
+         results.get(p2.id, {}).get("outcome") == "aangenomen"),
+        ("role_born event ontvangen",
+         "content_strategist" in born),
+        ("rol onbemand in reconciler",
+         "content_strategist" in v.reconciler.unmanned),
+    ]
+    print()
+    for label, ok in checks:
+        print(f"  {'✔' if ok else '✘'} {label}")
+
+    # Groeidagboek
+    dagboek = os.path.join(v.context.data_dir, "groeidagboek.jsonl")
+    if os.path.exists(dagboek):
+        entries = [json.loads(line) for line in open(dagboek)]
+        cs_entries = [e for e in entries if e.get("role_id") == "content_strategist"]
+        print(f"\nGroeidagboek: {dagboek}")
+        for entry in cs_entries[-2:]:
+            print(f"  [{entry['role_id']}] trigger: {entry.get('trigger_example','')[:65]}")
+
+    print("\n================ einde lifecycle demo ================")
 
 
 def intent_demo():
@@ -580,5 +690,7 @@ if __name__ == "__main__":
         triage_demo()
     elif mode == "intent":
         intent_demo()
+    elif mode == "lifecycle":
+        lifecycle_demo()
     else:
         demo()

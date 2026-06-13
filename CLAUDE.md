@@ -154,6 +154,27 @@ Het bevat `strategy` (lijst heuristieken) en `goals` (lijst tijdgebonden targets
 - Gesorteerd: niet-afgevallen eerst (op score desc), afgevallen achteraan.
 - GrowthAnalyst gebruikt dit om gerelateerde Trends-keywords te rangschikken vóór ze worden voorgesteld.
 
+## Rol-lifecycle: hoe een nieuwe rol het dorp binnenkomt
+
+Een `add_role`-voorstel doorloopt een afwijkend pad ten opzichte van andere governance-wijzigingen.
+
+### Geboren versus bemenst
+Een aangenomen `add_role` **schrijft alleen de roldefinitie** naar de records (purpose, accountabilities, domeinen). De rol wordt **onbemand geboren**: er draait geen thread, er is geen live inwoner. Pas als een menselijke ontwikkelaar de bijbehorende implementatie heeft geschreven én geregistreerd in `CLASS_MAP` én `SkillRegistry`, kan de Reconciler de rol activeren als live inwoner. Dit is de **enige plek waar adopt-by-default niet geldt**: draaiende autonome code is niet omkeerbaar zoals een record-edit dat is.
+
+### Activatie is altijd mens-gated
+Het schrijven en registreren van code voor een nieuwe rol vereist menselijke goedkeuring vóórdat de rol draait. Een agent mag een rol-definitie draften via governance; een mens tekent af op de code. De Reconciler (`_on_governance_changed`) controleert bij elke `add_role` of `CLASS_MAP` een entry heeft:
+- Ja → activeer als live inwoner (thread start)
+- Nee → sla op in `reconciler.unmanned`, geen thread
+
+### Onbemande rol als signaal
+Zolang een rol onbemand is, vallen zijn accountabilities toe aan de founder (Circle Lead, Holacracy 1.4.2). De stapel `reconciler.unmanned`-rollen is het vraagsignaal of een rol bemenst moet worden. Het groeidagboek (`data/groeidagboek.jsonl`) toont welke rollen wanneer geboren zijn en waarom.
+
+### Anti-proliferatie (G0-poort)
+Een `add_role`-voorstel vereist **bewijs van herhaling** in zowel `trigger_example` als `rationale`. Zonder herhalingswoorden (bijv. `meermaals`, `terugkerend`, `structureel`, `wekelijks`) wijst G0 het voorstel af als **ongeldig** (terug naar de proposer, geen menselijk oordeel). Één incident is onvoldoende grond voor een nieuwe structurele rol.
+
+### Groeidagboek
+Bij elke `add_role`-adoptie publiceert de Secretary een `role_born`-event. De Village schrijft dit naar `data/groeidagboek.jsonl` met `role_id`, `purpose`, `trigger_example`, `rationale` en tijdstempel. Zo is de ontwikkelgeschiedenis van het dorp terug te lezen.
+
 ## Triage — hoe een inwoner een spanning classificeert en routeert
 
 `Inhabitant.triage(tension)` classificeert in deze volgorde (eerste match wint):

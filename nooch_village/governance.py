@@ -30,6 +30,14 @@ _HARD_VIOLATION_RE = re.compile(
     re.I | re.S,
 )
 
+# Trefwoorden die herhalingsbewijs aantonen (vereist voor add_role)
+_REPETITION_KW = frozenset([
+    "meermaals", "herhaald", "herhaaldelijk", "elke keer", "meerdere keren",
+    "meerdere incidenten", "structureel", "terugkerend", "wekelijks", "dagelijks",
+    "maandelijks", "voortdurend", "steeds", "meerdere malen", "chronisch",
+    "elke week", "elke maand", "elke dag", "regelmatig",
+])
+
 # Verdachte patronen die de LLM extra toetst (alleen als er een LLM-sleutel is)
 _SUSPECT_RE = re.compile(
     r"\bplastic\b|\bleer\b|\bleather\b|\bpvc\b|\bsynth\w+\b|\bkunststof\b|"
@@ -131,6 +139,14 @@ class Gate:
             return False, f"{c.kind.value} vereist role_id"
         if c.kind == ChangeKind.ADD_ROLE and not (c.role_id and c.purpose):
             return False, "add_role vereist role_id en purpose"
+        if c.kind == ChangeKind.ADD_ROLE:
+            combined = (p.trigger_example + " " + p.rationale).lower()
+            if not any(kw in combined for kw in _REPETITION_KW):
+                return False, (
+                    "add_role vereist herhalingsbewijs in trigger_example én rationale "
+                    "(bijv. 'meermaals', 'terugkerend', 'structureel', 'wekelijks'); "
+                    "één incident is onvoldoende grond voor een nieuwe rol"
+                )
         if c.kind in (ChangeKind.ADD_POLICY, ChangeKind.AMEND_POLICY,
                       ChangeKind.REMOVE_POLICY) and not c.policy_id:
             return False, f"{c.kind.value} vereist policy_id"
@@ -395,6 +411,15 @@ class Secretary:
             if parent and c.role_id not in parent.members:
                 parent.members.append(c.role_id)
                 self.records.put(parent)
+            # Groeidagboek: geboorte-event met audittrail
+            self.bus.publish(Event("role_born", {
+                "role_id": c.role_id,
+                "purpose": c.purpose,
+                "accountabilities": c.add_accountabilities,
+                "trigger_example": proposal.trigger_example,
+                "rationale": proposal.rationale,
+                "by": proposal.proposer_role,
+            }, "Secretary"))
 
         elif c.kind == ChangeKind.REMOVE_ROLE:
             rec = self.records.get(c.role_id)
@@ -440,6 +465,7 @@ class Reconciler:
         self.matchmaker = matchmaker
         self.class_map = class_map or {}     # record-id -> Inhabitant-subklasse
         self.live: dict = {}
+        self.unmanned: dict = {}             # rollen born maar zonder implementatie
         bus.subscribe("role_adopted", self._on_adopted)
         bus.subscribe("governance_changed", self._on_governance_changed)
 
@@ -458,11 +484,20 @@ class Reconciler:
                 mr = self.records.get(mid)
                 if mr and not mr.archived:
                     member = self._materialize(mr)
-                    circle.add_member(member)
-                    self.matchmaker.register(member)
+                    if member is not None:           # None = onbemand
+                        circle.add_member(member)
+                        self.matchmaker.register(member)
             self.matchmaker.register(circle)
             return circle
-        inh_cls = self.class_map.get(record.id, Inhabitant)
+        # Rol: bestaat er een implementatie (CLASS_MAP) of een actieve skill?
+        inh_cls = self.class_map.get(record.id)
+        if inh_cls is None:
+            has_active = any(self.registry.get(s) is not None for s in record.definition.skills)
+            if not has_active:
+                self.unmanned[record.id] = record
+                log.info("rol '%s' onbemand (geen CLASS_MAP entry en geen actieve skills)", record.id)
+                return None
+            inh_cls = Inhabitant
         inh = inh_cls(record, self.bus, self.registry, self.context)
         self.live[record.id] = inh
         return inh
@@ -483,11 +518,17 @@ class Reconciler:
         if kind == "add_role" and rid and rid not in self.live:
             record = self.records.get(rid)
             if record:
-                from nooch_village.inhabitant import Inhabitant
-                inh_cls = self.class_map.get(rid, Inhabitant)
-                inh = inh_cls(record, self.bus, self.registry, self.context)
-                self.live[rid] = inh
-                self.matchmaker.register(inh)
-                if inh.is_alive() is False:
-                    inh.start()
-                log.info("nieuwe inwoner '%s' gestart na governance_changed", rid)
+                if rid in self.class_map:
+                    # Implementatie beschikbaar: activeer als live inwoner
+                    from nooch_village.inhabitant import Inhabitant
+                    inh_cls = self.class_map[rid]
+                    inh = inh_cls(record, self.bus, self.registry, self.context)
+                    self.live[rid] = inh
+                    self.matchmaker.register(inh)
+                    if not inh.is_alive():
+                        inh.start()
+                    log.info("nieuwe inwoner '%s' gestart na governance_changed", rid)
+                else:
+                    # Onbemand geboren: record bestaat, geen thread tot menselijke activatie
+                    self.unmanned[rid] = record
+                    log.info("rol '%s' geboren maar onbemand (wacht op implementatie in CLASS_MAP)", rid)
