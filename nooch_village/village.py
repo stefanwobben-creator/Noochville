@@ -154,6 +154,8 @@ class Village:
         self.bus.subscribe("governance_review_requested", self._observe)
         self.bus.subscribe("proposal_invalid", self._observe)
         self.bus.subscribe("governance_rejected", self._observe)
+        self.bus.subscribe("tension_triaged", self._observe)
+        self.bus.subscribe("human_intervention_needed", self._observe)
         self.root = self.reconciler.build()
 
     def _observe(self, e: Event) -> None:
@@ -357,6 +359,89 @@ def governance_demo():
     print("\n================ einde governance demo ================")
 
 
+def triage_demo():
+    """Vier spanningen die elk een ander triage-pad bewandelen.
+
+    1. Eigen werk  — 'bezoekersdata analyseren' → analyst-scope, zelf doen
+    2. Andere rol  — 'kandidaatwoord voor de bibliotheek' → librarian-domein
+    3. Structureel — 'niemand bezit de materiaal-policy' → Proposal via governance
+    4. Geen match  — 'serverruimte airco storing' → tactisch / human_intervention_needed
+    """
+    from nooch_village.models import Tension
+
+    v = Village(heartbeat_seconds=86400)  # geen automatische puls
+    triaged: list[dict] = []
+    proposals_raised: list[dict] = []
+    human_needed: list[dict] = []
+
+    v.bus.subscribe("tension_triaged",
+                    lambda e: triaged.append(dict(e.data)))
+    v.bus.subscribe("proposal_raised",
+                    lambda e: proposals_raised.append({"id": e.data.get("proposal", {}).get("id", "?")}))
+    v.bus.subscribe("human_intervention_needed",
+                    lambda e: human_needed.append(dict(e.data)))
+
+    v.start()
+
+    # Haal de analyst-inwoner op als triagepunt
+    analyst = v.reconciler.live.get("analyst")
+    if analyst is None:
+        print("⚠️  analyst-inwoner niet gevonden")
+        v.stop()
+        return
+
+    spanningen = [
+        ("bezoekersdata van afgelopen week analyseren",
+         "operational",
+         "eigen-werk (analyst-scope)"),
+        ("kandidaatwoord voor de bibliotheek: biobased sneakers",
+         "operational",
+         "andere-rol:librarian (domein)"),
+        ("niemand bezit het bijwerken van de materiaal-policy; "
+         "dit moet structureel belegd worden",
+         "governance",
+         "structureel → Proposal"),
+        ("de serverruimte heeft een airconditioning storing",
+         "operational",
+         "geen match → mens"),
+    ]
+
+    print("\n================ DEMO: triage ================\n")
+    for desc, kind, _ in spanningen:
+        analyst.sense_tension(desc, kind=kind)
+
+    # Geef alle threads de tijd om te verwerken
+    for _ in range(100):
+        if len(triaged) >= len(spanningen):
+            break
+        time.sleep(0.1)
+    time.sleep(0.2)  # extra wacht voor human_intervention_needed (is async na triage)
+
+    v.stop()
+    time.sleep(0.1)
+
+    print(f"\n{'Spanning (kort)':<52} {'Verwacht':<30} {'Classificatie'}")
+    print("-" * 110)
+    triage_map = {t["description"][:51]: t["classification"] for t in triaged}
+    for desc, _, verwacht in spanningen:
+        key = desc[:51]
+        cls = triage_map.get(key, "?")
+        check = "✔" if (
+            (verwacht.startswith("eigen") and "eigen" in cls) or
+            (verwacht.startswith("andere") and "andere" in cls) or
+            (verwacht.startswith("structureel") and "structureel" in cls) or
+            (verwacht.startswith("geen") and "tactisch" in cls)
+        ) else "✘"
+        print(f"{check} {desc[:50]:<51} {verwacht:<30} {cls}")
+
+    if proposals_raised:
+        print(f"\n🏛️  Governance-voorstel aangemaakt: {proposals_raised[0].get('id')}")
+    if human_needed:
+        print(f"🙋 Human intervention gevraagd voor: {human_needed[0].get('payload', {}).get('description', human_needed[0].get('capability', '?'))[:60]}")
+
+    print("\n================ einde triage demo ================")
+
+
 def once():
     """Eén echte puls en dan stoppen. Ideaal voor een cron-job ('s ochtends)."""
     v = Village(heartbeat_seconds=0)
@@ -383,5 +468,7 @@ if __name__ == "__main__":
         librarian_demo()
     elif mode == "governance":
         governance_demo()
+    elif mode == "triage":
+        triage_demo()
     else:
         demo()

@@ -25,8 +25,12 @@ class Matchmaker:
         candidates = self.by_cap.get(cap, [])
         if not candidates:
             log.warning("geen inwoner voor capability '%s'", cap)
-            self.bus.publish(Event("help_unmatched",
-                {"capability": cap, "request_id": e.data.get("request_id")}, "Matchmaker"))
+            self.bus.publish(Event("human_intervention_needed", {
+                "capability": cap,
+                "request_id": e.data.get("request_id"),
+                "payload": e.data.get("payload", {}),
+                "reason": "geen capabele rol gevonden in het dorp",
+            }, "Matchmaker"))
             return
         chosen = min(candidates, key=lambda i: i.inbox.pending())   # simpele load-balancing
         chosen.deliver(Task(capability=cap, payload=e.data.get("payload", {}),

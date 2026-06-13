@@ -1,9 +1,17 @@
 from __future__ import annotations
-import threading, logging, uuid
+import threading, logging, uuid, re
 from nooch_village.event_bus import EventBus, Event
 from nooch_village.inbox import Inbox
-from nooch_village.models import Task, Response, Record, RecordType
+from nooch_village.models import Task, Response, Record, RecordType, Tension
 from nooch_village.skills import SkillRegistry
+
+# Trefwoorden die duiden op een structurele, terugkerende spanning die governance vereist
+_STRUCTURAL_KW = frozenset([
+    "voortaan", "altijd", "elke keer", "niemand bezit", "niemand heeft",
+    "niemand pakt", "ontbreekt", "terugkerend", "structureel", "policy",
+    "accountability", "nooit belegd", "verwacht wordt", "structuur",
+    "verwacht dat", "zou moeten", "onbeheerd",
+])
 
 
 class Inhabitant(threading.Thread):
@@ -35,8 +43,192 @@ class Inhabitant(threading.Thread):
         return rid
 
     def sense_tension(self, description: str, kind: str = "operational") -> None:
+        """Sens een spanning: logt naar het audittrail én triageert voor dispatch."""
+        tension = Tension(sensed_by=self.id, description=description, kind=kind)
         self.bus.publish(Event("tension_sensed",
             {"by": self.id, "description": description, "kind": kind}, self.id))
+        self.triage(tension)
+
+    # ── Triage ─────────────────────────────────────────────────────────────────
+
+    def triage(self, tension: Tension) -> None:
+        """Classificeer en routeer een spanning. Eerste match wint.
+
+        1. Structureel/terugkerend  → Proposal via proposal_raised (governance-engine)
+        2. Eigen werk               → zelf doen (al in uitvoering)
+        3. Andere rol               → routeer via help_requested of broadcast
+        4. Geen passende rol        → tactisch proberen; matchmaker escaleert naar mens
+        """
+        desc = tension.description
+        desc_l = desc.lower()
+        cls = "onbekend"
+
+        # Optionele LLM-classificatie (als er een sleutel is)
+        llm = self._classify_llm(desc)
+
+        if llm == "structural" or (llm is None and self._is_structural(desc_l)):
+            cls = "structureel"
+            self._raise_governance_proposal(tension)
+
+        elif llm == "own" or (llm is None and self._fits_own_role(desc_l)):
+            cls = "eigen-werk"
+            self._do_own_work(tension)
+
+        elif llm and llm not in ("tactical", "own", "structural"):
+            # LLM gaf een rol-id terug
+            role_id = llm
+            records = getattr(self.context, "records", None)
+            cap = None
+            if records:
+                rec = records.get(role_id)
+                if rec and rec.definition.skills:
+                    cap = rec.definition.skills[0]
+            cls = f"andere-rol:{role_id}"
+            self._route_to_role(tension, role_id, cap)
+
+        else:
+            role_id, cap = self._find_other_role(desc_l)
+            if role_id:
+                cls = f"andere-rol:{role_id}"
+                self._route_to_role(tension, role_id, cap)
+            else:
+                cls = "tactisch"
+                self._try_tactical_or_escalate(tension)
+
+        self.bus.publish(Event("tension_triaged", {
+            "by": self.id,
+            "description": desc[:80],
+            "classification": cls,
+        }, self.id))
+
+    # ── Triage-helpers ──────────────────────────────────────────────────────────
+
+    def _is_structural(self, desc_l: str) -> bool:
+        return any(kw in desc_l for kw in _STRUCTURAL_KW)
+
+    def _fits_own_role(self, desc_l: str) -> bool:
+        """True als een significant woord uit de spanning in mijn purpose/accountabilities voorkomt."""
+        own = (self.dna.purpose + " " + " ".join(self.dna.accountabilities)).lower()
+        for word in desc_l.split():
+            if len(word) >= 6 and word in own:
+                return True
+        for word in own.split():
+            if len(word) >= 6 and word in desc_l:
+                return True
+        return False
+
+    def _find_other_role(self, desc_l: str) -> tuple[str | None, str | None]:
+        """Zoek een andere rol wiens domeinen of accountabilities beter passen."""
+        records = getattr(self.context, "records", None)
+        if records is None:
+            return None, None
+        desc_words = {w for w in desc_l.split() if len(w) >= 6}
+        for rec in records.all():
+            if rec.id == self.id or rec.archived:
+                continue
+            # Domein-match heeft prioriteit (sterkste signaal)
+            for domain in rec.definition.domains:
+                if domain.lower() in desc_l:
+                    cap = rec.definition.skills[0] if rec.definition.skills else None
+                    return rec.id, cap
+            # Accountability-overlap
+            acc_text = " ".join(rec.definition.accountabilities).lower()
+            acc_words = {w for w in acc_text.split() if len(w) >= 6}
+            if acc_words & desc_words:
+                cap = rec.definition.skills[0] if rec.definition.skills else None
+                return rec.id, cap
+        return None, None
+
+    def _raise_governance_proposal(self, tension: Tension) -> None:
+        """Zet een structurele spanning om in een Proposal en stuur het door de engine."""
+        from nooch_village.models import GovernanceChange, ChangeKind, Proposal
+        from nooch_village.governance import proposal_to_dict
+
+        desc = tension.description
+        desc_l = desc.lower()
+
+        if "policy" in desc_l:
+            pid = re.sub(r"\W+", "_", desc_l[:25]).strip("_")
+            change = GovernanceChange(kind=ChangeKind.ADD_POLICY,
+                                      policy_id=pid, policy_text=desc[:200])
+        elif "rol ontbreekt" in desc_l or "nieuwe rol" in desc_l:
+            rid = re.sub(r"\W+", "_", desc_l[:20]).strip("_")
+            change = GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id=rid,
+                                      purpose=desc[:100], new_role_parent="noochville")
+        else:
+            change = GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id=self.id,
+                                      add_accountabilities=[desc[:80]])
+
+        proposal = Proposal(
+            proposer_role=self.id,
+            change=change,
+            tension=desc,
+            trigger_example=f"{self.id}:{desc[:50]}",
+            rationale="Structurele spanning gedetecteerd via automatische triage",
+        )
+        self.bus.publish(Event("proposal_raised",
+                               {"proposal": proposal_to_dict(proposal)}, self.id))
+        self.log.info("🏛️ structureel → voorstel %s (%s)", proposal.id, change.kind.value)
+
+    def _do_own_work(self, tension: Tension) -> None:
+        """De spanning valt binnen mijn eigen rol — wordt hier al opgepakt."""
+        self.log.info("🔧 spanning in eigen scope (%s) → geen aparte actie", self.id)
+
+    def _route_to_role(self, tension: Tension, role_id: str, capability: str | None) -> None:
+        """Routeer naar een andere rol die beter bij de spanning past."""
+        if capability:
+            self.ask(capability, {"description": tension.description, "from": self.id})
+            self.log.info("🔀 spanning gerouteerd → %s via '%s'", role_id, capability)
+        else:
+            self.bus.publish(Event("tension_routed", {
+                "from": self.id, "to": role_id,
+                "description": tension.description[:80],
+            }, self.id))
+            self.log.info("🔀 spanning gerouteerd → %s (broadcast)", role_id)
+
+    def _try_tactical_or_escalate(self, tension: Tension) -> None:
+        """Geen passende rol gevonden. Probeer tactisch; matchmaker escaleert naar mens."""
+        self.log.info("🔀 geen passende rol → tactisch via help_requested")
+        self.ask("assistance", {
+            "description": tension.description,
+            "from": self.id,
+            "context": "geen passende rol gevonden in het dorp",
+        })
+
+    def _classify_llm(self, desc: str) -> str | None:
+        """Optionele LLM-classificatie. Geeft 'structural','own',<rol_id>,'tactical' of None."""
+        from nooch_village.llm import reason
+        records = getattr(self.context, "records", None)
+        if records is None:
+            return None
+        roster = "\n".join(
+            f"- {r.id}: {', '.join(r.definition.accountabilities[:3])}"
+            for r in records.all() if not r.archived and r.id != self.id
+        )
+        prompt = (
+            f"Jouw rol ({self.id}): {self.dna.purpose}\n"
+            f"Jouw accountabilities: {', '.join(self.dna.accountabilities)}\n"
+            f"Andere rollen:\n{roster}\n\n"
+            f"Gevoelde spanning: \"{desc}\"\n\n"
+            "Classificeer op EXACT ÉÉN regel (eerste match wint):\n"
+            "STRUCTURAL  — terugkerend, governance-structuur ontbreekt of niemand bezit het\n"
+            "OWN         — eenmalig werk dat binnen mijn eigen rol valt\n"
+            "OTHER:<id>  — werk dat bij een andere bestaande rol past (geef de rol-id)\n"
+            "TACTICAL    — eenmalig werk, geen passende rol"
+        )
+        out = reason(prompt)
+        if not out:
+            return None
+        out_l = out.strip().lower().split("\n")[0]
+        if out_l.startswith("structural"):
+            return "structural"
+        if out_l.startswith("own"):
+            return "own"
+        if out_l.startswith("other:"):
+            return out_l[6:].strip()
+        if out_l.startswith("tactical"):
+            return "tactical"
+        return None
 
     # --- het werk ---
     def handle(self, task: Task) -> Response:

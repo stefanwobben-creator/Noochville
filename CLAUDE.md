@@ -126,6 +126,24 @@ open('gsc_token.json', 'w').write(creds.to_json())
 ```
 Zet daarna `GSC_TOKEN_PATH=./gsc_token.json` en `GSC_SITE=sc-domain:jouwsite.nl` in `.env`.
 
+## Triage — hoe een inwoner een spanning classificeert en routeert
+
+`Inhabitant.triage(tension)` classificeert in deze volgorde (eerste match wint):
+
+| Prio | Signaal | Actie |
+|------|---------|-------|
+| 1 | Structureel/terugkerend trefwoord (`_STRUCTURAL_KW`) of LLM="structural" | `_raise_governance_proposal()` → `proposal_raised` → Facilitator + G0-G4 |
+| 2 | Overlap ≥6 tekens met eigen purpose/accountabilities, of LLM="own" | `_do_own_work()` — log, geen verdere actie (werk is al in scope) |
+| 3 | Domein-match bij andere rol (sterkste signaal), dan accountability-overlap ≥6 tekens, of LLM="other:<id>" | `_route_to_role()` → `ask(cap, ...)` of broadcast `tension_routed` |
+| 4 | Geen match | `_try_tactical_or_escalate()` → `ask("assistance", ...)` → Matchmaker → `human_intervention_needed` |
+
+`sense_tension(description, kind)` publiceert eerst `tension_sensed` (audittrail), dan roept hij `triage()` aan.
+
+Scheiding van verantwoordelijkheden:
+- **Triage ≠ Poort**: triage classificeert *wie* het werk uitvoert; G0-G4 toetst *of* een voorstel geldig is. De ene roept de andere aan; ze dupliceren elkaars logica niet.
+- **Operationeel vs. governance**: structureel terugkerende spanning → governance; eenmalig werk → operationeel. De grens ligt bij de trefwoorden in `_STRUCTURAL_KW`.
+- **Default is tactisch**: als geen rol past, escaleer pas naar de mens nadat het tactisch geprobeerd is via de Matchmaker. Zo blijft het dorp zelf-redzaam.
+
 ## Roadmap (depth-first, niet breadth-first)
 
 1. **Echte missie-redenering aanzetten** in de Field Note (zet een LLM-key in `.env`).
