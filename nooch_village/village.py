@@ -23,6 +23,7 @@ from nooch_village.roles import (
 )
 from nooch_village.library import Library
 from nooch_village.lexicon import Lexicon
+from nooch_village.observers.coherence_observer import CoherenceObserver
 from nooch_village.skills_impl.site_health import SiteHealthSkill
 from nooch_village.skills_impl.budget import BudgetSkill
 from nooch_village.skills_impl.plausible import PlausibleSkill
@@ -119,6 +120,7 @@ class Village:
         self.bus.subscribe("tijdgeest_signaal",           self._observe)
         self.bus.subscribe("means_gap_sensed",            self._observe)
         self.bus.subscribe("means_gap_sensed",            self._on_means_gap)
+        self.coherence_observer = CoherenceObserver(self.bus)
         self.root = self.reconciler.build()
 
     def _observe(self, e: Event) -> None:
