@@ -200,12 +200,16 @@ class GrowthAnalyst(Inhabitant):
 
 class PerformanceScout(Inhabitant):
     """Luistert op dag_begint, haalt GSC-queries op en stuurt high_potential-woorden
-    die nog niet in de bibliotheek staan door als keyword_proposed naar de Librarian."""
+    die nog niet in de bibliotheek staan door als keyword_proposed naar de Librarian.
+    Schrijft wekelijks een GSC-nota met zoekopdracht-analyse en rankings."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.react("dag_begint", self._on_dag_begint)
         self._busy = False
+        self._nota_interval = float(
+            self.context.settings.get("gsc_nota_interval_seconds", str(7 * 24 * 3600)))
+        self._last_nota: float = 0.0
 
     def _on_dag_begint(self, event: Event) -> None:
         if self._busy:
@@ -222,12 +226,74 @@ class PerformanceScout(Inhabitant):
             self.log.info("📊 %d queries opgehaald (%s)", result.get("total", 0),
                           result.get("bucket_counts", {}))
             self._propose_from_gsc(result)
+            self._maybe_write_nota(result)
             self.bus.publish(Event("gsc_pulse_completed",
                 {"by": self.id, "ok": True,
                  "total": result.get("total", 0),
                  "bucket_counts": result.get("bucket_counts", {})}, self.id))
         finally:
             self._busy = False
+
+    def _maybe_write_nota(self, result: dict) -> None:
+        now = time.time()
+        if self._nota_interval > 0 and now - self._last_nota < self._nota_interval:
+            return
+        self._last_nota = now
+        path = self._write_gsc_nota(result)
+        self.log.info("📋 GSC-nota geschreven → %s", path)
+        self.bus.publish(Event("gsc_nota_written", {"by": self.id, "path": path}, self.id))
+
+    def _write_gsc_nota(self, result: dict) -> str:
+        today = date.today().isoformat()
+        period = result.get("period", "onbekend")
+        total = result.get("total", 0)
+        counts = result.get("bucket_counts", {})
+        rows = result.get("rows", [])
+
+        page1       = sorted([r for r in rows if r["bucket"] == "page1"],
+                             key=lambda r: r["clicks"], reverse=True)[:10]
+        high_pot    = sorted([r for r in rows if r["bucket"] == "high_potential"],
+                             key=lambda r: r["impressions"], reverse=True)[:10]
+        low_ranking = sorted([r for r in rows if r["bucket"] == "low_ranking"],
+                             key=lambda r: r["impressions"], reverse=True)[:10]
+        content_gap = sorted([r for r in rows if r["bucket"] == "content_gap"],
+                             key=lambda r: r["impressions"], reverse=True)[:10]
+
+        def tabel(rijen: list[dict]) -> str:
+            if not rijen:
+                return "  (geen)\n"
+            lines = [f"  {'Zoekopdracht':<45} {'Imp':>6} {'Klikken':>8} {'Positie':>8}",
+                     "  " + "-" * 71]
+            for r in rijen:
+                lines.append(f"  {r['query']:<45} {r['impressions']:>6} "
+                              f"{r['clicks']:>8} {r['position']:>8.1f}")
+            return "\n".join(lines) + "\n"
+
+        lines = [
+            f"# GSC-nota {today}",
+            f"Periode: {period} | {total} zoekopdrachten geanalyseerd\n",
+            f"## Verdeling buckets",
+            f"- Pagina 1 (positie 1–10):    {counts.get('page1', 0):>4}",
+            f"- High potential (pos 11–20):  {counts.get('high_potential', 0):>4}",
+            f"- Low ranking (pos 21–50):     {counts.get('low_ranking', 0):>4}",
+            f"- Content gap (pos 50+):       {counts.get('content_gap', 0):>4}\n",
+            "## Pagina 1 — meeste klikken",
+            tabel(page1),
+            "## High potential — meeste impressies, net buiten top 10",
+            tabel(high_pot),
+            "## Low ranking — kansen met veel impressies",
+            tabel(low_ranking),
+        ]
+        if content_gap:
+            lines += ["## Content gap — veel gezocht, nauwelijks aanwezig", tabel(content_gap)]
+
+        body = "\n".join(lines)
+        out_dir = os.path.join(self.context.data_dir, "output")
+        os.makedirs(out_dir, exist_ok=True)
+        path = os.path.join(out_dir, f"gsc_nota_{today}.md")
+        with open(path, "w") as f:
+            f.write(body)
+        return path
 
     def _propose_from_gsc(self, result: dict) -> None:
         lib = self.context.library
