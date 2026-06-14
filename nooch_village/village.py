@@ -1512,18 +1512,19 @@ def simulate():
 
 
 def kennis_scout_demo():
-    """Demo: haal een paar lexicon-termen door OpenAlex en Semantic Scholar.
+    """Demo: haal een paar lexicon-termen door OpenAlex, Semantic Scholar en OpenLibrary.
 
     Termen komen rechtstreeks uit het Lexicon (approved concepten), per locale.
-    Per term: topics + citaties (OpenAlex) en tldr (Semantic Scholar).
     Max 3 termen per locale om de demo snel te houden.
     """
     from nooch_village.skills_impl.openalex import OpenalexSkill
     from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
+    from nooch_village.skills_impl.openlibrary_search_inside import OpenlibrarySearchInsideSkill
 
     v   = Village(heartbeat_seconds=86400)
     oa  = OpenalexSkill()
     ss  = SemanticScholarSkill()
+    ol  = OpenlibrarySearchInsideSkill()
     lex = v.context.lexicon
 
     # Haal approved termen per locale op uit het Lexicon
@@ -1567,6 +1568,18 @@ def kennis_scout_demo():
                 print(f"    [{h['year'] or '?'}] {h['citations']:>6} cit.  "
                       f"{h['title'][:45]:<45}")
                 print(f"          tldr: {tldr[:90]}")
+
+        # OpenLibrary — boek-evidentie
+        r_ol = ol.run({"term": term, "limit": 3}, v.context)
+        if "error" in r_ol:
+            print(f"  OpenLib   ✘  {r_ol['error']}")
+        elif not r_ol.get("hits"):
+            print(f"  OpenLib   ℹ  geen boeken gevonden")
+        else:
+            print(f"  OpenLib   ✔  {r_ol['total']:,} boeken totaal")
+            for h in r_ol["hits"]:
+                authors = ", ".join(h.get("authors", [])[:2]) or "?"
+                print(f"    [{h['year'] or '?'}]  {h['title'][:50]:<50}  — {authors[:30]}")
 
     print("\n================ einde kennis_scout demo ================")
 

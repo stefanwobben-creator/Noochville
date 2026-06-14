@@ -678,6 +678,16 @@ class KennisScout(Inhabitant):
             else:
                 evidence.extend(papers.get("hits", []))
 
+            # OpenLibrary — boek-evidentie (duurzaamheidscanon, voltekst)
+            books = self.use_skill("openlibrary_search_inside",
+                                   {"term": word, "limit": 3})
+            if "error" in books:
+                self.log.warning("⚠️ OpenLibrary: %s", books["error"])
+            elif not books.get("hits"):
+                self.log.info("ℹ️ OpenLibrary: geen boeken voor '%s'", word)
+            else:
+                evidence.extend(books.get("hits", []))
+
             assessment = self._distill(word, locale, evidence, demand)
 
             self.bus.publish(Event("keyword_evidence", {
