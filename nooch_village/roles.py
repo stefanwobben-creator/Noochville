@@ -784,12 +784,11 @@ class Noochie(Inhabitant):
             "Begin met 'Missie-alignment: ok' als alles klopt. "
             "Anders begin met 'Missie-lens:' en schrijf max 2 zinnen over wat botst of mist."
         )
-        result = reason(prompt)
-        if not result:
-            return
+        result = reason(prompt) or "(geen LLM beschikbaar)"
         self.log.info("🎯 %s", result)
         if not result.lower().startswith("missie-alignment: ok"):
             self.sense_tension(result, kind="operational")
+        self.bus.publish(Event("noochie_weighed_in", {"oordeel": result}, self.id))
 
     def _reflect(self) -> None:
         """Genereert periodiek een creatief voorstel als spanning richting de mens."""

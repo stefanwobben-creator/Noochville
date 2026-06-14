@@ -1575,15 +1575,22 @@ def once():
     """Eén echte puls en dan stoppen. Ideaal voor een cron-job ('s ochtends)."""
     v = Village(heartbeat_seconds=0)
     done = {}
-    v.bus.subscribe("pulse_completed", lambda e: done.update(e.data))
+    noochie = {}
+    v.bus.subscribe("pulse_completed",     lambda e: done.update(e.data))
+    v.bus.subscribe("noochie_weighed_in",  lambda e: noochie.update(e.data))
     v.start()
+    has_noochie = "noochie" in v.reconciler.live
     v.bus.publish(Event("dag_begint", {"label": "cron"}, "cron"))
     for _ in range(1800):   # max 3 min: Trends + LLM kunnen samen >60s duren
-        if done:
+        pulse_klaar   = bool(done)
+        noochie_klaar = bool(noochie) or not has_noochie
+        if pulse_klaar and noochie_klaar:
             break
         time.sleep(0.1)
     v.stop()
     print(f"Field Note: {done.get('note_path')} | tension={done.get('tension')}")
+    if noochie:
+        print(f"\nNoochie: {noochie.get('oordeel', '-')}")
 
 
 if __name__ == "__main__":
