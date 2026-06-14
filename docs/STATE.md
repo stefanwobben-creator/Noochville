@@ -103,6 +103,22 @@
   Beslissing uitgesteld.
 - **Durable-reject bevestiging, blocked-project recovery, smart WIP,
   requirements-dev.txt**: open uit vorige sessies, ongewijzigd.
+- **C-trechter dedup dood-tot-eerste-geboorte**: `_funnel_c_proposal` vergelijkt
+  `gap_key` (afgeleid via `_role_id_from_gap`, top-3 tokens) tegen `rec.id`.
+  Seed- en handmatige sensed-records hebben korte, leesbare namen die nooit
+  matchen op een token-afgeleid ID. De dedup triggert dus pas nadat een eerder
+  C-voorstel is aangenomen en het resulterende record in governance staat. Correct
+  binnen scope, maar in productie feitelijk inactief totdat de eerste C-rol is
+  geboren.
+- **B/C-sleutelverschil — cross-pad history ontbreekt**: `_report_means_gap`
+  gebruikt `re.sub(r"\W+", "_", desc[:30])` (slug van eerste 30 tekens);
+  `_funnel_c_proposal` gebruikt `_role_id_from_gap` (top-3 semantische tokens).
+  Een gat dat van B naar C kantelt (bijv. na een records-wijziging) wordt door
+  de C-trechter niet als duplicaat van een eerder afgewezen B-item herkend. De
+  twee histories (inbox-history voor B, records-history voor C) spreken een
+  andere sleuteltaal. Sleutel-uniformering lost dit niet op; een cross-pad
+  history-lookup (inbox checken vóór C-publish) is de correcte fix, maar een
+  aparte kwestie.
 
 ## Volgende stappen
 
