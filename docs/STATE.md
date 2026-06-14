@@ -71,6 +71,27 @@
   noochville (anchor-purpose) en analyst, alle drie B, geen C. Lek is dicht.
   De twee-slag-gate (`_sense_gap`, `min_count=2`) bestaat al stroomopwaarts en
   is geen extra werk voor de trechter.
+- **C-trechter + coherentiepoort live** (commit `13802c9`): `_funnel_c_proposal`
+  bevat drie filters in volgorde: (1) kandidaat-dedup op `gap_key == rec.id`,
+  (2) recurrence-passage (no-op, upstream gegarandeerd), (3) coherentiepoort via
+  `llm.reason`. Poort is fail-closed: `None`-response, exception, onverstaanbaar
+  antwoord, en expliciet `vague` geven allemaal `False`. Alleen `VERDICT: coherent`
+  laat door. 6 tests in `test_c_funnel.py`, 203 tests groen.
+  Drie observaties:
+  1. **Stub-afhankelijkheid verspreid**: twee bestaande C-pad tegenproef-tests
+     (`test_truly_new_gap_reaches_add_role_path`, `test_uncovered_gap_reaches_add_role_via_two_strike_gate`)
+     en één unit-test (`test_c_funnel_passes_new_gap_key`) waren stil afhankelijk
+     van de stub (altijd True). Na invulling braken ze; alle drie zijn bijgewerkt
+     met `patch("nooch_village.llm.reason", return_value="VERDICT: coherent\n...")`.
+  2. **Poort vereist altijd een mock in tests**: elke toekomstige test die het
+     C-pad t/m publish wil valideren moet `llm.reason` mocken. Geen key →
+     fail-closed → geen publish. Dit is het gewenste gedrag in productie, maar
+     het is een impliciet contract dat bij nieuwe tests niet vanzelf zichtbaar is.
+  3. **`llm.reason` swallowt intern al uitzonderingen en geeft `None` terug**:
+     de `except Exception`-tak in `_funnel_c_proposal` vangt alleen uitzonderingen
+     die `reason` zelf gooit (bijv. importfout). De `None`-tak vangt API-down en
+     interne fouten. Beide paden zijn getest via mock (`side_effect=RuntimeError`
+     resp. impliciet via `return_value=None`). Geen overlap, geen gat.
 
 ## Principes die niet mogen driften
 
