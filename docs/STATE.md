@@ -2,7 +2,7 @@
 
 ## Waar we staan
 
-- Code op ~8, bewezen: 75/75 tests groen + schone supervised live run.
+- Code op ~10, 159 tests groen + schone supervised live run (tot stap 8).
 - 4 review-fixes doorgevoerd: atomic writes + Noochie-rem (één voorstel, geen
   stroom), test-fundament (pytest), single-source missie/policy, village.py
   gesplitst + TriageEngine eruit + DRY.
@@ -11,6 +11,26 @@
   deduped).
 - Live burgers: GrowthAnalyst, Librarian, PerformanceScout, TimeKeeper,
   Facilitator, CircleLead, TijdgeestWachter, KennisScout, Noochie.
+- **Observatie-store**: getimestampte tijdreeks per rol/metric (`data/observations.jsonl`,
+  append-only). GrowthAnalyst logt pulsdata voor gemonitorde metrics.
+- **Project-primitief + grootboek + projects-CLI**: ProjectLedger (atomic writes,
+  mtime-reload voor cross-process zichtbaarheid), human-push trigger via CLI.
+  Levenscyclus: `queued → running → blocked → running → done`.
+- **Metric-discovery-lus end-to-end bewezen met gemockte trage delen** (Plausible,
+  Trends, LLM): project → analyst ontdekt menukaart → Noochie adviseert →
+  analyst zet monitoring → pulse logt. Gevalideerd in `tests/test_loop.py`
+  (echte threads, 20s timeout). Echte supervised live run nog te doen.
+- **MonitoringStore**: per-rol lijst van te monitoren metrics (`data/role_metrics.json`,
+  dedup + gesorteerd). Gevuld door `_on_advice_ready` na Noochie-advies.
+- **TimeKeeper**: `maand_begint` / `kwartaal_begint` toegevoegd aan
+  `cadence_events` (dag 1 van maand resp. kwartaal).
+- **Dom WIP-plafond op het grootboek**: ⚠ niet gecommit — open item.
+- **Structurele fix — once-per-pulse-discipline + `_busy`-drop**: `react()` heeft
+  `drop_if_busy=True`; een `dag_begint` tijdens een lopende puls wordt bij
+  enqueue direct weggegooid (niet gequeued). `_setup_events()`-hook laat
+  GrowthAnalyst/PerformanceScout/TijdgeestWachter hun eigen pulsgate definiëren.
+  Inbox-flooding opgelost.
+- **Blauwdruk `docs/ONTWERP_projecten_metrics.md`**: ⚠ nog niet aangemaakt — open item.
 
 ## Principes die niet mogen driften
 
@@ -31,15 +51,13 @@
 
 ## Volgende stappen
 
-1. Verifiëren: tests opnieuw draaien na de keyword-lus; inbox openen en de 4
-   pending keywords beslissen (earth shoes, natuurlijke schoenen, noosh,
-   sneaker zero).
-2. Op echt ritme draaien en observeren. Laat het dorp de volgende prioriteit
-   aanwijzen, niet een vooraf bedacht lijstje.
-3. Cockpit aan live data hangen (records/inbox/proces), met de auth-grens erin.
-4. CI: pytest bij elke commit (stap richting 9).
-5. Laat opkomen uit echte behoefte: synthesizer-rol, sub-cirkels voor schaal,
-   batched keyword-review + Librarian die glasheldere gevallen zelf afwijst
-   (pas als keyword-volume groeit).
-6. openlibrary_v2-activatie NIET reflexief goedkeuren: API is per-boek, niet
+1. **Echte supervised live run met sleutels**: sluitstuk van de lus. Plausible +
+   Google Trends + LLM écht aanroepen, one-shot controleren, dan vrijgeven.
+2. **Sensing herbouwen**: event-driven + deduplicatie van staande condities, niet
+   toestand-driven. Rem tegen oneindige spanning zodra een conditie aanhoudt.
+3. **Slimme WIP** (prioriteit-eviction, backpressure) + **synthesizer-rol** die
+   open spanningen batcht en de hefboom kiest.
+4. Cockpit aan live data hangen (records/inbox/proces), met de auth-grens erin.
+5. CI: pytest bij elke commit.
+6. `openlibrary_v2`-activatie NIET reflexief goedkeuren: API is per-boek, niet
    corpus-breed. Laat onbemand tot er een echte per-boek use case is.
