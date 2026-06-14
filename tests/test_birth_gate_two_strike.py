@@ -117,13 +117,19 @@ def test_first_strike_does_not_fire_sense_tension(tmp_path, records):
 # ── C-tegenproef: echt nieuw gat bereikt ADD_ROLE-pad ────────────────────────
 
 def test_uncovered_gap_reaches_add_role_via_two_strike_gate(tmp_path, records):
-    """Ongedekte C-gap: 2×_sense_gap → sense_tension → classify_gap C → ADD_ROLE-voorstel."""
+    """Ongedekte C-gap: 2×_sense_gap → sense_tension → classify_gap C → ADD_ROLE-voorstel.
+
+    llm.reason wordt gemockt op 'coherent' zodat de coherentiepoort doorlaat;
+    zonder mock is de poort fail-closed (geen key in testomgeving).
+    """
     bus = EventBus(name="test")
     proposals = []
     bus.subscribe("proposal_raised", lambda e: proposals.append(e))
 
     inh = _make_inhabitant(records, bus, tmp_path / "data")
-    _two_strikes(inh, "legal_compliance_gat", "legal compliance audit required")
+    with patch("nooch_village.llm.reason",
+               return_value="VERDICT: coherent\nREASON: heldere distincte rol"):
+        _two_strikes(inh, "legal_compliance_gat", "legal compliance audit required")
 
     add_role = _add_role_events(proposals)
     assert len(add_role) == 1, (

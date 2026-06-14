@@ -2,7 +2,7 @@
 
 Filter 1  Kandidaat-dedup (deterministisch): gap_key matcht bestaand record → drop.
 Filter 2  Recurrence-passage (no-op): twee-slag-gate stroomopwaarts reeds doorlopen.
-Filter 3  Coherentiepoort (stub): voorlopig altijd True; LLM-variant volgt in deelstap 2.
+Filter 3  Coherentiepoort via LLM: fail-closed; alleen "coherent" → True.
 """
 from __future__ import annotations
 from unittest.mock import patch
@@ -53,7 +53,8 @@ def _make_inhabitant(recs, bus, data_dir):
 # ── Unit-test 1: dedup dropt op bestaand gap_key ────────────────────────────
 
 def test_c_funnel_dedup_drops_existing_gap_key(tmp_path):
-    """Filter 1: gap_key matcht een niet-gearchiveerd record → _funnel_c_proposal False."""
+    """Filter 1: gap_key matcht een niet-gearchiveerd record → _funnel_c_proposal False.
+    LLM wordt niet bereikt (dedup blokkeert eerder)."""
     recs = _base_records(tmp_path)
     recs.put(Record(
         id="compliance_required_audit", type=RecordType.ROLE,
@@ -71,19 +72,26 @@ def test_c_funnel_dedup_drops_existing_gap_key(tmp_path):
     assert result is False
 
 
-# ── Unit-test 2: nieuw gap_key passeert alle filters ─────────────────────────
+# ── Unit-test 2: nieuw gap_key passeert dedup, coherentiepoort laat door ─────
 
 def test_c_funnel_passes_new_gap_key(tmp_path):
-    """Geen record met gap_key → filter 1 slaat over, stub filter 3 → True."""
+    """Geen record met gap_key → dedup slaat over; met coherent LLM-verdict → True.
+
+    Keuze: llm.reason wordt gemockt op "coherent" zodat de test key-onafhankelijk
+    is. Zonder mock zou de poort fail-closed (None) zijn bij ontbrekende API-key,
+    wat de dedup-passage-logica verbergt. De mock isoleert filter 1 en 3 samen.
+    """
     recs = _base_records(tmp_path)
     bus = EventBus(name="test")
     inh = _make_inhabitant(recs, bus, tmp_path / "data")
 
-    result = inh._funnel_c_proposal(
-        "legal compliance audit required",
-        "compliance_required_audit",
-        recs.all(),
-    )
+    with patch("nooch_village.llm.reason",
+               return_value="VERDICT: coherent\nREASON: heldere distincte rol"):
+        result = inh._funnel_c_proposal(
+            "legal compliance audit required",
+            "compliance_required_audit",
+            recs.all(),
+        )
     assert result is True
 
 
@@ -120,3 +128,60 @@ def test_c_proposal_dedup_blocks_publish(tmp_path):
         "C-trechter dedup moet ADD_ROLE blokkeren als 'compliance_required_audit' "
         "al als record bestaat"
     )
+
+
+# ── Coherentiepoort unit-tests ─────────────────────────────────────────────────
+
+def test_coherence_gate_passes_coherent_verdict(tmp_path):
+    """Filter 3: LLM geeft 'coherent' → _funnel_c_proposal True."""
+    recs = _base_records(tmp_path)
+    bus = EventBus(name="test")
+    inh = _make_inhabitant(recs, bus, tmp_path / "data")
+
+    with patch("nooch_village.llm.reason",
+               return_value="VERDICT: coherent\nREASON: dit is een heldere rol"):
+        result = inh._funnel_c_proposal(
+            "juridische claims controleren en afhandelen",
+            "juridische_claims_afhandelen",
+            recs.all(),
+        )
+    assert result is True
+
+
+def test_coherence_gate_blocks_vague_verdict(tmp_path):
+    """Filter 3: LLM geeft 'vague' → _funnel_c_proposal False; drop is gelogd."""
+    recs = _base_records(tmp_path)
+    bus = EventBus(name="test")
+    inh = _make_inhabitant(recs, bus, tmp_path / "data")
+
+    with patch("nooch_village.llm.reason",
+               return_value="VERDICT: vague\nREASON: keyword-cluster zonder mandaat"):
+        with patch.object(inh.log, "info") as mock_log:
+            result = inh._funnel_c_proposal(
+                "missie-alignment, transparantie, kernwaarden",
+                "missie_transparantie_kernwaarden",
+                recs.all(),
+            )
+
+    assert result is False
+    logged = " ".join(str(c) for c in mock_log.call_args_list)
+    assert "vague" in logged
+
+
+def test_coherence_gate_fails_closed_on_exception(tmp_path):
+    """Filter 3: llm.reason gooit een exception → fail-closed False; fout is gelogd."""
+    recs = _base_records(tmp_path)
+    bus = EventBus(name="test")
+    inh = _make_inhabitant(recs, bus, tmp_path / "data")
+
+    with patch("nooch_village.llm.reason", side_effect=RuntimeError("verbinding verbroken")):
+        with patch.object(inh.log, "info") as mock_log:
+            result = inh._funnel_c_proposal(
+                "juridische claims controleren",
+                "juridische_claims_controleren",
+                recs.all(),
+            )
+
+    assert result is False
+    logged = " ".join(str(c) for c in mock_log.call_args_list)
+    assert "fail-closed" in logged

@@ -204,10 +204,58 @@ class Inhabitant(threading.Thread):
         # Twee-slag-gate upstream gegarandeerd, hier passage.
         self.log.info("C-trechter: recurrence al geverifieerd stroomopwaarts")
 
-        # Filter 3: Coherentiepoort (stub).
-        # LLM-coherentiepoort komt in deelstap 2, fail-closed beoogd, voorlopig True.
-        self.log.info("C-trechter: coherentiepoort gestubd, doorgelaten")
-        return True
+        # Filter 3: Coherentiepoort via LLM.
+        # Fail-closed: fout, timeout, onverstaanbaar antwoord, of "vague" → False.
+        # Alleen "coherent" → True.
+        prompt = (
+            "Beoordeel of de volgende beschrijving één heldere, distincte rol beschrijft, "
+            "of een vage thematische cluster van keywords.\n\n"
+            f"Beschrijving: {gap_description}\n\n"
+            "Antwoord met precies één regel in dit formaat:\n"
+            "VERDICT: coherent\n"
+            "REASON: <één zin, max 20 woorden>\n\n"
+            "of:\n"
+            "VERDICT: vague\n"
+            "REASON: <één zin, max 20 woorden>\n\n"
+            "Voorbeelden coherent: 'juridische claims controleren', 'klantverhalen ophalen "
+            "en verspreiden', 'persberichten schrijven'.\n"
+            "Voorbeelden vague: 'missie-alignment, transparantie, kernwaarden', "
+            "'duurzaamheid en marketing', 'algemene communicatie'."
+        )
+        try:
+            from nooch_village.llm import reason as _llm_reason
+            raw = _llm_reason(prompt)
+        except Exception as exc:
+            self.log.info(
+                "C-trechter: coherentiepoort fout: %s, fail-closed dropped", exc)
+            return False
+
+        if raw is None:
+            self.log.info(
+                "C-trechter: coherentiepoort fout: geen LLM-response, fail-closed dropped")
+            return False
+
+        verdict = ""
+        reason_text = ""
+        for line in raw.splitlines():
+            s = line.strip()
+            if s.lower().startswith("verdict:"):
+                verdict = s[len("verdict:"):].strip().lower()
+            elif s.lower().startswith("reason:"):
+                reason_text = s[len("reason:"):].strip()
+
+        if verdict == "coherent":
+            self.log.info(
+                "C-trechter: coherentiepoort=coherent (%s), doorgelaten", reason_text)
+            return True
+        if verdict == "vague":
+            self.log.info(
+                "C-trechter: coherentiepoort=vague (%s), dropped", reason_text)
+            return False
+        self.log.info(
+            "C-trechter: coherentiepoort onverstaanbaar antwoord (%r), fail-closed dropped",
+            raw[:80])
+        return False
 
     def _report_means_gap(self, gap_key: str, description: str) -> None:
         """Routeer een structurele capaciteitsgrens direct naar de inbox als means-gap-item.

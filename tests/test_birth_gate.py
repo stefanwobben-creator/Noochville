@@ -10,6 +10,7 @@ de thread wordt nooit gestart (geen start(), geen join()).
 """
 from __future__ import annotations
 import pytest
+from unittest.mock import patch
 from nooch_village.event_bus import EventBus
 from nooch_village.governance import Records
 from nooch_village.human_inbox import HumanInbox
@@ -86,15 +87,21 @@ def test_junk_description_produces_no_birth(tmp_path, records, description):
 # ── C: echt ongedekt gat → ADD_ROLE-pad ──────────────────────────────────────
 
 def test_truly_new_gap_reaches_add_role_path(tmp_path, records):
-    """Een echt ongedekt gat (legal compliance) bereikt het ADD_ROLE-voorstel."""
+    """Een echt ongedekt gat (legal compliance) bereikt het ADD_ROLE-voorstel.
+
+    llm.reason wordt gemockt op 'coherent' zodat de coherentiepoort doorlaat;
+    zonder mock is de poort fail-closed (geen key in testomgeving).
+    """
     bus = EventBus(name="test")
     proposals = []
     bus.subscribe("proposal_raised", lambda e: proposals.append(e))
 
     inh = _make_inhabitant(records, bus)
-    inh._raise_governance_proposal(
-        Tension(sensed_by="test_rol",
-                description="legal compliance audit required", kind="structural"))
+    with patch("nooch_village.llm.reason",
+               return_value="VERDICT: coherent\nREASON: heldere distincte rol"):
+        inh._raise_governance_proposal(
+            Tension(sensed_by="test_rol",
+                    description="legal compliance audit required", kind="structural"))
 
     add_role = [p for p in proposals
                 if p.data.get("proposal", {}).get("change", {}).get("kind") == "add_role"]
