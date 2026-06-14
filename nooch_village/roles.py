@@ -784,7 +784,11 @@ class Noochie(Inhabitant):
         self._weigh_in(note)
 
     def _weigh_in(self, field_note: str) -> None:
-        """Leest de Field Note door een missie-lens en senst spanning als er drift is."""
+        """Leest de Field Note door een missie-lens en senst spanning als er drift is.
+
+        Deduplicatie: dezelfde missie-lens (zelfde hash) wordt niet opnieuw als spanning
+        gesensed totdat er een nieuwe Field Note met andere inhoud binnenkomt.
+        """
         from nooch_village.llm import reason
         prompt = (
             f"Je bent Noochie, de missiestem van Nooch.earth. Scherp en nuchter.\n"
@@ -797,11 +801,23 @@ class Noochie(Inhabitant):
         result = reason(prompt) or "(geen LLM beschikbaar)"
         self.log.info("🎯 %s", result)
         if not result.lower().startswith("missie-alignment: ok"):
-            self.sense_tension(result, kind="operational")
+            h = hashlib.sha256(result.encode()).hexdigest()[:16]
+            if getattr(self, "_last_weigh_hash", None) != h:
+                self._last_weigh_hash = h
+                self.sense_tension(result, kind="operational")
+            else:
+                self.log.info("🎯 missie-lens ongewijzigd — spanning niet herhaald")
         self.bus.publish(Event("noochie_weighed_in", {"oordeel": result}, self.id))
 
     def _reflect(self) -> None:
-        """Genereert periodiek een creatief voorstel als spanning richting de mens."""
+        """Genereert periodiek één creatief voorstel als spanning richting de mens.
+
+        Deduplicatie: de inhoud-hash van het voorstel wordt bijgehouden in
+        reflect_noochie.json (via _sense_gap). Pas bij een nieuw uniek voorstel
+        (andere hash) én min_count=2 wordt er een spanning gesensed — ook in
+        demo-modus (reflect_interval_seconds=0). force=True is verwijderd zodat
+        Noochie de inbox niet overspoelt.
+        """
         from nooch_village.llm import reason
         prompt = (
             f"Je bent Noochie, ideeënmotor van Nooch.earth.\n"
@@ -811,6 +827,8 @@ class Noochie(Inhabitant):
             "Max 2 zinnen. Formaat: 'Het dorp mist [wat]. [Voorstel] zou helpen omdat [reden].'"
         )
         result = reason(prompt)
-        if result:
-            self._sense_gap("creatief_voorstel", result, kind="governance",
-                            min_count=1, force=True)
+        if not result:
+            return
+        h = hashlib.sha256(result.encode()).hexdigest()[:16]
+        gap_key = f"creatief_voorstel_{h}"
+        self._sense_gap(gap_key, result, kind="governance", min_count=2)
