@@ -104,24 +104,38 @@ class Inhabitant(threading.Thread):
             rid = re.sub(r"\W+", "_", desc_l[:20]).strip("_")
             change = GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id=rid,
                                       purpose=desc[:100], new_role_parent="noochville")
-        else:
-            if is_reflection:
-                # Extraheer de accountability-naam na het "accountability:"-marker
-                idx      = desc_l.index(_ACC) + len(_ACC)
-                acc_text = desc[idx:].strip()
-                # Neem tot " — " of einde; trim tot 100 tekens
-                acc_text = acc_text.split(" — ")[0].split("\n")[0].strip()[:100]
-            else:
-                acc_text = desc[:80]
+        elif is_reflection:
+            # Extraheer de accountability-naam na het "accountability:"-marker
+            idx      = desc_l.index(_ACC) + len(_ACC)
+            acc_text = desc[idx:].strip()
+            # Neem tot " — " of einde; trim tot 100 tekens
+            acc_text = acc_text.split(" — ")[0].split("\n")[0].strip()[:100]
             change = GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id=self.id,
                                       add_accountabilities=[acc_text])
+        else:
+            # Roster-match oordeelsstap: beslist ADD_ROLE of AMEND_ROLE
+            from nooch_village.roster_match import roster_match
+            records = getattr(self.context, "records", None)
+            r_kind, r_id, r_purpose = roster_match(desc, self.id, records)
+            if r_kind == ChangeKind.ADD_ROLE:
+                change = GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id=r_id,
+                                          purpose=r_purpose, new_role_parent="noochville")
+            else:
+                change = GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id=self.id,
+                                          add_accountabilities=[desc[:80]])
 
-        rationale = (
-            "Periodieke reflectie gesignaleerd: structureel gat tussen eigen capaciteit "
-            "en vereiste accountability."
-            if is_reflection
-            else "Structurele spanning gedetecteerd via automatische triage"
-        )
+        if change.kind == ChangeKind.ADD_ROLE and not is_reflection:
+            rationale = (
+                "Structureel terugkerend gat: geen bestaande rol dekt deze "
+                "accountability voldoende (roster-match onder drempel)."
+            )
+        else:
+            rationale = (
+                "Periodieke reflectie gesignaleerd: structureel gat tussen eigen capaciteit "
+                "en vereiste accountability."
+                if is_reflection
+                else "Structurele spanning gedetecteerd via automatische triage"
+            )
         proposal = Proposal(
             proposer_role=self.id,
             change=change,

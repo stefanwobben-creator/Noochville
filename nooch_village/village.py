@@ -154,6 +154,7 @@ class Village:
         dagboek = os.path.join(self.context.data_dir, "groeidagboek.jsonl")
         with open(dagboek, "a") as f:
             f.write(json.dumps({"ts": time.time(), **e.data}, ensure_ascii=False, default=str) + "\n")
+        self.human_inbox.sync_unmanned(self.records.all(), CLASS_MAP)
 
     def start(self):
         self.root.start()
