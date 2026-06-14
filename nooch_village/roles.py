@@ -780,6 +780,33 @@ class KennisScout(Inhabitant):
         )
 
 
+# ── Metric-advies (deterministisch placeholder voor latere LLM-stap) ───────
+# v1-regel: keep als de metric een bekende groei-indicator of doelkoppeling
+# heeft. Bij onbekende metrics: fail-closed naar skip.
+# TODO: vervang later door een LLM-stap die de strategy/goals meeleest.
+
+_METRIC_ADVICE: dict[str, tuple[str, str]] = {
+    "visitors":       ("keep", "Directe indicator voor organisch bereik — kern groeidoel."),
+    "pageviews":      ("keep", "Meet content-engagement; proxy voor missie-verspreiding."),
+    "bounce_rate":    ("skip", "Geen actief groeidoel op dit moment; herintroduceren bij conversie-focus."),
+    "visit_duration": ("skip", "Informatief maar niet gekoppeld aan een actief doel."),
+}
+_DEFAULT_METRIC_ADVICE = ("skip", "Geen bekende doelkoppeling — sla over tot verder onderzoek.")
+
+
+def advise_metrics(catalog: list[str], context) -> list[dict]:
+    """Geeft per metric een keep/skip + rationale.
+
+    Pure functie: deterministisch en reproduceerbaar.
+    context is gereserveerd voor de toekomstige LLM-variant (nu ongebruikt).
+    """
+    result = []
+    for metric in catalog:
+        verdict, rationale = _METRIC_ADVICE.get(metric, _DEFAULT_METRIC_ADVICE)
+        result.append({"metric": metric, "verdict": verdict, "rationale": rationale})
+    return result
+
+
 class Noochie(Inhabitant):
     """Belichaamt de missie, bepleit en genereert creatieve governance-voorstellen.
     Geen domeinen, geen skills — alleen stem en ideeënmotor.
@@ -788,6 +815,28 @@ class Noochie(Inhabitant):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.react("pulse_completed", self._on_pulse_completed)
+        self.react("project_discovery_ready", self._on_discovery_ready)
+
+    def _on_discovery_ready(self, event: Event) -> None:
+        """Ontvang de menukaart van een discovery-project en produceer een advies.
+
+        Publiceert project_advice_ready met {project_id, advice} en geeft
+        het project terug aan de eigenaar (blocked_on → owner).
+        Maakt GEEN governance-voorstel en raakt GEEN record aan.
+        """
+        pid     = event.data.get("project_id")
+        catalog = event.data.get("catalog", [])
+        if not pid:
+            return
+        advice = advise_metrics(catalog, self.context)
+        self.bus.publish(Event("project_advice_ready",
+                               {"project_id": pid, "advice": advice}, self.id))
+        ledger = getattr(self.context, "projects", None)
+        if ledger is not None:
+            project = ledger.get(pid)
+            owner   = (project or {}).get("owner", "analyst")
+            ledger.block(pid, owner)
+        self.log.info("🎯 discovery-advies: %d metrics beoordeeld, project terug bij eigenaar", len(advice))
 
     def _on_pulse_completed(self, event: Event) -> None:
         note_path = event.data.get("note_path")
