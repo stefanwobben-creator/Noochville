@@ -1,8 +1,8 @@
-# NoochVille — State & Handover (2026-06-13)
+# NoochVille — State & Handover (2026-06-14)
 
 ## Waar we staan
 
-- Code op ~10, 163 tests groen + schone supervised live run (tot stap 8).
+- Code op ~10, 170 tests groen + schone supervised live run (tot stap 8).
 - 4 review-fixes doorgevoerd: atomic writes + Noochie-rem (één voorstel, geen
   stroom), test-fundament (pytest), single-source missie/policy, village.py
   gesplitst + TriageEngine eruit + DRY.
@@ -36,6 +36,15 @@
   aanroepen zwijgen zodra de accountability in het rol-DNA staat of als open
   inbox-item gevonden wordt. `force` omzeilt min_count maar respecteert dedup.
   4 thread-vrije tests in `tests/test_sense_gap.py`, 163 tests groen.
+- **Sensing-herbouw stap 2 — means-gap routing naar inbox**: structurele capaciteits-
+  grenzen gaan NIET meer via de governance-gate (`amend_role`). Nieuw pad:
+  `_report_means_gap` → `means_gap_sensed`-event → `Village._on_means_gap` →
+  `HumanInbox.add_means_gap` (dedup op `gap_key`, permanent, ongeacht status).
+  Resultaat: `openlibrary_v2`, `ngram_2019_cutoff`, `nl_corpus_coverage` landen
+  elk exact één keer als means_gap-item in de inbox; `semscholar_no_key` zwijgt.
+  Geen `amend_role`-churn meer. Live bewijs: 4 supervised pulsen vlakke tellers
+  (38/34/42/38 onveranderd), `python -m nooch_village.inbox list` toont 3 items,
+  `amend_role` = 0 in system_log. 170 tests groen (`tests/test_means_gap.py`).
 
 ## Principes die niet mogen driften
 
