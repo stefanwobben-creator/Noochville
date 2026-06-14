@@ -55,6 +55,7 @@ Data (allemaal in `data/`, gitignored):
 7. **Een cirkel heeft geen handen: hij delegeert.** Laat een `Circle` nooit zelf werk uitvoeren in `handle`; hij routeert naar een member.
 8. **Niet de oude `src/`-generaties terughalen.** Die repo had drie onderling botsende base-classes (`Role` vs `BaseAgent`), drie versies van het datamodel, en een Plausible-agent met de echte API-call dood-gecodeerd áchter een `return` met mock-data. Dat is bewust vervangen.
 9. **Inwoners reageren op events via `self.react(event_name, handler)`, nooit direct via `self.bus.subscribe`.** De `react()`-wrapper deponeert het event-job in de eigen inbox; de handler draait dan op de eigen thread van de inwoner, niet op die van de afzender. Zo blokkeert een `publish()` nooit en werken inwoners parallel. Uitzonderingen (infra): `Matchmaker`, `Secretary`, `Reconciler` mogen direct subscriben — ze hebben lichte, snelle handlers zonder blocking I/O.
+10. **Sensing en zelfverbetering produceren UITSLUITEND spanningen en voorstellen.** Een inwoner mag via `_reflect()` gaten signaleren en `amend_role`/`add_role`-voorstellen doen. Hij mag NOOIT zelf nieuwe code schrijven, nieuwe threads starten, nieuwe skills registreren, of nieuwe externe API's aanroepen buiten zijn eigen `skills`-lijst. Uitbreiding van capaciteit is altijd mens-gated — identiek aan de geboren-versus-bemenst-splitsing voor rollen.
 
 ## Een nieuwe skill toevoegen
 
@@ -242,6 +243,36 @@ per-term tabel met corpus, richting (stijgend/dalend/vlak), recente helling en f
   automatisch als het record in governance aanwezig is.
 - Dedup via `lib.status(term) is not None` — ook stijgende termen worden nooit dubbel voorgesteld.
 
+## Gap-sensing — drie niveaus van spanning
+
+Sensing is niet "een incident melden" maar "een gat observeren". Elk inwoner senst op drie niveaus:
+
+| Niveau | Wat | Trigger | Voorbeeld |
+|--------|-----|---------|-----------|
+| **Doel-voortgang** | Werkelijke trend vs. vereiste run-rate voor actief doel | Elke puls (GrowthAnalyst) | Bezoekers 3 pulsen dalend terwijl Q4-doel nadert |
+| **Missie-gat** | Wat ontbreekt om de missie te dienen (geen rol, geen meting, geen koppeling) | Periodieke reflectie | pairs_sold niet meetbaar in de puls |
+| **Zelf-gat** | Eigen capaciteit vs. eigen accountabilities | Periodieke reflectie | ngram_culture stopt in 2019; 7 jaar blind |
+
+**Doel-voortgang (GrowthAnalyst, elke puls):**
+- Schrijft bezoekers naar `data/pulse_history.jsonl` (rolling history)
+- Theorie-gat: als de doel-metriek niet meetbaar is → eenmalig sensen, daarna elke 14 dagen
+- Off-pace: ≥3 opeenvolgende dalende pulsen → spanning; bij één hobbel niet
+- State in `data/goal_state.json` (deduplicatie)
+
+**Periodieke reflectie (elke inwoner, eigen ritme):**
+- `Inhabitant._maybe_reflect()` → reageert op `dag_begint`, bewaakt `_reflect_interval` (default: 7 dagen)
+- `Inhabitant._reflect()` → stub; subklassen overschrijven met specifieke gaten
+- `Inhabitant._sense_gap(gap_key, description, min_count, force)`:
+  - `min_count=2` (default): ruis-filter; pas spanning bij ≥2 opeenvolgende observaties
+  - `force=True`: structureel bekende limieten (altijd waar, geen herhaling nodig)
+  - State per rol in `data/reflect_<rol_id>.json`
+- Demo: `python -m nooch_village.village reflect` (stel `reflect_interval_seconds=0` in voor directe trigger)
+
+**Hoe een spanning er na gap-sensing uitziet:**
+- Doel-gap → `sense_tension(kind="operational")` → triage → meest waarschijnlijk eigen-werk of mens-escalatie
+- Missie-gap → `sense_tension(kind="governance")` + "accountability:" in beschrijving → triage → `_raise_governance_proposal` → `AMEND_ROLE` of `ADD_ROLE`
+- Zelf-gap → identiek aan missie-gap; het voorstel amendeert de eigen rol
+
 ## Roadmap (depth-first, niet breadth-first)
 
 1. **Echte missie-redenering aanzetten** in de Field Note (zet een LLM-key in `.env`).
@@ -286,6 +317,29 @@ De wortelcirkel heeft een `purpose` die de Nooch-missie verwoordt en `policies` 
 | `governance_verdict` | mens/proxy | `{proposal_id, decision: approve|reject, reason}` |
 | `governance_changed` | Secretary | Change aangenomen en geschreven naar records |
 | `governance_rejected` | Secretary | Mens wees voorstel af |
+
+## Harde grens: zelfverbetering stopt bij voorstellen
+
+Dit is de meest kritieke architectuurgrens in het systeem en mag NOOIT worden overschreden.
+
+### Wat een inwoner WEL mag
+- Een gat signaleren via `sense_tension` of `_sense_gap`
+- Een `amend_role`- of `add_role`-voorstel genereren dat beschrijft wat een nieuwe bron of capaciteit zou doen
+- In dat voorstel een URL of bron noemen als audittrail voor de mens
+- Via triage en governance het voorstel laten beoordelen door de Facilitator
+
+### Wat een inwoner NOOIT mag
+- Zelf nieuwe code schrijven, uitvoeren of laden (ook geen `exec`, geen dynamische imports van externe modules)
+- Zelf een nieuwe externe API of databron aanroepen die niet al in zijn `skills`-lijst staat
+- Een nieuwe `Skill`-subklasse instantiëren of registreren in de `SkillRegistry`
+- Een nieuwe thread starten voor een nieuwe capaciteit
+
+### Waarom (dezelfde reden als bij rollen)
+De geboren-versus-bemenst-splitsing geldt voor **capaciteit**, niet alleen voor rollen. Net als een `add_role`-voorstel een rol definitie schrijft maar geen thread start, schrijft een `amend_role`-reflectie-voorstel een accountability maar start geen nieuwe API-verbinding. De drempel voor draaiende code is altijd menselijke goedkeuring plus handmatige registratie.
+
+**Voorbeeld:** TijdgeestWachter signaleert via `_reflect()` dat de ngram-databron stopt in 2019. Hij schrijft een voorstel "accountability: aanvullende recente bron evalueren". Het voorstel wordt aangenomen → de accountability staat in het record. De implementatie (bijv. Wikipedia API of een nieuwere corpus) vereist menselijke code + registratie in `SkillRegistry` + `CLASS_MAP`. Tot dan is de accountability een "belofte aan de mens", geen draaiend systeem.
+
+**In code:** `Inhabitant._reflect()` bevat een docstring die dit expliciet verwoordt. Elke subklasse die `_reflect()` overschrijft MOET dit patroon respecteren.
 
 ## Schaal-naden (grenzen die je later kunt opentrekken, nu niet schenden)
 
