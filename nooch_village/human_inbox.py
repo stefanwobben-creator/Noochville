@@ -21,7 +21,7 @@ from nooch_village.util import atomic_write_json
 
 
 _VALID_STATUSES = {"pending", "approved", "rejected", "amended", "deferred"}
-_VALID_TYPES    = {"escalation", "activation"}
+_VALID_TYPES    = {"escalation", "activation", "keyword"}
 
 
 class HumanInbox:
@@ -113,6 +113,37 @@ class HumanInbox:
                 "current_skills": defn.get("skills", []),
                 # Wat schrijven en draaien zou worden bij een approve:
                 "activation_plan": _derive_activation_plan(role_id, defn),
+            },
+            "status":     "pending",
+            "created_at": time.time(),
+            "resolved_at": None,
+            "resolution": None,
+        }
+        self._save()
+        return iid
+
+    def add_keyword_escalation(self, word: str, reason: str, demand: dict) -> str:
+        """Voeg een keyword-escalatie-item toe vanuit human_decision_needed.
+
+        Duplicaatcheck op word + status pending: hetzelfde woord wordt niet tweemaal
+        toegevoegd zolang het nog open staat.
+        Retourneert het item-id.
+        """
+        for item in self._items.values():
+            if (item["type"] == "keyword"
+                    and item.get("subject") == word
+                    and item["status"] == "pending"):
+                return item["id"]
+
+        iid = uuid.uuid4().hex[:12]
+        self._items[iid] = {
+            "id":      iid,
+            "type":    "keyword",
+            "subject": word,
+            "context": {
+                "word":   word,
+                "reason": reason,
+                "demand": demand or {},
             },
             "status":     "pending",
             "created_at": time.time(),

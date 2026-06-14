@@ -93,6 +93,7 @@ class Village:
         self.bus.subscribe("tension_sensed",              self._observe)
         self.bus.subscribe("keyword_decided",             self._observe)
         self.bus.subscribe("human_decision_needed",       self._observe)
+        self.bus.subscribe("human_decision_needed",       self._on_keyword_escalation)
         self.bus.subscribe("gsc_pulse_completed",         self._observe)
         self.bus.subscribe("governance_changed",          self._observe)
         self.bus.subscribe("governance_review_requested", self._observe)
@@ -120,6 +121,17 @@ class Village:
         logging.getLogger("village.inbox").info(
             "📬 escalatie in human_inbox: item %s (voorstel %s, poort %s)",
             iid, proposal_dict.get("id", "?"), gate)
+
+    def _on_keyword_escalation(self, e: Event) -> None:
+        """Schrijf keyword-escalaties naar de human inbox."""
+        if e.data.get("topic") != "keyword":
+            return
+        word   = e.data.get("word", "?")
+        reason = e.data.get("reason", "")
+        demand = e.data.get("demand", {})
+        iid = self.human_inbox.add_keyword_escalation(word, reason, demand)
+        logging.getLogger("village.inbox").info(
+            "📬 keyword-escalatie in human_inbox: item %s ('%s')", iid, word)
 
     def approve_escalation(self, item_id: str, reason: str = "") -> bool:
         """Stuur governance_verdict approve voor een escalatie-item.

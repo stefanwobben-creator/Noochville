@@ -33,7 +33,7 @@ def _status_icon(status: str) -> str:
 
 
 def _type_icon(typ: str) -> str:
-    return {"escalation": "🏛️", "activation": "🔧"}.get(typ, "?")
+    return {"escalation": "🏛️", "activation": "🔧", "keyword": "📚"}.get(typ, "?")
 
 
 def _print_item_summary(item: dict) -> None:
@@ -123,6 +123,30 @@ def _print_item_full(item: dict) -> None:
         print(f"  approve <id> [reden]   → green-light; code daarna handmatig + code-review")
         print(f"  reject  <id> [reden]   → niet implementeren, gesloten")
         print(f"  amend   <id> <tekst>   → plan aanpassen, item bijwerken")
+        print(f"  defer   <id> [reden]   → uitstellen, blijft geregistreerd")
+
+    elif item["type"] == "keyword":
+        ctx = item.get("context", {})
+        demand = ctx.get("demand", {})
+        src    = demand.get("source", "?")
+        signal = demand.get("signal", "?")
+        interest = demand.get("interest")
+        print(f"\n── Woord ──")
+        print(f"Woord     : {ctx.get('word')}")
+        print(f"Bron      : {src}  |  Signaal: {signal}"
+              + (f"  |  Interest: {interest}" if interest else ""))
+        pos = demand.get("position")
+        if pos:
+            print(f"Positie   : {pos:.1f}  (bucket: {demand.get('bucket','?')})")
+        locale = demand.get("locale")
+        if locale:
+            print(f"Locale    : {locale}")
+        print(f"\n── Reden escalatie ──")
+        print(f"{ctx.get('reason','')}")
+        print(f"\n── Acties ──")
+        print(f"  approve <id> [reden]   → goedkeuren → in bibliotheek als 'approved'")
+        print(f"  reject  <id> [reden]   → verbieden → in bibliotheek als 'forbidden'")
+        print(f"  amend   <id> <tekst>   → notitie toevoegen, opnieuw beoordelen")
         print(f"  defer   <id> [reden]   → uitstellen, blijft geregistreerd")
 
     res = item.get("resolution")
@@ -224,6 +248,14 @@ def main(argv: list[str]) -> None:
             print(f"\n⚠  Approval green-light de implementatie.")
             print(f"   Iedere stap hierboven passeert daarna nog de normale per-edit code-review.")
 
+        elif item["type"] == "keyword":
+            word = item["context"].get("word", item["subject"])
+            inbox.resolve(iid, "approved", reason=reason)
+            v.context.library.curate(word, "approved",
+                                     rationale=reason or "menselijke goedkeuring via inbox",
+                                     by="human")
+            print(f"✅ '{word}' goedgekeurd → in bibliotheek als 'approved'.")
+
     elif cmd == "reject":
         if len(argv) < 2:
             print("Gebruik: inbox reject <id> [reden]"); sys.exit(1)
@@ -248,9 +280,19 @@ def main(argv: list[str]) -> None:
                 "human"))
             time.sleep(0.3)
             v.stop()
+            print(f"❌ Item {iid} afgewezen. Reden: {reason or '(geen)'}")
+
+        elif item["type"] == "keyword":
+            word = item["context"].get("word", item["subject"])
+            inbox.resolve(iid, "rejected", reason=reason)
+            v.context.library.curate(word, "forbidden",
+                                     rationale=reason or "menselijk besluit via inbox",
+                                     by="human")
+            print(f"❌ '{word}' verboden → in bibliotheek als 'forbidden'.")
+
         else:
             inbox.resolve(iid, "rejected", reason=reason)
-        print(f"❌ Item {iid} afgewezen. Reden: {reason or '(geen)'}")
+            print(f"❌ Item {iid} afgewezen. Reden: {reason or '(geen)'}")
 
     elif cmd == "amend":
         if len(argv) < 3:
