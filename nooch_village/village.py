@@ -1578,7 +1578,7 @@ def once():
     v.bus.subscribe("pulse_completed", lambda e: done.update(e.data))
     v.start()
     v.bus.publish(Event("dag_begint", {"label": "cron"}, "cron"))
-    for _ in range(600):
+    for _ in range(1800):   # max 3 min: Trends + LLM kunnen samen >60s duren
         if done:
             break
         time.sleep(0.1)
