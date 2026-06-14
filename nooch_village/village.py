@@ -137,13 +137,22 @@ def activate_tijdgeest_wachter(records: Records) -> None:
 
 
 def activate_kennis_scout(records: Records) -> None:
-    """Idempotent: voeg de drie kennisgrond-skills toe aan kennis_scout zodra het record bestaat."""
+    """Idempotent: zet v1-skills in kennis_scout-record zodra het bestaat.
+
+    Verwijdert ook eventuele v0-namen (openalex, semantic_scholar,
+    openlibrary_search_inside) die uit de vorige commit zijn overgebleven.
+    """
     rec = records.get("kennis_scout")
     if rec is None:
         return
-    _SKILLS = ["openlibrary_search_inside", "semantic_scholar", "openalex"]
+    _V1     = ["openalex_evidence", "semscholar_tldr"]
+    _OLD    = ["openalex", "semantic_scholar", "openlibrary_search_inside"]
     changed = False
-    for s in _SKILLS:
+    for old in _OLD:
+        if old in rec.definition.skills:
+            rec.definition.skills.remove(old)
+            changed = True
+    for s in _V1:
         if s not in rec.definition.skills:
             rec.definition.skills.append(s)
             changed = True
@@ -261,7 +270,9 @@ class Village:
         for skill in (SiteHealthSkill(), BudgetSkill(), PlausibleSkill(), TrendsSkill(),
                       FieldNoteSkill(), LibraryLookupSkill(), KeywordReviewSkill(),
                       GscPerformanceSkill(), NgramCultureSkill(),
-                      OpenlibrarySearchInsideSkill(), SemanticScholarSkill(), OpenalexSkill()):
+                      OpenlibrarySearchInsideSkill(),   # v2: nog niet in KennisScout DNA
+                      SemanticScholarSkill(),            # capability: semscholar_tldr
+                      OpenalexSkill()):                  # capability: openalex_evidence
             self.registry.register(skill)
         self.records = Records(os.path.join(self.context.data_dir, "governance_records.json"))
         seed_records(self.records)
@@ -1459,6 +1470,66 @@ def simulate():
     print("="*65 + "\n")
 
 
+def kennis_scout_demo():
+    """Demo: haal een paar lexicon-termen door OpenAlex en Semantic Scholar.
+
+    Termen komen rechtstreeks uit het Lexicon (approved concepten), per locale.
+    Per term: topics + citaties (OpenAlex) en tldr (Semantic Scholar).
+    Max 3 termen per locale om de demo snel te houden.
+    """
+    from nooch_village.skills_impl.openalex import OpenalexSkill
+    from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
+
+    v   = Village(heartbeat_seconds=86400)
+    oa  = OpenalexSkill()
+    ss  = SemanticScholarSkill()
+    lex = v.context.lexicon
+
+    # Haal approved termen per locale op uit het Lexicon
+    nl_terms = lex.words_for_lang("nl", status_filter="approved")[:3]
+    en_terms = lex.words_for_lang("en", status_filter="approved")[:3]
+    demo_pairs = [(t, "nl") for t in nl_terms] + [(t, "en") for t in en_terms]
+
+    print("\n================ DEMO: KennisScout — lexicon-termen gronden ================")
+    print(f"NL termen: {nl_terms}")
+    print(f"EN termen: {en_terms}")
+    print("(OpenAlex: 0.5s sleep; Semantic Scholar: 1s sleep + backoff bij 429)\n")
+
+    for term, locale in demo_pairs:
+        print(f"\n{'─'*60}")
+        print(f"  {term}  [{locale}]")
+        print(f"{'─'*60}")
+
+        # OpenAlex
+        r_oa = oa.run({"term": term, "locale": locale, "limit": 3}, v.context)
+        if "error" in r_oa:
+            print(f"  OpenAlex  ✘  {r_oa['error']}")
+        elif r_oa.get("no_data"):
+            print(f"  OpenAlex  ℹ  geen werken gevonden  ({r_oa.get('reason','')})")
+        else:
+            print(f"  OpenAlex  ✔  {r_oa['total']:,} werken totaal")
+            for h in r_oa["hits"]:
+                topic = h.get("topic", "") or "—"
+                print(f"    [{h['year'] or '?'}] {h['citations']:>6} cit.  "
+                      f"{h['title'][:50]:<50}  topic: {topic[:35]}")
+
+        # Semantic Scholar
+        r_ss = ss.run({"term": term, "locale": locale, "limit": 3}, v.context)
+        if "error" in r_ss:
+            print(f"  SemSchol  ✘  {r_ss['error']}")
+        elif r_ss.get("no_data"):
+            print(f"  SemSchol  ℹ  geen papers gevonden  ({r_ss.get('reason','')})")
+        else:
+            print(f"  SemSchol  ✔  {r_ss['total']:,} papers totaal")
+            for h in r_ss["hits"]:
+                tldr = h.get("tldr", "") or "(geen tldr)"
+                print(f"    [{h['year'] or '?'}] {h['citations']:>6} cit.  "
+                      f"{h['title'][:45]:<45}")
+                print(f"          tldr: {tldr[:90]}")
+
+    print("\n================ einde kennis_scout demo ================")
+
+
 def once():
     """Eén echte puls en dan stoppen. Ideaal voor een cron-job ('s ochtends)."""
     v = Village(heartbeat_seconds=0)
@@ -1504,5 +1575,7 @@ if __name__ == "__main__":
         v.print_roster()
     elif mode == "simulate":
         simulate()
+    elif mode == "kennis_scout":
+        kennis_scout_demo()
     else:
         demo()
