@@ -15,7 +15,7 @@ from nooch_village.skills import SkillRegistry
 from nooch_village.matchmaker import Matchmaker
 from nooch_village.governance import Records, Secretary, Reconciler
 from nooch_village.models import Record, RoleDefinition, RecordType
-from nooch_village.roles import TimeKeeper, GrowthAnalyst, Librarian, PerformanceScout, Facilitator, TijdgeestWachter
+from nooch_village.roles import TimeKeeper, GrowthAnalyst, Librarian, PerformanceScout, Facilitator, TijdgeestWachter, KennisScout
 from nooch_village.library import Library
 from nooch_village.lexicon import Lexicon
 from nooch_village.models import Proposal, GovernanceChange, ChangeKind
@@ -28,17 +28,17 @@ from nooch_village.skills_impl.field_note import FieldNoteSkill
 from nooch_village.skills_impl.library_skills import LibraryLookupSkill, KeywordReviewSkill
 from nooch_village.skills_impl.gsc import GscPerformanceSkill
 from nooch_village.skills_impl.ngram import NgramCultureSkill
+from nooch_village.skills_impl.openlibrary_search_inside import OpenlibrarySearchInsideSkill
+from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
+from nooch_village.skills_impl.openalex import OpenalexSkill
 from nooch_village.human_inbox import HumanInbox
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 CLASS_MAP = {"timekeeper": TimeKeeper, "analyst": GrowthAnalyst,
              "librarian": Librarian, "scout": PerformanceScout,
-             "facilitator": Facilitator, "tijdgeest_wachter": TijdgeestWachter}
-# "kennis_scout": KennisScout   ← ONBEMAND geboren via governance 2026-06-14.
-#   Activeer door: 1) KennisScout-klasse schrijven in roles.py,
-#   2) skills_impl/open_library.py + skills_impl/semantic_scholar.py schrijven,
-#   3) deze regel ontcommentariëren en KennisScout importeren.
+             "facilitator": Facilitator, "tijdgeest_wachter": TijdgeestWachter,
+             "kennis_scout": KennisScout}
 
 
 _ANCHOR_POLICIES = [
@@ -133,6 +133,21 @@ def activate_tijdgeest_wachter(records: Records) -> None:
         return
     if "ngram_culture" not in rec.definition.skills:
         rec.definition.skills.append("ngram_culture")
+        records.put(rec)
+
+
+def activate_kennis_scout(records: Records) -> None:
+    """Idempotent: voeg de drie kennisgrond-skills toe aan kennis_scout zodra het record bestaat."""
+    rec = records.get("kennis_scout")
+    if rec is None:
+        return
+    _SKILLS = ["openlibrary_search_inside", "semantic_scholar", "openalex"]
+    changed = False
+    for s in _SKILLS:
+        if s not in rec.definition.skills:
+            rec.definition.skills.append(s)
+            changed = True
+    if changed:
         records.put(rec)
 
 
@@ -245,12 +260,14 @@ class Village:
         self.registry = SkillRegistry()
         for skill in (SiteHealthSkill(), BudgetSkill(), PlausibleSkill(), TrendsSkill(),
                       FieldNoteSkill(), LibraryLookupSkill(), KeywordReviewSkill(),
-                      GscPerformanceSkill(), NgramCultureSkill()):
+                      GscPerformanceSkill(), NgramCultureSkill(),
+                      OpenlibrarySearchInsideSkill(), SemanticScholarSkill(), OpenalexSkill()):
             self.registry.register(skill)
         self.records = Records(os.path.join(self.context.data_dir, "governance_records.json"))
         seed_records(self.records)
         migrate_records(self.records)
         activate_tijdgeest_wachter(self.records)
+        activate_kennis_scout(self.records)
         self.context.records = self.records
         self.matchmaker = Matchmaker(self.bus)
         self.secretary = Secretary(self.records, self.bus)

@@ -265,8 +265,9 @@ class Librarian(Inhabitant):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.react("keyword_proposed", self._on_proposal)
+        self.react("keyword_proposed",    self._on_proposal)
         self.react("human_keyword_verdict", self._on_human_verdict)
+        self.react("keyword_evidence",    self._on_evidence)
 
     def _on_proposal(self, event: Event) -> None:
         word = event.data.get("word")
@@ -310,6 +311,50 @@ class Librarian(Inhabitant):
         self.log.info("👤 mens besliste over '%s': %s (%s)", word, decision, reason)
         self.bus.publish(Event("keyword_decided",
             {"word": word, "status": decision, "reason": reason, "by": "human"}, self.id))
+
+    def _on_evidence(self, event: Event) -> None:
+        """Ontvangt wetenschappelijk bewijs van de KennisScout.
+
+        Als het woord al 'escalated' is (geen beslissing mogelijk zonder bewijs),
+        herbeoordeelt de Librarian het nu met de opgehaalde evidentie.
+        """
+        word       = event.data.get("word", "")
+        evidence   = event.data.get("evidence", [])
+        assessment = event.data.get("assessment", "")
+        if not word:
+            return
+        self.log.info("📚 evidentie ontvangen voor '%s': %d bron(nen)", word, len(evidence))
+
+        existing = self.context.library.status(word)
+        if existing and existing.get("status") == "escalated" and evidence:
+            # Herbeoordeel met verrijkte demand
+            enriched = {**(event.data.get("original_demand", {})),
+                        "evidence_count": len(evidence),
+                        "assessment":     assessment}
+            v = self.use_skill("keyword_review", {"word": word, "demand": enriched})
+            decision = v.get("decision")
+            reason   = v.get("reason", "")
+            if decision == "approve":
+                self.context.library.curate(
+                    word, "approved",
+                    rationale=f"{reason} [KennisScout: {assessment[:80]}]",
+                    evidence=enriched, by=self.id)
+                self.log.info("✅ herzien → goedgekeurd na KennisScout-evidentie: '%s'", word)
+                self.bus.publish(Event("keyword_decided",
+                    {"word": word, "status": "approved", "reason": reason,
+                     "via": "kennis_scout"}, self.id))
+            elif decision == "reject":
+                self.context.library.curate(
+                    word, "forbidden", rationale=reason, by=self.id)
+                self.log.info("⛔ herzien → afgewezen na KennisScout-evidentie: '%s'", word)
+                self.bus.publish(Event("keyword_decided",
+                    {"word": word, "status": "forbidden", "reason": reason,
+                     "via": "kennis_scout"}, self.id))
+            else:
+                self.log.info("🔖 evidentie genoteerd; '%s' blijft escalated", word)
+        else:
+            status = (existing or {}).get("status", "onbekend")
+            self.log.info("🔖 evidentie genoteerd voor '%s' (status: %s)", word, status)
 
 
 class Facilitator(Inhabitant):
@@ -507,3 +552,112 @@ class TijdgeestWachter(Inhabitant):
             }, self.id))
         finally:
             self._busy = False
+
+
+class KennisScout(Inhabitant):
+    """Grondt kandidaat-termen in boeken en wetenschap.
+
+    Reageert op keyword_proposed, haalt context op via OpenLibrary, Semantic Scholar
+    en OpenAlex, destilleert de evidentie en publiceert keyword_evidence.
+    Signaleert alleen — beslist nooit zelf over goedkeuring of afwijzing.
+
+    Harde grens (_reflect):
+      Produceer UITSLUITEND spanningen en voorstellen — nooit nieuwe code of API-calls
+      buiten de skills-lijst. Uitbreiding van capaciteit is mens-gated activatie.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.react("keyword_proposed", self._on_keyword_proposed)
+        self._busy_terms: set[str] = set()
+
+    def _on_keyword_proposed(self, event: Event) -> None:
+        word = event.data.get("word", "").strip()
+        if not word or word in self._busy_terms:
+            return
+        self._busy_terms.add(word)
+        try:
+            self.log.info("🔬 gronden: '%s'", word)
+            evidence: list[dict] = []
+
+            books = self.use_skill("openlibrary_search_inside", {"term": word, "limit": 3})
+            if "error" in books:
+                self.log.warning("⚠️ OpenLibrary: %s", books["error"])
+            else:
+                evidence.extend(books.get("hits", []))
+
+            papers = self.use_skill("semantic_scholar", {"term": word, "limit": 3})
+            if "error" in papers:
+                self.log.warning("⚠️ Semantic Scholar: %s", papers["error"])
+            else:
+                evidence.extend(papers.get("hits", []))
+
+            # OpenAlex als aanvulling (ook als al hits zijn — extra dekking)
+            works = self.use_skill("openalex", {"term": word, "limit": 2})
+            if "error" in works:
+                self.log.warning("⚠️ OpenAlex: %s", works["error"])
+            else:
+                evidence.extend(works.get("hits", []))
+
+            assessment = self._distill(word, evidence, event.data.get("demand", {}))
+
+            self.bus.publish(Event("keyword_evidence", {
+                "word":            word,
+                "evidence":        evidence,
+                "assessment":      assessment,
+                "from":            self.id,
+                "original_demand": event.data.get("demand", {}),
+            }, self.id))
+            self.log.info("📚 evidentie gepubliceerd voor '%s': %d bron(nen)", word, len(evidence))
+        finally:
+            self._busy_terms.discard(word)
+
+    def _distill(self, word: str, evidence: list[dict], demand: dict) -> str:
+        """Destilleer gevonden evidentie tot een beknopte relevantie-duiding.
+
+        Citeer UITSLUITEND bronnen die in `evidence` staan. Fabriceer geen titels,
+        auteurs of abstracten die niet daadwerkelijk zijn opgehaald.
+        """
+        if not evidence:
+            return f"Geen boek- of wetenschappelijke bronnen gevonden voor '{word}'."
+
+        bron_regels = []
+        for e in evidence[:5]:
+            auteurs = ", ".join(e.get("authors", [])[:2]) or "onbekend"
+            jaar    = e.get("year") or "?"
+            bron_regels.append(f"- {e.get('title','?')} ({auteurs}, {jaar}) [{e.get('source','?')}]")
+
+        from nooch_village.llm import reason as llm_reason
+        prompt = (
+            f"Duiding gevraagd voor term '{word}' voor Nooch.earth (duurzame schoenen, geen plastic).\n"
+            f"Gevonden bronnen:\n" + "\n".join(bron_regels) + "\n\n"
+            f"Geef in maximaal 2 zinnen: (1) wat de inhoudelijke/wetenschappelijke relevantie "
+            f"is van '{word}', (2) of de bronnen de missie-claim ondersteunen of tegenspreken. "
+            f"Baseer je ALLEEN op de bovenstaande bronnen. "
+            f"Als je het niet kunt beoordelen, zeg dat expliciet."
+        )
+        llm_out = llm_reason(prompt)
+        if llm_out:
+            return llm_out.strip()
+
+        # Fallback zonder LLM
+        count = len(evidence)
+        titels = ", ".join(e.get("title", "?") for e in evidence[:3])
+        return f"{count} bron(nen) gevonden voor '{word}': {titels}."
+
+    def _reflect(self) -> None:
+        """Periodieke reflectie op de dekking van de gebruikte databronnen.
+
+        Produceer UITSLUITEND spanningen en voorstellen — nooit nieuwe code of API-calls.
+        Elke uitbreiding van capaciteit (bijv. een nieuwe corpus of bron) vereist
+        menselijke goedkeuring en handmatige registratie in SkillRegistry + CLASS_MAP.
+        """
+        # Structurele limiet: Semantic Scholar rate-limit zonder API key
+        self._sense_gap(
+            "semantic_scholar_no_key",
+            "accountability: API-key voor Semantic Scholar evalueren voor hogere rate-limit — "
+            "zonder key is de Semantic Scholar API beperkt tot ~100 verzoeken per 5 minuten; "
+            "bij intensief gebruik van de KennisScout kan dit de grondingssnelheid beperken",
+            kind="governance",
+            min_count=3,   # pas spanning na drie observaties (kan ruis zijn)
+        )
