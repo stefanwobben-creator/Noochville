@@ -30,6 +30,7 @@ class Record:
     members: list[str] = field(default_factory=list)   # alleen bij een cirkel
     version: int = 1
     archived: bool = False
+    source: str = "sensed"   # "seed" | "sensed" | "demo" — herkomst van het record
 
 
 @dataclass
@@ -97,3 +98,4 @@ class Proposal:
     created_at: float = field(default_factory=time.time)
     escalation_gate: Optional[str] = None
     escalation_reason: Optional[str] = None
+    source: str = "sensed"  # "seed" | "sensed" | "demo" — herkomst van het voorstel

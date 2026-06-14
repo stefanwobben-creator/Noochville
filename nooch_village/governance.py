@@ -62,6 +62,7 @@ def proposal_to_dict(p: Proposal) -> dict:
         "created_at": p.created_at,
         "escalation_gate": p.escalation_gate,
         "escalation_reason": p.escalation_reason,
+        "source": p.source,
         "change": {
             "kind": c.kind.value,
             "role_id": c.role_id,
@@ -105,6 +106,7 @@ def proposal_from_dict(d: dict) -> Proposal:
         created_at=d.get("created_at", time.time()),
         escalation_gate=d.get("escalation_gate"),
         escalation_reason=d.get("escalation_reason"),
+        source=d.get("source", "sensed"),
     )
 
 
@@ -160,7 +162,7 @@ class Gate:
             return True, ""
         new = {d.lower() for d in c.add_domains}
         for rec in records.all():
-            if rec.archived or rec.id == c.role_id:
+            if rec.archived or rec.id == c.role_id or rec.source == "demo":
                 continue
             overlap = new & {d.lower() for d in rec.definition.domains}
             if overlap:
@@ -173,7 +175,7 @@ class Gate:
             return True, ""
         new = [a.lower() for a in c.add_accountabilities]
         for rec in records.all():
-            if rec.archived or rec.id == c.role_id:
+            if rec.archived or rec.id == c.role_id or rec.source == "demo":
                 continue
             for existing in rec.definition.accountabilities:
                 el = existing.lower()
@@ -279,7 +281,8 @@ class Records:
                 id=r["id"], type=RecordType(r["type"]), parent=r["parent"],
                 definition=RoleDefinition(**r["definition"]),
                 members=r.get("members", []), version=r.get("version", 1),
-                archived=r.get("archived", False))
+                archived=r.get("archived", False),
+                source=r.get("source", "sensed"))
 
     def save(self) -> None:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
@@ -407,7 +410,8 @@ class Secretary:
                              definition=RoleDefinition(
                                  purpose=c.purpose or "Nieuwe rol",
                                  accountabilities=c.add_accountabilities,
-                                 domains=c.add_domains, skills=c.add_skills))
+                                 domains=c.add_domains, skills=c.add_skills),
+                             source=proposal.source)
             self.records.put(new_rec)
             parent = self.records.get(parent_id) if parent_id else None
             if parent and c.role_id not in parent.members:
@@ -497,11 +501,13 @@ class Reconciler:
             has_active = any(self.registry.get(s) is not None for s in record.definition.skills)
             if not has_active:
                 self.unmanned[record.id] = record
-                log.info("rol '%s' onbemand (geen CLASS_MAP entry en geen actieve skills)", record.id)
+                log.info("rol '%s' onbemand [source=%s] (geen CLASS_MAP entry en geen actieve skills)",
+                         record.id, record.source)
                 return None
             inh_cls = Inhabitant
         inh = inh_cls(record, self.bus, self.registry, self.context)
         self.live[record.id] = inh
+        log.info("rol '%s' [source=%s] gematerialiseerd", record.id, record.source)
         return inh
 
     def _on_adopted(self, e):

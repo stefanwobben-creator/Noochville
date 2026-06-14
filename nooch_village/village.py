@@ -107,6 +107,7 @@ def seed_records(records: Records) -> None:
                                                "risicovolle voorstellen escaleren naar de mens"],
                              skills=[]))
     for r in (root, timekeeper, analyst, librarian, scout, facilitator):
+        r.source = "seed"
         records.put(r)
 
 
@@ -142,6 +143,20 @@ def migrate_records(records: Records) -> None:
     if root.definition.purpose != _ANCHOR_PURPOSE:
         root.definition.purpose = _ANCHOR_PURPOSE
         changed = True
+    # Retroactief: content_strategist (lifecycle_demo) markeren als "demo"
+    cs = records.get("content_strategist")
+    if cs is not None and cs.source == "sensed":
+        cs.source = "demo"
+        records.put(cs)
+        changed = True
+    # Retroactief: seed-records zonder source markeren als "seed"
+    _SEED_IDS = {"noochville", "timekeeper", "analyst", "librarian", "scout", "facilitator"}
+    for sid in _SEED_IDS:
+        rec = records.get(sid)
+        if rec is not None and rec.source == "sensed":
+            rec.source = "seed"
+            records.put(rec)
+            changed = True
     if changed:
         records.put(root)
 
@@ -210,6 +225,24 @@ class Village:
                 time.sleep(1)
         except KeyboardInterrupt:
             self.stop()
+
+    def print_roster(self) -> None:
+        """Toont alle niet-gearchiveerde records met hun source (seed/sensed/demo)."""
+        all_recs = [r for r in self.records.all() if not r.archived]
+        all_recs.sort(key=lambda r: (r.source, r.id))
+        print(f"\n{'ID':<26} {'Type':<8} {'Source':<8} {'Versie':<8} Purpose")
+        print("-" * 95)
+        for r in all_recs:
+            tag = {"seed": "  ", "sensed": "✱ ", "demo": "⚙ "}.get(r.source, "? ")
+            print(f"{tag}{r.id:<24} {r.type.value:<8} {r.source:<8} v{r.version:<7} "
+                  f"{r.definition.purpose[:50]}")
+        live_ids  = set(self.reconciler.live.keys())
+        unmanned  = set(self.reconciler.unmanned.keys())
+        demo_ids  = {r.id for r in all_recs if r.source == "demo"}
+        print(f"\n  Legende: ✱ = sensed (echt), ⚙ = demo, (blanco) = seed")
+        print(f"  Live: {sorted(live_ids - demo_ids)}  |  Onbemand: {sorted(unmanned)}")
+        if demo_ids:
+            print(f"  Demo-rollen (worden genegeerd door G1/G2): {sorted(demo_ids)}")
 
     def submit_proposal(self, proposal: Proposal) -> str:
         """Human-ingang voor governance-voorstellen. Publiceert proposal_raised op de bus.
@@ -552,6 +585,7 @@ def lifecycle_demo():
         tension="Er is één keer een contentverzoek binnengekomen",
         trigger_example="analyst:2026-06-13 één contentverzoek",
         rationale="Content schrijven kost veel tijd",
+        source="demo",
     )
 
     # Voorstel 2: add_role MÉT herhalingsbewijs → aangenomen, onbemand geboren
@@ -565,6 +599,7 @@ def lifecycle_demo():
         tension="Elke week hetzelfde gat: geen eigenaar voor content-planning",
         trigger_example="analyst:meermaals terugkerend wekelijks — elke week geen contentplanning",
         rationale="Structureel elke week hetzelfde probleem. Meermaals gesignaleerd.",
+        source="demo",
     )
 
     print("\n================ DEMO: rol-lifecycle (add_role addendum) ================\n")
@@ -975,6 +1010,44 @@ def reflect_demo():
     print("\n================ einde reflect demo ================")
 
 
+def purge_demo():
+    """Verwijdert alle records met source='demo' uit de governance.
+
+    Archiveert de records én verwijdert ze uit de members-lijst van hun ouder.
+    Idempotent: als er geen demo-records zijn, zegt hij dat ook.
+    """
+    v = Village(heartbeat_seconds=86400)
+
+    print("\n================ ROSTER VOOR PURGE ================")
+    v.print_roster()
+
+    demo_recs = [r for r in v.records.all() if r.source == "demo" and not r.archived]
+    if not demo_recs:
+        print("\n✔ Geen demo-records gevonden — niets te doen.")
+        print("\n================ einde purge ================")
+        return
+
+    print(f"\n⚙  Gevonden demo-records om te archiveren: {[r.id for r in demo_recs]}")
+    for rec in demo_recs:
+        # Archiveer het record
+        rec.archived = True
+        rec.version += 1
+        v.records.put(rec)
+        # Verwijder uit parent.members
+        if rec.parent:
+            parent = v.records.get(rec.parent)
+            if parent and rec.id in parent.members:
+                parent.members.remove(rec.id)
+                v.records.put(parent)
+        print(f"  ✔ '{rec.id}' gearchiveerd (v{rec.version})")
+
+    print("\n================ ROSTER NA PURGE ================")
+    # Herlaad records zodat het roster actueel is
+    v2 = Village(heartbeat_seconds=86400)
+    v2.print_roster()
+    print("\n================ einde purge ================")
+
+
 def once():
     """Eén echte puls en dan stoppen. Ideaal voor een cron-job ('s ochtends)."""
     v = Village(heartbeat_seconds=0)
@@ -1013,5 +1086,10 @@ if __name__ == "__main__":
         ngram_demo()
     elif mode == "reflect":
         reflect_demo()
+    elif mode == "purge":
+        purge_demo()
+    elif mode == "roster":
+        v = Village(heartbeat_seconds=86400)
+        v.print_roster()
     else:
         demo()

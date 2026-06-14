@@ -57,6 +57,29 @@ Data (allemaal in `data/`, gitignored):
 9. **Inwoners reageren op events via `self.react(event_name, handler)`, nooit direct via `self.bus.subscribe`.** De `react()`-wrapper deponeert het event-job in de eigen inbox; de handler draait dan op de eigen thread van de inwoner, niet op die van de afzender. Zo blokkeert een `publish()` nooit en werken inwoners parallel. Uitzonderingen (infra): `Matchmaker`, `Secretary`, `Reconciler` mogen direct subscriben — ze hebben lichte, snelle handlers zonder blocking I/O.
 10. **Sensing en zelfverbetering produceren UITSLUITEND spanningen en voorstellen.** Een inwoner mag via `_reflect()` gaten signaleren en `amend_role`/`add_role`-voorstellen doen. Hij mag NOOIT zelf nieuwe code schrijven, nieuwe threads starten, nieuwe skills registreren, of nieuwe externe API's aanroepen buiten zijn eigen `skills`-lijst. Uitbreiding van capaciteit is altijd mens-gated — identiek aan de geboren-versus-bemenst-splitsing voor rollen.
 
+## Herkomst (source) van Records en Proposals
+
+Elk `Record` en elk `Proposal` draagt een `source`-veld dat aangeeft waar het vandaan komt:
+
+| Waarde | Betekenis | Voorbeelden |
+|--------|-----------|-------------|
+| `"seed"` | Handmatig gedefinieerd bij oprichting | `noochville`, `timekeeper`, `analyst`, `librarian`, `scout`, `facilitator` |
+| `"sensed"` | Echte spanning, gevoeld door een inwoner of via governance ingedient door de mens | `tijdgeest_wachter` (menselijk voorstel), toekomstige sensed rollen |
+| `"demo"` | Aangemaakt door een test-/demofunctie, niet productie-relevant | `content_strategist` (uit `lifecycle_demo`) |
+
+### Regels
+
+- **Productie draait idealiter alleen op `seed` en `sensed` records.** `demo`-records zijn synthetisch en mogen niet meetellen in botsings-checks.
+- **Gate G1 en G2 negeren `demo`-records** bij domein- en accountability-botsingen. Een sensed voorstel voor een content-rol wordt niet geblokkeerd omdat `content_strategist` (demo) toevallig een overlappende accountability heeft.
+- **`migrate_records()` markeert bekende demo-records retroactief** (`content_strategist` → `"demo"`) én zet seed-records zonder source op `"seed"`. Idempotent.
+- **`lifecycle_demo()`-proposals krijgen expliciet `source="demo"`.** De geboren rol erft die source via de Secretary.
+- **Purge-commando:** `python -m nooch_village.village purge` archiveert alle `source="demo"` records en verwijdert ze uit hun ouder-cirkel. Idempotent.
+- **Roster-commando:** `python -m nooch_village.village roster` toont alle records met hun source (legende: `✱` = sensed, `⚙` = demo, blanco = seed).
+
+### Startup-log
+
+Bij `Inhabitant.run()` wordt de source gelogd: `ontwaakt [source=seed] | purpose=…` zodat je in de startup-output direct ziet of een rol seed, sensed of demo is.
+
 ## Een nieuwe skill toevoegen
 
 1. Maak `skills_impl/<naam>.py` met een `Skill`-subklasse (`name`, `description`, `run(self, payload, context) -> dict`).

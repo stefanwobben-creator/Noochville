@@ -347,7 +347,8 @@ class Inhabitant(threading.Thread):
         self.bus.subscribe(event_name, _enqueue)
 
     def run(self) -> None:
-        self.log.info("ontwaakt | purpose=%s | skills=%s", self.dna.purpose, self.dna.skills)
+        self.log.info("ontwaakt [source=%s] | purpose=%s | skills=%s",
+                      self.record.source, self.dna.purpose, self.dna.skills)
         while not self._stop.is_set():
             try:
                 self.tick()
