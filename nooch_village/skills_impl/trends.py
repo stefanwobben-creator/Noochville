@@ -37,7 +37,7 @@ def _keywords_for_locale(locale: str, context) -> list[str]:
     """Woorden voor een locale: Lexicon-taalvak heeft prioriteit, dan keywords.txt + Library."""
     lexicon = getattr(context, "lexicon", None)
     if lexicon:
-        words = lexicon.words_for_lang(locale)
+        words = lexicon.words_for_lang(locale, status_filter="approved")
         if words:
             return words
 
