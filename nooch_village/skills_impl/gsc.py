@@ -89,6 +89,9 @@ class GscPerformanceSkill(Skill):
         except Exception as e:
             return {"error": f"GSC API-fout: {e} -> skill faalt bewust closed"}
 
+        # Detecteer de locale van de site op basis van het domein (bijv. .nl → nl, anders en)
+        locale = "nl" if site.rstrip("/").endswith(".nl") or ".nl/" in site else "en"
+
         rows = []
         for row in response.get("rows", []):
             query = row["keys"][0]
@@ -96,11 +99,12 @@ class GscPerformanceSkill(Skill):
             impressions = int(row.get("impressions", 0))
             position = round(row.get("position", 0.0), 1)
             rows.append({
-                "query": query,
-                "clicks": clicks,
+                "query":       query,
+                "locale":      locale,   # taalvak afgeleid van het site-domein
+                "clicks":      clicks,
                 "impressions": impressions,
-                "position": position,
-                "bucket": _bucket(position, impressions),
+                "position":    position,
+                "bucket":      _bucket(position, impressions),
             })
 
         counts = {}
@@ -108,7 +112,8 @@ class GscPerformanceSkill(Skill):
             counts[r["bucket"]] = counts.get(r["bucket"], 0) + 1
 
         return {
-            "site": site,
+            "site":   site,
+            "locale": locale,            # top-level locale voor eenvoudige consumers
             "period": f"{start}/{end}",
             "total": len(rows),
             "bucket_counts": counts,
