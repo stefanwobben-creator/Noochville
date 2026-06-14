@@ -9,6 +9,18 @@ from nooch_village.event_bus import Event
 from nooch_village.governance import Gate, proposal_from_dict, proposal_to_dict
 
 
+def _publish_keyword_proposed(bus, from_id: str, word: str, demand: dict, library) -> bool:
+    """Dedupliceer en publiceer een keyword_proposed-event.
+
+    Controleert of het woord al bekend is in de bibliotheek (élke status blokkeert).
+    Retourneert True als het event gepubliceerd is.
+    """
+    if library is not None and library.status(word) is not None:
+        return False
+    bus.publish(Event("keyword_proposed", {"word": word, "demand": demand, "from": from_id}, from_id))
+    return True
+
+
 class TimeKeeper(Inhabitant):
     """De dorpsomroeper. Roept elke nieuwe dag 'dag_begint' om op het marktplein.
     Voor de demo kun je via settings['heartbeat_seconds'] een snelle hartslag zetten."""
@@ -187,14 +199,15 @@ class GrowthAnalyst(Inhabitant):
             if action["dropped"]:
                 self.log.info("⏭️ keyword '%s' afgevallen: %s", action["label"], action["drop_reason"])
                 continue
-            self.bus.publish(Event("keyword_proposed", {
-                "word": action["label"],
-                "demand": {"signal": "positive", "interest": action.get("_value", 0),
-                           "source": "google_trends_related",
-                           "parent_keyword": action.get("_parent", "")},
-                "from": self.id,
-            }, self.id))
-            proposed += 1
+            published = _publish_keyword_proposed(
+                self.bus, self.id, action["label"],
+                demand={"signal": "positive", "interest": action.get("_value", 0),
+                        "source": "google_trends_related",
+                        "parent_keyword": action.get("_parent", "")},
+                library=lib,
+            )
+            if published:
+                proposed += 1
         if proposed:
             self.log.info("🔍 %d kandidaat-woorden doorgestuurd (gerangschikt op doelbijdrage)", proposed)
 
@@ -251,12 +264,9 @@ class PerformanceScout(Inhabitant):
         for row in result.get("rows", []):
             if row["bucket"] != "high_potential":
                 continue
-            term = row["query"]
-            if lib.status(term) is not None:  # elke bekende status, ook 'escalated'
-                continue
-            self.bus.publish(Event("keyword_proposed", {
-                "word": term,
-                "demand": {
+            published = _publish_keyword_proposed(
+                self.bus, self.id, row["query"],
+                demand={
                     "signal": "positive",
                     "interest": row["impressions"],
                     "source": "gsc",
@@ -265,9 +275,10 @@ class PerformanceScout(Inhabitant):
                     "impressions": row["impressions"],
                     "clicks": row["clicks"],
                 },
-                "from": self.id,
-            }, self.id))
-            proposed += 1
+                library=lib,
+            )
+            if published:
+                proposed += 1
         if proposed:
             self.log.info("🔍 %d GSC high_potential kandidaten doorgestuurd naar de Librarian", proposed)
         else:
@@ -526,13 +537,11 @@ class TijdgeestWachter(Inhabitant):
             lib = getattr(self.context, "library", None)
             row_by_term = {r["term"]: r for r in rows} if rows else {}
             for term in stijgend:
-                if lib and lib.status(term) is not None:
-                    continue  # Librarian heeft al een oordeel
                 row  = row_by_term.get(term, {})
                 freq = row.get("freq_last") or (terms.get(term) or {}).get("freq_last")
-                self.bus.publish(Event("keyword_proposed", {
-                    "word": term,
-                    "demand": {
+                _publish_keyword_proposed(
+                    self.bus, self.id, term,
+                    demand={
                         "signal":    "positive",
                         "source":    "ngram_culture",
                         "direction": "stijgend",
@@ -540,8 +549,8 @@ class TijdgeestWachter(Inhabitant):
                         "concept":   row.get("concept"),
                         "freq_last": freq,
                     },
-                    "from": self.id,
-                }, self.id))
+                    library=lib,
+                )
 
             # Broadcast bij opvallende culturele verschuiving
             if len(stijgend) >= self._SHIFT_THRESHOLD or len(dalend) >= self._SHIFT_THRESHOLD:
