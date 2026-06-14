@@ -1,16 +1,10 @@
-"""Roster-match oordeelsstap: beslist of een structurele spanning een ADD_ROLE
-of AMEND_ROLE verdient op basis van dekking door bestaande rollen.
+"""Hulpfuncties voor roster-analyse: term-signaturen en dekkingsberekening.
 
-Deterministisch, geen LLM, geen I/O. Wordt aangeroepen vanuit
-Inhabitant._raise_governance_proposal, vlak vóór de AMEND_ROLE-fallback.
+Deterministisch, geen LLM, geen I/O.
+De ADD_ROLE/AMEND_ROLE-beslissing zit nu in classify_gap (gap_classifier.py).
 """
 from __future__ import annotations
 import re
-from nooch_village.models import ChangeKind
-
-# Dekking waarbij een bestaande rol als 'dichtbij genoeg' wordt beschouwd.
-# Onder drempel → ADD_ROLE; erboven → AMEND_ROLE op zichzelf.
-COVERAGE_THRESHOLD = 0.34
 
 _NL_STOP = frozenset([
     "de", "het", "een", "van", "in", "op", "te", "en", "of", "is", "zijn",
@@ -74,20 +68,3 @@ def _role_id_from_gap(gap: frozenset[str]) -> str:
 def _purpose_from_gap(gap: frozenset[str]) -> str:
     terms = sorted(gap, key=lambda t: (-len(t), t))[:4]
     return "Beheert en bewaakt " + ", ".join(terms) + "."
-
-
-def roster_match(desc: str, proposer_id: str, records) -> tuple[ChangeKind, str, str]:
-    """Beslis ADD_ROLE of AMEND_ROLE op basis van roster-dekking.
-
-    Retourneert (kind, role_id, purpose):
-      ADD_ROLE:   role_id en purpose afgeleid van gat-signatuur
-      AMEND_ROLE: role_id = proposer_id, purpose = ""
-    Fail-closed: lege gat-signatuur → AMEND_ROLE (niet beoordeelbaar).
-    """
-    gap = gap_signature(desc)
-    if not gap:
-        return ChangeKind.AMEND_ROLE, proposer_id, ""
-    cov = best_coverage(gap, records)
-    if cov < COVERAGE_THRESHOLD:
-        return ChangeKind.ADD_ROLE, _role_id_from_gap(gap), _purpose_from_gap(gap)
-    return ChangeKind.AMEND_ROLE, proposer_id, ""

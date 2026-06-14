@@ -1,10 +1,8 @@
-"""Tests voor de roster-match oordeelsstap — geen I/O, geen bus, geen threads."""
+"""Tests voor roster-match hulpfuncties — geen I/O, geen bus, geen threads."""
 from __future__ import annotations
 import pytest
-from nooch_village.roster_match import (
-    gap_signature, role_signature, best_coverage, roster_match, COVERAGE_THRESHOLD,
-)
-from nooch_village.models import Record, RoleDefinition, RecordType, ChangeKind
+from nooch_village.roster_match import gap_signature, role_signature, best_coverage
+from nooch_village.models import Record, RoleDefinition, RecordType
 
 
 def _rec(rid, purpose="", accs=None, domains=None, skills=None):
@@ -88,41 +86,3 @@ def test_none_records_returns_zero():
     assert best_coverage(gap, None) == pytest.approx(0.0)
 
 
-# ── roster_match ──────────────────────────────────────────────────────────────
-
-def test_add_role_when_coverage_below_threshold():
-    recs = _FakeRecords([_rec("bestaand", purpose="volledig andere domein zonder overlap")])
-    kind, role_id, purpose = roster_match(
-        "kwartaalrapportage verkoopcijfers productanalyse", "mijn_rol", recs)
-    assert kind == ChangeKind.ADD_ROLE
-    assert role_id
-    assert " " not in role_id and role_id == role_id.lower()
-    assert purpose.startswith("Beheert en bewaakt")
-
-
-def test_amend_role_when_coverage_above_threshold():
-    recs = _FakeRecords([_rec("analist",
-        purpose="kwartaalrapportage verkoopcijfers productanalyse trends")])
-    kind, role_id, _ = roster_match(
-        "kwartaalrapportage verkoopcijfers productanalyse trends", "mijn_rol", recs)
-    assert kind == ChangeKind.AMEND_ROLE
-    assert role_id == "mijn_rol"
-
-
-def test_amend_role_failclosed_on_empty_gap():
-    recs = _FakeRecords([])
-    kind, role_id, _ = roster_match("de het een van", "mijn_rol", recs)
-    assert kind == ChangeKind.AMEND_ROLE
-    assert role_id == "mijn_rol"
-
-
-def test_role_id_is_snake_case_not_raw_slug():
-    recs = _FakeRecords([_rec("r", purpose="geen overlap hier whatsoever")])
-    _, role_id, _ = roster_match(
-        "kwartaalrapportage conversieoptimalisatie landingspagina", "x", recs)
-    assert " " not in role_id
-    assert role_id == role_id.lower()
-
-
-def test_coverage_threshold_constant_is_named():
-    assert COVERAGE_THRESHOLD == 0.34

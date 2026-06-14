@@ -118,21 +118,37 @@ class Inhabitant(threading.Thread):
             change = GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id=self.id,
                                       add_accountabilities=[acc_text])
         else:
-            # Roster-match oordeelsstap: beslist ADD_ROLE of AMEND_ROLE
-            from nooch_village.roster_match import roster_match
+            # classify_gap beslist A/B/C: A/B → geen geboorte, C → ADD_ROLE
+            from nooch_village.gap_classifier import classify_gap
+            from nooch_village.roster_match import (
+                gap_signature, _role_id_from_gap, _purpose_from_gap)
             records = getattr(self.context, "records", None)
-            r_kind, r_id, r_purpose = roster_match(desc, self.id, records)
-            if r_kind == ChangeKind.ADD_ROLE:
-                change = GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id=r_id,
-                                          purpose=r_purpose, new_role_parent="noochville")
-            else:
-                change = GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id=self.id,
-                                          add_accountabilities=[desc[:80]])
+            recs_list = records.all() if records is not None else []
+            outcome, matched_role, reason = classify_gap(desc, recs_list)
+            if outcome == "A":
+                self.log.info(
+                    "✅ spanning A (gedekt door '%s'): %s — %s",
+                    matched_role, desc[:60], reason)
+                return
+            elif outcome == "B":
+                gap_key = re.sub(r"\W+", "_", desc[:30]).strip("_")
+                self._report_means_gap(gap_key, desc)
+                self.log.info(
+                    "📌 spanning B → means-gap voor '%s': %s — %s",
+                    matched_role, desc[:60], reason)
+                return
+            # C: geen dekkende rol → door naar geboorte
+            gap = gap_signature(desc)
+            r_id = (_role_id_from_gap(gap) if gap
+                    else re.sub(r"\W+", "_", desc[:20]).strip("_"))
+            r_purpose = _purpose_from_gap(gap) if gap else desc[:100]
+            change = GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id=r_id,
+                                      purpose=r_purpose, new_role_parent="noochville")
 
         if change.kind == ChangeKind.ADD_ROLE and not is_reflection:
             rationale = (
                 "Structureel terugkerend gat: geen bestaande rol dekt deze "
-                "accountability voldoende (roster-match onder drempel)."
+                "accountability voldoende (classify_gap uitkomst C)."
             )
         else:
             rationale = (
