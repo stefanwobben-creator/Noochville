@@ -96,10 +96,11 @@ def main(argv: list[str]) -> None:
     elif cmd == "create":
         if len(argv) < 3:
             print("Gebruik: projects_cli create <owner> <scope...>"); sys.exit(1)
-        ledger = _load()
+        from nooch_village.village import Village
+        v      = Village(heartbeat_seconds=86400)
         owner  = argv[1]
         scope  = " ".join(argv[2:])
-        pid    = human_create(ledger, owner, scope)
+        pid    = v.queue_project(owner, scope, trigger="human")
         print(f"✅ Project aangemaakt: {pid}  (owner={owner}, trigger=human)")
 
     else:

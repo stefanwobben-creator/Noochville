@@ -27,6 +27,7 @@ class Inhabitant(threading.Thread):
         self._reflect_interval: float = float(
             self.context.settings.get("reflect_interval_seconds", str(7 * 24 * 3600)))
         self.react("dag_begint", self._maybe_reflect)
+        self.react("project_queued", self._on_project_queued)
 
     # --- buitenkant: van buiten ben ik gewoon een rol ---
     def capabilities(self) -> list[str]:
@@ -262,6 +263,43 @@ class Inhabitant(threading.Thread):
             return True
         self.log.info("🔍 gat '%s' geregistreerd (%d/%d — nog geen spanning)", gap_key, gap["count"], min_count)
         return False
+
+    # ── Project-afhandeling ─────────────────────────────────────────────────────
+
+    def _on_project_queued(self, event: Event) -> None:
+        """Reageer op project_queued: alleen als ik de eigenaar ben."""
+        if event.data.get("owner") != self.id:
+            return
+        pid = event.data.get("project_id")
+        if pid is None:
+            return
+        self._claim_run_complete(pid)
+
+    def _claim_run_complete(self, pid: str) -> None:
+        """Start het project, voer het uit en markeer het als afgerond.
+        Losgekoppeld van _on_project_queued zodat tests 'm direct kunnen aanroepen.
+        """
+        ledger = getattr(self.context, "projects", None)
+        if ledger is None:
+            self.log.warning("project '%s': geen ProjectLedger in context", pid)
+            return
+        project = ledger.get(pid)
+        if project is None:
+            self.log.warning("project '%s': niet gevonden", pid)
+            return
+        ledger.start(pid)
+        self.log.info("▶ project '%s' gestart: %s", pid, str(project.get("scope", ""))[:60])
+        outcome = self.run_project(project)
+        ledger.complete(pid, outcome)
+        self.log.info("✅ project '%s' afgerond (outcome=%s)", pid, outcome)
+
+    def run_project(self, project: dict) -> str | None:
+        """Overridebaar: voer het projectwerk uit. Geef een outcome-marker terug.
+        Default-stub: logt de scope en geeft een vaste marker terug.
+        """
+        scope = str(project.get("scope", ""))[:60]
+        self.log.info("🔨 project: '%s'", scope)
+        return "stub:done"
 
     # --- het werk ---
 

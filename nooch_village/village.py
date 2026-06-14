@@ -199,6 +199,12 @@ class Village:
                                {"proposal": proposal_to_dict(proposal)}, "human"))
         return proposal.id
 
+    def queue_project(self, owner: str, scope, trigger: str = "human") -> str:
+        """Maak een project aan in het grootboek en notificeer de eigenaar via de bus."""
+        pid = self.context.projects.create(owner, scope, trigger)
+        self.bus.publish(Event("project_queued", {"project_id": pid, "owner": owner}, "village"))
+        return pid
+
 
 def once():
     """Eén echte puls en dan stoppen. Ideaal voor een cron-job ('s ochtends)."""
