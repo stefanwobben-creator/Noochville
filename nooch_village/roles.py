@@ -1,6 +1,6 @@
 """Gespecialiseerde inwoners met eigen gedrag bovenop de generieke Inhabitant."""
 from __future__ import annotations
-import time
+import os, json, time
 from datetime import date
 from nooch_village.inhabitant import Inhabitant
 from nooch_village.event_bus import Event
@@ -55,6 +55,7 @@ class GrowthAnalyst(Inhabitant):
             note = self.use_skill("field_note", {"plausible": plausible, "trends": trends})
 
             self._propose_related(trends)
+            self._sense_goal_gap(plausible)
 
             if note.get("tension"):
                 self.sense_tension(note.get("reason", "Verval gedetecteerd in de groei-puls"),
@@ -64,6 +65,104 @@ class GrowthAnalyst(Inhabitant):
             self.log.info("📝 Field Note klaar -> %s", note.get("path"))
         finally:
             self._busy = False
+
+    def _sense_goal_gap(self, plausible: dict) -> None:
+        """Vergelijk werkelijke bezoekerstrend met de run-rate die actieve doelen vereisen.
+
+        Twee signalen:
+        1. Theorie-gat  — doel-metriek (bijv. pairs_sold) is niet meetbaar in de puls;
+                          eenmalig sensen, daarna elke 14 dagen opnieuw.
+        2. Off-pace     — bezoekerstrend 3+ pulsen consistent dalend terwijl doel nadert;
+                          eenmalig sensen, daarna pas na 7 dagen opnieuw.
+        Bij een enkele ruis-hobbel geen spanning: minimum 3 opeenvolgende dalende pulsen.
+        """
+        strategy_data = getattr(self.context, "strategy", None) or {}
+        goals = [g for g in strategy_data.get("goals", []) if g.get("active")]
+        if not goals:
+            return
+
+        visitors = (plausible.get("results", {}).get("visitors") or {}).get("value")
+
+        # Schrijf huidige pulse naar geschiedenis (rolling log)
+        history_path = os.path.join(self.context.data_dir, "pulse_history.jsonl")
+        with open(history_path, "a") as f:
+            f.write(json.dumps({"ts": time.time(), "visitors_7d": visitors}) + "\n")
+
+        # Laad recente geschiedenis (max 10 pulsen)
+        history = []
+        with open(history_path) as f:
+            for line in f:
+                try:
+                    history.append(json.loads(line.strip()))
+                except Exception:
+                    pass
+        history = history[-10:]
+
+        # Laad/maak gap-state voor deduplicatie
+        state_path = os.path.join(self.context.data_dir, "goal_state.json")
+        try:
+            with open(state_path) as f:
+                state = json.load(f)
+        except Exception:
+            state = {}
+
+        today = date.today().isoformat()
+        changed = False
+
+        for goal in goals:
+            goal_id = goal["id"]
+            metric  = goal.get("metric", "")
+            target  = goal.get("target", 0)
+            unit    = goal.get("unit", "")
+            wend    = goal.get("window_end", "")
+
+            # Signaal 1 — theorie-gat
+            if metric not in ("visitors", "pageviews"):
+                key  = f"theory_gap_{goal_id}"
+                last = state.get(key)
+                days_since = None
+                if last:
+                    from datetime import date as _d
+                    days_since = (_d.fromisoformat(today) - _d.fromisoformat(last)).days
+                if last is None or (days_since is not None and days_since >= 14):
+                    self.sense_tension(
+                        f"Doel '{goal_id}' vereist meting van '{metric}' "
+                        f"(target: {target} {unit} voor {wend}), maar de puls meet "
+                        f"alleen bezoekers. De koppeling van bezoekersdata naar "
+                        f"daadwerkelijke '{metric}' ontbreekt in de puls.",
+                        kind="operational",
+                    )
+                    state[key] = today
+                    changed = True
+                    self.log.info("🎯 theorie-gat gesensed voor doel '%s'", goal_id)
+
+            # Signaal 2 — off-pace bezoekerstrend
+            v_list = [h["visitors_7d"] for h in history if h.get("visitors_7d") is not None]
+            if len(v_list) >= 3:
+                last3 = v_list[-3:]
+                structureel_dalend = all(last3[i] > last3[i + 1] for i in range(len(last3) - 1))
+                if structureel_dalend:
+                    key  = f"offpace_{goal_id}"
+                    last = state.get(key)
+                    days_since = None
+                    if last:
+                        from datetime import date as _d
+                        days_since = (_d.fromisoformat(today) - _d.fromisoformat(last)).days
+                    if last is None or (days_since is not None and days_since >= 7):
+                        self.sense_tension(
+                            f"Bezoekerstrend structureel dalend over {len(last3)} pulsen "
+                            f"({last3[0]}→{last3[-1]}): off-pace tegen doel '{goal_id}' "
+                            f"({target} {unit} voor {wend}). Positieve bezoekersgroei is "
+                            f"vereist als basis voor het verkoopdoel.",
+                            kind="operational",
+                        )
+                        state[key] = today
+                        changed = True
+                        self.log.info("📉 off-pace spanning gesensed voor doel '%s'", goal_id)
+
+        if changed:
+            with open(state_path, "w") as f:
+                json.dump(state, f, ensure_ascii=False, indent=2)
 
     def _propose_related(self, trends: dict) -> None:
         from nooch_village.intent import prioritize
