@@ -1,8 +1,8 @@
-# NoochVille — State & Handover (2026-06-14)
+# NoochVille — State & Handover (2026-06-13)
 
 ## Waar we staan
 
-- Code op ~10, 159 tests groen + schone supervised live run (tot stap 8).
+- Code op ~10, 163 tests groen + schone supervised live run (tot stap 8).
 - 4 review-fixes doorgevoerd: atomic writes + Noochie-rem (één voorstel, geen
   stroom), test-fundament (pytest), single-source missie/policy, village.py
   gesplitst + TriageEngine eruit + DRY.
@@ -30,7 +30,12 @@
   enqueue direct weggegooid (niet gequeued). `_setup_events()`-hook laat
   GrowthAnalyst/PerformanceScout/TijdgeestWachter hun eigen pulsgate definiëren.
   Inbox-flooding opgelost.
-- **Blauwdruk `docs/ONTWERP_projecten_metrics.md`**: ⚠ nog niet aangemaakt — open item.
+- **Blauwdruk `docs/ONTWERP_projecten_metrics.md`**: aangemaakt en gecommit.
+- **Sensing-herbouw stap 1 — dedup van staande condities**: `_sense_gap` slaat
+  bij eerste emit `acc_text` + `emitted=True` op in reflect-state. Volgende
+  aanroepen zwijgen zodra de accountability in het rol-DNA staat of als open
+  inbox-item gevonden wordt. `force` omzeilt min_count maar respecteert dedup.
+  4 thread-vrije tests in `tests/test_sense_gap.py`, 163 tests groen.
 
 ## Principes die niet mogen driften
 
@@ -53,8 +58,8 @@
 
 1. **Echte supervised live run met sleutels**: sluitstuk van de lus. Plausible +
    Google Trends + LLM écht aanroepen, one-shot controleren, dan vrijgeven.
-2. **Sensing herbouwen**: event-driven + deduplicatie van staande condities, niet
-   toestand-driven. Rem tegen oneindige spanning zodra een conditie aanhoudt.
+2. **Sensing herbouwen stap 2**: event-driven sensing (in plaats van polling in
+   `_maybe_reflect`). Staande-conditie dedup (stap 1) is klaar.
 3. **Slimme WIP** (prioriteit-eviction, backpressure) + **synthesizer-rol** die
    open spanningen batcht en de hefboom kiest.
 4. Cockpit aan live data hangen (records/inbox/proces), met de auth-grens erin.
