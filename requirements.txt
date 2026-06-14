@@ -1,3 +1,6 @@
+# Dev / test
+pytest>=8.0
+
 # Kern van NoochVillage + groei-puls
 requests>=2.31
 pytrends>=4.9
