@@ -32,6 +32,8 @@ from nooch_village.skills_impl.openlibrary_search_inside import OpenlibrarySearc
 from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
 from nooch_village.skills_impl.openalex import OpenalexSkill
 from nooch_village.human_inbox import HumanInbox
+from nooch_village.mission import ANCHOR_PURPOSE as _ANCHOR_PURPOSE
+from nooch_village.policy import ANCHOR_POLICY_PROSE as _ANCHOR_POLICIES
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -39,28 +41,6 @@ CLASS_MAP = {"timekeeper": TimeKeeper, "analyst": GrowthAnalyst,
              "librarian": Librarian, "scout": PerformanceScout,
              "facilitator": Facilitator, "tijdgeest_wachter": TijdgeestWachter,
              "kennis_scout": KennisScout, "noochie": Noochie}
-
-
-_ANCHOR_POLICIES = [
-    "Geen enkele rol mag een accountability hebben die plastic-gebaseerd of "
-    "dierlijk-leer materiaal als on-mission goedkeurt.",
-    "De missie-toetsing (KeywordReview, G4-poort) mag nooit als accountability "
-    "worden verwijderd zonder een gelijkwaardig alternatief in hetzelfde voorstel.",
-    "Geen enkele rol mag uitgaven aan advertising autoriseren of plannen; "
-    "betaald bereik is verboden als groeistrategie.",
-    "Verkoop loopt uitsluitend via de eigen website nooch.earth; "
-    "geen enkele rol mag externe verkoopkanalen of marktplaatsen autoriseren.",
-    "Productie is on demand; geen enkele rol mag voorraadopbouw of "
-    "overproductie autoriseren of plannen.",
-]
-
-_ANCHOR_PURPOSE = (
-    "Nooch.earth is het duurzaamste schoenenmerk ter wereld — om een industrie vol "
-    "menselijk, dierlijk en planetair leed te inspireren dat meliorisme (altijd beter kunnen) "
-    "echt kan, en om klanten en anderen te inspireren iets positiefs op gang te brengen. "
-    "Kernwaarden: geen plastic, geen leer, in Europa geproduceerd, op bestelling, eerlijke prijs, "
-    "transparantie. Groei via missie-gedreven organische content op nooch.earth."
-)
 
 
 # Zaad-concepten voor het meertalige lexicon.

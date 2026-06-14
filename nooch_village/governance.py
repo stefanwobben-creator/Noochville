@@ -1,6 +1,8 @@
 from __future__ import annotations
 import json, os, re, logging, dataclasses, time
 from nooch_village.util import atomic_write_json
+from nooch_village.mission import ANCHOR_PURPOSE as _MISSION
+from nooch_village.policy import HARD_VIOLATION_RE as _HARD_VIOLATION_RE
 from nooch_village.models import (
     Record, RoleDefinition, RecordType,
     Proposal, GovernanceChange, ChangeKind,
@@ -8,28 +10,6 @@ from nooch_village.models import (
 from nooch_village.event_bus import EventBus, Event
 
 log = logging.getLogger("village.governance")
-
-# Nooch-missie (voor G4 LLM-prompt)
-_MISSION = (
-    "Nooch.earth bewijst dat ethisch en duurzaam ondernemen winstgevend is. "
-    "Kernwaarden: geen plastic, geen leer, in Europa geproduceerd, op bestelling, "
-    "eerlijke prijs, transparantie. Groei via missie-gedreven organische content."
-)
-
-# Patronen die de missie schenden als ze in een voorstel voorkomen
-_HARD_VIOLATION_RE = re.compile(
-    r"plastic.{0,35}goed|goed.{0,35}plastic|"
-    r"leer.{0,35}goed|goed.{0,35}leer|"
-    r"leather.{0,35}approv|approv.{0,35}leather|"
-    r"\bpvc\b|\bkunstleer\b|\bpu-leer\b|"
-    r"massaproduct\w*|overproduct\w*|voorraadopbouw\w*|"
-    r"advertis\w*.{0,30}autoris|autoris\w*.{0,30}advertis|"
-    r"reclame.{0,25}autoris|autoris.{0,25}reclame|"
-    r"betaald.{0,30}adverteer|adverteer.{0,30}betaald|"
-    r"google.{0,10}ads.{0,20}autoris|facebook.{0,10}ads|"
-    r"missie.{0,25}toets.{0,25}verwijder|verwijder.{0,25}missie",
-    re.I | re.S,
-)
 
 # Trefwoorden die herhalingsbewijs aantonen (vereist voor add_role)
 _REPETITION_KW = frozenset([

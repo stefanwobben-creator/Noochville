@@ -9,23 +9,7 @@ Terugkeer: gesorteerde lijst (beste eerst) met 'score', 'dropped' en 'drop_reaso
 """
 from __future__ import annotations
 from nooch_village.config import Context
-
-# Patronen in label+description die een harde Anchor-policy schenden.
-# Volgorde: meest specifiek eerst.
-_POLICY_VIOLATIONS: list[tuple[str, str]] = [
-    ("google ads",          "advertising is verboden via Anchor-policy"),
-    ("facebook ads",        "advertising is verboden via Anchor-policy"),
-    ("instagram ads",       "advertising is verboden via Anchor-policy"),
-    ("betaald adverter",    "advertising is verboden via Anchor-policy"),
-    ("betaalde reclame",    "advertising is verboden via Anchor-policy"),
-    ("advertentiebudget",   "advertising is verboden via Anchor-policy"),
-    ("advertis",            "advertising is verboden via Anchor-policy"),
-    ("voorraadopbouw",      "voorraadopbouw is verboden (on-demand productie, Anchor-policy)"),
-    ("overproductie",       "overproductie is verboden via Anchor-policy"),
-    ("marktplaats",         "verkoop via externe kanalen is verboden; alleen nooch.earth"),
-    ("bol.com",             "verkoop via externe kanalen is verboden; alleen nooch.earth"),
-    ("amazon",              "verkoop via externe kanalen is verboden; alleen nooch.earth"),
-]
+from nooch_village.policy import INTENT_VIOLATIONS as _POLICY_VIOLATIONS
 
 
 def _violates_policy(desc_l: str) -> str | None:

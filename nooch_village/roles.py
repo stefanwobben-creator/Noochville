@@ -3,13 +3,7 @@ from __future__ import annotations
 import hashlib, os, json, time
 from datetime import date
 from nooch_village.util import atomic_write_json
-
-_NOOCHIE_MISSION = (
-    "Nooch.earth bewijst dat eerlijk en duurzaam ondernemen winstgevend is. "
-    "Geen plastic, geen leer, in Europa geproduceerd, op bestelling, eerlijke prijs, "
-    "transparantie. Groei via missie-gedreven organische content op nooch.earth. "
-    "De missie is de waarheid waaraan alles getoetst wordt."
-)
+from nooch_village.mission import ANCHOR_PURPOSE as _NOOCHIE_MISSION
 from nooch_village.inhabitant import Inhabitant
 from nooch_village.event_bus import Event
 from nooch_village.governance import Gate, proposal_from_dict, proposal_to_dict
