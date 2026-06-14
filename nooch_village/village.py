@@ -115,6 +115,8 @@ class Village:
         self.bus.subscribe("role_born",                   self._on_role_born)
         self.bus.subscribe("tijdgeest_pulse_completed",   self._observe)
         self.bus.subscribe("tijdgeest_signaal",           self._observe)
+        self.bus.subscribe("means_gap_sensed",            self._observe)
+        self.bus.subscribe("means_gap_sensed",            self._on_means_gap)
         self.root = self.reconciler.build()
         self.human_inbox.sync_unmanned(self.records.all(), CLASS_MAP)
 
@@ -130,6 +132,14 @@ class Village:
         logging.getLogger("village.inbox").info(
             "📬 escalatie in human_inbox: item %s (voorstel %s, poort %s)",
             iid, proposal_dict.get("id", "?"), gate)
+
+    def _on_means_gap(self, e: Event) -> None:
+        """Schrijf een means-gap naar de human inbox (één keer, daarna stil door dedup)."""
+        gap_key     = e.data.get("gap_key", "?")
+        description = e.data.get("description", "")
+        iid = self.human_inbox.add_means_gap(gap_key, description)
+        logging.getLogger("village.inbox").info(
+            "📌 means-gap in human_inbox: item %s (gap %s)", iid, gap_key)
 
     def _on_keyword_escalation(self, e: Event) -> None:
         """Schrijf keyword-escalaties naar de human inbox."""

@@ -572,30 +572,25 @@ class TijdgeestWachter(Inhabitant):
     def _reflect(self) -> None:
         """Reflecteert op de structurele limieten van de ngram_culture-databron.
 
-        Produceer UITSLUITEND spanningen en voorstellen — nooit nieuwe code of nieuwe API.
-        Uitbreiding van capaciteit (bijv. een aanvullende externe bron aansluiten)
-        is mens-gated activatie, identiek aan het bemensen van een geboren rol.
+        Produceer UITSLUITEND means-gap-items — nooit governance-voorstellen of API-aanroepen.
+        Uitbreiding van capaciteit is mens-gated; de inbox is de persistente trace.
         """
-        # Structureel bekende limiet (force=True): data stopt in 2019, altijd waar
-        self._sense_gap(
+        # Data stopt in 2019 — structureel bekende limiet, eenmalig naar inbox
+        self._report_means_gap(
             "ngram_2019_cutoff",
             "accountability: aanvullende recente bron voor tijdgeest-observaties periodiek "
             "evalueren en aan de mens rapporteren — "
             "de ngram_culture-databron stopt in 2019 en misloopt daarmee 7 jaar culturele "
             "verschuiving (2019-2026); geen enkele puls kan recente verschuivingen signaleren",
-            kind="governance",
-            force=True,   # Structureel bekende limiet; geen herhalingseis
         )
-        # NL corpus dekking (min_count=2): kan ruis zijn (netwerk), dus twee observaties
-        self._sense_gap(
+        # NL corpus verouderd — eenmalig naar inbox
+        self._report_means_gap(
             "nl_corpus_coverage",
             "accountability: NL corpus dekking periodiek valideren en ontbrekende "
             "kernbegrippen documenteren — "
             "meerdere Nederlandse termen (bijv. 'consument') worden niet gevonden in het "
             "NL corpus 10 (2012); het corpus is verouderd en dekt moderne missie-terminologie "
             "onvoldoende af",
-            kind="governance",
-            min_count=2,  # Twee observaties vereist; één FOUT kan een netwerk-fout zijn
         )
 
     def _run_pulse(self, event) -> None:
@@ -799,28 +794,18 @@ class KennisScout(Inhabitant):
     def _reflect(self) -> None:
         """Periodieke reflectie op de dekking van de twee v1-databronnen.
 
-        Produceer UITSLUITEND spanningen en voorstellen — nooit nieuwe code of API-calls.
+        Produceer UITSLUITEND means-gap-items — nooit governance-voorstellen of API-calls.
         Elke uitbreiding van capaciteit vereist menselijke goedkeuring en handmatige
         registratie in SkillRegistry + CLASS_MAP (v2: OpenLibrary voltekst).
         """
-        # v1-limiet: OpenLibrary voltekst-grounding ontbreekt
-        self._sense_gap(
+        # v1-limiet: OpenLibrary voltekst-grounding ontbreekt → inbox (eenmalig)
+        self._report_means_gap(
             "openlibrary_v2",
             "accountability: OpenLibrary voltekst-grounding evalueren en toevoegen als v2 — "
             "v1 grondt uitsluitend in academische literatuur (OpenAlex, Semantic Scholar); "
             "boek-evidentie (bijv. duurzaamheidscanon) ontbreekt daardoor volledig",
-            kind="governance",
-            min_count=2,
         )
-        # Rate-limit zonder key bij hoog volume
-        self._sense_gap(
-            "semscholar_no_key",
-            "accountability: SEMANTIC_SCHOLAR_API_KEY evalueren voor hogere rate-limit — "
-            "zonder key is Semantic Scholar beperkt tot ~100 req / 5 min; "
-            "bij intensief gebruik kan dit de grondingssnelheid beperken",
-            kind="governance",
-            min_count=3,
-        )
+        # semscholar_no_key: geen toestandssensing — sens pas als de rate-limit geraakt wordt.
 
 
 # ── Metric-advies (deterministisch placeholder voor latere LLM-stap) ───────

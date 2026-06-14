@@ -152,6 +152,18 @@ class Inhabitant(threading.Thread):
                                {"proposal": proposal_to_dict(proposal)}, self.id))
         self.log.info("🏛️ structureel → voorstel %s (%s)", proposal.id, change.kind.value)
 
+    def _report_means_gap(self, gap_key: str, description: str) -> None:
+        """Routeer een structurele capaciteitsgrens direct naar de inbox als means-gap-item.
+
+        Gaat NIET door de governance-gate: geen amend_role, geen voorstel, geen churn.
+        De inbox dedupt op gap_key zodat het hooguit één keer verschijnt.
+        """
+        self.bus.publish(Event("means_gap_sensed", {
+            "gap_key":     gap_key,
+            "description": description,
+            "by":          self.id,
+        }, self.id))
+
     def _do_own_work(self, tension: Tension) -> None:
         """De spanning valt binnen mijn eigen rol — wordt hier al opgepakt."""
         self.log.info("🔧 spanning in eigen scope (%s) → geen aparte actie", self.id)
@@ -317,7 +329,7 @@ class Inhabitant(threading.Thread):
             return any(
                 acc_text in json.dumps(item, ensure_ascii=False)
                 for item in inbox.values()
-                if item.get("status") == "open"
+                if item.get("status") in ("open", "pending")
             )
         except Exception:
             return False
