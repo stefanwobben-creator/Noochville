@@ -80,6 +80,74 @@ Elk `Record` en elk `Proposal` draagt een `source`-veld dat aangeeft waar het va
 
 Bij `Inhabitant.run()` wordt de source gelogd: `ontwaakt [source=seed] | purpose=…` zodat je in de startup-output direct ziet of een rol seed, sensed of demo is.
 
+## Taal als eersteklas as
+
+Taal is een structurele dimensie van het systeem, geen implementatiedetail.
+
+### Meertalig Lexicon (`nooch_village/lexicon.py`, data in `data/lexicon.json`)
+
+Elk missie-begrip bestaat als een **concept** met een stabiele id en een woord per taalvak:
+
+```python
+{
+  "concept_id": "consumer_frame",
+  "words": {"nl": "consument", "en": "consumer"},
+  "status": "avoid",
+  "rationale": "Consumentenkader versterkt passiviteit; burgerframe heeft voorkeur."
+}
+```
+
+**Sleutelregels:**
+- **Status geldt symmetrisch over alle talen.** Is `consument` `avoid`, dan is `consumer` dat ook. Framing-regels zijn concept-eigenschap, niet woord-eigenschap.
+- **Eén bron, beide talen.** `word_for(concept_id, lang)` geeft het taalspecifieke woord; `words_for_lang(lang)` alle woorden voor een taal.
+- **De Librarian cureert** (`add_concept`, `add_words`); anderen lezen vrij. Zelfde domein-eigenaarschapsregel als voor de Library.
+- **`seed_lexicon()`** laadt 7 zaad-concepten idempotent bij opstarten: `burger_frame`, `consumer_frame`, `sufficiency`, `regenerative`, `plastic_free`, `sustainable`, `vegan`.
+- **context.lexicon** is het injectie-punt; altijd beschikbaar na `Village.__init__`.
+
+**Nieuw concept toevoegen** (via Librarian governance of seed):
+1. `lexicon.add_concept(concept_id, {"nl": "...", "en": "..."}, status="approved", ...)` of toevoegen aan `_LEXICON_SEED` in `village.py`.
+2. Zowel het NL- als EN-woord worden automatisch als zaad gebruikt door ngram, Trends, etc.
+
+### Skills segmenteren per locale
+
+Elke data-skill heeft een notie van de locales die hij ondersteunt:
+
+| Skill | Locale-dimensie | Hoe |
+|-------|----------------|-----|
+| `ngram_culture` | Taal per corpus: NL → corpus 10, EN → corpus 26 | Woorden uit `context.lexicon.words_for_lang(lang)` per corpus |
+| `google_trends` | Geo per geo-code: NL/BE → nl, GB/US/AU/CA → en | `geos=[...]` payload; per geo de locale-woorden uit Lexicon |
+| `gsc_performance` | Locale afgeleid van het site-domein (.nl → nl, anders en) | Elke query-row draagt een `locale`-sleutel |
+| `plausible_stats` | Segmentatie op `country` beschikbaar via Plausible API | Nog niet geïmplementeerd |
+
+**Output-formaat:** alle skills produceren `rows` met expliciete locale-sleutels:
+```python
+{"term": "vegan", "locale": "en", "corpus": 26, "signal": {"direction": "stijgend"}, ...}
+# of bij ontbrekende data:
+{"term": "plasticvrij", "locale": "nl", "corpus": 10, "no_data": True, "reason": "term niet gevonden in corpus"}
+```
+
+**Drie regels:**
+1. **Geen data ≠ nul.** `no_data: True` met `reason` onderscheidt afwezige data van interest=0 of een vlak signaal. Fail-closed per locale-segment.
+2. **Forceer geen segment.** Een bron zonder taal-dimensie (bijv. Plausible country, GSC zonder language-filter) krijgt geen gesimuleerde locale.
+3. **NL-woorden in NL-bronnen, EN-woorden in EN-bronnen.** De woorden per locale komen altijd uit het Lexicon; nooit een NL-woord aan een EN-corpus aanbieden.
+
+### Taal van een output
+
+De taal van een output volgt de context:
+- **Rapportage aan de mens** (Field Note, voorstel, rationale): taal van de mens (nu NL).
+- **Content-analyse**: taal van de data-bron (ngram EN corpus → EN termen in het event).
+- **`keyword_proposed`-events** dragen een `locale`-sleutel zodat de Librarian weet in welke taal het woord thuishoort.
+
+### Simulatie
+
+```bash
+python -m nooch_village.village simulate
+```
+
+Voert 7 fasen opeenvolgend uit: Roster+Lexicon → Governance → Triage → Reflectie →
+Ngram live NL+EN → Librarian → Herkomst. Externe API-aanroepen (ngram) zijn beperkt
+tot 3 termen voor snelheid.
+
 ## Een nieuwe skill toevoegen
 
 1. Maak `skills_impl/<naam>.py` met een `Skill`-subklasse (`name`, `description`, `run(self, payload, context) -> dict`).
