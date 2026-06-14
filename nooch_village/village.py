@@ -34,6 +34,10 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 CLASS_MAP = {"timekeeper": TimeKeeper, "analyst": GrowthAnalyst,
              "librarian": Librarian, "scout": PerformanceScout,
              "facilitator": Facilitator, "tijdgeest_wachter": TijdgeestWachter}
+# "kennis_scout": KennisScout   ← ONBEMAND geboren via governance 2026-06-14.
+#   Activeer door: 1) KennisScout-klasse schrijven in roles.py,
+#   2) skills_impl/open_library.py + skills_impl/semantic_scholar.py schrijven,
+#   3) deze regel ontcommentariëren en KennisScout importeren.
 
 
 _ANCHOR_POLICIES = [
