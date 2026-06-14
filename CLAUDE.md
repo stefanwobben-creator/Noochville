@@ -483,6 +483,60 @@ Een `approve` op een activatie-item green-light de implementatie: de mens heeft 
 - `add_activation` dedupliceerde op `role_id` + status `pending` of `approved` — de KennisScout blijft één item, ook na herstarts.
 - `sync_unmanned()` wordt bij elke Village-start aangeroepen zodat nieuwe onbemande rollen automatisch in de inbox verschijnen.
 
+## KennisScout — academische grounding van lexicon-termen
+
+De KennisScout grondt kandidaat-termen in wetenschappelijke literatuur en publiceert
+`keyword_evidence`-events voor de Librarian en GrowthAnalyst. Hij beslist en cureert nooit.
+
+### Status: v1 actief
+
+| Skill | Capability | Bron | Key vereist |
+|-------|-----------|------|-------------|
+| `skills_impl/openalex.py` | `openalex_evidence` | OpenAlex (keyless, polite pool) | Nee — `openalex_mailto` uit config |
+| `skills_impl/semantic_scholar.py` | `semscholar_tldr` | Semantic Scholar Graph API | Nee — optioneel `SEMANTIC_SCHOLAR_API_KEY` in `.env` |
+| `skills_impl/openlibrary_search_inside.py` | `openlibrary_search_inside` | OpenLibrary boeken-voltekst | Nee — **gepland voor v2**, nog niet in KennisScout DNA |
+
+### OpenAlex (`openalex_evidence`)
+
+- `GET https://api.openalex.org/works?search=TERM&sort=cited_by_count:desc&mailto=<email>`
+- `openalex_mailto` uit `context.settings` (settings.ini of .env); fallback `info@nooch.earth`
+- Resultaten gesorteerd op citaties (meest geciteerd eerst)
+- Abstract gereconstrueerd vanuit inverted index
+- `no_data: True` als API 0 resultaten teruggeeft (onderscheiden van netwerk-fout)
+
+### Semantic Scholar (`semscholar_tldr`)
+
+- `GET https://api.semanticscholar.org/graph/v1/paper/search?query=TERM&fields=title,abstract,year,citationCount,tldr`
+- `tldr`-veld: machinaal gegenereerde één-zinsamenvatting per paper
+- Geen key vereist (~100 req / 5 min gratis); zet `SEMANTIC_SCHOLAR_API_KEY` in `.env` voor hogere limieten
+- Exponentiële backoff bij HTTP 429 (max 4 pogingen); daarna fail-closed
+
+### Termen komen uit het Lexicon
+
+De KennisScout reageert op `keyword_proposed`-events. Die events worden gestuurd door
+TijdgeestWachter, GrowthAnalyst en PerformanceScout — die halen hun termen op hun beurt
+uit het Lexicon. De `locale`-sleutel in `demand.locale` geeft aan in welke taal de term thuis hoort.
+
+### Librarian-integratie
+
+De Librarian luistert ook op `keyword_evidence`. Als een term eerder `escalated` was maar
+nu KennisScout-bewijs beschikbaar is, herbeoordeelt de Librarian de term automatisch.
+
+### Demo
+
+```bash
+python -m nooch_village.village kennis_scout
+```
+
+Haalt approved lexicon-termen op (max 3 NL + 3 EN) en toont per term:
+- OpenAlex: aantal werken, topics en citaties
+- Semantic Scholar: paper-titels en tldr-samenvattingen
+
+### v2-roadmap
+
+- OpenLibrary voltekst (`openlibrary_search_inside`) toevoegen aan KennisScout DNA
+- Approval via human inbox; daarna handmatige registratie in `activate_kennis_scout()`
+
 ## Schaal-naden (grenzen die je later kunt opentrekken, nu niet schenden)
 
 Dit zijn de vier plekken waar de architectuur later kan groeien zonder bestaande code te herschrijven:
