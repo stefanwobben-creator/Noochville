@@ -90,9 +90,12 @@ class GrowthAnalyst(Inhabitant):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.react("dag_begint", self._morning_pulse)
         self.react("project_advice_ready", self._on_advice_ready)
         self._busy = False
+
+    def _setup_events(self) -> None:
+        # Alle dag_begint-werk loopt via _morning_pulse: geen zelfstandige _maybe_reflect-subscriptie.
+        self.react("dag_begint", self._morning_pulse, drop_if_busy=True)
 
     def _on_advice_ready(self, event: Event) -> None:
         """Ontvang advies van Noochie: voeg keep-metrics toe aan het monitoring-overzicht
@@ -139,6 +142,8 @@ class GrowthAnalyst(Inhabitant):
             self.log.info("📝 Field Note klaar -> %s", note.get("path"))
         finally:
             self._busy = False
+        self._maybe_reflect(None)
+        self._scan_queued_projects(None)
 
     def _log_pulse_metrics(self, plausible: dict) -> None:
         """Log de metrics die in het monitoring-overzicht staan én in de puls aanwezig zijn."""
@@ -312,11 +317,13 @@ class PerformanceScout(Inhabitant):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.react("dag_begint", self._on_dag_begint)
         self._busy = False
         self._nota_interval = float(
             self.context.settings.get("gsc_nota_interval_seconds", str(7 * 24 * 3600)))
         self._last_nota: float = 0.0
+
+    def _setup_events(self) -> None:
+        self.react("dag_begint", self._on_dag_begint, drop_if_busy=True)
 
     def _on_dag_begint(self, event: Event) -> None:
         if self._busy:
@@ -340,6 +347,7 @@ class PerformanceScout(Inhabitant):
                  "bucket_counts": result.get("bucket_counts", {})}, self.id))
         finally:
             self._busy = False
+        self._maybe_reflect(None)
 
     def _maybe_write_nota(self, result: dict) -> None:
         now = time.time()
@@ -546,8 +554,10 @@ class TijdgeestWachter(Inhabitant):
         # Productie: wekelijks. Demo/test: tijdgeest_interval_seconds=0 → altijd.
         self._pulse_interval = float(
             self.context.settings.get("tijdgeest_interval_seconds", str(7 * 24 * 3600)))
-        self.react("dag_begint",      self._maybe_pulse)
         self.react("tijdgeest_pulse", self._run_pulse)   # handmatig triggerable
+
+    def _setup_events(self) -> None:
+        self.react("dag_begint", self._maybe_pulse, drop_if_busy=True)
 
     def _maybe_pulse(self, event: Event) -> None:
         """Reageert op de dagelijkse hartslag maar runt alleen als het tijd is."""
@@ -670,6 +680,7 @@ class TijdgeestWachter(Inhabitant):
             }, self.id))
         finally:
             self._busy = False
+        self._maybe_reflect(None)
 
 
 class KennisScout(Inhabitant):

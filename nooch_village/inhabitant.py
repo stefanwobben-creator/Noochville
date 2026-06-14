@@ -26,8 +26,12 @@ class Inhabitant(threading.Thread):
         # Productie: wekelijks; demo/test: reflect_interval_seconds=0 → altijd
         self._reflect_interval: float = float(
             self.context.settings.get("reflect_interval_seconds", str(7 * 24 * 3600)))
-        self.react("dag_begint", self._maybe_reflect)
+        self._setup_events()
         self.react("project_queued", self._on_project_queued)
+
+    def _setup_events(self) -> None:
+        """Koppel dag_begint aan _maybe_reflect. Rollen met een eigen pulsgate overschrijven dit."""
+        self.react("dag_begint", self._maybe_reflect)
 
     # --- buitenkant: van buiten ben ik gewoon een rol ---
     def capabilities(self) -> list[str]:
@@ -266,6 +270,17 @@ class Inhabitant(threading.Thread):
 
     # ── Project-afhandeling ─────────────────────────────────────────────────────
 
+    def _scan_queued_projects(self, event: Event) -> None:
+        """Herstelpad: pik bij dag_begint queued-projecten op die via een extern proces
+        zijn aangemaakt en waarvoor het project_queued-event gemist is.
+        """
+        ledger = getattr(self.context, "projects", None)
+        if ledger is None:
+            return
+        for p in ledger.by_status("queued"):
+            if p.get("owner") == self.id:
+                self._claim_run_complete(p["id"])
+
     def _on_project_queued(self, event: Event) -> None:
         """Reageer op project_queued: alleen als ik de eigenaar ben."""
         if event.data.get("owner") != self.id:
@@ -345,10 +360,13 @@ class Inhabitant(threading.Thread):
         Inwoners die zichzelf wakker maken (zoals TimeKeeper) overschrijven dit."""
         pass
 
-    def react(self, event_name: str, handler) -> None:
+    def react(self, event_name: str, handler, *, drop_if_busy: bool = False) -> None:
         """Abonneer op een event en laat het werk op de eigen thread draaien.
-        De wrapper keert meteen terug; de handler draait asynchroon via de inbox."""
+        De wrapper keert meteen terug; de handler draait asynchroon via de inbox.
+        drop_if_busy=True: gooi het event weg als _busy=True (geen queue-opbouw)."""
         def _enqueue(event: Event) -> None:
+            if drop_if_busy and getattr(self, "_busy", False):
+                return
             self.inbox.enqueue(lambda e=event: handler(e))
         self.bus.subscribe(event_name, _enqueue)
 
