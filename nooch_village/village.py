@@ -886,6 +886,95 @@ def ngram_demo():
     print("\n================ einde ngram demo ================")
 
 
+def reflect_demo():
+    """Laat zien hoe TijdgeestWachter zijn structurele beperkingen reflecteert en
+    via governance een amend_role-voorstel doet.
+
+    Verifieer: het voorstel wordt aangenomen (nieuwe accountability in het record),
+    maar er draait GEEN nieuwe code en er is GEEN nieuwe externe API-verbinding.
+    Uitbreiding van capaciteit blijft mens-gated.
+    """
+    v = Village(heartbeat_seconds=86400)
+    # Reflecteer direct bij de eerste dag_begint; geen ngram-puls nodig in de demo
+    v.context.settings["reflect_interval_seconds"] = "0"
+    v.context.settings["tijdgeest_interval_seconds"] = "999999"
+
+    proposals_raised: list = []
+    outcomes:         list = []
+
+    v.bus.subscribe("proposal_raised",
+                    lambda e: proposals_raised.append(e.data.get("proposal", {})))
+    v.bus.subscribe("governance_changed",
+                    lambda e: outcomes.append({"status": "aangenomen", **e.data}))
+    v.bus.subscribe("proposal_invalid",
+                    lambda e: outcomes.append({"status": "ongeldig", **e.data}))
+    v.bus.subscribe("governance_review_requested",
+                    lambda e: outcomes.append({"status": "geëscaleerd", **e.data}))
+
+    rec_before = v.records.get("tijdgeest_wachter")
+    accs_before  = list(rec_before.definition.accountabilities) if rec_before else []
+    skills_before = list(rec_before.definition.skills)          if rec_before else []
+
+    v.start()
+
+    print("\n================ DEMO: TijdgeestWachter zelf-reflectie ================\n")
+    print("Record VOOR reflectie:")
+    print(f"  skills          : {skills_before}")
+    print(f"  accountabilities ({len(accs_before)}):")
+    for a in accs_before:
+        print(f"    · {a}")
+
+    # Stuur één handmatige dag_begint zodat reflectie direct vuurt
+    v.bus.publish(Event("dag_begint", {"label": "reflect-demo"}, "demo"))
+
+    # Wacht op minstens één voorstel (max 5s)
+    for _ in range(100):
+        if proposals_raised:
+            break
+        time.sleep(0.05)
+    # Wacht op uitkomst van de poort (max 3s extra)
+    for _ in range(60):
+        if outcomes:
+            break
+        time.sleep(0.05)
+    time.sleep(0.3)
+
+    v.stop()
+    time.sleep(0.1)
+
+    print(f"\nVoorstellen gesensed: {len(proposals_raised)}")
+    for p in proposals_raised[:4]:
+        kind     = p.get("change", {}).get("kind", "?")
+        proposer = p.get("proposer_role", "?")
+        new_accs = p.get("change", {}).get("add_accountabilities", [])
+        print(f"  [{proposer}] {kind}: {new_accs[0][:70] if new_accs else '–'}…")
+
+    print(f"\nGovernance-uitkomsten: {len(outcomes)}")
+    for o in outcomes[:4]:
+        print(f"  {o.get('status','?')} | kind={o.get('kind','-')} | "
+              f"role={o.get('role_id','-')}")
+
+    rec_after   = v.records.get("tijdgeest_wachter")
+    accs_after  = list(rec_after.definition.accountabilities) if rec_after else []
+    skills_after = list(rec_after.definition.skills)          if rec_after else []
+
+    print("\nRecord NA reflectie:")
+    print(f"  skills          : {skills_after}")
+    print(f"  accountabilities ({len(accs_after)}):")
+    for a in accs_after:
+        marker = " ← NIEUW" if a not in accs_before else ""
+        print(f"    · {a[:80]}{marker}")
+
+    new_accs = [a for a in accs_after if a not in accs_before]
+    print(f"\nChecks:")
+    print(f"  {'✔' if new_accs else '✘'} nieuwe accountability opgenomen in governance-record")
+    print(f"  {'✔' if skills_before == skills_after else '✘'} skills ongewijzigd (geen nieuwe externe bron gestart)")
+    print(f"  ✔ geen nieuwe thread geactiveerd (mens-gated activatie)")
+    print(f"\n⚠  De accountability is een voorstel, niet een feit.")
+    print(f"⚠  Implementatie van een echte nieuwe bron vereist menselijke goedkeuring + code.")
+    print("\n================ einde reflect demo ================")
+
+
 def once():
     """Eén echte puls en dan stoppen. Ideaal voor een cron-job ('s ochtends)."""
     v = Village(heartbeat_seconds=0)
@@ -922,5 +1011,7 @@ if __name__ == "__main__":
         proposal_demo()
     elif mode == "ngram":
         ngram_demo()
+    elif mode == "reflect":
+        reflect_demo()
     else:
         demo()

@@ -394,6 +394,35 @@ class TijdgeestWachter(Inhabitant):
         self._last_pulse = now
         self._run_pulse(event)
 
+    def _reflect(self) -> None:
+        """Reflecteert op de structurele limieten van de ngram_culture-databron.
+
+        Produceer UITSLUITEND spanningen en voorstellen — nooit nieuwe code of nieuwe API.
+        Uitbreiding van capaciteit (bijv. een aanvullende externe bron aansluiten)
+        is mens-gated activatie, identiek aan het bemensen van een geboren rol.
+        """
+        # Structureel bekende limiet (force=True): data stopt in 2019, altijd waar
+        self._sense_gap(
+            "ngram_2019_cutoff",
+            "accountability: aanvullende recente bron voor tijdgeest-observaties periodiek "
+            "evalueren en aan de mens rapporteren — "
+            "de ngram_culture-databron stopt in 2019 en misloopt daarmee 7 jaar culturele "
+            "verschuiving (2019-2026); geen enkele puls kan recente verschuivingen signaleren",
+            kind="governance",
+            force=True,   # Structureel bekende limiet; geen herhalingseis
+        )
+        # NL corpus dekking (min_count=2): kan ruis zijn (netwerk), dus twee observaties
+        self._sense_gap(
+            "nl_corpus_coverage",
+            "accountability: NL corpus dekking periodiek valideren en ontbrekende "
+            "kernbegrippen documenteren — "
+            "meerdere Nederlandse termen (bijv. 'consument') worden niet gevonden in het "
+            "NL corpus 10 (2012); het corpus is verouderd en dekt moderne missie-terminologie "
+            "onvoldoende af",
+            kind="governance",
+            min_count=2,  # Twee observaties vereist; één FOUT kan een netwerk-fout zijn
+        )
+
     def _run_pulse(self, event) -> None:
         if self._busy:
             return

@@ -1,5 +1,5 @@
 from __future__ import annotations
-import threading, logging, uuid, re
+import threading, logging, uuid, re, os, json, time
 from nooch_village.event_bus import EventBus, Event
 from nooch_village.inbox import Inbox
 from nooch_village.models import Task, Response, Record, RecordType, Tension
@@ -28,6 +28,11 @@ class Inhabitant(threading.Thread):
         self.inbox = Inbox(self.id)
         self._stop = threading.Event()
         self.log = logging.getLogger(f"village.{self.id}")
+        self._last_reflect: float = 0.0
+        # Productie: wekelijks; demo/test: reflect_interval_seconds=0 → altijd
+        self._reflect_interval: float = float(
+            self.context.settings.get("reflect_interval_seconds", str(7 * 24 * 3600)))
+        self.react("dag_begint", self._maybe_reflect)
 
     # --- buitenkant: van buiten ben ik gewoon een rol ---
     def capabilities(self) -> list[str]:
@@ -144,27 +149,43 @@ class Inhabitant(threading.Thread):
         from nooch_village.models import GovernanceChange, ChangeKind, Proposal
         from nooch_village.governance import proposal_to_dict
 
-        desc = tension.description
+        desc   = tension.description
         desc_l = desc.lower()
+        _ACC   = "accountability:"
+        is_reflection = _ACC in desc_l
 
-        if "policy" in desc_l:
+        if "policy" in desc_l and not is_reflection:
             pid = re.sub(r"\W+", "_", desc_l[:25]).strip("_")
             change = GovernanceChange(kind=ChangeKind.ADD_POLICY,
                                       policy_id=pid, policy_text=desc[:200])
-        elif "rol ontbreekt" in desc_l or "nieuwe rol" in desc_l:
+        elif ("rol ontbreekt" in desc_l or "nieuwe rol" in desc_l) and not is_reflection:
             rid = re.sub(r"\W+", "_", desc_l[:20]).strip("_")
             change = GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id=rid,
                                       purpose=desc[:100], new_role_parent="noochville")
         else:
+            if is_reflection:
+                # Extraheer de accountability-naam na het "accountability:"-marker
+                idx      = desc_l.index(_ACC) + len(_ACC)
+                acc_text = desc[idx:].strip()
+                # Neem tot " — " of einde; trim tot 100 tekens
+                acc_text = acc_text.split(" — ")[0].split("\n")[0].strip()[:100]
+            else:
+                acc_text = desc[:80]
             change = GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id=self.id,
-                                      add_accountabilities=[desc[:80]])
+                                      add_accountabilities=[acc_text])
 
+        rationale = (
+            "Periodieke reflectie gesignaleerd: structureel gat tussen eigen capaciteit "
+            "en vereiste accountability."
+            if is_reflection
+            else "Structurele spanning gedetecteerd via automatische triage"
+        )
         proposal = Proposal(
             proposer_role=self.id,
             change=change,
-            tension=desc,
-            trigger_example=f"{self.id}:{desc[:50]}",
-            rationale="Structurele spanning gedetecteerd via automatische triage",
+            tension=desc[:200],
+            trigger_example=f"{self.id}:{desc[:80]}",
+            rationale=rationale,
         )
         self.bus.publish(Event("proposal_raised",
                                {"proposal": proposal_to_dict(proposal)}, self.id))
@@ -229,6 +250,63 @@ class Inhabitant(threading.Thread):
         if out_l.startswith("tactical"):
             return "tactical"
         return None
+
+    # ── Periodieke reflectie ────────────────────────────────────────────────────
+
+    def _maybe_reflect(self, event: Event) -> None:
+        """Reflecteer periodiek, niet bij elke dag_begint-puls."""
+        now = time.time()
+        if self._reflect_interval > 0 and now - self._last_reflect < self._reflect_interval:
+            return
+        self._last_reflect = now
+        self._reflect()
+
+    def _reflect(self) -> None:
+        """Periodieke zelf-reflectie: vergelijk missie/doelen en eigen capaciteit.
+
+        Subklassen overschrijven dit voor hun specifieke gaten.
+        HARDE GRENS: produceer UITSLUITEND spanningen en voorstellen.
+        Schrijf nooit nieuwe code, start nooit nieuwe externe verbindingen.
+        Alles wat capaciteit uitbreidt is mens-gated activatie.
+        """
+
+    def _sense_gap(self, gap_key: str, description: str,
+                   kind: str = "governance",
+                   min_count: int = 2,
+                   force: bool = False) -> bool:
+        """Track een gat over meerdere reflecties; sens pas spanning bij aanhoudend bewijs.
+
+        gap_key   : unieke sleutel voor dit gat (per rol in data/reflect_<id>.json)
+        min_count : minimum observaties vóór spanning (default 2; voor ruis-filtering)
+        force     : omzeil min_count voor structureel bekende, altijd-geldige limieten
+
+        Retourneert True als er een spanning gesensed is.
+        """
+        path = os.path.join(self.context.data_dir, f"reflect_{self.id}.json")
+        state = {}
+        if os.path.exists(path):
+            try:
+                with open(path) as f:
+                    state = json.load(f)
+            except Exception:
+                pass
+
+        gap = state.setdefault(gap_key, {"count": 0, "first_seen": None, "last_seen": None})
+        now = time.time()
+        if gap["first_seen"] is None:
+            gap["first_seen"] = now
+        gap["last_seen"] = now
+        gap["count"] += 1
+
+        with open(path, "w") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+
+        if force or gap["count"] >= min_count:
+            self.sense_tension(description, kind=kind)
+            self.log.info("🔍 gat '%s' → spanning gesensed (observaties: %d)", gap_key, gap["count"])
+            return True
+        self.log.info("🔍 gat '%s' geregistreerd (%d/%d — nog geen spanning)", gap_key, gap["count"], min_count)
+        return False
 
     # --- het werk ---
     def handle(self, task: Task) -> Response:
