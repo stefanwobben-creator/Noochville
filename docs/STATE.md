@@ -112,6 +112,24 @@
 
 ## Openstaande ontwerpschuld
 
+- **tijdgeest_wachter means-gap blokkade**: `ngram_2019_cutoff` staat op deferred
+  (CLI `resolve()` weigert non-pending items). Means_gap-items kennen sowieso geen
+  approve-handler in de inbox-CLI — `approve` op een means_gap valt door alle type-
+  branches zonder effect. Het juiste pad loopt via
+  `Village.submit_proposal(amend_role, add_skills=[...])` → Facilitator G0-G4 →
+  Secretary adopt. Operationele acties via een losse Python-one-liner schaalt niet;
+  op de lange termijn: óf inbox-CLI uitbreiden met een `means_gap`-approve die het
+  governance-voorstel triggert, óf een aparte governance-CLI.
+
+- **Misfire gezien: `Missie_alignment_ok_Reg`** landde als means_gap terwijl het een
+  content-analyse-output is (keyword-review-rationale vanuit een LLM-response).
+  Afgewezen als ruis (182742a069c0). Te onderzoeken later: waar in de routing kwam
+  dit als means_gap binnen — vermoedelijk: een C-gap-beschrijving met een gestileerde
+  rationale die als capaciteitsbeschrijving werd doorgegeven, of een B-gap-route die
+  niet de juiste bronbeschrijving filterde. De fix is een filter op de
+  `means_gap_sensed`-payload vóór `add_means_gap` (bijv. max-lengte, geen markdown-
+  opmaak, of expliciete `accountability:`-prefix vereisen als correctheidsindicator).
+
 - **MANDATE_THRESHOLD = 0.10 empirisch laag**: junk-mandaat-scores liggen op
   0.125–0.571, klantverhalen op 0.333. C is in de praktijk bijna onbereikbaar
   voor alles wat Nooch-woorden bevat (anchor-purpose vangt breed). Voorlopig
