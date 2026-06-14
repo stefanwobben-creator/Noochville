@@ -37,6 +37,7 @@ from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
 from nooch_village.skills_impl.openalex import OpenalexSkill
 from nooch_village.human_inbox import HumanInbox
 from nooch_village.observations import ObservationStore
+from nooch_village.monitoring import MonitoringStore
 from nooch_village.projects import ProjectLedger
 from nooch_village.seeds import (
     seed_lexicon, seed_records, migrate_records,
@@ -70,6 +71,8 @@ class Village:
         seed_lexicon(self.context.lexicon)
         self.context.observations = ObservationStore(
             os.path.join(self.context.data_dir, "observations.jsonl"))
+        self.context.monitoring = MonitoringStore(
+            os.path.join(self.context.data_dir, "role_metrics.json"))
         self.context.projects = ProjectLedger(
             os.path.join(self.context.data_dir, "projects.json"))
         self.human_inbox = HumanInbox(os.path.join(self.context.data_dir, "human_inbox.json"))

@@ -91,7 +91,30 @@ class GrowthAnalyst(Inhabitant):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.react("dag_begint", self._morning_pulse)
+        self.react("project_advice_ready", self._on_advice_ready)
         self._busy = False
+
+    def _on_advice_ready(self, event: Event) -> None:
+        """Ontvang advies van Noochie: voeg keep-metrics toe aan het monitoring-overzicht
+        en completeer het project. Geen voorstel, geen gate, geen inbox.
+        """
+        pid    = event.data.get("project_id")
+        advice = event.data.get("advice", [])
+        if not pid:
+            return
+        ledger = getattr(self.context, "projects", None)
+        if ledger is None:
+            return
+        project = ledger.get(pid)
+        if project is None or project.get("owner") != self.id:
+            return
+        keep = [a["metric"] for a in advice if a.get("verdict") == "keep"]
+        monitoring = getattr(self.context, "monitoring", None)
+        if monitoring is not None and keep:
+            monitoring.add_metrics(self.id, keep)
+        outcome = "monitoring: " + ", ".join(sorted(keep)) if keep else "monitoring: (leeg)"
+        ledger.complete(pid, outcome)
+        self.log.info("📊 monitoring bijgewerkt: %s", keep)
 
     def _morning_pulse(self, event: Event) -> None:
         if self._busy:
@@ -103,10 +126,7 @@ class GrowthAnalyst(Inhabitant):
             trends = self.use_skill("google_trends", {})
             note = self.use_skill("field_note", {"plausible": plausible, "trends": trends})
 
-            obs = getattr(self.context, "observations", None)
-            if obs is not None:
-                for metric, value in _extract_pulse_metrics(plausible):
-                    obs.record(self.id, metric, value)
+            self._log_pulse_metrics(plausible)
 
             self._propose_related(trends)
             self._sense_goal_gap(plausible)
@@ -119,6 +139,18 @@ class GrowthAnalyst(Inhabitant):
             self.log.info("📝 Field Note klaar -> %s", note.get("path"))
         finally:
             self._busy = False
+
+    def _log_pulse_metrics(self, plausible: dict) -> None:
+        """Log de metrics die in het monitoring-overzicht staan én in de puls aanwezig zijn."""
+        obs        = getattr(self.context, "observations", None)
+        monitoring = getattr(self.context, "monitoring",   None)
+        if obs is None:
+            return
+        monitored   = monitoring.get_metrics(self.id) if monitoring else []
+        pulse_dict  = dict(_extract_pulse_metrics(plausible))
+        for metric in monitored:
+            if metric in pulse_dict:
+                obs.record(self.id, metric, pulse_dict[metric])
 
     def _sense_goal_gap(self, plausible: dict) -> None:
         """Vergelijk werkelijke bezoekerstrend met de run-rate die actieve doelen vereisen.
