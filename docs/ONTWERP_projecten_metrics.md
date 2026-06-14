@@ -81,6 +81,18 @@ Dit is de uitbreiding op de al gespecceerde deterministische roster-match: van �
 
 Discipline: deterministisch eerst. De LLM-stap komt er pas op als de term-overlap te grof blijkt, en dan alleen voor de twijfelband rond de drempel, fail-closed (geen antwoord of fout → niet baren).
 
+### 3b. Means-gap dedup & lifecycle (gebouwd 14 juni via live debugging)
+
+B-cases (means-gaps: openlibrary_v2, ngram_2019_cutoff, nl_corpus_coverage) landen nu via `_report_means_gap` als één inbox-item, keyed op gap_key, in plaats van als auto-geadopteerde amend_role. De governance-gate ziet ze niet meer. De inbox dedupt op `subject == gap_key`, op dit moment ongeacht status.
+
+Lifecycle, nu en later:
+
+- **Approve** = opgelost (het middel bestaat), voor altijd stil.
+- **Reject** = "niet nu". Nu: ongeacht status, dus nooit een tweede item. Verfijning voor later (Stefans idee): een cooldown (bijv. 3 maanden) waarna het gat één keer terug mag, met een teller die na 3 rejects definitief zwijgt (3-strikes). Dom-eerst met timer + strikes, slim-later op een wezenlijke verandering (een echte use case duikt op) in plaats van de klok.
+- **semscholar_no_key** vervalt: geen tension. Sens pas op de gebeurtenis (de rate-limit raken), niet op de toestand (key ontbreekt).
+
+Let op: dit is een gedeeltelijke B-routing voor de huidige means-gaps. De volledige gedeelde gap-judgment (roster-match mandaat vs middel → A/B/C, inclusief role-birth voor C) is nog niet geïntegreerd. Zie open knoppen.
+
 ---
 
 ## 4. Het project-grootboek (status & provenance)
@@ -128,6 +140,18 @@ Twee regels die de slimme laag kloppend maken:
 
 ---
 
+## 7. Feedback-loop: leren van beslissingen
+
+Een afwijs-reden wordt nu opgeslagen op het inbox-item (`resolution.reason`), maar niks leest 'm terug. Het is audit, geen les. Drie lagen, dom-eerst:
+
+- **Onthouden (gebouwd):** dedup zorgt dat een afgewezen item niet terugkomt (means-gaps ongeacht status; activaties idem na de durable-reject-fix). Dit is "herhaal de beslissing niet", nog geen leren van het waarom.
+- **Deterministisch leren:** afwijzingen worden gecureerde feiten die de roster-match (A/B/C) raadpleegt. Precedent in het dorp: de Library, een gecureerde beslissing mét het waarom, geraadpleegd voordat er gehandeld wordt ("ontologie, geen blocklist"). Voor rommel-rollen ís de roster-match zelf al de les (missie-alignment = Noochie's mandaat, dus niet baren). De reden verdient z'n geld vooral bij oordelen die de match níét kan berekenen (bijv. "openlibrary per-boek API past niet"); die horen gecureerde governance-kennis te worden die toekomstige sensing checkt, zodat je niet opnieuw gevraagd wordt over iets waar je al nee op zei.
+- **Slim leren (later):** voer het reden-corpus aan een LLM die patronen ziet die de regels missen. Fail-closed.
+
+Venijn: laat een LLM niet stilletjes leren-en-onderdrukken, dat drift en smoort legitieme signalen omdat ze op een oude afwijzing lijken. De mens cureert wat onthouden wordt, net als bij de Library. Auditeerbaar, dom waar het kan.
+
+---
+
 ## Principes die voor deze upgrade niet mogen driften
 
 - Project = operationeel. Niet door G0-G4, niet in de inbox. Alleen de structurele uitkomst is gated.
@@ -147,3 +171,5 @@ Twee regels die de slimme laag kloppend maken:
 - De drempel van de roster-match is empirisch. Stel 'm bij ná het zien draaien, niet vooraf.
 - Welke intelligente trigger eerst (Noochie-push of tension-driven) blijft open tot de domme triggers staan.
 - De WIP-getallen (FUTURE_MAX, RUNNING_MAX, en de slimme varianten) stel je af nadat je het bord hebt zien vollopen, niet vooraf.
+- **A/B/C nog goed integreren (volgende grote stap):** de means-gap-fix routet B-cases naar de inbox, maar de volledige gedeelde gap-judgment (roster-match mandaat vs middel → A/B/C, inclusief role-birth voor C) is nog niet gebouwd. Dit is het stuk dat het dorp echt zelf rollen laat baren en skills laat ontwikkelen.
+- De means-gap reject-lifecycle (cooldown + 3-strikes, smart-later op materiële trigger) is genoteerd in 3b, nog niet gebouwd.
