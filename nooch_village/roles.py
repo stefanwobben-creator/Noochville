@@ -438,26 +438,46 @@ class TijdgeestWachter(Inhabitant):
                     {"by": self.id, "ok": False, "error": result["error"]}, self.id))
                 return
 
+            # Verwerk locale-bewuste rows (nieuw) of legacy terms-dict (compat)
+            rows  = result.get("rows", [])
             terms = result.get("terms", {})
-            stijgend = [t for t, d in terms.items()
-                        if d.get("signal", {}).get("direction") == "stijgend"]
-            dalend   = [t for t, d in terms.items()
-                        if d.get("signal", {}).get("direction") == "dalend"]
+
+            if rows:
+                stijgend = list(dict.fromkeys(
+                    r["term"] for r in rows
+                    if not r.get("no_data")
+                    and r.get("signal", {}).get("direction") == "stijgend"
+                ))
+                dalend = list(dict.fromkeys(
+                    r["term"] for r in rows
+                    if not r.get("no_data")
+                    and r.get("signal", {}).get("direction") == "dalend"
+                ))
+            else:
+                stijgend = [t for t, d in terms.items()
+                            if d.get("signal", {}).get("direction") == "stijgend"]
+                dalend   = [t for t, d in terms.items()
+                            if d.get("signal", {}).get("direction") == "dalend"]
 
             self.log.info("📈 stijgend: %s | 📉 dalend: %s", stijgend, dalend)
 
             # Stijgende termen aanbieden aan de Librarian (niet zelf curating)
             lib = getattr(self.context, "library", None)
+            row_by_term = {r["term"]: r for r in rows} if rows else {}
             for term in stijgend:
                 if lib and lib.status(term) is not None:
                     continue  # Librarian heeft al een oordeel
+                row  = row_by_term.get(term, {})
+                freq = row.get("freq_last") or (terms.get(term) or {}).get("freq_last")
                 self.bus.publish(Event("keyword_proposed", {
                     "word": term,
                     "demand": {
                         "signal":    "positive",
                         "source":    "ngram_culture",
                         "direction": "stijgend",
-                        "freq_last": terms[term].get("freq_last"),
+                        "locale":    row.get("locale"),
+                        "concept":   row.get("concept"),
+                        "freq_last": freq,
                     },
                     "from": self.id,
                 }, self.id))
@@ -481,8 +501,9 @@ class TijdgeestWachter(Inhabitant):
                 "ok":        True,
                 "stijgend":  stijgend,
                 "dalend":    dalend,
-                "term_count": len(terms),
-                "terms":     terms,   # volledige details voor observability
+                "term_count": len(rows) if rows else len(terms),
+                "rows":      rows,    # locale-bewust (nieuw)
+                "terms":     terms,   # backward compat
             }, self.id))
         finally:
             self._busy = False
