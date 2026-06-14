@@ -5,14 +5,7 @@ from nooch_village.event_bus import EventBus, Event
 from nooch_village.inbox import Inbox
 from nooch_village.models import Task, Response, Record, RecordType, Tension
 from nooch_village.skills import SkillRegistry
-
-# Trefwoorden die duiden op een structurele, terugkerende spanning die governance vereist
-_STRUCTURAL_KW = frozenset([
-    "voortaan", "altijd", "elke keer", "niemand bezit", "niemand heeft",
-    "niemand pakt", "ontbreekt", "terugkerend", "structureel", "policy",
-    "accountability", "nooit belegd", "verwacht wordt", "structuur",
-    "verwacht dat", "zou moeten", "onbeheerd",
-])
+from nooch_village.triage_engine import TriageContext, classify as _triage_classify
 
 
 class Inhabitant(threading.Thread):
@@ -58,92 +51,40 @@ class Inhabitant(threading.Thread):
     # ── Triage ─────────────────────────────────────────────────────────────────
 
     def triage(self, tension: Tension) -> None:
-        """Classificeer en routeer een spanning. Eerste match wint.
+        """Classificeer en routeer een spanning via TriageEngine (dunne facade).
 
         1. Structureel/terugkerend  → Proposal via proposal_raised (governance-engine)
         2. Eigen werk               → zelf doen (al in uitvoering)
         3. Andere rol               → routeer via help_requested of broadcast
         4. Geen passende rol        → tactisch proberen; matchmaker escaleert naar mens
         """
-        desc = tension.description
+        desc  = tension.description
         desc_l = desc.lower()
-        cls = "onbekend"
 
-        # Optionele LLM-classificatie (als er een sleutel is)
         llm = self._classify_llm(desc)
+        ctx = TriageContext(
+            role_id=self.id,
+            purpose=self.dna.purpose,
+            accountabilities=self.dna.accountabilities,
+            domains=getattr(self.dna, "domains", []),
+            records=getattr(self.context, "records", None),
+        )
+        result = _triage_classify(desc_l, ctx, llm_result=llm)
 
-        if llm == "structural" or (llm is None and self._is_structural(desc_l)):
-            cls = "structureel"
+        if result.classification == "structureel":
             self._raise_governance_proposal(tension)
-
-        elif llm == "own" or (llm is None and self._fits_own_role(desc_l)):
-            cls = "eigen-werk"
+        elif result.classification == "eigen-werk":
             self._do_own_work(tension)
-
-        elif llm and llm not in ("tactical", "own", "structural"):
-            # LLM gaf een rol-id terug
-            role_id = llm
-            records = getattr(self.context, "records", None)
-            cap = None
-            if records:
-                rec = records.get(role_id)
-                if rec and rec.definition.skills:
-                    cap = rec.definition.skills[0]
-            cls = f"andere-rol:{role_id}"
-            self._route_to_role(tension, role_id, cap)
-
+        elif result.classification.startswith("andere-rol:"):
+            self._route_to_role(tension, result.target_role_id, result.target_capability)
         else:
-            role_id, cap = self._find_other_role(desc_l)
-            if role_id:
-                cls = f"andere-rol:{role_id}"
-                self._route_to_role(tension, role_id, cap)
-            else:
-                cls = "tactisch"
-                self._try_tactical_or_escalate(tension)
+            self._try_tactical_or_escalate(tension)
 
         self.bus.publish(Event("tension_triaged", {
             "by": self.id,
             "description": desc[:80],
-            "classification": cls,
+            "classification": result.classification,
         }, self.id))
-
-    # ── Triage-helpers ──────────────────────────────────────────────────────────
-
-    def _is_structural(self, desc_l: str) -> bool:
-        return any(kw in desc_l for kw in _STRUCTURAL_KW)
-
-    def _fits_own_role(self, desc_l: str) -> bool:
-        """True als een significant woord uit de spanning in mijn purpose/accountabilities voorkomt."""
-        own = (self.dna.purpose + " " + " ".join(self.dna.accountabilities)).lower()
-        for word in desc_l.split():
-            if len(word) >= 6 and word in own:
-                return True
-        for word in own.split():
-            if len(word) >= 6 and word in desc_l:
-                return True
-        return False
-
-    def _find_other_role(self, desc_l: str) -> tuple[str | None, str | None]:
-        """Zoek een andere rol wiens domeinen of accountabilities beter passen."""
-        records = getattr(self.context, "records", None)
-        if records is None:
-            return None, None
-        desc_words = {w for w in desc_l.split() if len(w) >= 6}
-        for rec in records.all():
-            if rec.id == self.id or rec.archived:
-                continue
-            # Domein-match heeft prioriteit (sterkste signaal)
-            for domain in rec.definition.domains:
-                if domain.lower() in desc_l:
-                    cap = rec.definition.skills[0] if rec.definition.skills else None
-                    return rec.id, cap
-            # Accountability-overlap
-            acc_text = " ".join(rec.definition.accountabilities).lower()
-            acc_words = {w for w in acc_text.split() if len(w) >= 6}
-            if acc_words & desc_words:
-                cap = rec.definition.skills[0] if rec.definition.skills else None
-                return rec.id, cap
-        return None, None
 
     def _raise_governance_proposal(self, tension: Tension) -> None:
         """Zet een structurele spanning om in een Proposal en stuur het door de engine."""
@@ -309,30 +250,38 @@ class Inhabitant(threading.Thread):
         return False
 
     # --- het werk ---
+
+    def _execute_skill(self, capability: str, payload: dict) -> tuple[bool, object]:
+        """Voer een skill uit en geef (ok, resultaat) terug.
+
+        Gedeelde kern voor handle() en use_skill(); valideert registry maar
+        NIET DNA — dat doet de aanroeper.
+        """
+        skill = self.registry.get(capability)
+        if skill is None:
+            return False, f"skill '{capability}' niet geregistreerd"
+        try:
+            return True, skill.run(payload, self.context)
+        except Exception as e:
+            self.log.error("skill '%s' faalde: %s", capability, e)
+            return False, str(e)
+
     def handle(self, task: Task) -> Response:
         if task.capability not in self.dna.skills:
             return Response(success=False, error=f"'{self.id}' heeft skill '{task.capability}' niet in zijn DNA")
-        skill = self.registry.get(task.capability)
-        if skill is None:
-            return Response(success=False, error=f"skill '{task.capability}' niet geregistreerd")
-        try:
-            return Response(success=True, data=skill.run(task.payload, self.context))
-        except Exception as e:
-            self.log.error("skill '%s' faalde: %s", task.capability, e)
-            return Response(success=False, error=str(e))
+        ok, result = self._execute_skill(task.capability, task.payload)
+        if ok:
+            return Response(success=True, data=result)
+        return Response(success=False, error=result)
 
     def use_skill(self, capability: str, payload: dict) -> dict:
         """Zelf een eigen skill gebruiken (voor zelf-geinitieerd werk, niet via de matchmaker)."""
         if capability not in self.dna.skills:
             return {"error": f"'{self.id}' heeft skill '{capability}' niet in zijn DNA"}
-        skill = self.registry.get(capability)
-        if skill is None:
-            return {"error": f"skill '{capability}' niet geregistreerd"}
-        try:
-            return skill.run(payload, self.context)
-        except Exception as e:
-            self.log.error("skill '%s' faalde: %s", capability, e)
-            return {"error": str(e)}
+        ok, result = self._execute_skill(capability, payload)
+        if ok:
+            return result
+        return {"error": result}
 
     def tick(self) -> None:
         """Hartslag-hook: wordt elke cyclus aangeroepen. Default niets.
