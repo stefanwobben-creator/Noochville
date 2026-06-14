@@ -27,7 +27,7 @@ Niet `python nooch_village/village.py` (dan breken de imports). Laat de `__init_
 ## Architectuur (drie lagen)
 
 1. **Het marktplein** — `EventBus` (`event_bus.py`): broadcast van feiten/aankondigingen. Autonomie: inwoners reageren zelf op events die hen aangaan.
-2. **De postbus** — `Inbox` per inwoner (`inbox.py`): toegewezen werk dat áf moet. Betrouwbaarheid.
+2. **De postbus** — `Inbox` per inwoner (`inbox/__init__.py`): toegewezen werk dat áf moet. Betrouwbaarheid.
 3. **De matchmaker** — `Matchmaker` (`matchmaker.py`): hoort "wie kan dit?" en legt werk in de inbox van een capabele inwoner.
 
 Kerncomponenten:
@@ -431,6 +431,57 @@ De geboren-versus-bemenst-splitsing geldt voor **capaciteit**, niet alleen voor 
 **Voorbeeld:** TijdgeestWachter signaleert via `_reflect()` dat de ngram-databron stopt in 2019. Hij schrijft een voorstel "accountability: aanvullende recente bron evalueren". Het voorstel wordt aangenomen → de accountability staat in het record. De implementatie (bijv. Wikipedia API of een nieuwere corpus) vereist menselijke code + registratie in `SkillRegistry` + `CLASS_MAP`. Tot dan is de accountability een "belofte aan de mens", geen draaiend systeem.
 
 **In code:** `Inhabitant._reflect()` bevat een docstring die dit expliciet verwoordt. Elke subklasse die `_reflect()` overschrijft MOET dit patroon respecteren.
+
+## Human inbox — het geauthenticeerde lokale approval-oppervlak
+
+`HumanInbox` (`human_inbox.py`) is de persistente wachtrij voor beslissingen die menselijke goedkeuring vereisen.
+State in `data/human_inbox.json` (gitignored). CLI: `python -m nooch_village.inbox`.
+
+### Twee item-typen
+
+| Type | Wanneer | Voorbeeld |
+|------|---------|-----------|
+| `escalation` | Governance-voorstel dat G1-G4 niet passeerde | Domein-botsing bij een `add_role` |
+| `activation` | Sensed onbemande rol zonder `CLASS_MAP`-entry | `kennis_scout` geboren via governance |
+
+### CLI-commando's
+
+```bash
+python -m nooch_village.inbox              # toon pending items
+python -m nooch_village.inbox list         # idem
+python -m nooch_village.inbox all          # alle items incl. gesloten
+python -m nooch_village.inbox show <id>    # volledig item met activatieplan / gate-context
+
+python -m nooch_village.inbox approve <id> [reden]   # zie effecten per type hieronder
+python -m nooch_village.inbox reject  <id> [reden]
+python -m nooch_village.inbox amend   <id> <tekst>   # sluit het item + instructie voor herindiening
+python -m nooch_village.inbox defer   <id> [reden]   # uitstellen, blijft geregistreerd
+```
+
+### Effecten per actie × type
+
+| Actie | escalation | activation |
+|-------|-----------|-----------|
+| `approve` | `governance_verdict approve` op de bus → Secretary adopteert direct | Green-light; toont stappenplan voor handmatige implementatie |
+| `reject` | `governance_verdict reject` op de bus → Secretary markeert voorstel afgewezen | Item gesloten; geen code |
+| `amend` | Item amended + instructie om voorstel aangepast her in te dienen | Idem voor activatieplan |
+| `defer` | Uitgesteld; blijft in `data/human_inbox.json` | Idem |
+
+### Beveiligingsgrens (nooit te doorbreken)
+
+- Approvals en activaties mogen **uitsluitend** op dit geauthenticeerde lokale oppervlak bevestigd worden.
+- Geen extern of ongeauthenticeerd kanaal (mail, Slack, webhook) mag een approval triggeren.
+- Komt er later notificatie bij, dan is die altijd alleen een **heads-up** met context en een link terug naar de CLI — nooit een approve-knop.
+
+### Activatie-approval ≠ code-review
+
+Een `approve` op een activatie-item green-light de implementatie: de mens heeft besloten dat de rol gebouwd mag worden. Dit **vervangt de per-edit code-review niet**. Iedere stap in het activatieplan (skill-bestanden, klasse in `roles.py`, `CLASS_MAP`-entry) passeert daarna nog de normale code-review voordat hij commit en draait.
+
+### Dedup-garanties
+
+- `add_escalation` dedupliceerde op `proposal_id` — hetzelfde voorstel wordt nooit tweemaal toegevoegd.
+- `add_activation` dedupliceerde op `role_id` + status `pending` of `approved` — de KennisScout blijft één item, ook na herstarts.
+- `sync_unmanned()` wordt bij elke Village-start aangeroepen zodat nieuwe onbemande rollen automatisch in de inbox verschijnen.
 
 ## Schaal-naden (grenzen die je later kunt opentrekken, nu niet schenden)
 
