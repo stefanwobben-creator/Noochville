@@ -141,6 +141,18 @@
   history-lookup (inbox checken vóór C-publish) is de correcte fix, maar een
   aparte kwestie.
 
+## Evaluatie-checkpoints
+
+### B-observer pad — beslissing na ~1-2 weken data
+
+- **Wanneer beslissen** we of de coherentiepoort blokkerend wordt op B,
+  observerend blijft, of weggaat?
+- **Kalibratie-criterium nog te kiezen**: vals-positieven (vague-verdict op
+  legitieme means-gaps) versus vals-negatieven (coherent-verdict op rommel).
+- **Concreet**: na de eerste week B-observer logs handmatig doornemen, per
+  observer-verdict checken of de mens dezelfde beslissing zou hebben genomen.
+  Bij ≥X% [drempel nog te bepalen] — *instructie afgeknipt, drempel open.*
+
 ## Volgende stappen
 
 1. **Echte supervised live run met sleutels**: sluitstuk van de lus. Plausible +
