@@ -100,8 +100,6 @@ class Inhabitant(threading.Thread):
         desc_l = desc.lower()
         _ACC   = "accountability:"
         is_reflection = _ACC in desc_l
-        _c_gap_key = None   # alleen gezet op classify_gap C-pad
-        _c_records  = None
 
         if "policy" in desc_l and not is_reflection:
             pid = re.sub(r"\W+", "_", desc_l[:25]).strip("_")
@@ -139,14 +137,34 @@ class Inhabitant(threading.Thread):
                     "📌 spanning B → means-gap voor '%s': %s — %s",
                     matched_role, desc[:60], reason)
                 return
-            # C: geen dekkende rol → door naar geboorte
-            gap = gap_signature(desc)
-            r_id = (_role_id_from_gap(gap) if gap
-                    else re.sub(r"\W+", "_", desc[:20]).strip("_"))
+            # C: geen dekkende rol → trechter → geboorte
+            gap       = gap_signature(desc)
+            r_id      = (_role_id_from_gap(gap) if gap
+                         else re.sub(r"\W+", "_", desc[:20]).strip("_"))
             r_purpose = _purpose_from_gap(gap) if gap else desc[:100]
-            change = GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id=r_id,
-                                      purpose=r_purpose, new_role_parent="noochville")
+            change    = GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id=r_id,
+                                         purpose=r_purpose, new_role_parent="noochville")
+            proposal  = Proposal(
+                proposer_role=self.id,
+                change=change,
+                tension=desc[:200],
+                trigger_example=f"{self.id}:{desc[:80]}",
+                rationale=(
+                    "Structureel terugkerend gat: geen bestaande rol dekt deze "
+                    "accountability voldoende (classify_gap uitkomst C)."
+                ),
+            )
+            if not self._funnel_c_proposal(desc, r_id, recs_list):
+                self.log.info(
+                    "🚫 C-trechter: voorstel gedropt voor gap_key='%s'", r_id)
+                return
+            self.bus.publish(Event("proposal_raised",
+                                   {"proposal": proposal_to_dict(proposal)}, self.id))
+            self.log.info(
+                "🏛️ structureel → voorstel %s (%s)", proposal.id, change.kind.value)
+            return
 
+        # Niet-C paden: policy / "rol ontbreekt" / reflectie
         if change.kind == ChangeKind.ADD_ROLE and not is_reflection:
             rationale = (
                 "Structureel terugkerend gat: geen bestaande rol dekt deze "
@@ -169,6 +187,27 @@ class Inhabitant(threading.Thread):
         self.bus.publish(Event("proposal_raised",
                                {"proposal": proposal_to_dict(proposal)}, self.id))
         self.log.info("🏛️ structureel → voorstel %s (%s)", proposal.id, change.kind.value)
+
+    def _funnel_c_proposal(self, gap_description: str, gap_key: str, records: list) -> bool:
+        """Drie-filter trechter voor classify_gap C-voorstellen.
+
+        Retourneert True als het voorstel door mag, False als het gedropt wordt.
+        """
+        # Filter 1: Kandidaat-dedup (deterministisch).
+        for rec in records:
+            if not getattr(rec, "archived", False) and rec.id == gap_key:
+                self.log.info(
+                    "C-trechter: dedup op gap_key=%s — record bestaat al", gap_key)
+                return False
+
+        # Filter 2: Recurrence-passage (no-op met logregel).
+        # Twee-slag-gate upstream gegarandeerd, hier passage.
+        self.log.info("C-trechter: recurrence al geverifieerd stroomopwaarts")
+
+        # Filter 3: Coherentiepoort (stub).
+        # LLM-coherentiepoort komt in deelstap 2, fail-closed beoogd, voorlopig True.
+        self.log.info("C-trechter: coherentiepoort gestubd, doorgelaten")
+        return True
 
     def _report_means_gap(self, gap_key: str, description: str) -> None:
         """Routeer een structurele capaciteitsgrens direct naar de inbox als means-gap-item.
