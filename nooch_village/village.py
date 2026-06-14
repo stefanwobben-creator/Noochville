@@ -17,6 +17,7 @@ from nooch_village.governance import Records, Secretary, Reconciler
 from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.roles import TimeKeeper, GrowthAnalyst, Librarian, PerformanceScout, Facilitator, TijdgeestWachter
 from nooch_village.library import Library
+from nooch_village.lexicon import Lexicon
 from nooch_village.models import Proposal, GovernanceChange, ChangeKind
 from nooch_village.governance import proposal_to_dict
 from nooch_village.skills_impl.site_health import SiteHealthSkill
@@ -55,6 +56,69 @@ _ANCHOR_PURPOSE = (
     "Kernwaarden: geen plastic, geen leer, in Europa geproduceerd, op bestelling, eerlijke prijs, "
     "transparantie. Groei via missie-gedreven organische content op nooch.earth."
 )
+
+
+# Zaad-concepten voor het meertalige lexicon.
+# Status geldt symmetrisch: is 'consument' avoid → 'consumer' ook.
+_LEXICON_SEED = [
+    {
+        "concept_id": "burger_frame",
+        "words": {"nl": "burger", "en": "citizen"},
+        "status": "approved",
+        "rationale": (
+            "Burgerframe versterkt agency en collectieve verantwoordelijkheid; "
+            "kernterm voor de missie in NL en EN. Symmetrisch: beide talen preferred."
+        ),
+    },
+    {
+        "concept_id": "consumer_frame",
+        "words": {"nl": "consument", "en": "consumer"},
+        "status": "avoid",
+        "rationale": (
+            "Consumentenkader versterkt passiviteit en extractief gedrag; burgerframe "
+            "heeft voorkeur. Symmetrisch: avoid in NL én EN."
+        ),
+    },
+    {
+        "concept_id": "sufficiency",
+        "words": {"nl": "soberheid", "en": "sufficiency"},
+        "status": "approved",
+        "rationale": "Sufficiencybeweging sluit aan bij missie: minder verbruik als waarde.",
+    },
+    {
+        "concept_id": "regenerative",
+        "words": {"nl": "regeneratief", "en": "regenerative"},
+        "status": "approved",
+        "rationale": "Regeneratief ontwerp is een kernterm voor de positieve missierichting.",
+    },
+    {
+        "concept_id": "plastic_free",
+        "words": {"nl": "plasticvrij", "en": "plastic-free"},
+        "status": "approved",
+        "rationale": "Geen plastic is een harde beleidsregel én een SEO-kans in beide talen.",
+    },
+    {
+        "concept_id": "sustainable",
+        "words": {"nl": "duurzaam", "en": "sustainable"},
+        "status": "approved",
+        "rationale": "Kernwoord voor duurzame schoenenmissie in NL en EN.",
+    },
+    {
+        "concept_id": "vegan",
+        "words": {"nl": "veganistisch", "en": "vegan"},
+        "status": "approved",
+        "rationale": "Geen dierenleer is beleidsregel; vegan/veganistisch missie-aligned.",
+    },
+]
+
+
+def seed_lexicon(lexicon: Lexicon) -> None:
+    """Seed het meertalige lexicon idempotent met de zaad-concepten."""
+    added = lexicon.seed(_LEXICON_SEED)
+    if added:
+        import logging
+        logging.getLogger("village.lexicon").info(
+            "lexicon geseeded: %d nieuwe concepten", added)
 
 
 def activate_tijdgeest_wachter(records: Records) -> None:
@@ -170,6 +234,8 @@ class Village:
         if heartbeat_seconds is not None:
             self.context.settings["heartbeat_seconds"] = str(heartbeat_seconds)
         self.context.library = Library(os.path.join(self.context.data_dir, "library.json"))
+        self.context.lexicon = Lexicon(os.path.join(self.context.data_dir, "lexicon.json"))
+        seed_lexicon(self.context.lexicon)
         self.registry = SkillRegistry()
         for skill in (SiteHealthSkill(), BudgetSkill(), PlausibleSkill(), TrendsSkill(),
                       FieldNoteSkill(), LibraryLookupSkill(), KeywordReviewSkill(),
