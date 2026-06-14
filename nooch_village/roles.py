@@ -555,15 +555,18 @@ class TijdgeestWachter(Inhabitant):
 
 
 class KennisScout(Inhabitant):
-    """Grondt kandidaat-termen in boeken en wetenschap.
+    """Grondt kandidaat-termen in academische literatuur (v1: OpenAlex + Semantic Scholar).
 
-    Reageert op keyword_proposed, haalt context op via OpenLibrary, Semantic Scholar
-    en OpenAlex, destilleert de evidentie en publiceert keyword_evidence.
-    Signaleert alleen — beslist nooit zelf over goedkeuring of afwijzing.
+    Termen komen uit het lexicon — via keyword_proposed-events van TijdgeestWachter,
+    GrowthAnalyst of PerformanceScout, die hun woorden op hun beurt uit het Lexicon halen.
+    De KennisScout haalt evidentie op, destilleert een duiding en publiceert keyword_evidence.
+
+    Signaleert alleen — beslist en cureert nooit zelf.
+    OpenLibrary voltekst-grounding is gepland voor v2.
 
     Harde grens (_reflect):
       Produceer UITSLUITEND spanningen en voorstellen — nooit nieuwe code of API-calls
-      buiten de skills-lijst. Uitbreiding van capaciteit is mens-gated activatie.
+      buiten de eigen skills-lijst. Uitbreiding van capaciteit is mens-gated activatie.
     """
 
     def __init__(self, *args, **kwargs):
@@ -572,92 +575,110 @@ class KennisScout(Inhabitant):
         self._busy_terms: set[str] = set()
 
     def _on_keyword_proposed(self, event: Event) -> None:
-        word = event.data.get("word", "").strip()
+        word   = event.data.get("word", "").strip()
+        demand = event.data.get("demand", {})
+        locale = demand.get("locale", "")   # locale volgt de term uit het Lexicon
         if not word or word in self._busy_terms:
             return
         self._busy_terms.add(word)
         try:
-            self.log.info("🔬 gronden: '%s'", word)
+            self.log.info("🔬 gronden: '%s' (locale=%s)", word, locale or "?")
             evidence: list[dict] = []
 
-            books = self.use_skill("openlibrary_search_inside", {"term": word, "limit": 3})
-            if "error" in books:
-                self.log.warning("⚠️ OpenLibrary: %s", books["error"])
-            else:
-                evidence.extend(books.get("hits", []))
-
-            papers = self.use_skill("semantic_scholar", {"term": word, "limit": 3})
-            if "error" in papers:
-                self.log.warning("⚠️ Semantic Scholar: %s", papers["error"])
-            else:
-                evidence.extend(papers.get("hits", []))
-
-            # OpenAlex als aanvulling (ook als al hits zijn — extra dekking)
-            works = self.use_skill("openalex", {"term": word, "limit": 2})
+            # OpenAlex — academische werken, gesorteerd op citaties
+            works = self.use_skill("openalex_evidence",
+                                   {"term": word, "locale": locale, "limit": 3})
             if "error" in works:
                 self.log.warning("⚠️ OpenAlex: %s", works["error"])
+            elif works.get("no_data"):
+                self.log.info("ℹ️ OpenAlex: geen werken voor '%s'", word)
             else:
                 evidence.extend(works.get("hits", []))
 
-            assessment = self._distill(word, evidence, event.data.get("demand", {}))
+            # Semantic Scholar — papers met tldr-samenvatting
+            papers = self.use_skill("semscholar_tldr",
+                                    {"term": word, "locale": locale, "limit": 3})
+            if "error" in papers:
+                self.log.warning("⚠️ Semantic Scholar: %s", papers["error"])
+            elif papers.get("no_data"):
+                self.log.info("ℹ️ Semantic Scholar: geen papers voor '%s'", word)
+            else:
+                evidence.extend(papers.get("hits", []))
+
+            assessment = self._distill(word, locale, evidence, demand)
 
             self.bus.publish(Event("keyword_evidence", {
                 "word":            word,
+                "locale":          locale,
                 "evidence":        evidence,
                 "assessment":      assessment,
                 "from":            self.id,
-                "original_demand": event.data.get("demand", {}),
+                "original_demand": demand,
             }, self.id))
             self.log.info("📚 evidentie gepubliceerd voor '%s': %d bron(nen)", word, len(evidence))
         finally:
             self._busy_terms.discard(word)
 
-    def _distill(self, word: str, evidence: list[dict], demand: dict) -> str:
+    def _distill(self, word: str, locale: str,
+                 evidence: list[dict], demand: dict) -> str:
         """Destilleer gevonden evidentie tot een beknopte relevantie-duiding.
 
         Citeer UITSLUITEND bronnen die in `evidence` staan. Fabriceer geen titels,
-        auteurs of abstracten die niet daadwerkelijk zijn opgehaald.
+        auteurs, abstracten of DOI's die niet daadwerkelijk zijn opgehaald.
         """
         if not evidence:
-            return f"Geen boek- of wetenschappelijke bronnen gevonden voor '{word}'."
+            return (f"Geen academische bronnen gevonden voor '{word}' "
+                    f"(locale={locale or 'onbekend'}, v1: OpenAlex + Semantic Scholar).")
 
-        bron_regels = []
+        bron_regels: list[str] = []
         for e in evidence[:5]:
-            auteurs = ", ".join(e.get("authors", [])[:2]) or "onbekend"
-            jaar    = e.get("year") or "?"
-            bron_regels.append(f"- {e.get('title','?')} ({auteurs}, {jaar}) [{e.get('source','?')}]")
+            jaar  = e.get("year") or "?"
+            tldr  = e.get("tldr", "")
+            bron_regels.append(
+                f"- {e.get('title','?')} ({jaar}) [{e.get('source','?')}]"
+                + (f"\n  tldr: {tldr}" if tldr else ""))
 
         from nooch_village.llm import reason as llm_reason
         prompt = (
-            f"Duiding gevraagd voor term '{word}' voor Nooch.earth (duurzame schoenen, geen plastic).\n"
-            f"Gevonden bronnen:\n" + "\n".join(bron_regels) + "\n\n"
+            f"Duiding gevraagd voor term '{word}' (locale: {locale or '?'}) "
+            f"voor Nooch.earth (duurzame schoenen, geen plastic, geen leer).\n"
+            f"Gevonden bronnen ({len(evidence)}):\n" + "\n".join(bron_regels) + "\n\n"
             f"Geef in maximaal 2 zinnen: (1) wat de inhoudelijke/wetenschappelijke relevantie "
             f"is van '{word}', (2) of de bronnen de missie-claim ondersteunen of tegenspreken. "
             f"Baseer je ALLEEN op de bovenstaande bronnen. "
+            f"Verzin geen andere titels of auteurs. "
             f"Als je het niet kunt beoordelen, zeg dat expliciet."
         )
         llm_out = llm_reason(prompt)
         if llm_out:
             return llm_out.strip()
 
-        # Fallback zonder LLM
-        count = len(evidence)
-        titels = ", ".join(e.get("title", "?") for e in evidence[:3])
-        return f"{count} bron(nen) gevonden voor '{word}': {titels}."
+        # Fallback zonder LLM — alleen namen van écht opgehaalde bronnen
+        titels = "; ".join(e.get("title", "?")[:60] for e in evidence[:3])
+        return f"{len(evidence)} bron(nen) gevonden voor '{word}': {titels}."
 
     def _reflect(self) -> None:
-        """Periodieke reflectie op de dekking van de gebruikte databronnen.
+        """Periodieke reflectie op de dekking van de twee v1-databronnen.
 
         Produceer UITSLUITEND spanningen en voorstellen — nooit nieuwe code of API-calls.
-        Elke uitbreiding van capaciteit (bijv. een nieuwe corpus of bron) vereist
-        menselijke goedkeuring en handmatige registratie in SkillRegistry + CLASS_MAP.
+        Elke uitbreiding van capaciteit vereist menselijke goedkeuring en handmatige
+        registratie in SkillRegistry + CLASS_MAP (v2: OpenLibrary voltekst).
         """
-        # Structurele limiet: Semantic Scholar rate-limit zonder API key
+        # v1-limiet: OpenLibrary voltekst-grounding ontbreekt
         self._sense_gap(
-            "semantic_scholar_no_key",
-            "accountability: API-key voor Semantic Scholar evalueren voor hogere rate-limit — "
-            "zonder key is de Semantic Scholar API beperkt tot ~100 verzoeken per 5 minuten; "
-            "bij intensief gebruik van de KennisScout kan dit de grondingssnelheid beperken",
+            "openlibrary_v2",
+            "accountability: OpenLibrary voltekst-grounding evalueren en toevoegen als v2 — "
+            "v1 grondt uitsluitend in academische literatuur (OpenAlex, Semantic Scholar); "
+            "boek-evidentie (bijv. duurzaamheidscanon) ontbreekt daardoor volledig",
             kind="governance",
-            min_count=3,   # pas spanning na drie observaties (kan ruis zijn)
+            min_count=2,
+        )
+        # Rate-limit zonder key bij hoog volume
+        self._sense_gap(
+            "semscholar_no_key",
+            "accountability: SEMANTIC_SCHOLAR_API_KEY evalueren voor hogere rate-limit — "
+            "zonder key is Semantic Scholar beperkt tot ~100 req / 5 min; "
+            "bij intensief gebruik kan dit de grondingssnelheid beperken",
+            kind="governance",
+            min_count=3,
         )
