@@ -9,6 +9,24 @@ from nooch_village.event_bus import Event
 from nooch_village.governance import Gate, proposal_from_dict, proposal_to_dict
 
 
+def _extract_pulse_metrics(plausible: dict) -> list[tuple[str, float]]:
+    """Extraheer numerieke metrics uit een plausible-resultaat.
+
+    Retourneert (metric_name, value)-tuples voor aanwezige, niet-None waarden.
+    Verzint niets: ontbrekende of fout-resultaten geven een lege lijst.
+    """
+    results = plausible.get("results", {}) if isinstance(plausible, dict) else {}
+    out = []
+    for key in ("visitors", "pageviews"):
+        v = (results.get(key) or {}).get("value")
+        if v is not None:
+            try:
+                out.append((key, float(v)))
+            except (TypeError, ValueError):
+                pass
+    return out
+
+
 def _publish_keyword_proposed(bus, from_id: str, word: str, demand: dict, library) -> bool:
     """Dedupliceer en publiceer een keyword_proposed-event.
 
@@ -67,6 +85,11 @@ class GrowthAnalyst(Inhabitant):
             plausible = self.use_skill("plausible_stats", {"period": "7d"})
             trends = self.use_skill("google_trends", {})
             note = self.use_skill("field_note", {"plausible": plausible, "trends": trends})
+
+            obs = getattr(self.context, "observations", None)
+            if obs is not None:
+                for metric, value in _extract_pulse_metrics(plausible):
+                    obs.record(self.id, metric, value)
 
             self._propose_related(trends)
             self._sense_goal_gap(plausible)
