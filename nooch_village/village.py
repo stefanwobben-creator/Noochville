@@ -69,10 +69,21 @@ _LEXICON_SEED = [
     {
         "concept_id": "burger_frame",
         "words": {"nl": "burger", "en": "citizen"},
+        "status": "avoid",
+        "rationale": (
+            "'burger' NL geeft hamburger-gerelateerde Trends-ruis en is als zoekterm "
+            "onbruikbaar. Concept blijft in het lexicon als referentie, maar niet als "
+            "actieve zoekterm."
+        ),
+    },
+    {
+        "concept_id": "conscious_consumer",
+        "words": {"nl": "bewuste consument", "en": "conscious consumer"},
         "status": "approved",
         "rationale": (
-            "Burgerframe versterkt agency en collectieve verantwoordelijkheid; "
-            "kernterm voor de missie in NL en EN. Symmetrisch: beide talen preferred."
+            "Bewuste consument / conscious consumer beschrijft de doelgroep van Nooch: "
+            "mensen die actief kiezen voor ethische, duurzame producten. "
+            "Missie-aligned SEO-term in zowel NL als EN."
         ),
     },
     {
@@ -120,10 +131,40 @@ _LEXICON_SEED = [
 def seed_lexicon(lexicon: Lexicon) -> None:
     """Seed het meertalige lexicon idempotent met de zaad-concepten."""
     added = lexicon.seed(_LEXICON_SEED)
+    _migrate_lexicon(lexicon)
     if added:
         import logging
         logging.getLogger("village.lexicon").info(
             "lexicon geseeded: %d nieuwe concepten", added)
+
+
+def _migrate_lexicon(lexicon: Lexicon) -> None:
+    """Pas bekende lexicon-correcties toe op bestaande data/lexicon.json. Idempotent."""
+    c = lexicon.concept("burger_frame")
+    if c and c.get("status") == "approved":
+        lexicon.add_concept(
+            "burger_frame",
+            words=c["words"],
+            status="avoid",
+            rationale=(
+                "'burger' NL geeft hamburger-gerelateerde Trends-ruis en is als zoekterm "
+                "onbruikbaar. Concept blijft in het lexicon als referentie, maar niet als "
+                "actieve zoekterm."
+            ),
+            by="migrate",
+        )
+    if lexicon.concept("conscious_consumer") is None:
+        lexicon.add_concept(
+            "conscious_consumer",
+            words={"nl": "bewuste consument", "en": "conscious consumer"},
+            status="approved",
+            rationale=(
+                "Bewuste consument / conscious consumer beschrijft de doelgroep van Nooch: "
+                "mensen die actief kiezen voor ethische, duurzame producten. "
+                "Missie-aligned SEO-term in zowel NL als EN."
+            ),
+            by="migrate",
+        )
 
 
 def activate_tijdgeest_wachter(records: Records) -> None:
@@ -994,7 +1035,7 @@ def ngram_demo():
         return
 
     # Handmatige puls met zaad-termen (kan ook worden overschreven via payload)
-    terms = ["burger", "consument", "sufficiency", "regenerative", "plastic-free"]
+    terms = ["bewuste consument", "conscious consumer", "sufficiency", "regenerative", "plastic-free"]
     v.bus.publish(Event("tijdgeest_pulse", {"terms": terms}, "ngram_demo"))
 
     print("\n================ DEMO: TijdgeestWachter ngram-puls ================")
@@ -1376,7 +1417,7 @@ def simulate():
     tw2 = v2.reconciler.live.get("tijdgeest_wachter")
     if tw2:
         # Drie begrippenparen NL+EN uit het Lexicon
-        demo_terms = ["burger", "citizen", "plasticvrij"]
+        demo_terms = ["bewuste consument", "conscious consumer", "plasticvrij"]
         v2.bus.publish(Event("tijdgeest_pulse", {"terms": demo_terms}, "simulate"))
 
         print(f"  Termen: {demo_terms}")
