@@ -36,6 +36,7 @@ from nooch_village.skills_impl.openlibrary_search_inside import OpenlibrarySearc
 from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
 from nooch_village.skills_impl.openalex import OpenalexSkill
 from nooch_village.human_inbox import HumanInbox
+from nooch_village.gap_classifier import classify_gap
 from nooch_village.observations import ObservationStore
 from nooch_village.monitoring import MonitoringStore
 from nooch_village.projects import ProjectLedger
@@ -134,12 +135,31 @@ class Village:
             iid, proposal_dict.get("id", "?"), gate)
 
     def _on_means_gap(self, e: Event) -> None:
-        """Schrijf een means-gap naar de human inbox (één keer, daarna stil door dedup)."""
+        """Classificeer een gesensed gat en dispatch op uitkomst A / B / C.
+
+        A  operationeel gedekt (mandaat + middelen aanwezig) — log, geen inbox-item.
+        B  mandaat aanwezig, middelen ontbreken — means-gap in inbox (zoals voorheen).
+        C  geen rol dekt het mandaat — placeholder-suggestie in inbox, geen geboorte.
+        """
         gap_key     = e.data.get("gap_key", "?")
         description = e.data.get("description", "")
-        iid = self.human_inbox.add_means_gap(gap_key, description)
-        logging.getLogger("village.inbox").info(
-            "📌 means-gap in human_inbox: item %s (gap %s)", iid, gap_key)
+        log = logging.getLogger("village.inbox")
+
+        outcome, role_id, reason = classify_gap(description, self.records.all())
+
+        if outcome == "A":
+            log.info("✅ gap A (operationeel gedekt door '%s'): %s — %s",
+                     role_id, gap_key, reason)
+
+        elif outcome == "B":
+            iid = self.human_inbox.add_means_gap(gap_key, description)
+            log.info("📌 gap B → means-gap in human_inbox: item %s (gap %s, rol '%s')",
+                     iid, gap_key, role_id)
+
+        elif outcome == "C":
+            iid = self.human_inbox.add_suggestion(gap_key, description)
+            log.info("💡 gap C → suggestie in human_inbox: item %s (gap %s) — %s",
+                     iid, gap_key, reason)
 
     def _on_keyword_escalation(self, e: Event) -> None:
         """Schrijf keyword-escalaties naar de human inbox."""

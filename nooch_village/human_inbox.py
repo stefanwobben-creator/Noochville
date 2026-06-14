@@ -21,7 +21,7 @@ from nooch_village.util import atomic_write_json
 
 
 _VALID_STATUSES = {"pending", "approved", "rejected", "amended", "deferred"}
-_VALID_TYPES    = {"escalation", "activation", "keyword", "means_gap"}
+_VALID_TYPES    = {"escalation", "activation", "keyword", "means_gap", "suggestion"}
 
 
 class HumanInbox:
@@ -138,6 +138,39 @@ class HumanInbox:
             "type":       "means_gap",
             "subject":    gap_key,
             "context":    {"gap_key": gap_key, "description": description},
+            "status":     "pending",
+            "created_at": time.time(),
+            "resolved_at": None,
+            "resolution":  None,
+        }
+        self._save()
+        return iid
+
+    def add_suggestion(self, gap_key: str, description: str) -> str:
+        """Voeg een placeholder-suggestie toe voor een C-gap (geen mandaatdekking).
+
+        Dedup op gap_key ongeacht status — eenmaal gesignaleerd, altijd stil.
+        Dit is een inspectie-item, GEEN geboorte-aanvraag.
+        Retourneert het item-id.
+        """
+        for item in self._items.values():
+            if item["type"] == "suggestion" and item.get("subject") == gap_key:
+                return item["id"]
+
+        iid = uuid.uuid4().hex[:12]
+        self._items[iid] = {
+            "id":      iid,
+            "type":    "suggestion",
+            "subject": gap_key,
+            "context": {
+                "gap_key":     gap_key,
+                "description": description,
+                "note": (
+                    "Suggestie: geen bestaande rol dekt dit mandaat. "
+                    "Kandidaat voor een nieuw voorstel — ter inspectie, "
+                    "geen automatische geboorte."
+                ),
+            },
             "status":     "pending",
             "created_at": time.time(),
             "resolved_at": None,
