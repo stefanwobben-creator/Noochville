@@ -17,8 +17,25 @@ Beveiligingsgrens:
     een approval triggeren — notificaties zijn altijd alleen een heads-up.
 """
 from __future__ import annotations
-import sys, time
+import os, sys, time
 from datetime import datetime
+
+
+def _data_dir() -> str:
+    # __file__ = .../nooch_village/inbox/__main__.py → project root is two levels up
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data"))
+
+
+def _inbox_only():
+    """Laad HumanInbox direct uit JSON — geen Village, geen sync_unmanned."""
+    from nooch_village.human_inbox import HumanInbox
+    return HumanInbox(os.path.join(_data_dir(), "human_inbox.json"))
+
+
+def _records_only():
+    """Laad Records direct — voor archiveren bij reject activation."""
+    from nooch_village.governance import Records
+    return Records(os.path.join(_data_dir(), "governance_records.json"))
 
 
 def _fmt_ts(ts) -> str:
@@ -125,6 +142,13 @@ def _print_item_full(item: dict) -> None:
         print(f"  amend   <id> <tekst>   → plan aanpassen, item bijwerken")
         print(f"  defer   <id> [reden]   → uitstellen, blijft geregistreerd")
 
+    elif item["type"] == "means_gap":
+        print(f"\n── Capaciteitsgrens ──")
+        print(f"Gap-key     : {ctx.get('gap_key', item['subject'])}")
+        desc = ctx.get("description", "")
+        if desc:
+            print(f"Beschrijving: {desc}")
+
     elif item["type"] == "keyword":
         ctx = item.get("context", {})
         demand = ctx.get("demand", {})
@@ -171,7 +195,7 @@ def main(argv: list[str]) -> None:
     cmd = argv[0] if argv else "list"
 
     if cmd in ("list", "pending"):
-        inbox, _ = _load()
+        inbox = _inbox_only()
         items = inbox.pending()
         print(f"\n⏳ Human inbox — {len(items)} pending item(s)\n")
         if not items:
@@ -184,7 +208,7 @@ def main(argv: list[str]) -> None:
             print()
 
     elif cmd == "all":
-        inbox, _ = _load()
+        inbox = _inbox_only()
         items = inbox.all()
         print(f"\n📋 Human inbox — alle {len(items)} item(s)\n")
         if not items:
@@ -199,7 +223,7 @@ def main(argv: list[str]) -> None:
     elif cmd == "show":
         if len(argv) < 2:
             print("Gebruik: inbox show <id>"); sys.exit(1)
-        inbox, _ = _load()
+        inbox = _inbox_only()
         item = inbox.get(argv[1])
         if item is None:
             print(f"Item '{argv[1]}' niet gevonden."); sys.exit(1)
@@ -210,7 +234,9 @@ def main(argv: list[str]) -> None:
             print("Gebruik: inbox approve <id> [reden]"); sys.exit(1)
         iid    = argv[1]
         reason = " ".join(argv[2:])
-        inbox, v = _load()
+
+        # Lees item zonder Village (geen sync_unmanned side-effect)
+        inbox = _inbox_only()
         item = inbox.get(iid)
         if item is None:
             print(f"Item '{iid}' niet gevonden."); sys.exit(1)
@@ -218,7 +244,9 @@ def main(argv: list[str]) -> None:
             print(f"Item '{iid}' is al '{item['status']}', niet pending."); sys.exit(1)
 
         if item["type"] == "escalation":
+            # Escalatie vereist de bus (governance_verdict-event)
             from nooch_village.event_bus import Event
+            _, v = _load()
             v.start()
             time.sleep(0.1)
             ok = v.approve_escalation(iid, reason=reason)
@@ -249,6 +277,8 @@ def main(argv: list[str]) -> None:
             print(f"   Iedere stap hierboven passeert daarna nog de normale per-edit code-review.")
 
         elif item["type"] == "keyword":
+            # Keyword vereist de bibliotheek via Village-context
+            _, v = _load()
             word = item["context"].get("word", item["subject"])
             inbox.resolve(iid, "approved", reason=reason)
             v.context.library.curate(word, "approved",
@@ -261,7 +291,9 @@ def main(argv: list[str]) -> None:
             print("Gebruik: inbox reject <id> [reden]"); sys.exit(1)
         iid    = argv[1]
         reason = " ".join(argv[2:])
-        inbox, v = _load()
+
+        # Lees item zonder Village (geen sync_unmanned side-effect)
+        inbox = _inbox_only()
         item = inbox.get(iid)
         if item is None:
             print(f"Item '{iid}' niet gevonden."); sys.exit(1)
@@ -269,8 +301,10 @@ def main(argv: list[str]) -> None:
             print(f"Item '{iid}' is al '{item['status']}'."); sys.exit(1)
 
         if item["type"] == "escalation":
+            # Escalatie vereist de bus (governance_verdict-event)
             from nooch_village.event_bus import Event
             pid = item["context"].get("proposal_id")
+            _, v = _load()
             v.start()
             time.sleep(0.1)
             inbox.resolve(iid, "rejected", reason=reason)
@@ -282,7 +316,24 @@ def main(argv: list[str]) -> None:
             v.stop()
             print(f"❌ Item {iid} afgewezen. Reden: {reason or '(geen)'}")
 
+        elif item["type"] == "activation":
+            # Archiveer het onderliggende sensed record zodat sync_unmanned het niet opnieuw oppervlakt
+            records = _records_only()
+            inbox.resolve(iid, "rejected", reason=reason)
+            role_id = item["subject"]
+            rec = records.get(role_id)
+            if rec and rec.source == "sensed" and not rec.archived:
+                rec.archived = True
+                rec.version += 1
+                records.put(rec)
+                print(f"❌ Activatie '{role_id}' afgewezen en gearchiveerd (v{rec.version}). "
+                      f"Reden: {reason or '(geen)'}")
+            else:
+                print(f"❌ Activatie '{role_id}' afgewezen. Reden: {reason or '(geen)'}")
+
         elif item["type"] == "keyword":
+            # Keyword vereist de bibliotheek via Village-context
+            _, v = _load()
             word = item["context"].get("word", item["subject"])
             inbox.resolve(iid, "rejected", reason=reason)
             v.context.library.curate(word, "forbidden",
@@ -299,7 +350,7 @@ def main(argv: list[str]) -> None:
             print("Gebruik: inbox amend <id> <wijziging-tekst>"); sys.exit(1)
         iid       = argv[1]
         amendment = " ".join(argv[2:])
-        inbox, _  = _load()
+        inbox     = _inbox_only()
         item = inbox.get(iid)
         if item is None:
             print(f"Item '{iid}' niet gevonden."); sys.exit(1)
@@ -320,7 +371,7 @@ def main(argv: list[str]) -> None:
             print("Gebruik: inbox defer <id> [reden]"); sys.exit(1)
         iid    = argv[1]
         reason = " ".join(argv[2:])
-        inbox, _ = _load()
+        inbox  = _inbox_only()
         item = inbox.get(iid)
         if item is None:
             print(f"Item '{iid}' niet gevonden."); sys.exit(1)

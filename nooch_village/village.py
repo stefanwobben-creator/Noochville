@@ -105,6 +105,7 @@ class Village:
         self.bus.subscribe("human_decision_needed",       self._on_keyword_escalation)
         self.bus.subscribe("gsc_pulse_completed",         self._observe)
         self.bus.subscribe("governance_changed",          self._observe)
+        self.bus.subscribe("governance_changed",          self._on_governance_changed)
         self.bus.subscribe("governance_review_requested", self._observe)
         self.bus.subscribe("governance_review_requested", self._on_escalation)
         self.bus.subscribe("proposal_invalid",            self._observe)
@@ -118,7 +119,6 @@ class Village:
         self.bus.subscribe("means_gap_sensed",            self._observe)
         self.bus.subscribe("means_gap_sensed",            self._on_means_gap)
         self.root = self.reconciler.build()
-        self.human_inbox.sync_unmanned(self.records.all(), CLASS_MAP)
 
     def _observe(self, e: Event) -> None:
         with open(os.path.join(self.context.data_dir, "system_log.jsonl"), "a") as f:
@@ -175,7 +175,11 @@ class Village:
             f.write(json.dumps({"ts": time.time(), **e.data}, ensure_ascii=False, default=str) + "\n")
         self.human_inbox.sync_unmanned(self.records.all(), CLASS_MAP)
 
+    def _on_governance_changed(self, e: Event) -> None:
+        self.human_inbox.sync_unmanned(self.records.all(), CLASS_MAP)
+
     def start(self):
+        self.human_inbox.sync_unmanned(self.records.all(), CLASS_MAP)
         self.root.start()
 
     def stop(self):

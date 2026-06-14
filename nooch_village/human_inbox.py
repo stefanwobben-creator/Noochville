@@ -88,14 +88,13 @@ class HumanInbox:
     def add_activation(self, role_id: str, record: dict) -> str:
         """Voeg een activatie-item toe voor een onbemande sensed-rol.
 
-        Duplicaatcheck op role_id: als de activatie al pending of approved is,
-        wordt geen nieuw item aangemaakt.
+        Duplicaatcheck op role_id ongeacht status: een eenmaal afgewezen of
+        goedgekeurde activatie keert nooit terug als nieuw item (zoals means_gap).
         Retourneert het item-id.
         """
         for item in self._items.values():
             if (item["type"] == "activation"
-                    and item.get("subject") == role_id
-                    and item["status"] in ("pending", "approved")):
+                    and item.get("subject") == role_id):
                 return item["id"]
 
         defn = record.get("definition", {})
