@@ -251,6 +251,27 @@ class GrowthAnalyst(Inhabitant):
         if proposed:
             self.log.info("🔍 %d kandidaat-woorden doorgestuurd (gerangschikt op doelbijdrage)", proposed)
 
+    # ── Project-werk ───────────────────────────────────────────────────────────
+
+    def run_project(self, project: dict) -> str | None:
+        scope = project.get("scope") or {}
+        if isinstance(scope, dict) and scope.get("kind") == "discovery":
+            return self._run_discovery(project, scope)
+        return super().run_project(project)
+
+    def _run_discovery(self, project: dict, scope: dict) -> None:
+        pid       = project["id"]
+        skill_name = scope.get("skill", "")
+        skill     = self.registry.get(skill_name)
+        catalog   = skill.available_metrics() if skill is not None and hasattr(skill, "available_metrics") else []
+        self.bus.publish(Event("project_discovery_ready",
+                               {"project_id": pid, "catalog": catalog}, self.id))
+        ledger = getattr(self.context, "projects", None)
+        if ledger is not None:
+            ledger.block(pid, "noochie")
+        self.log.info("📋 discovery '%s': %d metrics, geblokkeerd op noochie", skill_name, len(catalog))
+        return None
+
 
 class PerformanceScout(Inhabitant):
     """Luistert op dag_begint, haalt GSC-queries op en stuurt high_potential-woorden

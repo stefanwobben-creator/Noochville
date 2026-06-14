@@ -290,8 +290,13 @@ class Inhabitant(threading.Thread):
         ledger.start(pid)
         self.log.info("▶ project '%s' gestart: %s", pid, str(project.get("scope", ""))[:60])
         outcome = self.run_project(project)
-        ledger.complete(pid, outcome)
-        self.log.info("✅ project '%s' afgerond (outcome=%s)", pid, outcome)
+        current = ledger.get(pid)
+        if current and current["status"] == "running":
+            ledger.complete(pid, outcome)
+            self.log.info("✅ project '%s' afgerond (outcome=%s)", pid, outcome)
+        else:
+            self.log.info("⏸ project '%s' niet afgerond door run_project (status=%s)",
+                          pid, current and current["status"])
 
     def run_project(self, project: dict) -> str | None:
         """Overridebaar: voer het projectwerk uit. Geef een outcome-marker terug.

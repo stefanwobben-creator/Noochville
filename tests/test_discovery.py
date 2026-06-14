@@ -1,0 +1,94 @@
+"""Tests voor discovery-project flow in GrowthAnalyst — thread-vrij."""
+from __future__ import annotations
+import pytest
+from types import SimpleNamespace
+from nooch_village.roles import GrowthAnalyst
+from nooch_village.models import Record, RoleDefinition, RecordType
+from nooch_village.event_bus import EventBus
+from nooch_village.skills import SkillRegistry
+from nooch_village.projects import ProjectLedger
+
+_STUB_CATALOG = ["visitors", "pageviews"]
+
+
+class _StubPlausible:
+    name = "plausible_stats"
+
+    def available_metrics(self):
+        return list(_STUB_CATALOG)
+
+    def run(self, payload, context):
+        return {}
+
+
+def _make_analyst(tmp_path, ledger):
+    bus = EventBus(name="test")
+    registry = SkillRegistry()
+    registry._skills["plausible_stats"] = _StubPlausible()
+    context = SimpleNamespace(
+        settings={"reflect_interval_seconds": "0"},
+        data_dir=str(tmp_path),
+        projects=ledger,
+        records=None,
+        observations=None,
+        strategy=None,
+    )
+    record = Record(
+        id="analyst",
+        type=RecordType.ROLE,
+        parent="noochville",
+        definition=RoleDefinition(
+            purpose="groei meten",
+            accountabilities=[],
+            domains=[],
+            skills=["plausible_stats"],
+        ),
+        source="seed",
+    )
+    return GrowthAnalyst(record, bus, registry, context), bus
+
+
+@pytest.fixture
+def ledger(tmp_path):
+    return ProjectLedger(str(tmp_path / "projects.json"))
+
+
+@pytest.fixture
+def analyst_bus(tmp_path, ledger):
+    return _make_analyst(tmp_path, ledger)
+
+
+def test_discovery_blocks_project_on_noochie(analyst_bus, ledger):
+    analyst, _ = analyst_bus
+    pid = ledger.create("analyst", {"kind": "discovery", "skill": "plausible_stats"}, "human")
+    analyst._claim_run_complete(pid)
+    p = ledger.get(pid)
+    assert p["status"] == "blocked"
+    assert p["blocked_on"] == "noochie"
+
+
+def test_discovery_event_carries_catalog(analyst_bus, ledger):
+    analyst, bus = analyst_bus
+    received = []
+    bus.subscribe("project_discovery_ready", received.append)
+    pid = ledger.create("analyst", {"kind": "discovery", "skill": "plausible_stats"}, "human")
+    analyst._claim_run_complete(pid)
+    assert len(received) == 1
+    assert received[0].data["project_id"] == pid
+    assert received[0].data["catalog"] == _STUB_CATALOG
+
+
+def test_catalog_not_stored_in_ledger(analyst_bus, ledger):
+    analyst, _ = analyst_bus
+    pid = ledger.create("analyst", {"kind": "discovery", "skill": "plausible_stats"}, "human")
+    analyst._claim_run_complete(pid)
+    p = ledger.get(pid)
+    assert "catalog" not in p
+    assert "visitors" not in str(p.get("outcome") or "")
+
+
+def test_non_discovery_project_completes_normally(analyst_bus, ledger):
+    analyst, _ = analyst_bus
+    pid = ledger.create("analyst", "gewoon schrijfwerk", "human")
+    analyst._claim_run_complete(pid)
+    assert ledger.get(pid)["status"] == "done"

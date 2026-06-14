@@ -3,10 +3,17 @@ import os, requests
 from nooch_village.skills import Skill
 
 
+_METRICS = ["visitors", "pageviews", "bounce_rate", "visit_duration"]
+
+
 class PlausibleSkill(Skill):
     name = "plausible_stats"
     needs_secret = True
     description = "Haalt echte bezoekersdata uit de Plausible Stats API (geen mock)."
+
+    def available_metrics(self) -> list[str]:
+        """Menukaart: de metrics die deze skill kan leveren. Geen API-call nodig."""
+        return list(_METRICS)
 
     def run(self, payload: dict, context) -> dict:
         key = context.settings.get("PLAUSIBLE_API_KEY") or os.getenv("PLAUSIBLE_API_KEY")
