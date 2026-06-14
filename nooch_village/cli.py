@@ -12,7 +12,7 @@ def main() -> None:
 
     elif mode == "run":
         from nooch_village.village import Village
-        Village(heartbeat_seconds=0).run_forever()
+        Village().run_forever()   # heartbeat uit settings.ini (lokaal: 5s, prod: 0)
 
     elif mode == "demo":
         from nooch_village.demos.growth import demo

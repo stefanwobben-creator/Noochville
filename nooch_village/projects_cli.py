@@ -96,11 +96,16 @@ def main(argv: list[str]) -> None:
     elif cmd == "create":
         if len(argv) < 3:
             print("Gebruik: projects_cli create <owner> <scope...>"); sys.exit(1)
+        import json as _json
         from nooch_village.village import Village
-        v      = Village(heartbeat_seconds=86400)
-        owner  = argv[1]
-        scope  = " ".join(argv[2:])
-        pid    = v.queue_project(owner, scope, trigger="human")
+        v     = Village(heartbeat_seconds=86400)
+        owner = argv[1]
+        raw   = " ".join(argv[2:])
+        try:
+            scope = _json.loads(raw)
+        except (ValueError, TypeError):
+            scope = raw
+        pid   = v.queue_project(owner, scope, trigger="human")
         print(f"✅ Project aangemaakt: {pid}  (owner={owner}, trigger=human)")
 
     else:

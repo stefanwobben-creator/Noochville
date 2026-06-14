@@ -17,14 +17,24 @@ class ProjectLedger:
     def __init__(self, path: str):
         self.path = path
         self._projects: dict[str, dict] = {}
+        self._mtime: float = 0.0
         self._load()
 
     def _load(self) -> None:
         if os.path.exists(self.path):
             try:
                 self._projects = json.load(open(self.path))
+                self._mtime = os.path.getmtime(self.path)
             except Exception:
                 self._projects = {}
+
+    def _maybe_reload(self) -> None:
+        """Herlaad van schijf als het bestand door een extern proces is gewijzigd."""
+        try:
+            if os.path.exists(self.path) and os.path.getmtime(self.path) > self._mtime:
+                self._load()
+        except Exception:
+            pass
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
@@ -97,13 +107,17 @@ class ProjectLedger:
     # ── lezen ──────────────────────────────────────────────────────────────────
 
     def get(self, pid: str) -> dict | None:
+        self._maybe_reload()
         return self._projects.get(pid)
 
     def all(self) -> list[dict]:
+        self._maybe_reload()
         return list(self._projects.values())
 
     def by_status(self, status: str) -> list[dict]:
+        self._maybe_reload()
         return [p for p in self._projects.values() if p["status"] == status]
 
     def open(self) -> list[dict]:
+        self._maybe_reload()
         return [p for p in self._projects.values() if p["status"] not in _TERMINAL]

@@ -94,7 +94,26 @@ def test_second_call_suppressed_after_governance(tmp_path):
     assert result2 is False
 
 
-# ── 4. force=True respecteert dedup ─────────────────────────────────────────
+# ── 4b. Onderdrukking via inbox (status=pending) ────────────────────────────
+
+def test_gap_suppressed_when_in_inbox_pending(tmp_path):
+    acc = "inbox pending item"
+    inh = _make_inhabitant(tmp_path)
+    _seed_reflect(tmp_path, "inbox_gat", acc)
+    # Schrijf een pending inbox-item met de acc_text erin
+    inbox = {"abc123": {"id": "abc123", "status": "pending",
+                        "type": "escalation", "body": acc}}
+    (tmp_path / "human_inbox.json").write_text(json.dumps(inbox))
+
+    with patch.object(inh, "sense_tension") as st:
+        result = inh._sense_gap("inbox_gat",
+                                f"accountability: {acc} — detail",
+                                min_count=1)
+    assert result is False
+    st.assert_not_called()
+
+
+# ── 5. force=True respecteert dedup ─────────────────────────────────────────
 
 def test_force_gap_suppressed_when_in_dna(tmp_path):
     acc = "altijd aanwezig"

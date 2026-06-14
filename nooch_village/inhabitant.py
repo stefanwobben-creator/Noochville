@@ -100,6 +100,8 @@ class Inhabitant(threading.Thread):
         desc_l = desc.lower()
         _ACC   = "accountability:"
         is_reflection = _ACC in desc_l
+        _c_gap_key = None   # alleen gezet op classify_gap C-pad
+        _c_records  = None
 
         if "policy" in desc_l and not is_reflection:
             pid = re.sub(r"\W+", "_", desc_l[:25]).strip("_")

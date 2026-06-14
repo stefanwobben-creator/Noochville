@@ -19,6 +19,9 @@ def load_context(base_dir: str) -> Context:
     if os.path.exists(ini):
         cp = configparser.ConfigParser()
         cp.read(ini)
+        # cp.sections() slaat [DEFAULT] over; lees defaults apart
+        for k, v in cp.defaults().items():
+            settings[k] = v
         for section in cp.sections():
             for k, v in cp.items(section):
                 settings[k] = v
