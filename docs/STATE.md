@@ -172,6 +172,26 @@
   Bij ≥X% overeenstemming overwegen naar blokkerend. Drempel X nog te bepalen
   op basis van werkelijk aantal items in de logs.
 
+### Eerste live vague-verdict B-observer (45-min run 14 juni avond)
+
+- Vier B-observer calls, drie keer coherent (`openlibrary_v2`, `ngram_2019_cutoff`,
+  `nl_corpus_coverage`, consistent met eerdere data), één keer vague:
+  `Missie_alignment_ok_De_a`.
+- De vague-verdict is correct: het item is een missie-alignment-beoordeling, geen
+  capaciteitsgrens. Bewijs dat de coherentiepoort discrimineert op echte vague-cases,
+  niet alleen op testfixtures.
+- Maar: dit is een **terugkerend patroon**. Gisteren afgewezen als
+  `Missie_alignment_ok_Reg`, vandaag opnieuw als `Missie_alignment_ok_De_a`. De suffix
+  verandert per genereerronde, dedup pakt 'm niet door verschillende gap_keys.
+  Cross-pad memory ontbreekt: afgewezen items worden archived in records, maar Noochie
+  stroomopwaarts heeft geen toegang tot die geschiedenis en blijft het patroon
+  genereren.
+- Te onderzoeken later: wat in Noochie's missie-alignment-werk produceert outputs die
+  als means-gap worden gerouteerd? Is dit een type-vraagstuk (output van
+  missie-alignment != means-gap), een routing-bug, of een mandate-overlap?
+- Voor nu: niet ingrijpen, gewoon observeren. Volgende runs zullen tonen of dit blijft
+  terugkomen en hoe vaak.
+
 ### Openstaande observaties C-trechter / coherentiepoort
 
 - Geen timeout op `llm.reason` in `_funnel_c_proposal`: bij hangende LLM blijft
