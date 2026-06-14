@@ -3,29 +3,38 @@ het onofficiële JSON-endpoint van Google Books Ngram Viewer.
 
 Data stopt ~2019: dit is GEEN huidige zoekvraag maar een culturele tijdseries
 over decennia. Fail closed als het netwerk niet bereikbaar is.
+
+Locale-model:
+  NL-woorden → corpus 10 (Dutch 2012)
+  EN-woorden → corpus 26 (English 2019)
+  Woorden komen uit het Lexicon (context.lexicon); valt terug op zaad-termen.
+
+Output: `rows` (locale-bewust) + `terms` (backward compat).
+  Elke row: {concept, locale, term, corpus, signal, freq_last}
+        of: {concept, locale, term, corpus, no_data: True, reason: str}
+  "geen data" is expliciet onderscheiden van een echte nul of vlak signaal.
 """
 from __future__ import annotations
 import json, time, urllib.request, urllib.parse
 from nooch_village.skills import Skill
 
-# Zaad-termen die het burgerframe en de missie dragen; aangevuld vanuit de Library
-_SEED_TERMS: list[str] = [
-    "burger",        # NL: burger/burgerkader
-    "consument",     # NL: consumentisme vs. burgerwaarden
-    "sufficiency",   # EN: sufficiency movement
-    "regenerative",  # EN: regenerative design
-    "plastic-free",  # EN: plastic-free movement
-]
+# Zaad-termen met expliciete locale — worden alleen gebruikt als het Lexicon ontbreekt
+_SEED_TERMS: dict[str, list[str]] = {
+    "nl": ["burger", "consument", "regeneratief", "plasticvrij", "duurzaam"],
+    "en": ["citizen", "consumer", "regenerative", "plastic-free", "sustainable", "sufficiency"],
+}
 
-# Termen die op een Nederlandstalig corpus wijzen
+# Termen die op een Nederlandstalig corpus wijzen (voor payload-override zonder Lexicon)
 _NL_INDICATORS = frozenset([
     "burger", "burgers", "consument", "consumenten", "duurzaam", "duurzame",
     "schoenen", "kleding", "milieu", "eerlijk", "transparantie", "bewust",
-    "bewuste", "plastic-vrij", "overproductie", "behoeften", "gemeenschap",
+    "bewuste", "plastic-vrij", "plasticvrij", "regeneratief", "overproductie",
+    "behoeften", "gemeenschap", "soberheid", "veganistisch",
 ])
 
 _CORPUS_EN = 26   # English (2019)
 _CORPUS_NL = 10   # Dutch (2012 — meest stabiele NL-corpus in de JSON-API)
+_LANG_TO_CORPUS = {"nl": _CORPUS_NL, "en": _CORPUS_EN}
 _YEAR_START = 1980
 _YEAR_END   = 2019
 _SMOOTHING  = 3
@@ -33,6 +42,7 @@ _RECENT_YEARS = 10   # venster voor de recente helling
 
 
 def _detect_corpus(term: str) -> int:
+    """Auto-detectie als fallback voor los opgegeven termen zonder Lexicon."""
     words = set(term.lower().replace("-", " ").replace("_", " ").split())
     return _CORPUS_NL if words & _NL_INDICATORS else _CORPUS_EN
 
@@ -40,10 +50,7 @@ def _detect_corpus(term: str) -> int:
 def _derive_signal(timeseries: list[float]) -> dict:
     """Leidt richting af: stijgend / dalend / vlak.
 
-    Gebruikt twee hellingen:
-    - slope_overall : over de hele reeks (trend over decennia)
-    - slope_recent  : laatste _RECENT_YEARS jaar (huidige momentum)
-    Beslissing op basis van slope_recent ten opzichte van het gemiddelde.
+    Gebruikt slope_recent (laatste _RECENT_YEARS jaar) als primair signaal.
     """
     valid = [v for v in timeseries if v is not None]
     if len(valid) < 2:
@@ -58,16 +65,14 @@ def _derive_signal(timeseries: list[float]) -> dict:
     avg = sum(valid) / n
     threshold = avg * 0.05 if avg > 0 else 1e-14
 
-    if slope_recent > threshold:
-        direction = "stijgend"
-    elif slope_recent < -threshold:
-        direction = "dalend"
-    else:
-        direction = "vlak"
-
+    direction = (
+        "stijgend" if slope_recent > threshold else
+        "dalend"   if slope_recent < -threshold else
+        "vlak"
+    )
     return {
-        "direction": direction,
-        "slope_recent": round(slope_recent, 12),
+        "direction":     direction,
+        "slope_recent":  round(slope_recent, 12),
         "slope_overall": round(slope_overall, 12),
     }
 
@@ -90,61 +95,131 @@ def _fetch_ngram(batch: list[str], corpus: int,
         return json.loads(resp.read().decode())
 
 
-def _load_lexicon_terms(context) -> list[str]:
-    """Zaad + goedgekeurde bibliotheekwoorden (Librarian-domein, alleen lezen)."""
-    terms = list(_SEED_TERMS)
+def _locale_term_groups(context) -> dict[str, list[tuple[str, str]]]:
+    """Laadt per locale de te bevragen termen vanuit het Lexicon.
+
+    Returns:
+        {lang: [(term, concept_id), ...]}
+        Alle talen die het Lexicon kent, aangevuld met Library-goedkeuringen
+        waarvoor nog geen concept bestaat.
+
+    Valt terug op _SEED_TERMS als het Lexicon niet beschikbaar is.
+    """
+    lexicon = getattr(context, "lexicon", None)
+    if not lexicon:
+        return {
+            lang: [(t, t) for t in terms]
+            for lang, terms in _SEED_TERMS.items()
+        }
+
+    groups: dict[str, list[tuple[str, str]]] = {}
+    seen_terms: set[str] = set()
+
+    for cid, entry in lexicon.all().items():
+        for lang, word in entry.get("words", {}).items():
+            if word:
+                groups.setdefault(lang, []).append((word, cid))
+                seen_terms.add(word.lower())
+
+    # Voeg Library-woorden toe die nog niet in het Lexicon zitten
     lib = getattr(context, "library", None)
     if lib:
         for word, entry in lib.all().items():
-            if entry.get("status") == "approved" and word not in terms:
-                terms.append(word)
-    return terms
+            if entry.get("status") == "approved" and word.lower() not in seen_terms:
+                lang = "nl" if _detect_corpus(word) == _CORPUS_NL else "en"
+                groups.setdefault(lang, []).append((word, word))
+                seen_terms.add(word.lower())
+
+    return groups
 
 
 class NgramCultureSkill(Skill):
     name = "ngram_culture"
     description = (
         "Analyseert de lange-termijn culturele taalverschuiving via Google Books Ngram Viewer. "
-        "Geeft per term de richting (stijgend/dalend/vlak) over decennia. "
-        "Data stopt ~2019; geen huidige zoekvraag maar een culturele tijdseries."
+        "Geeft per term/locale de richting (stijgend/dalend/vlak) over decennia. "
+        "NL-woorden → corpus 10 (2012); EN-woorden → corpus 26 (2019). "
+        "Fail-closed per locale: één locale-fout faalt alleen dat segment."
     )
 
     def run(self, payload: dict, context) -> dict:
-        terms: list[str] = payload.get("terms") or _load_lexicon_terms(context)
         year_start = int(payload.get("year_start", _YEAR_START))
         year_end   = int(payload.get("year_end",   _YEAR_END))
         smoothing  = int(payload.get("smoothing",  _SMOOTHING))
 
-        # Groepeer per corpus; per groep max 5 termen per HTTP-request
-        by_corpus: dict[int, list[str]] = {}
-        for term in terms:
-            by_corpus.setdefault(_detect_corpus(term), []).append(term)
+        # Payload-override: losse termen zonder Lexicon-context
+        if payload.get("terms"):
+            locale_groups: dict[str, list[tuple[str, str]]] = {}
+            for term in payload["terms"]:
+                lang = "nl" if _detect_corpus(term) == _CORPUS_NL else "en"
+                locale_groups.setdefault(lang, []).append((term, term))
+        else:
+            locale_groups = _locale_term_groups(context)
 
-        results: dict[str, dict] = {}
-        for corpus, group in by_corpus.items():
-            for i in range(0, len(group), 5):
-                batch = group[i:i + 5]
+        rows: list[dict] = []
+        legacy_terms: dict[str, dict] = {}
+
+        for lang, term_pairs in locale_groups.items():
+            corpus = _LANG_TO_CORPUS.get(lang, _CORPUS_EN)
+            terms_list = [t for t, _ in term_pairs]
+            concept_of = {t: c for t, c in term_pairs}
+
+            for i in range(0, len(terms_list), 5):
+                batch = terms_list[i:i + 5]
                 try:
-                    raw = _fetch_ngram(batch, corpus, year_start, year_end, smoothing)
+                    raw   = _fetch_ngram(batch, corpus, year_start, year_end, smoothing)
                     found = {item.get("ngram", "").lower(): item for item in raw}
                     for term in batch:
                         item = found.get(term.lower())
                         if item and item.get("timeseries"):
-                            ts = item["timeseries"]
-                            results[term] = {
+                            ts     = item["timeseries"]
+                            signal = _derive_signal(ts)
+                            row = {
+                                "concept":   concept_of.get(term, term),
+                                "locale":    lang,
+                                "term":      term,
                                 "corpus":    corpus,
-                                "signal":    _derive_signal(ts),
+                                "signal":    signal,
                                 "freq_last": round(ts[-1], 12) if ts else None,
                                 "freq_peak": round(max(ts), 12) if ts else None,
                             }
+                            legacy_terms[term] = {
+                                "corpus":    corpus,
+                                "signal":    signal,
+                                "freq_last": row["freq_last"],
+                                "freq_peak": row["freq_peak"],
+                            }
                         else:
-                            results[term] = {
+                            row = {
+                                "concept": concept_of.get(term, term),
+                                "locale":  lang,
+                                "term":    term,
+                                "corpus":  corpus,
+                                "no_data": True,
+                                "reason":  "term niet gevonden in corpus",
+                            }
+                            legacy_terms[term] = {
                                 "corpus": corpus,
                                 "error":  "term niet gevonden in corpus",
                             }
+                        rows.append(row)
                 except Exception as exc:
                     for term in batch:
-                        results[term] = {"corpus": corpus, "error": str(exc)}
+                        row = {
+                            "concept": concept_of.get(term, term),
+                            "locale":  lang,
+                            "term":    term,
+                            "corpus":  corpus,
+                            "no_data": True,
+                            "reason":  str(exc),
+                        }
+                        rows.append(row)
+                        legacy_terms[term] = {"corpus": corpus, "error": str(exc)}
                 time.sleep(1.5)   # onofficieel endpoint — vriendelijk blijven
 
-        return {"terms": results, "year_start": year_start, "year_end": year_end}
+        return {
+            "rows":       rows,          # locale-bewust (nieuw)
+            "terms":      legacy_terms,  # backward compat
+            "year_start": year_start,
+            "year_end":   year_end,
+        }
