@@ -145,13 +145,24 @@
 
 ### B-observer pad — beslissing na ~1-2 weken data
 
-- **Wanneer beslissen** we of de coherentiepoort blokkerend wordt op B,
-  observerend blijft, of weggaat?
-- **Kalibratie-criterium nog te kiezen**: vals-positieven (vague-verdict op
+- Wanneer beslissen we of de coherentiepoort blokkerend wordt op B, observerend
+  blijft, of weggaat?
+- Kalibratie-criterium nog te kiezen: vals-positieven (vague-verdict op
   legitieme means-gaps) versus vals-negatieven (coherent-verdict op rommel).
-- **Concreet**: na de eerste week B-observer logs handmatig doornemen, per
+- Concreet: na de eerste week B-observer logs handmatig doornemen, per
   observer-verdict checken of de mens dezelfde beslissing zou hebben genomen.
-  Bij ≥X% [drempel nog te bepalen] — *instructie afgeknipt, drempel open.*
+  Bij ≥X% overeenstemming overwegen naar blokkerend. Drempel X nog te bepalen
+  op basis van werkelijk aantal items in de logs.
+
+### Openstaande observaties C-trechter / coherentiepoort
+
+- Geen timeout op `llm.reason` in `_funnel_c_proposal`: bij hangende LLM blijft
+  de geboorte-naad wachten. Relevant zodra meer rollen tegelijk sensen.
+- Log-niveau coherentiepoort: drop-paden staan op `info`, beter op `warning`
+  zodat ze opvallen bij latere log-review.
+- Functie-scope import `from nooch_village.llm import reason as _llm_reason`
+  in `_funnel_c_proposal`: bewuste keuze voor patching, kleine herhaalde
+  import-cost. Niet kritiek.
 
 ## Volgende stappen
 
