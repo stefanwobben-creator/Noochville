@@ -15,7 +15,7 @@ from nooch_village.skills import SkillRegistry
 from nooch_village.matchmaker import Matchmaker
 from nooch_village.governance import Records, Secretary, Reconciler
 from nooch_village.models import Record, RoleDefinition, RecordType
-from nooch_village.roles import TimeKeeper, GrowthAnalyst, Librarian, PerformanceScout, Facilitator, TijdgeestWachter, KennisScout
+from nooch_village.roles import TimeKeeper, GrowthAnalyst, Librarian, PerformanceScout, Facilitator, TijdgeestWachter, KennisScout, Noochie
 from nooch_village.library import Library
 from nooch_village.lexicon import Lexicon
 from nooch_village.models import Proposal, GovernanceChange, ChangeKind
@@ -38,7 +38,7 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 CLASS_MAP = {"timekeeper": TimeKeeper, "analyst": GrowthAnalyst,
              "librarian": Librarian, "scout": PerformanceScout,
              "facilitator": Facilitator, "tijdgeest_wachter": TijdgeestWachter,
-             "kennis_scout": KennisScout}
+             "kennis_scout": KennisScout, "noochie": Noochie}
 
 
 _ANCHOR_POLICIES = [

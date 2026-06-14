@@ -2,6 +2,13 @@
 from __future__ import annotations
 import os, json, time
 from datetime import date
+
+_NOOCHIE_MISSION = (
+    "Nooch.earth bewijst dat eerlijk en duurzaam ondernemen winstgevend is. "
+    "Geen plastic, geen leer, in Europa geproduceerd, op bestelling, eerlijke prijs, "
+    "transparantie. Groei via missie-gedreven organische content op nooch.earth. "
+    "De missie is de waarheid waaraan alles getoetst wordt."
+)
 from nooch_village.inhabitant import Inhabitant
 from nooch_village.event_bus import Event
 from nooch_village.governance import Gate, proposal_from_dict, proposal_to_dict
@@ -748,3 +755,53 @@ class KennisScout(Inhabitant):
             kind="governance",
             min_count=3,
         )
+
+
+class Noochie(Inhabitant):
+    """Belichaamt de missie, bepleit en genereert creatieve governance-voorstellen.
+    Geen domeinen, geen skills — alleen stem en ideeënmotor.
+    Reageert op de Field Note en reflecteert periodiek met een nieuw voorstel."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.react("pulse_completed", self._on_pulse_completed)
+
+    def _on_pulse_completed(self, event: Event) -> None:
+        note_path = event.data.get("note_path")
+        if not (note_path and os.path.exists(note_path)):
+            return
+        note = open(note_path).read()
+        self._weigh_in(note)
+
+    def _weigh_in(self, field_note: str) -> None:
+        """Leest de Field Note door een missie-lens en senst spanning als er drift is."""
+        from nooch_village.llm import reason
+        prompt = (
+            f"Je bent Noochie, de missiestem van Nooch.earth. Scherp en nuchter.\n"
+            f"Missie: {_NOOCHIE_MISSION}\n\n"
+            f"Field Note van vandaag:\n{field_note}\n\n"
+            "Toets de aanbevolen actie aan de missie. Klopt hij? "
+            "Begin met 'Missie-alignment: ok' als alles klopt. "
+            "Anders begin met 'Missie-lens:' en schrijf max 2 zinnen over wat botst of mist."
+        )
+        result = reason(prompt)
+        if not result:
+            return
+        self.log.info("🎯 %s", result)
+        if not result.lower().startswith("missie-alignment: ok"):
+            self.sense_tension(result, kind="operational")
+
+    def _reflect(self) -> None:
+        """Genereert periodiek een creatief voorstel als spanning richting de mens."""
+        from nooch_village.llm import reason
+        prompt = (
+            f"Je bent Noochie, ideeënmotor van Nooch.earth.\n"
+            f"Missie: {_NOOCHIE_MISSION}\n\n"
+            "Formuleer één concrete spanning die het dorp zou moeten oppakken om de missie "
+            "beter te dienen. Uitvoerbaar met content, SEO of governance — geen advertising. "
+            "Max 2 zinnen. Formaat: 'Het dorp mist [wat]. [Voorstel] zou helpen omdat [reden].'"
+        )
+        result = reason(prompt)
+        if result:
+            self._sense_gap("creatief_voorstel", result, kind="governance",
+                            min_count=1, force=True)
