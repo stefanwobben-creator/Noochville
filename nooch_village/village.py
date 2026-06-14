@@ -28,6 +28,7 @@ from nooch_village.skills_impl.field_note import FieldNoteSkill
 from nooch_village.skills_impl.library_skills import LibraryLookupSkill, KeywordReviewSkill
 from nooch_village.skills_impl.gsc import GscPerformanceSkill
 from nooch_village.skills_impl.ngram import NgramCultureSkill
+from nooch_village.human_inbox import HumanInbox
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -240,6 +241,7 @@ class Village:
         self.context.library = Library(os.path.join(self.context.data_dir, "library.json"))
         self.context.lexicon = Lexicon(os.path.join(self.context.data_dir, "lexicon.json"))
         seed_lexicon(self.context.lexicon)
+        self.human_inbox = HumanInbox(os.path.join(self.context.data_dir, "human_inbox.json"))
         self.registry = SkillRegistry()
         for skill in (SiteHealthSkill(), BudgetSkill(), PlausibleSkill(), TrendsSkill(),
                       FieldNoteSkill(), LibraryLookupSkill(), KeywordReviewSkill(),
@@ -262,6 +264,7 @@ class Village:
         self.bus.subscribe("gsc_pulse_completed", self._observe)
         self.bus.subscribe("governance_changed", self._observe)
         self.bus.subscribe("governance_review_requested", self._observe)
+        self.bus.subscribe("governance_review_requested", self._on_escalation)
         self.bus.subscribe("proposal_invalid", self._observe)
         self.bus.subscribe("governance_rejected", self._observe)
         self.bus.subscribe("tension_triaged", self._observe)
@@ -271,10 +274,40 @@ class Village:
         self.bus.subscribe("tijdgeest_pulse_completed", self._observe)
         self.bus.subscribe("tijdgeest_signaal", self._observe)
         self.root = self.reconciler.build()
+        # Sync onbemande sensed-rollen naar de inbox bij opstarten
+        import dataclasses as _dc
+        self.human_inbox.sync_unmanned(self.records.all(), CLASS_MAP)
 
     def _observe(self, e: Event) -> None:
         with open(os.path.join(self.context.data_dir, "system_log.jsonl"), "a") as f:
             f.write(json.dumps({"event": e.name, **e.data}, ensure_ascii=False, default=str) + "\n")
+
+    def _on_escalation(self, e: Event) -> None:
+        """Schrijf geëscaleerde voorstellen naar de human inbox."""
+        proposal_dict = e.data.get("proposal", {})
+        gate   = e.data.get("gate", "?")
+        reason = e.data.get("reason", "")
+        iid = self.human_inbox.add_escalation(proposal_dict, gate, reason)
+        logging.getLogger("village.inbox").info(
+            "📬 escalatie in human_inbox: item %s (voorstel %s, poort %s)",
+            iid, proposal_dict.get("id", "?"), gate)
+
+    def approve_escalation(self, item_id: str, reason: str = "") -> bool:
+        """Stuur governance_verdict approve voor een escalatie-item.
+
+        Beveiligingsgrens: alleen aanroepbaar via het geauthenticeerde lokale oppervlak.
+        """
+        item = self.human_inbox.get(item_id)
+        if item is None or item["type"] != "escalation":
+            return False
+        pid = item["context"]["proposal_id"]
+        self.human_inbox.resolve(item_id, "approved", reason=reason)
+        self.bus.publish(Event("governance_verdict",
+                               {"proposal_id": pid, "decision": "approve", "reason": reason},
+                               "human"))
+        logging.getLogger("village.inbox").info(
+            "✅ human_inbox: escalatie %s goedgekeurd (voorstel %s)", item_id, pid)
+        return True
 
     def _on_role_born(self, e: Event) -> None:
         """Schrijft de geboorte van een rol naar het groeidagboek (audittrail)."""
