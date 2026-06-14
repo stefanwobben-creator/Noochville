@@ -39,6 +39,21 @@ def _publish_keyword_proposed(bus, from_id: str, word: str, demand: dict, librar
     return True
 
 
+def cadence_events(d) -> list[str]:
+    """Pure helper: geeft de event-namen die op datum d gepubliceerd moeten worden.
+
+    Altijd: dag_begint. Bovendien:
+      maand_begint    — op dag 1 van elke maand
+      kwartaal_begint — op dag 1 van jan/apr/jul/okt
+    """
+    events = ["dag_begint"]
+    if d.day == 1:
+        events.append("maand_begint")
+        if d.month in (1, 4, 7, 10):
+            events.append("kwartaal_begint")
+    return events
+
+
 class TimeKeeper(Inhabitant):
     """De dorpsomroeper. Roept elke nieuwe dag 'dag_begint' om op het marktplein.
     Voor de demo kun je via settings['heartbeat_seconds'] een snelle hartslag zetten."""
@@ -63,8 +78,10 @@ class TimeKeeper(Inhabitant):
             self._ring(today)
 
     def _ring(self, label: str) -> None:
-        self.log.info("🔔 dag_begint (%s)", label)
-        self.bus.publish(Event("dag_begint", {"label": label}, self.id))
+        today = date.today()
+        for name in cadence_events(today):
+            self.log.info("🔔 %s (%s)", name, label)
+            self.bus.publish(Event(name, {"label": label}, self.id))
 
 
 class GrowthAnalyst(Inhabitant):
