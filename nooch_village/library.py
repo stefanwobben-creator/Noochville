@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json, os
 from datetime import datetime
+from nooch_village.util import atomic_write_json
 
 
 class Library:
@@ -20,7 +21,7 @@ class Library:
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        json.dump(self._data, open(self.path, "w"), indent=2, ensure_ascii=False)
+        atomic_write_json(self.path, self._data)
 
     # --- lezen (vrij) ---
     def status(self, word: str) -> dict | None:

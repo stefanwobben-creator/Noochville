@@ -17,6 +17,7 @@ State in data/human_inbox.json (gitignored met de rest van data/).
 from __future__ import annotations
 import json, os, time, uuid
 from datetime import datetime
+from nooch_village.util import atomic_write_json
 
 
 _VALID_STATUSES = {"pending", "approved", "rejected", "amended", "deferred"}
@@ -40,7 +41,7 @@ class HumanInbox:
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        json.dump(self._items, open(self.path, "w"), indent=2, ensure_ascii=False)
+        atomic_write_json(self.path, self._items)
 
     # ── schrijven ─────────────────────────────────────────────────────────────
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 import threading, logging, uuid, re, os, json, time
+from nooch_village.util import atomic_write_json
 from nooch_village.event_bus import EventBus, Event
 from nooch_village.inbox import Inbox
 from nooch_village.models import Task, Response, Record, RecordType, Tension
@@ -298,8 +299,7 @@ class Inhabitant(threading.Thread):
         gap["last_seen"] = now
         gap["count"] += 1
 
-        with open(path, "w") as f:
-            json.dump(state, f, ensure_ascii=False, indent=2)
+        atomic_write_json(path, state)
 
         if force or gap["count"] >= min_count:
             self.sense_tension(description, kind=kind)

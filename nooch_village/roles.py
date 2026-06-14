@@ -1,7 +1,8 @@
 """Gespecialiseerde inwoners met eigen gedrag bovenop de generieke Inhabitant."""
 from __future__ import annotations
-import os, json, time
+import hashlib, os, json, time
 from datetime import date
+from nooch_village.util import atomic_write_json
 
 _NOOCHIE_MISSION = (
     "Nooch.earth bewijst dat eerlijk en duurzaam ondernemen winstgevend is. "
@@ -168,8 +169,7 @@ class GrowthAnalyst(Inhabitant):
                         self.log.info("📉 off-pace spanning gesensed voor doel '%s'", goal_id)
 
         if changed:
-            with open(state_path, "w") as f:
-                json.dump(state, f, ensure_ascii=False, indent=2)
+            atomic_write_json(state_path, state)
 
     def _propose_related(self, trends: dict) -> None:
         from nooch_village.intent import prioritize

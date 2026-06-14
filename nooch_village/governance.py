@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json, os, re, logging, dataclasses, time
+from nooch_village.util import atomic_write_json
 from nooch_village.models import (
     Record, RoleDefinition, RecordType,
     Proposal, GovernanceChange, ChangeKind,
@@ -285,13 +286,12 @@ class Records:
                 source=r.get("source", "sensed"))
 
     def save(self) -> None:
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
         out = {}
         for rid, r in self._data.items():
             d = dataclasses.asdict(r)
             d["type"] = r.type.value
             out[rid] = d
-        json.dump(out, open(self.path, "w"), indent=2, ensure_ascii=False)
+        atomic_write_json(self.path, out)
 
     def all(self):
         return list(self._data.values())
