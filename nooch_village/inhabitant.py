@@ -239,8 +239,10 @@ class Inhabitant(threading.Thread):
 
         gap_key   : unieke sleutel voor dit gat (per rol in data/reflect_<id>.json)
         min_count : minimum observaties vóór spanning (default 2; voor ruis-filtering)
-        force     : omzeil min_count voor structureel bekende, altijd-geldige limieten
+        force     : omzeil min_count — maar respecteert wél de dedup-check
 
+        Dedup: als dit gat eerder gemeld is én de bijbehorende accountability al in
+        het rol-record staat (of er een open inbox-item voor is), zwijg.
         Retourneert True als er een spanning gesensed is.
         """
         path = os.path.join(self.context.data_dir, f"reflect_{self.id}.json")
@@ -252,21 +254,73 @@ class Inhabitant(threading.Thread):
             except Exception:
                 pass
 
-        gap = state.setdefault(gap_key, {"count": 0, "first_seen": None, "last_seen": None})
+        gap = state.setdefault(gap_key, {"count": 0, "emitted": False,
+                                         "first_seen": None, "last_seen": None})
         now = time.time()
         if gap["first_seen"] is None:
             gap["first_seen"] = now
         gap["last_seen"] = now
         gap["count"] += 1
 
+        # Dedup: als eerder gemeld, check of het gat al verwerkt is.
+        if gap.get("emitted"):
+            acc_text = gap.get("acc", "")
+            in_dna   = bool(acc_text) and acc_text in (getattr(self.dna, "accountabilities", None) or [])
+            in_inbox = self._gap_in_inbox(acc_text)
+            if in_dna or in_inbox:
+                atomic_write_json(path, state)
+                self.log.debug("gap '%s' al gemeld en verwerkt, zwijg (dna=%s inbox=%s)",
+                               gap_key, in_dna, in_inbox)
+                return False
+            # Geen verwerking gevonden (triage mislukt?) → reset, opnieuw rapporteren.
+            gap["emitted"] = False
+
+        emit = force or gap["count"] >= min_count
+        if emit:
+            gap["emitted"] = True
+            gap["acc"]     = self._extract_acc_text(description)
+
         atomic_write_json(path, state)
 
-        if force or gap["count"] >= min_count:
+        if emit:
             self.sense_tension(description, kind=kind)
             self.log.info("🔍 gat '%s' → spanning gesensed (observaties: %d)", gap_key, gap["count"])
             return True
-        self.log.info("🔍 gat '%s' geregistreerd (%d/%d — nog geen spanning)", gap_key, gap["count"], min_count)
+        self.log.info("🔍 gat '%s' geregistreerd (%d/%d — nog geen spanning)",
+                      gap_key, gap["count"], min_count)
         return False
+
+    @staticmethod
+    def _extract_acc_text(description: str) -> str:
+        """Extraheer de accountability-tekst zoals _raise_governance_proposal dat doet.
+
+        Gebruikt als betrouwbare sleutel voor de DNA-check bij deduplicatie.
+        """
+        desc_l = description.lower()
+        _ACC   = "accountability:"
+        if _ACC not in desc_l:
+            return ""
+        idx      = desc_l.index(_ACC) + len(_ACC)
+        acc_text = description[idx:].strip()
+        return acc_text.split(" — ")[0].split("\n")[0].strip()[:100]
+
+    def _gap_in_inbox(self, acc_text: str) -> bool:
+        """Controleer of er al een open inbox-item bestaat dat de accountability adresseert."""
+        if not acc_text:
+            return False
+        inbox_path = os.path.join(self.context.data_dir, "human_inbox.json")
+        if not os.path.exists(inbox_path):
+            return False
+        try:
+            with open(inbox_path) as f:
+                inbox = json.load(f)
+            return any(
+                acc_text in json.dumps(item, ensure_ascii=False)
+                for item in inbox.values()
+                if item.get("status") == "open"
+            )
+        except Exception:
+            return False
 
     # ── Project-afhandeling ─────────────────────────────────────────────────────
 
