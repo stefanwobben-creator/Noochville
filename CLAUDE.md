@@ -193,6 +193,55 @@ Scheiding van verantwoordelijkheden:
 - **Operationeel vs. governance**: structureel terugkerende spanning → governance; eenmalig werk → operationeel. De grens ligt bij de trefwoorden in `_STRUCTURAL_KW`.
 - **Default is tactisch**: als geen rol past, escaleer pas naar de mens nadat het tactisch geprobeerd is via de Matchmaker. Zo blijft het dorp zelf-redzaam.
 
+## TijdgeestWachter — culturele taalverschuiving observeren
+
+De TijdgeestWachter is geboren via het eerste echte governance-voorstel van de founder
+(`python -m nooch_village.village proposal`). Hij observeert de lange culturele boog van
+de wereldtaal via het onofficiële JSON-endpoint van Google Books Ngram Viewer (data t/m ~2019).
+
+### Rol en grenzen
+- **Observeert** de frequentie van missie-relevante termen over decennia (corpus EN 26 of NL 10).
+- **Voedt** GrowthAnalyst en Librarian via `keyword_proposed` (stijgende termen) en
+  `tijdgeest_signaal` (opvallende verschuiving ≥ 2 termen in dezelfde richting).
+- **Claimt het lexicon-domein NIET**: de Librarian cureert; de TijdgeestWachter voedt alleen.
+- **Ritme**: productie = wekelijks (`tijdgeest_interval_seconds = 604800`);
+  demo/test: stel `tijdgeest_interval_seconds=0` in `settings.ini` of via `context.settings`.
+
+### Skill: `ngram_culture` (`skills_impl/ngram.py`)
+- Zaad-termen: `burger`, `consument`, `sufficiency`, `regenerative`, `plastic-free` +
+  alle goedgekeurde bibliotheekwoorden (automatisch zelfversterkend).
+- Corpus-detectie: `_NL_INDICATORS` → corpus 10 (NL 2012); anders corpus 26 (EN 2019).
+- Signaal: `slope_recent` (laatste 10 jaar) geeft `stijgend` / `dalend` / `vlak`.
+- Fail-closed: bij netwerk- of parse-fouten per term `{"error": str(e)}`; geen mock-data.
+- Beleefde aanroep: 1,5s sleep tussen batches (onofficieel endpoint).
+
+### Events
+| Event | Wie publiceert | Inhoud |
+|-------|---------------|--------|
+| `tijdgeest_pulse` | mens/demo | Handmatige trigger; optioneel `{"terms": [...]}` payload |
+| `tijdgeest_pulse_completed` | TijdgeestWachter | `ok`, `stijgend`, `dalend`, `terms` (volledige details) |
+| `tijdgeest_signaal` | TijdgeestWachter | `stijgend`, `dalend`, `boodschap` — bij ≥ 2 verschuivingen |
+| `keyword_proposed` | TijdgeestWachter | Per stijgende term nog niet in de bibliotheek |
+
+### Demo draaien
+```bash
+# Stap 1: zorg dat het governance-record bestaat (eenmalig)
+python -m nooch_village.village proposal
+
+# Stap 2: draai de echte ngram-puls
+python -m nooch_village.village ngram
+```
+
+De ngram-demo wacht maximaal 90 seconden op de API-response. Na afloop toont hij een
+per-term tabel met corpus, richting (stijgend/dalend/vlak), recente helling en frequentie.
+
+### Implementatie-aantekeningen
+- `activate_tijdgeest_wachter(records)` in `village.py` voegt `ngram_culture` idempotent
+  toe aan het record zodra het bestaat.
+- `CLASS_MAP["tijdgeest_wachter"] = TijdgeestWachter` — de Reconciler activeert de rol
+  automatisch als het record in governance aanwezig is.
+- Dedup via `lib.status(term) is not None` — ook stijgende termen worden nooit dubbel voorgesteld.
+
 ## Roadmap (depth-first, niet breadth-first)
 
 1. **Echte missie-redenering aanzetten** in de Field Note (zet een LLM-key in `.env`).

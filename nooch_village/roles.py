@@ -266,3 +266,95 @@ class Facilitator(Inhabitant):
         self.log.info("✅ voorstel aangenomen via poort (alle G0-G4 geslaagd)")
         self.bus.publish(Event("proposal_gate_passed",
                                {"proposal": proposal_to_dict(proposal)}, self.id))
+
+
+class TijdgeestWachter(Inhabitant):
+    """Volgt de lange culturele taalverschuiving via Google Books Ngram Viewer.
+    Observeert en voedt GrowthAnalyst en Librarian via events.
+    Claimt het lexicon-domein NIET — de Librarian cureert; de TijdgeestWachter voedt."""
+
+    _SHIFT_THRESHOLD = 2   # minimaal N termen in dezelfde richting voor een broadcast
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._last_pulse: float = 0.0
+        self._busy = False
+        # Productie: wekelijks. Demo/test: tijdgeest_interval_seconds=0 → altijd.
+        self._pulse_interval = float(
+            self.context.settings.get("tijdgeest_interval_seconds", str(7 * 24 * 3600)))
+        self.react("dag_begint",      self._maybe_pulse)
+        self.react("tijdgeest_pulse", self._run_pulse)   # handmatig triggerable
+
+    def _maybe_pulse(self, event: Event) -> None:
+        """Reageert op de dagelijkse hartslag maar runt alleen als het tijd is."""
+        now = time.time()
+        if self._pulse_interval > 0 and now - self._last_pulse < self._pulse_interval:
+            return
+        if self._busy:
+            return
+        self._last_pulse = now
+        self._run_pulse(event)
+
+    def _run_pulse(self, event) -> None:
+        if self._busy:
+            return
+        self._busy = True
+        payload = event.data if event and hasattr(event, "data") else {}
+        try:
+            self.log.info("🌊 tijdgeest-puls gestart")
+            result = self.use_skill("ngram_culture", payload)
+
+            if "error" in result:
+                self.log.warning("⚠️ ngram-puls mislukt: %s", result["error"])
+                self.bus.publish(Event("tijdgeest_pulse_completed",
+                    {"by": self.id, "ok": False, "error": result["error"]}, self.id))
+                return
+
+            terms = result.get("terms", {})
+            stijgend = [t for t, d in terms.items()
+                        if d.get("signal", {}).get("direction") == "stijgend"]
+            dalend   = [t for t, d in terms.items()
+                        if d.get("signal", {}).get("direction") == "dalend"]
+
+            self.log.info("📈 stijgend: %s | 📉 dalend: %s", stijgend, dalend)
+
+            # Stijgende termen aanbieden aan de Librarian (niet zelf curating)
+            lib = getattr(self.context, "library", None)
+            for term in stijgend:
+                if lib and lib.status(term) is not None:
+                    continue  # Librarian heeft al een oordeel
+                self.bus.publish(Event("keyword_proposed", {
+                    "word": term,
+                    "demand": {
+                        "signal":    "positive",
+                        "source":    "ngram_culture",
+                        "direction": "stijgend",
+                        "freq_last": terms[term].get("freq_last"),
+                    },
+                    "from": self.id,
+                }, self.id))
+
+            # Broadcast bij opvallende culturele verschuiving
+            if len(stijgend) >= self._SHIFT_THRESHOLD or len(dalend) >= self._SHIFT_THRESHOLD:
+                self.bus.publish(Event("tijdgeest_signaal", {
+                    "by":       self.id,
+                    "stijgend": stijgend,
+                    "dalend":   dalend,
+                    "boodschap": (
+                        f"{len(stijgend)} termen cultureel stijgend "
+                        f"({', '.join(stijgend[:3])}), "
+                        f"{len(dalend)} dalend ({', '.join(dalend[:3])})"
+                    ),
+                }, self.id))
+                self.log.info("📢 tijdgeest-signaal uitgezonden")
+
+            self.bus.publish(Event("tijdgeest_pulse_completed", {
+                "by":        self.id,
+                "ok":        True,
+                "stijgend":  stijgend,
+                "dalend":    dalend,
+                "term_count": len(terms),
+                "terms":     terms,   # volledige details voor observability
+            }, self.id))
+        finally:
+            self._busy = False

@@ -15,7 +15,7 @@ from nooch_village.skills import SkillRegistry
 from nooch_village.matchmaker import Matchmaker
 from nooch_village.governance import Records, Secretary, Reconciler
 from nooch_village.models import Record, RoleDefinition, RecordType
-from nooch_village.roles import TimeKeeper, GrowthAnalyst, Librarian, PerformanceScout, Facilitator
+from nooch_village.roles import TimeKeeper, GrowthAnalyst, Librarian, PerformanceScout, Facilitator, TijdgeestWachter
 from nooch_village.library import Library
 from nooch_village.models import Proposal, GovernanceChange, ChangeKind
 from nooch_village.governance import proposal_to_dict
@@ -26,12 +26,13 @@ from nooch_village.skills_impl.trends import TrendsSkill
 from nooch_village.skills_impl.field_note import FieldNoteSkill
 from nooch_village.skills_impl.library_skills import LibraryLookupSkill, KeywordReviewSkill
 from nooch_village.skills_impl.gsc import GscPerformanceSkill
+from nooch_village.skills_impl.ngram import NgramCultureSkill
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 CLASS_MAP = {"timekeeper": TimeKeeper, "analyst": GrowthAnalyst,
              "librarian": Librarian, "scout": PerformanceScout,
-             "facilitator": Facilitator}
+             "facilitator": Facilitator, "tijdgeest_wachter": TijdgeestWachter}
 
 
 _ANCHOR_POLICIES = [
@@ -54,6 +55,16 @@ _ANCHOR_PURPOSE = (
     "Kernwaarden: geen plastic, geen leer, in Europa geproduceerd, op bestelling, eerlijke prijs, "
     "transparantie. Groei via missie-gedreven organische content op nooch.earth."
 )
+
+
+def activate_tijdgeest_wachter(records: Records) -> None:
+    """Idempotent: voeg ngram_culture toe aan tijdgeest_wachter zodra het record bestaat."""
+    rec = records.get("tijdgeest_wachter")
+    if rec is None:
+        return
+    if "ngram_culture" not in rec.definition.skills:
+        rec.definition.skills.append("ngram_culture")
+        records.put(rec)
 
 
 def seed_records(records: Records) -> None:
@@ -147,11 +158,12 @@ class Village:
         self.registry = SkillRegistry()
         for skill in (SiteHealthSkill(), BudgetSkill(), PlausibleSkill(), TrendsSkill(),
                       FieldNoteSkill(), LibraryLookupSkill(), KeywordReviewSkill(),
-                      GscPerformanceSkill()):
+                      GscPerformanceSkill(), NgramCultureSkill()):
             self.registry.register(skill)
         self.records = Records(os.path.join(self.context.data_dir, "governance_records.json"))
         seed_records(self.records)
         migrate_records(self.records)
+        activate_tijdgeest_wachter(self.records)
         self.context.records = self.records
         self.matchmaker = Matchmaker(self.bus)
         self.secretary = Secretary(self.records, self.bus)
@@ -171,6 +183,8 @@ class Village:
         self.bus.subscribe("human_intervention_needed", self._observe)
         self.bus.subscribe("role_born", self._observe)
         self.bus.subscribe("role_born", self._on_role_born)
+        self.bus.subscribe("tijdgeest_pulse_completed", self._observe)
+        self.bus.subscribe("tijdgeest_signaal", self._observe)
         self.root = self.reconciler.build()
 
     def _observe(self, e: Event) -> None:
@@ -783,6 +797,95 @@ def triage_demo():
     print("\n================ einde triage demo ================")
 
 
+def ngram_demo():
+    """Activeer de TijdgeestWachter met een handmatige puls en toon het resultaat per term.
+
+    Vereist: tijdgeest_wachter-record in governance_records.json (run 'proposal' eerst).
+    Draait de NgramCultureSkill live tegen books.google.com/ngrams/json.
+    """
+    v = Village(heartbeat_seconds=86400)   # geen automatische hartslag
+    # Forceer tijdgeest_interval_seconds=0 zodat de wachter altijd pult (demo)
+    v.context.settings["tijdgeest_interval_seconds"] = "0"
+
+    pulse_result: dict = {}
+    signaal_events: list = []
+    keyword_log: list = []
+
+    v.bus.subscribe("tijdgeest_pulse_completed", lambda e: pulse_result.update(e.data))
+    v.bus.subscribe("tijdgeest_signaal",         lambda e: signaal_events.append(e.data))
+    v.bus.subscribe("keyword_decided",
+                    lambda e: keyword_log.append({**e.data, "_event": "decided"}))
+
+    v.start()
+
+    # Controleer of de TijdgeestWachter bemand is
+    tw = v.reconciler.live.get("tijdgeest_wachter")
+    if tw is None:
+        print("\n⚠️  TijdgeestWachter niet actief in het dorp.")
+        print("   → Run eerst: python -m nooch_village.village proposal")
+        print("   → Daarna is het record aangemaakt en wordt de rol auto-geactiveerd.\n")
+        v.stop()
+        return
+
+    # Handmatige puls met zaad-termen (kan ook worden overschreven via payload)
+    terms = ["burger", "consument", "sufficiency", "regenerative", "plastic-free"]
+    v.bus.publish(Event("tijdgeest_pulse", {"terms": terms}, "ngram_demo"))
+
+    print("\n================ DEMO: TijdgeestWachter ngram-puls ================")
+    print(f"Termen: {', '.join(terms)}")
+    print("Wacht op Google Books Ngram Viewer (kan 15-30 sec duren)…\n")
+
+    # Max 90 seconden wachten (elke batch heeft 1.5s sleep, 5 termen = 2 batches + netwerk)
+    for _ in range(900):
+        if pulse_result:
+            break
+        time.sleep(0.1)
+    time.sleep(0.2)
+
+    v.stop()
+    time.sleep(0.2)
+
+    if not pulse_result.get("ok"):
+        err = pulse_result.get("error", "onbekende fout")
+        print(f"✘ Puls mislukt: {err}")
+        print("  (Onofficieel endpoint — bij blokkering of rate-limit: probeer later opnieuw)")
+        return
+
+    print(f"\n{'Term':<20} {'Corpus':<8} {'Richting':<12} {'Slope recent':>14} {'Freq (2019)':>12}")
+    print("-" * 72)
+    all_terms = pulse_result.get("terms", {})
+    for term in terms:
+        d = all_terms.get(term, {})
+        if "error" in d:
+            print(f"{term:<20} {'?':<8} {'FOUT':<12} {d['error'][:28]}")
+            continue
+        sig = d.get("signal", {})
+        corpus = "NL (10)" if d.get("corpus") == 10 else "EN (26)"
+        richting = sig.get("direction", "?")
+        slope = sig.get("slope_recent")
+        freq = d.get("freq_last")
+        slope_str = f"{slope:.3e}" if slope is not None else "?"
+        freq_str  = f"{freq:.3e}" if freq  is not None else "?"
+        icon = {"stijgend": "📈", "dalend": "📉", "vlak": "➡️"}.get(richting, "❓")
+        print(f"{term:<20} {corpus:<8} {icon} {richting:<10} {slope_str:>14} {freq_str:>12}")
+
+    stijgend = pulse_result.get("stijgend", [])
+    dalend   = pulse_result.get("dalend",   [])
+    print(f"\n📈 stijgend ({len(stijgend)}): {', '.join(stijgend) or '(geen)'}")
+    print(f"📉 dalend   ({len(dalend)}):   {', '.join(dalend)   or '(geen)'}")
+
+    if signaal_events:
+        s = signaal_events[0]
+        print(f"\n📢 tijdgeest_signaal: {s.get('boodschap','')}")
+
+    if keyword_log:
+        print(f"\nLibrarian-beslissingen voor stijgende termen:")
+        for kw in keyword_log:
+            print(f"  {kw.get('word','?'):<25} {kw.get('status','?'):<11} {kw.get('reason','')[:45]}")
+
+    print("\n================ einde ngram demo ================")
+
+
 def once():
     """Eén echte puls en dan stoppen. Ideaal voor een cron-job ('s ochtends)."""
     v = Village(heartbeat_seconds=0)
@@ -817,5 +920,7 @@ if __name__ == "__main__":
         lifecycle_demo()
     elif mode == "proposal":
         proposal_demo()
+    elif mode == "ngram":
+        ngram_demo()
     else:
         demo()
