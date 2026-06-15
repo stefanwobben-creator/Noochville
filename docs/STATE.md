@@ -161,6 +161,32 @@ documenten gemaakt en gecommit:
   Ahrens/Zettelkasten-vertaling naar mens-LLM-werkverdeling.
   Pull-request principe voor cross-cirkel kennis.
 
+Middag en avond (na de afsluiter ochtend):
+
+- Vier strategische documenten gecommit: docs/visie_noochville.md
+  (vier pijlers), docs/option_value_noochville.md (100 uur, 10
+  weken, reminder 24 augustus), docs/ontwerp_governance_ritueel.md
+  (concept met mens-als-rol-tweedeling), docs/ontwerp_kennislaag.md
+  (drie rollen, Ahrens-vertaling, cirkel-libraries).
+
+- Nieuwe rol Ronnie de Reflector (ESFJ-dorpschroniqueur): roles.py
+  uitgebreid plus skills_impl/bulletin_schrijven.py, dagelijks
+  bulletin op dag_eindigt-event, markdown-output in data/bulletins/.
+  TimeKeeper aangepast: _first_ring vlag plus dag_eindigt-publicatie
+  voor elke dag_begint behalve de eerste. Twee village-runs
+  succesvol uitgevoerd, twee bulletins geschreven.
+
+- Ronnie verbreed: means_gap_sensed toegevoegd aan _TRACK, Field
+  Note lezen bij dag_eindigt (met fallback), guardrail
+  'verzin niets' in prompt. Twee bulletins vergeleken: eerste
+  was charmant maar verzon een zonsopgang, tweede was feitelijk
+  én warm met expliciete 'ik weet nog niet precies waar dit over
+  gaat' bij onvolledige informatie. Guardrail werkt.
+
+- Metrics-referentiekader vastgelegd: docs/metrics_noochville.md
+  met drie meet-categorieën (systeemgezondheid, activiteit,
+  kwaliteit), niet-automatisch, kompas voor evaluatie 24 augustus.
+
 ## Principes die niet mogen driften
 
 - **Spine blijft dom**: gate G0-G4, prioriteit Missie > Policy > Strategy > Goal,
@@ -255,6 +281,32 @@ documenten gemaakt en gecommit:
 - **Inzicht "mens als rol"** (zie ontwerp_governance_ritueel.md) raakt
   meerdere systeemonderdelen. Te bouwen na Holacracy v5
   constitutie-herleting door Stefan.
+
+- **Bevindingen uit Ronnie's eerste echte runs (15 juni middag)**:
+
+  - Race-condition in dev-pulse: analyst's puls (Plausible plus
+    schrijven Field Note) duurt langer dan de twaalf seconden tot
+    dag_eindigt. Ronnie leest de Field Note voor 'm bestaat, valt
+    terug op fallback-tekst. In productie (echte dag-cadans) geen
+    probleem. In dev-pulse wel. Niet acuut, wel observatie.
+
+  - Audit-trail-gat: noochie_weighed_in vuurt wel, maar staat niet
+    in Village's bus.subscribe(..., self._observe)-lijst. Noochie's
+    oordeel verdwijnt uit de audit-trail tenzij 'once()' gebruikt
+    wordt. Eén-regel-fix in Village.start, niet acuut. Te combineren
+    met audit-trail-completeness-check later.
+
+  - Ronnie's event-subscription is goed voor nu (8 types), maar mist
+    bewust gsc_pulse_completed (te frequent voor bulletin) en
+    noochie_weighed_in (audit-trail-gat). Beide kunnen later
+    toegevoegd worden als de bulletin-toon erbij gediend is.
+
+  - Patroon vandaag bevestigd: een ontdekking leidt vaak tot een fix
+    die tot een nieuwe ontdekking leidt. Eerste Ronnie-bulletin
+    toonde guardrail-zwakte. Verbreding plus guardrail leidde tot
+    ontdekking van race-condition en audit-trail-gat. Belangrijk om
+    in budget-discipline (10 uur per week) deze keten te kunnen
+    stoppen op een natuurlijk moment, niet door uitputting.
 
 - **Claude Code commit-discipline en ongevraagde wijzigingen**: vandaag
   drie keer netjes gewacht op akkoord (Noochie-fix, LLM-timeout,
