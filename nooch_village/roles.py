@@ -961,6 +961,7 @@ class Ronnie(Inhabitant):
         "keyword_decided",
         "governance_changed",
         "tension_sensed",
+        "means_gap_sensed",
         "tijdgeest_pulse_completed",
         "keyword_proposed",
     )
@@ -982,13 +983,26 @@ class Ronnie(Inhabitant):
         })
 
     def _on_dag_eindigt(self, event: Event) -> None:
-        """Schrijf het dagbulletin op basis van de events die vandaag voorkwamen."""
+        """Schrijf het dagbulletin op basis van de events en de Field Note van vandaag."""
         events = list(self._events_today)
         self._events_today.clear()
 
+        datum = date.today().isoformat()
+        field_note_path = os.path.join(
+            self.context.data_dir, "output", f"field_note_{datum}.md"
+        )
+        field_note = ""
+        if os.path.exists(field_note_path):
+            try:
+                with open(field_note_path, encoding="utf-8") as fh:
+                    field_note = fh.read()
+            except OSError:
+                pass
+
         result = self.use_skill("bulletin_schrijven", {
-            "events": events,
-            "datum":  date.today().isoformat(),
+            "events":     events,
+            "datum":      datum,
+            "field_note": field_note,
         })
 
         if "error" in result:

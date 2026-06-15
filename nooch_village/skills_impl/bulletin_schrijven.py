@@ -14,6 +14,7 @@ class BulletinSchrijvenSkill(Skill):
     def run(self, payload: dict, context) -> dict:
         events: list[dict] = payload.get("events", [])
         datum: str = payload.get("datum", date.today().isoformat())
+        field_note: str = payload.get("field_note", "")
 
         if events:
             event_regels = "\n".join(
@@ -24,10 +25,16 @@ class BulletinSchrijvenSkill(Skill):
         else:
             event_regels = "(geen events vandaag)"
 
+        if field_note:
+            fn_sectie = f"\nVeld-notitie van analyst van vandaag:\n{field_note}\n"
+        else:
+            fn_sectie = "\n(Geen veld-notitie beschikbaar vandaag.)\n"
+
         prompt = (
             f"Je bent Ronnie, de warmhartige dorpschroniqueur van NoochVille (ESFJ).\n"
             f"Datum: {datum}\n\n"
-            f"Events die vandaag plaatsvonden in het dorp:\n{event_regels}\n\n"
+            f"Events die vandaag plaatsvonden in het dorp:\n{event_regels}\n"
+            f"{fn_sectie}\n"
             f"Schrijf een kort dagelijks dorpsbulletin met precies deze vier koppen "
             f"(markdown ## niveau):\n"
             f"## Wat ik vandaag zag\n"
@@ -35,6 +42,7 @@ class BulletinSchrijvenSkill(Skill):
             f"## Wat ik signaleer\n"
             f"## Tot morgen\n\n"
             f"Warm van toon, informatief, maximaal 200 woorden totaal. "
+            f"Schrijf alleen wat je werkelijk ziet in de events of de veld-notitie, verzin niets. "
             f"Start met '# Dorpsbulletin {datum}'."
         )
 
