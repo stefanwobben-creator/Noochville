@@ -107,6 +107,39 @@
      interne fouten. Beide paden zijn getest via mock (`side_effect=RuntimeError`
      resp. impliciet via `return_value=None`). Geen overlap, geen gat.
 
+## Afgesloten 15 juni
+
+Vijf commits, alle tests groen (216 op het laatst gemeten punt, mogelijk
+221 na inbox-handler).
+
+- Noochie-misfire fix: markdown-bold ontsnapte de startswith-check in
+  _weigh_in, waardoor positieve missie-alignment-oordelen via
+  sense_tension als spanning de B-route ingingen. Vervangen door
+  gestructureerd VERDICT/REASON-patroon, consistent met
+  coherentiepoort. parse_verdict_reason geëxtraheerd als gedeelde
+  helper in coherence.py.
+
+- Hygiëne-veeg: log-niveau drop-paden in _funnel_c_proposal info ->
+  warning, module-level import voor evaluate_coherence in inhabitant.py.
+
+- LLM-timeout plus exception-handling: native 30s timeout op Anthropic
+  en Gemini, "except: pass" vervangen door warning-logging. Tweede
+  silent-fallthrough patroon van de week opgeruimd, na de Noochie-fix.
+  Lost impliciet ook de openstaande observatie "geen timeout op
+  llm.reason in _funnel_c_proposal" op: de client time-out gooit een
+  exception, reason() vangt die als None, _funnel_c_proposal sluit
+  fail-closed — geen oneindige wacht meer op de geboorte-naad.
+
+- Inbox-CLI means_gap-approve handler: mens kan means_gap-items
+  goedkeuren met skill_name + rationale + alternatives_considered,
+  voorstel gaat via Village.submit_proposal door de gate.
+  5-seconden-timeout op gate-uitkomst. Resolutievelden in inbox-item
+  (skill_added, rationale, alternatives_considered, resolved_by).
+
+- Documenten: visie_noochville.md (vier pijlers, doelgroep,
+  eindplaatje), ontwerp_governance_ritueel.md (concept, plus inzicht
+  mens-als-rol en tweedeling eigenaar/rolhouder).
+
 ## Principes die niet mogen driften
 
 - **Spine blijft dom**: gate G0-G4, prioriteit Missie > Policy > Strategy > Goal,
@@ -134,15 +167,6 @@
   Secretary adopt. Operationele acties via een losse Python-one-liner schaalt niet;
   op de lange termijn: óf inbox-CLI uitbreiden met een `means_gap`-approve die het
   governance-voorstel triggert, óf een aparte governance-CLI.
-
-- **Misfire gezien: `Missie_alignment_ok_Reg`** landde als means_gap terwijl het een
-  content-analyse-output is (keyword-review-rationale vanuit een LLM-response).
-  Afgewezen als ruis (182742a069c0). Te onderzoeken later: waar in de routing kwam
-  dit als means_gap binnen — vermoedelijk: een C-gap-beschrijving met een gestileerde
-  rationale die als capaciteitsbeschrijving werd doorgegeven, of een B-gap-route die
-  niet de juiste bronbeschrijving filterde. De fix is een filter op de
-  `means_gap_sensed`-payload vóór `add_means_gap` (bijv. max-lengte, geen markdown-
-  opmaak, of expliciete `accountability:`-prefix vereisen als correctheidsindicator).
 
 - **MANDATE_THRESHOLD = 0.10 empirisch laag**: junk-mandaat-scores liggen op
   0.125–0.571, klantverhalen op 0.333. C is in de praktijk bijna onbereikbaar
@@ -173,23 +197,47 @@
   history-lookup (inbox checken vóór C-publish) is de correcte fix, maar een
   aparte kwestie.
 
-- ~~**LLM-timeout op `llm.reason`**~~ — opgelost in commit `851c7da` (15 juni).
-  Native 30s timeout op Anthropic en Gemini; exceptions worden gelogd als warning.
+- **Lichtgewicht governance-CLI vs governance-ritueel**: huidige
+  means_gap-, escalation- en keyword-approve-handlers starten allemaal
+  een volledige Village (8-12 threads) voor één submit_proposal.
+  Bestaande schuld, drie handlers met hetzelfde patroon. Wordt
+  overbodig zodra governance-ritueel (zie
+  docs/ontwerp_governance_ritueel.md) wordt gebouwd, want governance
+  wordt dan een Village-staat, geen losse CLI.
 
-- ~~**Inbox-CLI gat voor means_gap-approve**~~ — opgelost in commit `bf10ca0` (15 juni).
-  Handler aanwezig; `Village.submit_proposal` + 5s timeout + resolution-velden.
-  Resterende kanttekening: handler start een volledige Village (alle inwoners + threads)
-  voor één submit. Lichte variant (alleen Secretary + Facilitator) bestaat niet als
-  losse constructie. Zelfde patroon als bestaande `escalation`- en `keyword`-handlers —
-  consistente schuld, geen nieuw gat.
+- **Inbox approve-gate timeout (5s) is een gok**. Bij eerste false-timeout
+  (uitkomst arriveert na de wait): parametrisch maken of langer
+  default.
 
-- **Diepere ontwerpvraag uit Noochie-misfix**: een missie-alignment-rode-vlag
-  (`"niet_ok"`) gaat nu via `sense_tension` de operational-route in en belandt
-  zo in `classify_gap` en mogelijk de B-route. Maar een missie-rode-vlag is
-  geen capaciteitsgrens; het hoort waarschijnlijk een eigen kanaal te krijgen
-  (escalation naar governance? eigen event-type?). Te onderzoeken later. Voor
-  nu blijft het bestaande pad: de fix van 15 juni stopt alleen de false
-  positives (positieve oordelen die per ongeluk als spanning werden gerouteerd).
+- **Ontwerpprincipe vastgelegd (Stefan, 15 juni)**: "een spanning mag
+  nooit doodlopen". Elke spanning kan worden omgezet in governance
+  (nieuwe, aangepaste of verwijderde rol), in een project (huidig of
+  toekomstig), of via human-escalatie voor prioriteitswijziging.
+  Routing langs dit principe toetsen bij toekomstige ontwerpkeuzes.
+  Huidige means_gap-handler voldoet (drie uitwegen: approve naar
+  governance, reject met reden, zichtbare foutmelding bij ontbrekende
+  role_id).
+
+- **Diepere ontwerpvraag uit Noochie-misfix**: een missie-alignment-
+  rode-vlag ("niet_ok") gaat nu via sense_tension de operational-route
+  in en belandt zo in classify_gap en mogelijk de B-route. Een
+  missie-rode-vlag is geen capaciteitsgrens, hoort waarschijnlijk
+  een eigen kanaal te krijgen (escalation naar governance? eigen
+  event-type?). Te onderzoeken later.
+
+- **Inzicht "mens als rol"** (zie ontwerp_governance_ritueel.md) raakt
+  meerdere systeemonderdelen. Te bouwen na Holacracy v5
+  constitutie-herleting door Stefan.
+
+- **Claude Code commit-discipline en ongevraagde wijzigingen**: vandaag
+  drie keer netjes gewacht op akkoord (Noochie-fix, LLM-timeout,
+  inbox-handler), één keer ongevraagd gecommit (38a2243 hygiëne-veeg).
+  Daarnaast drie keer ongevraagde inhoud-wijzigingen aangebracht in
+  bouw-stappen (sense_tension-signature in Noochie-fix,
+  parse_verdict_reason-extractie, sectie-aanpassing in
+  governance-ritueel-doc). Allemaal technisch verdedigbaar, geen van
+  drieën gevraagd. Bewust besluiten hoe verder: accepteren, scherper
+  benoemen, of branch-based review afdwingen.
 
 ## Evaluatie-checkpoints
 
@@ -223,12 +271,6 @@
   missie-alignment != means-gap), een routing-bug, of een mandate-overlap?
 - Voor nu: niet ingrijpen, gewoon observeren. Volgende runs zullen tonen of dit blijft
   terugkomen en hoe vaak.
-
-### Openstaande observaties C-trechter / coherentiepoort
-
-- Geen timeout op `llm.reason` in `_funnel_c_proposal`: bij hangende LLM blijft
-  de geboorte-naad wachten. Relevant zodra meer rollen tegelijk sensen.
-  *(log-niveau en functie-scope import opgelost in commit `38a2243`)*
 
 ### Procesnotities
 
