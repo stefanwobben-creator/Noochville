@@ -1,8 +1,22 @@
-# NoochVille — State & Handover (2026-06-14)
+# NoochVille — State & Handover (2026-06-15)
 
 ## Waar we staan
 
-- Code op ~10, 170 tests groen + schone supervised live run (tot stap 8).
+- Code op ~10, 221 tests groen.
+- **LLM-timeout fix** (commit `851c7da`): `anthropic.Anthropic(timeout=30.0)` en
+  `GenerateContentConfig(http_options=HttpOptions(timeout=30))` op beide backends.
+  Bare `except Exception: pass` vervangen door `logging.warning("LLM <backend> faalde: %s", exc)`.
+  5 tests in `tests/test_llm.py` (timeout aanwezig, exception gelogd ×2, fall-through, geen-key).
+- **inbox: means_gap approve-handler** (commit `bf10ca0`): mens kan nu een means_gap via de
+  inbox-CLI omzetten naar een `amend_role`-governance-voorstel met skill-uitbreiding.
+  `human_inbox.add_means_gap` slaat `role_id` op in context (B-uitkomst `classify_gap`).
+  `human_inbox.resolve` accepteert `extra={}` voor aanvullende resolution-velden.
+  Handler: prompt skill_name/rationale/alternatives, `EOFError`/`KeyboardInterrupt` breekt
+  netjes af, submit via `Village.submit_proposal`, wacht max 5s op gate-uitkomst,
+  schrijft `skill_added`/`resolved_by="human-cli"` in resolution. Gate-veto toont poort +
+  reden, item blijft pending. Fallback voor oude items zonder `role_id`: herleidt via
+  `classify_gap`; als dat ook niets oplevert → foutmelding + return, geen crash.
+  5 tests in `tests/test_inbox_means_gap_approve.py`.
 - 4 review-fixes doorgevoerd: atomic writes + Noochie-rem (één voorstel, geen
   stroom), test-fundament (pytest), single-source missie/policy, village.py
   gesplitst + TriageEngine eruit + DRY.
@@ -159,20 +173,15 @@
   history-lookup (inbox checken vóór C-publish) is de correcte fix, maar een
   aparte kwestie.
 
-- **LLM-timeout op `llm.reason`**: de aanroep hangt nooit af; in productie
-  kan dat een pulse-thread laten staan als de API niet antwoordt. Fix zit in
-  `llm.py` (threading- of signal-based timeout) en optioneel een
-  timeout-parameter aan de callers. Geschat ~5–10 regels in `llm.py`,
-  raakt alle callers (`_funnel_c_proposal`, `CoherenceObserver`, `_weigh_in`,
-  `_reflect`).
+- ~~**LLM-timeout op `llm.reason`**~~ — opgelost in commit `851c7da` (15 juni).
+  Native 30s timeout op Anthropic en Gemini; exceptions worden gelogd als warning.
 
-- **Inbox-CLI gat voor means_gap-approve**: de inbox-CLI heeft handlers voor
-  `escalation`, `activation` en `keyword`, maar geen `approve`-handler voor
-  `means_gap`. Means_gap-items zitten daarmee in een wachtkamer; de mens kan
-  ze niet via de inbox naar governance promoveren. Fix: nieuwe `elif`-tak in
-  `inbox/__main__.py` die `Village.submit_proposal` aanroept met `amend_role`
-  + `add_skills`, mits er een mechanisme is om de skill-naam uit context te
-  halen. ~15–40 regels, raakt `inbox/__main__.py` en `village.py`.
+- ~~**Inbox-CLI gat voor means_gap-approve**~~ — opgelost in commit `bf10ca0` (15 juni).
+  Handler aanwezig; `Village.submit_proposal` + 5s timeout + resolution-velden.
+  Resterende kanttekening: handler start een volledige Village (alle inwoners + threads)
+  voor één submit. Lichte variant (alleen Secretary + Facilitator) bestaat niet als
+  losse constructie. Zelfde patroon als bestaande `escalation`- en `keyword`-handlers —
+  consistente schuld, geen nieuw gat.
 
 - **Diepere ontwerpvraag uit Noochie-misfix**: een missie-alignment-rode-vlag
   (`"niet_ok"`) gaat nu via `sense_tension` de operational-route in en belandt
