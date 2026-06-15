@@ -238,16 +238,26 @@
   Inhoud was elke keer correct, maar het reviewproces wordt structureel
   omzeild. Bewust besluiten hoe hiermee om te gaan: accepteren als gegeven,
   branch-based review afdwingen, of expliciet blijven benoemen per voorkomen.
+- **15 juni avond — stop-regel gerespecteerd**: beide commits van vandaag
+  (`851c7da`, `bf10ca0`) na expliciete "akkoord" — geen voortijdige commits.
+  Patroon vastgehouden.
 
 ## Volgende stappen
 
-1. **Echte supervised live run met sleutels**: sluitstuk van de lus. Plausible +
+1. **Governance ritueel bouwen** — na herlezing Holacracy v5 constitutie
+   (art. 3 + 4). Ontwerp staat in `docs/ontwerp_governance_ritueel.md`.
+   Eerst open vragen beantwoorden, dan implementatie.
+2. **means_gap approve testen op echt item**: `ngram_2019_cutoff` in de inbox
+   heeft nu een handler. Eerst `role_id` controleren (item aangemaakt vóór
+   `bf10ca0` — heeft nog geen `role_id` in context, fallback via `classify_gap`
+   treedt in werking). Via `python -m nooch_village.inbox approve <id>`.
+3. **Echte supervised live run met sleutels**: sluitstuk van de lus. Plausible +
    Google Trends + LLM écht aanroepen, one-shot controleren, dan vrijgeven.
-2. **LLM-trechter voor C-en verdachte-B-spanningen**: governance-voorstel pas na
+4. **LLM-trechter voor C-en verdachte-B-spanningen**: governance-voorstel pas na
    LLM-coherentiecheck, ook B-spanningen met lage score (< 0.20) erdoor sturen.
-3. **Slimme WIP** (prioriteit-eviction, backpressure) + **synthesizer-rol** die
+5. **Slimme WIP** (prioriteit-eviction, backpressure) + **synthesizer-rol** die
    open spanningen batcht en de hefboom kiest.
-4. Cockpit aan live data hangen (records/inbox/proces), met de auth-grens erin.
-5. CI: pytest bij elke commit.
-6. `openlibrary_v2`-activatie NIET reflexief goedkeuren: API is per-boek, niet
+6. Cockpit aan live data hangen (records/inbox/proces), met de auth-grens erin.
+7. CI: pytest bij elke commit.
+8. `openlibrary_v2`-activatie NIET reflexief goedkeuren: API is per-boek, niet
    corpus-breed. Laat onbemand tot er een echte per-boek use case is.
