@@ -876,27 +876,45 @@ class Noochie(Inhabitant):
     def _weigh_in(self, field_note: str) -> None:
         """Leest de Field Note door een missie-lens en senst spanning als er drift is.
 
-        Deduplicatie: dezelfde missie-lens (zelfde hash) wordt niet opnieuw als spanning
-        gesensed totdat er een nieuwe Field Note met andere inhoud binnenkomt.
+        Deduplicatie: dezelfde reason-tekst wordt niet opnieuw als spanning gesensed
+        totdat Noochie een nieuwe unieke beoordeling produceert.
         """
         from nooch_village.llm import reason
+        from nooch_village.coherence import parse_verdict_reason
         prompt = (
             f"Je bent Noochie, de missiestem van Nooch.earth. Scherp en nuchter.\n"
             f"Missie: {_NOOCHIE_MISSION}\n\n"
             f"Field Note van vandaag:\n{field_note}\n\n"
-            "Toets de aanbevolen actie aan de missie. Klopt hij? "
-            "Begin met 'Missie-alignment: ok' als alles klopt. "
-            "Anders begin met 'Missie-lens:' en schrijf max 2 zinnen over wat botst of mist."
+            "Toets de aanbevolen actie aan de missie. Klopt hij?\n\n"
+            "Antwoord met precies dit formaat:\n"
+            "VERDICT: ok\n"
+            "REASON: <één zin>\n\n"
+            "of:\n"
+            "VERDICT: niet_ok\n"
+            "REASON: <één zin over wat botst of mist>"
         )
         result = reason(prompt) or "(geen LLM beschikbaar)"
-        self.log.info("🎯 %s", result)
-        if not result.lower().startswith("missie-alignment: ok"):
+        verdict, reason_text = parse_verdict_reason(result, frozenset({"ok", "niet_ok"}))
+
+        if verdict == "ok":
+            self.log.info("🎯 Missie-alignment: ok (%s)", reason_text)
+        elif verdict == "niet_ok":
+            self.log.info("🎯 Missie-alignment: niet_ok (%s)", reason_text)
+            h = hashlib.sha256(reason_text.encode()).hexdigest()[:16]
+            if getattr(self, "_last_weigh_hash", None) != h:
+                self._last_weigh_hash = h
+                self.sense_tension(reason_text, kind="operational")
+            else:
+                self.log.info("🎯 missie-lens ongewijzigd — spanning niet herhaald")
+        else:  # unparseable
+            self.log.info("🎯 Missie-alignment: onverstaanbaar antwoord — fail-closed als niet_ok")
             h = hashlib.sha256(result.encode()).hexdigest()[:16]
             if getattr(self, "_last_weigh_hash", None) != h:
                 self._last_weigh_hash = h
                 self.sense_tension(result, kind="operational")
             else:
                 self.log.info("🎯 missie-lens ongewijzigd — spanning niet herhaald")
+
         self.bus.publish(Event("noochie_weighed_in", {"oordeel": result}, self.id))
 
     def _reflect(self) -> None:
