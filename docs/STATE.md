@@ -140,6 +140,27 @@ Vijf commits, alle tests groen (216 op het laatst gemeten punt, mogelijk
   eindplaatje), ontwerp_governance_ritueel.md (concept, plus inzicht
   mens-als-rol en tweedeling eigenaar/rolhouder).
 
+Bovenop de vijf code-commits (Noochie-fix, hygiëne-veeg, LLM-timeout,
+inbox-handler, STATE.md afsluiter ochtend) zijn er vier strategische
+documenten gemaakt en gecommit:
+
+- docs/visie_noochville.md: vier pijlers (missie is de baas, mens-AI
+  harmonie, missie-strategisch fundamenteler, drie maturity-lagen) plus
+  doelgroep en eindplaatje.
+
+- docs/option_value_noochville.md: option-value-afspraak NoochVille
+  als 100-uur-investering over 10 weken, evaluatie op 24 augustus
+  2026 met drie reflectievragen. Reminder ingepland.
+
+- docs/ontwerp_governance_ritueel.md: concept-ontwerp mens-getriggerd
+  governance-ritueel plus mens-als-rol-inzicht plus tweedeling
+  eigenaar/rolhouder. Wacht op herlezing Holacracy v5 constitution.
+
+- docs/ontwerp_kennislaag.md: concept-ontwerp drie rollen (ingestie,
+  librarian per cirkel, domein-rapporteurs) op basis van
+  Ahrens/Zettelkasten-vertaling naar mens-LLM-werkverdeling.
+  Pull-request principe voor cross-cirkel kennis.
+
 ## Principes die niet mogen driften
 
 - **Spine blijft dom**: gate G0-G4, prioriteit Missie > Policy > Strategy > Goal,
@@ -289,6 +310,18 @@ Vijf commits, alle tests groen (216 op het laatst gemeten punt, mogelijk
 - **15 juni avond — stop-regel gerespecteerd**: beide commits van vandaag
   (`851c7da`, `bf10ca0`) na expliciete "akkoord" — geen voortijdige commits.
   Patroon vastgehouden.
+
+### Herframing 15 juni
+
+Diepere herframing 15 juni: NoochVille is op dit moment primair
+denkgereedschap voor Stefan, geen operationele kern. De waarde zit nu
+in spill-over naar ander werk. Of NoochVille ook operationele waarde
+gaat leveren is onbekend, daarom option-value-aanpak (100 uur, 10
+weken, evaluatie 24 augustus). Drie kennislagen die straks horen te
+bestaan (ingestie, librarian, rapporteurs) zijn ontworpen maar niet
+gebouwd. Eerstvolgende echte bouw-werk: datamodel voor
+permanent notes (Pydantic), eerste librarian-rol voor één cirkel.
+Niet in deze sessie.
 
 ## Volgende stappen
 
