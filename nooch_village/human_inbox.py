@@ -121,11 +121,13 @@ class HumanInbox:
         self._save()
         return iid
 
-    def add_means_gap(self, gap_key: str, description: str) -> str:
+    def add_means_gap(self, gap_key: str, description: str,
+                      role_id: str | None = None) -> str:
         """Voeg een means-gap-item toe voor een structurele capaciteitsgrens.
 
         Routeert reflects die NIET via de governance-gate gaan (geen amend_role-voorstel).
         Duplicaatcheck op gap_key (subject), ongeacht status: eenmaal gemeld, altijd stil.
+        role_id is de rol met het mandaat maar zonder de skill (B-uitkomst classify_gap).
         Retourneert het item-id.
         """
         for item in self._items.values():
@@ -137,7 +139,8 @@ class HumanInbox:
             "id":         iid,
             "type":       "means_gap",
             "subject":    gap_key,
-            "context":    {"gap_key": gap_key, "description": description},
+            "context":    {"gap_key": gap_key, "description": description,
+                           "role_id": role_id},
             "status":     "pending",
             "created_at": time.time(),
             "resolved_at": None,
@@ -211,10 +214,13 @@ class HumanInbox:
         return iid
 
     def resolve(self, item_id: str, action: str,
-                reason: str = "", amendment: str = "") -> bool:
+                reason: str = "", amendment: str = "",
+                extra: dict | None = None) -> bool:
         """Registreer een beslissing op een item.
 
         action: "approved" | "rejected" | "amended" | "deferred"
+        extra: optionele aanvullende velden in het resolution-object
+               (bijv. skill_added, rationale, resolved_by voor means_gap).
         Retourneert False als het item niet bestaat of al gesloten is.
         """
         if action not in _VALID_STATUSES - {"pending"}:
@@ -230,6 +236,7 @@ class HumanInbox:
             "action":    action,
             "reason":    reason,
             "amendment": amendment,
+            **(extra or {}),
         }
         self._save()
         return True

@@ -191,6 +191,119 @@ def _load():
     return v.human_inbox, v
 
 
+def _approve_means_gap(inbox, item, _load_fn=None):
+    """Approve een means_gap: prompt voor skill-details, dien amend_role in, wacht op gate."""
+    from nooch_village.models import Proposal, GovernanceChange, ChangeKind
+
+    ctx         = item["context"]
+    gap_key     = ctx.get("gap_key", item["subject"])
+    description = ctx.get("description", "")
+    role_id     = ctx.get("role_id")
+
+    if not role_id:
+        # Oud item zonder role_id: afleiden via classify_gap
+        try:
+            from nooch_village.gap_classifier import classify_gap
+            recs = _records_only()
+            _, role_id, _ = classify_gap(description, recs.all())
+        except Exception:
+            role_id = None
+        if not role_id:
+            print(f"  ✘ Kan role_id niet afleiden voor gap '{gap_key}'.")
+            print(f"    Herstart de village zodat het item wordt ververst, of amend het item.")
+            return
+
+    print(f"\n── Skill toevoegen aan '{role_id}' ──")
+    print(f"Gap         : {gap_key}")
+    print(f"Omschrijving: {description[:120]}")
+    print()
+
+    try:
+        skill_name = ""
+        while not skill_name:
+            skill_name = input("Skill-naam (bijv. 'english_ngram_2024'): ").strip()
+            if not skill_name:
+                print("  ✘ Skill-naam mag niet leeg zijn.")
+
+        rationale = ""
+        while len(rationale) < 10:
+            rationale = input("Reden (min. 10 tekens): ").strip()
+            if len(rationale) < 10:
+                print(f"  ✘ Rationale te kort ({len(rationale)} tekens, min. 10).")
+
+        alternatives = ""
+        while not alternatives:
+            alternatives = input("Alternatieven overwogen? (of 'geen'): ").strip()
+            if not alternatives:
+                print("  ✘ Dit veld is verplicht.")
+    except (KeyboardInterrupt, EOFError):
+        print("\n  (afgebroken)")
+        return
+
+    proposal = Proposal(
+        proposer_role="human-cli",
+        change=GovernanceChange(
+            kind=ChangeKind.AMEND_ROLE,
+            role_id=role_id,
+            add_skills=[skill_name],
+        ),
+        tension=description,
+        trigger_example=f"means_gap:{gap_key}",
+        rationale=rationale,
+        source="sensed",
+    )
+
+    load_fn = _load_fn or _load
+    _, v    = load_fn()
+    outcome: dict = {}
+    target_pid    = proposal.id
+
+    def _on_changed(e):
+        if e.data.get("proposal_id") == target_pid:
+            outcome["ok"] = True
+
+    def _on_invalid(e):
+        if e.data.get("proposal_id") == target_pid:
+            outcome["gate"]   = e.data.get("gate", "G0")
+            outcome["reason"] = e.data.get("reason", "")
+
+    def _on_review(e):
+        if e.data.get("proposal_id") == target_pid:
+            outcome["gate"]   = e.data.get("gate", "?")
+            outcome["reason"] = e.data.get("reason", "")
+
+    v.bus.subscribe("governance_changed",          _on_changed)
+    v.bus.subscribe("proposal_invalid",            _on_invalid)
+    v.bus.subscribe("governance_review_requested", _on_review)
+
+    v.start()
+    time.sleep(0.1)
+    v.submit_proposal(proposal)
+
+    for _ in range(50):
+        if outcome:
+            break
+        time.sleep(0.1)
+
+    v.stop()
+
+    if outcome.get("ok"):
+        inbox.resolve(item["id"], "approved", reason=rationale, extra={
+            "skill_added":             skill_name,
+            "rationale":               rationale,
+            "alternatives_considered": alternatives,
+            "resolved_by":             "human-cli",
+        })
+        print(f"\n✅ Skill '{skill_name}' toegevoegd aan '{role_id}' — voorstel aangenomen.")
+    elif "gate" in outcome:
+        gate        = outcome["gate"]
+        reason_text = outcome["reason"]
+        print(f"\n  ✘ Voorstel geblokkeerd door poort {gate}: {reason_text}")
+        print(f"     Item blijft pending — kies een andere skill of pas het voorstel aan.")
+    else:
+        print(f"\n  ✘ Geen uitkomst ontvangen binnen timeout. Controleer het village-log.")
+
+
 def main(argv: list[str]) -> None:
     cmd = argv[0] if argv else "list"
 
@@ -275,6 +388,9 @@ def main(argv: list[str]) -> None:
             print(f"  {n+3}. Voeg toe aan CLASS_MAP: {plan.get('class_map_entry')}")
             print(f"\n⚠  Approval green-light de implementatie.")
             print(f"   Iedere stap hierboven passeert daarna nog de normale per-edit code-review.")
+
+        elif item["type"] == "means_gap":
+            _approve_means_gap(inbox, item)
 
         elif item["type"] == "keyword":
             # Keyword vereist de bibliotheek via Village-context
