@@ -1,61 +1,100 @@
 # Ontwerp: Governance Ritueel voor NoochVille
 
 Status: concept, niet geïmplementeerd. Vastgelegd 15 juni 2026 als
-startpunt voor latere bouw. Volledig ontwerp wacht op Stefan's
-herlezing van de Holacracy v5 constitution.
+startpunt voor latere bouw. Volledig ontwerp wacht op herlezing
+Holacracy v5 constitution door Stefan.
 
 ## Uitgangspunt
 
-NoochVille volgt het Holacracy v5 model voor de scheiding van
-governance en operationeel werk. De constitutie is de bron, dit
-document is de vertaling naar een agent-systeem.
+NoochVille volgt het Holacracy v5 model voor scheiding van governance
+en operationeel werk. De constitutie is de bron, dit document is de
+vertaling naar een agent-systeem.
 
-## Wat we al weten (Stefan's intuïtie, 15 juni)
+## Eerste keuzes (Stefan, 15 juni)
 
-- Governance is een aparte ruimte, niet parallel aan operatie.
-  Tijdens governance pauzeert de operatie.
-- Een rol met accountability + skill kan operationeel aan de slag.
-- Loopt een rol vast (spanning, blokkade, ontbrekend middel), dan
-  verzamelt Secretary deze spanningen en classificeert:
-    - Tactisch (werkoverleg-werk): prioriteiten aanpassen, doorlopende
-      werkzaamheden bijsturen.
-    - Governance (roloverleg-werk): concreet voorstel formuleren voor
-      volgend governance-overleg.
-- Ritme:
-    - Tactisch ritme: dagelijks werkoverleg aan begin van de dag.
-    - Governance ritme: één keer per week, operatie pauzeert.
+Type ritme: mens-getriggerd, niet klok-gebaseerd. Stefan triggert
+governance-modus expliciet. Operatie pauzeert tijdens governance.
 
-## Open vragen, te beantwoorden na herlezing constitutie
+Doel: efficiënt systeem (niet wachten op vaste tijdslots als er niks
+is, niet doorgaan als er governance-werk klaar staat).
+
+Werkverdeling tijdens governance:
+- Secretary tussen twee governance-momenten in: verzamelt spanningen,
+  classificeert (tactisch vs governance), bereidt agenda voor.
+- Stefan bij start governance: ontvangt agenda met open
+  governance-spanningen plus Secretary's voorgestelde acties plus
+  classificatie. Doorloopt één voor één: keurt goed, past aan,
+  pakt door. Governance sluit als agenda leeg is.
+
+Verschil tussen governance-ritueel en huidige inbox-CLI:
+- Governance verwerkt een agenda van meerdere items in één sessie,
+  Secretary is gids.
+- Huidige inbox-CLI verwerkt één item per commando, transactioneel.
+- Beide blijven naast elkaar bestaan, governance is structurele bouw,
+  inbox is dag-tot-dag operationeel.
+
+## Inzicht 15 juni: mens als rol
+
+Tijdens het gesprek over het governance-ritueel kwam Stefan tot een
+herframing: de mens is óók een rol in het systeem, met een
+projectenbord, accountabilities, en zichtbaarheid voor andere rollen.
+
+Concreet zou dit betekenen:
+- Stefan heeft een record in governance_records.json met purpose,
+  accountabilities, domains, skills.
+- Stefan's werk-in-uitvoering is zichtbaar voor inhabitants via een
+  projectenbord, zodat het dorp weet waar Stefan aan werkt.
+- Stefan's persoonlijke inbox (huidige items als project-suggesties
+  vanuit zijn richting) hoort mogelijk thuis in zijn rol-projectenbord,
+  niet in een aparte mens-inbox.
+
+Open vragen (te verfijnen na constitutie-herlezing):
+
+1. Bestaat Stefan als gewone rol (met dezelfde regels als andere rollen)
+   of als speciale categorie (human role) met aparte regels? Holacracy
+   v5 zegt: gewone rol. Praktische verschillen: mens sensed niet
+   automatisch, wordt niet vanzelf wakker, heeft andere skills.
+
+2. Kan Stefan's rol via governance worden geamendeerd, en wie modereert
+   dat? Stefan is zowel rolhouder als governance-moderator. Holacracy
+   v5 normaliseert dit (CEO-rollen worden ook door governance
+   vormgegeven), maar het vraagt discipline.
+
+3. Wordt huidige inbox vervangen door rol-projectenbord, naast elkaar,
+   of geïntegreerd? Want als mens een rol is, dan zijn de items in zijn
+   inbox eigenlijk projecten in zijn rol.
+
+## Open vragen, na herlezing constitutie
 
 - Wat zegt Holacracy v5 over de exacte structuur van tactical en
   governance meetings? Welke onderdelen zijn verplicht?
-- Hoe vertaalt "voorzitter" en "secretary" zich naar een agent-systeem?
-  Worden dit aparte rollen (we hebben al Secretary en Facilitator),
-  of LLM-functies?
-- Wat is de minimale en maximale duur van governance-modus? Per
-  voorstel, of vast window?
-- Hoe verhoudt het huidige sense-classify-route mechanisme zich tot
-  het constitutionele "tension processing" proces?
-- Wat doet het systeem met spanningen die binnenkomen TIJDENS
-  governance-modus (bufferen, weigeren, sense maar niet routeren)?
+- Hoe vertaalt "voorzitter" en "secretary" zich naar agent-systeem?
+  Worden dit aparte rollen (we hebben al Secretary en Facilitator) of
+  LLM-functies?
+- Hoe verhoudt huidig sense-classify-route mechanisme zich tot
+  constitutioneel "tension processing" proces?
+- Wat doet systeem met spanningen die binnenkomen TIJDENS
+  governance-modus? Bufferen, weigeren, sensen maar niet routeren?
 
 ## Connectie met huidige stand
 
-- Means_gap-approve via CLI (15 juni gebouwd) is een interim-oplossing.
-  In het ritueel-model wordt dit governance-modus-actie. CLI-handler
-  blijft bestaan tot rituelen-bouw gereed is.
-- Lichtgewicht governance-CLI (op de plank van 15 juni) wordt
-  overbodig: governance-modus is geen losse CLI maar een Village-staat.
-  Mag van openstaand-lijst af zodra ritueel-ontwerp wordt gebouwd.
+- Means_gap-approve via CLI (15 juni gebouwd) is interim-oplossing.
+  Blijft bestaan tot rituelen-bouw gereed.
+- Lichtgewicht governance-CLI (op de plank van 15 juni) wordt overbodig:
+  governance-modus is geen losse CLI maar een Village-staat. Mag van
+  openstaand-lijst zodra rituelen-bouw begint.
+- Inzicht "mens als rol" raakt mogelijk meer dan dit document: kan
+  betekenen dat er een StefanRole-record bij komt, en dat huidig
+  inbox-model wordt herzien.
 
 ## Volgende stap (Stefan)
 
-Herlezen van Holacracy v5 constitution, met focus op:
+Herlezing Holacracy v5 constitution met focus op:
 - Artikel 3 (Governance Process)
 - Artikel 4 (Operational Process / Tactical Meetings)
-- Definities van Tension, Project, Accountability, Domain
+- Definities van Tension, Project, Accountability, Domain, Role
 
 Bron: https://www.holacracy.org/constitution
 
-Daarna terugkomen met ontwerp dat constitutie als basis heeft, niet
+Daarna: terugkomen met ontwerp dat constitutie als basis heeft, niet
 gevoel.
