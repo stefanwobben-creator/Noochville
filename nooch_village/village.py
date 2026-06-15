@@ -19,7 +19,7 @@ from nooch_village.governance import Records, Secretary, Reconciler, proposal_to
 from nooch_village.models import Proposal
 from nooch_village.roles import (
     TimeKeeper, GrowthAnalyst, Librarian, PerformanceScout,
-    Facilitator, TijdgeestWachter, KennisScout, Noochie,
+    Facilitator, TijdgeestWachter, KennisScout, Noochie, Ronnie,
 )
 from nooch_village.library import Library
 from nooch_village.lexicon import Lexicon
@@ -36,6 +36,7 @@ from nooch_village.skills_impl.ngram import NgramCultureSkill
 from nooch_village.skills_impl.openlibrary_search_inside import OpenlibrarySearchInsideSkill
 from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
 from nooch_village.skills_impl.openalex import OpenalexSkill
+from nooch_village.skills_impl.bulletin_schrijven import BulletinSchrijvenSkill
 from nooch_village.human_inbox import HumanInbox
 from nooch_village.gap_classifier import classify_gap
 from nooch_village.observations import ObservationStore
@@ -43,7 +44,7 @@ from nooch_village.monitoring import MonitoringStore
 from nooch_village.projects import ProjectLedger
 from nooch_village.seeds import (
     seed_lexicon, seed_records, migrate_records,
-    activate_tijdgeest_wachter, activate_kennis_scout,
+    activate_tijdgeest_wachter, activate_kennis_scout, activate_ronnie,
 )
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -57,6 +58,7 @@ CLASS_MAP = {
     "tijdgeest_wachter": TijdgeestWachter,
     "kennis_scout":     KennisScout,
     "noochie":          Noochie,
+    "ronnie":           Ronnie,
 }
 
 
@@ -87,6 +89,7 @@ class Village:
             OpenlibrarySearchInsideSkill(),
             SemanticScholarSkill(),
             OpenalexSkill(),
+            BulletinSchrijvenSkill(),
         ):
             self.registry.register(skill)
         self.records = Records(os.path.join(self.context.data_dir, "governance_records.json"))
@@ -94,6 +97,7 @@ class Village:
         migrate_records(self.records)
         activate_tijdgeest_wachter(self.records)
         activate_kennis_scout(self.records)
+        activate_ronnie(self.records)
         self.context.records = self.records
         self.matchmaker = Matchmaker(self.bus)
         self.secretary = Secretary(self.records, self.bus)
@@ -120,6 +124,7 @@ class Village:
         self.bus.subscribe("tijdgeest_signaal",           self._observe)
         self.bus.subscribe("means_gap_sensed",            self._observe)
         self.bus.subscribe("means_gap_sensed",            self._on_means_gap)
+        self.bus.subscribe("bulletin_geschreven",         self._observe)
         self.coherence_observer = CoherenceObserver(self.bus)
         self.root = self.reconciler.build()
 

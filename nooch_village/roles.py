@@ -62,6 +62,7 @@ class TimeKeeper(Inhabitant):
         super().__init__(*args, **kwargs)
         self._last_day = None
         self._last_beat = 0.0
+        self._first_ring = True
         # demo-modus: elke N seconden i.p.v. één keer per dag
         self._interval = float(self.context.settings.get("heartbeat_seconds", 0) or 0)
 
@@ -79,6 +80,9 @@ class TimeKeeper(Inhabitant):
 
     def _ring(self, label: str) -> None:
         today = date.today()
+        if not self._first_ring:
+            self.bus.publish(Event("dag_eindigt", {"label": label}, self.id))
+        self._first_ring = False
         for name in cadence_events(today):
             self.log.info("🔔 %s (%s)", name, label)
             self.bus.publish(Event(name, {"label": label}, self.id))
@@ -940,3 +944,61 @@ class Noochie(Inhabitant):
         h = hashlib.sha256(result.encode()).hexdigest()[:16]
         gap_key = f"creatief_voorstel_{h}"
         self._sense_gap(gap_key, result, kind="governance", min_count=2)
+
+
+class Ronnie(Inhabitant):
+    """Dorpschroniqueur: verzamelt events de hele dag en schrijft bij dag_eindigt
+    een bulletin via LLM.
+
+    Harde grens (_reflect):
+      Produceer UITSLUITEND means-gap-items — nooit governance-voorstellen of API-calls
+      buiten de eigen skills-lijst. Uitbreiding van capaciteit is mens-gated activatie.
+    """
+
+    _TRACK = (
+        "dag_begint",
+        "pulse_completed",
+        "keyword_decided",
+        "governance_changed",
+        "tension_sensed",
+        "tijdgeest_pulse_completed",
+        "keyword_proposed",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._events_today: list[dict] = []
+
+    def _setup_events(self) -> None:
+        for name in self._TRACK:
+            self.react(name, self._collect_event)
+        self.react("dag_eindigt", self._on_dag_eindigt)
+
+    def _collect_event(self, event: Event) -> None:
+        self._events_today.append({
+            "name": event.name,
+            "by":   event.data.get("by", event.sender),
+            "note": event.data.get("boodschap", "") or event.data.get("note_path", ""),
+        })
+
+    def _on_dag_eindigt(self, event: Event) -> None:
+        """Schrijf het dagbulletin op basis van de events die vandaag voorkwamen."""
+        events = list(self._events_today)
+        self._events_today.clear()
+
+        result = self.use_skill("bulletin_schrijven", {
+            "events": events,
+            "datum":  date.today().isoformat(),
+        })
+
+        if "error" in result:
+            self.log.warning("⚠️ bulletin niet geschreven: %s", result["error"])
+            return
+
+        self.bus.publish(Event("bulletin_geschreven",
+                               {"path": result["path"], "by": self.id,
+                                "event_count": result.get("event_count", 0)}, self.id))
+        self.log.info("📋 bulletin gepubliceerd: %s", result["path"])
+
+    def _reflect(self) -> None:
+        pass

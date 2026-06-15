@@ -215,6 +215,30 @@ def activate_tijdgeest_wachter(records: Records) -> None:
         records.put(rec)
 
 
+def activate_ronnie(records: Records) -> None:
+    """Idempotent: maak het Ronnie-record aan als seed-rol als hij nog niet bestaat."""
+    if records.get("ronnie") is not None:
+        return
+    root = records.root()
+    if root is None:
+        return
+    ronnie = Record(
+        id="ronnie",
+        type=RecordType.ROLE,
+        parent=root.id,
+        definition=RoleDefinition(
+            purpose="Schrijft het dagelijkse dorpsbulletin — warm, gemeenschapsgericht",
+            accountabilities=["dagelijks dorpsbulletin schrijven op basis van village-events"],
+            skills=["bulletin_schrijven"],
+        ),
+    )
+    ronnie.source = "seed"
+    records.put(ronnie)
+    if "ronnie" not in root.members:
+        root.members.append("ronnie")
+        records.put(root)
+
+
 def activate_kennis_scout(records: Records) -> None:
     """Idempotent: zet v1-skills in kennis_scout-record zodra het bestaat."""
     rec = records.get("kennis_scout")
