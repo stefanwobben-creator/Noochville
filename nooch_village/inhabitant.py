@@ -6,6 +6,7 @@ from nooch_village.inbox import Inbox
 from nooch_village.models import Task, Response, Record, RecordType, Tension
 from nooch_village.skills import SkillRegistry
 from nooch_village.triage_engine import TriageContext, classify as _triage_classify
+from nooch_village.coherence import evaluate_coherence
 
 
 class Inhabitant(threading.Thread):
@@ -206,18 +207,17 @@ class Inhabitant(threading.Thread):
 
         # Filter 3: Coherentiepoort via LLM.
         # Fail-closed: error, unparseable en "vague" → False. Alleen "coherent" → True.
-        from nooch_village.coherence import evaluate_coherence
         verdict, reason_text = evaluate_coherence(gap_description)
         if verdict == "coherent":
             self.log.info(
                 "C-trechter: coherentiepoort=coherent (%s), doorgelaten", reason_text)
             return True
         if verdict == "vague":
-            self.log.info(
+            self.log.warning(
                 "C-trechter: coherentiepoort=vague (%s), dropped", reason_text)
             return False
         # error of unparseable → fail-closed
-        self.log.info(
+        self.log.warning(
             "C-trechter: coherentiepoort %s (%s), fail-closed dropped", verdict, reason_text)
         return False
 

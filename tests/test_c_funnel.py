@@ -156,7 +156,7 @@ def test_coherence_gate_blocks_vague_verdict(tmp_path):
 
     with patch("nooch_village.llm.reason",
                return_value="VERDICT: vague\nREASON: keyword-cluster zonder mandaat"):
-        with patch.object(inh.log, "info") as mock_log:
+        with patch.object(inh.log, "warning") as mock_warn:
             result = inh._funnel_c_proposal(
                 "missie-alignment, transparantie, kernwaarden",
                 "missie_transparantie_kernwaarden",
@@ -164,7 +164,7 @@ def test_coherence_gate_blocks_vague_verdict(tmp_path):
             )
 
     assert result is False
-    logged = " ".join(str(c) for c in mock_log.call_args_list)
+    logged = " ".join(str(c) for c in mock_warn.call_args_list)
     assert "vague" in logged
 
 
@@ -175,7 +175,7 @@ def test_coherence_gate_fails_closed_on_exception(tmp_path):
     inh = _make_inhabitant(recs, bus, tmp_path / "data")
 
     with patch("nooch_village.llm.reason", side_effect=RuntimeError("verbinding verbroken")):
-        with patch.object(inh.log, "info") as mock_log:
+        with patch.object(inh.log, "warning") as mock_warn:
             result = inh._funnel_c_proposal(
                 "juridische claims controleren",
                 "juridische_claims_controleren",
@@ -183,5 +183,5 @@ def test_coherence_gate_fails_closed_on_exception(tmp_path):
             )
 
     assert result is False
-    logged = " ".join(str(c) for c in mock_log.call_args_list)
+    logged = " ".join(str(c) for c in mock_warn.call_args_list)
     assert "fail-closed" in logged
