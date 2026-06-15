@@ -245,8 +245,12 @@
 ## Volgende stappen
 
 1. **Governance ritueel bouwen** — na herlezing Holacracy v5 constitutie
-   (art. 3 + 4). Ontwerp staat in `docs/ontwerp_governance_ritueel.md`.
-   Eerst open vragen beantwoorden, dan implementatie.
+   (art. 3 + 4). Ontwerp staat in `docs/ontwerp_governance_ritueel.md`
+   (commits `adf0044`, `f4e33ab`). Bevat: mens-getriggerd ritme, Secretary
+   als agenda-gids, tweedeling eigenaar vs rolhouder (eigenaar buiten
+   governance, Stefan-rol volledig erin), inzicht mens-als-rol met open
+   vragen over inbox vs projectenbord. Eerst constitutie herlezen, dan
+   implementatie.
 2. **means_gap approve testen op echt item**: `ngram_2019_cutoff` in de inbox
    heeft nu een handler. Eerst `role_id` controleren (item aangemaakt vóór
    `bf10ca0` — heeft nog geen `role_id` in context, fallback via `classify_gap`
