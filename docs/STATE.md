@@ -178,8 +178,14 @@ Vijf commits, alle tests groen (216 op het laatst gemeten punt, mogelijk
   Uitfilteren verandert B/C-verdeling niet (gemeten), maar verschuift matchende
   rol van noochville naar analyst. Cosmetisch, geen veiligheidsprobleem.
   Beslissing uitgesteld.
-- **Durable-reject bevestiging, blocked-project recovery, smart WIP,
+- **Durable-reject bevestiging, smart WIP,
   requirements-dev.txt**: open uit vorige sessies, ongewijzigd.
+- **Project b88d2ddaea33** (analyst discovery via plausible_stats): correct
+  geblokkeerd op blocked_on=analyst, wacht op Plausible-credential in .env.
+  Geen recovery nodig, geen stale-cleanup. Project bestaat zoals het hoort:
+  zichtbare blockage tot de credential beschikbaar is. Onblok-trigger: zodra
+  Plausible-sleutel in .env staat, kan een nieuwe analyst-trigger de
+  discovery-run starten.
 - **C-trechter dedup dood-tot-eerste-geboorte**: `_funnel_c_proposal` vergelijkt
   `gap_key` (afgeleid via `_role_id_from_gap`, top-3 tokens) tegen `rec.id`.
   Seed- en handmatige sensed-records hebben korte, leesbare namen die nooit
