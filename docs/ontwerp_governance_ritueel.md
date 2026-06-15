@@ -64,6 +64,33 @@ Open vragen (te verfijnen na constitutie-herlezing):
    of geïntegreerd? Want als mens een rol is, dan zijn de items in zijn
    inbox eigenlijk projecten in zijn rol.
 
+## Tweedeling: eigenaar versus rolhouder
+
+Stefan's rol in het systeem heeft twee lagen die helder gescheiden
+moeten blijven, in lijn met Holacracy v5:
+
+1. Stefan als eigenaar (anchor van Nooch.earth):
+   - Staat buiten governance.
+   - Kan in laatste instantie de constitutie wijzigen of het systeem
+     stoppen.
+   - Wordt zelden expliciet gebruikt. Bestaat omdat ergens iemand de
+     laatste verantwoordelijkheid moet dragen.
+
+2. Stefan als rolhouder ("Stefan-rol", naam te bepalen):
+   - Valt volledig onder governance.
+   - Heeft accountabilities (eerste denken: input geven aan het dorp,
+     verbinding leggen met externe bronnen, troubleshooting bij
+     onverwachte systeemstaat).
+   - Heeft een projectenbord dat zichtbaar is voor andere rollen.
+   - Bezwaren tegen voorstellen die deze rol raken worden net zo
+     getoetst als bij andere rollen. Bij een geldig bezwaar moet
+     Stefan ook nadenken over een aangepast voorstel om de spanning
+     op te lossen.
+
+Het overgrote deel van de tijd opereert Stefan als rolhouder, niet
+als eigenaar. De eigenaar-pet is een uitzondering, niet een
+standaard.
+
 ## Open vragen, na herlezing constitutie
 
 - Wat zegt Holacracy v5 over de exacte structuur van tactical en
