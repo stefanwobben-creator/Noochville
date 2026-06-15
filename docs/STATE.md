@@ -159,6 +159,29 @@
   history-lookup (inbox checken vóór C-publish) is de correcte fix, maar een
   aparte kwestie.
 
+- **LLM-timeout op `llm.reason`**: de aanroep hangt nooit af; in productie
+  kan dat een pulse-thread laten staan als de API niet antwoordt. Fix zit in
+  `llm.py` (threading- of signal-based timeout) en optioneel een
+  timeout-parameter aan de callers. Geschat ~5–10 regels in `llm.py`,
+  raakt alle callers (`_funnel_c_proposal`, `CoherenceObserver`, `_weigh_in`,
+  `_reflect`).
+
+- **Inbox-CLI gat voor means_gap-approve**: de inbox-CLI heeft handlers voor
+  `escalation`, `activation` en `keyword`, maar geen `approve`-handler voor
+  `means_gap`. Means_gap-items zitten daarmee in een wachtkamer; de mens kan
+  ze niet via de inbox naar governance promoveren. Fix: nieuwe `elif`-tak in
+  `inbox/__main__.py` die `Village.submit_proposal` aanroept met `amend_role`
+  + `add_skills`, mits er een mechanisme is om de skill-naam uit context te
+  halen. ~15–40 regels, raakt `inbox/__main__.py` en `village.py`.
+
+- **Diepere ontwerpvraag uit Noochie-misfix**: een missie-alignment-rode-vlag
+  (`"niet_ok"`) gaat nu via `sense_tension` de operational-route in en belandt
+  zo in `classify_gap` en mogelijk de B-route. Maar een missie-rode-vlag is
+  geen capaciteitsgrens; het hoort waarschijnlijk een eigen kanaal te krijgen
+  (escalation naar governance? eigen event-type?). Te onderzoeken later. Voor
+  nu blijft het bestaande pad: de fix van 15 juni stopt alleen de false
+  positives (positieve oordelen die per ongeluk als spanning werden gerouteerd).
+
 ## Evaluatie-checkpoints
 
 ### B-observer pad — beslissing na ~1-2 weken data
@@ -196,11 +219,16 @@
 
 - Geen timeout op `llm.reason` in `_funnel_c_proposal`: bij hangende LLM blijft
   de geboorte-naad wachten. Relevant zodra meer rollen tegelijk sensen.
-- Log-niveau coherentiepoort: drop-paden staan op `info`, beter op `warning`
-  zodat ze opvallen bij latere log-review.
-- Functie-scope import `from nooch_village.llm import reason as _llm_reason`
-  in `_funnel_c_proposal`: bewuste keuze voor patching, kleine herhaalde
-  import-cost. Niet kritiek.
+  *(log-niveau en functie-scope import opgelost in commit `38a2243`)*
+
+### Procesnotities
+
+- **Claude Code commit-discipline**: ondanks expliciete stop-regel bovenaan
+  de instructie en herhaalde "wacht op akkoord" heeft Claude Code op 15 juni
+  opnieuw zonder akkoord gecommit (`38a2243`). Vierde voorkomen sinds vrijdag.
+  Inhoud was elke keer correct, maar het reviewproces wordt structureel
+  omzeild. Bewust besluiten hoe hiermee om te gaan: accepteren als gegeven,
+  branch-based review afdwingen, of expliciet blijven benoemen per voorkomen.
 
 ## Volgende stappen
 
