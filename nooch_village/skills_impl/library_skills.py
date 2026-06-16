@@ -18,6 +18,34 @@ RISK = {
 FORBIDDEN_CLAIM = ["biologisch afbreekbaar", "100%", "co2-neutraal", "co2 neutraal", "klimaatneutraal"]
 
 
+class LibraryListSkill(Skill):
+    name = "library_list"
+    description = "Geeft alle termen terug voor een of meer statussen, optioneel gefilterd op locale."
+
+    _DEFAULT_STATUSES = ("approved", "insight_statement")
+
+    def run(self, payload: dict, context) -> dict:
+        statuses = set(payload.get("statuses", self._DEFAULT_STATUSES))
+        locale_filter: str | None = payload.get("locale")
+
+        terms = []
+        for word, entry in context.library.all().items():
+            if entry.get("status") not in statuses:
+                continue
+            term_locale = entry.get("locale")
+            if locale_filter is not None and term_locale != locale_filter:
+                continue
+            terms.append({
+                "term": word,
+                "status": entry["status"],
+                "locale": term_locale,
+                "concept_id": entry.get("concept_id"),
+                "gemet_id": entry.get("gemet_id"),
+            })
+
+        return {"terms": terms, "count": len(terms)}
+
+
 class LibraryLookupSkill(Skill):
     name = "library_lookup"
     description = "Leest de status van een woord uit de bibliotheek (read-only, voor iedereen)."

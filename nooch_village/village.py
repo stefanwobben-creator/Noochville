@@ -29,7 +29,7 @@ from nooch_village.skills_impl.budget import BudgetSkill
 from nooch_village.skills_impl.plausible import PlausibleSkill
 from nooch_village.skills_impl.trends import TrendsSkill
 from nooch_village.skills_impl.field_note import FieldNoteSkill
-from nooch_village.skills_impl.library_skills import LibraryLookupSkill, KeywordReviewSkill
+from nooch_village.skills_impl.library_skills import LibraryLookupSkill, KeywordReviewSkill, LibraryListSkill
 from nooch_village.skills_impl.gsc import GscPerformanceSkill
 from nooch_village.skills_impl.gsc_report import GscReportSkill
 from nooch_village.skills_impl.ngram import NgramCultureSkill
@@ -83,7 +83,7 @@ class Village:
         self.registry = SkillRegistry()
         for skill in (
             SiteHealthSkill(), BudgetSkill(), PlausibleSkill(), TrendsSkill(),
-            FieldNoteSkill(), LibraryLookupSkill(), KeywordReviewSkill(),
+            FieldNoteSkill(), LibraryLookupSkill(), LibraryListSkill(), KeywordReviewSkill(),
             GscPerformanceSkill(), GscReportSkill(),
             NgramCultureSkill(),
             OpenlibrarySearchInsideSkill(),
