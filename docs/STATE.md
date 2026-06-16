@@ -187,6 +187,25 @@ Middag en avond (na de afsluiter ochtend):
   met drie meet-categorieën (systeemgezondheid, activiteit,
   kwaliteit), niet-automatisch, kompas voor evaluatie 24 augustus.
 
+## Afgesloten 16 juni
+
+Twee commits, beide kennis-laag-fundament.
+
+- LibraryListSkill in SkillRegistry: nieuwe skill in
+  nooch_village/skills_impl/library_skills.py, geregistreerd in
+  village.py. Default-statussen approved + insight_statement,
+  optioneel locale-filter. 5 tests groen. Backward-compatible:
+  gebruikt .get() voor toekomstige velden (locale, concept_id,
+  gemet_id) die nog niet bestaan in library.json entries.
+
+- scripts/library_cleanup.py: CLI-tool voor cleanup van escalated
+  entries via vijf clusters (nooch-typo, food-noise, authority-noise,
+  vegan-risico, missie-adjacent). Dry-run produceert tabel plus
+  review-file, --apply blokkeert op PENDING, schrijft via
+  library.curate(). 6 tests groen. Echte dry-run op data/library.json
+  toonde: 21 automatisch forbidden, 31 PENDING voor Stefan
+  (9 vegan-risico, 6 missie-adjacent, 16 overig).
+
 ## Principes die niet mogen driften
 
 - **Spine blijft dom**: gate G0-G4, prioriteit Missie > Policy > Strategy > Goal,
@@ -317,6 +336,19 @@ Middag en avond (na de afsluiter ochtend):
   governance-ritueel-doc). Allemaal technisch verdedigbaar, geen van
   drieën gevraagd. Bewust besluiten hoe verder: accepteren, scherper
   benoemen, of branch-based review afdwingen.
+
+- **LibraryListSkill koppeling aan librarian-record**: skill bestaat in
+  SkillRegistry, maar librarian-record in governance_records.json heeft
+  'm niet in z'n skills-lijst. Beslissing 16 juni: koppeling volgt
+  via governance-amendement in latere sessie. Principe vastgelegd:
+  skills mogen los bestaan in de registry, formele koppeling aan een
+  rol gaat altijd via governance.
+
+- **Cleanup-review PENDING (31 items)**: data/cleanup_review_2026-06-16.json
+  staat klaar. Stefan vervangt PENDING door forbidden/approved/
+  escalated/ignore per term, daarna:
+  python scripts/library_cleanup.py --apply
+  Niet snel tussendoor doen — aparte sessie met verse blik.
 
 ## Evaluatie-checkpoints
 
