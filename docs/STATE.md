@@ -206,6 +206,22 @@ Twee commits, beide kennis-laag-fundament.
   toonde: 21 automatisch forbidden, 31 PENDING voor Stefan
   (9 vegan-risico, 6 missie-adjacent, 16 overig).
 
+- migratie-script library_migrate_v2: idempotente migratie die drie
+  nullable velden (locale, concept_id, gemet_id) toevoegt aan elke
+  library-entry. 3 tests groen. Daadwerkelijk uitgevoerd op
+  data/library.json: 69/69 entries gemigreerd, geen commit van
+  data-bestand (gitignored).
+
+- Ahrens-fundament gelegd: PermanentNote Pydantic-model en
+  NotesStore in nooch_village/. Minimaal model met zes velden
+  (id, claim, source, source_date, created_at, links_to, tags),
+  geen status/GEMET/versioning. 4 tests groen. seed_first_notes
+  script schreef zes echte notes naar data/notes.json: vijf
+  atomaire claims uit de pillar "Vegan sneakers: what they are
+  and what's inside" plus één claim uit customer insights deck.
+  Link-integriteit gecontroleerd, geen dangling refs. Eerste
+  end-to-end-test van het kennislaag-fundament in praktijk.
+
 ## Principes die niet mogen driften
 
 - **Spine blijft dom**: gate G0-G4, prioriteit Missie > Policy > Strategy > Goal,
@@ -300,6 +316,19 @@ Twee commits, beide kennis-laag-fundament.
 - **Inzicht "mens als rol"** (zie ontwerp_governance_ritueel.md) raakt
   meerdere systeemonderdelen. Te bouwen na Holacracy v5
   constitutie-herleting door Stefan.
+
+- **PermanentNote vs library.json**: twee aparte stores nu. library is
+  keyword-georiënteerd, notes is claim-georiënteerd. Geen brug
+  ontworpen, want concept_id-veld in PermanentNote ontbreekt. Te
+  besluiten in latere sessie: of permanent notes via concept_id
+  aan library-entries gekoppeld worden, of dat ze parallelle data
+  blijven.
+
+- **Ingestie-rol nog te bouwen**: zes notes zijn nu handmatig
+  toegevoegd via seed-script. Voor schaalbare ingestie van fuzzy
+  input is een dialoog-rol nodig die we vrijdag 12 juni hebben
+  ontworpen in docs/ontwerp_kennislaag.md. Eerstvolgende
+  natuurlijke vervolgstap na het familie-bezoek.
 
 - **Bevindingen uit Ronnie's eerste echte runs (15 juni middag)**:
 
