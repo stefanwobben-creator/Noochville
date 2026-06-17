@@ -1,8 +1,8 @@
-# NoochVille — State & Handover (2026-06-15)
+# NoochVille — State & Handover (2026-06-17)
 
 ## Waar we staan
 
-- Code op ~10, 257 tests groen (suite groeide fors sinds 14 juni: 221 → 257).
+- Code op ~10, 263 tests groen (suite groeide fors sinds 14 juni: 221 → 263).
 - **LLM-timeout fix** (commit `851c7da`): `anthropic.Anthropic(timeout=30.0)` en
   `GenerateContentConfig(http_options=HttpOptions(timeout=30))` op beide backends.
   Bare `except Exception: pass` vervangen door `logging.warning("LLM <backend> faalde: %s", exc)`.
@@ -24,7 +24,8 @@
   de inbox (approve → approved, reject → forbidden naar de bibliotheek, direct,
   deduped).
 - Live burgers: GrowthAnalyst, Librarian, PerformanceScout, TimeKeeper,
-  Facilitator, CircleLead, TijdgeestWachter, KennisScout, Noochie.
+  Facilitator, CircleLead, TijdgeestWachter, KennisScout, Noochie, Ronnie
+  (live sinds 15 juni).
 - **Observatie-store**: getimestampte tijdreeks per rol/metric (`data/observations.jsonl`,
   append-only). GrowthAnalyst logt pulsdata voor gemonitorde metrics.
 - **Project-primitief + grootboek + projects-CLI**: ProjectLedger (atomic writes,
@@ -275,32 +276,6 @@ Plan-uur plus woord-vinder-machine.
   Both-ways gevalideerd: in-memory injectie van "zzz_spook" geeft spook-
   lijst `['librarian:zzz_spook']`; schijf bleef ongewijzigd (v3).
 
-## Afgesloten 17 juni (blok 4): analyst-record opgeschoond
-
-- `analyst`-record naar v8 via governance amend (G3-escalatie → founder
-  approve → Secretary adopt → governance_changed). Purpose aangescherpt:
-  "Data en inzicht omzetten in bruikbaar advies dat Nooch.earth gezond,
-  vindbaar en groeiend houdt." Twee accountabilities verwijderd:
-  "maandrapportage opstellen voor stakeholders" (gedekt door dagelijkse
-  Field Note, geen aparte skill) en "taalgebruik per locale bewaken"
-  (geen skill-dekking, wens voor later). Vijf keepers over: pairs_sold-
-  goal-derived, bezoekersdata duiden, locale-analyse, dagelijkse Field
-  Note, site monitoren. Skills ongemoeid.
-
-- MBTI ISTJ vastgelegd als rol-karakter (documentatie; RoleDefinition
-  heeft nog geen veld voor MBTI of leesbare naam).
-
-- Geparkeerd (drie):
-  * Rol-metadata/persona-laag: leesbare naam los van role_id, plus
-    MBTI-veld. Binnenkort oppakken nu de rollen nog weinig zijn, vóór
-    het duurder wordt.
-  * google_trends migreert naar de toekomstige naar-buiten-rol (rol 2
-    in het website-performance-vs-naar-buiten-ontwerp uit blok 3).
-  * verkoopdoel_2026_q4 hoort op context/missie-niveau, gediend door
-    alle rollen vanuit hun eigen verantwoordelijkheid, niet als
-    accountability van één rol. Apart uitdenken. De pairs_sold-
-    accountability op analyst blijft tot dan ongemoeid.
-
 ## Afgesloten 17 juni (blok 3): Plausible verrijkt
 
 - `plausible_stats` (GrowthAnalyst) verrijkt: aggregate haalt nu
@@ -327,6 +302,32 @@ Plan-uur plus woord-vinder-machine.
   - pytrends = toekomstige Rol-2-skill (eerder TrendScout genoemd).
   - GSC search terms (must-have) komen NIET uit de Plausible Stats API maar
     uit GSC zelf; eigen verrijkingsblok op gsc_performance, zelfde patroon.
+
+## Afgesloten 17 juni (blok 4): analyst-record opgeschoond
+
+- `analyst`-record naar v8 via governance amend (G3-escalatie → founder
+  approve → Secretary adopt → governance_changed). Purpose aangescherpt:
+  "Data en inzicht omzetten in bruikbaar advies dat Nooch.earth gezond,
+  vindbaar en groeiend houdt." Twee accountabilities verwijderd:
+  "maandrapportage opstellen voor stakeholders" (gedekt door dagelijkse
+  Field Note, geen aparte skill) en "taalgebruik per locale bewaken"
+  (geen skill-dekking, wens voor later). Vijf keepers over: pairs_sold-
+  goal-derived, bezoekersdata duiden, locale-analyse, dagelijkse Field
+  Note, site monitoren. Skills ongemoeid.
+
+- MBTI ISTJ vastgelegd als rol-karakter (documentatie; RoleDefinition
+  heeft nog geen veld voor MBTI of leesbare naam).
+
+- Geparkeerd (drie):
+  * Rol-metadata/persona-laag: leesbare naam los van role_id, plus
+    MBTI-veld. Binnenkort oppakken nu de rollen nog weinig zijn, vóór
+    het duurder wordt.
+  * google_trends migreert naar de toekomstige naar-buiten-rol (rol 2
+    in het website-performance-vs-naar-buiten-ontwerp uit blok 3).
+  * verkoopdoel_2026_q4 hoort op context/missie-niveau, gediend door
+    alle rollen vanuit hun eigen verantwoordelijkheid, niet als
+    accountability van één rol. Apart uitdenken. De pairs_sold-
+    accountability op analyst blijft tot dan ongemoeid.
 
 ## Principes die niet mogen driften
 
@@ -366,14 +367,12 @@ Plan-uur plus woord-vinder-machine.
   Uitfilteren verandert B/C-verdeling niet (gemeten), maar verschuift matchende
   rol van noochville naar analyst. Cosmetisch, geen veiligheidsprobleem.
   Beslissing uitgesteld.
-- **Durable-reject bevestiging, smart WIP,
-  requirements-dev.txt**: open uit vorige sessies, ongewijzigd.
-- **Project b88d2ddaea33** (analyst discovery via plausible_stats): correct
-  geblokkeerd op blocked_on=analyst, wacht op Plausible-credential in .env.
-  Geen recovery nodig, geen stale-cleanup. Project bestaat zoals het hoort:
-  zichtbare blockage tot de credential beschikbaar is. Onblok-trigger: zodra
-  Plausible-sleutel in .env staat, kan een nieuwe analyst-trigger de
-  discovery-run starten.
+- **Durable-reject**: feature gebouwd (commit `87b91a5`), bevestigingstest
+  nog niet. Smart WIP en requirements-dev.txt: open uit vorige sessies.
+- **Project b88d2ddaea33** (analyst discovery via plausible_stats):
+  credential-conditie ingelost (.env bevat nu PLAUSIBLE_API_KEY). Echte
+  blokkade is de event-handshake: Noochie's advies bereikt de analyst niet
+  terug om de discovery-run te hervatten. Nog open.
 - **C-trechter dedup dood-tot-eerste-geboorte**: `_funnel_c_proposal` vergelijkt
   `gap_key` (afgeleid via `_role_id_from_gap`, top-3 tokens) tegen `rec.id`.
   Seed- en handmatige sensed-records hebben korte, leesbare namen die nooit
@@ -430,6 +429,10 @@ Plan-uur plus woord-vinder-machine.
   aan library-entries gekoppeld worden, of dat ze parallelle data
   blijven.
 
+- **Regeneratief-pagina schrijven**: kwam 17 juni twee keer boven als
+  concrete actie — field-note-aanbeveling én Noochie-oordeel. Content-
+  backlog, geen code.
+
 - **Ingestie-rol nog te bouwen**: zes notes zijn nu handmatig
   toegevoegd via seed-script. Voor schaalbare ingestie van fuzzy
   input is een dialoog-rol nodig die we vrijdag 12 juni hebben
@@ -467,11 +470,7 @@ Plan-uur plus woord-vinder-machine.
   drieën gevraagd. Bewust besluiten hoe verder: accepteren, scherper
   benoemen, of branch-based review afdwingen.
 
-- **Cleanup-review PENDING (31 items)**: data/cleanup_review_2026-06-16.json
-  staat klaar. Stefan vervangt PENDING door forbidden/approved/
-  escalated/ignore per term, daarna:
-  python scripts/library_cleanup.py --apply
-  Niet snel tussendoor doen — aparte sessie met verse blik.
+- **Cleanup-review**: 31 items wachten op triage, werkplek = inbox.
 
 - **Approved-status verfijning**: onderscheid tussen "approved voor
   onderzoek" (research-rollen mogen data verzamelen, geen content)
@@ -502,16 +501,15 @@ Plan-uur plus woord-vinder-machine.
 
 ## Evaluatie-checkpoints
 
-### B-observer pad — beslissing na ~1-2 weken data
+### B-observer pad — beslissing na 7 live pulsen
 
-- Wanneer beslissen we of de coherentiepoort blokkerend wordt op B, observerend
-  blijft, of weggaat?
-- Kalibratie-criterium nog te kiezen: vals-positieven (vague-verdict op
-  legitieme means-gaps) versus vals-negatieven (coherent-verdict op rommel).
-- Concreet: na de eerste week B-observer logs handmatig doornemen, per
-  observer-verdict checken of de mens dezelfde beslissing zou hebben genomen.
-  Bij ≥X% overeenstemming overwegen naar blokkerend. Drempel X nog te bepalen
+- Trigger: na 7 live pulsen (~1 echte week) de B-observer logs handmatig
+  doornemen, per verdict checken of de mens dezelfde beslissing zou hebben
+  genomen.
+- Kalibratie-criterium: vals-positieven (vague-verdict op legitieme means-gaps)
+  versus vals-negatieven (coherent-verdict op rommel). Drempel X nog te bepalen
   op basis van werkelijk aantal items in de logs.
+- Beslissing: coherentiepoort blokkerend maken, observerend houden, of weghalen.
 
 ### Eerste live vague-verdict B-observer (45-min run 14 juni avond)
 
@@ -570,13 +568,11 @@ Niet in deze sessie.
    heeft nu een handler. Eerst `role_id` controleren (item aangemaakt vóór
    `bf10ca0` — heeft nog geen `role_id` in context, fallback via `classify_gap`
    treedt in werking). Via `python -m nooch_village.inbox approve <id>`.
-3. **Echte supervised live run met sleutels**: sluitstuk van de lus. Plausible +
-   Google Trends + LLM écht aanroepen, one-shot controleren, dan vrijgeven.
-4. **LLM-trechter voor C-en verdachte-B-spanningen**: governance-voorstel pas na
+3. **LLM-trechter voor C-en verdachte-B-spanningen**: governance-voorstel pas na
    LLM-coherentiecheck, ook B-spanningen met lage score (< 0.20) erdoor sturen.
-5. **Slimme WIP** (prioriteit-eviction, backpressure) + **synthesizer-rol** die
+4. **Slimme WIP** (prioriteit-eviction, backpressure) + **synthesizer-rol** die
    open spanningen batcht en de hefboom kiest.
-6. Cockpit aan live data hangen (records/inbox/proces), met de auth-grens erin.
-7. CI: pytest bij elke commit.
-8. `openlibrary_v2`-activatie NIET reflexief goedkeuren: API is per-boek, niet
+5. Cockpit aan live data hangen (records/inbox/proces), met de auth-grens erin.
+6. CI: pytest bij elke commit.
+7. `openlibrary_v2`-activatie NIET reflexief goedkeuren: API is per-boek, niet
    corpus-breed. Laat onbemand tot er een echte per-boek use case is.
