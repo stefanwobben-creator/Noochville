@@ -60,9 +60,14 @@ class FieldNoteSkill(Skill):
         prompt = (
             f"Je bent de Growth Analyst van Nooch.earth. Missie:\n{MISSION}\n\n"
             f"Hier is de groei-data van vandaag (JSON):\n{self._data_block(plausible, trends)}\n\n"
-            "Schrijf een korte Field Note in het Nederlands (max 180 woorden): wat valt op in het "
-            "verkeer en de trends, wat betekent dit voor de missie-gedreven groei, en wat is de "
-            "belangrijkste actie voor morgen. Nuchter, geen marketingtaal."
+            "Schrijf een Field Note in het Nederlands (max 250 woorden), nuchter en zonder "
+            "marketingtaal. Behandel: (1) wat opvalt in het verkeer en de trends, (2) wat dit "
+            "betekent voor de missie-gedreven groei, (3) de belangrijkste actie voor morgen. "
+            "Verweef in punt 1 de concrete website-data waar die aanwezig is: de gemiddelde "
+            "bezoekduur als engagement-signaal, de drukste pagina's, de belangrijkste "
+            "verkeersbronnen, de sterkste landen (internationale spreiding), en opvallende "
+            "UTM- of campagnebronnen. Noem alleen velden die echt in de data staan; laat lege "
+            "velden weg en verzin niets."
         )
         llm = reason(prompt)
         header = f"# Field Note {today}\n\n"
