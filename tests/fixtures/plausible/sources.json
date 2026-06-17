@@ -1,0 +1,60 @@
+{
+  "results": [
+    {
+      "source": "Direct / None",
+      "visitors": 47
+    },
+    {
+      "source": "Google",
+      "visitors": 39
+    },
+    {
+      "source": "bluemarble",
+      "visitors": 7
+    },
+    {
+      "source": "hetkanwel.nl",
+      "visitors": 5
+    },
+    {
+      "source": "Bing",
+      "visitors": 4
+    },
+    {
+      "source": "Ecosia",
+      "visitors": 4
+    },
+    {
+      "source": "shopify_email",
+      "visitors": 4
+    },
+    {
+      "source": "thebluemarble.club",
+      "visitors": 3
+    },
+    {
+      "source": "DuckDuckGo",
+      "visitors": 2
+    },
+    {
+      "source": "Instagram",
+      "visitors": 2
+    },
+    {
+      "source": "deondernemer.nl",
+      "visitors": 2
+    },
+    {
+      "source": "duurzaam-ondernemen.nl",
+      "visitors": 2
+    },
+    {
+      "source": "shopify.com",
+      "visitors": 2
+    },
+    {
+      "source": "circularfootwearinitiative.com",
+      "visitors": 1
+    }
+  ]
+}

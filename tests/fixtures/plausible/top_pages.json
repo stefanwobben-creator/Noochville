@@ -1,0 +1,60 @@
+{
+  "results": [
+    {
+      "page": "/",
+      "visitors": 116
+    },
+    {
+      "page": "/collections",
+      "visitors": 4
+    },
+    {
+      "page": "/collections/all",
+      "visitors": 4
+    },
+    {
+      "page": "/policies/privacy-policy",
+      "visitors": 4
+    },
+    {
+      "page": "/products/the-269-hi-natural",
+      "visitors": 4
+    },
+    {
+      "page": "/account/unsubscribe",
+      "visitors": 3
+    },
+    {
+      "page": "/products/the-269-off-white",
+      "visitors": 3
+    },
+    {
+      "page": "/policies/terms-of-service",
+      "visitors": 2
+    },
+    {
+      "page": "/products/the-269-black",
+      "visitors": 2
+    },
+    {
+      "page": "/blogs/news",
+      "visitors": 1
+    },
+    {
+      "page": "/blogs/news/from-shoe-size-to-foot-size",
+      "visitors": 1
+    },
+    {
+      "page": "/blogs/news/instant-impact-made-on-demand",
+      "visitors": 1
+    },
+    {
+      "page": "/pages/size-chart",
+      "visitors": 1
+    },
+    {
+      "page": "/services",
+      "visitors": 1
+    }
+  ]
+}
