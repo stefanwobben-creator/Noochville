@@ -429,9 +429,13 @@ Plan-uur plus woord-vinder-machine.
   aan library-entries gekoppeld worden, of dat ze parallelle data
   blijven.
 
-- **Regeneratief-pagina schrijven**: kwam 17 juni twee keer boven als
-  concrete actie — field-note-aanbeveling én Noochie-oordeel. Content-
-  backlog, geen code.
+- **Regeneratief-pagina**: kwam 17 juni meermaals boven (field-note-aanbeveling
+  + drie Noochie-oordelen). Content-backlog, geen code. Drie stappen:
+  1. Research eerst: regeneratief in combinatie met footwear/sneakers, is dit
+     een echte kans?
+  2. Pas daarna een draft, mét productieketen, materialen en eerlijke prijs
+     (niet kaal SEO, conform Noochie's transparantie-waarschuwing).
+  3. Draft ter controle naar Noochie.
 
 - **Ingestie-rol nog te bouwen**: zes notes zijn nu handmatig
   toegevoegd via seed-script. Voor schaalbare ingestie van fuzzy
