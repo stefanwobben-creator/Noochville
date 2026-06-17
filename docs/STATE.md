@@ -275,6 +275,32 @@ Plan-uur plus woord-vinder-machine.
   Both-ways gevalideerd: in-memory injectie van "zzz_spook" geeft spook-
   lijst `['librarian:zzz_spook']`; schijf bleef ongewijzigd (v3).
 
+## Afgesloten 17 juni (blok 4): analyst-record opgeschoond
+
+- `analyst`-record naar v8 via governance amend (G3-escalatie → founder
+  approve → Secretary adopt → governance_changed). Purpose aangescherpt:
+  "Data en inzicht omzetten in bruikbaar advies dat Nooch.earth gezond,
+  vindbaar en groeiend houdt." Twee accountabilities verwijderd:
+  "maandrapportage opstellen voor stakeholders" (gedekt door dagelijkse
+  Field Note, geen aparte skill) en "taalgebruik per locale bewaken"
+  (geen skill-dekking, wens voor later). Vijf keepers over: pairs_sold-
+  goal-derived, bezoekersdata duiden, locale-analyse, dagelijkse Field
+  Note, site monitoren. Skills ongemoeid.
+
+- MBTI ISTJ vastgelegd als rol-karakter (documentatie; RoleDefinition
+  heeft nog geen veld voor MBTI of leesbare naam).
+
+- Geparkeerd (drie):
+  * Rol-metadata/persona-laag: leesbare naam los van role_id, plus
+    MBTI-veld. Binnenkort oppakken nu de rollen nog weinig zijn, vóór
+    het duurder wordt.
+  * google_trends migreert naar de toekomstige naar-buiten-rol (rol 2
+    in het website-performance-vs-naar-buiten-ontwerp uit blok 3).
+  * verkoopdoel_2026_q4 hoort op context/missie-niveau, gediend door
+    alle rollen vanuit hun eigen verantwoordelijkheid, niet als
+    accountability van één rol. Apart uitdenken. De pairs_sold-
+    accountability op analyst blijft tot dan ongemoeid.
+
 ## Afgesloten 17 juni (blok 3): Plausible verrijkt
 
 - `plausible_stats` (GrowthAnalyst) verrijkt: aggregate haalt nu
