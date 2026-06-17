@@ -275,6 +275,29 @@ Plan-uur plus woord-vinder-machine.
   Both-ways gevalideerd: in-memory injectie van "zzz_spook" geeft spook-
   lijst `['librarian:zzz_spook']`; schijf bleef ongewijzigd (v3).
 
+## Afgesloten 17 juni (blok 3): Plausible verrijkt
+
+- `plausible_stats` (GrowthAnalyst) verrijkt: aggregate haalt nu
+  visitors/pageviews/visit_duration (bounce_rate eruit). Vier resiliente
+  breakdowns toegevoegd: top_pages (event:page), sources (visit:source),
+  countries (visit:country), utm_sources (visit:utm_source), limit=10.
+  Falende breakdown valt terug op [] — de puls wordt nooit afgebroken door
+  een netwerk- of rate-limit-fout op een breakdown. Fixture-getest (5 golden
+  responses), resilience-test met geïnjecteerde exception. Suite 257 → 263.
+
+- Geparkeerd ontwerp (niet gebouwd): rol-model gesneden op de website-grens.
+  Rol 1 "website-performance" draagt Plausible EN GSC (gedrag op de site plus
+  hoe mensen ons vinden; later ook 404/conversie/broken links). Rol 2 kijkt
+  naar buiten (bredere zoekvraag, pytrends). Huidige code wijkt af: Plausible
+  op GrowthAnalyst, GSC op PerformanceScout. Consolidatie plus hernoeming is
+  een toekomstige governance-herstructurering.
+  - GSC zit op de grens: "queries die clicks brachten" hoort bij Rol 1, de
+    "hoge impressies, lage CTR"-kansensnede bij Rol 2. Eén bron, twee rollen,
+    via aparte skills op gedeelde OAuth-plumbing.
+  - pytrends = toekomstige Rol-2-skill (eerder TrendScout genoemd).
+  - GSC search terms (must-have) komen NIET uit de Plausible Stats API maar
+    uit GSC zelf; eigen verrijkingsblok op gsc_performance, zelfde patroon.
+
 ## Principes die niet mogen driften
 
 - **Spine blijft dom**: gate G0-G4, prioriteit Missie > Policy > Strategy > Goal,
