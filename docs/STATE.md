@@ -310,6 +310,10 @@ Plan-uur plus woord-vinder-machine.
   Falende breakdown valt terug op [] — de puls wordt nooit afgebroken door
   een netwerk- of rate-limit-fout op een breakdown. Fixture-getest (5 golden
   responses), resilience-test met geïnjecteerde exception. Suite 257 → 263.
+  FieldNoteSkill-prompt uitgebreid (commit `c8833ee`): LLM krijgt nu
+  expliciete instructie om bezoekduur, top-pagina's, bronnen, landen en
+  UTM-bronnen te verwerken. Rijkdom stroomt automatisch door naar Ronnie
+  (die de volledige field note als tekst leest). Blok 3 daarmee dicht.
 
 - Geparkeerd ontwerp (niet gebouwd): rol-model gesneden op de website-grens.
   Rol 1 "website-performance" draagt Plausible EN GSC (gedrag op de site plus
