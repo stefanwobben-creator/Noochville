@@ -60,8 +60,14 @@ def extract(text: str, library: dict) -> tuple[list[str], list[str]]:
     if raw is None:
         raise RuntimeError("LLM niet beschikbaar — stel ANTHROPIC_API_KEY of GEMINI_API_KEY in.")
 
+    # Strip markdown code fence als de LLM die toevoegt (```json ... ```)
+    stripped = raw.strip()
+    if stripped.startswith("```"):
+        stripped = "\n".join(stripped.split("\n")[1:])
+        stripped = stripped.rstrip("`").rstrip()
+
     try:
-        terms = json.loads(raw)
+        terms = json.loads(stripped)
         if not isinstance(terms, list):
             raise ValueError("LLM-output is geen array")
     except json.JSONDecodeError as exc:
