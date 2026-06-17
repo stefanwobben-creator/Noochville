@@ -2,7 +2,7 @@
 
 ## Waar we staan
 
-- Code op ~10, 221 tests groen.
+- Code op ~10, 257 tests groen (suite groeide fors sinds 14 juni: 221 → 257).
 - **LLM-timeout fix** (commit `851c7da`): `anthropic.Anthropic(timeout=30.0)` en
   `GenerateContentConfig(http_options=HttpOptions(timeout=30))` op beide backends.
   Bare `except Exception: pass` vervangen door `logging.warning("LLM <backend> faalde: %s", exc)`.
@@ -255,6 +255,26 @@ Plan-uur plus woord-vinder-machine.
   3 forbidden, 8 ignored. Library uitgebreid van 69 naar 79
   entries.
 
+## Afgesloten 17 juni (blok 2): wachters en governance-consistentie
+
+- Audit-trail-gat noochie_weighed_in gedicht (commit `77885e0`):
+  `self.bus.subscribe("noochie_weighed_in", self._observe)` toegevoegd
+  aan Village. Regressietest `test_audit_trail.py` bewaakt dit: haalt
+  de subscribe-regel weg → test rood om de juiste reden (beide kanten
+  gevalideerd).
+
+- library_list via governance-amend toegekend aan librarian-record:
+  `amend_role`-voorstel (proposer: human-cli) doorliep G0-G4, werd
+  direct aangenomen, Secretary schreef record naar v3. Audit-trail
+  toont `proposal_id=41142db48186/65dc8945ace9` (twee runs, idempotent
+  op skills). `governance_records.json` is gitignored runtime-state;
+  de governance-weg zelf is het bewijs.
+
+- Wachter `test_record_registry_consistentie.py` toegevoegd: controleert
+  dat elke skill in elk governance-record ook bestaat in de SkillRegistry.
+  Both-ways gevalideerd: in-memory injectie van "zzz_spook" geeft spook-
+  lijst `['librarian:zzz_spook']`; schijf bleef ongewijzigd (v3).
+
 ## Principes die niet mogen driften
 
 - **Spine blijft dom**: gate G0-G4, prioriteit Missie > Policy > Strategy > Goal,
@@ -371,16 +391,11 @@ Plan-uur plus woord-vinder-machine.
     terug op fallback-tekst. In productie (echte dag-cadans) geen
     probleem. In dev-pulse wel. Niet acuut, wel observatie.
 
-  - Audit-trail-gat: noochie_weighed_in vuurt wel, maar staat niet
-    in Village's bus.subscribe(..., self._observe)-lijst. Noochie's
-    oordeel verdwijnt uit de audit-trail tenzij 'once()' gebruikt
-    wordt. Eén-regel-fix in Village.start, niet acuut. Te combineren
-    met audit-trail-completeness-check later.
-
   - Ronnie's event-subscription is goed voor nu (8 types), maar mist
     bewust gsc_pulse_completed (te frequent voor bulletin) en
-    noochie_weighed_in (audit-trail-gat). Beide kunnen later
-    toegevoegd worden als de bulletin-toon erbij gediend is.
+    noochie_weighed_in (toegevoegd aan audit-trail, 17 juni). Beide
+    kunnen later toegevoegd worden als de bulletin-toon erbij gediend
+    is.
 
   - Patroon vandaag bevestigd: een ontdekking leidt vaak tot een fix
     die tot een nieuwe ontdekking leidt. Eerste Ronnie-bulletin
@@ -398,13 +413,6 @@ Plan-uur plus woord-vinder-machine.
   governance-ritueel-doc). Allemaal technisch verdedigbaar, geen van
   drieën gevraagd. Bewust besluiten hoe verder: accepteren, scherper
   benoemen, of branch-based review afdwingen.
-
-- **LibraryListSkill koppeling aan librarian-record**: skill bestaat in
-  SkillRegistry, maar librarian-record in governance_records.json heeft
-  'm niet in z'n skills-lijst. Beslissing 16 juni: koppeling volgt
-  via governance-amendement in latere sessie. Principe vastgelegd:
-  skills mogen los bestaan in de registry, formele koppeling aan een
-  rol gaat altijd via governance.
 
 - **Cleanup-review PENDING (31 items)**: data/cleanup_review_2026-06-16.json
   staat klaar. Stefan vervangt PENDING door forbidden/approved/
@@ -425,6 +433,19 @@ Plan-uur plus woord-vinder-machine.
   mechanisme. Stefan krijgt per geëxtraheerde term een inbox-item
   met escalated/forbidden/ignore-knoppen. Consistenter met andere
   goedkeuringsroutes in het systeem.
+
+- **Gate-check add_skills**: een spook-skill in een voorstel
+  sneuvelt nu pas in `test_record_registry_consistentie` (na adoptie).
+  Grotere broer: G0 of een aparte pre-adoptie-check valideert
+  `add_skills` al bij indiening tegen de registry, zodat een typefout
+  direct een `proposal_invalid` geeft. Niet gebouwd — uitgesteld.
+
+- **Durabel vastleggen welke skills een Inhabitant nódig heeft**:
+  nu kan een `use_skill`-aanroep in code en het governance-record
+  stil uit elkaar lopen (code vraagt skill X, record kent skill X
+  niet toe). Geen runtime-bewaking van die mismatch. Architectuurvraag:
+  moet dit in het record (required_skills naast skills), in de test-
+  suite, of als invariant in `use_skill`? Te besluiten later.
 
 ## Evaluatie-checkpoints
 
