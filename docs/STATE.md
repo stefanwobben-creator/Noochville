@@ -222,6 +222,39 @@ Twee commits, beide kennis-laag-fundament.
   Link-integriteit gecontroleerd, geen dangling refs. Eerste
   end-to-end-test van het kennislaag-fundament in praktijk.
 
+## Afgesloten 17 juni
+
+Plan-uur plus woord-vinder-machine.
+
+- Plan-uur uitgevoerd: dependency-diagram getekend voor alle 11
+  te-bouwen functies. Drie onafhankelijke ketens (GEMET, insights,
+  woord-vinder). GEMET-track geparkeerd voor na 24 augustus
+  (5 SP). Resterende 6 SP verdeeld in twee tracks: insights
+  (3.5 SP) en woord-vinder (2.5 SP). Woord-vinder gekozen voor
+  eerst, want sneller operationeel.
+
+- Term-extractor gebouwd (scripts/extract_terms.py): LLM-gebaseerde
+  extractie van kandidaat-termen uit een tekstbestand, filtering
+  tegen library. Aangescherpte prompt sluit geografie, procesbegrip
+  en eigen merknaam uit. 4 tests groen.
+
+- Review-tabel + --apply toegevoegd aan extract_terms.py: zelfde
+  patroon als library_cleanup. Schrijft data/extract_review_
+  YYYY-MM-DD.json met PENDING-decisions, --apply blokkeert tot
+  alle PENDING vervangen zijn door escalated/forbidden/ignore.
+  5 nieuwe tests, 255 totaal. Machine 3 (woord-vinder) operationeel.
+
+- Bug-fix in extract_terms: strip markdown-fence van LLM-output.
+  Wijziging werd ongevraagd door Claude Code gedaan tijdens een
+  test-run, achteraf geaccepteerd vanwege technische correctheid
+  maar gemarkeerd als afwijking van stop-regel-discipline.
+
+- Eerste echte test op pillar-content "What is a plant-based shoe
+  actually made of?": 18 termen geëxtraheerd, 0 bekend, 18 nieuw.
+  Stefan triageerde handmatig via JSON-bewerking: 7 escalated,
+  3 forbidden, 8 ignored. Library uitgebreid van 69 naar 79
+  entries.
+
 ## Principes die niet mogen driften
 
 - **Spine blijft dom**: gate G0-G4, prioriteit Missie > Policy > Strategy > Goal,
@@ -378,6 +411,20 @@ Twee commits, beide kennis-laag-fundament.
   escalated/ignore per term, daarna:
   python scripts/library_cleanup.py --apply
   Niet snel tussendoor doen — aparte sessie met verse blik.
+
+- **Approved-status verfijning**: onderscheid tussen "approved voor
+  onderzoek" (research-rollen mogen data verzamelen, geen content)
+  en "approved voor SEO" (content-rollen mogen content maken).
+  Een term kan onderzoekswaardig zijn zonder content-waardig te
+  zijn. Implementatie: ofwel twee aparte statussen (research_ready,
+  seo_ready), ofwel één approved met sub-veld. Te besluiten in
+  latere sessie. Niet in machine 3 of machine 2 ingebouwd.
+
+- **Triage via JSON-bewerking is werkbaar voor MVP maar niet
+  schaalbaar**: volgende stap (na machine 2): triage via inbox-
+  mechanisme. Stefan krijgt per geëxtraheerde term een inbox-item
+  met escalated/forbidden/ignore-knoppen. Consistenter met andere
+  goedkeuringsroutes in het systeem.
 
 ## Evaluatie-checkpoints
 
