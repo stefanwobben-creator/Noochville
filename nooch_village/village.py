@@ -125,6 +125,7 @@ class Village:
         self.bus.subscribe("means_gap_sensed",            self._observe)
         self.bus.subscribe("means_gap_sensed",            self._on_means_gap)
         self.bus.subscribe("bulletin_geschreven",         self._observe)
+        self.bus.subscribe("noochie_weighed_in",          self._observe)
         self.coherence_observer = CoherenceObserver(self.bus)
         self.root = self.reconciler.build()
 
