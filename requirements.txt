@@ -6,11 +6,11 @@ requests>=2.31
 pytrends>=4.9
 pandas>=2.0          # dependency van pytrends
 
-# Optioneel: één LLM-key in .env geeft een rijkere, missie-gedreven Field Note
-# anthropic          # met ANTHROPIC_API_KEY -> claude-sonnet
-# google-genai       # met GEMINI_API_KEY    -> gemini
+# LLM (één key in .env geeft rijkere Field Note)
+anthropic==0.109.1          # met ANTHROPIC_API_KEY -> claude-sonnet
+google-genai==2.8.0         # met GEMINI_API_KEY    -> gemini
 
-# Extra skills om later uit je oude repo te porten:
-# google-api-python-client + google-auth-oauthlib   # GSC / Drive
-# beautifulsoup4                                     # trustpilot
-# pydantic                                           # SeoOpportunity-datamodel
+# GSC / Drive / datamodel
+google-api-python-client==2.197.0
+google-auth-oauthlib==1.4.0
+pydantic>=2.0,<3

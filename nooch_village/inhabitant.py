@@ -21,7 +21,7 @@ class Inhabitant(threading.Thread):
         self.registry = registry
         self.context = context
         self.inbox = Inbox(self.id)
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
         self.log = logging.getLogger(f"village.{self.id}")
         self._last_reflect: float = 0.0
         # Productie: wekelijks; demo/test: reflect_interval_seconds=0 → altijd
@@ -508,7 +508,7 @@ class Inhabitant(threading.Thread):
     def run(self) -> None:
         self.log.info("ontwaakt [source=%s] | purpose=%s | skills=%s",
                       self.record.source, self.dna.purpose, self.dna.skills)
-        while not self._stop.is_set():
+        while not self._stop_event.is_set():
             try:
                 self.tick()
             except Exception as e:
@@ -537,7 +537,7 @@ class Inhabitant(threading.Thread):
         self.log.info("DNA herladen (v%s) | skills=%s", record.version, self.dna.skills)
 
     def stop(self) -> None:
-        self._stop.set()
+        self._stop_event.set()
 
 
 class Circle(Inhabitant):
