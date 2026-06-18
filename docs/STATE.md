@@ -372,6 +372,45 @@ Cockpit-bevindingen uit de eerste live run:
 genummerde stap 2 (`ngram_2019_cutoff` approve) eerst un-deferren of via de
 governance-route, niet via inbox approve.
 
+## Afgesloten 18 juni (blok 2): CI, bug-fix, deps, keywords_everywhere
+
+- **CI opgezet** (``.github/workflows/ci.yml``): GitHub Actions op de Noochville-repo,
+  advies-modus, Python 3.14 (matcht lokaal), draait ``pytest -q`` op elke push.
+  Branch-plus-CI is nu de werkflow.
+
+- **Bug gevangen die lokaal onzichtbaar was**: ``Inhabitant._stop`` (een
+  ``threading.Event``) botste met ``threading.Thread._stop`` → ``TypeError: 'Event'
+  object is not callable`` bij ``join()``, alleen in CI. Hernoemd naar ``_stop_event``
+  (commit ``0f394e0``). Les: nooit een ``Thread``-subclass-attribuut ``_stop`` (of
+  andere Thread-internals) noemen.
+
+- **``requirements.txt`` structureel compleet gemaakt**: was lazy/gemockt. Gedeclareerd
+  met gepinde versies: ``pydantic>=2.0,<3``, ``anthropic==0.109.1``,
+  ``google-genai==2.8.0``, ``google-api-python-client==2.197.0``,
+  ``google-auth-oauthlib==1.4.0``.
+
+- **``keywords_everywhere``-skill gebouwd** (spec-first, branch ``skill/keywords-everywhere``,
+  CI-groen, gemerged op main, commit ``82b072b``): haalt echte search volume, CPC,
+  competitie en 12-maands trend per keyword uit de Keywords Everywhere API.
+  ``cost="credits"`` — nooit in de dagpuls; on-demand op gecureerde shortlist.
+  ``side_effect_free=True``. 6 tests in ``tests/test_keywords_everywhere.py``.
+
+- **Scout v3** — ``keywords_everywhere`` toegekend via ``amend_role``-voorstel
+  (proposer ``human-cli``, proposal ``5980bc58f3fa``), volledig door G0-G4, Secretary
+  geadopteerd, DNA live herladen. Skills: ``['gsc_performance', 'gsc_report',
+  'keywords_everywhere']``. 279 tests groen.
+
+## Openstaand / let op (18 juni blok 2)
+
+- **Venv is gebroken** (wijst naar oud ``~/Downloads/noochville``-pad). ``./venv/bin/python``
+  werkt, ``./venv/bin/pip`` niet — gebruik ``python -m pip``. Fix: recreëren uit de
+  nu-complete ``requirements.txt`` en controleren dat het 279 blijft.
+- **``KEYWORDS_EVERYWHERE_API_KEY`` moet in ``.env``** (regenereren; oude sleutel is
+  in een chat-sessie verschenen).
+- **``pandas>=2.0`` trekt in CI al ``pandas 3.0.3`` binnen**; gemockt dus geen pijn,
+  overweeg een cap (``pandas>=2.0,<3``).
+- **cost-gate** (puls weigert ``cost != "free"``): blijft genoteerd, niet gebouwd.
+
 ## Principes die niet mogen driften
 
 - **Spine blijft dom**: gate G0-G4, prioriteit Missie > Policy > Strategy > Goal,
