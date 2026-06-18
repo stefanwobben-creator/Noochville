@@ -32,6 +32,7 @@ _FIELDS = "title,abstract,year,citationCount,tldr"
 
 class SemanticScholarSkill(Skill):
     name = "semscholar_tldr"
+    cost = "rate_limited"
     description = (
         "Zoekt wetenschappelijke papers op via Semantic Scholar (tldr-veld, "
         "optionele API-key via .env, backoff bij 429, locale-bewust, fail-closed)."

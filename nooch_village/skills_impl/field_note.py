@@ -14,6 +14,8 @@ MISSION = (
 
 class FieldNoteSkill(Skill):
     name = "field_note"
+    cost = "free"
+    side_effect_free = False
     description = "Duidt de groei-data tegen de Nooch-missie en schrijft een Field Note. Senst verval."
 
     def run(self, payload: dict, context) -> dict:

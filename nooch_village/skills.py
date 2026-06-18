@@ -11,6 +11,31 @@ class Skill(ABC):
     needs_secret: bool = False
     description: str = ""
 
+    cost: str | None = None
+    """Puls-veiligheid en gemeten externe call-kost die de (toekomstige) puls-gate bewaakt.
+    Verplicht voor elke concrete subklasse; None is niet toegestaan in productie.
+      "free"         — veilig herhaald in de puls (lokale I/O, eigen API, geen quota)
+      "rate_limited" — mag in de puls met backoff (onofficieel endpoint, throttling)
+      "credits"      — gemeten/ongebonden kost, niet in de continue puls
+    NB: kleine begrensde LLM-tokenkost wordt hier bewust niet gevlagd; daarom blijven
+    field_note en bulletin_schrijven "free".
+    """
+
+    side_effect_free: bool = True
+    """True = run() leest alleen en muteert geen state, intern noch extern.
+    Schrijft de skill een bestand/record of doet hij een externe actie, dan False.
+    """
+
+    input_schema: str = ""
+    """Beschrijving van de verwachte payload-sleutels (proza of pseudo-schema).
+    Zie run()-docstring voor details.
+    """
+
+    output_schema: str = ""
+    """Beschrijving van de teruggegeven dict-sleutels (proza of pseudo-schema).
+    Zie run()-docstring voor details.
+    """
+
     @abstractmethod
     def run(self, payload: dict, context) -> dict:
         ...

@@ -5,6 +5,7 @@ from nooch_village.skills import Skill
 
 class SiteHealthSkill(Skill):
     name = "site_health"
+    cost = "free"
     description = "Checkt of een site live is en haalt de paginatitel op (echte HTTP GET)."
 
     def run(self, payload: dict, context) -> dict:

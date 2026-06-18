@@ -14,6 +14,7 @@ from nooch_village.skills import Skill
 
 class OpenlibrarySearchInsideSkill(Skill):
     name = "openlibrary_search_inside"
+    cost = "free"
     description = (
         "Zoekt op OpenLibrary naar boeken die een term bevatten en retourneert "
         "titels, auteurs en onderwerp-tags (geen key vereist, fail-closed)."

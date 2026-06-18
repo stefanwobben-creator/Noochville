@@ -36,6 +36,7 @@ def _reconstruct_abstract(inverted_index: dict | None) -> str:
 
 class OpenalexSkill(Skill):
     name = "openalex_evidence"
+    cost = "free"
     description = (
         "Haalt academische evidentie op via OpenAlex (geen key, polite pool, "
         "gesorteerd op citaties, locale-bewust, fail-closed)."
