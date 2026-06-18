@@ -1,0 +1,16 @@
+{
+  "data": [
+    {
+      "keyword": "digital marketing",
+      "vol": 90500,
+      "cpc": { "currency": "$", "value": "9.96" },
+      "competition": 0.62,
+      "trend": [
+        { "month": "January", "year": 2026, "value": 110000 }
+      ]
+    }
+  ],
+  "credits": 148520,
+  "credits_consumed": 1,
+  "time": 0.31
+}
