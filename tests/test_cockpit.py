@@ -1,0 +1,113 @@
+"""Read-only tests voor de cockpit. Geen Village, geen netwerk-afhankelijkheid
+buiten een korte loopback-server op poort 0."""
+from __future__ import annotations
+
+import json
+import os
+import threading
+import time
+import urllib.request
+import urllib.error
+from http.server import HTTPServer
+
+import pytest
+
+from nooch_village import cockpit
+
+
+def _seed(tmp_path):
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "governance_records.json").write_text(json.dumps({
+        "noochville": {
+            "id": "noochville", "type": "circle", "parent": None,
+            "definition": {"purpose": "anchor", "accountabilities": [],
+                           "domains": [], "skills": [], "policies": ["plasticvrij"]},
+            "members": ["analyst"], "version": 2, "archived": False, "source": "seed",
+        },
+        "analyst": {
+            "id": "analyst", "type": "role", "parent": "noochville",
+            "definition": {"purpose": "Data omzetten in advies",
+                           "accountabilities": ["bezoekersdata duiden"],
+                           "domains": ["analytics"], "skills": ["plausible_stats"],
+                           "policies": []},
+            "members": [], "version": 8, "archived": False, "source": "seed",
+        },
+    }), encoding="utf-8")
+    (data / "human_inbox.json").write_text(json.dumps({
+        "aaa111aaa111": {
+            "id": "aaa111aaa111", "type": "means_gap", "subject": "ngram_2019_cutoff",
+            "context": {"gap_key": "ngram_2019_cutoff",
+                        "description": "ngram-data stopt bij 2019", "role_id": "analyst"},
+            "status": "pending", "created_at": time.time(),
+            "resolved_at": None, "resolution": None,
+        },
+    }), encoding="utf-8")
+    (data / "projects.json").write_text(json.dumps({
+        "p1p1p1p1p1p1": {
+            "id": "p1p1p1p1p1p1", "owner": "analyst", "scope": "GSC menukaart",
+            "trigger": "human", "status": "queued", "blocked_on": None,
+            "created_at": time.time(), "updated_at": time.time(), "outcome": None,
+        },
+    }), encoding="utf-8")
+    return str(data)
+
+
+def test_gather_reads_three_stores(tmp_path):
+    snap = cockpit.gather(_seed(tmp_path))
+    assert {r["id"] for r in snap["roster"]} == {"noochville", "analyst"}
+    assert snap["inbox"][0]["subject"] == "ngram_2019_cutoff"
+    assert snap["projects"][0]["owner"] == "analyst"
+
+
+def test_gather_missing_dir_is_safe(tmp_path):
+    snap = cockpit.gather(str(tmp_path / "leeg"))
+    assert snap == {**snap, "roster": [], "inbox": [], "projects": []}
+
+
+def test_render_contains_key_facts(tmp_path):
+    page = cockpit.render_html(cockpit.gather(_seed(tmp_path)))
+    assert "analyst" in page and "ngram_2019_cutoff" in page
+    assert "plausible_stats" in page and "GSC menukaart" in page
+    assert "read-only" in page.lower()
+
+
+def test_render_escapes_html(tmp_path):
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "governance_records.json").write_text(json.dumps({
+        "x": {"id": "x", "type": "role", "parent": None,
+              "definition": {"purpose": "<script>alert(1)</script>",
+                             "accountabilities": [], "domains": [], "skills": [],
+                             "policies": []},
+              "members": [], "version": 1, "archived": False, "source": "seed"},
+    }), encoding="utf-8")
+    page = cockpit.render_html(cockpit.gather(str(data)))
+    assert "<script>alert(1)</script>" not in page
+    assert "&lt;script&gt;" in page
+
+
+def test_server_get_ok_post_blocked(tmp_path):
+    data_dir = _seed(tmp_path)
+    httpd = HTTPServer(("127.0.0.1", 0), cockpit.make_handler(data_dir))
+    port = httpd.server_address[1]
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as resp:
+            assert resp.status == 200
+            assert b"analyst" in resp.read()
+        with pytest.raises(urllib.error.HTTPError) as exc:
+            urllib.request.urlopen(
+                urllib.request.Request(f"http://127.0.0.1:{port}/", data=b"x",
+                                       method="POST"), timeout=5)
+        assert exc.value.code == 405
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        t.join(timeout=5)
+
+
+def test_serve_refuses_non_local_host():
+    with pytest.raises(SystemExit):
+        cockpit.serve(host="0.0.0.0", port=0)
