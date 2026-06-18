@@ -22,3 +22,6 @@ build/
 
 # OS
 .DS_Store
+
+code_export.txt
+STATE_export.txt
