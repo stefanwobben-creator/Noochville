@@ -39,6 +39,9 @@ class FieldNoteSkill(Skill):
 
         out_dir = os.path.join(context.data_dir, "output")
         os.makedirs(out_dir, exist_ok=True)
+        raw_path = os.path.join(out_dir, f"pulse_raw_{today}.json")
+        with open(raw_path, "w") as f:
+            json.dump({"plausible": plausible, "trends": trends}, f, ensure_ascii=False, indent=2)
         path = os.path.join(out_dir, f"field_note_{today}.md")
         with open(path, "w") as f:
             f.write(body)
@@ -66,7 +69,9 @@ class FieldNoteSkill(Skill):
             "Verweef in punt 1 de concrete website-data waar die aanwezig is: de gemiddelde "
             "bezoekduur als engagement-signaal, de drukste pagina's, de belangrijkste "
             "verkeersbronnen, de sterkste landen (internationale spreiding), en opvallende "
-            "UTM- of campagnebronnen. Noem alleen velden die echt in de data staan; laat lege "
+            "UTM- of campagnebronnen. Verweef ook het trends-signaal: welke zoektermen stijgen "
+            "of dalen (met hun interest-waarden), en wat de stijgende termen betekenen voor de "
+            "Nooch-doelgroep. Noem alleen velden die echt in de data staan; laat lege "
             "velden weg en verzin niets."
         )
         llm = reason(prompt)

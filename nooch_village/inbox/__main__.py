@@ -280,7 +280,8 @@ def _approve_means_gap(inbox, item, _load_fn=None):
     time.sleep(0.1)
     v.submit_proposal(proposal)
 
-    for _ in range(50):
+    _timeout = int(v.context.settings.get("inbox_approve_timeout", "5"))
+    for _ in range(_timeout * 10):
         if outcome:
             break
         time.sleep(0.1)
