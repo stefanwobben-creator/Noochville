@@ -135,6 +135,7 @@ def _locale_term_groups(context) -> dict[str, list[tuple[str, str]]]:
 
 class NgramCultureSkill(Skill):
     name = "ngram_culture"
+    cost = "rate_limited"
     description = (
         "Analyseert de lange-termijn culturele taalverschuiving via Google Books Ngram Viewer. "
         "Geeft per term/locale de richting (stijgend/dalend/vlak) over decennia. "

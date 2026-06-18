@@ -61,6 +61,7 @@ def _read_keywords(context) -> list[str]:
 
 class TrendsSkill(Skill):
     name = "google_trends"
+    cost = "rate_limited"
     description = (
         "Haalt Google Trends-data op per geo/locale "
         "(interesse + gerelateerde zoekopdrachten). "

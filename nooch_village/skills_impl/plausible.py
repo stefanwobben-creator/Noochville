@@ -16,6 +16,7 @@ _BREAKDOWNS = [
 
 class PlausibleSkill(Skill):
     name = "plausible_stats"
+    cost = "free"
     needs_secret = True
     description = "Haalt echte bezoekersdata uit de Plausible Stats API (geen mock)."
 

@@ -20,6 +20,7 @@ FORBIDDEN_CLAIM = ["biologisch afbreekbaar", "100%", "co2-neutraal", "co2 neutra
 
 class LibraryListSkill(Skill):
     name = "library_list"
+    cost = "free"
     description = "Geeft alle termen terug voor een of meer statussen, optioneel gefilterd op locale."
 
     _DEFAULT_STATUSES = ("approved", "insight_statement")
@@ -48,6 +49,7 @@ class LibraryListSkill(Skill):
 
 class LibraryLookupSkill(Skill):
     name = "library_lookup"
+    cost = "free"
     description = "Leest de status van een woord uit de bibliotheek (read-only, voor iedereen)."
 
     def run(self, payload: dict, context) -> dict:
@@ -60,6 +62,7 @@ class LibraryLookupSkill(Skill):
 
 class KeywordReviewSkill(Skill):
     name = "keyword_review"
+    cost = "free"
     description = "Beoordeelt een kandidaat-woord tegen de missie (LLM of heuristiek) + vraag-bewijs."
 
     def run(self, payload: dict, context) -> dict:

@@ -5,6 +5,8 @@ from nooch_village.skills import Skill
 
 class BudgetSkill(Skill):
     name = "budget_adjust"
+    cost = "free"
+    side_effect_free = False
     description = "Past de begroting aan: echte, duurzame mutatie op data/budget.json."
 
     def run(self, payload: dict, context) -> dict:

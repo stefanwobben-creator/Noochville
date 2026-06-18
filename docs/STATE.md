@@ -545,6 +545,8 @@ governance-route, niet via inbox approve.
   niet toe). Geen runtime-bewaking van die mismatch. Architectuurvraag:
   moet dit in het record (required_skills naast skills), in de test-
   suite, of als invariant in `use_skill`? Te besluiten later.
+- **cost-gate** (puls weigert `cost != "free"`): genoteerd, niet gebouwd.
+  Trigger = credits-skill voorgesteld voor de puls óf creditsaldo zakt.
 
 ## Evaluatie-checkpoints
 

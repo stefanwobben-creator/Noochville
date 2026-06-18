@@ -9,6 +9,8 @@ log = logging.getLogger(__name__)
 
 class BulletinSchrijvenSkill(Skill):
     name = "bulletin_schrijven"
+    cost = "free"
+    side_effect_free = False
     description = "Schrijft het dagelijkse dorpsbulletin via LLM op basis van village-events."
 
     def run(self, payload: dict, context) -> dict:

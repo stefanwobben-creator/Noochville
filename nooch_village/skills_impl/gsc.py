@@ -44,6 +44,7 @@ def _bucket(position: float, impressions: int) -> str:
 
 class GscPerformanceSkill(Skill):
     name = "gsc_performance"
+    cost = "free"
     description = (
         "Haalt Search Analytics-data op uit Google Search Console (dimensie 'query', "
         "laatste 28 dagen) en classificeert queries in page1 / high_potential / "
