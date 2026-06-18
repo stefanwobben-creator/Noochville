@@ -24,8 +24,14 @@ from nooch_village.inbox.__main__ import _approve_means_gap
 
 # ── Fake Village ──────────────────────────────────────────────────────────────
 
+class _FakeContext:
+    settings: dict = {}
+
+
 class _FakeVillage:
     """Lichtgewicht village-vervanger: echte EventBus, synchrone event-firing."""
+
+    context = _FakeContext()
 
     def __init__(self, *, fire_event: str = "governance_changed", veto_gate: str | None = None):
         self.bus = EventBus(name="test")
