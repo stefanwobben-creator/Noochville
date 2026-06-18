@@ -329,6 +329,49 @@ Plan-uur plus woord-vinder-machine.
     accountability van één rol. Apart uitdenken. De pairs_sold-
     accountability op analyst blijft tot dan ongemoeid.
 
+## Afgesloten 18 juni
+
+Stap 1 cockpit (read-only) gebouwd en gecommit. Drie schone commits.
+
+- **Cockpit read-only** (`nooch_village/cockpit.py`, commit `2b14988`): stdlib
+  `http.server`, geen nieuwe dependency, bindt uitsluitend op `127.0.0.1` en
+  weigert een niet-lokale host. Geen schrijfpad (`POST` = 405). Leest de drie
+  stores read-only via `Records`/`HumanInbox`/`ProjectLedger` (zelfde patroon als
+  `inbox/__main__.py`) en rendert één platte HTML-pagina: roster, inbox, proces.
+  Pure `gather` + `render_html`, server apart. 6 tests in `tests/test_cockpit.py`.
+  Draaien: `python -m nooch_village.cockpit`, dan `http://127.0.0.1:8765`.
+- **Ontwerpnotitie** `docs/ONTWERP_cockpit_rol_skill_werkbank.md`: cockpit als
+  mens-kant van de auth-grens, twee activiteiten (authoring versus
+  review-dan-submit), twee harde grenzen (alles via de gate, skills mint je niet
+  vanuit de UI), bouwvolgorde read-only, authoring, gesensede review, lichte triage.
+- **Test-fix** (commit `fd9ce10`): `_FakeVillage` kreeg een `context` zodat de
+  means_gap-approve test slaagt zonder de productie-handler te versoepelen. Een
+  Claude Code-poging om `inbox/__main__.py` te wijzigen met een
+  `try/except AttributeError` (productie verzwakken voor een incomplete fake) is
+  teruggedraaid; de fout is in de test gerepareerd waar hij hoort. 269 groen.
+- **Discipline**: twee slips gevangen door de stop-regel, een verkeerd gelabelde
+  verzamel-commit en de bovenstaande productie-versoepeling, beide rechtgezet
+  vóór commit.
+
+Cockpit-bevindingen uit de eerste live run:
+
+- **means_gaps staan op deferred, niet pending.** `ngram_2019_cutoff`,
+  `openlibrary_v2`, `nl_corpus_coverage` plus de `Missie_alignment_ok_*`-reeks
+  zijn deferred. De oude stap 2 ("approve `ngram_2019_cutoff` via de inbox-CLI")
+  is daarmee geblokkeerd: `resolve()` weigert non-pending. Pending-inbox leeg, gezond.
+- **`tijdgeest_wachter` v64, `kennis_scout` v50.** Vermoedelijk fossiel van de oude
+  `amend_role`-churn van vóór de means-gap-routing. Te verifiëren: bumpt een puls
+  die versies nog? Zo niet, dood en begraven.
+- **analyst discovery-project `blocked`, `blocked_on=analyst`, sinds 14 juni.** De
+  open event-handshake (`b88d2ddaea33`): Noochie's advies bereikt de analyst niet
+  terug. Nu zichtbaar zonder commando.
+- Verfijning genoteerd: cockpit-header telt alleen pending als "open"; deferred
+  apart tellen (deferred is geparkeerd, niet done).
+
+**Volgende:** cockpit stap 2 (rol/skill-authoring) per de ontwerpnotitie. De oude
+genummerde stap 2 (`ngram_2019_cutoff` approve) eerst un-deferren of via de
+governance-route, niet via inbox approve.
+
 ## Principes die niet mogen driften
 
 - **Spine blijft dom**: gate G0-G4, prioriteit Missie > Policy > Strategy > Goal,
