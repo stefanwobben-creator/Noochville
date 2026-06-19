@@ -4,7 +4,7 @@ pytest>=8.0
 # Kern van NoochVillage + groei-puls
 requests>=2.31
 pytrends>=4.9
-pandas>=2.0          # dependency van pytrends
+pandas>=2.0,<3       # dependency van pytrends; cap op 3 tot compatibiliteit bevestigd
 
 # LLM (één key in .env geeft rijkere Field Note)
 anthropic==0.109.1          # met ANTHROPIC_API_KEY -> claude-sonnet
