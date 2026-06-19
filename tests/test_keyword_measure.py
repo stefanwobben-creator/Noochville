@@ -76,3 +76,18 @@ def test_credits_spent_binnen_plafond_na_geslaagde_meting():
     ceiling = batch["estimated_credits"]
     result = measure_batch(batch, approval=_approval(ceiling=ceiling), runner=runner)
     assert result["credits_spent"] <= ceiling
+
+
+def test_gate_toetst_op_echte_kandidaten_niet_op_estimated_credits():
+    """Gate moet blokkeren als len(candidates) het plafond overschrijdt,
+    ook als estimated_credits lager is (misvormde batch). Runner mag niet worden aangeroepen."""
+    runner = _FakeRunner()
+    batch = _batch()
+    # Manipuleer estimated_credits zodat het lager is dan het werkelijke aantal kandidaten
+    echte_tel = len(batch["candidates"])
+    assert echte_tel >= 2, "batch heeft te weinig kandidaten voor deze test"
+    batch["estimated_credits"] = echte_tel - 1  # goedkoper dan de werkelijkheid
+    ceiling = echte_tel - 1                      # plafond ertussenin: boven estimated, onder echte tel
+    with pytest.raises(ValueError, match="creditplafond"):
+        measure_batch(batch, approval=_approval(ceiling=ceiling), runner=runner)
+    assert runner.call_count == 0
