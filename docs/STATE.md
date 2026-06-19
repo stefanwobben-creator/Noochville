@@ -388,6 +388,18 @@ Niet in deze sessie.
     Librarian-beslissingen met KennisScout-bewijs, `keyword_evidence`-events,
     herbeoordeelde escalaties.
 
+**Wiring-gaps (observatie-run 2026-06-19)**
+
+(a) **Ronnie blind voor de dag (prioriteit)**: het bulletin abonneert alleen op
+    het `dag_begint`-event van de TimeKeeper, niet op `pulse_completed` /
+    `gsc_pulse_completed` / Field Note. Gevolg: het schreef "stille dag" terwijl
+    negen inwoners draaiden. Mens-gerichte output zonder gate, dus een vals
+    venster op het dorp. Fix: Ronnie op de pulse-events abonneren.
+(b) **locale ontbreekt in de GSC-flow**: PerformanceScout publiceert
+    `keyword_proposed` zonder locale in de demand, dus KennisScout grondt met
+    `locale=""` (geen taalsleutel). Fix: PerformanceScout een locale laten
+    meegeven, afgeleid uit de GSC-property of de querytaal.
+
 **Roadmap (daarna)**
 
 - Governance-ritueel bouwen — na herlezing Holacracy v5 constitutie (art. 3 + 4);
