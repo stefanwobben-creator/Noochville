@@ -1,7 +1,8 @@
 """OpenAlexSkill — capability "openalex_evidence".
 
-Zoekt academische werken op via de OpenAlex API (open, geen key vereist).
-Polite pool: hogere rate-limit als het mailto-adres in de User-Agent staat.
+Zoekt academische werken op via de OpenAlex API.
+Authenticatie via OPENALEX_API_KEY (vereist — skill faalt bewust closed zonder key).
+Polite pool: mailto-adres in de User-Agent voor hogere rate-limit.
 Mailto komt uit context.settings["openalex_mailto"] (settings.ini of .env).
 
 Segmentatie:
@@ -9,12 +10,19 @@ Segmentatie:
   Resultaten gesorteerd op citaties (meest geciteerd eerst).
   `no_data: True` onderscheidt "API werkt, maar niets gevonden" van een echte fout.
 
-Fail-closed: netwerk- of parse-fouten retourneren {"error": ...}, nooit mock-data.
+Rate-limit-gedrag:
+  Bij HTTP 429: exponentiële backoff (2**attempt + jitter), max 4 pogingen.
+  Daarna: raise (use_skill vangt dit op als {"error": ...}).
+
+Fail-closed: ontbrekende key of definitieve fout → raise, nooit mock-data.
 """
 from __future__ import annotations
+import os
 import time
+import random
 import urllib.request
 import urllib.parse
+import urllib.error
 import json
 from nooch_village.skills import Skill
 
@@ -36,13 +44,21 @@ def _reconstruct_abstract(inverted_index: dict | None) -> str:
 
 class OpenalexSkill(Skill):
     name = "openalex_evidence"
-    cost = "free"
+    needs_secret = True
+    cost = "rate_limited"
     description = (
-        "Haalt academische evidentie op via OpenAlex (geen key, polite pool, "
-        "gesorteerd op citaties, locale-bewust, fail-closed)."
+        "Haalt academische evidentie op via OpenAlex (API-key vereist, polite pool, "
+        "gesorteerd op citaties, backoff bij 429, locale-bewust, fail-closed)."
     )
 
     def run(self, payload: dict, context) -> dict:
+        key = (getattr(context, "settings", {}).get("OPENALEX_API_KEY")
+               or os.getenv("OPENALEX_API_KEY"))
+        if not key:
+            raise RuntimeError(
+                "OPENALEX_API_KEY ontbreekt in .env — openalex_evidence faalt bewust closed"
+            )
+
         term   = payload.get("term", "").strip()
         locale = payload.get("locale", "")
         if not term:
@@ -54,18 +70,14 @@ class OpenalexSkill(Skill):
 
         q   = urllib.parse.quote(term)
         url = (f"{_BASE}?search={q}"
-               f"&per-page={limit}"
+               f"&per_page={limit}"
                f"&sort=cited_by_count:desc"
                f"&select={_SELECT}"
-               f"&mailto={urllib.parse.quote(mailto)}")
+               f"&mailto={urllib.parse.quote(mailto)}"
+               f"&api_key={urllib.parse.quote(key)}")
 
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": ua})
-            with urllib.request.urlopen(req, timeout=12) as resp:
-                data = json.loads(resp.read().decode())
-        except Exception as e:
-            return {"error": f"OpenAlex niet bereikbaar: {e}",
-                    "hits": [], "term": term, "locale": locale}
+        req  = urllib.request.Request(url, headers={"User-Agent": ua})
+        data = self._fetch_with_backoff(req)
 
         results = data.get("results", [])
         total   = data.get("meta", {}).get("count", len(results))
@@ -97,3 +109,15 @@ class OpenalexSkill(Skill):
 
         time.sleep(0.5)
         return {"term": term, "locale": locale, "total": total, "hits": hits}
+
+    def _fetch_with_backoff(self, req, timeout: int = 12, max_retries: int = 4) -> dict:
+        for attempt in range(max_retries):
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    return json.loads(resp.read().decode())
+            except urllib.error.HTTPError as e:
+                if e.code == 429 and attempt < max_retries - 1:
+                    time.sleep(2 ** attempt + random.uniform(0, 1))
+                    continue
+                raise
+        raise RuntimeError("OpenAlex rate-limit overschreden na 4 pogingen")
