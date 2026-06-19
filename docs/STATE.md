@@ -103,6 +103,13 @@
   termen; CLI (clickstream) geeft echte volumes. NL "vegan schoenen" = 3.4k CLI,
   DE "vegane schuhe" = 48k CLI. Conclusie: `data_source="cli"` default voor
   NL/DACH/Nordics, vastgelegd in DESIGN doc §6.
+- **Academische grounding live**: KennisScout grondt elke binnenkomende term
+  tegen OpenAlex (citatie-rang, key-auth) en Semantic Scholar (recente literatuur
+  + tldr). Per_page-bug gefixed; 429-backoff actief; beide sockets groen op echte keys.
+- **Keyword-pijplijn compleet op main**: matrix → batch → measure → integration
+  → inbox, lineair, CI-groen. nl/core village-run bevestigd (15 credits, Librarian
+  en KennisScout verwerken gepubliceerde termen). FR/ES/IT (Romance word-order)
+  gecommit en live getest.
 
 ## Openstaand / let op
 
@@ -368,6 +375,18 @@ Niet in deze sessie.
     Librarian-approved. Beide gates moeten groen zijn voor verdere verwerking.
 (e) **Venv repair**: nieuw venv bouwen vanuit volledige `requirements.txt`,
     verifiëren dat 297 tests groen blijven.
+
+**KennisScout — follow-up**
+
+(a) **OpenAlex relevance-sort hybride**: nu gesorteerd op citaties; overweeg
+    hybride (relevance-score + citatie-floor). Niet blind flippen: 3-punter
+    (drempel bepalen, recency-spanning, test-set voor vergelijking).
+(b) **cost-taxonomie voor gratis-laag-met-dagquota**: huidig schema (`free` /
+    `rate_limited` / `credits`) vangt dagquota-grenzen niet. Extra label of
+    `daily_limit`-veld overwegen.
+(c) **Observatie-run**: downstream-effect van de nu-gevulde grounding zien —
+    Librarian-beslissingen met KennisScout-bewijs, `keyword_evidence`-events,
+    herbeoordeelde escalaties.
 
 **Roadmap (daarna)**
 

@@ -1,5 +1,27 @@
 # NoochVille — Changelog
 
+## Afgesloten 2026-06-19: Academische grounding live
+
+KennisScout grondt nu elke binnenkomende term tegen twee echte bronnen:
+OpenAlex (gezag, citatie-rang) en Semantic Scholar (relevante recente
+literatuur plus tldr). Beide sockets stonden al in het DNA (v50) en waren al
+bedraad in `_on_keyword_proposed`; ze misten alleen authenticatie.
+
+- **openalex.py**: van keyless/polite-pool (sinds 13-02-2026 stil gebroken,
+  409 na de 100-credit testtoelage, door KennisScout als warning weggeslikt)
+  naar key-auth (`api_key` in URL), `needs_secret=True`, `cost "free"` →
+  `"rate_limited"`, 429-backoff gekopieerd uit `semantic_scholar.py`.
+  Pre-existing bug meegefixed: `per-page` → `per_page` (limit gaf default 25).
+- **`semantic_scholar.py`**: ongewijzigd, was al key-ready; key in `.env`,
+  `x-api-key`-header actief.
+- **Live-bevestigd** op "plant-based leather": beide bronnen geven echte hits.
+  Gemerged naar main, CI groen. Geen governance-amend nodig.
+- **Inzicht**: de twee bronnen zijn complementair, niet redundant. De
+  "bedraad beide"-keuze boven "kies er een" werd door de rooktest gevalideerd.
+- **Geparkeerd**: OpenAlex relevance-sort hybride (relevance + citatie-floor)
+  als bewuste 3-punter met recency-spanning en drempel-test; cost-taxonomie
+  vangt "gratis-laag-met-dagquota" nog niet.
+
 ## Afgesloten 18 juni (blok 2): CI, bug-fix, deps, keywords_everywhere
 
 - **CI opgezet** (`.github/workflows/ci.yml`): GitHub Actions op de Noochville-repo,
