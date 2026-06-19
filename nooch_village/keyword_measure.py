@@ -27,10 +27,10 @@ def measure_batch(
         raise PermissionError("batch niet goedgekeurd — runner niet aangeroepen")
 
     ceiling = approval.get("credits_ceiling")
-    if ceiling is None or batch["estimated_credits"] > ceiling:
+    if ceiling is None or len(batch["candidates"]) > ceiling:
         raise ValueError(
             f"batch overschrijdt goedgekeurd creditplafond "
-            f"({batch['estimated_credits']} > {ceiling})"
+            f"({len(batch['candidates'])} kandidaten > plafond {ceiling})"
         )
 
     results = runner(batch["candidates"], batch["country"], batch["data_source"])
