@@ -21,7 +21,8 @@ from nooch_village.util import atomic_write_json
 
 
 _VALID_STATUSES = {"pending", "approved", "rejected", "amended", "deferred"}
-_VALID_TYPES    = {"escalation", "activation", "keyword", "means_gap", "suggestion"}
+_VALID_TYPES    = {"escalation", "activation", "keyword", "means_gap", "suggestion",
+                   "keyword_batch"}
 
 
 class HumanInbox:
@@ -173,6 +174,40 @@ class HumanInbox:
                     "Kandidaat voor een nieuw voorstel — ter inspectie, "
                     "geen automatische geboorte."
                 ),
+            },
+            "status":     "pending",
+            "created_at": time.time(),
+            "resolved_at": None,
+            "resolution":  None,
+        }
+        self._save()
+        return iid
+
+    def add_keyword_batch(self, market: str, tier: str,
+                          candidates: list[str], estimated_credits: int) -> str:
+        """Voeg een keyword-batch-item toe ter goedkeuring door de mens.
+
+        Dedup op {market}/{tier} bij status pending: dezelfde batch wordt niet tweemaal
+        toegevoegd zolang hij nog open staat. Na afsluiten mag dezelfde batch opnieuw.
+        Retourneert het item-id.
+        """
+        dedup_key = f"{market}/{tier}"
+        for item in self._items.values():
+            if (item["type"] == "keyword_batch"
+                    and item.get("subject") == dedup_key
+                    and item["status"] == "pending"):
+                return item["id"]
+
+        iid = uuid.uuid4().hex[:12]
+        self._items[iid] = {
+            "id":      iid,
+            "type":    "keyword_batch",
+            "subject": dedup_key,
+            "context": {
+                "market":            market,
+                "tier":              tier,
+                "candidates":        candidates,
+                "estimated_credits": estimated_credits,
             },
             "status":     "pending",
             "created_at": time.time(),

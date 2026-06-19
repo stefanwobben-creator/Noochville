@@ -50,7 +50,8 @@ def _status_icon(status: str) -> str:
 
 
 def _type_icon(typ: str) -> str:
-    return {"escalation": "🏛️", "activation": "🔧", "keyword": "📚"}.get(typ, "?")
+    return {"escalation": "🏛️", "activation": "🔧", "keyword": "📚",
+            "keyword_batch": "📊"}.get(typ, "?")
 
 
 def _print_item_summary(item: dict) -> None:
@@ -173,6 +174,21 @@ def _print_item_full(item: dict) -> None:
         print(f"  amend   <id> <tekst>   → notitie toevoegen, opnieuw beoordelen")
         print(f"  defer   <id> [reden]   → uitstellen, blijft geregistreerd")
 
+    elif item["type"] == "keyword_batch":
+        ctx        = item.get("context", {})
+        candidates = ctx.get("candidates", [])
+        print(f"\n── Batch ──")
+        print(f"Markt       : {ctx.get('market')}")
+        print(f"Tier        : {ctx.get('tier')}")
+        print(f"Credits     : {ctx.get('estimated_credits')} (geschat, 1 credit per keyword)")
+        print(f"Kandidaten ({len(candidates)}):")
+        for c in candidates:
+            print(f"  · {c}")
+        print(f"\n── Acties ──")
+        print(f"  approve <id> [reden]   → credits uitgeven + meten + publiceren naar curatie-lus")
+        print(f"  reject  <id> [reden]   → afwijzen, geen credits uitgegeven")
+        print(f"  defer   <id> [reden]   → uitstellen, blijft geregistreerd")
+
     res = item.get("resolution")
     if res:
         print(f"\n── Beslissing ──")
@@ -189,6 +205,85 @@ def _load():
     from nooch_village.village import Village
     v = Village(heartbeat_seconds=86400)
     return v.human_inbox, v
+
+
+def _approve_keyword_batch(inbox, item, iid: str, reason: str, _load_fn=None) -> None:
+    """Approve een keyword_batch: meet via KE, publiceer levende termen naar curatie-lus.
+
+    Spiegelt de means_gap-lifecycle: Village laden → start → actie → poll/timeout → stop.
+    De uitvoeringskern (run_approved_keyword_batch) is al getest; dit is dunne glue.
+    """
+    from nooch_village.keyword_integration import run_approved_keyword_batch
+    from nooch_village.keyword_runner import make_keywords_runner
+    from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
+
+    ctx   = item["context"]
+    batch = {
+        "market":            ctx["market"],
+        "country":           ctx["market"],
+        "tier":              ctx["tier"],
+        "data_source":       "cli",
+        "candidates":        ctx["candidates"],
+        "estimated_credits": ctx["estimated_credits"],
+    }
+
+    load_fn = _load_fn or _load
+    _, v    = load_fn()
+
+    min_volume = int(v.context.settings.get("keyword_batch_min_volume", "100"))
+    decided: list[str] = []
+
+    def _on_decided(e):
+        decided.append(e.data.get("word", ""))
+
+    v.bus.subscribe("keyword_decided", _on_decided)
+
+    v.start()
+    time.sleep(0.1)
+
+    skill   = KeywordsEverywhereSkill()
+    runner  = make_keywords_runner(skill, v.context)
+    library = v.context.library
+
+    try:
+        summary = run_approved_keyword_batch(
+            batch, runner, v.bus, library,
+            from_id="scout",
+            min_volume=min_volume,
+            approved_by="human",
+        )
+    except Exception as exc:
+        v.stop()
+        print(f"\n  ✘ Meting mislukt: {exc}")
+        print(f"     Item blijft pending — controleer het creditplafond of de API-sleutel.")
+        return
+
+    # Wacht tot KennisScout en Librarian de gepubliceerde termen verwerkt hebben
+    _timeout = int(v.context.settings.get("inbox_approve_timeout", "5"))
+    expected = len(summary["published"])
+    for _ in range(_timeout * 10):
+        if len(decided) >= expected:
+            break
+        time.sleep(0.1)
+
+    v.stop()
+
+    inbox.resolve(iid, "approved", reason=reason, extra=summary)
+    market = ctx["market"]
+    tier   = ctx["tier"]
+    print(f"\n✅ Batch {market}/{tier} goedgekeurd.")
+    print(f"   Credits uitgegeven : {summary['credits_spent']}")
+    print(f"   Gemeten            : {summary['measured']}")
+    print(f"   Boven min_volume   : {summary['live']} (drempel: {min_volume})")
+    print(f"   Gepubliceerd       : {len(summary['published'])}")
+    for w in summary["published"]:
+        print(f"     · {w}")
+    if summary["skipped_dedup"]:
+        print(f"   Al bekend (dedup)  : {len(summary['skipped_dedup'])}")
+    if summary["errors"]:
+        print(f"   Fouten             : {len(summary['errors'])}")
+        for e in summary["errors"]:
+            print(f"     · {e['word']}: {e['error']}")
 
 
 def _approve_means_gap(inbox, item, _load_fn=None):
@@ -403,6 +498,9 @@ def main(argv: list[str]) -> None:
                                      by="human")
             print(f"✅ '{word}' goedgekeurd → in bibliotheek als 'approved'.")
 
+        elif item["type"] == "keyword_batch":
+            _approve_keyword_batch(inbox, item, iid, reason)
+
     elif cmd == "reject":
         if len(argv) < 2:
             print("Gebruik: inbox reject <id> [reden]"); sys.exit(1)
@@ -457,6 +555,13 @@ def main(argv: list[str]) -> None:
                                      rationale=reason or "menselijk besluit via inbox",
                                      by="human")
             print(f"❌ '{word}' verboden → in bibliotheek als 'forbidden'.")
+
+        elif item["type"] == "keyword_batch":
+            # Geen credits uitgegeven, niets om terug te draaien
+            inbox.resolve(iid, "rejected", reason=reason)
+            print(f"❌ Batch '{item['subject']}' afgewezen. Geen credits uitgegeven.")
+            if reason:
+                print(f"   Reden: {reason}")
 
         else:
             inbox.resolve(iid, "rejected", reason=reason)
