@@ -27,7 +27,7 @@ def test_core_gb_uitsluitend_engels():
 
 
 def test_elke_kandidaat_minimaal_twee_woorden():
-    for market in ("nl", "de", "gb", "se"):
+    for market in ("nl", "de", "gb", "se", "fr", "es", "it"):
         for term in core_candidates(market):
             assert len(term.split()) >= 2, f"core '{term}' heeft minder dan 2 woorden ({market})"
         for term in longtail_candidates(market):
@@ -46,12 +46,31 @@ def test_onbekende_markt_raises_valueerror():
     with pytest.raises(ValueError, match="Onbekende markt"):
         core_candidates("xx")
     with pytest.raises(ValueError, match="Onbekende markt"):
-        longtail_candidates("fr")
+        longtail_candidates("xx")
 
 
 def test_output_gesorteerd_en_zonder_duplicaten():
-    for market in ("nl", "de", "gb", "se"):
+    for market in ("nl", "de", "gb", "se", "fr", "es", "it"):
         core = core_candidates(market)
         assert core == sorted(set(core)), f"core({market}) is niet gesorteerd of bevat duplicaten"
         longtail = longtail_candidates(market)
         assert longtail == sorted(set(longtail)), f"longtail({market}) is niet gesorteerd of bevat duplicaten"
+
+
+def test_romaanse_woordvolgorde_fr():
+    core = core_candidates("fr")
+    assert "chaussures vegan" in core, "FR core: verwacht 'chaussures vegan' (naamwoord eerst)"
+    assert "vegan chaussures" not in core, "FR core: 'vegan chaussures' mag niet voorkomen"
+
+
+def test_romaanse_woordvolgorde_es():
+    assert "zapatillas veganas" in core_candidates("es")
+
+
+def test_romaanse_woordvolgorde_it():
+    assert "scarpe vegane" in core_candidates("it")
+
+
+def test_longtail_fr_woordvolgorde():
+    longtail = longtail_candidates("fr")
+    assert "chaussures vegan femme" in longtail, "FR longtail: verwacht 'chaussures vegan femme'"
