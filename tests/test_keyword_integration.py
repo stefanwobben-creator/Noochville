@@ -75,7 +75,7 @@ def test_alleen_termen_boven_min_volume_worden_gepubliceerd():
 
 
 def test_gepubliceerde_demand_bevat_seo_data_en_consument_velden():
-    """KennisScout verwacht demand.locale; Librarian slaat demand op als evidence."""
+    """demand.locale en demand.signal worden correct doorgegeven aan de Librarian."""
     batch = _batch("fr")
     rows  = [{"keyword": "chaussures vegan", "vol": 10000, "cpc": 0.19, "competition": 0.62}]
     _, _, bus = _run(batch, rows, min_volume=100)
@@ -84,7 +84,7 @@ def test_gepubliceerde_demand_bevat_seo_data_en_consument_velden():
     demand = bus.events[0].data["demand"]
 
     # Consument-vereiste velden
-    assert demand["locale"] == "fr"          # KennisScout leest dit
+    assert demand["locale"] == "fr"
     assert demand["signal"] == "positive"    # conventie van alle callers
     assert demand["source"] == "keywords_everywhere"
 

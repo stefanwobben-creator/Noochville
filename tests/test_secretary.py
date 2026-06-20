@@ -2,7 +2,8 @@
 from __future__ import annotations
 import pytest
 from nooch_village.event_bus import EventBus, Event
-from nooch_village.governance import Secretary, proposal_to_dict
+from nooch_village.governance import Records, Secretary, proposal_to_dict, proposal_from_dict
+from nooch_village.human_inbox import HumanInbox
 from nooch_village.models import (
     Record, RoleDefinition, RecordType,
     Proposal, GovernanceChange, ChangeKind,
@@ -142,3 +143,64 @@ def test_verdict_unknown_proposal_is_ignored(sec):
                       "human"))
 
     assert changed == [] and rejected == []
+
+
+# ── remove_role adoption ──────────────────────────────────────────────────────
+
+def test_approve_escalation_populates_pending_and_adopts(tmp_path):
+    """Secretary._adopt archiveert een record bij REMOVE_ROLE na governance_verdict.
+
+    Simuleert Village-herstart: Secretary._pending is leeg, approve_escalation
+    herstelt het via store_pending, daarna adopteert governance_verdict de removal.
+    Drie asserties: _pending gevuld, rec.archived is True, governance_changed gepubliceerd.
+    """
+    path = str(tmp_path / "gov.json")
+    recs = Records(path)
+    root = Record(id="noochville", type=RecordType.CIRCLE, parent=None,
+                  definition=RoleDefinition(purpose="test", skills=[], policies=[]),
+                  members=["voorbeeld_rol"], source="seed")
+    recs.put(root)
+    rol = Record(id="voorbeeld_rol", type=RecordType.ROLE, parent="noochville",
+                 definition=RoleDefinition(purpose="test rol",
+                                           accountabilities=["iets periodiek doen"]),
+                 source="seed")
+    recs.put(rol)
+
+    bus = EventBus()
+    proposal = Proposal(
+        proposer_role="human",
+        change=GovernanceChange(kind=ChangeKind.REMOVE_ROLE, role_id="voorbeeld_rol"),
+        tension="test spanning",
+        trigger_example="structureel wekelijks terugkerend: trigger",
+        rationale="structureel doorlopend: rationale",
+        source="sensed",
+    )
+    proposal_dict = proposal_to_dict(proposal)
+    inbox = HumanInbox(str(tmp_path / "human_inbox.json"))
+    iid = inbox.add_escalation(proposal_dict, gate="G3",
+                               reason="rol heeft accountabilities")
+    assert inbox.get(iid)["context"]["proposal"] == proposal_dict
+
+    # Secretary met lege _pending simuleert Village-herstart
+    secretary = Secretary(recs, bus)
+    assert len(secretary._pending) == 0
+
+    changed: list[dict] = []
+    bus.subscribe("governance_changed", lambda e: changed.append(dict(e.data)))
+
+    # Herstel _pending vanuit opgeslagen proposal-dict (zoals approve_escalation doet)
+    reconstructed = proposal_from_dict(inbox.get(iid)["context"]["proposal"])
+    secretary.store_pending(reconstructed)
+    assert proposal.id in secretary._pending
+
+    # governance_verdict approve → Secretary._adopt → archivering
+    inbox.resolve(iid, "approved", reason="human goedkeuring")
+    bus.publish(Event("governance_verdict",
+                      {"proposal_id": proposal.id, "decision": "approve", "reason": "test"},
+                      "human"))
+
+    rec = recs.get("voorbeeld_rol")
+    assert rec is not None
+    assert rec.archived is True
+    assert len(changed) == 1
+    assert changed[0]["kind"] == "remove_role"

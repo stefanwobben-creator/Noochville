@@ -326,32 +326,3 @@ def migrate_records(records: Records) -> None:
     if changed:
         records.put(root)
 
-
-def activate_tijdgeest_wachter(records: Records) -> None:
-    """Idempotent: voeg ngram_culture toe aan tijdgeest_wachter zodra het record bestaat."""
-    rec = records.get("tijdgeest_wachter")
-    if rec is None or rec.archived:
-        return
-    if "ngram_culture" not in rec.definition.skills:
-        rec.definition.skills.append("ngram_culture")
-        records.put(rec)
-
-
-def activate_kennis_scout(records: Records) -> None:
-    """Idempotent: zet v1-skills in kennis_scout-record zodra het bestaat."""
-    rec = records.get("kennis_scout")
-    if rec is None or rec.archived:
-        return
-    _V1  = ["openalex_evidence", "semscholar_tldr"]
-    _OLD = ["openalex", "semantic_scholar", "openlibrary_search_inside"]
-    changed = False
-    for old in _OLD:
-        if old in rec.definition.skills:
-            rec.definition.skills.remove(old)
-            changed = True
-    for s in _V1:
-        if s not in rec.definition.skills:
-            rec.definition.skills.append(s)
-            changed = True
-    if changed:
-        records.put(rec)

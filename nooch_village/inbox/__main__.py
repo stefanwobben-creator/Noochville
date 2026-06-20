@@ -258,7 +258,7 @@ def _approve_keyword_batch(inbox, item, iid: str, reason: str, _load_fn=None) ->
         print(f"     Item blijft pending — controleer het creditplafond of de API-sleutel.")
         return
 
-    # Wacht tot KennisScout en Librarian de gepubliceerde termen verwerkt hebben
+    # Wacht tot Librarian de gepubliceerde termen verwerkt heeft
     _timeout = int(v.context.settings.get("inbox_approve_timeout", "5"))
     expected = len(summary["published"])
     for _ in range(_timeout * 10):
