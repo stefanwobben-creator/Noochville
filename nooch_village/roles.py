@@ -834,13 +834,31 @@ def advise_metrics(catalog: list[str], context) -> list[dict]:
 
 class Noochie(Inhabitant):
     """Belichaamt de missie, bepleit en genereert creatieve governance-voorstellen.
-    Geen domeinen, geen skills — alleen stem en ideeënmotor.
+    Schrijft ook het dagelijkse dorpsbulletin (bulletin-mandaat geabsorbeerd van Ronnie).
     Reageert op de Field Note en reflecteert periodiek met een nieuw voorstel."""
+
+    # ── bulletin-mandaat (afsplitsbaar blok, geabsorbeerd van Ronnie) ────────
+    _TRACK = (
+        "dag_begint",
+        "pulse_completed",
+        "keyword_decided",
+        "governance_changed",
+        "tension_sensed",
+        "means_gap_sensed",
+        "tijdgeest_pulse_completed",
+        "keyword_proposed",
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # ── missie-werk ───────────────────────────────────────────────────────
         self.react("pulse_completed", self._on_pulse_completed)
         self.react("project_discovery_ready", self._on_discovery_ready)
+        # ── bulletin-mandaat ──────────────────────────────────────────────────
+        self._events_today: list[dict] = []
+        for name in self._TRACK:
+            self.react(name, self._collect_event)
+        self.react("dag_eindigt", self._on_dag_eindigt)
 
     def _on_discovery_ready(self, event: Event) -> None:
         """Ontvang de menukaart van een discovery-project en produceer een advies.
@@ -938,35 +956,7 @@ class Noochie(Inhabitant):
         gap_key = f"creatief_voorstel_{h}"
         self._sense_gap(gap_key, result, kind="governance", min_count=2)
 
-
-class Ronnie(Inhabitant):
-    """Dorpschroniqueur: verzamelt events de hele dag en schrijft bij dag_eindigt
-    een bulletin via LLM.
-
-    Harde grens (_reflect):
-      Produceer UITSLUITEND means-gap-items — nooit governance-voorstellen of API-calls
-      buiten de eigen skills-lijst. Uitbreiding van capaciteit is mens-gated activatie.
-    """
-
-    _TRACK = (
-        "dag_begint",
-        "pulse_completed",
-        "keyword_decided",
-        "governance_changed",
-        "tension_sensed",
-        "means_gap_sensed",
-        "tijdgeest_pulse_completed",
-        "keyword_proposed",
-    )
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._events_today: list[dict] = []
-
-    def _setup_events(self) -> None:
-        for name in self._TRACK:
-            self.react(name, self._collect_event)
-        self.react("dag_eindigt", self._on_dag_eindigt)
+    # ── bulletin-mandaat (afsplitsbaar blok) ──────────────────────────────────
 
     def _collect_event(self, event: Event) -> None:
         self._events_today.append({
@@ -1006,6 +996,3 @@ class Ronnie(Inhabitant):
                                {"path": result["path"], "by": self.id,
                                 "event_count": result.get("event_count", 0)}, self.id))
         self.log.info("📋 bulletin gepubliceerd: %s", result["path"])
-
-    def _reflect(self) -> None:
-        pass

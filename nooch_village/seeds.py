@@ -227,6 +227,42 @@ def migrate_records(records: Records) -> None:
         trends.definition.skills.append("gsc_report")
         records.put(trends)
         changed = True
+    # ── Noochie absorbeert Ronnie's bulletin-mandaat ──────────────────────────
+    noochie = records.get("noochie")
+    if noochie is not None:
+        _NOOCHIE_PURPOSE = (
+            "De droom van NoochVille levend houden in het dagelijkse dorp, "
+            "en de brug zijn tussen The Source en de bewoners."
+        )
+        _NOOCHIE_ACCOUNTABILITIES = [
+            "de missie levend houden door elke veld-notitie tegen de missie te wegen",
+            "de brug zijn tussen The Source en het dorp, en The Source scherp houden",
+            "creatieve governance-voorstellen aandragen",
+            "het dagelijkse dorpsbulletin schrijven uit de village-events",
+        ]
+        noochie_changed = False
+        if noochie.definition.purpose != _NOOCHIE_PURPOSE:
+            noochie.definition.purpose = _NOOCHIE_PURPOSE
+            noochie_changed = True
+        if noochie.definition.accountabilities != _NOOCHIE_ACCOUNTABILITIES:
+            noochie.definition.accountabilities = _NOOCHIE_ACCOUNTABILITIES
+            noochie_changed = True
+        if "bulletin_schrijven" not in noochie.definition.skills:
+            noochie.definition.skills.append("bulletin_schrijven")
+            noochie_changed = True
+        if noochie_changed:
+            records.put(noochie)
+            changed = True
+    # ── Ronnie archiveren (audittrail bewaard, geen hard verwijderen) ─────────
+    ronnie = records.get("ronnie")
+    if ronnie is not None and not ronnie.archived:
+        ronnie.archived = True
+        records.put(ronnie)
+        changed = True
+    if "ronnie" in root.members:
+        root.members.remove("ronnie")
+        changed = True
+
     if changed:
         records.put(root)
 
@@ -239,30 +275,6 @@ def activate_tijdgeest_wachter(records: Records) -> None:
     if "ngram_culture" not in rec.definition.skills:
         rec.definition.skills.append("ngram_culture")
         records.put(rec)
-
-
-def activate_ronnie(records: Records) -> None:
-    """Idempotent: maak het Ronnie-record aan als seed-rol als hij nog niet bestaat."""
-    if records.get("ronnie") is not None:
-        return
-    root = records.root()
-    if root is None:
-        return
-    ronnie = Record(
-        id="ronnie",
-        type=RecordType.ROLE,
-        parent=root.id,
-        definition=RoleDefinition(
-            purpose="Schrijft het dagelijkse dorpsbulletin — warm, gemeenschapsgericht",
-            accountabilities=["dagelijks dorpsbulletin schrijven op basis van village-events"],
-            skills=["bulletin_schrijven"],
-        ),
-    )
-    ronnie.source = "seed"
-    records.put(ronnie)
-    if "ronnie" not in root.members:
-        root.members.append("ronnie")
-        records.put(root)
 
 
 def activate_kennis_scout(records: Records) -> None:

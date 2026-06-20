@@ -28,12 +28,13 @@ class BulletinSchrijvenSkill(Skill):
             event_regels = "(geen events vandaag)"
 
         if field_note:
-            fn_sectie = f"\nVeld-notitie van analyst van vandaag:\n{field_note}\n"
+            fn_sectie = f"\nVeld-notitie van vandaag:\n{field_note}\n"
         else:
             fn_sectie = "\n(Geen veld-notitie beschikbaar vandaag.)\n"
 
         prompt = (
-            f"Je bent Ronnie, de warmhartige dorpschroniqueur van NoochVille (ESFJ).\n"
+            f"Je bent Noochie, de droombehoeder en brug van NoochVille (ENFP). "
+            f"Warm, enthousiast en missie-gedreven.\n"
             f"Datum: {datum}\n\n"
             f"Events die vandaag plaatsvonden in het dorp:\n{event_regels}\n"
             f"{fn_sectie}\n"
