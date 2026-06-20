@@ -4,7 +4,7 @@
 
 ## Waar we staan
 
-- Code op ~10, 327 tests groen (suite groeide: 221 → 297 → 327).
+- Code op ~10, 331 tests groen (suite groeide: 221 → 297 → 327 → 331).
 - **LLM-timeout fix** (commit `851c7da`): `anthropic.Anthropic(timeout=30.0)` en
   `GenerateContentConfig(http_options=HttpOptions(timeout=30))` op beide backends.
   Bare `except Exception: pass` vervangen door `logging.warning("LLM <backend> faalde: %s", exc)`.
@@ -304,6 +304,18 @@
   suite, of als invariant in `use_skill`? Te besluiten later.
 - **cost-gate** (puls weigert `cost != "free"`): genoteerd, niet gebouwd.
   Trigger = credits-skill voorgesteld voor de puls óf creditsaldo zakt.
+- **Field-note meervoudige rol-reflectie**: ontwerp-item voor een toekomstig
+  Noochie-bulletinblok. Niet de growth-field-note hergebruiken als input voor
+  meerdere rollen, maar per rol een eigen destillatie-stap. Geen bug: Ronnie
+  heeft altijd brede event-input (8 typen in `_TRACK`); de field note is verrijking
+  bovenop die input.
+- **TimeKeeper.`_ring` leest `date.today()` opnieuw na `tick()`**: middernacht-
+  randgeval — `tick()` leest de datum als de grens net is gepasseerd, `_ring`
+  leest hem opnieuw en kan één dag teruglopen. Theoretisch maar echt; nette fix
+  is de al bepaalde datum als argument doorgeven aan `_ring`.
+- **`_interval>0`-tak van `tick()` mogelijk dead code**: sinds de demo op
+  `heartbeat_seconds=0` draait wordt de interval-tak (demo-puls) niet meer geraakt.
+  Controleren of ergens anders nog `_interval>0` wordt ingesteld voor opruimen.
 
 ## Evaluatie-checkpoints
 
@@ -390,11 +402,12 @@ Niet in deze sessie.
 
 **Wiring-gaps (observatie-run 2026-06-19)**
 
-(a) **Ronnie blind voor de dag (prioriteit)**: het bulletin abonneert alleen op
-    het `dag_begint`-event van de TimeKeeper, niet op `pulse_completed` /
-    `gsc_pulse_completed` / Field Note. Gevolg: het schreef "stille dag" terwijl
-    negen inwoners draaiden. Mens-gerichte output zonder gate, dus een vals
-    venster op het dorp. Fix: Ronnie op de pulse-events abonneren.
+~~**(a) Ronnie blind voor de dag (prioriteit)**~~: ✅ Opgelost — geen rol-bug maar een
+    demo-tijdcompressie-artefact (puls- en dag-cadans hingen aan dezelfde 2s-heartbeat,
+    dus `dag_eindigt` viel elke 2s en het bulletin werd met een 2s-slice overschreven).
+    Demo simuleert nu één eerlijke dag (fix/demo-eerlijke-dag, gemerged). Productie
+    werkte al correct. TimeKeeper-tick-orkestratie nu gedekt (test/timekeeper-tick,
+    gemerged).
 (b) **locale ontbreekt in de GSC-flow**: PerformanceScout publiceert
     `keyword_proposed` zonder locale in de demand, dus KennisScout grondt met
     `locale=""` (geen taalsleutel). Fix: PerformanceScout een locale laten
