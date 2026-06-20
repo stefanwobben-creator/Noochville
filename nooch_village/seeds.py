@@ -237,7 +237,7 @@ def migrate_records(records: Records) -> None:
         _NOOCHIE_ACCOUNTABILITIES = [
             "de missie levend houden door elke veld-notitie tegen de missie te wegen",
             "de brug zijn tussen The Source en het dorp, en The Source scherp houden",
-            "creatieve governance-voorstellen aandragen",
+            "creatieve governance-voorstellen aandragen, met de voorwaarde waaronder een voorstel kantelt",
             "het dagelijkse dorpsbulletin schrijven uit de village-events",
         ]
         noochie_changed = False

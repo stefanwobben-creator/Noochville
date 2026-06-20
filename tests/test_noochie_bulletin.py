@@ -1,6 +1,6 @@
 """Tests voor Noochie's bulletin-mandaat (geabsorbeerd van Ronnie) — thread-vrij.
 
-Negen scenario's:
+Tien scenario's:
 1. Noochie abonneert zich op dag_eindigt — na publish staat er werk in de inbox.
 2. Op dag_eindigt schrijft Noochie een bulletin (LLM gemockt, vier koppen aanwezig).
 3. Lege dag (geen events) → bulletin wordt toch geschreven.
@@ -12,6 +12,8 @@ Negen scenario's:
    de verzameling (_events_today) — twee onafhankelijke handlers.
 9. REGRESSIE: dag_begint raakt ZOWEL de reflectie-kans (inbox job via _maybe_reflect)
    ALS de verzameling (_events_today) — twee onafhankelijke handlers.
+10. KANTEL: de prompt aan reason() bevat de kantel-instructie en de kantel-zin
+    belandt in het tension_sensed-event na het bereiken van min_count=2.
 """
 from __future__ import annotations
 import logging
@@ -216,3 +218,41 @@ def test_noochie_dag_begint_triggers_reflect_and_collect(tmp_path):
     )
     collected = {e["name"] for e in noochie._events_today}
     assert "dag_begint" in collected, "dag_begint moet verzameld zijn door _collect_event"
+
+
+def test_noochie_reflect_kantel_in_prompt_and_tension(tmp_path):
+    """KANTEL: prompt bevat kantel-instructie; kantel-zin belandt in tension_sensed na min_count=2."""
+    noochie, bus = _make_noochie(tmp_path)
+
+    mock_voorstel = (
+        "Het dorp mist een vergelijkingspagina voor duurzame materialen. "
+        "Een materiaalwijzer zou helpen omdat kopers bewuste keuzes kunnen maken. "
+        "Dit advies kantelt als er al een externe vergelijkingssite bestaat die deze rol beter vult."
+    )
+
+    tensions: list[dict] = []
+    bus.subscribe("tension_sensed", lambda e: tensions.append(dict(e.data)))
+
+    prompts_gezien: list[str] = []
+
+    def mock_reason(prompt: str):
+        prompts_gezien.append(prompt)
+        return mock_voorstel
+
+    with patch("nooch_village.llm.reason", side_effect=mock_reason):
+        # Eerste aanroep: count=1, nog onder min_count=2 — geen spanning
+        noochie._reflect()
+        assert len(tensions) == 0
+
+        # Tweede aanroep: count=2, drempel bereikt — spanning gepubliceerd
+        noochie._reflect()
+
+    assert len(prompts_gezien) >= 2, "reason() moet minstens tweemaal zijn aangeroepen"
+    prompt = prompts_gezien[0]
+    assert "kantelt als" in prompt, f"kantel-instructie ontbreekt in prompt:\n{prompt}"
+
+    assert len(tensions) >= 1, "tension_sensed moet na min_count=2 gepubliceerd zijn"
+    description = tensions[0].get("description", "")
+    assert "kantelt als" in description, (
+        f"kantel-zin ontbreekt in de tension_sensed description:\n{description}"
+    )

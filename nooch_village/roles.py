@@ -947,7 +947,8 @@ class Noochie(Inhabitant):
             f"Missie: {_NOOCHIE_MISSION}\n\n"
             "Formuleer één concrete spanning die het dorp zou moeten oppakken om de missie "
             "beter te dienen. Uitvoerbaar met content, SEO of governance — geen advertising. "
-            "Max 2 zinnen. Formaat: 'Het dorp mist [wat]. [Voorstel] zou helpen omdat [reden].'"
+            "Max 3 zinnen. Formaat: 'Het dorp mist [wat]. [Voorstel] zou helpen omdat [reden]. "
+            "Dit advies kantelt als [voorwaarde waaronder een andere route beter is].'"
         )
         result = reason(prompt)
         if not result:
