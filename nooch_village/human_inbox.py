@@ -77,6 +77,7 @@ class HumanInbox:
                 "rationale":     proposal_dict.get("rationale"),
                 "gate":          gate,
                 "gate_reason":   reason,
+                "proposal":      proposal_dict,  # volledige serialisatie voor reconstruct bij approve
             },
             "status":     "pending",
             "created_at": time.time(),

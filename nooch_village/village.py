@@ -189,6 +189,12 @@ class Village:
         if item is None or item["type"] != "escalation":
             return False
         pid = item["context"]["proposal_id"]
+        # Herstel het voorstel in Secretary._pending zodat governance_verdict het kan vinden.
+        # Secretary._pending is leeg na een herstart; de opgeslagen proposal-dict herstelt dit.
+        stored = item["context"].get("proposal")
+        if stored:
+            from nooch_village.governance import proposal_from_dict
+            self.secretary.store_pending(proposal_from_dict(stored))
         self.human_inbox.resolve(item_id, "approved", reason=reason)
         self.bus.publish(Event("governance_verdict",
                                {"proposal_id": pid, "decision": "approve", "reason": reason},

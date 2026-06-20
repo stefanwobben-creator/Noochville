@@ -270,7 +270,7 @@ def migrate_records(records: Records) -> None:
 def activate_tijdgeest_wachter(records: Records) -> None:
     """Idempotent: voeg ngram_culture toe aan tijdgeest_wachter zodra het record bestaat."""
     rec = records.get("tijdgeest_wachter")
-    if rec is None:
+    if rec is None or rec.archived:
         return
     if "ngram_culture" not in rec.definition.skills:
         rec.definition.skills.append("ngram_culture")
@@ -280,7 +280,7 @@ def activate_tijdgeest_wachter(records: Records) -> None:
 def activate_kennis_scout(records: Records) -> None:
     """Idempotent: zet v1-skills in kennis_scout-record zodra het bestaat."""
     rec = records.get("kennis_scout")
-    if rec is None:
+    if rec is None or rec.archived:
         return
     _V1  = ["openalex_evidence", "semscholar_tldr"]
     _OLD = ["openalex", "semantic_scholar", "openlibrary_search_inside"]

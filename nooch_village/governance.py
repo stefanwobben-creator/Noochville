@@ -520,3 +520,12 @@ class Reconciler:
                     # Onbemand geboren: record bestaat, geen thread tot menselijke activatie
                     self.unmanned[rid] = record
                     log.info("rol '%s' geboren maar onbemand (wacht op implementatie in CLASS_MAP)", rid)
+        elif kind == "remove_role" and rid:
+            inh = self.live.pop(rid, None)
+            if inh is not None:
+                try:
+                    inh.stop()
+                except Exception:
+                    pass
+                log.info("inwoner '%s' gestopt na remove_role governance_changed", rid)
+            self.unmanned.pop(rid, None)

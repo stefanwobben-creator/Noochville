@@ -62,6 +62,10 @@ def main() -> None:
         from nooch_village.demos.knowledge import kennis_scout_demo
         kennis_scout_demo()
 
+    elif mode == "scientist_fase2":
+        from nooch_village.demos.scientist_fase2 import scientist_fase2
+        scientist_fase2()
+
     elif mode == "roster":
         from nooch_village.village import Village
         v = Village(heartbeat_seconds=86400)
@@ -70,6 +74,7 @@ def main() -> None:
     else:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
-              "purge | intent | triage | ngram | reflect | simulate | kennis_scout | roster",
+              "purge | intent | triage | ngram | reflect | simulate | kennis_scout | "
+              "scientist_fase2 | roster",
               file=sys.stderr)
         sys.exit(1)
