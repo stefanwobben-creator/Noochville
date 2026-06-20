@@ -89,7 +89,7 @@ def governance_demo():
 
 
 def proposal_demo():
-    """Eerste echte governance-voorstel van de human: de TijdgeestWachter."""
+    """Demonstreert het ADD_ROLE governance-proces met een fictieve sensorrol: VoorbeeldSensor."""
     v = Village(heartbeat_seconds=86400)
     outcome: dict = {}
     born: dict = {}
@@ -176,13 +176,13 @@ def proposal_demo():
         print(f"Poort    : {gate}")
         print(f"Reden    : {reason}")
     else:
-        rec = v.records.get("tijdgeest_wachter")
-        print(f"Record   : tijdgeest_wachter v{rec.version if rec else '?'} opgeslagen")
-        unmanned = "tijdgeest_wachter" in v.reconciler.unmanned
+        rec = v.records.get("voorbeeld_sensor")
+        print(f"Record   : voorbeeld_sensor v{rec.version if rec else '?'} opgeslagen")
+        unmanned = "voorbeeld_sensor" in v.reconciler.unmanned
         print(f"Status   : {'onbemand (wacht op implementatie)' if unmanned else 'live — onverwacht!'}")
         print(f"Domein   : {rec.definition.domains if rec else '?'}")
         print()
-        if "tijdgeest_wachter" in born:
+        if "voorbeeld_sensor" in born:
             print("Groeidagboek-entry:")
             print(f"  trigger: {born.get('trigger_example','')[:80]}")
             print(f"  by     : {born.get('by','?')}")

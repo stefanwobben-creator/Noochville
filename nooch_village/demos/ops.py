@@ -13,7 +13,7 @@ def simulate():
     1. Roster + Lexicon
     2. Governance-poort (G0-G4)
     3. Triage (4 spanningen)
-    4. Reflectie TijdgeestWachter
+    4. Reflectie Harry Hemp
     5. Ngram locale-demo (live API, max 3 termen)
     6. Librarian keyword-beslissingen
     7. Herkomst-roster
@@ -144,8 +144,8 @@ def simulate():
     else:
         print("  ⚠️  website_watcher niet gevonden, triage overgeslagen")
 
-    # ── 4. Reflectie — TijdgeestWachter ──────────────────────────────
-    section("4 / 7 — REFLECTIE (TijdgeestWachter gap-sensing)")
+    # ── 4. Reflectie — Harry Hemp ─────────────────────────────────────
+    section("4 / 7 — REFLECTIE (Harry Hemp gap-sensing)")
     v.context.settings["reflect_interval_seconds"] = "0"
     v.context.settings["tijdgeest_interval_seconds"] = "999999"
 
@@ -155,9 +155,9 @@ def simulate():
     v.bus.subscribe("proposal_invalid",
                     lambda e: reflect_outcomes.append({"s": "ongeldig", **e.data}))
 
-    tw = v.reconciler.live.get("tijdgeest_wachter")
+    tw = v.reconciler.live.get("harry_hemp")
     if tw:
-        rec_before = v.records.get("tijdgeest_wachter")
+        rec_before = v.records.get("harry_hemp")
         accs_before = list(rec_before.definition.accountabilities) if rec_before else []
         v.bus.publish(Event("dag_begint", {"label": "simulate-reflect"}, "simulate"))
 
@@ -167,7 +167,7 @@ def simulate():
             time.sleep(0.05)
         time.sleep(0.3)
 
-        rec_after = v.records.get("tijdgeest_wachter")
+        rec_after = v.records.get("harry_hemp")
         accs_after = list(rec_after.definition.accountabilities) if rec_after else []
         new_accs = [a for a in accs_after if a not in accs_before]
 
@@ -180,7 +180,7 @@ def simulate():
         print(f"\n  ✔ skills ongewijzigd: {list(rec_after.definition.skills) if rec_after else '?'}")
         print(f"  ✔ geen nieuwe thread — activatie blijft mens-gated")
     else:
-        print("  ⚠️  tijdgeest_wachter niet actief (run 'proposal' eerst)")
+        print("  ⚠️  harry_hemp niet actief")
 
     v.stop()
     time.sleep(0.2)
@@ -194,7 +194,7 @@ def simulate():
     v2.bus.subscribe("tijdgeest_pulse_completed", lambda e: pulse_result.update(e.data))
     v2.start()
 
-    tw2 = v2.reconciler.live.get("tijdgeest_wachter")
+    tw2 = v2.reconciler.live.get("harry_hemp")
     if tw2:
         demo_terms = ["bewuste consument", "conscious consumer", "plasticvrij"]
         v2.bus.publish(Event("tijdgeest_pulse", {"terms": demo_terms}, "simulate"))
@@ -234,7 +234,7 @@ def simulate():
         else:
             print(f"  ⚠️  geen rows — {pulse_result.get('error', 'onbekende fout')}")
     else:
-        print("  ⚠️  tijdgeest_wachter niet actief (run 'proposal' eerst)")
+        print("  ⚠️  harry_hemp niet actief")
 
     v2.stop()
     time.sleep(0.2)

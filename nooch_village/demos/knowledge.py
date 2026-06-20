@@ -1,4 +1,4 @@
-"""Librarian en KennisScout demo-functies."""
+"""Librarian en Harry Hemp demo-functies."""
 from __future__ import annotations
 import time
 from nooch_village.event_bus import Event
@@ -52,8 +52,8 @@ def librarian_demo():
     print("\n================ einde demo ================")
 
 
-def kennis_scout_demo():
-    """Demo: haal een paar lexicon-termen door OpenAlex, Semantic Scholar en OpenLibrary."""
+def harry_hemp_grounding_demo():
+    """Demo: grond een paar lexicon-termen via OpenAlex, Semantic Scholar en OpenLibrary."""
     from nooch_village.skills_impl.openalex import OpenalexSkill
     from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
     from nooch_village.skills_impl.openlibrary_search_inside import OpenlibrarySearchInsideSkill
@@ -68,7 +68,7 @@ def kennis_scout_demo():
     en_terms = lex.words_for_lang("en", status_filter="approved")[:3]
     demo_pairs = [(t, "nl") for t in nl_terms] + [(t, "en") for t in en_terms]
 
-    print("\n================ DEMO: KennisScout — lexicon-termen gronden ================")
+    print("\n================ DEMO: Harry Hemp — lexicon-termen gronden ================")
     print(f"NL termen: {nl_terms}")
     print(f"EN termen: {en_terms}")
     print("(OpenAlex: 0.5s sleep; Semantic Scholar: 1s sleep + backoff bij 429)\n")
@@ -114,4 +114,4 @@ def kennis_scout_demo():
                 authors = ", ".join(h.get("authors", [])[:2]) or "?"
                 print(f"    [{h['year'] or '?'}]  {h['title'][:50]:<50}  — {authors[:30]}")
 
-    print("\n================ einde kennis_scout demo ================")
+    print("\n================ einde harry_hemp grounding demo ================")

@@ -58,13 +58,9 @@ def main() -> None:
         from nooch_village.demos.ops import simulate
         simulate()
 
-    elif mode == "kennis_scout":
-        from nooch_village.demos.knowledge import kennis_scout_demo
-        kennis_scout_demo()
-
-    elif mode == "scientist_fase2":
-        from nooch_village.demos.scientist_fase2 import scientist_fase2
-        scientist_fase2()
+    elif mode == "harry_hemp":
+        from nooch_village.demos.knowledge import harry_hemp_grounding_demo
+        harry_hemp_grounding_demo()
 
     elif mode == "roster":
         from nooch_village.village import Village
@@ -74,7 +70,6 @@ def main() -> None:
     else:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
-              "purge | intent | triage | ngram | reflect | simulate | kennis_scout | "
-              "scientist_fase2 | roster",
+              "purge | intent | triage | ngram | reflect | simulate | harry_hemp | roster",
               file=sys.stderr)
         sys.exit(1)

@@ -119,7 +119,7 @@ def triage_demo():
     spanningen = [
         ("bezoekersdata van afgelopen week analyseren",
          "operational",
-         "eigen-werk (analyst-scope)"),
+         "eigen-werk (website-watcher-scope)"),
         ("kandidaatwoord voor de bibliotheek: biobased sneakers",
          "operational",
          "andere-rol:librarian (domein)"),
@@ -248,7 +248,7 @@ def ngram_demo():
 
 
 def reflect_demo():
-    """Laat zien hoe TijdgeestWachter zijn structurele beperkingen reflecteert."""
+    """Laat zien hoe Harry Hemp zijn structurele beperkingen reflecteert."""
     v = Village(heartbeat_seconds=86400)
     v.context.settings["reflect_interval_seconds"] = "0"
     v.context.settings["tijdgeest_interval_seconds"] = "999999"
@@ -265,13 +265,13 @@ def reflect_demo():
     v.bus.subscribe("governance_review_requested",
                     lambda e: outcomes.append({"status": "geëscaleerd", **e.data}))
 
-    rec_before   = v.records.get("tijdgeest_wachter")
-    accs_before  = list(rec_before.definition.accountabilities) if rec_before else []
-    skills_before = list(rec_before.definition.skills)          if rec_before else []
+    rec_before    = v.records.get("harry_hemp")
+    accs_before   = list(rec_before.definition.accountabilities) if rec_before else []
+    skills_before = list(rec_before.definition.skills)           if rec_before else []
 
     v.start()
 
-    print("\n================ DEMO: TijdgeestWachter zelf-reflectie ================\n")
+    print("\n================ DEMO: Harry Hemp zelf-reflectie ================\n")
     print("Record VOOR reflectie:")
     print(f"  skills          : {skills_before}")
     print(f"  accountabilities ({len(accs_before)}):")
@@ -305,9 +305,9 @@ def reflect_demo():
         print(f"  {o.get('status','?')} | kind={o.get('kind','-')} | "
               f"role={o.get('role_id','-')}")
 
-    rec_after   = v.records.get("tijdgeest_wachter")
-    accs_after  = list(rec_after.definition.accountabilities) if rec_after else []
-    skills_after = list(rec_after.definition.skills)          if rec_after else []
+    rec_after    = v.records.get("harry_hemp")
+    accs_after   = list(rec_after.definition.accountabilities) if rec_after else []
+    skills_after = list(rec_after.definition.skills)           if rec_after else []
 
     print("\nRecord NA reflectie:")
     print(f"  skills          : {skills_after}")
