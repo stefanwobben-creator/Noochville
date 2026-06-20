@@ -169,7 +169,7 @@ def triage_demo():
 
 
 def ngram_demo():
-    """Activeer de TijdgeestWachter met een handmatige puls en toon het resultaat per term."""
+    """Activeer Harry Hemp met een handmatige puls en toon het resultaat per term."""
     v = Village(heartbeat_seconds=86400)
     v.context.settings["tijdgeest_interval_seconds"] = "0"
 
@@ -184,17 +184,17 @@ def ngram_demo():
 
     v.start()
 
-    tw = v.reconciler.live.get("tijdgeest_wachter")
+    tw = v.reconciler.live.get("harry_hemp")
     if tw is None:
-        print("\n⚠️  TijdgeestWachter niet actief in het dorp.")
-        print("   → Run eerst: python -m nooch_village.village proposal")
+        print("\n⚠️  HarryHemp niet actief in het dorp.")
+        print("   → Controleer of harry_hemp in governance_records.json staat en CLASS_MAP.")
         v.stop()
         return
 
     terms = ["bewuste consument", "conscious consumer", "sufficiency", "regenerative", "plastic-free"]
     v.bus.publish(Event("tijdgeest_pulse", {"terms": terms}, "ngram_demo"))
 
-    print("\n================ DEMO: TijdgeestWachter ngram-puls ================")
+    print("\n================ DEMO: HarryHemp ngram-puls ================")
     print(f"Termen: {', '.join(terms)}")
     print("Wacht op Google Books Ngram Viewer (kan 15-30 sec duren)…\n")
 

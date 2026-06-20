@@ -112,39 +112,36 @@ def proposal_demo():
         proposer_role="human",
         change=GovernanceChange(
             kind=ChangeKind.ADD_ROLE,
-            role_id="tijdgeest_wachter",
+            role_id="voorbeeld_sensor",
             purpose=(
-                "De lange culturele taalverschuiving volgen die voor de missie relevant is: "
-                "zien of de wereldtaal over de lange boog richting of weg van het burgerframe beweegt."
+                "Een fictieve sensorrol ter illustratie van het governance-proces: "
+                "volgt periodiek een meetbare omgevingsvariabele en rapporteert signalen."
             ),
             add_accountabilities=[
-                "de lange-termijn frequentie van missie-relevante termen in het boekencorpus "
-                "periodiek volgen via Google Books Ngram Viewer",
-                "culturele verschuivingen richting of weg van het burgerframe signaleren "
-                "aan GrowthAnalyst en Librarian",
-                "periodiek de tijdgeest-richting aan het dorp rapporteren",
+                "de variabele wekelijks meten via een beschikbare databron",
+                "afwijkingen van de verwachte trend signaleren aan relevante inwoners",
+                "periodiek de richting van het signaal aan het dorp rapporteren",
             ],
-            add_domains=["tijdgeest-observaties"],
+            add_domains=["sensor-observaties"],
             new_role_parent="noochville",
         ),
         tension=(
-            "Het dorp ziet nu alleen huidige zoekvraag (Trends) en is blind voor de lange "
-            "culturele boog die de missie juist probeert te buigen."
+            "Het dorp heeft geen inwoner die deze specifieke omgevingsvariabele "
+            "structureel bijhoudt, waardoor blindheid ontstaat voor tijdige signalen."
         ),
         trigger_example=(
-            "Dit ontwerpgesprek, de Scheffer-methode voor n-gram cultuuranalyse, "
-            "en de werkende ngram-code als bewijs van haalbaarheid. "
+            "Meermaals terugkerend in de wekelijkse puls: de variabele beïnvloedt "
+            "structureel de beslissingen van andere inwoners en vraagt een staande rol. "
             "Dit is een doorlopende sensorfunctie, geen eenmalige opzoeking."
         ),
         rationale=(
-            "Een doorlopende sensorfunctie die het gat dicht tussen recente vraag "
-            "en culturele richting. Geen eenmalige opzoeking maar een staande accountability: "
-            "de tijdgeest verandert langzaam en vereist periodiek meten om trends "
-            "vroeg te signaleren."
+            "Een staande sensorfunctie dicht het gat structureel en doorlopend. "
+            "Geen eenmalige opzoeking maar een terugkerende accountability: "
+            "het signaal verandert langzaam en vereist periodiek meten."
         ),
     )
 
-    print("\n================ VOORSTEL: TijdgeestWachter ================\n")
+    print("\n================ VOORSTEL: VoorbeeldSensor (fictief) ================\n")
     print(f"Proposer : {voorstel.proposer_role}")
     print(f"Soort    : {voorstel.change.kind.value}")
     print(f"Rol-ID   : {voorstel.change.role_id}")

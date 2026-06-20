@@ -411,7 +411,7 @@ class Librarian(Inhabitant):
             {"word": word, "status": decision, "reason": reason, "by": "human"}, self.id))
 
     def _on_evidence(self, event: Event) -> None:
-        """Ontvangt wetenschappelijk bewijs van de KennisScout.
+        """Ontvangt wetenschappelijk bewijs van Harry Hemp of een andere grounding-inwoner.
 
         Als het woord al 'escalated' is (geen beslissing mogelijk zonder bewijs),
         herbeoordeelt de Librarian het nu met de opgehaalde evidentie.
@@ -419,6 +419,7 @@ class Librarian(Inhabitant):
         word       = event.data.get("word", "")
         evidence   = event.data.get("evidence", [])
         assessment = event.data.get("assessment", "")
+        source     = event.data.get("from", "harry_hemp")
         if not word:
             return
         self.log.info("📚 evidentie ontvangen voor '%s': %d bron(nen)", word, len(evidence))
@@ -435,19 +436,19 @@ class Librarian(Inhabitant):
             if decision == "approve":
                 self.context.library.curate(
                     word, "approved",
-                    rationale=f"{reason} [KennisScout: {assessment[:80]}]",
+                    rationale=f"{reason} [{source}: {assessment[:80]}]",
                     evidence=enriched, by=self.id)
-                self.log.info("✅ herzien → goedgekeurd na KennisScout-evidentie: '%s'", word)
+                self.log.info("✅ herzien → goedgekeurd na evidentie van '%s': '%s'", source, word)
                 self.bus.publish(Event("keyword_decided",
                     {"word": word, "status": "approved", "reason": reason,
-                     "via": "kennis_scout"}, self.id))
+                     "via": source}, self.id))
             elif decision == "reject":
                 self.context.library.curate(
                     word, "forbidden", rationale=reason, by=self.id)
-                self.log.info("⛔ herzien → afgewezen na KennisScout-evidentie: '%s'", word)
+                self.log.info("⛔ herzien → afgewezen na evidentie van '%s': '%s'", source, word)
                 self.bus.publish(Event("keyword_decided",
                     {"word": word, "status": "forbidden", "reason": reason,
-                     "via": "kennis_scout"}, self.id))
+                     "via": source}, self.id))
             else:
                 self.log.info("🔖 evidentie genoteerd; '%s' blijft escalated", word)
         else:
