@@ -68,20 +68,20 @@ def governance_demo():
     print(f"\n{'Voorstel (rol → change)':<42} {'Uitkomst':<14} {'Poort':<6} Reden")
     print("-" * 100)
     proposals = [
-        (p1.id, "analyst → maandrapportage opstellen"),
-        (p2.id, "scout → Field Note schrijven (dup)"),
-        (p3.id, "analyst → plastic goedkeuren (G4)"),
+        (p1.id, "website_watcher → maandrapportage opstellen"),
+        (p2.id, "trends → Field Note schrijven (dup)"),
+        (p3.id, "website_watcher → plastic goedkeuren (G4)"),
     ]
     for pid, label in proposals:
         r = results.get(pid, {})
         print(f"{label:<42} {r.get('outcome','?'):<14} {r.get('gate','-'):<6} "
               f"{r.get('reason','')[:45]}")
 
-    rec = v.records.get("analyst")
+    rec = v.records.get("website_watcher")
     if rec:
         new_acc = "maandrapportage opstellen voor stakeholders"
         heeft = new_acc in rec.definition.accountabilities
-        print(f"\n✔ analyst-record bevat nieuwe accountability: {heeft} (v{rec.version})")
+        print(f"\n✔ website_watcher-record bevat nieuwe accountability: {heeft} (v{rec.version})")
         if heeft:
             print(f"  → {new_acc}")
 

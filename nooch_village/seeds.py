@@ -123,7 +123,7 @@ def seed_records(records: Records) -> None:
                         definition=RoleDefinition(
                             purpose="De dorpsomroeper: markeert de dagcyclus",
                             accountabilities=["dagcyclus omroepen"], skills=[]))
-    analyst = Record(id="website_watcher", type=RecordType.ROLE, parent="noochville",
+    watcher = Record(id="website_watcher", type=RecordType.ROLE, parent="noochville",
                      definition=RoleDefinition(
                          purpose="Bewaakt de online gezondheid en groei van Nooch.earth",
                          accountabilities=["site monitoren", "bezoekersdata duiden",
@@ -137,13 +137,13 @@ def seed_records(records: Records) -> None:
                                              "twijfelgevallen escaleren naar een mens"],
                            domains=["bibliotheek"],
                            skills=["keyword_review", "library_lookup"]))
-    scout = Record(id="trends", type=RecordType.ROLE, parent="noochville",
-                   definition=RoleDefinition(
-                       purpose="Ontdekt kansen in Google Search Console en voedt de woordenschat",
-                       accountabilities=["GSC-queries ophalen",
-                                         "high_potential queries voorstellen aan de Librarian"],
-                       skills=["gsc_performance", "gsc_report"]),
-                   persona="Maisy Mushroom")
+    trends = Record(id="trends", type=RecordType.ROLE, parent="noochville",
+                    definition=RoleDefinition(
+                        purpose="Ontdekt kansen in Google Search Console en voedt de woordenschat",
+                        accountabilities=["GSC-queries ophalen",
+                                          "high_potential queries voorstellen aan de Librarian"],
+                        skills=["gsc_performance", "gsc_report"]),
+                    persona="Maisy Mushroom")
     facilitator = Record(id="facilitator", type=RecordType.ROLE, parent="noochville",
                          definition=RoleDefinition(
                              purpose="Bewaakt de geldigheid van governance-voorstellen "
@@ -152,7 +152,7 @@ def seed_records(records: Records) -> None:
                                                "geldige voorstellen direct aannemen",
                                                "risicovolle voorstellen escaleren naar de mens"],
                              skills=[]))
-    for r in (root, timekeeper, analyst, librarian, scout, facilitator):
+    for r in (root, timekeeper, watcher, librarian, trends, facilitator):
         r.source = "seed"
         records.put(r)
 
@@ -198,10 +198,10 @@ def migrate_records(records: Records) -> None:
             records.put(rec)
             changed = True
     # Zorg dat trends de gsc_report-skill heeft (idempotent)
-    scout = records.get("trends")
-    if scout is not None and "gsc_report" not in scout.definition.skills:
-        scout.definition.skills.append("gsc_report")
-        records.put(scout)
+    trends = records.get("trends")
+    if trends is not None and "gsc_report" not in trends.definition.skills:
+        trends.definition.skills.append("gsc_report")
+        records.put(trends)
         changed = True
     if changed:
         records.put(root)

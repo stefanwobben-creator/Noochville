@@ -72,8 +72,8 @@ def simulate():
         proposer_role="trends",
         change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="trends",
                                 add_accountabilities=["dagelijkse Field Note schrijven"]),
-        tension="Scout wil ook Field Notes schrijven",
-        trigger_example="simulate:geen eigen note voor scout",
+        tension="Trends wil ook Field Notes schrijven",
+        trigger_example="simulate:geen eigen note voor trends",
         rationale="GSC-data verdiend eigen nota",
     )
     pg3 = Proposal(

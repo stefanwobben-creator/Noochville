@@ -111,20 +111,20 @@ class TestAndereRol:
         assert r.target_capability == "keyword_review"
 
     def test_accountability_overlap(self, engine):
-        scout = _make_record("trends",
-                             accountabilities=["gsc-queries ophalen", "rapportage maandelijks"],
-                             skills=["gsc_performance"])
-        records = SimpleRecords([scout])
+        trends = _make_record("trends",
+                              accountabilities=["gsc-queries ophalen", "rapportage maandelijks"],
+                              skills=["gsc_performance"])
+        records = SimpleRecords([trends])
         r = engine.classify("rapportage maandelijks opmaken voor stakeholders", _ctx(records=records))
         assert r.classification == "andere-rol:trends"
         assert r.target_role_id == "trends"
 
     def test_domain_beats_accountability(self, engine):
-        # Librarian heeft domein-match; scout heeft accountability-overlap → librarian wint
+        # Librarian heeft domein-match; trends heeft accountability-overlap → librarian wint
         librarian = _make_record("librarian", domains=["bibliotheek"], skills=["keyword_review"])
-        scout = _make_record("trends",
-                             accountabilities=["kandidaat beoordelen"], skills=["gsc_performance"])
-        records = SimpleRecords([librarian, scout])
+        trends = _make_record("trends",
+                              accountabilities=["kandidaat beoordelen"], skills=["gsc_performance"])
+        records = SimpleRecords([librarian, trends])
         r = engine.classify("kandidaatwoord voor de bibliotheek", _ctx(records=records))
         assert r.target_role_id == "librarian"
 
