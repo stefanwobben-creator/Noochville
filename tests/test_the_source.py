@@ -1,12 +1,14 @@
 """Tests voor The Source — de menselijke founding rol in het dorp.
 
-Vier scenario's:
+Vijf scenario's:
 1. RECORD: migrate_records voegt the_source toe met source=seed, persona=Stefan,
    zeven accountabilities, geen skills; en plaatst hem in noochville.members.
 2. UNMANNED: na build belandt the_source in reconciler.unmanned, niet in live.
 3. INBOX-SKIP: sync_unmanned slaat source=seed records over; geen activatie-item
    voor the_source, ook al staat hij niet in CLASS_MAP.
 4. APPROVE: approve_escalation publiceert governance_verdict met sender "the_source".
+5. ROUNDTRIP: persona overleeft een save()/_load()-roundtrip — zou de originele
+   _load-bug hebben gevangen waarbij het persona-veld niet werd meegeladen.
 """
 from __future__ import annotations
 import pytest
@@ -117,6 +119,33 @@ def test_seed_record_krijgt_geen_activatie_item(tmp_path):
 
 
 # ── 4. APPROVE ────────────────────────────────────────────────────────────────
+
+def test_persona_overleeft_save_load_roundtrip(tmp_path):
+    """persona-veld overleeft een Records.save()/_load()-roundtrip.
+
+    Regressietest voor de _load-bug waarbij het persona-veld niet werd gelezen
+    uit de JSON; na herladen viel het terug op None (de dataclass-default).
+    """
+    path = str(tmp_path / "gov.json")
+    recs = Records(path)
+
+    rec = Record(
+        id="test_rol", type=RecordType.ROLE, parent=None,
+        definition=RoleDefinition(purpose="test", skills=[]),
+        source="seed",
+        persona="Testpersoon",
+    )
+    recs.put(rec)   # schrijft naar disk via save()
+
+    # Nieuwe instantie laadt hetzelfde bestand via _load()
+    recs2 = Records(path)
+    reloaded = recs2.get("test_rol")
+
+    assert reloaded is not None
+    assert reloaded.persona == "Testpersoon", (
+        f"persona genivelleerd naar {reloaded.persona!r} na save/_load-roundtrip"
+    )
+
 
 def test_approve_escalation_sender_is_the_source():
     """approve_escalation publiceert governance_verdict met sender 'the_source'."""

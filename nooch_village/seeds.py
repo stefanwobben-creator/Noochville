@@ -175,16 +175,10 @@ def migrate_records(records: Records) -> None:
         records.put(facilitator)
         changed = True
     else:
-        # Idempotent: voeg cadans-accountability en persona toe als ze ontbreken
+        # Idempotent: voeg cadans-accountability toe als die ontbreekt
         fac = records.get("facilitator")
-        fac_changed = False
         if "de dagcyclus omroepen" not in fac.definition.accountabilities:
             fac.definition.accountabilities.insert(0, "de dagcyclus omroepen")
-            fac_changed = True
-        if fac.persona != "Rupert Rubber":
-            fac.persona = "Rupert Rubber"
-            fac_changed = True
-        if fac_changed:
             fac.version += 1
             records.put(fac)
             changed = True
@@ -309,17 +303,25 @@ def migrate_records(records: Records) -> None:
         )
         records.put(the_source)
         changed = True
-    else:
-        # Idempotent: zet persona als die ontbreekt (bijv. na _load zonder persona-veld)
-        ts = records.get("the_source")
-        if ts.persona != "Stefan":
-            ts.persona = "Stefan"
-            ts.version += 1
-            records.put(ts)
-            changed = True
     if "the_source" not in root.members:
         root.members.append("the_source")
         changed = True
+
+    # ── Persona's: centrale bron, herstelt verlies na save/_load ─────────────
+    _PERSONAS = {
+        "website_watcher": "Corry Coconut",
+        "trends":          "Maisy Mushroom",
+        "facilitator":     "Rupert Rubber",
+        "harry_hemp":      "Harry Hemp",
+        "the_source":      "Stefan",
+    }
+    for _rid, _persona in _PERSONAS.items():
+        _rec = records.get(_rid)
+        if _rec is not None and not _rec.archived and _rec.persona != _persona:
+            _rec.persona = _persona
+            _rec.version += 1
+            records.put(_rec)
+            changed = True
 
     if changed:
         records.put(root)
