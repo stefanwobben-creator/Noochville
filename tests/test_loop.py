@@ -11,7 +11,7 @@ import pytest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from nooch_village.roles import GrowthAnalyst, Noochie
+from nooch_village.roles import WebsiteWatcherWorker, Noochie
 from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.event_bus import EventBus, Event
 from nooch_village.skills import SkillRegistry
@@ -63,8 +63,8 @@ def loop_setup(tmp_path):
         strategy={},
     )
 
-    analyst = GrowthAnalyst(
-        _record("analyst", ["plausible_stats", "google_trends", "field_note"]),
+    analyst = WebsiteWatcherWorker(
+        _record("website_watcher", ["plausible_stats", "google_trends", "field_note"]),
         bus, registry, context,
     )
     noochie = Noochie(
@@ -91,7 +91,7 @@ def test_discovery_loop(loop_setup):
         s.noochie.start()
         try:
             pid = s.ledger.create(
-                "analyst",
+                "website_watcher",
                 {"kind": "discovery", "skill": "plausible_stats"},
                 "human",
             )
@@ -114,6 +114,6 @@ def test_discovery_loop(loop_setup):
     assert p["status"] == "done", f"Verwacht 'done', got '{p['status']}'"
     assert p["outcome"] and "monitoring" in p["outcome"]
 
-    metrics = s.monitoring.get_metrics("analyst")
+    metrics = s.monitoring.get_metrics("website_watcher")
     assert len(metrics) > 0, "Geen metrics in monitoring na discovery"
     assert any(m in metrics for m in ("visitors", "pageviews"))

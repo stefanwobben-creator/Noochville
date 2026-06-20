@@ -11,8 +11,8 @@ from nooch_village.models import (
 
 def _make_proposal(**kwargs) -> Proposal:
     defaults = dict(
-        proposer_role="analyst",
-        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="analyst"),
+        proposer_role="website_watcher",
+        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="website_watcher"),
         tension="test",
         trigger_example="terugkerend probleem",
         rationale="structureel patroon",
@@ -228,7 +228,7 @@ class TestG4:
     def test_hard_violation_plastic_goedkeuren(self, records_with_root):
         p = _make_proposal(
             change=GovernanceChange(
-                kind=ChangeKind.AMEND_ROLE, role_id="analyst",
+                kind=ChangeKind.AMEND_ROLE, role_id="website_watcher",
                 add_accountabilities=["plastic goedkeuren voor productie"],
             ),
         )
@@ -240,7 +240,7 @@ class TestG4:
     def test_hard_violation_google_ads_autoriseren(self, records_with_root):
         p = _make_proposal(
             change=GovernanceChange(
-                kind=ChangeKind.AMEND_ROLE, role_id="analyst",
+                kind=ChangeKind.AMEND_ROLE, role_id="website_watcher",
                 add_accountabilities=["google ads autoriseren voor campagnes"],
             ),
         )
@@ -264,7 +264,7 @@ class TestG4:
     def test_schone_amend_passeert_g4(self, records_with_root):
         p = _make_proposal(
             change=GovernanceChange(
-                kind=ChangeKind.AMEND_ROLE, role_id="analyst",
+                kind=ChangeKind.AMEND_ROLE, role_id="website_watcher",
                 add_accountabilities=["wekelijkse groei-rapportage schrijven"],
             ),
         )

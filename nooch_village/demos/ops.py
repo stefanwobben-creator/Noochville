@@ -61,8 +61,8 @@ def simulate():
     v.start()
 
     pg1 = Proposal(
-        proposer_role="analyst",
-        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="analyst",
+        proposer_role="website_watcher",
+        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="website_watcher",
                                 add_accountabilities=["taalgebruik per locale bewaken"]),
         tension="Geen accountability voor locale-bewaking van rapportages",
         trigger_example="simulate:geen locale-check in field_note",
@@ -77,8 +77,8 @@ def simulate():
         rationale="GSC-data verdiend eigen nota",
     )
     pg3 = Proposal(
-        proposer_role="analyst",
-        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="analyst",
+        proposer_role="website_watcher",
+        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="website_watcher",
                                 add_accountabilities=[
                                     "plastic producten goedkeuren voor promotie"]),
         tension="Wil plastic alternatieven promoten",
@@ -107,11 +107,11 @@ def simulate():
     triaged: list[dict] = []
     v.bus.subscribe("tension_triaged", lambda e: triaged.append(dict(e.data)))
 
-    analyst = v.reconciler.live.get("analyst")
-    if analyst:
+    watcher = v.reconciler.live.get("website_watcher")
+    if watcher:
         spanningen = [
             ("bezoekersdata per locale analyseren", "operational",
-             "eigen-werk (analyst-scope)"),
+             "eigen-werk (website_watcher-scope)"),
             ("kandidaatwoord voor de bibliotheek: plasticvrij", "operational",
              "andere-rol:librarian"),
             ("niemand bezit de locale-policy structureel", "governance",
@@ -120,7 +120,7 @@ def simulate():
              "geen match → mens"),
         ]
         for desc, kind, _ in spanningen:
-            analyst.sense_tension(desc, kind=kind)
+            watcher.sense_tension(desc, kind=kind)
 
         for _ in range(80):
             if len(triaged) >= len(spanningen):
@@ -142,7 +142,7 @@ def simulate():
             ) else "✘")
             print(f"  {ok} {desc[:46]:<47} {verwacht:<26} {cls}")
     else:
-        print("  ⚠️  analyst niet gevonden, triage overgeslagen")
+        print("  ⚠️  website_watcher niet gevonden, triage overgeslagen")
 
     # ── 4. Reflectie — TijdgeestWachter ──────────────────────────────
     section("4 / 7 — REFLECTIE (TijdgeestWachter gap-sensing)")

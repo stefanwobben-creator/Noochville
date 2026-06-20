@@ -2,7 +2,7 @@
 from __future__ import annotations
 import pytest
 from types import SimpleNamespace
-from nooch_village.roles import GrowthAnalyst
+from nooch_village.roles import WebsiteWatcherWorker
 from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.event_bus import EventBus
 from nooch_village.skills import SkillRegistry
@@ -34,7 +34,7 @@ def _make_analyst(tmp_path, ledger):
         strategy=None,
     )
     record = Record(
-        id="analyst",
+        id="website_watcher",
         type=RecordType.ROLE,
         parent="noochville",
         definition=RoleDefinition(
@@ -45,7 +45,7 @@ def _make_analyst(tmp_path, ledger):
         ),
         source="seed",
     )
-    return GrowthAnalyst(record, bus, registry, context), bus
+    return WebsiteWatcherWorker(record, bus, registry, context), bus
 
 
 @pytest.fixture
@@ -60,7 +60,7 @@ def analyst_bus(tmp_path, ledger):
 
 def test_discovery_blocks_project_on_noochie(analyst_bus, ledger):
     analyst, _ = analyst_bus
-    pid = ledger.create("analyst", {"kind": "discovery", "skill": "plausible_stats"}, "human")
+    pid = ledger.create("website_watcher", {"kind": "discovery", "skill": "plausible_stats"}, "human")
     analyst._claim_run_complete(pid)
     p = ledger.get(pid)
     assert p["status"] == "blocked"
@@ -71,7 +71,7 @@ def test_discovery_event_carries_catalog(analyst_bus, ledger):
     analyst, bus = analyst_bus
     received = []
     bus.subscribe("project_discovery_ready", received.append)
-    pid = ledger.create("analyst", {"kind": "discovery", "skill": "plausible_stats"}, "human")
+    pid = ledger.create("website_watcher", {"kind": "discovery", "skill": "plausible_stats"}, "human")
     analyst._claim_run_complete(pid)
     assert len(received) == 1
     assert received[0].data["project_id"] == pid
@@ -80,7 +80,7 @@ def test_discovery_event_carries_catalog(analyst_bus, ledger):
 
 def test_catalog_not_stored_in_ledger(analyst_bus, ledger):
     analyst, _ = analyst_bus
-    pid = ledger.create("analyst", {"kind": "discovery", "skill": "plausible_stats"}, "human")
+    pid = ledger.create("website_watcher", {"kind": "discovery", "skill": "plausible_stats"}, "human")
     analyst._claim_run_complete(pid)
     p = ledger.get(pid)
     assert "catalog" not in p
@@ -89,6 +89,6 @@ def test_catalog_not_stored_in_ledger(analyst_bus, ledger):
 
 def test_non_discovery_project_completes_normally(analyst_bus, ledger):
     analyst, _ = analyst_bus
-    pid = ledger.create("analyst", "gewoon schrijfwerk", "human")
+    pid = ledger.create("website_watcher", "gewoon schrijfwerk", "human")
     analyst._claim_run_complete(pid)
     assert ledger.get(pid)["status"] == "done"

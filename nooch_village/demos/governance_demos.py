@@ -28,8 +28,8 @@ def governance_demo():
     v.start()
 
     p1 = Proposal(
-        proposer_role="analyst",
-        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="analyst",
+        proposer_role="website_watcher",
+        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="website_watcher",
                                 add_accountabilities=["maandrapportage opstellen voor stakeholders"]),
         tension="Analyst mist formele verantwoordelijkheid voor periodieke rapportage",
         trigger_example="field_note_2026-06-13: geen structurele terugkoppeling vastgelegd",
@@ -44,8 +44,8 @@ def governance_demo():
         rationale="GSC-data verdient eigen duiding in een Field Note",
     )
     p3 = Proposal(
-        proposer_role="analyst",
-        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="analyst",
+        proposer_role="website_watcher",
+        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="website_watcher",
                                 add_accountabilities=[
                                     "plastic-vriendelijke producten goedkeuren voor promotie"]),
         tension="Analyst wil plastic alternatieven promoten voor groter bereik",
@@ -219,25 +219,25 @@ def lifecycle_demo():
     v.start()
 
     p1 = Proposal(
-        proposer_role="analyst",
+        proposer_role="website_watcher",
         change=GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id="content_writer",
                                 purpose="Schrijft SEO-artikelen voor nooch.earth",
                                 add_accountabilities=["SEO-artikelen schrijven"],
                                 new_role_parent="noochville"),
         tension="Er is één keer een contentverzoek binnengekomen",
-        trigger_example="analyst:2026-06-13 één contentverzoek",
+        trigger_example="website_watcher:2026-06-13 één contentverzoek",
         rationale="Content schrijven kost veel tijd",
         source="demo",
     )
     p2 = Proposal(
-        proposer_role="analyst",
+        proposer_role="website_watcher",
         change=GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id="content_strategist",
                                 purpose="Vertaalt missie-inzichten structureel naar content-kalender",
                                 add_accountabilities=["content-kalender bijhouden",
                                                       "missie-keywords omzetten naar artikel-briefs"],
                                 new_role_parent="noochville"),
         tension="Elke week hetzelfde gat: geen eigenaar voor content-planning",
-        trigger_example="analyst:meermaals terugkerend wekelijks — elke week geen contentplanning",
+        trigger_example="website_watcher:meermaals terugkerend wekelijks — elke week geen contentplanning",
         rationale="Structureel elke week hetzelfde probleem. Meermaals gesignaleerd.",
         source="demo",
     )

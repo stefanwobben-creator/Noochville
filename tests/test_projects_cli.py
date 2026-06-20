@@ -11,11 +11,11 @@ def ledger(tmp_path):
 
 
 def test_human_create_queued(ledger):
-    pid = human_create(ledger, "analyst", "schrijf vegan-pagina")
+    pid = human_create(ledger, "website_watcher", "schrijf vegan-pagina")
     p = ledger.get(pid)
     assert p is not None
     assert p["status"]  == "queued"
-    assert p["owner"]   == "analyst"
+    assert p["owner"]   == "website_watcher"
     assert p["scope"]   == "schrijf vegan-pagina"
     assert p["trigger"] == "human"
 
@@ -31,6 +31,6 @@ def test_open_bevat_vers_project(ledger):
 
 
 def test_open_niet_na_complete(ledger):
-    pid = human_create(ledger, "analyst", "werk")
+    pid = human_create(ledger, "website_watcher", "werk")
     ledger.complete(pid)
     assert not any(p["id"] == pid for p in ledger.open())

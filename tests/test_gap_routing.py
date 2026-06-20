@@ -27,7 +27,7 @@ def records(tmp_path):
 
     # analyst — mandaat + skills → A-rol voor site/health-gaten
     recs.put(Record(
-        id="analyst", type=RecordType.ROLE, parent="noochville", source="seed",
+        id="website_watcher", type=RecordType.ROLE, parent="noochville", source="seed",
         definition=RoleDefinition(
             purpose="Bewaakt de online gezondheid en groei van Nooch.earth",
             accountabilities=["site monitoren", "bezoekersdata duiden"],
@@ -128,8 +128,8 @@ def test_a_gap_produces_no_inbox_item(tmp_path, records):
     e = Event("means_gap_sensed", {
         "gap_key":     "site_health_monitoring",
         "description": "site health monitoring ontbreekt",
-        "by":          "analyst",
-    }, "analyst")
+        "by":          "website_watcher",
+    }, "website_watcher")
 
     outcome = dispatch(e)
 
@@ -205,8 +205,8 @@ def test_abc_inbox_types_are_distinct(tmp_path, records):
     dispatch(Event("means_gap_sensed", {
         "gap_key": "site_health_monitoring",
         "description": "site health monitoring ontbreekt",
-        "by": "analyst",
-    }, "analyst"))  # A → geen item
+        "by": "website_watcher",
+    }, "website_watcher"))  # A → geen item
 
     dispatch(Event("means_gap_sensed", {
         "gap_key": "boek_evidentie",

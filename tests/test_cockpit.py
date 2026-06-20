@@ -23,10 +23,10 @@ def _seed(tmp_path):
             "id": "noochville", "type": "circle", "parent": None,
             "definition": {"purpose": "anchor", "accountabilities": [],
                            "domains": [], "skills": [], "policies": ["plasticvrij"]},
-            "members": ["analyst"], "version": 2, "archived": False, "source": "seed",
+            "members": ["website_watcher"], "version": 2, "archived": False, "source": "seed",
         },
-        "analyst": {
-            "id": "analyst", "type": "role", "parent": "noochville",
+        "website_watcher": {
+            "id": "website_watcher", "type": "role", "parent": "noochville",
             "definition": {"purpose": "Data omzetten in advies",
                            "accountabilities": ["bezoekersdata duiden"],
                            "domains": ["analytics"], "skills": ["plausible_stats"],
@@ -38,14 +38,14 @@ def _seed(tmp_path):
         "aaa111aaa111": {
             "id": "aaa111aaa111", "type": "means_gap", "subject": "ngram_2019_cutoff",
             "context": {"gap_key": "ngram_2019_cutoff",
-                        "description": "ngram-data stopt bij 2019", "role_id": "analyst"},
+                        "description": "ngram-data stopt bij 2019", "role_id": "website_watcher"},
             "status": "pending", "created_at": time.time(),
             "resolved_at": None, "resolution": None,
         },
     }), encoding="utf-8")
     (data / "projects.json").write_text(json.dumps({
         "p1p1p1p1p1p1": {
-            "id": "p1p1p1p1p1p1", "owner": "analyst", "scope": "GSC menukaart",
+            "id": "p1p1p1p1p1p1", "owner": "website_watcher", "scope": "GSC menukaart",
             "trigger": "human", "status": "queued", "blocked_on": None,
             "created_at": time.time(), "updated_at": time.time(), "outcome": None,
         },
@@ -55,9 +55,9 @@ def _seed(tmp_path):
 
 def test_gather_reads_three_stores(tmp_path):
     snap = cockpit.gather(_seed(tmp_path))
-    assert {r["id"] for r in snap["roster"]} == {"noochville", "analyst"}
+    assert {r["id"] for r in snap["roster"]} == {"noochville", "website_watcher"}
     assert snap["inbox"][0]["subject"] == "ngram_2019_cutoff"
-    assert snap["projects"][0]["owner"] == "analyst"
+    assert snap["projects"][0]["owner"] == "website_watcher"
 
 
 def test_gather_missing_dir_is_safe(tmp_path):
@@ -67,7 +67,7 @@ def test_gather_missing_dir_is_safe(tmp_path):
 
 def test_render_contains_key_facts(tmp_path):
     page = cockpit.render_html(cockpit.gather(_seed(tmp_path)))
-    assert "analyst" in page and "ngram_2019_cutoff" in page
+    assert "website_watcher" in page and "ngram_2019_cutoff" in page
     assert "plausible_stats" in page and "GSC menukaart" in page
     assert "read-only" in page.lower()
 
@@ -96,7 +96,7 @@ def test_server_get_ok_post_blocked(tmp_path):
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as resp:
             assert resp.status == 200
-            assert b"analyst" in resp.read()
+            assert b"website_watcher" in resp.read()
         with pytest.raises(urllib.error.HTTPError) as exc:
             urllib.request.urlopen(
                 urllib.request.Request(f"http://127.0.0.1:{port}/", data=b"x",

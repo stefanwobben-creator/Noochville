@@ -10,11 +10,11 @@ def ledger(tmp_path):
 
 
 def test_create_returns_id_and_queued(ledger):
-    pid = ledger.create("analyst", {"doel": "vegan-pagina"}, "clock")
+    pid = ledger.create("website_watcher", {"doel": "vegan-pagina"}, "clock")
     p = ledger.get(pid)
     assert p is not None
     assert p["id"] == pid
-    assert p["owner"] == "analyst"
+    assert p["owner"] == "website_watcher"
     assert p["scope"] == {"doel": "vegan-pagina"}
     assert p["trigger"] == "clock"
     assert p["status"] == "queued"
@@ -23,7 +23,7 @@ def test_create_returns_id_and_queued(ledger):
 
 
 def test_lifecycle(ledger):
-    pid = ledger.create("analyst", "schrijf pagina", "human")
+    pid = ledger.create("website_watcher", "schrijf pagina", "human")
 
     assert ledger.start(pid) is True
     assert ledger.get(pid)["status"] == "running"
@@ -45,7 +45,7 @@ def test_lifecycle(ledger):
 
 
 def test_open_excludes_done(ledger):
-    pid = ledger.create("analyst", "werk", "tension")
+    pid = ledger.create("website_watcher", "werk", "tension")
     assert any(p["id"] == pid for p in ledger.open())
 
     ledger.complete(pid)
@@ -53,7 +53,7 @@ def test_open_excludes_done(ledger):
 
 
 def test_complete_done_is_noop(ledger):
-    pid = ledger.create("analyst", "werk", "clock")
+    pid = ledger.create("website_watcher", "werk", "clock")
     ledger.complete(pid, "prop_1")
 
     result = ledger.complete(pid, "prop_2")
@@ -62,7 +62,7 @@ def test_complete_done_is_noop(ledger):
 
 
 def test_by_status(ledger):
-    p1 = ledger.create("analyst", "a", "clock")
+    p1 = ledger.create("website_watcher", "a", "clock")
     p2 = ledger.create("scout",   "b", "human")
     ledger.start(p1)
     assert any(p["id"] == p1 for p in ledger.by_status("running"))
@@ -71,7 +71,7 @@ def test_by_status(ledger):
 
 def test_invalid_trigger_raises(ledger):
     with pytest.raises(ValueError):
-        ledger.create("analyst", "werk", "onbekend")
+        ledger.create("website_watcher", "werk", "onbekend")
 
 
 def test_mutate_nonexistent_returns_false(ledger):

@@ -19,7 +19,7 @@ def _make_inhabitant(tmp_path, ledger):
         records=None,
     )
     record = Record(
-        id="analyst",
+        id="website_watcher",
         type=RecordType.ROLE,
         parent="noochville",
         definition=RoleDefinition(
@@ -44,7 +44,7 @@ def inhabitant(tmp_path, ledger):
 
 
 def test_claim_run_complete_sets_done(inhabitant, ledger):
-    pid = ledger.create("analyst", "schrijf vegan-pagina", "human")
+    pid = ledger.create("website_watcher", "schrijf vegan-pagina", "human")
     inhabitant._claim_run_complete(pid)
     assert ledger.get(pid)["status"] == "done"
 
@@ -57,7 +57,7 @@ def test_claim_run_complete_calls_run_project(inhabitant, ledger):
         return "custom_outcome"
 
     inhabitant.run_project = mock_run
-    pid = ledger.create("analyst", "analyseer", "human")
+    pid = ledger.create("website_watcher", "analyseer", "human")
     inhabitant._claim_run_complete(pid)
     assert len(called) == 1
     assert called[0]["id"] == pid
@@ -65,26 +65,26 @@ def test_claim_run_complete_calls_run_project(inhabitant, ledger):
 
 def test_claim_run_complete_outcome_from_run_project(inhabitant, ledger):
     inhabitant.run_project = lambda p: "prop_123"
-    pid = ledger.create("analyst", "werk", "human")
+    pid = ledger.create("website_watcher", "werk", "human")
     inhabitant._claim_run_complete(pid)
     assert ledger.get(pid)["outcome"] == "prop_123"
 
 
 def test_claim_run_complete_default_stub_outcome(inhabitant, ledger):
-    pid = ledger.create("analyst", "werk", "human")
+    pid = ledger.create("website_watcher", "werk", "human")
     inhabitant._claim_run_complete(pid)
     assert ledger.get(pid)["outcome"] == "stub:done"
 
 
 def test_on_project_queued_skips_wrong_owner(inhabitant, ledger):
-    pid = ledger.create("analyst", "werk", "human")
+    pid = ledger.create("website_watcher", "werk", "human")
     event = Event("project_queued", {"project_id": pid, "owner": "scout"}, "village")
     inhabitant._on_project_queued(event)
     assert ledger.get(pid)["status"] == "queued"
 
 
 def test_on_project_queued_triggers_for_correct_owner(inhabitant, ledger):
-    pid = ledger.create("analyst", "werk", "human")
-    event = Event("project_queued", {"project_id": pid, "owner": "analyst"}, "village")
+    pid = ledger.create("website_watcher", "werk", "human")
+    event = Event("project_queued", {"project_id": pid, "owner": "website_watcher"}, "village")
     inhabitant._on_project_queued(event)
     assert ledger.get(pid)["status"] == "done"

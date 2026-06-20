@@ -67,7 +67,7 @@ def test_ronnie_writes_bulletin_on_dag_eindigt(tmp_path):
     ronnie, bus = _make_ronnie(tmp_path)
     ronnie._events_today = [
         {"name": "dag_begint", "by": "timekeeper", "note": ""},
-        {"name": "pulse_completed", "by": "analyst", "note": ""},
+        {"name": "pulse_completed", "by": "website_watcher", "note": ""},
     ]
 
     with patch("nooch_village.llm.reason", return_value=_MOCK_BULLETIN):
@@ -125,7 +125,7 @@ def test_ronnie_listens_to_more_events(tmp_path):
     to_publish = [
         Event("tension_sensed",          {"by": "noochie",           "description": "spanning"}, "noochie"),
         Event("means_gap_sensed",         {"by": "kennis_scout",      "gap_key": "test_gap"},     "kennis_scout"),
-        Event("pulse_completed",          {"by": "analyst"},                                       "analyst"),
+        Event("pulse_completed",          {"by": "website_watcher"},                                       "website_watcher"),
         Event("tijdgeest_pulse_completed",{"by": "tijdgeest_wachter", "ok": True},                "tijdgeest_wachter"),
     ]
     for e in to_publish:

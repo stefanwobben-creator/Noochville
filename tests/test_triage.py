@@ -9,7 +9,7 @@ def engine():
     return TriageEngine()
 
 
-def _ctx(role_id="analyst", purpose="bewaakt de groei van nooch.earth",
+def _ctx(role_id="website_watcher", purpose="bewaakt de groei van nooch.earth",
          accountabilities=None, domains=None, records=None) -> TriageContext:
     return TriageContext(
         role_id=role_id,
@@ -130,15 +130,15 @@ class TestAndereRol:
 
     def test_skip_self(self, engine):
         # De analyst staat in records maar mag zichzelf niet selecteren
-        analyst = _make_record("analyst",
+        analyst = _make_record("website_watcher",
                                accountabilities=["bezoekersdata duiden"],
                                skills=["plausible_stats"])
         records = SimpleRecords([analyst])
-        # beschrijving matcht "bezoekersdata" maar rol_id is ook "analyst"
-        r = engine.classify("bezoekersdata duiden vanuit GSC", _ctx(role_id="analyst", records=records))
+        # beschrijving matcht "bezoekersdata" maar rol_id is ook "website_watcher"
+        r = engine.classify("bezoekersdata duiden vanuit GSC", _ctx(role_id="website_watcher", records=records))
         # eigen-werk match wint vóór andere-rol-scan
         assert r.classification in ("eigen-werk", "tactisch")  # nooit "andere-rol:analyst"
-        assert r.target_role_id != "analyst" if r.target_role_id else True
+        assert r.target_role_id != "website_watcher" if r.target_role_id else True
 
     def test_skip_archived(self, engine):
         archived = _make_record("old_role", domains=["bibliotheek"], archived=True)

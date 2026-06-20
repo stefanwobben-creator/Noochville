@@ -88,7 +88,7 @@ class TimeKeeper(Inhabitant):
             self.bus.publish(Event(name, {"label": label}, self.id))
 
 
-class GrowthAnalyst(Inhabitant):
+class WebsiteWatcherWorker(Inhabitant):
     """Hoort de ochtendbel en voert zelf zijn groei-puls uit: echte data ophalen,
     duiden tegen de missie, en een Field Note schrijven. Senst een spanning bij verval."""
 
@@ -546,7 +546,7 @@ class Facilitator(Inhabitant):
 
 class TijdgeestWachter(Inhabitant):
     """Volgt de lange culturele taalverschuiving via Google Books Ngram Viewer.
-    Observeert en voedt GrowthAnalyst en Librarian via events.
+    Observeert en voedt WebsiteWatcherWorker en Librarian via events.
     Claimt het lexicon-domein NIET — de Librarian cureert; de TijdgeestWachter voedt."""
 
     _SHIFT_THRESHOLD = 2   # minimaal N termen in dezelfde richting voor een broadcast
@@ -686,7 +686,7 @@ class KennisScout(Inhabitant):
     """Grondt kandidaat-termen in academische literatuur (v1: OpenAlex + Semantic Scholar).
 
     Termen komen uit het lexicon — via keyword_proposed-events van TijdgeestWachter,
-    GrowthAnalyst of PerformanceScout, die hun woorden op hun beurt uit het Lexicon halen.
+    WebsiteWatcherWorker of PerformanceScout, die hun woorden op hun beurt uit het Lexicon halen.
     De KennisScout haalt evidentie op, destilleert een duiding en publiceert keyword_evidence.
 
     Signaleert alleen — beslist en cureert nooit zelf.
@@ -866,7 +866,7 @@ class Noochie(Inhabitant):
         ledger = getattr(self.context, "projects", None)
         if ledger is not None:
             project = ledger.get(pid)
-            owner   = (project or {}).get("owner", "analyst")
+            owner   = (project or {}).get("owner", "website_watcher")
             ledger.block(pid, owner)
         self.log.info("🎯 discovery-advies: %d metrics beoordeeld, project terug bij eigenaar", len(advice))
 

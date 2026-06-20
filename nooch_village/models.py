@@ -31,6 +31,7 @@ class Record:
     version: int = 1
     archived: bool = False
     source: str = "sensed"   # "seed" | "sensed" | "demo" — herkomst van het record
+    persona: Optional[str] = None  # optionele weergavenaam voor de vervuller
 
 
 @dataclass

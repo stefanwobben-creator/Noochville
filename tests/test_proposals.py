@@ -8,7 +8,7 @@ from nooch_village.models import Proposal, GovernanceChange, ChangeKind
 
 def _full_proposal(**kwargs) -> Proposal:
     defaults = dict(
-        proposer_role="analyst",
+        proposer_role="website_watcher",
         change=GovernanceChange(
             kind=ChangeKind.AMEND_ROLE,
             role_id="scout",

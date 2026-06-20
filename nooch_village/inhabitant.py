@@ -34,6 +34,11 @@ class Inhabitant(threading.Thread):
         """Koppel dag_begint aan _maybe_reflect. Rollen met een eigen pulsgate overschrijven dit."""
         self.react("dag_begint", self._maybe_reflect)
 
+    @property
+    def display_name(self) -> str:
+        """Geeft de persona-naam als die gezet is, anders de rol-id."""
+        return self.record.persona or self.id
+
     # --- buitenkant: van buiten ben ik gewoon een rol ---
     def capabilities(self) -> list[str]:
         return list(self.dna.skills)

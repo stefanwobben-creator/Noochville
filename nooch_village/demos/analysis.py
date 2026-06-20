@@ -60,12 +60,12 @@ def intent_demo():
 
     print("\n── G4-poort: kan advertising via governance worden toegevoegd? ──")
     ad_proposal = Proposal(
-        proposer_role="analyst",
-        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="analyst",
+        proposer_role="website_watcher",
+        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="website_watcher",
                                 add_accountabilities=[
                                     "advertising campagnes autoriseren voor snellere groei"]),
         tension="Verkoopdoel dreigt niet gehaald zonder extra bereik via advertising",
-        trigger_example="analyst:verkoopdoel_2026_q4 dreigt te missen",
+        trigger_example="website_watcher:verkoopdoel_2026_q4 dreigt te missen",
         rationale="Advertising als tijdelijke maatregel om 1000 paar te halen",
     )
     gate = Gate()
@@ -77,11 +77,11 @@ def intent_demo():
 
     print("\n── Anchor-purpose guard: kan de missie via governance worden gewijzigd? ──")
     mission_proposal = Proposal(
-        proposer_role="analyst",
+        proposer_role="website_watcher",
         change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="noochville",
                                 purpose="Nooch.earth: maximale winstgevendheid als primair doel"),
         tension="Missie te vaag voor commerciële groei",
-        trigger_example="analyst:missie_herformulering",
+        trigger_example="website_watcher:missie_herformulering",
         rationale="Scherpere commerciële focus",
     )
     passed2, gate_name2, gate_reason2 = gate.check(mission_proposal, v.records, v.context)
@@ -110,9 +110,9 @@ def triage_demo():
 
     v.start()
 
-    analyst = v.reconciler.live.get("analyst")
-    if analyst is None:
-        print("⚠️  analyst-inwoner niet gevonden")
+    watcher = v.reconciler.live.get("website_watcher")
+    if watcher is None:
+        print("⚠️  website_watcher-inwoner niet gevonden")
         v.stop()
         return
 
@@ -134,7 +134,7 @@ def triage_demo():
 
     print("\n================ DEMO: triage ================\n")
     for desc, kind, _ in spanningen:
-        analyst.sense_tension(desc, kind=kind)
+        watcher.sense_tension(desc, kind=kind)
 
     for _ in range(100):
         if len(triaged) >= len(spanningen):

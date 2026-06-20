@@ -29,7 +29,7 @@ def records(tmp_path):
     migrate_records(recs)
 
     # analyst: voeg pairs_sold accountability toe (in productie via governance)
-    analyst = recs.get("analyst")
+    analyst = recs.get("website_watcher")
     analyst.definition.accountabilities.append(
         "meting van pairs_sold (verkochte paren schoenen) bijhouden en rapporteren"
     )
@@ -137,7 +137,7 @@ def test_legal_compliance_checking_is_c(records):
 def test_pairs_sold_meten(records):
     outcome, role_id, reason = classify_gap("pairs_sold meten", _all(records))
     assert outcome == "B", f"verwacht B, kreeg {outcome!r} ({reason})"
-    assert role_id == "analyst", f"verwacht analyst, kreeg {role_id!r} ({reason})"
+    assert role_id == "website_watcher", f"verwacht analyst, kreeg {role_id!r} ({reason})"
 
 
 # ── Gearchiveerde records worden overgeslagen ─────────────────────────────────

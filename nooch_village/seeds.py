@@ -118,17 +118,18 @@ def seed_records(records: Records) -> None:
                   definition=RoleDefinition(
                       purpose=_ANCHOR_PURPOSE, skills=[],
                       policies=_ANCHOR_POLICIES),
-                  members=["timekeeper", "analyst", "librarian", "scout", "facilitator"])
+                  members=["timekeeper", "website_watcher", "librarian", "scout", "facilitator"])
     timekeeper = Record(id="timekeeper", type=RecordType.ROLE, parent="noochville",
                         definition=RoleDefinition(
                             purpose="De dorpsomroeper: markeert de dagcyclus",
                             accountabilities=["dagcyclus omroepen"], skills=[]))
-    analyst = Record(id="analyst", type=RecordType.ROLE, parent="noochville",
+    analyst = Record(id="website_watcher", type=RecordType.ROLE, parent="noochville",
                      definition=RoleDefinition(
                          purpose="Bewaakt de online gezondheid en groei van Nooch.earth",
                          accountabilities=["site monitoren", "bezoekersdata duiden",
                                            "dagelijkse Field Note schrijven"],
-                         skills=["site_health", "plausible_stats", "google_trends", "field_note"]))
+                         skills=["site_health", "plausible_stats", "google_trends", "field_note"]),
+                     persona="Corry Coconut")
     librarian = Record(id="librarian", type=RecordType.ROLE, parent="noochville",
                        definition=RoleDefinition(
                            purpose="Hoeder van de goedgekeurde woordenschat (DOMEIN: bibliotheek)",
@@ -188,7 +189,7 @@ def migrate_records(records: Records) -> None:
         cs.source = "demo"
         records.put(cs)
         changed = True
-    _SEED_IDS = {"noochville", "timekeeper", "analyst", "librarian", "scout", "facilitator"}
+    _SEED_IDS = {"noochville", "timekeeper", "website_watcher", "librarian", "scout", "facilitator"}
     for sid in _SEED_IDS:
         rec = records.get(sid)
         if rec is not None and rec.source == "sensed":

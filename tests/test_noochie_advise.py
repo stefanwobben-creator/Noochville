@@ -75,7 +75,7 @@ def test_advise_metrics_deterministic():
 
 def _send_discovery(noochie, pid, catalog):
     event = Event("project_discovery_ready",
-                  {"project_id": pid, "catalog": catalog}, "analyst")
+                  {"project_id": pid, "catalog": catalog}, "website_watcher")
     noochie._on_discovery_ready(event)
 
 
@@ -83,7 +83,7 @@ def test_advice_event_published(noochie_bus, ledger):
     noochie, bus = noochie_bus
     received = []
     bus.subscribe("project_advice_ready", received.append)
-    pid = ledger.create("analyst", {"kind": "discovery", "skill": "plausible_stats"}, "human")
+    pid = ledger.create("website_watcher", {"kind": "discovery", "skill": "plausible_stats"}, "human")
     ledger.block(pid, "noochie")
     _send_discovery(noochie, pid, ["visitors", "pageviews"])
     assert len(received) == 1
@@ -93,7 +93,7 @@ def test_advice_event_published(noochie_bus, ledger):
 
 def test_project_no_longer_blocked_on_noochie(noochie_bus, ledger):
     noochie, _ = noochie_bus
-    pid = ledger.create("analyst", {"kind": "discovery", "skill": "plausible_stats"}, "human")
+    pid = ledger.create("website_watcher", {"kind": "discovery", "skill": "plausible_stats"}, "human")
     ledger.block(pid, "noochie")
     _send_discovery(noochie, pid, ["visitors"])
     assert ledger.get(pid)["blocked_on"] != "noochie"
@@ -101,17 +101,17 @@ def test_project_no_longer_blocked_on_noochie(noochie_bus, ledger):
 
 def test_project_returned_to_owner(noochie_bus, ledger):
     noochie, _ = noochie_bus
-    pid = ledger.create("analyst", {"kind": "discovery", "skill": "plausible_stats"}, "human")
+    pid = ledger.create("website_watcher", {"kind": "discovery", "skill": "plausible_stats"}, "human")
     ledger.block(pid, "noochie")
     _send_discovery(noochie, pid, [])
-    assert ledger.get(pid)["blocked_on"] == "analyst"
+    assert ledger.get(pid)["blocked_on"] == "website_watcher"
 
 
 def test_no_governance_proposal_raised(noochie_bus, ledger):
     noochie, bus = noochie_bus
     proposals = []
     bus.subscribe("proposal_raised", proposals.append)
-    pid = ledger.create("analyst", {"kind": "discovery", "skill": "plausible_stats"}, "human")
+    pid = ledger.create("website_watcher", {"kind": "discovery", "skill": "plausible_stats"}, "human")
     ledger.block(pid, "noochie")
     _send_discovery(noochie, pid, ["visitors"])
     assert proposals == []
