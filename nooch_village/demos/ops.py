@@ -147,37 +147,22 @@ def simulate():
     # ── 4. Reflectie — Harry Hemp ─────────────────────────────────────
     section("4 / 7 — REFLECTIE (Harry Hemp gap-sensing)")
     v.context.settings["reflect_interval_seconds"] = "0"
-    v.context.settings["tijdgeest_interval_seconds"] = "999999"
 
-    reflect_outcomes: list = []
-    v.bus.subscribe("governance_changed",
-                    lambda e: reflect_outcomes.append({"s": "aangenomen", **e.data}))
-    v.bus.subscribe("proposal_invalid",
-                    lambda e: reflect_outcomes.append({"s": "ongeldig", **e.data}))
+    reflect_means_gaps: list = []
+    v.bus.subscribe("means_gap_sensed",
+                    lambda e: reflect_means_gaps.append(dict(e.data)))
 
     tw = v.reconciler.live.get("harry_hemp")
     if tw:
-        rec_before = v.records.get("harry_hemp")
-        accs_before = list(rec_before.definition.accountabilities) if rec_before else []
-        v.bus.publish(Event("dag_begint", {"label": "simulate-reflect"}, "simulate"))
+        tw._maybe_reflect(None)
+        time.sleep(0.1)
 
-        for _ in range(100):
-            if reflect_outcomes:
-                break
-            time.sleep(0.05)
-        time.sleep(0.3)
-
+        print(f"  Means-gaps ({len(reflect_means_gaps)}):")
+        for g in reflect_means_gaps:
+            print(f"    [{g.get('gap_key','')}] {g.get('description','')[:80]}…")
         rec_after = v.records.get("harry_hemp")
-        accs_after = list(rec_after.definition.accountabilities) if rec_after else []
-        new_accs = [a for a in accs_after if a not in accs_before]
-
-        print(f"  Governance-uitkomsten: {len(reflect_outcomes)}")
-        for o in reflect_outcomes[:3]:
-            print(f"    {o.get('s','?')} | kind={o.get('kind','-')} | role={o.get('role_id','-')}")
-        if new_accs:
-            print(f"\n  Nieuwe accountability in record:")
-            print(f"    · {new_accs[0][:80]}")
         print(f"\n  ✔ skills ongewijzigd: {list(rec_after.definition.skills) if rec_after else '?'}")
+        print(f"  ✔ geen governance-voorstel — means-gaps → inbox (niet governance)")
         print(f"  ✔ geen nieuwe thread — activatie blijft mens-gated")
     else:
         print("  ⚠️  harry_hemp niet actief")

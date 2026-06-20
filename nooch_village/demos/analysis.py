@@ -248,22 +248,13 @@ def ngram_demo():
 
 
 def reflect_demo():
-    """Laat zien hoe Harry Hemp zijn structurele beperkingen reflecteert."""
+    """Laat zien hoe Harry Hemp zijn structurele beperkingen als means-gaps rapporteert."""
     v = Village(heartbeat_seconds=86400)
     v.context.settings["reflect_interval_seconds"] = "0"
     v.context.settings["tijdgeest_interval_seconds"] = "999999"
 
-    proposals_raised: list = []
-    outcomes:         list = []
-
-    v.bus.subscribe("proposal_raised",
-                    lambda e: proposals_raised.append(e.data.get("proposal", {})))
-    v.bus.subscribe("governance_changed",
-                    lambda e: outcomes.append({"status": "aangenomen", **e.data}))
-    v.bus.subscribe("proposal_invalid",
-                    lambda e: outcomes.append({"status": "ongeldig", **e.data}))
-    v.bus.subscribe("governance_review_requested",
-                    lambda e: outcomes.append({"status": "geëscaleerd", **e.data}))
+    means_gaps: list = []
+    v.bus.subscribe("means_gap_sensed", lambda e: means_gaps.append(dict(e.data)))
 
     rec_before    = v.records.get("harry_hemp")
     accs_before   = list(rec_before.definition.accountabilities) if rec_before else []
@@ -278,49 +269,39 @@ def reflect_demo():
     for a in accs_before:
         print(f"    · {a}")
 
-    v.bus.publish(Event("dag_begint", {"label": "reflect-demo"}, "demo"))
+    tw = v.reconciler.live.get("harry_hemp")
+    if not tw:
+        print("\n⚠️  harry_hemp niet actief")
+        v.stop()
+        return
 
-    for _ in range(100):
-        if proposals_raised:
-            break
-        time.sleep(0.05)
-    for _ in range(60):
-        if outcomes:
-            break
-        time.sleep(0.05)
-    time.sleep(0.3)
+    tw._maybe_reflect(None)
+    time.sleep(0.2)
 
     v.stop()
     time.sleep(0.1)
 
-    print(f"\nVoorstellen gesensed: {len(proposals_raised)}")
-    for p in proposals_raised[:4]:
-        kind     = p.get("change", {}).get("kind", "?")
-        proposer = p.get("proposer_role", "?")
-        new_accs = p.get("change", {}).get("add_accountabilities", [])
-        print(f"  [{proposer}] {kind}: {new_accs[0][:70] if new_accs else '–'}…")
-
-    print(f"\nGovernance-uitkomsten: {len(outcomes)}")
-    for o in outcomes[:4]:
-        print(f"  {o.get('status','?')} | kind={o.get('kind','-')} | "
-              f"role={o.get('role_id','-')}")
+    print(f"\nMeans-gaps gerapporteerd ({len(means_gaps)}):")
+    for g in means_gaps:
+        print(f"  [{g.get('gap_key','')}]")
+        print(f"    {g.get('description','')[:110]}…")
 
     rec_after    = v.records.get("harry_hemp")
     accs_after   = list(rec_after.definition.accountabilities) if rec_after else []
     skills_after = list(rec_after.definition.skills)           if rec_after else []
 
-    print("\nRecord NA reflectie:")
+    print("\nRecord NA reflectie (ongewijzigd — means-gaps gaan naar inbox, niet governance):")
     print(f"  skills          : {skills_after}")
     print(f"  accountabilities ({len(accs_after)}):")
     for a in accs_after:
-        marker = " ← NIEUW" if a not in accs_before else ""
-        print(f"    · {a[:80]}{marker}")
+        print(f"    · {a[:80]}")
 
-    new_accs = [a for a in accs_after if a not in accs_before]
     print(f"\nChecks:")
-    print(f"  {'✔' if new_accs else '✘'} nieuwe accountability opgenomen in governance-record")
-    print(f"  {'✔' if skills_before == skills_after else '✘'} skills ongewijzigd (geen nieuwe externe bron gestart)")
-    print(f"  ✔ geen nieuwe thread geactiveerd (mens-gated activatie)")
-    print(f"\n⚠  De accountability is een voorstel, niet een feit.")
-    print(f"⚠  Implementatie van een echte nieuwe bron vereist menselijke goedkeuring + code.")
+    print(f"  {'✔' if len(means_gaps) == 2 else '✘'} twee means_gap_sensed events: "
+          f"{[g.get('gap_key') for g in means_gaps]}")
+    print(f"  {'✔' if skills_before == skills_after else '✘'} skills ongewijzigd")
+    print(f"  ✔ geen governance-voorstel — means-gaps gaan naar inbox, niet naar governance")
+    print(f"  ✔ geen nieuwe thread — activatie blijft mens-gated")
+    print(f"\n⚠  Means-gaps zijn signalen aan de mens: vereisen nieuwe databronnen.")
+    print(f"⚠  Implementatie vereist menselijke goedkeuring + code + SkillRegistry-registratie.")
     print("\n================ einde reflect demo ================")
