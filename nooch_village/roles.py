@@ -54,40 +54,6 @@ def cadence_events(d) -> list[str]:
     return events
 
 
-class TimeKeeper(Inhabitant):
-    """De dorpsomroeper. Roept elke nieuwe dag 'dag_begint' om op het marktplein.
-    Voor de demo kun je via settings['heartbeat_seconds'] een snelle hartslag zetten."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._last_day = None
-        self._last_beat = 0.0
-        self._first_ring = True
-        # demo-modus: elke N seconden i.p.v. één keer per dag
-        self._interval = float(self.context.settings.get("heartbeat_seconds", 0) or 0)
-
-    def tick(self) -> None:
-        now = time.time()
-        if self._interval > 0:
-            if now - self._last_beat >= self._interval:
-                self._last_beat = now
-                self._ring("demo-puls")
-            return
-        today = date.today().isoformat()
-        if today != self._last_day:
-            self._last_day = today
-            self._ring(today)
-
-    def _ring(self, label: str) -> None:
-        today = date.today()
-        if not self._first_ring:
-            self.bus.publish(Event("dag_eindigt", {"label": label}, self.id))
-        self._first_ring = False
-        for name in cadence_events(today):
-            self.log.info("🔔 %s (%s)", name, label)
-            self.bus.publish(Event(name, {"label": label}, self.id))
-
-
 class WebsiteWatcherWorker(Inhabitant):
     """Hoort de ochtendbel en voert zelf zijn groei-puls uit: echte data ophalen,
     duiden tegen de missie, en een Field Note schrijven. Senst een spanning bij verval."""
@@ -492,12 +458,39 @@ class Librarian(Inhabitant):
 class Facilitator(Inhabitant):
     """Bewaakt de geldigheid van governance-voorstellen zonder inhoudelijk te oordelen.
     Draait de poort G0-G4 en beslist adopt-by-default of escaleren naar de mens.
-    Integreert bezwaren NOOIT automatisch: alleen de mens kan dat doen."""
+    Integreert bezwaren NOOIT automatisch: alleen de mens kan dat doen.
+    Verzorgt ook de dagcyclus-cadans (dag_begint, dag_eindigt, maand_begint, kwartaal_begint)."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # ── governance-poort ──────────────────────────────────────────
         self._gate = Gate()
         self.react("proposal_raised", self._on_proposal_raised)
+        # ── dagcyclus-cadans ──────────────────────────────────────────
+        self._last_day: str | None = None
+        self._last_beat: float = 0.0
+        self._first_ring: bool = True
+        self._interval: float = float(self.context.settings.get("heartbeat_seconds", 0) or 0)
+
+    def tick(self) -> None:
+        today = date.today()
+        now = time.time()
+        if self._interval > 0:
+            if now - self._last_beat >= self._interval:
+                self._last_beat = now
+                self._ring("demo-puls", today)
+            return
+        if today.isoformat() != self._last_day:
+            self._last_day = today.isoformat()
+            self._ring(today.isoformat(), today)
+
+    def _ring(self, label: str, today) -> None:
+        if not self._first_ring:
+            self.bus.publish(Event("dag_eindigt", {"label": label}, self.id))
+        self._first_ring = False
+        for name in cadence_events(today):
+            self.log.info("🔔 %s (%s)", name, label)
+            self.bus.publish(Event(name, {"label": label}, self.id))
 
     def _on_proposal_raised(self, event: Event) -> None:
         proposal = proposal_from_dict(event.data["proposal"])

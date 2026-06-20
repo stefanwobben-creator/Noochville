@@ -66,7 +66,7 @@ def test_ronnie_subscribes_to_dag_eindigt(tmp_path):
 def test_ronnie_writes_bulletin_on_dag_eindigt(tmp_path):
     ronnie, bus = _make_ronnie(tmp_path)
     ronnie._events_today = [
-        {"name": "dag_begint", "by": "timekeeper", "note": ""},
+        {"name": "dag_begint", "by": "facilitator", "note": ""},
         {"name": "pulse_completed", "by": "website_watcher", "note": ""},
     ]
 
@@ -96,7 +96,7 @@ def test_ronnie_handles_empty_run(tmp_path):
 
 def test_ronnie_handles_llm_failure(tmp_path, caplog):
     ronnie, bus = _make_ronnie(tmp_path)
-    ronnie._events_today = [{"name": "dag_begint", "by": "timekeeper", "note": ""}]
+    ronnie._events_today = [{"name": "dag_begint", "by": "facilitator", "note": ""}]
 
     with patch("nooch_village.llm.reason", return_value=None):
         with caplog.at_level(logging.WARNING):
@@ -149,7 +149,7 @@ def test_ronnie_includes_field_note_in_prompt(tmp_path):
     field_note_text = "## Groei-analyse\nBezoekers stabiel op 234 unieke bezoekers."
     (output_dir / f"field_note_{today}.md").write_text(field_note_text, encoding="utf-8")
 
-    ronnie._events_today = [{"name": "dag_begint", "by": "timekeeper", "note": ""}]
+    ronnie._events_today = [{"name": "dag_begint", "by": "facilitator", "note": ""}]
 
     with patch("nooch_village.llm.reason", return_value=_MOCK_BULLETIN) as mock_llm:
         ronnie._on_dag_eindigt(Event("dag_eindigt", {}, "test"))
@@ -162,7 +162,7 @@ def test_ronnie_includes_field_note_in_prompt(tmp_path):
 
 def test_ronnie_handles_missing_field_note(tmp_path):
     ronnie, bus = _make_ronnie(tmp_path)
-    ronnie._events_today = [{"name": "dag_begint", "by": "timekeeper", "note": ""}]
+    ronnie._events_today = [{"name": "dag_begint", "by": "facilitator", "note": ""}]
 
     with patch("nooch_village.llm.reason", return_value=_MOCK_BULLETIN):
         ronnie._on_dag_eindigt(Event("dag_eindigt", {}, "test"))

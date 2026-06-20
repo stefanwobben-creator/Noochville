@@ -118,11 +118,7 @@ def seed_records(records: Records) -> None:
                   definition=RoleDefinition(
                       purpose=_ANCHOR_PURPOSE, skills=[],
                       policies=_ANCHOR_POLICIES),
-                  members=["timekeeper", "website_watcher", "librarian", "trends", "facilitator"])
-    timekeeper = Record(id="timekeeper", type=RecordType.ROLE, parent="noochville",
-                        definition=RoleDefinition(
-                            purpose="De dorpsomroeper: markeert de dagcyclus",
-                            accountabilities=["dagcyclus omroepen"], skills=[]))
+                  members=["website_watcher", "librarian", "trends", "facilitator"])
     watcher = Record(id="website_watcher", type=RecordType.ROLE, parent="noochville",
                      definition=RoleDefinition(
                          purpose="Bewaakt de online gezondheid en groei van Nooch.earth",
@@ -148,11 +144,13 @@ def seed_records(records: Records) -> None:
                          definition=RoleDefinition(
                              purpose="Bewaakt de geldigheid van governance-voorstellen "
                                      "zonder inhoudelijk te oordelen",
-                             accountabilities=["voorstellen toetsen op G0-G4",
+                             accountabilities=["de dagcyclus omroepen",
+                                               "voorstellen toetsen op G0-G4",
                                                "geldige voorstellen direct aannemen",
                                                "risicovolle voorstellen escaleren naar de mens"],
-                             skills=[]))
-    for r in (root, timekeeper, watcher, librarian, trends, facilitator):
+                             skills=[]),
+                         persona="Rupert Rubber")
+    for r in (root, watcher, librarian, trends, facilitator):
         r.source = "seed"
         records.put(r)
 
@@ -168,14 +166,40 @@ def migrate_records(records: Records) -> None:
                              definition=RoleDefinition(
                                  purpose="Bewaakt de geldigheid van governance-voorstellen "
                                          "zonder inhoudelijk te oordelen",
-                                 accountabilities=["voorstellen toetsen op G0-G4",
+                                 accountabilities=["de dagcyclus omroepen",
+                                                   "voorstellen toetsen op G0-G4",
                                                    "geldige voorstellen direct aannemen",
                                                    "risicovolle voorstellen escaleren naar de mens"],
-                                 skills=[]))
+                                 skills=[]),
+                             persona="Rupert Rubber")
         records.put(facilitator)
         changed = True
+    else:
+        # Idempotent: voeg cadans-accountability en persona toe als ze ontbreken
+        fac = records.get("facilitator")
+        fac_changed = False
+        if "de dagcyclus omroepen" not in fac.definition.accountabilities:
+            fac.definition.accountabilities.insert(0, "de dagcyclus omroepen")
+            fac_changed = True
+        if fac.persona != "Rupert Rubber":
+            fac.persona = "Rupert Rubber"
+            fac_changed = True
+        if fac_changed:
+            fac.version += 1
+            records.put(fac)
+            changed = True
     if "facilitator" not in root.members:
         root.members.append("facilitator")
+        changed = True
+    # Verwijder timekeeper uit members als hij er nog in zit (absorptie)
+    if "timekeeper" in root.members:
+        root.members.remove("timekeeper")
+        changed = True
+    tk = records.get("timekeeper")
+    if tk is not None and not tk.archived:
+        tk.archived = True
+        tk.version += 1
+        records.put(tk)
         changed = True
     existing_policies = set(root.definition.policies)
     for policy in _ANCHOR_POLICIES:
@@ -190,7 +214,7 @@ def migrate_records(records: Records) -> None:
         cs.source = "demo"
         records.put(cs)
         changed = True
-    _SEED_IDS = {"noochville", "timekeeper", "website_watcher", "librarian", "trends", "facilitator"}
+    _SEED_IDS = {"noochville", "website_watcher", "librarian", "trends", "facilitator"}
     for sid in _SEED_IDS:
         rec = records.get(sid)
         if rec is not None and rec.source == "sensed":

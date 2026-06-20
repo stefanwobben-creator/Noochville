@@ -18,7 +18,7 @@ from nooch_village.matchmaker import Matchmaker
 from nooch_village.governance import Records, Secretary, Reconciler, proposal_to_dict
 from nooch_village.models import Proposal
 from nooch_village.roles import (
-    TimeKeeper, WebsiteWatcherWorker, Librarian, TrendsWorker,
+    WebsiteWatcherWorker, Librarian, TrendsWorker,
     Facilitator, TijdgeestWachter, KennisScout, Noochie, Ronnie,
 )
 from nooch_village.library import Library
@@ -51,15 +51,14 @@ from nooch_village.seeds import (
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 CLASS_MAP = {
-    "timekeeper":        TimeKeeper,
     "website_watcher":   WebsiteWatcherWorker,
     "librarian":         Librarian,
     "trends":            TrendsWorker,
-    "facilitator":      Facilitator,
+    "facilitator":       Facilitator,
     "tijdgeest_wachter": TijdgeestWachter,
-    "kennis_scout":     KennisScout,
-    "noochie":          Noochie,
-    "ronnie":           Ronnie,
+    "kennis_scout":      KennisScout,
+    "noochie":           Noochie,
+    "ronnie":            Ronnie,
 }
 
 
