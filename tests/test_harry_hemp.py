@@ -1,6 +1,6 @@
 """Tests voor HarryHemp (The Scientist) — thread-vrij.
 
-Zes scenario's:
+Zeven scenario's:
 1. PULS: ngram geeft stijgende term → keyword_proposed gepubliceerd +
    tijdgeest_pulse_completed met ok=True.
 2. PULS-FOUT: ngram geeft error → tijdgeest_pulse_completed met ok=False,
@@ -14,6 +14,9 @@ Zes scenario's:
 6. EIGEN TERMEN: Harry's puls publiceert keyword_proposed voor een stijgende
    term; zijn eigen grounding-handler pikt dit op en publiceert keyword_evidence.
    Bevestigt dat de lus precies één keer doorlopen wordt (geen oneindige herhaling).
+7. SETUP_EVENTS: dag_begint op de bus → inbox-job enqueued → na drain start de
+   puls (tijdgeest_pulse_completed volgt). Bevestigt dat _setup_events
+   dag_begint → _maybe_pulse wiert en NIET de default dag_begint → _maybe_reflect.
 """
 from __future__ import annotations
 import pytest
@@ -224,3 +227,37 @@ def test_eigen_termen_worden_gegrond_zonder_lus(tmp_path):
     assert proposed == ["vegan"], "precies één keyword_proposed verwacht"
     assert evidence == ["vegan"],  "keyword_evidence voor 'vegan' verwacht"
     # Geen tweede ronde: de grounding publiceert geen keyword_proposed terug
+
+
+def test_setup_events_dag_begint_start_puls(tmp_path):
+    """SETUP_EVENTS: dag_begint op de bus → _maybe_pulse via inbox → puls draait.
+
+    Bevestigt:
+    - dag_begint is gewired op _maybe_pulse (niet op _maybe_reflect).
+    - Na drain volgt tijdgeest_pulse_completed (puls heeft daadwerkelijk gedraaid).
+    - _maybe_reflect is NIET direct aangeroepen via dag_begint (die route bestaat niet).
+    """
+    ngram_result = {
+        "rows": [
+            {"term": "vegan", "locale": "en", "no_data": False,
+             "signal": {"direction": "stijgend"}, "freq_last": 0.0005},
+        ],
+        "terms": {},
+    }
+    # _pulse_interval=0 zodat _maybe_pulse altijd doorschakelt naar _run_pulse
+    harry, bus = _make_harry(tmp_path, tijdgeest_interval=0, ngram_result=ngram_result)
+
+    completed: list[dict] = []
+    bus.subscribe("tijdgeest_pulse_completed", lambda e: completed.append(dict(e.data)))
+
+    # Geen handmatige _run_pulse aanroep — alleen dag_begint via de bus
+    assert harry.inbox.pending() == 0
+    bus.publish(Event("dag_begint", {"label": "test"}, "facilitator"))
+    assert harry.inbox.pending() > 0, "dag_begint moet een inbox-job opleveren"
+
+    with patch("nooch_village.llm.reason", return_value=None):
+        _drain(harry)
+
+    assert len(completed) == 1, "tijdgeest_pulse_completed verwacht na dag_begint-drain"
+    assert completed[0]["ok"] is True
+    assert "vegan" in completed[0]["stijgend"]
