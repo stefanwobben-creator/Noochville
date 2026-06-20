@@ -21,12 +21,12 @@ def test_human_create_queued(ledger):
 
 
 def test_human_create_returns_id(ledger):
-    pid = human_create(ledger, "scout", "analyseer zoekwoorden")
+    pid = human_create(ledger, "trends", "analyseer zoekwoorden")
     assert isinstance(pid, str) and len(pid) == 12
 
 
 def test_open_bevat_vers_project(ledger):
-    pid = human_create(ledger, "scout", "analyseer zoekwoorden")
+    pid = human_create(ledger, "trends", "analyseer zoekwoorden")
     assert any(p["id"] == pid for p in ledger.open())
 
 

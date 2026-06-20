@@ -36,8 +36,8 @@ def governance_demo():
         rationale="Transparantie-waarde vraagt om periodieke verslaglegging",
     )
     p2 = Proposal(
-        proposer_role="scout",
-        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="scout",
+        proposer_role="trends",
+        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="trends",
                                 add_accountabilities=["dagelijkse Field Note schrijven"]),
         tension="Scout wil ook Field Notes schrijven vanuit GSC-perspectief",
         trigger_example="dag_begint: geen Field Note vanuit GSC-data",

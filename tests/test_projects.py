@@ -63,7 +63,7 @@ def test_complete_done_is_noop(ledger):
 
 def test_by_status(ledger):
     p1 = ledger.create("website_watcher", "a", "clock")
-    p2 = ledger.create("scout",   "b", "human")
+    p2 = ledger.create("trends",   "b", "human")
     ledger.start(p1)
     assert any(p["id"] == p1 for p in ledger.by_status("running"))
     assert any(p["id"] == p2 for p in ledger.by_status("queued"))

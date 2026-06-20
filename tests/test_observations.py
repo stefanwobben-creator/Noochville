@@ -27,7 +27,7 @@ def test_latest_returns_last(store):
 
 def test_series_filters_by_role_and_metric(store):
     store.record("website_watcher", "bezoekers", 50,  ts=1.0)
-    store.record("scout",   "bezoekers", 99,  ts=2.0)
+    store.record("trends",   "bezoekers", 99,  ts=2.0)
     store.record("website_watcher", "pageviews", 80,  ts=3.0)
     rows = store.series("website_watcher", "bezoekers")
     assert len(rows) == 1 and rows[0]["value"] == 50

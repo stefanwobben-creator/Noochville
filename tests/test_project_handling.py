@@ -78,7 +78,7 @@ def test_claim_run_complete_default_stub_outcome(inhabitant, ledger):
 
 def test_on_project_queued_skips_wrong_owner(inhabitant, ledger):
     pid = ledger.create("website_watcher", "werk", "human")
-    event = Event("project_queued", {"project_id": pid, "owner": "scout"}, "village")
+    event = Event("project_queued", {"project_id": pid, "owner": "trends"}, "village")
     inhabitant._on_project_queued(event)
     assert ledger.get(pid)["status"] == "queued"
 

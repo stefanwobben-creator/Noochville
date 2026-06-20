@@ -314,7 +314,7 @@ class WebsiteWatcherWorker(Inhabitant):
         return None
 
 
-class PerformanceScout(Inhabitant):
+class TrendsWorker(Inhabitant):
     """Luistert op dag_begint, haalt GSC-queries op en stuurt high_potential-woorden
     die nog niet in de bibliotheek staan door als keyword_proposed naar de Librarian.
     Schrijft wekelijks een GSC-nota met zoekopdracht-analyse en rankings."""
@@ -686,7 +686,7 @@ class KennisScout(Inhabitant):
     """Grondt kandidaat-termen in academische literatuur (v1: OpenAlex + Semantic Scholar).
 
     Termen komen uit het lexicon — via keyword_proposed-events van TijdgeestWachter,
-    WebsiteWatcherWorker of PerformanceScout, die hun woorden op hun beurt uit het Lexicon halen.
+    WebsiteWatcherWorker of TrendsWorker, die hun woorden op hun beurt uit het Lexicon halen.
     De KennisScout haalt evidentie op, destilleert een duiding en publiceert keyword_evidence.
 
     Signaleert alleen — beslist en cureert nooit zelf.

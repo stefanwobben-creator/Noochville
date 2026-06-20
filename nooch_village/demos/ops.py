@@ -69,8 +69,8 @@ def simulate():
         rationale="Meertalige uitvoer vereist expliciet eigenaarschap per locale",
     )
     pg2 = Proposal(
-        proposer_role="scout",
-        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="scout",
+        proposer_role="trends",
+        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="trends",
                                 add_accountabilities=["dagelijkse Field Note schrijven"]),
         tension="Scout wil ook Field Notes schrijven",
         trigger_example="simulate:geen eigen note voor scout",

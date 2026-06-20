@@ -11,7 +11,7 @@ def _full_proposal(**kwargs) -> Proposal:
         proposer_role="website_watcher",
         change=GovernanceChange(
             kind=ChangeKind.AMEND_ROLE,
-            role_id="scout",
+            role_id="trends",
             purpose="nieuw doel",
             add_accountabilities=["wekelijkse rapportage"],
             remove_accountabilities=["oude taak"],
@@ -88,7 +88,7 @@ class TestRoundTrip:
 
     def test_lege_lijsten_bewaard(self):
         p = _full_proposal(
-            change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="scout"),
+            change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="trends"),
         )
         restored = proposal_from_dict(proposal_to_dict(p))
         assert restored.change.add_accountabilities == []

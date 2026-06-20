@@ -18,7 +18,7 @@ from nooch_village.matchmaker import Matchmaker
 from nooch_village.governance import Records, Secretary, Reconciler, proposal_to_dict
 from nooch_village.models import Proposal
 from nooch_village.roles import (
-    TimeKeeper, WebsiteWatcherWorker, Librarian, PerformanceScout,
+    TimeKeeper, WebsiteWatcherWorker, Librarian, TrendsWorker,
     Facilitator, TijdgeestWachter, KennisScout, Noochie, Ronnie,
 )
 from nooch_village.library import Library
@@ -54,7 +54,7 @@ CLASS_MAP = {
     "timekeeper":        TimeKeeper,
     "website_watcher":   WebsiteWatcherWorker,
     "librarian":         Librarian,
-    "scout":            PerformanceScout,
+    "trends":            TrendsWorker,
     "facilitator":      Facilitator,
     "tijdgeest_wachter": TijdgeestWachter,
     "kennis_scout":     KennisScout,

@@ -248,7 +248,7 @@ def _approve_keyword_batch(inbox, item, iid: str, reason: str, _load_fn=None) ->
     try:
         summary = run_approved_keyword_batch(
             batch, runner, v.bus, library,
-            from_id="scout",
+            from_id="trends",
             min_volume=min_volume,
             approved_by="human",
         )

@@ -118,7 +118,7 @@ def seed_records(records: Records) -> None:
                   definition=RoleDefinition(
                       purpose=_ANCHOR_PURPOSE, skills=[],
                       policies=_ANCHOR_POLICIES),
-                  members=["timekeeper", "website_watcher", "librarian", "scout", "facilitator"])
+                  members=["timekeeper", "website_watcher", "librarian", "trends", "facilitator"])
     timekeeper = Record(id="timekeeper", type=RecordType.ROLE, parent="noochville",
                         definition=RoleDefinition(
                             purpose="De dorpsomroeper: markeert de dagcyclus",
@@ -137,12 +137,13 @@ def seed_records(records: Records) -> None:
                                              "twijfelgevallen escaleren naar een mens"],
                            domains=["bibliotheek"],
                            skills=["keyword_review", "library_lookup"]))
-    scout = Record(id="scout", type=RecordType.ROLE, parent="noochville",
+    scout = Record(id="trends", type=RecordType.ROLE, parent="noochville",
                    definition=RoleDefinition(
                        purpose="Ontdekt kansen in Google Search Console en voedt de woordenschat",
                        accountabilities=["GSC-queries ophalen",
                                          "high_potential queries voorstellen aan de Librarian"],
-                       skills=["gsc_performance", "gsc_report"]))
+                       skills=["gsc_performance", "gsc_report"]),
+                   persona="Maisy Mushroom")
     facilitator = Record(id="facilitator", type=RecordType.ROLE, parent="noochville",
                          definition=RoleDefinition(
                              purpose="Bewaakt de geldigheid van governance-voorstellen "
@@ -189,15 +190,15 @@ def migrate_records(records: Records) -> None:
         cs.source = "demo"
         records.put(cs)
         changed = True
-    _SEED_IDS = {"noochville", "timekeeper", "website_watcher", "librarian", "scout", "facilitator"}
+    _SEED_IDS = {"noochville", "timekeeper", "website_watcher", "librarian", "trends", "facilitator"}
     for sid in _SEED_IDS:
         rec = records.get(sid)
         if rec is not None and rec.source == "sensed":
             rec.source = "seed"
             records.put(rec)
             changed = True
-    # Zorg dat scout de gsc_report-skill heeft (idempotent)
-    scout = records.get("scout")
+    # Zorg dat trends de gsc_report-skill heeft (idempotent)
+    scout = records.get("trends")
     if scout is not None and "gsc_report" not in scout.definition.skills:
         scout.definition.skills.append("gsc_report")
         records.put(scout)

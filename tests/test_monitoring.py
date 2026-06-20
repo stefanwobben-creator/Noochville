@@ -107,7 +107,7 @@ def test_monitoring_dedup(analyst_bus, ledger, monitoring):
 
 def test_wrong_owner_ignored(analyst_bus, ledger, monitoring):
     analyst, _ = analyst_bus
-    pid = _blocked_project(ledger, owner="scout")
+    pid = _blocked_project(ledger, owner="trends")
     analyst._on_advice_ready(_advice_event(pid, ["visitors"]))
     assert ledger.get(pid)["status"] != "done"
     assert monitoring.get_metrics("website_watcher") == []
