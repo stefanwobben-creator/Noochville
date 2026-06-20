@@ -805,6 +805,266 @@ class KennisScout(Inhabitant):
         # semscholar_no_key: geen toestandssensing — sens pas als de rate-limit geraakt wordt.
 
 
+class HarryHemp(Inhabitant):
+    """The Scientist: combineert tijdgeest-observatie (ngram) en academische grounding
+    in één inwoner met twee herkenbaar afgescheiden taken.
+
+    Tijdgeest-puls-tak:
+      Volgt de lange culturele taalverschuiving via Google Books Ngram Viewer.
+      Publiceert stijgende termen als keyword_proposed en sluit de dag af met
+      tijdgeest_pulse_completed. Roept _maybe_reflect aan na elke puls.
+
+    Grounding-tak:
+      Ontvangt keyword_proposed (van zichzelf of van anderen) en grondt de term
+      in academische literatuur (OpenAlex, Semantic Scholar, OpenLibrary).
+      Publiceert keyword_evidence. Beslist en cureert nooit zelf.
+
+    Eigen termen worden ook gegrond: Harry publiceert keyword_proposed (puls) én
+    consumeert het (grounding). De _busy_terms-dedup voorkomt dat dit een lus wordt:
+    zodra een term al in _busy_terms zit, wordt een tweede keyword_proposed voor
+    diezelfde term gedropt. Omdat _on_keyword_proposed geen keyword_proposed terug
+    publiceert, is er geen echte terugkoppeling — elke term doorloopt de lus precies
+    één keer.
+
+    persona "Harry Hemp".
+    """
+
+    _SHIFT_THRESHOLD = 2   # minimaal N termen in dezelfde richting voor broadcast
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # ── tijdgeest-puls-state ──────────────────────────────────────────────
+        self._last_pulse: float = 0.0
+        self._busy = False
+        self._pulse_interval = float(
+            self.context.settings.get("tijdgeest_interval_seconds", str(7 * 24 * 3600)))
+        self.react("tijdgeest_pulse", self._run_pulse)   # handmatig triggerable
+        # ── grounding-state ───────────────────────────────────────────────────
+        self._busy_terms: set[str] = set()
+        self.react("keyword_proposed", self._on_keyword_proposed)
+
+    def _setup_events(self) -> None:
+        # Geen dag_begint → _maybe_reflect; de puls roept _maybe_reflect zelf
+        # aan na afloop zodat de interval-check niet op elke dag_begint vuurt.
+        self.react("dag_begint", self._maybe_pulse, drop_if_busy=True)
+
+    def _maybe_pulse(self, event: Event) -> None:
+        """Reageert op de dagelijkse hartslag maar runt alleen als het tijd is."""
+        now = time.time()
+        if self._pulse_interval > 0 and now - self._last_pulse < self._pulse_interval:
+            return
+        if self._busy:
+            return
+        self._last_pulse = now
+        self._run_pulse(event)
+
+    # ── tijdgeest-puls-tak ────────────────────────────────────────────────────
+
+    def _run_pulse(self, event) -> None:
+        if self._busy:
+            return
+        self._busy = True
+        payload = event.data if event and hasattr(event, "data") else {}
+        try:
+            self.log.info("🌊 tijdgeest-puls gestart")
+            result = self.use_skill("ngram_culture", payload)
+
+            if "error" in result:
+                self.log.warning("⚠️ ngram-puls mislukt: %s", result["error"])
+                self.bus.publish(Event("tijdgeest_pulse_completed",
+                    {"by": self.id, "ok": False, "error": result["error"]}, self.id))
+                return
+
+            rows  = result.get("rows", [])
+            terms = result.get("terms", {})
+
+            if rows:
+                stijgend = list(dict.fromkeys(
+                    r["term"] for r in rows
+                    if not r.get("no_data")
+                    and r.get("signal", {}).get("direction") == "stijgend"
+                ))
+                dalend = list(dict.fromkeys(
+                    r["term"] for r in rows
+                    if not r.get("no_data")
+                    and r.get("signal", {}).get("direction") == "dalend"
+                ))
+            else:
+                stijgend = [t for t, d in terms.items()
+                            if d.get("signal", {}).get("direction") == "stijgend"]
+                dalend   = [t for t, d in terms.items()
+                            if d.get("signal", {}).get("direction") == "dalend"]
+
+            self.log.info("📈 stijgend: %s | 📉 dalend: %s", stijgend, dalend)
+
+            lib = getattr(self.context, "library", None)
+            row_by_term = {r["term"]: r for r in rows} if rows else {}
+            for term in stijgend:
+                row  = row_by_term.get(term, {})
+                freq = row.get("freq_last") or (terms.get(term) or {}).get("freq_last")
+                _publish_keyword_proposed(
+                    self.bus, self.id, term,
+                    demand={
+                        "signal":    "positive",
+                        "source":    "ngram_culture",
+                        "direction": "stijgend",
+                        "locale":    row.get("locale"),
+                        "concept":   row.get("concept"),
+                        "freq_last": freq,
+                    },
+                    library=lib,
+                )
+
+            if len(stijgend) >= self._SHIFT_THRESHOLD or len(dalend) >= self._SHIFT_THRESHOLD:
+                self.bus.publish(Event("tijdgeest_signaal", {
+                    "by":       self.id,
+                    "stijgend": stijgend,
+                    "dalend":   dalend,
+                    "boodschap": (
+                        f"{len(stijgend)} termen cultureel stijgend "
+                        f"({', '.join(stijgend[:3])}), "
+                        f"{len(dalend)} dalend ({', '.join(dalend[:3])})"
+                    ),
+                }, self.id))
+                self.log.info("📢 tijdgeest-signaal uitgezonden")
+
+            self.bus.publish(Event("tijdgeest_pulse_completed", {
+                "by":        self.id,
+                "ok":        True,
+                "stijgend":  stijgend,
+                "dalend":    dalend,
+                "term_count": len(rows) if rows else len(terms),
+                "rows":      rows,
+                "terms":     terms,
+            }, self.id))
+        finally:
+            self._busy = False
+        self._maybe_reflect(None)
+
+    # ── grounding-tak ─────────────────────────────────────────────────────────
+
+    def _on_keyword_proposed(self, event: Event) -> None:
+        word   = event.data.get("word", "").strip()
+        demand = event.data.get("demand", {})
+        locale = demand.get("locale", "")
+        if not word or word in self._busy_terms:
+            return
+        self._busy_terms.add(word)
+        try:
+            self.log.info("🔬 gronden: '%s' (locale=%s)", word, locale or "?")
+            evidence: list[dict] = []
+
+            works = self.use_skill("openalex_evidence",
+                                   {"term": word, "locale": locale, "limit": 3})
+            if "error" in works:
+                self.log.warning("⚠️ OpenAlex: %s", works["error"])
+            elif works.get("no_data"):
+                self.log.info("ℹ️ OpenAlex: geen werken voor '%s'", word)
+            else:
+                evidence.extend(works.get("hits", []))
+
+            papers = self.use_skill("semscholar_tldr",
+                                    {"term": word, "locale": locale, "limit": 3})
+            if "error" in papers:
+                self.log.warning("⚠️ Semantic Scholar: %s", papers["error"])
+            elif papers.get("no_data"):
+                self.log.info("ℹ️ Semantic Scholar: geen papers voor '%s'", word)
+            else:
+                evidence.extend(papers.get("hits", []))
+
+            books = self.use_skill("openlibrary_search_inside",
+                                   {"term": word, "limit": 3})
+            if "error" in books:
+                self.log.warning("⚠️ OpenLibrary: %s", books["error"])
+            elif not books.get("hits"):
+                self.log.info("ℹ️ OpenLibrary: geen boeken voor '%s'", word)
+            else:
+                evidence.extend(books.get("hits", []))
+
+            assessment = self._distill(word, locale, evidence, demand)
+
+            self.bus.publish(Event("keyword_evidence", {
+                "word":            word,
+                "locale":          locale,
+                "evidence":        evidence,
+                "assessment":      assessment,
+                "from":            self.id,
+                "original_demand": demand,
+            }, self.id))
+            self.log.info("📚 evidentie gepubliceerd voor '%s': %d bron(nen)", word, len(evidence))
+        finally:
+            self._busy_terms.discard(word)
+
+    def _distill(self, word: str, locale: str,
+                 evidence: list[dict], demand: dict) -> str:
+        """Destilleer gevonden evidentie tot een beknopte relevantie-duiding.
+
+        Citeer UITSLUITEND bronnen die in `evidence` staan. Fabriceer geen titels,
+        auteurs, abstracten of DOI's die niet daadwerkelijk zijn opgehaald.
+        """
+        if not evidence:
+            return (f"Geen academische bronnen gevonden voor '{word}' "
+                    f"(locale={locale or 'onbekend'}, v1: OpenAlex + Semantic Scholar).")
+
+        bron_regels: list[str] = []
+        for e in evidence[:5]:
+            jaar  = e.get("year") or "?"
+            tldr  = e.get("tldr", "")
+            bron_regels.append(
+                f"- {e.get('title','?')} ({jaar}) [{e.get('source','?')}]"
+                + (f"\n  tldr: {tldr}" if tldr else ""))
+
+        from nooch_village.llm import reason as llm_reason
+        prompt = (
+            f"Duiding gevraagd voor term '{word}' (locale: {locale or '?'}) "
+            f"voor Nooch.earth (duurzame schoenen, geen plastic, geen leer).\n"
+            f"Gevonden bronnen ({len(evidence)}):\n" + "\n".join(bron_regels) + "\n\n"
+            f"Geef in maximaal 2 zinnen: (1) wat de inhoudelijke/wetenschappelijke relevantie "
+            f"is van '{word}', (2) of de bronnen de missie-claim ondersteunen of tegenspreken. "
+            f"Baseer je ALLEEN op de bovenstaande bronnen. "
+            f"Verzin geen andere titels of auteurs. "
+            f"Als je het niet kunt beoordelen, zeg dat expliciet."
+        )
+        llm_out = llm_reason(prompt)
+        if llm_out:
+            return llm_out.strip()
+
+        titels = "; ".join(e.get("title", "?")[:60] for e in evidence[:3])
+        return f"{len(evidence)} bron(nen) gevonden voor '{word}': {titels}."
+
+    # ── reflectie ─────────────────────────────────────────────────────────────
+
+    def _reflect(self) -> None:
+        """Combineert de means_gaps van beide bronrollen.
+
+        Produceer UITSLUITEND means-gap-items — nooit governance-voorstellen of API-calls.
+        Uitbreiding van capaciteit is mens-gated activatie.
+        """
+        # Tijdgeest-limieten
+        self._report_means_gap(
+            "ngram_2019_cutoff",
+            "accountability: aanvullende recente bron voor tijdgeest-observaties periodiek "
+            "evalueren en aan de mens rapporteren — "
+            "de ngram_culture-databron stopt in 2019 en misloopt daarmee 7 jaar culturele "
+            "verschuiving (2019-2026); geen enkele puls kan recente verschuivingen signaleren",
+        )
+        self._report_means_gap(
+            "nl_corpus_coverage",
+            "accountability: NL corpus dekking periodiek valideren en ontbrekende "
+            "kernbegrippen documenteren — "
+            "meerdere Nederlandse termen (bijv. 'consument') worden niet gevonden in het "
+            "NL corpus 10 (2012); het corpus is verouderd en dekt moderne missie-terminologie "
+            "onvoldoende af",
+        )
+        # Grounding-limieten
+        self._report_means_gap(
+            "openlibrary_v2",
+            "accountability: OpenLibrary voltekst-grounding evalueren en toevoegen als v2 — "
+            "v1 grondt uitsluitend in academische literatuur (OpenAlex, Semantic Scholar); "
+            "boek-evidentie (bijv. duurzaamheidscanon) ontbreekt daardoor volledig",
+        )
+
+
 # ── Metric-advies (deterministisch placeholder voor latere LLM-stap) ───────
 # v1-regel: keep als de metric een bekende groei-indicator of doelkoppeling
 # heeft. Bij onbekende metrics: fail-closed naar skip.
