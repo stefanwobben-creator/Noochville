@@ -190,17 +190,25 @@ class TestG2:
 # ── G3: verweesd werk ─────────────────────────────────────────────────────────
 
 class TestG3:
-    def test_remove_role_met_accountabilities_escaleert(self, records_with_root):
+    def test_remove_role_met_accountabilities_escaleert_eerlijk(self, records_with_root):
+        """REMOVE_ROLE met accountabilities escaleert (False) en de boodschap beweert
+        niet dat het werk nergens belegd is — dat heeft de gate niet onderzocht."""
         records_with_root.put(_role("te_verwijderen", accs=["iets heel belangrijks doen"]))
         p = _make_proposal(
             change=GovernanceChange(kind=ChangeKind.REMOVE_ROLE, role_id="te_verwijderen"),
         )
         passed, gate_name, reason = gate.check(p, records_with_root)
+
         assert not passed
         assert gate_name == "G3"
         assert "te_verwijderen" in reason
+        # De gate claimt niet dat het werk nergens belegd is; dat zou een leugen zijn.
+        assert "nergens elders belegd zijn" not in reason
+        # De gate geeft wél aan waarom menselijk oordeel nodig is.
+        assert "menselijke beoordeling" in reason
 
     def test_remove_role_zonder_accountabilities_passeert_g3(self, records_with_root):
+        """REMOVE_ROLE van een rol zonder accountabilities brengt geen verweesd werk mee."""
         records_with_root.put(_role("lege_rol", accs=[]))
         p = _make_proposal(
             change=GovernanceChange(kind=ChangeKind.REMOVE_ROLE, role_id="lege_rol"),
@@ -209,6 +217,7 @@ class TestG3:
         assert passed or gate_name != "G3"
 
     def test_remove_accountability_nergens_belegd_faalt(self, records_with_root):
+        """AMEND_ROLE met remove_accountabilities die nergens gedekt zijn: tweede tak intact."""
         records_with_root.put(_role("mijn_rol", accs=["unieke taak nergens anders"]))
         p = _make_proposal(
             change=GovernanceChange(

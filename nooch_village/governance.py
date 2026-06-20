@@ -172,8 +172,9 @@ class Gate:
             rec = records.get(c.role_id)
             if rec and rec.definition.accountabilities:
                 accs = rec.definition.accountabilities[:2]
-                return False, (f"rol '{c.role_id}' heeft accountabilities die nergens "
-                               f"elders belegd zijn: {accs}")
+                return False, (f"rol '{c.role_id}' heeft accountabilities ({accs} …); "
+                               f"de gate kan niet vaststellen of dit werk elders belegd is — "
+                               f"menselijke beoordeling vereist")
         if c.remove_accountabilities:
             removed = {a.lower() for a in c.remove_accountabilities}
             covered = set()
