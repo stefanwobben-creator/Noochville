@@ -63,18 +63,15 @@ class FieldNoteSkill(Skill):
         today = datetime.now().strftime("%Y-%m-%d")
         # 1. Probeer LLM-redenering
         prompt = (
-            f"Je bent de Growth Analyst van Nooch.earth. Missie:\n{MISSION}\n\n"
+            f"Je bent Corry Coconut, website watcher van Nooch.earth. Missie:\n{MISSION}\n\n"
             f"Hier is de groei-data van vandaag (JSON):\n{self._data_block(plausible, trends)}\n\n"
-            "Schrijf een Field Note in het Nederlands (max 250 woorden), nuchter en zonder "
-            "marketingtaal. Behandel: (1) wat opvalt in het verkeer en de trends, (2) wat dit "
-            "betekent voor de missie-gedreven groei, (3) de belangrijkste actie voor morgen. "
-            "Verweef in punt 1 de concrete website-data waar die aanwezig is: de gemiddelde "
-            "bezoekduur als engagement-signaal, de drukste pagina's, de belangrijkste "
-            "verkeersbronnen, de sterkste landen (internationale spreiding), en opvallende "
-            "UTM- of campagnebronnen. Verweef ook het trends-signaal: welke zoektermen stijgen "
-            "of dalen (met hun interest-waarden), en wat de stijgende termen betekenen voor de "
-            "Nooch-doelgroep. Noem alleen velden die echt in de data staan; laat lege "
-            "velden weg en verzin niets."
+            "Schrijf een Field Note in het Nederlands (max 250 woorden), nauwkeurig en feitelijk. "
+            "Rapporteer wat de data toont — geen duiding, geen aanbevelingen. "
+            "Behandel: (1) de concrete website-cijfers waar die aanwezig zijn: bezoekers, "
+            "gemiddelde bezoekduur, drukste pagina's, belangrijkste verkeersbronnen, "
+            "sterkste landen en opvallende UTM- of campagnebronnen; "
+            "(2) het trends-signaal: welke zoektermen stijgen of dalen met hun interest-waarden. "
+            "Noem alleen velden die echt in de data staan; laat lege velden weg en verzin niets."
         )
         llm = reason(prompt)
         header = f"# Field Note {today}\n\n"

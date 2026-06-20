@@ -76,18 +76,18 @@ def voer_puls_uit(puls_nr: int) -> dict:
     v.bus.subscribe("tijdgeest_pulse_completed", lambda e: tijdgeest_done.update(e.data or {"ok": True}))
 
     v.start()
-    heeft_tijdgeest = "tijdgeest_wachter" in v.reconciler.live
+    heeft_harry = "harry_hemp" in v.reconciler.live
     v.bus.publish(Event("dag_begint", {"label": f"supervised-{puls_nr}"}, "supervisor"))
 
     timeout = time.time() + 300  # 5 min max
     while time.time() < timeout:
-        analyst_klaar   = bool(done)
-        tijdgeest_klaar = bool(tijdgeest_done) or not heeft_tijdgeest
-        if analyst_klaar and tijdgeest_klaar:
+        watcher_klaar = bool(done)
+        harry_klaar   = bool(tijdgeest_done) or not heeft_harry
+        if watcher_klaar and harry_klaar:
             break
         time.sleep(0.2)
 
-    # Geef KennisScout (base-class _maybe_reflect via dag_begint) extra tijd
+    # Geef inwoners extra tijd voor _maybe_reflect via dag_begint
     time.sleep(2)
     v.stop()
     v.root.join(timeout=10)
@@ -95,10 +95,10 @@ def voer_puls_uit(puls_nr: int) -> dict:
     gaps   = _lees_gaps()
     inbox  = _lees_inbox_open()
     return {
-        "gaps":          gaps,
-        "inbox_items":   len(inbox),
-        "analyst_ok":    bool(done),
-        "tijdgeest_ok":  bool(tijdgeest_done) or not heeft_tijdgeest,
+        "gaps":              gaps,
+        "inbox_items":       len(inbox),
+        "website_watcher_ok": bool(done),
+        "harry_hemp_ok":     bool(tijdgeest_done) or not heeft_harry,
     }
 
 
@@ -119,7 +119,7 @@ def main():
         res = voer_puls_uit(i)
         dt  = time.time() - t0
 
-        print(f"   analyst_ok={res['analyst_ok']}  tijdgeest_ok={res['tijdgeest_ok']}  "
+        print(f"   website_watcher_ok={res['website_watcher_ok']}  harry_hemp_ok={res['harry_hemp_ok']}  "
               f"duur={dt:.1f}s  inbox_open_items={res['inbox_items']}")
         for k in TARGETS:
             g = res["gaps"].get(k, {})
