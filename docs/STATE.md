@@ -1,10 +1,10 @@
-# NoochVille — State & Handover (2026-06-19)
+# NoochVille — State & Handover (2026-06-20)
 
 > STATE = huidige waarheid, vervang bij update. `docs/JOURNAL.md` = historie, append-only.
 
 ## Waar we staan
 
-- Code op ~10, 331 tests groen (suite groeide: 221 → 297 → 327 → 331).
+- Code op ~10, 349 tests groen (suite groeide: 221 → 297 → 327 → 331 → 349).
 - **LLM-timeout fix** (commit `851c7da`): `anthropic.Anthropic(timeout=30.0)` en
   `GenerateContentConfig(http_options=HttpOptions(timeout=30))` op beide backends.
   Bare `except Exception: pass` vervangen door `logging.warning("LLM <backend> faalde: %s", exc)`.
@@ -25,27 +25,26 @@
 - Keyword-lus gesloten: Librarian-escalaties landen als eigen type "keyword" in
   de inbox (approve → approved, reject → forbidden naar de bibliotheek, direct,
   deduped).
-- Live burgers: GrowthAnalyst, Librarian, PerformanceScout, TimeKeeper,
-  Facilitator, CircleLead, TijdgeestWachter, KennisScout, Noochie, Ronnie
-  (live sinds 15 juni).
+- Live AI-burgers: WebsiteWatcher (Corry Coconut), Librarian, TrendsWorker (Maisy Mushroom),
+  Facilitator, HarryHemp, Noochie. Onbemand seed: The Source (Stefan).
 - **Observatie-store**: getimestampte tijdreeks per rol/metric (`data/observations.jsonl`,
-  append-only). GrowthAnalyst logt pulsdata voor gemonitorde metrics.
+  append-only). WebsiteWatcher (Corry Coconut) logt pulsdata voor gemonitorde metrics.
 - **Project-primitief + grootboek + projects-CLI**: ProjectLedger (atomic writes,
   mtime-reload voor cross-process zichtbaarheid), human-push trigger via CLI.
   Levenscyclus: `queued → running → blocked → running → done`.
 - **Metric-discovery-lus end-to-end bewezen met gemockte trage delen** (Plausible,
-  Trends, LLM): project → analyst ontdekt menukaart → Noochie adviseert →
-  analyst zet monitoring → pulse logt. Gevalideerd in `tests/test_loop.py`
+  Trends, LLM): project → website_watcher ontdekt menukaart → Noochie adviseert →
+  website_watcher zet monitoring → pulse logt. Gevalideerd in `tests/test_loop.py`
   (echte threads, 20s timeout). Echte supervised live run nog te doen.
 - **MonitoringStore**: per-rol lijst van te monitoren metrics (`data/role_metrics.json`,
   dedup + gesorteerd). Gevuld door `_on_advice_ready` na Noochie-advies.
-- **TimeKeeper**: `maand_begint` / `kwartaal_begint` toegevoegd aan
+- **Facilitator (absorbeert TimeKeeper-cadans)**: `maand_begint` / `kwartaal_begint` toegevoegd aan
   `cadence_events` (dag 1 van maand resp. kwartaal).
 - **Dom WIP-plafond op het grootboek**: ontworpen, NIET gebouwd; `ProjectLedger` heeft `open()` maar geen cap-logica; te bouwen.
 - **Structurele fix — once-per-pulse-discipline + `_busy`-drop**: `react()` heeft
   `drop_if_busy=True`; een `dag_begint` tijdens een lopende puls wordt bij
   enqueue direct weggegooid (niet gequeued). `_setup_events()`-hook laat
-  GrowthAnalyst/PerformanceScout/TijdgeestWachter hun eigen pulsgate definiëren.
+  WebsiteWatcher/TrendsWorker/HarryHemp hun eigen pulsgate definiëren.
   Inbox-flooding opgelost.
 - **Blauwdruk `docs/ONTWERP_projecten_metrics.md`**: aangemaakt en gecommit.
 - **Sensing-herbouw stap 1 — dedup van staande condities**: `_sense_gap` slaat
@@ -61,7 +60,8 @@
   elk exact één keer als means_gap-item in de inbox; `semscholar_no_key` zwijgt.
   Geen `amend_role`-churn meer. Live bewijs: 4 supervised pulsen vlakke tellers
   (38/34/42/38 onveranderd), `python -m nooch_village.inbox list` toont 3 items,
-  `amend_role` = 0 in system_log. 170 tests groen (`tests/test_means_gap.py`).
+  `amend_role` = 0 in system_log. 170 tests groen (`tests/test_means_gap.py`, groep-A;
+  groep-B verwijderd in 1ed484d, volledige route-dekking via `test_harry_hemp.py` en `test_gap_routing.py`).
 - **Durable reject** (commit `87b91a5`): CLI-leespaden (`list`/`show`/`defer`/
   `approve`) muteren niet meer via `sync_unmanned`. Reject-activatie archiveert
   het onderliggende sensed-record zodat het niet terugkomt. `add_activation`
@@ -85,7 +85,7 @@
   nieuwe rol geboren, geen nieuwe activatie-items, alle junk-spanningen als B
   geblokkeerd. (3) Meting tegen echt Noochie-record
   (`data/governance_records.json`): junk-scores 0.125–0.571, matchende rol
-  noochville (anchor-purpose) en analyst, alle drie B, geen C. Lek is dicht.
+  noochville (anchor-purpose) en website_watcher, alle drie B, geen C. Lek is dicht.
   De twee-slag-gate (`_sense_gap`, `min_count=2`) bestaat al stroomopwaarts en
   is geen extra werk voor de trechter.
 - **C-trechter + coherentiepoort live** (commit `13802c9`): `_funnel_c_proposal`
@@ -105,12 +105,12 @@
   termen; CLI (clickstream) geeft echte volumes. NL "vegan schoenen" = 3.4k CLI,
   DE "vegane schuhe" = 48k CLI. Conclusie: `data_source="cli"` default voor
   NL/DACH/Nordics, vastgelegd in DESIGN doc §6.
-- **Academische grounding live**: KennisScout grondt elke binnenkomende term
+- **Academische grounding live**: HarryHemp grondt elke binnenkomende term
   tegen OpenAlex (citatie-rang, key-auth) en Semantic Scholar (recente literatuur
   + tldr). Per_page-bug gefixed; 429-backoff actief; beide sockets groen op echte keys.
 - **Keyword-pijplijn compleet op main**: matrix → batch → measure → integration
   → inbox, lineair, CI-groen. nl/core village-run bevestigd (15 credits, Librarian
-  en KennisScout verwerken gepubliceerde termen). FR/ES/IT (Romance word-order)
+  en HarryHemp verwerken gepubliceerde termen). FR/ES/IT (Romance word-order)
   gecommit en live getest.
 
 ## Openstaand / let op
@@ -148,15 +148,6 @@
 
 ## Openstaande ontwerpschuld
 
-- **tijdgeest_wachter means-gap blokkade**: `ngram_2019_cutoff` staat op deferred
-  (CLI `resolve()` weigert non-pending items). Means_gap-items kennen sowieso geen
-  approve-handler in de inbox-CLI — `approve` op een means_gap valt door alle type-
-  branches zonder effect. Het juiste pad loopt via
-  `Village.submit_proposal(amend_role, add_skills=[...])` → Facilitator G0-G4 →
-  Secretary adopt. Operationele acties via een losse Python-one-liner schaalt niet;
-  op de lange termijn: óf inbox-CLI uitbreiden met een `means_gap`-approve die het
-  governance-voorstel triggert, óf een aparte governance-CLI.
-
 - **MANDATE_THRESHOLD = 0.10 empirisch laag**: junk-mandaat-scores liggen op
   0.125–0.571, klantverhalen op 0.333. C is in de praktijk bijna onbereikbaar
   voor alles wat Nooch-woorden bevat (anchor-purpose vangt breed). Voorlopig
@@ -165,13 +156,13 @@
   te beoordelen (lage score, brede match op anchor-purpose), niet alleen C's.
 - **Cirkelfilter in classify_gap**: `noochville` (type=circle) wordt meegeschand.
   Uitfilteren verandert B/C-verdeling niet (gemeten), maar verschuift matchende
-  rol van noochville naar analyst. Cosmetisch, geen veiligheidsprobleem.
+  rol van noochville naar website_watcher. Cosmetisch, geen veiligheidsprobleem.
   Beslissing uitgesteld.
 - **Durable-reject**: feature gebouwd (commit `87b91a5`), bevestigingstest
   nog niet. Smart WIP en requirements-dev.txt: open uit vorige sessies.
-- **Project b88d2ddaea33** (analyst discovery via plausible_stats):
+- **Project b88d2ddaea33** (website_watcher discovery via plausible_stats):
   credential-conditie ingelost (.env bevat nu PLAUSIBLE_API_KEY). Echte
-  blokkade is de event-handshake: Noochie's advies bereikt de analyst niet
+  blokkade is de event-handshake: Noochie's advies bereikt website_watcher niet
   terug om de discovery-run te hervatten. Nog open.
 - **C-trechter dedup dood-tot-eerste-geboorte**: `_funnel_c_proposal` vergelijkt
   `gap_key` (afgeleid via `_role_id_from_gap`, top-3 tokens) tegen `rec.id`.
@@ -243,22 +234,22 @@
   ontworpen in docs/ontwerp_kennislaag.md. Eerstvolgende
   natuurlijke vervolgstap na het familie-bezoek.
 
-- **Bevindingen uit Ronnie's eerste echte runs (15 juni middag)**:
+- **Bevindingen uit Noochie's eerste echte bulletin-runs (15 juni middag, toen nog Ronnie)**:
 
-  - Race-condition in dev-pulse: analyst's puls (Plausible plus
+  - Race-condition in dev-pulse: website_watcher's puls (Plausible plus
     schrijven Field Note) duurt langer dan de twaalf seconden tot
-    dag_eindigt. Ronnie leest de Field Note voor 'm bestaat, valt
+    dag_eindigt. Noochie leest de Field Note voor 'm bestaat, valt
     terug op fallback-tekst. In productie (echte dag-cadans) geen
     probleem. In dev-pulse wel. Niet acuut, wel observatie.
 
-  - Ronnie's event-subscription is goed voor nu (8 types), maar mist
+  - Noochie's event-subscription is goed voor nu (8 types), maar mist
     bewust gsc_pulse_completed (te frequent voor bulletin) en
     noochie_weighed_in (toegevoegd aan audit-trail, 17 juni). Beide
     kunnen later toegevoegd worden als de bulletin-toon erbij gediend
     is.
 
   - Patroon vandaag bevestigd: een ontdekking leidt vaak tot een fix
-    die tot een nieuwe ontdekking leidt. Eerste Ronnie-bulletin
+    die tot een nieuwe ontdekking leidt. Eerste Noochie-bulletin
     toonde guardrail-zwakte. Verbreding plus guardrail leidde tot
     ontdekking van race-condition en audit-trail-gat. Belangrijk om
     in budget-discipline (10 uur per week) deze keten te kunnen
@@ -306,10 +297,10 @@
   Trigger = credits-skill voorgesteld voor de puls óf creditsaldo zakt.
 - **Field-note meervoudige rol-reflectie**: ontwerp-item voor een toekomstig
   Noochie-bulletinblok. Niet de growth-field-note hergebruiken als input voor
-  meerdere rollen, maar per rol een eigen destillatie-stap. Geen bug: Ronnie
+  meerdere rollen, maar per rol een eigen destillatie-stap. Geen bug: Noochie
   heeft altijd brede event-input (8 typen in `_TRACK`); de field note is verrijking
   bovenop die input.
-- **TimeKeeper.`_ring` leest `date.today()` opnieuw na `tick()`**: middernacht-
+- **Facilitator.`_ring` leest `date.today()` opnieuw na `tick()`**: middernacht-
   randgeval — `tick()` leest de datum als de grens net is gepasseerd, `_ring`
   leest hem opnieuw en kan één dag teruglopen. Theoretisch maar echt; nette fix
   is de al bepaalde datum als argument doorgeven aan `_ring`.
@@ -380,7 +371,7 @@ Niet in deze sessie.
 (a) **Wiring-brick**: verbind `keywords_everywhere`-skill als echte runner achter
     `measure_batch`. Approval via inbox/verdict-flow. Fold credit-gate-hardening
     erin mee: laat de plafond-check toetsen op `len(batch["candidates"])`.
-(b) **Scout research store**: `PerformanceScout` schrijft keyword + volume naar
+(b) **Scout research store**: `TrendsWorker` schrijft keyword + volume naar
     store met status `onderzoeken`. `klaar voor creatie`-vlag als volume boven drempel.
 (c) **Demand-feed**: koppel `keyword_proposed`-flow aan demand-data (SEO volume
     uit keywords_everywhere-resultaten). Librarian ontvangt voortaan ook demand.
@@ -388,7 +379,7 @@ Niet in deze sessie.
     Librarian-approved. Beide gates moeten groen zijn voor verdere verwerking.
 (e) ~~**Venv repair**~~: ✅ Gedaan — schoon herbouwd, 327 tests groen.
 
-**KennisScout — follow-up**
+**HarryHemp — follow-up**
 
 (a) **OpenAlex relevance-sort hybride**: nu gesorteerd op citaties; overweeg
     hybride (relevance-score + citatie-floor). Niet blind flippen: 3-punter
@@ -397,7 +388,7 @@ Niet in deze sessie.
     `rate_limited` / `credits`) vangt dagquota-grenzen niet. Extra label of
     `daily_limit`-veld overwegen.
 (c) **Observatie-run**: downstream-effect van de nu-gevulde grounding zien —
-    Librarian-beslissingen met KennisScout-bewijs, `keyword_evidence`-events,
+    Librarian-beslissingen met HarryHemp-bewijs, `keyword_evidence`-events,
     herbeoordeelde escalaties.
 
 **Wiring-gaps (observatie-run 2026-06-19)**
@@ -408,9 +399,9 @@ Niet in deze sessie.
     Demo simuleert nu één eerlijke dag (fix/demo-eerlijke-dag, gemerged). Productie
     werkte al correct. TimeKeeper-tick-orkestratie nu gedekt (test/timekeeper-tick,
     gemerged).
-(b) **locale ontbreekt in de GSC-flow**: PerformanceScout publiceert
-    `keyword_proposed` zonder locale in de demand, dus KennisScout grondt met
-    `locale=""` (geen taalsleutel). Fix: PerformanceScout een locale laten
+(b) **locale ontbreekt in de GSC-flow**: TrendsWorker publiceert
+    `keyword_proposed` zonder locale in de demand, dus HarryHemp grondt met
+    `locale=""` (geen taalsleutel). Fix: TrendsWorker een locale laten
     meegeven, afgeleid uit de GSC-property of de querytaal.
 
 **Roadmap (daarna)**
