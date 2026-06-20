@@ -263,6 +263,64 @@ def migrate_records(records: Records) -> None:
         root.members.remove("ronnie")
         changed = True
 
+    # ── Junk-records archiveren (sensed governance-experimenten) ──────────────
+    _JUNK_IDS = [
+        "missie-alignment_missie-gedreven_transparantie",
+        "veganistisch_missie-lens_niche-label",
+        "missie-alignment_marketingtruc_veganistisch",
+    ]
+    for junk_id in _JUNK_IDS:
+        junk = records.get(junk_id)
+        if junk is not None and not junk.archived:
+            junk.archived = True
+            junk.version += 1
+            records.put(junk)
+            changed = True
+        if junk_id in root.members:
+            root.members.remove(junk_id)
+            changed = True
+
+    # ── The Source: de menselijke founding rol ────────────────────────────────
+    if records.get("the_source") is None:
+        the_source = Record(
+            id="the_source",
+            type=RecordType.ROLE,
+            parent=root.id,
+            definition=RoleDefinition(
+                purpose=(
+                    "De droom van NoochVille bedenken en iedereen enthousiast maken "
+                    "om deze droom samen waar te maken."
+                ),
+                accountabilities=[
+                    "de richting van NoochVille bepalen",
+                    "de levende grens bewaken waar geen regel het zegt, en de residuele "
+                    "verantwoordelijkheid dragen die geen enkele rol bezit, waaronder het "
+                    "bijwerken van de materiaal-policy en de locale-policy",
+                    "knopen doorhakken na overleg en met uitleg",
+                    "vrijheid geven aan de inwoners",
+                    "middelen en geld verdelen",
+                    "de score bijhouden",
+                    "een vangnet zijn",
+                ],
+                skills=[],
+            ),
+            source="seed",
+            persona="Stefan",
+        )
+        records.put(the_source)
+        changed = True
+    else:
+        # Idempotent: zet persona als die ontbreekt (bijv. na _load zonder persona-veld)
+        ts = records.get("the_source")
+        if ts.persona != "Stefan":
+            ts.persona = "Stefan"
+            ts.version += 1
+            records.put(ts)
+            changed = True
+    if "the_source" not in root.members:
+        root.members.append("the_source")
+        changed = True
+
     if changed:
         records.put(root)
 

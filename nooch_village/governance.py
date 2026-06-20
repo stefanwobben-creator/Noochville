@@ -263,7 +263,8 @@ class Records:
                 definition=RoleDefinition(**r["definition"]),
                 members=r.get("members", []), version=r.get("version", 1),
                 archived=r.get("archived", False),
-                source=r.get("source", "sensed"))
+                source=r.get("source", "sensed"),
+                persona=r.get("persona"))
 
     def save(self) -> None:
         out = {}

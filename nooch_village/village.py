@@ -193,7 +193,7 @@ class Village:
         self.human_inbox.resolve(item_id, "approved", reason=reason)
         self.bus.publish(Event("governance_verdict",
                                {"proposal_id": pid, "decision": "approve", "reason": reason},
-                               "human"))
+                               "the_source"))
         logging.getLogger("village.inbox").info(
             "✅ human_inbox: escalatie %s goedgekeurd (voorstel %s)", item_id, pid)
         return True
