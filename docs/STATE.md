@@ -1,8 +1,10 @@
 # NoochVille — State & Handover (2026-06-19)
 
+> STATE = huidige waarheid, vervang bij update. `docs/JOURNAL.md` = historie, append-only.
+
 ## Waar we staan
 
-- Code op ~10, 297 tests groen (suite groeide: 221 → 297).
+- Code op ~10, 327 tests groen (suite groeide: 221 → 297 → 327).
 - **LLM-timeout fix** (commit `851c7da`): `anthropic.Anthropic(timeout=30.0)` en
   `GenerateContentConfig(http_options=HttpOptions(timeout=30))` op beide backends.
   Bare `except Exception: pass` vervangen door `logging.warning("LLM <backend> faalde: %s", exc)`.
@@ -39,7 +41,7 @@
   dedup + gesorteerd). Gevuld door `_on_advice_ready` na Noochie-advies.
 - **TimeKeeper**: `maand_begint` / `kwartaal_begint` toegevoegd aan
   `cadence_events` (dag 1 van maand resp. kwartaal).
-- **Dom WIP-plafond op het grootboek**: ⚠ niet gecommit — open item.
+- **Dom WIP-plafond op het grootboek**: ontworpen, NIET gebouwd; `ProjectLedger` heeft `open()` maar geen cap-logica; te bouwen.
 - **Structurele fix — once-per-pulse-discipline + `_busy`-drop**: `react()` heeft
   `drop_if_busy=True`; een `dag_begint` tijdens een lopende puls wordt bij
   enqueue direct weggegooid (niet gequeued). `_setup_events()`-hook laat
@@ -113,13 +115,12 @@
 
 ## Openstaand / let op
 
-- **Venv is gebroken** (wijst naar oud `~/Downloads/noochville`-pad). `./venv/bin/python`
-  werkt, `./venv/bin/pip` niet — gebruik `python -m pip`. Fix: recreëren uit de
-  nu-complete `requirements.txt` en controleren dat het 297 blijft.
+- ~~**Venv was gebroken**~~ ✅ Gedaan — schoon herbouwd met Python 3.14, pip-shebang
+  gecorrigeerd, 327 tests groen (lokale actie, geen commit).
 - **`KEYWORDS_EVERYWHERE_API_KEY` moet in `.env`** (regenereren; oude sleutel is
   in een chat-sessie verschenen).
-- **`pandas>=2.0` trekt in CI al `pandas 3.0.3` binnen**; gemockt dus geen pijn,
-  overweeg een cap (`pandas>=2.0,<3`).
+- ~~**`pandas>=2.0` trekt in CI al `pandas 3.0.3` binnen**~~: ✅ Gedaan — gecapt op `<3`
+  (commit `cd4116c`); verse venv pakt `pandas 2.3.3`.
 - **cost-gate** (puls weigert `cost != "free"`): blijft genoteerd, niet gebouwd.
 - **credit-gate-hardening**: de plafond-check in `measure_batch` toetst
   `batch["estimated_credits"]`, terwijl `credits_spent` op `len(batch["candidates"])`
@@ -197,9 +198,9 @@
   docs/ontwerp_governance_ritueel.md) wordt gebouwd, want governance
   wordt dan een Village-staat, geen losse CLI.
 
-- **Inbox approve-gate timeout (5s) is een gok**. Bij eerste false-timeout
-  (uitkomst arriveert na de wait): parametrisch maken of langer
-  default.
+- ~~**Inbox approve-gate timeout (5s) is een gok**~~: ✅ Opgelost — al instelbaar via
+  `inbox_approve_timeout` in `settings.ini` (default `5`). Geen actie nodig; fix-on-trigger
+  als ooit een echte false-timeout optreedt.
 
 - **Ontwerpprincipe vastgelegd (Stefan, 15 juni)**: "een spanning mag
   nooit doodlopen". Elke spanning kan worden omgezet in governance
@@ -373,8 +374,7 @@ Niet in deze sessie.
     uit keywords_everywhere-resultaten). Librarian ontvangt voortaan ook demand.
 (d) **Promotion join**: `klaar voor creatie` = scout-research klaar én
     Librarian-approved. Beide gates moeten groen zijn voor verdere verwerking.
-(e) **Venv repair**: nieuw venv bouwen vanuit volledige `requirements.txt`,
-    verifiëren dat 297 tests groen blijven.
+(e) ~~**Venv repair**~~: ✅ Gedaan — schoon herbouwd, 327 tests groen.
 
 **KennisScout — follow-up**
 
