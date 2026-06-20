@@ -6,11 +6,11 @@ Zeven scenario's:
 2. PULS-FOUT: ngram geeft error → tijdgeest_pulse_completed met ok=False,
    geen keyword_proposed.
 3. GROUNDING: keyword_proposed event → keyword_evidence gepubliceerd
-   (drie skills gemockt).
+   (twee skills: OpenAlex + Semantic Scholar; OpenLibrary niet meer in DNA).
 4. GROUNDING-DEDUP: twee keyword_proposed voor dezelfde term terwijl de eerste
    nog in _busy_terms zit → tweede wordt genegeerd.
-5. REFLECT: _reflect publiceert precies drie means_gap_sensed-events
-   (ngram_2019_cutoff, nl_corpus_coverage, openlibrary_v2).
+5. REFLECT: _reflect publiceert precies twee means_gap_sensed-events
+   (ngram_2019_cutoff, nl_corpus_coverage); openlibrary_v2 verdwenen uit _reflect.
 6. EIGEN TERMEN: Harry's puls publiceert keyword_proposed voor een stijgende
    term; zijn eigen grounding-handler pikt dit op en publiceert keyword_evidence.
    Bevestigt dat de lus precies één keer doorlopen wordt (geen oneindige herhaling).
@@ -46,8 +46,7 @@ def _make_harry(tmp_path, *,
                 tijdgeest_interval: int = 0,
                 ngram_result: dict | None = None,
                 openalex_result: dict | None = None,
-                semscholar_result: dict | None = None,
-                openlibrary_result: dict | None = None):
+                semscholar_result: dict | None = None):
     bus = EventBus(name="test")
     registry = SkillRegistry()
     registry.register(_StubSkill("ngram_culture",
@@ -56,8 +55,6 @@ def _make_harry(tmp_path, *,
         openalex_result or {"no_data": True}))
     registry.register(_StubSkill("semscholar_tldr",
         semscholar_result or {"no_data": True}))
-    registry.register(_StubSkill("openlibrary_search_inside",
-        openlibrary_result or {"hits": []}))
     context = SimpleNamespace(
         settings={
             "tijdgeest_interval_seconds": str(tijdgeest_interval),
@@ -73,8 +70,7 @@ def _make_harry(tmp_path, *,
         parent="noochville",
         definition=RoleDefinition(
             purpose="The Scientist: combineert tijdgeest-observatie en academische grounding",
-            skills=["ngram_culture", "openalex_evidence", "semscholar_tldr",
-                    "openlibrary_search_inside"],
+            skills=["ngram_culture", "openalex_evidence", "semscholar_tldr"],
         ),
         source="seed",
     )
@@ -137,7 +133,7 @@ def test_puls_fout_publiceert_completed_niet_ok(tmp_path):
 
 
 def test_grounding_keyword_proposed_publiceert_evidence(tmp_path):
-    """keyword_proposed → drie skills aanroepen → keyword_evidence gepubliceerd."""
+    """keyword_proposed → OpenAlex + Semantic Scholar → keyword_evidence gepubliceerd."""
     openalex  = {"hits": [{"title": "Regenerative Farming", "year": 2021,
                             "source": "openalex", "tldr": ""}]}
     semscholar = {"hits": [{"title": "Regen. Design Principles", "year": 2019,
@@ -183,8 +179,12 @@ def test_grounding_dedup_tweede_term_genegeerd(tmp_path):
     assert "regeneratief" in harry._busy_terms   # nog steeds erin (extern ingesteld)
 
 
-def test_reflect_publiceert_drie_means_gaps(tmp_path):
-    """_reflect publiceert precies drie means_gap_sensed: ngram_2019, nl_corpus, openlibrary."""
+def test_reflect_publiceert_twee_means_gaps(tmp_path):
+    """_reflect publiceert precies twee means_gap_sensed: ngram_2019_cutoff en nl_corpus_coverage.
+
+    openlibrary_v2 is verwijderd uit _reflect: de skill staat niet meer in Harry's DNA
+    en OpenLibrary-grounding is een toekomstige v2-beslissing.
+    """
     harry, bus = _make_harry(tmp_path)
 
     gaps: list[str] = []
@@ -192,10 +192,10 @@ def test_reflect_publiceert_drie_means_gaps(tmp_path):
 
     harry._reflect()
 
-    assert "ngram_2019_cutoff"   in gaps
-    assert "nl_corpus_coverage"  in gaps
-    assert "openlibrary_v2"      in gaps
-    assert len(gaps) == 3
+    assert "ngram_2019_cutoff"  in gaps
+    assert "nl_corpus_coverage" in gaps
+    assert "openlibrary_v2"     not in gaps
+    assert len(gaps) == 2
 
 
 def test_eigen_termen_worden_gegrond_zonder_lus(tmp_path):

@@ -972,15 +972,6 @@ class HarryHemp(Inhabitant):
             else:
                 evidence.extend(papers.get("hits", []))
 
-            books = self.use_skill("openlibrary_search_inside",
-                                   {"term": word, "limit": 3})
-            if "error" in books:
-                self.log.warning("⚠️ OpenLibrary: %s", books["error"])
-            elif not books.get("hits"):
-                self.log.info("ℹ️ OpenLibrary: geen boeken voor '%s'", word)
-            else:
-                evidence.extend(books.get("hits", []))
-
             assessment = self._distill(word, locale, evidence, demand)
 
             self.bus.publish(Event("keyword_evidence", {
@@ -1004,7 +995,7 @@ class HarryHemp(Inhabitant):
         """
         if not evidence:
             return (f"Geen academische bronnen gevonden voor '{word}' "
-                    f"(locale={locale or 'onbekend'}, v1: OpenAlex + Semantic Scholar).")
+                    f"(locale={locale or 'onbekend'}; v1: OpenAlex + Semantic Scholar).")
 
         bron_regels: list[str] = []
         for e in evidence[:5]:
@@ -1035,12 +1026,11 @@ class HarryHemp(Inhabitant):
     # ── reflectie ─────────────────────────────────────────────────────────────
 
     def _reflect(self) -> None:
-        """Combineert de means_gaps van beide bronrollen.
+        """Tijdgeest-limieten: ngram data-cutoff en NL-corpus.
 
         Produceer UITSLUITEND means-gap-items — nooit governance-voorstellen of API-calls.
         Uitbreiding van capaciteit is mens-gated activatie.
         """
-        # Tijdgeest-limieten
         self._report_means_gap(
             "ngram_2019_cutoff",
             "accountability: aanvullende recente bron voor tijdgeest-observaties periodiek "
@@ -1055,13 +1045,6 @@ class HarryHemp(Inhabitant):
             "meerdere Nederlandse termen (bijv. 'consument') worden niet gevonden in het "
             "NL corpus 10 (2012); het corpus is verouderd en dekt moderne missie-terminologie "
             "onvoldoende af",
-        )
-        # Grounding-limieten
-        self._report_means_gap(
-            "openlibrary_v2",
-            "accountability: OpenLibrary voltekst-grounding evalueren en toevoegen als v2 — "
-            "v1 grondt uitsluitend in academische literatuur (OpenAlex, Semantic Scholar); "
-            "boek-evidentie (bijv. duurzaamheidscanon) ontbreekt daardoor volledig",
         )
 
 
