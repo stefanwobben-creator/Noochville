@@ -19,7 +19,7 @@ from nooch_village.governance import Records, Secretary, Reconciler, proposal_to
 from nooch_village.models import Proposal
 from nooch_village.roles import (
     WebsiteWatcherWorker, Librarian, TrendsWorker,
-    Facilitator, TijdgeestWachter, KennisScout, Noochie, HarryHemp,
+    Facilitator, Noochie, HarryHemp,
 )
 from nooch_village.library import Library
 from nooch_village.lexicon import Lexicon
@@ -45,20 +45,17 @@ from nooch_village.monitoring import MonitoringStore
 from nooch_village.projects import ProjectLedger
 from nooch_village.seeds import (
     seed_lexicon, seed_records, migrate_records,
-    activate_tijdgeest_wachter, activate_kennis_scout,
 )
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 CLASS_MAP = {
-    "website_watcher":   WebsiteWatcherWorker,
-    "librarian":         Librarian,
-    "trends":            TrendsWorker,
-    "facilitator":       Facilitator,
-    "tijdgeest_wachter": TijdgeestWachter,
-    "kennis_scout":      KennisScout,
-    "noochie":           Noochie,
-    "harry_hemp":        HarryHemp,
+    "website_watcher": WebsiteWatcherWorker,
+    "librarian":       Librarian,
+    "trends":          TrendsWorker,
+    "facilitator":     Facilitator,
+    "noochie":         Noochie,
+    "harry_hemp":      HarryHemp,
 }
 
 
@@ -96,8 +93,6 @@ class Village:
         self.records = Records(os.path.join(self.context.data_dir, "governance_records.json"))
         seed_records(self.records)
         migrate_records(self.records)
-        activate_tijdgeest_wachter(self.records)
-        activate_kennis_scout(self.records)
         self.context.records = self.records
         self.matchmaker = Matchmaker(self.bus)
         self.secretary = Secretary(self.records, self.bus)
