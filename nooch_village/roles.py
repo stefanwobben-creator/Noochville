@@ -315,7 +315,8 @@ class TrendsWorker(Inhabitant):
             self.bus.publish(Event("gsc_pulse_completed",
                 {"by": self.id, "ok": True,
                  "total": result.get("total", 0),
-                 "bucket_counts": result.get("bucket_counts", {})}, self.id))
+                 "bucket_counts": result.get("bucket_counts", {}),
+                 "boodschap": f"GSC-ronde: {result.get('total', 0)} queries opgehaald"}, self.id))
         finally:
             self._busy = False
         self._maybe_reflect(None)
@@ -835,6 +836,7 @@ class Noochie(Inhabitant):
         "means_gap_sensed",
         "tijdgeest_pulse_completed",
         "keyword_proposed",
+        "gsc_pulse_completed",
     )
 
     def __init__(self, *args, **kwargs):

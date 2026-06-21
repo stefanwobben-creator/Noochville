@@ -1,6 +1,6 @@
 """Tests voor Noochie's bulletin-mandaat (geabsorbeerd van Ronnie) — thread-vrij.
 
-Tien scenario's:
+Elf scenario's:
 1. Noochie abonneert zich op dag_eindigt — na publish staat er werk in de inbox.
 2. Op dag_eindigt schrijft Noochie een bulletin (LLM gemockt, vier koppen aanwezig).
 3. Lege dag (geen events) → bulletin wordt toch geschreven.
@@ -14,6 +14,8 @@ Tien scenario's:
    ALS de verzameling (_events_today) — twee onafhankelijke handlers.
 10. KANTEL: de prompt aan reason() bevat de kantel-instructie en de kantel-zin
     belandt in het tension_sensed-event na het bereiken van min_count=2.
+11. gsc_pulse_completed met ok=True wordt door _collect_event verzameld met een
+    niet-lege note die het aantal opgehaalde queries bevat.
 """
 from __future__ import annotations
 import logging
@@ -256,3 +258,24 @@ def test_noochie_reflect_kantel_in_prompt_and_tension(tmp_path):
     assert "kantelt als" in description, (
         f"kantel-zin ontbreekt in de tension_sensed description:\n{description}"
     )
+
+
+def test_gsc_pulse_completed_verzameld_met_boodschap(tmp_path):
+    """gsc_pulse_completed (ok=True) → verzameld in _events_today met niet-lege note."""
+    noochie, bus = _make_noochie(tmp_path)
+
+    with patch("nooch_village.llm.reason", return_value=None):
+        bus.publish(Event("gsc_pulse_completed", {
+            "by": "performance_scout",
+            "ok": True,
+            "total": 42,
+            "bucket_counts": {"high_potential": 3},
+            "boodschap": "GSC-ronde: 42 queries opgehaald",
+        }, "performance_scout"))
+        _drain(noochie)
+
+    collected = [e for e in noochie._events_today if e["name"] == "gsc_pulse_completed"]
+    assert len(collected) == 1
+    note = collected[0]["note"]
+    assert note, "note mag niet leeg zijn"
+    assert "42" in note
