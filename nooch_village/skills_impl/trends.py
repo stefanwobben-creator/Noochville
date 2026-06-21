@@ -33,6 +33,18 @@ def _geo_to_locale(geo: str) -> str:
     return _GEO_LOCALE.get(geo.upper(), "en")
 
 
+def _normalize_rising_value(raw):
+    """rising-value is een int (stijgingspercentage) of de string 'Breakout'.
+    Breakout = >5000% of vanuit nul; we behouden het signaal als hoge sentinel
+    en markeren het apart, zodat het sterkste discovery-signaal niet wegvalt."""
+    if isinstance(raw, str) and raw.strip().lower() == "breakout":
+        return 10000, True
+    try:
+        return int(raw), False
+    except (TypeError, ValueError):
+        return 0, False
+
+
 def _keywords_for_locale(locale: str, context) -> list[str]:
     """Woorden voor een locale: Lexicon-taalvak heeft prioriteit, dan keywords.txt + Library."""
     lexicon = getattr(context, "lexicon", None)
@@ -126,6 +138,15 @@ class TrendsSkill(Skill):
                         if kw in related and related[kw].get("top") is not None:
                             top_related = (related[kw]["top"][["query", "value"]]
                                            .head(5).to_dict("records"))
+                        rising_related: list = []
+                        if kw in related and related[kw].get("rising") is not None:
+                            for rec in related[kw]["rising"][["query", "value"]].head(5).to_dict("records"):
+                                val, is_breakout = _normalize_rising_value(rec.get("value"))
+                                rising_related.append({
+                                    "query": rec.get("query"),
+                                    "value": val,
+                                    "breakout": is_breakout,
+                                })
                         row = {
                             "term":            kw,
                             "locale":          locale,
@@ -133,12 +154,14 @@ class TrendsSkill(Skill):
                             "interest_latest": latest,
                             "direction":       direction,
                             "top_related":     top_related,
+                            "rising_related":  rising_related,
                         }
                         if geo == first_geo:
                             legacy[kw] = {
                                 "interest_latest": latest,
                                 "direction":       direction,
                                 "top_related":     top_related,
+                                "rising_related":  rising_related,
                             }
                     else:
                         row = {

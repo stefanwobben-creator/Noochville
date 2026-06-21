@@ -8,15 +8,16 @@ Verifieert de volledige keten:
 from __future__ import annotations
 import time
 import pytest
+import pandas as pd
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from nooch_village.roles import WebsiteWatcherWorker, Noochie
 from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.event_bus import EventBus, Event
 from nooch_village.skills import SkillRegistry
 from nooch_village.skills_impl.plausible import PlausibleSkill
-from nooch_village.skills_impl.trends import TrendsSkill
+from nooch_village.skills_impl.trends import TrendsSkill, _normalize_rising_value
 from nooch_village.skills_impl.field_note import FieldNoteSkill
 from nooch_village.projects import ProjectLedger
 from nooch_village.monitoring import MonitoringStore
@@ -117,3 +118,88 @@ def test_discovery_loop(loop_setup):
     metrics = s.monitoring.get_metrics("website_watcher")
     assert len(metrics) > 0, "Geen metrics in monitoring na discovery"
     assert any(m in metrics for m in ("visitors", "pageviews"))
+
+
+# ── Tests voor rising_related parsing ─────────────────────────────────────────
+
+def test_normalize_rising_value_breakout():
+    val, is_breakout = _normalize_rising_value("Breakout")
+    assert val == 10000
+    assert is_breakout is True
+
+
+def test_normalize_rising_value_integer():
+    val, is_breakout = _normalize_rising_value(350)
+    assert val == 350
+    assert is_breakout is False
+
+
+def test_normalize_rising_value_ongeldige_waarde():
+    val, is_breakout = _normalize_rising_value(None)
+    assert val == 0
+    assert is_breakout is False
+
+
+def test_trends_rising_related_structuur(tmp_path):
+    """TrendsSkill.run() met gemockte pytrends: rising_related verwerkt Breakout
+    en integer correct; term zonder rising levert lege lijst, geen crash."""
+    rising_term1 = pd.DataFrame([
+        {"query": "vegan laarzen",    "value": "Breakout"},
+        {"query": "plantaardig leer", "value": 320},
+    ])
+    top_term1 = pd.DataFrame([{"query": "vegan schoenen nl", "value": 100}])
+
+    rising_term2 = None
+    top_term2    = pd.DataFrame([{"query": "duurzame skor",   "value": 80}])
+
+    def fake_related_queries():
+        return {
+            "vegan schoenen": {
+                "top":    top_term1,
+                "rising": rising_term1,
+            },
+            "duurzame sneakers": {
+                "top":    top_term2,
+                "rising": rising_term2,
+            },
+        }
+
+    fake_interest = pd.DataFrame(
+        {"vegan schoenen": [50, 60], "duurzame sneakers": [40, 45]},
+        index=pd.date_range("2025-01-01", periods=2, freq="W"),
+    )
+
+    mock_pytrends = MagicMock()
+    mock_pytrends.interest_over_time.return_value = fake_interest
+    mock_pytrends.related_queries.side_effect = fake_related_queries
+
+    import nooch_village.config as cfg
+    from nooch_village.library import Library
+
+    ctx = SimpleNamespace(
+        settings={"trends_geo": "NL"},
+        data_dir=str(tmp_path),
+        library=Library(str(tmp_path / "library.json")),
+        lexicon=None,
+    )
+
+    with patch("pytrends.request.TrendReq", return_value=mock_pytrends):
+        result = TrendsSkill().run(
+            {"keywords": ["vegan schoenen", "duurzame sneakers"]}, ctx
+        )
+
+    kw = result["keywords"]
+
+    # term 1: rising met Breakout én integer
+    r1 = kw["vegan schoenen"]["rising_related"]
+    assert len(r1) == 2
+    breakout_row = next(r for r in r1 if r["query"] == "vegan laarzen")
+    assert breakout_row["value"] == 10000
+    assert breakout_row["breakout"] is True
+    normal_row = next(r for r in r1 if r["query"] == "plantaardig leer")
+    assert normal_row["value"] == 320
+    assert normal_row["breakout"] is False
+
+    # term 2: rising is None → lege lijst, geen crash
+    r2 = kw["duurzame sneakers"]["rising_related"]
+    assert r2 == []

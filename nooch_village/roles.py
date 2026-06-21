@@ -241,6 +241,19 @@ class WebsiteWatcherWorker(Inhabitant):
                     "_value": value,
                     "_parent": parent_kw,
                 })
+            for related in kw_data.get("rising_related") or []:
+                term = related["query"] if isinstance(related, dict) else related
+                value = related.get("value", 0) if isinstance(related, dict) else 0
+                if lib.status(term) is not None:
+                    continue
+                candidates.append({
+                    "label": term,
+                    "description": f"opkomende zoekterm gerelateerd aan missie-keyword {related.get('_parent', parent_kw) if isinstance(related, dict) else parent_kw}",
+                    "_value": value,
+                    "_parent": parent_kw,
+                    "_rising": True,
+                    "_breakout": related.get("breakout", False) if isinstance(related, dict) else False,
+                })
         ranked = prioritize(candidates, self.context)
         proposed = 0
         for action in ranked:
@@ -250,7 +263,8 @@ class WebsiteWatcherWorker(Inhabitant):
             published = _publish_keyword_proposed(
                 self.bus, self.id, action["label"],
                 demand={"signal": "positive", "interest": action.get("_value", 0),
-                        "source": "google_trends_related",
+                        "source": "google_trends_rising" if action.get("_rising") else "google_trends_related",
+                        "breakout": action.get("_breakout", False),
                         "parent_keyword": action.get("_parent", "")},
                 library=lib,
             )
