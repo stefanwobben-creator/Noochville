@@ -1,10 +1,10 @@
-# NoochVille — State & Handover (2026-06-20)
+# NoochVille — State & Handover (2026-06-22)
 
 > STATE = huidige waarheid, vervang bij update. `docs/JOURNAL.md` = historie, append-only.
 
 ## Waar we staan
 
-- Code op ~10, 384 tests groen (suite groeide: 221 → 297 → 327 → 331 → 349 → 357 → 370 → 384).
+- Code op ~10, 401 tests groen (suite groeide: ... → 384 → 401).
 - **LLM-timeout fix** (commit `851c7da`): `anthropic.Anthropic(timeout=30.0)` en
   `GenerateContentConfig(http_options=HttpOptions(timeout=30))` op beide backends.
   Bare `except Exception: pass` vervangen door `logging.warning("LLM <backend> faalde: %s", exc)`.
@@ -223,11 +223,18 @@
   koppel-mechanisme voor een goedgekeurd LLM-voorstel nog te ontwerpen
   (raakt optie 2 / draad 4).
 
-- **Kraan-marsroute (volgende sessie, thema: de kraan openzetten)**. Diagnose (brok 0, gedaan): álle bronnen leveren. Woord-toevoer: google_trends geeft verse queries, GSC haalt ~146 queries op (credentials werken), ngram geeft signaal (vegan EN stijgend). Grounding: OpenAlex én Semantic Scholar leveren beide in een echte context. Geen droge bron, geen ontbrekende key. Conclusie: het is wiring, niet data. Het materiaal is er, het komt alleen niet de bus op in de dagcyclus; demo-modi omzeilen de bus, simulate zet de kop niet aan. Let op: losse skill-tests draaien ánders dan in de loop (OpenAlex faalde los met context=None, werkt mét context), dus de echte test van brok 1 gebeurt in de draaiende dagcyclus, niet in losse aanroepen.
-  - **Brok 1 — keten aanzetten in de dagcyclus** (~halve dag, 3pt): na een dagdraai biedt minstens één ontdekkingsrol uit zichzelf verse woorden aan en je ziet ze door de poort de bus op gaan.
-  - **Brok 2 — woord-tot-kaartje zien lopen** (~paar uur, 2pt, na brok 1): in het dagverslag staat aantoonbaar dat een vers ontdekt woord is gegrond, beoordeeld en als kaartje vastgelegd, zonder handmatige injectie. Klein, want de naad is er al; hij wachtte op toevoer.
-  - **Brok 3 — intentie-toets** (~dag, 5pt, nieuw werk): het dorp stelt geen woorden meer voor waarvan de zoekvraag buiten schoenen valt (zoals 'veganistisch' over eten). De keten bleek intentie-blind op twéé plekken: de woordkeuze (veganistisch) én de grounding (Semantic Scholar gaf voor 'vegan' het R-statistiekpakket terug, geen schoenen). Hier hoort KeywordsEverywhere of een intentie-signaal in de propose-keten, plus relevantie-weging in de grounding. Pas te bouwen en te beoordelen als brok 1 en 2 de kraan laten stromen.
-  - **Observatie (geen taak): meertalig ngram-signaal**. Missie-termen leven in het Engelse corpus, 'plasticvrij'/'regeneratief' geven no_data in het NL-corpus. Steunt de Engelse ontdekkingskoers; Duits signaal zou puur winst zijn. Meertalig pas zinvol als lexicon-concepten en intentie-toets per taal meedenken (concepten dragen al nl/en).
+- **Kraan omgebouwd (2026-06-22), discovery draait nu Engels-worldwide op schone seeds.** De brok-0-diagnose klopte: het was wiring, niet data. De ombouw in deze sessie:
+  - Trends-skill leest nu ook `rising` related queries naast `top` (breakout-signaal behouden als sentinel), meer oogst per pytrends-call zonder extra quotum.
+  - `geos`, `hl`, `timeframe` instelbaar via payload; dagcyclus geeft expliciet de discovery-stand mee (worldwide, en-US, today 3-m). Lege geo leidt nu af naar EN, niet NL.
+  - Grof schoen-domeinfilter in `prioritize`: keyword-acties zonder schoen-categoriewoord vallen vóór scoring (zelfde patroon als policy-drop). Filtert afgeleiden, niet de seeds zelf.
+  - Vier scherpe seeds in `config/keywords.txt`: barefoot shoes, sustainable shoes, eco friendly shoes, barefoot sneakers. Bewezen volume + schone waaier (meting), gekozen boven brede termen als 'duurzaam' (waaiert naar funderingsherstel) en dode missie-termen.
+  - Vliegwiel opgeschoond: van 16 approved Library-woorden (die als extra seeds dienen) naar 6 schone schoen-termen; 10 off-schoen NL-woorden op `avoid` gezet zodat ze geen quotum meer vreten.
+- **Strategische diagnose (gemeten, hard): missie-termen hebben geen zoekvraag.** KeywordsEverywhere-clickstream gaf nul volume op 'plastic free shoes', 'plasticvrije schoenen', 'plastikfreie schuhe' (drie talen), terwijl 'barefoot shoes' 165k/mo gaf. Gevolg, sturend voor alle discovery: categorie-termen (barefoot, vegan, sustainable) zoek je via discovery; missie-termen (plasticvrij) creëer je via content, je leent het volume van de categorie-term om de missie te introduceren. Discovery-taal is Engels (vaak ook creatie).
+- **Seed-strategie: weinig scherpe seeds, vliegwiel breidt zelf uit.** Een sterke seed baart de volgende generatie scherpere seeds via z'n waaier (top/rising) → approved → seed. Leersnelheid komt van weinig sterke seeds (rijke waaier, spaart quotum), niet veel matige. Stefan promoveert nieuwe seeds met de hand uit de waaier.
+- **Openstaand na deze sessie:**
+  - **Live-bevestiging (K1d, ~10 min, geen bouw):** één `once()`-run zodra pytrends-quotum hersteld is, kijken of Engelse schoenen-termen met `google_trends_rising`-bron door de keten komen en het domeinfilter de ruis dropt. (Quotum was op aan eind van de sessie.)
+  - **K2 — woord-tot-kaartje (volgende grote stap):** vers Engels schoenen-woord gegrond, beoordeeld, als kaartje vastgelegd zonder handmatige injectie. De naad is er al; hij wachtte op schone toevoer.
+  - **Bekende eigenschappen (geen taak):** domeinfilter draait op label+description, kan aan de randen een off-domein term redden via de parent in de description (fix: alleen op label). Library-saturatie op termijn (poort blokkeert elk bekend woord, raakt de geparkeerde poort-versoepeling). KeywordsEverywhere-volume-validatie als geparkeerde vervolgstap, gegate want credits.
 
 - **Spelregel: library-check aan de poort, niet bij de grounding**: voordat een rol
   een woord op de bus zet, checkt ze of het mag in de library (is_forbidden). De zeef
