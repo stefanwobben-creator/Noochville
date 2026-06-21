@@ -223,16 +223,11 @@
   koppel-mechanisme voor een goedgekeurd LLM-voorstel nog te ontwerpen
   (raakt optie 2 / draad 4).
 
-- **Toevoer-kraan staat droog (blokkade)**: de kennislaag is af en getest, maar
-  ademt niet, want er komt geen vers woord de keten in. Harry grondt elk
-  keyword_proposed van de bus (geen eigen bieb-check), maar de drie publishers
-  (WebsiteWatcher via google_trends, PerformanceScout via GSC, Harry via
-  ngram_culture) hangen aan externe data die in demo en simulate niet is
-  aangesloten. Demo-modi (harry_hemp) omzeilen bovendien de bus en printen alleen.
-  Gevolg: nul groundings, nul kaartjes in een draaiende dag. KeywordsEverywhere
-  bestaat als skill maar zit nog niet in de propose-keten. Volgende stap, vóór de
-  inbox-flow: een ontdekkingsrol die echt woorden aanbiedt zodat het pad woord →
-  grounding → kaartje gaat lopen.
+- **Kraan-marsroute (volgende sessie, thema: de kraan openzetten)**. Diagnose (brok 0, gedaan): álle bronnen leveren. Woord-toevoer: google_trends geeft verse queries, GSC haalt ~146 queries op (credentials werken), ngram geeft signaal (vegan EN stijgend). Grounding: OpenAlex én Semantic Scholar leveren beide in een echte context. Geen droge bron, geen ontbrekende key. Conclusie: het is wiring, niet data. Het materiaal is er, het komt alleen niet de bus op in de dagcyclus; demo-modi omzeilen de bus, simulate zet de kop niet aan. Let op: losse skill-tests draaien ánders dan in de loop (OpenAlex faalde los met context=None, werkt mét context), dus de echte test van brok 1 gebeurt in de draaiende dagcyclus, niet in losse aanroepen.
+  - **Brok 1 — keten aanzetten in de dagcyclus** (~halve dag, 3pt): na een dagdraai biedt minstens één ontdekkingsrol uit zichzelf verse woorden aan en je ziet ze door de poort de bus op gaan.
+  - **Brok 2 — woord-tot-kaartje zien lopen** (~paar uur, 2pt, na brok 1): in het dagverslag staat aantoonbaar dat een vers ontdekt woord is gegrond, beoordeeld en als kaartje vastgelegd, zonder handmatige injectie. Klein, want de naad is er al; hij wachtte op toevoer.
+  - **Brok 3 — intentie-toets** (~dag, 5pt, nieuw werk): het dorp stelt geen woorden meer voor waarvan de zoekvraag buiten schoenen valt (zoals 'veganistisch' over eten). De keten bleek intentie-blind op twéé plekken: de woordkeuze (veganistisch) én de grounding (Semantic Scholar gaf voor 'vegan' het R-statistiekpakket terug, geen schoenen). Hier hoort KeywordsEverywhere of een intentie-signaal in de propose-keten, plus relevantie-weging in de grounding. Pas te bouwen en te beoordelen als brok 1 en 2 de kraan laten stromen.
+  - **Observatie (geen taak): meertalig ngram-signaal**. Missie-termen leven in het Engelse corpus, 'plasticvrij'/'regeneratief' geven no_data in het NL-corpus. Steunt de Engelse ontdekkingskoers; Duits signaal zou puur winst zijn. Meertalig pas zinvol als lexicon-concepten en intentie-toets per taal meedenken (concepten dragen al nl/en).
 
 - **Spelregel: library-check aan de poort, niet bij de grounding**: voordat een rol
   een woord op de bus zet, checkt ze of het mag in de library (is_forbidden). De zeef
@@ -270,12 +265,6 @@
   eigen sessie met de consequenties overzien, niet een avond-ingreep. Tot dan blijft
   de poort dedup-op-alles (ken-ik-dit), wat voor het lage volume van de eerste weken
   prima volstaat.
-- **Intentie-filter ontbreekt aan de kop**: het dorp ziet stijging (pytrends) en
-  positie (GSC), maar geen zoekintentie. Daardoor kwam 'veganistisch' boven als
-  kans terwijl die vraag over eten gaat, niet over schoenen. Dezelfde fout-klasse als
-  de hamburgers bij burger_frame, nu aan de voorkant. Hier hoort KeywordsEverywhere
-  plus een intentie-toets in de propose-keten, de demand-validatie die nog ontbreekt.
-
 - **Regeneratief-pagina**: kwam 17 juni meermaals boven (field-note-aanbeveling
   + drie Noochie-oordelen). Content-backlog, geen code. Drie stappen:
   1. Research eerst: regeneratief in combinatie met footwear/sneakers, is dit
