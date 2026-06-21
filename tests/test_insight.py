@@ -158,3 +158,31 @@ def test_verified_with_certified_is_valid():
     )
     assert note.status == GroundingStatus.VERIFIED
     assert note.evidence_type == EvidenceType.CERTIFIED
+
+
+# --- concept_id tests ---
+
+def test_concept_id_is_optional():
+    note = Insight(id="x", claim="Een claim.", source="test")
+    assert note.concept_id is None
+
+
+def test_concept_id_stored_on_note():
+    note = Insight(id="x", claim="Een claim.", source="test", concept_id="plastic_free")
+    assert note.concept_id == "plastic_free"
+
+
+def test_by_concept_returns_matching_notes(tmp_path):
+    store = _store(tmp_path)
+    store.add(Insight(id="a", claim="Claim A.", source="test", concept_id="plastic_free"))
+    store.add(Insight(id="b", claim="Claim B.", source="test", concept_id="plastic_free"))
+    store.add(Insight(id="c", claim="Claim C.", source="test", concept_id="vegan"))
+    result = store.by_concept("plastic_free")
+    assert len(result) == 2
+    assert {n.id for n in result} == {"a", "b"}
+
+
+def test_by_concept_excludes_notes_without_concept_id(tmp_path):
+    store = _store(tmp_path)
+    store.add(Insight(id="x", claim="Claim.", source="test"))
+    assert store.by_concept("plastic_free") == []

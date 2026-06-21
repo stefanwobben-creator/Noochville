@@ -38,6 +38,7 @@ class Insight(BaseModel):
     rebuttal: str | None = None
     evidence_type: EvidenceType | None = None
     reference: str | None = None
+    concept_id: str | None = None
 
     @model_validator(mode="after")
     def _check_grounding(self) -> Self:

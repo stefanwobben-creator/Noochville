@@ -31,3 +31,6 @@ class NotesStore:
 
     def all(self) -> list[Insight]:
         return [Insight(**d) for d in self._notes.values()]
+
+    def by_concept(self, concept_id: str) -> list[Insight]:
+        return [n for n in self.all() if n.concept_id == concept_id]
