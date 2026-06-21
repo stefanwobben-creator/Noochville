@@ -203,3 +203,46 @@ def test_trends_rising_related_structuur(tmp_path):
     # term 2: rising is None → lege lijst, geen crash
     r2 = kw["duurzame sneakers"]["rising_related"]
     assert r2 == []
+
+
+def test_trends_timeframe_en_hl_doorgegeven(tmp_path):
+    """Payload-velden timeframe en hl worden doorgegeven aan respectievelijk
+    build_payload en TrendReq — geen harde defaults meer in de aanroep."""
+    fake_interest = pd.DataFrame(
+        {"vegan schoenen": [50, 60]},
+        index=pd.date_range("2025-01-01", periods=2, freq="W"),
+    )
+    mock_pytrends = MagicMock()
+    mock_pytrends.interest_over_time.return_value = fake_interest
+    mock_pytrends.related_queries.return_value = {}
+
+    ctx = SimpleNamespace(
+        settings={"trends_geo": "NL"},
+        data_dir=str(tmp_path),
+        library=None,
+        lexicon=None,
+    )
+
+    mock_trendreq_cls = MagicMock(return_value=mock_pytrends)
+
+    with patch("pytrends.request.TrendReq", mock_trendreq_cls):
+        TrendsSkill().run(
+            {
+                "keywords": ["vegan schoenen"],
+                "timeframe": "today 3-m",
+                "hl": "en-US",
+            },
+            ctx,
+        )
+
+    # TrendReq moet aangeroepen zijn met hl="en-US"
+    mock_trendreq_cls.assert_called_once()
+    _, kwargs = mock_trendreq_cls.call_args
+    assert kwargs.get("hl") == "en-US", f"verwacht hl='en-US', got {kwargs}"
+
+    # build_payload moet aangeroepen zijn met timeframe="today 3-m"
+    mock_pytrends.build_payload.assert_called_once()
+    _, bp_kwargs = mock_pytrends.build_payload.call_args
+    assert bp_kwargs.get("timeframe") == "today 3-m", (
+        f"verwacht timeframe='today 3-m', got {bp_kwargs}"
+    )

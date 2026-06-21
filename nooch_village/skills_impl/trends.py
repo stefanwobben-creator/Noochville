@@ -81,13 +81,13 @@ class TrendsSkill(Skill):
         "Fail-closed per geo×term."
     )
 
-    def _fetch(self, pytrends, keyword, geo, max_retries=4, base_delay=8):
+    def _fetch(self, pytrends, keyword, geo, timeframe="today 12-m", max_retries=4, base_delay=8):
         """Exponentiele backoff bij 429."""
         retries = 0
         while retries < max_retries:
             try:
                 pytrends.build_payload([keyword], cat=0,
-                                       timeframe="today 12-m", geo=geo, gprop="")
+                                       timeframe=timeframe, geo=geo, gprop="")
                 return pytrends.interest_over_time(), pytrends.related_queries()
             except Exception as e:
                 if "429" in str(e):
@@ -110,8 +110,10 @@ class TrendsSkill(Skill):
         if isinstance(geos_raw, str):
             geos_raw = [geos_raw]
         geos: list[str] = list(dict.fromkeys(geos_raw))  # dedup, volgorde behouden
+        timeframe = payload.get("timeframe", "today 12-m")
+        hl        = payload.get("hl", "nl-NL")
 
-        pytrends = TrendReq(hl="nl-NL", tz=60, timeout=(10, 25))
+        pytrends = TrendReq(hl=hl, tz=60, timeout=(10, 25))
 
         rows: list[dict]  = []
         legacy: dict      = {}           # eerste geo → keywords-dict (backward compat)
@@ -123,7 +125,7 @@ class TrendsSkill(Skill):
 
             for kw in keywords:
                 try:
-                    interest_df, related = self._fetch(pytrends, kw, geo)
+                    interest_df, related = self._fetch(pytrends, kw, geo, timeframe=timeframe)
 
                     if interest_df is not None and not interest_df.empty and kw in interest_df:
                         series  = interest_df[kw].tolist()
