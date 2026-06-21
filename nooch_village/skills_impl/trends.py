@@ -25,7 +25,7 @@ _GEO_LOCALE: dict[str, str] = {
     "AU": "en",
     "CA": "en",
     "IE": "en",
-    "": "nl",      # lege string = geen filter = NL default
+    "": "en",      # lege string = worldwide discovery → EN (Engelse discovery-koers)
 }
 
 

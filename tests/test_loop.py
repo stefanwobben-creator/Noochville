@@ -17,7 +17,7 @@ from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.event_bus import EventBus, Event
 from nooch_village.skills import SkillRegistry
 from nooch_village.skills_impl.plausible import PlausibleSkill
-from nooch_village.skills_impl.trends import TrendsSkill, _normalize_rising_value
+from nooch_village.skills_impl.trends import TrendsSkill, _normalize_rising_value, _geo_to_locale
 from nooch_village.skills_impl.field_note import FieldNoteSkill
 from nooch_village.projects import ProjectLedger
 from nooch_village.monitoring import MonitoringStore
@@ -118,6 +118,17 @@ def test_discovery_loop(loop_setup):
     metrics = s.monitoring.get_metrics("website_watcher")
     assert len(metrics) > 0, "Geen metrics in monitoring na discovery"
     assert any(m in metrics for m in ("visitors", "pageviews"))
+
+
+# ── Tests voor geo→locale mapping ────────────────────────────────────────────
+
+def test_geo_to_locale_worldwide_geeft_en():
+    assert _geo_to_locale("") == "en", (
+        "lege geo = worldwide discovery → moet 'en' geven, niet 'nl'"
+    )
+
+def test_geo_to_locale_nl_geeft_nl():
+    assert _geo_to_locale("NL") == "nl"
 
 
 # ── Tests voor rising_related parsing ─────────────────────────────────────────
