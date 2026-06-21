@@ -1,6 +1,7 @@
 """Tests voor LibraryListSkill — vijf scenario's, geen threads."""
 from __future__ import annotations
 from types import SimpleNamespace
+import pytest
 from nooch_village.skills_impl.library_skills import LibraryListSkill
 from nooch_village.library import Library
 
@@ -85,3 +86,43 @@ def test_ontbrekende_nieuwe_velden_geen_crash(tmp_path):
     assert term["locale"] is None
     assert term["concept_id"] is None
     assert term["gemet_id"] is None
+
+
+# --- Library.curate / link_concept / keywords_for_concept ---
+
+def _lib(tmp_path) -> Library:
+    return Library(str(tmp_path / "library.json"))
+
+
+def test_curate_behoudt_concept_id(tmp_path):
+    lib = _lib(tmp_path)
+    lib.curate("plasticvrij", "approved", "missie-kern")
+    lib.link_concept("plasticvrij", "plastic_free")
+    lib.curate("plasticvrij", "forbidden", "toch niet")
+    assert lib.status("plasticvrij")["concept_id"] == "plastic_free"
+
+
+def test_link_concept_zet_concept_id(tmp_path):
+    lib = _lib(tmp_path)
+    lib.curate("plasticvrij", "approved")
+    entry = lib.link_concept("plasticvrij", "plastic_free")
+    assert entry["concept_id"] == "plastic_free"
+    assert lib.status("plasticvrij")["concept_id"] == "plastic_free"
+
+
+def test_link_concept_onbekend_woord_raist_key_error(tmp_path):
+    lib = _lib(tmp_path)
+    with pytest.raises(KeyError):
+        lib.link_concept("onbekend", "plastic_free")
+
+
+def test_keywords_for_concept(tmp_path):
+    lib = _lib(tmp_path)
+    lib.curate("plasticvrij", "approved")
+    lib.curate("plastic-free", "approved")
+    lib.curate("veganistisch", "approved")
+    lib.link_concept("plasticvrij", "plastic_free")
+    lib.link_concept("plastic-free", "plastic_free")
+    result = lib.keywords_for_concept("plastic_free")
+    assert set(result) == {"plasticvrij", "plastic-free"}
+    assert "veganistisch" not in result

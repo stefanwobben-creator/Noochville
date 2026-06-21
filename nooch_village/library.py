@@ -41,13 +41,27 @@ class Library:
     # --- cureren (alleen de Librarian hoort dit aan te roepen) ---
     def curate(self, word: str, status: str, rationale: str = "",
                evidence: dict | None = None, by: str = "Librarian") -> dict:
-        entry = {
-            "status": status,                 # approved | forbidden | avoid | escalated
-            "rationale": rationale,
-            "evidence": evidence or {},
-            "by": by,
-            "date": datetime.now().strftime("%Y-%m-%d"),
-        }
+        existing = self._data.get(word.lower(), {})
+        entry = {**existing,
+                 "status": status,            # approved | forbidden | avoid | escalated
+                 "rationale": rationale,
+                 "evidence": evidence or {},
+                 "by": by,
+                 "date": datetime.now().strftime("%Y-%m-%d")}
         self._data[word.lower()] = entry
         self._save()
         return entry
+
+    def link_concept(self, word: str, concept_id: str) -> dict:
+        key = word.lower()
+        if key not in self._data:
+            raise KeyError(f"Woord '{word}' staat niet in de bibliotheek")
+        self._data[key]["concept_id"] = concept_id
+        self._save()
+        return self._data[key]
+
+    def keywords_for_concept(self, concept_id: str) -> list[str]:
+        return [
+            word for word, entry in self._data.items()
+            if entry.get("concept_id") == concept_id
+        ]
