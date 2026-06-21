@@ -11,11 +11,11 @@ import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from nooch_village.permanent_note import PermanentNote
+from nooch_village.permanent_note import Insight
 from nooch_village.notes_store import NotesStore
 
 NOTES = [
-    PermanentNote(
+    Insight(
         id="vegan_sneakers_zijn_plastic",
         claim="De meeste vegan sneakers zijn gemaakt van plastic, niet van plantaardige of natuurlijke materialen.",
         source="Vegan sneakers: what they are and what's inside (nooch.earth)",
@@ -23,7 +23,7 @@ NOTES = [
         links_to=["vegan_materialen_opsomming", "vegan_betekenis_correctie"],
         tags=[],
     ),
-    PermanentNote(
+    Insight(
         id="vegan_materialen_opsomming",
         claim="Een typische vegan sneaker bevat PU-leer of polyester voor de bovenkant, EVA-schuim voor de zool, nylon stiksels en synthetische lijm.",
         source="Vegan sneakers: what they are and what's inside (nooch.earth)",
@@ -31,7 +31,7 @@ NOTES = [
         links_to=["vegan_sneakers_zijn_plastic", "vegan_olie_per_paar"],
         tags=[],
     ),
-    PermanentNote(
+    Insight(
         id="vegan_betekenis_correctie",
         claim="Vegan betekent zonder dierlijke materialen, niet zonder plastic.",
         source="Vegan sneakers: what they are and what's inside (nooch.earth)",
@@ -39,7 +39,7 @@ NOTES = [
         links_to=["vegan_sneakers_zijn_plastic"],
         tags=[],
     ),
-    PermanentNote(
+    Insight(
         id="vegan_olie_per_paar",
         claim="Een paar vegan sneakers bevat ongeveer drie kwart liter aardolie.",
         source="Vegan sneakers: what they are and what's inside (nooch.earth)",
@@ -47,7 +47,7 @@ NOTES = [
         links_to=["vegan_materialen_opsomming"],
         tags=[],
     ),
-    PermanentNote(
+    Insight(
         id="nooch_plant_based_keuze",
         claim="Nooch koos voor plant-based ontwerp in plaats van vegan-zonder-plastic; acht planten leveren de materialen voor één Nooch-sneaker.",
         source="Vegan sneakers: what they are and what's inside (nooch.earth)",
@@ -55,7 +55,7 @@ NOTES = [
         links_to=["vegan_sneakers_zijn_plastic", "vegan_betekenis_correctie"],
         tags=[],
     ),
-    PermanentNote(
+    Insight(
         id="mother_earth_ceo_69pct",
         claim="Voor 69% van Nooch-klanten is bewustzijn over duurzaamheid een doorslaggevende aankoopreden.",
         source="Customer Insights deck (oktober 2025)",

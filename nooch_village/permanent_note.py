@@ -3,7 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-class PermanentNote(BaseModel):
+class Insight(BaseModel):
     id: str
     claim: str
     source: str
