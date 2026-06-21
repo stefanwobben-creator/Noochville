@@ -97,7 +97,11 @@ class WebsiteWatcherWorker(Inhabitant):
         try:
             self.log.info("☀️ groei-puls gestart")
             plausible = self.use_skill("plausible_stats", {"period": "7d"})
-            trends = self.use_skill("google_trends", {})
+            trends = self.use_skill("google_trends", {
+                "geos": [""],
+                "hl": "en-US",
+                "timeframe": "today 3-m",
+            })
             note = self.use_skill("field_note", {"plausible": plausible, "trends": trends})
 
             self._log_pulse_metrics(plausible)
