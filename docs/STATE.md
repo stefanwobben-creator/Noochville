@@ -223,6 +223,17 @@
   koppel-mechanisme voor een goedgekeurd LLM-voorstel nog te ontwerpen
   (raakt optie 2 / draad 4).
 
+- **Toevoer-kraan staat droog (blokkade)**: de kennislaag is af en getest, maar
+  ademt niet, want er komt geen vers woord de keten in. Harry grondt elk
+  keyword_proposed van de bus (geen eigen bieb-check), maar de drie publishers
+  (WebsiteWatcher via google_trends, PerformanceScout via GSC, Harry via
+  ngram_culture) hangen aan externe data die in demo en simulate niet is
+  aangesloten. Demo-modi (harry_hemp) omzeilen bovendien de bus en printen alleen.
+  Gevolg: nul groundings, nul kaartjes in een draaiende dag. KeywordsEverywhere
+  bestaat als skill maar zit nog niet in de propose-keten. Volgende stap, vóór de
+  inbox-flow: een ontdekkingsrol die echt woorden aanbiedt zodat het pad woord →
+  grounding → kaartje gaat lopen.
+
 - **Regeneratief-pagina**: kwam 17 juni meermaals boven (field-note-aanbeveling
   + drie Noochie-oordelen). Content-backlog, geen code. Drie stappen:
   1. Research eerst: regeneratief in combinatie met footwear/sneakers, is dit
