@@ -241,10 +241,21 @@
   (WebsiteWatcher via Trends, PerformanceScout via GSC, Harry via ngram). Eén check
   daar filtert voor allemaal, en een verboden woord komt niet eens op de bus. De bus
   wordt zo een gedeelde, schone werkvoorraad waar meerdere rollen uit kunnen putten.
-- **Gevolg voor de Harry-check (feat/harry-skip-forbidden)**: die zit nu aan de
-  ontvangende kant en wordt door de poort-regel deels dubbel. Besluit morgen:
-  verplaatsen naar de poort (voorkeur, geen dubbeling) of laten staan als vangnet
-  voor woorden die ooit buiten _publish_keyword_proposed om binnenkomen.
+- **Poort filtert al, Harry-check teruggedraaid**: de spelregel bleek bij nader
+  inzien al geïmplementeerd. _publish_keyword_proposed laat geen woord door dat al
+  in de library staat (productieverkeer loopt volledig via deze poort, alleen demo's
+  omzeilen hem). De gisteren toegevoegde is_forbidden-check bij Harry was dus dubbel
+  en is teruggedraaid. Let op: de poort blokkeert nu élke bekende status, niet alleen
+  forbidden, dus ook approved woorden vallen voorgoed uit de stroom.
+- **Vervolg (grote brok, eigen sessie): poort van ken-ik-dit naar mag-dit**: de
+  poort moet versoepelen van "woord is bekend" (status is not None) naar "woord mag"
+  (is_forbidden), zodat een approved woord opnieuw door de poort kan. Consequenties
+  nog te overzien: dan kan élk niet-verboden bekend woord terugkomen, en zonder
+  aandrijving zwerft dat rond.
+- **Vervolg (hangt aan het vorige): spaced-repetition-ritme**: approved woorden niet
+  passief toelaten maar actief op gezette tijden laten herzien en hermeten, zodat
+  stijgende termen opnieuw onderzocht worden. Dit is het mechanisme dat de
+  versoepelde poort aandrijft; de twee horen bij elkaar.
 - **Intentie-filter ontbreekt aan de kop**: het dorp ziet stijging (pytrends) en
   positie (GSC), maar geen zoekintentie. Daardoor kwam 'veganistisch' boven als
   kans terwijl die vraag over eten gaat, niet over schoenen. Dezelfde fout-klasse als
