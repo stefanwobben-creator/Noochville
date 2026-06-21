@@ -11,7 +11,7 @@ import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from nooch_village.permanent_note import Insight
+from nooch_village.insight import Insight
 from nooch_village.notes_store import NotesStore
 
 NOTES = [

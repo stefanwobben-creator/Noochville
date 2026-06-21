@@ -2,7 +2,7 @@
 from __future__ import annotations
 import json
 from pathlib import Path
-from nooch_village.permanent_note import Insight
+from nooch_village.insight import Insight
 from nooch_village.notes_store import NotesStore
 
 

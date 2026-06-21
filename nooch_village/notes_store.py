@@ -1,6 +1,6 @@
 from __future__ import annotations
 import json, os
-from nooch_village.permanent_note import Insight
+from nooch_village.insight import Insight
 
 
 class NotesStore:
