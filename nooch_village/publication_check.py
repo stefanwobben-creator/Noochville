@@ -1,7 +1,27 @@
 from __future__ import annotations
 import re
+from dataclasses import dataclass
+from nooch_village.notes_store import NotesStore
+from nooch_village.insight import GroundingStatus
 
 FORBIDDEN_IN_SALES: list[str] = ["plastic", "leer"]
+
+
+@dataclass
+class ClaimIssue:
+    insight_id: str
+    reason: str
+
+
+def unverified_claims(insight_ids: list[str], store: NotesStore) -> list[ClaimIssue]:
+    issues = []
+    for id_ in insight_ids:
+        note = store.get(id_)
+        if note is None:
+            issues.append(ClaimIssue(insight_id=id_, reason="geen kaartje met dit id"))
+        elif note.status != GroundingStatus.VERIFIED:
+            issues.append(ClaimIssue(insight_id=id_, reason=f"niet verified, status is {note.status}"))
+    return issues
 
 
 def find_forbidden_words(text: str, words: list[str]) -> list[str]:
