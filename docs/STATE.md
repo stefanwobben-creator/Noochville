@@ -256,6 +256,20 @@
   passief toelaten maar actief op gezette tijden laten herzien en hermeten, zodat
   stijgende termen opnieuw onderzocht worden. Dit is het mechanisme dat de
   versoepelde poort aandrijft; de twee horen bij elkaar.
+- **Ontwerpvraag (review over ~10 weken): kennis-evolutie vastleggen**: het idee om
+  de poort te versoepelen (approved woorden terug de stroom in) bleek geen regeltje
+  maar drie gekoppelde wijzigingen, en eronder lag een diepere vraag. Een approved
+  woord dat opnieuw gegrond wordt levert verse kennis op, en die wil je het oude niet
+  zomaar laten overschrijven: het verloop van bewijs is zelf waardevol voor het
+  leerproces. Dat botst met het huidige model (één Insight-id per woord, één actuele
+  stand). Twee richtingen, fris te kiezen: (a) verversen plus een apart logboek dat
+  per datum de grounding bewaart, kaartje = heden, logboek = verleden, laat de
+  Insight-structuur intact; (b) het kaartje meervoudig maken, een reeks waarnemingen
+  in de tijd, rijker maar raakt grounding-status, evidence-laag, poortregels en de
+  keuring. Bewust uitgesteld: dit heropent het net-gelegde fundament en verdient een
+  eigen sessie met de consequenties overzien, niet een avond-ingreep. Tot dan blijft
+  de poort dedup-op-alles (ken-ik-dit), wat voor het lage volume van de eerste weken
+  prima volstaat.
 - **Intentie-filter ontbreekt aan de kop**: het dorp ziet stijging (pytrends) en
   positie (GSC), maar geen zoekintentie. Daardoor kwam 'veganistisch' boven als
   kans terwijl die vraag over eten gaat, niet over schoenen. Dezelfde fout-klasse als
