@@ -234,6 +234,23 @@
   inbox-flow: een ontdekkingsrol die echt woorden aanbiedt zodat het pad woord →
   grounding → kaartje gaat lopen.
 
+- **Spelregel: library-check aan de poort, niet bij de grounding**: voordat een rol
+  een woord op de bus zet, checkt ze of het mag in de library (is_forbidden). De zeef
+  hoort bij het publiceren, niet bij het gronden. Plek: de gedeelde functie
+  _publish_keyword_proposed, waar alle drie de ontdekkingsrollen doorheen gaan
+  (WebsiteWatcher via Trends, PerformanceScout via GSC, Harry via ngram). Eén check
+  daar filtert voor allemaal, en een verboden woord komt niet eens op de bus. De bus
+  wordt zo een gedeelde, schone werkvoorraad waar meerdere rollen uit kunnen putten.
+- **Gevolg voor de Harry-check (feat/harry-skip-forbidden)**: die zit nu aan de
+  ontvangende kant en wordt door de poort-regel deels dubbel. Besluit morgen:
+  verplaatsen naar de poort (voorkeur, geen dubbeling) of laten staan als vangnet
+  voor woorden die ooit buiten _publish_keyword_proposed om binnenkomen.
+- **Intentie-filter ontbreekt aan de kop**: het dorp ziet stijging (pytrends) en
+  positie (GSC), maar geen zoekintentie. Daardoor kwam 'veganistisch' boven als
+  kans terwijl die vraag over eten gaat, niet over schoenen. Dezelfde fout-klasse als
+  de hamburgers bij burger_frame, nu aan de voorkant. Hier hoort KeywordsEverywhere
+  plus een intentie-toets in de propose-keten, de demand-validatie die nog ontbreekt.
+
 - **Regeneratief-pagina**: kwam 17 juni meermaals boven (field-note-aanbeveling
   + drie Noochie-oordelen). Content-backlog, geen code. Drie stappen:
   1. Research eerst: regeneratief in combinatie met footwear/sneakers, is dit
