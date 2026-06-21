@@ -693,9 +693,6 @@ class HarryHemp(Inhabitant):
         locale = demand.get("locale", "")
         if not word or word in self._busy_terms:
             return
-        if self.context.library.is_forbidden(word):
-            self.log.info("⏭️  niet gronden: '%s' staat al op forbidden/avoid in de bieb", word)
-            return
         self._busy_terms.add(word)
         try:
             self.log.info("🔬 gronden: '%s' (locale=%s)", word, locale or "?")
