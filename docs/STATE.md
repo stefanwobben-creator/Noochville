@@ -4,7 +4,7 @@
 
 ## Waar we staan
 
-- Code op ~10, 349 tests groen (suite groeide: 221 → 297 → 327 → 331 → 349).
+- Code op ~10, 357 tests groen (suite groeide: 221 → 297 → 327 → 331 → 349 → 357).
 - **LLM-timeout fix** (commit `851c7da`): `anthropic.Anthropic(timeout=30.0)` en
   `GenerateContentConfig(http_options=HttpOptions(timeout=30))` op beide backends.
   Bare `except Exception: pass` vervangen door `logging.warning("LLM <backend> faalde: %s", exc)`.
@@ -213,10 +213,10 @@
   meerdere systeemonderdelen. Te bouwen na Holacracy v5
   constitutie-herleting door Stefan.
 
-- **PermanentNote vs library.json**: twee aparte stores nu. library is
+- **Insight vs library.json**: twee aparte stores nu. library is
   keyword-georiënteerd, notes is claim-georiënteerd. Geen brug
-  ontworpen, want concept_id-veld in PermanentNote ontbreekt. Te
-  besluiten in latere sessie: of permanent notes via concept_id
+  ontworpen, want concept_id-veld in Insight ontbreekt. Te
+  besluiten in latere sessie: of Insights via concept_id
   aan library-entries gekoppeld worden, of dat ze parallelle data
   blijven.
 
@@ -360,8 +360,16 @@ in spill-over naar ander werk. Of NoochVille ook operationele waarde
 gaat leveren is onbekend, daarom option-value-aanpak (100 uur, 10
 weken, evaluatie 24 augustus). Drie kennislagen die straks horen te
 bestaan (ingestie, librarian, rapporteurs) zijn ontworpen maar niet
-gebouwd. Eerstvolgende echte bouw-werk: datamodel voor
-permanent notes (Pydantic), eerste librarian-rol voor één cirkel.
+gebouwd. Het datamodel voor het kenniskaartje is gebouwd als Insight (Pydantic):
+een grounding-status (unresolved/supported/verified), een evidence-laag (EvidenceType
+plus reference-veld) en twee poortregels, namelijk dat VERIFIED volledige onderbouwing
+eist en dat een eigen claim (CLAIMED) nooit VERIFIED kan worden. Eerstvolgende bouw-werk
+is de tweede laag, de teksten die kaartjes inzetten, bewust gekozen als optie 1: een
+keuring bij publiceren die toetst of alleen verified kaartjes als harde claim gebruikt
+worden, plus een merk-brede verboden-woordenlijst, zonder opgeslagen content-model. Een
+content-model-met-bestemming is gebouwd en verworpen, omdat een tekst geen vaste enkele
+bestemming heeft en heterogeen is. Naspeurbaarheid van claim naar tekst (optie 2) is
+geparkeerd tot het tekst-volume groeit. Daarnaast nog: eerste librarian-rol voor één cirkel.
 Niet in deze sessie.
 
 ## Volgende stappen

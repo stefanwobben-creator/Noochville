@@ -99,3 +99,11 @@ diagnose dan keuze.
 **[parkeren]** Niet gefixt: (a) gsc_pulse_completed staat niet in Noochie's _TRACK, bewust weggelaten omdat het te frequent is voor de bulletin-toon (zo al uit Ronnie mee); een klein gat dat later gedicht kan worden als de toon erbij gebaat is. (b) ngram_2019_cutoff blijft een means_gap die Harry zelf naar de inbox signaleert, by design, te dichten door Harry's ngram-meting aan te vullen met academische frequentie. (c) De echt-cosmetische residu-veeg (comments, docstrings, test-string-fixtures, lokale varnamen) staat nog open. (d) OpenLibrary-voltekst-v2 staat ongebruikt klaar, lage prioriteit.
 
 **[richting]** The Source maakt de mens expliciet als rol in het dorp, onbemand en seed, en belegt de twee niemand-bezit-policies. Daarmee schuift NoochVille verder op naar een domein-agnostische governance-substraat waarin de mens het oordeel houdt en de gate dom-en-cheap blijft.
+
+## 2026-06-21 — Insight-datamodel: kenniskaartje met grounding en bewijslaag
+
+**[ombouw]** PermanentNote hernoemd naar Insight, eerst de klasse (a6d4aec), daarna het bestand permanent_note.py naar insight.py via git mv met behoud van history (2807078).
+
+**[bouw]** Grounding-status toegevoegd (GroundingStatus unresolved/supported/verified) met een oplopende validator: supported eist grounds, verified eist grounds plus warrant plus rebuttal (82771b5). Daarna de evidence-laag: EvidenceType (claimed/reported/measured/certified/peer_reviewed) plus een reference-veld, en twee poortregels op verified, evidence_type verplicht en CLAIMED kan nooit verified worden (a6f7bd3). 349 → 353 → 357 groen.
+
+**[ontwerp-besluit]** Tweede laag getoetst aan drie echte voorbeelden (een inzicht, de pillar-blog, de productpagina) plus het DPP-passport. Knip: kaartjes dragen grounding, teksten dragen bestemming en woordkeuze. Een eerste content-model-met-bestemming gebouwd en bewust verworpen. Gekozen voor optie 1 (keuring plus verboden-woordenlijst, geen opgeslagen koppelingen); naspeurbaarheid als optie 2 geparkeerd.
