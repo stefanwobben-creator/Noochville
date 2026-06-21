@@ -107,3 +107,30 @@ diagnose dan keuze.
 **[bouw]** Grounding-status toegevoegd (GroundingStatus unresolved/supported/verified) met een oplopende validator: supported eist grounds, verified eist grounds plus warrant plus rebuttal (82771b5). Daarna de evidence-laag: EvidenceType (claimed/reported/measured/certified/peer_reviewed) plus een reference-veld, en twee poortregels op verified, evidence_type verplicht en CLAIMED kan nooit verified worden (a6f7bd3). 349 → 353 → 357 groen.
 
 **[ontwerp-besluit]** Tweede laag getoetst aan drie echte voorbeelden (een inzicht, de pillar-blog, de productpagina) plus het DPP-passport. Knip: kaartjes dragen grounding, teksten dragen bestemming en woordkeuze. Een eerste content-model-met-bestemming gebouwd en bewust verworpen. Gekozen voor optie 1 (keuring plus verboden-woordenlijst, geen opgeslagen koppelingen); naspeurbaarheid als optie 2 geparkeerd.
+
+## 2026-06-21 — deel 2: keuring-laag, brug compleet, deterministische vulling, LLM-suggestielaag
+
+Voortbouwend op het Insight-datamodel. De keuring-laag (optie 1) gebouwd:
+find_forbidden_words (woordgrens-scan, plasticvrij blijft schoon), unverified_claims
+(claim-ids tegen verified status), review_publication (beide checks per PublicationKind,
+streng voor sales_page en passport, blog laat door). 357 naar 370.
+
+De brug van kaartje via concept naar keyword compleet: concept_id plus by_concept op
+Insight, link_concept plus keywords_for_concept op Library, plus een curate-bugfix die
+voorkwam dat her-curatie de koppeling wist. 370 naar 378.
+
+Deterministisch gevuld: backfill (exact lexicon-match, vegan plus regeneratief) en
+parent-erving tot fixpoint (12 schone koppelingen via duurzaam, veganistisch, plasticvrij,
+regeneratief). De burger- en consument-kinderen bleken homoniem-ruis (hamburgers,
+ACM-toezichthouder) en zijn als suggestie geisoleerd, niet gekoppeld. 14 van 86 gekoppeld.
+burger_frame stond al op avoid in het lexicon, wat dat besluit bevestigt.
+
+De LLM-suggestielaag (concept_suggest) gebouwd voor de 72 resterende: biedt alleen
+approved concepten met hun rationale als doel, een whitelist-guard weert hallucinaties,
+fail-closed bij geen key of twijfel. 378 naar 384. Eerste echte run wacht op productie;
+zonder key lokaal viel de keten correct terug op nul voorstellen.
+
+Open: de LLM-run op productie, en het koppel-mechanisme voor een goedgekeurd voorstel
+(raakt optie 2 / draad 4).
+
+Commits: 6d8b7f0 (find_forbidden_words) · 5370dfe (unverified_claims) · dce2de2 (review_publication) · 60b5df5 (concept_id + by_concept) · fd80508 (link_concept + keywords_for_concept + curate-fix) · a9105d2 (backfill exact-match) · cac60f5 (concept_suggest) · c75399b (parent-erving) · 4125efc (batch-script suggest_concepts)

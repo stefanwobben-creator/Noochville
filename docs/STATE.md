@@ -4,7 +4,7 @@
 
 ## Waar we staan
 
-- Code op ~10, 357 tests groen (suite groeide: 221 → 297 → 327 → 331 → 349 → 357).
+- Code op ~10, 384 tests groen (suite groeide: 221 → 297 → 327 → 331 → 349 → 357 → 370 → 384).
 - **LLM-timeout fix** (commit `851c7da`): `anthropic.Anthropic(timeout=30.0)` en
   `GenerateContentConfig(http_options=HttpOptions(timeout=30))` op beide backends.
   Bare `except Exception: pass` vervangen door `logging.warning("LLM <backend> faalde: %s", exc)`.
@@ -213,12 +213,15 @@
   meerdere systeemonderdelen. Te bouwen na Holacracy v5
   constitutie-herleting door Stefan.
 
-- **Insight vs library.json**: twee aparte stores nu. library is
-  keyword-georiënteerd, notes is claim-georiënteerd. Geen brug
-  ontworpen, want concept_id-veld in Insight ontbreekt. Te
-  besluiten in latere sessie: of Insights via concept_id
-  aan library-entries gekoppeld worden, of dat ze parallelle data
-  blijven.
+- **Insight ↔ library brug**: gebouwd deze sessie. concept_id plus
+  by_concept op Insight, link_concept plus keywords_for_concept op
+  Library, concept_for_word dekt de zaadtermen. Het concept is de
+  gedeelde spil. 14 van 86 keywords deterministisch gekoppeld (backfill
+  exact-match plus parent-erving); de burger- en consument-kinderen
+  bewust ongekoppeld als homoniem-ruis. De 72 resterende wachten op de
+  fail-closed LLM-suggestielaag (klaar, eerste run op productie). Open:
+  koppel-mechanisme voor een goedgekeurd LLM-voorstel nog te ontwerpen
+  (raakt optie 2 / draad 4).
 
 - **Regeneratief-pagina**: kwam 17 juni meermaals boven (field-note-aanbeveling
   + drie Noochie-oordelen). Content-backlog, geen code. Drie stappen:
@@ -363,13 +366,17 @@ bestaan (ingestie, librarian, rapporteurs) zijn ontworpen maar niet
 gebouwd. Het datamodel voor het kenniskaartje is gebouwd als Insight (Pydantic):
 een grounding-status (unresolved/supported/verified), een evidence-laag (EvidenceType
 plus reference-veld) en twee poortregels, namelijk dat VERIFIED volledige onderbouwing
-eist en dat een eigen claim (CLAIMED) nooit VERIFIED kan worden. Eerstvolgende bouw-werk
-is de tweede laag, de teksten die kaartjes inzetten, bewust gekozen als optie 1: een
-keuring bij publiceren die toetst of alleen verified kaartjes als harde claim gebruikt
-worden, plus een merk-brede verboden-woordenlijst, zonder opgeslagen content-model. Een
-content-model-met-bestemming is gebouwd en verworpen, omdat een tekst geen vaste enkele
-bestemming heeft en heterogeen is. Naspeurbaarheid van claim naar tekst (optie 2) is
-geparkeerd tot het tekst-volume groeit. Daarnaast nog: eerste librarian-rol voor één cirkel.
+eist en dat een eigen claim (CLAIMED) nooit VERIFIED kan worden. De tweede laag, de teksten die kaartjes inzetten, is gebouwd als optie 1: een
+keuring bij publiceren (publication_check) die per PublicationKind toetst of alleen
+verified kaartjes als harde claim gebruikt worden (unverified_claims), plus een
+merk-brede verboden-woordenlijst (find_forbidden_words, waarbij plasticvrij schoon
+blijft), samengebracht in review_publication. Een content-model-met-bestemming is
+gebouwd en verworpen, omdat een tekst geen vaste enkele bestemming heeft en heterogeen
+is. Naspeurbaarheid van claim naar tekst (optie 2) blijft geparkeerd tot het tekst-volume
+groeit. De brug van kaartje via concept naar keyword is deze sessie gelegd en
+deterministisch gevuld (14 van 86), met een fail-closed LLM-suggestielaag (concept_suggest)
+klaar voor de 72 resterende. Eerstvolgend bouw-werk: de LLM-run op productie, het
+koppel-mechanisme voor goedgekeurde voorstellen, daarna de ingestie- en librarian-rollen.
 Niet in deze sessie.
 
 ## Volgende stappen
