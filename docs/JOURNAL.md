@@ -134,3 +134,27 @@ Open: de LLM-run op productie, en het koppel-mechanisme voor een goedgekeurd voo
 (raakt optie 2 / draad 4).
 
 Commits: 6d8b7f0 (find_forbidden_words) · 5370dfe (unverified_claims) · dce2de2 (review_publication) · 60b5df5 (concept_id + by_concept) · fd80508 (link_concept + keywords_for_concept + curate-fix) · a9105d2 (backfill exact-match) · cac60f5 (concept_suggest) · c75399b (parent-erving) · 4125efc (batch-script suggest_concepts)
+
+## 2026-06-22 — kraan-ombouw: van droog-en-rommelig naar Engels-worldwide op schone seeds
+
+**[diagnose]** Brok 0 (vorige sessie) zei: alle bronnen leveren, het is wiring. Deze sessie groef dieper en draaide die conclusie deels om. De kraan was niet stuk door wiring maar mager door bron-eigenschappen: pytrends levert grillig (1 op 3 runs een vers woord), ngram publiceert niets zolang stijgende termen al in de bieb staan, GSC toont alleen waar je al rankt (zelden iets nieuws). Geen draad-fix loste dat op; het vroeg om de juiste knoppen en seeds.
+
+**[bouw] rising erbij** (eb2a6f3): trends-skill leest nu ook `related[kw]["rising"]` naast `top`. De Breakout-string wordt een hoge sentinel (10000) met een vlaggetje, zodat het sterkste discovery-signaal niet wegvalt of crasht. Geen extra pytrends-call, dezelfde respons bevatte top én rising; de helft werd weggegooid.
+
+**[bouw] knoppen instelbaar** (ad87728): `timeframe` en `hl` via payload, oude waarden als default. Dagcyclus geeft nu expliciet de discovery-stand mee. Was nog niet aangezet in de loop — feature gebouwd maar niet gebruikt.
+
+**[bouw] schoen-domeinfilter** (aa13ab3): grof deterministisch filter in `prioritize`, zelfde patroon als de policy-drop. Keyword-acties zonder schoen-categoriewoord vallen vóór scoring. Bewust grof (vangt brood/kernenergie/funderingsherstel, laat aan de randen een kale merknaam vallen). Filtert afgeleiden, niet de seeds zelf.
+
+**[bouw] vier scherpe seeds + locale-fix** (3465429, 5f49630): `config/keywords.txt` naar vier bewezen categorie-seeds (barefoot shoes, sustainable shoes, eco friendly shoes, barefoot sneakers). En de lege-geo-bug: `geos:[""]` (worldwide) leidde via `_geo_to_locale("")` af naar "nl", waardoor de Nederlandse Library-woorden als seeds meedraaiden. Mapping `"":"en"` gezet, past bij de Engelse koers.
+
+**[data] vliegwiel opgeschoond** (data-only, library.json is gitignored): van 16 approved Library-woorden naar 6 schone schoen-termen. 10 off-schoen NL-woorden ('duurzaamheid', 'regeneratief', 'nos shoes', 'duurzaam gewas in opmars', etc.) op `avoid`, zodat ze geen pytrends-quotum meer vreten. Het vliegwiel (approved woorden dienen als extra seeds) is gewenst gedrag — auto-expansie van de database — maar draaide op oude NL-rommel.
+
+**[meting/diagnose] missie-termen hebben geen zoekvraag.** Betaalde KeywordsEverywhere-clickstream-meting (~24 credits over de sessie): 'plastic free shoes' 170/mo, 'plastic free sneakers' 20, alle NL- en DE-plasticvrij-termen 0. Controle: 'barefoot shoes' 165000, 'vegan shoes' 8100, 'sustainable shoes' 3600. Hard antwoord: missie-termen zijn positionering, geen zoektermen. Sturend voor de strategie: categorie-termen via discovery, missie-termen via content (leen het categorie-volume om de missie te introduceren).
+
+**[les]** Elke keer dat we de Library bekeken, vonden we nog een off-schoen woord. Het vliegwiel is zo schoon als de curatie; het domeinfilter vangt afgeleiden maar niet de seeds zelf. Kandidaat voor later: domeinfilter ook aan de seed-kant.
+
+**[les]** Leersnelheid komt van weinig sterke seeds, niet veel matige. Een sterke seed (barefoot, rijke waaier) baart de volgende generatie scherpere seeds en spaart quotum; een magere seed levert één term en vreet evenveel quotum. Tegen-intuïtief: je komt het snelst aan veel scherpe seeds door met weinig sterke te beginnen.
+
+Tests: 394 → 399 (domeinfilter) → 401 (locale-fix). Alles gemerged en gepusht.
+
+Commits: eb2a6f3 (rising_related + Breakout-normalisatie) · ad87728 (timeframe + hl instelbaar) · aa13ab3 (schoen-domeinfilter) · 3465429 (vier EN seeds + dagcyclus worldwide/en-US/3-m) · 5f49630 (locale-fix: worldwide → en)
