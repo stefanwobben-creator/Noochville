@@ -2,7 +2,7 @@
 from __future__ import annotations
 import pytest
 from unittest.mock import MagicMock
-from nooch_village.intent import prioritize
+from nooch_village.intent import prioritize, _is_schoen_domein
 
 
 def _ctx(goals=None, strategy=None):
@@ -51,8 +51,8 @@ class TestGoalScoring:
     def test_doelbijdrage_signaal_verhoogt_score(self):
         goals = [{"active": True, "contributes_via": ["organische bezoekers"]}]
         actions = [
-            {"label": "seo artikel", "description": "organische bezoekers trekken via content"},
-            {"label": "andere taak", "description": "iets anders doen"},
+            {"label": "seo artikel vegan shoes", "description": "organische bezoekers trekken via content over shoes"},
+            {"label": "andere taak sneakers",    "description": "iets anders doen met sneakers"},
         ]
         result = prioritize(actions, _ctx(goals=goals))
         seo = next(a for a in result if "seo" in a["label"])
@@ -61,13 +61,13 @@ class TestGoalScoring:
 
     def test_inactief_doel_telt_niet(self):
         goals = [{"active": False, "contributes_via": ["organische bezoekers"]}]
-        actions = [{"label": "seo", "description": "organische bezoekers via content"}]
+        actions = [{"label": "seo vegan shoes", "description": "organische bezoekers via content over shoes"}]
         result = prioritize(actions, _ctx(goals=goals))
         assert result[0]["score"] == pytest.approx(0.0, abs=0.5)
 
     def test_meerdere_signalen_tellen_op(self):
         goals = [{"active": True, "contributes_via": ["content", "bezoekers"]}]
-        actions = [{"label": "artikel", "description": "content schrijven voor bezoekers"}]
+        actions = [{"label": "artikel over sneakers", "description": "content schrijven voor bezoekers over sneakers"}]
         result = prioritize(actions, _ctx(goals=goals))
         assert result[0]["score"] >= 2.0
 
@@ -90,13 +90,43 @@ class TestPolicyOverrulesDoel:
         assert result.index(seo) < result.index(ads)
 
 
+# ── schoen-domeinfilter ──────────────────────────────────────────────────────
+
+class TestSchoenDomeinfilter:
+    def test_barefoot_dress_shoes_niet_dropped(self):
+        actions = [{"label": "barefoot dress shoes", "description": "opkomende zoekterm"}]
+        result = prioritize(actions, _ctx())
+        assert result[0]["dropped"] is False, (
+            "'barefoot' en 'shoes' zitten in _SCHOEN_WOORDEN — mag niet droppen"
+        )
+
+    def test_veganistisch_brood_dropped(self):
+        actions = [{"label": "veganistisch brood", "description": "veganistisch brood recept"}]
+        result = prioritize(actions, _ctx())
+        assert result[0]["dropped"] is True
+        assert "schoen" in result[0]["drop_reason"]
+
+    def test_kernenergie_dropped(self):
+        actions = [{"label": "is kernenergie duurzaam", "description": "zoekterm over energie"}]
+        result = prioritize(actions, _ctx())
+        assert result[0]["dropped"] is True
+        assert "schoen" in result[0]["drop_reason"]
+
+    def test_vegan_sneakers_womens_niet_dropped(self):
+        actions = [{"label": "vegan sneakers womens", "description": "opkomende zoekterm"}]
+        result = prioritize(actions, _ctx())
+        assert result[0]["dropped"] is False, (
+            "'sneakers' zit in _SCHOEN_WOORDEN — mag niet droppen"
+        )
+
+
 # ── sorteervolgorde ──────────────────────────────────────────────────────────
 
 class TestSortering:
     def test_niet_gedropt_staat_voor_gedropt(self):
         actions = [
-            {"label": "google ads", "description": "google ads"},
-            {"label": "content",    "description": "organische content"},
+            {"label": "google ads sneakers", "description": "google ads voor sneakers"},
+            {"label": "content over shoes",  "description": "organische content over shoes"},
         ]
         result = prioritize(actions, _ctx())
         assert result[0]["dropped"] is False

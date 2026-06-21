@@ -11,6 +11,24 @@ from __future__ import annotations
 from nooch_village.config import Context
 from nooch_village.policy import INTENT_VIOLATIONS as _POLICY_VIOLATIONS
 
+_SCHOEN_WOORDEN = (
+    "schoen", "schoenen", "shoe", "shoes",
+    "sneaker", "sneakers", "schuh", "schuhe",
+    "boot", "boots", "laars", "laarzen", "stiefel",
+    "sandaal", "sandalen", "sandal", "sandals", "sandale",
+    "loafer", "loafers", "espadrille", "espadrilles",
+    "pump", "pumps", "slipper", "slippers",
+    "barefoot", "minimalist",
+    "footwear", "schoeisel",
+)
+
+
+def _is_schoen_domein(desc_l: str) -> bool:
+    """Grof domeinfilter: bevat de term een schoen-categoriewoord?
+    Bewust grof — vangt off-domein ruis (brood, kernenergie, funderingsherstel),
+    laat aan de randen een enkele legitieme term vallen (kale merknaam). Te verfijnen later."""
+    return any(w in desc_l for w in _SCHOEN_WOORDEN)
+
 
 def _violates_policy(desc_l: str) -> str | None:
     for pattern, reason in _POLICY_VIOLATIONS:
@@ -60,6 +78,10 @@ def prioritize(actions: list[dict], context: Context) -> list[dict]:
         violation = _violates_policy(desc_l)
         if violation:
             result.append({**action, "score": -1.0, "dropped": True, "drop_reason": violation})
+            continue
+        if not _is_schoen_domein(desc_l):
+            result.append({**action, "score": -1.0, "dropped": True,
+                           "drop_reason": "geen schoen-categorie (off-domein)"})
             continue
         score = _goal_score(desc_l, goals) + _strategy_score(desc_l, heuristics)
         result.append({**action, "score": score, "dropped": False, "drop_reason": None})
