@@ -1,6 +1,18 @@
 from __future__ import annotations
 from datetime import datetime
-from pydantic import BaseModel, Field
+from enum import StrEnum
+from typing import Self
+from pydantic import BaseModel, Field, model_validator
+
+
+class GroundingStatus(StrEnum):
+    UNRESOLVED = "unresolved"
+    SUPPORTED = "supported"
+    VERIFIED = "verified"
+
+
+def _filled(value: str | None) -> bool:
+    return value is not None and value.strip() != ""
 
 
 class Insight(BaseModel):
@@ -11,3 +23,28 @@ class Insight(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
     links_to: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+    status: GroundingStatus = GroundingStatus.UNRESOLVED
+    grounds: str | None = None
+    warrant: str | None = None
+    qualifier: str | None = None
+    rebuttal: str | None = None
+
+    @model_validator(mode="after")
+    def _check_grounding(self) -> Self:
+        if self.status == GroundingStatus.SUPPORTED:
+            if not _filled(self.grounds):
+                raise ValueError("SUPPORTED vereist een gevuld 'grounds'-veld")
+        elif self.status == GroundingStatus.VERIFIED:
+            missing = [
+                name for name, val in [
+                    ("grounds", self.grounds),
+                    ("warrant", self.warrant),
+                    ("rebuttal", self.rebuttal),
+                ]
+                if not _filled(val)
+            ]
+            if missing:
+                raise ValueError(
+                    f"VERIFIED vereist gevulde velden: {', '.join(missing)}"
+                )
+        return self
