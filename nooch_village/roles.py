@@ -461,10 +461,11 @@ class Librarian(Inhabitant):
         if kaartje is not None:
             try:
                 self.context.notes.add(kaartje)
+            except ValueError:
+                pass  # bekende dubbele id: kaartje voor dit woord bestaat al
+            else:
                 self.log.info("🗂️  kaartje vastgelegd voor '%s' (concept=%s)",
                               word, concept_id or "geen")
-            except Exception:
-                pass  # dubbele id: kaartje bestaat al, idempotent
 
 
 class Facilitator(Inhabitant):

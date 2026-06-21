@@ -1,5 +1,6 @@
 from __future__ import annotations
 import pytest
+from types import SimpleNamespace
 from nooch_village.insight_ingest import insight_from_grounding, _slug
 from nooch_village.insight import GroundingStatus
 
@@ -37,3 +38,44 @@ def test_evidence_titels_in_reference_en_deterministische_id():
     assert "Paper C" in kaartje1.reference
     assert "Paper D" not in kaartje1.reference  # alleen eerste 3
     assert kaartje1.id == kaartje2.id            # deterministisch op word
+
+
+def test_tweede_grounding_geen_valueerror(tmp_path):
+    """_on_evidence twee keer voor hetzelfde woord → geen ValueError, eerste kaartje intact."""
+    from nooch_village.roles import Librarian
+    from nooch_village.models import Record, RoleDefinition, RecordType
+    from nooch_village.event_bus import EventBus, Event
+    from nooch_village.skills import SkillRegistry
+    from nooch_village.notes_store import NotesStore
+
+    bus = EventBus(name="test")
+    record = Record(
+        id="librarian",
+        type=RecordType.ROLE,
+        parent="noochville",
+        definition=RoleDefinition(purpose="test"),
+        source="seed",
+    )
+    notes = NotesStore(str(tmp_path / "notes.json"))
+    context = SimpleNamespace(
+        settings={},
+        data_dir=str(tmp_path),
+        records=None,
+        library=SimpleNamespace(status=lambda w: None),
+        lexicon=SimpleNamespace(concept_for_word=lambda w: None),
+        notes=notes,
+    )
+    librarian = Librarian(record, bus, SkillRegistry(), context)
+
+    event = Event("keyword_evidence", {
+        "word": "vegan",
+        "assessment": "Relevant voor de missie.",
+        "evidence": [],
+        "from": "harry_hemp",
+    }, "harry_hemp")
+
+    librarian._on_evidence(event)
+    librarian._on_evidence(event)  # zelfde slug → ValueError in NotesStore
+
+    assert len(notes.all()) == 1
+    assert notes.all()[0].claim == "Relevant voor de missie."
