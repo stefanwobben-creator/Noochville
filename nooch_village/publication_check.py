@@ -1,6 +1,7 @@
 from __future__ import annotations
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import StrEnum
 from nooch_village.notes_store import NotesStore
 from nooch_village.insight import GroundingStatus
 
@@ -22,6 +23,39 @@ def unverified_claims(insight_ids: list[str], store: NotesStore) -> list[ClaimIs
         elif note.status != GroundingStatus.VERIFIED:
             issues.append(ClaimIssue(insight_id=id_, reason=f"niet verified, status is {note.status}"))
     return issues
+
+
+class PublicationKind(StrEnum):
+    BLOG = "blog"
+    SALES_PAGE = "sales_page"
+    PASSPORT = "passport"
+
+
+STRICT_KINDS: set[PublicationKind] = {PublicationKind.SALES_PAGE, PublicationKind.PASSPORT}
+
+
+@dataclass
+class PublicationReport:
+    forbidden_words: list[str] = field(default_factory=list)
+    claim_issues: list[ClaimIssue] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return not self.forbidden_words and not self.claim_issues
+
+
+def review_publication(
+    text: str,
+    claim_insight_ids: list[str],
+    kind: PublicationKind,
+    store: NotesStore,
+) -> PublicationReport:
+    if kind in STRICT_KINDS:
+        return PublicationReport(
+            forbidden_words=find_forbidden_words(text, FORBIDDEN_IN_SALES),
+            claim_issues=unverified_claims(claim_insight_ids, store),
+        )
+    return PublicationReport()
 
 
 def find_forbidden_words(text: str, words: list[str]) -> list[str]:
