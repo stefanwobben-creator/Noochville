@@ -62,7 +62,7 @@ def _make_harry(tmp_path, *,
         },
         data_dir=str(tmp_path),
         records=None,
-        library=None,
+        library=SimpleNamespace(is_forbidden=lambda w: False, status=lambda w: None),
     )
     record = Record(
         id="harry_hemp",
@@ -227,6 +227,49 @@ def test_eigen_termen_worden_gegrond_zonder_lus(tmp_path):
     assert proposed == ["vegan"], "precies één keyword_proposed verwacht"
     assert evidence == ["vegan"],  "keyword_evidence voor 'vegan' verwacht"
     # Geen tweede ronde: de grounding publiceert geen keyword_proposed terug
+
+
+def test_grounding_slaat_forbidden_woord_over(tmp_path):
+    """keyword_proposed voor een woord dat in de library op forbidden staat →
+    grounding-tak wordt niet geraakt, geen keyword_evidence, woord blijft buiten _busy_terms.
+    """
+    harry, bus = _make_harry(tmp_path)
+    harry.context.library = SimpleNamespace(
+        is_forbidden=lambda w: w == "duurzaam wonen",
+    )
+
+    evidence_events: list[dict] = []
+    bus.subscribe("keyword_evidence", lambda e: evidence_events.append(dict(e.data)))
+
+    harry._on_keyword_proposed(Event("keyword_proposed", {
+        "word": "duurzaam wonen",
+        "demand": {"locale": "nl"},
+    }, "test"))
+
+    assert evidence_events == [], "geen keyword_evidence voor forbidden woord"
+    assert "duurzaam wonen" not in harry._busy_terms
+
+
+def test_grounding_loopt_door_voor_onbekend_woord(tmp_path):
+    """keyword_proposed voor een woord dat niet in de library staat →
+    grounding-tak loopt door en publiceert keyword_evidence.
+    """
+    harry, bus = _make_harry(tmp_path)
+    harry.context.library = SimpleNamespace(
+        is_forbidden=lambda w: False,
+    )
+
+    evidence_events: list[dict] = []
+    bus.subscribe("keyword_evidence", lambda e: evidence_events.append(dict(e.data)))
+
+    with patch("nooch_village.llm.reason", return_value=None):
+        harry._on_keyword_proposed(Event("keyword_proposed", {
+            "word": "plasticvrij leven",
+            "demand": {"locale": "nl"},
+        }, "test"))
+
+    assert len(evidence_events) == 1
+    assert evidence_events[0]["word"] == "plasticvrij leven"
 
 
 def test_setup_events_dag_begint_start_puls(tmp_path):
