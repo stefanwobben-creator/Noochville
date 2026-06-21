@@ -7,6 +7,7 @@ from nooch_village.mission import ANCHOR_PURPOSE as _NOOCHIE_MISSION
 from nooch_village.inhabitant import Inhabitant
 from nooch_village.event_bus import Event
 from nooch_village.governance import Gate, proposal_from_dict, proposal_to_dict
+from nooch_village.insight_ingest import insight_from_grounding
 
 
 def _extract_pulse_metrics(plausible: dict) -> list[tuple[str, float]]:
@@ -454,6 +455,16 @@ class Librarian(Inhabitant):
         else:
             status = (existing or {}).get("status", "onbekend")
             self.log.info("🔖 evidentie genoteerd voor '%s' (status: %s)", word, status)
+
+        concept_id = self.context.lexicon.concept_for_word(word)
+        kaartje = insight_from_grounding(word, assessment, evidence, concept_id)
+        if kaartje is not None:
+            try:
+                self.context.notes.add(kaartje)
+                self.log.info("🗂️  kaartje vastgelegd voor '%s' (concept=%s)",
+                              word, concept_id or "geen")
+            except Exception:
+                pass  # dubbele id: kaartje bestaat al, idempotent
 
 
 class Facilitator(Inhabitant):

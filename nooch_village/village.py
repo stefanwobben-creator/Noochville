@@ -46,6 +46,7 @@ from nooch_village.projects import ProjectLedger
 from nooch_village.seeds import (
     seed_lexicon, seed_records, migrate_records,
 )
+from nooch_village.notes_store import NotesStore
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -70,6 +71,7 @@ class Village:
         self.context.library = Library(os.path.join(self.context.data_dir, "library.json"))
         self.context.lexicon = Lexicon(os.path.join(self.context.data_dir, "lexicon.json"))
         seed_lexicon(self.context.lexicon)
+        self.context.notes = NotesStore(os.path.join(self.context.data_dir, "notes.json"))
         self.context.observations = ObservationStore(
             os.path.join(self.context.data_dir, "observations.jsonl"))
         self.context.monitoring = MonitoringStore(
