@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import pytest
 from pydantic import ValidationError
-from nooch_village.insight import Insight, GroundingStatus
+from nooch_village.insight import Insight, GroundingStatus, EvidenceType
 from nooch_village.notes_store import NotesStore
 
 
@@ -99,6 +99,7 @@ def test_verified_requires_grounds_warrant_rebuttal():
         grounds="Studie A toont X aan.",
         warrant="Dit geldt wanneer populatie N > 1000.",
         rebuttal="Tenzij confounding factor Y aanwezig is.",
+        evidence_type=EvidenceType.CERTIFIED,
     )
     assert note.qualifier is None
     assert note.status == GroundingStatus.VERIFIED
@@ -113,3 +114,47 @@ def test_old_card_loads_with_unresolved_default():
     note = Insight(**old_fields)
     assert note.status == GroundingStatus.UNRESOLVED
     assert note.grounds is None
+
+
+# --- evidence_type tests ---
+
+def test_evidence_type_and_reference_are_optional():
+    note = Insight(id="x", claim="Een claim.", source="test")
+    assert note.evidence_type is None
+    assert note.reference is None
+
+
+def test_verified_without_evidence_type_raises():
+    with pytest.raises(ValidationError, match="evidence_type"):
+        Insight(
+            id="x", claim="Een claim.", source="test",
+            status=GroundingStatus.VERIFIED,
+            grounds="Studie A toont X aan.",
+            warrant="Dit geldt wanneer populatie N > 1000.",
+            rebuttal="Tenzij confounding factor Y aanwezig is.",
+        )
+
+
+def test_verified_with_claimed_raises():
+    with pytest.raises(ValidationError, match="CLAIMED"):
+        Insight(
+            id="x", claim="Een claim.", source="test",
+            status=GroundingStatus.VERIFIED,
+            grounds="Studie A toont X aan.",
+            warrant="Dit geldt wanneer populatie N > 1000.",
+            rebuttal="Tenzij confounding factor Y aanwezig is.",
+            evidence_type=EvidenceType.CLAIMED,
+        )
+
+
+def test_verified_with_certified_is_valid():
+    note = Insight(
+        id="x", claim="Een claim.", source="test",
+        status=GroundingStatus.VERIFIED,
+        grounds="Studie A toont X aan.",
+        warrant="Dit geldt wanneer populatie N > 1000.",
+        rebuttal="Tenzij confounding factor Y aanwezig is.",
+        evidence_type=EvidenceType.CERTIFIED,
+    )
+    assert note.status == GroundingStatus.VERIFIED
+    assert note.evidence_type == EvidenceType.CERTIFIED

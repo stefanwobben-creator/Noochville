@@ -11,6 +11,14 @@ class GroundingStatus(StrEnum):
     VERIFIED = "verified"
 
 
+class EvidenceType(StrEnum):
+    CLAIMED = "claimed"
+    REPORTED = "reported"
+    MEASURED = "measured"
+    CERTIFIED = "certified"
+    PEER_REVIEWED = "peer_reviewed"
+
+
 def _filled(value: str | None) -> bool:
     return value is not None and value.strip() != ""
 
@@ -28,6 +36,8 @@ class Insight(BaseModel):
     warrant: str | None = None
     qualifier: str | None = None
     rebuttal: str | None = None
+    evidence_type: EvidenceType | None = None
+    reference: str | None = None
 
     @model_validator(mode="after")
     def _check_grounding(self) -> Self:
@@ -46,5 +56,12 @@ class Insight(BaseModel):
             if missing:
                 raise ValueError(
                     f"VERIFIED vereist gevulde velden: {', '.join(missing)}"
+                )
+            if self.evidence_type is None:
+                raise ValueError("VERIFIED vereist een gezet evidence_type")
+            if self.evidence_type == EvidenceType.CLAIMED:
+                raise ValueError(
+                    "VERIFIED staat EvidenceType.CLAIMED niet toe: "
+                    "een eigen claim kan nooit verified worden"
                 )
         return self
