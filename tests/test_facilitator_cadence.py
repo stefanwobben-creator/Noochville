@@ -101,3 +101,27 @@ def test_tick_kwartaalgrens_volgorde():
         fac.tick()
 
     assert log == ["dag_eindigt", "dag_begint", "maand_begint", "kwartaal_begint"]
+
+
+def test_ring_gebruikt_de_door_tick_gelezen_datum():
+    """Middernacht-vangnet: _ring gebruikt de datum die tick() las, niet een herlezen datum.
+
+    De klok springt over de middernachtgrens: date.today() geeft eerst D_Q (1 april,
+    kwartaal- én maandgrens), daarna D_NA (2 april, gewone dag). tick() mag de klok
+    maar één keer lezen en die datum doorgeven aan _ring. Leest _ring de klok opnieuw
+    (de oude bug), dan ziet hij 2 april en vervallen maand_begint + kwartaal_begint.
+    """
+    fac, bus = _make_facilitator()
+    fac._last_day = D_Q_PRE.isoformat()
+    fac._first_ring = False
+    log = _capture(bus)
+
+    D_NA = date(2026, 4, 2)  # gewone dag; zou opduiken als _ring herleest
+
+    with patch("nooch_village.roles.date") as mock_date:
+        mock_date.today.side_effect = [D_Q, D_NA]
+        fac.tick()
+
+    # 1 april-events aanwezig => _ring gebruikte de door tick gelezen datum, niet 2 april
+    assert log == ["dag_eindigt", "dag_begint", "maand_begint", "kwartaal_begint"]
+    assert fac._last_day == D_Q.isoformat()

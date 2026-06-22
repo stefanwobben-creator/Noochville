@@ -380,10 +380,12 @@
   meerdere rollen, maar per rol een eigen destillatie-stap. Geen bug: Noochie
   heeft altijd brede event-input (8 typen in `_TRACK`); de field note is verrijking
   bovenop die input.
-- **Facilitator.`_ring` leest `date.today()` opnieuw na `tick()`**: middernacht-
-  randgeval — `tick()` leest de datum als de grens net is gepasseerd, `_ring`
-  leest hem opnieuw en kan één dag teruglopen. Theoretisch maar echt; nette fix
-  is de al bepaalde datum als argument doorgeven aan `_ring`.
+- ~~**Facilitator.`_ring` leest `date.today()` opnieuw na `tick()`**~~: ✅ Gedaan —
+  bleek al gefixt: `tick()` geeft de gelezen datum als argument door aan `_ring`,
+  dat de klok niet meer zelf herleest. Vangnet-test toegevoegd
+  (`test_ring_gebruikt_de_door_tick_gelezen_datum` in `tests/test_facilitator_cadence.py`):
+  klok springt over middernacht (1→2 april), test bewijst dat alleen de door `tick()`
+  gelezen datum telt. Mutatie-getest (bug teruggebouwd → test rood → hersteld → groen).
 - **`_interval>0`-tak van `tick()` mogelijk dead code**: sinds de demo op
   `heartbeat_seconds=0` draait wordt de interval-tak (demo-puls) niet meer geraakt.
   Controleren of ergens anders nog `_interval>0` wordt ingesteld voor opruimen.
