@@ -21,7 +21,11 @@ class VerbandVoorstelSkill(Skill):
         prompt = (
             "Je beoordeelt of twee kennis-kaarten over duurzame schoenen een zinvol, "
             "niet-triviaal inhoudelijk verband hebben. Een gedeeld woord is GEEN verband; "
-            "er moet een echte gedachte zijn die de twee verbindt.\n\n"
+            "er moet een echte gedachte zijn die de twee verbindt. Ook GEEN verband: "
+            "twee kaarten die hetzelfde zeggen, of die allebei een lege of negatieve "
+            "uitkomst delen (zoals 'beide vonden geen onderbouwing'). Een verband moet "
+            "twee VERSCHILLENDE inhoudelijke ideeen aan elkaar knopen, niet constateren "
+            "dat twee kaarten dezelfde of geen inhoud hebben.\n\n"
             f"KAART A (over '{a.get('word', '')}'): {a.get('claim', '')}\n"
             f"KAART B (over '{b.get('word', '')}'): {b.get('claim', '')}\n\n"
             "Antwoord op EXACT één regel in dit formaat:\n"
