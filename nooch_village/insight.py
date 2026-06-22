@@ -27,6 +27,7 @@ class Insight(BaseModel):
     id: str
     claim: str
     source: str
+    word: str | None = None
     source_date: str | None = None
     created_at: datetime = Field(default_factory=datetime.now)
     links_to: list[str] = Field(default_factory=list)

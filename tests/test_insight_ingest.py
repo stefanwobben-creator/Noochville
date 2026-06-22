@@ -40,6 +40,18 @@ def test_evidence_titels_in_reference_en_deterministische_id():
     assert kaartje1.id == kaartje2.id            # deterministisch op word
 
 
+def test_word_veld_gevuld_na_grounding():
+    kaartje = insight_from_grounding("vegan shoes", "Relevant voor missie-schoenen.")
+    assert kaartje is not None
+    assert kaartje.word == "vegan shoes"
+
+
+def test_insight_zonder_word_veld_laadt_backward_compat():
+    from nooch_village.insight import Insight
+    kaartje = Insight(id="test_id", claim="een claim", source="handmatig")
+    assert kaartje.word is None
+
+
 def test_tweede_grounding_geen_valueerror(tmp_path):
     """_on_evidence twee keer voor hetzelfde woord → geen ValueError, eerste kaartje intact."""
     from nooch_village.roles import Librarian

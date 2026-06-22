@@ -28,6 +28,7 @@ def insight_from_grounding(
         id=_slug(word),
         claim=assessment.strip(),
         source=f"grounding:{word}",
+        word=word,
         status=GroundingStatus.UNRESOLVED,
         reference=titels or None,
         concept_id=concept_id,
