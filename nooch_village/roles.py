@@ -398,6 +398,15 @@ class Librarian(Inhabitant):
         reason = v.get("reason", "")
         lib = self.context.library
 
+        # Vorm 2: raadpleeg bestaande kennis over verwante woorden (zichtbaar, stuurt het oordeel niet)
+        notes = getattr(self.context, "notes", None)
+        if notes is not None:
+            verwant = notes.relevant_for(word, limit=3)
+            if verwant:
+                woorden = ", ".join(f"'{n.word}'" for n in verwant)
+                self.log.info("📚 bij beoordeling van '%s' vond ik %d verwante kaartje(s): %s",
+                              word, len(verwant), woorden)
+
         if decision == "known":
             self.log.info("ℹ️ '%s' al bekend: %s", word, v.get("status"))
             self.bus.publish(Event("keyword_decided",

@@ -1,8 +1,10 @@
 from __future__ import annotations
+import logging
 import pytest
 from types import SimpleNamespace
 from nooch_village.insight_ingest import insight_from_grounding, _slug
-from nooch_village.insight import GroundingStatus
+from nooch_village.insight import Insight, GroundingStatus
+from nooch_village.notes_store import NotesStore
 
 
 def test_assessment_levert_unresolved_insight():
@@ -91,3 +93,83 @@ def test_tweede_grounding_geen_valueerror(tmp_path):
 
     assert len(notes.all()) == 1
     assert notes.all()[0].claim == "Relevant voor de missie."
+
+
+def _make_librarian(tmp_path, notes=None, skill_decision="approve"):
+    """Helper: bouw een Librarian met nep-context en instelbaar keyword_review-oordeel."""
+    from nooch_village.roles import Librarian
+    from nooch_village.models import Record, RoleDefinition, RecordType
+    from nooch_village.event_bus import EventBus
+    from nooch_village.skills import SkillRegistry, Skill
+
+    class FakeReviewSkill(Skill):
+        name = "keyword_review"
+        description = "nep"
+        def run(self, payload, context):
+            return {"decision": skill_decision, "reason": "test", "basis": "heuristic"}
+
+    bus    = EventBus(name="test")
+    record = Record(
+        id="librarian", type=RecordType.ROLE, parent="noochville",
+        definition=RoleDefinition(purpose="test"), source="seed",
+    )
+    registry = SkillRegistry()
+    registry.register(FakeReviewSkill())
+
+    ctx_notes = notes if notes is not None else NotesStore(str(tmp_path / "notes.json"))
+    context = SimpleNamespace(
+        settings={},
+        data_dir=str(tmp_path),
+        records=None,
+        library=SimpleNamespace(
+            status=lambda w: None,
+            curate=lambda *a, **kw: None,
+        ),
+        lexicon=SimpleNamespace(concept_for_word=lambda w: None),
+        notes=ctx_notes,
+        observations=None,
+    )
+    return Librarian(record, bus, registry, context), bus
+
+
+def test_librarian_logt_verwante_kennis_bij_voorstel(tmp_path, caplog):
+    """Bij een proposal voor 'vegan trail shoes' vindt de Librarian twee verwante
+    kaartjes (vegan running shoes, barefoot shoes) en logt de 📚-regel."""
+    notes = NotesStore(str(tmp_path / "notes.json"))
+    notes.add(Insight(id="a", claim=".", source="test", word="vegan running shoes"))
+    notes.add(Insight(id="b", claim=".", source="test", word="barefoot shoes"))
+
+    librarian, _ = _make_librarian(tmp_path, notes=notes)
+
+    from nooch_village.event_bus import Event
+    event = Event("keyword_proposed", {
+        "word": "vegan trail shoes",
+        "demand": {"signal": "positive"},
+        "from": "website_watcher",
+    }, "website_watcher")
+
+    with caplog.at_level(logging.INFO, logger="village.librarian"):
+        librarian._on_proposal(event)
+
+    assert any("📚" in r.message and "vegan trail shoes" in r.message
+               for r in caplog.records), (
+        f"Verwachtte 📚-logregel; gevonden: {[r.message for r in caplog.records]}"
+    )
+
+
+def test_librarian_geen_fout_bij_lege_kennis(tmp_path, caplog):
+    """Bij een proposal zonder verwante kennis loopt _on_proposal zonder fout en
+    zonder 📚-logregel door."""
+    librarian, _ = _make_librarian(tmp_path)
+
+    from nooch_village.event_bus import Event
+    event = Event("keyword_proposed", {
+        "word": "leather boots",
+        "demand": {"signal": "positive"},
+        "from": "website_watcher",
+    }, "website_watcher")
+
+    with caplog.at_level(logging.INFO, logger="village.librarian"):
+        librarian._on_proposal(event)
+
+    assert not any("📚" in r.message for r in caplog.records)
