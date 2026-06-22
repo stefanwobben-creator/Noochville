@@ -322,11 +322,12 @@
     terug op fallback-tekst. In productie (echte dag-cadans) geen
     probleem. In dev-pulse wel. Niet acuut, wel observatie.
 
-  - Noochie's event-subscription is goed voor nu (8 types), maar mist
-    bewust gsc_pulse_completed (te frequent voor bulletin) en
-    noochie_weighed_in (toegevoegd aan audit-trail, 17 juni). Beide
-    kunnen later toegevoegd worden als de bulletin-toon erbij gediend
-    is.
+  - Noochie's event-subscription omvat nu 9 types in `_TRACK`, inclusief
+    gsc_pulse_completed (verzameld met boodschap, getest in
+    `test_gsc_pulse_completed_verzameld_met_boodschap`). De oude notitie
+    "gsc_pulse_completed bewust weggelaten" is achterhaald: het signaal
+    wordt gevolgd. noochie_weighed_in is toegevoegd aan de audit-trail
+    (17 juni).
 
   - Patroon vandaag bevestigd: een ontdekking leidt vaak tot een fix
     die tot een nieuwe ontdekking leidt. Eerste Noochie-bulletin

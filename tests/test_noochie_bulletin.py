@@ -5,7 +5,7 @@ Elf scenario's:
 2. Op dag_eindigt schrijft Noochie een bulletin (LLM gemockt, vier koppen aanwezig).
 3. Lege dag (geen events) → bulletin wordt toch geschreven.
 4. LLM-fout (returns None) → geen bestand, warning gelogd.
-5. Noochie luistert op de acht event-typen in _TRACK (incl. means_gap_sensed).
+5. Noochie luistert op de negen event-typen in _TRACK (incl. means_gap_sensed en gsc_pulse_completed).
 6. Field Note wordt meegestuurd in de LLM-prompt.
 7. Ontbrekende Field Note → geen crash, bulletin toch geschreven.
 8. REGRESSIE: pulse_completed raakt ZOWEL missie-weging (noochie_weighed_in) ALS
