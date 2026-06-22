@@ -186,3 +186,47 @@ def test_by_concept_excludes_notes_without_concept_id(tmp_path):
     store = _store(tmp_path)
     store.add(Insight(id="x", claim="Claim.", source="test"))
     assert store.by_concept("plastic_free") == []
+
+
+# --- relevant_for tests ---
+
+def test_relevant_for_zeldzaam_woord_scoort_hoger(tmp_path):
+    store = _store(tmp_path)
+    store.add(Insight(id="a", claim=".", source="test", word="vegan running shoes"))
+    store.add(Insight(id="b", claim=".", source="test", word="barefoot shoes"))
+    resultaat = store.relevant_for("vegan trail shoes")
+    assert len(resultaat) >= 1
+    # 'vegan' zit in 1 kaartje, 'shoes' in 2 — kaartje a scoort hoger
+    assert resultaat[0].id == "a"
+
+
+def test_relevant_for_sluit_exacte_match_uit(tmp_path):
+    store = _store(tmp_path)
+    store.add(Insight(id="a", claim=".", source="test", word="vegan shoes"))
+    store.add(Insight(id="b", claim=".", source="test", word="barefoot shoes"))
+    resultaat = store.relevant_for("vegan shoes")
+    ids = [n.id for n in resultaat]
+    assert "a" not in ids  # exact zelfde word → niet relevant voor zichzelf
+
+
+def test_relevant_for_geen_overlap_komt_niet_terug(tmp_path):
+    store = _store(tmp_path)
+    store.add(Insight(id="a", claim=".", source="test", word="plastic gloves"))
+    resultaat = store.relevant_for("leather boots")
+    assert resultaat == []
+
+
+def test_relevant_for_leeg_zoekwoord_en_lege_store(tmp_path):
+    store = _store(tmp_path)
+    assert store.relevant_for("") == []
+    assert store.relevant_for("vegan shoes") == []
+
+
+def test_relevant_for_kaartjes_zonder_word_doen_niet_mee(tmp_path):
+    store = _store(tmp_path)
+    store.add(Insight(id="a", claim=".", source="test"))          # geen word
+    store.add(Insight(id="b", claim=".", source="test", word="vegan shoes"))
+    resultaat = store.relevant_for("vegan trail shoes")
+    ids = [n.id for n in resultaat]
+    assert "a" not in ids
+    assert "b" in ids
