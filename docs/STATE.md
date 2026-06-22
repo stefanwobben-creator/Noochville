@@ -233,7 +233,7 @@
 - **Seed-strategie: weinig scherpe seeds, vliegwiel breidt zelf uit.** Een sterke seed baart de volgende generatie scherpere seeds via z'n waaier (top/rising) → approved → seed. Leersnelheid komt van weinig sterke seeds (rijke waaier, spaart quotum), niet veel matige. Stefan promoveert nieuwe seeds met de hand uit de waaier.
 - **Openstaand na deze sessie:**
   - **Live-bevestiging (K1d, ~10 min, geen bouw):** één `once()`-run zodra pytrends-quotum hersteld is, kijken of Engelse schoenen-termen met `google_trends_rising`-bron door de keten komen en het domeinfilter de ruis dropt. (Quotum was op aan eind van de sessie.)
-  - **K2 — woord-tot-kaartje (volgende grote stap):** vers Engels schoenen-woord gegrond, beoordeeld, als kaartje vastgelegd zonder handmatige injectie. De naad is er al; hij wachtte op schone toevoer.
+  - **K2 — woord-tot-kaartje: in de kern af (2026-06-22).** Bleek een diagnose-brok, geen bouw-brok. De naad vuurt: een gegrond woord wordt door de Librarian als kaartje vastgelegd met een geldige grounding-status (unresolved). Twee vermeende gaten bleken geen bouwwerk te vragen: (1) de grounding-status werkt al (de "status: None" in notes.json laadt via Pydantic-default correct als unresolved; de oude zes gezaaide kaartjes draaien dus goed); (2) het concept blijft bewust None bij grounding. Dat laatste is geen bug maar een ontwerpbesluit: een vers gegrond woord (noochwear.com reviews, duurzaam wonen) staat nog niet in het lexicon, dus concept_for_word geeft terecht None. Een concept is een beloning voor emergentie, niet een administratieve handeling bij elke grounding. Zie de kennis-evolutie-ontwerpvraag voor het koppel-mechanisme.
   - **Bekende eigenschappen (geen taak):** domeinfilter draait op label+description, kan aan de randen een off-domein term redden via de parent in de description (fix: alleen op label). Library-saturatie op termijn (poort blokkeert elk bekend woord, raakt de geparkeerde poort-versoepeling). KeywordsEverywhere-volume-validatie als geparkeerde vervolgstap, gegate want credits.
 
 - **Spelregel: library-check aan de poort, niet bij de grounding**: voordat een rol
@@ -272,6 +272,20 @@
   eigen sessie met de consequenties overzien, niet een avond-ingreep. Tot dan blijft
   de poort dedup-op-alles (ken-ik-dit), wat voor het lage volume van de eerste weken
   prima volstaat.
+    Concrete invulling (Stefan, 2026-06-22): concept-koppeling verdient emergentie.
+    Koppel een woord pas aan een concept als het zich bewezen heeft, bijv. na ~3
+    groundings van hetzelfde woord. Eerst emergentie bewijzen, dan structuur toekennen
+    (zelfde logica als spaced repetition voor seeds: herhaling verdient gewicht).
+    Voordeel: geen LLM-call per grounding (verspilling aan eendagsvliegen), wel een
+    gerichte koppeling voor woorden die blijven terugkomen. Voorwaarde die nu ontbreekt:
+    een telmechanisme. Het systeem onthoudt niet hoe vaak een woord langskwam; sterker,
+    een tweede grounding botst nu op de deterministische kaartje-id (ValueError, stil
+    gevangen) en wordt weggegooid. Een woord dat terugkomt moet dus geteld of gestapeld
+    worden in plaats van verworpen, en dat is precies richting (b) hierboven (kaartje
+    meervoudig / reeks waarnemingen). Het emergentie-idee en de meervoudig-kaartje-vraag
+    zijn dus hetzelfde mechanisme van twee kanten. Bouwen in deze sessie, niet eerder,
+    want het raakt het kaartje-fundament. Tot dan: kaartjes blijven concept-loos bij
+    grounding, wat de juiste tussenstaat is.
 - **Regeneratief-pagina**: kwam 17 juni meermaals boven (field-note-aanbeveling
   + drie Noochie-oordelen). Content-backlog, geen code. Drie stappen:
   1. Research eerst: regeneratief in combinatie met footwear/sneakers, is dit
