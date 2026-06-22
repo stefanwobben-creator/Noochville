@@ -40,7 +40,7 @@ class TestPolicyViolations:
         assert result[0]["dropped"] is True
 
     def test_schone_actie_niet_dropped(self):
-        actions = [{"label": "blogpost schrijven", "description": "organische content over vegan schoenen"}]
+        actions = [{"label": "vegan schoenen blogpost", "description": "organische content over vegan schoenen"}]
         result = prioritize(actions, _ctx())
         assert result[0]["dropped"] is False
 
@@ -78,8 +78,8 @@ class TestPolicyOverrulesDoel:
     def test_policy_wint_van_hoge_doelscore(self):
         goals = [{"active": True, "contributes_via": ["advertis", "google ads"]}]
         actions = [
-            {"label": "Google Ads",  "description": "advertis via google ads"},
-            {"label": "SEO artikel", "description": "content over duurzame schoenen"},
+            {"label": "Google Ads",          "description": "advertis via google ads"},
+            {"label": "SEO artikel schoenen", "description": "content over duurzame schoenen"},
         ]
         result = prioritize(actions, _ctx(goals=goals))
         seo = next(a for a in result if "SEO" in a["label"])
@@ -117,6 +117,22 @@ class TestSchoenDomeinfilter:
         result = prioritize(actions, _ctx())
         assert result[0]["dropped"] is False, (
             "'sneakers' zit in _SCHOEN_WOORDEN — mag niet droppen"
+        )
+
+    def test_off_domein_label_niet_gered_door_schoen_in_description(self):
+        # Randzwakte vóór de fix: 'barefoot shoes' in description redde het off-domein label.
+        actions = [{"label": "veganistisch brood", "description": "gerelateerd aan barefoot shoes"}]
+        result = prioritize(actions, _ctx())
+        assert result[0]["dropped"] is True, (
+            "schoen-woord in description mag het label niet redden; alleen het label telt"
+        )
+        assert "schoen" in result[0]["drop_reason"]
+
+    def test_schoen_woord_in_label_passeert_domeinfilter(self):
+        actions = [{"label": "barefoot shoes kids", "description": "opkomende zoekterm"}]
+        result = prioritize(actions, _ctx())
+        assert result[0]["dropped"] is False, (
+            "'shoes' en 'barefoot' zitten in het label — moet doorkomen"
         )
 
 

@@ -75,11 +75,14 @@ def prioritize(actions: list[dict], context: Context) -> list[dict]:
     result = []
     for action in actions:
         desc_l = (action.get("description", "") + " " + action.get("label", "")).lower()
+        label_l = action.get("label", "").lower()
         violation = _violates_policy(desc_l)
         if violation:
             result.append({**action, "score": -1.0, "dropped": True, "drop_reason": violation})
             continue
-        if not _is_schoen_domein(desc_l):
+        # Domeinfilter kijkt ALLEEN naar het label: de description (met parent-term) mag
+        # een off-domein term niet redden via een schoen-woord dat niet in de term zelf zit.
+        if not _is_schoen_domein(label_l):
             result.append({**action, "score": -1.0, "dropped": True,
                            "drop_reason": "geen schoen-categorie (off-domein)"})
             continue
