@@ -578,6 +578,7 @@ class Facilitator(Inhabitant):
 
     def _ring(self, label: str, today) -> None:
         if not self._first_ring:
+            self.log.info("🌙 dag_eindigt (%s)", label)
             self.bus.publish(Event("dag_eindigt", {"label": label}, self.id))
         self._first_ring = False
         for name in cadence_events(today):
