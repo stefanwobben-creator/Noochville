@@ -387,9 +387,16 @@
   (`test_ring_gebruikt_de_door_tick_gelezen_datum` in `tests/test_facilitator_cadence.py`):
   klok springt over middernacht (1→2 april), test bewijst dat alleen de door `tick()`
   gelezen datum telt. Mutatie-getest (bug teruggebouwd → test rood → hersteld → groen).
-- **`_interval>0`-tak van `tick()` mogelijk dead code**: sinds de demo op
-  `heartbeat_seconds=0` draait wordt de interval-tak (demo-puls) niet meer geraakt.
-  Controleren of ergens anders nog `_interval>0` wordt ingesteld voor opruimen.
+- ~~**`_interval>0`-tak van `tick()` mogelijk dead code**~~: ✅ Onderzocht — GEEN dode code,
+  niet weghalen. De tak is het lokale `run`-pad: `cli.py` doet `Village().run_forever()`
+  zonder heartbeat-argument, dus `_interval` komt uit `config/settings.ini`
+  (`heartbeat_seconds = 5`). In productie is heartbeat 0 (kalender-tak), lokaal 5
+  (interval-tak, demo-puls elke 5s). De tak was alleen ongetest: alle overige
+  Facilitator-tests draaien op heartbeat 0. Vangnet-test toegevoegd
+  (`test_interval_tak_vuurt_en_knijpt_af`): puls vuurt voorbij het interval en wordt
+  afgeknepen erbinnen. Mutatie-getest (afknijp-logica uit → test rood → hersteld → groen).
+  Let op (geen taak): met heartbeat=5 ringt Facilitator elke 5s een volle dag-cyclus —
+  dezelfde dag_eindigt-storm die de growth-demo met heartbeat=0 juist vermijdt.
 
 ## Evaluatie-checkpoints
 

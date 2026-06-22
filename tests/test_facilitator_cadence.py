@@ -19,11 +19,11 @@ D_Q_PRE = date(2026, 3, 31)  # dag vóór kwartaalgrens
 D_Q = date(2026, 4, 1)   # eerste kwartaalgrens na D_Q_PRE
 
 
-def _make_facilitator():
+def _make_facilitator(heartbeat: str = "0"):
     bus = EventBus(name="test")
     registry = SkillRegistry()
     context = SimpleNamespace(
-        settings={"heartbeat_seconds": "0", "reflect_interval_seconds": "0"},
+        settings={"heartbeat_seconds": heartbeat, "reflect_interval_seconds": "0"},
         data_dir="/tmp",
         records=None,
         library=None,
@@ -101,6 +101,41 @@ def test_tick_kwartaalgrens_volgorde():
         fac.tick()
 
     assert log == ["dag_eindigt", "dag_begint", "maand_begint", "kwartaal_begint"]
+
+
+def test_interval_tak_vuurt_en_knijpt_af():
+    """De _interval>0-tak (lokaal `run`-pad, heartbeat>0) vuurt een puls en knijpt af binnen het interval.
+
+    Dit pad is live via `python -m nooch_village.village run` (settings.ini: heartbeat_seconds=5),
+    maar werd niet getest — de overige tests draaien op heartbeat=0 (kalender-tak).
+    """
+    fac, bus = _make_facilitator(heartbeat="5")
+    assert fac._interval == 5.0  # settings → _interval-wiring
+    log = _capture(bus)
+
+    with patch("nooch_village.roles.date") as mock_date, \
+         patch("nooch_village.roles.time") as mock_time:
+        mock_date.today.return_value = D1
+
+        # Eerste tick: ruim voorbij het interval (_last_beat start op 0.0) → vuurt
+        mock_time.time.return_value = 1000.0
+        fac.tick()
+        assert log == ["dag_begint"]        # cadence van D1; eerste ring → geen dag_eindigt
+        assert fac._last_beat == 1000.0
+
+        # Tweede tick binnen het interval (2s later) → afgeknepen, geen nieuwe events
+        log.clear()
+        mock_time.time.return_value = 1002.0
+        fac.tick()
+        assert log == []
+        assert fac._last_beat == 1000.0
+
+        # Derde tick voorbij het interval (6s na de eerste) → vuurt opnieuw, nu mét dag_eindigt
+        log.clear()
+        mock_time.time.return_value = 1006.0
+        fac.tick()
+        assert log == ["dag_eindigt", "dag_begint"]
+        assert fac._last_beat == 1006.0
 
 
 def test_ring_gebruikt_de_door_tick_gelezen_datum():
