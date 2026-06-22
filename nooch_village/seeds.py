@@ -132,7 +132,7 @@ def seed_records(records: Records) -> None:
                            accountabilities=["kandidaat-woorden beoordelen",
                                              "twijfelgevallen escaleren naar een mens"],
                            domains=["bibliotheek"],
-                           skills=["keyword_review", "library_lookup"]))
+                           skills=["keyword_review", "library_lookup", "verband_voorstel"]))
     trends = Record(id="trends", type=RecordType.ROLE, parent="noochville",
                     definition=RoleDefinition(
                         purpose="Ontdekt kansen in Google Search Console en voedt de woordenschat",

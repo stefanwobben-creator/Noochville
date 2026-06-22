@@ -115,10 +115,13 @@ def _make_librarian(tmp_path, notes=None, skill_decision="approve"):
     bus    = EventBus(name="test")
     record = Record(
         id="librarian", type=RecordType.ROLE, parent="noochville",
-        definition=RoleDefinition(purpose="test"), source="seed",
+        definition=RoleDefinition(purpose="test", skills=["keyword_review", "verband_voorstel"]),
+        source="seed",
     )
     registry = SkillRegistry()
     registry.register(FakeReviewSkill())
+    from nooch_village.skills_impl.verband_voorstel import VerbandVoorstelSkill
+    registry.register(VerbandVoorstelSkill())
 
     ctx_notes = notes if notes is not None else NotesStore(str(tmp_path / "notes.json"))
     context = SimpleNamespace(
@@ -202,10 +205,6 @@ def test_dag_reflectie_vindt_vegan_paar(tmp_path, caplog):
     berichten = [r.message for r in caplog.records]
     assert any("🔗" in m and "kandidaat-verband" in m for m in berichten), (
         f"Verwachtte 🔗-kandidaat-verband; got: {berichten}"
-    )
-    assert any("vegan running shoes" in m and "vegan trail shoes" in m for m in berichten) or \
-           any("vegan trail shoes" in m and "vegan running shoes" in m for m in berichten), (
-        f"Verwachtte vegan-paar in log; got: {berichten}"
     )
     assert not any("leather boots" in m and "vegan" in m for m in berichten), (
         f"leather boots mag geen paar vormen met vegan; got: {berichten}"

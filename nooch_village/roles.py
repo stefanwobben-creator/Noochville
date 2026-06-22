@@ -502,9 +502,9 @@ class Librarian(Inhabitant):
                               word, concept_id or "geen")
 
     def _on_dag_eindigt(self, event: Event) -> None:
-        """Dag-afsluitende reflectie: zoek kaart-paren die een verband zouden kunnen
-        hebben. Deterministisch (relevant_for); legt nog geen verband, logt alleen de
-        kandidaten zodat we zien of de paren zinnig zijn voordat een oordeel volgt (3b)."""
+        """Dag-afsluitende reflectie: zoek kaart-paren via relevant_for, vraag per paar
+        (max 3) een LLM-oordeel via verband_voorstel. Bij bevestigd verband: sense_tension
+        + human_decision_needed. Fail-closed: geen LLM of geen skill → geen voorstel."""
         notes = getattr(self.context, "notes", None)
         if notes is None:
             return
@@ -523,12 +523,28 @@ class Librarian(Inhabitant):
                 gezien.add(sleutel)
                 paren.append((kaart, ander))
 
-        if paren:
-            self.log.info("🔗 dag-reflectie: %d kandidaat-verband(en) gevonden", len(paren))
-            for a, b in paren:
-                self.log.info("   mogelijk verband: '%s' ↔ '%s'", a.word, b.word)
-        else:
+        if not paren:
             self.log.info("🔗 dag-reflectie: geen kandidaat-verbanden")
+            return
+
+        self.log.info("🔗 dag-reflectie: %d kandidaat-verband(en) gevonden", len(paren))
+        for a, b in paren[:3]:
+            uitslag = self.use_skill("verband_voorstel", {
+                "kaart_a": {"word": a.word, "claim": a.claim},
+                "kaart_b": {"word": b.word, "claim": b.claim},
+            })
+            if uitslag.get("verband"):
+                claim = uitslag["claim"]
+                self.log.info("🔗 verband voorgesteld: '%s' ↔ '%s' → %s", a.word, b.word, claim)
+                self.sense_tension(
+                    f"Voorgesteld verband tussen '{a.word}' en '{b.word}': {claim}",
+                    kind="governance")
+                self.bus.publish(Event("human_decision_needed", {
+                    "topic": "verband",
+                    "kaart_a_id": a.id, "kaart_b_id": b.id,
+                    "voorstel_claim": claim,
+                    "reason": f"verband tussen '{a.word}' en '{b.word}'",
+                }, self.id))
 
 
 class Facilitator(Inhabitant):
