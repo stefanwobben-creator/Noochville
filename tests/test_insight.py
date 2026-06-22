@@ -188,6 +188,34 @@ def test_by_concept_excludes_notes_without_concept_id(tmp_path):
     assert store.by_concept("plastic_free") == []
 
 
+# --- enrich tests ---
+
+def test_enrich_verhoogt_teller_en_voegt_bron_toe(tmp_path):
+    store = _store(tmp_path)
+    store.add(Insight(id="a", claim="Originele claim.", source="test",
+                      word="vegan shoes", reference="bron A"))
+    verrijkt = store.enrich("a", nieuwe_reference="bron B")
+    assert verrijkt is not None
+    assert verrijkt.grounding_count == 2
+    assert verrijkt.last_updated_at is not None
+    assert "bron A" in verrijkt.reference
+    assert "bron B" in verrijkt.reference
+    assert verrijkt.claim == "Originele claim."
+
+
+def test_enrich_niet_bestaand_id_geeft_none(tmp_path):
+    store = _store(tmp_path)
+    assert store.enrich("bestaat_niet", nieuwe_reference="bron X") is None
+
+
+def test_enrich_dubbele_bron_niet_toegevoegd(tmp_path):
+    store = _store(tmp_path)
+    store.add(Insight(id="a", claim="Claim.", source="test", reference="bron A"))
+    verrijkt = store.enrich("a", nieuwe_reference="bron A")
+    assert verrijkt.reference == "bron A"  # niet verdubbeld
+    assert verrijkt.grounding_count == 2   # teller wél omhoog
+
+
 # --- relevant_for tests ---
 
 def test_relevant_for_zeldzaam_woord_scoort_hoger(tmp_path):

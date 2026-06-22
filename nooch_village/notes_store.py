@@ -39,6 +39,25 @@ class NotesStore:
     def by_concept(self, concept_id: str) -> list[Insight]:
         return [n for n in self.all() if n.concept_id == concept_id]
 
+    def enrich(self, note_id: str, nieuwe_reference: str | None = None) -> Insight | None:
+        """Verrijk een bestaande kaart met een nieuwe grounding: voeg bron toe,
+        hoog de grounding-teller op, en zet last_updated_at op nu. Claim en status
+        blijven ongemoeid. Geeft de verrijkte kaart terug, of None als hij niet bestaat."""
+        bestaand = self.get(note_id)
+        if bestaand is None:
+            return None
+        if nieuwe_reference and nieuwe_reference not in (bestaand.reference or ""):
+            if bestaand.reference:
+                bestaand.reference = bestaand.reference + "; " + nieuwe_reference
+            else:
+                bestaand.reference = nieuwe_reference
+        bestaand.grounding_count += 1
+        from datetime import datetime
+        bestaand.last_updated_at = datetime.now()
+        self._notes[note_id] = bestaand.model_dump(mode="json")
+        self._save()
+        return bestaand
+
     def relevant_for(self, word: str, limit: int = 5) -> list[Insight]:
         """Vind kaartjes die termen delen met `word`, gewogen op zeldzaamheid.
         Een gedeeld woord telt zwaarder naarmate minder kaartjes het bevatten —

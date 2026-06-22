@@ -30,6 +30,8 @@ class Insight(BaseModel):
     word: str | None = None
     source_date: str | None = None
     created_at: datetime = Field(default_factory=datetime.now)
+    grounding_count: int = 1
+    last_updated_at: datetime | None = None
     links_to: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     status: GroundingStatus = GroundingStatus.UNRESOLVED

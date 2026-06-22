@@ -7,6 +7,7 @@ from nooch_village.mission import ANCHOR_PURPOSE as _NOOCHIE_MISSION
 from nooch_village.inhabitant import Inhabitant
 from nooch_village.event_bus import Event
 from nooch_village.governance import Gate, proposal_from_dict, proposal_to_dict
+from nooch_village.insight import Insight
 from nooch_village.insight_ingest import insight_from_grounding
 
 
@@ -383,9 +384,10 @@ class Librarian(Inhabitant):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.react("keyword_proposed",    self._on_proposal)
+        self.react("keyword_proposed",      self._on_proposal)
         self.react("human_keyword_verdict", self._on_human_verdict)
-        self.react("keyword_evidence",    self._on_evidence)
+        self.react("keyword_evidence",      self._on_evidence)
+        self.react("dag_eindigt",           self._on_dag_eindigt)
 
     def _on_proposal(self, event: Event) -> None:
         word = event.data.get("word")
@@ -490,10 +492,43 @@ class Librarian(Inhabitant):
             try:
                 self.context.notes.add(kaartje)
             except ValueError:
-                pass  # bekende dubbele id: kaartje voor dit woord bestaat al
+                # kaart bestaat al: verrijk in plaats van weggooien (vorm 1)
+                verrijkt = self.context.notes.enrich(kaartje.id, nieuwe_reference=kaartje.reference)
+                if verrijkt is not None:
+                    self.log.info("🌱 kaart voor '%s' verrijkt: %dde grounding",
+                                  word, verrijkt.grounding_count)
             else:
                 self.log.info("🗂️  kaartje vastgelegd voor '%s' (concept=%s)",
                               word, concept_id or "geen")
+
+    def _on_dag_eindigt(self, event: Event) -> None:
+        """Dag-afsluitende reflectie: zoek kaart-paren die een verband zouden kunnen
+        hebben. Deterministisch (relevant_for); legt nog geen verband, logt alleen de
+        kandidaten zodat we zien of de paren zinnig zijn voordat een oordeel volgt (3b)."""
+        notes = getattr(self.context, "notes", None)
+        if notes is None:
+            return
+        kaarten = [n for n in notes.all() if n.word]
+        if len(kaarten) < 2:
+            return
+
+        gezien: set[frozenset] = set()
+        paren: list[tuple[Insight, Insight]] = []
+        for kaart in kaarten:
+            verwant = notes.relevant_for(kaart.word, limit=3)
+            for ander in verwant:
+                sleutel = frozenset({kaart.id, ander.id})
+                if kaart.id == ander.id or sleutel in gezien:
+                    continue
+                gezien.add(sleutel)
+                paren.append((kaart, ander))
+
+        if paren:
+            self.log.info("🔗 dag-reflectie: %d kandidaat-verband(en) gevonden", len(paren))
+            for a, b in paren:
+                self.log.info("   mogelijk verband: '%s' ↔ '%s'", a.word, b.word)
+        else:
+            self.log.info("🔗 dag-reflectie: geen kandidaat-verbanden")
 
 
 class Facilitator(Inhabitant):

@@ -54,8 +54,9 @@ def test_insight_zonder_word_veld_laadt_backward_compat():
     assert kaartje.word is None
 
 
-def test_tweede_grounding_geen_valueerror(tmp_path):
-    """_on_evidence twee keer voor hetzelfde woord → geen ValueError, eerste kaartje intact."""
+def test_tweede_grounding_verrijkt_kaart(tmp_path):
+    """_on_evidence twee keer voor hetzelfde woord → kaart verrijkt: 1 kaart, claim intact,
+    grounding_count == 2, last_updated_at gezet."""
     from nooch_village.roles import Librarian
     from nooch_village.models import Record, RoleDefinition, RecordType
     from nooch_village.event_bus import EventBus, Event
@@ -89,10 +90,13 @@ def test_tweede_grounding_geen_valueerror(tmp_path):
     }, "harry_hemp")
 
     librarian._on_evidence(event)
-    librarian._on_evidence(event)  # zelfde slug → ValueError in NotesStore
+    librarian._on_evidence(event)  # tweede grounding → verrijking
 
     assert len(notes.all()) == 1
-    assert notes.all()[0].claim == "Relevant voor de missie."
+    kaart = notes.all()[0]
+    assert kaart.claim == "Relevant voor de missie."
+    assert kaart.grounding_count == 2
+    assert kaart.last_updated_at is not None
 
 
 def _make_librarian(tmp_path, notes=None, skill_decision="approve"):
@@ -173,3 +177,67 @@ def test_librarian_geen_fout_bij_lege_kennis(tmp_path, caplog):
         librarian._on_proposal(event)
 
     assert not any("📚" in r.message for r in caplog.records)
+
+
+# ── Tests voor Librarian dag-reflectie (_on_dag_eindigt) ─────────────────────
+
+def _dag_eindigt_event():
+    from nooch_village.event_bus import Event
+    return Event("dag_eindigt", {"label": "2026-06-22"}, "facilitator")
+
+
+def test_dag_reflectie_vindt_vegan_paar(tmp_path, caplog):
+    """Drie kaarten: vegan running shoes en vegan trail shoes delen 'vegan' → paar gevonden.
+    leather boots deelt niets met de vegan-kaarten → geen paar met hen."""
+    notes = NotesStore(str(tmp_path / "notes.json"))
+    notes.add(Insight(id="a", claim=".", source="test", word="vegan running shoes"))
+    notes.add(Insight(id="b", claim=".", source="test", word="vegan trail shoes"))
+    notes.add(Insight(id="c", claim=".", source="test", word="leather boots"))
+
+    librarian, _ = _make_librarian(tmp_path, notes=notes)
+
+    with caplog.at_level(logging.INFO, logger="village.librarian"):
+        librarian._on_dag_eindigt(_dag_eindigt_event())
+
+    berichten = [r.message for r in caplog.records]
+    assert any("🔗" in m and "kandidaat-verband" in m for m in berichten), (
+        f"Verwachtte 🔗-kandidaat-verband; got: {berichten}"
+    )
+    assert any("vegan running shoes" in m and "vegan trail shoes" in m for m in berichten) or \
+           any("vegan trail shoes" in m and "vegan running shoes" in m for m in berichten), (
+        f"Verwachtte vegan-paar in log; got: {berichten}"
+    )
+    assert not any("leather boots" in m and "vegan" in m for m in berichten), (
+        f"leather boots mag geen paar vormen met vegan; got: {berichten}"
+    )
+
+
+def test_dag_reflectie_geen_verbanden_bij_geen_overlap(tmp_path, caplog):
+    """Twee kaarten zonder gedeelde woorden → geen kandidaat-verbanden."""
+    notes = NotesStore(str(tmp_path / "notes.json"))
+    notes.add(Insight(id="a", claim=".", source="test", word="vegan shoes"))
+    notes.add(Insight(id="b", claim=".", source="test", word="leather gloves"))
+
+    librarian, _ = _make_librarian(tmp_path, notes=notes)
+
+    with caplog.at_level(logging.INFO, logger="village.librarian"):
+        librarian._on_dag_eindigt(_dag_eindigt_event())
+
+    berichten = [r.message for r in caplog.records]
+    assert any("geen kandidaat-verbanden" in m for m in berichten), (
+        f"Verwachtte 'geen kandidaat-verbanden'; got: {berichten}"
+    )
+
+
+def test_dag_reflectie_te_weinig_kaarten_geen_crash(tmp_path, caplog):
+    """Minder dan twee kaarten-met-word → handler loopt zonder fout, geen paren."""
+    notes = NotesStore(str(tmp_path / "notes.json"))
+    notes.add(Insight(id="a", claim=".", source="test", word="vegan shoes"))
+
+    librarian, _ = _make_librarian(tmp_path, notes=notes)
+
+    with caplog.at_level(logging.INFO, logger="village.librarian"):
+        librarian._on_dag_eindigt(_dag_eindigt_event())
+
+    berichten = [r.message for r in caplog.records]
+    assert not any("🔗" in m for m in berichten)
