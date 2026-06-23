@@ -179,3 +179,63 @@ Commits: eb2a6f3 (rising_related + Breakout-normalisatie) · ad87728 (timeframe 
 
 Tests: 403 (word-veld) → 408 (relevant_for) → 410 (vorm 2) → 413 (vorm 1) → 416 (vorm 3a) → 423 (vorm 3b).
 Commits: 828a085 (word-veld) · fc7c434 (relevant_for, zelf-metend) · 3f1c85b (vorm 2, Librarian leest) · fff9f0c (vorm 1 enrich + vorm 3a dag-reflectie, verweven) · 273dac2 (vorm 3b verband_voorstel LLM-skill) · 389f084, 5cfa392 (STATE-updates: K2 af, emergentie-teller, leeskant + drie richtingen)
+
+---
+
+## 2026-06-23/24 — lange sessie: van één inbox-spanning naar de grondwet
+
+**[procesobservatie]** Werkwijze: één spanning per keer, écht serieus nemen ("tijd maakt niet
+uit"), elke stap klein + getest + mutatie-check + commit. Eén inbox-item serieus nemen leidde tot
+diepere lagen die vooraf niet zichtbaar waren — dat is de kern van de methode geworden.
+
+**[bouw]** Trends-saga. pytrends wordt door Google hard geblokkeerd (429, bevestigd live).
+Drie stappen: (1) Field Note ontkoppeld van Trends via `run_bounded` (harde tijdslimiet) — een
+unit-bug ontdekt: de puls hing in pytrends-backoff (~10min) voorbij de 180s once()-timeout, dus
+géén Field Note; (2) roterend keyword-venster + UA hielpen niet (Google blokkeert hard); (3)
+SerpApi als betrouwbare bron, wekelijks/zuinig, per-taal-geo. pytrends dormant gemaakt (via
+governance uit website_watcher's DNA gehaald).
+
+**[fix]** Gemini SSL-timeout was geen netwerk maar een unit-bug: `HttpOptions.timeout` is in
+MILLISECONDEN; stond op 30 (=30ms) → elke call timeoutte op de TLS-handshake. Nu 30000.
+Gemini is meteen ook de default-LLM gemaakt (Anthropic fallback), want ~10-30x goedkoper en
+ruime gratis tier; Anthropic-credits raakten steeds op.
+
+**[ontdekking]** Het "bijzondere" van zelf-gesensde spanningen ligt niet bij het gat zelf maar bij
+de autonome afhandeling eromheen. `ngram_2019_cutoff` bleek HARDGECODEERD in Harry's `_reflect`
+(een mens-geschreven bekende limiet), niet dynamisch ontdekt. De gap-classifier + coherence-observer
++ routing zijn wél autonoom. Onderscheid hardcoded-gat vs dynamisch-gat als vaste rubriek opgenomen
+in `docs/inbox_analyse.md`.
+
+**[bouw]** Harry's spanning helemaal afgemaakt i.p.v. afgevinkt. ngram-correlaties (co-beweging +
+substitutie over decennia; `leather free ~ vegan` r=0.97 live), OpenAlex jaar-aandeel (relatief),
+overlap-kalibratie (eerlijkheidstoets vóór vertrouwen), gekalibreerde voortzetting voorbij 2019.
+Harry's rol verdiept van "mist 7 jaar" naar een scherpzinniger waarnemer. Rol-definitie via
+amend_role (governance) bijgewerkt.
+
+**[beslissing/grondwet]** Stefan: "de inbox is mijn expliciete akkoord — weet je waarom?" → het
+systeem mag z'n eigen huiswerk niet beoordelen; menselijke goedkeuring breekt de zelfbevestigende
+lus open. Claude had ten onrechte zelf een inbox-item gesloten → teruggezet op pending.
+
+**[bouw]** Regel 5 (rol-vraagt-rol om een accountability) als dorpsbrede laag. Inzicht van Stefan:
+een event wordt door een rol getriggerd, en de mens is óók een rol → a/b/c collapst tot twee modi
+(autonoom + op-verzoek-door-elke-rol). Mens-zetel toegevoegd (`Record.held_by`, `seat_human`) zodat
+de founder legitiem in `the_source` zit.
+
+**[bouw/grondwet]** "Ik dek dit nu, voorstel tot sluiten": rol stelt voor, mens bevestigt
+(`propose_close` → `inbox confirm`). Stefans vervolgvraag "zou de rol ooit nee zeggen?" legde een
+te-eager wiring bloot: `nl_corpus_coverage` werd onvoorwaardelijk voorgesteld te sluiten, terwijl de
+check juist bewees dat het corpus kapot is. Fix (optie a): sluit de validatie-vraag, maar werp het
+échte, scherpere gat op (`nl_corpus_bron_onbruikbaar`). Spelregel: `propose_close` draagt het
+oordeel van de rol, geen stempel; een rol mag nee/openhouden/escaleren.
+
+**[bouw]** De grondwet `docs/spelregels.md`: 10 substraat-onafhankelijke spelregels (machine/AI/mens,
+zelfde regels per rol). Distillaat van CLAUDE.md + de inzichten van deze sessie.
+
+**[les]** STATE liep weer achter op de code (het terugkerende thema). Bijgewerkt naar de actuele
+waarheid; de oude detail-status als historisch gemarkeerd.
+
+Tests: ~502 → 688, elke stap met mutatie-check.
+Commits o.a.: a5d7c06 (Field Note ontkoppeld) · c147151 (Trends-rotatie) · 829776a (SerpApi) ·
+abb0640 (Gemini default) · 1ee2358 (Gemini ms-fix) · 6963e05 (grondwet) · 26499d0 (mens-zetel) ·
+bc47cf5 (regel 5) · 67ab5da (propose_close) · 76dd301 (rol mag nee-maar zeggen) ·
+90ab730 (OpenAlex-voortzetting) · 8281673 (NL-check) · 6f56765 (inbox approve-vangnet)

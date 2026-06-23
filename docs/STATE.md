@@ -1,8 +1,62 @@
-# NoochVille — State & Handover (2026-06-22)
+# NoochVille — State & Handover (2026-06-24)
 
 > STATE = huidige waarheid, vervang bij update. `docs/JOURNAL.md` = historie, append-only.
 
-## Waar we staan
+## Waar we staan (2026-06-24)
+
+**Suite: 688 tests groen** (gegroeid van ~502 deze sessie). Elke stap met mutatie-check.
+
+Wat deze sessie (2026-06-23/24) is gebouwd en nu de waarheid is:
+
+- **De grondwet `docs/spelregels.md`**: 10 substraat-onafhankelijke spelregels die gelden voor
+  elke rol-vervuller (machine/AI/mens). Uitgangspunt voor alle verdere bouw.
+- **Mens-zetel**: `Record.held_by` + CLI `seat_human <rol> <naam>`. Stefan bezet `the_source`
+  (legitieme zetel binnen het model; nog geen interactieve HumanProxy — dat is roadmap).
+- **Regel 5 (dorpsbreed)**: rol-vraagt-rol om een accountability. `Inhabitant.offer(key, handler)`
+  + `ask_accountability(target, key, payload)`; doelrol dispatcht of senst een spanning.
+  CLI `ask_accountability <rol> <key>`. De mens (als the_source) is gewoon een van de vragers.
+- **Sluiten-met-oordeel**: `Inhabitant.propose_close(gap_key, reason)` → voorstel op het inbox-item;
+  mens bevestigt met `inbox confirm <id>`. De rol sluit nooit zelf (geen dichtgeklapte lus) en mag
+  "nee, maar" zeggen (open houden / scherper gat opwerpen i.p.v. stempelen).
+- **Harry's rol verdiept** (rol-upgrade v3 via governance): naast richting nu ook structurele
+  co-beweging/substitutie over de lange ngram-boog (`leather free ~ vegan` r=0.97 live gevonden),
+  en een gekalibreerde voortzetting voorbij de 2019-cutoff via OpenAlex (`mode='yearly'`,
+  relatief aandeel, overlap-kalibratie r≥0.5, anker = corpus-eindjaar). Modules:
+  `ngram_correlate.py` (pearson, correlate_terms, findings_from_rows, calibrate, continue_arc,
+  assess_continuation, uncovered_nl_terms, label_uncovered).
+- **NL-corpus-dekking dynamisch**: `_check_nl_corpus` (modus c, stil tenzij vondst) + op verzoek
+  via regel 5. Geen hardcoded `_reflect`-gaten meer; beide oude zelf-gaten zijn opgelost.
+- **Trends: SerpApi i.p.v. pytrends** (door Google geblokkeerd). `serpapi_trends`-skill,
+  wekelijks/zuinig (`serpapi_interval_seconds`, `serpapi_keywords_per_run`), per-taal-geo.
+  Field Note níét meer gegijzeld door Trends (`run_bounded`, harde tijdslimiet). pytrends dormant.
+- **Gemini als default LLM** (Anthropic fallback). Bugfix: `HttpOptions.timeout` is MS, niet sec
+  (stond op 30ms → elke Gemini-call timeoutte). Modelnamen via env (`GEMINI_MODEL`/`ANTHROPIC_MODEL`).
+- **KE-aanjager + per-taal-geo**: `measure_propose` zet per-taal meet-batches in de inbox
+  (en→gb, nl→nl); credits mens-gated via approve.
+- **Librarian-heuristiek tweetalig**: missie-kern uit het Lexicon (en+nl), leather-free/leervrij
+  niet meer als leer-risico. `rereview`-CLI her-beoordeelt geëscaleerde termen.
+- **Ingest-proces** (`nooch_village/ingest.py` + CLI `ingest <json>`): mens-gecureerde insight-kaartjes
+  in de NotesStore (survey-insights + KE-demand insights), via `notes.link` (gevalideerd).
+- **Governance-toolset (CLI)**: `grant_skill`, `revoke_skill`, `remove_role`, `grant_serpapi_trends`,
+  `upgrade_harry_role`, `seat_human`, `ask_accountability`, `measure_propose`, `rereview`, `ingest`.
+- **Opgelost via deze sessie**: inbox-items `ngram_2019_cutoff` en `nl_corpus_coverage`
+  (beide approved). Nieuw, scherper gat opgeworpen: `nl_corpus_bron_onbruikbaar` (corpus 10 mist
+  doodgewone NL-woorden → Delpher-kandidaat of NL buiten scope).
+
+### Geparkeerd (aparte sessies)
+
+- **Inbox-herontwerp** (eigen designsessie; nu niet perfect = bewust oké). Klein dichtgezet:
+  approve-vangnet zodat geen type stil blijft hangen.
+- **Grondwet fijnslijpen** (sessie 3), o.a. expliciet: een rol mag nee/openhouden/escaleren.
+- **Delpher (KB)** als Nederlandse lange-boog-bron (SRU-API, toegang op aanvraag, loopt tot 1995).
+  Stefan kent er mensen. Pas bouwen na KB-toegang.
+- **Getrapte LLM-modelkeuze** (Flash-Lite voor classificatie, Flash voor duiding) + prompt-caching:
+  pas relevant als je buiten de Gemini-gratis-tier valt.
+- **HumanProxy** (interactieve mens-in-het-dorp) — volle versie van de mens-zetel.
+
+---
+
+### Detail-status uit eerdere sessies (historisch, kan deels achterhaald zijn door bovenstaande)
 
 - Code op ~10, 401 tests groen (suite groeide: ... → 384 → 401).
 - **LLM-timeout fix** (commit `851c7da`): `anthropic.Anthropic(timeout=30.0)` en
