@@ -70,7 +70,8 @@ def _ctx(tmp_path, key="serp-key"):
     )
 
 
-def test_zonder_key_faalt_closed(tmp_path):
+def test_zonder_key_faalt_closed(tmp_path, monkeypatch):
+    monkeypatch.delenv("SERPAPI_API_KEY", raising=False)   # geen lek uit .env/omgeving
     ctx = _ctx(tmp_path, key="")
     with pytest.raises(RuntimeError, match="SERPAPI_API_KEY"):
         _FakeSerpapi().run({"keywords": ["vegan shoes"]}, ctx)

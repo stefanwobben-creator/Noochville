@@ -74,6 +74,14 @@ def main() -> None:
         from nooch_village.role_proposals import grant_website_watcher_serpapi
         grant_website_watcher_serpapi()
 
+    elif mode == "remove_role":
+        from nooch_village.role_proposals import remove_role_via_governance
+        if len(sys.argv) < 3:
+            print("Gebruik: python -m nooch_village.village remove_role <role_id> [reden]",
+                  file=sys.stderr)
+            sys.exit(1)
+        remove_role_via_governance(sys.argv[2], " ".join(sys.argv[3:]))
+
     elif mode == "rereview":
         import os
         from nooch_village.config import load_context

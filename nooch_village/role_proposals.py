@@ -111,6 +111,59 @@ def grant_content_strategist_skills() -> None:
     print("\n===== einde =====")
 
 
+def build_remove_role_proposal(role_id: str, reason: str = "") -> Proposal:
+    """Een REMOVE_ROLE-voorstel via governance: archiveert een rol.
+
+    De gate (G3) laat een rol zonder accountabilities door (auto-adopt); een rol mét
+    accountabilities escaleert naar de mens, zodat verweesd werk nooit stilletjes verdwijnt.
+    Removal is omkeerbaar: de Secretary archiveert, verwijdert niet hard."""
+    return Proposal(
+        proposer_role="the_source",
+        change=GovernanceChange(kind=ChangeKind.REMOVE_ROLE, role_id=role_id),
+        tension=(reason or f"Rol '{role_id}' is overbodig/rommel en hoort opgeruimd te worden."),
+        trigger_example=f"the_source: governance-opschoning, verwijder rol '{role_id}'",
+        rationale=("Opruiming van een rol die niet (meer) bijdraagt. Bij accountabilities "
+                   "escaleert de gate naar de mens; anders wordt de rol gearchiveerd."),
+    )
+
+
+def remove_role_via_governance(role_id: str, reason: str = "") -> None:
+    """Dien een REMOVE_ROLE-voorstel in via de gate en rapporteer de uitkomst."""
+    from nooch_village.village import Village
+
+    v = Village(heartbeat_seconds=86400)
+    outcome: dict = {}
+    v.bus.subscribe("governance_changed",
+                    lambda e: outcome.update({"status": "aangenomen", **e.data}))
+    v.bus.subscribe("governance_review_requested",
+                    lambda e: outcome.update({"status": "geëscaleerd",
+                                              "gate": e.data.get("gate"),
+                                              "reason": e.data.get("reason")}))
+    v.bus.subscribe("proposal_invalid",
+                    lambda e: outcome.update({"status": "ongeldig", "gate": "G0",
+                                              "reason": e.data.get("reason")}))
+    v.start()
+    v.submit_proposal(build_remove_role_proposal(role_id, reason))
+    print(f"\n===== REMOVE_ROLE: '{role_id}' via governance =====\n")
+    for _ in range(200):
+        if outcome:
+            break
+        time.sleep(0.05)
+    time.sleep(0.3)
+    v.stop()
+    status = outcome.get("status", "?")
+    print(f"Uitkomst: {status}")
+    if status == "aangenomen":
+        rec = v.records.get(role_id)
+        print(f"Rol '{role_id}' gearchiveerd: {getattr(rec, 'archived', '?')}")
+    elif status == "geëscaleerd":
+        print(f"Poort {outcome.get('gate')}: {outcome.get('reason')}")
+        print("→ De rol heeft accountabilities; keur de verwijdering goed in de human inbox.")
+    else:
+        print(f"Reden: {outcome.get('reason', '')}")
+    print("\n===== einde =====")
+
+
 def build_website_watcher_serpapi_proposal() -> Proposal:
     """amend_role: ken website_watcher de serpapi_trends-skill toe, via de gate.
 
