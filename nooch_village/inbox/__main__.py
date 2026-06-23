@@ -251,7 +251,8 @@ def _approve_keyword_batch(inbox, item, iid: str, reason: str, _load_fn=None) ->
     ctx   = item["context"]
     batch = {
         "market":            ctx["market"],
-        "country":           ctx["market"],
+        "country":           ctx.get("geo") or ctx["market"],   # meet in de juiste geo
+        "locale":            ctx.get("locale"),                 # label de taal correct
         "tier":              ctx["tier"],
         "data_source":       "cli",
         "candidates":        ctx["candidates"],

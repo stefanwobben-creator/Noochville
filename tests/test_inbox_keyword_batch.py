@@ -75,6 +75,38 @@ def test_add_keyword_batch_dedup_na_afsluiten_mag_opnieuw(tmp_path):
     assert iid1 != iid2
 
 
+# ── Tests: per-taal-batch (geo + locale) ──────────────────────────────────────
+
+def _locale_batch_args(locale: str, tier: str = "core") -> dict:
+    from nooch_village.keyword_batch import propose_locale_batch
+    b = propose_locale_batch(locale, tier=tier)
+    return b
+
+
+def test_locale_batch_slaat_geo_en_locale_op(tmp_path):
+    inbox = _inbox(tmp_path)
+    b = _locale_batch_args("en")
+    iid = inbox.add_keyword_batch(b["market"], b["tier"], b["candidates"],
+                                  b["estimated_credits"], geo=b["country"], locale=b["locale"])
+    ctx = inbox.get(iid)["context"]
+    assert ctx["geo"]    == "gb"          # Engels meten in gb
+    assert ctx["locale"] == "en"
+    assert inbox.get(iid)["subject"] == "en/gb/core"
+
+
+def test_locale_batches_en_en_nl_geen_dedup(tmp_path):
+    inbox = _inbox(tmp_path)
+    en = _locale_batch_args("en")
+    nl = _locale_batch_args("nl")
+    iid_en = inbox.add_keyword_batch(en["market"], en["tier"], en["candidates"],
+                                     en["estimated_credits"], geo=en["country"], locale=en["locale"])
+    iid_nl = inbox.add_keyword_batch(nl["market"], nl["tier"], nl["candidates"],
+                                     nl["estimated_credits"], geo=nl["country"], locale=nl["locale"])
+    assert iid_en != iid_nl
+    batches = [i for i in inbox.all() if i["type"] == "keyword_batch"]
+    assert len(batches) == 2
+
+
 # ── Tests: _print_item_full ───────────────────────────────────────────────────
 
 def test_print_item_full_toont_markt_tier_credits_kandidaten(tmp_path, capsys):

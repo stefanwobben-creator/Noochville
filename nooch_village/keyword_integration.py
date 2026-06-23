@@ -40,7 +40,9 @@ def run_approved_keyword_batch(
     result = measure_batch(batch, approval, runner)
 
     market = batch["market"]
-    locale = MARKET_LANGUAGES.get(market, [market])[0]
+    # Een per-taal-batch draagt zijn eigen locale; valt terug op de eerste taal van de
+    # markt als die ontbreekt (oude, gemengde batches).
+    locale = batch.get("locale") or MARKET_LANGUAGES.get(market, [market])[0]
 
     live_results = [r for r in result["results"] if r.get("vol", 0) >= min_volume]
 

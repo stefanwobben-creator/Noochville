@@ -1,7 +1,7 @@
 """Tests voor keyword_integration — pure uitvoeringskern. Geen netwerk, geen echte credits."""
 from __future__ import annotations
 import pytest
-from nooch_village.keyword_batch import propose_batch
+from nooch_village.keyword_batch import propose_batch, propose_locale_batch
 from nooch_village.keyword_integration import run_approved_keyword_batch
 
 
@@ -93,6 +93,23 @@ def test_gepubliceerde_demand_bevat_seo_data_en_consument_velden():
     assert demand["cpc"]         == 0.19
     assert demand["competition"] == 0.62
     assert demand["market"]      == "fr"
+
+
+def test_locale_batch_labelt_taal_los_van_geo():
+    """De batch-locale wint van de primaire taal van de geo.
+
+    Zweeds (sv) wordt gemeten in geo 'se', maar se's primaire taal is 'en'. Zonder de
+    expliciete batch-locale zou de demand fout als 'en' gelabeld worden. Dit onderscheidt
+    de fix van het oude gedrag (anders dan en→gb, waar geo en taal toevallig samenvallen).
+    """
+    batch = propose_locale_batch("sv", "core")
+    assert batch["country"] == "se"          # gemeten in Zweden
+    assert batch["locale"]  == "sv"
+    rows  = [{"keyword": "veganska skor", "vol": 5000, "cpc": 0.2, "competition": 0.5}]
+    _, _, bus = _run(batch, rows, min_volume=100)
+    demand = bus.events[0].data["demand"]
+    assert demand["locale"] == "sv"          # taal-label, niet de geo-primaire taal 'en'
+    assert demand["market"] == "se"
 
 
 def test_credits_spent_gelijk_aan_measure_batch_uitkomst():

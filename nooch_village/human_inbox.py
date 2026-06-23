@@ -185,14 +185,19 @@ class HumanInbox:
         return iid
 
     def add_keyword_batch(self, market: str, tier: str,
-                          candidates: list[str], estimated_credits: int) -> str:
+                          candidates: list[str], estimated_credits: int,
+                          geo: str | None = None, locale: str | None = None) -> str:
         """Voeg een keyword-batch-item toe ter goedkeuring door de mens.
 
-        Dedup op {market}/{tier} bij status pending: dezelfde batch wordt niet tweemaal
-        toegevoegd zolang hij nog open staat. Na afsluiten mag dezelfde batch opnieuw.
-        Retourneert het item-id.
+        `geo` is de keywords_everywhere country-param waarin gemeten wordt (default: market).
+        `locale` labelt de taal van de batch zodat dat label tot in keyword_proposed klopt.
+        Bij een per-taal-batch is market gelijk aan de geo en is locale gezet.
+
+        Dedup op {locale}/{market}/{tier} bij status pending (zonder locale: {market}/{tier}):
+        dezelfde batch wordt niet tweemaal toegevoegd zolang hij nog open staat. Na afsluiten
+        mag dezelfde batch opnieuw. Retourneert het item-id.
         """
-        dedup_key = f"{market}/{tier}"
+        dedup_key = f"{locale}/{market}/{tier}" if locale else f"{market}/{tier}"
         for item in self._items.values():
             if (item["type"] == "keyword_batch"
                     and item.get("subject") == dedup_key
@@ -206,6 +211,8 @@ class HumanInbox:
             "subject": dedup_key,
             "context": {
                 "market":            market,
+                "geo":               geo or market,
+                "locale":            locale,
                 "tier":              tier,
                 "candidates":        candidates,
                 "estimated_credits": estimated_credits,

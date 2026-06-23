@@ -70,6 +70,29 @@ def main() -> None:
         from nooch_village.role_proposals import grant_content_strategist_skills
         grant_content_strategist_skills()
 
+    elif mode == "measure_propose":
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.human_inbox import HumanInbox
+        from nooch_village.keyword_aanjager import propose_locale_batches, DEFAULT_LOCALES
+        from nooch_village.village import BASE_DIR
+        tier = "core"
+        locales: list[str] = []
+        for a in sys.argv[2:]:
+            if a in ("core", "longtail"):
+                tier = a
+            else:
+                locales.append(a)
+        ctx = load_context(BASE_DIR)
+        inbox = HumanInbox(os.path.join(ctx.data_dir, "human_inbox.json"))
+        queued = propose_locale_batches(inbox, locales or None, tier)
+        total = sum(q["candidates"] for q in queued)
+        print(f"Meet-batches in de inbox gezet (tier={tier}):")
+        for q in queued:
+            print(f"  {q['locale']} → geo {q['geo']}: {q['candidates']} kandidaten  [{q['iid']}]")
+        print(f"\nMax {total} credits als je ALLE batches goedkeurt (per batch los te keuren).")
+        print("Bekijk + keur goed:  python -m nooch_village.inbox")
+
     elif mode == "ingest":
         import json, os
         from nooch_village.config import load_context
@@ -101,6 +124,6 @@ def main() -> None:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
               "purge | intent | triage | ngram | reflect | simulate | harry_hemp | "
-              "content_strategist | ingest | roster",
+              "content_strategist | measure_propose | ingest | roster",
               file=sys.stderr)
         sys.exit(1)
