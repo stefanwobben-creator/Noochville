@@ -2,13 +2,29 @@
 from __future__ import annotations
 import hashlib, os, json, time
 from datetime import date
-from nooch_village.util import atomic_write_json
+from nooch_village.util import atomic_write_json, run_bounded
 from nooch_village.mission import ANCHOR_PURPOSE as _NOOCHIE_MISSION
 from nooch_village.inhabitant import Inhabitant
 from nooch_village.event_bus import Event
 from nooch_village.governance import Gate, proposal_from_dict, proposal_to_dict
 from nooch_village.insight import Insight
 from nooch_village.insight_ingest import insight_from_grounding
+
+
+def _bounded_trends(fetch_fn, budget: float, log=None) -> dict:
+    """Haal Google Trends best-effort op, met een harde tijdslimiet.
+
+    Levert de skill-output als die binnen `budget` seconden klaar is; anders een
+    {"error": ...}-dict die field_note netjes opvangt. Zo is de dagelijkse Field Note
+    nooit gegijzeld door een trage of rate-limited Trends-call.
+    """
+    ok, res = run_bounded(fetch_fn, budget)
+    if ok:
+        return res
+    reden = "tijdslimiet overschreden" if res is None else str(res)
+    if log is not None:
+        log.warning("google_trends best-effort overgeslagen: %s", reden)
+    return {"error": f"google_trends: {reden}", "keywords": {}, "rows": []}
 
 
 def _extract_pulse_metrics(plausible: dict) -> list[tuple[str, float]]:
@@ -97,12 +113,22 @@ class WebsiteWatcherWorker(Inhabitant):
         self._busy = True
         try:
             self.log.info("☀️ groei-puls gestart")
-            plausible = self.use_skill("plausible_stats", {"period": "7d"})
-            trends = self.use_skill("google_trends", {
-                "geos": [""],
-                "hl": "en-US",
-                "timeframe": "today 3-m",
-            })
+            try:
+                plausible = self.use_skill("plausible_stats", {"period": "7d"})
+            except Exception as exc:                       # Plausible mag de note niet blokkeren
+                self.log.warning("plausible_stats faalde: %s", exc)
+                plausible = {"error": str(exc)}
+
+            # Trends staat NIET op het kritieke pad: best-effort met harde tijdslimiet.
+            budget = float(self.context.settings.get("trends_time_budget_seconds", "30"))
+            trends = _bounded_trends(
+                lambda: self.use_skill("google_trends", {
+                    "geos": [""],
+                    "hl": "en-US",
+                    "timeframe": "today 3-m",
+                }),
+                budget, self.log,
+            )
             note = self.use_skill("field_note", {"plausible": plausible, "trends": trends})
 
             self._log_pulse_metrics(plausible)

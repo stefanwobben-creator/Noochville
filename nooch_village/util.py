@@ -4,6 +4,34 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
+
+
+def run_bounded(fn, timeout_s: float):
+    """Voer fn() uit met een harde tijdslimiet via een daemon-thread.
+
+    Geeft (True, resultaat) als fn binnen de tijd klaar is, (False, exception) als fn
+    een uitzondering gooide, en (False, None) bij time-out. Bij time-out blijft de
+    thread (daemon) nog draaien tot fn zelf klaar is, maar de aanroeper wacht niet —
+    zo kan een trage, flaky call (zoals Google Trends-backoff) het kritieke pad niet
+    gijzelen.
+    """
+    box: dict = {}
+
+    def worker():
+        try:
+            box["value"] = fn()
+        except Exception as exc:               # noqa: BLE001 — bewust alles vangen
+            box["error"] = exc
+
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+    t.join(timeout_s)
+    if t.is_alive():
+        return (False, None)                    # time-out
+    if "error" in box:
+        return (False, box["error"])
+    return (True, box.get("value"))
 
 
 def atomic_write_json(path: str, obj) -> None:
