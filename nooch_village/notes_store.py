@@ -58,6 +58,26 @@ class NotesStore:
         self._save()
         return bestaand
 
+    def link(self, from_id: str, to_id: str) -> Insight | None:
+        """Verbind twee bestaande kaartjes: voeg `to_id` toe aan de links_to van
+        `from_id`. Gericht (van bron naar doel), idempotent (geen dubbele link) en
+        fail-closed: bestaat een van beide niet, of wijst het kaartje naar zichzelf,
+        dan gebeurt er niets en is het resultaat None. Geeft anders het bijgewerkte
+        bron-kaartje terug."""
+        if from_id == to_id:
+            return None
+        bron = self.get(from_id)
+        doel = self.get(to_id)
+        if bron is None or doel is None:
+            return None
+        if to_id not in bron.links_to:
+            bron.links_to.append(to_id)
+            from datetime import datetime
+            bron.last_updated_at = datetime.now()
+            self._notes[from_id] = bron.model_dump(mode="json")
+            self._save()
+        return bron
+
     def relevant_for(self, word: str, limit: int = 5) -> list[Insight]:
         """Vind kaartjes die termen delen met `word`, gewogen op zeldzaamheid.
         Een gedeeld woord telt zwaarder naarmate minder kaartjes het bevatten —
