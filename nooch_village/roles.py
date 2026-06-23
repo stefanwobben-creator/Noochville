@@ -939,12 +939,16 @@ class HarryHemp(Inhabitant):
     def _check_nl_corpus(self, rows) -> list[str]:
         """Dynamische NL-corpus-dekkingscheck (regel 6: zoek en meld, niet garandeer).
         Stil tenzij hij iets vindt — een proactieve waarnemer die z'n mond houdt tot er wat is."""
-        from nooch_village.ngram_correlate import uncovered_nl_terms
+        from nooch_village.ngram_correlate import uncovered_nl_terms, label_uncovered
         missing = uncovered_nl_terms(rows)
         if missing:
-            self.log.info("🇳🇱 NL-corpus mist %d term(en): %s", len(missing), missing)
+            labeled = label_uncovered(missing)
+            sterk = [x["term"] for x in labeled if x["signaal"] == "sterk"]
+            self.log.info("🇳🇱 NL-corpus mist %d term(en); sterk signaal (los woord): %s",
+                          len(missing), sterk or "geen")
             self.bus.publish(Event("nl_corpus_gap",
-                                   {"by": self.id, "terms": missing}, self.id))
+                                   {"by": self.id, "terms": missing, "labeled": labeled},
+                                   self.id))
         return missing
 
     def _on_nl_corpus_request(self, payload) -> None:

@@ -117,6 +117,24 @@ def uncovered_nl_terms(rows: list[dict]) -> list[str]:
     return out
 
 
+def label_uncovered(terms: list[str]) -> list[dict]:
+    """Duid de ontbrekende termen (we filteren niets, we labelen achteraf).
+
+    Een los cultureel woord dat ontbreekt is een STERK signaal: het corpus mist het echt.
+    Een meerwoords/SEO-frase die ontbreekt is ZWAK en verwacht: een boekfrequentie-corpus
+    bevat zulke frases per definitie nooit. Zo blijft de check breed, maar wordt de melding
+    slim geduid."""
+    out: list[dict] = []
+    for t in terms:
+        is_frase = len(t.split()) > 1
+        out.append({
+            "term":    t,
+            "kind":    "frase" if is_frase else "woord",
+            "signaal": "zwak" if is_frase else "sterk",
+        })
+    return out
+
+
 def assess_continuation(ngram_years: dict[int, float], openalex_years: dict[int, float],
                         anchor_year: int, min_r: float = 0.5) -> dict:
     """Beslis of de OpenAlex-voortzetting vertrouwd mag worden, en bouw 'm alleen dan.
