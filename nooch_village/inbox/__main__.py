@@ -150,6 +150,18 @@ def _print_item_full(item: dict) -> None:
         if desc:
             print(f"Beschrijving: {desc}")
 
+    elif item["type"] == "verband":
+        print(f"\n── Verband-voorstel (3c) ──")
+        print(f"Kaart A   : {ctx.get('kaart_a_id')}")
+        print(f"Kaart B   : {ctx.get('kaart_b_id')}")
+        claim = ctx.get("voorstel_claim", "")
+        if claim:
+            print(f"Voorstel  : {claim}")
+        print(f"\n── Acties ──")
+        print(f"  approve <id> [reden]   → touwtje leggen tussen de twee kaartjes")
+        print(f"  reject  <id> [reden]   → geen touwtje, gesloten")
+        print(f"  defer   <id> [reden]   → uitstellen, blijft geregistreerd")
+
     elif item["type"] == "keyword":
         ctx = item.get("context", {})
         demand = ctx.get("demand", {})
@@ -284,6 +296,18 @@ def _approve_keyword_batch(inbox, item, iid: str, reason: str, _load_fn=None) ->
         print(f"   Fouten             : {len(summary['errors'])}")
         for e in summary["errors"]:
             print(f"     · {e['word']}: {e['error']}")
+
+
+def _approve_verband(inbox, item, iid: str, notes, reason: str = "") -> bool:
+    """Approve een verband (3c): sluit het item en schrijf het touwtje tussen de twee
+    kaartjes (notes.link). Retourneert True als de link gelegd is (beide kaartjes
+    bestaan), anders False (het item is dan wel netjes afgesloten)."""
+    ctx = item.get("context", {})
+    a, b = ctx.get("kaart_a_id"), ctx.get("kaart_b_id")
+    inbox.resolve(iid, "approved", reason=reason)
+    if not (a and b):
+        return False
+    return notes.link(a, b) is not None
 
 
 def _approve_means_gap(inbox, item, _load_fn=None):
@@ -500,6 +524,17 @@ def main(argv: list[str]) -> None:
 
         elif item["type"] == "keyword_batch":
             _approve_keyword_batch(inbox, item, iid, reason)
+
+        elif item["type"] == "verband":
+            # Verband vereist de notes-store via Village-context
+            _, v = _load()
+            a = item["context"].get("kaart_a_id")
+            b = item["context"].get("kaart_b_id")
+            ok = _approve_verband(inbox, item, iid, v.context.notes, reason)
+            if ok:
+                print(f"✅ Verband goedgekeurd → touwtje gelegd: {a} ↔ {b}.")
+            else:
+                print(f"✘ Item gesloten, maar touwtje niet gelegd (kaartje ontbreekt): {a}, {b}.")
 
     elif cmd == "reject":
         if len(argv) < 2:

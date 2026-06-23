@@ -22,7 +22,7 @@ from nooch_village.util import atomic_write_json
 
 _VALID_STATUSES = {"pending", "approved", "rejected", "amended", "deferred"}
 _VALID_TYPES    = {"escalation", "activation", "keyword", "means_gap", "suggestion",
-                   "keyword_batch"}
+                   "keyword_batch", "verband"}
 
 
 class HumanInbox:
@@ -245,6 +245,36 @@ class HumanInbox:
             "created_at": time.time(),
             "resolved_at": None,
             "resolution": None,
+        }
+        self._save()
+        return iid
+
+    def add_verband(self, kaart_a_id: str, kaart_b_id: str,
+                    voorstel_claim: str, reason: str = "") -> str:
+        """Voeg een verband-voorstel toe: een door de scientist gesuggereerd verband
+        tussen twee kaartjes, dat de mens kan goedkeuren (touwtje schrijven, 3c) of
+        afwijzen. Dedup op het ongeordende paar, ongeacht status: eenmaal beslist,
+        altijd stil. Retourneert het item-id."""
+        subject = "|".join(sorted([kaart_a_id, kaart_b_id]))
+        for item in self._items.values():
+            if item["type"] == "verband" and item.get("subject") == subject:
+                return item["id"]
+
+        iid = uuid.uuid4().hex[:12]
+        self._items[iid] = {
+            "id":      iid,
+            "type":    "verband",
+            "subject": subject,
+            "context": {
+                "kaart_a_id":     kaart_a_id,
+                "kaart_b_id":     kaart_b_id,
+                "voorstel_claim": voorstel_claim,
+                "reason":         reason,
+            },
+            "status":     "pending",
+            "created_at": time.time(),
+            "resolved_at": None,
+            "resolution":  None,
         }
         self._save()
         return iid

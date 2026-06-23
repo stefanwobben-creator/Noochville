@@ -110,6 +110,7 @@ class Village:
         self.bus.subscribe("keyword_decided",             self._observe)
         self.bus.subscribe("human_decision_needed",       self._observe)
         self.bus.subscribe("human_decision_needed",       self._on_keyword_escalation)
+        self.bus.subscribe("human_decision_needed",       self._on_verband_suggestion)
         self.bus.subscribe("gsc_pulse_completed",         self._observe)
         self.bus.subscribe("governance_changed",          self._observe)
         self.bus.subscribe("governance_changed",          self._on_governance_changed)
@@ -169,6 +170,23 @@ class Village:
             iid = self.human_inbox.add_suggestion(gap_key, description)
             log.info("💡 gap C → suggestie in human_inbox: item %s (gap %s) — %s",
                      iid, gap_key, reason)
+
+    def _on_verband_suggestion(self, e: Event) -> None:
+        """Schrijf een verband-voorstel (topic 'verband') naar de human inbox (3c).
+
+        De mens beslist later: approve schrijft het touwtje, reject laat het weg.
+        Fail-closed: zonder beide kaart-ids gebeurt er niets.
+        """
+        if e.data.get("topic") != "verband":
+            return
+        a = e.data.get("kaart_a_id")
+        b = e.data.get("kaart_b_id")
+        if not a or not b:
+            return
+        iid = self.human_inbox.add_verband(
+            a, b, e.data.get("voorstel_claim", ""), e.data.get("reason", ""))
+        logging.getLogger("village.inbox").info(
+            "📬 verband-voorstel in human_inbox: item %s (%s ↔ %s)", iid, a, b)
 
     def _on_keyword_escalation(self, e: Event) -> None:
         """Schrijf keyword-escalaties naar de human inbox."""
