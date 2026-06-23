@@ -838,6 +838,9 @@ class HarryHemp(Inhabitant):
             # Voortzetting voorbij de ngram-cutoff via gekalibreerde OpenAlex-proxy.
             self._extend_arcs(rows, int(result.get("year_start", 1980)))
 
+            # NL-corpus-dekking (modus c, autonoom): meld alleen wat ontbreekt.
+            self._check_nl_corpus(rows)
+
             if len(stijgend) >= self._SHIFT_THRESHOLD or len(dalend) >= self._SHIFT_THRESHOLD:
                 self.bus.publish(Event("tijdgeest_signaal", {
                     "by":       self.id,
@@ -930,6 +933,17 @@ class HarryHemp(Inhabitant):
             self.bus.publish(Event("tijdgeest_voortzetting",
                                    {"by": self.id, "reports": reports}, self.id))
         return reports
+
+    def _check_nl_corpus(self, rows) -> list[str]:
+        """Dynamische NL-corpus-dekkingscheck (regel 6: zoek en meld, niet garandeer).
+        Stil tenzij hij iets vindt — een proactieve waarnemer die z'n mond houdt tot er wat is."""
+        from nooch_village.ngram_correlate import uncovered_nl_terms
+        missing = uncovered_nl_terms(rows)
+        if missing:
+            self.log.info("🇳🇱 NL-corpus mist %d term(en): %s", len(missing), missing)
+            self.bus.publish(Event("nl_corpus_gap",
+                                   {"by": self.id, "terms": missing}, self.id))
+        return missing
 
     # ── grounding-tak ─────────────────────────────────────────────────────────
 

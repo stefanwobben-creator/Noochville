@@ -105,6 +105,18 @@ def continue_arc(ngram: dict[int, float], openalex: dict[int, float],
     return out
 
 
+def uncovered_nl_terms(rows: list[dict]) -> list[str]:
+    """NL-termen die het ngram-corpus niet kent. Dynamische dekkingscheck: kijk in de
+    pulse-rijen welke NL-termen `no_data` met reden 'niet gevonden in corpus' hebben.
+    Een netwerk-/andere fout telt NIET mee (dat is geen dekkingsgat). Geen hardcoded lijst."""
+    out: list[str] = []
+    for r in rows:
+        if (r.get("locale") == "nl" and r.get("no_data")
+                and "niet gevonden" in (r.get("reason") or "").lower()):
+            out.append(r["term"])
+    return out
+
+
 def assess_continuation(ngram_years: dict[int, float], openalex_years: dict[int, float],
                         anchor_year: int, min_r: float = 0.5) -> dict:
     """Beslis of de OpenAlex-voortzetting vertrouwd mag worden, en bouw 'm alleen dan.
