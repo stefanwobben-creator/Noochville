@@ -52,6 +52,42 @@ class Inhabitant(threading.Thread):
             {"request_id": rid, "capability": capability, "payload": payload, "from": self.id}, self.id))
         return rid
 
+    # --- spelregel 5: rol-vraagt-rol om een accountability (dorpsbreed) ---
+    def offer(self, accountability_key: str, handler) -> None:
+        """Bied een accountability aan die elke andere rol mag aanvragen (spelregel 5).
+        De eerste aanbieding abonneert op accountability_requested; de handler draait dan
+        op de eigen thread van deze inwoner (via react)."""
+        if not hasattr(self, "_offered"):
+            self._offered: dict = {}
+            self.react("accountability_requested", self._on_accountability_requested)
+        self._offered[accountability_key] = handler
+
+    def _on_accountability_requested(self, event: Event) -> None:
+        if event.data.get("target") != self.id:
+            return                                  # niet aan mij gericht
+        key = event.data.get("accountability")
+        handler = getattr(self, "_offered", {}).get(key)
+        if handler is None:
+            self.sense_tension(
+                f"Gevraagd om accountability '{key}' die ik niet aanbied; "
+                f"verzoeker: {event.data.get('from', '?')}", kind="operational")
+            return
+        self.log.info("📨 verzoek van %s: voer accountability '%s' uit",
+                      event.data.get("from", "?"), key)
+        handler(event.data.get("payload", {}))
+
+    def ask_accountability(self, target_role: str, accountability_key: str,
+                           payload: dict | None = None) -> None:
+        """Vraag een andere rol een van diens accountabilities op te pakken (spelregel 5).
+        Geen commando: de rol-eigenaar beslist zelf of hij het doet of er een spanning van maakt.
+        Een mens-bemenste rol (bv. de founder in the_source) is gewoon een van de vragers."""
+        self.bus.publish(Event("accountability_requested", {
+            "target":         target_role,
+            "accountability": accountability_key,
+            "payload":        payload or {},
+            "from":           self.id,
+        }, self.id))
+
     def sense_tension(self, description: str, kind: str = "operational") -> None:
         """Sens een spanning: logt naar het audittrail én triageert voor dispatch."""
         tension = Tension(sensed_by=self.id, description=description, kind=kind)
