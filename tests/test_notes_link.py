@@ -108,3 +108,41 @@ def test_neighbors_zonder_links_is_leeg(tmp_path):
     """Een los kaartje zonder touwtjes heeft geen buren."""
     s = _store(tmp_path, _kaart("a"), _kaart("b"))
     assert s.neighbors("a") == []
+
+
+# ── brokje 9: cluster lezen (samenhangend groepje rond een zaad) ──────────────
+
+def test_cluster_zaad_eerst_dan_buren(tmp_path):
+    """a-b en a-c: cluster(a) = [a, b, c] (zaad vooraan, buren erna)."""
+    s = _store(tmp_path, _kaart("a"), _kaart("b"), _kaart("c"))
+    s.link("a", "b")
+    s.link("a", "c")
+    assert [n.id for n in s.cluster("a")] == ["a", "b", "c"]
+
+
+def test_cluster_volgt_touwtjes_transitief(tmp_path):
+    """a-b-c (keten): cluster(a) bereikt ook c, twee hops ver."""
+    s = _store(tmp_path, _kaart("a"), _kaart("b"), _kaart("c"))
+    s.link("a", "b")
+    s.link("b", "c")
+    assert [n.id for n in s.cluster("a")] == ["a", "b", "c"]
+
+
+def test_cluster_los_kaartje_is_alleen_zichzelf(tmp_path):
+    s = _store(tmp_path, _kaart("a"), _kaart("b"))
+    assert [n.id for n in s.cluster("a")] == ["a"]
+
+
+def test_cluster_respecteert_max_size(tmp_path):
+    """Ster met veel buren: max_size kapt het groepje af (zaad telt mee)."""
+    s = _store(tmp_path, _kaart("hub"), *[_kaart(f"n{i}") for i in range(5)])
+    for i in range(5):
+        s.link("hub", f"n{i}")
+    out = s.cluster("hub", max_size=3)
+    assert len(out) == 3
+    assert out[0].id == "hub"
+
+
+def test_cluster_onbestaand_zaad_is_leeg(tmp_path):
+    s = _store(tmp_path, _kaart("a"))
+    assert s.cluster("weg") == []

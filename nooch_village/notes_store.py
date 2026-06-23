@@ -95,6 +95,30 @@ class NotesStore:
         resultaat = [self.get(vid) for vid in sorted(verbonden)]
         return [n for n in resultaat if n is not None]
 
+    def cluster(self, note_id: str, max_size: int = 8) -> list[Insight]:
+        """Verzamel een samenhangend groepje kaartjes rond een zaad-kaartje, breedte-
+        eerst via de touwtjes (neighbors, beide richtingen). Het zaad-kaartje staat
+        vooraan; daarna de buren oplopend in afstand, deterministisch op id. Begrensd
+        op `max_size` zodat het materiaal voor één artikel behapbaar blijft. Bestaat
+        het zaad niet, dan een lege lijst (fail-closed)."""
+        from collections import deque
+        seed = self.get(note_id)
+        if seed is None:
+            return []
+        bezocht = {note_id}
+        volgorde: list[Insight] = [seed]
+        queue: deque[str] = deque([note_id])
+        while queue and len(volgorde) < max_size:
+            huidig = queue.popleft()
+            for buur in self.neighbors(huidig):   # al gesorteerd op id
+                if buur.id not in bezocht:
+                    bezocht.add(buur.id)
+                    volgorde.append(buur)
+                    queue.append(buur.id)
+                    if len(volgorde) >= max_size:
+                        break
+        return volgorde
+
     def relevant_for(self, word: str, limit: int = 5) -> list[Insight]:
         """Vind kaartjes die termen delen met `word`, gewogen op zeldzaamheid.
         Een gedeeld woord telt zwaarder naarmate minder kaartjes het bevatten —
