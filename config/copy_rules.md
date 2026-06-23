@@ -19,6 +19,11 @@ emails, and the language-as-system-change note (JW).
 - **The writing loop (human in the middle):** the LLM drafts a full first draft against
   these rules → a **human rewrites** it in their judgement and voice → the LLM does a
   final check against these rules and the claim-gate. Every text passes a human.
+- **Internal vs external voice (two regimes).** This filter governs **outward-facing** copy
+  only. Internal village communications (Field Notes, the daily bulletin, exec summaries) are
+  written in the **voice of the role-holder's persona** (e.g. Corry Coconut's plain factual
+  tone, Noochie's warm ENFP), not in this brand voice. Only when content goes **public** does
+  it pass through these rules. The boundary is simply: does this leave the village?
 
 ## 1. Who we talk to (pick ONE per piece)
 

@@ -13,20 +13,26 @@ class ContentSchrijvenSkill(Skill):
     cost = "free"  # kleine begrensde LLM-tokenkost wordt bewust niet gevlagd
     side_effect_free = True
     description = "Schrijft publieke website-content in Nooch-merkstem uit een cluster kennis-kaartjes, per publicatie-soort."
-    input_schema = "payload: {'cards': [{'id','word','claim','status'}], 'kind': 'blog|sales_page|passport', 'locale'?: str}"
+    input_schema = ("payload: {'cards': [{'id','word','claim','status'}], "
+                    "'kind': 'blog|sales_page|passport', 'audience'?: str, "
+                    "'desired_outcome'?: str, 'locale'?: str}. De copyregels komen uit "
+                    "context.copy_rules.")
     output_schema = "{'text': str|None, 'claim_insight_ids': [str], 'kind': str} — fail-closed: text=None zonder LLM of materiaal"
 
     def run(self, payload: dict, context) -> dict:
         cards = payload.get("cards", [])
         kind = payload.get("kind", "blog")
-        text = self._llm(cards, kind, payload.get("locale"))
+        rules = getattr(context, "copy_rules", "") if context is not None else ""
+        text = self._llm(cards, kind, payload.get("audience", ""),
+                         payload.get("desired_outcome", ""), rules, payload.get("locale"))
         return {
             "text": text,
             "claim_insight_ids": [c.get("id") for c in cards if c.get("id")],
             "kind": kind,
         }
 
-    def _llm(self, cards: list[dict], kind: str, locale: str | None = None) -> str | None:
+    def _llm(self, cards: list[dict], kind: str, audience: str,
+             desired_outcome: str, rules: str, locale: str | None = None) -> str | None:
         from nooch_village.llm import reason
         from nooch_village.language import instruction
         if not cards:
@@ -43,15 +49,23 @@ class ContentSchrijvenSkill(Skill):
             "Dit is een blog: je mag verkennend schrijven, maar verzin geen feiten buiten "
             "het materiaal."
         )
+        rules_block = (
+            f"Volg deze merk-copyregels strikt als basis voor alles:\n{rules}\n\n"
+            if rules else ""
+        )
         prompt = (
-            "Je schrijft publieke content voor Nooch.earth, een missie-gedreven duurzaam "
-            "schoenenmerk. Toon: warm, eerlijk, speels-rebels, geen greenwashing en geen "
-            "opgeklopte taal. Schrijf vanuit de missie, niet als verkoper.\n\n"
-            f"Publicatie-soort: {kind}\n"
-            f"{claim_regel}\n\n"
-            f"Materiaal (kennis-kaartjes, met grounding-status tussen haakjes):\n{material}\n\n"
-            "Maak van dit materiaal één samenhangend stuk. Baseer je ALLEEN op het "
-            "materiaal; verzin geen cijfers, bronnen of feiten die er niet staan.\n"
+            "Je schrijft een EERSTE DRAFT van publieke content voor Nooch.earth. Een mens "
+            "herschrijft 'm daarna, dus lever een sterke, complete draft, geen kaal raamwerk.\n\n"
+            + rules_block
+            + f"Lezer (persona): {audience or 'niet gespecificeerd'}\n"
+            + f"Gewenste uitkomst/emotie: {desired_outcome or 'niet gespecificeerd'}\n\n"
+            + f"Publicatie-soort: {kind}\n"
+            + f"{claim_regel}\n\n"
+            + f"Materiaal (kennis-kaartjes, met grounding-status tussen haakjes):\n{material}\n\n"
+            + "Maak hier één samenhangend stuk van, gericht op deze ene lezer en de gewenste "
+            + "emotie. Baseer je ALLEEN op het materiaal; verzin geen cijfers, bronnen of "
+            + "feiten die er niet staan. Geef bovenaan een paar kop-opties (de kop is ~80% "
+            + "van het succes).\n"
             + instruction(locale)
         )
         out = reason(prompt)

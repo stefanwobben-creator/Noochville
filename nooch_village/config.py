@@ -11,6 +11,7 @@ class Context:
     library: object = None
     records: object = None   # read-only verwijzing naar Records, voor Facilitator/Gate
     strategy: dict = field(default_factory=dict)  # geladen uit config/strategy.json
+    copy_rules: str = ""  # geladen uit config/copy_rules.md — de basis voor alle copy
 
 
 def load_context(base_dir: str) -> Context:
@@ -43,4 +44,11 @@ def load_context(base_dir: str) -> Context:
             raw = json.load(f)
         strategy = {k: v for k, v in raw.items() if not k.startswith("_")}
 
-    return Context(settings=settings, data_dir=data_dir, strategy=strategy)
+    copy_rules: str = ""
+    copy_rules_path = os.path.join(base_dir, "config", "copy_rules.md")
+    if os.path.exists(copy_rules_path):
+        with open(copy_rules_path, encoding="utf-8") as f:
+            copy_rules = f.read()
+
+    return Context(settings=settings, data_dir=data_dir,
+                   strategy=strategy, copy_rules=copy_rules)

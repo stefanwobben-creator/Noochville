@@ -11,10 +11,10 @@ _CARDS = [
 ]
 
 
-def _run(payload, mock_return="Een mooi stuk tekst."):
+def _run(payload, mock_return="Een mooi stuk tekst.", context=None):
     skill = ContentSchrijvenSkill()
     with patch("nooch_village.llm.reason", return_value=mock_return) as mock:
-        out = skill.run(payload, context=None)
+        out = skill.run(payload, context=context)
     return out, mock
 
 
@@ -58,3 +58,28 @@ def test_geen_llm_geeft_geen_tekst():
 def test_geen_kaarten_geeft_geen_tekst():
     out, _ = _run({"cards": [], "kind": "blog"})
     assert out["text"] is None
+
+
+# ── brief (lezer + emotie), regels uit context, eerste-draft-framing ──────────
+
+def test_brief_lezer_en_emotie_in_prompt():
+    _, mock = _run({"cards": _CARDS, "kind": "blog",
+                    "audience": "Yasmine, design-first",
+                    "desired_outcome": "excited about the look"})
+    prompt = mock.call_args[0][0]
+    assert "Yasmine, design-first" in prompt
+    assert "excited about the look" in prompt
+
+
+def test_copyregels_uit_context_in_prompt():
+    from types import SimpleNamespace
+    ctx = SimpleNamespace(copy_rules="MERKREGELS: burger niet consument.")
+    _, mock = _run({"cards": _CARDS, "kind": "blog"}, context=ctx)
+    assert "MERKREGELS: burger niet consument." in mock.call_args[0][0]
+
+
+def test_eerste_draft_framing_en_kopopties():
+    _, mock = _run({"cards": _CARDS, "kind": "blog"})
+    prompt = mock.call_args[0][0]
+    assert "EERSTE DRAFT" in prompt
+    assert "kop-opties" in prompt
