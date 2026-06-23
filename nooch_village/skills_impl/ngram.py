@@ -1,8 +1,10 @@
 """NgramCultureSkill — leest de lange-termijn culturele taalverschuiving via
 het onofficiële JSON-endpoint van Google Books Ngram Viewer.
 
-Data stopt ~2019: dit is GEEN huidige zoekvraag maar een culturele tijdseries
-over decennia. Fail closed als het netwerk niet bereikbaar is.
+Dit is GEEN huidige zoekvraag maar een culturele tijdseries over decennia. We
+vragen op tot het huidige jaar en laten de bron teruggeven wat hij heeft; het
+echte eindjaar wordt door het corpus bepaald, niet door een eigen cap. Fail closed
+als het netwerk niet bereikbaar is.
 
 Locale-model:
   NL-woorden → corpus 10 (Dutch 2012)
@@ -15,7 +17,7 @@ Output: `rows` (locale-bewust) + `terms` (backward compat).
   "geen data" is expliciet onderscheiden van een echte nul of vlak signaal.
 """
 from __future__ import annotations
-import json, time, urllib.request, urllib.parse
+import datetime, json, time, urllib.request, urllib.parse
 from nooch_village.skills import Skill
 
 # Zaad-termen met expliciete locale — worden alleen gebruikt als het Lexicon ontbreekt
@@ -36,8 +38,9 @@ _CORPUS_EN = 26   # English (2019)
 _CORPUS_NL = 10   # Dutch (2012 — meest stabiele NL-corpus in de JSON-API)
 _LANG_TO_CORPUS = {"nl": _CORPUS_NL, "en": _CORPUS_EN}
 _YEAR_START = 1980
-_YEAR_END   = 2019
 _SMOOTHING  = 3
+# Geen eigen eindjaar-cap: we vragen op tot het huidige jaar en laten het corpus
+# bepalen waar de data echt ophoudt (was hardgecodeerd op 2019, dat was zelf-opgelegd).
 _RECENT_YEARS = 10   # venster voor de recente helling
 
 
@@ -145,7 +148,7 @@ class NgramCultureSkill(Skill):
 
     def run(self, payload: dict, context) -> dict:
         year_start = int(payload.get("year_start", _YEAR_START))
-        year_end   = int(payload.get("year_end",   _YEAR_END))
+        year_end   = int(payload.get("year_end",   datetime.date.today().year))
         smoothing  = int(payload.get("smoothing",  _SMOOTHING))
 
         # Payload-override: losse termen zonder Lexicon-context
