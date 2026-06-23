@@ -13,8 +13,35 @@ Output: `rows` (locale-bewust) + `keywords` (backward compat, eerste geo).
 Fail-closed per geo×term: netwerk-/rate-limit-fout faalt alleen dat segment.
 """
 from __future__ import annotations
-import os, time, random
+import os, json, time, random
 from nooch_village.skills import Skill
+
+# Een realistische browser-User-Agent vermindert 429's: de pytrends-default-UA
+# wordt sneller geblokkeerd door Google.
+_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+
+
+def rotate_window(items: list, cursor: int, size: int) -> tuple[list, int]:
+    """Round-robin venster van maximaal `size` items vanaf `cursor`.
+
+    Geeft (venster, volgende_cursor). Zo bevraagt elke puls maar een paar termen en
+    rolt over meerdere pulsen door de hele set — dat begrenst de request-burst die
+    Google Trends 429't, ongeacht hoe groot de woordenlijst wordt.
+
+    Leeg → ([], 0). size <= 0 of size >= aantal → alle items (cursor terug naar 0).
+    """
+    n = len(items)
+    if n == 0:
+        return [], 0
+    if size <= 0 or size >= n:
+        return list(items), 0
+    start = cursor % n
+    window = [items[(start + i) % n] for i in range(size)]
+    return window, (start + size) % n
+
 
 # Geo-code → taal (uitbreidbaar)
 _GEO_LOCALE: dict[str, str] = {
@@ -81,6 +108,23 @@ class TrendsSkill(Skill):
         "Fail-closed per geo×term."
     )
 
+    def _select_window(self, keywords: list[str], context) -> list[str]:
+        """Beperk tot een roterend venster (default 3) en bewaar de cursor, zodat de
+        request-burst begrensd blijft en de set over meerdere pulsen toch rondkomt."""
+        size = int(context.settings.get("trends_keywords_per_pulse", "3"))
+        path = os.path.join(context.data_dir, "trends_cursor.json")
+        try:
+            cursor = int(json.load(open(path)).get("cursor", 0))
+        except Exception:
+            cursor = 0
+        window, nxt = rotate_window(keywords, cursor, size)
+        try:
+            with open(path, "w") as f:
+                json.dump({"cursor": nxt}, f)
+        except Exception:
+            pass
+        return window
+
     def _fetch(self, pytrends, keyword, geo, timeframe="today 12-m", max_retries=4, base_delay=8):
         """Exponentiele backoff bij 429."""
         retries = 0
@@ -113,7 +157,8 @@ class TrendsSkill(Skill):
         timeframe = payload.get("timeframe", "today 12-m")
         hl        = payload.get("hl", "nl-NL")
 
-        pytrends = TrendReq(hl=hl, tz=60, timeout=(10, 25))
+        pytrends = TrendReq(hl=hl, tz=60, timeout=(10, 25),
+                            requests_args={"headers": {"User-Agent": _USER_AGENT}})
 
         rows: list[dict]  = []
         legacy: dict      = {}           # eerste geo → keywords-dict (backward compat)
@@ -121,7 +166,10 @@ class TrendsSkill(Skill):
 
         for geo in geos:
             locale   = _geo_to_locale(geo)
-            keywords = payload.get("keywords") or _keywords_for_locale(locale, context)
+            if payload.get("keywords"):
+                keywords = payload["keywords"]          # expliciet meegegeven: respecteer volledig
+            else:
+                keywords = self._select_window(_keywords_for_locale(locale, context), context)
 
             for kw in keywords:
                 try:
