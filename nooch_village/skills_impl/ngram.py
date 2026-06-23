@@ -179,13 +179,14 @@ class NgramCultureSkill(Skill):
                             ts     = item["timeseries"]
                             signal = _derive_signal(ts)
                             row = {
-                                "concept":   concept_of.get(term, term),
-                                "locale":    lang,
-                                "term":      term,
-                                "corpus":    corpus,
-                                "signal":    signal,
-                                "freq_last": round(ts[-1], 12) if ts else None,
-                                "freq_peak": round(max(ts), 12) if ts else None,
+                                "concept":    concept_of.get(term, term),
+                                "locale":     lang,
+                                "term":       term,
+                                "corpus":     corpus,
+                                "signal":     signal,
+                                "freq_last":  round(ts[-1], 12) if ts else None,
+                                "freq_peak":  round(max(ts), 12) if ts else None,
+                                "timeseries": ts,   # volledige jaarreeks voor correlatie-analyse
                             }
                             legacy_terms[term] = {
                                 "corpus":    corpus,
