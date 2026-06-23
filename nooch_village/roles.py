@@ -841,14 +841,13 @@ class HarryHemp(Inhabitant):
             arcs = self._extend_arcs(rows, int(result.get("year_start", 1980)))
 
             # NL-corpus-dekking (modus c, autonoom): meld alleen wat ontbreekt.
-            self._check_nl_corpus(rows)
+            missing = self._check_nl_corpus(rows)
 
-            # Ik dek deze gaten nu → stel voor ze te sluiten; de mens bevestigt.
+            # Ik dek dit nu → stel voor te sluiten; de mens bevestigt.
             if arcs:   # minstens één vertrouwde voortzetting → de 2019-cutoff is gedekt
                 self.propose_close("ngram_2019_cutoff",
                                    "gedekt via de gekalibreerde OpenAlex-voortzetting")
-            self.propose_close("nl_corpus_coverage",
-                               "nu dynamisch gedekt via de NL-dekkingscheck (modus c + op verzoek)")
+            self._settle_nl_corpus(rows, missing)
 
             if len(stijgend) >= self._SHIFT_THRESHOLD or len(dalend) >= self._SHIFT_THRESHOLD:
                 self.bus.publish(Event("tijdgeest_signaal", {
@@ -957,6 +956,29 @@ class HarryHemp(Inhabitant):
                                    {"by": self.id, "terms": missing, "labeled": labeled},
                                    self.id))
         return missing
+
+    def _settle_nl_corpus(self, rows, missing) -> None:
+        """nl_corpus_coverage afhandelen met oordeel, niet als stempel.
+
+        De oorspronkelijke vraag ("valideer de NL-dekking en documenteer ontbrekende
+        kernbegrippen") is nu gedekt: Harry valideert. Dus voorstel tot sluiten. MAAR als de
+        validatie échte culturele woorden mist, is het corpus onbruikbaar, en dat is een
+        scherper, nieuw gat dat Harry opwerpt in plaats van stil te sluiten. De rol mag dus
+        "ja, sluit de vraag, maar hier is het echte probleem" zeggen."""
+        if not any(r.get("locale") == "nl" for r in rows):
+            return                                  # geen NL gevalideerd → niets te zeggen
+        self.propose_close(
+            "nl_corpus_coverage",
+            "ik valideer en documenteer de NL-dekking nu (modus c + op verzoek)")
+        from nooch_village.ngram_correlate import label_uncovered
+        sterk = [x["term"] for x in label_uncovered(missing) if x["signaal"] == "sterk"]
+        if sterk:
+            self._report_means_gap(
+                "nl_corpus_bron_onbruikbaar",
+                "accountability: structureel alternatieve NL-cultuurbron evalueren — het ngram "
+                f"NL-corpus (10, 2012) mist doodgewone missiewoorden ({', '.join(sterk[:5])}); "
+                "onbruikbaar voor lange-boog-analyse. Kandidaat: Delpher (KB), of NL bewust "
+                "buiten scope.")
 
     def _on_nl_corpus_request(self, payload) -> None:
         """Op verzoek (spelregel 5, modus a+b): draai een verse NL-dekkingscheck.

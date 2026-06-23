@@ -71,16 +71,41 @@ def test_propose_close_publiceert_event():
     assert events == [{"gap_key": "nl_corpus_coverage", "reason": "nu gedekt", "from": "harry_hemp"}]
 
 
-def test_harry_puls_stelt_voor_nl_corpus_te_sluiten(tmp_path):
-    """Na een puls stelt Harry voor de gedekte gaten te sluiten (hier nl_corpus_coverage)."""
+def _harry(tmp_path, rows):
     import sys, os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
     from test_harry_hemp import _make_harry
+    return _make_harry(tmp_path, ngram_result={"rows": rows, "terms": {}})
 
-    harry, bus = _make_harry(tmp_path, ngram_result={"rows": [], "terms": {}})
+
+def test_harry_stelt_voor_nl_corpus_te_sluiten_na_validatie(tmp_path):
+    """Harry valideerde NL-dekking (er waren NL-rijen) → voorstel tot sluiten van de means-gap."""
+    rows = [{"term": "duurzaam", "locale": "nl", "timeseries": [0.1, 0.2, 0.3]}]
+    harry, bus = _harry(tmp_path, rows)
     voorstellen = []
     bus.subscribe("resolution_proposed", lambda e: voorstellen.append(e.data["gap_key"]))
-
     harry._run_pulse(None)
-
     assert "nl_corpus_coverage" in voorstellen
+
+
+def test_harry_werpt_scherper_gat_op_bij_kapot_corpus(tmp_path):
+    """Mist het corpus een doodgewoon woord → Harry sluit de vraag MAAR werpt het echte
+    gat op (corpus onbruikbaar). De rol zegt 'ja, maar', geen stille sluiting."""
+    rows = [{"term": "consument", "locale": "nl", "no_data": True,
+             "reason": "term niet gevonden in corpus"}]
+    harry, bus = _harry(tmp_path, rows)
+    voorstellen, gaten = [], []
+    bus.subscribe("resolution_proposed", lambda e: voorstellen.append(e.data["gap_key"]))
+    bus.subscribe("means_gap_sensed", lambda e: gaten.append(e.data["gap_key"]))
+    harry._run_pulse(None)
+    assert "nl_corpus_coverage" in voorstellen          # vraag gesloten
+    assert "nl_corpus_bron_onbruikbaar" in gaten        # echt probleem opgeworpen
+
+
+def test_harry_zwijgt_zonder_nl_rijen(tmp_path):
+    """Geen NL gevalideerd → geen voorstel tot sluiten van nl_corpus_coverage."""
+    harry, bus = _harry(tmp_path, [])
+    voorstellen = []
+    bus.subscribe("resolution_proposed", lambda e: voorstellen.append(e.data["gap_key"]))
+    harry._run_pulse(None)
+    assert "nl_corpus_coverage" not in voorstellen
