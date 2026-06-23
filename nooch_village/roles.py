@@ -501,6 +501,33 @@ class Librarian(Inhabitant):
                 self.log.info("🗂️  kaartje vastgelegd voor '%s' (concept=%s)",
                               word, concept_id or "geen")
 
+    def _write_child_card(self, parent_id: str, vraag: str,
+                          evidence: list[dict], assessment: str) -> Insight | None:
+        """Schrijf een kind-kaartje uit waaróm-onderzoek en koppel het aan de
+        trend-kaart (geboren-uit). Atomair (Ahrens): een nieuw, eigen kaartje voor
+        een nieuw feit, niet het trend-kaartje verdikken. Bestaat het kind-kaartje al
+        (dezelfde vraag), dan verrijken in plaats van dupliceren (vorm 1). De link
+        wordt altijd gelegd (idempotent). Concept-koppeling blijft None: een concept
+        wordt door emergentie verdiend, niet bij geboorte toegekend. Fail-closed:
+        geen notes-store of geen assessment levert geen kaartje (None)."""
+        notes = getattr(self.context, "notes", None)
+        if notes is None:
+            return None
+        kind = insight_from_grounding(vraag, assessment, evidence, concept_id=None)
+        if kind is None:
+            return None
+        try:
+            notes.add(kind)
+            self.log.info("🌱 kind-kaartje uit waaróm-onderzoek: '%s'", vraag[:50])
+        except ValueError:
+            verrijkt = notes.enrich(kind.id, nieuwe_reference=kind.reference)
+            if verrijkt is not None:
+                kind = verrijkt
+                self.log.info("🌱 kind-kaartje verrijkt: %dde grounding",
+                              verrijkt.grounding_count)
+        notes.link(kind.id, parent_id)   # geboren-uit: kind wijst naar de trend-kaart
+        return kind
+
     def _on_dag_eindigt(self, event: Event) -> None:
         """Dag-afsluitende reflectie: zoek kaart-paren via relevant_for, vraag per paar
         (max 3) een LLM-oordeel via verband_voorstel. Bij bevestigd verband: sense_tension
