@@ -221,6 +221,12 @@ def migrate_records(records: Records) -> None:
         trends.definition.skills.append("gsc_report")
         records.put(trends)
         changed = True
+    # Zorg dat Harry de onderzoeksvraag-skill heeft voor de verdiep-lus (idempotent)
+    harry = records.get("harry_hemp")
+    if harry is not None and "onderzoeksvraag" not in harry.definition.skills:
+        harry.definition.skills.append("onderzoeksvraag")
+        records.put(harry)
+        changed = True
     # ── Noochie absorbeert Ronnie's bulletin-mandaat ──────────────────────────
     noochie = records.get("noochie")
     if noochie is not None:

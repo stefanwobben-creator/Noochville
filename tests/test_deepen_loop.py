@@ -33,6 +33,7 @@ def _make_harry(tmp_path, notes, budget="5"):
     registry.register(_Stub("onderzoeksvraag", {"vraag": "Waarom stijgt deze trend?"}))
     registry.register(_Stub("openalex_evidence", {"hits": [{"title": "Werk", "source": "openalex"}]}))
     registry.register(_Stub("semscholar_tldr", {"no_data": True}))
+    registry.register(_Stub("ngram_culture", {"rows": [], "terms": {}}))
     context = SimpleNamespace(
         settings={"tijdgeest_interval_seconds": "0", "reflect_interval_seconds": "0",
                   "deepen_budget": budget},
@@ -45,7 +46,7 @@ def _make_harry(tmp_path, notes, budget="5"):
         id="harry_hemp", type=RecordType.ROLE, parent="noochville",
         definition=RoleDefinition(
             purpose="scientist",
-            skills=["onderzoeksvraag", "openalex_evidence", "semscholar_tldr"],
+            skills=["onderzoeksvraag", "openalex_evidence", "semscholar_tldr", "ngram_culture"],
         ),
         source="seed",
     )
@@ -149,3 +150,33 @@ def test_librarian_negeert_child_evidence_zonder_parent(tmp_path):
     lib = _make_librarian(tmp_path, notes)
     lib._on_child_evidence(Event("child_evidence", {"vraag": "x"}, "harry"))  # geen parent_id
     assert notes.all() == []
+
+
+# ── 7b-ii: productie-bedrading ────────────────────────────────────────────────
+
+def test_migrate_geeft_harry_onderzoeksvraag_skill(tmp_path):
+    """migrate_records voegt onderzoeksvraag idempotent toe aan Harry's DNA (rugzakje)."""
+    from nooch_village.governance import Records
+    from nooch_village.seeds import seed_records, migrate_records
+
+    records = Records(str(tmp_path / "gov.json"))
+    seed_records(records)
+    records.put(Record(id="harry_hemp", type=RecordType.ROLE, parent="noochville",
+                       definition=RoleDefinition(purpose="scientist", skills=["ngram_culture"]),
+                       source="sensed"))
+    migrate_records(records)
+    skills = records.get("harry_hemp").definition.skills
+    assert "onderzoeksvraag" in skills
+    migrate_records(records)  # idempotent
+    assert records.get("harry_hemp").definition.skills.count("onderzoeksvraag") == 1
+
+
+def test_run_pulse_haakt_deepen_aan(tmp_path):
+    """De puls roept na afloop _deepen_trends aan (productie-trigger)."""
+    notes = NotesStore(str(tmp_path / "notes.json"))
+    harry, _ = _make_harry(tmp_path, notes)
+    calls = []
+    harry._deepen_trends = lambda: calls.append(1)
+    with patch("nooch_village.llm.reason", return_value=None):
+        harry._run_pulse(Event("tijdgeest_pulse", {}, "test"))
+    assert calls == [1]

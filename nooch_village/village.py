@@ -39,6 +39,7 @@ from nooch_village.skills_impl.openalex import OpenalexSkill
 from nooch_village.skills_impl.bulletin_schrijven import BulletinSchrijvenSkill
 from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
 from nooch_village.skills_impl.verband_voorstel import VerbandVoorstelSkill
+from nooch_village.skills_impl.onderzoeksvraag import OnderzoeksvraagSkill
 from nooch_village.human_inbox import HumanInbox
 from nooch_village.gap_classifier import classify_gap
 from nooch_village.observations import ObservationStore
@@ -92,6 +93,7 @@ class Village:
             BulletinSchrijvenSkill(),
             KeywordsEverywhereSkill(),
             VerbandVoorstelSkill(),
+            OnderzoeksvraagSkill(),
         ):
             self.registry.register(skill)
         self.records = Records(os.path.join(self.context.data_dir, "governance_records.json"))

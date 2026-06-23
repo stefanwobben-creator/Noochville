@@ -805,6 +805,7 @@ class HarryHemp(Inhabitant):
         finally:
             self._busy = False
         self._maybe_reflect(None)
+        self._deepen_trends()
 
     # ── grounding-tak ─────────────────────────────────────────────────────────
 
