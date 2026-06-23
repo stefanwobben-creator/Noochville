@@ -307,6 +307,90 @@ class Inhabitant(threading.Thread):
             return
         self._last_reflect = now
         self._reflect()
+        self._sense_redundancy()
+
+    def _sense_redundancy(self, min_count: int = 2) -> bool:
+        """Pioniers-reflectie (spiegelbeeld van gap-sensing): ben ik nog nodig?
+
+        Als ELKE eigen accountability inmiddels door andere live rollen gedekt is,
+        draft ik (na herhaalde bevestiging) een mens-gegateerd remove_role-voorstel
+        voor mezelf. De pionier die verdwijnt zodra de bodem hersteld is. Schrijft
+        zelf niets weg; de mens beslist via de gate (onomkeerbaar). Fail-closed
+        richting behouden: twijfel betekent blijven.
+        """
+        records = getattr(self.context, "records", None)
+        if records is None:
+            return False
+        root = records.root()
+        if root is not None and self.id == root.id:
+            return False   # de wortelcirkel heft zichzelf nooit op
+        my_rec = records.get(self.id)
+        if my_rec is None:
+            return False
+        my_accs = list(getattr(my_rec.definition, "accountabilities", None) or [])
+        if not my_accs:
+            return False
+
+        from nooch_village.models import RecordType
+        from nooch_village.redundancy import is_redundant
+        others = {
+            r.id: list(getattr(r.definition, "accountabilities", None) or [])
+            for r in records.all()
+            if r.id != self.id and not getattr(r, "archived", False)
+            and r.type == RecordType.ROLE
+        }
+        redundant, coverers = is_redundant(my_accs, others)
+
+        # Geduld + dedup via reflect-state (zelfde bestand als _sense_gap).
+        path = os.path.join(self.context.data_dir, f"reflect_{self.id}.json")
+        state = {}
+        if os.path.exists(path):
+            try:
+                with open(path) as f:
+                    state = json.load(f)
+            except Exception:
+                pass
+        rs = state.setdefault("_redundancy", {"count": 0, "emitted": False})
+
+        if not redundant:
+            rs["count"], rs["emitted"] = 0, False
+            atomic_write_json(path, state)
+            return False
+
+        rs["count"] += 1
+        if rs["emitted"] or rs["count"] < min_count:
+            atomic_write_json(path, state)
+            self.log.info("🪴 overbodigheid geregistreerd (%d/%d) — gedekt door %s",
+                          rs["count"], min_count, ", ".join(coverers))
+            return False
+
+        rs["emitted"] = True
+        atomic_write_json(path, state)
+        self._propose_self_removal(coverers)
+        return True
+
+    def _propose_self_removal(self, coverers: list[str]) -> None:
+        """Draft een remove_role-voorstel voor de eigen rol. Mens-gegateerd: de gate
+        (G3) escaleert een remove_role met accountabilities naar de mens."""
+        from nooch_village.models import GovernanceChange, ChangeKind, Proposal
+        from nooch_village.governance import proposal_to_dict
+        desc = (f"Pioniers-reflectie: alle accountabilities van '{self.id}' lijken "
+                f"inmiddels gedekt door {', '.join(coverers)}. Kandidaat om de rol op "
+                f"te heffen.")
+        change = GovernanceChange(kind=ChangeKind.REMOVE_ROLE, role_id=self.id)
+        proposal = Proposal(
+            proposer_role=self.id,
+            change=change,
+            tension=desc[:200],
+            trigger_example=f"{self.id}:redundancy:{','.join(coverers)[:60]}",
+            rationale=("Zelf-overbodigheid: elke eigen accountability is door andere "
+                       "live rollen gedekt. De pionier verdwijnt als de bodem hersteld "
+                       "is. Mens beslist via de gate (onomkeerbaar)."),
+        )
+        self.bus.publish(Event("proposal_raised",
+                               {"proposal": proposal_to_dict(proposal)}, self.id))
+        self.log.info("🪴 zelf-overbodigheid → remove_role-voorstel %s (gedekt door %s)",
+                      proposal.id, ", ".join(coverers))
 
     def _reflect(self) -> None:
         """Periodieke zelf-reflectie: vergelijk missie/doelen en eigen capaciteit.
