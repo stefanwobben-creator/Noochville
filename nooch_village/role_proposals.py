@@ -111,6 +111,57 @@ def grant_content_strategist_skills() -> None:
     print("\n===== einde =====")
 
 
+def build_grant_skill_proposal(role_id: str, skill: str, reason: str = "") -> Proposal:
+    """Een AMEND_ROLE-voorstel dat een bestaande, in de registry geregistreerde skill aan
+    een rol toekent via de gate. Herbruikbaar voor elke skill→rol-toekenning."""
+    return Proposal(
+        proposer_role="the_source",
+        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id=role_id,
+                                add_skills=[skill]),
+        tension=(reason or f"Rol '{role_id}' gebruikt skill '{skill}' al in code, maar de "
+                 f"governance-definitie loopt achter; de skill staat niet in de DNA."),
+        trigger_example=f"the_source: skill '{skill}' toekennen aan rol '{role_id}'",
+        rationale=(f"De skill '{skill}' bestaat al in de registry en wordt aangeroepen; via "
+                   f"amend_role krijgt '{role_id}' de capaciteit ook formeel, zodat use_skill "
+                   f"niet langer fail-closed gaat."),
+    )
+
+
+def grant_skill_via_governance(role_id: str, skill: str, reason: str = "") -> None:
+    """Dien een AMEND_ROLE-voorstel in dat een skill aan een rol toekent, via de gate."""
+    from nooch_village.village import Village
+
+    v = Village(heartbeat_seconds=86400)
+    outcome: dict = {}
+    v.bus.subscribe("governance_changed",
+                    lambda e: outcome.update({"status": "aangenomen", **e.data}))
+    v.bus.subscribe("governance_review_requested",
+                    lambda e: outcome.update({"status": "geëscaleerd",
+                                              "gate": e.data.get("gate"),
+                                              "reason": e.data.get("reason")}))
+    v.bus.subscribe("proposal_invalid",
+                    lambda e: outcome.update({"status": "ongeldig", "gate": "G0",
+                                              "reason": e.data.get("reason")}))
+    v.start()
+    v.submit_proposal(build_grant_skill_proposal(role_id, skill, reason))
+    print(f"\n===== AMEND_ROLE: skill '{skill}' → rol '{role_id}' via governance =====\n")
+    for _ in range(200):
+        if outcome:
+            break
+        time.sleep(0.05)
+    time.sleep(0.3)
+    v.stop()
+    status = outcome.get("status", "?")
+    print(f"Uitkomst: {status}")
+    if status == "aangenomen":
+        rec = v.records.get(role_id)
+        print(f"Skills nu: {rec.definition.skills if rec else '?'}")
+        print("Herstart de village (of draai 'once') om de skill actief te maken.")
+    else:
+        print(f"Poort {outcome.get('gate', '-')}: {outcome.get('reason', '')}")
+    print("\n===== einde =====")
+
+
 def build_remove_role_proposal(role_id: str, reason: str = "") -> Proposal:
     """Een REMOVE_ROLE-voorstel via governance: archiveert een rol.
 

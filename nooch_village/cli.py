@@ -74,6 +74,14 @@ def main() -> None:
         from nooch_village.role_proposals import grant_website_watcher_serpapi
         grant_website_watcher_serpapi()
 
+    elif mode == "grant_skill":
+        from nooch_village.role_proposals import grant_skill_via_governance
+        if len(sys.argv) < 4:
+            print("Gebruik: python -m nooch_village.village grant_skill <role_id> <skill>",
+                  file=sys.stderr)
+            sys.exit(1)
+        grant_skill_via_governance(sys.argv[2], sys.argv[3], " ".join(sys.argv[4:]))
+
     elif mode == "remove_role":
         from nooch_village.role_proposals import remove_role_via_governance
         if len(sys.argv) < 3:
@@ -162,6 +170,7 @@ def main() -> None:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
               "purge | intent | triage | ngram | reflect | simulate | harry_hemp | "
-              "content_strategist | grant_serpapi_trends | measure_propose | rereview | ingest | roster",
+              "content_strategist | grant_serpapi_trends | grant_skill | remove_role | "
+              "measure_propose | rereview | ingest | roster",
               file=sys.stderr)
         sys.exit(1)
