@@ -31,6 +31,32 @@ _SELECT = ("id,title,publication_year,cited_by_count,"
            "abstract_inverted_index,primary_topic,authorships")
 
 
+def _parse_year_groups(data: dict) -> dict[int, int]:
+    """Zet een OpenAlex group_by=publication_year-respons om naar {jaar: aantal}.
+    Niet-numerieke sleutels ('unknown'/None) worden overgeslagen."""
+    out: dict[int, int] = {}
+    for g in (data.get("group_by") or []):
+        try:
+            year = int(g.get("key"))
+        except (TypeError, ValueError):
+            continue
+        out[year] = int(g.get("count", 0))
+    return out
+
+
+def relative_attention(term_counts: dict[int, int],
+                       total_counts: dict[int, int]) -> dict[int, float]:
+    """Relatieve academische aandacht per jaar: aandeel van de term in álle werken dat jaar.
+    Analoog aan ngram's relatieve frequentie, dus vergelijkbaar. Jaren zonder totaal worden
+    overgeslagen (geen deling door nul). Gesorteerd op jaar."""
+    out: dict[int, float] = {}
+    for year, c in term_counts.items():
+        tot = total_counts.get(year, 0)
+        if tot > 0:
+            out[year] = c / tot
+    return dict(sorted(out.items()))
+
+
 def _reconstruct_abstract(inverted_index: dict | None) -> str:
     """Reconstrueer abstracttekst vanuit OpenAlex inverted index."""
     if not inverted_index:
@@ -67,6 +93,11 @@ class OpenalexSkill(Skill):
         limit  = int(payload.get("limit", 5))
         mailto = getattr(context, "settings", {}).get("openalex_mailto", "info@nooch.earth")
         ua     = f"NoochVillage/1.0 (nooch.earth; mailto:{mailto})"
+
+        # Jaar-aandeel-modus: relatieve academische aandacht per jaar (voor de lange-boog-
+        # voortzetting voorbij de ngram-cutoff). Zelfde bron/capaciteit, andere query.
+        if payload.get("mode") == "yearly":
+            return self._yearly(term, locale, mailto, key, ua)
 
         q   = urllib.parse.quote(term)
         url = (f"{_BASE}?search={q}"
@@ -109,6 +140,27 @@ class OpenalexSkill(Skill):
 
         time.sleep(0.5)
         return {"term": term, "locale": locale, "total": total, "hits": hits}
+
+    def _yearly(self, term: str, locale: str, mailto: str, key: str, ua: str) -> dict:
+        """Twee group_by=publication_year-calls (term + totaal) → relatief aandeel per jaar."""
+        creds = (f"&mailto={urllib.parse.quote(mailto)}"
+                 f"&api_key={urllib.parse.quote(key)}")
+        q = urllib.parse.quote(term)
+        term_url  = f"{_BASE}?search={q}&group_by=publication_year{creds}"
+        total_url = f"{_BASE}?group_by=publication_year{creds}"
+
+        term_data  = self._fetch_with_backoff(
+            urllib.request.Request(term_url, headers={"User-Agent": ua}))
+        total_data = self._fetch_with_backoff(
+            urllib.request.Request(total_url, headers={"User-Agent": ua}))
+
+        series = relative_attention(_parse_year_groups(term_data),
+                                    _parse_year_groups(total_data))
+        time.sleep(0.5)
+        if not series:
+            return {"term": term, "locale": locale, "mode": "yearly",
+                    "no_data": True, "reason": "geen jaardata gevonden", "series": {}}
+        return {"term": term, "locale": locale, "mode": "yearly", "series": series}
 
     def _fetch_with_backoff(self, req, timeout: int = 12, max_retries: int = 4) -> dict:
         for attempt in range(max_retries):
