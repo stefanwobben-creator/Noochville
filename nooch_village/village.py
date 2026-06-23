@@ -19,7 +19,7 @@ from nooch_village.governance import Records, Secretary, Reconciler, proposal_to
 from nooch_village.models import Proposal
 from nooch_village.roles import (
     WebsiteWatcherWorker, Librarian, TrendsWorker,
-    Facilitator, Noochie, HarryHemp,
+    Facilitator, Noochie, HarryHemp, ContentStrategist,
 )
 from nooch_village.library import Library
 from nooch_village.lexicon import Lexicon
@@ -61,6 +61,7 @@ CLASS_MAP = {
     "facilitator":     Facilitator,
     "noochie":         Noochie,
     "harry_hemp":      HarryHemp,
+    "content_strategist": ContentStrategist,
 }
 
 

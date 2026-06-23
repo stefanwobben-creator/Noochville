@@ -66,6 +66,10 @@ def main() -> None:
         from nooch_village.role_proposals import birth_content_strategist
         birth_content_strategist()
 
+    elif mode == "content_strategist_skills":
+        from nooch_village.role_proposals import grant_content_strategist_skills
+        grant_content_strategist_skills()
+
     elif mode == "roster":
         from nooch_village.village import Village
         v = Village(heartbeat_seconds=86400)

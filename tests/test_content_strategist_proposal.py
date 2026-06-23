@@ -5,7 +5,9 @@ moet passeren. Deze tests bewijzen dat het voorstel goed gevormd is en de poort 
 """
 from __future__ import annotations
 
-from nooch_village.role_proposals import build_content_strategist_proposal
+from nooch_village.role_proposals import (
+    build_content_strategist_proposal, build_content_strategist_skills_proposal,
+)
 from nooch_village.governance import Gate, Records
 from nooch_village.seeds import seed_records, migrate_records
 from nooch_village.models import ChangeKind
@@ -46,3 +48,25 @@ def test_content_strategist_wordt_niet_geseed(tmp_path):
     """De rol mag NIET via seed bestaan: hij hoort via governance geboren te worden."""
     records = _seeded_records(tmp_path)
     assert records.get("content_strategist") is None
+
+
+# ── 13e: activatie (skills via amend_role + CLASS_MAP) ────────────────────────
+
+def test_skills_voorstel_is_amend_role():
+    p = build_content_strategist_skills_proposal()
+    assert p.change.kind == ChangeKind.AMEND_ROLE
+    assert p.change.role_id == "content_strategist"
+    assert set(p.change.add_skills) == {"content_schrijven", "content_check"}
+
+
+def test_skills_voorstel_passeert_de_gate(tmp_path):
+    p = build_content_strategist_skills_proposal()
+    records = _seeded_records(tmp_path)
+    passed, gate, reason = Gate().check(p, records)
+    assert passed, f"verwacht aangenomen, maar {gate} blokkeerde: {reason}"
+
+
+def test_content_strategist_in_class_map():
+    from nooch_village.village import CLASS_MAP
+    from nooch_village.roles import ContentStrategist
+    assert CLASS_MAP.get("content_strategist") is ContentStrategist
