@@ -76,6 +76,14 @@ class Inhabitant(threading.Thread):
                       event.data.get("from", "?"), key)
         handler(event.data.get("payload", {}))
 
+    def propose_close(self, gap_key: str, reason: str) -> None:
+        """Stel voor een inbox-item (met deze gap_key) te sluiten omdat ik de accountability nu
+        dek: "ik dek dit nu, voorstel tot sluiten". De mens bevestigt met één klik; ik sluit
+        nooit zelf — dat zou de dichtgeklapte lus zijn (het systeem dat z'n eigen huiswerk
+        beoordeelt)."""
+        self.bus.publish(Event("resolution_proposed",
+            {"gap_key": gap_key, "reason": reason, "from": self.id}, self.id))
+
     def ask_accountability(self, target_role: str, accountability_key: str,
                            payload: dict | None = None) -> None:
         """Vraag een andere rol een van diens accountabilities op te pakken (spelregel 5).

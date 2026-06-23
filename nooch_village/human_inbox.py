@@ -352,6 +352,42 @@ class HumanInbox:
         self._save()
         return True
 
+    # ── voorstel tot sluiten (rol stelt voor, mens bevestigt) ──────────────────
+
+    def find_by_gap(self, gap_key: str) -> str | None:
+        """Vind het pending-item met deze gap_key (suggestion/means_gap). None als geen."""
+        for it in self._items.values():
+            if it["status"] == "pending" and it.get("context", {}).get("gap_key") == gap_key:
+                return it["id"]
+        return None
+
+    def propose_resolution(self, item_id: str, by: str, reason: str) -> bool:
+        """Een rol stelt voor dit item te sluiten omdat hij de accountability nu dekt.
+        Status blijft pending; de mens bevestigt met confirm_resolution. Zo blijft de
+        onafhankelijke check intact (het systeem sluit z'n eigen item niet). False als geen
+        pending item."""
+        it = self._items.get(item_id)
+        if it is None or it["status"] != "pending":
+            return False
+        it["proposed_resolution"] = {"by": by, "reason": reason, "at": time.time()}
+        self._save()
+        return True
+
+    def confirm_resolution(self, item_id: str, by_human: str = "mens") -> bool:
+        """De mens bevestigt een voorgestelde sluiting met één klik → item resolved (approved).
+        False als er geen voorstel tot sluiten op het item staat."""
+        it = self._items.get(item_id)
+        if it is None or it["status"] != "pending":
+            return False
+        pr = it.get("proposed_resolution")
+        if not pr:
+            return False
+        return self.resolve(
+            item_id, "approved",
+            reason=f"{pr['reason']} (voorgesteld door {pr['by']}, bevestigd door {by_human})",
+            extra={"confirmed_by": by_human, "proposed_by": pr["by"]},
+        )
+
     # ── lezen ─────────────────────────────────────────────────────────────────
 
     def pending(self) -> list[dict]:

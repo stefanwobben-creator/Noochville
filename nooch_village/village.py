@@ -135,6 +135,7 @@ class Village:
         self.bus.subscribe("tijdgeest_signaal",           self._observe)
         self.bus.subscribe("means_gap_sensed",            self._observe)
         self.bus.subscribe("means_gap_sensed",            self._on_means_gap)
+        self.bus.subscribe("resolution_proposed",         self._on_resolution_proposed)
         self.bus.subscribe("bulletin_geschreven",         self._observe)
         self.bus.subscribe("noochie_weighed_in",          self._observe)
         self.coherence_observer = CoherenceObserver(self.bus)
@@ -179,6 +180,19 @@ class Village:
             iid = self.human_inbox.add_suggestion(gap_key, description)
             log.info("💡 gap C → suggestie in human_inbox: item %s (gap %s) — %s",
                      iid, gap_key, reason)
+
+    def _on_resolution_proposed(self, e: Event) -> None:
+        """Een rol stelt voor een inbox-item te sluiten omdat hij de accountability nu dekt.
+        We schrijven het voorstel op het item (status blijft pending); de mens bevestigt."""
+        gap_key = e.data.get("gap_key")
+        by      = e.data.get("from", "?")
+        reason  = e.data.get("reason", "")
+        if not gap_key:
+            return
+        item_id = self.human_inbox.find_by_gap(gap_key)
+        if item_id and self.human_inbox.propose_resolution(item_id, by, reason):
+            logging.getLogger("village.inbox").info(
+                "📝 %s stelt voor item %s (gap %s) te sluiten: %s", by, item_id, gap_key, reason)
 
     def _on_verband_suggestion(self, e: Event) -> None:
         """Schrijf een verband-voorstel (topic 'verband') naar de human inbox (3c).

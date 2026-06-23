@@ -70,6 +70,11 @@ def _print_item_full(item: dict) -> None:
     print(f"Subject   : {item['subject']}")
     print(f"Aangemaakt: {_fmt_ts(item['created_at'])}")
 
+    pr = item.get("proposed_resolution")
+    if pr:
+        print(f"\n📝 Voorstel tot sluiten door {pr['by']}: {pr['reason']}")
+        print(f"   Bevestig met: python -m nooch_village.inbox confirm {item['id']}")
+
     ctx = item.get("context", {})
 
     if item["type"] == "escalation":
@@ -731,9 +736,26 @@ def main(argv: list[str]) -> None:
         print(f"⏸️  Item {iid} uitgesteld. Reden: {reason or '(geen)'}")
         print(f"   Item blijft geregistreerd in data/human_inbox.json.")
 
+    elif cmd == "confirm":
+        # Bevestig met één klik een door een rol voorgestelde sluiting ("ik dek dit nu").
+        if len(argv) < 2:
+            print("Gebruik: inbox confirm <id>"); sys.exit(1)
+        iid   = argv[1]
+        inbox = _inbox_only()
+        item  = inbox.get(iid)
+        if item is None:
+            print(f"Item '{iid}' niet gevonden."); sys.exit(1)
+        pr = item.get("proposed_resolution")
+        if not pr:
+            print(f"Item '{iid}' heeft geen voorgestelde sluiting om te bevestigen."); sys.exit(1)
+        if inbox.confirm_resolution(iid):
+            print(f"✅ Item {iid} gesloten. Voorgesteld door {pr['by']}: {pr['reason']}")
+        else:
+            print(f"Kon item {iid} niet sluiten (al gesloten?)."); sys.exit(1)
+
     else:
         print(f"Onbekend commando: '{cmd}'")
-        print("Gebruik: list | all | show <id> | approve | reject | amend | defer")
+        print("Gebruik: list | all | show <id> | approve | reject | amend | defer | confirm")
         sys.exit(1)
 
 
