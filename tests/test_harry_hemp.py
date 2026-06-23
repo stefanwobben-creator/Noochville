@@ -261,3 +261,46 @@ def test_setup_events_dag_begint_start_puls(tmp_path):
     assert len(completed) == 1, "tijdgeest_pulse_completed verwacht na dag_begint-drain"
     assert completed[0]["ok"] is True
     assert "vegan" in completed[0]["stijgend"]
+
+
+# ── brokje 5: vraag onderzoeken via bestaande grounding-skills ────────────────
+
+def test_gather_evidence_voegt_beide_bronnen_samen(tmp_path):
+    """_gather_evidence bundelt hits van OpenAlex én Semantic Scholar."""
+    harry, _ = _make_harry(
+        tmp_path,
+        openalex_result={"hits": [{"title": "OpenAlex-werk", "source": "openalex"}]},
+        semscholar_result={"hits": [{"title": "SemScholar-paper", "source": "semscholar"}]},
+    )
+    evidence = harry._gather_evidence("barefoot running benefits")
+    titels = {e["title"] for e in evidence}
+    assert titels == {"OpenAlex-werk", "SemScholar-paper"}
+
+
+def test_gather_evidence_geen_data_geeft_lege_lijst(tmp_path):
+    """Beide bronnen no_data → geen hits, geen crash (fail-closed per bron)."""
+    harry, _ = _make_harry(tmp_path)  # stubs geven standaard {"no_data": True}
+    assert harry._gather_evidence("iets obscuurs") == []
+
+
+def test_research_question_geeft_evidence_en_assessment(tmp_path):
+    """_research_question onderzoekt een vraag en levert (evidence, assessment)."""
+    harry, _ = _make_harry(
+        tmp_path,
+        openalex_result={"hits": [{"title": "Werk A", "source": "openalex", "year": 2021}]},
+        semscholar_result={"hits": [{"title": "Paper B", "source": "semscholar", "year": 2022}]},
+    )
+    with patch("nooch_village.llm.reason", return_value="Barefoot lopen versterkt voetspieren."):
+        evidence, assessment = harry._research_question(
+            "Welke voordelen drijven de opkomst van barefoot schoenen?")
+    assert len(evidence) == 2
+    assert assessment == "Barefoot lopen versterkt voetspieren."
+
+
+def test_research_question_zonder_bronnen_meldt_dat(tmp_path):
+    """Geen bronnen → assessment zegt expliciet dat er niets gevonden is."""
+    harry, _ = _make_harry(tmp_path)  # no_data
+    with patch("nooch_village.llm.reason", return_value=None):
+        evidence, assessment = harry._research_question("een vraag zonder literatuur")
+    assert evidence == []
+    assert "Geen academische bronnen" in assessment

@@ -777,26 +777,7 @@ class HarryHemp(Inhabitant):
         self._busy_terms.add(word)
         try:
             self.log.info("🔬 gronden: '%s' (locale=%s)", word, locale or "?")
-            evidence: list[dict] = []
-
-            works = self.use_skill("openalex_evidence",
-                                   {"term": word, "locale": locale, "limit": 3})
-            if "error" in works:
-                self.log.warning("⚠️ OpenAlex: %s", works["error"])
-            elif works.get("no_data"):
-                self.log.info("ℹ️ OpenAlex: geen werken voor '%s'", word)
-            else:
-                evidence.extend(works.get("hits", []))
-
-            papers = self.use_skill("semscholar_tldr",
-                                    {"term": word, "locale": locale, "limit": 3})
-            if "error" in papers:
-                self.log.warning("⚠️ Semantic Scholar: %s", papers["error"])
-            elif papers.get("no_data"):
-                self.log.info("ℹ️ Semantic Scholar: geen papers voor '%s'", word)
-            else:
-                evidence.extend(papers.get("hits", []))
-
+            evidence = self._gather_evidence(word, locale, limit=3)
             assessment = self._distill(word, locale, evidence, demand)
 
             self.bus.publish(Event("keyword_evidence", {
@@ -810,6 +791,42 @@ class HarryHemp(Inhabitant):
             self.log.info("📚 evidentie gepubliceerd voor '%s': %d bron(nen)", word, len(evidence))
         finally:
             self._busy_terms.discard(word)
+
+    def _gather_evidence(self, query: str, locale: str = "", limit: int = 3) -> list[dict]:
+        """Zoek academisch bewijs voor een zoekstring (een term óf een onderzoeksvraag)
+        via Harry's bestaande grounding-skills: OpenAlex en Semantic Scholar. Geeft de
+        gevonden hits terug. Fouten en geen-data worden per bron gelogd en leveren
+        simpelweg minder hits (fail-closed per bron, geen verzinsels)."""
+        evidence: list[dict] = []
+
+        works = self.use_skill("openalex_evidence",
+                               {"term": query, "locale": locale, "limit": limit})
+        if "error" in works:
+            self.log.warning("⚠️ OpenAlex: %s", works["error"])
+        elif works.get("no_data"):
+            self.log.info("ℹ️ OpenAlex: geen werken voor '%s'", query)
+        else:
+            evidence.extend(works.get("hits", []))
+
+        papers = self.use_skill("semscholar_tldr",
+                                {"term": query, "locale": locale, "limit": limit})
+        if "error" in papers:
+            self.log.warning("⚠️ Semantic Scholar: %s", papers["error"])
+        elif papers.get("no_data"):
+            self.log.info("ℹ️ Semantic Scholar: geen papers voor '%s'", query)
+        else:
+            evidence.extend(papers.get("hits", []))
+
+        return evidence
+
+    def _research_question(self, vraag: str, locale: str = "") -> tuple[list[dict], str]:
+        """Onderzoek een afgeleide waaróm-vraag met dezelfde grounding-skills als een term.
+        Geeft (evidence, assessment) terug; de assessment is een beknopte duiding van wat
+        de bronnen zeggen (of dat er niets gevonden is). Schrijft niets weg en publiceert
+        niets: het kind-kaartje plus de link naar de trend-kaart volgen in een aparte stap."""
+        evidence = self._gather_evidence(vraag, locale)
+        assessment = self._distill(vraag, locale, evidence, demand={})
+        return evidence, assessment
 
     def _distill(self, word: str, locale: str,
                  evidence: list[dict], demand: dict) -> str:
