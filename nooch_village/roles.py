@@ -835,6 +835,9 @@ class HarryHemp(Inhabitant):
             # Lange-boog-analyse: structurele co-beweging/substitutie tussen missietermen.
             self._report_correlations(rows)
 
+            # Voortzetting voorbij de ngram-cutoff via gekalibreerde OpenAlex-proxy.
+            self._extend_arcs(rows, int(result.get("year_start", 1980)))
+
             if len(stijgend) >= self._SHIFT_THRESHOLD or len(dalend) >= self._SHIFT_THRESHOLD:
                 self.bus.publish(Event("tijdgeest_signaal", {
                     "by":       self.id,
@@ -876,6 +879,57 @@ class HarryHemp(Inhabitant):
             self.bus.publish(Event("tijdgeest_correlatie",
                                    {"by": self.id, "bevindingen": bevindingen}, self.id))
         return bevindingen
+
+    # Corpus-eindjaren: de ngram-data houdt hier echt op (anker voor de voortzetting).
+    _CORPUS_END = {26: 2019, 10: 2012}   # EN-corpus 2019, NL-corpus 2012
+
+    def _extend_arcs(self, rows, year_start: int) -> list[dict]:
+        """Zet de lange boog voorbij de ngram-cutoff voort via een gekalibreerde OpenAlex-proxy.
+
+        Per term: ngram-reeks t/m het corpus-eindjaar (anker), OpenAlex relatieve aandacht per
+        jaar (zelfde skill, mode='yearly'), kalibreer over de overlap, en bouw de voortzetting
+        alléén als de correlatie sterk genoeg is. Transparant gelabeld als proxy met de gemeten r.
+        Fail-closed: een OpenAlex-fout slaat alleen die term over."""
+        from nooch_village.ngram_correlate import years_dict, assess_continuation
+        reports: list[dict] = []
+        for r in rows:
+            ts = r.get("timeseries")
+            if r.get("no_data") or not ts:
+                continue
+            anchor = self._CORPUS_END.get(r.get("corpus"))
+            if anchor is None:
+                continue
+            ngram_years = {y: v for y, v in years_dict(ts, year_start).items() if y <= anchor}
+            try:
+                oa = self.use_skill("openalex_evidence",
+                                    {"term": r["term"], "locale": r.get("locale"),
+                                     "mode": "yearly"})
+            except Exception as exc:
+                self.log.warning("OpenAlex-voortzetting '%s' faalde: %s", r["term"], exc)
+                continue
+            series = oa.get("series") or {}
+            # JSON-grenzen kunnen jaren als string teruggeven; normaliseer naar int.
+            series = {int(y): v for y, v in series.items()}
+            if not series:
+                continue
+            res = assess_continuation(ngram_years, series, anchor)
+            cal = res["calibration"]
+            if res["trusted"]:
+                tot = max(res["arc"])
+                self.log.info("📈 '%s': boog voortgezet t/m %d via OpenAlex-proxy "
+                              "(kalibratie r=%.2f over %d jaar)",
+                              r["term"], tot, cal["r"], cal["n"])
+                reports.append({"term": r["term"], "locale": r.get("locale"),
+                                "calibration": cal, "arc": res["arc"]})
+            else:
+                reden = ("te weinig overlap" if cal.get("insufficient")
+                         else f"zwakke kalibratie (r={cal.get('r')})")
+                self.log.info("⚠️ '%s': OpenAlex-voortzetting niet vertrouwd (%s)",
+                              r["term"], reden)
+        if reports:
+            self.bus.publish(Event("tijdgeest_voortzetting",
+                                   {"by": self.id, "reports": reports}, self.id))
+        return reports
 
     # ── grounding-tak ─────────────────────────────────────────────────────────
 

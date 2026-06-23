@@ -105,6 +105,24 @@ def continue_arc(ngram: dict[int, float], openalex: dict[int, float],
     return out
 
 
+def assess_continuation(ngram_years: dict[int, float], openalex_years: dict[int, float],
+                        anchor_year: int, min_r: float = 0.5) -> dict:
+    """Beslis of de OpenAlex-voortzetting vertrouwd mag worden, en bouw 'm alleen dan.
+
+    Kalibreer eerst over de gedeelde jaren. Alleen bij voldoende overlap én een correlatie
+    boven `min_r` is de proxy verdedigbaar → dan pas de geketende boog. Anders een lege boog
+    met de kalibratie als verantwoording (transparant: we plakken niet blind door).
+
+    Geeft {'calibration': {...}, 'trusted': bool, 'arc': {jaar: index}}.
+    """
+    cal = calibrate(ngram_years, openalex_years)
+    if cal.get("insufficient"):
+        return {"calibration": cal, "trusted": False, "arc": {}}
+    trusted = abs(cal["r"]) >= min_r
+    arc = continue_arc(ngram_years, openalex_years, anchor_year) if trusted else {}
+    return {"calibration": cal, "trusted": trusted, "arc": arc}
+
+
 def findings_from_rows(rows: list[dict], min_overlap: int = 5,
                        strong: float = 0.6) -> list[dict]:
     """Uit ngram-skill-rijen de sterkste co-beweging en sterkste substitutie per locale.
