@@ -28,6 +28,7 @@ from nooch_village.skills_impl.site_health import SiteHealthSkill
 from nooch_village.skills_impl.budget import BudgetSkill
 from nooch_village.skills_impl.plausible import PlausibleSkill
 from nooch_village.skills_impl.trends import TrendsSkill
+from nooch_village.skills_impl.serpapi_trends import SerpapiTrendsSkill
 from nooch_village.skills_impl.field_note import FieldNoteSkill
 from nooch_village.skills_impl.library_skills import LibraryLookupSkill, KeywordReviewSkill, LibraryListSkill
 from nooch_village.skills_impl.gsc import GscPerformanceSkill
@@ -86,7 +87,7 @@ class Village:
         self.human_inbox = HumanInbox(os.path.join(self.context.data_dir, "human_inbox.json"))
         self.registry = SkillRegistry()
         for skill in (
-            SiteHealthSkill(), BudgetSkill(), PlausibleSkill(), TrendsSkill(),
+            SiteHealthSkill(), BudgetSkill(), PlausibleSkill(), TrendsSkill(), SerpapiTrendsSkill(),
             FieldNoteSkill(), LibraryLookupSkill(), LibraryListSkill(), KeywordReviewSkill(),
             GscPerformanceSkill(), GscReportSkill(),
             NgramCultureSkill(),

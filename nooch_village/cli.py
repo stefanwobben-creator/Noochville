@@ -70,6 +70,10 @@ def main() -> None:
         from nooch_village.role_proposals import grant_content_strategist_skills
         grant_content_strategist_skills()
 
+    elif mode == "grant_serpapi_trends":
+        from nooch_village.role_proposals import grant_website_watcher_serpapi
+        grant_website_watcher_serpapi()
+
     elif mode == "rereview":
         import os
         from nooch_village.config import load_context
@@ -150,6 +154,6 @@ def main() -> None:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
               "purge | intent | triage | ngram | reflect | simulate | harry_hemp | "
-              "content_strategist | measure_propose | rereview | ingest | roster",
+              "content_strategist | grant_serpapi_trends | measure_propose | rereview | ingest | roster",
               file=sys.stderr)
         sys.exit(1)

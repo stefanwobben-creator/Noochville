@@ -2,7 +2,7 @@
 from __future__ import annotations
 import hashlib, os, json, time
 from datetime import date
-from nooch_village.util import atomic_write_json, run_bounded
+from nooch_village.util import atomic_write_json, run_bounded, is_due
 from nooch_village.mission import ANCHOR_PURPOSE as _NOOCHIE_MISSION
 from nooch_village.inhabitant import Inhabitant
 from nooch_village.event_bus import Event
@@ -119,16 +119,9 @@ class WebsiteWatcherWorker(Inhabitant):
                 self.log.warning("plausible_stats faalde: %s", exc)
                 plausible = {"error": str(exc)}
 
-            # Trends staat NIET op het kritieke pad: best-effort met harde tijdslimiet.
-            budget = float(self.context.settings.get("trends_time_budget_seconds", "30"))
-            trends = _bounded_trends(
-                lambda: self.use_skill("google_trends", {
-                    "geos": [""],
-                    "hl": "en-US",
-                    "timeframe": "today 3-m",
-                }),
-                budget, self.log,
-            )
+            # Trends: betrouwbaar via SerpApi, maar zuinig (wekelijks) en nooit op het
+            # kritieke pad. Buiten de cadans of bij een fout gaat de note gewoon door.
+            trends = self._maybe_trends()
             note = self.use_skill("field_note", {"plausible": plausible, "trends": trends})
 
             self._log_pulse_metrics(plausible)
@@ -146,6 +139,39 @@ class WebsiteWatcherWorker(Inhabitant):
             self._busy = False
         self._maybe_reflect(None)
         self._scan_queued_projects(None)
+
+    def _maybe_trends(self) -> dict:
+        """Trends best-effort via SerpApi, zuinig (wekelijkse cadans) en bounded.
+
+        Buiten de cadans: niets ophalen, geen credits, een nette {error}-dict die
+        field_note opvangt. Binnen de cadans: SerpApi met harde tijdslimiet; de
+        last-run-stempel wordt alleen gezet bij succes, zodat een fout volgende puls
+        opnieuw mag proberen.
+        """
+        interval = float(self.context.settings.get("serpapi_interval_seconds", "604800"))
+        state_path = os.path.join(self.context.data_dir, "serpapi_trends_last.json")
+        try:
+            last = float(json.load(open(state_path)).get("ts", 0))
+        except Exception:
+            last = 0.0
+
+        now = time.time()
+        if not is_due(last, now, interval):
+            self.log.info("⏭️ Trends overgeslagen (wekelijkse cadans nog niet verstreken)")
+            return {"error": "trends deze puls overgeslagen (cadans)", "keywords": {}, "rows": []}
+
+        budget = float(self.context.settings.get("trends_time_budget_seconds", "30"))
+        trends = _bounded_trends(
+            lambda: self.use_skill("serpapi_trends", {"geos": [""], "date": "today 3-m"}),
+            budget, self.log,
+        )
+        if "error" not in trends:
+            try:
+                with open(state_path, "w") as f:
+                    json.dump({"ts": now}, f)
+            except Exception:
+                pass
+        return trends
 
     def _log_pulse_metrics(self, plausible: dict) -> None:
         """Log de metrics die in het monitoring-overzicht staan én in de puls aanwezig zijn."""

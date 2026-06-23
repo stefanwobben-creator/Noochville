@@ -111,6 +111,63 @@ def grant_content_strategist_skills() -> None:
     print("\n===== einde =====")
 
 
+def build_website_watcher_serpapi_proposal() -> Proposal:
+    """amend_role: ken website_watcher de serpapi_trends-skill toe, via de gate.
+
+    pytrends wordt door Google geblokkeerd; SerpApi is de betrouwbare vervanger. De rol
+    bestaat al; dit voorstel geeft hem de nieuwe databron-capaciteit. google_trends blijft
+    in de DNA staan (ongebruikt) tot de governance-opschoning."""
+    return Proposal(
+        proposer_role="the_source",
+        change=GovernanceChange(
+            kind=ChangeKind.AMEND_ROLE,
+            role_id="website_watcher",
+            add_skills=["serpapi_trends"],
+        ),
+        tension=("Google Trends via pytrends wordt structureel geblokkeerd (429); de "
+                 "website_watcher mist een betrouwbare trends-bron voor zijn groei-puls."),
+        trigger_example="the_source: betrouwbare trends-bron (SerpApi) voor website_watcher",
+        rationale=("pytrends faalt herhaaldelijk; serpapi_trends levert dezelfde data "
+                   "betrouwbaar. De skill bestaat al in de registry; via amend_role krijgt "
+                   "website_watcher de capaciteit, zodat de wekelijkse trends-puls werkt."),
+    )
+
+
+def grant_website_watcher_serpapi() -> None:
+    """Dien het amend_role-voorstel voor de SerpApi-trends-skill in via de gate."""
+    from nooch_village.village import Village
+
+    v = Village(heartbeat_seconds=86400)
+    outcome: dict = {}
+    v.bus.subscribe("governance_changed",
+                    lambda e: outcome.update({"status": "aangenomen", **e.data}))
+    v.bus.subscribe("governance_review_requested",
+                    lambda e: outcome.update({"status": "geëscaleerd",
+                                              "gate": e.data.get("gate"),
+                                              "reason": e.data.get("reason")}))
+    v.bus.subscribe("proposal_invalid",
+                    lambda e: outcome.update({"status": "ongeldig", "gate": "G0",
+                                              "reason": e.data.get("reason")}))
+    v.start()
+    v.submit_proposal(build_website_watcher_serpapi_proposal())
+    print("\n===== amend_role: serpapi_trends → website_watcher via governance =====\n")
+    for _ in range(200):
+        if outcome:
+            break
+        time.sleep(0.05)
+    time.sleep(0.3)
+    v.stop()
+    status = outcome.get("status", "?")
+    print(f"Uitkomst: {status}")
+    if status == "aangenomen":
+        rec = v.records.get("website_watcher")
+        print(f"Skills nu: {rec.definition.skills if rec else '?'}")
+        print("Herstart de village (of draai 'once') om de nieuwe skill te gebruiken.")
+    else:
+        print(f"Poort   : {outcome.get('gate', '-')}  Reden: {outcome.get('reason', '')}")
+    print("\n===== einde =====")
+
+
 def birth_content_strategist() -> None:
     """Dien het Content Strategist-voorstel in via het live governance-proces en
     rapporteer de uitkomst. De rol wordt onbemand geboren als de poort 'm aanneemt."""

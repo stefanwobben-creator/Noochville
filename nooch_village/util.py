@@ -7,6 +7,17 @@ import tempfile
 import threading
 
 
+def is_due(last_ts: float, now: float, interval_s: float) -> bool:
+    """Is een periodieke taak weer aan de beurt?
+
+    interval_s <= 0 → altijd (geen cadans). Anders pas weer als er minstens
+    interval_s seconden verstreken zijn sinds last_ts.
+    """
+    if interval_s <= 0:
+        return True
+    return (now - last_ts) >= interval_s
+
+
 def run_bounded(fn, timeout_s: float):
     """Voer fn() uit met een harde tijdslimiet via een daemon-thread.
 
