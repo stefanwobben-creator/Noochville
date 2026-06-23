@@ -70,6 +70,28 @@ def main() -> None:
         from nooch_village.role_proposals import grant_content_strategist_skills
         grant_content_strategist_skills()
 
+    elif mode == "ingest":
+        import json, os
+        from nooch_village.config import load_context
+        from nooch_village.ingest import ingest_insights
+        from nooch_village.notes_store import NotesStore
+        from nooch_village.village import BASE_DIR
+        if len(sys.argv) < 3:
+            print("Gebruik: python -m nooch_village.village ingest <pad-naar-json>",
+                  file=sys.stderr)
+            sys.exit(1)
+        with open(sys.argv[2], encoding="utf-8") as f:
+            items = json.load(f)
+        ctx = load_context(BASE_DIR)
+        notes = NotesStore(os.path.join(ctx.data_dir, "notes.json"))
+        res = ingest_insights(notes, items)
+        print(f"Ingestie: {len(res['added'])} toegevoegd, "
+              f"{len(res['skipped'])} overgeslagen, {res['linked']} link(s) gelegd.")
+        for i in res["added"]:
+            print(f"  + {i}")
+        for i in res["skipped"]:
+            print(f"  = {i} (bestond al)")
+
     elif mode == "roster":
         from nooch_village.village import Village
         v = Village(heartbeat_seconds=86400)
@@ -79,6 +101,6 @@ def main() -> None:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
               "purge | intent | triage | ngram | reflect | simulate | harry_hemp | "
-              "content_strategist | roster",
+              "content_strategist | ingest | roster",
               file=sys.stderr)
         sys.exit(1)
