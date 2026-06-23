@@ -148,6 +148,21 @@
 
 ## Openstaande ontwerpschuld
 
+- **Kind-woord van verdiep-kaartjes is de volledige vraag (geparkeerd, 2026-06-23)**:
+  `_write_child_card` gebruikt de waaróm-vraag als `word`, dus het id (=slug van het
+  woord) en de matching hangen aan een verbose vraag vol veelvoorkomende tokens. In de
+  simulatie maakte dat de green-gap-kaart een sterke brug (6 buren over beide clusters),
+  maar ook een over-matcher: meer verband-kandidaten naar de inbox. Geen foute data,
+  wel ruis. Bewust uitgesteld tot er echte data is: bij laag volume (emergentie + budget
+  remmen de aanwas) blijft de latere fix klein. **Caveat bij achteraf fixen**: het id is
+  afgeleid van het woord, dus een schoner kind-woord vraagt een her-slug + her-link-
+  migratie (triviaal bij laag volume, geen pure no-op). De échte fix is dat de LLM naast
+  de vraag een beknopt onderwerp-label levert dat beide concepten spant (bijv. "green gap
+  price premium"); dat is een kleine feature, geen eenregelig fixje.
+- **Engels = werktaal-default (besloten 2026-06-23, gebouwd)**: `language.py` is de bron
+  van waarheid; kaart-voedende prompts vragen Engels tenzij expliciete locale. Reden in
+  de docstring. Nog te doen: bulletin/Field Note zijn mens-rapporten en volgen nu nog NL;
+  besluit of die ook naar Engels gaan (raakt het oude "rapportage volgt de mens"-principe).
 - **MANDATE_THRESHOLD = 0.10 empirisch laag**: junk-mandaat-scores liggen op
   0.125–0.571, klantverhalen op 0.333. C is in de praktijk bijna onbereikbaar
   voor alles wat Nooch-woorden bevat (anchor-purpose vangt breed). Voorlopig
