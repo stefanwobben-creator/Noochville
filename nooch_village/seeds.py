@@ -203,11 +203,10 @@ def migrate_records(records: Records) -> None:
     if root.definition.purpose != _ANCHOR_PURPOSE:
         root.definition.purpose = _ANCHOR_PURPOSE
         changed = True
-    cs = records.get("content_strategist")
-    if cs is not None and cs.source == "sensed":
-        cs.source = "demo"
-        records.put(cs)
-        changed = True
+    # (De oude demote-regel voor 'content_strategist' is verwijderd: die degradeerde
+    #  een sensed content_strategist naar 'demo'. De Content Strategist wordt nu via
+    #  het echte governance-proces geboren — zie nooch_village/role_proposals.py — en
+    #  mag dus niet automatisch naar demo worden gezet.)
     _SEED_IDS = {"noochville", "website_watcher", "librarian", "trends", "facilitator"}
     for sid in _SEED_IDS:
         rec = records.get(sid)

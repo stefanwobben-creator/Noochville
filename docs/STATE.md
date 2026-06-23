@@ -148,6 +148,16 @@
 
 ## Openstaande ontwerpschuld
 
+- **Beveiliging: rolwijzigingen alleen via governance (taak voor later, 2026-06-23)**:
+  structureel afdwingen dat élke rolwijziging (add/amend/remove_role) uitsluitend via het
+  officiële governance-proces kan (proposal → G0-G4 → Secretary → records), nooit via
+  directe records-mutatie of seed-hardcoding. Aanleiding: de Content Strategist is bewust
+  via governance geboren (`role_proposals.py` + `python -m nooch_village.village
+  content_strategist`), niet geseed; de oude demote-regel in `migrate_records` is
+  verwijderd. Volgende stap: een wachter/invariant die een rol-wijziging buiten de
+  Secretary om detecteert of verbiedt (records alleen schrijfbaar via de Secretary;
+  seed_records/migrate uitsluitend voor de oprichtings-bootstrap, niet voor latere
+  structuurwijzigingen). Dit is de structurele rugdekking van born-vs-activated.
 - **Kind-woord van verdiep-kaartjes is de volledige vraag (geparkeerd, 2026-06-23)**:
   `_write_child_card` gebruikt de waaróm-vraag als `word`, dus het id (=slug van het
   woord) en de matching hangen aan een verbose vraag vol veelvoorkomende tokens. In de

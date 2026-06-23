@@ -228,7 +228,7 @@ def lifecycle_demo():
     )
     p2 = Proposal(
         proposer_role="website_watcher",
-        change=GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id="content_strategist",
+        change=GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id="content_calendar",
                                 purpose="Vertaalt missie-inzichten structureel naar content-kalender",
                                 add_accountabilities=["content-kalender bijhouden",
                                                       "missie-keywords omzetten naar artikel-briefs"],
@@ -270,9 +270,9 @@ def lifecycle_demo():
         ("G0 passeert met herhalingsbewijs",
          results.get(p2.id, {}).get("outcome") == "aangenomen"),
         ("role_born event ontvangen",
-         "content_strategist" in born),
+         "content_calendar" in born),
         ("rol onbemand in reconciler",
-         "content_strategist" in v.reconciler.unmanned),
+         "content_calendar" in v.reconciler.unmanned),
     ]
     print()
     for label, ok in checks:
@@ -281,7 +281,7 @@ def lifecycle_demo():
     dagboek = os.path.join(v.context.data_dir, "groeidagboek.jsonl")
     if os.path.exists(dagboek):
         entries = [json.loads(line) for line in open(dagboek)]
-        cs_entries = [e for e in entries if e.get("role_id") == "content_strategist"]
+        cs_entries = [e for e in entries if e.get("role_id") == "content_calendar"]
         print(f"\nGroeidagboek: {dagboek}")
         for entry in cs_entries[-2:]:
             print(f"  [{entry['role_id']}] trigger: {entry.get('trigger_example','')[:65]}")

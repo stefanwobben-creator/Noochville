@@ -62,6 +62,10 @@ def main() -> None:
         from nooch_village.demos.knowledge import harry_hemp_grounding_demo
         harry_hemp_grounding_demo()
 
+    elif mode == "content_strategist":
+        from nooch_village.role_proposals import birth_content_strategist
+        birth_content_strategist()
+
     elif mode == "roster":
         from nooch_village.village import Village
         v = Village(heartbeat_seconds=86400)
@@ -70,6 +74,7 @@ def main() -> None:
     else:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
-              "purge | intent | triage | ngram | reflect | simulate | harry_hemp | roster",
+              "purge | intent | triage | ngram | reflect | simulate | harry_hemp | "
+              "content_strategist | roster",
               file=sys.stderr)
         sys.exit(1)
