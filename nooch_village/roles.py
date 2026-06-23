@@ -1157,3 +1157,66 @@ class Noochie(Inhabitant):
                                {"path": result["path"], "by": self.id,
                                 "event_count": result.get("event_count", 0)}, self.id))
         self.log.info("📋 bulletin gepubliceerd: %s", result["path"])
+
+
+class ContentStrategist(Inhabitant):
+    """Model C: spot autonoom content-waardige clusters en stel ze voor; op goedkeuring
+    van de mens draft hij. Elke tekst gaat via een mens. Schrijft zelf niets publiek weg,
+    levert suggesties en drafts in de inbox (via events naar de Village)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # base _setup_events houdt dag_begint → _maybe_reflect; hier komt het spotten erbij
+        self.react("dag_begint", self._spot_content)
+        self.react("content_suggestion_approved", self._on_suggestion_approved)
+
+    def _spot_content(self, event) -> None:
+        """Op de dag-cadans: spot content-waardige clusters en stel ze voor. De inbox
+        dedupt op seed, dus dezelfde kans komt niet dubbel. Begrensd door content_budget."""
+        notes = getattr(self.context, "notes", None)
+        if notes is None:
+            return
+        budget = int(self.context.settings.get("content_budget", 2) or 0)
+        for seed in notes.content_seeds(budget):
+            cluster = notes.cluster(seed.id)
+            self.bus.publish(Event("content_opportunity", {
+                "seed_id":     seed.id,
+                "cluster_ids": [c.id for c in cluster],
+                "reason":      f"bevestigd cluster rond '{seed.word or seed.id}'",
+                "by":          self.id,
+            }, self.id))
+            self.log.info("✍️ content-kans gespot: '%s' (%d kaartjes)",
+                          seed.id, len(cluster))
+
+    def _on_suggestion_approved(self, event: Event) -> None:
+        """De mens keurde een content-suggestie goed → draft. Bouw het cluster, schrijf
+        een volledige eerste draft (content_schrijven), en publiceer 'm naar de inbox. De
+        mens herschrijft daarna. Fail-closed: geen seed/cluster/LLM → geen draft."""
+        notes = getattr(self.context, "notes", None)
+        seed_id = event.data.get("seed_id")
+        if notes is None or not seed_id:
+            return
+        cluster = notes.cluster(seed_id)
+        if not cluster:
+            return
+        cards = [{"id": c.id, "word": c.word, "claim": c.claim,
+                  "status": getattr(c.status, "value", str(c.status))} for c in cluster]
+        kind = event.data.get("kind", "blog")
+        res = self.use_skill("content_schrijven", {
+            "cards":           cards,
+            "kind":            kind,
+            "audience":        event.data.get("audience", ""),
+            "desired_outcome": event.data.get("desired_outcome", ""),
+        })
+        text = res.get("text")
+        if not text:
+            self.log.info("✍️ geen draft voor '%s' (geen LLM of materiaal)", seed_id)
+            return
+        self.bus.publish(Event("content_draft_ready", {
+            "seed_id":           seed_id,
+            "kind":              kind,
+            "text":              text,
+            "claim_insight_ids": res.get("claim_insight_ids", []),
+            "by":                self.id,
+        }, self.id))
+        self.log.info("✍️ draft klaar voor '%s' (%s)", seed_id, kind)
