@@ -50,3 +50,28 @@ def test_kaartjes_komen_op_unresolved_binnen(tmp_path):
     ingest_insights(notes, _items())
     from nooch_village.insight import GroundingStatus
     assert notes.get("a").status == GroundingStatus.UNRESOLVED
+
+
+def test_rijke_velden_worden_doorgegeven(tmp_path):
+    """status/grounds/evidence_type uit het item komen op het kaartje terecht."""
+    from nooch_village.insight import GroundingStatus, EvidenceType
+    notes = NotesStore(str(tmp_path / "notes.json"))
+    res = ingest_insights(notes, [{
+        "id": "m", "claim": "Gemeten feit", "source": "KE",
+        "status": "supported", "evidence_type": "measured",
+        "grounds": "vol=33100 (GB, jun 2026)", "tags": ["seo"],
+    }])
+    assert res["added"] == ["m"]
+    m = notes.get("m")
+    assert m.status == GroundingStatus.SUPPORTED
+    assert m.evidence_type == EvidenceType.MEASURED
+    assert m.grounds == "vol=33100 (GB, jun 2026)"
+
+
+def test_onbekende_sleutel_wordt_genegeerd(tmp_path):
+    notes = NotesStore(str(tmp_path / "notes.json"))
+    res = ingest_insights(notes, [
+        {"id": "z", "claim": "C", "source": "s", "rommel": "negeer mij"},
+    ])
+    assert res["added"] == ["z"]
+    assert notes.get("z") is not None
