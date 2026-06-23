@@ -179,11 +179,11 @@ def test_grounding_dedup_tweede_term_genegeerd(tmp_path):
     assert "regeneratief" in harry._busy_terms   # nog steeds erin (extern ingesteld)
 
 
-def test_reflect_publiceert_twee_means_gaps(tmp_path):
-    """_reflect publiceert precies twee means_gap_sensed: ngram_2019_cutoff en nl_corpus_coverage.
+def test_reflect_publiceert_alleen_nl_corpus_gap(tmp_path):
+    """_reflect publiceert nog precies één means_gap_sensed: nl_corpus_coverage.
 
-    openlibrary_v2 is verwijderd uit _reflect: de skill staat niet meer in Harry's DNA
-    en OpenLibrary-grounding is een toekomstige v2-beslissing.
+    ngram_2019_cutoff is opgelost (gekalibreerde OpenAlex-voortzetting via _extend_arcs) en
+    wordt daarom niet meer gesenst. openlibrary_v2 was al eerder verwijderd (toekomstige v2).
     """
     harry, bus = _make_harry(tmp_path)
 
@@ -192,10 +192,10 @@ def test_reflect_publiceert_twee_means_gaps(tmp_path):
 
     harry._reflect()
 
-    assert "ngram_2019_cutoff"  in gaps
     assert "nl_corpus_coverage" in gaps
+    assert "ngram_2019_cutoff"  not in gaps      # opgelost via voortzetting
     assert "openlibrary_v2"     not in gaps
-    assert len(gaps) == 2
+    assert len(gaps) == 1
 
 
 def test_eigen_termen_worden_gegrond_zonder_lus(tmp_path):

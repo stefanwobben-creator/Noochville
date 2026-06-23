@@ -211,6 +211,70 @@ def revoke_skill_via_governance(role_id: str, skill: str, reason: str = "") -> N
     print("\n===== einde =====")
 
 
+def build_harry_role_upgrade_proposal() -> Proposal:
+    """amend_role: scherp harry_hemp's purpose + accountabilities aan na de bouw van
+    correlatie-analyse en de gekalibreerde voortzetting. De code loopt voor op de definitie."""
+    return Proposal(
+        proposer_role="the_source",
+        change=GovernanceChange(
+            kind=ChangeKind.AMEND_ROLE,
+            role_id="harry_hemp",
+            purpose=(
+                "Detecteert structurele taalverschuiving over decennia — co-beweging en "
+                "substitutie tussen missietermen — en zet die boog gekalibreerd voort voorbij "
+                "de ngram-cutoff via een academische-aandacht-proxy; grondt kandidaat-termen "
+                "in wetenschappelijke literatuur."
+            ),
+            add_accountabilities=[
+                "structurele co-beweging en substitutie tussen missietermen detecteren over de lange boog",
+                "de culturele boog voorbij de ngram-cutoff voortzetten via een gekalibreerde "
+                "academische-aandacht-proxy, transparant gelabeld met de gemeten betrouwbaarheid",
+            ],
+        ),
+        tension=("Harry's mandaat stond op 'richting observeren'; zijn werkelijke waarde is "
+                 "structurele verschuiving plus een gekalibreerde voortzetting voorbij 2019. De "
+                 "definitie liep achter op de gebouwde capaciteit."),
+        trigger_example="the_source: roldefinitie harry_hemp aanscherpen na bouw correlatie + voortzetting",
+        rationale=("De capaciteit is gebouwd (co-beweging/substitutie + gekalibreerde OpenAlex-"
+                   "voortzetting); via amend_role kloppen purpose en accountabilities weer met de code."),
+    )
+
+
+def upgrade_harry_role() -> None:
+    """Dien het amend_role-voorstel voor Harry's aangescherpte roldefinitie in via de gate."""
+    from nooch_village.village import Village
+
+    v = Village(heartbeat_seconds=86400)
+    outcome: dict = {}
+    v.bus.subscribe("governance_changed",
+                    lambda e: outcome.update({"status": "aangenomen", **e.data}))
+    v.bus.subscribe("governance_review_requested",
+                    lambda e: outcome.update({"status": "geëscaleerd",
+                                              "gate": e.data.get("gate"),
+                                              "reason": e.data.get("reason")}))
+    v.bus.subscribe("proposal_invalid",
+                    lambda e: outcome.update({"status": "ongeldig", "gate": "G0",
+                                              "reason": e.data.get("reason")}))
+    v.start()
+    v.submit_proposal(build_harry_role_upgrade_proposal())
+    print("\n===== amend_role: harry_hemp roldefinitie via governance =====\n")
+    for _ in range(200):
+        if outcome:
+            break
+        time.sleep(0.05)
+    time.sleep(0.3)
+    v.stop()
+    status = outcome.get("status", "?")
+    print(f"Uitkomst: {status}")
+    if status == "aangenomen":
+        rec = v.records.get("harry_hemp")
+        print(f"Purpose nu: {rec.definition.purpose if rec else '?'}")
+        print(f"Accountabilities: {len(rec.definition.accountabilities) if rec else '?'}")
+    else:
+        print(f"Poort {outcome.get('gate', '-')}: {outcome.get('reason', '')}")
+    print("\n===== einde =====")
+
+
 def build_remove_role_proposal(role_id: str, reason: str = "") -> Proposal:
     """Een REMOVE_ROLE-voorstel via governance: archiveert een rol.
 

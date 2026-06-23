@@ -74,6 +74,10 @@ def main() -> None:
         from nooch_village.role_proposals import grant_website_watcher_serpapi
         grant_website_watcher_serpapi()
 
+    elif mode == "upgrade_harry_role":
+        from nooch_village.role_proposals import upgrade_harry_role
+        upgrade_harry_role()
+
     elif mode == "grant_skill":
         from nooch_village.role_proposals import grant_skill_via_governance
         if len(sys.argv) < 4:

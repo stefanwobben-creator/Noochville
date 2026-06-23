@@ -1066,18 +1066,14 @@ class HarryHemp(Inhabitant):
     # ── reflectie ─────────────────────────────────────────────────────────────
 
     def _reflect(self) -> None:
-        """Tijdgeest-limieten: ngram data-cutoff en NL-corpus.
+        """Tijdgeest-limieten: NL-corpus-dekking.
 
         Produceer UITSLUITEND means-gap-items — nooit governance-voorstellen of API-calls.
         Uitbreiding van capaciteit is mens-gated activatie.
+
+        NB: het oude gat 'ngram_2019_cutoff' is opgelost — de boog wordt nu voorbij de cutoff
+        voortgezet via een gekalibreerde OpenAlex-proxy (_extend_arcs). Daarom niet meer gesenst.
         """
-        self._report_means_gap(
-            "ngram_2019_cutoff",
-            "accountability: aanvullende recente bron voor tijdgeest-observaties periodiek "
-            "evalueren en aan de mens rapporteren — "
-            "de ngram_culture-databron stopt in 2019 en misloopt daarmee 7 jaar culturele "
-            "verschuiving (2019-2026); geen enkele puls kan recente verschuivingen signaleren",
-        )
         self._report_means_gap(
             "nl_corpus_coverage",
             "accountability: NL corpus dekking periodiek valideren en ontbrekende "

@@ -81,5 +81,18 @@ verdiepen met wat hij al heeft. Drie-traps methode:
   en de ngram-skill levert nu de volledige `timeseries` per term mee. 9 tests + mutatie-check.
 - ⏳ Stuk 1b: Harry de engine laten draaien op de missietermen en de sterkste co-beweging +
   substitutie rapporteren (tijdgeest-observatie).
-- ⏳ Stuk 2: OpenAlex relatieve-aandacht-reeks + overlap-kalibratie (de gelabelde voortzetting).
-- Daarna: het inbox-item sluiten met de gemeten uitkomst als reden.
+- ✅ Stuk 2a: OpenAlex `mode='yearly'` → relatieve academische aandacht per jaar (aandeel, niet
+  ruw). 7 tests.
+- ✅ Stuk 2b: `years_dict` + `calibrate` (pearson over gedeelde jaren) + `continue_arc` (anker=100,
+  ngram t/m anker + OpenAlex daarna). 7 tests.
+- ✅ Stuk 2c: `assess_continuation` (alleen voortzetten bij r >= 0.5) + `HarryHemp._extend_arcs`
+  (per term OpenAlex-jaarreeks, ankert op corpus-eindjaar, rapporteert vertrouwde voortzetting
+  met gemeten r). 3 tests.
+- ✅ Reflectie opgeruimd: `ngram_2019_cutoff` niet meer gesenst (gat is gedekt); `nl_corpus_coverage`
+  blijft (= item 2, los verhaal).
+- ✅ Inbox-item `2d8333a29ac0` gesloten (approved) met de gemeten uitkomst als reden.
+- ⏳ Roldefinitie via governance: `python -m nooch_village.village upgrade_harry_role` (amend_role,
+  draait op de Mac).
+
+**STATUS ITEM 1: OPGELOST.** Van "ik mis 7 jaar" naar een rijkere rol: structurele co-beweging/
+substitutie over de lange boog + een gekalibreerde, transparant gelabelde voortzetting voorbij 2019.
