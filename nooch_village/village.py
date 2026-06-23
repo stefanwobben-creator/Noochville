@@ -40,6 +40,8 @@ from nooch_village.skills_impl.bulletin_schrijven import BulletinSchrijvenSkill
 from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
 from nooch_village.skills_impl.verband_voorstel import VerbandVoorstelSkill
 from nooch_village.skills_impl.onderzoeksvraag import OnderzoeksvraagSkill
+from nooch_village.skills_impl.content_schrijven import ContentSchrijvenSkill
+from nooch_village.skills_impl.content_check import ContentCheckSkill
 from nooch_village.human_inbox import HumanInbox
 from nooch_village.gap_classifier import classify_gap
 from nooch_village.observations import ObservationStore
@@ -94,6 +96,8 @@ class Village:
             KeywordsEverywhereSkill(),
             VerbandVoorstelSkill(),
             OnderzoeksvraagSkill(),
+            ContentSchrijvenSkill(),
+            ContentCheckSkill(),
         ):
             self.registry.register(skill)
         self.records = Records(os.path.join(self.context.data_dir, "governance_records.json"))
@@ -111,6 +115,10 @@ class Village:
         self.bus.subscribe("human_decision_needed",       self._observe)
         self.bus.subscribe("human_decision_needed",       self._on_keyword_escalation)
         self.bus.subscribe("human_decision_needed",       self._on_verband_suggestion)
+        self.bus.subscribe("content_opportunity",         self._observe)
+        self.bus.subscribe("content_opportunity",         self._on_content_opportunity)
+        self.bus.subscribe("content_draft_ready",         self._observe)
+        self.bus.subscribe("content_draft_ready",         self._on_content_draft_ready)
         self.bus.subscribe("gsc_pulse_completed",         self._observe)
         self.bus.subscribe("governance_changed",          self._observe)
         self.bus.subscribe("governance_changed",          self._on_governance_changed)
@@ -187,6 +195,30 @@ class Village:
             a, b, e.data.get("voorstel_claim", ""), e.data.get("reason", ""))
         logging.getLogger("village.inbox").info(
             "📬 verband-voorstel in human_inbox: item %s (%s ↔ %s)", iid, a, b)
+
+    def _on_content_opportunity(self, e: Event) -> None:
+        """Schrijf een gespotte content-kans naar de human inbox (model C).
+        Fail-closed: zonder seed_id gebeurt er niets."""
+        seed_id = e.data.get("seed_id")
+        if not seed_id:
+            return
+        iid = self.human_inbox.add_content_suggestion(
+            seed_id, e.data.get("cluster_ids", []), e.data.get("reason", ""))
+        logging.getLogger("village.inbox").info(
+            "📬 content-kans in human_inbox: item %s (cluster '%s')", iid, seed_id)
+
+    def _on_content_draft_ready(self, e: Event) -> None:
+        """Schrijf een gegenereerde content-draft naar de human inbox, klaar om te
+        herschrijven. Fail-closed: zonder seed_id of tekst gebeurt er niets."""
+        seed_id = e.data.get("seed_id")
+        text = e.data.get("text")
+        if not seed_id or not text:
+            return
+        iid = self.human_inbox.add_content_draft(
+            seed_id, e.data.get("kind", "blog"), text,
+            e.data.get("claim_insight_ids", []))
+        logging.getLogger("village.inbox").info(
+            "📬 content-draft in human_inbox: item %s (cluster '%s')", iid, seed_id)
 
     def _on_keyword_escalation(self, e: Event) -> None:
         """Schrijf keyword-escalaties naar de human inbox."""
