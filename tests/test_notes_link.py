@@ -60,3 +60,51 @@ def test_link_naar_zichzelf_doet_niets(tmp_path):
     s = _store(tmp_path, _kaart("a"))
     assert s.link("a", "a") is None
     assert s.get("a").links_to == []
+
+
+# ── brokje 2: link lezen (neighbors) ──────────────────────────────────────────
+
+def _ids(kaarten):
+    return sorted(k.id for k in kaarten)
+
+
+def test_neighbors_vindt_uitgaande_link(tmp_path):
+    """a -> b: neighbors(a) bevat b (de kant waar a naar wijst)."""
+    s = _store(tmp_path, _kaart("a"), _kaart("b"))
+    s.link("a", "b")
+    assert _ids(s.neighbors("a")) == ["b"]
+
+
+def test_neighbors_vindt_inkomende_link(tmp_path):
+    """a -> b: neighbors(b) bevat a (de kant die naar b wijst)."""
+    s = _store(tmp_path, _kaart("a"), _kaart("b"))
+    s.link("a", "b")
+    assert _ids(s.neighbors("b")) == ["a"]
+
+
+def test_neighbors_beide_richtingen_ontdubbeld(tmp_path):
+    """c -> a en a -> b: neighbors(a) = {b (uitgaand), c (inkomend)}, elk één keer."""
+    s = _store(tmp_path, _kaart("a"), _kaart("b"), _kaart("c"))
+    s.link("a", "b")
+    s.link("c", "a")
+    assert _ids(s.neighbors("a")) == ["b", "c"]
+
+
+def test_neighbors_telt_dubbele_richting_enkel(tmp_path):
+    """a -> b en b -> a: neighbors(a) bevat b precies één keer."""
+    s = _store(tmp_path, _kaart("a"), _kaart("b"))
+    s.link("a", "b")
+    s.link("b", "a")
+    assert _ids(s.neighbors("a")) == ["b"]
+
+
+def test_neighbors_onbestaand_kaartje_is_leeg(tmp_path):
+    """Fail-closed: een kaartje dat niet bestaat heeft geen buren."""
+    s = _store(tmp_path, _kaart("a"))
+    assert s.neighbors("weg") == []
+
+
+def test_neighbors_zonder_links_is_leeg(tmp_path):
+    """Een los kaartje zonder touwtjes heeft geen buren."""
+    s = _store(tmp_path, _kaart("a"), _kaart("b"))
+    assert s.neighbors("a") == []

@@ -78,6 +78,23 @@ class NotesStore:
             self._save()
         return bron
 
+    def neighbors(self, note_id: str) -> list[Insight]:
+        """Geef alle kaartjes die met `note_id` verbonden zijn, in beide richtingen:
+        de kaartjes waar dit kaartje naar wijst (eigen links_to) én de kaartjes die
+        naar dit kaartje wijzen. Ontdubbeld, zonder het kaartje zelf, gesorteerd op
+        id voor een stabiele volgorde. Bestaat het kaartje niet, dan een lege lijst
+        (fail-closed)."""
+        kaart = self.get(note_id)
+        if kaart is None:
+            return []
+        verbonden: set[str] = set(kaart.links_to)
+        for andere in self.all():
+            if note_id in andere.links_to:
+                verbonden.add(andere.id)
+        verbonden.discard(note_id)
+        resultaat = [self.get(vid) for vid in sorted(verbonden)]
+        return [n for n in resultaat if n is not None]
+
     def relevant_for(self, word: str, limit: int = 5) -> list[Insight]:
         """Vind kaartjes die termen delen met `word`, gewogen op zeldzaamheid.
         Een gedeeld woord telt zwaarder naarmate minder kaartjes het bevatten —
