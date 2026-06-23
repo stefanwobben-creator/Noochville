@@ -162,6 +162,25 @@ def _print_item_full(item: dict) -> None:
         print(f"  reject  <id> [reden]   → geen touwtje, gesloten")
         print(f"  defer   <id> [reden]   → uitstellen, blijft geregistreerd")
 
+    elif item["type"] == "content_suggestion":
+        print(f"\n── Content-kans (model C) ──")
+        print(f"Cluster   : {ctx.get('seed_id')}")
+        print(f"Kaartjes  : {', '.join(ctx.get('cluster_ids', []))}")
+        if ctx.get("reason"):
+            print(f"Waarom    : {ctx.get('reason')}")
+        print(f"\n── Acties ──")
+        print(f"  approve <id>           → kies lezer + soort, de strateeg maakt een draft")
+        print(f"  reject  <id> [reden]   → geen draft, gesloten")
+
+    elif item["type"] == "content_draft":
+        print(f"\n── Content-draft (eerste draft, jij herschrijft) ──")
+        print(f"Cluster   : {ctx.get('seed_id')}  |  Soort: {ctx.get('kind')}")
+        print(f"\n{ctx.get('text', '')}\n")
+        print(f"── Acties ──")
+        print(f"  check <id> <bestand>   → eindcheck op jouw herschreven tekst (claim-gate + copyregels)")
+        print(f"  approve <id>           → markeer als gebruikt/klaar")
+        print(f"  reject  <id> [reden]   → verworpen, gesloten")
+
     elif item["type"] == "keyword":
         ctx = item.get("context", {})
         demand = ctx.get("demand", {})
@@ -296,6 +315,30 @@ def _approve_keyword_batch(inbox, item, iid: str, reason: str, _load_fn=None) ->
         print(f"   Fouten             : {len(summary['errors'])}")
         for e in summary["errors"]:
             print(f"     · {e['word']}: {e['error']}")
+
+
+def _content_suggestion_event(item: dict, kind: str, audience: str, outcome: str) -> dict:
+    """Bouw de payload voor content_suggestion_approved: de brief waarmee de strateeg
+    draft. De mens kiest lezer (audience) en soort (kind) bij het goedkeuren."""
+    ctx = item.get("context", {})
+    return {
+        "seed_id":         ctx.get("seed_id"),
+        "kind":            kind or "blog",
+        "audience":        audience,
+        "desired_outcome": outcome,
+    }
+
+
+def _content_check_report(item: dict, text: str, context) -> dict:
+    """Draai de eindcheck (content_check-skill) op de door de mens herschreven tekst,
+    met de kind + claim-ids van de draft. Geeft het rapport-dict terug."""
+    from nooch_village.skills_impl.content_check import ContentCheckSkill
+    ctx = item.get("context", {})
+    return ContentCheckSkill().run({
+        "text":              text,
+        "claim_insight_ids": ctx.get("claim_insight_ids", []),
+        "kind":              ctx.get("kind", "blog"),
+    }, context)
 
 
 def _approve_verband(inbox, item, iid: str, notes, reason: str = "") -> bool:
@@ -535,6 +578,55 @@ def main(argv: list[str]) -> None:
                 print(f"✅ Verband goedgekeurd → touwtje gelegd: {a} ↔ {b}.")
             else:
                 print(f"✘ Item gesloten, maar touwtje niet gelegd (kaartje ontbreekt): {a}, {b}.")
+
+        elif item["type"] == "content_suggestion":
+            # Mens kiest de brief; de levende strateeg draft op het event.
+            from nooch_village.event_bus import Event
+            kind = input("Soort (blog/sales_page/passport) [blog]: ").strip() or "blog"
+            audience = input("Lezer/persona: ").strip()
+            outcome = input("Gewenste emotie/uitkomst: ").strip()
+            payload = _content_suggestion_event(item, kind, audience, outcome)
+            inbox.resolve(iid, "approved", reason=reason)
+            _, v = _load()
+            v.start()
+            time.sleep(0.1)
+            v.bus.publish(Event("content_suggestion_approved", payload, "human"))
+            seed = item["context"].get("seed_id")
+            timeout = int(v.context.settings.get("inbox_approve_timeout", "5"))
+            for _ in range(timeout * 10):
+                if any(x["type"] == "content_draft" and x["context"].get("seed_id") == seed
+                       for x in v.human_inbox.all()):
+                    break
+                time.sleep(0.1)
+            v.stop()
+            print(f"✅ Content-kans goedgekeurd → strateeg draft cluster '{seed}'. "
+                  f"Bekijk de draft met 'inbox list'.")
+
+        elif item["type"] == "content_draft":
+            inbox.resolve(iid, "approved", reason=reason)
+            print(f"✅ Content-draft '{item['subject']}' gemarkeerd als gebruikt. "
+                  f"Tip: 'inbox check <id> <bestand>' voor de eindcheck op je herschreven tekst.")
+
+    elif cmd == "check":
+        if len(argv) < 3:
+            print("Gebruik: inbox check <id> <pad-naar-tekstbestand>"); sys.exit(1)
+        iid, path = argv[1], argv[2]
+        inbox = _inbox_only()
+        item = inbox.get(iid)
+        if item is None or item["type"] != "content_draft":
+            print(f"Item '{iid}' is geen content_draft."); sys.exit(1)
+        if not os.path.exists(path):
+            print(f"Bestand niet gevonden: {path}"); sys.exit(1)
+        text = open(path, encoding="utf-8").read()
+        _, v = _load()
+        report = _content_check_report(item, text, v.context)
+        print(f"\n── Eindcheck ──")
+        print(f"Gate ok          : {report['gate_ok']}")
+        if report["forbidden_words"]:
+            print(f"Verboden woorden : {report['forbidden_words']}")
+        for ci in report["claim_issues"]:
+            print(f"Claim-issue      : {ci['insight_id']} — {ci['reason']}")
+        print(f"\nSuggesties:\n{report.get('suggestions') or '(geen / geen LLM)'}")
 
     elif cmd == "reject":
         if len(argv) < 2:
