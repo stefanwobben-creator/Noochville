@@ -74,6 +74,26 @@ def main() -> None:
         from nooch_village.role_proposals import grant_website_watcher_serpapi
         grant_website_watcher_serpapi()
 
+    elif mode == "seat_human":
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.governance import Records
+        from nooch_village.village import BASE_DIR
+        if len(sys.argv) < 4:
+            print("Gebruik: python -m nooch_village.village seat_human <role_id> <naam>",
+                  file=sys.stderr)
+            sys.exit(1)
+        role_id, naam = sys.argv[2], " ".join(sys.argv[3:])
+        ctx = load_context(BASE_DIR)
+        records = Records(os.path.join(ctx.data_dir, "governance_records.json"))
+        if records.set_holder(role_id, naam):
+            rec = records.get(role_id)
+            print(f"Zetel vastgelegd: '{role_id}' wordt bezet door {rec.held_by} (mens).")
+            print(f"  purpose: {rec.definition.purpose[:70]}")
+        else:
+            print(f"Rol '{role_id}' bestaat niet.", file=sys.stderr)
+            sys.exit(1)
+
     elif mode == "upgrade_harry_role":
         from nooch_village.role_proposals import upgrade_harry_role
         upgrade_harry_role()
@@ -182,7 +202,8 @@ def main() -> None:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
               "purge | intent | triage | ngram | reflect | simulate | harry_hemp | "
-              "content_strategist | grant_serpapi_trends | grant_skill | remove_role | "
-              "measure_propose | rereview | ingest | roster",
+              "content_strategist | grant_serpapi_trends | grant_skill | revoke_skill | "
+              "remove_role | seat_human | upgrade_harry_role | measure_propose | rereview | "
+              "ingest | roster",
               file=sys.stderr)
         sys.exit(1)

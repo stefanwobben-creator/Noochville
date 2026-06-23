@@ -265,7 +265,8 @@ class Records:
                 members=r.get("members", []), version=r.get("version", 1),
                 archived=r.get("archived", False),
                 source=r.get("source", "sensed"),
-                persona=r.get("persona"))
+                persona=r.get("persona"),
+                held_by=r.get("held_by"))
 
     def save(self) -> None:
         out = {}
@@ -284,6 +285,16 @@ class Records:
     def put(self, record: Record) -> None:
         self._data[record.id] = record
         self.save()
+
+    def set_holder(self, role_id: str, name: str | None) -> bool:
+        """Leg vast welke mens een rol bezet (bv. de founder in the_source). Een door-mens-
+        bemenste rol: een legitieme zetel, geen code-thread. Geeft False als de rol niet bestaat."""
+        rec = self._data.get(role_id)
+        if rec is None:
+            return False
+        rec.held_by = name
+        self.save()
+        return True
 
     def root(self):
         for r in self._data.values():

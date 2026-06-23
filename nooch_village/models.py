@@ -32,6 +32,8 @@ class Record:
     archived: bool = False
     source: str = "sensed"   # "seed" | "sensed" | "demo" — herkomst van het record
     persona: Optional[str] = None  # optionele weergavenaam voor de vervuller
+    held_by: Optional[str] = None  # mens die deze rol bezet (bv. de founder in the_source):
+    #                                een door-mens-bemenste rol, geen code-thread
 
 
 @dataclass

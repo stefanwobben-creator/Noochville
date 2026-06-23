@@ -293,6 +293,10 @@ class Village:
         demo_ids = {r.id for r in all_recs if r.source == "demo"}
         print(f"\n  Legende: ✱ = sensed (echt), ⚙ = demo, (blanco) = seed")
         print(f"  Live: {sorted(live_ids - demo_ids)}  |  Onbemand: {sorted(unmanned)}")
+        human_held = {r.id: r.held_by for r in all_recs if r.held_by}
+        if human_held:
+            zetels = ", ".join(f"{rid} ← {who}" for rid, who in sorted(human_held.items()))
+            print(f"  Door mens bezet: {zetels}")
         if demo_ids:
             print(f"  Demo-rollen (worden genegeerd door G1/G2): {sorted(demo_ids)}")
 
