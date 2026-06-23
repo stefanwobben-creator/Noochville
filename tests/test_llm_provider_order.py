@@ -5,6 +5,12 @@ from __future__ import annotations
 import nooch_village.llm as llm
 
 
+def test_gemini_timeout_is_in_milliseconden():
+    """Vangnet tegen de unit-bug: de SDK wil ms, dus een realistische TLS-handshake
+    moet ruim passen. Een waarde < 1000 zou seconden-denken verraden."""
+    assert llm._GEMINI_TIMEOUT_MS >= 5_000
+
+
 def test_geen_keys_geeft_none(monkeypatch):
     for var in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY"):
         monkeypatch.delenv(var, raising=False)

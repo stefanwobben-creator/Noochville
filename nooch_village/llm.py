@@ -16,6 +16,10 @@ log = logging.getLogger("village.llm")
 _DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 _DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
 
+# LET OP: de google-genai SDK verwacht de timeout in MILLISECONDEN, niet seconden.
+# 30 (ms) liet elke call direct timeouten op de TLS-handshake ("SSL timeout").
+_GEMINI_TIMEOUT_MS = 30_000  # 30 seconden
+
 
 def _try_gemini(prompt: str) -> str | None:
     """Probeer Gemini (default). Eén retry op een transiente fout (bijv. SSL-timeout)."""
@@ -32,7 +36,7 @@ def _try_gemini(prompt: str) -> str | None:
                 model=model,
                 contents=prompt,
                 config=genai_types.GenerateContentConfig(
-                    http_options=genai_types.HttpOptions(timeout=30)
+                    http_options=genai_types.HttpOptions(timeout=_GEMINI_TIMEOUT_MS)
                 ),
             )
             text = (resp.text or "").strip()

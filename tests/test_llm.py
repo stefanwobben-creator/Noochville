@@ -7,7 +7,7 @@ volstaat. os.getenv() werkt direct met monkeypatched env-vars.
 Vijf invarianten:
   1. Anthropic-client wordt aangemaakt met timeout=30.0.
   2. Exception in Anthropic-aanroep → warning gelogd (geen bare swallow).
-  3. Gemini-aanroep gebruikt GenerateContentConfig(http_options=HttpOptions(timeout=30)).
+  3. Gemini-aanroep gebruikt HttpOptions(timeout=30000) — milliseconden, niet seconden.
   4. Exception in Gemini-aanroep → warning gelogd.
   5. Geen key → reason() geeft None terug.
 """
@@ -70,7 +70,7 @@ def test_anthropic_failure_is_logged(monkeypatch, caplog):
 # ── 3. Gemini timeout ─────────────────────────────────────────────────────────
 
 def test_gemini_timeout_is_set(monkeypatch):
-    """Gemini-aanroep gebruikt GenerateContentConfig(http_options=HttpOptions(timeout=30))."""
+    """Gemini-aanroep gebruikt HttpOptions(timeout=30000) — MS, niet seconden (unit-bug-vangnet)."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
 
@@ -101,7 +101,7 @@ def test_gemini_timeout_is_set(monkeypatch):
     }):
         reason("test prompt")
 
-    fake_types.HttpOptions.assert_called_once_with(timeout=30)
+    fake_types.HttpOptions.assert_called_once_with(timeout=30000)   # ms, niet seconden
     fake_types.GenerateContentConfig.assert_called_once_with(http_options=fake_http_options)
     assert captured.get("config") is fake_config
 
