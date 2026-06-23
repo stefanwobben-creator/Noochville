@@ -70,6 +70,32 @@ def main() -> None:
         from nooch_village.role_proposals import grant_content_strategist_skills
         grant_content_strategist_skills()
 
+    elif mode == "rereview":
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.library import Library
+        from nooch_village.lexicon import Lexicon
+        from nooch_village.seeds import seed_lexicon
+        from nooch_village.library_rereview import rereview_escalated
+        from nooch_village.village import BASE_DIR
+        dry = "dry" in sys.argv[2:]
+        ctx = load_context(BASE_DIR)
+        ctx.library = Library(os.path.join(ctx.data_dir, "library.json"))
+        ctx.lexicon = Lexicon(os.path.join(ctx.data_dir, "lexicon.json"))
+        seed_lexicon(ctx.lexicon)                      # zorg dat leather_free aanwezig is
+        res = rereview_escalated(ctx.library, ctx, apply=not dry)
+        kop = "DROOGDRAAI (niets geschreven)" if dry else "Her-review toegepast"
+        print(f"{kop} — {res['total']} escalated termen bekeken:")
+        print(f"  → approved : {len(res['approved'])}")
+        for w in res["approved"]:
+            print(f"      + {w}")
+        print(f"  → forbidden: {len(res['forbidden'])}")
+        for w in res["forbidden"]:
+            print(f"      - {w}")
+        print(f"  → blijven escalated: {res['unchanged']}")
+        if dry:
+            print("\nDraai zonder 'dry' om dit echt door te voeren.")
+
     elif mode == "measure_propose":
         import os
         from nooch_village.config import load_context
@@ -124,6 +150,6 @@ def main() -> None:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
               "purge | intent | triage | ngram | reflect | simulate | harry_hemp | "
-              "content_strategist | measure_propose | ingest | roster",
+              "content_strategist | measure_propose | rereview | ingest | roster",
               file=sys.stderr)
         sys.exit(1)
