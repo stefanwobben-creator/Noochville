@@ -7,11 +7,14 @@ filtert een lijst met behoud van volgorde.
 from __future__ import annotations
 
 from nooch_village.insight import Insight
-from nooch_village.emergence import EMERGENCE_THRESHOLD, is_emerged, emerged
+from nooch_village.emergence import (
+    EMERGENCE_THRESHOLD, is_emerged, emerged, select_for_deepening,
+)
 
 
-def _kaart(kid: str, count: int) -> Insight:
-    return Insight(id=kid, claim="c", source="test", grounding_count=count)
+def _kaart(kid: str, count: int, links: list[str] | None = None) -> Insight:
+    return Insight(id=kid, claim="c", source="test", grounding_count=count,
+                   links_to=links or [])
 
 
 def test_standaarddrempel_is_drie():
@@ -48,3 +51,41 @@ def test_emerged_filtert_lijst_met_volgorde():
 
 def test_emerged_lege_lijst():
     assert emerged([]) == []
+
+
+# ── brokje 7: budget- en diepte-rem (select_for_deepening) ────────────────────
+
+def test_select_alleen_bevestigde_trends():
+    """Onbevestigde kaartjes (onder de drempel) doen niet mee."""
+    kaarten = [_kaart("vers", 1), _kaart("trend", 4)]
+    gekozen = [n.id for n in select_for_deepening(kaarten, budget=5)]
+    assert gekozen == ["trend"]
+
+
+def test_select_budget_en_sterkste_eerst():
+    """Meer bevestigde trends dan budget → alleen de sterkste, op volgorde van teller."""
+    kaarten = [_kaart("a", 3), _kaart("b", 9), _kaart("c", 5)]
+    gekozen = [n.id for n in select_for_deepening(kaarten, budget=2)]
+    assert gekozen == ["b", "c"]   # 9 en 5, niet de 3
+
+
+def test_select_slaat_kind_kaartjes_over():
+    """Diepte één hop: een kind-kaartje (met uitgaande link) wordt niet verdiept.
+    Het kind wijst naar een ánder kaartje ('x'), zodat de trend niet als al-verdiept telt."""
+    kaarten = [_kaart("trend", 5), _kaart("kind", 5, links=["x"])]
+    gekozen = [n.id for n in select_for_deepening(kaarten, budget=5)]
+    assert gekozen == ["trend"]    # het kind doet niet mee, de trend wel
+
+
+def test_select_slaat_al_verdiepte_trend_over():
+    """Eén vraag per trend: een trend die al een kind heeft, wordt overgeslagen."""
+    # 'kind' wijst naar 'trend' → trend heeft al een kind
+    kaarten = [_kaart("trend", 8, ), _kaart("kind", 1, links=["trend"])]
+    gekozen = [n.id for n in select_for_deepening(kaarten, budget=5)]
+    assert gekozen == []           # trend al verdiept, kind onbevestigd
+
+
+def test_select_budget_nul_of_negatief_is_leeg():
+    kaarten = [_kaart("trend", 9)]
+    assert select_for_deepening(kaarten, budget=0) == []
+    assert select_for_deepening(kaarten, budget=-1) == []
