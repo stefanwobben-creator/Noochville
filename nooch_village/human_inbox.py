@@ -22,7 +22,7 @@ from nooch_village.util import atomic_write_json
 
 _VALID_STATUSES = {"pending", "approved", "rejected", "amended", "deferred"}
 _VALID_TYPES    = {"escalation", "activation", "keyword", "means_gap", "suggestion",
-                   "keyword_batch", "verband"}
+                   "keyword_batch", "verband", "content_suggestion", "content_draft"}
 
 
 class HumanInbox:
@@ -275,6 +275,44 @@ class HumanInbox:
             "created_at": time.time(),
             "resolved_at": None,
             "resolution":  None,
+        }
+        self._save()
+        return iid
+
+    def add_content_suggestion(self, seed_id: str, cluster_ids: list[str],
+                               reason: str = "") -> str:
+        """Een gespotte content-kans: dit cluster verdient een publiek stuk. De mens
+        keurt goed (-> draft) of wijst af. Dedup op seed_id, ongeacht status: eenmaal
+        voorgesteld, niet opnieuw. Retourneert het item-id."""
+        for item in self._items.values():
+            if item["type"] == "content_suggestion" and item.get("subject") == seed_id:
+                return item["id"]
+        iid = uuid.uuid4().hex[:12]
+        self._items[iid] = {
+            "id": iid, "type": "content_suggestion", "subject": seed_id,
+            "context": {"seed_id": seed_id, "cluster_ids": list(cluster_ids),
+                        "reason": reason},
+            "status": "pending", "created_at": time.time(),
+            "resolved_at": None, "resolution": None,
+        }
+        self._save()
+        return iid
+
+    def add_content_draft(self, seed_id: str, kind: str, text: str,
+                          claim_insight_ids: list[str]) -> str:
+        """Een gegenereerde eerste draft, klaar voor de mens om te herschrijven. Dedup
+        op seed_id + kind, ongeacht status. Retourneert het item-id."""
+        subject = f"{seed_id}/{kind}"
+        for item in self._items.values():
+            if item["type"] == "content_draft" and item.get("subject") == subject:
+                return item["id"]
+        iid = uuid.uuid4().hex[:12]
+        self._items[iid] = {
+            "id": iid, "type": "content_draft", "subject": subject,
+            "context": {"seed_id": seed_id, "kind": kind, "text": text,
+                        "claim_insight_ids": list(claim_insight_ids)},
+            "status": "pending", "created_at": time.time(),
+            "resolved_at": None, "resolution": None,
         }
         self._save()
         return iid
