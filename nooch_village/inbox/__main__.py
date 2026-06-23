@@ -613,6 +613,19 @@ def main(argv: list[str]) -> None:
             print(f"✅ Content-draft '{item['subject']}' gemarkeerd als gebruikt. "
                   f"Tip: 'inbox check <id> <bestand>' voor de eindcheck op je herschreven tekst.")
 
+        elif item["type"] == "suggestion":
+            # Gap C: kandidaat voor een nieuw voorstel. Approve = de mens accepteert/pakt dit op;
+            # een nieuwe rol of means bouwen loopt apart via governance (geen automatische geboorte).
+            inbox.resolve(iid, "approved", reason=reason)
+            print(f"✅ Suggestie '{item['subject']}' geaccepteerd [{iid}].")
+            print("   (Een nieuwe rol/means hiervoor loopt via het governance-proces.)")
+
+        else:
+            # Vangnet: geen type-specifieke afhandeling → toch sluiten met reden, zodat geen
+            # enkel item-type stil blijft hangen bij approve.
+            inbox.resolve(iid, "approved", reason=reason)
+            print(f"✅ Item '{item['subject']}' [{iid}] goedgekeurd (type: {item['type']}).")
+
     elif cmd == "check":
         if len(argv) < 3:
             print("Gebruik: inbox check <id> <pad-naar-tekstbestand>"); sys.exit(1)
