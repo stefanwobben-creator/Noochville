@@ -19,10 +19,11 @@ class OnderzoeksvraagSkill(Skill):
 
     def run(self, payload: dict, context) -> dict:
         kaart = payload.get("kaart", {})
-        return {"vraag": self._llm(kaart)}
+        return {"vraag": self._llm(kaart, payload.get("locale"))}
 
-    def _llm(self, kaart: dict) -> str | None:
+    def _llm(self, kaart: dict, locale: str | None = None) -> str | None:
         from nooch_village.llm import reason
+        from nooch_village.language import instruction
         word = kaart.get("word", "")
         claim = kaart.get("claim", "")
         prompt = (
@@ -36,7 +37,8 @@ class OnderzoeksvraagSkill(Skill):
             f"WAT WE WETEN: {claim}\n\n"
             "Antwoord op EXACT één regel:\n"
             "VRAAG: <één onderzoekbare vraag>\n"
-            "Kun je geen zinvolle vraag vormen, antwoord dan: VRAAG: geen"
+            "Kun je geen zinvolle vraag vormen, antwoord dan: VRAAG: geen\n"
+            + instruction(locale)
         )
         out = reason(prompt)
         if not out:

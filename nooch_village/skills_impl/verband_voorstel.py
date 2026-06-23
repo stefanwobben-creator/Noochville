@@ -18,6 +18,7 @@ class VerbandVoorstelSkill(Skill):
 
     def _llm(self, a: dict, b: dict) -> str | None:
         from nooch_village.llm import reason
+        from nooch_village.language import instruction
         prompt = (
             "Je beoordeelt of twee kennis-kaarten over duurzame schoenen een zinvol, "
             "niet-triviaal inhoudelijk verband hebben. Een gedeeld woord is GEEN verband; "
@@ -30,7 +31,8 @@ class VerbandVoorstelSkill(Skill):
             f"KAART B (over '{b.get('word', '')}'): {b.get('claim', '')}\n\n"
             "Antwoord op EXACT één regel in dit formaat:\n"
             "VERBAND: ja|nee | CLAIM: <één zin die de twee verbindt, alleen bij ja>\n"
-            "Bij twijfel of geen echt verband: VERBAND: nee"
+            "Bij twijfel of geen echt verband: VERBAND: nee\n"
+            + instruction()
         )
         out = reason(prompt)
         if not out:

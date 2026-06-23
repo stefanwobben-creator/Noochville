@@ -48,3 +48,19 @@ def test_onparseerbaar_antwoord_geeft_none():
 
 def test_lege_vraag_geeft_none():
     assert _run("VRAAG:    ")["vraag"] is None
+
+
+def test_prompt_vraagt_engels_default():
+    """De werktaal is Engels: zonder locale draagt de prompt de Engelse instructie."""
+    skill = OnderzoeksvraagSkill()
+    with patch("nooch_village.llm.reason", return_value="VRAAG: x") as mock:
+        skill.run({"kaart": _KAART}, context=None)
+    assert "Write your answer in English." in mock.call_args[0][0]
+
+
+def test_prompt_respecteert_expliciete_locale():
+    """Een expliciete locale wijkt af van de default."""
+    skill = OnderzoeksvraagSkill()
+    with patch("nooch_village.llm.reason", return_value="VRAAG: x") as mock:
+        skill.run({"kaart": _KAART, "locale": "nl"}, context=None)
+    assert "Write your answer in Dutch." in mock.call_args[0][0]

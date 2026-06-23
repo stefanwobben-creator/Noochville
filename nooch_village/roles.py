@@ -930,6 +930,8 @@ class HarryHemp(Inhabitant):
             f"Verzin geen andere titels of auteurs. "
             f"Als je het niet kunt beoordelen, zeg dat expliciet."
         )
+        from nooch_village.language import instruction
+        prompt = prompt + "\n" + instruction(locale)
         llm_out = llm_reason(prompt)
         if llm_out:
             return llm_out.strip()
