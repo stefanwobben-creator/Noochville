@@ -759,6 +759,8 @@ class HarryHemp(Inhabitant):
         # ── grounding-state ───────────────────────────────────────────────────
         self._busy_terms: set[str] = set()
         self.react("keyword_proposed", self._on_keyword_proposed)
+        # ── spelregel 5: bied de NL-dekkingscheck aan op verzoek (modus a+b) ──
+        self.offer("nl_corpus_coverage", self._on_nl_corpus_request)
 
     def _setup_events(self) -> None:
         # Geen dag_begint → _maybe_reflect; de puls roept _maybe_reflect zelf
@@ -945,6 +947,20 @@ class HarryHemp(Inhabitant):
                                    {"by": self.id, "terms": missing}, self.id))
         return missing
 
+    def _on_nl_corpus_request(self, payload) -> None:
+        """Op verzoek (spelregel 5, modus a+b): draai een verse NL-dekkingscheck.
+        Modus c gebruikt de puls-rijen; hier is er niets bij de hand, dus halen we ze op."""
+        result = self.use_skill("ngram_culture", payload or {})
+        if "error" in result:
+            self.log.warning("NL-dekkingscheck op verzoek mislukt: %s", result["error"])
+            self.bus.publish(Event("nl_corpus_check_completed",
+                                   {"by": self.id, "ok": False, "error": result["error"]}, self.id))
+            return
+        missing = self._check_nl_corpus(result.get("rows", []))
+        self.log.info("📋 NL-dekkingscheck op verzoek: %d ontbrekende term(en)", len(missing))
+        self.bus.publish(Event("nl_corpus_check_completed",
+                               {"by": self.id, "ok": True, "terms": missing}, self.id))
+
     # ── grounding-tak ─────────────────────────────────────────────────────────
 
     def _on_keyword_proposed(self, event: Event) -> None:
@@ -1080,22 +1096,14 @@ class HarryHemp(Inhabitant):
     # ── reflectie ─────────────────────────────────────────────────────────────
 
     def _reflect(self) -> None:
-        """Tijdgeest-limieten: NL-corpus-dekking.
+        """Geen hardcoded zelf-gaten meer; beide zijn opgelost en nu dynamisch.
 
-        Produceer UITSLUITEND means-gap-items — nooit governance-voorstellen of API-calls.
-        Uitbreiding van capaciteit is mens-gated activatie.
-
-        NB: het oude gat 'ngram_2019_cutoff' is opgelost — de boog wordt nu voorbij de cutoff
-        voortgezet via een gekalibreerde OpenAlex-proxy (_extend_arcs). Daarom niet meer gesenst.
+        ngram_2019_cutoff  → opgelost via de gekalibreerde OpenAlex-voortzetting (_extend_arcs).
+        nl_corpus_coverage → nu dynamisch: _check_nl_corpus leest per puls (modus c) welke
+        NL-termen het corpus echt mist, en is op verzoek opvraagbaar via spelregel 5
+        (_on_nl_corpus_request). Geen vaste klacht meer, maar zoeken-en-melden (regel 6).
         """
-        self._report_means_gap(
-            "nl_corpus_coverage",
-            "accountability: NL corpus dekking periodiek valideren en ontbrekende "
-            "kernbegrippen documenteren — "
-            "meerdere Nederlandse termen (bijv. 'consument') worden niet gevonden in het "
-            "NL corpus 10 (2012); het corpus is verouderd en dekt moderne missie-terminologie "
-            "onvoldoende af",
-        )
+        return
 
 
 # ── Metric-advies (deterministisch placeholder voor latere LLM-stap) ───────

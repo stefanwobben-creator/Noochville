@@ -74,6 +74,35 @@ def main() -> None:
         from nooch_village.role_proposals import grant_website_watcher_serpapi
         grant_website_watcher_serpapi()
 
+    elif mode == "ask_accountability":
+        import time
+        from nooch_village.event_bus import Event
+        from nooch_village.village import Village
+        if len(sys.argv) < 4:
+            print("Gebruik: python -m nooch_village.village ask_accountability <rol> <accountability>",
+                  file=sys.stderr)
+            sys.exit(1)
+        target, key = sys.argv[2], sys.argv[3]
+        v = Village(heartbeat_seconds=86400)
+        done = {}
+        v.bus.subscribe("nl_corpus_check_completed", lambda e: done.update(e.data))
+        v.bus.subscribe("accountability_check_completed", lambda e: done.update(e.data))
+        v.start()
+        time.sleep(0.3)
+        # de mens vraagt als houder van the_source (spelregel 5)
+        v.bus.publish(Event("accountability_requested",
+            {"target": target, "accountability": key, "payload": {}, "from": "the_source"}, "the_source"))
+        for _ in range(600):              # max ~60s (verse fetch kan even duren)
+            if done:
+                break
+            time.sleep(0.1)
+        v.stop()
+        if done:
+            print(f"Antwoord van '{target}' op '{key}': {done}")
+        else:
+            print(f"Geen antwoord binnen de tijd (rol biedt '{key}' misschien niet aan, "
+                  f"of de check duurde te lang).")
+
     elif mode == "seat_human":
         import os
         from nooch_village.config import load_context
@@ -203,7 +232,7 @@ def main() -> None:
               "once | run | demo | librarian | governance | proposal | lifecycle | "
               "purge | intent | triage | ngram | reflect | simulate | harry_hemp | "
               "content_strategist | grant_serpapi_trends | grant_skill | revoke_skill | "
-              "remove_role | seat_human | upgrade_harry_role | measure_propose | rereview | "
-              "ingest | roster",
+              "remove_role | seat_human | upgrade_harry_role | ask_accountability | "
+              "measure_propose | rereview | ingest | roster",
               file=sys.stderr)
         sys.exit(1)

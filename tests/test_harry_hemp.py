@@ -179,11 +179,37 @@ def test_grounding_dedup_tweede_term_genegeerd(tmp_path):
     assert "regeneratief" in harry._busy_terms   # nog steeds erin (extern ingesteld)
 
 
-def test_reflect_publiceert_alleen_nl_corpus_gap(tmp_path):
-    """_reflect publiceert nog precies één means_gap_sensed: nl_corpus_coverage.
+def test_harry_biedt_nl_corpus_accountability_aan(tmp_path):
+    """Spelregel 5: Harry biedt 'nl_corpus_coverage' aan als opvraagbare accountability."""
+    harry, _ = _make_harry(tmp_path)
+    assert "nl_corpus_coverage" in harry._offered
 
-    ngram_2019_cutoff is opgelost (gekalibreerde OpenAlex-voortzetting via _extend_arcs) en
-    wordt daarom niet meer gesenst. openlibrary_v2 was al eerder verwijderd (toekomstige v2).
+
+def test_nl_corpus_check_op_verzoek_meldt_ontbrekende_termen(tmp_path):
+    """Op verzoek (modus a+b): verse check via ngram, meldt de NL-termen die het corpus mist."""
+    ngram_rows = {"rows": [
+        {"term": "consument", "locale": "nl", "no_data": True,
+         "reason": "term niet gevonden in corpus"},
+        {"term": "duurzaam", "locale": "nl", "timeseries": [0.1, 0.2]},
+    ], "terms": {}}
+    harry, bus = _make_harry(tmp_path, ngram_result=ngram_rows)
+
+    gaps, done = [], []
+    bus.subscribe("nl_corpus_gap", lambda e: gaps.append(e.data))
+    bus.subscribe("nl_corpus_check_completed", lambda e: done.append(e.data))
+
+    harry._on_nl_corpus_request({})
+
+    assert gaps and gaps[0]["terms"] == ["consument"]
+    assert done and done[0]["ok"] is True
+    assert done[0]["terms"] == ["consument"]
+
+
+def test_reflect_senst_geen_hardcoded_gaten_meer(tmp_path):
+    """_reflect is leeg: beide oude gaten zijn opgelost en nu dynamisch.
+
+    ngram_2019_cutoff → gekalibreerde OpenAlex-voortzetting (_extend_arcs).
+    nl_corpus_coverage → dynamische check (_check_nl_corpus, modus c) + opvraagbaar (regel 5).
     """
     harry, bus = _make_harry(tmp_path)
 
@@ -192,10 +218,7 @@ def test_reflect_publiceert_alleen_nl_corpus_gap(tmp_path):
 
     harry._reflect()
 
-    assert "nl_corpus_coverage" in gaps
-    assert "ngram_2019_cutoff"  not in gaps      # opgelost via voortzetting
-    assert "openlibrary_v2"     not in gaps
-    assert len(gaps) == 1
+    assert gaps == []          # geen hardcoded zelf-gaten meer
 
 
 def test_eigen_termen_worden_gegrond_zonder_lus(tmp_path):
