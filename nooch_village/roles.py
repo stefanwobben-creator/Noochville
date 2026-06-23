@@ -838,10 +838,17 @@ class HarryHemp(Inhabitant):
             self._report_correlations(rows)
 
             # Voortzetting voorbij de ngram-cutoff via gekalibreerde OpenAlex-proxy.
-            self._extend_arcs(rows, int(result.get("year_start", 1980)))
+            arcs = self._extend_arcs(rows, int(result.get("year_start", 1980)))
 
             # NL-corpus-dekking (modus c, autonoom): meld alleen wat ontbreekt.
             self._check_nl_corpus(rows)
+
+            # Ik dek deze gaten nu → stel voor ze te sluiten; de mens bevestigt.
+            if arcs:   # minstens één vertrouwde voortzetting → de 2019-cutoff is gedekt
+                self.propose_close("ngram_2019_cutoff",
+                                   "gedekt via de gekalibreerde OpenAlex-voortzetting")
+            self.propose_close("nl_corpus_coverage",
+                               "nu dynamisch gedekt via de NL-dekkingscheck (modus c + op verzoek)")
 
             if len(stijgend) >= self._SHIFT_THRESHOLD or len(dalend) >= self._SHIFT_THRESHOLD:
                 self.bus.publish(Event("tijdgeest_signaal", {

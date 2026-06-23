@@ -49,3 +49,38 @@ def test_rol_sluit_niet_zelf(tmp_path):
     iid = inbox.add_suggestion("g", "d")
     inbox.propose_resolution(iid, "harry_hemp", "klaar")
     assert inbox.get(iid)["status"] == "pending"            # geen dichtgeklapte lus
+
+
+# ── Inhabitant.propose_close publiceert het juiste event ─────────────────────
+
+def test_propose_close_publiceert_event():
+    from types import SimpleNamespace
+    from nooch_village.inhabitant import Inhabitant
+    from nooch_village.models import Record, RoleDefinition, RecordType
+    from nooch_village.event_bus import EventBus
+    from nooch_village.skills import SkillRegistry
+
+    bus = EventBus(name="t")
+    events = []
+    bus.subscribe("resolution_proposed", lambda e: events.append(e.data))
+    rec = Record(id="harry_hemp", type=RecordType.ROLE, parent="noochville",
+                 definition=RoleDefinition(purpose="test"), source="seed")
+    inh = Inhabitant(rec, bus, SkillRegistry(),
+                     SimpleNamespace(settings={"reflect_interval_seconds": "0"}))
+    inh.propose_close("nl_corpus_coverage", "nu gedekt")
+    assert events == [{"gap_key": "nl_corpus_coverage", "reason": "nu gedekt", "from": "harry_hemp"}]
+
+
+def test_harry_puls_stelt_voor_nl_corpus_te_sluiten(tmp_path):
+    """Na een puls stelt Harry voor de gedekte gaten te sluiten (hier nl_corpus_coverage)."""
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+    from test_harry_hemp import _make_harry
+
+    harry, bus = _make_harry(tmp_path, ngram_result={"rows": [], "terms": {}})
+    voorstellen = []
+    bus.subscribe("resolution_proposed", lambda e: voorstellen.append(e.data["gap_key"]))
+
+    harry._run_pulse(None)
+
+    assert "nl_corpus_coverage" in voorstellen
