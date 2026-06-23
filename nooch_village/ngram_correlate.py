@@ -62,6 +62,49 @@ def correlate_terms(series: dict[str, list[float]],
     return results
 
 
+def years_dict(values: list, year_start: int) -> dict[int, float]:
+    """Zet een ngram-jaarlijst om naar {jaar: waarde} (index 0 = year_start). None's overslaan."""
+    return {year_start + i: v for i, v in enumerate(values) if v is not None}
+
+
+def calibrate(a: dict[int, float], b: dict[int, float], min_overlap: int = 5) -> dict:
+    """Correleer twee {jaar: waarde}-reeksen over hun gedeelde jaren.
+
+    Dit is de eerlijkheidstoets vóór we OpenAlex als voortzetting van ngram vertrouwen:
+    correleren ze sterk over de overlap, dan is de proxy verdedigbaar. Geeft
+    {'r', 'n', 'overlap': (van, tot)} of {'insufficient': True, 'n'} bij te weinig overlap.
+    """
+    shared = sorted(set(a) & set(b))
+    if len(shared) < min_overlap:
+        return {"insufficient": True, "n": len(shared)}
+    r = pearson([a[y] for y in shared], [b[y] for y in shared])
+    if r is None:
+        return {"insufficient": True, "n": len(shared)}
+    return {"r": round(r, 3), "n": len(shared), "overlap": (shared[0], shared[-1])}
+
+
+def continue_arc(ngram: dict[int, float], openalex: dict[int, float],
+                 anchor_year: int) -> dict[int, float]:
+    """Geketende index, basis anchor_year = 100.
+
+    Tot en met het ankerjaar: ngram, herschaald zodat het anker 100 is. Daarna: OpenAlex,
+    herschaald op zijn eigen ankerwaarde. Beide raken elkaar op 100 in het ankerjaar, zodat de
+    boog naadloos doorloopt voorbij de ngram-cutoff. Leeg als het anker in een van beide
+    ontbreekt of nul is (dan kun je niet normaliseren)."""
+    vn = ngram.get(anchor_year)
+    vo = openalex.get(anchor_year)
+    if not vn or not vo:
+        return {}
+    out: dict[int, float] = {}
+    for y, v in sorted(ngram.items()):
+        if y <= anchor_year:
+            out[y] = round(100 * v / vn, 2)
+    for y, v in sorted(openalex.items()):
+        if y > anchor_year:
+            out[y] = round(100 * v / vo, 2)
+    return out
+
+
 def findings_from_rows(rows: list[dict], min_overlap: int = 5,
                        strong: float = 0.6) -> list[dict]:
     """Uit ngram-skill-rijen de sterkste co-beweging en sterkste substitutie per locale.
