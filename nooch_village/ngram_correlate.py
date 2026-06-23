@@ -60,3 +60,29 @@ def correlate_terms(series: dict[str, list[float]],
         results.append({"a": a, "b": b, "r": round(r, 3), "label": label, "n": len(xs)})
     results.sort(key=lambda d: -abs(d["r"]))
     return results
+
+
+def findings_from_rows(rows: list[dict], min_overlap: int = 5,
+                       strong: float = 0.6) -> list[dict]:
+    """Uit ngram-skill-rijen de sterkste co-beweging en sterkste substitutie per locale.
+
+    Correleert alleen binnen dezelfde locale (gelijk corpus, gelijke jaren). Rijen zonder
+    `timeseries` of met `no_data` worden overgeslagen. Geeft een platte lijst van bevindingen,
+    elk met `locale` erbij. Leeg als er te weinig data is."""
+    per_locale: dict[str, dict[str, list]] = {}
+    for r in rows:
+        ts = r.get("timeseries")
+        if r.get("no_data") or not ts:
+            continue
+        per_locale.setdefault(r.get("locale", "?"), {})[r["term"]] = ts
+
+    out: list[dict] = []
+    for locale, series in sorted(per_locale.items()):
+        cors = correlate_terms(series, min_overlap, strong)
+        co  = next((c for c in cors if c["label"] == "co-beweging"), None)
+        sub = next((c for c in cors if c["label"] == "substitutie"), None)
+        if co:
+            out.append({**co, "locale": locale})
+        if sub:
+            out.append({**sub, "locale": locale})
+    return out

@@ -832,6 +832,9 @@ class HarryHemp(Inhabitant):
                     library=lib,
                 )
 
+            # Lange-boog-analyse: structurele co-beweging/substitutie tussen missietermen.
+            self._report_correlations(rows)
+
             if len(stijgend) >= self._SHIFT_THRESHOLD or len(dalend) >= self._SHIFT_THRESHOLD:
                 self.bus.publish(Event("tijdgeest_signaal", {
                     "by":       self.id,
@@ -858,6 +861,21 @@ class HarryHemp(Inhabitant):
             self._busy = False
         self._maybe_reflect(None)
         self._deepen_trends()
+
+    def _report_correlations(self, rows) -> list[dict]:
+        """Rapporteer de sterkste co-beweging en substitutie tussen missietermen over de
+        lange boog (per locale). De berekening is puur (ngram_correlate); hier alleen
+        loggen en als observatie publiceren. Geen besluit, geen API-call."""
+        from nooch_village.ngram_correlate import findings_from_rows
+        bevindingen = findings_from_rows(rows)
+        for b in bevindingen:
+            teken = "🔗 co-beweging" if b["label"] == "co-beweging" else "↔️ substitutie"
+            self.log.info("%s [%s]: '%s' ~ '%s' (r=%.2f, %d jaar)",
+                          teken, b["locale"], b["a"], b["b"], b["r"], b["n"])
+        if bevindingen:
+            self.bus.publish(Event("tijdgeest_correlatie",
+                                   {"by": self.id, "bevindingen": bevindingen}, self.id))
+        return bevindingen
 
     # ── grounding-tak ─────────────────────────────────────────────────────────
 
