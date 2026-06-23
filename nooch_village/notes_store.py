@@ -119,6 +119,20 @@ class NotesStore:
                         break
         return volgorde
 
+    def content_seeds(self, budget: int, threshold: int | None = None) -> list[Insight]:
+        """Spot welke kaartjes een publiek stuk verdienen: bevestigd (emergentie:
+        grounding_count >= drempel) én verbonden (minstens één buur, dus een echt
+        cluster, geen los feit). Sterkste eerst (grounding_count desc, dan id),
+        begrensd op `budget`. Dedup op al-voorgestelde clusters gebeurt in de inbox."""
+        from nooch_village.emergence import is_emerged, EMERGENCE_THRESHOLD
+        thr = EMERGENCE_THRESHOLD if threshold is None else threshold
+        if budget <= 0:
+            return []
+        seeds = [n for n in self.all()
+                 if is_emerged(n, thr) and self.neighbors(n.id)]
+        seeds.sort(key=lambda n: (-n.grounding_count, n.id))
+        return seeds[:budget]
+
     def relevant_for(self, word: str, limit: int = 5) -> list[Insight]:
         """Vind kaartjes die termen delen met `word`, gewogen op zeldzaamheid.
         Een gedeeld woord telt zwaarder naarmate minder kaartjes het bevatten —
