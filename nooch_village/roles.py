@@ -387,6 +387,7 @@ class Librarian(Inhabitant):
         self.react("keyword_proposed",      self._on_proposal)
         self.react("human_keyword_verdict", self._on_human_verdict)
         self.react("keyword_evidence",      self._on_evidence)
+        self.react("child_evidence",        self._on_child_evidence)
         self.react("dag_eindigt",           self._on_dag_eindigt)
 
     def _on_proposal(self, event: Event) -> None:
@@ -500,6 +501,18 @@ class Librarian(Inhabitant):
             else:
                 self.log.info("🗂️  kaartje vastgelegd voor '%s' (concept=%s)",
                               word, concept_id or "geen")
+
+    def _on_child_evidence(self, event: Event) -> None:
+        """Ontvang waaróm-onderzoek van de scientist en schrijf het kind-kaartje plus
+        de geboren-uit-link. De Librarian cureert de kennis; de scientist onderzoekt.
+        Fail-closed: zonder parent_id of vraag gebeurt er niets."""
+        parent_id  = event.data.get("parent_id")
+        vraag      = event.data.get("vraag", "")
+        evidence   = event.data.get("evidence", [])
+        assessment = event.data.get("assessment", "")
+        if not parent_id or not vraag:
+            return
+        self._write_child_card(parent_id, vraag, evidence, assessment)
 
     def _write_child_card(self, parent_id: str, vraag: str,
                           evidence: list[dict], assessment: str) -> Insight | None:
@@ -854,6 +867,37 @@ class HarryHemp(Inhabitant):
         evidence = self._gather_evidence(vraag, locale)
         assessment = self._distill(vraag, locale, evidence, demand={})
         return evidence, assessment
+
+    def _deepen_trends(self) -> None:
+        """Verdiep bevestigde trend-kaartjes tot één hop diep.
+
+        Kiest met select_for_deepening welke trends mogen (emergentie + diepte +
+        dagbudget), leidt per trend één waaróm-vraag af (onderzoeksvraag-skill),
+        onderzoekt die met de grounding-skills, en publiceert child_evidence zodat de
+        Librarian er een kind-kaartje van schrijft. Schrijft zelf niets weg: kennis
+        cureren is het domein van de Librarian."""
+        from nooch_village.emergence import select_for_deepening
+        notes = getattr(self.context, "notes", None)
+        if notes is None:
+            return
+        budget = int(self.context.settings.get("deepen_budget", 2) or 0)
+        for trend in select_for_deepening(notes.all(), budget):
+            if not trend.word:
+                continue
+            res = self.use_skill("onderzoeksvraag",
+                                 {"kaart": {"word": trend.word, "claim": trend.claim}})
+            vraag = res.get("vraag")
+            if not vraag:
+                continue
+            evidence, assessment = self._research_question(vraag)
+            self.bus.publish(Event("child_evidence", {
+                "parent_id":  trend.id,
+                "vraag":      vraag,
+                "evidence":   evidence,
+                "assessment": assessment,
+                "from":       self.id,
+            }, self.id))
+            self.log.info("🌱 waaróm onderzocht voor '%s': %s", trend.word, vraag[:50])
 
     def _distill(self, word: str, locale: str,
                  evidence: list[dict], demand: dict) -> str:
