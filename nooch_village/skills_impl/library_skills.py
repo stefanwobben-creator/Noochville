@@ -17,6 +17,18 @@ RISK = {
 }
 FORBIDDEN_CLAIM = ["biologisch afbreekbaar", "100%", "co2-neutraal", "co2 neutraal", "klimaatneutraal"]
 
+# Talen waarin we de missie-woordenschat uit het Lexicon lezen.
+_CORE_LANGS = ("en", "nl")
+# "<risk> free/vrij/frei": de AFWEZIGHEID van het risico is juist missie-positief.
+# 'leather free' / 'leervrij' is geen leer-risico maar precies waar Nooch voor staat.
+_NEGATORS = ("vrije", "free", "frei", "vrij")
+
+
+def _norm(s: str) -> str:
+    """Normaliseer koppelteken en spatie tot één vorm, zodat 'plastic-free' en
+    'plastic free' hetzelfde matchen."""
+    return s.lower().replace("-", " ")
+
 
 class LibraryListSkill(Skill):
     name = "library_list"
@@ -73,7 +85,7 @@ class KeywordReviewSkill(Skill):
             return {"word": word, "decision": "known", "status": existing["status"],
                     "reason": "al vastgelegd in de bibliotheek"}
 
-        h_decision, h_reason = self._heuristic(word, demand)
+        h_decision, h_reason = self._heuristic(word, demand, context)
         llm = self._llm(word, demand)
         decision, reason_txt, basis = (llm[0], llm[1], "llm") if llm else (h_decision, h_reason, "heuristic")
         return {"word": word, "decision": decision, "reason": reason_txt, "basis": basis,
@@ -84,15 +96,37 @@ class KeywordReviewSkill(Skill):
             return False
         return demand.get("signal") in ("rising", "positive") or (demand.get("interest", 0) or 0) > 10
 
-    def _heuristic(self, word: str, demand: dict):
+    def _mission_core(self, context) -> list[str]:
+        """Missie-kernwoorden, genormaliseerd. Vereniging van de hardcoded baseline en de
+        approved Lexicon-woorden (en+nl), zodat ook Engelse missiewoorden als 'sustainable'
+        matchen. Geen Lexicon → alleen de baseline (vangnet)."""
+        terms = {_norm(c) for c in MISSION_CORE}
+        lex = getattr(context, "lexicon", None)
+        if lex is not None:
+            for lang in _CORE_LANGS:
+                for w in lex.words_for_lang(lang, status_filter="approved"):
+                    terms.add(_norm(w))
+        return sorted(terms)
+
+    def _negated(self, w: str, term: str) -> bool:
+        """Staat er direct na het risico-woord een ontkenner (free/vrij/frei)?
+        Dan is het juist missie-positief, geen risico."""
+        neg = "|".join(_NEGATORS)
+        return re.search(rf"\b{re.escape(term)}[\s-]*(?:{neg})\b", w) is not None
+
+    def _heuristic(self, word: str, demand: dict, context=None):
         w = word.lower()
         for term in FORBIDDEN_CLAIM:
             if term in w:
                 return "reject", f"bevat een onbewezen claim ('{term}')"
         for term, why in RISK.items():
             if re.search(rf"\b{re.escape(term)}", w):
+                if self._negated(w, term):
+                    continue  # 'leather free'/'leervrij': de afwezigheid is on-mission
                 return "escalate", why
-        core = any(c in w for c in MISSION_CORE)
+        core_terms = self._mission_core(context)
+        nw = _norm(w)
+        core = any(c in nw for c in core_terms)
         if core and self._has_demand(demand):
             return "approve", "missie-kern en er is aantoonbare vraag"
         if core:

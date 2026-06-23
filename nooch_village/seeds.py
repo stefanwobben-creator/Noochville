@@ -71,6 +71,12 @@ _LEXICON_SEED = [
         "status": "approved",
         "rationale": "Geen dierenleer is beleidsregel; vegan/veganistisch missie-aligned.",
     },
+    {
+        "concept_id": "leather_free",
+        "words": {"nl": "leervrij", "en": "leather free"},
+        "status": "approved",
+        "rationale": "Geen leer is een harde beleidsregel; leervrij/leather free is missie-kern, niet een leer-risico.",
+    },
 ]
 
 
