@@ -455,6 +455,7 @@ class ConcurrentScout(Inhabitant):
             self._run_news(monitored)
             self._run_discovery(monitored, store)
             self._run_linkbuilding(monitored)
+            self._run_market_interest(monitored, store)
         finally:
             self._busy = False
 
@@ -540,6 +541,26 @@ class ConcurrentScout(Inhabitant):
         if added:
             self.log.info("🔗 %d nieuw linkbuilding-doelwit(ten) gespot (%d hoog) — wacht op jouw oordeel",
                           added, hoog)
+
+    def _run_market_interest(self, monitored: list[str], store) -> None:
+        """Consument van de gedeelde concurrent-store: meet het zoekvolume van de bevestigde
+        concurrenten met KeywordsEverywhere (marktinteresse). Faalt closed."""
+        if "keywords_everywhere" not in self.dna.skills:
+            return
+        targets = (store.confirmed() or monitored)[:25]   # bevestigde concurrenten, anders vaste set
+        if not targets:
+            return
+        country = (self.context.settings.get("ke_country", "nl") or "nl").strip()
+        res = self.use_skill("keywords_everywhere", {"kw": targets, "country": country})
+        if not isinstance(res, dict) or "error" in res or "keywords" not in res:
+            self.log.info("📊 marktinteresse overgeslagen: %s",
+                          res.get("error") if isinstance(res, dict) else res)
+            return
+        vols = {k.get("keyword", ""): int(k.get("vol", 0) or 0) for k in res["keywords"]}
+        ranked = sorted(vols.items(), key=lambda kv: -kv[1])
+        self.log.info("📊 marktinteresse concurrenten: %s",
+                      ", ".join(f"{b} {v}/mnd" for b, v in ranked[:8]))
+        self.bus.publish(Event("competitor_interest", {"by": self.id, "volumes": vols}, self.id))
 
     def _is_mission_relevant(self, title: str) -> bool:
         from nooch_village.skills_impl.competitor_news import _MISSION_THEMES
@@ -1455,6 +1476,7 @@ class Noochie(Inhabitant):
         "gsc_pulse_completed",
         "competitor_signal",
         "linkbuilding_target",
+        "competitor_interest",
     )
 
     def __init__(self, *args, **kwargs):

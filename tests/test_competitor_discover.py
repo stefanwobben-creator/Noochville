@@ -125,6 +125,24 @@ def test_scout_gebruikt_gedeelde_competitor_store(tmp_path):
     assert bound() is store and "Cariuma" in bound().confirmed()
 
 
+def test_scout_meet_marktinteresse_van_concurrenten(tmp_path):
+    # consument 1: scout leest confirmed concurrenten en meet hun volume via KE
+    store = CompetitorBrands(str(tmp_path / "b.json"))
+    store.add_candidate("Veja"); store.confirm("Veja")
+    s = SimpleNamespace()
+    s.id = "concurrent_scout"
+    s.dna = SimpleNamespace(skills=["keywords_everywhere"])
+    s.log = logging.getLogger("test.scout")
+    s._events = []
+    s.bus = SimpleNamespace(publish=lambda e: s._events.append(e))
+    s.context = SimpleNamespace(settings={}, competitors=store)
+    s.use_skill = lambda cap, payload: {"keywords": [{"keyword": "Veja", "vol": 18100}]}
+    s._run_market_interest = types.MethodType(ConcurrentScout._run_market_interest, s)
+    s._run_market_interest(["Veja"], store)
+    ev = [e for e in s._events if e.name == "competitor_interest"]
+    assert ev and ev[0].data["volumes"]["Veja"] == 18100
+
+
 def test_scout_discovery_zet_kandidaten_klaar(tmp_path):
     s = SimpleNamespace()
     s.id = "concurrent_scout"

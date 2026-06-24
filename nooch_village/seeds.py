@@ -167,7 +167,7 @@ def seed_records(records: Records) -> None:
                                          "een wekelijks field report schrijven",
                                          "missie-relevante zetten als spanning signaleren"],
                        skills=["competitor_news", "competitor_discover",
-                               "linkbuilding_targets"]),
+                               "linkbuilding_targets", "keywords_everywhere"]),
                    persona="Sven Spruce")
     for r in (root, watcher, librarian, trends, facilitator, scout):
         r.source = "seed"
@@ -262,7 +262,7 @@ def migrate_records(records: Records) -> None:
     scout_rec = records.get("concurrent_scout")
     if scout_rec is not None:
         scout_changed = False
-        for sk in ("competitor_discover", "linkbuilding_targets"):
+        for sk in ("competitor_discover", "linkbuilding_targets", "keywords_everywhere"):
             if sk not in scout_rec.definition.skills:
                 scout_rec.definition.skills.append(sk)
                 scout_rec.version += 1
