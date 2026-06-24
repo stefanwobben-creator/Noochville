@@ -182,6 +182,7 @@ def test_process_page_renders_glassfrog_flow(tmp_path):
     assert "Add Project" in page                  # live rail: uitkomst voor een rol
     assert "Bring to Governance" in page          # live rail: rol een skill geven
     assert "website_watcher" in page              # rol-keuze uit de roster
+    assert '<option value="noochville"' not in page  # cirkel is geen owner/skill-ontvanger
     assert 'value="tok123"' in page               # csrf in de formulieren
 
 

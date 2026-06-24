@@ -326,9 +326,10 @@ def render_process(item: dict, roster: list, csrf_token: str, msg=None) -> str:
         '</form>'
     )
 
+    # Alleen echte rollen als owner/skill-ontvanger; een cirkel delegeert, die doet niks zelf.
     owner_opts = "".join(
         f'<option value="{_e(r["id"])}">{_e(r["id"])}</option>'
-        for r in roster if not r.get("archived"))
+        for r in roster if not r.get("archived") and r.get("type") == "role")
     proj_form = (
         '<form method="post" action="/action" class="pf">'
         + _hidden("add_project", stay)
@@ -455,7 +456,7 @@ def render_project_edit(p: dict, roster: list, csrf_token: str) -> str:
     owner_opts = "".join(
         f'<option value="{_e(r["id"])}"{" selected" if r["id"] == p.get("owner") else ""}>'
         f'{_e(r["id"])}</option>'
-        for r in roster if not r.get("archived"))
+        for r in roster if not r.get("archived") and r.get("type") == "role")
     form = (
         '<form method="post" action="/action" class="pf">'
         f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
