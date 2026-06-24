@@ -146,12 +146,14 @@ def test_server_get_and_post_action(tmp_path):
 def test_process_page_renders_glassfrog_flow(tmp_path):
     snap = cockpit.gather(_seed(tmp_path))
     item = snap["inbox"][0]                       # de pending means_gap
-    page = cockpit.render_process(item, "tok123")
+    page = cockpit.render_process(item, snap["roster"], "tok123")
     assert "Process Tension" in page
     assert "Wat heb je nodig" in page
-    assert "Add Reference" in page                # de live rail
+    assert "Add Reference" in page                # live rail: info vastleggen
+    assert "Add Project" in page                  # live rail: uitkomst voor een rol
+    assert "website_watcher" in page              # owner-keuze uit de roster
     assert 'value="tok123"' in page               # csrf in de formulieren
-    assert "volgende stap" in page                # de nog-niet-live rails als structuur
+    assert "volgende stap" in page                # governance/rol-vragen nog als structuur
 
 
 def test_server_process_get_and_add_reference(tmp_path):
@@ -169,9 +171,11 @@ def test_server_process_get_and_add_reference(tmp_path):
             page = resp.read().decode("utf-8")
         token = re.search(r'name="csrf" value="([^"]+)"', page).group(1)
 
-        # Add Reference via POST → kennis-kaart geschreven + item gesloten
+        # Add Reference via POST → kennis-kaart geschreven, spanning blijft OPEN
+        # (rail sluit niet; next=stay → terug naar de process-pagina)
         body = urllib.parse.urlencode({
             "csrf": token, "iid": "aaa111aaa111", "action": "add_reference",
+            "next": "/process?iid=aaa111aaa111",
             "claim": "Visitor data must be analysed per locale.",
             "grounds": "Different markets behave differently; one aggregate hides the signal.",
         }).encode()
@@ -183,7 +187,16 @@ def test_server_process_get_and_add_reference(tmp_path):
         notes_items = notes.get("notes", notes) if isinstance(notes, dict) else {}
         assert any("locale" in (c.get("claim", "")) for c in notes_items.values())
         inbox = _json.loads((tmp_path / "data" / "human_inbox.json").read_text())
-        assert inbox["aaa111aaa111"]["status"] == "approved"   # spanning gesloten
+        assert inbox["aaa111aaa111"]["status"] == "pending"    # nog OPEN na de rail
+
+        # Daarna bewust sluiten via Done → withdrawn
+        done = urllib.parse.urlencode({
+            "csrf": token, "iid": "aaa111aaa111", "action": "done", "next": "/"}).encode()
+        with urllib.request.urlopen(urllib.request.Request(
+                f"{base}/action", data=done, method="POST"), timeout=5) as resp:
+            assert resp.status == 200
+        inbox = _json.loads((tmp_path / "data" / "human_inbox.json").read_text())
+        assert inbox["aaa111aaa111"]["status"] == "withdrawn"  # nu gesloten
     finally:
         httpd.shutdown()
         httpd.server_close()

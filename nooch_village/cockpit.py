@@ -129,25 +129,29 @@ def _item_actions(i: dict, token: str) -> str:
     return " ".join(parts)
 
 
-def render_process(item: dict, csrf_token: str) -> str:
-    """De GlassFrog 'Process Tension'-flow voor één spanning. Toont de volledige
-    'Wat heb je nodig?'-structuur; de live rails in deze stap zijn Add Reference
-    (info vastleggen) en Niets-nodig/Defer. De overige rails zijn zichtbaar als
-    structuur en volgen in een volgende stap (governance/project/rol-vragen)."""
+def render_process(item: dict, roster: list, csrf_token: str) -> str:
+    """De GlassFrog 'Process Tension'-flow voor één spanning. Live rails: Add Reference
+    (info vastleggen), Add Project (uitkomst voor een rol) en Niets-nodig/Defer. De
+    overige rails (governance, rol-vragen) volgen als structuur."""
     iid = item["id"]
     ctx = item.get("context", {}) or {}
     detail = (ctx.get("description") or ctx.get("reason") or ctx.get("purpose")
               or ctx.get("tension") or "")
     t = csrf_token
 
-    def _hidden(action: str) -> str:
+    # Rails laten de spanning OPEN (één spanning kan meerdere uitkomsten hebben) en
+    # keren terug naar deze pagina; sluiten is de aparte Done/Defer-stap (→ home).
+    stay = f"/process?iid={iid}"
+
+    def _hidden(action: str, next_url: str = "/") -> str:
         return (f'<input type="hidden" name="csrf" value="{_e(t)}">'
                 f'<input type="hidden" name="iid" value="{_e(iid)}">'
-                f'<input type="hidden" name="action" value="{action}">')
+                f'<input type="hidden" name="action" value="{action}">'
+                f'<input type="hidden" name="next" value="{_e(next_url)}">')
 
     ref_form = (
         '<form method="post" action="/action" class="pf">'
-        + _hidden("add_reference")
+        + _hidden("add_reference", stay)
         + '<label>Claim (Engels, één feit):</label>'
         f'<input name="claim" value="{_e(detail[:140])}">'
         + '<label>Grounds (het bewijs of de redenering erachter):</label>'
@@ -156,13 +160,27 @@ def render_process(item: dict, csrf_token: str) -> str:
         '</form>'
     )
 
+    owner_opts = "".join(
+        f'<option value="{_e(r["id"])}">{_e(r["id"])}</option>'
+        for r in roster if not r.get("archived"))
+    proj_form = (
+        '<form method="post" action="/action" class="pf">'
+        + _hidden("add_project", stay)
+        + '<label>Owner (welke rol pakt de uitkomst op):</label>'
+        f'<select name="owner">{owner_opts}</select>'
+        + '<label>Scope / uitkomst:</label>'
+        f'<input name="scope" value="{_e(detail[:140])}">'
+        + '<button class="btn ok" type="submit">Add Project</button>'
+        '</form>'
+    )
+
     done_form = (
         '<form method="post" action="/action" style="display:inline">'
-        + _hidden("done")
-        + '<button class="btn" type="submit">Niets nodig / afgehandeld</button></form>'
+        + _hidden("done", "/")
+        + '<button class="btn" type="submit">Klaar — sluit deze spanning</button></form>'
         ' '
         '<form method="post" action="/action" style="display:inline">'
-        + _hidden("defer")
+        + _hidden("defer", "/")
         + '<button class="btn" type="submit">Defer (later)</button></form>'
     )
 
@@ -194,14 +212,16 @@ def render_process(item: dict, csrf_token: str) -> str:
 </details>
 
 <details><summary>Ik wil zelf iets doen</summary>
-<p>Add Project (uitkomst voor een rol) {soon} · Bring to Governance (rol/skill wijzigen) {soon}</p>
+<p class="muted">Maak er een project van (een uitkomst die een rol nastreeft). Bring to Governance (rol/skill wijzigen) {soon}.</p>
+{proj_form}
 </details>
 
 <details><summary>Ik wil dat iemand anders iets doet</summary>
 <p>Een rol vragen een accountability op te pakken (regel 5) {soon} · Bring to Governance {soon}</p>
 </details>
 
-<details><summary>Niets nodig — al afgehandeld of hoort hier niet</summary>
+<details><summary>Klaar of niets nodig</summary>
+<p class="muted">Eén spanning kan meerdere uitkomsten opleveren. Voeg hierboven toe wat nodig is en sluit 'm hier pas als je klaar bent.</p>
 <p>{done_form}</p>
 </details>
 </body></html>"""
@@ -337,8 +357,12 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         return mark_done(inbox, iid, reason=reason)
     if action == "add_reference":
         notes = NotesStore(os.path.join(dd, "notes.json"))
-        return add_reference(notes, inbox, iid, claim=extra.get("claim", ""),
+        return add_reference(notes, claim=extra.get("claim", ""),
                              grounds=extra.get("grounds", ""))
+    if action == "add_project":
+        projects = ProjectLedger(os.path.join(dd, "projects.json"))
+        return route_to_project(projects, owner=extra.get("owner", ""),
+                                scope=extra.get("scope", ""))
     return {"ok": False, "error": f"onbekende actie '{action}'"}
 
 
@@ -358,7 +382,7 @@ def make_handler(data_dir: str | None):
                     self.end_headers()
                     self.wfile.write(b"Item niet gevonden")
                     return
-                body = render_process(item, csrf_token).encode("utf-8")
+                body = render_process(item, snap["roster"], csrf_token).encode("utf-8")
             elif path in ("/", "/index.html"):
                 body = render_html(gather(data_dir), csrf_token=csrf_token).encode("utf-8")
             else:
@@ -390,11 +414,16 @@ def make_handler(data_dir: str | None):
             iid = (form.get("iid") or [""])[0]
             reason = (form.get("reason") or [""])[0]
             extra = {"claim": (form.get("claim") or [""])[0],
-                     "grounds": (form.get("grounds") or [""])[0]}
+                     "grounds": (form.get("grounds") or [""])[0],
+                     "owner": (form.get("owner") or [""])[0],
+                     "scope": (form.get("scope") or [""])[0]}
             _dispatch_action(data_dir, action, iid, reason, extra=extra)
-            # 303 → de browser doet een verse GET, zo zie je meteen de nieuwe staat.
+            # 303 → verse GET. Rails keren terug naar de spanning (next), sluiten gaat home.
+            nxt = (form.get("next") or ["/"])[0]
+            if not nxt.startswith("/"):
+                nxt = "/"
             self.send_response(303)
-            self.send_header("Location", "/")
+            self.send_header("Location", nxt)
             self.end_headers()
 
         def log_message(self, *_):  # stil

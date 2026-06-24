@@ -7,7 +7,9 @@ import pytest
 
 from nooch_village.human_inbox import HumanInbox
 from nooch_village.notes_store import NotesStore
-from nooch_village.inbox_actions import decide_keyword, defer_item, confirm_item, add_reference
+from nooch_village.projects import ProjectLedger
+from nooch_village.inbox_actions import (
+    decide_keyword, defer_item, confirm_item, add_reference, route_to_project, mark_done)
 
 
 class _StubLibrary:
@@ -85,33 +87,55 @@ def test_confirm_item_met_voorstel(tmp_path):
 
 # ── Add Reference (capture info → kennis-kaart) ───────────────────────────────
 
-def test_add_reference_schrijft_kaart_en_sluit_item(tmp_path):
+def test_add_reference_schrijft_kaart_zonder_te_sluiten(tmp_path):
+    """Een rail produceert een uitkomst maar sluit de spanning niet (multi-uitkomst)."""
     notes = NotesStore(str(tmp_path / "notes.json"))
-    hi = HumanInbox(str(tmp_path / "inbox.json"))
-    iid = hi.add_means_gap("gap_x", "iets om vast te leggen")
-    res = add_reference(notes, hi, iid,
-                        claim="Most vegan sneakers contain plastic.",
+    res = add_reference(notes, claim="Most vegan sneakers contain plastic.",
                         grounds="Material analysis from the nooch.earth article.")
     assert res["ok"]
     card = notes.get(res["card_id"])
     assert card is not None and "plastic" in card.claim
     assert card.grounds                                  # contract: grounds gevuld
-    assert hi.get(iid)["status"] == "approved"           # spanning gesloten
 
 
 def test_add_reference_weigert_zonder_grounds(tmp_path):
     notes = NotesStore(str(tmp_path / "notes.json"))
-    hi = HumanInbox(str(tmp_path / "inbox.json"))
-    res = add_reference(notes, hi, "", claim="Een claim zonder bewijs.", grounds="")
+    res = add_reference(notes, claim="Een claim zonder bewijs.", grounds="")
     assert not res["ok"]
     assert notes.all() == []                             # niks geschreven (fail-closed)
 
 
-def test_add_reference_zonder_inbox_item(tmp_path):
-    """Nieuwe spanning (geen iid) → kaart wordt geschreven, niks te sluiten."""
+# ── Add Project (uitkomst voor een rol) ───────────────────────────────────────
+
+def test_route_to_project_maakt_project_zonder_te_sluiten(tmp_path):
+    projects = ProjectLedger(str(tmp_path / "projects.json"))
+    res = route_to_project(projects, owner="the_source",
+                           scope="Onderzoek KB-datasets als NL-bron")
+    assert res["ok"]
+    proj = projects.get(res["pid"])
+    assert proj["owner"] == "the_source" and "KB-datasets" in proj["scope"]
+
+
+def test_route_to_project_vereist_owner_en_scope(tmp_path):
+    projects = ProjectLedger(str(tmp_path / "projects.json"))
+    res = route_to_project(projects, owner="", scope="iets")
+    assert not res["ok"]
+    assert projects.all() == []
+
+
+def test_een_spanning_meerdere_uitkomsten_dan_sluiten(tmp_path):
+    """De kern-les: één spanning → meerdere uitkomsten, daarna bewust sluiten.
+    Project + reference produceren, spanning blijft pending; mark_done sluit hem."""
+    projects = ProjectLedger(str(tmp_path / "projects.json"))
     notes = NotesStore(str(tmp_path / "notes.json"))
     hi = HumanInbox(str(tmp_path / "inbox.json"))
-    res = add_reference(notes, hi, "", claim="A standalone fact.",
-                        grounds="Reasoning behind it.")
-    assert res["ok"]
-    assert notes.get(res["card_id"]) is not None
+    iid = hi.add_means_gap("nl_corpus", "NL-bron onbruikbaar")
+
+    route_to_project(projects, owner="the_source", scope="Onderzoek KB-datasets")
+    add_reference(notes, claim="The Dutch ngram corpus lacks core mission words.",
+                  grounds="Coverage check found 9 missing strong-signal words.")
+    assert hi.get(iid)["status"] == "pending"            # nog open na twee uitkomsten
+
+    mark_done(hi, iid, reason="project + reference vastgelegd; accountability dekt no-data")
+    assert hi.get(iid)["status"] == "withdrawn"          # nu bewust gesloten
+    assert len(projects.all()) == 1 and len(notes.all()) == 1

@@ -19,12 +19,15 @@ def _slug(text: str) -> str:
     return s[:60] or "ref"
 
 
-def add_reference(notes, inbox, iid: str, claim: str, grounds: str,
+def add_reference(notes, claim: str, grounds: str,
                   *, source: str = "cockpit", tags=None) -> dict:
-    """Capture-info-rail (Add Reference): leg een feit vast als kennis-kaart en sluit
-    de spanning. Loopt via de curator-contract-poort (validate_card + finalize_card) en
-    ingest_insights — Engels/atomair/compleet, geen LLM, geen Village. Als iid een pending
-    inbox-item is, wordt dat gesloten (gerouteerd als reference). Geeft {ok, card_id?}.
+    """Capture-info-rail (Add Reference): leg een feit vast als kennis-kaart. Loopt via
+    de curator-contract-poort (validate_card + finalize_card) en ingest_insights —
+    Engels/atomair/compleet, geen LLM, geen Village.
+
+    Sluit de spanning NIET: één spanning kan meerdere uitkomsten hebben (ook een project,
+    een governance-voorstel, ...). Afsluiten is een aparte, bewuste stap (mark_done).
+    Geeft {ok, card_id?}.
     """
     from nooch_village.curate import validate_card, finalize_card
     from nooch_village.ingest import ingest_insights
@@ -41,14 +44,22 @@ def add_reference(notes, inbox, iid: str, claim: str, grounds: str,
 
     card = finalize_card(raw, source=source, source_date=date.today().isoformat())
     res = ingest_insights(notes, [card])
-
-    if iid and inbox is not None:
-        item = inbox.get(iid)
-        if item and item.get("status") == "pending":
-            inbox.resolve(iid, "approved",
-                          reason=f"vastgelegd als kennis-kaart '{card['id']}'",
-                          extra={"routed": "reference", "card_id": card["id"]})
     return {"ok": True, "card_id": card["id"], "added": res["added"]}
+
+
+def route_to_project(projects, owner: str, scope: str) -> dict:
+    """Add Project-rail: maak een project voor een rol (de uitkomst om na te streven).
+    Puur gevalideerde store-write (ProjectLedger.create), geen Village/LLM. Het project
+    landt in de ledger; een draaiend dorp pakt het op.
+
+    Sluit de spanning NIET (zie add_reference): afsluiten is een aparte stap. Geeft {ok, pid?}.
+    """
+    owner = (owner or "").strip()
+    scope = (scope or "").strip()
+    if not owner or not scope:
+        return {"ok": False, "error": "owner en scope zijn allebei verplicht"}
+    pid = projects.create(owner, scope, "human")
+    return {"ok": True, "pid": pid, "owner": owner}
 
 
 def decide_keyword(inbox, library, iid: str, decision: str,
