@@ -20,7 +20,8 @@ from datetime import datetime
 from nooch_village.util import atomic_write_json
 
 
-_VALID_STATUSES = {"pending", "approved", "rejected", "amended", "deferred", "withdrawn"}
+_VALID_STATUSES = {"pending", "approved", "rejected", "amended", "deferred",
+                   "withdrawn", "resolved"}
 _VALID_TYPES    = {"escalation", "activation", "keyword", "means_gap", "suggestion",
                    "keyword_batch", "verband", "content_suggestion", "content_draft"}
 

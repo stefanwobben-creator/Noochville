@@ -146,15 +146,29 @@ def defer_item(inbox, iid: str, reason: str = "") -> dict:
 
 
 def mark_done(inbox, iid: str, reason: str = "") -> dict:
-    """Nevermind/Done-pad: de spanning vergt geen systeemactie (al afgehandeld, of hoort
-    hier niet thuis). Trekt het item in (withdrawn) — geen domein-actie."""
+    """Nevermind-pad: de spanning vergt geen actie (hoort hier niet thuis, of is elders
+    al opgelost). Trekt het item in (withdrawn). Voor 'wél afgehandeld via uitkomsten':
+    zie resolve_tension."""
     item = inbox.get(iid)
     if item is None:
         return {"ok": False, "error": "item niet gevonden"}
     if item.get("status") != "pending":
         return {"ok": False, "error": f"item is al {item.get('status')}"}
-    inbox.resolve(iid, "withdrawn", reason=reason or "geen actie nodig / afgehandeld")
+    inbox.resolve(iid, "withdrawn", reason=reason or "niets nodig / hoort hier niet")
     return {"ok": True, "status": "withdrawn"}
+
+
+def resolve_tension(inbox, iid: str, reason: str = "") -> dict:
+    """Klaar-pad: de spanning is afgehandeld via de uitkomsten die je produceerde
+    (project, reference, governance, ...). Sluit als 'resolved' — een positieve afronding,
+    niet hetzelfde als withdrawn (niets nodig)."""
+    item = inbox.get(iid)
+    if item is None:
+        return {"ok": False, "error": "item niet gevonden"}
+    if item.get("status") != "pending":
+        return {"ok": False, "error": f"item is al {item.get('status')}"}
+    inbox.resolve(iid, "resolved", reason=reason or "afgehandeld via uitkomsten")
+    return {"ok": True, "status": "resolved"}
 
 
 def confirm_item(inbox, iid: str, by_human: str = "mens") -> dict:

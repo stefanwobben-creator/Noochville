@@ -26,7 +26,7 @@ from nooch_village.projects import ProjectLedger
 from nooch_village.library import Library
 from nooch_village.notes_store import NotesStore
 from nooch_village.inbox_actions import (
-    decide_keyword, defer_item, confirm_item, mark_done, add_reference,
+    decide_keyword, defer_item, confirm_item, mark_done, resolve_tension, add_reference,
     route_to_project, route_to_governance)
 
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -267,8 +267,12 @@ def render_process(item: dict, roster: list, csrf_token: str, msg=None) -> str:
 
     done_form = (
         '<form method="post" action="/action" style="display:inline">'
+        + _hidden("resolve", "/")
+        + '<button class="btn ok" type="submit">Klaar — afgehandeld</button></form>'
+        ' '
+        '<form method="post" action="/action" style="display:inline">'
         + _hidden("done", "/")
-        + '<button class="btn" type="submit">Klaar — sluit deze spanning</button></form>'
+        + '<button class="btn" type="submit">Niets nodig / nevermind</button></form>'
         ' '
         '<form method="post" action="/action" style="display:inline">'
         + _hidden("defer", "/")
@@ -419,7 +423,10 @@ def _flash(result: dict) -> str:
         return f"✓ Project aangemaakt voor {result.get('owner')}"
     if "word" in result:
         return f"✓ '{result['word']}' → {result.get('status')}"
-    return "✓ " + (result.get("status") or "klaar")
+    _labels = {"resolved": "✓ Spanning afgehandeld (resolved)",
+               "withdrawn": "✓ Spanning ingetrokken (niets nodig)",
+               "deferred": "✓ Spanning uitgesteld (defer)"}
+    return _labels.get(result.get("status"), "✓ " + (result.get("status") or "klaar"))
 
 
 def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
@@ -438,6 +445,8 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         return confirm_item(inbox, iid)
     if action == "done":
         return mark_done(inbox, iid, reason=reason)
+    if action == "resolve":
+        return resolve_tension(inbox, iid, reason=reason)
     if action == "add_reference":
         notes = NotesStore(os.path.join(dd, "notes.json"))
         return add_reference(notes, claim=extra.get("claim", ""),

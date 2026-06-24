@@ -12,7 +12,7 @@ from nooch_village.governance import Records
 from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.inbox_actions import (
     decide_keyword, defer_item, confirm_item, add_reference, route_to_project, mark_done,
-    route_to_governance)
+    route_to_governance, resolve_tension)
 
 
 class _StubLibrary:
@@ -172,6 +172,18 @@ def test_een_spanning_meerdere_uitkomsten_dan_sluiten(tmp_path):
                   grounds="Coverage check found 9 missing strong-signal words.")
     assert hi.get(iid)["status"] == "pending"            # nog open na twee uitkomsten
 
-    mark_done(hi, iid, reason="project + reference vastgelegd; accountability dekt no-data")
-    assert hi.get(iid)["status"] == "withdrawn"          # nu bewust gesloten
+    # Afgehandeld via uitkomsten → resolved (niet withdrawn: dat is 'niets nodig')
+    resolve_tension(hi, iid, reason="project + reference vastgelegd")
+    assert hi.get(iid)["status"] == "resolved"
     assert len(projects.all()) == 1 and len(notes.all()) == 1
+
+
+def test_resolve_versus_withdrawn(tmp_path):
+    """Twee verschillende eindstatussen: afgehandeld (resolved) vs niets nodig (withdrawn)."""
+    hi = HumanInbox(str(tmp_path / "inbox.json"))
+    a = hi.add_means_gap("a", "x")
+    b = hi.add_means_gap("b", "y")
+    assert resolve_tension(hi, a)["status"] == "resolved"
+    assert mark_done(hi, b)["status"] == "withdrawn"
+    assert hi.get(a)["status"] == "resolved"
+    assert hi.get(b)["status"] == "withdrawn"

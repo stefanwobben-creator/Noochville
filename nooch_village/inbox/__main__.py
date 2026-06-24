@@ -46,7 +46,8 @@ def _fmt_ts(ts) -> str:
 
 def _status_icon(status: str) -> str:
     return {"pending": "⏳", "approved": "✅", "rejected": "❌",
-            "amended": "✏️ ", "deferred": "⏸️ "}.get(status, "?")
+            "amended": "✏️ ", "deferred": "⏸️ ", "resolved": "✔️ ",
+            "withdrawn": "⟲"}.get(status, "?")
 
 
 def _type_icon(typ: str) -> str:

@@ -189,14 +189,14 @@ def test_server_process_get_and_add_reference(tmp_path):
         inbox = _json.loads((tmp_path / "data" / "human_inbox.json").read_text())
         assert inbox["aaa111aaa111"]["status"] == "pending"    # nog OPEN na de rail
 
-        # Daarna bewust sluiten via Done → withdrawn
+        # Daarna bewust sluiten via "Klaar — afgehandeld" → resolved (niet withdrawn)
         done = urllib.parse.urlencode({
-            "csrf": token, "iid": "aaa111aaa111", "action": "done", "next": "/"}).encode()
+            "csrf": token, "iid": "aaa111aaa111", "action": "resolve", "next": "/"}).encode()
         with urllib.request.urlopen(urllib.request.Request(
                 f"{base}/action", data=done, method="POST"), timeout=5) as resp:
             assert resp.status == 200
         inbox = _json.loads((tmp_path / "data" / "human_inbox.json").read_text())
-        assert inbox["aaa111aaa111"]["status"] == "withdrawn"  # nu gesloten
+        assert inbox["aaa111aaa111"]["status"] == "resolved"   # afgehandeld via uitkomst
     finally:
         httpd.shutdown()
         httpd.server_close()
