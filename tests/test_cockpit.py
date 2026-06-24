@@ -72,6 +72,17 @@ def test_render_contains_key_facts(tmp_path):
     assert "read-only" in page.lower()
 
 
+def test_render_writable_has_action_buttons(tmp_path):
+    snap = cockpit.gather(_seed(tmp_path))
+    page = cockpit.render_html(snap, csrf_token="tok123")
+    assert "verwerk-modus" in page
+    assert "Defer" in page                      # pending means_gap krijgt een defer-knop
+    assert 'value="tok123"' in page             # csrf-token in de formulieren
+    # read-only (geen token) → geen knoppen
+    ro = cockpit.render_html(snap)
+    assert "Defer" not in ro
+
+
 def test_render_escapes_html(tmp_path):
     data = tmp_path / "data"
     data.mkdir()
@@ -87,21 +98,45 @@ def test_render_escapes_html(tmp_path):
     assert "&lt;script&gt;" in page
 
 
-def test_server_get_ok_post_blocked(tmp_path):
+def test_server_get_and_post_action(tmp_path):
+    import re, json as _json
     data_dir = _seed(tmp_path)
     httpd = HTTPServer(("127.0.0.1", 0), cockpit.make_handler(data_dir))
     port = httpd.server_address[1]
+    base = f"http://127.0.0.1:{port}"
     t = threading.Thread(target=httpd.serve_forever, daemon=True)
     t.start()
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as resp:
+        # GET → 200, en haal de CSRF-token uit de pagina
+        with urllib.request.urlopen(f"{base}/", timeout=5) as resp:
             assert resp.status == 200
-            assert b"website_watcher" in resp.read()
-        with pytest.raises(urllib.error.HTTPError) as exc:
-            urllib.request.urlopen(
-                urllib.request.Request(f"http://127.0.0.1:{port}/", data=b"x",
-                                       method="POST"), timeout=5)
-        assert exc.value.code == 405
+            page = resp.read().decode("utf-8")
+        token = re.search(r'name="csrf" value="([^"]+)"', page).group(1)
+
+        # POST naar verkeerd pad → 404
+        with pytest.raises(urllib.error.HTTPError) as e404:
+            urllib.request.urlopen(urllib.request.Request(
+                f"{base}/", data=b"x", method="POST"), timeout=5)
+        assert e404.value.code == 404
+
+        # POST /action zonder geldige token → 403
+        bad = urllib.parse.urlencode({"csrf": "fout", "iid": "aaa111aaa111",
+                                      "action": "defer"}).encode()
+        with pytest.raises(urllib.error.HTTPError) as e403:
+            urllib.request.urlopen(urllib.request.Request(
+                f"{base}/action", data=bad, method="POST"), timeout=5)
+        assert e403.value.code == 403
+
+        # POST /action mét token → defert het item (303 → gevolgd naar GET /)
+        good = urllib.parse.urlencode({"csrf": token, "iid": "aaa111aaa111",
+                                       "action": "defer", "reason": "later"}).encode()
+        with urllib.request.urlopen(urllib.request.Request(
+                f"{base}/action", data=good, method="POST"), timeout=5) as resp:
+            assert resp.status == 200      # urllib volgt de 303 naar GET /
+
+        # Effect: het item staat nu op 'deferred' in de store
+        inbox = _json.loads((tmp_path / "data" / "human_inbox.json").read_text())
+        assert inbox["aaa111aaa111"]["status"] == "deferred"
     finally:
         httpd.shutdown()
         httpd.server_close()
