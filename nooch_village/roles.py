@@ -550,7 +550,7 @@ class ConcurrentScout(Inhabitant):
         targets = (store.confirmed() or monitored)[:25]   # bevestigde concurrenten, anders vaste set
         if not targets:
             return
-        country = (self.context.settings.get("ke_country", "nl") or "nl").strip()
+        country = self.context.settings.get("ke_country", "").strip()   # leeg = global
         res = self.use_skill("keywords_everywhere", {"kw": targets, "country": country})
         if not isinstance(res, dict) or "error" in res or "keywords" not in res:
             self.log.info("📊 marktinteresse overgeslagen: %s",
@@ -641,7 +641,7 @@ class Librarian(Inhabitant):
         return {**demand, "volume": vol, "ke_country": self._ke_country()}
 
     def _ke_country(self) -> str:
-        return (self.context.settings.get("ke_country", "nl") or "nl").strip()
+        return self.context.settings.get("ke_country", "").strip()   # leeg = global
 
     def _on_proposal(self, event: Event) -> None:
         word = event.data.get("word")

@@ -87,6 +87,14 @@ class SerpapiTrendsSkill(Skill):
             pass
         return window
 
+    def _window_with_competitors(self, seeds: list[str], context) -> list[str]:
+        """Bevestigde concurrenten worden ÉLKE run bevraagd (niet in de rotatie begraven);
+        de rest van het zaad rouleert in een venster."""
+        comp = getattr(context, "competitors", None)
+        confirmed = [c for c in (comp.confirmed() if comp is not None else []) if c in seeds]
+        rest = [w for w in seeds if w not in confirmed]
+        return confirmed + self._select_window(rest, context)
+
     def run(self, payload: dict, context) -> dict:
         key = context.settings.get("SERPAPI_API_KEY") or os.getenv("SERPAPI_API_KEY")
         if not key:
@@ -107,7 +115,8 @@ class SerpapiTrendsSkill(Skill):
             if payload.get("keywords"):
                 keywords = payload["keywords"]
             else:
-                keywords = self._select_window(_keywords_for_locale(locale, context), context)
+                keywords = self._window_with_competitors(
+                    _keywords_for_locale(locale, context), context)
 
             for kw in keywords:
                 base = {"engine": "google_trends", "q": kw, "geo": geo,

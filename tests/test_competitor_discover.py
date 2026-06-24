@@ -135,6 +135,17 @@ def test_confirmed_concurrenten_voeden_de_trends_seed(tmp_path):
     assert "Cariuma" in seed
 
 
+def test_confirmed_concurrenten_altijd_in_trends_window(tmp_path):
+    # consument 2: bevestigde concurrenten worden élke Trends-run bevraagd (niet weggerouleerd)
+    from nooch_village.skills_impl.serpapi_trends import SerpapiTrendsSkill
+    store = CompetitorBrands(str(tmp_path / "b.json"))
+    store.add_candidate("Merrell"); store.confirm("Merrell")
+    ctx = SimpleNamespace(data_dir=str(tmp_path), competitors=store,
+                          settings={"serpapi_keywords_per_run": "3"})
+    win = SerpapiTrendsSkill()._window_with_competitors(["a", "b", "c", "d", "Merrell"], ctx)
+    assert "Merrell" in win
+
+
 def test_scout_meet_marktinteresse_van_concurrenten(tmp_path):
     # consument 1: scout leest confirmed concurrenten en meet hun volume via KE
     store = CompetitorBrands(str(tmp_path / "b.json"))
