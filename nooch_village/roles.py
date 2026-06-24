@@ -782,7 +782,14 @@ class HarryHemp(Inhabitant):
         self.react("tijdgeest_pulse", self._run_pulse)   # handmatig triggerable
         # ── grounding-state ───────────────────────────────────────────────────
         self._busy_terms: set[str] = set()
+        # Bundeling: verzamel inkomende termen en grond ze in één LLM-call. Default 1
+        # = direct gronden per term (ongewijzigd gedrag). >1 = bundelen (minder calls).
+        self._batch_size = max(1, int(
+            self.context.settings.get("grounding_batch_size", "1")))
+        self._pending_groundings: list[dict] = []
         self.react("keyword_proposed", self._on_keyword_proposed)
+        # Restbundel legen bij de dagelijkse hartslag, zodat niets blijft hangen.
+        self.react("dag_begint", self._flush_groundings)
         # ── spelregel 5: bied de NL-dekkingscheck aan op verzoek (modus a+b) ──
         self.offer("nl_corpus_coverage", self._on_nl_corpus_request)
 
@@ -1027,22 +1034,46 @@ class HarryHemp(Inhabitant):
         if not word or word in self._busy_terms:
             return
         self._busy_terms.add(word)
-        try:
-            self.log.info("🔬 gronden: '%s' (locale=%s)", word, locale or "?")
-            evidence = self._gather_evidence(word, locale, limit=3)
-            assessment = self._distill(word, locale, evidence, demand)
+        self._pending_groundings.append({"word": word, "locale": locale, "demand": demand})
+        if len(self._pending_groundings) >= self._batch_size:
+            self._flush_groundings()
 
-            self.bus.publish(Event("keyword_evidence", {
-                "word":            word,
-                "locale":          locale,
-                "evidence":        evidence,
-                "assessment":      assessment,
-                "from":            self.id,
-                "original_demand": demand,
-            }, self.id))
-            self.log.info("📚 evidentie gepubliceerd voor '%s': %d bron(nen)", word, len(evidence))
+    def _flush_groundings(self, event: Event | None = None) -> None:
+        """Grond de verzamelde termen. Eén term → het bestaande pad (_distill); meerdere
+        → één gebundelde LLM-call (_distill_batch). Per term wordt keyword_evidence
+        gepubliceerd. Fail-closed: een term zonder oordeel krijgt de fallback-duiding."""
+        if not self._pending_groundings:
+            return
+        batch = self._pending_groundings
+        self._pending_groundings = []
+        try:
+            for it in batch:
+                self.log.info("🔬 gronden: '%s' (locale=%s)", it["word"], it["locale"] or "?")
+                it["evidence"] = self._gather_evidence(it["word"], it["locale"], limit=3)
+
+            if len(batch) == 1:
+                it = batch[0]
+                assessments = {it["word"]:
+                               self._distill(it["word"], it["locale"], it["evidence"], it["demand"])}
+            else:
+                self.log.info("🔬 gebundelde grounding van %d termen in één call", len(batch))
+                assessments = self._distill_batch(batch)
+
+            for it in batch:
+                word = it["word"]
+                self.bus.publish(Event("keyword_evidence", {
+                    "word":            word,
+                    "locale":          it["locale"],
+                    "evidence":        it["evidence"],
+                    "assessment":      assessments.get(word, ""),
+                    "from":            self.id,
+                    "original_demand": it["demand"],
+                }, self.id))
+                self.log.info("📚 evidentie gepubliceerd voor '%s': %d bron(nen)",
+                              word, len(it["evidence"]))
         finally:
-            self._busy_terms.discard(word)
+            for it in batch:
+                self._busy_terms.discard(it["word"])
 
     def _gather_evidence(self, query: str, locale: str = "", limit: int = 3) -> list[dict]:
         """Zoek academisch bewijs voor een zoekstring (een term óf een onderzoeksvraag)
@@ -1111,6 +1142,16 @@ class HarryHemp(Inhabitant):
             }, self.id))
             self.log.info("🌱 waaróm onderzocht voor '%s': %s", trend.word, vraag[:50])
 
+    def _fallback_assessment(self, word: str, locale: str, evidence: list[dict]) -> str:
+        """Deterministische duiding zonder LLM (geen bron, of LLM niet beschikbaar).
+        Gedeeld door _distill (één woord) en _distill_batch (bundel), zodat bundeling
+        nooit een woord verliest: in het ergste geval krijgt elk woord deze samenvatting."""
+        if not evidence:
+            return (f"No academic sources found for '{word}' "
+                    f"(locale={locale or 'unknown'}; v1: OpenAlex + Semantic Scholar).")
+        titels = "; ".join(e.get("title", "?")[:60] for e in evidence[:3])
+        return f"{len(evidence)} source(s) found for '{word}': {titels}."
+
     def _distill(self, word: str, locale: str,
                  evidence: list[dict], demand: dict) -> str:
         """Destilleer gevonden evidentie tot een beknopte relevantie-duiding.
@@ -1119,8 +1160,7 @@ class HarryHemp(Inhabitant):
         auteurs, abstracten of DOI's die niet daadwerkelijk zijn opgehaald.
         """
         if not evidence:
-            return (f"No academic sources found for '{word}' "
-                    f"(locale={locale or 'unknown'}; v1: OpenAlex + Semantic Scholar).")
+            return self._fallback_assessment(word, locale, evidence)
 
         bron_regels: list[str] = []
         for e in evidence[:5]:
@@ -1147,8 +1187,58 @@ class HarryHemp(Inhabitant):
         if llm_out:
             return llm_out.strip()
 
-        titels = "; ".join(e.get("title", "?")[:60] for e in evidence[:3])
-        return f"{len(evidence)} source(s) found for '{word}': {titels}."
+        return self._fallback_assessment(word, locale, evidence)
+
+    def _distill_batch(self, items: list[dict]) -> dict:
+        """Beoordeel meerdere termen in ÉÉN LLM-call (bundeling: minder verzoeken tegen
+        de rate-limit). items: [{"word","locale","evidence"}]. Geeft {word: assessment}.
+
+        Fail-closed: geen of onparseerbare LLM-output → per woord de deterministische
+        fallback, zodat bundeling nooit een woord verliest. Citeert uitsluitend de
+        meegegeven bronnen; output is altijd Engels (kennislaag-werktaal)."""
+        if not items:
+            return {}
+        blokken = []
+        for it in items:
+            ev = it.get("evidence") or []
+            bronnen = "; ".join(
+                f"{e.get('title','?')[:60]} ({e.get('year','?')})" for e in ev[:5]
+            ) or "(no sources)"
+            blokken.append(
+                f'- term "{it["word"]}" (locale: {it.get("locale") or "?"}): {bronnen}')
+
+        from nooch_village.llm import reason as llm_reason
+        from nooch_village.language import instruction
+        prompt = (
+            "Assess each term below for Nooch.earth (sustainable shoes, no plastic, no "
+            "leather). For each term, in at most 2 sentences: its substantive relevance "
+            "and whether the sources support or contradict the mission claim. Use ONLY "
+            "the listed sources; do not invent titles or authors.\n\n"
+            + "\n".join(blokken) +
+            '\n\nReturn ONLY a JSON object mapping each exact term string to its '
+            "assessment string, no prose, no code fences.\n" + instruction()
+        )
+        out = llm_reason(prompt)
+        parsed: dict = {}
+        if out:
+            import json, re
+            cleaned = re.sub(r"```(?:json)?", "", out).strip()
+            s, e = cleaned.find("{"), cleaned.rfind("}")
+            if s != -1 and e != -1 and e > s:
+                try:
+                    data = json.loads(cleaned[s:e + 1])
+                    if isinstance(data, dict):
+                        parsed = {k: str(v).strip() for k, v in data.items()
+                                  if str(v).strip()}
+                except (ValueError, TypeError):
+                    parsed = {}
+
+        result: dict = {}
+        for it in items:
+            w = it["word"]
+            result[w] = parsed.get(w) or self._fallback_assessment(
+                w, it.get("locale", ""), it.get("evidence") or [])
+        return result
 
     # ── reflectie ─────────────────────────────────────────────────────────────
 
