@@ -50,6 +50,49 @@ def main() -> None:
         from nooch_village.demos.analysis import ngram_demo
         ngram_demo()
 
+    elif mode == "ground":
+        # Demo/utility: voer Harry een paar termen en laat ze in ÉÉN gebundelde
+        # LLM-call gronden. Toont de batching-hefboom + de grounds-op-kaartjes live.
+        import time
+        from nooch_village.event_bus import Event
+        from nooch_village.village import Village
+        words = sys.argv[2:]
+        if not words:
+            print("Gebruik: python -m nooch_village.village ground <woord> [woord ...]",
+                  file=sys.stderr)
+            sys.exit(1)
+        v = Village(heartbeat_seconds=86400)
+        seen: list[str] = []
+        v.bus.subscribe("keyword_evidence", lambda e: seen.append(e.data["word"]))
+        v.start()
+        harry = v.reconciler.live.get("harry_hemp")
+        if harry is None:
+            print("HarryHemp niet actief in het dorp.", file=sys.stderr)
+            v.stop(); sys.exit(1)
+        # Forceer bundeling: flush precies wanneer alle termen binnen zijn (één call).
+        harry._batch_size = len(words)
+        print(f"\nHarry grondt {len(words)} term(en) in één gebundelde call: "
+              f"{', '.join(words)}")
+        print("Wacht op OpenAlex/Semantic Scholar + de LLM (kan ~30-90s)…\n")
+        for w in words:
+            v.bus.publish(Event("keyword_proposed",
+                                {"word": w, "demand": {"locale": "en"}}, "the_source"))
+        deadline = time.time() + 180
+        while time.time() < deadline and len(set(seen)) < len(words):
+            time.sleep(0.3)
+        time.sleep(2.0)   # geef de Librarian even om de kaarten te schrijven
+        v.stop()
+        notes = v.context.notes
+        print("\n── grounding-kaartjes (claim + grounds) ──")
+        for w in words:
+            card = next((n for n in notes.all() if n.word == w), None)
+            if card:
+                print(f"  ✔ {w}  (id={card.id}, grounding_count={card.grounding_count})")
+                print(f"      claim:   {card.claim[:90]}")
+                print(f"      grounds: {(card.grounds or '(leeg!)')[:90]}")
+            else:
+                print(f"  ✗ {w}: geen kaartje geschreven (LLM weg of niets gevonden)")
+
     elif mode == "harry_run":
         # Eenmalige opdracht aan Harry op eigen termen: ngram-richting + lange-boog-verbanden
         # (co-beweging/substitutie) + gekalibreerde OpenAlex-voortzetting voorbij de cutoff.
@@ -317,6 +360,6 @@ def main() -> None:
               "content_strategist | grant_serpapi_trends | grant_skill | revoke_skill | "
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "
               "measure_propose | rereview | ingest | notes_remove | recurate | "
-              "harry_run | roster",
+              "ground | harry_run | roster",
               file=sys.stderr)
         sys.exit(1)
