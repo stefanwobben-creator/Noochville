@@ -23,7 +23,8 @@ from nooch_village.util import atomic_write_json
 _VALID_STATUSES = {"pending", "approved", "rejected", "amended", "deferred",
                    "withdrawn", "resolved"}
 _VALID_TYPES    = {"escalation", "activation", "keyword", "means_gap", "suggestion",
-                   "keyword_batch", "verband", "content_suggestion", "content_draft"}
+                   "keyword_batch", "verband", "content_suggestion", "content_draft",
+                   "voorstel"}
 
 
 def _escalation_signature(proposal_dict: dict) -> tuple:
@@ -194,6 +195,29 @@ class HumanInbox:
             "subject":    gap_key,
             "context":    {"gap_key": gap_key, "description": description,
                            "role_id": role_id, "sensed_by": sensed_by},
+            "status":     "pending",
+            "created_at": time.time(),
+            "resolved_at": None,
+            "resolution":  None,
+        }
+        self._save()
+        return iid
+
+    def add_voorstel(self, gap_key: str, voorstel: str, *, by: str = "noochie",
+                     origin: str = "") -> str:
+        """Voeg een door een rol (Noochie) uitgewerkt voorstel toe voor de mens om te
+        beoordelen. Dedup op gap_key (subject) ongeacht status: per spanning één voorstel
+        open. Retourneert het item-id."""
+        for item in self._items.values():
+            if (item["type"] == "voorstel" and item.get("subject") == gap_key
+                    and item["status"] == "pending"):
+                return item["id"]
+        iid = uuid.uuid4().hex[:12]
+        self._items[iid] = {
+            "id":      iid,
+            "type":    "voorstel",
+            "subject": gap_key,
+            "context": {"gap_key": gap_key, "voorstel": voorstel, "by": by, "origin": origin},
             "status":     "pending",
             "created_at": time.time(),
             "resolved_at": None,

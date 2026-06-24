@@ -215,7 +215,7 @@ _TYPE_LABELS = {
     "escalation": "Governance-voorstel", "suggestion": "Suggestie",
     "activation": "Rol-activatie", "verband": "Verband",
     "content_suggestion": "Content-kans", "content_draft": "Content-draft",
-    "keyword_batch": "Keyword-batch",
+    "keyword_batch": "Keyword-batch", "voorstel": "Voorstel van Noochie",
 }
 
 
@@ -229,6 +229,8 @@ def _item_title(i: dict) -> str:
     t = i.get("type")
     if t in ("means_gap", "suggestion"):
         return ctx.get("description") or i.get("subject")
+    if t == "voorstel":
+        return ctx.get("voorstel") or i.get("subject")
     if t == "keyword":
         return ctx.get("word") or i.get("subject")
     if t == "escalation":
@@ -284,6 +286,10 @@ def _tension_meta(item: dict) -> str:
         row("Rationale", ctx.get("rationale"))
         if ctx.get("gate"):
             row("Gate", f'{ctx.get("gate")} — {ctx.get("gate_reason", "")}')
+    elif t == "voorstel":
+        row("Uitgewerkt door", ctx.get("by") or "noochie")
+        row("Over spanning", ctx.get("origin"))
+        row("Voorstel", ctx.get("voorstel"))
     elif t == "keyword":
         d = ctx.get("demand", {}) or {}
         row("Woord", ctx.get("word"))
@@ -390,7 +396,10 @@ def render_process(item: dict, roster: list, csrf_token: str, msg=None) -> str:
 </details>
 
 <details><summary>Ik wil dat iemand anders iets doet</summary>
-<p>Een rol vragen een accountability op te pakken (regel 5) {soon} · Bring to Governance {soon}</p>
+<p class="muted">Laat Noochie (de brug naar The Source, met LLM) deze spanning uitwerken tot
+een concreet voorstel dat jij daarna beoordeelt. Een rol vragen via regel 5 {soon}.</p>
+<form method="post" action="/action" style="display:inline">{_hidden("delegate_noochie", stay)}
+<button class="btn ok" type="submit">Laat Noochie dit uitwerken</button></form>
 </details>
 
 <details><summary>Klaar of niets nodig</summary>
@@ -617,6 +626,8 @@ def _flash(result: dict) -> str:
         return f"✓ Project-status → {result['proj_status']}"
     if "proj_edit" in result:
         return "✓ Project bijgewerkt"
+    if "delegated" in result:
+        return "✓ Noochie heeft een voorstel ingebracht — zie je inbox"
     if result.get("status") == "adopted":
         return f"✓ Skill '{result.get('skill')}' toegekend aan {result.get('role_id')}"
     if "removed" in result:
@@ -658,6 +669,23 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
     if action == "note_remove":
         notes = NotesStore(os.path.join(dd, "notes.json"))
         return remove_note(notes, iid)
+    if action == "delegate_noochie":
+        # Noochie werkt de spanning uit tot een concreet voorstel (LLM) en zet dat als
+        # 'voorstel'-item in de inbox; de mens beoordeelt het daarna.
+        from nooch_village.skills_impl.voorstel import VoorstelSchrijvenSkill
+        item = inbox.get(iid)
+        if item is None:
+            return {"ok": False, "error": "spanning niet gevonden"}
+        c = item.get("context", {}) or {}
+        tension = (c.get("description") or c.get("tension") or c.get("reason")
+                   or item.get("subject"))
+        role = c.get("role_id") or c.get("sensed_by") or ""
+        res = VoorstelSchrijvenSkill().run({"tension": tension, "role": role})
+        if not res.get("ok"):
+            return res
+        inbox.add_voorstel(item.get("subject"), res["voorstel"], by="noochie",
+                           origin=item.get("subject"))
+        return {"ok": True, "delegated": True}
     if action == "add_project":
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
         return route_to_project(projects, owner=extra.get("owner", ""),

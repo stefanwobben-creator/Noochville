@@ -342,6 +342,40 @@ def test_projectledger_edit(tmp_path):
     assert pl.edit(pid, scope="x") is False            # done vergrendeld
 
 
+def test_server_delegate_noochie_creates_voorstel(tmp_path):
+    import re, json as _json
+    from unittest.mock import patch
+    data_dir = _seed(tmp_path)
+    # voeg een means_gap toe om te delegeren
+    from nooch_village.human_inbox import HumanInbox
+    hi = HumanInbox(str(tmp_path / "data" / "human_inbox.json"))
+    gid = hi.add_means_gap("nl_gap", "NL-corpus onbruikbaar", role_id="harry_hemp")
+
+    httpd = HTTPServer(("127.0.0.1", 0), cockpit.make_handler(data_dir))
+    port = httpd.server_address[1]
+    base = f"http://127.0.0.1:{port}"
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    out = "SCOPE: Onderzoek Delpher.\nAANPAK: API-check.\nAFWEGING: bij NL-prioriteit."
+    try:
+        with patch("nooch_village.llm.reason", return_value=out):
+            with urllib.request.urlopen(f"{base}/process?iid={gid}", timeout=5) as resp:
+                page = resp.read().decode("utf-8")
+            assert "Laat Noochie dit uitwerken" in page
+            token = re.search(r'name="csrf" value="([^"]+)"', page).group(1)
+            body = urllib.parse.urlencode({
+                "csrf": token, "iid": gid, "action": "delegate_noochie",
+                "next": f"/process?iid={gid}"}).encode()
+            with urllib.request.urlopen(urllib.request.Request(
+                    f"{base}/action", data=body, method="POST"), timeout=5) as resp:
+                assert resp.status == 200
+        inbox = _json.loads((tmp_path / "data" / "human_inbox.json").read_text())
+        voorstellen = [i for i in inbox.values() if i["type"] == "voorstel"]
+        assert len(voorstellen) == 1 and "Delpher" in voorstellen[0]["context"]["voorstel"]
+    finally:
+        httpd.shutdown(); httpd.server_close(); t.join(timeout=5)
+
+
 def test_server_card_detail_and_remove(tmp_path):
     import re, json as _json
     data = tmp_path / "data"
