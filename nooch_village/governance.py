@@ -125,12 +125,23 @@ class Gate:
         if c.kind == ChangeKind.ADD_ROLE and not (c.role_id and c.purpose):
             return False, "add_role vereist role_id en purpose"
         if c.kind == ChangeKind.ADD_ROLE:
-            combined = (p.trigger_example + " " + p.rationale).lower()
-            if not any(kw in combined for kw in _REPETITION_KW):
+            # Herhalingsbewijs moet in de TRIGGER staan (de waargenomen feiten uit
+            # het logboek), niet in de rationale. De rationale is de zelfgeschreven
+            # argumentatie van de proposer; die als bewijs accepteren maakte de poort
+            # tandeloos (de C-weg vulde 'm met "structureel terugkerend").
+            trigger = p.trigger_example.lower()
+            if not any(kw in trigger for kw in _REPETITION_KW):
                 return False, (
-                    "add_role vereist herhalingsbewijs in trigger_example én rationale "
+                    "add_role vereist herhalingsbewijs in trigger_example "
                     "(bijv. 'meermaals', 'terugkerend', 'structureel', 'wekelijks'); "
                     "één incident is onvoldoende grond voor een nieuwe rol"
+                )
+            # Weiger mechanische term-smurrie als purpose ("Beheert en bewaakt X, Y").
+            # Een rol-purpose hoort een betekenisvolle functie te beschrijven.
+            if c.purpose.strip().lower().startswith("beheert en bewaakt "):
+                return False, (
+                    "add_role-purpose is een mechanische term-opsomming "
+                    f"('{c.purpose[:50]}…'); beschrijf een echte functie, geen woordcluster"
                 )
         if c.kind in (ChangeKind.ADD_POLICY, ChangeKind.AMEND_POLICY,
                       ChangeKind.REMOVE_POLICY) and not c.policy_id:

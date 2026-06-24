@@ -96,9 +96,14 @@ class Inhabitant(threading.Thread):
             "from":           self.id,
         }, self.id))
 
-    def sense_tension(self, description: str, kind: str = "operational") -> None:
-        """Sens een spanning: logt naar het audittrail én triageert voor dispatch."""
-        tension = Tension(sensed_by=self.id, description=description, kind=kind)
+    def sense_tension(self, description: str, kind: str = "operational",
+                      evidence: dict | None = None) -> None:
+        """Sens een spanning: logt naar het audittrail én triageert voor dispatch.
+
+        evidence: optioneel verifieerbaar herhalingsbewijs uit het logboek
+        (observaties/first_seen), zodat de poort echte feiten leest, geen woord."""
+        tension = Tension(sensed_by=self.id, description=description, kind=kind,
+                          evidence=evidence)
         self.bus.publish(Event("tension_sensed",
             {"by": self.id, "description": description, "kind": kind}, self.id))
         self.triage(tension)
@@ -151,6 +156,22 @@ class Inhabitant(threading.Thread):
         _ACC   = "accountability:"
         is_reflection = _ACC in desc_l
 
+        # Eerlijke trigger: stempel het echte logboek-bewijs (observaties + sinds)
+        # i.p.v. een zelfgeschreven woord. De poort (G0) leest dit. Zonder bewijs
+        # (≥2 observaties) blijft de trigger neutraal en wijst G0 een add_role af —
+        # precies wat we willen voor een eenmalig gat.
+        ev  = tension.evidence or {}
+        obs = ev.get("observations", 0)
+        def _trigger(body: str) -> str:
+            if obs >= 2:
+                since = ""
+                if ev.get("first_seen"):
+                    import datetime
+                    since = " sinds " + datetime.date.fromtimestamp(
+                        ev["first_seen"]).isoformat()
+                return f"{self.id}: gat meermaals waargenomen ({obs}x{since}); {body[:50]}"
+            return f"{self.id}:{body[:80]}"
+
         if "policy" in desc_l and not is_reflection:
             pid = re.sub(r"\W+", "_", desc_l[:25]).strip("_")
             change = GovernanceChange(kind=ChangeKind.ADD_POLICY,
@@ -187,21 +208,23 @@ class Inhabitant(threading.Thread):
                     "📌 spanning B → means-gap voor '%s': %s — %s",
                     matched_role, desc[:60], reason)
                 return
-            # C: geen dekkende rol → trechter → geboorte
+            # C: geen dekkende rol → trechter → geboorte.
+            # Purpose = de echte gat-beschrijving (een betekenisvolle zin), nooit
+            # een mechanische term-smurrie ("Beheert en bewaakt X, Y, Z").
             gap       = gap_signature(desc)
             r_id      = (_role_id_from_gap(gap) if gap
                          else re.sub(r"\W+", "_", desc[:20]).strip("_"))
-            r_purpose = _purpose_from_gap(gap) if gap else desc[:100]
+            r_purpose = desc[:100]
             change    = GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id=r_id,
                                          purpose=r_purpose, new_role_parent="noochville")
             proposal  = Proposal(
                 proposer_role=self.id,
                 change=change,
                 tension=desc[:200],
-                trigger_example=f"{self.id}:{desc[:80]}",
+                trigger_example=_trigger(desc),
                 rationale=(
-                    "Structureel terugkerend gat: geen bestaande rol dekt deze "
-                    "accountability voldoende (classify_gap uitkomst C)."
+                    "Geen bestaande rol dekt deze accountability (classify_gap "
+                    "uitkomst C). Het herhalingsbewijs staat in de trigger."
                 ),
             )
             if not self._funnel_c_proposal(desc, r_id, recs_list):
@@ -231,7 +254,7 @@ class Inhabitant(threading.Thread):
             proposer_role=self.id,
             change=change,
             tension=desc[:200],
-            trigger_example=f"{self.id}:{desc[:80]}",
+            trigger_example=_trigger(desc),
             rationale=rationale,
         )
         self.bus.publish(Event("proposal_raised",
@@ -497,7 +520,13 @@ class Inhabitant(threading.Thread):
         atomic_write_json(path, state)
 
         if emit:
-            self.sense_tension(description, kind=kind)
+            # Stempel het echte logboek-bewijs mee: de poort leest dit, niet de
+            # zelfgeschreven rationale. count is hier al ≥ min_count (twee slagen).
+            self.sense_tension(description, kind=kind, evidence={
+                "observations": gap["count"],
+                "first_seen": gap.get("first_seen"),
+                "gap_key": gap_key,
+            })
             self.log.info("🔍 gat '%s' → spanning gesensed (observaties: %d)", gap_key, gap["count"])
             return True
         self.log.info("🔍 gat '%s' geregistreerd (%d/%d — nog geen spanning)",

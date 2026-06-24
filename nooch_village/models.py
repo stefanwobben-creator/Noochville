@@ -58,6 +58,10 @@ class Tension:
     description: str
     kind: str = "operational"                          # of "governance"
     at: float = field(default_factory=time.time)
+    # Verifieerbaar herhalingsbewijs uit het logboek (reflect_<rol>.json):
+    # {"observations": int, "first_seen": float, "gap_key": str}. Gevuld door
+    # _sense_gap bij emit; de poort (G0) leest dit i.p.v. een zelfgeschreven woord.
+    evidence: Optional[dict] = None
 
 
 # ── Governance-voorstel ────────────────────────────────────────────────────────
