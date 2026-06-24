@@ -25,6 +25,22 @@ _VALID_TYPES    = {"escalation", "activation", "keyword", "means_gap", "suggesti
                    "keyword_batch", "verband", "content_suggestion", "content_draft"}
 
 
+def _escalation_signature(proposal_dict: dict) -> tuple:
+    """Inhoud-vingerafdruk van een voorstel: wie + welke wijziging. Twee semantisch
+    identieke voorstellen krijgen dezelfde afdruk, ook al verschilt hun toevallige id.
+    Basis voor dedup zodat één voorstel één openstaande beslissing is."""
+    ch = proposal_dict.get("change", {}) if proposal_dict else {}
+    return (
+        proposal_dict.get("proposer_role") if proposal_dict else None,
+        ch.get("kind"),
+        ch.get("role_id"),
+        ch.get("purpose"),
+        tuple(sorted(ch.get("add_accountabilities") or [])),
+        tuple(sorted(ch.get("add_domains") or [])),
+        tuple(sorted(ch.get("add_skills") or [])),
+    )
+
+
 class HumanInbox:
     """Persistente wachtrij voor menselijke beslissingen."""
 
@@ -54,10 +70,18 @@ class HumanInbox:
         Retourneert het item-id.
         """
         pid = proposal_dict.get("id", "?")
+        sig = _escalation_signature(proposal_dict)
         for item in self._items.values():
-            if (item["type"] == "escalation"
-                    and item.get("context", {}).get("proposal_id") == pid):
-                return item["id"]   # al aanwezig
+            if item["type"] != "escalation":
+                continue
+            ctx = item.get("context", {})
+            if ctx.get("proposal_id") == pid:
+                return item["id"]   # exact hetzelfde voorstel-id
+            # Inhoud-dedup: een identiek voorstel dat al OPENSTAAT levert geen tweede
+            # beslissing op (de storm was zes kopieën van twee voorstellen).
+            if (item["status"] == "pending"
+                    and _escalation_signature(ctx.get("proposal", {})) == sig):
+                return item["id"]
 
         iid = uuid.uuid4().hex[:12]
         change = proposal_dict.get("change", {})
