@@ -56,6 +56,7 @@ from nooch_village.seeds import (
     seed_lexicon, seed_records, migrate_records,
 )
 from nooch_village.notes_store import NotesStore
+from nooch_village.competitor_brands import CompetitorBrands
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -91,6 +92,10 @@ class Village:
         self.context.lexicon = Lexicon(os.path.join(self.context.data_dir, "lexicon.json"))
         seed_lexicon(self.context.lexicon)
         self.context.notes = NotesStore(os.path.join(self.context.data_dir, "notes.json"))
+        # Gedeelde concurrent-store: confirmed merken die de scout heeft laten bevestigen
+        # zijn nu leesbaar voor élke rol (voor KE/SerpAPI-analyses).
+        self.context.competitors = CompetitorBrands(
+            os.path.join(self.context.data_dir, "competitor_brands.json"))
         self.context.observations = ObservationStore(
             os.path.join(self.context.data_dir, "observations.jsonl"))
         self.context.monitoring = MonitoringStore(

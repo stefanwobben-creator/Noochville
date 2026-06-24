@@ -459,6 +459,9 @@ class ConcurrentScout(Inhabitant):
             self._busy = False
 
     def _brands_store(self):
+        store = getattr(self.context, "competitors", None)
+        if store is not None:
+            return store                                 # gedeelde store (village-breed)
         from nooch_village.competitor_brands import CompetitorBrands
         return CompetitorBrands(os.path.join(self.context.data_dir, "competitor_brands.json"))
 

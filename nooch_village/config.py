@@ -9,6 +9,8 @@ class Context:
     settings: dict
     data_dir: str
     library: object = None
+    competitors: object = None  # gedeelde CompetitorBrands-store: confirmed concurrenten,
+                                # leesbaar voor élke rol (KE/SerpAPI-analyses)
     records: object = None   # read-only verwijzing naar Records, voor Facilitator/Gate
     strategy: dict = field(default_factory=dict)  # geladen uit config/strategy.json
     copy_rules: str = ""  # geladen uit config/copy_rules.md — de basis voor alle copy

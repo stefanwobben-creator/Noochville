@@ -115,6 +115,16 @@ def test_render_read_only_zonder_knoppen():
 
 # ── scout-discovery-stap ────────────────────────────────────────────────────────
 
+def test_scout_gebruikt_gedeelde_competitor_store(tmp_path):
+    # 'aanbieden in de village': de scout leest de gedeelde context.competitors-store,
+    # zodat confirmed concurrenten voor élke rol beschikbaar zijn.
+    store = CompetitorBrands(str(tmp_path / "b.json"))
+    store.add_candidate("Cariuma"); store.confirm("Cariuma")
+    s = SimpleNamespace(context=SimpleNamespace(competitors=store, data_dir=str(tmp_path)))
+    bound = types.MethodType(ConcurrentScout._brands_store, s)
+    assert bound() is store and "Cariuma" in bound().confirmed()
+
+
 def test_scout_discovery_zet_kandidaten_klaar(tmp_path):
     s = SimpleNamespace()
     s.id = "concurrent_scout"
