@@ -248,6 +248,20 @@ def main() -> None:
         print(f"\nMax {total} credits als je ALLE batches goedkeurt (per batch los te keuren).")
         print("Bekijk + keur goed:  python -m nooch_village.inbox")
 
+    elif mode == "notes_remove":
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.notes_store import NotesStore
+        from nooch_village.village import BASE_DIR
+        if len(sys.argv) < 3:
+            print("Gebruik: python -m nooch_village.village notes_remove <id> [id ...]",
+                  file=sys.stderr)
+            sys.exit(1)
+        ctx = load_context(BASE_DIR)
+        notes = NotesStore(os.path.join(ctx.data_dir, "notes.json"))
+        for nid in sys.argv[2:]:
+            print(("  − verwijderd: " if notes.remove(nid) else "  = niet gevonden: ") + nid)
+
     elif mode == "ingest":
         import json, os
         from nooch_village.config import load_context
@@ -281,6 +295,6 @@ def main() -> None:
               "purge | intent | triage | ngram | reflect | simulate | harry_hemp | "
               "content_strategist | grant_serpapi_trends | grant_skill | revoke_skill | "
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "
-              "measure_propose | rereview | ingest | harry_run | roster",
+              "measure_propose | rereview | ingest | notes_remove | harry_run | roster",
               file=sys.stderr)
         sys.exit(1)

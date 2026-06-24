@@ -33,6 +33,20 @@ class NotesStore:
         data = self._notes.get(note_id)
         return Insight(**data) if data else None
 
+    def remove(self, note_id: str) -> bool:
+        """Verwijder een kaartje (curatie/correctie). Ruimt ook inkomende touwtjes op zodat
+        er geen verwijzingen naar een verdwenen kaartje achterblijven. False als het niet
+        bestond."""
+        if note_id not in self._notes:
+            return False
+        del self._notes[note_id]
+        for d in self._notes.values():
+            lt = d.get("links_to") or []
+            if note_id in lt:
+                d["links_to"] = [x for x in lt if x != note_id]
+        self._save()
+        return True
+
     def all(self) -> list[Insight]:
         return [Insight(**d) for d in self._notes.values()]
 
