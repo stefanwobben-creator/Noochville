@@ -104,6 +104,18 @@ class ProjectLedger:
         self._save()
         return True
 
+    def to_future(self, pid: str) -> bool:
+        """Park een project als 'future' (later oppakken als er ruimte is). Niet-terminaal:
+        het kan later weer naar running/blocked. Done-projecten blijven done."""
+        p = self._projects.get(pid)
+        if p is None or p["status"] in _TERMINAL:
+            return False
+        p["status"] = "future"
+        p["blocked_on"] = None
+        self._touch(p)
+        self._save()
+        return True
+
     # ── lezen ──────────────────────────────────────────────────────────────────
 
     def get(self, pid: str) -> dict | None:

@@ -312,15 +312,36 @@ def render_process(item: dict, roster: list, csrf_token: str, msg=None) -> str:
     return _page(f"Process Tension — {item.get('subject')}", inner)
 
 
-def render_html(snap: dict, csrf_token: str | None = None, msg=None) -> str:
+def _proj_actions(p: dict, token: str) -> str:
+    """Statusknoppen per project: actief / waiting / toekomst / done. Done is terminal
+    (verdwijnt uit de actieve weergave). Alleen niet-terminale projecten krijgen knoppen."""
+    if p.get("status") == "done":
+        return '<span class="muted">—</span>'
+    pid = p.get("id")
+    return " ".join([
+        _btn(pid, "proj_active", "Actief", token, "ok"),
+        _btn(pid, "proj_waiting", "Waiting", token),
+        _btn(pid, "proj_future", "Toekomst", token),
+        _btn(pid, "proj_done", "Done", token),
+    ])
+
+
+def render_html(snap: dict, csrf_token: str | None = None, msg=None,
+                show_all: bool = False) -> str:
     roster = snap["roster"]
     inbox = snap["inbox"]
     projects = snap["projects"]
     writable = csrf_token is not None
 
-    # Roster
+    # Opschonen: standaard alleen actieve dingen. Grijs (gearchiveerd/gesloten/done)
+    # verbergen; via 'toon geschiedenis' weer zichtbaar.
+    show_roster = roster if show_all else [r for r in roster if not r["archived"]]
+    show_inbox = inbox if show_all else [i for i in inbox if i.get("status") == "pending"]
+    show_proj = projects if show_all else [p for p in projects if p.get("status") != "done"]
+
+    # Roster (ingeklapt)
     rrows = []
-    for r in roster:
+    for r in show_roster:
         cls = "archived" if r["archived"] else ""
         rrows.append(
             f'<tr class="{cls}">'
@@ -329,19 +350,18 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None) -> str:
             f'<td>{_e(_SOURCE_MARK.get(r["source"], r["source"]))}</td>'
             f'<td>{_e(r["purpose"])}</td>'
             f'<td>{_chips(r["accountabilities"])}</td>'
-            f'<td>{_chips(r["domains"])}</td>'
             f'<td>{_chips(r["skills"])}</td>'
             f"</tr>"
         )
     roster_tbl = (
         '<table><thead><tr><th>rol</th><th>type</th><th>source</th><th>purpose</th>'
-        '<th>accountabilities</th><th>domeinen</th><th>skills</th></tr></thead>'
-        f'<tbody>{"".join(rrows) or "<tr><td colspan=7 class=muted>geen records</td></tr>"}</tbody></table>'
+        '<th>accountabilities</th><th>skills</th></tr></thead>'
+        f'<tbody>{"".join(rrows) or "<tr><td colspan=6 class=muted>geen records</td></tr>"}</tbody></table>'
     )
 
-    # Inbox
+    # Inbox (alleen actief tenzij geschiedenis)
     irows = []
-    for i in inbox:
+    for i in show_inbox:
         ctx = i.get("context", {}) or {}
         detail = ctx.get("description") or ctx.get("purpose") or ctx.get("tension") \
             or ctx.get("reason") or ""
@@ -352,56 +372,54 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None) -> str:
             f'<td><b>{_e(i.get("subject"))}</b></td>'
             f'<td>{_e(i.get("status"))}</td>'
             f'<td>{_e(detail)}</td>'
-            f'<td class="muted">{_e(_ts(i.get("created_at")))}</td>'
             f'<td>{actions}</td>'
             f"</tr>"
         )
     inbox_tbl = (
         '<table><thead><tr><th>type</th><th>subject</th><th>status</th>'
-        '<th>detail</th><th>aangemaakt</th><th>acties</th></tr></thead>'
-        f'<tbody>{"".join(irows) or "<tr><td colspan=6 class=muted>inbox leeg</td></tr>"}</tbody></table>'
+        '<th>detail</th><th>acties</th></tr></thead>'
+        f'<tbody>{"".join(irows) or "<tr><td colspan=5 class=muted>geen open items 🎉</td></tr>"}</tbody></table>'
     )
 
-    # Projecten
+    # Projecten (met statusknoppen)
     prows = []
-    for p in projects:
+    for p in show_proj:
+        pacts = _proj_actions(p, csrf_token) if writable else '<span class="muted">—</span>'
         prows.append(
             f'<tr class="st-{_e(p.get("status"))}">'
             f'<td><b>{_e(p.get("owner"))}</b></td>'
             f'<td>{_e(p.get("scope"))}</td>'
-            f'<td>{_e(p.get("trigger"))}</td>'
             f'<td>{_e(p.get("status"))}</td>'
             f'<td>{_e(p.get("blocked_on") or "—")}</td>'
-            f'<td class="muted">{_e(_ts(p.get("updated_at")))}</td>'
+            f'<td>{pacts}</td>'
             f"</tr>"
         )
     proj_tbl = (
-        '<table><thead><tr><th>owner</th><th>scope</th><th>trigger</th>'
-        '<th>status</th><th>blocked_on</th><th>bijgewerkt</th></tr></thead>'
-        f'<tbody>{"".join(prows) or "<tr><td colspan=6 class=muted>geen projecten</td></tr>"}</tbody></table>'
+        '<table><thead><tr><th>owner</th><th>scope</th><th>status</th>'
+        '<th>wacht op</th><th>acties</th></tr></thead>'
+        f'<tbody>{"".join(prows) or "<tr><td colspan=5 class=muted>geen open projecten</td></tr>"}</tbody></table>'
     )
 
     counts = (
-        f'{len(roster)} rollen · {sum(1 for i in inbox if i.get("status") == "pending")} '
-        f'open inbox-items · {sum(1 for p in projects if p.get("status") != "done")} open projecten'
+        f'{sum(1 for r in roster if not r["archived"])} rollen · '
+        f'{sum(1 for i in inbox if i.get("status") == "pending")} open inbox-items · '
+        f'{sum(1 for p in projects if p.get("status") not in ("done",))} open projecten'
     )
 
     if writable:
         badge = '<span class="badge rw">verwerk-modus</span>'
-        note = ("Beslissingen lopen via het gevalideerde inbox-pad (zelfde als de CLI), "
-                "altijd door de gate. Lokaal oppervlak, CSRF-beveiligd.")
     else:
         badge = '<span class="badge ro">read-only</span>'
-        note = ("Read-only zicht. Muteren loopt via de CLI/inbox en altijd door de gate. "
-                "Ververs met F5.")
+    hist = ('<a href="/">← verberg geschiedenis</a>' if show_all
+            else '<a href="/?history=1">toon geschiedenis (gesloten + gearchiveerd)</a>')
 
     inner = (
         f'<h1>NoochVille cockpit {badge}</h1>'
-        f'<div class="bar">{_e(counts)} · gegenereerd {_e(_ts(snap.get("generated_at")))}<br>{note}</div>'
+        f'<div class="bar">{_e(counts)} · gegenereerd {_e(_ts(snap.get("generated_at")))} · {hist}</div>'
         f'{_banner(msg)}'
-        f'<h2>Roster</h2>{roster_tbl}'
         f'<h2>Inbox</h2>{inbox_tbl}'
         f'<h2>Proces (projecten)</h2>{proj_tbl}'
+        f'<details><summary>Roster ({sum(1 for r in roster if not r["archived"])} actieve rollen)</summary>{roster_tbl}</details>'
     )
     return _page("NoochVille cockpit", inner)
 
@@ -415,6 +433,8 @@ def _flash(result: dict) -> str:
         if st in ("escalated", "invalid"):
             return f"✗ Governance {st}: {result.get('reason', '')}"
         return "✗ " + (result.get("error") or result.get("reason") or "actie mislukt")
+    if "proj_status" in result:
+        return f"✓ Project-status → {result['proj_status']}"
     if result.get("status") == "adopted":
         return f"✓ Skill '{result.get('skill')}' toegekend aan {result.get('role_id')}"
     if "card_id" in result:
@@ -455,6 +475,19 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
         return route_to_project(projects, owner=extra.get("owner", ""),
                                 scope=extra.get("scope", ""))
+    if action in ("proj_active", "proj_waiting", "proj_future", "proj_done"):
+        projects = ProjectLedger(os.path.join(dd, "projects.json"))
+        if action == "proj_active":
+            ok = projects.start(iid)
+            return {"ok": ok, "proj_status": "running"}
+        if action == "proj_waiting":
+            ok = projects.block(iid, reason or "(wachtend)")
+            return {"ok": ok, "proj_status": "blocked"}
+        if action == "proj_future":
+            ok = projects.to_future(iid)
+            return {"ok": ok, "proj_status": "future"}
+        ok = projects.complete(iid)
+        return {"ok": ok, "proj_status": "done"}
     if action == "add_governance":
         records = Records(os.path.join(dd, "governance_records.json"))
         return route_to_governance(records, extra.get("role", ""), extra.get("skill", ""),
@@ -481,7 +514,9 @@ def make_handler(data_dir: str | None):
                     return
                 body = render_process(item, snap["roster"], csrf_token, msg=msg).encode("utf-8")
             elif path in ("/", "/index.html"):
-                body = render_html(gather(data_dir), csrf_token=csrf_token, msg=msg).encode("utf-8")
+                show_all = (qs.get("history") or ["0"])[0] in ("1", "true", "yes")
+                body = render_html(gather(data_dir), csrf_token=csrf_token, msg=msg,
+                                   show_all=show_all).encode("utf-8")
             else:
                 self.send_response(404)
                 self.end_headers()

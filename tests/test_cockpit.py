@@ -203,6 +203,74 @@ def test_server_process_get_and_add_reference(tmp_path):
         t.join(timeout=5)
 
 
+def test_default_hides_grey_history_shows_it():
+    snap = {
+        "roster": [
+            {"id": "live_role", "type": "role", "parent": "x", "version": 1,
+             "archived": False, "source": "seed", "purpose": "p",
+             "accountabilities": [], "domains": [], "skills": [], "policies": [], "members": []},
+            {"id": "dead_role", "type": "role", "parent": "x", "version": 2,
+             "archived": True, "source": "sensed", "purpose": "p",
+             "accountabilities": [], "domains": [], "skills": [], "policies": [], "members": []},
+        ],
+        "inbox": [
+            {"id": "i1", "type": "keyword", "subject": "open_word", "status": "pending",
+             "context": {}, "created_at": 1.0},
+            {"id": "i2", "type": "keyword", "subject": "closed_word", "status": "withdrawn",
+             "context": {}, "created_at": 1.0},
+        ],
+        "projects": [
+            {"id": "p1", "owner": "live_role", "scope": "open project", "status": "running",
+             "blocked_on": None, "updated_at": 1.0},
+            {"id": "p2", "owner": "live_role", "scope": "klaar project", "status": "done",
+             "blocked_on": None, "updated_at": 1.0},
+        ],
+        "generated_at": 1.0, "data_dir": "x",
+    }
+    default = cockpit.render_html(snap, csrf_token="t")
+    assert "open_word" in default and "open project" in default and "live_role" in default
+    assert "closed_word" not in default        # gesloten inbox-item verborgen
+    assert "dead_role" not in default          # gearchiveerde rol verborgen
+    assert "klaar project" not in default      # done-project verborgen
+
+    history = cockpit.render_html(snap, csrf_token="t", show_all=True)
+    assert "closed_word" in history and "dead_role" in history and "klaar project" in history
+
+
+def test_project_status_change_to_running(tmp_path):
+    import json as _json
+    data_dir = _seed(tmp_path)
+    httpd = HTTPServer(("127.0.0.1", 0), cockpit.make_handler(data_dir))
+    port = httpd.server_address[1]
+    base = f"http://127.0.0.1:{port}"
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    try:
+        import re
+        with urllib.request.urlopen(f"{base}/", timeout=5) as resp:
+            token = re.search(r'name="csrf" value="([^"]+)"', resp.read().decode()).group(1)
+        body = urllib.parse.urlencode({
+            "csrf": token, "iid": "p1p1p1p1p1p1", "action": "proj_active", "next": "/"}).encode()
+        with urllib.request.urlopen(urllib.request.Request(
+                f"{base}/action", data=body, method="POST"), timeout=5) as resp:
+            assert resp.status == 200
+        proj = _json.loads((tmp_path / "data" / "projects.json").read_text())
+        items = proj.get("projects", proj) if isinstance(proj, dict) else {}
+        assert items["p1p1p1p1p1p1"]["status"] == "running"
+    finally:
+        httpd.shutdown(); httpd.server_close(); t.join(timeout=5)
+
+
+def test_projectledger_to_future(tmp_path):
+    from nooch_village.projects import ProjectLedger
+    pl = ProjectLedger(str(tmp_path / "p.json"))
+    pid = pl.create("trends", "iets voor later", "human")
+    assert pl.to_future(pid) is True
+    assert pl.get(pid)["status"] == "future"
+    pl.complete(pid)                                   # done is terminal
+    assert pl.to_future(pid) is False                  # done blijft done
+
+
 def test_server_add_governance_grants_skill(tmp_path):
     import re, json as _json
     data_dir = _seed(tmp_path)
