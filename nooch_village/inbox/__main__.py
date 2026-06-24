@@ -562,14 +562,16 @@ def main(argv: list[str]) -> None:
             _approve_means_gap(inbox, item)
 
         elif item["type"] == "keyword":
-            # Keyword vereist de bibliotheek via Village-context
-            _, v = _load()
-            word = item["context"].get("word", item["subject"])
-            inbox.resolve(iid, "approved", reason=reason)
-            v.context.library.curate(word, "approved",
-                                     rationale=reason or "menselijke goedkeuring via inbox",
-                                     by="human")
-            print(f"✅ '{word}' goedgekeurd → in bibliotheek als 'approved'.")
+            # Eén gedeeld gevalideerd pad (ook gebruikt door de cockpit): sluit het item
+            # en cureer het woord. Geen volledige Village nodig, alleen de bibliotheek.
+            from nooch_village.library import Library
+            from nooch_village.inbox_actions import decide_keyword
+            library = Library(os.path.join(_data_dir(), "library.json"))
+            res = decide_keyword(inbox, library, iid, "approve", reason=reason)
+            if res["ok"]:
+                print(f"✅ '{res['word']}' goedgekeurd → in bibliotheek als 'approved'.")
+            else:
+                print(f"✘ {res['error']}")
 
         elif item["type"] == "keyword_batch":
             _approve_keyword_batch(inbox, item, iid, reason)
@@ -693,14 +695,15 @@ def main(argv: list[str]) -> None:
                 print(f"❌ Activatie '{role_id}' afgewezen. Reden: {reason or '(geen)'}")
 
         elif item["type"] == "keyword":
-            # Keyword vereist de bibliotheek via Village-context
-            _, v = _load()
-            word = item["context"].get("word", item["subject"])
-            inbox.resolve(iid, "rejected", reason=reason)
-            v.context.library.curate(word, "forbidden",
-                                     rationale=reason or "menselijk besluit via inbox",
-                                     by="human")
-            print(f"❌ '{word}' verboden → in bibliotheek als 'forbidden'.")
+            # Eén gedeeld gevalideerd pad (ook gebruikt door de cockpit).
+            from nooch_village.library import Library
+            from nooch_village.inbox_actions import decide_keyword
+            library = Library(os.path.join(_data_dir(), "library.json"))
+            res = decide_keyword(inbox, library, iid, "reject", reason=reason)
+            if res["ok"]:
+                print(f"❌ '{res['word']}' verboden → in bibliotheek als 'forbidden'.")
+            else:
+                print(f"✘ {res['error']}")
 
         elif item["type"] == "keyword_batch":
             # Geen credits uitgegeven, niets om terug te draaien
