@@ -301,9 +301,12 @@ class Village:
 
     def _on_governance_changed(self, e: Event) -> None:
         self.human_inbox.sync_unmanned(self.records.all(), CLASS_MAP)
+        # Een gearchiveerde rol mag geen openstaande activatie-vraag achterlaten.
+        self.human_inbox.withdraw_archived_activations(self.records.all())
 
     def start(self):
         self.human_inbox.sync_unmanned(self.records.all(), CLASS_MAP)
+        self.human_inbox.withdraw_archived_activations(self.records.all())
         self.root.start()
 
     def stop(self):

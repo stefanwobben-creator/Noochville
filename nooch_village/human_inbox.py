@@ -20,7 +20,7 @@ from datetime import datetime
 from nooch_village.util import atomic_write_json
 
 
-_VALID_STATUSES = {"pending", "approved", "rejected", "amended", "deferred"}
+_VALID_STATUSES = {"pending", "approved", "rejected", "amended", "deferred", "withdrawn"}
 _VALID_TYPES    = {"escalation", "activation", "keyword", "means_gap", "suggestion",
                    "keyword_batch", "verband", "content_suggestion", "content_draft"}
 
@@ -122,6 +122,31 @@ class HumanInbox:
         }
         self._save()
         return iid
+
+    def withdraw_activation(self, role_id: str,
+                            reason: str = "rol gearchiveerd (premisse vervallen)") -> bool:
+        """Trek het pending activation-item van een rol in zodra de rol verdwijnt.
+        Geen menselijke afwijzing maar een ingetrokken vraag: de mens haalde de rol al
+        weg via governance, dus de vraag 'zullen we 'm bemensen?' heeft geen bodem meer.
+        Idempotent: geen pending item → False."""
+        for it in self._items.values():
+            if (it["type"] == "activation" and it.get("subject") == role_id
+                    and it["status"] == "pending"):
+                return self.resolve(it["id"], "withdrawn", reason=reason)
+        return False
+
+    def withdraw_archived_activations(self, records_all: list) -> int:
+        """Veegbeurt: trek elk pending activation-item in waarvan de rol gearchiveerd is
+        (of niet meer bestaat). Retourneert het aantal ingetrokken items."""
+        archived = {getattr(r, "id", None) for r in records_all if getattr(r, "archived", False)}
+        n = 0
+        for it in list(self._items.values()):
+            if (it["type"] == "activation" and it["status"] == "pending"
+                    and it.get("subject") in archived):
+                if self.resolve(it["id"], "withdrawn",
+                                reason="rol gearchiveerd (premisse vervallen)"):
+                    n += 1
+        return n
 
     def add_means_gap(self, gap_key: str, description: str,
                       role_id: str | None = None) -> str:
