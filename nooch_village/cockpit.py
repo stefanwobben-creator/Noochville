@@ -228,6 +228,45 @@ def _item_actions(i: dict, token: str) -> str:
     return " ".join(parts)
 
 
+def _tension_meta(item: dict) -> str:
+    """Gestructureerde kop per spanning: wie senste het, wat is de spanning, en (waar
+    aanwezig) welk concreet voorstel. Per type uit de juiste context-velden."""
+    ctx = item.get("context", {}) or {}
+    t = item.get("type")
+    rows = []
+
+    def row(label, val):
+        if val:
+            rows.append(f'<div><span class="muted">{_e(label)}:</span> {_e(val)}</div>')
+
+    if t == "means_gap":
+        row("Gesensed door", ctx.get("sensed_by") or "—")
+        row("Betreft rol", ctx.get("role_id"))
+        row("De spanning", ctx.get("description"))
+        rows.append('<div class="muted">Voorstel: een means-gap draagt geen vast voorstel — '
+                    'kies hieronder de oplossing (skill, project of vastleggen).</div>')
+    elif t == "escalation":
+        row("Voorgesteld door", ctx.get("proposer_role"))
+        row("De spanning", ctx.get("tension"))
+        change = f'{ctx.get("change_kind") or ""} {ctx.get("role_id") or ""}'.strip()
+        extra = (ctx.get("add_accountabilities") or []) + (ctx.get("add_domains") or [])
+        if extra:
+            change += " + " + ", ".join(extra)
+        row("Voorgestelde oplossing", change)
+        row("Rationale", ctx.get("rationale"))
+        if ctx.get("gate"):
+            row("Gate", f'{ctx.get("gate")} — {ctx.get("gate_reason", "")}')
+    elif t == "keyword":
+        d = ctx.get("demand", {}) or {}
+        row("Woord", ctx.get("word"))
+        row("Bron / signaal", f'{d.get("source", "?")} / {d.get("signal", "?")}')
+        row("Reden (Librarian)", ctx.get("reason"))
+    else:
+        row("Onderwerp", item.get("subject"))
+        row("Detail", ctx.get("description") or ctx.get("reason"))
+    return "".join(rows)
+
+
 def render_process(item: dict, roster: list, csrf_token: str, msg=None) -> str:
     """De GlassFrog 'Process Tension'-flow voor één spanning. Live rails: Add Reference
     (info vastleggen), Add Project (uitkomst voor een rol), Bring to Governance (rol een
@@ -306,7 +345,7 @@ def render_process(item: dict, roster: list, csrf_token: str, msg=None) -> str:
 <p><a href="/">← terug naar de cockpit</a></p>
 <h1>Process Tension</h1>
 {_banner(msg)}
-<div class="tension"><b>{_e(item.get('subject'))}</b> <span class="muted">({_e(item.get('type'))})</span><br>{_e(detail)}</div>
+<div class="tension"><b>{_e(item.get('subject'))}</b> <span class="muted">({_e(item.get('type'))})</span>{_tension_meta(item)}</div>
 <h2>Wat heb je nodig?</h2>
 
 <details open><summary>Ik wil info delen, ophalen of vastleggen</summary>

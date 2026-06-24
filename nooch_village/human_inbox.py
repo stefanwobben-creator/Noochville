@@ -174,12 +174,13 @@ class HumanInbox:
         return n
 
     def add_means_gap(self, gap_key: str, description: str,
-                      role_id: str | None = None) -> str:
+                      role_id: str | None = None, sensed_by: str | None = None) -> str:
         """Voeg een means-gap-item toe voor een structurele capaciteitsgrens.
 
         Routeert reflects die NIET via de governance-gate gaan (geen amend_role-voorstel).
         Duplicaatcheck op gap_key (subject), ongeacht status: eenmaal gemeld, altijd stil.
-        role_id is de rol met het mandaat maar zonder de skill (B-uitkomst classify_gap).
+        role_id   = de rol met het mandaat maar zonder de skill (B-uitkomst classify_gap).
+        sensed_by = de rol die de spanning voelde (wie 'm aankaartte).
         Retourneert het item-id.
         """
         for item in self._items.values():
@@ -192,7 +193,7 @@ class HumanInbox:
             "type":       "means_gap",
             "subject":    gap_key,
             "context":    {"gap_key": gap_key, "description": description,
-                           "role_id": role_id},
+                           "role_id": role_id, "sensed_by": sensed_by},
             "status":     "pending",
             "created_at": time.time(),
             "resolved_at": None,

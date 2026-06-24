@@ -175,6 +175,7 @@ class Village:
         """
         gap_key     = e.data.get("gap_key", "?")
         description = e.data.get("description", "")
+        sensed_by   = e.data.get("by")
         log = logging.getLogger("village.inbox")
 
         outcome, role_id, reason = classify_gap(description, self.records.all())
@@ -184,7 +185,8 @@ class Village:
                      role_id, gap_key, reason)
 
         elif outcome == "B":
-            iid = self.human_inbox.add_means_gap(gap_key, description, role_id=role_id)
+            iid = self.human_inbox.add_means_gap(gap_key, description, role_id=role_id,
+                                                 sensed_by=sensed_by)
             log.info("📌 gap B → means-gap in human_inbox: item %s (gap %s, rol '%s')",
                      iid, gap_key, role_id)
 

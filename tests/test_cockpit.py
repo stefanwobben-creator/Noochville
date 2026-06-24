@@ -143,6 +143,23 @@ def test_server_get_and_post_action(tmp_path):
         t.join(timeout=5)
 
 
+def test_process_meta_shows_who_what_for_means_gap():
+    item = {"id": "x", "type": "means_gap", "subject": "g", "status": "pending",
+            "context": {"gap_key": "g", "description": "bezoekersdata per locale analyseren",
+                        "role_id": "website_watcher", "sensed_by": "website_watcher"}}
+    page = cockpit.render_process(item, [], "t")
+    assert "Gesensed door" in page and "website_watcher" in page
+    assert "De spanning" in page and "bezoekersdata per locale" in page
+    assert "Betreft rol" in page
+
+
+def test_means_gap_stores_sensed_by(tmp_path):
+    from nooch_village.human_inbox import HumanInbox
+    hi = HumanInbox(str(tmp_path / "i.json"))
+    iid = hi.add_means_gap("g", "iets", role_id="website_watcher", sensed_by="harry_hemp")
+    assert hi.get(iid)["context"]["sensed_by"] == "harry_hemp"
+
+
 def test_process_page_renders_glassfrog_flow(tmp_path):
     snap = cockpit.gather(_seed(tmp_path))
     item = snap["inbox"][0]                       # de pending means_gap
