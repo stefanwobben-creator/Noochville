@@ -391,6 +391,20 @@ def main() -> None:
                 print("   geen nieuwe merken gespot")
         else:
             print(f"   ontdekking overgeslagen: {disc.get('error', 'onbekend')}")
+        # Linkbuilding: gidsen/lijstjes waar Nooch in vermeld wil worden
+        from nooch_village.link_targets import LinkTargets
+        from nooch_village.skills_impl.linkbuilding import LinkbuildingTargetsSkill
+        print("🔗 Scannen op linkbuilding-doelwitten…")
+        lt = LinkbuildingTargetsSkill().run({"brands": monitored}, ctx)
+        if lt.get("ok"):
+            lstore = LinkTargets(os.path.join(ctx.data_dir, "linkbuilding_targets.json"))
+            new = [t for t in lt.get("targets", [])
+                   if lstore.add_candidate(t.get("link", ""), t.get("title", ""),
+                                           t.get("source", ""), t.get("priority", "onbekend"))]
+            hoog = sum(1 for t in new if t.get("priority") == "hoog")
+            print(f"   {len(new)} nieuw doelwit(ten), waarvan {hoog} hoge prioriteit (zie cockpit)")
+        else:
+            print(f"   linkbuilding overgeslagen: {lt.get('error', 'onbekend')}")
 
     else:
         print(f"Onbekende mode '{mode}'. Geldige modes: "

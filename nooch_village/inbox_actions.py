@@ -182,6 +182,24 @@ def decide_competitor_candidate(brands, brand: str, decision: str) -> dict:
     return {"ok": False, "error": f"onbekend besluit '{decision}'"}
 
 
+def decide_link_target(targets, link: str, decision: str) -> dict:
+    """Menselijk oordeel over een linkbuilding-doelwit (gids/lijstje).
+    pursue → ga je pitchen; ignore → niks voor Nooch. Via de LinkTargets-store.
+    Geeft {ok, link?, link_status?, error?}."""
+    link = (link or "").strip()
+    if not link:
+        return {"ok": False, "error": "geen link"}
+    if decision == "pursue":
+        ok = targets.pursue(link)
+        return {"ok": ok, "link": link, "link_status": "te pitchen"} if ok \
+            else {"ok": False, "error": "kon niet markeren"}
+    if decision == "ignore":
+        ok = targets.ignore(link)
+        return {"ok": ok, "link": link, "link_status": "genegeerd"} if ok \
+            else {"ok": False, "error": "kon niet negeren"}
+    return {"ok": False, "error": f"onbekend besluit '{decision}'"}
+
+
 def defer_item(inbox, iid: str, reason: str = "") -> dict:
     """Stel een item uit (blijft geregistreerd). Werkt voor elk type (pure bookkeeping)."""
     item = inbox.get(iid)

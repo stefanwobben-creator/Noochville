@@ -454,6 +454,7 @@ class ConcurrentScout(Inhabitant):
             monitored = self._monitored_brands(store)
             self._run_news(monitored)
             self._run_discovery(monitored, store)
+            self._run_linkbuilding(monitored)
         finally:
             self._busy = False
 
@@ -514,6 +515,28 @@ class ConcurrentScout(Inhabitant):
                      "article": c.get("article", ""), "link": c.get("link", "")}, self.id))
         if added:
             self.log.info("🔮 %d nieuwe kandidaat-concurrent(en) gespot — wacht op jouw oordeel", added)
+
+    def _run_linkbuilding(self, monitored: list[str]) -> None:
+        """Spot gidsen/lijstjes waar Nooch in vermeld wil worden; zet ze (deduped) in de
+        doelwit-store met prioriteit (concurrenten-zonder-Nooch = hoog)."""
+        if "linkbuilding_targets" not in self.dna.skills:
+            return
+        res = self.use_skill("linkbuilding_targets", {"brands": monitored})
+        if not res.get("ok"):
+            self.log.info("🔗 linkbuilding overgeslagen: %s", res.get("error"))
+            return
+        from nooch_village.link_targets import LinkTargets
+        store = LinkTargets(os.path.join(self.context.data_dir, "linkbuilding_targets.json"))
+        added, hoog = 0, 0
+        for t in res.get("targets", []):
+            if store.add_candidate(t.get("link", ""), t.get("title", ""),
+                                   t.get("source", ""), t.get("priority", "onbekend")):
+                added += 1
+                hoog += 1 if t.get("priority") == "hoog" else 0
+                self.bus.publish(Event("linkbuilding_target", {"by": self.id, **t}, self.id))
+        if added:
+            self.log.info("🔗 %d nieuw linkbuilding-doelwit(ten) gespot (%d hoog) — wacht op jouw oordeel",
+                          added, hoog)
 
     def _is_mission_relevant(self, title: str) -> bool:
         from nooch_village.skills_impl.competitor_news import _MISSION_THEMES
@@ -1428,6 +1451,7 @@ class Noochie(Inhabitant):
         "keyword_proposed",
         "gsc_pulse_completed",
         "competitor_signal",
+        "linkbuilding_target",
     )
 
     def __init__(self, *args, **kwargs):

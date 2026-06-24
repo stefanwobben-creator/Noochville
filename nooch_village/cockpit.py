@@ -28,8 +28,9 @@ from nooch_village.notes_store import NotesStore
 from nooch_village.inbox_actions import (
     decide_keyword, defer_item, confirm_item, mark_done, resolve_tension, add_reference,
     route_to_project, route_to_governance, remove_note, override_library_term,
-    decide_competitor_candidate)
+    decide_competitor_candidate, decide_link_target)
 from nooch_village.competitor_brands import CompetitorBrands
+from nooch_village.link_targets import LinkTargets
 
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
@@ -51,6 +52,7 @@ def gather(data_dir: str | None = None) -> dict:
     library = Library(os.path.join(dd, "library.json"))
     notes = NotesStore(os.path.join(dd, "notes.json"))
     brands = CompetitorBrands(os.path.join(dd, "competitor_brands.json"))
+    links = LinkTargets(os.path.join(dd, "linkbuilding_targets.json"))
 
     roster = []
     for rec in sorted(records.all(), key=lambda r: (r.archived, r.type.value, r.id)):
@@ -101,6 +103,8 @@ def gather(data_dir: str | None = None) -> dict:
         "insights": insights,
         "competitor_candidates": brands.candidates(),
         "competitor_confirmed": brands.confirmed(),
+        "link_candidates": links.candidates(),
+        "link_pursued": links.pursued(),
         "generated_at": time.time(),
         "data_dir": dd,
     }
@@ -228,6 +232,11 @@ def _lib_btn(word: str, decision: str, label: str, token: str, cls: str = "") ->
 def _brand_btn(brand: str, decision: str, label: str, token: str, cls: str = "") -> str:
     """Bevestig/negeer-knop voor een gespotte concurrent: POST /action brand_decide."""
     return _word_btn("brand_decide", brand, decision, label, token, cls)
+
+
+def _link_btn(link: str, decision: str, label: str, token: str, cls: str = "") -> str:
+    """Pitchen/negeer-knop voor een linkbuilding-doelwit: POST /action link_decide."""
+    return _word_btn("link_decide", link, decision, label, token, cls)
 
 
 def _word_btn(action: str, word: str, decision: str, label: str, token: str, cls: str = "") -> str:
@@ -649,6 +658,29 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
                   f'<details open><summary>🔮 Nieuw gespot — wacht op jouw oordeel ({len(cands)})</summary>'
                   f'{cand_tbl}</details>{conf_line}') if (cands or confirmed) else ''
 
+    # Linkbuilding: gidsen/lijstjes waar Nooch in vermeld wil worden (hoog = noemt
+    # concurrenten maar niet Nooch → sterkste pitch).
+    ltargets = snap.get("link_candidates", [])
+    lpursued = snap.get("link_pursued", [])
+    _prio_mark = {"hoog": "★ hoog", "midden": "midden", "laag": "laag", "onbekend": "?"}
+    lrows3 = "".join(
+        f'<tr class="{"st-future" if t.get("priority") in ("laag", "onbekend") else ""}">'
+        f'<td>{_e(_prio_mark.get(t.get("priority"), "?"))}</td>'
+        f'<td><a href="{_e(t.get("link", ""))}">{_e((t.get("title") or "")[:90])}</a>'
+        f'{(" · noemt: " + _e(", ".join(t.get("mentions", [])))) if t.get("mentions") else ""}</td>'
+        f'<td>' + ((_link_btn(t["link"], "pursue", "✓ pitchen", csrf_token, "ok") + " "
+                    + _link_btn(t["link"], "ignore", "✗ negeer", csrf_token, "danger"))
+                   if writable else '<span class="muted">—</span>') + '</td></tr>'
+        for t in ltargets)
+    ltbl = ('<table><thead><tr><th>prio</th><th>gids / lijstje</th><th>jouw oordeel</th></tr></thead>'
+            f'<tbody>{lrows3 or "<tr><td colspan=3 class=muted>geen doelwitten gespot</td></tr>"}</tbody></table>')
+    pursued_line = (f'<p class="muted">Te pitchen ({len(lpursued)}): '
+                    + ", ".join(_e((p.get("source") or p.get("title") or "")[:40]) for p in lpursued)
+                    + '</p>') if lpursued else ''
+    link_block = (f'<h2>Linkbuilding</h2>'
+                  f'<details open><summary>🔗 Doelwitten — wacht op jouw oordeel ({len(ltargets)})</summary>'
+                  f'{ltbl}</details>{pursued_line}') if (ltargets or lpursued) else ''
+
     counts = (
         f'{sum(1 for r in roster if not r["archived"])} rollen · '
         f'{sum(1 for i in inbox if i.get("status") == "pending")} open inbox-items · '
@@ -675,6 +707,7 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'<details><summary>Inzichten — kennislaag ({len(ins)} kaartjes)</summary>{ins_tbl}</details>'
         f'<details><summary>Roster ({sum(1 for r in roster if not r["archived"])} actieve rollen)</summary>{roster_tbl}</details>'
         f'{comp_block}'
+        f'{link_block}'
     )
     return _page("NoochVille cockpit", inner)
 
@@ -704,6 +737,8 @@ def _flash(result: dict) -> str:
         return f"✓ Project aangemaakt voor {result.get('owner')}"
     if "brand_status" in result:
         return f"✓ '{result['brand']}' → {result['brand_status']}"
+    if "link_status" in result:
+        return f"✓ doelwit → {result['link_status']}"
     if "word" in result:
         return f"✓ '{result['word']}' → {result.get('status')}"
     _labels = {"resolved": "✓ Spanning afgehandeld (resolved)",
@@ -730,6 +765,9 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         brands = CompetitorBrands(os.path.join(dd, "competitor_brands.json"))
         return decide_competitor_candidate(brands, extra.get("word", ""),
                                            extra.get("decision", ""))
+    if action == "link_decide":
+        targets = LinkTargets(os.path.join(dd, "linkbuilding_targets.json"))
+        return decide_link_target(targets, extra.get("word", ""), extra.get("decision", ""))
     if action == "defer":
         return defer_item(inbox, iid, reason=reason)
     if action == "confirm":
