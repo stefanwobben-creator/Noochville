@@ -33,14 +33,24 @@ _MISSION_THEMES = ("b-corp", "vegan leather", "materials", "sustainability",
 _RSS = "https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
 _UA = "Mozilla/5.0 (NoochVille competitor monitor; +https://nooch.earth)"
 
+# Getrapt venster: eerst de afgelopen maand; niets? dan het kwartaal; niets? dan het jaar.
+_DEFAULT_WINDOWS = (30, 90, 365)
 
-def _parse_feed(xml_text: str, *, now: datetime, days: int, brand: str) -> list[dict]:
-    """Pure parser: RSS-XML → lijst items binnen het venster. Geen netwerk, testbaar."""
+
+def _window_label(days: int) -> str:
+    return {30: "laatste maand", 90: "laatste kwartaal", 365: "laatste jaar"}.get(
+        days, f"laatste {days} dagen")
+
+
+def _parse_all(xml_text: str, *, now: datetime, brand: str) -> list[dict]:
+    """Pure parser: RSS-XML → álle items met hun publicatiedatum. Geen venster-filter
+    (dat doet de cascade). Onparseerbare datum → 'now' (telt als recent)."""
     root = ET.fromstring(xml_text)
-    cutoff = now - timedelta(days=days)
     items: list[dict] = []
     for item in root.findall(".//item"):
         title = (item.findtext("title") or "").strip()
+        if not title:
+            continue
         link = (item.findtext("link") or "").strip()
         pub = (item.findtext("pubDate") or "").strip()
         try:
@@ -49,14 +59,19 @@ def _parse_feed(xml_text: str, *, now: datetime, days: int, brand: str) -> list[
                 published = published.replace(tzinfo=timezone.utc)
         except (TypeError, ValueError):
             published = now
-        if published >= cutoff and title:
-            items.append({
-                "brand": brand,
-                "title": title,
-                "link": link,
-                "date": published.strftime("%Y-%m-%d"),
-            })
+        items.append({"brand": brand, "title": title, "link": link,
+                      "published": published, "date": published.strftime("%Y-%m-%d")})
     return items
+
+
+def _cascade_select(items: list[dict], *, now: datetime, windows) -> tuple[list[dict], int]:
+    """Kies het kórtste venster dat nieuws oplevert. Niets in alle vensters → ([], grootste)."""
+    for w in windows:
+        cutoff = now - timedelta(days=w)
+        sel = [i for i in items if i["published"] >= cutoff]
+        if sel:
+            return sel, w
+    return [], (windows[-1] if windows else 0)
 
 
 class CompetitorNewsSkill(Skill):
@@ -76,59 +91,71 @@ class CompetitorNewsSkill(Skill):
         parsed = [b.strip() for b in raw.split(",") if b.strip()]
         return parsed or list(_DEFAULT_BRANDS)
 
-    def _fetch_brand(self, brand: str, *, days: int, now: datetime) -> list[dict]:
+    def _fetch_brand(self, brand: str, *, now: datetime) -> list[dict]:
         import requests
         query = f'"{brand}" AND ({_THEMES})'
         url = _RSS.format(q=urllib.parse.quote(query))
         resp = requests.get(url, headers={"User-Agent": _UA}, timeout=20)
         resp.raise_for_status()
-        return _parse_feed(resp.text, now=now, days=days, brand=brand)
+        return _parse_all(resp.text, now=now, brand=brand)
+
+    def _windows(self, payload: dict, context) -> list[int]:
+        if payload.get("windows"):
+            return [int(w) for w in payload["windows"]]
+        if payload.get("days"):                          # back-compat: één vast venster
+            return [int(payload["days"])]
+        raw = str((getattr(context, "settings", {}) or {}).get("competitor_windows", ""))
+        parsed = [int(x) for x in raw.replace(" ", "").split(",") if x.strip().isdigit()]
+        return parsed or list(_DEFAULT_WINDOWS)
 
     def run(self, payload: dict, context=None) -> dict:
         brands = self._brands(payload, context)
-        try:
-            days = int(payload.get("days")
-                       or (getattr(context, "settings", {}) or {}).get("competitor_days", 7))
-        except (TypeError, ValueError):
-            days = 7
+        windows = self._windows(payload, context)
         now = datetime.now(timezone.utc)
 
-        per_brand: dict[str, list[dict]] = {}
+        per_brand: dict[str, dict] = {}                  # brand -> {"items": [...], "window": int}
         errors: dict[str, str] = {}
         for i, brand in enumerate(brands):
             try:
-                per_brand[brand] = self._fetch_brand(brand, days=days, now=now)
+                allitems = self._fetch_brand(brand, now=now)
+                sel, used = _cascade_select(allitems, now=now, windows=windows)
+                per_brand[brand] = {"items": sel, "window": used}
             except Exception as exc:                     # fail-closed per merk
                 errors[brand] = str(exc)
-                per_brand[brand] = []
+                per_brand[brand] = {"items": [], "window": windows[-1]}
                 log.warning("competitor_news: '%s' faalde: %s", brand, exc)
             if i < len(brands) - 1:
                 time.sleep(1.0)                          # beleefd
 
         # Hele run mislukt (alle merken faalden) → geen rapport, fail-closed.
-        if errors and all(not v for v in per_brand.values()) and len(errors) == len(brands):
+        if (len(errors) == len(brands)
+                and all(not v["items"] for v in per_brand.values()) and errors):
             return {"ok": False, "error": f"alle merken faalden: {errors}"}
 
-        items = [it for lst in per_brand.values() for it in lst]
-        path = self._write_report(context, brands, per_brand, days, now)
+        items = [{"brand": it["brand"], "title": it["title"], "link": it["link"], "date": it["date"]}
+                 for v in per_brand.values() for it in v["items"]]
+        path = self._write_report(context, brands, per_brand, windows, now)
         return {"ok": True, "path": path, "items": items, "total": len(items),
-                "brands": brands, "errors": errors}
+                "brands": brands, "windows": windows, "errors": errors}
 
-    def _write_report(self, context, brands, per_brand, days, now) -> str:
+    def _write_report(self, context, brands, per_brand, windows, now) -> str:
+        cascade = "/".join(str(w) for w in windows)
         lines = ["# Competitor Field Report",
                  f"*Gegenereerd op: {now.strftime('%Y-%m-%d %H:%M')} UTC*", "",
-                 f"Wekelijkse monitor van strategische ontwikkelingen (funding, materiaal-"
-                 f"innovaties, winkelopeningen, B-Corp, lanceringen) bij directe concurrenten. "
-                 f"Venster: {days} dagen.", "", "---", ""]
+                 f"Monitor van strategische ontwikkelingen (funding, materiaalinnovatie, "
+                 f"winkelopeningen, B-Corp, lanceringen) bij directe concurrenten. "
+                 f"Getrapt venster per merk: {cascade} dagen (het kortste met nieuws).", "",
+                 "---", ""]
         for brand in brands:
-            lines.append(f"## 👟 {brand}")
-            news = per_brand.get(brand, [])
+            entry = per_brand.get(brand, {"items": [], "window": windows[-1]})
+            news, used = entry["items"], entry["window"]
+            lines.append(f"## 👟 {brand}  _({_window_label(used)})_")
             if news:
                 for it in news:
                     lines.append(f"- **[{it['title']}]({it['link']})**")
                     lines.append(f"  - *Publicatiedatum:* {it['date']}")
             else:
-                lines.append("- _Geen opvallende strategische ontwikkelingen in dit venster._")
+                lines.append("- _Geen ontwikkelingen in het afgelopen jaar._")
             lines.append("")
         out_dir = os.path.join(getattr(context, "data_dir", "."), "output")
         os.makedirs(out_dir, exist_ok=True)

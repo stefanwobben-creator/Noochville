@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from nooch_village.skills_impl.competitor_news import CompetitorNewsSkill, _parse_feed
+from datetime import timedelta
+from nooch_village.skills_impl.competitor_news import (
+    CompetitorNewsSkill, _parse_all, _cascade_select)
 from nooch_village.roles import ConcurrentScout
 
 _RSS = """<?xml version="1.0"?><rss><channel>
@@ -18,14 +20,32 @@ _RSS = """<?xml version="1.0"?><rss><channel>
 </channel></rss>"""
 
 
-# ── pure parser ───────────────────────────────────────────────────────────────
+def _rss_one(days_ago: int, now: datetime) -> str:
+    dt = (now - timedelta(days=days_ago)).strftime("%a, %d %b %Y %H:%M:%S GMT")
+    return (f'<?xml version="1.0"?><rss><channel><item><title>Veja nieuws</title>'
+            f'<link>http://x</link><pubDate>{dt}</pubDate></item></channel></rss>')
 
-def test_parse_feed_filtert_op_venster_en_zet_merk():
+
+# ── pure parser + cascade ──────────────────────────────────────────────────────
+
+def test_parse_all_zet_merk_en_datum():
     now = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
-    items = _parse_feed(_RSS, now=now, days=7, brand="Veja")
-    assert len(items) == 1                       # oude bericht (2020) valt buiten 7 dagen
-    assert items[0]["brand"] == "Veja"
-    assert items[0]["link"] == "http://a"
+    items = _parse_all(_RSS, now=now, brand="Veja")
+    assert len(items) == 2 and items[0]["brand"] == "Veja"
+
+
+def test_cascade_kiest_kortste_venster_met_nieuws():
+    now = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
+    items = _parse_all(_rss_one(50, now), now=now, brand="Veja")    # 50 dagen geleden
+    sel, used = _cascade_select(items, now=now, windows=[30, 90, 365])
+    assert used == 90 and len(sel) == 1            # buiten maand, binnen kwartaal
+
+
+def test_cascade_leeg_als_niks_in_een_jaar():
+    now = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
+    items = _parse_all(_rss_one(800, now), now=now, brand="Veja")   # >2 jaar geleden
+    sel, used = _cascade_select(items, now=now, windows=[30, 90, 365])
+    assert sel == [] and used == 365
 
 
 # ── skill run ────────────────────────────────────────────────────────────────
