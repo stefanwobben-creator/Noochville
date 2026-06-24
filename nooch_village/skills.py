@@ -11,6 +11,15 @@ class Skill(ABC):
     needs_secret: bool = False
     description: str = ""
 
+    required_env: tuple[str, ...] = ()
+    """Env-/settings-sleutels die deze skill HARD nodig heeft. Ontbreekt er één, dan faalt
+    de skill closed (geen verzonnen output). Het opstart-rapport leest dit zelfbeschrijvend
+    uit, zodat je bij een run in één oogopslag ziet welke skills 'scherp staan'."""
+
+    optional_env: tuple[str, ...] = ()
+    """Env-/settings-sleutels die de skill VERBETEREN maar niet vereist zijn (hogere limiet,
+    courtesy-mailto). Afwezig = de skill werkt nog, in beperkte modus."""
+
     cost: str | None = None
     """Puls-veiligheid en gemeten externe call-kost die de (toekomstige) puls-gate bewaakt.
     Verplicht voor elke concrete subklasse; None is niet toegestaan in productie.
@@ -54,3 +63,6 @@ class SkillRegistry:
 
     def names(self) -> list[str]:
         return list(self._skills)
+
+    def all(self) -> list[Skill]:
+        return list(self._skills.values())

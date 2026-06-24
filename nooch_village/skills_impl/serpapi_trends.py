@@ -60,6 +60,7 @@ class SerpapiTrendsSkill(Skill):
     name = "serpapi_trends"
     needs_secret = True
     cost = "credits"
+    required_env = ("SERPAPI_API_KEY",)
     description = (
         "Google Trends via SerpApi (betrouwbaar, betaald): interest-over-time + "
         "top/rising related queries per keyword. Roterend venster, fail-closed zonder key."

@@ -316,7 +316,13 @@ class Village:
     def stop(self):
         self.root.stop()
 
+    def report_keys(self) -> str:
+        """Niet-blokkerend opstart-rapport: welke LLM-treden + skills hebben hun sleutel."""
+        from nooch_village.key_audit import audit_keys, format_key_report
+        return format_key_report(audit_keys(self.registry, self.context))
+
     def run_forever(self):
+        print(self.report_keys())
         self.start()
         try:
             while True:
@@ -361,6 +367,7 @@ class Village:
 def once():
     """Eén echte puls en dan stoppen. Ideaal voor een cron-job ('s ochtends)."""
     v = Village(heartbeat_seconds=0)
+    print(v.report_keys())
     done = {}
     noochie = {}
     v.bus.subscribe("pulse_completed",    lambda e: done.update(e.data))

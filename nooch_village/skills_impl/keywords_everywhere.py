@@ -12,6 +12,7 @@ class KeywordsEverywhereSkill(Skill):
     name = "keywords_everywhere"
     needs_secret = True
     cost = "credits"
+    required_env = ("KEYWORDS_EVERYWHERE_API_KEY",)
     side_effect_free = True
     description = "Haalt echte search volume, CPC, competitie en 12-maands trend per keyword uit de Keywords Everywhere API (geen mock)."
 

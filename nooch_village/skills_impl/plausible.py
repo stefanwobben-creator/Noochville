@@ -18,6 +18,7 @@ class PlausibleSkill(Skill):
     name = "plausible_stats"
     cost = "free"
     needs_secret = True
+    required_env = ("PLAUSIBLE_API_KEY", "PLAUSIBLE_SITE_ID")
     description = "Haalt echte bezoekersdata uit de Plausible Stats API (geen mock)."
 
     def available_metrics(self) -> list[str]:

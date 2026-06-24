@@ -353,6 +353,11 @@ def main() -> None:
         v = Village(heartbeat_seconds=86400)
         v.print_roster()
 
+    elif mode == "keys":
+        from nooch_village.village import Village
+        v = Village(heartbeat_seconds=86400)
+        print(v.report_keys())
+
     else:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
@@ -360,6 +365,6 @@ def main() -> None:
               "content_strategist | grant_serpapi_trends | grant_skill | revoke_skill | "
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "
               "measure_propose | rereview | ingest | notes_remove | recurate | "
-              "ground | harry_run | roster",
+              "ground | harry_run | roster | keys",
               file=sys.stderr)
         sys.exit(1)

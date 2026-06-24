@@ -72,6 +72,8 @@ class OpenalexSkill(Skill):
     name = "openalex_evidence"
     needs_secret = True
     cost = "rate_limited"
+    required_env = ("OPENALEX_API_KEY",)
+    optional_env = ("openalex_mailto",)
     description = (
         "Haalt academische evidentie op via OpenAlex (API-key vereist, polite pool, "
         "gesorteerd op citaties, backoff bij 429, locale-bewust, fail-closed)."

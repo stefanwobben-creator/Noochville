@@ -9,6 +9,7 @@ from nooch_village.util import atomic_write_json
 class GscReportSkill(Skill):
     name = "gsc_report"
     cost = "free"
+    required_env = ("GSC_TOKEN_PATH", "GSC_SITE")
     description = "Genereert een markdown GSC-nota vanuit GSC-performance-resultaten"
 
     def run(self, payload: dict, context) -> dict:
