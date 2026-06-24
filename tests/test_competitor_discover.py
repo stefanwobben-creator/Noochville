@@ -6,48 +6,63 @@ import types
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from nooch_village.skills_impl.competitor_discover import CompetitorDiscoverSkill, _extract
+from nooch_village.skills_impl.competitor_discover import (
+    CompetitorDiscoverSkill, _parse_brand_list, _strip_html)
 from nooch_village.competitor_brands import CompetitorBrands
 from nooch_village.inbox_actions import decide_competitor_candidate
 from nooch_village.roles import ConcurrentScout
 from nooch_village.cockpit import render_html
 
 
-# ── pure extractie ─────────────────────────────────────────────────────────────
+# ── pure helpers ────────────────────────────────────────────────────────────────
 
-def test_extract_filtert_stopwoorden_en_bekende_merken():
-    titles = [("10 Best Sustainable Sneaker Brands Like Veja: Cariuma and Saye", "http://x")]
-    out = _extract(titles, ["Veja", "Moea"])
-    namen = [c["brand"] for c in out]
-    assert "Cariuma" in namen and "Saye" in namen
-    assert "Best" not in namen and "Veja" not in namen and "Sneaker" not in namen
+def test_parse_brand_list_filtert_ruis_en_bekende():
+    out = _parse_brand_list("Veja, Cariuma, Wills Vegan Store, Nooch, Best", ["Veja"])
+    assert "Cariuma" in out and "Wills Vegan Store" in out
+    assert "Veja" not in out and "Nooch" not in out and "Best" not in out
 
 
-def test_extract_dedupliceert_en_limiteert():
-    titles = [("Allbirds vs Allbirds and Cariuma", "http://x")]
-    out = _extract(titles, [], limit=2)
-    namen = [c["brand"] for c in out]
-    assert namen.count("Allbirds") == 1 and len(out) <= 2
+def test_parse_brand_list_none_geeft_leeg():
+    assert _parse_brand_list("NONE", []) == []
+    assert _parse_brand_list("", []) == []
 
 
-# ── skill run ──────────────────────────────────────────────────────────────────
-
-_FEED = """<?xml version="1.0"?><rss><channel>
-<item><title>Best vegan sneaker brands like Veja: Cariuma rises</title><link>http://a</link></item>
-</channel></rss>"""
+def test_strip_html():
+    assert "Veja" in _strip_html("<p>featuring <b>Veja</b></p>") and "<" not in _strip_html("<p>x</p>")
 
 
-def test_run_geeft_kandidaten(monkeypatch):
-    resp = SimpleNamespace(text=_FEED, raise_for_status=lambda: None)
-    with patch("requests.get", return_value=resp):
-        res = CompetitorDiscoverSkill().run({"brands": ["Veja"]}, SimpleNamespace(settings={}))
+# ── skill run (gids lezen + LLM-extractie) ──────────────────────────────────────
+
+def _run_with(llm_out, *, text="x" * 300 + " Veja and Cariuma"):
+    skill = CompetitorDiscoverSkill()
+    with patch.object(skill, "_fetch_guides",
+                      return_value=[{"title": "15 Best Vegan Sneakers - Good On You", "link": "http://g"}]), \
+         patch.object(skill, "_fetch_text", return_value=text), \
+         patch("nooch_village.llm.reason", return_value=llm_out):
+        return skill.run({"brands": ["Veja"]}, SimpleNamespace(settings={}))
+
+
+def test_run_extraheert_echte_merken_uit_gids():
+    res = _run_with("Veja, Cariuma, Wills Vegan Store")
+    namen = [c["brand"] for c in res["candidates"]]
     assert res["ok"]
-    assert any(c["brand"] == "Cariuma" for c in res["candidates"])
+    assert "Cariuma" in namen and "Wills Vegan Store" in namen and "Veja" not in namen
 
 
-def test_run_fail_closed(monkeypatch):
-    with patch("requests.get", side_effect=RuntimeError("netwerk weg")):
-        res = CompetitorDiscoverSkill().run({"brands": ["Veja"]}, SimpleNamespace(settings={}))
+def test_run_fail_closed_zonder_llm():
+    res = _run_with(None)
+    assert res["ok"] and res["candidates"] == []        # geen LLM → geen rommel
+
+
+def test_run_slaat_lege_pagina_over():
+    res = _run_with("Veja, Cariuma", text="te kort")     # <200 tekens → overslaan
+    assert res["ok"] and res["candidates"] == []
+
+
+def test_run_gidsen_ophalen_faalt():
+    skill = CompetitorDiscoverSkill()
+    with patch.object(skill, "_fetch_guides", side_effect=RuntimeError("netwerk weg")):
+        res = skill.run({"brands": []}, SimpleNamespace(settings={}))
     assert not res["ok"]
 
 
