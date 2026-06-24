@@ -261,6 +261,28 @@ def test_project_status_change_to_running(tmp_path):
         httpd.shutdown(); httpd.server_close(); t.join(timeout=5)
 
 
+def test_gather_and_render_knowledge_views(tmp_path):
+    data = tmp_path / "data"
+    data.mkdir()
+    for f in ("governance_records.json", "human_inbox.json", "projects.json"):
+        (data / f).write_text("{}", encoding="utf-8")
+    (data / "library.json").write_text(json.dumps({
+        "vegan sneakers": {"status": "approved", "by": "human", "date": "2026-06-24"},
+        "fairtrade schoenen": {"status": "forbidden", "by": "human", "date": "2026-06-24"},
+    }), encoding="utf-8")
+    (data / "notes.json").write_text(json.dumps({
+        "c1": {"id": "c1", "claim": "Most vegan sneakers contain plastic.", "source": "x",
+               "grounds": "g", "status": "supported", "grounding_count": 3},
+    }), encoding="utf-8")
+    snap = cockpit.gather(str(data))
+    assert any(x["word"] == "vegan sneakers" and x["status"] == "approved" for x in snap["library"])
+    assert any(x["status"] == "forbidden" for x in snap["library"])
+    assert snap["insights"][0]["grounding_count"] == 3
+    page = cockpit.render_html(snap, csrf_token="t")
+    assert "Woordenschat" in page and "vegan sneakers" in page and "fairtrade schoenen" in page
+    assert "Inzichten" in page and "Most vegan sneakers contain plastic" in page
+
+
 def test_projectledger_to_future(tmp_path):
     from nooch_village.projects import ProjectLedger
     pl = ProjectLedger(str(tmp_path / "p.json"))

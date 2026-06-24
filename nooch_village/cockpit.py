@@ -46,6 +46,8 @@ def gather(data_dir: str | None = None) -> dict:
     records = Records(os.path.join(dd, "governance_records.json"))
     inbox = HumanInbox(os.path.join(dd, "human_inbox.json"))
     projects = ProjectLedger(os.path.join(dd, "projects.json"))
+    library = Library(os.path.join(dd, "library.json"))
+    notes = NotesStore(os.path.join(dd, "notes.json"))
 
     roster = []
     for rec in sorted(records.all(), key=lambda r: (r.archived, r.type.value, r.id)):
@@ -71,10 +73,28 @@ def gather(data_dir: str | None = None) -> dict:
     )
     proj = sorted(projects.all(), key=lambda p: -(p.get("updated_at") or 0))
 
+    # Woordenschat: woord + status (approved/forbidden/avoid/escalated), beslist eerst.
+    _ws_order = {"approved": 0, "escalated": 1, "avoid": 2, "forbidden": 3}
+    lib = sorted(
+        ({"word": w, "status": e.get("status", "?"), "by": e.get("by", ""),
+          "date": e.get("date", "")} for w, e in (library.all() or {}).items()),
+        key=lambda x: (_ws_order.get(x["status"], 9), x["word"]),
+    )
+
+    # Inzichten: claim + status + hoe vaak gegrond (geëmergeerd eerst).
+    insights = sorted(
+        ({"id": n.id, "claim": n.claim, "status": str(getattr(n.status, "value", n.status)),
+          "grounding_count": n.grounding_count, "word": n.word or ""}
+         for n in notes.all()),
+        key=lambda x: -x["grounding_count"],
+    )
+
     return {
         "roster": roster,
         "inbox": inbox_items,
         "projects": proj,
+        "library": lib,
+        "insights": insights,
         "generated_at": time.time(),
         "data_dir": dd,
     }
@@ -400,10 +420,29 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'<tbody>{"".join(prows) or "<tr><td colspan=5 class=muted>geen open projecten</td></tr>"}</tbody></table>'
     )
 
+    # Woordenschat (keyword-library) — read-only inzicht
+    lib = snap.get("library", [])
+    lrows = "".join(
+        f'<tr><td><b>{_e(x["word"])}</b></td>'
+        f'<td><span class="chip">{_e(x["status"])}</span></td>'
+        f'<td class="muted">{_e(x.get("by", ""))}</td></tr>' for x in lib)
+    lib_tbl = ('<table><thead><tr><th>woord</th><th>status</th><th>door</th></tr></thead>'
+               f'<tbody>{lrows or "<tr><td colspan=3 class=muted>leeg</td></tr>"}</tbody></table>')
+
+    # Inzichten (kennislaag) — geëmergeerd (vaakst gegrond) eerst
+    ins = snap.get("insights", [])
+    irows2 = "".join(
+        f'<tr><td>{_e(x["claim"][:120])}</td>'
+        f'<td class="muted">{_e(x["status"])}</td>'
+        f'<td>{_e(x["grounding_count"])}×</td></tr>' for x in ins)
+    ins_tbl = ('<table><thead><tr><th>claim</th><th>status</th><th>gegrond</th></tr></thead>'
+               f'<tbody>{irows2 or "<tr><td colspan=3 class=muted>geen inzichten</td></tr>"}</tbody></table>')
+
     counts = (
         f'{sum(1 for r in roster if not r["archived"])} rollen · '
         f'{sum(1 for i in inbox if i.get("status") == "pending")} open inbox-items · '
-        f'{sum(1 for p in projects if p.get("status") not in ("done",))} open projecten'
+        f'{sum(1 for p in projects if p.get("status") not in ("done",))} open projecten · '
+        f'{len(lib)} woorden · {len(ins)} inzichten'
     )
 
     if writable:
@@ -419,6 +458,9 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'{_banner(msg)}'
         f'<h2>Inbox</h2>{inbox_tbl}'
         f'<h2>Proces (projecten)</h2>{proj_tbl}'
+        f'<h2>Kennis</h2>'
+        f'<details><summary>Woordenschat ({len(lib)} woorden)</summary>{lib_tbl}</details>'
+        f'<details><summary>Inzichten — kennislaag ({len(ins)} kaartjes)</summary>{ins_tbl}</details>'
         f'<details><summary>Roster ({sum(1 for r in roster if not r["archived"])} actieve rollen)</summary>{roster_tbl}</details>'
     )
     return _page("NoochVille cockpit", inner)
