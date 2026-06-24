@@ -404,14 +404,12 @@ class TrendsWorker(Inhabitant):
 
     def _propose_from_gsc(self, result: dict) -> None:
         lib = self.context.library
-        # Alleen nieuwe high_potential-queries (nog geen oordeel in de bibliotheek):
-        # die meten we met KeywordsEverywhere en sturen we door met écht zoekvolume,
-        # zodat de Librarian boven de drempel auto-kan goedkeuren.
-        new_rows = [r for r in result.get("rows", [])
-                    if r["bucket"] == "high_potential" and lib.status(r["query"]) is None]
-        vol_by = self._measure_volumes([r["query"] for r in new_rows])
         proposed = 0
-        for row in new_rows:
+        for row in result.get("rows", []):
+            if row["bucket"] != "high_potential":
+                continue
+            # Geen volume-meting hier: de KeywordsEverywhere-verrijking is gecentraliseerd
+            # bij de Librarian, zodat élke bron (GSC, SerpAPI-Trends, ngram) gelijk profiteert.
             published = _publish_keyword_proposed(
                 self.bus, self.id, row["query"],
                 demand={
@@ -422,7 +420,6 @@ class TrendsWorker(Inhabitant):
                     "bucket": row["bucket"],
                     "impressions": row["impressions"],
                     "clicks": row["clicks"],
-                    "volume": vol_by.get(row["query"], 0),
                 },
                 library=lib,
             )
@@ -432,37 +429,6 @@ class TrendsWorker(Inhabitant):
             self.log.info("🔍 %d GSC high_potential kandidaten doorgestuurd naar de Librarian", proposed)
         else:
             self.log.info("ℹ️ Geen nieuwe high_potential kandidaten (alles al bekend of geen data)")
-
-    def _measure_volumes(self, queries: list[str]) -> dict[str, int]:
-        """Meet kandidaat-queries met KeywordsEverywhere (echt zoekvolume per term).
-        Begrensd tot ke_pulse_max per puls (credit-beheersing). Faalt closed: geen key /
-        skill weg → leeg dict, kandidaten gaan zonder volume door (en escaleren dan zoals
-        voorheen)."""
-        if not queries:
-            return {}
-        if "keywords_everywhere" not in self.dna.skills:
-            return {}                                   # niet gegrant → niet meten
-        cap = self._ke_pulse_max()
-        batch = queries[:cap]
-        res = self.use_skill("keywords_everywhere",
-                             {"kw": batch, "country": self._ke_country()})
-        if not isinstance(res, dict) or "error" in res or "keywords" not in res:
-            reason = res.get("error") if isinstance(res, dict) else res
-            self.log.info("📐 KeywordsEverywhere niet beschikbaar (%s) — kandidaten zonder volume", reason)
-            return {}
-        vols = {k.get("keyword", ""): int(k.get("vol", 0) or 0) for k in res.get("keywords", [])}
-        self.log.info("📐 KeywordsEverywhere: %d/%d kandidaten gemeten (cap %d)",
-                      len(vols), len(queries), cap)
-        return vols
-
-    def _ke_pulse_max(self) -> int:
-        try:
-            return int(self.context.settings.get("ke_pulse_max", "25"))
-        except (TypeError, ValueError):
-            return 25
-
-    def _ke_country(self) -> str:
-        return (self.context.settings.get("ke_country", "nl") or "nl").strip()
 
 
 class Librarian(Inhabitant):
@@ -502,12 +468,35 @@ class Librarian(Inhabitant):
         self.bus.publish(Event("cards_curated",
             {"by": self.id, "added": r["added"], "from": source}, self.id))
 
+    def _enrich_volume(self, word: str, demand: dict) -> dict:
+        """Centrale KeywordsEverywhere-verrijking vóór de beoordeling: hang échte
+        zoekvraag (volume) aan de demand, zodat élke bron (GSC, SerpAPI-Trends, ngram)
+        gelijk op volume kan auto-approven. Faalt closed: bron leverde al volume, of geen
+        key/skill → demand onveranderd (kandidaat beoordeelt zoals voorheen)."""
+        if demand.get("volume") or demand.get("vol"):
+            return demand                               # bron gaf al volume
+        if not word or "keywords_everywhere" not in self.dna.skills:
+            return demand
+        res = self.use_skill("keywords_everywhere",
+                             {"kw": [word], "country": self._ke_country()})
+        if not isinstance(res, dict) or "error" in res or not res.get("keywords"):
+            reason = res.get("error") if isinstance(res, dict) else res
+            self.log.info("📐 KE niet beschikbaar (%s) — '%s' zonder volume beoordeeld", reason, word)
+            return demand
+        vol = int(res["keywords"][0].get("vol", 0) or 0)
+        self.log.info("📐 KE: '%s' → volume %d/mnd", word, vol)
+        return {**demand, "volume": vol, "ke_country": self._ke_country()}
+
+    def _ke_country(self) -> str:
+        return (self.context.settings.get("ke_country", "nl") or "nl").strip()
+
     def _on_proposal(self, event: Event) -> None:
         word = event.data.get("word")
-        demand = event.data.get("demand", {})
+        demand = dict(event.data.get("demand", {}))     # kopie: we verrijken 'm centraal
         proposer = event.data.get("from", "?")
         self.log.info("📥 kandidaat van %s: '%s'", proposer, word)
 
+        demand = self._enrich_volume(word, demand)
         v = self.use_skill("keyword_review", {"word": word, "demand": demand})
         decision = v.get("decision")
         reason = v.get("reason", "")

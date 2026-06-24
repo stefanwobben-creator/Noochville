@@ -62,11 +62,12 @@ def test_trede_in_cooldown_wordt_overgeslagen(monkeypatch):
     assert geraakt["gemini"] is False           # cooldown-trede niet aangeroepen
 
 
-def test_cooldown_verloopt_na_de_tijd():
+def test_cooldown_verloopt_na_de_tijd(monkeypatch):
+    monkeypatch.setenv("LLM_TIER_COOLDOWN_S", "100")        # deterministisch, los van .env
     llm.reset_cooldowns()
     llm._set_cooldown("gemini:g1", now=0.0)
-    assert llm._in_cooldown("gemini:g1", now=10.0)          # binnen het venster
-    assert not llm._in_cooldown("gemini:g1", now=10_000.0)  # ruim erna verlopen
+    assert llm._in_cooldown("gemini:g1", now=10.0)          # binnen het venster (< 100)
+    assert not llm._in_cooldown("gemini:g1", now=10_000.0)  # ruim erna verlopen (> 100)
 
 
 # ── Fail-closed + geen sleutel = trede overslaan ──────────────────────────────

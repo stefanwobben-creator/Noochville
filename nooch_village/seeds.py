@@ -138,7 +138,8 @@ def seed_records(records: Records) -> None:
                            accountabilities=["kandidaat-woorden beoordelen",
                                              "twijfelgevallen escaleren naar een mens"],
                            domains=["bibliotheek"],
-                           skills=["keyword_review", "library_lookup", "verband_voorstel"]))
+                           skills=["keyword_review", "library_lookup", "verband_voorstel",
+                                   "keywords_everywhere"]))
     trends = Record(id="trends", type=RecordType.ROLE, parent="noochville",
                     definition=RoleDefinition(
                         purpose="Ontdekt kansen in Google Search Console en voedt de woordenschat",
@@ -225,6 +226,14 @@ def migrate_records(records: Records) -> None:
     if trends is not None and "gsc_report" not in trends.definition.skills:
         trends.definition.skills.append("gsc_report")
         records.put(trends)
+        changed = True
+    # Zorg dat de Librarian KeywordsEverywhere heeft: hij verrijkt elke kandidaat centraal
+    # met echt zoekvolume vóór de beoordeling (idempotent).
+    librarian = records.get("librarian")
+    if librarian is not None and "keywords_everywhere" not in librarian.definition.skills:
+        librarian.definition.skills.append("keywords_everywhere")
+        librarian.version += 1
+        records.put(librarian)
         changed = True
     # Zorg dat Harry de onderzoeksvraag-skill heeft voor de verdiep-lus (idempotent)
     harry = records.get("harry_hemp")
