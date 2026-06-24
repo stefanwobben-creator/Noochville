@@ -19,7 +19,7 @@ from nooch_village.governance import Records, Secretary, Reconciler, proposal_to
 from nooch_village.models import Proposal
 from nooch_village.roles import (
     WebsiteWatcherWorker, Librarian, TrendsWorker,
-    Facilitator, Noochie, HarryHemp, ContentStrategist,
+    Facilitator, Noochie, HarryHemp, ContentStrategist, ConcurrentScout,
 )
 from nooch_village.library import Library
 from nooch_village.lexicon import Lexicon
@@ -38,6 +38,7 @@ from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
 from nooch_village.skills_impl.openalex import OpenalexSkill
 from nooch_village.skills_impl.bulletin_schrijven import BulletinSchrijvenSkill
 from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
+from nooch_village.skills_impl.competitor_news import CompetitorNewsSkill
 from nooch_village.skills_impl.verband_voorstel import VerbandVoorstelSkill
 from nooch_village.skills_impl.onderzoeksvraag import OnderzoeksvraagSkill
 from nooch_village.skills_impl.content_schrijven import ContentSchrijvenSkill
@@ -64,6 +65,7 @@ CLASS_MAP = {
     "noochie":         Noochie,
     "harry_hemp":      HarryHemp,
     "content_strategist": ContentStrategist,
+    "concurrent_scout": ConcurrentScout,
 }
 
 
@@ -105,6 +107,7 @@ class Village:
             OpenalexSkill(),
             BulletinSchrijvenSkill(),
             KeywordsEverywhereSkill(),
+            CompetitorNewsSkill(),
             VerbandVoorstelSkill(),
             OnderzoeksvraagSkill(),
             ContentSchrijvenSkill(),

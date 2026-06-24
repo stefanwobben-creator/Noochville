@@ -358,6 +358,22 @@ def main() -> None:
         v = Village(heartbeat_seconds=86400)
         print(v.report_keys())
 
+    elif mode == "competitor":
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.skills_impl.competitor_news import CompetitorNewsSkill
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        print("🔭 Concurrent-scan draait (Google News RSS per merk)…")
+        res = CompetitorNewsSkill().run({}, ctx)
+        if not res.get("ok"):
+            print(f"Scan mislukt: {res.get('error', 'onbekend')}", file=sys.stderr)
+            sys.exit(1)
+        print(f"✅ Rapport: {res['path']}")
+        print(f"   {res['total']} updates over {len(res['brands'])} merken: {', '.join(res['brands'])}")
+        if res.get("errors"):
+            print(f"   ⚠️ merken met fouten: {list(res['errors'])}")
+
     else:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
@@ -365,6 +381,6 @@ def main() -> None:
               "content_strategist | grant_serpapi_trends | grant_skill | revoke_skill | "
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "
               "measure_propose | rereview | ingest | notes_remove | recurate | "
-              "ground | harry_run | roster | keys",
+              "ground | harry_run | roster | keys | competitor",
               file=sys.stderr)
         sys.exit(1)

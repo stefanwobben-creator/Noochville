@@ -124,7 +124,8 @@ def seed_records(records: Records) -> None:
                   definition=RoleDefinition(
                       purpose=_ANCHOR_PURPOSE, skills=[],
                       policies=_ANCHOR_POLICIES),
-                  members=["website_watcher", "librarian", "trends", "facilitator"])
+                  members=["website_watcher", "librarian", "trends", "facilitator",
+                           "concurrent_scout"])
     watcher = Record(id="website_watcher", type=RecordType.ROLE, parent="noochville",
                      definition=RoleDefinition(
                          purpose="Bewaakt de online gezondheid en groei van Nooch.earth",
@@ -157,7 +158,17 @@ def seed_records(records: Records) -> None:
                                                "risicovolle voorstellen escaleren naar de mens"],
                              skills=[]),
                          persona="Rupert Rubber")
-    for r in (root, watcher, librarian, trends, facilitator):
+    scout = Record(id="concurrent_scout", type=RecordType.ROLE, parent="noochville",
+                   definition=RoleDefinition(
+                       purpose="Observeert de duurzame-sneakermarkt en signaleert "
+                               "strategische bewegingen van directe concurrenten",
+                       accountabilities=["concurrentienieuws monitoren (funding, lanceringen, "
+                                         "B-Corp, materiaalinnovatie)",
+                                         "een wekelijks field report schrijven",
+                                         "missie-relevante zetten als spanning signaleren"],
+                       skills=["competitor_news"]),
+                   persona="Sven Spruce")
+    for r in (root, watcher, librarian, trends, facilitator, scout):
         r.source = "seed"
         records.put(r)
 
@@ -226,6 +237,25 @@ def migrate_records(records: Records) -> None:
     if trends is not None and "gsc_report" not in trends.definition.skills:
         trends.definition.skills.append("gsc_report")
         records.put(trends)
+        changed = True
+    # Concurrent-scout: nieuwe inwoner die de markt observeert (idempotent geboren + bemenst,
+    # CLASS_MAP heeft de entry, dus de Reconciler activeert 'm direct).
+    if records.get("concurrent_scout") is None:
+        scout = Record(id="concurrent_scout", type=RecordType.ROLE, parent=root.id,
+                       definition=RoleDefinition(
+                           purpose="Observeert de duurzame-sneakermarkt en signaleert "
+                                   "strategische bewegingen van directe concurrenten",
+                           accountabilities=["concurrentienieuws monitoren (funding, lanceringen, "
+                                             "B-Corp, materiaalinnovatie)",
+                                             "een wekelijks field report schrijven",
+                                             "missie-relevante zetten als spanning signaleren"],
+                           skills=["competitor_news"]),
+                       persona="Sven Spruce")
+        scout.source = "seed"
+        records.put(scout)
+        changed = True
+    if "concurrent_scout" not in root.members:
+        root.members.append("concurrent_scout")
         changed = True
     # Zorg dat de Librarian KeywordsEverywhere heeft: hij verrijkt elke kandidaat centraal
     # met echt zoekvolume vóór de beoordeling (idempotent).

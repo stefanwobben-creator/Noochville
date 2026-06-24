@@ -431,6 +431,78 @@ class TrendsWorker(Inhabitant):
             self.log.info("ℹ️ Geen nieuwe high_potential kandidaten (alles al bekend of geen data)")
 
 
+class ConcurrentScout(Inhabitant):
+    """Observeert de duurzame-sneakermarkt: monitort strategisch nieuws van directe
+    concurrenten (funding, lanceringen, B-Corp, materiaalinnovatie) en voedt het dorp.
+
+    Schrijft elke puls een field report en publiceert per NIEUW bericht een competitor_signal
+    (dat Noochie in het bulletin verwerkt). Bij missie-relevante zetten senst hij één
+    gebundelde spanning. Dedup via data/competitor_seen.json zodat 'elke puls' geen ruis geeft.
+    Cureert of beslist nooit; hij observeert en signaleert."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._busy = False
+        self.react("dag_begint", self._on_pulse, drop_if_busy=True)
+
+    def _on_pulse(self, event: Event) -> None:
+        if self._busy:
+            return
+        self._busy = True
+        try:
+            self.log.info("🔭 concurrent-scan gestart")
+            res = self.use_skill("competitor_news", {})
+            if not res.get("ok"):
+                self.log.warning("⚠️ concurrent-scan mislukt: %s", res.get("error"))
+                self.bus.publish(Event("competitor_pulse_completed",
+                    {"by": self.id, "ok": False, "error": res.get("error")}, self.id))
+                return
+            items = res.get("items", [])
+            seen = self._load_seen()
+            new_items = [it for it in items if it.get("link") and it["link"] not in seen]
+            for it in new_items:                          # signalen → bulletin (Noochie)
+                self.bus.publish(Event("competitor_signal",
+                    {"by": self.id, "brand": it["brand"], "title": it["title"],
+                     "link": it["link"], "date": it["date"]}, self.id))
+            mission_hits = [it for it in new_items if self._is_mission_relevant(it["title"])]
+            if mission_hits:                              # één gebundelde spanning, geen flood
+                merken = ", ".join(sorted({it["brand"] for it in mission_hits}))
+                self.sense_tension(
+                    f"{len(mission_hits)} nieuwe missie-relevante concurrent-zet(ten) bij "
+                    f"{merken}; zie {os.path.basename(res.get('path', '') or '')}",
+                    kind="operational")
+            self._save_seen(seen | {it["link"] for it in new_items})
+            self.log.info("🔭 concurrent-scan: %d nieuw / %d totaal, %d missie-relevant → %s",
+                          len(new_items), res.get("total", 0), len(mission_hits), res.get("path"))
+            self.bus.publish(Event("competitor_pulse_completed",
+                {"by": self.id, "ok": True, "new": len(new_items),
+                 "total": res.get("total", 0), "mission_relevant": len(mission_hits),
+                 "path": res.get("path")}, self.id))
+        finally:
+            self._busy = False
+
+    def _is_mission_relevant(self, title: str) -> bool:
+        from nooch_village.skills_impl.competitor_news import _MISSION_THEMES
+        t = (title or "").lower()
+        return any(theme in t for theme in _MISSION_THEMES)
+
+    def _seen_path(self) -> str:
+        return os.path.join(self.context.data_dir, "competitor_seen.json")
+
+    def _load_seen(self) -> set:
+        try:
+            return set(json.load(open(self._seen_path())).get("links", []))
+        except Exception:
+            return set()
+
+    def _save_seen(self, links: set) -> None:
+        try:
+            with open(self._seen_path(), "w") as f:
+                json.dump({"links": sorted(links)[-2000:]}, f)   # cap tegen onbeperkte groei
+        except Exception as exc:
+            self.log.warning("kon competitor_seen niet opslaan: %s", exc)
+
+
 class Librarian(Inhabitant):
     """Hoeder van de woordenschat. Bezit het DOMEIN (de bibliotheek): anderen lezen vrij,
     alleen de Librarian cureert. Beoordeelt kandidaat-woorden tegen de missie en escaleert
@@ -1321,6 +1393,7 @@ class Noochie(Inhabitant):
         "tijdgeest_pulse_completed",
         "keyword_proposed",
         "gsc_pulse_completed",
+        "competitor_signal",
     )
 
     def __init__(self, *args, **kwargs):
