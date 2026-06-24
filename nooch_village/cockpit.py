@@ -27,7 +27,9 @@ from nooch_village.library import Library
 from nooch_village.notes_store import NotesStore
 from nooch_village.inbox_actions import (
     decide_keyword, defer_item, confirm_item, mark_done, resolve_tension, add_reference,
-    route_to_project, route_to_governance, remove_note, override_library_term)
+    route_to_project, route_to_governance, remove_note, override_library_term,
+    decide_competitor_candidate)
+from nooch_village.competitor_brands import CompetitorBrands
 
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
@@ -48,6 +50,7 @@ def gather(data_dir: str | None = None) -> dict:
     projects = ProjectLedger(os.path.join(dd, "projects.json"))
     library = Library(os.path.join(dd, "library.json"))
     notes = NotesStore(os.path.join(dd, "notes.json"))
+    brands = CompetitorBrands(os.path.join(dd, "competitor_brands.json"))
 
     roster = []
     for rec in sorted(records.all(), key=lambda r: (r.archived, r.type.value, r.id)):
@@ -96,6 +99,8 @@ def gather(data_dir: str | None = None) -> dict:
         "projects": proj,
         "library": lib,
         "insights": insights,
+        "competitor_candidates": brands.candidates(),
+        "competitor_confirmed": brands.confirmed(),
         "generated_at": time.time(),
         "data_dir": dd,
     }
@@ -217,10 +222,19 @@ def _btn(iid: str, action: str, label: str, token: str, cls: str = "") -> str:
 
 def _lib_btn(word: str, decision: str, label: str, token: str, cls: str = "") -> str:
     """Override-knop voor een bibliotheekterm (escalated afromen): POST /action lib_override."""
+    return _word_btn("lib_override", word, decision, label, token, cls)
+
+
+def _brand_btn(brand: str, decision: str, label: str, token: str, cls: str = "") -> str:
+    """Bevestig/negeer-knop voor een gespotte concurrent: POST /action brand_decide."""
+    return _word_btn("brand_decide", brand, decision, label, token, cls)
+
+
+def _word_btn(action: str, word: str, decision: str, label: str, token: str, cls: str = "") -> str:
     return (
         f'<form method="post" action="/action" style="display:inline">'
         f'<input type="hidden" name="csrf" value="{_e(token)}">'
-        f'<input type="hidden" name="action" value="lib_override">'
+        f'<input type="hidden" name="action" value="{_e(action)}">'
         f'<input type="hidden" name="word" value="{_e(word)}">'
         f'<input type="hidden" name="decision" value="{_e(decision)}">'
         f'<button class="btn {cls}" type="submit">{_e(label)}</button></form>'
@@ -617,6 +631,24 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     ins_tbl = ('<table><thead><tr><th>claim</th><th>status</th><th>gegrond</th></tr></thead>'
                f'<tbody>{irows2 or "<tr><td colspan=3 class=muted>geen inzichten</td></tr>"}</tbody></table>')
 
+    # Concurrenten: gespotte (kandidaat) merken die op jouw oordeel wachten + de bevestigde set.
+    cands = snap.get("competitor_candidates", [])
+    confirmed = snap.get("competitor_confirmed", [])
+    crows = "".join(
+        f'<tr><td><b>{_e(c["brand"])}</b></td>'
+        f'<td class="muted"><a href="{_e(c.get("link", ""))}">{_e((c.get("article") or "")[:80])}</a></td>'
+        f'<td>' + ((_brand_btn(c["brand"], "confirm", "✓ monitor", csrf_token, "ok") + " "
+                    + _brand_btn(c["brand"], "reject", "✗ negeer", csrf_token, "danger"))
+                   if writable else '<span class="muted">—</span>') + '</td></tr>'
+        for c in cands)
+    cand_tbl = ('<table><thead><tr><th>gespot merk</th><th>in artikel</th><th>jouw oordeel</th></tr></thead>'
+                f'<tbody>{crows or "<tr><td colspan=3 class=muted>geen nieuwe merken gespot</td></tr>"}</tbody></table>')
+    conf_line = (f'<p class="muted">Gemonitord (bevestigd): {_e(", ".join(confirmed))}</p>'
+                 if confirmed else '')
+    comp_block = (f'<h2>Concurrenten</h2>'
+                  f'<details open><summary>🔮 Nieuw gespot — wacht op jouw oordeel ({len(cands)})</summary>'
+                  f'{cand_tbl}</details>{conf_line}') if (cands or confirmed) else ''
+
     counts = (
         f'{sum(1 for r in roster if not r["archived"])} rollen · '
         f'{sum(1 for i in inbox if i.get("status") == "pending")} open inbox-items · '
@@ -642,6 +674,7 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'<details><summary>Woordenschat ({len(show_lib)} woorden)</summary>{lib_tbl}</details>'
         f'<details><summary>Inzichten — kennislaag ({len(ins)} kaartjes)</summary>{ins_tbl}</details>'
         f'<details><summary>Roster ({sum(1 for r in roster if not r["archived"])} actieve rollen)</summary>{roster_tbl}</details>'
+        f'{comp_block}'
     )
     return _page("NoochVille cockpit", inner)
 
@@ -669,6 +702,8 @@ def _flash(result: dict) -> str:
         return f"✓ Kennis-kaart vastgelegd ({result['card_id']})"
     if "pid" in result:
         return f"✓ Project aangemaakt voor {result.get('owner')}"
+    if "brand_status" in result:
+        return f"✓ '{result['brand']}' → {result['brand_status']}"
     if "word" in result:
         return f"✓ '{result['word']}' → {result.get('status')}"
     _labels = {"resolved": "✓ Spanning afgehandeld (resolved)",
@@ -691,6 +726,10 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         library = Library(os.path.join(dd, "library.json"))
         return override_library_term(library, extra.get("word", ""),
                                      extra.get("decision", ""), reason=reason)
+    if action == "brand_decide":
+        brands = CompetitorBrands(os.path.join(dd, "competitor_brands.json"))
+        return decide_competitor_candidate(brands, extra.get("word", ""),
+                                           extra.get("decision", ""))
     if action == "defer":
         return defer_item(inbox, iid, reason=reason)
     if action == "confirm":

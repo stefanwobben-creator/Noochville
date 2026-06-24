@@ -166,7 +166,7 @@ def seed_records(records: Records) -> None:
                                          "B-Corp, materiaalinnovatie)",
                                          "een wekelijks field report schrijven",
                                          "missie-relevante zetten als spanning signaleren"],
-                       skills=["competitor_news"]),
+                       skills=["competitor_news", "competitor_discover"]),
                    persona="Sven Spruce")
     for r in (root, watcher, librarian, trends, facilitator, scout):
         r.source = "seed"
@@ -256,6 +256,13 @@ def migrate_records(records: Records) -> None:
         changed = True
     if "concurrent_scout" not in root.members:
         root.members.append("concurrent_scout")
+        changed = True
+    # Zorg dat de scout ook de ontdek-skill heeft (idempotent, voor bestaande records).
+    scout_rec = records.get("concurrent_scout")
+    if scout_rec is not None and "competitor_discover" not in scout_rec.definition.skills:
+        scout_rec.definition.skills.append("competitor_discover")
+        scout_rec.version += 1
+        records.put(scout_rec)
         changed = True
     # Zorg dat de Librarian KeywordsEverywhere heeft: hij verrijkt elke kandidaat centraal
     # met echt zoekvolume vóór de beoordeling (idempotent).

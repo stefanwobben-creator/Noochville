@@ -39,6 +39,7 @@ from nooch_village.skills_impl.openalex import OpenalexSkill
 from nooch_village.skills_impl.bulletin_schrijven import BulletinSchrijvenSkill
 from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
 from nooch_village.skills_impl.competitor_news import CompetitorNewsSkill
+from nooch_village.skills_impl.competitor_discover import CompetitorDiscoverSkill
 from nooch_village.skills_impl.verband_voorstel import VerbandVoorstelSkill
 from nooch_village.skills_impl.onderzoeksvraag import OnderzoeksvraagSkill
 from nooch_village.skills_impl.content_schrijven import ContentSchrijvenSkill
@@ -108,6 +109,7 @@ class Village:
             BulletinSchrijvenSkill(),
             KeywordsEverywhereSkill(),
             CompetitorNewsSkill(),
+            CompetitorDiscoverSkill(),
             VerbandVoorstelSkill(),
             OnderzoeksvraagSkill(),
             ContentSchrijvenSkill(),

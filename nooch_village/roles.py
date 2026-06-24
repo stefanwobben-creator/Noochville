@@ -450,36 +450,70 @@ class ConcurrentScout(Inhabitant):
             return
         self._busy = True
         try:
-            self.log.info("🔭 concurrent-scan gestart")
-            res = self.use_skill("competitor_news", {})
-            if not res.get("ok"):
-                self.log.warning("⚠️ concurrent-scan mislukt: %s", res.get("error"))
-                self.bus.publish(Event("competitor_pulse_completed",
-                    {"by": self.id, "ok": False, "error": res.get("error")}, self.id))
-                return
-            items = res.get("items", [])
-            seen = self._load_seen()
-            new_items = [it for it in items if it.get("link") and it["link"] not in seen]
-            for it in new_items:                          # signalen → bulletin (Noochie)
-                self.bus.publish(Event("competitor_signal",
-                    {"by": self.id, "brand": it["brand"], "title": it["title"],
-                     "link": it["link"], "date": it["date"]}, self.id))
-            mission_hits = [it for it in new_items if self._is_mission_relevant(it["title"])]
-            if mission_hits:                              # één gebundelde spanning, geen flood
-                merken = ", ".join(sorted({it["brand"] for it in mission_hits}))
-                self.sense_tension(
-                    f"{len(mission_hits)} nieuwe missie-relevante concurrent-zet(ten) bij "
-                    f"{merken}; zie {os.path.basename(res.get('path', '') or '')}",
-                    kind="operational")
-            self._save_seen(seen | {it["link"] for it in new_items})
-            self.log.info("🔭 concurrent-scan: %d nieuw / %d totaal, %d missie-relevant → %s",
-                          len(new_items), res.get("total", 0), len(mission_hits), res.get("path"))
-            self.bus.publish(Event("competitor_pulse_completed",
-                {"by": self.id, "ok": True, "new": len(new_items),
-                 "total": res.get("total", 0), "mission_relevant": len(mission_hits),
-                 "path": res.get("path")}, self.id))
+            store = self._brands_store()
+            monitored = self._monitored_brands(store)
+            self._run_news(monitored)
+            self._run_discovery(monitored, store)
         finally:
             self._busy = False
+
+    def _brands_store(self):
+        from nooch_village.competitor_brands import CompetitorBrands
+        return CompetitorBrands(os.path.join(self.context.data_dir, "competitor_brands.json"))
+
+    def _monitored_brands(self, store) -> list[str]:
+        """Vaste merken (settings) + door de mens bevestigde ontdekkingen."""
+        raw = (self.context.settings.get("competitor_brands", "") or "")
+        settings_brands = [b.strip() for b in raw.split(",") if b.strip()]
+        return list(dict.fromkeys(settings_brands + store.confirmed()))
+
+    def _run_news(self, monitored: list[str]) -> None:
+        self.log.info("🔭 concurrent-scan gestart (%d merken)", len(monitored))
+        res = self.use_skill("competitor_news", {"brands": monitored} if monitored else {})
+        if not res.get("ok"):
+            self.log.warning("⚠️ concurrent-scan mislukt: %s", res.get("error"))
+            self.bus.publish(Event("competitor_pulse_completed",
+                {"by": self.id, "ok": False, "error": res.get("error")}, self.id))
+            return
+        items = res.get("items", [])
+        seen = self._load_seen()
+        new_items = [it for it in items if it.get("link") and it["link"] not in seen]
+        for it in new_items:                              # signalen → bulletin (Noochie)
+            self.bus.publish(Event("competitor_signal",
+                {"by": self.id, "brand": it["brand"], "title": it["title"],
+                 "link": it["link"], "date": it["date"]}, self.id))
+        mission_hits = [it for it in new_items if self._is_mission_relevant(it["title"])]
+        if mission_hits:                                  # één gebundelde spanning, geen flood
+            merken = ", ".join(sorted({it["brand"] for it in mission_hits}))
+            self.sense_tension(
+                f"{len(mission_hits)} nieuwe missie-relevante concurrent-zet(ten) bij "
+                f"{merken}; zie {os.path.basename(res.get('path', '') or '')}",
+                kind="operational")
+        self._save_seen(seen | {it["link"] for it in new_items})
+        self.log.info("🔭 concurrent-scan: %d nieuw / %d totaal, %d missie-relevant → %s",
+                      len(new_items), res.get("total", 0), len(mission_hits), res.get("path"))
+        self.bus.publish(Event("competitor_pulse_completed",
+            {"by": self.id, "ok": True, "new": len(new_items),
+             "total": res.get("total", 0), "mission_relevant": len(mission_hits),
+             "path": res.get("path")}, self.id))
+
+    def _run_discovery(self, monitored: list[str], store) -> None:
+        """Spot kandidaat-concurrenten en zet ze (deduped) in de store voor jouw oordeel."""
+        if "competitor_discover" not in self.dna.skills:
+            return
+        res = self.use_skill("competitor_discover", {"brands": monitored})
+        if not res.get("ok"):
+            self.log.info("🔮 ontdekking overgeslagen: %s", res.get("error"))
+            return
+        added = 0
+        for c in res.get("candidates", []):
+            if store.add_candidate(c.get("brand", ""), c.get("article", ""), c.get("link", "")):
+                added += 1
+                self.bus.publish(Event("competitor_candidate",
+                    {"by": self.id, "brand": c.get("brand", ""),
+                     "article": c.get("article", ""), "link": c.get("link", "")}, self.id))
+        if added:
+            self.log.info("🔮 %d nieuwe kandidaat-concurrent(en) gespot — wacht op jouw oordeel", added)
 
     def _is_mission_relevant(self, title: str) -> bool:
         from nooch_village.skills_impl.competitor_news import _MISSION_THEMES

@@ -164,6 +164,24 @@ def override_library_term(library, word: str, decision: str,
     return {"ok": True, "word": word, "status": status}
 
 
+def decide_competitor_candidate(brands, brand: str, decision: str) -> dict:
+    """Menselijk oordeel over een gespotte concurrent (ruizige ontdekking → mens beslist).
+    confirm → vanaf nu meegenomen in de monitoring; reject → genegeerd (komt niet terug).
+    Schrijft via de CompetitorBrands-store. Geeft {ok, brand?, brand_status?, error?}."""
+    brand = (brand or "").strip()
+    if not brand:
+        return {"ok": False, "error": "geen merk"}
+    if decision == "confirm":
+        ok = brands.confirm(brand)
+        return {"ok": ok, "brand": brand, "brand_status": "gemonitord"} if ok \
+            else {"ok": False, "error": "kon niet bevestigen"}
+    if decision == "reject":
+        ok = brands.reject(brand)
+        return {"ok": ok, "brand": brand, "brand_status": "genegeerd"} if ok \
+            else {"ok": False, "error": "kon niet negeren"}
+    return {"ok": False, "error": f"onbekend besluit '{decision}'"}
+
+
 def defer_item(inbox, iid: str, reason: str = "") -> dict:
     """Stel een item uit (blijft geregistreerd). Werkt voor elk type (pure bookkeeping)."""
     item = inbox.get(iid)

@@ -361,11 +361,17 @@ def main() -> None:
     elif mode == "competitor":
         import os
         from nooch_village.config import load_context
+        from nooch_village.competitor_brands import CompetitorBrands
         from nooch_village.skills_impl.competitor_news import CompetitorNewsSkill
+        from nooch_village.skills_impl.competitor_discover import CompetitorDiscoverSkill
         from nooch_village.village import BASE_DIR
         ctx = load_context(BASE_DIR)
+        store = CompetitorBrands(os.path.join(ctx.data_dir, "competitor_brands.json"))
+        raw = (ctx.settings.get("competitor_brands", "") or "")
+        monitored = list(dict.fromkeys(
+            [b.strip() for b in raw.split(",") if b.strip()] + store.confirmed()))
         print("🔭 Concurrent-scan draait (Google News RSS per merk)…")
-        res = CompetitorNewsSkill().run({}, ctx)
+        res = CompetitorNewsSkill().run({"brands": monitored} if monitored else {}, ctx)
         if not res.get("ok"):
             print(f"Scan mislukt: {res.get('error', 'onbekend')}", file=sys.stderr)
             sys.exit(1)
@@ -373,6 +379,18 @@ def main() -> None:
         print(f"   {res['total']} updates over {len(res['brands'])} merken: {', '.join(res['brands'])}")
         if res.get("errors"):
             print(f"   ⚠️ merken met fouten: {list(res['errors'])}")
+        # Ontdekking: spot nieuwe merken en zet ze (deduped) klaar voor jouw oordeel
+        print("🔮 Scannen op nieuwe/aanverwante merken…")
+        disc = CompetitorDiscoverSkill().run({"brands": monitored}, ctx)
+        if disc.get("ok"):
+            added = [c["brand"] for c in disc.get("candidates", [])
+                     if store.add_candidate(c.get("brand", ""), c.get("article", ""), c.get("link", ""))]
+            if added:
+                print(f"   {len(added)} nieuw gespot (wacht op je oordeel in de cockpit): {', '.join(added)}")
+            else:
+                print("   geen nieuwe merken gespot")
+        else:
+            print(f"   ontdekking overgeslagen: {disc.get('error', 'onbekend')}")
 
     else:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
