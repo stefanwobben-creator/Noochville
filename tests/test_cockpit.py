@@ -278,9 +278,16 @@ def test_gather_and_render_knowledge_views(tmp_path):
     assert any(x["word"] == "vegan sneakers" and x["status"] == "approved" for x in snap["library"])
     assert any(x["status"] == "forbidden" for x in snap["library"])
     assert snap["insights"][0]["grounding_count"] == 3
+
+    # Standaard: alleen actieve (approved) woorden; forbidden verborgen.
     page = cockpit.render_html(snap, csrf_token="t")
-    assert "Woordenschat" in page and "vegan sneakers" in page and "fairtrade schoenen" in page
+    assert "Woordenschat" in page and "vegan sneakers" in page
+    assert "fairtrade schoenen" not in page
     assert "Inzichten" in page and "Most vegan sneakers contain plastic" in page
+
+    # Geschiedenis toont ook de verboden woorden.
+    hist = cockpit.render_html(snap, csrf_token="t", show_all=True)
+    assert "fairtrade schoenen" in hist
 
 
 def test_projectledger_to_future(tmp_path):

@@ -163,6 +163,7 @@ tr.archived td{opacity:.45}
 tr.st-pending td{background:var(--yellow-light)}
 tr.st-blocked td{background:#FDEAEA}
 tr.st-running td{background:var(--green-tint)}
+tr.st-future td{opacity:.55}
 .chip{display:inline-block;background:var(--green-tint);color:var(--green-dark);
  border-radius:var(--radius-pill);padding:.1rem .55rem;margin:.06rem;font-size:12px}
 .muted{color:var(--muted)}
@@ -357,7 +358,9 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     # verbergen; via 'toon geschiedenis' weer zichtbaar.
     show_roster = roster if show_all else [r for r in roster if not r["archived"]]
     show_inbox = inbox if show_all else [i for i in inbox if i.get("status") == "pending"]
-    show_proj = projects if show_all else [p for p in projects if p.get("status") != "done"]
+    # done = klaar, future = geparkeerd: allebei uit het actieve zicht.
+    _parked = ("done", "future")
+    show_proj = projects if show_all else [p for p in projects if p.get("status") not in _parked]
 
     # Roster (ingeklapt)
     rrows = []
@@ -402,13 +405,18 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     )
 
     # Projecten (met statusknoppen)
+    def _scope(p):
+        s = p.get("scope")
+        if isinstance(s, dict):                      # oude machine-scope leesbaar maken
+            return " · ".join(f"{k}: {v}" for k, v in s.items())
+        return s
     prows = []
     for p in show_proj:
         pacts = _proj_actions(p, csrf_token) if writable else '<span class="muted">—</span>'
         prows.append(
             f'<tr class="st-{_e(p.get("status"))}">'
             f'<td><b>{_e(p.get("owner"))}</b></td>'
-            f'<td>{_e(p.get("scope"))}</td>'
+            f'<td>{_e(_scope(p))}</td>'
             f'<td>{_e(p.get("status"))}</td>'
             f'<td>{_e(p.get("blocked_on") or "—")}</td>'
             f'<td>{pacts}</td>'
@@ -420,14 +428,15 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'<tbody>{"".join(prows) or "<tr><td colspan=5 class=muted>geen open projecten</td></tr>"}</tbody></table>'
     )
 
-    # Woordenschat (keyword-library) — read-only inzicht
+    # Woordenschat (keyword-library) — standaard alleen actief (approved); geschiedenis toont alle.
     lib = snap.get("library", [])
+    show_lib = lib if show_all else [x for x in lib if x["status"] == "approved"]
     lrows = "".join(
         f'<tr><td><b>{_e(x["word"])}</b></td>'
         f'<td><span class="chip">{_e(x["status"])}</span></td>'
-        f'<td class="muted">{_e(x.get("by", ""))}</td></tr>' for x in lib)
-    lib_tbl = ('<table><thead><tr><th>woord</th><th>status</th><th>door</th></tr></thead>'
-               f'<tbody>{lrows or "<tr><td colspan=3 class=muted>leeg</td></tr>"}</tbody></table>')
+        f'<td class="muted">{_e(x.get("date", ""))}</td></tr>' for x in show_lib)
+    lib_tbl = ('<table><thead><tr><th>woord</th><th>status</th><th>actief sinds</th></tr></thead>'
+               f'<tbody>{lrows or "<tr><td colspan=3 class=muted>geen actieve woorden</td></tr>"}</tbody></table>')
 
     # Inzichten (kennislaag) — geëmergeerd (vaakst gegrond) eerst
     ins = snap.get("insights", [])
@@ -441,8 +450,8 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     counts = (
         f'{sum(1 for r in roster if not r["archived"])} rollen · '
         f'{sum(1 for i in inbox if i.get("status") == "pending")} open inbox-items · '
-        f'{sum(1 for p in projects if p.get("status") not in ("done",))} open projecten · '
-        f'{len(lib)} woorden · {len(ins)} inzichten'
+        f'{sum(1 for p in projects if p.get("status") not in _parked)} open projecten · '
+        f'{sum(1 for x in lib if x["status"] == "approved")} actieve woorden · {len(ins)} inzichten'
     )
 
     if writable:
@@ -459,7 +468,7 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'<h2>Inbox</h2>{inbox_tbl}'
         f'<h2>Proces (projecten)</h2>{proj_tbl}'
         f'<h2>Kennis</h2>'
-        f'<details><summary>Woordenschat ({len(lib)} woorden)</summary>{lib_tbl}</details>'
+        f'<details><summary>Woordenschat ({len(show_lib)} woorden)</summary>{lib_tbl}</details>'
         f'<details><summary>Inzichten — kennislaag ({len(ins)} kaartjes)</summary>{ins_tbl}</details>'
         f'<details><summary>Roster ({sum(1 for r in roster if not r["archived"])} actieve rollen)</summary>{roster_tbl}</details>'
     )
