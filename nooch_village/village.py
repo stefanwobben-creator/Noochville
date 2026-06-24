@@ -323,7 +323,18 @@ class Village:
     def start(self):
         self.human_inbox.sync_unmanned(self.records.all(), CLASS_MAP)
         self.human_inbox.withdraw_archived_activations(self.records.all())
+        self._audit_role_provenance()
         self.root.start()
+
+    def _audit_role_provenance(self) -> None:
+        """Herkomst-wachter: waarschuw luid bij een seed-gehardcodeerde niet-bootstrap rol.
+        Zo'n rol hoort via governance geboren te zijn (source=sensed), niet geseed."""
+        from nooch_village.seeds import role_provenance_violations
+        for rid in role_provenance_violations(self.records):
+            logging.getLogger("village.governance").warning(
+                "⚠️ herkomst: rol '%s' is seed-gehardcodeerd (geen governance-geboorte). "
+                "Draai 'python -m nooch_village.village formalize' of dien een add_role-voorstel in.",
+                rid)
 
     def stop(self):
         self.root.stop()

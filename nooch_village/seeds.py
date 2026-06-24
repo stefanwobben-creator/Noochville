@@ -9,6 +9,28 @@ from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.mission import ANCHOR_PURPOSE as _ANCHOR_PURPOSE
 from nooch_village.policy import ANCHOR_POLICY_PROSE as _ANCHOR_POLICIES
 
+# ── Herkomst-wachter ──────────────────────────────────────────────────────────
+# De founding-bootstrap: de enige rollen die geseed mogen zijn. Elke andere rol hoort via
+# governance geboren te zijn (source="sensed"), niet seed-gehardcodeerd. Dit is de
+# structurele rugdekking onder "rolwijziging alleen via governance".
+BOOTSTRAP_ROLES = frozenset(
+    {"noochville", "website_watcher", "librarian", "trends", "facilitator", "the_source"})
+
+
+def role_provenance_violations(records: "Records") -> list[str]:
+    """Niet-bootstrap, niet-gearchiveerde rollen die NIET via governance zijn geboren
+    (source != 'sensed'). Zo'n rol is seed-gehardcodeerde structuur en hoort niet te bestaan.
+    Demo-records (source='demo') tellen niet mee. Geeft een lijst rol-ids (leeg = schoon)."""
+    out = []
+    for rec in records.all():
+        if rec.archived or rec.type != RecordType.ROLE:
+            continue
+        if rec.id in BOOTSTRAP_ROLES or rec.source in ("sensed", "demo"):
+            continue
+        out.append(rec.id)
+    return sorted(out)
+
+
 # ── Lexicon-zaad ──────────────────────────────────────────────────────────────
 
 _LEXICON_SEED = [
@@ -124,8 +146,7 @@ def seed_records(records: Records) -> None:
                   definition=RoleDefinition(
                       purpose=_ANCHOR_PURPOSE, skills=[],
                       policies=_ANCHOR_POLICIES),
-                  members=["website_watcher", "librarian", "trends", "facilitator",
-                           "concurrent_scout"])
+                  members=["website_watcher", "librarian", "trends", "facilitator"])
     watcher = Record(id="website_watcher", type=RecordType.ROLE, parent="noochville",
                      definition=RoleDefinition(
                          purpose="Bewaakt de online gezondheid en groei van Nooch.earth",
@@ -158,18 +179,9 @@ def seed_records(records: Records) -> None:
                                                "risicovolle voorstellen escaleren naar de mens"],
                              skills=[]),
                          persona="Rupert Rubber")
-    scout = Record(id="concurrent_scout", type=RecordType.ROLE, parent="noochville",
-                   definition=RoleDefinition(
-                       purpose="Observeert de duurzame-sneakermarkt en signaleert "
-                               "strategische bewegingen van directe concurrenten",
-                       accountabilities=["concurrentienieuws monitoren (funding, lanceringen, "
-                                         "B-Corp, materiaalinnovatie)",
-                                         "een wekelijks field report schrijven",
-                                         "missie-relevante zetten als spanning signaleren"],
-                       skills=["competitor_news", "competitor_discover",
-                               "linkbuilding_targets", "keywords_everywhere"]),
-                   persona="Sven Spruce")
-    for r in (root, watcher, librarian, trends, facilitator, scout):
+    # NB: concurrent_scout is GÉÉN founding-rol. Hij wordt via governance geboren
+    # (python -m nooch_village.village formalize), niet geseed — zie role_provenance_violations.
+    for r in (root, watcher, librarian, trends, facilitator):
         r.source = "seed"
         records.put(r)
 
@@ -239,37 +251,9 @@ def migrate_records(records: Records) -> None:
         trends.definition.skills.append("gsc_report")
         records.put(trends)
         changed = True
-    # Concurrent-scout: nieuwe inwoner die de markt observeert (idempotent geboren + bemenst,
-    # CLASS_MAP heeft de entry, dus de Reconciler activeert 'm direct).
-    if records.get("concurrent_scout") is None:
-        scout = Record(id="concurrent_scout", type=RecordType.ROLE, parent=root.id,
-                       definition=RoleDefinition(
-                           purpose="Observeert de duurzame-sneakermarkt en signaleert "
-                                   "strategische bewegingen van directe concurrenten",
-                           accountabilities=["concurrentienieuws monitoren (funding, lanceringen, "
-                                             "B-Corp, materiaalinnovatie)",
-                                             "een wekelijks field report schrijven",
-                                             "missie-relevante zetten als spanning signaleren"],
-                           skills=["competitor_news"]),
-                       persona="Sven Spruce")
-        scout.source = "seed"
-        records.put(scout)
-        changed = True
-    if "concurrent_scout" not in root.members:
-        root.members.append("concurrent_scout")
-        changed = True
-    # Zorg dat de scout ook de ontdek-skill heeft (idempotent, voor bestaande records).
-    scout_rec = records.get("concurrent_scout")
-    if scout_rec is not None:
-        scout_changed = False
-        for sk in ("competitor_discover", "linkbuilding_targets", "keywords_everywhere"):
-            if sk not in scout_rec.definition.skills:
-                scout_rec.definition.skills.append(sk)
-                scout_rec.version += 1
-                scout_changed = True
-        if scout_changed:
-            records.put(scout_rec)
-            changed = True
+    # NB: concurrent_scout wordt NIET meer via migratie geseed (was een afwijking van
+    # 'rolwijziging alleen via governance'). Hij wordt via de gate geboren — zie
+    # role_proposals.formalize_session_governance en role_provenance_violations.
     # Zorg dat de Librarian KeywordsEverywhere heeft: hij verrijkt elke kandidaat centraal
     # met echt zoekvolume vóór de beoordeling (idempotent).
     librarian = records.get("librarian")
