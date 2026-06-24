@@ -143,6 +143,27 @@ def decide_keyword(inbox, library, iid: str, decision: str,
     return {"ok": False, "error": f"onbekend besluit '{decision}'"}
 
 
+def override_library_term(library, word: str, decision: str,
+                          reason: str = "", by: str = "human") -> dict:
+    """Menselijke override van een bibliotheekterm (de escalated-berg afromen vanuit het
+    dashboard). approve → 'approved', reject → 'forbidden'. Schrijft via de domein-methode
+    Library.curate (niet rechtstreeks in de store). Geeft {ok, word?, status?, error?}.
+
+    Dit is een legitieme menselijke curatie op het geauthenticeerde lokale oppervlak: de
+    mens neemt het oordeel dat de Librarian naar hem escaleerde."""
+    word = (word or "").strip()
+    if not word:
+        return {"ok": False, "error": "geen woord"}
+    if library.status(word) is None:
+        return {"ok": False, "error": f"'{word}' staat niet in de bibliotheek"}
+    status = {"approve": "approved", "reject": "forbidden"}.get(decision)
+    if status is None:
+        return {"ok": False, "error": f"onbekend besluit '{decision}'"}
+    library.curate(word, status,
+                   rationale=reason or "menselijke override via cockpit", by=by)
+    return {"ok": True, "word": word, "status": status}
+
+
 def defer_item(inbox, iid: str, reason: str = "") -> dict:
     """Stel een item uit (blijft geregistreerd). Werkt voor elk type (pure bookkeeping)."""
     item = inbox.get(iid)

@@ -27,7 +27,7 @@ from nooch_village.library import Library
 from nooch_village.notes_store import NotesStore
 from nooch_village.inbox_actions import (
     decide_keyword, defer_item, confirm_item, mark_done, resolve_tension, add_reference,
-    route_to_project, route_to_governance, remove_note)
+    route_to_project, route_to_governance, remove_note, override_library_term)
 
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
@@ -77,7 +77,8 @@ def gather(data_dir: str | None = None) -> dict:
     _ws_order = {"approved": 0, "escalated": 1, "avoid": 2, "forbidden": 3}
     lib = sorted(
         ({"word": w, "status": e.get("status", "?"), "by": e.get("by", ""),
-          "date": e.get("date", "")} for w, e in (library.all() or {}).items()),
+          "rationale": e.get("rationale", ""), "date": e.get("date", "")}
+         for w, e in (library.all() or {}).items()),
         key=lambda x: (_ws_order.get(x["status"], 9), x["word"]),
     )
 
@@ -210,6 +211,18 @@ def _btn(iid: str, action: str, label: str, token: str, cls: str = "") -> str:
         f'<input type="hidden" name="csrf" value="{_e(token)}">'
         f'<input type="hidden" name="iid" value="{_e(iid)}">'
         f'<input type="hidden" name="action" value="{_e(action)}">'
+        f'<button class="btn {cls}" type="submit">{_e(label)}</button></form>'
+    )
+
+
+def _lib_btn(word: str, decision: str, label: str, token: str, cls: str = "") -> str:
+    """Override-knop voor een bibliotheekterm (escalated afromen): POST /action lib_override."""
+    return (
+        f'<form method="post" action="/action" style="display:inline">'
+        f'<input type="hidden" name="csrf" value="{_e(token)}">'
+        f'<input type="hidden" name="action" value="lib_override">'
+        f'<input type="hidden" name="word" value="{_e(word)}">'
+        f'<input type="hidden" name="decision" value="{_e(decision)}">'
         f'<button class="btn {cls}" type="submit">{_e(label)}</button></form>'
     )
 
@@ -580,6 +593,21 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     lib_tbl = ('<table><thead><tr><th>woord</th><th>status</th><th>actief sinds</th></tr></thead>'
                f'<tbody>{lrows or "<tr><td colspan=3 class=muted>geen actieve woorden</td></tr>"}</tbody></table>')
 
+    # Escalated-berg: termen die de Librarian naar de mens escaleerde. Afroombaar met
+    # één klik (keur goed → approved / verbied → forbidden). Dit dweilt het kerkhof leeg.
+    esc = [x for x in lib if x["status"] == "escalated"]
+    erows = "".join(
+        f'<tr><td><b>{_e(x["word"])}</b></td>'
+        f'<td class="muted">{_e((x.get("rationale") or "")[:90])}</td>'
+        f'<td>' + ((_lib_btn(x["word"], "approve", "✓ keur goed", csrf_token, "ok") + " "
+                    + _lib_btn(x["word"], "reject", "✗ verbied", csrf_token, "danger"))
+                   if writable else '<span class="muted">—</span>') + '</td></tr>'
+        for x in esc)
+    esc_tbl = ('<table><thead><tr><th>woord</th><th>waarom geëscaleerd</th><th>jouw oordeel</th></tr></thead>'
+               f'<tbody>{erows}</tbody></table>')
+    esc_block = (f'<details open><summary>⚖️ Wacht op jouw oordeel — geëscaleerd ({len(esc)})</summary>'
+                 f'{esc_tbl}</details>') if esc else ''
+
     # Inzichten (kennislaag) — geëmergeerd (vaakst gegrond) eerst
     ins = snap.get("insights", [])
     irows2 = "".join(
@@ -610,6 +638,7 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'<h2>Inbox</h2>{inbox_tbl}'
         f'<h2>Proces (projecten)</h2>{proj_tbl}'
         f'<h2>Kennis</h2>'
+        f'{esc_block}'
         f'<details><summary>Woordenschat ({len(show_lib)} woorden)</summary>{lib_tbl}</details>'
         f'<details><summary>Inzichten — kennislaag ({len(ins)} kaartjes)</summary>{ins_tbl}</details>'
         f'<details><summary>Roster ({sum(1 for r in roster if not r["archived"])} actieve rollen)</summary>{roster_tbl}</details>'
@@ -658,6 +687,10 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
     if action in ("approve", "reject"):
         library = Library(os.path.join(dd, "library.json"))
         return decide_keyword(inbox, library, iid, action, reason=reason)
+    if action == "lib_override":
+        library = Library(os.path.join(dd, "library.json"))
+        return override_library_term(library, extra.get("word", ""),
+                                     extra.get("decision", ""), reason=reason)
     if action == "defer":
         return defer_item(inbox, iid, reason=reason)
     if action == "confirm":
@@ -801,7 +834,9 @@ def make_handler(data_dir: str | None):
                      "scope": (form.get("scope") or [""])[0],
                      "role": (form.get("role") or [""])[0],
                      "skill": (form.get("skill") or [""])[0],
-                     "rationale": (form.get("rationale") or [""])[0]}
+                     "rationale": (form.get("rationale") or [""])[0],
+                     "word": (form.get("word") or [""])[0],
+                     "decision": (form.get("decision") or [""])[0]}
             result = _dispatch_action(data_dir, action, iid, reason, extra=extra)
             # 303 → verse GET. Rails keren terug naar de spanning (next), sluiten gaat home.
             # De uitkomst gaat als korte flash-banner mee in de query.
