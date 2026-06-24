@@ -344,7 +344,40 @@ def _proj_actions(p: dict, token: str) -> str:
         _btn(pid, "proj_waiting", "Waiting", token),
         _btn(pid, "proj_future", "Toekomst", token),
         _btn(pid, "proj_done", "Done", token),
+        f'<a class="btn" href="/project?pid={_e(pid)}">Edit…</a>',
     ])
+
+
+def render_project_edit(p: dict, roster: list, csrf_token: str) -> str:
+    """Kleine editpagina voor een project: owner + scope aanpassen (status apart)."""
+    pid = p["id"]
+    scope = p.get("scope")
+    if isinstance(scope, dict):
+        scope = " · ".join(f"{k}: {v}" for k, v in scope.items())
+    owner_opts = "".join(
+        f'<option value="{_e(r["id"])}"{" selected" if r["id"] == p.get("owner") else ""}>'
+        f'{_e(r["id"])}</option>'
+        for r in roster if not r.get("archived"))
+    form = (
+        '<form method="post" action="/action" class="pf">'
+        f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
+        f'<input type="hidden" name="iid" value="{_e(pid)}">'
+        '<input type="hidden" name="action" value="proj_edit">'
+        '<input type="hidden" name="next" value="/">'
+        '<label>Owner (rol die het oppakt):</label>'
+        f'<select name="owner">{owner_opts}</select>'
+        '<label>Scope / uitkomst:</label>'
+        f'<input name="scope" value="{_e(scope)}">'
+        '<button class="btn ok" type="submit">Opslaan</button></form>'
+    )
+    inner = (
+        '<p><a href="/">← terug naar de cockpit</a></p>'
+        '<h1>Project bewerken</h1>'
+        f'<div class="tension"><b>{_e(p.get("owner"))}</b> '
+        f'<span class="muted">· status {_e(p.get("status"))}</span></div>'
+        f'{form}'
+    )
+    return _page("Project bewerken", inner)
 
 
 def render_html(snap: dict, csrf_token: str | None = None, msg=None,
@@ -486,6 +519,8 @@ def _flash(result: dict) -> str:
         return "✗ " + (result.get("error") or result.get("reason") or "actie mislukt")
     if "proj_status" in result:
         return f"✓ Project-status → {result['proj_status']}"
+    if "proj_edit" in result:
+        return "✓ Project bijgewerkt"
     if result.get("status") == "adopted":
         return f"✓ Skill '{result.get('skill')}' toegekend aan {result.get('role_id')}"
     if "card_id" in result:
@@ -539,6 +574,10 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
             return {"ok": ok, "proj_status": "future"}
         ok = projects.complete(iid)
         return {"ok": ok, "proj_status": "done"}
+    if action == "proj_edit":
+        projects = ProjectLedger(os.path.join(dd, "projects.json"))
+        ok = projects.edit(iid, scope=extra.get("scope", ""), owner=extra.get("owner", ""))
+        return {"ok": ok, "proj_edit": True}
     if action == "add_governance":
         records = Records(os.path.join(dd, "governance_records.json"))
         return route_to_governance(records, extra.get("role", ""), extra.get("skill", ""),
@@ -564,6 +603,16 @@ def make_handler(data_dir: str | None):
                     self.wfile.write(b"Item niet gevonden")
                     return
                 body = render_process(item, snap["roster"], csrf_token, msg=msg).encode("utf-8")
+            elif path == "/project":
+                pid = (qs.get("pid") or [""])[0]
+                snap = gather(data_dir)
+                proj = next((p for p in snap["projects"] if p.get("id") == pid), None)
+                if proj is None:
+                    self.send_response(404)
+                    self.end_headers()
+                    self.wfile.write(b"Project niet gevonden")
+                    return
+                body = render_project_edit(proj, snap["roster"], csrf_token).encode("utf-8")
             elif path in ("/", "/index.html"):
                 show_all = (qs.get("history") or ["0"])[0] in ("1", "true", "yes")
                 body = render_html(gather(data_dir), csrf_token=csrf_token, msg=msg,

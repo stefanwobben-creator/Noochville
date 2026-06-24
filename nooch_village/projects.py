@@ -104,6 +104,20 @@ class ProjectLedger:
         self._save()
         return True
 
+    def edit(self, pid: str, scope=None, owner: str | None = None) -> bool:
+        """Bewerk de inhoud van een project (scope en/of owner). Status blijft ongemoeid;
+        done-projecten zijn vergrendeld. Lege waarden worden genegeerd. Geeft True bij succes."""
+        p = self._projects.get(pid)
+        if p is None or p["status"] in _TERMINAL:
+            return False
+        if scope is not None and str(scope).strip():
+            p["scope"] = scope
+        if owner is not None and str(owner).strip():
+            p["owner"] = owner
+        self._touch(p)
+        self._save()
+        return True
+
     def to_future(self, pid: str) -> bool:
         """Park een project als 'future' (later oppakken als er ruimte is). Niet-terminaal:
         het kan later weer naar running/blocked. Done-projecten blijven done."""

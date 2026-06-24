@@ -300,6 +300,45 @@ def test_projectledger_to_future(tmp_path):
     assert pl.to_future(pid) is False                  # done blijft done
 
 
+def test_projectledger_edit(tmp_path):
+    from nooch_village.projects import ProjectLedger
+    pl = ProjectLedger(str(tmp_path / "p.json"))
+    pid = pl.create("analyst", {"kind": "discovery"}, "human")
+    assert pl.edit(pid, scope="Bezoekersdata per locale analyseren", owner="website_watcher")
+    p = pl.get(pid)
+    assert p["scope"] == "Bezoekersdata per locale analyseren" and p["owner"] == "website_watcher"
+    assert p["status"] == "queued"                     # status ongemoeid
+    pl.complete(pid)
+    assert pl.edit(pid, scope="x") is False            # done vergrendeld
+
+
+def test_server_project_edit(tmp_path):
+    import re, json as _json
+    data_dir = _seed(tmp_path)
+    httpd = HTTPServer(("127.0.0.1", 0), cockpit.make_handler(data_dir))
+    port = httpd.server_address[1]
+    base = f"http://127.0.0.1:{port}"
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    try:
+        with urllib.request.urlopen(f"{base}/project?pid=p1p1p1p1p1p1", timeout=5) as resp:
+            assert resp.status == 200
+            page = resp.read().decode("utf-8")
+        assert "Project bewerken" in page and "GSC menukaart" in page
+        token = re.search(r'name="csrf" value="([^"]+)"', page).group(1)
+        body = urllib.parse.urlencode({
+            "csrf": token, "iid": "p1p1p1p1p1p1", "action": "proj_edit", "next": "/",
+            "owner": "website_watcher", "scope": "Nieuwe scope-tekst"}).encode()
+        with urllib.request.urlopen(urllib.request.Request(
+                f"{base}/action", data=body, method="POST"), timeout=5) as resp:
+            assert resp.status == 200
+        proj = _json.loads((tmp_path / "data" / "projects.json").read_text())
+        items = proj.get("projects", proj) if isinstance(proj, dict) else {}
+        assert items["p1p1p1p1p1p1"]["scope"] == "Nieuwe scope-tekst"
+    finally:
+        httpd.shutdown(); httpd.server_close(); t.join(timeout=5)
+
+
 def test_server_add_governance_grants_skill(tmp_path):
     import re, json as _json
     data_dir = _seed(tmp_path)
