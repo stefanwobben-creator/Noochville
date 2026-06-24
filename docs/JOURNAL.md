@@ -291,3 +291,31 @@ ronde gescheeld. Stefans "maar het dorp is toch nog bezig?" was een terechte che
 een deel van het probleem oude persistente data was, niet de live run.
 
 Tests: ~688 → 862, elke stap met mutatie-check.
+
+---
+
+## 2026-06-24 (avond, vervolg) — governance-herkomst rechtgezet (A) + bewaakt (B)
+
+**[ontdekking/proces]** Stefan: "hebben we de nieuwe rol + skills wel via governance laten lopen?"
+Nee. De Concurrent-scout + skills + de Librarian-KE-grant waren via seed/migratie toegevoegd, een
+afwijking van de eigen regel "rolwijziging alleen via governance" (precedent: Content Strategist
+ging wél via de gate). Eerlijk benoemd i.p.v. weggepoetst.
+
+**[bouw] A — formaliseren achteraf.** `build_concurrent_scout_proposal` (add_role: herhalingsbewijs
+in de trigger voor G0, uniek domein voor G1, niet-botsende accountabilities voor G2, de 4 skills)
++ de Librarian-KE als amend_role, samen in `formalize_session_governance` / CLI `formalize`. Loopt
+alsnog door G0-G4 + Secretary; herbouwt het scout-record getrouw met `source=sensed` + groeidagboek-
+audit. Deterministische test (gate + adopt, geen threads).
+
+**[bouw] B — de herkomst-wachter.** `BOOTSTRAP_ROLES` (de zes founding-rollen) +
+`role_provenance_violations()`: elke niet-bootstrap, niet-gearchiveerde rol moet `source=sensed`
+zijn; seed-gehardcodeerde structuur wordt gevlagd. Boot-audit in `Village.start()` waarschuwt luid.
+concurrent_scout uit seed/migratie gehaald: hij wordt voortaan via `formalize` (de gate) geboren,
+niet geseed. Test dwingt af: seed+migratie leveren 0 violations; de wachter betrapt een smokkelrol.
+
+**[les]** De afwijking ontstond in bouwflow (snel seeden i.p.v. via de gate). De wachter maakt het
+nu zichtbaar én onmogelijk om stil te herhalen, precies de structurele rugdekking onder born-vs-
+activated die al als schuld op de lijst stond. Detectie nu; harde preventie (records alleen via de
+Secretary) en skill-grant-provenance blijven als vollere B-stap open.
+
+Tests: 862 → 874. Actie op live-data: `python -m nooch_village.village formalize`.

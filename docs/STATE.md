@@ -4,7 +4,7 @@
 
 ## Waar we staan (2026-06-24)
 
-**Suite: 862 tests groen** (gegroeid van ~688 in de latere sessie van 24/6). Elke stap met mutatie-check.
+**Suite: 874 tests groen** (gegroeid van ~688 in de latere sessie van 24/6). Elke stap met mutatie-check.
 
 ### Latere sessie 2026-06-24: cockpit-verwerking, LLM-ladder, markt- & linkbuilding-radar
 
@@ -39,7 +39,17 @@
   (zoals library/lexicon) en voeden de Trends-zaadlijst.
 - **Spaced-repetition-scheduler** (`keyword_scheduler.py`) vervangt het platte roterende venster:
   nieuw/productief zaadwoord vaak, uitgekauwd zakt naar een langer interval (verdubbelt tot een
-  plafond, reset bij nieuwe oogst). Subsumeert de concurrent-voorrang.
+  plafond, reset bij nieuwe oogst). Subsumeert de concurrent-voorrang. "Productief" telt alleen
+  schoen-relevante nieuwe termen (gedeeld domeinfilter), zodat brede ruis-zaadwoorden wegzakken.
+- **Governance-herkomst rechtgezet + bewaakt (A+B)**: de scout + skills waren via seed/migratie
+  toegevoegd (afwijking van "rolwijziging alleen via governance"). **A** — `formalize`-CLI dient de
+  add_role (scout) + amend_role (Librarian←keywords_everywhere) alsnog via G0-G4 + Secretary in,
+  met audittrail; scout-record herbouwd met `source=sensed`. **B** — `BOOTSTRAP_ROLES` +
+  `role_provenance_violations()`: alleen de zes founding-rollen mogen geseed zijn, elke andere rol
+  moet sensed (governance-geboren) zijn; boot-audit waarschuwt luid. concurrent_scout uit
+  seed/migratie gehaald (wordt via `formalize` geboren). **Actie op de live-data: draai
+  `python -m nooch_village.village formalize`** om de scout-provenance op je echte records recht te
+  zetten (tot dan waarschuwt de boot-audit, correct).
 
 #### Geparkeerd uit deze sessie
 - **Scheduler-productiviteitssignaal telt off-domein-ruis mee**: een breed zaadwoord ("regenerative")
@@ -246,6 +256,12 @@ Wat de eerdere sessie (2026-06-23/24) is gebouwd en nu de waarheid is:
 
 ## Openstaande ontwerpschuld
 
+- **Beveiliging: rolwijzigingen alleen via governance** — ✅ deels gedaan (2026-06-24, B):
+  de herkomst-wachter (`role_provenance_violations` + boot-audit) dwingt nu af dat alleen
+  bootstrap-rollen geseed zijn; elke andere rol moet sensed/governance-geboren zijn. Detecteert
+  (waarschuwt luid), verbiedt nog niet hard op records.put-niveau. Resterend (voller B): records
+  alleen schrijfbaar via de Secretary (write-token of guard op put), en óók skill-grants aan
+  bootstrap-rollen via governance i.p.v. migratie. Oorspronkelijke notitie hieronder.
 - **Beveiliging: rolwijzigingen alleen via governance (taak voor later, 2026-06-23)**:
   structureel afdwingen dat élke rolwijziging (add/amend/remove_role) uitsluitend via het
   officiële governance-proces kan (proposal → G0-G4 → Secretary → records), nooit via
