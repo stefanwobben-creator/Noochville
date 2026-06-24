@@ -42,6 +42,7 @@ from nooch_village.skills_impl.verband_voorstel import VerbandVoorstelSkill
 from nooch_village.skills_impl.onderzoeksvraag import OnderzoeksvraagSkill
 from nooch_village.skills_impl.content_schrijven import ContentSchrijvenSkill
 from nooch_village.skills_impl.content_check import ContentCheckSkill
+from nooch_village.skills_impl.curate import CurateSkill
 from nooch_village.human_inbox import HumanInbox
 from nooch_village.gap_classifier import classify_gap
 from nooch_village.observations import ObservationStore
@@ -99,6 +100,7 @@ class Village:
             OnderzoeksvraagSkill(),
             ContentSchrijvenSkill(),
             ContentCheckSkill(),
+            CurateSkill(),
         ):
             self.registry.register(skill)
         self.records = Records(os.path.join(self.context.data_dir, "governance_records.json"))

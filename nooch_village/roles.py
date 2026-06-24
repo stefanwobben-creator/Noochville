@@ -440,7 +440,31 @@ class Librarian(Inhabitant):
         self.react("human_keyword_verdict", self._on_human_verdict)
         self.react("keyword_evidence",      self._on_evidence)
         self.react("child_evidence",        self._on_child_evidence)
+        self.react("insight_proposed",      self._on_insight_proposed)
         self.react("dag_eindigt",           self._on_dag_eindigt)
+
+    def _on_insight_proposed(self, event: Event) -> None:
+        """Enige schrijfweg naar de kennislaag: cureer fuzzy input tot atomaire, Engelse
+        kaartjes en schrijf ze weg. De Librarian is domein-eigenaar (regel 7); kwaliteit
+        (Engels, atomair, compleet, gelinkt) wordt hier op één plek afgedwongen."""
+        fuzzy = (event.data.get("fuzzy") or event.data.get("text") or "").strip()
+        if not fuzzy:
+            return
+        source = event.data.get("source") or event.data.get("from", "curator")
+        res = self.use_skill("curate", {
+            "fuzzy": fuzzy, "source": source,
+            "source_date": event.data.get("source_date"),
+        })
+        cards = res.get("cards", [])
+        if not cards:
+            self.log.info("🗂️ curate: geen geldige kaartjes uit input van %s", source)
+            return
+        from nooch_village.ingest import ingest_insights
+        r = ingest_insights(self.context.notes, cards)
+        self.log.info("🗂️ gecureerd: %d kaartje(s) toegevoegd, %d link(s) (van %s)",
+                      len(r["added"]), r["linked"], source)
+        self.bus.publish(Event("cards_curated",
+            {"by": self.id, "added": r["added"], "from": source}, self.id))
 
     def _on_proposal(self, event: Event) -> None:
         word = event.data.get("word")
