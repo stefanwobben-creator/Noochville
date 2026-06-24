@@ -312,6 +312,43 @@ def test_projectledger_edit(tmp_path):
     assert pl.edit(pid, scope="x") is False            # done vergrendeld
 
 
+def test_server_card_detail_and_remove(tmp_path):
+    import re, json as _json
+    data = tmp_path / "data"
+    data.mkdir()
+    for f in ("governance_records.json", "human_inbox.json", "projects.json", "library.json"):
+        (data / f).write_text("{}", encoding="utf-8")
+    (data / "notes.json").write_text(json.dumps({
+        "a": {"id": "a", "claim": "Claim A about vegan.", "source": "x", "grounds": "g",
+              "status": "supported", "grounding_count": 2, "links_to": ["b"]},
+        "b": {"id": "b", "claim": "Claim B about plastic.", "source": "x", "grounds": "g",
+              "status": "supported", "grounding_count": 1},
+    }), encoding="utf-8")
+    httpd = HTTPServer(("127.0.0.1", 0), cockpit.make_handler(str(data)))
+    port = httpd.server_address[1]
+    base = f"http://127.0.0.1:{port}"
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    try:
+        # /card?id=a toont de kaart + de verbonden kaart B als doorklik
+        with urllib.request.urlopen(f"{base}/card?id=a", timeout=5) as resp:
+            page = resp.read().decode("utf-8")
+        assert "Claim A about vegan." in page
+        assert "Claim B about plastic." in page and "/card?id=b" in page   # verbonden kaartje
+        token = re.search(r'name="csrf" value="([^"]+)"', page).group(1)
+        # verwijder kaart A
+        body = urllib.parse.urlencode({
+            "csrf": token, "iid": "a", "action": "note_remove", "next": "/"}).encode()
+        with urllib.request.urlopen(urllib.request.Request(
+                f"{base}/action", data=body, method="POST"), timeout=5) as resp:
+            assert resp.status == 200
+        notes = _json.loads((data / "notes.json").read_text())
+        items = notes.get("notes", notes) if isinstance(notes, dict) else {}
+        assert "a" not in items and "b" in items        # A weg, B blijft
+    finally:
+        httpd.shutdown(); httpd.server_close(); t.join(timeout=5)
+
+
 def test_server_project_edit(tmp_path):
     import re, json as _json
     data_dir = _seed(tmp_path)

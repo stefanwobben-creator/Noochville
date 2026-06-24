@@ -27,7 +27,7 @@ from nooch_village.library import Library
 from nooch_village.notes_store import NotesStore
 from nooch_village.inbox_actions import (
     decide_keyword, defer_item, confirm_item, mark_done, resolve_tension, add_reference,
-    route_to_project, route_to_governance)
+    route_to_project, route_to_governance, remove_note)
 
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
@@ -348,6 +348,37 @@ def _proj_actions(p: dict, token: str) -> str:
     ])
 
 
+def render_card(card: dict, neighbors: list, csrf_token: str) -> str:
+    """Detailpagina van één kennis-kaartje: de claim + grounds, en de verbonden kaartjes
+    (de kennisgraaf) als doorklikbare links. Plus een verwijder-knop."""
+    cid = card["id"]
+    nb = "".join(
+        f'<li><a href="/card?id={_e(n["id"])}">{_e(n["claim"][:90])}</a> '
+        f'<span class="muted">({_e(n["status"])}, {_e(n["grounding_count"])}×)</span></li>'
+        for n in neighbors)
+    nb_block = (f'<ul>{nb}</ul>' if neighbors
+                else '<p class="muted">Nog geen verbonden kaartjes.</p>')
+    remove_form = (
+        '<form method="post" action="/action" style="display:inline">'
+        f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
+        f'<input type="hidden" name="iid" value="{_e(cid)}">'
+        '<input type="hidden" name="action" value="note_remove">'
+        '<input type="hidden" name="next" value="/">'
+        '<button class="btn no" type="submit">Verwijder dit kaartje</button></form>'
+    )
+    inner = (
+        '<p><a href="/">← terug naar de cockpit</a></p>'
+        '<h1>Kennis-kaartje</h1>'
+        f'<div class="tension"><b>{_e(card["claim"])}</b><br>'
+        f'<span class="muted">{_e(card["status"])} · {_e(card["grounding_count"])}× gegrond'
+        f'{" · " + _e(card["word"]) if card.get("word") else ""}</span></div>'
+        f'<h2>Grounds</h2><p>{_e(card.get("grounds") or "—")}</p>'
+        f'<h2>Verbonden kaartjes ({len(neighbors)})</h2>{nb_block}'
+        f'<p style="margin-top:1.4rem">{remove_form}</p>'
+    )
+    return _page("Kennis-kaartje", inner)
+
+
 def render_project_edit(p: dict, roster: list, csrf_token: str) -> str:
     """Kleine editpagina voor een project: owner + scope aanpassen (status apart)."""
     pid = p["id"]
@@ -474,7 +505,7 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     # Inzichten (kennislaag) — geëmergeerd (vaakst gegrond) eerst
     ins = snap.get("insights", [])
     irows2 = "".join(
-        f'<tr><td>{_e(x["claim"][:120])}</td>'
+        f'<tr><td><a href="/card?id={_e(x["id"])}">{_e(x["claim"][:120])}</a></td>'
         f'<td class="muted">{_e(x["status"])}</td>'
         f'<td>{_e(x["grounding_count"])}×</td></tr>' for x in ins)
     ins_tbl = ('<table><thead><tr><th>claim</th><th>status</th><th>gegrond</th></tr></thead>'
@@ -523,6 +554,8 @@ def _flash(result: dict) -> str:
         return "✓ Project bijgewerkt"
     if result.get("status") == "adopted":
         return f"✓ Skill '{result.get('skill')}' toegekend aan {result.get('role_id')}"
+    if "removed" in result:
+        return "✓ Kaartje verwijderd"
     if "card_id" in result:
         return f"✓ Kennis-kaart vastgelegd ({result['card_id']})"
     if "pid" in result:
@@ -557,6 +590,9 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         notes = NotesStore(os.path.join(dd, "notes.json"))
         return add_reference(notes, claim=extra.get("claim", ""),
                              grounds=extra.get("grounds", ""))
+    if action == "note_remove":
+        notes = NotesStore(os.path.join(dd, "notes.json"))
+        return remove_note(notes, iid)
     if action == "add_project":
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
         return route_to_project(projects, owner=extra.get("owner", ""),
@@ -613,6 +649,23 @@ def make_handler(data_dir: str | None):
                     self.wfile.write(b"Project niet gevonden")
                     return
                 body = render_project_edit(proj, snap["roster"], csrf_token).encode("utf-8")
+            elif path == "/card":
+                cid = (qs.get("id") or [""])[0]
+                dd = data_dir or _default_data_dir()
+                notes = NotesStore(os.path.join(dd, "notes.json"))
+                card = notes.get(cid)
+                if card is None:
+                    self.send_response(404)
+                    self.end_headers()
+                    self.wfile.write(b"Kaartje niet gevonden")
+                    return
+                cdict = {"id": card.id, "claim": card.claim, "grounds": card.grounds,
+                         "status": str(getattr(card.status, "value", card.status)),
+                         "grounding_count": card.grounding_count, "word": card.word or ""}
+                nbs = [{"id": n.id, "claim": n.claim,
+                        "status": str(getattr(n.status, "value", n.status)),
+                        "grounding_count": n.grounding_count} for n in notes.neighbors(cid)]
+                body = render_card(cdict, nbs, csrf_token).encode("utf-8")
             elif path in ("/", "/index.html"):
                 show_all = (qs.get("history") or ["0"])[0] in ("1", "true", "yes")
                 body = render_html(gather(data_dir), csrf_token=csrf_token, msg=msg,

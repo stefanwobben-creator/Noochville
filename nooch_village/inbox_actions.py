@@ -62,6 +62,15 @@ def route_to_project(projects, owner: str, scope: str) -> dict:
     return {"ok": True, "pid": pid, "owner": owner}
 
 
+def remove_note(notes, note_id: str) -> dict:
+    """Verwijder een kennis-kaartje (NotesStore.remove ruimt ook inkomende links op).
+    Voor het bewust weggooien van een niet-relevant kaartje. Geeft {ok}."""
+    if not note_id:
+        return {"ok": False, "error": "geen kaart-id"}
+    ok = notes.remove(note_id)
+    return {"ok": ok, "removed": note_id} if ok else {"ok": False, "error": "kaart niet gevonden"}
+
+
 def route_to_governance(records, role_id: str, skill: str, rationale: str,
                         *, tension: str = "", gap_key: str = "") -> dict:
     """Bring to Governance-rail: ken een rol een (bestaande) skill toe via het volledige
