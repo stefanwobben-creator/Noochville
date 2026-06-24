@@ -12,8 +12,10 @@ def _no_llm_throttle():
     import nooch_village.llm as llm
     saved = llm.LIMITER
     llm.LIMITER = llm.RateLimiter(0)
+    llm.reset_cooldowns()       # geen cooldown-lek tussen tests (de ladder slaat treden over)
     yield
     llm.LIMITER = saved
+    llm.reset_cooldowns()
 
 
 @pytest.fixture
