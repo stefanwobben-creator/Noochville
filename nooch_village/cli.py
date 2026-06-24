@@ -218,6 +218,10 @@ def main() -> None:
         from nooch_village.role_proposals import upgrade_harry_role
         upgrade_harry_role()
 
+    elif mode == "formalize":
+        from nooch_village.role_proposals import formalize_session_governance
+        formalize_session_governance()
+
     elif mode == "grant_skill":
         from nooch_village.role_proposals import grant_skill_via_governance
         if len(sys.argv) < 4:
@@ -413,6 +417,6 @@ def main() -> None:
               "content_strategist | grant_serpapi_trends | grant_skill | revoke_skill | "
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "
               "measure_propose | rereview | ingest | notes_remove | recurate | "
-              "ground | harry_run | roster | keys | competitor",
+              "ground | harry_run | roster | keys | competitor | formalize",
               file=sys.stderr)
         sys.exit(1)

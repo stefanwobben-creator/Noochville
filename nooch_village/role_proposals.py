@@ -385,6 +385,94 @@ def grant_website_watcher_serpapi() -> None:
     print("\n===== einde =====")
 
 
+def build_concurrent_scout_proposal() -> Proposal:
+    """ADD_ROLE: de Concurrent-scout formeel via de gate geboren laten worden.
+
+    De rol is deze sessie via seed/migratie toegevoegd (een afwijking van de regel dat
+    rolwijzigingen via governance gaan); dit voorstel brengt de provenance in lijn. Het
+    herbouwt het record getrouw (zelfde 4 skills) maar nu met source=sensed en een
+    audittrail. Bevat herhalingsbewijs (G0), een uniek domein (G1) en niet-botsende
+    accountabilities (G2)."""
+    return Proposal(
+        proposer_role="the_source",
+        change=GovernanceChange(
+            kind=ChangeKind.ADD_ROLE,
+            role_id="concurrent_scout",
+            purpose=("Observeert de duurzame-sneakermarkt: signaleert strategische bewegingen "
+                     "van directe concurrenten, ontdekt nieuwe spelers en linkbuilding-kansen, "
+                     "en meet hun marktinteresse."),
+            add_accountabilities=[
+                "strategisch concurrentienieuws monitoren (funding, lanceringen, B-Corp, materiaalinnovatie)",
+                "wekelijks een concurrentie-veldrapport opstellen",
+                "nieuwe concurrenten en linkbuilding-doelwitten spotten en aan de mens voorleggen",
+                "missie-relevante concurrent-zetten als spanning signaleren",
+            ],
+            add_domains=["concurrentie-observatie"],
+            add_skills=["competitor_news", "competitor_discover",
+                        "linkbuilding_targets", "keywords_everywhere"],
+            new_role_parent="noochville",
+        ),
+        tension=("Het dorp observeerde de markt niet; concurrent-bewegingen, nieuwe spelers en "
+                 "linkbuilding-kansen bleven onzichtbaar terwijl daar groei en positionering ligt."),
+        trigger_example=("Wekelijks terugkerend en structureel: concurrenten doen doorlopend "
+                         "strategische zetten en er duiken steeds nieuwe duurzame sneakermerken "
+                         "en gids-artikelen op, zonder staande waarnemer."),
+        rationale=("Een staande marktobservator dicht dit gat doorlopend: een wekelijkse, "
+                   "terugkerende accountability die concurrentienieuws, nieuwe spelers en "
+                   "linkbuilding-doelwitten levert. De rol is al bemenst (code + CLASS_MAP); dit "
+                   "voorstel brengt de governance-provenance in lijn (geboren via de gate)."),
+    )
+
+
+def formalize_session_governance() -> None:
+    """Formaliseer achteraf de structuurwijzigingen die deze sessie via seed/migratie zijn
+    toegevoegd: de Concurrent-scout (add_role) en de KeywordsEverywhere-grant aan de Librarian
+    (amend_role). Beide lopen nu alsnog door de G0-G4-poort + Secretary, met audittrail."""
+    from nooch_village.village import Village
+
+    v = Village(heartbeat_seconds=86400)
+    state: dict = {}
+    v.bus.subscribe("governance_changed",
+                    lambda e: state.update({"status": "aangenomen"}))
+    v.bus.subscribe("governance_review_requested",
+                    lambda e: state.update({"status": "geëscaleerd", "gate": e.data.get("gate"),
+                                            "reason": e.data.get("reason")}))
+    v.bus.subscribe("proposal_invalid",
+                    lambda e: state.update({"status": "ongeldig", "gate": "G0",
+                                            "reason": e.data.get("reason")}))
+    v.start()
+
+    proposals = [
+        ("ADD_ROLE concurrent_scout", build_concurrent_scout_proposal()),
+        ("AMEND_ROLE librarian ← keywords_everywhere",
+         build_grant_skill_proposal(
+             "librarian", "keywords_everywhere",
+             "De Librarian verrijkt elke kandidaat met KE-volume; deze sessie geseed, nu formeel.")),
+    ]
+    print("\n===== Formaliseren via governance (achteraf) =====\n")
+    for label, p in proposals:
+        state.clear()
+        v.submit_proposal(p)
+        for _ in range(200):
+            if state:
+                break
+            time.sleep(0.05)
+        time.sleep(0.3)
+        st = state.get("status", "?")
+        line = f"{label}: {st}"
+        if st != "aangenomen":
+            line += f"  (poort {state.get('gate', '-')}: {state.get('reason', '')})"
+        print(line)
+    v.stop()
+
+    scout = v.records.get("concurrent_scout")
+    lib = v.records.get("librarian")
+    print(f"\nconcurrent_scout: source={getattr(scout, 'source', '?')} "
+          f"skills={scout.definition.skills if scout else '?'}")
+    print(f"librarian skills: {lib.definition.skills if lib else '?'}")
+    print("\n===== einde =====")
+
+
 def birth_content_strategist() -> None:
     """Dien het Content Strategist-voorstel in via het live governance-proces en
     rapporteer de uitkomst. De rol wordt onbemand geboren als de poort 'm aanneemt."""
