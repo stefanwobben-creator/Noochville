@@ -404,10 +404,14 @@ class TrendsWorker(Inhabitant):
 
     def _propose_from_gsc(self, result: dict) -> None:
         lib = self.context.library
+        # Alleen nieuwe high_potential-queries (nog geen oordeel in de bibliotheek):
+        # die meten we met KeywordsEverywhere en sturen we door met écht zoekvolume,
+        # zodat de Librarian boven de drempel auto-kan goedkeuren.
+        new_rows = [r for r in result.get("rows", [])
+                    if r["bucket"] == "high_potential" and lib.status(r["query"]) is None]
+        vol_by = self._measure_volumes([r["query"] for r in new_rows])
         proposed = 0
-        for row in result.get("rows", []):
-            if row["bucket"] != "high_potential":
-                continue
+        for row in new_rows:
             published = _publish_keyword_proposed(
                 self.bus, self.id, row["query"],
                 demand={
@@ -418,6 +422,7 @@ class TrendsWorker(Inhabitant):
                     "bucket": row["bucket"],
                     "impressions": row["impressions"],
                     "clicks": row["clicks"],
+                    "volume": vol_by.get(row["query"], 0),
                 },
                 library=lib,
             )
@@ -427,6 +432,37 @@ class TrendsWorker(Inhabitant):
             self.log.info("🔍 %d GSC high_potential kandidaten doorgestuurd naar de Librarian", proposed)
         else:
             self.log.info("ℹ️ Geen nieuwe high_potential kandidaten (alles al bekend of geen data)")
+
+    def _measure_volumes(self, queries: list[str]) -> dict[str, int]:
+        """Meet kandidaat-queries met KeywordsEverywhere (echt zoekvolume per term).
+        Begrensd tot ke_pulse_max per puls (credit-beheersing). Faalt closed: geen key /
+        skill weg → leeg dict, kandidaten gaan zonder volume door (en escaleren dan zoals
+        voorheen)."""
+        if not queries:
+            return {}
+        if "keywords_everywhere" not in self.dna.skills:
+            return {}                                   # niet gegrant → niet meten
+        cap = self._ke_pulse_max()
+        batch = queries[:cap]
+        res = self.use_skill("keywords_everywhere",
+                             {"kw": batch, "country": self._ke_country()})
+        if not isinstance(res, dict) or "error" in res or "keywords" not in res:
+            reason = res.get("error") if isinstance(res, dict) else res
+            self.log.info("📐 KeywordsEverywhere niet beschikbaar (%s) — kandidaten zonder volume", reason)
+            return {}
+        vols = {k.get("keyword", ""): int(k.get("vol", 0) or 0) for k in res.get("keywords", [])}
+        self.log.info("📐 KeywordsEverywhere: %d/%d kandidaten gemeten (cap %d)",
+                      len(vols), len(queries), cap)
+        return vols
+
+    def _ke_pulse_max(self) -> int:
+        try:
+            return int(self.context.settings.get("ke_pulse_max", "25"))
+        except (TypeError, ValueError):
+            return 25
+
+    def _ke_country(self) -> str:
+        return (self.context.settings.get("ke_country", "nl") or "nl").strip()
 
 
 class Librarian(Inhabitant):

@@ -85,11 +85,51 @@ class KeywordReviewSkill(Skill):
             return {"word": word, "decision": "known", "status": existing["status"],
                     "reason": "al vastgelegd in de bibliotheek"}
 
+        # Auto-approve op echt zoekvolume (KeywordsEverywhere). Missie-risico's
+        # (RISK / FORBIDDEN_CLAIM) gaan NOOIT automatisch door op volume — die blijven
+        # mens-gated en komen in het dashboard.
+        block, _ = self._mission_block(word)
+        if block is None:
+            vol = self._search_volume(demand)
+            threshold = self._auto_approve_volume(context)
+            if threshold > 0 and vol >= threshold:
+                return {"word": word, "decision": "approve", "basis": "volume",
+                        "reason": f"echt zoekvolume {vol}/mnd ≥ drempel {threshold} (KeywordsEverywhere)",
+                        "demand": demand, "alignment_heuristic": "approve"}
+
         h_decision, h_reason = self._heuristic(word, demand, context)
         llm = self._llm(word, demand)
         decision, reason_txt, basis = (llm[0], llm[1], "llm") if llm else (h_decision, h_reason, "heuristic")
         return {"word": word, "decision": decision, "reason": reason_txt, "basis": basis,
                 "demand": demand, "alignment_heuristic": h_decision}
+
+    @staticmethod
+    def _search_volume(demand: dict) -> int:
+        """Echt maandelijks zoekvolume uit de demand (KeywordsEverywhere-veld 'volume'/'vol').
+        Bewust NIET 'interest' (GSC-impressies) — alleen echt KE-volume telt voor auto-approve."""
+        try:
+            return int(demand.get("volume") or demand.get("vol") or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    def _auto_approve_volume(self, context) -> int:
+        """Drempel waarboven echt zoekvolume automatisch goedkeurt. 0 = uit."""
+        try:
+            return int(getattr(context, "settings", {}).get("ke_auto_approve_volume", "100"))
+        except (TypeError, ValueError):
+            return 100
+
+    def _mission_block(self, word: str):
+        """Missie-poort: onbewezen claim → reject, risico-woord (niet ontkend) → escalate.
+        Geen blokkade → (None, ""). Gedeeld door run() (volume-gate) en _heuristic()."""
+        w = word.lower()
+        for term in FORBIDDEN_CLAIM:
+            if term in w:
+                return "reject", f"bevat een onbewezen claim ('{term}')"
+        for term, why in RISK.items():
+            if re.search(rf"\b{re.escape(term)}", w) and not self._negated(w, term):
+                return "escalate", why
+        return None, ""
 
     def _has_demand(self, demand: dict) -> bool:
         if not demand:
@@ -115,17 +155,11 @@ class KeywordReviewSkill(Skill):
         return re.search(rf"\b{re.escape(term)}[\s-]*(?:{neg})\b", w) is not None
 
     def _heuristic(self, word: str, demand: dict, context=None):
-        w = word.lower()
-        for term in FORBIDDEN_CLAIM:
-            if term in w:
-                return "reject", f"bevat een onbewezen claim ('{term}')"
-        for term, why in RISK.items():
-            if re.search(rf"\b{re.escape(term)}", w):
-                if self._negated(w, term):
-                    continue  # 'leather free'/'leervrij': de afwezigheid is on-mission
-                return "escalate", why
+        block, why = self._mission_block(word)
+        if block is not None:
+            return block, why
         core_terms = self._mission_core(context)
-        nw = _norm(w)
+        nw = _norm(word.lower())
         core = any(c in nw for c in core_terms)
         if core and self._has_demand(demand):
             return "approve", "missie-kern en er is aantoonbare vraag"

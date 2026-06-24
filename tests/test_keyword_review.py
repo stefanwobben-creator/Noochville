@@ -76,6 +76,10 @@ def test_kern_zonder_vraag_escaleert(tmp_path):
 def test_run_geeft_context_door(tmp_path):
     ctx = _ctx(tmp_path)
     ctx.library = SimpleNamespace(status=lambda w: None)   # niets bekend → heuristiek beslist
-    out = KeywordReviewSkill().run({"word": "sustainable sneakers", "demand": _DEMAND}, ctx)
+    ctx.settings = {}                                       # default-drempel
+    # Demand ZONDER volume, anders keurt de volume-regel al goed vóór de heuristiek;
+    # deze test bewijst juist dat run() de context aan de heuristiek doorgeeft.
+    out = KeywordReviewSkill().run({"word": "sustainable sneakers",
+                                    "demand": {"signal": "positive"}}, ctx)
     assert out["decision"] == "approve"
     assert out["basis"] == "heuristic"
