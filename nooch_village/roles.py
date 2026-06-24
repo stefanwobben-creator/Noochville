@@ -1119,8 +1119,8 @@ class HarryHemp(Inhabitant):
         auteurs, abstracten of DOI's die niet daadwerkelijk zijn opgehaald.
         """
         if not evidence:
-            return (f"Geen academische bronnen gevonden voor '{word}' "
-                    f"(locale={locale or 'onbekend'}; v1: OpenAlex + Semantic Scholar).")
+            return (f"No academic sources found for '{word}' "
+                    f"(locale={locale or 'unknown'}; v1: OpenAlex + Semantic Scholar).")
 
         bron_regels: list[str] = []
         for e in evidence[:5]:
@@ -1132,23 +1132,23 @@ class HarryHemp(Inhabitant):
 
         from nooch_village.llm import reason as llm_reason
         prompt = (
-            f"Duiding gevraagd voor term '{word}' (locale: {locale or '?'}) "
-            f"voor Nooch.earth (duurzame schoenen, geen plastic, geen leer).\n"
-            f"Gevonden bronnen ({len(evidence)}):\n" + "\n".join(bron_regels) + "\n\n"
-            f"Geef in maximaal 2 zinnen: (1) wat de inhoudelijke/wetenschappelijke relevantie "
-            f"is van '{word}', (2) of de bronnen de missie-claim ondersteunen of tegenspreken. "
-            f"Baseer je ALLEEN op de bovenstaande bronnen. "
-            f"Verzin geen andere titels of auteurs. "
-            f"Als je het niet kunt beoordelen, zeg dat expliciet."
+            f"Assessment requested for the term '{word}' (locale: {locale or '?'}) "
+            f"for Nooch.earth (sustainable shoes, no plastic, no leather).\n"
+            f"Sources found ({len(evidence)}):\n" + "\n".join(bron_regels) + "\n\n"
+            f"In at most 2 sentences: (1) the substantive/scientific relevance of '{word}', "
+            f"(2) whether the sources support or contradict the mission claim. "
+            f"Base your answer ONLY on the sources above. Do not invent titles or authors. "
+            f"If you cannot assess it, say so explicitly."
         )
         from nooch_village.language import instruction
-        prompt = prompt + "\n" + instruction(locale)
+        # Knowledge-layer output is ALWAYS English, regardless of the term's locale.
+        prompt = prompt + "\n" + instruction()
         llm_out = llm_reason(prompt)
         if llm_out:
             return llm_out.strip()
 
         titels = "; ".join(e.get("title", "?")[:60] for e in evidence[:3])
-        return f"{len(evidence)} bron(nen) gevonden voor '{word}': {titels}."
+        return f"{len(evidence)} source(s) found for '{word}': {titels}."
 
     # ── reflectie ─────────────────────────────────────────────────────────────
 

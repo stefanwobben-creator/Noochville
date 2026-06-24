@@ -326,4 +326,4 @@ def test_research_question_zonder_bronnen_meldt_dat(tmp_path):
     with patch("nooch_village.llm.reason", return_value=None):
         evidence, assessment = harry._research_question("een vraag zonder literatuur")
     assert evidence == []
-    assert "Geen academische bronnen" in assessment
+    assert "No academic sources" in assessment       # knowledge layer = English
