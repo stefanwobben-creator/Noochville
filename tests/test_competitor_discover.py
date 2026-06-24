@@ -35,7 +35,7 @@ def test_strip_html():
 
 def _run_with(llm_out, *, text="x" * 300 + " Veja and Cariuma"):
     skill = CompetitorDiscoverSkill()
-    with patch.object(skill, "_fetch_guides",
+    with patch.object(skill, "_serpapi_guides",
                       return_value=[{"title": "15 Best Vegan Sneakers - Good On You", "link": "http://g"}]), \
          patch.object(skill, "_fetch_text", return_value=text), \
          patch("nooch_village.llm.reason", return_value=llm_out):
@@ -61,7 +61,7 @@ def test_run_slaat_lege_pagina_over():
 
 def test_run_gidsen_ophalen_faalt():
     skill = CompetitorDiscoverSkill()
-    with patch.object(skill, "_fetch_guides", side_effect=RuntimeError("netwerk weg")):
+    with patch.object(skill, "_serpapi_guides", side_effect=RuntimeError("geen key")):
         res = skill.run({"brands": []}, SimpleNamespace(settings={}))
     assert not res["ok"]
 

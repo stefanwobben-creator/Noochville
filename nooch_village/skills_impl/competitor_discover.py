@@ -1,55 +1,41 @@
 """competitor_discover — spot nieuwe concurrenten door gids-artikelen UIT TE LEZEN.
 
-De vorige aanpak (hoofdletter-woorden uit krantenkoppen) gaf rommel: titelwoorden en
-publicatienamen ('Ultimate', 'Good', 'Business', 'Insider') in plaats van merken. De échte
-merken staan in de tekst van de gids ('15 Best Vegan Sneaker Brands' → Veja, Vesica Piscis,
-Etiko, ...). Daarom: vind de gidsen via Google News RSS, lees de pagina, en laat de LLM de
-merknamen extraheren. Dependency-vrij (requests + stdlib-XML) + de gedeelde LLM-ladder.
+Bron: SerpAPI Google-zoekopdracht (geeft échte artikel-URLs, geen Google News-redirects waar
+een lezer niet doorheen komt). Per gevonden gids: pagina lezen, en de LLM de genoemde
+merknamen laten extraheren ('15 Best Vegan Sneaker Brands' → Veja, Vesica Piscis, Etiko, ...).
+Dependency-vrij (requests + stdlib) + de gedeelde LLM-ladder.
 
-Fail-closed: geen LLM, geen leesbare pagina of geen merken → géén kandidaten (geen rommel).
-De heuristiek is bewust verdwenen; liever niets dan een verkeerde merknaam.
+Fail-closed: geen SerpAPI-key, geen leesbare pagina of geen LLM → géén kandidaten (geen rommel).
+Liever niets dan een verkeerde merknaam; de mens bevestigt de rest in de cockpit.
 """
 from __future__ import annotations
 
 import logging
+import os
 import re
-import urllib.parse
-from xml.etree import ElementTree as ET
+
+import requests
 
 from nooch_village.skills import Skill
 
 log = logging.getLogger("village.skill.discover")
 
-_GUIDE_QUERY = ('("best" OR "top" OR "guide" OR "brands") AND '
-                '("sustainable sneakers" OR "ethical sneakers" OR "vegan sneakers" '
-                'OR "sustainable shoes" OR "vegan footwear")')
-_RSS = "https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
+_ENDPOINT = "https://serpapi.com/search.json"
+_GUIDE_QUERY = "best sustainable vegan sneaker brands"
 _UA = "Mozilla/5.0 (NoochVille competitor monitor; +https://nooch.earth)"
 
 _PROMPT = (
     "Hieronder staat de tekst van een artikel over duurzame/ethische/vegan schoenen.\n"
     "Geef UITSLUITEND de namen van schoen- of sneakermerken die erin genoemd worden, als "
     "kommagescheiden lijst. Geen publicatienamen, geen auteurs, geen algemene woorden, niet "
-    "'Nooch'. Geen niets gevonden → antwoord precies: NONE.\n\nArtikel:\n{text}"
+    "'Nooch'. Niets gevonden → antwoord precies: NONE.\n\nArtikel:\n{text}"
 )
 
-# Woorden die nooit een merk zijn (vangnet als de LLM toch ruis teruggeeft).
 _NOT_A_BRAND = {
     "none", "best", "top", "guide", "sustainable", "ethical", "vegan", "sneakers",
     "shoes", "footwear", "brands", "brand", "the", "good on you", "business insider",
-    "esquire", "vogue", "nooch", "review", "guide to", "and", "more",
+    "esquire", "vogue", "nooch", "review", "and", "more", "vegnews", "peta",
 }
-
-
-def _parse_titles(xml_text: str) -> list[dict]:
-    root = ET.fromstring(xml_text)
-    out = []
-    for item in root.findall(".//item"):
-        title = (item.findtext("title") or "").strip()
-        link = (item.findtext("link") or "").strip()
-        if title and link:
-            out.append({"title": title, "link": link})
-    return out
 
 
 def _strip_html(html: str) -> str:
@@ -78,11 +64,11 @@ def _parse_brand_list(llm_out: str, known: list[str]) -> list[str]:
 
 class CompetitorDiscoverSkill(Skill):
     name = "competitor_discover"
-    cost = "rate_limited"
+    cost = "credits"               # SerpAPI-zoekopdracht
     side_effect_free = True
-    required_env = ()
-    description = ("Leest gids-artikelen over duurzame sneakers en laat de LLM de genoemde "
-                   "merknamen extraheren als kandidaat-concurrenten. Fail-closed (geen rommel).")
+    required_env = ("SERPAPI_API_KEY",)
+    description = ("Vindt gids-artikelen via SerpAPI (echte URLs), leest ze, en laat de LLM "
+                   "de genoemde merknamen extraheren als kandidaat-concurrenten. Fail-closed.")
     input_schema = "brands: list[str] (bekende merken, worden gefilterd), limit: int (gidsen)"
     output_schema = "ok: bool, candidates: list[{brand, article, link}] | error"
 
@@ -93,16 +79,16 @@ class CompetitorDiscoverSkill(Skill):
         except (TypeError, ValueError):
             limit = 4
         try:
-            guides = self._fetch_guides(context)
+            guides = self._serpapi_guides(context)
         except Exception as exc:
-            log.warning("competitor_discover: gidsen ophalen faalde: %s", exc)
+            log.warning("competitor_discover: SerpAPI-zoekopdracht faalde: %s", exc)
             return {"ok": False, "error": str(exc)}
 
         from nooch_village.llm import reason
         seen, candidates = set(), []
         for g in guides[:limit]:
             text = self._fetch_text(g["link"])
-            if len(text) < 200:                          # interstitial / lege pagina → overslaan
+            if len(text) < 200:                          # niet leesbaar → overslaan
                 continue
             out = reason(_PROMPT.format(text=text[:6000]))
             for name in _parse_brand_list(out, brands):
@@ -112,20 +98,28 @@ class CompetitorDiscoverSkill(Skill):
                 candidates.append({"brand": name, "article": g["title"], "link": g["link"]})
         return {"ok": True, "candidates": candidates, "guides": len(guides)}
 
-    def _fetch_guides(self, context) -> list[dict]:
-        import requests
+    def _serpapi_guides(self, context) -> list[dict]:
+        key = ((getattr(context, "settings", {}) or {}).get("SERPAPI_API_KEY")
+               or os.getenv("SERPAPI_API_KEY"))
+        if not key:
+            raise RuntimeError("SERPAPI_API_KEY ontbreekt — skill faalt bewust closed")
         query = str((getattr(context, "settings", {}) or {}).get("discover_query", "")) or _GUIDE_QUERY
-        url = _RSS.format(q=urllib.parse.quote(query))
-        resp = requests.get(url, headers={"User-Agent": _UA}, timeout=20)
+        params = {"engine": "google", "q": query, "num": 10, "api_key": key}
+        resp = requests.get(_ENDPOINT, params=params, timeout=20)
         resp.raise_for_status()
-        return _parse_titles(resp.text)
+        data = resp.json()
+        out = []
+        for item in data.get("organic_results", []):
+            link = (item.get("link") or "").strip()
+            if link:
+                out.append({"title": (item.get("title") or "").strip(), "link": link})
+        return out
 
     def _fetch_text(self, link: str) -> str:
-        """Best-effort: volg de link en geef platte tekst terug. Faalt → lege string."""
+        """Lees een echte artikel-URL en geef platte tekst terug. Faalt → lege string."""
         if not link:
             return ""
         try:
-            import requests
             resp = requests.get(link, headers={"User-Agent": _UA}, timeout=20,
                                 allow_redirects=True)
             resp.raise_for_status()
