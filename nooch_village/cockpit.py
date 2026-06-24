@@ -24,7 +24,9 @@ from nooch_village.governance import Records
 from nooch_village.human_inbox import HumanInbox
 from nooch_village.projects import ProjectLedger
 from nooch_village.library import Library
-from nooch_village.inbox_actions import decide_keyword, defer_item, confirm_item
+from nooch_village.notes_store import NotesStore
+from nooch_village.inbox_actions import (
+    decide_keyword, defer_item, confirm_item, mark_done, add_reference)
 
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
@@ -123,7 +125,86 @@ def _item_actions(i: dict, token: str) -> str:
     if i.get("proposed_resolution"):
         parts.append(_btn(iid, "confirm", "Confirm", token, "ok"))
     parts.append(_btn(iid, "defer", "Defer", token))
+    parts.append(f'<a class="btn" href="/process?iid={_e(iid)}">Process…</a>')
     return " ".join(parts)
+
+
+def render_process(item: dict, csrf_token: str) -> str:
+    """De GlassFrog 'Process Tension'-flow voor één spanning. Toont de volledige
+    'Wat heb je nodig?'-structuur; de live rails in deze stap zijn Add Reference
+    (info vastleggen) en Niets-nodig/Defer. De overige rails zijn zichtbaar als
+    structuur en volgen in een volgende stap (governance/project/rol-vragen)."""
+    iid = item["id"]
+    ctx = item.get("context", {}) or {}
+    detail = (ctx.get("description") or ctx.get("reason") or ctx.get("purpose")
+              or ctx.get("tension") or "")
+    t = csrf_token
+
+    def _hidden(action: str) -> str:
+        return (f'<input type="hidden" name="csrf" value="{_e(t)}">'
+                f'<input type="hidden" name="iid" value="{_e(iid)}">'
+                f'<input type="hidden" name="action" value="{action}">')
+
+    ref_form = (
+        '<form method="post" action="/action" class="pf">'
+        + _hidden("add_reference")
+        + '<label>Claim (Engels, één feit):</label>'
+        f'<input name="claim" value="{_e(detail[:140])}">'
+        + '<label>Grounds (het bewijs of de redenering erachter):</label>'
+        '<input name="grounds" placeholder="Grounded in: …">'
+        + '<button class="btn ok" type="submit">Add Reference</button>'
+        '</form>'
+    )
+
+    done_form = (
+        '<form method="post" action="/action" style="display:inline">'
+        + _hidden("done")
+        + '<button class="btn" type="submit">Niets nodig / afgehandeld</button></form>'
+        ' '
+        '<form method="post" action="/action" style="display:inline">'
+        + _hidden("defer")
+        + '<button class="btn" type="submit">Defer (later)</button></form>'
+    )
+
+    soon = '<span class="muted">(volgende stap)</span>'
+
+    return f"""<!doctype html><html lang="nl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Process Tension — {_e(item.get('subject'))}</title>
+<style>
+ body{{font:14px/1.5 system-ui,sans-serif;margin:1.5rem;max-width:760px;color:#1a1a1a}}
+ a{{color:#36c}} .muted{{color:#999}}
+ .tension{{background:#eef4fb;border-radius:6px;padding:.6rem .8rem;margin:.6rem 0 1.2rem}}
+ details{{border:1px solid #e0e0e0;border-radius:6px;margin:.5rem 0;padding:.3rem .7rem}}
+ details>summary{{cursor:pointer;font-weight:600;padding:.3rem 0}}
+ .pf label{{display:block;margin:.5rem 0 .15rem;font-size:13px;color:#444}}
+ .pf input{{width:100%;padding:.35rem;box-sizing:border-box}}
+ .btn{{font:13px system-ui;border:1px solid #bbb;border-radius:4px;background:#f7f7f7;
+   padding:.25rem .7rem;margin:.5rem .1rem 0;cursor:pointer;display:inline-block;text-decoration:none;color:#222}}
+ .btn.ok{{border-color:#3a7;background:#eafaef}}
+</style></head><body>
+<p><a href="/">← terug naar de cockpit</a></p>
+<h1>Process Tension</h1>
+<div class="tension"><b>{_e(item.get('subject'))}</b> <span class="muted">({_e(item.get('type'))})</span><br>{_e(detail)}</div>
+<h2>Wat heb je nodig?</h2>
+
+<details open><summary>Ik wil info delen, ophalen of vastleggen</summary>
+<p class="muted">Leg een feit vast als kennis-kaart (Engels, één claim, met grounds). Loopt door de curator-poort.</p>
+{ref_form}
+</details>
+
+<details><summary>Ik wil zelf iets doen</summary>
+<p>Add Project (uitkomst voor een rol) {soon} · Bring to Governance (rol/skill wijzigen) {soon}</p>
+</details>
+
+<details><summary>Ik wil dat iemand anders iets doet</summary>
+<p>Een rol vragen een accountability op te pakken (regel 5) {soon} · Bring to Governance {soon}</p>
+</details>
+
+<details><summary>Niets nodig — al afgehandeld of hoort hier niet</summary>
+<p>{done_form}</p>
+</details>
+</body></html>"""
 
 
 def render_html(snap: dict, csrf_token: str | None = None) -> str:
@@ -238,9 +319,11 @@ def render_html(snap: dict, csrf_token: str | None = None) -> str:
 
 # ── server (read-only, localhost) ────────────────────────────────────────────
 
-def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str) -> dict:
+def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
+                     extra: dict | None = None) -> dict:
     """Voer één inbox-actie uit via het gedeelde, gevalideerde pad. Geen directe
     store-write buiten inbox_actions. Onbekende actie → fout (geen stille no-op)."""
+    extra = extra or {}
     dd = data_dir or _default_data_dir()
     inbox = HumanInbox(os.path.join(dd, "human_inbox.json"))
     if action in ("approve", "reject"):
@@ -250,6 +333,12 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str) -
         return defer_item(inbox, iid, reason=reason)
     if action == "confirm":
         return confirm_item(inbox, iid)
+    if action == "done":
+        return mark_done(inbox, iid, reason=reason)
+    if action == "add_reference":
+        notes = NotesStore(os.path.join(dd, "notes.json"))
+        return add_reference(notes, inbox, iid, claim=extra.get("claim", ""),
+                             grounds=extra.get("grounds", ""))
     return {"ok": False, "error": f"onbekende actie '{action}'"}
 
 
@@ -258,11 +347,24 @@ def make_handler(data_dir: str | None):
 
     class _Handler(BaseHTTPRequestHandler):
         def do_GET(self):
-            if self.path.split("?", 1)[0] not in ("/", "/index.html"):
+            path, _, query = self.path.partition("?")
+            if path == "/process":
+                qs = urllib.parse.parse_qs(query)
+                iid = (qs.get("iid") or [""])[0]
+                snap = gather(data_dir)
+                item = next((i for i in snap["inbox"] if i.get("id") == iid), None)
+                if item is None:
+                    self.send_response(404)
+                    self.end_headers()
+                    self.wfile.write(b"Item niet gevonden")
+                    return
+                body = render_process(item, csrf_token).encode("utf-8")
+            elif path in ("/", "/index.html"):
+                body = render_html(gather(data_dir), csrf_token=csrf_token).encode("utf-8")
+            else:
                 self.send_response(404)
                 self.end_headers()
                 return
-            body = render_html(gather(data_dir), csrf_token=csrf_token).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -287,7 +389,9 @@ def make_handler(data_dir: str | None):
             action = (form.get("action") or [""])[0]
             iid = (form.get("iid") or [""])[0]
             reason = (form.get("reason") or [""])[0]
-            _dispatch_action(data_dir, action, iid, reason)
+            extra = {"claim": (form.get("claim") or [""])[0],
+                     "grounds": (form.get("grounds") or [""])[0]}
+            _dispatch_action(data_dir, action, iid, reason, extra=extra)
             # 303 → de browser doet een verse GET, zo zie je meteen de nieuwe staat.
             self.send_response(303)
             self.send_header("Location", "/")

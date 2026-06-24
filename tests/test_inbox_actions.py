@@ -6,7 +6,8 @@ from __future__ import annotations
 import pytest
 
 from nooch_village.human_inbox import HumanInbox
-from nooch_village.inbox_actions import decide_keyword, defer_item, confirm_item
+from nooch_village.notes_store import NotesStore
+from nooch_village.inbox_actions import decide_keyword, defer_item, confirm_item, add_reference
 
 
 class _StubLibrary:
@@ -80,3 +81,37 @@ def test_confirm_item_met_voorstel(tmp_path):
     res = confirm_item(hi, iid)
     assert res["ok"]
     assert hi.get(iid)["status"] == "approved"
+
+
+# ── Add Reference (capture info → kennis-kaart) ───────────────────────────────
+
+def test_add_reference_schrijft_kaart_en_sluit_item(tmp_path):
+    notes = NotesStore(str(tmp_path / "notes.json"))
+    hi = HumanInbox(str(tmp_path / "inbox.json"))
+    iid = hi.add_means_gap("gap_x", "iets om vast te leggen")
+    res = add_reference(notes, hi, iid,
+                        claim="Most vegan sneakers contain plastic.",
+                        grounds="Material analysis from the nooch.earth article.")
+    assert res["ok"]
+    card = notes.get(res["card_id"])
+    assert card is not None and "plastic" in card.claim
+    assert card.grounds                                  # contract: grounds gevuld
+    assert hi.get(iid)["status"] == "approved"           # spanning gesloten
+
+
+def test_add_reference_weigert_zonder_grounds(tmp_path):
+    notes = NotesStore(str(tmp_path / "notes.json"))
+    hi = HumanInbox(str(tmp_path / "inbox.json"))
+    res = add_reference(notes, hi, "", claim="Een claim zonder bewijs.", grounds="")
+    assert not res["ok"]
+    assert notes.all() == []                             # niks geschreven (fail-closed)
+
+
+def test_add_reference_zonder_inbox_item(tmp_path):
+    """Nieuwe spanning (geen iid) → kaart wordt geschreven, niks te sluiten."""
+    notes = NotesStore(str(tmp_path / "notes.json"))
+    hi = HumanInbox(str(tmp_path / "inbox.json"))
+    res = add_reference(notes, hi, "", claim="A standalone fact.",
+                        grounds="Reasoning behind it.")
+    assert res["ok"]
+    assert notes.get(res["card_id"]) is not None

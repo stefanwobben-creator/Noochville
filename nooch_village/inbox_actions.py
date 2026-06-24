@@ -10,6 +10,45 @@ Interactieve of bus-afhankelijke acties (means_gap, escalation, content) horen h
 die houden hun eigen pad tot ze niet-interactief gemaakt zijn.
 """
 from __future__ import annotations
+import re
+from datetime import date
+
+
+def _slug(text: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "_", (text or "").lower()).strip("_")
+    return s[:60] or "ref"
+
+
+def add_reference(notes, inbox, iid: str, claim: str, grounds: str,
+                  *, source: str = "cockpit", tags=None) -> dict:
+    """Capture-info-rail (Add Reference): leg een feit vast als kennis-kaart en sluit
+    de spanning. Loopt via de curator-contract-poort (validate_card + finalize_card) en
+    ingest_insights — Engels/atomair/compleet, geen LLM, geen Village. Als iid een pending
+    inbox-item is, wordt dat gesloten (gerouteerd als reference). Geeft {ok, card_id?}.
+    """
+    from nooch_village.curate import validate_card, finalize_card
+    from nooch_village.ingest import ingest_insights
+
+    claim = (claim or "").strip()
+    grounds = (grounds or "").strip()
+    if not claim or not grounds:
+        return {"ok": False, "error": "claim en grounds zijn allebei verplicht"}
+
+    raw = {"id": _slug(claim), "claim": claim, "grounds": grounds,
+           "tags": tags or []}
+    if not validate_card(raw):
+        return {"ok": False, "error": "kaart haalt het contract niet (id/claim/grounds)"}
+
+    card = finalize_card(raw, source=source, source_date=date.today().isoformat())
+    res = ingest_insights(notes, [card])
+
+    if iid and inbox is not None:
+        item = inbox.get(iid)
+        if item and item.get("status") == "pending":
+            inbox.resolve(iid, "approved",
+                          reason=f"vastgelegd als kennis-kaart '{card['id']}'",
+                          extra={"routed": "reference", "card_id": card["id"]})
+    return {"ok": True, "card_id": card["id"], "added": res["added"]}
 
 
 def decide_keyword(inbox, library, iid: str, decision: str,
@@ -50,6 +89,18 @@ def defer_item(inbox, iid: str, reason: str = "") -> dict:
         return {"ok": False, "error": f"item is al {item.get('status')}"}
     inbox.resolve(iid, "deferred", reason=reason)
     return {"ok": True, "status": "deferred"}
+
+
+def mark_done(inbox, iid: str, reason: str = "") -> dict:
+    """Nevermind/Done-pad: de spanning vergt geen systeemactie (al afgehandeld, of hoort
+    hier niet thuis). Trekt het item in (withdrawn) — geen domein-actie."""
+    item = inbox.get(iid)
+    if item is None:
+        return {"ok": False, "error": "item niet gevonden"}
+    if item.get("status") != "pending":
+        return {"ok": False, "error": f"item is al {item.get('status')}"}
+    inbox.resolve(iid, "withdrawn", reason=reason or "geen actie nodig / afgehandeld")
+    return {"ok": True, "status": "withdrawn"}
 
 
 def confirm_item(inbox, iid: str, by_human: str = "mens") -> dict:

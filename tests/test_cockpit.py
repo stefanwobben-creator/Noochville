@@ -143,6 +143,53 @@ def test_server_get_and_post_action(tmp_path):
         t.join(timeout=5)
 
 
+def test_process_page_renders_glassfrog_flow(tmp_path):
+    snap = cockpit.gather(_seed(tmp_path))
+    item = snap["inbox"][0]                       # de pending means_gap
+    page = cockpit.render_process(item, "tok123")
+    assert "Process Tension" in page
+    assert "Wat heb je nodig" in page
+    assert "Add Reference" in page                # de live rail
+    assert 'value="tok123"' in page               # csrf in de formulieren
+    assert "volgende stap" in page                # de nog-niet-live rails als structuur
+
+
+def test_server_process_get_and_add_reference(tmp_path):
+    import re, json as _json
+    data_dir = _seed(tmp_path)
+    httpd = HTTPServer(("127.0.0.1", 0), cockpit.make_handler(data_dir))
+    port = httpd.server_address[1]
+    base = f"http://127.0.0.1:{port}"
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    try:
+        # /process?iid= → 200 met de flow + de csrf-token
+        with urllib.request.urlopen(f"{base}/process?iid=aaa111aaa111", timeout=5) as resp:
+            assert resp.status == 200
+            page = resp.read().decode("utf-8")
+        token = re.search(r'name="csrf" value="([^"]+)"', page).group(1)
+
+        # Add Reference via POST → kennis-kaart geschreven + item gesloten
+        body = urllib.parse.urlencode({
+            "csrf": token, "iid": "aaa111aaa111", "action": "add_reference",
+            "claim": "Visitor data must be analysed per locale.",
+            "grounds": "Different markets behave differently; one aggregate hides the signal.",
+        }).encode()
+        with urllib.request.urlopen(urllib.request.Request(
+                f"{base}/action", data=body, method="POST"), timeout=5) as resp:
+            assert resp.status == 200
+
+        notes = _json.loads((tmp_path / "data" / "notes.json").read_text())
+        notes_items = notes.get("notes", notes) if isinstance(notes, dict) else {}
+        assert any("locale" in (c.get("claim", "")) for c in notes_items.values())
+        inbox = _json.loads((tmp_path / "data" / "human_inbox.json").read_text())
+        assert inbox["aaa111aaa111"]["status"] == "approved"   # spanning gesloten
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        t.join(timeout=5)
+
+
 def test_serve_refuses_non_local_host():
     with pytest.raises(SystemExit):
         cockpit.serve(host="0.0.0.0", port=0)
