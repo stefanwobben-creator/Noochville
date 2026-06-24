@@ -210,6 +210,34 @@ def _btn(iid: str, action: str, label: str, token: str, cls: str = "") -> str:
     )
 
 
+_TYPE_LABELS = {
+    "means_gap": "Middelen-gat", "keyword": "Zoekwoord",
+    "escalation": "Governance-voorstel", "suggestion": "Suggestie",
+    "activation": "Rol-activatie", "verband": "Verband",
+    "content_suggestion": "Content-kans", "content_draft": "Content-draft",
+    "keyword_batch": "Keyword-batch",
+}
+
+
+def _type_label(t: str) -> str:
+    return _TYPE_LABELS.get(t, t or "?")
+
+
+def _item_title(i: dict) -> str:
+    """De menselijke titel van een spanning: de echte zin, niet de machine-slug."""
+    ctx = i.get("context", {}) or {}
+    t = i.get("type")
+    if t in ("means_gap", "suggestion"):
+        return ctx.get("description") or i.get("subject")
+    if t == "keyword":
+        return ctx.get("word") or i.get("subject")
+    if t == "escalation":
+        return ctx.get("tension") or i.get("subject")
+    if t == "activation":
+        return ctx.get("purpose") or i.get("subject")
+    return i.get("subject")
+
+
 def _item_actions(i: dict, token: str) -> str:
     """De knoppen voor één inbox-item. Alleen pending items krijgen acties; alleen de
     veilige, niet-interactieve acties zitten in deze stap (keyword-beslissing, defer,
@@ -345,7 +373,7 @@ def render_process(item: dict, roster: list, csrf_token: str, msg=None) -> str:
 <p><a href="/">← terug naar de cockpit</a></p>
 <h1>Process Tension</h1>
 {_banner(msg)}
-<div class="tension"><b>{_e(item.get('subject'))}</b> <span class="muted">({_e(item.get('type'))})</span>{_tension_meta(item)}</div>
+<div class="tension"><b>{_e(item.get('subject'))}</b> <span class="muted">({_e(_type_label(item.get('type')))})</span>{_tension_meta(item)}</div>
 <h2>Wat heb je nodig?</h2>
 
 <details open><summary>Ik wil info delen, ophalen of vastleggen</summary>
@@ -485,26 +513,23 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'<tbody>{"".join(rrows) or "<tr><td colspan=6 class=muted>geen records</td></tr>"}</tbody></table>'
     )
 
-    # Inbox (alleen actief tenzij geschiedenis)
+    # Inbox (alleen actief tenzij geschiedenis) — semantisch: leesbare titel, slug klein
     irows = []
     for i in show_inbox:
-        ctx = i.get("context", {}) or {}
-        detail = ctx.get("description") or ctx.get("purpose") or ctx.get("tension") \
-            or ctx.get("reason") or ""
         actions = _item_actions(i, csrf_token) if writable else '<span class="muted">—</span>'
         irows.append(
             f'<tr class="st-{_e(i.get("status"))}">'
-            f'<td>{_e(i.get("type"))}</td>'
-            f'<td><b>{_e(i.get("subject"))}</b></td>'
+            f'<td><span class="chip">{_e(_type_label(i.get("type")))}</span></td>'
+            f'<td><b>{_e(_item_title(i))}</b><br>'
+            f'<span class="muted" style="font-size:11px">{_e(i.get("subject"))}</span></td>'
             f'<td>{_e(i.get("status"))}</td>'
-            f'<td>{_e(detail)}</td>'
             f'<td>{actions}</td>'
             f"</tr>"
         )
     inbox_tbl = (
-        '<table><thead><tr><th>type</th><th>subject</th><th>status</th>'
-        '<th>detail</th><th>acties</th></tr></thead>'
-        f'<tbody>{"".join(irows) or "<tr><td colspan=5 class=muted>geen open items 🎉</td></tr>"}</tbody></table>'
+        '<table><thead><tr><th>soort</th><th>spanning</th><th>status</th>'
+        '<th>acties</th></tr></thead>'
+        f'<tbody>{"".join(irows) or "<tr><td colspan=4 class=muted>geen open items 🎉</td></tr>"}</tbody></table>'
     )
 
     # Projecten (met statusknoppen)

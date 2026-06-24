@@ -153,6 +153,18 @@ def test_process_meta_shows_who_what_for_means_gap():
     assert "Betreft rol" in page
 
 
+def test_inbox_semantic_labels():
+    snap = {"roster": [], "projects": [], "library": [], "insights": [],
+            "generated_at": 1.0, "data_dir": "x",
+            "inbox": [{"id": "i1", "type": "means_gap",
+                       "subject": "bezoekersdata_per_locale_analy", "status": "pending",
+                       "context": {"description": "bezoekersdata per locale analyseren"}}]}
+    page = cockpit.render_html(snap, csrf_token="t")
+    assert "Middelen-gat" in page                         # leesbaar type i.p.v. 'means_gap'
+    assert "bezoekersdata per locale analyseren" in page  # de zin als titel
+    assert "bezoekersdata_per_locale_analy" in page        # slug nog als kleine technische ref
+
+
 def test_means_gap_stores_sensed_by(tmp_path):
     from nooch_village.human_inbox import HumanInbox
     hi = HumanInbox(str(tmp_path / "i.json"))
