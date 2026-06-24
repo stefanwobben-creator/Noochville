@@ -617,11 +617,39 @@ class Inhabitant(threading.Thread):
     def use_skill(self, capability: str, payload: dict) -> dict:
         """Zelf een eigen skill gebruiken (voor zelf-geinitieerd werk, niet via de matchmaker)."""
         if capability not in self.dna.skills:
+            # Luid, niet stil: een DNA-miss is bijna altijd een dode feature
+            # (de skill wordt aangeroepen maar nooit gegrant). Stil falen heeft
+            # verband_voorstel en curate maandenlang onzichtbaar dood gehouden.
+            self.log.warning(
+                "⚠️ dode capability: '%s' roept skill '%s' aan, maar die zit niet "
+                "in zijn DNA (%s). Grant via governance of verwijder de aanroep.",
+                self.id, capability, self.dna.skills)
             return {"error": f"'{self.id}' heeft skill '{capability}' niet in zijn DNA"}
         ok, result = self._execute_skill(capability, payload)
         if ok:
             return result
         return {"error": result}
+
+    def referenced_capabilities(self) -> set[str]:
+        """Alle skills die deze rol via een use_skill-aanroep met letterlijke naam
+        gebruikt, statisch afgeleid uit de broncode van de klasse-MRO. Basis voor
+        de dode-skill-audit."""
+        import inspect
+        found: set[str] = set()
+        for cls in type(self).__mro__:
+            if cls.__module__ == "builtins" or cls is threading.Thread:
+                continue
+            try:
+                src = inspect.getsource(cls)
+            except (OSError, TypeError):
+                continue
+            found.update(re.findall(r'use_skill\(\s*["\']([^"\']+)["\']', src))
+        return found
+
+    def dormant_capabilities(self) -> set[str]:
+        """Skills die de rol aanroept maar niet in zijn DNA heeft: dode features.
+        Leeg = gezond. Niet-leeg = grant ontbreekt of de aanroep is dood."""
+        return self.referenced_capabilities() - set(self.dna.skills)
 
     def tick(self) -> None:
         """Hartslag-hook: wordt elke cyclus aangeroepen. Default niets.
@@ -641,6 +669,12 @@ class Inhabitant(threading.Thread):
     def run(self) -> None:
         self.log.info("ontwaakt [source=%s] | purpose=%s | skills=%s",
                       self.record.source, self.dna.purpose, self.dna.skills)
+        dormant = self.dormant_capabilities()
+        if dormant:
+            self.log.warning(
+                "⚠️ dode capabilities bij ontwaken: '%s' roept %s aan zonder grant. "
+                "Grant via governance of verwijder de aanroep.",
+                self.id, sorted(dormant))
         while not self._stop_event.is_set():
             try:
                 self.tick()
