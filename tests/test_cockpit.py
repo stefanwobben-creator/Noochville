@@ -153,6 +153,17 @@ def test_process_meta_shows_who_what_for_means_gap():
     assert "Betreft rol" in page
 
 
+def test_banner_error_vs_success_styling():
+    ok = cockpit.render_html({"roster": [], "inbox": [], "projects": [], "library": [],
+                              "insights": [], "generated_at": 1.0, "data_dir": "x"},
+                             csrf_token="t", msg="✓ Gelukt")
+    err = cockpit.render_html({"roster": [], "inbox": [], "projects": [], "library": [],
+                               "insights": [], "generated_at": 1.0, "data_dir": "x"},
+                              csrf_token="t", msg="✗ geen LLM beschikbaar")
+    assert 'class="flash"' in ok and 'class="flash err"' not in ok
+    assert 'class="flash err"' in err          # fout krijgt de rode stijl
+
+
 def test_inbox_semantic_labels():
     snap = {"roster": [], "projects": [], "library": [], "insights": [],
             "generated_at": 1.0, "data_dir": "x",

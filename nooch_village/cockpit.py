@@ -185,11 +185,15 @@ details>summary{cursor:pointer;font-family:var(--font-display);font-weight:700;p
  border-radius:var(--radius);font:inherit;background:#fff}
 .flash{background:var(--green-tint);border:1px solid var(--green);color:var(--green-dark);
  border-radius:var(--radius);padding:.5rem .8rem;margin:.4rem 0 1rem;font-weight:600}
+.flash.err{background:#FDEAEA;border-color:var(--coral);color:#A8322A}
 """
 
 
 def _banner(msg) -> str:
-    return f'<div class="flash">{_e(msg)}</div>' if msg else ""
+    if not msg:
+        return ""
+    cls = "flash err" if str(msg).lstrip().startswith("✗") else "flash"
+    return f'<div class="{cls}">{_e(msg)}</div>'
 
 
 def _page(title: str, inner: str) -> str:
