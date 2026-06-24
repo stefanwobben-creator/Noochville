@@ -96,6 +96,32 @@ def test_gate_passed_add_role_emits_born_and_changed(sec):
     assert records.get("nieuwe_rol") is not None
 
 
+# ── remove_role: archiveren én uit ouder-members prunen ───────────────────────
+
+def _remove_role(role_id: str) -> Proposal:
+    return Proposal(
+        proposer_role="the_source",
+        change=GovernanceChange(kind=ChangeKind.REMOVE_ROLE, role_id=role_id),
+        tension="opruimen", trigger_example="terugkerend", rationale="structureel",
+    )
+
+
+def test_gate_passed_remove_role_archiveert_en_pruunt_members(sec):
+    secretary, records, bus = sec
+    records.put(_role("doomed"))
+    root = records.root()
+    root.members = list(root.members) + ["doomed"]
+    records.put(root)
+
+    p = _remove_role("doomed")
+    bus.publish(Event("proposal_gate_passed", {"proposal": proposal_to_dict(p)}, "facilitator"))
+
+    rec = records.get("doomed")
+    assert rec.archived is True
+    # Geen dangling member-ref meer in de ouder-cirkel
+    assert "doomed" not in records.root().members
+
+
 # ── governance_verdict ────────────────────────────────────────────────────────
 
 def test_verdict_approve_adopts(sec):

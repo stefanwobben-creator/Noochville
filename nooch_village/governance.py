@@ -437,6 +437,14 @@ class Secretary:
                 rec.archived = True
                 rec.version += 1
                 self.records.put(rec)
+                # Prune uit de ouder-cirkel: een gearchiveerde rol mag geen dangling
+                # member-ref achterlaten (records-drift). De Reconciler bouwt het
+                # dorp uit members; een verwijzing naar een archief-record is rommel.
+                parent = self.records.get(rec.parent) if rec.parent else None
+                if parent and c.role_id in parent.members:
+                    parent.members = [m for m in parent.members if m != c.role_id]
+                    parent.version += 1
+                    self.records.put(parent)
 
         elif c.kind in (ChangeKind.ADD_POLICY, ChangeKind.AMEND_POLICY, ChangeKind.REMOVE_POLICY):
             root = self.records.root()
