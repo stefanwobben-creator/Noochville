@@ -151,9 +151,9 @@ def test_process_page_renders_glassfrog_flow(tmp_path):
     assert "Wat heb je nodig" in page
     assert "Add Reference" in page                # live rail: info vastleggen
     assert "Add Project" in page                  # live rail: uitkomst voor een rol
-    assert "website_watcher" in page              # owner-keuze uit de roster
+    assert "Bring to Governance" in page          # live rail: rol een skill geven
+    assert "website_watcher" in page              # rol-keuze uit de roster
     assert 'value="tok123"' in page               # csrf in de formulieren
-    assert "volgende stap" in page                # governance/rol-vragen nog als structuur
 
 
 def test_server_process_get_and_add_reference(tmp_path):
@@ -197,6 +197,39 @@ def test_server_process_get_and_add_reference(tmp_path):
             assert resp.status == 200
         inbox = _json.loads((tmp_path / "data" / "human_inbox.json").read_text())
         assert inbox["aaa111aaa111"]["status"] == "withdrawn"  # nu gesloten
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        t.join(timeout=5)
+
+
+def test_server_add_governance_grants_skill(tmp_path):
+    import re, json as _json
+    data_dir = _seed(tmp_path)
+    httpd = HTTPServer(("127.0.0.1", 0), cockpit.make_handler(data_dir))
+    port = httpd.server_address[1]
+    base = f"http://127.0.0.1:{port}"
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    try:
+        with urllib.request.urlopen(f"{base}/process?iid=aaa111aaa111", timeout=5) as resp:
+            page = resp.read().decode("utf-8")
+        token = re.search(r'name="csrf" value="([^"]+)"', page).group(1)
+
+        body = urllib.parse.urlencode({
+            "csrf": token, "iid": "aaa111aaa111", "action": "add_governance",
+            "next": "/process?iid=aaa111aaa111",
+            "role": "website_watcher", "skill": "serpapi_trends",
+            "rationale": "serpapi-bron bestaat al en wordt aangeroepen",
+        }).encode()
+        with urllib.request.urlopen(urllib.request.Request(
+                f"{base}/action", data=body, method="POST"), timeout=5) as resp:
+            assert resp.status == 200
+            assert "toegekend" in resp.read().decode("utf-8")   # flash-banner zichtbaar
+
+        recs = _json.loads((tmp_path / "data" / "governance_records.json").read_text())
+        ww = recs["website_watcher"] if "website_watcher" in recs else recs
+        assert "serpapi_trends" in ww["definition"]["skills"]   # skill via de gate toegekend
     finally:
         httpd.shutdown()
         httpd.server_close()

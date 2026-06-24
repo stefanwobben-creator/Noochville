@@ -8,8 +8,11 @@ import pytest
 from nooch_village.human_inbox import HumanInbox
 from nooch_village.notes_store import NotesStore
 from nooch_village.projects import ProjectLedger
+from nooch_village.governance import Records
+from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.inbox_actions import (
-    decide_keyword, defer_item, confirm_item, add_reference, route_to_project, mark_done)
+    decide_keyword, defer_item, confirm_item, add_reference, route_to_project, mark_done,
+    route_to_governance)
 
 
 class _StubLibrary:
@@ -121,6 +124,39 @@ def test_route_to_project_vereist_owner_en_scope(tmp_path):
     res = route_to_project(projects, owner="", scope="iets")
     assert not res["ok"]
     assert projects.all() == []
+
+
+# ── Bring to Governance (rol een skill geven) ─────────────────────────────────
+
+def _records_with_role(tmp_path, role_id="trends"):
+    recs = Records(str(tmp_path / "gov.json"))
+    recs.put(Record(id="noochville", type=RecordType.CIRCLE, parent=None,
+                    definition=RoleDefinition(purpose="anchor"), source="seed"))
+    recs.put(Record(id=role_id, type=RecordType.ROLE, parent="noochville",
+                    definition=RoleDefinition(purpose="iets", skills=["a"]), source="seed"))
+    return recs
+
+
+def test_route_to_governance_grant_skill_adopted(tmp_path):
+    recs = _records_with_role(tmp_path, "trends")
+    res = route_to_governance(recs, "trends", "serpapi_trends",
+                              rationale="serpapi-bron bestaat en wordt aangeroepen")
+    assert res["ok"] and res["status"] == "adopted"
+    assert "serpapi_trends" in recs.get("trends").definition.skills
+
+
+def test_route_to_governance_onbekende_rol_invalid(tmp_path):
+    recs = _records_with_role(tmp_path, "trends")
+    res = route_to_governance(recs, "bestaat_niet", "x",
+                              rationale="lange genoege reden hier")
+    assert not res["ok"] and res["status"] == "invalid"
+
+
+def test_route_to_governance_korte_rationale_invalid(tmp_path):
+    recs = _records_with_role(tmp_path, "trends")
+    res = route_to_governance(recs, "trends", "x", rationale="kort")
+    assert not res["ok"] and res["status"] == "invalid"
+    assert "x" not in recs.get("trends").definition.skills      # niks toegevoegd
 
 
 def test_een_spanning_meerdere_uitkomsten_dan_sluiten(tmp_path):

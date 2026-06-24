@@ -26,7 +26,8 @@ from nooch_village.projects import ProjectLedger
 from nooch_village.library import Library
 from nooch_village.notes_store import NotesStore
 from nooch_village.inbox_actions import (
-    decide_keyword, defer_item, confirm_item, mark_done, add_reference)
+    decide_keyword, defer_item, confirm_item, mark_done, add_reference,
+    route_to_project, route_to_governance)
 
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
@@ -161,7 +162,13 @@ details>summary{cursor:pointer;font-family:var(--font-display);font-weight:700;p
 .pf label{display:block;margin:.6rem 0 .2rem;font-size:13px;color:var(--gray)}
 .pf input,.pf select{width:100%;padding:.45rem;border:1px solid var(--border);
  border-radius:var(--radius);font:inherit;background:#fff}
+.flash{background:var(--green-tint);border:1px solid var(--green);color:var(--green-dark);
+ border-radius:var(--radius);padding:.5rem .8rem;margin:.4rem 0 1rem;font-weight:600}
 """
+
+
+def _banner(msg) -> str:
+    return f'<div class="flash">{_e(msg)}</div>' if msg else ""
 
 
 def _page(title: str, inner: str) -> str:
@@ -200,10 +207,10 @@ def _item_actions(i: dict, token: str) -> str:
     return " ".join(parts)
 
 
-def render_process(item: dict, roster: list, csrf_token: str) -> str:
+def render_process(item: dict, roster: list, csrf_token: str, msg=None) -> str:
     """De GlassFrog 'Process Tension'-flow voor één spanning. Live rails: Add Reference
-    (info vastleggen), Add Project (uitkomst voor een rol) en Niets-nodig/Defer. De
-    overige rails (governance, rol-vragen) volgen als structuur."""
+    (info vastleggen), Add Project (uitkomst voor een rol), Bring to Governance (rol een
+    skill geven) en Niets-nodig/Defer. Rol-vragen volgt nog als structuur."""
     iid = item["id"]
     ctx = item.get("context", {}) or {}
     detail = (ctx.get("description") or ctx.get("reason") or ctx.get("purpose")
@@ -245,6 +252,19 @@ def render_process(item: dict, roster: list, csrf_token: str) -> str:
         '</form>'
     )
 
+    gov_form = (
+        '<form method="post" action="/action" class="pf">'
+        + _hidden("add_governance", stay)
+        + '<label>Rol die de skill krijgt:</label>'
+        f'<select name="role">{owner_opts}</select>'
+        + '<label>Skill (bestaande capability-naam):</label>'
+        '<input name="skill" placeholder="bijv. serpapi_trends">'
+        + '<label>Reden (min. 10 tekens, gaat door de gate):</label>'
+        '<input name="rationale" placeholder="waarom deze rol deze skill krijgt">'
+        + '<button class="btn ok" type="submit">Bring to Governance</button>'
+        '</form>'
+    )
+
     done_form = (
         '<form method="post" action="/action" style="display:inline">'
         + _hidden("done", "/")
@@ -260,6 +280,7 @@ def render_process(item: dict, roster: list, csrf_token: str) -> str:
     inner = f"""
 <p><a href="/">← terug naar de cockpit</a></p>
 <h1>Process Tension</h1>
+{_banner(msg)}
 <div class="tension"><b>{_e(item.get('subject'))}</b> <span class="muted">({_e(item.get('type'))})</span><br>{_e(detail)}</div>
 <h2>Wat heb je nodig?</h2>
 
@@ -269,8 +290,10 @@ def render_process(item: dict, roster: list, csrf_token: str) -> str:
 </details>
 
 <details><summary>Ik wil zelf iets doen</summary>
-<p class="muted">Maak er een project van (een uitkomst die een rol nastreeft). Bring to Governance (rol/skill wijzigen) {soon}.</p>
+<p class="muted">Maak er een project van (een uitkomst die een rol nastreeft), of geef een rol een bestaande skill via governance.</p>
 {proj_form}
+<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">
+{gov_form}
 </details>
 
 <details><summary>Ik wil dat iemand anders iets doet</summary>
@@ -285,7 +308,7 @@ def render_process(item: dict, roster: list, csrf_token: str) -> str:
     return _page(f"Process Tension — {item.get('subject')}", inner)
 
 
-def render_html(snap: dict, csrf_token: str | None = None) -> str:
+def render_html(snap: dict, csrf_token: str | None = None, msg=None) -> str:
     roster = snap["roster"]
     inbox = snap["inbox"]
     projects = snap["projects"]
@@ -371,6 +394,7 @@ def render_html(snap: dict, csrf_token: str | None = None) -> str:
     inner = (
         f'<h1>NoochVille cockpit {badge}</h1>'
         f'<div class="bar">{_e(counts)} · gegenereerd {_e(_ts(snap.get("generated_at")))}<br>{note}</div>'
+        f'{_banner(msg)}'
         f'<h2>Roster</h2>{roster_tbl}'
         f'<h2>Inbox</h2>{inbox_tbl}'
         f'<h2>Proces (projecten)</h2>{proj_tbl}'
@@ -379,6 +403,24 @@ def render_html(snap: dict, csrf_token: str | None = None) -> str:
 
 
 # ── server (read-only, localhost) ────────────────────────────────────────────
+
+def _flash(result: dict) -> str:
+    """Korte, leesbare terugkoppeling van een actie (getoond als banner na de redirect)."""
+    if not result.get("ok"):
+        st = result.get("status")
+        if st in ("escalated", "invalid"):
+            return f"✗ Governance {st}: {result.get('reason', '')}"
+        return "✗ " + (result.get("error") or result.get("reason") or "actie mislukt")
+    if result.get("status") == "adopted":
+        return f"✓ Skill '{result.get('skill')}' toegekend aan {result.get('role_id')}"
+    if "card_id" in result:
+        return f"✓ Kennis-kaart vastgelegd ({result['card_id']})"
+    if "pid" in result:
+        return f"✓ Project aangemaakt voor {result.get('owner')}"
+    if "word" in result:
+        return f"✓ '{result['word']}' → {result.get('status')}"
+    return "✓ " + (result.get("status") or "klaar")
+
 
 def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                      extra: dict | None = None) -> dict:
@@ -404,6 +446,10 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
         return route_to_project(projects, owner=extra.get("owner", ""),
                                 scope=extra.get("scope", ""))
+    if action == "add_governance":
+        records = Records(os.path.join(dd, "governance_records.json"))
+        return route_to_governance(records, extra.get("role", ""), extra.get("skill", ""),
+                                   extra.get("rationale", ""), gap_key=iid)
     return {"ok": False, "error": f"onbekende actie '{action}'"}
 
 
@@ -413,8 +459,9 @@ def make_handler(data_dir: str | None):
     class _Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             path, _, query = self.path.partition("?")
+            qs = urllib.parse.parse_qs(query)
+            msg = (qs.get("msg") or [None])[0]
             if path == "/process":
-                qs = urllib.parse.parse_qs(query)
                 iid = (qs.get("iid") or [""])[0]
                 snap = gather(data_dir)
                 item = next((i for i in snap["inbox"] if i.get("id") == iid), None)
@@ -423,9 +470,9 @@ def make_handler(data_dir: str | None):
                     self.end_headers()
                     self.wfile.write(b"Item niet gevonden")
                     return
-                body = render_process(item, snap["roster"], csrf_token).encode("utf-8")
+                body = render_process(item, snap["roster"], csrf_token, msg=msg).encode("utf-8")
             elif path in ("/", "/index.html"):
-                body = render_html(gather(data_dir), csrf_token=csrf_token).encode("utf-8")
+                body = render_html(gather(data_dir), csrf_token=csrf_token, msg=msg).encode("utf-8")
             else:
                 self.send_response(404)
                 self.end_headers()
@@ -457,12 +504,18 @@ def make_handler(data_dir: str | None):
             extra = {"claim": (form.get("claim") or [""])[0],
                      "grounds": (form.get("grounds") or [""])[0],
                      "owner": (form.get("owner") or [""])[0],
-                     "scope": (form.get("scope") or [""])[0]}
-            _dispatch_action(data_dir, action, iid, reason, extra=extra)
+                     "scope": (form.get("scope") or [""])[0],
+                     "role": (form.get("role") or [""])[0],
+                     "skill": (form.get("skill") or [""])[0],
+                     "rationale": (form.get("rationale") or [""])[0]}
+            result = _dispatch_action(data_dir, action, iid, reason, extra=extra)
             # 303 → verse GET. Rails keren terug naar de spanning (next), sluiten gaat home.
+            # De uitkomst gaat als korte flash-banner mee in de query.
             nxt = (form.get("next") or ["/"])[0]
             if not nxt.startswith("/"):
                 nxt = "/"
+            sep = "&" if "?" in nxt else "?"
+            nxt = f"{nxt}{sep}msg={urllib.parse.quote(_flash(result))}"
             self.send_response(303)
             self.send_header("Location", nxt)
             self.end_headers()

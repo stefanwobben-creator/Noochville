@@ -62,6 +62,49 @@ def route_to_project(projects, owner: str, scope: str) -> dict:
     return {"ok": True, "pid": pid, "owner": owner}
 
 
+def route_to_governance(records, role_id: str, skill: str, rationale: str,
+                        *, tension: str = "", gap_key: str = "") -> dict:
+    """Bring to Governance-rail: ken een rol een (bestaande) skill toe via het volledige
+    gevalideerde pad — Gate.check (G0-G4) + Secretary._adopt. Synchroon, geen Village/LLM:
+    een skill toekennen aan een bestaande rol passeert de poort (adopt-by-default).
+
+    Sluit de spanning NIET (multi-uitkomst-model). Geeft {ok, status, reason?}:
+      adopted   — skill toegevoegd aan het rol-record
+      invalid   — G0/structureel mis (rol bestaat niet, rationale te kort, ...)
+      escalated — G1-G4 vraagt menselijk oordeel (niet auto-toegepast)
+    """
+    from nooch_village.event_bus import EventBus
+    from nooch_village.governance import Gate, Secretary
+    from nooch_village.models import Proposal, GovernanceChange, ChangeKind
+
+    role_id = (role_id or "").strip()
+    skill = (skill or "").strip()
+    rationale = (rationale or "").strip()
+    if not role_id or not skill:
+        return {"ok": False, "status": "invalid", "reason": "rol en skill zijn verplicht"}
+    if len(rationale) < 10:
+        return {"ok": False, "status": "invalid",
+                "reason": "rationale te kort (minimaal 10 tekens)"}
+    if records.get(role_id) is None:
+        return {"ok": False, "status": "invalid", "reason": f"rol '{role_id}' bestaat niet"}
+
+    proposal = Proposal(
+        proposer_role="human-cockpit",
+        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id=role_id,
+                                add_skills=[skill]),
+        tension=tension or f"cockpit governance: skill '{skill}' voor '{role_id}'",
+        trigger_example=(f"means_gap:{gap_key}" if gap_key else f"cockpit:{role_id}:{skill}"),
+        rationale=rationale, source="sensed",
+    )
+    passed, gate_name, reason = Gate().check(proposal, records, None)
+    if not passed:
+        status = "invalid" if gate_name == "G0" else "escalated"
+        return {"ok": False, "status": status, "gate": gate_name, "reason": reason}
+
+    Secretary(records, EventBus(name="cockpit"))._adopt(proposal)
+    return {"ok": True, "status": "adopted", "role_id": role_id, "skill": skill}
+
+
 def decide_keyword(inbox, library, iid: str, decision: str,
                    reason: str = "", by: str = "human") -> dict:
     """Menselijke keyword-beslissing: sluit het item en cureer het woord in de bibliotheek.
