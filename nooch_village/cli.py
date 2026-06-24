@@ -50,6 +50,54 @@ def main() -> None:
         from nooch_village.demos.analysis import ngram_demo
         ngram_demo()
 
+    elif mode == "harry_run":
+        # Eenmalige opdracht aan Harry op eigen termen: ngram-richting + lange-boog-verbanden
+        # (co-beweging/substitutie) + gekalibreerde OpenAlex-voortzetting voorbij de cutoff.
+        import time
+        from nooch_village.event_bus import Event
+        from nooch_village.village import Village
+        terms = sys.argv[2:] or ["consumer", "citizen"]
+        v = Village(heartbeat_seconds=86400)
+        v.context.settings["tijdgeest_interval_seconds"] = "0"
+        pulse, cors, conts = {}, [], []
+        v.bus.subscribe("tijdgeest_pulse_completed", lambda e: pulse.update(e.data))
+        v.bus.subscribe("tijdgeest_correlatie",      lambda e: cors.extend(e.data.get("bevindingen", [])))
+        v.bus.subscribe("tijdgeest_voortzetting",    lambda e: conts.extend(e.data.get("reports", [])))
+        v.start()
+        if "harry_hemp" not in v.reconciler.live:
+            print("HarryHemp niet actief in het dorp.", file=sys.stderr); v.stop(); sys.exit(1)
+        print(f"\nHarry draait ngram + verbanden + OpenAlex-voortzetting voor: {', '.join(terms)}")
+        print("Wacht op Google Books Ngram + OpenAlex (kan ~30-60s duren)…\n")
+        # De mens vraagt als houder van the_source (spelregel 5).
+        v.bus.publish(Event("tijdgeest_pulse", {"terms": terms}, "the_source"))
+        for _ in range(1200):
+            if pulse:
+                break
+            time.sleep(0.1)
+        time.sleep(0.5)
+        v.stop()
+        if not pulse.get("ok"):
+            print(f"Puls mislukt: {pulse.get('error', 'onbekend')}"); sys.exit(1)
+        print("── ngram-richting ──")
+        for r in pulse.get("rows", []):
+            if r.get("no_data"):
+                print(f"  {r['term']:<22} geen data ({r.get('reason', '')})")
+            else:
+                s = r.get("signal", {})
+                print(f"  {r['term']:<22} {s.get('direction', '?'):<10} (recente helling {s.get('slope_recent')})")
+        print("\n── lange-boog-verbanden ──")
+        for c in cors or []:
+            print(f"  {c['label']}: '{c['a']}' ~ '{c['b']}' (r={c['r']}, {c['n']} jaar)")
+        if not cors:
+            print("  (geen sterk verband gevonden)")
+        print("\n── voortzetting voorbij de cutoff (OpenAlex-proxy) ──")
+        for ct in conts or []:
+            cal = ct["calibration"]; jaren = sorted(ct["arc"])
+            print(f"  {ct['term']:<22} kalibratie r={cal.get('r')} ({cal.get('n')} jaar overlap); "
+                  f"boog t/m {jaren[-1] if jaren else '?'}")
+        if not conts:
+            print("  (geen vertrouwde voortzetting; OpenAlex correleerde onvoldoende met ngram)")
+
     elif mode == "reflect":
         from nooch_village.demos.analysis import reflect_demo
         reflect_demo()
@@ -233,6 +281,6 @@ def main() -> None:
               "purge | intent | triage | ngram | reflect | simulate | harry_hemp | "
               "content_strategist | grant_serpapi_trends | grant_skill | revoke_skill | "
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "
-              "measure_propose | rereview | ingest | roster",
+              "measure_propose | rereview | ingest | harry_run | roster",
               file=sys.stderr)
         sys.exit(1)
