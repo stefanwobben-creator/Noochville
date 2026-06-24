@@ -262,6 +262,27 @@ def main() -> None:
         for nid in sys.argv[2:]:
             print(("  − verwijderd: " if notes.remove(nid) else "  = niet gevonden: ") + nid)
 
+    elif mode == "recurate":
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.notes_store import NotesStore
+        from nooch_village.curate_migrate import recurate_cards
+        from nooch_village.village import BASE_DIR
+        if len(sys.argv) < 3:
+            print("Gebruik: python -m nooch_village.village recurate <card_id> [card_id ...]",
+                  file=sys.stderr)
+            print("Haalt elk kaartje opnieuw door de curator (Engels + atomair) via de LLM.",
+                  file=sys.stderr)
+            sys.exit(1)
+        ctx = load_context(BASE_DIR)
+        notes = NotesStore(os.path.join(ctx.data_dir, "notes.json"))
+        print("Her-curatie via de curator (LLM):")
+        for r in recurate_cards(notes, sys.argv[2:]):
+            if r["replaced"]:
+                print(f"  ✔ {r['card_id']} → {r['new_ids']}")
+            else:
+                print(f"  ✗ {r['card_id']}: {r['reason']}")
+
     elif mode == "ingest":
         import json, os
         from nooch_village.config import load_context
@@ -295,6 +316,7 @@ def main() -> None:
               "purge | intent | triage | ngram | reflect | simulate | harry_hemp | "
               "content_strategist | grant_serpapi_trends | grant_skill | revoke_skill | "
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "
-              "measure_propose | rereview | ingest | notes_remove | harry_run | roster",
+              "measure_propose | rereview | ingest | notes_remove | recurate | "
+              "harry_run | roster",
               file=sys.stderr)
         sys.exit(1)
