@@ -1,6 +1,6 @@
 """Operationele demo's: simulate en roster."""
 from __future__ import annotations
-import time
+import time, tempfile, shutil
 from nooch_village.event_bus import Event
 from nooch_village.village import Village
 from nooch_village.models import Proposal, GovernanceChange, ChangeKind
@@ -23,9 +23,16 @@ def simulate():
         print(f"  {title}")
         print(f"{'='*65}\n")
 
+    # Sandbox: simulate draait in een wegwerp-data-dir, nooit op productie.
+    # Voorheen schreef simulate echte proposals/escalaties naar de echte
+    # human_inbox en governance_records (de "escalatie-storm"). settings/.env
+    # blijven uit de echte base laden; alleen de schrijf-stores zijn geïsoleerd.
+    _sim_dir = tempfile.mkdtemp(prefix="noochville-sim-")
+    print(f"  (sandbox-data-dir: {_sim_dir} — productie wordt niet geraakt)")
+
     # ── 1. Roster + Lexicon ───────────────────────────────────────────
     section("1 / 7 — ROSTER & LEXICON")
-    v = Village(heartbeat_seconds=86400)
+    v = Village(heartbeat_seconds=86400, data_dir=_sim_dir)
 
     v.print_roster()
 
@@ -172,7 +179,7 @@ def simulate():
 
     # ── 5. Ngram locale-demo (live, max 3 termen) ─────────────────────
     section("5 / 7 — NGRAM LOCALE-DEMO (NL + EN, live API)")
-    v2 = Village(heartbeat_seconds=86400)
+    v2 = Village(heartbeat_seconds=86400, data_dir=_sim_dir)
     v2.context.settings["tijdgeest_interval_seconds"] = "0"
 
     pulse_result: dict = {}
@@ -226,7 +233,7 @@ def simulate():
 
     # ── 6. Librarian keyword-beslissingen ─────────────────────────────
     section("6 / 7 — LIBRARIAN (meertalige kandidaat-woorden)")
-    v3 = Village(heartbeat_seconds=86400)
+    v3 = Village(heartbeat_seconds=86400, data_dir=_sim_dir)
     decisions: dict = {}
     escalations: list = []
     v3.bus.subscribe("keyword_decided",
@@ -265,10 +272,14 @@ def simulate():
 
     # ── 7. Herkomst — roster met source-labels ────────────────────────
     section("7 / 7 — HERKOMST ROSTER (seed / sensed / demo)")
-    v4 = Village(heartbeat_seconds=86400)
+    v4 = Village(heartbeat_seconds=86400, data_dir=_sim_dir)
     v4.print_roster()
+
+    # Sandbox opruimen: de wegwerp-data-dir mag geen sporen achterlaten.
+    shutil.rmtree(_sim_dir, ignore_errors=True)
 
     print("\n" + "="*65)
     print("  SIMULATIE VOLTOOID")
     print("  Systeem draait: governance ✔ triage ✔ reflectie ✔ lexicon ✔")
+    print("  (sandbox opgeruimd; productie-data ongemoeid)")
     print("="*65 + "\n")

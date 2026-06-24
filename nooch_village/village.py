@@ -67,11 +67,19 @@ CLASS_MAP = {
 
 
 class Village:
-    def __init__(self, heartbeat_seconds: float | None = None):
+    def __init__(self, heartbeat_seconds: float | None = None,
+                 data_dir: str | None = None):
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)-20s %(message)s",
                             datefmt="%H:%M:%S")
         self.bus = EventBus(name="root")
         self.context = load_context(BASE_DIR)
+        # data_dir-override: settings/.env blijven uit de echte base laden, maar
+        # alle SCHRIJF-stores (records, inbox, notes, library, ...) verhuizen naar
+        # de opgegeven map. Zo kan simulate() in een wegwerp-map draaien zonder de
+        # productie-records of human_inbox te vervuilen (escalatie-storm-bug).
+        if data_dir is not None:
+            self.context.data_dir = data_dir
+            os.makedirs(data_dir, exist_ok=True)
         if heartbeat_seconds is not None:
             self.context.settings["heartbeat_seconds"] = str(heartbeat_seconds)
         self.context.library = Library(os.path.join(self.context.data_dir, "library.json"))
