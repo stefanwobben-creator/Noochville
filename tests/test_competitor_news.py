@@ -48,6 +48,32 @@ def test_cascade_leeg_als_niks_in_een_jaar():
     assert sel == [] and used == 365
 
 
+def test_onleesbare_datum_wordt_hard_overgeslagen():
+    now = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
+    bad = ('<?xml version="1.0"?><rss><channel><item><title>geen datum</title>'
+           '<link>http://x</link><pubDate>onzin</pubDate></item></channel></rss>')
+    assert _parse_all(bad, now=now, brand="Veja") == []      # geen 'now'-lek meer
+
+
+def test_run_ontdubbelt_zelfde_link_over_merken():
+    same = _rss_one(5, datetime.now(timezone.utc))           # zelfde link 'http://x'
+    ctx = SimpleNamespace(data_dir="/tmp", settings={"competitor_brands": "Veja, Moea"})
+    with patch("requests.get", return_value=_resp(same)):
+        res = CompetitorNewsSkill().run({}, ctx)
+    assert res["total"] == 1                                  # roundup telt maar één keer
+
+
+def test_query_dwingt_footwear_context_af():
+    seen = {}
+    def grab(url, **k):
+        seen["url"] = url
+        return _resp(_RSS)
+    ctx = SimpleNamespace(data_dir="/tmp", settings={"competitor_brands": "Moea"})
+    with patch("requests.get", side_effect=grab):
+        CompetitorNewsSkill().run({}, ctx)
+    assert "footwear" in seen["url"] or "sneakers" in seen["url"]
+
+
 # ── skill run ────────────────────────────────────────────────────────────────
 
 def _resp(text):

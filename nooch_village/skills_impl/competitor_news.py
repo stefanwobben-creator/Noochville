@@ -24,6 +24,10 @@ from nooch_village.skills import Skill
 log = logging.getLogger("village.skill.competitor")
 
 _DEFAULT_BRANDS = ["Veja", "Moea", "Flamingos Life", "Komrads"]
+# Footwear-context: dwingt af dat het écht over schoenen gaat. Lost homoniemen op
+# (bijv. 'Moea' = Taiwan Ministry of Economic Affairs). Instelbaar via competitor_context.
+_CONTEXT = ('"sneakers" OR "footwear" OR "shoes" OR "trainers" OR "vegan leather" '
+            'OR "sustainable fashion"')
 _THEMES = ('"CEO" OR "funding" OR "launch" OR "partner" OR "B-Corp" OR "collaboration" '
            'OR "flagship store" OR "greenwashing" OR "vegan leather" OR "materials" '
            'OR "sustainability"')
@@ -58,7 +62,7 @@ def _parse_all(xml_text: str, *, now: datetime, brand: str) -> list[dict]:
             if published.tzinfo is None:
                 published = published.replace(tzinfo=timezone.utc)
         except (TypeError, ValueError):
-            published = now
+            continue                                     # geen betrouwbare datum → hard overslaan
         items.append({"brand": brand, "title": title, "link": link,
                       "published": published, "date": published.strftime("%Y-%m-%d")})
     return items
@@ -91,9 +95,10 @@ class CompetitorNewsSkill(Skill):
         parsed = [b.strip() for b in raw.split(",") if b.strip()]
         return parsed or list(_DEFAULT_BRANDS)
 
-    def _fetch_brand(self, brand: str, *, now: datetime) -> list[dict]:
+    def _fetch_brand(self, brand: str, *, now: datetime, context=None) -> list[dict]:
         import requests
-        query = f'"{brand}" AND ({_THEMES})'
+        ctx = str((getattr(context, "settings", {}) or {}).get("competitor_context", "")) or _CONTEXT
+        query = f'"{brand}" AND ({ctx}) AND ({_THEMES})'
         url = _RSS.format(q=urllib.parse.quote(query))
         resp = requests.get(url, headers={"User-Agent": _UA}, timeout=20)
         resp.raise_for_status()
@@ -115,11 +120,18 @@ class CompetitorNewsSkill(Skill):
 
         per_brand: dict[str, dict] = {}                  # brand -> {"items": [...], "window": int}
         errors: dict[str, str] = {}
+        seen_links: set[str] = set()                     # ontdubbel dezelfde roundup over merken
         for i, brand in enumerate(brands):
             try:
-                allitems = self._fetch_brand(brand, now=now)
+                allitems = self._fetch_brand(brand, now=now, context=context)
                 sel, used = _cascade_select(allitems, now=now, windows=windows)
-                per_brand[brand] = {"items": sel, "window": used}
+                deduped = []
+                for it in sel:
+                    if it["link"] and it["link"] in seen_links:
+                        continue
+                    seen_links.add(it["link"])
+                    deduped.append(it)
+                per_brand[brand] = {"items": deduped, "window": used}
             except Exception as exc:                     # fail-closed per merk
                 errors[brand] = str(exc)
                 per_brand[brand] = {"items": [], "window": windows[-1]}
