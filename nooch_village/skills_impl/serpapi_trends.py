@@ -81,17 +81,20 @@ class SerpapiTrendsSkill(Skill):
 
     @staticmethod
     def _produced_new(top_related, rising_related, lib) -> bool:
-        """Leverde dit zaadwoord minstens één gerelateerde term op die nog niet in de
-        bibliotheek staat? Zonder bibliotheek: elke gevonden term telt als 'nieuw'."""
+        """Leverde dit zaadwoord minstens één NIEUWE, schoen-relevante gerelateerde term op?
+        Off-domein ruis (regenerative medicine, vegan food, ...) telt NIET als productief: die
+        sneuvelt later toch in het domeinfilter, dus een breed ruis-zaadwoord mag wegzakken naar
+        een langer interval. Zonder bibliotheek: elke schoen-relevante term telt als 'nieuw'."""
+        from nooch_village.intent import _is_schoen_domein
         queries = []
         for r in (top_related or []) + (rising_related or []):
             queries.append(r.get("query") if isinstance(r, dict) else r)
-        queries = [q for q in queries if q]
-        if not queries:
+        on_domain = [q for q in queries if q and _is_schoen_domein(q.lower())]
+        if not on_domain:
             return False
         if lib is None:
             return True
-        return any(lib.status(q) is None for q in queries)
+        return any(lib.status(q) is None for q in on_domain)
 
     def run(self, payload: dict, context) -> dict:
         key = context.settings.get("SERPAPI_API_KEY") or os.getenv("SERPAPI_API_KEY")

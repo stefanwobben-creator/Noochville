@@ -38,6 +38,14 @@ def test_interval_heeft_een_plafond(tmp_path):
     assert s._state["seeds"]["x"]["interval"] <= 4
 
 
+def test_produced_new_telt_alleen_schoen_domein():
+    # de scheduler-opbrengst negeert off-domein ruis, zodat brede ruis-zaadwoorden wegzakken
+    from nooch_village.skills_impl.serpapi_trends import SerpapiTrendsSkill
+    f = SerpapiTrendsSkill._produced_new
+    assert f([{"query": "regenerative medicine"}, {"query": "vegan food"}], [], None) is False
+    assert f([{"query": "vegan sneakers"}], [], None) is True       # schoen-relevant → productief
+
+
 def test_state_blijft_bewaard(tmp_path):
     p = str(tmp_path / "s.json")
     s = SeedScheduler(p)
