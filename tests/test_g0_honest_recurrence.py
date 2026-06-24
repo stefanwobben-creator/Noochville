@@ -118,28 +118,10 @@ def test_evidence_stempelt_meermaals_in_trigger(seeded):
     assert "3x" in trigger
 
 
-def test_zonder_evidence_blijft_trigger_neutraal(seeded):
-    """Geen logboek-bewijs → neutrale trigger zonder herhalingswoord → G0 zou weigeren."""
-    bus = EventBus(name="test")
-    proposals = []
-    bus.subscribe("proposal_raised", lambda e: proposals.append(e))
-
-    inh = _inh(seeded, bus)
-    with patch("nooch_village.llm.reason",
-               return_value="VERDICT: coherent\nREASON: heldere rol"):
-        inh._raise_governance_proposal(Tension(
-            sensed_by="test_rol",
-            description="recurring legal compliance audit needed",
-            kind="structural",
-        ))
-
-    add_role = [p for p in proposals
-                if p.data["proposal"]["change"]["kind"] == "add_role"]
-    assert len(add_role) == 1
-    trigger = add_role[0].data["proposal"]["trigger_example"].lower()
-    assert "meermaals" not in trigger
-    # En de poort weigert 'm dan ook (eenmalig gat is geen rol)
-    p_obj = _add_role_proposal(trigger=add_role[0].data["proposal"]["trigger_example"],
-                               rationale="neutraal")
-    passed, gate_name, _ = gate.check(p_obj, seeded)
+def test_neutrale_trigger_wordt_door_g0_geweigerd(records_with_root):
+    """Een add_role-voorstel met een neutrale trigger (geen herhaling) → G0 weigert.
+    (Het integratie-pad zonder bewijs levert sinds R1b sowieso geen add_role meer op,
+    maar de Gate-regel zelf moet onafhankelijk blijven gelden.)"""
+    p = _add_role_proposal(trigger="test_rol:eenmalig dingetje gezien", rationale="neutraal")
+    passed, gate_name, _ = gate.check(p, records_with_root)
     assert not passed and gate_name == "G0"

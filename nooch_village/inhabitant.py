@@ -208,12 +208,24 @@ class Inhabitant(threading.Thread):
                     "📌 spanning B → means-gap voor '%s': %s — %s",
                     matched_role, desc[:60], reason)
                 return
-            # C: geen dekkende rol → trechter → geboorte.
-            # Purpose = de echte gat-beschrijving (een betekenisvolle zin), nooit
-            # een mechanische term-smurrie ("Beheert en bewaakt X, Y, Z").
+            # C: geen dekkende rol.
             gap       = gap_signature(desc)
             r_id      = (_role_id_from_gap(gap) if gap
                          else re.sub(r"\W+", "_", desc[:20]).strip("_"))
+            # Categorie-splitsing (Holacracy): een rol is een DOORLOPENDE
+            # verantwoordelijkheid. Zonder herhalingsbewijs in het logboek is dit
+            # geen rol maar een EENMALIGE individuele actie buiten ieders scope →
+            # naar de mens, niet als (door G0 toch geweigerde) rol-geboorte.
+            if obs < 2:
+                self.log.info(
+                    "🙋 C-gap zonder herhaling → individuele actie naar mens: %s",
+                    desc[:60])
+                self.bus.publish(Event("individuele_actie", {
+                    "gap_key": r_id, "description": desc, "by": self.id}, self.id))
+                return
+            # obs ≥ 2: echt doorlopend gat → rol-voorstel (geboorte).
+            # Purpose = de echte gat-beschrijving (een betekenisvolle zin), nooit
+            # een mechanische term-smurrie ("Beheert en bewaakt X, Y, Z").
             r_purpose = desc[:100]
             change    = GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id=r_id,
                                          purpose=r_purpose, new_role_parent="noochville")

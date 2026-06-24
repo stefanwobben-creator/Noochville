@@ -145,6 +145,8 @@ class Village:
         self.bus.subscribe("tijdgeest_signaal",           self._observe)
         self.bus.subscribe("means_gap_sensed",            self._observe)
         self.bus.subscribe("means_gap_sensed",            self._on_means_gap)
+        self.bus.subscribe("individuele_actie",           self._observe)
+        self.bus.subscribe("individuele_actie",           self._on_individuele_actie)
         self.bus.subscribe("resolution_proposed",         self._on_resolution_proposed)
         self.bus.subscribe("bulletin_geschreven",         self._observe)
         self.bus.subscribe("noochie_weighed_in",          self._observe)
@@ -190,6 +192,18 @@ class Village:
             iid = self.human_inbox.add_suggestion(gap_key, description)
             log.info("💡 gap C → suggestie in human_inbox: item %s (gap %s) — %s",
                      iid, gap_key, reason)
+
+    def _on_individuele_actie(self, e: Event) -> None:
+        """Een eenmalig gat buiten ieders scope (geen herhaling) → individuele actie.
+        Holacracy: toegestaan als niet-schadelijk; hier escaleren we naar de mens als
+        inspectie-item in de human inbox (geen rol-geboorte, geen auto-actie)."""
+        gap_key     = e.data.get("gap_key", "?")
+        description = e.data.get("description", "")
+        by          = e.data.get("by", "?")
+        iid = self.human_inbox.add_suggestion(
+            gap_key, f"Individuele actie (eenmalig, buiten ieders scope, door {by}): {description}")
+        logging.getLogger("village.inbox").info(
+            "🙋 individuele actie → human_inbox: item %s (gap %s)", iid, gap_key)
 
     def _on_resolution_proposed(self, e: Event) -> None:
         """Een rol stelt voor een inbox-item te sluiten omdat hij de accountability nu dekt.

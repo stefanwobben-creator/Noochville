@@ -87,11 +87,14 @@ def test_junk_description_produces_no_birth(tmp_path, records, description):
 # ── C: echt ongedekt gat → ADD_ROLE-pad ──────────────────────────────────────
 
 def test_truly_new_gap_reaches_add_role_path(tmp_path, records):
-    """Een echt ongedekt gat (legal compliance) bereikt het ADD_ROLE-voorstel.
+    """Een echt ongedekt én DOORLOPEND gat (legal compliance, meermaals waargenomen)
+    bereikt het ADD_ROLE-voorstel.
 
-    llm.reason wordt gemockt op 'coherent' zodat de coherentiepoort doorlaat;
-    zonder mock is de poort fail-closed (geen key in testomgeving).
+    Sinds R1b is herhalingsbewijs uit het logboek vereist: een gat zonder bewijs is
+    een eenmalige individuele actie, geen rol. Hier geven we evidence (obs=2) mee.
+    llm.reason wordt gemockt op 'coherent' zodat de coherentiepoort doorlaat.
     """
+    import time
     bus = EventBus(name="test")
     proposals = []
     bus.subscribe("proposal_raised", lambda e: proposals.append(e))
@@ -101,12 +104,14 @@ def test_truly_new_gap_reaches_add_role_path(tmp_path, records):
                return_value="VERDICT: coherent\nREASON: heldere distincte rol"):
         inh._raise_governance_proposal(
             Tension(sensed_by="test_rol",
-                    description="legal compliance audit required", kind="structural"))
+                    description="legal compliance audit required", kind="structural",
+                    evidence={"observations": 2, "first_seen": time.time() - 86400,
+                              "gap_key": "legal_compliance"}))
 
     add_role = [p for p in proposals
                 if p.data.get("proposal", {}).get("change", {}).get("kind") == "add_role"]
     assert len(add_role) == 1, (
-        "Legal compliance gap moet precies één ADD_ROLE-voorstel opleveren"
+        "Doorlopend legal compliance gap moet precies één ADD_ROLE-voorstel opleveren"
     )
 
 
