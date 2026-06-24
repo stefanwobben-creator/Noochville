@@ -239,3 +239,55 @@ Commits o.a.: a5d7c06 (Field Note ontkoppeld) · c147151 (Trends-rotatie) · 829
 abb0640 (Gemini default) · 1ee2358 (Gemini ms-fix) · 6963e05 (grondwet) · 26499d0 (mens-zetel) ·
 bc47cf5 (regel 5) · 67ab5da (propose_close) · 76dd301 (rol mag nee-maar zeggen) ·
 90ab730 (OpenAlex-voortzetting) · 8281673 (NL-check) · 6f56765 (inbox approve-vangnet)
+
+---
+
+## 2026-06-24 (latere sessie) — cockpit-verwerking, LLM-ladder, markt- & linkbuilding-radar
+
+**[bouw]** Getrapte LLM-ladder in `llm.py`: `reason()` loopt `gemini:flash-lite → mistral →
+gemini:flash → anthropic:haiku` af, goedkoop eerst, stopt bij de eerste die antwoordt. Rate-limit/
+quota → trede in cooldown + door (`LLM_TIER_COOLDOWN_S`). Fail-closed. Killt het Sonnet-kostenlek
+(defaults goedkoop). Instelbaar via `LLM_LADDER`. Aanleiding: twee `run`-processen draaiden sinds
+maandag op Sonnet en aten credits.
+
+**[ontdekking]** Gemini's gratis tier is 20 calls/DAG (niet per minuut). De ladder ving die muur
+live op: flash-lite 429 → cooldown → door naar Mistral/Haiku, puls liep gewoon door.
+
+**[bouw]** Opstart-sleutelrapport (niet-blokkerend) + CLI `keys`. Skills declareren zelf
+`required_env`/`optional_env` (zelfbeschrijvend, geen drift-gevoelige losse map). Presence-only.
+
+**[bouw]** Cockpit uitgebouwd tot verwerk-oppervlak (localhost + CSRF, schrijft alleen via
+`inbox_actions`): escalated-woordenschat afroombaar, Concurrenten bevestig/negeer, Linkbuilding
+pitchen/negeer. Nooch design-tokens toegepast.
+
+**[root-cause]** "De lus levert niets nieuws" onderzocht: 59 van 98 library-termen stonden op
+escalated, en escalated was terminaal + dedup-blokkerend → de lus at z'n eigen input op. Stefan
+heeft de berg via het dashboard afgeroomd (59 → 0). Tweede oorzaak: de KE-volume-auto-approve was
+geneutraliseerd door `ke_country=nl` (KE geeft voor NL overal 0; global werkt wél). `ke_country` nu
+leeg/global → de auto-approve vuurt voor het eerst echt.
+
+**[bouw]** Nieuwe inwoner Concurrent-scout (*Sven Spruce*): `competitor_news` (getrapt venster
+maand→kwartaal→jaar, harde datumfilter, dedup, footwear-context tegen homoniemen),
+`competitor_discover` (SerpAPI echte URLs → pagina lezen → LLM merk-extractie; mens bevestigt),
+`linkbuilding_targets` (gidsen als pitch-doelwitten, prio = noemt concurrent zonder Nooch), plus
+marktinteresse via KE. Live bewezen: 4 echte concurrenten bevestigd (LØCI, Lane Eight, Alohas,
+Merrell), 15 linkbuilding-gidsen gevonden, marktinteresse met echte getallen (LØCI 1M/mnd).
+
+**[faalmodus→fix]** Eerste `competitor_discover` raadde merknamen uit titels → rommel ("Ultimate",
+"Good", "Business", "Insider", publicatienamen). Daarna pagina-lezen via Google News-links → die zijn
+redirects, lezer komt er niet bij → niets. Pas SerpAPI (echte URLs) + LLM-extractie gaf de echte
+merken. Les: de bron bepaalt of extractie kán; Google News RSS is voor titels, niet voor body.
+
+**[bouw]** Gedeelde `context.competitors`-store: bevestigde concurrenten leesbaar voor elke rol,
+voeden de Trends-zaadlijst (consument 2, licht: gerelateerde termen rond concurrenten → Librarian).
+
+**[bouw]** Spaced-repetition-scheduler (`keyword_scheduler.py`) vervangt het platte roterende venster
+— idee van Stefan. Nieuw/productief zaadwoord vaak, uitgekauwd zakt weg (interval verdubbelt tot
+plafond, reset bij nieuwe oogst). Subsumeert de concurrent-voorrang (nieuw = vanzelf voorrang).
+
+**[les]** Drie keer dezelfde diagnose-stap nodig op concurrent-ontdekking (titels → Google News-body
+→ SerpAPI) voordat het klopte. Sneller naar "kan de bron dit überhaupt leveren?" springen had een
+ronde gescheeld. Stefans "maar het dorp is toch nog bezig?" was een terechte check die liet zien dat
+een deel van het probleem oude persistente data was, niet de live run.
+
+Tests: ~688 → 862, elke stap met mutatie-check.

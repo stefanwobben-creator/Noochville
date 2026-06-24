@@ -4,9 +4,53 @@
 
 ## Waar we staan (2026-06-24)
 
-**Suite: 688 tests groen** (gegroeid van ~502 deze sessie). Elke stap met mutatie-check.
+**Suite: 862 tests groen** (gegroeid van ~688 in de latere sessie van 24/6). Elke stap met mutatie-check.
 
-Wat deze sessie (2026-06-23/24) is gebouwd en nu de waarheid is:
+### Latere sessie 2026-06-24: cockpit-verwerking, LLM-ladder, markt- & linkbuilding-radar
+
+- **Getrapte LLM-ladder** (`llm.py`): `reason()` loopt een ladder af van goedkoop naar duur —
+  `gemini:flash-lite → mistral → gemini:flash → anthropic:haiku`. Rate-limit/quota op een trede →
+  cooldown-skip (`LLM_TIER_COOLDOWN_S`, default 30m) + door naar de volgende. Fail-closed.
+  Instelbaar via `LLM_LADDER`. Killt het oude Sonnet-kostenlek (defaults nu goedkoop). Plus een
+  per-minuut throttle (`RateLimiter`/`LIMITER`). Bewezen in de praktijk: ving Gemini's gratis dagcap
+  (20/dag) op zonder dat de puls vastliep.
+- **Opstart-sleutelrapport** (niet-blokkerend) + CLI `keys`: skills declareren zelf
+  `required_env`/`optional_env`; het dorp toont bij elke run welke LLM-treden en skills "scherp"
+  staan. Presence-only (geen sleutelwaarden).
+- **Cockpit als verwerk-oppervlak** (`cockpit.py`, localhost + CSRF): inbox-acties, project-status,
+  kennis-graaf, en nieuw — de **escalated-woordenschat afroombaar** (`override_library_term`),
+  **Concurrenten** (bevestig/negeer) en **Linkbuilding** (pitchen/negeer). Schrijft uitsluitend via
+  de gevalideerde `inbox_actions`, nooit direct in een store.
+- **Loop-fix (root cause)**: de lus leverde niets nieuws omdat (1) de Librarian-beoordeling alles
+  zonder vraag escaleerde en escalated terminaal + dedup-blokkerend was (59 van 98 termen vast).
+  Stefan heeft de berg via het dashboard afgeroomd (59 → 0). (2) KeywordsEverywhere-auto-approve in
+  de Librarian (centraal `_enrich_volume`) was geneutraliseerd door `ke_country=nl` (KE geeft voor NL
+  overal 0). Nu `ke_country` leeg = **global** (werkt voor NL-termen ≈ NL/BE én merken). Pas hierdoor
+  vuurt de volume-auto-approve echt.
+- **Concurrent-scout** (nieuwe inwoner, *Sven Spruce*; seed + idempotente migratie, CLASS_MAP):
+  - `competitor_news` — Google News RSS per merk, getrapt venster (maand→kwartaal→jaar), harde
+    datumfilter, cross-merk dedup, footwear-context tegen homoniemen (Moea≠ministerie).
+  - `competitor_discover` — SerpAPI (echte URLs i.p.v. Google News-redirects) → pagina lezen → LLM
+    extraheert merknamen. Fail-closed (liever niets dan titel-rommel). Mens bevestigt in de cockpit.
+  - `linkbuilding_targets` — gidsen/lijstjes als pitch-doelwitten; prio "hoog" als een gids
+    concurrenten noemt maar Nooch niet.
+  - marktinteresse via KE (`competitor_interest`).
+- **Gedeelde `context.competitors`-store**: bevestigde concurrenten zijn leesbaar voor élke rol
+  (zoals library/lexicon) en voeden de Trends-zaadlijst.
+- **Spaced-repetition-scheduler** (`keyword_scheduler.py`) vervangt het platte roterende venster:
+  nieuw/productief zaadwoord vaak, uitgekauwd zakt naar een langer interval (verdubbelt tot een
+  plafond, reset bij nieuwe oogst). Subsumeert de concurrent-voorrang.
+
+#### Geparkeerd uit deze sessie
+- **Scheduler-productiviteitssignaal telt off-domein-ruis mee**: een breed zaadwoord ("regenerative")
+  lijkt productief terwijl z'n gerelateerde termen later als off-domein sneuvelen. Verfijning: laat
+  "productief" pas tellen als een term het domeinfilter overleeft. (Stefan akkoord met richting.)
+- **Gemini gratis dagcap (20/dag)** wordt geraakt; ladder vangt het op. Optioneel: Gemini
+  pay-as-you-go aanzetten zodat trede 1 niet wegvalt.
+- **Echte concurrent-rankings** ("op welke termen rankt Veja, op welke plek") vragen een rank-tracker
+  (Serpstat); SerpAPI levert nu alleen de lichtere gerelateerde-termen-variant.
+
+Wat de eerdere sessie (2026-06-23/24) is gebouwd en nu de waarheid is:
 
 - **De grondwet `docs/spelregels.md`**: 10 substraat-onafhankelijke spelregels die gelden voor
   elke rol-vervuller (machine/AI/mens). Uitgangspunt voor alle verdere bouw.
