@@ -135,15 +135,15 @@ def test_confirmed_concurrenten_voeden_de_trends_seed(tmp_path):
     assert "Cariuma" in seed
 
 
-def test_confirmed_concurrenten_altijd_in_trends_window(tmp_path):
-    # consument 2: bevestigde concurrenten worden élke Trends-run bevraagd (niet weggerouleerd)
-    from nooch_village.skills_impl.serpapi_trends import SerpapiTrendsSkill
-    store = CompetitorBrands(str(tmp_path / "b.json"))
-    store.add_candidate("Merrell"); store.confirm("Merrell")
-    ctx = SimpleNamespace(data_dir=str(tmp_path), competitors=store,
-                          settings={"serpapi_keywords_per_run": "3"})
-    win = SerpapiTrendsSkill()._window_with_competitors(["a", "b", "c", "d", "Merrell"], ctx)
-    assert "Merrell" in win
+def test_nieuwe_concurrent_krijgt_voorrang_via_scheduler(tmp_path):
+    # consument 2: een net-bevestigde concurrent is een nieuw zaadwoord → de scheduler
+    # geeft 'm voorrang boven een al-uitgekauwd woord (spaced repetition).
+    from nooch_village.keyword_scheduler import SeedScheduler
+    s = SeedScheduler(str(tmp_path / "s.json"), budget=2)
+    s.tick(); s.select(["oud"]); s.record("oud", produced_new=False)   # 'oud' zakt weg
+    s.tick()
+    chosen = s.select(["oud", "Merrell", "ander"])
+    assert "Merrell" in chosen and "oud" not in chosen
 
 
 def test_scout_meet_marktinteresse_van_concurrenten(tmp_path):

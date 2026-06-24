@@ -12,7 +12,8 @@ from __future__ import annotations
 import os, json
 import requests
 from nooch_village.skills import Skill
-from nooch_village.skills_impl.trends import rotate_window, _keywords_for_locale, _geo_to_locale
+from nooch_village.skills_impl.trends import _keywords_for_locale, _geo_to_locale
+from nooch_village.keyword_scheduler import SeedScheduler
 
 _ENDPOINT = "https://serpapi.com/search.json"
 
@@ -72,28 +73,25 @@ class SerpapiTrendsSkill(Skill):
         r.raise_for_status()
         return r.json()
 
-    def _select_window(self, keywords: list[str], context) -> list[str]:
-        size = int(context.settings.get("serpapi_keywords_per_run", "5"))
-        path = os.path.join(context.data_dir, "serpapi_trends_cursor.json")
-        try:
-            cursor = int(json.load(open(path)).get("cursor", 0))
-        except Exception:
-            cursor = 0
-        window, nxt = rotate_window(keywords, cursor, size)
-        try:
-            with open(path, "w") as f:
-                json.dump({"cursor": nxt}, f)
-        except Exception:
-            pass
-        return window
+    def _scheduler(self, context) -> SeedScheduler:
+        budget = int(context.settings.get("serpapi_keywords_per_run", "5"))
+        max_int = int(context.settings.get("trends_max_interval", "8"))
+        return SeedScheduler(os.path.join(context.data_dir, "serpapi_seed_scheduler.json"),
+                             budget=budget, max_interval=max_int)
 
-    def _window_with_competitors(self, seeds: list[str], context) -> list[str]:
-        """Bevestigde concurrenten worden ÉLKE run bevraagd (niet in de rotatie begraven);
-        de rest van het zaad rouleert in een venster."""
-        comp = getattr(context, "competitors", None)
-        confirmed = [c for c in (comp.confirmed() if comp is not None else []) if c in seeds]
-        rest = [w for w in seeds if w not in confirmed]
-        return confirmed + self._select_window(rest, context)
+    @staticmethod
+    def _produced_new(top_related, rising_related, lib) -> bool:
+        """Leverde dit zaadwoord minstens één gerelateerde term op die nog niet in de
+        bibliotheek staat? Zonder bibliotheek: elke gevonden term telt als 'nieuw'."""
+        queries = []
+        for r in (top_related or []) + (rising_related or []):
+            queries.append(r.get("query") if isinstance(r, dict) else r)
+        queries = [q for q in queries if q]
+        if not queries:
+            return False
+        if lib is None:
+            return True
+        return any(lib.status(q) is None for q in queries)
 
     def run(self, payload: dict, context) -> dict:
         key = context.settings.get("SERPAPI_API_KEY") or os.getenv("SERPAPI_API_KEY")
@@ -109,14 +107,21 @@ class SerpapiTrendsSkill(Skill):
 
         rows: list[dict] = []
         legacy: dict = {}
+        lib = getattr(context, "library", None)
+
+        # Spaced-repetition-scheduler bepaalt welke zaadwoorden deze run aan de beurt zijn
+        # (nieuw/productief vaak, uitgekauwd zelden). Bij een vaste keywords-payload niet.
+        sched = None
+        if not payload.get("keywords"):
+            sched = self._scheduler(context)
+            sched.tick()
 
         for geo in geos:
             locale = _geo_to_locale(geo)
             if payload.get("keywords"):
                 keywords = payload["keywords"]
             else:
-                keywords = self._window_with_competitors(
-                    _keywords_for_locale(locale, context), context)
+                keywords = sched.select(_keywords_for_locale(locale, context))
 
             for kw in keywords:
                 base = {"engine": "google_trends", "q": kw, "geo": geo,
@@ -132,6 +137,8 @@ class SerpapiTrendsSkill(Skill):
                                "no_data": True, "reason": "geen interesse-data"}
                         if geo == first_geo:
                             legacy[kw] = {"no_data": True}
+                        if sched is not None:
+                            sched.record(kw, False)         # geen data → interval verlengen
                     else:
                         row = {
                             "term": kw, "locale": locale, "geo": geo,
@@ -143,12 +150,17 @@ class SerpapiTrendsSkill(Skill):
                                 "interest_latest": latest, "direction": direction,
                                 "top_related": top_related, "rising_related": rising_related,
                             }
+                        if sched is not None:
+                            sched.record(kw, self._produced_new(top_related, rising_related, lib))
                     rows.append(row)
                 except Exception as e:
                     rows.append({"term": kw, "locale": locale, "geo": geo,
                                  "no_data": True, "reason": str(e)})
                     if geo == first_geo:
                         legacy[kw] = {"error": str(e)}
+                    # Fout = transiënt, niet 'saai': geen record → volgende run opnieuw proberen.
 
+        if sched is not None:
+            sched.save()
         return {"rows": rows, "keywords": legacy, "geos": geos,
                 "geo": first_geo, "source": "serpapi"}
