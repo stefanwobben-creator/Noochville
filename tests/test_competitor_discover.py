@@ -125,6 +125,16 @@ def test_scout_gebruikt_gedeelde_competitor_store(tmp_path):
     assert bound() is store and "Cariuma" in bound().confirmed()
 
 
+def test_confirmed_concurrenten_voeden_de_trends_seed(tmp_path):
+    # consument 2 (licht): bevestigde concurrenten worden extra zaad voor de SerpAPI-Trends-run
+    from nooch_village.skills_impl.trends import _keywords_for_locale
+    store = CompetitorBrands(str(tmp_path / "b.json"))
+    store.add_candidate("Cariuma"); store.confirm("Cariuma")
+    ctx = SimpleNamespace(lexicon=None, library=None, data_dir=str(tmp_path), competitors=store)
+    seed = _keywords_for_locale("nl", ctx)
+    assert "Cariuma" in seed
+
+
 def test_scout_meet_marktinteresse_van_concurrenten(tmp_path):
     # consument 1: scout leest confirmed concurrenten en meet hun volume via KE
     store = CompetitorBrands(str(tmp_path / "b.json"))

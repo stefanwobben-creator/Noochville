@@ -73,23 +73,32 @@ def _normalize_rising_value(raw):
 
 
 def _keywords_for_locale(locale: str, context) -> list[str]:
-    """Woorden voor een locale: Lexicon-taalvak heeft prioriteit, dan keywords.txt + Library."""
+    """Woorden voor een locale: Lexicon-taalvak heeft prioriteit, dan keywords.txt + Library.
+    Bevestigde concurrenten (context.competitors) komen er als extra zaad bij, zodat de
+    Trends-run hun gerelateerde zoektermen ophaalt en die via de Librarian-pijp lopen."""
     lexicon = getattr(context, "lexicon", None)
+    base: list[str] = []
     if lexicon:
-        words = lexicon.words_for_lang(locale, status_filter="approved")
-        if words:
-            return words
+        base = list(lexicon.words_for_lang(locale, status_filter="approved"))
 
-    # Fallback: keywords.txt + Library (taal-onbewust)
-    path = os.path.join(os.path.dirname(context.data_dir), "config", "keywords.txt")
-    kws: list[str] = []
-    if os.path.exists(path):
-        kws = [l.strip() for l in open(path) if l.strip() and not l.startswith("#")]
-    lib = getattr(context, "library", None)
-    if lib:
-        kws.extend(w for w, e in lib.all().items()
-                   if e.get("status") == "approved" and w not in kws)
-    return kws or ["duurzame sneakers", "vegan schoenen", "plastic free shoes"]
+    if not base:
+        # Fallback: keywords.txt + Library (taal-onbewust)
+        path = os.path.join(os.path.dirname(context.data_dir), "config", "keywords.txt")
+        kws: list[str] = []
+        if os.path.exists(path):
+            kws = [l.strip() for l in open(path) if l.strip() and not l.startswith("#")]
+        lib = getattr(context, "library", None)
+        if lib:
+            kws.extend(w for w, e in lib.all().items()
+                       if e.get("status") == "approved" and w not in kws)
+        base = kws or ["duurzame sneakers", "vegan schoenen", "plastic free shoes"]
+
+    comp = getattr(context, "competitors", None)
+    if comp is not None:
+        for c in comp.confirmed():
+            if c not in base:
+                base.append(c)
+    return base
 
 
 def _read_keywords(context) -> list[str]:
