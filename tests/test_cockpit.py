@@ -153,6 +153,21 @@ def test_process_meta_shows_who_what_for_means_gap():
     assert "Betreft rol" in page
 
 
+def test_load_env_populates_os_environ(tmp_path, monkeypatch):
+    # Simuleer een project-root met een .env; _load_env (via load_context) zet de sleutel.
+    import os as _os
+    from nooch_village.config import load_context
+    (tmp_path / "config").mkdir()
+    (tmp_path / ".env").write_text("COCKPIT_TEST_KEY=abc123\n", encoding="utf-8")
+    monkeypatch.delenv("COCKPIT_TEST_KEY", raising=False)
+    load_context(str(tmp_path))
+    assert _os.environ.get("COCKPIT_TEST_KEY") == "abc123"
+
+
+def test_load_env_callable_no_crash():
+    cockpit._load_env()                # best-effort, mag nooit crashen
+
+
 def test_banner_error_vs_success_styling():
     ok = cockpit.render_html({"roster": [], "inbox": [], "projects": [], "library": [],
                               "insights": [], "generated_at": 1.0, "data_dir": "x"},

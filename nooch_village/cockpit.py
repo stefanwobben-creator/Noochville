@@ -820,12 +820,25 @@ def make_handler(data_dir: str | None):
     return _Handler
 
 
+def _load_env() -> None:
+    """Laad de project-.env (API-sleutels, model, throttle) in os.environ. De cockpit
+    draait als eigen proces en zou anders géén LLM-sleutels hebben — dan faalt Noochie's
+    draft met 'geen LLM beschikbaar' ook al staat er tegoed klaar. Best-effort."""
+    try:
+        from nooch_village.config import load_context
+        base = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        load_context(base)
+    except Exception:
+        pass
+
+
 def serve(host: str = "127.0.0.1", port: int = 8765,
           data_dir: str | None = None) -> None:
     if host not in _LOCAL_HOSTS:
         raise SystemExit(
             f"Cockpit weigert niet-lokale host '{host}'. Read-only blijft op localhost."
         )
+    _load_env()   # .env-sleutels in os.environ, anders heeft de cockpit geen LLM
     httpd = HTTPServer((host, port), make_handler(data_dir))
     print(f"Cockpit (verwerk-modus, lokaal) op http://{host}:{port}  —  Ctrl-C om te stoppen")
     try:
