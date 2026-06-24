@@ -5,6 +5,17 @@ from nooch_village.governance import Records
 from nooch_village.models import Record, RoleDefinition, RecordType
 
 
+@pytest.fixture(autouse=True)
+def _no_llm_throttle():
+    """Tests mogen nooit écht wachten op de LLM-rate-limiter. Zet 'm op 'geen limiet'
+    (de throttle-logica zelf wordt los getest in test_llm_throttle met een nep-klok)."""
+    import nooch_village.llm as llm
+    saved = llm.LIMITER
+    llm.LIMITER = llm.RateLimiter(0)
+    yield
+    llm.LIMITER = saved
+
+
 @pytest.fixture
 def records(tmp_path):
     """Lege Records backed by een tijdelijk bestand."""
