@@ -100,6 +100,77 @@ def _ts(ts) -> str:
     return time.strftime("%Y-%m-%d %H:%M", time.localtime(ts))
 
 
+# ── Nooch design system (tokens uit nooch-shop/assets/design-tokens.css) ──────
+
+_FONTS = (
+    '<link rel="preconnect" href="https://fonts.googleapis.com">'
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
+    'family=Bricolage+Grotesque:wght@600;800&family=DM+Sans:wght@400;500;700&display=swap">'
+)
+
+_CSS = """
+:root{
+ --ink:#1B1B1B;--gray:#4A4A4A;--subtle:#7A7A7A;--muted:#9A9483;
+ --green:#1F9D55;--green-dark:#14713C;--green-tint:#D3EFDD;
+ --cream:#FCFAF4;--cream-2:#FBF6EA;--cream-3:#FFF7E8;--sand:#F1ECDF;--surface:#fff;
+ --yellow:#FFCE2E;--yellow-light:#FFF1B8;--coral:#FF6B5B;--border:#DDD4C0;
+ --font-display:'Bricolage Grotesque',system-ui,sans-serif;
+ --font-body:'DM Sans',system-ui,sans-serif;
+ --radius:9px;--radius-pill:999px;
+ --shadow:0 1px 2px rgba(27,27,27,.06),0 2px 8px rgba(27,27,27,.04);
+}
+*{box-sizing:border-box}
+body{font-family:var(--font-body);font-size:14px;line-height:1.5;color:var(--ink);
+ background:var(--cream);margin:0;padding:1.6rem 2rem;max-width:1180px}
+h1{font-family:var(--font-display);font-weight:800;font-size:1.5rem;margin:0}
+h2{font-family:var(--font-display);font-weight:800;font-size:.95rem;text-transform:uppercase;
+ letter-spacing:.03em;margin:1.8rem 0 .5rem;color:var(--green-dark)}
+a{color:var(--green-dark)}
+.bar{color:var(--gray);margin:.4rem 0 1.2rem;font-size:13px}
+.badge{font-size:.66rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;
+ padding:.18rem .55rem;border-radius:var(--radius-pill);vertical-align:middle;margin-left:.4rem}
+.badge.ro{background:var(--sand);color:var(--gray)}
+.badge.rw{background:var(--green-tint);color:var(--green-dark)}
+table{border-collapse:collapse;width:100%;font-size:13px;background:var(--surface);
+ border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+th,td{border-bottom:1px solid var(--border);padding:.5rem .6rem;text-align:left;vertical-align:top}
+th{background:var(--cream-2);font-family:var(--font-display);font-weight:700;
+ text-transform:uppercase;font-size:11px;letter-spacing:.03em;color:var(--gray)}
+tr:last-child td{border-bottom:none}
+tr.archived td{opacity:.45}
+tr.st-pending td{background:var(--yellow-light)}
+tr.st-blocked td{background:#FDEAEA}
+tr.st-running td{background:var(--green-tint)}
+.chip{display:inline-block;background:var(--green-tint);color:var(--green-dark);
+ border-radius:var(--radius-pill);padding:.1rem .55rem;margin:.06rem;font-size:12px}
+.muted{color:var(--muted)}
+.btn{font-family:var(--font-body);font-weight:600;font-size:12px;border:1px solid rgba(27,27,27,.14);
+ border-radius:var(--radius-pill);background:transparent;color:var(--ink);
+ padding:.3rem .85rem;margin:.12rem;cursor:pointer;display:inline-block;text-decoration:none}
+.btn:hover{background:rgba(27,27,27,.05)}
+.btn.ok{background:var(--green);border-color:var(--green);color:#fff}
+.btn.ok:hover{background:var(--green-dark);border-color:var(--green-dark)}
+.btn.no{background:#fff;border-color:var(--coral);color:var(--coral)}
+.tension{background:var(--cream-3);border:1px solid var(--border);border-radius:var(--radius);
+ padding:.7rem .9rem;margin:.6rem 0 1.4rem}
+details{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+ margin:.5rem 0;padding:.3rem .9rem;box-shadow:var(--shadow)}
+details[open]{padding-bottom:.8rem}
+details>summary{cursor:pointer;font-family:var(--font-display);font-weight:700;padding:.45rem 0}
+.pf label{display:block;margin:.6rem 0 .2rem;font-size:13px;color:var(--gray)}
+.pf input,.pf select{width:100%;padding:.45rem;border:1px solid var(--border);
+ border-radius:var(--radius);font:inherit;background:#fff}
+"""
+
+
+def _page(title: str, inner: str) -> str:
+    return (f'<!doctype html><html lang="nl"><head><meta charset="utf-8">'
+            f'<meta name="viewport" content="width=device-width, initial-scale=1">'
+            f'<title>{_e(title)}</title>{_FONTS}<style>{_CSS}</style></head>'
+            f'<body>{inner}</body></html>')
+
+
 def _btn(iid: str, action: str, label: str, token: str, cls: str = "") -> str:
     """Een mini-formulier-knop die via POST /action de gevalideerde inbox-actie aantrapt."""
     return (
@@ -186,21 +257,7 @@ def render_process(item: dict, roster: list, csrf_token: str) -> str:
 
     soon = '<span class="muted">(volgende stap)</span>'
 
-    return f"""<!doctype html><html lang="nl"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Process Tension — {_e(item.get('subject'))}</title>
-<style>
- body{{font:14px/1.5 system-ui,sans-serif;margin:1.5rem;max-width:760px;color:#1a1a1a}}
- a{{color:#36c}} .muted{{color:#999}}
- .tension{{background:#eef4fb;border-radius:6px;padding:.6rem .8rem;margin:.6rem 0 1.2rem}}
- details{{border:1px solid #e0e0e0;border-radius:6px;margin:.5rem 0;padding:.3rem .7rem}}
- details>summary{{cursor:pointer;font-weight:600;padding:.3rem 0}}
- .pf label{{display:block;margin:.5rem 0 .15rem;font-size:13px;color:#444}}
- .pf input{{width:100%;padding:.35rem;box-sizing:border-box}}
- .btn{{font:13px system-ui;border:1px solid #bbb;border-radius:4px;background:#f7f7f7;
-   padding:.25rem .7rem;margin:.5rem .1rem 0;cursor:pointer;display:inline-block;text-decoration:none;color:#222}}
- .btn.ok{{border-color:#3a7;background:#eafaef}}
-</style></head><body>
+    inner = f"""
 <p><a href="/">← terug naar de cockpit</a></p>
 <h1>Process Tension</h1>
 <div class="tension"><b>{_e(item.get('subject'))}</b> <span class="muted">({_e(item.get('type'))})</span><br>{_e(detail)}</div>
@@ -224,7 +281,8 @@ def render_process(item: dict, roster: list, csrf_token: str) -> str:
 <p class="muted">Eén spanning kan meerdere uitkomsten opleveren. Voeg hierboven toe wat nodig is en sluit 'm hier pas als je klaar bent.</p>
 <p>{done_form}</p>
 </details>
-</body></html>"""
+"""
+    return _page(f"Process Tension — {item.get('subject')}", inner)
 
 
 def render_html(snap: dict, csrf_token: str | None = None) -> str:
@@ -302,39 +360,22 @@ def render_html(snap: dict, csrf_token: str | None = None) -> str:
     )
 
     if writable:
-        _mode_badge = ' <span class="ro" style="color:#3a7">verwerk-modus</span>'
-        _mode_note = ("Beslissingen lopen via het gevalideerde inbox-pad (zelfde als de CLI), "
-                      "altijd door de gate. Lokaal oppervlak, CSRF-beveiligd.")
+        badge = '<span class="badge rw">verwerk-modus</span>'
+        note = ("Beslissingen lopen via het gevalideerde inbox-pad (zelfde als de CLI), "
+                "altijd door de gate. Lokaal oppervlak, CSRF-beveiligd.")
     else:
-        _mode_badge = ' <span class="ro">read-only</span>'
-        _mode_note = "Read-only zicht. Muteren loopt via de CLI/inbox en altijd door de gate. Ververs met F5."
+        badge = '<span class="badge ro">read-only</span>'
+        note = ("Read-only zicht. Muteren loopt via de CLI/inbox en altijd door de gate. "
+                "Ververs met F5.")
 
-    return f"""<!doctype html>
-<html lang="nl"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NoochVille cockpit (read-only)</title>
-<style>
- body{{font:14px/1.45 system-ui,sans-serif;margin:1.5rem;color:#1a1a1a}}
- h1{{font-size:1.1rem;margin:0}} h2{{font-size:.95rem;margin:1.6rem 0 .4rem}}
- .bar{{color:#555;margin:.2rem 0 1rem}} .ro{{color:#a00;font-weight:600}}
- table{{border-collapse:collapse;width:100%;font-size:13px}}
- th,td{{border:1px solid #ddd;padding:.35rem .5rem;text-align:left;vertical-align:top}}
- th{{background:#f4f4f4}} tr.archived td{{opacity:.45}}
- .chip{{display:inline-block;background:#eef;border-radius:3px;padding:.05rem .35rem;margin:.05rem;font-size:12px}}
- .muted{{color:#999}}
- tr.st-pending td{{background:#fff7e6}} tr.st-blocked td{{background:#fdeaea}}
- tr.st-running td{{background:#eaf6ec}}
- .btn{{font:12px system-ui;border:1px solid #bbb;border-radius:4px;background:#f7f7f7;
-   padding:.15rem .5rem;margin:.05rem;cursor:pointer}}
- .btn.ok{{border-color:#3a7;background:#eafaef}} .btn.no{{border-color:#c55;background:#fdeeee}}
-</style></head><body>
-<h1>NoochVille cockpit{_mode_badge}</h1>
-<div class="bar">{_e(counts)} · gegenereerd {_e(_ts(snap.get("generated_at")))} · {_e(snap.get("data_dir"))}<br>
-{_mode_note}</div>
-<h2>Roster (records)</h2>{roster_tbl}
-<h2>Inbox</h2>{inbox_tbl}
-<h2>Proces (projecten)</h2>{proj_tbl}
-</body></html>"""
+    inner = (
+        f'<h1>NoochVille cockpit {badge}</h1>'
+        f'<div class="bar">{_e(counts)} · gegenereerd {_e(_ts(snap.get("generated_at")))}<br>{note}</div>'
+        f'<h2>Roster</h2>{roster_tbl}'
+        f'<h2>Inbox</h2>{inbox_tbl}'
+        f'<h2>Proces (projecten)</h2>{proj_tbl}'
+    )
+    return _page("NoochVille cockpit", inner)
 
 
 # ── server (read-only, localhost) ────────────────────────────────────────────
