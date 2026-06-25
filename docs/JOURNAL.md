@@ -987,3 +987,13 @@ dezelfde kop niet opnieuw wordt verwerkt. Cockpit: blok 'Scout uit het nieuws' m
 (news_prop). Bevestigen routeert: kaart→NotesStore, seed/doelwit→Library.curate+set_function,
 concurrent→CompetitorBrands. Tests in test_news_distill.py. Suite groen (549 + 497).
 Resterend open: #1 Website Watcher datacheck, #2 periode-toggle.
+
+## Website Watcher: eerlijke databaken (#1) + periode-toggle 7d/maand/alles (#2)
+#1 Datacheck: de Shopify-winkel bevat 1 order, €0 omzet, 2 items (1782421273) = een testorder; de
+530-batch is elders verkocht en zit niet in Shopify. Het dashboard toont nu een 'lees met korrel
+zout'-baken (€0-bij-verkochte-paren → testorder; ≤2 orders → andere kanalen niet meegeteld) plus een
+scope-regel (bron: alleen footwear-nooch).
+#2 Toggle: shopify-skill kan met windows=[0,7,30] in ÉÉN fetch meerdere vensters aggregeren; CLI
+'village shopify' slaat standaard 7d/maand/hele-historie op. Dashboard heeft een 7d/maand/alles-
+toggle (client-side JS, geen round-trip). Conversie alleen in het 7d-paneel (passend bezoekersgetal).
+Eén getal meegeven aan 'village shopify N' = alleen dat venster (oud gedrag). Suite groen (551 + 498).

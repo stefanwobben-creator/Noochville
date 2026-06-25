@@ -1546,44 +1546,50 @@ def _render_digest(d: dict, noochie: dict | None = None) -> str:
             f'<div class="kpis">{tiles}</div>{noochie_block}')
 
 
-def _render_watcher_dashboard(shop: dict, visitors_7d=None) -> str:
-    """Website Watcher-dashboard: verkoopindicatoren uit Shopify (paren verkocht, orders, omzet,
-    AOV, top landen/producten) + conversie (orders 7d ÷ bezoekers 7d uit Plausible). Leeg → hint."""
-    if not shop or not shop.get("ok"):
-        return ('<h2>📊 Website Watcher — verkoop</h2>'
-                '<p class="muted">Nog geen Shopify-data. Draai <code>village shopify</code> '
-                '(vereist SHOPIFY_STORE + Client ID/secret in .env) of <code>./refresh.sh</code>.</p>')
+_WATCHER_STYLE = ('<style>.wgrid{display:flex;flex-wrap:wrap;gap:.7rem;margin:.3rem 0 .6rem}'
+                  '.wbox{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);'
+                  'padding:.55rem .8rem;flex:1 1 220px;min-width:0;box-shadow:var(--shadow)}'
+                  '.wbox-h{font-family:var(--font-display);font-weight:700;font-size:.8rem;'
+                  'color:var(--green-dark);margin-bottom:.2rem}'
+                  '.wtoggle{display:inline-flex;gap:.3rem;margin:.2rem 0 .4rem}'
+                  '.wtoggle button{cursor:pointer;border:1px solid var(--border);background:var(--surface);'
+                  'border-radius:var(--radius);padding:.25rem .7rem;font-size:.82rem}'
+                  '.wtoggle button.on{background:var(--green-dark);color:#fff;border-color:var(--green-dark)}'
+                  '.wpanel{display:none}.wpanel.on{display:block}</style>')
+
+
+def _watcher_panel(shop: dict, visitors_7d, *, show_conv: bool) -> str:
+    """Inner HTML van één venster (tiles + databaken + conversie + uitsplitsingen)."""
     cur = _e(shop.get("currency", ""))
     wd = shop.get("window_days", 0)
-    periode = "hele historie" if not wd else f"laatste {wd} dagen"
     base = [
         ("👟", _fmt_int(shop.get("pairs_sold", 0)), "paren verkocht"),
         ("🧾", _fmt_int(shop.get("orders", 0)), "orders"),
         ("💶", f'{_fmt_int(round(shop.get("revenue", 0)))} {cur}'.strip(), "omzet"),
         ("📦", f'{shop.get("aov", 0)} {cur}'.strip(), "gem. orderwaarde"),
     ]
-    # Gemiddelden per maand — vooral nuttig bij 'hele historie' (rustig beeld i.p.v. een venster).
-    if shop.get("avg_pairs_month"):
+    if not wd and shop.get("avg_pairs_month"):     # gemiddelden alleen bij 'hele historie'
         base.append(("📅", _fmt_int(round(shop["avg_pairs_month"])), "gem. paren/maand"))
         if shop.get("avg_revenue_month"):
             base.append(("📈", f'{_fmt_int(round(shop["avg_revenue_month"]))} {cur}'.strip(),
                          "gem. omzet/maand"))
-    # Conversie: orders ÷ bezoekers over de LAATSTE 7 DAGEN (Plausible). Bewust 7d-scoped, want
-    # alleen daar hebben we een passend bezoekersgetal. Toggle 7d/maand/alles komt nog.
     conv_note = ""
-    if visitors_7d:
+    if show_conv and visitors_7d:
         base.append(("👣", _fmt_int(visitors_7d), "bezoekers (7d)"))
-        o7 = shop.get("orders_7d")
+        o7 = shop.get("orders_7d", shop.get("orders"))
         if o7 is not None:
             conv = round(100 * o7 / visitors_7d, 2) if visitors_7d else 0.0
             base.append(("🎯", f"{conv}%", "conversie (7d)"))
             conv_note = ('<p class="muted" style="font-size:.78rem;margin:.1rem 0 .6rem">'
                          f'Conversie = {o7} orders ÷ {_fmt_int(visitors_7d)} bezoekers over de '
-                         'laatste 7 dagen. (Periode-toggle 7d/maand/alles volgt.)</p>')
+                         'laatste 7 dagen.</p>')
+    elif not show_conv:
+        conv_note = ('<p class="muted" style="font-size:.78rem;margin:.1rem 0 .6rem">'
+                     'Conversie tonen we alleen bij 7 dagen — daar hebben we een passend '
+                     'bezoekersgetal (Plausible).</p>')
     tiles = "".join(
         f'<div class="kpi"><div class="kpi-n">{ico} {val}</div>'
-        f'<div class="kpi-l">{_e(label)}</div></div>'
-        for ico, val, label in base)
+        f'<div class="kpi-l">{_e(label)}</div></div>' for ico, val, label in base)
 
     def _box(rows, lbl):
         if not rows:
@@ -1601,16 +1607,58 @@ def _render_watcher_dashboard(shop: dict, visitors_7d=None) -> str:
         _box(shop.get("top_landing_pages", []), "Via landingspagina → paren"),
         _box(shop.get("top_keywords", []), "UTM-term (campagne) → paren"),
     ])
-    style = ('<style>.wgrid{display:flex;flex-wrap:wrap;gap:.7rem;margin:.3rem 0 .6rem}'
-             '.wbox{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);'
-             'padding:.55rem .8rem;flex:1 1 220px;min-width:0;box-shadow:var(--shadow)}'
-             '.wbox-h{font-family:var(--font-display);font-weight:700;font-size:.8rem;'
-             'color:var(--green-dark);margin-bottom:.2rem}</style>')
-    cols = f'{style}<div class="wgrid">{boxes}</div>' if boxes else ""
-    sinds = (f' <span class="muted">· sinds {_e(shop.get("first_order_date"))}</span>'
-             if not wd and shop.get("first_order_date") else "")
-    return (f'<h2>📊 Website Watcher — verkoop ({periode}){sinds}</h2>'
-            f'<div class="kpis">{tiles}</div>{conv_note}{cols}')
+    cols = f'<div class="wgrid">{boxes}</div>' if boxes else ""
+    # Eerlijke databaken: cijfers komen UITSLUITEND uit de gekoppelde Shopify-winkel.
+    flags = []
+    if shop.get("pairs_sold", 0) and not shop.get("revenue", 0):
+        flags.append("omzet is €0 bij wél verkochte paren → dit lijkt een <b>testorder</b>, geen echte verkoop")
+    if shop.get("orders", 0) <= 2:
+        flags.append("er staan maar een paar orders in déze winkel; verkoop via andere kanalen "
+                     "(bijv. de 530-batch) zit <b>niet</b> in Shopify en dus niet in deze cijfers")
+    warn = ""
+    if flags:
+        lis = "".join(f"<li>{f}</li>" for f in flags)
+        warn = ('<div class="wbox" style="border-left:3px solid #c9a227;margin:.2rem 0 .6rem">'
+                '<div class="wbox-h">⚠️ Lees deze cijfers met een korrel zout</div>'
+                f'<ul style="margin:.2rem 0 0;padding-left:1.1rem;font-size:.82rem">{lis}</ul></div>')
+    return f'<div class="kpis">{tiles}</div>{warn}{conv_note}{cols}'
+
+
+def _render_watcher_dashboard(shop: dict, visitors_7d=None) -> str:
+    """Website Watcher-dashboard: verkoopindicatoren uit Shopify + conversie (7d ÷ Plausible).
+    Met een 7d/maand/hele-historie-toggle als de refresh meerdere vensters heeft opgehaald."""
+    if not shop or not shop.get("ok"):
+        return ('<h2>📊 Website Watcher — verkoop</h2>'
+                '<p class="muted">Nog geen Shopify-data. Draai <code>village shopify</code> '
+                '(vereist SHOPIFY_STORE + Client ID/secret in .env) of <code>./refresh.sh</code>.</p>')
+    scope = ('<p class="muted" style="font-size:.78rem;margin:.1rem 0 .4rem">Bron: alleen de '
+             'gekoppelde Shopify-winkel (footwear-nooch). Andere verkoopkanalen tellen niet mee.</p>')
+    wins = shop.get("windows") or {}
+    if not wins:                                    # oude cache zonder vensters → enkel paneel
+        wd = shop.get("window_days", 0)
+        sinds = (f' <span class="muted">· sinds {_e(shop.get("first_order_date"))}</span>'
+                 if not wd and shop.get("first_order_date") else "")
+        periode = "hele historie" if not wd else f"laatste {wd} dagen"
+        panel = _watcher_panel(shop, visitors_7d, show_conv=bool(visitors_7d))
+        return (f'<h2>📊 Website Watcher — verkoop ({periode}){sinds}</h2>{scope}'
+                f'{_WATCHER_STYLE}{panel}')
+    # Toggle: 7 dagen / maand (30) / hele historie (0). Default = hele historie.
+    order = [("7", "7 dagen"), ("30", "maand"), ("0", "hele historie")]
+    avail = [(k, lbl) for k, lbl in order if k in wins]
+    default = "0" if "0" in wins else avail[-1][0]
+    btns = "".join(
+        f'<button type="button" class="{"on" if k == default else ""}" '
+        f'onclick="wsel(\'{k}\')" data-w="{k}">{_e(lbl)}</button>' for k, lbl in avail)
+    panels = ""
+    for k, _lbl in avail:
+        panels += (f'<div class="wpanel{" on" if k == default else ""}" id="wpanel-{k}">'
+                   + _watcher_panel(wins[k], visitors_7d, show_conv=(k == "7")) + '</div>')
+    js = ("<script>function wsel(w){document.querySelectorAll('.wpanel').forEach(function(p){"
+          "p.classList.toggle('on',p.id=='wpanel-'+w)});"
+          "document.querySelectorAll('.wtoggle button').forEach(function(b){"
+          "b.classList.toggle('on',b.dataset.w==w)});}</script>")
+    return (f'<h2>📊 Website Watcher — verkoop</h2>{scope}{_WATCHER_STYLE}'
+            f'<div class="wtoggle">{btns}</div>{panels}{js}')
 
 
 def render_html(snap: dict, csrf_token: str | None = None, msg=None,

@@ -29,3 +29,12 @@ def test_watcher_dashboard_kaders_en_conversienoot():
     page = cockpit._render_watcher_dashboard(shop, visitors_7d=115)
     assert "wbox" in page and "Orders per land" in page          # nette kaders
     assert "conversie (7d)" in page and "1 orders" in page       # conversienoot met de getallen
+
+
+def test_watcher_dashboard_eerlijke_databaken_testorder():
+    # 2 paren bij €0 omzet en 1 order = testorder + scope-waarschuwing
+    shop = {"ok": True, "window_days": 0, "pairs_sold": 2, "orders": 1, "revenue": 0,
+            "currency": "EUR", "aov": 0.0, "first_order_date": "2026-06-02"}
+    page = cockpit._render_watcher_dashboard(shop, visitors_7d=0)
+    assert "testorder" in page                                   # €0 bij verkochte paren
+    assert "530-batch" in page and "footwear-nooch" in page      # scope + andere kanalen

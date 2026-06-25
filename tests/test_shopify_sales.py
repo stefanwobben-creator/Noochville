@@ -167,6 +167,47 @@ def test_skill_met_client_credentials():
     assert res["ok"] and res["pairs_sold"] == 1
 
 
+def test_skill_windows_multi_aggregaat_in_een_fetch():
+    now_iso = datetime.now(timezone.utc)
+    recent = now_iso.isoformat()
+    old = "2026-01-01T00:00:00Z"
+    calls = {"n": 0}
+    def fake_post(q, v):
+        calls["n"] += 1
+        assert v["q"] is None                                # windows → hele historie ophalen
+        return {"data": {"orders": {"pageInfo": {"hasNextPage": False},
+                "nodes": [
+                    {"createdAt": recent, "currentTotalPriceSet": {"shopMoney": {"amount": "90", "currencyCode": "EUR"}},
+                     "shippingAddress": {"countryCodeV2": "NL"},
+                     "lineItems": {"nodes": [{"title": "A", "quantity": 1}]}, "customerJourneySummary": None},
+                    {"createdAt": old, "currentTotalPriceSet": {"shopMoney": {"amount": "60", "currencyCode": "EUR"}},
+                     "shippingAddress": {"countryCodeV2": "NL"},
+                     "lineItems": {"nodes": [{"title": "A", "quantity": 1}]}, "customerJourneySummary": None}]}}}
+    ctx = SimpleNamespace(settings={"SHOPIFY_STORE": "x.myshopify.com", "SHOPIFY_TOKEN": "tok"},
+                          data_dir="/tmp")
+    res = ShopifySalesSkill().run({"windows": [0, 7, 30], "_post": fake_post}, ctx)
+    assert calls["n"] == 1                                   # één API-fetch voor alle vensters
+    assert res["ok"] and set(res["windows"]) == {"0", "7", "30"}
+    assert res["windows"]["0"]["orders"] == 2               # hele historie: beide
+    assert res["windows"]["7"]["orders"] == 1               # alleen de recente
+    assert res["pairs_sold"] == 2                            # flat top-level = venster 0
+
+
+def test_dashboard_toggle_drie_vensters():
+    from nooch_village import cockpit
+    def w(days, orders, pairs):
+        return {"window_days": days, "orders": orders, "pairs_sold": pairs, "revenue": pairs * 90,
+                "currency": "EUR", "aov": 90.0, "orders_7d": min(orders, 1),
+                "by_country": [("NL", orders)], "top_products": [("A", pairs)]}
+    shop = {"ok": True, "windows": {"0": w(0, 9, 9), "7": w(7, 1, 1), "30": w(30, 4, 4)}, **w(0, 9, 9)}
+    page = cockpit._render_watcher_dashboard(shop, visitors_7d=200)
+    assert "wtoggle" in page and "wsel(" in page             # toggle + JS aanwezig
+    for lbl in ("7 dagen", "maand", "hele historie"):
+        assert lbl in page
+    assert 'id="wpanel-0"' in page and 'id="wpanel-7"' in page and 'id="wpanel-30"' in page
+    assert "conversie (7d)" in page                          # alleen in het 7d-paneel
+
+
 def test_cockpit_dashboard_render():
     from nooch_village import cockpit
     shop = {"ok": True, "window_days": 28, "pairs_sold": 42, "orders": 30,

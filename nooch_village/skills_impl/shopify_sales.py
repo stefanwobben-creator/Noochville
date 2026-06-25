@@ -227,6 +227,23 @@ class ShopifySalesSkill(Skill):
                 return {"error": f"Shopify-token ophalen mislukt: {e} -> skill faalt closed"}
             if not token:
                 return {"error": "Shopify gaf geen access_token terug -> skill faalt closed"}
+        # Eén of meer vensters. `windows=[0,7,30]` → in één fetch (hele historie) meerdere
+        # aggregaties, zodat het dashboard een 7d/maand/alles-toggle kan tonen zonder extra calls.
+        windows = payload.get("windows")
+        if windows:
+            try:
+                orders = fetch_orders(store, token, None, _post=payload.get("_post"))
+            except Exception as e:
+                return {"error": f"Shopify-call mislukt: {e} -> skill faalt closed"}
+            now = datetime.now(timezone.utc)
+            wins = {}
+            for w in windows:
+                w = int(w)
+                subset = orders if w <= 0 else [o for o in orders
+                                                if _within_days(o.get("created_at", ""), now, w)]
+                wins[str(w)] = aggregate_orders(subset, w, now=now)
+            base = wins.get("0") or next(iter(wins.values()))
+            return {"ok": True, "windows": wins, **base}
         window = int(payload.get("window_days", 0))      # 0 = hele historie (geen datumfilter)
         since = None if window <= 0 else (
             datetime.now(timezone.utc) - timedelta(days=window)).date().isoformat()

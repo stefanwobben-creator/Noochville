@@ -553,10 +553,13 @@ def main() -> None:
         from nooch_village.util import atomic_write_json
         from nooch_village.village import BASE_DIR
         ctx = load_context(BASE_DIR)
-        # Geen getal → hele historie (0). Getal (bijv. 7) → dat venster, handig in campagnetijd.
-        window = next((int(a) for a in sys.argv[2:] if a.isdigit()), 0)
-        print(f"🛍️  Shopify-verkoop ophalen ({'hele historie' if window <= 0 else f'laatste {window} dagen'})…")
-        res = ShopifySalesSkill().run({"window_days": window}, ctx)
+        # Standaard: drie vensters in één fetch (7d / 30d / hele historie) voor de dashboard-toggle.
+        # Eén getal meegeven → alleen dat venster (oud gedrag, handig in campagnetijd).
+        one = next((int(a) for a in sys.argv[2:] if a.isdigit()), None)
+        payload = {"window_days": one} if one is not None else {"windows": [0, 7, 30]}
+        print("🛍️  Shopify-verkoop ophalen "
+              f"({'7d/maand/hele historie' if one is None else (f'laatste {one} dagen' if one else 'hele historie')})…")
+        res = ShopifySalesSkill().run(payload, ctx)
         if not res.get("ok"):
             print(f"   {res.get('error', 'onbekend')}", file=sys.stderr)
             sys.exit(1)
