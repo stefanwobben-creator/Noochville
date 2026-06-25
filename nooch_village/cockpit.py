@@ -1196,17 +1196,21 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
                      if obj.get("text") else "⚖️ <b>Bezwaar getoetst</b><br>")
         obj_box = (f'<div class="tg-dlg" style="border-left:3px solid {edge};padding-left:.5rem">'
                    f'{harm_line}<b>{_e(r.get("summary",""))}</b>{steps_html}</div>')
+    # Kop + context (spanning/voorbeeld/baat + eventuele status-bakens). De diff zit verderop
+    # ingeklapt; het bewerkbare formulier is de hoofdweergave (GlassFrog-stijl).
     card = (f'<div class="tg-card"><div class="tg-meta">Voorstel · door {_e(item.get("by",""))} · '
             f'status {_e(item.get("status",""))}</div>'
             f'<h2>{_e(item["title"])}</h2>'
-            f'{diff}'
-            f'{(("<div style=margin:.3rem0>" + flip_btn + "</div>") if flip_btn else "")}'
-            f'<div class="muted" style="margin-top:.3rem"><b>Lost deze spanning op:</b> {_e(item.get("reason","")) or "—"}</div>'
+            f'<div class="muted" style="margin-top:.2rem"><b>Lost deze spanning op:</b> {_e(item.get("reason","")) or "—"}</div>'
             + (f'<div class="muted" style="margin-top:.15rem"><b>Concreet voorbeeld:</b> '
                f'{_e(item.get("example",""))}</div>' if item.get("example") else "")
             + (f'<div class="muted" style="margin-top:.15rem"><b>Helpt mijn eigen rol:</b> '
                f'{_e(item.get("benefit",""))}</div>' if item.get("benefit") else "")
-            + invalid_box + obj_box + f'{sec}{react_log}</div>')
+            + invalid_box + obj_box + react_log + '</div>')
+    # De diff blijft beschikbaar als ingeklapte referentie ('wat verandert er t.o.v. nu').
+    diff_block = (f'<details style="margin:.4rem 0"><summary>📋 Wijzigingen t.o.v. nu</summary>'
+                  f'{diff}{(("<div style=margin:.3rem0>" + flip_btn + "</div>") if flip_btn else "")}'
+                  '</details>')
     # GlassFrog-stijl: direct bewerkbare velden, voorgevuld met de 'na dit voorstel'-stand.
     if is_add:
         ed_naam, ed_pur = (item.get("title") or item.get("role_id", "")), (pur_new or "")
@@ -1221,7 +1225,8 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
         naam_attr = ""
     _ta = lambda xs: _e("\n".join(xs))
     editor = (
-        '<details open style="margin-top:.5rem"><summary>✏️ Voorstel bewerken (velden)</summary>'
+        '<details open style="margin-top:.5rem"><summary>✏️ Rol bewerken — naam, purpose, '
+        'accountabilities &amp; domeinen (dit is het voorstel)</summary>'
         f'<form method="post" action="/action" style="margin-top:.4rem">{common}'
         f'<input type="hidden" name="next" value="/roloverleg?iid={_e(item["id"])}">'
         f'<div style="{_H}">Naam</div>'
@@ -1235,7 +1240,9 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
         '<button class="bigbtn go" type="submit" name="action" value="rov_edit" '
         'style="margin-top:.4rem">💾 Voorstel opslaan<small>werkt de wijziging bij vanuit deze '
         'velden; de Secretaris hertoetst</small></button></form></details>')
-    inner = (f'{head}{_banner(msg)}{card}{editor}{react_form}{decide}{objection_form}'
+    # Volgorde: kop+context → het FORMULIER (hoofdweergave) → Secretaris-check (direct na bewerken)
+    # → ingeklapte diff → AI-suggestie → consent/project/ongeldig → bezwaar-toets.
+    inner = (f'{head}{_banner(msg)}{card}{editor}{sec}{diff_block}{react_form}{decide}{objection_form}'
              '<div class="tg-skip"><a class="muted" href="/roloverleg">← terug naar de agenda</a>'
              '</div></div><style>' + _TRIAGE_CSS + '</style>')
     return _page("Voorstel behandelen", inner)

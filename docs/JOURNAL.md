@@ -1028,3 +1028,11 @@ Tests in test_roloverleg.py. Suite groen (554 + 498).
   Secretary._adopt past d.name toe (record-id blijft stabiel, dus geen kapotte members/CLASS_MAP).
   proposal_to_dict/from_dict + _proposal_from_item dragen rename. Naam-veld in de editor niet meer
   read-only. Suite groen (556 + 498).
+
+## Roloverleg-layout: formulier als hoofdweergave + Secretaris-hercheck direct eronder
+Het bewerkbare rol-formulier (naam/purpose/accountabilities/domeinen) is nu de hoofdweergave op het
+behandel-scherm; de tekstuele voor/na-diff staat ingeklapt onder 'Wijzigingen t.o.v. nu'. Volgorde:
+kop+context → formulier → Secretaris-check → diff → AI-suggestie → consent/project/ongeldig →
+bezwaar-toets. De Secretaris-check draait bij elke render (dus na elke 'Voorstel opslaan' zie je
+direct of de gewijzigde accountabilities de -en-vorm/dubbel-check/rijpheidspoort passeren).
+Suite groen (556 + 498).
