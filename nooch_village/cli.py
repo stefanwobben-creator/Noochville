@@ -254,6 +254,38 @@ def main() -> None:
             sys.exit(1)
         remove_role_via_governance(sys.argv[2], " ".join(sys.argv[3:]))
 
+    elif mode == "enrich_volumes":
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.library import Library
+        from nooch_village.library_enrich import enrich_library
+        from nooch_village.village import BASE_DIR
+        dry = "dry" in sys.argv[2:]
+        use_gsc = "nogsc" not in sys.argv[2:]
+        ctx = load_context(BASE_DIR)
+        ctx.library = Library(os.path.join(ctx.data_dir, "library.json"))
+        out = enrich_library(ctx.library, ctx, apply=not dry, gsc=use_gsc)
+        if out["gsc_error"]:
+            print(f"⚠️ GSC niet beschikbaar ({out['gsc_error']}) — alleen volume/concurrentie/kans.")
+        rows = sorted(out["results"],
+                      key=lambda r: -(r.get("opportunity") if r.get("opportunity") is not None else -1))
+        print(f"{'DROOGDRAAI (niets weggeschreven)' if dry else 'Verrijkt'} — "
+              f"{len(rows)} goedgekeurde woorden (op kans):")
+        for r in rows:
+            vol = "" if r.get("volume") is None else f'{r["volume"]}/mnd'
+            comp = "" if r.get("competition") is None else f'{round(float(r["competition"])*100)}%'
+            opp = "" if r.get("opportunity") is None else str(r["opportunity"])
+            if r.get("gsc_seen") is True:
+                stand = f'positie {r.get("gsc_position")} ({r.get("gsc_clicks") or 0} klik)'
+            elif r.get("gsc_seen") is False:
+                stand = "nog niet in Google"
+            else:
+                stand = "—"
+            print(f'  {r["word"][:38]:38} vol {vol:>10}  concur {comp:>5}  '
+                  f'kans {opp:>8}  {stand}')
+        if dry:
+            print("\nDraai zonder 'dry' om dit echt weg te schrijven.")
+
     elif mode == "rereview":
         import os
         from nooch_village.config import load_context

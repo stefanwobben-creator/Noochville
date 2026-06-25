@@ -655,9 +655,15 @@ class Librarian(Inhabitant):
             reason = res.get("error") if isinstance(res, dict) else res
             self.log.info("📐 KE niet beschikbaar (%s) — '%s' zonder volume beoordeeld", reason, word)
             return demand
-        vol = int(res["keywords"][0].get("vol", 0) or 0)
-        self.log.info("📐 KE: '%s' → volume %d/mnd", word, vol)
-        return {**demand, "volume": vol, "ke_country": self._ke_country()}
+        from nooch_village.skills_impl.keywords_everywhere import opportunity_score
+        kw = res["keywords"][0]
+        vol = int(kw.get("vol", 0) or 0)
+        comp = float(kw.get("competition", 0) or 0)
+        opp = opportunity_score(vol, comp)
+        self.log.info("📐 KE: '%s' → volume %d/mnd · concurrentie %.2f · kans %s",
+                      word, vol, comp, opp)
+        return {**demand, "volume": vol, "competition": comp,
+                "opportunity": opp, "ke_country": self._ke_country()}
 
     def _ke_country(self) -> str:
         return self.context.settings.get("ke_country", "").strip()   # leeg = global

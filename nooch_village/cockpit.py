@@ -82,15 +82,26 @@ def compute_digest(library_all: dict, link_cands: list, comp_cands: list,
     doelwitten (op prioriteit) en marktinteresse (nieuw gespotte + de volledige monitor-set:
     de vaste config-concurrenten + de door jou bevestigde kandidaten).
     """
+    def _word_row(w, e):
+        ev = e.get("evidence") or {}
+        return {"word": w,
+                "volume": ev.get("volume"),
+                "competition": ev.get("competition"),
+                "opportunity": ev.get("opportunity"),
+                "gsc_seen": ev.get("gsc_seen"),
+                "gsc_position": ev.get("gsc_position"),
+                "gsc_clicks": ev.get("gsc_clicks"),
+                "gsc_impressions": ev.get("gsc_impressions"),
+                "interest": ev.get("interest"),
+                "locale": e.get("locale") or "",
+                "date": e.get("date", "")}
     new_words = sorted(
-        ({"word": w,
-          "interest": ((e.get("evidence") or {}).get("interest")),
-          "locale": e.get("locale") or "",
-          "date": e.get("date", "")}
-         for w, e in (library_all or {}).items()
+        (_word_row(w, e) for w, e in (library_all or {}).items()
          if isinstance(e, dict) and e.get("status") == "approved"
          and _within(e.get("date"), now, days)),
-        key=lambda x: (-(x["interest"] or 0), x["word"]),
+        # kans eerst (kwantitatief), dan volume, dan trends-interesse als zwakke fallback
+        key=lambda x: (-((x["opportunity"] if x["opportunity"] is not None else -1)),
+                       -((x["volume"] or 0)), -((x["interest"] or 0)), x["word"]),
     )
     new_links = sorted(
         ({"title": t.get("title", ""), "source": t.get("source", ""),
@@ -602,6 +613,33 @@ def render_project_edit(p: dict, roster: list, csrf_token: str) -> str:
     return _page("Project bewerken", inner)
 
 
+def _word_metrics(x: dict) -> str:
+    """Compacte kerncijfers per zoekwoord: zoekvolume · concurrentie · kans · onze GSC-stand.
+    Toont alleen wat bekend is; valt terug op trends-interesse en anders een hint om te verrijken."""
+    parts = []
+    if x.get("volume") is not None:
+        parts.append(f'vol {x["volume"]}/mnd')
+    if x.get("competition") is not None:
+        parts.append(f'concurrentie {round(float(x["competition"]) * 100)}%')
+    if x.get("opportunity") is not None:
+        parts.append(f'<b>kans {x["opportunity"]}</b>')
+    # Onze huidige Google-stand voor exact deze term (uit GSC)
+    if x.get("gsc_seen") is True:
+        pos = x.get("gsc_position")
+        clicks = x.get("gsc_clicks") or 0
+        parts.append(f'positie {pos} ({clicks} klikken)')
+    elif x.get("gsc_seen") is False:
+        parts.append('nog niet in Google top-resultaten')
+    if not parts:
+        if x.get("interest") is not None:
+            parts.append(f'interesse {x["interest"]}')
+        else:
+            return ('<span class="muted">— nog niet gemeten '
+                    '(draai <code>enrich_volumes</code>)</span>')
+    sep = ' <span class="muted">·</span> '
+    return f'<span class="muted">{sep.join(parts)}</span>'
+
+
 def _render_digest(d: dict) -> str:
     """Weekrapport-blok: één overzicht dat je elke week opent. Pure render uit snap['digest']."""
     days = d.get("window_days", 7)
@@ -610,10 +648,7 @@ def _render_digest(d: dict) -> str:
     _pm = {"hoog": "★ hoog", "midden": "midden", "laag": "laag", "onbekend": "?"}
     cards = []
     if nw:
-        rows = "".join(
-            f'<li><b>{_e(x["word"])}</b>'
-            f'{(" · interesse " + _e(x["interest"])) if x.get("interest") is not None else ""}'
-            f'{(" · " + _e(x["locale"])) if x.get("locale") else ""}</li>' for x in nw)
+        rows = "".join(f'<li><b>{_e(x["word"])}</b> {_word_metrics(x)}</li>' for x in nw)
         cards.append(f'<div class="dg"><h3>🌱 Nieuw goedgekeurde woorden ({len(nw)})</h3>'
                      f'<ul>{rows}</ul></div>')
     if nl:

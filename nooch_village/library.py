@@ -52,6 +52,18 @@ class Library:
         self._save()
         return entry
 
+    def set_evidence(self, word: str, updates: dict) -> dict | None:
+        """Verrijk de evidence van een bestaand woord (merge), zonder status/datum/rationale
+        te raken. Bedoeld voor verrijking achteraf (bv. KE-volume/concurrentie/kans toevoegen
+        aan al goedgekeurde woorden). Retourneert het bijgewerkte entry, of None als onbekend."""
+        key = word.lower()
+        entry = self._data.get(key)
+        if entry is None:
+            return None
+        entry["evidence"] = {**(entry.get("evidence") or {}), **(updates or {})}
+        self._save()
+        return entry
+
     def link_concept(self, word: str, concept_id: str) -> dict:
         key = word.lower()
         if key not in self._data:

@@ -8,6 +8,24 @@ log = logging.getLogger(__name__)
 _VALID_DATA_SOURCES = {"gkp", "cli"}
 
 
+def opportunity_score(volume, competition) -> int | None:
+    """Kwantitatieve kans per zoekwoord: zoekvolume gewogen voor lage concurrentie.
+
+    kans = round(volume * (1 - competition)), met competition geklemd op [0, 1].
+    Interpretatie: 'haalbaar maandelijks verkeer' — veel zoekvraag bij lage concurrentie
+    scoort hoog, veel zoekvraag bij hoge concurrentie laag. None als volume onbekend is.
+    """
+    if volume is None:
+        return None
+    try:
+        v = int(volume)
+        c = float(competition or 0)
+    except (TypeError, ValueError):
+        return None
+    c = min(max(c, 0.0), 1.0)
+    return round(v * (1 - c))
+
+
 class KeywordsEverywhereSkill(Skill):
     name = "keywords_everywhere"
     needs_secret = True
