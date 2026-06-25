@@ -1,8 +1,31 @@
 """Gedeelde fixtures voor de NoochVillage test-suite."""
 from __future__ import annotations
+import os
 import pytest
 from nooch_village.governance import Records
 from nooch_village.models import Record, RoleDefinition, RecordType
+
+
+@pytest.fixture(autouse=True)
+def _isolate_village_data(monkeypatch):
+    """Geen test schrijft ooit in de échte data/. Wijs BASE_DIR naar een eigen tmp-map (verse
+    data), met de echte config gesymlinkt zodat settings/strategy blijven laden. Eigen tmp-map
+    (niet de test-tmp_path) om botsing met tests te vermijden. Voorkomt dat een test die een
+    volledige Village() bouwt de productie-inbox/records vervuilt ('nonexistent_test_rol')."""
+    import tempfile
+    import shutil
+    import nooch_village.village as village
+    real_cfg = os.path.join(village.BASE_DIR, "config")
+    base = tempfile.mkdtemp(prefix="nv_test_base_")
+    os.makedirs(os.path.join(base, "data"), exist_ok=True)
+    if os.path.isdir(real_cfg):
+        try:
+            os.symlink(real_cfg, os.path.join(base, "config"))
+        except OSError:
+            shutil.copytree(real_cfg, os.path.join(base, "config"))
+    monkeypatch.setattr(village, "BASE_DIR", base)
+    yield
+    shutil.rmtree(base, ignore_errors=True)
 
 
 @pytest.fixture(autouse=True)
