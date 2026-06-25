@@ -55,21 +55,24 @@ def test_digest_sorteert_links_op_prioriteit():
     assert [l["priority"] for l in dg["new_links"]] == ["hoog", "midden"]
 
 
-def test_render_toont_weekrapport_en_inhoud():
+def test_render_weekrapport_is_kwantitatief():
     now = time.time()
     dg = compute_digest(
-        {"vegan sneakers": {"status": "approved", "date": _d(1, now),
-                            "evidence": {"interest": 800}, "locale": "en"}},
+        {"vegan sneakers dames": {"status": "approved", "date": _d(1, now),
+                                  "evidence": {"volume": 210}}},
         [{"title": "Best Vegan Sneakers", "priority": "hoog", "link": "https://x",
           "first_seen": _d(1, now)}],
         [], ["LØCI"], now)
     html = _render_digest(dg)
     assert "Weekrapport" in html
-    assert "vegan sneakers" in html
-    assert "Best Vegan Sneakers" in html
-    assert "LØCI" in html
+    # puur kwantitatief: tellingen + labels, geen woord-/titeldetails
+    assert "doelwit-woorden" in html and "linkbuilding-doelwitten" in html
+    assert "vegan sneakers dames" not in html
+    assert "Best Vegan Sneakers" not in html
 
 
-def test_render_leeg_is_vriendelijk():
-    html = _render_digest(compute_digest({}, [], [], [], time.time()))
-    assert "Niks nieuws" in html
+def test_render_weekrapport_toont_noochie():
+    html = _render_digest(compute_digest({}, [], [], [], time.time()),
+                          {"verdict": "niet_ok", "oordeel": "Field Note adviseert ads",
+                           "date": "2026-06-25"})
+    assert "Noochie vandaag" in html and "Field Note adviseert ads" in html

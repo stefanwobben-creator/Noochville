@@ -491,6 +491,10 @@ class ConcurrentScout(Inhabitant):
         settings_brands = [b.strip() for b in raw.split(",") if b.strip()]
         return list(dict.fromkeys(settings_brands + store.confirmed()))
 
+    def _news_store(self):
+        from nooch_village.competitor_news_store import CompetitorNews
+        return CompetitorNews(os.path.join(self.context.data_dir, "competitor_news.json"))
+
     def _run_news(self, monitored: list[str]) -> None:
         self.log.info("🔭 concurrent-scan gestart (%d merken)", len(monitored))
         res = self.use_skill("competitor_news", {"brands": monitored} if monitored else {})
@@ -500,6 +504,10 @@ class ConcurrentScout(Inhabitant):
                 {"by": self.id, "ok": False, "error": res.get("error")}, self.id))
             return
         items = res.get("items", [])
+        try:                                              # per-merk laatste nieuws voor de cockpit
+            self._news_store().update(items)
+        except Exception as e:
+            self.log.info("kon concurrent-nieuws niet opslaan: %s", e)
         seen = self._load_seen()
         new_items = [it for it in items if it.get("link") and it["link"] not in seen]
         for it in new_items:                              # signalen → bulletin (Noochie)
@@ -1589,6 +1597,22 @@ class Noochie(Inhabitant):
                 self.log.info("🎯 missie-lens ongewijzigd — spanning niet herhaald")
 
         self.bus.publish(Event("noochie_weighed_in", {"oordeel": result}, self.id))
+        self._persist_daily(verdict, reason_text or result)
+
+    def _persist_daily(self, verdict: str, tekst: str) -> None:
+        """Bewaar Noochie's dagverdict zodat de cockpit het als dagelijkse update toont."""
+        import json as _json
+        import time as _time
+        path = os.path.join(self.context.data_dir, "noochie_daily.json")
+        try:
+            from nooch_village.util import atomic_write_json
+            atomic_write_json(path, {
+                "date": _time.strftime("%Y-%m-%d"),
+                "verdict": verdict or "onbekend",
+                "oordeel": (tekst or "").strip()[:300],
+            })
+        except Exception as e:
+            self.log.info("kon Noochie-dagverdict niet opslaan: %s", e)
 
     def _reflect(self) -> None:
         """Genereert periodiek één creatief voorstel als spanning richting de mens.

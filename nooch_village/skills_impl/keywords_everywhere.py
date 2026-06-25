@@ -37,6 +37,24 @@ def opportunity_score(volume, *, position=None, ranks=None) -> int | None:
     return round(v * gap)
 
 
+def trend_change_pct(trend) -> float | None:
+    """Procentuele verandering over de KE-trendreeks (laatste vs eerste maand, ~12 mnd).
+    Voor volg-woorden: laat de échte trend zien over een jaar i.p.v. een 7-daagse momentopname.
+    Accepteert een lijst getallen of dicts met 'value'. None als niet te bepalen."""
+    if not trend:
+        return None
+    vals = []
+    for t in trend:
+        v = t.get("value") if isinstance(t, dict) else t
+        try:
+            vals.append(float(v))
+        except (TypeError, ValueError):
+            continue
+    if len(vals) < 2 or vals[0] <= 0:
+        return None
+    return round((vals[-1] - vals[0]) / vals[0] * 100, 1)
+
+
 class KeywordsEverywhereSkill(Skill):
     name = "keywords_everywhere"
     needs_secret = True

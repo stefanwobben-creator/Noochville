@@ -31,7 +31,7 @@ def enrich_library(library, context, *, apply: bool = True, only_missing: bool =
     only_missing=True slaat woorden over die al een volume hebben (idempotent, spaart credits).
     """
     from nooch_village.skills_impl.keywords_everywhere import (
-        KeywordsEverywhereSkill, opportunity_score)
+        KeywordsEverywhereSkill, opportunity_score, trend_change_pct)
     country = (getattr(context, "settings", {}) or {}).get("ke_country", "").strip()
 
     gsc_by_query, gsc_error = ({}, None)
@@ -53,6 +53,9 @@ def enrich_library(library, context, *, apply: bool = True, only_missing: bool =
                 vol = int(kw.get("vol", 0) or 0)
                 comp = float(kw.get("competition", 0) or 0)
                 updates.update(volume=vol, competition=comp, ke_country=country)
+                tp = trend_change_pct(kw.get("trend"))
+                if tp is not None:
+                    updates["trend_pct"] = tp               # 12-mnd trend voor volg-woorden
             time.sleep(sleep)                               # beleefd tegen de API
 
         if gsc and gsc_error is None:

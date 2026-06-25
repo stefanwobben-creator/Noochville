@@ -383,3 +383,21 @@ flip-knop in de cockpit (`Library.set_function` via inbox-actie `lib_function`).
 via de heuristiek (vegan/microplastics/biobased → volg, rest → doelwit).
 
 Tests: 895 → 900.
+
+---
+
+## 2026-06-25 (vervolg 3) — Cockpit-herinrichting
+
+**[feat] Weekrapport = dashboard.** Puur kwantitatief: KPI-tegels (nieuwe doelwit-woorden, volg-woorden,
+linkbuilding-doelwitten, concurrenten) + Noochie's dagverdict. Noochie schrijft zijn missie-lens-oordeel
+nu weg (`noochie_daily.json`); de cockpit toont het als dagelijkse update.
+
+**[feat] Woordenschat gesplitst.** 🎯 Doelwit-woorden: volume + kans + onze GSC-stand. 🌱 Volg-woorden:
+de 12-maands trend% (`trend_change_pct` over de KE-trendreeks) i.p.v. een 7-daagse momentopname — zo zie
+je de échte beweging van een seed. `enrich_volumes` slaat de trend nu op.
+
+**[feat] Concurrenten: volledige monitor + nieuws.** Per merk (config ∪ bevestigd) het laatste nieuwsfeit.
+Nieuwe store `competitor_news.json`, geschreven door de scout in `_run_news`; eenmalig gevuld uit het
+laatste veldrapport (8 merken, 6 met nieuws).
+
+Tests: 900 → 904. Mac: na `enrich_volumes` verschijnt de seed-trend%; elke pulse ververst het nieuws.

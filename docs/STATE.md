@@ -4,7 +4,13 @@
 
 ## Waar we staan (2026-06-25)
 
-**Suite: 900 tests groen.** Elke stap met mutatie-check.
+**Suite: 904 tests groen.** Elke stap met mutatie-check.
+
+### Sessie 2026-06-25 (vervolg 2): cockpit-herinrichting
+
+- **Weekrapport puur kwantitatief**: KPI-tegels (nieuwe doelwit-woorden / volg-woorden / linkbuilding-doelwitten / concurrenten) + Noochie's dagverdict (`noochie_daily.json`, door Noochie weggeschreven). Details staan in de eigen secties.
+- **Woordenschat gesplitst**: 🎯 doelwit-woorden met volume/kans/GSC-positie, 🌱 volg-woorden met de 12-maands trend% (`trend_change_pct` uit de KE-trendreeks, opgeslagen door `enrich_volumes`). Flip-knop per woord blijft.
+- **Concurrenten: volledige monitor** (config ∪ bevestigd) met per merk het laatste nieuwsfeit (`competitor_news.json`, geschreven door de scout in `_run_news`; eenmalig gevuld uit het laatste rapport). 8 merken, 6 met nieuws.
 
 ### Sessie 2026-06-25 (vervolg): kans-score per zoekwoord
 

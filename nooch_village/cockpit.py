@@ -141,6 +141,16 @@ def gather(data_dir: str | None = None) -> dict:
     notes = NotesStore(os.path.join(dd, "notes.json"))
     brands = CompetitorBrands(os.path.join(dd, "competitor_brands.json"))
     links = LinkTargets(os.path.join(dd, "linkbuilding_targets.json"))
+    from nooch_village.competitor_news_store import CompetitorNews
+    comp_news = CompetitorNews(os.path.join(dd, "competitor_news.json")).all()
+    noochie_daily = {}
+    _nd_path = os.path.join(dd, "noochie_daily.json")
+    if os.path.exists(_nd_path):
+        try:
+            import json as _json
+            noochie_daily = _json.load(open(_nd_path))
+        except Exception:
+            noochie_daily = {}
 
     roster = []
     for rec in sorted(records.all(), key=lambda r: (r.archived, r.type.value, r.id)):
@@ -168,14 +178,20 @@ def gather(data_dir: str | None = None) -> dict:
 
     # Woordenschat: woord + status (approved/forbidden/avoid/escalated), beslist eerst.
     _ws_order = {"approved": 0, "escalated": 1, "avoid": 2, "forbidden": 3}
-    lib = sorted(
-        ({"word": w, "status": e.get("status", "?"), "by": e.get("by", ""),
-          "rationale": e.get("rationale", ""), "date": e.get("date", ""),
-          "function": (e.get("function") if e.get("function") in ("volg", "doelwit")
-                       else classify_function(w, e.get("evidence")))}
-         for w, e in (library.all() or {}).items()),
-        key=lambda x: (_ws_order.get(x["status"], 9), x["word"]),
-    )
+
+    def _lib_row(w, e):
+        ev = e.get("evidence") or {}
+        fn = e.get("function") if e.get("function") in ("volg", "doelwit") \
+            else classify_function(w, ev)
+        return {"word": w, "status": e.get("status", "?"), "by": e.get("by", ""),
+                "rationale": e.get("rationale", ""), "date": e.get("date", ""),
+                "function": fn,
+                "volume": ev.get("volume"), "opportunity": ev.get("opportunity"),
+                "competition": ev.get("competition"), "trend_pct": ev.get("trend_pct"),
+                "gsc_seen": ev.get("gsc_seen"), "gsc_position": ev.get("gsc_position"),
+                "gsc_clicks": ev.get("gsc_clicks")}
+    lib = sorted((_lib_row(w, e) for w, e in (library.all() or {}).items()),
+                 key=lambda x: (_ws_order.get(x["status"], 9), x["word"]))
 
     # Inzichten: claim + status + hoe vaak gegrond (geëmergeerd eerst).
     insights = sorted(
@@ -194,6 +210,8 @@ def gather(data_dir: str | None = None) -> dict:
         "insights": insights,
         "competitor_candidates": brands.candidates(),
         "competitor_confirmed": brands.confirmed(),
+        "competitor_news": comp_news,
+        "noochie_daily": noochie_daily,
         "link_candidates": links.candidates(),
         "link_pursued": links.pursued(),
         "competitor_config": _config_competitor_brands(dd),
@@ -655,46 +673,38 @@ def _word_metrics(x: dict) -> str:
     return f'<span class="muted">{sep.join(parts)}</span>'
 
 
-def _render_digest(d: dict) -> str:
-    """Weekrapport-blok: één overzicht dat je elke week opent. Pure render uit snap['digest']."""
+def _render_digest(d: dict, noochie: dict | None = None) -> str:
+    """Weekrapport: puur kwantitatief — hoeveel nieuw deze week — plus Noochie's dagverdict.
+    De details staan in de eigen secties (Woordenschat, Concurrenten, Linkbuilding)."""
     days = d.get("window_days", 7)
-    nt, ns = d.get("new_targets", []), d.get("new_seeds", [])
-    nl = d.get("new_links", [])
-    nc, conf = d.get("new_competitors", []), d.get("monitored_competitors", [])
-    _pm = {"hoog": "★ hoog", "midden": "midden", "laag": "laag", "onbekend": "?"}
-    cards = []
-    if nt:
-        rows = "".join(f'<li><b>{_e(x["word"])}</b> {_word_metrics(x)}</li>' for x in nt)
-        cards.append(f'<div class="dg"><h3>🎯 Doelwit-woorden — kans om te ranken ({len(nt)})</h3>'
-                     f'<ul>{rows}</ul></div>')
-    if ns:
-        rows = "".join(
-            f'<li><b>{_e(x["word"])}</b> '
-            f'{("<span class=muted>vol " + _e(x["volume"]) + "/mnd · voedt de radar</span>") if x.get("volume") is not None else "<span class=muted>voedt de radar</span>"}'
-            f'</li>' for x in ns)
-        cards.append(f'<div class="dg"><h3>🌱 Volg-woorden — seeds voor trends/SerpAPI ({len(ns)})</h3>'
-                     f'<ul>{rows}</ul></div>')
-    if nl:
-        rows = "".join(
-            f'<li>{_e(_pm.get(x["priority"], "?"))} — '
-            f'<a href="{_e(x.get("link", ""))}">{_e((x["title"])[:80])}</a></li>' for x in nl)
-        cards.append(f'<div class="dg"><h3>🔗 Nieuwe linkbuilding-doelwitten ({len(nl)})</h3>'
-                     f'<ul>{rows}</ul></div>')
-    if nc or conf:
-        line = (f'<p><b>Nieuw gespot:</b> {_e(", ".join(nc))}</p>' if nc else '')
-        line += (f'<p class="muted">Gemonitord: {_e(", ".join(conf))}</p>' if conf else '')
-        cards.append(f'<div class="dg"><h3>📈 Marktinteresse</h3>{line}</div>')
-    body = ("".join(cards) if cards else
-            '<p class="muted">Niks nieuws in de afgelopen {} dagen. Draai de village '
-            'voor verse signalen.</p>'.format(days))
-    style = ('<style>.digest{display:flex;flex-wrap:wrap;gap:1rem;margin:.3rem 0 1rem}'
-             '.digest .dg{background:var(--surface);border:1px solid var(--border);'
-             'border-radius:var(--radius);padding:.7rem 1rem;flex:1 1 250px;min-width:0;'
+    counts = [
+        ("🎯", len(d.get("new_targets", [])), "nieuwe doelwit-woorden"),
+        ("🌱", len(d.get("new_seeds", [])), "nieuwe volg-woorden (seeds)"),
+        ("🔗", len(d.get("new_links", [])), "nieuwe linkbuilding-doelwitten"),
+        ("👟", len(d.get("new_competitors", [])), "nieuw gespotte concurrenten"),
+    ]
+    tiles = "".join(
+        f'<div class="kpi"><div class="kpi-n">{ico} {n}</div>'
+        f'<div class="kpi-l">{_e(label)}</div></div>'
+        for ico, n, label in counts)
+    noochie_block = ""
+    if noochie and noochie.get("oordeel"):
+        v = noochie.get("verdict", "")
+        mark = "✅" if v == "ok" else ("⚠️" if v == "niet_ok" else "💬")
+        noochie_block = (
+            f'<div class="noochie">{mark} <b>Noochie vandaag:</b> {_e(noochie.get("oordeel"))} '
+            f'<span class="muted">({_e(noochie.get("date", ""))})</span></div>')
+    style = ('<style>.kpis{display:flex;flex-wrap:wrap;gap:.7rem;margin:.3rem 0 .6rem}'
+             '.kpi{background:var(--surface);border:1px solid var(--border);'
+             'border-radius:var(--radius);padding:.6rem .9rem;flex:1 1 150px;min-width:0;'
              'box-shadow:var(--shadow)}'
-             ".digest h3{font-family:var(--font-display);font-size:.82rem;margin:.1rem 0 .5rem;"
-             'color:var(--green-dark)}.digest ul{margin:.2rem 0;padding-left:1.1rem}'
-             '.digest li{margin:.15rem 0}.digest p{margin:.2rem 0}</style>')
-    return f'<h2>📊 Weekrapport — laatste {days} dagen</h2>{style}<div class="digest">{body}</div>'
+             '.kpi-n{font-family:var(--font-display);font-weight:800;font-size:1.3rem;'
+             'color:var(--green-dark)}.kpi-l{font-size:.78rem;color:var(--gray)}'
+             '.noochie{background:var(--cream-3);border:1px solid var(--border);'
+             'border-radius:var(--radius);padding:.55rem .9rem;margin:.2rem 0 1rem;font-size:.9rem}'
+             '</style>')
+    return (f'<h2>📊 Weekrapport — laatste {days} dagen</h2>{style}'
+            f'<div class="kpis">{tiles}</div>{noochie_block}')
 
 
 def render_html(snap: dict, csrf_token: str | None = None, msg=None,
@@ -775,28 +785,70 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'<tbody>{"".join(prows) or "<tr><td colspan=5 class=muted>geen open projecten</td></tr>"}</tbody></table>'
     )
 
-    # Woordenschat (keyword-library) — standaard alleen actief (approved); geschiedenis toont alle.
+    # Woordenschat (keyword-library): gesplitst in doelwit-woorden (rank: volume/kans/positie)
+    # en volg-woorden (seed: 12-mnd trend). Alleen approved; geschiedenis toont alle statussen.
     lib = snap.get("library", [])
-    show_lib = lib if show_all else [x for x in lib if x["status"] == "approved"]
-    _fn_label = {"doelwit": "🎯 doelwit", "volg": "🌱 volg"}
+    approved_lib = [x for x in lib if x["status"] == "approved"]
+    targets = [x for x in approved_lib if x.get("function") == "doelwit"]
+    seeds = [x for x in approved_lib if x.get("function") == "volg"]
 
-    def _func_cell(x):
-        fn = x.get("function", "doelwit")
-        chip = f'<span class="chip">{_e(_fn_label.get(fn, fn))}</span>'
-        if not writable or x["status"] != "approved":
-            return chip
-        # flip naar het andere type
-        other = "volg" if fn == "doelwit" else "doelwit"
-        btn = _func_btn(x["word"], other, "→ " + _fn_label.get(other, other), csrf_token)
-        return f'{chip} {btn}'
-    lrows = "".join(
+    def _flip(word, to, label):
+        return _func_btn(word, to, label, csrf_token) if writable else ""
+
+    def _pos_cell(x):
+        if x.get("gsc_seen") is True:
+            return f'positie {_e(x.get("gsc_position"))} ({_e(x.get("gsc_clicks") or 0)} klik)'
+        if x.get("gsc_seen") is False:
+            return '<span class="muted">nog niet in Google</span>'
+        return '<span class="muted">—</span>'
+
+    def _num(v, suffix=""):
+        return f'{_e(v)}{suffix}' if v is not None else '<span class="muted">—</span>'
+
+    # Doelwit-woorden: waar we op willen ranken (sorteer op kans).
+    trows = "".join(
         f'<tr><td><b>{_e(x["word"])}</b></td>'
-        f'<td><span class="chip">{_e(x["status"])}</span></td>'
-        f'<td>{_func_cell(x)}</td>'
-        f'<td class="muted">{_e(x.get("date", ""))}</td></tr>' for x in show_lib)
-    lib_tbl = ('<table><thead><tr><th>woord</th><th>status</th><th>functie</th>'
-               '<th>actief sinds</th></tr></thead>'
-               f'<tbody>{lrows or "<tr><td colspan=4 class=muted>geen actieve woorden</td></tr>"}</tbody></table>')
+        f'<td>{_num(x.get("volume"), "/mnd")}</td>'
+        f'<td>{("<b>" + _e(x["opportunity"]) + "</b>") if x.get("opportunity") is not None else "<span class=muted>—</span>"}</td>'
+        f'<td>{_pos_cell(x)}</td>'
+        f'<td>{_flip(x["word"], "volg", "→ 🌱 volg")}</td></tr>'
+        for x in sorted(targets, key=lambda x: -((x.get("opportunity") if x.get("opportunity") is not None else -1))))
+    targets_tbl = (
+        '<table><thead><tr><th>doelwit-woord</th><th>volume</th><th>kans</th>'
+        '<th>onze Google-stand</th><th></th></tr></thead>'
+        f'<tbody>{trows or "<tr><td colspan=5 class=muted>geen doelwit-woorden</td></tr>"}</tbody></table>')
+
+    # Volg-woorden: seeds voor de radar; toon de 12-maands trend i.p.v. kans.
+    def _trend_cell(x):
+        tp = x.get("trend_pct")
+        if tp is None:
+            return '<span class="muted">— (draai enrich_volumes)</span>'
+        arrow = "▲" if tp > 0 else ("▼" if tp < 0 else "▬")
+        sign = "+" if tp > 0 else ""
+        return f'{arrow} {sign}{_e(tp)}% <span class="muted">(12 mnd)</span>'
+    srows = "".join(
+        f'<tr><td><b>{_e(x["word"])}</b></td>'
+        f'<td>{_num(x.get("volume"), "/mnd")}</td>'
+        f'<td>{_trend_cell(x)}</td>'
+        f'<td>{_flip(x["word"], "doelwit", "→ 🎯 doelwit")}</td></tr>'
+        for x in sorted(seeds, key=lambda x: -((x.get("trend_pct") if x.get("trend_pct") is not None else -9999))))
+    seeds_tbl = (
+        '<table><thead><tr><th>volg-woord (seed)</th><th>volume</th>'
+        '<th>trend</th><th></th></tr></thead>'
+        f'<tbody>{srows or "<tr><td colspan=4 class=muted>geen volg-woorden</td></tr>"}</tbody></table>')
+
+    lib_tbl = (f'<h3 style="margin:.6rem 0 .2rem">🎯 Doelwit-woorden — waar we op willen ranken ({len(targets)})</h3>'
+               f'{targets_tbl}'
+               f'<h3 style="margin:1rem 0 .2rem">🌱 Volg-woorden — seeds voor de radar ({len(seeds)})</h3>'
+               f'{seeds_tbl}')
+    if show_all:                                          # geschiedenis: ook niet-approved woorden
+        other = [x for x in lib if x["status"] != "approved"]
+        orows = "".join(
+            f'<tr><td><b>{_e(x["word"])}</b></td><td><span class="chip">{_e(x["status"])}</span></td>'
+            f'<td class="muted">{_e(x.get("date", ""))}</td></tr>' for x in other)
+        lib_tbl += ('<h3 style="margin:1rem 0 .2rem">Overige (geschiedenis)</h3>'
+                    '<table><thead><tr><th>woord</th><th>status</th><th>datum</th></tr></thead>'
+                    f'<tbody>{orows or "<tr><td colspan=3 class=muted>geen</td></tr>"}</tbody></table>')
 
     # Escalated-berg: termen die de Librarian naar de mens escaleerde. Afroombaar met
     # één klik (keur goed → approved / verbied → forbidden). Dit dweilt het kerkhof leeg.
@@ -836,14 +888,30 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         for c in cands)
     cand_tbl = ('<table><thead><tr><th>gespot merk</th><th>in artikel</th><th>jouw oordeel</th></tr></thead>'
                 f'<tbody>{crows or "<tr><td colspan=3 class=muted>geen nieuwe merken gespot</td></tr>"}</tbody></table>')
-    conf_line = (
-        (f'<p class="muted">Gemonitord ({len(monitored)}): {_e(", ".join(monitored))}'
-         + (f' <span class="muted">— vast: {_e(", ".join(config_brands))}; door jou toegevoegd: '
-            f'{_e(", ".join(confirmed))}</span>' if (config_brands and confirmed) else '')
-         + '</p>') if monitored else '')
+    # Volledige monitor-lijst: élke gemonitorde concurrent + zijn laatste nieuwsfeit.
+    news = snap.get("competitor_news", {}) or {}
+    _conf_set = {b.lower() for b in confirmed}
+
+    def _herkomst(b):
+        return "door jou" if b.lower() in _conf_set else "vast"
+    mrows = ""
+    for b in monitored:
+        n = news.get(b) or {}
+        if n.get("title"):
+            feit = (f'<a href="{_e(n.get("link", ""))}">{_e(n["title"][:90])}</a>'
+                    f' <span class="muted">({_e(n.get("date", ""))})</span>')
+        else:
+            feit = '<span class="muted">geen recent nieuws opgehaald</span>'
+        mrows += (f'<tr><td><b>{_e(b)}</b> <span class="muted">{_herkomst(b)}</span></td>'
+                  f'<td>{feit}</td></tr>')
+    monitor_tbl = (
+        '<table><thead><tr><th>concurrent</th><th>laatste nieuwsfeit</th></tr></thead>'
+        f'<tbody>{mrows or "<tr><td colspan=2 class=muted>geen concurrenten gemonitord</td></tr>"}</tbody></table>')
     comp_block = (f'<h2>Concurrenten</h2>'
                   f'<details open><summary>🔮 Nieuw gespot — wacht op jouw oordeel ({len(cands)})</summary>'
-                  f'{cand_tbl}</details>{conf_line}') if (cands or monitored) else ''
+                  f'{cand_tbl}</details>'
+                  f'<details open><summary>📡 Gemonitord — alle concurrenten ({len(monitored)})</summary>'
+                  f'{monitor_tbl}</details>') if (cands or monitored) else ''
 
     # Linkbuilding: gidsen/lijstjes waar Nooch in vermeld wil worden (hoog = noemt
     # concurrenten maar niet Nooch → sterkste pitch).
@@ -886,12 +954,12 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'<h1>NoochVille cockpit {badge}</h1>'
         f'<div class="bar">{_e(counts)} · gegenereerd {_e(_ts(snap.get("generated_at")))} · {hist}</div>'
         f'{_banner(msg)}'
-        f'{_render_digest(snap.get("digest", {}))}'
+        f'{_render_digest(snap.get("digest", {}), snap.get("noochie_daily", {}))}'
         f'<h2>Inbox</h2>{inbox_tbl}'
         f'<h2>Proces (projecten)</h2>{proj_tbl}'
         f'<h2>Kennis</h2>'
         f'{esc_block}'
-        f'<details><summary>Woordenschat ({len(show_lib)} woorden)</summary>{lib_tbl}</details>'
+        f'<details open><summary>Woordenschat ({len(approved_lib)} actieve woorden)</summary>{lib_tbl}</details>'
         f'<details><summary>Inzichten — kennislaag ({len(ins)} kaartjes)</summary>{ins_tbl}</details>'
         f'<details><summary>Roster ({sum(1 for r in roster if not r["archived"])} actieve rollen)</summary>{roster_tbl}</details>'
         f'{comp_block}'
