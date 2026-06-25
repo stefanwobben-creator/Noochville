@@ -96,6 +96,7 @@ def enrich_library(library, context, *, apply: bool = True, only_missing: bool =
             st = trend_state(series)
             if st is not None:
                 updates["trend_state"] = st
+                updates["trend_series"] = series          # bewaar de curve voor de sparkline
             time.sleep(sleep)
 
         if updates and apply:

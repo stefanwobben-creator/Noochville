@@ -189,7 +189,7 @@ def gather(data_dir: str | None = None) -> dict:
                 "function": fn,
                 "volume": ev.get("volume"), "opportunity": ev.get("opportunity"),
                 "competition": ev.get("competition"), "trend_pct": ev.get("trend_pct"),
-                "trend_state": ev.get("trend_state"),
+                "trend_state": ev.get("trend_state"), "trend_series": ev.get("trend_series"),
                 "gsc_seen": ev.get("gsc_seen"), "gsc_position": ev.get("gsc_position"),
                 "gsc_clicks": ev.get("gsc_clicks")}
     lib = sorted((_lib_row(w, e) for w, e in (library.all() or {}).items()),
@@ -675,6 +675,24 @@ def _word_metrics(x: dict) -> str:
     return f'<span class="muted">{sep.join(parts)}</span>'
 
 
+def _sparkline(values, width: int = 90, height: int = 22) -> str:
+    """Mini-lijngrafiek (inline SVG) van een interesse-reeks, zodat je het trend-label
+    tegen de echte curve kunt leggen. Lege string bij te weinig data."""
+    vals = [float(v) for v in (values or []) if isinstance(v, (int, float))]
+    if len(vals) < 2:
+        return ""
+    lo, hi = min(vals), max(vals)
+    rng = (hi - lo) or 1.0
+    n = len(vals)
+    pts = " ".join(
+        f"{i / (n - 1) * width:.1f},{height - (v - lo) / rng * height:.1f}"
+        for i, v in enumerate(vals))
+    return (f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
+            f'preserveAspectRatio="none" style="vertical-align:middle;margin-right:.3rem">'
+            f'<polyline points="{pts}" fill="none" stroke="var(--green-dark)" '
+            f'stroke-width="1.5"/></svg>')
+
+
 def _render_digest(d: dict, noochie: dict | None = None) -> str:
     """Weekrapport: puur kwantitatief — hoeveel nieuw deze week — plus Noochie's dagverdict.
     De details staan in de eigen secties (Woordenschat, Concurrenten, Linkbuilding)."""
@@ -820,11 +838,13 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         '<th>onze Google-stand</th><th></th></tr></thead>'
         f'<tbody>{trows or "<tr><td colspan=5 class=muted>geen doelwit-woorden</td></tr>"}</tbody></table>')
 
-    # Volg-woorden: seeds voor de radar; toon de meerjarige trend-toestand (5 jaar) i.p.v. kans.
+    # Volg-woorden: seeds voor de radar; toon de meerjarige trend-toestand (5 jaar) + sparkline.
     def _trend_cell(x):
         st = x.get("trend_state")
         if st:
-            return f'{_e(trend_state_label(st))} <span class="muted">(5 jr)</span>'
+            spark = _sparkline(x.get("trend_series"))
+            return (f'{spark} {_e(trend_state_label(st))} <span class="muted">(5 jr)</span>'
+                    if spark else f'{_e(trend_state_label(st))} <span class="muted">(5 jr)</span>')
         tp = x.get("trend_pct")                            # fallback: 12-mnd % als er nog geen toestand is
         if tp is not None:
             arrow = "▲" if tp > 0 else ("▼" if tp < 0 else "▬")

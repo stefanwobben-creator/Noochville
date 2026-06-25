@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from nooch_village.trend_analysis import trend_state, trend_state_label
 from nooch_village.skills_impl.serpapi_trends import _series_from_timeseries
+from nooch_village.cockpit import _sparkline
 
 
 def test_opkomend():
@@ -28,6 +29,18 @@ def test_piek_voorbij():
     assert trend_state(up + down) == "piek-voorbij"
 
 
+def test_milde_afkoeling_blijft_stabiel():
+    # hoog plateau (90) met een lichte recente dip (naar 84): geen 25% val vanaf piek → stabiel
+    plateau = [90] * 48 + [88, 87, 86, 85, 85, 84, 84, 84, 84, 84, 84, 84]
+    assert trend_state(plateau) == "stabiel"
+
+
+def test_forse_val_vanaf_piek_is_piek_voorbij():
+    # piek 100 in het verleden, recent niveau ~35 (65% lager) → piek-voorbij
+    series = list(range(20, 100, 4)) + list(range(96, 30, -3))
+    assert trend_state(series) == "piek-voorbij"
+
+
 def test_te_weinig_data():
     assert trend_state([1, 2, 3]) is None
     assert trend_state([]) is None
@@ -36,6 +49,12 @@ def test_te_weinig_data():
 def test_label():
     assert "opkomend" in trend_state_label("opkomend")
     assert trend_state_label(None) == "—"
+
+
+def test_sparkline():
+    svg = _sparkline([10, 20, 15, 30])
+    assert svg.startswith("<svg") and "polyline" in svg
+    assert _sparkline([]) == "" and _sparkline([5]) == ""
 
 
 def test_series_parser():
