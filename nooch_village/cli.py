@@ -230,6 +230,14 @@ def main() -> None:
             sys.exit(1)
         grant_skill_via_governance(sys.argv[2], sys.argv[3], " ".join(sys.argv[4:]))
 
+    elif mode == "grant_accountability":
+        from nooch_village.role_proposals import grant_accountability_via_governance
+        if len(sys.argv) < 4:
+            print("Gebruik: python -m nooch_village.village grant_accountability <role_id> <accountability>",
+                  file=sys.stderr)
+            sys.exit(1)
+        grant_accountability_via_governance(sys.argv[2], sys.argv[3], " ".join(sys.argv[4:]))
+
     elif mode == "revoke_skill":
         from nooch_village.role_proposals import revoke_skill_via_governance
         if len(sys.argv) < 4:

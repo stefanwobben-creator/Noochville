@@ -125,6 +125,7 @@ class WebsiteWatcherWorker(Inhabitant):
             note = self.use_skill("field_note", {"plausible": plausible, "trends": trends})
 
             self._log_pulse_metrics(plausible)
+            self._surface_locale(plausible)
 
             self._propose_related(trends)
             self._sense_goal_gap(plausible)
@@ -139,6 +140,20 @@ class WebsiteWatcherWorker(Inhabitant):
             self._busy = False
         self._maybe_reflect(None)
         self._scan_queued_projects(None)
+
+    def _surface_locale(self, plausible: dict) -> None:
+        """Duid de bezoekersdata per locale (Plausible country-breakdown). De capaciteit zit al
+        in plausible_stats; deze stap ontsluit 'm zodat de accountability 'bezoekersdata per
+        locale duiden' echt wordt uitgevoerd, en publiceert het als signaal voor Noochie."""
+        countries = (plausible or {}).get("countries") or []
+        rows = [{"locale": (c.get("country") or c.get("name") or "?"),
+                 "visitors": c.get("visitors", 0)} for c in countries if isinstance(c, dict)]
+        if not rows:
+            return
+        top = rows[:6]
+        self.log.info("📍 bezoekers per locale: %s",
+                      ", ".join(f"{r['locale']} {r['visitors']}" for r in top))
+        self.bus.publish(Event("locale_insight", {"by": self.id, "countries": rows[:10]}, self.id))
 
     def _maybe_trends(self) -> dict:
         """Trends best-effort via SerpApi, zuinig (wekelijkse cadans) en bounded.
@@ -1481,6 +1496,7 @@ class Noochie(Inhabitant):
         "competitor_signal",
         "linkbuilding_target",
         "competitor_interest",
+        "locale_insight",
     )
 
     def __init__(self, *args, **kwargs):

@@ -10,7 +10,8 @@ from nooch_village.event_bus import EventBus
 from nooch_village.governance import Records, Gate, Secretary
 from nooch_village.seeds import seed_records, migrate_records
 from nooch_village.role_proposals import (
-    build_concurrent_scout_proposal, build_grant_skill_proposal)
+    build_concurrent_scout_proposal, build_grant_skill_proposal,
+    build_grant_accountability_proposal)
 
 
 def _records(tmp_path):
@@ -48,3 +49,14 @@ def test_librarian_ke_grant_passeert_en_is_idempotent(tmp_path):
     assert "keywords_everywhere" in lib.definition.skills
     # idempotent: geen dubbele entry
     assert lib.definition.skills.count("keywords_everywhere") == 1
+
+
+def test_website_watcher_locale_accountability_via_governance(tmp_path):
+    r = _records(tmp_path)
+    p = build_grant_accountability_proposal("website_watcher", "bezoekersdata per locale duiden")
+    with patch("nooch_village.llm.reason", return_value=None):
+        passed, gate, reason = Gate().check(p, r, None)
+    assert passed, f"geblokkeerd op {gate}: {reason}"
+    Secretary(r, EventBus(name="t"))._adopt(p)
+    ww = r.get("website_watcher")
+    assert "bezoekersdata per locale duiden" in ww.definition.accountabilities
