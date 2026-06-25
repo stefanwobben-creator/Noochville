@@ -310,12 +310,42 @@ class Inhabitant(threading.Thread):
 
         Gaat NIET door de governance-gate: geen amend_role, geen voorstel, geen churn.
         De inbox dedupt op gap_key zodat het hooguit één keer verschijnt.
+
+        Cross-path-memory: staat dit gat al in de inbox-historie (welke status dan ook,
+        ook resolved/withdrawn/deferred), dan eenmaal-gemeld-altijd-stil — niet opnieuw
+        sensen. Anders blijft een rol elke reflect hetzelfde gat publiceren, en evalueert
+        de B-observer het telkens opnieuw als ruis (de 'resolve-dan-opnieuw'-lus).
         """
+        if self._means_gap_already_known(gap_key):
+            self.log.info(
+                "🤫 means-gap '%s' staat al in de inbox-historie → niet opnieuw gesensed",
+                gap_key)
+            return
         self.bus.publish(Event("means_gap_sensed", {
             "gap_key":     gap_key,
             "description": description,
             "by":          self.id,
         }, self.id))
+
+    def _means_gap_already_known(self, gap_key: str) -> bool:
+        """True als er al een means_gap-item met dit gap_key in de inbox staat — ongeacht
+        status. Spiegelt de dedup-sleutel van HumanInbox.add_means_gap (type + subject),
+        maar dan aan de sense-kant zodat ook het event en de B-observer-ruis stoppen."""
+        data_dir = getattr(self.context, "data_dir", None)
+        if not data_dir:
+            return False
+        inbox_path = os.path.join(data_dir, "human_inbox.json")
+        if not os.path.exists(inbox_path):
+            return False
+        try:
+            with open(inbox_path) as f:
+                inbox = json.load(f)
+        except Exception:
+            return False
+        return any(
+            item.get("type") == "means_gap" and item.get("subject") == gap_key
+            for item in inbox.values()
+        )
 
     def _do_own_work(self, tension: Tension) -> None:
         """De spanning valt binnen mijn eigen rol — wordt hier al opgepakt."""
