@@ -319,3 +319,28 @@ activated die al als schuld op de lijst stond. Detectie nu; harde preventie (rec
 Secretary) en skill-grant-provenance blijven als vollere B-stap open.
 
 Tests: 862 → 874. Actie op live-data: `python -m nooch_village.village formalize`.
+
+---
+
+## 2026-06-25 — Sessie: test-isolatie, cross-path-memory, weekrapport
+
+**[fix] Test-data-isolatie.** Vondst: de echte `human_inbox.json` bevatte 130+ `nonexistent_test_rol`-
+items. Oorzaak: `test_the_source` (en 9 andere tests) bouwden een volledige `Village()` zonder data-dir-
+override → schreven in de productie-`data/`. Conftest autouse-fixture wijst `BASE_DIR` nu per test naar
+een eigen tmp-map (echte config gesymlinkt zodat settings/strategy blijven laden). Bewijs: inbox bleef
+170 tijdens de hele suite (geen groei). 120 junk-items opgeschoond (50 echte over, `.bak` bewaard).
+
+**[fix] Cross-path-memory voor means-gaps.** Harry sensde `nl_corpus_bron_onbruikbaar` 11×: de inbox
+dedupliceerde het item al, maar het EVENT bleef komen → de B-observer her-evalueerde het telkens als
+ruis (resolve-dan-opnieuw-lus). `_report_means_gap` checkt nu de inbox-historie (type means_gap +
+subject, ongeacht status): staat het er al, dan stil. Spiegelt `add_means_gap` aan de sense-kant.
+
+**[feat] Weekrapport in de cockpit.** `compute_digest()` (pure functie, geen I/O) + `_render_digest()`
+bovenaan `render_html`: één overzicht over de afgelopen 7 dagen — nieuw goedgekeurde woorden (met
+vraag-signaal), nieuwe linkbuilding-doelwitten (★ hoog eerst), marktinteresse (nieuw + gemonitord).
+
+**[les]** Twee van de drie waren onzichtbare ruis: testjunk in productie-data en een gat dat eindeloos
+opnieuw gesensed werd. Beide opgelost bij de wortel (isolatie-fixture; sense-kant-geheugen), niet met
+een eenmalige opruiming. Het weekrapport maakt de waarde die het dorp produceert in één blik zichtbaar.
+
+Tests: 874 → 889.

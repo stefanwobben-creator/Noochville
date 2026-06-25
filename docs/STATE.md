@@ -1,10 +1,27 @@
-# NoochVille — State & Handover (2026-06-24)
+# NoochVille — State & Handover (2026-06-25)
 
 > STATE = huidige waarheid, vervang bij update. `docs/JOURNAL.md` = historie, append-only.
 
-## Waar we staan (2026-06-24)
+## Waar we staan (2026-06-25)
 
-**Suite: 874 tests groen** (gegroeid van ~688 in de latere sessie van 24/6). Elke stap met mutatie-check.
+**Suite: 889 tests groen.** Elke stap met mutatie-check.
+
+### Sessie 2026-06-25: test-isolatie, cross-path-memory, weekrapport
+
+- **Fix — test-data-isolatie** (`tests/conftest.py`): tests die een volledige `Village()` bouwden
+  (o.a. `test_the_source`) schreven in de échte `data/` en hadden 120 `nonexistent_test_rol`-items in
+  de productie-`human_inbox.json` gepompt. Autouse-fixture wijst `BASE_DIR` nu per test naar een eigen
+  tmp-map (config gesymlinkt). Bewezen: inbox bleef 170 tijdens de hele suite. Echte inbox opgeschoond
+  (120 weg, 50 echte over, `.bak` veiliggesteld). Bonus: voorkomt ook `.env`-lek in `os.environ`.
+- **Spanning — cross-path-memory voor means-gaps** (`inhabitant.py`): een rol bleef elke reflect
+  hetzelfde gat (`nl_corpus_bron_onbruikbaar`, 11× gesensed) publiceren, ook nadat de mens het had
+  afgehandeld → B-observer her-evalueerde het telkens als ruis. `_report_means_gap` checkt nu de
+  inbox-historie (type means_gap + subject, ongeacht status): staat het er al, dan stil. Dicht de
+  resolve-dan-opnieuw-lus. Spiegelt `add_means_gap` aan de sense-kant.
+- **Functie — weekrapport** bovenaan de cockpit (`compute_digest` + `_render_digest`): één overzicht
+  over de afgelopen 7 dagen — nieuw goedgekeurde woorden (met vraag-signaal), nieuwe linkbuilding-
+  doelwitten (★ hoog eerst) en marktinteresse (nieuw gespotte + gemonitorde concurrenten). Pure,
+  testbare functie; live: 17 woorden, 23 doelwitten, 4 merken.
 
 ### Latere sessie 2026-06-24: cockpit-verwerking, LLM-ladder, markt- & linkbuilding-radar
 
