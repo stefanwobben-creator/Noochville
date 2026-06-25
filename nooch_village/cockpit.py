@@ -1007,15 +1007,30 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
             '<a href="/">cockpit</a></p><h1>🏛️ Voorstel behandelen</h1>')
     ch = item.get("change", {})
     accs = ch.get("add_accountabilities", [])
+    is_purpose = bool(ch.get("purpose")) and not accs and item["kind"] != "add_role"
+    flip_btn = ""
     if item["kind"] == "add_role":
         wijziging = (f'<b>Nieuwe rol:</b> {_e(item["role_id"])}<br>'
                      f'<b>Purpose:</b> {_e(ch.get("purpose",""))}'
                      + (f'<br><b>Eerste accountability:</b> {_e(accs[0])}' if accs else ""))
         huidig = '<p class="muted">Deze rol bestaat nog niet — dit is een voorstel voor een nieuwe rol.</p>'
     else:
-        wijziging = ('<b>Rol uitbreiden:</b> ' + _e(item["role_id"]) + '<br>'
-                     + '<b>Toe te voegen accountability:</b> '
-                     + "; ".join(_e(a) for a in accs))
+        if is_purpose:
+            wijziging = ('<b>Purpose wijzigen van rol:</b> ' + _e(item["role_id"]) + '<br>'
+                         + '<b>Nieuwe purpose:</b> ' + _e(ch.get("purpose", "")))
+            flip_lbl = "↔ dit gaat eigenlijk over een accountability"
+        else:
+            wijziging = ('<b>Rol uitbreiden:</b> ' + _e(item["role_id"]) + '<br>'
+                         + '<b>Toe te voegen accountability:</b> '
+                         + "; ".join(_e(a) for a in accs))
+            flip_lbl = "↔ dit gaat eigenlijk over de purpose"
+        flip_btn = (
+            f'<form method="post" action="/action" style="display:inline">'
+            f'<input type="hidden" name="csrf" value="{_e(token)}">'
+            f'<input type="hidden" name="iid" value="{_e(item["id"])}">'
+            f'<input type="hidden" name="next" value="/roloverleg?iid={_e(item["id"])}">'
+            f'<button class="btn" type="submit" name="action" value="rov_flip_facet">'
+            f'{flip_lbl}</button></form>')
         if role_snapshot:
             al = "".join(f"<li>{_e(a)}</li>" for a in role_snapshot.get("accountabilities", [])) \
                  or "<li class=muted>nog geen</li>"
@@ -1059,6 +1074,7 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
             f'<h2>{_e(item["title"])}</h2>'
             f'<div style="margin:.3rem 0"><b>Huidige situatie</b><br>{huidig}</div>'
             f'<div style="margin:.3rem 0">{wijziging}</div>'
+            f'{(("<div style=margin:.2rem0>" + flip_btn + "</div>") if flip_btn else "")}'
             f'<div class="muted"><b>Reden:</b> {_e(item.get("reason",""))}</div>'
             f'{sec}{react_log}</div>')
     inner = (f'{head}{_banner(msg)}{card}{react_form}{decide}'
@@ -1821,7 +1837,8 @@ def _flash(result: dict) -> str:
     _rov = {"reacted": "🤖 Voorstel aangepast op basis van je reactie.",
             "consented": "✓ Consent — wordt doorgevoerd bij einde roloverleg.",
             "objected": "⚠ Als schadelijk gemarkeerd — blijft staan voor de volgende keer.",
-            "added": "➕ Voorstel op de agenda gezet."}
+            "added": "➕ Voorstel op de agenda gezet.",
+            "flipped": "↔ Omgezet (purpose ↔ accountability) en opnieuw geformuleerd."}
     if result.get("rov") in _rov:
         return _rov[result["rov"]]
     if result.get("rov") == "ended":
@@ -1961,11 +1978,17 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         return decide_opportunity(inbox, iid, "add", destination="project",
                                   owner=extra.get("owner", ""), scope_override=scope,
                                   project_status="draft", projects=projects)
-    if action in ("rov_react", "rov_consent", "rov_object", "rov_add", "rov_end"):
+    if action in ("rov_react", "rov_consent", "rov_object", "rov_add", "rov_end", "rov_flip_facet"):
         from nooch_village.roloverleg import (Agenda, amend_with_reaction, apply_consented,
-                                              secretary_check)
+                                              flip_facet)
         agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
         records = Records(os.path.join(dd, "governance_records.json"))
+        if action == "rov_flip_facet":
+            item = agenda.get(iid)
+            if item is None:
+                return {"ok": False, "error": "voorstel niet gevonden"}
+            agenda.update_change(iid, flip_facet(item))
+            return {"ok": True, "rov": "flipped"}
         if action == "rov_end":
             res = apply_consented(agenda, records)
             n_ok = sum(1 for r in res if r["status"] == "adopted")

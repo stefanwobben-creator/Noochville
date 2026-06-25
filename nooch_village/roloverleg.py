@@ -152,10 +152,12 @@ def amend_with_reaction(item: dict, reaction: str, *, examples_block: str = "",
         return change
     if llm_reason is None:
         from nooch_village.llm import reason as llm_reason
+    # Purpose-wijziging? (nieuwe rol = purpose, of een amend zonder accountabilities mét purpose)
     is_add = item.get("kind") == "add_role"
-    huidig = (change.get("purpose", "") if is_add
+    is_purpose = is_add or (bool(change.get("purpose")) and not change.get("add_accountabilities"))
+    huidig = (change.get("purpose", "") if is_purpose
               else (change.get("add_accountabilities") or [""])[0])
-    wat = "de purpose van een nieuwe rol" if is_add else "een accountability van een rol"
+    wat = "de purpose (reden van bestaan) van een rol" if is_purpose else "een accountability van een rol"
     prompt = (
         "Je past in een roloverleg (Holacracy) een governance-voorstel aan op basis van de "
         f"reactie van de mens. Het gaat om {wat}.\n\n" + ACCOUNTABILITY_RULES + "\n\n"
@@ -163,13 +165,14 @@ def amend_with_reaction(item: dict, reaction: str, *, examples_block: str = "",
         + f"Voorstel nu: {huidig}\nReden: {item.get('reason','')}\n"
         f"Reactie van de mens: {reaction}\n\n"
         "Schrijf de VERBETERDE versie, voluit en afgerond, in gewone taal. "
-        + ("Eén korte purpose-zin." if is_add else "Eén accountability (begint met de -en-vorm).")
+        + ("Eén korte purpose-zin (reden van bestaan, geen -en-vorm)." if is_purpose
+           else "Eén accountability (begint met de -en-vorm).")
         + " Eén regel, niets anders.")
     out = (llm_reason(prompt) or "").strip().splitlines()
     line = out[0].strip().strip('"- ').strip() if out else ""
     if not line:
         return change
-    if is_add:
+    if is_purpose:
         change["purpose"] = line[:140]
     else:
         accs = list(change.get("add_accountabilities", []))
@@ -179,6 +182,20 @@ def amend_with_reaction(item: dict, reaction: str, *, examples_block: str = "",
             accs = [line[:140]]
         change["add_accountabilities"] = accs
     return change
+
+
+def flip_facet(item: dict, *, examples_block: str = "", llm_reason=None) -> dict:
+    """Zet een amend-voorstel om tussen PURPOSE (ziel) en ACCOUNTABILITY (activiteit), voor als de
+    AI de bedoeling verkeerd inschatte. Geeft de nieuwe change-dict. Alleen zinvol bij amend_role."""
+    from nooch_village.inbox_actions import formulate_purpose, formulate_accountability
+    change = dict(item.get("change", {}))
+    title, reason = item.get("title", ""), item.get("reason", "")
+    is_purpose_now = bool(change.get("purpose")) and not change.get("add_accountabilities")
+    if is_purpose_now:
+        acc = formulate_accountability(title, reason, examples_block=examples_block, llm_reason=llm_reason)
+        return {"add_accountabilities": [acc]}
+    purpose = formulate_purpose(title, reason, examples_block=examples_block, llm_reason=llm_reason)
+    return {"purpose": purpose, "add_accountabilities": []}
 
 
 def apply_consented(agenda: Agenda, records) -> list[dict]:

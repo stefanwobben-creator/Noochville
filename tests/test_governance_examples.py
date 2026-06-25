@@ -5,7 +5,9 @@ from __future__ import annotations
 
 from nooch_village.governance_examples import (
     GovernanceExamples, parse_governance_text, few_shot_block)
-from nooch_village.inbox_actions import formulate_accountability, _route_kans_to_governance
+from nooch_village.inbox_actions import (
+    formulate_accountability, _route_kans_to_governance,
+    classify_governance_facet, formulate_purpose)
 
 
 _EXPORT = """Marketing
@@ -66,6 +68,43 @@ def test_formulate_accountability_en_regel_en_failclosed():
     # zonder LLM → fail-closed naar de titel
     assert formulate_accountability("social media bijhouden", "x",
                                     llm_reason=lambda p: None) == "social media bijhouden"
+
+
+def test_classify_facet_purpose_vs_accountability():
+    # trefwoord 'purpose' → purpose, zonder LLM nodig
+    assert classify_governance_facet("Vervang de purpose", "reden van bestaan helderder",
+                                     llm_reason=lambda p: None) == "purpose"
+    # geen signaal + geen LLM → default accountability
+    assert classify_governance_facet("Social media bijhouden", "posts plaatsen",
+                                     llm_reason=lambda p: None) == "accountability"
+    # LLM beslist als trefwoord ontbreekt
+    assert classify_governance_facet("De ziel van de rol", "x",
+                                     llm_reason=lambda p: "accountability") == "purpose"  # trefwoord 'ziel'
+
+
+def test_formulate_purpose_failclosed():
+    assert formulate_purpose("X", "reden van bestaan", llm_reason=lambda p: None) == "reden van bestaan"
+    out = formulate_purpose("X", "y", llm_reason=lambda p: "Het mogelijk maken van bewuste keuzes")
+    assert out == "Het mogelijk maken van bewuste keuzes"
+
+
+def test_route_purpose_wijzigt_purpose_niet_accountability(tmp_path):
+    from nooch_village.governance import Records
+    from nooch_village.models import Record, RoleDefinition, RecordType
+    recs = Records(str(tmp_path / "gov.json"))
+    recs.put(Record(id="noochville", type=RecordType.CIRCLE, parent=None,
+                    definition=RoleDefinition(purpose="Nooch", policies=[]), source="seed"))
+    recs.put(Record(id="scout", type=RecordType.ROLE, parent="noochville",
+                    definition=RoleDefinition(purpose="markt observeren", accountabilities=[]),
+                    source="seed"))
+    from nooch_village.roloverleg import Agenda
+    ag = Agenda(str(tmp_path / "ag.json"))
+    _route_kans_to_governance(recs, "scout", "Purpose aanscherpen",
+                              "de reden van bestaan helderder maken", "", None,
+                              llm_reason=lambda p: "Het wakker houden van de markt voor Nooch",
+                              agenda=ag)
+    item = ag.open()[0]
+    assert item["change"].get("purpose") and not item["change"].get("add_accountabilities")
 
 
 def test_route_naar_governance_gebruikt_geformuleerde_accountability(tmp_path):

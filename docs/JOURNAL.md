@@ -863,3 +863,14 @@ zoekwoord, één pagina telt bij één woord). cockpit.gather berekent per doelw
 en de doelwit-tabel toont een 'verkoop'-kolom (👟 N), gesorteerd op verkoop eerst (wat geld
 oplevert bovenaan). Zo zie je welke targets daadwerkelijk verkopen, niet alleen welke volume hebben.
 Tests: +test_attribution.py. Suite groen (522 + 493).
+
+## Governance: purpose-wijziging vs accountability (+ omzetten in het roloverleg)
+Een governance-kans wordt niet meer altijd een accountability. Nieuw in inbox_actions:
+classify_governance_facet (trefwoorden purpose/ziel/reden-van-bestaan, dan LLM, default
+accountability) en formulate_purpose (reden van bestaan, GEEN -en-vorm). _route_kans_to_governance:
+bij een bestaande rol → purpose-wijziging (change.purpose) of accountability (add_accountabilities)
+afhankelijk van de facet; bij een nieuwe rol → purpose + eerste accountability. Secretary._adopt
+voerde een purpose-amend al door. Roloverleg toont een purpose-wijziging correct (huidige vs nieuwe
+purpose), amend_with_reaction is purpose-bewust, en een knop 'rov_flip_facet' zet een voorstel met
+één klik om tussen purpose en accountability als de AI ernaast zat. Tests uitgebreid.
+Suite groen (525 + 493).

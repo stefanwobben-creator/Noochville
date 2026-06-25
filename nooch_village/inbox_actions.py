@@ -179,17 +179,26 @@ def _route_kans_to_governance(records, owner: str, title: str, wat: str, waarom:
     from nooch_village.governance import Gate, Secretary
     from nooch_village.models import Proposal, GovernanceChange, ChangeKind
     owner = (owner or "").strip()
-    # Formuleer de accountability volgens de Holacracy-regels (fail-closed → titel).
-    acc = formulate_accountability(title, wat, examples_block=examples_block, llm_reason=llm_reason)
     new_role = owner in ("", "__new__")
     if new_role:
+        # Nieuwe rol: purpose (ziel) + eerste accountability (activiteit), beide netjes geformuleerd.
         r_id = _re.sub(r"\W+", "_", title.lower())[:40].strip("_") or "nieuwe_rol"
+        purpose = formulate_purpose(title, wat, examples_block=examples_block, llm_reason=llm_reason)
+        acc = formulate_accountability(title, wat, examples_block=examples_block, llm_reason=llm_reason)
         change = GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id=r_id,
-                                  purpose=(wat or title)[:140], new_role_parent="noochville",
+                                  purpose=purpose, new_role_parent="noochville",
                                   add_accountabilities=[acc])
     else:
-        change = GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id=owner,
-                                  add_accountabilities=[acc])
+        # Bestaande rol: gaat dit over de PURPOSE (ziel) of een ACCOUNTABILITY (activiteit)?
+        facet = classify_governance_facet(title, wat, llm_reason=llm_reason)
+        if facet == "purpose":
+            change = GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id=owner,
+                                      purpose=formulate_purpose(title, wat, examples_block=examples_block,
+                                                                llm_reason=llm_reason))
+        else:
+            acc = formulate_accountability(title, wat, examples_block=examples_block, llm_reason=llm_reason)
+            change = GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id=owner,
+                                      add_accountabilities=[acc])
     if agenda is not None:
         # Op de roloverleg-agenda: niet nu doorvoeren, maar in het overleg behandelen.
         agenda.add(role_id=change.role_id,
@@ -391,6 +400,47 @@ def formulate_accountability(title: str, wat: str, *, examples_block: str = "",
     out = (llm_reason(prompt) or "").strip().splitlines()
     line = out[0].strip().strip('"- ').strip() if out else ""
     return line[:140] or title
+
+
+_PURPOSE_SIGNALS = ("purpose", "reden van bestaan", "bestaansrecht", "ziel", "waarom de rol",
+                    "doel van de rol", "missie van de rol", "reden waarom")
+
+
+def classify_governance_facet(title: str, wat: str, *, llm_reason=None) -> str:
+    """Bepaal of een governance-kans over de PURPOSE (ziel/reden van bestaan) gaat of over een
+    ACCOUNTABILITY (doorlopende activiteit). Heuristiek eerst (trefwoorden), dan optioneel LLM.
+    Default 'accountability'. Geeft 'purpose' of 'accountability'."""
+    blob = f"{title} {wat}".lower()
+    if any(s in blob for s in _PURPOSE_SIGNALS):
+        return "purpose"
+    if llm_reason is None:
+        from nooch_village.llm import reason as llm_reason
+    out = (llm_reason(
+        "In Holacracy is een PURPOSE de reden van bestaan van een rol (geen activiteit) en een "
+        "ACCOUNTABILITY een doorlopende activiteit. Gaat onderstaande wijziging over de purpose "
+        "of over een accountability?\n\n"
+        f"Wijziging: {title}\nToelichting: {wat}\n\n"
+        "Antwoord met PRECIES één woord: purpose of accountability.") or "").strip().lower()
+    return "purpose" if out.startswith("purpose") else "accountability"
+
+
+def formulate_purpose(title: str, wat: str, *, examples_block: str = "", llm_reason=None) -> str:
+    """Formuleer een PURPOSE: de reden van bestaan / het potentieel dat de rol nastreeft. GEEN
+    doorlopende activiteit, geen -en-vorm, geen taak; kort, de ziel van de rol mag doorklinken.
+    Fail-closed → de toelichting of titel."""
+    title = (title or "").strip()
+    if llm_reason is None:
+        from nooch_village.llm import reason as llm_reason
+    prompt = (
+        "Een PURPOSE in Holacracy is de reden van bestaan, het potentieel dat een rol nastreeft of "
+        "uitdrukt. GEEN doorlopende activiteit, GEEN -en-vorm vooraan, geen taak of meetbaar doel. "
+        "Kort en betekenisvol; de ziel van de rol mag erin doorklinken.\n\n"
+        + (examples_block + "\n\n" if examples_block else "")
+        + f"Kans: {title}\nToelichting: {wat}\n\n"
+        "Schrijf PRECIES één korte purpose-zin, niets anders.")
+    out = (llm_reason(prompt) or "").strip().splitlines()
+    line = out[0].strip().strip('"- ').strip() if out else ""
+    return line[:140] or (wat or title)[:140]
 
 
 def pick_governance_target(roster_ids, title: str, wat: str, *, examples_block: str = "",
