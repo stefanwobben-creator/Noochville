@@ -4,7 +4,11 @@
 
 ## Waar we staan (2026-06-25)
 
-**Suite: 904 tests groen.** Elke stap met mutatie-check.
+**Suite: 912 tests groen.** Elke stap met mutatie-check.
+
+### Sessie 2026-06-25 (vervolg 3): seed-trend als meerjarige toestand
+
+- **Volg-woorden tonen een trend-toestand** (opkomend/stabiel/piek-voorbij/dalend) uit een 5-jaars Google Trends-reeks i.p.v. een 12-maands percentage. `trend_analysis.trend_state` (pure classifier: helling totaal + recent + piekpositie), `serpapi_trends.series(term, timeframe='today 5-y')` haalt de reeks op, `enrich_volumes` slaat `trend_state` op voor seeds. Trendwatcher-advies: een jaar is te kort om fad van structurele trend te scheiden; de meerjarige vorm is de echte lens. Cockpit toont de toestand (met 12-mnd% als fallback).
 
 ### Sessie 2026-06-25 (vervolg 2): cockpit-herinrichting
 

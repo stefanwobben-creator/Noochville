@@ -24,6 +24,7 @@ from nooch_village.governance import Records
 from nooch_village.human_inbox import HumanInbox
 from nooch_village.projects import ProjectLedger
 from nooch_village.library import Library, classify_function
+from nooch_village.trend_analysis import trend_state_label
 from nooch_village.notes_store import NotesStore
 from nooch_village.inbox_actions import (
     decide_keyword, defer_item, confirm_item, mark_done, resolve_tension, add_reference,
@@ -188,6 +189,7 @@ def gather(data_dir: str | None = None) -> dict:
                 "function": fn,
                 "volume": ev.get("volume"), "opportunity": ev.get("opportunity"),
                 "competition": ev.get("competition"), "trend_pct": ev.get("trend_pct"),
+                "trend_state": ev.get("trend_state"),
                 "gsc_seen": ev.get("gsc_seen"), "gsc_position": ev.get("gsc_position"),
                 "gsc_clicks": ev.get("gsc_clicks")}
     lib = sorted((_lib_row(w, e) for w, e in (library.all() or {}).items()),
@@ -818,20 +820,25 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         '<th>onze Google-stand</th><th></th></tr></thead>'
         f'<tbody>{trows or "<tr><td colspan=5 class=muted>geen doelwit-woorden</td></tr>"}</tbody></table>')
 
-    # Volg-woorden: seeds voor de radar; toon de 12-maands trend i.p.v. kans.
+    # Volg-woorden: seeds voor de radar; toon de meerjarige trend-toestand (5 jaar) i.p.v. kans.
     def _trend_cell(x):
-        tp = x.get("trend_pct")
-        if tp is None:
-            return '<span class="muted">— (draai enrich_volumes)</span>'
-        arrow = "▲" if tp > 0 else ("▼" if tp < 0 else "▬")
-        sign = "+" if tp > 0 else ""
-        return f'{arrow} {sign}{_e(tp)}% <span class="muted">(12 mnd)</span>'
+        st = x.get("trend_state")
+        if st:
+            return f'{_e(trend_state_label(st))} <span class="muted">(5 jr)</span>'
+        tp = x.get("trend_pct")                            # fallback: 12-mnd % als er nog geen toestand is
+        if tp is not None:
+            arrow = "▲" if tp > 0 else ("▼" if tp < 0 else "▬")
+            sign = "+" if tp > 0 else ""
+            return f'{arrow} {sign}{_e(tp)}% <span class="muted">(12 mnd)</span>'
+        return '<span class="muted">— (draai enrich_volumes)</span>'
     srows = "".join(
         f'<tr><td><b>{_e(x["word"])}</b></td>'
         f'<td>{_num(x.get("volume"), "/mnd")}</td>'
         f'<td>{_trend_cell(x)}</td>'
         f'<td>{_flip(x["word"], "doelwit", "→ 🎯 doelwit")}</td></tr>'
-        for x in sorted(seeds, key=lambda x: -((x.get("trend_pct") if x.get("trend_pct") is not None else -9999))))
+        for x in sorted(seeds, key=lambda x: (
+            {"opkomend": 0, "stabiel": 1, "piek-voorbij": 2, "dalend": 3}.get(x.get("trend_state"), 4),
+            -((x.get("volume") or 0)))))
     seeds_tbl = (
         '<table><thead><tr><th>volg-woord (seed)</th><th>volume</th>'
         '<th>trend</th><th></th></tr></thead>'

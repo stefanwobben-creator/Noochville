@@ -401,3 +401,19 @@ Nieuwe store `competitor_news.json`, geschreven door de scout in `_run_news`; ee
 laatste veldrapport (8 merken, 6 met nieuws).
 
 Tests: 900 → 904. Mac: na `enrich_volumes` verschijnt de seed-trend%; elke pulse ververst het nieuws.
+
+---
+
+## 2026-06-25 (vervolg 4) — Seed-trend als meerjarige toestand
+
+**[feat]** Op advies (trendwatcher-lens): een jaar is te kort om een fad van een structurele trend te
+scheiden. Volg-woorden krijgen nu een trend-TOESTAND uit een 5-jaars Google Trends-reeks, niet één
+percentage. `trend_analysis.trend_state` leest de vórm van de curve (totale helling, recente helling,
+piekpositie) → opkomend / stabiel / piek-voorbij / dalend. `serpapi_trends.series(timeframe='today 5-y')`
+haalt de TIMESERIES op; `enrich_volumes` slaat de toestand op voor seeds (doelwit-woorden niet). Cockpit
+toont de toestand met pijl; 12-mnd% blijft fallback tot een seed verrijkt is.
+
+**[les]** Eén bron/één getal is fragiel (seizoen, endpoints). De toestand-classificatie uit de curve-vorm
+is robuuster dan een kaal percentage — precies wat een trendwatcher zou doen.
+
+Tests: 904 → 912.

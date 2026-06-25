@@ -37,6 +37,20 @@ def _parse_timeseries(resp: dict) -> tuple[int | None, str]:
     return latest, direction
 
 
+def _series_from_timeseries(resp: dict) -> list[int]:
+    """De volledige interesse-reeks (chronologisch) uit een TIMESERIES-respons."""
+    td = (resp.get("interest_over_time") or {}).get("timeline_data") or []
+    vals: list[int] = []
+    for point in td:
+        values = point.get("values") or []
+        if values and values[0].get("extracted_value") is not None:
+            try:
+                vals.append(int(values[0]["extracted_value"]))
+            except (TypeError, ValueError):
+                pass
+    return vals
+
+
 def _parse_related(resp: dict) -> tuple[list[dict], list[dict]]:
     """Haal top- en rising-gerelateerde queries uit een RELATED_QUERIES-respons."""
     rq = resp.get("related_queries") or {}
@@ -72,6 +86,23 @@ class SerpapiTrendsSkill(Skill):
         r = requests.get(_ENDPOINT, params=params, timeout=20)
         r.raise_for_status()
         return r.json()
+
+    def series(self, term: str, context, *, geo: str | None = None,
+               timeframe: str = "today 5-y") -> list[int]:
+        """Eén TIMESERIES-call: de meerjarige interesse-reeks voor één term (voor trend-toestand).
+        Faalt closed: lege lijst bij geen key of API-fout."""
+        import os as _os
+        key = (getattr(context, "settings", {}) or {}).get("serpapi_api_key") \
+            or _os.environ.get("SERPAPI_API_KEY")
+        if not key or not term:
+            return []
+        geo = geo or (getattr(context, "settings", {}) or {}).get("trends_geo", "NL")
+        try:
+            resp = self._get({"engine": "google_trends", "q": term, "geo": geo,
+                              "date": timeframe, "data_type": "TIMESERIES", "api_key": key})
+            return _series_from_timeseries(resp)
+        except Exception:
+            return []
 
     def _scheduler(self, context) -> SeedScheduler:
         budget = int(context.settings.get("serpapi_keywords_per_run", "5"))

@@ -25,25 +25,41 @@ def _gsc_index(context, log) -> tuple[dict, str | None]:
 
 
 def enrich_library(library, context, *, apply: bool = True, only_missing: bool = True,
-                   gsc: bool = True, sleep: float = 1.0, log=None) -> dict:
+                   gsc: bool = True, seeds_trends: bool = True,
+                   sleep: float = 1.0, log=None) -> dict:
     """Verrijk alle approved-woorden. Retourneert {results, gsc_error}.
 
     only_missing=True slaat woorden over die al een volume hebben (idempotent, spaart credits).
+    Doelwit-woorden krijgen volume/concurrentie/kans + GSC-stand; volg-woorden (seeds) krijgen
+    daarnaast de meerjarige trend-toestand (5-jaars Google Trends → opkomend/stabiel/...).
     """
     from nooch_village.skills_impl.keywords_everywhere import (
         KeywordsEverywhereSkill, opportunity_score, trend_change_pct)
+    from nooch_village.library import classify_function
+    from nooch_village.trend_analysis import trend_state
     country = (getattr(context, "settings", {}) or {}).get("ke_country", "").strip()
 
     gsc_by_query, gsc_error = ({}, None)
     if gsc:
         gsc_by_query, gsc_error = _gsc_index(context, log)
 
+    trends_skill = None
+    if seeds_trends:
+        try:
+            from nooch_village.skills_impl.serpapi_trends import SerpapiTrendsSkill
+            trends_skill = SerpapiTrendsSkill()
+        except Exception:
+            trends_skill = None
+
     ke = KeywordsEverywhereSkill()
     results = []
     approved = [w for w, e in (library.all() or {}).items()
                 if isinstance(e, dict) and e.get("status") == "approved"]
     for w in approved:
-        ev = (library.status(w) or {}).get("evidence") or {}
+        entry = library.status(w) or {}
+        ev = entry.get("evidence") or {}
+        fn = entry.get("function") if entry.get("function") in ("volg", "doelwit") \
+            else classify_function(w, ev)
         updates: dict = {}
 
         if not (only_missing and ev.get("volume") is not None):
@@ -73,10 +89,19 @@ def enrich_library(library, context, *, apply: bool = True, only_missing: bool =
             updates["opportunity"] = opportunity_score(
                 vol, position=merged_now.get("gsc_position"), ranks=merged_now.get("gsc_seen"))
 
+        # Volg-woorden (seeds): meerjarige trend-toestand uit 5-jaars Google Trends.
+        if fn == "volg" and trends_skill is not None and \
+                not (only_missing and ev.get("trend_state")):
+            series = trends_skill.series(w, context, timeframe="today 5-y")
+            st = trend_state(series)
+            if st is not None:
+                updates["trend_state"] = st
+            time.sleep(sleep)
+
         if updates and apply:
             library.set_evidence(w, updates)
         merged = {**ev, **updates}
-        results.append({"word": w, **{k: merged.get(k) for k in (
-            "volume", "competition", "opportunity",
+        results.append({"word": w, "function": fn, **{k: merged.get(k) for k in (
+            "volume", "competition", "opportunity", "trend_state",
             "gsc_seen", "gsc_position", "gsc_clicks", "gsc_impressions")}})
     return {"results": results, "gsc_error": gsc_error}
