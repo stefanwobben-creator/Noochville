@@ -18,6 +18,7 @@ class RoleDefinition:
     domains: list[str] = field(default_factory=list)
     skills: list[str] = field(default_factory=list)   # capability-ids die deze rol energizet
     policies: list[str] = field(default_factory=list)  # harde policies (alleen voor anchor-cirkel)
+    name: str = ""                                     # weergavenaam; leeg = val terug op record-id
 
 
 @dataclass
@@ -90,6 +91,7 @@ class GovernanceChange:
     new_role_parent: Optional[str] = None   # voor add_role: ouder-cirkel
     policy_id: Optional[str] = None         # voor policy-wijzigingen
     policy_text: Optional[str] = None
+    rename: Optional[str] = None            # voor amend_role: nieuwe weergavenaam van de rol
 
 
 @dataclass

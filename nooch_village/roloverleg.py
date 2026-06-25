@@ -128,7 +128,7 @@ def _proposal_from_item(item: dict):
         purpose=c.get("purpose"), add_accountabilities=list(c.get("add_accountabilities", [])),
         remove_accountabilities=list(c.get("remove_accountabilities", [])),
         add_domains=list(c.get("add_domains", [])), remove_domains=list(c.get("remove_domains", [])),
-        new_role_parent=c.get("new_role_parent"))
+        new_role_parent=c.get("new_role_parent"), rename=c.get("rename"))
     title = item.get("title", "")
     return Proposal(
         proposer_role=item.get("by") or "founder", change=change,
@@ -320,7 +320,14 @@ def build_change_from_fields(item: dict, snapshot: dict | None, *, naam: str = "
         "remove_domains": [d for d in real_d if d.lower() not in dd]}
     if purpose and purpose != (snap.get("purpose", "") or "").strip():
         change["purpose"] = purpose[:140]
-    return change, item.get("role_id"), item.get("title")
+    # Naam wijzigen van een bestaande rol = een weergavenaam (record-id blijft stabiel).
+    cur_name = (snap.get("name") or item.get("role_id") or "").strip()
+    naam = (naam or "").strip()
+    title = item.get("title")
+    if naam and naam != cur_name:
+        change["rename"] = naam[:60]
+        title = naam[:60]
+    return change, item.get("role_id"), title
 
 
 def _parse_role(text: str) -> dict:

@@ -59,6 +59,7 @@ def proposal_to_dict(p: Proposal) -> dict:
             "new_role_parent": c.new_role_parent,
             "policy_id": c.policy_id,
             "policy_text": c.policy_text,
+            "rename": c.rename,
         },
     }
 
@@ -80,6 +81,7 @@ def proposal_from_dict(d: dict) -> Proposal:
             new_role_parent=c.get("new_role_parent"),
             policy_id=c.get("policy_id"),
             policy_text=c.get("policy_text"),
+            rename=c.get("rename"),
         ),
         tension=d["tension"],
         trigger_example=d["trigger_example"],
@@ -408,6 +410,8 @@ class Secretary:
                 d.skills = [a for a in d.skills if a not in c.remove_skills]
             if c.purpose:
                 d.purpose = c.purpose
+            if c.rename and c.rename.strip():
+                d.name = c.rename.strip()              # weergavenaam; record-id blijft stabiel
             rec.version += 1
             self.records.put(rec)
             self.bus.publish(Event("role_adopted", {"record_id": c.role_id}, "Secretary"))

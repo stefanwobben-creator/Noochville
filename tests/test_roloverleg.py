@@ -217,6 +217,36 @@ def test_rov_edit_werkt_voorstel_bij(tmp_path):
     assert it["change"]["add_domains"] == ["nieuw domein"]
 
 
+def test_rov_edit_hernoem_bestaande_rol(tmp_path):
+    from nooch_village import cockpit
+    from nooch_village.roloverleg import Agenda
+    import json
+    data = tmp_path / "data"; data.mkdir()
+    recs = {"scout": {"id": "scout", "type": "role", "parent": "noochville", "version": 1,
+                      "definition": {"purpose": "p", "accountabilities": ["A"], "domains": []}}}
+    (data / "governance_records.json").write_text(json.dumps(recs), encoding="utf-8")
+    ag = Agenda(str(data / "roloverleg_agenda.json"))
+    iid = ag.add("scout", "amend_role", {"add_accountabilities": ["A"]}, "x", by="scout", title="scout")
+    res = cockpit._dispatch_action(str(data), "rov_edit", iid, "", extra={
+        "ed_naam": "Marktverkenner", "ed_purpose": "p", "ed_accs": "A", "ed_domeinen": ""})
+    assert res["ok"]
+    it = Agenda(str(data / "roloverleg_agenda.json")).get(iid)
+    assert it["change"]["rename"] == "Marktverkenner" and it["title"] == "Marktverkenner"
+    assert it["role_id"] == "scout"                                    # id blijft stabiel
+
+
+def test_rename_doorgevoerd_in_adopt(tmp_path):
+    from nooch_village.governance import proposal_from_dict, proposal_to_dict
+    from nooch_village.models import Proposal, GovernanceChange, ChangeKind
+    p = Proposal(proposer_role="founder",
+                 change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id="scout",
+                                         rename="Marktverkenner"),
+                 tension="t", trigger_example="t", rationale="r")
+    d = proposal_to_dict(p)
+    assert d["change"]["rename"] == "Marktverkenner"
+    assert proposal_from_dict(d).change.rename == "Marktverkenner"       # roundtrip
+
+
 def test_rov_edit_nieuwe_rol_naam_bewerkbaar(tmp_path):
     from nooch_village import cockpit
     from nooch_village.roloverleg import Agenda
@@ -271,13 +301,11 @@ def test_rov_object_proces_zet_status(tmp_path):
         "q1": "right", "q2": "left", "q3": "left", "q4": "left"})
     assert res["rov"] == "obj_invalid"
     assert Agenda(str(data / "roloverleg_agenda.json")).get(iid)["status"] == "open"
-    # geldig bezwaar (alles links) → blijft staan (objected) + opgeslagen met steps
+    # geldig bezwaar (alles links) → voorstel gaat van de agenda
     res2 = cockpit._dispatch_action(str(data), "rov_object", iid, "", extra={
         "q1": "left", "q2": "left", "q3": "left", "q4": "left", "harm": "beperkt mijn rol"})
     assert res2["rov"] == "obj_valid"
-    it = Agenda(str(data / "roloverleg_agenda.json")).get(iid)
-    assert it["status"] == "objected" and it["objection"]["text"] == "beperkt mijn rol"
-    assert it["objection"]["result"]["valid"] is True
+    assert Agenda(str(data / "roloverleg_agenda.json")).get(iid) is None      # weg van de agenda
 
 
 def test_auto_stollen_na_3x(tmp_path):

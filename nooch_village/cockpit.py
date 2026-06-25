@@ -1213,11 +1213,12 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
         ed_accs_list, ed_doms_list = list(accs), list(doms_new)
         naam_attr = ""
     else:
-        ed_naam, ed_pur = item.get("role_id", ""), (pur_new or cur_pur or "")
+        ed_naam = ch.get("rename") or snap.get("name") or item.get("role_id", "")
+        ed_pur = pur_new or cur_pur or ""
         doms_rm = ch.get("remove_domains", [])
         ed_accs_list = [a for a in cur_accs if a not in accs_rm] + list(accs)
         ed_doms_list = [d for d in cur_doms if d not in doms_rm] + list(doms_new)
-        naam_attr = " readonly title='Naam van een bestaande rol wijzigen komt in fase 2'"
+        naam_attr = ""
     _ta = lambda xs: _e("\n".join(xs))
     editor = (
         '<details open style="margin-top:.5rem"><summary>✏️ Voorstel bewerken (velden)</summary>'
@@ -2147,8 +2148,9 @@ def _flash(result: dict) -> str:
     _rov = {"reacted": "🤖 Voorstel aangepast op basis van je reactie.",
             "consented": "✓ Consent — wordt doorgevoerd bij einde roloverleg.",
             "objected": "⚠ Als schadelijk gemarkeerd — blijft staan voor de volgende keer.",
-            "obj_valid": "⚖️ Bezwaar geldig bevonden — blijft staan voor integratie.",
-            "obj_invalid": "⚖️ Bezwaar ongeldig (vorm) — je kunt alsnog consent geven.",
+            "obj_valid": "⚖️ Geldig bezwaar — het voorstel is van de agenda gehaald. Dien "
+                         "eventueel een aangepaste versie opnieuw in.",
+            "obj_invalid": "⚖️ Geen geldig bezwaar — je kunt alsnog consent geven.",
             "added": "➕ Voorstel op de agenda gezet.",
             "edited": "💾 Voorstel bijgewerkt vanuit de velden.",
             "flipped": "↔ Omgezet (purpose ↔ accountability) en opnieuw geformuleerd.",
@@ -2385,6 +2387,7 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                 return {"ok": False, "error": "voorstel niet gevonden"}
             rec = records.get(item.get("role_id"))
             snap = ({"purpose": rec.definition.purpose,
+                     "name": getattr(rec.definition, "name", "") or item.get("role_id"),
                      "accountabilities": list(rec.definition.accountabilities),
                      "domains": list(rec.definition.domains)} if rec else None)
             accs = (extra.get("ed_accs") or "").splitlines()
@@ -2409,8 +2412,13 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
             if not any(answers.values()):
                 return {"ok": False, "error": "beantwoord eerst de toetsvragen (kies per vraag een antwoord)"}
             res = evaluate_objection(answers, harm=extra.get("harm", ""))
-            agenda.set_objection(iid, res.get("harm", ""), res)
-            return {"ok": True, "rov": "obj_valid" if res.get("valid") else "obj_invalid"}
+            if res.get("valid"):
+                # Geldig bezwaar → het voorstel gaat zó niet door: van de agenda. Dien eventueel
+                # een aangepaste (geïntegreerde) versie opnieuw in.
+                agenda.remove(iid)
+                return {"ok": True, "rov": "obj_valid"}
+            agenda.set_objection(iid, res.get("harm", ""), res)  # ongeldig → blijft open, met toets
+            return {"ok": True, "rov": "obj_invalid"}
         # rov_react: reactie loggen + AI past voorstel aan (gegrond in de bank)
         from nooch_village.governance_examples import GovernanceExamples, few_shot_block
         item = agenda.get(iid)
@@ -2656,6 +2664,7 @@ def make_handler(data_dir: str | None):
                 else:
                     rec = recs.get(item["role_id"])
                     snap = ({"purpose": rec.definition.purpose,
+                             "name": getattr(rec.definition, "name", "") or item["role_id"],
                              "accountabilities": list(rec.definition.accountabilities),
                              "domains": list(rec.definition.domains)} if rec else None)
                     body = render_roloverleg(

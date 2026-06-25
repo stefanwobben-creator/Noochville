@@ -1019,3 +1019,12 @@ velden vult. _proposal_from_item + adopt dragen nu remove_domains. Agenda.update
 Tests in test_roloverleg.py. Suite groen (554 + 498).
 
 ### Fase 2 (gepland): meerdere rollen per voorstel + andere rol erbij openen + hernoemen bestaande rol.
+
+## Roloverleg-fixes: geldig bezwaar verwijdert het voorstel + naam bestaande rol bewerkbaar
+- Geldig bezwaar (alle vragen 'left') → het voorstel gaat direct van de agenda (rov_object → remove);
+  ongeldig → blijft open met de getoetste vragen. (Voorheen bleef een geldig bezwaar staan.)
+- Naam van een BESTAANDE rol bewerkbaar: RoleDefinition kreeg een weergavenaam-veld `name`;
+  GovernanceChange kreeg `rename`; build_change_from_fields zet change['rename'] als de naam wijzigt;
+  Secretary._adopt past d.name toe (record-id blijft stabiel, dus geen kapotte members/CLASS_MAP).
+  proposal_to_dict/from_dict + _proposal_from_item dragen rename. Naam-veld in de editor niet meer
+  read-only. Suite groen (556 + 498).
