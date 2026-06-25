@@ -822,6 +822,7 @@ def _render_backlog(backlog: list, north_star: dict, token: str | None = None,
             opts = "".join(
                 f'<option value="{_e(r)}"{" selected" if r == by else ""}>{_e(r)}</option>'
                 for r in _roles) or f'<option value="{_e(by)}">{_e(by)}</option>'
+            opts += '<option value="__new__">➕ nieuwe rol</option>'
             inp = ('padding:.25rem .4rem;border:1px solid var(--border);border-radius:6px')
             # één formulier, gedeelde velden, drie uitkomsten (project / kennis / negeer)
             return (
@@ -836,6 +837,7 @@ def _render_backlog(backlog: list, north_star: dict, token: str | None = None,
                 f'<input type="checkbox" name="remember" value="1"> onthoud reden als huis-regel</label>'
                 f'<button class="btn ok" type="submit" name="action" value="opp_project">✓ project</button> '
                 f'<button class="btn" type="submit" name="action" value="opp_knowledge">📚 kennis</button> '
+                f'<button class="btn" type="submit" name="action" value="opp_governance">🏛️ governance</button> '
                 f'<button class="btn danger" type="submit" name="action" value="opp_reject">✗ negeer</button>'
                 f'</form>')
         rows = "".join(
@@ -1232,6 +1234,11 @@ def _flash(result: dict) -> str:
         if st in ("escalated", "invalid"):
             return f"✗ Governance {st}: {result.get('reason', '')}"
         return "✗ " + (result.get("error") or result.get("reason") or "actie mislukt")
+    if result.get("status") == "approved" and result.get("destination") == "governance":
+        gs = result.get("gov_status")
+        if gs == "adopted":
+            return "✓ Kans → governance: rol aangemaakt/uitgebreid (zie Roster)."
+        return f"✓ Kans → governance, maar de poort vraagt jouw oordeel ({result.get('gov_reason', '')})."
     if result.get("status") == "approved" and result.get("destination") == "knowledge":
         return "✓ Kans → kennis-kaart (zie Inzichten)."
     if result.get("status") == "approved" and result.get("destination") == "project":
@@ -1280,21 +1287,24 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         library = Library(os.path.join(dd, "library.json"))
         return override_library_term(library, extra.get("word", ""),
                                      extra.get("decision", ""), reason=reason)
-    if action in ("opp_project", "opp_knowledge", "opp_approve", "opp_reject"):
+    if action in ("opp_project", "opp_knowledge", "opp_governance", "opp_approve", "opp_reject"):
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
         notes = NotesStore(os.path.join(dd, "notes.json"))
         from nooch_village.constraints import Constraints
         constraints = Constraints(os.path.join(dd, "constraints.json"))
+        records = Records(os.path.join(dd, "governance_records.json"))
         if action == "opp_reject":
             decision, destination = "reject", "project"
         elif action == "opp_knowledge":
             decision, destination = "approve", "knowledge"
+        elif action == "opp_governance":
+            decision, destination = "approve", "governance"
         else:                                             # opp_project / opp_approve
             decision, destination = "approve", "project"
         return decide_opportunity(
             inbox, iid, decision, reason=reason, destination=destination,
             owner=extra.get("owner", ""), remember_constraint=bool(extra.get("remember")),
-            projects=projects, notes=notes, constraints=constraints)
+            projects=projects, notes=notes, constraints=constraints, records=records)
     if action in ("target_project", "target_drop"):
         library = Library(os.path.join(dd, "library.json"))
         projects = ProjectLedger(os.path.join(dd, "projects.json"))

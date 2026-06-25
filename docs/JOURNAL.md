@@ -597,3 +597,16 @@ niets meer voor dat ertegen ingaat. Cockpit: 📏 Huis-regels-blok in Kennis.
 
 Tests: 954 → 956. Volgende triage-stappen: nieuwe-rol/roloverleg + advies-aan-rol + doorgeven-aan-mens +
 verduidelijk/herleid-dialoog; daarna alles samenvoegen (concurrenten/linkbuilding in de inbox) + Engels.
+
+---
+
+## 2026-06-25 (vervolg 17) — Triage: governance-uitkomst (rol aanmaken/uitbreiden)
+
+**[feat]** Vierde ✓-bestemming toegevoegd: 🏛️ **governance**. Bij een kans kies je in de eigenaar-dropdown
+"➕ nieuwe rol" (→ add_role) of een bestaande rol (→ amend_role: de kans wordt een accountability erbij).
+`_route_kans_to_governance` bouwt het Proposal en draait het synchroon door Gate.check + Secretary._adopt
+op de on-disk records (geen Village/bus). Poort akkoord → rol aangemaakt/uitgebreid (onbemand, born-vs-
+manned blijft gelden); poort escaleert → melding dat jouw oordeel nodig is. Triage-uitkomsten nu compleet:
+project (voor rol) / kennis / governance / negeer(+constraint).
+
+Tests: 956 → 958.

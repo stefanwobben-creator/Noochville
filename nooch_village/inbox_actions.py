@@ -164,10 +164,40 @@ def override_library_term(library, word: str, decision: str,
     return {"ok": True, "word": word, "status": status}
 
 
+def _route_kans_to_governance(records, owner: str, title: str, wat: str, waarom: str,
+                              business_case, *, by: str = "") -> dict:
+    """Los een kans op in governance: nieuwe rol (owner == '__new__') of een bestaande rol
+    uitbreiden met een accountability. Via de sync-poort Gate.check + Secretary._adopt op de
+    on-disk records (geen Village/bus). Geeft {status: adopted|escalated|invalid, reason}."""
+    import re as _re
+    from nooch_village.event_bus import EventBus
+    from nooch_village.governance import Gate, Secretary
+    from nooch_village.models import Proposal, GovernanceChange, ChangeKind
+    owner = (owner or "").strip()
+    if owner in ("", "__new__"):
+        r_id = _re.sub(r"\W+", "_", title.lower())[:40].strip("_") or "nieuwe_rol"
+        change = GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id=r_id,
+                                  purpose=(wat or title)[:140], new_role_parent="noochville")
+    else:
+        change = GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id=owner,
+                                  add_accountabilities=[title])
+    proposal = Proposal(
+        proposer_role=by or "founder", change=change, tension=f"kans: {title}"[:200],
+        # 'structureel' + 'mens besluit' = legitieme herhalingsgrond: jij beslist via triage.
+        trigger_example=f"structureel besluit via triage door de mens: {title[:60]}",
+        rationale=wat or waarom or "Onderbouwde kans, mens kiest governance.",
+        hypothesis=waarom, business_case=business_case, source="sensed")
+    passed, gate, reason_g = Gate().check(proposal, records, None)
+    if passed:
+        Secretary(records, EventBus(name="triage"))._adopt(proposal)
+        return {"status": "adopted", "reason": ""}
+    return {"status": "escalated", "reason": f"{gate}: {reason_g}"}
+
+
 def decide_opportunity(inbox, iid: str, decision: str, *, reason: str = "",
                        destination: str = "project", owner: str = "",
                        remember_constraint: bool = False,
-                       projects=None, notes=None, constraints=None) -> dict:
+                       projects=None, notes=None, constraints=None, records=None) -> dict:
     """Triage van een kans (mens-poort). approve → kies bestemming: 'project' (voor `owner`,
     op het projectbord) of 'knowledge' (kennis-kaart). reject → genegeerd; bij remember_constraint
     wordt de reden een vaste huis-regel die de reflex voortaan respecteert (zo voedt jouw oordeel
@@ -181,6 +211,13 @@ def decide_opportunity(inbox, iid: str, decision: str, *, reason: str = "",
     title = ctx.get("title") or item.get("subject")
     wat = ctx.get("wat", "") or ctx.get("waarom", "")
     if decision == "approve":
+        if destination == "governance" and records is not None:
+            res = _route_kans_to_governance(records, owner, title, wat,
+                                            ctx.get("waarom", ""), ctx.get("business_case"),
+                                            by=ctx.get("by", ""))
+            inbox.resolve(iid, "approved", reason=(reason or f"→ governance ({res.get('status')})"))
+            return {"ok": True, "status": "approved", "destination": "governance",
+                    "title": title, "gov_status": res.get("status"), "gov_reason": res.get("reason", "")}
         if destination == "knowledge" and notes is not None:
             from nooch_village.insight import Insight, GroundingStatus
             import uuid as _uuid

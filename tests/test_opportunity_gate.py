@@ -59,6 +59,36 @@ def test_reject_onthoudt_constraint(tmp_path):
     assert projects.all() == []
 
 
+def test_approve_naar_governance_nieuwe_rol(tmp_path):
+    from nooch_village.governance import Records
+    from nooch_village.models import Record, RoleDefinition, RecordType
+    inbox, projects, iid = _setup(tmp_path)
+    recs = Records(str(tmp_path / "gov.json"))
+    recs.put(Record(id="noochville", type=RecordType.CIRCLE, parent=None,
+                    definition=RoleDefinition(purpose="Nooch", policies=[]), source="seed"))
+    res = decide_opportunity(inbox, iid, "approve", destination="governance",
+                             owner="__new__", records=recs)
+    assert res["ok"] and res["destination"] == "governance"
+    assert res["gov_status"] == "adopted"
+    # er is een nieuw (onbemand) rol-record bijgekomen
+    assert any(r.id != "noochville" for r in recs.all())
+
+
+def test_approve_naar_governance_rol_uitbreiden(tmp_path):
+    from nooch_village.governance import Records
+    from nooch_village.models import Record, RoleDefinition, RecordType
+    inbox, projects, iid = _setup(tmp_path)
+    recs = Records(str(tmp_path / "gov.json"))
+    recs.put(Record(id="noochville", type=RecordType.CIRCLE, parent=None,
+                    definition=RoleDefinition(purpose="Nooch", policies=[]), source="seed"))
+    recs.put(Record(id="scout", type=RecordType.ROLE, parent="noochville",
+                    definition=RoleDefinition(purpose="markt observeren", accountabilities=[]),
+                    source="seed"))
+    res = decide_opportunity(inbox, iid, "approve", destination="governance",
+                             owner="scout", records=recs)
+    assert res["ok"] and res["gov_status"] in ("adopted", "escalated")
+
+
 def test_dubbele_beslissing_faalt(tmp_path):
     inbox, projects, iid = _setup(tmp_path)
     decide_opportunity(inbox, iid, "approve", projects=projects)
