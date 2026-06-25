@@ -13,6 +13,42 @@ import time
 from nooch_village.models import Proposal, GovernanceChange, ChangeKind
 
 
+def _submit_proposal_sync(proposal: Proposal) -> dict:
+    """Voer een governance-voorstel synchroon uit: Gate.check + Secretary._adopt direct op de
+    on-disk records, ZONDER een volledige Village te starten (geen threads, geen puls, geen
+    credits). Schrijft een groeidagboek-entry bij een geboorte. Geeft {status, gate?, reason?,
+    records?}."""
+    import os
+    import json
+    import time as _t
+    from nooch_village.config import load_context
+    from nooch_village.governance import Records, Gate, Secretary
+    from nooch_village.event_bus import EventBus
+    from nooch_village.seeds import seed_records, migrate_records
+    from nooch_village.village import BASE_DIR
+
+    ctx = load_context(BASE_DIR)
+    records = Records(os.path.join(ctx.data_dir, "governance_records.json"))
+    seed_records(records)
+    migrate_records(records)
+    passed, gate, reason = Gate().check(proposal, records, ctx)
+    if not passed:
+        return {"status": "ongeldig" if gate == "G0" else "geëscaleerd",
+                "gate": gate, "reason": reason}
+    bus = EventBus(name="cli-governance")
+    born: list = []
+    bus.subscribe("role_born", lambda e: born.append(e.data))
+    Secretary(records, bus)._adopt(proposal)
+    if born:
+        try:
+            with open(os.path.join(ctx.data_dir, "groeidagboek.jsonl"), "a") as f:
+                for d in born:
+                    f.write(json.dumps({"ts": _t.time(), **d}, ensure_ascii=False, default=str) + "\n")
+        except Exception:
+            pass
+    return {"status": "aangenomen", "records": records}
+
+
 def build_content_strategist_proposal() -> Proposal:
     """Het ADD_ROLE-voorstel voor de Content Strategist: publieke website-content in
     de merkstem, gevoed door de kennisgraaf, gegated door de claim-keuring.
@@ -128,37 +164,16 @@ def build_grant_skill_proposal(role_id: str, skill: str, reason: str = "") -> Pr
 
 
 def grant_skill_via_governance(role_id: str, skill: str, reason: str = "") -> None:
-    """Dien een AMEND_ROLE-voorstel in dat een skill aan een rol toekent, via de gate."""
-    from nooch_village.village import Village
-
-    v = Village(heartbeat_seconds=86400)
-    outcome: dict = {}
-    v.bus.subscribe("governance_changed",
-                    lambda e: outcome.update({"status": "aangenomen", **e.data}))
-    v.bus.subscribe("governance_review_requested",
-                    lambda e: outcome.update({"status": "geëscaleerd",
-                                              "gate": e.data.get("gate"),
-                                              "reason": e.data.get("reason")}))
-    v.bus.subscribe("proposal_invalid",
-                    lambda e: outcome.update({"status": "ongeldig", "gate": "G0",
-                                              "reason": e.data.get("reason")}))
-    v.start()
-    v.submit_proposal(build_grant_skill_proposal(role_id, skill, reason))
+    """Dien een AMEND_ROLE-voorstel in dat een skill aan een rol toekent, via de gate (synchroon)."""
+    res = _submit_proposal_sync(build_grant_skill_proposal(role_id, skill, reason))
     print(f"\n===== AMEND_ROLE: skill '{skill}' → rol '{role_id}' via governance =====\n")
-    for _ in range(200):
-        if outcome:
-            break
-        time.sleep(0.05)
-    time.sleep(0.3)
-    v.stop()
-    status = outcome.get("status", "?")
-    print(f"Uitkomst: {status}")
-    if status == "aangenomen":
-        rec = v.records.get(role_id)
+    print(f"Uitkomst: {res['status']}")
+    if res["status"] == "aangenomen":
+        rec = res["records"].get(role_id)
         print(f"Skills nu: {rec.definition.skills if rec else '?'}")
         print("Herstart de village (of draai 'once') om de skill actief te maken.")
     else:
-        print(f"Poort {outcome.get('gate', '-')}: {outcome.get('reason', '')}")
+        print(f"Poort {res.get('gate', '-')}: {res.get('reason', '')}")
     print("\n===== einde =====")
 
 
@@ -178,35 +193,15 @@ def build_grant_accountability_proposal(role_id: str, accountability: str, reaso
 
 
 def grant_accountability_via_governance(role_id: str, accountability: str, reason: str = "") -> None:
-    """Dien een AMEND_ROLE-voorstel in dat een accountability aan een rol toekent, via de gate."""
-    from nooch_village.village import Village
-
-    v = Village(heartbeat_seconds=86400)
-    outcome: dict = {}
-    v.bus.subscribe("governance_changed",
-                    lambda e: outcome.update({"status": "aangenomen", **e.data}))
-    v.bus.subscribe("governance_review_requested",
-                    lambda e: outcome.update({"status": "geëscaleerd", "gate": e.data.get("gate"),
-                                              "reason": e.data.get("reason")}))
-    v.bus.subscribe("proposal_invalid",
-                    lambda e: outcome.update({"status": "ongeldig", "gate": "G0",
-                                              "reason": e.data.get("reason")}))
-    v.start()
-    v.submit_proposal(build_grant_accountability_proposal(role_id, accountability, reason))
+    """Dien een AMEND_ROLE-voorstel in dat een accountability aan een rol toekent (synchroon)."""
+    res = _submit_proposal_sync(build_grant_accountability_proposal(role_id, accountability, reason))
     print(f"\n===== AMEND_ROLE: accountability '{accountability}' → '{role_id}' via governance =====\n")
-    for _ in range(200):
-        if outcome:
-            break
-        time.sleep(0.05)
-    time.sleep(0.3)
-    v.stop()
-    status = outcome.get("status", "?")
-    print(f"Uitkomst: {status}")
-    if status == "aangenomen":
-        rec = v.records.get(role_id)
+    print(f"Uitkomst: {res['status']}")
+    if res["status"] == "aangenomen":
+        rec = res["records"].get(role_id)
         print(f"Accountabilities nu: {rec.definition.accountabilities if rec else '?'}")
     else:
-        print(f"Poort {outcome.get('gate', '-')}: {outcome.get('reason', '')}")
+        print(f"Poort {res.get('gate', '-')}: {res.get('reason', '')}")
     print("\n===== einde =====")
 
 
@@ -476,20 +471,6 @@ def formalize_session_governance() -> None:
     """Formaliseer achteraf de structuurwijzigingen die deze sessie via seed/migratie zijn
     toegevoegd: de Concurrent-scout (add_role) en de KeywordsEverywhere-grant aan de Librarian
     (amend_role). Beide lopen nu alsnog door de G0-G4-poort + Secretary, met audittrail."""
-    from nooch_village.village import Village
-
-    v = Village(heartbeat_seconds=86400)
-    state: dict = {}
-    v.bus.subscribe("governance_changed",
-                    lambda e: state.update({"status": "aangenomen"}))
-    v.bus.subscribe("governance_review_requested",
-                    lambda e: state.update({"status": "geëscaleerd", "gate": e.data.get("gate"),
-                                            "reason": e.data.get("reason")}))
-    v.bus.subscribe("proposal_invalid",
-                    lambda e: state.update({"status": "ongeldig", "gate": "G0",
-                                            "reason": e.data.get("reason")}))
-    v.start()
-
     proposals = [
         ("ADD_ROLE concurrent_scout", build_concurrent_scout_proposal()),
         ("AMEND_ROLE librarian ← keywords_everywhere",
@@ -497,27 +478,23 @@ def formalize_session_governance() -> None:
              "librarian", "keywords_everywhere",
              "De Librarian verrijkt elke kandidaat met KE-volume; deze sessie geseed, nu formeel.")),
     ]
-    print("\n===== Formaliseren via governance (achteraf) =====\n")
+    print("\n===== Formaliseren via governance (achteraf, synchroon — geen puls) =====\n")
+    last: dict = {}
     for label, p in proposals:
-        state.clear()
-        v.submit_proposal(p)
-        for _ in range(200):
-            if state:
-                break
-            time.sleep(0.05)
-        time.sleep(0.3)
-        st = state.get("status", "?")
-        line = f"{label}: {st}"
-        if st != "aangenomen":
-            line += f"  (poort {state.get('gate', '-')}: {state.get('reason', '')})"
+        res = _submit_proposal_sync(p)
+        last = res
+        line = f"{label}: {res['status']}"
+        if res["status"] != "aangenomen":
+            line += f"  (poort {res.get('gate', '-')}: {res.get('reason', '')})"
         print(line)
-    v.stop()
 
-    scout = v.records.get("concurrent_scout")
-    lib = v.records.get("librarian")
-    print(f"\nconcurrent_scout: source={getattr(scout, 'source', '?')} "
-          f"skills={scout.definition.skills if scout else '?'}")
-    print(f"librarian skills: {lib.definition.skills if lib else '?'}")
+    recs = last.get("records")
+    if recs is not None:
+        scout = recs.get("concurrent_scout")
+        lib = recs.get("librarian")
+        print(f"\nconcurrent_scout: source={getattr(scout, 'source', '?')} "
+              f"skills={scout.definition.skills if scout else '?'}")
+        print(f"librarian skills: {lib.definition.skills if lib else '?'}")
     print("\n===== einde =====")
 
 
