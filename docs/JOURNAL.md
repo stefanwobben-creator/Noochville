@@ -480,3 +480,17 @@ nooit zelf uitvoeren; fail-closed zonder LLM. `_parse_opportunity` robuust tegen
 ProjectLedger.create + open_scopes uitgebreid; make_business_case leest nu ook numerieke strings.
 
 Tests: 933 → 937. Demo: zet reflect_interval_seconds=0 in settings.ini om 'm op de eerstvolgende puls te laten vuren.
+
+---
+
+## 2026-06-25 (vervolg 9) — Ademend dorp Fase 3: Synthesist (creatieve links)
+
+**[feat]** De kennisgraaf gaat ademen. `card_synthesis.py` (puur, gesmoothede TF-IDF): bridge_pairs
+(verwant-maar-niet-gelijk, nog niet verbonden), duplicate_pairs, graph_density. `SynthesizeCardsSkill`
+(synthesize_cards): twee kaartjes → ÉÉN emergente hypothese (geen samenvatting), fail-closed.
+`synthesist.py`: pakt het sterkste bridge-paar, maakt een nieuw synthese-kaartje (tag 'synthese',
+links_to=[ouders]) → de ouders zien het als buur. Dedup (geen dubbele bridge). CLI `village synthesize [n]`
++ stap 3/3 in refresh.sh. Cockpit: 🔗-markering + graaf-dichtheid in Inzichten.
+Diagnose blijft: 15 kaartjes, 0 links nu → na synthesize gaan de eilandjes verbinden.
+
+Tests: 937 → 942. Mens-gedraaid (LLM-kosten) via refresh.sh / synthesize.

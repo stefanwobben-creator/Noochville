@@ -286,6 +286,28 @@ def main() -> None:
         if dry:
             print("\nDraai zonder 'dry' om dit echt weg te schrijven.")
 
+    elif mode == "synthesize":
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.notes_store import NotesStore
+        from nooch_village.synthesist import synthesize_round, density
+        from nooch_village.village import BASE_DIR
+        n = next((int(a) for a in sys.argv[2:] if a.isdigit()), 3)
+        ctx = load_context(BASE_DIR)
+        notes = NotesStore(os.path.join(ctx.data_dir, "notes.json"))
+        ctx.notes = notes
+        d0 = density(notes)
+        print(f"Kennisgraaf vóór: {d0['cards']} kaartjes, {d0['links']} links, "
+              f"gem. gelijkenis {d0['avg_similarity']}")
+        made = synthesize_round(notes, ctx, n)
+        if not made:
+            print("Geen nieuwe creatieve links (geen bridge-paar of geen LLM).")
+        for m in made:
+            print(f"  🔗 {m['synthese'][:80]}  (uit {m['parents'][0]} + {m['parents'][1]})")
+        d1 = density(notes)
+        print(f"Kennisgraaf ná: {d1['cards']} kaartjes, {d1['links']} links, "
+              f"gem. gelijkenis {d1['avg_similarity']}")
+
     elif mode == "rereview":
         import os
         from nooch_village.config import load_context

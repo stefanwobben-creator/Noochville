@@ -219,13 +219,18 @@ def gather(data_dir: str | None = None) -> dict:
     lib = sorted((_lib_row(w, e) for w, e in (library.all() or {}).items()),
                  key=lambda x: (_ws_order.get(x["status"], 9), x["word"]))
 
-    # Inzichten: claim + status + hoe vaak gegrond (geëmergeerd eerst).
+    # Inzichten: claim + status + hoe vaak gegrond (geëmergeerd eerst). Synthese-kaartjes
+    # (creatieve links tussen kaartjes) zijn herkenbaar via de tag en hun ouders.
     insights = sorted(
         ({"id": n.id, "claim": n.claim, "status": str(getattr(n.status, "value", n.status)),
-          "grounding_count": n.grounding_count, "word": n.word or ""}
+          "grounding_count": n.grounding_count, "word": n.word or "",
+          "synthese": ("synthese" in (n.tags or [])), "links": len(n.links_to or [])}
          for n in notes.all()),
-        key=lambda x: -x["grounding_count"],
+        key=lambda x: (-int(x["synthese"]), -x["grounding_count"]),
     )
+    from nooch_village.card_synthesis import graph_density
+    graph = graph_density([{"id": n.id, "text": (n.claim or "") + " " + (n.grounds or ""),
+                            "links_to": list(n.links_to or [])} for n in notes.all()])
 
     # Kansen-backlog: alle onderbouwde voorstellen/projecten (met business-case), op waarde.
     from nooch_village.business_case import business_value
@@ -259,6 +264,7 @@ def gather(data_dir: str | None = None) -> dict:
         "north_star": _north_star(dd),
         "library": lib,
         "insights": insights,
+        "knowledge_graph": graph,
         "competitor_candidates": brands.candidates(),
         "competitor_confirmed": brands.confirmed(),
         "competitor_news": comp_news,
@@ -994,13 +1000,18 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     esc_block = (f'<details open><summary>⚖️ Wacht op jouw oordeel — geëscaleerd ({len(esc)})</summary>'
                  f'{esc_tbl}</details>') if esc else ''
 
-    # Inzichten (kennislaag) — geëmergeerd (vaakst gegrond) eerst
+    # Inzichten (kennislaag) — synthese-kaartjes (creatieve links) eerst, dan geëmergeerd
     ins = snap.get("insights", [])
+    g = snap.get("knowledge_graph", {})
+    g_line = (f'<p class="muted">Graaf: {g.get("cards", 0)} kaartjes · {g.get("links", 0)} links · '
+              f'gem. gelijkenis {g.get("avg_similarity", 0)}</p>') if g else ''
     irows2 = "".join(
-        f'<tr><td><a href="/card?id={_e(x["id"])}">{_e(x["claim"][:120])}</a></td>'
+        f'<tr><td>{("🔗 " if x.get("synthese") else "")}'
+        f'<a href="/card?id={_e(x["id"])}">{_e(x["claim"][:120])}</a>'
+        f'{(" <span class=muted>(" + _e(x["links"]) + " links)</span>") if x.get("links") else ""}</td>'
         f'<td class="muted">{_e(x["status"])}</td>'
         f'<td>{_e(x["grounding_count"])}×</td></tr>' for x in ins)
-    ins_tbl = ('<table><thead><tr><th>claim</th><th>status</th><th>gegrond</th></tr></thead>'
+    ins_tbl = (g_line + '<table><thead><tr><th>claim</th><th>status</th><th>gegrond</th></tr></thead>'
                f'<tbody>{irows2 or "<tr><td colspan=3 class=muted>geen inzichten</td></tr>"}</tbody></table>')
 
     # Concurrenten: gespotte (kandidaat) merken die op jouw oordeel wachten + de monitor-set.

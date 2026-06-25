@@ -15,8 +15,12 @@ echo "📐 1/2 — woorden verrijken (volume, kans, GSC-stand, 5-jaars seed-tren
 "$PY" -m nooch_village.village enrich_volumes
 
 echo
-echo "🌅 2/2 — dag-puls draaien (Field Note, Noochie, concurrent-nieuws; Harry/scout duiden oplevingen)..."
+echo "🌅 2/3 — dag-puls draaien (Field Note, Noochie, concurrent-nieuws; Harry/scout duiden oplevingen)..."
 "$PY" -m nooch_village.village once
+
+echo
+echo "🔗 3/3 — Synthesist: creatieve links leggen tussen kennis-kaartjes..."
+"$PY" -m nooch_village.village synthesize 3
 
 echo
 echo "✅ Klaar. Herlaad de cockpit (http://127.0.0.1:8765) — weekrapport, Noochie,"

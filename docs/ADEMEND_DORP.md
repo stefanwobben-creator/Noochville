@@ -35,7 +35,7 @@ kennisbank ademt nog niet: één bron (Harry), nul verrijking, nul links.
 - **Fase 1 — frame (GEBOUWD):** business-case-model + `business_value` + noordster in strategy.json +
   cockpit "🎯 Kansen-backlog" die voorstellen/projecten mét business-case op waarde rangschikt.
 - **Fase 2 — opportunity-reflex (GEBOUWD):** elke rol bedenkt periodiek (reflect-interval, default wekelijks) vanuit zijn purpose één hoogst-renderende kans → project (ledger) of governance-voorstel, met hypothese + business-case → backlog. Sensen+voorstellen, nooit zelf uitvoeren. Fail-closed zonder LLM.
-- **Fase 3 — Synthesist:** verrijking + bridge-links (13 kandidaten liggen klaar).
+- **Fase 3 — Synthesist (GEBOUWD):** `card_synthesis` (TF-IDF bridge/duplicaat/dichtheid), `synthesize_cards`-skill (LLM → emergente hypothese), runner `synthesist.py` maakt een gelinkt synthese-kaartje. CLI `village synthesize [n]` + in refresh.sh. Cockpit toont 🔗-synthesekaartjes + graaf-dichtheid. Fail-closed zonder LLM.
 - **Fase 4 — nieuw zintuig:** één bron tegelijk (reviews of regelgeving eerst).
 - **Fase 5 — wekelijkse raad.**
 
