@@ -1969,15 +1969,17 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                 inbox.resolve(iid, "resolved", reason="doorgestuurd naar het roloverleg")
             return res
         # tac_project: AI formuleert de project-uitkomst (Holacracy), fail-closed → titel.
-        # Het project wordt een CONCEPT (draft): je ziet 'm eerst en keurt 'm goed vóór hij
-        # op het bord van de rol komt.
+        # Omkeerbaarheidspoort: kan dit onherstelbare schade doen? Zo nee → direct op het bord
+        # (queued, een vrij experiment). Zo ja → eerst als concept langs jouw akkoord (draft).
+        from nooch_village.maturity import irreversible_harm
         item = inbox.get(iid) or {}
         c = item.get("context") or {}
         scope = formulate_project(c.get("title") or item.get("subject", ""),
                                   c.get("wat", ""), extra.get("owner", ""))
+        risky = irreversible_harm(scope, c.get("title", ""), c.get("wat", ""))
         return decide_opportunity(inbox, iid, "add", destination="project",
                                   owner=extra.get("owner", ""), scope_override=scope,
-                                  project_status="draft", projects=projects)
+                                  project_status="draft" if risky else "queued", projects=projects)
     if action in ("rov_react", "rov_consent", "rov_object", "rov_add", "rov_end", "rov_flip_facet"):
         from nooch_village.roloverleg import (Agenda, amend_with_reaction, apply_consented,
                                               flip_facet)

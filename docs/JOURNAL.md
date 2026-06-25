@@ -874,3 +874,16 @@ voerde een purpose-amend al door. Roloverleg toont een purpose-wijziging correct
 purpose), amend_with_reaction is purpose-bewust, en een knop 'rov_flip_facet' zet een voorstel met
 één klik om tussen purpose en accountability als de AI ernaast zat. Tests uitgebreid.
 Suite groen (525 + 493).
+
+## Twee poorten uit de governance-filosofie: rijpheid + omkeerbaarheid
+nooch_village/maturity.py (puur): friction_evidence (terugkerende-frictie-signalen) en
+irreversible_harm (onomkeerbare-schade-signalen).
+- RIJPHEIDSPOORT: de Secretaris-check geeft 'let op: nog niet gestold — overweeg eerst een project'
+  bij een accountability-voorstel zonder bewijs van terugkerende frictie. Advies, geen veto
+  (Secretary heeft geen veto). Spiegelt G0's herhalingseis voor add_role, nu ook voor accountabilities.
+- OMKEERBAARHEIDSPOORT: een project uit triage gaat DIRECT op het bord (queued) als het omkeerbaar
+  is; alleen bij mogelijk onomkeerbare schade wordt het een concept (draft) dat jouw akkoord vraagt.
+  'De enige check bij een project is: kan het onherstelbare schade doen?'
+- De opportunity-reflex-prompt kreeg de vuistregel: begin bij een experiment (project); een
+  accountability/rol is een stolling, alleen bij terugkerende frictie.
+Filosofie vastgelegd in docs/GOVERNANCE_FILOSOFIE.md. Tests: +test_maturity.py. Suite groen (500 + 522).

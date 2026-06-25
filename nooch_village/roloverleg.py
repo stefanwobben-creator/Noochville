@@ -121,6 +121,15 @@ def secretary_check(item: dict, records) -> list[dict]:
     if not passed:
         issues.append({"level": "blok", "msg": f"{gate}: {reason}"})
     new_accs = item.get("change", {}).get("add_accountabilities", [])
+    # Rijpheidspoort: een accountability hoort GESTOLD te zijn (terugkerende frictie). Geen
+    # bewijs? Dan is het waarschijnlijk nog een experiment → liever een project. Advies, geen veto.
+    if new_accs:
+        from nooch_village.maturity import friction_evidence
+        if not friction_evidence(item.get("title", ""), item.get("reason", ""),
+                                 " ".join(r.get("text", "") for r in item.get("reactions", []))):
+            issues.append({"level": "let op",
+                           "msg": "nog niet gestold: geen bewijs van terugkerende frictie. "
+                                  "Overweeg dit eerst als project (experiment) te doen."})
     # Dubbel binnen DEZELFDE rol: Gate's G2 slaat de eigen rol over, dus die check doen we hier.
     rec = records.get(item.get("role_id"))
     if rec is not None:
