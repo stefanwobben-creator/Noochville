@@ -166,11 +166,14 @@ def override_library_term(library, word: str, decision: str,
 
 def _route_kans_to_governance(records, owner: str, title: str, wat: str, waarom: str,
                               business_case, *, by: str = "", examples_block: str = "",
-                              llm_reason=None) -> dict:
+                              llm_reason=None, agenda=None) -> dict:
     """Los een kans op in governance: nieuwe rol (owner == '__new__') of een bestaande rol
     uitbreiden met een accountability. De accountability wordt Holacracy-correct geformuleerd
-    (gegrond met echte voorbeelden). Via de sync-poort Gate.check + Secretary._adopt op de
-    on-disk records (geen Village/bus). Geeft {status: adopted|escalated|invalid, reason}."""
+    (gegrond met echte voorbeelden).
+
+    Met een `agenda` (roloverleg): het voorstel komt op de AGENDA en wordt pas in het overleg
+    behandeld en bij einde doorgevoerd → {status: agendeerd}. Zonder agenda (back-compat): direct
+    via de sync-poort Gate.check + Secretary._adopt → {status: adopted|escalated|invalid}."""
     import re as _re
     from nooch_village.event_bus import EventBus
     from nooch_village.governance import Gate, Secretary
@@ -178,7 +181,8 @@ def _route_kans_to_governance(records, owner: str, title: str, wat: str, waarom:
     owner = (owner or "").strip()
     # Formuleer de accountability volgens de Holacracy-regels (fail-closed → titel).
     acc = formulate_accountability(title, wat, examples_block=examples_block, llm_reason=llm_reason)
-    if owner in ("", "__new__"):
+    new_role = owner in ("", "__new__")
+    if new_role:
         r_id = _re.sub(r"\W+", "_", title.lower())[:40].strip("_") or "nieuwe_rol"
         change = GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id=r_id,
                                   purpose=(wat or title)[:140], new_role_parent="noochville",
@@ -186,6 +190,16 @@ def _route_kans_to_governance(records, owner: str, title: str, wat: str, waarom:
     else:
         change = GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id=owner,
                                   add_accountabilities=[acc])
+    if agenda is not None:
+        # Op de roloverleg-agenda: niet nu doorvoeren, maar in het overleg behandelen.
+        agenda.add(role_id=change.role_id,
+                   kind="add_role" if new_role else "amend_role",
+                   change={"purpose": change.purpose,
+                           "add_accountabilities": list(change.add_accountabilities),
+                           "new_role_parent": change.new_role_parent},
+                   reason=wat or waarom or "Voorstel uit triage.",
+                   by=by or "founder", title=title)
+        return {"status": "agendeerd", "reason": ""}
     proposal = Proposal(
         proposer_role=by or "founder", change=change, tension=f"kans: {title}"[:200],
         # 'structureel' + 'mens besluit' = legitieme herhalingsgrond: jij beslist via triage.
@@ -204,7 +218,7 @@ def decide_opportunity(inbox, iid: str, decision: str, *, reason: str = "",
                        remember_constraint: bool = False, scope_override: str = "",
                        info: str = "", project_status: str = "queued", examples_block: str = "",
                        projects=None, notes=None, constraints=None, records=None,
-                       feedback=None) -> dict:
+                       feedback=None, agenda=None) -> dict:
     """Triage van een kans (mens-poort). approve → kies bestemming: 'project' (voor `owner`,
     op het projectbord) of 'knowledge' (kennis-kaart). reject → genegeerd; bij remember_constraint
     wordt de reden een vaste huis-regel die de reflex voortaan respecteert (zo voedt jouw oordeel
@@ -255,7 +269,7 @@ def decide_opportunity(inbox, iid: str, decision: str, *, reason: str = "",
     if destination == "governance" and records is not None:
         res = _route_kans_to_governance(records, owner, title, wat, ctx.get("waarom", ""),
                                         ctx.get("business_case"), by=ctx.get("by", ""),
-                                        examples_block=examples_block)
+                                        examples_block=examples_block, agenda=agenda)
         return {"ok": True, "status": "added", "destination": "governance", "title": title,
                 "gov_status": res.get("status"), "gov_reason": res.get("reason", "")}
     if destination == "knowledge" and notes is not None:

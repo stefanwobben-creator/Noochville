@@ -158,6 +158,8 @@ def gather(data_dir: str | None = None) -> dict:
     comp_news = CompetitorNews(os.path.join(dd, "competitor_news.json")).all()
     from nooch_village.constraints import Constraints
     house_rules = Constraints(os.path.join(dd, "constraints.json")).all()
+    from nooch_village.roloverleg import Agenda
+    agenda_open = Agenda(os.path.join(dd, "roloverleg_agenda.json")).open()
     noochie_daily = {}
     _nd_path = os.path.join(dd, "noochie_daily.json")
     if os.path.exists(_nd_path):
@@ -292,6 +294,7 @@ def gather(data_dir: str | None = None) -> dict:
         "competitor_confirmed": brands.confirmed(),
         "competitor_news": comp_news,
         "house_rules": house_rules,
+        "agenda_open": agenda_open,
         "noochie_daily": noochie_daily,
         "link_candidates": links.candidates(),
         "link_pursued": links.pursued(),
@@ -903,6 +906,129 @@ def render_triage(x: dict | None, pos: int, total: int, roles: list,
              f'{step0}{step_tac}{step_proj}{step_give}{step_ask}{step_gov}{step_oordeel}'
              f'{skip}</div>{js}<style>{_TRIAGE_CSS}</style>')
     return _page("Spanningen verwerken", inner)
+
+
+def render_roloverleg_overview(items: list, agenda_all: list, roles: list,
+                               token: str, msg=None) -> str:
+    """Roloverleg-agenda: de voorstellen die op behandeling wachten. Behandel er één, voeg er een
+    toe, of sluit het overleg (de aangenomen voorstellen worden dan doorgevoerd)."""
+    head = ('<div class="tg-wrap"><p><a href="/">← cockpit</a></p>'
+            '<h1>🏛️ Roloverleg</h1>')
+    n_consent = sum(1 for i in agenda_all if i.get("status") == "consented")
+    role_opts = "".join(f'<option value="{_e(r)}">{_e(r)}</option>' for r in roles)
+    add_form = (
+        '<details><summary style="cursor:pointer;font-weight:700;margin:.6rem 0">'
+        '➕ Zelf een voorstel toevoegen</summary>'
+        f'<form method="post" action="/action" style="padding:.4rem 0">'
+        f'<input type="hidden" name="csrf" value="{_e(token)}">'
+        f'<input type="hidden" name="next" value="/roloverleg">'
+        f'<div class="tg-meta">Voor welke rol?</div>'
+        f'<select name="owner" class="tg-in">{role_opts}'
+        f'<option value="__new__">➕ nieuwe rol</option></select>'
+        '<textarea name="info" class="tg-in" rows="2" '
+        'placeholder="de accountability (begint met de -en-vorm), of purpose bij een nieuwe rol">'
+        '</textarea>'
+        '<input type="text" name="reason" class="tg-in" placeholder="reden / aanleiding">'
+        '<button class="bigbtn go" type="submit" name="action" value="rov_add">'
+        '➕ Op de agenda zetten</button></form></details>')
+    end_form = (
+        f'<form method="post" action="/action" style="margin-top:.6rem">'
+        f'<input type="hidden" name="csrf" value="{_e(token)}">'
+        f'<input type="hidden" name="next" value="/roloverleg">'
+        f'<button class="bigbtn go" type="submit" name="action" value="rov_end">'
+        f'✓ Einde roloverleg — {n_consent} aangenomen voorstel(len) doorvoeren</button></form>')
+    if not items:
+        body = ('<div class="tg-card"><h2>Lege agenda 🎉</h2>'
+                '<p class="muted">Geen voorstellen om te behandelen. Governance-keuzes uit de '
+                'triage komen hier terecht.</p></div>' + add_form)
+        return _page("Roloverleg",
+                     f'{head}{_banner(msg)}{body}</div><style>{_TRIAGE_CSS}</style>')
+    rows = []
+    for i, it in enumerate(items, 1):
+        kind = "nieuwe rol" if it["kind"] == "add_role" else f"rol '{it['role_id']}' uitbreiden"
+        badge = (' <span class="tg-wacht">⚠ vorige keer schadelijk</span>'
+                 if it["status"] == "objected" else
+                 (' <span class="tg-wacht">✓ aangenomen</span>'
+                  if it["status"] == "consented" else ""))
+        rows.append(
+            f'<a class="tg-item" href="/roloverleg?iid={_e(it["id"])}">'
+            f'<span class="tg-item-n">{i}</span>'
+            f'<span class="tg-item-body"><b>{_e(it["title"])}</b>{badge}'
+            f'<small>{_e(kind)} · door {_e(it.get("by",""))}</small></span>'
+            f'<span class="tg-go">behandel →</span></a>')
+    body = (f'<p class="tg-meta">{len(items)} voorstel(len) op de agenda. Behandel er één, '
+            f'of sluit het overleg.</p><div class="tg-list">{"".join(rows)}</div>'
+            f'{end_form}{add_form}')
+    return _page("Roloverleg",
+                 f'{head}{_banner(msg)}{body}</div><style>{_TRIAGE_CSS}</style>')
+
+
+def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
+                      token: str, msg=None) -> str:
+    """Eén voorstel behandelen: huidige rol + voorgestelde wijziging + reden, de Secretaris-check,
+    je reactie (→ AI past aan), en consent of schadelijk."""
+    head = ('<div class="tg-wrap"><p><a href="/roloverleg">← agenda</a> · '
+            '<a href="/">cockpit</a></p><h1>🏛️ Voorstel behandelen</h1>')
+    ch = item.get("change", {})
+    accs = ch.get("add_accountabilities", [])
+    if item["kind"] == "add_role":
+        wijziging = (f'<b>Nieuwe rol:</b> {_e(item["role_id"])}<br>'
+                     f'<b>Purpose:</b> {_e(ch.get("purpose",""))}'
+                     + (f'<br><b>Eerste accountability:</b> {_e(accs[0])}' if accs else ""))
+        huidig = '<p class="muted">Deze rol bestaat nog niet — dit is een voorstel voor een nieuwe rol.</p>'
+    else:
+        wijziging = ('<b>Rol uitbreiden:</b> ' + _e(item["role_id"]) + '<br>'
+                     + '<b>Toe te voegen accountability:</b> '
+                     + "; ".join(_e(a) for a in accs))
+        if role_snapshot:
+            al = "".join(f"<li>{_e(a)}</li>" for a in role_snapshot.get("accountabilities", [])) \
+                 or "<li class=muted>nog geen</li>"
+            huidig = (f'<b>{_e(item["role_id"])}</b> — {_e(role_snapshot.get("purpose",""))}'
+                      f'<ul style="margin:.3rem 0">{al}</ul>')
+        else:
+            huidig = '<p class="muted">Rol niet gevonden in de records.</p>'
+    # Secretaris-check
+    if not issues:
+        sec = '<div class="tg-dlg">📋 <b>Secretaris:</b> in orde — volledig, geen botsing.</div>'
+    else:
+        lis = "".join(
+            f'<li>{"🔴" if i["level"]=="blok" else "🟡"} {_e(i["msg"])}</li>' for i in issues)
+        sec = ('<div class="tg-dlg">📋 <b>Secretaris ziet aandachtspunten:</b>'
+               f'<ul style="margin:.3rem 0">{lis}</ul></div>')
+    react_log = ""
+    for r in item.get("reactions", []):
+        react_log += f'<div class="tg-dlg">🙋 <b>jij:</b> {_e(r.get("text",""))}</div>'
+    common = (f'<input type="hidden" name="csrf" value="{_e(token)}">'
+              f'<input type="hidden" name="iid" value="{_e(item["id"])}">')
+    react_form = (
+        f'<form method="post" action="/action">{common}'
+        f'<input type="hidden" name="next" value="/roloverleg?iid={_e(item["id"])}">'
+        '<div class="tg-q">Vraag of reactie?</div>'
+        '<textarea name="reason" class="tg-in" rows="2" '
+        'placeholder="bijv. te breed, of: voeg X toe"></textarea>'
+        '<button class="bigbtn" type="submit" name="action" value="rov_react">'
+        '🤖 AI past voorstel aan</button></form>')
+    decide = (
+        f'<form method="post" action="/action" style="margin-top:.5rem">{common}'
+        f'<input type="hidden" name="next" value="/roloverleg">'
+        '<div class="tg-opts">'
+        '<button class="bigbtn go" type="submit" name="action" value="rov_consent">'
+        '✓ Consent<small>geen bezwaar — wordt aangenomen en bij einde overleg doorgevoerd</small>'
+        '</button>'
+        '<button class="bigbtn warn" type="submit" name="action" value="rov_object">'
+        '⚠ Schadelijk<small>blijft staan, lossen we de volgende keer op</small></button>'
+        '</div></form>')
+    card = (f'<div class="tg-card"><div class="tg-meta">Voorstel · door {_e(item.get("by",""))} · '
+            f'status {_e(item.get("status",""))}</div>'
+            f'<h2>{_e(item["title"])}</h2>'
+            f'<div style="margin:.3rem 0"><b>Huidige situatie</b><br>{huidig}</div>'
+            f'<div style="margin:.3rem 0">{wijziging}</div>'
+            f'<div class="muted"><b>Reden:</b> {_e(item.get("reason",""))}</div>'
+            f'{sec}{react_log}</div>')
+    inner = (f'{head}{_banner(msg)}{card}{react_form}{decide}'
+             '<div class="tg-skip"><a class="muted" href="/roloverleg">← terug naar de agenda</a>'
+             '</div></div><style>' + _TRIAGE_CSS + '</style>')
+    return _page("Voorstel behandelen", inner)
 
 
 def _proj_actions(p: dict, token: str) -> str:
@@ -1550,9 +1676,14 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     if _n_woorden: _parts.append(f'{_n_woorden} woorden te beoordelen')
     if _n_conc:    _parts.append(f'{_n_conc} nieuwe concurrenten')
     if _n_link:    _parts.append(f'{_n_link} linkbuilding-doelwitten')
+    _n_agenda = len(snap.get("agenda_open", []))
     _focus = (f' <a class="btn ok" href="/triage" style="margin-left:.4rem">▶ Verwerk in focus</a>'
               if _n_kansen else "")
-    _aan_jou = (f'<div class="aanjou"><b>📥 Aan jou:</b> {" · ".join(_parts)}{_focus}</div>'
+    _rov = (f' <a class="btn" href="/roloverleg" style="margin-left:.4rem">🏛️ Roloverleg ({_n_agenda})</a>'
+            if _n_agenda else "")
+    if _n_agenda:
+        _parts.append(f'{_n_agenda} op de roloverleg-agenda')
+    _aan_jou = (f'<div class="aanjou"><b>📥 Aan jou:</b> {" · ".join(_parts)}{_focus}{_rov}</div>'
                 if _parts else '<div class="aanjou">📥 <b>Aan jou:</b> niks openstaand 🎉</div>')
 
     inner = (
@@ -1590,6 +1721,15 @@ def _flash(result: dict) -> str:
         if st in ("escalated", "invalid"):
             return f"✗ Governance {st}: {result.get('reason', '')}"
         return "✗ " + (result.get("error") or result.get("reason") or "actie mislukt")
+    _rov = {"reacted": "🤖 Voorstel aangepast op basis van je reactie.",
+            "consented": "✓ Consent — wordt doorgevoerd bij einde roloverleg.",
+            "objected": "⚠ Als schadelijk gemarkeerd — blijft staan voor de volgende keer.",
+            "added": "➕ Voorstel op de agenda gezet."}
+    if result.get("rov") in _rov:
+        return _rov[result["rov"]]
+    if result.get("rov") == "ended":
+        return (f"🏛️ Roloverleg afgerond — {result.get('adopted', 0)} doorgevoerd, "
+                f"{result.get('escalated', 0)} bleef staan.")
     if result.get("status") == "waiting":
         return ("⏳ Vraag geparkeerd — de rol beantwoordt 'm in de volgende puls "
                 "(item blijft open).")
@@ -1598,6 +1738,8 @@ def _flash(result: dict) -> str:
         tail = " — item blijft open, klik ✓ klaar als je tevreden bent."
         if d == "governance":
             gs = result.get("gov_status")
+            if gs == "agendeerd":
+                return ("🏛️ Op de roloverleg-agenda gezet — behandel 'm in het roloverleg." + tail)
             if gs == "adopted":
                 return "➕ Governance: rol aangemaakt/uitgebreid (zie Roster)." + tail
             return f"➕ Governance: poort vraagt jouw oordeel ({result.get('gov_reason', '')})." + tail
@@ -1690,6 +1832,7 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                                       info=extra.get("info", ""), notes=notes)
         if action == "gov_proposal":
             from nooch_village.governance_examples import GovernanceExamples, few_shot_block
+            from nooch_village.roloverleg import Agenda
             ge = GovernanceExamples(os.path.join(dd, "governance_examples.json"))
             item = inbox.get(iid) or {}
             c = item.get("context") or {}
@@ -1701,8 +1844,11 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                     [r.id for r in records.all()],
                     c.get("title") or item.get("subject", ""), c.get("wat", ""),
                     examples_block=block)
+            # Governance gaat naar de roloverleg-AGENDA (niet direct doorvoeren).
+            agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
             return decide_opportunity(inbox, iid, "add", destination="governance",
-                                      owner=owner, records=records, examples_block=block)
+                                      owner=owner, records=records, examples_block=block,
+                                      agenda=agenda)
         # tac_project: AI formuleert de project-uitkomst (Holacracy), fail-closed → titel.
         # Het project wordt een CONCEPT (draft): je ziet 'm eerst en keurt 'm goed vóór hij
         # op het bord van de rol komt.
@@ -1713,6 +1859,46 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         return decide_opportunity(inbox, iid, "add", destination="project",
                                   owner=extra.get("owner", ""), scope_override=scope,
                                   project_status="draft", projects=projects)
+    if action in ("rov_react", "rov_consent", "rov_object", "rov_add", "rov_end"):
+        from nooch_village.roloverleg import (Agenda, amend_with_reaction, apply_consented,
+                                              secretary_check)
+        agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
+        records = Records(os.path.join(dd, "governance_records.json"))
+        if action == "rov_end":
+            res = apply_consented(agenda, records)
+            n_ok = sum(1 for r in res if r["status"] == "adopted")
+            return {"ok": True, "rov": "ended", "adopted": n_ok,
+                    "escalated": len(res) - n_ok}
+        if action == "rov_add":
+            owner = extra.get("owner", "")
+            acc = (extra.get("info") or "").strip()
+            new_role = owner in ("", "__new__")
+            if not acc:
+                return {"ok": False, "error": "geef de accountability of purpose op"}
+            import re as _re2
+            if new_role:
+                rid = _re2.sub(r"\W+", "_", acc.lower())[:40].strip("_") or "nieuwe_rol"
+                change = {"purpose": acc[:140], "add_accountabilities": [], "new_role_parent": "noochville"}
+            else:
+                rid, change = owner, {"add_accountabilities": [acc[:140]]}
+            agenda.add(role_id=rid, kind="add_role" if new_role else "amend_role",
+                       change=change, reason=reason, by="founder", title=acc[:60])
+            return {"ok": True, "rov": "added"}
+        # de overige acties werken op één item
+        if action == "rov_consent":
+            return {"ok": agenda.set_status(iid, "consented"), "rov": "consented"}
+        if action == "rov_object":
+            return {"ok": agenda.set_status(iid, "objected"), "rov": "objected"}
+        # rov_react: reactie loggen + AI past voorstel aan (gegrond in de bank)
+        from nooch_village.governance_examples import GovernanceExamples, few_shot_block
+        item = agenda.get(iid)
+        if item is None:
+            return {"ok": False, "error": "voorstel niet gevonden"}
+        agenda.react(iid, reason)
+        ge = GovernanceExamples(os.path.join(dd, "governance_examples.json"))
+        block = few_shot_block(ge, item.get("title", "") + " " + item.get("reason", ""), k=3)
+        agenda.update_change(iid, amend_with_reaction(item, reason, examples_block=block))
+        return {"ok": True, "rov": "reacted"}
     if action in ("proj_approve", "proj_discard"):
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
         if action == "proj_approve":
@@ -1855,6 +2041,25 @@ def make_handler(data_dir: str | None):
                              if not r["archived"] and r["type"] == "role"]
                     body = render_triage(cur, 1, len(queue), roles,
                                          csrf_token, msg=msg).encode("utf-8")
+            elif path == "/roloverleg":
+                dd = data_dir or _default_data_dir()
+                from nooch_village.roloverleg import Agenda, secretary_check
+                agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
+                recs = Records(os.path.join(dd, "governance_records.json"))
+                roles = [r.id for r in recs.all()
+                         if not r.archived and r.type.value == "role"]
+                want = (qs.get("iid") or [""])[0]
+                item = agenda.get(want) if want else None
+                if item is None:
+                    body = render_roloverleg_overview(
+                        agenda.open(), agenda.all(), roles, csrf_token, msg=msg).encode("utf-8")
+                else:
+                    rec = recs.get(item["role_id"])
+                    snap = ({"purpose": rec.definition.purpose,
+                             "accountabilities": list(rec.definition.accountabilities),
+                             "domains": list(rec.definition.domains)} if rec else None)
+                    body = render_roloverleg(
+                        item, snap, secretary_check(item, recs), csrf_token, msg=msg).encode("utf-8")
             elif path in ("/", "/index.html"):
                 show_all = (qs.get("history") or ["0"])[0] in ("1", "true", "yes")
                 body = render_html(gather(data_dir), csrf_token=csrf_token, msg=msg,

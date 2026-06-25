@@ -746,3 +746,21 @@ logt 'vision_drop' + huis-regel). Cockpit focus-kaart: nieuw 'Afronden / oordeel
 met alle verdict-knoppen, gedeelde reden + huis-regel-vinkje. Inhabitant._training_signals voedt
 de reflex (rol-specifiek). Tests: +test_feedback.py, reflex-signaal-test, stub bijgewerkt.
 Suite groen (483 + 507).
+
+## Roloverleg (IDM): governance-voorstellen behandelen i.p.v. direct doorvoeren
+Het echte governance-overleg, zoals de roadmap aankondigde. Governance-keuzes uit de triage
+worden niet meer meteen doorgevoerd maar op een AGENDA gezet (data/roloverleg_agenda.json).
+In /roloverleg behandel je ze één voor één:
+- huidige rol (purpose + accountabilities) + de voorgestelde wijziging + reden;
+- Secretaris-check: de deterministische poort G0-G4 + de -en-formuleercheck (blok / let op);
+- reactie geven → AI past het voorstel aan (gegrond in de referentiebank, Holacracy-regels);
+- Consent (aangenomen) of Schadelijk (blijft staan, volgende keer oplossen);
+- zelf een voorstel toevoegen via hetzelfde proces;
+- 'Einde roloverleg' → de aangenomen voorstellen worden doorgevoerd via Gate + Secretary._adopt;
+  een voorstel dat de poort alsnog blokkeert blijft staan (objected).
+
+Nieuw: nooch_village/roloverleg.py (Agenda + secretary_check + amend_with_reaction + apply_consented).
+inbox_actions._route_kans_to_governance/decide_opportunity: met agenda → agenderen (status 'agendeerd'),
+zonder agenda → oude direct-adopt (back-compat). Cockpit: /roloverleg overzicht + behandel-scherm,
+rov_* dispatch, dashboard-link + 'Aan jou'-telling, flash. Tests: +test_roloverleg.py.
+Suite groen (504 + 492).
