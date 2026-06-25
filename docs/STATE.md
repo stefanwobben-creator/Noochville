@@ -4,7 +4,18 @@
 
 ## Waar we staan (2026-06-25)
 
-**Suite: 889 tests groen.** Elke stap met mutatie-check.
+**Suite: 895 tests groen.** Elke stap met mutatie-check.
+
+### Sessie 2026-06-25 (vervolg): kans-score per zoekwoord
+
+- **Weekrapport toont meetbare kans** i.p.v. losse trends-interesse. `opportunity_score(volume,
+  competition) = round(volume*(1-competition))` ("haalbaar verkeer": veel zoekvraag bij lage
+  concurrentie scoort hoog). `_enrich_volume` bewaart bij goedkeuren nu volume + competition + kans
+  (CPC verwijderd, niet relevant). Plus een **GSC-snapshot per exacte term** (onze positie +
+  klikken/impressies, of "nog niet in Google" = onontgonnen). `Library.set_evidence` merget evidence
+  zonder status/datum te raken. Backfill-CLI **`enrich_volumes [dry] [nogsc]`** vult bestaande
+  approved-woorden (mens-gated, KE per woord + één GSC-call). Faalt closed per bron.
+  Mac-actie: `./venv/bin/python -m nooch_village.village enrich_volumes` (vult de 17 woorden).
 
 ### Sessie 2026-06-25: test-isolatie, cross-path-memory, weekrapport
 

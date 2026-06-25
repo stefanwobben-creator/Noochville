@@ -344,3 +344,23 @@ opnieuw gesensed werd. Beide opgelost bij de wortel (isolatie-fixture; sense-kan
 een eenmalige opruiming. Het weekrapport maakt de waarde die het dorp produceert in één blik zichtbaar.
 
 Tests: 874 → 889.
+
+---
+
+## 2026-06-25 (vervolg) — Kans-score per zoekwoord
+
+**[feat] Meetbare kans i.p.v. losse interesse.** Het weekrapport toonde alleen `evidence.interest`
+(trends 1-100 / GSC-impressies), inconsistent. Nu een kwantitatieve kans: `opportunity_score(volume,
+competition) = round(volume*(1-competition))` — "haalbaar maandelijks verkeer". `_enrich_volume`
+bewaart bij goedkeuren volume + competition + kans. CPC bewust verwijderd (niet relevant voor ons).
+
+**[feat] GSC-stand per term.** Op verzoek: naast volume/concurrentie ook onze huidige Google-stand
+voor exact die zoekterm (positie + klikken/impressies), of "nog niet in Google top-resultaten" =
+onontgonnen. Eén GSC-call, per woord gematcht op de query. Maakt zichtbaar: veel kans én ranken we
+nog niet = eerste prioriteit.
+
+**[bouw] set_evidence + backfill.** `Library.set_evidence` merget evidence zonder status/datum te
+raken (verrijking achteraf, niet de approval-datum resetten). `library_enrich.enrich_library` +
+CLI `enrich_volumes [dry] [nogsc]` vult bestaande approved-woorden, mens-gated. Faalt closed per bron.
+
+Tests: 889 → 895. Mac-actie: `./venv/bin/python -m nooch_village.village enrich_volumes`.
