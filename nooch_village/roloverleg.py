@@ -34,10 +34,11 @@ class Agenda:
         atomic_write_json(self.path, self._items)
 
     def add(self, role_id: str, kind: str, change: dict, reason: str,
-            by: str = "founder", title: str = "", example: str = "") -> str:
+            by: str = "founder", title: str = "", example: str = "", benefit: str = "") -> str:
         """Zet een voorstel op de agenda. Dedup op (role_id, kind, eerste accountability/purpose).
-        `reason` = de spanning die dit oplost; `example` = een concreet voorbeeld (Holacracy:
-        een voorstel is tension-driven; de indiener vertelt hoe aannemen de spanning oplost)."""
+        `reason` = de spanning die dit oplost; `example` = een concreet voorbeeld; `benefit` = hoe
+        aannemen de EIGEN rol van de indiener helpt (verplicht bij een voorstel over een ándere rol —
+        Holacracy 'from your role'). (Een voorstel is tension-driven.)"""
         title = (title or role_id or "voorstel").strip()
         sig = (role_id, kind, (change.get("purpose") or "").lower(),
                tuple(a.lower() for a in change.get("add_accountabilities", [])))
@@ -49,7 +50,8 @@ class Agenda:
         iid = uuid.uuid4().hex[:12]
         self._items.append({
             "id": iid, "role_id": role_id, "kind": kind, "change": change,
-            "reason": reason or "", "example": example or "", "by": by or "founder", "title": title,
+            "reason": reason or "", "example": example or "", "benefit": benefit or "",
+            "by": by or "founder", "title": title,
             "status": "open", "reactions": [], "created_at": time.time()})
         self._save()
         return iid
@@ -113,6 +115,38 @@ def _proposal_from_item(item: dict):
         tension=f"roloverleg: {title}"[:200],
         trigger_example=f"structureel besluit via roloverleg door de mens: {title[:60]}",
         rationale=item.get("reason") or title or "Roloverleg-voorstel.", source="sensed")
+
+
+_EXEMPT_PROPOSERS = {"founder", "facilitator", "secretary"}   # Circle Lead / procesrollen
+
+
+def tension_validity(item: dict, *, llm_reason=None) -> tuple[bool, str]:
+    """Holacracy 'from your role' bij intake: een voorstel om een ÁNDERE rol te wijzigen is alleen
+    een geldige spanning als de indiener concreet kan benoemen hoe aannemen zíjn/háár eigen rol
+    helpt. Kan dat niet, dan mag de Facilitator de spanning ongeldig verklaren en het punt direct
+    schrappen, zónder het governance-proces te doorlopen.
+
+    Geeft (geldig, reden-bij-ongeldig). Deterministisch: een cross-rol-voorstel zonder benefit is
+    ongeldig. Is er wel een benefit en een LLM beschikbaar, dan toetst die nog of de benefit echt
+    aan de eigen rol raakt (fail-open: bij twijfel/geen-LLM geldig)."""
+    by = (item.get("by") or "").strip().lower()
+    target = (item.get("role_id") or "").strip().lower()
+    cross = bool(by) and bool(target) and by != target and by not in _EXEMPT_PROPOSERS
+    if not cross:
+        return True, ""                                     # eigen rol, of Circle Lead/procesrol
+    benefit = (item.get("benefit") or "").strip()
+    if not benefit:
+        return (False, f"geen baat voor de eigen rol benoemd: '{by}' stelt een wijziging voor aan "
+                f"'{target}', maar zegt niet hoe aannemen de eigen rol helpt (Holacracy: from your role)")
+    if llm_reason is not None:
+        ans = (llm_reason(
+            f"Een rol '{by}' stelt voor om rol '{target}' te wijzigen. Onderbouwing hoe het de eigen "
+            f"rol '{by}' helpt: \"{benefit}\". Raakt dit echt een spanning vanuit de rol '{by}' zelf "
+            "(niet alleen 'goed voor het dorp')? Antwoord met alleen JA of NEE.") or "").strip().upper()
+        if ans.startswith("NEE"):
+            return (False, f"de benoemde baat raakt geen spanning vanuit de eigen rol '{by}', "
+                    "maar een algemeen belang — dat is geen geldige eigen spanning")
+    return True, ""
 
 
 def secretary_check(item: dict, records) -> list[dict]:

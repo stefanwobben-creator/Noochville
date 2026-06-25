@@ -147,6 +147,40 @@ def test_voorstel_draagt_spanning_en_voorbeeld(tmp_path):
     assert "3 weken stil op TikTok" in page
 
 
+def test_tension_validity_from_your_role():
+    from nooch_village.roloverleg import tension_validity
+    # rol stelt voor een ÁNDERE rol te wijzigen zonder baat voor de eigen rol → ongeldig
+    cross = {"by": "analyst", "role_id": "scout", "benefit": ""}
+    ok, why = tension_validity(cross)
+    assert ok is False and "eigen rol" in why
+    # mét baat → geldig (deterministisch, geen LLM)
+    assert tension_validity({**cross, "benefit": "anders blijf ik op data wachten"})[0] is True
+    # eigen rol → altijd geldig; Circle Lead/procesrol vrijgesteld
+    assert tension_validity({"by": "scout", "role_id": "scout", "benefit": ""})[0] is True
+    assert tension_validity({"by": "founder", "role_id": "scout", "benefit": ""})[0] is True
+    # LLM mag een 'algemeen belang'-baat alsnog afkeuren
+    ok2, _ = tension_validity({**cross, "benefit": "goed voor het dorp"},
+                             llm_reason=lambda p: "NEE")
+    assert ok2 is False
+
+
+def test_rov_invalid_verwijdert_ongeldige_spanning_zonder_governance(tmp_path):
+    from nooch_village import cockpit
+    from nooch_village.roloverleg import Agenda
+    data = tmp_path / "data"; data.mkdir()
+    (data / "governance_records.json").write_text("{}", encoding="utf-8")
+    ag = Agenda(str(data / "roloverleg_agenda.json"))
+    iid = ag.add("scout", "amend_role", {"add_accountabilities": ["Bewaken van X"]},
+                 "x", by="analyst", title="X")            # cross-rol, geen benefit → ongeldig
+    res = cockpit._dispatch_action(str(data), "rov_invalid", iid, "", extra={})
+    assert res["ok"] and res["rov"] == "invalid"
+    assert Agenda(str(data / "roloverleg_agenda.json")).open() == []
+    # een geldige spanning kan NIET zo verwijderd worden
+    iid2 = ag.add("scout", "amend_role", {"add_accountabilities": ["Y-en"]}, "y", by="scout", title="Y")
+    res2 = cockpit._dispatch_action(str(data), "rov_invalid", iid2, "", extra={})
+    assert res2["ok"] is False
+
+
 def test_roloverleg_diff_huidig_vs_na(tmp_path):
     from nooch_village import cockpit
     item = {"id": "k1", "role_id": "scout", "kind": "amend_role",

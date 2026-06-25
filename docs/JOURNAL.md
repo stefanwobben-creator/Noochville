@@ -950,3 +950,14 @@ Tests uitgebreid. Suite groen (546 + 488).
   van het bezwaar (niet de waarheid), in volgorde 1→4→2→3: (1) benoemt het schade, (4) vanuit jouw
   rol, (2) veroorzaakt door dít voorstel (een 'kaart'-wijziging), (3) niet louter speculatief
   ('zou/zou kunnen') of wél omkeerbaar. Default: bezwaar geldig → integreren; mens beslist.
+
+## Roloverleg: 'from your role'-intakepoort (ongeldige cross-rol-spanning direct schrappen)
+- roloverleg.tension_validity(item, llm_reason=None): een voorstel om een ÁNDERE rol te wijzigen is
+  alleen een geldige spanning als de indiener benoemt hoe aannemen de EIGEN rol helpt (benefit).
+  Geen benefit → ongeldig. Met benefit + LLM: die mag een puur 'algemeen belang' alsnog afkeuren.
+  Eigen rol, founder en procesrollen (facilitator/secretary) zijn vrijgesteld.
+- Agenda.add draagt nu `benefit`; het add-formulier vraagt erom bij een wijziging aan een andere rol.
+- Behandel-scherm: bij een ongeldige spanning een Facilitator-banner + knop '⚖️ Spanning ongeldig —
+  verwijderen' (rov_invalid) die het punt direct van de agenda haalt, ZONDER governance-proces.
+  Een geldige spanning kan zo niet verwijderd worden.
+Suite groen (546 + 491).

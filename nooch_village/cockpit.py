@@ -976,6 +976,10 @@ def render_roloverleg_overview(items: list, agenda_all: list, roles: list,
         '<input type="text" name="reason" class="tg-in" placeholder="bijv. ik moet steeds zelf social posts schrijven en dat blijft liggen">'
         '<textarea name="voorbeeld" class="tg-in" rows="2" '
         'placeholder="concreet voorbeeld: laatst bleef de TikTok 3 weken stil omdat niemand de rol had"></textarea>'
+        '<div class="tg-meta" style="margin-top:.3rem">Pas je een ÁNDERE rol aan? Zeg dan hoe '
+        'aannemen jóuw eigen rol helpt (anders is de spanning ongeldig — Holacracy: from your role)</div>'
+        '<input type="text" name="benefit" class="tg-in" '
+        'placeholder="bijv. zonder deze accountability bij scout blijf ik als analist op data wachten">'
         '<button class="bigbtn go" type="submit" name="action" value="rov_add">'
         '➕ Op de agenda zetten</button></form></details>'
         '<script>function rovSuggest(){'
@@ -1025,6 +1029,8 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
     je reactie (→ AI past aan), en consent of schadelijk."""
     head = ('<div class="tg-wrap"><p><a href="/roloverleg">← agenda</a> · '
             '<a href="/">cockpit</a></p><h1>🏛️ Voorstel behandelen</h1>')
+    from nooch_village.roloverleg import tension_validity
+    valid, invalid_reason = tension_validity(item)
     ch = item.get("change", {})
     accs = ch.get("add_accountabilities", [])
     accs_rm = ch.get("remove_accountabilities", [])
@@ -1128,9 +1134,18 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
         '✓ Consent<small>geen bezwaar — wordt aangenomen en bij einde overleg doorgevoerd</small>'
         '</button>'
         f'{project_opt}'
-        '<button class="bigbtn warn" type="submit" name="action" value="rov_object">'
+        + ("" if valid else
+           '<button class="bigbtn warn" type="submit" name="action" value="rov_invalid">'
+           '⚖️ Spanning ongeldig — verwijderen<small>geen baat voor de eigen rol benoemd; '
+           'direct van de agenda, zonder governance</small></button>')
+        + '<button class="bigbtn warn" type="submit" name="action" value="rov_object">'
         '⚠ Schadelijk<small>blijft staan, lossen we de volgende keer op</small></button>'
         '</div></form>')
+    invalid_box = ("" if valid else
+                   '<div class="tg-dlg" style="border-left:3px solid #c0392b;padding-left:.5rem">'
+                   f'⚖️ <b>Facilitator:</b> deze spanning lijkt ongeldig — {_e(invalid_reason)}. '
+                   'Een voorstel om een ándere rol te wijzigen mag direct van de agenda zonder '
+                   'governance.</div>')
     card = (f'<div class="tg-card"><div class="tg-meta">Voorstel · door {_e(item.get("by",""))} · '
             f'status {_e(item.get("status",""))}</div>'
             f'<h2>{_e(item["title"])}</h2>'
@@ -1139,7 +1154,9 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
             f'<div class="muted" style="margin-top:.3rem"><b>Lost deze spanning op:</b> {_e(item.get("reason","")) or "—"}</div>'
             + (f'<div class="muted" style="margin-top:.15rem"><b>Concreet voorbeeld:</b> '
                f'{_e(item.get("example",""))}</div>' if item.get("example") else "")
-            + f'{sec}{react_log}</div>')
+            + (f'<div class="muted" style="margin-top:.15rem"><b>Helpt mijn eigen rol:</b> '
+               f'{_e(item.get("benefit",""))}</div>' if item.get("benefit") else "")
+            + invalid_box + f'{sec}{react_log}</div>')
     inner = (f'{head}{_banner(msg)}{card}{react_form}{decide}'
              '<div class="tg-skip"><a class="muted" href="/roloverleg">← terug naar de agenda</a>'
              '</div></div><style>' + _TRIAGE_CSS + '</style>')
@@ -1973,7 +1990,9 @@ def _flash(result: dict) -> str:
             "added": "➕ Voorstel op de agenda gezet.",
             "flipped": "↔ Omgezet (purpose ↔ accountability) en opnieuw geformuleerd.",
             "to_project": "▶ Als experiment op het projectbord gezet voor de rol — bij herhaling "
-                          "stolt het later tot accountability."}
+                          "stolt het later tot accountability.",
+            "invalid": "⚖️ Spanning ongeldig verklaard (geen baat voor de eigen rol) en direct "
+                       "van de agenda gehaald — geen governance nodig."}
     if result.get("rov") in _rov:
         return _rov[result["rov"]]
     if result.get("rov") == "ended":
@@ -2116,7 +2135,7 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                                   owner=extra.get("owner", ""), scope_override=scope,
                                   project_status="draft" if risky else "queued", projects=projects)
     if action in ("rov_react", "rov_consent", "rov_object", "rov_add", "rov_end", "rov_flip_facet",
-                  "rov_to_project"):
+                  "rov_to_project", "rov_invalid"):
         from nooch_village.roloverleg import (Agenda, amend_with_reaction, apply_consented,
                                               flip_facet)
         agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
@@ -2127,6 +2146,19 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                 return {"ok": False, "error": "voorstel niet gevonden"}
             agenda.update_change(iid, flip_facet(item))
             return {"ok": True, "rov": "flipped"}
+        if action == "rov_invalid":
+            # Holacracy 'from your role': een voorstel om een ándere rol te wijzigen zonder
+            # benoemde baat voor de eigen rol is geen geldige spanning → direct van de agenda,
+            # zonder governance-proces.
+            from nooch_village.roloverleg import tension_validity
+            item = agenda.get(iid)
+            if item is None:
+                return {"ok": False, "error": "voorstel niet gevonden"}
+            valid, why = tension_validity(item)
+            if valid:
+                return {"ok": False, "error": "deze spanning is wél geldig; verwijderen kan niet"}
+            agenda.remove(iid)
+            return {"ok": True, "rov": "invalid"}
         if action == "rov_to_project":
             # Geen accountability nodig om te handelen: laat de indienende rol dit als omkeerbaar
             # EXPERIMENT (project) doen. Bij herhaling stolt het later tot accountability.
@@ -2149,6 +2181,7 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
             import re as _re2
             owner = extra.get("owner", "")
             voorbeeld = (extra.get("voorbeeld") or "").strip()
+            benefit = (extra.get("benefit") or "").strip()
             new_role = owner in ("", "__new__")
             # Accountabilities: één per regel (nieuw veld 'accs'); val terug op het oude 'info'-veld.
             accs = [l.strip() for l in (extra.get("accs") or extra.get("info") or "").splitlines()
@@ -2170,7 +2203,8 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                 if not accs:
                     return {"ok": False, "error": "geef minstens één accountability op"}
                 agenda.add(role_id=owner, kind="amend_role", change={"add_accountabilities": accs},
-                           reason=reason, by="founder", title=accs[0][:60], example=voorbeeld)
+                           reason=reason, by="founder", title=accs[0][:60], example=voorbeeld,
+                           benefit=benefit)
             return {"ok": True, "rov": "added"}
         # de overige acties werken op één item
         if action == "rov_consent":
@@ -2435,6 +2469,7 @@ def make_handler(data_dir: str | None):
                      "domein": (form.get("domein") or [""])[0],
                      "accs": (form.get("accs") or [""])[0],
                      "voorbeeld": (form.get("voorbeeld") or [""])[0],
+                     "benefit": (form.get("benefit") or [""])[0],
                      "remember": (form.get("remember") or [""])[0]}
             result = _dispatch_action(data_dir, action, iid, reason, extra=extra)
             # 303 → verse GET. Rails keren terug naar de spanning (next), sluiten gaat home.
