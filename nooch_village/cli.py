@@ -512,6 +512,39 @@ def main() -> None:
             print(f"   {res['answered']} beantwoord, {res['pending']} blijft wachten "
                   f"(geen LLM of geen antwoord).")
 
+    elif mode == "ingest_governance":
+        # Parse een (vertrouwelijke) governance-export naar de lokale referentiebank.
+        #   python -m nooch_village.village ingest_governance "<archetype>" pad/naar.pdf
+        # Accumuleert over meerdere aanroepen (dedup). Blijft lokaal in data/ (gitignored).
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.governance_examples import GovernanceExamples, parse_governance_pdf
+        from nooch_village.village import BASE_DIR
+        args = sys.argv[2:]
+        if len(args) < 2:
+            print('Gebruik: ingest_governance "<archetype>" <pad.pdf> [pad2.pdf ...]',
+                  file=sys.stderr)
+            sys.exit(1)
+        archetype, paths = args[0], args[1:]
+        ctx = load_context(BASE_DIR)
+        store = GovernanceExamples(os.path.join(ctx.data_dir, "governance_examples.json"))
+        merged = store.all()
+        seen = {(r["role"].lower(), r["purpose"].lower()) for r in merged}
+        added = 0
+        for p in paths:
+            if not os.path.exists(p):
+                print(f"  ⚠️ niet gevonden: {p}", file=sys.stderr)
+                continue
+            roles = parse_governance_pdf(p, archetype)
+            for r in roles:
+                k = (r["role"].lower(), r["purpose"].lower())
+                if k not in seen:
+                    seen.add(k); merged.append(r); added += 1
+            print(f"  • {os.path.basename(p)} → {len(roles)} rollen geparsed")
+        store.replace(merged)
+        print(f"✅ Referentiebank: {added} nieuw, totaal {store.count()} rollen "
+              f"(vertrouwelijk, lokaal in data/governance_examples.json).")
+
     else:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
@@ -519,6 +552,7 @@ def main() -> None:
               "content_strategist | grant_serpapi_trends | grant_skill | revoke_skill | "
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "
               "measure_propose | rereview | ingest | notes_remove | recurate | "
-              "ground | harry_run | roster | keys | competitor | formalize | answer_questions",
+              "ground | harry_run | roster | keys | competitor | formalize | answer_questions | "
+              "ingest_governance",
               file=sys.stderr)
         sys.exit(1)

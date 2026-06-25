@@ -165,22 +165,27 @@ def override_library_term(library, word: str, decision: str,
 
 
 def _route_kans_to_governance(records, owner: str, title: str, wat: str, waarom: str,
-                              business_case, *, by: str = "") -> dict:
+                              business_case, *, by: str = "", examples_block: str = "",
+                              llm_reason=None) -> dict:
     """Los een kans op in governance: nieuwe rol (owner == '__new__') of een bestaande rol
-    uitbreiden met een accountability. Via de sync-poort Gate.check + Secretary._adopt op de
+    uitbreiden met een accountability. De accountability wordt Holacracy-correct geformuleerd
+    (gegrond met echte voorbeelden). Via de sync-poort Gate.check + Secretary._adopt op de
     on-disk records (geen Village/bus). Geeft {status: adopted|escalated|invalid, reason}."""
     import re as _re
     from nooch_village.event_bus import EventBus
     from nooch_village.governance import Gate, Secretary
     from nooch_village.models import Proposal, GovernanceChange, ChangeKind
     owner = (owner or "").strip()
+    # Formuleer de accountability volgens de Holacracy-regels (fail-closed → titel).
+    acc = formulate_accountability(title, wat, examples_block=examples_block, llm_reason=llm_reason)
     if owner in ("", "__new__"):
         r_id = _re.sub(r"\W+", "_", title.lower())[:40].strip("_") or "nieuwe_rol"
         change = GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id=r_id,
-                                  purpose=(wat or title)[:140], new_role_parent="noochville")
+                                  purpose=(wat or title)[:140], new_role_parent="noochville",
+                                  add_accountabilities=[acc])
     else:
         change = GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id=owner,
-                                  add_accountabilities=[title])
+                                  add_accountabilities=[acc])
     proposal = Proposal(
         proposer_role=by or "founder", change=change, tension=f"kans: {title}"[:200],
         # 'structureel' + 'mens besluit' = legitieme herhalingsgrond: jij beslist via triage.
@@ -197,7 +202,7 @@ def _route_kans_to_governance(records, owner: str, title: str, wat: str, waarom:
 def decide_opportunity(inbox, iid: str, decision: str, *, reason: str = "",
                        destination: str = "project", owner: str = "",
                        remember_constraint: bool = False, scope_override: str = "",
-                       info: str = "", project_status: str = "queued",
+                       info: str = "", project_status: str = "queued", examples_block: str = "",
                        projects=None, notes=None, constraints=None, records=None) -> dict:
     """Triage van een kans (mens-poort). approve → kies bestemming: 'project' (voor `owner`,
     op het projectbord) of 'knowledge' (kennis-kaart). reject → genegeerd; bij remember_constraint
@@ -234,7 +239,8 @@ def decide_opportunity(inbox, iid: str, decision: str, *, reason: str = "",
     # decision == "add": maak een uitkomst, item blijft open.
     if destination == "governance" and records is not None:
         res = _route_kans_to_governance(records, owner, title, wat, ctx.get("waarom", ""),
-                                        ctx.get("business_case"), by=ctx.get("by", ""))
+                                        ctx.get("business_case"), by=ctx.get("by", ""),
+                                        examples_block=examples_block)
         return {"ok": True, "status": "added", "destination": "governance", "title": title,
                 "gov_status": res.get("status"), "gov_reason": res.get("reason", "")}
     if destination == "knowledge" and notes is not None:
@@ -338,10 +344,31 @@ def answer_pending_questions(inbox, *, records=None, llm_reason=None, limit: int
     return {"ok": True, "answered": answered, "pending": len(qs) - answered}
 
 
-def pick_governance_target(roster_ids, title: str, wat: str, *, llm_reason=None) -> str:
+def formulate_accountability(title: str, wat: str, *, examples_block: str = "",
+                             llm_reason=None) -> str:
+    """Formuleer een kans tot één Holacracy-accountability (NL: -en-vorm vooraan, doorlopende
+    activiteit). Gegrond met echte voorbeelden uit vergelijkbare orgs. Fail-closed → de titel."""
+    from nooch_village.governance_examples import ACCOUNTABILITY_RULES
+    title = (title or "").strip()
+    if llm_reason is None:
+        from nooch_village.llm import reason as llm_reason
+    prompt = (
+        "Je belegt voor NoochVille (duurzaam, vegan schoenenmerk) een kans als accountability "
+        "van een rol.\n\n" + ACCOUNTABILITY_RULES + "\n\n"
+        + (examples_block + "\n\n" if examples_block else "")
+        + f"Kans: {title}\nToelichting: {wat}\n\n"
+        "Schrijf PRECIES één accountability volgens de regels (begint met de -en-vorm, "
+        "doorlopende activiteit). Eén regel, niets anders.")
+    out = (llm_reason(prompt) or "").strip().splitlines()
+    line = out[0].strip().strip('"- ').strip() if out else ""
+    return line[:140] or title
+
+
+def pick_governance_target(roster_ids, title: str, wat: str, *, examples_block: str = "",
+                           llm_reason=None) -> str:
     """AI kiest of een kans een BESTAANDE rol uitbreidt of een NIEUWE rol vraagt. Geeft een
-    bestaand rol-id terug, of '__new__'. Heeft overzicht over alle rollen (roster_ids). Fail-
-    closed zonder LLM → '__new__' (de mens kan in de UI altijd zelf de rol kiezen)."""
+    bestaand rol-id terug, of '__new__'. Heeft overzicht over alle rollen (roster_ids) en —
+    ter inspiratie — echte rollen uit vergelijkbare orgs. Fail-closed zonder LLM → '__new__'."""
     ids = [r for r in (roster_ids or []) if r and r != "noochville"]
     if not ids:
         return "__new__"
@@ -351,8 +378,9 @@ def pick_governance_target(roster_ids, title: str, wat: str, *, llm_reason=None)
         "NoochVille (duurzaam schoenenmerk) gebruikt Holacracy. Een kans moet via governance "
         "belegd worden. Kies of een BESTAANDE rol hiervoor uitgebreid wordt, of dat er een NIEUWE "
         "rol nodig is. Een nieuwe rol alleen als geen bestaande rol logisch past.\n\n"
-        f"Kans: {title}\nToelichting: {wat}\n\n"
-        f"Bestaande rollen: {', '.join(ids)}\n\n"
+        + (examples_block + "\n\n" if examples_block else "")
+        + f"Kans: {title}\nToelichting: {wat}\n\n"
+        f"Bestaande rollen in NoochVille: {', '.join(ids)}\n\n"
         "Antwoord met PRECIES één regel: het rol-id van de best passende bestaande rol, "
         "of het woord __new__ als geen enkele past. Niets anders.")
     out = (llm_reason(prompt) or "").strip().lower()
@@ -368,16 +396,16 @@ def pick_governance_target(roster_ids, title: str, wat: str, *, llm_reason=None)
 
 
 def formulate_project(title: str, wat: str, owner: str = "", *, llm_reason=None) -> str:
-    """AI formuleert een kans tot een Holacracy-project: een heldere uitkomst-zin (waar je
-    naartoe werkt), niet vaag. Fail-closed zonder LLM → de oorspronkelijke titel."""
+    """AI formuleert een kans tot een Holacracy-project: een heldere uitkomst-zin als AFGERONDE
+    toestand (waar je naartoe werkt), niet vaag. Fail-closed zonder LLM → de oorspronkelijke titel."""
     title = (title or "").strip()
     if llm_reason is None:
         from nooch_village.llm import reason as llm_reason
     prompt = (
-        "In Holacracy is een PROJECT een concrete uitkomst die je wilt bereiken, geformuleerd "
-        "als een afgeronde toestand (bijv. 'Reviews zichtbaar op elke productpagina'), niet als "
-        "een vage wens of een taak. Herschrijf onderstaande kans tot één zo'n korte uitkomst-zin "
-        "in gewone taal. Geen jargon.\n\n"
+        "In Holacracy is een PROJECT een concrete uitkomst, geformuleerd als een AFGERONDE "
+        "toestand (voltooid): bijv. 'Reviews zichtbaar op elke productpagina', 'Nieuw logo "
+        "ontworpen'. Niet als vage wens, niet als doorlopende taak. Herschrijf onderstaande kans "
+        "tot één zo'n korte uitkomst-zin in gewone taal. Geen jargon.\n\n"
         f"Kans: {title}\nToelichting: {wat}\n"
         f"{f'Uit te voeren door rol: {owner}' if owner else ''}\n\n"
         "Antwoord met PRECIES één korte zin, niets anders.")

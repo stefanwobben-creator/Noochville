@@ -672,3 +672,22 @@ kaart (stapelen); klaar/vraag/visie → volgende kaart schuift vanzelf in beeld.
 
 Nieuw: cockpit.render_triage + /triage GET-route + focus-knop. Tests: +test_focusmodus_*.
 Suite groen (478 + 489; test_loop discovery is een bekende flaky threaded-timing-test).
+
+## Governance-referentiebank: few-shot-grounding uit echte Holacracy-orgs (vertrouwelijk)
+Drie governance-exports van bestaande organisaties (geanonimiseerd naar branche-archetype)
+geparsed tot 1.651 rol-skeletten: archetype, rolnaam, purpose, accountabilities, domeinen.
+Projecten en persoonsnamen bewust NIET bewaard. Nieuw: nooch_village/governance_examples.py
+(GovernanceExamples-store + parse_governance_text/_pdf + lexicale search + few_shot_block +
+ACCOUNTABILITY_RULES). CLI 'ingest_governance "<archetype>" <pdf...>' accumuleert in
+data/governance_examples.json.
+
+HARDE GRENS — vertrouwelijk: de store leeft alleen lokaal in data/ (gitignored), wordt NIET
+door cockpit.gather() ingeladen, en mag nooit in notes/keywords/content/Field Notes belanden.
+Alleen de governance-formuleer-calls lezen eruit.
+
+Grounding ingebouwd in de bestaande governance-flow: pick_governance_target krijgt vergelijkbare
+echte rollen als inspiratie; nieuw formulate_accountability schrijft een kans Holacracy-correct
+(NL: -en-vorm vooraan, doorlopende activiteit, bron holacracy.org) gegrond met voorbeelden;
+_route_kans_to_governance gebruikt die geformuleerde accountability i.p.v. de ruwe titel (zowel
+amend als add_role); formulate_project versterkt met de 'afgeronde toestand'-regel. Alles
+fail-closed zonder store/LLM. Tests: +test_governance_examples.py. Suite groen (485 + 491).

@@ -1581,15 +1581,20 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
             return decide_opportunity(inbox, iid, "add", destination="knowledge",
                                       info=extra.get("info", ""), notes=notes)
         if action == "gov_proposal":
+            from nooch_village.governance_examples import GovernanceExamples, few_shot_block
+            ge = GovernanceExamples(os.path.join(dd, "governance_examples.json"))
+            item = inbox.get(iid) or {}
+            c = item.get("context") or {}
+            query = (c.get("title") or item.get("subject", "")) + " " + c.get("wat", "")
+            block = few_shot_block(ge, query, k=3)          # vertrouwelijke referentie (lokaal)
             owner = extra.get("owner", "")
-            if owner == "__auto__":                       # AI bepaalt nieuw vs. uitbreiden
-                item = inbox.get(iid) or {}
-                c = item.get("context") or {}
+            if owner == "__auto__":                         # AI bepaalt nieuw vs. uitbreiden
                 owner = pick_governance_target(
                     [r.id for r in records.all()],
-                    c.get("title") or item.get("subject", ""), c.get("wat", ""))
+                    c.get("title") or item.get("subject", ""), c.get("wat", ""),
+                    examples_block=block)
             return decide_opportunity(inbox, iid, "add", destination="governance",
-                                      owner=owner, records=records)
+                                      owner=owner, records=records, examples_block=block)
         # tac_project: AI formuleert de project-uitkomst (Holacracy), fail-closed → titel.
         # Het project wordt een CONCEPT (draft): je ziet 'm eerst en keurt 'm goed vóór hij
         # op het bord van de rol komt.
