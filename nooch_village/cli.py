@@ -286,6 +286,25 @@ def main() -> None:
         if dry:
             print("\nDraai zonder 'dry' om dit echt weg te schrijven.")
 
+    elif mode == "add_seed":
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.library import Library
+        from nooch_village.village import BASE_DIR
+        words = [a.strip() for a in sys.argv[2:] if a.strip()]
+        if not words:
+            print('Gebruik: python -m nooch_village.village add_seed "footwear" "fashion"',
+                  file=sys.stderr)
+            sys.exit(1)
+        ctx = load_context(BASE_DIR)
+        lib = Library(os.path.join(ctx.data_dir, "library.json"))
+        for w in words:
+            lib.curate(w, "approved", rationale="seed toegevoegd door de mens (volg-woord)",
+                       by="founder")
+            lib.set_function(w, "volg")                   # expliciet seed, ongeacht woordenaantal
+            print(f"🌱 volg-woord toegevoegd: {w}")
+        print("Draai 'enrich_volumes' om volume + 5-jaars trend op te halen voor de nieuwe seeds.")
+
     elif mode == "synthesize":
         import os
         from nooch_village.config import load_context
