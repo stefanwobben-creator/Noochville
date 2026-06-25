@@ -8,6 +8,7 @@ hierop, zodat 'bol staan van spanningen' geen ruis wordt maar een geprioriteerde
 Pure module: geen I/O, los testbaar.
 """
 from __future__ import annotations
+import re
 
 _EFFORT_RANGE = (1, 5)        # 1 = klein, 5 = groot
 _TIERS = {                    # leesbare effect-tier als de inwoner geen getal kan geven
@@ -21,7 +22,12 @@ def make_business_case(metric: str = "pairs_sold", *, effect=0, effort: int = 3,
     """Bouw een genormaliseerde business-case. effect = geschatte bijdrage aan de metriek
     (getal of tier xs/s/m/l/xl); effort 1-5; confidence 0-1."""
     if isinstance(effect, str):
-        effect = _TIERS.get(effect.strip().lower(), 0)
+        key = effect.strip().lower()
+        if key in _TIERS:
+            effect = _TIERS[key]
+        else:
+            m = re.search(r"[\d.]+", key)        # numerieke string ('80', '~50 paar')
+            effect = float(m.group()) if m else 0.0
     try:
         effect = max(0.0, float(effect))
     except (TypeError, ValueError):

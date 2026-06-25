@@ -464,3 +464,19 @@ bouwstenen + 5 fasen + vitaliteits-KPI's. Noordster: 1M paar/jaar; batch 4 = 100
   noordster in de kop. Lege staat verwijst naar Fase 2.
 
 Tests: 928 → 933. Volgende: Fase 2 (opportunity-reflex die de backlog vult), dan Fase 3 (Synthesist).
+
+---
+
+## 2026-06-25 (vervolg 8) — Ademend dorp Fase 2: opportunity-reflex
+
+**[feat]** Elke rol heeft nu een opportunity-reflex (`Inhabitant._opportunity_reflex`, aangeroepen in
+`_maybe_reflect`, dus op het reflect-interval, default wekelijks). De rol vraagt de LLM, gevoed met zijn
+purpose/accountabilities/skills + de noordster (1M/jaar) + actief doel, om de ÉNE hoogst-renderende kans:
+TYPE (project/amend_role/add_role), TITEL, HYPOTHESE, EFFECT/EFFORT/CONFIDENCE/RATIONALE. Resultaat:
+- project → ProjectLedger.create (met hypothesis + business_case), dedup op open scope.
+- amend_role/add_role → governance-voorstel mét business_case (mens-gated via de gate), dedup per proces.
+Alles landt in de cockpit-kansen-backlog, gerangschikt op waarde. Harde regel intact: sensen+voorstellen,
+nooit zelf uitvoeren; fail-closed zonder LLM. `_parse_opportunity` robuust tegen markdown.
+ProjectLedger.create + open_scopes uitgebreid; make_business_case leest nu ook numerieke strings.
+
+Tests: 933 → 937. Demo: zet reflect_interval_seconds=0 in settings.ini om 'm op de eerstvolgende puls te laten vuren.

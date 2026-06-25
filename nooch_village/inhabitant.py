@@ -9,6 +9,40 @@ from nooch_village.triage_engine import TriageContext, classify as _triage_class
 from nooch_village.coherence import evaluate_coherence
 
 
+def _parse_opportunity(text: str) -> dict:
+    """Parse het gestructureerde antwoord van de opportunity-reflex (TYPE/TITEL/HYPOTHESE/
+    EFFECT/EFFORT/CONFIDENCE/RATIONALE). Robuust tegen markdown/bullets."""
+    out: dict = {}
+    for raw in (text or "").splitlines():
+        line = raw.strip().lstrip("*-•# ").strip()
+        if ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key = key.strip().lower().strip("*").strip()
+        val = val.strip().strip("*").strip()
+        if not val:
+            continue
+        if key == "type":
+            v = val.lower()
+            out["type"] = ("amend_role" if "amend" in v else
+                           "add_role" if "add" in v or "nieuwe" in v else "project")
+        elif key in ("titel", "title"):
+            out["titel"] = val[:120]
+        elif key in ("hypothese", "hypothesis"):
+            out["hypothese"] = val[:240]
+        elif key == "effect":
+            out["effect"] = val
+        elif key == "effort":
+            m = re.search(r"\d+", val)
+            out["effort"] = int(m.group()) if m else 3
+        elif key == "confidence":
+            m = re.search(r"[\d.]+", val)
+            out["confidence"] = float(m.group()) if m else 0.5
+        elif key == "rationale":
+            out["rationale"] = val[:200]
+    return out
+
+
 class Inhabitant(threading.Thread):
     """Eén rol per inwoner (leaf). Doet zelf werk via zijn skills."""
 
@@ -417,6 +451,97 @@ class Inhabitant(threading.Thread):
         self._last_reflect = now
         self._reflect()
         self._sense_redundancy()
+        self._opportunity_reflex()
+
+    def _opportunity_reflex(self) -> None:
+        """Fase 2 — denk vanuit je rol één hoogst-renderende KANS richting de noordster, en zet
+        die als onderbouwd voorstel (project / rol-uitbreiding / nieuwe rol) met hypothese +
+        business-case op de backlog. Sensen + voorstellen, NOOIT zelf uitvoeren. Fail-closed
+        zonder LLM. Mens beslist via de gate (governance) of pakt het project op."""
+        from nooch_village.llm import reason
+        from nooch_village.business_case import make_business_case, business_value
+        dna = getattr(self, "dna", None)
+        if dna is None:
+            return
+        records = getattr(self.context, "records", None)
+        root = records.root() if records is not None else None
+        if root is not None and self.id == root.id:
+            return                                        # de wortelcirkel doet dit niet
+        strat = getattr(self.context, "strategy", {}) or {}
+        ns = strat.get("north_star", {}) or {}
+        ns_txt = (f"{ns.get('target')} {ns.get('unit', '')} {ns.get('horizon', '')}".strip()
+                  or "groei richting de missie")
+        goals = "; ".join(g.get("description", "") for g in strat.get("goals", [])
+                          if g.get("active")) or "—"
+        prompt = (
+            f"Je bent de rol '{self.id}' in NoochVille. Purpose: {dna.purpose}\n"
+            f"Accountabilities: {', '.join(dna.accountabilities) or '-'}\n"
+            f"Skills: {', '.join(dna.skills) or '-'}\n"
+            f"Noordster: {ns_txt}. Actief doel: {goals}.\n\n"
+            "Bedenk vanuit JOUW rol de ÉNE hoogst-renderende kans die ons dichter bij de noordster "
+            "brengt: een project, een uitbreiding van je eigen rol, of een nieuwe rol. Onderbouw met "
+            "een toetsbare hypothese en een ruwe business-case (effect op pairs_sold).\n\n"
+            "Antwoord exact zo:\n"
+            "TYPE: project | amend_role | add_role\n"
+            "TITEL: <kort, concreet>\n"
+            "HYPOTHESE: als we X, dan Y omdat Z\n"
+            "EFFECT: <geschat aantal paar, of tier xs/s/m/l/xl>\n"
+            "EFFORT: <1-5>\n"
+            "CONFIDENCE: <0-1>\n"
+            "RATIONALE: <één zin>"
+        )
+        out = reason(prompt)
+        if not out:
+            return
+        o = _parse_opportunity(out)
+        if not o.get("titel"):
+            return
+        bc = make_business_case(metric=(ns.get("metric") or "pairs_sold"),
+                                effect=o.get("effect", 0), effort=o.get("effort", 3),
+                                confidence=o.get("confidence", 0.5),
+                                horizon=ns.get("horizon", ""), rationale=o.get("rationale", ""))
+        typ = o.get("type", "project")
+        hyp = o.get("hypothese", "")
+        if typ == "project":
+            ledger = getattr(self.context, "projects", None)
+            if ledger is None:
+                return
+            if o["titel"] in ledger.open_scopes():        # dedup: zelfde kans niet opnieuw
+                return
+            ledger.create(self.id, o["titel"], "tension", hypothesis=hyp, business_case=bc)
+            self.log.info("💡 kans (project) → backlog: %s (waarde %s)",
+                          o["titel"][:60], business_value(bc))
+        else:
+            self._raise_opportunity_governance(typ, o["titel"], hyp, bc)
+
+    def _raise_opportunity_governance(self, typ: str, titel: str, hyp: str, bc: dict) -> None:
+        """Rol-uitbreiding of nieuwe rol als onderbouwd governance-voorstel (mens-gated)."""
+        import hashlib
+        from nooch_village.models import GovernanceChange, ChangeKind, Proposal
+        from nooch_village.governance import proposal_to_dict
+        h = hashlib.sha256((typ + titel).encode()).hexdigest()[:16]
+        seen = getattr(self, "_opp_seen", None)
+        if seen is None:
+            seen = self._opp_seen = set()
+        if h in seen:
+            return                                        # dedup per proces
+        seen.add(h)
+        if typ == "amend_role":
+            change = GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id=self.id,
+                                      add_accountabilities=[titel])
+        else:                                             # add_role
+            r_id = re.sub(r"\W+", "_", titel.lower())[:40].strip("_") or "nieuwe_rol"
+            change = GovernanceChange(kind=ChangeKind.ADD_ROLE, role_id=r_id,
+                                      purpose=titel, new_role_parent="noochville")
+        proposal = Proposal(
+            proposer_role=self.id, change=change,
+            tension=f"kans: {titel}"[:200],
+            trigger_example=f"{self.id}: kans richting de noordster — {titel[:60]}",
+            rationale=hyp or "Onderbouwde kans uit de opportunity-reflex.",
+            hypothesis=hyp, business_case=bc)
+        self.bus.publish(Event("proposal_raised",
+                               {"proposal": proposal_to_dict(proposal)}, self.id))
+        self.log.info("💡 kans (%s) → voorstel %s: %s", typ, proposal.id, titel[:60])
 
     def _sense_redundancy(self, min_count: int = 2) -> bool:
         """Pioniers-reflectie (spiegelbeeld van gap-sensing): ben ik nog nodig?

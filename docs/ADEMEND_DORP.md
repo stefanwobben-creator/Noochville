@@ -34,7 +34,7 @@ kennisbank ademt nog niet: één bron (Harry), nul verrijking, nul links.
 ## Fasering (hoogste hefboom eerst)
 - **Fase 1 — frame (GEBOUWD):** business-case-model + `business_value` + noordster in strategy.json +
   cockpit "🎯 Kansen-backlog" die voorstellen/projecten mét business-case op waarde rangschikt.
-- **Fase 2 — opportunity-reflex:** vul de backlog. Begin met GrowthAnalyst als sjabloon, dan uitrollen.
+- **Fase 2 — opportunity-reflex (GEBOUWD):** elke rol bedenkt periodiek (reflect-interval, default wekelijks) vanuit zijn purpose één hoogst-renderende kans → project (ledger) of governance-voorstel, met hypothese + business-case → backlog. Sensen+voorstellen, nooit zelf uitvoeren. Fail-closed zonder LLM.
 - **Fase 3 — Synthesist:** verrijking + bridge-links (13 kandidaten liggen klaar).
 - **Fase 4 — nieuw zintuig:** één bron tegelijk (reviews of regelgeving eerst).
 - **Fase 5 — wekelijkse raad.**

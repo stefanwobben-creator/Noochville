@@ -45,7 +45,8 @@ class ProjectLedger:
 
     # ── schrijven ──────────────────────────────────────────────────────────────
 
-    def create(self, owner: str, scope, trigger: str) -> str:
+    def create(self, owner: str, scope, trigger: str,
+               hypothesis: str = "", business_case: dict | None = None) -> str:
         if trigger not in _VALID_TRIGGERS:
             raise ValueError(f"ongeldig trigger: '{trigger}'")
         pid = uuid.uuid4().hex[:12]
@@ -60,9 +61,16 @@ class ProjectLedger:
             "created_at": now,
             "updated_at": now,
             "outcome":    None,
+            "hypothesis":    hypothesis or "",
+            "business_case": business_case,
         }
         self._save()
         return pid
+
+    def open_scopes(self) -> set:
+        """Scopes van niet-afgeronde projecten (voor dedup van kans-voorstellen)."""
+        return {str(p.get("scope")) for p in self._projects.values()
+                if p.get("status") not in _TERMINAL}
 
     def start(self, pid: str) -> bool:
         p = self._projects.get(pid)
