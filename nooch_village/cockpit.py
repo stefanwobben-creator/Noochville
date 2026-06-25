@@ -256,6 +256,17 @@ def gather(data_dir: str | None = None) -> dict:
     lib = sorted((_lib_row(w, e) for w, e in (library.all() or {}).items()),
                  key=lambda x: (_ws_order.get(x["status"], 9), x["word"]))
 
+    # Attributie terugkoppelen: paren verkocht via een landingspagina toewijzen aan het doelwit-
+    # woord dat bij die pagina hoort. Zo zie je per doelwit hoeveel verkoop het opleverde.
+    _pages = shopify.get("top_landing_pages") or []
+    if _pages:
+        from nooch_village.attribution import attribute_keywords
+        _doelwit = [r["word"] for r in lib if r.get("function") == "doelwit"]
+        _kw_sales = attribute_keywords(_pages, _doelwit)
+        for r in lib:
+            if r.get("function") == "doelwit":
+                r["sales_pairs"] = _kw_sales.get(r["word"], 0)
+
     # Inzichten: claim + status + hoe vaak gegrond (geëmergeerd eerst). Synthese-kaartjes
     # (creatieve links tussen kaartjes) zijn herkenbaar via de tag en hun ouders.
     insights = sorted(
@@ -1565,17 +1576,26 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
             f'<div style="margin-top:.3rem">{_flip(w, "volg", "→ 🌱 volg")}</div>')
 
     # Doelwit-woorden: waar we op willen ranken (sorteer op kans).
+    def _sales_cell(x):
+        sp = x.get("sales_pairs")
+        if sp:
+            return f'<b>👟 {_fmt_int(sp)}</b>'
+        return '<span class="muted">—</span>'
+
     trows = "".join(
         f'<tr><td><b>{_e(x["word"])}</b></td>'
         f'<td>{_num(x.get("volume"), "/mnd")}</td>'
         f'<td>{("<b>" + _fmt_int(x["opportunity"]) + "</b>") if x.get("opportunity") is not None else "<span class=muted>—</span>"}</td>'
         f'<td>{_pos_cell(x)}</td>'
+        f'<td>{_sales_cell(x)}</td>'
         f'<td style="min-width:230px">{_target_acts(x)}</td></tr>'
-        for x in sorted(targets, key=lambda x: -((x.get("opportunity") if x.get("opportunity") is not None else -1))))
+        # sorteer op verkoop (wat geld oplevert eerst), dan op kans
+        for x in sorted(targets, key=lambda x: (-(x.get("sales_pairs") or 0),
+                                                -((x.get("opportunity") if x.get("opportunity") is not None else -1)))))
     targets_tbl = (
         '<table><thead><tr><th>doelwit-woord</th><th>volume</th><th>kans</th>'
-        '<th>onze Google-stand</th><th>jouw oordeel</th></tr></thead>'
-        f'<tbody>{trows or "<tr><td colspan=5 class=muted>geen doelwit-woorden</td></tr>"}</tbody></table>')
+        '<th>onze Google-stand</th><th>verkoop</th><th>jouw oordeel</th></tr></thead>'
+        f'<tbody>{trows or "<tr><td colspan=6 class=muted>geen doelwit-woorden</td></tr>"}</tbody></table>')
 
     # Volg-woorden: seeds voor de radar; toon de meerjarige trend-toestand (5 jaar) + sparkline.
     def _surge_tag(x):

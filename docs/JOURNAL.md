@@ -854,3 +854,12 @@ toont deze naast land/producten. Eerlijke grens: organische zoekterm is bij Goog
 'not provided', dus attributie is op landingspagina + kanaal (UTM-term vooral bij campagnes).
 fetch_orders surfacet nu ook GraphQL-fouten (geen stille 0). Geen PII. Tests uitgebreid.
 Suite groen (497 + 514).
+
+## Landingspagina → keyword: verkoop terug in de woordenschat
+De attributie sluit nu de cirkel naar de bibliotheek. Nieuw: nooch_village/attribution.py
+(attribute_keywords, puur): match elke landingspagina (uit Shopify-attributie) aan het best
+passende doelwit-woord via woord-overlap (prefix-match enkelvoud/meervoud, drempel ≥helft van het
+zoekwoord, één pagina telt bij één woord). cockpit.gather berekent per doelwit-woord 'sales_pairs'
+en de doelwit-tabel toont een 'verkoop'-kolom (👟 N), gesorteerd op verkoop eerst (wat geld
+oplevert bovenaan). Zo zie je welke targets daadwerkelijk verkopen, niet alleen welke volume hebben.
+Tests: +test_attribution.py. Suite groen (522 + 493).
