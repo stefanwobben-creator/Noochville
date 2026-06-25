@@ -1,0 +1,76 @@
+"""Autonome project-uitvoering — de rol pakt z'n omkeerbare projecten zelf op.
+
+Filosofie (docs/GOVERNANCE_FILOSOFIE.md): een rol mag vanuit zijn purpose vrij handelen aan een
+experiment zolang het OMKEERBAAR is en geen domein van een ander schendt. Een accountability is
+daarvoor NIET nodig (accountability = verwachting, geen toestemming).
+
+Grenzen die hier hard bewaakt worden:
+- Alleen `queued` projecten (die zijn door de omkeerbaarheidspoort als omkeerbaar gemarkeerd).
+- De rol levert UITSLUITEND tekst (een deliverable / next action / analyse) met zijn BESTAANDE
+  capaciteit (LLM-redenering). Geen externe write-API's, geen code, geen nieuwe skills, niets
+  onomkeerbaars — dat blijft mens-gated (geboren-vs-bemenst).
+- Vraagt het project tóch nieuwe capaciteit of een onomkeerbare handeling? Dan levert de rol niet,
+  maar zegt 'KAN NIET' met wat er nodig is → het project wordt geblokkeerd voor jouw oordeel.
+- De mens sluit projecten af (de rol markeert hooguit voortgang), zodat de onafhankelijke check blijft.
+"""
+from __future__ import annotations
+import re
+
+_CANT = re.compile(r"KAN\s*NIET\s*:?\s*(.+)", re.IGNORECASE | re.DOTALL)
+
+
+def _scope_text(scope) -> str:
+    if isinstance(scope, dict):
+        return " · ".join(f"{k}: {v}" for k, v in scope.items())
+    return str(scope or "")
+
+
+def work_one(scope, role_id: str, role_purpose: str, *, llm_reason=None) -> dict:
+    """Laat de rol (met bestaande capaciteit, tekst-only, omkeerbaar) aan één project werken.
+    Geeft {ok, outcome} of {ok: False, needs} als het nieuwe capaciteit/onomkeerbaarheid vraagt.
+    Fail-closed zonder LLM → {ok: False, needs: None} (niets gedaan)."""
+    if llm_reason is None:
+        from nooch_village.llm import reason as llm_reason
+    prompt = (
+        f"Je bent de rol '{role_id}' in NoochVille (duurzaam, vegan schoenenmerk Nooch.earth). "
+        f"Jouw purpose: {role_purpose or '-'}.\n\n"
+        f"Pak dit project op: {_scope_text(scope)}\n\n"
+        "Lever wat je NU concreet kunt met je eigen kennis: een afgeronde tekst-uitkomst, een eerste "
+        "draft, een analyse, of de concrete eerstvolgende stap. Regels: alleen tekst (omkeerbaar), "
+        "geen externe systemen aanroepen, niets publiceren/versturen/kopen/verwijderen, geen nieuwe "
+        "tools. Gewone taal, geen jargon.\n\n"
+        "Kun je dit NIET met tekst alleen (vereist een websitewijziging, een externe tool, geld "
+        "uitgeven, iets versturen, of een vaardigheid die je niet hebt)? Antwoord dan met:\n"
+        "KAN NIET: <wat is daarvoor nodig>\n\n"
+        "Anders antwoord met:\n"
+        "LEVER: <je concrete uitkomst of eerstvolgende stap>")
+    out = (llm_reason(prompt) or "").strip()
+    if not out:
+        return {"ok": False, "needs": None}
+    m = _CANT.search(out)
+    if m and out.upper().lstrip().startswith("KAN NIET"):
+        return {"ok": False, "needs": m.group(1).strip()[:200]}
+    body = re.sub(r"^\s*LEVER\s*:?\s*", "", out, flags=re.IGNORECASE).strip()
+    return {"ok": True, "outcome": body[:1500]} if body else {"ok": False, "needs": None}
+
+
+def work_projects(ledger, records=None, *, llm_reason=None, limit: int = 5) -> dict:
+    """Loop de openstaande omkeerbare (queued) projecten langs en laat de eigenaar-rol eraan werken.
+    Idempotent (slaat reeds bewerkte over). Geeft {worked, blocked, skipped}."""
+    todo = [p for p in ledger.all() if p.get("status") == "queued" and not p.get("worked")]
+    worked = blocked = 0
+    for p in todo[:limit]:
+        owner = p.get("owner", "")
+        purpose = ""
+        if records is not None:
+            rec = records.get(owner)
+            purpose = getattr(getattr(rec, "definition", None), "purpose", "") if rec else ""
+        res = work_one(p.get("scope"), owner, purpose, llm_reason=llm_reason)
+        if res.get("ok"):
+            ledger.record_progress(p["id"], res["outcome"])
+            worked += 1
+        elif res.get("needs"):
+            # Vraagt nieuwe capaciteit/onomkeerbaarheid → blokkeren voor de mens (geboren-vs-bemenst).
+            ledger.block(p["id"], f"capaciteit nodig: {res['needs']}")
+            blocked += 1
+    return {"worked": worked, "blocked": blocked, "skipped": max(0, len(todo) - limit)}

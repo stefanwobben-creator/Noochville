@@ -155,6 +155,21 @@ class ProjectLedger:
         self._maybe_reload()
         return [p for p in self._projects.values() if p.get("status") == "draft"]
 
+    def record_progress(self, pid: str, note: str) -> bool:
+        """Leg autonome voortgang vast: een rol heeft (omkeerbaar, met eigen skills) aan dit
+        project gewerkt. Zet status queued→running, bewaart de uitkomst en markeert 'worked'
+        (idempotent: niet nog eens oppakken). Done-projecten blijven ongemoeid."""
+        p = self._projects.get(pid)
+        if p is None or p["status"] in _TERMINAL:
+            return False
+        p["progress"] = note
+        p["worked"] = True
+        if p["status"] == "queued":
+            p["status"] = "running"
+        self._touch(p)
+        self._save()
+        return True
+
     def to_future(self, pid: str) -> bool:
         """Park een project als 'future' (later oppakken als er ruimte is). Niet-terminaal:
         het kan later weer naar running/blocked. Done-projecten blijven done."""

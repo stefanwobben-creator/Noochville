@@ -887,3 +887,14 @@ irreversible_harm (onomkeerbare-schade-signalen).
 - De opportunity-reflex-prompt kreeg de vuistregel: begin bij een experiment (project); een
   accountability/rol is een stolling, alleen bij terugkerende frictie.
 Filosofie vastgelegd in docs/GOVERNANCE_FILOSOFIE.md. Tests: +test_maturity.py. Suite groen (500 + 522).
+
+## Autonome project-uitvoering: de rol pakt z'n omkeerbare projecten op
+De filosofie doorgetrokken naar echt ademen. nooch_village/project_worker.py: een rol werkt in de
+puls aan z'n `queued` (= door de omkeerbaarheidspoort als omkeerbaar gemarkeerde) projecten en
+levert met BESTAANDE capaciteit (LLM-redenering) een concrete tekst-deliverable/next-action
+(record_progress → status running, idempotent via 'worked'). Vraagt het project nieuwe capaciteit of
+een onomkeerbare handeling? Dan zegt de rol 'KAN NIET: <wat nodig is>' en wordt het project
+geblokkeerd met die capaciteitsvraag voor de mens (geboren-vs-bemenst blijft mens-gated). De mens
+sluit projecten af (rol markeert alleen voortgang). CLI work_projects + stap 6/6 in refresh.sh; cap
+per run, fail-closed zonder LLM. Accountability ≠ toestemming: een rol mag vrij handelen vanuit z'n
+purpose zolang omkeerbaar en binnen z'n skills. Tests: +test_project_worker.py. Suite groen (513 + 514).

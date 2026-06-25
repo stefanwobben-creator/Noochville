@@ -565,6 +565,23 @@ def main() -> None:
               f"{res['revenue']} {res['currency']} omzet (AOV {res['aov']}"
               f", gem. {res.get('avg_pairs_month', 0)} paar/maand). Dashboard staat in de cockpit.")
 
+    elif mode == "work_projects":
+        # Rollen werken (omkeerbaar, met eigen skills) aan hun queued projecten.
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.projects import ProjectLedger
+        from nooch_village.governance import Records
+        from nooch_village.project_worker import work_projects
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        limit = next((int(a) for a in sys.argv[2:] if a.isdigit()), 5)
+        ledger = ProjectLedger(os.path.join(ctx.data_dir, "projects.json"))
+        recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
+        print(f"🛠️  Rollen werken aan hun omkeerbare projecten (max {limit})…")
+        res = work_projects(ledger, recs, limit=limit)
+        print(f"✅ {res['worked']} uitgevoerd, {res['blocked']} geblokkeerd (vragen jouw oordeel), "
+              f"{res['skipped']} wachten op een volgende ronde. Zie het projectbord in de cockpit.")
+
     elif mode == "review_roles":
         # Facilitator-project: review alle dorp-rollen tegen de Holacracy-regels + referentiebank,
         # en zet per rol één verbetervoorstel als kans in de inbox (mens-gated, niks auto-toegepast).
@@ -595,6 +612,6 @@ def main() -> None:
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "
               "measure_propose | rereview | ingest | notes_remove | recurate | "
               "ground | harry_run | roster | keys | competitor | formalize | answer_questions | "
-              "ingest_governance | review_roles | shopify",
+              "ingest_governance | review_roles | shopify | work_projects",
               file=sys.stderr)
         sys.exit(1)

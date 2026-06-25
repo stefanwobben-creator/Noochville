@@ -27,8 +27,12 @@ echo "💬 4/5 — openstaande vragen aan rollen gebundeld beantwoorden..."
 "$PY" -m nooch_village.village answer_questions
 
 echo
-echo "🛍️  5/5 — Shopify-verkoopindicatoren ophalen (website watcher-dashboard)..."
-"$PY" -m nooch_village.village shopify || echo "   (overgeslagen: geen SHOPIFY_STORE/SHOPIFY_TOKEN in .env)"
+echo "🛍️  5/6 — Shopify-verkoopindicatoren ophalen (website watcher-dashboard)..."
+"$PY" -m nooch_village.village shopify || echo "   (overgeslagen: geen Shopify-credentials in .env)"
+
+echo
+echo "🛠️  6/6 — rollen werken aan hun omkeerbare projecten..."
+"$PY" -m nooch_village.village work_projects
 
 echo
 echo "✅ Klaar. Herlaad de cockpit (http://127.0.0.1:8765) — weekrapport, Noochie,"
