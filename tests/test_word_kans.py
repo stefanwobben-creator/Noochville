@@ -9,13 +9,16 @@ from nooch_village.cockpit import _word_metrics
 from nooch_village import library_enrich
 
 
-def test_opportunity_score_weegt_concurrentie():
-    assert opportunity_score(1000, 0.0) == 1000      # geen concurrentie → volledige kans
-    assert opportunity_score(1000, 1.0) == 0         # max concurrentie → geen kans
-    assert opportunity_score(1000, 0.25) == 750
-    assert opportunity_score(1000, 2.0) == 0         # geklemd op [0,1]
-    assert opportunity_score(None, 0.5) is None      # geen volume → geen score
-    assert opportunity_score("x", 0.1) is None
+def test_opportunity_score_weegt_organische_ruimte():
+    # Geen GSC-info → volle upside (we ranken nog niet)
+    assert opportunity_score(1000) == 1000
+    assert opportunity_score(1000, ranks=False) == 1000
+    # Wel een positie → kans schaalt met afstand tot #1
+    assert opportunity_score(1000, position=1.0, ranks=True) == 0      # al #1 → niets te halen
+    assert opportunity_score(1000, position=11, ranks=True) == 1000    # pagina 2+ → volle ruimte
+    assert opportunity_score(1000, position=6, ranks=True) == 500      # halverwege
+    assert opportunity_score(None) is None                            # geen volume → geen score
+    assert opportunity_score("x") is None
 
 
 def test_set_evidence_merget_zonder_status_of_datum(tmp_path):
@@ -84,7 +87,9 @@ def test_enrich_library_verrijkt_volume_en_gsc(monkeypatch):
 
     assert out["gsc_error"] is None
     vs = data["vegan sneakers"]["evidence"]
-    assert vs["volume"] == 18000 and vs["opportunity"] == opportunity_score(18000, 0.3)
+    # kans berekend mét GSC-positie (organische ruimte), niet met ad-concurrentie
+    assert vs["volume"] == 18000
+    assert vs["opportunity"] == opportunity_score(18000, position=8.4, ranks=True)
     assert vs["gsc_seen"] is True and vs["gsc_position"] == 8.4 and vs["gsc_clicks"] == 12
     # biobased had al volume → KE overgeslagen, maar GSC-stand wel gezet (niet rankend)
     assert data["biobased"]["evidence"]["volume"] == 90

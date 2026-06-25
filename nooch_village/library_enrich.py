@@ -52,8 +52,7 @@ def enrich_library(library, context, *, apply: bool = True, only_missing: bool =
                 kw = res["keywords"][0]
                 vol = int(kw.get("vol", 0) or 0)
                 comp = float(kw.get("competition", 0) or 0)
-                updates.update(volume=vol, competition=comp,
-                               opportunity=opportunity_score(vol, comp), ke_country=country)
+                updates.update(volume=vol, competition=comp, ke_country=country)
             time.sleep(sleep)                               # beleefd tegen de API
 
         if gsc and gsc_error is None:
@@ -63,6 +62,13 @@ def enrich_library(library, context, *, apply: bool = True, only_missing: bool =
                                gsc_clicks=g.get("clicks"), gsc_impressions=g.get("impressions"))
             else:
                 updates["gsc_seen"] = False                 # bekend: ranken (nog) niet voor deze term
+
+        # Kans = volume × resterende organische ruimte (uit onze GSC-positie), pas ná de GSC-stand.
+        merged_now = {**ev, **updates}
+        vol = merged_now.get("volume")
+        if vol is not None:
+            updates["opportunity"] = opportunity_score(
+                vol, position=merged_now.get("gsc_position"), ranks=merged_now.get("gsc_seen"))
 
         if updates and apply:
             library.set_evidence(w, updates)

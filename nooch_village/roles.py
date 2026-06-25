@@ -659,8 +659,10 @@ class Librarian(Inhabitant):
         kw = res["keywords"][0]
         vol = int(kw.get("vol", 0) or 0)
         comp = float(kw.get("competition", 0) or 0)
-        opp = opportunity_score(vol, comp)
-        self.log.info("📐 KE: '%s' → volume %d/mnd · concurrentie %.2f · kans %s",
+        # Kans bij goedkeuren zonder GSC = volle upside (we ranken nog niet); enrich_volumes
+        # verfijnt later met onze echte positie. competition = Google Ads-druk, los infoveld.
+        opp = opportunity_score(vol)
+        self.log.info("📐 KE: '%s' → volume %d/mnd · ad-concurrentie %.2f · kans %s",
                       word, vol, comp, opp)
         return {**demand, "volume": vol, "competition": comp,
                 "opportunity": opp, "ke_country": self._ke_country()}

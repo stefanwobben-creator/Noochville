@@ -619,10 +619,10 @@ def _word_metrics(x: dict) -> str:
     parts = []
     if x.get("volume") is not None:
         parts.append(f'vol {x["volume"]}/mnd')
-    if x.get("competition") is not None:
-        parts.append(f'concurrentie {round(float(x["competition"]) * 100)}%')
     if x.get("opportunity") is not None:
         parts.append(f'<b>kans {x["opportunity"]}</b>')
+    if x.get("competition") is not None:
+        parts.append(f'ad-concurrentie {round(float(x["competition"]) * 100)}%')
     # Onze huidige Google-stand voor exact deze term (uit GSC)
     if x.get("gsc_seen") is True:
         pos = x.get("gsc_position")

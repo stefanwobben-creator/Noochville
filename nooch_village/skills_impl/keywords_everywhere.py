@@ -8,22 +8,33 @@ log = logging.getLogger(__name__)
 _VALID_DATA_SOURCES = {"gkp", "cli"}
 
 
-def opportunity_score(volume, competition) -> int | None:
-    """Kwantitatieve kans per zoekwoord: zoekvolume gewogen voor lage concurrentie.
+def opportunity_score(volume, *, position=None, ranks=None) -> int | None:
+    """Organische kans per zoekwoord: zoekvolume × hoeveel ruimte we nog hebben om te stijgen.
 
-    kans = round(volume * (1 - competition)), met competition geklemd op [0, 1].
-    Interpretatie: 'haalbaar maandelijks verkeer' — veel zoekvraag bij lage concurrentie
-    scoort hoog, veel zoekvraag bij hoge concurrentie laag. None als volume onbekend is.
+    kans = round(volume * gap), met:
+      - ranks is False (we ranken niet voor deze term) of geen positie bekend → gap = 1.0 (volle upside)
+      - wel een GSC-positie p → gap = clamp((p - 1) / 10, 0, 1): #1 ≈ benut (0), pagina 2+ ≈ vol (1)
+
+    Bewust NIET op KE's 'competition': dat is Google Ads-veilingdruk (betaald), geen organische
+    moeilijkheid — die zou commerciële termen ten onrechte op kans 0 zetten. Onze eigen GSC-stand
+    is de eerlijke maat voor resterende organische ruimte. None als volume onbekend is.
     """
     if volume is None:
         return None
     try:
         v = int(volume)
-        c = float(competition or 0)
     except (TypeError, ValueError):
         return None
-    c = min(max(c, 0.0), 1.0)
-    return round(v * (1 - c))
+    if ranks is False or position is None:
+        gap = 1.0
+    else:
+        try:
+            p = float(position)
+        except (TypeError, ValueError):
+            gap = 1.0
+        else:
+            gap = min(1.0, max(0.0, (p - 1.0) / 10.0))
+    return round(v * gap)
 
 
 class KeywordsEverywhereSkill(Skill):

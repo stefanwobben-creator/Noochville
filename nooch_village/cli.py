@@ -281,8 +281,8 @@ def main() -> None:
                 stand = "nog niet in Google"
             else:
                 stand = "—"
-            print(f'  {r["word"][:38]:38} vol {vol:>10}  concur {comp:>5}  '
-                  f'kans {opp:>8}  {stand}')
+            print(f'  {r["word"][:38]:38} vol {vol:>10}  kans {opp:>8}  '
+                  f'ad-conc {comp:>5}  {stand}')
         if dry:
             print("\nDraai zonder 'dry' om dit echt weg te schrijven.")
 
