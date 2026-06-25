@@ -177,11 +177,22 @@ def gather(data_dir: str | None = None) -> dict:
     )
     proj = sorted(projects.all(), key=lambda p: -(p.get("updated_at") or 0))
 
+    # Seed-oplevingen (door enrich gesignaleerd, door de scout geduid): term → verklaring.
+    _surges = {}
+    _surge_path = os.path.join(dd, "seed_surges.json")
+    if os.path.exists(_surge_path):
+        try:
+            import json as _json
+            _surges = _json.load(open(_surge_path))
+        except Exception:
+            _surges = {}
+
     # Woordenschat: woord + status (approved/forbidden/avoid/escalated), beslist eerst.
     _ws_order = {"approved": 0, "escalated": 1, "avoid": 2, "forbidden": 3}
 
     def _lib_row(w, e):
         ev = e.get("evidence") or {}
+        surge = _surges.get(w) or {}
         fn = e.get("function") if e.get("function") in ("volg", "doelwit") \
             else classify_function(w, ev)
         return {"word": w, "status": e.get("status", "?"), "by": e.get("by", ""),
@@ -190,6 +201,8 @@ def gather(data_dir: str | None = None) -> dict:
                 "volume": ev.get("volume"), "opportunity": ev.get("opportunity"),
                 "competition": ev.get("competition"), "trend_pct": ev.get("trend_pct"),
                 "trend_state": ev.get("trend_state"), "trend_series": ev.get("trend_series"),
+                "recent_surge": ev.get("recent_surge"),
+                "surge_explanation": surge.get("explanation"),
                 "gsc_seen": ev.get("gsc_seen"), "gsc_position": ev.get("gsc_position"),
                 "gsc_clicks": ev.get("gsc_clicks")}
     lib = sorted((_lib_row(w, e) for w, e in (library.all() or {}).items()),
@@ -855,18 +868,30 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'<tbody>{trows or "<tr><td colspan=5 class=muted>geen doelwit-woorden</td></tr>"}</tbody></table>')
 
     # Volg-woorden: seeds voor de radar; toon de meerjarige trend-toestand (5 jaar) + sparkline.
+    def _surge_tag(x):
+        if not x.get("recent_surge"):
+            return ""
+        expl = x.get("surge_explanation") or {}
+        tip = ""
+        if expl.get("title"):
+            tip = (f' <span class="muted">— mogelijk: '
+                   f'<a href="{_e(expl.get("link", ""))}">{_e(expl["title"][:70])}</a></span>')
+        return f' <b style="color:var(--coral)">▲ recent stijgend</b>{tip}'
+
     def _trend_cell(x):
         st = x.get("trend_state")
+        surge = _surge_tag(x)
         if st:
             spark = _sparkline(x.get("trend_series"))
-            return (f'{spark} {_e(trend_state_label(st))} <span class="muted">(5 jr)</span>'
+            base = (f'{spark} {_e(trend_state_label(st))} <span class="muted">(5 jr)</span>'
                     if spark else f'{_e(trend_state_label(st))} <span class="muted">(5 jr)</span>')
+            return base + surge
         tp = x.get("trend_pct")                            # fallback: 12-mnd % als er nog geen toestand is
         if tp is not None:
             arrow = "▲" if tp > 0 else ("▼" if tp < 0 else "▬")
             sign = "+" if tp > 0 else ""
-            return f'{arrow} {sign}{_e(tp)}% <span class="muted">(12 mnd)</span>'
-        return '<span class="muted">— (draai enrich_volumes)</span>'
+            return f'{arrow} {sign}{_e(tp)}% <span class="muted">(12 mnd)</span>{surge}'
+        return f'<span class="muted">— (draai enrich_volumes)</span>{surge}'
     srows = "".join(
         f'<tr><td><b>{_e(x["word"])}</b></td>'
         f'<td>{_num(x.get("volume"), "/mnd")}</td>'

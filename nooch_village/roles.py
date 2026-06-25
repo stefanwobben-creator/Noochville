@@ -463,6 +463,33 @@ class ConcurrentScout(Inhabitant):
         super().__init__(*args, **kwargs)
         self._busy = False
         self.react("dag_begint", self._on_pulse, drop_if_busy=True)
+        # Seed-opleving: zoek de actuele nieuws-aanleiding (RSS) parallel aan Harry's duiding.
+        self.react("seed_surge_sensed", self._explain_surge)
+
+    def _explain_surge(self, event: Event) -> None:
+        """Zoek in het nieuws (RSS) een mogelijke verklaring voor een seed-opleving.
+        Bewaart de top-treffer in de seed-surge-store en publiceert seed_surge_explanation.
+        Fail-closed: geen skill/treffer → stil."""
+        term = (event.data.get("term") or "").strip()
+        if not term or "competitor_news" not in self.dna.skills:
+            return
+        res = self.use_skill("competitor_news", {"brands": [term], "days": 90})
+        items = res.get("items", []) if isinstance(res, dict) else []
+        if not items:
+            self.log.info("📰 geen nieuws-aanleiding gevonden voor opleving '%s'", term)
+            return
+        top = sorted(items, key=lambda it: it.get("date", ""), reverse=True)[0]
+        expl = {"title": top.get("title", ""), "link": top.get("link", ""),
+                "date": top.get("date", "")}
+        try:
+            from nooch_village.seed_surge_store import SeedSurges
+            SeedSurges(os.path.join(self.context.data_dir,
+                                    "seed_surges.json")).set_explanation(term, expl)
+        except Exception as e:
+            self.log.info("kon seed-verklaring niet opslaan: %s", e)
+        self.log.info("📰 mogelijke aanleiding voor '%s': %s", term, expl["title"][:70])
+        self.bus.publish(Event("seed_surge_explanation",
+                               {"by": self.id, "term": term, **expl}, self.id))
 
     def _on_pulse(self, event: Event) -> None:
         if self._busy:
@@ -1003,6 +1030,8 @@ class HarryHemp(Inhabitant):
         self.react("keyword_proposed", self._on_keyword_proposed)
         # Restbundel legen bij de dagelijkse hartslag, zodat niets blijft hangen.
         self.react("dag_begint", self._flush_groundings)
+        # Seed-oplevingen (door enrich gesignaleerd) academisch duiden.
+        self.react("dag_begint", self._investigate_seed_surges)
         # ── spelregel 5: bied de NL-dekkingscheck aan op verzoek (modus a+b) ──
         self.offer("nl_corpus_coverage", self._on_nl_corpus_request)
 
@@ -1239,6 +1268,28 @@ class HarryHemp(Inhabitant):
                                {"by": self.id, "ok": True, "terms": missing}, self.id))
 
     # ── grounding-tak ─────────────────────────────────────────────────────────
+
+    def _investigate_seed_surges(self, event: Event) -> None:
+        """Een seed met een aanhoudende recente opleving (door enrich gesignaleerd) vraagt om
+        een verklaring. Harry grondt de term academisch (zijn grounding-tak → keyword_evidence)
+        en markeert de opleving als onderzocht. Spanning → duiding, mens-zichtbaar in de kennislaag."""
+        from nooch_village.seed_surge_store import SeedSurges
+        store = SeedSurges(os.path.join(self.context.data_dir, "seed_surges.json"))
+        for s in store.pending():
+            term = s.get("term", "")
+            if not term:
+                continue
+            self.log.info("🔬 seed-opleving '%s' → academische duiding gezocht", term)
+            # breed signaal: de scout zoekt parallel de nieuws-aanleiding (RSS)
+            self.bus.publish(Event("seed_surge_sensed",
+                                   {"by": self.id, "term": term, "locale": s.get("locale", "")},
+                                   self.id))
+            self._on_keyword_proposed(Event("keyword_proposed", {
+                "word": term,
+                "demand": {"source": "seed_surge", "direction": "stijgend",
+                           "locale": s.get("locale", ""), "pct": s.get("pct")},
+            }, self.id))
+            store.mark_investigated(term)
 
     def _on_keyword_proposed(self, event: Event) -> None:
         word   = event.data.get("word", "").strip()

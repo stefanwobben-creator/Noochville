@@ -2,7 +2,7 @@
 Pure classifier (geen netwerk) + de serpapi-reeksparser + de cockpit-weergave."""
 from __future__ import annotations
 
-from nooch_village.trend_analysis import trend_state, trend_state_label
+from nooch_village.trend_analysis import trend_state, trend_state_label, recent_surge
 from nooch_village.skills_impl.serpapi_trends import _series_from_timeseries
 from nooch_village.cockpit import _sparkline
 
@@ -49,6 +49,17 @@ def test_te_weinig_data():
 def test_label():
     assert "opkomend" in trend_state_label("opkomend")
     assert trend_state_label(None) == "—"
+
+
+def test_recent_surge():
+    # aanhoudende recente stijging (laatste 3 mnd fors boven het jaar ervoor) → True
+    assert recent_surge([50] * 24 + [80, 85, 90]) is True
+    # losse uitschieter in één maand → False (3-maands gemiddelde dempt 'm)
+    assert recent_surge([50] * 24 + [50, 50, 80]) is False
+    # vlak → False
+    assert recent_surge([50] * 30) is False
+    # te weinig data → False
+    assert recent_surge([50, 60, 70]) is False
 
 
 def test_sparkline():

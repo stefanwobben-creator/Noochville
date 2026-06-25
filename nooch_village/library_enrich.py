@@ -9,6 +9,7 @@ als mens-gedraaid onderhoudscommando (`python -m nooch_village.village enrich_vo
 autonome puls — capaciteit/credits blijven mens-gated.
 """
 from __future__ import annotations
+import os
 import time
 
 
@@ -36,7 +37,10 @@ def enrich_library(library, context, *, apply: bool = True, only_missing: bool =
     from nooch_village.skills_impl.keywords_everywhere import (
         KeywordsEverywhereSkill, opportunity_score, trend_change_pct)
     from nooch_village.library import classify_function
-    from nooch_village.trend_analysis import trend_state
+    from nooch_village.trend_analysis import trend_state, recent_surge
+    from nooch_village.seed_surge_store import SeedSurges
+    surges = SeedSurges(os.path.join(
+        (getattr(context, "data_dir", None) or "data"), "seed_surges.json"))
     country = (getattr(context, "settings", {}) or {}).get("ke_country", "").strip()
 
     gsc_by_query, gsc_error = ({}, None)
@@ -97,6 +101,10 @@ def enrich_library(library, context, *, apply: bool = True, only_missing: bool =
             if st is not None:
                 updates["trend_state"] = st
                 updates["trend_series"] = series          # bewaar de curve voor de sparkline
+                surge = recent_surge(series)
+                updates["recent_surge"] = surge
+                if surge:                                 # spanning: laat Harry het onderzoeken
+                    surges.add(w, locale=(library.status(w) or {}).get("locale") or "")
             time.sleep(sleep)
 
         if updates and apply:

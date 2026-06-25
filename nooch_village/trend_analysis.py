@@ -52,6 +52,21 @@ def trend_state(values, *, threshold: float = 0.01, peak_drop: float = 0.25) -> 
     return "stabiel"
 
 
+def recent_surge(values, *, months: int = 3, lookback: int = 12, jump: float = 0.30) -> bool:
+    """True bij een AANHOUDENDE recente opleving: het gemiddelde van de laatste `months`
+    maanden ligt minstens `jump` (fractie) boven het gemiddelde van de `lookback` maanden
+    daarvóór. Gebruikt een 3-maands gemiddelde zodat één losse uitschieter niet meetelt —
+    precies het verschil tussen ruis en een echt signaal dat om verklaring vraagt."""
+    vals = [float(v) for v in (values or []) if isinstance(v, (int, float))]
+    if len(vals) < months + lookback:
+        return False
+    recent = sum(vals[-months:]) / months
+    base = sum(vals[-(months + lookback):-months]) / lookback
+    if base <= 0:
+        return False
+    return (recent - base) / base >= jump
+
+
 _STATE_VIEW = {
     "opkomend":     "▲ opkomend",
     "stabiel":      "▬ stabiel",

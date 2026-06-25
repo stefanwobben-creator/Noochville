@@ -431,3 +431,18 @@ noochie_daily.json bewaart nu findings[] + suggestion; cockpit toont bevindingen
 Back-compat: oude 'oordeel' valt terug op een losse regel.
 
 Tests: 915 → 918.
+
+---
+
+## 2026-06-25 (vervolg 6) — Seed-opleving als spanning: Harry + scout onderzoeken
+
+**[feat]** Een seed met een AANHOUDENDE recente opleving (3-maands gemiddelde ≥30% boven het jaar
+ervoor — losse uitschieter telt niet mee) is nu een spanning. `trend_analysis.recent_surge` detecteert;
+`enrich_volumes` zet `evidence.recent_surge` + schrijft de term naar `data/seed_surges.json`. Op de puls
+publiceert Harry `seed_surge_sensed` en grondt de term academisch (zijn grounding-tak → keyword_evidence /
+insight). De ConcurrentScout luistert mee en zoekt in het nieuws (RSS via competitor_news) de actuele
+aanleiding → `set_explanation` + `seed_surge_explanation`. Cockpit toont '▲ recent stijgend' bij de seed
++ de mogelijke nieuws-verklaring. Twee onderzoekshoeken: Harry = lange/academische context, scout = actueel
+nieuws. refresh.sh draait nu enrich vóór de puls zodat een verse opleving in dezelfde run wordt geduid.
+
+Tests: 919 → 924.
