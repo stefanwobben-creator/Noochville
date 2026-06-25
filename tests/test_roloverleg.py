@@ -131,6 +131,22 @@ def test_rov_add_nieuwe_rol_met_alle_velden(tmp_path):
     assert it["change"]["add_domains"] == ["de blog"]
 
 
+def test_voorstel_draagt_spanning_en_voorbeeld(tmp_path):
+    from nooch_village import cockpit
+    from nooch_village.roloverleg import Agenda
+    data = tmp_path / "data"; data.mkdir()
+    (data / "governance_records.json").write_text("{}", encoding="utf-8")
+    cockpit._dispatch_action(str(data), "rov_add", "", "social blijft liggen", extra={
+        "owner": "scout", "accs": "Bewaken van sociale kanalen",
+        "voorbeeld": "vorige maand 3 weken stil op TikTok"})
+    it = Agenda(str(data / "roloverleg_agenda.json")).open()[0]
+    assert it["reason"] == "social blijft liggen"
+    assert it["example"] == "vorige maand 3 weken stil op TikTok"
+    page = cockpit.render_roloverleg(it, {"purpose": "p", "accountabilities": [], "domains": []}, [], "t")
+    assert "Lost deze spanning op" in page and "Concreet voorbeeld" in page
+    assert "3 weken stil op TikTok" in page
+
+
 def test_roloverleg_diff_huidig_vs_na(tmp_path):
     from nooch_village import cockpit
     item = {"id": "k1", "role_id": "scout", "kind": "amend_role",

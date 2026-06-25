@@ -34,8 +34,10 @@ class Agenda:
         atomic_write_json(self.path, self._items)
 
     def add(self, role_id: str, kind: str, change: dict, reason: str,
-            by: str = "founder", title: str = "") -> str:
-        """Zet een voorstel op de agenda. Dedup op (role_id, kind, eerste accountability/purpose)."""
+            by: str = "founder", title: str = "", example: str = "") -> str:
+        """Zet een voorstel op de agenda. Dedup op (role_id, kind, eerste accountability/purpose).
+        `reason` = de spanning die dit oplost; `example` = een concreet voorbeeld (Holacracy:
+        een voorstel is tension-driven; de indiener vertelt hoe aannemen de spanning oplost)."""
         title = (title or role_id or "voorstel").strip()
         sig = (role_id, kind, (change.get("purpose") or "").lower(),
                tuple(a.lower() for a in change.get("add_accountabilities", [])))
@@ -47,7 +49,7 @@ class Agenda:
         iid = uuid.uuid4().hex[:12]
         self._items.append({
             "id": iid, "role_id": role_id, "kind": kind, "change": change,
-            "reason": reason or "", "by": by or "founder", "title": title,
+            "reason": reason or "", "example": example or "", "by": by or "founder", "title": title,
             "status": "open", "reactions": [], "created_at": time.time()})
         self._save()
         return iid

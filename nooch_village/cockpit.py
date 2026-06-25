@@ -971,7 +971,11 @@ def render_roloverleg_overview(items: list, agenda_all: list, roles: list,
         '<textarea name="accs" id="rovaccs" class="tg-in" rows="3" '
         'placeholder="bijv. Schrijven van blogcopy voor de pillar-pagina&#10;Bewaken van de tone of voice"></textarea>'
         '<button type="button" class="bigbtn" onclick="rovSuggest()">🤖 AI: stel accountabilities voor</button>'
-        '<input type="text" name="reason" class="tg-in" placeholder="reden / aanleiding">'
+        '<div class="tg-meta" style="margin-top:.3rem">Welke spanning lost dit op? '
+        '(Holacracy: een voorstel is altijd tension-driven)</div>'
+        '<input type="text" name="reason" class="tg-in" placeholder="bijv. ik moet steeds zelf social posts schrijven en dat blijft liggen">'
+        '<textarea name="voorbeeld" class="tg-in" rows="2" '
+        'placeholder="concreet voorbeeld: laatst bleef de TikTok 3 weken stil omdat niemand de rol had"></textarea>'
         '<button class="bigbtn go" type="submit" name="action" value="rov_add">'
         '➕ Op de agenda zetten</button></form></details>'
         '<script>function rovSuggest(){'
@@ -1132,8 +1136,10 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
             f'<h2>{_e(item["title"])}</h2>'
             f'{diff}'
             f'{(("<div style=margin:.3rem0>" + flip_btn + "</div>") if flip_btn else "")}'
-            f'<div class="muted" style="margin-top:.3rem"><b>Reden:</b> {_e(item.get("reason",""))}</div>'
-            f'{sec}{react_log}</div>')
+            f'<div class="muted" style="margin-top:.3rem"><b>Lost deze spanning op:</b> {_e(item.get("reason","")) or "—"}</div>'
+            + (f'<div class="muted" style="margin-top:.15rem"><b>Concreet voorbeeld:</b> '
+               f'{_e(item.get("example",""))}</div>' if item.get("example") else "")
+            + f'{sec}{react_log}</div>')
     inner = (f'{head}{_banner(msg)}{card}{react_form}{decide}'
              '<div class="tg-skip"><a class="muted" href="/roloverleg">← terug naar de agenda</a>'
              '</div></div><style>' + _TRIAGE_CSS + '</style>')
@@ -2142,6 +2148,7 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         if action == "rov_add":
             import re as _re2
             owner = extra.get("owner", "")
+            voorbeeld = (extra.get("voorbeeld") or "").strip()
             new_role = owner in ("", "__new__")
             # Accountabilities: één per regel (nieuw veld 'accs'); val terug op het oude 'info'-veld.
             accs = [l.strip() for l in (extra.get("accs") or extra.get("info") or "").splitlines()
@@ -2158,12 +2165,12 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                 if domein:
                     change["add_domains"] = [domein[:140]]
                 agenda.add(role_id=rid, kind="add_role", change=change, reason=reason,
-                           by="founder", title=(naam or purpose)[:60])
+                           by="founder", title=(naam or purpose)[:60], example=voorbeeld)
             else:
                 if not accs:
                     return {"ok": False, "error": "geef minstens één accountability op"}
                 agenda.add(role_id=owner, kind="amend_role", change={"add_accountabilities": accs},
-                           reason=reason, by="founder", title=accs[0][:60])
+                           reason=reason, by="founder", title=accs[0][:60], example=voorbeeld)
             return {"ok": True, "rov": "added"}
         # de overige acties werken op één item
         if action == "rov_consent":
@@ -2427,6 +2434,7 @@ def make_handler(data_dir: str | None):
                      "purpose": (form.get("purpose") or [""])[0],
                      "domein": (form.get("domein") or [""])[0],
                      "accs": (form.get("accs") or [""])[0],
+                     "voorbeeld": (form.get("voorbeeld") or [""])[0],
                      "remember": (form.get("remember") or [""])[0]}
             result = _dispatch_action(data_dir, action, iid, reason, extra=extra)
             # 303 → verse GET. Rails keren terug naar de spanning (next), sluiten gaat home.

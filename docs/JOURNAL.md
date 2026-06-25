@@ -940,3 +940,13 @@ Tests uitgebreid. Suite groen (546 + 488).
 - Betere objection-test (per https://holacracy.org/blog/a-better-way-to-test-objections-in-holacracy):
   gestructureerde validiteitsvragen i.p.v. één 'schadelijk'-knop.
 - Auto-formalisering: een experiment dat 3x is uitgevoerd stolt automatisch tot accountability-voorstel.
+
+## Roloverleg: voorstel is tension-driven (indiener benoemt spanning + concreet voorbeeld)
+- Agenda.add draagt nu `example`; het 'zelf toevoegen'-formulier vraagt expliciet "Welke spanning
+  lost dit op?" + een concreet voorbeeld-veld. Behandel-scherm toont 'Lost deze spanning op' +
+  'Concreet voorbeeld'. (Holacracy, Chris Cowan: een voorstel is altijd tension-driven.)
+- Volgende ronde gepland: betere objection-test volgens
+  holacracy.org/blog/a-better-way-to-test-objections-in-holacracy — de Facilitator toetst de VORM
+  van het bezwaar (niet de waarheid), in volgorde 1→4→2→3: (1) benoemt het schade, (4) vanuit jouw
+  rol, (2) veroorzaakt door dít voorstel (een 'kaart'-wijziging), (3) niet louter speculatief
+  ('zou/zou kunnen') of wél omkeerbaar. Default: bezwaar geldig → integreren; mens beslist.
