@@ -18,7 +18,7 @@ import html
 import time
 import secrets
 import urllib.parse
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 
 from nooch_village.governance import Records
 from nooch_village.human_inbox import HumanInbox
@@ -1252,7 +1252,11 @@ def serve(host: str = "127.0.0.1", port: int = 8765,
             f"Cockpit weigert niet-lokale host '{host}'. Read-only blijft op localhost."
         )
     _load_env()   # .env-sleutels in os.environ, anders heeft de cockpit geen LLM
-    httpd = HTTPServer((host, port), make_handler(data_dir))
+    # ThreadingHTTPServer: elke browser-verbinding krijgt een eigen thread. Een single-threaded
+    # server blijft hangen zodra de browser (Firefox) een tweede verbinding open houdt → reloads
+    # leken vast te lopen. daemon_threads zodat Ctrl-C meteen afsluit.
+    httpd = ThreadingHTTPServer((host, port), make_handler(data_dir))
+    httpd.daemon_threads = True
     print(f"Cockpit (verwerk-modus, lokaal) op http://{host}:{port}  —  Ctrl-C om te stoppen")
     try:
         httpd.serve_forever()
