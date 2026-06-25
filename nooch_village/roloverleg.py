@@ -155,61 +155,66 @@ def formalize_ripe_experiments(ledger, agenda, threshold: int = 3) -> int:
     return n
 
 
-_OBJ_CRITERIA = [
-    (1, "Schade", "Benoemt het bezwaar concrete SCHADE die ontstaat als we dit aannemen "
-        "(niet 'ik vind het niks', 'niet nodig', of een betere oplossing)?"),
-    (4, "Vanuit je rol", "Voel je die schade vanuit een rol die je ZELF bezit (niet namens een "
-        "ander of het algemeen belang)?"),
-    (2, "Voorstel-gebaseerd", "Wordt de schade veroorzaakt door DIT voorstel zelf (een wijziging "
-        "van de governance-'kaart'), en niet door iets anders?"),
-    (3, "Niet louter speculatief", "Is de schade al zichtbaar/zeker ('zal', 'voorkomt'), niet "
-        "alleen 'zou kunnen'/'misschien' — of is het effect niet veilig terug te draaien?"),
+# De vier toetsvragen uit de roldenken.nl/Holacracy-handout. De MENS (bezwaarmaker) kiest per
+# vraag het linker ('left' → richting geldig) of rechter ('right' → geen geldig bezwaar) antwoord.
+# De facilitator/AI oordeelt NIET over de inhoud; de uitkomst volgt uit de eigen antwoorden.
+_OBJ_QUESTIONS = [
+    {"q": "q1", "label": "Schade",
+     "vraag": "Zie je een reden waarom dit voorstel SCHADE veroorzaakt?",
+     "left": "Ja, het veroorzaakt schade",
+     "right": "Nee, mijn zorg is dat het onnodig of onvolledig is",
+     "hint": "Schade = het vermindert de capaciteit van een rol om haar doel of "
+             "verantwoordelijkheden uit te drukken (niet per se fysiek of financieel)."},
+    {"q": "q2", "label": "Door dit voorstel",
+     "vraag": "Wordt je zorg veroorzaakt door DIT voorstel?",
+     "left": "Ja, door dit voorstel",
+     "right": "Nee, het is al een zorg, ook als het voorstel werd ingetrokken"},
+    {"q": "q3", "label": "Zeker, niet speculatief",
+     "vraag": "Weet je dat deze impact ZAL optreden?",
+     "left": "Ja, ik weet het zeker",
+     "right": "Nee, ik anticipeer dat het zou kunnen optreden"},
+    {"q": "q3b", "label": "Niet veilig om te proberen", "depends_on": ("q3", "right"),
+     "vraag": "Zou er aanzienlijke schade kunnen optreden vóórdat we kunnen bijsturen?",
+     "left": "Ja, aanzienlijke schade vóór we kunnen aanpassen",
+     "right": "Nee, het is veilig genoeg om te proberen (we kunnen altijd herzien)"},
+    {"q": "q4", "label": "Beperkt jouw rol",
+     "vraag": "Zou het voorstel een van JOUW rollen beperken?",
+     "left": "Ja, het beperkt een van mijn rollen",
+     "right": "Nee, ik probeer een andere rol / de cirkel in het algemeen te helpen"},
 ]
 
 
-def test_objection(objection: str, *, change_summary: str = "", llm_reason=None) -> dict:
-    """Toets de VORM van een bezwaar tegen de vier Holacracy-validiteitscriteria, in de aanbevolen
-    volgorde 1→4→2→3 (Chris Cowan, 'A Better Way to Test Objections'). De Facilitator beoordeelt
-    niet of het bezwaar wáár is, alleen of het de juiste constructie heeft. Default = geldig
-    (we proberen te integreren); fail-open zonder LLM → 'niet getoetst, standaard geldig'.
+def evaluate_objection(answers: dict, *, harm: str = "") -> dict:
+    """Bepaal de geldigheid van een bezwaar uit de antwoorden van de bezwaarmaker op de vier
+    toetsvragen (handout roldenken.nl). Geldig = op alle vragen het 'left'-antwoord; bij 'anticiperen'
+    (q3=right) telt q3b mee: aanzienlijke schade vóór bijsturen (left) = geldig, veilig om te proberen
+    (right) = ongeldig. De mens beslist per vraag; dit telt alleen op. Onbeantwoord = ongeldig.
 
-    Geeft {valid, tested, criteria:[{n,label,passed,note}], summary}."""
-    objection = (objection or "").strip()
-    if not objection:
-        return {"valid": False, "tested": False, "criteria": [],
-                "summary": "geen bezwaar opgegeven"}
-    if llm_reason is None:
-        from nooch_village.llm import reason as llm_reason
-    crit_txt = "\n".join(f"#{n} {lbl}: {q}" for n, lbl, q in _OBJ_CRITERIA)
-    prompt = (
-        "Je bent Facilitator in een Holacracy-roloverleg. Toets of een BEZWAAR geldig is qua VORM "
-        "(niet of het waar is). Een geldig bezwaar voldoet aan ALLE vier criteria:\n" + crit_txt
-        + (f"\n\nHet voorstel: {change_summary}" if change_summary else "")
-        + f"\n\nHet bezwaar: \"{objection}\"\n\n"
-        "Beoordeel elk criterium los. Antwoord EXACT zo (één regel per criterium):\n"
-        "1: PASS of FAIL — korte reden\n4: PASS of FAIL — korte reden\n"
-        "2: PASS of FAIL — korte reden\n3: PASS of FAIL — korte reden\n"
-        "OORDEEL: GELDIG of ONGELDIG")
-    out = (llm_reason(prompt) or "").strip()
-    if not out:
-        return {"valid": True, "tested": False, "criteria": [],
-                "summary": "niet getoetst (geen facilitator-AI beschikbaar) — standaard geldig"}
-    labels = {n: lbl for n, lbl, _ in _OBJ_CRITERIA}
-    crits, passed_all = [], True
-    for n in (1, 4, 2, 3):
-        m = re.search(rf"^\s*#?{n}\s*[:\.\)]\s*(PASS|FAIL|GESLAAGD|GEZAKT)\b[^\S\n]*[—\-:]?\s*(.*)$",
-                      out, re.IGNORECASE | re.MULTILINE)
-        ok = bool(m) and m.group(1).upper() in ("PASS", "GESLAAGD")
-        note = (m.group(2).strip() if m else "")
-        crits.append({"n": n, "label": labels[n], "passed": ok, "note": note[:160]})
-        passed_all = passed_all and ok
-    verdict = re.search(r"OORDEEL\s*:\s*(GELDIG|ONGELDIG|VALID|INVALID)", out, re.IGNORECASE)
-    valid = (verdict.group(1).upper() in ("GELDIG", "VALID")) if verdict else passed_all
-    first_fail = next((c for c in crits if not c["passed"]), None)
-    summary = ("bezwaar geldig — we proberen het te integreren" if valid else
-               f"bezwaar ongeldig: zakt op #{first_fail['n']} {first_fail['label']}"
-               if first_fail else "bezwaar ongeldig")
-    return {"valid": valid, "tested": True, "criteria": crits, "summary": summary}
+    Geeft {valid, answers, harm, steps:[{label,vraag,answer,ok,gekozen}], summary}."""
+    a = {k: (answers.get(k) or "").lower() for k in ("q1", "q2", "q3", "q3b", "q4")}
+    steps, valid, first_fail = [], True, None
+    for spec in _OBJ_QUESTIONS:
+        dep = spec.get("depends_on")
+        if dep and a.get(dep[0]) != dep[1]:
+            continue                                    # q3b alleen relevant als q3 = anticiperen
+        ans = a.get(spec["q"], "")
+        # q3 is een SPLITSING, geen buis: 'right' (anticiperen) leidt naar q3b en is op zich geldig.
+        if spec["q"] == "q3":
+            ok = ans in ("left", "right")
+        else:
+            ok = ans == "left"
+        gekozen = spec["left"] if ans == "left" else (spec["right"] if ans == "right" else "—")
+        steps.append({"label": spec["label"], "vraag": spec["vraag"], "answer": ans,
+                      "ok": ok, "gekozen": gekozen})
+        if not ok:
+            valid = False
+            if first_fail is None:
+                first_fail = spec["label"]
+    summary = ("geldig bezwaar — we integreren het in het voorstel" if valid else
+               (f"geen geldig bezwaar (zakt op: {first_fail})" if first_fail
+                else "nog niet alle vragen beantwoord"))
+    return {"valid": valid, "answers": a, "harm": (harm or "").strip(),
+            "steps": steps, "summary": summary}
 
 
 _EXEMPT_PROPOSERS = {"founder", "facilitator", "secretary"}   # Circle Lead / procesrollen

@@ -181,45 +181,48 @@ def test_rov_invalid_verwijdert_ongeldige_spanning_zonder_governance(tmp_path):
     assert res2["ok"] is False
 
 
-def test_objection_test_vorm_1_4_2_3():
-    from nooch_village.roloverleg import test_objection
-    geldig = ("1: PASS — noemt verwarring (schade)\n4: PASS — vanuit eigen rol\n"
-              "2: PASS — door dit voorstel\n3: PASS — al zichtbaar\nOORDEEL: GELDIG")
-    r = test_objection("dit veroorzaakt verwarring met mijn rol", llm_reason=lambda p: geldig)
-    assert r["valid"] is True and r["tested"] is True
-    assert [c["n"] for c in r["criteria"]] == [1, 4, 2, 3]    # aanbevolen volgorde
-    ongeldig = ("1: FAIL — alleen 'niet nodig', geen schade\n4: PASS\n2: PASS\n3: PASS\n"
-                "OORDEEL: ONGELDIG")
-    r2 = test_objection("dit lijkt me niet nodig", llm_reason=lambda p: ongeldig)
-    assert r2["valid"] is False and "#1" in r2["summary"]
-    # geen LLM-antwoord → fail-open: standaard geldig maar 'niet getoetst'
-    r3 = test_objection("iets", llm_reason=lambda p: None)
-    assert r3["valid"] is True and r3["tested"] is False
-    assert test_objection("", llm_reason=lambda p: "x")["valid"] is False
+def test_evaluate_objection_proces():
+    from nooch_village.roloverleg import evaluate_objection
+    # alle 'left' → geldig bezwaar
+    geldig = evaluate_objection({"q1": "left", "q2": "left", "q3": "left", "q4": "left"},
+                                harm="mijn rol kan haar doel niet meer uitdrukken")
+    assert geldig["valid"] is True and geldig["harm"].startswith("mijn rol")
+    assert [s["label"] for s in geldig["steps"]] == ["Schade", "Door dit voorstel",
+                                                     "Zeker, niet speculatief", "Beperkt jouw rol"]
+    # q1 rechts (alleen 'onnodig') → geen geldig bezwaar
+    assert evaluate_objection({"q1": "right", "q2": "left", "q3": "left", "q4": "left"})["valid"] is False
+    # anticiperen (q3 rechts) + veilig om te proberen (q3b rechts) → ongeldig; q3b komt in de stappen
+    r = evaluate_objection({"q1": "left", "q2": "left", "q3": "right", "q3b": "right", "q4": "left"})
+    assert r["valid"] is False and any(s["label"] == "Niet veilig om te proberen" for s in r["steps"])
+    # anticiperen + aanzienlijke schade vóór bijsturen (q3b links) → wél geldig
+    assert evaluate_objection({"q1": "left", "q2": "left", "q3": "right", "q3b": "left",
+                               "q4": "left"})["valid"] is True
+    # niets beantwoord → ongeldig
+    assert evaluate_objection({})["valid"] is False
 
 
-def test_rov_object_toetst_en_zet_status(tmp_path):
+def test_rov_object_proces_zet_status(tmp_path):
     from nooch_village import cockpit
     from nooch_village.roloverleg import Agenda
-    import nooch_village.roloverleg as rl
     data = tmp_path / "data"; data.mkdir()
     (data / "governance_records.json").write_text("{}", encoding="utf-8")
     ag = Agenda(str(data / "roloverleg_agenda.json"))
     iid = ag.add("scout", "amend_role", {"add_accountabilities": ["Bewaken van X"]}, "x",
                  by="scout", title="X")
-    # leeg bezwaar → geweigerd
+    # niets beantwoord → geweigerd
     assert cockpit._dispatch_action(str(data), "rov_object", iid, "", extra={})["ok"] is False
-    # ongeldig bezwaar → terug naar open
-    rl.test_objection = lambda obj, **k: {"valid": False, "tested": True, "criteria": [], "summary": "x"}
-    res = cockpit._dispatch_action(str(data), "rov_object", iid, "niet nodig", extra={})
+    # geen geldig bezwaar (q1 rechts) → terug naar open
+    res = cockpit._dispatch_action(str(data), "rov_object", iid, "", extra={
+        "q1": "right", "q2": "left", "q3": "left", "q4": "left"})
     assert res["rov"] == "obj_invalid"
     assert Agenda(str(data / "roloverleg_agenda.json")).get(iid)["status"] == "open"
-    # geldig bezwaar → blijft staan (objected) + opgeslagen
-    rl.test_objection = lambda obj, **k: {"valid": True, "tested": True, "criteria": [], "summary": "ok"}
-    res2 = cockpit._dispatch_action(str(data), "rov_object", iid, "schade vanuit mijn rol", extra={})
+    # geldig bezwaar (alles links) → blijft staan (objected) + opgeslagen met steps
+    res2 = cockpit._dispatch_action(str(data), "rov_object", iid, "", extra={
+        "q1": "left", "q2": "left", "q3": "left", "q4": "left", "harm": "beperkt mijn rol"})
     assert res2["rov"] == "obj_valid"
     it = Agenda(str(data / "roloverleg_agenda.json")).get(iid)
-    assert it["status"] == "objected" and it["objection"]["text"] == "schade vanuit mijn rol"
+    assert it["status"] == "objected" and it["objection"]["text"] == "beperkt mijn rol"
+    assert it["objection"]["result"]["valid"] is True
 
 
 def test_auto_stollen_na_3x(tmp_path):

@@ -997,3 +997,13 @@ scope-regel (bron: alleen footwear-nooch).
 'village shopify' slaat standaard 7d/maand/hele-historie op. Dashboard heeft een 7d/maand/alles-
 toggle (client-side JS, geen round-trip). Conversie alleen in het 7d-paneel (passend bezoekersgetal).
 Eén getal meegeven aan 'village shopify N' = alleen dat venster (oud gedrag). Suite groen (551 + 498).
+
+## Bezwaar-toets = het handout-proces (mens beslist, facilitator vrij)
+Vervangt de AI-die-oordeelt door het 4-stappen-proces uit de roldenken.nl/Holacracy-handout:
+roloverleg.evaluate_objection(answers, harm) telt op uit de eigen antwoorden van de bezwaarmaker.
+Vier vragen (Schade / Door dit voorstel / Zeker-niet-speculatief / Beperkt jouw rol); q3 is een
+splitsing: 'anticiperen' (right) leidt naar q3b (aanzienlijke schade vóór bijsturen = geldig, veilig
+om te proberen = ongeldig). Geldig = op alle vragen het linker antwoord. De cockpit toont een
+uitklapbaar 4-vragen-formulier (radio's, q3b verschijnt alleen bij anticiperen) en het resultaat met
+✅/❌ per stap. De facilitator/AI oordeelt NIET meer over de inhoud — dat loste de 'mijn geldige
+bezwaar werd afgekeurd'-klacht op. Suite groen (551 + 498).

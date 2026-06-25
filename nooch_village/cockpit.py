@@ -1134,10 +1134,6 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
     decide = (
         f'<form method="post" action="/action" style="margin-top:.5rem">{common}'
         f'<input type="hidden" name="next" value="/roloverleg?iid={_e(item["id"])}">'
-        '<div class="tg-q" style="margin-top:.3rem">Bezwaar? (wordt getoetst op vorm: schade · '
-        'vanuit je rol · door dit voorstel · niet louter speculatief)</div>'
-        '<textarea name="reason" class="tg-in" rows="2" '
-        'placeholder="welke concrete schade ontstaat, en vanuit welke van je rollen voel je die?"></textarea>'
         '<div class="tg-opts">'
         '<button class="bigbtn go" type="submit" name="action" value="rov_consent">'
         '✓ Consent<small>geen bezwaar — wordt aangenomen en bij einde overleg doorgevoerd</small>'
@@ -1147,10 +1143,40 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
            '<button class="bigbtn warn" type="submit" name="action" value="rov_invalid">'
            '⚖️ Spanning ongeldig — verwijderen<small>geen baat voor de eigen rol benoemd; '
            'direct van de agenda, zonder governance</small></button>')
-        + '<button class="bigbtn warn" type="submit" name="action" value="rov_object">'
-        '⚠ Bezwaar toetsen<small>de Facilitator toetst de vorm; geldig → blijft staan, '
-        'ongeldig → je kunt alsnog consent geven</small></button>'
-        '</div></form>')
+        + '</div></form>')
+    # Bezwaar toetsen volgens de handout (roldenken.nl/Holacracy): JIJ kiest per vraag het antwoord;
+    # de uitkomst volgt uit je eigen antwoorden — de facilitator oordeelt niet over de inhoud.
+    from nooch_village.roloverleg import _OBJ_QUESTIONS
+    qrows = ""
+    for spec in _OBJ_QUESTIONS:
+        dep = spec.get("depends_on")
+        sub = (f' data-dep="{dep[0]}" data-depval="{dep[1]}" style="display:none"') if dep else ""
+        qrows += (
+            f'<div class="objq"{sub}><div class="objq-t"><b>{_e(spec["label"])}</b> — {_e(spec["vraag"])}</div>'
+            + (f'<div class="muted" style="font-size:.78rem">{_e(spec["hint"])}</div>' if spec.get("hint") else "")
+            + f'<label class="objopt"><input type="radio" name="{spec["q"]}" value="left"> {_e(spec["left"])}</label>'
+            f'<label class="objopt"><input type="radio" name="{spec["q"]}" value="right"> {_e(spec["right"])}</label>'
+            '</div>')
+    objection_form = (
+        '<details style="margin-top:.5rem"><summary>⚠ Bezwaar? Toets het (4 vragen)</summary>'
+        f'<form method="post" action="/action" style="margin-top:.4rem">{common}'
+        f'<input type="hidden" name="next" value="/roloverleg?iid={_e(item["id"])}">'
+        '<textarea name="harm" class="tg-in" rows="2" '
+        'placeholder="optioneel: beschrijf de schade — welke rol van jou wordt beperkt, en hoe?"></textarea>'
+        f'{qrows}'
+        '<button class="bigbtn warn" type="submit" name="action" value="rov_object" '
+        'style="margin-top:.4rem">⚖️ Toets mijn bezwaar<small>geldig → blijft staan voor '
+        'integratie · geen geldig bezwaar → je kunt alsnog consent geven</small></button>'
+        '</form></details>'
+        '<style>.objq{margin:.4rem 0;padding:.4rem .5rem;border:1px solid var(--border);'
+        'border-radius:var(--radius)}.objq-t{margin-bottom:.2rem}.objopt{display:block;'
+        'padding:.15rem 0;cursor:pointer}</style>'
+        '<script>(function(){function sync(){document.querySelectorAll(".objq[data-dep]").forEach('
+        'function(b){var d=b.getAttribute("data-dep"),v=b.getAttribute("data-depval");'
+        'var c=document.querySelector("input[name="+d+"]:checked");'
+        'b.style.display=(c&&c.value==v)?"block":"none";});}'
+        'document.querySelectorAll(".objq input[type=radio]").forEach(function(r){'
+        'r.addEventListener("change",sync);});sync();})();</script>')
     invalid_box = ("" if valid else
                    '<div class="tg-dlg" style="border-left:3px solid #c0392b;padding-left:.5rem">'
                    f'⚖️ <b>Facilitator:</b> deze spanning lijkt ongeldig — {_e(invalid_reason)}. '
@@ -1161,18 +1187,15 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
     obj_box = ""
     if obj:
         r = obj.get("result", {})
-        if not r.get("tested"):
-            crit_html = '<div class="muted">niet getoetst (geen facilitator-AI) — standaard geldig</div>'
-        else:
-            crit_html = "".join(
-                f'<li>{"✅" if c["passed"] else "❌"} #{c["n"]} {_e(c["label"])}'
-                + (f' — <span class="muted">{_e(c["note"])}</span>' if c.get("note") else "") + '</li>'
-                for c in r.get("criteria", []))
-            crit_html = f'<ul style="margin:.3rem 0">{crit_html}</ul>'
+        steps_html = "".join(
+            f'<li>{"✅" if s["ok"] else "❌"} <b>{_e(s["label"])}</b>: {_e(s.get("gekozen","—"))}</li>'
+            for s in r.get("steps", []))
+        steps_html = f'<ul style="margin:.3rem 0">{steps_html}</ul>' if steps_html else ""
         edge = "#27ae60" if r.get("valid") else "#c0392b"
+        harm_line = (f'⚖️ <b>Bezwaar getoetst:</b> "{_e(obj.get("text",""))}"<br>'
+                     if obj.get("text") else "⚖️ <b>Bezwaar getoetst</b><br>")
         obj_box = (f'<div class="tg-dlg" style="border-left:3px solid {edge};padding-left:.5rem">'
-                   f'⚖️ <b>Bezwaar getoetst:</b> "{_e(obj.get("text",""))}"<br>'
-                   f'<b>{_e(r.get("summary",""))}</b>{crit_html}</div>')
+                   f'{harm_line}<b>{_e(r.get("summary",""))}</b>{steps_html}</div>')
     card = (f'<div class="tg-card"><div class="tg-meta">Voorstel · door {_e(item.get("by",""))} · '
             f'status {_e(item.get("status",""))}</div>'
             f'<h2>{_e(item["title"])}</h2>'
@@ -1184,7 +1207,7 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
             + (f'<div class="muted" style="margin-top:.15rem"><b>Helpt mijn eigen rol:</b> '
                f'{_e(item.get("benefit",""))}</div>' if item.get("benefit") else "")
             + invalid_box + obj_box + f'{sec}{react_log}</div>')
-    inner = (f'{head}{_banner(msg)}{card}{react_form}{decide}'
+    inner = (f'{head}{_banner(msg)}{card}{react_form}{decide}{objection_form}'
              '<div class="tg-skip"><a class="muted" href="/roloverleg">← terug naar de agenda</a>'
              '</div></div><style>' + _TRIAGE_CSS + '</style>')
     return _page("Voorstel behandelen", inner)
@@ -2331,23 +2354,19 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         if action == "rov_consent":
             return {"ok": agenda.set_status(iid, "consented"), "rov": "consented"}
         if action == "rov_object":
-            # Holacracy-objection-test: toets de VORM van het bezwaar (1→4→2→3). Geldig → blijft
-            # staan voor integratie; ongeldig → terug naar open (je kunt alsnog consent geven).
-            from nooch_village.roloverleg import test_objection
+            # Bezwaar-toets volgens de handout: JIJ kiest per vraag; de uitkomst volgt uit je eigen
+            # antwoorden (facilitator oordeelt niet). Geldig → blijft staan voor integratie; geen
+            # geldig bezwaar → terug naar open (je kunt alsnog consent geven).
+            from nooch_village.roloverleg import evaluate_objection
             item = agenda.get(iid)
             if item is None:
                 return {"ok": False, "error": "voorstel niet gevonden"}
-            objection = (reason or "").strip()
-            if not objection:
-                return {"ok": False, "error": "typ eerst je bezwaar: welke schade ontstaat, "
-                        "en vanuit welke van je rollen?"}
-            ch = item.get("change", {})
-            summ = (ch.get("purpose") or " / ".join(ch.get("add_accountabilities", [])) or
-                    item.get("title", ""))
-            res = test_objection(objection, change_summary=summ)
-            agenda.set_objection(iid, objection, res)
-            return {"ok": True, "rov": "obj_valid" if res.get("valid") else "obj_invalid",
-                    "tested": res.get("tested")}
+            answers = {k: extra.get(k, "") for k in ("q1", "q2", "q3", "q3b", "q4")}
+            if not any(answers.values()):
+                return {"ok": False, "error": "beantwoord eerst de toetsvragen (kies per vraag een antwoord)"}
+            res = evaluate_objection(answers, harm=extra.get("harm", ""))
+            agenda.set_objection(iid, res.get("harm", ""), res)
+            return {"ok": True, "rov": "obj_valid" if res.get("valid") else "obj_invalid"}
         # rov_react: reactie loggen + AI past voorstel aan (gegrond in de bank)
         from nooch_village.governance_examples import GovernanceExamples, few_shot_block
         item = agenda.get(iid)
@@ -2646,6 +2665,10 @@ def make_handler(data_dir: str | None):
                      "accs": (form.get("accs") or [""])[0],
                      "voorbeeld": (form.get("voorbeeld") or [""])[0],
                      "benefit": (form.get("benefit") or [""])[0],
+                     "harm": (form.get("harm") or [""])[0],
+                     "q1": (form.get("q1") or [""])[0], "q2": (form.get("q2") or [""])[0],
+                     "q3": (form.get("q3") or [""])[0], "q3b": (form.get("q3b") or [""])[0],
+                     "q4": (form.get("q4") or [""])[0],
                      "remember": (form.get("remember") or [""])[0]}
             result = _dispatch_action(data_dir, action, iid, reason, extra=extra)
             # 303 → verse GET. Rails keren terug naar de spanning (next), sluiten gaat home.
