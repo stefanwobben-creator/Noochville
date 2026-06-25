@@ -446,3 +446,21 @@ aanleiding → `set_explanation` + `seed_surge_explanation`. Cockpit toont '▲ 
 nieuws. refresh.sh draait nu enrich vóór de puls zodat een verse opleving in dezelfde run wordt geduid.
 
 Tests: 919 → 924.
+
+---
+
+## 2026-06-25 (vervolg 7) — Ademend dorp: Fase 1 (business-case-frame)
+
+**[ontwerp]** docs/ADEMEND_DORP.md: de kansen-motor. Diagnose via experiment (15 kaartjes, allemaal
+grounding_count=1, gem. gelijkenis 0.06, 13 onbenutte bridge-paren → kennisbank ademt niet). Zes
+bouwstenen + 5 fasen + vitaliteits-KPI's. Noordster: 1M paar/jaar; batch 4 = 1000 (sep-dec).
+
+**[feat] Fase 1 — business-case-frame.** Spanning → afweegbare kans.
+- `business_case.py`: make_business_case (normaliseert, tiers xs..xl), business_value (effect×confidence÷effort),
+  format_business_case.
+- `Proposal` krijgt hypothesis + business_case; proposal_to_dict/from_dict roundtrippen ze.
+- `config/strategy.json`: north_star (1.000.000 paar/jaar) toegevoegd.
+- Cockpit: "🎯 Kansen-backlog" rangschikt voorstellen/projecten mét business-case op waarde, met de
+  noordster in de kop. Lege staat verwijst naar Fase 2.
+
+Tests: 928 → 933. Volgende: Fase 2 (opportunity-reflex die de backlog vult), dan Fase 3 (Synthesist).

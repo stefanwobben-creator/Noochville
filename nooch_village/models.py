@@ -106,3 +106,5 @@ class Proposal:
     escalation_gate: Optional[str] = None
     escalation_reason: Optional[str] = None
     source: str = "sensed"  # "seed" | "sensed" | "demo" — herkomst van het voorstel
+    hypothesis: str = ""              # toetsbare aanname: "als we X, dan Y omdat Z"
+    business_case: Optional[dict] = None  # {metric, effect, effort, confidence, horizon, rationale}

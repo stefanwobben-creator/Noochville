@@ -1,5 +1,12 @@
 {
   "_comment": "Strategische heuristieken en tijdgebonden doelen. Bewerkt door de founder, niet via governance.",
+  "north_star": {
+    "description": "1 miljoen paar schoenen per jaar via nooch.earth",
+    "metric": "pairs_sold",
+    "target": 1000000,
+    "unit": "paar schoenen",
+    "horizon": "per jaar"
+  },
   "strategy": [
     "Verkies organische groei boven betaald bereik (advertising is verboden via Anchor-policy)",
     "Verkies missie-passende langetermijn-keywords boven kortetermijn-volume",

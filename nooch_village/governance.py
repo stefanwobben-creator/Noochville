@@ -44,6 +44,8 @@ def proposal_to_dict(p: Proposal) -> dict:
         "escalation_gate": p.escalation_gate,
         "escalation_reason": p.escalation_reason,
         "source": p.source,
+        "hypothesis": p.hypothesis,
+        "business_case": p.business_case,
         "change": {
             "kind": c.kind.value,
             "role_id": c.role_id,
@@ -88,6 +90,8 @@ def proposal_from_dict(d: dict) -> Proposal:
         escalation_gate=d.get("escalation_gate"),
         escalation_reason=d.get("escalation_reason"),
         source=d.get("source", "sensed"),
+        hypothesis=d.get("hypothesis", ""),
+        business_case=d.get("business_case"),
     )
 
 

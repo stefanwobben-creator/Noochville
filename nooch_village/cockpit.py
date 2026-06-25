@@ -55,6 +55,16 @@ def _config_competitor_brands(dd: str) -> list[str]:
     return [b.strip() for b in raw.split(",") if b.strip()]
 
 
+def _north_star(dd: str) -> dict:
+    """De noordster uit config/strategy.json (naast data/). Leeg bij ontbreken."""
+    import json as _json
+    path = os.path.join(dd, "..", "config", "strategy.json")
+    try:
+        return (_json.load(open(path)) or {}).get("north_star", {}) or {}
+    except Exception:
+        return {}
+
+
 def _monitored_brands(config_brands: list[str], confirmed: list[str]) -> list[str]:
     """Volledige monitor-set, dedup met behoud van volgorde (config eerst, dan bevestigd).
     Spiegelt ConcurrentScout._monitored_brands."""
@@ -217,11 +227,36 @@ def gather(data_dir: str | None = None) -> dict:
         key=lambda x: -x["grounding_count"],
     )
 
+    # Kansen-backlog: alle onderbouwde voorstellen/projecten (met business-case), op waarde.
+    from nooch_village.business_case import business_value
+    backlog = []
+    for it in inbox_items:
+        if it.get("status") != "pending":
+            continue
+        prop = (it.get("context") or {}).get("proposal") or {}
+        bc = prop.get("business_case") or (it.get("context") or {}).get("business_case")
+        if bc:
+            backlog.append({
+                "title": it.get("subject") or prop.get("proposer_role") or "voorstel",
+                "kind": "voorstel", "by": prop.get("proposer_role", ""),
+                "hypothesis": prop.get("hypothesis", "") or (it.get("context") or {}).get("hypothesis", ""),
+                "business_case": bc, "value": business_value(bc)})
+    for p in proj:
+        bc = p.get("business_case")
+        if bc:
+            backlog.append({"title": p.get("scope") or p.get("owner") or p.get("id"),
+                            "kind": "project", "by": p.get("owner", ""),
+                            "hypothesis": p.get("hypothesis", ""),
+                            "business_case": bc, "value": business_value(bc)})
+    backlog.sort(key=lambda x: -x["value"])
+
     _now = time.time()
     return {
         "roster": roster,
         "inbox": inbox_items,
         "projects": proj,
+        "backlog": backlog,
+        "north_star": _north_star(dd),
         "library": lib,
         "insights": insights,
         "competitor_candidates": brands.candidates(),
@@ -715,6 +750,28 @@ def _sparkline(values, width: int = 90, height: int = 22) -> str:
             f'stroke-width="1.5"/></svg>')
 
 
+def _render_backlog(backlog: list, north_star: dict) -> str:
+    """Geprioriteerde kansen-backlog: onderbouwde voorstellen/projecten, op verwachte waarde."""
+    from nooch_village.business_case import format_business_case
+    ns = ""
+    if north_star.get("target"):
+        ns = (f' <span class="muted">— noordster: {_fmt_int(north_star["target"])} '
+              f'{_e(north_star.get("unit", ""))} {_e(north_star.get("horizon", ""))}</span>')
+    if not backlog:
+        body = ('<p class="muted">Nog geen onderbouwde kansen. Zodra rollen voorstellen doen '
+                'mét business-case (Fase 2: opportunity-reflex), verschijnen ze hier, op waarde gerangschikt.</p>')
+    else:
+        rows = "".join(
+            f'<tr><td><b>{_e(x["title"])}</b> <span class="muted">{_e(x["kind"])}'
+            f'{(" · " + _e(x["by"])) if x.get("by") else ""}</span>'
+            f'{("<br><span class=muted>" + _e(x["hypothesis"][:120]) + "</span>") if x.get("hypothesis") else ""}</td>'
+            f'<td>{_e(format_business_case(x.get("business_case")))}</td>'
+            f'<td><b>{_e(x.get("value"))}</b></td></tr>' for x in backlog)
+        body = ('<table><thead><tr><th>kans</th><th>business-case</th><th>waarde</th></tr></thead>'
+                f'<tbody>{rows}</tbody></table>')
+    return f'<h2>🎯 Kansen-backlog{ns}</h2>{body}'
+
+
 def _render_digest(d: dict, noochie: dict | None = None) -> str:
     """Weekrapport: puur kwantitatief — hoeveel nieuw deze week — plus Noochie's dagverdict.
     De details staan in de eigen secties (Woordenschat, Concurrenten, Linkbuilding)."""
@@ -1027,6 +1084,7 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'<div class="bar">{_e(counts)} · gegenereerd {_e(_ts(snap.get("generated_at")))} · {hist}</div>'
         f'{_banner(msg)}'
         f'{_render_digest(snap.get("digest", {}), snap.get("noochie_daily", {}))}'
+        f'{_render_backlog(snap.get("backlog", []), snap.get("north_star", {}))}'
         f'<h2>Inbox</h2>{inbox_tbl}'
         f'<h2>Proces (projecten)</h2>{proj_tbl}'
         f'<h2>Kennis</h2>'
