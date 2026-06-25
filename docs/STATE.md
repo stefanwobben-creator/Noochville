@@ -59,6 +59,11 @@
   pay-as-you-go aanzetten zodat trede 1 niet wegvalt.
 - **Echte concurrent-rankings** ("op welke termen rankt Veja, op welke plek") vragen een rank-tracker
   (Serpstat); SerpAPI levert nu alleen de lichtere gerelateerde-termen-variant.
+- **Regionaal bezoekers-dashboard (Noochie's voorstel, na launch)**: de basis (Plausible-bezoekers
+  per locale, geduid in de puls via `locale_insight`) staat. Noochie's rijkere voorstel — GA4-data
+  per regio vergelijken met verkoopcijfers per regio, met AVG-check — is bewust NIET gebouwd:
+  voorbarig pre-launch (geen GA4 in gebruik, te weinig verkoopvolume per regio). De means_gap +
+  het voorstel zijn afgesloten op het juiste niveau-voor-nu. Heroppakken zodra er verkoopdata is.
 
 Wat de eerdere sessie (2026-06-23/24) is gebouwd en nu de waarheid is:
 
