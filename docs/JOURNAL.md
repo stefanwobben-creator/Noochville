@@ -704,3 +704,15 @@ en de wortelcirkel worden overgeslagen — die liggen in de Grondwet vast.
 Nieuw: nooch_village/governance_review.py (review_role + review_all_roles + _parse_review).
 CLI: 'python -m nooch_village.village review_roles'. Fail-closed zonder LLM (0 voorstellen).
 Tests: +test_role_review.py. Suite groen (507 + 474).
+
+## Focusmodus: overzicht-eerst i.p.v. auto-kaart (geen restart, geen terugkeer)
+/triage opent nu een OVERZICHT van alle openstaande spanningen (klikbare lijst, geen gedwongen
+volgorde, 'wacht op antwoord'-badge waar een vraag openstaat). Je kiest er zelf één → focuskaart
+verwerken → terug naar het overzicht (de afgehandelde is dan weg). Lost twee klachten op: je zag
+geen totaaloverzicht, en na het verwerken sprong je terug naar de eerste / leek een verwerkte
+weer terug te komen. Oorzaak: /triage laadde automatisch queue[0]; afgehandelde items verdwijnen
+nu uit de queue en het overzicht laadt nooit een dichtgezette kaart.
+
+Nieuw: cockpit.render_triage_overview; /triage GET → overzicht zonder iid, focuskaart met geldig
+iid; focuskaart-acties: uitkomst toevoegen blijft op de kaart, klaar/vraag/visie → overzicht.
+Tests: test_triage_dialoog bijgewerkt + overzicht-tests. Suite groen (507 + 475).

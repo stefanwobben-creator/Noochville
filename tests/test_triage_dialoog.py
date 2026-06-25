@@ -149,26 +149,46 @@ def test_lopende_projecten_niet_in_backlog(tmp_path):
 
 
 def test_focusmodus_render_een_kaart_met_stappen(tmp_path):
-    """Focusmodus toont één spanning, voortgang, en de stapsgewijze keuzes (Duolingo-stijl)."""
+    """Focusmodus toont één spanning en de stapsgewijze keuzes (Duolingo-stijl), met een
+    duidelijke weg terug naar het overzicht."""
     from nooch_village import cockpit
     x = {"iid": "k1", "title": "Reviews op de PDP", "by": "analyst",
          "wat": "Sterren tonen.", "waarom": "sociaal bewijs",
          "business_case": make_business_case(effect=80, effort=2, confidence=0.7),
          "value": 28.0, "dialogue": []}
     page = cockpit.render_triage(x, 1, 3, ["scout", "analyst"], "t")
-    assert "Spanning 1 van 3" in page and "Reviews op de PDP" in page
-    assert "Hoe pak je dit op?" in page
+    assert "Reviews op de PDP" in page and "Hoe pak je dit op?" in page
+    assert "← overzicht" in page                                    # terug naar de lijst
     for val in ("tac_project", "tac_info_give", "tac_info_ask", "gov_proposal",
                 "tension_done", "vision_drop"):
         assert f'value="{val}"' in page
-    assert "/triage?iid=k1" in page and 'value="/triage"' in page   # stapelen vs. volgende
+    # uitkomst toevoegen → blijf op de kaart; afronden/vraag → terug naar overzicht
+    assert "/triage?iid=k1" in page and 'value="/triage"' in page
     assert "<option value=\"scout\">" in page                       # rol-keuze
 
 
-def test_focusmodus_leeg_is_klaar(tmp_path):
+def test_focusmodus_overzicht_lijst_alle_spanningen(tmp_path):
+    """Het overzicht toont álle openstaande spanningen als klikbare lijst (geen gedwongen
+    volgorde), met een 'wacht op antwoord'-badge waar een vraag openstaat."""
     from nooch_village import cockpit
-    page = cockpit.render_triage(None, 0, 0, [], "t")
-    assert "Alles verwerkt" in page
+    queue = [
+        {"iid": "k1", "title": "Reviews op de PDP", "by": "analyst", "value": 28.0,
+         "business_case": make_business_case(effect=80, effort=2, confidence=0.7),
+         "awaiting": False},
+        {"iid": "k2", "title": "Sokken van hennep", "by": "herman", "value": 12.0,
+         "business_case": None, "awaiting": True},
+    ]
+    page = cockpit.render_triage_overview(queue, "t")
+    assert "2 openstaande spanning" in page
+    assert "Reviews op de PDP" in page and "Sokken van hennep" in page
+    assert "/triage?iid=k1" in page and "/triage?iid=k2" in page    # elk klikbaar
+    assert "wacht op antwoord" in page                              # badge op k2
+
+
+def test_focusmodus_overzicht_leeg_is_klaar(tmp_path):
+    from nooch_village import cockpit
+    assert "Alles verwerkt" in cockpit.render_triage_overview([], "t")
+    assert "Alles verwerkt" in cockpit.render_triage(None, 0, 0, [], "t")
 
 
 def test_cockpit_render_anchor_en_holacracy_knoppen(tmp_path):

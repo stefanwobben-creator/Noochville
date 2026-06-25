@@ -682,27 +682,72 @@ _TRIAGE_CSS = """
   border-radius:10px;font-size:.95rem;margin:.3rem 0 .6rem;font-family:var(--font-body)}
 .tg-dlg{border-left:3px solid var(--green);padding-left:.7rem;margin:.6rem 0;font-size:.9rem}
 .tg-skip{text-align:center;margin-top:1rem}
+.tg-list{display:flex;flex-direction:column;gap:.5rem}
+.tg-item{display:flex;align-items:center;gap:.7rem;text-decoration:none;color:var(--ink);
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.7rem .9rem;
+  transition:.12s}
+.tg-item:hover{border-color:var(--green);background:var(--green-tint)}
+.tg-item-n{flex:0 0 auto;width:1.6rem;height:1.6rem;border-radius:50%;background:var(--sand);
+  display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700}
+.tg-item-body{flex:1 1 auto;min-width:0;display:flex;flex-direction:column}
+.tg-item-body small{color:var(--gray);font-size:.78rem}
+.tg-go{flex:0 0 auto;color:var(--green-dark);font-weight:700;font-size:.85rem}
+.tg-wacht{background:var(--cream-3);border:1px solid var(--border);border-radius:6px;
+  padding:0 .3rem;font-size:.7rem;font-weight:600}
 """
+
+
+def render_triage_overview(queue: list, token: str, msg=None) -> str:
+    """Overzicht van álle openstaande spanningen: kies er zelf één om te verwerken. Na het
+    verwerken kom je hier terug (de afgehandelde is dan weg). Geen gedwongen volgorde, geen
+    'terug naar de eerste'."""
+    from nooch_village.business_case import format_business_case
+    head = ('<div class="tg-wrap"><p><a href="/">← cockpit</a></p>'
+            '<h1>🎯 Spanningen verwerken</h1>')
+    if not queue:
+        body = ('<div class="tg-card"><h2>Alles verwerkt 🎉</h2>'
+                '<p class="muted">Geen openstaande spanningen meer. Mooi opgeruimd.</p>'
+                '<p><a class="btn ok" href="/">← terug naar de cockpit</a></p></div>')
+        return _page("Spanningen verwerken",
+                     f'{head}{_banner(msg)}{body}</div><style>{_TRIAGE_CSS}</style>')
+    rows = []
+    for i, x in enumerate(queue, 1):
+        bc = format_business_case(x.get("business_case")) if x.get("business_case") else ""
+        wacht = (' <span class="tg-wacht">⏳ wacht op antwoord</span>'
+                 if x.get("awaiting") else "")
+        meta = " · ".join(p for p in [
+            (f'door {_e(x["by"])}' if x.get("by") else ""), _e(bc),
+            (f'waarde {_e(x.get("value"))}' if x.get("value") is not None else "")] if p)
+        rows.append(
+            f'<a class="tg-item" href="/triage?iid={_e(x["iid"])}">'
+            f'<span class="tg-item-n">{i}</span>'
+            f'<span class="tg-item-body"><b>{_e(x["title"])}</b>{wacht}'
+            f'<small>{meta}</small></span><span class="tg-go">verwerk →</span></a>')
+    body = (f'<p class="tg-meta">{len(queue)} openstaande spanning(en) — kies er één om te '
+            f'verwerken. Je komt hier daarna vanzelf terug.</p>'
+            f'<div class="tg-list">{"".join(rows)}</div>')
+    return _page("Spanningen verwerken",
+                 f'{head}{_banner(msg)}{body}</div><style>{_TRIAGE_CSS}</style>')
 
 
 def render_triage(x: dict | None, pos: int, total: int, roles: list,
                   token: str, msg=None) -> str:
-    """Focusmodus: één spanning per scherm, één keuze per stap (Duolingo-stijl). Je werkt de
-    stapel door; na 'klaar' of een vraag schuift de volgende kaart vanzelf in beeld."""
+    """Focusmodus: één spanning per scherm, één keuze per stap (Duolingo-stijl). Na een keuze
+    kom je terug op het overzicht; de afgehandelde spanning is dan weg."""
     from nooch_village.business_case import format_business_case
-    head = ('<div class="tg-wrap"><p><a href="/">← cockpit</a></p>'
-            '<h1>🎯 Spanningen verwerken</h1>')
+    head = ('<div class="tg-wrap"><p><a href="/triage">← overzicht</a> · '
+            '<a href="/">cockpit</a></p><h1>🎯 Spanning verwerken</h1>')
     if not x:
         body = ('<div class="tg-card"><h2>Alles verwerkt 🎉</h2>'
-                '<p class="muted">Geen openstaande kansen meer. Mooi opgeruimd.</p>'
-                '<p><a class="btn ok" href="/">← terug naar de cockpit</a></p></div>')
+                '<p class="muted">Geen openstaande spanningen meer.</p>'
+                '<p><a class="btn ok" href="/triage">← naar het overzicht</a></p></div>')
         return _page("Spanningen verwerken", f'{head}{_banner(msg)}{body}</div>'
                      + f'<style>{_TRIAGE_CSS}</style>')
 
     iid = x["iid"]
-    pct = int(round(100 * pos / total)) if total else 0
-    prog = (f'<div class="tg-meta">Spanning {pos} van {total}</div>'
-            f'<div class="tg-prog"><span style="width:{pct}%"></span></div>')
+    nog = max(total - 1, 0)
+    prog = (f'<div class="tg-meta">Nog {nog} andere spanning(en) op het overzicht</div>'
+            if total else "")
     # de kaart: waar gaat het over
     bc = format_business_case(x.get("business_case")) if x.get("business_case") else ""
     meta = " · ".join(p for p in [
@@ -802,8 +847,8 @@ def render_triage(x: dict | None, pos: int, total: int, roles: list,
                  nxt=nextc)
         + '<button class="tg-back" type="button" onclick="tg(\'t-start\')">← terug</button></div>')
 
-    skip = (f'<div class="tg-skip"><a class="muted" href="/triage?skip={iid}">'
-            f'volgende spanning →</a></div>')
+    skip = ('<div class="tg-skip"><a class="muted" href="/triage">'
+            '← terug naar het overzicht</a></div>')
     js = ("<script>function tg(id){document.querySelectorAll('.tstep')"
           ".forEach(function(e){e.classList.remove('on')});"
           "document.getElementById(id).classList.add('on');}</script>")
@@ -1737,20 +1782,16 @@ def make_handler(data_dir: str | None):
             elif path == "/triage":
                 snap = gather(data_dir)
                 queue = [b for b in snap["backlog"] if b.get("approvable") and b.get("iid")]
-                roles = [r["id"] for r in snap["roster"]
-                         if not r["archived"] and r["type"] == "role"]
                 want = (qs.get("iid") or [""])[0]
-                skip = (qs.get("skip") or [""])[0]
-                cur, pos = (None, 0)
-                if queue:
-                    idx = 0
-                    if want:
-                        idx = next((i for i, b in enumerate(queue) if b["iid"] == want), 0)
-                    elif skip:
-                        si = next((i for i, b in enumerate(queue) if b["iid"] == skip), -1)
-                        idx = (si + 1) % len(queue) if si >= 0 else 0
-                    cur, pos = queue[idx], idx + 1
-                body = render_triage(cur, pos, len(queue), roles, csrf_token, msg=msg).encode("utf-8")
+                cur = next((b for b in queue if b["iid"] == want), None) if want else None
+                if cur is None:
+                    # Geen (geldig/openstaand) item gekozen → toon het overzicht van alle spanningen.
+                    body = render_triage_overview(queue, csrf_token, msg=msg).encode("utf-8")
+                else:
+                    roles = [r["id"] for r in snap["roster"]
+                             if not r["archived"] and r["type"] == "role"]
+                    body = render_triage(cur, 1, len(queue), roles,
+                                         csrf_token, msg=msg).encode("utf-8")
             elif path in ("/", "/index.html"):
                 show_all = (qs.get("history") or ["0"])[0] in ("1", "true", "yes")
                 body = render_html(gather(data_dir), csrf_token=csrf_token, msg=msg,
