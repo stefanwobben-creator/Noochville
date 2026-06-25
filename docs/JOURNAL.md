@@ -691,3 +691,16 @@ echte rollen als inspiratie; nieuw formulate_accountability schrijft een kans Ho
 _route_kans_to_governance gebruikt die geformuleerde accountability i.p.v. de ruwe titel (zowel
 amend als add_role); formulate_project versterkt met de 'afgeronde toestand'-regel. Alles
 fail-closed zonder store/LLM. Tests: +test_governance_examples.py. Suite groen (485 + 491).
+
+## Facilitator-rolreview: alle rollen langs de meetlat (mens-gated)
+Nieuw project: de Facilitator reviewt elke operationele dorp-rol tegen de Holacracy-regels,
+gegrond in de vertrouwelijke referentiebank (vergelijkbare echte rollen per rol opgezocht).
+Per rol levert hij ÉÉN concreet verbetervoorstel (accountability naar -en-vorm, ontbrekend
+aandachtsgebied, te detaillistische regel schrappen, purpose scherper), dat als KANS in de
+human inbox landt (by=facilitator, kind=governance). Mens-gated: jij verwerkt ze in de
+focus-triage; niks wordt automatisch toegepast. Kernrollen (Facilitator/Secretaris/Lead Link)
+en de wortelcirkel worden overgeslagen — die liggen in de Grondwet vast.
+
+Nieuw: nooch_village/governance_review.py (review_role + review_all_roles + _parse_review).
+CLI: 'python -m nooch_village.village review_roles'. Fail-closed zonder LLM (0 voorstellen).
+Tests: +test_role_review.py. Suite groen (507 + 474).

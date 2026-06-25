@@ -545,6 +545,28 @@ def main() -> None:
         print(f"✅ Referentiebank: {added} nieuw, totaal {store.count()} rollen "
               f"(vertrouwelijk, lokaal in data/governance_examples.json).")
 
+    elif mode == "review_roles":
+        # Facilitator-project: review alle dorp-rollen tegen de Holacracy-regels + referentiebank,
+        # en zet per rol één verbetervoorstel als kans in de inbox (mens-gated, niks auto-toegepast).
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.governance import Records
+        from nooch_village.governance_examples import GovernanceExamples
+        from nooch_village.governance_review import review_all_roles
+        from nooch_village.human_inbox import HumanInbox
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
+        ge = GovernanceExamples(os.path.join(ctx.data_dir, "governance_examples.json"))
+        inbox = HumanInbox(os.path.join(ctx.data_dir, "human_inbox.json"))
+        print(f"🏛️ Facilitator reviewt alle rollen (referentiebank: {ge.count()} voorbeeldrollen)…")
+        res = review_all_roles(recs, ge, inbox)
+        print(f"✅ {res['reviewed']} rollen gereviewd, {res['proposed']} verbetervoorstel(len) "
+              f"als kans in je inbox (verwerk ze in de focus-triage). {res['skipped']} overgeslagen "
+              f"(kernrollen/cirkels).")
+        if ge.count() == 0:
+            print("   ⚠️ Referentiebank leeg — draai eerst 'ingest_governance' voor grounding.")
+
     else:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
@@ -553,6 +575,6 @@ def main() -> None:
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "
               "measure_propose | rereview | ingest | notes_remove | recurate | "
               "ground | harry_run | roster | keys | competitor | formalize | answer_questions | "
-              "ingest_governance",
+              "ingest_governance | review_roles",
               file=sys.stderr)
         sys.exit(1)
