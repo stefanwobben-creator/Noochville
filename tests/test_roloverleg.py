@@ -58,18 +58,22 @@ def test_secretary_check_dubbel_in_dezelfde_rol(tmp_path):
     assert any("heeft al een vergelijkbare accountability" in i["msg"] for i in issues)
 
 
-def test_amend_with_reaction_en_failclosed(tmp_path):
+def test_amend_with_reaction_hele_rol_diff_en_failclosed():
     item = {"id": "x", "role_id": "scout", "kind": "amend_role",
             "change": {"add_accountabilities": ["Bijhouden van social media"]},
             "reason": "t", "title": "t"}
-    out = amend_with_reaction(item, "maak het breder",
-                              llm_reason=lambda p: "Bewaken van alle online kanalen van Nooch")
-    assert out["add_accountabilities"][0] == "Bewaken van alle online kanalen van Nooch"
-    # geen reactie of geen LLM → ongemoeid
-    assert amend_with_reaction(item, "", llm_reason=lambda p: "x")["add_accountabilities"][0] \
-        == "Bijhouden van social media"
-    assert amend_with_reaction(item, "breder", llm_reason=lambda p: None)["add_accountabilities"][0] \
-        == "Bijhouden van social media"
+    snap = {"purpose": "markt observeren", "accountabilities": ["Volgen van de markt"], "domains": []}
+    rev = ("PURPOSE: markt observeren\nACCOUNTABILITIES:\n"
+           "- Bewaken van alle online kanalen\n- Analyseren van trends\nDOMEIN: -")
+    out = amend_with_reaction(item, "maak het breder, haal 'volgen van de markt' weg",
+                              role_snapshot=snap, llm_reason=lambda p: rev)
+    # desired vervangt de hele set: nieuwe accountabilities erbij, de oude eruit (echte diff)
+    assert "Bewaken van alle online kanalen" in out["add_accountabilities"]
+    assert "Volgen van de markt" in out["remove_accountabilities"]
+    # geen reactie / geen LLM → ongemoeid
+    assert amend_with_reaction(item, "", llm_reason=lambda p: "x") == item["change"]
+    assert amend_with_reaction(item, "breder", role_snapshot=snap, llm_reason=lambda p: None) \
+        == item["change"]
 
 
 def test_apply_consented_adopt_en_objected_blijft(tmp_path):
@@ -101,6 +105,58 @@ def test_triage_governance_agendeert_ipv_adopt(tmp_path):
     assert res["gov_status"] == "agendeerd"
     assert len(a.open()) == 1                                # op de agenda, niet doorgevoerd
     assert "Social media bijhouden" not in str(recs.get("scout").definition.accountabilities)
+
+
+def test_suggest_accountabilities():
+    from nooch_village.inbox_actions import suggest_accountabilities
+    out = suggest_accountabilities("Copywriter", "Schrijven van copy", llm_reason=lambda p:
+                                   "Schrijven van blogcopy\n- Bewaken van de tone of voice\n3) Redigeren van teksten")
+    assert out == ["Schrijven van blogcopy", "Bewaken van de tone of voice", "Redigeren van teksten"]
+    assert suggest_accountabilities("x", "y", llm_reason=lambda p: None) == []
+
+
+def test_rov_add_nieuwe_rol_met_alle_velden(tmp_path):
+    from nooch_village import cockpit
+    from nooch_village.roloverleg import Agenda
+    data = tmp_path / "data"; data.mkdir()
+    (data / "governance_records.json").write_text("{}", encoding="utf-8")
+    res = cockpit._dispatch_action(str(data), "rov_add", "", "we hebben copy nodig", extra={
+        "owner": "__new__", "rolnaam": "Copywriter",
+        "purpose": "Het laten resoneren van de missie in woorden",
+        "domein": "de blog", "accs": "Schrijven van blogcopy\nBewaken van de tone of voice"})
+    assert res["ok"] and res["rov"] == "added"
+    it = Agenda(str(data / "roloverleg_agenda.json")).open()[0]
+    assert it["kind"] == "add_role" and it["change"]["purpose"].startswith("Het laten")
+    assert it["change"]["add_accountabilities"] == ["Schrijven van blogcopy", "Bewaken van de tone of voice"]
+    assert it["change"]["add_domains"] == ["de blog"]
+
+
+def test_roloverleg_diff_huidig_vs_na(tmp_path):
+    from nooch_village import cockpit
+    item = {"id": "k1", "role_id": "scout", "kind": "amend_role",
+            "change": {"add_accountabilities": ["Bewaken van sociale kanalen"]},
+            "reason": "bereik", "by": "scout", "title": "Social", "status": "open", "reactions": []}
+    snap = {"purpose": "markt observeren", "accountabilities": ["Volgen van de markt"], "domains": []}
+    page = cockpit.render_roloverleg(item, snap, [], "t")
+    assert "Huidige rol" in page and "Na dit voorstel" in page
+    assert "Volgen van de markt" in page and "✚ Bewaken van sociale kanalen" in page
+
+
+def test_rov_to_project_maakt_experiment_en_haalt_van_agenda(tmp_path):
+    from nooch_village import cockpit
+    from nooch_village.roloverleg import Agenda
+    from nooch_village.projects import ProjectLedger
+    data = tmp_path / "data"; data.mkdir()
+    (data / "governance_records.json").write_text("{}", encoding="utf-8")
+    ag = Agenda(str(data / "roloverleg_agenda.json"))
+    iid = ag.add("scout", "amend_role", {"add_accountabilities": ["Bewaken van sociale kanalen"]},
+                 "bereik", title="Social")
+    res = cockpit._dispatch_action(str(data), "rov_to_project", iid, "", extra={})
+    assert res["ok"] and res["rov"] == "to_project"
+    assert Agenda(str(data / "roloverleg_agenda.json")).open() == []   # van de agenda af (van schijf)
+    ps = ProjectLedger(str(data / "projects.json")).all()
+    assert len(ps) == 1 and ps[0]["owner"] == "scout" and ps[0]["status"] == "queued"
+    assert "Bewaken van sociale kanalen" in str(ps[0]["scope"])
 
 
 def test_cockpit_render_roloverleg(tmp_path):

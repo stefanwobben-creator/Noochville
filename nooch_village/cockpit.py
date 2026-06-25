@@ -955,18 +955,34 @@ def render_roloverleg_overview(items: list, agenda_all: list, roles: list,
     add_form = (
         '<details><summary style="cursor:pointer;font-weight:700;margin:.6rem 0">'
         '➕ Zelf een voorstel toevoegen</summary>'
-        f'<form method="post" action="/action" style="padding:.4rem 0">'
+        f'<form method="post" action="/action" id="rovadd" style="padding:.4rem 0">'
         f'<input type="hidden" name="csrf" value="{_e(token)}">'
         f'<input type="hidden" name="next" value="/roloverleg">'
-        f'<div class="tg-meta">Voor welke rol?</div>'
-        f'<select name="owner" class="tg-in">{role_opts}'
+        f'<div class="tg-meta">Bestaande rol uitbreiden, of een nieuwe rol?</div>'
+        f'<select name="owner" id="rovowner" class="tg-in">{role_opts}'
         f'<option value="__new__">➕ nieuwe rol</option></select>'
-        '<textarea name="info" class="tg-in" rows="2" '
-        'placeholder="de accountability (begint met de -en-vorm), of purpose bij een nieuwe rol">'
-        '</textarea>'
+        # Velden alleen relevant bij een nieuwe rol (worden bij een bestaande rol genegeerd).
+        '<div id="rovnew">'
+        '<input name="rolnaam" class="tg-in" placeholder="naam van de nieuwe rol (bijv. Copywriter)">'
+        '<input name="purpose" class="tg-in" placeholder="purpose — reden van bestaan (geen -en-vorm)">'
+        '<input name="domein" class="tg-in" placeholder="domein (optioneel: waar deze rol exclusief over gaat)">'
+        '</div>'
+        '<div class="tg-meta" style="margin-top:.3rem">Accountabilities (één per regel, -en-vorm)</div>'
+        '<textarea name="accs" id="rovaccs" class="tg-in" rows="3" '
+        'placeholder="bijv. Schrijven van blogcopy voor de pillar-pagina&#10;Bewaken van de tone of voice"></textarea>'
+        '<button type="button" class="bigbtn" onclick="rovSuggest()">🤖 AI: stel accountabilities voor</button>'
         '<input type="text" name="reason" class="tg-in" placeholder="reden / aanleiding">'
         '<button class="bigbtn go" type="submit" name="action" value="rov_add">'
-        '➕ Op de agenda zetten</button></form></details>')
+        '➕ Op de agenda zetten</button></form></details>'
+        '<script>function rovSuggest(){'
+        "var own=document.getElementById('rovowner').value;"
+        "var naam=document.querySelector('#rovadd [name=rolnaam]').value;"
+        "var pur=document.querySelector('#rovadd [name=purpose]').value;"
+        "var role=(own==='__new__')?(naam||'nieuwe rol'):own;"
+        "var ta=document.getElementById('rovaccs');var prev=ta.value;ta.value='\\u23f3 AI denkt na...';"
+        "fetch('/suggest_accountabilities?role='+encodeURIComponent(role)+'&purpose='+encodeURIComponent(pur))"
+        ".then(function(r){return r.text();}).then(function(t){ta.value=(prev?prev+'\\n':'')+(t.trim()||'(geen suggestie)');})"
+        ".catch(function(){ta.value=prev;alert('Suggestie mislukt (geen LLM?)');});}</script>")
     end_form = (
         f'<form method="post" action="/action" style="margin-top:.6rem">'
         f'<input type="hidden" name="csrf" value="{_e(token)}">'
@@ -1007,23 +1023,62 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
             '<a href="/">cockpit</a></p><h1>🏛️ Voorstel behandelen</h1>')
     ch = item.get("change", {})
     accs = ch.get("add_accountabilities", [])
-    is_purpose = bool(ch.get("purpose")) and not accs and item["kind"] != "add_role"
-    flip_btn = ""
-    if item["kind"] == "add_role":
-        wijziging = (f'<b>Nieuwe rol:</b> {_e(item["role_id"])}<br>'
-                     f'<b>Purpose:</b> {_e(ch.get("purpose",""))}'
-                     + (f'<br><b>Eerste accountability:</b> {_e(accs[0])}' if accs else ""))
-        huidig = '<p class="muted">Deze rol bestaat nog niet — dit is een voorstel voor een nieuwe rol.</p>'
+    accs_rm = ch.get("remove_accountabilities", [])
+    doms_new = ch.get("add_domains", [])
+    pur_new = ch.get("purpose")
+    is_add = item["kind"] == "add_role"
+    is_purpose = bool(pur_new) and not accs and not is_add
+    snap = role_snapshot or {}
+    cur_pur, cur_accs, cur_doms = snap.get("purpose", ""), snap.get("accountabilities", []), snap.get("domains", [])
+    _GR = "background:var(--green-tint);color:var(--green-dark);border-radius:4px;padding:0 .25rem"
+    _ST = "text-decoration:line-through;color:var(--gray)"
+    _UL = 'list-style:none;padding:0;margin:.2rem 0;font-size:.86rem'
+    _H = 'font-family:var(--font-display);font-weight:700;font-size:.8rem;color:var(--green-dark);margin-bottom:.2rem'
+
+    def _accs_ul(keep, added, removed=()):
+        items_ = "".join(
+            (f'<li style="padding:.1rem 0;{_ST}">✗ {_e(a)}</li>' if a in removed
+             else f'<li style="padding:.1rem 0">{_e(a)}</li>') for a in keep)
+        items_ += "".join(f'<li style="padding:.1rem 0;{_GR}">✚ {_e(a)}</li>' for a in added)
+        return f'<ul style="{_UL}">{items_ or "<li class=muted>geen</li>"}</ul>'
+
+    # Huidige rol (links)
+    if is_add:
+        cur_html = '<p class="muted">Deze rol bestaat nog niet.</p>'
     else:
-        if is_purpose:
-            wijziging = ('<b>Purpose wijzigen van rol:</b> ' + _e(item["role_id"]) + '<br>'
-                         + '<b>Nieuwe purpose:</b> ' + _e(ch.get("purpose", "")))
-            flip_lbl = "↔ dit gaat eigenlijk over een accountability"
-        else:
-            wijziging = ('<b>Rol uitbreiden:</b> ' + _e(item["role_id"]) + '<br>'
-                         + '<b>Toe te voegen accountability:</b> '
-                         + "; ".join(_e(a) for a in accs))
-            flip_lbl = "↔ dit gaat eigenlijk over de purpose"
+        cur_dom = (f'<div class="muted" style="margin-top:.2rem">Domeinen: {", ".join(_e(d) for d in cur_doms)}</div>'
+                   if cur_doms else "")
+        cur_html = (f'<div><b>Purpose:</b> {_e(cur_pur) or "<span class=muted>—</span>"}</div>'
+                    f'<div style="margin-top:.2rem"><b>Accountabilities</b>{_accs_ul(cur_accs, [])}</div>{cur_dom}')
+
+    # Na dit voorstel (rechts) — toevoegingen groen, gewijzigde purpose oud→nieuw
+    dom_add = (f'<div style="margin-top:.2rem"><b>Domein:</b> <span style="{_GR}">✚ '
+               f'{_e(", ".join(doms_new))}</span></div>' if doms_new else "")
+    if is_add:
+        after_html = (f'<div><b>Nieuwe rol:</b> {_e(item["role_id"])}</div>'
+                      f'<div><b>Purpose:</b> <span style="{_GR}">{_e(pur_new or "")}</span></div>'
+                      f'<div style="margin-top:.2rem"><b>Accountabilities</b>{_accs_ul([], accs)}</div>{dom_add}')
+    elif is_purpose:
+        after_html = (f'<div><b>Purpose:</b> <span style="{_ST}">{_e(cur_pur)}</span> '
+                      f'→ <span style="{_GR}">{_e(pur_new)}</span></div>'
+                      f'<div class="muted" style="margin-top:.2rem">Accountabilities ongewijzigd '
+                      f'({len(cur_accs)})</div>')
+    else:
+        pur_line = (f'<div><b>Purpose:</b> <span style="{_ST}">{_e(cur_pur)}</span> → '
+                    f'<span style="{_GR}">{_e(pur_new)}</span></div>' if pur_new and pur_new != cur_pur
+                    else f'<div><b>Purpose:</b> {_e(cur_pur) or "<span class=muted>—</span>"}</div>')
+        after_html = (f'{pur_line}'
+                      f'<div style="margin-top:.2rem"><b>Accountabilities</b>'
+                      f'{_accs_ul(cur_accs, accs, removed=accs_rm)}</div>{dom_add}')
+
+    diff = ('<div style="display:flex;gap:1rem;flex-wrap:wrap;margin:.3rem 0">'
+            f'<div style="flex:1 1 280px;min-width:0"><div style="{_H}">Huidige rol</div>{cur_html}</div>'
+            f'<div style="flex:1 1 280px;min-width:0"><div style="{_H}">Na dit voorstel</div>{after_html}</div></div>')
+
+    flip_btn = ""
+    if not is_add:
+        flip_lbl = ("↔ dit gaat eigenlijk over een accountability" if is_purpose
+                    else "↔ dit gaat eigenlijk over de purpose")
         flip_btn = (
             f'<form method="post" action="/action" style="display:inline">'
             f'<input type="hidden" name="csrf" value="{_e(token)}">'
@@ -1031,13 +1086,6 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
             f'<input type="hidden" name="next" value="/roloverleg?iid={_e(item["id"])}">'
             f'<button class="btn" type="submit" name="action" value="rov_flip_facet">'
             f'{flip_lbl}</button></form>')
-        if role_snapshot:
-            al = "".join(f"<li>{_e(a)}</li>" for a in role_snapshot.get("accountabilities", [])) \
-                 or "<li class=muted>nog geen</li>"
-            huidig = (f'<b>{_e(item["role_id"])}</b> — {_e(role_snapshot.get("purpose",""))}'
-                      f'<ul style="margin:.3rem 0">{al}</ul>')
-        else:
-            huidig = '<p class="muted">Rol niet gevonden in de records.</p>'
     # Secretaris-check
     if not issues:
         sec = '<div class="tg-dlg">📋 <b>Secretaris:</b> in orde — volledig, geen botsing.</div>'
@@ -1059,6 +1107,15 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
         'placeholder="bijv. te breed, of: voeg X toe"></textarea>'
         '<button class="bigbtn" type="submit" name="action" value="rov_react">'
         '🤖 AI past voorstel aan</button></form>')
+    # Bij een accountability-voorstel: het ook nu meteen als EXPERIMENT (project) kunnen laten
+    # doen door de indienende rol — een accountability is daarvoor niet nodig (purpose volstaat),
+    # en pas na herhaalde uitvoering 'stolt' het tot accountability (rijpheidspoort).
+    project_opt = ""
+    if accs and not is_add:
+        project_opt = (
+            '<button class="bigbtn" type="submit" name="action" value="rov_to_project">'
+            f'▶ Doe dit eerst als project<small>de rol \'{_e(item["role_id"])}\' voert het uit als '
+            'omkeerbaar experiment; bij herhaling stolt het later tot accountability</small></button>')
     decide = (
         f'<form method="post" action="/action" style="margin-top:.5rem">{common}'
         f'<input type="hidden" name="next" value="/roloverleg">'
@@ -1066,16 +1123,16 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
         '<button class="bigbtn go" type="submit" name="action" value="rov_consent">'
         '✓ Consent<small>geen bezwaar — wordt aangenomen en bij einde overleg doorgevoerd</small>'
         '</button>'
+        f'{project_opt}'
         '<button class="bigbtn warn" type="submit" name="action" value="rov_object">'
         '⚠ Schadelijk<small>blijft staan, lossen we de volgende keer op</small></button>'
         '</div></form>')
     card = (f'<div class="tg-card"><div class="tg-meta">Voorstel · door {_e(item.get("by",""))} · '
             f'status {_e(item.get("status",""))}</div>'
             f'<h2>{_e(item["title"])}</h2>'
-            f'<div style="margin:.3rem 0"><b>Huidige situatie</b><br>{huidig}</div>'
-            f'<div style="margin:.3rem 0">{wijziging}</div>'
-            f'{(("<div style=margin:.2rem0>" + flip_btn + "</div>") if flip_btn else "")}'
-            f'<div class="muted"><b>Reden:</b> {_e(item.get("reason",""))}</div>'
+            f'{diff}'
+            f'{(("<div style=margin:.3rem0>" + flip_btn + "</div>") if flip_btn else "")}'
+            f'<div class="muted" style="margin-top:.3rem"><b>Reden:</b> {_e(item.get("reason",""))}</div>'
             f'{sec}{react_log}</div>')
     inner = (f'{head}{_banner(msg)}{card}{react_form}{decide}'
              '<div class="tg-skip"><a class="muted" href="/roloverleg">← terug naar de agenda</a>'
@@ -1908,7 +1965,9 @@ def _flash(result: dict) -> str:
             "consented": "✓ Consent — wordt doorgevoerd bij einde roloverleg.",
             "objected": "⚠ Als schadelijk gemarkeerd — blijft staan voor de volgende keer.",
             "added": "➕ Voorstel op de agenda gezet.",
-            "flipped": "↔ Omgezet (purpose ↔ accountability) en opnieuw geformuleerd."}
+            "flipped": "↔ Omgezet (purpose ↔ accountability) en opnieuw geformuleerd.",
+            "to_project": "▶ Als experiment op het projectbord gezet voor de rol — bij herhaling "
+                          "stolt het later tot accountability."}
     if result.get("rov") in _rov:
         return _rov[result["rov"]]
     if result.get("rov") == "ended":
@@ -2050,7 +2109,8 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         return decide_opportunity(inbox, iid, "add", destination="project",
                                   owner=extra.get("owner", ""), scope_override=scope,
                                   project_status="draft" if risky else "queued", projects=projects)
-    if action in ("rov_react", "rov_consent", "rov_object", "rov_add", "rov_end", "rov_flip_facet"):
+    if action in ("rov_react", "rov_consent", "rov_object", "rov_add", "rov_end", "rov_flip_facet",
+                  "rov_to_project"):
         from nooch_village.roloverleg import (Agenda, amend_with_reaction, apply_consented,
                                               flip_facet)
         agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
@@ -2061,25 +2121,49 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                 return {"ok": False, "error": "voorstel niet gevonden"}
             agenda.update_change(iid, flip_facet(item))
             return {"ok": True, "rov": "flipped"}
+        if action == "rov_to_project":
+            # Geen accountability nodig om te handelen: laat de indienende rol dit als omkeerbaar
+            # EXPERIMENT (project) doen. Bij herhaling stolt het later tot accountability.
+            item = agenda.get(iid)
+            if item is None:
+                return {"ok": False, "error": "voorstel niet gevonden"}
+            ch = item.get("change", {})
+            scope = (ch.get("add_accountabilities") or [item.get("title", "")])[0]
+            projects = ProjectLedger(os.path.join(dd, "projects.json"))
+            projects.create(item.get("role_id", "village"), scope, "human",
+                            hypothesis=item.get("reason", ""), status="queued")
+            agenda.remove(iid)
+            return {"ok": True, "rov": "to_project"}
         if action == "rov_end":
             res = apply_consented(agenda, records)
             n_ok = sum(1 for r in res if r["status"] == "adopted")
             return {"ok": True, "rov": "ended", "adopted": n_ok,
                     "escalated": len(res) - n_ok}
         if action == "rov_add":
-            owner = extra.get("owner", "")
-            acc = (extra.get("info") or "").strip()
-            new_role = owner in ("", "__new__")
-            if not acc:
-                return {"ok": False, "error": "geef de accountability of purpose op"}
             import re as _re2
+            owner = extra.get("owner", "")
+            new_role = owner in ("", "__new__")
+            # Accountabilities: één per regel (nieuw veld 'accs'); val terug op het oude 'info'-veld.
+            accs = [l.strip() for l in (extra.get("accs") or extra.get("info") or "").splitlines()
+                    if l.strip()][:8]
             if new_role:
-                rid = _re2.sub(r"\W+", "_", acc.lower())[:40].strip("_") or "nieuwe_rol"
-                change = {"purpose": acc[:140], "add_accountabilities": [], "new_role_parent": "noochville"}
+                naam = (extra.get("rolnaam") or "").strip()
+                purpose = (extra.get("purpose") or "").strip()
+                domein = (extra.get("domein") or "").strip()
+                if not (naam or purpose):
+                    return {"ok": False, "error": "geef minstens een naam of purpose voor de nieuwe rol"}
+                rid = _re2.sub(r"\W+", "_", (naam or purpose).lower())[:40].strip("_") or "nieuwe_rol"
+                change = {"purpose": (purpose or naam)[:140], "add_accountabilities": accs,
+                          "new_role_parent": "noochville"}
+                if domein:
+                    change["add_domains"] = [domein[:140]]
+                agenda.add(role_id=rid, kind="add_role", change=change, reason=reason,
+                           by="founder", title=(naam or purpose)[:60])
             else:
-                rid, change = owner, {"add_accountabilities": [acc[:140]]}
-            agenda.add(role_id=rid, kind="add_role" if new_role else "amend_role",
-                       change=change, reason=reason, by="founder", title=acc[:60])
+                if not accs:
+                    return {"ok": False, "error": "geef minstens één accountability op"}
+                agenda.add(role_id=owner, kind="amend_role", change={"add_accountabilities": accs},
+                           reason=reason, by="founder", title=accs[0][:60])
             return {"ok": True, "rov": "added"}
         # de overige acties werken op één item
         if action == "rov_consent":
@@ -2094,7 +2178,12 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         agenda.react(iid, reason)
         ge = GovernanceExamples(os.path.join(dd, "governance_examples.json"))
         block = few_shot_block(ge, item.get("title", "") + " " + item.get("reason", ""), k=3)
-        agenda.update_change(iid, amend_with_reaction(item, reason, examples_block=block))
+        rec = records.get(item.get("role_id"))
+        snap = ({"purpose": rec.definition.purpose,
+                 "accountabilities": list(rec.definition.accountabilities),
+                 "domains": list(rec.definition.domains)} if rec else None)
+        agenda.update_change(iid, amend_with_reaction(item, reason, role_snapshot=snap,
+                                                      examples_block=block))
         return {"ok": True, "rov": "reacted"}
     if action in ("proj_approve", "proj_discard"):
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
@@ -2238,6 +2327,23 @@ def make_handler(data_dir: str | None):
                              if not r["archived"] and r["type"] == "role"]
                     body = render_triage(cur, 1, len(queue), roles,
                                          csrf_token, msg=msg).encode("utf-8")
+            elif path == "/suggest_accountabilities":
+                # Live AI-suggestie voor accountabilities (read-only, geen mutatie → geen CSRF).
+                dd = data_dir or _default_data_dir()
+                from nooch_village.governance_examples import GovernanceExamples, few_shot_block
+                from nooch_village.inbox_actions import suggest_accountabilities
+                role = (qs.get("role") or [""])[0]
+                purpose = (qs.get("purpose") or [""])[0]
+                ge = GovernanceExamples(os.path.join(dd, "governance_examples.json"))
+                block = few_shot_block(ge, f"{role} {purpose}", k=3)
+                accs = suggest_accountabilities(role, purpose, examples_block=block)
+                payload = ("\n".join(accs)).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+                return
             elif path == "/fieldnotes":
                 import glob
                 dd = data_dir or _default_data_dir()
@@ -2317,6 +2423,10 @@ def make_handler(data_dir: str | None):
                      "decision": (form.get("decision") or [""])[0],
                      "question": (form.get("question") or [""])[0],
                      "info": (form.get("info") or [""])[0],
+                     "rolnaam": (form.get("rolnaam") or [""])[0],
+                     "purpose": (form.get("purpose") or [""])[0],
+                     "domein": (form.get("domein") or [""])[0],
+                     "accs": (form.get("accs") or [""])[0],
                      "remember": (form.get("remember") or [""])[0]}
             result = _dispatch_action(data_dir, action, iid, reason, extra=extra)
             # 303 → verse GET. Rails keren terug naar de spanning (next), sluiten gaat home.

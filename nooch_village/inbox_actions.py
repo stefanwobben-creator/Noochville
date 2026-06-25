@@ -443,6 +443,25 @@ def formulate_purpose(title: str, wat: str, *, examples_block: str = "", llm_rea
     return line[:140] or (wat or title)[:140]
 
 
+def suggest_accountabilities(role_name: str, purpose: str, *, examples_block: str = "",
+                             n: int = 3, llm_reason=None) -> list[str]:
+    """Stel n accountabilities voor bij een (nieuwe) rol, Holacracy-correct (NL: -en-vorm vooraan),
+    gegrond in de referentiebank. Fail-closed zonder LLM → []."""
+    from nooch_village.governance_examples import ACCOUNTABILITY_RULES
+    if llm_reason is None:
+        from nooch_village.llm import reason as llm_reason
+    prompt = (
+        "Stel voor de volgende rol in NoochVille (duurzaam, vegan schoenenmerk) accountabilities "
+        "voor.\n\n" + ACCOUNTABILITY_RULES + "\n\n"
+        + (examples_block + "\n\n" if examples_block else "")
+        + f"Rol: {role_name}\nPurpose: {purpose}\n\n"
+        f"Geef {n} accountabilities, elk op een NIEUWE regel, elk beginnend met de -en-vorm. "
+        "Geen nummering, geen opsommingstekens, niets erbuiten.")
+    out = llm_reason(prompt) or ""
+    lines = [re.sub(r"^[\-\d\.\)\s]+", "", ln).strip() for ln in out.splitlines()]
+    return [ln[:140] for ln in lines if len(ln) > 3][:n]
+
+
 def pick_governance_target(roster_ids, title: str, wat: str, *, examples_block: str = "",
                            llm_reason=None) -> str:
     """AI kiest of een kans een BESTAANDE rol uitbreidt of een NIEUWE rol vraagt. Geeft een

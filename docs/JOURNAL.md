@@ -919,3 +919,24 @@ Suite groen (546 + 484).
   batch 1 zaten niet in deze Shopify-store; verifiëren).
 - Scout leest artikelen en destilleert ze tot voorstellen (kenniskaart / seed / doelwit /
   concurrent), inclusief Nooch.earth als zelf-monitor.
+
+## Roloverleg ronde 2: nieuwe-rol-form, hele-rol-reactie, GlassFrog-diff, project-uit-overleg
+- 'Zelf een voorstel toevoegen' voor een NIEUWE rol heeft nu naam + purpose + accountabilities
+  (één per regel) + domein, met een LIVE AI-suggestieknop (fetch → /suggest_accountabilities,
+  geen herladen). inbox_actions.suggest_accountabilities (gegrond, -en-vorm, fail-closed).
+- amend_with_reaction herziet nu de HELE rol op je reactie (purpose + accountabilities + domein) en
+  levert een echte diff op (add/remove accountabilities t.o.v. de huidige rol). role_snapshot mee.
+- Behandel-scherm: GlassFrog-achtige 'Huidige rol' vs 'Na dit voorstel' met groene toevoegingen,
+  doorgehaalde verwijderingen en purpose oud→nieuw.
+- Nieuwe knop '▶ Doe dit eerst als project': een accountability-voorstel kan direct als omkeerbaar
+  experiment naar de indienende rol (rov_to_project) — accountability niet nodig om te handelen;
+  bij herhaling stolt het later (rijpheidspoort). Haalt het item van de agenda.
+- _proposal_from_item ondersteunt remove_accountabilities (Secretary._adopt deed dat al).
+Tests uitgebreid. Suite groen (546 + 488).
+
+### Doorgeschoven (Holacracy-verdieping, volgende ronde)
+- Bij INDIENEN: de indienende rol benoemt welke spanning het voorstel oplost + een concreet
+  voorbeeld (Holacracy: voorstel is tension-driven). Tonen in het roloverleg.
+- Betere objection-test (per https://holacracy.org/blog/a-better-way-to-test-objections-in-holacracy):
+  gestructureerde validiteitsvragen i.p.v. één 'schadelijk'-knop.
+- Auto-formalisering: een experiment dat 3x is uitgevoerd stolt automatisch tot accountability-voorstel.

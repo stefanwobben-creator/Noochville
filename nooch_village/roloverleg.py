@@ -13,7 +13,7 @@ Niets wordt automatisch doorgevoerd: pas bij consent + einde overleg verandert d
 Opslag: data/roloverleg_agenda.json (gitignored).
 """
 from __future__ import annotations
-import json, os, time, uuid
+import json, os, re, time, uuid
 from nooch_village.util import atomic_write_json
 
 
@@ -103,6 +103,7 @@ def _proposal_from_item(item: dict):
     change = GovernanceChange(
         kind=kind, role_id=item.get("role_id"),
         purpose=c.get("purpose"), add_accountabilities=list(c.get("add_accountabilities", [])),
+        remove_accountabilities=list(c.get("remove_accountabilities", [])),
         add_domains=list(c.get("add_domains", [])), new_role_parent=c.get("new_role_parent"))
     title = item.get("title", "")
     return Proposal(
@@ -149,11 +150,30 @@ def secretary_check(item: dict, records) -> list[dict]:
     return issues
 
 
-def amend_with_reaction(item: dict, reaction: str, *, examples_block: str = "",
-                        llm_reason=None) -> dict:
-    """De AI past het voorstel aan op basis van jouw reactie (Holacracy-correct, gegrond met de
-    referentiebank). Past de eerste accountability aan (amend_role) of de purpose (add_role).
-    Fail-closed zonder LLM → de wijziging blijft ongemoeid. Geeft de (nieuwe) change-dict."""
+def _parse_role(text: str) -> dict:
+    """Parse PURPOSE / ACCOUNTABILITIES / DOMEIN uit een LLM-rolherziening."""
+    pm = re.search(r"PURPOSE\s*:\s*(.+)", text, re.IGNORECASE)
+    dm = re.search(r"DOMEIN(?:EN)?\s*:\s*(.+)", text, re.IGNORECASE)
+    am = re.search(r"ACCOUNTABILITIES\s*:\s*(.*?)(?:\nDOMEIN|\Z)", text, re.IGNORECASE | re.DOTALL)
+    accs = []
+    if am:
+        for ln in am.group(1).splitlines():
+            ln = re.sub(r"^[\-\*\d\.\)\s]+", "", ln).strip()
+            if len(ln) > 2:
+                accs.append(ln[:140])
+    purpose = pm.group(1).strip()[:140] if pm else ""
+    domein = (dm.group(1).strip() if dm else "")
+    if domein.lower() in ("-", "geen", "none", ""):
+        domein = ""
+    return {"purpose": purpose, "accountabilities": accs[:10], "domein": domein[:140]}
+
+
+def amend_with_reaction(item: dict, reaction: str, *, role_snapshot: dict | None = None,
+                        examples_block: str = "", llm_reason=None) -> dict:
+    """De AI herziet op basis van jouw reactie de HELE rol (purpose + accountabilities + evt.
+    domein), Holacracy-correct en gegrond in de referentiebank. Voor een bestaande rol levert dit
+    een echte diff op (add/remove accountabilities) t.o.v. de huidige rol. Fail-closed zonder LLM
+    of zonder leesbaar antwoord → de wijziging blijft ongemoeid. Geeft de (nieuwe) change-dict."""
     from nooch_village.governance_examples import ACCOUNTABILITY_RULES
     change = dict(item.get("change", {}))
     reaction = (reaction or "").strip()
@@ -161,36 +181,47 @@ def amend_with_reaction(item: dict, reaction: str, *, examples_block: str = "",
         return change
     if llm_reason is None:
         from nooch_village.llm import reason as llm_reason
-    # Purpose-wijziging? (nieuwe rol = purpose, of een amend zonder accountabilities mét purpose)
     is_add = item.get("kind") == "add_role"
-    is_purpose = is_add or (bool(change.get("purpose")) and not change.get("add_accountabilities"))
-    huidig = (change.get("purpose", "") if is_purpose
-              else (change.get("add_accountabilities") or [""])[0])
-    wat = "de purpose (reden van bestaan) van een rol" if is_purpose else "een accountability van een rol"
-    prompt = (
-        "Je past in een roloverleg (Holacracy) een governance-voorstel aan op basis van de "
-        f"reactie van de mens. Het gaat om {wat}.\n\n" + ACCOUNTABILITY_RULES + "\n\n"
-        + (examples_block + "\n\n" if examples_block else "")
-        + f"Voorstel nu: {huidig}\nReden: {item.get('reason','')}\n"
-        f"Reactie van de mens: {reaction}\n\n"
-        "Schrijf de VERBETERDE versie, voluit en afgerond, in gewone taal. "
-        + ("Eén korte purpose-zin (reden van bestaan, geen -en-vorm)." if is_purpose
-           else "Eén accountability (begint met de -en-vorm).")
-        + " Eén regel, niets anders.")
-    out = (llm_reason(prompt) or "").strip().splitlines()
-    line = out[0].strip().strip('"- ').strip() if out else ""
-    if not line:
-        return change
-    if is_purpose:
-        change["purpose"] = line[:140]
+    snap = role_snapshot or {}
+    # 'Huidige' rol zoals de mens 'm ziet: bij add_role = het voorstel; bij amend = de echte rol
+    # plus de al voorgestelde toevoeging.
+    if is_add:
+        cur_purpose = change.get("purpose", "")
+        cur_accs = list(change.get("add_accountabilities", []))
     else:
-        accs = list(change.get("add_accountabilities", []))
-        if accs:
-            accs[0] = line[:140]
+        cur_purpose = change.get("purpose") or snap.get("purpose", "")
+        cur_accs = list(dict.fromkeys(list(snap.get("accountabilities", []))
+                                      + list(change.get("add_accountabilities", []))))
+    acc_txt = "\n".join(f"- {a}" for a in cur_accs) or "- (nog geen)"
+    prompt = (
+        "Je herziet in een roloverleg (Holacracy) een hele rol op basis van de reactie van de mens.\n\n"
+        + ACCOUNTABILITY_RULES + "\n\n" + (examples_block + "\n\n" if examples_block else "")
+        + f"Rol nu:\nPURPOSE: {cur_purpose}\nACCOUNTABILITIES:\n{acc_txt}\n\n"
+        f"Reactie van de mens: {reaction}\n\n"
+        "Geef de VOLLEDIG herziene rol, met de reactie verwerkt. Behoud wat goed is, pas aan/voeg "
+        "toe/laat weg wat de reactie vraagt. Antwoord EXACT in dit formaat:\n"
+        "PURPOSE: <reden van bestaan, geen -en-vorm>\n"
+        "ACCOUNTABILITIES:\n- <accountability, -en-vorm>\n- <...>\n"
+        "DOMEIN: <exclusief beheer, of '-'>")
+    parsed = _parse_role(llm_reason(prompt) or "")
+    if not parsed["purpose"] and not parsed["accountabilities"]:
+        return change                                   # fail-closed: niets bruikbaars terug
+    new = dict(change)
+    if parsed["purpose"]:
+        new["purpose"] = parsed["purpose"]
+    desired = parsed["accountabilities"]
+    if desired:
+        if is_add:
+            new["add_accountabilities"] = desired       # nieuwe rol: de hele set is 'toe te voegen'
         else:
-            accs = [line[:140]]
-        change["add_accountabilities"] = accs
-    return change
+            real = list(snap.get("accountabilities", []))
+            dl = {d.lower() for d in desired}
+            rl = {r.lower() for r in real}
+            new["add_accountabilities"] = [d for d in desired if d.lower() not in rl]
+            new["remove_accountabilities"] = [r for r in real if r.lower() not in dl]
+    if parsed["domein"]:
+        new["add_domains"] = [parsed["domein"]]
+    return new
 
 
 def flip_facet(item: dict, *, examples_block: str = "", llm_reason=None) -> dict:
