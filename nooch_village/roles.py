@@ -284,7 +284,9 @@ class WebsiteWatcherWorker(Inhabitant):
 
     def _propose_related(self, trends: dict) -> None:
         from nooch_village.intent import prioritize
+        from nooch_village.skills_impl.trends import _geo_to_locale
         lib = self.context.library
+        locale = _geo_to_locale(trends.get("geo", ""))   # taalvak uit de geo van de run
         candidates = []
         for parent_kw, kw_data in (trends.get("keywords") or {}).items():
             for related in kw_data.get("top_related") or []:
@@ -321,6 +323,7 @@ class WebsiteWatcherWorker(Inhabitant):
                 self.bus, self.id, action["label"],
                 demand={"signal": "positive", "interest": action.get("_value", 0),
                         "source": "google_trends_rising" if action.get("_rising") else "google_trends_related",
+                        "locale": locale,
                         "breakout": action.get("_breakout", False),
                         "parent_keyword": action.get("_parent", "")},
                 library=lib,
@@ -416,6 +419,7 @@ class TrendsWorker(Inhabitant):
                     "signal": "positive",
                     "interest": row["impressions"],
                     "source": "gsc",
+                    "locale": row.get("locale", ""),   # taalvak uit het site-domein
                     "position": row["position"],
                     "bucket": row["bucket"],
                     "impressions": row["impressions"],
