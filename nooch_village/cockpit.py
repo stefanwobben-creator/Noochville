@@ -176,6 +176,21 @@ def gather(data_dir: str | None = None) -> dict:
             shopify = _json.load(open(_shop_path))
         except Exception:
             shopify = {}
+    # Laatste 7-daagse bezoekerscijfer (door de GrowthAnalyst per puls weggeschreven), voor conversie.
+    visitors_7d = None
+    _ph_path = os.path.join(dd, "pulse_history.jsonl")
+    if os.path.exists(_ph_path):
+        try:
+            import json as _json
+            for _line in open(_ph_path):
+                _line = _line.strip()
+                if not _line:
+                    continue
+                _v = _json.loads(_line).get("visitors_7d")
+                if _v is not None:
+                    visitors_7d = _v          # laatste niet-lege wint
+        except Exception:
+            visitors_7d = None
 
     roster = []
     for rec in sorted(records.all(), key=lambda r: (r.archived, r.type.value, r.id)):
@@ -305,6 +320,7 @@ def gather(data_dir: str | None = None) -> dict:
         "agenda_open": agenda_open,
         "noochie_daily": noochie_daily,
         "shopify": shopify,
+        "visitors_7d": visitors_7d,
         "link_candidates": links.candidates(),
         "link_pursued": links.pursued(),
         "competitor_config": _config_competitor_brands(dd),
@@ -1348,23 +1364,31 @@ def _render_digest(d: dict, noochie: dict | None = None) -> str:
             f'<div class="kpis">{tiles}</div>{noochie_block}')
 
 
-def _render_watcher_dashboard(shop: dict) -> str:
+def _render_watcher_dashboard(shop: dict, visitors_7d=None) -> str:
     """Website Watcher-dashboard: verkoopindicatoren uit Shopify (paren verkocht, orders, omzet,
-    AOV, top landen/producten). Leeg → korte hint. Pure render."""
+    AOV, top landen/producten) + conversie (orders 7d ÷ bezoekers 7d uit Plausible). Leeg → hint."""
     if not shop or not shop.get("ok"):
         return ('<h2>📊 Website Watcher — verkoop</h2>'
                 '<p class="muted">Nog geen Shopify-data. Draai <code>village shopify</code> '
-                '(vereist SHOPIFY_STORE + SHOPIFY_TOKEN in .env) of <code>./refresh.sh</code>.</p>')
+                '(vereist SHOPIFY_STORE + Client ID/secret in .env) of <code>./refresh.sh</code>.</p>')
     cur = _e(shop.get("currency", ""))
+    base = [
+        ("👟", _fmt_int(shop.get("pairs_sold", 0)), "paren verkocht"),
+        ("🧾", _fmt_int(shop.get("orders", 0)), "orders"),
+        ("💶", f'{_fmt_int(round(shop.get("revenue", 0)))} {cur}'.strip(), "omzet"),
+        ("📦", f'{shop.get("aov", 0)} {cur}'.strip(), "gem. orderwaarde"),
+    ]
+    # Conversie: orders (laatste 7 dagen) ÷ bezoekers (laatste 7 dagen, Plausible).
+    if visitors_7d:
+        base.append(("👣", _fmt_int(visitors_7d), "bezoekers (7d)"))
+        o7 = shop.get("orders_7d")
+        if o7 is not None:
+            conv = round(100 * o7 / visitors_7d, 2) if visitors_7d else 0.0
+            base.append(("🎯", f"{conv}%", "conversie (7d)"))
     tiles = "".join(
         f'<div class="kpi"><div class="kpi-n">{ico} {val}</div>'
         f'<div class="kpi-l">{_e(label)}</div></div>'
-        for ico, val, label in [
-            ("👟", _fmt_int(shop.get("pairs_sold", 0)), "paren verkocht"),
-            ("🧾", _fmt_int(shop.get("orders", 0)), "orders"),
-            ("💶", f'{_fmt_int(round(shop.get("revenue", 0)))} {cur}'.strip(), "omzet"),
-            ("📦", f'{shop.get("aov", 0)} {cur}'.strip(), "gem. orderwaarde"),
-        ])
+        for ico, val, label in base)
     def _pairs(rows, lbl):
         if not rows:
             return ""
@@ -1733,7 +1757,7 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'{_aan_jou}'
         f'{_banner(msg)}'
         f'{_render_digest(snap.get("digest", {}), snap.get("noochie_daily", {}))}'
-        f'{_render_watcher_dashboard(snap.get("shopify", {}))}'
+        f'{_render_watcher_dashboard(snap.get("shopify", {}), snap.get("visitors_7d"))}'
         f'{_render_backlog(snap.get("backlog", []), snap.get("north_star", {}), csrf_token, [r["id"] for r in roster if not r["archived"]])}'
         f'<h2>Inbox</h2>{inbox_tbl}'
         f'{drafts_block}'

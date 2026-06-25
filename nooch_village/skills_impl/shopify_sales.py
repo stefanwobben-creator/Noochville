@@ -43,6 +43,21 @@ def _post_graphql(store: str, token: str, query: str, variables: dict) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
+def get_access_token(store: str, client_id: str, client_secret: str, *, _post=None) -> str:
+    """Wissel Client ID + secret om voor een (kortlevend) Admin-token via de client-credentials-
+    flow (Dev Dashboard-apps; werkt als app en winkel in dezelfde organisatie zitten). De oude
+    statische 'shpat_'-token bestaat sinds 2026 niet meer voor nieuwe apps. `_post` injecteerbaar."""
+    if _post is not None:
+        return _post(store, client_id, client_secret)
+    url = f"https://{store}/admin/oauth/access_token"
+    body = json.dumps({"client_id": client_id, "client_secret": client_secret,
+                       "grant_type": "client_credentials"}).encode("utf-8")
+    req = urllib.request.Request(url, data=body, method="POST",
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read().decode("utf-8")).get("access_token", "")
+
+
 def _normalize(node: dict) -> dict:
     """GraphQL-order → vlak dict {created_at, country, currency, total, line_items[]}."""
     money = ((node.get("currentTotalPriceSet") or {}).get("shopMoney") or {})
@@ -73,8 +88,21 @@ def fetch_orders(store: str, token: str, since_iso: str, *, _post=None, max_page
     return out
 
 
+def _within_days(created_at: str, now: datetime, days: int) -> bool:
+    """True als de order-datum binnen `days` van nu valt. Fail-safe → True (tel mee bij twijfel)."""
+    try:
+        dt = datetime.fromisoformat((created_at or "").replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (now - dt).total_seconds() <= days * 86400
+    except Exception:
+        return True
+
+
 def aggregate_orders(orders: list[dict], window_days: int, *, now=None) -> dict:
-    """Pure aggregatie van genormaliseerde orders → verkoopindicatoren. Geen netwerk, geen PII."""
+    """Pure aggregatie van genormaliseerde orders → verkoopindicatoren. Geen netwerk, geen PII.
+    Bevat ook een 7-daags subvenster (orders_7d/pairs_7d), zodat het dashboard de conversie eerlijk
+    tegen de 7-daagse bezoekerscijfers (Plausible) kan zetten."""
     now = now or datetime.now(timezone.utc)
     pairs = sum(li["quantity"] for o in orders for li in o.get("line_items", []))
     revenue = round(sum(o.get("total", 0.0) for o in orders), 2)
@@ -85,6 +113,8 @@ def aggregate_orders(orders: list[dict], window_days: int, *, now=None) -> dict:
     for o in orders:
         for li in o.get("line_items", []):
             prod[li["title"]] += li["quantity"]
+    recent = [o for o in orders if _within_days(o.get("created_at", ""), now, 7)]
+    pairs_7d = sum(li["quantity"] for o in recent for li in o.get("line_items", []))
     return {
         "generated_at": now.timestamp(),
         "window_days": window_days,
@@ -95,13 +125,15 @@ def aggregate_orders(orders: list[dict], window_days: int, *, now=None) -> dict:
         "aov": round(revenue / n, 2) if n else 0.0,
         "by_country": by_country.most_common(8),
         "top_products": prod.most_common(8),
+        "orders_7d": len(recent),
+        "pairs_7d": pairs_7d,
     }
 
 
 class ShopifySalesSkill(Skill):
     name = "shopify_sales"
     cost = "free"
-    required_env = ("SHOPIFY_STORE", "SHOPIFY_TOKEN")
+    required_env = ("SHOPIFY_STORE", "SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET")
     description = (
         "Read-only verkoopindicatoren uit Shopify (Admin GraphQL): paren verkocht, orders, omzet, "
         "AOV, per land en topproducten over een venster. Uitsluitend geaggregeerd, geen PII."
@@ -110,9 +142,22 @@ class ShopifySalesSkill(Skill):
     def run(self, payload: dict, context) -> dict:
         s = context.settings
         store = (s.get("SHOPIFY_STORE") or s.get("shopify_store", "")).strip()
+        if not store:
+            return {"error": "SHOPIFY_STORE ontbreekt in .env -> skill faalt closed"}
+        # Token: statisch (oude apps) óf via Client ID/secret (Dev Dashboard, client-credentials).
         token = (s.get("SHOPIFY_TOKEN") or s.get("shopify_token", "")).strip()
-        if not store or not token:
-            return {"error": "SHOPIFY_STORE/SHOPIFY_TOKEN ontbreekt in .env -> skill faalt closed"}
+        if not token:
+            cid = (s.get("SHOPIFY_CLIENT_ID") or s.get("shopify_client_id", "")).strip()
+            csec = (s.get("SHOPIFY_CLIENT_SECRET") or s.get("shopify_client_secret", "")).strip()
+            if not (cid and csec):
+                return {"error": "SHOPIFY_TOKEN of SHOPIFY_CLIENT_ID+SHOPIFY_CLIENT_SECRET "
+                                 "ontbreekt in .env -> skill faalt closed"}
+            try:
+                token = get_access_token(store, cid, csec, _post=payload.get("_token_post"))
+            except Exception as e:
+                return {"error": f"Shopify-token ophalen mislukt: {e} -> skill faalt closed"}
+            if not token:
+                return {"error": "Shopify gaf geen access_token terug -> skill faalt closed"}
         window = int(payload.get("window_days", 28))
         since = (datetime.now(timezone.utc) - timedelta(days=window)).date().isoformat()
         try:

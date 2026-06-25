@@ -823,3 +823,15 @@ Suite groen (497 + 506).
 - Conversie-join: Plausible-bezoekers × Shopify-orders = conversie + sale-per-keyword/pagina
   (order.landing_site/referring_site) — de echte SEO-ROI-lus.
 - Skill via governance aan website_watcher's DNA + in de puls (nu CLI/refresh-gedreven).
+
+## Shopify-auth → Dev Dashboard (client-credentials) + conversie-indicator
+Shopify staat sinds 2026 geen legacy custom apps meer toe; tokens komen nu uit een Dev Dashboard-app
+via de client-credentials-flow (Client ID + secret, kortlevend token). Skill aangepast:
+get_access_token() wisselt Client ID/secret om voor een token (injecteerbaar voor tests); run()
+accepteert zowel een statische SHOPIFY_TOKEN (oude apps) als SHOPIFY_CLIENT_ID+SHOPIFY_CLIENT_SECRET.
+.env: SHOPIFY_STORE + SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET.
+
+Conversie-indicator op het Website Watcher-dashboard: aggregate_orders levert nu ook een 7-daags
+subvenster (orders_7d/pairs_7d); de cockpit leest het laatste visitors_7d uit pulse_history.jsonl
+(Plausible) en toont 'bezoekers (7d)' + 'conversie (7d)' = orders_7d ÷ bezoekers_7d. Dit is de eerste
+stap van de verkeer-naar-verkoop-lus. Tests uitgebreid. Suite groen (497 + 509).
