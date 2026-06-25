@@ -78,12 +78,12 @@ def test_render_weekrapport_toont_noochie():
     assert "Noochie vandaag" in html and "Field Note adviseert ads" in html
 
 
-def test_render_weekrapport_bevindingen_en_suggestie():
+def test_render_weekrapport_bevindingen_en_vraag():
     html = _render_digest(compute_digest({}, [], [], [], time.time()),
-                          {"date": "2026-06-25", "suggestion": "koppel homepage aan missie",
+                          {"date": "2026-06-25", "question": "wat houdt bezoekers tegen?",
                            "findings": ["homepage trekt 97%", "BE/VS onontgonnen",
                                         "geen zoekwoord-verkeer"]})
     assert "Noochie vandaag" in html
     for f in ("homepage trekt 97%", "BE/VS onontgonnen", "geen zoekwoord-verkeer"):
         assert f in html
-    assert "Suggestie" in html and "koppel homepage aan missie" in html
+    assert "Noochie vraagt" in html and "wat houdt bezoekers tegen?" in html

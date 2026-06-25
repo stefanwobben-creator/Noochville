@@ -716,9 +716,10 @@ def _render_digest(d: dict, noochie: dict | None = None) -> str:
         f'<div class="kpi-l">{_e(label)}</div></div>'
         for ico, n, label in counts)
     noochie_block = ""
-    if noochie and (noochie.get("findings") or noochie.get("suggestion") or noochie.get("oordeel")):
+    if noochie and (noochie.get("findings") or noochie.get("question")
+                    or noochie.get("suggestion") or noochie.get("oordeel")):
         findings = noochie.get("findings") or []
-        suggestion = noochie.get("suggestion") or ""
+        vraag = noochie.get("question") or noochie.get("suggestion") or ""   # back-compat
         head = (f'💬 <b>Noochie vandaag</b> '
                 f'<span class="muted">({_e(noochie.get("date", ""))})</span>')
         if findings:
@@ -727,8 +728,8 @@ def _render_digest(d: dict, noochie: dict | None = None) -> str:
             body = f' {_e(noochie.get("oordeel"))}'        # back-compat: oude losse beoordeling
         else:
             body = ''
-        sug = (f'<div><b>Suggestie:</b> {_e(suggestion)}</div>' if suggestion else '')
-        noochie_block = f'<div class="noochie">{head}{body}{sug}</div>'
+        vr = (f'<div>💭 <b>Noochie vraagt:</b> {_e(vraag)}</div>' if vraag else '')
+        noochie_block = f'<div class="noochie">{head}{body}{vr}</div>'
     style = ('<style>.kpis{display:flex;flex-wrap:wrap;gap:.7rem;margin:.3rem 0 .6rem}'
              '.kpi{background:var(--surface);border:1px solid var(--border);'
              'border-radius:var(--radius);padding:.6rem .9rem;flex:1 1 150px;min-width:0;'

@@ -1493,11 +1493,23 @@ def advise_metrics(catalog: list[str], context) -> list[dict]:
     return result
 
 
+def _clip(s: str, n: int) -> str:
+    """Knip op een woordgrens met ellipsis, nooit midden in een woord."""
+    s = (s or "").strip()
+    if len(s) <= n:
+        return s
+    cut = s[:n].rstrip()
+    sp = cut.rfind(" ")
+    if sp > n * 0.6:                                       # alleen terug naar spatie als zinnig
+        cut = cut[:sp]
+    return cut.rstrip(" ,;:") + "…"
+
+
 def _parse_noochie_report(text: str) -> tuple[list[str], str]:
-    """Haal tot 3 BEVINDING-regels en de SUGGESTIE-regel uit Noochie's antwoord.
-    Robuust tegen markdown-bold en opsomtekens. Retourneert (findings, suggestion)."""
+    """Haal tot 3 BEVINDING-regels en de reflectievraag (VRAAG, terugval SUGGESTIE) uit
+    Noochie's antwoord. Robuust tegen markdown-bold en opsomtekens. Retourneert (findings, vraag)."""
     findings: list[str] = []
-    suggestion = ""
+    vraag = ""
     for raw in (text or "").splitlines():
         line = raw.strip().lstrip("*-•# ").strip()
         low = line.lower()
@@ -1505,9 +1517,10 @@ def _parse_noochie_report(text: str) -> tuple[list[str], str]:
             v = line.split(":", 1)[1].strip().strip("* ").strip()
             if v:
                 findings.append(v)
-        elif low.startswith("suggestie") and ":" in line and not suggestion:
-            suggestion = line.split(":", 1)[1].strip().strip("* ").strip()
-    return findings[:3], suggestion
+        elif (low.startswith("vraag") or low.startswith("reflectievraag")
+              or low.startswith("suggestie")) and ":" in line and not vraag:
+            vraag = line.split(":", 1)[1].strip().strip("* ").strip()
+    return findings[:3], vraag
 
 
 class Noochie(Inhabitant):
@@ -1581,24 +1594,27 @@ class Noochie(Inhabitant):
         from nooch_village.coherence import parse_verdict_reason
         prompt = (
             f"Je bent Noochie, de missiestem van Nooch.earth. Scherp, nuchter, en je kijkt naar "
-            f"het GEHEEL: niet alleen website-tweaks, maar ook verkeer, markt, missie-afstemming, "
-            f"kansen en risico's.\n"
+            f"het GEHEEL: verkeer, markt, missie-afstemming, kansen en risico's.\n"
             f"Missie: {_NOOCHIE_MISSION}\n\n"
             f"Field Note van vandaag:\n{field_note}\n\n"
-            "Geef je drie scherpste bevindingen over het geheel en één concrete suggestie. "
-            "Toets ook of de aanbevolen actie bij de missie past.\n\n"
-            "Antwoord met precies dit formaat:\n"
-            "BEVINDING: <scherpe observatie 1>\n"
-            "BEVINDING: <scherpe observatie 2>\n"
-            "BEVINDING: <scherpe observatie 3>\n"
-            "SUGGESTIE: <één concrete actie>\n"
+            "Regels:\n"
+            "- Baseer je UITSLUITEND op wat in de Field Note staat. Verzin geen namen, partners "
+            "of cijfers; weet je iets niet, schrijf het niet op.\n"
+            "- Elke bevinding is ÉÉN volledige, bondige zin (max ~25 woorden). Geen halve zinnen.\n"
+            "- Sluit af met één scherpe REFLECTIEVRAAG aan de oprichter die hem aan het denken zet "
+            "(geen actie die hij waarschijnlijk al doet).\n\n"
+            "Antwoord exact zo:\n"
+            "BEVINDING: <één volledige zin>\n"
+            "BEVINDING: <één volledige zin>\n"
+            "BEVINDING: <één volledige zin>\n"
+            "VRAAG: <één reflectievraag>\n"
             "VERDICT: ok\n"
             "REASON: <één zin>\n\n"
-            "(gebruik VERDICT: niet_ok als de aanbevolen actie botst met of de missie mist)"
+            "(gebruik VERDICT: niet_ok als de aanbevolen richting botst met of de missie mist)"
         )
         result = reason(prompt) or "(geen LLM beschikbaar)"
         verdict, reason_text = parse_verdict_reason(result, frozenset({"ok", "niet_ok"}))
-        findings, suggestion = _parse_noochie_report(result)
+        findings, question = _parse_noochie_report(result)
 
         if verdict == "ok":
             self.log.info("🎯 Missie-alignment: ok (%s)", reason_text)
@@ -1620,11 +1636,11 @@ class Noochie(Inhabitant):
                 self.log.info("🎯 missie-lens ongewijzigd — spanning niet herhaald")
 
         self.bus.publish(Event("noochie_weighed_in", {"oordeel": result}, self.id))
-        self._persist_daily(verdict, reason_text or result, findings, suggestion)
+        self._persist_daily(verdict, reason_text or result, findings, question)
 
     def _persist_daily(self, verdict: str, tekst: str,
-                       findings: list[str] | None = None, suggestion: str = "") -> None:
-        """Bewaar Noochie's dag-rapport (3 bevindingen + 1 suggestie) voor de cockpit."""
+                       findings: list[str] | None = None, question: str = "") -> None:
+        """Bewaar Noochie's dag-rapport (3 bevindingen + 1 reflectievraag) voor de cockpit."""
         import time as _time
         path = os.path.join(self.context.data_dir, "noochie_daily.json")
         try:
@@ -1632,8 +1648,8 @@ class Noochie(Inhabitant):
             atomic_write_json(path, {
                 "date": _time.strftime("%Y-%m-%d"),
                 "verdict": verdict or "onbekend",
-                "findings": [f.strip()[:240] for f in (findings or [])][:3],
-                "suggestion": (suggestion or "").strip()[:240],
+                "findings": [_clip(f, 320) for f in (findings or [])][:3],
+                "question": _clip(question, 320),
                 "oordeel": (tekst or "").strip()[:300],   # back-compat
             })
         except Exception as e:

@@ -23,26 +23,32 @@ def test_parse_noochie_report():
             "- BEVINDING: NL domineert, BE/VS onontgonnen\n"
             "BEVINDING: geen zoekwoord-verkeer\n"
             "BEVINDING: vierde wordt genegeerd\n"
-            "SUGGESTIE: koppel homepage aan missiepagina's\n"
+            "VRAAG: wat houdt bezoekers tegen om dieper te gaan?\n"
             "VERDICT: ok\nREASON: prima")
-    findings, suggestion = _parse_noochie_report(text)
+    findings, vraag = _parse_noochie_report(text)
     assert len(findings) == 3                      # max 3
     assert "homepage trekt 97%" in findings[0]
-    assert suggestion == "koppel homepage aan missiepagina's"
+    assert vraag == "wat houdt bezoekers tegen om dieper te gaan?"
 
 
-def test_weigh_in_persisteert_bevindingen_en_suggestie(tmp_path):
+def test_parse_noochie_report_suggestie_fallback():
+    # oude SUGGESTIE-regel wordt nog steeds als vraag-veld opgepikt (back-compat)
+    _, vraag = _parse_noochie_report("BEVINDING: x\nSUGGESTIE: doe iets")
+    assert vraag == "doe iets"
+
+
+def test_weigh_in_persisteert_bevindingen_en_vraag(tmp_path):
     noochie = _make_noochie(tmp_path)
     resp = ("BEVINDING: 97% verkeer naar de homepage, productpagina's blijven leeg\n"
             "BEVINDING: NL domineert, BE en VS onontgonnen\n"
             "BEVINDING: geen zoekwoord-verkeer wijst op dunne content\n"
-            "SUGGESTIE: koppel de homepage aan de missiepagina's\n"
+            "VRAAG: wat zou bezoekers verleiden om voorbij de homepage te klikken?\n"
             "VERDICT: ok\nREASON: actie past bij de missie")
     with patch("nooch_village.llm.reason", return_value=resp):
         noochie._weigh_in("Field Note inhoud")
     d = json.load(open(f"{tmp_path}/noochie_daily.json"))
     assert len(d["findings"]) == 3 and "homepage" in d["findings"][0]
-    assert d["suggestion"] == "koppel de homepage aan de missiepagina's"
+    assert d["question"] == "wat zou bezoekers verleiden om voorbij de homepage te klikken?"
 
 
 def _make_noochie(tmp_path):
