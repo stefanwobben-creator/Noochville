@@ -2,7 +2,8 @@
 Pure classifier (geen netwerk) + de serpapi-reeksparser + de cockpit-weergave."""
 from __future__ import annotations
 
-from nooch_village.trend_analysis import trend_state, trend_state_label, recent_surge
+from nooch_village.trend_analysis import (
+    trend_state, trend_state_label, recent_surge, recent_move)
 from nooch_village.skills_impl.serpapi_trends import _series_from_timeseries
 from nooch_village.cockpit import _sparkline
 
@@ -51,15 +52,31 @@ def test_label():
     assert trend_state_label(None) == "—"
 
 
-def test_recent_surge():
-    # aanhoudende recente stijging (laatste 3 mnd fors boven het jaar ervoor) → True
-    assert recent_surge([50] * 24 + [80, 85, 90]) is True
-    # losse uitschieter in één maand → False (3-maands gemiddelde dempt 'm)
-    assert recent_surge([50] * 24 + [50, 50, 80]) is False
-    # vlak → False
-    assert recent_surge([50] * 30) is False
-    # te weinig data → False
-    assert recent_surge([50, 60, 70]) is False
+def test_recent_move_maandelijks():
+    # aanhoudende stijging (laatste maanden fors boven het jaar ervoor)
+    assert recent_move([50] * 24 + [80, 85, 90, 88])[0] == "stijgend"
+    # aanhoudende daling
+    assert recent_move([80] * 24 + [40, 35, 30, 32])[0] == "dalend"
+    # vlak → geen richting
+    assert recent_move([50] * 30)[0] is None
+    # te weinig data
+    assert recent_move([50, 60, 70])[0] is None
+
+
+def test_recent_move_negeert_laatste_onvolledige_punt():
+    # vlak met één lage slotwaarde (incompleet Trends-punt) → geen 'dalend'
+    assert recent_move([50] * 29 + [5])[0] is None
+
+
+def test_recent_move_wekelijkse_cadans():
+    # 5-jaars wekelijks (~260 punten): laatste kwartaal fors boven het jaar ervoor
+    weekly = [50] * 200 + [85] * 20
+    assert recent_move(weekly)[0] == "stijgend"
+
+
+def test_recent_surge_wrapper():
+    assert recent_surge([50] * 24 + [80, 85, 90, 88]) is True
+    assert recent_surge([80] * 24 + [40, 35, 30, 32]) is False
 
 
 def test_sparkline():

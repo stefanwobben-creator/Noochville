@@ -61,6 +61,53 @@ def test_enrich_signaleert_opleving(monkeypatch, tmp_path):
     assert "microplastics" in surges and surges["microplastics"]["status"] == "new"
 
 
+def test_enrich_herberekent_uit_opgeslagen_reeks_zonder_api(monkeypatch, tmp_path):
+    """Bij een al opgeslagen reeks: geen nieuwe Trends-call, maar de richting wordt wél
+    (her)berekend — hier een daling → recent_move 'dalend' + surge-store met richting."""
+    from nooch_village import library_enrich
+
+    series = [80] * 24 + [40, 35, 30, 32]                  # duidelijke daling
+    data = {"vegan": {"status": "approved", "function": "volg",
+                      "evidence": {"volume": 100, "trend_series": series}}}
+
+    class FakeKE:
+        def run(self, p, c):
+            return {"keywords": [{"vol": 100, "competition": 0.1}]}
+
+    class FakeGSC:
+        def run(self, p, c):
+            return {"rows": []}
+
+    class FakeTrendsNoCall:
+        def series(self, *a, **k):
+            raise AssertionError("geen API-call verwacht als de reeks al bestaat")
+
+    monkeypatch.setattr(
+        "nooch_village.skills_impl.keywords_everywhere.KeywordsEverywhereSkill", FakeKE)
+    monkeypatch.setattr("nooch_village.skills_impl.gsc.GscPerformanceSkill", FakeGSC)
+    monkeypatch.setattr(
+        "nooch_village.skills_impl.serpapi_trends.SerpapiTrendsSkill", FakeTrendsNoCall)
+
+    class Lib:
+        def __init__(self, d):
+            self._d = d
+        def all(self):
+            return self._d
+        def status(self, w):
+            return self._d.get(w)
+        def set_evidence(self, w, u):
+            self._d[w]["evidence"] = {**self._d[w]["evidence"], **u}
+            return self._d[w]
+
+    ctx = SimpleNamespace(settings={"ke_country": ""}, data_dir=str(tmp_path))
+    library_enrich.enrich_library(Lib(data), ctx, sleep=0)
+
+    assert data["vegan"]["evidence"]["recent_move"] == "dalend"
+    assert data["vegan"]["evidence"]["recent_surge"] is False
+    surges = json.load(open(tmp_path / "seed_surges.json"))
+    assert surges["vegan"]["direction"] == "dalend"
+
+
 def test_scout_explain_surge_zet_verklaring(tmp_path):
     from nooch_village.roles import ConcurrentScout
     import types

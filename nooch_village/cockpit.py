@@ -202,6 +202,7 @@ def gather(data_dir: str | None = None) -> dict:
                 "competition": ev.get("competition"), "trend_pct": ev.get("trend_pct"),
                 "trend_state": ev.get("trend_state"), "trend_series": ev.get("trend_series"),
                 "recent_surge": ev.get("recent_surge"),
+                "recent_move": ev.get("recent_move"),
                 "surge_explanation": surge.get("explanation"),
                 "gsc_seen": ev.get("gsc_seen"), "gsc_position": ev.get("gsc_position"),
                 "gsc_clicks": ev.get("gsc_clicks")}
@@ -869,14 +870,17 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
 
     # Volg-woorden: seeds voor de radar; toon de meerjarige trend-toestand (5 jaar) + sparkline.
     def _surge_tag(x):
-        if not x.get("recent_surge"):
+        move = x.get("recent_move") or ("stijgend" if x.get("recent_surge") else None)
+        if move not in ("stijgend", "dalend"):
             return ""
+        label = "▲ recent stijgend" if move == "stijgend" else "▼ recent dalend"
+        color = "var(--coral)" if move == "stijgend" else "var(--green-dark)"
         expl = x.get("surge_explanation") or {}
         tip = ""
         if expl.get("title"):
             tip = (f' <span class="muted">— mogelijk: '
                    f'<a href="{_e(expl.get("link", ""))}">{_e(expl["title"][:70])}</a></span>')
-        return f' <b style="color:var(--coral)">▲ recent stijgend</b>{tip}'
+        return f' <b style="color:{color}">{label}</b>{tip}'
 
     def _trend_cell(x):
         st = x.get("trend_state")

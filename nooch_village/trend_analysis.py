@@ -52,19 +52,36 @@ def trend_state(values, *, threshold: float = 0.01, peak_drop: float = 0.25) -> 
     return "stabiel"
 
 
-def recent_surge(values, *, months: int = 3, lookback: int = 12, jump: float = 0.30) -> bool:
-    """True bij een AANHOUDENDE recente opleving: het gemiddelde van de laatste `months`
-    maanden ligt minstens `jump` (fractie) boven het gemiddelde van de `lookback` maanden
-    daarvóór. Gebruikt een 3-maands gemiddelde zodat één losse uitschieter niet meetelt —
-    precies het verschil tussen ruis en een echt signaal dat om verklaring vraagt."""
+def recent_move(values, *, jump: float = 0.30, trim_last: int = 1) -> tuple[str | None, float | None]:
+    """Detecteer een AANHOUDENDE recente verschuiving (opleving of daling) en geef de richting +
+    procentuele verandering. Cadans-bewust: 5-jaars Google Trends is wekelijks (~260 punten),
+    12-maands is maandelijks. Vergelijkt het recente kwartaal met het jaar daarvóór, zodat één
+    losse uitschieter niet meetelt. Trimt het laatste (vaak onvolledige) Trends-punt weg.
+
+    Retourneert ('stijgend'|'dalend'|None, pct). None = geen duidelijke verschuiving / te weinig data.
+    """
     vals = [float(v) for v in (values or []) if isinstance(v, (int, float))]
-    if len(vals) < months + lookback:
-        return False
-    recent = sum(vals[-months:]) / months
-    base = sum(vals[-(months + lookback):-months]) / lookback
+    if trim_last and len(vals) > trim_last:
+        vals = vals[:-trim_last]                           # laatste, vaak onvolledige periode eruit
+    n = len(vals)
+    recent_w, base_w = (13, 52) if n >= 160 else (3, 12)   # wekelijks vs maandelijks
+    if n < recent_w + base_w:
+        return (None, None)
+    recent = sum(vals[-recent_w:]) / recent_w
+    base = sum(vals[-(recent_w + base_w):-recent_w]) / base_w
     if base <= 0:
-        return False
-    return (recent - base) / base >= jump
+        return (None, None)
+    pct = round((recent - base) / base * 100, 1)
+    if pct >= jump * 100:
+        return ("stijgend", pct)
+    if pct <= -jump * 100:
+        return ("dalend", pct)
+    return (None, pct)
+
+
+def recent_surge(values, **kw) -> bool:
+    """Back-compat: True bij een aanhoudende recente OPLEVING (zie recent_move)."""
+    return recent_move(values, **{k: v for k, v in kw.items() if k in ("jump", "trim_last")})[0] == "stijgend"
 
 
 _STATE_VIEW = {

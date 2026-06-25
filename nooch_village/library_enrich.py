@@ -37,7 +37,7 @@ def enrich_library(library, context, *, apply: bool = True, only_missing: bool =
     from nooch_village.skills_impl.keywords_everywhere import (
         KeywordsEverywhereSkill, opportunity_score, trend_change_pct)
     from nooch_village.library import classify_function
-    from nooch_village.trend_analysis import trend_state, recent_surge
+    from nooch_village.trend_analysis import trend_state, recent_move
     from nooch_village.seed_surge_store import SeedSurges
     surges = SeedSurges(os.path.join(
         (getattr(context, "data_dir", None) or "data"), "seed_surges.json"))
@@ -94,18 +94,24 @@ def enrich_library(library, context, *, apply: bool = True, only_missing: bool =
                 vol, position=merged_now.get("gsc_position"), ranks=merged_now.get("gsc_seen"))
 
         # Volg-woorden (seeds): meerjarige trend-toestand uit 5-jaars Google Trends.
-        if fn == "volg" and trends_skill is not None and \
-                not (only_missing and ev.get("trend_series")):
-            series = trends_skill.series(w, context, timeframe="today 5-y")
-            st = trend_state(series)
-            if st is not None:
-                updates["trend_state"] = st
-                updates["trend_series"] = series          # bewaar de curve voor de sparkline
-                surge = recent_surge(series)
-                updates["recent_surge"] = surge
-                if surge:                                 # spanning: laat Harry het onderzoeken
-                    surges.add(w, locale=(library.status(w) or {}).get("locale") or "")
-            time.sleep(sleep)
+        if fn == "volg" and trends_skill is not None:
+            series = ev.get("trend_series")
+            if not (only_missing and series):             # alleen API-call als de reeks ontbreekt
+                fetched = trends_skill.series(w, context, timeframe="today 5-y")
+                if fetched:
+                    series = fetched
+                    updates["trend_series"] = fetched     # curve voor de sparkline
+                time.sleep(sleep)
+            if series:                                    # signalen áltijd (her)berekenen, geen API-cost
+                st = trend_state(series)
+                if st is not None:
+                    updates["trend_state"] = st
+                move, pct = recent_move(series)
+                updates["recent_move"] = move
+                updates["recent_surge"] = (move == "stijgend")   # back-compat
+                if move:                                  # opleving óf daling: laat Harry+scout duiden
+                    surges.add(w, locale=(library.status(w) or {}).get("locale") or "",
+                               pct=pct, direction=move)
 
         if updates and apply:
             library.set_evidence(w, updates)

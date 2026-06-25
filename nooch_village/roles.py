@@ -1279,14 +1279,16 @@ class HarryHemp(Inhabitant):
             term = s.get("term", "")
             if not term:
                 continue
-            self.log.info("🔬 seed-opleving '%s' → academische duiding gezocht", term)
+            direction = s.get("direction", "stijgend")
+            self.log.info("🔬 seed-verschuiving '%s' (%s) → academische duiding gezocht",
+                          term, direction)
             # breed signaal: de scout zoekt parallel de nieuws-aanleiding (RSS)
             self.bus.publish(Event("seed_surge_sensed",
-                                   {"by": self.id, "term": term, "locale": s.get("locale", "")},
-                                   self.id))
+                                   {"by": self.id, "term": term, "direction": direction,
+                                    "locale": s.get("locale", "")}, self.id))
             self._on_keyword_proposed(Event("keyword_proposed", {
                 "word": term,
-                "demand": {"source": "seed_surge", "direction": "stijgend",
+                "demand": {"source": "seed_surge", "direction": direction,
                            "locale": s.get("locale", ""), "pct": s.get("pct")},
             }, self.id))
             store.mark_investigated(term)

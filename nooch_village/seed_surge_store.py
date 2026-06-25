@@ -25,14 +25,16 @@ class SeedSurges:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         atomic_write_json(self.path, self._data)
 
-    def add(self, term: str, *, locale: str = "", pct: float | None = None) -> bool:
-        """Registreer een opleving. True = nieuw toegevoegd. Bestaat de term al, dan blijft de
-        status (geen her-onderzoek elke run)."""
+    def add(self, term: str, *, locale: str = "", pct: float | None = None,
+            direction: str = "stijgend") -> bool:
+        """Registreer een verschuiving (opleving of daling). True = nieuw toegevoegd. Bestaat de
+        term al, dan blijft de status (geen her-onderzoek elke run)."""
         term = (term or "").strip()
         if not term or term in self._data:
             return False
         self._data[term] = {"term": term, "locale": locale, "pct": pct,
-                            "status": "new", "detected": time.strftime("%Y-%m-%d")}
+                            "direction": direction, "status": "new",
+                            "detected": time.strftime("%Y-%m-%d")}
         self._save()
         return True
 
