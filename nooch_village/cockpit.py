@@ -1893,6 +1893,8 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     _conf_set = {b.lower() for b in confirmed}
 
     def _herkomst(b):
+        if b.lower() in ("nooch.earth", "nooch"):
+            return "wijzelf"                              # self-monitor: ons eigen merk volgen
         return "door jou" if b.lower() in _conf_set else "vast"
     mrows = ""
     for b in monitored:
