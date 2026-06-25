@@ -1007,3 +1007,15 @@ om te proberen = ongeldig). Geldig = op alle vragen het linker antwoord. De cock
 uitklapbaar 4-vragen-formulier (radio's, q3b verschijnt alleen bij anticiperen) en het resultaat met
 ✅/❌ per stap. De facilitator/AI oordeelt NIET meer over de inhoud — dat loste de 'mijn geldige
 bezwaar werd afgekeurd'-klacht op. Suite groen (551 + 498).
+
+## GlassFrog-editor fase 1: bewerkbare velden op het behandel-scherm (B+C)
+Direct bewerkbare velden i.p.v. alleen via de AI: naam, purpose, accountabilities (één per regel,
+vrij toevoegen/herschrijven/verwijderen) en domeinen, voorgevuld met de 'na dit voorstel'-stand.
+'💾 Voorstel opslaan' (rov_edit) → build_change_from_fields() bouwt de change als echte diff t.o.v.
+de huidige rol (add/remove accountabilities + domeinen, purpose-wijziging); de Secretaris hertoetst.
+Naam bewerkbaar voor een NIEUWE rol (drijft role_id + titel); bij een bestaande rol read-only met
+de notitie 'hernoemen komt in fase 2'. De AI-reactie blijft eronder als optionele suggestie die de
+velden vult. _proposal_from_item + adopt dragen nu remove_domains. Agenda.update_fields toegevoegd.
+Tests in test_roloverleg.py. Suite groen (554 + 498).
+
+### Fase 2 (gepland): meerdere rollen per voorstel + andere rol erbij openen + hernoemen bestaande rol.

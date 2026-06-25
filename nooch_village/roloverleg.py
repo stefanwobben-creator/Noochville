@@ -90,6 +90,15 @@ class Agenda:
         self._save()
         return True
 
+    def update_fields(self, iid: str, **fields) -> bool:
+        """Werk losse velden van een agenda-item bij (change, role_id, title, ...)."""
+        it = self.get(iid)
+        if it is None:
+            return False
+        it.update({k: v for k, v in fields.items() if v is not None})
+        self._save()
+        return True
+
     def set_objection(self, iid: str, text: str, result: dict) -> bool:
         """Bewaar een getoetst bezwaar (tekst + Facilitator-validiteitsresultaat) op het item."""
         it = self.get(iid)
@@ -118,7 +127,8 @@ def _proposal_from_item(item: dict):
         kind=kind, role_id=item.get("role_id"),
         purpose=c.get("purpose"), add_accountabilities=list(c.get("add_accountabilities", [])),
         remove_accountabilities=list(c.get("remove_accountabilities", [])),
-        add_domains=list(c.get("add_domains", [])), new_role_parent=c.get("new_role_parent"))
+        add_domains=list(c.get("add_domains", [])), remove_domains=list(c.get("remove_domains", [])),
+        new_role_parent=c.get("new_role_parent"))
     title = item.get("title", "")
     return Proposal(
         proposer_role=item.get("by") or "founder", change=change,
@@ -284,6 +294,33 @@ def secretary_check(item: dict, records) -> list[dict]:
             issues.append({"level": "let op",
                            "msg": f"accountability begint niet met de -en-vorm: '{a[:50]}'"})
     return issues
+
+
+def build_change_from_fields(item: dict, snapshot: dict | None, *, naam: str = "",
+                             purpose: str = "", accs=(), domeinen=()) -> tuple[dict, str, str]:
+    """GlassFrog-stijl: bouw de change uit de DIRECT bewerkte velden (naam/purpose/accountabilities/
+    domeinen). Voor een bestaande rol levert dit een echte diff op (add/remove t.o.v. de huidige
+    rol); voor een nieuwe rol is alles 'toe te voegen'. Geeft (change, role_id, title)."""
+    accs = [a.strip() for a in accs if a and a.strip()][:12]
+    doms = [d.strip() for d in domeinen if d and d.strip()][:8]
+    purpose = (purpose or "").strip()
+    if item.get("kind") == "add_role":
+        rid = re.sub(r"\W+", "_", (naam or purpose).lower())[:40].strip("_") or item.get("role_id", "nieuwe_rol")
+        change = {"purpose": purpose[:140], "add_accountabilities": accs, "add_domains": doms,
+                  "new_role_parent": item.get("change", {}).get("new_role_parent", "noochville")}
+        return change, rid, (naam or purpose)[:60]
+    snap = snapshot or {}
+    real_a, real_d = list(snap.get("accountabilities", [])), list(snap.get("domains", []))
+    la, da = {a.lower() for a in real_a}, {a.lower() for a in accs}
+    ld, dd = {d.lower() for d in real_d}, {d.lower() for d in doms}
+    change = {
+        "add_accountabilities": [a for a in accs if a.lower() not in la],
+        "remove_accountabilities": [a for a in real_a if a.lower() not in da],
+        "add_domains": [d for d in doms if d.lower() not in ld],
+        "remove_domains": [d for d in real_d if d.lower() not in dd]}
+    if purpose and purpose != (snap.get("purpose", "") or "").strip():
+        change["purpose"] = purpose[:140]
+    return change, item.get("role_id"), item.get("title")
 
 
 def _parse_role(text: str) -> dict:

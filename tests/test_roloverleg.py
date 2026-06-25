@@ -181,6 +181,61 @@ def test_rov_invalid_verwijdert_ongeldige_spanning_zonder_governance(tmp_path):
     assert res2["ok"] is False
 
 
+def test_build_change_from_fields_amend_diff():
+    from nooch_village.roloverleg import build_change_from_fields
+    item = {"kind": "amend_role", "role_id": "scout", "title": "scout", "change": {}}
+    snap = {"purpose": "markt observeren", "accountabilities": ["Volgen van de markt", "Oud werk"],
+            "domains": ["socials"]}
+    # purpose gewijzigd, één accountability herschreven (Oud werk → Nieuw werk), domein verwijderd
+    change, rid, title = build_change_from_fields(
+        item, snap, naam="scout", purpose="de markt vóór zijn",
+        accs=["Volgen van de markt", "Nieuw werk"], domeinen=[])
+    assert rid == "scout"
+    assert change["purpose"] == "de markt vóór zijn"
+    assert change["add_accountabilities"] == ["Nieuw werk"]
+    assert change["remove_accountabilities"] == ["Oud werk"]
+    assert change["remove_domains"] == ["socials"]
+
+
+def test_rov_edit_werkt_voorstel_bij(tmp_path):
+    from nooch_village import cockpit
+    from nooch_village.roloverleg import Agenda
+    import json
+    data = tmp_path / "data"; data.mkdir()
+    recs = {"scout": {"id": "scout", "type": "role", "parent": "noochville", "version": 1,
+                      "definition": {"purpose": "p", "accountabilities": ["A", "B"], "domains": []}}}
+    (data / "governance_records.json").write_text(json.dumps(recs), encoding="utf-8")
+    ag = Agenda(str(data / "roloverleg_agenda.json"))
+    iid = ag.add("scout", "amend_role", {"add_accountabilities": ["C"]}, "x", by="scout", title="C")
+    res = cockpit._dispatch_action(str(data), "rov_edit", iid, "", extra={
+        "ed_naam": "scout", "ed_purpose": "nieuwe purpose",
+        "ed_accs": "A\nB\nC-herschreven", "ed_domeinen": "nieuw domein"})
+    assert res["ok"] and res["rov"] == "edited"
+    it = Agenda(str(data / "roloverleg_agenda.json")).get(iid)
+    assert it["change"]["add_accountabilities"] == ["C-herschreven"]      # C verwijderd, herschreven erbij
+    assert it["change"]["purpose"] == "nieuwe purpose"
+    assert it["change"]["add_domains"] == ["nieuw domein"]
+
+
+def test_rov_edit_nieuwe_rol_naam_bewerkbaar(tmp_path):
+    from nooch_village import cockpit
+    from nooch_village.roloverleg import Agenda
+    data = tmp_path / "data"; data.mkdir()
+    (data / "governance_records.json").write_text("{}", encoding="utf-8")
+    ag = Agenda(str(data / "roloverleg_agenda.json"))
+    iid = ag.add("oude_naam", "add_role",
+                 {"purpose": "p", "add_accountabilities": ["x"], "new_role_parent": "noochville"},
+                 "x", by="founder", title="Oude naam")
+    res = cockpit._dispatch_action(str(data), "rov_edit", iid, "", extra={
+        "ed_naam": "Copywriter", "ed_purpose": "laat de missie resoneren",
+        "ed_accs": "Schrijven van copy", "ed_domeinen": ""})
+    assert res["ok"]
+    it = Agenda(str(data / "roloverleg_agenda.json")).get(iid)
+    assert it["role_id"] == "copywriter" and it["title"] == "Copywriter"
+    assert it["change"]["purpose"] == "laat de missie resoneren"
+    assert it["change"]["add_accountabilities"] == ["Schrijven van copy"]
+
+
 def test_evaluate_objection_proces():
     from nooch_village.roloverleg import evaluate_objection
     # alle 'left' → geldig bezwaar

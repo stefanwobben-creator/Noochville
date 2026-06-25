@@ -1207,7 +1207,34 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
             + (f'<div class="muted" style="margin-top:.15rem"><b>Helpt mijn eigen rol:</b> '
                f'{_e(item.get("benefit",""))}</div>' if item.get("benefit") else "")
             + invalid_box + obj_box + f'{sec}{react_log}</div>')
-    inner = (f'{head}{_banner(msg)}{card}{react_form}{decide}{objection_form}'
+    # GlassFrog-stijl: direct bewerkbare velden, voorgevuld met de 'na dit voorstel'-stand.
+    if is_add:
+        ed_naam, ed_pur = (item.get("title") or item.get("role_id", "")), (pur_new or "")
+        ed_accs_list, ed_doms_list = list(accs), list(doms_new)
+        naam_attr = ""
+    else:
+        ed_naam, ed_pur = item.get("role_id", ""), (pur_new or cur_pur or "")
+        doms_rm = ch.get("remove_domains", [])
+        ed_accs_list = [a for a in cur_accs if a not in accs_rm] + list(accs)
+        ed_doms_list = [d for d in cur_doms if d not in doms_rm] + list(doms_new)
+        naam_attr = " readonly title='Naam van een bestaande rol wijzigen komt in fase 2'"
+    _ta = lambda xs: _e("\n".join(xs))
+    editor = (
+        '<details open style="margin-top:.5rem"><summary>✏️ Voorstel bewerken (velden)</summary>'
+        f'<form method="post" action="/action" style="margin-top:.4rem">{common}'
+        f'<input type="hidden" name="next" value="/roloverleg?iid={_e(item["id"])}">'
+        f'<div style="{_H}">Naam</div>'
+        f'<input name="ed_naam" class="tg-in" value="{_e(ed_naam)}"{naam_attr}>'
+        f'<div style="{_H};margin-top:.4rem">Purpose (reden van bestaan, geen -en-vorm)</div>'
+        f'<textarea name="ed_purpose" class="tg-in" rows="2">{_e(ed_pur)}</textarea>'
+        f'<div style="{_H};margin-top:.4rem">Accountabilities (één per regel, -en-vorm)</div>'
+        f'<textarea name="ed_accs" class="tg-in" rows="5">{_ta(ed_accs_list)}</textarea>'
+        f'<div style="{_H};margin-top:.4rem">Domeinen (één per regel, optioneel)</div>'
+        f'<textarea name="ed_domeinen" class="tg-in" rows="2">{_ta(ed_doms_list)}</textarea>'
+        '<button class="bigbtn go" type="submit" name="action" value="rov_edit" '
+        'style="margin-top:.4rem">💾 Voorstel opslaan<small>werkt de wijziging bij vanuit deze '
+        'velden; de Secretaris hertoetst</small></button></form></details>')
+    inner = (f'{head}{_banner(msg)}{card}{editor}{react_form}{decide}{objection_form}'
              '<div class="tg-skip"><a class="muted" href="/roloverleg">← terug naar de agenda</a>'
              '</div></div><style>' + _TRIAGE_CSS + '</style>')
     return _page("Voorstel behandelen", inner)
@@ -2123,6 +2150,7 @@ def _flash(result: dict) -> str:
             "obj_valid": "⚖️ Bezwaar geldig bevonden — blijft staan voor integratie.",
             "obj_invalid": "⚖️ Bezwaar ongeldig (vorm) — je kunt alsnog consent geven.",
             "added": "➕ Voorstel op de agenda gezet.",
+            "edited": "💾 Voorstel bijgewerkt vanuit de velden.",
             "flipped": "↔ Omgezet (purpose ↔ accountability) en opnieuw geformuleerd.",
             "to_project": "▶ Als experiment op het projectbord gezet voor de rol — bij herhaling "
                           "stolt het later tot accountability.",
@@ -2278,9 +2306,9 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                                   owner=extra.get("owner", ""), scope_override=scope,
                                   project_status="draft" if risky else "queued", projects=projects)
     if action in ("rov_react", "rov_consent", "rov_object", "rov_add", "rov_end", "rov_flip_facet",
-                  "rov_to_project", "rov_invalid"):
+                  "rov_to_project", "rov_invalid", "rov_edit"):
         from nooch_village.roloverleg import (Agenda, amend_with_reaction, apply_consented,
-                                              flip_facet)
+                                              flip_facet, build_change_from_fields)
         agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
         records = Records(os.path.join(dd, "governance_records.json"))
         if action == "rov_flip_facet":
@@ -2350,6 +2378,22 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                            reason=reason, by="founder", title=accs[0][:60], example=voorbeeld,
                            benefit=benefit)
             return {"ok": True, "rov": "added"}
+        if action == "rov_edit":
+            # GlassFrog-stijl: het voorstel bijwerken vanuit de direct bewerkte velden.
+            item = agenda.get(iid)
+            if item is None:
+                return {"ok": False, "error": "voorstel niet gevonden"}
+            rec = records.get(item.get("role_id"))
+            snap = ({"purpose": rec.definition.purpose,
+                     "accountabilities": list(rec.definition.accountabilities),
+                     "domains": list(rec.definition.domains)} if rec else None)
+            accs = (extra.get("ed_accs") or "").splitlines()
+            doms = (extra.get("ed_domeinen") or "").splitlines()
+            change, rid, title = build_change_from_fields(
+                item, snap, naam=extra.get("ed_naam", ""), purpose=extra.get("ed_purpose", ""),
+                accs=accs, domeinen=doms)
+            agenda.update_fields(iid, change=change, role_id=rid, title=title)
+            return {"ok": True, "rov": "edited"}
         # de overige acties werken op één item
         if action == "rov_consent":
             return {"ok": agenda.set_status(iid, "consented"), "rov": "consented"}
@@ -2666,6 +2710,10 @@ def make_handler(data_dir: str | None):
                      "voorbeeld": (form.get("voorbeeld") or [""])[0],
                      "benefit": (form.get("benefit") or [""])[0],
                      "harm": (form.get("harm") or [""])[0],
+                     "ed_naam": (form.get("ed_naam") or [""])[0],
+                     "ed_purpose": (form.get("ed_purpose") or [""])[0],
+                     "ed_accs": (form.get("ed_accs") or [""])[0],
+                     "ed_domeinen": (form.get("ed_domeinen") or [""])[0],
                      "q1": (form.get("q1") or [""])[0], "q2": (form.get("q2") or [""])[0],
                      "q3": (form.get("q3") or [""])[0], "q3b": (form.get("q3b") or [""])[0],
                      "q4": (form.get("q4") or [""])[0],
