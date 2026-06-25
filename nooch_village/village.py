@@ -346,7 +346,12 @@ class Village:
 
     def run_forever(self):
         print(self.report_keys())
+        self.bus.subscribe("pulse_completed", lambda e: logging.getLogger("village").info(
+            "✅ dagpuls verwerkt — het dorp leeft en wacht nu op de volgende dag-puls. "
+            "Geen nieuwe regels = normaal, niet vastgelopen. Ctrl+C om te stoppen."))
         self.start()
+        print("🌙 Het dorp draait (daemon). Zodra het log stilvalt is dat normaal: het wacht "
+              "op de volgende dag-puls. Ctrl+C om te stoppen.\n")
         try:
             while True:
                 time.sleep(1)
