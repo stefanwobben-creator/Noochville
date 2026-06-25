@@ -11,6 +11,7 @@ landcodes. Fail-closed zonder store/token. De pure aggregatie (`aggregate_orders
 from __future__ import annotations
 import json
 import urllib.request
+import urllib.parse
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from nooch_village.skills import Skill
@@ -50,10 +51,11 @@ def get_access_token(store: str, client_id: str, client_secret: str, *, _post=No
     if _post is not None:
         return _post(store, client_id, client_secret)
     url = f"https://{store}/admin/oauth/access_token"
-    body = json.dumps({"client_id": client_id, "client_secret": client_secret,
-                       "grant_type": "client_credentials"}).encode("utf-8")
+    # Shopify vereist hier application/x-www-form-urlencoded (NIET json), anders HTTP 400.
+    body = urllib.parse.urlencode({"client_id": client_id, "client_secret": client_secret,
+                                   "grant_type": "client_credentials"}).encode("utf-8")
     req = urllib.request.Request(url, data=body, method="POST",
-                                 headers={"Content-Type": "application/json"})
+                                 headers={"Content-Type": "application/x-www-form-urlencoded"})
     with urllib.request.urlopen(req, timeout=30) as resp:
         return json.loads(resp.read().decode("utf-8")).get("access_token", "")
 
