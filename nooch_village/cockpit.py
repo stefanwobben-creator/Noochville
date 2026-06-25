@@ -23,12 +23,12 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from nooch_village.governance import Records
 from nooch_village.human_inbox import HumanInbox
 from nooch_village.projects import ProjectLedger
-from nooch_village.library import Library
+from nooch_village.library import Library, classify_function
 from nooch_village.notes_store import NotesStore
 from nooch_village.inbox_actions import (
     decide_keyword, defer_item, confirm_item, mark_done, resolve_tension, add_reference,
     route_to_project, route_to_governance, remove_note, override_library_term,
-    decide_competitor_candidate, decide_link_target)
+    decide_competitor_candidate, decide_link_target, set_word_function)
 from nooch_village.competitor_brands import CompetitorBrands
 from nooch_village.link_targets import LinkTargets
 
@@ -84,7 +84,11 @@ def compute_digest(library_all: dict, link_cands: list, comp_cands: list,
     """
     def _word_row(w, e):
         ev = e.get("evidence") or {}
+        fn = e.get("function")
+        if fn not in ("volg", "doelwit"):
+            fn = classify_function(w, ev)
         return {"word": w,
+                "function": fn,
                 "volume": ev.get("volume"),
                 "competition": ev.get("competition"),
                 "opportunity": ev.get("opportunity"),
@@ -95,14 +99,17 @@ def compute_digest(library_all: dict, link_cands: list, comp_cands: list,
                 "interest": ev.get("interest"),
                 "locale": e.get("locale") or "",
                 "date": e.get("date", "")}
-    new_words = sorted(
-        (_word_row(w, e) for w, e in (library_all or {}).items()
-         if isinstance(e, dict) and e.get("status") == "approved"
-         and _within(e.get("date"), now, days)),
-        # kans eerst (kwantitatief), dan volume, dan trends-interesse als zwakke fallback
+    fresh = [_word_row(w, e) for w, e in (library_all or {}).items()
+             if isinstance(e, dict) and e.get("status") == "approved"
+             and _within(e.get("date"), now, days)]
+    # Doelwit-woorden: op kans (waar we op willen ranken). Volg-woorden: op volume (seeds).
+    new_targets = sorted(
+        (x for x in fresh if x["function"] == "doelwit"),
         key=lambda x: (-((x["opportunity"] if x["opportunity"] is not None else -1)),
-                       -((x["volume"] or 0)), -((x["interest"] or 0)), x["word"]),
-    )
+                       -((x["volume"] or 0)), -((x["interest"] or 0)), x["word"]))
+    new_seeds = sorted(
+        (x for x in fresh if x["function"] == "volg"),
+        key=lambda x: (-((x["volume"] or 0)), x["word"]))
     new_links = sorted(
         ({"title": t.get("title", ""), "source": t.get("source", ""),
           "priority": t.get("priority", "onbekend"), "link": t.get("link", "")}
@@ -113,7 +120,8 @@ def compute_digest(library_all: dict, link_cands: list, comp_cands: list,
                        if _within(c.get("first_seen"), now, days)]
     return {
         "window_days": days,
-        "new_words": new_words,
+        "new_targets": new_targets,
+        "new_seeds": new_seeds,
         "new_links": new_links,
         "new_competitors": new_competitors,
         "monitored_competitors": list(comp_monitored or []),
@@ -162,7 +170,9 @@ def gather(data_dir: str | None = None) -> dict:
     _ws_order = {"approved": 0, "escalated": 1, "avoid": 2, "forbidden": 3}
     lib = sorted(
         ({"word": w, "status": e.get("status", "?"), "by": e.get("by", ""),
-          "rationale": e.get("rationale", ""), "date": e.get("date", "")}
+          "rationale": e.get("rationale", ""), "date": e.get("date", ""),
+          "function": (e.get("function") if e.get("function") in ("volg", "doelwit")
+                       else classify_function(w, e.get("evidence")))}
          for w, e in (library.all() or {}).items()),
         key=lambda x: (_ws_order.get(x["status"], 9), x["word"]),
     )
@@ -312,6 +322,11 @@ def _btn(iid: str, action: str, label: str, token: str, cls: str = "") -> str:
 def _lib_btn(word: str, decision: str, label: str, token: str, cls: str = "") -> str:
     """Override-knop voor een bibliotheekterm (escalated afromen): POST /action lib_override."""
     return _word_btn("lib_override", word, decision, label, token, cls)
+
+
+def _func_btn(word: str, function: str, label: str, token: str, cls: str = "") -> str:
+    """Flip-knop voor de functie van een woord (volg↔doelwit): POST /action lib_function."""
+    return _word_btn("lib_function", word, function, label, token, cls)
 
 
 def _brand_btn(brand: str, decision: str, label: str, token: str, cls: str = "") -> str:
@@ -643,13 +658,21 @@ def _word_metrics(x: dict) -> str:
 def _render_digest(d: dict) -> str:
     """Weekrapport-blok: één overzicht dat je elke week opent. Pure render uit snap['digest']."""
     days = d.get("window_days", 7)
-    nw, nl = d.get("new_words", []), d.get("new_links", [])
+    nt, ns = d.get("new_targets", []), d.get("new_seeds", [])
+    nl = d.get("new_links", [])
     nc, conf = d.get("new_competitors", []), d.get("monitored_competitors", [])
     _pm = {"hoog": "★ hoog", "midden": "midden", "laag": "laag", "onbekend": "?"}
     cards = []
-    if nw:
-        rows = "".join(f'<li><b>{_e(x["word"])}</b> {_word_metrics(x)}</li>' for x in nw)
-        cards.append(f'<div class="dg"><h3>🌱 Nieuw goedgekeurde woorden ({len(nw)})</h3>'
+    if nt:
+        rows = "".join(f'<li><b>{_e(x["word"])}</b> {_word_metrics(x)}</li>' for x in nt)
+        cards.append(f'<div class="dg"><h3>🎯 Doelwit-woorden — kans om te ranken ({len(nt)})</h3>'
+                     f'<ul>{rows}</ul></div>')
+    if ns:
+        rows = "".join(
+            f'<li><b>{_e(x["word"])}</b> '
+            f'{("<span class=muted>vol " + _e(x["volume"]) + "/mnd · voedt de radar</span>") if x.get("volume") is not None else "<span class=muted>voedt de radar</span>"}'
+            f'</li>' for x in ns)
+        cards.append(f'<div class="dg"><h3>🌱 Volg-woorden — seeds voor trends/SerpAPI ({len(ns)})</h3>'
                      f'<ul>{rows}</ul></div>')
     if nl:
         rows = "".join(
@@ -755,12 +778,25 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     # Woordenschat (keyword-library) — standaard alleen actief (approved); geschiedenis toont alle.
     lib = snap.get("library", [])
     show_lib = lib if show_all else [x for x in lib if x["status"] == "approved"]
+    _fn_label = {"doelwit": "🎯 doelwit", "volg": "🌱 volg"}
+
+    def _func_cell(x):
+        fn = x.get("function", "doelwit")
+        chip = f'<span class="chip">{_e(_fn_label.get(fn, fn))}</span>'
+        if not writable or x["status"] != "approved":
+            return chip
+        # flip naar het andere type
+        other = "volg" if fn == "doelwit" else "doelwit"
+        btn = _func_btn(x["word"], other, "→ " + _fn_label.get(other, other), csrf_token)
+        return f'{chip} {btn}'
     lrows = "".join(
         f'<tr><td><b>{_e(x["word"])}</b></td>'
         f'<td><span class="chip">{_e(x["status"])}</span></td>'
+        f'<td>{_func_cell(x)}</td>'
         f'<td class="muted">{_e(x.get("date", ""))}</td></tr>' for x in show_lib)
-    lib_tbl = ('<table><thead><tr><th>woord</th><th>status</th><th>actief sinds</th></tr></thead>'
-               f'<tbody>{lrows or "<tr><td colspan=3 class=muted>geen actieve woorden</td></tr>"}</tbody></table>')
+    lib_tbl = ('<table><thead><tr><th>woord</th><th>status</th><th>functie</th>'
+               '<th>actief sinds</th></tr></thead>'
+               f'<tbody>{lrows or "<tr><td colspan=4 class=muted>geen actieve woorden</td></tr>"}</tbody></table>')
 
     # Escalated-berg: termen die de Librarian naar de mens escaleerde. Afroombaar met
     # één klik (keur goed → approved / verbied → forbidden). Dit dweilt het kerkhof leeg.
@@ -913,6 +949,9 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         library = Library(os.path.join(dd, "library.json"))
         return override_library_term(library, extra.get("word", ""),
                                      extra.get("decision", ""), reason=reason)
+    if action == "lib_function":
+        library = Library(os.path.join(dd, "library.json"))
+        return set_word_function(library, extra.get("word", ""), extra.get("decision", ""))
     if action == "brand_decide":
         brands = CompetitorBrands(os.path.join(dd, "competitor_brands.json"))
         return decide_competitor_candidate(brands, extra.get("word", ""),

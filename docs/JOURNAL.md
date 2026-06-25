@@ -364,3 +364,22 @@ raken (verrijking achteraf, niet de approval-datum resetten). `library_enrich.en
 CLI `enrich_volumes [dry] [nogsc]` vult bestaande approved-woorden, mens-gated. Faalt closed per bron.
 
 Tests: 889 → 895. Mac-actie: `./venv/bin/python -m nooch_village.village enrich_volumes`.
+
+---
+
+## 2026-06-25 (vervolg 2) — Functie-as: seed vs rank-doel
+
+**[ontwerp+feat]** Probleem (Stefan): brede termen als 'vegan' (1,22M), 'microplastics', 'biobased'
+verschenen als grootste 'kans', maar dat zijn seeds om de radar te voeden — geen woorden waar we op
+willen ranken. Eén platte approved-lijst verbergt dat onderscheid. Oplossing: een functie-as per woord,
+`volg` (seed) vs `doelwit` (rank), orthogonaal op status. Heuristiek classificeert (mega-volume of
+één generiek woord → volg; specifiek meerwoord → doelwit), de mens corrigeert uitzonderingen met een
+flip-knop in de cockpit (`Library.set_function` via inbox-actie `lib_function`). Weekrapport splitst in
+'🎯 Doelwit-woorden — kans om te ranken' (kans/GSC) en '🌱 Volg-woorden — seeds voor trends/SerpAPI'
+(geen misleidende kans). Discovery blijft uit álle approved zaaien (volg-woorden waren al seeds).
+
+**[les]** Het was geen bug in de kans-formule maar een ontbrekend concept: input (seed) vs output
+(rank-doel). Zelfde input-versus-output-scheiding als elders. 17 bestaande woorden geclassificeerd
+via de heuristiek (vegan/microplastics/biobased → volg, rest → doelwit).
+
+Tests: 895 → 900.

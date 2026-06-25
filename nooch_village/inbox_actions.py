@@ -164,6 +164,20 @@ def override_library_term(library, word: str, decision: str,
     return {"ok": True, "word": word, "status": status}
 
 
+def set_word_function(library, word: str, function: str, by: str = "human") -> dict:
+    """Menselijke override van de functie van een woord: 'volg' (seed) of 'doelwit' (rank).
+    De heuristiek classificeert automatisch; dit corrigeert uitzonderingen vanuit de cockpit.
+    Schrijft via Library.set_function (domein-methode). Geeft {ok, word?, function?, error?}."""
+    word = (word or "").strip()
+    if not word:
+        return {"ok": False, "error": "geen woord"}
+    if function not in ("volg", "doelwit"):
+        return {"ok": False, "error": f"onbekende functie '{function}'"}
+    if library.set_function(word, function) is None:
+        return {"ok": False, "error": f"'{word}' staat niet in de bibliotheek"}
+    return {"ok": True, "word": word, "function": function}
+
+
 def decide_competitor_candidate(brands, brand: str, decision: str) -> dict:
     """Menselijk oordeel over een gespotte concurrent (ruizige ontdekking → mens beslist).
     confirm → vanaf nu meegenomen in de monitoring; reject → genegeerd (komt niet terug).

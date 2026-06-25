@@ -4,9 +4,17 @@
 
 ## Waar we staan (2026-06-25)
 
-**Suite: 895 tests groen.** Elke stap met mutatie-check.
+**Suite: 900 tests groen.** Elke stap met mutatie-check.
 
 ### Sessie 2026-06-25 (vervolg): kans-score per zoekwoord
+
+- **Functie-as: volg (seed) vs doelwit (rank).** Een goedgekeurd woord heeft nu een functie:
+  `volg` = te breed om op te ranken maar voedt de radar (Trends/SerpAPI/ngram), `doelwit` = waar we
+  content voor maken en op willen ranken. Heuristiek (`classify_function`: mega-volume of één generiek
+  woord → volg; specifiek meerwoord → doelwit), mens corrigeert met één klik in de cockpit
+  (`set_function` / inbox-actie `lib_function`). Weekrapport splitst: doelwit krijgt kans/GSC, volg
+  krijgt seed-framing (geen misleidende kans). Live: vegan/microplastics/biobased → volg; de rest
+  → doelwit. Lost op dat 'vegan' (1,22M) als grootste 'kans' verscheen terwijl het een seed is.
 
 - **Weekrapport toont meetbare kans** i.p.v. losse trends-interesse. `opportunity_score(volume,
   competition) = round(volume*(1-competition))` ("haalbaar verkeer": veel zoekvraag bij lage

@@ -37,8 +37,9 @@ def test_digest_neemt_alleen_recent_mee():
                   {"brand": "OudMerk", "first_seen": _d(50, now)}]
     dg = compute_digest(library, links, comp_cands, ["LØCI", "Merrell"], now)
 
-    assert [w["word"] for w in dg["new_words"]] == ["vegan sneakers"]   # geen oud/afgewezen
-    assert dg["new_words"][0]["interest"] == 800
+    # 'vegan sneakers' (meerwoord, geen mega-volume) → doelwit
+    assert [w["word"] for w in dg["new_targets"]] == ["vegan sneakers"]   # geen oud/afgewezen
+    assert dg["new_targets"][0]["interest"] == 800
     assert [l["title"] for l in dg["new_links"]] == ["Best Vegan Sneakers"]
     assert dg["new_competitors"] == ["Flamingos Life"]
     assert dg["monitored_competitors"] == ["LØCI", "Merrell"]
