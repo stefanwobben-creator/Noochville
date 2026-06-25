@@ -91,7 +91,7 @@ def enrich_library(library, context, *, apply: bool = True, only_missing: bool =
 
         # Volg-woorden (seeds): meerjarige trend-toestand uit 5-jaars Google Trends.
         if fn == "volg" and trends_skill is not None and \
-                not (only_missing and ev.get("trend_state")):
+                not (only_missing and ev.get("trend_series")):
             series = trends_skill.series(w, context, timeframe="today 5-y")
             st = trend_state(series)
             if st is not None:

@@ -234,6 +234,14 @@ def _e(x) -> str:
     return html.escape("" if x is None else str(x))
 
 
+def _fmt_int(v) -> str:
+    """Heel getal met punt-duizendtallen (NL): 1220000 → 1.220.000."""
+    try:
+        return f"{int(v):,}".replace(",", ".")
+    except (TypeError, ValueError):
+        return _e(v)
+
+
 def _chips(items: list[str]) -> str:
     if not items:
         return '<span class="muted">—</span>'
@@ -823,13 +831,13 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         return '<span class="muted">—</span>'
 
     def _num(v, suffix=""):
-        return f'{_e(v)}{suffix}' if v is not None else '<span class="muted">—</span>'
+        return f'{_fmt_int(v)}{suffix}' if v is not None else '<span class="muted">—</span>'
 
     # Doelwit-woorden: waar we op willen ranken (sorteer op kans).
     trows = "".join(
         f'<tr><td><b>{_e(x["word"])}</b></td>'
         f'<td>{_num(x.get("volume"), "/mnd")}</td>'
-        f'<td>{("<b>" + _e(x["opportunity"]) + "</b>") if x.get("opportunity") is not None else "<span class=muted>—</span>"}</td>'
+        f'<td>{("<b>" + _fmt_int(x["opportunity"]) + "</b>") if x.get("opportunity") is not None else "<span class=muted>—</span>"}</td>'
         f'<td>{_pos_cell(x)}</td>'
         f'<td>{_flip(x["word"], "volg", "→ 🌱 volg")}</td></tr>'
         for x in sorted(targets, key=lambda x: -((x.get("opportunity") if x.get("opportunity") is not None else -1))))
