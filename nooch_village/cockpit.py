@@ -271,20 +271,18 @@ def gather(data_dir: str | None = None) -> dict:
                 "kind": "voorstel", "by": prop.get("proposer_role", ""),
                 "hypothesis": prop.get("hypothesis", "") or ctx.get("hypothesis", ""),
                 "business_case": bc, "value": business_value(bc)})
-    for p in proj:
-        bc = p.get("business_case")
-        if bc and p.get("status") not in ("future", "done"):   # geparkeerd/klaar telt niet mee
-            backlog.append({"title": p.get("scope") or p.get("owner") or p.get("id"),
-                            "kind": "project (loopt)", "by": p.get("owner", ""),
-                            "hypothesis": p.get("hypothesis", ""),
-                            "business_case": bc, "value": business_value(bc)})
+    # NB: lopende projecten staan NIET in de backlog — die is een triage-wachtrij (dingen die
+    # jouw beslissing vragen). Zodra je een kans afrondt, verdwijnt hij hier; het werk leeft
+    # verder op het projectbord (Proces). Zo blijft de backlog schoon.
     backlog.sort(key=lambda x: -x["value"])
+    project_drafts = [p for p in proj if p.get("status") == "draft"]
 
     _now = time.time()
     return {
         "roster": roster,
         "inbox": inbox_items,
         "projects": proj,
+        "project_drafts": project_drafts,
         "backlog": backlog,
         "north_star": _north_star(dd),
         "library": lib,
@@ -981,8 +979,8 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     show_inbox = (inbox if show_all
                   else [i for i in inbox if i.get("status") == "pending"
                         and i.get("type") != "opportunity"])
-    # done = klaar, future = geparkeerd: allebei uit het actieve zicht.
-    _parked = ("done", "future")
+    # done = klaar, future = geparkeerd, draft = wacht nog op je akkoord: uit het actieve bord.
+    _parked = ("done", "future", "draft")
     show_proj = projects if show_all else [p for p in projects if p.get("status") not in _parked]
 
     # Roster (ingeklapt)
@@ -1047,6 +1045,37 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         '<th>wacht op</th><th>acties</th></tr></thead>'
         f'<tbody>{"".join(prows) or "<tr><td colspan=5 class=muted>geen open projecten</td></tr>"}</tbody></table>'
     )
+
+    # Concept-projecten: door triage aangemaakt, wachten op jouw akkoord vóór ze op het
+    # bord van de rol komen. Je ziet eerst de (AI-)formulering en keurt goed / past aan / gooit weg.
+    from nooch_village.business_case import format_business_case as _fbc
+    drafts = snap.get("project_drafts", [])
+    drows = []
+    for p in drafts:
+        pid = p.get("id")
+        acts = ('<span class="muted">—</span>' if not writable else
+                f'<form method="post" action="/action" style="display:inline">'
+                f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
+                f'<input type="hidden" name="iid" value="{_e(pid)}">'
+                f'<button class="btn ok" type="submit" name="action" value="proj_approve">'
+                f'✓ goedkeuren</button></form> '
+                f'<a class="btn" href="/project?pid={_e(pid)}">✎ aanpassen</a> '
+                f'<form method="post" action="/action" style="display:inline">'
+                f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
+                f'<input type="hidden" name="iid" value="{_e(pid)}">'
+                f'<button class="btn danger" type="submit" name="action" value="proj_discard">'
+                f'✗ weggooien</button></form>')
+        drows.append(
+            f'<tr><td><b>{_e(p.get("owner"))}</b></td>'
+            f'<td>{_e(_scope(p))}</td>'
+            f'<td>{_e(_fbc(p.get("business_case")))}</td>'
+            f'<td>{acts}</td></tr>')
+    drafts_block = ("" if not drows else
+                    '<h2>📝 Concept-projecten — wacht op jouw akkoord</h2>'
+                    '<p class="muted" style="font-size:.85rem;margin:.2rem 0">Door triage '
+                    'voorgesteld (AI-geformuleerd). Goedkeuren zet het op het bord van de rol.</p>'
+                    '<table><thead><tr><th>owner</th><th>uitkomst</th><th>business-case</th>'
+                    f'<th>jouw oordeel</th></tr></thead><tbody>{"".join(drows)}</tbody></table>')
 
     # Woordenschat (keyword-library): gesplitst in doelwit-woorden (rank: volume/kans/positie)
     # en volg-woorden (seed: 12-mnd trend). Alleen approved; geschiedenis toont alle statussen.
@@ -1286,6 +1315,7 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'{_render_digest(snap.get("digest", {}), snap.get("noochie_daily", {}))}'
         f'{_render_backlog(snap.get("backlog", []), snap.get("north_star", {}), csrf_token, [r["id"] for r in roster if not r["archived"]])}'
         f'<h2>Inbox</h2>{inbox_tbl}'
+        f'{drafts_block}'
         f'<h2>Proces (projecten)</h2>{proj_tbl}'
         f'<h2>Kennis</h2>'
         f'{_render_house_rules(snap.get("house_rules", []))}'
@@ -1305,6 +1335,8 @@ def _flash(result: dict) -> str:
     """Korte, leesbare terugkoppeling van een actie (getoond als banner na de redirect)."""
     if not result.get("ok"):
         st = result.get("status")
+        if st == "blocked_question":
+            return "⏳ " + result.get("error", "")
         if st in ("escalated", "invalid"):
             return f"✗ Governance {st}: {result.get('reason', '')}"
         return "✗ " + (result.get("error") or result.get("reason") or "actie mislukt")
@@ -1321,6 +1353,9 @@ def _flash(result: dict) -> str:
             return f"➕ Governance: poort vraagt jouw oordeel ({result.get('gov_reason', '')})." + tail
         if d == "knowledge":
             return "➕ Toegevoegd aan de kennisbank (zie Inzichten)." + tail
+        if result.get("draft"):
+            return (f"📝 Concept-project voor {result.get('owner') or 'het dorp'} klaargezet — "
+                    f"keur het goed bij 'Concept-projecten' om het op het bord te zetten." + tail)
         return f"➕ Project toegevoegd voor {result.get('owner') or 'het dorp'} (zie Proces)." + tail
     if result.get("status") == "done":
         return "✓ Spanning klaar — uit je inbox."
@@ -1397,14 +1432,25 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                     c.get("title") or item.get("subject", ""), c.get("wat", ""))
             return decide_opportunity(inbox, iid, "add", destination="governance",
                                       owner=owner, records=records)
-        # tac_project: AI formuleert de project-uitkomst (Holacracy), fail-closed → titel
+        # tac_project: AI formuleert de project-uitkomst (Holacracy), fail-closed → titel.
+        # Het project wordt een CONCEPT (draft): je ziet 'm eerst en keurt 'm goed vóór hij
+        # op het bord van de rol komt.
         item = inbox.get(iid) or {}
         c = item.get("context") or {}
         scope = formulate_project(c.get("title") or item.get("subject", ""),
                                   c.get("wat", ""), extra.get("owner", ""))
         return decide_opportunity(inbox, iid, "add", destination="project",
                                   owner=extra.get("owner", ""), scope_override=scope,
-                                  projects=projects)
+                                  project_status="draft", projects=projects)
+    if action in ("proj_approve", "proj_discard"):
+        projects = ProjectLedger(os.path.join(dd, "projects.json"))
+        if action == "proj_approve":
+            ok = projects.approve(iid)
+            return {"ok": ok, "proj_status": "queued"} if ok \
+                else {"ok": False, "error": "kon concept niet goedkeuren"}
+        ok = projects.discard(iid)
+        return {"ok": ok, "removed": iid} if ok \
+            else {"ok": False, "error": "kon concept niet weggooien"}
     if action in ("target_project", "target_drop"):
         library = Library(os.path.join(dd, "library.json"))
         projects = ProjectLedger(os.path.join(dd, "projects.json"))

@@ -46,9 +46,12 @@ class ProjectLedger:
     # ── schrijven ──────────────────────────────────────────────────────────────
 
     def create(self, owner: str, scope, trigger: str,
-               hypothesis: str = "", business_case: dict | None = None) -> str:
+               hypothesis: str = "", business_case: dict | None = None,
+               status: str = "queued") -> str:
         if trigger not in _VALID_TRIGGERS:
             raise ValueError(f"ongeldig trigger: '{trigger}'")
+        if status not in ("queued", "draft", "future"):
+            raise ValueError(f"ongeldige start-status: '{status}'")
         pid = uuid.uuid4().hex[:12]
         now = time.time()
         self._projects[pid] = {
@@ -56,7 +59,7 @@ class ProjectLedger:
             "owner":      owner,
             "scope":      scope,
             "trigger":    trigger,
-            "status":     "queued",
+            "status":     status,
             "blocked_on": None,
             "created_at": now,
             "updated_at": now,
@@ -125,6 +128,32 @@ class ProjectLedger:
         self._touch(p)
         self._save()
         return True
+
+    def approve(self, pid: str) -> bool:
+        """Keur een concept-project (draft) goed → het komt op het bord van de rol (queued).
+        Alleen drafts. Zo zie je eerst de (AI-)formulering en geef je akkoord vóór het live gaat."""
+        p = self._projects.get(pid)
+        if p is None or p.get("status") != "draft":
+            return False
+        p["status"] = "queued"
+        self._touch(p)
+        self._save()
+        return True
+
+    def discard(self, pid: str) -> bool:
+        """Gooi een concept-project (draft) weg dat je niet wilt. Alleen drafts; nooit een
+        project dat al op het bord staat. Geeft True als verwijderd."""
+        p = self._projects.get(pid)
+        if p is None or p.get("status") != "draft":
+            return False
+        del self._projects[pid]
+        self._save()
+        return True
+
+    def drafts(self) -> list[dict]:
+        """Concept-projecten die op jouw akkoord wachten (status draft)."""
+        self._maybe_reload()
+        return [p for p in self._projects.values() if p.get("status") == "draft"]
 
     def to_future(self, pid: str) -> bool:
         """Park een project als 'future' (later oppakken als er ruimte is). Niet-terminaal:

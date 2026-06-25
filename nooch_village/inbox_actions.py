@@ -197,7 +197,7 @@ def _route_kans_to_governance(records, owner: str, title: str, wat: str, waarom:
 def decide_opportunity(inbox, iid: str, decision: str, *, reason: str = "",
                        destination: str = "project", owner: str = "",
                        remember_constraint: bool = False, scope_override: str = "",
-                       info: str = "",
+                       info: str = "", project_status: str = "queued",
                        projects=None, notes=None, constraints=None, records=None) -> dict:
     """Triage van een kans (mens-poort). approve → kies bestemming: 'project' (voor `owner`,
     op het projectbord) of 'knowledge' (kennis-kaart). reject → genegeerd; bij remember_constraint
@@ -215,6 +215,13 @@ def decide_opportunity(inbox, iid: str, decision: str, *, reason: str = "",
     # 'done' en 'reject' SLUITEN het item; 'add' (project/kennis/governance) maakt een uitkomst
     # maar laat het item OPEN, zodat je meerdere uitkomsten op één kans kunt stapelen.
     if decision == "done":
+        # Veiligheid: sluit niet af terwijl er nog een vraag openstaat — dan zou je het
+        # antwoord (dat in de volgende puls komt) mislopen. Wacht tot 'm beantwoord is.
+        dlg = ctx.get("dialogue") or []
+        if any(not d.get("answered") for d in dlg):
+            return {"ok": False, "status": "blocked_question",
+                    "error": "Er staat nog een vraag open — het antwoord komt in de volgende "
+                             "puls. Wacht daarop voor je afrondt (anders mis je het antwoord)."}
         inbox.resolve(iid, "approved", reason=(reason or "afgerond"))
         return {"ok": True, "status": "done", "title": title}
     if decision in ("reject", "dismiss", "negeer"):
@@ -247,9 +254,9 @@ def decide_opportunity(inbox, iid: str, decision: str, *, reason: str = "",
                   and p.get("status") not in ("done",) for p in projects.all())
         if not dup:
             projects.create(owner, scope, "human", hypothesis=wat,
-                            business_case=ctx.get("business_case"))
+                            business_case=ctx.get("business_case"), status=project_status)
     return {"ok": True, "status": "added", "destination": "project",
-            "title": scope, "owner": owner}
+            "title": scope, "owner": owner, "draft": project_status == "draft"}
 
 
 def ask_role(inbox, iid: str, question: str, *, by_role: str = "") -> dict:

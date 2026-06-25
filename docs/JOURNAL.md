@@ -641,3 +641,19 @@ Scroll-fix: elke backlog-rij heeft id=kans-<iid> en de forms sturen een anchor m
 Nieuw: human_inbox.add_question/answer_question/pending_questions; inbox_actions.ask_role,
 answer_pending_questions, pick_governance_target, formulate_project; cockpit Holacracy-UI +
 anchor. Tests: +test_triage_dialoog.py. Volledige suite groen (478 + 489 in twee helften).
+
+## Triage opgeschoond: afgehandeld → weg, vraag beschermt afronden, project = concept
+Drie verfijningen op de Holacracy-triage:
+1. De Kansen-backlog is nu puur een triage-wachtrij: lopende projecten staan er NIET meer in
+   (die leven op het projectbord/Proces). Zodra je een kans afrondt (✓ klaar) verdwijnt hij.
+2. ✓ klaar is geblokkeerd zolang er een onbeantwoorde vraag op de kans staat — anders zou je
+   het antwoord (dat in de volgende puls komt) mislopen. Na beantwoording mag afronden wel.
+3. Een project uit triage wordt een CONCEPT (status 'draft'): het verschijnt in een nieuw blok
+   'Concept-projecten — wacht op jouw akkoord' met de AI-geformuleerde uitkomst + business-case.
+   Goedkeuren → queued (op het bord van de rol); aanpassen via de editpagina; weggooien verwijdert
+   alleen drafts. Drafts staan niet op het actieve bord.
+
+Nieuw: ProjectLedger.create(status=…) + approve/discard/drafts; decide_opportunity blokkeert
+done bij open vraag en zet project als draft; cockpit concept-blok + dispatch proj_approve/proj_discard.
+Tests: +test_klaar_geblokkeerd, +test_project_wordt_concept, +test_lopende_projecten_niet_in_backlog.
+Suite groen (478 + 492 in twee helften).

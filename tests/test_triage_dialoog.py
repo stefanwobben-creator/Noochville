@@ -88,6 +88,66 @@ def test_formulate_project_fail_closed(tmp_path):
     assert out == "Reviews zichtbaar op elke productpagina"
 
 
+def test_klaar_geblokkeerd_zolang_vraag_open(tmp_path):
+    """Veiligheid: je kunt niet afronden terwijl er nog een vraag openstaat (anders mis je
+    het antwoord uit de volgende puls)."""
+    from nooch_village.inbox_actions import decide_opportunity
+    inbox, iid = _inbox(tmp_path)
+    ask_role(inbox, iid, "Wat bedoel je?")
+    res = decide_opportunity(inbox, iid, "done")
+    assert res["ok"] is False and res["status"] == "blocked_question"
+    assert inbox.get(iid)["status"] == "pending"             # nog open
+    # antwoord komt binnen → dan mag afronden wel
+    answer_pending_questions(inbox, llm_reason=lambda p: "ANTWOORD 1: Dit en dat.")
+    res2 = decide_opportunity(inbox, iid, "done")
+    assert res2["ok"] and res2["status"] == "done"
+    assert inbox.get(iid)["status"] == "approved"            # nu weg uit de lijst
+
+
+def test_project_wordt_concept_en_keuren_we_goed(tmp_path):
+    """tac_project maakt een CONCEPT (draft) dat niet op het actieve bord staat; approve zet
+    'm op queued (op het bord), discard gooit 'm weg."""
+    from nooch_village.projects import ProjectLedger
+    from nooch_village.inbox_actions import decide_opportunity
+    inbox, iid = _inbox(tmp_path)
+    projects = ProjectLedger(str(tmp_path / "projects.json"))
+    res = decide_opportunity(inbox, iid, "add", destination="project", owner="scout",
+                             scope_override="Reviews zichtbaar op elke productpagina",
+                             project_status="draft", projects=projects)
+    assert res["ok"] and res["draft"] is True
+    d = projects.drafts()
+    assert len(d) == 1 and d[0]["status"] == "draft" and d[0]["owner"] == "scout"
+    assert projects.approve(d[0]["id"]) is True
+    assert projects.get(d[0]["id"])["status"] == "queued"    # nu op het bord
+    assert projects.drafts() == []
+    # discard werkt alleen op drafts
+    iid2 = projects.create("scout", "x", "human", status="draft")
+    assert projects.discard(iid2) is True and projects.get(iid2) is None
+
+
+def test_lopende_projecten_niet_in_backlog(tmp_path):
+    """De backlog is een triage-wachtrij: lopende projecten staan er NIET in (anders blijft
+    de lijst vollopen). Drafts ook niet."""
+    import json
+    from nooch_village import cockpit
+    data = tmp_path / "data"
+    data.mkdir()
+    for f in ("governance_records.json", "human_inbox.json", "library.json"):
+        (data / f).write_text("{}", encoding="utf-8")
+    (data / "projects.json").write_text(json.dumps({
+        "p1": {"id": "p1", "owner": "scout", "scope": "Lopend project", "status": "running",
+               "business_case": make_business_case(effect=80, effort=2, confidence=0.7)},
+        "p2": {"id": "p2", "owner": "harry", "scope": "Concept-project", "status": "draft",
+               "business_case": make_business_case(effect=80, effort=2, confidence=0.7)},
+    }), encoding="utf-8")
+    snap = cockpit.gather(str(data))
+    assert snap["backlog"] == []                             # geen projecten in de backlog
+    assert len(snap["project_drafts"]) == 1
+    page = cockpit.render_html(snap, csrf_token="t")
+    assert "Concept-projecten" in page and "Concept-project" in page
+    assert 'value="proj_approve"' in page and 'value="proj_discard"' in page
+
+
 def test_cockpit_render_anchor_en_holacracy_knoppen(tmp_path):
     """De backlog-rij heeft een anchor (scroll-fix) en de Holacracy-knoppen; een onbeantwoorde
     vraag toont 'wachten op antwoord' met de dialoog."""
