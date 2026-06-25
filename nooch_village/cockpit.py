@@ -796,10 +796,6 @@ def render_triage(x: dict | None, pos: int, total: int, roles: list,
                 + owner_opts + '<option value="__new__">➕ nieuwe rol</option>')
 
     # ── stap 0: hoe pak je dit op? ──
-    done_btn = f_open(
-        "tension_done",
-        '<button class="bigbtn go" type="submit">✓ Klaar — niks nodig, volgende</button>',
-        nxt=nextc)
     step0 = (
         '<div class="tstep on" id="t-start"><div class="tg-q">Hoe pak je dit op?</div>'
         '<div class="tg-opts">'
@@ -807,8 +803,9 @@ def render_triage(x: dict | None, pos: int, total: int, roles: list,
         '<small>werk binnen de bestaande structuur: een project of informatie</small></button>'
         '<button class="bigbtn" type="button" onclick="tg(\'t-gov\')">🏛️ Governance'
         '<small>de structuur moet veranderen: een rol erbij of uitbreiden</small></button>'
-        + done_btn +
-        '<button class="bigbtn warn" type="button" onclick="tg(\'t-visie\')">✗ Past niet binnen de visie</button>'
+        '<button class="bigbtn go" type="button" onclick="tg(\'t-oordeel\')">✓ Afronden / oordeel'
+        '<small>sluiten met een oordeel dat het dorp traint (leuk idee, nee, nu niet, ...)</small>'
+        '</button>'
         '</div></div>')
     # ── stap tactical ──
     step_tac = (
@@ -852,20 +849,41 @@ def render_triage(x: dict | None, pos: int, total: int, roles: list,
                  '<button class="bigbtn go" type="submit">🏛️ Maak voorstel</button>',
                  nxt=stay)
         + '<button class="tg-back" type="button" onclick="tg(\'t-start\')">← terug</button></div>')
-    step_visie = (
-        '<div class="tstep" id="t-visie"><div class="tg-q">Past niet binnen de visie</div>'
-        + f_open("vision_drop",
-                 '<input type="text" name="reason" class="tg-in" placeholder="waarom past dit niet?">'
-                 '<label style="display:block;font-size:.85rem;margin-bottom:.5rem">'
-                 '<input type="checkbox" name="remember" value="1"> onthoud als huis-regel</label>'
-                 '<button class="bigbtn warn" type="submit">✗ Verwijderen (volgende)</button>',
-                 nxt=nextc)
-        + '<button class="tg-back" type="button" onclick="tg(\'t-start\')">← terug</button></div>')
+    # ── oordeel-paneel: sluit de spanning mét een trainingssignaal ──
+    # Eén form, gedeelde reden + huis-regel-vinkje, meerdere verdict-knoppen. Elke knop sluit
+    # het item en stuurt terug naar het overzicht (nxt). Alleen 'niet in de visie' wordt een
+    # harde huis-regel (als het vinkje aanstaat); de rest zijn zachte trainingssignalen.
+    step_oordeel = (
+        '<div class="tstep" id="t-oordeel"><div class="tg-q">Afronden — wat is je oordeel?</div>'
+        f'<form method="post" action="/action">'
+        f'<input type="hidden" name="csrf" value="{_e(token)}">'
+        f'<input type="hidden" name="iid" value="{_e(iid)}">'
+        f'<input type="hidden" name="next" value="{_e(nextc)}">'
+        '<input type="text" name="reason" class="tg-in" placeholder="reden / opmerking (optioneel)">'
+        '<div class="tg-opts">'
+        '<button class="bigbtn go" type="submit" name="action" value="opp_praise">'
+        '👍 Leuk idee<small>geen actie, wél een positief signaal: meer van dit denken</small></button>'
+        '<button class="bigbtn" type="submit" name="action" value="tension_done">'
+        '✓ Klaar — niets nodig<small>afgehandeld, geen verdere actie</small></button>'
+        '<button class="bigbtn" type="submit" name="action" value="opp_soft_reject">'
+        '🙂 Nee, maar geen regel<small>zachte afwijzing; mag opnieuw bij andere situatie</small></button>'
+        '<button class="bigbtn" type="submit" name="action" value="opp_not_now">'
+        '⏳ Nu niet handig<small>goed idee, verkeerde timing</small></button>'
+        '<button class="bigbtn" type="submit" name="action" value="opp_elsewhere">'
+        '🌍 Buiten NoochVille<small>een andere rol/partij buiten het dorp pakt dit op</small></button>'
+        '<button class="bigbtn warn" type="submit" name="action" value="vision_drop">'
+        '✗ Past niet binnen de visie<small>de enige die een harde huis-regel wordt</small></button>'
+        '</div>'
+        '<label style="display:block;font-size:.8rem;margin:.5rem 0">'
+        '<input type="checkbox" name="remember" value="1" checked> onthoud als huis-regel '
+        '(alleen bij ‘past niet binnen de visie’)</label>'
+        '</form>'
+        '<button class="tg-back" type="button" onclick="tg(\'t-start\')">← terug</button></div>')
 
     skip = ('<div class="tg-skip"><a class="muted" href="/triage">'
             '← terug naar het overzicht</a></div>'
             '<p class="tg-hint" style="text-align:center">Toetsenbord: '
-            '<kbd>1</kbd> Tactical · <kbd>2</kbd> Governance · '
+            '<kbd>1</kbd> Tactical · <kbd>2</kbd> Governance · <kbd>3</kbd> afronden · '
             '<kbd>←</kbd> terug · <kbd>Esc</kbd> overzicht</p>')
     js = ("<script>function tg(id){document.querySelectorAll('.tstep')"
           ".forEach(function(e){e.classList.remove('on')});"
@@ -879,9 +897,10 @@ def render_triage(x: dict | None, pos: int, total: int, roles: list,
           "if(e.key==='ArrowLeft'){e.preventDefault();"
           "if(startOn()){window.location='/triage';}else{tg('t-start');}}"
           "else if(startOn()&&e.key==='1'){tg('t-tac');}"
-          "else if(startOn()&&e.key==='2'){tg('t-gov');}});})();</script>")
+          "else if(startOn()&&e.key==='2'){tg('t-gov');}"
+          "else if(startOn()&&e.key==='3'){tg('t-oordeel');}});})();</script>")
     inner = (f'{head}{_banner(msg)}{card}'
-             f'{step0}{step_tac}{step_proj}{step_give}{step_ask}{step_gov}{step_visie}'
+             f'{step0}{step_tac}{step_proj}{step_give}{step_ask}{step_gov}{step_oordeel}'
              f'{skip}</div>{js}<style>{_TRIAGE_CSS}</style>')
     return _page("Spanningen verwerken", inner)
 
@@ -1590,6 +1609,13 @@ def _flash(result: dict) -> str:
         return f"➕ Project toegevoegd voor {result.get('owner') or 'het dorp'} (zie Proces)." + tail
     if result.get("status") == "done":
         return "✓ Spanning klaar — uit je inbox."
+    _verdict_flash = {
+        "praise": "👍 Genoteerd als goed denkwerk — het dorp leert: meer van dit.",
+        "soft_reject": "🙂 Afgewezen (geen harde regel) — meegenomen als richting.",
+        "not_now": "⏳ Nu niet — genoteerd als timing-signaal.",
+        "elsewhere": "🌍 Buiten NoochVille belegd — uit je inbox, het dorp leert ervan."}
+    if result.get("status") in _verdict_flash:
+        return _verdict_flash[result["status"]]
     if result.get("status") == "rejected" and "title" in result:
         extra = " + onthouden als huis-regel" if result.get("constraint_learned") else ""
         return f"✗ Past niet binnen de visie — weg{extra} (het dorp leert van je reden)."
@@ -1637,11 +1663,19 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
     if action == "tac_info_ask":
         # Vraag parkeren; de puls beantwoordt 'm gebundeld (geen LLM hier).
         return ask_role(inbox, iid, extra.get("question", ""))
+    # Zachte oordeel-verdicts (trainingssignaal): leuk idee / zachte nee / nu niet / elders.
+    if action in ("opp_praise", "opp_soft_reject", "opp_not_now", "opp_elsewhere"):
+        from nooch_village.feedback import Feedback
+        verdict = {"opp_praise": "praise", "opp_soft_reject": "soft_reject",
+                   "opp_not_now": "not_now", "opp_elsewhere": "elsewhere"}[action]
+        return decide_opportunity(inbox, iid, verdict, reason=reason,
+                                  feedback=Feedback(os.path.join(dd, "feedback.json")))
     if action in ("tac_project", "tac_info_give", "gov_proposal",
                   "tension_done", "vision_drop"):
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
         notes = NotesStore(os.path.join(dd, "notes.json"))
         from nooch_village.constraints import Constraints
+        from nooch_village.feedback import Feedback
         constraints = Constraints(os.path.join(dd, "constraints.json"))
         records = Records(os.path.join(dd, "governance_records.json"))
         if action == "tension_done":
@@ -1649,7 +1683,8 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         if action == "vision_drop":
             return decide_opportunity(
                 inbox, iid, "reject", reason=reason,
-                remember_constraint=bool(extra.get("remember")), constraints=constraints)
+                remember_constraint=bool(extra.get("remember")), constraints=constraints,
+                feedback=Feedback(os.path.join(dd, "feedback.json")))
         if action == "tac_info_give":
             return decide_opportunity(inbox, iid, "add", destination="knowledge",
                                       info=extra.get("info", ""), notes=notes)

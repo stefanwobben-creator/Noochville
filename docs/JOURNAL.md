@@ -727,3 +727,22 @@ Tests: test_triage_dialoog bijgewerkt + overzicht-tests. Suite groen (507 + 475)
    terwijl je in een veld typt). Hints in beeld.
 
 Tests: +test_parse_review_volledige_meerregelige_suggestie, toetsenbord-assert. Suite groen (507 + 476).
+
+## "Oordeel = training"-laag: zachte verdicts voeden de rollen
+Een spanning afronden kan nu mét een oordeel dat het dorp traint, los van het feit dát hij sluit:
+- 👍 leuk idee (resolved) — positief signaal "meer van dit denken"
+- ✓ klaar, niets nodig (neutraal, geen signaal)
+- 🙂 nee, geen huis-regel (rejected) — zacht, mag opnieuw bij andere context
+- ⏳ nu niet (deferred) — timing, niet de inhoud
+- 🌍 buiten NoochVille (resolved) — hoort niet in het dorp
+- ✗ past niet binnen de visie (rejected) — de ENIGE die een harde huis-regel wordt (constraints)
+
+Kern: wat er met het item gebeurt (sluit) staat los van wat het dorp leert (signaaltype). Alleen
+vision_drop blokkeert; de rest zijn zachte, gewogen signalen die de opportunity-reflex kleuren.
+
+Nieuw: nooch_village/feedback.py (Feedback-store data/feedback.json + training_block, pos/neg
+gegroepeerd, rol-filter). decide_opportunity verwerkt de verdicts + logt feedback (vision_drop
+logt 'vision_drop' + huis-regel). Cockpit focus-kaart: nieuw 'Afronden / oordeel'-paneel (toets 3)
+met alle verdict-knoppen, gedeelde reden + huis-regel-vinkje. Inhabitant._training_signals voedt
+de reflex (rol-specifiek). Tests: +test_feedback.py, reflex-signaal-test, stub bijgewerkt.
+Suite groen (483 + 507).

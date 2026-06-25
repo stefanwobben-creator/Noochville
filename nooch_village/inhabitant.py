@@ -483,11 +483,12 @@ class Inhabitant(threading.Thread):
         if regels:
             regels_txt = ("\nVASTE HUIS-REGELS (respecteer ALTIJD, stel niets voor dat hiertegen "
                           "ingaat):\n" + "\n".join(f"- {r}" for r in regels[:12]) + "\n")
+        signalen_txt = self._training_signals()            # zachte oordelen: leer van beide kanten
         prompt = (
             f"Je bent de rol '{self.id}' in NoochVille. Purpose: {dna.purpose}\n"
             f"Accountabilities: {', '.join(dna.accountabilities) or '-'}\n"
             f"Skills: {', '.join(dna.skills) or '-'}\n"
-            f"Noordster: {ns_txt}. Actief doel: {goals}.\n{regels_txt}{eerder_txt}\n"
+            f"Noordster: {ns_txt}. Actief doel: {goals}.\n{regels_txt}{signalen_txt}{eerder_txt}\n"
             "Bedenk vanuit JOUW rol de ÉNE hoogst-renderende kans die ons dichter bij de noordster "
             "brengt: een project, een uitbreiding van je eigen rol, of een nieuwe rol.\n\n"
             "SCHRIJFREGELS (heel belangrijk):\n"
@@ -567,6 +568,22 @@ class Inhabitant(threading.Thread):
                 return [c.get("text", "") for c in json.load(f) if c.get("text")]
         except Exception:
             return []
+
+    def _training_signals(self) -> str:
+        """Zachte oordeel-signalen van de mens (leuk idee / zachte nee / nu niet / elders) als
+        prompt-blok, zodat de reflex van BEIDE kanten leert. Read-only, fail-safe → ''."""
+        data_dir = getattr(self.context, "data_dir", None)
+        if not data_dir:
+            return ""
+        path = os.path.join(data_dir, "feedback.json")
+        if not os.path.exists(path):
+            return ""
+        try:
+            from nooch_village.feedback import training_block
+            with open(path) as f:
+                return training_block(json.load(f), role=self.id)
+        except Exception:
+            return ""
 
     def _raise_opportunity_governance(self, typ: str, titel: str, wat: str, waarom: str,
                                       bc: dict) -> None:

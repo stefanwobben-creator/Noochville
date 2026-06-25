@@ -35,7 +35,22 @@ def _stub(tmp_path, *, skills=()):
     s._raise_opportunity_governance = types.MethodType(Inhabitant._raise_opportunity_governance, s)
     s._rejected_opportunities = types.MethodType(Inhabitant._rejected_opportunities, s)
     s._house_constraints = types.MethodType(Inhabitant._house_constraints, s)
+    s._training_signals = types.MethodType(Inhabitant._training_signals, s)
     return s
+
+
+def test_reflex_leest_trainingssignalen(tmp_path, monkeypatch):
+    """Zachte oordeel-signalen (leuk idee / zachte nee) komen in de prompt zodat de rol van
+    beide kanten leert."""
+    import json as _json
+    (tmp_path / "feedback.json").write_text(_json.dumps([
+        {"verdict": "praise", "title": "Reviews tonen", "reason": "", "by": "analyst"},
+        {"verdict": "soft_reject", "title": "Pop-up store", "reason": "te duur", "by": "analyst"}]))
+    s = _stub(tmp_path)
+    seen = {}
+    monkeypatch.setattr("nooch_village.llm.reason", lambda p: seen.setdefault("p", p))
+    s._opportunity_reflex()
+    assert "goed denkwerk: Reviews tonen" in seen["p"] and "Pop-up store" in seen["p"]
 
 
 def test_reflex_project_publiceert_kans_geen_autoproject(tmp_path):

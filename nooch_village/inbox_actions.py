@@ -203,7 +203,8 @@ def decide_opportunity(inbox, iid: str, decision: str, *, reason: str = "",
                        destination: str = "project", owner: str = "",
                        remember_constraint: bool = False, scope_override: str = "",
                        info: str = "", project_status: str = "queued", examples_block: str = "",
-                       projects=None, notes=None, constraints=None, records=None) -> dict:
+                       projects=None, notes=None, constraints=None, records=None,
+                       feedback=None) -> dict:
     """Triage van een kans (mens-poort). approve → kies bestemming: 'project' (voor `owner`,
     op het projectbord) of 'knowledge' (kennis-kaart). reject → genegeerd; bij remember_constraint
     wordt de reden een vaste huis-regel die de reflex voortaan respecteert (zo voedt jouw oordeel
@@ -229,11 +230,25 @@ def decide_opportunity(inbox, iid: str, decision: str, *, reason: str = "",
                              "puls. Wacht daarop voor je afrondt (anders mis je het antwoord)."}
         inbox.resolve(iid, "approved", reason=(reason or "afgerond"))
         return {"ok": True, "status": "done", "title": title}
+    # Zachte oordeel-verdicts (trainingssignaal, GEEN harde regel): leuk idee / zachte nee /
+    # nu niet / elders. Elk sluit het item op z'n eigen manier en legt een feedback-signaal vast.
+    from nooch_village.feedback import SOFT_VERDICTS
+    if decision in SOFT_VERDICTS:
+        _label, status = SOFT_VERDICTS[decision]
+        if feedback is not None:
+            feedback.add(decision, title, reason, by=ctx.get("by", ""))
+        inbox.resolve(iid, status, reason=(reason or _label))
+        return {"ok": True, "status": decision, "title": title}
+
     if decision in ("reject", "dismiss", "negeer"):
+        # Visie-afwijzing: de ENIGE harde regel. Legt (optioneel) een huis-regel vast én een
+        # feedback-signaal zodat de reflex weet dat dit type niet binnen de visie past.
         learned = False
         if remember_constraint and reason and constraints is not None:
             learned = constraints.add(reason, by="human", source=f"triage: {title[:40]}")
-        inbox.resolve(iid, "rejected", reason=(reason or "kans genegeerd"))
+        if feedback is not None:
+            feedback.add("vision_drop", title, reason, by=ctx.get("by", ""))
+        inbox.resolve(iid, "rejected", reason=(reason or "past niet binnen de visie"))
         return {"ok": True, "status": "rejected", "title": title, "constraint_learned": learned}
 
     # decision == "add": maak een uitkomst, item blijft open.
