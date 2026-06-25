@@ -553,16 +553,17 @@ def main() -> None:
         from nooch_village.util import atomic_write_json
         from nooch_village.village import BASE_DIR
         ctx = load_context(BASE_DIR)
-        window = next((int(a) for a in sys.argv[2:] if a.isdigit()), 28)
-        print(f"🛍️  Shopify-verkoop ophalen (laatste {window} dagen)…")
+        # Geen getal → hele historie (0). Getal (bijv. 7) → dat venster, handig in campagnetijd.
+        window = next((int(a) for a in sys.argv[2:] if a.isdigit()), 0)
+        print(f"🛍️  Shopify-verkoop ophalen ({'hele historie' if window <= 0 else f'laatste {window} dagen'})…")
         res = ShopifySalesSkill().run({"window_days": window}, ctx)
         if not res.get("ok"):
             print(f"   {res.get('error', 'onbekend')}", file=sys.stderr)
             sys.exit(1)
         atomic_write_json(os.path.join(ctx.data_dir, "shopify_metrics.json"), res)
         print(f"✅ {res['pairs_sold']} paar verkocht · {res['orders']} orders · "
-              f"{res['revenue']} {res['currency']} omzet (AOV {res['aov']}). "
-              f"Dashboard staat in de cockpit.")
+              f"{res['revenue']} {res['currency']} omzet (AOV {res['aov']}"
+              f", gem. {res.get('avg_pairs_month', 0)} paar/maand). Dashboard staat in de cockpit.")
 
     elif mode == "review_roles":
         # Facilitator-project: review alle dorp-rollen tegen de Holacracy-regels + referentiebank,

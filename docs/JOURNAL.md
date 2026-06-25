@@ -835,3 +835,13 @@ Conversie-indicator op het Website Watcher-dashboard: aggregate_orders levert nu
 subvenster (orders_7d/pairs_7d); de cockpit leest het laatste visitors_7d uit pulse_history.jsonl
 (Plausible) en toont 'bezoekers (7d)' + 'conversie (7d)' = orders_7d ÷ bezoekers_7d. Dit is de eerste
 stap van de verkeer-naar-verkoop-lus. Tests uitgebreid. Suite groen (497 + 509).
+
+## Shopify-dashboard: hele historie + gemiddelden per maand
+Op verzoek (winkel nu dicht → hele historie + gemiddelden interessanter dan een 7d-venster):
+- venster instelbaar; default = HELE HISTORIE (window 0 → geen datumfilter in fetch_orders).
+  CLI `village shopify` = hele historie; `village shopify 7` = venster (campagnetijd).
+- aggregate_orders berekent first_order_date, span_days en gemiddelden per maand
+  (avg_pairs_month/avg_orders_month/avg_revenue_month) over de werkelijke periode.
+- dashboard toont periode-label ('hele historie · sinds <datum>' of 'laatste N dagen'),
+  plus tegels 'gem. paren/maand' + 'gem. omzet/maand'. 7d-conversie blijft voor campagnetijd.
+Tests uitgebreid. Suite groen (497 + 511).

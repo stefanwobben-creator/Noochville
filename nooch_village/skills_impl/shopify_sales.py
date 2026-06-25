@@ -83,13 +83,15 @@ def _normalize(node: dict) -> dict:
             "currency": money.get("currencyCode") or "", "total": total, "line_items": items}
 
 
-def fetch_orders(store: str, token: str, since_iso: str, *, _post=None, max_pages: int = 10) -> list[dict]:
-    """Haal (genormaliseerde) orders op vanaf `since_iso`, met paginatie. `_post` injecteerbaar."""
+def fetch_orders(store: str, token: str, since_iso: str | None, *, _post=None, max_pages: int = 20) -> list[dict]:
+    """Haal (genormaliseerde) orders op, met paginatie. `since_iso=None` → hele historie (geen
+    datumfilter). `_post` injecteerbaar voor tests."""
     post = _post or (lambda q, v: _post_graphql(store, token, q, v))
     out: list[dict] = []
     cursor = None
+    q = f"created_at:>={since_iso}" if since_iso else None
     for _ in range(max_pages):
-        data = post(_ORDERS_QUERY, {"cursor": cursor, "q": f"created_at:>={since_iso}"})
+        data = post(_ORDERS_QUERY, {"cursor": cursor, "q": q})
         conn = ((data or {}).get("data") or {}).get("orders") or {}
         out.extend(_normalize(n) for n in conn.get("nodes", []))
         page = conn.get("pageInfo") or {}
@@ -99,15 +101,19 @@ def fetch_orders(store: str, token: str, since_iso: str, *, _post=None, max_page
     return out
 
 
-def _within_days(created_at: str, now: datetime, days: int) -> bool:
-    """True als de order-datum binnen `days` van nu valt. Fail-safe → True (tel mee bij twijfel)."""
+def _parse_dt(created_at: str, now: datetime):
+    """Parse Shopify-ISO naar datetime (UTC). None bij onleesbaar."""
     try:
         dt = datetime.fromisoformat((created_at or "").replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return (now - dt).total_seconds() <= days * 86400
+        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
     except Exception:
-        return True
+        return None
+
+
+def _within_days(created_at: str, now: datetime, days: int) -> bool:
+    """True als de order-datum binnen `days` van nu valt. Fail-safe → True (tel mee bij twijfel)."""
+    dt = _parse_dt(created_at, now)
+    return True if dt is None else (now - dt).total_seconds() <= days * 86400
 
 
 def aggregate_orders(orders: list[dict], window_days: int, *, now=None) -> dict:
@@ -126,6 +132,13 @@ def aggregate_orders(orders: list[dict], window_days: int, *, now=None) -> dict:
             prod[li["title"]] += li["quantity"]
     recent = [o for o in orders if _within_days(o.get("created_at", ""), now, 7)]
     pairs_7d = sum(li["quantity"] for o in recent for li in o.get("line_items", []))
+    # Gemiddelden per maand over de werkelijke periode (eerste order → nu) — vooral nuttig bij
+    # 'hele historie': zo zie je een rustig gemiddelde i.p.v. alleen een venster.
+    dates = [d for o in orders if (d := _parse_dt(o.get("created_at", ""), now))]
+    first = min(dates) if dates else None
+    span_days = max(1, (now - first).days) if first else 0
+    fmonth = (span_days / 30) if span_days else 0
+    per_month = lambda x: round(x / fmonth, 1) if fmonth else 0.0
     return {
         "generated_at": now.timestamp(),
         "window_days": window_days,
@@ -138,6 +151,11 @@ def aggregate_orders(orders: list[dict], window_days: int, *, now=None) -> dict:
         "top_products": prod.most_common(8),
         "orders_7d": len(recent),
         "pairs_7d": pairs_7d,
+        "first_order_date": first.date().isoformat() if first else None,
+        "span_days": span_days,
+        "avg_pairs_month": per_month(pairs),
+        "avg_orders_month": per_month(n),
+        "avg_revenue_month": per_month(revenue),
     }
 
 
@@ -169,8 +187,9 @@ class ShopifySalesSkill(Skill):
                 return {"error": f"Shopify-token ophalen mislukt: {e} -> skill faalt closed"}
             if not token:
                 return {"error": "Shopify gaf geen access_token terug -> skill faalt closed"}
-        window = int(payload.get("window_days", 28))
-        since = (datetime.now(timezone.utc) - timedelta(days=window)).date().isoformat()
+        window = int(payload.get("window_days", 0))      # 0 = hele historie (geen datumfilter)
+        since = None if window <= 0 else (
+            datetime.now(timezone.utc) - timedelta(days=window)).date().isoformat()
         try:
             orders = fetch_orders(store, token, since, _post=payload.get("_post"))
         except Exception as e:

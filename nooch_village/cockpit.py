@@ -1372,12 +1372,20 @@ def _render_watcher_dashboard(shop: dict, visitors_7d=None) -> str:
                 '<p class="muted">Nog geen Shopify-data. Draai <code>village shopify</code> '
                 '(vereist SHOPIFY_STORE + Client ID/secret in .env) of <code>./refresh.sh</code>.</p>')
     cur = _e(shop.get("currency", ""))
+    wd = shop.get("window_days", 0)
+    periode = "hele historie" if not wd else f"laatste {wd} dagen"
     base = [
         ("👟", _fmt_int(shop.get("pairs_sold", 0)), "paren verkocht"),
         ("🧾", _fmt_int(shop.get("orders", 0)), "orders"),
         ("💶", f'{_fmt_int(round(shop.get("revenue", 0)))} {cur}'.strip(), "omzet"),
         ("📦", f'{shop.get("aov", 0)} {cur}'.strip(), "gem. orderwaarde"),
     ]
+    # Gemiddelden per maand — vooral nuttig bij 'hele historie' (rustig beeld i.p.v. een venster).
+    if shop.get("avg_pairs_month"):
+        base.append(("📅", _fmt_int(round(shop["avg_pairs_month"])), "gem. paren/maand"))
+        if shop.get("avg_revenue_month"):
+            base.append(("📈", f'{_fmt_int(round(shop["avg_revenue_month"]))} {cur}'.strip(),
+                         "gem. omzet/maand"))
     # Conversie: orders (laatste 7 dagen) ÷ bezoekers (laatste 7 dagen, Plausible).
     if visitors_7d:
         base.append(("👣", _fmt_int(visitors_7d), "bezoekers (7d)"))
@@ -1398,7 +1406,9 @@ def _render_watcher_dashboard(shop: dict, visitors_7d=None) -> str:
     prod = _pairs(shop.get("top_products", []), "Topproducten (paren)")
     cols = (f'<div style="display:flex;gap:1.4rem;flex-wrap:wrap;font-size:.85rem">{land}{prod}</div>'
             if (land or prod) else "")
-    return (f'<h2>📊 Website Watcher — verkoop (laatste {shop.get("window_days", 28)} dagen)</h2>'
+    sinds = (f' <span class="muted">· sinds {_e(shop.get("first_order_date"))}</span>'
+             if not wd and shop.get("first_order_date") else "")
+    return (f'<h2>📊 Website Watcher — verkoop ({periode}){sinds}</h2>'
             f'<div class="kpis">{tiles}</div>{cols}')
 
 

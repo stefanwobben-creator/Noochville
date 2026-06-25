@@ -76,6 +76,30 @@ def test_aggregate_7d_subvenster():
     assert agg["orders_7d"] == 1 and agg["pairs_7d"] == 1
 
 
+def test_aggregate_gemiddelden_per_maand():
+    now = datetime(2026, 6, 25, tzinfo=timezone.utc)
+    # eerste order 60 dagen geleden → span ~2 maanden; 10 paar → ~5/maand
+    orders = [
+        {"created_at": "2026-04-26T00:00:00Z", "country": "NL", "currency": "EUR",
+         "total": 300.0, "line_items": [{"title": "A", "quantity": 5}]},
+        {"created_at": "2026-06-20T00:00:00Z", "country": "NL", "currency": "EUR",
+         "total": 300.0, "line_items": [{"title": "A", "quantity": 5}]},
+    ]
+    agg = aggregate_orders(orders, 0, now=now)
+    assert agg["pairs_sold"] == 10 and agg["first_order_date"] == "2026-04-26"
+    assert agg["span_days"] >= 59
+    assert 4.0 <= agg["avg_pairs_month"] <= 6.0          # ~5 paar/maand
+
+
+def test_fetch_orders_hele_historie_geen_filter():
+    seen = {}
+    def fake_post(query, variables):
+        seen["q"] = variables["q"]
+        return _gql_page([_node("NL", 50, [("A", 1)])], False)
+    fetch_orders("x.myshopify.com", "tok", None, _post=fake_post)
+    assert seen["q"] is None                              # geen datumfilter bij hele historie
+
+
 def test_get_access_token_geinjecteerd():
     tok = get_access_token("x.myshopify.com", "cid", "sec",
                            _post=lambda s, i, c: "shpat_runtime_123")
@@ -117,7 +141,14 @@ def test_cockpit_dashboard_render():
             "by_country": [("NL", 20), ("DE", 10)], "top_products": [("Sneaker Groen", 25)]}
     page = cockpit._render_watcher_dashboard(shop, visitors_7d=400)
     assert "Website Watcher" in page and "42" in page and "paren verkocht" in page
+    assert "laatste 28 dagen" in page
     assert "Sneaker Groen" in page and "NL" in page
     assert "bezoekers (7d)" in page and "conversie (7d)" in page and "2.0%" in page  # 8/400
+    # hele historie → gemiddelden + 'sinds'
+    allt = {"ok": True, "window_days": 0, "pairs_sold": 120, "orders": 80, "revenue": 14400,
+            "currency": "EUR", "aov": 180.0, "by_country": [], "top_products": [],
+            "avg_pairs_month": 20.0, "avg_revenue_month": 2400.0, "first_order_date": "2026-01-01"}
+    p2 = cockpit._render_watcher_dashboard(allt)
+    assert "hele historie" in p2 and "gem. paren/maand" in p2 and "sinds 2026-01-01" in p2
     # leeg → hint, geen crash
     assert "Nog geen Shopify-data" in cockpit._render_watcher_dashboard({})
