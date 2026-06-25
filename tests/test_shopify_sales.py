@@ -38,11 +38,44 @@ def _gql_page(nodes, has_next, cursor=None):
         "nodes": nodes}}}
 
 
-def _node(country, amount, items):
+def _node(country, amount, items, landing=None, sourcetype=None, term=None):
+    journey = None
+    if landing or sourcetype or term:
+        journey = {"firstVisit": {"landingPage": landing, "sourceType": sourcetype,
+                                  "source": None, "referrerUrl": None,
+                                  "utmParameters": {"term": term} if term else None}}
     return {"createdAt": "2026-06-01",
             "currentTotalPriceSet": {"shopMoney": {"amount": str(amount), "currencyCode": "EUR"}},
             "shippingAddress": {"countryCodeV2": country},
-            "lineItems": {"nodes": [{"title": t, "quantity": q} for t, q in items]}}
+            "lineItems": {"nodes": [{"title": t, "quantity": q} for t, q in items]},
+            "customerJourneySummary": journey}
+
+
+def test_attributie_landingspagina_kanaal_term():
+    from nooch_village.skills_impl.shopify_sales import _normalize
+    o = _normalize(_node("NL", 90, [("Groen", 2)],
+                         landing="https://nooch.earth/blogs/vegan/sneakers",
+                         sourcetype="SEARCH", term="vegan sneakers"))
+    assert o["landing_page"] == "/blogs/vegan/sneakers"
+    assert o["channel"] == "SEARCH" and o["utm_term"] == "vegan sneakers"
+    agg = aggregate_orders([o], 0)
+    assert agg["top_landing_pages"][0] == ("/blogs/vegan/sneakers", 2)
+    assert dict(agg["channels"])["SEARCH"] == 1
+    assert agg["top_keywords"][0] == ("vegan sneakers", 2)
+
+
+def test_normalize_zonder_journey_failsafe():
+    from nooch_village.skills_impl.shopify_sales import _normalize
+    o = _normalize(_node("NL", 50, [("A", 1)]))   # geen journey
+    assert o["landing_page"] == "" and o["channel"] == "onbekend" and o["utm_term"] == ""
+
+
+def test_fetch_orders_surfacet_graphql_fout():
+    import pytest
+    def bad_post(q, v):
+        return {"errors": [{"message": "Field 'customerJourneySummary' doesn't exist"}]}
+    with pytest.raises(RuntimeError):
+        fetch_orders("x.myshopify.com", "tok", None, _post=bad_post)
 
 
 def test_fetch_orders_pagineert():
@@ -147,8 +180,11 @@ def test_cockpit_dashboard_render():
     # hele historie → gemiddelden + 'sinds'
     allt = {"ok": True, "window_days": 0, "pairs_sold": 120, "orders": 80, "revenue": 14400,
             "currency": "EUR", "aov": 180.0, "by_country": [], "top_products": [],
-            "avg_pairs_month": 20.0, "avg_revenue_month": 2400.0, "first_order_date": "2026-01-01"}
+            "avg_pairs_month": 20.0, "avg_revenue_month": 2400.0, "first_order_date": "2026-01-01",
+            "top_landing_pages": [("/blogs/vegan/sneakers", 30)], "channels": [("SEARCH", 50)],
+            "top_keywords": [("vegan sneakers", 12)]}
     p2 = cockpit._render_watcher_dashboard(allt)
     assert "hele historie" in p2 and "gem. paren/maand" in p2 and "sinds 2026-01-01" in p2
+    assert "/blogs/vegan/sneakers" in p2 and "Kanaal" in p2 and "SEARCH" in p2
     # leeg → hint, geen crash
     assert "Nog geen Shopify-data" in cockpit._render_watcher_dashboard({})

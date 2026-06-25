@@ -845,3 +845,12 @@ Op verzoek (winkel nu dicht → hele historie + gemiddelden interessanter dan ee
 - dashboard toont periode-label ('hele historie · sinds <datum>' of 'laatste N dagen'),
   plus tegels 'gem. paren/maand' + 'gem. omzet/maand'. 7d-conversie blijft voor campagnetijd.
 Tests uitgebreid. Suite groen (497 + 511).
+
+## Attributie-lus: welke landingspagina/kanaal leidde tot een order
+De verkeer-naar-verkoop-lus. De Shopify-skill leest nu per order de customer journey (eerste
+bezoek): landingspagina, kanaal (sourceType, bijv. SEARCH/DIRECT/SOCIAL) en UTM-term. aggregate_orders
+levert top_landing_pages (→ paren), channels (→ orders) en top_keywords (UTM, → paren). Dashboard
+toont deze naast land/producten. Eerlijke grens: organische zoekterm is bij Google meestal
+'not provided', dus attributie is op landingspagina + kanaal (UTM-term vooral bij campagnes).
+fetch_orders surfacet nu ook GraphQL-fouten (geen stille 0). Geen PII. Tests uitgebreid.
+Suite groen (497 + 514).

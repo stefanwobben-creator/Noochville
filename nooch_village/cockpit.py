@@ -1404,8 +1404,11 @@ def _render_watcher_dashboard(shop: dict, visitors_7d=None) -> str:
         return f'<div><b>{lbl}</b><ul style="margin:.2rem 0">{lis}</ul></div>'
     land = _pairs(shop.get("by_country", []), "Orders per land")
     prod = _pairs(shop.get("top_products", []), "Topproducten (paren)")
-    cols = (f'<div style="display:flex;gap:1.4rem;flex-wrap:wrap;font-size:.85rem">{land}{prod}</div>'
-            if (land or prod) else "")
+    pages = _pairs(shop.get("top_landing_pages", []), "Via landingspagina → paren")
+    chan = _pairs(shop.get("channels", []), "Kanaal → orders")
+    kw = _pairs(shop.get("top_keywords", []), "UTM-term (campagne) → paren")
+    cols = (f'<div style="display:flex;gap:1.4rem;flex-wrap:wrap;font-size:.85rem">'
+            f'{land}{prod}{chan}{pages}{kw}</div>' if (land or prod or pages or chan) else "")
     sinds = (f' <span class="muted">· sinds {_e(shop.get("first_order_date"))}</span>'
              if not wd and shop.get("first_order_date") else "")
     return (f'<h2>📊 Website Watcher — verkoop ({periode}){sinds}</h2>'

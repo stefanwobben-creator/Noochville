@@ -29,6 +29,15 @@ query($cursor: String, $q: String) {
       currentTotalPriceSet { shopMoney { amount currencyCode } }
       shippingAddress { countryCodeV2 }
       lineItems(first: 100) { nodes { title quantity } }
+      customerJourneySummary {
+        firstVisit {
+          landingPage
+          source
+          sourceType
+          referrerUrl
+          utmParameters { source medium campaign term }
+        }
+      }
     }
   }
 }
@@ -69,8 +78,20 @@ def get_access_token(store: str, client_id: str, client_secret: str, *, _post=No
         raise RuntimeError(f"HTTP {e.code} van Shopify: {detail or e.reason}") from None
 
 
+def _path_of(url: str) -> str:
+    """Maak een landingspagina-URL leesbaar: alleen het pad (bijv. /blogs/veganisme/...)."""
+    if not url:
+        return ""
+    try:
+        p = urllib.parse.urlparse(url)
+        return (p.path or "/") if p.scheme else url
+    except Exception:
+        return url
+
+
 def _normalize(node: dict) -> dict:
-    """GraphQL-order → vlak dict {created_at, country, currency, total, line_items[]}."""
+    """GraphQL-order → vlak dict met verkoop- én attributievelden (eerste bezoek: landingspagina,
+    kanaal, UTM-term). Geen PII."""
     money = ((node.get("currentTotalPriceSet") or {}).get("shopMoney") or {})
     addr = node.get("shippingAddress") or {}
     items = [{"title": (n.get("title") or "?"), "quantity": int(n.get("quantity") or 0)}
@@ -79,8 +100,13 @@ def _normalize(node: dict) -> dict:
         total = float(money.get("amount") or 0)
     except (TypeError, ValueError):
         total = 0.0
+    fv = ((node.get("customerJourneySummary") or {}).get("firstVisit") or {})
+    utm = fv.get("utmParameters") or {}
     return {"created_at": node.get("createdAt", ""), "country": addr.get("countryCodeV2") or "?",
-            "currency": money.get("currencyCode") or "", "total": total, "line_items": items}
+            "currency": money.get("currencyCode") or "", "total": total, "line_items": items,
+            "landing_page": _path_of(fv.get("landingPage") or ""),
+            "channel": (fv.get("sourceType") or fv.get("source") or "onbekend"),
+            "utm_term": (utm.get("term") or "")}
 
 
 def fetch_orders(store: str, token: str, since_iso: str | None, *, _post=None, max_pages: int = 20) -> list[dict]:
@@ -92,6 +118,8 @@ def fetch_orders(store: str, token: str, since_iso: str | None, *, _post=None, m
     q = f"created_at:>={since_iso}" if since_iso else None
     for _ in range(max_pages):
         data = post(_ORDERS_QUERY, {"cursor": cursor, "q": q})
+        if (data or {}).get("errors"):
+            raise RuntimeError(f"Shopify GraphQL-fout: {str(data['errors'])[:300]}")
         conn = ((data or {}).get("data") or {}).get("orders") or {}
         out.extend(_normalize(n) for n in conn.get("nodes", []))
         page = conn.get("pageInfo") or {}
@@ -127,9 +155,18 @@ def aggregate_orders(orders: list[dict], window_days: int, *, now=None) -> dict:
     currency = next((o["currency"] for o in orders if o.get("currency")), "")
     by_country = Counter(o.get("country", "?") for o in orders)
     prod = Counter()
+    landing = Counter()      # landingspagina (eerste bezoek) → paren
+    channels = Counter()     # kanaal van eerste bezoek → orders
+    keywords = Counter()     # UTM-term (campagnes) → paren
     for o in orders:
+        units = sum(li["quantity"] for li in o.get("line_items", []))
         for li in o.get("line_items", []):
             prod[li["title"]] += li["quantity"]
+        if o.get("landing_page"):
+            landing[o["landing_page"]] += units
+        channels[o.get("channel") or "onbekend"] += 1
+        if o.get("utm_term"):
+            keywords[o["utm_term"]] += units
     recent = [o for o in orders if _within_days(o.get("created_at", ""), now, 7)]
     pairs_7d = sum(li["quantity"] for o in recent for li in o.get("line_items", []))
     # Gemiddelden per maand over de werkelijke periode (eerste order → nu) — vooral nuttig bij
@@ -156,6 +193,9 @@ def aggregate_orders(orders: list[dict], window_days: int, *, now=None) -> dict:
         "avg_pairs_month": per_month(pairs),
         "avg_orders_month": per_month(n),
         "avg_revenue_month": per_month(revenue),
+        "top_landing_pages": landing.most_common(8),
+        "channels": channels.most_common(8),
+        "top_keywords": keywords.most_common(8),
     }
 
 
