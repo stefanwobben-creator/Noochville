@@ -197,6 +197,13 @@ def gather(data_dir: str | None = None) -> dict:
         except Exception:
             _surges = {}
 
+    # Per (seed-)woord het sterkste duiding-kaartje van Harry (academische grounding op de term).
+    _duiding: dict = {}
+    for _n in notes.all():
+        _wn = (_n.word or "").lower()
+        if _wn and (_wn not in _duiding or _n.grounding_count > _duiding[_wn]["gc"]):
+            _duiding[_wn] = {"id": _n.id, "claim": _n.claim, "gc": _n.grounding_count}
+
     # Woordenschat: woord + status (approved/forbidden/avoid/escalated), beslist eerst.
     _ws_order = {"approved": 0, "escalated": 1, "avoid": 2, "forbidden": 3}
 
@@ -214,6 +221,7 @@ def gather(data_dir: str | None = None) -> dict:
                 "recent_surge": ev.get("recent_surge"),
                 "recent_move": ev.get("recent_move"),
                 "surge_explanation": surge.get("explanation"),
+                "duiding": _duiding.get(w.lower()),
                 "gsc_seen": ev.get("gsc_seen"), "gsc_position": ev.get("gsc_position"),
                 "gsc_clicks": ev.get("gsc_clicks")}
     lib = sorted((_lib_row(w, e) for w, e in (library.all() or {}).items()),
@@ -955,12 +963,16 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
             return ""
         label = "▲ recent stijgend" if move == "stijgend" else "▼ recent dalend"
         color = "var(--coral)" if move == "stijgend" else "var(--green-dark)"
+        out = f' <b style="color:{color}">{label}</b>'
         expl = x.get("surge_explanation") or {}
-        tip = ""
-        if expl.get("title"):
-            tip = (f' <span class="muted">— mogelijk: '
-                   f'<a href="{_e(expl.get("link", ""))}">{_e(expl["title"][:70])}</a></span>')
-        return f' <b style="color:{color}">{label}</b>{tip}'
+        if expl.get("title"):                              # scout: nieuws-aanleiding
+            out += (f' <span class="muted">· 📰 <a href="{_e(expl.get("link", ""))}">'
+                    f'{_e(expl["title"][:55])}</a></span>')
+        d = x.get("duiding")                               # Harry: academische duiding (kaartje)
+        if d:
+            out += (f' <span class="muted">· 🔬 <a href="/card?id={_e(d["id"])}">'
+                    f'{_e((d.get("claim") or "duiding")[:45])}</a></span>')
+        return out
 
     def _trend_cell(x):
         st = x.get("trend_state")

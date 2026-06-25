@@ -509,3 +509,16 @@ teruggezet naar inbox-kansen + projecten geparkeerd (future). Backlog telt gepar
 projecten niet meer mee (geen dubbeling).
 
 Tests: 942 → 946 (test_opportunity_gate + bijgewerkte reflex-test).
+
+---
+
+## 2026-06-25 (vervolg 11) — Seed-opleving linkt naar de duiding
+
+**[feat]** Bij een seed-opleving (▲/▼) toont de cockpit nu de duiding inline: 🔬 een link naar Harry's
+academische inzicht-kaartje voor die term (per woord het sterkste, op grounding_count) en, indien de
+scout nieuws vond, 📰 de nieuws-aanleiding. Zo kom je van het signaal direct bij de verklaring.
+Geconstateerd: Harry's duiding bestond al (3 kaartjes met word=seed) maar was niet gelinkt; de
+scout-nieuwsverklaring is nu nog leeg omdat de footwear-context-nieuwszoek niets vindt voor brede
+seed-termen (tuning-follow-up: bredere nieuws-query voor seed-surges).
+
+Tests: 946 → 947.
