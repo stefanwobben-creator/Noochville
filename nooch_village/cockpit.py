@@ -33,6 +33,7 @@ from nooch_village.inbox_actions import (
     decide_competitor_candidate, decide_link_target, set_word_function, decide_opportunity,
     decide_target, ask_role, pick_governance_target, formulate_project)
 from nooch_village.competitor_brands import CompetitorBrands
+from nooch_village.news_distill import NewsProposals as _NewsProposals
 from nooch_village.link_targets import LinkTargets
 
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -330,6 +331,7 @@ def gather(data_dir: str | None = None) -> dict:
         "competitor_candidates": brands.candidates(),
         "competitor_confirmed": brands.confirmed(),
         "competitor_news": comp_news,
+        "news_proposals": _NewsProposals(os.path.join(dd, "news_proposals.json")).pending(),
         "house_rules": house_rules,
         "agenda_open": agenda_open,
         "noochie_daily": noochie_daily,
@@ -1910,11 +1912,44 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     monitor_tbl = (
         '<table><thead><tr><th>concurrent</th><th>laatste nieuwsfeit</th></tr></thead>'
         f'<tbody>{mrows or "<tr><td colspan=2 class=muted>geen concurrenten gemonitord</td></tr>"}</tbody></table>')
+    # Scout destilleert het nieuws → voorstellen (kaart/seed/doelwit/concurrent), mens-gated.
+    props = snap.get("news_proposals", [])
+    _kind_lbl = {"kaart": "📇 kenniskaart", "seed": "🌱 seed", "doelwit": "🎯 doelwit",
+                 "concurrent": "👟 concurrent"}
+
+    def _prop_btn(pid, decision, label, cls):
+        return (f'<form method="post" action="/action" style="display:inline">'
+                f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
+                f'<input type="hidden" name="iid" value="{_e(pid)}">'
+                f'<input type="hidden" name="decision" value="{decision}">'
+                f'<button class="btn {cls}" type="submit" name="action" value="news_prop">'
+                f'{label}</button></form>')
+    prows = "".join(
+        f'<tr><td>{_e(_kind_lbl.get(p["kind"], p["kind"]))}</td>'
+        f'<td><b>{_e(p["content"])}</b>'
+        f'{(" — <span class=muted>" + _e(p["rationale"]) + "</span>") if p.get("rationale") else ""}'
+        f'{(" <br><span class=muted>uit: <a href=" + chr(34) + _e(p.get("link","")) + chr(34) + " target=_blank rel=noopener>" + _e((p.get("title") or p.get("brand") or "")[:70]) + "</a></span>") if p.get("link") else ""}</td>'
+        f'<td>' + ((_prop_btn(p["id"], "confirm", "✓ overnemen", "ok") + " "
+                    + _prop_btn(p["id"], "reject", "✗ negeer", "danger"))
+                   if writable else '<span class="muted">—</span>') + '</td></tr>'
+        for p in props)
+    scan_btn = (f'<form method="post" action="/action" style="margin:.3rem 0">'
+                f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
+                f'<button class="btn" type="submit" name="action" value="news_scan">'
+                f'🔎 Scout: lees het nieuws &amp; destilleer</button></form>') if writable else ''
+    distill_block = (
+        f'<details{" open" if props else ""}><summary>🧪 Scout uit het nieuws — '
+        f'voorstellen ({len(props)})</summary>{scan_btn}'
+        '<table><thead><tr><th>type</th><th>voorstel</th><th>jouw oordeel</th></tr></thead>'
+        f'<tbody>{prows or "<tr><td colspan=3 class=muted>nog geen voorstellen — klik hierboven</td></tr>"}'
+        '</tbody></table></details>')
+
     comp_block = (f'<h2>Concurrenten</h2>'
                   f'<details open><summary>🔮 Nieuw gespot — wacht op jouw oordeel ({len(cands)})</summary>'
                   f'{cand_tbl}</details>'
                   f'<details open><summary>📡 Gemonitord — alle concurrenten ({len(monitored)})</summary>'
-                  f'{monitor_tbl}</details>') if (cands or monitored) else ''
+                  f'{monitor_tbl}</details>'
+                  f'{distill_block}') if (cands or monitored or props or writable) else ''
 
     # Linkbuilding: gidsen/lijstjes waar Nooch in vermeld wil worden (hoog = noemt
     # concurrenten maar niet Nooch → sterkste pitch).
@@ -2024,6 +2059,14 @@ def _flash(result: dict) -> str:
                        "van de agenda gehaald — geen governance nodig."}
     if result.get("rov") in _rov:
         return _rov[result["rov"]]
+    if "news_scan" in result:
+        s = result["news_scan"]
+        return f"🔎 Scout las {s.get('scanned', 0)} koppen → {s.get('proposed', 0)} nieuw voorstel(len)."
+    if result.get("news"):
+        _nl = {"rejected": "✗ Voorstel genegeerd.", "kaart": "📇 Als kenniskaart opgeslagen.",
+               "seed": "🌱 Als seed in de bibliotheek gezet.", "doelwit": "🎯 Als doelwit in de "
+               "bibliotheek gezet.", "concurrent": "👟 Toegevoegd aan de gevolgde merken."}
+        return _nl.get(result["news"], "✓ Verwerkt.")
     if result.get("rov") == "ended":
         return (f"🏛️ Roloverleg afgerond — {result.get('adopted', 0)} doorgevoerd, "
                 f"{result.get('escalated', 0)} bleef staan.")
@@ -2293,6 +2336,45 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         brands = CompetitorBrands(os.path.join(dd, "competitor_brands.json"))
         return decide_competitor_candidate(brands, extra.get("word", ""),
                                            extra.get("decision", ""))
+    if action == "news_scan":
+        # Scout leest de gemonitorde koppen en destilleert ze tot voorstellen (mens-gated).
+        from nooch_village.news_distill import NewsProposals, distill_news
+        from nooch_village.competitor_news_store import CompetitorNews
+        news = CompetitorNews(os.path.join(dd, "competitor_news.json")).all()
+        brands = CompetitorBrands(os.path.join(dd, "competitor_brands.json"))
+        known = _monitored_brands(_config_competitor_brands(dd), brands.confirmed())
+        props = NewsProposals(os.path.join(dd, "news_proposals.json"))
+        res = distill_news(news, props, known_brands=known)
+        return {"ok": True, "news_scan": res}
+    if action == "news_prop":
+        from nooch_village.news_distill import NewsProposals
+        props = NewsProposals(os.path.join(dd, "news_proposals.json"))
+        p = props.get(iid)
+        if p is None:
+            return {"ok": False, "error": "voorstel niet gevonden"}
+        if extra.get("decision") == "reject":
+            props.set_status(iid, "rejected")
+            return {"ok": True, "news": "rejected"}
+        kind, content = p["kind"], p["content"]
+        rat, link, brand = p.get("rationale", ""), p.get("link", ""), p.get("brand", "")
+        if kind == "kaart":
+            from nooch_village.insight import Insight
+            notes = NotesStore(os.path.join(dd, "notes.json"))
+            nid = f"news_{iid}"
+            if notes.get(nid) is None:
+                notes.add(Insight(id=nid, claim=content,
+                                  source=(link or brand or "concurrent-nieuws"),
+                                  tags=["scout", "nieuws"] + ([brand] if brand else [])))
+        elif kind in ("seed", "doelwit"):
+            library = Library(os.path.join(dd, "library.json"))
+            library.curate(content, "approved", rationale=rat, by="Scout (nieuws, mens-bevestigd)")
+            library.set_function(content, "volg" if kind == "seed" else "doelwit")
+        elif kind == "concurrent":
+            brands = CompetitorBrands(os.path.join(dd, "competitor_brands.json"))
+            brands.add_candidate(content, article=p.get("title", ""), link=link)
+            brands.confirm(content)
+        props.set_status(iid, "confirmed")
+        return {"ok": True, "news": kind}
     if action == "link_decide":
         targets = LinkTargets(os.path.join(dd, "linkbuilding_targets.json"))
         return decide_link_target(targets, extra.get("word", ""), extra.get("decision", ""))

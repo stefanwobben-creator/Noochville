@@ -977,3 +977,13 @@ automatisch voor als add_accountability voor de eigenaar (reason bevat 'structur
 rijpheidspoort vervuld), met dedup via de 'formalized'-vlag. cockpit.gather roept dit aan, zodat
 rijpe experimenten vanzelf op de roloverleg-agenda verschijnen.
 Suite groen (546 + 495).
+
+## Scout destilleert concurrent-nieuws → mens-gated voorstellen (open punt #3)
+nooch_village/news_distill.py: NewsProposals-store + distill_article (LLM, fail-closed) + distill_news.
+De Scout leest de gemonitorde koppen (competitor_news) en destilleert elk artikel tot ÉÉN voorstel:
+kaart (kenniskaartje) / seed / doelwit / concurrent. Dedup op (kind, content) + 'seen'-links zodat
+dezelfde kop niet opnieuw wordt verwerkt. Cockpit: blok 'Scout uit het nieuws' met knop
+'🔎 Scout: lees het nieuws & destilleer' (news_scan) en per voorstel ✓ overnemen / ✗ negeer
+(news_prop). Bevestigen routeert: kaart→NotesStore, seed/doelwit→Library.curate+set_function,
+concurrent→CompetitorBrands. Tests in test_news_distill.py. Suite groen (549 + 497).
+Resterend open: #1 Website Watcher datacheck, #2 periode-toggle.
