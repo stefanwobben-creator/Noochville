@@ -787,3 +787,20 @@ ervan leert (signaaltype); alleen de visie-afwijzing blokkeert hard.
 **Ontdekt:** de bundel-aanpak (vragen parkeren, in één puls-call beantwoorden) is het bovenliggende
 principe van het hele dorp, niet alleen voor de dialoog. En: een overzicht-eerst-flow lost zowel
 "geen totaalbeeld" als "springt terug naar de eerste" in één keer op.
+
+## Roloverleg-fixes (na eerste echte gebruik)
+- Governance vanuit de triage haalt het item nu UIT je focus-triage (resolved) zodra het op de
+  roloverleg-agenda staat — rol-reviews bleven anders in 'verwerk in focus' hangen.
+- Secretaris-check ziet nu ook een accountability die de rol AL (vergelijkbaar) heeft (Gate's G2
+  slaat de eigen rol over). Dit ving de website_watcher-casus: een purpose-review werd als bijna-
+  dubbele accountability geformuleerd.
+Tests: +test_secretary_check_dubbel_in_dezelfde_rol. Suite groen (503/504 + 493; de ene rode is de
+bekende flaky test_discovery_loop, slaagt los).
+
+### Nog open na deze ronde (volgende sessie)
+- Purpose-reviews worden nu altijd als ACCOUNTABILITY geformuleerd; een purpose-intentie hoort een
+  purpose-wijziging te worden (intentie detecteren of de mens laten kiezen accountability/purpose).
+- Reactie in het roloverleg: de flash staat bovenaan (je stond eronder) en de AI-amend raakt alleen
+  de voorgestelde accountability, niet de bestaande accountabilities waar je reactie over ging.
+  Inline-bevestiging + breder amend gewenst.
+- 'Einde roloverleg' geeft wél een bevestigingsbanner ("X doorgevoerd"); evt. prominenter maken.

@@ -120,7 +120,19 @@ def secretary_check(item: dict, records) -> list[dict]:
     passed, gate, reason = Gate().check(_proposal_from_item(item), records, None)
     if not passed:
         issues.append({"level": "blok", "msg": f"{gate}: {reason}"})
-    for a in item.get("change", {}).get("add_accountabilities", []):
+    new_accs = item.get("change", {}).get("add_accountabilities", [])
+    # Dubbel binnen DEZELFDE rol: Gate's G2 slaat de eigen rol over, dus die check doen we hier.
+    rec = records.get(item.get("role_id"))
+    if rec is not None:
+        for na in new_accs:
+            nl = na.lower()
+            for ex in rec.definition.accountabilities:
+                el = ex.lower()
+                if el == nl or nl in el or el in nl:
+                    issues.append({"level": "let op",
+                                   "msg": f"de rol heeft al een vergelijkbare accountability: '{ex[:60]}'"})
+                    break
+    for a in new_accs:
         first = (a.strip().split(" ", 1)[0] if a.strip() else "").lower()
         if not first.endswith("en"):
             issues.append({"level": "let op",

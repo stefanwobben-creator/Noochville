@@ -47,6 +47,17 @@ def test_secretary_check_dubbel_en_en_vorm(tmp_path):
     assert any(i["level"] == "let op" for i in issues2)      # niet in -en-vorm
 
 
+def test_secretary_check_dubbel_in_dezelfde_rol(tmp_path):
+    """De Secretaris ziet ook een accountability die de rol AL (vergelijkbaar) heeft —
+    Gate's G2 slaat de eigen rol over, dus die check zit hier."""
+    recs = _records(tmp_path)               # scout heeft 'Volgen van de markt'
+    item = {"id": "x", "role_id": "scout", "kind": "amend_role",
+            "change": {"add_accountabilities": ["Volgen van de markt en trends"]},
+            "reason": "t", "by": "founder", "title": "t"}
+    issues = secretary_check(item, recs)
+    assert any("heeft al een vergelijkbare accountability" in i["msg"] for i in issues)
+
+
 def test_amend_with_reaction_en_failclosed(tmp_path):
     item = {"id": "x", "role_id": "scout", "kind": "amend_role",
             "change": {"add_accountabilities": ["Bijhouden van social media"]},

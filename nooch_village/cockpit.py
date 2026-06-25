@@ -1739,7 +1739,8 @@ def _flash(result: dict) -> str:
         if d == "governance":
             gs = result.get("gov_status")
             if gs == "agendeerd":
-                return ("🏛️ Op de roloverleg-agenda gezet — behandel 'm in het roloverleg." + tail)
+                return ("🏛️ Op de roloverleg-agenda gezet en uit je triage gehaald — "
+                        "behandel 'm in het roloverleg.")
             if gs == "adopted":
                 return "➕ Governance: rol aangemaakt/uitgebreid (zie Roster)." + tail
             return f"➕ Governance: poort vraagt jouw oordeel ({result.get('gov_reason', '')})." + tail
@@ -1846,9 +1847,13 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                     examples_block=block)
             # Governance gaat naar de roloverleg-AGENDA (niet direct doorvoeren).
             agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
-            return decide_opportunity(inbox, iid, "add", destination="governance",
-                                      owner=owner, records=records, examples_block=block,
-                                      agenda=agenda)
+            res = decide_opportunity(inbox, iid, "add", destination="governance",
+                                     owner=owner, records=records, examples_block=block,
+                                     agenda=agenda)
+            # Doorgestuurd naar het roloverleg = uit je triage (geen openblijvend item).
+            if res.get("gov_status") == "agendeerd":
+                inbox.resolve(iid, "resolved", reason="doorgestuurd naar het roloverleg")
+            return res
         # tac_project: AI formuleert de project-uitkomst (Holacracy), fail-closed → titel.
         # Het project wordt een CONCEPT (draft): je ziet 'm eerst en keurt 'm goed vóór hij
         # op het bord van de rol komt.
