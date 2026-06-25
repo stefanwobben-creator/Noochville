@@ -1493,6 +1493,23 @@ def advise_metrics(catalog: list[str], context) -> list[dict]:
     return result
 
 
+def _parse_noochie_report(text: str) -> tuple[list[str], str]:
+    """Haal tot 3 BEVINDING-regels en de SUGGESTIE-regel uit Noochie's antwoord.
+    Robuust tegen markdown-bold en opsomtekens. Retourneert (findings, suggestion)."""
+    findings: list[str] = []
+    suggestion = ""
+    for raw in (text or "").splitlines():
+        line = raw.strip().lstrip("*-•# ").strip()
+        low = line.lower()
+        if low.startswith("bevinding") and ":" in line:
+            v = line.split(":", 1)[1].strip().strip("* ").strip()
+            if v:
+                findings.append(v)
+        elif low.startswith("suggestie") and ":" in line and not suggestion:
+            suggestion = line.split(":", 1)[1].strip().strip("* ").strip()
+    return findings[:3], suggestion
+
+
 class Noochie(Inhabitant):
     """Belichaamt de missie, bepleit en genereert creatieve governance-voorstellen.
     Schrijft ook het dagelijkse dorpsbulletin (bulletin-mandaat geabsorbeerd van Ronnie).
@@ -1563,19 +1580,25 @@ class Noochie(Inhabitant):
         from nooch_village.llm import reason
         from nooch_village.coherence import parse_verdict_reason
         prompt = (
-            f"Je bent Noochie, de missiestem van Nooch.earth. Scherp en nuchter.\n"
+            f"Je bent Noochie, de missiestem van Nooch.earth. Scherp, nuchter, en je kijkt naar "
+            f"het GEHEEL: niet alleen website-tweaks, maar ook verkeer, markt, missie-afstemming, "
+            f"kansen en risico's.\n"
             f"Missie: {_NOOCHIE_MISSION}\n\n"
             f"Field Note van vandaag:\n{field_note}\n\n"
-            "Toets de aanbevolen actie aan de missie. Klopt hij?\n\n"
+            "Geef je drie scherpste bevindingen over het geheel en één concrete suggestie. "
+            "Toets ook of de aanbevolen actie bij de missie past.\n\n"
             "Antwoord met precies dit formaat:\n"
+            "BEVINDING: <scherpe observatie 1>\n"
+            "BEVINDING: <scherpe observatie 2>\n"
+            "BEVINDING: <scherpe observatie 3>\n"
+            "SUGGESTIE: <één concrete actie>\n"
             "VERDICT: ok\n"
             "REASON: <één zin>\n\n"
-            "of:\n"
-            "VERDICT: niet_ok\n"
-            "REASON: <één zin over wat botst of mist>"
+            "(gebruik VERDICT: niet_ok als de aanbevolen actie botst met of de missie mist)"
         )
         result = reason(prompt) or "(geen LLM beschikbaar)"
         verdict, reason_text = parse_verdict_reason(result, frozenset({"ok", "niet_ok"}))
+        findings, suggestion = _parse_noochie_report(result)
 
         if verdict == "ok":
             self.log.info("🎯 Missie-alignment: ok (%s)", reason_text)
@@ -1597,11 +1620,11 @@ class Noochie(Inhabitant):
                 self.log.info("🎯 missie-lens ongewijzigd — spanning niet herhaald")
 
         self.bus.publish(Event("noochie_weighed_in", {"oordeel": result}, self.id))
-        self._persist_daily(verdict, reason_text or result)
+        self._persist_daily(verdict, reason_text or result, findings, suggestion)
 
-    def _persist_daily(self, verdict: str, tekst: str) -> None:
-        """Bewaar Noochie's dagverdict zodat de cockpit het als dagelijkse update toont."""
-        import json as _json
+    def _persist_daily(self, verdict: str, tekst: str,
+                       findings: list[str] | None = None, suggestion: str = "") -> None:
+        """Bewaar Noochie's dag-rapport (3 bevindingen + 1 suggestie) voor de cockpit."""
         import time as _time
         path = os.path.join(self.context.data_dir, "noochie_daily.json")
         try:
@@ -1609,10 +1632,12 @@ class Noochie(Inhabitant):
             atomic_write_json(path, {
                 "date": _time.strftime("%Y-%m-%d"),
                 "verdict": verdict or "onbekend",
-                "oordeel": (tekst or "").strip()[:300],
+                "findings": [f.strip()[:240] for f in (findings or [])][:3],
+                "suggestion": (suggestion or "").strip()[:240],
+                "oordeel": (tekst or "").strip()[:300],   # back-compat
             })
         except Exception as e:
-            self.log.info("kon Noochie-dagverdict niet opslaan: %s", e)
+            self.log.info("kon Noochie-dagrapport niet opslaan: %s", e)
 
     def _reflect(self) -> None:
         """Genereert periodiek één creatief voorstel als spanning richting de mens.

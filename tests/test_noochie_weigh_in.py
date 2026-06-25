@@ -11,10 +11,38 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch, patch as _patch
 
-from nooch_village.roles import Noochie
+import json
+from nooch_village.roles import Noochie, _parse_noochie_report
 from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.event_bus import EventBus
 from nooch_village.skills import SkillRegistry
+
+
+def test_parse_noochie_report():
+    text = ("**BEVINDING:** homepage trekt 97% van het verkeer\n"
+            "- BEVINDING: NL domineert, BE/VS onontgonnen\n"
+            "BEVINDING: geen zoekwoord-verkeer\n"
+            "BEVINDING: vierde wordt genegeerd\n"
+            "SUGGESTIE: koppel homepage aan missiepagina's\n"
+            "VERDICT: ok\nREASON: prima")
+    findings, suggestion = _parse_noochie_report(text)
+    assert len(findings) == 3                      # max 3
+    assert "homepage trekt 97%" in findings[0]
+    assert suggestion == "koppel homepage aan missiepagina's"
+
+
+def test_weigh_in_persisteert_bevindingen_en_suggestie(tmp_path):
+    noochie = _make_noochie(tmp_path)
+    resp = ("BEVINDING: 97% verkeer naar de homepage, productpagina's blijven leeg\n"
+            "BEVINDING: NL domineert, BE en VS onontgonnen\n"
+            "BEVINDING: geen zoekwoord-verkeer wijst op dunne content\n"
+            "SUGGESTIE: koppel de homepage aan de missiepagina's\n"
+            "VERDICT: ok\nREASON: actie past bij de missie")
+    with patch("nooch_village.llm.reason", return_value=resp):
+        noochie._weigh_in("Field Note inhoud")
+    d = json.load(open(f"{tmp_path}/noochie_daily.json"))
+    assert len(d["findings"]) == 3 and "homepage" in d["findings"][0]
+    assert d["suggestion"] == "koppel de homepage aan de missiepagina's"
 
 
 def _make_noochie(tmp_path):

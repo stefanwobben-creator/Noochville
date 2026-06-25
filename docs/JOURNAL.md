@@ -417,3 +417,17 @@ toont de toestand met pijl; 12-mnd% blijft fallback tot een seed verrijkt is.
 is robuuster dan een kaal percentage — precies wat een trendwatcher zou doen.
 
 Tests: 904 → 912.
+
+---
+
+## 2026-06-25 (vervolg 5) — Noochie-dagrapport: 3 bevindingen + 1 suggestie
+
+**[feat]** Noochie's dag-rapport in het weekrapport toonde alleen de aanbevolen actie (vaak een
+website-tweak). Op verzoek kijkt Noochie nu naar het GEHEEL (verkeer, markt, missie, kansen, risico's)
+en rapporteert drie scherpste bevindingen + één concrete suggestie (als zodanig gelabeld). Eén LLM-call
+levert BEVINDING×3 + SUGGESTIE + VERDICT/REASON; `_parse_noochie_report` haalt de bevindingen/suggestie
+eruit (robuust tegen markdown/bullets). De verdict→spanning-detectie blijft ongewijzigd (tests intact).
+noochie_daily.json bewaart nu findings[] + suggestion; cockpit toont bevindingen als lijst + suggestie.
+Back-compat: oude 'oordeel' valt terug op een losse regel.
+
+Tests: 915 → 918.
