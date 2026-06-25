@@ -610,3 +610,15 @@ manned blijft gelden); poort escaleert → melding dat jouw oordeel nodig is. Tr
 project (voor rol) / kennis / governance / negeer(+constraint).
 
 Tests: 956 → 958.
+
+---
+
+## 2026-06-25 (vervolg 18) — Meerdere uitkomsten per kans (toevoegen vs afronden)
+
+**[feat]** Eén kans kan nu meerdere uitkomsten krijgen (Stefans vraag: 2 projecten + een rol). decide_opportunity
+splitst toevoegen van afsluiten: '+ project' / '+ kennis' / '+ governance' MAKEN een uitkomst maar laten het
+item OPEN; '✓ afronden' sluit het (approved); '✗ negeer' sluit met reden (+constraint). Project-dedup nu op
+scope+eigenaar, zodat 2 projecten voor verschillende rollen vanuit één kans kunnen. Sluit aan op het bestaande
+principe 'één spanning, meerdere uitkomsten; afsluiten is een aparte stap'.
+
+Tests: 958 → 960.

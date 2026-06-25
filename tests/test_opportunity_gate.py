@@ -27,25 +27,28 @@ def test_kans_in_inbox_pending(tmp_path):
     assert iid2 == iid
 
 
-def test_approve_maakt_project_voor_gekozen_rol(tmp_path):
+def test_add_maakt_project_houdt_item_open(tmp_path):
     inbox, projects, iid = _setup(tmp_path)
-    assert projects.all() == []                            # nog geen project vóór akkoord
-    res = decide_opportunity(inbox, iid, "approve", destination="project",
+    res = decide_opportunity(inbox, iid, "add", destination="project",
                              owner="website_watcher", projects=projects)
-    assert res["ok"] and res["status"] == "approved" and res["owner"] == "website_watcher"
+    assert res["ok"] and res["status"] == "added" and res["owner"] == "website_watcher"
     ps = projects.all()
-    assert len(ps) == 1 and ps[0]["scope"] == "Reviews oogsten op de PDP"
-    assert ps[0]["owner"] == "website_watcher"             # mens koos de eigenaar
-    assert inbox.get(iid)["status"] == "approved"
+    assert len(ps) == 1 and ps[0]["owner"] == "website_watcher"
+    assert inbox.get(iid)["status"] == "pending"           # item BLIJFT open
 
 
-def test_approve_naar_kennis(tmp_path):
+def test_meerdere_uitkomsten_op_een_kans(tmp_path):
     from nooch_village.notes_store import NotesStore
     inbox, projects, iid = _setup(tmp_path)
     notes = NotesStore(str(tmp_path / "notes.json"))
-    res = decide_opportunity(inbox, iid, "approve", destination="knowledge", notes=notes)
-    assert res["ok"] and res["destination"] == "knowledge"
-    assert projects.all() == [] and len(notes.all()) == 1
+    # twee projecten (verschillende rollen) + een kennis-kaart, dan afronden
+    decide_opportunity(inbox, iid, "add", destination="project", owner="scout", projects=projects)
+    decide_opportunity(inbox, iid, "add", destination="project", owner="librarian", projects=projects)
+    decide_opportunity(inbox, iid, "add", destination="knowledge", notes=notes)
+    assert len(projects.all()) == 2 and len(notes.all()) == 1
+    assert inbox.get(iid)["status"] == "pending"           # nog open
+    decide_opportunity(inbox, iid, "done")
+    assert inbox.get(iid)["status"] == "approved"          # nu gesloten
 
 
 def test_reject_onthoudt_constraint(tmp_path):
@@ -66,7 +69,7 @@ def test_approve_naar_governance_nieuwe_rol(tmp_path):
     recs = Records(str(tmp_path / "gov.json"))
     recs.put(Record(id="noochville", type=RecordType.CIRCLE, parent=None,
                     definition=RoleDefinition(purpose="Nooch", policies=[]), source="seed"))
-    res = decide_opportunity(inbox, iid, "approve", destination="governance",
+    res = decide_opportunity(inbox, iid, "add", destination="governance",
                              owner="__new__", records=recs)
     assert res["ok"] and res["destination"] == "governance"
     assert res["gov_status"] == "adopted"
@@ -84,13 +87,13 @@ def test_approve_naar_governance_rol_uitbreiden(tmp_path):
     recs.put(Record(id="scout", type=RecordType.ROLE, parent="noochville",
                     definition=RoleDefinition(purpose="markt observeren", accountabilities=[]),
                     source="seed"))
-    res = decide_opportunity(inbox, iid, "approve", destination="governance",
+    res = decide_opportunity(inbox, iid, "add", destination="governance",
                              owner="scout", records=recs)
     assert res["ok"] and res["gov_status"] in ("adopted", "escalated")
 
 
-def test_dubbele_beslissing_faalt(tmp_path):
+def test_na_afronden_geen_actie_meer(tmp_path):
     inbox, projects, iid = _setup(tmp_path)
-    decide_opportunity(inbox, iid, "approve", projects=projects)
-    again = decide_opportunity(inbox, iid, "approve", projects=projects)
-    assert again["ok"] is False
+    decide_opportunity(inbox, iid, "done")
+    again = decide_opportunity(inbox, iid, "add", destination="project", projects=projects)
+    assert again["ok"] is False                            # gesloten item: geen actie meer

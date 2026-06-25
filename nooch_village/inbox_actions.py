@@ -210,36 +210,42 @@ def decide_opportunity(inbox, iid: str, decision: str, *, reason: str = "",
     ctx = item.get("context") or {}
     title = ctx.get("title") or item.get("subject")
     wat = ctx.get("wat", "") or ctx.get("waarom", "")
-    if decision == "approve":
-        if destination == "governance" and records is not None:
-            res = _route_kans_to_governance(records, owner, title, wat,
-                                            ctx.get("waarom", ""), ctx.get("business_case"),
-                                            by=ctx.get("by", ""))
-            inbox.resolve(iid, "approved", reason=(reason or f"→ governance ({res.get('status')})"))
-            return {"ok": True, "status": "approved", "destination": "governance",
-                    "title": title, "gov_status": res.get("status"), "gov_reason": res.get("reason", "")}
-        if destination == "knowledge" and notes is not None:
-            from nooch_village.insight import Insight, GroundingStatus
-            import uuid as _uuid
-            notes.add(Insight(id="kn_" + _uuid.uuid4().hex[:9], claim=title,
-                              grounds=(wat or title), source="triage",
-                              status=GroundingStatus.UNRESOLVED, tags=["triage"]))
-            inbox.resolve(iid, "approved", reason=(reason or "kans → kennis"))
-            return {"ok": True, "status": "approved", "destination": "knowledge", "title": title}
-        owner = (owner or ctx.get("by") or "village").strip()
-        if projects is not None:
-            projects.create(owner, title, "human", hypothesis=wat,
-                            business_case=ctx.get("business_case"))
-        inbox.resolve(iid, "approved", reason=(reason or "kans goedgekeurd → project"))
-        return {"ok": True, "status": "approved", "destination": "project",
-                "title": title, "owner": owner}
+
+    # 'done' en 'reject' SLUITEN het item; 'add' (project/kennis/governance) maakt een uitkomst
+    # maar laat het item OPEN, zodat je meerdere uitkomsten op één kans kunt stapelen.
+    if decision == "done":
+        inbox.resolve(iid, "approved", reason=(reason or "afgerond"))
+        return {"ok": True, "status": "done", "title": title}
     if decision in ("reject", "dismiss", "negeer"):
         learned = False
         if remember_constraint and reason and constraints is not None:
             learned = constraints.add(reason, by="human", source=f"triage: {title[:40]}")
         inbox.resolve(iid, "rejected", reason=(reason or "kans genegeerd"))
         return {"ok": True, "status": "rejected", "title": title, "constraint_learned": learned}
-    return {"ok": False, "error": f"onbekend besluit '{decision}'"}
+
+    # decision == "add": maak een uitkomst, item blijft open.
+    if destination == "governance" and records is not None:
+        res = _route_kans_to_governance(records, owner, title, wat, ctx.get("waarom", ""),
+                                        ctx.get("business_case"), by=ctx.get("by", ""))
+        return {"ok": True, "status": "added", "destination": "governance", "title": title,
+                "gov_status": res.get("status"), "gov_reason": res.get("reason", "")}
+    if destination == "knowledge" and notes is not None:
+        from nooch_village.insight import Insight, GroundingStatus
+        import uuid as _uuid
+        notes.add(Insight(id="kn_" + _uuid.uuid4().hex[:9], claim=title,
+                          grounds=(wat or title), source="triage",
+                          status=GroundingStatus.UNRESOLVED, tags=["triage"]))
+        return {"ok": True, "status": "added", "destination": "knowledge", "title": title}
+    # project (default): dedup op scope + eigenaar, zodat 2 projecten voor verschillende rollen kunnen.
+    owner = (owner or ctx.get("by") or "village").strip()
+    if projects is not None:
+        dup = any(str(p.get("scope")) == title and p.get("owner") == owner
+                  and p.get("status") not in ("done",) for p in projects.all())
+        if not dup:
+            projects.create(owner, title, "human", hypothesis=wat,
+                            business_case=ctx.get("business_case"))
+    return {"ok": True, "status": "added", "destination": "project",
+            "title": title, "owner": owner}
 
 
 def decide_target(library, projects, word: str, decision: str, reason: str = "") -> dict:
