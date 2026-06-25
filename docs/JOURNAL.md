@@ -804,3 +804,22 @@ bekende flaky test_discovery_loop, slaagt los).
   de voorgestelde accountability, niet de bestaande accountabilities waar je reactie over ging.
   Inline-bevestiging + breder amend gewenst.
 - 'Einde roloverleg' geeft wél een bevestigingsbanner ("X doorgevoerd"); evt. prominenter maken.
+
+## Shopify-koppeling + Website Watcher-verkoopdashboard
+De website_watcher krijgt de verkoopkant naast Plausible (bezoekers) en GSC (vindbaarheid).
+Nieuw: `skills_impl/shopify_sales.py` (ShopifySalesSkill, Admin GraphQL 2026-01, read-only):
+gepagineerde orders in een venster → geaggregeerde indicatoren (paren verkocht, orders, omzet,
+AOV, per land, topproducten). UITSLUITEND geaggregeerd, geen PII. Pure `aggregate_orders` +
+injecteerbare `fetch_orders`/`_post` (volledig testbaar zonder netwerk). Fail-closed zonder
+SHOPIFY_STORE/SHOPIFY_TOKEN. CLI `village shopify [dagen]` schrijft data/shopify_metrics.json;
+toegevoegd als stap 5/5 in refresh.sh.
+
+Cockpit: `_render_watcher_dashboard` toont '📊 Website Watcher — verkoop' (KPI-tegels + top
+landen/producten), boven de kansen-backlog; fail-safe als er nog geen data is. Hiermee wordt
+`pairs_sold` (de noordster-metriek) eindelijk echt meetbaar. Tests: +test_shopify_sales.py.
+Suite groen (497 + 506).
+
+### Volgende stappen (genoteerd)
+- Conversie-join: Plausible-bezoekers × Shopify-orders = conversie + sale-per-keyword/pagina
+  (order.landing_site/referring_site) — de echte SEO-ROI-lus.
+- Skill via governance aan website_watcher's DNA + in de puls (nu CLI/refresh-gedreven).

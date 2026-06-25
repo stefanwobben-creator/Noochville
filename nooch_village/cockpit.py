@@ -168,6 +168,14 @@ def gather(data_dir: str | None = None) -> dict:
             noochie_daily = _json.load(open(_nd_path))
         except Exception:
             noochie_daily = {}
+    shopify = {}
+    _shop_path = os.path.join(dd, "shopify_metrics.json")
+    if os.path.exists(_shop_path):
+        try:
+            import json as _json
+            shopify = _json.load(open(_shop_path))
+        except Exception:
+            shopify = {}
 
     roster = []
     for rec in sorted(records.all(), key=lambda r: (r.archived, r.type.value, r.id)):
@@ -296,6 +304,7 @@ def gather(data_dir: str | None = None) -> dict:
         "house_rules": house_rules,
         "agenda_open": agenda_open,
         "noochie_daily": noochie_daily,
+        "shopify": shopify,
         "link_candidates": links.candidates(),
         "link_pursued": links.pursued(),
         "competitor_config": _config_competitor_brands(dd),
@@ -1339,6 +1348,36 @@ def _render_digest(d: dict, noochie: dict | None = None) -> str:
             f'<div class="kpis">{tiles}</div>{noochie_block}')
 
 
+def _render_watcher_dashboard(shop: dict) -> str:
+    """Website Watcher-dashboard: verkoopindicatoren uit Shopify (paren verkocht, orders, omzet,
+    AOV, top landen/producten). Leeg → korte hint. Pure render."""
+    if not shop or not shop.get("ok"):
+        return ('<h2>📊 Website Watcher — verkoop</h2>'
+                '<p class="muted">Nog geen Shopify-data. Draai <code>village shopify</code> '
+                '(vereist SHOPIFY_STORE + SHOPIFY_TOKEN in .env) of <code>./refresh.sh</code>.</p>')
+    cur = _e(shop.get("currency", ""))
+    tiles = "".join(
+        f'<div class="kpi"><div class="kpi-n">{ico} {val}</div>'
+        f'<div class="kpi-l">{_e(label)}</div></div>'
+        for ico, val, label in [
+            ("👟", _fmt_int(shop.get("pairs_sold", 0)), "paren verkocht"),
+            ("🧾", _fmt_int(shop.get("orders", 0)), "orders"),
+            ("💶", f'{_fmt_int(round(shop.get("revenue", 0)))} {cur}'.strip(), "omzet"),
+            ("📦", f'{shop.get("aov", 0)} {cur}'.strip(), "gem. orderwaarde"),
+        ])
+    def _pairs(rows, lbl):
+        if not rows:
+            return ""
+        lis = "".join(f"<li>{_e(k)} <span class=muted>· {_e(v)}</span></li>" for k, v in rows)
+        return f'<div><b>{lbl}</b><ul style="margin:.2rem 0">{lis}</ul></div>'
+    land = _pairs(shop.get("by_country", []), "Orders per land")
+    prod = _pairs(shop.get("top_products", []), "Topproducten (paren)")
+    cols = (f'<div style="display:flex;gap:1.4rem;flex-wrap:wrap;font-size:.85rem">{land}{prod}</div>'
+            if (land or prod) else "")
+    return (f'<h2>📊 Website Watcher — verkoop (laatste {shop.get("window_days", 28)} dagen)</h2>'
+            f'<div class="kpis">{tiles}</div>{cols}')
+
+
 def render_html(snap: dict, csrf_token: str | None = None, msg=None,
                 show_all: bool = False) -> str:
     roster = snap["roster"]
@@ -1694,6 +1733,7 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'{_aan_jou}'
         f'{_banner(msg)}'
         f'{_render_digest(snap.get("digest", {}), snap.get("noochie_daily", {}))}'
+        f'{_render_watcher_dashboard(snap.get("shopify", {}))}'
         f'{_render_backlog(snap.get("backlog", []), snap.get("north_star", {}), csrf_token, [r["id"] for r in roster if not r["archived"]])}'
         f'<h2>Inbox</h2>{inbox_tbl}'
         f'{drafts_block}'

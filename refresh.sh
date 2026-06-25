@@ -23,8 +23,12 @@ echo "🔗 3/4 — Synthesist: creatieve links leggen tussen kennis-kaartjes..."
 "$PY" -m nooch_village.village synthesize 3
 
 echo
-echo "💬 4/4 — openstaande vragen aan rollen gebundeld beantwoorden..."
+echo "💬 4/5 — openstaande vragen aan rollen gebundeld beantwoorden..."
 "$PY" -m nooch_village.village answer_questions
+
+echo
+echo "🛍️  5/5 — Shopify-verkoopindicatoren ophalen (website watcher-dashboard)..."
+"$PY" -m nooch_village.village shopify || echo "   (overgeslagen: geen SHOPIFY_STORE/SHOPIFY_TOKEN in .env)"
 
 echo
 echo "✅ Klaar. Herlaad de cockpit (http://127.0.0.1:8765) — weekrapport, Noochie,"

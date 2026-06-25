@@ -545,6 +545,25 @@ def main() -> None:
         print(f"✅ Referentiebank: {added} nieuw, totaal {store.count()} rollen "
               f"(vertrouwelijk, lokaal in data/governance_examples.json).")
 
+    elif mode == "shopify":
+        # Haal verkoopindicatoren op uit Shopify en schrijf ze weg voor het cockpit-dashboard.
+        import os, json
+        from nooch_village.config import load_context
+        from nooch_village.skills_impl.shopify_sales import ShopifySalesSkill
+        from nooch_village.util import atomic_write_json
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        window = next((int(a) for a in sys.argv[2:] if a.isdigit()), 28)
+        print(f"🛍️  Shopify-verkoop ophalen (laatste {window} dagen)…")
+        res = ShopifySalesSkill().run({"window_days": window}, ctx)
+        if not res.get("ok"):
+            print(f"   {res.get('error', 'onbekend')}", file=sys.stderr)
+            sys.exit(1)
+        atomic_write_json(os.path.join(ctx.data_dir, "shopify_metrics.json"), res)
+        print(f"✅ {res['pairs_sold']} paar verkocht · {res['orders']} orders · "
+              f"{res['revenue']} {res['currency']} omzet (AOV {res['aov']}). "
+              f"Dashboard staat in de cockpit.")
+
     elif mode == "review_roles":
         # Facilitator-project: review alle dorp-rollen tegen de Holacracy-regels + referentiebank,
         # en zet per rol één verbetervoorstel als kans in de inbox (mens-gated, niks auto-toegepast).
@@ -575,6 +594,6 @@ def main() -> None:
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "
               "measure_propose | rereview | ingest | notes_remove | recurate | "
               "ground | harry_run | roster | keys | competitor | formalize | answer_questions | "
-              "ingest_governance | review_roles",
+              "ingest_governance | review_roles | shopify",
               file=sys.stderr)
         sys.exit(1)
