@@ -961,3 +961,19 @@ Tests uitgebreid. Suite groen (546 + 488).
   verwijderen' (rov_invalid) die het punt direct van de agenda haalt, ZONDER governance-proces.
   Een geldige spanning kan zo niet verwijderd worden.
 Suite groen (546 + 491).
+
+## Objection-test + auto-stollen na 3x (laatste roloverleg-ronde)
+Objection-test (Holacracy, Chris Cowan): roloverleg.test_objection() toetst de VORM van een bezwaar
+tegen de vier criteria in volgorde 1→4→2→3 (schade · vanuit je rol · door dit voorstel · niet louter
+speculatief). Default-valid, fail-open zonder LLM ('niet getoetst — standaard geldig'). De cockpit
+'⚠ Bezwaar toetsen'-knop vraagt eerst de bezwaartekst; geldig → blijft staan (objected) voor
+integratie, ongeldig → terug naar open (je kunt alsnog consent geven). Het getoetste bezwaar +
+de vier criteria worden op het behandel-scherm getoond. Agenda.set_objection bewaart het.
+
+Auto-stollen na 3x: een project met origin='experiment' (gemaakt via '▶ Doe dit als project') telt
+uitvoeringen (ProjectLedger.record_progress → executions++). work_projects herwerkt experimenten elke
+puls tot de drempel (3). formalize_ripe_experiments(ledger, agenda) draagt rijpe experimenten
+automatisch voor als add_accountability voor de eigenaar (reason bevat 'structureel terugkerend' →
+rijpheidspoort vervuld), met dedup via de 'formalized'-vlag. cockpit.gather roept dit aan, zodat
+rijpe experimenten vanzelf op de roloverleg-agenda verschijnen.
+Suite groen (546 + 495).

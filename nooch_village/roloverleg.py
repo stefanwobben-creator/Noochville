@@ -90,6 +90,16 @@ class Agenda:
         self._save()
         return True
 
+    def set_objection(self, iid: str, text: str, result: dict) -> bool:
+        """Bewaar een getoetst bezwaar (tekst + Facilitator-validiteitsresultaat) op het item."""
+        it = self.get(iid)
+        if it is None:
+            return False
+        it["objection"] = {"text": (text or "").strip(), "result": result, "at": time.time()}
+        it["status"] = "objected" if result.get("valid") else "open"
+        self._save()
+        return True
+
     def remove(self, iid: str) -> bool:
         n = len(self._items)
         self._items = [i for i in self._items if i["id"] != iid]
@@ -115,6 +125,91 @@ def _proposal_from_item(item: dict):
         tension=f"roloverleg: {title}"[:200],
         trigger_example=f"structureel besluit via roloverleg door de mens: {title[:60]}",
         rationale=item.get("reason") or title or "Roloverleg-voorstel.", source="sensed")
+
+
+def formalize_ripe_experiments(ledger, agenda, threshold: int = 3) -> int:
+    """Stollen: een experiment (project met origin='experiment') dat ≥ `threshold` keer is
+    uitgevoerd, heeft zich bewezen als terugkerend werk → draag het automatisch voor als
+    accountability op de roloverleg-agenda voor de eigenaar-rol. Dedup via de 'formalized'-vlag.
+    Geeft het aantal nieuw voorgedragen experimenten. (docs/GOVERNANCE_FILOSOFIE: accountability =
+    gestolde frictie; de rijpheidspoort is hier door herhaalde uitvoering aantoonbaar vervuld.)"""
+    n = 0
+    for p in ledger.all():
+        if (p.get("origin") == "experiment" and not p.get("formalized")
+                and p.get("status") not in ("done", "draft")
+                and int(p.get("executions", 0)) >= threshold):
+            owner = p.get("owner", "")
+            scope = p.get("scope")
+            acc = scope if isinstance(scope, str) else " · ".join(f"{k}: {v}" for k, v in scope.items())
+            if not acc.strip():
+                continue
+            agenda.add(
+                role_id=owner, kind="amend_role",
+                change={"add_accountabilities": [acc[:140]]},
+                reason=(f"{p.get('executions')}x uitgevoerd als experiment: structureel terugkerend "
+                        "werk, de frictie is gestold → vastleggen als accountability"),
+                by=owner, title=acc[:60],
+                example=(p.get("progress") or "")[:200])
+            ledger.mark_formalized(p["id"])
+            n += 1
+    return n
+
+
+_OBJ_CRITERIA = [
+    (1, "Schade", "Benoemt het bezwaar concrete SCHADE die ontstaat als we dit aannemen "
+        "(niet 'ik vind het niks', 'niet nodig', of een betere oplossing)?"),
+    (4, "Vanuit je rol", "Voel je die schade vanuit een rol die je ZELF bezit (niet namens een "
+        "ander of het algemeen belang)?"),
+    (2, "Voorstel-gebaseerd", "Wordt de schade veroorzaakt door DIT voorstel zelf (een wijziging "
+        "van de governance-'kaart'), en niet door iets anders?"),
+    (3, "Niet louter speculatief", "Is de schade al zichtbaar/zeker ('zal', 'voorkomt'), niet "
+        "alleen 'zou kunnen'/'misschien' — of is het effect niet veilig terug te draaien?"),
+]
+
+
+def test_objection(objection: str, *, change_summary: str = "", llm_reason=None) -> dict:
+    """Toets de VORM van een bezwaar tegen de vier Holacracy-validiteitscriteria, in de aanbevolen
+    volgorde 1→4→2→3 (Chris Cowan, 'A Better Way to Test Objections'). De Facilitator beoordeelt
+    niet of het bezwaar wáár is, alleen of het de juiste constructie heeft. Default = geldig
+    (we proberen te integreren); fail-open zonder LLM → 'niet getoetst, standaard geldig'.
+
+    Geeft {valid, tested, criteria:[{n,label,passed,note}], summary}."""
+    objection = (objection or "").strip()
+    if not objection:
+        return {"valid": False, "tested": False, "criteria": [],
+                "summary": "geen bezwaar opgegeven"}
+    if llm_reason is None:
+        from nooch_village.llm import reason as llm_reason
+    crit_txt = "\n".join(f"#{n} {lbl}: {q}" for n, lbl, q in _OBJ_CRITERIA)
+    prompt = (
+        "Je bent Facilitator in een Holacracy-roloverleg. Toets of een BEZWAAR geldig is qua VORM "
+        "(niet of het waar is). Een geldig bezwaar voldoet aan ALLE vier criteria:\n" + crit_txt
+        + (f"\n\nHet voorstel: {change_summary}" if change_summary else "")
+        + f"\n\nHet bezwaar: \"{objection}\"\n\n"
+        "Beoordeel elk criterium los. Antwoord EXACT zo (één regel per criterium):\n"
+        "1: PASS of FAIL — korte reden\n4: PASS of FAIL — korte reden\n"
+        "2: PASS of FAIL — korte reden\n3: PASS of FAIL — korte reden\n"
+        "OORDEEL: GELDIG of ONGELDIG")
+    out = (llm_reason(prompt) or "").strip()
+    if not out:
+        return {"valid": True, "tested": False, "criteria": [],
+                "summary": "niet getoetst (geen facilitator-AI beschikbaar) — standaard geldig"}
+    labels = {n: lbl for n, lbl, _ in _OBJ_CRITERIA}
+    crits, passed_all = [], True
+    for n in (1, 4, 2, 3):
+        m = re.search(rf"^\s*#?{n}\s*[:\.\)]\s*(PASS|FAIL|GESLAAGD|GEZAKT)\b[^\S\n]*[—\-:]?\s*(.*)$",
+                      out, re.IGNORECASE | re.MULTILINE)
+        ok = bool(m) and m.group(1).upper() in ("PASS", "GESLAAGD")
+        note = (m.group(2).strip() if m else "")
+        crits.append({"n": n, "label": labels[n], "passed": ok, "note": note[:160]})
+        passed_all = passed_all and ok
+    verdict = re.search(r"OORDEEL\s*:\s*(GELDIG|ONGELDIG|VALID|INVALID)", out, re.IGNORECASE)
+    valid = (verdict.group(1).upper() in ("GELDIG", "VALID")) if verdict else passed_all
+    first_fail = next((c for c in crits if not c["passed"]), None)
+    summary = ("bezwaar geldig — we proberen het te integreren" if valid else
+               f"bezwaar ongeldig: zakt op #{first_fail['n']} {first_fail['label']}"
+               if first_fail else "bezwaar ongeldig")
+    return {"valid": valid, "tested": True, "criteria": crits, "summary": summary}
 
 
 _EXEMPT_PROPOSERS = {"founder", "facilitator", "secretary"}   # Circle Lead / procesrollen

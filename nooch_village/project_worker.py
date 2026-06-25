@@ -54,10 +54,23 @@ def work_one(scope, role_id: str, role_purpose: str, *, llm_reason=None) -> dict
     return {"ok": True, "outcome": body[:1500]} if body else {"ok": False, "needs": None}
 
 
-def work_projects(ledger, records=None, *, llm_reason=None, limit: int = 5) -> dict:
-    """Loop de openstaande omkeerbare (queued) projecten langs en laat de eigenaar-rol eraan werken.
-    Idempotent (slaat reeds bewerkte over). Geeft {worked, blocked, skipped}."""
-    todo = [p for p in ledger.all() if p.get("status") == "queued" and not p.get("worked")]
+def _eligible(p, threshold: int) -> bool:
+    """Wie pakt de rol op deze puls op? Gewone projecten één keer (idempotent via 'worked').
+    Experimenten elke puls opnieuw, tot ze de stol-drempel halen — zo telt de herhaling mee."""
+    if p.get("status") not in ("queued", "running"):
+        return False
+    if p.get("origin") == "experiment":
+        return not p.get("formalized") and int(p.get("executions", 0)) < threshold
+    return p.get("status") == "queued" and not p.get("worked")
+
+
+def work_projects(ledger, records=None, *, llm_reason=None, limit: int = 5,
+                  agenda=None, formalize_threshold: int = 3) -> dict:
+    """Loop de openstaande omkeerbare projecten langs en laat de eigenaar-rol eraan werken. Gewone
+    projecten worden één keer opgepakt; experimenten elke puls opnieuw tot ze ≥ `formalize_threshold`
+    keer zijn uitgevoerd. Is er een agenda meegegeven, dan worden rijpe experimenten daarna automatisch
+    voorgedragen om te stollen tot accountability. Geeft {worked, blocked, skipped, formalized}."""
+    todo = [p for p in ledger.all() if _eligible(p, formalize_threshold)]
     worked = blocked = 0
     for p in todo[:limit]:
         owner = p.get("owner", "")
@@ -73,4 +86,9 @@ def work_projects(ledger, records=None, *, llm_reason=None, limit: int = 5) -> d
             # Vraagt nieuwe capaciteit/onomkeerbaarheid → blokkeren voor de mens (geboren-vs-bemenst).
             ledger.block(p["id"], f"capaciteit nodig: {res['needs']}")
             blocked += 1
-    return {"worked": worked, "blocked": blocked, "skipped": max(0, len(todo) - limit)}
+    formalized = 0
+    if agenda is not None:
+        from nooch_village.roloverleg import formalize_ripe_experiments
+        formalized = formalize_ripe_experiments(ledger, agenda, threshold=formalize_threshold)
+    return {"worked": worked, "blocked": blocked, "skipped": max(0, len(todo) - limit),
+            "formalized": formalized}

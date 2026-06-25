@@ -47,7 +47,7 @@ class ProjectLedger:
 
     def create(self, owner: str, scope, trigger: str,
                hypothesis: str = "", business_case: dict | None = None,
-               status: str = "queued") -> str:
+               status: str = "queued", origin: str = "") -> str:
         if trigger not in _VALID_TRIGGERS:
             raise ValueError(f"ongeldig trigger: '{trigger}'")
         if status not in ("queued", "draft", "future"):
@@ -66,6 +66,9 @@ class ProjectLedger:
             "outcome":    None,
             "hypothesis":    hypothesis or "",
             "business_case": business_case,
+            "origin":     origin or "",      # "experiment" = stolt later tot accountability bij herhaling
+            "executions": 0,                 # hoe vaak een rol dit experiment heeft uitgevoerd
+            "formalized": False,             # al voorgesteld als accountability? (dedup)
         }
         self._save()
         return pid
@@ -164,8 +167,20 @@ class ProjectLedger:
             return False
         p["progress"] = note
         p["worked"] = True
+        p["executions"] = int(p.get("executions", 0)) + 1   # telt mee voor 'stollen na 3x'
         if p["status"] == "queued":
             p["status"] = "running"
+        self._touch(p)
+        self._save()
+        return True
+
+    def mark_formalized(self, pid: str) -> bool:
+        """Markeer een experiment als 'voorgesteld om te stollen' (accountability op de agenda).
+        Voorkomt dat hetzelfde experiment tweemaal wordt voorgedragen."""
+        p = self._projects.get(pid)
+        if p is None:
+            return False
+        p["formalized"] = True
         self._touch(p)
         self._save()
         return True

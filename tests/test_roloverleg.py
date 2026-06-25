@@ -181,6 +181,79 @@ def test_rov_invalid_verwijdert_ongeldige_spanning_zonder_governance(tmp_path):
     assert res2["ok"] is False
 
 
+def test_objection_test_vorm_1_4_2_3():
+    from nooch_village.roloverleg import test_objection
+    geldig = ("1: PASS — noemt verwarring (schade)\n4: PASS — vanuit eigen rol\n"
+              "2: PASS — door dit voorstel\n3: PASS — al zichtbaar\nOORDEEL: GELDIG")
+    r = test_objection("dit veroorzaakt verwarring met mijn rol", llm_reason=lambda p: geldig)
+    assert r["valid"] is True and r["tested"] is True
+    assert [c["n"] for c in r["criteria"]] == [1, 4, 2, 3]    # aanbevolen volgorde
+    ongeldig = ("1: FAIL — alleen 'niet nodig', geen schade\n4: PASS\n2: PASS\n3: PASS\n"
+                "OORDEEL: ONGELDIG")
+    r2 = test_objection("dit lijkt me niet nodig", llm_reason=lambda p: ongeldig)
+    assert r2["valid"] is False and "#1" in r2["summary"]
+    # geen LLM-antwoord → fail-open: standaard geldig maar 'niet getoetst'
+    r3 = test_objection("iets", llm_reason=lambda p: None)
+    assert r3["valid"] is True and r3["tested"] is False
+    assert test_objection("", llm_reason=lambda p: "x")["valid"] is False
+
+
+def test_rov_object_toetst_en_zet_status(tmp_path):
+    from nooch_village import cockpit
+    from nooch_village.roloverleg import Agenda
+    import nooch_village.roloverleg as rl
+    data = tmp_path / "data"; data.mkdir()
+    (data / "governance_records.json").write_text("{}", encoding="utf-8")
+    ag = Agenda(str(data / "roloverleg_agenda.json"))
+    iid = ag.add("scout", "amend_role", {"add_accountabilities": ["Bewaken van X"]}, "x",
+                 by="scout", title="X")
+    # leeg bezwaar → geweigerd
+    assert cockpit._dispatch_action(str(data), "rov_object", iid, "", extra={})["ok"] is False
+    # ongeldig bezwaar → terug naar open
+    rl.test_objection = lambda obj, **k: {"valid": False, "tested": True, "criteria": [], "summary": "x"}
+    res = cockpit._dispatch_action(str(data), "rov_object", iid, "niet nodig", extra={})
+    assert res["rov"] == "obj_invalid"
+    assert Agenda(str(data / "roloverleg_agenda.json")).get(iid)["status"] == "open"
+    # geldig bezwaar → blijft staan (objected) + opgeslagen
+    rl.test_objection = lambda obj, **k: {"valid": True, "tested": True, "criteria": [], "summary": "ok"}
+    res2 = cockpit._dispatch_action(str(data), "rov_object", iid, "schade vanuit mijn rol", extra={})
+    assert res2["rov"] == "obj_valid"
+    it = Agenda(str(data / "roloverleg_agenda.json")).get(iid)
+    assert it["status"] == "objected" and it["objection"]["text"] == "schade vanuit mijn rol"
+
+
+def test_auto_stollen_na_3x(tmp_path):
+    from nooch_village.projects import ProjectLedger
+    from nooch_village.roloverleg import Agenda, formalize_ripe_experiments
+    led = ProjectLedger(str(tmp_path / "projects.json"))
+    pid = led.create("scout", "Bewaken van sociale kanalen", "human", origin="experiment")
+    ag = Agenda(str(tmp_path / "ag.json"))
+    led.record_progress(pid, "ronde 1"); led.record_progress(pid, "ronde 2")
+    assert formalize_ripe_experiments(led, ag) == 0          # nog maar 2x → niet rijp
+    led.record_progress(pid, "ronde 3")
+    assert led.get(pid)["executions"] == 3
+    assert formalize_ripe_experiments(led, ag) == 1          # 3x → stolt
+    it = ag.open()[0]
+    assert it["role_id"] == "scout" and it["kind"] == "amend_role"
+    assert it["change"]["add_accountabilities"] == ["Bewaken van sociale kanalen"]
+    assert led.get(pid)["formalized"] is True
+    assert formalize_ripe_experiments(led, ag) == 0          # dedup: niet nog eens
+
+
+def test_work_projects_experiment_herwerkt_tot_drempel(tmp_path):
+    from nooch_village.projects import ProjectLedger
+    from nooch_village.roloverleg import Agenda
+    from nooch_village.project_worker import work_projects
+    led = ProjectLedger(str(tmp_path / "projects.json"))
+    pid = led.create("scout", "Volgen van trends", "human", origin="experiment")
+    ag = Agenda(str(tmp_path / "ag.json"))
+    out = None
+    for _ in range(4):                                        # vier pulsen
+        out = work_projects(led, llm_reason=lambda p: "LEVER: gedaan", agenda=ag)
+    assert led.get(pid)["executions"] == 3                   # gestopt op de drempel
+    assert ag.open() and ag.open()[0]["change"]["add_accountabilities"] == ["Volgen van trends"]
+
+
 def test_roloverleg_diff_huidig_vs_na(tmp_path):
     from nooch_village import cockpit
     item = {"id": "k1", "role_id": "scout", "kind": "amend_role",

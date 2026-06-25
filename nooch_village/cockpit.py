@@ -158,8 +158,11 @@ def gather(data_dir: str | None = None) -> dict:
     comp_news = CompetitorNews(os.path.join(dd, "competitor_news.json")).all()
     from nooch_village.constraints import Constraints
     house_rules = Constraints(os.path.join(dd, "constraints.json")).all()
-    from nooch_village.roloverleg import Agenda
-    agenda_open = Agenda(os.path.join(dd, "roloverleg_agenda.json")).open()
+    from nooch_village.roloverleg import Agenda, formalize_ripe_experiments
+    _agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
+    # Stollen: experimenten die ≥3x zijn uitgevoerd dragen zichzelf voor als accountability.
+    formalize_ripe_experiments(projects, _agenda)
+    agenda_open = _agenda.open()
     noochie_daily = {}
     _nd_path = os.path.join(dd, "noochie_daily.json")
     if os.path.exists(_nd_path):
@@ -1128,7 +1131,11 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
             'omkeerbaar experiment; bij herhaling stolt het later tot accountability</small></button>')
     decide = (
         f'<form method="post" action="/action" style="margin-top:.5rem">{common}'
-        f'<input type="hidden" name="next" value="/roloverleg">'
+        f'<input type="hidden" name="next" value="/roloverleg?iid={_e(item["id"])}">'
+        '<div class="tg-q" style="margin-top:.3rem">Bezwaar? (wordt getoetst op vorm: schade · '
+        'vanuit je rol · door dit voorstel · niet louter speculatief)</div>'
+        '<textarea name="reason" class="tg-in" rows="2" '
+        'placeholder="welke concrete schade ontstaat, en vanuit welke van je rollen voel je die?"></textarea>'
         '<div class="tg-opts">'
         '<button class="bigbtn go" type="submit" name="action" value="rov_consent">'
         '✓ Consent<small>geen bezwaar — wordt aangenomen en bij einde overleg doorgevoerd</small>'
@@ -1139,13 +1146,31 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
            '⚖️ Spanning ongeldig — verwijderen<small>geen baat voor de eigen rol benoemd; '
            'direct van de agenda, zonder governance</small></button>')
         + '<button class="bigbtn warn" type="submit" name="action" value="rov_object">'
-        '⚠ Schadelijk<small>blijft staan, lossen we de volgende keer op</small></button>'
+        '⚠ Bezwaar toetsen<small>de Facilitator toetst de vorm; geldig → blijft staan, '
+        'ongeldig → je kunt alsnog consent geven</small></button>'
         '</div></form>')
     invalid_box = ("" if valid else
                    '<div class="tg-dlg" style="border-left:3px solid #c0392b;padding-left:.5rem">'
                    f'⚖️ <b>Facilitator:</b> deze spanning lijkt ongeldig — {_e(invalid_reason)}. '
                    'Een voorstel om een ándere rol te wijzigen mag direct van de agenda zonder '
                    'governance.</div>')
+    # Eerder getoetst bezwaar (objection-test) tonen, met de vier criteria.
+    obj = item.get("objection")
+    obj_box = ""
+    if obj:
+        r = obj.get("result", {})
+        if not r.get("tested"):
+            crit_html = '<div class="muted">niet getoetst (geen facilitator-AI) — standaard geldig</div>'
+        else:
+            crit_html = "".join(
+                f'<li>{"✅" if c["passed"] else "❌"} #{c["n"]} {_e(c["label"])}'
+                + (f' — <span class="muted">{_e(c["note"])}</span>' if c.get("note") else "") + '</li>'
+                for c in r.get("criteria", []))
+            crit_html = f'<ul style="margin:.3rem 0">{crit_html}</ul>'
+        edge = "#27ae60" if r.get("valid") else "#c0392b"
+        obj_box = (f'<div class="tg-dlg" style="border-left:3px solid {edge};padding-left:.5rem">'
+                   f'⚖️ <b>Bezwaar getoetst:</b> "{_e(obj.get("text",""))}"<br>'
+                   f'<b>{_e(r.get("summary",""))}</b>{crit_html}</div>')
     card = (f'<div class="tg-card"><div class="tg-meta">Voorstel · door {_e(item.get("by",""))} · '
             f'status {_e(item.get("status",""))}</div>'
             f'<h2>{_e(item["title"])}</h2>'
@@ -1156,7 +1181,7 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
                f'{_e(item.get("example",""))}</div>' if item.get("example") else "")
             + (f'<div class="muted" style="margin-top:.15rem"><b>Helpt mijn eigen rol:</b> '
                f'{_e(item.get("benefit",""))}</div>' if item.get("benefit") else "")
-            + invalid_box + f'{sec}{react_log}</div>')
+            + invalid_box + obj_box + f'{sec}{react_log}</div>')
     inner = (f'{head}{_banner(msg)}{card}{react_form}{decide}'
              '<div class="tg-skip"><a class="muted" href="/roloverleg">← terug naar de agenda</a>'
              '</div></div><style>' + _TRIAGE_CSS + '</style>')
@@ -1987,6 +2012,8 @@ def _flash(result: dict) -> str:
     _rov = {"reacted": "🤖 Voorstel aangepast op basis van je reactie.",
             "consented": "✓ Consent — wordt doorgevoerd bij einde roloverleg.",
             "objected": "⚠ Als schadelijk gemarkeerd — blijft staan voor de volgende keer.",
+            "obj_valid": "⚖️ Bezwaar geldig bevonden — blijft staan voor integratie.",
+            "obj_invalid": "⚖️ Bezwaar ongeldig (vorm) — je kunt alsnog consent geven.",
             "added": "➕ Voorstel op de agenda gezet.",
             "flipped": "↔ Omgezet (purpose ↔ accountability) en opnieuw geformuleerd.",
             "to_project": "▶ Als experiment op het projectbord gezet voor de rol — bij herhaling "
@@ -2169,7 +2196,8 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
             scope = (ch.get("add_accountabilities") or [item.get("title", "")])[0]
             projects = ProjectLedger(os.path.join(dd, "projects.json"))
             projects.create(item.get("role_id", "village"), scope, "human",
-                            hypothesis=item.get("reason", ""), status="queued")
+                            hypothesis=item.get("reason", ""), status="queued",
+                            origin="experiment")
             agenda.remove(iid)
             return {"ok": True, "rov": "to_project"}
         if action == "rov_end":
@@ -2210,7 +2238,23 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         if action == "rov_consent":
             return {"ok": agenda.set_status(iid, "consented"), "rov": "consented"}
         if action == "rov_object":
-            return {"ok": agenda.set_status(iid, "objected"), "rov": "objected"}
+            # Holacracy-objection-test: toets de VORM van het bezwaar (1→4→2→3). Geldig → blijft
+            # staan voor integratie; ongeldig → terug naar open (je kunt alsnog consent geven).
+            from nooch_village.roloverleg import test_objection
+            item = agenda.get(iid)
+            if item is None:
+                return {"ok": False, "error": "voorstel niet gevonden"}
+            objection = (reason or "").strip()
+            if not objection:
+                return {"ok": False, "error": "typ eerst je bezwaar: welke schade ontstaat, "
+                        "en vanuit welke van je rollen?"}
+            ch = item.get("change", {})
+            summ = (ch.get("purpose") or " / ".join(ch.get("add_accountabilities", [])) or
+                    item.get("title", ""))
+            res = test_objection(objection, change_summary=summ)
+            agenda.set_objection(iid, objection, res)
+            return {"ok": True, "rov": "obj_valid" if res.get("valid") else "obj_invalid",
+                    "tested": res.get("tested")}
         # rov_react: reactie loggen + AI past voorstel aan (gegrond in de bank)
         from nooch_village.governance_examples import GovernanceExamples, few_shot_block
         item = agenda.get(iid)
