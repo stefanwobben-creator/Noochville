@@ -36,23 +36,21 @@ def _stub(tmp_path, *, skills=()):
     return s
 
 
-def test_reflex_project_landt_in_backlog(tmp_path):
+def test_reflex_project_publiceert_kans_geen_autoproject(tmp_path):
+    """Mens-poort: een project-kans wordt GEEN project maar een opportunity_sensed-event
+    (beslissing voor de mens). Geen autonoom werk."""
     s = _stub(tmp_path)
     resp = ("TYPE: project\nTITEL: Reviews oogsten op de PDP\n"
             "HYPOTHESE: reviews → conversie\nEFFECT: 80\nEFFORT: 2\nCONFIDENCE: 0.7\n"
             "RATIONALE: sociaal bewijs")
     with patch("nooch_village.llm.reason", return_value=resp):
         s._opportunity_reflex()
-    projects = s.context.projects.all()
-    assert len(projects) == 1
-    p = projects[0]
-    assert p["scope"] == "Reviews oogsten op de PDP"
-    assert p["business_case"]["effect"] == 80 and p["hypothesis"] == "reviews → conversie"
-
-    # dedup: zelfde kans opnieuw → geen tweede project
-    with patch("nooch_village.llm.reason", return_value=resp):
-        s._opportunity_reflex()
-    assert len(s.context.projects.all()) == 1
+    assert s.context.projects.all() == []                  # NIET autonoom gequeued
+    opp = [e for e in s._events if e.name == "opportunity_sensed"]
+    assert len(opp) == 1
+    assert opp[0].data["title"] == "Reviews oogsten op de PDP"
+    assert opp[0].data["kind"] == "project"
+    assert opp[0].data["business_case"]["effect"] == 80
 
 
 def test_reflex_amend_role_wordt_voorstel(tmp_path):

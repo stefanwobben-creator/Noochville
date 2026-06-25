@@ -161,6 +161,8 @@ class Village:
         self.bus.subscribe("means_gap_sensed",            self._on_means_gap)
         self.bus.subscribe("individuele_actie",           self._observe)
         self.bus.subscribe("individuele_actie",           self._on_individuele_actie)
+        self.bus.subscribe("opportunity_sensed",          self._observe)
+        self.bus.subscribe("opportunity_sensed",          self._on_opportunity)
         self.bus.subscribe("resolution_proposed",         self._on_resolution_proposed)
         self.bus.subscribe("bulletin_geschreven",         self._observe)
         self.bus.subscribe("noochie_weighed_in",          self._observe)
@@ -179,6 +181,19 @@ class Village:
         logging.getLogger("village.inbox").info(
             "📬 escalatie in human_inbox: item %s (voorstel %s, poort %s)",
             iid, proposal_dict.get("id", "?"), gate)
+
+    def _on_opportunity(self, e: Event) -> None:
+        """Een door een rol gesensde kans (project) wordt een beslissing in de inbox — niet
+        autonoom werk. De mens keurt 'm goed (→ project) of negeert 'm. Mens-poort hersteld."""
+        d = e.data
+        title = (d.get("title") or "").strip()
+        if not title:
+            return
+        self.human_inbox.add_opportunity(
+            title, by=d.get("by", ""), kind=d.get("kind", "project"),
+            hypothesis=d.get("hypothesis", ""), business_case=d.get("business_case"))
+        logging.getLogger("village.inbox").info(
+            "💡 kans → inbox (wacht op akkoord): %s [%s]", title[:60], d.get("by", ""))
 
     def _on_means_gap(self, e: Event) -> None:
         """Classificeer een gesensed gat en dispatch op uitkomst A / B / C.

@@ -503,13 +503,12 @@ class Inhabitant(threading.Thread):
         typ = o.get("type", "project")
         hyp = o.get("hypothese", "")
         if typ == "project":
-            ledger = getattr(self.context, "projects", None)
-            if ledger is None:
-                return
-            if o["titel"] in ledger.open_scopes():        # dedup: zelfde kans niet opnieuw
-                return
-            ledger.create(self.id, o["titel"], "tension", hypothesis=hyp, business_case=bc)
-            self.log.info("💡 kans (project) → backlog: %s (waarde %s)",
+            # Mens-poort: een kans wordt GEEN project tot de mens akkoord geeft. Publiceer een
+            # opportunity_sensed; de Village zet 'm als beslissing in de inbox/backlog.
+            self.bus.publish(Event("opportunity_sensed", {
+                "by": self.id, "title": o["titel"], "kind": "project",
+                "hypothesis": hyp, "business_case": bc}, self.id))
+            self.log.info("💡 kans (project) → wacht op jouw akkoord: %s (waarde %s)",
                           o["titel"][:60], business_value(bc))
         else:
             self._raise_opportunity_governance(typ, o["titel"], hyp, bc)

@@ -164,6 +164,30 @@ def override_library_term(library, word: str, decision: str,
     return {"ok": True, "word": word, "status": status}
 
 
+def decide_opportunity(inbox, projects, iid: str, decision: str) -> dict:
+    """Mens beslist over een door een rol gesensde kans. approve → wordt pas dán een project
+    (mens-poort hersteld: het dorp queue't geen werk zonder akkoord). reject → genegeerd.
+    Schrijft via ProjectLedger.create + HumanInbox.resolve. Geeft {ok, status?, title?, error?}."""
+    item = inbox.get(iid)
+    if item is None or item.get("type") != "opportunity":
+        return {"ok": False, "error": "kans niet gevonden"}
+    if item.get("status") != "pending":
+        return {"ok": False, "error": f"kans is al {item.get('status')}"}
+    ctx = item.get("context") or {}
+    title = ctx.get("title") or item.get("subject")
+    if decision == "approve":
+        if projects is not None and ctx.get("kind", "project") == "project":
+            projects.create(ctx.get("by") or "village", title, "human",
+                            hypothesis=ctx.get("hypothesis", ""),
+                            business_case=ctx.get("business_case"))
+        inbox.resolve(iid, "approved", reason="kans goedgekeurd → project")
+        return {"ok": True, "status": "approved", "title": title}
+    if decision in ("reject", "dismiss", "negeer"):
+        inbox.resolve(iid, "rejected", reason="kans genegeerd")
+        return {"ok": True, "status": "rejected"}
+    return {"ok": False, "error": f"onbekend besluit '{decision}'"}
+
+
 def set_word_function(library, word: str, function: str, by: str = "human") -> dict:
     """Menselijke override van de functie van een woord: 'volg' (seed) of 'doelwit' (rank).
     De heuristiek classificeert automatisch; dit corrigeert uitzonderingen vanuit de cockpit.

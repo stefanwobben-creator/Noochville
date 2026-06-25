@@ -203,6 +203,30 @@ class HumanInbox:
         self._save()
         return iid
 
+    def add_opportunity(self, title: str, *, by: str = "", kind: str = "project",
+                        hypothesis: str = "", business_case: dict | None = None) -> str:
+        """Voeg een door een rol gesensde KANS toe als beslissing voor de mens. De kans wordt
+        pas werk als de mens 'm goedkeurt (→ project). Dedup op titel (subject), ongeacht status:
+        eenmaal beslist komt dezelfde kans niet terug. Retourneert het item-id."""
+        title = (title or "").strip()
+        for item in self._items.values():
+            if item["type"] == "opportunity" and item.get("subject") == title:
+                return item["id"]
+        iid = uuid.uuid4().hex[:12]
+        self._items[iid] = {
+            "id":         iid,
+            "type":       "opportunity",
+            "subject":    title,
+            "context":    {"title": title, "by": by, "kind": kind,
+                           "hypothesis": hypothesis, "business_case": business_case},
+            "status":     "pending",
+            "created_at": time.time(),
+            "resolved_at": None,
+            "resolution":  None,
+        }
+        self._save()
+        return iid
+
     def add_voorstel(self, gap_key: str, voorstel: str, *, by: str = "noochie",
                      origin: str = "") -> str:
         """Voeg een door een rol (Noochie) uitgewerkt voorstel toe voor de mens om te

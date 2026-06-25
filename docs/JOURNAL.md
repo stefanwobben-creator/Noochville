@@ -494,3 +494,18 @@ links_to=[ouders]) → de ouders zien het als buur. Dedup (geen dubbele bridge).
 Diagnose blijft: 15 kaartjes, 0 links nu → na synthesize gaan de eilandjes verbinden.
 
 Tests: 937 → 942. Mens-gedraaid (LLM-kosten) via refresh.sh / synthesize.
+
+---
+
+## 2026-06-25 (vervolg 10) — Mens-poort op kansen (opportunity-reflex hersteld)
+
+**[fix]** De opportunity-reflex queue'de project-kansen direct als 'queued' projecten — dat omzeilde
+de mens-poort (inbox = expliciet akkoord). Nu: een project-kans publiceert `opportunity_sensed`;
+Village._on_opportunity zet 'm als `opportunity`-item (pending) in de human_inbox. De kans wordt
+PAS een project als de mens 'm goedkeurt. Cockpit-kansen-backlog toont ✓ goedkeuren / ✗ negeer
+(decide_opportunity: approve → ProjectLedger.create, reject → gesloten). Dedup op titel. Rol-kansen
+(amend/add_role) blijven via de governance-gate (ook mens-gated). 6 reeds auto-gequeuede projecten
+teruggezet naar inbox-kansen + projecten geparkeerd (future). Backlog telt geparkeerde/afgeronde
+projecten niet meer mee (geen dubbeling).
+
+Tests: 942 → 946 (test_opportunity_gate + bijgewerkte reflex-test).

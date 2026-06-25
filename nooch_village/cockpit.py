@@ -29,7 +29,7 @@ from nooch_village.notes_store import NotesStore
 from nooch_village.inbox_actions import (
     decide_keyword, defer_item, confirm_item, mark_done, resolve_tension, add_reference,
     route_to_project, route_to_governance, remove_note, override_library_term,
-    decide_competitor_candidate, decide_link_target, set_word_function)
+    decide_competitor_candidate, decide_link_target, set_word_function, decide_opportunity)
 from nooch_village.competitor_brands import CompetitorBrands
 from nooch_village.link_targets import LinkTargets
 
@@ -238,19 +238,28 @@ def gather(data_dir: str | None = None) -> dict:
     for it in inbox_items:
         if it.get("status") != "pending":
             continue
-        prop = (it.get("context") or {}).get("proposal") or {}
-        bc = prop.get("business_case") or (it.get("context") or {}).get("business_case")
+        ctx = it.get("context") or {}
+        if it.get("type") == "opportunity":            # kans → wacht op jouw akkoord
+            bc = ctx.get("business_case")
+            backlog.append({
+                "title": ctx.get("title") or it.get("subject"), "kind": "kans",
+                "by": ctx.get("by", ""), "hypothesis": ctx.get("hypothesis", ""),
+                "business_case": bc, "value": business_value(bc),
+                "iid": it.get("id"), "approvable": True})
+            continue
+        prop = ctx.get("proposal") or {}
+        bc = prop.get("business_case") or ctx.get("business_case")
         if bc:
             backlog.append({
                 "title": it.get("subject") or prop.get("proposer_role") or "voorstel",
                 "kind": "voorstel", "by": prop.get("proposer_role", ""),
-                "hypothesis": prop.get("hypothesis", "") or (it.get("context") or {}).get("hypothesis", ""),
+                "hypothesis": prop.get("hypothesis", "") or ctx.get("hypothesis", ""),
                 "business_case": bc, "value": business_value(bc)})
     for p in proj:
         bc = p.get("business_case")
-        if bc:
+        if bc and p.get("status") not in ("future", "done"):   # geparkeerd/klaar telt niet mee
             backlog.append({"title": p.get("scope") or p.get("owner") or p.get("id"),
-                            "kind": "project", "by": p.get("owner", ""),
+                            "kind": "project (loopt)", "by": p.get("owner", ""),
                             "hypothesis": p.get("hypothesis", ""),
                             "business_case": bc, "value": business_value(bc)})
     backlog.sort(key=lambda x: -x["value"])
@@ -756,8 +765,9 @@ def _sparkline(values, width: int = 90, height: int = 22) -> str:
             f'stroke-width="1.5"/></svg>')
 
 
-def _render_backlog(backlog: list, north_star: dict) -> str:
-    """Geprioriteerde kansen-backlog: onderbouwde voorstellen/projecten, op verwachte waarde."""
+def _render_backlog(backlog: list, north_star: dict, token: str | None = None) -> str:
+    """Geprioriteerde kansen-backlog: onderbouwde voorstellen/projecten, op verwachte waarde.
+    Kansen (door rollen gesensd) wachten op jouw akkoord: goedkeuren → project, negeer → weg."""
     from nooch_village.business_case import format_business_case
     ns = ""
     if north_star.get("target"):
@@ -765,15 +775,22 @@ def _render_backlog(backlog: list, north_star: dict) -> str:
               f'{_e(north_star.get("unit", ""))} {_e(north_star.get("horizon", ""))}</span>')
     if not backlog:
         body = ('<p class="muted">Nog geen onderbouwde kansen. Zodra rollen voorstellen doen '
-                'mét business-case (Fase 2: opportunity-reflex), verschijnen ze hier, op waarde gerangschikt.</p>')
+                'mét business-case (opportunity-reflex), verschijnen ze hier, op waarde gerangschikt.</p>')
     else:
+        def _acts(x):
+            if x.get("approvable") and token:
+                return (_btn(x["iid"], "opp_approve", "✓ goedkeuren", token, "ok") + " "
+                        + _btn(x["iid"], "opp_reject", "✗ negeer", token, "danger"))
+            return '<span class="muted">—</span>'
         rows = "".join(
             f'<tr><td><b>{_e(x["title"])}</b> <span class="muted">{_e(x["kind"])}'
             f'{(" · " + _e(x["by"])) if x.get("by") else ""}</span>'
             f'{("<br><span class=muted>" + _e(x["hypothesis"][:120]) + "</span>") if x.get("hypothesis") else ""}</td>'
             f'<td>{_e(format_business_case(x.get("business_case")))}</td>'
-            f'<td><b>{_e(x.get("value"))}</b></td></tr>' for x in backlog)
-        body = ('<table><thead><tr><th>kans</th><th>business-case</th><th>waarde</th></tr></thead>'
+            f'<td><b>{_e(x.get("value"))}</b></td>'
+            f'<td>{_acts(x)}</td></tr>' for x in backlog)
+        body = ('<table><thead><tr><th>kans</th><th>business-case</th><th>waarde</th>'
+                '<th>jouw oordeel</th></tr></thead>'
                 f'<tbody>{rows}</tbody></table>')
     return f'<h2>🎯 Kansen-backlog{ns}</h2>{body}'
 
@@ -1095,7 +1112,7 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'<div class="bar">{_e(counts)} · gegenereerd {_e(_ts(snap.get("generated_at")))} · {hist}</div>'
         f'{_banner(msg)}'
         f'{_render_digest(snap.get("digest", {}), snap.get("noochie_daily", {}))}'
-        f'{_render_backlog(snap.get("backlog", []), snap.get("north_star", {}))}'
+        f'{_render_backlog(snap.get("backlog", []), snap.get("north_star", {}), csrf_token)}'
         f'<h2>Inbox</h2>{inbox_tbl}'
         f'<h2>Proces (projecten)</h2>{proj_tbl}'
         f'<h2>Kennis</h2>'
@@ -1158,6 +1175,10 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         library = Library(os.path.join(dd, "library.json"))
         return override_library_term(library, extra.get("word", ""),
                                      extra.get("decision", ""), reason=reason)
+    if action in ("opp_approve", "opp_reject"):
+        projects = ProjectLedger(os.path.join(dd, "projects.json"))
+        decision = "approve" if action == "opp_approve" else "reject"
+        return decide_opportunity(inbox, projects, iid, decision)
     if action == "lib_function":
         library = Library(os.path.join(dd, "library.json"))
         return set_word_function(library, extra.get("word", ""), extra.get("decision", ""))
