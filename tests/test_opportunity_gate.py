@@ -12,7 +12,8 @@ def _setup(tmp_path):
     inbox = HumanInbox(str(tmp_path / "human_inbox.json"))
     projects = ProjectLedger(str(tmp_path / "projects.json"))
     iid = inbox.add_opportunity("Reviews oogsten op de PDP", by="analyst", kind="project",
-                                hypothesis="reviews → conversie",
+                                wat="We tonen reviews op de productpagina.",
+                                waarom="sociaal bewijs → conversie",
                                 business_case=make_business_case(effect=80, effort=2, confidence=0.7))
     return inbox, projects, iid
 

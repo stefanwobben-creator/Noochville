@@ -537,3 +537,20 @@ naast de ▲/▼ in de cockpit, naast Harry's 🔬-duiding. Werkt voor oplevinge
 
 Tests: 947 → 948. Mogelijke vervolg: scout-purpose formeel verbreden naar 'externe markt/trendsignalen'
 via amend_role (governance), zodat de herkomst klopt.
+
+---
+
+## 2026-06-25 (vervolg 13) — Helderheid + dialoog: WAT in mensentaal, redenveld, leerlus, Aan-jou
+
+**[feat] Voorstel-kwaliteit aan de bron.** De opportunity-reflex schreef afgekapte jargon-voorstellen.
+Nieuwe prompt met schrijfregels (uitleggen alsof het een 12-jarige is, geen jargon, concreet, volledige
+zinnen) en een gestructureerd WAT (het idee in gewone taal, max 600) + WAAROM (bijdrage). _parse_opportunity
+parst WAT/WAAROM; cockpit toont de volledige WAT (niet truncated).
+**[feat] Redenveld + leerlus.** Bij goedkeuren/negeren een optioneel redenveld; decide_opportunity bewaart
+'m, en _rejected_opportunities voert afgewezen kansen + reden terug in de reflex-prompt ("niet herhalen,
+leer hiervan") → de village kalibreert i.p.v. te herhalen.
+**[feat] 'Aan jou'-balk.** Eén gele balk bovenaan telt alles wat nú jouw beslissing vraagt (kansen, inbox,
+te-beoordelen woorden, concurrenten, linkbuilding) zodat je niet hoeft te scrollen.
+
+Tests: 948 → 949. Bestaande 6 (pre-fix) kansen tonen nu volledig maar nog in oude bewoording; nieuwe
+kansen komen in mensentaal. Op de Mac: refresh.sh draait de reflex + vult de nieuwe WAT-voorstellen.

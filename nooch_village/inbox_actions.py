@@ -164,10 +164,10 @@ def override_library_term(library, word: str, decision: str,
     return {"ok": True, "word": word, "status": status}
 
 
-def decide_opportunity(inbox, projects, iid: str, decision: str) -> dict:
+def decide_opportunity(inbox, projects, iid: str, decision: str, reason: str = "") -> dict:
     """Mens beslist over een door een rol gesensde kans. approve → wordt pas dán een project
-    (mens-poort hersteld: het dorp queue't geen werk zonder akkoord). reject → genegeerd.
-    Schrijft via ProjectLedger.create + HumanInbox.resolve. Geeft {ok, status?, title?, error?}."""
+    (mens-poort hersteld). reject → genegeerd. De optionele reden wordt bewaard én voedt de
+    leerlus: de rol leest 'm terug en herhaalt/kalibreert. Geeft {ok, status?, title?, error?}."""
     item = inbox.get(iid)
     if item is None or item.get("type") != "opportunity":
         return {"ok": False, "error": "kans niet gevonden"}
@@ -178,12 +178,12 @@ def decide_opportunity(inbox, projects, iid: str, decision: str) -> dict:
     if decision == "approve":
         if projects is not None and ctx.get("kind", "project") == "project":
             projects.create(ctx.get("by") or "village", title, "human",
-                            hypothesis=ctx.get("hypothesis", ""),
+                            hypothesis=ctx.get("wat", "") or ctx.get("waarom", ""),
                             business_case=ctx.get("business_case"))
-        inbox.resolve(iid, "approved", reason="kans goedgekeurd → project")
+        inbox.resolve(iid, "approved", reason=(reason or "kans goedgekeurd → project"))
         return {"ok": True, "status": "approved", "title": title}
     if decision in ("reject", "dismiss", "negeer"):
-        inbox.resolve(iid, "rejected", reason="kans genegeerd")
+        inbox.resolve(iid, "rejected", reason=(reason or "kans genegeerd"))
         return {"ok": True, "status": "rejected"}
     return {"ok": False, "error": f"onbekend besluit '{decision}'"}
 

@@ -10,8 +10,8 @@ from nooch_village.coherence import evaluate_coherence
 
 
 def _parse_opportunity(text: str) -> dict:
-    """Parse het gestructureerde antwoord van de opportunity-reflex (TYPE/TITEL/HYPOTHESE/
-    EFFECT/EFFORT/CONFIDENCE/RATIONALE). Robuust tegen markdown/bullets."""
+    """Parse het gestructureerde antwoord van de opportunity-reflex (TYPE/TITEL/WAT/WAAROM/
+    EFFECT/EFFORT/CONFIDENCE) in gewone taal. Robuust tegen markdown/bullets."""
     out: dict = {}
     for raw in (text or "").splitlines():
         line = raw.strip().lstrip("*-•# ").strip()
@@ -28,8 +28,10 @@ def _parse_opportunity(text: str) -> dict:
                            "add_role" if "add" in v or "nieuwe" in v else "project")
         elif key in ("titel", "title"):
             out["titel"] = val[:120]
-        elif key in ("hypothese", "hypothesis"):
-            out["hypothese"] = val[:240]
+        elif key == "wat":
+            out["wat"] = val[:600]
+        elif key in ("waarom", "hypothese", "hypothesis"):
+            out["waarom"] = val[:300]
         elif key == "effect":
             out["effect"] = val
         elif key == "effort":
@@ -38,8 +40,6 @@ def _parse_opportunity(text: str) -> dict:
         elif key == "confidence":
             m = re.search(r"[\d.]+", val)
             out["confidence"] = float(m.group()) if m else 0.5
-        elif key == "rationale":
-            out["rationale"] = val[:200]
     return out
 
 
@@ -473,48 +473,80 @@ class Inhabitant(threading.Thread):
                   or "groei richting de missie")
         goals = "; ".join(g.get("description", "") for g in strat.get("goals", [])
                           if g.get("active")) or "—"
+        eerder = self._rejected_opportunities()           # leerlus: niet herhalen, kalibreren
+        eerder_txt = ""
+        if eerder:
+            eerder_txt = ("\nEerder door de mens AFGEWEZEN (niet opnieuw voorstellen, leer hiervan):\n"
+                          + "\n".join(f"- {t}: {r}" for t, r in eerder[:5]) + "\n")
         prompt = (
             f"Je bent de rol '{self.id}' in NoochVille. Purpose: {dna.purpose}\n"
             f"Accountabilities: {', '.join(dna.accountabilities) or '-'}\n"
             f"Skills: {', '.join(dna.skills) or '-'}\n"
-            f"Noordster: {ns_txt}. Actief doel: {goals}.\n\n"
+            f"Noordster: {ns_txt}. Actief doel: {goals}.\n{eerder_txt}\n"
             "Bedenk vanuit JOUW rol de ÉNE hoogst-renderende kans die ons dichter bij de noordster "
-            "brengt: een project, een uitbreiding van je eigen rol, of een nieuwe rol. Onderbouw met "
-            "een toetsbare hypothese en een ruwe business-case (effect op pairs_sold).\n\n"
+            "brengt: een project, een uitbreiding van je eigen rol, of een nieuwe rol.\n\n"
+            "SCHRIJFREGELS (heel belangrijk):\n"
+            "- Leg het idee uit alsof je het aan een 12-jarige vertelt. GEEN jargon, geen vakwoorden, "
+            "geen afkortingen.\n"
+            "- Wees CONCREET: wat gaan we precies doen, stap voor stap als dat helpt. Niet vaag.\n"
+            "- Volledige zinnen, niet afgekapt. Kort mag, maar af.\n\n"
             "Antwoord exact zo:\n"
             "TYPE: project | amend_role | add_role\n"
-            "TITEL: <kort, concreet>\n"
-            "HYPOTHESE: als we X, dan Y omdat Z\n"
-            "EFFECT: <geschat aantal paar, of tier xs/s/m/l/xl>\n"
-            "EFFORT: <1-5>\n"
-            "CONFIDENCE: <0-1>\n"
-            "RATIONALE: <één zin>"
+            "TITEL: <korte naam, max 8 woorden>\n"
+            "WAT: <2-4 zinnen: wat gaan we precies doen, in gewone taal>\n"
+            "WAAROM: <1-2 zinnen: hoe helpt dit meer schoenen verkopen via nooch.earth>\n"
+            "EFFECT: <geschat aantal extra paar schoenen, een getal>\n"
+            "EFFORT: <1 (klein) tot 5 (groot)>\n"
+            "CONFIDENCE: <0 tot 1: hoe zeker ben je>"
         )
         out = reason(prompt)
         if not out:
             return
         o = _parse_opportunity(out)
-        if not o.get("titel"):
+        if not o.get("titel") or not o.get("wat"):
             return
         bc = make_business_case(metric=(ns.get("metric") or "pairs_sold"),
                                 effect=o.get("effect", 0), effort=o.get("effort", 3),
                                 confidence=o.get("confidence", 0.5),
-                                horizon=ns.get("horizon", ""), rationale=o.get("rationale", ""))
+                                horizon=ns.get("horizon", ""), rationale=o.get("waarom", ""))
         typ = o.get("type", "project")
-        hyp = o.get("hypothese", "")
         if typ == "project":
             # Mens-poort: een kans wordt GEEN project tot de mens akkoord geeft. Publiceer een
             # opportunity_sensed; de Village zet 'm als beslissing in de inbox/backlog.
             self.bus.publish(Event("opportunity_sensed", {
                 "by": self.id, "title": o["titel"], "kind": "project",
-                "hypothesis": hyp, "business_case": bc}, self.id))
+                "wat": o["wat"], "waarom": o.get("waarom", ""), "business_case": bc}, self.id))
             self.log.info("💡 kans (project) → wacht op jouw akkoord: %s (waarde %s)",
                           o["titel"][:60], business_value(bc))
         else:
-            self._raise_opportunity_governance(typ, o["titel"], hyp, bc)
+            self._raise_opportunity_governance(typ, o["titel"], o["wat"], o.get("waarom", ""), bc)
 
-    def _raise_opportunity_governance(self, typ: str, titel: str, hyp: str, bc: dict) -> None:
-        """Rol-uitbreiding of nieuwe rol als onderbouwd governance-voorstel (mens-gated)."""
+    def _rejected_opportunities(self) -> list[tuple]:
+        """Lees de door de mens afgewezen kansen van DEZE rol (titel + reden) uit de inbox,
+        zodat de reflex ze niet herhaalt en z'n schatting kan bijstellen. Read-only, fail-safe."""
+        data_dir = getattr(self.context, "data_dir", None)
+        if not data_dir:
+            return []
+        path = os.path.join(data_dir, "human_inbox.json")
+        if not os.path.exists(path):
+            return []
+        try:
+            with open(path) as f:
+                inbox = json.load(f)
+        except Exception:
+            return []
+        out = []
+        for item in inbox.values():
+            ctx = item.get("context") or {}
+            if (item.get("type") == "opportunity" and item.get("status") == "rejected"
+                    and ctx.get("by") == self.id):
+                out.append((item.get("subject", ""), item.get("resolution") or "afgewezen"))
+        return out
+
+    def _raise_opportunity_governance(self, typ: str, titel: str, wat: str, waarom: str,
+                                      bc: dict) -> None:
+        """Rol-uitbreiding of nieuwe rol als onderbouwd governance-voorstel (mens-gated).
+        'wat' = het idee in gewone taal; 'waarom' = de bijdrage aan de noordster."""
         import hashlib
         from nooch_village.models import GovernanceChange, ChangeKind, Proposal
         from nooch_village.governance import proposal_to_dict
@@ -536,8 +568,8 @@ class Inhabitant(threading.Thread):
             proposer_role=self.id, change=change,
             tension=f"kans: {titel}"[:200],
             trigger_example=f"{self.id}: kans richting de noordster — {titel[:60]}",
-            rationale=hyp or "Onderbouwde kans uit de opportunity-reflex.",
-            hypothesis=hyp, business_case=bc)
+            rationale=wat or waarom or "Onderbouwde kans uit de opportunity-reflex.",
+            hypothesis=waarom, business_case=bc)
         self.bus.publish(Event("proposal_raised",
                                {"proposal": proposal_to_dict(proposal)}, self.id))
         self.log.info("💡 kans (%s) → voorstel %s: %s", typ, proposal.id, titel[:60])

@@ -204,10 +204,10 @@ class HumanInbox:
         return iid
 
     def add_opportunity(self, title: str, *, by: str = "", kind: str = "project",
-                        hypothesis: str = "", business_case: dict | None = None) -> str:
+                        wat: str = "", waarom: str = "", business_case: dict | None = None) -> str:
         """Voeg een door een rol gesensde KANS toe als beslissing voor de mens. De kans wordt
-        pas werk als de mens 'm goedkeurt (→ project). Dedup op titel (subject), ongeacht status:
-        eenmaal beslist komt dezelfde kans niet terug. Retourneert het item-id."""
+        pas werk als de mens 'm goedkeurt (→ project). 'wat' = het idee in gewone taal, 'waarom' =
+        de bijdrage. Dedup op titel (subject), ongeacht status. Retourneert het item-id."""
         title = (title or "").strip()
         for item in self._items.values():
             if item["type"] == "opportunity" and item.get("subject") == title:
@@ -217,8 +217,8 @@ class HumanInbox:
             "id":         iid,
             "type":       "opportunity",
             "subject":    title,
-            "context":    {"title": title, "by": by, "kind": kind,
-                           "hypothesis": hypothesis, "business_case": business_case},
+            "context":    {"title": title, "by": by, "kind": kind, "wat": wat, "waarom": waarom,
+                           "business_case": business_case},
             "status":     "pending",
             "created_at": time.time(),
             "resolved_at": None,

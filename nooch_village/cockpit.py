@@ -251,7 +251,9 @@ def gather(data_dir: str | None = None) -> dict:
             bc = ctx.get("business_case")
             backlog.append({
                 "title": ctx.get("title") or it.get("subject"), "kind": "kans",
-                "by": ctx.get("by", ""), "hypothesis": ctx.get("hypothesis", ""),
+                "by": ctx.get("by", ""),
+                "wat": ctx.get("wat", "") or ctx.get("hypothesis", ""),  # back-compat
+                "waarom": ctx.get("waarom", ""),
                 "business_case": bc, "value": business_value(bc),
                 "iid": it.get("id"), "approvable": True})
             continue
@@ -785,18 +787,33 @@ def _render_backlog(backlog: list, north_star: dict, token: str | None = None) -
         body = ('<p class="muted">Nog geen onderbouwde kansen. Zodra rollen voorstellen doen '
                 'mét business-case (opportunity-reflex), verschijnen ze hier, op waarde gerangschikt.</p>')
     else:
+        def _kans_cell(x):
+            head = (f'<b>{_e(x["title"])}</b> <span class="muted">{_e(x["kind"])}'
+                    f'{(" · " + _e(x["by"])) if x.get("by") else ""}</span>')
+            wat = f'<div style="margin:.2rem 0">{_e(x.get("wat", ""))}</div>' if x.get("wat") else ""
+            waarom = (f'<div class="muted"><b>Waarom:</b> {_e(x["waarom"])}</div>'
+                      if x.get("waarom") else "")
+            return head + wat + waarom
+
         def _acts(x):
-            if x.get("approvable") and token:
-                return (_btn(x["iid"], "opp_approve", "✓ goedkeuren", token, "ok") + " "
-                        + _btn(x["iid"], "opp_reject", "✗ negeer", token, "danger"))
-            return '<span class="muted">—</span>'
+            if not (x.get("approvable") and token):
+                return '<span class="muted">—</span>'
+            # één formulier, gedeeld redenveld, twee knoppen (goedkeuren/negeer)
+            return (
+                f'<form method="post" action="/action">'
+                f'<input type="hidden" name="csrf" value="{_e(token)}">'
+                f'<input type="hidden" name="iid" value="{_e(x["iid"])}">'
+                f'<input type="text" name="reason" placeholder="reden (optioneel, leert de rol)" '
+                f'style="width:100%;margin-bottom:.3rem;padding:.25rem .4rem;'
+                f'border:1px solid var(--border);border-radius:6px">'
+                f'<button class="btn ok" type="submit" name="action" value="opp_approve">✓ goedkeuren</button> '
+                f'<button class="btn danger" type="submit" name="action" value="opp_reject">✗ negeer</button>'
+                f'</form>')
         rows = "".join(
-            f'<tr><td><b>{_e(x["title"])}</b> <span class="muted">{_e(x["kind"])}'
-            f'{(" · " + _e(x["by"])) if x.get("by") else ""}</span>'
-            f'{("<br><span class=muted>" + _e(x["hypothesis"][:120]) + "</span>") if x.get("hypothesis") else ""}</td>'
+            f'<tr><td>{_kans_cell(x)}</td>'
             f'<td>{_e(format_business_case(x.get("business_case")))}</td>'
             f'<td><b>{_e(x.get("value"))}</b></td>'
-            f'<td>{_acts(x)}</td></tr>' for x in backlog)
+            f'<td style="min-width:220px">{_acts(x)}</td></tr>' for x in backlog)
         body = ('<table><thead><tr><th>kans</th><th>business-case</th><th>waarde</th>'
                 '<th>jouw oordeel</th></tr></thead>'
                 f'<tbody>{rows}</tbody></table>')
@@ -1119,9 +1136,27 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     hist = ('<a href="/">← verberg geschiedenis</a>' if show_all
             else '<a href="/?history=1">toon geschiedenis (gesloten + gearchiveerd)</a>')
 
+    # "Aan jou": alles wat nú een beslissing van de mens vraagt, op één plek geteld.
+    _n_kansen = sum(1 for b in snap.get("backlog", []) if b.get("approvable"))
+    _n_inbox = sum(1 for i in inbox if i.get("status") == "pending" and i.get("type") != "opportunity")
+    _n_woorden = sum(1 for x in lib if x["status"] == "escalated")
+    _n_conc = len(snap.get("competitor_candidates", []))
+    _n_link = len(snap.get("link_candidates", []))
+    _parts = []
+    if _n_kansen:  _parts.append(f'{_n_kansen} kansen')
+    if _n_inbox:   _parts.append(f'{_n_inbox} inbox-items')
+    if _n_woorden: _parts.append(f'{_n_woorden} woorden te beoordelen')
+    if _n_conc:    _parts.append(f'{_n_conc} nieuwe concurrenten')
+    if _n_link:    _parts.append(f'{_n_link} linkbuilding-doelwitten')
+    _aan_jou = (f'<div class="aanjou"><b>📥 Aan jou:</b> {" · ".join(_parts)}</div>'
+                if _parts else '<div class="aanjou">📥 <b>Aan jou:</b> niks openstaand 🎉</div>')
+
     inner = (
         f'<h1>NoochVille cockpit {badge}</h1>'
         f'<div class="bar">{_e(counts)} · gegenereerd {_e(_ts(snap.get("generated_at")))} · {hist}</div>'
+        f'<style>.aanjou{{background:var(--yellow-light);border:1px solid var(--border);'
+        f'border-radius:var(--radius);padding:.5rem .9rem;margin:.3rem 0 1rem;font-size:.95rem}}</style>'
+        f'{_aan_jou}'
         f'{_banner(msg)}'
         f'{_render_digest(snap.get("digest", {}), snap.get("noochie_daily", {}))}'
         f'{_render_backlog(snap.get("backlog", []), snap.get("north_star", {}), csrf_token)}'
@@ -1190,7 +1225,7 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
     if action in ("opp_approve", "opp_reject"):
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
         decision = "approve" if action == "opp_approve" else "reject"
-        return decide_opportunity(inbox, projects, iid, decision)
+        return decide_opportunity(inbox, projects, iid, decision, reason=reason)
     if action == "lib_function":
         library = Library(os.path.join(dd, "library.json"))
         return set_word_function(library, extra.get("word", ""), extra.get("decision", ""))

@@ -191,7 +191,8 @@ class Village:
             return
         self.human_inbox.add_opportunity(
             title, by=d.get("by", ""), kind=d.get("kind", "project"),
-            hypothesis=d.get("hypothesis", ""), business_case=d.get("business_case"))
+            wat=d.get("wat", ""), waarom=d.get("waarom", ""),
+            business_case=d.get("business_case"))
         logging.getLogger("village.inbox").info(
             "💡 kans → inbox (wacht op akkoord): %s [%s]", title[:60], d.get("by", ""))
 
