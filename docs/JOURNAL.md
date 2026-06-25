@@ -522,3 +522,18 @@ scout-nieuwsverklaring is nu nog leeg omdat de footwear-context-nieuwszoek niets
 seed-termen (tuning-follow-up: bredere nieuws-query voor seed-surges).
 
 Tests: 946 → 947.
+
+---
+
+## 2026-06-25 (vervolg 12) — Scout: brede nieuws-duiding voor seed-verschuivingen
+
+**[feat]** De scout-nieuwszoek bij een seed-verschuiving was leeg: hij gebruikte de merk-monitor
+(competitor_news) met schoen- én bedrijfsfilters, te smal voor brede termen. Nu: `web_read.serpapi_news`
+(Google News via SerpAPI, kale term, echte URLs) → `ConcurrentScout._pick_news_driver` laat de LLM uit
+de top de waarschijnlijke AANLEIDING kiezen, gewogen op aanleiding-kracht (regelgeving > onderzoek >
+incident > aandacht > markt; losse vermeldingen genegeerd). Fail-closed → nieuwste kop. Blijft bij de
+scout (extern-nieuws-zintuig; geen nieuwe rol — dat ware proliferatie). Verklaring landt als 📰-link
+naast de ▲/▼ in de cockpit, naast Harry's 🔬-duiding. Werkt voor oplevingen én dalingen.
+
+Tests: 947 → 948. Mogelijke vervolg: scout-purpose formeel verbreden naar 'externe markt/trendsignalen'
+via amend_role (governance), zodat de herkomst klopt.

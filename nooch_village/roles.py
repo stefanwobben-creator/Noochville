@@ -467,18 +467,22 @@ class ConcurrentScout(Inhabitant):
         self.react("seed_surge_sensed", self._explain_surge)
 
     def _explain_surge(self, event: Event) -> None:
-        """Zoek in het nieuws (RSS) een mogelijke verklaring voor een seed-opleving.
-        Bewaart de top-treffer in de seed-surge-store en publiceert seed_surge_explanation.
-        Fail-closed: geen skill/treffer → stil."""
+        """Zoek de waarschijnlijke nieuws-AANLEIDING voor een seed-verschuiving: breed Google
+        News op de kale term (geen schoen-/merkfilter), daarna kiest de LLM uit de top de kop die
+        de stijging/daling het best verklaart (regelgeving > studie > incident > aandacht > markt).
+        Bewaart 'm in de seed-surge-store + publiceert seed_surge_explanation. Fail-closed."""
+        import os as _os
         term = (event.data.get("term") or "").strip()
-        if not term or "competitor_news" not in self.dna.skills:
+        if not term:
             return
-        res = self.use_skill("competitor_news", {"brands": [term], "days": 90})
-        items = res.get("items", []) if isinstance(res, dict) else []
+        from nooch_village import web_read
+        key = (self.context.settings.get("serpapi_api_key", "")
+               or _os.environ.get("SERPAPI_API_KEY", ""))
+        items = web_read.serpapi_news(term, key, num=10)
         if not items:
-            self.log.info("📰 geen nieuws-aanleiding gevonden voor opleving '%s'", term)
+            self.log.info("📰 geen nieuws-aanleiding gevonden voor '%s'", term)
             return
-        top = sorted(items, key=lambda it: it.get("date", ""), reverse=True)[0]
+        top = self._pick_news_driver(term, items)
         expl = {"title": top.get("title", ""), "link": top.get("link", ""),
                 "date": top.get("date", "")}
         try:
@@ -490,6 +494,30 @@ class ConcurrentScout(Inhabitant):
         self.log.info("📰 mogelijke aanleiding voor '%s': %s", term, expl["title"][:70])
         self.bus.publish(Event("seed_surge_explanation",
                                {"by": self.id, "term": term, **expl}, self.id))
+
+    def _pick_news_driver(self, term: str, items: list[dict]) -> dict:
+        """LLM kiest uit de koppen de waarschijnlijke aanleiding (regelgeving > onderzoek >
+        incident > aandacht > markt; negeer losse vermeldingen). Fail-closed → nieuwste (eerste)."""
+        import re
+        from nooch_village.llm import reason
+        top = items[:8]
+        lines = "\n".join(
+            f"{i + 1}. {it.get('title', '')} ({it.get('source', '')}, {it.get('date', '')})"
+            for i, it in enumerate(top))
+        prompt = (
+            f"De zoekinteresse in '{term}' is recent verschoven. Welke kop verklaart die "
+            f"verschuiving het waarschijnlijkst? Weeg op aanleiding-kracht: regelgeving/beleid > "
+            f"onderzoek/rapport > incident/gebeurtenis > aandacht/cultuur > markt. Negeer losse "
+            f"vermeldingen.\n\n{lines}\n\n"
+            f"Antwoord met ALLEEN het nummer (1-{len(top)}).")
+        out = reason(prompt)
+        if out:
+            m = re.search(r"\d+", out)
+            if m:
+                idx = int(m.group()) - 1
+                if 0 <= idx < len(top):
+                    return top[idx]
+        return top[0]                                     # fail-closed: nieuwste/relevantste
 
     def _on_pulse(self, event: Event) -> None:
         if self._busy:

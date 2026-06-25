@@ -108,28 +108,54 @@ def test_enrich_herberekent_uit_opgeslagen_reeks_zonder_api(monkeypatch, tmp_pat
     assert surges["vegan"]["direction"] == "dalend"
 
 
-def test_scout_explain_surge_zet_verklaring(tmp_path):
+def test_scout_explain_surge_kiest_aanleiding(monkeypatch, tmp_path):
     from nooch_village.roles import ConcurrentScout
+    from nooch_village import web_read
     import types
     from nooch_village.event_bus import Event
 
     SeedSurges(str(tmp_path / "seed_surges.json")).add("microplastics")
 
     s = SimpleNamespace(id="concurrent_scout", log=__import__("logging").getLogger("t"))
-    s.context = SimpleNamespace(data_dir=str(tmp_path))
-    s.dna = SimpleNamespace(skills=["competitor_news"])
+    s.context = SimpleNamespace(data_dir=str(tmp_path), settings={"serpapi_api_key": "x"})
     s._events = []
     s.bus = SimpleNamespace(publish=lambda e: s._events.append(e))
-    s.use_skill = lambda name, payload: {"items": [
-        {"title": "EU scherpt microplastics-regels aan", "link": "http://x", "date": "2026-06-20"},
-        {"title": "ouder bericht", "link": "http://y", "date": "2026-01-01"}]}
     s._explain_surge = types.MethodType(ConcurrentScout._explain_surge, s)
+    s._pick_news_driver = types.MethodType(ConcurrentScout._pick_news_driver, s)
 
-    s._explain_surge(Event("seed_surge_sensed", {"term": "microplastics"}, "harry"))
+    news = [
+        {"title": "Influencer draagt sneakers", "link": "http://y", "date": "2026-06-22", "source": "Blog"},
+        {"title": "EU verbiedt microplastics in cosmetica", "link": "http://x", "date": "2026-06-20", "source": "Reuters"},
+    ]
+    monkeypatch.setattr(web_read, "serpapi_news", lambda q, k, num=10: news)
+    # LLM kiest kop 2 (de regelgeving) als aanleiding
+    with patch("nooch_village.llm.reason", return_value="2"):
+        s._explain_surge(Event("seed_surge_sensed", {"term": "microplastics"}, "harry"))
 
     surges = json.load(open(tmp_path / "seed_surges.json"))
-    assert surges["microplastics"]["explanation"]["title"] == "EU scherpt microplastics-regels aan"
+    assert surges["microplastics"]["explanation"]["title"] == "EU verbiedt microplastics in cosmetica"
     assert any(e.name == "seed_surge_explanation" for e in s._events)
+
+
+def test_scout_explain_surge_failclosed_pakt_nieuwste(monkeypatch, tmp_path):
+    from nooch_village.roles import ConcurrentScout
+    from nooch_village import web_read
+    import types
+    from nooch_village.event_bus import Event
+
+    SeedSurges(str(tmp_path / "seed_surges.json")).add("biobased")
+    s = SimpleNamespace(id="concurrent_scout", log=__import__("logging").getLogger("t"))
+    s.context = SimpleNamespace(data_dir=str(tmp_path), settings={"serpapi_api_key": "x"})
+    s._events = []
+    s.bus = SimpleNamespace(publish=lambda e: s._events.append(e))
+    s._explain_surge = types.MethodType(ConcurrentScout._explain_surge, s)
+    s._pick_news_driver = types.MethodType(ConcurrentScout._pick_news_driver, s)
+    news = [{"title": "Biobased materialen in opmars", "link": "http://a", "date": "x", "source": "S"}]
+    monkeypatch.setattr(web_read, "serpapi_news", lambda q, k, num=10: news)
+    with patch("nooch_village.llm.reason", return_value=None):     # geen LLM → nieuwste
+        s._explain_surge(Event("seed_surge_sensed", {"term": "biobased"}, "harry"))
+    surges = json.load(open(tmp_path / "seed_surges.json"))
+    assert surges["biobased"]["explanation"]["title"] == "Biobased materialen in opmars"
 
 
 def test_cockpit_toont_surge_badge_en_verklaring(tmp_path):

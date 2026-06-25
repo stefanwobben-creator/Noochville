@@ -35,6 +35,32 @@ def serpapi_search(query: str, key: str, *, num: int = 10) -> list[dict]:
     return out
 
 
+def serpapi_news(query: str, key: str, *, num: int = 10) -> list[dict]:
+    """Google News via SerpAPI → [{title, link, date, source}]. Breed: alleen de term, geen
+    extra filters (de aanleiding bepalen we daarna). Echte URLs. Fail-closed → []."""
+    import requests
+    if not key or not query:
+        return []
+    params = {"engine": "google_news", "q": query, "api_key": key}
+    try:
+        resp = requests.get(_ENDPOINT, params=params, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as exc:
+        log.info("web_read: google_news faalde (%s): %s", query[:40], exc)
+        return []
+    out = []
+    for item in data.get("news_results", []):
+        for r in (item.get("stories") or [item]):        # SerpAPI groepeert soms in 'stories'
+            link = (r.get("link") or "").strip()
+            if link:
+                src = r.get("source")
+                out.append({"title": (r.get("title") or "").strip(), "link": link,
+                            "date": (r.get("date") or "").strip(),
+                            "source": (src.get("name") if isinstance(src, dict) else src) or ""})
+    return out[:num]
+
+
 def fetch_text(url: str, *, timeout: int = 20) -> str:
     """Lees een echte URL en geef platte tekst terug. Faalt → lege string (fail-closed)."""
     if not url:
