@@ -1151,14 +1151,61 @@ def render_project_edit(p: dict, roster: list, csrf_token: str) -> str:
         f'<input name="scope" value="{_e(scope)}">'
         '<button class="btn ok" type="submit">Opslaan</button></form>'
     )
+    # Deliverable / voortgang die de rol (autonoom of via het projectbord) opleverde.
+    deliverable = ""
+    if p.get("progress"):
+        deliverable = (f'<h2>Deliverable / voortgang</h2>'
+                       f'<div class="tension" style="white-space:pre-wrap">{_e(p.get("progress"))}</div>')
+    if p.get("outcome"):
+        deliverable += (f'<h2>Uitkomst (afgerond)</h2>'
+                        f'<div class="tension">{_e(p.get("outcome"))}</div>')
+    hyp = (f'<p class="muted"><b>Hypothese:</b> {_e(p.get("hypothesis"))}</p>'
+           if p.get("hypothesis") else "")
     inner = (
         '<p><a href="/">← terug naar de cockpit</a></p>'
-        '<h1>Project bewerken</h1>'
-        f'<div class="tension"><b>{_e(p.get("owner"))}</b> '
-        f'<span class="muted">· status {_e(p.get("status"))}</span></div>'
-        f'{form}'
+        '<h1>Project</h1>'
+        f'<div class="tension"><b>{_e(p.get("owner"))}</b> · {_e(scope)}'
+        f'<br><span class="muted">status {_e(p.get("status"))}'
+        f'{(" · wacht op " + _e(p.get("blocked_on"))) if p.get("blocked_on") else ""}</span></div>'
+        f'{hyp}{deliverable}'
+        f'<h2>Bewerken</h2>{form}'
     )
-    return _page("Project bewerken", inner)
+    return _page("Project", inner)
+
+
+def render_fieldnotes(files: list, sel: str, content: str, pos: int, total: int) -> str:
+    """Leesbare Field Notes/bulletins in de browser: links-lijst + de gekozen note, met
+    vorige/volgende-bladeren (pijltjestoetsen ←/→). Pure render."""
+    if not files:
+        body = ('<div class="tension"><b>Nog geen Field Notes.</b><br>'
+                '<span class="muted">Draai een puls (./refresh.sh of village once); de Field Note '
+                'verschijnt dan in data/output/.</span></div>')
+        return _page("Field Notes", '<p><a href="/">← cockpit</a></p><h1>📓 Field Notes</h1>' + body)
+    items = "".join(
+        f'<li><a href="/fieldnotes?f={_e(f)}"'
+        f'{" style=font-weight:700" if f == sel else ""}>{_e(f.replace("field_note_","").replace(".md",""))}</a></li>'
+        for f in files)
+    i = files.index(sel) if sel in files else 0
+    nav = []
+    if i + 1 < len(files):
+        nav.append(f'<a id="older" href="/fieldnotes?f={_e(files[i+1])}">← ouder</a>')
+    if i > 0:
+        nav.append(f'<a id="newer" href="/fieldnotes?f={_e(files[i-1])}">nieuwer →</a>')
+    navbar = ' · '.join(nav)
+    js = ("<script>document.addEventListener('keydown',function(e){"
+          "if(e.key==='ArrowLeft'){var o=document.getElementById('older');if(o)location=o.href;}"
+          "else if(e.key==='ArrowRight'){var n=document.getElementById('newer');if(n)location=n.href;}});</script>")
+    inner = (
+        '<p><a href="/">← cockpit</a></p><h1>📓 Field Notes</h1>'
+        '<div style="display:flex;gap:1.4rem;align-items:flex-start">'
+        f'<div style="flex:0 0 200px"><b>Archief ({total})</b>'
+        f'<ul style="list-style:none;padding:0;margin:.2rem 0;font-size:.85rem;line-height:1.7">{items}</ul></div>'
+        f'<div style="flex:1 1 auto;min-width:0">'
+        f'<div class="muted" style="font-size:.82rem;margin-bottom:.3rem">Field Note {pos} van {total} · ←/→ bladeren · {navbar}</div>'
+        f'<pre style="white-space:pre-wrap;background:var(--cream-3);border:1px solid var(--border);'
+        f'border-radius:var(--radius);padding:1rem;font-family:var(--font-body);font-size:.9rem;'
+        f'line-height:1.55">{_e(content) or "(leeg)"}</pre></div></div>' + js)
+    return _page("Field Notes", inner)
 
 
 def _word_metrics(x: dict) -> str:
@@ -1377,7 +1424,8 @@ def _render_digest(d: dict, noochie: dict | None = None) -> str:
         else:
             body = ''
         vr = (f'<div>💭 <b>Noochie vraagt:</b> {_e(vraag)}</div>' if vraag else '')
-        noochie_block = f'<div class="noochie">{head}{body}{vr}</div>'
+        link = '<div style="margin-top:.3rem">📓 <a href="/fieldnotes">Field Notes lezen →</a></div>'
+        noochie_block = f'<div class="noochie">{head}{body}{vr}{link}</div>'
     style = ('<style>.kpis{display:flex;flex-wrap:wrap;gap:.7rem;margin:.3rem 0 .6rem}'
              '.kpi{background:var(--surface);border:1px solid var(--border);'
              'border-radius:var(--radius);padding:.6rem .9rem;flex:1 1 150px;min-width:0;'
@@ -1413,33 +1461,49 @@ def _render_watcher_dashboard(shop: dict, visitors_7d=None) -> str:
         if shop.get("avg_revenue_month"):
             base.append(("📈", f'{_fmt_int(round(shop["avg_revenue_month"]))} {cur}'.strip(),
                          "gem. omzet/maand"))
-    # Conversie: orders (laatste 7 dagen) ÷ bezoekers (laatste 7 dagen, Plausible).
+    # Conversie: orders ÷ bezoekers over de LAATSTE 7 DAGEN (Plausible). Bewust 7d-scoped, want
+    # alleen daar hebben we een passend bezoekersgetal. Toggle 7d/maand/alles komt nog.
+    conv_note = ""
     if visitors_7d:
         base.append(("👣", _fmt_int(visitors_7d), "bezoekers (7d)"))
         o7 = shop.get("orders_7d")
         if o7 is not None:
             conv = round(100 * o7 / visitors_7d, 2) if visitors_7d else 0.0
             base.append(("🎯", f"{conv}%", "conversie (7d)"))
+            conv_note = ('<p class="muted" style="font-size:.78rem;margin:.1rem 0 .6rem">'
+                         f'Conversie = {o7} orders ÷ {_fmt_int(visitors_7d)} bezoekers over de '
+                         'laatste 7 dagen. (Periode-toggle 7d/maand/alles volgt.)</p>')
     tiles = "".join(
         f'<div class="kpi"><div class="kpi-n">{ico} {val}</div>'
         f'<div class="kpi-l">{_e(label)}</div></div>'
         for ico, val, label in base)
-    def _pairs(rows, lbl):
+
+    def _box(rows, lbl):
         if not rows:
             return ""
-        lis = "".join(f"<li>{_e(k)} <span class=muted>· {_e(v)}</span></li>" for k, v in rows)
-        return f'<div><b>{lbl}</b><ul style="margin:.2rem 0">{lis}</ul></div>'
-    land = _pairs(shop.get("by_country", []), "Orders per land")
-    prod = _pairs(shop.get("top_products", []), "Topproducten (paren)")
-    pages = _pairs(shop.get("top_landing_pages", []), "Via landingspagina → paren")
-    chan = _pairs(shop.get("channels", []), "Kanaal → orders")
-    kw = _pairs(shop.get("top_keywords", []), "UTM-term (campagne) → paren")
-    cols = (f'<div style="display:flex;gap:1.4rem;flex-wrap:wrap;font-size:.85rem">'
-            f'{land}{prod}{chan}{pages}{kw}</div>' if (land or prod or pages or chan) else "")
+        lis = "".join(
+            f'<li style="display:flex;justify-content:space-between;gap:.6rem;padding:.15rem 0;'
+            f'border-bottom:1px solid var(--border)"><span>{_e(k)}</span>'
+            f'<b>{_e(v)}</b></li>' for k, v in rows)
+        return (f'<div class="wbox"><div class="wbox-h">{_e(lbl)}</div>'
+                f'<ul style="list-style:none;margin:.2rem 0 0;padding:0;font-size:.82rem">{lis}</ul></div>')
+    boxes = "".join([
+        _box(shop.get("by_country", []), "Orders per land"),
+        _box(shop.get("top_products", []), "Topproducten (paren)"),
+        _box(shop.get("channels", []), "Kanaal → orders"),
+        _box(shop.get("top_landing_pages", []), "Via landingspagina → paren"),
+        _box(shop.get("top_keywords", []), "UTM-term (campagne) → paren"),
+    ])
+    style = ('<style>.wgrid{display:flex;flex-wrap:wrap;gap:.7rem;margin:.3rem 0 .6rem}'
+             '.wbox{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);'
+             'padding:.55rem .8rem;flex:1 1 220px;min-width:0;box-shadow:var(--shadow)}'
+             '.wbox-h{font-family:var(--font-display);font-weight:700;font-size:.8rem;'
+             'color:var(--green-dark);margin-bottom:.2rem}</style>')
+    cols = f'{style}<div class="wgrid">{boxes}</div>' if boxes else ""
     sinds = (f' <span class="muted">· sinds {_e(shop.get("first_order_date"))}</span>'
              if not wd and shop.get("first_order_date") else "")
     return (f'<h2>📊 Website Watcher — verkoop ({periode}){sinds}</h2>'
-            f'<div class="kpis">{tiles}</div>{cols}')
+            f'<div class="kpis">{tiles}</div>{conv_note}{cols}')
 
 
 def render_html(snap: dict, csrf_token: str | None = None, msg=None,
@@ -1505,14 +1569,19 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         if isinstance(s, dict):                      # oude machine-scope leesbaar maken
             return " · ".join(f"{k}: {v}" for k, v in s.items())
         return s
+    # Leesbare statuslabels (intern: queued/running/blocked/future/done).
+    _STATUS_LBL = {"running": "Actief", "queued": "Toekomst", "future": "Toekomst",
+                   "blocked": "Wachten op", "done": "Done"}
     prows = []
     for p in show_proj:
         pacts = _proj_actions(p, csrf_token) if writable else '<span class="muted">—</span>'
+        # Scope is klikbaar naar de projectpagina (daar staat de deliverable/voortgang).
+        scope_link = f'<a href="/project?pid={_e(p.get("id"))}">{_e(_scope(p))}</a>'
         prows.append(
             f'<tr class="st-{_e(p.get("status"))}">'
             f'<td><b>{_e(p.get("owner"))}</b></td>'
-            f'<td>{_e(_scope(p))}</td>'
-            f'<td>{_e(p.get("status"))}</td>'
+            f'<td>{scope_link}</td>'
+            f'<td>{_e(_STATUS_LBL.get(p.get("status"), p.get("status")))}</td>'
             f'<td>{_e(p.get("blocked_on") or "—")}</td>'
             f'<td>{pacts}</td>'
             f"</tr>"
@@ -1623,8 +1692,8 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         out = f' <b style="color:{color}">{label}</b>'
         expl = x.get("surge_explanation") or {}
         if expl.get("title"):                              # scout: nieuws-aanleiding
-            out += (f' <span class="muted">· 📰 <a href="{_e(expl.get("link", ""))}">'
-                    f'{_e(expl["title"][:55])}</a></span>')
+            out += (f' <span class="muted">· 📰 <a href="{_e(expl.get("link", ""))}" '
+                    f'target="_blank" rel="noopener">{_e(expl["title"][:55])}</a></span>')
         d = x.get("duiding")                               # Harry: academische duiding (kaartje)
         if d:
             out += (f' <span class="muted">· 🔬 <a href="/card?id={_e(d["id"])}">'
@@ -1724,7 +1793,8 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     for b in monitored:
         n = news.get(b) or {}
         if n.get("title"):
-            feit = (f'<a href="{_e(n.get("link", ""))}">{_e(n["title"][:90])}</a>'
+            feit = (f'<a href="{_e(n.get("link", ""))}" target="_blank" rel="noopener">'
+                    f'{_e(n["title"][:90])}</a>'
                     f' <span class="muted">({_e(n.get("date", ""))})</span>')
         else:
             feit = '<span class="muted">geen recent nieuws opgehaald</span>'
@@ -1807,8 +1877,8 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'{_banner(msg)}'
         f'{_render_digest(snap.get("digest", {}), snap.get("noochie_daily", {}))}'
         f'{_render_watcher_dashboard(snap.get("shopify", {}), snap.get("visitors_7d"))}'
-        f'{_render_backlog(snap.get("backlog", []), snap.get("north_star", {}), csrf_token, [r["id"] for r in roster if not r["archived"]])}'
-        f'<h2>Inbox</h2>{inbox_tbl}'
+        # Kansen verwerk je in de focusmodus (▶ Verwerk in focus); geen dubbele backlog-tabel meer.
+        f'<details><summary>📥 Inbox — overige items ({_n_inbox})</summary>{inbox_tbl}</details>'
         f'{drafts_block}'
         f'<h2>Proces (projecten)</h2>{proj_tbl}'
         f'<h2>Kennis</h2>'
@@ -2168,6 +2238,23 @@ def make_handler(data_dir: str | None):
                              if not r["archived"] and r["type"] == "role"]
                     body = render_triage(cur, 1, len(queue), roles,
                                          csrf_token, msg=msg).encode("utf-8")
+            elif path == "/fieldnotes":
+                import glob
+                dd = data_dir or _default_data_dir()
+                out_dir = os.path.join(dd, "output")
+                files = sorted((os.path.basename(p) for p in
+                                glob.glob(os.path.join(out_dir, "field_note_*.md"))), reverse=True)
+                sel = (qs.get("f") or [""])[0]
+                if sel not in files:
+                    sel = files[0] if files else ""
+                content = ""
+                if sel:                       # sel is gevalideerd tegen de lijst (geen traversal)
+                    try:
+                        content = open(os.path.join(out_dir, sel), encoding="utf-8").read()
+                    except Exception:
+                        content = ""
+                pos = files.index(sel) + 1 if sel in files else 0
+                body = render_fieldnotes(files, sel, content, pos, len(files)).encode("utf-8")
             elif path == "/roloverleg":
                 dd = data_dir or _default_data_dir()
                 from nooch_village.roloverleg import Agenda, secretary_check

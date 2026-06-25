@@ -64,5 +64,7 @@ def test_cockpit_backlog_gerangschikt(tmp_path):
     assert [b["title"] for b in snap["backlog"]] == ["reviews oogsten", "fora monitoren"]  # op waarde
     assert snap["backlog"][0]["value"] == 40.0
 
+    # De dichte kansen-backlog is uit het dashboard (verwerken gaat via de focusmodus); de
+    # ranking-data leeft nog in snap. De render mag gewoon draaien zonder die tabel.
     page = cockpit.render_html(snap, csrf_token="t")
-    assert "Kansen-backlog" in page and "reviews oogsten" in page
+    assert "Kansen-backlog" not in page

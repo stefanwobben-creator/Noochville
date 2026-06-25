@@ -898,3 +898,24 @@ geblokkeerd met die capaciteitsvraag voor de mens (geboren-vs-bemenst blijft men
 sluit projecten af (rol markeert alleen voortgang). CLI work_projects + stap 6/6 in refresh.sh; cap
 per run, fail-closed zonder LLM. Accountability ≠ toestemming: een rol mag vrij handelen vanuit z'n
 purpose zolang omkeerbaar en binnen z'n skills. Tests: +test_project_worker.py. Suite groen (513 + 514).
+
+## Cockpit-feedback ronde 1 (quick fixes)
+- Kansen-backlog uit het dashboard gehaald (verwerken gaat via de focusmodus /triage).
+- Inbox ingeklapt tot een details ('overige items'); blijft bestaan voor niet-kans-types.
+- Website Watcher: attributie-lijstjes (land/producten/kanaal/landingspagina/UTM) nu in nette
+  kaders (.wbox), en een conversie-noot die de getallen toont (orders ÷ bezoekers, 7d-scoped).
+- Projecten: leesbare statuslabels (Actief/Toekomst/Wachten op/Done); scope klikbaar naar de
+  projectpagina, die nu de deliverable/voortgang (progress) + uitkomst + hypothese toont.
+- Externe nieuws-links (volg-woorden 📰 + concurrent-monitor) openen in een nieuw tabblad.
+- Field Notes leesbaar in de browser: nieuwe /fieldnotes-pagina (archieflijst + lezen + ←/→
+  bladeren), met een link vanuit het Noochie-blok.
+Tests: +test_cockpit_cleanup.py; test_business_case/test_triage_dialoog/test_cockpit bijgewerkt.
+Suite groen (546 + 484).
+
+### Doorgeschoven naar morgen (feedback ronde 1)
+- Website Watcher periode-toggle (7d / maand / hele periode) met eerlijke conversie per periode
+  (vraagt bezoekers-historie i.p.v. alleen laatste 7d).
+- Datacheck Shopify-koppeling: waarom maar 2 paar over 'hele historie' (waarschijnlijk: de 530 van
+  batch 1 zaten niet in deze Shopify-store; verifiëren).
+- Scout leest artikelen en destilleert ze tot voorstellen (kenniskaart / seed / doelwit /
+  concurrent), inclusief Nooch.earth als zelf-monitor.

@@ -192,10 +192,9 @@ def test_focusmodus_overzicht_leeg_is_klaar(tmp_path):
     assert "Alles verwerkt" in cockpit.render_triage(None, 0, 0, [], "t")
 
 
-def test_cockpit_render_anchor_en_holacracy_knoppen(tmp_path):
-    """De backlog-rij heeft een anchor (scroll-fix) en de Holacracy-knoppen; een onbeantwoorde
-    vraag toont 'wachten op antwoord' met de dialoog."""
-    import json
+def test_focus_kaart_holacracy_knoppen_en_dialoog(tmp_path):
+    """De focusmodus toont de Holacracy-knoppen en, bij een onbeantwoorde vraag, 'wachten op
+    antwoord' met de dialoog. (De kansen-backlog is uit het dashboard; verwerken gaat via focus.)"""
     from nooch_village import cockpit
     data = tmp_path / "data"
     data.mkdir()
@@ -207,12 +206,14 @@ def test_cockpit_render_anchor_en_holacracy_knoppen(tmp_path):
                                 business_case=make_business_case(effect=80, effort=2, confidence=0.7))
     inbox.add_question(iid, "Wat bedoel je hiermee?", by_role="analyst")
 
-    page = cockpit.render_html(cockpit.gather(str(data)), csrf_token="t")
-    assert f'id="kans-{iid}"' in page                         # scroll-anchor op de rij
-    assert f'name="anchor" value="kans-{iid}"' in page        # form stuurt anchor mee
+    snap = cockpit.gather(str(data))
+    # backlog is niet meer in het dashboard gerenderd
+    assert "Kansen-backlog" not in cockpit.render_html(snap, csrf_token="t")
+    x = next(b for b in snap["backlog"] if b.get("iid") == iid)
+    page = cockpit.render_triage(x, 1, 1, ["analyst"], "t")
     for val in ("tac_project", "tac_info_give", "tac_info_ask",
                 "gov_proposal", "tension_done", "vision_drop"):
         assert f'value="{val}"' in page
     assert "⚙️ Tactical" in page and "🏛️ Governance" in page
-    assert "wachten op antwoord" in page                      # onbeantwoorde vraag
+    assert "wachten op antwoord" in page and "Wat bedoel je hiermee?" in page
     assert "Wat bedoel je hiermee?" in page                   # de geparkeerde vraag
