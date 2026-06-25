@@ -14,6 +14,7 @@ Draaien:
 from __future__ import annotations
 
 import os
+import re
 import html
 import time
 import secrets
@@ -30,7 +31,7 @@ from nooch_village.inbox_actions import (
     decide_keyword, defer_item, confirm_item, mark_done, resolve_tension, add_reference,
     route_to_project, route_to_governance, remove_note, override_library_term,
     decide_competitor_candidate, decide_link_target, set_word_function, decide_opportunity,
-    decide_target)
+    decide_target, ask_role, pick_governance_target, formulate_project)
 from nooch_village.competitor_brands import CompetitorBrands
 from nooch_village.link_targets import LinkTargets
 
@@ -252,12 +253,14 @@ def gather(data_dir: str | None = None) -> dict:
         ctx = it.get("context") or {}
         if it.get("type") == "opportunity":            # kans → wacht op jouw akkoord
             bc = ctx.get("business_case")
+            dlg = ctx.get("dialogue") or []
             backlog.append({
                 "title": ctx.get("title") or it.get("subject"), "kind": "kans",
                 "by": ctx.get("by", ""),
                 "wat": ctx.get("wat", "") or ctx.get("hypothesis", ""),  # back-compat
                 "waarom": ctx.get("waarom", ""),
                 "business_case": bc, "value": business_value(bc),
+                "dialogue": dlg, "awaiting": any(not d.get("answered") for d in dlg),
                 "iid": it.get("id"), "approvable": True})
             continue
         prop = ctx.get("proposal") or {}
@@ -804,51 +807,118 @@ def _render_backlog(backlog: list, north_star: dict, token: str | None = None,
     else:
         _kind_label = {"kans": "📋 project", "voorstel": "🏛️ governance",
                        "project (loopt)": "📋 project (loopt)"}
+        def _dialogue(x):
+            """Toon de vraag-antwoord-dialoog met de rol (mens vraagt, rol antwoordt in de puls)."""
+            dlg = x.get("dialogue") or []
+            if not dlg:
+                return ""
+            rows = []
+            for d in dlg:
+                q = f'<div style="margin-top:.3rem">🙋 <b>jij:</b> {_e(d.get("q",""))}</div>'
+                if d.get("answered"):
+                    a = (f'<div>💬 <b>{_e(d.get("by") or "rol")}:</b> {_e(d.get("a",""))}</div>')
+                else:
+                    a = ('<div class="muted">⏳ <i>wachten op antwoord (komt in de volgende puls)</i></div>')
+                rows.append(q + a)
+            return (f'<div style="border-left:3px solid var(--border);padding-left:.6rem;'
+                    f'margin:.4rem 0;font-size:.85rem">{"".join(rows)}</div>')
+
         def _kans_cell(x):
             kl = _kind_label.get(x["kind"], x["kind"])
+            wacht = (' <span class="badge" style="background:var(--cream-3);'
+                     'border:1px solid var(--border);border-radius:6px;padding:0 .3rem;'
+                     'font-size:.7rem">⏳ wachten op antwoord</span>') if x.get("awaiting") else ""
             head = (f'<b>{_e(x["title"])}</b> <span class="muted">{kl}'
-                    f'{(" · door " + _e(x["by"])) if x.get("by") else ""}</span>')
+                    f'{(" · door " + _e(x["by"])) if x.get("by") else ""}</span>{wacht}')
             wat = f'<div style="margin:.2rem 0">{_e(x.get("wat", ""))}</div>' if x.get("wat") else ""
             waarom = (f'<div class="muted"><b>Waarom:</b> {_e(x["waarom"])}</div>'
                       if x.get("waarom") else "")
-            return head + wat + waarom
+            return head + wat + waarom + _dialogue(x)
 
         _roles = roles or []
 
         def _acts(x):
+            """Triage volgens Holacracy: kies Tactical (project / informatie) of Governance
+            (voorstel — AI bepaalt nieuwe rol vs. uitbreiden). 'Klaar' sluit het item. Het
+            enige 'weg' is jouw source-oordeel: past niet binnen de visie (wordt huis-regel)."""
             if not (x.get("approvable") and token):
                 return '<span class="muted">—</span>'
             by = x.get("by", "")
-            opts = "".join(
+            inp = 'padding:.25rem .4rem;border:1px solid var(--border);border-radius:6px'
+            iid = _e(x["iid"])
+            common = (f'<input type="hidden" name="csrf" value="{_e(token)}">'
+                      f'<input type="hidden" name="iid" value="{iid}">'
+                      f'<input type="hidden" name="anchor" value="kans-{iid}">')
+            owner_opts = "".join(
                 f'<option value="{_e(r)}"{" selected" if r == by else ""}>{_e(r)}</option>'
                 for r in _roles) or f'<option value="{_e(by)}">{_e(by)}</option>'
-            opts += '<option value="__new__">➕ nieuwe rol</option>'
-            inp = ('padding:.25rem .4rem;border:1px solid var(--border);border-radius:6px')
-            # één formulier, gedeelde velden, drie uitkomsten (project / kennis / negeer)
-            return (
-                f'<form method="post" action="/action">'
-                f'<input type="hidden" name="csrf" value="{_e(token)}">'
-                f'<input type="hidden" name="iid" value="{_e(x["iid"])}">'
-                f'<div style="margin-bottom:.3rem">project voor: '
-                f'<select name="owner" style="{inp}">{opts}</select></div>'
-                f'<input type="text" name="reason" placeholder="reden / opmerking" '
-                f'style="width:100%;margin-bottom:.2rem;{inp}">'
+            gov_opts = ('<option value="__auto__">🤖 laat AI kiezen (nieuw of uitbreiden)</option>'
+                        + owner_opts + '<option value="__new__">➕ nieuwe rol</option>')
+            ta = (f'width:100%;box-sizing:border-box;margin:.2rem 0;{inp}')
+            # ── Tactical: project (voor een rol) óf informatie (geven / vragen) ──
+            tactical = (
+                f'<details><summary style="cursor:pointer">⚙️ Tactical</summary>'
+                f'<div style="padding:.3rem 0 .2rem">'
+                # project
+                f'<form method="post" action="/action" style="margin-bottom:.4rem">{common}'
+                f'<div style="font-size:.8rem;margin-bottom:.15rem"><b>Project</b> voor rol '
+                f'(AI formuleert de uitkomst):</div>'
+                f'<select name="owner" style="{inp}">{owner_opts}</select> '
+                f'<button class="btn ok" type="submit" name="action" value="tac_project">'
+                f'+ project</button></form>'
+                # informatie geven
+                f'<form method="post" action="/action" style="margin-bottom:.4rem">{common}'
+                f'<div style="font-size:.8rem;margin-bottom:.15rem"><b>Informatie geven</b> '
+                f'(landt in de kennisbank):</div>'
+                f'<textarea name="info" rows="2" placeholder="wat wil je het dorp meegeven?" '
+                f'style="{ta}"></textarea>'
+                f'<button class="btn" type="submit" name="action" value="tac_info_give">'
+                f'+ 📚 kennis</button></form>'
+                # informatie vragen
+                f'<form method="post" action="/action">{common}'
+                f'<div style="font-size:.8rem;margin-bottom:.15rem"><b>Informatie vragen</b> '
+                f'(de rol antwoordt in de puls):</div>'
+                f'<textarea name="question" rows="2" placeholder="bijv. ik snap dit voorstel niet, wat bedoel je?" '
+                f'style="{ta}"></textarea>'
+                f'<button class="btn" type="submit" name="action" value="tac_info_ask">'
+                f'❓ vraag de rol</button></form>'
+                f'</div></details>')
+            # ── Governance: een voorstel (AI bepaalt nieuw vs. uitbreiden) ──
+            governance = (
+                f'<details><summary style="cursor:pointer">🏛️ Governance</summary>'
+                f'<div style="padding:.3rem 0 .2rem">'
+                f'<form method="post" action="/action">{common}'
+                f'<div style="font-size:.8rem;margin-bottom:.15rem"><b>Voorstel</b> — '
+                f'nieuwe rol of een bestaande uitbreiden:</div>'
+                f'<select name="owner" style="{inp}">{gov_opts}</select> '
+                f'<button class="btn" type="submit" name="action" value="gov_proposal">'
+                f'🏛️ maak voorstel</button></form>'
+                f'</div></details>')
+            # ── Klaar + (enige weg) past niet binnen de visie ──
+            klaar = (
+                f'<form method="post" action="/action" style="display:inline">{common}'
+                f'<button class="btn ok" type="submit" name="action" value="tension_done">'
+                f'✓ klaar</button></form>')
+            visie = (
+                f'<details style="margin-top:.3rem"><summary style="cursor:pointer;'
+                f'font-size:.8rem;color:var(--gray)">past niet binnen de visie</summary>'
+                f'<form method="post" action="/action" style="padding-top:.2rem">{common}'
+                f'<input type="text" name="reason" placeholder="waarom past dit niet?" '
+                f'style="width:100%;box-sizing:border-box;margin-bottom:.2rem;{inp}">'
                 f'<label style="font-size:.8rem;display:block;margin-bottom:.3rem">'
-                f'<input type="checkbox" name="remember" value="1"> onthoud reden als huis-regel</label>'
-                f'<div class="muted" style="font-size:.75rem;margin-bottom:.2rem">'
-                f'voeg uitkomsten toe (mag meerdere), dan Afronden:</div>'
-                f'<button class="btn ok" type="submit" name="action" value="opp_project">+ project</button> '
-                f'<button class="btn" type="submit" name="action" value="opp_knowledge">+ 📚 kennis</button> '
-                f'<button class="btn" type="submit" name="action" value="opp_governance">+ 🏛️ governance</button>'
-                f'<div style="margin-top:.3rem">'
-                f'<button class="btn ok" type="submit" name="action" value="opp_done">✓ afronden</button> '
-                f'<button class="btn danger" type="submit" name="action" value="opp_reject">✗ negeer</button>'
-                f'</div></form>')
-        rows = "".join(
-            f'<tr><td>{_kans_cell(x)}</td>'
-            f'<td>{_e(format_business_case(x.get("business_case")))}</td>'
-            f'<td><b>{_e(x.get("value"))}</b></td>'
-            f'<td style="min-width:220px">{_acts(x)}</td></tr>' for x in backlog)
+                f'<input type="checkbox" name="remember" value="1"> onthoud als huis-regel</label>'
+                f'<button class="btn danger" type="submit" name="action" value="vision_drop">'
+                f'✗ verwijderen</button></form></details>')
+            return (f'{tactical}{governance}'
+                    f'<div style="margin-top:.4rem">{klaar}</div>{visie}')
+
+        def _row(x):
+            anchor = f' id="kans-{_e(x["iid"])}"' if x.get("iid") else ""
+            return (f'<tr{anchor}><td>{_kans_cell(x)}</td>'
+                    f'<td>{_e(format_business_case(x.get("business_case")))}</td>'
+                    f'<td><b>{_e(x.get("value"))}</b></td>'
+                    f'<td style="min-width:240px">{_acts(x)}</td></tr>')
+        rows = "".join(_row(x) for x in backlog)
         body = ('<table><thead><tr><th>kans</th><th>business-case</th><th>waarde</th>'
                 '<th>jouw oordeel</th></tr></thead>'
                 f'<tbody>{rows}</tbody></table>')
@@ -1238,22 +1308,25 @@ def _flash(result: dict) -> str:
         if st in ("escalated", "invalid"):
             return f"✗ Governance {st}: {result.get('reason', '')}"
         return "✗ " + (result.get("error") or result.get("reason") or "actie mislukt")
+    if result.get("status") == "waiting":
+        return ("⏳ Vraag geparkeerd — de rol beantwoordt 'm in de volgende puls "
+                "(item blijft open).")
     if result.get("status") == "added":
         d = result.get("destination")
-        tail = " — item blijft open, voeg meer toe of klik Afronden."
+        tail = " — item blijft open, klik ✓ klaar als je tevreden bent."
         if d == "governance":
             gs = result.get("gov_status")
             if gs == "adopted":
                 return "➕ Governance: rol aangemaakt/uitgebreid (zie Roster)." + tail
             return f"➕ Governance: poort vraagt jouw oordeel ({result.get('gov_reason', '')})." + tail
         if d == "knowledge":
-            return "➕ Kennis-kaart toegevoegd (zie Inzichten)." + tail
+            return "➕ Toegevoegd aan de kennisbank (zie Inzichten)." + tail
         return f"➕ Project toegevoegd voor {result.get('owner') or 'het dorp'} (zie Proces)." + tail
     if result.get("status") == "done":
-        return "✓ Kans afgerond."
+        return "✓ Spanning klaar — uit je inbox."
     if result.get("status") == "rejected" and "title" in result:
         extra = " + onthouden als huis-regel" if result.get("constraint_learned") else ""
-        return f"✓ Kans genegeerd{extra} — de rol leert van je reden."
+        return f"✗ Past niet binnen de visie — weg{extra} (het dorp leert van je reden)."
     if "proj_status" in result:
         return f"✓ Project-status → {result['proj_status']}"
     if "proj_edit" in result:
@@ -1294,25 +1367,44 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         library = Library(os.path.join(dd, "library.json"))
         return override_library_term(library, extra.get("word", ""),
                                      extra.get("decision", ""), reason=reason)
-    if action in ("opp_project", "opp_knowledge", "opp_governance", "opp_done", "opp_reject"):
+    # ── Triage volgens Holacracy: tactical (project/info) | governance | klaar | visie-weg ──
+    if action == "tac_info_ask":
+        # Vraag parkeren; de puls beantwoordt 'm gebundeld (geen LLM hier).
+        return ask_role(inbox, iid, extra.get("question", ""))
+    if action in ("tac_project", "tac_info_give", "gov_proposal",
+                  "tension_done", "vision_drop"):
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
         notes = NotesStore(os.path.join(dd, "notes.json"))
         from nooch_village.constraints import Constraints
         constraints = Constraints(os.path.join(dd, "constraints.json"))
         records = Records(os.path.join(dd, "governance_records.json"))
-        decision, destination = "add", "project"
-        if action == "opp_reject":
-            decision = "reject"
-        elif action == "opp_done":
-            decision = "done"
-        elif action == "opp_knowledge":
-            destination = "knowledge"
-        elif action == "opp_governance":
-            destination = "governance"
-        return decide_opportunity(
-            inbox, iid, decision, reason=reason, destination=destination,
-            owner=extra.get("owner", ""), remember_constraint=bool(extra.get("remember")),
-            projects=projects, notes=notes, constraints=constraints, records=records)
+        if action == "tension_done":
+            return decide_opportunity(inbox, iid, "done", reason=reason)
+        if action == "vision_drop":
+            return decide_opportunity(
+                inbox, iid, "reject", reason=reason,
+                remember_constraint=bool(extra.get("remember")), constraints=constraints)
+        if action == "tac_info_give":
+            return decide_opportunity(inbox, iid, "add", destination="knowledge",
+                                      info=extra.get("info", ""), notes=notes)
+        if action == "gov_proposal":
+            owner = extra.get("owner", "")
+            if owner == "__auto__":                       # AI bepaalt nieuw vs. uitbreiden
+                item = inbox.get(iid) or {}
+                c = item.get("context") or {}
+                owner = pick_governance_target(
+                    [r.id for r in records.all()],
+                    c.get("title") or item.get("subject", ""), c.get("wat", ""))
+            return decide_opportunity(inbox, iid, "add", destination="governance",
+                                      owner=owner, records=records)
+        # tac_project: AI formuleert de project-uitkomst (Holacracy), fail-closed → titel
+        item = inbox.get(iid) or {}
+        c = item.get("context") or {}
+        scope = formulate_project(c.get("title") or item.get("subject", ""),
+                                  c.get("wat", ""), extra.get("owner", ""))
+        return decide_opportunity(inbox, iid, "add", destination="project",
+                                  owner=extra.get("owner", ""), scope_override=scope,
+                                  projects=projects)
     if action in ("target_project", "target_drop"):
         library = Library(os.path.join(dd, "library.json"))
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
@@ -1474,15 +1566,21 @@ def make_handler(data_dir: str | None):
                      "rationale": (form.get("rationale") or [""])[0],
                      "word": (form.get("word") or [""])[0],
                      "decision": (form.get("decision") or [""])[0],
+                     "question": (form.get("question") or [""])[0],
+                     "info": (form.get("info") or [""])[0],
                      "remember": (form.get("remember") or [""])[0]}
             result = _dispatch_action(data_dir, action, iid, reason, extra=extra)
             # 303 → verse GET. Rails keren terug naar de spanning (next), sluiten gaat home.
-            # De uitkomst gaat als korte flash-banner mee in de query.
+            # De uitkomst gaat als korte flash-banner mee in de query; een anchor brengt je
+            # terug naar exact het item waar je was (geen sprong naar boven na een actie).
             nxt = (form.get("next") or ["/"])[0]
             if not nxt.startswith("/"):
                 nxt = "/"
+            anchor = (form.get("anchor") or [""])[0]
             sep = "&" if "?" in nxt else "?"
             nxt = f"{nxt}{sep}msg={urllib.parse.quote(_flash(result))}"
+            if anchor and re.fullmatch(r"[A-Za-z0-9_\-]+", anchor):
+                nxt = f"{nxt}#{anchor}"          # fragment ná de query (juiste URL-volgorde)
             self.send_response(303)
             self.send_header("Location", nxt)
             self.end_headers()

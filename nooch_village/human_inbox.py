@@ -423,6 +423,56 @@ class HumanInbox:
         self._save()
         return iid
 
+    # ── dialoog (mens stelt een rol een vraag; rol antwoordt in de puls) ────────
+
+    def add_question(self, item_id: str, question: str, by_role: str = "") -> bool:
+        """Parkeer een vraag van de mens op een item (bijv. 'ik snap dit voorstel niet').
+        Geen LLM hier: de vraag wacht tot de puls 'm gebundeld beantwoordt. Het item blijft
+        pending; zolang er een onbeantwoorde vraag staat toont de cockpit 'wachten op antwoord'.
+        False als het item niet (meer) bestaat."""
+        it = self._items.get(item_id)
+        if it is None:
+            return False
+        q = (question or "").strip()
+        if not q:
+            return False
+        ctx = it.setdefault("context", {})
+        ctx.setdefault("dialogue", []).append(
+            {"q": q, "a": None, "by": by_role or ctx.get("by", ""),
+             "at": time.time(), "answered": False})
+        self._save()
+        return True
+
+    def answer_question(self, item_id: str, idx: int, answer: str) -> bool:
+        """Vul het antwoord van de rol in op de zoveelste dialoog-vraag (door de puls).
+        False als item/entry niet bestaat of al beantwoord."""
+        it = self._items.get(item_id)
+        if it is None:
+            return False
+        dlg = (it.get("context") or {}).get("dialogue") or []
+        if idx < 0 or idx >= len(dlg) or dlg[idx].get("answered"):
+            return False
+        dlg[idx]["a"] = (answer or "").strip()
+        dlg[idx]["answered"] = True
+        dlg[idx]["answered_at"] = time.time()
+        self._save()
+        return True
+
+    def pending_questions(self) -> list[dict]:
+        """Alle onbeantwoorde vragen over álle (open) items, voor de batch-beantwoording.
+        Elk: {iid, idx, by, question, subject, context}. Volgorde = aanmaakvolgorde."""
+        out: list[dict] = []
+        for it in self._items.values():
+            if it.get("status") != "pending":
+                continue
+            dlg = (it.get("context") or {}).get("dialogue") or []
+            for i, d in enumerate(dlg):
+                if not d.get("answered"):
+                    out.append({"iid": it["id"], "idx": i, "by": d.get("by", ""),
+                                "question": d.get("q", ""), "subject": it.get("subject", ""),
+                                "context": it.get("context") or {}})
+        return out
+
     def resolve(self, item_id: str, action: str,
                 reason: str = "", amendment: str = "",
                 extra: dict | None = None) -> bool:

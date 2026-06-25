@@ -491,6 +491,27 @@ def main() -> None:
         else:
             print(f"   linkbuilding overgeslagen: {lt.get('error', 'onbekend')}")
 
+    elif mode == "answer_questions":
+        # Gebundelde beantwoording: alle openstaande mens-vragen aan rollen in één LLM-call
+        # (het bovenliggende principe: geen realtime per-vraag-call, maar één puls-call).
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.human_inbox import HumanInbox
+        from nooch_village.governance import Records
+        from nooch_village.inbox_actions import answer_pending_questions
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        inbox = HumanInbox(os.path.join(ctx.data_dir, "human_inbox.json"))
+        records = Records(os.path.join(ctx.data_dir, "governance_records.json"))
+        pend = inbox.pending_questions()
+        if not pend:
+            print("Geen openstaande vragen.")
+        else:
+            print(f"💬 {len(pend)} openstaande vraag(en) — gebundeld beantwoorden…")
+            res = answer_pending_questions(inbox, records=records)
+            print(f"   {res['answered']} beantwoord, {res['pending']} blijft wachten "
+                  f"(geen LLM of geen antwoord).")
+
     else:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
@@ -498,6 +519,6 @@ def main() -> None:
               "content_strategist | grant_serpapi_trends | grant_skill | revoke_skill | "
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "
               "measure_propose | rereview | ingest | notes_remove | recurate | "
-              "ground | harry_run | roster | keys | competitor | formalize",
+              "ground | harry_run | roster | keys | competitor | formalize | answer_questions",
               file=sys.stderr)
         sys.exit(1)

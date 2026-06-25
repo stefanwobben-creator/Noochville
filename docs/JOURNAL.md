@@ -622,3 +622,22 @@ scope+eigenaar, zodat 2 projecten voor verschillende rollen vanuit één kans ku
 principe 'één spanning, meerdere uitkomsten; afsluiten is een aparte stap'.
 
 Tests: 958 → 960.
+
+## Triage volgens Holacracy + vraag-aan-rol-dialoog + scroll-fix
+De kansen-backlog is herbouwd naar het Holacracy-model. Per kans kies je nu Tactical
+(Project voor een rol — AI formuleert de uitkomst; Informatie geven → kennisbank; of
+Informatie vragen aan de rol) of Governance (Voorstel; bij '🤖 laat AI kiezen' bepaalt de AI
+of een bestaande rol wordt uitgebreid of een nieuwe rol nodig is). '✓ klaar' haalt de spanning
+uit je inbox; het enige 'weg' is je source-oordeel "past niet binnen de visie" (wordt huis-regel).
+
+Vraag-aan-rol is een GEBUNDELDE dialoog, geen realtime call: de cockpit parkeert de vraag
+(label 'wachten op antwoord'), en `village answer_questions` (ook stap 4/4 in refresh.sh)
+laat de LLM álle openstaande vragen in één call beantwoorden, elk als de betreffende rol in
+gewone taal. Fail-closed zonder LLM (blijft wachten). De dialoog staat onder de kans.
+
+Scroll-fix: elke backlog-rij heeft id=kans-<iid> en de forms sturen een anchor mee, zodat de
+303-redirect terugkeert naar exact het item (geen sprong naar boven na een actie).
+
+Nieuw: human_inbox.add_question/answer_question/pending_questions; inbox_actions.ask_role,
+answer_pending_questions, pick_governance_target, formulate_project; cockpit Holacracy-UI +
+anchor. Tests: +test_triage_dialoog.py. Volledige suite groen (478 + 489 in twee helften).

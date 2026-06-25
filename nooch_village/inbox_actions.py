@@ -196,7 +196,8 @@ def _route_kans_to_governance(records, owner: str, title: str, wat: str, waarom:
 
 def decide_opportunity(inbox, iid: str, decision: str, *, reason: str = "",
                        destination: str = "project", owner: str = "",
-                       remember_constraint: bool = False,
+                       remember_constraint: bool = False, scope_override: str = "",
+                       info: str = "",
                        projects=None, notes=None, constraints=None, records=None) -> dict:
     """Triage van een kans (mens-poort). approve → kies bestemming: 'project' (voor `owner`,
     op het projectbord) of 'knowledge' (kennis-kaart). reject → genegeerd; bij remember_constraint
@@ -232,20 +233,150 @@ def decide_opportunity(inbox, iid: str, decision: str, *, reason: str = "",
     if destination == "knowledge" and notes is not None:
         from nooch_village.insight import Insight, GroundingStatus
         import uuid as _uuid
-        notes.add(Insight(id="kn_" + _uuid.uuid4().hex[:9], claim=title,
-                          grounds=(wat or title), source="triage",
+        # 'info' = wat de mens zelf toevoegt (tactical: informatie geven); valt terug op de kans.
+        claim = (info or "").strip() or title
+        notes.add(Insight(id="kn_" + _uuid.uuid4().hex[:9], claim=claim,
+                          grounds=(info or wat or title), source="triage",
                           status=GroundingStatus.UNRESOLVED, tags=["triage"]))
         return {"ok": True, "status": "added", "destination": "knowledge", "title": title}
     # project (default): dedup op scope + eigenaar, zodat 2 projecten voor verschillende rollen kunnen.
+    scope = (scope_override or "").strip() or title
     owner = (owner or ctx.get("by") or "village").strip()
     if projects is not None:
-        dup = any(str(p.get("scope")) == title and p.get("owner") == owner
+        dup = any(str(p.get("scope")) == scope and p.get("owner") == owner
                   and p.get("status") not in ("done",) for p in projects.all())
         if not dup:
-            projects.create(owner, title, "human", hypothesis=wat,
+            projects.create(owner, scope, "human", hypothesis=wat,
                             business_case=ctx.get("business_case"))
     return {"ok": True, "status": "added", "destination": "project",
-            "title": title, "owner": owner}
+            "title": scope, "owner": owner}
+
+
+def ask_role(inbox, iid: str, question: str, *, by_role: str = "") -> dict:
+    """Tactical-informatie (vragen): de mens stelt een rol een vraag over een item
+    ('ik snap dit voorstel niet'). GEEN LLM hier — de vraag wordt geparkeerd en in de
+    puls gebundeld beantwoord (zie answer_pending_questions). Item blijft open met label
+    'wachten op antwoord'. Geeft {ok, status: 'waiting'}."""
+    item = inbox.get(iid)
+    if item is None:
+        return {"ok": False, "error": "item niet gevonden"}
+    if item.get("status") != "pending":
+        return {"ok": False, "error": f"item is al {item.get('status')}"}
+    role = by_role or (item.get("context") or {}).get("by", "")
+    if not inbox.add_question(iid, question, by_role=role):
+        return {"ok": False, "error": "vraag is leeg"}
+    return {"ok": True, "status": "waiting", "by": role}
+
+
+_ANS_RE = re.compile(r"ANTWOORD\s*(\d+)\s*:\s*(.+?)(?=\n\s*ANTWOORD\s*\d+\s*:|\Z)",
+                     re.IGNORECASE | re.DOTALL)
+
+
+def answer_pending_questions(inbox, *, records=None, llm_reason=None, limit: int = 20) -> dict:
+    """Batch-beantwoording: bundel ALLE openstaande vragen en laat de LLM ze in één call
+    beantwoorden, elk als de betreffende rol, in gewone taal (burger-frame, geen jargon).
+    Schrijft de antwoorden terug op de items. Fail-closed: zonder LLM of zonder antwoord
+    blijven de vragen 'wachten op antwoord'. Geeft {ok, answered, pending}.
+
+    Dit is het bovenliggende principe: geen realtime call per vraag, maar één gebundelde
+    puls-call — zoals de rest van het dorp werkt."""
+    if llm_reason is None:
+        from nooch_village.llm import reason as llm_reason
+    qs = inbox.pending_questions()[:limit]
+    if not qs:
+        return {"ok": True, "answered": 0, "pending": 0}
+
+    def _purpose(role_id: str) -> str:
+        if not role_id or records is None:
+            return ""
+        rec = records.get(role_id)
+        if rec is None:
+            return ""
+        d = getattr(rec, "definition", None)
+        return getattr(d, "purpose", "") if d else ""
+
+    blok = []
+    for n, q in enumerate(qs, 1):
+        ctx = q.get("context") or {}
+        rol = q.get("by") or "het dorp"
+        purpose = _purpose(q.get("by"))
+        onderwerp = ctx.get("title") or q.get("subject") or ""
+        wat = ctx.get("wat", "")
+        blok.append(
+            f"VRAAG {n} (gericht aan rol '{rol}'"
+            f"{f', wiens doel is: {purpose}' if purpose else ''}):\n"
+            f"  Onderwerp: {onderwerp}\n"
+            f"  Toelichting: {wat}\n"
+            f"  De vraag van de mens: {q.get('question')}")
+    prompt = (
+        "Je bent een inwoner van NoochVille (duurzaam, vegan schoenenmerk Nooch.earth). "
+        "De mens (oprichter) stelt per onderstaande spanning een vraag aan een rol. "
+        "Beantwoord ELKE vraag als díe rol, in gewone taal die een 12-jarige begrijpt: "
+        "concreet, eerlijk, kort (2 tot 4 zinnen). Geen jargon, geen Engelse vakwoorden, "
+        "geen marketingtaal. Spreek over 'mensen' en 'burgers', niet over 'consumenten' of "
+        "'transacties'. Als je iets niet zeker weet, zeg dat eerlijk.\n\n"
+        + "\n\n".join(blok)
+        + "\n\nAntwoord EXACT in dit formaat, één regel per antwoord, niets erbuiten:\n"
+        + "\n".join(f"ANTWOORD {n}: <je antwoord>" for n in range(1, len(qs) + 1)))
+
+    out = llm_reason(prompt)
+    if not out:
+        return {"ok": True, "answered": 0, "pending": len(qs)}
+    answers = {int(m.group(1)): m.group(2).strip() for m in _ANS_RE.finditer(out)}
+    answered = 0
+    for n, q in enumerate(qs, 1):
+        ans = answers.get(n)
+        if ans and inbox.answer_question(q["iid"], q["idx"], ans):
+            answered += 1
+    return {"ok": True, "answered": answered, "pending": len(qs) - answered}
+
+
+def pick_governance_target(roster_ids, title: str, wat: str, *, llm_reason=None) -> str:
+    """AI kiest of een kans een BESTAANDE rol uitbreidt of een NIEUWE rol vraagt. Geeft een
+    bestaand rol-id terug, of '__new__'. Heeft overzicht over alle rollen (roster_ids). Fail-
+    closed zonder LLM → '__new__' (de mens kan in de UI altijd zelf de rol kiezen)."""
+    ids = [r for r in (roster_ids or []) if r and r != "noochville"]
+    if not ids:
+        return "__new__"
+    if llm_reason is None:
+        from nooch_village.llm import reason as llm_reason
+    prompt = (
+        "NoochVille (duurzaam schoenenmerk) gebruikt Holacracy. Een kans moet via governance "
+        "belegd worden. Kies of een BESTAANDE rol hiervoor uitgebreid wordt, of dat er een NIEUWE "
+        "rol nodig is. Een nieuwe rol alleen als geen bestaande rol logisch past.\n\n"
+        f"Kans: {title}\nToelichting: {wat}\n\n"
+        f"Bestaande rollen: {', '.join(ids)}\n\n"
+        "Antwoord met PRECIES één regel: het rol-id van de best passende bestaande rol, "
+        "of het woord __new__ als geen enkele past. Niets anders.")
+    out = (llm_reason(prompt) or "").strip().lower()
+    if not out:
+        return "__new__"
+    token = re.split(r"\s+", out)[0].strip(".:'\"")
+    if token == "__new__":
+        return "__new__"
+    for r in ids:
+        if r.lower() == token:
+            return r
+    return "__new__"
+
+
+def formulate_project(title: str, wat: str, owner: str = "", *, llm_reason=None) -> str:
+    """AI formuleert een kans tot een Holacracy-project: een heldere uitkomst-zin (waar je
+    naartoe werkt), niet vaag. Fail-closed zonder LLM → de oorspronkelijke titel."""
+    title = (title or "").strip()
+    if llm_reason is None:
+        from nooch_village.llm import reason as llm_reason
+    prompt = (
+        "In Holacracy is een PROJECT een concrete uitkomst die je wilt bereiken, geformuleerd "
+        "als een afgeronde toestand (bijv. 'Reviews zichtbaar op elke productpagina'), niet als "
+        "een vage wens of een taak. Herschrijf onderstaande kans tot één zo'n korte uitkomst-zin "
+        "in gewone taal. Geen jargon.\n\n"
+        f"Kans: {title}\nToelichting: {wat}\n"
+        f"{f'Uit te voeren door rol: {owner}' if owner else ''}\n\n"
+        "Antwoord met PRECIES één korte zin, niets anders.")
+    out = (llm_reason(prompt) or "").strip().splitlines()
+    line = out[0].strip().strip('"').strip() if out else ""
+    return line[:140] or title
 
 
 def decide_target(library, projects, word: str, decision: str, reason: str = "") -> dict:

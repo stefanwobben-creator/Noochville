@@ -19,9 +19,13 @@ echo "🌅 2/3 — dag-puls draaien (Field Note, Noochie, concurrent-nieuws; Har
 "$PY" -m nooch_village.village once
 
 echo
-echo "🔗 3/3 — Synthesist: creatieve links leggen tussen kennis-kaartjes..."
+echo "🔗 3/4 — Synthesist: creatieve links leggen tussen kennis-kaartjes..."
 "$PY" -m nooch_village.village synthesize 3
 
 echo
+echo "💬 4/4 — openstaande vragen aan rollen gebundeld beantwoorden..."
+"$PY" -m nooch_village.village answer_questions
+
+echo
 echo "✅ Klaar. Herlaad de cockpit (http://127.0.0.1:8765) — weekrapport, Noochie,"
-echo "   keyword-volumes/kans en seed-trendtoestanden staan nu vers."
+echo "   keyword-volumes/kans, seed-trendtoestanden en beantwoorde vragen staan nu vers."
