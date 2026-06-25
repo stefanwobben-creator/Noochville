@@ -164,10 +164,14 @@ def override_library_term(library, word: str, decision: str,
     return {"ok": True, "word": word, "status": status}
 
 
-def decide_opportunity(inbox, projects, iid: str, decision: str, reason: str = "") -> dict:
-    """Mens beslist over een door een rol gesensde kans. approve → wordt pas dán een project
-    (mens-poort hersteld). reject → genegeerd. De optionele reden wordt bewaard én voedt de
-    leerlus: de rol leest 'm terug en herhaalt/kalibreert. Geeft {ok, status?, title?, error?}."""
+def decide_opportunity(inbox, iid: str, decision: str, *, reason: str = "",
+                       destination: str = "project", owner: str = "",
+                       remember_constraint: bool = False,
+                       projects=None, notes=None, constraints=None) -> dict:
+    """Triage van een kans (mens-poort). approve → kies bestemming: 'project' (voor `owner`,
+    op het projectbord) of 'knowledge' (kennis-kaart). reject → genegeerd; bij remember_constraint
+    wordt de reden een vaste huis-regel die de reflex voortaan respecteert (zo voedt jouw oordeel
+    het dorp). De reden wordt altijd bewaard (leerlus). Geeft {ok, status?, ...}."""
     item = inbox.get(iid)
     if item is None or item.get("type") != "opportunity":
         return {"ok": False, "error": "kans niet gevonden"}
@@ -175,17 +179,29 @@ def decide_opportunity(inbox, projects, iid: str, decision: str, reason: str = "
         return {"ok": False, "error": f"kans is al {item.get('status')}"}
     ctx = item.get("context") or {}
     title = ctx.get("title") or item.get("subject")
+    wat = ctx.get("wat", "") or ctx.get("waarom", "")
     if decision == "approve":
-        if projects is not None and ctx.get("kind", "project") == "project":
-            projects.create(ctx.get("by") or "village", title, "human",
-                            hypothesis=ctx.get("wat", "") or ctx.get("waarom", ""),
+        if destination == "knowledge" and notes is not None:
+            from nooch_village.insight import Insight, GroundingStatus
+            import uuid as _uuid
+            notes.add(Insight(id="kn_" + _uuid.uuid4().hex[:9], claim=title,
+                              grounds=(wat or title), source="triage",
+                              status=GroundingStatus.UNRESOLVED, tags=["triage"]))
+            inbox.resolve(iid, "approved", reason=(reason or "kans → kennis"))
+            return {"ok": True, "status": "approved", "destination": "knowledge", "title": title}
+        owner = (owner or ctx.get("by") or "village").strip()
+        if projects is not None:
+            projects.create(owner, title, "human", hypothesis=wat,
                             business_case=ctx.get("business_case"))
         inbox.resolve(iid, "approved", reason=(reason or "kans goedgekeurd → project"))
-        return {"ok": True, "status": "approved", "title": title,
-                "owner": ctx.get("by", ""), "opp_kind": ctx.get("kind", "project")}
+        return {"ok": True, "status": "approved", "destination": "project",
+                "title": title, "owner": owner}
     if decision in ("reject", "dismiss", "negeer"):
+        learned = False
+        if remember_constraint and reason and constraints is not None:
+            learned = constraints.add(reason, by="human", source=f"triage: {title[:40]}")
         inbox.resolve(iid, "rejected", reason=(reason or "kans genegeerd"))
-        return {"ok": True, "status": "rejected", "title": title}
+        return {"ok": True, "status": "rejected", "title": title, "constraint_learned": learned}
     return {"ok": False, "error": f"onbekend besluit '{decision}'"}
 
 

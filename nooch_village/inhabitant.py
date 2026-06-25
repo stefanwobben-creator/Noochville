@@ -478,11 +478,16 @@ class Inhabitant(threading.Thread):
         if eerder:
             eerder_txt = ("\nEerder door de mens AFGEWEZEN (niet opnieuw voorstellen, leer hiervan):\n"
                           + "\n".join(f"- {t}: {r}" for t, r in eerder[:5]) + "\n")
+        regels = self._house_constraints()                 # vaste huis-regels: nooit tegen ingaan
+        regels_txt = ""
+        if regels:
+            regels_txt = ("\nVASTE HUIS-REGELS (respecteer ALTIJD, stel niets voor dat hiertegen "
+                          "ingaat):\n" + "\n".join(f"- {r}" for r in regels[:12]) + "\n")
         prompt = (
             f"Je bent de rol '{self.id}' in NoochVille. Purpose: {dna.purpose}\n"
             f"Accountabilities: {', '.join(dna.accountabilities) or '-'}\n"
             f"Skills: {', '.join(dna.skills) or '-'}\n"
-            f"Noordster: {ns_txt}. Actief doel: {goals}.\n{eerder_txt}\n"
+            f"Noordster: {ns_txt}. Actief doel: {goals}.\n{regels_txt}{eerder_txt}\n"
             "Bedenk vanuit JOUW rol de ÉNE hoogst-renderende kans die ons dichter bij de noordster "
             "brengt: een project, een uitbreiding van je eigen rol, of een nieuwe rol.\n\n"
             "SCHRIJFREGELS (heel belangrijk):\n"
@@ -548,6 +553,20 @@ class Inhabitant(threading.Thread):
                     and ctx.get("by") == self.id):
                 out.append((item.get("subject", ""), item.get("resolution") or "afgewezen"))
         return out
+
+    def _house_constraints(self) -> list[str]:
+        """Lees de vaste huis-regels (uit triage) zodat de reflex er niet tegenin gaat. Read-only."""
+        data_dir = getattr(self.context, "data_dir", None)
+        if not data_dir:
+            return []
+        path = os.path.join(data_dir, "constraints.json")
+        if not os.path.exists(path):
+            return []
+        try:
+            with open(path) as f:
+                return [c.get("text", "") for c in json.load(f) if c.get("text")]
+        except Exception:
+            return []
 
     def _raise_opportunity_governance(self, typ: str, titel: str, wat: str, waarom: str,
                                       bc: dict) -> None:

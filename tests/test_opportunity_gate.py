@@ -27,27 +27,40 @@ def test_kans_in_inbox_pending(tmp_path):
     assert iid2 == iid
 
 
-def test_approve_maakt_project(tmp_path):
+def test_approve_maakt_project_voor_gekozen_rol(tmp_path):
     inbox, projects, iid = _setup(tmp_path)
     assert projects.all() == []                            # nog geen project vóór akkoord
-    res = decide_opportunity(inbox, projects, iid, "approve")
-    assert res["ok"] and res["status"] == "approved"
+    res = decide_opportunity(inbox, iid, "approve", destination="project",
+                             owner="website_watcher", projects=projects)
+    assert res["ok"] and res["status"] == "approved" and res["owner"] == "website_watcher"
     ps = projects.all()
     assert len(ps) == 1 and ps[0]["scope"] == "Reviews oogsten op de PDP"
-    assert ps[0]["business_case"]["effect"] == 80
-    assert inbox.get(iid)["status"] == "approved"          # uit de inbox
+    assert ps[0]["owner"] == "website_watcher"             # mens koos de eigenaar
+    assert inbox.get(iid)["status"] == "approved"
 
 
-def test_reject_sluit_zonder_project(tmp_path):
+def test_approve_naar_kennis(tmp_path):
+    from nooch_village.notes_store import NotesStore
     inbox, projects, iid = _setup(tmp_path)
-    res = decide_opportunity(inbox, projects, iid, "reject")
-    assert res["ok"] and res["status"] == "rejected"
+    notes = NotesStore(str(tmp_path / "notes.json"))
+    res = decide_opportunity(inbox, iid, "approve", destination="knowledge", notes=notes)
+    assert res["ok"] and res["destination"] == "knowledge"
+    assert projects.all() == [] and len(notes.all()) == 1
+
+
+def test_reject_onthoudt_constraint(tmp_path):
+    from nooch_village.constraints import Constraints
+    inbox, projects, iid = _setup(tmp_path)
+    cons = Constraints(str(tmp_path / "constraints.json"))
+    res = decide_opportunity(inbox, iid, "reject", reason="we bieden geen kinderschoenen",
+                             remember_constraint=True, constraints=cons)
+    assert res["ok"] and res["status"] == "rejected" and res["constraint_learned"]
+    assert "geen kinderschoenen" in cons.texts()[0]
     assert projects.all() == []
-    assert inbox.get(iid)["status"] == "rejected"
 
 
 def test_dubbele_beslissing_faalt(tmp_path):
     inbox, projects, iid = _setup(tmp_path)
-    decide_opportunity(inbox, projects, iid, "approve")
-    again = decide_opportunity(inbox, projects, iid, "approve")
+    decide_opportunity(inbox, iid, "approve", projects=projects)
+    again = decide_opportunity(inbox, iid, "approve", projects=projects)
     assert again["ok"] is False

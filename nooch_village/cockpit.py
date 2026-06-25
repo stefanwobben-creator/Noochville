@@ -155,6 +155,8 @@ def gather(data_dir: str | None = None) -> dict:
     links = LinkTargets(os.path.join(dd, "linkbuilding_targets.json"))
     from nooch_village.competitor_news_store import CompetitorNews
     comp_news = CompetitorNews(os.path.join(dd, "competitor_news.json")).all()
+    from nooch_village.constraints import Constraints
+    house_rules = Constraints(os.path.join(dd, "constraints.json")).all()
     noochie_daily = {}
     _nd_path = os.path.join(dd, "noochie_daily.json")
     if os.path.exists(_nd_path):
@@ -288,6 +290,7 @@ def gather(data_dir: str | None = None) -> dict:
         "competitor_candidates": brands.candidates(),
         "competitor_confirmed": brands.confirmed(),
         "competitor_news": comp_news,
+        "house_rules": house_rules,
         "noochie_daily": noochie_daily,
         "link_candidates": links.candidates(),
         "link_pursued": links.pursued(),
@@ -776,7 +779,18 @@ def _sparkline(values, width: int = 90, height: int = 22) -> str:
             f'stroke-width="1.5"/></svg>')
 
 
-def _render_backlog(backlog: list, north_star: dict, token: str | None = None) -> str:
+def _render_house_rules(rules: list) -> str:
+    """Huis-regels (constraints uit triage): de vaste feiten/eisen die het dorp respecteert."""
+    if not rules:
+        return ('<p class="muted">Nog geen huis-regels. Wijs een kans af met "onthoud als '
+                'huis-regel" en het dorp leert de constraint.</p>')
+    items = "".join(f'<li>{_e(r.get("text", ""))} <span class="muted">'
+                    f'({_e(r.get("source", ""))})</span></li>' for r in rules)
+    return f'<details open><summary>📏 Huis-regels ({len(rules)})</summary><ul>{items}</ul></details>'
+
+
+def _render_backlog(backlog: list, north_star: dict, token: str | None = None,
+                    roles: list | None = None) -> str:
     """Geprioriteerde kansen-backlog: onderbouwde voorstellen/projecten, op verwachte waarde.
     Kansen (door rollen gesensd) wachten op jouw akkoord: goedkeuren → project, negeer → weg."""
     from nooch_village.business_case import format_business_case
@@ -799,18 +813,29 @@ def _render_backlog(backlog: list, north_star: dict, token: str | None = None) -
                       if x.get("waarom") else "")
             return head + wat + waarom
 
+        _roles = roles or []
+
         def _acts(x):
             if not (x.get("approvable") and token):
                 return '<span class="muted">—</span>'
-            # één formulier, gedeeld redenveld, twee knoppen (goedkeuren/negeer)
+            by = x.get("by", "")
+            opts = "".join(
+                f'<option value="{_e(r)}"{" selected" if r == by else ""}>{_e(r)}</option>'
+                for r in _roles) or f'<option value="{_e(by)}">{_e(by)}</option>'
+            inp = ('padding:.25rem .4rem;border:1px solid var(--border);border-radius:6px')
+            # één formulier, gedeelde velden, drie uitkomsten (project / kennis / negeer)
             return (
                 f'<form method="post" action="/action">'
                 f'<input type="hidden" name="csrf" value="{_e(token)}">'
                 f'<input type="hidden" name="iid" value="{_e(x["iid"])}">'
-                f'<input type="text" name="reason" placeholder="reden (optioneel, leert de rol)" '
-                f'style="width:100%;margin-bottom:.3rem;padding:.25rem .4rem;'
-                f'border:1px solid var(--border);border-radius:6px">'
-                f'<button class="btn ok" type="submit" name="action" value="opp_approve">✓ goedkeuren</button> '
+                f'<div style="margin-bottom:.3rem">project voor: '
+                f'<select name="owner" style="{inp}">{opts}</select></div>'
+                f'<input type="text" name="reason" placeholder="reden / opmerking" '
+                f'style="width:100%;margin-bottom:.2rem;{inp}">'
+                f'<label style="font-size:.8rem;display:block;margin-bottom:.3rem">'
+                f'<input type="checkbox" name="remember" value="1"> onthoud reden als huis-regel</label>'
+                f'<button class="btn ok" type="submit" name="action" value="opp_project">✓ project</button> '
+                f'<button class="btn" type="submit" name="action" value="opp_knowledge">📚 kennis</button> '
                 f'<button class="btn danger" type="submit" name="action" value="opp_reject">✗ negeer</button>'
                 f'</form>')
         rows = "".join(
@@ -1183,10 +1208,11 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'{_aan_jou}'
         f'{_banner(msg)}'
         f'{_render_digest(snap.get("digest", {}), snap.get("noochie_daily", {}))}'
-        f'{_render_backlog(snap.get("backlog", []), snap.get("north_star", {}), csrf_token)}'
+        f'{_render_backlog(snap.get("backlog", []), snap.get("north_star", {}), csrf_token, [r["id"] for r in roster if not r["archived"]])}'
         f'<h2>Inbox</h2>{inbox_tbl}'
         f'<h2>Proces (projecten)</h2>{proj_tbl}'
         f'<h2>Kennis</h2>'
+        f'{_render_house_rules(snap.get("house_rules", []))}'
         f'{esc_block}'
         f'<details open><summary>Woordenschat ({len(approved_lib)} actieve woorden)</summary>{lib_tbl}</details>'
         f'<details><summary>Inzichten — kennislaag ({len(ins)} kaartjes)</summary>{ins_tbl}</details>'
@@ -1206,11 +1232,14 @@ def _flash(result: dict) -> str:
         if st in ("escalated", "invalid"):
             return f"✗ Governance {st}: {result.get('reason', '')}"
         return "✗ " + (result.get("error") or result.get("reason") or "actie mislukt")
-    if result.get("status") == "approved" and "opp_kind" in result:
-        return (f"✓ Kans goedgekeurd → project voor {result.get('owner') or 'het dorp'} "
-                f"(zie Proces). De rol pakt 'm op; jij blijft de poort.")
+    if result.get("status") == "approved" and result.get("destination") == "knowledge":
+        return "✓ Kans → kennis-kaart (zie Inzichten)."
+    if result.get("status") == "approved" and result.get("destination") == "project":
+        return (f"✓ Kans → project voor {result.get('owner') or 'het dorp'} (zie Proces). "
+                f"De rol pakt 'm op; jij blijft de poort.")
     if result.get("status") == "rejected" and "title" in result:
-        return "✓ Kans genegeerd — de rol leert van je reden en herhaalt 'm niet."
+        extra = " + onthouden als huis-regel" if result.get("constraint_learned") else ""
+        return f"✓ Kans genegeerd{extra} — de rol leert van je reden."
     if "proj_status" in result:
         return f"✓ Project-status → {result['proj_status']}"
     if "proj_edit" in result:
@@ -1251,10 +1280,21 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         library = Library(os.path.join(dd, "library.json"))
         return override_library_term(library, extra.get("word", ""),
                                      extra.get("decision", ""), reason=reason)
-    if action in ("opp_approve", "opp_reject"):
+    if action in ("opp_project", "opp_knowledge", "opp_approve", "opp_reject"):
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
-        decision = "approve" if action == "opp_approve" else "reject"
-        return decide_opportunity(inbox, projects, iid, decision, reason=reason)
+        notes = NotesStore(os.path.join(dd, "notes.json"))
+        from nooch_village.constraints import Constraints
+        constraints = Constraints(os.path.join(dd, "constraints.json"))
+        if action == "opp_reject":
+            decision, destination = "reject", "project"
+        elif action == "opp_knowledge":
+            decision, destination = "approve", "knowledge"
+        else:                                             # opp_project / opp_approve
+            decision, destination = "approve", "project"
+        return decide_opportunity(
+            inbox, iid, decision, reason=reason, destination=destination,
+            owner=extra.get("owner", ""), remember_constraint=bool(extra.get("remember")),
+            projects=projects, notes=notes, constraints=constraints)
     if action in ("target_project", "target_drop"):
         library = Library(os.path.join(dd, "library.json"))
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
@@ -1415,7 +1455,8 @@ def make_handler(data_dir: str | None):
                      "skill": (form.get("skill") or [""])[0],
                      "rationale": (form.get("rationale") or [""])[0],
                      "word": (form.get("word") or [""])[0],
-                     "decision": (form.get("decision") or [""])[0]}
+                     "decision": (form.get("decision") or [""])[0],
+                     "remember": (form.get("remember") or [""])[0]}
             result = _dispatch_action(data_dir, action, iid, reason, extra=extra)
             # 303 → verse GET. Rails keren terug naar de spanning (next), sluiten gaat home.
             # De uitkomst gaat als korte flash-banner mee in de query.

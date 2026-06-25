@@ -582,3 +582,18 @@ knoppen + de bestaande flip naar volg. Doel: voelen hoe de ja→uitkomst / nee�
 vóór we alle beslis-plekken samenvoegen tot één triage-inbox (volgende stap). Engelse sweep daarna.
 
 Tests: 949 → 952.
+
+---
+
+## 2026-06-25 (vervolg 16) — Triage v1: kies-bij-goedkeuren + leerlus via huis-regels
+
+**[feat]** Triage als bron-verbetering (Stefans inzicht: rommel is prima, mijn oordeel maakt het dorp
+slimmer). Per kans nu: ✓ **project** (kies de eigenaar-rol uit een dropdown) of 📚 **kennis** (kaartje),
+en ✗ **negeer** met reden + checkbox "onthoud als huis-regel". Nieuwe `constraints.py` (Constraints-store);
+`decide_opportunity` uitgebreid (destination project/knowledge, owner-keuze, remember_constraint).
+**Leerlus gesloten:** een als-constraint onthouden reden komt in `data/constraints.json`, en de
+opportunity-reflex leest die als "VASTE HUIS-REGELS (respecteer ALTIJD)" in z'n prompt → het dorp stelt
+niets meer voor dat ertegen ingaat. Cockpit: 📏 Huis-regels-blok in Kennis.
+
+Tests: 954 → 956. Volgende triage-stappen: nieuwe-rol/roloverleg + advies-aan-rol + doorgeven-aan-mens +
+verduidelijk/herleid-dialoog; daarna alles samenvoegen (concurrenten/linkbuilding in de inbox) + Engels.

@@ -34,6 +34,7 @@ def _stub(tmp_path, *, skills=()):
     s._opportunity_reflex = types.MethodType(Inhabitant._opportunity_reflex, s)
     s._raise_opportunity_governance = types.MethodType(Inhabitant._raise_opportunity_governance, s)
     s._rejected_opportunities = types.MethodType(Inhabitant._rejected_opportunities, s)
+    s._house_constraints = types.MethodType(Inhabitant._house_constraints, s)
     return s
 
 
@@ -72,6 +73,23 @@ def test_reflex_leest_afgewezen_kansen(tmp_path, monkeypatch):
     monkeypatch.setattr("nooch_village.llm.reason", _capture)
     s._opportunity_reflex()
     assert "Adverteren op Google" in seen["p"] and "advertising is verboden" in seen["p"]
+
+
+def test_reflex_respecteert_huisregels(tmp_path, monkeypatch):
+    """Vaste huis-regels (uit triage) komen in de prompt zodat de rol er niet tegenin gaat."""
+    import json as _json
+    (tmp_path / "constraints.json").write_text(_json.dumps(
+        [{"text": "Alle producten moeten bio-afbreekbaar zijn"},
+         {"text": "We bieden geen kinderschoenen aan"}]))
+    s = _stub(tmp_path)
+    seen = {}
+
+    def _cap(p):
+        seen["p"] = p
+        return None
+    monkeypatch.setattr("nooch_village.llm.reason", _cap)
+    s._opportunity_reflex()
+    assert "bio-afbreekbaar" in seen["p"] and "geen kinderschoenen" in seen["p"]
 
 
 def test_reflex_amend_role_wordt_voorstel(tmp_path):
