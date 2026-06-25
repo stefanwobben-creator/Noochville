@@ -183,6 +183,7 @@ def test_focusmodus_overzicht_lijst_alle_spanningen(tmp_path):
     assert "Reviews op de PDP" in page and "Sokken van hennep" in page
     assert "/triage?iid=k1" in page and "/triage?iid=k2" in page    # elk klikbaar
     assert "wacht op antwoord" in page                              # badge op k2
+    assert "ArrowDown" in page and "ArrowUp" in page                # toetsenbord-navigatie
 
 
 def test_focusmodus_overzicht_leeg_is_klaar(tmp_path):

@@ -16,6 +16,17 @@ def test_parse_review():
     assert _parse_review("") is None
 
 
+def test_parse_review_volledige_meerregelige_suggestie():
+    """Een voorstel als 'Vervang X door:\\n<nieuwe tekst>' mag NIET afkappen op 'door:'."""
+    txt = ("SUGGESTIE: Vervang de accountability 'tijdgeest-signalen publiceren' door:\n"
+           "Signaleren van culturele taalverschuivingen die de missie raken\n"
+           "WAAROM: korter en in de -en-vorm")
+    out = _parse_review(txt)
+    assert "Signaleren van culturele taalverschuivingen" in out["suggestion"]
+    assert out["suggestion"].endswith("raken")               # volledige zin, niet 'door:'
+    assert out["why"].startswith("korter")
+
+
 def test_review_role_failclosed():
     role = {"id": "scout", "purpose": "markt observeren", "accountabilities": ["markt kijken"]}
     assert review_role(role, "", llm_reason=lambda p: None) is None

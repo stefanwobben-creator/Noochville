@@ -15,19 +15,26 @@ _SKIP = {"noochville", "facilitator", "secretary", "secretaris", "lead_link",
          "rep_link", "cirkel_lead", "circle_lead"}
 
 
+def _collapse(text: str) -> str:
+    """Meerdere regels → één nette zin/alinea (vervolgregels samenvoegen, witruimte normaliseren)."""
+    return re.sub(r"\s+", " ", (text or "").replace("\n", " ")).strip().strip('"').strip()
+
+
 def _parse_review(text: str) -> dict | None:
-    """Lees SUGGESTIE/WAAROM uit het LLM-antwoord. 'GEEN' → geen voorstel (rol is prima)."""
+    """Lees SUGGESTIE/WAAROM uit het LLM-antwoord. 'GEEN' → geen voorstel (rol is prima).
+    De suggestie wordt VOLLEDIG meegenomen (ook over meerdere regels), zodat een voorstel als
+    'Vervang X door: <nieuwe tekst>' niet halverwege afkapt."""
     if not text:
         return None
     if text.strip().upper().startswith("GEEN"):
         return None
     sug = re.search(r"SUGGESTIE\s*:\s*(.+?)(?:\nWAAROM\s*:|\Z)", text, re.IGNORECASE | re.DOTALL)
     why = re.search(r"WAAROM\s*:\s*(.+)", text, re.IGNORECASE | re.DOTALL)
-    s = (sug.group(1).strip() if sug else "").splitlines()
-    s = s[0].strip() if s else ""
+    s = _collapse(sug.group(1)) if sug else ""
     if not s:
         return None
-    return {"suggestion": s[:200], "why": (why.group(1).strip()[:300] if why else "")}
+    # Ruime limieten: liever compleet dan netjes afgekapt (een halve zin is waardeloos).
+    return {"suggestion": s[:600], "why": (_collapse(why.group(1))[:600] if why else "")}
 
 
 def review_role(role: dict, examples_block: str = "", *, llm_reason=None) -> dict | None:
@@ -49,8 +56,10 @@ def review_role(role: dict, examples_block: str = "", *, llm_reason=None) -> dic
         "accountability herschrijven naar de -en-vorm, een ontbrekend aandachtsgebied toevoegen "
         "dat vergelijkbare organisaties wél beleggen, een te gedetailleerde regel schrappen, of "
         "de purpose scherper maken. Eén voorstel, concreet en in gewone taal.\n\n"
+        "BELANGRIJK: schrijf het voorstel VOLUIT en AFGEROND. Stel je voor 'Vervang X door: ...', "
+        "geef dan de volledige nieuwe tekst achter 'door:'. Lever nooit een halve zin in.\n\n"
         "Antwoord EXACT zo (of 'GEEN' als de rol prima is):\n"
-        "SUGGESTIE: <één concrete wijziging>\nWAAROM: <korte reden>")
+        "SUGGESTIE: <de volledige, concrete wijziging, voluit>\nWAAROM: <korte reden>")
     return _parse_review(llm_reason(prompt))
 
 
@@ -77,7 +86,7 @@ def review_all_roles(records, examples_store, inbox, *, llm_reason=None) -> dict
         if not res:
             continue
         inbox.add_opportunity(
-            f"Rol '{rec.id}' aanscherpen: {res['suggestion'][:60]}",
+            f"Rol '{rec.id}' aanscherpen",
             by="facilitator", kind="governance",
             wat=res["suggestion"], waarom=res["why"])
         proposed += 1

@@ -686,7 +686,11 @@ _TRIAGE_CSS = """
 .tg-item{display:flex;align-items:center;gap:.7rem;text-decoration:none;color:var(--ink);
   background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.7rem .9rem;
   transition:.12s}
-.tg-item:hover{border-color:var(--green);background:var(--green-tint)}
+.tg-item:hover,.tg-item.sel{border-color:var(--green);background:var(--green-tint)}
+.tg-item.sel{box-shadow:0 0 0 2px var(--green)}
+.tg-hint{font-size:.78rem;color:var(--gray);margin-top:.8rem}
+.tg-hint kbd{background:var(--surface);border:1px solid var(--border);border-radius:4px;
+  padding:0 .3rem;font-family:var(--font-body);font-size:.72rem}
 .tg-item-n{flex:0 0 auto;width:1.6rem;height:1.6rem;border-radius:50%;background:var(--sand);
   display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700}
 .tg-item-body{flex:1 1 auto;min-width:0;display:flex;flex-direction:column}
@@ -723,11 +727,22 @@ def render_triage_overview(queue: list, token: str, msg=None) -> str:
             f'<span class="tg-item-n">{i}</span>'
             f'<span class="tg-item-body"><b>{_e(x["title"])}</b>{wacht}'
             f'<small>{meta}</small></span><span class="tg-go">verwerk →</span></a>')
+    hint = ('<p class="tg-hint">Toetsenbord: <kbd>↑</kbd><kbd>↓</kbd> kiezen · '
+            '<kbd>Enter</kbd> openen</p>')
     body = (f'<p class="tg-meta">{len(queue)} openstaande spanning(en) — kies er één om te '
             f'verwerken. Je komt hier daarna vanzelf terug.</p>'
-            f'<div class="tg-list">{"".join(rows)}</div>')
+            f'<div class="tg-list">{"".join(rows)}</div>{hint}')
+    js = ("<script>(function(){var it=[].slice.call(document.querySelectorAll('.tg-item'));"
+          "var i=-1;function sel(n){if(!it.length)return;i=(n+it.length)%it.length;"
+          "it.forEach(function(e){e.classList.remove('sel')});it[i].classList.add('sel');"
+          "it[i].scrollIntoView({block:'nearest'});}"
+          "document.addEventListener('keydown',function(e){"
+          "if(e.key==='ArrowDown'||e.key==='j'){e.preventDefault();sel(i+1);}"
+          "else if(e.key==='ArrowUp'||e.key==='k'){e.preventDefault();sel(i-1);}"
+          "else if(e.key==='Enter'&&i>=0){window.location=it[i].getAttribute('href');}});"
+          "if(it.length)sel(0);})();</script>")
     return _page("Spanningen verwerken",
-                 f'{head}{_banner(msg)}{body}</div><style>{_TRIAGE_CSS}</style>')
+                 f'{head}{_banner(msg)}{body}</div>{js}<style>{_TRIAGE_CSS}</style>')
 
 
 def render_triage(x: dict | None, pos: int, total: int, roles: list,
@@ -848,10 +863,23 @@ def render_triage(x: dict | None, pos: int, total: int, roles: list,
         + '<button class="tg-back" type="button" onclick="tg(\'t-start\')">← terug</button></div>')
 
     skip = ('<div class="tg-skip"><a class="muted" href="/triage">'
-            '← terug naar het overzicht</a></div>')
+            '← terug naar het overzicht</a></div>'
+            '<p class="tg-hint" style="text-align:center">Toetsenbord: '
+            '<kbd>1</kbd> Tactical · <kbd>2</kbd> Governance · '
+            '<kbd>←</kbd> terug · <kbd>Esc</kbd> overzicht</p>')
     js = ("<script>function tg(id){document.querySelectorAll('.tstep')"
           ".forEach(function(e){e.classList.remove('on')});"
-          "document.getElementById(id).classList.add('on');}</script>")
+          "document.getElementById(id).classList.add('on');}"
+          "(function(){function typing(){var a=document.activeElement;"
+          "return a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);}"
+          "function startOn(){return document.getElementById('t-start').classList.contains('on');}"
+          "document.addEventListener('keydown',function(e){"
+          "if(e.key==='Escape'){window.location='/triage';return;}"
+          "if(typing())return;"
+          "if(e.key==='ArrowLeft'){e.preventDefault();"
+          "if(startOn()){window.location='/triage';}else{tg('t-start');}}"
+          "else if(startOn()&&e.key==='1'){tg('t-tac');}"
+          "else if(startOn()&&e.key==='2'){tg('t-gov');}});})();</script>")
     inner = (f'{head}{_banner(msg)}{card}'
              f'{step0}{step_tac}{step_proj}{step_give}{step_ask}{step_gov}{step_visie}'
              f'{skip}</div>{js}<style>{_TRIAGE_CSS}</style>')

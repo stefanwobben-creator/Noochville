@@ -716,3 +716,14 @@ nu uit de queue en het overzicht laadt nooit een dichtgezette kaart.
 Nieuw: cockpit.render_triage_overview; /triage GET → overzicht zonder iid, focuskaart met geldig
 iid; focuskaart-acties: uitkomst toevoegen blijft op de kaart, klaar/vraag/visie → overzicht.
 Tests: test_triage_dialoog bijgewerkt + overzicht-tests. Suite groen (507 + 475).
+
+## Quick fixes: volledige rol-voorstellen + toetsenbord-navigatie
+1) Rol-review-voorstellen kapten af op "door:" — oorzaak: parser nam alleen de eerste regel van
+   SUGGESTIE + te krappe tekenlimieten + de suggestie werd in de titel geperst. Nu: _parse_review
+   neemt de VOLLEDIGE (ook meerregelige) suggestie, ruime limieten (600), schone vaste titel
+   "Rol 'X' aanscherpen", en de prompt dwingt een voluit-geformuleerd, afgerond voorstel af.
+2) Toetsenbord-navigatie in de focusmodus: op het overzicht ↑/↓ (of j/k) door de lijst + Enter
+   opent; op een kaart Esc/← terug naar het overzicht en 1/2 voor Tactical/Governance (genegeerd
+   terwijl je in een veld typt). Hints in beeld.
+
+Tests: +test_parse_review_volledige_meerregelige_suggestie, toetsenbord-assert. Suite groen (507 + 476).
