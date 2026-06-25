@@ -40,6 +40,26 @@ def _default_data_dir() -> str:
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
 
 
+def _config_competitor_brands(dd: str) -> list[str]:
+    """De vaste concurrent-set uit config/settings.ini ([DEFAULT] competitor_brands), naast data/.
+    Zelfde bron die de scout gebruikt, zodat 'Gemonitord' de echte monitor-set toont (config + bevestigd)."""
+    import configparser
+    path = os.path.join(dd, "..", "config", "settings.ini")
+    try:
+        cp = configparser.ConfigParser()
+        cp.read(path)
+        raw = cp["DEFAULT"].get("competitor_brands", "")
+    except Exception:
+        return []
+    return [b.strip() for b in raw.split(",") if b.strip()]
+
+
+def _monitored_brands(config_brands: list[str], confirmed: list[str]) -> list[str]:
+    """Volledige monitor-set, dedup met behoud van volgorde (config eerst, dan bevestigd).
+    Spiegelt ConcurrentScout._monitored_brands."""
+    return list(dict.fromkeys(list(config_brands) + list(confirmed)))
+
+
 _PRIO_ORDER = {"hoog": 0, "midden": 1, "laag": 2, "onbekend": 3}
 
 
@@ -55,11 +75,12 @@ def _within(date_str: str | None, now: float, days: int = 7) -> bool:
 
 
 def compute_digest(library_all: dict, link_cands: list, comp_cands: list,
-                   comp_confirmed: list, now: float, days: int = 7) -> dict:
+                   comp_monitored: list, now: float, days: int = 7) -> dict:
     """Pure weekrapport-berekening over een venster van `days` dagen. Geen I/O.
 
     Vat samen wat er nieuw is: goedgekeurde woorden (met vraag-signaal), linkbuilding-
-    doelwitten (op prioriteit) en marktinteresse (nieuw gespotte + gemonitorde concurrenten).
+    doelwitten (op prioriteit) en marktinteresse (nieuw gespotte + de volledige monitor-set:
+    de vaste config-concurrenten + de door jou bevestigde kandidaten).
     """
     new_words = sorted(
         ({"word": w,
@@ -84,7 +105,7 @@ def compute_digest(library_all: dict, link_cands: list, comp_cands: list,
         "new_words": new_words,
         "new_links": new_links,
         "new_competitors": new_competitors,
-        "confirmed_competitors": list(comp_confirmed or []),
+        "monitored_competitors": list(comp_monitored or []),
     }
 
 
@@ -154,8 +175,10 @@ def gather(data_dir: str | None = None) -> dict:
         "competitor_confirmed": brands.confirmed(),
         "link_candidates": links.candidates(),
         "link_pursued": links.pursued(),
-        "digest": compute_digest(library.all() or {}, links.candidates(),
-                                 brands.candidates(), brands.confirmed(), _now),
+        "competitor_config": _config_competitor_brands(dd),
+        "digest": compute_digest(
+            library.all() or {}, links.candidates(), brands.candidates(),
+            _monitored_brands(_config_competitor_brands(dd), brands.confirmed()), _now),
         "generated_at": _now,
         "data_dir": dd,
     }
@@ -583,7 +606,7 @@ def _render_digest(d: dict) -> str:
     """Weekrapport-blok: één overzicht dat je elke week opent. Pure render uit snap['digest']."""
     days = d.get("window_days", 7)
     nw, nl = d.get("new_words", []), d.get("new_links", [])
-    nc, conf = d.get("new_competitors", []), d.get("confirmed_competitors", [])
+    nc, conf = d.get("new_competitors", []), d.get("monitored_competitors", [])
     _pm = {"hoog": "★ hoog", "midden": "midden", "laag": "laag", "onbekend": "?"}
     cards = []
     if nw:
@@ -728,9 +751,11 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     ins_tbl = ('<table><thead><tr><th>claim</th><th>status</th><th>gegrond</th></tr></thead>'
                f'<tbody>{irows2 or "<tr><td colspan=3 class=muted>geen inzichten</td></tr>"}</tbody></table>')
 
-    # Concurrenten: gespotte (kandidaat) merken die op jouw oordeel wachten + de bevestigde set.
+    # Concurrenten: gespotte (kandidaat) merken die op jouw oordeel wachten + de monitor-set.
     cands = snap.get("competitor_candidates", [])
     confirmed = snap.get("competitor_confirmed", [])
+    config_brands = snap.get("competitor_config", [])
+    monitored = _monitored_brands(config_brands, confirmed)
     crows = "".join(
         f'<tr><td><b>{_e(c["brand"])}</b></td>'
         f'<td class="muted"><a href="{_e(c.get("link", ""))}">{_e((c.get("article") or "")[:80])}</a></td>'
@@ -740,11 +765,14 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         for c in cands)
     cand_tbl = ('<table><thead><tr><th>gespot merk</th><th>in artikel</th><th>jouw oordeel</th></tr></thead>'
                 f'<tbody>{crows or "<tr><td colspan=3 class=muted>geen nieuwe merken gespot</td></tr>"}</tbody></table>')
-    conf_line = (f'<p class="muted">Gemonitord (bevestigd): {_e(", ".join(confirmed))}</p>'
-                 if confirmed else '')
+    conf_line = (
+        (f'<p class="muted">Gemonitord ({len(monitored)}): {_e(", ".join(monitored))}'
+         + (f' <span class="muted">— vast: {_e(", ".join(config_brands))}; door jou toegevoegd: '
+            f'{_e(", ".join(confirmed))}</span>' if (config_brands and confirmed) else '')
+         + '</p>') if monitored else '')
     comp_block = (f'<h2>Concurrenten</h2>'
                   f'<details open><summary>🔮 Nieuw gespot — wacht op jouw oordeel ({len(cands)})</summary>'
-                  f'{cand_tbl}</details>{conf_line}') if (cands or confirmed) else ''
+                  f'{cand_tbl}</details>{conf_line}') if (cands or monitored) else ''
 
     # Linkbuilding: gidsen/lijstjes waar Nooch in vermeld wil worden (hoog = noemt
     # concurrenten maar niet Nooch → sterkste pitch).

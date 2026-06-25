@@ -41,7 +41,7 @@ def test_digest_neemt_alleen_recent_mee():
     assert dg["new_words"][0]["interest"] == 800
     assert [l["title"] for l in dg["new_links"]] == ["Best Vegan Sneakers"]
     assert dg["new_competitors"] == ["Flamingos Life"]
-    assert dg["confirmed_competitors"] == ["LØCI", "Merrell"]
+    assert dg["monitored_competitors"] == ["LØCI", "Merrell"]
 
 
 def test_digest_sorteert_links_op_prioriteit():
