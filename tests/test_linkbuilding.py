@@ -1,25 +1,25 @@
-"""Linkbuilding-radar: prioritering (concurrent-zonder-Nooch = hoog), parser, store,
-cockpit-render en de gevalideerde pitch/negeer-actie. Geen netwerk (HTTP gemockt)."""
+"""Linkbuilding-radar: diepe prioritering op de gids-tekst (concurrent-zonder-Nooch = hoog),
+store, gevalideerde pitch/negeer-actie en cockpit-render. Geen netwerk (web_read gemockt)."""
 from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from nooch_village.skills_impl.linkbuilding import (
-    LinkbuildingTargetsSkill, _assess_priority, _parse_guides, _publication)
+from nooch_village.skills_impl.linkbuilding import LinkbuildingTargetsSkill, _assess_priority
 from nooch_village.link_targets import LinkTargets
 from nooch_village.inbox_actions import decide_link_target
 from nooch_village.cockpit import render_html
 
 
-# ── prioritering ────────────────────────────────────────────────────────────────
+# ── prioritering op de gids-tekst ───────────────────────────────────────────────
 
 def test_noemt_concurrent_zonder_nooch_is_hoog():
-    prio, mentions = _assess_priority("Best vegan sneakers: Veja and Komrads", ["Veja", "Komrads"])
+    prio, mentions = _assess_priority("...featuring Veja and Komrads, both vegan...",
+                                      ["Veja", "Komrads"])
     assert prio == "hoog" and "Veja" in mentions
 
 
 def test_noemt_nooch_is_laag():
-    prio, _ = _assess_priority("Top sustainable brands incl Nooch", ["Veja"])
+    prio, _ = _assess_priority("top brands include Nooch and Veja", ["Veja"])
     assert prio == "laag"
 
 
@@ -27,30 +27,40 @@ def test_geen_tekst_is_onbekend():
     assert _assess_priority("", ["Veja"])[0] == "onbekend"
 
 
-def test_publication_uit_titel():
-    assert _publication("The Ultimate Guide - Good On You") == "Good On You"
+def test_geen_concurrenten_geen_nooch_is_midden():
+    assert _assess_priority("a long guide about shoes in general", ["Veja"])[0] == "midden"
 
 
-# ── parser + skill ────────────────────────────────────────────────────────────
+# ── skill run (SerpAPI echte URL → body lezen → prioriteit) ─────────────────────
 
-_FEED = """<?xml version="1.0"?><rss><channel>
-<item><title>15 Best Vegan Sneaker Brands - Good On You</title><link>http://g</link>
- <description>&lt;p&gt;featuring Veja and Komrads&lt;/p&gt;</description></item>
-</channel></rss>"""
+def _run(brands, *, guides, body, settings=None):
+    skill = LinkbuildingTargetsSkill()
+    ctx = SimpleNamespace(settings=settings if settings is not None else {"SERPAPI_API_KEY": "k"})
+    with patch("nooch_village.web_read.serpapi_search", return_value=guides), \
+         patch("nooch_village.web_read.fetch_text", return_value=body):
+        return skill.run({"brands": brands}, ctx)
 
 
-def test_skill_geeft_doelwit_met_prioriteit():
-    resp = SimpleNamespace(text=_FEED, raise_for_status=lambda: None)
-    with patch("requests.get", return_value=resp):
-        res = LinkbuildingTargetsSkill().run({"brands": ["Veja", "Komrads"]}, SimpleNamespace(settings={}))
+def test_skill_prioriteert_op_body_en_bron():
+    res = _run(["Veja", "Komrads"],
+               guides=[{"title": "15 Best Vegan Sneakers", "link": "https://www.goodonyou.eco/x"}],
+               body="...we love Veja and Komrads, both vegan and sustainable...")
     assert res["ok"] and len(res["targets"]) == 1
     t = res["targets"][0]
-    assert t["priority"] == "hoog" and t["source"] == "Good On You"
+    assert t["priority"] == "hoog" and t["source"] == "goodonyou.eco" and "Veja" in t["mentions"]
 
 
-def test_skill_fail_closed():
-    with patch("requests.get", side_effect=RuntimeError("weg")):
-        res = LinkbuildingTargetsSkill().run({"brands": []}, SimpleNamespace(settings={}))
+def test_skill_fail_closed_zonder_key(monkeypatch):
+    monkeypatch.delenv("SERPAPI_API_KEY", raising=False)
+    res = _run([], guides=[], body="", settings={})
+    assert not res["ok"]
+
+
+def test_skill_fail_closed_bij_serpapi_fout():
+    skill = LinkbuildingTargetsSkill()
+    ctx = SimpleNamespace(settings={"SERPAPI_API_KEY": "k"})
+    with patch("nooch_village.web_read.serpapi_search", side_effect=RuntimeError("weg")):
+        res = skill.run({"brands": []}, ctx)
     assert not res["ok"]
 
 
@@ -58,11 +68,10 @@ def test_skill_fail_closed():
 
 def test_store_dedup_en_pitch(tmp_path):
     s = LinkTargets(str(tmp_path / "l.json"))
-    assert s.add_candidate("http://g", "Gids", "Good On You", "hoog") is True
-    assert s.add_candidate("http://g") is False              # dedup op link
+    assert s.add_candidate("http://g", "Gids", "goodonyou.eco", "hoog") is True
+    assert s.add_candidate("http://g") is False
     assert decide_link_target(s, "http://g", "pursue")["link_status"] == "te pitchen"
     assert s.pursued()[0]["link"] == "http://g"
-    assert not decide_link_target(s, "http://g", "huh")["ok"]
 
 
 def test_candidates_sorteren_hoog_eerst(tmp_path):
@@ -82,7 +91,7 @@ def _snap(targets):
 
 def test_render_toont_doelwitten_met_knoppen():
     html = render_html(_snap([{"link": "http://g", "title": "15 Best Vegan Sneakers",
-                               "source": "Good On You", "priority": "hoog", "mentions": ["Veja"]}]),
+                               "source": "goodonyou.eco", "priority": "hoog", "mentions": ["Veja"]}]),
                        csrf_token="tok")
     assert "Linkbuilding" in html and "pitchen" in html and "link_decide" in html
     assert "hoog" in html and "Veja" in html

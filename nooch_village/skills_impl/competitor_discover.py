@@ -14,15 +14,11 @@ import logging
 import os
 import re
 
-import requests
-
 from nooch_village.skills import Skill
 
 log = logging.getLogger("village.skill.discover")
 
-_ENDPOINT = "https://serpapi.com/search.json"
 _GUIDE_QUERY = "best sustainable vegan sneaker brands"
-_UA = "Mozilla/5.0 (NoochVille competitor monitor; +https://nooch.earth)"
 
 _PROMPT = (
     "Hieronder staat de tekst van een artikel over duurzame/ethische/vegan schoenen.\n"
@@ -39,9 +35,8 @@ _NOT_A_BRAND = {
 
 
 def _strip_html(html: str) -> str:
-    text = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html or "", flags=re.S | re.I)
-    text = re.sub(r"<[^>]+>", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
+    from nooch_village.web_read import strip_html
+    return strip_html(html)
 
 
 def _parse_brand_list(llm_out: str, known: list[str]) -> list[str]:
@@ -99,31 +94,15 @@ class CompetitorDiscoverSkill(Skill):
         return {"ok": True, "candidates": candidates, "guides": len(guides)}
 
     def _serpapi_guides(self, context) -> list[dict]:
+        from nooch_village import web_read
         key = ((getattr(context, "settings", {}) or {}).get("SERPAPI_API_KEY")
                or os.getenv("SERPAPI_API_KEY"))
         if not key:
             raise RuntimeError("SERPAPI_API_KEY ontbreekt — skill faalt bewust closed")
         query = str((getattr(context, "settings", {}) or {}).get("discover_query", "")) or _GUIDE_QUERY
-        params = {"engine": "google", "q": query, "num": 10, "api_key": key}
-        resp = requests.get(_ENDPOINT, params=params, timeout=20)
-        resp.raise_for_status()
-        data = resp.json()
-        out = []
-        for item in data.get("organic_results", []):
-            link = (item.get("link") or "").strip()
-            if link:
-                out.append({"title": (item.get("title") or "").strip(), "link": link})
-        return out
+        return web_read.serpapi_search(query, key)
 
     def _fetch_text(self, link: str) -> str:
         """Lees een echte artikel-URL en geef platte tekst terug. Faalt → lege string."""
-        if not link:
-            return ""
-        try:
-            resp = requests.get(link, headers={"User-Agent": _UA}, timeout=20,
-                                allow_redirects=True)
-            resp.raise_for_status()
-            return _strip_html(resp.text)
-        except Exception as exc:
-            log.info("competitor_discover: pagina lezen faalde (%s): %s", link[:60], exc)
-            return ""
+        from nooch_village import web_read
+        return web_read.fetch_text(link)
