@@ -189,6 +189,29 @@ def decide_opportunity(inbox, projects, iid: str, decision: str, reason: str = "
     return {"ok": False, "error": f"onbekend besluit '{decision}'"}
 
 
+def decide_target(library, projects, word: str, decision: str, reason: str = "") -> dict:
+    """Mens beslist over een doelwit-woord (waar we op willen ranken). 'project' → maak een
+    content-project (we gaan hier content voor schrijven, verschijnt op het projectbord).
+    'drop' → laat vallen met reden (woord → forbidden). Zelfde ja/nee-met-reden-flow als kansen."""
+    word = (word or "").strip()
+    if not word:
+        return {"ok": False, "error": "geen woord"}
+    if library.status(word) is None:
+        return {"ok": False, "error": f"'{word}' staat niet in de bibliotheek"}
+    if decision == "project":
+        scope = f"Content schrijven gericht op '{word}'"
+        if projects is not None and scope not in projects.open_scopes():
+            projects.create("librarian", scope, "human",
+                            hypothesis=f"Door content voor '{word}' te maken kunnen mensen die "
+                                       f"hierop zoeken ons vinden en schoenen kopen.")
+        return {"ok": True, "pid": "x", "owner": "librarian"}
+    if decision in ("drop", "reject", "negeer"):
+        library.curate(word, "forbidden",
+                       rationale=reason or "doelwit laten vallen (mens)", by="human")
+        return {"ok": True, "status": "forbidden", "word": word}
+    return {"ok": False, "error": f"onbekend besluit '{decision}'"}
+
+
 def set_word_function(library, word: str, function: str, by: str = "human") -> dict:
     """Menselijke override van de functie van een woord: 'volg' (seed) of 'doelwit' (rank).
     De heuristiek classificeert automatisch; dit corrigeert uitzonderingen vanuit de cockpit.

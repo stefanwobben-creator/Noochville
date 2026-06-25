@@ -570,3 +570,15 @@ governance). Bij goedkeuren een duidelijke melding: "→ project voor <rol> (zie
 op, jij blijft de poort." Bij negeren: "de rol leert van je reden". Mens-poort + flow-back zichtbaar.
 
 Tests: 949 → 949 (bestaand groen).
+
+---
+
+## 2026-06-25 (vervolg 15) — Triage-prototype: doelwit-woorden ja/nee-met-reden
+
+**[feat]** Eerste triage-prototype: doelwit-woorden krijgen dezelfde ✓/✗-met-reden-flow als kansen.
+`decide_target`: ✓ 'maak content-project' → ProjectLedger.create (owner librarian, op het projectbord,
+dedup op scope); ✗ 'laat vallen' → library.curate forbidden mét reden. Cockpit: redenveld + twee
+knoppen + de bestaande flip naar volg. Doel: voelen hoe de ja→uitkomst / nee→reden-interactie werkt
+vóór we alle beslis-plekken samenvoegen tot één triage-inbox (volgende stap). Engelse sweep daarna.
+
+Tests: 949 → 952.

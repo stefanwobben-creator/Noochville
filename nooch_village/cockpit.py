@@ -29,7 +29,8 @@ from nooch_village.notes_store import NotesStore
 from nooch_village.inbox_actions import (
     decide_keyword, defer_item, confirm_item, mark_done, resolve_tension, add_reference,
     route_to_project, route_to_governance, remove_note, override_library_term,
-    decide_competitor_candidate, decide_link_target, set_word_function, decide_opportunity)
+    decide_competitor_candidate, decide_link_target, set_word_function, decide_opportunity,
+    decide_target)
 from nooch_village.competitor_brands import CompetitorBrands
 from nooch_village.link_targets import LinkTargets
 
@@ -966,17 +967,34 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     def _num(v, suffix=""):
         return f'{_fmt_int(v)}{suffix}' if v is not None else '<span class="muted">—</span>'
 
+    def _target_acts(x):
+        w = x["word"]
+        if not writable:
+            return '<span class="muted">—</span>'
+        return (
+            f'<form method="post" action="/action">'
+            f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
+            f'<input type="hidden" name="word" value="{_e(w)}">'
+            f'<input type="text" name="reason" placeholder="reden (bij laten vallen)" '
+            f'style="width:100%;margin-bottom:.3rem;padding:.25rem .4rem;'
+            f'border:1px solid var(--border);border-radius:6px">'
+            f'<button class="btn ok" type="submit" name="action" value="target_project">'
+            f'✓ maak content-project</button> '
+            f'<button class="btn danger" type="submit" name="action" value="target_drop">'
+            f'✗ laat vallen</button></form>'
+            f'<div style="margin-top:.3rem">{_flip(w, "volg", "→ 🌱 volg")}</div>')
+
     # Doelwit-woorden: waar we op willen ranken (sorteer op kans).
     trows = "".join(
         f'<tr><td><b>{_e(x["word"])}</b></td>'
         f'<td>{_num(x.get("volume"), "/mnd")}</td>'
         f'<td>{("<b>" + _fmt_int(x["opportunity"]) + "</b>") if x.get("opportunity") is not None else "<span class=muted>—</span>"}</td>'
         f'<td>{_pos_cell(x)}</td>'
-        f'<td>{_flip(x["word"], "volg", "→ 🌱 volg")}</td></tr>'
+        f'<td style="min-width:230px">{_target_acts(x)}</td></tr>'
         for x in sorted(targets, key=lambda x: -((x.get("opportunity") if x.get("opportunity") is not None else -1))))
     targets_tbl = (
         '<table><thead><tr><th>doelwit-woord</th><th>volume</th><th>kans</th>'
-        '<th>onze Google-stand</th><th></th></tr></thead>'
+        '<th>onze Google-stand</th><th>jouw oordeel</th></tr></thead>'
         f'<tbody>{trows or "<tr><td colspan=5 class=muted>geen doelwit-woorden</td></tr>"}</tbody></table>')
 
     # Volg-woorden: seeds voor de radar; toon de meerjarige trend-toestand (5 jaar) + sparkline.
@@ -1237,6 +1255,11 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
         decision = "approve" if action == "opp_approve" else "reject"
         return decide_opportunity(inbox, projects, iid, decision, reason=reason)
+    if action in ("target_project", "target_drop"):
+        library = Library(os.path.join(dd, "library.json"))
+        projects = ProjectLedger(os.path.join(dd, "projects.json"))
+        decision = "project" if action == "target_project" else "drop"
+        return decide_target(library, projects, extra.get("word", ""), decision, reason=reason)
     if action == "lib_function":
         library = Library(os.path.join(dd, "library.json"))
         return set_word_function(library, extra.get("word", ""), extra.get("decision", ""))
