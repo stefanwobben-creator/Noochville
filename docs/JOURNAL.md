@@ -554,3 +554,19 @@ te-beoordelen woorden, concurrenten, linkbuilding) zodat je niet hoeft te scroll
 
 Tests: 948 → 949. Bestaande 6 (pre-fix) kansen tonen nu volledig maar nog in oude bewoording; nieuwe
 kansen komen in mensentaal. Op de Mac: refresh.sh draait de reflex + vult de nieuwe WAT-voorstellen.
+
+---
+
+## 2026-06-25 (vervolg 14) — Frame + UI-flow op kansen
+
+**[feat] Burger-frame + jargonverbod in de reflex-prompt.** Voorstellen bleven zakelijk ("validatie",
+"transacties"). Prompt verbiedt nu expliciet consument/transactie-jargon (validatie, conversie,
+implementeren, funnel, KPI, doelgroep, consument...) en eist het BURGER-frame (mensen die bewust kiezen
+en dragen, geen 'consumenten'/'transacties'). Opmerking: lexicon-seed markeert 'burger' óók als avoid —
+waarschijnlijk een seed-bug (burger_frame hoort approved), los te fixen.
+**[feat] UI-flow.** Kansen staan niet langer dubbel: alleen in de Kansen-backlog (met volledige uitleg),
+niet meer in de gewone Inbox-tabel. Backlog toont het type expliciet (📋 project · door <rol> / 🏛️
+governance). Bij goedkeuren een duidelijke melding: "→ project voor <rol> (zie Proces); de rol pakt 'm
+op, jij blijft de poort." Bij negeren: "de rol leert van je reden". Mens-poort + flow-back zichtbaar.
+
+Tests: 949 → 949 (bestaand groen).

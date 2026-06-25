@@ -181,10 +181,11 @@ def decide_opportunity(inbox, projects, iid: str, decision: str, reason: str = "
                             hypothesis=ctx.get("wat", "") or ctx.get("waarom", ""),
                             business_case=ctx.get("business_case"))
         inbox.resolve(iid, "approved", reason=(reason or "kans goedgekeurd → project"))
-        return {"ok": True, "status": "approved", "title": title}
+        return {"ok": True, "status": "approved", "title": title,
+                "owner": ctx.get("by", ""), "opp_kind": ctx.get("kind", "project")}
     if decision in ("reject", "dismiss", "negeer"):
         inbox.resolve(iid, "rejected", reason=(reason or "kans genegeerd"))
-        return {"ok": True, "status": "rejected"}
+        return {"ok": True, "status": "rejected", "title": title}
     return {"ok": False, "error": f"onbekend besluit '{decision}'"}
 
 

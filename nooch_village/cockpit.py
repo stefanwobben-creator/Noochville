@@ -787,9 +787,12 @@ def _render_backlog(backlog: list, north_star: dict, token: str | None = None) -
         body = ('<p class="muted">Nog geen onderbouwde kansen. Zodra rollen voorstellen doen '
                 'mét business-case (opportunity-reflex), verschijnen ze hier, op waarde gerangschikt.</p>')
     else:
+        _kind_label = {"kans": "📋 project", "voorstel": "🏛️ governance",
+                       "project (loopt)": "📋 project (loopt)"}
         def _kans_cell(x):
-            head = (f'<b>{_e(x["title"])}</b> <span class="muted">{_e(x["kind"])}'
-                    f'{(" · " + _e(x["by"])) if x.get("by") else ""}</span>')
+            kl = _kind_label.get(x["kind"], x["kind"])
+            head = (f'<b>{_e(x["title"])}</b> <span class="muted">{kl}'
+                    f'{(" · door " + _e(x["by"])) if x.get("by") else ""}</span>')
             wat = f'<div style="margin:.2rem 0">{_e(x.get("wat", ""))}</div>' if x.get("wat") else ""
             waarom = (f'<div class="muted"><b>Waarom:</b> {_e(x["waarom"])}</div>'
                       if x.get("waarom") else "")
@@ -872,7 +875,10 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     # Opschonen: standaard alleen actieve dingen. Grijs (gearchiveerd/gesloten/done)
     # verbergen; via 'toon geschiedenis' weer zichtbaar.
     show_roster = roster if show_all else [r for r in roster if not r["archived"]]
-    show_inbox = inbox if show_all else [i for i in inbox if i.get("status") == "pending"]
+    # Kansen (opportunity) tonen we in de Kansen-backlog met volledige uitleg, niet dubbel hier.
+    show_inbox = (inbox if show_all
+                  else [i for i in inbox if i.get("status") == "pending"
+                        and i.get("type") != "opportunity"])
     # done = klaar, future = geparkeerd: allebei uit het actieve zicht.
     _parked = ("done", "future")
     show_proj = projects if show_all else [p for p in projects if p.get("status") not in _parked]
@@ -1182,6 +1188,11 @@ def _flash(result: dict) -> str:
         if st in ("escalated", "invalid"):
             return f"✗ Governance {st}: {result.get('reason', '')}"
         return "✗ " + (result.get("error") or result.get("reason") or "actie mislukt")
+    if result.get("status") == "approved" and "opp_kind" in result:
+        return (f"✓ Kans goedgekeurd → project voor {result.get('owner') or 'het dorp'} "
+                f"(zie Proces). De rol pakt 'm op; jij blijft de poort.")
+    if result.get("status") == "rejected" and "title" in result:
+        return "✓ Kans genegeerd — de rol leert van je reden en herhaalt 'm niet."
     if "proj_status" in result:
         return f"✓ Project-status → {result['proj_status']}"
     if "proj_edit" in result:
