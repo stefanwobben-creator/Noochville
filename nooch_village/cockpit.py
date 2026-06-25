@@ -657,6 +657,162 @@ een concreet voorstel dat jij daarna beoordeelt. Een rol vragen via regel 5 {soo
     return _page(f"Process Tension — {item.get('subject')}", inner)
 
 
+_TRIAGE_CSS = """
+.tg-wrap{max-width:680px;margin:0 auto}
+.tg-prog{height:8px;background:var(--sand);border-radius:99px;overflow:hidden;margin:.4rem 0 1.2rem}
+.tg-prog>span{display:block;height:100%;background:var(--green)}
+.tg-card{background:var(--cream-3);border:1px solid var(--border);border-radius:var(--radius);
+  padding:1.1rem 1.3rem;box-shadow:var(--shadow);margin-bottom:1.2rem}
+.tg-card h2{margin:.1rem 0 .5rem;font-size:1.25rem;color:var(--ink)}
+.tg-meta{font-size:.85rem;color:var(--gray);margin-bottom:.5rem}
+.tg-q{font-family:var(--font-display);font-weight:800;font-size:1.05rem;margin:.2rem 0 .8rem}
+.tstep{display:none}.tstep.on{display:block}
+.tg-opts{display:flex;flex-direction:column;gap:.6rem}
+.bigbtn{font-family:var(--font-body);font-weight:700;font-size:1rem;text-align:left;
+  border:1.5px solid var(--border);background:var(--surface);border-radius:14px;
+  padding:.85rem 1.1rem;cursor:pointer;transition:.12s;width:100%}
+.bigbtn:hover{border-color:var(--green);background:var(--green-tint)}
+.bigbtn small{display:block;font-weight:500;font-size:.8rem;color:var(--gray);margin-top:.15rem}
+.bigbtn.go{background:var(--green);border-color:var(--green);color:#fff}
+.bigbtn.go:hover{background:var(--green-dark)}
+.bigbtn.warn{border-color:var(--coral);color:var(--coral)}
+.tg-back{background:none;border:none;color:var(--gray);cursor:pointer;font-size:.85rem;
+  padding:.3rem 0;margin-top:.6rem}
+.tg-in{width:100%;box-sizing:border-box;padding:.6rem .7rem;border:1px solid var(--border);
+  border-radius:10px;font-size:.95rem;margin:.3rem 0 .6rem;font-family:var(--font-body)}
+.tg-dlg{border-left:3px solid var(--green);padding-left:.7rem;margin:.6rem 0;font-size:.9rem}
+.tg-skip{text-align:center;margin-top:1rem}
+"""
+
+
+def render_triage(x: dict | None, pos: int, total: int, roles: list,
+                  token: str, msg=None) -> str:
+    """Focusmodus: één spanning per scherm, één keuze per stap (Duolingo-stijl). Je werkt de
+    stapel door; na 'klaar' of een vraag schuift de volgende kaart vanzelf in beeld."""
+    from nooch_village.business_case import format_business_case
+    head = ('<div class="tg-wrap"><p><a href="/">← cockpit</a></p>'
+            '<h1>🎯 Spanningen verwerken</h1>')
+    if not x:
+        body = ('<div class="tg-card"><h2>Alles verwerkt 🎉</h2>'
+                '<p class="muted">Geen openstaande kansen meer. Mooi opgeruimd.</p>'
+                '<p><a class="btn ok" href="/">← terug naar de cockpit</a></p></div>')
+        return _page("Spanningen verwerken", f'{head}{_banner(msg)}{body}</div>'
+                     + f'<style>{_TRIAGE_CSS}</style>')
+
+    iid = x["iid"]
+    pct = int(round(100 * pos / total)) if total else 0
+    prog = (f'<div class="tg-meta">Spanning {pos} van {total}</div>'
+            f'<div class="tg-prog"><span style="width:{pct}%"></span></div>')
+    # de kaart: waar gaat het over
+    bc = format_business_case(x.get("business_case")) if x.get("business_case") else ""
+    meta = " · ".join(p for p in [
+        (f'door {_e(x["by"])}' if x.get("by") else ""),
+        _e(bc), (f'waarde {_e(x.get("value"))}' if x.get("value") is not None else "")] if p)
+    dlg = ""
+    for d in (x.get("dialogue") or []):
+        a = (f'<div>💬 <b>{_e(d.get("by") or "rol")}:</b> {_e(d.get("a"))}</div>'
+             if d.get("answered")
+             else '<div class="muted">⏳ <i>wachten op antwoord (volgende puls)</i></div>')
+        dlg += f'<div class="tg-dlg">🙋 <b>jij:</b> {_e(d.get("q"))}{a}</div>'
+    card = (f'<div class="tg-card">{prog}<h2>{_e(x["title"])}</h2>'
+            f'<div class="tg-meta">{meta}</div>'
+            f'{("<div>" + _e(x.get("wat")) + "</div>") if x.get("wat") else ""}'
+            f'{("<div class=muted><b>Waarom:</b> " + _e(x.get("waarom")) + "</div>") if x.get("waarom") else ""}'
+            f'{dlg}</div>')
+
+    def f_open(action, fields_html, *, nxt):
+        """Een POST-form naar /action met csrf+iid+next en de eigen velden."""
+        return (f'<form method="post" action="/action">'
+                f'<input type="hidden" name="csrf" value="{_e(token)}">'
+                f'<input type="hidden" name="iid" value="{_e(iid)}">'
+                f'<input type="hidden" name="next" value="{_e(nxt)}">'
+                f'<input type="hidden" name="action" value="{_e(action)}">'
+                f'{fields_html}</form>')
+
+    stay = f'/triage?iid={iid}'      # uitkomst toevoegen → blijf op deze kaart (stapelen)
+    nextc = '/triage'               # afronden / vraag → volgende kaart
+    owner_opts = "".join(f'<option value="{_e(r)}">{_e(r)}</option>' for r in roles)
+    gov_opts = ('<option value="__auto__">🤖 laat AI kiezen (nieuw of uitbreiden)</option>'
+                + owner_opts + '<option value="__new__">➕ nieuwe rol</option>')
+
+    # ── stap 0: hoe pak je dit op? ──
+    done_btn = f_open(
+        "tension_done",
+        '<button class="bigbtn go" type="submit">✓ Klaar — niks nodig, volgende</button>',
+        nxt=nextc)
+    step0 = (
+        '<div class="tstep on" id="t-start"><div class="tg-q">Hoe pak je dit op?</div>'
+        '<div class="tg-opts">'
+        '<button class="bigbtn" type="button" onclick="tg(\'t-tac\')">⚙️ Tactical'
+        '<small>werk binnen de bestaande structuur: een project of informatie</small></button>'
+        '<button class="bigbtn" type="button" onclick="tg(\'t-gov\')">🏛️ Governance'
+        '<small>de structuur moet veranderen: een rol erbij of uitbreiden</small></button>'
+        + done_btn +
+        '<button class="bigbtn warn" type="button" onclick="tg(\'t-visie\')">✗ Past niet binnen de visie</button>'
+        '</div></div>')
+    # ── stap tactical ──
+    step_tac = (
+        '<div class="tstep" id="t-tac"><div class="tg-q">Wat wil je doen?</div>'
+        '<div class="tg-opts">'
+        '<button class="bigbtn" type="button" onclick="tg(\'t-proj\')">📋 Project voor een rol'
+        '<small>concrete uitkomst; je ziet \'m als concept en keurt \'m daarna goed</small></button>'
+        '<button class="bigbtn" type="button" onclick="tg(\'t-give\')">📚 Informatie geven'
+        '<small>iets meegeven aan de kennisbank van het dorp</small></button>'
+        '<button class="bigbtn" type="button" onclick="tg(\'t-ask\')">❓ Informatie vragen'
+        '<small>stel de rol een vraag; antwoord komt in de volgende puls</small></button>'
+        '</div><button class="tg-back" type="button" onclick="tg(\'t-start\')">← terug</button></div>')
+    # ── leafs ──
+    step_proj = (
+        '<div class="tstep" id="t-proj"><div class="tg-q">Project — welke rol pakt het op?</div>'
+        + f_open("tac_project",
+                 f'<select name="owner" class="tg-in">{owner_opts}</select>'
+                 '<button class="bigbtn go" type="submit">📋 Maak concept-project</button>',
+                 nxt=stay)
+        + '<button class="tg-back" type="button" onclick="tg(\'t-tac\')">← terug</button></div>')
+    step_give = (
+        '<div class="tstep" id="t-give"><div class="tg-q">Wat wil je het dorp meegeven?</div>'
+        + f_open("tac_info_give",
+                 '<textarea name="info" class="tg-in" rows="3" '
+                 'placeholder="jouw kennis / context"></textarea>'
+                 '<button class="bigbtn go" type="submit">📚 Voeg toe aan kennisbank</button>',
+                 nxt=stay)
+        + '<button class="tg-back" type="button" onclick="tg(\'t-tac\')">← terug</button></div>')
+    step_ask = (
+        '<div class="tstep" id="t-ask"><div class="tg-q">Wat wil je de rol vragen?</div>'
+        + f_open("tac_info_ask",
+                 '<textarea name="question" class="tg-in" rows="3" '
+                 'placeholder="bijv. ik snap dit voorstel niet, wat bedoel je?"></textarea>'
+                 '<button class="bigbtn go" type="submit">❓ Vraag de rol (volgende)</button>',
+                 nxt=nextc)
+        + '<button class="tg-back" type="button" onclick="tg(\'t-tac\')">← terug</button></div>')
+    step_gov = (
+        '<div class="tstep" id="t-gov"><div class="tg-q">Voorstel — nieuwe rol of uitbreiden?</div>'
+        + f_open("gov_proposal",
+                 f'<select name="owner" class="tg-in">{gov_opts}</select>'
+                 '<button class="bigbtn go" type="submit">🏛️ Maak voorstel</button>',
+                 nxt=stay)
+        + '<button class="tg-back" type="button" onclick="tg(\'t-start\')">← terug</button></div>')
+    step_visie = (
+        '<div class="tstep" id="t-visie"><div class="tg-q">Past niet binnen de visie</div>'
+        + f_open("vision_drop",
+                 '<input type="text" name="reason" class="tg-in" placeholder="waarom past dit niet?">'
+                 '<label style="display:block;font-size:.85rem;margin-bottom:.5rem">'
+                 '<input type="checkbox" name="remember" value="1"> onthoud als huis-regel</label>'
+                 '<button class="bigbtn warn" type="submit">✗ Verwijderen (volgende)</button>',
+                 nxt=nextc)
+        + '<button class="tg-back" type="button" onclick="tg(\'t-start\')">← terug</button></div>')
+
+    skip = (f'<div class="tg-skip"><a class="muted" href="/triage?skip={iid}">'
+            f'volgende spanning →</a></div>')
+    js = ("<script>function tg(id){document.querySelectorAll('.tstep')"
+          ".forEach(function(e){e.classList.remove('on')});"
+          "document.getElementById(id).classList.add('on');}</script>")
+    inner = (f'{head}{_banner(msg)}{card}'
+             f'{step0}{step_tac}{step_proj}{step_give}{step_ask}{step_gov}{step_visie}'
+             f'{skip}</div>{js}<style>{_TRIAGE_CSS}</style>')
+    return _page("Spanningen verwerken", inner)
+
+
 def _proj_actions(p: dict, token: str) -> str:
     """Statusknoppen per project: actief / waiting / toekomst / done. Done is terminal
     (verdwijnt uit de actieve weergave). Alleen niet-terminale projecten krijgen knoppen."""
@@ -1302,7 +1458,9 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     if _n_woorden: _parts.append(f'{_n_woorden} woorden te beoordelen')
     if _n_conc:    _parts.append(f'{_n_conc} nieuwe concurrenten')
     if _n_link:    _parts.append(f'{_n_link} linkbuilding-doelwitten')
-    _aan_jou = (f'<div class="aanjou"><b>📥 Aan jou:</b> {" · ".join(_parts)}</div>'
+    _focus = (f' <a class="btn ok" href="/triage" style="margin-left:.4rem">▶ Verwerk in focus</a>'
+              if _n_kansen else "")
+    _aan_jou = (f'<div class="aanjou"><b>📥 Aan jou:</b> {" · ".join(_parts)}{_focus}</div>'
                 if _parts else '<div class="aanjou">📥 <b>Aan jou:</b> niks openstaand 🎉</div>')
 
     inner = (
@@ -1571,6 +1729,23 @@ def make_handler(data_dir: str | None):
                         "status": str(getattr(n.status, "value", n.status)),
                         "grounding_count": n.grounding_count} for n in notes.neighbors(cid)]
                 body = render_card(cdict, nbs, csrf_token).encode("utf-8")
+            elif path == "/triage":
+                snap = gather(data_dir)
+                queue = [b for b in snap["backlog"] if b.get("approvable") and b.get("iid")]
+                roles = [r["id"] for r in snap["roster"]
+                         if not r["archived"] and r["type"] == "role"]
+                want = (qs.get("iid") or [""])[0]
+                skip = (qs.get("skip") or [""])[0]
+                cur, pos = (None, 0)
+                if queue:
+                    idx = 0
+                    if want:
+                        idx = next((i for i, b in enumerate(queue) if b["iid"] == want), 0)
+                    elif skip:
+                        si = next((i for i, b in enumerate(queue) if b["iid"] == skip), -1)
+                        idx = (si + 1) % len(queue) if si >= 0 else 0
+                    cur, pos = queue[idx], idx + 1
+                body = render_triage(cur, pos, len(queue), roles, csrf_token, msg=msg).encode("utf-8")
             elif path in ("/", "/index.html"):
                 show_all = (qs.get("history") or ["0"])[0] in ("1", "true", "yes")
                 body = render_html(gather(data_dir), csrf_token=csrf_token, msg=msg,

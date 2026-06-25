@@ -657,3 +657,18 @@ Nieuw: ProjectLedger.create(status=…) + approve/discard/drafts; decide_opportu
 done bij open vraag en zet project als draft; cockpit concept-blok + dispatch proj_approve/proj_discard.
 Tests: +test_klaar_geblokkeerd, +test_project_wordt_concept, +test_lopende_projecten_niet_in_backlog.
 Suite groen (478 + 492 in twee helften).
+
+## Focusmodus: /triage — één spanning per scherm (Duolingo-stijl)
+De inbox-flow liep stroef (lange dichte tabel, te veel klikken, items sprongen). Nieuw: een
+aparte /triage-pagina die je de stapel kansen één-voor-één laat doorwerken. Eén kaart per scherm
+met voortgangsbalk ('Spanning 3 van 12'), en stapsgewijze keuzes met grote knoppen:
+Hoe pak je dit op? → Tactical (Project / Informatie geven / Informatie vragen) of Governance
+(voorstel, AI kiest nieuw vs. uitbreiden), plus '✓ Klaar' en 'Past niet binnen de visie'.
+
+Stap-navigatie is client-side (lichte JS toont één paneel tegelijk); de eigenlijke acties zijn
+gewone POST-forms naar /action (zelfde gevalideerde dispatch). Uitkomst toevoegen → blijf op de
+kaart (stapelen); klaar/vraag/visie → volgende kaart schuift vanzelf in beeld. Ingang: knop
+'▶ Verwerk in focus' in de 'Aan jou'-banner. De dichte backlog-tabel blijft als overzicht bestaan.
+
+Nieuw: cockpit.render_triage + /triage GET-route + focus-knop. Tests: +test_focusmodus_*.
+Suite groen (478 + 489; test_loop discovery is een bekende flaky threaded-timing-test).

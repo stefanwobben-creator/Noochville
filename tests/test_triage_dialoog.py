@@ -148,6 +148,29 @@ def test_lopende_projecten_niet_in_backlog(tmp_path):
     assert 'value="proj_approve"' in page and 'value="proj_discard"' in page
 
 
+def test_focusmodus_render_een_kaart_met_stappen(tmp_path):
+    """Focusmodus toont één spanning, voortgang, en de stapsgewijze keuzes (Duolingo-stijl)."""
+    from nooch_village import cockpit
+    x = {"iid": "k1", "title": "Reviews op de PDP", "by": "analyst",
+         "wat": "Sterren tonen.", "waarom": "sociaal bewijs",
+         "business_case": make_business_case(effect=80, effort=2, confidence=0.7),
+         "value": 28.0, "dialogue": []}
+    page = cockpit.render_triage(x, 1, 3, ["scout", "analyst"], "t")
+    assert "Spanning 1 van 3" in page and "Reviews op de PDP" in page
+    assert "Hoe pak je dit op?" in page
+    for val in ("tac_project", "tac_info_give", "tac_info_ask", "gov_proposal",
+                "tension_done", "vision_drop"):
+        assert f'value="{val}"' in page
+    assert "/triage?iid=k1" in page and 'value="/triage"' in page   # stapelen vs. volgende
+    assert "<option value=\"scout\">" in page                       # rol-keuze
+
+
+def test_focusmodus_leeg_is_klaar(tmp_path):
+    from nooch_village import cockpit
+    page = cockpit.render_triage(None, 0, 0, [], "t")
+    assert "Alles verwerkt" in page
+
+
 def test_cockpit_render_anchor_en_holacracy_knoppen(tmp_path):
     """De backlog-rij heeft een anchor (scroll-fix) en de Holacracy-knoppen; een onbeantwoorde
     vraag toont 'wachten op antwoord' met de dialoog."""
