@@ -764,3 +764,26 @@ inbox_actions._route_kans_to_governance/decide_opportunity: met agenda → agend
 zonder agenda → oude direct-adopt (back-compat). Cockpit: /roloverleg overzicht + behandel-scherm,
 rov_* dispatch, dashboard-link + 'Aan jou'-telling, flash. Tests: +test_roloverleg.py.
 Suite groen (504 + 492).
+
+## Check-out 2026-06-25 (de grote triage/governance-dag)
+**Tevreden:** de hele keten staat en is end-to-end testbaar: rol-review → focus-triage → agenda →
+roloverleg → records, plus de "oordeel = training"-lus. ~996 tests groen, alles mens-gated, niks
+autonoom doorgevoerd. De focusmodus valt goed ("dit werkt heel goed daarboven").
+
+**Ontevreden / schuld:** veel UI in cockpit.py inline-HTML (groeit; ooit splitsen). De lexicale
+zoek in de governance-bank mist samengeplakte PDF-woorden ("socialemediakanalen") — semantisch
+matchen is beter. De roloverleg-amend past nu alleen de eerste accountability / purpose aan, niet
+meerdere. Schadelijk = alleen "blijft staan" (tegenvoorstel/validiteitstoets nog niet).
+
+**Verrast:** hoe naadloos de echte governance-exports op NoochVille's eigen model bleken te passen
+(zelfde rol → purpose/accountabilities/domeinen, zelfde kernrollen). En dat de afgekapte voorstellen
+mijn eigen parser-bug waren, niet de LLM.
+
+**Geleerd:** de Holacracy-canon — accountability = doorlopende activiteit, -ing/-en-vorm vooraan,
+geen autoriteit (dat zijn domeinen/policies); project = afgeronde toestand. En het principe dat
+Stefan steeds aanscherpte: wát er met een spanning gebeurt (sluiten) staat los van wat het dorp
+ervan leert (signaaltype); alleen de visie-afwijzing blokkeert hard.
+
+**Ontdekt:** de bundel-aanpak (vragen parkeren, in één puls-call beantwoorden) is het bovenliggende
+principe van het hele dorp, niet alleen voor de dialoog. En: een overzicht-eerst-flow lost zowel
+"geen totaalbeeld" als "springt terug naar de eerste" in één keer op.

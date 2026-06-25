@@ -4,7 +4,40 @@
 
 ## Waar we staan (2026-06-25)
 
-**Suite: 912 tests groen.** Elke stap met mutatie-check.
+**Suite: ~996 tests groen** (in de sandbox in twee helften gedraaid wegens tijdslimiet; op de Mac
+in één keer). Elke stap met mutatie-check. `test_loop::test_discovery_loop` is een bekende flaky
+threaded-timing-test (slaagt bij herhaling), niet gerelateerd aan deze wijzigingen.
+
+### Sessie 2026-06-25 (vervolg 4): triage-UX, governance-grounding, roloverleg
+
+De grote dag rond "het dorp ademt en ik bestuur via oordeel". Gebouwd, getest, gecommit:
+
+- **Triage volgens Holacracy** in de cockpit: per spanning Tactical (project / informatie geven /
+  informatie vragen) of Governance (voorstel; AI kiest nieuw-vs-uitbreiden). Meerdere uitkomsten
+  per kans (stapelen), pas 'klaar' sluit. Project uit triage = CONCEPT dat je eerst goedkeurt.
+- **Focusmodus `/triage`** (Duolingo-stijl): overzicht → kies één → verwerk → terug naar overzicht
+  (afgehandelde weg). Toetsenbord: ↑/↓ + Enter, 1/2/3, Esc.
+- **Vraag-aan-rol = gebundelde dialoog**: cockpit parkeert de vraag, `village answer_questions`
+  (ook in refresh.sh) beantwoordt alle openstaande vragen in één LLM-call als de betreffende rol.
+  Klaar geblokkeerd zolang een vraag openstaat.
+- **Governance-referentiebank (VERTROUWELIJK, lokaal)**: `governance_examples.py` + CLI
+  `ingest_governance`. 1.651 rol-skeletten uit 3 echte Holacracy-exports (geanonimiseerd; projecten
+  + namen weggelaten). Few-shot-grounding in de governance-calls + de Holacracy-formuleerregel
+  (accountability begint met -en-vorm; project = afgeronde toestand). Alleen in `data/` (gitignored),
+  nooit in content/notes/keywords. `pypdf` toegevoegd aan requirements.
+- **Facilitator-rolreview**: `village review_roles` → per rol één verbetervoorstel als kans
+  (mens-gated), gegrond in de bank.
+- **"Oordeel = training"-laag**: `feedback.py` — afronden mét verdict (👍 leuk idee / 🙂 zachte nee /
+  ⏳ nu niet / 🌍 buiten NoochVille / ✗ niet in de visie). Alleen visie wordt een harde huis-regel;
+  de rest zijn zachte signalen die de opportunity-reflex van beide kanten voeden.
+- **Roloverleg (IDM)**: `roloverleg.py` + `/roloverleg`. Governance uit triage → AGENDA i.p.v.
+  direct doorvoeren. Per voorstel: huidige rol + wijziging + reden, Secretaris-check (Gate G0-G4 +
+  -en-check), reactie → AI past aan, consent / schadelijk. 'Einde roloverleg' voert aangenomen
+  voorstellen door; geblokkeerde blijven staan.
+
+**Mac-acties**: `git pull`; eenmalig `./venv/bin/pip install pypdf`; de bank staat al lokaal
+(regenereer evt. met `ingest_governance`); uitproberen: `review_roles` → focus-triage → roloverleg.
+`git push` om de commits te bewaren.
 
 ### Sessie 2026-06-25 (vervolg 3): seed-trend als meerjarige toestand
 
