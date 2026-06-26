@@ -49,13 +49,17 @@ class ProjectLedger:
                hypothesis: str = "", business_case: dict | None = None,
                status: str = "queued", origin: str = "",
                dod_outcome: str = "", done_when: str = "", goes_to: str = "",
-               links: list[str] | None = None) -> str:
+               links: list[str] | None = None, parent: str | None = None) -> str:
         if trigger not in _VALID_TRIGGERS:
             raise ValueError(f"ongeldig trigger: '{trigger}'")
         if status not in ("queued", "draft", "future"):
             raise ValueError(f"ongeldige start-status: '{status}'")
         pid = uuid.uuid4().hex[:12]
         now = time.time()
+        # Cluster-lidmaatschap: een kind erft de cluster-root van zijn ouder (master-switch werkt
+        # zo op de hele keten). Geen ouder → eigen cluster (root/standalone).
+        par = self._projects.get(parent) if parent else None
+        cluster = (par.get("cluster") or parent) if par else pid
         self._projects[pid] = {
             "id":         pid,
             "owner":      owner,
@@ -78,6 +82,9 @@ class ProjectLedger:
             "done_when":   done_when or "",     # checkbaar criterium (lege/nee-uitkomst telt ook)
             "goes_to":     goes_to or "",       # wie de uitkomst consumeert (rol/bord/mens)
             "links":       list(links or []),   # verwante projecten (de keten/het gesprek)
+            "parent":      parent,              # ouder-project (None = root/standalone)
+            "cluster":     cluster,             # cluster-root id (master-switch werkt hierop)
+            "waiting_on":  None,                # project/briefje waarop dit wacht (resume-trigger)
         }
         self._save()
         return pid
@@ -209,6 +216,20 @@ class ProjectLedger:
             return False
         p.setdefault("log", []).append({"who": "rol", "text": text[:1500], "at": time.time()})
         p["progress"] = text
+        self._touch(p)
+        self._save()
+        return True
+
+    def wait_for(self, pid: str, need: str, on_id: str = "") -> bool:
+        """Zet een project op WACHTEN met een gestructureerde behoefte: WAT is nodig (need) en
+        WAAROP het wacht (on_id = een ander project of een prikbord-briefje). De scheduler hervat
+        het zodra `on_id` klaar is. Done-projecten blijven ongemoeid."""
+        p = self._projects.get(pid)
+        if p is None or p["status"] in _TERMINAL:
+            return False
+        p["status"] = "blocked"
+        p["blocked_on"] = need or "wacht"
+        p["waiting_on"] = on_id or None
         self._touch(p)
         self._save()
         return True
