@@ -201,6 +201,7 @@ def gather(data_dir: str | None = None) -> dict:
         d = rec.definition
         roster.append({
             "id": rec.id,
+            "name": getattr(d, "name", "") or rec.id,   # weergavenaam (na hernoemen) of het id
             "type": rec.type.value,
             "parent": rec.parent,
             "version": rec.version,
@@ -1869,9 +1870,14 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     rrows = []
     for r in show_roster:
         cls = "archived" if r["archived"] else ""
+        # Toon de weergavenaam (na hernoemen); het id staat er klein onder als het afwijkt.
+        nm = r.get("name") or r["id"]
+        naam_cell = (f'<b>{_e(nm)}</b> <span class="muted">v{_e(r["version"])}</span>'
+                     + (f'<br><span class="muted" style="font-size:.75rem">{_e(r["id"])}</span>'
+                        if nm != r["id"] else ""))
         rrows.append(
             f'<tr class="{cls}">'
-            f'<td><b>{_e(r["id"])}</b> <span class="muted">v{_e(r["version"])}</span></td>'
+            f'<td>{naam_cell}</td>'
             f'<td>{_e(r["type"])}</td>'
             f'<td>{_e(_SOURCE_MARK.get(r["source"], r["source"]))}</td>'
             f'<td>{_e(r["purpose"])}</td>'

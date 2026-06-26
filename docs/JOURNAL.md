@@ -1085,3 +1085,11 @@ Suite groen (549 + 510).
   format) → melding 'AI kon nu geen herziening maken, pas de velden zelf aan' i.p.v. stilletjes niets.
   Lege reactie → nette fout.
 Suite groen (582 + 483).
+
+## Weergavenaam in het roster + opruiming oude content-rollen
+- Roster toont nu de weergavenaam (RoleDefinition.name na hernoemen) met het id klein eronder als
+  het afwijkt. Zo wordt een hernoemde rol (bijv. → 'Copywriter') ook echt zichtbaar als die naam.
+- 5 oude content-campagne-rollen gearchiveerd (data, gitignored): nooch_x_noordster_sneaker_swap,
+  schoenen_met_verhalen, schoenenjagers_op_tiktok, schoenenruilfeest_in_het_dorp,
+  schrijven_van_copy_voor_blogs. (schoenen_voor_duurzame_evenementen_seo NIET — daar hangt een
+  consented hernoem→Copywriter aan op de agenda; die moet eerst via 'Einde roloverleg'.)
