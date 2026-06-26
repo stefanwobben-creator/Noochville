@@ -75,8 +75,70 @@ Dat is goed nieuws: we kunnen er één licht ding van lenen (zie hieronder) zond
 **Overzicht-laag (vraag van eerder):** sorteer niet op een dood getal maar op (a) sterkste claims
 (berekende sterkte), (b) signalen-zonder-bevinding (de gaten/kansen), (c) betwiste claims.
 
-## Open vraag voor de bouwfase
-Moet `standpunt` ook een berekende "sterkte" krijgen (bv. hoe consistent het met de missie is), of
-blijft het bewust ongescoord (een waarde is geen bewijs)? Mijn voorstel: ongescoord, maar wél
-koppelbaar aan bevindingen die het ondersteunen (zo zie je welke waarden onderbouwd zijn en welke
-puur overtuiging — ook een soort gat).
+## Vastgelegde besluiten (na ontwerpdialoog)
+
+### Soort vs sterkte (de kern)
+Twee dingen die los van elkaar staan:
+
+- **Soort** (signaal / bevinding / kader / standpunt) verandert NOOIT. Een signaal wordt geen
+  bevinding door ouder te worden; een mening wordt geen feit. De soorten gaan over verschillende
+  werelden (signaal = aandacht/cultuur, bevinding = de wereld, kader = norm, standpunt = wat wij
+  beweren). Ze door elkaar laten lopen zou betekenen dat opinie zich kan vermommen als bewijs
+  (de bevestigingsbias-val) en je je audittrail verliest.
+- **Sterkte** binnen één soort evolueert WEL. Een bevinding groeit: `ondersteund` (1 bron) →
+  `bevestigd` (meerdere onafhankelijke) → `geverifieerd` (haalt de lat). Een standpunt groeit in
+  publiceerbaarheid: `positie` → `onderbouwd` → `publiceerbaar`.
+
+Een "bewezen claim" is dus GEEN één kaartje dat van vorm verandert, maar een ketting van gelinkte
+kaartjes, elk met een eigen sterkte-evolutie:
+
+```
+SIGNAAL  → roept vraag op →  BEVINDING  → onderbouwt →  STANDPUNT
+(blijft signaal)             (groeit in sterkte)        (wordt publiceerbaar zodra de
+                                  ↑ gelinkt aan          bevinding geverifieerd is
+                                  KADER (de lat)         én aan het kader voldoet)
+```
+
+### Autonome promotie, mét validiteitscheck (geen ja-knikker)
+Een claim mag autonoom naar `geverifieerd` springen, MAAR alleen als een automatische, objectief
+toetsbare controle slaagt. De mens wordt zo bewaard voor de twijfelgevallen, niet voor het stempelen
+van routinewerk. De automatische validiteitscheck (startdefinitie, verfijnbaar):
+
+1. ≥2 **onafhankelijke** bevindingen steunen de claim (onafhankelijk = niet naar elkaar verwijzend), en
+2. ≥1 daarvan is `evidence_type = measured`, en
+3. er is **geen** tegensprekend kaartje (geen `betwist`).
+
+Slaagt de check → systeem promoot zelf. Faalt iets (één bron, alleen `claimed`/`reported`, of
+tegenspraak) → géén autopromotie, het komt bij de mens als een ECHTE afweging (geen vinkje).
+
+### Standpunt: ongescoord, maar koppelbaar
+Een `standpunt` krijgt geen eigen bewijs-sterkte (een waarde is geen bewijs). Het ERFT sterkte van de
+bevindingen die eraan gelinkt zijn. Zo zie je welke standpunten onderbouwd zijn en welke pure
+overtuiging (ook een soort gat). De publiceer-beslissing onder een kader blijft mens-gated (Legal
+signaleert, de mens beslist) — dit is bewust GEEN autopromotie, want het is consequent en juridisch.
+
+### Kader draagt zijn eigen drempel
+Hoeveel bewijs "genoeg" is, verschilt per regel (EN13432 eist een gemeten labtest; een vrijwillig
+keurmerk neemt soms een fabrikantverklaring). De lat staat daarom als veld/tekst op het kader-kaartje
+zelf, niet hardgecodeerd. Mag in v1 simpel beginnen met één defaultdrempel en later verfijnen.
+
+## De Legal-rol (signaleert, blokkeert niet)
+Een nieuwe rol, geboren via governance, bemenst zodra code + de bestaande `nooch-legal`-skill
+geregistreerd zijn (born-vs-manned).
+
+- **Capaciteit (rol):** bezit het **kader-domein** in de kennislaag (cureert de kader-kaartjes:
+  EN13432, Green Claims, BRL, ISO/ASTM). Lezen vrij, cureren exclusief — zelfde domeinregel als de
+  Librarian met de bibliotheek. "Alle legal kennis" = exact de verzameling kader-kaartjes, niet meer
+  (fail-closed: een leeg kader = "ik weet het hier niet", geen orakel).
+- **Wat hij doet:** doorlopende accountability die de compliance-loop bewaakt. Zodra een standpunt
+  aan een kader hangt zonder voldoende bevinding → hangt hij een **publiceer-risico-signaal** in de
+  focus-inbox (claim + geschonden kader + ontbrekend bewijs). Stolt via hetzelfde experiment-patroon.
+- **Grenzen (3x niet, 1x wel):** beslist NIET over waarheid (dat doet het bewijs), schrijft GEEN
+  copy (dat doet nooch-copy), blokkeert NOOIT publicatie (dat doet de mens). Hij signaleert alleen
+  het gat tussen claim en bewijs, gemeten tegen een kader.
+- Optioneel: een inwoner met karakter (nuchtere, precieze ISTJ-compliance-stem).
+
+## Status
+Ontworpen en op papier getest (196 echte kaartjes + 100 synthetische claims + het
+biodegradability-rapport als integrale casus). Nog niets gebouwd. Volgende stap: in kleine,
+toetsbare brokken bouwen, net als bij het prikbord.
