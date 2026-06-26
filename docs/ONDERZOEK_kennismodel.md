@@ -154,5 +154,10 @@ en gebouwd in kleine brokken:
 5. ✅ **Bewijs-links leggen tijdens review** — op de kaartpagina (`/card`): soort kiezen +
    `steunt`/`spreekt-tegen` koppelen aan een ander kaartje, met live berekende sterkte.
    (`tests/test_card_relations.py`)
+6. ✅ **Librarian stelt bewijs-links voor** — `link_suggest`: per claim-die-bewijs-mist de
+   relevante bevindingen (idf op claim-tekst, publiceer-risico eerst), als VOORSTEL; de mens
+   bevestigt/verwerpt (decided-store dedupt). De Librarian bereidt voor, jij beslist; sterkte
+   leeft op bevestigde links. Geen LLM/SR (latere laagjes). (`tests/test_link_suggest.py`)
 
-Nog te doen (later): de Legal-rol (eigenaar kader-domein, signaleert publiceer-risico).
+Nog te doen (later): de Legal-rol (eigenaar kader-domein, signaleert publiceer-risico);
+optionele laagjes op de link-voorstellen: LLM-suggestie (met reden) en spaced repetition (ritme).

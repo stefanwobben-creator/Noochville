@@ -337,6 +337,10 @@ def gather(data_dir: str | None = None) -> dict:
         "betwist": [{"id": n.id, "claim": n.claim, "strength": _str.get(n.id)}
                     for n in _kcont(_alln)],
     }
+    # Librarian stelt bewijs-links voor (mens bevestigt). Live, gefilterd tegen wat al beslist is.
+    from nooch_village.link_suggest import LinkProposals, open_proposals
+    _lp = LinkProposals(os.path.join(dd, "link_proposals.json"))
+    kennis["link_proposals"] = open_proposals(_alln, _lp)
 
     # Kansen-backlog: alle onderbouwde voorstellen/projecten (met business-case), op waarde.
     from nooch_village.business_case import business_value
@@ -2637,10 +2641,42 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
                  'Jij beslist; de eerste 40 staan hier.</p>'
                  f'<table><tbody>{onb_rows}</tbody></table></details>')
 
+    # Voorgestelde bewijs-links (Librarian stelt voor, jij bevestigt).
+    props = kn.get("link_proposals", [])
+    def _prop_row(p):
+        if not writable:
+            return ""
+        acts = (f'<form method="post" action="/action" style="display:inline">'
+                f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
+                f'<input type="hidden" name="from_id" value="{_e(p["from_id"])}">'
+                f'<input type="hidden" name="target" value="{_e(p["to_id"])}">'
+                f'<input type="hidden" name="next" value="/">'
+                f'<button class="btn ok" type="submit" name="action" value="link_confirm">✓ steunt</button>'
+                f'</form> '
+                f'<form method="post" action="/action" style="display:inline">'
+                f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
+                f'<input type="hidden" name="from_id" value="{_e(p["from_id"])}">'
+                f'<input type="hidden" name="target" value="{_e(p["to_id"])}">'
+                f'<input type="hidden" name="next" value="/">'
+                f'<button class="btn no" type="submit" name="action" value="link_reject">✗ niet</button>'
+                f'</form>')
+        return (f'<tr><td>🔬 <a href="/card?id={_e(p["from_id"])}">{_e((p["from_claim"] or "")[:55])}</a>'
+                f'<br><span class="muted">steunt →</span> 📣 '
+                f'<a href="/card?id={_e(p["to_id"])}">{_e((p["to_claim"] or "")[:55])}</a>'
+                f'<br><span class="muted" style="font-size:11px">{_e(p["reason"])}</span></td>'
+                f'<td style="white-space:nowrap">{acts}</td></tr>')
+    prop_block = ("" if not props else
+                  f'<details open><summary>🔗 Voorgestelde bewijs-links — Librarian stelt voor, '
+                  f'jij bevestigt ({len(props)})</summary>'
+                  '<p class="muted" style="font-size:.85rem">Een bevinding die een standpunt zou '
+                  'kunnen onderbouwen. Bevestig je het, dan telt hij mee voor de sterkte.</p>'
+                  f'<table><tbody>{"".join(_prop_row(p) for p in props)}</tbody></table></details>')
+
     kennis_block = (
         '<h2>Kennislaag</h2>'
         f'<p>{counts_line or "<span class=muted>nog geen kaartjes met een soort</span>"} '
         f'· <span class="muted">{kn.get("onbeslist_total", 0)} onbeslist</span></p>'
+        f'{prop_block}'
         f'<details open><summary>📣 Publiceer-risico — standpunt zonder bewijs '
         f'({len(kn.get("publiceer_risico", []))})</summary>'
         f'{_gap_list(kn.get("publiceer_risico", []), "Geen — elk standpunt heeft bewijs 🎉", "var(--coral)")}'
@@ -2888,6 +2924,9 @@ def _flash(result: dict) -> str:
     if "note_relation" in result:
         return ("✓ Bewijs-link gelegd: steunt" if result["note_relation"] == "supports"
                 else "✓ Bewijs-link gelegd: spreekt tegen")
+    if "link_proposal" in result:
+        return ("✓ Voorstel bevestigd — link gelegd, telt mee voor de sterkte."
+                if result["link_proposal"] == "confirmed" else "✗ Voorstel verworpen — komt niet terug.")
     if "removed" in result:
         return "✓ Kaartje verwijderd"
     if "card_id" in result:
@@ -3261,6 +3300,23 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         res = notes.add_relation(iid, target, rel)
         return ({"ok": True, "note_relation": rel} if res is not None
                 else {"ok": False, "error": "kon de link niet leggen (bestaat het doelkaartje?)"})
+    if action in ("link_confirm", "link_reject"):
+        # Voorgestelde bewijs-link van de Librarian: jij bevestigt of verwerpt. from_id=bevinding,
+        # target=standpunt/signaal. Bevestigen legt de echte link + onthoudt het besluit (dedup).
+        from nooch_village.link_suggest import LinkProposals
+        notes = NotesStore(os.path.join(dd, "notes.json"))
+        lp = LinkProposals(os.path.join(dd, "link_proposals.json"))
+        frm = (extra.get("from_id") or "").strip()
+        tgt = (extra.get("target") or "").strip()
+        if not frm or not tgt:
+            return {"ok": False, "error": "voorstel mist from/target"}
+        if action == "link_reject":
+            lp.reject(frm, tgt)
+            return {"ok": True, "link_proposal": "rejected"}
+        if notes.add_relation(frm, tgt, "supports") is None:
+            return {"ok": False, "error": "kon de link niet leggen"}
+        lp.confirm(frm, tgt)
+        return {"ok": True, "link_proposal": "confirmed"}
     if action == "delegate_noochie":
         # Noochie werkt de spanning uit tot een concreet voorstel (LLM) en zet dat als
         # 'voorstel'-item in de inbox; de mens beoordeelt het daarna.
@@ -3536,6 +3592,7 @@ def make_handler(data_dir: str | None):
                      "q4": (form.get("q4") or [""])[0],
                      "kind": (form.get("kind") or [""])[0],
                      "target": (form.get("target") or [""])[0],
+                     "from_id": (form.get("from_id") or [""])[0],
                      "remember": (form.get("remember") or [""])[0]}
             result = _dispatch_action(data_dir, action, iid, reason, extra=extra)
             # 303 → verse GET. Rails keren terug naar de spanning (next), sluiten gaat home.
