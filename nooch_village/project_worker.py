@@ -25,17 +25,18 @@ def _scope_text(scope) -> str:
     return str(scope or "")
 
 
-def work_one(scope, role_id: str, role_purpose: str, *, llm_reason=None) -> dict:
+def work_one(scope, role_id: str, role_purpose: str, *, steer: str = "", llm_reason=None) -> dict:
     """Laat de rol (met bestaande capaciteit, tekst-only, omkeerbaar) aan één project werken.
-    Geeft {ok, outcome} of {ok: False, needs} als het nieuwe capaciteit/onomkeerbaarheid vraagt.
-    Fail-closed zonder LLM → {ok: False, needs: None} (niets gedaan)."""
+    `steer` = stuur-opmerkingen van de mens die de rol moet meenemen. Geeft {ok, outcome} of
+    {ok: False, needs} als het nieuwe capaciteit/onomkeerbaarheid vraagt. Fail-closed zonder LLM."""
     if llm_reason is None:
         from nooch_village.llm import reason as llm_reason
     prompt = (
         f"Je bent de rol '{role_id}' in NoochVille (duurzaam, vegan schoenenmerk Nooch.earth). "
         f"Jouw purpose: {role_purpose or '-'}.\n\n"
         f"Pak dit project op: {_scope_text(scope)}\n\n"
-        "Lever wat je NU concreet kunt met je eigen kennis: een afgeronde tekst-uitkomst, een eerste "
+        + (f"STURING van de mens (volg dit nadrukkelijk): {steer}\n\n" if steer else "")
+        + "Lever wat je NU concreet kunt met je eigen kennis: een afgeronde tekst-uitkomst, een eerste "
         "draft, een analyse, of de concrete eerstvolgende stap. Regels: alleen tekst (omkeerbaar), "
         "geen externe systemen aanroepen, niets publiceren/versturen/kopen/verwijderen, geen nieuwe "
         "tools. Gewone taal, geen jargon.\n\n"
@@ -78,7 +79,8 @@ def work_projects(ledger, records=None, *, llm_reason=None, limit: int = 5,
         if records is not None:
             rec = records.get(owner)
             purpose = getattr(getattr(rec, "definition", None), "purpose", "") if rec else ""
-        res = work_one(p.get("scope"), owner, purpose, llm_reason=llm_reason)
+        steer = " · ".join(c.get("text", "") for c in p.get("comments", []) if c.get("text"))
+        res = work_one(p.get("scope"), owner, purpose, steer=steer, llm_reason=llm_reason)
         if res.get("ok"):
             ledger.record_progress(p["id"], res["outcome"])
             worked += 1

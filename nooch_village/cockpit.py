@@ -1434,13 +1434,33 @@ def render_project_edit(p: dict, roster: list, csrf_token: str) -> str:
                         f'<div class="tension">{_e(p.get("outcome"))}</div>')
     hyp = (f'<p class="muted"><b>Hypothese:</b> {_e(p.get("hypothesis"))}</p>'
            if p.get("hypothesis") else "")
+    # Stuur-opmerkingen: de mens stuurt bij, de eigenaar-rol leest ze mee bij het volgende werk.
+    clist = "".join(
+        f'<li style="padding:.15rem 0;border-bottom:1px solid var(--border)">{_e(c.get("text",""))}</li>'
+        for c in p.get("comments", []))
+    comments = (
+        '<h2>Bijsturen</h2>'
+        '<p class="muted" style="font-size:.85rem">Plaats een opmerking om de rol bij te sturen '
+        '(bijv. “richt je op technisch onderzoek naar een natuurlijke elastaan-vervanger”). '
+        'De rol leest dit mee en pakt het project opnieuw op.</p>'
+        + (f'<ul style="list-style:none;padding:0;margin:.3rem 0">{clist}</ul>' if clist else "")
+        + '<form method="post" action="/action" class="pf">'
+        f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
+        f'<input type="hidden" name="iid" value="{_e(pid)}">'
+        '<input type="hidden" name="action" value="proj_comment">'
+        f'<input type="hidden" name="next" value="/project?id={_e(pid)}">'
+        '<textarea name="comment" rows="2" placeholder="jouw sturing voor de rol"></textarea>'
+        '<button class="btn ok" type="submit">Opmerking plaatsen</button></form>')
+    done_note = ('<p class="muted" style="font-size:.82rem">De rol levert voortgang op (status '
+                 '<b>Actief</b>); <b>jij</b> zet een project op <b>Done</b> als het af is — een rol '
+                 'sluit zichzelf nooit af.</p>')
     inner = (
         '<p><a href="/">← terug naar de cockpit</a></p>'
         '<h1>Project</h1>'
         f'<div class="tension"><b>{_e(p.get("owner"))}</b> · {_e(scope)}'
         f'<br><span class="muted">status {_e(p.get("status"))}'
         f'{(" · wacht op " + _e(p.get("blocked_on"))) if p.get("blocked_on") else ""}</span></div>'
-        f'{hyp}{deliverable}'
+        f'{hyp}{deliverable}{comments}{done_note}'
         f'<h2>Bewerken</h2>{form}'
     )
     return _page("Project", inner)
@@ -2261,6 +2281,8 @@ def _flash(result: dict) -> str:
             return f"✗ Governance {st}: {result.get('reason', '')}"
         return "✗ " + (result.get("error") or result.get("reason") or "actie mislukt")
     _rov = {"reacted": "🤖 Voorstel aangepast op basis van je reactie.",
+            "react_noop": "🤖 De AI kon nu geen herziening maken (geen LLM-antwoord of onleesbaar) "
+                          "— pas de velden hierboven gerust zelf aan.",
             "consented": "✓ Consent — wordt doorgevoerd bij einde roloverleg.",
             "objected": "⚠ Als schadelijk gemarkeerd — blijft staan voor de volgende keer.",
             "obj_valid": "⚖️ Geldig bezwaar — het voorstel is van de agenda gehaald. Dien "
@@ -2313,6 +2335,8 @@ def _flash(result: dict) -> str:
             return (f"📝 Concept-project voor {result.get('owner') or 'het dorp'} klaargezet — "
                     f"keur het goed bij 'Concept-projecten' om het op het bord te zetten." + tail)
         return f"➕ Project toegevoegd voor {result.get('owner') or 'het dorp'} (zie Proces)." + tail
+    if result.get("proj_comment"):
+        return "💬 Opmerking geplaatst — de rol pakt het project opnieuw op met jouw sturing."
     if result.get("status") == "done":
         return "✓ Spanning klaar — uit je inbox."
     _verdict_flash = {
@@ -2594,6 +2618,8 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         item = agenda.get(iid)
         if item is None:
             return {"ok": False, "error": "voorstel niet gevonden"}
+        if not (reason or "").strip():
+            return {"ok": False, "error": "typ eerst een reactie voor de AI"}
         agenda.react(iid, reason)
         ge = GovernanceExamples(os.path.join(dd, "governance_examples.json"))
         block = few_shot_block(ge, item.get("title", "") + " " + item.get("reason", ""), k=3)
@@ -2601,9 +2627,12 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         snap = ({"purpose": rec.definition.purpose,
                  "accountabilities": list(rec.definition.accountabilities),
                  "domains": list(rec.definition.domains)} if rec else None)
-        agenda.update_change(iid, amend_with_reaction(item, reason, role_snapshot=snap,
-                                                      examples_block=block))
-        return {"ok": True, "rov": "reacted"}
+        before = item.get("change", {})
+        after = amend_with_reaction(item, reason, role_snapshot=snap, examples_block=block)
+        agenda.update_change(iid, after)
+        # Eerlijk: als er niets veranderde (geen LLM-antwoord of onleesbaar format) → dat melden,
+        # niet stilletjes 'aangepast' tonen terwijl er niets gebeurde.
+        return {"ok": True, "rov": "reacted" if after != before else "react_noop"}
     if action in ("proj_approve", "proj_discard"):
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
         if action == "proj_approve":
@@ -2720,6 +2749,11 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
         ok = projects.edit(iid, scope=extra.get("scope", ""), owner=extra.get("owner", ""))
         return {"ok": ok, "proj_edit": True}
+    if action == "proj_comment":
+        projects = ProjectLedger(os.path.join(dd, "projects.json"))
+        ok = projects.add_comment(iid, extra.get("comment", ""))
+        return {"ok": ok, "proj_comment": True} if ok \
+            else {"ok": False, "error": "lege opmerking of project niet gevonden"}
     if action == "add_governance":
         records = Records(os.path.join(dd, "governance_records.json"))
         return route_to_governance(records, extra.get("role", ""), extra.get("skill", ""),
@@ -2898,6 +2932,7 @@ def make_handler(data_dir: str | None):
                      "group": (form.get("group") or [""])[0],
                      "g_owner": (form.get("g_owner") or [""])[0],
                      "g_naam": (form.get("g_naam") or [""])[0],
+                     "comment": (form.get("comment") or [""])[0],
                      "q1": (form.get("q1") or [""])[0], "q2": (form.get("q2") or [""])[0],
                      "q3": (form.get("q3") or [""])[0], "q3b": (form.get("q3b") or [""])[0],
                      "q4": (form.get("q4") or [""])[0],

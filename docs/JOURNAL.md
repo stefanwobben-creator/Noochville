@@ -1073,3 +1073,15 @@ Minder cognitieve last: formulier-eerst, één beslis-zone onderaan, secundair i
 - Bij één rol geen apart groep-blok meer; alleen een uitklapper 'Nog een rol bij dit voorstel betrekken'.
   Bij meerdere rollen wél het volle '📦 Dit voorstel'-blok met 'Neem hele voorstel aan'.
 Suite groen (549 + 510).
+
+## Stuur-comment per project + AI-reactie eerlijk + done-uitleg
+- Per project een stuur-opmerking (ProjectLedger.add_comment): de mens stuurt bij (bijv. 'richt je op
+  technisch onderzoek naar een natuurlijke elastaan-vervanger'); de eigenaar-rol leest ze mee
+  (work_one kreeg `steer`, work_projects bundelt de comments in de prompt) en pakt het project
+  opnieuw op (worked=False). Cockpit: 'Bijsturen'-blok op de projectpagina (proj_comment) + lijst.
+- Done-uitleg op de projectpagina: een rol levert voortgang (Actief); de MENS zet op Done — een rol
+  sluit zichzelf nooit af.
+- AI-reactie in het roloverleg is nu eerlijk: als er niets verandert (geen LLM-antwoord of onleesbaar
+  format) → melding 'AI kon nu geen herziening maken, pas de velden zelf aan' i.p.v. stilletjes niets.
+  Lege reactie → nette fout.
+Suite groen (582 + 483).
