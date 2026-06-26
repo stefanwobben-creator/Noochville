@@ -296,6 +296,7 @@ class Records:
                 archived=r.get("archived", False),
                 source=r.get("source", "sensed"),
                 persona=r.get("persona"),
+                persona_id=r.get("persona_id"),
                 held_by=r.get("held_by"))
 
     def save(self) -> None:
@@ -323,6 +324,17 @@ class Records:
         if rec is None:
             return False
         rec.held_by = name
+        self.save()
+        return True
+
+    def set_persona(self, role_id: str, persona_id: str | None) -> bool:
+        """Koppel een inwoner (data/personas.json) aan een rol, of ontkoppel (persona_id=None).
+        Het karakter dat de rol vervult; de skills/rugzak blijven van de rol. Geeft False als de
+        rol niet bestaat. (Validatie dat de inwoner bestaat doet de aanroeper.)"""
+        rec = self._data.get(role_id)
+        if rec is None:
+            return False
+        rec.persona_id = persona_id or None
         self.save()
         return True
 

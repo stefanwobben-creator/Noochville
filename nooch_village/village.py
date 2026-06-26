@@ -16,7 +16,7 @@ from nooch_village.config import load_context
 from nooch_village.skills import SkillRegistry
 from nooch_village.matchmaker import Matchmaker
 from nooch_village.governance import Records, Secretary, Reconciler, proposal_to_dict
-from nooch_village.models import Proposal
+from nooch_village.models import Proposal, RecordType
 from nooch_village.roles import (
     WebsiteWatcherWorker, Librarian, TrendsWorker,
     Facilitator, Noochie, HarryHemp, ContentStrategist, ConcurrentScout,
@@ -343,7 +343,21 @@ class Village:
         self.human_inbox.sync_unmanned(self.records.all(), CLASS_MAP)
         self.human_inbox.withdraw_archived_activations(self.records.all())
         self._audit_role_provenance()
+        self._write_role_status()
         self.root.start()
+
+    def _write_role_status(self) -> None:
+        """Schrijf de bemenst/onbemand-status (de laatste reconcile) weg zodat de read-only cockpit
+        het kan tonen zonder zelf een dorp te draaien. 'bemenst' = code (CLASS_MAP) of actieve skill;
+        'onbemand' = rol bestaat maar kan niet werken. Zie docs/ONTWERP_inwoners.md (de code-as)."""
+        from nooch_village.util import atomic_write_json
+        def _is_role(rid):
+            r = self.records.get(rid)
+            return r is not None and r.type == RecordType.ROLE
+        manned = sorted(rid for rid in self.reconciler.live if _is_role(rid))
+        unmanned = sorted(self.reconciler.unmanned.keys())
+        atomic_write_json(os.path.join(self.context.data_dir, "role_status.json"),
+                          {"manned": manned, "unmanned": unmanned, "generated_at": time.time()})
 
     def _audit_role_provenance(self) -> None:
         """Herkomst-wachter: waarschuw luid bij een seed-gehardcodeerde niet-bootstrap rol.

@@ -592,10 +592,70 @@ def main() -> None:
         limit = next((int(a) for a in sys.argv[2:] if a.isdigit()), 5)
         ledger = ProjectLedger(os.path.join(ctx.data_dir, "projects.json"))
         recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
+        from nooch_village.personas import PersonaStore
+        personas = PersonaStore(os.path.join(ctx.data_dir, "personas.json"))
         print(f"🛠️  Rollen werken aan hun omkeerbare projecten (max {limit})…")
-        res = work_projects(ledger, recs, limit=limit)
+        res = work_projects(ledger, recs, limit=limit, personas=personas)
         print(f"✅ {res['worked']} uitgevoerd, {res['blocked']} geblokkeerd (vragen jouw oordeel), "
               f"{res['skipped']} wachten op een volgende ronde. Zie het projectbord in de cockpit.")
+
+    elif mode in ("inwoner_new", "inwoner_list", "inwoner_assign"):
+        # Inwoners (persona's): The Source maakt karakters aan en koppelt ze aan rollen.
+        # Skills/rugzak blijven van de rol; de inwoner kleurt alleen de toon.
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.personas import PersonaStore
+        from nooch_village.governance import Records
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        personas = PersonaStore(os.path.join(ctx.data_dir, "personas.json"))
+        if mode == "inwoner_new":
+            # village inwoner_new <naam> <MBTI> <instructies...>
+            if len(sys.argv) < 3:
+                print("Gebruik: village inwoner_new <naam> [MBTI] [instructies...]", file=sys.stderr)
+                sys.exit(1)
+            naam = sys.argv[2]
+            mbti = sys.argv[3] if len(sys.argv) > 3 else ""
+            instr = " ".join(sys.argv[4:]) if len(sys.argv) > 4 else ""
+            p = personas.add(naam, mbti=mbti, instructions=instr)
+            print(f"🧑 Inwoner aangemaakt: {p.name} ({p.mbti or 'geen MBTI'}) — id={p.id}")
+            if instr:
+                print(f"   instructies: {p.instructions}")
+            print("   Koppel aan een rol: village inwoner_assign <role_id> " + p.id)
+        elif mode == "inwoner_list":
+            recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
+            seated = {}
+            for r in recs.all():
+                if getattr(r, "persona_id", None):
+                    seated.setdefault(r.persona_id, []).append(r.id)
+            items = personas.all()
+            if not items:
+                print("Nog geen inwoners. Maak er een: village inwoner_new <naam> <MBTI> <instructies>")
+            for p in items:
+                rollen = ", ".join(seated.get(p.id, [])) or "— (niet gekoppeld)"
+                print(f"  {p.name:<16} {p.mbti or '----':<6} id={p.id}  → rol: {rollen}")
+                if p.instructions:
+                    print(f"      {p.instructions[:80]}")
+        else:  # inwoner_assign
+            # village inwoner_assign <role_id> <persona_id|->   ('-' = ontkoppelen)
+            if len(sys.argv) < 4:
+                print("Gebruik: village inwoner_assign <role_id> <persona_id|->", file=sys.stderr)
+                sys.exit(1)
+            role_id, pid = sys.argv[2], sys.argv[3]
+            recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
+            if recs.get(role_id) is None:
+                print(f"Rol '{role_id}' bestaat niet.", file=sys.stderr); sys.exit(1)
+            if pid == "-":
+                recs.set_persona(role_id, None)
+                print(f"🔌 Rol '{role_id}' ontkoppeld van zijn inwoner.")
+            elif personas.get(pid) is None:
+                print(f"Inwoner '{pid}' bestaat niet (zie: village inwoner_list).", file=sys.stderr)
+                sys.exit(1)
+            else:
+                recs.set_persona(role_id, pid)
+                p = personas.get(pid)
+                print(f"🪑 {p.name} ({p.mbti or 'geen MBTI'}) zit nu in de rol '{role_id}'. "
+                      f"De rugzak (skills) blijft van de rol; {p.name} kleurt de toon.")
 
     elif mode == "review_roles":
         # Facilitator-project: review alle dorp-rollen tegen de Holacracy-regels + referentiebank,
@@ -627,6 +687,7 @@ def main() -> None:
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "
               "measure_propose | rereview | ingest | notes_remove | recurate | "
               "ground | harry_run | roster | keys | competitor | formalize | answer_questions | "
-              "ingest_governance | review_roles | shopify | work_projects",
+              "ingest_governance | review_roles | shopify | work_projects | "
+              "inwoner_new | inwoner_list | inwoner_assign",
               file=sys.stderr)
         sys.exit(1)

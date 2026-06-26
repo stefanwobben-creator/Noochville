@@ -25,6 +25,7 @@ from nooch_village.governance import Records
 from nooch_village.human_inbox import HumanInbox
 from nooch_village.projects import ProjectLedger
 from nooch_village.pinboard import Pinboard, read_wip
+from nooch_village.personas import PersonaStore
 from nooch_village.library import Library, classify_function
 from nooch_village.trend_analysis import trend_state_label
 from nooch_village.notes_store import NotesStore
@@ -208,9 +209,23 @@ def gather(data_dir: str | None = None) -> dict:
         except Exception:
             visitors_7d = None
 
+    # Inwoners (persona's) + bemenst-status: voor de twee assen in de roster.
+    personas = PersonaStore(os.path.join(dd, "personas.json"))
+    role_status = {}
+    _rs_path = os.path.join(dd, "role_status.json")
+    if os.path.exists(_rs_path):
+        try:
+            import json as _json
+            role_status = _json.load(open(_rs_path))
+        except Exception:
+            role_status = {}
+    _unmanned = set(role_status.get("unmanned", []))
+    _have_status = bool(role_status)            # zonder een puls weten we het niet → niet markeren
+
     roster = []
     for rec in sorted(records.all(), key=lambda r: (r.archived, r.type.value, r.id)):
         d = rec.definition
+        _pers = personas.get(getattr(rec, "persona_id", None))
         roster.append({
             "id": rec.id,
             "name": getattr(d, "name", "") or rec.id,   # weergavenaam (na hernoemen) of het id
@@ -225,6 +240,9 @@ def gather(data_dir: str | None = None) -> dict:
             "skills": list(d.skills),
             "policies": list(d.policies),
             "members": list(rec.members),
+            # Inwoner (karakter) + bemenst-as (code). Twee verschillende dingen, bewust apart.
+            "inhabitant": ({"name": _pers.name, "mbti": _pers.mbti} if _pers else None),
+            "unmanned": (rec.type.value == "role" and _have_status and rec.id in _unmanned),
         })
 
     inbox_items = sorted(
@@ -2231,10 +2249,23 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         naam_cell = (f'<b>{_e(nm)}</b> <span class="muted">v{_e(r["version"])}</span>'
                      + (f'<br><span class="muted" style="font-size:.75rem">{_e(r["id"])}</span>'
                         if nm != r["id"] else ""))
+        # Inwoner (karakter) + bemenst-as (code) — twee aparte signalen.
+        inh = r.get("inhabitant")
+        if inh:
+            inh_cell = (f'🧑 <b>{_e(inh["name"])}</b>'
+                        + (f' <span class="chip">{_e(inh["mbti"])}</span>' if inh.get("mbti") else ""))
+        elif r["type"] == "role":
+            inh_cell = '<span class="muted">— geen inwoner</span>'
+        else:
+            inh_cell = '<span class="muted">—</span>'
+        if r.get("unmanned"):
+            inh_cell += ('<br><span class="chip" style="background:var(--error-tint);'
+                         'color:#A8322A">⚠ onbemand — werk valt op jou</span>')
         rrows.append(
             f'<tr class="{cls}">'
             f'<td>{naam_cell}</td>'
             f'<td>{_e(r["type"])}</td>'
+            f'<td>{inh_cell}</td>'
             f'<td>{_e(_SOURCE_MARK.get(r["source"], r["source"]))}</td>'
             f'<td>{_e(r["purpose"])}</td>'
             f'<td>{_chips(r["accountabilities"])}</td>'
@@ -2242,9 +2273,9 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
             f"</tr>"
         )
     roster_tbl = (
-        '<table><thead><tr><th>rol</th><th>type</th><th>source</th><th>purpose</th>'
+        '<table><thead><tr><th>rol</th><th>type</th><th>inwoner</th><th>source</th><th>purpose</th>'
         '<th>accountabilities</th><th>skills</th></tr></thead>'
-        f'<tbody>{"".join(rrows) or "<tr><td colspan=6 class=muted>geen records</td></tr>"}</tbody></table>'
+        f'<tbody>{"".join(rrows) or "<tr><td colspan=7 class=muted>geen records</td></tr>"}</tbody></table>'
     )
 
     # Inbox (alleen actief tenzij geschiedenis) — semantisch: leesbare titel, slug klein
@@ -3120,13 +3151,15 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         if not ok:
             return {"ok": False, "error": "lege opmerking of project niet gevonden"}
         # De rol antwoordt DIRECT op je bericht (eigen capaciteit, tekst-only, omkeerbaar).
-        from nooch_village.project_worker import work_one
+        from nooch_village.project_worker import work_one, _persona_for
+        from nooch_village.personas import PersonaStore
         p = projects.get(iid) or {}
         rec = records.get(p.get("owner")) if (records := Records(os.path.join(dd, "governance_records.json"))) else None
         purpose = getattr(getattr(rec, "definition", None), "purpose", "") if rec else ""
+        persona = _persona_for(rec, PersonaStore(os.path.join(dd, "personas.json")))
         steer = " · ".join(c.get("text", "") for c in p.get("comments", []) if c.get("text"))
         try:
-            res = work_one(p.get("scope"), p.get("owner", ""), purpose, steer=steer)
+            res = work_one(p.get("scope"), p.get("owner", ""), purpose, steer=steer, persona=persona)
         except Exception:
             res = {"ok": False, "needs": None}
         if res.get("ok"):

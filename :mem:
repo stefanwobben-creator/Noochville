@@ -16,6 +16,7 @@
     "archived": false,
     "source": "seed",
     "persona": null,
+    "persona_id": null,
     "held_by": null
   },
   "scout": {
@@ -35,6 +36,7 @@
     "archived": false,
     "source": "seed",
     "persona": null,
+    "persona_id": null,
     "held_by": null
   }
 }

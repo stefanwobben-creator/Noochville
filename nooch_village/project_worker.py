@@ -25,14 +25,17 @@ def _scope_text(scope) -> str:
     return str(scope or "")
 
 
-def work_one(scope, role_id: str, role_purpose: str, *, steer: str = "", llm_reason=None) -> dict:
+def work_one(scope, role_id: str, role_purpose: str, *, steer: str = "", persona: str = "",
+             llm_reason=None) -> dict:
     """Laat de rol (met bestaande capaciteit, tekst-only, omkeerbaar) aan één project werken.
-    `steer` = stuur-opmerkingen van de mens die de rol moet meenemen. Geeft {ok, outcome} of
+    `steer` = stuur-opmerkingen van de mens die de rol moet meenemen. `persona` = de preamble van
+    de toegewezen inwoner (karakter; kleurt toon, niet capaciteit). Geeft {ok, outcome} of
     {ok: False, needs} als het nieuwe capaciteit/onomkeerbaarheid vraagt. Fail-closed zonder LLM."""
     if llm_reason is None:
         from nooch_village.llm import reason as llm_reason
     prompt = (
-        f"Je bent de rol '{role_id}' in NoochVille (duurzaam, vegan schoenenmerk Nooch.earth). "
+        (persona.strip() + "\n\n" if persona and persona.strip() else "")
+        + f"Je bent de rol '{role_id}' in NoochVille (duurzaam, vegan schoenenmerk Nooch.earth). "
         f"Jouw purpose: {role_purpose or '-'}.\n\n"
         f"Pak dit project op: {_scope_text(scope)}\n\n"
         + (f"STURING van de mens (volg dit nadrukkelijk): {steer}\n\n" if steer else "")
@@ -55,6 +58,18 @@ def work_one(scope, role_id: str, role_purpose: str, *, steer: str = "", llm_rea
     return {"ok": True, "outcome": body[:1500]} if body else {"ok": False, "needs": None}
 
 
+def _persona_for(rec, personas) -> str:
+    """De persona-preamble van de aan een rol gekoppelde inwoner (leeg = neutrale stem).
+    Skills/capaciteit blijven van de rol; de inwoner kleurt alleen toon en aanpak."""
+    if rec is None or personas is None:
+        return ""
+    pid = getattr(rec, "persona_id", None)
+    if not pid:
+        return ""
+    from nooch_village.personas import persona_prompt
+    return persona_prompt(personas.get(pid))
+
+
 def _eligible(p, threshold: int) -> bool:
     """Wie pakt de rol op deze puls op? Gewone projecten één keer (idempotent via 'worked').
     Experimenten elke puls opnieuw, tot ze de stol-drempel halen — zo telt de herhaling mee."""
@@ -66,21 +81,25 @@ def _eligible(p, threshold: int) -> bool:
 
 
 def work_projects(ledger, records=None, *, llm_reason=None, limit: int = 5,
-                  agenda=None, formalize_threshold: int = 3) -> dict:
+                  agenda=None, formalize_threshold: int = 3, personas=None) -> dict:
     """Loop de openstaande omkeerbare projecten langs en laat de eigenaar-rol eraan werken. Gewone
     projecten worden één keer opgepakt; experimenten elke puls opnieuw tot ze ≥ `formalize_threshold`
     keer zijn uitgevoerd. Is er een agenda meegegeven, dan worden rijpe experimenten daarna automatisch
-    voorgedragen om te stollen tot accountability. Geeft {worked, blocked, skipped, formalized}."""
+    voorgedragen om te stollen tot accountability. `personas` (PersonaStore) kleurt de toon via de aan
+    de rol gekoppelde inwoner. Geeft {worked, blocked, skipped, formalized}."""
     todo = [p for p in ledger.all() if _eligible(p, formalize_threshold)]
     worked = blocked = 0
     for p in todo[:limit]:
         owner = p.get("owner", "")
         purpose = ""
+        persona = ""
         if records is not None:
             rec = records.get(owner)
             purpose = getattr(getattr(rec, "definition", None), "purpose", "") if rec else ""
+            persona = _persona_for(rec, personas)
         steer = " · ".join(c.get("text", "") for c in p.get("comments", []) if c.get("text"))
-        res = work_one(p.get("scope"), owner, purpose, steer=steer, llm_reason=llm_reason)
+        res = work_one(p.get("scope"), owner, purpose, steer=steer, persona=persona,
+                       llm_reason=llm_reason)
         if res.get("ok"):
             ledger.record_progress(p["id"], res["outcome"])
             worked += 1

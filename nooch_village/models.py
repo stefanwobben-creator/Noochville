@@ -32,7 +32,8 @@ class Record:
     version: int = 1
     archived: bool = False
     source: str = "sensed"   # "seed" | "sensed" | "demo" — herkomst van het record
-    persona: Optional[str] = None  # optionele weergavenaam voor de vervuller
+    persona: Optional[str] = None  # (afbouwend) losse weergavenaam; vervangen door persona_id
+    persona_id: Optional[str] = None  # toegewezen inwoner (data/personas.json) — het karakter
     held_by: Optional[str] = None  # mens die deze rol bezet (bv. de founder in the_source):
     #                                een door-mens-bemenste rol, geen code-thread
 
