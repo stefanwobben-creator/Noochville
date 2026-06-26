@@ -1501,16 +1501,7 @@ def render_project_edit(p: dict, roster: list, csrf_token: str) -> str:
             '<textarea name="comment" rows="3" style="width:100%;box-sizing:border-box;font-size:.95rem" '
             'placeholder="Bericht aan de rol…"></textarea>'
             '<button class="btn ok" type="submit" style="margin-top:.3rem">Versturen ➤</button></form>'
-            # Brug naar de woordenschat: heeft de rol zoekwoorden opgeleverd, bied ze aan de
-            # Librarian-review aan → ze landen in de bibliotheek en verschijnen ter review.
-            + ('<form method="post" action="/action" style="margin-top:.4rem">'
-               f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
-               f'<input type="hidden" name="iid" value="{_e(pid)}">'
-               '<input type="hidden" name="action" value="kw_offer">'
-               f'<input type="hidden" name="next" value="/project?pid={_e(pid)}">'
-               '<button class="btn" type="submit">📚 Bied de gevonden zoekwoorden aan de Librarian aan'
-               '</button></form>' if any(m.get("who") == "rol" for m in (p.get("log") or [])) or p.get("progress") else "")
-            + '<p class="muted" style="font-size:.78rem;margin-top:.3rem">Een rol sluit zichzelf nooit '
+            '<p class="muted" style="font-size:.78rem;margin-top:.3rem">Een rol sluit zichzelf nooit '
             'af; jij zet het hierboven op <b>Done</b> — naar archief — als het klaar is.</p>')
     # Betrek een andere rol: spin direct een project-verzoek af naar een rol die zich in de
     # discussie mengt (die rol pakt het op zijn eigen bord op). Alleen bij een lopend project.
@@ -2516,10 +2507,6 @@ def _flash(result: dict) -> str:
             return (f"📝 Concept-project voor {result.get('owner') or 'het dorp'} klaargezet — "
                     f"keur het goed bij 'Concept-projecten' om het op het bord te zetten." + tail)
         return f"➕ Project toegevoegd voor {result.get('owner') or 'het dorp'} (zie Proces)." + tail
-    if result.get("kw_offer"):
-        r = result["kw_offer"]
-        return (f"📚 {r['reviewed']} woorden aan de Librarian aangeboden — {r['approved']} goedgekeurd, "
-                f"{r['forbidden']} afgewezen, {r['escalated']} ter review (zie Woordenschat).")
     if result.get("proj_spinoff"):
         return f"➡️ Verzoek gestuurd — nieuw project voor {result.get('owner','de rol')} op het bord."
     if result.get("proj_comment"):
@@ -2939,25 +2926,6 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
         ok = projects.edit(iid, scope=extra.get("scope", ""), owner=extra.get("owner", ""))
         return {"ok": ok, "proj_edit": True}
-    if action == "kw_offer":
-        # Bied de zoekwoorden uit dit project-gesprek aan de Librarian-review aan → ze landen in de
-        # bibliotheek (approved/forbidden/escalated) en worden zichtbaar (escalated = 'te beoordelen').
-        from nooch_village.keyword_intake import extract_candidates, review_words
-        projects = ProjectLedger(os.path.join(dd, "projects.json"))
-        p = projects.get(iid)
-        if p is None:
-            return {"ok": False, "error": "project niet gevonden"}
-        text = "\n".join(m.get("text", "") for m in p.get("log", []) if m.get("who") == "rol")
-        if not text and p.get("progress"):
-            text = p["progress"]
-        words = extract_candidates(text)
-        if not words:
-            return {"ok": False, "error": "geen zoekwoorden gevonden in de oplevering"}
-        res = review_words(words, dd)
-        projects.add_comment(iid, f"📚 {res['reviewed']} woorden aan de Librarian aangeboden: "
-                             f"{res['approved']} goedgekeurd, {res['forbidden']} afgewezen, "
-                             f"{res['escalated']} ter review.")
-        return {"ok": True, "kw_offer": res}
     if action == "proj_spinoff":
         # Betrek een andere rol: maak een NIEUW project voor die rol en log het verzoek hier.
         projects = ProjectLedger(os.path.join(dd, "projects.json"))

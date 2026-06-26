@@ -1178,18 +1178,3 @@ design-tokens: #c0392b→var(--coral), #27ae60→var(--green), #c9a227→var(--y
 #e2cf8e→var(--border), chat-bubble border-radius→var(--radius). De enige resterende literals zijn
 (a) de :root/.btn token-DEFINITIES in de basis-stylesheet (daar horen ze, als een tokens-bestand)
 en (b) #fff (witte tekst op donkere knop; geen merkkleur). Cockpit-tests groen.
-
-## Diagnose 'keyword-treintje' + brug naar de Librarian-review
-Bevinding: de ontdekkings→review-lus (Trends/GSC/ngram → keyword_proposed → Librarian →
-keyword_review → library) draait ALLEEN in de village-puls. Een rol die in een PROJECT werkt, draait
-work_one = generieke tekst (geen skills, geen library-schrijfactie). Dus keywords die een rol in een
-projectgesprek 'vond' bleven tekst; ze gingen nooit door de review. Daarnaast: de Librarian
-auto-beslist en escaleert zelden → library had 0 'escalated' → cockpit toonde niets 'ter review'.
-Bovendien was de Scout een PROJECT gaan maken voor een DOORLOPENDE activiteit (mis-routing).
-
-Fix (brug): nooch_village/keyword_intake.py — extract_candidates() haalt kandidaat-zoekwoorden uit
-een rol-oplevering; review_words() draait dezelfde KeywordReviewSkill + curatie buiten de puls om,
-zodat woorden echt in de bibliotheek landen (approved/forbidden/escalated). Cockpit: knop op de
-projectpagina '📚 Bied de gevonden zoekwoorden aan de Librarian aan' (kw_offer) → woorden door de
-review → zichtbaar in Woordenschat / 'te beoordelen'. Tests in test_keyword_intake.py.
-Suite groen (521 + 561).
