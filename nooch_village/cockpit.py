@@ -1284,19 +1284,20 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
             '<button class="bigbtn" type="submit" name="action" value="rov_to_project">'
             f'▶ Doe dit eerst als project<small>de rol \'{_e(item["role_id"])}\' voert het uit als '
             'omkeerbaar experiment; bij herhaling stolt het later tot accountability</small></button>')
-    decide = (
-        f'<form method="post" action="/action" style="margin-top:.5rem">{common}'
-        f'<input type="hidden" name="next" value="/roloverleg?iid={_e(item["id"])}">'
+    # De beslis-knoppen leven IN het bewerk-formulier (één form), zodat 'Neem voorstel aan'
+    # de bewerkte velden meteen vastlegt én consent geeft (geen aparte opslaan-knop meer; p.4 punt 8).
+    decide_buttons = (
+        f'<div class="tg-card" style="margin-top:.6rem"><div style="{_H}">Beslis</div>'
         '<div class="tg-opts">'
         '<button class="bigbtn go" type="submit" name="action" value="rov_consent">'
-        '✓ Consent<small>geen bezwaar — wordt aangenomen en bij einde overleg doorgevoerd</small>'
-        '</button>'
+        '✓ Neem voorstel aan<small>legt je bewerkte velden vast én geeft consent — '
+        'bij einde overleg doorgevoerd</small></button>'
         f'{project_opt}'
         + ("" if valid else
            '<button class="bigbtn warn" type="submit" name="action" value="rov_invalid">'
            '⚖️ Spanning ongeldig — verwijderen<small>geen baat voor de eigen rol benoemd; '
            'direct van de agenda, zonder governance</small></button>')
-        + '</div></form>')
+        + '</div></div>')
     # Bezwaar toetsen volgens de handout (roldenken.nl/Holacracy): JIJ kiest per vraag het antwoord;
     # de uitkomst volgt uit je eigen antwoorden — de facilitator oordeelt niet over de inhoud.
     from nooch_village.roloverleg import _OBJ_QUESTIONS
@@ -1360,10 +1361,12 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
             + (f'<div class="muted" style="margin-top:.15rem"><b>Helpt mijn eigen rol:</b> '
                f'{_e(item.get("benefit",""))}</div>' if item.get("benefit") else "")
             + invalid_box + obj_box + react_log + '</div>')
-    # De diff blijft beschikbaar als ingeklapte referentie ('wat verandert er t.o.v. nu').
-    diff_block = (f'<details style="margin:.4rem 0"><summary>📋 Wijzigingen t.o.v. nu</summary>'
+    # De wijziging staat ALTIJD in beeld (p.4 punt 4 / p.6): wat het was (doorgestreept) → wat het
+    # wordt (groen). Niet meer ingeklapt onder 'Meer opties'.
+    diff_block = (f'<div class="tg-card" style="margin:.4rem 0"><div style="{_H}">'
+                  '📋 Wat verandert er t.o.v. nu</div>'
                   f'{diff}{(("<div style=margin:.3rem0>" + flip_btn + "</div>") if flip_btn else "")}'
-                  '</details>')
+                  '</div>')
     # GlassFrog-stijl: direct bewerkbare velden, voorgevuld met de 'na dit voorstel'-stand.
     if is_add:
         ed_naam, ed_pur = (item.get("title") or item.get("role_id", "")), (pur_new or "")
@@ -1390,12 +1393,14 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
                 'onclick="this.closest(\'.acc-row\').remove()" '
                 'style="flex:0 0 auto">✗</button></div>')
     acc_rows = "".join(_acc_row(a, a in _added_set) for a in ed_accs_list)
+    # GlassFrog (p.6): de velden zijn het concept; wijzigingen blijven staan tot 'Neem voorstel aan'.
+    # Eén form omvat de velden ÉN de beslis-knoppen; de losse 'opslaan'-knop is weg (p.4 punt 8).
     editor = (
-        '<details open style="margin-top:.5rem"><summary>✏️ Rol bewerken — naam, purpose, '
-        'accountabilities &amp; domeinen (dit is het voorstel)</summary>'
         f'<form method="post" action="/action" id="roveditform" style="margin-top:.4rem">{common}'
         f'<input type="hidden" name="next" value="/roloverleg?iid={_e(item["id"])}">'
-        f'<div style="{_H}">Naam</div>'
+        '<details open style="margin-top:.2rem"><summary>✏️ Rol bewerken — naam, purpose, '
+        'accountabilities &amp; domeinen (dit is het voorstel)</summary>'
+        f'<div style="{_H};margin-top:.4rem">Naam</div>'
         f'<input name="ed_naam" class="tg-in" value="{_e(ed_naam)}"{naam_attr}>'
         f'<div style="{_H};margin-top:.4rem">Purpose (reden van bestaan, geen -en-vorm)</div>'
         f'<textarea name="ed_purpose" class="tg-in" rows="2">{_e(ed_pur)}</textarea>'
@@ -1408,9 +1413,9 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
         '<textarea name="ed_accs" id="rovedit-accs-hidden" style="display:none"></textarea>'
         f'<div style="{_H};margin-top:.4rem">Domeinen (één per regel, optioneel)</div>'
         f'<textarea name="ed_domeinen" class="tg-in" rows="2">{_ta(ed_doms_list)}</textarea>'
-        '<button class="bigbtn go" type="submit" name="action" value="rov_edit" '
-        'style="margin-top:.4rem">💾 Voorstel opslaan<small>werkt de wijziging bij vanuit deze '
-        'velden; de Secretaris hertoetst</small></button></form>'
+        '</details>'
+        f'{decide_buttons}'
+        '</form>'
         + ("" if is_add else
            f'<form method="post" action="/action" style="margin-top:.4rem">{common}'
            f'<input type="hidden" name="next" value="/roloverleg?iid={_e(item["id"])}">'
@@ -1480,14 +1485,14 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
                 f'📦 Dit voorstel — {len(members)} rollen</div>'
                 f'<ul style="list-style:none;padding:0;margin:.2rem 0">{rows}</ul>'
                 f'{add_to}{accept_all}</div>')
-    # UX (Duolingo + GlassFrog): formulier is de held; secundaire dingen ingeklapt; ONE duidelijke
-    # beslis-zone onderaan (consent groot, bezwaar als rustige tweede stap).
-    beslis = (f'<div class="tg-card" style="margin-top:.6rem"><div style="{_H}">Beslis</div>'
-              f'{decide}{objection_form}</div>')
+    # UX (GlassFrog): context → wat verandert er → de secretaris-check → het bewerk-formulier met
+    # 'Neem voorstel aan' (de beslis-knoppen zitten ín het formulier). Bezwaar als rustige 2e stap.
+    bezwaar = (f'<div class="tg-card" style="margin-top:.4rem"><div style="{_H}">Toch een '
+               f'bezwaar?</div>{objection_form}</div>')
     secondair = (f'<details style="margin-top:.4rem"><summary>🔧 Meer opties '
-                 '(AI-herziening, wijzigingen t.o.v. nu)</summary>'
-                 f'{react_form}{diff_block}</details>')
-    inner = (f'{head}{_banner(msg)}{card}{editor}{sec}{group_block}{secondair}{beslis}'
+                 '(AI-herziening)</summary>'
+                 f'{react_form}</details>')
+    inner = (f'{head}{_banner(msg)}{card}{diff_block}{sec}{editor}{group_block}{bezwaar}{secondair}'
              '<div class="tg-skip"><a class="muted" href="/roloverleg">← terug naar de agenda</a>'
              '</div></div><style>' + _TRIAGE_CSS + '</style>')
     return _page("Voorstel behandelen", inner)
@@ -3216,6 +3221,26 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                                               flip_facet, build_change_from_fields)
         agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
         records = Records(os.path.join(dd, "governance_records.json"))
+
+        def _apply_editor_fields(it):
+            """Werk het voorstel bij vanuit de direct bewerkte velden (GlassFrog: wijzigingen
+            blijven 'pending' tot je het voorstel aanneemt). Gedeeld door consent/project/opslaan."""
+            rec = records.get(it.get("role_id"))
+            snap = ({"purpose": rec.definition.purpose,
+                     "name": getattr(rec.definition, "name", "") or it.get("role_id"),
+                     "accountabilities": list(rec.definition.accountabilities),
+                     "domains": list(rec.definition.domains)} if rec else None)
+            accs = (extra.get("ed_accs") or "").splitlines()
+            doms = (extra.get("ed_domeinen") or "").splitlines()
+            change, rid, title = build_change_from_fields(
+                it, snap, naam=extra.get("ed_naam", ""), purpose=extra.get("ed_purpose", ""),
+                accs=accs, domeinen=doms)
+            agenda.update_fields(iid, change=change, role_id=rid, title=title)
+
+        def _has_editor_fields(it):
+            return (it.get("kind") in ("add_role", "amend_role")
+                    and any(extra.get(k) for k in ("ed_naam", "ed_purpose", "ed_accs", "ed_domeinen")))
+
         if action == "rov_flip_facet":
             item = agenda.get(iid)
             if item is None:
@@ -3241,6 +3266,9 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
             item = agenda.get(iid)
             if item is None:
                 return {"ok": False, "error": "voorstel niet gevonden"}
+            if _has_editor_fields(item):       # eerst de bewerkte velden vastleggen
+                _apply_editor_fields(item)
+                item = agenda.get(iid)
             ch = item.get("change", {})
             scope = (ch.get("add_accountabilities") or [item.get("title", "")])[0]
             projects = ProjectLedger(os.path.join(dd, "projects.json"))
@@ -3335,20 +3363,16 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
             item = agenda.get(iid)
             if item is None:
                 return {"ok": False, "error": "voorstel niet gevonden"}
-            rec = records.get(item.get("role_id"))
-            snap = ({"purpose": rec.definition.purpose,
-                     "name": getattr(rec.definition, "name", "") or item.get("role_id"),
-                     "accountabilities": list(rec.definition.accountabilities),
-                     "domains": list(rec.definition.domains)} if rec else None)
-            accs = (extra.get("ed_accs") or "").splitlines()
-            doms = (extra.get("ed_domeinen") or "").splitlines()
-            change, rid, title = build_change_from_fields(
-                item, snap, naam=extra.get("ed_naam", ""), purpose=extra.get("ed_purpose", ""),
-                accs=accs, domeinen=doms)
-            agenda.update_fields(iid, change=change, role_id=rid, title=title)
+            _apply_editor_fields(item)
             return {"ok": True, "rov": "edited"}
         # de overige acties werken op één item
         if action == "rov_consent":
+            # 'Neem voorstel aan' = de bewerkte velden vastleggen én consent geven (één knop).
+            item = agenda.get(iid)
+            if item is None:
+                return {"ok": False, "error": "voorstel niet gevonden"}
+            if _has_editor_fields(item):
+                _apply_editor_fields(item)
             return {"ok": agenda.set_status(iid, "consented"), "rov": "consented"}
         if action == "rov_object":
             # Bezwaar-toets volgens de handout: JIJ kiest per vraag; de uitkomst volgt uit je eigen
