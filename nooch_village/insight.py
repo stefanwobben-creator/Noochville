@@ -19,6 +19,20 @@ class EvidenceType(StrEnum):
     PEER_REVIEWED = "peer_reviewed"
 
 
+class ClaimKind(StrEnum):
+    """De SOORT van een kaartje (verandert nooit; alleen de sterkte evolueert).
+    Zie docs/ONDERZOEK_kennismodel.md.
+      - SIGNAAL   : trend/mening/nieuws; gaat over aandacht/cultuur. Roept een vraag op.
+      - BEVINDING : empirie; gaat over de wereld. Beantwoordt een vraag.
+      - KADER     : norm/regel; bindend (draagt zijn eigen bewijsdrempel).
+      - STANDPUNT : wat Nooch zelf beweert/wil claimen; beweerd, niet bewezen (erft sterkte).
+    None = (nog) onbeslist → mens-review (definities horen niet hier maar in het Lexicon)."""
+    SIGNAAL = "signaal"
+    BEVINDING = "bevinding"
+    KADER = "kader"
+    STANDPUNT = "standpunt"
+
+
 def _filled(value: str | None) -> bool:
     return value is not None and value.strip() != ""
 
@@ -35,6 +49,7 @@ class Insight(BaseModel):
     links_to: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     status: GroundingStatus = GroundingStatus.UNRESOLVED
+    kind: ClaimKind | None = None      # soort (signaal/bevinding/kader/standpunt); None = onbeslist
     grounds: str | None = None
     warrant: str | None = None
     qualifier: str | None = None
