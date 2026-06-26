@@ -1010,29 +1010,44 @@ def render_triage(x: dict | None, pos: int, total: int, roles: list,
 
 
 def render_roloverleg_overview(items: list, agenda_all: list, roles: list,
-                               token: str, msg=None) -> str:
+                               token: str, msg=None, role_snaps: dict | None = None) -> str:
     """Roloverleg-agenda: de voorstellen die op behandeling wachten. Behandel er één, voeg er een
     toe, of sluit het overleg (de aangenomen voorstellen worden dan doorgevoerd)."""
     head = ('<div class="tg-wrap"><p><a href="/">← cockpit</a></p>'
             '<h1>🏛️ Roloverleg</h1>')
     n_consent = sum(1 for i in agenda_all if i.get("status") == "consented")
+    role_snaps = role_snaps or {}
+    # Of/of-keuze (p.5): één dropdown, '➕ Nieuwe rol/cirkel' als eerste echte optie, dan de
+    # bestaande rollen. Een lege placeholder dwingt een bewuste keuze af.
     role_opts = "".join(f'<option value="{_e(r)}">{_e(r)}</option>' for r in roles)
+    # Snapshots (id → purpose + accountabilities) voor de 'huidige rol'-referentie in beeld (p.3).
+    snap_js = json.dumps({rid: {"purpose": s.get("purpose", ""),
+                                "accs": list(s.get("accountabilities", []))}
+                          for rid, s in role_snaps.items()}, ensure_ascii=False)
     add_form = (
         '<details><summary style="cursor:pointer;font-weight:700;margin:.6rem 0">'
         '➕ Zelf een voorstel toevoegen</summary>'
         f'<form method="post" action="/action" id="rovadd" style="padding:.4rem 0">'
         f'<input type="hidden" name="csrf" value="{_e(token)}">'
         f'<input type="hidden" name="next" value="/roloverleg">'
-        f'<div class="tg-meta">Bestaande rol uitbreiden, of een nieuwe rol?</div>'
-        f'<select name="owner" id="rovowner" class="tg-in">{role_opts}'
-        f'<option value="__new__">➕ nieuwe rol</option></select>'
-        # Velden alleen relevant bij een nieuwe rol (worden bij een bestaande rol genegeerd).
-        '<div id="rovnew">'
+        f'<div class="tg-meta">Nieuwe rol, of een bestaande rol uitbreiden? (of/of)</div>'
+        f'<select name="owner" id="rovowner" class="tg-in">'
+        f'<option value="" disabled selected>— kies: nieuwe of bestaande rol —</option>'
+        f'<option value="__new__">➕ Nieuwe rol/cirkel</option>'
+        f'{role_opts}</select>'
+        # Bij een NIEUWE rol: naam, purpose, domein invullen.
+        '<div id="rovnew" style="display:none">'
         '<input name="rolnaam" class="tg-in" placeholder="naam van de nieuwe rol (bijv. Copywriter)">'
         '<input name="purpose" class="tg-in" placeholder="purpose — reden van bestaan (geen -en-vorm)">'
         '<input name="domein" class="tg-in" placeholder="domein (optioneel: waar deze rol exclusief over gaat)">'
         '</div>'
-        '<div class="tg-meta" style="margin-top:.3rem">Accountabilities (één per regel, -en-vorm)</div>'
+        # Bij een BESTAANDE rol: toon (read-only) de huidige purpose + accountabilities als referentie,
+        # zodat je weet wat er al is voordat je iets toevoegt.
+        '<div id="rovcur" style="display:none;margin:.3rem 0;padding:.5rem;border:1px solid var(--border);'
+        'border-radius:var(--radius);background:var(--surface)">'
+        '<div class="tg-meta" style="font-weight:700">Huidige rol (referentie)</div>'
+        '<div id="rovcur-body"></div></div>'
+        '<div class="tg-meta" style="margin-top:.3rem" id="rovaccs-lbl">Accountabilities (één per regel, -en-vorm)</div>'
         '<textarea name="accs" id="rovaccs" class="tg-in" rows="3" '
         'placeholder="bijv. Schrijven van blogcopy voor de pillar-pagina&#10;Bewaken van de tone of voice"></textarea>'
         '<button type="button" class="bigbtn" onclick="rovSuggest()">🤖 AI: stel accountabilities voor</button>'
@@ -1047,11 +1062,28 @@ def render_roloverleg_overview(items: list, agenda_all: list, roles: list,
         'placeholder="bijv. zonder deze accountability bij scout blijf ik als analist op data wachten">'
         '<button class="bigbtn go" type="submit" name="action" value="rov_add">'
         '➕ Op de agenda zetten</button></form></details>'
-        '<script>function rovSuggest(){'
+        f'<script>var ROVSNAP={snap_js};'
+        'function rovToggle(){'
+        "var own=document.getElementById('rovowner').value;"
+        "var isnew=(own==='__new__');var isrole=(own&&own!=='__new__');"
+        "document.getElementById('rovnew').style.display=isnew?'block':'none';"
+        "document.getElementById('rovcur').style.display=isrole?'block':'none';"
+        "document.getElementById('rovaccs-lbl').textContent=isrole?"
+        "'Accountabilities om toe te voegen (één per regel, -en-vorm)':"
+        "'Accountabilities (één per regel, -en-vorm)';"
+        "if(isrole){var s=ROVSNAP[own]||{purpose:'',accs:[]};"
+        "var li=(s.accs||[]).map(function(a){return '<li>'+a.replace(/[<>&]/g,function(c){"
+        "return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c];})+'</li>';}).join('');"
+        "document.getElementById('rovcur-body').innerHTML='<div><b>Purpose:</b> '+"
+        "((s.purpose||'—').replace(/[<>&]/g,function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c];}))+"
+        "'</div><div style=\"margin-top:.2rem\"><b>Accountabilities:</b><ul style=\"margin:.2rem 0\">'+"
+        "(li||'<li class=muted>geen</li>')+'</ul></div>';}}"
+        "document.getElementById('rovowner').addEventListener('change',rovToggle);rovToggle();"
+        'function rovSuggest(){'
         "var own=document.getElementById('rovowner').value;"
         "var naam=document.querySelector('#rovadd [name=rolnaam]').value;"
         "var pur=document.querySelector('#rovadd [name=purpose]').value;"
-        "var role=(own==='__new__')?(naam||'nieuwe rol'):own;"
+        "var role=(own==='__new__')?(naam||'nieuwe rol'):(own||'nieuwe rol');"
         "var ta=document.getElementById('rovaccs');var prev=ta.value;ta.value='\\u23f3 AI denkt na...';"
         "fetch('/suggest_accountabilities?role='+encodeURIComponent(role)+'&purpose='+encodeURIComponent(pur))"
         ".then(function(r){return r.text();}).then(function(t){ta.value=(prev?prev+'\\n':'')+(t.trim()||'(geen suggestie)');})"
@@ -3657,8 +3689,14 @@ def make_handler(data_dir: str | None):
                 want = (qs.get("iid") or [""])[0]
                 item = agenda.get(want) if want else None
                 if item is None:
+                    # Snapshots per rol (purpose + accountabilities) voor de 'huidige rol'-referentie.
+                    role_snaps = {r.id: {"purpose": r.definition.purpose,
+                                         "accountabilities": list(r.definition.accountabilities)}
+                                  for r in recs.all()
+                                  if not r.archived and r.type.value == "role"}
                     body = render_roloverleg_overview(
-                        agenda.open(), agenda.all(), roles, csrf_token, msg=msg).encode("utf-8")
+                        agenda.open(), agenda.all(), roles, csrf_token, msg=msg,
+                        role_snaps=role_snaps).encode("utf-8")
                 else:
                     rec = recs.get(item["role_id"])
                     snap = ({"purpose": rec.definition.purpose,
