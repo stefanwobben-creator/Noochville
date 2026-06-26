@@ -93,6 +93,21 @@ def test_render_project_edit_chat_en_done_uitleg():
     assert "een rol sluit zichzelf nooit af" in page.lower()
 
 
+def test_wall_bewaart_alle_berichten_en_done_knop():
+    # De wall toont elk bericht (niets overschreven) + een Done-knop (→ archief).
+    p = {"id": "p1", "owner": "harry_hemp", "scope": "Zoek X", "status": "running",
+         "log": [{"who": "rol", "text": "eerste uitwerking"},
+                 {"who": "mens", "text": "stuur bij"},
+                 {"who": "rol", "text": "tweede uitwerking"}]}
+    page = cockpit.render_project_edit(p, [{"id": "harry_hemp", "type": "role", "archived": False}], "t")
+    assert "eerste uitwerking" in page and "tweede uitwerking" in page   # beide bewaard
+    assert 'value="proj_done"' in page and "naar archief" in page
+    # afgerond project: geen invoer meer
+    done = {**p, "status": "done"}
+    pg2 = cockpit.render_project_edit(done, [{"id": "harry_hemp", "type": "role", "archived": False}], "t")
+    assert "in het archief" in pg2 and 'value="proj_comment"' not in pg2
+
+
 def test_render_project_edit_valt_terug_op_comments_zonder_log():
     # Oud project zonder log: val terug op comments + laatste voortgang.
     p = {"id": "p1", "owner": "harry_hemp", "scope": "Zoek X", "status": "running",

@@ -8,7 +8,8 @@ def test_project_pagina_toont_deliverable_en_status():
     p = {"id": "p1", "owner": "scout", "scope": "Blog over veganisme", "status": "running",
          "progress": "Een eerste blogdraft van 300 woorden.", "hypothesis": "meer bereik"}
     page = cockpit.render_project_edit(p, [{"id": "scout", "type": "role", "archived": False}], "t")
-    assert "Deliverable" in page and "eerste blogdraft" in page
+    # De uitwerking staat nu in de gesprekswall (geen apart 'Deliverable'-blok meer).
+    assert "Gesprek met de rol" in page and "eerste blogdraft" in page
     assert "Blog over veganisme" in page
 
 

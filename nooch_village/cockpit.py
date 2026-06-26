@@ -1426,8 +1426,63 @@ def render_project_edit(p: dict, roster: list, csrf_token: str) -> str:
         f'<option value="{_e(r["id"])}"{" selected" if r["id"] == p.get("owner") else ""}>'
         f'{_e(r["id"])}</option>'
         for r in roster if not r.get("archived") and r.get("type") == "role")
-    form = (
-        '<form method="post" action="/action" class="pf">'
+    hyp = (f'<p class="muted" style="font-size:.85rem"><b>Hypothese:</b> {_e(p.get("hypothesis"))}</p>'
+           if p.get("hypothesis") else "")
+    done = p.get("status") == "done"
+    # Eén gesprekswall: ALLE berichten chronologisch (rol-opleveringen + jouw sturing + antwoorden).
+    # Niets wordt overschreven — de log bewaart elke uitwerking. (Oud project zonder log: val terug.)
+    wall = list(p.get("log") or [])
+    if not wall:
+        if p.get("progress"):
+            wall.append({"who": "rol", "text": p["progress"]})
+        for c in p.get("comments", []):
+            wall.append({"who": "mens", "text": c.get("text", "")})
+    if p.get("outcome"):
+        wall.append({"who": "rol", "text": "✓ Afgerond: " + p["outcome"]})
+    owner_name = _e(p.get("owner", "rol"))
+    bubbles = ""
+    for m in wall:
+        mens = m.get("who") == "mens"
+        side = "flex-end" if mens else "flex-start"
+        bg = "var(--green-tint)" if mens else "var(--surface)"
+        who = "jij" if mens else owner_name
+        bubbles += (
+            f'<div style="display:flex;justify-content:{side};margin:.3rem 0">'
+            f'<div style="max-width:82%;background:{bg};border:1px solid var(--border);'
+            f'border-radius:12px;padding:.5rem .75rem">'
+            f'<div class="muted" style="font-size:.7rem;margin-bottom:.15rem">{who}</div>'
+            f'<div style="white-space:pre-wrap;font-size:.9rem;line-height:1.45">{_e(m.get("text",""))}</div>'
+            '</div></div>')
+    if not bubbles:
+        bubbles = ('<p class="muted" style="font-size:.85rem">Nog geen gesprek. Stuur de rol een '
+                   'bericht — de rol leest het mee en pakt het project op.</p>')
+    wall_html = (f'<div style="border:1px solid var(--border);border-radius:var(--radius);'
+                 f'background:var(--sand);padding:.7rem;max-height:60vh;overflow-y:auto">{bubbles}</div>')
+    # Invoer + Done (Done → archief). Bij een afgerond project: geen invoer meer.
+    if done:
+        actions = '<p class="muted" style="margin-top:.6rem">✓ Afgerond — in het archief.</p>'
+    else:
+        actions = (
+            '<form method="post" action="/action" style="margin-top:.5rem">'
+            f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
+            f'<input type="hidden" name="iid" value="{_e(pid)}">'
+            '<input type="hidden" name="action" value="proj_comment">'
+            f'<input type="hidden" name="next" value="/project?pid={_e(pid)}">'
+            '<textarea name="comment" rows="3" style="width:100%;box-sizing:border-box;font-size:.95rem" '
+            'placeholder="Bericht aan de rol…"></textarea>'
+            '<button class="btn ok" type="submit" style="margin-top:.3rem">Versturen ➤</button></form>'
+            '<form method="post" action="/action" style="margin-top:.5rem">'
+            f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
+            f'<input type="hidden" name="iid" value="{_e(pid)}">'
+            '<input type="hidden" name="action" value="proj_done">'
+            '<input type="hidden" name="next" value="/">'
+            '<button class="btn" type="submit">✓ Done — naar archief</button></form>'
+            '<p class="muted" style="font-size:.78rem;margin-top:.3rem">Een rol sluit zichzelf nooit '
+            'af; jij zet het op Done als het klaar is.</p>')
+    # Owner/scope bewerken: ingeklapt, secundair.
+    edit = (
+        '<details style="margin-top:.6rem"><summary>⚙️ Eigenaar / scope aanpassen</summary>'
+        '<form method="post" action="/action" class="pf" style="margin-top:.3rem">'
         f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
         f'<input type="hidden" name="iid" value="{_e(pid)}">'
         '<input type="hidden" name="action" value="proj_edit">'
@@ -1436,67 +1491,14 @@ def render_project_edit(p: dict, roster: list, csrf_token: str) -> str:
         f'<select name="owner">{owner_opts}</select>'
         '<label>Scope / uitkomst:</label>'
         f'<input name="scope" value="{_e(scope)}">'
-        '<button class="btn ok" type="submit">Opslaan</button></form>'
-    )
-    # Deliverable / voortgang die de rol (autonoom of via het projectbord) opleverde.
-    deliverable = ""
-    if p.get("progress"):
-        deliverable = (f'<h2>Deliverable / voortgang</h2>'
-                       f'<div class="tension" style="white-space:pre-wrap">{_e(p.get("progress"))}</div>')
-    if p.get("outcome"):
-        deliverable += (f'<h2>Uitkomst (afgerond)</h2>'
-                        f'<div class="tension">{_e(p.get("outcome"))}</div>')
-    hyp = (f'<p class="muted"><b>Hypothese:</b> {_e(p.get("hypothesis"))}</p>'
-           if p.get("hypothesis") else "")
-    # Gesprek met de rol (WhatsApp-stijl): rol links, jij rechts. Bron: de log (val terug op de
-    # losse comments + laatste voortgang voor oude projecten zonder log).
-    chat_log = list(p.get("log") or [])
-    if not chat_log:
-        if p.get("progress"):
-            chat_log.append({"who": "rol", "text": p["progress"]})
-        for c in p.get("comments", []):
-            chat_log.append({"who": "mens", "text": c.get("text", "")})
-    owner_name = _e(p.get("owner", "rol"))
-    bubbles = ""
-    for m in chat_log:
-        mens = m.get("who") == "mens"
-        side = "flex-end" if mens else "flex-start"
-        bg = "var(--green-tint)" if mens else "var(--surface)"
-        who = "jij" if mens else owner_name
-        bubbles += (
-            f'<div style="display:flex;justify-content:{side};margin:.25rem 0">'
-            f'<div style="max-width:78%;background:{bg};border:1px solid var(--border);'
-            f'border-radius:12px;padding:.45rem .7rem">'
-            f'<div class="muted" style="font-size:.7rem;margin-bottom:.1rem">{who}</div>'
-            f'<div style="white-space:pre-wrap;font-size:.9rem">{_e(m.get("text",""))}</div></div></div>')
-    if not bubbles:
-        bubbles = ('<p class="muted" style="font-size:.85rem">Nog geen gesprek. Stuur de rol een '
-                   'bericht om bij te sturen — de rol leest het mee en pakt het project opnieuw op.</p>')
-    comments = (
-        '<h2>💬 Gesprek met de rol</h2>'
-        f'<div style="border:1px solid var(--border);border-radius:var(--radius);'
-        f'background:var(--sand);padding:.6rem;max-height:340px;overflow-y:auto">{bubbles}</div>'
-        '<form method="post" action="/action" class="pf" style="margin-top:.5rem">'
-        f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
-        f'<input type="hidden" name="iid" value="{_e(pid)}">'
-        '<input type="hidden" name="action" value="proj_comment">'
-        f'<input type="hidden" name="next" value="/project?pid={_e(pid)}">'
-        '<textarea name="comment" rows="3" style="width:100%;box-sizing:border-box;font-size:.95rem" '
-        'placeholder="Bericht aan de rol — bijv. “richt je op technisch onderzoek naar een '
-        'natuurlijke elastaan-vervanger”"></textarea>'
-        '<button class="btn ok" type="submit" style="margin-top:.3rem">Versturen ➤</button></form>')
-    done_note = ('<p class="muted" style="font-size:.82rem">De rol levert voortgang op (status '
-                 '<b>Actief</b>); <b>jij</b> zet een project op <b>Done</b> als het af is — een rol '
-                 'sluit zichzelf nooit af.</p>')
+        '<button class="btn ok" type="submit">Opslaan</button></form></details>')
     inner = (
         '<p><a href="/">← terug naar de cockpit</a></p>'
         '<h1>Project</h1>'
-        f'<div class="tension"><b>{_e(p.get("owner"))}</b> · {_e(scope)}'
+        f'<div class="tension"><b>{owner_name}</b> · {_e(scope)}'
         f'<br><span class="muted">status {_e(p.get("status"))}'
         f'{(" · wacht op " + _e(p.get("blocked_on"))) if p.get("blocked_on") else ""}</span></div>'
-        f'{hyp}{deliverable}{comments}{done_note}'
-        f'<h2>Bewerken</h2>{form}'
-    )
+        f'{hyp}<h2>💬 Gesprek met de rol</h2>{wall_html}{actions}{edit}')
     return _page("Project", inner)
 
 

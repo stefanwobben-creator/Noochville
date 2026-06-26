@@ -1117,3 +1117,10 @@ konden nooit worden doorgevoerd (leken 'verdwenen'). Nu: een apart blok '✓ Aan
 doorgevoerd bij einde overleg (N)' met de doorvoer-knop, altijd zichtbaar zolang er consented items
 zijn (ook bij 0 open items). Geen verlies: de copywriter-wijziging stond nog als consented klaar.
 Suite groen (585 + 483).
+
+## Projectpagina vereenvoudigd: één gesprekswall + Done-knop
+Het losse 'Deliverable/Voortgang'-blok (dat de chat dupliceerde én de eerste uitwerking overschreef)
+is weg. Nu één wall: ALLE berichten chronologisch (rol-opleveringen + jouw sturing + antwoorden),
+niets overschreven (de log bewaart elke uitwerking). Daaronder: invoerveld + 'Versturen ➤' + een
+'✓ Done — naar archief'-knop (proj_done → terminal/archief). Eigenaar/scope-bewerken staat ingeklapt.
+Afgerond project: geen invoer meer, alleen de wall. Suite groen (586 + 483).

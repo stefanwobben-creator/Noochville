@@ -451,7 +451,7 @@ def test_server_project_edit(tmp_path):
         with urllib.request.urlopen(f"{base}/project?pid=p1p1p1p1p1p1", timeout=5) as resp:
             assert resp.status == 200
             page = resp.read().decode("utf-8")
-        assert "GSC menukaart" in page and "Bewerken" in page
+        assert "GSC menukaart" in page and "Gesprek met de rol" in page
         token = re.search(r'name="csrf" value="([^"]+)"', page).group(1)
         body = urllib.parse.urlencode({
             "csrf": token, "iid": "p1p1p1p1p1p1", "action": "proj_edit", "next": "/",
