@@ -166,11 +166,13 @@ def main() -> None:
         ctx = load_context(BASE_DIR)
         store = NotesStore(os.path.join(ctx.data_dir, "notes.json"))
         do_apply = "apply" in sys.argv[2:]
+        use_llm = "nollm" not in sys.argv[2:]
 
         # Classifier: heuristiek, met LLM als rijkere terugval op de twijfelgevallen (mens-machine).
+        # 'nollm' = puur heuristiek (snel, geen Gemini-calls; handig bij quota/overbelasting).
         def classify(claim, et, source):
             k = classify_kind(claim, et, source)
-            if k is not None:
+            if k is not None or not use_llm:
                 return k
             try:
                 from nooch_village.llm import reason
