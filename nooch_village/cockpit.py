@@ -1311,9 +1311,10 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
             rows += (f'<li style="padding:.15rem 0">{cell} '
                      f'<span class="muted">· {kindlbl} · {_e(m.get("status",""))}'
                      f'{" · nu open" if here else ""}</span></li>')
+        # `roles` is een lijst rol-ids (strings); ondersteun ook dict-vorm voor de zekerheid.
+        def _rid(r): return r["id"] if isinstance(r, dict) else r
         role_opts = "".join(
-            f'<option value="{_e(r["id"])}">{_e(r["id"])}</option>'
-            for r in (roles or []) if not r.get("archived"))
+            f'<option value="{_e(_rid(r))}">{_e(_rid(r))}</option>' for r in (roles or []))
         add_to = (
             f'<form method="post" action="/action" style="margin-top:.3rem">{common}'
             f'<input type="hidden" name="next" value="/roloverleg?iid={_e(item["id"])}">'

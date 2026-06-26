@@ -266,6 +266,19 @@ def test_rov_edit_nieuwe_rol_naam_bewerkbaar(tmp_path):
     assert it["change"]["add_accountabilities"] == ["Schrijven van copy"]
 
 
+def test_render_roloverleg_met_string_roles():
+    # Regressie: de live cockpit geeft `roles` als lijst STRINGS door; de render mag daar niet op
+    # crashen (eerder: AttributeError op r.get in het groep-blok → lege respons).
+    from nooch_village import cockpit
+    it = {"id": "a", "role_id": "scout", "kind": "amend_role",
+          "change": {"add_accountabilities": ["Bewaken van X"]}, "reason": "r", "by": "scout",
+          "title": "Scout", "status": "open", "reactions": []}
+    snap = {"purpose": "p", "name": "scout", "accountabilities": ["A"], "domains": []}
+    page = cockpit.render_roloverleg(it, snap, [], "t", group_members=[it],
+                                     roles=["scout", "librarian", "analyst"])
+    assert "Beslis" in page and "Rol bewerken" in page and "librarian" in page
+
+
 def test_meerdere_rollen_per_voorstel(tmp_path):
     from nooch_village import cockpit
     from nooch_village.roloverleg import Agenda
