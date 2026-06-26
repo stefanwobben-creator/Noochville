@@ -58,14 +58,25 @@ def _config_competitor_brands(dd: str) -> list[str]:
     return [b.strip() for b in raw.split(",") if b.strip()]
 
 
-def _north_star(dd: str) -> dict:
-    """De noordster uit config/strategy.json (naast data/). Leeg bij ontbreken."""
+def _strategy(dd: str) -> dict:
+    """De hele strategie/intentielaag uit config/strategy.json (purpose, core_values, north_star,
+    goals). Leeg bij ontbreken."""
     import json as _json
     path = os.path.join(dd, "..", "config", "strategy.json")
     try:
-        return (_json.load(open(path)) or {}).get("north_star", {}) or {}
+        return _json.load(open(path)) or {}
     except Exception:
         return {}
+
+
+def _north_star(dd: str) -> dict:
+    """De noordster uit config/strategy.json (naast data/). Leeg bij ontbreken."""
+    return _strategy(dd).get("north_star", {}) or {}
+
+
+def _active_goal(dd: str) -> dict:
+    """Het actieve tijdgebonden doel (bijv. batch 4: 1000 paar). Leeg bij ontbreken."""
+    return next((g for g in _strategy(dd).get("goals", []) if g.get("active")), {})
 
 
 def _monitored_brands(config_brands: list[str], confirmed: list[str]) -> list[str]:
@@ -326,6 +337,9 @@ def gather(data_dir: str | None = None) -> dict:
         "project_drafts": project_drafts,
         "backlog": backlog,
         "north_star": _north_star(dd),
+        "mission": {"purpose": _strategy(dd).get("purpose", ""),
+                    "core_values": _strategy(dd).get("core_values", []),
+                    "goal": _active_goal(dd)},
         "library": lib,
         "insights": insights,
         "knowledge_graph": graph,
@@ -460,13 +474,15 @@ def _page(title: str, inner: str) -> str:
             f'<body>{inner}</body></html>')
 
 
-def _btn(iid: str, action: str, label: str, token: str, cls: str = "") -> str:
-    """Een mini-formulier-knop die via POST /action de gevalideerde inbox-actie aantrapt."""
+def _btn(iid: str, action: str, label: str, token: str, cls: str = "", next: str = "") -> str:
+    """Een mini-formulier-knop die via POST /action de gevalideerde inbox-actie aantrapt.
+    `next` = waarheen na de actie (bijv. '/#proj-<id>' om terug te keren naar de rij i.p.v. boven)."""
+    nxt = f'<input type="hidden" name="next" value="{_e(next)}">' if next else ""
     return (
         f'<form method="post" action="/action" style="display:inline">'
         f'<input type="hidden" name="csrf" value="{_e(token)}">'
         f'<input type="hidden" name="iid" value="{_e(iid)}">'
-        f'<input type="hidden" name="action" value="{_e(action)}">'
+        f'<input type="hidden" name="action" value="{_e(action)}">{nxt}'
         f'<button class="btn {cls}" type="submit">{_e(label)}</button></form>'
     )
 
@@ -1370,19 +1386,28 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
     return _page("Voorstel behandelen", inner)
 
 
+_PROJ_STEPS = [("proj_active", "running", "Actief"), ("proj_waiting", "blocked", "Wachten"),
+               ("proj_future", "future", "Toekomst"), ("proj_done", "done", "Done")]
+_PROJ_ON = ("display:inline-block;padding:.2rem .6rem;border-radius:var(--radius-pill);"
+            "background:var(--green-dark);color:#fff;font-size:.8rem;font-weight:700")
+
+
 def _proj_actions(p: dict, token: str) -> str:
-    """Statusknoppen per project: actief / waiting / toekomst / done. Done is terminal
-    (verdwijnt uit de actieve weergave). Alleen niet-terminale projecten krijgen knoppen."""
-    if p.get("status") == "done":
-        return '<span class="muted">—</span>'
+    """Statusknoppen per project. De HUIDIGE status is gemarkeerd (groen, niet-klikbaar) zodat je
+    altijd ziet waar het staat; de andere knoppen wisselen ernaartoe. Na een wissel keer je terug
+    naar de projectrij (anker), niet naar de top. Done is terminal."""
     pid = p.get("id")
-    return " ".join([
-        _btn(pid, "proj_active", "Actief", token, "ok"),
-        _btn(pid, "proj_waiting", "Waiting", token),
-        _btn(pid, "proj_future", "Toekomst", token),
-        _btn(pid, "proj_done", "Done", token),
-        f'<a class="btn" href="/project?pid={_e(pid)}">Edit…</a>',
-    ])
+    cur = p.get("status")
+    if cur == "done":
+        return f'<span style="{_PROJ_ON}">✓ Done</span>'
+    parts = []
+    for action, st, label in _PROJ_STEPS:
+        if st == cur:
+            parts.append(f'<span style="{_PROJ_ON}">● {label}</span>')   # huidige status, zichtbaar
+        else:
+            parts.append(_btn(pid, action, label, token, next=f"/#proj-{pid}"))
+    parts.append(f'<a class="btn" href="/project?pid={_e(pid)}">Edit…</a>')
+    return " ".join(parts)
 
 
 def render_card(card: dict, neighbors: list, csrf_token: str) -> str:
@@ -1424,7 +1449,7 @@ def render_project_edit(p: dict, roster: list, csrf_token: str) -> str:
         scope = " · ".join(f"{k}: {v}" for k, v in scope.items())
     owner_opts = "".join(
         f'<option value="{_e(r["id"])}"{" selected" if r["id"] == p.get("owner") else ""}>'
-        f'{_e(r["id"])}</option>'
+        f'{_e(r.get("name") or r["id"])}</option>'
         for r in roster if not r.get("archived") and r.get("type") == "role")
     hyp = (f'<p class="muted" style="font-size:.85rem"><b>Hypothese:</b> {_e(p.get("hypothesis"))}</p>'
            if p.get("hypothesis") else "")
@@ -1895,7 +1920,12 @@ _SIGNAL_CSS = (
     '.sigrow:last-child{border-bottom:none}.sigrow .n{font-weight:800;color:var(--green-dark)}'
     '.sigbig{font-size:1.5rem;font-weight:800;font-family:var(--font-display);color:var(--green-dark);'
     'line-height:1.1}.sigsub{font-size:.85rem;color:var(--gray);margin-top:.15rem}'
-    '.sigcta{display:inline-block;margin-top:.5rem}</style>')
+    '.sigcta{display:inline-block;margin-top:.5rem}'
+    '.vchips{display:flex;flex-wrap:wrap;gap:.3rem;margin:.45rem 0 .2rem}'
+    '.vchip{background:var(--green-tint);color:var(--green-dark);border-radius:var(--radius-pill);'
+    'padding:.12rem .55rem;font-size:.74rem;font-weight:700;cursor:help}'
+    '.progress{height:8px;background:var(--sand);border-radius:99px;overflow:hidden;margin:.15rem 0 .25rem}'
+    '.progress-bar{height:100%;background:var(--green);border-radius:99px}</style>')
 
 
 def _render_signal(snap: dict, writable: bool) -> str:
@@ -1912,17 +1942,29 @@ def _render_signal(snap: dict, writable: bool) -> str:
         lib_vals = list(lib.values())
     else:
         lib_vals = lib
-    # 1) Missie — de CEO grootbrengen.
-    ns_desc = _e(ns.get("description", "het duurzaamste schoenenmerk ter wereld"))
+    # 1) Missie — purpose centraal, target (batch 4) + BHAG met voortgang, kernwaarden als chips.
+    mission = snap.get("mission", {}) or {}
+    purpose = _e(mission.get("purpose") or "Nooch transforms the shoe industry, step by step.")
+    goal = mission.get("goal", {}) or {}
+    goal_target = goal.get("target") or 1000
+    pct = min(100, round(100 * (pairs or 0) / goal_target)) if goal_target else 0
+    values = mission.get("core_values", []) or []
+    chips = "".join(
+        f'<span class="vchip" title="{_e(v.get("desc",""))}">{_e(v.get("title",""))}</span>'
+        for v in values)
     missie = (
         '<div class="sigcard"><h3>🎯 De missie</h3>'
-        '<div class="sigbig">Het dorp brengt de CEO groot</div>'
-        f'<div class="sigsub">Noordster: {ns_desc}.</div>'
-        f'<div class="sigrow" style="margin-top:.4rem"><span>Paar verkocht (Shopify)</span>'
-        f'<span class="n">{_fmt_int(pairs)}</span></div>'
+        f'<div style="font-size:.95rem;line-height:1.4">{purpose}</div>'
+        + (f'<div class="vchips">{chips}</div>' if chips else "")
+        + f'<div class="sigrow" style="margin-top:.5rem"><span>🎯 Target (batch 4)</span>'
+        f'<span class="n">{_fmt_int(pairs)} / {_fmt_int(goal_target)} paar</span></div>'
+        f'<div class="progress"><div class="progress-bar" style="width:{pct}%"></div></div>'
+        f'<div class="sigrow"><span>🌟 BHAG</span><span class="n">{_fmt_int(ns.get("target", 1000000))} '
+        f'paar/jaar</span></div>'
         + (f'<div class="sigrow"><span>Bezoekers (7d)</span>'
            f'<span class="n">{_fmt_int(snap.get("visitors_7d"))}</span></div>'
            if snap.get("visitors_7d") else "")
+        + '<div class="sigsub" style="margin-top:.4rem">Het dorp brengt de CEO groot.</div>'
         + '</div>')
     # 2) Aan jou — beslissingen die alleen jij kunt nemen.
     n_kansen = sum(1 for b in snap.get("backlog", []) if b.get("approvable"))
@@ -2044,7 +2086,7 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         # Scope is klikbaar naar de projectpagina (daar staat de deliverable/voortgang).
         scope_link = f'<a href="/project?pid={_e(p.get("id"))}">{_e(_scope(p))}</a>'
         prows.append(
-            f'<tr class="st-{_e(p.get("status"))}">'
+            f'<tr class="st-{_e(p.get("status"))}" id="proj-{_e(p.get("id"))}">'
             f'<td><b>{_e(p.get("owner"))}</b></td>'
             f'<td>{scope_link}</td>'
             f'<td>{_e(_STATUS_LBL.get(p.get("status"), p.get("status")))}</td>'

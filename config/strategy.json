@@ -1,7 +1,13 @@
 {
   "_comment": "Strategische heuristieken en tijdgebonden doelen. Bewerkt door de founder, niet via governance.",
+  "purpose": "Nooch transforms the shoe industry, step by step. Every movement with Nooch is a step towards a better world for Mother Earth and her inhabitants.",
+  "core_values": [
+    {"title": "Do Right & Keep Going", "desc": "The challenging path is usually the correct one"},
+    {"title": "Care for All", "desc": "Every decision considers people, animals, and planet"},
+    {"title": "Find the Fun", "desc": "Changing the world works better with joy and humor"}
+  ],
   "north_star": {
-    "description": "1 miljoen paar schoenen per jaar via nooch.earth",
+    "description": "1 miljoen paar schoenen per jaar via nooch.earth (BHAG)",
     "metric": "pairs_sold",
     "target": 1000000,
     "unit": "paar schoenen",

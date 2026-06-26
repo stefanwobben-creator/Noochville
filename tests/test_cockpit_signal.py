@@ -8,6 +8,13 @@ from nooch_village import cockpit
 
 def _snap(tmp_path):
     data = tmp_path / "data"; data.mkdir()
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "strategy.json").write_text(json.dumps({
+        "purpose": "Nooch transforms the shoe industry, step by step.",
+        "core_values": [{"title": "Do Right & Keep Going", "desc": "x"},
+                        {"title": "Care for All", "desc": "y"}],
+        "north_star": {"target": 1000000},
+        "goals": [{"target": 1000, "active": True}]}), encoding="utf-8")
     for f in ("governance_records.json", "library.json", "human_inbox.json", "projects.json"):
         (data / f).write_text("{}", encoding="utf-8")
     return cockpit.gather(str(data))
@@ -19,7 +26,10 @@ def test_signaaldek_drie_kaarten(tmp_path):
     assert "🎯 De missie" in page
     assert "Aan jou" in page and "alleen jij beslist" in page
     assert "Het dorp werkt voor je" in page
+    # CEO subtiel (geen grote kop), missie + kernwaarden + target/BHAG centraal
     assert "Het dorp brengt de CEO groot" in page
+    assert "Nooch transforms" in page and "Do Right &amp; Keep Going" in page
+    assert "Target (batch 4)" in page and "BHAG" in page and "progress-bar" in page
     # roloverleg-ingang staat altijd in 'Aan jou'
     assert 'href="/roloverleg"' in page
 

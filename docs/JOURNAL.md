@@ -1149,3 +1149,13 @@ _render_signal() zet bovenaan een driedelig signaaldek ('it takes a village to r
 3) 🌱 Het dorp werkt voor je — inwoners aan het werk, lopende projecten, Noochie vandaag.
 De gedetailleerde secties blijven eronder (ingeklapt). Oude dunne 'aanjou'-balk verwijderd.
 Tests in test_cockpit_signal.py. Suite groen (515 + 558).
+
+## Cockpit 2.0 vervolg: project-status zichtbaar + naam in dropdowns + echte missie/kernwaarden
+- Project-statusknoppen: de HUIDIGE status is nu gemarkeerd (groen, '● Actief'), de andere wisselen
+  ernaartoe; na wisselen keer je terug naar de projectrij (anker /#proj-<id>), niet naar de top.
+  (visibility of system status). _btn kreeg een optionele `next`.
+- Eigenaar-dropdowns tonen nu de WEERGAVENAAM (bijv. 'Copywriter') i.p.v. het rauwe record-id.
+- Missie-kaart data-gedreven uit config/strategy.json: echte purpose ('Nooch transforms the shoe
+  industry, step by step…'), kernwaarden als chips (Do Right & Keep Going · Care for All · Find the
+  Fun), Target batch 4 (1000 paar) met voortgangsbalk, BHAG (1 miljoen/jaar). 'CEO' subtiel als
+  onderregel i.p.v. grote kop. Suite groen (515 + 558).
