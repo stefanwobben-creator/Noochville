@@ -1628,19 +1628,74 @@ def render_prikbord(snap: dict, csrf_token: str | None = None, msg=None) -> str:
     return _page("Prikbord — NoochVille", inner)
 
 
-def render_card(card: dict, neighbors: list, csrf_token: str) -> str:
-    """Detailpagina van één kennis-kaartje: de claim + grounds, en de verbonden kaartjes
-    (de kennisgraaf) als doorklikbare links. Plus een verwijder-knop."""
+_KIND_CHIP = {"signaal": "📡 signaal", "bevinding": "🔬 bevinding",
+              "kader": "⚖️ kader", "standpunt": "📣 standpunt"}
+
+
+def render_card(card: dict, neighbors: list, csrf_token: str, all_cards: list | None = None) -> str:
+    """Detailpagina van één kennis-kaartje: claim + grounds, soort kiezen, bewijs-links leggen
+    (steunt/spreekt-tegen) met live berekende sterkte, en de verbonden kaartjes."""
     cid = card["id"]
+    all_cards = all_cards or []
+    claim_of = {c["id"]: c.get("claim", "") for c in all_cards}
+    back = f"/card?id={cid}"
+
+    def _csrf():
+        return f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
+
+    # Soort: chip + (bij onbeslist) kiezer
+    kind = card.get("kind")
+    kind_line = (f'<span class="chip">{_e(_KIND_CHIP.get(kind, kind))}</span>'
+                 if kind else '<span class="muted">— onbeslist</span>')
+    kind_picker = ""
+    if csrf_token:
+        btns = ""
+        for val, lbl in (("signaal", "📡 signaal"), ("bevinding", "🔬 bevinding"),
+                         ("kader", "⚖️ kader"), ("standpunt", "📣 standpunt")):
+            mark = " ✓" if val == kind else ""
+            btns += (f'<form method="post" action="/action" style="display:inline">{_csrf()}'
+                     f'<input type="hidden" name="iid" value="{_e(cid)}">'
+                     f'<input type="hidden" name="kind" value="{val}">'
+                     f'<input type="hidden" name="next" value="{_e(back)}">'
+                     f'<button class="btn" type="submit" name="action" value="note_set_kind">'
+                     f'{lbl}{mark}</button></form> ')
+        kind_picker = f'<p>Soort kiezen: {btns}</p>'
+
+    # Berekende sterkte (live)
+    strength = card.get("strength", "onbeslist")
+
+    # Bestaande bewijs-relaties van dit kaartje
+    def _rel_list(ids, leeg):
+        if not ids:
+            return f'<span class="muted">{leeg}</span>'
+        return "<ul>" + "".join(
+            f'<li><a href="/card?id={_e(i)}">{_e((claim_of.get(i, i))[:80])}</a></li>'
+            for i in ids) + "</ul>"
+    supports = card.get("supports") or []
+    contradicts = card.get("contradicts") or []
+
+    # Nieuwe relatie leggen: kies een doelkaartje + steunt / spreekt-tegen
+    rel_form = ""
+    if csrf_token and all_cards:
+        opts = "".join(f'<option value="{_e(c["id"])}">{_e((c.get("claim") or "")[:80])}</option>'
+                       for c in all_cards if c["id"] != cid)
+        rel_form = (
+            f'<form method="post" action="/action" style="margin:.4rem 0">{_csrf()}'
+            f'<input type="hidden" name="iid" value="{_e(cid)}">'
+            f'<input type="hidden" name="next" value="{_e(back)}">'
+            f'<select name="target" style="max-width:520px;padding:.35rem">{opts}</select> '
+            f'<button class="btn ok" type="submit" name="action" value="note_support">'
+            f'✓ dit kaartje steunt dat</button> '
+            f'<button class="btn no" type="submit" name="action" value="note_contradict">'
+            f'✗ spreekt dat tegen</button></form>')
+
     nb = "".join(
         f'<li><a href="/card?id={_e(n["id"])}">{_e(n["claim"][:90])}</a> '
         f'<span class="muted">({_e(n["status"])}, {_e(n["grounding_count"])}×)</span></li>'
         for n in neighbors)
-    nb_block = (f'<ul>{nb}</ul>' if neighbors
-                else '<p class="muted">Nog geen verbonden kaartjes.</p>')
+    nb_block = (f'<ul>{nb}</ul>' if neighbors else '<p class="muted">Nog geen verbonden kaartjes.</p>')
     remove_form = (
-        '<form method="post" action="/action" style="display:inline">'
-        f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
+        f'<form method="post" action="/action" style="display:inline">{_csrf()}'
         f'<input type="hidden" name="iid" value="{_e(cid)}">'
         '<input type="hidden" name="action" value="note_remove">'
         '<input type="hidden" name="next" value="/">'
@@ -1650,9 +1705,16 @@ def render_card(card: dict, neighbors: list, csrf_token: str) -> str:
         '<p><a href="/">← terug naar de cockpit</a></p>'
         '<h1>Kennis-kaartje</h1>'
         f'<div class="tension"><b>{_e(card["claim"])}</b><br>'
-        f'<span class="muted">{_e(card["status"])} · {_e(card["grounding_count"])}× gegrond'
+        f'{kind_line} · sterkte <b>{_e(strength)}</b>'
         f'{" · " + _e(card["word"]) if card.get("word") else ""}</span></div>'
+        f'{kind_picker}'
         f'<h2>Grounds</h2><p>{_e(card.get("grounds") or "—")}</p>'
+        '<h2>Bewijs-links</h2>'
+        '<p class="muted" style="font-size:.85rem">Koppel een bevinding aan een standpunt om het te '
+        'onderbouwen (of spreek het tegen). De sterkte rekent live mee.</p>'
+        f'<p><b>Dit kaartje steunt:</b> {_rel_list(supports, "nog niets")}</p>'
+        f'<p><b>Dit kaartje spreekt tegen:</b> {_rel_list(contradicts, "niets")}</p>'
+        f'{rel_form}'
         f'<h2>Verbonden kaartjes ({len(neighbors)})</h2>{nb_block}'
         f'<p style="margin-top:1.4rem">{remove_form}</p>'
     )
@@ -2823,6 +2885,9 @@ def _flash(result: dict) -> str:
         return f"✓ Skill '{result.get('skill')}' toegekend aan {result.get('role_id')}"
     if "note_kind" in result:
         return f"✓ Soort gezet → {result['note_kind']}"
+    if "note_relation" in result:
+        return ("✓ Bewijs-link gelegd: steunt" if result["note_relation"] == "supports"
+                else "✓ Bewijs-link gelegd: spreekt tegen")
     if "removed" in result:
         return "✓ Kaartje verwijderd"
     if "card_id" in result:
@@ -3188,6 +3253,14 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
             return {"ok": False, "error": f"onbekende soort '{val}'"}
         ok = notes.set_kind(iid, kind)
         return {"ok": ok, "note_kind": val} if ok else {"ok": False, "error": "kaartje niet gevonden"}
+    if action in ("note_support", "note_contradict"):
+        # Bewijs-link: dit kaartje (iid) steunt/spreekt-tegen het doelkaartje (target).
+        notes = NotesStore(os.path.join(dd, "notes.json"))
+        rel = "supports" if action == "note_support" else "contradicts"
+        target = (extra.get("target") or "").strip()
+        res = notes.add_relation(iid, target, rel)
+        return ({"ok": True, "note_relation": rel} if res is not None
+                else {"ok": False, "error": "kon de link niet leggen (bestaat het doelkaartje?)"})
     if action == "delegate_noochie":
         # Noochie werkt de spanning uit tot een concreet voorstel (LLM) en zet dat als
         # 'voorstel'-item in de inbox; de mens beoordeelt het daarna.
@@ -3311,13 +3384,21 @@ def make_handler(data_dir: str | None):
                     self.end_headers()
                     self.wfile.write(b"Kaartje niet gevonden")
                     return
+                from nooch_village.knowledge import strength as _kstrength
+                _alln = notes.all()
                 cdict = {"id": card.id, "claim": card.claim, "grounds": card.grounds,
                          "status": str(getattr(card.status, "value", card.status)),
-                         "grounding_count": card.grounding_count, "word": card.word or ""}
+                         "grounding_count": card.grounding_count, "word": card.word or "",
+                         "kind": (card.kind.value if card.kind else None),
+                         "strength": _kstrength(card, _alln).value,
+                         "supports": list(card.supports or []),
+                         "contradicts": list(card.contradicts or [])}
                 nbs = [{"id": n.id, "claim": n.claim,
                         "status": str(getattr(n.status, "value", n.status)),
                         "grounding_count": n.grounding_count} for n in notes.neighbors(cid)]
-                body = render_card(cdict, nbs, csrf_token).encode("utf-8")
+                # Doelkaartjes voor de bewijs-link-kiezer (id → claim), zonder zichzelf.
+                all_cards = [{"id": n.id, "claim": n.claim} for n in _alln if n.id != cid]
+                body = render_card(cdict, nbs, csrf_token, all_cards=all_cards).encode("utf-8")
             elif path == "/triage":
                 snap = gather(data_dir)
                 queue = [b for b in snap["backlog"] if b.get("approvable") and b.get("iid")]
@@ -3454,6 +3535,7 @@ def make_handler(data_dir: str | None):
                      "q3": (form.get("q3") or [""])[0], "q3b": (form.get("q3b") or [""])[0],
                      "q4": (form.get("q4") or [""])[0],
                      "kind": (form.get("kind") or [""])[0],
+                     "target": (form.get("target") or [""])[0],
                      "remember": (form.get("remember") or [""])[0]}
             result = _dispatch_action(data_dir, action, iid, reason, extra=extra)
             # 303 → verse GET. Rails keren terug naar de spanning (next), sluiten gaat home.

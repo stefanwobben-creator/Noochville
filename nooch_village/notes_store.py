@@ -66,6 +66,24 @@ class NotesStore:
         self._save()
         return True
 
+    def add_relation(self, from_id: str, to_id: str, relation: str) -> Insight | None:
+        """Leg een bewijs-relatie: `from_id` STEUNT of SPREEKT TEGEN `to_id`.
+        relation ∈ {'supports', 'contradicts'}. Gericht, idempotent, geen zelf-relatie, fail-closed
+        (bestaat een van beide niet → None). Geeft het bijgewerkte bron-kaartje."""
+        if relation not in ("supports", "contradicts") or from_id == to_id:
+            return None
+        bron = self.get(from_id)
+        if bron is None or self.get(to_id) is None:
+            return None
+        lijst = getattr(bron, relation)
+        if to_id not in lijst:
+            lijst.append(to_id)
+            from datetime import datetime
+            bron.last_updated_at = datetime.now()
+            self._notes[from_id] = bron.model_dump(mode="json")
+            self._save()
+        return bron
+
     def enrich(self, note_id: str, nieuwe_reference: str | None = None) -> Insight | None:
         """Verrijk een bestaande kaart met een nieuwe grounding: voeg bron toe,
         hoog de grounding-teller op, en zet last_updated_at op nu. Claim en status

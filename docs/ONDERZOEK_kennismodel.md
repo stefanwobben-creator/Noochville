@@ -138,7 +138,21 @@ geregistreerd zijn (born-vs-manned).
   het gat tussen claim en bewijs, gemeten tegen een kader.
 - Optioneel: een inwoner met karakter (nuchtere, precieze ISTJ-compliance-stem).
 
-## Status
-Ontworpen en op papier getest (196 echte kaartjes + 100 synthetische claims + het
-biodegradability-rapport als integrale casus). Nog niets gebouwd. Volgende stap: in kleine,
-toetsbare brokken bouwen, net als bij het prikbord.
+## Status — GEBOUWD (brok 1-5 ✓)
+Ontworpen, getest (196 echte kaartjes + 100 synthetische claims + het biodegradability-rapport)
+en gebouwd in kleine brokken:
+
+1. ✅ **Soort op het model** — `ClaimKind` (signaal/bevinding/kader/standpunt) op `Insight`;
+   `claim_classify.classify_kind` (heuristiek, None=onbeslist). (`tests/test_claim_kind.py`)
+2. ✅ **Links + berekende sterkte** — `supports`/`contradicts` op `Insight`; `knowledge.py`
+   berekent sterkte puur uit het web (onbeslist/ondersteund/bevestigd/geverifieerd/betwist),
+   met de validiteitscheck + `gaps()`. (`tests/test_knowledge_strength.py`)
+3. ✅ **Cockpit-weergave** — Kennislaag-blok: tellingen per soort, publiceer-risico,
+   onderzoekskansen, betwist, en de onbeslist-kiezer. (`tests/test_cockpit_kennislaag.py`)
+4. ✅ **Migratie met terugwerkende kracht** — `kennis_migrate` (dry-run + apply, heuristiek +
+   optionele LLM-terugval). CLI: `village kennis_migrate [nollm] [apply]`. (`tests/test_kennis_migrate.py`)
+5. ✅ **Bewijs-links leggen tijdens review** — op de kaartpagina (`/card`): soort kiezen +
+   `steunt`/`spreekt-tegen` koppelen aan een ander kaartje, met live berekende sterkte.
+   (`tests/test_card_relations.py`)
+
+Nog te doen (later): de Legal-rol (eigenaar kader-domein, signaleert publiceer-risico).
