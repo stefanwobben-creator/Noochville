@@ -1883,6 +1883,90 @@ def _render_watcher_dashboard(shop: dict, visitors_7d=None) -> str:
             f'<div class="wtoggle">{btns}</div>{panels}{js}')
 
 
+_SIGNAL_CSS = (
+    '<style>.sig{display:flex;flex-wrap:wrap;gap:.8rem;margin:.4rem 0 1.1rem}'
+    '.sigcard{flex:1 1 280px;min-width:0;background:var(--surface);border:1px solid var(--border);'
+    'border-radius:var(--radius);padding:.8rem 1rem;box-shadow:var(--shadow)}'
+    '.sigcard.you{background:var(--yellow-light);border-color:#e2cf8e}'
+    '.sigcard h3{font-family:var(--font-display);font-weight:800;font-size:.82rem;'
+    'text-transform:uppercase;letter-spacing:.02em;margin:0 0 .5rem;color:var(--green-dark)}'
+    '.sigrow{display:flex;justify-content:space-between;align-items:center;gap:.5rem;'
+    'padding:.28rem 0;border-bottom:1px solid var(--border);font-size:.9rem}'
+    '.sigrow:last-child{border-bottom:none}.sigrow .n{font-weight:800;color:var(--green-dark)}'
+    '.sigbig{font-size:1.5rem;font-weight:800;font-family:var(--font-display);color:var(--green-dark);'
+    'line-height:1.1}.sigsub{font-size:.85rem;color:var(--gray);margin-top:.15rem}'
+    '.sigcta{display:inline-block;margin-top:.5rem}</style>')
+
+
+def _render_signal(snap: dict, writable: bool) -> str:
+    """Cockpit 2.0 — het signaaldek: 'it takes a village to raise a CEO'. Drie kaarten:
+    waar brengt het dorp de CEO naartoe (missie), wat vraagt jouw besluit (aan jou), en wat doet
+    het dorp nu autonoom voor je (het dorp werkt)."""
+    ns = snap.get("north_star", {}) or {}
+    shop = snap.get("shopify", {}) or {}
+    pairs = shop.get("pairs_sold", 0)
+    roster = snap.get("roster", [])
+    inbox = snap.get("inbox", [])
+    lib = snap.get("library", {}) or {}
+    if isinstance(lib, dict):
+        lib_vals = list(lib.values())
+    else:
+        lib_vals = lib
+    # 1) Missie — de CEO grootbrengen.
+    ns_desc = _e(ns.get("description", "het duurzaamste schoenenmerk ter wereld"))
+    missie = (
+        '<div class="sigcard"><h3>🎯 De missie</h3>'
+        '<div class="sigbig">Het dorp brengt de CEO groot</div>'
+        f'<div class="sigsub">Noordster: {ns_desc}.</div>'
+        f'<div class="sigrow" style="margin-top:.4rem"><span>Paar verkocht (Shopify)</span>'
+        f'<span class="n">{_fmt_int(pairs)}</span></div>'
+        + (f'<div class="sigrow"><span>Bezoekers (7d)</span>'
+           f'<span class="n">{_fmt_int(snap.get("visitors_7d"))}</span></div>'
+           if snap.get("visitors_7d") else "")
+        + '</div>')
+    # 2) Aan jou — beslissingen die alleen jij kunt nemen.
+    n_kansen = sum(1 for b in snap.get("backlog", []) if b.get("approvable"))
+    n_inbox = sum(1 for i in inbox if i.get("status") == "pending" and i.get("type") != "opportunity")
+    n_woorden = sum(1 for x in lib_vals if x.get("status") == "escalated")
+    n_conc = len(snap.get("competitor_candidates", []))
+    n_link = len(snap.get("link_candidates", []))
+    n_news = len(snap.get("news_proposals", []))
+    n_agenda = len(snap.get("agenda_open", []))
+    rows = []
+    if n_kansen:
+        rows.append(f'<div class="sigrow"><span>🎯 Kansen om te wegen</span>'
+                    f'<span><span class="n">{n_kansen}</span> '
+                    f'<a class="btn ok" href="/triage">▶ verwerk</a></span></div>')
+    rows.append(f'<div class="sigrow"><span>🏛️ Roloverleg</span>'
+                f'<span>{f"<span class=n>{n_agenda}</span> " if n_agenda else ""}'
+                f'<a class="btn" href="/roloverleg">open</a></span></div>')
+    for cond, label in ((n_news, "🧪 Scout-voorstellen uit nieuws"),
+                        (n_woorden, "📝 Woorden te beoordelen"),
+                        (n_conc, "👟 Nieuwe concurrenten"),
+                        (n_link, "🔗 Linkbuilding-doelwitten"),
+                        (n_inbox, "📥 Overige inbox-items")):
+        if cond:
+            rows.append(f'<div class="sigrow"><span>{label}</span><span class="n">{cond}</span></div>')
+    if len(rows) == 1 and not n_agenda:     # alleen de (lege) roloverleg-regel
+        rows.append('<div class="sigrow"><span class="muted">Niks dat op je wacht 🎉</span><span></span></div>')
+    aan_jou = ('<div class="sigcard you"><h3>📥 Aan jou — alleen jij beslist</h3>'
+               + "".join(rows) + '</div>')
+    # 3) Het dorp werkt — autonome activiteit (geruststelling: het dorp draait voor je).
+    n_rollen = sum(1 for r in roster if not r.get("archived") and r.get("type") == "role")
+    n_running = sum(1 for p in snap.get("projects", []) if p.get("status") == "running")
+    noochie = snap.get("noochie_daily", {}) or {}
+    nood_q = noochie.get("question") or noochie.get("suggestion") or ""
+    dorp = (
+        '<div class="sigcard"><h3>🌱 Het dorp werkt voor je</h3>'
+        f'<div class="sigrow"><span>Inwoners aan het werk</span><span class="n">{n_rollen}</span></div>'
+        f'<div class="sigrow"><span>Projecten lopen nu</span><span class="n">{n_running}</span></div>'
+        + (f'<div class="sigrow"><span>📓 Noochie vandaag</span>'
+           f'<a class="btn" href="/fieldnotes">lees</a></div>' if noochie else "")
+        + (f'<div class="sigsub" style="margin-top:.4rem">💭 {_e(nood_q[:120])}</div>' if nood_q else "")
+        + '</div>')
+    return f'{_SIGNAL_CSS}<div class="sig">{missie}{aan_jou}{dorp}</div>'
+
+
 def render_html(snap: dict, csrf_token: str | None = None, msg=None,
                 show_all: bool = False) -> str:
     roster = snap["roster"]
@@ -2263,42 +2347,15 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     hist = ('<a href="/">← verberg geschiedenis</a>' if show_all
             else '<a href="/?history=1">toon geschiedenis (gesloten + gearchiveerd)</a>')
 
-    # "Aan jou": alles wat nú een beslissing van de mens vraagt, op één plek geteld.
-    _n_kansen = sum(1 for b in snap.get("backlog", []) if b.get("approvable"))
-    _n_inbox = sum(1 for i in inbox if i.get("status") == "pending" and i.get("type") != "opportunity")
-    _n_woorden = sum(1 for x in lib if x["status"] == "escalated")
-    _n_conc = len(snap.get("competitor_candidates", []))
-    _n_link = len(snap.get("link_candidates", []))
-    _parts = []
-    if _n_kansen:  _parts.append(f'{_n_kansen} kansen')
-    if _n_inbox:   _parts.append(f'{_n_inbox} inbox-items')
-    if _n_woorden: _parts.append(f'{_n_woorden} woorden te beoordelen')
-    if _n_conc:    _parts.append(f'{_n_conc} nieuwe concurrenten')
-    if _n_link:    _parts.append(f'{_n_link} linkbuilding-doelwitten')
-    _n_agenda = len(snap.get("agenda_open", []))
-    _focus = (f' <a class="btn ok" href="/triage" style="margin-left:.4rem">▶ Verwerk in focus</a>'
-              if _n_kansen else "")
-    # Roloverleg-knop staat ALTIJD (ook bij lege agenda) zodat je altijd een nieuwe rol kunt
-    # voorstellen / het overleg kunt openen.
-    _rov = (f' <a class="btn" href="/roloverleg" style="margin-left:.4rem">🏛️ Roloverleg'
-            f'{f" ({_n_agenda})" if _n_agenda else ""}</a>')
-    if _n_agenda:
-        _parts.append(f'{_n_agenda} op de roloverleg-agenda')
-    _aan_jou = (f'<div class="aanjou"><b>📥 Aan jou:</b> {" · ".join(_parts)}{_focus}{_rov}</div>'
-                if _parts else
-                f'<div class="aanjou">📥 <b>Aan jou:</b> niks openstaand 🎉{_rov}</div>')
-
     inner = (
         f'<h1>NoochVille cockpit {badge}</h1>'
         f'<div class="bar">{_e(counts)} · gegenereerd {_e(_ts(snap.get("generated_at")))} · {hist}</div>'
-        f'<style>.aanjou{{background:var(--yellow-light);border:1px solid var(--border);'
-        f'border-radius:var(--radius);padding:.5rem .9rem;margin:.3rem 0 1rem;font-size:.95rem}}</style>'
-        f'{_aan_jou}'
         f'{_banner(msg)}'
+        f'{_render_signal(snap, writable)}'
         f'{_render_digest(snap.get("digest", {}), snap.get("noochie_daily", {}))}'
         f'{_render_watcher_dashboard(snap.get("shopify", {}), snap.get("visitors_7d"))}'
         # Kansen verwerk je in de focusmodus (▶ Verwerk in focus); geen dubbele backlog-tabel meer.
-        f'<details><summary>📥 Inbox — overige items ({_n_inbox})</summary>{inbox_tbl}</details>'
+        f'<details><summary>📥 Inbox — overige items ({len(show_inbox)})</summary>{inbox_tbl}</details>'
         f'{drafts_block}'
         f'<h2>Proces (projecten)</h2>{proj_tbl}'
         f'<h2>Kennis</h2>'

@@ -1133,3 +1133,19 @@ Fix: de orphan-check geldt nu alleen bij een PURE verwijdering (geen add_account
 change). Een herschrijving/herschikking binnen de rol mag door. Regressietest in test_montecarlo.
 De 3 vastgelopen voorstellen (the_source, Copywriter, trends) passeren nu de Gate en zijn op de
 agenda teruggezet op 'consented' zodat 'Einde roloverleg' ze nu wél doorvoert. Suite groen (587+483).
+
+## Cockpit-review + 2.0 signaaldek
+Audit (statisch + runtime op een data-kopie): alle interne links → bestaande routes, alle UI-acties →
+een dispatch-handler, alle pagina's renderen en alle acties geven netjes een dict terug. Geen dode
+links, geen knoppen zonder handler, geen render-crashes. (De eerdere bugs string-roles / /project?pid
+/ G3 waren al gefixt.)
+
+Heuristiek (Nielsen): grootste knelpunt was 'visibility of system status' + cognitieve last — de home
+was een lange tabellenmuur met één dunne 'Aan jou'-regel als signaal. Opgelost met cockpit 2.0:
+_render_signal() zet bovenaan een driedelig signaaldek ('it takes a village to raise a CEO'):
+1) 🎯 De missie — het dorp brengt de CEO groot (noordster + paar verkocht + bezoekers),
+2) 📥 Aan jou — alleen jij beslist (kansen ▶verwerk, roloverleg, scout-voorstellen, woorden,
+   concurrenten, links, inbox; rustige melding als er niets is),
+3) 🌱 Het dorp werkt voor je — inwoners aan het werk, lopende projecten, Noochie vandaag.
+De gedetailleerde secties blijven eronder (ingeklapt). Oude dunne 'aanjou'-balk verwijderd.
+Tests in test_cockpit_signal.py. Suite groen (515 + 558).
