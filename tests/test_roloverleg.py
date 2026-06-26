@@ -456,7 +456,12 @@ def test_cockpit_render_roloverleg(tmp_path):
     assert "Secretaris" in page
     for val in ("rov_react", "rov_consent", "rov_object"):
         assert f'value="{val}"' in page
-    # overzicht
+    # overzicht: open item zichtbaar + 'zelf toevoegen' altijd
     ov = cockpit.render_roloverleg_overview([item], [item], ["scout", "librarian"], "t")
     assert "Roloverleg" in ov
-    assert "/roloverleg?iid=k1" in ov and 'value="rov_end"' in ov and 'value="rov_add"' in ov
+    assert "/roloverleg?iid=k1" in ov and 'value="rov_add"' in ov
+    # de 'Einde roloverleg'-knop verschijnt zodra er een AANGENOMEN (consented) voorstel is —
+    # ook als er geen open items meer zijn (de bug: anders bleef het hangen).
+    consented = {**item, "status": "consented"}
+    ov2 = cockpit.render_roloverleg_overview([], [consented], ["scout"], "t")
+    assert 'value="rov_end"' in ov2 and "Aangenomen" in ov2 and "/roloverleg?iid=k1" in ov2

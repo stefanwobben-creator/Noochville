@@ -1109,3 +1109,11 @@ proj_comment laat na jouw bericht de eigenaar-rol METEEN werken (work_one, eigen
 tekst-only) en plaatst het antwoord direct in het gesprek (ProjectLedger.add_role_message — telt
 NIET als experiment-uitvoering, raakt 'worked' niet). Geen LLM beschikbaar → nette melding 'rol
 reageert bij de volgende puls'. Flash maakt onderscheid (direct geantwoord vs niet). Suite groen (585 + 483).
+
+## BUG-fix: aangenomen voorstellen + 'Einde roloverleg' bleven verborgen
+Het roloverleg-overzicht toonde alleen OPEN voorstellen; consented (aangenomen) items en de
+'Einde roloverleg'-knop verdwenen zodra er geen open items meer waren → aangenomen voorstellen
+konden nooit worden doorgevoerd (leken 'verdwenen'). Nu: een apart blok '✓ Aangenomen — wordt
+doorgevoerd bij einde overleg (N)' met de doorvoer-knop, altijd zichtbaar zolang er consented items
+zijn (ook bij 0 open items). Geen verlies: de copywriter-wijziging stond nog als consented klaar.
+Suite groen (585 + 483).

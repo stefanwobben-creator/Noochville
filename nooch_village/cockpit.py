@@ -1003,40 +1003,53 @@ def render_roloverleg_overview(items: list, agenda_all: list, roles: list,
         f'<input type="hidden" name="next" value="/roloverleg">'
         f'<button class="bigbtn go" type="submit" name="action" value="rov_end">'
         f'✓ Einde roloverleg — {n_consent} aangenomen voorstel(len) doorvoeren</button></form>')
-    if not items:
-        body = ('<div class="tg-card"><h2>Lege agenda 🎉</h2>'
-                '<p class="muted">Geen voorstellen om te behandelen. Governance-keuzes uit de '
-                'triage komen hier terecht.</p></div>' + add_form)
-        return _page("Roloverleg",
-                     f'{head}{_banner(msg)}{body}</div><style>{_TRIAGE_CSS}</style>')
-    # Groepeer per voorstel (group): één regel per voorstel, ook als het meerdere rollen raakt.
-    groups: dict[str, list] = {}
-    for it in items:
-        groups.setdefault(it.get("group") or it["id"], []).append(it)
-    rows = []
-    for i, (gid, gm) in enumerate(groups.items(), 1):
-        head_it = gm[0]
-        if len(gm) > 1:
-            kind = f"{len(gm)} rollen: " + ", ".join(_e(m.get("role_id", "")) for m in gm)
-            titel = _e(head_it.get("title", "")) + f' <span class="muted">(+{len(gm)-1} rol)</span>'
-        else:
-            kind = ("nieuwe rol" if head_it["kind"] == "add_role"
-                    else ("🗑 rol verwijderen" if head_it["kind"] == "remove_role"
-                          else f"rol '{head_it['role_id']}' uitbreiden"))
-            titel = _e(head_it["title"])
-        badge = (' <span class="tg-wacht">⚠ vorige keer schadelijk</span>'
-                 if any(m["status"] == "objected" for m in gm) else
-                 (' <span class="tg-wacht">✓ aangenomen</span>'
-                  if all(m["status"] == "consented" for m in gm) else ""))
-        rows.append(
-            f'<a class="tg-item" href="/roloverleg?iid={_e(head_it["id"])}">'
-            f'<span class="tg-item-n">{i}</span>'
-            f'<span class="tg-item-body"><b>{titel}</b>{badge}'
-            f'<small>{kind} · door {_e(head_it.get("by",""))}</small></span>'
-            f'<span class="tg-go">behandel →</span></a>')
-    body = (f'<p class="tg-meta">{len(groups)} voorstel(len) op de agenda. Behandel er één, '
-            f'of sluit het overleg.</p><div class="tg-list">{"".join(rows)}</div>'
-            f'{end_form}{add_form}')
+    def _rows(lst):
+        """Groepeer per voorstel (group) en bouw klikbare rijen."""
+        groups: dict[str, list] = {}
+        for it in lst:
+            groups.setdefault(it.get("group") or it["id"], []).append(it)
+        out = []
+        for i, (gid, gm) in enumerate(groups.items(), 1):
+            head_it = gm[0]
+            if len(gm) > 1:
+                kind = f"{len(gm)} rollen: " + ", ".join(_e(m.get("role_id", "")) for m in gm)
+                titel = _e(head_it.get("title", "")) + f' <span class="muted">(+{len(gm)-1} rol)</span>'
+            else:
+                kind = ("nieuwe rol" if head_it["kind"] == "add_role"
+                        else ("🗑 rol verwijderen" if head_it["kind"] == "remove_role"
+                              else f"rol '{head_it['role_id']}' uitbreiden"))
+                titel = _e(head_it["title"])
+            badge = (' <span class="tg-wacht">⚠ vorige keer schadelijk</span>'
+                     if any(m["status"] == "objected" for m in gm) else
+                     (' <span class="tg-wacht">✓ aangenomen</span>'
+                      if all(m["status"] == "consented" for m in gm) else ""))
+            out.append(
+                f'<a class="tg-item" href="/roloverleg?iid={_e(head_it["id"])}">'
+                f'<span class="tg-item-n">{i}</span>'
+                f'<span class="tg-item-body"><b>{titel}</b>{badge}'
+                f'<small>{kind} · door {_e(head_it.get("by",""))}</small></span>'
+                f'<span class="tg-go">behandel →</span></a>')
+        return "".join(out)
+
+    # Open voorstellen (te behandelen) en aangenomen voorstellen (consented, wachten op doorvoeren).
+    consented = [it for it in (agenda_all or []) if it.get("status") == "consented"]
+    if items:
+        n_g = len({it.get("group") or it["id"] for it in items})
+        open_block = (f'<p class="tg-meta">{n_g} open voorstel(len). Behandel er één, of sluit '
+                      f'het overleg.</p><div class="tg-list">{_rows(items)}</div>')
+    else:
+        open_block = ('<div class="tg-card"><h2>Geen open voorstellen</h2>'
+                      '<p class="muted">Niets meer te behandelen. Governance-keuzes uit de triage '
+                      'komen hier terecht.</p></div>')
+    # Aangenomen voorstellen + de doorvoer-knop staan ALTIJD zolang er consented items zijn —
+    # ook als er geen open items meer zijn (anders blijven aangenomen voorstellen hangen).
+    consent_block = ""
+    if consented:
+        consent_block = (
+            '<div class="tg-card" style="border-left:3px solid var(--green)">'
+            f'<h2>✓ Aangenomen — wordt doorgevoerd bij einde overleg ({len(consented)})</h2>'
+            f'<div class="tg-list">{_rows(consented)}</div></div>{end_form}')
+    body = f'{open_block}{consent_block}{add_form}'
     return _page("Roloverleg",
                  f'{head}{_banner(msg)}{body}</div><style>{_TRIAGE_CSS}</style>')
 
