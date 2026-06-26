@@ -1388,26 +1388,31 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
 
 _PROJ_STEPS = [("proj_active", "running", "Actief"), ("proj_waiting", "blocked", "Wachten"),
                ("proj_future", "future", "Toekomst"), ("proj_done", "done", "Done")]
+_STATUS_LBL = {"running": "Actief", "queued": "Toekomst", "future": "Toekomst",
+               "blocked": "Wachten op", "done": "Done"}
 _PROJ_ON = ("display:inline-block;padding:.2rem .6rem;border-radius:var(--radius-pill);"
             "background:var(--green-dark);color:#fff;font-size:.8rem;font-weight:700")
 
 
-def _proj_actions(p: dict, token: str) -> str:
-    """Statusknoppen per project. De HUIDIGE status is gemarkeerd (groen, niet-klikbaar) zodat je
-    altijd ziet waar het staat; de andere knoppen wisselen ernaartoe. Na een wissel keer je terug
-    naar de projectrij (anker), niet naar de top. Done is terminal."""
-    pid = p.get("id")
-    cur = p.get("status")
+def _proj_status_controls(p: dict, token: str, back: str) -> str:
+    """Statuswissel-knoppen met de HUIDIGE status gemarkeerd (groen, niet-klikbaar). Na een wissel
+    keer je terug naar `back` (de projectrij of de projectpagina), niet naar de top."""
+    pid, cur = p.get("id"), p.get("status")
     if cur == "done":
         return f'<span style="{_PROJ_ON}">✓ Done</span>'
     parts = []
     for action, st, label in _PROJ_STEPS:
         if st == cur:
-            parts.append(f'<span style="{_PROJ_ON}">● {label}</span>')   # huidige status, zichtbaar
+            parts.append(f'<span style="{_PROJ_ON}">● {label}</span>')
         else:
-            parts.append(_btn(pid, action, label, token, next=f"/#proj-{pid}"))
-    parts.append(f'<a class="btn" href="/project?pid={_e(pid)}">Edit…</a>')
+            parts.append(_btn(pid, action, label, token, next=back))
     return " ".join(parts)
+
+
+def _proj_actions(p: dict, token: str) -> str:
+    """Statusknoppen voor de dashboard-rij (terug naar de rij via anker) + Edit-link."""
+    return _proj_status_controls(p, token, f"/#proj-{p.get('id')}") + \
+        f' <a class="btn" href="/project?pid={_e(p.get("id"))}">Edit…</a>'
 
 
 def render_card(card: dict, neighbors: list, csrf_token: str) -> str:
@@ -1496,14 +1501,30 @@ def render_project_edit(p: dict, roster: list, csrf_token: str) -> str:
             '<textarea name="comment" rows="3" style="width:100%;box-sizing:border-box;font-size:.95rem" '
             'placeholder="Bericht aan de rol…"></textarea>'
             '<button class="btn ok" type="submit" style="margin-top:.3rem">Versturen ➤</button></form>'
-            '<form method="post" action="/action" style="margin-top:.5rem">'
+            '<p class="muted" style="font-size:.78rem;margin-top:.3rem">Een rol sluit zichzelf nooit '
+            'af; jij zet het hierboven op <b>Done</b> — naar archief — als het klaar is.</p>')
+    # Betrek een andere rol: spin direct een project-verzoek af naar een rol die zich in de
+    # discussie mengt (die rol pakt het op zijn eigen bord op). Alleen bij een lopend project.
+    spinoff = ""
+    if not done:
+        spin_opts = "".join(
+            f'<option value="{_e(r["id"])}">{_e(r.get("name") or r["id"])}</option>'
+            for r in roster if not r.get("archived") and r.get("type") == "role"
+            and r["id"] != p.get("owner"))
+        spinoff = (
+            '<details style="margin-top:.5rem"><summary>➡️ Betrek een andere rol bij dit project</summary>'
+            '<form method="post" action="/action" class="pf" style="margin-top:.3rem">'
             f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
             f'<input type="hidden" name="iid" value="{_e(pid)}">'
-            '<input type="hidden" name="action" value="proj_done">'
-            '<input type="hidden" name="next" value="/">'
-            '<button class="btn" type="submit">✓ Done — naar archief</button></form>'
-            '<p class="muted" style="font-size:.78rem;margin-top:.3rem">Een rol sluit zichzelf nooit '
-            'af; jij zet het op Done als het klaar is.</p>')
+            '<input type="hidden" name="action" value="proj_spinoff">'
+            f'<input type="hidden" name="next" value="/project?pid={_e(pid)}">'
+            '<label>Welke rol vraag je erbij?</label>'
+            f'<select name="spin_owner">{spin_opts}</select>'
+            '<label>Wat vraag je die rol?</label>'
+            '<textarea name="spin_msg" rows="2" placeholder="bijv. toets de juridische claims van deze '
+            'aanpak"></textarea>'
+            '<button class="btn ok" type="submit">➡️ Stuur verzoek (maakt een project voor die rol)'
+            '</button></form></details>')
     # Owner/scope bewerken: ingeklapt, secundair.
     edit = (
         '<details style="margin-top:.6rem"><summary>⚙️ Eigenaar / scope aanpassen</summary>'
@@ -1517,13 +1538,16 @@ def render_project_edit(p: dict, roster: list, csrf_token: str) -> str:
         '<label>Scope / uitkomst:</label>'
         f'<input name="scope" value="{_e(scope)}">'
         '<button class="btn ok" type="submit">Opslaan</button></form></details>')
+    status_lbl = _STATUS_LBL.get(p.get("status"), p.get("status"))
+    status_ctrl = _proj_status_controls(p, csrf_token, f"/project?pid={_e(pid)}") if csrf_token else ""
     inner = (
         '<p><a href="/">← terug naar de cockpit</a></p>'
         '<h1>Project</h1>'
         f'<div class="tension"><b>{owner_name}</b> · {_e(scope)}'
-        f'<br><span class="muted">status {_e(p.get("status"))}'
+        f'<br><span class="muted">status: <b>{_e(status_lbl)}</b>'
         f'{(" · wacht op " + _e(p.get("blocked_on"))) if p.get("blocked_on") else ""}</span></div>'
-        f'{hyp}<h2>💬 Gesprek met de rol</h2>{wall_html}{actions}{edit}')
+        f'<div style="margin:.4rem 0">{status_ctrl}</div>'
+        f'{hyp}<h2>💬 Gesprek met de rol</h2>{wall_html}{actions}{spinoff}{edit}')
     return _page("Project", inner)
 
 
@@ -2077,9 +2101,7 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         if isinstance(s, dict):                      # oude machine-scope leesbaar maken
             return " · ".join(f"{k}: {v}" for k, v in s.items())
         return s
-    # Leesbare statuslabels (intern: queued/running/blocked/future/done).
-    _STATUS_LBL = {"running": "Actief", "queued": "Toekomst", "future": "Toekomst",
-                   "blocked": "Wachten op", "done": "Done"}
+    # Leesbare statuslabels: module-niveau _STATUS_LBL (gedeeld met de projectpagina).
     prows = []
     for p in show_proj:
         pacts = _proj_actions(p, csrf_token) if writable else '<span class="muted">—</span>'
@@ -2268,14 +2290,21 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     g = snap.get("knowledge_graph", {})
     g_line = (f'<p class="muted">Graaf: {g.get("cards", 0)} kaartjes · {g.get("links", 0)} links · '
               f'gem. gelijkenis {g.get("avg_similarity", 0)}</p>') if g else ''
-    irows2 = "".join(
-        f'<tr><td>{("🔗 " if x.get("synthese") else "")}'
-        f'<a href="/card?id={_e(x["id"])}">{_e(x["claim"][:120])}</a>'
-        f'{(" <span class=muted>(" + _e(x["links"]) + " links)</span>") if x.get("links") else ""}</td>'
-        f'<td class="muted">{_e(x["status"])}</td>'
-        f'<td>{_e(x["grounding_count"])}×</td></tr>' for x in ins)
-    ins_tbl = (g_line + '<table><thead><tr><th>claim</th><th>status</th><th>gegrond</th></tr></thead>'
-               f'<tbody>{irows2 or "<tr><td colspan=3 class=muted>geen inzichten</td></tr>"}</tbody></table>')
+    def _ins_row(x):
+        return (f'<tr><td>{("🔗 " if x.get("synthese") else "")}'
+                f'<a href="/card?id={_e(x["id"])}">{_e(x["claim"][:120])}</a>'
+                f'{(" <span class=muted>(" + _e(x["links"]) + " links)</span>") if x.get("links") else ""}</td>'
+                f'<td class="muted">{_e(x["status"])}</td>'
+                f'<td>{_e(x["grounding_count"])}×</td></tr>')
+    # Top 10 (meest gegrond) zichtbaar; de rest achter een 'meer'-uitklapper (geen muur van 196).
+    ins_sorted = sorted(ins, key=lambda x: -(x.get("grounding_count") or 0))
+    top, rest = ins_sorted[:10], ins_sorted[10:]
+    _thead = '<thead><tr><th>claim</th><th>status</th><th>gegrond</th></tr></thead>'
+    top_rows = "".join(_ins_row(x) for x in top) or "<tr><td colspan=3 class=muted>geen inzichten</td></tr>"
+    ins_tbl = g_line + f'<table>{_thead}<tbody>{top_rows}</tbody></table>'
+    if rest:
+        ins_tbl += (f'<details style="margin-top:.3rem"><summary>meer inzichten ({len(rest)})</summary>'
+                    f'<table>{_thead}<tbody>{"".join(_ins_row(x) for x in rest)}</tbody></table></details>')
 
     # Concurrenten: gespotte (kandidaat) merken die op jouw oordeel wachten + de monitor-set.
     cands = snap.get("competitor_candidates", [])
@@ -2478,6 +2507,8 @@ def _flash(result: dict) -> str:
             return (f"📝 Concept-project voor {result.get('owner') or 'het dorp'} klaargezet — "
                     f"keur het goed bij 'Concept-projecten' om het op het bord te zetten." + tail)
         return f"➕ Project toegevoegd voor {result.get('owner') or 'het dorp'} (zie Proces)." + tail
+    if result.get("proj_spinoff"):
+        return f"➡️ Verzoek gestuurd — nieuw project voor {result.get('owner','de rol')} op het bord."
     if result.get("proj_comment"):
         return ("💬 Verstuurd — de rol heeft direct geantwoord (zie het gesprek)."
                 if result.get("replied")
@@ -2895,6 +2926,22 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
         ok = projects.edit(iid, scope=extra.get("scope", ""), owner=extra.get("owner", ""))
         return {"ok": ok, "proj_edit": True}
+    if action == "proj_spinoff":
+        # Betrek een andere rol: maak een NIEUW project voor die rol en log het verzoek hier.
+        projects = ProjectLedger(os.path.join(dd, "projects.json"))
+        src = projects.get(iid)
+        owner = (extra.get("spin_owner") or "").strip()
+        msg = (extra.get("spin_msg") or "").strip()
+        if src is None or not owner:
+            return {"ok": False, "error": "kies een rol om te betrekken"}
+        src_scope = src.get("scope")
+        src_scope = (" · ".join(f"{k}: {v}" for k, v in src_scope.items())
+                     if isinstance(src_scope, dict) else str(src_scope or ""))
+        scope = msg or f"Bijdrage gevraagd aan: {src_scope}"
+        new_pid = projects.create(owner, scope, "human",
+                                  hypothesis=f"Verzoek vanuit project '{src_scope[:60]}'.")
+        projects.add_comment(iid, f"➡️ {owner} erbij gevraagd: {msg or 'bijdrage'}")
+        return {"ok": True, "proj_spinoff": True, "new_pid": new_pid, "owner": owner}
     if action == "proj_comment":
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
         ok = projects.add_comment(iid, extra.get("comment", ""))
@@ -3096,6 +3143,8 @@ def make_handler(data_dir: str | None):
                      "g_owner": (form.get("g_owner") or [""])[0],
                      "g_naam": (form.get("g_naam") or [""])[0],
                      "comment": (form.get("comment") or [""])[0],
+                     "spin_owner": (form.get("spin_owner") or [""])[0],
+                     "spin_msg": (form.get("spin_msg") or [""])[0],
                      "q1": (form.get("q1") or [""])[0], "q2": (form.get("q2") or [""])[0],
                      "q3": (form.get("q3") or [""])[0], "q3b": (form.get("q3b") or [""])[0],
                      "q4": (form.get("q4") or [""])[0],

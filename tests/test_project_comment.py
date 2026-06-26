@@ -93,6 +93,37 @@ def test_render_project_edit_chat_en_done_uitleg():
     assert "een rol sluit zichzelf nooit af" in page.lower()
 
 
+def test_proj_spinoff_maakt_project_voor_andere_rol(tmp_path):
+    import json
+    data = tmp_path / "data"; data.mkdir()
+    (data / "governance_records.json").write_text("{}", encoding="utf-8")
+    led = ProjectLedger(str(data / "projects.json"))
+    pid = led.create("harry_hemp", "Elastaan-vervanger zoeken", "human")
+    res = cockpit._dispatch_action(str(data), "proj_spinoff", pid, "",
+                                   extra={"spin_owner": "nooch_legal", "spin_msg": "toets de claims"})
+    assert res["ok"] and res["owner"] == "nooch_legal"
+    led2 = ProjectLedger(str(data / "projects.json"))
+    owners = {p["owner"] for p in led2.all()}
+    assert "nooch_legal" in owners
+    new = next(p for p in led2.all() if p["owner"] == "nooch_legal")
+    assert new["scope"] == "toets de claims" and new["status"] == "queued"
+    # het verzoek staat ook in het gesprek van het bronproject
+    assert any("nooch_legal erbij gevraagd" in m["text"] for m in led2.get(pid).get("log", []))
+    # zonder rol → nette fout
+    assert cockpit._dispatch_action(str(data), "proj_spinoff", pid, "",
+                                    extra={"spin_owner": "", "spin_msg": "x"})["ok"] is False
+
+
+def test_proj_actions_markeert_huidige_status():
+    # De huidige status is zichtbaar gemarkeerd (geen knop), de andere zijn wissel-knoppen met anker.
+    running = cockpit._proj_actions({"id": "p1", "status": "running"}, "t")
+    assert "● Actief" in running                              # huidige status gemarkeerd
+    assert 'value="proj_future"' in running and "#proj-p1" in running   # wisselen + anker
+    assert "proj_active" not in running                       # geen knop naar de huidige status
+    done = cockpit._proj_actions({"id": "p2", "status": "done"}, "t")
+    assert "✓ Done" in done and "proj_" not in done          # terminal, geen knoppen
+
+
 def test_wall_bewaart_alle_berichten_en_done_knop():
     # De wall toont elk bericht (niets overschreven) + een Done-knop (→ archief).
     p = {"id": "p1", "owner": "harry_hemp", "scope": "Zoek X", "status": "running",
@@ -101,7 +132,7 @@ def test_wall_bewaart_alle_berichten_en_done_knop():
                  {"who": "rol", "text": "tweede uitwerking"}]}
     page = cockpit.render_project_edit(p, [{"id": "harry_hemp", "type": "role", "archived": False}], "t")
     assert "eerste uitwerking" in page and "tweede uitwerking" in page   # beide bewaard
-    assert 'value="proj_done"' in page and "naar archief" in page
+    assert 'value="proj_done"' in page and "naar archief" in page        # Done-statusknop + uitleg
     # afgerond project: geen invoer meer
     done = {**p, "status": "done"}
     pg2 = cockpit.render_project_edit(done, [{"id": "harry_hemp", "type": "role", "archived": False}], "t")

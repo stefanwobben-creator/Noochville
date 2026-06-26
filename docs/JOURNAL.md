@@ -1159,3 +1159,15 @@ Tests in test_cockpit_signal.py. Suite groen (515 + 558).
   industry, step by step…'), kernwaarden als chips (Do Right & Keep Going · Care for All · Find the
   Fun), Target batch 4 (1000 paar) met voortgangsbalk, BHAG (1 miljoen/jaar). 'CEO' subtiel als
   onderregel i.p.v. grote kop. Suite groen (515 + 558).
+
+## Cockpit-review vervolg: project-rol betrekken, top-10 inzichten, diepe journey-tests
+- Projectpagina: statuscontrole mét leesbaar label (Actief/Toekomst/Wachten/Done), huidige status
+  gemarkeerd, terug-naar-pagina-anker. Done staat niet meer dubbel.
+- '➡️ Betrek een andere rol bij dit project' (proj_spinoff): maakt een nieuw project voor die rol
+  en logt het verzoek in het gesprek. (Voor 'een rol die zich in de discussie mengt'.)
+- Inzichten: top-10 (meest gegrond) zichtbaar, rest achter 'meer (N)'-uitklap (geen muur van 196).
+- Eigenaar-dropdowns tonen de weergavenaam.
+- DIEPE end-to-end journey-tests (test_cockpit_journeys.py) via de echte HTTP-handler: home+routes,
+  project-status wijzigt écht, chat-log, spinoff maakt project, en roloverleg consent→Einde voert de
+  wijziging ECHT door in de records. (Verving de oppervlakkige render-only check.)
+Suite groen (592 + 487).
