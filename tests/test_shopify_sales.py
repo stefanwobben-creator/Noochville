@@ -228,4 +228,4 @@ def test_cockpit_dashboard_render():
     assert "hele historie" in p2 and "gem. paren/maand" in p2 and "sinds 2026-01-01" in p2
     assert "/blogs/vegan/sneakers" in p2 and "Kanaal" in p2 and "SEARCH" in p2
     # leeg → hint, geen crash
-    assert "Nog geen Shopify-data" in cockpit._render_watcher_dashboard({})
+    assert "Nog geen Shopify-verkoopdata" in cockpit._render_watcher_dashboard({})

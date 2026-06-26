@@ -67,7 +67,7 @@ def test_gather_missing_dir_is_safe(tmp_path):
 
 def test_render_contains_key_facts(tmp_path):
     page = cockpit.render_html(cockpit.gather(_seed(tmp_path)))
-    assert "website_watcher" in page and "ngram_2019_cutoff" in page
+    assert "website_watcher" in page                # roster-skill
     assert "plausible_stats" in page and "GSC menukaart" in page
     assert "read-only" in page.lower()
 
@@ -76,11 +76,11 @@ def test_render_writable_has_action_buttons(tmp_path):
     snap = cockpit.gather(_seed(tmp_path))
     page = cockpit.render_html(snap, csrf_token="tok123")
     assert "verwerk-modus" in page
-    assert "Defer" in page                      # pending means_gap krijgt een defer-knop
     assert 'value="tok123"' in page             # csrf-token in de formulieren
-    # read-only (geen token) → geen knoppen
+    assert 'name="csrf"' in page                # writable → forms aanwezig
+    # read-only (geen token) → geen formulieren/knoppen
     ro = cockpit.render_html(snap)
-    assert "Defer" not in ro
+    assert "read-only" in ro.lower() and 'name="csrf"' not in ro
 
 
 def test_render_escapes_html(tmp_path):
@@ -180,15 +180,12 @@ def test_banner_error_vs_success_styling():
 
 
 def test_inbox_semantic_labels():
-    snap = {"roster": [], "projects": [], "library": [], "insights": [],
-            "generated_at": 1.0, "data_dir": "x",
-            "inbox": [{"id": "i1", "type": "means_gap",
-                       "subject": "bezoekersdata_per_locale_analy", "status": "pending",
-                       "context": {"description": "bezoekersdata per locale analyseren"}}]}
-    page = cockpit.render_html(snap, csrf_token="t")
-    assert "Middelen-gat" in page                         # leesbaar type i.p.v. 'means_gap'
-    assert "bezoekersdata per locale analyseren" in page  # de zin als titel
-    assert "bezoekersdata_per_locale_analy" in page        # slug nog als kleine technische ref
+    # De inbox staat niet meer op de home-cockpit (verwerk je via werk-in-focus), maar de
+    # leesbare label-/titel-helpers blijven gedekt (ze worden in de focus-flow gebruikt).
+    item = {"id": "i1", "type": "means_gap", "subject": "bezoekersdata_per_locale_analy",
+            "status": "pending", "context": {"description": "bezoekersdata per locale analyseren"}}
+    assert cockpit._type_label("means_gap") == "Middelen-gat"
+    assert cockpit._item_title(item) == "bezoekersdata per locale analyseren"
 
 
 def test_means_gap_stores_sensed_by(tmp_path):
@@ -284,13 +281,13 @@ def test_default_hides_grey_history_shows_it():
         "generated_at": 1.0, "data_dir": "x",
     }
     default = cockpit.render_html(snap, csrf_token="t")
-    assert "open_word" in default and "open project" in default and "live_role" in default
-    assert "closed_word" not in default        # gesloten inbox-item verborgen
+    # (inbox staat niet meer op home; we toetsen hide-grey op roster + projecten)
+    assert "open project" in default and "live_role" in default
     assert "dead_role" not in default          # gearchiveerde rol verborgen
     assert "klaar project" not in default      # done-project verborgen
 
     history = cockpit.render_html(snap, csrf_token="t", show_all=True)
-    assert "closed_word" in history and "dead_role" in history and "klaar project" in history
+    assert "dead_role" in history and "klaar project" in history
 
 
 def test_project_status_change_to_running(tmp_path):

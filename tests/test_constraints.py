@@ -24,4 +24,4 @@ def test_cockpit_toont_huisregels(tmp_path):
         [{"text": "We bieden geen kinderschoenen aan", "source": "triage: schoolruil"}]),
         encoding="utf-8")
     page = cockpit.render_html(cockpit.gather(str(data)), csrf_token="t")
-    assert "Huis-regels" in page and "geen kinderschoenen" in page
+    assert "Huisregels" in page and "geen kinderschoenen" in page

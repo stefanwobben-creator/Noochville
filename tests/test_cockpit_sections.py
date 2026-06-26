@@ -67,8 +67,10 @@ def test_woordenschat_split_en_concurrent_monitor(tmp_path):
     assert "LØCI" in page and "geen recent nieuws opgehaald" in page
 
 
-def test_weekrapport_kwantitatief_met_noochie(tmp_path):
+def test_geen_weekrapport_wel_dorp_werkt(tmp_path):
+    # Review-1: het weekrapport is van de cockpit gehaald; de Noochie-reflectie staat in de hero
+    # met een link naar het dagbulletin.
     snap = _setup(tmp_path)
     page = cockpit.render_html(snap, csrf_token="t")
-    assert "Weekrapport" in page
-    assert "Noochie vandaag" in page and "Field Note adviseert ads" in page
+    assert "Weekrapport" not in page                        # weekrapport bewust verwijderd
+    assert "Het dorp werkt voor je" in page and "dagbulletin" in page

@@ -26,22 +26,27 @@ def test_signaaldek_drie_kaarten(tmp_path):
     assert "🎯 De missie" in page
     assert "Aan jou" in page and "alleen jij beslist" in page
     assert "Het dorp werkt voor je" in page
-    # missie + kernwaarden + target/BHAG centraal (CEO-subtekst is bewust verwijderd)
-    assert "Nooch transforms" in page and "Do Right &amp; Keep Going" in page
-    assert "Target (batch 4)" in page and "BHAG" in page and "progress-bar" in page
+    # missie lean: alleen purpose in de hero (review-1: target/BHAG → watcher, kernwaarden → huisregels)
+    assert "Nooch transforms" in page
+    assert "BHAG" not in page                       # BHAG bewust uit de hero gehaald
+    # kernwaarden staan nu in de huisregels, niet in de hero
+    assert "Do Right &amp; Keep Going" in page and "Kernwaarden" in page
+    # target + conversie staan nu in de Website Watcher
+    assert "Target (batch 4)" in page and "Conversie" in page
     # roloverleg-ingang staat altijd in 'Aan jou'
     assert 'href="/roloverleg"' in page
+    # lopende projecten in het gele blok
+    assert "Projecten lopen nu" in page
 
 
-def test_signaal_toont_aandachtspunten(tmp_path):
+def test_signaal_toont_eerste_spanning(tmp_path):
     snap = _snap(tmp_path)
-    # injecteer iets dat jouw besluit vraagt
-    snap["backlog"] = [{"approvable": True, "title": "x"}]
-    snap["competitor_candidates"] = [{"brand": "Veja"}]
+    snap["backlog"] = [{"approvable": True, "title": "TikTok challenge", "iid": "op1"}]
     snap["agenda_open"] = [{"id": "a"}]
     page = cockpit.render_html(snap, "t")
-    assert "Kansen om te wegen" in page and "▶ verwerk" in page
-    assert "Nieuwe concurrenten" in page
+    assert "Kansen om te wegen" in page and "verwerk in focus" in page
+    assert "eerste spanning" in page and "TikTok challenge" in page   # direct te verwerken
+    assert 'href="/triage?iid=op1"' in page
     assert "Roloverleg" in page
 
 

@@ -1910,14 +1910,24 @@ def _sparkline(values, width: int = 90, height: int = 22) -> str:
             f'stroke-width="1.5"/></svg>')
 
 
-def _render_house_rules(rules: list) -> str:
-    """Huis-regels (constraints uit triage): de vaste feiten/eisen die het dorp respecteert."""
+def _render_house_rules(rules: list, core_values: list | None = None) -> str:
+    """Huis-regels (constraints uit triage): de vaste feiten/eisen die het dorp respecteert.
+    De kernwaarden van Nooch staan hier bovenaan (verplaatst uit de hero) — ze zijn immers de
+    bovenste, onwrikbare huisregels."""
+    core_values = core_values or []
+    cv = ""
+    if core_values:
+        lis = "".join(f'<li><b>{_e(v.get("title",""))}</b> '
+                      f'<span class="muted">{_e(v.get("desc",""))}</span></li>' for v in core_values)
+        cv = f'<p style="margin:.2rem 0 .4rem"><b>Kernwaarden</b></p><ul>{lis}</ul>'
     if not rules:
-        return ('<p class="muted">Nog geen huis-regels. Wijs een kans af met "onthoud als '
+        body = (cv + '<p class="muted">Nog geen huis-regels. Wijs een kans af met "onthoud als '
                 'huis-regel" en het dorp leert de constraint.</p>')
+        return f'<details><summary>📏 Huisregels &amp; kernwaarden</summary>{body}</details>'
     items = "".join(f'<li>{_e(r.get("text", ""))} <span class="muted">'
                     f'({_e(r.get("source", ""))})</span></li>' for r in rules)
-    return f'<details open><summary>📏 Huis-regels ({len(rules)})</summary><ul>{items}</ul></details>'
+    return (f'<details><summary>📏 Huisregels &amp; kernwaarden ({len(rules)})</summary>'
+            f'{cv}<p style="margin:.2rem 0 .4rem"><b>Regels</b></p><ul>{items}</ul></details>')
 
 
 def _render_backlog(backlog: list, north_star: dict, token: str | None = None,
@@ -2174,12 +2184,32 @@ def _watcher_panel(shop: dict, visitors_7d, *, show_conv: bool) -> str:
     return f'<div class="kpis">{tiles}</div>{warn}{conv_note}{cols}'
 
 
-def _render_watcher_dashboard(shop: dict, visitors_7d=None) -> str:
-    """Website Watcher-dashboard: verkoopindicatoren uit Shopify + conversie (7d ÷ Plausible).
+def _doelstrip(shop: dict, visitors_7d, goal: dict | None) -> str:
+    """Doel + bezoekers + conversie bovenaan de Watcher (verplaatst uit de hero, review-1 punt 4/10)."""
+    goal = goal or {}
+    target = goal.get("target") or 1000
+    pairs = (shop or {}).get("pairs_sold", 0) or 0
+    pct = min(100, round(100 * pairs / target)) if target else 0
+    orders = (shop or {}).get("orders", 0) or 0
+    conv = (f'{round(100*orders/visitors_7d, 1)}%' if visitors_7d else "—")
+    return (
+        '<div class="tension" style="margin:.2rem 0 .8rem">'
+        f'<div class="sigrow"><span>🎯 Target (batch 4)</span>'
+        f'<span class="n">{_fmt_int(pairs)} / {_fmt_int(target)} paar</span></div>'
+        f'<div class="progress"><div class="progress-bar" style="width:{pct}%"></div></div>'
+        f'<div class="sigrow"><span>Bezoekers (7d)</span>'
+        f'<span class="n">{_fmt_int(visitors_7d) if visitors_7d else "—"}</span></div>'
+        f'<div class="sigrow"><span>Conversie (orders ÷ bezoekers, 7d)</span>'
+        f'<span class="n">{conv}</span></div></div>')
+
+
+def _render_watcher_dashboard(shop: dict, visitors_7d=None, goal: dict | None = None) -> str:
+    """Website Watcher-dashboard: doel + bezoekers + conversie, en verkoopindicatoren uit Shopify.
     Met een 7d/maand/hele-historie-toggle als de refresh meerdere vensters heeft opgehaald."""
+    strip = _doelstrip(shop, visitors_7d, goal)
     if not shop or not shop.get("ok"):
-        return ('<h2>📊 Website Watcher — verkoop</h2>'
-                '<p class="muted">Nog geen Shopify-data. Draai <code>village shopify</code> '
+        return ('<h2>📊 Website Watcher</h2>' + strip +
+                '<p class="muted">Nog geen Shopify-verkoopdata. Draai <code>village shopify</code> '
                 '(vereist SHOPIFY_STORE + Client ID/secret in .env) of <code>./refresh.sh</code>.</p>')
     scope = ('<p class="muted" style="font-size:.78rem;margin:.1rem 0 .4rem">Bron: alleen de '
              'gekoppelde Shopify-winkel (footwear-nooch). Andere verkoopkanalen tellen niet mee.</p>')
@@ -2190,7 +2220,7 @@ def _render_watcher_dashboard(shop: dict, visitors_7d=None) -> str:
                  if not wd and shop.get("first_order_date") else "")
         periode = "hele historie" if not wd else f"laatste {wd} dagen"
         panel = _watcher_panel(shop, visitors_7d, show_conv=bool(visitors_7d))
-        return (f'<h2>📊 Website Watcher — verkoop ({periode}){sinds}</h2>{scope}'
+        return (f'<h2>📊 Website Watcher — verkoop ({periode}){sinds}</h2>{strip}{scope}'
                 f'{_WATCHER_STYLE}{panel}')
     # Toggle: 7 dagen / maand (30) / hele historie (0). Default = hele historie.
     order = [("7", "7 dagen"), ("30", "maand"), ("0", "hele historie")]
@@ -2207,7 +2237,7 @@ def _render_watcher_dashboard(shop: dict, visitors_7d=None) -> str:
           "p.classList.toggle('on',p.id=='wpanel-'+w)});"
           "document.querySelectorAll('.wtoggle button').forEach(function(b){"
           "b.classList.toggle('on',b.dataset.w==w)});}</script>")
-    return (f'<h2>📊 Website Watcher — verkoop</h2>{scope}{_WATCHER_STYLE}'
+    return (f'<h2>📊 Website Watcher</h2>{strip}{scope}{_WATCHER_STYLE}'
             f'<div class="wtoggle">{btns}</div>{panels}{js}')
 
 
@@ -2232,83 +2262,57 @@ _SIGNAL_CSS = (
 
 
 def _render_signal(snap: dict, writable: bool) -> str:
-    """Cockpit 2.0 — het signaaldek: 'it takes a village to raise a CEO'. Drie kaarten:
-    waar brengt het dorp de CEO naartoe (missie), wat vraagt jouw besluit (aan jou), en wat doet
-    het dorp nu autonoom voor je (het dorp werkt)."""
-    ns = snap.get("north_star", {}) or {}
-    shop = snap.get("shopify", {}) or {}
-    pairs = shop.get("pairs_sold", 0)
-    roster = snap.get("roster", [])
+    """Het signaaldek (na review-1): drie lean kaarten + direct de eerste spanning om te verwerken.
+    Missie = alleen de purpose; target/bezoekers/conversie staan in de Website Watcher; kernwaarden
+    in de huisregels. Geen datadump — een duidelijk signaal."""
     inbox = snap.get("inbox", [])
-    lib = snap.get("library", {}) or {}
-    if isinstance(lib, dict):
-        lib_vals = list(lib.values())
-    else:
-        lib_vals = lib
-    # 1) Missie — purpose centraal, target (batch 4) + BHAG met voortgang, kernwaarden als chips.
+    # 1) Missie — alleen de purpose (it takes a village to raise a Noochie staat al in de titel).
     mission = snap.get("mission", {}) or {}
     purpose = _e(mission.get("purpose") or "Nooch transforms the shoe industry, step by step.")
-    goal = mission.get("goal", {}) or {}
-    goal_target = goal.get("target") or 1000
-    pct = min(100, round(100 * (pairs or 0) / goal_target)) if goal_target else 0
-    values = mission.get("core_values", []) or []
-    chips = "".join(
-        f'<span class="vchip" title="{_e(v.get("desc",""))}">{_e(v.get("title",""))}</span>'
-        for v in values)
-    missie = (
-        '<div class="sigcard"><h3>🎯 De missie</h3>'
-        f'<div style="font-size:.95rem;line-height:1.4">{purpose}</div>'
-        + (f'<div class="vchips">{chips}</div>' if chips else "")
-        + f'<div class="sigrow" style="margin-top:.5rem"><span>🎯 Target (batch 4)</span>'
-        f'<span class="n">{_fmt_int(pairs)} / {_fmt_int(goal_target)} paar</span></div>'
-        f'<div class="progress"><div class="progress-bar" style="width:{pct}%"></div></div>'
-        f'<div class="sigrow"><span>🌟 BHAG</span><span class="n">{_fmt_int(ns.get("target", 1000000))} '
-        f'paar/jaar</span></div>'
-        + (f'<div class="sigrow"><span>Bezoekers (7d)</span>'
-           f'<span class="n">{_fmt_int(snap.get("visitors_7d"))}</span></div>'
-           if snap.get("visitors_7d") else "")
-        + '</div>')
-    # 2) Aan jou — beslissingen die alleen jij kunt nemen.
+    missie = ('<div class="sigcard"><h3>🎯 De missie</h3>'
+              f'<div style="font-size:.95rem;line-height:1.4">{purpose}</div></div>')
+    # 2) Aan jou — beslissingen die alleen jij kunt nemen + (info) hoeveel projecten lopen.
     n_kansen = sum(1 for b in snap.get("backlog", []) if b.get("approvable"))
-    n_inbox = sum(1 for i in inbox if i.get("status") == "pending" and i.get("type") != "opportunity")
-    n_woorden = sum(1 for x in lib_vals if x.get("status") == "escalated")
-    n_conc = len(snap.get("competitor_candidates", []))
-    n_link = len(snap.get("link_candidates", []))
-    n_news = len(snap.get("news_proposals", []))
     n_agenda = len(snap.get("agenda_open", []))
+    n_running = sum(1 for p in snap.get("projects", []) if p.get("status") == "running")
     rows = []
     if n_kansen:
         rows.append(f'<div class="sigrow"><span>🎯 Kansen om te wegen</span>'
                     f'<span><span class="n">{n_kansen}</span> '
-                    f'<a class="btn ok" href="/triage">▶ verwerk</a></span></div>')
+                    f'<a class="btn ok" href="/triage">▶ verwerk in focus</a></span></div>')
     rows.append(f'<div class="sigrow"><span>🏛️ Roloverleg</span>'
                 f'<span>{f"<span class=n>{n_agenda}</span> " if n_agenda else ""}'
                 f'<a class="btn" href="/roloverleg">open</a></span></div>')
-    for cond, label in ((n_news, "🧪 Scout-voorstellen uit nieuws"),
-                        (n_woorden, "📝 Woorden te beoordelen"),
-                        (n_conc, "👟 Nieuwe concurrenten"),
-                        (n_link, "🔗 Linkbuilding-doelwitten"),
-                        (n_inbox, "📥 Overige inbox-items")):
-        if cond:
-            rows.append(f'<div class="sigrow"><span>{label}</span><span class="n">{cond}</span></div>')
-    if len(rows) == 1 and not n_agenda:     # alleen de (lege) roloverleg-regel
+    if not n_kansen and not n_agenda:
         rows.append('<div class="sigrow"><span class="muted">Niks dat op je wacht 🎉</span><span></span></div>')
+    rows.append(f'<div class="sigrow"><span>⚡ Projecten lopen nu</span>'
+                f'<span><span class="n">{n_running}</span> '
+                f'<a class="btn" href="/prikbord">bord</a></span></div>')
     aan_jou = ('<div class="sigcard you"><h3>📥 Aan jou — alleen jij beslist</h3>'
                + "".join(rows) + '</div>')
-    # 3) Het dorp werkt — autonome activiteit (geruststelling: het dorp draait voor je).
-    n_rollen = sum(1 for r in roster if not r.get("archived") and r.get("type") == "role")
-    n_running = sum(1 for p in snap.get("projects", []) if p.get("status") == "running")
+    # 3) Het dorp werkt voor je — Noochie's reflectie + link naar het dagbulletin.
     noochie = snap.get("noochie_daily", {}) or {}
     nood_q = noochie.get("question") or noochie.get("suggestion") or ""
     dorp = (
         '<div class="sigcard"><h3>🌱 Het dorp werkt voor je</h3>'
-        f'<div class="sigrow"><span>Inwoners aan het werk</span><span class="n">{n_rollen}</span></div>'
-        f'<div class="sigrow"><span>Projecten lopen nu</span><span class="n">{n_running}</span></div>'
-        + (f'<div class="sigrow"><span>📓 Noochie vandaag</span>'
-           f'<a class="btn" href="/fieldnotes">lees</a></div>' if noochie else "")
-        + (f'<div class="sigsub" style="margin-top:.4rem">💭 {_e(nood_q[:120])}</div>' if nood_q else "")
+        + (f'<div class="sigsub" style="margin-top:0">💭 {_e(nood_q[:180])}</div>'
+           if nood_q else '<div class="sigsub">Noochie heeft vandaag nog niet gereflecteerd.</div>')
+        + '<div class="sigcta"><a class="btn" href="/fieldnotes">📓 lees het dagbulletin</a></div>'
         + '</div>')
-    return f'{_SIGNAL_CSS}<div class="sig">{missie}{aan_jou}{dorp}</div>'
+    # Eerste spanning — direct verwerken (de hero stuurt je naar werk-in-focus).
+    top = next((b for b in snap.get("backlog", []) if b.get("approvable") and b.get("iid")), None)
+    if top:
+        eerste = (
+            '<div class="sigcard you" style="flex-basis:100%">'
+            '<h3>🎯 Je eerste spanning om te verwerken</h3>'
+            f'<div style="font-size:.95rem;margin-bottom:.5rem"><b>{_e((top.get("title") or "")[:90])}</b>'
+            f'{(" — " + _e((top.get("by") or ""))) if top.get("by") else ""}</div>'
+            f'<a class="btn ok sigcta" href="/triage?iid={_e(top.get("iid"))}">▶ verwerk in focus</a> '
+            f'<a class="btn" href="/triage">alle spanningen ({n_kansen})</a></div>')
+    else:
+        eerste = ('<div class="sigcard" style="flex-basis:100%">'
+                  '<span class="muted">Geen spanningen om te verwerken 🎉</span></div>')
+    return f'{_SIGNAL_CSS}<div class="sig">{missie}{aan_jou}{dorp}</div><div class="sig">{eerste}</div>'
 
 
 def render_html(snap: dict, csrf_token: str | None = None, msg=None,
@@ -2787,37 +2791,27 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
                   f'<details open><summary>🔗 Doelwitten — wacht op jouw oordeel ({len(ltargets)})</summary>'
                   f'{ltbl}</details>{pursued_line}') if (ltargets or lpursued) else ''
 
-    counts = (
-        f'{sum(1 for r in roster if not r["archived"])} rollen · '
-        f'{sum(1 for i in inbox if i.get("status") == "pending")} open inbox-items · '
-        f'{sum(1 for p in projects if p.get("status") not in _parked)} open projecten · '
-        f'{sum(1 for x in lib if x["status"] == "approved")} actieve woorden · {len(ins)} inzichten'
-    )
-
     if writable:
         badge = '<span class="badge rw">verwerk-modus</span>'
     else:
         badge = '<span class="badge ro">read-only</span>'
     hist = ('<a href="/">← verberg geschiedenis</a>' if show_all
-            else '<a href="/?history=1">toon geschiedenis (gesloten + gearchiveerd)</a>')
+            else '<a href="/?history=1">toon geschiedenis</a>')
 
     inner = (
         f'<h1>IT TAKES A VILLAGE TO RAISE A NOOCHIE {badge}</h1>'
-        f'<div class="bar">{_e(counts)} · gegenereerd {_e(_ts(snap.get("generated_at")))} · {hist}</div>'
+        f'<div class="bar">gegenereerd {_e(_ts(snap.get("generated_at")))} · {hist}</div>'
         f'{_banner(msg)}'
         f'{_render_signal(snap, writable)}'
-        f'{_render_digest(snap.get("digest", {}), snap.get("noochie_daily", {}))}'
-        f'{_render_watcher_dashboard(snap.get("shopify", {}), snap.get("visitors_7d"))}'
-        # Kansen verwerk je in de focusmodus (▶ Verwerk in focus); geen dubbele backlog-tabel meer.
-        f'<details><summary>📥 Inbox — overige items ({len(show_inbox)})</summary>{inbox_tbl}</details>'
+        f'{_render_watcher_dashboard(snap.get("shopify", {}), snap.get("visitors_7d"), snap.get("mission", {}).get("goal"))}'
         f'{drafts_block}'
         f'<h2>Proces (projecten) · <a href="/prikbord" style="font-size:.8rem;'
         f'text-transform:none;letter-spacing:0">📋 open het prikbord-bord →</a></h2>{proj_tbl}'
         f'<h2>Kennis</h2>'
-        f'{_render_house_rules(snap.get("house_rules", []))}'
+        f'{_render_house_rules(snap.get("house_rules", []), snap.get("mission", {}).get("core_values"))}'
         f'{esc_block}'
         f'{kennis_block}'
-        f'<details open><summary>Woordenschat ({len(approved_lib)} actieve woorden)</summary>{lib_tbl}</details>'
+        f'<details><summary>Woordenschat ({len(approved_lib)} actieve woorden)</summary>{lib_tbl}</details>'
         f'<details><summary>Inzichten — kaartjes op sterkte ({len(ins)} kaartjes)</summary>{ins_tbl}</details>'
         f'<details><summary>Roster ({sum(1 for r in roster if not r["archived"])} actieve rollen)</summary>{roster_tbl}</details>'
         f'{comp_block}'
