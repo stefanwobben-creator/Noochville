@@ -1735,6 +1735,19 @@ def _scratch_save(dd: str, cid: str, text: str) -> None:
     os.replace(tmp, path)
 
 
+def _next_open_agenda(data_dir: str | None, iid: str) -> str:
+    """Brok 5 (p.4 punt 11): het volgende open agendapunt na consent — of de agenda-overview als er
+    geen open punt meer is. Zo loop je het roloverleg vloeiend door zonder terug te springen."""
+    try:
+        from nooch_village.roloverleg import Agenda
+        dd = data_dir or _default_data_dir()
+        ag = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
+        nexts = [i for i in ag.open() if i["id"] != iid]
+        return f"/roloverleg?iid={nexts[0]['id']}" if nexts else "/roloverleg"
+    except Exception:
+        return "/roloverleg"
+
+
 def _build_cdict(card, all_notes) -> dict:
     """Bouwt het render-dict voor een kennis-kaartje (gedeeld door /card en /kennis)."""
     from nooch_village.knowledge import strength as _kstrength
@@ -3859,6 +3872,10 @@ def make_handler(data_dir: str | None):
                      "scratch": (form.get("scratch") or [""])[0],
                      "remember": (form.get("remember") or [""])[0]}
             result = _dispatch_action(data_dir, action, iid, reason, extra=extra)
+            # Brok 5 (p.4 punt 11): na consent niet terug naar de agenda, maar dóór naar het
+            # volgende open agendapunt — zo verwerk je het overleg in één vloeiende lijn.
+            if result.get("ok") and result.get("rov") == "consented":
+                form["next"] = [_next_open_agenda(data_dir, iid)]
             # 303 → verse GET. Rails keren terug naar de spanning (next), sluiten gaat home.
             # De uitkomst gaat als korte flash-banner mee in de query; een anchor brengt je
             # terug naar exact het item waar je was (geen sprong naar boven na een actie).
