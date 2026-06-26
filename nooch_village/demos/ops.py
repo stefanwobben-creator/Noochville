@@ -353,10 +353,13 @@ def discovery_demo():
     v.stop()
 
     json.dump(seeds_state, open(state_path, "w"))
-    print(f"\nKlaargezet (future): {len(res['created'])} | geactiveerd: {len(res['activated'])} "
-          f"| geoogst: {len(res['harvested'])} | seeds-verzoek aan Harry: {res['requested_seeds']}")
-    for h in res["harvested"]:
+    print(f"\nKlaargezet (staande experimenten): {len(res['ensured'])} | uitgevoerd: {len(res['ran'])} "
+          f"| seeds-verzoek aan Harry: {res['requested_seeds']}")
+    for h in res["ran"]:
         if h.get("ok"):
-            print(f"  ✓ {h['pid'][:8]}: {len(h['fresh'])} nieuwe term(en) → review "
+            p = projects.get(h["pid"]) or {}
+            print(f"  ✓ {p.get('owner','?')}: {len(h['fresh'])} nieuwe term(en) → review "
+                  f"({h.get('executions')}× gedraaid{' → STOLT tot accountability' if h.get('executions',0) >= 3 else ''}) "
                   f"{', '.join(h['fresh'][:6])}")
-    print("\nBekijk het bord in de cockpit: /prikbord")
+    print("\nNa 3× draaien draagt elk experiment zich voor als accountability (roloverleg-agenda).")
+    print("Bekijk het bord in de cockpit: /prikbord")
