@@ -266,6 +266,34 @@ def test_rov_edit_nieuwe_rol_naam_bewerkbaar(tmp_path):
     assert it["change"]["add_accountabilities"] == ["Schrijven van copy"]
 
 
+def test_meerdere_rollen_per_voorstel(tmp_path):
+    from nooch_village import cockpit
+    from nooch_village.roloverleg import Agenda
+    data = tmp_path / "data"; data.mkdir()
+    (data / "governance_records.json").write_text("{}", encoding="utf-8")
+    ag = Agenda(str(data / "roloverleg_agenda.json"))
+    iid = ag.add("scout", "amend_role", {"add_accountabilities": ["X"]}, "spanning",
+                 by="scout", title="Scout")
+    gid = ag.group_of(iid)
+    # bestaande rol toevoegen aan het voorstel
+    r1 = cockpit._dispatch_action(str(data), "rov_group_add", "", "", extra={
+        "group": gid, "g_owner": "librarian"})
+    # nieuwe rol toevoegen aan het voorstel
+    r2 = cockpit._dispatch_action(str(data), "rov_group_add", "", "", extra={
+        "group": gid, "g_owner": "__new__", "g_naam": "Copywriter"})
+    assert r1["ok"] and r2["ok"]
+    ag2 = Agenda(str(data / "roloverleg_agenda.json"))
+    members = ag2.members_of_group(gid)
+    assert len(members) == 3
+    assert {m["role_id"] for m in members} == {"scout", "librarian", "copywriter"}
+    assert all((m.get("group") or m["id"]) == gid for m in members)
+    # hele voorstel in één keer aannemen
+    res = cockpit._dispatch_action(str(data), "rov_group_consent", "", "", extra={"group": gid})
+    assert res["ok"] and res["n"] == 3
+    ag3 = Agenda(str(data / "roloverleg_agenda.json"))
+    assert all(m["status"] == "consented" for m in ag3.members_of_group(gid))
+
+
 def test_evaluate_objection_proces():
     from nooch_village.roloverleg import evaluate_objection
     # alle 'left' → geldig bezwaar

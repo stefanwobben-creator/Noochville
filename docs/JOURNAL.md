@@ -1036,3 +1036,10 @@ kop+context → formulier → Secretaris-check → diff → AI-suggestie → con
 bezwaar-toets. De Secretaris-check draait bij elke render (dus na elke 'Voorstel opslaan' zie je
 direct of de gewijzigde accountabilities de -en-vorm/dubbel-check/rijpheidspoort passeren).
 Suite groen (556 + 498).
+
+## Fase 2: meerdere rollen per voorstel (group)
+Agenda-items dragen nu een `group` (default = eigen id); members_of_group/group_of toegevoegd.
+Behandel-scherm heeft een blok '📦 Dit voorstel — N rol(len)' met alle rol-onderdelen (klikbaar),
+een 'rol toevoegen aan dit voorstel' (bestaande rol of nieuwe, start leeg → bewerk via het formulier)
+en 'Neem hele voorstel aan' (consent op alle open onderdelen tegelijk). Het overzicht groepeert per
+voorstel (één regel, '+N rol'-badge). Acties: rov_group_add, rov_group_consent. Suite groen (557 + 498).

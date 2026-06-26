@@ -34,11 +34,13 @@ class Agenda:
         atomic_write_json(self.path, self._items)
 
     def add(self, role_id: str, kind: str, change: dict, reason: str,
-            by: str = "founder", title: str = "", example: str = "", benefit: str = "") -> str:
+            by: str = "founder", title: str = "", example: str = "", benefit: str = "",
+            group: str | None = None) -> str:
         """Zet een voorstel op de agenda. Dedup op (role_id, kind, eerste accountability/purpose).
         `reason` = de spanning die dit oplost; `example` = een concreet voorbeeld; `benefit` = hoe
         aannemen de EIGEN rol van de indiener helpt (verplicht bij een voorstel over een ándere rol —
-        Holacracy 'from your role'). (Een voorstel is tension-driven.)"""
+        Holacracy 'from your role'). `group` = voorstel-id zodat één voorstel meerdere rollen kan
+        raken (GlassFrog); leeg = eigen id (één rol). (Een voorstel is tension-driven.)"""
         title = (title or role_id or "voorstel").strip()
         sig = (role_id, kind, (change.get("purpose") or "").lower(),
                tuple(a.lower() for a in change.get("add_accountabilities", [])))
@@ -51,7 +53,7 @@ class Agenda:
         self._items.append({
             "id": iid, "role_id": role_id, "kind": kind, "change": change,
             "reason": reason or "", "example": example or "", "benefit": benefit or "",
-            "by": by or "founder", "title": title,
+            "by": by or "founder", "title": title, "group": group or iid,
             "status": "open", "reactions": [], "created_at": time.time()})
         self._save()
         return iid
@@ -62,6 +64,16 @@ class Agenda:
     def open(self) -> list[dict]:
         """Nog te behandelen (open of vorige keer schadelijk bevonden)."""
         return [i for i in self._items if i["status"] in ("open", "objected")]
+
+    def group_of(self, iid: str) -> str:
+        it = self.get(iid)
+        return (it.get("group") or it["id"]) if it else iid
+
+    def members_of_group(self, gid: str, *, only_open: bool = False) -> list[dict]:
+        """Alle rol-onderdelen van één voorstel (zelfde group). Oudste eerst."""
+        ms = [i for i in self._items if (i.get("group") or i["id"]) == gid
+              and (not only_open or i["status"] in ("open", "objected"))]
+        return sorted(ms, key=lambda i: i.get("created_at", 0))
 
     def get(self, iid: str) -> dict | None:
         return next((i for i in self._items if i["id"] == iid), None)

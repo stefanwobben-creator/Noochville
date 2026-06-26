@@ -1008,20 +1008,31 @@ def render_roloverleg_overview(items: list, agenda_all: list, roles: list,
                 'triage komen hier terecht.</p></div>' + add_form)
         return _page("Roloverleg",
                      f'{head}{_banner(msg)}{body}</div><style>{_TRIAGE_CSS}</style>')
+    # Groepeer per voorstel (group): één regel per voorstel, ook als het meerdere rollen raakt.
+    groups: dict[str, list] = {}
+    for it in items:
+        groups.setdefault(it.get("group") or it["id"], []).append(it)
     rows = []
-    for i, it in enumerate(items, 1):
-        kind = "nieuwe rol" if it["kind"] == "add_role" else f"rol '{it['role_id']}' uitbreiden"
+    for i, (gid, gm) in enumerate(groups.items(), 1):
+        head_it = gm[0]
+        if len(gm) > 1:
+            kind = f"{len(gm)} rollen: " + ", ".join(_e(m.get("role_id", "")) for m in gm)
+            titel = _e(head_it.get("title", "")) + f' <span class="muted">(+{len(gm)-1} rol)</span>'
+        else:
+            kind = ("nieuwe rol" if head_it["kind"] == "add_role"
+                    else f"rol '{head_it['role_id']}' uitbreiden")
+            titel = _e(head_it["title"])
         badge = (' <span class="tg-wacht">⚠ vorige keer schadelijk</span>'
-                 if it["status"] == "objected" else
+                 if any(m["status"] == "objected" for m in gm) else
                  (' <span class="tg-wacht">✓ aangenomen</span>'
-                  if it["status"] == "consented" else ""))
+                  if all(m["status"] == "consented" for m in gm) else ""))
         rows.append(
-            f'<a class="tg-item" href="/roloverleg?iid={_e(it["id"])}">'
+            f'<a class="tg-item" href="/roloverleg?iid={_e(head_it["id"])}">'
             f'<span class="tg-item-n">{i}</span>'
-            f'<span class="tg-item-body"><b>{_e(it["title"])}</b>{badge}'
-            f'<small>{_e(kind)} · door {_e(it.get("by",""))}</small></span>'
+            f'<span class="tg-item-body"><b>{titel}</b>{badge}'
+            f'<small>{kind} · door {_e(head_it.get("by",""))}</small></span>'
             f'<span class="tg-go">behandel →</span></a>')
-    body = (f'<p class="tg-meta">{len(items)} voorstel(len) op de agenda. Behandel er één, '
+    body = (f'<p class="tg-meta">{len(groups)} voorstel(len) op de agenda. Behandel er één, '
             f'of sluit het overleg.</p><div class="tg-list">{"".join(rows)}</div>'
             f'{end_form}{add_form}')
     return _page("Roloverleg",
@@ -1029,9 +1040,10 @@ def render_roloverleg_overview(items: list, agenda_all: list, roles: list,
 
 
 def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
-                      token: str, msg=None) -> str:
+                      token: str, msg=None, group_members=None, roles=None) -> str:
     """Eén voorstel behandelen: huidige rol + voorgestelde wijziging + reden, de Secretaris-check,
-    je reactie (→ AI past aan), en consent of schadelijk."""
+    je reactie (→ AI past aan), en consent of schadelijk. `group_members` = alle rol-onderdelen van
+    hetzelfde voorstel (GlassFrog: één voorstel kan meerdere rollen raken)."""
     head = ('<div class="tg-wrap"><p><a href="/roloverleg">← agenda</a> · '
             '<a href="/">cockpit</a></p><h1>🏛️ Voorstel behandelen</h1>')
     from nooch_village.roloverleg import tension_validity
@@ -1240,9 +1252,51 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
         '<button class="bigbtn go" type="submit" name="action" value="rov_edit" '
         'style="margin-top:.4rem">💾 Voorstel opslaan<small>werkt de wijziging bij vanuit deze '
         'velden; de Secretaris hertoetst</small></button></form></details>')
+    # GlassFrog: één voorstel kan meerdere rollen raken. Toon de andere rol-onderdelen + een knop
+    # om een rol toe te voegen aan dit voorstel, en om het hele voorstel in één keer aan te nemen.
+    members = group_members or [item]
+    gid = item.get("group") or item["id"]
+    group_block = ""
+    if members:
+        rows = ""
+        for m in members:
+            here = m["id"] == item["id"]
+            kindlbl = "nieuwe rol" if m["kind"] == "add_role" else "wijzigen"
+            label = _e(m.get("title") or m.get("role_id") or "rol")
+            cell = (f'<b>{label}</b>' if here else
+                    f'<a href="/roloverleg?iid={_e(m["id"])}">{label}</a>')
+            rows += (f'<li style="padding:.15rem 0">{cell} '
+                     f'<span class="muted">· {kindlbl} · {_e(m.get("status",""))}'
+                     f'{" · nu open" if here else ""}</span></li>')
+        role_opts = "".join(
+            f'<option value="{_e(r["id"])}">{_e(r["id"])}</option>'
+            for r in (roles or []) if not r.get("archived"))
+        add_to = (
+            f'<form method="post" action="/action" style="margin-top:.3rem">{common}'
+            f'<input type="hidden" name="next" value="/roloverleg?iid={_e(item["id"])}">'
+            f'<input type="hidden" name="group" value="{_e(gid)}">'
+            f'<select name="g_owner" class="tg-in"><option value="__new__">➕ nieuwe rol</option>'
+            f'{role_opts}</select>'
+            '<input name="g_naam" class="tg-in" placeholder="naam (alleen bij nieuwe rol)">'
+            '<button class="btn" type="submit" name="action" value="rov_group_add">'
+            '➕ rol toevoegen aan dit voorstel</button></form>')
+        accept_all = ""
+        if len(members) > 1:
+            accept_all = (
+                f'<form method="post" action="/action" style="margin-top:.3rem">{common}'
+                f'<input type="hidden" name="next" value="/roloverleg">'
+                f'<input type="hidden" name="group" value="{_e(gid)}">'
+                '<button class="bigbtn go" type="submit" name="action" value="rov_group_consent">'
+                f'✓ Neem hele voorstel aan ({len(members)} rollen)<small>consent op alle '
+                'rol-onderdelen tegelijk</small></button></form>')
+        group_block = (
+            f'<div class="tg-card" style="margin-top:.5rem"><div style="{_H}">'
+            f'📦 Dit voorstel — {len(members)} rol(len)</div>'
+            f'<ul style="list-style:none;padding:0;margin:.2rem 0">{rows}</ul>{add_to}{accept_all}</div>')
     # Volgorde: kop+context → het FORMULIER (hoofdweergave) → Secretaris-check (direct na bewerken)
-    # → ingeklapte diff → AI-suggestie → consent/project/ongeldig → bezwaar-toets.
-    inner = (f'{head}{_banner(msg)}{card}{editor}{sec}{diff_block}{react_form}{decide}{objection_form}'
+    # → ingeklapte diff → AI-suggestie → consent/project/ongeldig → bezwaar-toets → dit voorstel.
+    inner = (f'{head}{_banner(msg)}{card}{editor}{sec}{diff_block}{react_form}{decide}'
+             f'{objection_form}{group_block}'
              '<div class="tg-skip"><a class="muted" href="/roloverleg">← terug naar de agenda</a>'
              '</div></div><style>' + _TRIAGE_CSS + '</style>')
     return _page("Voorstel behandelen", inner)
@@ -2160,6 +2214,7 @@ def _flash(result: dict) -> str:
             "obj_invalid": "⚖️ Geen geldig bezwaar — je kunt alsnog consent geven.",
             "added": "➕ Voorstel op de agenda gezet.",
             "edited": "💾 Voorstel bijgewerkt vanuit de velden.",
+            "group_added": "➕ Rol toegevoegd aan dit voorstel — bewerk 'm via het rol-formulier.",
             "flipped": "↔ Omgezet (purpose ↔ accountability) en opnieuw geformuleerd.",
             "to_project": "▶ Als experiment op het projectbord gezet voor de rol — bij herhaling "
                           "stolt het later tot accountability.",
@@ -2175,6 +2230,8 @@ def _flash(result: dict) -> str:
                "seed": "🌱 Als seed in de bibliotheek gezet.", "doelwit": "🎯 Als doelwit in de "
                "bibliotheek gezet.", "concurrent": "👟 Toegevoegd aan de gevolgde merken."}
         return _nl.get(result["news"], "✓ Verwerkt.")
+    if result.get("rov") == "group_consented":
+        return f"✓ Hele voorstel aangenomen — {result.get('n', 0)} rol-onderdelen op consent."
     if result.get("rov") == "ended":
         return (f"🏛️ Roloverleg afgerond — {result.get('adopted', 0)} doorgevoerd, "
                 f"{result.get('escalated', 0)} bleef staan.")
@@ -2315,7 +2372,7 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                                   owner=extra.get("owner", ""), scope_override=scope,
                                   project_status="draft" if risky else "queued", projects=projects)
     if action in ("rov_react", "rov_consent", "rov_object", "rov_add", "rov_end", "rov_flip_facet",
-                  "rov_to_project", "rov_invalid", "rov_edit"):
+                  "rov_to_project", "rov_invalid", "rov_edit", "rov_group_add", "rov_group_consent"):
         from nooch_village.roloverleg import (Agenda, amend_with_reaction, apply_consented,
                                               flip_facet, build_change_from_fields)
         agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
@@ -2387,6 +2444,34 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                            reason=reason, by="founder", title=accs[0][:60], example=voorbeeld,
                            benefit=benefit)
             return {"ok": True, "rov": "added"}
+        if action == "rov_group_add":
+            # Voeg een rol-onderdeel toe aan een bestaand voorstel (zelfde group). Start leeg; je
+            # bewerkt het daarna via het rol-formulier. Bestaande rol → amend; __new__ → add_role.
+            gid = extra.get("group") or ""
+            if not gid:
+                return {"ok": False, "error": "geen voorstel-id"}
+            owner = (extra.get("g_owner") or "").strip()
+            if owner in ("", "__new__"):
+                naam = (extra.get("g_naam") or "").strip()
+                if not naam:
+                    return {"ok": False, "error": "geef een naam voor de nieuwe rol"}
+                import re as _re3
+                rid = _re3.sub(r"\W+", "_", naam.lower())[:40].strip("_") or "nieuwe_rol"
+                agenda.add(role_id=rid, kind="add_role",
+                           change={"purpose": "", "add_accountabilities": [],
+                                   "new_role_parent": "noochville"},
+                           reason="onderdeel van een voorstel", by="founder", title=naam[:60],
+                           group=gid)
+            else:
+                agenda.add(role_id=owner, kind="amend_role", change={}, reason="onderdeel van een voorstel",
+                           by="founder", title=owner, group=gid)
+            return {"ok": True, "rov": "group_added"}
+        if action == "rov_group_consent":
+            gid = extra.get("group") or ""
+            members = agenda.members_of_group(gid, only_open=True)
+            for m in members:
+                agenda.set_status(m["id"], "consented")
+            return {"ok": True, "rov": "group_consented", "n": len(members)}
         if action == "rov_edit":
             # GlassFrog-stijl: het voorstel bijwerken vanuit de direct bewerkte velden.
             item = agenda.get(iid)
@@ -2674,8 +2759,10 @@ def make_handler(data_dir: str | None):
                              "name": getattr(rec.definition, "name", "") or item["role_id"],
                              "accountabilities": list(rec.definition.accountabilities),
                              "domains": list(rec.definition.domains)} if rec else None)
+                    gmembers = agenda.members_of_group(item.get("group") or item["id"])
                     body = render_roloverleg(
-                        item, snap, secretary_check(item, recs), csrf_token, msg=msg).encode("utf-8")
+                        item, snap, secretary_check(item, recs), csrf_token, msg=msg,
+                        group_members=gmembers, roles=roles).encode("utf-8")
             elif path in ("/", "/index.html"):
                 show_all = (qs.get("history") or ["0"])[0] in ("1", "true", "yes")
                 body = render_html(gather(data_dir), csrf_token=csrf_token, msg=msg,
@@ -2730,6 +2817,9 @@ def make_handler(data_dir: str | None):
                      "ed_purpose": (form.get("ed_purpose") or [""])[0],
                      "ed_accs": (form.get("ed_accs") or [""])[0],
                      "ed_domeinen": (form.get("ed_domeinen") or [""])[0],
+                     "group": (form.get("group") or [""])[0],
+                     "g_owner": (form.get("g_owner") or [""])[0],
+                     "g_naam": (form.get("g_naam") or [""])[0],
                      "q1": (form.get("q1") or [""])[0], "q2": (form.get("q2") or [""])[0],
                      "q3": (form.get("q3") or [""])[0], "q3b": (form.get("q3b") or [""])[0],
                      "q4": (form.get("q4") or [""])[0],
