@@ -283,3 +283,80 @@ def simulate():
     print("  Systeem draait: governance ✔ triage ✔ reflectie ✔ lexicon ✔")
     print("  (sandbox opgeruimd; productie-data ongemoeid)")
     print("="*65 + "\n")
+
+
+def discovery_demo():
+    """Brok 4 — discovery-rollen bedraad op het bord, één bord-puls tegen de ECHTE stores.
+
+    Maakt afgebakende discovery-projecten (één seed → één deliverable) onder de discovery-
+    cluster-root, activeert ze binnen WIP + master-switch, en routeert de uitkomsten naar de
+    Librarian-review via de live bus (keyword_proposed). Fail-closed zonder netwerk/LLM.
+
+    De master-switch staat standaard UIT: zet het discovery-cluster op 'Actief' in de cockpit
+    (/prikbord) of via deze demo (--aan) om de rollen te laten draaien.
+    """
+    import sys, time
+    from nooch_village import discovery_board as db
+    from nooch_village.roles import _publish_keyword_proposed
+
+    v = Village(heartbeat_seconds=86400)
+    projects = v.context.projects
+    pinboard = v.context.pinboard
+    library = v.context.library
+
+    # Master-switch: zet de discovery-cluster aan als '--aan' is meegegeven.
+    root = db.ensure_root(projects)
+    if "aan" in sys.argv[2:] or "--aan" in sys.argv[2:]:
+        projects.start(root)
+        print("🟢 Master-switch AAN — discovery-cluster op 'Actief'.")
+    on = projects.get(root)["status"] == "running"
+    print(f"Discovery-cluster: {projects.get(root)['status']}"
+          f"{' (rollen mogen draaien)' if on else ' (gepauzeerd — draai met: discovery aan)'}")
+
+    # Live adapters (mens-gated capaciteit: bestaande skills + bus, geen nieuwe code).
+    v.start()
+
+    def do_discovery(owner: str, scope: str) -> list[str]:
+        """Het echte term-vinden via de bestaande skills; fail-closed → []. """
+        try:
+            if owner == "trends":
+                seed = scope.split("'", 2)[1] if "'" in scope else ""
+                r = v.context.registry.get("google_trends").run(
+                    {"keywords": [seed]} if seed else {}, v.context)
+                terms = []
+                for row in (r.get("rows") or []):
+                    for rel in (row.get("top_related") or []):
+                        terms.append(rel["query"] if isinstance(rel, dict) else rel)
+                return terms
+        except Exception as e:
+            print(f"  (do_discovery {owner} fail-closed: {e})")
+        return []
+
+    def route_review(term: str) -> bool:
+        return _publish_keyword_proposed(v.bus, "discovery_board", term, {}, library)
+
+    state_path = f"{v.context.data_dir}/discovery_state.json"
+    import json, os
+    seeds_state = {}
+    if os.path.exists(state_path):
+        try:
+            seeds_state = json.load(open(state_path))
+        except Exception:
+            seeds_state = {}
+
+    avail = [r for r in ("harry_hemp", "trends", "concurrent_scout") if r in v.reconciler.live]
+    print(f"Beschikbare discovery-rollen: {avail or '— (geen bemenst)'}")
+    res = db.run_discovery_pulse(projects, pinboard, library, avail,
+                                 do_discovery=do_discovery, route_review=route_review,
+                                 seeds_state=seeds_state)
+    time.sleep(0.4)        # geef de Librarian even om te reageren op keyword_proposed
+    v.stop()
+
+    json.dump(seeds_state, open(state_path, "w"))
+    print(f"\nKlaargezet (future): {len(res['created'])} | geactiveerd: {len(res['activated'])} "
+          f"| geoogst: {len(res['harvested'])} | seeds-verzoek aan Harry: {res['requested_seeds']}")
+    for h in res["harvested"]:
+        if h.get("ok"):
+            print(f"  ✓ {h['pid'][:8]}: {len(h['fresh'])} nieuwe term(en) → review "
+                  f"{', '.join(h['fresh'][:6])}")
+    print("\nBekijk het bord in de cockpit: /prikbord")

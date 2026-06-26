@@ -88,11 +88,16 @@ projecten (één seed → één deliverable) waarvan de uitkomst automatisch de 
 
 ## 9. Bouw in brokken (klein & toetsbaar)
 
-1. **Datamodel** — `future` als default, het 3-velden-DoD-contract, project-`links`, WIP-instelling,
+1. ✅ **Datamodel** — `future` als default, het 3-velden-DoD-contract, project-`links`, WIP-instelling,
    en de prikbord-store (verzoek/uitkomst, status, tag, links). + één handmatig gevulde keten als bewijs.
-2. **Autonome pull-loop** in de puls — claim + WIP-bij-elke-activering + ancestor-guard + spaced
-   repetition + fallback naar mens.
-3. **Cockpit** — prikbord-weergave + projectgraaf + stuwmeer-per-rol + WIP-knoppen.
-4. **Discovery-rollen bedraden** — Harry/Trends/Scout → uitkomsten → Librarian-review.
+   (`pinboard.py`, `projects.py` create/link/neighbors/wait_for, `tests/test_pinboard_kanban.py`)
+2. ✅ **Autonome pull-loop** (`board_loop.activate_pulse`) — WIP-bij-elke-activering + master-switch +
+   resume + fallback naar mens + prioritering op business-value. (`tests/test_board_loop.py`)
+3. ✅ **Cockpit** — `/prikbord`: WIP-meter, vier Kanban-kolommen, cluster master-switch, stuwmeer-
+   per-rol, briefjes. (`cockpit.render_prikbord`, `tests/test_prikbord_view.py`)
+4. ✅ **Discovery-rollen bedraden** (`discovery_board.py`) — afgebakende projecten (één seed → één
+   deliverable) onder de discovery-cluster-root, board-gedreven, uitkomst → briefje + Librarian-
+   review, spaced repetition, seeds-op → verzoek aan Harry. CLI: `python -m nooch_village.village
+   discovery [aan]`. (`tests/test_discovery_board.py`)
 
 Reproduceerbaarheid: `python tools/prikbord_sim.py` (de dynamiek-stresstest).

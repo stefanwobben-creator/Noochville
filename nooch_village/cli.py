@@ -149,6 +149,10 @@ def main() -> None:
         from nooch_village.demos.ops import simulate
         simulate()
 
+    elif mode == "discovery":
+        from nooch_village.demos.ops import discovery_demo
+        discovery_demo()
+
     elif mode == "harry_hemp":
         from nooch_village.demos.knowledge import harry_hemp_grounding_demo
         harry_hemp_grounding_demo()

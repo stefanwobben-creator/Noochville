@@ -102,6 +102,9 @@ class Village:
             os.path.join(self.context.data_dir, "role_metrics.json"))
         self.context.projects = ProjectLedger(
             os.path.join(self.context.data_dir, "projects.json"))
+        from nooch_village.pinboard import Pinboard as _Pinboard
+        self.context.pinboard = _Pinboard(
+            os.path.join(self.context.data_dir, "pinboard.json"))
         self.human_inbox = HumanInbox(os.path.join(self.context.data_dir, "human_inbox.json"))
         self.registry = SkillRegistry()
         for skill in (
