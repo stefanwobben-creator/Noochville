@@ -1064,3 +1064,12 @@ verwijderen' / 'Toch niet'. _proposal_from_item bouwt nu een echte REMOVE_ROLE, 
 draait apply_consented het door de Gate (G3 bewaakt werk/kinderen → escalatie). Een NIEUWE-rol-
 voorstel 'verwijderen' = gewoon van de agenda. Acties rov_remove/rov_keep_role. Overview-label +
 flash toegevoegd. Suite groen (549 + 510).
+
+## UX-herinrichting behandel-scherm (Duolingo + GlassFrog)
+Minder cognitieve last: formulier-eerst, één beslis-zone onderaan, secundair ingeklapt.
+- Volgorde nu: kop+context → ✏️ rol-formulier (held, open) → Secretaris-check → groep → '🔧 Meer
+  opties' (AI-herziening + diff, ingeklapt) → 'Beslis'-kaart (Consent/project/ongeldig + bezwaar-toets).
+- AI-reactie staat niet meer los/open maar als rustige uitklapper ('Laat de AI een herziening voorstellen').
+- Bij één rol geen apart groep-blok meer; alleen een uitklapper 'Nog een rol bij dit voorstel betrekken'.
+  Bij meerdere rollen wél het volle '📦 Dit voorstel'-blok met 'Neem hele voorstel aan'.
+Suite groen (549 + 510).

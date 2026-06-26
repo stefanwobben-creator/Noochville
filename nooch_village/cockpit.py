@@ -1163,13 +1163,13 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
     common = (f'<input type="hidden" name="csrf" value="{_e(token)}">'
               f'<input type="hidden" name="iid" value="{_e(item["id"])}">')
     react_form = (
-        f'<form method="post" action="/action">{common}'
+        '<details style="margin-top:.4rem"><summary>🤖 Laat de AI een herziening voorstellen</summary>'
+        f'<form method="post" action="/action" style="margin-top:.3rem">{common}'
         f'<input type="hidden" name="next" value="/roloverleg?iid={_e(item["id"])}">'
-        '<div class="tg-q">Vraag of reactie?</div>'
         '<textarea name="reason" class="tg-in" rows="2" '
-        'placeholder="bijv. te breed, of: voeg X toe"></textarea>'
+        'placeholder="beschrijf in gewone taal wat anders moet; de AI vult de velden hierboven"></textarea>'
         '<button class="bigbtn" type="submit" name="action" value="rov_react">'
-        '🤖 AI past voorstel aan</button></form>')
+        '🤖 Stel een herziening voor</button></form></details>')
     # Bij een accountability-voorstel: het ook nu meteen als EXPERIMENT (project) kunnen laten
     # doen door de indienende rol — een accountability is daarvoor niet nodig (purpose volstaat),
     # en pas na herhaalde uitvoering 'stolt' het tot accountability (rijpheidspoort).
@@ -1323,8 +1323,13 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
             '<input name="g_naam" class="tg-in" placeholder="naam (alleen bij nieuwe rol)">'
             '<button class="btn" type="submit" name="action" value="rov_group_add">'
             '➕ rol toevoegen aan dit voorstel</button></form>')
-        accept_all = ""
-        if len(members) > 1:
+        if len(members) <= 1:
+            # Eén rol = de simpele standaard. Geen apart blok; alleen een rustige uitklapper om er
+            # eventueel een rol bij te betrekken (Duolingo: geen ruis tot je het nodig hebt).
+            group_block = (
+                '<details style="margin-top:.4rem"><summary>➕ Nog een rol bij dit voorstel '
+                'betrekken</summary>' + add_to + '</details>')
+        else:
             accept_all = (
                 f'<form method="post" action="/action" style="margin-top:.3rem">{common}'
                 f'<input type="hidden" name="next" value="/roloverleg">'
@@ -1332,14 +1337,19 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
                 '<button class="bigbtn go" type="submit" name="action" value="rov_group_consent">'
                 f'✓ Neem hele voorstel aan ({len(members)} rollen)<small>consent op alle '
                 'rol-onderdelen tegelijk</small></button></form>')
-        group_block = (
-            f'<div class="tg-card" style="margin-top:.5rem"><div style="{_H}">'
-            f'📦 Dit voorstel — {len(members)} rol(len)</div>'
-            f'<ul style="list-style:none;padding:0;margin:.2rem 0">{rows}</ul>{add_to}{accept_all}</div>')
-    # Volgorde: kop+context → het FORMULIER (hoofdweergave) → Secretaris-check (direct na bewerken)
-    # → ingeklapte diff → AI-suggestie → consent/project/ongeldig → bezwaar-toets → dit voorstel.
-    inner = (f'{head}{_banner(msg)}{card}{editor}{sec}{diff_block}{react_form}{decide}'
-             f'{objection_form}{group_block}'
+            group_block = (
+                f'<div class="tg-card" style="margin-top:.5rem"><div style="{_H}">'
+                f'📦 Dit voorstel — {len(members)} rollen</div>'
+                f'<ul style="list-style:none;padding:0;margin:.2rem 0">{rows}</ul>'
+                f'{add_to}{accept_all}</div>')
+    # UX (Duolingo + GlassFrog): formulier is de held; secundaire dingen ingeklapt; ONE duidelijke
+    # beslis-zone onderaan (consent groot, bezwaar als rustige tweede stap).
+    beslis = (f'<div class="tg-card" style="margin-top:.6rem"><div style="{_H}">Beslis</div>'
+              f'{decide}{objection_form}</div>')
+    secondair = (f'<details style="margin-top:.4rem"><summary>🔧 Meer opties '
+                 '(AI-herziening, wijzigingen t.o.v. nu)</summary>'
+                 f'{react_form}{diff_block}</details>')
+    inner = (f'{head}{_banner(msg)}{card}{editor}{sec}{group_block}{secondair}{beslis}'
              '<div class="tg-skip"><a class="muted" href="/roloverleg">← terug naar de agenda</a>'
              '</div></div><style>' + _TRIAGE_CSS + '</style>')
     return _page("Voorstel behandelen", inner)
