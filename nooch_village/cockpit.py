@@ -2177,7 +2177,6 @@ def _render_signal(snap: dict, writable: bool) -> str:
         + (f'<div class="sigrow"><span>Bezoekers (7d)</span>'
            f'<span class="n">{_fmt_int(snap.get("visitors_7d"))}</span></div>'
            if snap.get("visitors_7d") else "")
-        + '<div class="sigsub" style="margin-top:.4rem">Het dorp brengt de CEO groot.</div>'
         + '</div>')
     # 2) Aan jou — beslissingen die alleen jij kunt nemen.
     n_kansen = sum(1 for b in snap.get("backlog", []) if b.get("approvable"))
@@ -2621,7 +2620,7 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
             else '<a href="/?history=1">toon geschiedenis (gesloten + gearchiveerd)</a>')
 
     inner = (
-        f'<h1>NoochVille cockpit {badge}</h1>'
+        f'<h1>IT TAKES A VILLAGE TO RAISE A NOOCHIE {badge}</h1>'
         f'<div class="bar">{_e(counts)} · gegenereerd {_e(_ts(snap.get("generated_at")))} · {hist}</div>'
         f'{_banner(msg)}'
         f'{_render_signal(snap, writable)}'
