@@ -23,13 +23,19 @@ _BEVINDING = re.compile(r"\b(studie|onderzoek|meta-?analyse|rct|gerandomiseerd|c
                         r"data toont|gemeten|meet|degradeer|correlat|proefpersonen|n=|"
                         r"peer-?review|wetenschappelijk|aangetoond|experiment|%|procent|"
                         r"dagen|weken|maanden)\b", re.I)
-_STANDPUNT = re.compile(r"\b(wij|we|onze|nooch|ik geloof|wij vinden|onze missie|hoort|"
-                        r"zou moeten|beter|moreel|verantwoord)\b", re.I)
+# Standpunt = een EIGEN positie/keuze/waarde. Let op: een loutere merkvermelding ("Nooch") in
+# een feitelijke zin is GEEN standpunt; vandaar geen kale 'nooch' hier.
+_STANDPUNT = re.compile(r"\b(wij vinden|wij geloven|ik geloof|onze missie|wij kiezen|nooch chose|"
+                        r"nooch koos|hoort|zou moeten|moreel|verantwoord|should|we believe|"
+                        r"we choose)\b", re.I)
 # 'voldoet aan EN13432' = een claim ÓVER een norm (standpunt/bevinding), niet de norm zélf.
 _COMPLIANCE = re.compile(r"\b(voldoet aan|voldoen aan|conform|gecertificeerd|meets|passed|"
                          r"behaalt|haalt|getest volgens|volgens de)\b", re.I)
 _DEFINITIE = re.compile(r"\b(is per definitie|betekent|wordt gedefinieerd|definieert|"
-                        r"verwijst naar|is een soort|valt onder|staat voor)\b", re.I)
+                        r"verwijst naar|is een soort|valt onder|staat voor|"
+                        r"denotes|means|defined as|refers to|stands for|is the absence of)\b", re.I)
+# Echte norm-CODE (EN13432, ISO 14855, ASTM D6400) — niet de kale 'EN' uit 'corpus 26 EN'.
+_NORM_CODE = re.compile(r"\b(EN\s?\d{3,}|ISO\s?\d{3,}|ASTM\s?[A-Z]?\d{3,}|GOTS|keurcompost)\b", re.I)
 
 
 def looks_like_definition(text: str) -> bool:
@@ -54,7 +60,7 @@ def classify_kind(claim: str, evidence_type: str | None = None,
         et_hint = ClaimKind.STANDPUNT          # let op: alleen als de tekst dat niet tegenspreekt
 
     hits: set[ClaimKind] = set()
-    if _KADER.search(t) or re.search(r"\b(EN|ISO|ASTM|GOTS|BRL)\b", src):
+    if _KADER.search(t) or _NORM_CODE.search(t) or _NORM_CODE.search(src):
         hits.add(ClaimKind.KADER)
     if _BEVINDING.search(t):
         hits.add(ClaimKind.BEVINDING)
@@ -70,6 +76,11 @@ def classify_kind(claim: str, evidence_type: str | None = None,
             hits.discard(ClaimKind.KADER)
         else:
             return ClaimKind.KADER
+
+    # Data wint: een zin met een getal/percentage die zowel bevinding als standpunt raakt,
+    # is een feit/meting, geen mening. Zo wordt '69% van de klanten ...' een bevinding, niet standpunt.
+    if {ClaimKind.BEVINDING, ClaimKind.STANDPUNT} <= hits and re.search(r"\d", t):
+        hits.discard(ClaimKind.STANDPUNT)
 
     # evidence_type breekt een gelijkspel of beslist als de tekst zwijgt.
     if not hits and et_hint:
