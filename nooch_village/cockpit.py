@@ -1377,17 +1377,35 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
         ed_doms_list = [d for d in cur_doms if d not in doms_rm] + list(doms_new)
         naam_attr = ""
     _ta = lambda xs: _e("\n".join(xs))
+    # Accountabilities als LOSSE velden (p.4 punt 5+6): elk een eigen invoer met een ✗ om te
+    # verwijderen, plus een regel om er een toe te voegen. Toegevoegde (voorgestelde) krijgen een
+    # groene rand. Op submit synct JS de velden naar het verborgen ed_accs (handler ongewijzigd).
+    _added_set = set(accs)
+    def _acc_row(val, added):
+        edge = ";border-color:var(--green);background:var(--green-tint)" if added else ""
+        return ('<div class="acc-row" style="display:flex;gap:.3rem;align-items:center;margin:.2rem 0">'
+                f'<input class="tg-in acc-field" style="flex:1 1 auto;min-width:0{edge}" '
+                f'value="{_e(val)}">'
+                '<button type="button" class="btn acc-x" title="verwijder deze accountability" '
+                'onclick="this.closest(\'.acc-row\').remove()" '
+                'style="flex:0 0 auto">✗</button></div>')
+    acc_rows = "".join(_acc_row(a, a in _added_set) for a in ed_accs_list)
     editor = (
         '<details open style="margin-top:.5rem"><summary>✏️ Rol bewerken — naam, purpose, '
         'accountabilities &amp; domeinen (dit is het voorstel)</summary>'
-        f'<form method="post" action="/action" style="margin-top:.4rem">{common}'
+        f'<form method="post" action="/action" id="roveditform" style="margin-top:.4rem">{common}'
         f'<input type="hidden" name="next" value="/roloverleg?iid={_e(item["id"])}">'
         f'<div style="{_H}">Naam</div>'
         f'<input name="ed_naam" class="tg-in" value="{_e(ed_naam)}"{naam_attr}>'
         f'<div style="{_H};margin-top:.4rem">Purpose (reden van bestaan, geen -en-vorm)</div>'
         f'<textarea name="ed_purpose" class="tg-in" rows="2">{_e(ed_pur)}</textarea>'
-        f'<div style="{_H};margin-top:.4rem">Accountabilities (één per regel, -en-vorm)</div>'
-        f'<textarea name="ed_accs" class="tg-in" rows="5">{_ta(ed_accs_list)}</textarea>'
+        f'<div style="{_H};margin-top:.4rem">Accountabilities (-en-vorm) '
+        '<span class="muted" style="font-weight:400;font-size:.75rem">— elk een eigen veld; ✗ '
+        'verwijdert, groen = nieuw</span></div>'
+        f'<div id="rovedit-accs">{acc_rows}</div>'
+        '<button type="button" class="btn" onclick="rovAccAdd()" style="margin-top:.2rem">'
+        '➕ accountability toevoegen</button>'
+        '<textarea name="ed_accs" id="rovedit-accs-hidden" style="display:none"></textarea>'
         f'<div style="{_H};margin-top:.4rem">Domeinen (één per regel, optioneel)</div>'
         f'<textarea name="ed_domeinen" class="tg-in" rows="2">{_ta(ed_doms_list)}</textarea>'
         '<button class="bigbtn go" type="submit" name="action" value="rov_edit" '
@@ -1399,6 +1417,20 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
            '<button class="btn danger" type="submit" name="action" value="rov_remove" '
            'onclick="return confirm(\'Dit voorstel omzetten naar: deze rol verwijderen?\')">'
            '🗑 Stel voor deze rol te verwijderen</button></form>')
+        + '<script>'
+        'function rovAccAdd(){var c=document.getElementById("rovedit-accs");'
+        'var d=document.createElement("div");d.className="acc-row";'
+        'd.style.cssText="display:flex;gap:.3rem;align-items:center;margin:.2rem 0";'
+        'd.innerHTML=\'<input class="tg-in acc-field" style="flex:1 1 auto;min-width:0" '
+        'placeholder="nieuwe accountability (-en-vorm)"><button type="button" class="btn" '
+        'onclick="this.closest(&quot;.acc-row&quot;).remove()" style="flex:0 0 auto">✗</button>\';'
+        'c.appendChild(d);d.querySelector("input").focus();}'
+        '(function(){var f=document.getElementById("roveditform");if(!f)return;'
+        'f.addEventListener("submit",function(){'
+        'var vals=[].slice.call(f.querySelectorAll(".acc-field")).map(function(i){'
+        'return i.value.trim();}).filter(Boolean);'
+        'document.getElementById("rovedit-accs-hidden").value=vals.join("\\n");});})();'
+        '</script>'
         + '</details>')
     # GlassFrog: één voorstel kan meerdere rollen raken. Toon de andere rol-onderdelen + een knop
     # om een rol toe te voegen aan dit voorstel, en om het hele voorstel in één keer aan te nemen.
