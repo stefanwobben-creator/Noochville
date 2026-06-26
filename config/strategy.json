@@ -6,6 +6,11 @@
     {"title": "Care for All", "desc": "Every decision considers people, animals, and planet"},
     {"title": "Find the Fun", "desc": "Changing the world works better with joy and humor"}
   ],
+  "wip": {
+    "_comment": "Kanban work-in-progress: max actieve projecten bord-breed en per rol (tempo-knop).",
+    "board": 3,
+    "roles": {}
+  },
   "north_star": {
     "description": "1 miljoen paar schoenen per jaar via nooch.earth (BHAG)",
     "metric": "pairs_sold",

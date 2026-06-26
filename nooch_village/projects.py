@@ -47,7 +47,9 @@ class ProjectLedger:
 
     def create(self, owner: str, scope, trigger: str,
                hypothesis: str = "", business_case: dict | None = None,
-               status: str = "queued", origin: str = "") -> str:
+               status: str = "queued", origin: str = "",
+               dod_outcome: str = "", done_when: str = "", goes_to: str = "",
+               links: list[str] | None = None) -> str:
         if trigger not in _VALID_TRIGGERS:
             raise ValueError(f"ongeldig trigger: '{trigger}'")
         if status not in ("queued", "draft", "future"):
@@ -63,7 +65,7 @@ class ProjectLedger:
             "blocked_on": None,
             "created_at": now,
             "updated_at": now,
-            "outcome":    None,
+            "outcome":    None,              # geleverde eind-uitkomst (gevuld bij done)
             "hypothesis":    hypothesis or "",
             "business_case": business_case,
             "origin":     origin or "",      # "experiment" = stolt later tot accountability bij herhaling
@@ -71,6 +73,11 @@ class ProjectLedger:
             "formalized": False,             # al voorgesteld als accountability? (dedup)
             "comments":   [],                # stuur-opmerkingen van de mens (de rol leest ze mee)
             "log":        [],                # gesprek: {who: 'mens'|'rol', text, at} — chat-weergave
+            # DoD-contract: de rol weet hiermee wanneer hij klaar is (docs/ONTWERP_prikbord_kanban.md)
+            "dod_outcome": dod_outcome or "",   # gewenste uitkomst in één zin
+            "done_when":   done_when or "",     # checkbaar criterium (lege/nee-uitkomst telt ook)
+            "goes_to":     goes_to or "",       # wie de uitkomst consumeert (rol/bord/mens)
+            "links":       list(links or []),   # verwante projecten (de keten/het gesprek)
         }
         self._save()
         return pid
@@ -205,6 +212,36 @@ class ProjectLedger:
         self._touch(p)
         self._save()
         return True
+
+    def link(self, a: str, b: str) -> bool:
+        """Verbind twee projecten tot een keten/gesprek (wederzijds, zoals de notes-graaf). Geen
+        zelf-link, dedup. Geeft True als er iets is bijgekomen."""
+        if a == b:
+            return False
+        pa, pb = self._projects.get(a), self._projects.get(b)
+        if pa is None or pb is None:
+            return False
+        changed = False
+        for x, y in ((pa, b), (pb, a)):
+            x.setdefault("links", [])
+            if y not in x["links"]:
+                x["links"].append(y); changed = True
+        if changed:
+            self._save()
+        return changed
+
+    def neighbors(self, pid: str) -> list[dict]:
+        """De direct gelinkte projecten (beide richtingen), oudste eerst."""
+        p = self._projects.get(pid)
+        if p is None:
+            return []
+        ids = set(p.get("links", []))
+        for q in self._projects.values():
+            if pid in q.get("links", []):
+                ids.add(q["id"])
+        ids.discard(pid)
+        return sorted((self._projects[i] for i in ids if i in self._projects),
+                      key=lambda q: q.get("created_at", 0))
 
     def mark_formalized(self, pid: str) -> bool:
         """Markeer een experiment als 'voorgesteld om te stollen' (accountability op de agenda).

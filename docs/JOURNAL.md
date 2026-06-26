@@ -1178,3 +1178,14 @@ design-tokens: #c0392b→var(--coral), #27ae60→var(--green), #c9a227→var(--y
 #e2cf8e→var(--border), chat-bubble border-radius→var(--radius). De enige resterende literals zijn
 (a) de :root/.btn token-DEFINITIES in de basis-stylesheet (daar horen ze, als een tokens-bestand)
 en (b) #fff (witte tekst op donkere knop; geen merkkleur). Cockpit-tests groen.
+
+## Prikbord-Kanban brok 1: datamodel
+Eerste, toetsbare brok van docs/ONTWERP_prikbord_kanban.md (geen autonome loop/cockpit nog):
+- nooch_village/pinboard.py — Pinboard-store (verzoek/uitkomst; open→claimed→done; dedup op
+  (kind,tag,title); link_project; open(tag)) + read_wip() (board + per-rol WIP uit strategy.json).
+- ProjectLedger: DoD-contract op projecten (dod_outcome / done_when / goes_to) + projectgraaf
+  (links + link() wederzijds + neighbors()); create() accepteert status='future' (backlog).
+- config/strategy.json: "wip" {board:3, roles:{}} als tempo-knop.
+- Bewijs: test_pinboard_kanban.py bouwt de sokken-feasibility-keten met de hand (idee → Harry →
+  Scout → Harry), gelinkt als één gesprek + via het prikbord aangeboden/afgehandeld.
+Suite groen (559 + 526). Volgende: brok 2 (autonome pull-loop in de puls met de guardrails).
