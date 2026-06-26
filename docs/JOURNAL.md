@@ -1103,3 +1103,9 @@ Suite groen (582 + 483).
 - Roloverleg-knop op de cockpit-home staat nu ALTIJD (ook bij lege agenda en bij 'niks openstaand'),
   zodat je altijd een nieuwe rol kunt voorstellen / het overleg kunt openen.
 Suite groen (583 + 483).
+
+## Rol antwoordt direct in de project-chat
+proj_comment laat na jouw bericht de eigenaar-rol METEEN werken (work_one, eigen capaciteit,
+tekst-only) en plaatst het antwoord direct in het gesprek (ProjectLedger.add_role_message — telt
+NIET als experiment-uitvoering, raakt 'worked' niet). Geen LLM beschikbaar → nette melding 'rol
+reageert bij de volgende puls'. Flash maakt onderscheid (direct geantwoord vs niet). Suite groen (585 + 483).

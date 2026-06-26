@@ -2365,7 +2365,10 @@ def _flash(result: dict) -> str:
                     f"keur het goed bij 'Concept-projecten' om het op het bord te zetten." + tail)
         return f"➕ Project toegevoegd voor {result.get('owner') or 'het dorp'} (zie Proces)." + tail
     if result.get("proj_comment"):
-        return "💬 Opmerking geplaatst — de rol pakt het project opnieuw op met jouw sturing."
+        return ("💬 Verstuurd — de rol heeft direct geantwoord (zie het gesprek)."
+                if result.get("replied")
+                else "💬 Verstuurd — de rol kon nu niet reageren (geen LLM); pakt het op bij de "
+                     "volgende puls.")
     if result.get("status") == "done":
         return "✓ Spanning klaar — uit je inbox."
     _verdict_flash = {
@@ -2781,8 +2784,25 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
     if action == "proj_comment":
         projects = ProjectLedger(os.path.join(dd, "projects.json"))
         ok = projects.add_comment(iid, extra.get("comment", ""))
-        return {"ok": ok, "proj_comment": True} if ok \
-            else {"ok": False, "error": "lege opmerking of project niet gevonden"}
+        if not ok:
+            return {"ok": False, "error": "lege opmerking of project niet gevonden"}
+        # De rol antwoordt DIRECT op je bericht (eigen capaciteit, tekst-only, omkeerbaar).
+        from nooch_village.project_worker import work_one
+        p = projects.get(iid) or {}
+        rec = records.get(p.get("owner")) if (records := Records(os.path.join(dd, "governance_records.json"))) else None
+        purpose = getattr(getattr(rec, "definition", None), "purpose", "") if rec else ""
+        steer = " · ".join(c.get("text", "") for c in p.get("comments", []) if c.get("text"))
+        try:
+            res = work_one(p.get("scope"), p.get("owner", ""), purpose, steer=steer)
+        except Exception:
+            res = {"ok": False, "needs": None}
+        if res.get("ok"):
+            projects.add_role_message(iid, res["outcome"])
+            return {"ok": True, "proj_comment": True, "replied": True}
+        if res.get("needs"):
+            projects.add_role_message(iid, f"Dit lukt me niet met tekst alleen — nodig: {res['needs']}")
+            return {"ok": True, "proj_comment": True, "replied": True}
+        return {"ok": True, "proj_comment": True, "replied": False}
     if action == "add_governance":
         records = Records(os.path.join(dd, "governance_records.json"))
         return route_to_governance(records, extra.get("role", ""), extra.get("skill", ""),

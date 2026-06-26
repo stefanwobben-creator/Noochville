@@ -49,6 +49,39 @@ def test_cockpit_proj_comment_dispatch(tmp_path):
     assert cockpit._dispatch_action(str(data), "proj_comment", pid, "", extra={"comment": ""})["ok"] is False
 
 
+def test_proj_comment_rol_antwoordt_direct(tmp_path, monkeypatch):
+    import json
+    import nooch_village.project_worker as pw
+    data = tmp_path / "data"; data.mkdir()
+    (data / "governance_records.json").write_text(json.dumps({"harry_hemp": {
+        "id": "harry_hemp", "type": "role", "parent": "noochville", "version": 1,
+        "definition": {"purpose": "hennep", "accountabilities": [], "domains": []}}}), encoding="utf-8")
+    led = ProjectLedger(str(data / "projects.json"))
+    pid = led.create("harry_hemp", "Zoek elastaan-vervanger", "human")
+    monkeypatch.setattr(pw, "work_one",
+                        lambda *a, **k: {"ok": True, "outcome": "Ik focus op natuurlijke vezels."})
+    res = cockpit._dispatch_action(str(data), "proj_comment", pid, "",
+                                   extra={"comment": "richt je op technisch onderzoek"})
+    assert res["ok"] and res["replied"] is True
+    log = ProjectLedger(str(data / "projects.json")).get(pid)["log"]
+    assert [m["who"] for m in log] == ["mens", "rol"]         # jouw bericht + direct antwoord
+    assert "natuurlijke vezels" in log[1]["text"]
+
+
+def test_proj_comment_geen_llm_geen_reply(tmp_path, monkeypatch):
+    import json
+    import nooch_village.project_worker as pw
+    data = tmp_path / "data"; data.mkdir()
+    (data / "governance_records.json").write_text("{}", encoding="utf-8")
+    led = ProjectLedger(str(data / "projects.json"))
+    pid = led.create("harry_hemp", "Zoek X", "human")
+    monkeypatch.setattr(pw, "work_one", lambda *a, **k: {"ok": False, "needs": None})
+    res = cockpit._dispatch_action(str(data), "proj_comment", pid, "", extra={"comment": "stuur bij"})
+    assert res["ok"] and res["replied"] is False             # comment staat er, geen reply
+    log = ProjectLedger(str(data / "projects.json")).get(pid)["log"]
+    assert [m["who"] for m in log] == ["mens"]
+
+
 def test_render_project_edit_chat_en_done_uitleg():
     p = {"id": "p1", "owner": "harry_hemp", "scope": "Zoek X", "status": "running",
          "log": [{"who": "rol", "text": "eerste draft"}, {"who": "mens", "text": "focus op elastaan"}]}

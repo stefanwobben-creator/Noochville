@@ -192,6 +192,20 @@ class ProjectLedger:
         self._save()
         return True
 
+    def add_role_message(self, pid: str, text: str) -> bool:
+        """Voeg een DIRECT antwoord van de rol toe aan het gesprek (chat-reply op een opmerking).
+        Anders dan record_progress telt dit NIET als een experiment-uitvoering en raakt het de
+        'worked'-vlag niet — het is conversatie, geen puls-werk."""
+        p = self._projects.get(pid)
+        text = (text or "").strip()
+        if p is None or not text:
+            return False
+        p.setdefault("log", []).append({"who": "rol", "text": text[:1500], "at": time.time()})
+        p["progress"] = text
+        self._touch(p)
+        self._save()
+        return True
+
     def mark_formalized(self, pid: str) -> bool:
         """Markeer een experiment als 'voorgesteld om te stollen' (accountability op de agenda).
         Voorkomt dat hetzelfde experiment tweemaal wordt voorgedragen."""
