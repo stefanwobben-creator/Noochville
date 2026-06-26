@@ -187,6 +187,15 @@ class Gate:
     def _g3(self, c: GovernanceChange, records: "Records") -> tuple[bool, str]:
         if c.kind == ChangeKind.REMOVE_ROLE:
             rec = records.get(c.role_id)
+            # Een rol/cirkel met onderliggende rollen verwijderen zou die kinderen tot wezen maken
+            # (ouder weg → dangling members). Eerst de kinderen herbeleggen → menselijk oordeel.
+            if rec:
+                kids = [m for m in rec.members
+                        if (k := records.get(m)) and not k.archived]
+                if kids:
+                    return False, (f"rol '{c.role_id}' is een cirkel met onderliggende rollen "
+                                   f"({kids[:3]} …); verwijderen zou die tot wees maken — "
+                                   f"herbeleg de kinderen eerst (menselijke beoordeling vereist)")
             if rec and rec.definition.accountabilities:
                 accs = rec.definition.accountabilities[:2]
                 return False, (f"rol '{c.role_id}' heeft accountabilities ({accs} …); "

@@ -568,6 +568,14 @@ def main() -> None:
               f"{res['revenue']} {res['currency']} omzet (AOV {res['aov']}"
               f", gem. {res.get('avg_pairs_month', 0)} paar/maand). Dashboard staat in de cockpit.")
 
+    elif mode == "montecarlo":
+        # Stresstest de governance-kern: honderden gerandomiseerde rolvoorstellen door Gate+Secretary.
+        from nooch_village.montecarlo import run, format_report
+        nums = [int(a) for a in sys.argv[2:] if a.isdigit()]
+        n = nums[0] if nums else 500
+        seed = nums[1] if len(nums) > 1 else 0
+        print(format_report(run(n, seed=seed)))
+
     elif mode == "work_projects":
         # Rollen werken (omkeerbaar, met eigen skills) aan hun queued projecten.
         import os

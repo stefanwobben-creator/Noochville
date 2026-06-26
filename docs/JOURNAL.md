@@ -1043,3 +1043,16 @@ Behandel-scherm heeft een blok '📦 Dit voorstel — N rol(len)' met alle rol-o
 een 'rol toevoegen aan dit voorstel' (bestaande rol of nieuwe, start leeg → bewerk via het formulier)
 en 'Neem hele voorstel aan' (consent op alle open onderdelen tegelijk). Het overzicht groepeert per
 voorstel (één regel, '+N rol'-badge). Acties: rov_group_add, rov_group_consent. Suite groen (557 + 498).
+
+## Monte-Carlo stresstest governance-kern + gevonden gat gedicht
+nooch_village/montecarlo.py: genereert honderden gerandomiseerde rolvoorstellen (add/amend/remove,
+dubbele accountabilities, domein-botsingen, hernoemen, geneste rollen) en draait ze door de échte
+Gate G0-G4 + Secretary-adoptie op een geïsoleerde in-memory records-set. check_invariants() toetst
+daarna de waarheid (geen wezen, geen dubbele acc/domein over rollen, members-integriteit, geen lege
+purpose). CLI: `python -m nooch_village.village montecarlo [n] [seed]`. Reproduceerbaar via seed.
+
+GEVONDEN GAT (en gedicht): G3 liet het verwijderen van een rol/cirkel MET onderliggende rollen toe
+als die ouder zelf geen accountabilities had → kinderen werden wees (ouder gearchiveerd, dangling
+members). G3 escaleert nu elke remove_role van een rol met actieve kinderen ('herbeleg de kinderen
+eerst'). Over 5+ seeds en honderden voorstellen blijven de records nu structureel valide.
+Regressie-guards in test_montecarlo.py. Suite groen (549 + 509).
