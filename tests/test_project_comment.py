@@ -49,10 +49,20 @@ def test_cockpit_proj_comment_dispatch(tmp_path):
     assert cockpit._dispatch_action(str(data), "proj_comment", pid, "", extra={"comment": ""})["ok"] is False
 
 
-def test_render_project_edit_toont_comment_en_done_uitleg():
+def test_render_project_edit_chat_en_done_uitleg():
     p = {"id": "p1", "owner": "harry_hemp", "scope": "Zoek X", "status": "running",
-         "comments": [{"text": "focus op elastaan", "at": 1}]}
+         "log": [{"who": "rol", "text": "eerste draft"}, {"who": "mens", "text": "focus op elastaan"}]}
     page = cockpit.render_project_edit(p, [{"id": "harry_hemp", "type": "role", "archived": False}], "t")
-    assert "Bijsturen" in page and "focus op elastaan" in page
+    assert "Gesprek met de rol" in page                     # chat-weergave
+    assert "focus op elastaan" in page and "eerste draft" in page
+    assert "jij" in page and "harry_hemp" in page           # beide kanten van het gesprek
     assert 'value="proj_comment"' in page
     assert "een rol sluit zichzelf nooit af" in page.lower()
+
+
+def test_render_project_edit_valt_terug_op_comments_zonder_log():
+    # Oud project zonder log: val terug op comments + laatste voortgang.
+    p = {"id": "p1", "owner": "harry_hemp", "scope": "Zoek X", "status": "running",
+         "progress": "een draft", "comments": [{"text": "stuur bij", "at": 1}]}
+    page = cockpit.render_project_edit(p, [{"id": "harry_hemp", "type": "role", "archived": False}], "t")
+    assert "een draft" in page and "stuur bij" in page

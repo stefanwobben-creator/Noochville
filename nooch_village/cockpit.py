@@ -1435,23 +1435,43 @@ def render_project_edit(p: dict, roster: list, csrf_token: str) -> str:
                         f'<div class="tension">{_e(p.get("outcome"))}</div>')
     hyp = (f'<p class="muted"><b>Hypothese:</b> {_e(p.get("hypothesis"))}</p>'
            if p.get("hypothesis") else "")
-    # Stuur-opmerkingen: de mens stuurt bij, de eigenaar-rol leest ze mee bij het volgende werk.
-    clist = "".join(
-        f'<li style="padding:.15rem 0;border-bottom:1px solid var(--border)">{_e(c.get("text",""))}</li>'
-        for c in p.get("comments", []))
+    # Gesprek met de rol (WhatsApp-stijl): rol links, jij rechts. Bron: de log (val terug op de
+    # losse comments + laatste voortgang voor oude projecten zonder log).
+    chat_log = list(p.get("log") or [])
+    if not chat_log:
+        if p.get("progress"):
+            chat_log.append({"who": "rol", "text": p["progress"]})
+        for c in p.get("comments", []):
+            chat_log.append({"who": "mens", "text": c.get("text", "")})
+    owner_name = _e(p.get("owner", "rol"))
+    bubbles = ""
+    for m in chat_log:
+        mens = m.get("who") == "mens"
+        side = "flex-end" if mens else "flex-start"
+        bg = "var(--green-tint)" if mens else "var(--surface)"
+        who = "jij" if mens else owner_name
+        bubbles += (
+            f'<div style="display:flex;justify-content:{side};margin:.25rem 0">'
+            f'<div style="max-width:78%;background:{bg};border:1px solid var(--border);'
+            f'border-radius:12px;padding:.45rem .7rem">'
+            f'<div class="muted" style="font-size:.7rem;margin-bottom:.1rem">{who}</div>'
+            f'<div style="white-space:pre-wrap;font-size:.9rem">{_e(m.get("text",""))}</div></div></div>')
+    if not bubbles:
+        bubbles = ('<p class="muted" style="font-size:.85rem">Nog geen gesprek. Stuur de rol een '
+                   'bericht om bij te sturen — de rol leest het mee en pakt het project opnieuw op.</p>')
     comments = (
-        '<h2>Bijsturen</h2>'
-        '<p class="muted" style="font-size:.85rem">Plaats een opmerking om de rol bij te sturen '
-        '(bijv. “richt je op technisch onderzoek naar een natuurlijke elastaan-vervanger”). '
-        'De rol leest dit mee en pakt het project opnieuw op.</p>'
-        + (f'<ul style="list-style:none;padding:0;margin:.3rem 0">{clist}</ul>' if clist else "")
-        + '<form method="post" action="/action" class="pf">'
+        '<h2>💬 Gesprek met de rol</h2>'
+        f'<div style="border:1px solid var(--border);border-radius:var(--radius);'
+        f'background:var(--sand);padding:.6rem;max-height:340px;overflow-y:auto">{bubbles}</div>'
+        '<form method="post" action="/action" class="pf" style="margin-top:.5rem">'
         f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
         f'<input type="hidden" name="iid" value="{_e(pid)}">'
         '<input type="hidden" name="action" value="proj_comment">'
-        f'<input type="hidden" name="next" value="/project?id={_e(pid)}">'
-        '<textarea name="comment" rows="2" placeholder="jouw sturing voor de rol"></textarea>'
-        '<button class="btn ok" type="submit">Opmerking plaatsen</button></form>')
+        f'<input type="hidden" name="next" value="/project?pid={_e(pid)}">'
+        '<textarea name="comment" rows="3" style="width:100%;box-sizing:border-box;font-size:.95rem" '
+        'placeholder="Bericht aan de rol — bijv. “richt je op technisch onderzoek naar een '
+        'natuurlijke elastaan-vervanger”"></textarea>'
+        '<button class="btn ok" type="submit" style="margin-top:.3rem">Versturen ➤</button></form>')
     done_note = ('<p class="muted" style="font-size:.82rem">De rol levert voortgang op (status '
                  '<b>Actief</b>); <b>jij</b> zet een project op <b>Done</b> als het af is — een rol '
                  'sluit zichzelf nooit af.</p>')
@@ -2243,12 +2263,15 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     _n_agenda = len(snap.get("agenda_open", []))
     _focus = (f' <a class="btn ok" href="/triage" style="margin-left:.4rem">▶ Verwerk in focus</a>'
               if _n_kansen else "")
-    _rov = (f' <a class="btn" href="/roloverleg" style="margin-left:.4rem">🏛️ Roloverleg ({_n_agenda})</a>'
-            if _n_agenda else "")
+    # Roloverleg-knop staat ALTIJD (ook bij lege agenda) zodat je altijd een nieuwe rol kunt
+    # voorstellen / het overleg kunt openen.
+    _rov = (f' <a class="btn" href="/roloverleg" style="margin-left:.4rem">🏛️ Roloverleg'
+            f'{f" ({_n_agenda})" if _n_agenda else ""}</a>')
     if _n_agenda:
         _parts.append(f'{_n_agenda} op de roloverleg-agenda')
     _aan_jou = (f'<div class="aanjou"><b>📥 Aan jou:</b> {" · ".join(_parts)}{_focus}{_rov}</div>'
-                if _parts else '<div class="aanjou">📥 <b>Aan jou:</b> niks openstaand 🎉</div>')
+                if _parts else
+                f'<div class="aanjou">📥 <b>Aan jou:</b> niks openstaand 🎉{_rov}</div>')
 
     inner = (
         f'<h1>NoochVille cockpit {badge}</h1>'

@@ -70,6 +70,7 @@ class ProjectLedger:
             "executions": 0,                 # hoe vaak een rol dit experiment heeft uitgevoerd
             "formalized": False,             # al voorgesteld als accountability? (dedup)
             "comments":   [],                # stuur-opmerkingen van de mens (de rol leest ze mee)
+            "log":        [],                # gesprek: {who: 'mens'|'rol', text, at} — chat-weergave
         }
         self._save()
         return pid
@@ -167,6 +168,7 @@ class ProjectLedger:
         if p is None or p["status"] in _TERMINAL:
             return False
         p["progress"] = note
+        p.setdefault("log", []).append({"who": "rol", "text": note, "at": time.time()})
         p["worked"] = True
         p["executions"] = int(p.get("executions", 0)) + 1   # telt mee voor 'stollen na 3x'
         if p["status"] == "queued":
@@ -182,7 +184,9 @@ class ProjectLedger:
         text = (text or "").strip()
         if p is None or not text:
             return False
-        p.setdefault("comments", []).append({"text": text[:500], "at": time.time()})
+        now = time.time()
+        p.setdefault("comments", []).append({"text": text[:500], "at": now})
+        p.setdefault("log", []).append({"who": "mens", "text": text[:500], "at": now})
         p["worked"] = False           # nieuwe sturing → de rol pakt het opnieuw op
         self._touch(p)
         self._save()

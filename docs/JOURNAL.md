@@ -1093,3 +1093,13 @@ Suite groen (582 + 483).
   schoenen_met_verhalen, schoenenjagers_op_tiktok, schoenenruilfeest_in_het_dorp,
   schrijven_van_copy_voor_blogs. (schoenen_voor_duurzame_evenementen_seo NIET — daar hangt een
   consented hernoem→Copywriter aan op de agenda; die moet eerst via 'Einde roloverleg'.)
+
+## Project-chat + fixes (project-route, roloverleg-knop altijd zichtbaar)
+- Bug: na een opmerking ging next naar /project?id= maar de route leest ?pid= → 'Project niet
+  gevonden'. Gefixt (pid).
+- Projectpagina: WhatsApp-stijl gesprek met de rol (rol links, jij rechts), groter invoerveld
+  ('Versturen ➤'). Projecten dragen nu een `log` ({who:mens|rol,text,at}); record_progress en
+  add_comment schrijven erin; oude projecten vallen terug op comments + laatste voortgang.
+- Roloverleg-knop op de cockpit-home staat nu ALTIJD (ook bij lege agenda en bij 'niks openstaand'),
+  zodat je altijd een nieuwe rol kunt voorstellen / het overleg kunt openen.
+Suite groen (583 + 483).
