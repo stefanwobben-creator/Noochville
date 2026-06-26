@@ -859,25 +859,15 @@ def render_triage_overview(queue: list, token: str, msg=None) -> str:
                  f'{head}{_banner(msg)}{body}</div>{js}<style>{_TRIAGE_CSS}</style>')
 
 
-def render_triage(x: dict | None, pos: int, total: int, roles: list,
-                  token: str, msg=None) -> str:
-    """Focusmodus: één spanning per scherm, één keuze per stap (Duolingo-stijl). Na een keuze
-    kom je terug op het overzicht; de afgehandelde spanning is dan weg."""
+def _triage_body(x: dict, roles: list, token: str, *, stay: str, nextc: str,
+                 esc_url: str, with_keyboard: bool, show_progress: bool = True) -> str:
+    """De verwerk-controls van één spanning (kaart + stappen + JS), zonder pagina-omhulsel.
+    Herbruikt door de focusmodus (/triage) én inline op de cockpit, zodat de bovenste spanning
+    daar direct verwerkbaar is. `stay` = waarheen na 'uitkomst toevoegen', `nextc` = na afronden,
+    `esc_url` = waar Escape/← naartoe gaat."""
     from nooch_village.business_case import format_business_case
-    head = ('<div class="tg-wrap"><p><a href="/triage">← overzicht</a> · '
-            '<a href="/">cockpit</a></p><h1>🎯 Spanning verwerken</h1>')
-    if not x:
-        body = ('<div class="tg-card"><h2>Alles verwerkt 🎉</h2>'
-                '<p class="muted">Geen openstaande spanningen meer.</p>'
-                '<p><a class="btn ok" href="/triage">← naar het overzicht</a></p></div>')
-        return _page("Spanningen verwerken", f'{head}{_banner(msg)}{body}</div>'
-                     + f'<style>{_TRIAGE_CSS}</style>')
-
     iid = x["iid"]
-    nog = max(total - 1, 0)
-    prog = (f'<div class="tg-meta">Nog {nog} andere spanning(en) op het overzicht</div>'
-            if total else "")
-    # de kaart: waar gaat het over
+    prog = ('<div class="tg-meta">Nog spanningen op het overzicht</div>' if show_progress else "")
     bc = format_business_case(x.get("business_case")) if x.get("business_case") else ""
     meta = " · ".join(p for p in [
         (f'door {_e(x["by"])}' if x.get("by") else ""),
@@ -895,7 +885,6 @@ def render_triage(x: dict | None, pos: int, total: int, roles: list,
             f'{dlg}</div>')
 
     def f_open(action, fields_html, *, nxt):
-        """Een POST-form naar /action met csrf+iid+next en de eigen velden."""
         return (f'<form method="post" action="/action">'
                 f'<input type="hidden" name="csrf" value="{_e(token)}">'
                 f'<input type="hidden" name="iid" value="{_e(iid)}">'
@@ -903,13 +892,9 @@ def render_triage(x: dict | None, pos: int, total: int, roles: list,
                 f'<input type="hidden" name="action" value="{_e(action)}">'
                 f'{fields_html}</form>')
 
-    stay = f'/triage?iid={iid}'      # uitkomst toevoegen → blijf op deze kaart (stapelen)
-    nextc = '/triage'               # afronden / vraag → volgende kaart
     owner_opts = "".join(f'<option value="{_e(r)}">{_e(r)}</option>' for r in roles)
     gov_opts = ('<option value="__auto__">🤖 laat AI kiezen (nieuw of uitbreiden)</option>'
                 + owner_opts + '<option value="__new__">➕ nieuwe rol</option>')
-
-    # ── stap 0: hoe pak je dit op? ──
     step0 = (
         '<div class="tstep on" id="t-start"><div class="tg-q">Hoe pak je dit op?</div>'
         '<div class="tg-opts">'
@@ -919,9 +904,7 @@ def render_triage(x: dict | None, pos: int, total: int, roles: list,
         '<small>de structuur moet veranderen: een rol erbij of uitbreiden</small></button>'
         '<button class="bigbtn go" type="button" onclick="tg(\'t-oordeel\')">✓ Afronden / oordeel'
         '<small>sluiten met een oordeel dat het dorp traint (leuk idee, nee, nu niet, ...)</small>'
-        '</button>'
-        '</div></div>')
-    # ── stap tactical ──
+        '</button></div></div>')
     step_tac = (
         '<div class="tstep" id="t-tac"><div class="tg-q">Wat wil je doen?</div>'
         '<div class="tg-opts">'
@@ -932,41 +915,32 @@ def render_triage(x: dict | None, pos: int, total: int, roles: list,
         '<button class="bigbtn" type="button" onclick="tg(\'t-ask\')">❓ Informatie vragen'
         '<small>stel de rol een vraag; antwoord komt in de volgende puls</small></button>'
         '</div><button class="tg-back" type="button" onclick="tg(\'t-start\')">← terug</button></div>')
-    # ── leafs ──
     step_proj = (
         '<div class="tstep" id="t-proj"><div class="tg-q">Project — welke rol pakt het op?</div>'
         + f_open("tac_project",
                  f'<select name="owner" class="tg-in">{owner_opts}</select>'
-                 '<button class="bigbtn go" type="submit">📋 Maak concept-project</button>',
-                 nxt=stay)
+                 '<button class="bigbtn go" type="submit">📋 Maak concept-project</button>', nxt=stay)
         + '<button class="tg-back" type="button" onclick="tg(\'t-tac\')">← terug</button></div>')
     step_give = (
         '<div class="tstep" id="t-give"><div class="tg-q">Wat wil je het dorp meegeven?</div>'
         + f_open("tac_info_give",
                  '<textarea name="info" class="tg-in" rows="3" '
                  'placeholder="jouw kennis / context"></textarea>'
-                 '<button class="bigbtn go" type="submit">📚 Voeg toe aan kennisbank</button>',
-                 nxt=stay)
+                 '<button class="bigbtn go" type="submit">📚 Voeg toe aan kennisbank</button>', nxt=stay)
         + '<button class="tg-back" type="button" onclick="tg(\'t-tac\')">← terug</button></div>')
     step_ask = (
         '<div class="tstep" id="t-ask"><div class="tg-q">Wat wil je de rol vragen?</div>'
         + f_open("tac_info_ask",
                  '<textarea name="question" class="tg-in" rows="3" '
                  'placeholder="bijv. ik snap dit voorstel niet, wat bedoel je?"></textarea>'
-                 '<button class="bigbtn go" type="submit">❓ Vraag de rol (volgende)</button>',
-                 nxt=nextc)
+                 '<button class="bigbtn go" type="submit">❓ Vraag de rol (volgende)</button>', nxt=nextc)
         + '<button class="tg-back" type="button" onclick="tg(\'t-tac\')">← terug</button></div>')
     step_gov = (
         '<div class="tstep" id="t-gov"><div class="tg-q">Voorstel — nieuwe rol of uitbreiden?</div>'
         + f_open("gov_proposal",
                  f'<select name="owner" class="tg-in">{gov_opts}</select>'
-                 '<button class="bigbtn go" type="submit">🏛️ Maak voorstel</button>',
-                 nxt=stay)
+                 '<button class="bigbtn go" type="submit">🏛️ Maak voorstel</button>', nxt=stay)
         + '<button class="tg-back" type="button" onclick="tg(\'t-start\')">← terug</button></div>')
-    # ── oordeel-paneel: sluit de spanning mét een trainingssignaal ──
-    # Eén form, gedeelde reden + huis-regel-vinkje, meerdere verdict-knoppen. Elke knop sluit
-    # het item en stuurt terug naar het overzicht (nxt). Alleen 'niet in de visie' wordt een
-    # harde huis-regel (als het vinkje aanstaat); de rest zijn zachte trainingssignalen.
     step_oordeel = (
         '<div class="tstep" id="t-oordeel"><div class="tg-q">Afronden — wat is je oordeel?</div>'
         f'<form method="post" action="/action">'
@@ -993,30 +967,45 @@ def render_triage(x: dict | None, pos: int, total: int, roles: list,
         '(alleen bij ‘past niet binnen de visie’)</label>'
         '</form>'
         '<button class="tg-back" type="button" onclick="tg(\'t-start\')">← terug</button></div>')
+    kb = ("(function(){function typing(){var a=document.activeElement;"
+          "return a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);}"
+          "function startOn(){return document.getElementById('t-start').classList.contains('on');}"
+          "document.addEventListener('keydown',function(e){"
+          f"if(e.key==='Escape'){{window.location='{esc_url}';return;}}"
+          "if(typing())return;"
+          "if(e.key==='ArrowLeft'){e.preventDefault();"
+          f"if(startOn()){{window.location='{esc_url}';}}else{{tg('t-start');}}}}"
+          "else if(startOn()&&e.key==='1'){tg('t-tac');}"
+          "else if(startOn()&&e.key==='2'){tg('t-gov');}"
+          "else if(startOn()&&e.key==='3'){tg('t-oordeel');}});})();" if with_keyboard else "")
+    js = ("<script>function tg(id){document.querySelectorAll('.tstep')"
+          ".forEach(function(e){e.classList.remove('on')});"
+          f"document.getElementById(id).classList.add('on');}}{kb}</script>")
+    return (f'{card}{step0}{step_tac}{step_proj}{step_give}{step_ask}{step_gov}{step_oordeel}{js}')
 
+
+def render_triage(x: dict | None, pos: int, total: int, roles: list,
+                  token: str, msg=None) -> str:
+    """Focusmodus: één spanning per scherm, één keuze per stap (Duolingo-stijl)."""
+    head = ('<div class="tg-wrap"><p><a href="/triage">← overzicht</a> · '
+            '<a href="/">cockpit</a></p><h1>🎯 Spanning verwerken</h1>')
+    if not x:
+        body = ('<div class="tg-card"><h2>Alles verwerkt 🎉</h2>'
+                '<p class="muted">Geen openstaande spanningen meer.</p>'
+                '<p><a class="btn ok" href="/triage">← naar het overzicht</a></p></div>')
+        return _page("Spanningen verwerken", f'{head}{_banner(msg)}{body}</div>'
+                     + f'<style>{_TRIAGE_CSS}</style>')
+    body = _triage_body(x, roles, token, stay=f'/triage?iid={x["iid"]}', nextc='/triage',
+                        esc_url='/triage', with_keyboard=True)
     skip = ('<div class="tg-skip"><a class="muted" href="/triage">'
             '← terug naar het overzicht</a></div>'
             '<p class="tg-hint" style="text-align:center">Toetsenbord: '
             '<kbd>1</kbd> Tactical · <kbd>2</kbd> Governance · <kbd>3</kbd> afronden · '
             '<kbd>←</kbd> terug · <kbd>Esc</kbd> overzicht</p>')
-    js = ("<script>function tg(id){document.querySelectorAll('.tstep')"
-          ".forEach(function(e){e.classList.remove('on')});"
-          "document.getElementById(id).classList.add('on');}"
-          "(function(){function typing(){var a=document.activeElement;"
-          "return a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);}"
-          "function startOn(){return document.getElementById('t-start').classList.contains('on');}"
-          "document.addEventListener('keydown',function(e){"
-          "if(e.key==='Escape'){window.location='/triage';return;}"
-          "if(typing())return;"
-          "if(e.key==='ArrowLeft'){e.preventDefault();"
-          "if(startOn()){window.location='/triage';}else{tg('t-start');}}"
-          "else if(startOn()&&e.key==='1'){tg('t-tac');}"
-          "else if(startOn()&&e.key==='2'){tg('t-gov');}"
-          "else if(startOn()&&e.key==='3'){tg('t-oordeel');}});})();</script>")
-    inner = (f'{head}{_banner(msg)}{card}'
-             f'{step0}{step_tac}{step_proj}{step_give}{step_ask}{step_gov}{step_oordeel}'
-             f'{skip}</div>{js}<style>{_TRIAGE_CSS}</style>')
-    return _page("Spanningen verwerken", inner)
+    return _page("Spanningen verwerken",
+                 f'{head}{_banner(msg)}{body}{skip}</div><style>{_TRIAGE_CSS}</style>')
+
+
 
 
 def render_roloverleg_overview(items: list, agenda_all: list, roles: list,
@@ -2261,10 +2250,10 @@ _SIGNAL_CSS = (
     '.progress-bar{height:100%;background:var(--green);border-radius:99px}</style>')
 
 
-def _render_signal(snap: dict, writable: bool) -> str:
-    """Het signaaldek (na review-1): drie lean kaarten + direct de eerste spanning om te verwerken.
-    Missie = alleen de purpose; target/bezoekers/conversie staan in de Website Watcher; kernwaarden
-    in de huisregels. Geen datadump — een duidelijk signaal."""
+def _render_signal(snap: dict, writable: bool, csrf_token: str | None = None) -> str:
+    """Het signaaldek (na review-1): drie lean kaarten + de bovenste spanning VOLLEDIG inline
+    verwerkbaar. Missie = alleen de purpose; target/bezoekers/conversie staan in de Website Watcher;
+    kernwaarden in de huisregels. Geen datadump — een duidelijk signaal."""
     inbox = snap.get("inbox", [])
     # 1) Missie — alleen de purpose (it takes a village to raise a Noochie staat al in de titel).
     mission = snap.get("mission", {}) or {}
@@ -2299,20 +2288,28 @@ def _render_signal(snap: dict, writable: bool) -> str:
            if nood_q else '<div class="sigsub">Noochie heeft vandaag nog niet gereflecteerd.</div>')
         + '<div class="sigcta"><a class="btn" href="/fieldnotes">📓 lees het dagbulletin</a></div>'
         + '</div>')
-    # Eerste spanning — direct verwerken (de hero stuurt je naar werk-in-focus).
+    # Eerste spanning — VOLLEDIG inline verwerkbaar (zelfde controls als werk-in-focus, maar
+    # acties keren terug naar de cockpit). Zo hoef je voor de bovenste niet een laag dieper.
     top = next((b for b in snap.get("backlog", []) if b.get("approvable") and b.get("iid")), None)
-    if top:
+    if top and csrf_token:
+        roles = [r["id"] for r in snap.get("roster", [])
+                 if not r.get("archived") and r.get("type") == "role"]
+        controls = _triage_body(top, roles, csrf_token, stay="/", nextc="/", esc_url="/",
+                                with_keyboard=False, show_progress=False)
         eerste = (
-            '<div class="sigcard you" style="flex-basis:100%">'
-            '<h3>🎯 Je eerste spanning om te verwerken</h3>'
-            f'<div style="font-size:.95rem;margin-bottom:.5rem"><b>{_e((top.get("title") or "")[:90])}</b>'
-            f'{(" — " + _e((top.get("by") or ""))) if top.get("by") else ""}</div>'
-            f'<a class="btn ok sigcta" href="/triage?iid={_e(top.get("iid"))}">▶ verwerk in focus</a> '
-            f'<a class="btn" href="/triage">alle spanningen ({n_kansen})</a></div>')
+            '<div class="tg-wrap" style="margin:.2rem 0 1.1rem;max-width:none">'
+            "<h2 style=\"margin-top:.2rem\">🎯 Je eerste spanning — verwerk 'm direct</h2>"
+            f'{controls}'
+            f'<div class="tg-skip"><a class="muted" href="/triage">alle spanningen '
+            f'({n_kansen}) →</a></div></div><style>{_TRIAGE_CSS}</style>')
+    elif top:
+        eerste = (f'<div class="sig"><div class="sigcard you" style="flex-basis:100%">'
+                  f'<h3>🎯 Eerste spanning</h3><div><b>{_e((top.get("title") or "")[:90])}</b></div>'
+                  f'<a class="btn ok sigcta" href="/triage?iid={_e(top.get("iid"))}">▶ verwerk</a></div></div>')
     else:
-        eerste = ('<div class="sigcard" style="flex-basis:100%">'
-                  '<span class="muted">Geen spanningen om te verwerken 🎉</span></div>')
-    return f'{_SIGNAL_CSS}<div class="sig">{missie}{aan_jou}{dorp}</div><div class="sig">{eerste}</div>'
+        eerste = ('<div class="sig"><div class="sigcard" style="flex-basis:100%">'
+                  '<span class="muted">Geen spanningen om te verwerken 🎉</span></div></div>')
+    return f'{_SIGNAL_CSS}<div class="sig">{missie}{aan_jou}{dorp}</div>{eerste}'
 
 
 def render_html(snap: dict, csrf_token: str | None = None, msg=None,
@@ -2802,7 +2799,7 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'<h1>IT TAKES A VILLAGE TO RAISE A NOOCHIE {badge}</h1>'
         f'<div class="bar">gegenereerd {_e(_ts(snap.get("generated_at")))} · {hist}</div>'
         f'{_banner(msg)}'
-        f'{_render_signal(snap, writable)}'
+        f'{_render_signal(snap, writable, csrf_token)}'
         f'{_render_watcher_dashboard(snap.get("shopify", {}), snap.get("visitors_7d"), snap.get("mission", {}).get("goal"))}'
         f'{drafts_block}'
         f'<h2>Proces (projecten) · <a href="/prikbord" style="font-size:.8rem;'

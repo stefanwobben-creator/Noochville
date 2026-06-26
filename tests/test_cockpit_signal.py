@@ -39,15 +39,26 @@ def test_signaaldek_drie_kaarten(tmp_path):
     assert "Projecten lopen nu" in page
 
 
-def test_signaal_toont_eerste_spanning(tmp_path):
+def test_signaal_toont_eerste_spanning_inline(tmp_path):
     snap = _snap(tmp_path)
-    snap["backlog"] = [{"approvable": True, "title": "TikTok challenge", "iid": "op1"}]
+    snap["backlog"] = [{"approvable": True, "title": "TikTok challenge", "iid": "op1",
+                        "wat": "doe iets", "waarom": "omdat"}]
     snap["agenda_open"] = [{"id": "a"}]
     page = cockpit.render_html(snap, "t")
     assert "Kansen om te wegen" in page and "verwerk in focus" in page
-    assert "eerste spanning" in page and "TikTok challenge" in page   # direct te verwerken
-    assert 'href="/triage?iid=op1"' in page
+    # de bovenste spanning is VOLLEDIG inline verwerkbaar (zelfde controls als werk-in-focus)
+    assert "eerste spanning" in page and "TikTok challenge" in page
+    assert "Hoe pak je dit op" in page and 'value="tac_project"' in page
+    assert 'href="/triage"' in page          # 'alle spanningen' naar het overzicht
     assert "Roloverleg" in page
+
+
+def test_eerste_spanning_readonly_valt_terug_op_link(tmp_path):
+    snap = _snap(tmp_path)
+    snap["backlog"] = [{"approvable": True, "title": "TikTok challenge", "iid": "op1"}]
+    page = cockpit.render_html(snap)                 # geen token = read-only
+    assert 'href="/triage?iid=op1"' in page          # alleen een linkje, geen inline-form
+    assert "Hoe pak je dit op" not in page
 
 
 def test_signaal_leeg_is_rustig(tmp_path):
