@@ -454,7 +454,8 @@ def test_cockpit_render_roloverleg(tmp_path):
     assert "Volgen van de markt" in page                      # huidige rol
     assert "Bewaken van sociale kanalen" in page              # voorgestelde wijziging
     assert "Secretaris" in page
-    for val in ("rov_react", "rov_consent", "rov_object"):
+    # brok 6: de AI-herziening (rov_react) is vervangen door het chat-kladblok (rov_kladblok)
+    for val in ("rov_kladblok", "rov_consent", "rov_object"):
         assert f'value="{val}"' in page
     # overzicht: open item zichtbaar + 'zelf toevoegen' altijd
     ov = cockpit.render_roloverleg_overview([item], [item], ["scout", "librarian"], "t")

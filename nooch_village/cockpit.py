@@ -1273,14 +1273,27 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
         react_log += f'<div class="tg-dlg">🙋 <b>jij:</b> {_e(r.get("text",""))}</div>'
     common = (f'<input type="hidden" name="csrf" value="{_e(token)}">'
               f'<input type="hidden" name="iid" value="{_e(item["id"])}">')
-    react_form = (
-        '<details style="margin-top:.4rem"><summary>🤖 Laat de AI een herziening voorstellen</summary>'
+    # Chat-kladblok (brok 6, p.6): één denkruimte naast het voorstel mét AI, i.p.v. AI bij elk veld.
+    # Jouw bericht wordt altijd bewaard; de AI denkt gericht mee (formulering, dubbeling). De AI past
+    # niets aan — jij bewerkt de velden hierboven zelf.
+    kladblok_log = ""
+    for m in item.get("kladblok", []):
+        who = "🙋 jij" if m.get("who") == "jij" else "🤖 AI"
+        edge = "var(--green)" if m.get("who") == "ai" else "var(--border)"
+        kladblok_log += (f'<div class="tg-dlg" style="border-left:3px solid {edge};padding-left:.5rem">'
+                         f'<b>{who}:</b> {_e(m.get("text",""))}</div>')
+    kladblok = (
+        f'<div class="tg-card" style="margin-top:.4rem"><div style="{_H}">💬 Kladblok — chat met de AI</div>'
+        '<p class="muted" style="font-size:.8rem">Vrije notitie of gerichte vraag (bijv. "scherp deze '
+        'purpose aan" of "bestaat deze accountability al ergens?"). De AI denkt mee; jij past de velden '
+        'hierboven zelf aan.</p>'
+        f'{kladblok_log or "<p class=muted>Nog geen berichten.</p>"}'
         f'<form method="post" action="/action" style="margin-top:.3rem">{common}'
         f'<input type="hidden" name="next" value="/roloverleg?iid={_e(item["id"])}">'
-        '<textarea name="reason" class="tg-in" rows="2" '
-        'placeholder="beschrijf in gewone taal wat anders moet; de AI vult de velden hierboven"></textarea>'
-        '<button class="bigbtn" type="submit" name="action" value="rov_react">'
-        '🤖 Stel een herziening voor</button></form></details>')
+        '<textarea name="kladblok_msg" class="tg-in" rows="2" '
+        'placeholder="schrijf een notitie of stel een vraag aan de AI..."></textarea>'
+        '<button class="bigbtn" type="submit" name="action" value="rov_kladblok">'
+        '💬 Stuur</button></form></div>')
     # Bij een accountability-voorstel: het ook nu meteen als EXPERIMENT (project) kunnen laten
     # doen door de indienende rol — een accountability is daarvoor niet nodig (purpose volstaat),
     # en pas na herhaalde uitvoering 'stolt' het tot accountability (rijpheidspoort).
@@ -1506,10 +1519,7 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
     # 'Neem voorstel aan' (de beslis-knoppen zitten ín het formulier). Bezwaar als rustige 2e stap.
     bezwaar = (f'<div class="tg-card" style="margin-top:.4rem"><div style="{_H}">Toch een '
                f'bezwaar?</div>{objection_form}</div>')
-    secondair = (f'<details style="margin-top:.4rem"><summary>🔧 Meer opties '
-                 '(AI-herziening)</summary>'
-                 f'{react_form}</details>')
-    inner = (f'{head}{_banner(msg)}{card}{diff_block}{sec}{editor}{group_block}{bezwaar}{secondair}'
+    inner = (f'{head}{_banner(msg)}{card}{diff_block}{sec}{editor}{kladblok}{group_block}{bezwaar}'
              '<div class="tg-skip"><a class="muted" href="/roloverleg">← terug naar de agenda</a>'
              '</div></div><style>' + _TRIAGE_CSS + '</style>')
     return _page("Voorstel behandelen", inner)
@@ -1746,6 +1756,53 @@ def _next_open_agenda(data_dir: str | None, iid: str) -> str:
         return f"/roloverleg?iid={nexts[0]['id']}" if nexts else "/roloverleg"
     except Exception:
         return "/roloverleg"
+
+
+def _kladblok_ai_reply(item: dict, records, vraag: str) -> str | None:
+    """Gerichte AI-hulp in het kladblok (brok 6): denkt mee over purpose/accountability-formulering
+    en wijst op mogelijke dubbeling bij ándere rollen. Geeft ALLEEN advies — past de velden niet aan
+    (de mens doet dat zelf). Fail-soft: geen LLM of geen antwoord → None."""
+    try:
+        from nooch_village.llm import reason as _reason
+    except Exception:
+        return None
+    ch = item.get("change", {}) or {}
+    rec = records.get(item.get("role_id")) if records else None
+    cur_pur = getattr(getattr(rec, "definition", None), "purpose", "") if rec else ""
+    cur_accs = list(getattr(getattr(rec, "definition", None), "accountabilities", []) or []) if rec else []
+    # Korte lijst van accountabilities bij ÁNDERE rollen, zodat de AI dubbeling kan signaleren.
+    andere = []
+    try:
+        for r in records.all():
+            if r.archived or r.type.value != "role" or r.id == item.get("role_id"):
+                continue
+            for a in r.definition.accountabilities:
+                andere.append(f"{r.id}: {a}")
+    except Exception:
+        pass
+    andere_txt = "\n".join(f"- {x}" for x in andere[:40]) or "- (geen)"
+    voorstel = []
+    if ch.get("purpose"):
+        voorstel.append(f"nieuwe purpose: {ch['purpose']}")
+    if ch.get("add_accountabilities"):
+        voorstel.append("toevoegen: " + "; ".join(ch["add_accountabilities"]))
+    if ch.get("remove_accountabilities"):
+        voorstel.append("verwijderen: " + "; ".join(ch["remove_accountabilities"]))
+    prompt = (
+        "Je bent de Secretaris/AI-meedenker in een Holacracy-roloverleg. Geef KORT (max 4 zinnen), "
+        "concreet en behulpzaam antwoord op de vraag van de mens. Je past niets aan; je adviseert "
+        "alleen. Let speciaal op: (1) scherpe -en-formulering van accountabilities, (2) of een "
+        "accountability al bij een ándere rol bestaat (noem die rol dan).\n\n"
+        f"Rol: {item.get('role_id','?')}\nHuidige purpose: {cur_pur or '—'}\n"
+        f"Huidige accountabilities:\n" + ("\n".join(f"- {a}" for a in cur_accs) or "- (geen)") + "\n\n"
+        f"Voorgestelde wijziging: {' | '.join(voorstel) or '—'}\n\n"
+        f"Accountabilities bij andere rollen:\n{andere_txt}\n\n"
+        f"Vraag van de mens: {vraag}")
+    try:
+        out = (_reason(prompt) or "").strip()
+    except Exception:
+        return None
+    return out or None
 
 
 def _build_cdict(card, all_notes) -> dict:
@@ -3142,6 +3199,9 @@ def _flash(result: dict) -> str:
         return f"✓ Soort gezet → {result['note_kind']}"
     if "note_scratch" in result:
         return "💾 Notitie bewaard (niet-officieel)."
+    if result.get("rov") == "kladblok":
+        return ("💬 Bewaard — de AI heeft meegedacht (zie kladblok)." if result.get("ai")
+                else "💬 Bewaard in het kladblok (de AI kon nu niet meedenken — geen LLM).")
     if "note_relation" in result:
         return ("✓ Bewijs-link gelegd: steunt" if result["note_relation"] == "supports"
                 else "✓ Bewijs-link gelegd: spreekt tegen")
@@ -3246,7 +3306,7 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                                   project_status="draft" if risky else "queued", projects=projects)
     if action in ("rov_react", "rov_consent", "rov_object", "rov_add", "rov_end", "rov_flip_facet",
                   "rov_to_project", "rov_invalid", "rov_edit", "rov_group_add", "rov_group_consent",
-                  "rov_remove", "rov_keep_role"):
+                  "rov_remove", "rov_keep_role", "rov_kladblok"):
         from nooch_village.roloverleg import (Agenda, amend_with_reaction, apply_consented,
                                               flip_facet, build_change_from_fields)
         agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
@@ -3395,6 +3455,19 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                 return {"ok": False, "error": "voorstel niet gevonden"}
             _apply_editor_fields(item)
             return {"ok": True, "rov": "edited"}
+        if action == "rov_kladblok":
+            # Chat-kladblok (brok 6): jouw bericht wordt altijd bewaard; de AI denkt mee (fail-soft).
+            item = agenda.get(iid)
+            if item is None:
+                return {"ok": False, "error": "voorstel niet gevonden"}
+            msg = (extra.get("kladblok_msg") or "").strip()
+            if not msg:
+                return {"ok": False, "error": "schrijf eerst een bericht in het kladblok"}
+            agenda.add_kladblok(iid, "jij", msg)
+            reply = _kladblok_ai_reply(item, records, msg)
+            if reply:
+                agenda.add_kladblok(iid, "ai", reply)
+            return {"ok": True, "rov": "kladblok", "ai": bool(reply)}
         # de overige acties werken op één item
         if action == "rov_consent":
             # 'Neem voorstel aan' = de bewerkte velden vastleggen én consent geven (één knop).
@@ -3870,6 +3943,7 @@ def make_handler(data_dir: str | None):
                      "target": (form.get("target") or [""])[0],
                      "from_id": (form.get("from_id") or [""])[0],
                      "scratch": (form.get("scratch") or [""])[0],
+                     "kladblok_msg": (form.get("kladblok_msg") or [""])[0],
                      "remember": (form.get("remember") or [""])[0]}
             result = _dispatch_action(data_dir, action, iid, reason, extra=extra)
             # Brok 5 (p.4 punt 11): na consent niet terug naar de agenda, maar dóór naar het

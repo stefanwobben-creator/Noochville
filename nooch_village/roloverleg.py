@@ -86,6 +86,17 @@ class Agenda:
         self._save()
         return True
 
+    def add_kladblok(self, iid: str, who: str, text: str) -> bool:
+        """Voeg een bericht toe aan het kladblok (chat met de AI) van een voorstel. `who` =
+        'jij' of 'ai'. Het kladblok is een denkruimte naast het voorstel; het wijzigt de rol niet."""
+        it = self.get(iid)
+        if it is None or not (text or "").strip():
+            return False
+        it.setdefault("kladblok", []).append(
+            {"who": who, "text": text.strip(), "at": time.time()})
+        self._save()
+        return True
+
     def update_change(self, iid: str, change: dict) -> bool:
         it = self.get(iid)
         if it is None:
