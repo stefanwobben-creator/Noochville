@@ -1254,14 +1254,20 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
             f'<input type="hidden" name="next" value="/roloverleg?iid={_e(item["id"])}">'
             f'<button class="btn" type="submit" name="action" value="rov_flip_facet">'
             f'{flip_lbl}</button></form>')
-    # Secretaris-check
+    # Secretaris-check (p.4 punt 9+10): de Secretaris toetst o.a. of een accountability al bij een
+    # ándere rol bestaat (Gate G2). Een 🔴 'blok' = geen consent mogelijk → de knop gaat op slot.
+    sec_blocked = any(i.get("level") == "blok" for i in issues)
     if not issues:
-        sec = '<div class="tg-dlg">📋 <b>Secretaris:</b> in orde — volledig, geen botsing.</div>'
+        sec = ('<div class="tg-dlg" style="border-left:3px solid var(--green);padding-left:.5rem">'
+               '📋 <b>Secretaris:</b> in orde — volledig, geen botsing. ✓ consent kan.</div>')
     else:
         lis = "".join(
             f'<li>{"🔴" if i["level"]=="blok" else "🟡"} {_e(i["msg"])}</li>' for i in issues)
-        sec = ('<div class="tg-dlg">📋 <b>Secretaris ziet aandachtspunten:</b>'
-               f'<ul style="margin:.3rem 0">{lis}</ul></div>')
+        edge = "var(--coral)" if sec_blocked else "var(--yellow)"
+        kop = ("⛔ <b>Secretaris: geen consent mogelijk</b> — los dit eerst op:" if sec_blocked
+               else "📋 <b>Secretaris ziet aandachtspunten</b> (advies, consent kan):")
+        sec = (f'<div class="tg-dlg" style="border-left:3px solid {edge};padding-left:.5rem">'
+               f'{kop}<ul style="margin:.3rem 0">{lis}</ul></div>')
     react_log = ""
     for r in item.get("reactions", []):
         react_log += f'<div class="tg-dlg">🙋 <b>jij:</b> {_e(r.get("text",""))}</div>'
@@ -1286,12 +1292,23 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
             'omkeerbaar experiment; bij herhaling stolt het later tot accountability</small></button>')
     # De beslis-knoppen leven IN het bewerk-formulier (één form), zodat 'Neem voorstel aan'
     # de bewerkte velden meteen vastlegt én consent geeft (geen aparte opslaan-knop meer; p.4 punt 8).
+    # Bij een 🔴 'blok' van de Secretaris (bijv. accountability bestaat al bij een ándere rol) staat
+    # de consent-knop op slot (p.4 punt 9+10): geen consent tot het is opgelost.
+    if sec_blocked:
+        consent_btn = (
+            '<button class="bigbtn go" type="submit" name="action" value="rov_consent" disabled '
+            'style="opacity:.5;cursor:not-allowed">'
+            '🔒 Neem voorstel aan<small>geblokkeerd door de Secretaris — los het 🔴-punt eerst op '
+            '(bijv. de accountability bestaat al bij een andere rol)</small></button>')
+    else:
+        consent_btn = (
+            '<button class="bigbtn go" type="submit" name="action" value="rov_consent">'
+            '✓ Neem voorstel aan<small>legt je bewerkte velden vast én geeft consent — '
+            'bij einde overleg doorgevoerd</small></button>')
     decide_buttons = (
         f'<div class="tg-card" style="margin-top:.6rem"><div style="{_H}">Beslis</div>'
         '<div class="tg-opts">'
-        '<button class="bigbtn go" type="submit" name="action" value="rov_consent">'
-        '✓ Neem voorstel aan<small>legt je bewerkte velden vast én geeft consent — '
-        'bij einde overleg doorgevoerd</small></button>'
+        f'{consent_btn}'
         f'{project_opt}'
         + ("" if valid else
            '<button class="bigbtn warn" type="submit" name="action" value="rov_invalid">'
@@ -3373,6 +3390,13 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                 return {"ok": False, "error": "voorstel niet gevonden"}
             if _has_editor_fields(item):
                 _apply_editor_fields(item)
+                item = agenda.get(iid)
+            # Server-side poort: een 🔴 'blok' van de Secretaris (bijv. accountability bestaat al
+            # bij een ándere rol) blokkeert consent — ook als de knop via een oude pagina toch POST.
+            from nooch_village.roloverleg import secretary_check as _seccheck
+            if any(i.get("level") == "blok" for i in _seccheck(item, records)):
+                return {"ok": False, "error": "Secretaris blokkeert: los het 🔴-aandachtspunt eerst "
+                        "op (bijv. de accountability bestaat al bij een andere rol)"}
             return {"ok": agenda.set_status(iid, "consented"), "rov": "consented"}
         if action == "rov_object":
             # Bezwaar-toets volgens de handout: JIJ kiest per vraag; de uitkomst volgt uit je eigen
