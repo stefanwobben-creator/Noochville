@@ -1091,7 +1091,7 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
             lis = "".join(f'<li>{"🔴" if i["level"]=="blok" else "🟡"} {_e(i["msg"])}</li>' for i in issues)
             sec = ('<div class="tg-dlg">📋 <b>Secretaris ziet aandachtspunten:</b>'
                    f'<ul style="margin:.3rem 0">{lis}</ul></div>')
-        rmcard = (f'<div class="tg-card" style="border-left:3px solid #c0392b">'
+        rmcard = (f'<div class="tg-card" style="border-left:3px solid var(--coral)">'
                   f'<div class="tg-meta">Voorstel · door {_e(item.get("by",""))} · '
                   f'status {_e(item.get("status",""))}</div>'
                   f'<h2>🗑 Rol verwijderen: {_e(item.get("title") or item.get("role_id"))}</h2>'
@@ -1256,7 +1256,7 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
         'document.querySelectorAll(".objq input[type=radio]").forEach(function(r){'
         'r.addEventListener("change",sync);});sync();})();</script>')
     invalid_box = ("" if valid else
-                   '<div class="tg-dlg" style="border-left:3px solid #c0392b;padding-left:.5rem">'
+                   '<div class="tg-dlg" style="border-left:3px solid var(--coral);padding-left:.5rem">'
                    f'⚖️ <b>Facilitator:</b> deze spanning lijkt ongeldig — {_e(invalid_reason)}. '
                    'Een voorstel om een ándere rol te wijzigen mag direct van de agenda zonder '
                    'governance.</div>')
@@ -1269,7 +1269,7 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
             f'<li>{"✅" if s["ok"] else "❌"} <b>{_e(s["label"])}</b>: {_e(s.get("gekozen","—"))}</li>'
             for s in r.get("steps", []))
         steps_html = f'<ul style="margin:.3rem 0">{steps_html}</ul>' if steps_html else ""
-        edge = "#27ae60" if r.get("valid") else "#c0392b"
+        edge = "var(--green)" if r.get("valid") else "var(--coral)"
         harm_line = (f'⚖️ <b>Bezwaar getoetst:</b> "{_e(obj.get("text",""))}"<br>'
                      if obj.get("text") else "⚖️ <b>Bezwaar getoetst</b><br>")
         obj_box = (f'<div class="tg-dlg" style="border-left:3px solid {edge};padding-left:.5rem">'
@@ -1479,7 +1479,7 @@ def render_project_edit(p: dict, roster: list, csrf_token: str) -> str:
         bubbles += (
             f'<div style="display:flex;justify-content:{side};margin:.3rem 0">'
             f'<div style="max-width:82%;background:{bg};border:1px solid var(--border);'
-            f'border-radius:12px;padding:.5rem .75rem">'
+            f'border-radius:var(--radius);padding:.5rem .75rem">'
             f'<div class="muted" style="font-size:.7rem;margin-bottom:.15rem">{who}</div>'
             f'<div style="white-space:pre-wrap;font-size:.9rem;line-height:1.45">{_e(m.get("text",""))}</div>'
             '</div></div>')
@@ -1889,7 +1889,7 @@ def _watcher_panel(shop: dict, visitors_7d, *, show_conv: bool) -> str:
     warn = ""
     if flags:
         lis = "".join(f"<li>{f}</li>" for f in flags)
-        warn = ('<div class="wbox" style="border-left:3px solid #c9a227;margin:.2rem 0 .6rem">'
+        warn = ('<div class="wbox" style="border-left:3px solid var(--yellow);margin:.2rem 0 .6rem">'
                 '<div class="wbox-h">⚠️ Lees deze cijfers met een korrel zout</div>'
                 f'<ul style="margin:.2rem 0 0;padding-left:1.1rem;font-size:.82rem">{lis}</ul></div>')
     return f'<div class="kpis">{tiles}</div>{warn}{conv_note}{cols}'
@@ -1936,7 +1936,7 @@ _SIGNAL_CSS = (
     '<style>.sig{display:flex;flex-wrap:wrap;gap:.8rem;margin:.4rem 0 1.1rem}'
     '.sigcard{flex:1 1 280px;min-width:0;background:var(--surface);border:1px solid var(--border);'
     'border-radius:var(--radius);padding:.8rem 1rem;box-shadow:var(--shadow)}'
-    '.sigcard.you{background:var(--yellow-light);border-color:#e2cf8e}'
+    '.sigcard.you{background:var(--yellow-light);border-color:var(--yellow)}'
     '.sigcard h3{font-family:var(--font-display);font-weight:800;font-size:.82rem;'
     'text-transform:uppercase;letter-spacing:.02em;margin:0 0 .5rem;color:var(--green-dark)}'
     '.sigrow{display:flex;justify-content:space-between;align-items:center;gap:.5rem;'

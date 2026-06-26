@@ -1171,3 +1171,10 @@ Tests in test_cockpit_signal.py. Suite groen (515 + 558).
   project-status wijzigt écht, chat-log, spinoff maakt project, en roloverleg consent→Einde voert de
   wijziging ECHT door in de records. (Verving de oppervlakkige render-only check.)
 Suite groen (592 + 487).
+
+## Design-system: cockpit-componenten op tokens (geen losse hex)
+De componenten die ik toevoegde gebruikten een paar losse hex-kleuren; omgezet naar de bestaande
+design-tokens: #c0392b→var(--coral), #27ae60→var(--green), #c9a227→var(--yellow),
+#e2cf8e→var(--border), chat-bubble border-radius→var(--radius). De enige resterende literals zijn
+(a) de :root/.btn token-DEFINITIES in de basis-stylesheet (daar horen ze, als een tokens-bestand)
+en (b) #fff (witte tekst op donkere knop; geen merkkleur). Cockpit-tests groen.
