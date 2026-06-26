@@ -24,6 +24,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from nooch_village.governance import Records
 from nooch_village.human_inbox import HumanInbox
 from nooch_village.projects import ProjectLedger
+from nooch_village.pinboard import Pinboard, read_wip
 from nooch_village.library import Library, classify_function
 from nooch_village.trend_analysis import trend_state_label
 from nooch_village.notes_store import NotesStore
@@ -329,12 +330,18 @@ def gather(data_dir: str | None = None) -> dict:
     backlog.sort(key=lambda x: -x["value"])
     project_drafts = [p for p in proj if p.get("status") == "draft"]
 
+    # Prikbord (brok 2/3): briefjes (request/outcome) + WIP-instelling, voor de /prikbord-pagina.
+    pinboard = Pinboard(os.path.join(dd, "pinboard.json")).all()
+    wip = read_wip(dd)
+
     _now = time.time()
     return {
         "roster": roster,
         "inbox": inbox_items,
         "projects": proj,
         "project_drafts": project_drafts,
+        "pinboard": pinboard,
+        "wip": wip,
         "backlog": backlog,
         "north_star": _north_star(dd),
         "mission": {"purpose": _strategy(dd).get("purpose", ""),
@@ -406,7 +413,7 @@ _CSS = """
  --ink:#1B1B1B;--gray:#4A4A4A;--subtle:#7A7A7A;--muted:#9A9483;
  --green:#1F9D55;--green-dark:#14713C;--green-tint:#D3EFDD;
  --cream:#FCFAF4;--cream-2:#FBF6EA;--cream-3:#FFF7E8;--sand:#F1ECDF;--surface:#fff;
- --yellow:#FFCE2E;--yellow-light:#FFF1B8;--coral:#FF6B5B;--border:#DDD4C0;
+ --yellow:#FFCE2E;--yellow-light:#FFF1B8;--coral:#FF6B5B;--border:#DDD4C0;--error-tint:#FDEAEA;
  --font-display:'Bricolage Grotesque',system-ui,sans-serif;
  --font-body:'DM Sans',system-ui,sans-serif;
  --radius:9px;--radius-pill:999px;
@@ -432,7 +439,7 @@ th{background:var(--cream-2);font-family:var(--font-display);font-weight:700;
 tr:last-child td{border-bottom:none}
 tr.archived td{opacity:.45}
 tr.st-pending td{background:var(--yellow-light)}
-tr.st-blocked td{background:#FDEAEA}
+tr.st-blocked td{background:var(--error-tint)}
 tr.st-running td{background:var(--green-tint)}
 tr.st-future td{opacity:.55}
 .chip{display:inline-block;background:var(--green-tint);color:var(--green-dark);
@@ -456,7 +463,7 @@ details>summary{cursor:pointer;font-family:var(--font-display);font-weight:700;p
  border-radius:var(--radius);font:inherit;background:#fff}
 .flash{background:var(--green-tint);border:1px solid var(--green);color:var(--green-dark);
  border-radius:var(--radius);padding:.5rem .8rem;margin:.4rem 0 1rem;font-weight:600}
-.flash.err{background:#FDEAEA;border-color:var(--coral);color:#A8322A}
+.flash.err{background:var(--error-tint);border-color:var(--coral);color:#A8322A}
 """
 
 
@@ -1413,6 +1420,170 @@ def _proj_actions(p: dict, token: str) -> str:
     """Statusknoppen voor de dashboard-rij (terug naar de rij via anker) + Edit-link."""
     return _proj_status_controls(p, token, f"/#proj-{p.get('id')}") + \
         f' <a class="btn" href="/project?pid={_e(p.get("id"))}">Edit…</a>'
+
+
+def _proj_scope(p: dict) -> str:
+    """Leesbare scope (oude machine-scope als dict → 'k: v · k: v')."""
+    s = p.get("scope")
+    if isinstance(s, dict):
+        return " · ".join(f"{k}: {v}" for k, v in s.items())
+    return str(s or "")
+
+
+# ── Prikbord-Kanban (brok 3): het levende bord — WIP, kolommen, clusters, stuwmeren, briefjes ──
+
+_KANBAN_COLS = [("future", "🌱 Toekomst", "Geparkeerd — wacht op de puls of jouw zet"),
+                ("running", "⚡ Actief", "Wordt nu gedaan (binnen WIP)"),
+                ("blocked", "⏳ Wachten", "Geblokkeerd op een ander of op jou"),
+                ("done", "✓ Done", "Afgerond — het archief")]
+
+
+def _wip_meter(projects: list, wip: dict) -> str:
+    """Bord-brede en per-rol WIP-bezetting als balkjes. Rood als de limiet bereikt is."""
+    board_cap = int((wip or {}).get("board", 3))
+    role_caps = dict((wip or {}).get("roles", {}))
+    running = [p for p in projects if p.get("status") == "running"]
+    board_n = len(running)
+    per_role: dict[str, int] = {}
+    for p in running:
+        per_role[p.get("owner")] = per_role.get(p.get("owner"), 0) + 1
+
+    def _bar(n, cap, label):
+        full = n >= cap
+        col = "var(--coral)" if full else "var(--green)"
+        pct = min(100, int(100 * n / cap)) if cap else 0
+        return (f'<div style="margin:.25rem 0">'
+                f'<div style="display:flex;justify-content:space-between;font-size:12px">'
+                f'<span>{_e(label)}</span><span style="font-weight:700;color:{col}">{n}/{cap}'
+                f'{" · vol" if full else ""}</span></div>'
+                f'<div style="height:7px;background:var(--sand);border-radius:var(--radius-pill)">'
+                f'<div style="height:7px;width:{pct}%;background:{col};'
+                f'border-radius:var(--radius-pill)"></div></div></div>')
+
+    rows = _bar(board_n, board_cap, "Bord-breed (alle rollen)")
+    for r in sorted(per_role, key=lambda r: -per_role[r]):
+        rows += _bar(per_role[r], int(role_caps.get(r, board_cap)), r)
+    return (f'<div class="tension"><b>WIP — hoeveel er tegelijk loopt</b> '
+            f'<span class="muted">(tempo-knop staat in config/strategy.json)</span>{rows}</div>')
+
+
+def _stuwmeer(projects: list) -> str:
+    """De stuwmeren zichtbaar maken: werk dat op de MENS wacht, per rol opgestapeld.
+    Dit is guardrail 3 uit het ontwerp — de menselijke wachtrij mag niet stil zwellen."""
+    human = [p for p in projects if p.get("status") == "blocked"
+             and "mens" in str(p.get("blocked_on") or "").lower()]
+    if not human:
+        return ('<div class="tension" style="background:var(--green-tint);'
+                'border-color:var(--green)">✓ Geen stuwmeer — niets ligt op jou te wachten.</div>')
+    per: dict[str, list] = {}
+    for p in human:
+        per.setdefault(p.get("owner"), []).append(p)
+    items = ""
+    for owner in sorted(per, key=lambda o: -len(per[o])):
+        lis = "".join(
+            f'<li><a href="/project?pid={_e(p.get("id"))}">{_e(_proj_scope(p)[:70])}</a> '
+            f'<span class="muted">— {_e(p.get("blocked_on"))}</span></li>' for p in per[owner])
+        items += (f'<li><b>{_e(owner)}</b> <span class="chip">{len(per[owner])} '
+                  f'op jou</span><ul>{lis}</ul></li>')
+    return (f'<div class="tension" style="background:var(--error-tint);border-color:var(--coral)">'
+            f'<b>⏳ Stuwmeer — {len(human)} stuk(s) wachten op jou</b>'
+            f'<ul style="margin:.4rem 0">{items}</ul></div>')
+
+
+def _kanban_card(p: dict, token: str, is_root: bool, n_members: int, n_links: int) -> str:
+    """Eén project-kaartje in een Kanban-kolom: owner, scope, cluster/links-badges, status-knoppen."""
+    pid = p.get("id")
+    badges = ""
+    if is_root and n_members:
+        on = p.get("status") == "running"
+        sw = "🟢 cluster aan" if on else "⚪ cluster uit"
+        badges += (f'<span class="chip" title="master-switch: stuurt {n_members} leden">'
+                   f'{sw} · {n_members}</span>')
+    elif p.get("parent"):
+        badges += '<span class="chip" title="onderdeel van een cluster">↳ lid</span>'
+    if n_links:
+        badges += f'<span class="chip">↔ {n_links}</span>'
+    wait = (f'<div class="muted" style="font-size:12px;margin-top:.2rem">wacht: '
+            f'{_e(p.get("blocked_on"))}</div>') if p.get("status") == "blocked" else ""
+    dod = (f'<div class="muted" style="font-size:12px;margin-top:.2rem">🎯 '
+           f'{_e(p.get("dod_outcome")[:80])}</div>') if p.get("dod_outcome") else ""
+    ctrl = _proj_status_controls(p, token, "/prikbord") if token else ""
+    return (f'<div style="background:var(--surface);border:1px solid var(--border);'
+            f'border-radius:var(--radius);padding:.55rem .65rem;margin:.4rem 0;'
+            f'box-shadow:var(--shadow)">'
+            f'<div style="display:flex;justify-content:space-between;gap:.4rem">'
+            f'<b style="font-size:12px">{_e(p.get("owner"))}</b>'
+            f'<a href="/project?pid={_e(pid)}" style="font-size:11px">open ›</a></div>'
+            f'<div style="margin:.2rem 0;font-size:13px">{_e(_proj_scope(p)[:90])}</div>'
+            f'{dod}{wait}<div style="margin:.25rem 0">{badges}</div>'
+            f'<div>{ctrl}</div></div>')
+
+
+def render_prikbord(snap: dict, csrf_token: str | None = None, msg=None) -> str:
+    """Het prikbord-Kanban-bord: WIP-meter, stuwmeren, vier statuskolommen met cluster- en
+    link-badges, en de losse briefjes (request/outcome). Zie docs/ONTWERP_prikbord_kanban.md."""
+    projects = snap.get("projects", [])
+    token = csrf_token
+    # Clusters: een root is een project dat de 'cluster' van ≥1 ánder project is.
+    members_of: dict[str, list] = {}
+    for p in projects:
+        cl = p.get("cluster")
+        if cl and cl != p.get("id"):
+            members_of.setdefault(cl, []).append(p)
+    is_root = {p.get("id"): (p.get("id") in members_of) for p in projects}
+
+    # Kanban-kolommen
+    cols = ""
+    for st, title, hint in _KANBAN_COLS:
+        bucket = [p for p in projects if p.get("status") == st]
+        if st == "done":
+            bucket = sorted(bucket, key=lambda p: -(p.get("updated_at") or 0))[:8]
+        cards = "".join(
+            _kanban_card(p, token, is_root.get(p.get("id"), False),
+                         len(members_of.get(p.get("id"), [])), len(p.get("links") or []))
+            for p in bucket) or '<div class="muted" style="font-size:12px;padding:.4rem">leeg</div>'
+        cols += (f'<div style="flex:1;min-width:0;background:var(--cream-2);'
+                 f'border:1px solid var(--border);border-radius:var(--radius);padding:.5rem">'
+                 f'<div style="font-family:var(--font-display);font-weight:700;font-size:13px">'
+                 f'{_e(title)} <span class="muted">({len(bucket)})</span></div>'
+                 f'<div class="muted" style="font-size:11px;margin-bottom:.3rem">{_e(hint)}</div>'
+                 f'{cards}</div>')
+    board = (f'<div style="display:flex;gap:.6rem;align-items:flex-start;'
+             f'overflow-x:auto">{cols}</div>')
+
+    # Briefjes (prikbord): open verzoeken/uitkomsten die rollen kunnen oppakken.
+    pin = snap.get("pinboard", [])
+    open_b = [b for b in pin if b.get("status") != "done"]
+    brows = "".join(
+        f'<tr><td><span class="chip">{_e("📌 verzoek" if b.get("kind")=="request" else "📤 uitkomst")}</span></td>'
+        f'<td>{_e(b.get("tag"))}</td><td><b>{_e(b.get("title"))}</b>'
+        f'{(" <span class=muted>· " + _e(b.get("by")) + "</span>") if b.get("by") else ""}</td>'
+        f'<td>{_e(b.get("status"))}{(" · " + _e(b.get("claimed_by"))) if b.get("claimed_by") else ""}</td></tr>'
+        for b in sorted(open_b, key=lambda b: -(b.get("created_at") or 0)))
+    pin_tbl = ('<table><thead><tr><th>soort</th><th>tag</th><th>briefje</th><th>status</th></tr></thead>'
+               f'<tbody>{brows or "<tr><td colspan=4 class=muted>geen open briefjes</td></tr>"}</tbody></table>')
+
+    n_run = sum(1 for p in projects if p.get("status") == "running")
+    n_fut = sum(1 for p in projects if p.get("status") == "future")
+    n_blk = sum(1 for p in projects if p.get("status") == "blocked")
+    inner = (
+        '<p><a href="/">← terug naar de cockpit</a></p>'
+        '<h1>📋 Prikbord</h1>'
+        f'<div class="bar">{n_run} actief · {n_fut} toekomst · {n_blk} wachten · '
+        f'{len(open_b)} open briefjes · gegenereerd {_e(_ts(snap.get("generated_at")))}</div>'
+        f'{_banner(msg)}'
+        f'{_wip_meter(projects, snap.get("wip", {}))}'
+        f'{_stuwmeer(projects)}'
+        '<h2>Het bord</h2>'
+        '<p class="muted" style="font-size:.85rem;margin:.2rem 0">Een cluster-kaartje met '
+        '🟢/⚪ is een master-switch: zet je hem op Actief, dan mogen zijn leden draaien (binnen WIP).</p>'
+        f'{board}'
+        '<h2>Briefjes — het gedeelde prikbord</h2>'
+        '<p class="muted" style="font-size:.85rem;margin:.2rem 0">Verzoeken en uitkomsten die '
+        'rollen zelf oppakken (pull). Done-briefjes vallen weg.</p>'
+        f'{pin_tbl}'
+    )
+    return _page("Prikbord — NoochVille", inner)
 
 
 def render_card(card: dict, neighbors: list, csrf_token: str) -> str:
@@ -2428,7 +2599,8 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         # Kansen verwerk je in de focusmodus (▶ Verwerk in focus); geen dubbele backlog-tabel meer.
         f'<details><summary>📥 Inbox — overige items ({len(show_inbox)})</summary>{inbox_tbl}</details>'
         f'{drafts_block}'
-        f'<h2>Proces (projecten)</h2>{proj_tbl}'
+        f'<h2>Proces (projecten) · <a href="/prikbord" style="font-size:.8rem;'
+        f'text-transform:none;letter-spacing:0">📋 open het prikbord-bord →</a></h2>{proj_tbl}'
         f'<h2>Kennis</h2>'
         f'{_render_house_rules(snap.get("house_rules", []))}'
         f'{esc_block}'
@@ -3085,6 +3257,9 @@ def make_handler(data_dir: str | None):
                     body = render_roloverleg(
                         item, snap, secretary_check(item, recs), csrf_token, msg=msg,
                         group_members=gmembers, roles=roles).encode("utf-8")
+            elif path == "/prikbord":
+                body = render_prikbord(gather(data_dir), csrf_token=csrf_token,
+                                       msg=msg).encode("utf-8")
             elif path in ("/", "/index.html"):
                 show_all = (qs.get("history") or ["0"])[0] in ("1", "true", "yes")
                 body = render_html(gather(data_dir), csrf_token=csrf_token, msg=msg,
