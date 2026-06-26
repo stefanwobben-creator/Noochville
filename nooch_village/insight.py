@@ -47,6 +47,11 @@ class Insight(BaseModel):
     grounding_count: int = 1
     last_updated_at: datetime | None = None
     links_to: list[str] = Field(default_factory=list)
+    # Getypeerde bewijs-relaties (kennislaag): welke claims dit kaartje STEUNT of TEGENSPREEKT.
+    # Een bevinding die een standpunt steunt zet het standpunt-id in `supports`. Sterkte wordt
+    # hieruit berekend (knowledge.py), niet opgeslagen — zo kan hij niet verouderen.
+    supports: list[str] = Field(default_factory=list)
+    contradicts: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     status: GroundingStatus = GroundingStatus.UNRESOLVED
     kind: ClaimKind | None = None      # soort (signaal/bevinding/kader/standpunt); None = onbeslist
