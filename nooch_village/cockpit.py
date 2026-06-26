@@ -302,18 +302,41 @@ def gather(data_dir: str | None = None) -> dict:
             if r.get("function") == "doelwit":
                 r["sales_pairs"] = _kw_sales.get(r["word"], 0)
 
-    # Inzichten: claim + status + hoe vaak gegrond (geëmergeerd eerst). Synthese-kaartjes
-    # (creatieve links tussen kaartjes) zijn herkenbaar via de tag en hun ouders.
+    # Kennislaag: soort (signaal/bevinding/kader/standpunt) + BEREKENDE sterkte (puur uit het web).
+    from nooch_village.knowledge import strength as _kstrength, gaps as _kgaps, contested as _kcont
+    _alln = notes.all()
+    _str = {n.id: _kstrength(n, _alln).value for n in _alln}
+    _STR_RANK = {"geverifieerd": 0, "bevestigd": 1, "ondersteund": 2, "betwist": 3, "onbeslist": 4}
+
+    # Inzichten: claim + soort + sterkte (sterkste eerst, dan synthese). Synthese-kaartjes
+    # (creatieve links) blijven herkenbaar via de tag.
     insights = sorted(
         ({"id": n.id, "claim": n.claim, "status": str(getattr(n.status, "value", n.status)),
+          "kind": (n.kind.value if n.kind else None), "strength": _str.get(n.id, "onbeslist"),
           "grounding_count": n.grounding_count, "word": n.word or "",
           "synthese": ("synthese" in (n.tags or [])), "links": len(n.links_to or [])}
-         for n in notes.all()),
-        key=lambda x: (-int(x["synthese"]), -x["grounding_count"]),
+         for n in _alln),
+        key=lambda x: (_STR_RANK.get(x["strength"], 9), -int(x["synthese"]), -x["grounding_count"]),
     )
     from nooch_village.card_synthesis import graph_density
     graph = graph_density([{"id": n.id, "text": (n.claim or "") + " " + (n.grounds or ""),
-                            "links_to": list(n.links_to or [])} for n in notes.all()])
+                            "links_to": list(n.links_to or [])} for n in _alln])
+
+    # Kennislaag-overzicht: tellingen per soort + de drie waardevolle lijsten.
+    from collections import Counter as _Counter
+    _g = _kgaps(_alln)
+    _kind_counts = _Counter((n.kind.value if n.kind else "onbeslist") for n in _alln)
+    kennis = {
+        "counts": dict(_kind_counts),
+        "onbeslist_total": sum(1 for n in _alln if n.kind is None),
+        "onbeslist": [{"id": n.id, "claim": n.claim} for n in _alln if n.kind is None],
+        "publiceer_risico": [{"id": n.id, "claim": n.claim}
+                             for n in _g["standpunt_zonder_bevinding"]],
+        "onderzoekskansen": [{"id": n.id, "claim": n.claim}
+                             for n in _g["signaal_zonder_bevinding"]],
+        "betwist": [{"id": n.id, "claim": n.claim, "strength": _str.get(n.id)}
+                    for n in _kcont(_alln)],
+    }
 
     # Kansen-backlog: alle onderbouwde voorstellen/projecten (met business-case), op waarde.
     from nooch_village.business_case import business_value
@@ -368,6 +391,7 @@ def gather(data_dir: str | None = None) -> dict:
         "library": lib,
         "insights": insights,
         "knowledge_graph": graph,
+        "kennis": kennis,
         "competitor_candidates": brands.candidates(),
         "competitor_confirmed": brands.confirmed(),
         "competitor_news": comp_news,
@@ -2486,26 +2510,86 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     esc_block = (f'<details open><summary>⚖️ Wacht op jouw oordeel — geëscaleerd ({len(esc)})</summary>'
                  f'{esc_tbl}</details>') if esc else ''
 
-    # Inzichten (kennislaag) — synthese-kaartjes (creatieve links) eerst, dan geëmergeerd
+    # Inzichten (kennislaag) — gesorteerd op BEREKENDE sterkte (sterkste eerst, uit gather).
     ins = snap.get("insights", [])
     g = snap.get("knowledge_graph", {})
     g_line = (f'<p class="muted">Graaf: {g.get("cards", 0)} kaartjes · {g.get("links", 0)} links · '
               f'gem. gelijkenis {g.get("avg_similarity", 0)}</p>') if g else ''
+    _KIND_CHIP = {"signaal": "📡 signaal", "bevinding": "🔬 bevinding",
+                  "kader": "⚖️ kader", "standpunt": "📣 standpunt"}
+    _STR_CHIP = {"geverifieerd": "var(--green)", "bevestigd": "var(--green-dark)",
+                 "ondersteund": "var(--muted)", "betwist": "var(--coral)", "onbeslist": "var(--subtle)"}
     def _ins_row(x):
+        kind = x.get("kind")
+        kc = (f'<span class="chip">{_e(_KIND_CHIP.get(kind, kind))}</span>'
+              if kind else '<span class="muted">— onbeslist</span>')
+        st = x.get("strength", "onbeslist")
+        sc = f'<b style="color:{_STR_CHIP.get(st, "var(--muted)")}">{_e(st)}</b>'
         return (f'<tr><td>{("🔗 " if x.get("synthese") else "")}'
-                f'<a href="/card?id={_e(x["id"])}">{_e(x["claim"][:120])}</a>'
+                f'<a href="/card?id={_e(x["id"])}">{_e(x["claim"][:110])}</a>'
                 f'{(" <span class=muted>(" + _e(x["links"]) + " links)</span>") if x.get("links") else ""}</td>'
-                f'<td class="muted">{_e(x["status"])}</td>'
-                f'<td>{_e(x["grounding_count"])}×</td></tr>')
-    # Top 10 (meest gegrond) zichtbaar; de rest achter een 'meer'-uitklapper (geen muur van 196).
-    ins_sorted = sorted(ins, key=lambda x: -(x.get("grounding_count") or 0))
-    top, rest = ins_sorted[:10], ins_sorted[10:]
-    _thead = '<thead><tr><th>claim</th><th>status</th><th>gegrond</th></tr></thead>'
+                f'<td>{kc}</td><td>{sc}</td></tr>')
+    top, rest = ins[:12], ins[12:]     # al op sterkte gesorteerd
+    _thead = '<thead><tr><th>claim</th><th>soort</th><th>sterkte</th></tr></thead>'
     top_rows = "".join(_ins_row(x) for x in top) or "<tr><td colspan=3 class=muted>geen inzichten</td></tr>"
     ins_tbl = g_line + f'<table>{_thead}<tbody>{top_rows}</tbody></table>'
     if rest:
         ins_tbl += (f'<details style="margin-top:.3rem"><summary>meer inzichten ({len(rest)})</summary>'
                     f'<table>{_thead}<tbody>{"".join(_ins_row(x) for x in rest)}</tbody></table></details>')
+
+    # Kennislaag-overzicht: tellingen per soort, de gat-lijsten, betwist, en de onbeslist-kiezer.
+    kn = snap.get("kennis", {})
+    _kc = kn.get("counts", {})
+    counts_line = " · ".join(f'{_e(_KIND_CHIP.get(k, k))}: <b>{v}</b>'
+                             for k, v in sorted(_kc.items()) if k != "onbeslist")
+    def _gap_list(items, leeg, kleur):
+        if not items:
+            return f'<p class="muted">{leeg}</p>'
+        lis = "".join(f'<li><a href="/card?id={_e(i["id"])}">{_e((i["claim"] or "")[:90])}</a></li>'
+                      for i in items[:25])
+        meer = f'<li class="muted">… +{len(items)-25} meer</li>' if len(items) > 25 else ""
+        return f'<ul style="border-left:3px solid {kleur};padding-left:.8rem">{lis}{meer}</ul>'
+
+    # Onbeslist-kiezer: per kaartje zie je de claim en kies je de soort (mens beslist, geen ja-knikker).
+    onbeslist = kn.get("onbeslist", [])
+    def _kind_buttons(cid):
+        if not writable:
+            return ""
+        b = ""
+        for val, lbl in (("signaal", "📡"), ("bevinding", "🔬"), ("kader", "⚖️"), ("standpunt", "📣")):
+            b += (f'<form method="post" action="/action" style="display:inline">'
+                  f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
+                  f'<input type="hidden" name="iid" value="{_e(cid)}">'
+                  f'<input type="hidden" name="kind" value="{val}">'
+                  f'<input type="hidden" name="next" value="/">'
+                  f'<button class="btn" type="submit" name="action" value="note_set_kind" '
+                  f'title="{val}">{lbl}</button></form>')
+        return b
+    onb_rows = "".join(
+        f'<tr><td><a href="/card?id={_e(i["id"])}">{_e((i["claim"] or "")[:95])}</a></td>'
+        f'<td style="white-space:nowrap">{_kind_buttons(i["id"])}</td></tr>'
+        for i in onbeslist[:40])
+    onb_block = ("" if not onbeslist else
+                 f'<details><summary>❓ Onbeslist — kies een soort ({kn.get("onbeslist_total", 0)})</summary>'
+                 '<p class="muted" style="font-size:.85rem">📡 signaal · 🔬 bevinding · ⚖️ kader · 📣 standpunt. '
+                 'Jij beslist; de eerste 40 staan hier.</p>'
+                 f'<table><tbody>{onb_rows}</tbody></table></details>')
+
+    kennis_block = (
+        '<h2>Kennislaag</h2>'
+        f'<p>{counts_line or "<span class=muted>nog geen kaartjes met een soort</span>"} '
+        f'· <span class="muted">{kn.get("onbeslist_total", 0)} onbeslist</span></p>'
+        f'<details open><summary>📣 Publiceer-risico — standpunt zonder bewijs '
+        f'({len(kn.get("publiceer_risico", []))})</summary>'
+        f'{_gap_list(kn.get("publiceer_risico", []), "Geen — elk standpunt heeft bewijs 🎉", "var(--coral)")}'
+        '</details>'
+        f'<details><summary>📡 Onderzoekskansen — signaal zonder bevinding '
+        f'({len(kn.get("onderzoekskansen", []))})</summary>'
+        f'{_gap_list(kn.get("onderzoekskansen", []), "Geen open signalen", "var(--yellow)")}</details>'
+        + (f'<details><summary>⚔️ Betwist ({len(kn.get("betwist", []))})</summary>'
+           f'{_gap_list(kn.get("betwist", []), "Niets betwist", "var(--coral)")}</details>'
+           if kn.get("betwist") else "")
+        + onb_block)
 
     # Concurrenten: gespotte (kandidaat) merken die op jouw oordeel wachten + de monitor-set.
     cands = snap.get("competitor_candidates", [])
@@ -2634,8 +2718,9 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'<h2>Kennis</h2>'
         f'{_render_house_rules(snap.get("house_rules", []))}'
         f'{esc_block}'
+        f'{kennis_block}'
         f'<details open><summary>Woordenschat ({len(approved_lib)} actieve woorden)</summary>{lib_tbl}</details>'
-        f'<details><summary>Inzichten — kennislaag ({len(ins)} kaartjes)</summary>{ins_tbl}</details>'
+        f'<details><summary>Inzichten — kaartjes op sterkte ({len(ins)} kaartjes)</summary>{ins_tbl}</details>'
         f'<details><summary>Roster ({sum(1 for r in roster if not r["archived"])} actieve rollen)</summary>{roster_tbl}</details>'
         f'{comp_block}'
         f'{link_block}'
@@ -2736,6 +2821,8 @@ def _flash(result: dict) -> str:
         return "✓ Noochie heeft een voorstel ingebracht — zie je inbox"
     if result.get("status") == "adopted":
         return f"✓ Skill '{result.get('skill')}' toegekend aan {result.get('role_id')}"
+    if "note_kind" in result:
+        return f"✓ Soort gezet → {result['note_kind']}"
     if "removed" in result:
         return "✓ Kaartje verwijderd"
     if "card_id" in result:
@@ -3090,6 +3177,17 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
     if action == "note_remove":
         notes = NotesStore(os.path.join(dd, "notes.json"))
         return remove_note(notes, iid)
+    if action == "note_set_kind":
+        # Mens kiest de soort van een kaartje (de onbeslist-kiezer). Geen ja-knikker: jij beslist.
+        from nooch_village.insight import ClaimKind
+        notes = NotesStore(os.path.join(dd, "notes.json"))
+        val = (extra.get("kind") or "").strip()
+        try:
+            kind = ClaimKind(val)
+        except ValueError:
+            return {"ok": False, "error": f"onbekende soort '{val}'"}
+        ok = notes.set_kind(iid, kind)
+        return {"ok": ok, "note_kind": val} if ok else {"ok": False, "error": "kaartje niet gevonden"}
     if action == "delegate_noochie":
         # Noochie werkt de spanning uit tot een concreet voorstel (LLM) en zet dat als
         # 'voorstel'-item in de inbox; de mens beoordeelt het daarna.
@@ -3355,6 +3453,7 @@ def make_handler(data_dir: str | None):
                      "q1": (form.get("q1") or [""])[0], "q2": (form.get("q2") or [""])[0],
                      "q3": (form.get("q3") or [""])[0], "q3b": (form.get("q3b") or [""])[0],
                      "q4": (form.get("q4") or [""])[0],
+                     "kind": (form.get("kind") or [""])[0],
                      "remember": (form.get("remember") or [""])[0]}
             result = _dispatch_action(data_dir, action, iid, reason, extra=extra)
             # 303 → verse GET. Rails keren terug naar de spanning (next), sluiten gaat home.
