@@ -201,7 +201,11 @@ class Gate:
                 return False, (f"rol '{c.role_id}' heeft accountabilities ({accs} …); "
                                f"de gate kan niet vaststellen of dit werk elders belegd is — "
                                f"menselijke beoordeling vereist")
-        if c.remove_accountabilities:
+        # Verwijderde accountabilities zonder ze elders te beleggen = mogelijk verweesd werk.
+        # MAAR: voegt dezelfde wijziging óók accountabilities toe aan de rol, dan is dit een
+        # HERSCHRIJVING/HERSCHIKKING binnen de rol (geen orphaning) — die laten we door. De
+        # orphan-check geldt dus alleen bij een PURE verwijdering (niets toegevoegd in dezelfde change).
+        if c.remove_accountabilities and not c.add_accountabilities:
             removed = {a.lower() for a in c.remove_accountabilities}
             covered = set()
             for rec in records.all():

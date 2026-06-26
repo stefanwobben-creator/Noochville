@@ -1124,3 +1124,12 @@ is weg. Nu één wall: ALLE berichten chronologisch (rol-opleveringen + jouw stu
 niets overschreven (de log bewaart elke uitwerking). Daaronder: invoerveld + 'Versturen ➤' + een
 '✓ Done — naar archief'-knop (proj_done → terminal/archief). Eigenaar/scope-bewerken staat ingeklapt.
 Afgerond project: geen invoer meer, alleen de wall. Suite groen (586 + 483).
+
+## BUG-fix G3: 'Einde roloverleg' voerde herschrijvingen niet door (0 doorgevoerd)
+Root-cause: G3 (verweesd werk) blokkeerde elke amend die accountabilities HERSCHRIJFT (remove oude +
+add nieuwe in dezelfde rol), omdat de orphan-check alleen naar ándere rollen keek en de eigen
+toevoegingen negeerde. Daardoor zakten alle consented voorstellen bij doorvoeren → 'objected'.
+Fix: de orphan-check geldt nu alleen bij een PURE verwijdering (geen add_accountabilities in dezelfde
+change). Een herschrijving/herschikking binnen de rol mag door. Regressietest in test_montecarlo.
+De 3 vastgelopen voorstellen (the_source, Copywriter, trends) passeren nu de Gate en zijn op de
+agenda teruggezet op 'consented' zodat 'Einde roloverleg' ze nu wél doorvoert. Suite groen (587+483).

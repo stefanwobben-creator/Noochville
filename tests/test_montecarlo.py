@@ -47,6 +47,24 @@ def test_g3_blokkeert_verwijderen_van_cirkel_met_kinderen():
     assert check_invariants(recs) == []
 
 
+def test_g3_laat_herschrijving_door_maar_blokkeert_pure_verwijdering():
+    # Een accountability herschrijven = remove oude + add nieuwe in DEZELFDE rol. Dat is geen
+    # verweesd werk → G3 mag het NIET blokkeren (was de bug bij 'Einde roloverleg').
+    recs, gate, _ = _setup()
+    herschrijf = Proposal(change=GovernanceChange(
+        kind=ChangeKind.AMEND_ROLE, role_id="scout",
+        remove_accountabilities=["Volgen van de concurrenten"],
+        add_accountabilities=["Monitoren van de concurrentie"]), **_META)
+    passed, gate_name, _r = gate.check(herschrijf, recs, None)
+    assert passed is True, gate_name
+    # Pure verwijdering (niets toegevoegd, nergens anders belegd) → G3 blokkeert nog steeds.
+    puur = Proposal(change=GovernanceChange(
+        kind=ChangeKind.AMEND_ROLE, role_id="scout",
+        remove_accountabilities=["Volgen van de concurrenten"]), **_META)
+    passed2, gate2, _r2 = gate.check(puur, recs, None)
+    assert passed2 is False and gate2 == "G3"
+
+
 def test_check_invariants_spot_wees_en_dubbele_acc():
     # De invariant-checker moet echte corruptie kunnen zien (anders is de stresstest blind).
     recs, _, _ = _setup()
