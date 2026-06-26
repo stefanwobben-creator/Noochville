@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import re
+import json
 import html
 import time
 import secrets
@@ -1625,13 +1626,48 @@ _KIND_CHIP = {"signaal": "📡 signaal", "bevinding": "🔬 bevinding",
               "kader": "⚖️ kader", "standpunt": "📣 standpunt"}
 
 
-def render_card(card: dict, neighbors: list, csrf_token: str, all_cards: list | None = None) -> str:
-    """Detailpagina van één kennis-kaartje: claim + grounds, soort kiezen, bewijs-links leggen
-    (steunt/spreekt-tegen) met live berekende sterkte, en de verbonden kaartjes."""
+def _scratch_load(dd: str) -> dict:
+    """Niet-officiële krabbels per kaartje (data/card_scratch.json). Fail-soft: leeg bij fout."""
+    try:
+        with open(os.path.join(dd, "card_scratch.json"), encoding="utf-8") as f:
+            d = json.load(f)
+            return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def _scratch_save(dd: str, cid: str, text: str) -> None:
+    d = _scratch_load(dd)
+    if text.strip():
+        d[cid] = text
+    else:
+        d.pop(cid, None)
+    path = os.path.join(dd, "card_scratch.json")
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+
+
+def _build_cdict(card, all_notes) -> dict:
+    """Bouwt het render-dict voor een kennis-kaartje (gedeeld door /card en /kennis)."""
+    from nooch_village.knowledge import strength as _kstrength
+    return {"id": card.id, "claim": card.claim, "grounds": card.grounds,
+            "status": str(getattr(card.status, "value", card.status)),
+            "grounding_count": card.grounding_count, "word": card.word or "",
+            "kind": (card.kind.value if card.kind else None),
+            "strength": _kstrength(card, all_notes).value,
+            "supports": list(card.supports or []),
+            "contradicts": list(card.contradicts or [])}
+
+
+def _card_detail(card: dict, neighbors: list, csrf_token: str, all_cards: list,
+                 *, back: str, scratch: str = "") -> str:
+    """De detail-inhoud van één kennis-kaartje (zonder pagina-omhulsel): claim, soort kiezen,
+    bewijs-links, verbonden kaartjes, een (niet-officieel) krabbelveld. Herbruikt door de
+    kaartpagina én de harmonica (/kennis)."""
     cid = card["id"]
-    all_cards = all_cards or []
     claim_of = {c["id"]: c.get("claim", "") for c in all_cards}
-    back = f"/card?id={cid}"
 
     def _csrf():
         return f'<input type="hidden" name="csrf" value="{_e(csrf_token)}">'
@@ -1687,6 +1723,16 @@ def render_card(card: dict, neighbors: list, csrf_token: str, all_cards: list | 
         f'<span class="muted">({_e(n["status"])}, {_e(n["grounding_count"])}×)</span></li>'
         for n in neighbors)
     nb_block = (f'<ul>{nb}</ul>' if neighbors else '<p class="muted">Nog geen verbonden kaartjes.</p>')
+    # Krabbelveld: losse notities bij dit kaartje (niet-officieel, wel handig om ideeën te parkeren).
+    scratch_form = (
+        f'<form method="post" action="/action" style="margin:.3rem 0">{_csrf()}'
+        f'<input type="hidden" name="iid" value="{_e(cid)}">'
+        f'<input type="hidden" name="next" value="{_e(back)}">'
+        f'<textarea name="scratch" rows="2" style="width:100%;max-width:560px;padding:.4rem;'
+        f'border:1px solid var(--border);border-radius:var(--radius)" '
+        f'placeholder="losse notitie / idee (niet-officieel)">{_e(scratch)}</textarea><br>'
+        f'<button class="btn" type="submit" name="action" value="note_scratch">💾 notitie bewaren</button>'
+        f'</form>') if csrf_token else ""
     remove_form = (
         f'<form method="post" action="/action" style="display:inline">{_csrf()}'
         f'<input type="hidden" name="iid" value="{_e(cid)}">'
@@ -1694,12 +1740,10 @@ def render_card(card: dict, neighbors: list, csrf_token: str, all_cards: list | 
         '<input type="hidden" name="next" value="/">'
         '<button class="btn no" type="submit">Verwijder dit kaartje</button></form>'
     )
-    inner = (
-        '<p><a href="/">← terug naar de cockpit</a></p>'
-        '<h1>Kennis-kaartje</h1>'
+    return (
         f'<div class="tension"><b>{_e(card["claim"])}</b><br>'
         f'{kind_line} · sterkte <b>{_e(strength)}</b>'
-        f'{" · " + _e(card["word"]) if card.get("word") else ""}</span></div>'
+        f'{" · " + _e(card["word"]) if card.get("word") else ""}</div>'
         f'{kind_picker}'
         f'<h2>Grounds</h2><p>{_e(card.get("grounds") or "—")}</p>'
         '<h2>Bewijs-links</h2>'
@@ -1708,10 +1752,85 @@ def render_card(card: dict, neighbors: list, csrf_token: str, all_cards: list | 
         f'<p><b>Dit kaartje steunt:</b> {_rel_list(supports, "nog niets")}</p>'
         f'<p><b>Dit kaartje spreekt tegen:</b> {_rel_list(contradicts, "niets")}</p>'
         f'{rel_form}'
+        f'<h2>Notitie</h2>{scratch_form}'
         f'<h2>Verbonden kaartjes ({len(neighbors)})</h2>{nb_block}'
         f'<p style="margin-top:1.4rem">{remove_form}</p>'
     )
-    return _page("Kennis-kaartje", inner)
+
+
+def render_card(card: dict, neighbors: list, csrf_token: str, all_cards: list | None = None,
+                scratch: str = "") -> str:
+    """Detailpagina van één kennis-kaartje (gebruikt _card_detail)."""
+    body = _card_detail(card, neighbors, csrf_token, all_cards or [],
+                        back=f"/card?id={card['id']}", scratch=scratch)
+    return _page("Kennis-kaartje",
+                 '<p><a href="/">← terug naar de cockpit</a> · <a href="/kennis">harmonica</a></p>'
+                 '<h1>Kennis-kaartje</h1>' + body)
+
+
+_KENNIS_CSS = (
+    '<style>.kh{display:flex;gap:1rem;align-items:flex-start}'
+    '.kh-left{flex:0 0 36%;max-width:36%}'
+    '.kh-right{flex:1 1 auto;min-width:0;position:sticky;top:.5rem}'
+    '.kh-item{display:block;padding:.4rem .6rem;border:1px solid var(--border);border-radius:var(--radius);'
+    'margin:.25rem 0;background:var(--surface);text-decoration:none;color:var(--ink);font-size:.85rem}'
+    '.kh-item:hover{background:rgba(27,27,27,.04)}'
+    '.kh-item.sel{border-color:var(--green);background:var(--green-tint)}'
+    '.kh-item .m{display:block;margin-top:.15rem;font-size:.72rem;color:var(--muted)}'
+    '.kh-filters{display:flex;flex-wrap:wrap;gap:.3rem;margin:.2rem 0 .5rem}'
+    '.kh-filters a{font-size:.75rem;padding:.15rem .55rem;border:1px solid var(--border);'
+    'border-radius:var(--radius-pill);text-decoration:none;color:var(--gray)}'
+    '.kh-filters a.on{background:var(--green);color:#fff;border-color:var(--green)}'
+    '@media(max-width:780px){.kh{flex-direction:column}.kh-left{max-width:none;flex-basis:auto}}</style>')
+
+_KIND_CHIP_K = {"signaal": "📡", "bevinding": "🔬", "kader": "⚖️", "standpunt": "📣"}
+
+
+def render_kennis(insights: list, detail_html: str, selected_id: str, csrf_token: str | None,
+                  filt: str = "alle", counts: dict | None = None) -> str:
+    """Harmonica voor de kennislaag: links de (gefilterde) lijst, rechts het opengeklapte kaartje.
+    Pijltjes ↑/↓ lopen door de lijst, Enter opent. Zo verwerk je vlot kaartje na kaartje."""
+    counts = counts or {}
+    def _match(x):
+        if filt == "alle":
+            return True
+        if filt == "onbeslist":
+            return not x.get("kind")
+        return x.get("kind") == filt
+    rows = [x for x in insights if _match(x)]
+    filters = [("alle", f'alle ({len(insights)})'),
+               ("onbeslist", f'❓ onbeslist ({sum(1 for x in insights if not x.get("kind"))})'),
+               ("signaal", "📡 signaal"), ("bevinding", "🔬 bevinding"),
+               ("kader", "⚖️ kader"), ("standpunt", "📣 standpunt")]
+    ftabs = "".join(f'<a class="{"on" if k == filt else ""}" href="/kennis?filter={k}'
+                    f'{("&id=" + _e(selected_id)) if selected_id else ""}">{_e(lbl)}</a>'
+                    for k, lbl in filters)
+    items = "".join(
+        f'<a class="kh-item{" sel" if x["id"] == selected_id else ""}" '
+        f'href="/kennis?id={_e(x["id"])}&filter={filt}">'
+        f'{_KIND_CHIP_K.get(x.get("kind"), "❓")} {_e((x.get("claim") or "")[:70])}'
+        f'<span class="m">{_e(x.get("strength", ""))}</span></a>'
+        for x in rows) or '<p class="muted">Geen kaartjes in dit filter.</p>'
+    right = detail_html or '<p class="muted">Kies links een kaartje om het hier te openen.</p>'
+    js = ("<script>(function(){var it=[].slice.call(document.querySelectorAll('.kh-item'));"
+          "var i=it.findIndex(function(e){return e.classList.contains('sel');});"
+          "document.addEventListener('keydown',function(e){"
+          "if(/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement||{}).tagName))return;"
+          "if(e.key==='ArrowDown'||e.key==='j'){e.preventDefault();i=Math.min(it.length-1,i+1);"
+          "if(it[i])it[i].scrollIntoView({block:'nearest'});mark();}"
+          "else if(e.key==='ArrowUp'||e.key==='k'){e.preventDefault();i=Math.max(0,i-1);"
+          "if(it[i])it[i].scrollIntoView({block:'nearest'});mark();}"
+          "else if(e.key==='Enter'&&it[i]){window.location=it[i].getAttribute('href');}});"
+          "function mark(){it.forEach(function(e){e.classList.remove('sel')});"
+          "if(it[i])it[i].classList.add('sel');}})();</script>")
+    inner = (
+        '<p><a href="/">← cockpit</a></p><h1>🧠 Kennislaag — harmonica</h1>'
+        '<p class="muted" style="font-size:.85rem">Links kiezen (↑/↓ + Enter), rechts verwerken. '
+        'Soort kiezen, bewijs-links leggen, een notitie achterlaten.</p>'
+        f'<div class="kh-filters">{ftabs}</div>'
+        f'<div class="kh"><div class="kh-left">{items}</div>'
+        f'<div class="kh-right">{right}</div></div>{js}{_KENNIS_CSS}')
+    return _page("Kennislaag — harmonica", inner)
 
 
 def render_project_edit(p: dict, roster: list, csrf_token: str) -> str:
@@ -2684,7 +2803,9 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     kennis_block = (
         '<h2>Kennislaag</h2>'
         f'<p>{counts_line or "<span class=muted>nog geen kaartjes met een soort</span>"} '
-        f'· <span class="muted">{kn.get("onbeslist_total", 0)} onbeslist</span></p>'
+        f'· <span class="muted">{kn.get("onbeslist_total", 0)} onbeslist</span> '
+        f'· <a href="/kennis"><b>🧠 open harmonica →</b></a> '
+        f'<span class="muted" style="font-size:.85rem">(kaartje na kaartje verwerken, ↑/↓)</span></p>'
         f'{prop_block}'
         f'<details open><summary>📣 Publiceer-risico — standpunt zonder bewijs '
         f'({len(kn.get("publiceer_risico", []))})</summary>'
@@ -2920,6 +3041,8 @@ def _flash(result: dict) -> str:
         return f"✓ Skill '{result.get('skill')}' toegekend aan {result.get('role_id')}"
     if "note_kind" in result:
         return f"✓ Soort gezet → {result['note_kind']}"
+    if "note_scratch" in result:
+        return "💾 Notitie bewaard (niet-officieel)."
     if "note_relation" in result:
         return ("✓ Bewijs-link gelegd: steunt" if result["note_relation"] == "supports"
                 else "✓ Bewijs-link gelegd: spreekt tegen")
@@ -3291,6 +3414,10 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
             return {"ok": False, "error": f"onbekende soort '{val}'"}
         ok = notes.set_kind(iid, kind)
         return {"ok": ok, "note_kind": val} if ok else {"ok": False, "error": "kaartje niet gevonden"}
+    if action == "note_scratch":
+        # Niet-officiële krabbel bij een kaartje (handig om ideeën te parkeren tijdens review).
+        _scratch_save(dd, iid, extra.get("scratch") or "")
+        return {"ok": True, "note_scratch": "saved"}
     if action in ("note_support", "note_contradict"):
         # Bewijs-link: dit kaartje (iid) steunt/spreekt-tegen het doelkaartje (target).
         notes = NotesStore(os.path.join(dd, "notes.json"))
@@ -3439,21 +3566,40 @@ def make_handler(data_dir: str | None):
                     self.end_headers()
                     self.wfile.write(b"Kaartje niet gevonden")
                     return
-                from nooch_village.knowledge import strength as _kstrength
                 _alln = notes.all()
-                cdict = {"id": card.id, "claim": card.claim, "grounds": card.grounds,
-                         "status": str(getattr(card.status, "value", card.status)),
-                         "grounding_count": card.grounding_count, "word": card.word or "",
-                         "kind": (card.kind.value if card.kind else None),
-                         "strength": _kstrength(card, _alln).value,
-                         "supports": list(card.supports or []),
-                         "contradicts": list(card.contradicts or [])}
+                cdict = _build_cdict(card, _alln)
                 nbs = [{"id": n.id, "claim": n.claim,
                         "status": str(getattr(n.status, "value", n.status)),
                         "grounding_count": n.grounding_count} for n in notes.neighbors(cid)]
                 # Doelkaartjes voor de bewijs-link-kiezer (id → claim), zonder zichzelf.
                 all_cards = [{"id": n.id, "claim": n.claim} for n in _alln if n.id != cid]
-                body = render_card(cdict, nbs, csrf_token, all_cards=all_cards).encode("utf-8")
+                scratch = _scratch_load(dd).get(cid, "")
+                body = render_card(cdict, nbs, csrf_token, all_cards=all_cards,
+                                   scratch=scratch).encode("utf-8")
+            elif path == "/kennis":
+                cid = (qs.get("id") or [""])[0]
+                filt = (qs.get("filter") or ["alle"])[0]
+                dd = data_dir or _default_data_dir()
+                notes = NotesStore(os.path.join(dd, "notes.json"))
+                _alln = notes.all()
+                from nooch_village.knowledge import strength as _kstrength
+                # Lijst voor de linkerkolom (id/claim/kind/sterkte), nieuwste eerst.
+                lst = [{"id": n.id, "claim": n.claim,
+                        "kind": (n.kind.value if n.kind else None),
+                        "strength": _kstrength(n, _alln).value} for n in _alln]
+                lst.reverse()
+                detail_html = ""
+                sel = notes.get(cid) if cid else None
+                if sel is not None:
+                    cdict = _build_cdict(sel, _alln)
+                    nbs = [{"id": n.id, "claim": n.claim,
+                            "status": str(getattr(n.status, "value", n.status)),
+                            "grounding_count": n.grounding_count} for n in notes.neighbors(cid)]
+                    all_cards = [{"id": n.id, "claim": n.claim} for n in _alln if n.id != cid]
+                    scratch = _scratch_load(dd).get(cid, "")
+                    detail_html = _card_detail(cdict, nbs, csrf_token, all_cards,
+                                               back=f"/kennis?id={cid}&filter={filt}", scratch=scratch)
+                body = render_kennis(lst, detail_html, cid, csrf_token, filt=filt).encode("utf-8")
             elif path == "/triage":
                 snap = gather(data_dir)
                 queue = [b for b in snap["backlog"] if b.get("approvable") and b.get("iid")]
@@ -3592,6 +3738,7 @@ def make_handler(data_dir: str | None):
                      "kind": (form.get("kind") or [""])[0],
                      "target": (form.get("target") or [""])[0],
                      "from_id": (form.get("from_id") or [""])[0],
+                     "scratch": (form.get("scratch") or [""])[0],
                      "remember": (form.get("remember") or [""])[0]}
             result = _dispatch_action(data_dir, action, iid, reason, extra=extra)
             # 303 → verse GET. Rails keren terug naar de spanning (next), sluiten gaat home.
