@@ -26,3 +26,7 @@ build/
 code_export.txt
 STATE_export.txt
 .env
+
+# backups van .env nooit tracken
+.env.save
+*.save
