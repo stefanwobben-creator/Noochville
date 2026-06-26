@@ -1899,6 +1899,20 @@ def _sparkline(values, width: int = 90, height: int = 22) -> str:
             f'stroke-width="1.5"/></svg>')
 
 
+def _toptable(thead: str, rows: list, *, top: int = 3, full_label: str = "bekijk alle",
+              empty: str = "—", cols: int = 1) -> str:
+    """Canoniek lijst-pattern (review-1): toon de top-N rijen, de rest achter een toggle, en altijd
+    een doorklik naar de volledige lijst (= de toggle hier, want alles staat op de cockpit)."""
+    if not rows:
+        return f'<table>{thead}<tbody><tr><td colspan={cols} class=muted>{empty}</td></tr></tbody></table>'
+    head, rest = rows[:top], rows[top:]
+    out = f'<table>{thead}<tbody>{"".join(head)}</tbody></table>'
+    if rest:
+        out += (f'<details style="margin-top:.2rem"><summary>{full_label} (+{len(rest)} van {len(rows)})'
+                f'</summary><table>{thead}<tbody>{"".join(rest)}</tbody></table></details>')
+    return out
+
+
 def _render_house_rules(rules: list, core_values: list | None = None) -> str:
     """Huis-regels (constraints uit triage): de vaste feiten/eisen die het dorp respecteert.
     De kernwaarden van Nooch staan hier bovenaan (verplaatst uit de hero) — ze zijn immers de
@@ -2489,7 +2503,7 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
             return f'<b>👟 {_fmt_int(sp)}</b>'
         return '<span class="muted">—</span>'
 
-    trows = "".join(
+    trows = [
         f'<tr><td><b>{_e(x["word"])}</b></td>'
         f'<td>{_num(x.get("volume"), "/mnd")}</td>'
         f'<td>{("<b>" + _fmt_int(x["opportunity"]) + "</b>") if x.get("opportunity") is not None else "<span class=muted>—</span>"}</td>'
@@ -2498,11 +2512,10 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'<td style="min-width:230px">{_target_acts(x)}</td></tr>'
         # sorteer op verkoop (wat geld oplevert eerst), dan op kans
         for x in sorted(targets, key=lambda x: (-(x.get("sales_pairs") or 0),
-                                                -((x.get("opportunity") if x.get("opportunity") is not None else -1)))))
-    targets_tbl = (
-        '<table><thead><tr><th>doelwit-woord</th><th>volume</th><th>kans</th>'
-        '<th>onze Google-stand</th><th>verkoop</th><th>jouw oordeel</th></tr></thead>'
-        f'<tbody>{trows or "<tr><td colspan=6 class=muted>geen doelwit-woorden</td></tr>"}</tbody></table>')
+                                                -((x.get("opportunity") if x.get("opportunity") is not None else -1))))]
+    _targets_thead = ('<thead><tr><th>doelwit-woord</th><th>volume</th><th>kans</th>'
+                      '<th>onze Google-stand</th><th>verkoop</th><th>jouw oordeel</th></tr></thead>')
+    targets_tbl = _toptable(_targets_thead, trows, empty="geen doelwit-woorden", cols=6)
 
     # Volg-woorden: seeds voor de radar; toon de meerjarige trend-toestand (5 jaar) + sparkline.
     def _surge_tag(x):
@@ -2536,18 +2549,17 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
             sign = "+" if tp > 0 else ""
             return f'{arrow} {sign}{_e(tp)}% <span class="muted">(12 mnd)</span>{surge}'
         return f'<span class="muted">— (draai enrich_volumes)</span>{surge}'
-    srows = "".join(
+    srows = [
         f'<tr><td><b>{_e(x["word"])}</b></td>'
         f'<td>{_num(x.get("volume"), "/mnd")}</td>'
         f'<td>{_trend_cell(x)}</td>'
         f'<td>{_flip(x["word"], "doelwit", "→ 🎯 doelwit")}</td></tr>'
         for x in sorted(seeds, key=lambda x: (
             {"opkomend": 0, "stabiel": 1, "piek-voorbij": 2, "dalend": 3}.get(x.get("trend_state"), 4),
-            -((x.get("volume") or 0)))))
-    seeds_tbl = (
-        '<table><thead><tr><th>volg-woord (seed)</th><th>volume</th>'
-        '<th>trend</th><th></th></tr></thead>'
-        f'<tbody>{srows or "<tr><td colspan=4 class=muted>geen volg-woorden</td></tr>"}</tbody></table>')
+            -((x.get("volume") or 0))))]
+    _seeds_thead = ('<thead><tr><th>volg-woord (seed)</th><th>volume</th>'
+                    '<th>trend</th><th></th></tr></thead>')
+    seeds_tbl = _toptable(_seeds_thead, srows, empty="geen volg-woorden", cols=4)
 
     lib_tbl = (f'<h3 style="margin:.6rem 0 .2rem">🎯 Doelwit-woorden — waar we op willen ranken ({len(targets)})</h3>'
                f'{targets_tbl}'
@@ -2596,13 +2608,9 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
                 f'<a href="/card?id={_e(x["id"])}">{_e(x["claim"][:110])}</a>'
                 f'{(" <span class=muted>(" + _e(x["links"]) + " links)</span>") if x.get("links") else ""}</td>'
                 f'<td>{kc}</td><td>{sc}</td></tr>')
-    top, rest = ins[:12], ins[12:]     # al op sterkte gesorteerd
     _thead = '<thead><tr><th>claim</th><th>soort</th><th>sterkte</th></tr></thead>'
-    top_rows = "".join(_ins_row(x) for x in top) or "<tr><td colspan=3 class=muted>geen inzichten</td></tr>"
-    ins_tbl = g_line + f'<table>{_thead}<tbody>{top_rows}</tbody></table>'
-    if rest:
-        ins_tbl += (f'<details style="margin-top:.3rem"><summary>meer inzichten ({len(rest)})</summary>'
-                    f'<table>{_thead}<tbody>{"".join(_ins_row(x) for x in rest)}</tbody></table></details>')
+    ins_tbl = g_line + _toptable(_thead, [_ins_row(x) for x in ins],   # al op sterkte gesorteerd
+                                 full_label="meer inzichten", empty="geen inzichten", cols=3)
 
     # Kennislaag-overzicht: tellingen per soort, de gat-lijsten, betwist, en de onbeslist-kiezer.
     kn = snap.get("kennis", {})
@@ -2770,7 +2778,7 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
     ltargets = snap.get("link_candidates", [])
     lpursued = snap.get("link_pursued", [])
     _prio_mark = {"hoog": "★ hoog", "midden": "midden", "laag": "laag", "onbekend": "?"}
-    lrows3 = "".join(
+    lrows3 = [
         f'<tr class="{"st-future" if t.get("priority") in ("laag", "onbekend") else ""}">'
         f'<td>{_e(_prio_mark.get(t.get("priority"), "?"))}</td>'
         f'<td><a href="{_e(t.get("link", ""))}">{_e((t.get("title") or "")[:90])}</a>'
@@ -2778,9 +2786,9 @@ def render_html(snap: dict, csrf_token: str | None = None, msg=None,
         f'<td>' + ((_link_btn(t["link"], "pursue", "✓ pitchen", csrf_token, "ok") + " "
                     + _link_btn(t["link"], "ignore", "✗ negeer", csrf_token, "danger"))
                    if writable else '<span class="muted">—</span>') + '</td></tr>'
-        for t in ltargets)
-    ltbl = ('<table><thead><tr><th>prio</th><th>gids / lijstje</th><th>jouw oordeel</th></tr></thead>'
-            f'<tbody>{lrows3 or "<tr><td colspan=3 class=muted>geen doelwitten gespot</td></tr>"}</tbody></table>')
+        for t in ltargets]
+    _ltbl_thead = '<thead><tr><th>prio</th><th>gids / lijstje</th><th>jouw oordeel</th></tr></thead>'
+    ltbl = _toptable(_ltbl_thead, lrows3, empty="geen doelwitten gespot", cols=3)
     pursued_line = (f'<p class="muted">Te pitchen ({len(lpursued)}): '
                     + ", ".join(_e((p.get("source") or p.get("title") or "")[:40]) for p in lpursued)
                     + '</p>') if lpursued else ''
