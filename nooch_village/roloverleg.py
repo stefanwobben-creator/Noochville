@@ -133,7 +133,8 @@ class Agenda:
 def _proposal_from_item(item: dict):
     """Bouw een Proposal uit een agenda-item (voor de Gate en het adopteren)."""
     from nooch_village.models import Proposal, GovernanceChange, ChangeKind
-    kind = ChangeKind.ADD_ROLE if item.get("kind") == "add_role" else ChangeKind.AMEND_ROLE
+    _kinds = {"add_role": ChangeKind.ADD_ROLE, "remove_role": ChangeKind.REMOVE_ROLE}
+    kind = _kinds.get(item.get("kind"), ChangeKind.AMEND_ROLE)
     c = item.get("change", {})
     change = GovernanceChange(
         kind=kind, role_id=item.get("role_id"),

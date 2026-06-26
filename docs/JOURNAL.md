@@ -1056,3 +1056,11 @@ als die ouder zelf geen accountabilities had → kinderen werden wees (ouder gea
 members). G3 escaleert nu elke remove_role van een rol met actieve kinderen ('herbeleg de kinderen
 eerst'). Over 5+ seeds en honderden voorstellen blijven de records nu structureel valide.
 Regressie-guards in test_montecarlo.py. Suite groen (549 + 509).
+
+## Rol verwijderen via de cockpit
+Knop '🗑 Stel voor deze rol te verwijderen' op het editor-scherm (bestaande rol) zet het voorstel om
+naar kind=remove_role; aparte sobere weergave met de Secretaris/Gate-G3-check en 'Consent — rol
+verwijderen' / 'Toch niet'. _proposal_from_item bouwt nu een echte REMOVE_ROLE, dus bij einde overleg
+draait apply_consented het door de Gate (G3 bewaakt werk/kinderen → escalatie). Een NIEUWE-rol-
+voorstel 'verwijderen' = gewoon van de agenda. Acties rov_remove/rov_keep_role. Overview-label +
+flash toegevoegd. Suite groen (549 + 510).

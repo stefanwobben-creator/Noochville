@@ -294,6 +294,38 @@ def test_meerdere_rollen_per_voorstel(tmp_path):
     assert all(m["status"] == "consented" for m in ag3.members_of_group(gid))
 
 
+def test_rol_verwijderen_voorstel(tmp_path):
+    from nooch_village import cockpit
+    from nooch_village.roloverleg import Agenda, _proposal_from_item
+    from nooch_village.models import ChangeKind
+    import json
+    data = tmp_path / "data"; data.mkdir()
+    recs = {"noochville": {"id": "noochville", "type": "circle", "parent": None, "version": 1,
+                           "definition": {"purpose": "p"}, "members": ["scout"]},
+            "scout": {"id": "scout", "type": "role", "parent": "noochville", "version": 1,
+                      "definition": {"purpose": "p", "accountabilities": [], "domains": []}}}
+    (data / "governance_records.json").write_text(json.dumps(recs), encoding="utf-8")
+    ag = Agenda(str(data / "roloverleg_agenda.json"))
+    iid = ag.add("scout", "amend_role", {"add_accountabilities": ["X"]}, "weg ermee",
+                 by="founder", title="Scout")
+    # omzetten naar verwijder-voorstel
+    res = cockpit._dispatch_action(str(data), "rov_remove", iid, "", extra={})
+    assert res["ok"] and res["rov"] == "to_remove"
+    it = Agenda(str(data / "roloverleg_agenda.json")).get(iid)
+    assert it["kind"] == "remove_role"
+    # _proposal_from_item bouwt nu een echte REMOVE_ROLE (niet langer amend)
+    assert _proposal_from_item(it).change.kind == ChangeKind.REMOVE_ROLE
+    # terugdraaien kan
+    cockpit._dispatch_action(str(data), "rov_keep_role", iid, "", extra={})
+    assert Agenda(str(data / "roloverleg_agenda.json")).get(iid)["kind"] == "amend_role"
+    # een NIEUWE-rol-voorstel verwijderen = gewoon van de agenda
+    iid2 = ag.add("nieuw", "add_role", {"purpose": "p", "add_accountabilities": ["Y"],
+                  "new_role_parent": "noochville"}, "x", by="founder", title="Nieuw")
+    r2 = cockpit._dispatch_action(str(data), "rov_remove", iid2, "", extra={})
+    assert r2["rov"] == "removed_draft"
+    assert Agenda(str(data / "roloverleg_agenda.json")).get(iid2) is None
+
+
 def test_evaluate_objection_proces():
     from nooch_village.roloverleg import evaluate_objection
     # alle 'left' → geldig bezwaar

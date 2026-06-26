@@ -1020,7 +1020,8 @@ def render_roloverleg_overview(items: list, agenda_all: list, roles: list,
             titel = _e(head_it.get("title", "")) + f' <span class="muted">(+{len(gm)-1} rol)</span>'
         else:
             kind = ("nieuwe rol" if head_it["kind"] == "add_role"
-                    else f"rol '{head_it['role_id']}' uitbreiden")
+                    else ("🗑 rol verwijderen" if head_it["kind"] == "remove_role"
+                          else f"rol '{head_it['role_id']}' uitbreiden"))
             titel = _e(head_it["title"])
         badge = (' <span class="tg-wacht">⚠ vorige keer schadelijk</span>'
                  if any(m["status"] == "objected" for m in gm) else
@@ -1048,6 +1049,41 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
             '<a href="/">cockpit</a></p><h1>🏛️ Voorstel behandelen</h1>')
     from nooch_village.roloverleg import tension_validity
     valid, invalid_reason = tension_validity(item)
+    common = (f'<input type="hidden" name="csrf" value="{_e(token)}">'
+              f'<input type="hidden" name="iid" value="{_e(item["id"])}">')
+    # Verwijder-voorstel: aparte, sobere weergave (geen editor/diff). De Secretaris-check (Gate G3)
+    # staat eronder; consent voert het bij einde overleg door, of escaleert als er kinderen/werk hangt.
+    if item.get("kind") == "remove_role":
+        if not issues:
+            sec = ('<div class="tg-dlg">📋 <b>Secretaris:</b> geen blokkade gezien — bij einde '
+                   'overleg wordt de rol gearchiveerd.</div>')
+        else:
+            lis = "".join(f'<li>{"🔴" if i["level"]=="blok" else "🟡"} {_e(i["msg"])}</li>' for i in issues)
+            sec = ('<div class="tg-dlg">📋 <b>Secretaris ziet aandachtspunten:</b>'
+                   f'<ul style="margin:.3rem 0">{lis}</ul></div>')
+        rmcard = (f'<div class="tg-card" style="border-left:3px solid #c0392b">'
+                  f'<div class="tg-meta">Voorstel · door {_e(item.get("by",""))} · '
+                  f'status {_e(item.get("status",""))}</div>'
+                  f'<h2>🗑 Rol verwijderen: {_e(item.get("title") or item.get("role_id"))}</h2>'
+                  f'<div class="muted" style="margin-top:.2rem"><b>Lost deze spanning op:</b> '
+                  f'{_e(item.get("reason","")) or "—"}</div>'
+                  '<p class="muted" style="margin-top:.3rem">De rol wordt bij einde overleg '
+                  'gearchiveerd en uit de ouder-cirkel gehaald. Heeft de rol nog werk of '
+                  'onderliggende rollen, dan escaleert de Gate (G3) naar jou.</p></div>')
+        decide = (
+            f'<form method="post" action="/action" style="margin-top:.5rem">{common}'
+            f'<input type="hidden" name="next" value="/roloverleg">'
+            '<div class="tg-opts">'
+            '<button class="bigbtn warn" type="submit" name="action" value="rov_consent">'
+            '🗑 Consent — rol verwijderen<small>bij einde overleg doorgevoerd (Gate G3 bewaakt)</small>'
+            '</button>'
+            f'<button class="bigbtn" type="submit" name="action" value="rov_keep_role">'
+            '↩ Toch niet verwijderen<small>terug naar een gewoon wijzig-voorstel</small></button>'
+            '</div></form>')
+        inner = (f'{head}{_banner(msg)}{rmcard}{sec}{decide}'
+                 '<div class="tg-skip"><a class="muted" href="/roloverleg">← terug naar de agenda</a>'
+                 '</div></div><style>' + _TRIAGE_CSS + '</style>')
+        return _page("Rol verwijderen", inner)
     ch = item.get("change", {})
     accs = ch.get("add_accountabilities", [])
     accs_rm = ch.get("remove_accountabilities", [])
@@ -1251,7 +1287,14 @@ def render_roloverleg(item: dict, role_snapshot: dict | None, issues: list,
         f'<textarea name="ed_domeinen" class="tg-in" rows="2">{_ta(ed_doms_list)}</textarea>'
         '<button class="bigbtn go" type="submit" name="action" value="rov_edit" '
         'style="margin-top:.4rem">💾 Voorstel opslaan<small>werkt de wijziging bij vanuit deze '
-        'velden; de Secretaris hertoetst</small></button></form></details>')
+        'velden; de Secretaris hertoetst</small></button></form>'
+        + ("" if is_add else
+           f'<form method="post" action="/action" style="margin-top:.4rem">{common}'
+           f'<input type="hidden" name="next" value="/roloverleg?iid={_e(item["id"])}">'
+           '<button class="btn danger" type="submit" name="action" value="rov_remove" '
+           'onclick="return confirm(\'Dit voorstel omzetten naar: deze rol verwijderen?\')">'
+           '🗑 Stel voor deze rol te verwijderen</button></form>')
+        + '</details>')
     # GlassFrog: één voorstel kan meerdere rollen raken. Toon de andere rol-onderdelen + een knop
     # om een rol toe te voegen aan dit voorstel, en om het hele voorstel in één keer aan te nemen.
     members = group_members or [item]
@@ -2215,6 +2258,10 @@ def _flash(result: dict) -> str:
             "added": "➕ Voorstel op de agenda gezet.",
             "edited": "💾 Voorstel bijgewerkt vanuit de velden.",
             "group_added": "➕ Rol toegevoegd aan dit voorstel — bewerk 'm via het rol-formulier.",
+            "to_remove": "🗑 Omgezet naar een verwijder-voorstel — consent voert het bij einde "
+                         "overleg door (Gate G3 bewaakt werk/kinderen).",
+            "kept_role": "↩ Terug naar een gewoon wijzig-voorstel.",
+            "removed_draft": "🗑 Concept-rol uit dit voorstel verwijderd (van de agenda).",
             "flipped": "↔ Omgezet (purpose ↔ accountability) en opnieuw geformuleerd.",
             "to_project": "▶ Als experiment op het projectbord gezet voor de rol — bij herhaling "
                           "stolt het later tot accountability.",
@@ -2372,7 +2419,8 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
                                   owner=extra.get("owner", ""), scope_override=scope,
                                   project_status="draft" if risky else "queued", projects=projects)
     if action in ("rov_react", "rov_consent", "rov_object", "rov_add", "rov_end", "rov_flip_facet",
-                  "rov_to_project", "rov_invalid", "rov_edit", "rov_group_add", "rov_group_consent"):
+                  "rov_to_project", "rov_invalid", "rov_edit", "rov_group_add", "rov_group_consent",
+                  "rov_remove", "rov_keep_role"):
         from nooch_village.roloverleg import (Agenda, amend_with_reaction, apply_consented,
                                               flip_facet, build_change_from_fields)
         agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
@@ -2472,6 +2520,25 @@ def _dispatch_action(data_dir: str | None, action: str, iid: str, reason: str,
             for m in members:
                 agenda.set_status(m["id"], "consented")
             return {"ok": True, "rov": "group_consented", "n": len(members)}
+        if action == "rov_remove":
+            # Zet een voorstel om naar 'deze rol verwijderen'. Gate G3 bewaakt het bij doorvoeren
+            # (werk/kinderen → escalatie). Een nieuwe-rol-voorstel verwijderen = gewoon van de agenda.
+            item = agenda.get(iid)
+            if item is None:
+                return {"ok": False, "error": "voorstel niet gevonden"}
+            if item.get("kind") == "add_role":
+                agenda.remove(iid)
+                return {"ok": True, "rov": "removed_draft"}
+            agenda.update_fields(iid, kind="remove_role", change={},
+                                 title=f"verwijder {item.get('role_id')}")
+            return {"ok": True, "rov": "to_remove"}
+        if action == "rov_keep_role":
+            item = agenda.get(iid)
+            if item is None:
+                return {"ok": False, "error": "voorstel niet gevonden"}
+            agenda.update_fields(iid, kind="amend_role", change={},
+                                 title=item.get("role_id", "rol"))
+            return {"ok": True, "rov": "kept_role"}
         if action == "rov_edit":
             # GlassFrog-stijl: het voorstel bijwerken vanuit de direct bewerkte velden.
             item = agenda.get(iid)
