@@ -153,6 +153,64 @@ def main() -> None:
         from nooch_village.demos.ops import discovery_demo
         discovery_demo()
 
+    elif mode == "kennis_migrate":
+        # Geef de 196 bestaande kaartjes hun SOORT (signaal/bevinding/kader/standpunt).
+        # Default = dry-run (toont het plan, verandert niets). 'apply' voert het door.
+        # Conservatief: al-gezet blijft, definities → Lexicon, twijfel → mens-review.
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.notes_store import NotesStore
+        from nooch_village.kennis_migrate import plan_migration, apply_plan
+        from nooch_village.claim_classify import classify_kind
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        store = NotesStore(os.path.join(ctx.data_dir, "notes.json"))
+        do_apply = "apply" in sys.argv[2:]
+
+        # Classifier: heuristiek, met LLM als rijkere terugval op de twijfelgevallen (mens-machine).
+        def classify(claim, et, source):
+            k = classify_kind(claim, et, source)
+            if k is not None:
+                return k
+            try:
+                from nooch_village.llm import reason
+                prompt = ("Classificeer deze bewering in één woord: signaal (trend/mening), "
+                          "bevinding (empirie), kader (norm/regel), standpunt (eigen claim), "
+                          "of onbeslist. Antwoord met enkel dat woord.\n\nBewering: " + (claim or ""))
+                ans = (reason(prompt) or "").strip().lower()
+                from nooch_village.insight import ClaimKind
+                for kk in ClaimKind:
+                    if kk.value in ans:
+                        return kk
+            except Exception:
+                pass
+            return None
+
+        plan = plan_migration(store.all(), classify=classify)
+        s = plan["summary"]
+        print(f"📚 Kennis-migratie ({'APPLY' if do_apply else 'DRY-RUN'}) over {s['totaal']} kaartjes")
+        print(f"   al gezet (overslaan): {s['al_gezet']}")
+        print(f"   toe te kennen: {s['toe_te_kennen']}")
+        print(f"   definitie → Lexicon: {s['definitie_lexicon']}")
+        print(f"   onbeslist → mens-review: {s['onbeslist_review']}")
+        print()
+        # toon een paar voorbeelden per categorie
+        shown = 0
+        for r in plan["rows"]:
+            if r["proposed"] and shown < 12:
+                print(f"   [{r['proposed']:<10}] {r['claim']}")
+                shown += 1
+        if s["onbeslist_review"]:
+            print("\n   ⚠ onbeslist (blijven op jou wachten):")
+            for r in plan["rows"]:
+                if r["note"] == "onbeslist → mens-review":
+                    print(f"      {r['claim']}")
+        if do_apply:
+            n = apply_plan(store, plan)
+            print(f"\n✅ {n} kaartjes kregen hun soort. De rest (definitie/onbeslist) is met rust gelaten.")
+        else:
+            print("\n(DRY-RUN — niets gewijzigd. Draai 'kennis_migrate apply' om door te voeren.)")
+
     elif mode == "harry_hemp":
         from nooch_village.demos.knowledge import harry_hemp_grounding_demo
         harry_hemp_grounding_demo()
@@ -688,6 +746,6 @@ def main() -> None:
               "measure_propose | rereview | ingest | notes_remove | recurate | "
               "ground | harry_run | roster | keys | competitor | formalize | answer_questions | "
               "ingest_governance | review_roles | shopify | work_projects | "
-              "inwoner_new | inwoner_list | inwoner_assign",
+              "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate",
               file=sys.stderr)
         sys.exit(1)

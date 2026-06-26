@@ -25,6 +25,9 @@ _BEVINDING = re.compile(r"\b(studie|onderzoek|meta-?analyse|rct|gerandomiseerd|c
                         r"dagen|weken|maanden)\b", re.I)
 _STANDPUNT = re.compile(r"\b(wij|we|onze|nooch|ik geloof|wij vinden|onze missie|hoort|"
                         r"zou moeten|beter|moreel|verantwoord)\b", re.I)
+# 'voldoet aan EN13432' = een claim ÓVER een norm (standpunt/bevinding), niet de norm zélf.
+_COMPLIANCE = re.compile(r"\b(voldoet aan|voldoen aan|conform|gecertificeerd|meets|passed|"
+                         r"behaalt|haalt|getest volgens|volgens de)\b", re.I)
 _DEFINITIE = re.compile(r"\b(is per definitie|betekent|wordt gedefinieerd|definieert|"
                         r"verwijst naar|is een soort|valt onder|staat voor)\b", re.I)
 
@@ -60,11 +63,13 @@ def classify_kind(claim: str, evidence_type: str | None = None,
     if _STANDPUNT.search(t):
         hits.add(ClaimKind.STANDPUNT)
 
-    # Kader is het sterkste, eenduidige signaal (een norm is een norm).
-    if hits == {ClaimKind.KADER}:
-        return ClaimKind.KADER
-    if ClaimKind.KADER in hits and len(hits) > 1:
-        hits.discard(ClaimKind.KADER)          # 'voldoet aan EN13432' = standpunt/bevinding óver een norm
+    # Kader is het sterkste signaal: een norm is een norm, ook al noemt hij getallen/termijnen.
+    # Alleen bij een expliciete 'voldoet aan'-framing gaat de claim ÓVER de norm (standpunt/bevinding).
+    if ClaimKind.KADER in hits:
+        if _COMPLIANCE.search(t):
+            hits.discard(ClaimKind.KADER)
+        else:
+            return ClaimKind.KADER
 
     # evidence_type breekt een gelijkspel of beslist als de tekst zwijgt.
     if not hits and et_hint:

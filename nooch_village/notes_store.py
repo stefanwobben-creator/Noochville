@@ -53,6 +53,19 @@ class NotesStore:
     def by_concept(self, concept_id: str) -> list[Insight]:
         return [n for n in self.all() if n.concept_id == concept_id]
 
+    def set_kind(self, note_id: str, kind) -> bool:
+        """Ken de SOORT (ClaimKind) toe aan een bestaand kaartje. Gebruikt door de migratie en
+        door curatie. False als het kaartje niet bestaat."""
+        bestaand = self.get(note_id)
+        if bestaand is None:
+            return False
+        bestaand.kind = kind
+        from datetime import datetime
+        bestaand.last_updated_at = datetime.now()
+        self._notes[note_id] = bestaand.model_dump(mode="json")
+        self._save()
+        return True
+
     def enrich(self, note_id: str, nieuwe_reference: str | None = None) -> Insight | None:
         """Verrijk een bestaande kaart met een nieuwe grounding: voeg bron toe,
         hoog de grounding-teller op, en zet last_updated_at op nu. Claim en status
