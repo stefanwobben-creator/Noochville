@@ -1340,11 +1340,12 @@ def _rov_editor(st: _Stores, item: dict, csrf: str, back: str, circle_id: str = 
                 f"<input type='hidden' name='next' value='{_e(back)}'>")
 
     sub = ("this.form.requestSubmit?this.form.requestSubmit():this.form.submit()")
-    name_f = (f"<form method='post' action='/action'>{hid()}"
+    keep = f"data-reopen='{_e(back)}'"   # blijf na elke bewerking op DIT punt (niet auto-springen)
+    name_f = (f"<form method='post' action='/action' {keep}>{hid()}"
               f"<input type='hidden' name='action' value='rov2_set'><input type='hidden' name='field' value='name'>"
               f"<label class='att-lbl'>Rolnaam</label>"
               f"<input name='value' value='{_e(draft['name'])}' onchange='{sub}'></form>")
-    purpose_f = (f"<form method='post' action='/action'>{hid()}"
+    purpose_f = (f"<form method='post' action='/action' {keep}>{hid()}"
                  f"<input type='hidden' name='action' value='rov2_set'><input type='hidden' name='field' value='purpose'>"
                  f"<label class='att-lbl'>Purpose</label>"
                  f"<input name='value' value='{_e(draft['purpose'])}' onchange='{sub}'></form>")
@@ -1360,11 +1361,11 @@ def _rov_editor(st: _Stores, item: dict, csrf: str, back: str, circle_id: str = 
         for i, v in enumerate(vals):
             inline = _iss_html(per_issue.get(v, [])) if per_issue else ""
             rows += (f"<div class='rov-field'><span class='rov-fv'>{_e(v)}</span>"
-                     f"<form method='post' action='/action' style='display:inline'>{hid()}"
+                     f"<form method='post' action='/action' style='display:inline' {keep}>{hid()}"
                      f"<input type='hidden' name='idx' value='{i}'>"
                      f"<button class='dellink' type='submit' name='action' value='{rm_action}'>✕</button></form></div>"
                      f"{inline}")
-        addf = (f"<form method='post' action='/action' class='rov-addrow'>{hid()}"
+        addf = (f"<form method='post' action='/action' class='rov-addrow' {keep}>{hid()}"
                 f"<input name='text' placeholder='{_e(kind)} toevoegen…'>"
                 f"<button class='btn ok sm' type='submit' name='action' value='{add_action}'>+</button></form>")
         return f"<label class='att-lbl'>{_e(label)}</label>{rows or ''}{addf}"
