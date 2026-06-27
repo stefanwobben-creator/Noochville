@@ -171,12 +171,12 @@ ul.clean li:last-child{border-bottom:none}
 .rov-link{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;text-decoration:none;color:var(--ink)}
 .rov-title{font-weight:600}
 .rov-kind{font-size:.68rem;flex-basis:100%}
-@media(min-width:620px){.rov-grid{grid-template-columns:minmax(0,130px) minmax(0,1fr)}}
+@media(min-width:620px){.pgrid.rov-grid{grid-template-columns:minmax(0,1fr) minmax(0,3fr)}}
 .rov-add{display:flex;gap:.4rem;margin-bottom:.6rem}
 .rov-add input{flex:1 1 auto;min-width:0;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem}
 .rov-item.done .rov-title{text-decoration:line-through;color:var(--muted)}
 .rov-by{font-size:.6rem;width:auto;min-width:1.4rem;padding:0 .25rem;height:1.4rem;display:inline-flex;align-items:center;justify-content:center}
-.rov-foot{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--border);padding:.7rem 0 .2rem;margin-top:1rem;display:flex;justify-content:flex-start}
+.rov-foot{position:sticky;bottom:-1.3rem;z-index:6;background:var(--surface);border-top:1px solid var(--border);margin:1rem -1.5rem -1.3rem;padding:.8rem 1.5rem 1.3rem;display:flex;justify-content:flex-start}
 .rov-editor input[name=value]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem}
 .rov-block{margin-top:.8rem}
 .rov-field{display:flex;align-items:center;gap:.5rem;padding:.2rem 0;border-bottom:1px solid var(--border)}
