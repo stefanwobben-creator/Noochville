@@ -182,14 +182,12 @@ ul.clean li:last-child{border-bottom:none}
 .card-del{margin-top:1.2rem;padding-top:.6rem;border-top:1px solid var(--border)}
 .pdisc .psec{background:none;border:none;padding:0;margin:0}
 .pdisc{background:var(--cream-2);border-radius:var(--radius);padding:.9rem}
-.composer{margin-bottom:.85rem}
-.composer>summary{list-style:none}
-.composer>summary::-webkit-details-marker{display:none}
-.comp-start{cursor:text;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.55rem .7rem;color:var(--subtle)}
-.comp-form{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.6rem}
-.comp-form textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .55rem}
-.comp-row{display:flex;gap:.5rem;align-items:center;margin-top:.4rem}
-.comp-row select{flex:1 1 auto;min-width:0}
+.comp-form{margin-bottom:1rem}
+.comp-tools{display:flex;gap:.3rem;margin-bottom:.35rem}
+.ctool{border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);padding:.1rem .55rem;font-size:.8rem;cursor:pointer;color:var(--gray)}
+.ctool:hover{border-color:var(--green)}
+.comp-form textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.5rem .6rem;background:var(--surface)}
+.comp-row{margin-top:.4rem}
 .pdetail-h h2{margin:.1rem 0 .5rem;font-family:var(--font-display);font-size:1.35rem;line-height:1.2}
 .psec{margin:0 0 1.15rem}
 .psec-h{display:flex;align-items:center;gap:.4rem;color:var(--subtle);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:.45rem}
@@ -722,6 +720,10 @@ def _modal_html() -> str:
         "<div id='ovl-body'></div></div></div>"
         "<script>(function(){"
         "var ov=document.getElementById('ovl'),bd=document.getElementById('ovl-body'),last=null,dirty=false;"
+        "window.wrapSel=function(btn,pre,post){var f=btn.closest('form');var t=f&&f.querySelector('textarea');"
+        "if(!t)return;var s=t.selectionStart,e=t.selectionEnd,v=t.value;"
+        "t.value=v.slice(0,s)+pre+v.slice(s,e)+post+v.slice(e);t.focus();"
+        "t.selectionStart=s+pre.length;t.selectionEnd=e+pre.length;};"
         "function frag(u){return u+(u.indexOf('?')>-1?'&':'?')+'fragment=1';}"
         "function openCard(u){last=u;"
         "fetch(frag(u)).then(function(r){return r.text();}).then(function(h){bd.innerHTML=h;ov.style.display='flex';wire();});}"
@@ -1153,15 +1155,20 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
 
     # ---- Rechterkolom: de dialoog (mensen + AI) ----
     role_name = _name(orec) if orec else ""
-    feed = "".join(_feed_entry_html(st, m, role_name=role_name) for m in (p.get("log") or []))
+    # Nieuwste boven.
+    feed = "".join(_feed_entry_html(st, m, role_name=role_name) for m in reversed(p.get("log") or []))
     if not feed:
         feed = "<p class='muted'>Nog geen updates of reacties.</p>"
     composer = ""
     if rw:
-        # Direct de textarea (een reactie is altijd van jou); Plaatsen links uitgelijnd.
+        # Directe textarea met mini-toolbar op de gele achtergrond; Plaatsen links uitgelijnd.
         composer = (f"<form method='post' action='/action' class='pf comp-form'>{hid()}"
                     f"<input type='hidden' name='author' value='human:'>"
-                    f"<textarea name='text' rows='2' placeholder='Schrijf een reactie… (**vet**, of '- ' voor een lijst)'></textarea>"
+                    f"<div class='comp-tools'>"
+                    f"<button type='button' class='ctool' onclick=\"wrapSel(this,'**','**')\" title='vet'><b>B</b></button>"
+                    f"<button type='button' class='ctool' onclick=\"wrapSel(this,'- ','')\" title='lijst'>• lijst</button>"
+                    f"</div>"
+                    f"<textarea name='text' rows='2' placeholder='Schrijf een reactie…'></textarea>"
                     f"<div class='comp-row'>"
                     f"<button class='btn ok' type='submit' name='action' value='proj_feed'>Plaatsen</button>"
                     f"</div></form>")
