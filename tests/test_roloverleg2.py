@@ -34,6 +34,35 @@ def test_agendapunt_bestaande_rol_en_nieuwe_rol(tmp_path):
     assert "Website Developer" in frag and "Data Analist" in frag and "Agenda" in frag
 
 
+def test_editor_prefil_en_change_diff(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "owner": [RID], "reason": ["mist"], "next": ["/"]})
+    iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
+    frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
+    # editor prefilt de huidige rol
+    assert "rov-editor" in frag and "Rolnaam" in frag and "Building new features" in frag
+    # naam wijzigen -> rename in change; accountability toevoegen -> add_accountabilities
+    cockpit2.dispatch(dd, "rov2_set", {"iid": [iid], "field": ["name"], "value": ["Web Developer"], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Bewaken van performance"], "next": ["/"]})
+    ch = cockpit2._Stores(dd).agenda.get(iid)["change"]
+    assert ch.get("rename") == "Web Developer"
+    assert "Bewaken van performance" in ch.get("add_accountabilities", [])
+    # bestaande accountability verwijderen -> remove_accountabilities
+    cockpit2.dispatch(dd, "rov2_acc_remove", {"iid": [iid], "idx": ["0"], "next": ["/"]})
+    assert cockpit2._Stores(dd).agenda.get(iid)["change"].get("remove_accountabilities")
+
+
+def test_editor_nieuwe_rol(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "owner": ["__new__"],
+                                       "rolnaam": ["Data Analist"], "reason": ["meten"], "next": ["/"]})
+    iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
+    cockpit2.dispatch(dd, "rov2_set", {"iid": [iid], "field": ["purpose"], "value": ["Inzicht uit data"], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Rapporteren van trends"], "next": ["/"]})
+    ch = cockpit2._Stores(dd).agenda.get(iid)["change"]
+    assert ch.get("purpose") == "Inzicht uit data" and "Rapporteren van trends" in ch.get("add_accountabilities", [])
+
+
 def test_select_en_verwijderen(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "owner": [RID], "reason": ["x"], "next": ["/"]})

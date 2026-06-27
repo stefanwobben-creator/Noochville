@@ -172,6 +172,12 @@ ul.clean li:last-child{border-bottom:none}
 .rov-title{font-weight:600}
 .rov-kind{font-size:.72rem;margin-left:auto}
 .rov-add select,.rov-add input,.rov-add textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem;margin-top:.25rem}
+.rov-editor input[name=value]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem}
+.rov-block{margin-top:.8rem}
+.rov-field{display:flex;align-items:center;gap:.5rem;padding:.2rem 0;border-bottom:1px solid var(--border)}
+.rov-fv{flex:1 1 auto;min-width:0}
+.rov-addrow{display:flex;gap:.4rem;margin-top:.35rem}
+.rov-addrow input{flex:1 1 auto;min-width:0;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem}
 .av.role{background:var(--green-dark);color:#fff}
 .fkind{font-size:.64rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700;border-radius:var(--radius-pill);padding:.03rem .45rem}
 .fkind.upd{background:var(--green-tint);color:var(--green-dark)}
@@ -1162,6 +1168,90 @@ def _rov_kindlabel(kind: str) -> str:
     return {"add_role": "nieuwe rol", "remove_role": "rol verwijderen"}.get(kind, "rol wijzigen")
 
 
+def _rov_draft(st: _Stores, item: dict) -> dict:
+    """De bewerkbare rol-definitie van een agendapunt (naam/purpose/domeinen/accountabilities).
+    Init uit het bestaande record (amend) of uit de change (nieuwe rol)."""
+    d = item.get("draft")
+    if d:
+        return {"name": d.get("name", ""), "purpose": d.get("purpose", ""),
+                "accs": list(d.get("accs", [])), "domains": list(d.get("domains", []))}
+    if item.get("kind") == "add_role":
+        ch = item.get("change", {})
+        return {"name": item.get("title", ""), "purpose": ch.get("purpose", ""),
+                "accs": list(ch.get("add_accountabilities", [])), "domains": list(ch.get("add_domains", []))}
+    rec = st.records.get(item.get("role_id"))
+    if rec is not None:
+        de = rec.definition
+        return {"name": _name(rec), "purpose": de.purpose or "",
+                "accs": list(de.accountabilities), "domains": list(de.domains)}
+    return {"name": item.get("title", ""), "purpose": "", "accs": [], "domains": []}
+
+
+def _rov_snapshot(st: _Stores, item: dict):
+    if item.get("kind") == "add_role":
+        return None
+    rec = st.records.get(item.get("role_id"))
+    if rec is None:
+        return None
+    de = rec.definition
+    return {"name": _name(rec), "purpose": de.purpose,
+            "accountabilities": list(de.accountabilities), "domains": list(de.domains)}
+
+
+def _rov_save_draft(st: _Stores, iid: str, draft: dict) -> None:
+    """Sla de draft op én herbereken de change (diff t.o.v. de huidige rol) via roloverleg-logica."""
+    item = st.agenda.get(iid)
+    if item is None:
+        return
+    from nooch_village.roloverleg import build_change_from_fields
+    change, _rid, title = build_change_from_fields(
+        item, _rov_snapshot(st, item), naam=draft["name"], purpose=draft["purpose"],
+        accs=draft["accs"], domeinen=draft["domains"])
+    st.agenda.update_fields(iid, draft=draft, change=change, title=title or item.get("title"))
+
+
+def _rov_editor(st: _Stores, item: dict, csrf: str, back: str) -> str:
+    """Editor van één voorstel: naam, purpose, domeinen, accountabilities (losse velden + kruisje).
+    Wijzigingen zijn direct zichtbaar (geen opslaan-knop); de change wordt live herberekend."""
+    draft = _rov_draft(st, item)
+    iid = item["id"]
+
+    def hid():
+        return (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+                f"<input type='hidden' name='iid' value='{_e(iid)}'>"
+                f"<input type='hidden' name='circle' value='{_e(item.get('change', {}).get('parent', '') or '')}'>"
+                f"<input type='hidden' name='next' value='{_e(back)}'>")
+
+    sub = ("this.form.requestSubmit?this.form.requestSubmit():this.form.submit()")
+    name_f = (f"<form method='post' action='/action'>{hid()}"
+              f"<input type='hidden' name='action' value='rov2_set'><input type='hidden' name='field' value='name'>"
+              f"<label class='att-lbl'>Rolnaam</label>"
+              f"<input name='value' value='{_e(draft['name'])}' onchange='{sub}'></form>")
+    purpose_f = (f"<form method='post' action='/action'>{hid()}"
+                 f"<input type='hidden' name='action' value='rov2_set'><input type='hidden' name='field' value='purpose'>"
+                 f"<label class='att-lbl'>Purpose</label>"
+                 f"<input name='value' value='{_e(draft['purpose'])}' onchange='{sub}'></form>")
+
+    def listblock(label, kind, vals, add_action, rm_action):
+        rows = ""
+        for i, v in enumerate(vals):
+            rows += (f"<div class='rov-field'><span class='rov-fv'>{_e(v)}</span>"
+                     f"<form method='post' action='/action' style='display:inline'>{hid()}"
+                     f"<input type='hidden' name='idx' value='{i}'>"
+                     f"<button class='dellink' type='submit' name='action' value='{rm_action}'>✕</button></form></div>")
+        addf = (f"<form method='post' action='/action' class='rov-addrow'>{hid()}"
+                f"<input name='text' placeholder='{_e(kind)} toevoegen…'>"
+                f"<button class='btn ok sm' type='submit' name='action' value='{add_action}'>+</button></form>")
+        return f"<label class='att-lbl'>{_e(label)}</label>{rows or ''}{addf}"
+
+    acc_b = listblock("Accountabilities", "accountability", draft["accs"], "rov2_acc_add", "rov2_acc_remove")
+    dom_b = listblock("Domeinen", "domein", draft["domains"], "rov2_dom_add", "rov2_dom_remove")
+    head = (f"<div class='psec-h'>{_IC_INFO}<span>Voorstel · {_rov_kindlabel(item['kind'])}</span></div>"
+            f"<p class='muted' style='font-size:.82rem;margin:.2rem 0 .6rem'>Spanning: {_e(item.get('reason') or '—')}</p>")
+    return (f"<div class='rov-editor'>{head}{name_f}{purpose_f}"
+            f"<div class='rov-block'>{acc_b}</div><div class='rov-block'>{dom_b}</div></div>")
+
+
 def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: str = "",
                        fragment: bool = False) -> str:
     """Roloverleg in modal-vorm. Brok 1: frame + agenda links (toevoegen, lijst, selecteren)."""
@@ -1205,13 +1295,10 @@ def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: s
            f"style='margin-top:.3rem'>Toevoegen</button></form>")
     left = _psec(_IC_CHECK, "Agenda", f"<div class='rov-list'>{rows}</div>{add}")
 
-    # Rechts: editor-placeholder (brok 2).
+    # Rechts: de editor van het geselecteerde voorstel (naam/purpose/domeinen/accountabilities).
     sel = next((it for it in items if it["id"] == iid), None)
     if sel:
-        right = (f"<div class='psec'><div class='psec-h'>{_IC_INFO}<span>Voorstel</span></div>"
-                 f"<p><b>{_e(sel.get('title') or sel.get('role_id'))}</b> · {_rov_kindlabel(sel['kind'])}</p>"
-                 f"<p class='muted'>{_e(sel.get('reason') or '')}</p>"
-                 f"<p class='muted'>Editor (rol selecteren/bewerken, accountabilities, consent) volgt in brok 2.</p></div>")
+        right = _rov_editor(st, sel, csrf_token, f"{base}&iid={sel['id']}")
     else:
         right = "<p class='muted'>Kies links een agendapunt, of voeg er een toe.</p>"
 
@@ -2079,6 +2166,24 @@ def dispatch(data_dir: str, action: str, form: dict):
             msg = "✓ agendapunt toegevoegd"
     elif action == "rov2_remove":
         st.agenda.remove(g("iid")); msg = "🗑 agendapunt verwijderd"
+    elif action in ("rov2_set", "rov2_acc_add", "rov2_acc_remove", "rov2_dom_add", "rov2_dom_remove"):
+        item = st.agenda.get(g("iid"))
+        if item is not None:
+            draft = _rov_draft(st, item)
+            if action == "rov2_set" and g("field") in ("name", "purpose"):
+                draft[g("field")] = g("value")
+            elif action == "rov2_acc_add" and g("text").strip():
+                draft["accs"].append(g("text").strip())
+            elif action == "rov2_dom_add" and g("text").strip():
+                draft["domains"].append(g("text").strip())
+            elif action in ("rov2_acc_remove", "rov2_dom_remove"):
+                key = "accs" if action == "rov2_acc_remove" else "domains"
+                try:
+                    draft[key].pop(int(g("idx")))
+                except (ValueError, IndexError):
+                    pass
+            _rov_save_draft(st, g("iid"), draft)
+            msg = "✓ voorstel bijgewerkt"
     return nxt, msg
 
 
