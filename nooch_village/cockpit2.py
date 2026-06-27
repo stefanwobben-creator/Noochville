@@ -1058,10 +1058,8 @@ def _feed_entry_html(st: _Stores, entry: dict, role_name: str = "") -> str:
         who = f"<b class='fname'>{_e(nm)}</b> <span class='frole'>@{_e(role_name)}</span>"
     else:
         who = f"<b class='fname'>{_e(nm)}</b>"
-    badge = ("<span class='fkind upd'>update</span>" if kind == "update"
-             else "<span class='fkind cmt'>reactie</span>")
     return (f"<div class='fentry'>"
-            f"<div class='fhead'>{av}<span class='fwho'>{who}</span>{badge}</div>"
+            f"<div class='fhead'>{av}<span class='fwho'>{who}</span></div>"
             f"<div class='fbubble'>{_md(entry.get('text', ''))}</div>"
             f"<div class='ffoot'><span class='emoji-add' title='reactie (binnenkort)'>🙂</span>"
             f"<span class='fstamp'>{_e(_stamp(entry.get('at')))}</span></div>"
@@ -1160,14 +1158,13 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         feed = "<p class='muted'>Nog geen updates of reacties.</p>"
     composer = ""
     if rw:
-        # Start simpel ('Schrijf een reactie…'); klik klapt de schrijf-box open.
-        composer = (f"<details class='composer'><summary class='comp-start'>Schrijf een reactie…</summary>"
-                    f"<form method='post' action='/action' class='pf comp-form'>{hid()}"
-                    f"<textarea name='text' rows='3' placeholder='Typ je reactie… (**vet**, of '- ' voor een lijst)'></textarea>"
+        # Direct de textarea (een reactie is altijd van jou); Plaatsen links uitgelijnd.
+        composer = (f"<form method='post' action='/action' class='pf comp-form'>{hid()}"
+                    f"<input type='hidden' name='author' value='human:'>"
+                    f"<textarea name='text' rows='2' placeholder='Schrijf een reactie… (**vet**, of '- ' voor een lijst)'></textarea>"
                     f"<div class='comp-row'>"
-                    f"<select name='author'>{_feed_author_options(st, p)}</select>"
                     f"<button class='btn ok' type='submit' name='action' value='proj_feed'>Plaatsen</button>"
-                    f"</div></form></details>")
+                    f"</div></form>")
     discussie = _psec(_IC_CHAT, "Dialoog", composer + feed)   # schrijf-box boven, reacties eronder
 
     # ---- Status: chip in de header, wisselen via het …-menu (+ archiveren/verwijderen) ----

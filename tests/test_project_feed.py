@@ -35,10 +35,11 @@ def test_feed_render_auteur_en_soort(tmp_path):
     cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"],
                                         "text": ["mooi, ik publiceer"], "next": ["/"]})
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    assert "fkind upd" in frag and "fkind cmt" in frag          # beide soorten
+    # AI-update toont AI-naam + @rolnaam; menselijke reactie toont 'Jij' (geen update-badge meer)
     assert "Codie" in frag and "eerste versie staat klaar" in frag
-    # composer start simpel + namens-keuze (auteur) met update-optie
-    assert "comp-start" in frag and "name='author'" in frag and "(update)" in frag
+    assert "frole" in frag and "Jij" in frag
+    # composer = directe textarea + verborgen auteur 'human:' (een reactie is van jou)
+    assert "comp-form" in frag and "value='human:'" in frag
 
 
 def test_oude_log_entries_blijven_leesbaar(tmp_path):
@@ -50,8 +51,7 @@ def test_oude_log_entries_blijven_leesbaar(tmp_path):
     p["log"].append({"who": "mens", "text": "oude reactie", "at": 2.0})
     st.projects._save()
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    assert "oude update" in frag and "oude reactie" in frag
-    assert "fkind upd" in frag and "fkind cmt" in frag           # who→kind mapping
+    assert "oude update" in frag and "oude reactie" in frag      # oud schema blijft leesbaar
 
 
 def test_human_reactie_zet_worked_false(tmp_path):
