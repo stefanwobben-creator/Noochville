@@ -126,6 +126,13 @@ ul.clean li:last-child{border-bottom:none}
 .pmeta>div{display:flex;flex-direction:column;gap:.1rem;min-width:0}
 .pmeta .k{font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700}
 .dot{display:inline-block;width:.7rem;height:.7rem;border-radius:50%;margin-right:.35rem;vertical-align:middle}
+.fentry{border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .65rem;margin:.35rem 0}
+.fhead{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
+.ftext{margin-top:.25rem}
+.av.role{background:#5b3fa6;color:#fff}
+.fkind{font-size:.64rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700;border-radius:var(--radius-pill);padding:.03rem .45rem}
+.fkind.upd{background:#E3F4EA;color:#1F7A45}
+.fkind.cmt{background:var(--cream-2);color:var(--gray)}
 .acc-sub{padding:.15rem 0 .4rem 1.4rem;border-bottom:1px solid var(--border)}
 .sugg{background:#F4F1FB;border:1px solid #E0D7F5;border-radius:var(--radius);padding:.5rem .7rem;margin:.5rem 0}
 .sugg-h{font-weight:700;color:#5b3fa6;font-size:.82rem;margin-bottom:.3rem}
@@ -888,6 +895,56 @@ def render_person(st: _Stores, pid: str) -> str:
     return _page(p.name, inner)
 
 
+def _feed_norm(entry: dict):
+    """Normaliseer een feed-entry naar (kind, author_type, author_id). Leest zowel het nieuwe
+    schema (author/kind) als het oude ({who: 'mens'|'rol'})."""
+    if "author" in entry:
+        a = entry.get("author") or {}
+        return entry.get("kind", "comment"), a.get("type", "human"), a.get("id", "")
+    if entry.get("who") == "rol":
+        return "update", "role", ""
+    return "comment", "human", ""
+
+
+def _feed_who(st: _Stores, atype: str, aid: str):
+    """(avatar-html, naam) voor een feed-auteur."""
+    if atype == "person":
+        nm = _person_name(st, aid) or "Iemand"
+        return _avatar(nm, False), nm
+    if atype == "persona":
+        pa = st.personas.get(aid)
+        nm = pa.name if pa else "AI"
+        return _avatar(nm, True), nm
+    if atype == "role":
+        r = st.records.get(aid)
+        return "<span class='av role'>R</span>", (_name(r) if r else "Rol")
+    return "<span class='av'>🙋</span>", "Jij"
+
+
+def _feed_entry_html(st: _Stores, entry: dict) -> str:
+    kind, atype, aid = _feed_norm(entry)
+    av, nm = _feed_who(st, atype, aid)
+    badge = ("<span class='fkind upd'>update</span>" if kind == "update"
+             else "<span class='fkind cmt'>reactie</span>")
+    return (f"<div class='fentry'><div class='fhead'>{av}<b>{_e(nm)}</b>{badge}"
+            f"<span class='muted' style='font-size:.74rem'>· {_e(_age(entry.get('at')))}</span></div>"
+            f"<div class='ftext'>{_e(entry.get('text', ''))}</div></div>")
+
+
+def _feed_author_options(st: _Stores, p: dict) -> str:
+    """Namens-keuze voor de composer: jij (reactie) + de rolvervullers van de eigenaar-rol (update)."""
+    opts = ["<option value='human:'>🙋 Jij (reactie)</option>"]
+    orec = st.records.get(p.get("owner"))
+    if orec is not None:
+        for f in st.assign.fillers_of(orec.id, record=orec):
+            if f.type == "person":
+                opts.append(f"<option value='person:{_e(f.id)}'>{_e(_person_name(st, f.id))} (update)</option>")
+            else:
+                pa = st.personas.get(f.id)
+                opts.append(f"<option value='persona:{_e(f.id)}'>🤖 {_e(pa.name if pa else f.id)} (update)</option>")
+    return "".join(opts)
+
+
 def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", back: str = "/",
                    fragment: bool = False) -> str:
     p = st.projects.get(pid)
@@ -933,19 +990,18 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     checklist = (f"<div class='c2-sec'><h3>Checklist</h3>{bar}"
                  f"<ul class='clean ck-list'>{ck_rows or '<li class=muted>nog geen items</li>'}</ul>{ck_add}</div>")
 
-    # Activiteiten/opmerkingen-feed
-    feed = ""
-    for m in (p.get("log") or []):
-        who = "🤖 AI" if m.get("who") == "rol" else "🙋 jij"
-        feed += (f"<div class='tg-dlg' style='border:1px solid var(--border);border-radius:var(--radius);"
-                 f"padding:.4rem .6rem;margin:.3rem 0'><b>{who}</b> "
-                 f"<span class='muted' style='font-size:.74rem'>· {_e(_age(m.get('at')))}</span>"
-                 f"<div>{_e(m.get('text',''))}</div></div>")
-    comment = (f"<form method='post' action='/action' class='pf' style='margin-top:.4rem'>{hid()}"
-               f"<textarea name='comment' rows='2' placeholder='opmerking of voortgang…'></textarea>"
-               f"<button class='btn ok' type='submit' name='action' value='proj_comment' "
-               f"style='margin-top:.3rem'>plaatsen</button></form>") if rw else ""
-    feedsec = f"<div class='c2-sec'><h3>Activiteit & opmerkingen</h3>{feed}{comment}</div>"
+    # Activiteit & discussie-feed: mensen, AI en rollen praten in dezelfde stroom.
+    feed = "".join(_feed_entry_html(st, m) for m in (p.get("log") or []))
+    if not feed:
+        feed = "<p class='muted'>Nog geen updates of reacties.</p>"
+    composer = ""
+    if rw:
+        composer = (f"<form method='post' action='/action' class='pf' style='margin-top:.5rem'>{hid()}"
+                    f"<label>Plaatsen namens</label><select name='author'>{_feed_author_options(st, p)}</select>"
+                    f"<textarea name='text' rows='2' placeholder='update of reactie…'></textarea>"
+                    f"<button class='btn ok' type='submit' name='action' value='proj_feed' "
+                    f"style='margin-top:.3rem'>plaatsen</button></form>")
+    feedsec = f"<div class='c2-sec'><h3>Activiteit &amp; discussie</h3>{feed}{composer}</div>"
 
     # Bewerken (scope/omschrijving/trekker/label/zichtbaarheid) + archiveren/verwijderen
     edit = ""
@@ -1229,6 +1285,12 @@ def dispatch(data_dir: str, action: str, form: dict):
     elif action == "proj_comment":
         if pj.add_comment(g("pid"), g("comment")):
             msg = "💬 geplaatst"
+    elif action == "proj_feed":
+        atype, _, aid = g("author").partition(":")
+        atype = atype or "human"
+        kind = "comment" if atype == "human" else "update"
+        if pj.add_feed_entry(g("pid"), g("text"), kind=kind, author_type=atype, author_id=aid):
+            msg = "💬 update geplaatst" if kind == "update" else "💬 reactie geplaatst"
     elif action == "check_add":
         if pj.check_add(g("pid"), g("text")):
             msg = "✓ item toegevoegd"

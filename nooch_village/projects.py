@@ -301,6 +301,41 @@ class ProjectLedger:
         self._save()
         return True
 
+    # Gestructureerde feed-entry (Trello-stijl kaart-discussie). Anders dan de oude {who} draagt
+    # een entry nu een echte auteur (mens/persoon/AI/rol) en een soort (update vs reactie), zodat
+    # zowel mensen als AI's kunnen meepraten en rol-voortgang herkenbaar in dezelfde stroom landt.
+    _FEED_KINDS = ("update", "comment")
+    _AUTHOR_TYPES = ("human", "person", "persona", "role")
+
+    def add_feed_entry(self, pid: str, text: str, *, kind: str = "comment",
+                       author_type: str = "human", author_id: str = "") -> dict | None:
+        """Voeg een feed-item toe. `kind`: 'update' (voortgang door een rol/AI) of 'comment'
+        (reactie/sturing). `author_type` ∈ human|person|persona|role. Geeft de entry terug."""
+        p = self._projects.get(pid)
+        text = (text or "").strip()
+        if p is None or not text:
+            return None
+        if kind not in self._FEED_KINDS:
+            kind = "comment"
+        if author_type not in self._AUTHOR_TYPES:
+            author_type = "human"
+        entry = {
+            "id": uuid.uuid4().hex[:10],
+            "kind": kind,
+            "author": {"type": author_type, "id": author_id or ""},
+            "text": text[:1500],
+            "at": time.time(),
+        }
+        p.setdefault("log", []).append(entry)
+        # Een menselijke reactie is sturing: de rol pakt het opnieuw op (zoals add_comment).
+        if kind == "comment" and author_type == "human":
+            p["worked"] = False
+        elif kind == "update":
+            p["progress"] = text[:1500]
+        self._touch(p)
+        self._save()
+        return entry
+
     def wait_for(self, pid: str, need: str, on_id: str = "") -> bool:
         """Zet een project op WACHTEN met een gestructureerde behoefte: WAT is nodig (need) en
         WAAROP het wacht (on_id = een ander project of een prikbord-briefje). De scheduler hervat
