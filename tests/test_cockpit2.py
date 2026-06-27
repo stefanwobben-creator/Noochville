@@ -42,9 +42,9 @@ def test_nooch_roles_tab(tmp_path):
     # kernrollen apart + purpose onder de rol + toewijs-icoon
     assert "Kernrollen" in page and "Circle Lead" in page
     assert "Make Nooch visually consistent" in page          # purpose onder Brand & Visual Designer
-    assert "assignico" in page and "/rolefillers?role=" in page
-    # vervullers zichtbaar (rechts), bijv. Nina bij Community and Email
-    assert "Nina Wolter" in page
+    assert "manage-link" in page and "/rolefillers?role=" in page   # subtiele 'beheren'-link
+    # vervullers links uitgelijnd met naam-link naar de persoon
+    assert "Nina Wolter" in page and "/person?id=" in page
 
 
 def test_rolefillers_modal_en_assign(tmp_path):
@@ -61,6 +61,21 @@ def test_rolefillers_modal_en_assign(tmp_path):
     assert any(f.id == wytse.id for f in cockpit2._Stores(dd).assign.fillers_of(role))
     cockpit2.dispatch(dd, "role_unassign", {"role": [role], "filler": [f"person:{wytse.id}"], "next": ["/"]})
     assert cockpit2._Stores(dd).assign.fillers_of(role) == []
+
+
+def test_rolefiller_focus(tmp_path):
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    role = "mother_earth__nooch__community_and_email"
+    nina = st.people.by_name("Nina Wolter")
+    cockpit2.dispatch(dd, "role_focus", {"role": [role], "filler": [f"person:{nina.id}"],
+                                         "focus": ["nieuwsbrieven"], "next": ["/"]})
+    f = next(x for x in cockpit2._Stores(dd).assign.fillers_of(role) if x.id == nina.id)
+    assert f.focus == "nieuwsbrieven"
+    # focus zichtbaar in de beheer-modal
+    frag = cockpit2.render_rolefillers(cockpit2._Stores(dd), role, csrf_token="t", fragment=True)
+    assert "nieuwsbrieven" in frag and "role_focus" in frag
 
 
 def test_roles_tab_stack_bij_3plus(tmp_path):

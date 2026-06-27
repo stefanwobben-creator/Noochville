@@ -100,17 +100,18 @@ ul.clean li:last-child{border-bottom:none}
 .rrole{display:flex;align-items:flex-start;gap:1rem;padding:.6rem 0;border-bottom:1px solid var(--border)}
 .rrole-info{flex:1 1 auto;min-width:0}
 .rrole-pur{font-size:.84rem;margin-top:.1rem}
-.rrole-fill{flex:0 0 auto;margin-left:auto;text-align:right}
 .rrole-act{flex:0 0 auto}
-.fillers{display:flex;flex-direction:column;gap:.2rem;align-items:flex-end}
+.fillers{display:flex;flex-direction:column;gap:.15rem;align-items:flex-start;margin-top:.35rem}
 .fperson{display:inline-flex;align-items:center;gap:.35rem;font-size:.86rem;color:var(--gray)}
 .fillers.stack{flex-direction:row;align-items:center;gap:.3rem}
 .stack-av{margin-left:-8px}.stack-av:first-child{margin-left:0}
 .stack-av .av{border:2px solid var(--surface)}
-.assignico{display:inline-block;color:var(--gray);text-decoration:none;font-size:1rem;padding:.1rem .3rem;border-radius:var(--radius)}
-.assignico sup{font-weight:700}
-.assignico:hover{background:rgba(27,27,27,.07);color:var(--ink)}
-.frow{display:flex;align-items:center;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--border)}
+.manage-link{color:var(--gray);font-size:.82rem;text-decoration:none;cursor:pointer}
+.manage-link:hover{color:var(--ink);text-decoration:underline}
+.frow{display:flex;align-items:flex-start;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--border)}
+.ffocus{background:none;border:none;box-shadow:none;padding:0;margin:0}
+.ffocus>summary{list-style:none;cursor:pointer}
+.ffocus>summary::-webkit-details-marker{display:none}
 .ovl{position:fixed;inset:0;background:rgba(27,27,27,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center}
 .ovl-box{background:var(--surface);max-width:720px;width:92%;margin:4vh auto;border-radius:12px;padding:1.3rem 1.5rem;max-height:88vh;overflow:auto;position:relative;box-shadow:0 12px 48px rgba(27,27,27,.35)}
 .ovl-x{position:absolute;top:.5rem;right:.7rem;border:none;background:none;font-size:1.2rem;cursor:pointer;color:var(--gray)}
@@ -293,18 +294,20 @@ def _fillers_block(st: _Stores, role) -> str:
     for f in fillers:
         if f.type == "person":
             p = st.people.get(f.id)
-            resolved.append((p.name if p else f.id, False))
+            resolved.append((p.name if p else f.id, False, f.id))
         else:
             pa = st.personas.get(f.id)
-            resolved.append(((pa.name if pa else f.id), True))
+            resolved.append(((pa.name if pa else f.id), True, f.id))
     if not resolved:
         return "<span class='muted' style='font-size:.8rem'>niet vervuld</span>"
     if len(resolved) >= 3:
-        avs = "".join(f"<span class='stack-av'>{_avatar(n, ai)}</span>" for n, ai in resolved[:3])
+        avs = "".join(f"<span class='stack-av'>{_avatar(n, ai)}</span>" for n, ai, fid in resolved[:3])
         extra = f"<span class='muted' style='font-size:.82rem'>+ nog {len(resolved)-3}</span>" if len(resolved) > 3 else ""
         return f"<div class='fillers stack'>{avs}{extra}</div>"
-    rows = "".join(f"<div class='fperson'>{_avatar(n, ai)}<span>{_e(n)}"
-                   f"{' (AI)' if ai else ''}</span></div>" for n, ai in resolved)
+    rows = ""
+    for n, ai, fid in resolved:
+        nm = (f"<a href='/person?id={_e(fid)}'>{_e(n)}</a>" if not ai else f"{_e(n)} (AI)")
+        rows += f"<div class='fperson'>{_avatar(n, ai)}<span>{nm}</span></div>"
     return f"<div class='fillers'>{rows}</div>"
 
 
@@ -314,11 +317,11 @@ def _role_row(st: _Stores, role, csrf_token: str) -> str:
     assign = ""
     if csrf_token:
         url = f"/rolefillers?role={_e(role.id)}"
-        assign = (f"<a class='assignico js-modal' href='{url}' data-href='{url}' "
-                  f"title='rolvervullers beheren'>👤<sup>+</sup></a>")
+        assign = (f"<a class='manage-link js-modal' href='{url}' data-href='{url}' "
+                  f"title='rolvervullers beheren'>beheren</a>")
     return (f"<div class='rrole'>"
-            f"<div class='rrole-info'><a href='/node?id={_e(role.id)}'>{_e(_name(role))}</a>{pur}</div>"
-            f"<div class='rrole-fill'>{_fillers_block(st, role)}</div>"
+            f"<div class='rrole-info'><a href='/node?id={_e(role.id)}'>{_e(_name(role))}</a>{pur}"
+            f"{_fillers_block(st, role)}</div>"
             f"<div class='rrole-act'>{assign}</div></div>")
 
 
@@ -948,14 +951,25 @@ def render_rolefillers(st: _Stores, role_id: str, csrf_token: str = "", fragment
     for f in fillers:
         if f.type == "person":
             p = st.people.get(f.id); label = (p.name if p else f.id); ai = False
+            name = f"<a href='/person?id={_e(f.id)}'>{_e(label)}</a>"
         else:
             pa = st.personas.get(f.id); label = (pa.name if pa else f.id); ai = True
-        rows += (f"<div class='frow'>{_avatar(label, ai)}<span style='flex:1'>{_e(label)}"
-                 f"{' (AI)' if ai else ''}</span>"
-                 f"<form method='post' action='/action' style='display:inline'>{hid()}"
-                 f"<input type='hidden' name='filler' value='{f.type}:{_e(f.id)}'>"
-                 f"<button class='dellink' type='submit' name='action' value='role_unassign'>verwijderen</button>"
-                 f"</form></div>")
+            name = f"{_e(label)} (AI)"
+        prev = f" <span class='muted' style='font-size:.8rem'>· {_e(f.focus)}</span>" if f.focus else ""
+        rows += (
+            f"<div class='frow'>"
+            f"<details class='ffocus' style='flex:1'>"
+            f"<summary>{_avatar(label, ai)} {name}{prev}</summary>"
+            f"<form method='post' action='/action' style='margin:.3rem 0 .2rem 30px'>{hid()}"
+            f"<input type='hidden' name='filler' value='{f.type}:{_e(f.id)}'>"
+            f"<input name='focus' value='{_e(f.focus)}' placeholder='Focus (optioneel)' "
+            f"style='padding:.3rem .4rem;border:1px solid var(--border);border-radius:var(--radius)'> "
+            f"<button class='btn' type='submit' name='action' value='role_focus'>Focus opslaan</button>"
+            f"</form></details>"
+            f"<form method='post' action='/action' style='display:inline'>{hid()}"
+            f"<input type='hidden' name='filler' value='{f.type}:{_e(f.id)}'>"
+            f"<button class='dellink' type='submit' name='action' value='role_unassign'>verwijderen</button>"
+            f"</form></div>")
     if not rows:
         rows = "<p class='muted'>Nog niemand toegewezen.</p>"
     opts = "<option value=''>— kies persoon of AI —</option>"
@@ -1055,6 +1069,13 @@ def dispatch(data_dir: str, action: str, form: dict):
         elif agent:
             st.assign.unassign(g("role"), "persona", agent)
         msg = "✓ verwijderd"
+    elif action == "role_focus":
+        person, agent = _parse_trekker(g("filler"))
+        if person:
+            st.assign.set_focus(g("role"), "person", person, g("focus"))
+        elif agent:
+            st.assign.set_focus(g("role"), "persona", agent, g("focus"))
+        msg = "✓ focus opgeslagen"
     return nxt, msg
 
 
