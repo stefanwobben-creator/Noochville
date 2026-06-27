@@ -63,9 +63,13 @@ def test_editor_nieuwe_rol(tmp_path):
 
 def test_layout_toevoegen_boven_en_groene_knop(tmp_path):
     dd = _dd(tmp_path)
-    node = cockpit2.render_node(cockpit2._Stores(dd), C, "overview", csrf_token="t")
-    assert "btn ok js-modal" in node                      # groene meeting-knop
+    # zonder agenda: knop bestaat maar is niet groen
+    node0 = cockpit2.render_node(cockpit2._Stores(dd), C, "overview", csrf_token="t")
+    assert "Governance meeting" in node0 and "btn ok js-modal" not in node0
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
+    # met een lopend roloverleg: groen
+    node1 = cockpit2.render_node(cockpit2._Stores(dd), C, "overview", csrf_token="t")
+    assert "btn ok js-modal" in node1
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
     assert "Welke spanning" not in frag                    # spanning-veld weg
     assert frag.find("rov-add") < frag.find("rov-list")    # toevoegen boven de lijst
@@ -83,6 +87,48 @@ def test_sluiten_voert_consented_door(tmp_path):
     rec = cockpit2._Stores(dd).records.get(RID)
     assert "Bewaken van performance" in rec.definition.accountabilities
     assert cockpit2._Stores(dd).agenda.all() == []
+
+
+def test_agenda_initialen_en_geen_kindlabel(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "by": ["SW"], "next": ["/"]})
+    frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
+    assert "ingebracht door SW" in frag and ">SW<" in frag       # initialen-avatar
+    assert "rov-kind" not in frag                                # kind-label weg uit de lijst
+    assert "list='rov-roles'" in frag and "<datalist" in frag    # smart-search
+
+
+def test_secretaris_inline_en_consent(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
+    iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
+    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Snel reageren op tickets"], "next": ["/"]})
+    frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
+    assert "sec-issue" in frag and "-en-vorm" in frag            # feedback bij de accountability
+    assert "rov2_consent" in frag                                # consent kan (alleen advies)
+
+
+def test_consent_geblokkeerd_zonder_purpose(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Data Analist"], "next": ["/"]})
+    iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
+    frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
+    assert "disabled>Consent" in frag and "rov2_consent" not in frag
+    # consent-actie weigert ook serverside
+    cockpit2.dispatch(dd, "rov2_consent", {"iid": [iid], "circle": [C], "next": ["/"]})
+    assert cockpit2._Stores(dd).agenda.get(iid)["status"] == "open"
+
+
+def test_consent_en_auto_volgend(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Financial Controller"], "next": ["/"]})
+    first = cockpit2._Stores(dd).agenda.open()[0]["id"]
+    cockpit2.dispatch(dd, "rov2_consent", {"iid": [first], "circle": [C], "next": ["/"]})
+    assert cockpit2._Stores(dd).agenda.get(first)["status"] == "consented"
+    # zonder iid auto-selecteert de render het volgende OPEN punt
+    frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
+    assert "Financial Controller" in frag and "rov-editor" in frag
 
 
 def test_select_en_verwijderen(tmp_path):
