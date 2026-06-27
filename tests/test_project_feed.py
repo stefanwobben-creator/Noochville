@@ -42,6 +42,34 @@ def test_feed_render_auteur_en_soort(tmp_path):
     assert "comp-form" in frag and "value='human:'" in frag
 
 
+def test_mention_maakt_notificatie_en_highlight(tmp_path):
+    dd, rid, pid, codie = _setup(tmp_path)
+    person = cockpit2._Stores(dd).people.all()[0]
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"],
+                                        "text": ["hoi @Website Developer kijk even"], "next": ["/"]})
+    notes = cockpit2._Stores(dd).notif.all()
+    assert len(notes) == 1 and notes[0]["target_type"] == "role" and notes[0]["target_id"] == rid
+    # highlight in de bubble
+    frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
+    assert "class='ment'>@Website Developer" in frag
+
+
+def test_mention_autocomplete_data_in_modal(tmp_path):
+    dd, rid, pid, codie = _setup(tmp_path)
+    node = cockpit2.render_node(cockpit2._Stores(dd), rid, "projects", csrf_token="t")
+    assert "__mentions=" in node and "mentionWire" in node and "Website Developer" in node
+
+
+def test_persoonspagina_toont_notificatie(tmp_path):
+    dd, rid, pid, codie = _setup(tmp_path)
+    person = cockpit2._Stores(dd).people.all()[0]
+    cockpit2._Stores(dd).assign.assign(rid, "person", person.id)
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"],
+                                        "text": ["@Website Developer to-do"], "next": ["/"]})
+    page = cockpit2.render_person(cockpit2._Stores(dd), person.id)
+    assert "🔔 Notificaties" in page and "1 nieuw" in page
+
+
 def test_ai_praat_mee_op_verzoek(tmp_path):
     dd, rid, pid, codie = _setup(tmp_path)
     # knop zichtbaar omdat de eigenaar-rol een AI-inwoner heeft

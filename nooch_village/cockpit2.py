@@ -26,6 +26,7 @@ from nooch_village.attachments import AttachmentStore
 from nooch_village.personas import PersonaStore
 from nooch_village.projects import ProjectLedger
 from nooch_village.ai_tasks import AITaskStore
+from nooch_village.notifications import NotifStore
 from nooch_village import ai_match
 from nooch_village import org
 from nooch_village.glassfrog_import import import_org, nooch_poc_org
@@ -190,6 +191,12 @@ ul.clean li:last-child{border-bottom:none}
 .pdisc .psec{background:none;border:none;padding:0;margin:0}
 .pdisc{background:var(--cream-2);border-radius:var(--radius);padding:.9rem;min-width:0}
 .comp-row .btn{padding:.25rem .85rem;font-size:.76rem;border-radius:var(--radius-pill)}
+.ment{color:var(--green-dark);font-weight:600}
+.mention-pop{position:absolute;left:0;right:auto;top:100%;margin-top:2px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);z-index:8;min-width:180px;max-height:200px;overflow:auto}
+.mention-it{display:block;width:100%;text-align:left;border:none;background:none;padding:.35rem .6rem;cursor:pointer;font-size:.85rem}
+.mention-it:hover{background:var(--cream-2)}
+.nt-list .nt-item{padding:.3rem 0;border-bottom:1px solid var(--border)}
+.nt-dot{display:inline-block;width:.5rem;height:.5rem;border-radius:50%;background:var(--green);margin-right:.4rem;vertical-align:middle}
 .ai-ask{margin:.1rem 0 1rem}
 .ai-ask-btn{background:none;border:1px dashed var(--border);border-radius:var(--radius-pill);padding:.3rem .8rem;font-size:.78rem;color:var(--gray);cursor:pointer}
 .ai-ask-btn:hover{border-color:var(--green);color:var(--green-dark)}
@@ -289,6 +296,7 @@ class _Stores:
         self.projects = ProjectLedger(os.path.join(dd, "projects.json"))
         self.ai = AITaskStore(os.path.join(dd, "ai_tasks.json"))
         self.match = ai_match.MatchCache(os.path.join(dd, "ai_match_cache.json"))
+        self.notif = NotifStore(os.path.join(dd, "notifications.json"))
 
 
 def _bootstrap(dd: str) -> None:
@@ -721,7 +729,7 @@ def _drag_script(csrf_token: str, back: str) -> str:
 _II_PREFIX = "ii:"   # Individual Initiative-pseudo-eigenaar per cirkel: 'ii:<circle_id>'
 
 
-def _modal_html() -> str:
+def _modal_html(mentions_json: str = "[]") -> str:
     """Herbruikbare detail-overlay (modal): klik op een kaart → haalt het fragment op en toont het;
     formulieren erin posten via fetch en verversen alleen de overlay. Val-terug: zonder JS navigeert
     de kaart-link naar de volledige /project-pagina. Bedoeld als standaard-patroon (ook kenniskaartjes)."""
@@ -731,10 +739,22 @@ def _modal_html() -> str:
         "<div id='ovl-body'></div></div></div>"
         "<script>(function(){"
         "var ov=document.getElementById('ovl'),bd=document.getElementById('ovl-body'),last=null,dirty=false;"
+        f"window.__mentions={mentions_json};"
         "window.wrapSel=function(btn,pre,post){var f=btn.closest('form');var t=f&&f.querySelector('textarea');"
         "if(!t)return;var s=t.selectionStart,e=t.selectionEnd,v=t.value;"
         "t.value=v.slice(0,s)+pre+v.slice(s,e)+post+v.slice(e);t.focus();"
         "t.selectionStart=s+pre.length;t.selectionEnd=e+pre.length;};"
+        "function mentionWire(t){var box=null;function close(){if(box){box.remove();box=null;}}"
+        "t.addEventListener('input',function(){var v=t.value.slice(0,t.selectionStart);"
+        "var m=v.match(/@([^@\\n]*)$/);close();if(!m)return;var q=m[1].toLowerCase();"
+        "var hits=(window.__mentions||[]).filter(function(x){return x.l.toLowerCase().indexOf(q)===0;}).slice(0,6);"
+        "if(!hits.length)return;box=document.createElement('div');box.className='mention-pop';"
+        "hits.forEach(function(h){var b=document.createElement('button');b.type='button';b.className='mention-it';"
+        "b.textContent='@'+h.l;b.addEventListener('mousedown',function(ev){ev.preventDefault();"
+        "var s=t.value,c=t.selectionStart;var pre=s.slice(0,c).replace(/@([^@\\n]*)$/,'@'+h.l+' ');"
+        "t.value=pre+s.slice(c);t.focus();t.selectionStart=t.selectionEnd=pre.length;close();});box.appendChild(b);});"
+        "t.parentNode.style.position='relative';t.parentNode.appendChild(box);});"
+        "t.addEventListener('blur',function(){setTimeout(close,200);});}"
         "function frag(u){return u+(u.indexOf('?')>-1?'&':'?')+'fragment=1';}"
         "function openCard(u){last=u;"
         "fetch(frag(u)).then(function(r){return r.text();}).then(function(h){bd.innerHTML=h;ov.style.display='flex';wire();});}"
@@ -745,7 +765,8 @@ def _modal_html() -> str:
         "var data=new URLSearchParams(new FormData(f));"
         "if(e.submitter&&e.submitter.name){data.set(e.submitter.name,e.submitter.value);}"
         "fetch('/action',{method:'POST',body:data}).then(function(){"
-        "if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'){shut();}else{reopen();}});});});}"
+        "if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'){shut();}else{reopen();}});});});"
+        "bd.querySelectorAll('textarea').forEach(mentionWire);}"
         "document.querySelectorAll('.pcard[data-href],a.js-modal[data-href]').forEach(function(c){"
         "c.addEventListener('click',function(e){if(window.__pdrag)return;e.preventDefault();"
         "openCard(c.getAttribute('data-href'));});});"
@@ -971,7 +992,8 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
             f"<h1>{_e(_name(rec))} {chip}</h1>{_banner(msg)}{meet}"
             f"{_tabbar(node_id, tabs, tab)}{content}</div>")
     rail = f"<div class='c2-rail'>{_tree_html(st, node_id)}</div>"
-    modal = _modal_html() if (csrf_token and tab in ("projects", "roles", "overview")) else ""
+    modal = (_modal_html(json.dumps(_mentionables(st)[0]))
+             if (csrf_token and tab in ("projects", "roles", "overview")) else "")
     inner = (f"<style>{_EXTRA_CSS}</style>"
              "<div class='bar'>cockpit 2 · GlassFrog-vorm (PoC) · "
              "<a href='/'>home</a></div>"
@@ -993,9 +1015,26 @@ def render_person(st: _Stores, pid: str) -> str:
                            for i in org.breadcrumb(st.records.all(), rid)[:-1])
         rows += (f"<li><a href='/node?id={_e(rid)}'>{_e(_name(rec))}</a> "
                  f"<span class='muted'>{('· ' + crumb) if crumb else ''}</span></li>")
+    # Notificaties: @-mentions van mij of van een rol die ik vervul.
+    targets = {("person", pid)} | {("role", rid) for rid in role_ids}
+    notes = st.notif.for_targets(targets)
+    nrows = ""
+    for n in notes[:25]:
+        proj = st.projects.get(n.get("project_id"))
+        ptitle = _scope_text(proj) if proj else "project"
+        href = f"/project?pid={_e(n.get('project_id',''))}&back={urllib.parse.quote('/person?id=' + pid, safe='')}"
+        dot = "" if n.get("read") else "<span class='nt-dot'></span>"
+        nrows += (f"<li class='nt-item'>{dot}<a class='js-modal' href='{href}' data-href='{href}'>"
+                  f"{_e(ptitle)}</a> <span class='muted'>· {_e((n.get('snippet') or '')[:80])}</span> "
+                  f"<span class='muted' style='font-size:.72rem'>{_e(_age(n.get('at')))}</span></li>")
+    unread = sum(1 for n in notes if not n.get("read"))
+    notif_html = (f"<div class='c2-sec'><h3>🔔 Notificaties ({unread} nieuw)</h3>"
+                  + (f"<ul class='clean nt-list'>{nrows}</ul>" if nrows
+                     else "<span class='muted'>Geen notificaties.</span>") + "</div>")
     main = (f"<div class='c2-main'><h1><span class='av' style='width:28px;height:28px'>"
             f"{_e(_initials(p.name))}</span> {_e(p.name)}</h1>"
             f"<div class='muted'>{_e(p.email) or 'geen e-mail'}</div>"
+            f"{notif_html}"
             f"<div class='c2-sec'><h3>Mijn rollen ({len(role_ids)})</h3>"
             + (f"<ul class='clean'>{rows}</ul>" if rows else "<span class='muted'>Geen rollen.</span>")
             + "</div>" + _person_projects_html(st, pid) + "</div>")
@@ -1062,11 +1101,38 @@ def _md(text: str) -> str:
     return html[:-4] if html.endswith("<br>") else html
 
 
+def _mentionables(st: _Stores):
+    """(lijst voor de JS-autocomplete, naam→doel-map voor het parsen). Rollen + mensen."""
+    js, by_name = [], {}
+    for r in st.records.all():
+        if getattr(r, "archived", False):
+            continue
+        nm = _name(r)
+        js.append({"l": nm}); by_name[nm.lower()] = ("role", r.id)
+    for pr in st.people.all():
+        js.append({"l": pr.name}); by_name[pr.name.lower()] = ("person", pr.id)
+    return js, by_name
+
+
+def _mentions_in(text: str, by_name: dict):
+    """(type, id, naam) voor elke '@naam' uit by_name die in de tekst voorkomt."""
+    t = (text or "").lower()
+    return [(ty, i, nm) for nm, (ty, i) in by_name.items() if ("@" + nm) in t]
+
+
+def _hilite_mentions(html: str, names) -> str:
+    """Markeer '@naam' in al-gerenderde (veilige) HTML. Langste namen eerst (subset-botsing)."""
+    for nm in sorted(names, key=len, reverse=True):
+        esc = _e(nm)
+        html = html.replace("@" + esc, f"<span class='ment'>@{esc}</span>")
+    return html
+
+
 _EMOJIS = ["👍", "🎉", "❤️", "😄", "🙏", "👀"]   # standaard emoji's voor een snelle reactie
 
 
 def _feed_entry_html(st: _Stores, entry: dict, role_name: str = "",
-                     pid: str = "", csrf_token: str = "") -> str:
+                     pid: str = "", csrf_token: str = "", mention_names=()) -> str:
     kind, atype, aid = _feed_norm(entry)
     av, nm = _feed_who(st, atype, aid)
     if atype == "role":
@@ -1089,9 +1155,12 @@ def _feed_entry_html(st: _Stores, entry: dict, role_name: str = "",
             for emo in _EMOJIS)
         picker = (f"<details class='emoji-pick'><summary class='emoji-add' title='reactie'>🙂</summary>"
                   f"<div class='emoji-pop'>{btns}</div></details>")
+    bubble = _md(entry.get("text", ""))
+    if mention_names:
+        bubble = _hilite_mentions(bubble, mention_names)
     return (f"<div class='fentry'>"
             f"<div class='fhead'>{av}<span class='fwho'>{who}</span></div>"
-            f"<div class='fbubble'>{_md(entry.get('text', ''))}</div>"
+            f"<div class='fbubble'>{bubble}</div>"
             f"<div class='ffoot'><div class='ffoot-l'>{rx}{picker}</div>"
             f"<span class='fstamp'>{_e(_stamp(entry.get('at')))}</span></div>"
             f"</div>")
@@ -1184,8 +1253,10 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
 
     # ---- Rechterkolom: de dialoog (mensen + AI) ----
     role_name = _name(orec) if orec else ""
+    mention_names = [m["l"] for m in _mentionables(st)[0]]   # voor highlight in de bubble
     # Nieuwste boven.
-    feed = "".join(_feed_entry_html(st, m, role_name=role_name, pid=pid, csrf_token=csrf_token)
+    feed = "".join(_feed_entry_html(st, m, role_name=role_name, pid=pid, csrf_token=csrf_token,
+                                    mention_names=mention_names)
                    for m in reversed(p.get("log") or []))
     if not feed:
         feed = "<p class='muted'>Nog geen updates of reacties.</p>"
@@ -1611,8 +1682,15 @@ def dispatch(data_dir: str, action: str, form: dict):
         atype, _, aid = g("author").partition(":")
         atype = atype or "human"
         kind = "comment" if atype == "human" else "update"
-        if pj.add_feed_entry(g("pid"), g("text"), kind=kind, author_type=atype, author_id=aid):
+        entry = pj.add_feed_entry(g("pid"), g("text"), kind=kind, author_type=atype, author_id=aid)
+        if entry:
             msg = "💬 update geplaatst" if kind == "update" else "💬 reactie geplaatst"
+            _, by_name = _mentionables(st)
+            ment = _mentions_in(g("text"), by_name)
+            for ty, tid, nm in ment:
+                st.notif.add(ty, tid, g("pid"), entry["id"], by="dialoog", snippet=g("text"))
+            if ment:
+                msg += f" · {len(ment)} genotificeerd"
     elif action == "check_add":
         if pj.check_add(g("pid"), g("text")):
             msg = "✓ item toegevoegd"
