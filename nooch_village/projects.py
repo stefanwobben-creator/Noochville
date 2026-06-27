@@ -92,6 +92,7 @@ class ProjectLedger:
             "goes_to":     goes_to or "",       # wie de uitkomst consumeert (rol/bord/mens)
             "links":       list(links or []),   # verwante projecten (de keten/het gesprek)
             "attachments": [],                  # verrijking-cards: links/bijlagen (Trello-stijl)
+            "due":         None,                # deadline (ISO datum 'YYYY-MM-DD'), optioneel
             "parent":      parent,              # ouder-project (None = root/standalone)
             "cluster":     cluster,             # cluster-root id (master-switch werkt hierop)
             "waiting_on":  None,                # project/briefje waarop dit wacht (resume-trigger)
@@ -110,6 +111,16 @@ class ProjectLedger:
             return False
         p["status"] = "running"
         p["blocked_on"] = None
+        self._touch(p)
+        self._save()
+        return True
+
+    def set_due(self, pid: str, due: str) -> bool:
+        """Zet of wis de deadline (ISO 'YYYY-MM-DD'); lege string wist 'm."""
+        p = self._projects.get(pid)
+        if p is None:
+            return False
+        p["due"] = (due or "").strip() or None
         self._touch(p)
         self._save()
         return True

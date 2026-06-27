@@ -90,6 +90,20 @@ def test_emoji_reactie(tmp_path):
     assert "emoFilter" in node
 
 
+def test_datum_card_datepicker(tmp_path):
+    dd, pid = _setup(tmp_path)
+    frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
+    # minimalistisch: date input, geen start date / tijd / recurring
+    assert "acard-d" in frag and "type='date'" in frag and ">Datum<" in frag
+    assert "Start date" not in frag and "Recurring" not in frag
+    # datum zetten -> label past zich aan; en weer wissen
+    cockpit2.dispatch(dd, "proj_setdue", {"pid": [pid], "due": ["2026-06-25"], "next": ["/"]})
+    f2 = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
+    assert "25 jun 2026" in f2 and "datum verwijderen" in f2
+    cockpit2.dispatch(dd, "proj_setdue", {"pid": [pid], "due": [""], "next": ["/"]})
+    assert cockpit2._Stores(dd).projects.get(pid)["due"] is None
+
+
 def test_done_project_blijft_bewerkbaar(tmp_path):
     dd, pid = _setup(tmp_path)
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "csrf": ["t"], "next": ["/"]})

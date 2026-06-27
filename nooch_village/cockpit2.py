@@ -186,6 +186,12 @@ ul.clean li:last-child{border-bottom:none}
 .acard svg{width:15px;height:15px}
 .acard-off{opacity:.5;cursor:not-allowed}
 .acard-off:hover{border-color:var(--border);color:var(--gray)}
+.acard-on{background:var(--green-tint);color:var(--green-dark);border-color:var(--green)}
+.acard-d{position:relative;list-style:none}
+.acard-d>summary{list-style:none}
+.acard-d>summary::-webkit-details-marker{display:none}
+.datepop{position:absolute;left:0;top:2.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.6rem;z-index:7}
+.datepop input[type=date]{border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .55rem;font-size:.88rem}
 .dcol{display:grid;grid-template-columns:auto 1fr;gap:.35rem .8rem;align-content:start;min-width:0}
 .dk{align-self:baseline;color:var(--subtle);font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700;padding-top:.12rem}
 .dv{min-width:0;font-size:.88rem}
@@ -601,6 +607,17 @@ def _age(ts) -> str:
 
 
 _NL_MND = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
+
+
+def _fmt_due(iso: str) -> str:
+    """ISO-datum 'YYYY-MM-DD' → '25 jun 2026'."""
+    if not iso:
+        return ""
+    try:
+        y, m, d = iso.split("-")
+        return f"{int(d)} {_NL_MND[int(m) - 1]} {y}"
+    except Exception:
+        return iso
 
 
 def _created_full(ts) -> str:
@@ -1414,12 +1431,27 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
 
     checklist = _psec(_IC_CHECK, "Checklist", checklist_body)
 
-    # ---- Actie-kaarten (Trello 'Add to card'): interacties volgen later, één voor één ----
+    # ---- Actie-kaarten (Trello 'Add to card') ----
     actioncards = ""
     if rw:
+        due = p.get("due") or ""
+        due_lbl = _fmt_due(due) or "Datum"
+        date_rm = ("" if not due else
+                   f"<form method='post' action='/action' style='margin-top:.5rem'>{hid()}"
+                   f"<input type='hidden' name='action' value='proj_setdue'>"
+                   f"<input type='hidden' name='due' value=''>"
+                   f"<button class='dellink' type='submit'>datum verwijderen</button></form>")
+        date_card = (
+            f"<details class='acard-d'><summary class='acard{' acard-on' if due else ''}'>"
+            f"{_IC_CLOCK}<span>{_e(due_lbl)}</span></summary>"
+            f"<div class='datepop'><form method='post' action='/action'>{hid()}"
+            f"<input type='hidden' name='action' value='proj_setdue'>"
+            f"<input type='date' name='due' value='{_e(due)}' "
+            f"onchange='this.form.requestSubmit?this.form.requestSubmit():this.form.submit()'>"
+            f"</form>{date_rm}</div></details>")
         actioncards = (
             "<div class='actioncards'>"
-            f"<button type='button' class='acard'>{_IC_CLOCK}<span>Datum</span></button>"
+            f"{date_card}"
             f"<button type='button' class='acard'>{_IC_CHECK}<span>Checklist</span></button>"
             f"<button type='button' class='acard'>{_IC_LINK}<span>Bijlage</span></button>"
             f"<button type='button' class='acard acard-off' disabled "
@@ -1714,6 +1746,9 @@ def dispatch(data_dir: str, action: str, form: dict):
     elif action == "proj_setprivate":
         if pj.edit(g("pid"), private=(g("private") == "1"), allow_done=True):
             msg = "✓ zichtbaarheid opgeslagen"
+    elif action == "proj_setdue":
+        if pj.set_due(g("pid"), g("due")):
+            msg = "📅 datum opgeslagen" if g("due") else "✓ datum verwijderd"
     elif action == "attach_add":
         if pj.attach_add(g("pid"), url=g("url"), title=g("title")):
             msg = "🔗 bijlage toegevoegd"
