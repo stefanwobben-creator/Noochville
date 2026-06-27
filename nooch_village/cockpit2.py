@@ -83,10 +83,10 @@ ul.clean li:last-child{border-bottom:none}
 .qadd>summary{list-style:none;cursor:pointer;color:var(--gray);font-size:.82rem;padding:.35rem .5rem;border-radius:var(--radius)}
 .qadd>summary:hover{background:rgba(27,27,27,.05);color:var(--ink)}
 .qadd>summary::-webkit-details-marker{display:none}
-.qadd-form{display:flex;gap:.25rem;margin-top:.3rem}
-.qadd-form input{flex:1 1 auto;min-width:0;padding:.35rem .4rem;border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:.85rem}
-.qadd-form button{flex:0 0 auto}
-.vswitch{display:flex;gap:.2rem}
+.qadd-form{display:flex;flex-direction:column;gap:.35rem;margin-top:.3rem}
+.qadd-form textarea{width:100%;box-sizing:border-box;padding:.4rem .5rem;border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:.85rem;resize:vertical}
+.qadd-form button{align-self:flex-start}
+.vswitch{display:inline-flex;gap:.2rem;align-items:center}
 .vbtn{font-size:.78rem;padding:.15rem .55rem;border:1px solid var(--border);border-radius:var(--radius-pill);color:var(--gray);text-decoration:none}
 .vbtn.on{background:var(--green);color:#fff;border-color:var(--green)}
 .ck-prog{display:flex;align-items:center;gap:.5rem;margin:.3rem 0 .5rem}
@@ -393,30 +393,32 @@ def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
             f"{bar}<div class='ptitle'>{_e(_scope_text(p))}</div>{meta}{_progress_badge(p)}</div>")
 
 
-def _quickadd(owner: str, col: str, csrf_token: str, back: str) -> str:
-    """Trello-stijl '+ kaart toevoegen': een volle-breedte knop die openklapt naar een veld."""
+def _quickadd(owner: str, col: str, csrf_token: str, back: str, trekker: str = "") -> str:
+    """Trello-stijl '+ kaart toevoegen': klap open → vol-breed invoerveld bovenaan, knop eronder.
+    `trekker` (person:<id>/persona:<id>) wordt voorgevuld bij groeperen per persoon."""
     if not csrf_token or col == "done":
         return ""
+    trek = f"<input type='hidden' name='trekker' value='{_e(trekker)}'>" if trekker else ""
     return (
-        f"<details class='qadd'><summary>+ kaart toevoegen</summary>"
+        f"<details class='qadd'><summary>+ project toevoegen</summary>"
         f"<form method='post' action='/action' class='qadd-form'>"
         f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
         f"<input type='hidden' name='owner' value='{_e(owner)}'>"
         f"<input type='hidden' name='col' value='{_e(col)}'>"
-        f"<input type='hidden' name='next' value='{_e(back)}'>"
-        f"<input name='scope' placeholder='Titel van de kaart…' aria-label='nieuwe kaart'>"
-        f"<button class='btn ok' type='submit' name='action' value='proj_add'>Kaart toevoegen</button>"
+        f"<input type='hidden' name='next' value='{_e(back)}'>{trek}"
+        f"<textarea name='scope' rows='2' placeholder='Titel van het project…' aria-label='nieuw project'></textarea>"
+        f"<button class='btn ok' type='submit' name='action' value='proj_add'>Project toevoegen</button>"
         f"</form></details>")
 
 
-def _columns_html(st: _Stores, items: list, owner: str, csrf_token: str, back: str,
-                  quickadd: bool) -> str:
+def _columns_html(st: _Stores, items: list, add_owner: str, add_trekker: str,
+                  csrf_token: str, back: str, quickadd: bool) -> str:
     cols = ""
     for label, key, statuses in _PROJ_COLS:
         its = [p for p in items if p.get("status") in statuses]
         its.sort(key=lambda p: -(p.get("created_at") or 0))
         body = "".join(_proj_card(st, p, csrf_token, back) for p in its)
-        qa = _quickadd(owner, key, csrf_token, back) if quickadd else ""
+        qa = _quickadd(add_owner, key, csrf_token, back, trekker=add_trekker) if quickadd else ""
         cols += (f"<div class='pcol' data-to='{key}'>"
                  f"<div class='pcol-h'>{_e(label)} ({len(its)})</div>{body}{qa}</div>")
     return f"<div class='pboard'>{cols}</div>"
@@ -445,35 +447,40 @@ def _drag_script(csrf_token: str, back: str) -> str:
         "document.body.appendChild(f);f.submit();});});})();</script>")
 
 
-def _group_of(st: _Stores, p: dict, mode: str):
-    """(sorteersleutel, label) van een project voor groeperen per persoon of per rol."""
-    if mode == "persoon":
-        if p.get("agent"):
-            pa = st.personas.get(p["agent"])
-            return ("1", f"🤖 {(pa.name if pa else p['agent'])} (AI)")
-        if p.get("person"):
-            return ("0_" + _person_name(st, p["person"]).lower(), _person_name(st, p["person"]))
-        return ("2", "Geen trekker")
-    orec = st.records.get(p.get("owner"))
-    nm = _name(orec) if orec else (p.get("owner") or "—")
-    return (nm.lower(), nm)
+def _group_meta(st: _Stores, p: dict, mode: str, node_owner: str):
+    """(gid, sorteersleutel, label, add_owner, add_trekker) voor groeperen per persoon/rol."""
+    if mode == "rol":
+        owner = p.get("owner")
+        orec = st.records.get(owner)
+        nm = _name(orec) if orec else (owner or "—")
+        return (("rol", owner), nm.lower(), nm, owner, "")
+    if p.get("agent"):
+        pa = st.personas.get(p["agent"])
+        return (("persona", p["agent"]), "1", f"🤖 {(pa.name if pa else p['agent'])} (AI)",
+                node_owner, f"persona:{p['agent']}")
+    if p.get("person"):
+        nm = _person_name(st, p["person"])
+        return (("person", p["person"]), "0_" + nm.lower(), nm, node_owner, f"person:{p['person']}")
+    return (("none",), "2", "Geen trekker", node_owner, "")
 
 
 def _projects_board(st: _Stores, projs: list, owner: str, csrf_token: str, back: str,
-                    group: str = "geen") -> str:
-    if group in ("persoon", "rol"):
-        groups: dict = {}
-        for p in projs:
-            sk, label = _group_of(st, p, group)
-            groups.setdefault((sk, label), []).append(p)
-        board = ""
-        for (sk, label), items in sorted(groups.items(), key=lambda kv: kv[0][0]):
-            board += (f"<div class='swim'><div class='swim-h'>{_e(label)} ({len(items)})</div>"
-                      f"{_columns_html(st, items, owner, csrf_token, back, quickadd=False)}</div>")
-        if not groups:
-            board = "<p class='muted'>Nog geen projecten.</p>"
+                    group: str = "persoon") -> str:
+    mode = group if group in ("persoon", "rol") else "persoon"
+    groups: dict = {}
+    for p in projs:
+        gid, sk, label, ao, at = _group_meta(st, p, mode, owner)
+        g = groups.setdefault(gid, {"sk": sk, "label": label, "items": [], "ao": ao, "at": at})
+        g["items"].append(p)
+    if not groups:
+        # nog geen projecten: één toevoeg-board zodat je het eerste project kunt maken
+        board = _columns_html(st, [], owner, "", csrf_token, back, quickadd=True)
     else:
-        board = _columns_html(st, projs, owner, csrf_token, back, quickadd=True)
+        board = ""
+        for gid, g in sorted(groups.items(), key=lambda kv: kv[1]["sk"]):
+            board += (f"<div class='swim'><div class='swim-h'>{_e(g['label'])} ({len(g['items'])})</div>"
+                      f"{_columns_html(st, g['items'], g['ao'], g['at'], csrf_token, back, quickadd=True)}"
+                      f"</div>")
     return board + _drag_script(csrf_token, back)
 
 
@@ -500,7 +507,9 @@ def _archived_html(st: _Stores, archived: list, csrf_token: str, back: str) -> s
             f"<ul class='clean'>{rows}</ul></details>")
 
 
-def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "geen") -> str:
+def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "persoon") -> str:
+    if group not in ("persoon", "rol"):
+        group = "persoon"
     # Op een cirkel: alle projecten van de cirkel én onderliggende rollen/subcirkels (overzicht).
     ids = {rec.id}
     if org.is_circle(rec):
@@ -512,13 +521,13 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "geen") -
     base = f"/node?id={_e(rec.id)}&tab=projects"
     on = lambda v: " on" if group == v else ""
     switch = (f"<div class='vswitch'>Groeperen: "
-              f"<a class='vbtn{on('geen')}' href='{base}&group=geen'>geen</a>"
               f"<a class='vbtn{on('persoon')}' href='{base}&group=persoon'>per persoon</a>"
               f"<a class='vbtn{on('rol')}' href='{base}&group=rol'>per rol</a></div>")
     body = _projects_board(st, projs, rec.id, csrf_token, back, group=group)
     body += _archived_html(st, archived, csrf_token, back)
     head = (f"<div style='display:flex;align-items:center;justify-content:space-between;"
-            f"flex-wrap:wrap;gap:.4rem'><h3 style='margin:0'>Projecten ({len(projs)})</h3>{switch}</div>")
+            f"flex-wrap:wrap;gap:.4rem;margin-bottom:1rem'>"
+            f"<h3 style='margin:0'>Projecten ({len(projs)})</h3>{switch}</div>")
     return f"<div class='c2-sec'>{head}{body}</div>"
 
 
@@ -542,7 +551,7 @@ def _person_projects_html(st: _Stores, pid: str) -> str:
 
 
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",
-                group: str = "geen") -> str:
+                group: str = "persoon") -> str:
     rec = st.records.get(node_id)
     if rec is None:
         return _page("Niet gevonden", "<p>Node niet gevonden.</p><p><a href='/'>← home</a></p>")
@@ -815,7 +824,7 @@ def make_handler(data_dir: str, csrf_token: str):
                 self._send(render_node(st, (qs.get("id") or [""])[0],
                                        (qs.get("tab") or ["overview"])[0], csrf_token=csrf_token,
                                        msg=(qs.get("msg") or [""])[0],
-                                       group=(qs.get("group") or ["geen"])[0]))
+                                       group=(qs.get("group") or ["persoon"])[0]))
                 return
             if path == "/project":
                 self._send(render_project(st, (qs.get("pid") or [""])[0], csrf_token=csrf_token,

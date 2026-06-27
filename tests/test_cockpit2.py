@@ -58,7 +58,7 @@ def test_projecten_tab_kolommen_en_inline_add(tmp_path):
     # statuskolommen (Trello-stijl) + inline toevoegen + slepen
     for col in ("Actief", "Wacht", "Toekomst", "Done"):
         assert col in page
-    assert "proj_add" in page and "+ kaart toevoegen" in page
+    assert "proj_add" in page and "+ project toevoegen" in page
     assert "data-to='toekomst'" in page and "draggable" in page.lower()
     assert "data-href=" in page                 # kaart klikbaar naar detail
     assert "vbtn" in page                        # board/lijst-schakelaar
