@@ -36,10 +36,44 @@ def test_root_overview(tmp_path):
 
 def test_nooch_roles_tab(tmp_path):
     st = _st(tmp_path)
-    page = cockpit2.render_node(st, "mother_earth__nooch", "roles")
+    page = cockpit2.render_node(st, "mother_earth__nooch", "roles", csrf_token="t")
     assert "Creator of Shoes" in page and "Marketing Lead" in page
-    # de cirkel-kaart/boom toont de hiërarchie
-    assert "Organisatie" in page
+    assert "Organisatie" in page                              # org-boom (rail)
+    # kernrollen apart + purpose onder de rol + toewijs-icoon
+    assert "Kernrollen" in page and "Circle Lead" in page
+    assert "Make Nooch visually consistent" in page          # purpose onder Brand & Visual Designer
+    assert "assignico" in page and "/rolefillers?role=" in page
+    # vervullers zichtbaar (rechts), bijv. Nina bij Community and Email
+    assert "Nina Wolter" in page
+
+
+def test_rolefillers_modal_en_assign(tmp_path):
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    role = "mother_earth__nooch__factory_development_specialist"   # onbemand
+    frag = cockpit2.render_rolefillers(st, role, csrf_token="t", fragment=True)
+    assert "<!doctype" not in frag.lower()
+    assert "Rolvervullers beheren" in frag and "role_assign" in frag and "Nog niemand toegewezen" in frag
+    # toewijzen + verwijderen via dispatch
+    wytse = st.people.by_name("Wytse Valkema")
+    cockpit2.dispatch(dd, "role_assign", {"role": [role], "filler": [f"person:{wytse.id}"], "next": ["/"]})
+    assert any(f.id == wytse.id for f in cockpit2._Stores(dd).assign.fillers_of(role))
+    cockpit2.dispatch(dd, "role_unassign", {"role": [role], "filler": [f"person:{wytse.id}"], "next": ["/"]})
+    assert cockpit2._Stores(dd).assign.fillers_of(role) == []
+
+
+def test_roles_tab_stack_bij_3plus(tmp_path):
+    # 3+ vervullers → gestapelde avatars + '+ nog N'
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    role = "mother_earth__nooch__factory_development_specialist"
+    for nm in ("Lotte Mulder", "Stefan Wobben", "Nina Wolter", "Dan Morgan"):
+        cockpit2.dispatch(dd, "role_assign",
+                          {"role": [role], "filler": [f"person:{st.people.by_name(nm).id}"], "next": ["/"]})
+    page = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth__nooch", "roles", csrf_token="t")
+    assert "+ nog 1" in page and "stack" in page              # 4 vervullers → 3 avatars + nog 1
 
 
 def test_role_overview_fillers_en_domein(tmp_path):

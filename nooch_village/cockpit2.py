@@ -96,6 +96,21 @@ ul.clean li:last-child{border-bottom:none}
   border:1px solid rgba(27,27,27,.14);border-radius:var(--radius-pill);background:transparent;
   color:var(--gray);padding:.3rem .85rem;text-decoration:none;cursor:pointer;vertical-align:middle}
 .addlink:hover{background:rgba(27,27,27,.05);color:var(--ink);text-decoration:none}
+/* rollen-tab: rij met purpose + rechts uitgelijnde vervullers + toewijs-icoon */
+.rrole{display:flex;align-items:flex-start;gap:1rem;padding:.6rem 0;border-bottom:1px solid var(--border)}
+.rrole-info{flex:1 1 auto;min-width:0}
+.rrole-pur{font-size:.84rem;margin-top:.1rem}
+.rrole-fill{flex:0 0 auto;margin-left:auto;text-align:right}
+.rrole-act{flex:0 0 auto}
+.fillers{display:flex;flex-direction:column;gap:.2rem;align-items:flex-end}
+.fperson{display:inline-flex;align-items:center;gap:.35rem;font-size:.86rem;color:var(--gray)}
+.fillers.stack{flex-direction:row;align-items:center;gap:.3rem}
+.stack-av{margin-left:-8px}.stack-av:first-child{margin-left:0}
+.stack-av .av{border:2px solid var(--surface)}
+.assignico{display:inline-block;color:var(--gray);text-decoration:none;font-size:1rem;padding:.1rem .3rem;border-radius:var(--radius)}
+.assignico sup{font-weight:700}
+.assignico:hover{background:rgba(27,27,27,.07);color:var(--ink)}
+.frow{display:flex;align-items:center;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--border)}
 .ovl{position:fixed;inset:0;background:rgba(27,27,27,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center}
 .ovl-box{background:var(--surface);max-width:720px;width:92%;margin:4vh auto;border-radius:12px;padding:1.3rem 1.5rem;max-height:88vh;overflow:auto;position:relative;box-shadow:0 12px 48px rgba(27,27,27,.35)}
 .ovl-x{position:absolute;top:.5rem;right:.7rem;border:none;background:none;font-size:1.2rem;cursor:pointer;color:var(--gray)}
@@ -261,20 +276,69 @@ def _fillsummary(st: _Stores, rec) -> str:
     return "· " + ", ".join(names)
 
 
-def _roles_html(st: _Stores, rec) -> str:
+_CORE_ROLE_NAMES = {"circle lead", "lead link", "facilitator", "secretary", "secretaris",
+                    "rep link", "circle rep", "cross link"}
+
+
+def _avatar(label: str, is_ai: bool) -> str:
+    if is_ai:
+        return "<span class='av ai'>AI</span>"
+    return f"<span class='av'>{_e(_initials(label))}</span>"
+
+
+def _fillers_block(st: _Stores, role) -> str:
+    """Rechts uitgelijnde rolvervullers; bij 3+ gestapelde avatars + '+ nog N'."""
+    fillers = st.assign.fillers_of(role.id, record=role)
+    resolved = []
+    for f in fillers:
+        if f.type == "person":
+            p = st.people.get(f.id)
+            resolved.append((p.name if p else f.id, False))
+        else:
+            pa = st.personas.get(f.id)
+            resolved.append(((pa.name if pa else f.id), True))
+    if not resolved:
+        return "<span class='muted' style='font-size:.8rem'>niet vervuld</span>"
+    if len(resolved) >= 3:
+        avs = "".join(f"<span class='stack-av'>{_avatar(n, ai)}</span>" for n, ai in resolved[:3])
+        extra = f"<span class='muted' style='font-size:.82rem'>+ nog {len(resolved)-3}</span>" if len(resolved) > 3 else ""
+        return f"<div class='fillers stack'>{avs}{extra}</div>"
+    rows = "".join(f"<div class='fperson'>{_avatar(n, ai)}<span>{_e(n)}"
+                   f"{' (AI)' if ai else ''}</span></div>" for n, ai in resolved)
+    return f"<div class='fillers'>{rows}</div>"
+
+
+def _role_row(st: _Stores, role, csrf_token: str) -> str:
+    purpose = role.definition.purpose or ""
+    pur = f"<div class='muted rrole-pur'>{_e(purpose)}</div>" if purpose else ""
+    assign = ""
+    if csrf_token:
+        url = f"/rolefillers?role={_e(role.id)}"
+        assign = (f"<a class='assignico js-modal' href='{url}' data-href='{url}' "
+                  f"title='rolvervullers beheren'>👤<sup>+</sup></a>")
+    return (f"<div class='rrole'>"
+            f"<div class='rrole-info'><a href='/node?id={_e(role.id)}'>{_e(_name(role))}</a>{pur}</div>"
+            f"<div class='rrole-fill'>{_fillers_block(st, role)}</div>"
+            f"<div class='rrole-act'>{assign}</div></div>")
+
+
+def _roles_html(st: _Stores, rec, csrf_token: str = "") -> str:
     recs = st.records.all()
     subs = sorted(org.subcircles_of(recs, rec.id), key=lambda r: _name(r).lower())
     roles = sorted(org.roles_of(recs, rec.id), key=lambda r: _name(r).lower())
+    core = [r for r in roles if _name(r).strip().lower() in _CORE_ROLE_NAMES]
+    rest = [r for r in roles if _name(r).strip().lower() not in _CORE_ROLE_NAMES]
     out = []
+    if core:
+        out.append("<div class='c2-sec'><h3>Kernrollen</h3>"
+                   + "".join(_role_row(st, r, csrf_token) for r in core) + "</div>")
+    out.append("<div class='c2-sec'><h3>Rollen</h3>"
+               + ("".join(_role_row(st, r, csrf_token) for r in rest)
+                  if rest else "<span class='muted'>Geen rollen.</span>") + "</div>")
     if subs:
         out.append("<div class='c2-sec'><h3>Subcirkels</h3><ul class='clean'>"
                    + "".join(f"<li><a href='/node?id={_e(s.id)}'>{_e(_name(s))}</a> "
                              f"<span class='chip'>cirkel</span></li>" for s in subs) + "</ul></div>")
-    out.append("<div class='c2-sec'><h3>Rollen</h3>"
-               + ("<ul class='clean'>" + "".join(
-                   f"<li><a href='/node?id={_e(r.id)}'>{_e(_name(r))}</a> "
-                   f"<span class='muted'>{_e(_fillsummary(st, r))}</span></li>" for r in roles)
-                  + "</ul>" if roles else "<span class='muted'>Geen rollen.</span>") + "</div>")
     return "".join(out)
 
 
@@ -475,11 +539,11 @@ def _modal_html() -> str:
         "<button type='button' class='ovl-x' aria-label='sluiten'>✕</button>"
         "<div id='ovl-body'></div></div></div>"
         "<script>(function(){"
-        "var ov=document.getElementById('ovl'),bd=document.getElementById('ovl-body'),pid=null,dirty=false;"
+        "var ov=document.getElementById('ovl'),bd=document.getElementById('ovl-body'),last=null,dirty=false;"
         "function frag(u){return u+(u.indexOf('?')>-1?'&':'?')+'fragment=1';}"
-        "function openCard(u){var m=u.match(/[?&]pid=([^&]+)/);pid=m?decodeURIComponent(m[1]):null;"
+        "function openCard(u){last=u;"
         "fetch(frag(u)).then(function(r){return r.text();}).then(function(h){bd.innerHTML=h;ov.style.display='flex';wire();});}"
-        "function reopen(){if(pid)openCard('/project?pid='+encodeURIComponent(pid));}"
+        "function reopen(){if(last)openCard(last);}"
         "function shut(){ov.style.display='none';bd.innerHTML='';if(dirty){dirty=false;location.reload();}}"
         "function wire(){bd.querySelectorAll('form').forEach(function(f){f.addEventListener('submit',function(e){"
         "e.preventDefault();dirty=true;var act=(e.submitter&&e.submitter.value)||'';"
@@ -682,7 +746,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     if tab == "overview":
         content = _overview_html(st, rec)
     elif tab == "roles":
-        content = _roles_html(st, rec)
+        content = _roles_html(st, rec, csrf_token)
     elif tab == "members":
         content = _members_html(st, rec)
     elif tab == "notes":
@@ -714,7 +778,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
             f"<h1>{_e(_name(rec))} {chip}</h1>{_banner(msg)}{meet}"
             f"{_tabbar(node_id, tabs, tab)}{content}</div>")
     rail = f"<div class='c2-rail'>{_tree_html(st, node_id)}</div>"
-    modal = _modal_html() if (csrf_token and tab == "projects") else ""
+    modal = _modal_html() if (csrf_token and tab in ("projects", "roles")) else ""
     inner = (f"<style>{_EXTRA_CSS}</style>"
              "<div class='bar'>cockpit 2 · GlassFrog-vorm (PoC) · "
              "<a href='/'>home</a></div>"
@@ -867,6 +931,50 @@ def render_addproject(st: _Stores, node_id: str, csrf_token: str = "", fragment:
                  f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>{main}</div>")
 
 
+def render_rolefillers(st: _Stores, role_id: str, csrf_token: str = "", fragment: bool = False) -> str:
+    rec = st.records.get(role_id)
+    if rec is None:
+        return ("<p class='muted'>Onbekende rol.</p>" if fragment
+                else _page("Niet gevonden", "<p>Onbekend.</p>"))
+    back = f"/node?id={(rec.parent or rec.id)}&tab=roles"
+
+    def hid():
+        return (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                f"<input type='hidden' name='role' value='{_e(role_id)}'>"
+                f"<input type='hidden' name='next' value='{_e(back)}'>")
+
+    fillers = st.assign.fillers_of(role_id, record=rec)
+    rows = ""
+    for f in fillers:
+        if f.type == "person":
+            p = st.people.get(f.id); label = (p.name if p else f.id); ai = False
+        else:
+            pa = st.personas.get(f.id); label = (pa.name if pa else f.id); ai = True
+        rows += (f"<div class='frow'>{_avatar(label, ai)}<span style='flex:1'>{_e(label)}"
+                 f"{' (AI)' if ai else ''}</span>"
+                 f"<form method='post' action='/action' style='display:inline'>{hid()}"
+                 f"<input type='hidden' name='filler' value='{f.type}:{_e(f.id)}'>"
+                 f"<button class='dellink' type='submit' name='action' value='role_unassign'>verwijderen</button>"
+                 f"</form></div>")
+    if not rows:
+        rows = "<p class='muted'>Nog niemand toegewezen.</p>"
+    opts = "<option value=''>— kies persoon of AI —</option>"
+    opts += "".join(f"<option value='person:{_e(p.id)}'>{_e(p.name)}</option>" for p in st.people.all())
+    opts += "".join(f"<option value='persona:{_e(pa.id)}'>🤖 {_e(pa.name)} (AI)</option>" for pa in st.personas.all())
+    add = (f"<div class='pf' style='margin-top:.6rem'><form method='post' action='/action'>{hid()}"
+           f"<label>Toevoegen aan {_e(_name(rec))}</label>"
+           f"<select name='filler'>{opts}</select>"
+           f"<button class='btn ok' type='submit' name='action' value='role_assign' "
+           f"style='margin-top:.4rem'>Toewijzen</button></form></div>")
+    frag = (f"<h2 style='margin-top:0'>Rolvervullers beheren — {_e(_name(rec))}</h2>"
+            f"<div>{rows}</div>{add}")
+    if fragment:
+        return frag
+    main = (f"<div class='c2-main' style='max-width:560px'>"
+            f"<div class='c2-bar'><a href='{_e(back)}'>← terug</a></div>{frag}</div>")
+    return _page("Rolvervullers", f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>{main}</div>")
+
+
 def _parse_trekker(val: str):
     """'person:<id>' of 'persona:<id>' → (person_id of '', agent_id of '')."""
     val = (val or "").strip()
@@ -934,6 +1042,19 @@ def dispatch(data_dir: str, action: str, form: dict):
         pj.check_toggle(g("pid"), g("item"))
     elif action == "check_remove":
         pj.check_remove(g("pid"), g("item")); msg = "🗑 item verwijderd"
+    elif action == "role_assign":
+        person, agent = _parse_trekker(g("filler"))
+        if person and st.assign.assign(g("role"), "person", person):
+            msg = "✓ toegewezen"
+        elif agent and st.assign.assign(g("role"), "persona", agent):
+            msg = "🤖 AI toegewezen"
+    elif action == "role_unassign":
+        person, agent = _parse_trekker(g("filler"))
+        if person:
+            st.assign.unassign(g("role"), "person", person)
+        elif agent:
+            st.assign.unassign(g("role"), "persona", agent)
+        msg = "✓ verwijderd"
     return nxt, msg
 
 
@@ -975,6 +1096,10 @@ def make_handler(data_dir: str, csrf_token: str):
             if path == "/addproject":
                 self._send(render_addproject(st, (qs.get("node") or [""])[0], csrf_token=csrf_token,
                                              fragment=(qs.get("fragment") or [""])[0] == "1"))
+                return
+            if path == "/rolefillers":
+                self._send(render_rolefillers(st, (qs.get("role") or [""])[0], csrf_token=csrf_token,
+                                              fragment=(qs.get("fragment") or [""])[0] == "1"))
                 return
             if path == "/person":
                 self._send(render_person(st, (qs.get("id") or [""])[0]))
