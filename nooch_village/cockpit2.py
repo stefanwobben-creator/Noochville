@@ -201,11 +201,26 @@ ul.clean li:last-child{border-bottom:none}
 .vswitch{display:inline-flex;gap:.2rem;align-items:center}
 .vbtn{font-size:12px;font-weight:600;padding:.3rem .85rem;border:1px solid var(--border);border-radius:var(--radius-pill);color:var(--gray);text-decoration:none}
 .vbtn.on{background:var(--green);color:#fff;border-color:var(--green)}
-.ck-prog{display:flex;align-items:center;gap:.5rem;margin:.3rem 0 .5rem}
-.ck-list{}.ck-item{display:flex;align-items:center;gap:.4rem;padding:.2rem 0;border:none}
-.ck-box{width:18px;height:18px;border:1px solid var(--border);border-radius:4px;background:#fff;cursor:pointer;font-size:.7rem;line-height:1;color:#fff;flex:0 0 auto}
+.ck-prog{display:flex;align-items:center;gap:.6rem;margin:.2rem 0 .6rem}
+.ck-prog .pbar{flex:1 1 auto;width:auto}
+.ck-prog .muted{flex:0 0 auto;font-size:.74rem;min-width:2.5rem;text-align:right}
+.ck-list{}.ck-item{display:flex;align-items:center;gap:.5rem;padding:.25rem .3rem;border:none;border-radius:var(--radius)}
+.ck-item:hover{background:var(--cream-2)}
+.ck-box{width:18px;height:18px;border:1.5px solid var(--subtle);border-radius:4px;background:var(--surface);cursor:pointer;font-size:.72rem;line-height:1;color:#fff;flex:0 0 auto}
 .ck-box.on{background:var(--green);border-color:var(--green)}
+.ck-item .dellink{margin-left:auto;opacity:0}
+.ck-item:hover .dellink{opacity:1}
 .ck-done{text-decoration:line-through;color:var(--muted)}
+.attcard{display:flex;align-items:center;gap:.55rem;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .6rem;margin-bottom:.4rem}
+.att-ic{flex:0 0 auto;color:var(--gray);display:inline-flex}
+.att-ic svg{width:16px;height:16px}
+.att-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;text-decoration:none;color:var(--ink)}
+.att-name:hover{text-decoration:underline}
+.att-x{flex:0 0 auto}
+.att-link{display:inline-block}
+.att-link>summary{list-style:none}
+.att-link>summary::-webkit-details-marker{display:none}
+.ghost-off{opacity:.55;cursor:not-allowed}
 .btn.grey{color:var(--muted);border-style:dashed;cursor:not-allowed}
 @media(max-width:760px){.c2-wrap{flex-direction:column}.c2-rail{max-width:none;flex-basis:auto}}
 """
@@ -1020,6 +1035,12 @@ _IC_GEAR = _ic("<circle cx='12' cy='12' r='3'/><path d='M19 12a7 7 0 0 0-.1-1l2-
 _IC_LINK = _ic("<path d='M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1'/><path d='M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1'/>")
 
 
+def _link_host(url: str) -> str:
+    """Domeinnaam uit een URL als nette weergavenaam (zoals Trello bij een bijlage zonder titel)."""
+    u = (url or "").split("//", 1)[-1]
+    return u.split("/", 1)[0] or url
+
+
 def _psec(icon: str, title: str, body: str) -> str:
     return (f"<div class='psec'><div class='psec-h'>{icon}<span>{_e(title)}</span></div>"
             f"<div class='psec-b'>{body}</div></div>")
@@ -1147,14 +1168,31 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         desc_body = f"<div>{_e(p.get('description','')) or '<span class=muted>geen omschrijving</span>'}</div>"
     omschrijving = _psec(_IC_DESC, "Omschrijving", desc_body)
 
-    # ---- Verrijkingen (placeholder; wordt de kennis/links-laag) ----
-    enrich = ("<div class='enrich-add'>"
-              "<span class='enrich-ghost'>+ kenniskaart</span>"
-              "<span class='enrich-ghost'>+ link</span>"
-              "<span class='enrich-ghost'>+ bijlage</span></div>"
-              "<p class='muted' style='font-size:.78rem;margin:.4rem 0 0'>"
-              "Koppel straks kennis, bronnen of bijlagen aan dit project; ze verschijnen hier.</p>")
-    verrijking = _psec(_IC_LINK, "Toevoegen aan project", enrich)
+    # ---- Verrijkingen: Trello-stijl bijlage-cards onder de titel ----
+    cards = ""
+    for a in (p.get("attachments") or []):
+        title = a.get("title") or _link_host(a.get("url", ""))
+        rm = ("" if not rw else
+              f"<form method='post' action='/action' class='att-x'>{hid()}"
+              f"<input type='hidden' name='aid' value='{_e(a.get('id',''))}'>"
+              f"<button class='dellink' type='submit' name='action' value='attach_remove' "
+              f"title='verwijderen'>✕</button></form>")
+        cards += (f"<div class='attcard'><span class='att-ic'>{_IC_LINK}</span>"
+                  f"<a class='att-name' href='{_e(a.get('url',''))}' target='_blank' rel='noopener'>{_e(title)}</a>"
+                  f"{rm}</div>")
+    add = ""
+    if rw:
+        add = (f"<div class='enrich-add'>"
+               f"<details class='att-link'><summary class='enrich-ghost'>+ link</summary>"
+               f"<form method='post' action='/action' class='pf' style='margin-top:.4rem'>{hid()}"
+               f"<input name='url' placeholder='https://…'>"
+               f"<input name='title' placeholder='Titel (optioneel)'>"
+               f"<button class='btn ok' type='submit' name='action' value='attach_add' "
+               f"style='margin-top:.3rem'>Toevoegen</button></form></details>"
+               f"<span class='enrich-ghost ghost-off' title='binnenkort: koppel een kenniskaart'>+ kenniskaart</span>"
+               f"</div>")
+    enrich = (cards or "<p class='muted' style='font-size:.78rem;margin:0 0 .2rem'>Nog niets gekoppeld.</p>") + add
+    verrijking = _psec(_IC_LINK, "Bijlagen", enrich)
 
     checklist = _psec(_IC_CHECK, "Checklist", checklist_body)
 
@@ -1412,6 +1450,11 @@ def dispatch(data_dir: str, action: str, form: dict):
     elif action == "proj_setprivate":
         if pj.edit(g("pid"), private=(g("private") == "1")):
             msg = "✓ zichtbaarheid opgeslagen"
+    elif action == "attach_add":
+        if pj.attach_add(g("pid"), url=g("url"), title=g("title")):
+            msg = "🔗 bijlage toegevoegd"
+    elif action == "attach_remove":
+        pj.attach_remove(g("pid"), g("aid")); msg = "🗑 bijlage verwijderd"
     elif action == "proj_feed":
         atype, _, aid = g("author").partition(":")
         atype = atype or "human"

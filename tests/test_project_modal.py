@@ -51,6 +51,27 @@ def test_redesign_layout(tmp_path):
     assert "card-del" in frag and "cardmenu" not in frag and "Acties" not in frag
 
 
+def test_bijlage_cards_trello(tmp_path):
+    dd, pid = _setup(tmp_path)
+    cockpit2.dispatch(dd, "attach_add", {"pid": [pid], "url": ["https://nooch.earth/blog"],
+                                         "title": ["Nooch blog"], "next": ["/"]})
+    cockpit2.dispatch(dd, "attach_add", {"pid": [pid], "url": ["https://example.com/x"],
+                                         "title": [""], "next": ["/"]})
+    frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
+    assert "attcard" in frag and "Nooch blog" in frag      # met titel
+    assert "example.com" in frag                            # zonder titel -> domein
+    assert "+ link" in frag and "Bijlagen" in frag
+    # verwijderen
+    aid = cockpit2._Stores(dd).projects.get(pid)["attachments"][0]["id"]
+    cockpit2.dispatch(dd, "attach_remove", {"pid": [pid], "aid": [aid], "next": ["/"]})
+    assert len(cockpit2._Stores(dd).projects.get(pid)["attachments"]) == 1
+
+
+def test_attach_add_vereist_url(tmp_path):
+    dd, pid = _setup(tmp_path)
+    assert cockpit2._Stores(dd).projects.attach_add(pid, url="", title="x") is None
+
+
 def test_done_project_blijft_bewerkbaar(tmp_path):
     dd, pid = _setup(tmp_path)
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "csrf": ["t"], "next": ["/"]})

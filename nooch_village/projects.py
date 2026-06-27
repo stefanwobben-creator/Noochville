@@ -91,6 +91,7 @@ class ProjectLedger:
             "done_when":   done_when or "",     # checkbaar criterium (lege/nee-uitkomst telt ook)
             "goes_to":     goes_to or "",       # wie de uitkomst consumeert (rol/bord/mens)
             "links":       list(links or []),   # verwante projecten (de keten/het gesprek)
+            "attachments": [],                  # verrijking-cards: links/bijlagen (Trello-stijl)
             "parent":      parent,              # ouder-project (None = root/standalone)
             "cluster":     cluster,             # cluster-root id (master-switch werkt hierop)
             "waiting_on":  None,                # project/briefje waarop dit wacht (resume-trigger)
@@ -112,6 +113,33 @@ class ProjectLedger:
         self._touch(p)
         self._save()
         return True
+
+    def attach_add(self, pid: str, url: str = "", title: str = "", kind: str = "link") -> dict | None:
+        """Voeg een verrijking-card toe (Trello-stijl bijlage). Nu: een link met optionele titel.
+        Geeft de toegevoegde card terug."""
+        p = self._projects.get(pid)
+        url = (url or "").strip()
+        if p is None or not url:
+            return None
+        card = {"id": uuid.uuid4().hex[:10], "kind": kind, "url": url[:500],
+                "title": (title or "").strip()[:200], "at": time.time()}
+        p.setdefault("attachments", []).append(card)
+        self._touch(p)
+        self._save()
+        return card
+
+    def attach_remove(self, pid: str, aid: str) -> bool:
+        p = self._projects.get(pid)
+        if p is None:
+            return False
+        lst = p.get("attachments", [])
+        for c in list(lst):
+            if c.get("id") == aid:
+                lst.remove(c)
+                self._touch(p)
+                self._save()
+                return True
+        return False
 
     def reopen(self, pid: str) -> bool:
         """Heropen een afgerond project: haal 'done' eraf zodat het weer naar actief/wacht/toekomst
