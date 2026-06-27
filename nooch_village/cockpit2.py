@@ -100,7 +100,7 @@ ul.clean li:last-child{border-bottom:none}
 .ovl-box{background:var(--surface);max-width:720px;width:92%;margin:4vh auto;border-radius:12px;padding:1.3rem 1.5rem;max-height:88vh;overflow:auto;position:relative;box-shadow:0 12px 48px rgba(27,27,27,.35)}
 .ovl-x{position:absolute;top:.5rem;right:.7rem;border:none;background:none;font-size:1.2rem;cursor:pointer;color:var(--gray)}
 .vswitch{display:inline-flex;gap:.2rem;align-items:center}
-.vbtn{font-size:.78rem;padding:.15rem .55rem;border:1px solid var(--border);border-radius:var(--radius-pill);color:var(--gray);text-decoration:none}
+.vbtn{font-size:12px;font-weight:600;padding:.3rem .85rem;border:1px solid var(--border);border-radius:var(--radius-pill);color:var(--gray);text-decoration:none}
 .vbtn.on{background:var(--green);color:#fff;border-color:var(--green)}
 .ck-prog{display:flex;align-items:center;gap:.5rem;margin:.3rem 0 .5rem}
 .ck-list{}.ck-item{display:flex;align-items:center;gap:.4rem;padding:.2rem 0;border:none}
