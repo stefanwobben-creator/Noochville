@@ -1815,27 +1815,35 @@ def make_handler(data_dir: str, csrf_token: str):
                                        msg=(qs.get("msg") or [""])[0],
                                        group=(qs.get("group") or [""])[0]))
                 return
+            # Modal-fragmenten krijgen hun eigen <style> mee, zodat ze altijd verse CSS tonen
+            # (de overlay hergebruikt anders de stylesheet van de eerste pagina-load).
+            def _frag(out: str, is_frag: bool) -> str:
+                return (f"<style>{_EXTRA_CSS}</style>{out}") if is_frag else out
+
             if path == "/project":
-                self._send(render_project(st, (qs.get("pid") or [""])[0], csrf_token=csrf_token,
-                                          msg=(qs.get("msg") or [""])[0],
-                                          back=(qs.get("back") or ["/"])[0],
-                                          fragment=(qs.get("fragment") or [""])[0] == "1"))
+                fr = (qs.get("fragment") or [""])[0] == "1"
+                self._send(_frag(render_project(st, (qs.get("pid") or [""])[0], csrf_token=csrf_token,
+                                                msg=(qs.get("msg") or [""])[0],
+                                                back=(qs.get("back") or ["/"])[0], fragment=fr), fr))
                 return
             if path == "/addproject":
-                self._send(render_addproject(st, (qs.get("node") or [""])[0], csrf_token=csrf_token,
-                                             fragment=(qs.get("fragment") or [""])[0] == "1"))
+                fr = (qs.get("fragment") or [""])[0] == "1"
+                self._send(_frag(render_addproject(st, (qs.get("node") or [""])[0],
+                                                   csrf_token=csrf_token, fragment=fr), fr))
                 return
             if path == "/rolefillers":
-                self._send(render_rolefillers(st, (qs.get("role") or [""])[0], csrf_token=csrf_token,
-                                              fragment=(qs.get("fragment") or [""])[0] == "1"))
+                fr = (qs.get("fragment") or [""])[0] == "1"
+                self._send(_frag(render_rolefillers(st, (qs.get("role") or [""])[0],
+                                                    csrf_token=csrf_token, fragment=fr), fr))
                 return
             if path == "/aitask":
                 try:
                     acc_i = int((qs.get("acc") or ["-1"])[0])
                 except ValueError:
                     acc_i = -1
-                self._send(render_aitask(st, (qs.get("role") or [""])[0], acc_i, csrf_token=csrf_token,
-                                         fragment=(qs.get("fragment") or [""])[0] == "1"))
+                fr = (qs.get("fragment") or [""])[0] == "1"
+                self._send(_frag(render_aitask(st, (qs.get("role") or [""])[0], acc_i,
+                                               csrf_token=csrf_token, fragment=fr), fr))
                 return
             if path == "/person":
                 self._send(render_person(st, (qs.get("id") or [""])[0]))
