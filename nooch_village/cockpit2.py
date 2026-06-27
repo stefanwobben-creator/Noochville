@@ -1371,6 +1371,23 @@ def serve(host: str = "127.0.0.1", port: int = 8766, data_dir: str | None = None
         httpd.server_close()
 
 
+def _load_env() -> None:
+    """Laad project-.env in os.environ (idempotent, setdefault), zodat de losse cockpit2-CLI
+    dezelfde LLM-keys ziet als de volledige village. Zoekt .env in cwd en repo-root."""
+    import pathlib
+    seen = set()
+    for cand in (os.path.join(os.getcwd(), ".env"),
+                 os.path.join(pathlib.Path(__file__).resolve().parent.parent, ".env")):
+        if cand in seen or not os.path.exists(cand):
+            continue
+        seen.add(cand)
+        for line in open(cand):
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip())
+
+
 def refresh_matches(data_dir: str | None = None, ask=None, progress=None) -> int:
     """Achtergrond-pas: laat de LLM per (accountability, skill) oordelen en cache het, zodat het
     cadeautje semantisch matcht. Zonder key/`ask` is dit een no-op (fail-closed); de render valt
@@ -1414,7 +1431,7 @@ def main(argv=None) -> None:
     ap.add_argument("--data-dir", default=None)
     a = ap.parse_args(argv)
     if a.cmd == "match":
-        import sys
+        _load_env()   # zorg dat .env-keys beschikbaar zijn voor de losse CLI
         # Snelle key-check: zonder LLM-key heeft de achtergrond-pas niets te doen.
         try:
             from nooch_village import llm
