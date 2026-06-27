@@ -129,10 +129,29 @@ ul.clean li:last-child{border-bottom:none}
 .fentry{border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .65rem;margin:.35rem 0}
 .fhead{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
 .ftext{margin-top:.25rem}
-.av.role{background:#5b3fa6;color:#fff}
+.av.role{background:var(--green-dark);color:#fff}
 .fkind{font-size:.64rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700;border-radius:var(--radius-pill);padding:.03rem .45rem}
-.fkind.upd{background:#E3F4EA;color:#1F7A45}
+.fkind.upd{background:var(--green-tint);color:var(--green-dark)}
 .fkind.cmt{background:var(--cream-2);color:var(--gray)}
+.pgrid{display:grid;grid-template-columns:1fr;gap:1rem}
+@media(min-width:620px){.pgrid{grid-template-columns:minmax(0,1.7fr) minmax(0,1fr)}}
+.pmain{min-width:0}.pside{min-width:0}
+.pdetail-h h2{margin:.1rem 0 .5rem;font-family:var(--font-display);font-size:1.35rem;line-height:1.2}
+.psec{margin:0 0 1.15rem}
+.psec-h{display:flex;align-items:center;gap:.4rem;color:var(--subtle);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:.45rem}
+.psec-h svg{width:14px;height:14px;opacity:.75;flex:0 0 auto}
+.pside .psec{background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.65rem .75rem;margin-bottom:.8rem}
+.smeta{margin:0}
+.smeta dt{font-size:.62rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;margin-top:.55rem}
+.smeta dt:first-child{margin-top:0}
+.smeta dd{margin:.1rem 0 0}
+.ckadd{display:flex;gap:.4rem;margin-top:.5rem}
+.ckadd input{flex:1 1 auto;min-width:0}
+.ckadd .btn{flex:0 0 auto;white-space:nowrap}
+.composer{margin-top:.6rem}
+.editbox{margin:0 0 .5rem}
+.editbox>summary{cursor:pointer;font-weight:700;font-size:.85rem;color:var(--green-dark)}
+.actrow{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
 .acc-sub{padding:.15rem 0 .4rem 1.4rem;border-bottom:1px solid var(--border)}
 .sugg{background:#F4F1FB;border:1px solid #E0D7F5;border-radius:var(--radius);padding:.5rem .7rem;margin:.5rem 0}
 .sugg-h{font-weight:700;color:#5b3fa6;font-size:.82rem;margin-bottom:.3rem}
@@ -145,7 +164,7 @@ ul.clean li:last-child{border-bottom:none}
 .ffocus>summary{list-style:none;cursor:pointer}
 .ffocus>summary::-webkit-details-marker{display:none}
 .ovl{position:fixed;inset:0;background:rgba(27,27,27,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center}
-.ovl-box{background:var(--surface);max-width:720px;width:92%;margin:4vh auto;border-radius:12px;padding:1.3rem 1.5rem;max-height:88vh;overflow:auto;position:relative;box-shadow:0 12px 48px rgba(27,27,27,.35)}
+.ovl-box{background:var(--surface);max-width:780px;width:94%;margin:4vh auto;border-radius:12px;padding:1.3rem 1.5rem;max-height:88vh;overflow:auto;position:relative;box-shadow:0 12px 48px rgba(27,27,27,.35)}
 .ovl-x{position:absolute;top:.5rem;right:.7rem;border:none;background:none;font-size:1.2rem;cursor:pointer;color:var(--gray)}
 .vswitch{display:inline-flex;gap:.2rem;align-items:center}
 .vbtn{font-size:12px;font-weight:600;padding:.3rem .85rem;border:1px solid var(--border);border-radius:var(--radius-pill);color:var(--gray);text-decoration:none}
@@ -945,6 +964,24 @@ def _feed_author_options(st: _Stores, p: dict) -> str:
     return "".join(opts)
 
 
+def _ic(path: str) -> str:
+    return (f"<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' "
+            f"stroke-linecap='round' stroke-linejoin='round'>{path}</svg>")
+
+
+_IC_DESC = _ic("<line x1='4' y1='7' x2='20' y2='7'/><line x1='4' y1='12' x2='20' y2='12'/>"
+               "<line x1='4' y1='17' x2='14' y2='17'/>")
+_IC_CHECK = _ic("<polyline points='9 11 12 14 20 6'/><path d='M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9'/>")
+_IC_CHAT = _ic("<path d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'/>")
+_IC_INFO = _ic("<circle cx='12' cy='12' r='9'/><line x1='12' y1='11' x2='12' y2='16'/><line x1='12' y1='8' x2='12' y2='8'/>")
+_IC_GEAR = _ic("<circle cx='12' cy='12' r='3'/><path d='M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1z'/>")
+
+
+def _psec(icon: str, title: str, body: str) -> str:
+    return (f"<div class='psec'><div class='psec-h'>{icon}<span>{_e(title)}</span></div>"
+            f"<div class='psec-b'>{body}</div></div>")
+
+
 def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", back: str = "/",
                    fragment: bool = False) -> str:
     p = st.projects.get(pid)
@@ -984,11 +1021,10 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
               f"<button class='dellink' type='submit' name='action' value='check_remove'>✕</button></form>") if rw else ""
         txt = f"<span class='{'ck-done' if done else ''}'>{_e(it['text'])}</span>"
         ck_rows += f"<li class='ck-item'>{chk} {txt} {rm}</li>"
-    ck_add = (f"<form method='post' action='/action' class='qadd-form' style='margin-top:.3rem'>{hid()}"
+    ck_add = (f"<form method='post' action='/action' class='ckadd'>{hid()}"
               f"<input name='text' placeholder='item toevoegen…'>"
-              f"<button class='btn' type='submit' name='action' value='check_add'>+</button></form>") if rw else ""
-    checklist = (f"<div class='c2-sec'><h3>Checklist</h3>{bar}"
-                 f"<ul class='clean ck-list'>{ck_rows or '<li class=muted>nog geen items</li>'}</ul>{ck_add}</div>")
+              f"<button class='btn' type='submit' name='action' value='check_add'>+ item</button></form>") if rw else ""
+    checklist_body = (f"{bar}<ul class='clean ck-list'>{ck_rows or '<li class=muted>nog geen items</li>'}</ul>{ck_add}")
 
     # Activiteit & discussie-feed: mensen, AI en rollen praten in dezelfde stroom.
     feed = "".join(_feed_entry_html(st, m) for m in (p.get("log") or []))
@@ -996,42 +1032,14 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         feed = "<p class='muted'>Nog geen updates of reacties.</p>"
     composer = ""
     if rw:
-        composer = (f"<form method='post' action='/action' class='pf' style='margin-top:.5rem'>{hid()}"
+        composer = (f"<form method='post' action='/action' class='pf composer'>{hid()}"
                     f"<label>Plaatsen namens</label><select name='author'>{_feed_author_options(st, p)}</select>"
                     f"<textarea name='text' rows='2' placeholder='update of reactie…'></textarea>"
                     f"<button class='btn ok' type='submit' name='action' value='proj_feed' "
                     f"style='margin-top:.3rem'>plaatsen</button></form>")
-    feedsec = f"<div class='c2-sec'><h3>Activiteit &amp; discussie</h3>{feed}{composer}</div>"
+    feed_body = feed + composer
 
-    # Bewerken (scope/omschrijving/trekker/label/zichtbaarheid) + archiveren/verwijderen
-    edit = ""
-    if rw:
-        lopts = "".join(f"<option value='{k}'{' selected' if p.get('label')==k else ''}>"
-                        f"{k or '— geen —'}</option>" for k in _LABELS)
-        edit = (
-            f"<details class='c2-sec'><summary style='font-weight:700'>✎ bewerken</summary>"
-            f"<div class='pf'><form method='post' action='/action'>{hid()}"
-            f"<label>Titel</label><input name='scope' value='{_e(_scope_text(p))}'>"
-            f"<label>Omschrijving</label><textarea name='description' rows='3'>{_e(p.get('description',''))}</textarea>"
-            f"<label>Trekker</label><select name='trekker'>{_trekker_options(st, p.get('person') or '', p.get('agent') or '')}</select>"
-            f"<label>Kleurlabel (koppeling met doel, later)</label><select name='label'>{lopts}</select>"
-            f"<label style='font-size:.85rem'><input type='checkbox' name='private' value='1'"
-            f"{' checked' if p.get('private') else ''}> alleen zichtbaar voor de cirkel</label>"
-            f"<button class='btn ok' type='submit' name='action' value='proj_edit' style='margin-top:.4rem'>opslaan</button>"
-            f"</form>"
-            f"<div style='margin-top:.5rem'>"
-            f"<form method='post' action='/action' style='display:inline'>{hid()}"
-            f"<input type='hidden' name='next' value='{_e(back)}'>"
-            f"<button class='btn' type='submit' name='action' value='proj_archive'>🗄 archiveren</button></form> "
-            f"<form method='post' action='/action' style='display:inline'>{hid()}"
-            f"<input type='hidden' name='next' value='{_e(back)}'>"
-            f"<button class='dellink' type='submit' name='action' value='proj_delete' "
-            f"onclick=\"return confirm('Definitief verwijderen? Archiveren bewaart het project.')\">verwijderen</button>"
-            f"</form></div></div></details>")
-
-    labelbar = ""
-    if _LABELS.get(p.get("label")):
-        labelbar = f"<div class='clabel' style='background:{_LABELS[p['label']]};height:8px;border-radius:4px;margin-bottom:.4rem'></div>"
+    desc_body = f"<div>{_e(p.get('description','')) or '<span class=muted>geen omschrijving</span>'}</div>"
 
     # Status-schakelaar (in de modal kun je niet slepen): de vier kolommen als knoppen.
     status = p.get("status", "")
@@ -1046,28 +1054,63 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                      f"<button class='sw{on}' type='submit' name='action' value='{act}'>{_e(label)}</button></form>")
         switch = f"<div class='swrow'>{btns}</div>"
 
-    # Overzicht-grid: trekker, eigenaar, label, zichtbaarheid, voortgang, leeftijd.
+    # Zijbalk-details (verticaal): trekker, eigenaar, label, zichtbaarheid, voortgang, leeftijd.
     lab = "<span class='muted'>—</span>"
     if _LABELS.get(p.get("label")):
         lab = f"<span class='dot' style='background:{_LABELS[p['label']]}'></span>{_e(p.get('label'))}"
     vis = "Alleen deze cirkel" if p.get("private") else "Hele cirkel-boom"
     prog = f"{pr[2]}% ({pr[0]}/{pr[1]})" if pr else "<span class='muted'>—</span>"
-    meta = ("<div class='pmeta'>"
-            f"<div><span class='k'>Trekker</span><span>{_trekker_html(st, p)}</span></div>"
-            f"<div><span class='k'>Rol / eigenaar</span><span>{owner_link}</span></div>"
-            f"<div><span class='k'>Label</span><span>{lab}</span></div>"
-            f"<div><span class='k'>Zichtbaarheid</span><span>{vis}</span></div>"
-            f"<div><span class='k'>Voortgang</span><span>{prog}</span></div>"
-            f"<div><span class='k'>Aangemaakt</span><span>{_e(_age(p.get('created_at')))}</span></div>"
-            "</div>")
+    smeta = ("<dl class='smeta'>"
+             f"<dt>Trekker</dt><dd>{_trekker_html(st, p)}</dd>"
+             f"<dt>Rol / eigenaar</dt><dd>{owner_link}</dd>"
+             f"<dt>Label</dt><dd>{lab}</dd>"
+             f"<dt>Zichtbaarheid</dt><dd>{vis}</dd>"
+             f"<dt>Voortgang</dt><dd>{prog}</dd>"
+             f"<dt>Aangemaakt</dt><dd>{_e(_age(p.get('created_at')))}</dd>"
+             "</dl>")
 
-    desc = (f"<div class='c2-sec'><h3>Omschrijving</h3>"
-            f"<div>{_e(p.get('description','')) or '<span class=muted>geen omschrijving</span>'}</div></div>")
-    detail = (f"{labelbar}<h1 style='margin-top:0'>{_e(_scope_text(p))} {_proj_chip(status)}</h1>"
-              f"{switch}{meta}{_banner(msg)}{desc}{checklist}{feedsec}{edit}")
+    # Acties: bewerken (inklap) + archiveren/verwijderen.
+    actions = "<span class='muted'>Alleen-lezen.</span>"
+    if rw:
+        lopts = "".join(f"<option value='{k}'{' selected' if p.get('label')==k else ''}>"
+                        f"{k or '— geen —'}</option>" for k in _LABELS)
+        actions = (
+            f"<details class='editbox'><summary>Bewerken</summary>"
+            f"<div class='pf'><form method='post' action='/action'>{hid()}"
+            f"<label>Titel</label><input name='scope' value='{_e(_scope_text(p))}'>"
+            f"<label>Omschrijving</label><textarea name='description' rows='3'>{_e(p.get('description',''))}</textarea>"
+            f"<label>Trekker</label><select name='trekker'>{_trekker_options(st, p.get('person') or '', p.get('agent') or '')}</select>"
+            f"<label>Kleurlabel (koppeling met doel, later)</label><select name='label'>{lopts}</select>"
+            f"<label style='font-size:.85rem'><input type='checkbox' name='private' value='1'"
+            f"{' checked' if p.get('private') else ''}> alleen zichtbaar voor de cirkel</label>"
+            f"<button class='btn ok' type='submit' name='action' value='proj_edit' style='margin-top:.4rem'>opslaan</button>"
+            f"</form></div></details>"
+            f"<div class='actrow'>"
+            f"<form method='post' action='/action' style='display:inline'>{hid()}"
+            f"<input type='hidden' name='next' value='{_e(back)}'>"
+            f"<button class='btn' type='submit' name='action' value='proj_archive'>Archiveren</button></form>"
+            f"<form method='post' action='/action' style='display:inline'>{hid()}"
+            f"<input type='hidden' name='next' value='{_e(back)}'>"
+            f"<button class='dellink' type='submit' name='action' value='proj_delete' "
+            f"onclick=\"return confirm('Definitief verwijderen? Archiveren bewaart het project.')\">Verwijderen</button>"
+            f"</form></div>")
+
+    labelbar = ""
+    if _LABELS.get(p.get("label")):
+        labelbar = f"<div class='clabel' style='background:{_LABELS[p['label']]};height:8px;border-radius:4px;margin-bottom:.6rem'></div>"
+
+    head = f"<div class='pdetail-h'><h2>{_e(_scope_text(p))} {_proj_chip(status)}</h2>{switch}</div>"
+    maincol = (head
+               + _psec(_IC_DESC, "Omschrijving", desc_body)
+               + _psec(_IC_CHECK, "Checklist", checklist_body)
+               + _psec(_IC_CHAT, "Activiteit & discussie", feed_body))
+    sidecol = _psec(_IC_INFO, "Details", smeta) + _psec(_IC_GEAR, "Acties", actions)
+    detail = (f"{labelbar}{_banner(msg)}"
+              f"<div class='pgrid'><div class='pmain'>{maincol}</div>"
+              f"<aside class='pside'>{sidecol}</aside></div>")
     if fragment:
         return detail
-    main = (f"<div class='c2-main' style='max-width:720px'>"
+    main = (f"<div class='c2-main' style='max-width:820px'>"
             f"<div class='c2-bar'><a href='{_e(back)}'>← terug</a></div>{detail}</div>")
     inner = (f"<style>{_EXTRA_CSS}</style>"
              "<div class='bar'>cockpit 2 · projectdetail · <a href='/'>home</a></div>"
