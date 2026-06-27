@@ -233,13 +233,13 @@ class ProjectLedger:
     def edit(self, pid: str, scope=None, owner: str | None = None,
              person: str | None = None, agent: str | None = None,
              private: bool | None = None, description: str | None = None,
-             label: str | None = None) -> bool:
+             label: str | None = None, allow_done: bool = False) -> bool:
         """Bewerk de inhoud van een project (scope, owner, trekker mens/AI, zichtbaarheid).
-        Status blijft ongemoeid. Inhoud bewerken mag ook bij een afgerond project (titel/omschrijving
-        van een done-project aanpassen is onschuldig). Lege strings voor person/agent wissen de
-        trekker; None laat het veld ongemoeid. Geeft True bij succes."""
+        Status blijft ongemoeid; done-projecten zijn standaard vergrendeld. Met `allow_done=True`
+        mag je inhoud (titel/omschrijving/...) van een afgerond project nog aanpassen. Lege strings
+        voor person/agent wissen de trekker; None laat het veld ongemoeid. Geeft True bij succes."""
         p = self._projects.get(pid)
-        if p is None:
+        if p is None or (p["status"] in _TERMINAL and not allow_done):
             return False
         if scope is not None and str(scope).strip():
             p["scope"] = scope

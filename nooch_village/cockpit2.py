@@ -1674,20 +1674,20 @@ def dispatch(data_dir: str, action: str, form: dict):
         if pj.add_comment(g("pid"), g("comment")):
             msg = "💬 geplaatst"
     elif action == "proj_rename":
-        if pj.edit(g("pid"), scope=g("scope")):
+        if pj.edit(g("pid"), scope=g("scope"), allow_done=True):
             msg = "✓ titel opgeslagen"
     elif action == "proj_describe":
-        if pj.edit(g("pid"), description=g("description")):
+        if pj.edit(g("pid"), description=g("description"), allow_done=True):
             msg = "✓ omschrijving opgeslagen"
     elif action == "proj_settrekker":
         person, agent = _parse_trekker(g("trekker"))
-        if pj.edit(g("pid"), person=person, agent=agent):
+        if pj.edit(g("pid"), person=person, agent=agent, allow_done=True):
             msg = "✓ trekker opgeslagen"
     elif action == "proj_setlabel":
-        if pj.edit(g("pid"), label=g("label")):
+        if pj.edit(g("pid"), label=g("label"), allow_done=True):
             msg = "✓ label opgeslagen"
     elif action == "proj_setprivate":
-        if pj.edit(g("pid"), private=(g("private") == "1")):
+        if pj.edit(g("pid"), private=(g("private") == "1"), allow_done=True):
             msg = "✓ zichtbaarheid opgeslagen"
     elif action == "attach_add":
         if pj.attach_add(g("pid"), url=g("url"), title=g("title")):
