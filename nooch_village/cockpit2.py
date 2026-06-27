@@ -190,6 +190,9 @@ ul.clean li:last-child{border-bottom:none}
 .pdisc .psec{background:none;border:none;padding:0;margin:0}
 .pdisc{background:var(--cream-2);border-radius:var(--radius);padding:.9rem;min-width:0}
 .comp-row .btn{padding:.25rem .85rem;font-size:.76rem;border-radius:var(--radius-pill)}
+.ai-ask{margin:.1rem 0 1rem}
+.ai-ask-btn{background:none;border:1px dashed var(--border);border-radius:var(--radius-pill);padding:.3rem .8rem;font-size:.78rem;color:var(--gray);cursor:pointer}
+.ai-ask-btn:hover{border-color:var(--green);color:var(--green-dark)}
 .comp-form{margin-bottom:1rem}
 .comp-tools{display:flex;gap:.3rem;margin-bottom:.35rem}
 .ctool{border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);padding:.1rem .55rem;font-size:.8rem;cursor:pointer;color:var(--gray)}
@@ -1199,6 +1202,11 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                     f"<div class='comp-row'>"
                     f"<button class='btn ok' type='submit' name='action' value='proj_feed'>Plaatsen</button>"
                     f"</div></form>")
+        ai = _owner_ai(st, orec)
+        if ai is not None:
+            composer += (f"<form method='post' action='/action' class='ai-ask'>{hid()}"
+                         f"<button class='ai-ask-btn' type='submit' name='action' value='ai_reply'>"
+                         f"🤖 Vraag {_e(ai.name)} om mee te denken</button></form>")
     discussie = _psec(_IC_CHAT, "Dialoog", composer + feed)   # schrijf-box boven, reacties eronder
 
     # ---- Status: chip in de header, wisselen via het …-menu (+ archiveren/verwijderen) ----
@@ -1467,6 +1475,49 @@ def render_aitask(st: _Stores, role_id: str, acc_index: int, csrf_token: str = "
     return _page("AI op accountability", f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>{main}</div>")
 
 
+def _owner_ai(st: _Stores, orec):
+    """De AI-inwoner (persona) die de eigenaar-rol vervult, of None."""
+    if orec is None:
+        return None
+    for f in st.assign.fillers_of(orec.id, record=orec):
+        if f.type == "persona":
+            return st.personas.get(f.id)
+    return None
+
+
+def _ai_reply(st: _Stores, pid: str, ask=None) -> bool:
+    """Laat de AI-inwoner van de eigenaar-rol kort meedenken in de dialoog (op verzoek).
+    `ask(prompt)->str|None` is injecteerbaar (test); standaard via llm.reason. Fail-closed."""
+    p = st.projects.get(pid)
+    if p is None:
+        return False
+    orec = st.records.get(p.get("owner"))
+    persona = _owner_ai(st, orec)
+    if persona is None:
+        return False
+    recent = "\n".join(f"- {m.get('text', '')}" for m in (p.get("log") or [])[-6:])
+    ctx = (f"Project: {_scope_text(p)}\n"
+           f"Omschrijving: {p.get('description', '') or '(geen)'}\n"
+           f"Rol: {_name(orec)} — purpose: {orec.definition.purpose}\n"
+           f"Recente dialoog:\n{recent or '(nog leeg)'}\n\n"
+           f"Reageer kort (max 4 zinnen) en concreet als deze rol: geef een volgende stap of inzicht.")
+    from nooch_village.personas import persona_prompt
+    prompt = (persona_prompt(persona) + "\n\n" + ctx).strip()
+    if ask is None:
+        try:
+            from nooch_village import llm
+            out = llm.reason(prompt, ladder=_match_ladder())
+        except Exception:
+            out = None
+    else:
+        out = ask(prompt)
+    if not out:
+        return False
+    st.projects.add_feed_entry(pid, out.strip(), kind="comment",
+                              author_type="persona", author_id=persona.id)
+    return True
+
+
 def _parse_trekker(val: str):
     """'person:<id>' of 'persona:<id>' → (person_id of '', agent_id of '')."""
     val = (val or "").strip()
@@ -1552,6 +1603,10 @@ def dispatch(data_dir: str, action: str, form: dict):
     elif action == "react_add":
         if pj.add_reaction(g("pid"), g("item"), g("emoji")):
             msg = "✓ reactie geplaatst"
+    elif action == "ai_reply":
+        _load_env()
+        msg = ("🤖 AI heeft meegedacht" if _ai_reply(st, g("pid"))
+               else "geen AI-antwoord (geen AI-inwoner op de rol of geen LLM-key)")
     elif action == "proj_feed":
         atype, _, aid = g("author").partition(":")
         atype = atype or "human"
@@ -1686,6 +1741,7 @@ def serve(host: str = "127.0.0.1", port: int = 8766, data_dir: str | None = None
     if host not in _LOCAL_HOSTS:
         raise SystemExit(f"Cockpit 2 weigert niet-lokale host '{host}'.")
     dd = data_dir or _default_data_dir()
+    _load_env()   # LLM-keys beschikbaar maken voor 'AI praat mee'
     _bootstrap(dd)
     csrf_token = secrets.token_urlsafe(32)
     httpd = ThreadingHTTPServer((host, port), make_handler(dd, csrf_token))

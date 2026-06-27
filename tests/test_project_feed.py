@@ -42,6 +42,24 @@ def test_feed_render_auteur_en_soort(tmp_path):
     assert "comp-form" in frag and "value='human:'" in frag
 
 
+def test_ai_praat_mee_op_verzoek(tmp_path):
+    dd, rid, pid, codie = _setup(tmp_path)
+    # knop zichtbaar omdat de eigenaar-rol een AI-inwoner heeft
+    frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
+    assert "ai-ask-btn" in frag and "Vraag Codie" in frag
+    # AI plaatst een reactie (LLM gestubd)
+    ok = cockpit2._ai_reply(cockpit2._Stores(dd), pid, ask=lambda prompt: "Stap 1: meet de conversie.")
+    assert ok
+    last = cockpit2._Stores(dd).projects.get(pid)["log"][-1]
+    assert last["author"] == {"type": "persona", "id": codie.id} and "Stap 1" in last["text"]
+
+
+def test_ai_praat_mee_zonder_inwoner(tmp_path):
+    dd, rid, pid, codie = _setup(tmp_path)
+    pid2 = cockpit2._Stores(dd).projects.create("mother_earth__nooch__circle_lead", "X", "human")
+    assert cockpit2._ai_reply(cockpit2._Stores(dd), pid2, ask=lambda p: "x") is False
+
+
 def test_oude_log_entries_blijven_leesbaar(tmp_path):
     dd, rid, pid, codie = _setup(tmp_path)
     st = cockpit2._Stores(dd)
