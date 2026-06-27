@@ -141,8 +141,11 @@ ul.clean li:last-child{border-bottom:none}
 .emoji-pick>summary{list-style:none;cursor:pointer;font-size:1rem;opacity:.5;line-height:1}
 .emoji-pick>summary::-webkit-details-marker{display:none}
 .emoji-pick[open]>summary,.emoji-pick>summary:hover{opacity:1}
-.emoji-pop{position:absolute;left:0;top:1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.3rem;display:flex;gap:.1rem;z-index:6}
-.emo{border:none;background:none;cursor:pointer;font-size:1.05rem;padding:.15rem .25rem;border-radius:var(--radius)}
+.emoji-pop{position:absolute;left:0;top:1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.4rem;z-index:6;width:230px}
+.emo-search{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .45rem;margin-bottom:.35rem;font-size:.82rem}
+.emo-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:.1rem;max-height:170px;overflow:auto}
+.emo-f{display:inline}
+.emo{border:none;background:none;cursor:pointer;font-size:1.05rem;padding:.15rem;border-radius:var(--radius);width:100%}
 .emo:hover{background:var(--cream-2)}
 .fstamp{color:var(--subtle);font-size:.72rem;flex:0 0 auto}
 .av.role{background:var(--green-dark);color:#fff}
@@ -755,6 +758,9 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "t.value=pre+s.slice(c);t.focus();t.selectionStart=t.selectionEnd=pre.length;close();});box.appendChild(b);});"
         "t.parentNode.style.position='relative';t.parentNode.appendChild(box);});"
         "t.addEventListener('blur',function(){setTimeout(close,200);});}"
+        "window.emoFilter=function(inp){var q=inp.value.toLowerCase();"
+        "inp.parentNode.querySelectorAll('.emo-f').forEach(function(f){"
+        "var k=f.getAttribute('data-k')||'';f.style.display=(!q||k.indexOf(q)>-1)?'':'none';});};"
         "function frag(u){return u+(u.indexOf('?')>-1?'&':'?')+'fragment=1';}"
         "function openCard(u){last=u;"
         "fetch(frag(u)).then(function(r){return r.text();}).then(function(h){bd.innerHTML=h;ov.style.display='flex';wire();});}"
@@ -1128,7 +1134,22 @@ def _hilite_mentions(html: str, names) -> str:
     return html
 
 
-_EMOJIS = ["👍", "🎉", "❤️", "😄", "🙏", "👀"]   # standaard emoji's voor een snelle reactie
+# Gecureerde set standaard emoji's met zoekwoorden (NL/EN) voor de picker.
+_EMOJIS_FULL = [
+    ("👍", "duim like goed prima"), ("👎", "duim slecht nee"), ("🙏", "dank bedankt please"),
+    ("👏", "applaus klap"), ("🙌", "hoera yes"), ("💪", "sterk kracht power"), ("🤝", "deal akkoord hand"),
+    ("😀", "blij lach happy"), ("😂", "lachen lol"), ("😉", "knipoog wink"), ("😍", "liefde hart love"),
+    ("😎", "cool stoer"), ("🤔", "denken hmm"), ("😮", "wow verbaasd"), ("😢", "verdrietig sad"),
+    ("😡", "boos angry"), ("🥳", "feest party"), ("😴", "slaap moe"),
+    ("❤️", "hart liefde love rood"), ("💚", "hart groen"), ("💙", "hart blauw"),
+    ("🔥", "vuur top fire"), ("⭐", "ster top star"), ("✨", "sprankel magie"),
+    ("🎉", "feest party hoera"), ("🎊", "confetti"), ("✅", "check klaar done ok"), ("❌", "kruis fout nee"),
+    ("⚠️", "waarschuwing let op warning"), ("❓", "vraag question"), ("❗", "uitroep belangrijk"),
+    ("💡", "idee lamp insight"), ("🚀", "raket snel launch"), ("📈", "omhoog groei up"),
+    ("📉", "omlaag daling down"), ("💰", "geld money"), ("⏰", "tijd klok deadline"), ("📌", "pin belangrijk"),
+    ("🌱", "groei plant duurzaam"), ("🌍", "aarde wereld earth"), ("♻️", "recycle duurzaam"),
+    ("👀", "kijk ogen"), ("🤖", "ai robot"), ("🙂", "glimlach"),
+]
 
 
 def _feed_entry_html(st: _Stores, entry: dict, role_name: str = "",
@@ -1146,15 +1167,17 @@ def _feed_entry_html(st: _Stores, entry: dict, role_name: str = "",
     eid = entry.get("id")
     if csrf_token and eid:
         btns = "".join(
-            f"<form method='post' action='/action' style='display:inline'>"
+            f"<form method='post' action='/action' class='emo-f' data-k='{_e(kw)}' style='display:inline'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='pid' value='{_e(pid)}'>"
             f"<input type='hidden' name='item' value='{_e(eid)}'>"
             f"<input type='hidden' name='emoji' value='{emo}'>"
-            f"<button class='emo' type='submit' name='action' value='react_add'>{emo}</button></form>"
-            for emo in _EMOJIS)
+            f"<button class='emo' type='submit' name='action' value='react_add' title='{_e(kw)}'>{emo}</button></form>"
+            for emo, kw in _EMOJIS_FULL)
         picker = (f"<details class='emoji-pick'><summary class='emoji-add' title='reactie'>🙂</summary>"
-                  f"<div class='emoji-pop'>{btns}</div></details>")
+                  f"<div class='emoji-pop'>"
+                  f"<input class='emo-search' type='text' placeholder='Zoek emoji…' oninput='emoFilter(this)'>"
+                  f"<div class='emo-grid'>{btns}</div></div></details>")
     bubble = _md(entry.get("text", ""))
     if mention_names:
         bubble = _hilite_mentions(bubble, mention_names)

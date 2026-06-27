@@ -81,6 +81,11 @@ def test_emoji_reactie(tmp_path):
     assert cockpit2._Stores(dd).projects.get(pid)["log"][0]["reactions"] == {"👍": 2}
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "emoji-pick" in frag and "class='rx'" in frag and "👍 2" in frag
+    # zoekbare picker met gecureerde set
+    assert "emo-search" in frag and "emo-grid" in frag and "🚀" in frag
+    node = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth__nooch__website_developer",
+                                "projects", csrf_token="t")
+    assert "emoFilter" in node
 
 
 def test_done_project_blijft_bewerkbaar(tmp_path):
