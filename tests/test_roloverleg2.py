@@ -91,11 +91,15 @@ def test_sluiten_voert_consented_door(tmp_path):
 
 def test_agenda_initialen_en_geen_kindlabel(tmp_path):
     dd = _dd(tmp_path)
-    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "by": ["SW"], "next": ["/"]})
+    # initialen komen uit de tekst: '-SW' achteraan
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer -SW"], "next": ["/"]})
+    it = cockpit2._Stores(dd).agenda.open()[0]
+    assert it["title"] == "Website Developer" and it.get("by") == "SW"
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
-    assert "ingebracht door SW" in frag and ">SW<" in frag       # initialen-avatar
-    assert "rov-kind" not in frag                                # kind-label weg uit de lijst
+    assert "door SW" in frag and ">SW<" in frag                  # initialen-avatar
+    assert "rov-kind" not in frag and "chip muted'>open" not in frag   # geen kind-label/open-chip
     assert "list='rov-roles'" in frag and "<datalist" in frag    # smart-search
+    assert "name='by'" not in frag                               # los initialen-veld weg
 
 
 def test_secretaris_inline_en_consent(tmp_path):

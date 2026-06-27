@@ -171,10 +171,11 @@ ul.clean li:last-child{border-bottom:none}
 .rov-link{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;text-decoration:none;color:var(--ink)}
 .rov-title{font-weight:600}
 .rov-kind{font-size:.68rem;flex-basis:100%}
-@media(min-width:620px){.rov-grid{grid-template-columns:minmax(0,150px) minmax(0,1fr)}}
-.rov-add{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem}
+@media(min-width:620px){.rov-grid{grid-template-columns:minmax(0,130px) minmax(0,1fr)}}
+.rov-add{display:flex;gap:.4rem;margin-bottom:.6rem}
 .rov-add input{flex:1 1 auto;min-width:0;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem}
-.rov-add .rov-init{flex:0 0 5rem}
+.rov-item.done .rov-title{text-decoration:line-through;color:var(--muted)}
+.rov-by{font-size:.6rem;width:auto;min-width:1.4rem;padding:0 .25rem;height:1.4rem;display:inline-flex;align-items:center;justify-content:center}
 .rov-foot{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--border);padding:.7rem 0 .2rem;margin-top:1rem;display:flex;justify-content:flex-start}
 .rov-editor input[name=value]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem}
 .rov-block{margin-top:.8rem}
@@ -1192,11 +1193,24 @@ def _rov_children(st: _Stores, circle_id: str):
 
 
 def _rov_items(st: _Stores, circle_id: str):
-    """Open agendapunten die bij het roloverleg van DEZE cirkel horen (eigen kinderen of een
-    nieuwe rol onder deze cirkel)."""
+    """Alle agendapunten van DEZE cirkel (open + behandeld), voor de lijst en de groene knop."""
     cids = {r.id for r in _rov_children(st, circle_id)}
-    return [it for it in st.agenda.open()
-            if it.get("role_id") in cids or it.get("change", {}).get("new_role_parent") == circle_id]
+    return [it for it in st.agenda.all()
+            if it.get("status") in ("open", "objected", "consented")
+            and (it.get("role_id") in cids or it.get("change", {}).get("new_role_parent") == circle_id)]
+
+
+def _rov_open(st: _Stores, circle_id: str):
+    """Nog onbehandelde agendapunten (voor selectie en auto-door-naar-volgend)."""
+    return [it for it in _rov_items(st, circle_id) if it.get("status") != "consented"]
+
+
+def _rov_initials(text: str):
+    """Splits een trailing '-SW' / '-JvdP' als initialen af. Geeft (rest, initialen)."""
+    m = re.search(r"\s*-\s*([A-Za-z][A-Za-z.]{0,6})\s*$", text or "")
+    if m:
+        return text[:m.start()].strip(), m.group(1)
+    return (text or "").strip(), ""
 
 
 def _rov_hard(st: _Stores, item: dict):
@@ -1208,6 +1222,27 @@ def _rov_hard(st: _Stores, item: dict):
         out.append("Geef de rol een naam.")
     if not [a for a in d.get("accs", []) if a.strip()]:
         out.append("Een rol heeft minstens één accountability nodig.")
+    return out
+
+
+def _rov_signals(st: _Stores, item: dict):
+    """Secretaris-signalen tijdens het overleg (advies, niet-blokkerend): domein-botsing (G1),
+    accountability-duplicaat bij een ándere rol (G2), verweesd werk (G3), mechanische purpose (G0),
+    plus de lichte checks (-en-vorm, duplicaat binnen de rol, rijpheid)."""
+    from nooch_village.roloverleg import _proposal_from_item, secretary_check
+    from nooch_village.governance import Gate
+    g, c = Gate(), _proposal_from_item(item).change
+    out = []
+    for label, fn in (("Domein-botsing", g._g1), ("Dubbele accountability", g._g2),
+                      ("Verweesd werk", g._g3)):
+        ok, reason = fn(c, st.records)
+        if not ok:
+            out.append({"level": "let op", "msg": f"{label}: {reason}"})
+    if (c.purpose or "").strip().lower().startswith("beheert en bewaakt "):
+        out.append({"level": "let op",
+                    "msg": "Purpose lijkt een woordcluster ('Beheert en bewaakt …'); "
+                           "beschrijf een echte functie."})
+    out += [i for i in secretary_check(item, st.records) if i["level"] == "let op"]
     return out
 
 
@@ -1282,11 +1317,10 @@ def _rov_editor(st: _Stores, item: dict, csrf: str, back: str, circle_id: str = 
     """Editor van één voorstel: naam, purpose, domeinen, accountabilities (losse velden + kruisje).
     Wijzigingen zijn direct zichtbaar (geen opslaan-knop); de change wordt live herberekend.
     Secretaris-check live: feedback per accountability + algemeen; consent op slot bij blokkade."""
-    from nooch_village.roloverleg import secretary_check
     draft = _rov_draft(st, item)
     iid = item["id"]
     # Advies (niet-blokkerend) van de secretaris + de harde mens-regel (naam + >=1 accountability).
-    advies = [i for i in secretary_check(item, st.records) if i["level"] == "let op"]
+    advies = _rov_signals(st, item)
     acc_issues, general = {}, []
     for iss in advies:
         hit = next((a for a in draft["accs"] if a and a[:40].lower() in iss["msg"].lower()), None)
@@ -1368,43 +1402,43 @@ def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: s
                 else _page("Niet gevonden", "<p>Onbekend.</p>"))
     base = f"/roloverleg2?circle={circle_id}"
     roles = sorted(_rov_children(st, circle_id), key=lambda r: _name(r).lower())
-    items = _rov_items(st, circle_id)
 
     def hid(nextu):
         return (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                 f"<input type='hidden' name='circle' value='{_e(circle_id)}'>"
                 f"<input type='hidden' name='next' value='{_e(nextu)}'>")
 
-    # Agenda-lijst (checklist-pattern): status-chip + titel + soort, klikbaar.
-    active = iid or (items[0]["id"] if items else "")
+    # Agenda-lijst: alles op de agenda; behandeld = doorgestreept; geen 'open'-chip; initialen achteraan.
+    items_all = _rov_items(st, circle_id)
+    items_open = _rov_open(st, circle_id)
+    active = iid or (items_open[0]["id"] if items_open else "")
     rows = ""
-    for it in items:
-        on = " on" if it["id"] == active else ""
-        chip = "<span class='chip green'>aangenomen</span>" if it["status"] == "consented" else "<span class='chip muted'>open</span>"
+    for it in items_all:
+        done = it.get("status") == "consented"
+        cls = "rov-item" + (" on" if it["id"] == active else "") + (" done" if done else "")
         url = f"{base}&iid={it['id']}"
         rm = (f"<form method='post' action='/action' style='display:inline'>{hid(base)}"
               f"<input type='hidden' name='iid' value='{_e(it['id'])}'>"
               f"<button class='flink' type='submit' name='action' value='rov2_remove'>✕</button></form>")
         by = (it.get("by") or "").strip()
-        av = f"<span class='av rov-by' title='ingebracht door {_e(by)}'>{_e(by[:2].upper())}</span>" if by and by != "founder" else ""
-        rows += (f"<div class='rov-item{on}'><a class='js-modal rov-link' href='{url}' data-href='{url}'>"
-                 f"{chip} <span class='rov-title'>{_e(it.get('title') or it.get('role_id'))}</span></a>"
+        av = f"<span class='av rov-by' title='door {_e(by)}'>{_e(by)}</span>" if by and by != "founder" else ""
+        rows += (f"<div class='{cls}'><a class='js-modal rov-link' href='{url}' data-href='{url}'>"
+                 f"<span class='rov-title'>{_e(it.get('title') or it.get('role_id'))}</span></a>"
                  f"{av}{rm}</div>")
     if not rows:
         rows = "<p class='muted'>Nog geen agendapunten.</p>"
 
-    # Toevoegen boven de lijst; smart-search (datalist) op bestaande rollen; + initialen van de indiener.
+    # Toevoegen boven de lijst; minimalistisch: één veld (Enter of '+'); smart-search op bestaande rollen.
     dl = "".join(f"<option value='{_e(_name(r))}'>" for r in roles)
     add = (f"<form method='post' action='/action' class='rov-add'>{hid(base)}"
-           f"<input name='naam' list='rov-roles' placeholder='Rol (bestaand of nieuw)…' autocomplete='off'>"
+           f"<input name='naam' list='rov-roles' placeholder='Rol… (-SW voor initialen)' autocomplete='off'>"
            f"<datalist id='rov-roles'>{dl}</datalist>"
-           f"<input name='by' class='rov-init' placeholder='jij (bv. SW)' maxlength='4'>"
-           f"<button class='btn ok sm' type='submit' name='action' value='rov2_add'>Toevoegen</button></form>")
+           f"<button class='btn ok sm' type='submit' name='action' value='rov2_add'>+</button></form>")
     left = _psec(_IC_CHECK, "Agenda", f"{add}<div class='rov-list'>{rows}</div>")
 
     # Rechts: editor van het geselecteerde voorstel; geen iid -> auto-selecteer het eerste open punt
     # (zo land je na consent vanzelf op het volgende).
-    sel = next((it for it in items if it["id"] == iid), None) or (items[0] if items else None)
+    sel = next((it for it in items_all if it["id"] == iid), None) or (items_open[0] if items_open else None)
     if sel:
         right = _rov_editor(st, sel, csrf_token, f"{base}&iid={sel['id']}", circle_id=circle_id)
     else:
@@ -2264,8 +2298,7 @@ def dispatch(data_dir: str, action: str, form: dict):
             msg = "✓ skill aan rugzak toegevoegd"
     elif action == "rov2_add":
         circle = g("circle")
-        naam = (g("naam") or "").strip()
-        by = (g("by") or "").strip()[:4]
+        naam, by = _rov_initials(g("naam"))   # '-SW' achteraan = initialen
         if naam:
             children = _rov_children(st, circle)
             match = next((r for r in children if _name(r).lower() == naam.lower()), None)
