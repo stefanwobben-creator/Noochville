@@ -135,20 +135,64 @@ def test_consent_en_auto_volgend(tmp_path):
     assert "Financial Controller" in frag and "rov-editor" in frag
 
 
-def test_ai_kladblok(tmp_path):
+def test_ai_assistent_footer_en_chatvenster(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
+    # AI-knop staat rechts in de footer (geen inline kladblok meer in de editor)
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
-    assert "kbblok" in frag and "Meedenken met AI" in frag and "rov2_kladblok" in frag
-    # AI-helper (gestubd) denkt mee op basis van het voorstel
-    out = cockpit2._rov_ai_kladblok(cockpit2._Stores(dd), cockpit2._Stores(dd).agenda.get(iid),
-                                    ask=lambda p: "Scherpe vraag")
-    assert out == "Scherpe vraag"
+    assert "rovchat-toggle" in frag and "AI-assistent" in frag and "chat=1" in frag
+    assert "kbblok" not in frag                              # geen ingeklapt kladblok in de editor
+    # chat=1 -> chatvenster met de twee modi (eerst vragen waar je hulp bij wilt)
+    win = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True, chat=True)
+    assert "rovchat" in win and "Waar kan ik mee helpen?" in win
+    assert "Spanning verhelderen" in win and "Accountability formuleren" in win
+
+
+def test_ai_helper_mode_bewust(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
+    iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
+    item = cockpit2._Stores(dd).agenda.get(iid)
+    # spanning-modus stelt vragen; accountability-modus formuleert (-en-vorm)
+    p_span = cockpit2._rov_ai_kladblok(cockpit2._Stores(dd), item, mode="spanning", ask=lambda p: p)
+    p_acc = cockpit2._rov_ai_kladblok(cockpit2._Stores(dd), item, mode="accountability", ask=lambda p: p)
+    assert "verhelderen" in p_span and "scherpe vragen" in p_span
+    assert "accountability te formuleren" in p_acc and "-en-vorm" in p_acc
+
+
+def test_chat_start_en_kladblok(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
+    iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
+    cockpit2.dispatch(dd, "rov2_chat_start", {"iid": [iid], "mode": ["spanning"], "next": ["/"]})
+    assert cockpit2._Stores(dd).agenda.get(iid).get("chatmode") == "spanning"
     # jouw bericht wordt opgeslagen (AI faalt closed zonder key)
     cockpit2.dispatch(dd, "rov2_kladblok", {"iid": [iid], "text": ["even sparren"], "next": ["/"]})
     kb = cockpit2._Stores(dd).agenda.get(iid).get("kladblok")
-    assert kb and kb[0]["who"] == "jij" and kb[0]["text"] == "even sparren"
+    assert kb and kb[-1]["who"] == "jij" and kb[-1]["text"] == "even sparren"
+    # reset -> terug naar de keuze
+    cockpit2.dispatch(dd, "rov2_chat_start", {"iid": [iid], "mode": ["reset"], "next": ["/"]})
+    assert cockpit2._Stores(dd).agenda.get(iid).get("chatmode") == ""
+
+
+def test_accountability_dubbel_check(tmp_path):
+    dd = _dd(tmp_path)
+    # een bestaande accountability bij een ándere rol vinden we terug
+    st = cockpit2._Stores(dd)
+    existing = ""
+    for r in st.records.all():
+        if r.definition.accountabilities:
+            existing = r.definition.accountabilities[0]; break
+    hits = cockpit2._rov_dupes(st, existing)
+    assert hits and hits[0][1] == existing
+    # in accountability-modus plaatst de assistent een ⚠-check bij een dubbele formulering
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Data Analist"], "next": ["/"]})
+    iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
+    cockpit2.dispatch(dd, "rov2_chat_start", {"iid": [iid], "mode": ["accountability"], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_kladblok", {"iid": [iid], "text": [existing], "next": ["/"]})
+    kb = cockpit2._Stores(dd).agenda.get(iid).get("kladblok")
+    assert any(m.get("who") == "note" for m in kb)
 
 
 def test_rol_verwijderen_via_overleg(tmp_path):
