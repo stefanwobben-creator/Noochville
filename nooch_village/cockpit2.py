@@ -526,7 +526,7 @@ def _trekker_options(st: _Stores, sel_person="", sel_agent="") -> str:
 
 
 _PROJ_COLS = [("Actief", "actief", ("running", "queued")), ("Wacht", "wacht", ("blocked",)),
-              ("Toekomst", "toekomst", ("future",)), ("Done", "done", ("done",))]
+              ("Done", "done", ("done",)), ("Toekomst", "toekomst", ("future",))]
 
 
 _LABELS = {"groen": "#1F9D55", "geel": "#FFCE2E", "koraal": "#FF6B5B",
@@ -805,9 +805,7 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "") -> st
             f"flex-wrap:wrap;gap:.6rem;margin-bottom:1rem'>"
             f"<div><h3 style='margin:0;display:inline'>Projecten ({len(projs)})</h3> &nbsp; {addlink}</div>"
             f"{switch}</div>")
-    note = ("<p class='muted' style='font-size:.8rem;margin:-.6rem 0 .6rem'>Een cirkel doet zelf "
-            "geen werk: projecten horen bij de rollen of bij Individual Initiative.</p>")
-    return f"<div class='c2-sec'>{head}{note}{board}{sub_html}</div>"
+    return f"<div class='c2-sec'>{head}{board}{sub_html}</div>"
 
 
 def _person_projects_html(st: _Stores, pid: str) -> str:
@@ -1305,6 +1303,7 @@ def dispatch(data_dir: str, action: str, form: dict):
             msg = "➕ project toegevoegd"
     elif action == "proj_status":
         to = g("to")
+        pj.reopen(g("pid"))   # was het 'done', haal dat er eerst af zodat heractiveren kan
         if to == "actief":
             pj.start(g("pid"))
         elif to == "wacht":

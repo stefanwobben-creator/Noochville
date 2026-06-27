@@ -248,11 +248,13 @@ def test_circle_toont_directe_rollen_plus_ii(tmp_path):
     cockpit2._bootstrap(dd)
     cockpit2.dispatch(dd, "proj_add", {"owner": ["mother_earth__nooch__website_developer"],
                                        "scope": ["Rolproject"], "col": ["actief"], "next": ["/"]})
+    # Individual Initiative: een project direct onder de cirkel via de ii:-pseudo-eigenaar
+    cockpit2.dispatch(dd, "proj_add", {"owner": ["ii:mother_earth__nooch"],
+                                       "scope": ["Eigen initiatief"], "col": ["actief"], "next": ["/"]})
     page = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth__nooch", "projects",
                                 csrf_token="t", group="rol")
     assert "Rolproject" in page and "Website Developer" in page and "swim-h" in page
-    assert "Individual Initiative" in page           # II-lane altijd aanwezig
-    assert "doet zelf geen werk" in page             # cirkel-uitleg
+    assert "Individual Initiative" in page and "Eigen initiatief" in page   # II-lane bij een II-project
 
 
 def test_circle_aggregeert_geen_subcirkel(tmp_path):

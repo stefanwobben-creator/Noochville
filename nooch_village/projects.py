@@ -113,6 +113,18 @@ class ProjectLedger:
         self._save()
         return True
 
+    def reopen(self, pid: str) -> bool:
+        """Heropen een afgerond project: haal 'done' eraf zodat het weer naar actief/wacht/toekomst
+        kan. No-op als het project niet bestaat of niet afgerond is."""
+        p = self._projects.get(pid)
+        if p is None or p["status"] not in _TERMINAL:
+            return False
+        p["status"] = "running"
+        p["outcome"] = None
+        self._touch(p)
+        self._save()
+        return True
+
     def block(self, pid: str, on_role: str) -> bool:
         p = self._projects.get(pid)
         if p is None or p["status"] in _TERMINAL:
