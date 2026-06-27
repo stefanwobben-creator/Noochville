@@ -55,10 +55,10 @@ def test_projecten_tab_kolommen_en_inline_add(tmp_path):
     cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Sleepbaar"], "col": ["actief"],
                                        "next": ["/"]})
     page = cockpit2.render_node(cockpit2._Stores(dd), role, "projects", csrf_token="t")
-    # statuskolommen (Trello-stijl) + inline toevoegen + slepen
+    # statuskolommen (Trello-stijl) in een niet-lege lane + slepen + top-level toevoegen
     for col in ("Actief", "Wacht", "Toekomst", "Done"):
         assert col in page
-    assert "proj_add" in page and "+ project toevoegen" in page
+    assert "proj_add" in page and "➕ project" in page       # top-level add (geen per-kolom-add)
     assert "data-to='toekomst'" in page and "draggable" in page.lower()
     assert "data-href=" in page                 # kaart klikbaar naar detail
 
@@ -221,6 +221,14 @@ def test_individual_initiative_owner(tmp_path):
     assert "Ad hoc stunt" in page and "Individual Initiative" in page
 
 
+def test_leeg_bord_toont_geen_lege_lanes(tmp_path):
+    # lege rol: geen swimlane-ruis, wel een '+ project'
+    st = _st(tmp_path)
+    page = cockpit2.render_node(st, "mother_earth__nooch__circle_rep", "projects", csrf_token="t")
+    assert "<div class='swim'>" not in page       # geen lege lanes gerenderd
+    assert "Nog geen projecten" in page and "➕ project" in page
+
+
 def test_modal_overlay_en_fragment(tmp_path):
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
@@ -234,8 +242,8 @@ def test_modal_overlay_en_fragment(tmp_path):
     # fragment = alleen de detail-inhoud, geen volledige pagina
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "<!doctype" not in frag.lower() and "Modaltest" in frag and "Checklist" in frag
-    # kolommen scrollen (pcol-scroll) en de '+ project' zit als ghost-summary in de kolom
-    assert "pcol-scroll" in board and "qadd" in board
+    # kolommen scrollen (pcol-scroll) en er is een top-level '+ project'
+    assert "pcol-scroll" in board and "addproj" in board
 
 
 def test_project_archiveren_default(tmp_path):

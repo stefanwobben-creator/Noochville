@@ -89,6 +89,9 @@ ul.clean li:last-child{border-bottom:none}
 .qadd-form textarea{width:100%;box-sizing:border-box;padding:.45rem .55rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow);font:inherit;font-size:.85rem;resize:vertical}
 .qadd-row{display:flex;align-items:center;gap:.4rem}
 .qadd-x{background:none;border:none;font-size:1rem;color:var(--gray);cursor:pointer;padding:.1rem .3rem}
+.addproj>summary{list-style:none;cursor:pointer}
+.addproj>summary::-webkit-details-marker{display:none}
+.addproj[open]>summary{margin-bottom:.2rem}
 .ovl{position:fixed;inset:0;background:rgba(27,27,27,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center}
 .ovl-box{background:var(--surface);max-width:720px;width:92%;margin:4vh auto;border-radius:12px;padding:1.3rem 1.5rem;max-height:88vh;overflow:auto;position:relative;box-shadow:0 12px 48px rgba(27,27,27,.35)}
 .ovl-x{position:absolute;top:.5rem;right:.7rem;border:none;background:none;font-size:1.2rem;cursor:pointer;color:var(--gray)}
@@ -509,23 +512,20 @@ def _group_meta(st: _Stores, p: dict, mode: str, node_owner: str):
 
 
 def _projects_board(st: _Stores, projs: list, owner: str, csrf_token: str, back: str,
-                    group: str = "persoon", seed: list | None = None, add: bool = True) -> str:
-    """Swimlanes per groep. `seed` = altijd te tonen lanes (gid, sk, label, add_owner, add_trekker),
-    ook leeg (zodat je per rol/persoon direct kunt toevoegen). `add` zet de '+ project'-knop aan."""
+                    group: str = "persoon") -> str:
+    """Swimlanes per groep — alleen NIET-lege lanes (lege boards zijn ruis). Lege return → ''."""
     mode = group if group in ("persoon", "rol") else "persoon"
     groups: dict = {}
-    for gid, sk, label, ao, at in (seed or []):
-        groups[gid] = {"sk": sk, "label": label, "items": [], "ao": ao, "at": at}
     for p in projs:
         gid, sk, label, ao, at = _group_meta(st, p, mode, owner)
         g = groups.setdefault(gid, {"sk": sk, "label": label, "items": [], "ao": ao, "at": at})
         g["items"].append(p)
     if not groups:
-        return _columns_html(st, [], owner, "", csrf_token, back, quickadd=add) + _drag_script(csrf_token, back)
+        return ""
     board = ""
     for gid, g in sorted(groups.items(), key=lambda kv: kv[1]["sk"]):
         board += (f"<div class='swim'><div class='swim-h'>{_e(g['label'])} ({len(g['items'])})</div>"
-                  f"{_columns_html(st, g['items'], g['ao'], g['at'], csrf_token, back, quickadd=add)}"
+                  f"{_columns_html(st, g['items'], g['ao'], g['at'], csrf_token, back, quickadd=False)}"
                   f"</div>")
     return board + _drag_script(csrf_token, back)
 
@@ -553,35 +553,68 @@ def _archived_html(st: _Stores, archived: list, csrf_token: str, back: str) -> s
             f"<ul class='clean'>{rows}</ul></details>")
 
 
+def _add_project_form(st: _Stores, rec, csrf_token: str, back: str) -> str:
+    """'+ project' op bordniveau (GlassFrog Add Project): titel + rol + persoon + status.
+    Op een cirkel kies je de rol (directe rollen + Individual Initiative); op een rol staat die vast."""
+    if not csrf_token:
+        return ""
+    is_c = org.is_circle(rec)
+    if is_c:
+        direct = sorted(org.roles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
+        opts = "".join(f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>" for r in direct)
+        opts += f"<option value='{_II_PREFIX}{_e(rec.id)}'>Individual Initiative</option>"
+        role_field = f"<label>Rol</label><select name='owner'>{opts}</select>"
+    else:
+        role_field = (f"<input type='hidden' name='owner' value='{_e(rec.id)}'>"
+                      f"<label>Rol</label><div class='muted'>{_e(_name(rec))}</div>")
+    return (
+        "<details class='addproj'><summary class='btn ok'>➕ project</summary>"
+        "<div class='pf' style='max-width:560px;margin-top:.5rem'>"
+        "<form method='post' action='/action'>"
+        f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+        f"<input type='hidden' name='next' value='{_e(back)}'>"
+        "<label>Te bereiken uitkomst</label>"
+        "<input name='scope' placeholder='bijv. Productpagina met Product Passport live'>"
+        f"{role_field}"
+        f"<label>Trekker (persoon of AI-agent)</label><select name='trekker'>{_trekker_options(st)}</select>"
+        "<label>Status</label><select name='col'>"
+        "<option value='actief'>Actief</option><option value='wacht'>Wacht</option>"
+        "<option value='toekomst'>Toekomst</option></select>"
+        "<div style='margin-top:.5rem'>"
+        "<button class='btn ok' type='submit' name='action' value='proj_add'>Opslaan</button> "
+        "<button type='button' class='btn' onclick=\"this.closest('details').open=false\">Annuleren</button>"
+        "</div></form></div></details>")
+
+
 def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "") -> str:
     allp = st.projects.all()
     back_base = f"/node?id={rec.id}&tab=projects"
 
+    addbtn = _add_project_form(st, rec, csrf_token, back_base)
+
     if not org.is_circle(rec):
-        # ROL: eigen projecten, gegroepeerd per persoon (de doener). Een rol 'doet' niet, een
-        # persoon pakt een project op; geen trekker = nog niet opgepakt.
+        # ROL: eigen projecten, gegroepeerd per persoon (de doener). Lege lanes tonen we niet.
         projs = [p for p in allp if p.get("owner") == rec.id and not p.get("archived")]
         archived = [p for p in allp if p.get("owner") == rec.id and p.get("archived")]
-        seed = [(("none",), "2", "Geen trekker", rec.id, "")]
-        body = _projects_board(st, projs, rec.id, csrf_token, back_base, "persoon", seed=seed, add=True)
-        body += _archived_html(st, archived, csrf_token, back_base)
-        head = f"<h3 style='margin:0 0 1rem'>Projecten ({len(projs)})</h3>"
-        return f"<div class='c2-sec'>{head}{body}</div>"
+        board = _projects_board(st, projs, rec.id, csrf_token, back_base, "persoon")
+        if not board:
+            board = "<p class='muted'>Nog geen projecten. Voeg er een toe met ➕ project.</p>"
+        head = (f"<div style='display:flex;align-items:center;justify-content:space-between;"
+                f"flex-wrap:wrap;gap:.4rem;margin-bottom:1rem'>"
+                f"<h3 style='margin:0'>Projecten ({len(projs)})</h3>{addbtn}</div>")
+        return f"<div class='c2-sec'>{head}{board}{_archived_html(st, archived, csrf_token, back_base)}</div>"
 
-    # CIRKEL: doet zelf geen uitvoerend werk. Toont de projecten van haar DIRECTE rollen +
-    # Individual Initiative. Subcirkels = aparte rollen met een eigen bord (niet aggregeren).
+    # CIRKEL: doet zelf geen uitvoerend werk. Toont projecten van haar DIRECTE rollen +
+    # Individual Initiative. Lege lanes tonen we niet; subcirkels = eigen bord (niet aggregeren).
     g = group if group in ("persoon", "rol") else "rol"
     direct = sorted(org.roles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
     rids = {r.id for r in direct}
     ii = f"{_II_PREFIX}{rec.id}"
     projs = [p for p in allp if (p.get("owner") in rids or p.get("owner") == ii) and not p.get("archived")]
     back = f"{back_base}&group={g}"
-    if g == "rol":
-        seed = [(("rol", r.id), _name(r).lower(), _name(r), r.id, "") for r in direct]
-        seed.append((("ii", ii), "zzz", "Individual Initiative", ii, ""))
-        board = _projects_board(st, projs, rec.id, csrf_token, back, "rol", seed=seed, add=True)
-    else:
-        board = _projects_board(st, projs, rec.id, csrf_token, back, "persoon", add=False)
+    board = _projects_board(st, projs, rec.id, csrf_token, back, g)
+    if not board:
+        board = "<p class='muted'>Nog geen projecten. Voeg er een toe met ➕ project.</p>"
     subs = sorted(org.subcircles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
     sub_html = ""
     if subs:
@@ -595,8 +628,9 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "") -> st
               f"<a class='vbtn{on('rol')}' href='{back_base}&group=rol'>per rol</a>"
               f"<a class='vbtn{on('persoon')}' href='{back_base}&group=persoon'>per persoon</a></div>")
     head = (f"<div style='display:flex;align-items:center;justify-content:space-between;"
-            f"flex-wrap:wrap;gap:.4rem;margin-bottom:1rem'>"
-            f"<h3 style='margin:0'>Projecten ({len(projs)})</h3>{switch}</div>")
+            f"flex-wrap:wrap;gap:.6rem;margin-bottom:1rem'>"
+            f"<h3 style='margin:0'>Projecten ({len(projs)})</h3>"
+            f"<div style='display:flex;gap:.6rem;align-items:center;flex-wrap:wrap'>{switch}{addbtn}</div></div>")
     note = ("<p class='muted' style='font-size:.8rem;margin:-.6rem 0 .6rem'>Een cirkel doet zelf "
             "geen werk: projecten horen bij de rollen of bij Individual Initiative.</p>")
     return f"<div class='c2-sec'>{head}{note}{board}{sub_html}</div>"
