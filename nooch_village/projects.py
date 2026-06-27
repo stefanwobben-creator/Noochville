@@ -50,7 +50,8 @@ class ProjectLedger:
                status: str = "queued", origin: str = "",
                dod_outcome: str = "", done_when: str = "", goes_to: str = "",
                links: list[str] | None = None, parent: str | None = None,
-               person: str | None = None) -> str:
+               person: str | None = None, agent: str | None = None,
+               private: bool = False) -> str:
         if trigger not in _VALID_TRIGGERS:
             raise ValueError(f"ongeldig trigger: '{trigger}'")
         if status not in ("queued", "draft", "future"):
@@ -65,6 +66,9 @@ class ProjectLedger:
             "id":         pid,
             "owner":      owner,            # rol- of cirkel-id (GlassFrog: project hoort bij een rol/cirkel)
             "person":     person,           # optioneel: de mens die het project trekt
+            "agent":      agent,            # optioneel: AI-inwoner (persona-id) als trekker (beter dan GlassFrog)
+            "private":    bool(private),    # 'alleen zichtbaar voor de cirkel' (GlassFrog-zichtbaarheid)
+            "archived":   False,            # gearchiveerd = blijft bestaan, uit het actieve zicht
             "scope":      scope,
             "trigger":    trigger,
             "status":     status,
@@ -136,9 +140,12 @@ class ProjectLedger:
         self._save()
         return True
 
-    def edit(self, pid: str, scope=None, owner: str | None = None) -> bool:
-        """Bewerk de inhoud van een project (scope en/of owner). Status blijft ongemoeid;
-        done-projecten zijn vergrendeld. Lege waarden worden genegeerd. Geeft True bij succes."""
+    def edit(self, pid: str, scope=None, owner: str | None = None,
+             person: str | None = None, agent: str | None = None,
+             private: bool | None = None) -> bool:
+        """Bewerk de inhoud van een project (scope, owner, trekker mens/AI, zichtbaarheid).
+        Status blijft ongemoeid; done-projecten zijn vergrendeld. Lege strings voor person/agent
+        wissen de trekker; None laat het veld ongemoeid. Geeft True bij succes."""
         p = self._projects.get(pid)
         if p is None or p["status"] in _TERMINAL:
             return False
@@ -146,6 +153,12 @@ class ProjectLedger:
             p["scope"] = scope
         if owner is not None and str(owner).strip():
             p["owner"] = owner
+        if person is not None:
+            p["person"] = person or None
+        if agent is not None:
+            p["agent"] = agent or None
+        if private is not None:
+            p["private"] = bool(private)
         self._touch(p)
         self._save()
         return True
@@ -170,6 +183,33 @@ class ProjectLedger:
         del self._projects[pid]
         self._save()
         return True
+
+    def archive(self, pid: str) -> bool:
+        """Archiveer een project: het blijft bestaan maar verdwijnt uit het actieve zicht."""
+        p = self._projects.get(pid)
+        if p is None:
+            return False
+        p["archived"] = True
+        self._touch(p)
+        self._save()
+        return True
+
+    def unarchive(self, pid: str) -> bool:
+        p = self._projects.get(pid)
+        if p is None:
+            return False
+        p["archived"] = False
+        self._touch(p)
+        self._save()
+        return True
+
+    def remove(self, pid: str) -> bool:
+        """Verwijder een project definitief (GlassFrog: project deleten). Geeft True als verwijderd."""
+        if pid in self._projects:
+            del self._projects[pid]
+            self._save()
+            return True
+        return False
 
     def drafts(self) -> list[dict]:
         """Concept-projecten die op jouw akkoord wachten (status draft)."""

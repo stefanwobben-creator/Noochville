@@ -61,6 +61,12 @@ ul.clean li:last-child{border-bottom:none}
 .legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:.25rem}
 .pill{display:inline-block;font-size:.72rem;padding:.05rem .45rem;border-radius:var(--radius-pill);background:var(--cream-2);color:var(--gray);margin-left:.3rem}
 .card{border:1px solid var(--border);border-radius:var(--radius);padding:.5rem .7rem;margin:.3rem 0;background:var(--surface)}
+.pboard{display:flex;gap:.6rem;align-items:flex-start;overflow-x:auto}
+.pcol{flex:1 1 0;min-width:160px;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.4rem}
+.pcol-h{font-family:var(--font-display);font-weight:700;font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:var(--green-dark);margin-bottom:.3rem}
+.pcol .card{padding:.4rem .5rem;margin:.25rem 0;font-size:.85rem}
+.dellink{background:none;border:none;color:var(--coral);font:inherit;font-size:.78rem;text-decoration:underline;cursor:pointer;padding:0;margin-left:.3rem}
+.card.arch{opacity:.6}
 .btn.grey{color:var(--muted);border-style:dashed;cursor:not-allowed}
 @media(max-width:760px){.c2-wrap{flex-direction:column}.c2-rail{max-width:none;flex-basis:auto}}
 """
@@ -278,53 +284,185 @@ def _person_name(st: _Stores, pid: str) -> str:
     return p.name if p else (pid or "")
 
 
-def _proj_li(st: _Stores, p: dict, show_owner: bool = False) -> str:
+def _age(ts) -> str:
+    if not ts:
+        return ""
+    import time as _t
+    d = max(0, int((_t.time() - ts) / 86400))
+    if d == 0:
+        return "vandaag"
+    if d < 31:
+        return f"{d} d oud"
+    if d < 365:
+        return f"{d//30} mnd oud"
+    return f"{d//365} jr oud"
+
+
+def _trekker_html(st: _Stores, p: dict) -> str:
+    if p.get("agent"):
+        pa = st.personas.get(p["agent"])
+        return (f"<span class='person'><span class='av ai'>AI</span>"
+                f"{_e((pa.name if pa else p['agent']))} <span class='muted'>(AI)</span></span>")
+    if p.get("person"):
+        return (f"<span class='person'><span class='av'>{_e(_initials(_person_name(st, p['person'])))}"
+                f"</span>{_e(_person_name(st, p['person']))}</span>")
+    return "<span class='muted'>geen trekker</span>"
+
+
+def _trekker_options(st: _Stores, sel_person="", sel_agent="") -> str:
+    out = ["<option value=''>— geen trekker —</option>"]
+    for pr in st.people.all():
+        s = " selected" if pr.id == sel_person else ""
+        out.append(f"<option value='person:{_e(pr.id)}'{s}>{_e(pr.name)}</option>")
+    for pa in st.personas.all():
+        s = " selected" if pa.id == sel_agent else ""
+        out.append(f"<option value='persona:{_e(pa.id)}'{s}>🤖 {_e(pa.name)} (AI)</option>")
+    return "".join(out)
+
+
+_PROJ_COLS = [("Actief", ("running", "queued")), ("Wacht", ("blocked",)),
+              ("Toekomst", ("future",)), ("Done", ("done",))]
+
+
+def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
     scope = p.get("scope")
     if isinstance(scope, dict):
         scope = " · ".join(f"{k}: {v}" for k, v in scope.items())
-    person = p.get("person")
-    who = (f' <span class="muted">· trekker: {_e(_person_name(st, person))}</span>' if person else "")
-    owner = ""
-    if show_owner and p.get("owner"):
-        orec = st.records.get(p["owner"])
-        owner = f' <span class="muted">· {_e(_name(orec) if orec else p["owner"])}</span>'
-    return f'<li>{_proj_chip(p.get("status",""))} {_e(str(scope or "—"))}{who}{owner}</li>'
+    pid = p["id"]
+    lock = " 🔒" if p.get("private") else ""
+    meta = (f"<div class='muted' style='font-size:.74rem;margin-top:.2rem'>"
+            f"{_trekker_html(st, p)} · {_e(_age(p.get('created_at')))}{lock}</div>")
+    ctrl = ""
+    if csrf_token:
+        def btn(action, val, label, extra=""):
+            return (f"<form method='post' action='/action' style='display:inline'>"
+                    f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                    f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+                    f"<input type='hidden' name='next' value='{_e(back)}'>{extra}"
+                    f"<button class='btn' type='submit' name='action' value='{action}'>{label}</button></form> ")
+        status = p.get("status")
+        moves = ""
+        if status != "done":
+            if status not in ("running", "queued"):
+                moves += btn("proj_status", "", "▶ Actief", "<input type='hidden' name='to' value='actief'>")
+            if status != "blocked":
+                moves += btn("proj_status", "", "⏳ Wacht", "<input type='hidden' name='to' value='wacht'>")
+            if status != "future":
+                moves += btn("proj_status", "", "🌱 Toekomst", "<input type='hidden' name='to' value='toekomst'>")
+            moves += btn("proj_done", "", "✓ Done")
+        # edit + delete in een uitklapper
+        edit = (
+            f"<details style='margin-top:.3rem'><summary style='font-size:.75rem'>✎ bewerken</summary>"
+            f"<div class='pf'><form method='post' action='/action'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+            f"<input type='hidden' name='next' value='{_e(back)}'>"
+            f"<input name='scope' value='{_e(str(scope or ''))}'>"
+            f"<select name='trekker'>{_trekker_options(st, p.get('person') or '', p.get('agent') or '')}</select>"
+            f"<label style='font-size:.78rem'><input type='checkbox' name='private' value='1'"
+            f"{' checked' if p.get('private') else ''}> alleen zichtbaar voor de cirkel</label>"
+            f"<button class='btn ok' type='submit' name='action' value='proj_edit' "
+            f"style='margin-top:.3rem'>opslaan</button></form>"
+            # Default = archiveren (blijft bestaan); echt weg = rood linkje verwijderen.
+            f"<div style='margin-top:.4rem'>"
+            f"<form method='post' action='/action' style='display:inline'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+            f"<input type='hidden' name='next' value='{_e(back)}'>"
+            f"<button class='btn' type='submit' name='action' value='proj_archive'>🗄 archiveren</button>"
+            f"</form> "
+            f"<form method='post' action='/action' style='display:inline'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+            f"<input type='hidden' name='next' value='{_e(back)}'>"
+            f"<button type='submit' name='action' value='proj_delete' class='dellink' "
+            f"onclick=\"return confirm('Definitief verwijderen? Dit kan niet terug. "
+            f"Archiveren bewaart het project.')\">verwijderen</button>"
+            f"</form></div></div></details>")
+        ctrl = f"<div style='margin-top:.3rem'>{moves}{edit}</div>"
+    return (f"<div class='card'><b>{_e(str(scope or '—'))}</b>{meta}{ctrl}</div>")
+
+
+def _projects_board(st: _Stores, projs: list, csrf_token: str, back: str) -> str:
+    cols = ""
+    for label, statuses in _PROJ_COLS:
+        items = [p for p in projs if p.get("status") in statuses]
+        items.sort(key=lambda p: -(p.get("created_at") or 0))
+        body = ("".join(_proj_card(st, p, csrf_token, back) for p in items)
+                if items else "<p class='muted' style='font-size:.78rem'>—</p>")
+        cols += (f"<div class='pcol'><div class='pcol-h'>{_e(label)} ({len(items)})</div>{body}</div>")
+    return f"<div class='pboard'>{cols}</div>"
+
+
+def _archived_html(st: _Stores, archived: list, csrf_token: str, back: str) -> str:
+    if not archived:
+        return ""
+    rows = ""
+    for p in archived:
+        scope = p.get("scope")
+        if isinstance(scope, dict):
+            scope = " · ".join(f"{k}: {v}" for k, v in scope.items())
+        ctrl = ""
+        if csrf_token:
+            ctrl = (
+                f" <form method='post' action='/action' style='display:inline'>"
+                f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                f"<input type='hidden' name='pid' value='{_e(p['id'])}'>"
+                f"<input type='hidden' name='next' value='{_e(back)}'>"
+                f"<button class='btn' type='submit' name='action' value='proj_unarchive'>herstellen</button>"
+                f"<button type='submit' name='action' value='proj_delete' class='dellink' "
+                f"onclick=\"return confirm('Definitief verwijderen?')\">verwijderen</button></form>")
+        rows += f"<li class='muted'>{_e(str(scope or '—'))}{ctrl}</li>"
+    return (f"<details style='margin-top:.6rem'><summary>🗄 Gearchiveerd ({len(archived)})</summary>"
+            f"<ul class='clean'>{rows}</ul></details>")
 
 
 def _projects_tab_html(st: _Stores, rec, csrf_token: str) -> str:
-    projs = [p for p in st.projects.all() if p.get("owner") == rec.id]
-    projs.sort(key=lambda p: (p.get("status") == "done", -(p.get("created_at") or 0)))
-    lst = ("<ul class='clean'>" + "".join(_proj_li(st, p) for p in projs) + "</ul>"
-           if projs else "<p class='muted'>Nog geen projecten op deze rol/cirkel.</p>")
+    own = [p for p in st.projects.all() if p.get("owner") == rec.id]
+    projs = [p for p in own if not p.get("archived")]
+    archived = [p for p in own if p.get("archived")]
+    back = f"/node?id={rec.id}&tab=projects"
+    board = (_projects_board(st, projs, csrf_token, back) if projs
+             else "<p class='muted'>Nog geen projecten op deze rol/cirkel.</p>")
+    board += _archived_html(st, archived, csrf_token, back)
     form = ""
     if csrf_token:
-        opts = "<option value=''>— geen trekker —</option>" + "".join(
-            f"<option value='{_e(p.id)}'>{_e(p.name)}</option>" for p in st.people.all())
         form = (
-            "<div class='pf' style='margin-top:.8rem;max-width:520px'>"
+            "<details style='margin-top:.8rem'><summary style='font-weight:700'>➕ nieuw project</summary>"
+            "<div class='pf' style='max-width:520px;margin-top:.4rem'>"
             "<form method='post' action='/action'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='owner' value='{_e(rec.id)}'>"
-            f"<input type='hidden' name='next' value='/node?id={_e(rec.id)}&tab=projects'>"
-            "<label>Nieuw project — wat lever je op?</label>"
+            f"<input type='hidden' name='next' value='{_e(back)}'>"
+            "<label>Wat lever je op?</label>"
             "<input name='scope' placeholder='bijv. Productpagina met Product Passport live'>"
-            "<label>Trekker (optioneel)</label>"
-            f"<select name='person'>{opts}</select>"
+            "<label>Trekker (mens of AI-agent)</label>"
+            f"<select name='trekker'>{_trekker_options(st)}</select>"
+            "<label style='font-size:.82rem'><input type='checkbox' name='private' value='1'> "
+            "alleen zichtbaar voor de cirkel</label>"
             "<button class='btn ok' type='submit' name='action' value='proj_add' "
             "style='margin-top:.5rem'>➕ project toevoegen</button>"
-            "</form></div>")
-    return f"<div class='c2-sec'><h3>Projecten ({len(projs)})</h3>{lst}{form}</div>"
+            "</form></div></details>")
+    return f"<div class='c2-sec'><h3>Projecten ({len(projs)})</h3>{board}{form}</div>"
 
 
 def _person_projects_html(st: _Stores, pid: str) -> str:
     role_ids = set(st.assign.roles_of("person", pid))
     projs = [p for p in st.projects.all()
-             if p.get("person") == pid or p.get("owner") in role_ids]
+             if not p.get("archived") and (p.get("person") == pid or p.get("owner") in role_ids)]
     projs.sort(key=lambda p: (p.get("status") == "done", -(p.get("created_at") or 0)))
     if not projs:
         return ""
-    lst = "<ul class='clean'>" + "".join(_proj_li(st, p, show_owner=True) for p in projs) + "</ul>"
-    return f"<div class='c2-sec'><h3>Projecten ({len(projs)})</h3>{lst}</div>"
+    items = ""
+    for p in projs:
+        orec = st.records.get(p.get("owner"))
+        owner = _e(_name(orec) if orec else (p.get("owner") or ""))
+        scope = p.get("scope")
+        if isinstance(scope, dict):
+            scope = " · ".join(f"{k}: {v}" for k, v in scope.items())
+        items += (f"<li>{_proj_chip(p.get('status',''))} {_e(str(scope or '—'))} "
+                  f"<span class='muted'>· {owner}</span></li>")
+    return f"<div class='c2-sec'><h3>Projecten ({len(projs)})</h3><ul class='clean'>{items}</ul></div>"
 
 
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "") -> str:
@@ -409,18 +547,53 @@ def render_person(st: _Stores, pid: str) -> str:
     return _page(p.name, inner)
 
 
+def _parse_trekker(val: str):
+    """'person:<id>' of 'persona:<id>' → (person_id of '', agent_id of '')."""
+    val = (val or "").strip()
+    if val.startswith("person:"):
+        return val[7:], ""
+    if val.startswith("persona:"):
+        return "", val[8:]
+    return "", ""
+
+
 def dispatch(data_dir: str, action: str, form: dict) -> str:
-    """Verwerk een POST-actie en geef de redirect-URL terug. Nu: een project toevoegen."""
+    """Verwerk een POST-actie en geef de redirect-URL terug (projecten: toevoegen, status,
+    afronden, bewerken, verwijderen)."""
     st = _Stores(data_dir)
-    nxt = (form.get("next") or ["/"])[0]
+    g = lambda k: (form.get(k) or [""])[0]
+    nxt = g("next") or "/"
     if not nxt.startswith("/"):
         nxt = "/"
+    pj = st.projects
     if action == "proj_add":
-        owner = (form.get("owner") or [""])[0]
-        scope = (form.get("scope") or [""])[0].strip()
-        person = (form.get("person") or [""])[0].strip() or None
+        owner = g("owner")
+        scope = g("scope").strip()
+        person, agent = _parse_trekker(g("trekker"))
+        private = g("private") == "1"
         if owner and scope:
-            st.projects.create(owner, scope[:200], "human", status="queued", person=person)
+            pj.create(owner, scope[:200], "human", status="queued",
+                      person=person or None, agent=agent or None, private=private)
+    elif action == "proj_status":
+        pid, to = g("pid"), g("to")
+        if to == "actief":
+            pj.start(pid)
+        elif to == "wacht":
+            pj.block(pid, "—")
+        elif to == "toekomst":
+            pj.to_future(pid)
+    elif action == "proj_done":
+        pj.complete(g("pid"))
+    elif action == "proj_archive":
+        pj.archive(g("pid"))
+    elif action == "proj_unarchive":
+        pj.unarchive(g("pid"))
+    elif action == "proj_delete":
+        pj.remove(g("pid"))
+    elif action == "proj_edit":
+        person, agent = _parse_trekker(g("trekker"))
+        pj.edit(g("pid"), scope=g("scope"), person=person, agent=agent,
+                private=(g("private") == "1"))
     return nxt
 
 

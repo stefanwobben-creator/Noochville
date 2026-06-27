@@ -63,12 +63,10 @@ def test_project_toevoegen_en_koppeling(tmp_path):
     lotte = st.people.by_name("Lotte Mulder")
     role = "mother_earth__nooch__website_developer"
     cockpit2.dispatch(dd, "proj_add", {
-        "owner": [role], "scope": ["Productpagina live"], "person": [lotte.id],
+        "owner": [role], "scope": ["Productpagina live"], "trekker": [f"person:{lotte.id}"],
         "next": [f"/node?id={role}&tab=projects"]})
-    # op de rol zichtbaar
     page = cockpit2.render_node(cockpit2._Stores(dd), role, "projects", csrf_token="t")
     assert "Productpagina live" in page and "Lotte Mulder" in page
-    # op de persoonspagina zichtbaar (via trekker én via rol)
     pp = cockpit2.render_person(cockpit2._Stores(dd), lotte.id)
     assert "Productpagina live" in pp and "Projecten" in pp
 
@@ -77,10 +75,59 @@ def test_project_op_cirkel(tmp_path):
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     cockpit2.dispatch(dd, "proj_add", {
-        "owner": ["mother_earth__nooch"], "scope": ["Jaarplan 2027"], "person": [""],
+        "owner": ["mother_earth__nooch"], "scope": ["Jaarplan 2027"], "trekker": [""],
         "next": ["/node?id=mother_earth__nooch&tab=projects"]})
     page = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth__nooch", "projects", csrf_token="t")
     assert "Jaarplan 2027" in page
+
+
+def test_project_status_done_delete(tmp_path):
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    role = "mother_earth__nooch__website_developer"
+    cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Bug-sprint"], "trekker": [""],
+                                       "next": ["/"]})
+    pid = cockpit2._Stores(dd).projects.all()[0]["id"]
+    # status → wacht
+    cockpit2.dispatch(dd, "proj_status", {"pid": [pid], "to": ["wacht"], "next": ["/"]})
+    assert cockpit2._Stores(dd).projects.get(pid)["status"] == "blocked"
+    # → done
+    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]})
+    assert cockpit2._Stores(dd).projects.get(pid)["status"] == "done"
+    # verwijderen
+    cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/"]})
+    assert cockpit2._Stores(dd).projects.get(pid) is None
+
+
+def test_project_archiveren_default(tmp_path):
+    # archiveren = blijft bestaan, uit het actieve board; herstellen kan
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    role = "mother_earth__nooch__website_developer"
+    cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Oud project"], "trekker": [""],
+                                       "next": ["/"]})
+    pid = cockpit2._Stores(dd).projects.all()[0]["id"]
+    cockpit2.dispatch(dd, "proj_archive", {"pid": [pid], "next": ["/"]})
+    p = cockpit2._Stores(dd).projects.get(pid)
+    assert p is not None and p["archived"] is True          # blijft bestaan
+    page = cockpit2.render_node(cockpit2._Stores(dd), role, "projects", csrf_token="t")
+    assert "Gearchiveerd (1)" in page and "Oud project" in page
+    # herstellen
+    cockpit2.dispatch(dd, "proj_unarchive", {"pid": [pid], "next": ["/"]})
+    assert cockpit2._Stores(dd).projects.get(pid)["archived"] is False
+
+
+def test_project_ai_trekker(tmp_path):
+    # verbetering t.o.v. GlassFrog: een AI-inwoner als trekker
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    noochie = st.personas.add("Noochie")
+    role = "mother_earth__nooch__website_developer"
+    cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["SEO-audit"],
+                                       "trekker": [f"persona:{noochie.id}"], "next": ["/"]})
+    page = cockpit2.render_node(cockpit2._Stores(dd), role, "projects", csrf_token="t")
+    assert "SEO-audit" in page and "Noochie" in page and "(AI)" in page
 
 
 def test_persoonspagina_mijn_rollen(tmp_path):
