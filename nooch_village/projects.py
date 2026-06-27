@@ -49,7 +49,8 @@ class ProjectLedger:
                hypothesis: str = "", business_case: dict | None = None,
                status: str = "queued", origin: str = "",
                dod_outcome: str = "", done_when: str = "", goes_to: str = "",
-               links: list[str] | None = None, parent: str | None = None) -> str:
+               links: list[str] | None = None, parent: str | None = None,
+               person: str | None = None) -> str:
         if trigger not in _VALID_TRIGGERS:
             raise ValueError(f"ongeldig trigger: '{trigger}'")
         if status not in ("queued", "draft", "future"):
@@ -62,7 +63,8 @@ class ProjectLedger:
         cluster = (par.get("cluster") or parent) if par else pid
         self._projects[pid] = {
             "id":         pid,
-            "owner":      owner,
+            "owner":      owner,            # rol- of cirkel-id (GlassFrog: project hoort bij een rol/cirkel)
+            "person":     person,           # optioneel: de mens die het project trekt
             "scope":      scope,
             "trigger":    trigger,
             "status":     status,

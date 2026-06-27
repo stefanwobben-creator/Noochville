@@ -13,6 +13,7 @@ echte Nooch-structuur (glassfrog_import.nooch_poc_org) in data/poc/, zonder de l
 """
 from __future__ import annotations
 import os
+import secrets
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -22,6 +23,7 @@ from nooch_village.people import PeopleStore
 from nooch_village.assignments import Assignments
 from nooch_village.attachments import AttachmentStore
 from nooch_village.personas import PersonaStore
+from nooch_village.projects import ProjectLedger
 from nooch_village import org
 from nooch_village.glassfrog_import import import_org, nooch_poc_org
 
@@ -66,7 +68,7 @@ ul.clean li:last-child{border-bottom:none}
 # Welke tabs "leven" (echt werken) en welke nog grijs zijn. Status: live | basic | grey.
 _TAB_STATUS = {
     "overview": "live", "roles": "live", "members": "live", "notes": "basic",
-    "metrics": "basic", "checklists": "basic", "projects": "grey",
+    "metrics": "basic", "checklists": "basic", "projects": "live",
     "policies": "grey", "history": "grey",
 }
 _TAB_LABEL = {
@@ -93,6 +95,7 @@ class _Stores:
         self.assign = Assignments(os.path.join(dd, "assignments.json"))
         self.att = AttachmentStore(os.path.join(dd, "attachments.json"))
         self.personas = PersonaStore(os.path.join(dd, "personas.json"))
+        self.projects = ProjectLedger(os.path.join(dd, "projects.json"))
 
 
 def _bootstrap(dd: str) -> None:
@@ -254,7 +257,77 @@ def _att_html(st: _Stores, rec, kind: str, leeg: str) -> str:
     return out + "</ul>"
 
 
-def render_node(st: _Stores, node_id: str, tab: str) -> str:
+_PROJ_CHIP = {
+    "running": ("⚡ Actief", "var(--green)", "#fff"),
+    "queued": ("🌱 Wachtrij", "var(--cream-2)", "var(--gray)"),
+    "future": ("🌱 Toekomst", "var(--cream-2)", "var(--gray)"),
+    "blocked": ("⏳ Wacht", "var(--coral)", "#fff"),
+    "draft": ("📝 Concept", "var(--sand)", "var(--gray)"),
+    "done": ("✓ Done", "var(--green-dark)", "#fff"),
+}
+
+
+def _proj_chip(status: str) -> str:
+    lbl, bg, fg = _PROJ_CHIP.get(status, (status, "var(--cream-2)", "var(--gray)"))
+    return (f'<span style="display:inline-block;padding:.05rem .5rem;border-radius:var(--radius-pill);'
+            f'background:{bg};color:{fg};font-size:.72rem;font-weight:700">{_e(lbl)}</span>')
+
+
+def _person_name(st: _Stores, pid: str) -> str:
+    p = st.people.get(pid)
+    return p.name if p else (pid or "")
+
+
+def _proj_li(st: _Stores, p: dict, show_owner: bool = False) -> str:
+    scope = p.get("scope")
+    if isinstance(scope, dict):
+        scope = " · ".join(f"{k}: {v}" for k, v in scope.items())
+    person = p.get("person")
+    who = (f' <span class="muted">· trekker: {_e(_person_name(st, person))}</span>' if person else "")
+    owner = ""
+    if show_owner and p.get("owner"):
+        orec = st.records.get(p["owner"])
+        owner = f' <span class="muted">· {_e(_name(orec) if orec else p["owner"])}</span>'
+    return f'<li>{_proj_chip(p.get("status",""))} {_e(str(scope or "—"))}{who}{owner}</li>'
+
+
+def _projects_tab_html(st: _Stores, rec, csrf_token: str) -> str:
+    projs = [p for p in st.projects.all() if p.get("owner") == rec.id]
+    projs.sort(key=lambda p: (p.get("status") == "done", -(p.get("created_at") or 0)))
+    lst = ("<ul class='clean'>" + "".join(_proj_li(st, p) for p in projs) + "</ul>"
+           if projs else "<p class='muted'>Nog geen projecten op deze rol/cirkel.</p>")
+    form = ""
+    if csrf_token:
+        opts = "<option value=''>— geen trekker —</option>" + "".join(
+            f"<option value='{_e(p.id)}'>{_e(p.name)}</option>" for p in st.people.all())
+        form = (
+            "<div class='pf' style='margin-top:.8rem;max-width:520px'>"
+            "<form method='post' action='/action'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='owner' value='{_e(rec.id)}'>"
+            f"<input type='hidden' name='next' value='/node?id={_e(rec.id)}&tab=projects'>"
+            "<label>Nieuw project — wat lever je op?</label>"
+            "<input name='scope' placeholder='bijv. Productpagina met Product Passport live'>"
+            "<label>Trekker (optioneel)</label>"
+            f"<select name='person'>{opts}</select>"
+            "<button class='btn ok' type='submit' name='action' value='proj_add' "
+            "style='margin-top:.5rem'>➕ project toevoegen</button>"
+            "</form></div>")
+    return f"<div class='c2-sec'><h3>Projecten ({len(projs)})</h3>{lst}{form}</div>"
+
+
+def _person_projects_html(st: _Stores, pid: str) -> str:
+    role_ids = set(st.assign.roles_of("person", pid))
+    projs = [p for p in st.projects.all()
+             if p.get("person") == pid or p.get("owner") in role_ids]
+    projs.sort(key=lambda p: (p.get("status") == "done", -(p.get("created_at") or 0)))
+    if not projs:
+        return ""
+    lst = "<ul class='clean'>" + "".join(_proj_li(st, p, show_owner=True) for p in projs) + "</ul>"
+    return f"<div class='c2-sec'><h3>Projecten ({len(projs)})</h3>{lst}</div>"
+
+
+def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "") -> str:
     rec = st.records.get(node_id)
     if rec is None:
         return _page("Niet gevonden", "<p>Node niet gevonden.</p><p><a href='/'>← home</a></p>")
@@ -288,8 +361,7 @@ def render_node(st: _Stores, node_id: str, tab: str) -> str:
         content = ("<div class='c2-sec'><h3>Checklists</h3>"
                    + _att_html(st, rec, "checklist", "Nog geen checklist-items.") + "</div>")
     elif tab == "projects":
-        content = _todo("Projecten bestaan al (prikbord/ledger), maar de koppeling per rol/cirkel "
-                        "en deze weergave moeten nog.")
+        content = _projects_tab_html(st, rec, csrf_token)
     elif tab == "policies":
         content = _todo("Policies per cirkel (nu alleen harde policies op de anchor-cirkel).")
     else:  # history
@@ -329,7 +401,7 @@ def render_person(st: _Stores, pid: str) -> str:
             f"<div class='muted'>{_e(p.email) or 'geen e-mail'}</div>"
             f"<div class='c2-sec'><h3>Mijn rollen ({len(role_ids)})</h3>"
             + (f"<ul class='clean'>{rows}</ul>" if rows else "<span class='muted'>Geen rollen.</span>")
-            + "</div></div>")
+            + "</div>" + _person_projects_html(st, pid) + "</div>")
     rail = f"<div class='c2-rail'>{_tree_html(st, '')}</div>"
     inner = (f"<style>{_EXTRA_CSS}</style>"
              "<div class='bar'>cockpit 2 · GlassFrog-vorm (PoC) · <a href='/'>home</a></div>"
@@ -337,7 +409,22 @@ def render_person(st: _Stores, pid: str) -> str:
     return _page(p.name, inner)
 
 
-def make_handler(data_dir: str):
+def dispatch(data_dir: str, action: str, form: dict) -> str:
+    """Verwerk een POST-actie en geef de redirect-URL terug. Nu: een project toevoegen."""
+    st = _Stores(data_dir)
+    nxt = (form.get("next") or ["/"])[0]
+    if not nxt.startswith("/"):
+        nxt = "/"
+    if action == "proj_add":
+        owner = (form.get("owner") or [""])[0]
+        scope = (form.get("scope") or [""])[0].strip()
+        person = (form.get("person") or [""])[0].strip() or None
+        if owner and scope:
+            st.projects.create(owner, scope[:200], "human", status="queued", person=person)
+    return nxt
+
+
+def make_handler(data_dir: str, csrf_token: str):
     class H(BaseHTTPRequestHandler):
         def _send(self, body: str, code: int = 200):
             b = body.encode("utf-8")
@@ -362,12 +449,25 @@ def make_handler(data_dir: str):
                 return
             if path == "/node":
                 self._send(render_node(st, (qs.get("id") or [""])[0],
-                                       (qs.get("tab") or ["overview"])[0]))
+                                       (qs.get("tab") or ["overview"])[0], csrf_token=csrf_token))
                 return
             if path == "/person":
                 self._send(render_person(st, (qs.get("id") or [""])[0]))
                 return
             self._send("<p>404</p>", 404)
+
+        def do_POST(self):
+            if self.path.split("?", 1)[0] != "/action":
+                self._send("<p>404</p>", 404); return
+            length = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(length).decode("utf-8") if length else ""
+            form = urllib.parse.parse_qs(raw)
+            token = (form.get("csrf") or [""])[0]
+            if not secrets.compare_digest(token, csrf_token):
+                self._send("CSRF-token ongeldig", 403); return
+            action = (form.get("action") or [""])[0]
+            nxt = dispatch(data_dir, action, form)
+            self.send_response(303); self.send_header("Location", nxt); self.end_headers()
 
         def log_message(self, *_):
             pass
@@ -379,9 +479,10 @@ def serve(host: str = "127.0.0.1", port: int = 8766, data_dir: str | None = None
         raise SystemExit(f"Cockpit 2 weigert niet-lokale host '{host}'.")
     dd = data_dir or _default_data_dir()
     _bootstrap(dd)
-    httpd = ThreadingHTTPServer((host, port), make_handler(dd))
+    csrf_token = secrets.token_urlsafe(32)
+    httpd = ThreadingHTTPServer((host, port), make_handler(dd, csrf_token))
     httpd.daemon_threads = True
-    print(f"Cockpit 2 (GlassFrog-vorm, PoC, read-only) op http://{host}:{port}  —  Ctrl-C om te stoppen")
+    print(f"Cockpit 2 (GlassFrog-vorm, PoC) op http://{host}:{port}  —  Ctrl-C om te stoppen")
     print(f"Dataset: {dd}")
     try:
         httpd.serve_forever()
