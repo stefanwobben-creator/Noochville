@@ -25,6 +25,7 @@ from nooch_village.assignments import Assignments
 from nooch_village.attachments import AttachmentStore
 from nooch_village.personas import PersonaStore
 from nooch_village.projects import ProjectLedger
+from nooch_village.ai_tasks import AITaskStore
 from nooch_village import org
 from nooch_village.glassfrog_import import import_org, nooch_poc_org
 
@@ -98,9 +99,9 @@ ul.clean li:last-child{border-bottom:none}
 .addlink:hover{background:rgba(27,27,27,.05);color:var(--ink);text-decoration:none}
 /* rollen-tab: rij met purpose + rechts uitgelijnde vervullers + toewijs-icoon */
 .rrole{display:flex;align-items:flex-start;gap:1rem;padding:.6rem 0;border-bottom:1px solid var(--border)}
-.rrole-info{flex:1 1 52%;min-width:0}
+.rrole-info{flex:1 1 auto;min-width:0}
 .rrole-pur{font-size:.84rem;margin-top:.1rem}
-.rrole-fill{flex:1 1 42%;min-width:0}            /* rechterkolom; inhoud links uitgelijnd */
+.rrole-fill{flex:0 0 220px;min-width:0}          /* vaste rechterkolom; inhoud links uitgelijnd */
 .rrole-act{flex:0 0 auto}
 .fillers{display:flex;flex-direction:column;gap:.15rem;align-items:flex-start}
 .fperson{display:inline-flex;align-items:center;gap:.35rem;font-size:.86rem;color:var(--gray)}
@@ -110,6 +111,12 @@ ul.clean li:last-child{border-bottom:none}
 .manage-ico{display:inline-flex;align-items:center;justify-content:center;color:var(--subtle);
   padding:.25rem;border-radius:var(--radius)}
 .manage-ico:hover{color:var(--green-dark);background:rgba(27,27,27,.06)}
+.accrow{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:.35rem 0;border-bottom:1px solid var(--border)}
+.acc-text{flex:1 1 auto;min-width:0}
+.acc-ai{flex:0 0 auto;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;justify-content:flex-end}
+.aichip{display:inline-block;background:#EFEAF9;color:#5b3fa6;border-radius:var(--radius-pill);padding:.05rem .5rem;font-size:.74rem;font-weight:600}
+.ai-add{color:var(--subtle);font-size:.8rem;text-decoration:none;cursor:pointer;white-space:nowrap}
+.ai-add:hover{color:#5b3fa6;text-decoration:underline}
 .frow{display:flex;align-items:flex-start;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--border)}
 .ffocus{background:none;border:none;box-shadow:none;padding:0;margin:0}
 .ffocus>summary{list-style:none;cursor:pointer}
@@ -160,6 +167,7 @@ class _Stores:
         self.att = AttachmentStore(os.path.join(dd, "attachments.json"))
         self.personas = PersonaStore(os.path.join(dd, "personas.json"))
         self.projects = ProjectLedger(os.path.join(dd, "projects.json"))
+        self.ai = AITaskStore(os.path.join(dd, "ai_tasks.json"))
 
 
 def _bootstrap(dd: str) -> None:
@@ -245,7 +253,53 @@ def _todo(wat: str) -> str:
     return f"<div class='todo'><b>Nog te bouwen.</b> {_e(wat)}</div>"
 
 
-def _overview_html(st: _Stores, rec) -> str:
+def _ai_chip(st: _Stores, t) -> str:
+    pa = st.personas.get(t.agent)
+    nm = pa.name if pa else t.agent
+    wat = f" · {_e(t.wat)}" if t.wat else ""
+    return f"<span class='aichip'>🤖 {_e(nm)}{wat}</span>"
+
+
+def _acc_row(st: _Stores, rec, i: int, text: str, csrf_token: str) -> str:
+    tasks = st.ai.for_acc(rec.id, i)
+    chips = "".join(_ai_chip(st, t) for t in tasks)
+    add = ""
+    if csrf_token:
+        url = f"/aitask?role={_e(rec.id)}&acc={i}"
+        add = (f"<a class='ai-add js-modal' href='{url}' data-href='{url}' "
+               f"title='autonome AI-taak'>{'+ AI' if not tasks else '✎'}</a>")
+    return (f"<div class='accrow'><div class='acc-text'>{_e(text)}</div>"
+            f"<div class='acc-ai'>{chips}{add}</div></div>")
+
+
+def _autonomous_section(st: _Stores, rec) -> str:
+    """Gegroepeerde 'Autonome AI-taken': op een rol de eigen taken; op een cirkel over alle
+    directe rollen heen (overzicht van wat AI zelfstandig draait)."""
+    rows = ""
+    n = 0
+    if org.is_circle(rec):
+        direct = sorted(org.roles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
+        for r in direct:
+            for t in st.ai.for_role(r.id):
+                accs = r.definition.accountabilities or []
+                acc = accs[t.acc_index] if 0 <= t.acc_index < len(accs) else ""
+                rows += (f"<li><a href='/node?id={_e(r.id)}'>{_e(_name(r))}</a> "
+                         f"<span class='muted'>· {_e(acc)}</span> → {_ai_chip(st, t)}</li>")
+                n += 1
+    else:
+        accs = rec.definition.accountabilities or []
+        for t in st.ai.for_role(rec.id):
+            acc = accs[t.acc_index] if 0 <= t.acc_index < len(accs) else ""
+            rows += f"<li><span class='muted'>{_e(acc)}</span> → {_ai_chip(st, t)}</li>"
+            n += 1
+    if not rows:
+        return ""
+    return (f"<div class='c2-sec'><h3>🤖 Autonome AI-taken ({n})</h3>"
+            f"<p class='muted' style='font-size:.8rem'>Wat AI hier zelfstandig doet; de mens blijft "
+            f"verantwoordelijk en publiceert/keurt goed.</p><ul class='clean'>{rows}</ul></div>")
+
+
+def _overview_html(st: _Stores, rec, csrf_token: str = "") -> str:
     d = rec.definition
     is_c = org.is_circle(rec)
     parts = [f"<div class='c2-sec'><h3>Purpose</h3><div>{_e(d.purpose) or '<span class=muted>—</span>'}</div></div>"]
@@ -258,9 +312,14 @@ def _overview_html(st: _Stores, rec) -> str:
                  + ("<ul class='clean'>" + "".join(f"<li>{_e(x)}</li>" for x in doms) + "</ul>"
                     if doms else "<span class='muted'>Geen domein.</span>") + "</div>")
     accs = d.accountabilities or []
-    parts.append("<div class='c2-sec'><h3>Accountabilities</h3>"
-                 + ("<ul class='clean'>" + "".join(f"<li>{_e(x)}</li>" for x in accs) + "</ul>"
-                    if accs else "<span class='muted'>Geen accountabilities.</span>") + "</div>")
+    if not is_c:
+        parts.append("<div class='c2-sec'><h3>Accountabilities</h3>"
+                     + ("".join(_acc_row(st, rec, i, a, csrf_token) for i, a in enumerate(accs))
+                        if accs else "<span class='muted'>Geen accountabilities.</span>") + "</div>")
+    elif accs:
+        parts.append("<div class='c2-sec'><h3>Accountabilities</h3><ul class='clean'>"
+                     + "".join(f"<li>{_e(x)}</li>" for x in accs) + "</ul></div>")
+    parts.append(_autonomous_section(st, rec))
     if not is_c:
         parts.append(f"<div class='c2-sec'><h3>Role Fillers</h3>{_filler_html(st, rec.id, rec)}</div>")
     return "".join(parts)
@@ -758,7 +817,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     chip = "<span class='chip'>cirkel</span>" if is_c else "<span class='chip'>rol</span>"
 
     if tab == "overview":
-        content = _overview_html(st, rec)
+        content = _overview_html(st, rec, csrf_token)
     elif tab == "roles":
         content = _roles_html(st, rec, csrf_token)
     elif tab == "members":
@@ -792,7 +851,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
             f"<h1>{_e(_name(rec))} {chip}</h1>{_banner(msg)}{meet}"
             f"{_tabbar(node_id, tabs, tab)}{content}</div>")
     rail = f"<div class='c2-rail'>{_tree_html(st, node_id)}</div>"
-    modal = _modal_html() if (csrf_token and tab in ("projects", "roles")) else ""
+    modal = _modal_html() if (csrf_token and tab in ("projects", "roles", "overview")) else ""
     inner = (f"<style>{_EXTRA_CSS}</style>"
              "<div class='bar'>cockpit 2 · GlassFrog-vorm (PoC) · "
              "<a href='/'>home</a></div>"
@@ -1000,6 +1059,52 @@ def render_rolefillers(st: _Stores, role_id: str, csrf_token: str = "", fragment
     return _page("Rolvervullers", f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>{main}</div>")
 
 
+def render_aitask(st: _Stores, role_id: str, acc_index: int, csrf_token: str = "",
+                  fragment: bool = False) -> str:
+    rec = st.records.get(role_id)
+    accs = rec.definition.accountabilities if rec else []
+    acc_text = accs[acc_index] if (rec and 0 <= acc_index < len(accs)) else ""
+    back = f"/node?id={role_id}&tab=overview"
+
+    def hid():
+        return (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                f"<input type='hidden' name='role' value='{_e(role_id)}'>"
+                f"<input type='hidden' name='acc' value='{acc_index}'>"
+                f"<input type='hidden' name='next' value='{_e(back)}'>")
+
+    rows = ""
+    for t in st.ai.for_acc(role_id, acc_index):
+        rows += (f"<div class='frow'><span style='flex:1'>{_ai_chip(st, t)}</span>"
+                 f"<form method='post' action='/action' style='display:inline'>"
+                 f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                 f"<input type='hidden' name='tid' value='{_e(t.id)}'>"
+                 f"<input type='hidden' name='next' value='{_e(back)}'>"
+                 f"<button class='dellink' type='submit' name='action' value='aitask_remove'>verwijderen</button>"
+                 f"</form></div>")
+    personas = st.personas.all()
+    if personas:
+        opts = "".join(f"<option value='{_e(p.id)}'>🤖 {_e(p.name)}</option>" for p in personas)
+        add = (f"<div class='pf' style='margin-top:.6rem'><form method='post' action='/action'>{hid()}"
+               f"<label>AI-inwoner</label><select name='agent'>{opts}</select>"
+               f"<label>Wat doet de AI zelfstandig?</label>"
+               f"<input name='wat' placeholder='bijv. stelt conceptteksten op'>"
+               f"<button class='btn ok' type='submit' name='action' value='aitask_add' "
+               f"style='margin-top:.4rem'>Toevoegen</button></form></div>")
+    else:
+        add = ("<p class='muted' style='margin-top:.6rem'>Er zijn nog geen AI-inwoners. "
+               "Maak er eerst een aan, dan kun je hier een autonome taak koppelen.</p>")
+    frag = (f"<h2 style='margin-top:0'>Autonome AI-taak</h2>"
+            f"<p class='muted'>Accountability: {_e(acc_text) or '—'}</p>"
+            f"<p style='font-size:.82rem;color:var(--gray)'>Hybride hulp tellen we niet; leg hier "
+            f"alleen vast wat de AI <b>zelfstandig</b> doet. De mens blijft verantwoordelijk en "
+            f"publiceert/keurt goed.</p>{rows}{add}")
+    if fragment:
+        return frag
+    main = (f"<div class='c2-main' style='max-width:560px'>"
+            f"<div class='c2-bar'><a href='{_e(back)}'>← terug</a></div>{frag}</div>")
+    return _page("Autonome AI-taak", f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>{main}</div>")
+
+
 def _parse_trekker(val: str):
     """'person:<id>' of 'persona:<id>' → (person_id of '', agent_id of '')."""
     val = (val or "").strip()
@@ -1087,6 +1192,15 @@ def dispatch(data_dir: str, action: str, form: dict):
         elif agent:
             st.assign.set_focus(g("role"), "persona", agent, g("focus"))
         msg = "✓ focus opgeslagen"
+    elif action == "aitask_add":
+        try:
+            acc_i = int(g("acc"))
+        except ValueError:
+            acc_i = -1
+        if g("agent") and acc_i >= 0 and st.ai.add(g("role"), acc_i, g("agent"), g("wat")):
+            msg = "🤖 autonome AI-taak toegevoegd"
+    elif action == "aitask_remove":
+        st.ai.remove(g("tid")); msg = "✓ verwijderd"
     return nxt, msg
 
 
@@ -1132,6 +1246,14 @@ def make_handler(data_dir: str, csrf_token: str):
             if path == "/rolefillers":
                 self._send(render_rolefillers(st, (qs.get("role") or [""])[0], csrf_token=csrf_token,
                                               fragment=(qs.get("fragment") or [""])[0] == "1"))
+                return
+            if path == "/aitask":
+                try:
+                    acc_i = int((qs.get("acc") or ["-1"])[0])
+                except ValueError:
+                    acc_i = -1
+                self._send(render_aitask(st, (qs.get("role") or [""])[0], acc_i, csrf_token=csrf_token,
+                                         fragment=(qs.get("fragment") or [""])[0] == "1"))
                 return
             if path == "/person":
                 self._send(render_person(st, (qs.get("id") or [""])[0]))
