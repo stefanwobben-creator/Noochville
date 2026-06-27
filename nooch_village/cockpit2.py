@@ -525,7 +525,7 @@ def _projects_board(st: _Stores, projs: list, owner: str, csrf_token: str, back:
     board = ""
     for gid, g in sorted(groups.items(), key=lambda kv: kv[1]["sk"]):
         board += (f"<div class='swim'><div class='swim-h'>{_e(g['label'])} ({len(g['items'])})</div>"
-                  f"{_columns_html(st, g['items'], g['ao'], g['at'], csrf_token, back, quickadd=False)}"
+                  f"{_columns_html(st, g['items'], g['ao'], g['at'], csrf_token, back, quickadd=True)}"
                   f"</div>")
     return board + _drag_script(csrf_token, back)
 

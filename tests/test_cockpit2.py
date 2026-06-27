@@ -58,7 +58,8 @@ def test_projecten_tab_kolommen_en_inline_add(tmp_path):
     # statuskolommen (Trello-stijl) in een niet-lege lane + slepen + top-level toevoegen
     for col in ("Actief", "Wacht", "Toekomst", "Done"):
         assert col in page
-    assert "proj_add" in page and "➕ project" in page       # top-level add (geen per-kolom-add)
+    assert "proj_add" in page and "➕ project" in page       # top-level add
+    assert "+ project toevoegen" in page                     # Trello per-kolom-add in niet-lege lane
     assert "data-to='toekomst'" in page and "draggable" in page.lower()
     assert "data-href=" in page                 # kaart klikbaar naar detail
 
