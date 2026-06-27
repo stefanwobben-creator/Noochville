@@ -221,6 +221,23 @@ def test_individual_initiative_owner(tmp_path):
     assert "Ad hoc stunt" in page and "Individual Initiative" in page
 
 
+def test_modal_overlay_en_fragment(tmp_path):
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    role = "mother_earth__nooch__website_developer"
+    cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Modaltest"], "col": ["actief"],
+                                       "next": ["/"]})
+    pid = cockpit2._Stores(dd).projects.all()[0]["id"]
+    # board bevat de overlay + fragment-fetch
+    board = cockpit2.render_node(cockpit2._Stores(dd), role, "projects", csrf_token="t")
+    assert "id='ovl'" in board and "fragment=1" in board and "ovl-body" in board
+    # fragment = alleen de detail-inhoud, geen volledige pagina
+    frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
+    assert "<!doctype" not in frag.lower() and "Modaltest" in frag and "Checklist" in frag
+    # kolommen scrollen (pcol-scroll) en de '+ project' zit als ghost-summary in de kolom
+    assert "pcol-scroll" in board and "qadd" in board
+
+
 def test_project_archiveren_default(tmp_path):
     # archiveren = blijft bestaan, uit het actieve board; herstellen kan
     dd = str(tmp_path / "poc")

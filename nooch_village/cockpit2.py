@@ -63,7 +63,8 @@ ul.clean li:last-child{border-bottom:none}
 .pill{display:inline-block;font-size:.72rem;padding:.05rem .45rem;border-radius:var(--radius-pill);background:var(--cream-2);color:var(--gray);margin-left:.3rem}
 .card{border:1px solid var(--border);border-radius:var(--radius);padding:.5rem .7rem;margin:.3rem 0;background:var(--surface)}
 .pboard{display:flex;gap:.6rem;align-items:flex-start;overflow-x:auto}
-.pcol{flex:1 1 0;min-width:160px;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.4rem;max-height:68vh;overflow-y:auto}
+.pcol{flex:1 1 0;min-width:160px;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.4rem}
+.pcol-scroll{max-height:540px;overflow-y:auto}
 .swim{margin:.6rem 0}
 .swim-h{font-family:var(--font-display);font-weight:700;font-size:.85rem;color:var(--green-dark);margin:.2rem 0 .25rem}
 .pcol-h{font-family:var(--font-display);font-weight:700;font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:var(--green-dark);margin-bottom:.3rem}
@@ -79,13 +80,18 @@ ul.clean li:last-child{border-bottom:none}
 .pbar{height:6px;background:var(--border);border-radius:999px;overflow:hidden;width:70px}
 .pbar>div{height:100%;background:var(--green)}
 .pcol.over{outline:2px dashed var(--green);outline-offset:-2px;background:var(--green-tint)}
-.qadd{margin-top:.3rem}
-.qadd>summary{list-style:none;cursor:pointer;color:var(--gray);font-size:.82rem;padding:.35rem .5rem;border-radius:var(--radius)}
-.qadd>summary:hover{background:rgba(27,27,27,.05);color:var(--ink)}
+.qadd{margin-top:.2rem}
+.qadd>summary{list-style:none;cursor:pointer;color:var(--gray);font-size:.84rem;padding:.4rem .5rem;border-radius:var(--radius)}
+.qadd>summary:hover{background:rgba(27,27,27,.06);color:var(--ink)}
 .qadd>summary::-webkit-details-marker{display:none}
-.qadd-form{display:flex;flex-direction:column;gap:.35rem;margin-top:.3rem}
-.qadd-form textarea{width:100%;box-sizing:border-box;padding:.4rem .5rem;border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:.85rem;resize:vertical}
-.qadd-form button{align-self:flex-start}
+.qadd[open]>summary{display:none}
+.qadd-form{display:flex;flex-direction:column;gap:.4rem;margin-top:.1rem}
+.qadd-form textarea{width:100%;box-sizing:border-box;padding:.45rem .55rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow);font:inherit;font-size:.85rem;resize:vertical}
+.qadd-row{display:flex;align-items:center;gap:.4rem}
+.qadd-x{background:none;border:none;font-size:1rem;color:var(--gray);cursor:pointer;padding:.1rem .3rem}
+.ovl{position:fixed;inset:0;background:rgba(27,27,27,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center}
+.ovl-box{background:var(--surface);max-width:720px;width:92%;margin:4vh auto;border-radius:12px;padding:1.3rem 1.5rem;max-height:88vh;overflow:auto;position:relative;box-shadow:0 12px 48px rgba(27,27,27,.35)}
+.ovl-x{position:absolute;top:.5rem;right:.7rem;border:none;background:none;font-size:1.2rem;cursor:pointer;color:var(--gray)}
 .vswitch{display:inline-flex;gap:.2rem;align-items:center}
 .vbtn{font-size:.78rem;padding:.15rem .55rem;border:1px solid var(--border);border-radius:var(--radius-pill);color:var(--gray);text-decoration:none}
 .vbtn.on{background:var(--green);color:#fff;border-color:var(--green)}
@@ -407,7 +413,10 @@ def _quickadd(owner: str, col: str, csrf_token: str, back: str, trekker: str = "
         f"<input type='hidden' name='col' value='{_e(col)}'>"
         f"<input type='hidden' name='next' value='{_e(back)}'>{trek}"
         f"<textarea name='scope' rows='2' placeholder='Titel van het project…' aria-label='nieuw project'></textarea>"
+        f"<div class='qadd-row'>"
         f"<button class='btn ok' type='submit' name='action' value='proj_add'>Project toevoegen</button>"
+        f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "
+        f"aria-label='annuleren'>✕</button></div>"
         f"</form></details>")
 
 
@@ -420,7 +429,8 @@ def _columns_html(st: _Stores, items: list, add_owner: str, add_trekker: str,
         body = "".join(_proj_card(st, p, csrf_token, back) for p in its)
         qa = _quickadd(add_owner, key, csrf_token, back, trekker=add_trekker) if quickadd else ""
         cols += (f"<div class='pcol' data-to='{key}'>"
-                 f"<div class='pcol-h'>{_e(label)} ({len(its)})</div>{body}{qa}</div>")
+                 f"<div class='pcol-h'>{_e(label)} ({len(its)})</div>"
+                 f"<div class='pcol-scroll'>{body}</div>{qa}</div>")
     return f"<div class='pboard'>{cols}</div>"
 
 
@@ -429,12 +439,11 @@ def _drag_script(csrf_token: str, back: str) -> str:
         return ""
     return (
         "<script>(function(){"
-        f"var csrf={json.dumps(csrf_token)},next={json.dumps(back)},pid=null,dragging=false;"
+        f"var csrf={json.dumps(csrf_token)},next={json.dumps(back)},pid=null;"
         "document.querySelectorAll('.pcard').forEach(function(c){"
-        "c.addEventListener('dragstart',function(e){pid=c.getAttribute('data-pid');dragging=true;"
+        "c.addEventListener('dragstart',function(e){pid=c.getAttribute('data-pid');window.__pdrag=true;"
         "e.dataTransfer.effectAllowed='move';c.style.opacity='.5';});"
-        "c.addEventListener('dragend',function(){c.style.opacity='';setTimeout(function(){dragging=false;},50);});"
-        "c.addEventListener('click',function(){if(!dragging){var h=c.getAttribute('data-href');if(h)window.location=h;}});});"
+        "c.addEventListener('dragend',function(){c.style.opacity='';setTimeout(function(){window.__pdrag=false;},60);});});"
         "document.querySelectorAll('.pcol[data-to]').forEach(function(col){"
         "col.addEventListener('dragover',function(e){e.preventDefault();col.classList.add('over');});"
         "col.addEventListener('dragleave',function(){col.classList.remove('over');});"
@@ -448,6 +457,36 @@ def _drag_script(csrf_token: str, back: str) -> str:
 
 
 _II_PREFIX = "ii:"   # Individual Initiative-pseudo-eigenaar per cirkel: 'ii:<circle_id>'
+
+
+def _modal_html() -> str:
+    """Herbruikbare detail-overlay (modal): klik op een kaart → haalt het fragment op en toont het;
+    formulieren erin posten via fetch en verversen alleen de overlay. Val-terug: zonder JS navigeert
+    de kaart-link naar de volledige /project-pagina. Bedoeld als standaard-patroon (ook kenniskaartjes)."""
+    return (
+        "<div id='ovl' class='ovl' style='display:none'><div class='ovl-box'>"
+        "<button type='button' class='ovl-x' aria-label='sluiten'>✕</button>"
+        "<div id='ovl-body'></div></div></div>"
+        "<script>(function(){"
+        "var ov=document.getElementById('ovl'),bd=document.getElementById('ovl-body'),pid=null,dirty=false;"
+        "function frag(u){return u+(u.indexOf('?')>-1?'&':'?')+'fragment=1';}"
+        "function openCard(u){var m=u.match(/[?&]pid=([^&]+)/);pid=m?decodeURIComponent(m[1]):null;"
+        "fetch(frag(u)).then(function(r){return r.text();}).then(function(h){bd.innerHTML=h;ov.style.display='flex';wire();});}"
+        "function reopen(){if(pid)openCard('/project?pid='+encodeURIComponent(pid));}"
+        "function shut(){ov.style.display='none';bd.innerHTML='';if(dirty){dirty=false;location.reload();}}"
+        "function wire(){bd.querySelectorAll('form').forEach(function(f){f.addEventListener('submit',function(e){"
+        "e.preventDefault();dirty=true;var act=(e.submitter&&e.submitter.value)||'';"
+        "var data=new URLSearchParams(new FormData(f));"
+        "if(e.submitter&&e.submitter.name){data.set(e.submitter.name,e.submitter.value);}"
+        "fetch('/action',{method:'POST',body:data}).then(function(){"
+        "if(act==='proj_delete'||act==='proj_archive'){shut();}else{reopen();}});});});}"
+        "document.querySelectorAll('.pcard[data-href],a.js-modal[data-href]').forEach(function(c){"
+        "c.addEventListener('click',function(e){if(window.__pdrag)return;e.preventDefault();"
+        "openCard(c.getAttribute('data-href'));});});"
+        "ov.addEventListener('click',function(e){if(e.target===ov)shut();});"
+        "document.querySelector('.ovl-x').addEventListener('click',shut);"
+        "document.addEventListener('keydown',function(e){if(e.key==='Escape'&&ov.style.display!=='none')shut();});"
+        "})();</script>")
 
 
 def _group_meta(st: _Stores, p: dict, mode: str, node_owner: str):
@@ -631,10 +670,11 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
             f"<h1>{_e(_name(rec))} {chip}</h1>{_banner(msg)}{meet}"
             f"{_tabbar(node_id, tabs, tab)}{content}</div>")
     rail = f"<div class='c2-rail'>{_tree_html(st, node_id)}</div>"
+    modal = _modal_html() if (csrf_token and tab == "projects") else ""
     inner = (f"<style>{_EXTRA_CSS}</style>"
-             "<div class='bar'>cockpit 2 · GlassFrog-vorm (PoC, read-only) · "
+             "<div class='bar'>cockpit 2 · GlassFrog-vorm (PoC) · "
              "<a href='/'>home</a></div>"
-             f"<div class='c2-wrap'>{main}{rail}</div>")
+             f"<div class='c2-wrap'>{main}{rail}</div>{modal}")
     return _page(_name(rec), inner)
 
 
@@ -665,9 +705,12 @@ def render_person(st: _Stores, pid: str) -> str:
     return _page(p.name, inner)
 
 
-def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", back: str = "/") -> str:
+def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", back: str = "/",
+                   fragment: bool = False) -> str:
     p = st.projects.get(pid)
     if p is None:
+        if fragment:
+            return "<p class='muted'>Project bestaat niet meer.</p>"
         return _page("Niet gevonden", "<p>Project niet gevonden.</p><p><a href='/'>← home</a></p>")
     if not back.startswith("/"):
         back = "/"
@@ -752,11 +795,13 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         labelbar = f"<div class='clabel' style='background:{_LABELS[p['label']]};height:8px;border-radius:4px;margin-bottom:.4rem'></div>"
     desc = (f"<div class='c2-sec'><h3>Omschrijving</h3>"
             f"<div>{_e(p.get('description','')) or '<span class=muted>geen omschrijving</span>'}</div></div>")
+    detail = (f"{labelbar}<h1 style='margin-top:0'>{_e(_scope_text(p))} {_proj_chip(p.get('status',''))}</h1>"
+              f"<div class='muted'>trekker: {_trekker_html(st, p)} · {owner_link} · {_e(_age(p.get('created_at')))}</div>"
+              f"{_banner(msg)}{desc}{checklist}{feedsec}{edit}")
+    if fragment:
+        return detail
     main = (f"<div class='c2-main' style='max-width:720px'>"
-            f"<div class='c2-bar'><a href='{_e(back)}'>← bord</a> · {owner_link}</div>"
-            f"{labelbar}<h1>{_e(_scope_text(p))} {_proj_chip(p.get('status',''))}</h1>"
-            f"<div class='muted'>trekker: {_trekker_html(st, p)} · {_e(_age(p.get('created_at')))}</div>"
-            f"{_banner(msg)}{desc}{checklist}{feedsec}{edit}</div>")
+            f"<div class='c2-bar'><a href='{_e(back)}'>← terug</a></div>{detail}</div>")
     inner = (f"<style>{_EXTRA_CSS}</style>"
              "<div class='bar'>cockpit 2 · projectdetail · <a href='/'>home</a></div>"
              f"<div class='c2-wrap'>{main}</div>")
@@ -865,7 +910,8 @@ def make_handler(data_dir: str, csrf_token: str):
             if path == "/project":
                 self._send(render_project(st, (qs.get("pid") or [""])[0], csrf_token=csrf_token,
                                           msg=(qs.get("msg") or [""])[0],
-                                          back=(qs.get("back") or ["/"])[0]))
+                                          back=(qs.get("back") or ["/"])[0],
+                                          fragment=(qs.get("fragment") or [""])[0] == "1"))
                 return
             if path == "/person":
                 self._send(render_person(st, (qs.get("id") or [""])[0]))
