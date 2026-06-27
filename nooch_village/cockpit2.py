@@ -706,9 +706,10 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
         content = _todo("Wijzigingsgeschiedenis per rol/cirkel (records dragen al versies; de "
                         "weergave moet nog).")
 
+    # Meetings zijn een CIRKEL-functie (een rol heeft geen governance/tactical meeting).
     meet = ("<div class='c2-meet'>"
             "<span class='btn grey' title='governance draait in cockpit 1'>▾ Governance meeting</span>"
-            "<span class='btn grey' title='nog te bouwen'>▾ Tactical meeting</span></div>")
+            "<span class='btn grey' title='nog te bouwen'>▾ Tactical meeting</span></div>") if is_c else ""
     main = (f"<div class='c2-main'><div class='c2-bar'>{crumb}</div>"
             f"<h1>{_e(_name(rec))} {chip}</h1>{_banner(msg)}{meet}"
             f"{_tabbar(node_id, tabs, tab)}{content}</div>")

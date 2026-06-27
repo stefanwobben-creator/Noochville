@@ -17,6 +17,14 @@ def test_bootstrap_laadt_nooch(tmp_path):
     assert len(st.people.all()) == 6
 
 
+def test_meetings_alleen_op_cirkels(tmp_path):
+    st = _st(tmp_path)
+    circle = cockpit2.render_node(st, "mother_earth__nooch", "overview", csrf_token="t")
+    role = cockpit2.render_node(st, "mother_earth__nooch__website_developer", "overview", csrf_token="t")
+    assert "Tactical meeting" in circle and "Governance meeting" in circle
+    assert "Tactical meeting" not in role and "Governance meeting" not in role
+
+
 def test_root_overview(tmp_path):
     st = _st(tmp_path)
     page = cockpit2.render_node(st, "mother_earth", "overview")
