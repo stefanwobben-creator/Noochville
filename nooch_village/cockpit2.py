@@ -91,8 +91,11 @@ ul.clean li:last-child{border-bottom:none}
 .qadd-form textarea{width:100%;box-sizing:border-box;padding:.45rem .55rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow);font:inherit;font-size:.85rem;resize:vertical}
 .qadd-row{display:flex;align-items:center;gap:.4rem}
 .qadd-x{background:none;border:none;font-size:1rem;color:var(--gray);cursor:pointer;padding:.1rem .3rem}
-.addlink{color:var(--green-dark);font-weight:700;font-size:.88rem;text-decoration:none;cursor:pointer}
-.addlink:hover{text-decoration:underline}
+/* '+ project' krijgt dezelfde subtiele knop-vormgeving als de meeting-knoppen */
+.addlink{display:inline-block;font-family:var(--font-body);font-weight:600;font-size:12px;
+  border:1px solid rgba(27,27,27,.14);border-radius:var(--radius-pill);background:transparent;
+  color:var(--gray);padding:.3rem .85rem;text-decoration:none;cursor:pointer;vertical-align:middle}
+.addlink:hover{background:rgba(27,27,27,.05);color:var(--ink);text-decoration:none}
 .ovl{position:fixed;inset:0;background:rgba(27,27,27,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center}
 .ovl-box{background:var(--surface);max-width:720px;width:92%;margin:4vh auto;border-radius:12px;padding:1.3rem 1.5rem;max-height:88vh;overflow:auto;position:relative;box-shadow:0 12px 48px rgba(27,27,27,.35)}
 .ovl-x{position:absolute;top:.5rem;right:.7rem;border:none;background:none;font-size:1.2rem;cursor:pointer;color:var(--gray)}
