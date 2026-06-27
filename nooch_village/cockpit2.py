@@ -119,13 +119,11 @@ ul.clean li:last-child{border-bottom:none}
 .aichip{display:inline-block;background:#EFEAF9;color:#5b3fa6;border-radius:var(--radius-pill);padding:.05rem .5rem;font-size:.74rem;font-weight:600}
 .ai-gift{font-size:1rem;text-decoration:none;cursor:pointer;line-height:1}
 .chiplink{text-decoration:none}
-.swrow{display:flex;gap:.3rem;flex-wrap:wrap;margin:.2rem 0 .8rem}
-.sw{background:var(--cream-2);color:var(--gray);border:1px solid var(--border);border-radius:var(--radius-pill);padding:.2rem .7rem;font-size:.76rem;font-weight:600;cursor:pointer}
-.sw:hover{border-color:var(--green)}
-.sw.on{background:var(--green);color:#fff;border-color:var(--green)}
-.pmeta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem .9rem;margin:.4rem 0 .2rem}
-.pmeta>div{display:flex;flex-direction:column;gap:.1rem;min-width:0}
-.pmeta .k{font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700}
+/* Knop-atoom: .btn (neutraal) + .ok (primair groen) + .no (gevaar) uit het design system,
+   plus twee modifiers. Geen losse knop-varianten meer elders. */
+.btn.sm{padding:.2rem .6rem;font-size:.74rem}
+.btn.ghost{background:none;border-color:transparent}
+.btn.ghost:hover{background:rgba(27,27,27,.05);border-color:var(--border)}
 .dot{display:inline-block;width:.7rem;height:.7rem;border-radius:50%;margin-right:.35rem;vertical-align:middle}
 .fentry{margin:0 0 .85rem}
 .fhead{display:flex;align-items:center;gap:.45rem;margin-bottom:.2rem}
@@ -166,7 +164,7 @@ ul.clean li:last-child{border-bottom:none}
 .title-edit{flex:1;min-width:0;font-family:var(--font-display);font-size:1.5rem;font-weight:700;border:1px solid transparent;border-radius:var(--radius);padding:.15rem .35rem;background:none;color:var(--ink)}
 .title-edit:hover{border-color:var(--border)}
 .title-edit:focus{border-color:var(--green);background:var(--surface);outline:none}
-.title-save{flex:0 0 auto;border:none;background:var(--green);color:#fff;border-radius:var(--radius-pill);padding:.2rem .65rem;font-size:.72rem;font-weight:600;cursor:pointer;opacity:0;transition:opacity .12s}
+.title-save{flex:0 0 auto;opacity:0;transition:opacity .12s}   /* alleen reveal-gedrag; styling uit .btn.ok.sm */
 .titleform:focus-within .title-save{opacity:1}
 .ptitle-ro{margin:.1rem 0;font-family:var(--font-display)}
 .cardmenu{position:relative;flex:0 0 auto}
@@ -206,16 +204,12 @@ ul.clean li:last-child{border-bottom:none}
 .visform,.visform label{font-size:.85rem;margin:0;display:inline}
 .fieldform{display:flex;gap:.4rem;align-items:center}
 .fieldform select{flex:1 1 auto;min-width:0}
-.fieldsave{flex:0 0 auto;border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);padding:.12rem .5rem;font-size:.72rem;cursor:pointer}
 .descform textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .55rem}
 .enrich-add{display:flex;gap:.4rem;flex-wrap:wrap}
 .enrich-ghost{background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .7rem;font-size:.8rem;color:var(--gray);font-weight:600}
-.swlink{border:none;background:none;color:var(--subtle);font-size:.78rem;cursor:pointer;text-decoration:underline;padding:.2rem .3rem}
-.swlink:hover{color:var(--green-dark)}
 .card-del{margin-top:1.2rem;padding-top:.6rem;border-top:1px solid var(--border)}
 .pdisc .psec{background:none;border:none;padding:0;margin:0}
 .pdisc{background:var(--cream-2);border-radius:var(--radius);padding:.9rem;min-width:0}
-.comp-row .btn{padding:.25rem .85rem;font-size:.76rem;border-radius:var(--radius-pill)}
 .ment{color:var(--green-dark);font-weight:600}
 .mention-pop{position:absolute;left:0;right:auto;top:100%;margin-top:2px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);z-index:8;min-width:180px;max-height:200px;overflow:auto}
 .mention-it{display:block;width:100%;text-align:left;border:none;background:none;padding:.35rem .6rem;cursor:pointer;font-size:.85rem}
@@ -223,12 +217,8 @@ ul.clean li:last-child{border-bottom:none}
 .nt-list .nt-item{padding:.3rem 0;border-bottom:1px solid var(--border)}
 .nt-dot{display:inline-block;width:.5rem;height:.5rem;border-radius:50%;background:var(--green);margin-right:.4rem;vertical-align:middle}
 .ai-ask{margin:.1rem 0 1rem}
-.ai-ask-btn{background:none;border:1px dashed var(--border);border-radius:var(--radius-pill);padding:.3rem .8rem;font-size:.78rem;color:var(--gray);cursor:pointer}
-.ai-ask-btn:hover{border-color:var(--green);color:var(--green-dark)}
 .comp-form{margin-bottom:1rem}
 .comp-tools{display:flex;gap:.3rem;margin-bottom:.35rem}
-.ctool{border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);padding:.1rem .55rem;font-size:.8rem;cursor:pointer;color:var(--gray)}
-.ctool:hover{border-color:var(--green)}
 .comp-form textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.5rem .6rem;background:var(--surface)}
 .comp-row{margin-top:.4rem}
 .pdetail-h h2{margin:.1rem 0 .5rem;font-family:var(--font-display);font-size:1.35rem;line-height:1.2}
@@ -250,7 +240,6 @@ ul.clean li:last-child{border-bottom:none}
 .acc-sub{padding:.15rem 0 .4rem 1.4rem;border-bottom:1px solid var(--border)}
 .sugg{background:#F4F1FB;border:1px solid #E0D7F5;border-radius:var(--radius);padding:.5rem .7rem;margin:.5rem 0}
 .sugg-h{font-weight:700;color:#5b3fa6;font-size:.82rem;margin-bottom:.3rem}
-.koppel{background:#5b3fa6;color:#fff;border:none;border-radius:var(--radius-pill);padding:.15rem .7rem;font-size:.76rem;font-weight:600;cursor:pointer}
 .bagadd{background:none;border:none;box-shadow:none;padding:0;margin-top:.8rem}
 .bagadd>summary{cursor:pointer;color:var(--subtle);font-size:.82rem;list-style:none}
 .bagadd>summary:hover{color:#5b3fa6}
@@ -1095,6 +1084,40 @@ def render_person(st: _Stores, pid: str) -> str:
     return _page(p.name, inner)
 
 
+def render_patterns(csrf_token: str = "") -> str:
+    """Levende styleguide: elk atoom/molecuul één keer. Bron van waarheid; geen losse varianten."""
+    def sec(title, body):
+        return f"<div class='c2-sec'><h3>{_e(title)}</h3><div style='display:flex;gap:.5rem;flex-wrap:wrap;align-items:center'>{body}</div></div>"
+    buttons = ("<button class='btn ok'>Primair</button>"
+               "<button class='btn'>Neutraal</button>"
+               "<button class='btn no'>Gevaar</button>"
+               "<button class='btn ok sm'>Primair sm</button>"
+               "<button class='btn sm'>Neutraal sm</button>"
+               "<button class='btn ghost sm'>Ghost sm</button>"
+               "<a class='dellink' href='#'>verwijderen</a>")
+    chips = (_proj_chip("running") + _proj_chip("blocked") + _proj_chip("done")
+             + "<span class='chip'>chip</span><span class='badge ro'>read</span><span class='badge rw'>edit</span>")
+    cards = (f"<button class='acard'>{_IC_CLOCK}<span>Datum</span></button>"
+             f"<button class='acard'>{_IC_CHECK}<span>Checklist</span></button>"
+             f"<button class='acard acard-off' disabled>{_IC_TARGET}<span>Goals</span></button>")
+    att = f"<div class='attcard'><span class='att-ic'>{_IC_LINK}</span><a class='att-name' href='#'>voorbeeld bijlage</a></div>"
+    due = (f"<span class='due-chip'>{_IC_CLOCK}25 jun 2026</span>"
+           f"<span class='due-chip over'>{_IC_CLOCK}1 jan 2020<span class='ov-badge'>Overdue</span></span>")
+    av = _avatar("Stefan Wobben", False) + _avatar("Codie", True)
+    body = (sec("Knoppen — atoom: .btn [.ok|.no] [.sm] [.ghost] + .dellink", buttons)
+            + sec("Status & chips & badges", chips)
+            + sec("Action-cards (molecule)", cards)
+            + sec("Bijlage-card", att)
+            + sec("Deadline-chip", due)
+            + sec("Avatar", av))
+    main = (f"<div class='c2-main'><h1>Patterns</h1>"
+            f"<p class='muted'>Levende referentie. Gebruik deze atomen en moleculen; verzin geen varianten.</p>{body}</div>")
+    inner = (f"<style>{_EXTRA_CSS}</style>"
+             "<div class='bar'>cockpit 2 · patterns · <a href='/'>home</a></div>"
+             f"<div class='c2-wrap'>{main}</div>")
+    return _page("Patterns", inner)
+
+
 def _feed_norm(entry: dict):
     """Normaliseer een feed-entry naar (kind, author_type, author_id). Leest zowel het nieuwe
     schema (author/kind) als het oude ({who: 'mens'|'rol'})."""
@@ -1351,17 +1374,17 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         composer = (f"<form method='post' action='/action' class='pf comp-form'>{hid()}"
                     f"<input type='hidden' name='author' value='human:'>"
                     f"<div class='comp-tools'>"
-                    f"<button type='button' class='ctool' onclick=\"wrapSel(this,'**','**')\" title='vet'><b>B</b></button>"
-                    f"<button type='button' class='ctool' onclick=\"wrapSel(this,'- ','')\" title='lijst'>• lijst</button>"
+                    f"<button type='button' class='btn ghost sm' onclick=\"wrapSel(this,'**','**')\" title='vet'><b>B</b></button>"
+                    f"<button type='button' class='btn ghost sm' onclick=\"wrapSel(this,'- ','')\" title='lijst'>• lijst</button>"
                     f"</div>"
                     f"<textarea name='text' rows='2' placeholder='Schrijf een reactie…'></textarea>"
                     f"<div class='comp-row'>"
-                    f"<button class='btn ok' type='submit' name='action' value='proj_feed'>Plaatsen</button>"
+                    f"<button class='btn ok sm' type='submit' name='action' value='proj_feed'>Plaatsen</button>"
                     f"</div></form>")
         ai = _owner_ai(st, orec)
         if ai is not None:
             composer += (f"<form method='post' action='/action' class='ai-ask'>{hid()}"
-                         f"<button class='ai-ask-btn' type='submit' name='action' value='ai_reply'>"
+                         f"<button class='btn ghost sm ai-ask-btn' type='submit' name='action' value='ai_reply'>"
                          f"🤖 Vraag {_e(ai.name)} om mee te denken</button></form>")
     discussie = _psec(_IC_CHAT, "Dialoog", composer + feed)   # schrijf-box boven, reacties eronder
 
@@ -1389,7 +1412,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     if rw:
         title = (f"<form method='post' action='/action' class='titleform'>{hid()}"
                  f"<input class='title-edit' name='scope' value='{_e(_scope_text(p))}' aria-label='projecttitel'>"
-                 f"<button class='title-save' type='submit' name='action' value='proj_rename'>opslaan</button></form>")
+                 f"<button class='btn ok sm title-save' type='submit' name='action' value='proj_rename'>opslaan</button></form>")
     else:
         title = f"<h2 class='ptitle-ro'>{_e(_scope_text(p))}</h2>"
     # Deadline-chip vóór de status (overzicht), met Overdue-markering.
@@ -1934,6 +1957,9 @@ def make_handler(data_dir: str, csrf_token: str):
                 return
             if path == "/person":
                 self._send(render_person(st, (qs.get("id") or [""])[0]))
+                return
+            if path == "/_patterns":
+                self._send(render_patterns(csrf_token))
                 return
             self._send("<p>404</p>", 404)
 
