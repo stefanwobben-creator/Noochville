@@ -42,8 +42,10 @@ def test_ai_genest_onder_accountability(tmp_path):
     cockpit2.dispatch(dd, "aitask_add", {"role": [role], "acc": ["0"],
                                          "pick": [f"{codie.id}::schrijft de code"], "next": ["/"]})
     page = cockpit2.render_node(cockpit2._Stores(dd), role, "overview", csrf_token="t")
-    assert "acc-sub" in page and "Codie" in page and "schrijft de code" in page
-    # geen los blok meer op de rolpagina
+    # subtiele AI-marker op de accountability + één gebundeld overzicht (niet dubbel)
+    assert "ai-on" in page and "AI in deze rol" in page
+    assert "Codie" in page and "schrijft de code" in page
+    assert "acc-sub" not in page                  # geen herhaalde chip per regel meer
     assert "Autonome AI-taken" not in page
 
 

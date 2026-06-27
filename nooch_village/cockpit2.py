@@ -130,6 +130,11 @@ ul.clean li:last-child{border-bottom:none}
 .chip.coral{background:var(--error-tint);color:var(--coral);border:1px solid var(--coral)}
 .chip.coral-solid{background:var(--coral);color:#fff;font-size:.64rem;text-transform:uppercase;padding:.04rem .4rem}
 .ai-gift{font-size:1rem;text-decoration:none;cursor:pointer;line-height:1}
+.ai-on{font-size:.95rem;text-decoration:none;cursor:pointer;line-height:1;opacity:.8}
+.ai-on:hover{opacity:1}
+.ai-ov{margin:.2rem 0 .7rem}
+.ai-ov-h{display:flex;align-items:center;gap:.4rem;margin-bottom:.2rem}
+.ai-ov-list li{padding:.12rem 0}
 .chiplink{text-decoration:none}
 /* Knop-atoom: .btn (neutraal) + .ok (primair groen) + .no (gevaar) uit het design system,
    plus twee modifiers. Geen losse knop-varianten meer elders. */
@@ -318,9 +323,21 @@ ul.clean li:last-child{border-bottom:none}
 .nt-dot{display:inline-block;width:.5rem;height:.5rem;border-radius:50%;background:var(--green);margin-right:.4rem;vertical-align:middle}
 .ai-ask{margin:.1rem 0 1rem}
 .comp-form{margin-bottom:1rem}
-.comp-tools{display:flex;gap:.3rem;margin-bottom:.35rem}
-.comp-form textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.5rem .6rem;background:var(--surface)}
 .comp-row{margin-top:.4rem}
+/* Trello-stijl editor: omkaderde box met opmaak-toolbar boven een randloze textarea. */
+.editor{border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);overflow:visible}
+.editor:focus-within{border-color:var(--green)}
+.editor-tb{display:flex;align-items:center;gap:.1rem;padding:.25rem .35rem;border-bottom:1px solid var(--border);background:var(--cream-2);border-radius:var(--radius) var(--radius) 0 0}
+.editor-tb .tb-b{background:none;border:none;cursor:pointer;color:var(--gray);border-radius:var(--radius);padding:.2rem .42rem;font-size:.85rem;line-height:1;display:inline-flex;align-items:center}
+.editor-tb .tb-b:hover{background:var(--cream-3);color:var(--green-dark)}
+.editor-tb .tb-b svg{width:14px;height:14px}
+.tb-sep{width:1px;height:1.1rem;background:var(--border);margin:0 .25rem}
+.tb-help{margin-left:auto}
+.tb-help>summary{cursor:pointer;color:var(--subtle);padding:.2rem .45rem;font-weight:700;list-style:none}
+.tb-help>summary::-webkit-details-marker{display:none}
+.md-help{position:absolute;right:0;margin-top:.3rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .6rem;font-size:.72rem;color:var(--gray);white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.12);z-index:5}
+.editor textarea{border:none;width:100%;box-sizing:border-box;padding:.55rem .6rem;background:transparent;border-radius:0 0 var(--radius) var(--radius)}
+.editor textarea:focus{outline:none}
 .pdetail-h h2{margin:.1rem 0 .5rem;font-family:var(--font-display);font-size:1.35rem;line-height:1.2}
 .psec{margin:0 0 1.15rem}
 .psec-h{display:flex;align-items:center;gap:.4rem;color:var(--subtle);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:.45rem}
@@ -337,7 +354,6 @@ ul.clean li:last-child{border-bottom:none}
 .editbox{margin:0 0 .5rem}
 .editbox>summary{cursor:pointer;font-weight:700;font-size:.85rem;color:var(--green-dark)}
 .actrow{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
-.acc-sub{padding:.15rem 0 .4rem 1.4rem;border-bottom:1px solid var(--border)}
 .sugg{background:#F4F1FB;border:1px solid #E0D7F5;border-radius:var(--radius);padding:.5rem .7rem;margin:.5rem 0}
 .sugg-h{font-weight:700;color:#5b3fa6;font-size:.82rem;margin-bottom:.3rem}
 .bagadd{background:none;border:none;box-shadow:none;padding:0;margin-top:.8rem}
@@ -468,7 +484,10 @@ def _tree_html(st: _Stores, current_id: str) -> str:
         here = " here" if rec.id == current_id else ""
         label = f"<a class='{cls}{here}' href='/node?id={_e(rec.id)}'>{_e(_name(rec))}</a>"
         if is_c:
-            kids = sorted(org.children_of(recs, rec.id),
+            # Kernrollen (Lead/Rep/Secretary/Facilitator) niet in de navigatie: die zie je via
+            # de cirkel -> Rollen. Houdt de boom rustig.
+            kids = sorted([k for k in org.children_of(recs, rec.id)
+                           if org.is_circle(k) or _name(k).strip().lower() not in _CORE_ROLE_NAMES],
                           key=lambda r: (not org.is_circle(r), _name(r).lower()))
             return f"<li>{label}<ul>{''.join(node_li(k) for k in kids)}</ul></li>"
         return f"<li>{label}</li>"
@@ -510,21 +529,53 @@ def _suggest_for_acc(st: _Stores, role_id: str, acc_index: int, acc_text: str):
 
 
 def _acc_row(st: _Stores, rec, i: int, text: str, csrf_token: str) -> str:
+    """Eén accountability-regel. Is er AI op gekoppeld, dan tonen we dat SUBTIEL (één 🤖-marker,
+    klikbaar om te beheren); het 'wat' staat gebundeld in het AI-overzicht onder de rol. Zo niet
+    dubbel. Het 🎁 verschijnt alleen als er een passende, nog niet gekoppelde AI-skill is."""
     tasks = st.ai.for_acc(rec.id, i)
     url = f"/aitask?role={_e(rec.id)}&acc={i}"
-    # Gekoppelde AI: geneste chip, klikbaar om te beheren (toevoegen/verwijderen).
-    if csrf_token:
-        sub = "".join(f"<div class='acc-sub'>↳ <a class='chiplink js-modal' href='{url}' "
-                      f"data-href='{url}'>{_ai_chip(st, t)}</a></div>" for t in tasks)
-    else:
-        sub = "".join(f"<div class='acc-sub'>↳ {_ai_chip(st, t)}</div>" for t in tasks)
-    # Discovery: enkel het cadeautje, en alleen als er een passende, nog niet gekoppelde AI-skill is.
+    marker = ""
+    if tasks:
+        if csrf_token:
+            marker = (f"<a class='ai-on js-modal' href='{url}' data-href='{url}' "
+                      f"title='AI-empowered — beheren'>🤖</a>")
+        else:
+            marker = "<span class='ai-on' title='AI-empowered'>🤖</span>"
     aff = ""
     if csrf_token and _suggest_for_acc(st, rec.id, i, text):
         aff = (f"<a class='ai-gift js-modal' href='{url}' data-href='{url}' "
                f"title='Er is een AI-skill die deze accountability autonoom kan uitvoeren'>🎁</a>")
     return (f"<div class='accrow'><div class='acc-text'>{_e(text)}</div>"
-            f"<div class='acc-ai'>{aff}</div></div>{sub}")
+            f"<div class='acc-ai'>{marker}{aff}</div></div>")
+
+
+def _role_ai_overview(st: _Stores, rec, csrf_token: str = "") -> str:
+    """Overzicht (één keer, niet per accountability herhaald): wat doet elke AI autonoom in DEZE rol.
+    Gegroepeerd per agent -> per skill de accountabilities die hij dekt."""
+    tasks = st.ai.for_role(rec.id)
+    if not tasks:
+        return ""
+    accs = rec.definition.accountabilities or []
+    by_agent: dict[str, dict[str, list]] = {}
+    for t in tasks:
+        acc_txt = accs[t.acc_index] if 0 <= t.acc_index < len(accs) else "—"
+        by_agent.setdefault(t.agent, {}).setdefault(t.wat or "—", []).append(acc_txt)
+    blocks = ""
+    for agent, skills in by_agent.items():
+        pa = st.personas.get(agent)
+        nm = pa.name if pa else agent
+        rows = ""
+        for wat, acclist in skills.items():
+            uniq = ", ".join(dict.fromkeys(acclist))
+            rows += f"<li><b>{_e(wat)}</b> <span class='muted'>· {_e(uniq)}</span></li>"
+        manage = ""
+        if csrf_token:
+            url = f"/aitask?role={_e(rec.id)}&acc=0"
+            manage = f" <a class='flink js-modal' href='{url}' data-href='{url}'>beheren</a>"
+        blocks += (f"<div class='ai-ov'><div class='ai-ov-h'>{_avatar(nm, True)}"
+                   f"<b>{_e(nm)}</b> <span class='muted'>doet autonoom in deze rol:</span>{manage}</div>"
+                   f"<ul class='clean ai-ov-list'>{rows}</ul></div>")
+    return f"<div class='c2-sec'><h3>AI in deze rol</h3>{blocks}</div>"
 
 
 def _overview_html(st: _Stores, rec, csrf_token: str = "") -> str:
@@ -544,6 +595,7 @@ def _overview_html(st: _Stores, rec, csrf_token: str = "") -> str:
         parts.append("<div class='c2-sec'><h3>Accountabilities</h3>"
                      + ("".join(_acc_row(st, rec, i, a, csrf_token) for i, a in enumerate(accs))
                         if accs else "<span class='muted'>Geen accountabilities.</span>") + "</div>")
+        parts.append(_role_ai_overview(st, rec, csrf_token))
     elif accs:
         parts.append("<div class='c2-sec'><h3>Accountabilities</h3><ul class='clean'>"
                      + "".join(f"<li>{_e(x)}</li>" for x in accs) + "</ul></div>")
@@ -2152,11 +2204,20 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         # Directe textarea met mini-toolbar op de gele achtergrond; Plaatsen links uitgelijnd.
         composer = (f"<form method='post' action='/action' class='pf comp-form'>{hid()}"
                     f"<input type='hidden' name='author' value='human:'>"
-                    f"<div class='comp-tools'>"
-                    f"<button type='button' class='btn ghost sm' onclick=\"wrapSel(this,'**','**')\" title='vet'><b>B</b></button>"
-                    f"<button type='button' class='btn ghost sm' onclick=\"wrapSel(this,'- ','')\" title='lijst'>• lijst</button>"
-                    f"</div>"
+                    f"<div class='editor'>"
+                    f"<div class='editor-tb'>"
+                    f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'**','**')\" title='Vet'><b>B</b></button>"
+                    f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'*','*')\" title='Cursief'><i>I</i></button>"
+                    f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'~~','~~')\" title='Doorhalen'><s>S</s></button>"
+                    f"<span class='tb-sep'></span>"
+                    f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'- ','')\" title='Lijst'>•</button>"
+                    f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'## ','')\" title='Kop'>H</button>"
+                    f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'[','](url)')\" title='Link'>{_IC_LINK}</button>"
+                    f"<details class='emoji-pick tb-help'><summary title='Opmaak-hulp'>?</summary>"
+                    f"<div class='md-help'>**vet** · *cursief* · ~~doorhalen~~ · # kop · - lijst · [tekst](url)</div>"
+                    f"</details></div>"
                     f"<textarea name='text' rows='2' placeholder='Schrijf een reactie…'></textarea>"
+                    f"</div>"
                     f"<div class='comp-row'>"
                     f"<button class='btn ok sm' type='submit' name='action' value='proj_feed'>Plaatsen</button>"
                     f"</div></form>")
