@@ -136,9 +136,15 @@ ul.clean li:last-child{border-bottom:none}
 .pgrid{display:grid;grid-template-columns:1fr;gap:1rem}
 @media(min-width:620px){.pgrid{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}}
 .pmain{min-width:0}.pside{min-width:0}
+.pcard-head{display:flex;align-items:flex-start;gap:.6rem;padding:0 2.6rem .8rem 0;border-bottom:1px solid var(--border);margin-bottom:1.1rem}
+.pcard-head .titleform,.pcard-head .ptitle-ro{flex:1 1 auto;min-width:0}
+.pcard-head-r{flex:0 0 auto;display:flex;align-items:center;gap:.5rem;padding-top:.2rem}
+.menu-h{font-size:.62rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;padding:.25rem .55rem .1rem}
+.menu-sep{height:1px;background:var(--border);margin:.3rem 0}
+.menuitem.on{font-weight:700;color:var(--green-dark);background:var(--green-tint)}
 .pdetail-h{display:flex;align-items:flex-start;gap:.4rem;margin-bottom:.7rem}
 .titleform{display:flex;gap:.4rem;align-items:center;flex:1;min-width:0}
-.title-edit{flex:1;min-width:0;font-family:var(--font-display);font-size:1.3rem;font-weight:700;border:1px solid transparent;border-radius:var(--radius);padding:.15rem .35rem;background:none;color:var(--ink)}
+.title-edit{flex:1;min-width:0;font-family:var(--font-display);font-size:1.5rem;font-weight:700;border:1px solid transparent;border-radius:var(--radius);padding:.15rem .35rem;background:none;color:var(--ink)}
 .title-edit:hover{border-color:var(--border)}
 .title-edit:focus{border-color:var(--green);background:var(--surface);outline:none}
 .title-save{flex:0 0 auto;border:none;background:var(--green);color:#fff;border-radius:var(--radius-pill);padding:.2rem .65rem;font-size:.72rem;font-weight:600;cursor:pointer;opacity:0;transition:opacity .12s}
@@ -196,7 +202,7 @@ ul.clean li:last-child{border-bottom:none}
 .ffocus>summary{list-style:none;cursor:pointer}
 .ffocus>summary::-webkit-details-marker{display:none}
 .ovl{position:fixed;inset:0;background:rgba(27,27,27,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center}
-.ovl-box{background:var(--surface);max-width:780px;width:94%;margin:4vh auto;border-radius:12px;padding:1.3rem 1.5rem;max-height:88vh;overflow:auto;position:relative;box-shadow:0 12px 48px rgba(27,27,27,.35)}
+.ovl-box{background:var(--surface);max-width:980px;width:95%;margin:4vh auto;border-radius:12px;padding:1.3rem 1.5rem;max-height:88vh;overflow:auto;position:relative;box-shadow:0 12px 48px rgba(27,27,27,.35)}
 .ovl-x{position:absolute;top:.5rem;right:.7rem;border:none;background:none;font-size:1.2rem;cursor:pointer;color:var(--gray)}
 .vswitch{display:inline-flex;gap:.2rem;align-items:center}
 .vbtn{font-size:12px;font-weight:600;padding:.3rem .85rem;border:1px solid var(--border);border-radius:var(--radius-pill);color:var(--gray);text-decoration:none}
@@ -1105,29 +1111,38 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                     f"style='margin-top:.3rem'>plaatsen</button></form>")
     discussie = _psec(_IC_CHAT, "Dialoog", composer + feed)   # schrijf-box boven, reacties eronder
 
-    # ---- Titel (inline bewerkbaar) ----
+    # ---- Status: chip in de header, wisselen via het …-menu (+ archiveren/verwijderen) ----
+    status_chip = _proj_chip(status)
+    menu = ""
+    if rw:
+        st_items = ""
+        for label, key, statuses in _PROJ_COLS:
+            act = "proj_done" if key == "done" else "proj_status"
+            to = "" if key == "done" else f"<input type='hidden' name='to' value='{key}'>"
+            on = " on" if status in statuses else ""
+            st_items += (f"<form method='post' action='/action'>{hid()}{to}"
+                         f"<button class='menuitem{on}' type='submit' name='action' value='{act}'>{_e(label)}</button></form>")
+        menu = (f"<details class='cardmenu'><summary aria-label='menu'>⋯</summary><div class='cardmenu-b'>"
+                f"<div class='menu-h'>Status</div>{st_items}<div class='menu-sep'></div>"
+                f"<form method='post' action='/action'>{hid()}<input type='hidden' name='next' value='{_e(back)}'>"
+                f"<button class='menuitem' type='submit' name='action' value='proj_archive'>Archiveren</button></form>"
+                f"<form method='post' action='/action'>{hid()}<input type='hidden' name='next' value='{_e(back)}'>"
+                f"<button class='menuitem danger' type='submit' name='action' value='proj_delete' "
+                f"onclick=\"return confirm('Definitief verwijderen? Archiveren bewaart het project.')\">Verwijderen</button>"
+                f"</form></div></details>")
+
+    # ---- Header (volledige breedte): titel inline + status + …-menu ----
     if rw:
         title = (f"<form method='post' action='/action' class='titleform'>{hid()}"
                  f"<input class='title-edit' name='scope' value='{_e(_scope_text(p))}' aria-label='projecttitel'>"
                  f"<button class='title-save' type='submit' name='action' value='proj_rename'>opslaan</button></form>")
     else:
         title = f"<h2 class='ptitle-ro'>{_e(_scope_text(p))}</h2>"
-    head = f"<div class='pdetail-h'>{title}</div>"
+    head = (f"<div class='pcard-head'>{title}"
+            f"<div class='pcard-head-r'>{status_chip}{menu}</div></div>")
 
-    # ---- Details (ingeklapt blok boven de omschrijving): status + bewerkbare velden ----
+    # ---- Details (ingeklapt blok): bewerkbare velden (status zit in het …-menu) ----
     if rw:
-        sw_btns = ""
-        for label, key, statuses in _PROJ_COLS:
-            act = "proj_done" if key == "done" else "proj_status"
-            to = "" if key == "done" else f"<input type='hidden' name='to' value='{key}'>"
-            on = " on" if status in statuses else ""
-            sw_btns += (f"<form method='post' action='/action' style='display:inline'>{hid()}{to}"
-                        f"<button class='sw{on}' type='submit' name='action' value='{act}'>{_e(label)}</button></form>")
-        # archiveren als subtiel linkje naast de statusknoppen
-        arch = (f"<form method='post' action='/action' style='display:inline'>{hid()}"
-                f"<input type='hidden' name='next' value='{_e(back)}'>"
-                f"<button class='swlink' type='submit' name='action' value='proj_archive'>archiveren</button></form>")
-        status_ctl = f"<div class='swrow'>{sw_btns}{arch}</div>"
         trekker_ctl = (f"<form method='post' action='/action' class='fieldform'>{hid()}"
                        f"<select name='trekker'>{_trekker_options(st, p.get('person') or '', p.get('agent') or '')}</select>"
                        f"<button class='fieldsave' type='submit' name='action' value='proj_settrekker'>ok</button></form>")
@@ -1141,13 +1156,11 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                    f"{' checked' if p.get('private') else ''}> alleen deze cirkel</label>"
                    f"<button class='fieldsave' type='submit' name='action' value='proj_setprivate'>ok</button></form>")
     else:
-        status_ctl = _proj_chip(status)
         trekker_ctl = _trekker_html(st, p)
         label_ctl = (f"<span class='dot' style='background:{_LABELS[p['label']]}'></span>{_e(p.get('label'))}"
                      if _LABELS.get(p.get("label")) else "<span class='muted'>—</span>")
         vis_ctl = "Alleen deze cirkel" if p.get("private") else "Hele cirkel-boom"
     details_body = ("<dl class='smeta'>"
-                    f"<dt>Status</dt><dd>{status_ctl}</dd>"
                     f"<dt>Trekker</dt><dd>{trekker_ctl}</dd>"
                     f"<dt>Rol / eigenaar</dt><dd>{owner_link}</dd>"
                     f"<dt>Label</dt><dd>{label_ctl}</dd>"
@@ -1196,26 +1209,17 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
 
     checklist = _psec(_IC_CHECK, "Checklist", checklist_body)
 
-    # Verwijderen: onderaan de kaart (archiveren staat in Details).
-    del_link = ""
-    if rw:
-        del_link = (f"<div class='card-del'><form method='post' action='/action'>{hid()}"
-                    f"<input type='hidden' name='next' value='{_e(back)}'>"
-                    f"<button class='dellink' type='submit' name='action' value='proj_delete' "
-                    f"onclick=\"return confirm('Definitief verwijderen? Archiveren bewaart het project.')\">"
-                    f"Verwijderen</button></form></div>")
-
     labelbar = ""
     if _LABELS.get(p.get("label")):
         labelbar = f"<div class='clabel' style='background:{_LABELS[p['label']]};height:8px;border-radius:4px;margin-bottom:.6rem'></div>"
 
-    maincol = head + details + omschrijving + verrijking + checklist + del_link
-    detail = (f"{labelbar}{_banner(msg)}"
+    maincol = details + omschrijving + verrijking + checklist
+    detail = (f"{labelbar}{_banner(msg)}{head}"
               f"<div class='pgrid'><div class='pmain'>{maincol}</div>"
               f"<aside class='pside pdisc'>{discussie}</aside></div>")
     if fragment:
         return detail
-    main = (f"<div class='c2-main' style='max-width:880px'>"
+    main = (f"<div class='c2-main' style='max-width:980px'>"
             f"<div class='c2-bar'><a href='{_e(back)}'>← terug</a></div>{detail}</div>")
     inner = (f"<style>{_EXTRA_CSS}</style>"
              "<div class='bar'>cockpit 2 · projectdetail · <a href='/'>home</a></div>"
