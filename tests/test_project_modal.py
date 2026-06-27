@@ -46,8 +46,9 @@ def test_redesign_layout(tmp_path):
     # full-width header met titel inline + …-menu (status/archiveren/verwijderen)
     assert "pcard-head" in frag and "titleform" in frag and "title-edit" in frag
     assert "cardmenu" in frag and "menu-h" in frag and "Archiveren" in frag and "Verwijderen" in frag
-    # Details ingeklapt zonder status; omschrijving inline; bijlagen; rechterkolom = dialoog
-    assert "detailsbox" in frag and "descform" in frag and "Bijlagen" in frag
+    # Details ingeklapt zonder status; omschrijving inline; Bijlage-actiekaart; rechterkolom = dialoog
+    assert "detailsbox" in frag and "descform" in frag
+    assert "Bestand van je computer" in frag                 # Bijlage-actiekaart (upload + link)
     assert "pdisc" in frag and "Dialoog" in frag
     # geen apart 'Acties'-blok
     assert "Acties" not in frag
@@ -62,11 +63,26 @@ def test_bijlage_cards_trello(tmp_path):
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "attcard" in frag and "Nooch blog" in frag      # met titel
     assert "example.com" in frag                            # zonder titel -> domein
-    assert "+ link" in frag and "Bijlagen" in frag
+    assert ">Links<" in frag                                # links-overzicht (sectie)
+    assert "Bestand van je computer" in frag               # toevoegen via de Bijlage-actiekaart
     # verwijderen
     aid = cockpit2._Stores(dd).projects.get(pid)["attachments"][0]["id"]
     cockpit2.dispatch(dd, "attach_remove", {"pid": [pid], "aid": [aid], "next": ["/"]})
     assert len(cockpit2._Stores(dd).projects.get(pid)["attachments"]) == 1
+
+
+def test_bijlage_bestand(tmp_path):
+    dd, pid = _setup(tmp_path)
+    cockpit2._Stores(dd).projects.attach_file(pid, "rapport.pdf", f"attachments/{pid}/x_rapport.pdf")
+    frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
+    assert ">Bijlagen<" in frag and "rapport.pdf" in frag and f"/file?pid={pid}" in frag
+
+
+def test_multipart_parser():
+    body = (b'--B\r\nContent-Disposition: form-data; name="csrf"\r\n\r\ntok\r\n'
+            b'--B\r\nContent-Disposition: form-data; name="file"; filename="a.txt"\r\n\r\nhello\r\n--B--\r\n')
+    fields, files = cockpit2._parse_multipart(body, "B")
+    assert fields["csrf"] == "tok" and files["file"] == ("a.txt", b"hello")
 
 
 def test_attach_add_vereist_url(tmp_path):

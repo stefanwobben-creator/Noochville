@@ -30,3 +30,4 @@ STATE_export.txt
 # backups van .env nooit tracken
 .env.save
 *.save
+data/poc/attachments/

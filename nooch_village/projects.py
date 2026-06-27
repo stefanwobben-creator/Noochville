@@ -155,6 +155,19 @@ class ProjectLedger:
         self._save()
         return card
 
+    def attach_file(self, pid: str, name: str, stored: str, title: str = "") -> dict | None:
+        """Registreer een geupload bestand (het bestand zelf is al weggeschreven door de handler).
+        `stored` = pad relatief aan de data-map."""
+        p = self._projects.get(pid)
+        if p is None or not stored:
+            return None
+        card = {"id": uuid.uuid4().hex[:10], "kind": "file", "name": (name or "bestand")[:200],
+                "stored": stored, "title": (title or "").strip()[:200], "at": time.time()}
+        p.setdefault("attachments", []).append(card)
+        self._touch(p)
+        self._save()
+        return card
+
     def attach_remove(self, pid: str, aid: str) -> bool:
         p = self._projects.get(pid)
         if p is None:

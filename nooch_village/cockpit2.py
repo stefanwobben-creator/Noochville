@@ -13,9 +13,12 @@ echte Nooch-structuur (glassfrog_import.nooch_poc_org) in data/poc/, zonder de l
 """
 from __future__ import annotations
 import json
+import mimetypes
 import os
+import re
 import secrets
 import urllib.parse
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from nooch_village.cockpit import _e, _page, _banner     # zelfde design system
@@ -206,8 +209,10 @@ ul.clean li:last-child{border-bottom:none}
 .fieldform{display:flex;gap:.4rem;align-items:center}
 .fieldform select{flex:1 1 auto;min-width:0}
 .descform textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .55rem}
-.enrich-add{display:flex;gap:.4rem;flex-wrap:wrap}
-.enrich-ghost{background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .7rem;font-size:.8rem;color:var(--gray);font-weight:600}
+.att-pop{min-width:230px}
+.att-lbl{display:block;font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;margin-bottom:.25rem}
+.att-pop input[type=text],.att-pop input[name=url],.att-pop input[name=title]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem;font-size:.85rem}
+.att-sep{height:1px;background:var(--border);margin:.6rem 0}
 .card-del{margin-top:1.2rem;padding-top:.6rem;border-top:1px solid var(--border)}
 .pdisc .psec{background:none;border:none;padding:0;margin:0}
 .pdisc{background:var(--cream-2);border-radius:var(--radius);padding:.9rem;min-width:0}
@@ -270,9 +275,6 @@ ul.clean li:last-child{border-bottom:none}
 .att-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;text-decoration:none;color:var(--ink)}
 .att-name:hover{text-decoration:underline}
 .att-x{flex:0 0 auto}
-.att-link{display:inline-block}
-.att-link>summary{list-style:none}
-.att-link>summary::-webkit-details-marker{display:none}
 .ghost-off{opacity:.55;cursor:not-allowed}
 .btn.grey{color:var(--muted);border-style:dashed;cursor:not-allowed}
 @media(max-width:760px){.c2-wrap{flex-direction:column}.c2-rail{max-width:none;flex-basis:auto}}
@@ -811,10 +813,11 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "function reopen(){if(last)openCard(last);}"
         "function shut(){ov.style.display='none';bd.innerHTML='';if(dirty){dirty=false;location.reload();}}"
         "function wire(){bd.querySelectorAll('form').forEach(function(f){f.addEventListener('submit',function(e){"
-        "e.preventDefault();dirty=true;var act=(e.submitter&&e.submitter.value)||'';"
-        "var data=new URLSearchParams(new FormData(f));"
-        "if(e.submitter&&e.submitter.name){data.set(e.submitter.name,e.submitter.value);}"
-        "fetch('/action',{method:'POST',body:data}).then(function(){"
+        "e.preventDefault();dirty=true;var act=(e.submitter&&e.submitter.value)||'';var opts;"
+        "if(f.classList.contains('filepost')){opts={method:'POST',body:new FormData(f)};}"
+        "else{var data=new URLSearchParams(new FormData(f));"
+        "if(e.submitter&&e.submitter.name){data.set(e.submitter.name,e.submitter.value);}opts={method:'POST',body:data};}"
+        "fetch('/action',opts).then(function(){"
         "if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'){shut();}else{reopen();}});});});"
         "bd.querySelectorAll('textarea').forEach(mentionWire);}"
         "document.querySelectorAll('.pcard[data-href],a.js-modal[data-href]').forEach(function(c){"
@@ -1298,6 +1301,28 @@ _IC_INFO = _ic("<circle cx='12' cy='12' r='9'/><line x1='12' y1='11' x2='12' y2=
 _IC_GEAR = _ic("<circle cx='12' cy='12' r='3'/><path d='M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1z'/>")
 _IC_LINK = _ic("<path d='M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1'/><path d='M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1'/>")
 _IC_CLOCK = _ic("<circle cx='12' cy='12' r='9'/><polyline points='12 7 12 12 15 14'/>")
+_IC_FILE = _ic("<path d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/><path d='M14 3v5h5'/>")
+
+
+def _parse_multipart(body: bytes, boundary: str):
+    """Minimale multipart/form-data parser → (velden{str:str}, bestanden{str:(filename,bytes)})."""
+    fields, files = {}, {}
+    delim = ("--" + boundary).encode()
+    for part in body.split(delim):
+        part = part.strip(b"\r\n")
+        if not part or part == b"--" or b"\r\n\r\n" not in part:
+            continue
+        head, _, content = part.partition(b"\r\n\r\n")
+        headers = head.decode("utf-8", "replace")
+        mname = re.search(r'name="([^"]*)"', headers)
+        if not mname:
+            continue
+        mfile = re.search(r'filename="([^"]*)"', headers)
+        if mfile:
+            files[mname.group(1)] = (mfile.group(1), content)
+        else:
+            fields[mname.group(1)] = content.decode("utf-8", "replace")
+    return fields, files
 _IC_TARGET = _ic("<circle cx='12' cy='12' r='9'/><circle cx='12' cy='12' r='5'/><circle cx='12' cy='12' r='1.5'/>")
 
 
@@ -1483,31 +1508,31 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         desc_body = f"<div>{_e(p.get('description','')) or '<span class=muted>geen omschrijving</span>'}</div>"
     omschrijving = _psec(_IC_DESC, "Omschrijving", desc_body)
 
-    # ---- Verrijkingen: Trello-stijl bijlage-cards onder de titel ----
-    cards = ""
+    # ---- Bijlagen-overzicht: Links + Bestanden (card-pattern). Toevoegen via de Bijlage-kaart. ----
+    def _att_rm(aid):
+        return ("" if not rw else
+                f"<form method='post' action='/action' class='att-x'>{hid()}"
+                f"<input type='hidden' name='aid' value='{_e(aid)}'>"
+                f"<button class='dellink' type='submit' name='action' value='attach_remove' "
+                f"title='verwijderen'>✕</button></form>")
+    link_cards, file_cards = "", ""
     for a in (p.get("attachments") or []):
-        title = a.get("title") or _link_host(a.get("url", ""))
-        rm = ("" if not rw else
-              f"<form method='post' action='/action' class='att-x'>{hid()}"
-              f"<input type='hidden' name='aid' value='{_e(a.get('id',''))}'>"
-              f"<button class='dellink' type='submit' name='action' value='attach_remove' "
-              f"title='verwijderen'>✕</button></form>")
-        cards += (f"<div class='attcard'><span class='att-ic'>{_IC_LINK}</span>"
-                  f"<a class='att-name' href='{_e(a.get('url',''))}' target='_blank' rel='noopener'>{_e(title)}</a>"
-                  f"{rm}</div>")
-    add = ""
-    if rw:
-        add = (f"<div class='enrich-add'>"
-               f"<details class='att-link'><summary class='enrich-ghost'>+ link</summary>"
-               f"<form method='post' action='/action' class='pf' style='margin-top:.4rem'>{hid()}"
-               f"<input name='url' placeholder='https://…'>"
-               f"<input name='title' placeholder='Titel (optioneel)'>"
-               f"<button class='btn ok' type='submit' name='action' value='attach_add' "
-               f"style='margin-top:.3rem'>Toevoegen</button></form></details>"
-               f"<span class='enrich-ghost ghost-off' title='binnenkort: koppel een kenniskaart'>+ kenniskaart</span>"
-               f"</div>")
-    enrich = (cards or "<p class='muted' style='font-size:.78rem;margin:0 0 .2rem'>Nog niets gekoppeld.</p>") + add
-    verrijking = _psec(_IC_LINK, "Bijlagen", enrich)
+        if a.get("kind", "link") == "file":
+            nm = a.get("title") or a.get("name", "bestand")
+            href = f"/file?pid={_e(pid)}&aid={_e(a.get('id', ''))}"
+            file_cards += (f"<div class='attcard'><span class='att-ic'>{_IC_FILE}</span>"
+                           f"<a class='att-name' href='{href}' target='_blank' rel='noopener'>{_e(nm)}</a>"
+                           f"{_att_rm(a.get('id', ''))}</div>")
+        else:
+            nm = a.get("title") or _link_host(a.get("url", ""))
+            link_cards += (f"<div class='attcard'><span class='att-ic'>{_IC_LINK}</span>"
+                           f"<a class='att-name' href='{_e(a.get('url', ''))}' target='_blank' rel='noopener'>{_e(nm)}</a>"
+                           f"{_att_rm(a.get('id', ''))}</div>")
+    verrijking = ""
+    if link_cards:
+        verrijking += _psec(_IC_LINK, "Links", link_cards)
+    if file_cards:
+        verrijking += _psec(_IC_FILE, "Bijlagen", file_cards)
 
     checklists_html = _checklists_html(p, csrf_token, pid, back, rw)
 
@@ -1535,10 +1560,29 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
             f"<input name='title' placeholder='Naam checklist'>"
             f"<button class='btn ok' type='submit' name='action' value='checklist_add' "
             f"style='margin-left:.4rem'>Voeg toe</button></form></div></details>")
+        nxt_full = f"/project?pid={pid}&back=" + urllib.parse.quote(back, safe="")
+        bijlage_card = (
+            f"<details class='acard-d'><summary class='acard'>{_IC_LINK}<span>Bijlage</span></summary>"
+            f"<div class='datepop att-pop'>"
+            f"<form method='post' action='/action' enctype='multipart/form-data' class='filepost'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+            f"<input type='hidden' name='action' value='attach_file'>"
+            f"<input type='hidden' name='next' value='{_e(nxt_full)}'>"
+            f"<label class='att-lbl'>Bestand van je computer</label>"
+            f"<input type='file' name='file'>"
+            f"<button class='btn ok sm' type='submit' style='margin-top:.4rem'>Upload</button></form>"
+            f"<div class='att-sep'></div>"
+            f"<form method='post' action='/action'>{hid()}"
+            f"<label class='att-lbl'>Of een link plakken</label>"
+            f"<input name='url' placeholder='https://…'>"
+            f"<input name='title' placeholder='Naam (optioneel)' style='margin-top:.3rem'>"
+            f"<button class='btn ok sm' type='submit' name='action' value='attach_add' "
+            f"style='margin-top:.4rem'>Toevoegen</button></form>"
+            f"</div></details>")
         actioncards = (
             "<div class='actioncards'>"
-            f"{date_card}{checklist_card}"
-            f"<button type='button' class='acard'>{_IC_LINK}<span>Bijlage</span></button>"
+            f"{date_card}{checklist_card}{bijlage_card}"
             f"<button type='button' class='acard acard-off' disabled "
             f"title='binnenkort'>{_IC_TARGET}<span>Goals</span></button>"
             "</div>")
@@ -1921,6 +1965,13 @@ def make_handler(data_dir: str, csrf_token: str):
             self.end_headers()
             self.wfile.write(b)
 
+        def _send_bytes(self, data: bytes, content_type: str):
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
         def do_GET(self):
             path, _, query = self.path.partition("?")
             qs = urllib.parse.parse_qs(query)
@@ -1976,12 +2027,54 @@ def make_handler(data_dir: str, csrf_token: str):
             if path == "/_patterns":
                 self._send(render_patterns(csrf_token))
                 return
+            if path == "/file":
+                p = st.projects.get((qs.get("pid") or [""])[0])
+                aid = (qs.get("aid") or [""])[0]
+                att = next((a for a in (p.get("attachments") or [])
+                            if a.get("id") == aid and a.get("kind") == "file"), None) if p else None
+                full = os.path.join(data_dir, att["stored"]) if att else None
+                if not (full and os.path.exists(full)):
+                    self._send("<p>Bestand niet gevonden</p>", 404); return
+                with open(full, "rb") as fh:
+                    data = fh.read()
+                mt = mimetypes.guess_type(att.get("name", ""))[0] or "application/octet-stream"
+                self._send_bytes(data, mt)
+                return
             self._send("<p>404</p>", 404)
+
+        def _redirect(self, nxt: str, msg: str):
+            if msg:
+                sep = "&" if "?" in nxt else "?"
+                nxt = f"{nxt}{sep}msg={urllib.parse.quote(msg)}"
+            self.send_response(303); self.send_header("Location", nxt); self.end_headers()
 
         def do_POST(self):
             if self.path.split("?", 1)[0] != "/action":
                 self._send("<p>404</p>", 404); return
+            ctype = self.headers.get("Content-Type", "")
             length = int(self.headers.get("Content-Length") or 0)
+            # Bestand-upload (multipart): apart afhandelen; bestand wegschrijven + registreren.
+            if ctype.startswith("multipart/form-data") and "boundary=" in ctype:
+                raw = self.rfile.read(length) if length else b""
+                boundary = ctype.split("boundary=", 1)[1].strip().strip('"')
+                fields, files = _parse_multipart(raw, boundary)
+                if not secrets.compare_digest(fields.get("csrf", ""), csrf_token):
+                    self._send("CSRF-token ongeldig", 403); return
+                msg = ""
+                pid = fields.get("pid", "")
+                if fields.get("action") == "attach_file" and files.get("file"):
+                    fname, blob = files["file"]
+                    if fname and blob:
+                        safe = os.path.basename(fname).replace("\\", "_")[:120]
+                        rel = os.path.join("attachments", pid, uuid.uuid4().hex[:8] + "_" + safe)
+                        full = os.path.join(data_dir, rel)
+                        os.makedirs(os.path.dirname(full), exist_ok=True)
+                        with open(full, "wb") as fh:
+                            fh.write(blob)
+                        _Stores(data_dir).projects.attach_file(pid, safe, rel)
+                        msg = "📎 bijlage geupload"
+                self._redirect(fields.get("next", "/"), msg)
+                return
             raw = self.rfile.read(length).decode("utf-8") if length else ""
             form = urllib.parse.parse_qs(raw)
             token = (form.get("csrf") or [""])[0]
@@ -1989,10 +2082,7 @@ def make_handler(data_dir: str, csrf_token: str):
                 self._send("CSRF-token ongeldig", 403); return
             action = (form.get("action") or [""])[0]
             nxt, msg = dispatch(data_dir, action, form)
-            if msg:
-                sep = "&" if "?" in nxt else "?"
-                nxt = f"{nxt}{sep}msg={urllib.parse.quote(msg)}"
-            self.send_response(303); self.send_header("Location", nxt); self.end_headers()
+            self._redirect(nxt, msg)
 
         def log_message(self, *_):
             pass
