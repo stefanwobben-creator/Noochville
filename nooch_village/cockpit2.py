@@ -136,7 +136,7 @@ ul.clean li:last-child{border-bottom:none}
 .fbul{margin:.2rem 0 .2rem 1.1rem}
 .ffoot{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:.25rem}
 .ffoot-l{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;min-width:0}
-.rx{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-pill);padding:.05rem .45rem;font-size:.8rem}
+.rx{background:transparent;border:1px solid var(--border);border-radius:var(--radius-pill);padding:.05rem .5rem;font-size:.8rem;color:var(--gray)}
 .emoji-pick{position:relative;display:inline-block}
 .emoji-pick>summary{list-style:none;cursor:pointer;font-size:1rem;opacity:.5;line-height:1}
 .emoji-pick>summary::-webkit-details-marker{display:none}
