@@ -171,7 +171,11 @@ ul.clean li:last-child{border-bottom:none}
 .rov-link{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:.45rem;text-decoration:none;color:var(--ink)}
 .rov-title{font-weight:600}
 .rov-kind{font-size:.72rem;margin-left:auto}
-.rov-add select,.rov-add input,.rov-add textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem;margin-top:.25rem}
+@media(min-width:620px){.rov-grid{grid-template-columns:minmax(0,300px) minmax(0,1fr)}}
+.rov-add{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem}
+.rov-add select{flex:1 1 100%;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem}
+.rov-add input{flex:1 1 auto;min-width:0;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem}
+.rov-foot{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--border);padding:.7rem 0 .2rem;margin-top:1rem;display:flex;justify-content:flex-end}
 .rov-editor input[name=value]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem}
 .rov-block{margin-top:.8rem}
 .rov-field{display:flex;align-items:center;gap:.5rem;padding:.2rem 0;border-bottom:1px solid var(--border)}
@@ -842,7 +846,7 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "else{var data=new URLSearchParams(new FormData(f));"
         "if(e.submitter&&e.submitter.name){data.set(e.submitter.name,e.submitter.value);}opts={method:'POST',body:data};}"
         "fetch('/action',opts).then(function(){"
-        "if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'){shut();}else{reopen();}});});});"
+        "if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'||act==='rov2_end'){shut();}else{reopen();}});});});"
         "bd.querySelectorAll('textarea').forEach(mentionWire);}"
         "document.querySelectorAll('.pcard[data-href],a.js-modal[data-href]').forEach(function(c){"
         "c.addEventListener('click',function(e){if(window.__pdrag)return;e.preventDefault();"
@@ -1065,7 +1069,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     if is_c and csrf_token:
         rov_url = f"/roloverleg2?circle={_e(node_id)}"
         meet = (f"<div class='c2-meet'>"
-                f"<a class='btn js-modal' href='{rov_url}' data-href='{rov_url}'>Governance meeting</a>"
+                f"<a class='btn ok js-modal' href='{rov_url}' data-href='{rov_url}'>Governance meeting</a>"
                 f"<span class='btn grey' title='nog te bouwen'>Tactical meeting</span></div>")
     else:
         meet = ""
@@ -1285,15 +1289,13 @@ def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: s
     if not rows:
         rows = "<p class='muted'>Nog geen agendapunten.</p>"
 
+    # Toevoegen staat BOVEN de lijst (geen scrollen bij veel punten); geen spanning-veld.
     opts = "".join(f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>" for r in roles)
-    add = (f"<form method='post' action='/action' class='pf rov-add'>{hid(base)}"
-           f"<label>Agendapunt</label>"
+    add = (f"<form method='post' action='/action' class='rov-add'>{hid(base)}"
            f"<select name='owner'><option value='__new__'>+ nieuwe rol</option>{opts}</select>"
            f"<input name='rolnaam' placeholder='Naam (alleen bij nieuwe rol)'>"
-           f"<textarea name='reason' rows='2' placeholder='Welke spanning lost dit op?'></textarea>"
-           f"<button class='btn ok sm' type='submit' name='action' value='rov2_add' "
-           f"style='margin-top:.3rem'>Toevoegen</button></form>")
-    left = _psec(_IC_CHECK, "Agenda", f"<div class='rov-list'>{rows}</div>{add}")
+           f"<button class='btn ok sm' type='submit' name='action' value='rov2_add'>Toevoegen</button></form>")
+    left = _psec(_IC_CHECK, "Agenda", f"{add}<div class='rov-list'>{rows}</div>")
 
     # Rechts: de editor van het geselecteerde voorstel (naam/purpose/domeinen/accountabilities).
     sel = next((it for it in items if it["id"] == iid), None)
@@ -1302,9 +1304,15 @@ def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: s
     else:
         right = "<p class='muted'>Kies links een agendapunt, of voeg er een toe.</p>"
 
+    foot = (f"<div class='rov-foot'><form method='post' action='/action'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='circle' value='{_e(circle_id)}'>"
+            f"<input type='hidden' name='next' value='/node?id={_e(circle_id)}'>"
+            f"<button class='btn ok' type='submit' name='action' value='rov2_end'>"
+            f"Vergadering sluiten &amp; doorvoeren</button></form></div>")
     detail = (f"<h2 style='margin-top:0'>Governance meeting — {_e(_name(crec))}</h2>"
-              f"<div class='pgrid'><div class='pmain'>{left}</div>"
-              f"<aside class='pdisc'>{right}</aside></div>")
+              f"<div class='pgrid rov-grid'><div class='pmain'>{left}</div>"
+              f"<aside class='pdisc'>{right}</aside></div>{foot}")
     if fragment:
         return detail
     main = f"<div class='c2-main' style='max-width:980px'><div class='c2-bar'><a href='/node?id={_e(circle_id)}'>← terug</a></div>{detail}</div>"
@@ -2166,6 +2174,11 @@ def dispatch(data_dir: str, action: str, form: dict):
             msg = "✓ agendapunt toegevoegd"
     elif action == "rov2_remove":
         st.agenda.remove(g("iid")); msg = "🗑 agendapunt verwijderd"
+    elif action == "rov2_end":
+        from nooch_village.roloverleg import apply_consented
+        done = apply_consented(st.agenda, st.records)
+        n = sum(1 for d in done if d.get("status") == "adopted")
+        msg = f"✓ overleg gesloten — {n} doorgevoerd" if n else "overleg gesloten"
     elif action in ("rov2_set", "rov2_acc_add", "rov2_acc_remove", "rov2_dom_add", "rov2_dom_remove"):
         item = st.agenda.get(g("iid"))
         if item is not None:

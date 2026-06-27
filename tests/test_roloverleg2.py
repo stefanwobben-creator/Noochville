@@ -63,6 +63,30 @@ def test_editor_nieuwe_rol(tmp_path):
     assert ch.get("purpose") == "Inzicht uit data" and "Rapporteren van trends" in ch.get("add_accountabilities", [])
 
 
+def test_layout_toevoegen_boven_en_groene_knop(tmp_path):
+    dd = _dd(tmp_path)
+    node = cockpit2.render_node(cockpit2._Stores(dd), C, "overview", csrf_token="t")
+    assert "btn ok js-modal" in node                      # groene meeting-knop
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "owner": [RID], "next": ["/"]})
+    frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
+    assert "Welke spanning" not in frag                    # spanning-veld weg
+    assert frag.find("rov-add") < frag.find("rov-list")    # toevoegen boven de lijst
+    assert "rov-grid" in frag and "rov-foot" in frag and "Vergadering sluiten" in frag
+
+
+def test_sluiten_voert_consented_door(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "owner": [RID], "next": ["/"]})
+    iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
+    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Bewaken van performance"], "next": ["/"]})
+    cockpit2._Stores(dd).agenda.set_status(iid, "consented")
+    cockpit2.dispatch(dd, "rov2_end", {"circle": [C], "next": ["/node?id=" + C]})
+    # doorgevoerd in de records + van de agenda af
+    rec = cockpit2._Stores(dd).records.get(RID)
+    assert "Bewaken van performance" in rec.definition.accountabilities
+    assert cockpit2._Stores(dd).agenda.all() == []
+
+
 def test_select_en_verwijderen(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "owner": [RID], "reason": ["x"], "next": ["/"]})
