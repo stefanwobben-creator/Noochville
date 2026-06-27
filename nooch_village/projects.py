@@ -450,6 +450,30 @@ class ProjectLedger:
         self._save()
         return entry
 
+    def feed_edit(self, pid: str, entry_id: str, text: str) -> bool:
+        """Wijzig de tekst van een feed-entry (eigen comment). Lege tekst doet niets."""
+        p = self._projects.get(pid)
+        text = (text or "").strip()
+        if p is None or not text:
+            return False
+        for e in p.get("log", []):
+            if e.get("id") == entry_id:
+                e["text"] = text[:1500]
+                self._touch(p); self._save()
+                return True
+        return False
+
+    def feed_remove(self, pid: str, entry_id: str) -> bool:
+        p = self._projects.get(pid)
+        if p is None:
+            return False
+        n = len(p.get("log", []))
+        p["log"] = [e for e in p.get("log", []) if e.get("id") != entry_id]
+        if len(p["log"]) != n:
+            self._touch(p); self._save()
+            return True
+        return False
+
     def wait_for(self, pid: str, need: str, on_id: str = "") -> bool:
         """Zet een project op WACHTEN met een gestructureerde behoefte: WAT is nodig (need) en
         WAAROP het wacht (on_id = een ander project of een prikbord-briefje). De scheduler hervat

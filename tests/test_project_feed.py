@@ -42,6 +42,21 @@ def test_feed_render_auteur_en_soort(tmp_path):
     assert "comp-form" in frag and "value='human:'" in frag
 
 
+def test_eigen_comment_wijzigen_verwijderen(tmp_path):
+    dd, rid, pid, codie = _setup(tmp_path)
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"], "text": ["mijn comment"], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": [f"persona:{codie.id}"],
+                                        "text": ["AI update"], "next": ["/"]})
+    frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
+    # eigen comment: edit/delete; AI-update: niet (dus precies 1 keer feed_remove)
+    assert "Wijzigen" in frag and frag.count("feed_remove") == 1
+    eid = cockpit2._Stores(dd).projects.get(pid)["log"][0]["id"]
+    cockpit2.dispatch(dd, "feed_edit", {"pid": [pid], "item": [eid], "text": ["aangepast"], "next": ["/"]})
+    assert cockpit2._Stores(dd).projects.get(pid)["log"][0]["text"] == "aangepast"
+    cockpit2.dispatch(dd, "feed_remove", {"pid": [pid], "item": [eid], "next": ["/"]})
+    assert len(cockpit2._Stores(dd).projects.get(pid)["log"]) == 1
+
+
 def test_mention_maakt_notificatie_en_highlight(tmp_path):
     dd, rid, pid, codie = _setup(tmp_path)
     person = cockpit2._Stores(dd).people.all()[0]

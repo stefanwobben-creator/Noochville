@@ -155,7 +155,14 @@ ul.clean li:last-child{border-bottom:none}
 .emo-f{display:inline}
 .emo{border:none;background:none;cursor:pointer;font-size:1.05rem;padding:.15rem;border-radius:var(--radius);width:100%}
 .emo:hover{background:var(--cream-2)}
-.fstamp{color:var(--subtle);font-size:.72rem;flex:0 0 auto}
+.fstamp{color:var(--subtle);font-size:.72rem}
+.flink{border:none;background:none;color:var(--gray);font-size:.78rem;cursor:pointer;text-decoration:underline;padding:0}
+.flink:hover{color:var(--green-dark)}
+.fsep{color:var(--subtle);font-size:.78rem}
+.fedit{display:inline}
+.fedit>summary{list-style:none;display:inline}
+.fedit>summary::-webkit-details-marker{display:none}
+.fedit textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem}
 .av.role{background:var(--green-dark);color:#fff}
 .fkind{font-size:.64rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700;border-radius:var(--radius-pill);padding:.03rem .45rem}
 .fkind.upd{background:var(--green-tint);color:var(--green-dark)}
@@ -1269,11 +1276,26 @@ def _feed_entry_html(st: _Stores, entry: dict, role_name: str = "",
     bubble = _md(entry.get("text", ""))
     if mention_names:
         bubble = _hilite_mentions(bubble, mention_names)
+    # Eigen comment (mens) is wijzigbaar/verwijderbaar.
+    tools = ""
+    if csrf_token and eid and atype == "human":
+        hidf = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+                f"<input type='hidden' name='item' value='{_e(eid)}'>")
+        editd = (f"<details class='fedit'><summary class='flink'>Wijzigen</summary>"
+                 f"<form method='post' action='/action' class='pf' style='margin-top:.3rem'>{hidf}"
+                 f"<textarea name='text' rows='2'>{_e(entry.get('text', ''))}</textarea>"
+                 f"<button class='btn ok sm' type='submit' name='action' value='feed_edit' "
+                 f"style='margin-top:.3rem'>Opslaan</button></form></details>")
+        deld = (f"<form method='post' action='/action' style='display:inline'>{hidf}"
+                f"<button class='flink' type='submit' name='action' value='feed_remove' "
+                f"onclick=\"return confirm('Comment verwijderen?')\">Verwijderen</button></form>")
+        tools = f"<span class='fsep'>·</span>{editd}<span class='fsep'>·</span>{deld}"
     return (f"<div class='fentry'>"
-            f"<div class='fhead'>{av}<span class='fwho'>{who}</span></div>"
-            f"<div class='fbubble'>{bubble}</div>"
-            f"<div class='ffoot'><div class='ffoot-l'>{rx}{picker}</div>"
+            f"<div class='fhead'>{av}<span class='fwho'>{who}</span>"
             f"<span class='fstamp'>{_e(_stamp(entry.get('at')))}</span></div>"
+            f"<div class='fbubble'>{bubble}</div>"
+            f"<div class='ffoot'><div class='ffoot-l'>{rx}{picker}{tools}</div></div>"
             f"</div>")
 
 
@@ -1889,6 +1911,11 @@ def dispatch(data_dir: str, action: str, form: dict):
     elif action == "react_add":
         if pj.add_reaction(g("pid"), g("item"), g("emoji")):
             msg = "✓ reactie geplaatst"
+    elif action == "feed_edit":
+        if pj.feed_edit(g("pid"), g("item"), g("text")):
+            msg = "✓ comment gewijzigd"
+    elif action == "feed_remove":
+        pj.feed_remove(g("pid"), g("item")); msg = "🗑 comment verwijderd"
     elif action == "ai_reply":
         _load_env()
         msg = ("🤖 AI heeft meegedacht" if _ai_reply(st, g("pid"))
