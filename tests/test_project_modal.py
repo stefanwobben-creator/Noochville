@@ -104,6 +104,26 @@ def test_datum_card_datepicker(tmp_path):
     assert cockpit2._Stores(dd).projects.get(pid)["due"] is None
 
 
+def test_named_checklists(tmp_path):
+    dd, pid = _setup(tmp_path)
+    cockpit2.dispatch(dd, "checklist_add", {"pid": [pid], "title": ["Stappen"], "next": ["/"]})
+    clid = cockpit2._Stores(dd).projects.get(pid)["checklists"][0]["id"]
+    cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["Stap 1"], "next": ["/"]})
+    frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
+    assert "cl-title" in frag and "Stappen" in frag and "Stap 1" in frag
+    assert "Naam checklist" in frag                       # actie-kaart popover
+    # checklist verwijderen
+    cockpit2.dispatch(dd, "checklist_remove", {"pid": [pid], "clid": [clid], "next": ["/"]})
+    assert cockpit2._Stores(dd).projects.get(pid)["checklists"] == []
+
+
+def test_deadline_overdue_in_header(tmp_path):
+    dd, pid = _setup(tmp_path)
+    cockpit2.dispatch(dd, "proj_setdue", {"pid": [pid], "due": ["2020-01-01"], "next": ["/"]})
+    frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
+    assert "due-chip" in frag and "Overdue" in frag and "ov-badge" in frag
+
+
 def test_done_project_blijft_bewerkbaar(tmp_path):
     dd, pid = _setup(tmp_path)
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "csrf": ["t"], "next": ["/"]})

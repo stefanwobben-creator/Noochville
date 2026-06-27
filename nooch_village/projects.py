@@ -210,33 +210,66 @@ class ProjectLedger:
         self._save()
         return True
 
-    def check_add(self, pid: str, text: str) -> bool:
-        p = self._projects.get(pid)
-        text = (text or "").strip()
-        if p is None or not text:
-            return False
-        p.setdefault("checklist", []).append({"id": uuid.uuid4().hex[:8], "text": text[:200], "done": False})
-        self._touch(p); self._save()
-        return True
+    # Named checklists (Trello-stijl, meervoudig): p["checklists"] = [{id,title,items:[{id,text,done}]}]
+    def _checklists(self, p) -> list:
+        return p.setdefault("checklists", [])
 
-    def check_toggle(self, pid: str, item_id: str) -> bool:
+    def _checklist(self, p, clid):
+        for cl in self._checklists(p):
+            if cl.get("id") == clid:
+                return cl
+        return None
+
+    def checklist_add(self, pid: str, title: str = "") -> dict | None:
+        p = self._projects.get(pid)
+        if p is None:
+            return None
+        cl = {"id": uuid.uuid4().hex[:8], "title": (title or "").strip()[:80] or "Checklist", "items": []}
+        self._checklists(p).append(cl)
+        self._touch(p); self._save()
+        return cl
+
+    def checklist_remove(self, pid: str, clid: str) -> bool:
         p = self._projects.get(pid)
         if p is None:
             return False
-        for it in p.get("checklist", []):
+        before = len(self._checklists(p))
+        p["checklists"] = [cl for cl in self._checklists(p) if cl.get("id") != clid]
+        if len(p["checklists"]) != before:
+            self._touch(p); self._save()
+            return True
+        return False
+
+    def check_add(self, pid: str, clid: str, text: str) -> bool:
+        p = self._projects.get(pid)
+        text = (text or "").strip()
+        cl = self._checklist(p, clid) if p else None
+        if cl is None or not text:
+            return False
+        cl.setdefault("items", []).append({"id": uuid.uuid4().hex[:8], "text": text[:200], "done": False})
+        self._touch(p); self._save()
+        return True
+
+    def check_toggle(self, pid: str, clid: str, item_id: str) -> bool:
+        p = self._projects.get(pid)
+        cl = self._checklist(p, clid) if p else None
+        if cl is None:
+            return False
+        for it in cl.get("items", []):
             if it["id"] == item_id:
                 it["done"] = not it.get("done")
                 self._touch(p); self._save()
                 return True
         return False
 
-    def check_remove(self, pid: str, item_id: str) -> bool:
+    def check_remove(self, pid: str, clid: str, item_id: str) -> bool:
         p = self._projects.get(pid)
-        if p is None:
+        cl = self._checklist(p, clid) if p else None
+        if cl is None:
             return False
-        n = len(p.get("checklist", []))
-        p["checklist"] = [it for it in p.get("checklist", []) if it["id"] != item_id]
-        if len(p["checklist"]) != n:
+        n = len(cl.get("items", []))
+        cl["items"] = [it for it in cl.get("items", []) if it["id"] != item_id]
+        if len(cl["items"]) != n:
             self._touch(p); self._save()
             return True
         return False

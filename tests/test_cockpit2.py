@@ -195,11 +195,13 @@ def test_project_detail_checklist_en_feed(tmp_path):
     cockpit2.dispatch(dd, "proj_edit", {"pid": [pid], "scope": ["Detail-test"],
                                         "description": ["Een nette omschrijving"], "label": ["groen"],
                                         "trekker": [""], "next": ["/"]})
-    # checklist-items + afvinken
-    cockpit2.dispatch(dd, "check_add", {"pid": [pid], "text": ["Stap 1"], "next": ["/"]})
-    cockpit2.dispatch(dd, "check_add", {"pid": [pid], "text": ["Stap 2"], "next": ["/"]})
-    item1 = cockpit2._Stores(dd).projects.get(pid)["checklist"][0]["id"]
-    cockpit2.dispatch(dd, "check_toggle", {"pid": [pid], "item": [item1], "next": ["/"]})
+    # named checklist + items + afvinken
+    cockpit2.dispatch(dd, "checklist_add", {"pid": [pid], "title": ["Stappen"], "next": ["/"]})
+    clid = cockpit2._Stores(dd).projects.get(pid)["checklists"][0]["id"]
+    cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["Stap 1"], "next": ["/"]})
+    cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["Stap 2"], "next": ["/"]})
+    item1 = cockpit2._Stores(dd).projects.get(pid)["checklists"][0]["items"][0]["id"]
+    cockpit2.dispatch(dd, "check_toggle", {"pid": [pid], "clid": [clid], "item": [item1], "next": ["/"]})
     # opmerking in de feed
     cockpit2.dispatch(dd, "proj_comment", {"pid": [pid], "comment": ["Eerste voortgang"], "next": ["/"]})
 
@@ -220,7 +222,9 @@ def test_project_kaart_toont_label_en_progress(tmp_path):
     pid = cockpit2._Stores(dd).projects.all()[0]["id"]
     cockpit2.dispatch(dd, "proj_edit", {"pid": [pid], "scope": ["Met label"], "label": ["koraal"],
                                         "trekker": [""], "next": ["/"]})
-    cockpit2.dispatch(dd, "check_add", {"pid": [pid], "text": ["a"], "next": ["/"]})
+    cockpit2.dispatch(dd, "checklist_add", {"pid": [pid], "title": ["c"], "next": ["/"]})
+    clid = cockpit2._Stores(dd).projects.get(pid)["checklists"][0]["id"]
+    cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["a"], "next": ["/"]})
     page = cockpit2.render_node(cockpit2._Stores(dd), role, "projects", csrf_token="t")
     assert "clabel" in page and "FF6B5B" in page    # kleurbalk op de kaart
     assert "0%" in page                              # checklist-progress badge (geen 💬)

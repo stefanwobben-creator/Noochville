@@ -186,12 +186,20 @@ ul.clean li:last-child{border-bottom:none}
 .acard svg{width:15px;height:15px}
 .acard-off{opacity:.5;cursor:not-allowed}
 .acard-off:hover{border-color:var(--border);color:var(--gray)}
-.acard-on{background:var(--green-tint);color:var(--green-dark);border-color:var(--green)}
-.acard-d{position:relative;list-style:none}
+.acard-d{position:relative;list-style:none;background:none;border:none;box-shadow:none;padding:0;margin:0}
 .acard-d>summary{list-style:none}
 .acard-d>summary::-webkit-details-marker{display:none}
 .datepop{position:absolute;left:0;top:2.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.6rem;z-index:7}
 .datepop input[type=date]{border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .55rem;font-size:.88rem}
+.due-chip{display:inline-flex;align-items:center;gap:.3rem;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius-pill);padding:.15rem .6rem;font-size:.8rem;font-weight:600;color:var(--gray)}
+.due-chip svg{width:14px;height:14px}
+.due-chip.over{background:var(--error-tint);border-color:var(--coral);color:var(--coral)}
+.ov-badge{background:var(--coral);color:#fff;border-radius:var(--radius-pill);padding:.02rem .4rem;font-size:.66rem;font-weight:700;text-transform:uppercase}
+.checklist{margin:0 0 1.1rem}
+.cl-head{display:flex;align-items:center;gap:.4rem;margin-bottom:.4rem}
+.cl-head svg{width:15px;height:15px;color:var(--subtle)}
+.cl-title{font-weight:700;font-size:.92rem}
+.cl-del{margin-left:auto}
 .dcol{display:grid;grid-template-columns:auto 1fr;gap:.35rem .8rem;align-content:start;min-width:0}
 .dk{align-self:baseline;color:var(--subtle);font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700;padding-top:.12rem}
 .dv{min-width:0;font-size:.88rem}
@@ -660,11 +668,22 @@ _LABELS = {"groen": "#1F9D55", "geel": "#FFCE2E", "koraal": "#FF6B5B",
 
 
 def _proj_progress(p: dict):
-    items = p.get("checklist") or []
+    items = [it for cl in (p.get("checklists") or []) for it in cl.get("items", [])]
     if not items:
         return None
     done = sum(1 for it in items if it.get("done"))
     return done, len(items), round(100 * done / len(items))
+
+
+def _due_overdue(due: str) -> bool:
+    """Is de deadline (ISO 'YYYY-MM-DD') verstreken (vóór vandaag)?"""
+    if not due:
+        return False
+    import datetime
+    try:
+        return datetime.date.fromisoformat(due) < datetime.date.today()
+    except Exception:
+        return False
 
 
 def _progress_badge(p: dict) -> str:
@@ -1255,6 +1274,47 @@ def _psec(icon: str, title: str, body: str) -> str:
             f"<div class='psec-b'>{body}</div></div>")
 
 
+def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool) -> str:
+    """Named checklists (Trello-stijl): titel + voortgangsbalk + items + verwijderen."""
+    def hid():
+        nxt = f"/project?pid={pid}&back=" + urllib.parse.quote(back, safe="")
+        return (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+                f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+                f"<input type='hidden' name='next' value='{_e(nxt)}'>")
+
+    out = ""
+    for cl in (p.get("checklists") or []):
+        items = cl.get("items", [])
+        done = sum(1 for it in items if it.get("done"))
+        tot = len(items)
+        pct = round(100 * done / tot) if tot else 0
+        bar = (f"<div class='ck-prog'><div class='pbar' style='flex:1'><div style='width:{pct}%'></div></div>"
+               f"<span class='muted'>{pct}% ({done}/{tot})</span></div>") if tot else ""
+        rows = ""
+        for it in items:
+            d = it.get("done")
+            clitem = (f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
+                      f"<input type='hidden' name='item' value='{_e(it['id'])}'>")
+            chk = (f"<form method='post' action='/action' style='display:inline'>{hid()}{clitem}"
+                   f"<button class='ck-box{' on' if d else ''}' type='submit' name='action' "
+                   f"value='check_toggle'>{'✓' if d else ''}</button></form>") if rw else ("☑" if d else "☐")
+            rm = (f"<form method='post' action='/action' style='display:inline'>{hid()}{clitem}"
+                  f"<button class='dellink' type='submit' name='action' value='check_remove'>✕</button></form>") if rw else ""
+            rows += f"<li class='ck-item'>{chk}<span class='{'ck-done' if d else ''}'>{_e(it['text'])}</span>{rm}</li>"
+        add = (f"<form method='post' action='/action' class='ckadd'>{hid()}"
+               f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
+               f"<input name='text' placeholder='item toevoegen…'>"
+               f"<button class='btn ok' type='submit' name='action' value='check_add'>+ item</button></form>") if rw else ""
+        delc = (f"<form method='post' action='/action' style='display:inline'>{hid()}"
+                f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
+                f"<button class='dellink cl-del' type='submit' name='action' value='checklist_remove' "
+                f"onclick=\"return confirm('Checklist verwijderen?')\">verwijderen</button></form>") if rw else ""
+        out += (f"<div class='checklist'><div class='cl-head'>{_IC_CHECK}"
+                f"<span class='cl-title'>{_e(cl.get('title', 'Checklist'))}</span>{delc}</div>"
+                f"{bar}<ul class='clean ck-list'>{rows or '<li class=muted>nog geen items</li>'}</ul>{add}</div>")
+    return out
+
+
 def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", back: str = "/",
                    fragment: bool = False) -> str:
     p = st.projects.get(pid)
@@ -1273,31 +1333,6 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         return (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                 f"<input type='hidden' name='pid' value='{_e(pid)}'>"
                 f"<input type='hidden' name='next' value='{_e(f'/project?pid={pid}&back=' + urllib.parse.quote(back, safe=''))}'>")
-
-    # Checklist met voortgangsbalk
-    items = p.get("checklist") or []
-    pr = _proj_progress(p)
-    bar = ""
-    if pr:
-        bar = (f"<div class='ck-prog'><div class='pbar' style='flex:1'><div style='width:{pr[2]}%'></div></div>"
-               f"<span class='muted'>{pr[2]}% ({pr[0]}/{pr[1]})</span></div>")
-    ck_rows = ""
-    for it in items:
-        done = it.get("done")
-        chk = (f"<form method='post' action='/action' style='display:inline'>{hid()}"
-               f"<input type='hidden' name='item' value='{_e(it['id'])}'>"
-               f"<button class='ck-box{' on' if done else ''}' type='submit' name='action' "
-               f"value='check_toggle'>{'✓' if done else ''}</button></form>") if rw else (
-               "☑" if done else "☐")
-        rm = (f"<form method='post' action='/action' style='display:inline'>{hid()}"
-              f"<input type='hidden' name='item' value='{_e(it['id'])}'>"
-              f"<button class='dellink' type='submit' name='action' value='check_remove'>✕</button></form>") if rw else ""
-        txt = f"<span class='{'ck-done' if done else ''}'>{_e(it['text'])}</span>"
-        ck_rows += f"<li class='ck-item'>{chk} {txt} {rm}</li>"
-    ck_add = (f"<form method='post' action='/action' class='ckadd'>{hid()}"
-              f"<input name='text' placeholder='item toevoegen…'>"
-              f"<button class='btn' type='submit' name='action' value='check_add'>+ item</button></form>") if rw else ""
-    checklist_body = (f"{bar}<ul class='clean ck-list'>{ck_rows or '<li class=muted>nog geen items</li>'}</ul>{ck_add}")
 
     status = p.get("status", "")
 
@@ -1357,8 +1392,15 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                  f"<button class='title-save' type='submit' name='action' value='proj_rename'>opslaan</button></form>")
     else:
         title = f"<h2 class='ptitle-ro'>{_e(_scope_text(p))}</h2>"
+    # Deadline-chip vóór de status (overzicht), met Overdue-markering.
+    due_head = ""
+    if p.get("due"):
+        over = _due_overdue(p["due"])
+        badge = "<span class='ov-badge'>Overdue</span>" if over else ""
+        due_head = (f"<span class='due-chip{' over' if over else ''}'>"
+                    f"{_IC_CLOCK}{_e(_fmt_due(p['due']))}{badge}</span>")
     head = (f"<div class='pcard-head'>{title}"
-            f"<div class='pcard-head-r'>{menu or _proj_chip(status)}</div></div>")
+            f"<div class='pcard-head-r'>{due_head}{menu or _proj_chip(status)}</div></div>")
 
     # ---- Details: kader zonder achtergrond, tweekoloms, links uitgelijnd, altijd open ----
     owner = p.get("owner", "")
@@ -1429,7 +1471,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     enrich = (cards or "<p class='muted' style='font-size:.78rem;margin:0 0 .2rem'>Nog niets gekoppeld.</p>") + add
     verrijking = _psec(_IC_LINK, "Bijlagen", enrich)
 
-    checklist = _psec(_IC_CHECK, "Checklist", checklist_body)
+    checklists_html = _checklists_html(p, csrf_token, pid, back, rw)
 
     # ---- Actie-kaarten (Trello 'Add to card') ----
     actioncards = ""
@@ -1442,17 +1484,22 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                    f"<input type='hidden' name='due' value=''>"
                    f"<button class='dellink' type='submit'>datum verwijderen</button></form>")
         date_card = (
-            f"<details class='acard-d'><summary class='acard{' acard-on' if due else ''}'>"
+            f"<details class='acard-d'><summary class='acard'>"
             f"{_IC_CLOCK}<span>{_e(due_lbl)}</span></summary>"
             f"<div class='datepop'><form method='post' action='/action'>{hid()}"
             f"<input type='hidden' name='action' value='proj_setdue'>"
             f"<input type='date' name='due' value='{_e(due)}' "
             f"onchange='this.form.requestSubmit?this.form.requestSubmit():this.form.submit()'>"
             f"</form>{date_rm}</div></details>")
+        checklist_card = (
+            f"<details class='acard-d'><summary class='acard'>{_IC_CHECK}<span>Checklist</span></summary>"
+            f"<div class='datepop'><form method='post' action='/action'>{hid()}"
+            f"<input name='title' placeholder='Naam checklist'>"
+            f"<button class='btn ok' type='submit' name='action' value='checklist_add' "
+            f"style='margin-left:.4rem'>Voeg toe</button></form></div></details>")
         actioncards = (
             "<div class='actioncards'>"
-            f"{date_card}"
-            f"<button type='button' class='acard'>{_IC_CHECK}<span>Checklist</span></button>"
+            f"{date_card}{checklist_card}"
             f"<button type='button' class='acard'>{_IC_LINK}<span>Bijlage</span></button>"
             f"<button type='button' class='acard acard-off' disabled "
             f"title='binnenkort'>{_IC_TARGET}<span>Goals</span></button>"
@@ -1462,7 +1509,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     if _LABELS.get(p.get("label")):
         labelbar = f"<div class='clabel' style='background:{_LABELS[p['label']]};height:8px;border-radius:4px;margin-bottom:.6rem'></div>"
 
-    maincol = details + actioncards + omschrijving + verrijking + checklist
+    maincol = details + actioncards + omschrijving + checklists_html + verrijking
     detail = (f"{labelbar}{_banner(msg)}{head}"
               f"<div class='pgrid'><div class='pmain'>{maincol}</div>"
               f"<aside class='pdisc'>{discussie}</aside></div>")
@@ -1774,13 +1821,18 @@ def dispatch(data_dir: str, action: str, form: dict):
                 st.notif.add(ty, tid, g("pid"), entry["id"], by="dialoog", snippet=g("text"))
             if ment:
                 msg += f" · {len(ment)} genotificeerd"
+    elif action == "checklist_add":
+        if pj.checklist_add(g("pid"), g("title")):
+            msg = "✓ checklist toegevoegd"
+    elif action == "checklist_remove":
+        pj.checklist_remove(g("pid"), g("clid")); msg = "🗑 checklist verwijderd"
     elif action == "check_add":
-        if pj.check_add(g("pid"), g("text")):
+        if pj.check_add(g("pid"), g("clid"), g("text")):
             msg = "✓ item toegevoegd"
     elif action == "check_toggle":
-        pj.check_toggle(g("pid"), g("item"))
+        pj.check_toggle(g("pid"), g("clid"), g("item"))
     elif action == "check_remove":
-        pj.check_remove(g("pid"), g("item")); msg = "🗑 item verwijderd"
+        pj.check_remove(g("pid"), g("clid"), g("item")); msg = "🗑 item verwijderd"
     elif action == "role_assign":
         person, agent = _parse_trekker(g("filler"))
         if person and st.assign.assign(g("role"), "person", person):
