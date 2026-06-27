@@ -180,6 +180,12 @@ ul.clean li:last-child{border-bottom:none}
 .menuitem.danger{color:var(--coral)}
 .detailsbox{margin:0 0 1.1rem;border:1px solid var(--border);border-radius:var(--radius);padding:.7rem .8rem}
 .detailsbox .psec-h{margin-bottom:.5rem}
+.actioncards{display:flex;gap:.5rem;flex-wrap:wrap;margin:0 0 1.1rem}
+.acard{display:inline-flex;align-items:center;gap:.4rem;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .75rem;font-size:.82rem;font-weight:600;color:var(--gray);cursor:pointer}
+.acard:hover{border-color:var(--green);color:var(--green-dark)}
+.acard svg{width:15px;height:15px}
+.acard-off{opacity:.5;cursor:not-allowed}
+.acard-off:hover{border-color:var(--border);color:var(--gray)}
 .dcol{display:grid;grid-template-columns:auto 1fr;gap:.35rem .8rem;align-content:start;min-width:0}
 .dk{align-self:baseline;color:var(--subtle);font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700;padding-top:.12rem}
 .dv{min-width:0;font-size:.88rem}
@@ -1217,6 +1223,8 @@ _IC_CHAT = _ic("<path d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 
 _IC_INFO = _ic("<circle cx='12' cy='12' r='9'/><line x1='12' y1='11' x2='12' y2='16'/><line x1='12' y1='8' x2='12' y2='8'/>")
 _IC_GEAR = _ic("<circle cx='12' cy='12' r='3'/><path d='M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1z'/>")
 _IC_LINK = _ic("<path d='M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1'/><path d='M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1'/>")
+_IC_CLOCK = _ic("<circle cx='12' cy='12' r='9'/><polyline points='12 7 12 12 15 14'/>")
+_IC_TARGET = _ic("<circle cx='12' cy='12' r='9'/><circle cx='12' cy='12' r='5'/><circle cx='12' cy='12' r='1.5'/>")
 
 
 def _link_host(url: str) -> str:
@@ -1406,11 +1414,23 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
 
     checklist = _psec(_IC_CHECK, "Checklist", checklist_body)
 
+    # ---- Actie-kaarten (Trello 'Add to card'): interacties volgen later, één voor één ----
+    actioncards = ""
+    if rw:
+        actioncards = (
+            "<div class='actioncards'>"
+            f"<button type='button' class='acard'>{_IC_CLOCK}<span>Datum</span></button>"
+            f"<button type='button' class='acard'>{_IC_CHECK}<span>Checklist</span></button>"
+            f"<button type='button' class='acard'>{_IC_LINK}<span>Bijlage</span></button>"
+            f"<button type='button' class='acard acard-off' disabled "
+            f"title='binnenkort'>{_IC_TARGET}<span>Goals</span></button>"
+            "</div>")
+
     labelbar = ""
     if _LABELS.get(p.get("label")):
         labelbar = f"<div class='clabel' style='background:{_LABELS[p['label']]};height:8px;border-radius:4px;margin-bottom:.6rem'></div>"
 
-    maincol = details + omschrijving + verrijking + checklist
+    maincol = details + actioncards + omschrijving + verrijking + checklist
     detail = (f"{labelbar}{_banner(msg)}{head}"
               f"<div class='pgrid'><div class='pmain'>{maincol}</div>"
               f"<aside class='pdisc'>{discussie}</aside></div>")
