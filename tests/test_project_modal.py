@@ -18,7 +18,7 @@ def test_detail_overzicht_kop(tmp_path):
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "<!doctype" not in frag.lower()
     # tweekoloms: zijbalk-details met de kernvelden (status zit nu in het …-menu, niet in Details)
-    for k in ("pgrid", "pside", "smeta", "Trekker", "Rol / eigenaar", "Label", "Zichtbaarheid", "Aangemaakt"):
+    for k in ("pgrid", "pdisc", "smeta", "Trekker", "Rol / eigenaar", "Label", "Zichtbaarheid", "Aangemaakt"):
         assert k in frag
     assert "Voortgang" not in frag and "<dt>Status</dt>" not in frag
     # statuswissel via het …-menu
@@ -70,6 +70,17 @@ def test_bijlage_cards_trello(tmp_path):
 def test_attach_add_vereist_url(tmp_path):
     dd, pid = _setup(tmp_path)
     assert cockpit2._Stores(dd).projects.attach_add(pid, url="", title="x") is None
+
+
+def test_emoji_reactie(tmp_path):
+    dd, pid = _setup(tmp_path)
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"], "text": ["hoi"], "next": ["/"]})
+    eid = cockpit2._Stores(dd).projects.get(pid)["log"][0]["id"]
+    cockpit2.dispatch(dd, "react_add", {"pid": [pid], "item": [eid], "emoji": ["👍"], "next": ["/"]})
+    cockpit2.dispatch(dd, "react_add", {"pid": [pid], "item": [eid], "emoji": ["👍"], "next": ["/"]})
+    assert cockpit2._Stores(dd).projects.get(pid)["log"][0]["reactions"] == {"👍": 2}
+    frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
+    assert "emoji-pick" in frag and "class='rx'" in frag and "👍 2" in frag
 
 
 def test_done_project_blijft_bewerkbaar(tmp_path):

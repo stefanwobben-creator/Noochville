@@ -114,6 +114,22 @@ class ProjectLedger:
         self._save()
         return True
 
+    def add_reaction(self, pid: str, entry_id: str, emoji: str) -> bool:
+        """Voeg een emoji-reactie toe aan een feed-entry (per emoji een teller). Alleen entries met
+        een id (nieuw schema) kunnen reacties dragen."""
+        p = self._projects.get(pid)
+        emoji = (emoji or "").strip()
+        if p is None or not emoji or not entry_id:
+            return False
+        for entry in p.get("log", []):
+            if entry.get("id") == entry_id:
+                r = entry.setdefault("reactions", {})
+                r[emoji] = int(r.get(emoji, 0)) + 1
+                self._touch(p)
+                self._save()
+                return True
+        return False
+
     def attach_add(self, pid: str, url: str = "", title: str = "", kind: str = "link") -> dict | None:
         """Voeg een verrijking-card toe (Trello-stijl bijlage). Nu: een link met optionele titel.
         Geeft de toegevoegde card terug."""

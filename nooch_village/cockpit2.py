@@ -133,10 +133,17 @@ ul.clean li:last-child{border-bottom:none}
 .frole{color:var(--subtle);font-weight:400;font-size:.85rem}
 .fbubble{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.5rem .65rem}
 .fbul{margin:.2rem 0 .2rem 1.1rem}
-.ffoot{display:flex;align-items:center;justify-content:space-between;margin-top:.25rem}
-.emoji-add{cursor:pointer;font-size:1rem;opacity:.5;line-height:1}
-.emoji-add:hover{opacity:1}
-.fstamp{color:var(--subtle);font-size:.72rem}
+.ffoot{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:.25rem}
+.ffoot-l{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;min-width:0}
+.rx{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-pill);padding:.05rem .45rem;font-size:.8rem}
+.emoji-pick{position:relative;display:inline-block}
+.emoji-pick>summary{list-style:none;cursor:pointer;font-size:1rem;opacity:.5;line-height:1}
+.emoji-pick>summary::-webkit-details-marker{display:none}
+.emoji-pick[open]>summary,.emoji-pick>summary:hover{opacity:1}
+.emoji-pop{position:absolute;left:0;top:1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.3rem;display:flex;gap:.1rem;z-index:6}
+.emo{border:none;background:none;cursor:pointer;font-size:1.05rem;padding:.15rem .25rem;border-radius:var(--radius)}
+.emo:hover{background:var(--cream-2)}
+.fstamp{color:var(--subtle);font-size:.72rem;flex:0 0 auto}
 .av.role{background:var(--green-dark);color:#fff}
 .fkind{font-size:.64rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700;border-radius:var(--radius-pill);padding:.03rem .45rem}
 .fkind.upd{background:var(--green-tint);color:var(--green-dark)}
@@ -181,7 +188,8 @@ ul.clean li:last-child{border-bottom:none}
 .swlink:hover{color:var(--green-dark)}
 .card-del{margin-top:1.2rem;padding-top:.6rem;border-top:1px solid var(--border)}
 .pdisc .psec{background:none;border:none;padding:0;margin:0}
-.pdisc{background:var(--cream-2);border-radius:var(--radius);padding:.9rem}
+.pdisc{background:var(--cream-2);border-radius:var(--radius);padding:.9rem;min-width:0}
+.comp-row .btn{padding:.25rem .85rem;font-size:.76rem;border-radius:var(--radius-pill)}
 .comp-form{margin-bottom:1rem}
 .comp-tools{display:flex;gap:.3rem;margin-bottom:.35rem}
 .ctool{border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);padding:.1rem .55rem;font-size:.8rem;cursor:pointer;color:var(--gray)}
@@ -1051,7 +1059,11 @@ def _md(text: str) -> str:
     return html[:-4] if html.endswith("<br>") else html
 
 
-def _feed_entry_html(st: _Stores, entry: dict, role_name: str = "") -> str:
+_EMOJIS = ["👍", "🎉", "❤️", "😄", "🙏", "👀"]   # standaard emoji's voor een snelle reactie
+
+
+def _feed_entry_html(st: _Stores, entry: dict, role_name: str = "",
+                     pid: str = "", csrf_token: str = "") -> str:
     kind, atype, aid = _feed_norm(entry)
     av, nm = _feed_who(st, atype, aid)
     if atype == "role":
@@ -1060,10 +1072,24 @@ def _feed_entry_html(st: _Stores, entry: dict, role_name: str = "") -> str:
         who = f"<b class='fname'>{_e(nm)}</b> <span class='frole'>@{_e(role_name)}</span>"
     else:
         who = f"<b class='fname'>{_e(nm)}</b>"
+    rx = "".join(f"<span class='rx'>{emo} {cnt}</span>" for emo, cnt in (entry.get("reactions") or {}).items())
+    picker = ""
+    eid = entry.get("id")
+    if csrf_token and eid:
+        btns = "".join(
+            f"<form method='post' action='/action' style='display:inline'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+            f"<input type='hidden' name='item' value='{_e(eid)}'>"
+            f"<input type='hidden' name='emoji' value='{emo}'>"
+            f"<button class='emo' type='submit' name='action' value='react_add'>{emo}</button></form>"
+            for emo in _EMOJIS)
+        picker = (f"<details class='emoji-pick'><summary class='emoji-add' title='reactie'>🙂</summary>"
+                  f"<div class='emoji-pop'>{btns}</div></details>")
     return (f"<div class='fentry'>"
             f"<div class='fhead'>{av}<span class='fwho'>{who}</span></div>"
             f"<div class='fbubble'>{_md(entry.get('text', ''))}</div>"
-            f"<div class='ffoot'><span class='emoji-add' title='reactie (binnenkort)'>🙂</span>"
+            f"<div class='ffoot'><div class='ffoot-l'>{rx}{picker}</div>"
             f"<span class='fstamp'>{_e(_stamp(entry.get('at')))}</span></div>"
             f"</div>")
 
@@ -1156,7 +1182,8 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     # ---- Rechterkolom: de dialoog (mensen + AI) ----
     role_name = _name(orec) if orec else ""
     # Nieuwste boven.
-    feed = "".join(_feed_entry_html(st, m, role_name=role_name) for m in reversed(p.get("log") or []))
+    feed = "".join(_feed_entry_html(st, m, role_name=role_name, pid=pid, csrf_token=csrf_token)
+                   for m in reversed(p.get("log") or []))
     if not feed:
         feed = "<p class='muted'>Nog geen updates of reacties.</p>"
     composer = ""
@@ -1279,7 +1306,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     maincol = details + omschrijving + verrijking + checklist
     detail = (f"{labelbar}{_banner(msg)}{head}"
               f"<div class='pgrid'><div class='pmain'>{maincol}</div>"
-              f"<aside class='pside pdisc'>{discussie}</aside></div>")
+              f"<aside class='pdisc'>{discussie}</aside></div>")
     if fragment:
         return detail
     main = (f"<div class='c2-main' style='max-width:980px'>"
@@ -1522,6 +1549,9 @@ def dispatch(data_dir: str, action: str, form: dict):
             msg = "🔗 bijlage toegevoegd"
     elif action == "attach_remove":
         pj.attach_remove(g("pid"), g("aid")); msg = "🗑 bijlage verwijderd"
+    elif action == "react_add":
+        if pj.add_reaction(g("pid"), g("item"), g("emoji")):
+            msg = "✓ reactie geplaatst"
     elif action == "proj_feed":
         atype, _, aid = g("author").partition(":")
         atype = atype or "human"
