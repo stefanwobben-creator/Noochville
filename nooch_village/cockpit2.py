@@ -447,10 +447,15 @@ def _drag_script(csrf_token: str, back: str) -> str:
         "document.body.appendChild(f);f.submit();});});})();</script>")
 
 
+_II_PREFIX = "ii:"   # Individual Initiative-pseudo-eigenaar per cirkel: 'ii:<circle_id>'
+
+
 def _group_meta(st: _Stores, p: dict, mode: str, node_owner: str):
     """(gid, sorteersleutel, label, add_owner, add_trekker) voor groeperen per persoon/rol."""
+    owner = p.get("owner") or ""
     if mode == "rol":
-        owner = p.get("owner")
+        if owner.startswith(_II_PREFIX):
+            return (("ii", owner), "zzz", "Individual Initiative", owner, "")
         orec = st.records.get(owner)
         nm = _name(orec) if orec else (owner or "—")
         return (("rol", owner), nm.lower(), nm, owner, "")
@@ -465,22 +470,24 @@ def _group_meta(st: _Stores, p: dict, mode: str, node_owner: str):
 
 
 def _projects_board(st: _Stores, projs: list, owner: str, csrf_token: str, back: str,
-                    group: str = "persoon") -> str:
+                    group: str = "persoon", seed: list | None = None, add: bool = True) -> str:
+    """Swimlanes per groep. `seed` = altijd te tonen lanes (gid, sk, label, add_owner, add_trekker),
+    ook leeg (zodat je per rol/persoon direct kunt toevoegen). `add` zet de '+ project'-knop aan."""
     mode = group if group in ("persoon", "rol") else "persoon"
     groups: dict = {}
+    for gid, sk, label, ao, at in (seed or []):
+        groups[gid] = {"sk": sk, "label": label, "items": [], "ao": ao, "at": at}
     for p in projs:
         gid, sk, label, ao, at = _group_meta(st, p, mode, owner)
         g = groups.setdefault(gid, {"sk": sk, "label": label, "items": [], "ao": ao, "at": at})
         g["items"].append(p)
     if not groups:
-        # nog geen projecten: één toevoeg-board zodat je het eerste project kunt maken
-        board = _columns_html(st, [], owner, "", csrf_token, back, quickadd=True)
-    else:
-        board = ""
-        for gid, g in sorted(groups.items(), key=lambda kv: kv[1]["sk"]):
-            board += (f"<div class='swim'><div class='swim-h'>{_e(g['label'])} ({len(g['items'])})</div>"
-                      f"{_columns_html(st, g['items'], g['ao'], g['at'], csrf_token, back, quickadd=True)}"
-                      f"</div>")
+        return _columns_html(st, [], owner, "", csrf_token, back, quickadd=add) + _drag_script(csrf_token, back)
+    board = ""
+    for gid, g in sorted(groups.items(), key=lambda kv: kv[1]["sk"]):
+        board += (f"<div class='swim'><div class='swim-h'>{_e(g['label'])} ({len(g['items'])})</div>"
+                  f"{_columns_html(st, g['items'], g['ao'], g['at'], csrf_token, back, quickadd=add)}"
+                  f"</div>")
     return board + _drag_script(csrf_token, back)
 
 
@@ -507,28 +514,53 @@ def _archived_html(st: _Stores, archived: list, csrf_token: str, back: str) -> s
             f"<ul class='clean'>{rows}</ul></details>")
 
 
-def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "persoon") -> str:
-    if group not in ("persoon", "rol"):
-        group = "persoon"
-    # Op een cirkel: alle projecten van de cirkel én onderliggende rollen/subcirkels (overzicht).
-    ids = {rec.id}
-    if org.is_circle(rec):
-        ids |= {d.id for d in org.descendants(st.records.all(), rec.id)}
+def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "") -> str:
     allp = st.projects.all()
-    projs = [p for p in allp if p.get("owner") in ids and not p.get("archived")]
-    archived = [p for p in allp if p.get("owner") == rec.id and p.get("archived")]
-    back = f"/node?id={rec.id}&tab=projects&group={group}"
-    base = f"/node?id={_e(rec.id)}&tab=projects"
-    on = lambda v: " on" if group == v else ""
+    back_base = f"/node?id={rec.id}&tab=projects"
+
+    if not org.is_circle(rec):
+        # ROL: eigen projecten, gegroepeerd per persoon (de doener). Een rol 'doet' niet, een
+        # persoon pakt een project op; geen trekker = nog niet opgepakt.
+        projs = [p for p in allp if p.get("owner") == rec.id and not p.get("archived")]
+        archived = [p for p in allp if p.get("owner") == rec.id and p.get("archived")]
+        seed = [(("none",), "2", "Geen trekker", rec.id, "")]
+        body = _projects_board(st, projs, rec.id, csrf_token, back_base, "persoon", seed=seed, add=True)
+        body += _archived_html(st, archived, csrf_token, back_base)
+        head = f"<h3 style='margin:0 0 1rem'>Projecten ({len(projs)})</h3>"
+        return f"<div class='c2-sec'>{head}{body}</div>"
+
+    # CIRKEL: doet zelf geen uitvoerend werk. Toont de projecten van haar DIRECTE rollen +
+    # Individual Initiative. Subcirkels = aparte rollen met een eigen bord (niet aggregeren).
+    g = group if group in ("persoon", "rol") else "rol"
+    direct = sorted(org.roles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
+    rids = {r.id for r in direct}
+    ii = f"{_II_PREFIX}{rec.id}"
+    projs = [p for p in allp if (p.get("owner") in rids or p.get("owner") == ii) and not p.get("archived")]
+    back = f"{back_base}&group={g}"
+    if g == "rol":
+        seed = [(("rol", r.id), _name(r).lower(), _name(r), r.id, "") for r in direct]
+        seed.append((("ii", ii), "zzz", "Individual Initiative", ii, ""))
+        board = _projects_board(st, projs, rec.id, csrf_token, back, "rol", seed=seed, add=True)
+    else:
+        board = _projects_board(st, projs, rec.id, csrf_token, back, "persoon", add=False)
+    subs = sorted(org.subcircles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
+    sub_html = ""
+    if subs:
+        lis = "".join(f"<li><a href='/node?id={_e(s.id)}&tab=projects'>{_e(_name(s))}</a> "
+                      f"<span class='muted'>→ eigen projectenbord</span></li>" for s in subs)
+        sub_html = (f"<div class='c2-sec'><h3>Subcirkels</h3>"
+                    f"<p class='muted' style='font-size:.8rem'>Een subcirkel heeft een eigen "
+                    f"projectenbord.</p><ul class='clean'>{lis}</ul></div>")
+    on = lambda v: " on" if g == v else ""
     switch = (f"<div class='vswitch'>Groeperen: "
-              f"<a class='vbtn{on('persoon')}' href='{base}&group=persoon'>per persoon</a>"
-              f"<a class='vbtn{on('rol')}' href='{base}&group=rol'>per rol</a></div>")
-    body = _projects_board(st, projs, rec.id, csrf_token, back, group=group)
-    body += _archived_html(st, archived, csrf_token, back)
+              f"<a class='vbtn{on('rol')}' href='{back_base}&group=rol'>per rol</a>"
+              f"<a class='vbtn{on('persoon')}' href='{back_base}&group=persoon'>per persoon</a></div>")
     head = (f"<div style='display:flex;align-items:center;justify-content:space-between;"
             f"flex-wrap:wrap;gap:.4rem;margin-bottom:1rem'>"
             f"<h3 style='margin:0'>Projecten ({len(projs)})</h3>{switch}</div>")
-    return f"<div class='c2-sec'>{head}{body}</div>"
+    note = ("<p class='muted' style='font-size:.8rem;margin:-.6rem 0 .6rem'>Een cirkel doet zelf "
+            "geen werk: projecten horen bij de rollen of bij Individual Initiative.</p>")
+    return f"<div class='c2-sec'>{head}{note}{board}{sub_html}</div>"
 
 
 def _person_projects_html(st: _Stores, pid: str) -> str:
@@ -551,7 +583,7 @@ def _person_projects_html(st: _Stores, pid: str) -> str:
 
 
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",
-                group: str = "persoon") -> str:
+                group: str = "") -> str:
     rec = st.records.get(node_id)
     if rec is None:
         return _page("Niet gevonden", "<p>Node niet gevonden.</p><p><a href='/'>← home</a></p>")
@@ -756,6 +788,10 @@ def dispatch(data_dir: str, action: str, form: dict):
         person, agent = _parse_trekker(g("trekker"))
         col = g("col")
         create_status = "future" if col == "toekomst" else "queued"
+        orec = st.records.get(owner)
+        if orec is not None and org.is_circle(orec):
+            # Een cirkel doet geen uitvoerend werk: projecten horen bij een rol of Individual Initiative.
+            return nxt, "✗ een cirkel kan geen project bevatten — kies een rol of Individual Initiative"
         if owner and scope:
             pid = pj.create(owner, scope[:200], "human", status=create_status,
                             person=person or None, agent=agent or None, private=(g("private") == "1"))
@@ -824,7 +860,7 @@ def make_handler(data_dir: str, csrf_token: str):
                 self._send(render_node(st, (qs.get("id") or [""])[0],
                                        (qs.get("tab") or ["overview"])[0], csrf_token=csrf_token,
                                        msg=(qs.get("msg") or [""])[0],
-                                       group=(qs.get("group") or ["persoon"])[0]))
+                                       group=(qs.get("group") or [""])[0]))
                 return
             if path == "/project":
                 self._send(render_project(st, (qs.get("pid") or [""])[0], csrf_token=csrf_token,

@@ -61,7 +61,6 @@ def test_projecten_tab_kolommen_en_inline_add(tmp_path):
     assert "proj_add" in page and "+ project toevoegen" in page
     assert "data-to='toekomst'" in page and "draggable" in page.lower()
     assert "data-href=" in page                 # kaart klikbaar naar detail
-    assert "vbtn" in page                        # board/lijst-schakelaar
 
 
 def test_inline_add_in_kolom_zet_status(tmp_path):
@@ -78,7 +77,8 @@ def test_dispatch_geeft_bevestiging(tmp_path):
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     nxt, msg = cockpit2.dispatch(dd, "proj_add", {
-        "owner": ["mother_earth__nooch"], "scope": ["X"], "col": ["actief"], "next": ["/"]})
+        "owner": ["mother_earth__nooch__website_developer"], "scope": ["X"], "col": ["actief"],
+        "next": ["/"]})
     assert "toegevoegd" in msg
 
 
@@ -97,14 +97,14 @@ def test_project_toevoegen_en_koppeling(tmp_path):
     assert "Productpagina live" in pp and "Projecten" in pp
 
 
-def test_project_op_cirkel(tmp_path):
+def test_cirkel_kan_geen_project_bevatten(tmp_path):
+    # model-regel: een cirkel doet geen uitvoerend werk → geen project owned by een cirkel
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
-    cockpit2.dispatch(dd, "proj_add", {
-        "owner": ["mother_earth__nooch"], "scope": ["Jaarplan 2027"], "trekker": [""],
-        "next": ["/node?id=mother_earth__nooch&tab=projects"]})
-    page = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth__nooch", "projects", csrf_token="t")
-    assert "Jaarplan 2027" in page
+    nxt, msg = cockpit2.dispatch(dd, "proj_add", {
+        "owner": ["mother_earth__nooch"], "scope": ["Jaarplan 2027"], "trekker": [""], "next": ["/"]})
+    assert "cirkel kan geen project" in msg.lower()
+    assert cockpit2._Stores(dd).projects.all() == []        # niets aangemaakt
 
 
 def test_project_status_done_delete(tmp_path):
@@ -183,15 +183,42 @@ def test_projecten_groeperen_per_persoon(tmp_path):
     assert "swim-h" in page and "Lotte Mulder" in page and "Geen trekker" in page
 
 
-def test_circle_projecten_subtree_en_per_rol(tmp_path):
-    # cirkel toont projecten van onderliggende rollen, groepeerbaar per rol
+def test_circle_toont_directe_rollen_plus_ii(tmp_path):
+    # cirkel toont projecten van haar DIRECTE rollen + Individual Initiative; geen eigen werk
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     cockpit2.dispatch(dd, "proj_add", {"owner": ["mother_earth__nooch__website_developer"],
-                                       "scope": ["Subproject"], "col": ["actief"], "next": ["/"]})
+                                       "scope": ["Rolproject"], "col": ["actief"], "next": ["/"]})
     page = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth__nooch", "projects",
                                 csrf_token="t", group="rol")
-    assert "Subproject" in page and "Website Developer" in page and "swim-h" in page
+    assert "Rolproject" in page and "Website Developer" in page and "swim-h" in page
+    assert "Individual Initiative" in page           # II-lane altijd aanwezig
+    assert "doet zelf geen werk" in page             # cirkel-uitleg
+
+
+def test_circle_aggregeert_geen_subcirkel(tmp_path):
+    # een project op een rol in subcirkel Nooch hoort NIET op het bord van Mother Earth
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    cockpit2.dispatch(dd, "proj_add", {"owner": ["mother_earth__nooch__website_developer"],
+                                       "scope": ["Diep project"], "col": ["actief"], "next": ["/"]})
+    me = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth", "projects", csrf_token="t", group="rol")
+    assert "Diep project" not in me                  # subcirkel niet geaggregeerd
+    assert "Subcirkels" in me and "eigen projectenbord" in me
+
+
+def test_individual_initiative_owner(tmp_path):
+    # een project oppakken als Individual Initiative (persoon, geen rol)
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    stefan = st.people.by_name("Stefan Wobben")
+    ii = "ii:mother_earth__nooch"
+    cockpit2.dispatch(dd, "proj_add", {"owner": [ii], "scope": ["Ad hoc stunt"], "col": ["actief"],
+                                       "trekker": [f"person:{stefan.id}"], "next": ["/"]})
+    page = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth__nooch", "projects",
+                                csrf_token="t", group="rol")
+    assert "Ad hoc stunt" in page and "Individual Initiative" in page
 
 
 def test_project_archiveren_default(tmp_path):
