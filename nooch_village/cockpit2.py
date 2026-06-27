@@ -1371,6 +1371,12 @@ def serve(host: str = "127.0.0.1", port: int = 8766, data_dir: str | None = None
         httpd.server_close()
 
 
+def _match_ladder() -> str:
+    """Eén werkende, lokaal beschikbare trede voor de matcher. Default Anthropic (Gemini vereist
+    google-generativeai). Override via env LLM_MATCH_LADDER (bijv. 'mistral')."""
+    return os.getenv("LLM_MATCH_LADDER", "anthropic")
+
+
 def _load_env() -> None:
     """Laad project-.env in os.environ (idempotent, setdefault), zodat de losse cockpit2-CLI
     dezelfde LLM-keys ziet als de volledige village. Zoekt .env in cwd en repo-root."""
@@ -1404,7 +1410,7 @@ def refresh_matches(data_dir: str | None = None, ask=None, progress=None) -> int
         def ask(acc: str, skill: str):
             prompt = ("Ondersteunt de vaardigheid een verantwoordelijkheid? Antwoord met enkel "
                       f"'ja' of 'nee'.\nVerantwoordelijkheid: {acc}\nVaardigheid: {skill}")
-            out = llm.reason(prompt)
+            out = llm.reason(prompt, ladder=_match_ladder())
             if not out:
                 return None
             o = out.strip().lower()
@@ -1435,7 +1441,7 @@ def main(argv=None) -> None:
         # Snelle key-check: zonder LLM-key heeft de achtergrond-pas niets te doen.
         try:
             from nooch_village import llm
-            has_key = bool(llm.reason("antwoord met 'ok'"))
+            has_key = bool(llm.reason("antwoord met 'ok'", ladder=_match_ladder()))
         except Exception:
             has_key = False
         if not has_key:
