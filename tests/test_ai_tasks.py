@@ -49,19 +49,20 @@ def test_ai_genest_onder_accountability(tmp_path):
 
 def test_cadeau_icoon_bij_match(tmp_path):
     dd, st = _st(tmp_path)
-    # skill 'performance' matcht lexicaal 'Optimzing website performance'
+    # skill 'performance' matcht 'Optimzing website performance'
     st.personas.add("Codie", skills=["performance tuning"])
     role = "mother_earth__nooch__website_developer"
     page = cockpit2.render_node(cockpit2._Stores(dd), role, "overview", csrf_token="t")
     assert "ai-gift" in page and "🎁" in page
 
 
-def test_geen_cadeau_zonder_match(tmp_path):
+def test_geen_cadeau_en_geen_plusai_zonder_match(tmp_path):
     dd, st = _st(tmp_path)
     st.personas.add("Codie", skills=["iets totaal anders xyz"])
     role = "mother_earth__nooch__website_developer"
     page = cockpit2.render_node(cockpit2._Stores(dd), role, "overview", csrf_token="t")
-    assert "🎁" not in page and "+ AI" in page
+    # geen discovery-affordance als er niets past, en de oude '+ AI' bestaat niet meer
+    assert "🎁" not in page and "+ AI" not in page
 
 
 def test_modal_selecteert_uit_rugzak_geen_vrije_tekst(tmp_path):

@@ -26,6 +26,7 @@ from nooch_village.attachments import AttachmentStore
 from nooch_village.personas import PersonaStore
 from nooch_village.projects import ProjectLedger
 from nooch_village.ai_tasks import AITaskStore
+from nooch_village import ai_match
 from nooch_village import org
 from nooch_village.glassfrog_import import import_org, nooch_poc_org
 
@@ -115,9 +116,8 @@ ul.clean li:last-child{border-bottom:none}
 .acc-text{flex:1 1 auto;min-width:0}
 .acc-ai{flex:0 0 auto;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;justify-content:flex-end}
 .aichip{display:inline-block;background:#EFEAF9;color:#5b3fa6;border-radius:var(--radius-pill);padding:.05rem .5rem;font-size:.74rem;font-weight:600}
-.ai-add{color:var(--subtle);font-size:.8rem;text-decoration:none;cursor:pointer;white-space:nowrap}
-.ai-add:hover{color:#5b3fa6;text-decoration:underline}
 .ai-gift{font-size:1rem;text-decoration:none;cursor:pointer;line-height:1}
+.chiplink{text-decoration:none}
 .acc-sub{padding:.15rem 0 .4rem 1.4rem;border-bottom:1px solid var(--border)}
 .sugg{background:#F4F1FB;border:1px solid #E0D7F5;border-radius:var(--radius);padding:.5rem .7rem;margin:.5rem 0}
 .sugg-h{font-weight:700;color:#5b3fa6;font-size:.82rem;margin-bottom:.3rem}
@@ -176,6 +176,7 @@ class _Stores:
         self.personas = PersonaStore(os.path.join(dd, "personas.json"))
         self.projects = ProjectLedger(os.path.join(dd, "projects.json"))
         self.ai = AITaskStore(os.path.join(dd, "ai_tasks.json"))
+        self.match = ai_match.MatchCache(os.path.join(dd, "ai_match_cache.json"))
 
 
 def _bootstrap(dd: str) -> None:
@@ -268,43 +269,27 @@ def _ai_chip(st: _Stores, t) -> str:
     return f"<span class='aichip'>🤖 {_e(nm)}{skill}</span>"
 
 
-_STOP = {"the", "a", "an", "of", "and", "to", "for", "in", "on", "new", "with", "your",
-         "de", "het", "een", "van", "en", "te", "met", "der", "die", "dat"}
-
-
-def _toks(s: str) -> set[str]:
-    import re
-    return {w for w in re.findall(r"[a-zA-Z]+", (s or "").lower()) if len(w) > 2 and w not in _STOP}
-
-
 def _suggest_for_acc(st: _Stores, role_id: str, acc_index: int, acc_text: str):
-    """v1-matcher: welke (AI, skill) past lexicaal bij deze accountability en is nog niet gekoppeld.
-    Later slimmer (semantisch/skill-tags). Voedt het cadeau-icoon."""
+    """Welke (AI, skill) past bij deze accountability en is nog niet gekoppeld. Voedt het cadeautje.
+    Matching loopt via ai_match (lexicaal + concept + optioneel gecachet LLM-oordeel)."""
     attached = {(t.agent, t.wat) for t in st.ai.for_acc(role_id, acc_index)}
-    at = _toks(acc_text)
-    low = (acc_text or "").lower()
-    out = []
-    for p in st.personas.all():
-        for sk in (getattr(p, "skills", None) or []):
-            if (p.id, sk) in attached:
-                continue
-            if (_toks(sk) & at) or (sk.lower() in low):
-                out.append((p, sk))
-    return out
+    return ai_match.suggest(st.personas.all(), acc_text, attached, st.match)
 
 
 def _acc_row(st: _Stores, rec, i: int, text: str, csrf_token: str) -> str:
     tasks = st.ai.for_acc(rec.id, i)
-    sub = "".join(f"<div class='acc-sub'>↳ {_ai_chip(st, t)}</div>" for t in tasks)
-    aff = ""
+    url = f"/aitask?role={_e(rec.id)}&acc={i}"
+    # Gekoppelde AI: geneste chip, klikbaar om te beheren (toevoegen/verwijderen).
     if csrf_token:
-        url = f"/aitask?role={_e(rec.id)}&acc={i}"
-        if _suggest_for_acc(st, rec.id, i, text):
-            aff = (f"<a class='ai-gift js-modal' href='{url}' data-href='{url}' "
-                   f"title='Er is AI-ondersteuning beschikbaar voor deze accountability'>🎁</a>")
-        else:
-            aff = (f"<a class='ai-add js-modal' href='{url}' data-href='{url}' "
-                   f"title='autonome AI-taak'>{'+ AI' if not tasks else '✎'}</a>")
+        sub = "".join(f"<div class='acc-sub'>↳ <a class='chiplink js-modal' href='{url}' "
+                      f"data-href='{url}'>{_ai_chip(st, t)}</a></div>" for t in tasks)
+    else:
+        sub = "".join(f"<div class='acc-sub'>↳ {_ai_chip(st, t)}</div>" for t in tasks)
+    # Discovery: enkel het cadeautje, en alleen als er een passende, nog niet gekoppelde AI-skill is.
+    aff = ""
+    if csrf_token and _suggest_for_acc(st, rec.id, i, text):
+        aff = (f"<a class='ai-gift js-modal' href='{url}' data-href='{url}' "
+               f"title='Er is een AI-skill die deze accountability autonoom kan uitvoeren'>🎁</a>")
     return (f"<div class='accrow'><div class='acc-text'>{_e(text)}</div>"
             f"<div class='acc-ai'>{aff}</div></div>{sub}")
 
@@ -1350,13 +1335,53 @@ def serve(host: str = "127.0.0.1", port: int = 8766, data_dir: str | None = None
         httpd.server_close()
 
 
+def refresh_matches(data_dir: str | None = None, ask=None) -> int:
+    """Achtergrond-pas: laat de LLM per (accountability, skill) oordelen en cache het, zodat het
+    cadeautje semantisch matcht. Zonder key/`ask` is dit een no-op (fail-closed); de render valt
+    dan terug op lexicaal + concept. `ask` is injecteerbaar voor tests."""
+    dd = data_dir or _default_data_dir()
+    _bootstrap(dd)
+    st = _Stores(dd)
+    if ask is None:
+        try:
+            from nooch_village import llm
+        except Exception:
+            return 0
+
+        def ask(acc: str, skill: str):
+            prompt = ("Ondersteunt de vaardigheid een verantwoordelijkheid? Antwoord met enkel "
+                      f"'ja' of 'nee'.\nVerantwoordelijkheid: {acc}\nVaardigheid: {skill}")
+            out = llm.reason(prompt)
+            if not out:
+                return None
+            o = out.strip().lower()
+            if o.startswith("ja") or o.startswith("yes"):
+                return True
+            if o.startswith("nee") or o.startswith("no"):
+                return False
+            return None
+
+    skills = sorted({s for p in st.personas.all() for s in (p.skills or [])})
+    accs = sorted({a for r in st.records.all() if not org.is_circle(r)
+                   for a in (r.definition.accountabilities or [])})
+    pairs = [(a, s) for a in accs for s in skills]
+    return ai_match.refresh_semantic(pairs, ask, st.match)
+
+
 def main(argv=None) -> None:
     import argparse
     ap = argparse.ArgumentParser(prog="nooch_village.cockpit2")
+    ap.add_argument("cmd", nargs="?", default="serve", choices=["serve", "match"],
+                    help="serve = cockpit; match = achtergrond semantische matcher vullen")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8766)
     ap.add_argument("--data-dir", default=None)
     a = ap.parse_args(argv)
+    if a.cmd == "match":
+        n = refresh_matches(a.data_dir)
+        print(f"Semantische matcher: {n} paren bepaald."
+              + ("" if n else "  (geen LLM-key? dan blijft lexicaal+concept actief)"))
+        return
     serve(host=a.host, port=a.port, data_dir=a.data_dir)
 
 
