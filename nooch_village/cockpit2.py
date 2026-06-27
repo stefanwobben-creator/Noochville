@@ -30,6 +30,7 @@ from nooch_village.personas import PersonaStore
 from nooch_village.projects import ProjectLedger
 from nooch_village.ai_tasks import AITaskStore
 from nooch_village.notifications import NotifStore
+from nooch_village.roloverleg import Agenda
 from nooch_village import ai_match
 from nooch_village import org
 from nooch_village.glassfrog_import import import_org, nooch_poc_org
@@ -163,6 +164,14 @@ ul.clean li:last-child{border-bottom:none}
 .fedit>summary{list-style:none;display:inline}
 .fedit>summary::-webkit-details-marker{display:none}
 .fedit textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem}
+.rov-list{margin-bottom:.6rem}
+.rov-item{display:flex;align-items:center;gap:.3rem;padding:.25rem .3rem;border-radius:var(--radius)}
+.rov-item.on{background:var(--cream-2)}
+.rov-item:hover{background:var(--cream-2)}
+.rov-link{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:.45rem;text-decoration:none;color:var(--ink)}
+.rov-title{font-weight:600}
+.rov-kind{font-size:.72rem;margin-left:auto}
+.rov-add select,.rov-add input,.rov-add textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem;margin-top:.25rem}
 .av.role{background:var(--green-dark);color:#fff}
 .fkind{font-size:.64rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700;border-radius:var(--radius-pill);padding:.03rem .45rem}
 .fkind.upd{background:var(--green-tint);color:var(--green-dark)}
@@ -323,6 +332,7 @@ class _Stores:
         self.ai = AITaskStore(os.path.join(dd, "ai_tasks.json"))
         self.match = ai_match.MatchCache(os.path.join(dd, "ai_match_cache.json"))
         self.notif = NotifStore(os.path.join(dd, "notifications.json"))
+        self.agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
 
 
 def _bootstrap(dd: str) -> None:
@@ -1046,15 +1056,18 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
                         "weergave moet nog).")
 
     # Meetings zijn een CIRKEL-functie (een rol heeft geen governance/tactical meeting).
-    meet = ("<div class='c2-meet'>"
-            "<span class='btn grey' title='governance draait in cockpit 1'>▾ Governance meeting</span>"
-            "<span class='btn grey' title='nog te bouwen'>▾ Tactical meeting</span></div>") if is_c else ""
+    if is_c and csrf_token:
+        rov_url = f"/roloverleg2?circle={_e(node_id)}"
+        meet = (f"<div class='c2-meet'>"
+                f"<a class='btn js-modal' href='{rov_url}' data-href='{rov_url}'>Governance meeting</a>"
+                f"<span class='btn grey' title='nog te bouwen'>Tactical meeting</span></div>")
+    else:
+        meet = ""
     main = (f"<div class='c2-main'><div class='c2-bar'>{crumb}</div>"
             f"<h1>{_e(_name(rec))} {chip}</h1>{_banner(msg)}{meet}"
             f"{_tabbar(node_id, tabs, tab)}{content}</div>")
     rail = f"<div class='c2-rail'>{_tree_html(st, node_id)}</div>"
-    modal = (_modal_html(json.dumps(_mentionables(st)[0]))
-             if (csrf_token and tab in ("projects", "roles", "overview")) else "")
+    modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
     inner = (f"<style>{_EXTRA_CSS}</style>"
              "<div class='bar'>cockpit 2 · GlassFrog-vorm (PoC) · "
              "<a href='/'>home</a></div>"
@@ -1143,6 +1156,72 @@ def render_patterns(csrf_token: str = "") -> str:
              "<div class='bar'>cockpit 2 · patterns · <a href='/'>home</a></div>"
              f"<div class='c2-wrap'>{main}</div>")
     return _page("Patterns", inner)
+
+
+def _rov_kindlabel(kind: str) -> str:
+    return {"add_role": "nieuwe rol", "remove_role": "rol verwijderen"}.get(kind, "rol wijzigen")
+
+
+def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: str = "",
+                       fragment: bool = False) -> str:
+    """Roloverleg in modal-vorm. Brok 1: frame + agenda links (toevoegen, lijst, selecteren)."""
+    crec = st.records.get(circle_id)
+    if crec is None:
+        return ("<p class='muted'>Onbekende cirkel.</p>" if fragment
+                else _page("Niet gevonden", "<p>Onbekend.</p>"))
+    base = f"/roloverleg2?circle={circle_id}"
+    roles = sorted(org.roles_of(st.records.all(), circle_id), key=lambda r: _name(r).lower())
+    rids = {r.id for r in roles}
+    items = [it for it in st.agenda.open()
+             if it.get("role_id") in rids or it.get("change", {}).get("parent") == circle_id]
+
+    def hid(nextu):
+        return (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                f"<input type='hidden' name='circle' value='{_e(circle_id)}'>"
+                f"<input type='hidden' name='next' value='{_e(nextu)}'>")
+
+    # Agenda-lijst (checklist-pattern): status-chip + titel + soort, klikbaar.
+    rows = ""
+    for it in items:
+        on = " on" if it["id"] == iid else ""
+        chip = "<span class='chip green'>aangenomen</span>" if it["status"] == "consented" else "<span class='chip muted'>open</span>"
+        url = f"{base}&iid={it['id']}"
+        rm = (f"<form method='post' action='/action' style='display:inline'>{hid(base)}"
+              f"<input type='hidden' name='iid' value='{_e(it['id'])}'>"
+              f"<button class='flink' type='submit' name='action' value='rov2_remove'>✕</button></form>")
+        rows += (f"<div class='rov-item{on}'><a class='js-modal rov-link' href='{url}' data-href='{url}'>"
+                 f"{chip} <span class='rov-title'>{_e(it.get('title') or it.get('role_id'))}</span>"
+                 f"<span class='muted rov-kind'>{_rov_kindlabel(it['kind'])}</span></a>{rm}</div>")
+    if not rows:
+        rows = "<p class='muted'>Nog geen agendapunten.</p>"
+
+    opts = "".join(f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>" for r in roles)
+    add = (f"<form method='post' action='/action' class='pf rov-add'>{hid(base)}"
+           f"<label>Agendapunt</label>"
+           f"<select name='owner'><option value='__new__'>+ nieuwe rol</option>{opts}</select>"
+           f"<input name='rolnaam' placeholder='Naam (alleen bij nieuwe rol)'>"
+           f"<textarea name='reason' rows='2' placeholder='Welke spanning lost dit op?'></textarea>"
+           f"<button class='btn ok sm' type='submit' name='action' value='rov2_add' "
+           f"style='margin-top:.3rem'>Toevoegen</button></form>")
+    left = _psec(_IC_CHECK, "Agenda", f"<div class='rov-list'>{rows}</div>{add}")
+
+    # Rechts: editor-placeholder (brok 2).
+    sel = next((it for it in items if it["id"] == iid), None)
+    if sel:
+        right = (f"<div class='psec'><div class='psec-h'>{_IC_INFO}<span>Voorstel</span></div>"
+                 f"<p><b>{_e(sel.get('title') or sel.get('role_id'))}</b> · {_rov_kindlabel(sel['kind'])}</p>"
+                 f"<p class='muted'>{_e(sel.get('reason') or '')}</p>"
+                 f"<p class='muted'>Editor (rol selecteren/bewerken, accountabilities, consent) volgt in brok 2.</p></div>")
+    else:
+        right = "<p class='muted'>Kies links een agendapunt, of voeg er een toe.</p>"
+
+    detail = (f"<h2 style='margin-top:0'>Governance meeting — {_e(_name(crec))}</h2>"
+              f"<div class='pgrid'><div class='pmain'>{left}</div>"
+              f"<aside class='pdisc'>{right}</aside></div>")
+    if fragment:
+        return detail
+    main = f"<div class='c2-main' style='max-width:980px'><div class='c2-bar'><a href='/node?id={_e(circle_id)}'>← terug</a></div>{detail}</div>"
+    return _page("Roloverleg", f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>{main}</div>")
 
 
 def _feed_norm(entry: dict):
@@ -1982,6 +2061,24 @@ def dispatch(data_dir: str, action: str, form: dict):
     elif action == "persona_skill_add":
         if st.personas.add_skill(g("agent"), g("skill")):
             msg = "✓ skill aan rugzak toegevoegd"
+    elif action == "rov2_add":
+        circle = g("circle")
+        reason = g("reason")
+        owner = g("owner")
+        if owner == "__new__":
+            naam = (g("rolnaam") or "").strip()
+            if naam:
+                slug = re.sub(r"[^a-z0-9]+", "_", naam.lower()).strip("_") or "rol"
+                rid = f"{circle}__{slug}"
+                st.agenda.add(rid, "add_role",
+                              {"name": naam, "parent": circle, "purpose": "", "add_accountabilities": []},
+                              reason, title=naam)
+                msg = "✓ agendapunt toegevoegd"
+        elif st.records.get(owner) is not None:
+            st.agenda.add(owner, "amend_role", {}, reason, title=_name(st.records.get(owner)))
+            msg = "✓ agendapunt toegevoegd"
+    elif action == "rov2_remove":
+        st.agenda.remove(g("iid")); msg = "🗑 agendapunt verwijderd"
     return nxt, msg
 
 
@@ -2056,6 +2153,12 @@ def make_handler(data_dir: str, csrf_token: str):
                 return
             if path == "/_patterns":
                 self._send(render_patterns(csrf_token))
+                return
+            if path == "/roloverleg2":
+                fr = (qs.get("fragment") or [""])[0] == "1"
+                self._send(_frag(render_roloverleg2(st, (qs.get("circle") or [""])[0],
+                                                    (qs.get("iid") or [""])[0],
+                                                    csrf_token=csrf_token, fragment=fr), fr))
                 return
             if path == "/file":
                 p = st.projects.get((qs.get("pid") or [""])[0])
