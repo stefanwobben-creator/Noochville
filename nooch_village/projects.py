@@ -51,7 +51,7 @@ class ProjectLedger:
                dod_outcome: str = "", done_when: str = "", goes_to: str = "",
                links: list[str] | None = None, parent: str | None = None,
                person: str | None = None, agent: str | None = None,
-               private: bool = False) -> str:
+               private: bool = False, description: str = "", label: str = "") -> str:
         if trigger not in _VALID_TRIGGERS:
             raise ValueError(f"ongeldig trigger: '{trigger}'")
         if status not in ("queued", "draft", "future"):
@@ -68,6 +68,9 @@ class ProjectLedger:
             "person":     person,           # optioneel: de mens die het project trekt
             "agent":      agent,            # optioneel: AI-inwoner (persona-id) als trekker (beter dan GlassFrog)
             "private":    bool(private),    # 'alleen zichtbaar voor de cirkel' (GlassFrog-zichtbaarheid)
+            "description": description or "",  # omschrijving (kaartdetail)
+            "label":      label or "",      # kleurlabel (koppeling met organisatiedoel, later)
+            "checklist":  [],               # [{id, text, done}] — één checklist per project
             "archived":   False,            # gearchiveerd = blijft bestaan, uit het actieve zicht
             "scope":      scope,
             "trigger":    trigger,
@@ -140,9 +143,41 @@ class ProjectLedger:
         self._save()
         return True
 
+    def check_add(self, pid: str, text: str) -> bool:
+        p = self._projects.get(pid)
+        text = (text or "").strip()
+        if p is None or not text:
+            return False
+        p.setdefault("checklist", []).append({"id": uuid.uuid4().hex[:8], "text": text[:200], "done": False})
+        self._touch(p); self._save()
+        return True
+
+    def check_toggle(self, pid: str, item_id: str) -> bool:
+        p = self._projects.get(pid)
+        if p is None:
+            return False
+        for it in p.get("checklist", []):
+            if it["id"] == item_id:
+                it["done"] = not it.get("done")
+                self._touch(p); self._save()
+                return True
+        return False
+
+    def check_remove(self, pid: str, item_id: str) -> bool:
+        p = self._projects.get(pid)
+        if p is None:
+            return False
+        n = len(p.get("checklist", []))
+        p["checklist"] = [it for it in p.get("checklist", []) if it["id"] != item_id]
+        if len(p["checklist"]) != n:
+            self._touch(p); self._save()
+            return True
+        return False
+
     def edit(self, pid: str, scope=None, owner: str | None = None,
              person: str | None = None, agent: str | None = None,
-             private: bool | None = None) -> bool:
+             private: bool | None = None, description: str | None = None,
+             label: str | None = None) -> bool:
         """Bewerk de inhoud van een project (scope, owner, trekker mens/AI, zichtbaarheid).
         Status blijft ongemoeid; done-projecten zijn vergrendeld. Lege strings voor person/agent
         wissen de trekker; None laat het veld ongemoeid. Geeft True bij succes."""
@@ -159,6 +194,10 @@ class ProjectLedger:
             p["agent"] = agent or None
         if private is not None:
             p["private"] = bool(private)
+        if description is not None:
+            p["description"] = description
+        if label is not None:
+            p["label"] = label
         self._touch(p)
         self._save()
         return True

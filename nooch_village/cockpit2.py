@@ -63,16 +63,37 @@ ul.clean li:last-child{border-bottom:none}
 .pill{display:inline-block;font-size:.72rem;padding:.05rem .45rem;border-radius:var(--radius-pill);background:var(--cream-2);color:var(--gray);margin-left:.3rem}
 .card{border:1px solid var(--border);border-radius:var(--radius);padding:.5rem .7rem;margin:.3rem 0;background:var(--surface)}
 .pboard{display:flex;gap:.6rem;align-items:flex-start;overflow-x:auto}
-.pcol{flex:1 1 0;min-width:160px;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.4rem}
+.pcol{flex:1 1 0;min-width:160px;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.4rem;max-height:68vh;overflow-y:auto}
+.swim{margin:.6rem 0}
+.swim-h{font-family:var(--font-display);font-weight:700;font-size:.85rem;color:var(--green-dark);margin:.2rem 0 .25rem}
 .pcol-h{font-family:var(--font-display);font-weight:700;font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:var(--green-dark);margin-bottom:.3rem}
 .pcol .card{padding:.4rem .5rem;margin:.25rem 0;font-size:.85rem}
 .dellink{background:none;border:none;color:var(--coral);font:inherit;font-size:.78rem;text-decoration:underline;cursor:pointer;padding:0;margin-left:.3rem}
 .card.arch{opacity:.6}
-.pcard{cursor:grab}.pcard:active{cursor:grabbing}
+.pcard{cursor:pointer;position:relative;transition:box-shadow .1s,border-color .1s}
+.pcard:hover{border-color:var(--green);box-shadow:0 0 0 2px var(--green-tint)}
+.pcard:active{cursor:grabbing}
+.ptitle{font-weight:600}
+.clabel{height:7px;border-radius:4px;margin:-.1rem 0 .35rem}
+.pbadge{display:flex;align-items:center;gap:.35rem;margin-top:.35rem;font-size:.7rem;color:var(--muted)}
+.pbar{height:6px;background:var(--border);border-radius:999px;overflow:hidden;width:70px}
+.pbar>div{height:100%;background:var(--green)}
 .pcol.over{outline:2px dashed var(--green);outline-offset:-2px;background:var(--green-tint)}
-.qadd{display:flex;gap:.25rem;margin-top:.3rem}
-.qadd input{flex:1 1 auto;min-width:0;padding:.3rem .4rem;border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:.82rem}
-.qadd button{flex:0 0 auto}
+.qadd{margin-top:.3rem}
+.qadd>summary{list-style:none;cursor:pointer;color:var(--gray);font-size:.82rem;padding:.35rem .5rem;border-radius:var(--radius)}
+.qadd>summary:hover{background:rgba(27,27,27,.05);color:var(--ink)}
+.qadd>summary::-webkit-details-marker{display:none}
+.qadd-form{display:flex;gap:.25rem;margin-top:.3rem}
+.qadd-form input{flex:1 1 auto;min-width:0;padding:.35rem .4rem;border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:.85rem}
+.qadd-form button{flex:0 0 auto}
+.vswitch{display:flex;gap:.2rem}
+.vbtn{font-size:.78rem;padding:.15rem .55rem;border:1px solid var(--border);border-radius:var(--radius-pill);color:var(--gray);text-decoration:none}
+.vbtn.on{background:var(--green);color:#fff;border-color:var(--green)}
+.ck-prog{display:flex;align-items:center;gap:.5rem;margin:.3rem 0 .5rem}
+.ck-list{}.ck-item{display:flex;align-items:center;gap:.4rem;padding:.2rem 0;border:none}
+.ck-box{width:18px;height:18px;border:1px solid var(--border);border-radius:4px;background:#fff;cursor:pointer;font-size:.7rem;line-height:1;color:#fff;flex:0 0 auto}
+.ck-box.on{background:var(--green);border-color:var(--green)}
+.ck-done{text-decoration:line-through;color:var(--muted)}
 .btn.grey{color:var(--muted);border-style:dashed;cursor:not-allowed}
 @media(max-width:760px){.c2-wrap{flex-direction:column}.c2-rail{max-width:none;flex-basis:auto}}
 """
@@ -330,96 +351,130 @@ _PROJ_COLS = [("Actief", "actief", ("running", "queued")), ("Wacht", "wacht", ("
               ("Toekomst", "toekomst", ("future",)), ("Done", "done", ("done",))]
 
 
-def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
+_LABELS = {"groen": "#1F9D55", "geel": "#FFCE2E", "koraal": "#FF6B5B",
+           "blauw": "#2B5BB5", "paars": "#7A5BD1", "": ""}
+
+
+def _proj_progress(p: dict):
+    items = p.get("checklist") or []
+    if not items:
+        return None
+    done = sum(1 for it in items if it.get("done"))
+    return done, len(items), round(100 * done / len(items))
+
+
+def _progress_badge(p: dict) -> str:
+    pr = _proj_progress(p)
+    if not pr:
+        return ""
+    done, total, pct = pr
+    return (f"<div class='pbadge' title='{done}/{total}'>"
+            f"<div class='pbar'><div style='width:{pct}%'></div></div>"
+            f"<span>{pct}%</span></div>")
+
+
+def _scope_text(p) -> str:
     scope = p.get("scope")
     if isinstance(scope, dict):
-        scope = " · ".join(f"{k}: {v}" for k, v in scope.items())
+        return " · ".join(f"{k}: {v}" for k, v in scope.items())
+    return str(scope or "—")
+
+
+def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
     pid = p["id"]
-    lock = " 🔒" if p.get("private") else ""
-    ncom = len(p.get("log") or [])
-    com = f" · 💬 {ncom}" if ncom else ""
+    href = f"/project?pid={_e(pid)}&back={urllib.parse.quote(back, safe='')}"
+    bar = ""
+    if p.get("label") in _LABELS and _LABELS.get(p.get("label")):
+        bar = f"<div class='clabel' style='background:{_LABELS[p['label']]}'></div>"
     meta = (f"<div class='muted' style='font-size:.72rem;margin-top:.25rem'>"
-            f"{_trekker_html(st, p)} · {_e(_age(p.get('created_at')))}{lock}{com}</div>")
-    ctrl = ""
-    if csrf_token:
-        # Status wisselen gaat via slepen; op de kaart alleen bewerken/archiveren/verwijderen.
-        edit = (
-            f"<details style='margin-top:.3rem'><summary style='font-size:.75rem'>✎ bewerken</summary>"
-            f"<div class='pf'><form method='post' action='/action'>"
-            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-            f"<input type='hidden' name='pid' value='{_e(pid)}'>"
-            f"<input type='hidden' name='next' value='{_e(back)}'>"
-            f"<input name='scope' value='{_e(str(scope or ''))}'>"
-            f"<select name='trekker'>{_trekker_options(st, p.get('person') or '', p.get('agent') or '')}</select>"
-            f"<label style='font-size:.78rem'><input type='checkbox' name='private' value='1'"
-            f"{' checked' if p.get('private') else ''}> alleen zichtbaar voor de cirkel</label>"
-            f"<button class='btn ok' type='submit' name='action' value='proj_edit' "
-            f"style='margin-top:.3rem'>opslaan</button></form>"
-            # Default = archiveren (blijft bestaan); echt weg = rood linkje verwijderen.
-            f"<div style='margin-top:.4rem'>"
-            f"<form method='post' action='/action' style='display:inline'>"
-            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-            f"<input type='hidden' name='pid' value='{_e(pid)}'>"
-            f"<input type='hidden' name='next' value='{_e(back)}'>"
-            f"<button class='btn' type='submit' name='action' value='proj_archive'>🗄 archiveren</button>"
-            f"</form> "
-            f"<form method='post' action='/action' style='display:inline'>"
-            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-            f"<input type='hidden' name='pid' value='{_e(pid)}'>"
-            f"<input type='hidden' name='next' value='{_e(back)}'>"
-            f"<button type='submit' name='action' value='proj_delete' class='dellink' "
-            f"onclick=\"return confirm('Definitief verwijderen? Dit kan niet terug. "
-            f"Archiveren bewaart het project.')\">verwijderen</button>"
-            f"</form></div></div></details>")
-        ctrl = edit
+            f"{_trekker_html(st, p)} · {_e(_age(p.get('created_at')))}</div>")
     drag = ' draggable="true"' if csrf_token else ''
-    return (f"<div class='card pcard' data-pid='{_e(pid)}'{drag}>"
-            f"<b>{_e(str(scope or '—'))}</b>{meta}{ctrl}</div>")
+    return (f"<div class='card pcard' data-pid='{_e(pid)}' data-href='{href}'{drag}>"
+            f"{bar}<div class='ptitle'>{_e(_scope_text(p))}</div>{meta}{_progress_badge(p)}</div>")
 
 
 def _quickadd(owner: str, col: str, csrf_token: str, back: str) -> str:
-    """Trello-stijl: direct een kaart toevoegen in deze kolom (alleen een titel; rest via ✎)."""
+    """Trello-stijl '+ kaart toevoegen': een volle-breedte knop die openklapt naar een veld."""
     if not csrf_token or col == "done":
         return ""
     return (
-        f"<form method='post' action='/action' class='qadd'>"
+        f"<details class='qadd'><summary>+ kaart toevoegen</summary>"
+        f"<form method='post' action='/action' class='qadd-form'>"
         f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
         f"<input type='hidden' name='owner' value='{_e(owner)}'>"
         f"<input type='hidden' name='col' value='{_e(col)}'>"
         f"<input type='hidden' name='next' value='{_e(back)}'>"
-        f"<input name='scope' placeholder='+ kaart' aria-label='nieuw project'>"
-        f"<button class='btn' type='submit' name='action' value='proj_add'>+</button></form>")
+        f"<input name='scope' placeholder='Titel van de kaart…' aria-label='nieuwe kaart'>"
+        f"<button class='btn ok' type='submit' name='action' value='proj_add'>Kaart toevoegen</button>"
+        f"</form></details>")
 
 
-def _projects_board(st: _Stores, projs: list, owner: str, csrf_token: str, back: str) -> str:
+def _columns_html(st: _Stores, items: list, owner: str, csrf_token: str, back: str,
+                  quickadd: bool) -> str:
     cols = ""
     for label, key, statuses in _PROJ_COLS:
-        items = [p for p in projs if p.get("status") in statuses]
-        items.sort(key=lambda p: -(p.get("created_at") or 0))
-        body = "".join(_proj_card(st, p, csrf_token, back) for p in items)
+        its = [p for p in items if p.get("status") in statuses]
+        its.sort(key=lambda p: -(p.get("created_at") or 0))
+        body = "".join(_proj_card(st, p, csrf_token, back) for p in its)
+        qa = _quickadd(owner, key, csrf_token, back) if quickadd else ""
         cols += (f"<div class='pcol' data-to='{key}'>"
-                 f"<div class='pcol-h'>{_e(label)} ({len(items)})</div>{body}"
-                 f"{_quickadd(owner, key, csrf_token, back)}</div>")
-    script = ""
-    if csrf_token:
-        script = (
-            "<script>(function(){"
-            f"var csrf={json.dumps(csrf_token)},next={json.dumps(back)},pid=null;"
-            "document.querySelectorAll('.pcard[draggable]').forEach(function(c){"
-            "c.addEventListener('dragstart',function(e){pid=c.getAttribute('data-pid');"
-            "e.dataTransfer.effectAllowed='move';c.style.opacity='.5';});"
-            "c.addEventListener('dragend',function(){c.style.opacity='';});});"
-            "document.querySelectorAll('.pcol[data-to]').forEach(function(col){"
-            "col.addEventListener('dragover',function(e){e.preventDefault();col.classList.add('over');});"
-            "col.addEventListener('dragleave',function(){col.classList.remove('over');});"
-            "col.addEventListener('drop',function(e){e.preventDefault();col.classList.remove('over');"
-            "if(!pid)return;var to=col.getAttribute('data-to');"
-            "var f=document.createElement('form');f.method='post';f.action='/action';"
-            "function a(n,v){var i=document.createElement('input');i.type='hidden';i.name=n;i.value=v;f.appendChild(i);}"
-            "a('csrf',csrf);a('pid',pid);a('next',next);"
-            "if(to==='done'){a('action','proj_done');}else{a('action','proj_status');a('to',to);}"
-            "document.body.appendChild(f);f.submit();});});})();</script>")
-    return f"<div class='pboard'>{cols}</div>{script}"
+                 f"<div class='pcol-h'>{_e(label)} ({len(its)})</div>{body}{qa}</div>")
+    return f"<div class='pboard'>{cols}</div>"
+
+
+def _drag_script(csrf_token: str, back: str) -> str:
+    if not csrf_token:
+        return ""
+    return (
+        "<script>(function(){"
+        f"var csrf={json.dumps(csrf_token)},next={json.dumps(back)},pid=null,dragging=false;"
+        "document.querySelectorAll('.pcard').forEach(function(c){"
+        "c.addEventListener('dragstart',function(e){pid=c.getAttribute('data-pid');dragging=true;"
+        "e.dataTransfer.effectAllowed='move';c.style.opacity='.5';});"
+        "c.addEventListener('dragend',function(){c.style.opacity='';setTimeout(function(){dragging=false;},50);});"
+        "c.addEventListener('click',function(){if(!dragging){var h=c.getAttribute('data-href');if(h)window.location=h;}});});"
+        "document.querySelectorAll('.pcol[data-to]').forEach(function(col){"
+        "col.addEventListener('dragover',function(e){e.preventDefault();col.classList.add('over');});"
+        "col.addEventListener('dragleave',function(){col.classList.remove('over');});"
+        "col.addEventListener('drop',function(e){e.preventDefault();col.classList.remove('over');"
+        "if(!pid)return;var to=col.getAttribute('data-to');"
+        "var f=document.createElement('form');f.method='post';f.action='/action';"
+        "function a(n,v){var i=document.createElement('input');i.type='hidden';i.name=n;i.value=v;f.appendChild(i);}"
+        "a('csrf',csrf);a('pid',pid);a('next',next);"
+        "if(to==='done'){a('action','proj_done');}else{a('action','proj_status');a('to',to);}"
+        "document.body.appendChild(f);f.submit();});});})();</script>")
+
+
+def _group_of(st: _Stores, p: dict, mode: str):
+    """(sorteersleutel, label) van een project voor groeperen per persoon of per rol."""
+    if mode == "persoon":
+        if p.get("agent"):
+            pa = st.personas.get(p["agent"])
+            return ("1", f"🤖 {(pa.name if pa else p['agent'])} (AI)")
+        if p.get("person"):
+            return ("0_" + _person_name(st, p["person"]).lower(), _person_name(st, p["person"]))
+        return ("2", "Geen trekker")
+    orec = st.records.get(p.get("owner"))
+    nm = _name(orec) if orec else (p.get("owner") or "—")
+    return (nm.lower(), nm)
+
+
+def _projects_board(st: _Stores, projs: list, owner: str, csrf_token: str, back: str,
+                    group: str = "geen") -> str:
+    if group in ("persoon", "rol"):
+        groups: dict = {}
+        for p in projs:
+            sk, label = _group_of(st, p, group)
+            groups.setdefault((sk, label), []).append(p)
+        board = ""
+        for (sk, label), items in sorted(groups.items(), key=lambda kv: kv[0][0]):
+            board += (f"<div class='swim'><div class='swim-h'>{_e(label)} ({len(items)})</div>"
+                      f"{_columns_html(st, items, owner, csrf_token, back, quickadd=False)}</div>")
+        if not groups:
+            board = "<p class='muted'>Nog geen projecten.</p>"
+    else:
+        board = _columns_html(st, projs, owner, csrf_token, back, quickadd=True)
+    return board + _drag_script(csrf_token, back)
 
 
 def _archived_html(st: _Stores, archived: list, csrf_token: str, back: str) -> str:
@@ -445,17 +500,26 @@ def _archived_html(st: _Stores, archived: list, csrf_token: str, back: str) -> s
             f"<ul class='clean'>{rows}</ul></details>")
 
 
-def _projects_tab_html(st: _Stores, rec, csrf_token: str) -> str:
-    own = [p for p in st.projects.all() if p.get("owner") == rec.id]
-    projs = [p for p in own if not p.get("archived")]
-    archived = [p for p in own if p.get("archived")]
-    back = f"/node?id={rec.id}&tab=projects"
-    board = _projects_board(st, projs, rec.id, csrf_token, back)
-    board += _archived_html(st, archived, csrf_token, back)
-    hint = ("<p class='muted' style='font-size:.78rem;margin:.2rem 0 .4rem'>Sleep kaarten tussen "
-            "de kolommen om de status te wijzigen. Voeg een kaart toe met '+ kaart' onderaan een kolom; "
-            "trekker en zichtbaarheid stel je daarna in via ✎.</p>") if csrf_token else ""
-    return f"<div class='c2-sec'><h3>Projecten ({len(projs)})</h3>{hint}{board}</div>"
+def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "geen") -> str:
+    # Op een cirkel: alle projecten van de cirkel én onderliggende rollen/subcirkels (overzicht).
+    ids = {rec.id}
+    if org.is_circle(rec):
+        ids |= {d.id for d in org.descendants(st.records.all(), rec.id)}
+    allp = st.projects.all()
+    projs = [p for p in allp if p.get("owner") in ids and not p.get("archived")]
+    archived = [p for p in allp if p.get("owner") == rec.id and p.get("archived")]
+    back = f"/node?id={rec.id}&tab=projects&group={group}"
+    base = f"/node?id={_e(rec.id)}&tab=projects"
+    on = lambda v: " on" if group == v else ""
+    switch = (f"<div class='vswitch'>Groeperen: "
+              f"<a class='vbtn{on('geen')}' href='{base}&group=geen'>geen</a>"
+              f"<a class='vbtn{on('persoon')}' href='{base}&group=persoon'>per persoon</a>"
+              f"<a class='vbtn{on('rol')}' href='{base}&group=rol'>per rol</a></div>")
+    body = _projects_board(st, projs, rec.id, csrf_token, back, group=group)
+    body += _archived_html(st, archived, csrf_token, back)
+    head = (f"<div style='display:flex;align-items:center;justify-content:space-between;"
+            f"flex-wrap:wrap;gap:.4rem'><h3 style='margin:0'>Projecten ({len(projs)})</h3>{switch}</div>")
+    return f"<div class='c2-sec'>{head}{body}</div>"
 
 
 def _person_projects_html(st: _Stores, pid: str) -> str:
@@ -477,7 +541,8 @@ def _person_projects_html(st: _Stores, pid: str) -> str:
     return f"<div class='c2-sec'><h3>Projecten ({len(projs)})</h3><ul class='clean'>{items}</ul></div>"
 
 
-def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "") -> str:
+def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",
+                group: str = "geen") -> str:
     rec = st.records.get(node_id)
     if rec is None:
         return _page("Niet gevonden", "<p>Node niet gevonden.</p><p><a href='/'>← home</a></p>")
@@ -511,7 +576,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
         content = ("<div class='c2-sec'><h3>Checklists</h3>"
                    + _att_html(st, rec, "checklist", "Nog geen checklist-items.") + "</div>")
     elif tab == "projects":
-        content = _projects_tab_html(st, rec, csrf_token)
+        content = _projects_tab_html(st, rec, csrf_token, group=group)
     elif tab == "policies":
         content = _todo("Policies per cirkel (nu alleen harde policies op de anchor-cirkel).")
     else:  # history
@@ -557,6 +622,104 @@ def render_person(st: _Stores, pid: str) -> str:
              "<div class='bar'>cockpit 2 · GlassFrog-vorm (PoC) · <a href='/'>home</a></div>"
              f"<div class='c2-wrap'>{main}{rail}</div>")
     return _page(p.name, inner)
+
+
+def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", back: str = "/") -> str:
+    p = st.projects.get(pid)
+    if p is None:
+        return _page("Niet gevonden", "<p>Project niet gevonden.</p><p><a href='/'>← home</a></p>")
+    if not back.startswith("/"):
+        back = "/"
+    orec = st.records.get(p.get("owner"))
+    owner_link = (f"<a href='/node?id={_e(p['owner'])}'>{_e(_name(orec))}</a>" if orec
+                  else _e(p.get("owner") or ""))
+    rw = bool(csrf_token)
+
+    def hid():
+        return (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+                f"<input type='hidden' name='next' value='{_e(f'/project?pid={pid}&back=' + urllib.parse.quote(back, safe=''))}'>")
+
+    # Checklist met voortgangsbalk
+    items = p.get("checklist") or []
+    pr = _proj_progress(p)
+    bar = ""
+    if pr:
+        bar = (f"<div class='ck-prog'><div class='pbar' style='flex:1'><div style='width:{pr[2]}%'></div></div>"
+               f"<span class='muted'>{pr[2]}% ({pr[0]}/{pr[1]})</span></div>")
+    ck_rows = ""
+    for it in items:
+        done = it.get("done")
+        chk = (f"<form method='post' action='/action' style='display:inline'>{hid()}"
+               f"<input type='hidden' name='item' value='{_e(it['id'])}'>"
+               f"<button class='ck-box{' on' if done else ''}' type='submit' name='action' "
+               f"value='check_toggle'>{'✓' if done else ''}</button></form>") if rw else (
+               "☑" if done else "☐")
+        rm = (f"<form method='post' action='/action' style='display:inline'>{hid()}"
+              f"<input type='hidden' name='item' value='{_e(it['id'])}'>"
+              f"<button class='dellink' type='submit' name='action' value='check_remove'>✕</button></form>") if rw else ""
+        txt = f"<span class='{'ck-done' if done else ''}'>{_e(it['text'])}</span>"
+        ck_rows += f"<li class='ck-item'>{chk} {txt} {rm}</li>"
+    ck_add = (f"<form method='post' action='/action' class='qadd-form' style='margin-top:.3rem'>{hid()}"
+              f"<input name='text' placeholder='item toevoegen…'>"
+              f"<button class='btn' type='submit' name='action' value='check_add'>+</button></form>") if rw else ""
+    checklist = (f"<div class='c2-sec'><h3>Checklist</h3>{bar}"
+                 f"<ul class='clean ck-list'>{ck_rows or '<li class=muted>nog geen items</li>'}</ul>{ck_add}</div>")
+
+    # Activiteiten/opmerkingen-feed
+    feed = ""
+    for m in (p.get("log") or []):
+        who = "🤖 AI" if m.get("who") == "rol" else "🙋 jij"
+        feed += (f"<div class='tg-dlg' style='border:1px solid var(--border);border-radius:var(--radius);"
+                 f"padding:.4rem .6rem;margin:.3rem 0'><b>{who}</b> "
+                 f"<span class='muted' style='font-size:.74rem'>· {_e(_age(m.get('at')))}</span>"
+                 f"<div>{_e(m.get('text',''))}</div></div>")
+    comment = (f"<form method='post' action='/action' class='pf' style='margin-top:.4rem'>{hid()}"
+               f"<textarea name='comment' rows='2' placeholder='opmerking of voortgang…'></textarea>"
+               f"<button class='btn ok' type='submit' name='action' value='proj_comment' "
+               f"style='margin-top:.3rem'>plaatsen</button></form>") if rw else ""
+    feedsec = f"<div class='c2-sec'><h3>Activiteit & opmerkingen</h3>{feed}{comment}</div>"
+
+    # Bewerken (scope/omschrijving/trekker/label/zichtbaarheid) + archiveren/verwijderen
+    edit = ""
+    if rw:
+        lopts = "".join(f"<option value='{k}'{' selected' if p.get('label')==k else ''}>"
+                        f"{k or '— geen —'}</option>" for k in _LABELS)
+        edit = (
+            f"<details class='c2-sec'><summary style='font-weight:700'>✎ bewerken</summary>"
+            f"<div class='pf'><form method='post' action='/action'>{hid()}"
+            f"<label>Titel</label><input name='scope' value='{_e(_scope_text(p))}'>"
+            f"<label>Omschrijving</label><textarea name='description' rows='3'>{_e(p.get('description',''))}</textarea>"
+            f"<label>Trekker</label><select name='trekker'>{_trekker_options(st, p.get('person') or '', p.get('agent') or '')}</select>"
+            f"<label>Kleurlabel (koppeling met doel, later)</label><select name='label'>{lopts}</select>"
+            f"<label style='font-size:.85rem'><input type='checkbox' name='private' value='1'"
+            f"{' checked' if p.get('private') else ''}> alleen zichtbaar voor de cirkel</label>"
+            f"<button class='btn ok' type='submit' name='action' value='proj_edit' style='margin-top:.4rem'>opslaan</button>"
+            f"</form>"
+            f"<div style='margin-top:.5rem'>"
+            f"<form method='post' action='/action' style='display:inline'>{hid()}"
+            f"<input type='hidden' name='next' value='{_e(back)}'>"
+            f"<button class='btn' type='submit' name='action' value='proj_archive'>🗄 archiveren</button></form> "
+            f"<form method='post' action='/action' style='display:inline'>{hid()}"
+            f"<input type='hidden' name='next' value='{_e(back)}'>"
+            f"<button class='dellink' type='submit' name='action' value='proj_delete' "
+            f"onclick=\"return confirm('Definitief verwijderen? Archiveren bewaart het project.')\">verwijderen</button>"
+            f"</form></div></div></details>")
+
+    labelbar = ""
+    if _LABELS.get(p.get("label")):
+        labelbar = f"<div class='clabel' style='background:{_LABELS[p['label']]};height:8px;border-radius:4px;margin-bottom:.4rem'></div>"
+    desc = (f"<div class='c2-sec'><h3>Omschrijving</h3>"
+            f"<div>{_e(p.get('description','')) or '<span class=muted>geen omschrijving</span>'}</div></div>")
+    main = (f"<div class='c2-main' style='max-width:720px'>"
+            f"<div class='c2-bar'><a href='{_e(back)}'>← bord</a> · {owner_link}</div>"
+            f"{labelbar}<h1>{_e(_scope_text(p))} {_proj_chip(p.get('status',''))}</h1>"
+            f"<div class='muted'>trekker: {_trekker_html(st, p)} · {_e(_age(p.get('created_at')))}</div>"
+            f"{_banner(msg)}{desc}{checklist}{feedsec}{edit}</div>")
+    inner = (f"<style>{_EXTRA_CSS}</style>"
+             "<div class='bar'>cockpit 2 · projectdetail · <a href='/'>home</a></div>"
+             f"<div class='c2-wrap'>{main}</div>")
+    return _page(_scope_text(p), inner)
 
 
 def _parse_trekker(val: str):
@@ -610,8 +773,18 @@ def dispatch(data_dir: str, action: str, form: dict):
     elif action == "proj_edit":
         person, agent = _parse_trekker(g("trekker"))
         pj.edit(g("pid"), scope=g("scope"), person=person, agent=agent,
-                private=(g("private") == "1"))
+                private=(g("private") == "1"), description=g("description"), label=g("label"))
         msg = "💾 opgeslagen"
+    elif action == "proj_comment":
+        if pj.add_comment(g("pid"), g("comment")):
+            msg = "💬 geplaatst"
+    elif action == "check_add":
+        if pj.check_add(g("pid"), g("text")):
+            msg = "✓ item toegevoegd"
+    elif action == "check_toggle":
+        pj.check_toggle(g("pid"), g("item"))
+    elif action == "check_remove":
+        pj.check_remove(g("pid"), g("item")); msg = "🗑 item verwijderd"
     return nxt, msg
 
 
@@ -641,7 +814,13 @@ def make_handler(data_dir: str, csrf_token: str):
             if path == "/node":
                 self._send(render_node(st, (qs.get("id") or [""])[0],
                                        (qs.get("tab") or ["overview"])[0], csrf_token=csrf_token,
-                                       msg=(qs.get("msg") or [""])[0]))
+                                       msg=(qs.get("msg") or [""])[0],
+                                       group=(qs.get("group") or ["geen"])[0]))
+                return
+            if path == "/project":
+                self._send(render_project(st, (qs.get("pid") or [""])[0], csrf_token=csrf_token,
+                                          msg=(qs.get("msg") or [""])[0],
+                                          back=(qs.get("back") or ["/"])[0]))
                 return
             if path == "/person":
                 self._send(render_person(st, (qs.get("id") or [""])[0]))
