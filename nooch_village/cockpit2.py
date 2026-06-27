@@ -119,7 +119,14 @@ ul.clean li:last-child{border-bottom:none}
 .accrow{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:.35rem 0;border-bottom:1px solid var(--border)}
 .acc-text{flex:1 1 auto;min-width:0}
 .acc-ai{flex:0 0 auto;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;justify-content:flex-end}
-.aichip{display:inline-block;background:#EFEAF9;color:#5b3fa6;border-radius:var(--radius-pill);padding:.05rem .5rem;font-size:.74rem;font-weight:600}
+/* Chip-atoom: .chip (default = tint) + kleur-modifiers. Eén pill voor status/deadline/reactie/AI. */
+.chip{display:inline-flex;align-items:center;gap:.3rem;border-radius:var(--radius-pill);padding:.1rem .55rem;font-size:.74rem;font-weight:700;line-height:1.5;background:var(--green-tint);color:var(--green-dark)}
+.chip svg{width:13px;height:13px}
+.chip.green{background:var(--green);color:#fff}
+.chip.muted{background:var(--cream-2);color:var(--gray)}
+.chip.outline{background:transparent;border:1px solid var(--border);color:var(--gray);font-weight:600}
+.chip.coral{background:var(--error-tint);color:var(--coral);border:1px solid var(--coral)}
+.chip.coral-solid{background:var(--coral);color:#fff;font-size:.64rem;text-transform:uppercase;padding:.04rem .4rem}
 .ai-gift{font-size:1rem;text-decoration:none;cursor:pointer;line-height:1}
 .chiplink{text-decoration:none}
 /* Knop-atoom: .btn (neutraal) + .ok (primair groen) + .no (gevaar) uit het design system,
@@ -137,7 +144,6 @@ ul.clean li:last-child{border-bottom:none}
 .fbul{margin:.2rem 0 .2rem 1.1rem}
 .ffoot{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:.25rem}
 .ffoot-l{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;min-width:0}
-.rx{background:transparent;border:1px solid var(--border);border-radius:var(--radius-pill);padding:.05rem .5rem;font-size:.8rem;color:var(--gray)}
 .emoji-pick{position:relative;display:inline-block;background:none;border:none;box-shadow:none;padding:0;margin:0}
 .emoji-pick>summary{list-style:none;cursor:pointer;line-height:0;color:var(--subtle);display:inline-flex}
 .emoji-pick>summary svg{width:18px;height:18px}
@@ -193,10 +199,6 @@ ul.clean li:last-child{border-bottom:none}
 .acard-d>summary::-webkit-details-marker{display:none}
 .datepop{position:absolute;left:0;top:2.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.6rem;z-index:7}
 .datepop input[type=date]{border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .55rem;font-size:.88rem}
-.due-chip{display:inline-flex;align-items:center;gap:.3rem;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius-pill);padding:.15rem .6rem;font-size:.8rem;font-weight:600;color:var(--gray)}
-.due-chip svg{width:14px;height:14px}
-.due-chip.over{background:var(--error-tint);border-color:var(--coral);color:var(--coral)}
-.ov-badge{background:var(--coral);color:#fff;border-radius:var(--radius-pill);padding:.02rem .4rem;font-size:.66rem;font-weight:700;text-transform:uppercase}
 .checklist{margin:0 0 1.1rem}
 .cl-head{display:flex;align-items:center;gap:.4rem;margin-bottom:.4rem}
 .cl-head svg{width:15px;height:15px;color:var(--subtle)}
@@ -403,7 +405,7 @@ def _ai_chip(st: _Stores, t) -> str:
     pa = st.personas.get(t.agent)
     nm = pa.name if pa else t.agent
     skill = f" · {_e(t.wat)}" if t.wat else ""
-    return f"<span class='aichip'>🤖 {_e(nm)}{skill}</span>"
+    return f"<span class='chip'>🤖 {_e(nm)}{skill}</span>"
 
 
 def _suggest_for_acc(st: _Stores, role_id: str, acc_index: int, acc_text: str):
@@ -581,20 +583,19 @@ def _att_html(st: _Stores, rec, kind: str, leeg: str) -> str:
     return out + "</ul>"
 
 
-_PROJ_CHIP = {
-    "running": ("Actief", "var(--green)", "#fff"),
-    "queued": ("Wachtrij", "var(--cream-2)", "var(--gray)"),
-    "future": ("Toekomst", "var(--cream-2)", "var(--gray)"),
-    "blocked": ("Wacht", "var(--coral)", "#fff"),
-    "draft": ("Concept", "var(--sand)", "var(--gray)"),
-    "done": ("Done", "var(--green-dark)", "#fff"),
+_PROJ_CHIP = {   # status -> (label, chip-kleur-modifier)
+    "running": ("Actief", "green"),
+    "queued": ("Wachtrij", "muted"),
+    "future": ("Toekomst", "muted"),
+    "blocked": ("Wacht", "coral"),
+    "draft": ("Concept", "muted"),
+    "done": ("Done", "green"),
 }
 
 
 def _proj_chip(status: str) -> str:
-    lbl, bg, fg = _PROJ_CHIP.get(status, (status, "var(--cream-2)", "var(--gray)"))
-    return (f'<span style="display:inline-block;padding:.05rem .5rem;border-radius:var(--radius-pill);'
-            f'background:{bg};color:{fg};font-size:.72rem;font-weight:700">{_e(lbl)}</span>')
+    lbl, mod = _PROJ_CHIP.get(status, (status, "muted"))
+    return f"<span class='chip {mod}'>{_e(lbl)}</span>"
 
 
 def _person_name(st: _Stores, pid: str) -> str:
@@ -1109,14 +1110,16 @@ def render_patterns(csrf_token: str = "") -> str:
                "<button class='btn sm'>Neutraal sm</button>"
                "<button class='btn ghost sm'>Ghost sm</button>"
                "<a class='dellink' href='#'>verwijderen</a>")
-    chips = (_proj_chip("running") + _proj_chip("blocked") + _proj_chip("done")
-             + "<span class='chip'>chip</span><span class='badge ro'>read</span><span class='badge rw'>edit</span>")
+    chips = ("<span class='chip green'>green</span><span class='chip muted'>muted</span>"
+             "<span class='chip outline'>outline</span><span class='chip coral'>coral</span>"
+             "<span class='chip coral-solid'>Overdue</span><span class='chip'>tint (default)</span>"
+             "<span class='badge ro'>read</span><span class='badge rw'>edit</span>")
     cards = (f"<button class='acard'>{_IC_CLOCK}<span>Datum</span></button>"
              f"<button class='acard'>{_IC_CHECK}<span>Checklist</span></button>"
              f"<button class='acard acard-off' disabled>{_IC_TARGET}<span>Goals</span></button>")
     att = f"<div class='attcard'><span class='att-ic'>{_IC_LINK}</span><a class='att-name' href='#'>voorbeeld bijlage</a></div>"
-    due = (f"<span class='due-chip'>{_IC_CLOCK}25 jun 2026</span>"
-           f"<span class='due-chip over'>{_IC_CLOCK}1 jan 2020<span class='ov-badge'>Overdue</span></span>")
+    due = (f"<span class='chip outline'>{_IC_CLOCK}25 jun 2026</span>"
+           f"<span class='chip coral'>{_IC_CLOCK}1 jan 2020</span><span class='chip coral-solid'>Overdue</span>")
     av = _avatar("Stefan Wobben", False) + _avatar("Codie", True)
     icons = (f"<span class='manage-ico' title='persoon toevoegen'>{_ICON_ADD_PERSON}</span>"
              f"<span class='manage-ico' title='reactie toevoegen'>{_ICON_ADD_EMOJI}</span>")
@@ -1246,7 +1249,7 @@ def _feed_entry_html(st: _Stores, entry: dict, role_name: str = "",
         who = f"<b class='fname'>{_e(nm)}</b> <span class='frole'>@{_e(role_name)}</span>"
     else:
         who = f"<b class='fname'>{_e(nm)}</b>"
-    rx = "".join(f"<span class='rx'>{emo} {cnt}</span>" for emo, cnt in (entry.get("reactions") or {}).items())
+    rx = "".join(f"<span class='chip outline'>{emo} {cnt}</span>" for emo, cnt in (entry.get("reactions") or {}).items())
     picker = ""
     eid = entry.get("id")
     if csrf_token and eid:
@@ -1459,9 +1462,9 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     due_head = ""
     if p.get("due"):
         over = _due_overdue(p["due"])
-        badge = "<span class='ov-badge'>Overdue</span>" if over else ""
-        due_head = (f"<span class='due-chip{' over' if over else ''}'>"
-                    f"{_IC_CLOCK}{_e(_fmt_due(p['due']))}{badge}</span>")
+        badge = "<span class='chip coral-solid'>Overdue</span>" if over else ""
+        due_head = (f"<span class='chip {'coral' if over else 'outline'}'>"
+                    f"{_IC_CLOCK}{_e(_fmt_due(p['due']))}</span>{badge}")
     head = (f"<div class='pcard-head'>{title}"
             f"<div class='pcard-head-r'>{due_head}{menu or _proj_chip(status)}</div></div>")
 

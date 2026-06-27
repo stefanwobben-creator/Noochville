@@ -98,7 +98,7 @@ def test_emoji_reactie(tmp_path):
     cockpit2.dispatch(dd, "react_add", {"pid": [pid], "item": [eid], "emoji": ["👍"], "next": ["/"]})
     assert cockpit2._Stores(dd).projects.get(pid)["log"][0]["reactions"] == {"👍": 2}
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    assert "emoji-pick" in frag and "class='rx'" in frag and "👍 2" in frag
+    assert "emoji-pick" in frag and "chip outline" in frag and "👍 2" in frag
     # zoekbare picker met gecureerde set
     assert "emo-search" in frag and "emo-grid" in frag and "🚀" in frag
     node = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth__nooch__website_developer",
@@ -137,7 +137,7 @@ def test_deadline_overdue_in_header(tmp_path):
     dd, pid = _setup(tmp_path)
     cockpit2.dispatch(dd, "proj_setdue", {"pid": [pid], "due": ["2020-01-01"], "next": ["/"]})
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    assert "due-chip" in frag and "Overdue" in frag and "ov-badge" in frag
+    assert "chip coral" in frag and "Overdue" in frag and "chip coral-solid" in frag
 
 
 def test_done_project_blijft_bewerkbaar(tmp_path):
