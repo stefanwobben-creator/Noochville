@@ -35,3 +35,25 @@ def test_detail_readonly_geen_schakelaar(tmp_path):
     dd, pid = _setup(tmp_path)
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="", fragment=True)
     assert "swrow" not in frag and "smeta" in frag
+
+
+def test_redesign_layout(tmp_path):
+    dd, pid = _setup(tmp_path)
+    frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
+    # titel inline bewerkbaar, …-menu, Details ingeklapt met status erin
+    assert "titleform" in frag and "title-edit" in frag and "cardmenu" in frag
+    assert "detailsbox" in frag and "<dt>Status</dt>" in frag and "swrow" in frag
+    # omschrijving inline, verrijking-placeholder, en rechterkolom = dialoog
+    assert "descform" in frag and "enrich-ghost" in frag
+    assert "pdisc" in frag and "Dialoog" in frag
+    # geen apart 'Acties'-blok meer
+    assert "Acties" not in frag
+
+
+def test_inline_edits_partieel(tmp_path):
+    dd, pid = _setup(tmp_path)
+    cockpit2.dispatch(dd, "proj_describe", {"pid": [pid], "description": ["beschrijving"], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_rename", {"pid": [pid], "scope": ["Titel 2"], "next": ["/"]})
+    p = cockpit2._Stores(dd).projects.get(pid)
+    # rename mag de eerder gezette omschrijving NIET wissen
+    assert p["scope"] == "Titel 2" and p["description"] == "beschrijving"
