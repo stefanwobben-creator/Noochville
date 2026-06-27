@@ -170,18 +170,17 @@ ul.clean li:last-child{border-bottom:none}
 .titleform:focus-within .title-save{opacity:1}
 .ptitle-ro{margin:.1rem 0;font-family:var(--font-display)}
 .cardmenu{position:relative;flex:0 0 auto}
-.cardmenu>summary{list-style:none;cursor:pointer;color:var(--gray);font-size:1.25rem;line-height:1;padding:.25rem .6rem;border:1px solid transparent;border-radius:var(--radius)}
+.cardmenu>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:.25rem;padding:.2rem .4rem;border:1px solid transparent;border-radius:var(--radius)}
 .cardmenu>summary::-webkit-details-marker{display:none}
 .cardmenu>summary:hover,.cardmenu[open]>summary{border-color:var(--border);background:var(--surface)}
+.statustrigger .caret{color:var(--subtle);font-size:.7rem}
 .cardmenu-b{position:absolute;right:0;top:2rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.3rem;z-index:5;min-width:150px}
 .menuitem{display:block;width:100%;text-align:left;border:none;background:none;padding:.4rem .55rem;border-radius:var(--radius);cursor:pointer;font-size:.85rem;color:var(--ink)}
 .menuitem:hover{background:var(--cream-2)}
 .menuitem.danger{color:var(--coral)}
 .detailsbox{margin:0 0 1.1rem;border:1px solid var(--border);border-radius:var(--radius);padding:.7rem .8rem}
 .detailsbox .psec-h{margin-bottom:.5rem}
-.details-cols{display:grid;grid-template-columns:1fr;gap:.1rem 1.6rem}
-@media(min-width:520px){.details-cols{grid-template-columns:1fr 1fr}}
-.dcol{display:grid;grid-template-columns:auto 1fr;gap:.3rem .7rem;align-content:start;min-width:0}
+.dcol{display:grid;grid-template-columns:auto 1fr;gap:.35rem .8rem;align-content:start;min-width:0}
 .dk{align-self:baseline;color:var(--subtle);font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700;padding-top:.12rem}
 .dv{min-width:0;font-size:.88rem}
 .visform,.visform label{font-size:.85rem;margin:0;display:inline}
@@ -1316,7 +1315,8 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
             on = " on" if status in statuses else ""
             st_items += (f"<form method='post' action='/action'>{hid()}{to}"
                          f"<button class='menuitem{on}' type='submit' name='action' value='{act}'>{_e(label)}</button></form>")
-        menu = (f"<details class='cardmenu'><summary aria-label='menu'>⋯</summary><div class='cardmenu-b'>"
+        menu = (f"<details class='cardmenu'><summary class='statustrigger' aria-label='status wijzigen'>"
+                f"{_proj_chip(status)}<span class='caret'>▾</span></summary><div class='cardmenu-b'>"
                 f"<div class='menu-h'>Status</div>{st_items}<div class='menu-sep'></div>"
                 f"<form method='post' action='/action'>{hid()}<input type='hidden' name='next' value='{_e(back)}'>"
                 f"<button class='menuitem' type='submit' name='action' value='proj_archive'>Archiveren</button></form>"
@@ -1333,7 +1333,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     else:
         title = f"<h2 class='ptitle-ro'>{_e(_scope_text(p))}</h2>"
     head = (f"<div class='pcard-head'>{title}"
-            f"<div class='pcard-head-r'>{menu}</div></div>")
+            f"<div class='pcard-head-r'>{menu or _proj_chip(status)}</div></div>")
 
     # ---- Details: kader zonder achtergrond, tweekoloms, links uitgelijnd, altijd open ----
     owner = p.get("owner", "")
@@ -1360,15 +1360,12 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         vis_v = "Alleen voor deze cirkel" if p.get("private") else "Hele cirkel-boom"
     details = (
         f"<div class='detailsbox'><div class='psec-h'>{_IC_INFO}<span>Details</span></div>"
-        f"<div class='details-cols'>"
         f"<div class='dcol'>"
         f"<span class='dk'>Rol</span><span class='dv'>{rol_v}</span>"
         f"<span class='dk'>Persoon</span><span class='dv'>{pers_v}</span>"
-        f"</div>"
-        f"<div class='dcol'>"
         f"<span class='dk'>Aangemaakt</span><span class='dv'>{_e(_created_full(p.get('created_at')))}</span>"
         f"<span class='dk'>Zichtbaar</span><span class='dv'>{vis_v}</span>"
-        f"</div></div></div>")
+        f"</div></div>")
 
     # ---- Omschrijving (inline, omkaderd) ----
     if rw:

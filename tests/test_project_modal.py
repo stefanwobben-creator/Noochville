@@ -18,7 +18,7 @@ def test_detail_overzicht_kop(tmp_path):
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "<!doctype" not in frag.lower()
     # Details: tweekoloms, read-only rol/persoon + aangemaakt/zichtbaarheid (status in het …-menu)
-    for k in ("pgrid", "pdisc", "details-cols",
+    for k in ("pgrid", "pdisc", "class='dcol'",
               "<span class='dk'>Rol</span>", "<span class='dk'>Persoon</span>",
               "<span class='dk'>Aangemaakt</span>", "<span class='dk'>Zichtbaar</span>"):
         assert k in frag
@@ -37,7 +37,7 @@ def test_status_menu_markeert_huidige(tmp_path):
 def test_detail_readonly_geen_menu(tmp_path):
     dd, pid = _setup(tmp_path)
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="", fragment=True)
-    assert "cardmenu" not in frag and "details-cols" in frag
+    assert "cardmenu" not in frag and "class='dcol'" in frag
 
 
 def test_redesign_layout(tmp_path):
