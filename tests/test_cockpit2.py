@@ -42,7 +42,7 @@ def test_nooch_roles_tab(tmp_path):
     # kernrollen apart + purpose onder de rol + toewijs-icoon
     assert "Kernrollen" in page and "Circle Lead" in page
     assert "Make Nooch visually consistent" in page          # purpose onder Brand & Visual Designer
-    assert "manage-link" in page and "/rolefillers?role=" in page   # subtiele 'beheren'-link
+    assert "manage-ico" in page and "/rolefillers?role=" in page   # neutraal beheer-icoon
     # vervullers links uitgelijnd met naam-link naar de persoon
     assert "Nina Wolter" in page and "/person?id=" in page
 
@@ -55,6 +55,7 @@ def test_rolefillers_modal_en_assign(tmp_path):
     frag = cockpit2.render_rolefillers(st, role, csrf_token="t", fragment=True)
     assert "<!doctype" not in frag.lower()
     assert "Rolvervullers beheren" in frag and "role_assign" in frag and "Nog niemand toegewezen" in frag
+    assert "kies persoon" in frag and "of AI" not in frag      # alleen mensen vervullen een rol
     # toewijzen + verwijderen via dispatch
     wytse = st.people.by_name("Wytse Valkema")
     cockpit2.dispatch(dd, "role_assign", {"role": [role], "filler": [f"person:{wytse.id}"], "next": ["/"]})

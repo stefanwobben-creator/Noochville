@@ -98,16 +98,18 @@ ul.clean li:last-child{border-bottom:none}
 .addlink:hover{background:rgba(27,27,27,.05);color:var(--ink);text-decoration:none}
 /* rollen-tab: rij met purpose + rechts uitgelijnde vervullers + toewijs-icoon */
 .rrole{display:flex;align-items:flex-start;gap:1rem;padding:.6rem 0;border-bottom:1px solid var(--border)}
-.rrole-info{flex:1 1 auto;min-width:0}
+.rrole-info{flex:1 1 52%;min-width:0}
 .rrole-pur{font-size:.84rem;margin-top:.1rem}
+.rrole-fill{flex:1 1 42%;min-width:0}            /* rechterkolom; inhoud links uitgelijnd */
 .rrole-act{flex:0 0 auto}
-.fillers{display:flex;flex-direction:column;gap:.15rem;align-items:flex-start;margin-top:.35rem}
+.fillers{display:flex;flex-direction:column;gap:.15rem;align-items:flex-start}
 .fperson{display:inline-flex;align-items:center;gap:.35rem;font-size:.86rem;color:var(--gray)}
 .fillers.stack{flex-direction:row;align-items:center;gap:.3rem}
 .stack-av{margin-left:-8px}.stack-av:first-child{margin-left:0}
 .stack-av .av{border:2px solid var(--surface)}
-.manage-link{color:var(--gray);font-size:.82rem;text-decoration:none;cursor:pointer}
-.manage-link:hover{color:var(--ink);text-decoration:underline}
+.manage-ico{display:inline-flex;align-items:center;justify-content:center;color:var(--subtle);
+  padding:.25rem;border-radius:var(--radius)}
+.manage-ico:hover{color:var(--green-dark);background:rgba(27,27,27,.06)}
 .frow{display:flex;align-items:flex-start;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--border)}
 .ffocus{background:none;border:none;box-shadow:none;padding:0;margin:0}
 .ffocus>summary{list-style:none;cursor:pointer}
@@ -287,6 +289,15 @@ def _avatar(label: str, is_ai: bool) -> str:
     return f"<span class='av'>{_e(_initials(label))}</span>"
 
 
+# Genderneutraal 'persoon + toevoegen'-icoon (silhouet + plus), kleurt mee met currentColor.
+_ICON_ADD_PERSON = (
+    "<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' "
+    "stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'>"
+    "<circle cx='9' cy='8' r='3.2'/>"
+    "<path d='M3.5 20c0-3.2 2.5-5.6 5.5-5.6s5.5 2.4 5.5 5.6'/>"
+    "<path d='M18.5 8.5v5M16 11h5'/></svg>")
+
+
 def _fillers_block(st: _Stores, role) -> str:
     """Rechts uitgelijnde rolvervullers; bij 3+ gestapelde avatars + '+ nog N'."""
     fillers = st.assign.fillers_of(role.id, record=role)
@@ -317,11 +328,11 @@ def _role_row(st: _Stores, role, csrf_token: str) -> str:
     assign = ""
     if csrf_token:
         url = f"/rolefillers?role={_e(role.id)}"
-        assign = (f"<a class='manage-link js-modal' href='{url}' data-href='{url}' "
-                  f"title='rolvervullers beheren'>beheren</a>")
+        assign = (f"<a class='manage-ico js-modal' href='{url}' data-href='{url}' "
+                  f"title='rolvervullers beheren'>{_ICON_ADD_PERSON}</a>")
     return (f"<div class='rrole'>"
-            f"<div class='rrole-info'><a href='/node?id={_e(role.id)}'>{_e(_name(role))}</a>{pur}"
-            f"{_fillers_block(st, role)}</div>"
+            f"<div class='rrole-info'><a href='/node?id={_e(role.id)}'>{_e(_name(role))}</a>{pur}</div>"
+            f"<div class='rrole-fill'>{_fillers_block(st, role)}</div>"
             f"<div class='rrole-act'>{assign}</div></div>")
 
 
@@ -972,9 +983,9 @@ def render_rolefillers(st: _Stores, role_id: str, csrf_token: str = "", fragment
             f"</form></div>")
     if not rows:
         rows = "<p class='muted'>Nog niemand toegewezen.</p>"
-    opts = "<option value=''>— kies persoon of AI —</option>"
+    # Alleen mensen vervullen een rol; AI koppel je per accountability (niet hier).
+    opts = "<option value=''>— kies persoon —</option>"
     opts += "".join(f"<option value='person:{_e(p.id)}'>{_e(p.name)}</option>" for p in st.people.all())
-    opts += "".join(f"<option value='persona:{_e(pa.id)}'>🤖 {_e(pa.name)} (AI)</option>" for pa in st.personas.all())
     add = (f"<div class='pf' style='margin-top:.6rem'><form method='post' action='/action'>{hid()}"
            f"<label>Toevoegen aan {_e(_name(rec))}</label>"
            f"<select name='filler'>{opts}</select>"
