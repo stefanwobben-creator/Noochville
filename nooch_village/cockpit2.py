@@ -168,14 +168,13 @@ ul.clean li:last-child{border-bottom:none}
 .rov-item{display:flex;align-items:center;gap:.3rem;padding:.25rem .3rem;border-radius:var(--radius)}
 .rov-item.on{background:var(--cream-2)}
 .rov-item:hover{background:var(--cream-2)}
-.rov-link{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:.45rem;text-decoration:none;color:var(--ink)}
+.rov-link{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;text-decoration:none;color:var(--ink)}
 .rov-title{font-weight:600}
-.rov-kind{font-size:.72rem;margin-left:auto}
-@media(min-width:620px){.rov-grid{grid-template-columns:minmax(0,300px) minmax(0,1fr)}}
+.rov-kind{font-size:.68rem;flex-basis:100%}
+@media(min-width:620px){.rov-grid{grid-template-columns:minmax(0,180px) minmax(0,1fr)}}
 .rov-add{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem}
-.rov-add select{flex:1 1 100%;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem}
 .rov-add input{flex:1 1 auto;min-width:0;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem}
-.rov-foot{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--border);padding:.7rem 0 .2rem;margin-top:1rem;display:flex;justify-content:flex-end}
+.rov-foot{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--border);padding:.7rem 0 .2rem;margin-top:1rem;display:flex;justify-content:flex-start}
 .rov-editor input[name=value]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem}
 .rov-block{margin-top:.8rem}
 .rov-field{display:flex;align-items:center;gap:.5rem;padding:.2rem 0;border-bottom:1px solid var(--border)}
@@ -847,7 +846,9 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "if(e.submitter&&e.submitter.name){data.set(e.submitter.name,e.submitter.value);}opts={method:'POST',body:data};}"
         "fetch('/action',opts).then(function(){"
         "if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'||act==='rov2_end'){shut();}else{reopen();}});});});"
-        "bd.querySelectorAll('textarea').forEach(mentionWire);}"
+        "bd.querySelectorAll('textarea').forEach(mentionWire);"
+        "bd.querySelectorAll('a.js-modal[data-href]').forEach(function(a){"
+        "a.addEventListener('click',function(e){e.preventDefault();openCard(a.getAttribute('data-href'));});});}"
         "document.querySelectorAll('.pcard[data-href],a.js-modal[data-href]').forEach(function(c){"
         "c.addEventListener('click',function(e){if(window.__pdrag)return;e.preventDefault();"
         "openCard(c.getAttribute('data-href'));});});"
@@ -1289,11 +1290,9 @@ def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: s
     if not rows:
         rows = "<p class='muted'>Nog geen agendapunten.</p>"
 
-    # Toevoegen staat BOVEN de lijst (geen scrollen bij veel punten); geen spanning-veld.
-    opts = "".join(f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>" for r in roles)
+    # Toevoegen boven de lijst; één veld: bestaande rolnaam = wijzigen, anders = nieuwe rol.
     add = (f"<form method='post' action='/action' class='rov-add'>{hid(base)}"
-           f"<select name='owner'><option value='__new__'>+ nieuwe rol</option>{opts}</select>"
-           f"<input name='rolnaam' placeholder='Naam (alleen bij nieuwe rol)'>"
+           f"<input name='naam' placeholder='Rol (bestaand of nieuw)…'>"
            f"<button class='btn ok sm' type='submit' name='action' value='rov2_add'>Toevoegen</button></form>")
     left = _psec(_IC_CHECK, "Agenda", f"{add}<div class='rov-list'>{rows}</div>")
 
@@ -1309,7 +1308,7 @@ def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: s
             f"<input type='hidden' name='circle' value='{_e(circle_id)}'>"
             f"<input type='hidden' name='next' value='/node?id={_e(circle_id)}'>"
             f"<button class='btn ok' type='submit' name='action' value='rov2_end'>"
-            f"Vergadering sluiten &amp; doorvoeren</button></form></div>")
+            f"Vergadering sluiten</button></form></div>")
     detail = (f"<h2 style='margin-top:0'>Governance meeting — {_e(_name(crec))}</h2>"
               f"<div class='pgrid rov-grid'><div class='pmain'>{left}</div>"
               f"<aside class='pdisc'>{right}</aside></div>{foot}")
@@ -2158,19 +2157,17 @@ def dispatch(data_dir: str, action: str, form: dict):
             msg = "✓ skill aan rugzak toegevoegd"
     elif action == "rov2_add":
         circle = g("circle")
-        reason = g("reason")
-        owner = g("owner")
-        if owner == "__new__":
-            naam = (g("rolnaam") or "").strip()
-            if naam:
+        naam = (g("naam") or "").strip()
+        if naam:
+            roles = org.roles_of(st.records.all(), circle)
+            match = next((r for r in roles if _name(r).lower() == naam.lower()), None)
+            if match is not None:   # bestaande rol -> wijzigen
+                st.agenda.add(match.id, "amend_role", {}, "", title=_name(match))
+            else:                   # anders -> nieuwe rol
                 slug = re.sub(r"[^a-z0-9]+", "_", naam.lower()).strip("_") or "rol"
-                rid = f"{circle}__{slug}"
-                st.agenda.add(rid, "add_role",
+                st.agenda.add(f"{circle}__{slug}", "add_role",
                               {"name": naam, "parent": circle, "purpose": "", "add_accountabilities": []},
-                              reason, title=naam)
-                msg = "✓ agendapunt toegevoegd"
-        elif st.records.get(owner) is not None:
-            st.agenda.add(owner, "amend_role", {}, reason, title=_name(st.records.get(owner)))
+                              "", title=naam)
             msg = "✓ agendapunt toegevoegd"
     elif action == "rov2_remove":
         st.agenda.remove(g("iid")); msg = "🗑 agendapunt verwijderd"

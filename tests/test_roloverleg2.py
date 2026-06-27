@@ -24,9 +24,8 @@ def test_meeting_knop_op_cirkel(tmp_path):
 
 def test_agendapunt_bestaande_rol_en_nieuwe_rol(tmp_path):
     dd = _dd(tmp_path)
-    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "owner": [RID], "reason": ["mist iets"], "next": ["/"]})
-    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "owner": ["__new__"],
-                                       "rolnaam": ["Data Analist"], "reason": ["meten"], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Data Analist"], "next": ["/"]})
     items = cockpit2._Stores(dd).agenda.open()
     kinds = {it["kind"] for it in items}
     assert kinds == {"amend_role", "add_role"} and len(items) == 2
@@ -36,7 +35,7 @@ def test_agendapunt_bestaande_rol_en_nieuwe_rol(tmp_path):
 
 def test_editor_prefil_en_change_diff(tmp_path):
     dd = _dd(tmp_path)
-    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "owner": [RID], "reason": ["mist"], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
     # editor prefilt de huidige rol
@@ -54,8 +53,7 @@ def test_editor_prefil_en_change_diff(tmp_path):
 
 def test_editor_nieuwe_rol(tmp_path):
     dd = _dd(tmp_path)
-    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "owner": ["__new__"],
-                                       "rolnaam": ["Data Analist"], "reason": ["meten"], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Data Analist"], "next": ["/"]})
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
     cockpit2.dispatch(dd, "rov2_set", {"iid": [iid], "field": ["purpose"], "value": ["Inzicht uit data"], "next": ["/"]})
     cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Rapporteren van trends"], "next": ["/"]})
@@ -67,7 +65,7 @@ def test_layout_toevoegen_boven_en_groene_knop(tmp_path):
     dd = _dd(tmp_path)
     node = cockpit2.render_node(cockpit2._Stores(dd), C, "overview", csrf_token="t")
     assert "btn ok js-modal" in node                      # groene meeting-knop
-    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "owner": [RID], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
     assert "Welke spanning" not in frag                    # spanning-veld weg
     assert frag.find("rov-add") < frag.find("rov-list")    # toevoegen boven de lijst
@@ -76,7 +74,7 @@ def test_layout_toevoegen_boven_en_groene_knop(tmp_path):
 
 def test_sluiten_voert_consented_door(tmp_path):
     dd = _dd(tmp_path)
-    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "owner": [RID], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
     cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Bewaken van performance"], "next": ["/"]})
     cockpit2._Stores(dd).agenda.set_status(iid, "consented")
@@ -89,7 +87,7 @@ def test_sluiten_voert_consented_door(tmp_path):
 
 def test_select_en_verwijderen(tmp_path):
     dd = _dd(tmp_path)
-    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "owner": [RID], "reason": ["x"], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
     sel = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
     assert "rov-item on" in sel and "Voorstel" in sel
