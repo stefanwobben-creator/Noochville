@@ -48,12 +48,33 @@ def test_grijze_tab(tmp_path):
     assert "Nog te bouwen" in page
 
 
-def test_projecten_tab_leeg_en_toevoegformulier(tmp_path):
+def test_projecten_tab_kolommen_en_inline_add(tmp_path):
     st = _st(tmp_path)
     page = cockpit2.render_node(st, "mother_earth__nooch__website_developer", "projects",
                                 csrf_token="t")
-    assert "Nog geen projecten" in page
-    assert "proj_add" in page and "project toevoegen" in page
+    # statuskolommen (Trello-stijl) + inline toevoegen + slepen
+    for col in ("Actief", "Wacht", "Toekomst", "Done"):
+        assert col in page
+    assert "proj_add" in page and "+ kaart" in page
+    assert "data-to='toekomst'" in page and "draggable" in page.lower()
+
+
+def test_inline_add_in_kolom_zet_status(tmp_path):
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    role = "mother_earth__nooch__website_developer"
+    cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Later-idee"],
+                                       "col": ["toekomst"], "next": ["/"]})
+    p = cockpit2._Stores(dd).projects.all()[0]
+    assert p["status"] == "future"          # toegevoegd in de Toekomst-kolom
+
+
+def test_dispatch_geeft_bevestiging(tmp_path):
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    nxt, msg = cockpit2.dispatch(dd, "proj_add", {
+        "owner": ["mother_earth__nooch"], "scope": ["X"], "col": ["actief"], "next": ["/"]})
+    assert "toegevoegd" in msg
 
 
 def test_project_toevoegen_en_koppeling(tmp_path):

@@ -12,12 +12,13 @@ echte Nooch-structuur (glassfrog_import.nooch_poc_org) in data/poc/, zonder de l
     python -m nooch_village.cockpit2            # http://127.0.0.1:8766
 """
 from __future__ import annotations
+import json
 import os
 import secrets
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from nooch_village.cockpit import _e, _page              # zelfde design system
+from nooch_village.cockpit import _e, _page, _banner     # zelfde design system
 from nooch_village.governance import Records
 from nooch_village.people import PeopleStore
 from nooch_village.assignments import Assignments
@@ -67,6 +68,11 @@ ul.clean li:last-child{border-bottom:none}
 .pcol .card{padding:.4rem .5rem;margin:.25rem 0;font-size:.85rem}
 .dellink{background:none;border:none;color:var(--coral);font:inherit;font-size:.78rem;text-decoration:underline;cursor:pointer;padding:0;margin-left:.3rem}
 .card.arch{opacity:.6}
+.pcard{cursor:grab}.pcard:active{cursor:grabbing}
+.pcol.over{outline:2px dashed var(--green);outline-offset:-2px;background:var(--green-tint)}
+.qadd{display:flex;gap:.25rem;margin-top:.3rem}
+.qadd input{flex:1 1 auto;min-width:0;padding:.3rem .4rem;border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:.82rem}
+.qadd button{flex:0 0 auto}
 .btn.grey{color:var(--muted);border-style:dashed;cursor:not-allowed}
 @media(max-width:760px){.c2-wrap{flex-direction:column}.c2-rail{max-width:none;flex-basis:auto}}
 """
@@ -320,8 +326,8 @@ def _trekker_options(st: _Stores, sel_person="", sel_agent="") -> str:
     return "".join(out)
 
 
-_PROJ_COLS = [("Actief", ("running", "queued")), ("Wacht", ("blocked",)),
-              ("Toekomst", ("future",)), ("Done", ("done",))]
+_PROJ_COLS = [("Actief", "actief", ("running", "queued")), ("Wacht", "wacht", ("blocked",)),
+              ("Toekomst", "toekomst", ("future",)), ("Done", "done", ("done",))]
 
 
 def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
@@ -330,27 +336,13 @@ def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
         scope = " · ".join(f"{k}: {v}" for k, v in scope.items())
     pid = p["id"]
     lock = " 🔒" if p.get("private") else ""
-    meta = (f"<div class='muted' style='font-size:.74rem;margin-top:.2rem'>"
-            f"{_trekker_html(st, p)} · {_e(_age(p.get('created_at')))}{lock}</div>")
+    ncom = len(p.get("log") or [])
+    com = f" · 💬 {ncom}" if ncom else ""
+    meta = (f"<div class='muted' style='font-size:.72rem;margin-top:.25rem'>"
+            f"{_trekker_html(st, p)} · {_e(_age(p.get('created_at')))}{lock}{com}</div>")
     ctrl = ""
     if csrf_token:
-        def btn(action, val, label, extra=""):
-            return (f"<form method='post' action='/action' style='display:inline'>"
-                    f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-                    f"<input type='hidden' name='pid' value='{_e(pid)}'>"
-                    f"<input type='hidden' name='next' value='{_e(back)}'>{extra}"
-                    f"<button class='btn' type='submit' name='action' value='{action}'>{label}</button></form> ")
-        status = p.get("status")
-        moves = ""
-        if status != "done":
-            if status not in ("running", "queued"):
-                moves += btn("proj_status", "", "▶ Actief", "<input type='hidden' name='to' value='actief'>")
-            if status != "blocked":
-                moves += btn("proj_status", "", "⏳ Wacht", "<input type='hidden' name='to' value='wacht'>")
-            if status != "future":
-                moves += btn("proj_status", "", "🌱 Toekomst", "<input type='hidden' name='to' value='toekomst'>")
-            moves += btn("proj_done", "", "✓ Done")
-        # edit + delete in een uitklapper
+        # Status wisselen gaat via slepen; op de kaart alleen bewerken/archiveren/verwijderen.
         edit = (
             f"<details style='margin-top:.3rem'><summary style='font-size:.75rem'>✎ bewerken</summary>"
             f"<div class='pf'><form method='post' action='/action'>"
@@ -379,19 +371,55 @@ def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
             f"onclick=\"return confirm('Definitief verwijderen? Dit kan niet terug. "
             f"Archiveren bewaart het project.')\">verwijderen</button>"
             f"</form></div></div></details>")
-        ctrl = f"<div style='margin-top:.3rem'>{moves}{edit}</div>"
-    return (f"<div class='card'><b>{_e(str(scope or '—'))}</b>{meta}{ctrl}</div>")
+        ctrl = edit
+    drag = ' draggable="true"' if csrf_token else ''
+    return (f"<div class='card pcard' data-pid='{_e(pid)}'{drag}>"
+            f"<b>{_e(str(scope or '—'))}</b>{meta}{ctrl}</div>")
 
 
-def _projects_board(st: _Stores, projs: list, csrf_token: str, back: str) -> str:
+def _quickadd(owner: str, col: str, csrf_token: str, back: str) -> str:
+    """Trello-stijl: direct een kaart toevoegen in deze kolom (alleen een titel; rest via ✎)."""
+    if not csrf_token or col == "done":
+        return ""
+    return (
+        f"<form method='post' action='/action' class='qadd'>"
+        f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+        f"<input type='hidden' name='owner' value='{_e(owner)}'>"
+        f"<input type='hidden' name='col' value='{_e(col)}'>"
+        f"<input type='hidden' name='next' value='{_e(back)}'>"
+        f"<input name='scope' placeholder='+ kaart' aria-label='nieuw project'>"
+        f"<button class='btn' type='submit' name='action' value='proj_add'>+</button></form>")
+
+
+def _projects_board(st: _Stores, projs: list, owner: str, csrf_token: str, back: str) -> str:
     cols = ""
-    for label, statuses in _PROJ_COLS:
+    for label, key, statuses in _PROJ_COLS:
         items = [p for p in projs if p.get("status") in statuses]
         items.sort(key=lambda p: -(p.get("created_at") or 0))
-        body = ("".join(_proj_card(st, p, csrf_token, back) for p in items)
-                if items else "<p class='muted' style='font-size:.78rem'>—</p>")
-        cols += (f"<div class='pcol'><div class='pcol-h'>{_e(label)} ({len(items)})</div>{body}</div>")
-    return f"<div class='pboard'>{cols}</div>"
+        body = "".join(_proj_card(st, p, csrf_token, back) for p in items)
+        cols += (f"<div class='pcol' data-to='{key}'>"
+                 f"<div class='pcol-h'>{_e(label)} ({len(items)})</div>{body}"
+                 f"{_quickadd(owner, key, csrf_token, back)}</div>")
+    script = ""
+    if csrf_token:
+        script = (
+            "<script>(function(){"
+            f"var csrf={json.dumps(csrf_token)},next={json.dumps(back)},pid=null;"
+            "document.querySelectorAll('.pcard[draggable]').forEach(function(c){"
+            "c.addEventListener('dragstart',function(e){pid=c.getAttribute('data-pid');"
+            "e.dataTransfer.effectAllowed='move';c.style.opacity='.5';});"
+            "c.addEventListener('dragend',function(){c.style.opacity='';});});"
+            "document.querySelectorAll('.pcol[data-to]').forEach(function(col){"
+            "col.addEventListener('dragover',function(e){e.preventDefault();col.classList.add('over');});"
+            "col.addEventListener('dragleave',function(){col.classList.remove('over');});"
+            "col.addEventListener('drop',function(e){e.preventDefault();col.classList.remove('over');"
+            "if(!pid)return;var to=col.getAttribute('data-to');"
+            "var f=document.createElement('form');f.method='post';f.action='/action';"
+            "function a(n,v){var i=document.createElement('input');i.type='hidden';i.name=n;i.value=v;f.appendChild(i);}"
+            "a('csrf',csrf);a('pid',pid);a('next',next);"
+            "if(to==='done'){a('action','proj_done');}else{a('action','proj_status');a('to',to);}"
+            "document.body.appendChild(f);f.submit();});});})();</script>")
+    return f"<div class='pboard'>{cols}</div>{script}"
 
 
 def _archived_html(st: _Stores, archived: list, csrf_token: str, back: str) -> str:
@@ -422,28 +450,12 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str) -> str:
     projs = [p for p in own if not p.get("archived")]
     archived = [p for p in own if p.get("archived")]
     back = f"/node?id={rec.id}&tab=projects"
-    board = (_projects_board(st, projs, csrf_token, back) if projs
-             else "<p class='muted'>Nog geen projecten op deze rol/cirkel.</p>")
+    board = _projects_board(st, projs, rec.id, csrf_token, back)
     board += _archived_html(st, archived, csrf_token, back)
-    form = ""
-    if csrf_token:
-        form = (
-            "<details style='margin-top:.8rem'><summary style='font-weight:700'>➕ nieuw project</summary>"
-            "<div class='pf' style='max-width:520px;margin-top:.4rem'>"
-            "<form method='post' action='/action'>"
-            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-            f"<input type='hidden' name='owner' value='{_e(rec.id)}'>"
-            f"<input type='hidden' name='next' value='{_e(back)}'>"
-            "<label>Wat lever je op?</label>"
-            "<input name='scope' placeholder='bijv. Productpagina met Product Passport live'>"
-            "<label>Trekker (mens of AI-agent)</label>"
-            f"<select name='trekker'>{_trekker_options(st)}</select>"
-            "<label style='font-size:.82rem'><input type='checkbox' name='private' value='1'> "
-            "alleen zichtbaar voor de cirkel</label>"
-            "<button class='btn ok' type='submit' name='action' value='proj_add' "
-            "style='margin-top:.5rem'>➕ project toevoegen</button>"
-            "</form></div></details>")
-    return f"<div class='c2-sec'><h3>Projecten ({len(projs)})</h3>{board}{form}</div>"
+    hint = ("<p class='muted' style='font-size:.78rem;margin:.2rem 0 .4rem'>Sleep kaarten tussen "
+            "de kolommen om de status te wijzigen. Voeg een kaart toe met '+ kaart' onderaan een kolom; "
+            "trekker en zichtbaarheid stel je daarna in via ✎.</p>") if csrf_token else ""
+    return f"<div class='c2-sec'><h3>Projecten ({len(projs)})</h3>{hint}{board}</div>"
 
 
 def _person_projects_html(st: _Stores, pid: str) -> str:
@@ -465,7 +477,7 @@ def _person_projects_html(st: _Stores, pid: str) -> str:
     return f"<div class='c2-sec'><h3>Projecten ({len(projs)})</h3><ul class='clean'>{items}</ul></div>"
 
 
-def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "") -> str:
+def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "") -> str:
     rec = st.records.get(node_id)
     if rec is None:
         return _page("Niet gevonden", "<p>Node niet gevonden.</p><p><a href='/'>← home</a></p>")
@@ -510,7 +522,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "") -> st
             "<span class='btn grey' title='governance draait in cockpit 1'>▾ Governance meeting</span>"
             "<span class='btn grey' title='nog te bouwen'>▾ Tactical meeting</span></div>")
     main = (f"<div class='c2-main'><div class='c2-bar'>{crumb}</div>"
-            f"<h1>{_e(_name(rec))} {chip}</h1>{meet}"
+            f"<h1>{_e(_name(rec))} {chip}</h1>{_banner(msg)}{meet}"
             f"{_tabbar(node_id, tabs, tab)}{content}</div>")
     rail = f"<div class='c2-rail'>{_tree_html(st, node_id)}</div>"
     inner = (f"<style>{_EXTRA_CSS}</style>"
@@ -557,44 +569,50 @@ def _parse_trekker(val: str):
     return "", ""
 
 
-def dispatch(data_dir: str, action: str, form: dict) -> str:
-    """Verwerk een POST-actie en geef de redirect-URL terug (projecten: toevoegen, status,
-    afronden, bewerken, verwijderen)."""
+def dispatch(data_dir: str, action: str, form: dict):
+    """Verwerk een POST-actie. Geeft (redirect-URL, korte bevestiging) terug."""
     st = _Stores(data_dir)
     g = lambda k: (form.get(k) or [""])[0]
     nxt = g("next") or "/"
     if not nxt.startswith("/"):
         nxt = "/"
     pj = st.projects
+    msg = ""
     if action == "proj_add":
         owner = g("owner")
         scope = g("scope").strip()
         person, agent = _parse_trekker(g("trekker"))
-        private = g("private") == "1"
+        col = g("col")
+        create_status = "future" if col == "toekomst" else "queued"
         if owner and scope:
-            pj.create(owner, scope[:200], "human", status="queued",
-                      person=person or None, agent=agent or None, private=private)
+            pid = pj.create(owner, scope[:200], "human", status=create_status,
+                            person=person or None, agent=agent or None, private=(g("private") == "1"))
+            if col == "wacht":
+                pj.block(pid, "—")
+            msg = "➕ project toegevoegd"
     elif action == "proj_status":
-        pid, to = g("pid"), g("to")
+        to = g("to")
         if to == "actief":
-            pj.start(pid)
+            pj.start(g("pid"))
         elif to == "wacht":
-            pj.block(pid, "—")
+            pj.block(g("pid"), "—")
         elif to == "toekomst":
-            pj.to_future(pid)
+            pj.to_future(g("pid"))
+        msg = "✓ verplaatst"
     elif action == "proj_done":
-        pj.complete(g("pid"))
+        pj.complete(g("pid")); msg = "✓ afgerond"
     elif action == "proj_archive":
-        pj.archive(g("pid"))
+        pj.archive(g("pid")); msg = "🗄 gearchiveerd (blijft bestaan)"
     elif action == "proj_unarchive":
-        pj.unarchive(g("pid"))
+        pj.unarchive(g("pid")); msg = "↩ hersteld"
     elif action == "proj_delete":
-        pj.remove(g("pid"))
+        pj.remove(g("pid")); msg = "🗑 verwijderd"
     elif action == "proj_edit":
         person, agent = _parse_trekker(g("trekker"))
         pj.edit(g("pid"), scope=g("scope"), person=person, agent=agent,
                 private=(g("private") == "1"))
-    return nxt
+        msg = "💾 opgeslagen"
+    return nxt, msg
 
 
 def make_handler(data_dir: str, csrf_token: str):
@@ -622,7 +640,8 @@ def make_handler(data_dir: str, csrf_token: str):
                 return
             if path == "/node":
                 self._send(render_node(st, (qs.get("id") or [""])[0],
-                                       (qs.get("tab") or ["overview"])[0], csrf_token=csrf_token))
+                                       (qs.get("tab") or ["overview"])[0], csrf_token=csrf_token,
+                                       msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/person":
                 self._send(render_person(st, (qs.get("id") or [""])[0]))
@@ -639,7 +658,10 @@ def make_handler(data_dir: str, csrf_token: str):
             if not secrets.compare_digest(token, csrf_token):
                 self._send("CSRF-token ongeldig", 403); return
             action = (form.get("action") or [""])[0]
-            nxt = dispatch(data_dir, action, form)
+            nxt, msg = dispatch(data_dir, action, form)
+            if msg:
+                sep = "&" if "?" in nxt else "?"
+                nxt = f"{nxt}{sep}msg={urllib.parse.quote(msg)}"
             self.send_response(303); self.send_header("Location", nxt); self.end_headers()
 
         def log_message(self, *_):
