@@ -37,7 +37,8 @@ def test_feed_render_auteur_en_soort(tmp_path):
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "fkind upd" in frag and "fkind cmt" in frag          # beide soorten
     assert "Codie" in frag and "eerste versie staat klaar" in frag
-    assert "Plaatsen namens" in frag and "(update)" in frag      # composer met namens-keuze
+    # composer start simpel + namens-keuze (auteur) met update-optie
+    assert "comp-start" in frag and "name='author'" in frag and "(update)" in frag
 
 
 def test_oude_log_entries_blijven_leesbaar(tmp_path):

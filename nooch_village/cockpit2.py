@@ -126,15 +126,23 @@ ul.clean li:last-child{border-bottom:none}
 .pmeta>div{display:flex;flex-direction:column;gap:.1rem;min-width:0}
 .pmeta .k{font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700}
 .dot{display:inline-block;width:.7rem;height:.7rem;border-radius:50%;margin-right:.35rem;vertical-align:middle}
-.fentry{border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .65rem;margin:.35rem 0}
-.fhead{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
-.ftext{margin-top:.25rem}
+.fentry{margin:0 0 .85rem}
+.fhead{display:flex;align-items:center;gap:.45rem;margin-bottom:.2rem}
+.fwho{min-width:0}
+.fname{font-weight:700}
+.frole{color:var(--subtle);font-weight:400;font-size:.85rem}
+.fbubble{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.5rem .65rem}
+.fbul{margin:.2rem 0 .2rem 1.1rem}
+.ffoot{display:flex;align-items:center;justify-content:space-between;margin-top:.25rem}
+.emoji-add{cursor:pointer;font-size:1rem;opacity:.5;line-height:1}
+.emoji-add:hover{opacity:1}
+.fstamp{color:var(--subtle);font-size:.72rem}
 .av.role{background:var(--green-dark);color:#fff}
 .fkind{font-size:.64rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700;border-radius:var(--radius-pill);padding:.03rem .45rem}
 .fkind.upd{background:var(--green-tint);color:var(--green-dark)}
 .fkind.cmt{background:var(--cream-2);color:var(--gray)}
 .pgrid{display:grid;grid-template-columns:1fr;gap:1rem}
-@media(min-width:620px){.pgrid{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}}
+@media(min-width:620px){.pgrid{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}}
 .pmain{min-width:0}.pside{min-width:0}
 .pcard-head{display:flex;align-items:flex-start;gap:.6rem;padding:0 2.6rem .8rem 0;border-bottom:1px solid var(--border);margin-bottom:1.1rem}
 .pcard-head .titleform,.pcard-head .ptitle-ro{flex:1 1 auto;min-width:0}
@@ -173,7 +181,15 @@ ul.clean li:last-child{border-bottom:none}
 .swlink:hover{color:var(--green-dark)}
 .card-del{margin-top:1.2rem;padding-top:.6rem;border-top:1px solid var(--border)}
 .pdisc .psec{background:none;border:none;padding:0;margin:0}
-@media(min-width:620px){.pdisc{border-left:1px solid var(--border);padding-left:1.1rem}}
+.pdisc{background:var(--cream-2);border-radius:var(--radius);padding:.9rem}
+.composer{margin-bottom:.85rem}
+.composer>summary{list-style:none}
+.composer>summary::-webkit-details-marker{display:none}
+.comp-start{cursor:text;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.55rem .7rem;color:var(--subtle)}
+.comp-form{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.6rem}
+.comp-form textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .55rem}
+.comp-row{display:flex;gap:.5rem;align-items:center;margin-top:.4rem}
+.comp-row select{flex:1 1 auto;min-width:0}
 .pdetail-h h2{margin:.1rem 0 .5rem;font-family:var(--font-display);font-size:1.35rem;line-height:1.2}
 .psec{margin:0 0 1.15rem}
 .psec-h{display:flex;align-items:center;gap:.4rem;color:var(--subtle);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:.45rem}
@@ -1003,14 +1019,53 @@ def _feed_who(st: _Stores, atype: str, aid: str):
     return "<span class='av'>🙋</span>", "Jij"
 
 
-def _feed_entry_html(st: _Stores, entry: dict) -> str:
+def _stamp(ts) -> str:
+    """Datum + tijd, bijv. '27 jun 2026, 14:32'."""
+    if not ts:
+        return ""
+    import datetime
+    d = datetime.datetime.fromtimestamp(ts)
+    return f"{d.day} {_NL_MND[d.month - 1]} {d.year}, {d.hour:02d}:{d.minute:02d}"
+
+
+def _md(text: str) -> str:
+    """Lichte opmaak voor reacties: HTML-veilig, met **vet**, regelafbrekingen en '- ' lijstjes."""
+    import re
+    s = _e(text or "")
+    s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
+    out, in_ul = [], False
+    for ln in s.split("\n"):
+        if ln.strip().startswith("- "):
+            if not in_ul:
+                out.append("<ul class='fbul'>"); in_ul = True
+            out.append(f"<li>{ln.strip()[2:]}</li>")
+        else:
+            if in_ul:
+                out.append("</ul>"); in_ul = False
+            out.append(ln + "<br>")
+    if in_ul:
+        out.append("</ul>")
+    html = "".join(out)
+    return html[:-4] if html.endswith("<br>") else html
+
+
+def _feed_entry_html(st: _Stores, entry: dict, role_name: str = "") -> str:
     kind, atype, aid = _feed_norm(entry)
     av, nm = _feed_who(st, atype, aid)
+    if atype == "role":
+        who = f"<b class='fname'>@{_e(nm)}</b>"
+    elif atype in ("person", "persona") and role_name:
+        who = f"<b class='fname'>{_e(nm)}</b> <span class='frole'>@{_e(role_name)}</span>"
+    else:
+        who = f"<b class='fname'>{_e(nm)}</b>"
     badge = ("<span class='fkind upd'>update</span>" if kind == "update"
              else "<span class='fkind cmt'>reactie</span>")
-    return (f"<div class='fentry'><div class='fhead'>{av}<b>{_e(nm)}</b>{badge}"
-            f"<span class='muted' style='font-size:.74rem'>· {_e(_age(entry.get('at')))}</span></div>"
-            f"<div class='ftext'>{_e(entry.get('text', ''))}</div></div>")
+    return (f"<div class='fentry'>"
+            f"<div class='fhead'>{av}<span class='fwho'>{who}</span>{badge}</div>"
+            f"<div class='fbubble'>{_md(entry.get('text', ''))}</div>"
+            f"<div class='ffoot'><span class='emoji-add' title='reactie (binnenkort)'>🙂</span>"
+            f"<span class='fstamp'>{_e(_stamp(entry.get('at')))}</span></div>"
+            f"</div>")
 
 
 def _feed_author_options(st: _Stores, p: dict) -> str:
@@ -1099,16 +1154,20 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     status = p.get("status", "")
 
     # ---- Rechterkolom: de dialoog (mensen + AI) ----
-    feed = "".join(_feed_entry_html(st, m) for m in (p.get("log") or []))
+    role_name = _name(orec) if orec else ""
+    feed = "".join(_feed_entry_html(st, m, role_name=role_name) for m in (p.get("log") or []))
     if not feed:
         feed = "<p class='muted'>Nog geen updates of reacties.</p>"
     composer = ""
     if rw:
-        composer = (f"<form method='post' action='/action' class='pf composer'>{hid()}"
-                    f"<label>Plaatsen namens</label><select name='author'>{_feed_author_options(st, p)}</select>"
-                    f"<textarea name='text' rows='2' placeholder='update of reactie…'></textarea>"
-                    f"<button class='btn ok' type='submit' name='action' value='proj_feed' "
-                    f"style='margin-top:.3rem'>plaatsen</button></form>")
+        # Start simpel ('Schrijf een reactie…'); klik klapt de schrijf-box open.
+        composer = (f"<details class='composer'><summary class='comp-start'>Schrijf een reactie…</summary>"
+                    f"<form method='post' action='/action' class='pf comp-form'>{hid()}"
+                    f"<textarea name='text' rows='3' placeholder='Typ je reactie… (**vet**, of '- ' voor een lijst)'></textarea>"
+                    f"<div class='comp-row'>"
+                    f"<select name='author'>{_feed_author_options(st, p)}</select>"
+                    f"<button class='btn ok' type='submit' name='action' value='proj_feed'>Plaatsen</button>"
+                    f"</div></form></details>")
     discussie = _psec(_IC_CHAT, "Dialoog", composer + feed)   # schrijf-box boven, reacties eronder
 
     # ---- Status: chip in de header, wisselen via het …-menu (+ archiveren/verwijderen) ----
