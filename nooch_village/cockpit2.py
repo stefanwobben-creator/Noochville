@@ -1693,13 +1693,14 @@ def _noochie_suggest(st: _Stores, ask=None):
 
 
 def _noochie_reply(st: _Stores, text: str, ask=None):
-    """Vrij vervolggesprek na de triage. Noochie = de warme, enthousiaste brug tussen de oprichter
-    en de bewoners; kort en concreet, handelt nooit zelf. Fail-closed zonder AI-key (None)."""
+    """Vrij vervolggesprek na de triage. Gebruikt Noochie's canonieke stem (roles.Noochie: de
+    missiestem van Nooch.earth, scherp en nuchter; handelt nooit zelf). Fail-closed (None)."""
+    from nooch_village.mission import ANCHOR_PURPOSE
     s = st.noochie.state()
     recent = "\n".join(f"- {m['who']}: {m['text']}" for m in s.get("messages", [])[-6:])
-    prompt = ("Je bent Noochie, de warme, enthousiaste brug tussen de oprichter en de bewoners van "
-              "NoochVille (duurzaam, plantaardig schoenenmerk). Kort en concreet; je handelt nooit "
-              "zelf, je stelt alleen voor. Blijf gericht op een concrete vervolgstap.\n"
+    prompt = ("Je bent Noochie, de missiestem van Nooch.earth: scherp, nuchter, en je kijkt naar het "
+              "geheel. Je handelt nooit zelf; je stelt alleen voor. Kort en concreet, gericht op een "
+              f"concrete vervolgstap.\nMissie: {ANCHOR_PURPOSE}\n"
               f"Spanning: {s.get('spanning', '')}\nBehoefte: {s.get('need', '')}\nGesprek:\n{recent}")
     if ask is not None:
         return ask(prompt)
@@ -1714,8 +1715,8 @@ def render_noochie(st: _Stores, csrf: str, screen_ctx: str = "") -> str:
     """Noochie-venster: geleide mini-triage (spanning -> behoefte -> gerichte suggestie), daarna een
     vrij gesprek. Schermcontext wordt alleen meegenomen als de mens dat zelf aanzet (chip 'leest: X')."""
     s = st.noochie
-    if not s.messages:                                  # zaai de opening (ESFP, één vraag tegelijk)
-        s.add("noochie", "Hoi, ik ben Noochie! 🐸 Vertel: welke spanning voel je?")
+    if not s.messages:                                  # zaai de opening (één vraag tegelijk)
+        s.add("noochie", "Hoi, ik ben Noochie, de missiestem van Nooch. Welke spanning voel je?")
 
     def hid():
         return (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
