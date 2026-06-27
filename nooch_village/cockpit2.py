@@ -118,6 +118,14 @@ ul.clean li:last-child{border-bottom:none}
 .aichip{display:inline-block;background:#EFEAF9;color:#5b3fa6;border-radius:var(--radius-pill);padding:.05rem .5rem;font-size:.74rem;font-weight:600}
 .ai-gift{font-size:1rem;text-decoration:none;cursor:pointer;line-height:1}
 .chiplink{text-decoration:none}
+.swrow{display:flex;gap:.3rem;flex-wrap:wrap;margin:.2rem 0 .8rem}
+.sw{background:var(--cream-2);color:var(--gray);border:1px solid var(--border);border-radius:var(--radius-pill);padding:.2rem .7rem;font-size:.76rem;font-weight:600;cursor:pointer}
+.sw:hover{border-color:var(--green)}
+.sw.on{background:var(--green);color:#fff;border-color:var(--green)}
+.pmeta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem .9rem;margin:.4rem 0 .2rem}
+.pmeta>div{display:flex;flex-direction:column;gap:.1rem;min-width:0}
+.pmeta .k{font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700}
+.dot{display:inline-block;width:.7rem;height:.7rem;border-radius:50%;margin-right:.35rem;vertical-align:middle}
 .acc-sub{padding:.15rem 0 .4rem 1.4rem;border-bottom:1px solid var(--border)}
 .sugg{background:#F4F1FB;border:1px solid #E0D7F5;border-radius:var(--radius);padding:.5rem .7rem;margin:.5rem 0}
 .sugg-h{font-weight:700;color:#5b3fa6;font-size:.82rem;margin-bottom:.3rem}
@@ -968,11 +976,39 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     labelbar = ""
     if _LABELS.get(p.get("label")):
         labelbar = f"<div class='clabel' style='background:{_LABELS[p['label']]};height:8px;border-radius:4px;margin-bottom:.4rem'></div>"
+
+    # Status-schakelaar (in de modal kun je niet slepen): de vier kolommen als knoppen.
+    status = p.get("status", "")
+    switch = ""
+    if rw:
+        btns = ""
+        for label, key, statuses in _PROJ_COLS:
+            act = "proj_done" if key == "done" else "proj_status"
+            to = "" if key == "done" else f"<input type='hidden' name='to' value='{key}'>"
+            on = " on" if status in statuses else ""
+            btns += (f"<form method='post' action='/action' style='display:inline'>{hid()}{to}"
+                     f"<button class='sw{on}' type='submit' name='action' value='{act}'>{_e(label)}</button></form>")
+        switch = f"<div class='swrow'>{btns}</div>"
+
+    # Overzicht-grid: trekker, eigenaar, label, zichtbaarheid, voortgang, leeftijd.
+    lab = "<span class='muted'>—</span>"
+    if _LABELS.get(p.get("label")):
+        lab = f"<span class='dot' style='background:{_LABELS[p['label']]}'></span>{_e(p.get('label'))}"
+    vis = "Alleen deze cirkel" if p.get("private") else "Hele cirkel-boom"
+    prog = f"{pr[2]}% ({pr[0]}/{pr[1]})" if pr else "<span class='muted'>—</span>"
+    meta = ("<div class='pmeta'>"
+            f"<div><span class='k'>Trekker</span><span>{_trekker_html(st, p)}</span></div>"
+            f"<div><span class='k'>Rol / eigenaar</span><span>{owner_link}</span></div>"
+            f"<div><span class='k'>Label</span><span>{lab}</span></div>"
+            f"<div><span class='k'>Zichtbaarheid</span><span>{vis}</span></div>"
+            f"<div><span class='k'>Voortgang</span><span>{prog}</span></div>"
+            f"<div><span class='k'>Aangemaakt</span><span>{_e(_age(p.get('created_at')))}</span></div>"
+            "</div>")
+
     desc = (f"<div class='c2-sec'><h3>Omschrijving</h3>"
             f"<div>{_e(p.get('description','')) or '<span class=muted>geen omschrijving</span>'}</div></div>")
-    detail = (f"{labelbar}<h1 style='margin-top:0'>{_e(_scope_text(p))} {_proj_chip(p.get('status',''))}</h1>"
-              f"<div class='muted'>trekker: {_trekker_html(st, p)} · {owner_link} · {_e(_age(p.get('created_at')))}</div>"
-              f"{_banner(msg)}{desc}{checklist}{feedsec}{edit}")
+    detail = (f"{labelbar}<h1 style='margin-top:0'>{_e(_scope_text(p))} {_proj_chip(status)}</h1>"
+              f"{switch}{meta}{_banner(msg)}{desc}{checklist}{feedsec}{edit}")
     if fragment:
         return detail
     main = (f"<div class='c2-main' style='max-width:720px'>"
@@ -1335,7 +1371,7 @@ def serve(host: str = "127.0.0.1", port: int = 8766, data_dir: str | None = None
         httpd.server_close()
 
 
-def refresh_matches(data_dir: str | None = None, ask=None) -> int:
+def refresh_matches(data_dir: str | None = None, ask=None, progress=None) -> int:
     """Achtergrond-pas: laat de LLM per (accountability, skill) oordelen en cache het, zodat het
     cadeautje semantisch matcht. Zonder key/`ask` is dit een no-op (fail-closed); de render valt
     dan terug op lexicaal + concept. `ask` is injecteerbaar voor tests."""
@@ -1365,7 +1401,7 @@ def refresh_matches(data_dir: str | None = None, ask=None) -> int:
     accs = sorted({a for r in st.records.all() if not org.is_circle(r)
                    for a in (r.definition.accountabilities or [])})
     pairs = [(a, s) for a in accs for s in skills]
-    return ai_match.refresh_semantic(pairs, ask, st.match)
+    return ai_match.refresh_semantic(pairs, ask, st.match, skip_cached=True, progress=progress)
 
 
 def main(argv=None) -> None:
@@ -1378,9 +1414,26 @@ def main(argv=None) -> None:
     ap.add_argument("--data-dir", default=None)
     a = ap.parse_args(argv)
     if a.cmd == "match":
-        n = refresh_matches(a.data_dir)
-        print(f"Semantische matcher: {n} paren bepaald."
-              + ("" if n else "  (geen LLM-key? dan blijft lexicaal+concept actief)"))
+        import sys
+        # Snelle key-check: zonder LLM-key heeft de achtergrond-pas niets te doen.
+        try:
+            from nooch_village import llm
+            has_key = bool(llm.reason("antwoord met 'ok'"))
+        except Exception:
+            has_key = False
+        if not has_key:
+            print("Geen werkende LLM-key gevonden. De matcher draait al op lexicaal + concept "
+                  "(code ~ feature, bug ~ testscript); de semantische laag voegt pas iets toe "
+                  "met een Anthropic- of Gemini-key in .env. Niets te doen.")
+            return
+
+        def progress(i, total, acc, skill):
+            print(f"  [{i}/{total}] {acc[:40]} ↔ {skill[:30]}", flush=True)
+
+        print("Semantische matcher: oordelen ophalen (al-gecachete paren worden overgeslagen)…",
+              flush=True)
+        n = refresh_matches(a.data_dir, progress=progress)
+        print(f"Klaar: {n} nieuwe paren bepaald en gecachet.")
         return
     serve(host=a.host, port=a.port, data_dir=a.data_dir)
 

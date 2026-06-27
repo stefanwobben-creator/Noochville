@@ -109,12 +109,20 @@ def suggest(personas, acc_text: str, attached: set, cache: MatchCache | None = N
     return out
 
 
-def refresh_semantic(pairs, ask, cache: MatchCache) -> int:
+def refresh_semantic(pairs, ask, cache: MatchCache, *, skip_cached: bool = False,
+                     progress=None) -> int:
     """Vul de cache met semantische oordelen. `pairs` = iterable van (acc_text, skill);
     `ask(acc, skill) -> bool|None` is een geinjecteerd LLM-poortje (None = onbeslist, niet cachen).
-    Geeft het aantal nieuw bepaalde paren terug. Idempotent: bestaande oordelen worden overschreven."""
+    `skip_cached` slaat al beoordeelde paren over (resumable). `progress(i, total, acc, skill)`
+    wordt vóór elke beoordeling aangeroepen. Geeft het aantal nieuw bepaalde paren terug."""
+    pairs = list(pairs)
+    total = len(pairs)
     n = 0
-    for acc, skill in pairs:
+    for i, (acc, skill) in enumerate(pairs, 1):
+        if progress:
+            progress(i, total, acc, skill)
+        if skip_cached and cache.get(acc, skill) is not None:
+            continue
         verdict = ask(acc, skill)
         if verdict is None:
             continue
