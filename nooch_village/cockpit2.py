@@ -30,6 +30,7 @@ from nooch_village.personas import PersonaStore
 from nooch_village.projects import ProjectLedger
 from nooch_village.ai_tasks import AITaskStore
 from nooch_village.notifications import NotifStore
+from nooch_village.noochie import NoochieStore
 from nooch_village.roloverleg import Agenda
 from nooch_village import ai_match
 from nooch_village import org
@@ -228,6 +229,22 @@ ul.clean li:last-child{border-bottom:none}
 .kb-text{display:inline-block;text-align:left;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .55rem;margin-top:.15rem}
 .kb-msg.note .kb-text{background:var(--error-tint);border-color:var(--coral);color:var(--coral)}
 .kb-form textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .55rem}
+.c2-wrap{margin-left:3.4rem}
+.noo-rail{position:fixed;top:0;left:0;bottom:0;width:2.6rem;background:var(--green-dark);display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:.7rem 0;z-index:40}
+.noo-rail-top{width:1.1rem;height:1.1rem;border-radius:50%;border:2px solid rgba(255,255,255,.45)}
+.noo-cta{writing-mode:vertical-rl;transform:rotate(180deg);background:var(--coral);color:#fff;border:none;border-radius:var(--radius-pill);padding:.8rem .35rem;font-weight:800;letter-spacing:.05em;cursor:pointer;font-size:.78rem}
+.noo-cta:hover{filter:brightness(1.06)}
+.noo-ovl{position:fixed;inset:0;background:rgba(0,0,0,.22);z-index:70;display:flex;align-items:flex-end;justify-content:flex-end}
+.noo-box{width:min(380px,94vw);max-height:80vh;margin:0 1.2rem 1.2rem 0;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 14px 40px rgba(0,0,0,.25);overflow:hidden}
+.noo-head{display:flex;align-items:center;justify-content:space-between;padding:.6rem .8rem;background:var(--green-tint);color:var(--green-dark);font-weight:800}
+.noo-x{background:none;border:none;color:var(--green-dark);cursor:pointer;font-weight:700;font-size:.95rem}
+.noo-win{display:flex;flex-direction:column;min-height:0}
+.noo-sub{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.4rem .8rem;font-size:.72rem;color:var(--subtle);border-bottom:1px solid var(--border)}
+.noo-ctx{display:flex;align-items:center;gap:.5rem;padding:.45rem .8rem;border-bottom:1px solid var(--border);font-size:.74rem}
+.noo-feed{padding:.7rem .8rem;overflow-y:auto;max-height:46vh}
+.noo-win .kb-form{padding:.7rem .8rem;border-top:1px solid var(--border)}
+.kb-msg.noochie{text-align:left}
+@media(max-width:760px){.c2-wrap{margin-left:2.8rem}}
 .rov-delrole{margin-top:1rem;padding-top:.6rem;border-top:1px solid var(--border)}
 .rov-delrole .flink{color:var(--coral)}
 .rov-by{flex:0 0 auto}
@@ -392,6 +409,7 @@ class _Stores:
         self.match = ai_match.MatchCache(os.path.join(dd, "ai_match_cache.json"))
         self.notif = NotifStore(os.path.join(dd, "notifications.json"))
         self.agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
+        self.noochie = NoochieStore(os.path.join(dd, "noochie.json"))
 
 
 def _bootstrap(dd: str) -> None:
@@ -1648,6 +1666,120 @@ def _rov_chat(st: _Stores, item: dict, csrf: str, circle_id: str) -> str:
     return f"<div class='rovchat'>{head}{sub}<div class='kb-body'>{msgs}{comp}</div></div>"
 
 
+# --- Noochie: de globale AI-assistent (ESFP) -----------------------------------------------------
+
+def _noochie_suggest(st: _Stores, ask=None):
+    """Gerichte suggestie via Noochie's canonieke capability `voorstel_schrijven` (spanning ->
+    concreet voorstel: scope/aanpak/afweging). Fail-closed maar bruikbaar: zonder AI-key toch een
+    concrete deterministische vervolgstap. `ask(tension)` is een testhook."""
+    s = st.noochie.state()
+    need, ctx = s.get("need", ""), s.get("ctx", "")
+    tension = (s.get("spanning", "")
+               + (f" — behoefte: {need}" if need else "")
+               + (f" (context: {ctx})" if ctx else ""))
+    if ask is not None:
+        return ask(tension)
+    try:
+        from nooch_village.skills_impl.voorstel import VoorstelSchrijvenSkill
+        res = VoorstelSchrijvenSkill().run({"tension": tension})
+        if res.get("ok"):
+            return ("Hier is mijn voorstel:\n\n" + res["voorstel"]
+                    + "\n\nWil je dit als roloverleg-voorstel zetten?")
+    except Exception:
+        pass
+    return ("Concrete tip (even zonder AI-verbinding): zet dit als agendapunt op het roloverleg en "
+            "beleg je behoefte als accountability bij de best passende rol. Houd het klein: één rol, "
+            "één heldere verantwoordelijkheid.")
+
+
+def _noochie_reply(st: _Stores, text: str, ask=None):
+    """Vrij vervolggesprek na de triage. Noochie = de warme, enthousiaste brug tussen de oprichter
+    en de bewoners; kort en concreet, handelt nooit zelf. Fail-closed zonder AI-key (None)."""
+    s = st.noochie.state()
+    recent = "\n".join(f"- {m['who']}: {m['text']}" for m in s.get("messages", [])[-6:])
+    prompt = ("Je bent Noochie, de warme, enthousiaste brug tussen de oprichter en de bewoners van "
+              "NoochVille (duurzaam, plantaardig schoenenmerk). Kort en concreet; je handelt nooit "
+              "zelf, je stelt alleen voor. Blijf gericht op een concrete vervolgstap.\n"
+              f"Spanning: {s.get('spanning', '')}\nBehoefte: {s.get('need', '')}\nGesprek:\n{recent}")
+    if ask is not None:
+        return ask(prompt)
+    try:
+        from nooch_village import llm
+        return llm.reason(prompt, ladder=_match_ladder())
+    except Exception:
+        return None
+
+
+def render_noochie(st: _Stores, csrf: str, screen_ctx: str = "") -> str:
+    """Noochie-venster: geleide mini-triage (spanning -> behoefte -> gerichte suggestie), daarna een
+    vrij gesprek. Schermcontext wordt alleen meegenomen als de mens dat zelf aanzet (chip 'leest: X')."""
+    s = st.noochie
+    if not s.messages:                                  # zaai de opening (ESFP, één vraag tegelijk)
+        s.add("noochie", "Hoi, ik ben Noochie! 🐸 Vertel: welke spanning voel je?")
+
+    def hid():
+        return (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+                f"<input type='hidden' name='next' value='/'>")
+
+    if s.ctx:
+        ctxrow = (f"<div class='noo-ctx'><span class='chip green'>leest: {_e(s.ctx)}</span>"
+                  f"<form method='post' action='/action' style='display:inline'>{hid()}"
+                  f"<input type='hidden' name='ctx' value=''>"
+                  f"<button class='flink' type='submit' name='action' value='noochie_ctx'>verwijderen</button></form></div>")
+    elif screen_ctx:
+        ctxrow = (f"<div class='noo-ctx'><span class='muted'>Dit scherm: {_e(screen_ctx)}</span>"
+                  f"<form method='post' action='/action' style='display:inline'>{hid()}"
+                  f"<input type='hidden' name='ctx' value='{_e(screen_ctx)}'>"
+                  f"<button class='flink' type='submit' name='action' value='noochie_ctx'>neem dit scherm mee</button></form></div>")
+    else:
+        ctxrow = ""
+
+    msgs = ""
+    for m in s.messages:
+        jij = m.get("who") == "jij"
+        cls = "jij" if jij else "noochie"
+        lbl = "🙋 jij" if jij else "🐸 Noochie"
+        msgs += (f"<div class='kb-msg {cls}'><span class='kb-who'>{lbl}</span>"
+                 f"<div class='kb-text'>{_md(m.get('text', ''))}</div></div>")
+
+    ph = {"ask_spanning": "Wat is je spanning?", "ask_need": "Wat heb je nodig?"}.get(s.phase, "Typ je bericht…")
+    comp = (f"<form method='post' action='/action' class='kb-form'>{hid()}"
+            f"<textarea name='text' rows='2' placeholder='{_e(ph)}'></textarea>"
+            f"<button class='btn ok sm' type='submit' name='action' value='noochie_send' "
+            f"style='margin-top:.3rem'>Stuur</button></form>")
+    reset = (f"<form method='post' action='/action' style='display:inline'>{hid()}"
+             f"<button class='flink' type='submit' name='action' value='noochie_reset'>↺ opnieuw</button></form>")
+    return (f"<div class='noo-win'><div class='noo-sub'><span>Snelle hulp · ik stel alleen voor</span>{reset}</div>"
+            f"{ctxrow}<div class='kb-body noo-feed'>{msgs}</div>{comp}</div>")
+
+
+def _noochie_chrome() -> str:
+    """Globale chrome (op elke pagina): dunne linkerbalk met de Noochie-CTA onderaan + het venster.
+    Later komt de inbox in deze balk. Reuse: het venster gebruikt dezelfde chat-atomen (kb-msg)."""
+    rail = ("<div class='noo-rail'><div class='noo-rail-top' title='Inbox — binnenkort'></div>"
+            "<button class='noo-cta' type='button'><span class='noo-cta-tx'>Noochie</span></button></div>")
+    overlay = ("<div id='novl' class='noo-ovl' style='display:none'><div class='noo-box'>"
+               "<div class='noo-head'><span>🐸 Noochie</span><button type='button' class='noo-x'>✕</button></div>"
+               "<div id='noo-body'></div></div></div>")
+    js = ("<script>(function(){"
+          "function ctxLabel(){var el=document.querySelector('.c2-main h2,.c2-main h1,h2,h1');"
+          "return (el?el.textContent:document.title||'').trim().slice(0,80);}"
+          "function load(show){fetch('/noochie?fragment=1&ctx='+encodeURIComponent(ctxLabel()))"
+          ".then(function(r){return r.text();}).then(function(h){"
+          "document.getElementById('noo-body').innerHTML=h;"
+          "if(show)document.getElementById('novl').style.display='flex';wireN();});}"
+          "function wireN(){document.querySelectorAll('#noo-body form').forEach(function(f){"
+          "f.addEventListener('submit',function(e){e.preventDefault();"
+          "var d=new URLSearchParams(new FormData(f));var s=e.submitter;if(s&&s.name)d.set(s.name,s.value);"
+          "fetch('/action',{method:'POST',body:d}).then(function(){load(false);});});});"
+          "var ta=document.querySelector('#noo-body textarea');if(ta)ta.focus();}"
+          "var cta=document.querySelector('.noo-cta');if(cta)cta.addEventListener('click',function(){load(true);});"
+          "var nx=document.querySelector('.noo-x');if(nx)nx.addEventListener('click',function(){document.getElementById('novl').style.display='none';});"
+          "var nv=document.getElementById('novl');if(nv)nv.addEventListener('click',function(e){if(e.target===nv)nv.style.display='none';});"
+          "})();</script>")
+    return rail + overlay + js
+
+
 def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: str = "",
                        fragment: bool = False, chat: bool = False) -> str:
     """Roloverleg in modal-vorm. Brok 1: frame + agenda links (toevoegen, lijst, selecteren)."""
@@ -2622,6 +2754,29 @@ def dispatch(data_dir: str, action: str, form: dict):
     elif action == "rov2_end":
         done = _rov_apply(st)
         msg = f"✓ overleg gesloten — {len(done)} doorgevoerd" if done else "overleg gesloten"
+    elif action == "noochie_send":
+        s = st.noochie
+        if g("text").strip():
+            ph = s.phase
+            s.add("jij", g("text"))
+            _load_env()
+            if ph == "ask_spanning":
+                s.set_field("spanning", g("text")); s.set_phase("ask_need")
+                s.add("noochie", "Top! En wat heb je nodig om dit op te lossen?")
+                msg = "💬"
+            elif ph == "ask_need":
+                s.set_field("need", g("text")); s.set_phase("free")
+                s.add("noochie", (_noochie_suggest(st) or "").strip() or "…")
+                msg = "💡 suggestie"
+            else:
+                rep = _noochie_reply(st, g("text"))
+                s.add("noochie", (rep or "Even geen AI-verbinding — denk aan een klein "
+                                  "roloverleg-voorstel als vervolgstap.").strip())
+                msg = "💬"
+    elif action == "noochie_reset":
+        st.noochie.reset(); msg = "↺ Noochie opnieuw"
+    elif action == "noochie_ctx":
+        st.noochie.set_field("ctx", g("ctx")); msg = "✓ context bijgewerkt"
     elif action in ("rov2_set", "rov2_acc_add", "rov2_acc_remove", "rov2_dom_add", "rov2_dom_remove"):
         item = st.agenda.get(g("iid"))
         if item is not None:
@@ -2651,6 +2806,9 @@ def dispatch(data_dir: str, action: str, form: dict):
 def make_handler(data_dir: str, csrf_token: str):
     class H(BaseHTTPRequestHandler):
         def _send(self, body: str, code: int = 200):
+            # Globale Noochie-chrome op elke volledige pagina (niet op fragmenten/zonder csrf).
+            if csrf_token and "</body>" in body:
+                body = body.replace("</body>", _noochie_chrome() + "</body>", 1)
             b = body.encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -2719,6 +2877,9 @@ def make_handler(data_dir: str, csrf_token: str):
                 return
             if path == "/_patterns":
                 self._send(render_patterns(csrf_token))
+                return
+            if path == "/noochie":
+                self._send(render_noochie(st, csrf_token, (qs.get("ctx") or [""])[0]))
                 return
             if path == "/roloverleg2":
                 fr = (qs.get("fragment") or [""])[0] == "1"
