@@ -135,10 +135,11 @@ ul.clean li:last-child{border-bottom:none}
 .ffoot{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:.25rem}
 .ffoot-l{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;min-width:0}
 .rx{background:transparent;border:1px solid var(--border);border-radius:var(--radius-pill);padding:.05rem .5rem;font-size:.8rem;color:var(--gray)}
-.emoji-pick{position:relative;display:inline-block}
-.emoji-pick>summary{list-style:none;cursor:pointer;font-size:1rem;opacity:.5;line-height:1}
+.emoji-pick{position:relative;display:inline-block;background:none;border:none;box-shadow:none;padding:0;margin:0}
+.emoji-pick>summary{list-style:none;cursor:pointer;line-height:0;color:var(--subtle);display:inline-flex}
+.emoji-pick>summary svg{width:18px;height:18px}
 .emoji-pick>summary::-webkit-details-marker{display:none}
-.emoji-pick[open]>summary,.emoji-pick>summary:hover{opacity:1}
+.emoji-pick[open]>summary,.emoji-pick>summary:hover{color:var(--green-dark)}
 .emoji-pop{position:absolute;left:0;top:1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.4rem;z-index:6;width:230px}
 .emo-search{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .45rem;margin-bottom:.35rem;font-size:.82rem}
 .emo-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:.1rem;max-height:170px;overflow:auto}
@@ -483,6 +484,16 @@ _ICON_ADD_PERSON = (
     "<circle cx='9' cy='8' r='3.2'/>"
     "<path d='M3.5 20c0-3.2 2.5-5.6 5.5-5.6s5.5 2.4 5.5 5.6'/>"
     "<path d='M18.5 8.5v5M16 11h5'/></svg>")
+
+# Reactie toevoegen: neutrale lijn-smiley met plus (zelfde stijl als persoon-toevoegen).
+_ICON_ADD_EMOJI = (
+    "<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' "
+    "stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'>"
+    "<circle cx='10' cy='12' r='8'/>"
+    "<line x1='7.5' y1='10.5' x2='7.5' y2='10.5'/>"
+    "<line x1='12.5' y1='10.5' x2='12.5' y2='10.5'/>"
+    "<path d='M7 15a3.5 2.5 0 0 0 6 0'/>"
+    "<path d='M20 2.6v4M18 4.6h4'/></svg>")
 
 
 def _fillers_block(st: _Stores, role) -> str:
@@ -1104,7 +1115,10 @@ def render_patterns(csrf_token: str = "") -> str:
     due = (f"<span class='due-chip'>{_IC_CLOCK}25 jun 2026</span>"
            f"<span class='due-chip over'>{_IC_CLOCK}1 jan 2020<span class='ov-badge'>Overdue</span></span>")
     av = _avatar("Stefan Wobben", False) + _avatar("Codie", True)
+    icons = (f"<span class='manage-ico' title='persoon toevoegen'>{_ICON_ADD_PERSON}</span>"
+             f"<span class='manage-ico' title='reactie toevoegen'>{_ICON_ADD_EMOJI}</span>")
     body = (sec("Knoppen — atoom: .btn [.ok|.no] [.sm] [.ghost] + .dellink", buttons)
+            + sec("Lijn-iconen (neutraal, currentColor)", icons)
             + sec("Status & chips & badges", chips)
             + sec("Action-cards (molecule)", cards)
             + sec("Bijlage-card", att)
@@ -1241,7 +1255,8 @@ def _feed_entry_html(st: _Stores, entry: dict, role_name: str = "",
             f"<input type='hidden' name='emoji' value='{emo}'>"
             f"<button class='emo' type='submit' name='action' value='react_add' title='{_e(kw)}'>{emo}</button></form>"
             for emo, kw in _EMOJIS_FULL)
-        picker = (f"<details class='emoji-pick'><summary class='emoji-add' title='reactie'>🙂</summary>"
+        picker = (f"<details class='emoji-pick'><summary class='emoji-add' title='reactie' "
+                  f"aria-label='reactie toevoegen'>{_ICON_ADD_EMOJI}</summary>"
                   f"<div class='emoji-pop'>"
                   f"<input class='emo-search' type='text' placeholder='Zoek emoji…' oninput='emoFilter(this)'>"
                   f"<div class='emo-grid'>{btns}</div></div></details>")
