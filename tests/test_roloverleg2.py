@@ -39,7 +39,7 @@ def test_editor_prefil_en_change_diff(tmp_path):
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
     # editor prefilt de huidige rol
-    assert "rov-editor" in frag and "Rolnaam" in frag and "Building new features" in frag
+    assert "rov-editor" in frag and "Naam" in frag and "Building new features" in frag
     # naam wijzigen -> rename in change; accountability toevoegen -> add_accountabilities
     cockpit2.dispatch(dd, "rov2_set", {"iid": [iid], "field": ["name"], "value": ["Web Developer"], "next": ["/"]})
     cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Bewaken van performance"], "next": ["/"]})
@@ -117,7 +117,7 @@ def test_consent_geblokkeerd_zonder_purpose(tmp_path):
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Data Analist"], "next": ["/"]})
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
-    assert "disabled>Consent" in frag and "rov2_consent" not in frag
+    assert "disabled>Neem voorstel aan" in frag and "rov2_consent" not in frag
     # consent-actie weigert ook serverside
     cockpit2.dispatch(dd, "rov2_consent", {"iid": [iid], "circle": [C], "next": ["/"]})
     assert cockpit2._Stores(dd).agenda.get(iid)["status"] == "open"
@@ -204,7 +204,7 @@ def test_rol_verwijderen_via_overleg(tmp_path):
     # maak er een verwijder-voorstel van
     cockpit2.dispatch(dd, "rov2_setkind", {"iid": [iid], "kind": ["remove_role"], "next": ["/"]})
     f2 = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
-    assert "Consent — rol verwijderen" in f2 and "terug naar wijzigen" in f2
+    assert "wordt <b>verwijderd</b>" in f2 and "terug naar wijzigen" in f2 and "Neem voorstel aan" in f2
     # consent + sluiten -> rol gearchiveerd (verweesd werk = advies, geen blok)
     cockpit2.dispatch(dd, "rov2_consent", {"iid": [iid], "circle": [C], "next": ["/"]})
     cockpit2.dispatch(dd, "rov2_end", {"circle": [C], "next": ["/"]})
@@ -212,11 +212,66 @@ def test_rol_verwijderen_via_overleg(tmp_path):
     assert rec is None or rec.archived
 
 
+def test_diff_weergave_verwijderd_en_nieuw(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
+    iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
+    rec = cockpit2._Stores(dd).records.get(RID)
+    bestaand = rec.definition.accountabilities[0]
+    # bestaande accountability verwijderen -> doorgestreept (is-del), niet weg
+    cockpit2.dispatch(dd, "rov2_acc_remove", {"iid": [iid], "text": [bestaand], "next": ["/"]})
+    # nieuwe accountability toevoegen -> als 'nieuw' gemarkeerd (is-new)
+    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Bewaken van performance"], "next": ["/"]})
+    frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
+    assert "is-del" in frag and "<s>" in frag and "herstel" in frag    # verwijderd = doorgestreept + herstel
+    assert "is-new" in frag and "chip green'>nieuw" in frag             # toegevoegd = nieuw
+    # herstel zet 'm terug
+    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": [bestaand], "next": ["/"]})
+    ch = cockpit2._Stores(dd).agenda.get(iid)["change"]
+    assert bestaand not in ch.get("remove_accountabilities", [])
+
+
+def test_voorstel_meerdere_rollen(tmp_path):
+    dd = _dd(tmp_path)
+    # rol splitsen: bestaande rol wijzigen + tegelijk een nieuwe rol in HETZELFDE voorstel
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
+    iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
+    gid = cockpit2._Stores(dd).agenda.group_of(iid)
+    cockpit2.dispatch(dd, "rov2_add_to_group", {"circle": [C], "group": [gid], "naam": ["Data Analist"], "next": ["/"]})
+    # twee leden in dezelfde groep, maar één rij in de agenda
+    members = cockpit2._Stores(dd).agenda.members_of_group(gid)
+    assert len(members) == 2
+    frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
+    assert "Website Developer" in frag and "Data Analist" in frag      # beide blokken zichtbaar
+    assert "rov-more" in frag                                          # '+1' in de agenda-rij
+    assert frag.count("class='rovm") >= 2                              # twee wijziging-blokken
+    # 'toevoegen aan voorstel' met bestaande/nieuwe rol
+    assert "Toevoegen aan voorstel" in frag and "rov2_add_to_group" in frag
+
+
+def test_groep_consent_en_verwijderen(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
+    iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
+    gid = cockpit2._Stores(dd).agenda.group_of(iid)
+    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Bewaken van iets"], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_add_to_group", {"circle": [C], "group": [gid], "naam": ["Data Analist"], "next": ["/"]})
+    new_iid = [m["id"] for m in cockpit2._Stores(dd).agenda.members_of_group(gid) if m["id"] != iid][0]
+    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [new_iid], "text": ["Rapporteren van trends"], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_set", {"iid": [new_iid], "field": ["purpose"], "value": ["Inzicht"], "next": ["/"]})
+    # consent op één lid zet het HELE voorstel op consented
+    cockpit2.dispatch(dd, "rov2_consent", {"iid": [iid], "circle": [C], "next": ["/"]})
+    assert all(m["status"] == "consented" for m in cockpit2._Stores(dd).agenda.members_of_group(gid))
+    # heel voorstel verwijderen
+    cockpit2.dispatch(dd, "rov2_remove_group", {"iid": [iid], "circle": [C], "next": ["/"]})
+    assert cockpit2._Stores(dd).agenda.all() == []
+
+
 def test_select_en_verwijderen(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
     sel = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
-    assert "rov-item on" in sel and "Voorstel" in sel
+    assert "rov-item on" in sel and "Toevoegen aan voorstel" in sel
     cockpit2.dispatch(dd, "rov2_remove", {"iid": [iid], "circle": [C], "next": ["/"]})
     assert cockpit2._Stores(dd).agenda.open() == []

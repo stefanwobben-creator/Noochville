@@ -180,6 +180,27 @@ ul.clean li:last-child{border-bottom:none}
 .rovchat-toggle{display:inline-flex;align-items:center;gap:.4rem}
 .rovchat-toggle svg{width:15px;height:15px}
 .rov-editor input[name=value]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem}
+.rovm{border:1px solid var(--border);border-radius:var(--radius);padding:.8rem .9rem;margin-bottom:.9rem;background:var(--surface)}
+.rovm-h{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.6rem}
+.rovm-kind{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700}
+.rovm-kind b{color:var(--gray)}
+.rovm-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:0 .2rem}
+.rovm-close:hover{color:var(--coral)}
+.rovm-field{margin-top:.7rem}
+.rovm-field input[name=value]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem}
+.rovm-was{font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);font-style:italic}
+.rovm-item{display:flex;align-items:center;gap:.5rem;padding:.25rem .4rem;border-radius:var(--radius);border:1px solid var(--border);margin-top:.3rem}
+.rovm-iv{flex:1 1 auto;min-width:0}
+.rovm-item.is-new{background:var(--green-tint);border-color:var(--green)}
+.rovm-item.is-del{background:var(--cream-2);border-style:dashed}
+.rovm-item.is-del .rovm-iv s{color:var(--muted)}
+.rovm-foot{display:flex;align-items:center;gap:1rem;margin-top:.8rem;padding-top:.6rem;border-top:1px solid var(--border)}
+.rov-addprop{margin-top:.4rem;padding-top:.8rem;border-top:1px dashed var(--border)}
+.rov-addgrid{display:grid;gap:.8rem;grid-template-columns:1fr}
+@media(min-width:560px){.rov-addgrid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.rov-addgrid select{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem;background:var(--cream-2);color:var(--muted)}
+.is-soon{color:var(--muted)}
+.rov-more{font-size:.7rem;color:var(--subtle);font-weight:700}
 .rov-block{margin-top:.8rem}
 .rov-field{display:flex;align-items:center;gap:.5rem;padding:.2rem 0;border-bottom:1px solid var(--border)}
 .rov-fv{flex:1 1 auto;min-width:0}
@@ -1224,12 +1245,43 @@ def _rov_open(st: _Stores, circle_id: str):
     return [it for it in _rov_items(st, circle_id) if it.get("status") != "consented"]
 
 
+def _rov_groups(st: _Stores, circle_id: str):
+    """Agendapunten gegroepeerd per voorstel (GlassFrog: één voorstel kan meerdere rol-wijzigingen
+    bevatten). Geeft [(group_id, [members])], in agenda-volgorde, leden op aanmaaktijd."""
+    order, groups = [], {}
+    for it in _rov_items(st, circle_id):
+        gid = it.get("group") or it["id"]
+        if gid not in groups:
+            groups[gid] = []
+            order.append(gid)
+        groups[gid].append(it)
+    return [(gid, sorted(groups[gid], key=lambda i: i.get("created_at", 0))) for gid in order]
+
+
 def _rov_initials(text: str):
     """Splits een trailing '-SW' / '-JvdP' als initialen af. Geeft (rest, initialen)."""
     m = re.search(r"\s*-\s*([A-Za-z][A-Za-z.]{0,6})\s*$", text or "")
     if m:
         return text[:m.start()].strip(), m.group(1)
     return (text or "").strip(), ""
+
+
+def _rov_add_item(st: _Stores, circle: str, naam_raw: str, group: str | None = None) -> bool:
+    """Zet een rol-wijziging op de agenda: bestaande rol (naam matcht een kind) -> amend, anders
+    nieuwe rol. Met `group` hangt de wijziging onder een bestaand voorstel (GlassFrog: meerdere
+    wijzigingen per voorstel). Geeft True als er iets is toegevoegd."""
+    naam, by = _rov_initials(naam_raw)        # '-SW' achteraan = initialen
+    if not naam:
+        return False
+    match = next((r for r in _rov_children(st, circle) if _name(r).lower() == naam.lower()), None)
+    if match is not None:
+        st.agenda.add(match.id, "amend_role", {}, "", by=by or "founder", title=_name(match), group=group)
+    else:
+        slug = re.sub(r"[^a-z0-9]+", "_", naam.lower()).strip("_") or "rol"
+        st.agenda.add(f"{circle}__{slug}", "add_role",
+                      {"name": naam, "new_role_parent": circle, "purpose": "", "add_accountabilities": []},
+                      "", by=by or "founder", title=naam, group=group)
+    return True
 
 
 def _rov_hard(st: _Stores, item: dict):
@@ -1378,114 +1430,173 @@ def _rov_save_draft(st: _Stores, iid: str, draft: dict) -> None:
     st.agenda.update_fields(iid, draft=draft, change=change, title=title or item.get("title"))
 
 
-def _rov_editor(st: _Stores, item: dict, csrf: str, back: str, circle_id: str = "") -> str:
-    """Editor van één voorstel: naam, purpose, domeinen, accountabilities (losse velden + kruisje).
-    Wijzigingen zijn direct zichtbaar (geen opslaan-knop); de change wordt live herberekend.
-    Secretaris-check live: feedback per accountability + algemeen; consent op slot bij blokkade."""
+def _rov_member_block(st: _Stores, item: dict, csrf: str, back: str, circle_id: str = "") -> tuple[str, list]:
+    """Eén rol-wijziging binnen een voorstel (GlassFrog: een voorstel kan er meerdere bevatten).
+    Velden: naam, purpose, domeinen, accountabilities. Diff-weergave: verwijderd = doorgestreept
+    (pas weg na consent) met herstel, toegevoegd = als 'nieuw' gemarkeerd. Geeft (html, harde-regels)."""
     draft = _rov_draft(st, item)
     iid = item["id"]
-    # Advies (niet-blokkerend) van de secretaris + de harde mens-regel (naam + >=1 accountability).
-    advies = _rov_signals(st, item)
-    acc_issues, general = {}, []
-    for iss in advies:
-        hit = next((a for a in draft["accs"] if a and a[:40].lower() in iss["msg"].lower()), None)
-        if hit is not None:
-            acc_issues.setdefault(hit, []).append(iss)
-        else:
-            general.append(iss)
-    hard = _rov_hard(st, item)
-    for h in hard:
-        general.insert(0, {"level": "blok", "msg": h})
-    blok = bool(hard)
+    snap = _rov_snapshot(st, item)
+    is_amend = snap is not None and item.get("kind") != "add_role"
 
     def hid():
         return (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
                 f"<input type='hidden' name='iid' value='{_e(iid)}'>"
                 f"<input type='hidden' name='circle' value='{_e(circle_id)}'>"
                 f"<input type='hidden' name='next' value='{_e(back)}'>")
+    keep = f"data-reopen='{_e(back)}'"
+    sub = "this.form.requestSubmit?this.form.requestSubmit():this.form.submit()"
 
-    sub = ("this.form.requestSubmit?this.form.requestSubmit():this.form.submit()")
-    keep = f"data-reopen='{_e(back)}'"   # blijf na elke bewerking op DIT punt (niet auto-springen)
-    rbase = f"/roloverleg2?circle={circle_id}"
+    def _iss_html(lst):
+        return "".join(f"<div class='sec-issue {('blok' if i['level'] == 'blok' else 'let')}'>📋 {_e(i['msg'])}</div>"
+                       for i in lst)
 
-    # Verwijder-voorstel: aparte, simpele weergave (geen veld-editor).
+    rm_member = (f"<form method='post' action='/action' style='display:inline' {keep}>{hid()}"
+                 f"<button class='rovm-close' type='submit' name='action' value='rov2_remove' "
+                 f"title='Verwijder uit voorstel'>✕</button></form>")
+
+    # --- verwijder-rol blok ---
     if item.get("kind") == "remove_role":
         nm = _name(st.records.get(item.get("role_id"))) or item.get("title")
         adv = _rov_signals(st, item)
-        sec = ""
-        if adv:
-            body = "".join(f"<div class='sec-issue let'>📋 {_e(i['msg'])}</div>" for i in adv)
-            sec = f"<div class='sec-block'><div class='sec-kop'>📋 Secretaris (advies)</div>{body}</div>"
-        consent = (f"<form method='post' action='/action'>{hid()}<input type='hidden' name='iid' value='{_e(iid)}'>"
-                   f"<button class='btn no' type='submit' name='action' value='rov2_consent' "
-                   f"data-reopen='{_e(rbase)}'>Consent — rol verwijderen</button></form>")
+        sec = (f"<div class='sec-block'><div class='sec-kop'>📋 Secretaris (advies)</div>{_iss_html(adv)}</div>"
+               if adv else "")
         revert = (f"<form method='post' action='/action' {keep}>{hid()}"
                   f"<input type='hidden' name='kind' value='amend_role'>"
                   f"<button class='flink' type='submit' name='action' value='rov2_setkind'>← terug naar wijzigen</button></form>")
         note = ("<p class='muted' style='font-size:.78rem;margin:.2rem 0 .6rem'>"
                 "De secretaris signaleert alleen; het overleg beslist. Consent verwijdert de rol, "
                 "ook als er werk verweesd raakt.</p>")
-        return (f"<div class='rov-editor'><div class='psec-h'>{_IC_INFO}<span>Voorstel · rol verwijderen</span></div>"
-                f"<p>Dit voorstel <b>verwijdert</b> de rol <b>{_e(nm)}</b>.</p>{sec}{note}"
-                f"<div class='rov-consent'>{consent}</div><div style='margin-top:.5rem'>{revert}</div></div>")
-    name_f = (f"<form method='post' action='/action' {keep}>{hid()}"
-              f"<input type='hidden' name='action' value='rov2_set'><input type='hidden' name='field' value='name'>"
-              f"<label class='att-lbl'>Rolnaam</label>"
-              f"<input name='value' value='{_e(draft['name'])}' onchange='{sub}'></form>")
-    purpose_f = (f"<form method='post' action='/action' {keep}>{hid()}"
-                 f"<input type='hidden' name='action' value='rov2_set'><input type='hidden' name='field' value='purpose'>"
-                 f"<label class='att-lbl'>Purpose</label>"
-                 f"<input name='value' value='{_e(draft['purpose'])}' onchange='{sub}'></form>")
+        html = (f"<div class='rovm rovm-del'><div class='rovm-h'>"
+                f"<span class='rovm-kind'>Verwijderen · <b>{_e(nm)}</b></span>{rm_member}</div>"
+                f"<p>Deze rol wordt <b>verwijderd</b> als het voorstel wordt aangenomen.</p>{sec}{note}{revert}</div>")
+        return html, []
 
-    def _iss_html(iss_list):
-        out = ""
-        for iss in iss_list:
-            out += f"<div class='sec-issue {('blok' if iss['level'] == 'blok' else 'let')}'>📋 {_e(iss['msg'])}</div>"
-        return out
+    # --- amend / add blok ---
+    acc_issues, general = {}, []
+    for iss in _rov_signals(st, item):
+        hit = next((a for a in draft["accs"] if a and a[:40].lower() in iss["msg"].lower()), None)
+        if hit is not None:
+            acc_issues.setdefault(hit, []).append(iss)
+        else:
+            general.append(iss)
+    hard = _rov_hard(st, item)
 
-    def listblock(label, kind, vals, add_action, rm_action, per_issue=None):
+    def field_form(field, label, value, was=""):
+        waschip = f" <span class='rovm-was'>was: {_e(was)}</span>" if was else ""
+        return (f"<div class='rovm-field'><label class='att-lbl'>{label}{waschip}</label>"
+                f"<form method='post' action='/action' {keep}>{hid()}"
+                f"<input type='hidden' name='action' value='rov2_set'><input type='hidden' name='field' value='{field}'>"
+                f"<input name='value' value='{_e(value)}' onchange='{sub}'></form></div>")
+
+    name_was = (snap.get("name", "") if (is_amend and (snap.get("name", "") or "") != draft["name"]) else "")
+    purp_was = (snap.get("purpose", "") if (is_amend and snap.get("purpose")
+                and (snap.get("purpose", "") or "") != draft["purpose"]) else "")
+    name_f = field_form("name", "Naam", draft["name"], name_was)
+    purpose_f = field_form("purpose", "Purpose", draft["purpose"], purp_was)
+
+    def diff_list(label, orig, drafted, add_action, rm_action, per_issue=None):
+        ol = {x.lower() for x in orig}
+        dl = {x.lower() for x in drafted}
+
+        def itform(text, action, lbl, cls):
+            return (f"<form method='post' action='/action' style='display:inline' {keep}>{hid()}"
+                    f"<input type='hidden' name='text' value='{_e(text)}'>"
+                    f"<button class='{cls}' type='submit' name='action' value='{action}'>{lbl}</button></form>")
         rows = ""
-        for i, v in enumerate(vals):
-            inline = _iss_html(per_issue.get(v, [])) if per_issue else ""
-            rows += (f"<div class='rov-field'><span class='rov-fv'>{_e(v)}</span>"
-                     f"<form method='post' action='/action' style='display:inline' {keep}>{hid()}"
-                     f"<input type='hidden' name='idx' value='{i}'>"
-                     f"<button class='dellink' type='submit' name='action' value='{rm_action}'>✕</button></form></div>"
-                     f"{inline}")
+        for x in orig:                                   # bestaand: behouden of (doorgestreept) verwijderd
+            if x.lower() in dl:
+                rows += (f"<div class='rovm-item'><span class='rovm-iv'>{_e(x)}</span>"
+                         f"{itform(x, rm_action, '✕', 'dellink')}</div>"
+                         f"{_iss_html(per_issue.get(x, [])) if per_issue else ''}")
+            else:
+                rows += (f"<div class='rovm-item is-del'><span class='rovm-iv'><s>{_e(x)}</s></span>"
+                         f"{itform(x, add_action, 'herstel', 'flink')}</div>")
+        for x in drafted:                                # nieuw toegevoegd
+            if x.lower() not in ol:
+                badge = "<span class='chip green'>nieuw</span> " if is_amend else ""
+                rows += (f"<div class='rovm-item is-new'><span class='rovm-iv'>{badge}{_e(x)}</span>"
+                         f"{itform(x, rm_action, '✕', 'dellink')}</div>"
+                         f"{_iss_html(per_issue.get(x, [])) if per_issue else ''}")
         addf = (f"<form method='post' action='/action' class='rov-addrow' {keep}>{hid()}"
-                f"<input name='text' placeholder='{_e(kind)} toevoegen…'>"
+                f"<input name='text' placeholder='{_e(label.lower())} toevoegen…'>"
                 f"<button class='btn ok sm' type='submit' name='action' value='{add_action}'>+</button></form>")
-        return f"<label class='att-lbl'>{_e(label)}</label>{rows or ''}{addf}"
+        return f"<div class='rovm-field'><label class='att-lbl'>{_e(label)}</label>{rows}{addf}</div>"
 
-    acc_b = listblock("Accountabilities", "accountability", draft["accs"],
+    acc_b = diff_list("Accountabilities", list(snap["accountabilities"]) if snap else [], draft["accs"],
                       "rov2_acc_add", "rov2_acc_remove", per_issue=acc_issues)
-    dom_b = listblock("Domeinen", "domein", draft["domains"], "rov2_dom_add", "rov2_dom_remove")
+    dom_b = diff_list("Domeinen", list(snap["domains"]) if snap else [], draft["domains"],
+                      "rov2_dom_add", "rov2_dom_remove")
 
-    # Secretaris (algemene punten) + consent. Bij een blokkade staat consent op slot.
     sec = ""
     if general:
-        kop = "⛔ Secretaris: los dit eerst op" if blok else "📋 Secretaris (advies)"
-        sec = f"<div class='sec-block'><div class='sec-kop'>{kop}</div>{_iss_html(general)}</div>"
-    if blok:
-        consent = "<button class='btn ok' disabled>Consent</button> <span class='muted'>los de blokkade(s) op</span>"
+        sec += f"<div class='sec-block'><div class='sec-kop'>📋 Secretaris (advies)</div>{_iss_html(general)}</div>"
+    if hard:
+        sec += ("<div class='sec-block'>"
+                + "".join(f"<div class='sec-issue blok'>⛔ {_e(h)}</div>" for h in hard) + "</div>")
+
+    # GlassFrog: 'verwijder deze rol' + 'maak van deze rol een cirkel' (roadmap, grijs).
+    footer = ""
+    if item.get("kind") == "amend_role":
+        delrole = (f"<form method='post' action='/action' {keep}>{hid()}"
+                   f"<input type='hidden' name='kind' value='remove_role'>"
+                   f"<button class='flink' type='submit' name='action' value='rov2_setkind'>Rol verwijderen</button></form>")
+        circ = "<span class='flink is-soon' title='Binnenkort'>Maak van deze rol een cirkel</span>"
+        footer = f"<div class='rovm-foot rov-delrole'>{delrole}{circ}</div>"
+
+    kindlbl = "Nieuwe rol" if item.get("kind") == "add_role" else "Wijzigen rol"
+    nm = draft["name"] or item.get("title")
+    head = f"<div class='rovm-h'><span class='rovm-kind'>{kindlbl} · <b>{_e(nm)}</b></span>{rm_member}</div>"
+    html = f"<div class='rovm'>{head}{name_f}{purpose_f}{acc_b}{dom_b}{sec}{footer}</div>"
+    return html, hard
+
+
+def _rov_editor(st: _Stores, item: dict, csrf: str, back: str, circle_id: str = "") -> str:
+    """Een voorstel (GlassFrog-model): één of meer rol-wijzigingen samen, met diff-weergave en één
+    consent voor het hele voorstel. 'Toevoegen aan voorstel' betrekt nog een (bestaande of nieuwe)
+    rol erbij. Werkafspraak/verkiezing zijn roadmap (grijs)."""
+    base = f"/roloverleg2?circle={circle_id}"
+    gid = st.agenda.group_of(item["id"])
+    members = st.agenda.members_of_group(gid) or [item]
+    back = f"{base}&iid={item['id']}"
+
+    blocks, all_hard = "", []
+    for m in members:
+        b, hard = _rov_member_block(st, m, csrf, back, circle_id)
+        blocks += b
+        all_hard += hard
+
+    def hid():
+        return (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+                f"<input type='hidden' name='iid' value='{_e(item['id'])}'>"
+                f"<input type='hidden' name='circle' value='{_e(circle_id)}'>"
+                f"<input type='hidden' name='next' value='{_e(back)}'>")
+    keep = f"data-reopen='{_e(back)}'"
+
+    roles = sorted(_rov_children(st, circle_id), key=lambda r: _name(r).lower())
+    dl = "".join(f"<option value='{_e(_name(r))}'>" for r in roles)
+    add_role = (f"<form method='post' action='/action' class='rov-addrow' {keep}>{hid()}"
+                f"<input type='hidden' name='group' value='{_e(gid)}'>"
+                f"<input name='naam' list='rov-roles-add' placeholder='Bestaande of nieuwe rol… (-SW)' autocomplete='off'>"
+                f"<datalist id='rov-roles-add'>{dl}</datalist>"
+                f"<button class='btn ok sm' type='submit' name='action' value='rov2_add_to_group'>+</button></form>")
+    soon = "<select disabled><option>Binnenkort</option></select>"
+    add_block = (f"<div class='rov-addprop'><div class='sec-kop'>Toevoegen aan voorstel</div>"
+                 f"<div class='rov-addgrid'>"
+                 f"<div><label class='att-lbl'>Rol toevoegen/wijzigen</label>{add_role}</div>"
+                 f"<div><label class='att-lbl is-soon'>Werkafspraak toevoegen/wijzigen</label>{soon}</div>"
+                 f"</div></div>")
+
+    if all_hard:
+        consent = ("<button class='btn ok' disabled>Neem voorstel aan</button> "
+                   "<span class='muted'>los de blokkade(s) op</span>")
     else:
         consent = (f"<form method='post' action='/action'>{hid()}"
-                   f"<input type='hidden' name='iid' value='{_e(iid)}'>"
                    f"<button class='btn ok' type='submit' name='action' value='rov2_consent' "
-                   f"data-reopen='{_e(rbase)}'>Consent — voorstel aannemen</button></form>")
+                   f"data-reopen='{_e(base)}'>Neem voorstel aan</button></form>")
 
-    # Rol verwijderen (alleen bij een bestaande rol): maakt er een verwijder-voorstel van.
-    delrole = ""
-    if item.get("kind") == "amend_role":
-        delrole = (f"<div class='rov-delrole'><form method='post' action='/action' {keep}>{hid()}"
-                   f"<input type='hidden' name='kind' value='remove_role'>"
-                   f"<button class='flink' type='submit' name='action' value='rov2_setkind'>Rol verwijderen</button>"
-                   f"</form></div>")
-
-    head = f"<div class='psec-h'>{_IC_INFO}<span>Voorstel · {_rov_kindlabel(item['kind'])}</span></div>"
-    return (f"<div class='rov-editor'>{head}{name_f}{purpose_f}"
-            f"<div class='rov-block'>{acc_b}</div><div class='rov-block'>{dom_b}</div>"
-            f"{sec}<div class='rov-consent'>{consent}</div>{delrole}</div>")
+    return (f"<div class='rov-editor'>{blocks}{add_block}"
+            f"<div class='rov-consent'>{consent}</div></div>")
 
 
 def _rov_chat(st: _Stores, item: dict, csrf: str, circle_id: str) -> str:
@@ -1552,22 +1663,27 @@ def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: s
                 f"<input type='hidden' name='circle' value='{_e(circle_id)}'>"
                 f"<input type='hidden' name='next' value='{_e(nextu)}'>")
 
-    # Agenda-lijst: alles op de agenda; behandeld = doorgestreept; geen 'open'-chip; initialen achteraan.
+    # Agenda-lijst: één rij per VOORSTEL (GlassFrog: een voorstel kan meerdere rol-wijzigingen
+    # bevatten). Behandeld = doorgestreept; initialen van de indiener achteraan.
     items_all = _rov_items(st, circle_id)
     items_open = _rov_open(st, circle_id)
     active = iid or (items_open[0]["id"] if items_open else "")
     rows = ""
-    for it in items_all:
-        done = it.get("status") == "consented"
-        cls = "rov-item" + (" on" if it["id"] == active else "") + (" done" if done else "")
-        url = f"{base}&iid={it['id']}"
+    for gid, members in _rov_groups(st, circle_id):
+        primary = members[0]
+        done = all(m.get("status") == "consented" for m in members)
+        on = any(m["id"] == active for m in members)
+        cls = "rov-item" + (" on" if on else "") + (" done" if done else "")
+        url = f"{base}&iid={primary['id']}"
         rm = (f"<form method='post' action='/action' style='display:inline'>{hid(base)}"
-              f"<input type='hidden' name='iid' value='{_e(it['id'])}'>"
-              f"<button class='flink' type='submit' name='action' value='rov2_remove'>✕</button></form>")
-        by = (it.get("by") or "").strip()
+              f"<input type='hidden' name='iid' value='{_e(primary['id'])}'>"
+              f"<button class='flink' type='submit' name='action' value='rov2_remove_group'>✕</button></form>")
+        by = (primary.get("by") or "").strip()
         av = f"<span class='av rov-by' title='door {_e(by)}'>{_e(by)}</span>" if by and by != "founder" else ""
+        title = primary.get("title") or primary.get("role_id")
+        extra = f" <span class='rov-more'>+{len(members) - 1}</span>" if len(members) > 1 else ""
         rows += (f"<div class='{cls}'><a class='js-modal rov-link' href='{url}' data-href='{url}'>"
-                 f"<span class='rov-title'>{_e(it.get('title') or it.get('role_id'))}</span></a>"
+                 f"<span class='rov-title'>{_e(title)}{extra}</span></a>"
                  f"{av}{rm}</div>")
     if not rows:
         rows = "<p class='muted'>Nog geen agendapunten.</p>"
@@ -2448,32 +2564,31 @@ def dispatch(data_dir: str, action: str, form: dict):
         if st.personas.add_skill(g("agent"), g("skill")):
             msg = "✓ skill aan rugzak toegevoegd"
     elif action == "rov2_add":
-        circle = g("circle")
-        naam, by = _rov_initials(g("naam"))   # '-SW' achteraan = initialen
-        if naam:
-            children = _rov_children(st, circle)
-            match = next((r for r in children if _name(r).lower() == naam.lower()), None)
-            if match is not None:   # bestaande rol -> wijzigen
-                st.agenda.add(match.id, "amend_role", {}, "", by=by or "founder", title=_name(match))
-            else:                   # anders -> nieuwe rol
-                slug = re.sub(r"[^a-z0-9]+", "_", naam.lower()).strip("_") or "rol"
-                st.agenda.add(f"{circle}__{slug}", "add_role",
-                              {"name": naam, "new_role_parent": circle, "purpose": "", "add_accountabilities": []},
-                              "", by=by or "founder", title=naam)
+        if _rov_add_item(st, g("circle"), g("naam")):
             msg = "✓ agendapunt toegevoegd"
+    elif action == "rov2_add_to_group":
+        if _rov_add_item(st, g("circle"), g("naam"), group=g("group")):
+            msg = "✓ toegevoegd aan voorstel"
     elif action == "rov2_remove":
-        st.agenda.remove(g("iid")); msg = "🗑 agendapunt verwijderd"
+        st.agenda.remove(g("iid")); msg = "🗑 uit voorstel verwijderd"
+    elif action == "rov2_remove_group":
+        gid = st.agenda.group_of(g("iid"))
+        for m in st.agenda.members_of_group(gid):
+            st.agenda.remove(m["id"])
+        msg = "🗑 voorstel verwijderd"
     elif action == "rov2_setkind":
         if g("kind") in ("amend_role", "remove_role"):
             st.agenda.update_fields(g("iid"), kind=g("kind"))
             msg = "voorstel: rol verwijderen" if g("kind") == "remove_role" else "voorstel: rol wijzigen"
     elif action == "rov2_consent":
-        item = st.agenda.get(g("iid"))
-        if item is not None:
-            if _rov_hard(st, item):
-                msg = "⛔ consent geblokkeerd — los de blokkade(s) op"
-            else:
-                st.agenda.set_status(g("iid"), "consented"); msg = "✓ consent — voorstel aangenomen"
+        gid = st.agenda.group_of(g("iid"))
+        members = st.agenda.members_of_group(gid)
+        if members and not any(_rov_hard(st, m) for m in members):
+            for m in members:
+                st.agenda.set_status(m["id"], "consented")
+            msg = "✓ consent — voorstel aangenomen"
+        else:
+            msg = "⛔ consent geblokkeerd — los de blokkade(s) op"
     elif action == "rov2_chat_start":
         item = st.agenda.get(g("iid"))
         if item is not None:
@@ -2513,16 +2628,21 @@ def dispatch(data_dir: str, action: str, form: dict):
             draft = _rov_draft(st, item)
             if action == "rov2_set" and g("field") in ("name", "purpose"):
                 draft[g("field")] = g("value")
-            elif action == "rov2_acc_add" and g("text").strip():
-                draft["accs"].append(g("text").strip())
-            elif action == "rov2_dom_add" and g("text").strip():
-                draft["domains"].append(g("text").strip())
+            elif action in ("rov2_acc_add", "rov2_dom_add") and g("text").strip():
+                key = "accs" if action == "rov2_acc_add" else "domains"
+                t = g("text").strip()
+                if t.lower() not in {x.lower() for x in draft[key]}:   # dedup (ook bij 'herstel')
+                    draft[key].append(t)
             elif action in ("rov2_acc_remove", "rov2_dom_remove"):
                 key = "accs" if action == "rov2_acc_remove" else "domains"
-                try:
-                    draft[key].pop(int(g("idx")))
-                except (ValueError, IndexError):
-                    pass
+                text = g("text")
+                if text:                                              # diff-weergave: verwijder op waarde
+                    draft[key] = [x for x in draft[key] if x != text]
+                else:
+                    try:
+                        draft[key].pop(int(g("idx")))
+                    except (ValueError, IndexError):
+                        pass
             _rov_save_draft(st, g("iid"), draft)
             msg = "✓ voorstel bijgewerkt"
     return nxt, msg
