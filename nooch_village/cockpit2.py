@@ -89,9 +89,8 @@ ul.clean li:last-child{border-bottom:none}
 .qadd-form textarea{width:100%;box-sizing:border-box;padding:.45rem .55rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow);font:inherit;font-size:.85rem;resize:vertical}
 .qadd-row{display:flex;align-items:center;gap:.4rem}
 .qadd-x{background:none;border:none;font-size:1rem;color:var(--gray);cursor:pointer;padding:.1rem .3rem}
-.addproj>summary{list-style:none;cursor:pointer}
-.addproj>summary::-webkit-details-marker{display:none}
-.addproj[open]>summary{margin-bottom:.2rem}
+.addlink{color:var(--green-dark);font-weight:700;font-size:.88rem;text-decoration:none;cursor:pointer}
+.addlink:hover{text-decoration:underline}
 .ovl{position:fixed;inset:0;background:rgba(27,27,27,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center}
 .ovl-box{background:var(--surface);max-width:720px;width:92%;margin:4vh auto;border-radius:12px;padding:1.3rem 1.5rem;max-height:88vh;overflow:auto;position:relative;box-shadow:0 12px 48px rgba(27,27,27,.35)}
 .ovl-x{position:absolute;top:.5rem;right:.7rem;border:none;background:none;font-size:1.2rem;cursor:pointer;color:var(--gray)}
@@ -482,7 +481,7 @@ def _modal_html() -> str:
         "var data=new URLSearchParams(new FormData(f));"
         "if(e.submitter&&e.submitter.name){data.set(e.submitter.name,e.submitter.value);}"
         "fetch('/action',{method:'POST',body:data}).then(function(){"
-        "if(act==='proj_delete'||act==='proj_archive'){shut();}else{reopen();}});});});}"
+        "if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'){shut();}else{reopen();}});});});}"
         "document.querySelectorAll('.pcard[data-href],a.js-modal[data-href]').forEach(function(c){"
         "c.addEventListener('click',function(e){if(window.__pdrag)return;e.preventDefault();"
         "openCard(c.getAttribute('data-href'));});});"
@@ -553,13 +552,10 @@ def _archived_html(st: _Stores, archived: list, csrf_token: str, back: str) -> s
             f"<ul class='clean'>{rows}</ul></details>")
 
 
-def _add_project_form(st: _Stores, rec, csrf_token: str, back: str) -> str:
-    """'+ project' op bordniveau (GlassFrog Add Project): titel + rol + persoon + status.
-    Op een cirkel kies je de rol (directe rollen + Individual Initiative); op een rol staat die vast."""
-    if not csrf_token:
-        return ""
-    is_c = org.is_circle(rec)
-    if is_c:
+def _add_project_fragment(st: _Stores, rec, csrf_token: str, back: str) -> str:
+    """De inhoud van de Add-Project-modal: titel + rol + persoon + status. Op een cirkel kies je
+    de rol (directe rollen + Individual Initiative); op een rol staat die vast."""
+    if org.is_circle(rec):
         direct = sorted(org.roles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
         opts = "".join(f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>" for r in direct)
         opts += f"<option value='{_II_PREFIX}{_e(rec.id)}'>Individual Initiative</option>"
@@ -568,29 +564,38 @@ def _add_project_form(st: _Stores, rec, csrf_token: str, back: str) -> str:
         role_field = (f"<input type='hidden' name='owner' value='{_e(rec.id)}'>"
                       f"<label>Rol</label><div class='muted'>{_e(_name(rec))}</div>")
     return (
-        "<details class='addproj'><summary class='btn ok'>➕ project</summary>"
-        "<div class='pf' style='max-width:560px;margin-top:.5rem'>"
+        "<h2 style='margin-top:0'>Project toevoegen</h2>"
+        "<div class='pf'>"
         "<form method='post' action='/action'>"
         f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
         f"<input type='hidden' name='next' value='{_e(back)}'>"
         "<label>Te bereiken uitkomst</label>"
-        "<input name='scope' placeholder='bijv. Productpagina met Product Passport live'>"
+        "<input name='scope' placeholder='bijv. Productpagina met Product Passport live' autofocus>"
         f"{role_field}"
         f"<label>Trekker (persoon of AI-agent)</label><select name='trekker'>{_trekker_options(st)}</select>"
         "<label>Status</label><select name='col'>"
         "<option value='actief'>Actief</option><option value='wacht'>Wacht</option>"
         "<option value='toekomst'>Toekomst</option></select>"
-        "<div style='margin-top:.5rem'>"
+        "<div style='margin-top:.6rem'>"
         "<button class='btn ok' type='submit' name='action' value='proj_add'>Opslaan</button> "
-        "<button type='button' class='btn' onclick=\"this.closest('details').open=false\">Annuleren</button>"
-        "</div></form></div></details>")
+        "<button type='button' class='btn' onclick=\"document.querySelector('.ovl-x').click()\">"
+        "Annuleren</button>"
+        "</div></form></div>")
+
+
+def _add_project_trigger(rec, csrf_token: str) -> str:
+    """Subtiele '+ project'-trigger (tekstlabel) die de Add-Project-modal opent."""
+    if not csrf_token:
+        return ""
+    url = f"/addproject?node={_e(rec.id)}"
+    return f"<a class='js-modal addlink' href='{url}' data-href='{url}'>+ project</a>"
 
 
 def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "") -> str:
     allp = st.projects.all()
     back_base = f"/node?id={rec.id}&tab=projects"
 
-    addbtn = _add_project_form(st, rec, csrf_token, back_base)
+    addlink = _add_project_trigger(rec, csrf_token)
 
     if not org.is_circle(rec):
         # ROL: eigen projecten, gegroepeerd per persoon (de doener). Lege lanes tonen we niet.
@@ -598,10 +603,9 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "") -> st
         archived = [p for p in allp if p.get("owner") == rec.id and p.get("archived")]
         board = _projects_board(st, projs, rec.id, csrf_token, back_base, "persoon")
         if not board:
-            board = "<p class='muted'>Nog geen projecten. Voeg er een toe met ➕ project.</p>"
-        head = (f"<div style='display:flex;align-items:center;justify-content:space-between;"
-                f"flex-wrap:wrap;gap:.4rem;margin-bottom:1rem'>"
-                f"<h3 style='margin:0'>Projecten ({len(projs)})</h3>{addbtn}</div>")
+            board = "<p class='muted'>Nog geen projecten. Voeg er een toe met + project.</p>"
+        head = (f"<div style='margin-bottom:1rem'>"
+                f"<h3 style='margin:0;display:inline'>Projecten ({len(projs)})</h3> &nbsp; {addlink}</div>")
         return f"<div class='c2-sec'>{head}{board}{_archived_html(st, archived, csrf_token, back_base)}</div>"
 
     # CIRKEL: doet zelf geen uitvoerend werk. Toont projecten van haar DIRECTE rollen +
@@ -614,7 +618,7 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "") -> st
     back = f"{back_base}&group={g}"
     board = _projects_board(st, projs, rec.id, csrf_token, back, g)
     if not board:
-        board = "<p class='muted'>Nog geen projecten. Voeg er een toe met ➕ project.</p>"
+        board = "<p class='muted'>Nog geen projecten. Voeg er een toe met + project.</p>"
     subs = sorted(org.subcircles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
     sub_html = ""
     if subs:
@@ -629,8 +633,8 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "") -> st
               f"<a class='vbtn{on('persoon')}' href='{back_base}&group=persoon'>per persoon</a></div>")
     head = (f"<div style='display:flex;align-items:center;justify-content:space-between;"
             f"flex-wrap:wrap;gap:.6rem;margin-bottom:1rem'>"
-            f"<h3 style='margin:0'>Projecten ({len(projs)})</h3>"
-            f"<div style='display:flex;gap:.6rem;align-items:center;flex-wrap:wrap'>{switch}{addbtn}</div></div>")
+            f"<div><h3 style='margin:0;display:inline'>Projecten ({len(projs)})</h3> &nbsp; {addlink}</div>"
+            f"{switch}</div>")
     note = ("<p class='muted' style='font-size:.8rem;margin:-.6rem 0 .6rem'>Een cirkel doet zelf "
             "geen werk: projecten horen bij de rollen of bij Individual Initiative.</p>")
     return f"<div class='c2-sec'>{head}{note}{board}{sub_html}</div>"
@@ -842,6 +846,21 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     return _page(_scope_text(p), inner)
 
 
+def render_addproject(st: _Stores, node_id: str, csrf_token: str = "", fragment: bool = False) -> str:
+    rec = st.records.get(node_id)
+    if rec is None:
+        return ("<p class='muted'>Onbekende rol/cirkel.</p>" if fragment
+                else _page("Niet gevonden", "<p>Onbekend.</p><p><a href='/'>← home</a></p>"))
+    back = f"/node?id={rec.id}&tab=projects"
+    frag = _add_project_fragment(st, rec, csrf_token, back)
+    if fragment:
+        return frag
+    main = (f"<div class='c2-main' style='max-width:560px'>"
+            f"<div class='c2-bar'><a href='{_e(back)}'>← terug</a></div>{frag}</div>")
+    return _page("Project toevoegen",
+                 f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>{main}</div>")
+
+
 def _parse_trekker(val: str):
     """'person:<id>' of 'persona:<id>' → (person_id of '', agent_id of '')."""
     val = (val or "").strip()
@@ -946,6 +965,10 @@ def make_handler(data_dir: str, csrf_token: str):
                                           msg=(qs.get("msg") or [""])[0],
                                           back=(qs.get("back") or ["/"])[0],
                                           fragment=(qs.get("fragment") or [""])[0] == "1"))
+                return
+            if path == "/addproject":
+                self._send(render_addproject(st, (qs.get("node") or [""])[0], csrf_token=csrf_token,
+                                             fragment=(qs.get("fragment") or [""])[0] == "1"))
                 return
             if path == "/person":
                 self._send(render_person(st, (qs.get("id") or [""])[0]))

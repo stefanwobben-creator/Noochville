@@ -58,7 +58,7 @@ def test_projecten_tab_kolommen_en_inline_add(tmp_path):
     # statuskolommen (Trello-stijl) in een niet-lege lane + slepen + top-level toevoegen
     for col in ("Actief", "Wacht", "Toekomst", "Done"):
         assert col in page
-    assert "proj_add" in page and "➕ project" in page       # top-level add
+    assert "addlink" in page and "/addproject" in page       # subtiele '+ project'-trigger (modal)
     assert "+ project toevoegen" in page                     # Trello per-kolom-add in niet-lege lane
     assert "data-to='toekomst'" in page and "draggable" in page.lower()
     assert "data-href=" in page                 # kaart klikbaar naar detail
@@ -227,7 +227,19 @@ def test_leeg_bord_toont_geen_lege_lanes(tmp_path):
     st = _st(tmp_path)
     page = cockpit2.render_node(st, "mother_earth__nooch__circle_rep", "projects", csrf_token="t")
     assert "<div class='swim'>" not in page       # geen lege lanes gerenderd
-    assert "Nog geen projecten" in page and "➕ project" in page
+    assert "Nog geen projecten" in page and "addlink" in page
+
+
+def test_addproject_modal_fragment(tmp_path):
+    st = _st(tmp_path)
+    role = "mother_earth__nooch__website_developer"
+    frag = cockpit2.render_addproject(st, role, csrf_token="t", fragment=True)
+    assert "<!doctype" not in frag.lower()
+    assert "Project toevoegen" in frag and "Te bereiken uitkomst" in frag
+    assert "proj_add" in frag and "Trekker" in frag
+    # op een cirkel kun je de rol kiezen + Individual Initiative
+    cfrag = cockpit2.render_addproject(st, "mother_earth__nooch", csrf_token="t", fragment=True)
+    assert "Individual Initiative" in cfrag and "<select name='owner'>" in cfrag
 
 
 def test_modal_overlay_en_fragment(tmp_path):
@@ -243,8 +255,8 @@ def test_modal_overlay_en_fragment(tmp_path):
     # fragment = alleen de detail-inhoud, geen volledige pagina
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "<!doctype" not in frag.lower() and "Modaltest" in frag and "Checklist" in frag
-    # kolommen scrollen (pcol-scroll) en er is een top-level '+ project'
-    assert "pcol-scroll" in board and "addproj" in board
+    # kolommen scrollen (pcol-scroll) en er is een top-level '+ project'-trigger (modal)
+    assert "pcol-scroll" in board and "addlink" in board
 
 
 def test_project_archiveren_default(tmp_path):
