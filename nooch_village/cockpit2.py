@@ -170,10 +170,10 @@ ul.clean li:last-child{border-bottom:none}
 .titleform:focus-within .title-save{opacity:1}
 .ptitle-ro{margin:.1rem 0;font-family:var(--font-display)}
 .cardmenu{position:relative;flex:0 0 auto}
-.cardmenu>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:.25rem;padding:.2rem .4rem;border:1px solid transparent;border-radius:var(--radius)}
+.cardmenu>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:.3rem;padding:0}
 .cardmenu>summary::-webkit-details-marker{display:none}
-.cardmenu>summary:hover,.cardmenu[open]>summary{border-color:var(--border);background:var(--surface)}
 .statustrigger .caret{color:var(--subtle);font-size:.7rem}
+.statustrigger:hover .caret{color:var(--gray)}
 .cardmenu-b{position:absolute;right:0;top:2rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.3rem;z-index:5;min-width:150px}
 .menuitem{display:block;width:100%;text-align:left;border:none;background:none;padding:.4rem .55rem;border-radius:var(--radius);cursor:pointer;font-size:.85rem;color:var(--ink)}
 .menuitem:hover{background:var(--cream-2)}
@@ -560,12 +560,12 @@ def _att_html(st: _Stores, rec, kind: str, leeg: str) -> str:
 
 
 _PROJ_CHIP = {
-    "running": ("⚡ Actief", "var(--green)", "#fff"),
-    "queued": ("🌱 Wachtrij", "var(--cream-2)", "var(--gray)"),
-    "future": ("🌱 Toekomst", "var(--cream-2)", "var(--gray)"),
-    "blocked": ("⏳ Wacht", "var(--coral)", "#fff"),
-    "draft": ("📝 Concept", "var(--sand)", "var(--gray)"),
-    "done": ("✓ Done", "var(--green-dark)", "#fff"),
+    "running": ("Actief", "var(--green)", "#fff"),
+    "queued": ("Wachtrij", "var(--cream-2)", "var(--gray)"),
+    "future": ("Toekomst", "var(--cream-2)", "var(--gray)"),
+    "blocked": ("Wacht", "var(--coral)", "#fff"),
+    "draft": ("Concept", "var(--sand)", "var(--gray)"),
+    "done": ("Done", "var(--green-dark)", "#fff"),
 }
 
 
@@ -1372,7 +1372,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         desc_body = (f"<form method='post' action='/action' class='descform'>{hid()}"
                      f"<textarea name='description' rows='3' placeholder='Voeg een omschrijving toe…'>"
                      f"{_e(p.get('description',''))}</textarea>"
-                     f"<button class='btn' type='submit' name='action' value='proj_describe' "
+                     f"<button class='btn ok' type='submit' name='action' value='proj_describe' "
                      f"style='margin-top:.3rem'>opslaan</button></form>")
     else:
         desc_body = f"<div>{_e(p.get('description','')) or '<span class=muted>geen omschrijving</span>'}</div>"
