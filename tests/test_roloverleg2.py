@@ -135,6 +135,22 @@ def test_consent_en_auto_volgend(tmp_path):
     assert "Financial Controller" in frag and "rov-editor" in frag
 
 
+def test_ai_kladblok(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
+    iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
+    frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
+    assert "kbblok" in frag and "Meedenken met AI" in frag and "rov2_kladblok" in frag
+    # AI-helper (gestubd) denkt mee op basis van het voorstel
+    out = cockpit2._rov_ai_kladblok(cockpit2._Stores(dd), cockpit2._Stores(dd).agenda.get(iid),
+                                    ask=lambda p: "Scherpe vraag")
+    assert out == "Scherpe vraag"
+    # jouw bericht wordt opgeslagen (AI faalt closed zonder key)
+    cockpit2.dispatch(dd, "rov2_kladblok", {"iid": [iid], "text": ["even sparren"], "next": ["/"]})
+    kb = cockpit2._Stores(dd).agenda.get(iid).get("kladblok")
+    assert kb and kb[0]["who"] == "jij" and kb[0]["text"] == "even sparren"
+
+
 def test_select_en_verwijderen(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
