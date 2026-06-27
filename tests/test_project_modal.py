@@ -17,8 +17,10 @@ def test_detail_overzicht_kop(tmp_path):
     dd, pid = _setup(tmp_path)
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "<!doctype" not in frag.lower()
-    # tweekoloms: zijbalk-details met de kernvelden (status zit nu in het …-menu, niet in Details)
-    for k in ("pgrid", "pdisc", "smeta", "Trekker", "Rol / eigenaar", "Label", "Zichtbaarheid", "Aangemaakt"):
+    # Details: tweekoloms, read-only rol/persoon + aangemaakt/zichtbaarheid (status in het …-menu)
+    for k in ("pgrid", "pdisc", "details-cols",
+              "<span class='dk'>Rol</span>", "<span class='dk'>Persoon</span>",
+              "<span class='dk'>Aangemaakt</span>", "<span class='dk'>Zichtbaar</span>"):
         assert k in frag
     assert "Voortgang" not in frag and "<dt>Status</dt>" not in frag
     # statuswissel via het …-menu
@@ -35,7 +37,7 @@ def test_status_menu_markeert_huidige(tmp_path):
 def test_detail_readonly_geen_menu(tmp_path):
     dd, pid = _setup(tmp_path)
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="", fragment=True)
-    assert "cardmenu" not in frag and "smeta" in frag
+    assert "cardmenu" not in frag and "details-cols" in frag
 
 
 def test_redesign_layout(tmp_path):

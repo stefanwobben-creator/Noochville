@@ -177,11 +177,15 @@ ul.clean li:last-child{border-bottom:none}
 .menuitem{display:block;width:100%;text-align:left;border:none;background:none;padding:.4rem .55rem;border-radius:var(--radius);cursor:pointer;font-size:.85rem;color:var(--ink)}
 .menuitem:hover{background:var(--cream-2)}
 .menuitem.danger{color:var(--coral)}
-.detailsbox{margin:0 0 1.1rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--cream-2)}
-.detailsbox>summary{cursor:pointer;list-style:none;padding:.5rem .7rem;display:flex;align-items:center;gap:.4rem;color:var(--subtle);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700}
-.detailsbox>summary::-webkit-details-marker{display:none}
-.detailsbox>summary svg{width:14px;height:14px;opacity:.75}
-.detailsbox-b{padding:0 .7rem .65rem}
+.detailsbox{margin:0 0 1.1rem;border:1px solid var(--border);border-radius:var(--radius);padding:.7rem .8rem}
+.detailsbox .psec-h{margin-bottom:.5rem}
+.details-cols{display:grid;grid-template-columns:1fr;gap:0 .4rem}
+@media(min-width:520px){.details-cols{grid-template-columns:1fr 1fr;gap:0 1.4rem}}
+.dcol{min-width:0}
+.dfield{display:flex;gap:.6rem;align-items:baseline;padding:.18rem 0;text-align:left}
+.dk{flex:0 0 5.2rem;color:var(--subtle);font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+.dv{flex:1 1 auto;min-width:0;font-size:.88rem}
+.visform,.visform label{font-size:.85rem;margin:0}
 .fieldform{display:flex;gap:.4rem;align-items:center}
 .fieldform select{flex:1 1 auto;min-width:0}
 .fieldsave{flex:0 0 auto;border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);padding:.12rem .5rem;font-size:.72rem;cursor:pointer}
@@ -1333,34 +1337,40 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     head = (f"<div class='pcard-head'>{title}"
             f"<div class='pcard-head-r'>{status_chip}{menu}</div></div>")
 
-    # ---- Details (ingeklapt blok): bewerkbare velden (status zit in het …-menu) ----
-    if rw:
-        trekker_ctl = (f"<form method='post' action='/action' class='fieldform'>{hid()}"
-                       f"<select name='trekker'>{_trekker_options(st, p.get('person') or '', p.get('agent') or '')}</select>"
-                       f"<button class='fieldsave' type='submit' name='action' value='proj_settrekker'>ok</button></form>")
-        lopts = "".join(f"<option value='{k}'{' selected' if p.get('label')==k else ''}>{k or '— geen —'}</option>"
-                        for k in _LABELS)
-        label_ctl = (f"<form method='post' action='/action' class='fieldform'>{hid()}"
-                     f"<select name='label'>{lopts}</select>"
-                     f"<button class='fieldsave' type='submit' name='action' value='proj_setlabel'>ok</button></form>")
-        vis_ctl = (f"<form method='post' action='/action' class='fieldform'>{hid()}"
-                   f"<label style='font-size:.82rem'><input type='checkbox' name='private' value='1'"
-                   f"{' checked' if p.get('private') else ''}> alleen deze cirkel</label>"
-                   f"<button class='fieldsave' type='submit' name='action' value='proj_setprivate'>ok</button></form>")
+    # ---- Details: kader zonder achtergrond, tweekoloms, links uitgelijnd, altijd open ----
+    owner = p.get("owner", "")
+    if owner.startswith(_II_PREFIX):
+        rol_naam = "Individual Initiative"
     else:
-        trekker_ctl = _trekker_html(st, p)
-        label_ctl = (f"<span class='dot' style='background:{_LABELS[p['label']]}'></span>{_e(p.get('label'))}"
-                     if _LABELS.get(p.get("label")) else "<span class='muted'>—</span>")
-        vis_ctl = "Alleen deze cirkel" if p.get("private") else "Hele cirkel-boom"
-    details_body = ("<dl class='smeta'>"
-                    f"<dt>Trekker</dt><dd>{trekker_ctl}</dd>"
-                    f"<dt>Rol / eigenaar</dt><dd>{owner_link}</dd>"
-                    f"<dt>Label</dt><dd>{label_ctl}</dd>"
-                    f"<dt>Aangemaakt</dt><dd>{_e(_created_full(p.get('created_at')))}</dd>"
-                    f"<dt>Zichtbaarheid</dt><dd>{vis_ctl}</dd>"
-                    "</dl>")
-    details = (f"<details class='detailsbox'><summary>{_IC_INFO}<span>Details</span></summary>"
-               f"<div class='detailsbox-b'>{details_body}</div></details>")
+        rol_naam = _name(orec) if orec else (owner or "—")
+    rol_v = (f"<a href='/node?id={_e(owner)}'>{_e(rol_naam)}</a>" if orec else _e(rol_naam))
+    if p.get("agent"):
+        pa = st.personas.get(p["agent"])
+        pers_v = f"{_e(pa.name if pa else p['agent'])} (AI)"
+    elif p.get("person"):
+        pers_v = f"<a href='/person?id={_e(p['person'])}'>{_e(_person_name(st, p['person']))}</a>"
+    else:
+        pers_v = "<span class='muted'>—</span>"
+    if rw:
+        vis_v = (f"<form method='post' action='/action' class='visform'>{hid()}"
+                 f"<input type='hidden' name='action' value='proj_setprivate'>"
+                 f"<label><input type='checkbox' name='private' value='1'"
+                 f"{' checked' if p.get('private') else ''} "
+                 f"onchange='this.form.requestSubmit?this.form.requestSubmit():this.form.submit()'>"
+                 f" alleen voor deze cirkel</label></form>")
+    else:
+        vis_v = "Alleen voor deze cirkel" if p.get("private") else "Hele cirkel-boom"
+    details = (
+        f"<div class='detailsbox'><div class='psec-h'>{_IC_INFO}<span>Details</span></div>"
+        f"<div class='details-cols'>"
+        f"<div class='dcol'>"
+        f"<div class='dfield'><span class='dk'>Rol</span><span class='dv'>{rol_v}</span></div>"
+        f"<div class='dfield'><span class='dk'>Persoon</span><span class='dv'>{pers_v}</span></div>"
+        f"</div>"
+        f"<div class='dcol'>"
+        f"<div class='dfield'><span class='dk'>Aangemaakt</span><span class='dv'>{_e(_created_full(p.get('created_at')))}</span></div>"
+        f"<div class='dfield'><span class='dk'>Zichtbaar</span><span class='dv'>{vis_v}</span></div>"
+        f"</div></div></div>")
 
     # ---- Omschrijving (inline, omkaderd) ----
     if rw:
