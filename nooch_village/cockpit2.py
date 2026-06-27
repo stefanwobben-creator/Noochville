@@ -117,6 +117,14 @@ ul.clean li:last-child{border-bottom:none}
 .aichip{display:inline-block;background:#EFEAF9;color:#5b3fa6;border-radius:var(--radius-pill);padding:.05rem .5rem;font-size:.74rem;font-weight:600}
 .ai-add{color:var(--subtle);font-size:.8rem;text-decoration:none;cursor:pointer;white-space:nowrap}
 .ai-add:hover{color:#5b3fa6;text-decoration:underline}
+.ai-gift{font-size:1rem;text-decoration:none;cursor:pointer;line-height:1}
+.acc-sub{padding:.15rem 0 .4rem 1.4rem;border-bottom:1px solid var(--border)}
+.sugg{background:#F4F1FB;border:1px solid #E0D7F5;border-radius:var(--radius);padding:.5rem .7rem;margin:.5rem 0}
+.sugg-h{font-weight:700;color:#5b3fa6;font-size:.82rem;margin-bottom:.3rem}
+.koppel{background:#5b3fa6;color:#fff;border:none;border-radius:var(--radius-pill);padding:.15rem .7rem;font-size:.76rem;font-weight:600;cursor:pointer}
+.bagadd{background:none;border:none;box-shadow:none;padding:0;margin-top:.8rem}
+.bagadd>summary{cursor:pointer;color:var(--subtle);font-size:.82rem;list-style:none}
+.bagadd>summary:hover{color:#5b3fa6}
 .frow{display:flex;align-items:flex-start;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--border)}
 .ffocus{background:none;border:none;box-shadow:none;padding:0;margin:0}
 .ffocus>summary{list-style:none;cursor:pointer}
@@ -256,47 +264,49 @@ def _todo(wat: str) -> str:
 def _ai_chip(st: _Stores, t) -> str:
     pa = st.personas.get(t.agent)
     nm = pa.name if pa else t.agent
-    wat = f" · {_e(t.wat)}" if t.wat else ""
-    return f"<span class='aichip'>🤖 {_e(nm)}{wat}</span>"
+    skill = f" · {_e(t.wat)}" if t.wat else ""
+    return f"<span class='aichip'>🤖 {_e(nm)}{skill}</span>"
+
+
+_STOP = {"the", "a", "an", "of", "and", "to", "for", "in", "on", "new", "with", "your",
+         "de", "het", "een", "van", "en", "te", "met", "der", "die", "dat"}
+
+
+def _toks(s: str) -> set[str]:
+    import re
+    return {w for w in re.findall(r"[a-zA-Z]+", (s or "").lower()) if len(w) > 2 and w not in _STOP}
+
+
+def _suggest_for_acc(st: _Stores, role_id: str, acc_index: int, acc_text: str):
+    """v1-matcher: welke (AI, skill) past lexicaal bij deze accountability en is nog niet gekoppeld.
+    Later slimmer (semantisch/skill-tags). Voedt het cadeau-icoon."""
+    attached = {(t.agent, t.wat) for t in st.ai.for_acc(role_id, acc_index)}
+    at = _toks(acc_text)
+    low = (acc_text or "").lower()
+    out = []
+    for p in st.personas.all():
+        for sk in (getattr(p, "skills", None) or []):
+            if (p.id, sk) in attached:
+                continue
+            if (_toks(sk) & at) or (sk.lower() in low):
+                out.append((p, sk))
+    return out
 
 
 def _acc_row(st: _Stores, rec, i: int, text: str, csrf_token: str) -> str:
     tasks = st.ai.for_acc(rec.id, i)
-    chips = "".join(_ai_chip(st, t) for t in tasks)
-    add = ""
+    sub = "".join(f"<div class='acc-sub'>↳ {_ai_chip(st, t)}</div>" for t in tasks)
+    aff = ""
     if csrf_token:
         url = f"/aitask?role={_e(rec.id)}&acc={i}"
-        add = (f"<a class='ai-add js-modal' href='{url}' data-href='{url}' "
-               f"title='autonome AI-taak'>{'+ AI' if not tasks else '✎'}</a>")
+        if _suggest_for_acc(st, rec.id, i, text):
+            aff = (f"<a class='ai-gift js-modal' href='{url}' data-href='{url}' "
+                   f"title='Er is AI-ondersteuning beschikbaar voor deze accountability'>🎁</a>")
+        else:
+            aff = (f"<a class='ai-add js-modal' href='{url}' data-href='{url}' "
+                   f"title='autonome AI-taak'>{'+ AI' if not tasks else '✎'}</a>")
     return (f"<div class='accrow'><div class='acc-text'>{_e(text)}</div>"
-            f"<div class='acc-ai'>{chips}{add}</div></div>")
-
-
-def _autonomous_section(st: _Stores, rec) -> str:
-    """Gegroepeerde 'Autonome AI-taken': op een rol de eigen taken; op een cirkel over alle
-    directe rollen heen (overzicht van wat AI zelfstandig draait)."""
-    rows = ""
-    n = 0
-    if org.is_circle(rec):
-        direct = sorted(org.roles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
-        for r in direct:
-            for t in st.ai.for_role(r.id):
-                accs = r.definition.accountabilities or []
-                acc = accs[t.acc_index] if 0 <= t.acc_index < len(accs) else ""
-                rows += (f"<li><a href='/node?id={_e(r.id)}'>{_e(_name(r))}</a> "
-                         f"<span class='muted'>· {_e(acc)}</span> → {_ai_chip(st, t)}</li>")
-                n += 1
-    else:
-        accs = rec.definition.accountabilities or []
-        for t in st.ai.for_role(rec.id):
-            acc = accs[t.acc_index] if 0 <= t.acc_index < len(accs) else ""
-            rows += f"<li><span class='muted'>{_e(acc)}</span> → {_ai_chip(st, t)}</li>"
-            n += 1
-    if not rows:
-        return ""
-    return (f"<div class='c2-sec'><h3>🤖 Autonome AI-taken ({n})</h3>"
-            f"<p class='muted' style='font-size:.8rem'>Wat AI hier zelfstandig doet; de mens blijft "
-            f"verantwoordelijk en publiceert/keurt goed.</p><ul class='clean'>{rows}</ul></div>")
+            f"<div class='acc-ai'>{aff}</div></div>{sub}")
 
 
 def _overview_html(st: _Stores, rec, csrf_token: str = "") -> str:
@@ -319,7 +329,6 @@ def _overview_html(st: _Stores, rec, csrf_token: str = "") -> str:
     elif accs:
         parts.append("<div class='c2-sec'><h3>Accountabilities</h3><ul class='clean'>"
                      + "".join(f"<li>{_e(x)}</li>" for x in accs) + "</ul></div>")
-    parts.append(_autonomous_section(st, rec))
     if not is_c:
         parts.append(f"<div class='c2-sec'><h3>Role Fillers</h3>{_filler_html(st, rec.id, rec)}</div>")
     return "".join(parts)
@@ -1072,6 +1081,20 @@ def render_aitask(st: _Stores, role_id: str, acc_index: int, csrf_token: str = "
                 f"<input type='hidden' name='acc' value='{acc_index}'>"
                 f"<input type='hidden' name='next' value='{_e(back)}'>")
 
+    def pickform(agent: str, skill: str, label: str, cls: str) -> str:
+        return (f"<form method='post' action='/action' style='display:inline'>{hid()}"
+                f"<input type='hidden' name='pick' value='{_e(agent)}::{_e(skill)}'>"
+                f"<button class='{cls}' type='submit' name='action' value='aitask_add'>{label}</button></form>")
+
+    # 1) Voorgesteld: (AI, skill) die lexicaal bij deze accountability past (het cadeautje).
+    sugg = _suggest_for_acc(st, role_id, acc_index, acc_text)
+    sugg_html = ""
+    if sugg:
+        items = "".join(f"<div class='frow'><span style='flex:1'>🤖 {_e(p.name)} · {_e(sk)}</span>"
+                        f"{pickform(p.id, sk, 'koppel', 'btn ok')}</div>" for p, sk in sugg)
+        sugg_html = (f"<div class='sugg'><div class='sugg-h'>🎁 Voorgesteld</div>{items}</div>")
+
+    # 2) Al gekoppeld: verwijderbaar.
     rows = ""
     for t in st.ai.for_acc(role_id, acc_index):
         rows += (f"<div class='frow'><span style='flex:1'>{_ai_chip(st, t)}</span>"
@@ -1081,28 +1104,48 @@ def render_aitask(st: _Stores, role_id: str, acc_index: int, csrf_token: str = "
                  f"<input type='hidden' name='next' value='{_e(back)}'>"
                  f"<button class='dellink' type='submit' name='action' value='aitask_remove'>verwijderen</button>"
                  f"</form></div>")
+
+    # 3) Selecteren uit een rugzakje (geen vrije tekst): combinaties AI · skill, niet al gekoppeld.
     personas = st.personas.all()
-    if personas:
-        opts = "".join(f"<option value='{_e(p.id)}'>🤖 {_e(p.name)}</option>" for p in personas)
-        add = (f"<div class='pf' style='margin-top:.6rem'><form method='post' action='/action'>{hid()}"
-               f"<label>AI-inwoner</label><select name='agent'>{opts}</select>"
-               f"<label>Wat doet de AI zelfstandig?</label>"
-               f"<input name='wat' placeholder='bijv. stelt conceptteksten op'>"
-               f"<button class='btn ok' type='submit' name='action' value='aitask_add' "
-               f"style='margin-top:.4rem'>Toevoegen</button></form></div>")
+    attached = {(t.agent, t.wat) for t in st.ai.for_acc(role_id, acc_index)}
+    combos = [(p, sk) for p in personas for sk in (p.skills or []) if (p.id, sk) not in attached]
+    if combos:
+        opts = "".join(f"<option value='{_e(p.id)}::{_e(sk)}'>🤖 {_e(p.name)} · {_e(sk)}</option>"
+                       for p, sk in combos)
+        select = (f"<div class='pf'><form method='post' action='/action'>{hid()}"
+                  f"<label>Kies een skill uit het rugzakje van een AI</label>"
+                  f"<select name='pick'>{opts}</select>"
+                  f"<button class='btn ok' type='submit' name='action' value='aitask_add' "
+                  f"style='margin-top:.4rem'>Koppel</button></form></div>")
+    elif personas:
+        select = "<p class='muted'>Alle skills van de AI's zijn hier al gekoppeld, of de rugzakjes zijn leeg.</p>"
     else:
-        add = ("<p class='muted' style='margin-top:.6rem'>Er zijn nog geen AI-inwoners. "
-               "Maak er eerst een aan, dan kun je hier een autonome taak koppelen.</p>")
-    frag = (f"<h2 style='margin-top:0'>Autonome AI-taak</h2>"
+        select = ("<p class='muted'>Er zijn nog geen AI-inwoners. Maak er eerst een aan, "
+                  "dan kun je een skill koppelen.</p>")
+
+    # 4) Rugzak uitbreiden (set-up): een nieuwe skill aan een AI toevoegen.
+    bag = ""
+    if personas:
+        popts = "".join(f"<option value='{_e(p.id)}'>🤖 {_e(p.name)}</option>" for p in personas)
+        bag = (f"<details class='bagadd'><summary>Rugzak van een AI uitbreiden</summary>"
+               f"<form method='post' action='/action'>"
+               f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+               f"<input type='hidden' name='next' value='{_e(back + '&_aitask=' + str(acc_index))}'>"
+               f"<label>AI-inwoner</label><select name='agent'>{popts}</select>"
+               f"<label>Nieuwe skill</label><input name='skill' placeholder='bijv. schrijft de code'>"
+               f"<button class='btn' type='submit' name='action' value='persona_skill_add' "
+               f"style='margin-top:.4rem'>Aan rugzak toevoegen</button></form></details>")
+
+    frag = (f"<h2 style='margin-top:0'>AI op deze accountability</h2>"
             f"<p class='muted'>Accountability: {_e(acc_text) or '—'}</p>"
-            f"<p style='font-size:.82rem;color:var(--gray)'>Hybride hulp tellen we niet; leg hier "
-            f"alleen vast wat de AI <b>zelfstandig</b> doet. De mens blijft verantwoordelijk en "
-            f"publiceert/keurt goed.</p>{rows}{add}")
+            f"<p style='font-size:.82rem;color:var(--gray)'>De mens blijft verantwoordelijk; de AI "
+            f"voert <b>zelfstandig</b> een skill uit z'n rugzakje uit. Je typt niets, je "
+            f"<b>selecteert</b> een skill.</p>{sugg_html}{rows}{select}{bag}")
     if fragment:
         return frag
     main = (f"<div class='c2-main' style='max-width:560px'>"
             f"<div class='c2-bar'><a href='{_e(back)}'>← terug</a></div>{frag}</div>")
-    return _page("Autonome AI-taak", f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>{main}</div>")
+    return _page("AI op accountability", f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>{main}</div>")
 
 
 def _parse_trekker(val: str):
@@ -1197,10 +1240,18 @@ def dispatch(data_dir: str, action: str, form: dict):
             acc_i = int(g("acc"))
         except ValueError:
             acc_i = -1
-        if g("agent") and acc_i >= 0 and st.ai.add(g("role"), acc_i, g("agent"), g("wat")):
-            msg = "🤖 autonome AI-taak toegevoegd"
+        pick = g("pick")
+        if "::" in pick:
+            agent, skill = pick.split("::", 1)
+        else:
+            agent, skill = g("agent"), g("wat")   # fallback (legacy)
+        if agent and acc_i >= 0 and st.ai.add(g("role"), acc_i, agent, skill):
+            msg = "🤖 AI gekoppeld aan accountability"
     elif action == "aitask_remove":
         st.ai.remove(g("tid")); msg = "✓ verwijderd"
+    elif action == "persona_skill_add":
+        if st.personas.add_skill(g("agent"), g("skill")):
+            msg = "✓ skill aan rugzak toegevoegd"
     return nxt, msg
 
 

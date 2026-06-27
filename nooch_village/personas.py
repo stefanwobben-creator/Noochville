@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 
 from nooch_village.util import atomic_write_json
 
@@ -30,6 +30,10 @@ class Persona:
     name: str
     mbti: str = ""
     instructions: str = ""        # vrije personality-/specifieke instructies
+    skills: list[str] = field(default_factory=list)
+    # Rugzakje: wat deze AI-inwoner intrinsiek kan. Anders dan bij mensen (waar het gereedschap
+    # bij de rol hoort) is de capaciteit van een AI eigen aan de agent. Een AI mag nooit buiten
+    # dit rugzakje opereren; een autonome taak op een accountability kiest uit deze lijst.
 
 
 def persona_prompt(p: Persona | dict | None) -> str:
@@ -66,17 +70,42 @@ class PersonaStore:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
         atomic_write_json(self.path, self._items)
 
-    def add(self, name: str, mbti: str = "", instructions: str = "") -> Persona:
+    def add(self, name: str, mbti: str = "", instructions: str = "",
+            skills: list[str] | None = None) -> Persona:
         """Maak een nieuwe inwoner. Naam verplicht; MBTI wordt genormaliseerd naar hoofdletters."""
         name = (name or "").strip()
         if not name:
             raise ValueError("een inwoner heeft een naam nodig")
         mbti = (mbti or "").strip().upper()
         pid = uuid.uuid4().hex[:12]
-        p = Persona(id=pid, name=name[:60], mbti=mbti[:8], instructions=(instructions or "").strip()[:1000])
+        p = Persona(id=pid, name=name[:60], mbti=mbti[:8],
+                    instructions=(instructions or "").strip()[:1000],
+                    skills=[s.strip()[:80] for s in (skills or []) if s.strip()])
         self._items[pid] = asdict(p)
         self._save()
         return p
+
+    def add_skill(self, pid: str, skill: str) -> Persona | None:
+        """Voeg een skill toe aan het rugzakje van een AI-inwoner (idempotent op naam)."""
+        d = self._items.get(pid)
+        skill = (skill or "").strip()[:80]
+        if d is None or not skill:
+            return None
+        lst = d.setdefault("skills", [])
+        if skill not in lst:
+            lst.append(skill)
+            self._save()
+        return Persona(**d)
+
+    def remove_skill(self, pid: str, skill: str) -> Persona | None:
+        d = self._items.get(pid)
+        if d is None:
+            return None
+        lst = d.get("skills", [])
+        if skill in lst:
+            lst.remove(skill)
+            self._save()
+        return Persona(**d)
 
     def get(self, pid: str | None) -> Persona | None:
         if not pid:

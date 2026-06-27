@@ -1,4 +1,4 @@
-"""Autonome AI-taken per accountability (cockpit 2)."""
+"""Autonome AI op accountability (cockpit 2): genest, geselecteerd uit het rugzakje, met cadeau-match."""
 from __future__ import annotations
 
 from nooch_village.ai_tasks import AITaskStore
@@ -7,15 +7,26 @@ from nooch_village import cockpit2
 
 def test_store_add_for_acc_role(tmp_path):
     st = AITaskStore(str(tmp_path / "ai.json"))
-    t = st.add("role_x", 0, "persona_1", "stelt conceptteksten op")
+    t = st.add("role_x", 0, "persona_1", "schrijft de code")
     assert t is not None
     assert [x.id for x in st.for_acc("role_x", 0)] == [t.id]
     assert st.for_acc("role_x", 1) == []
     assert len(st.for_role("role_x")) == 1
     assert st.remove(t.id) and st.for_role("role_x") == []
-    # herladen vanaf schijf
     st.add("role_x", 2, "persona_1", "x")
     assert len(AITaskStore(str(tmp_path / "ai.json")).all()) == 1
+
+
+def test_persona_rugzak(tmp_path):
+    from nooch_village.personas import PersonaStore
+    ps = PersonaStore(str(tmp_path / "p.json"))
+    p = ps.add("Codie", skills=["schrijft de code"])
+    assert p.skills == ["schrijft de code"]
+    ps.add_skill(p.id, "draait testscripts")
+    ps.add_skill(p.id, "schrijft de code")              # idempotent
+    assert ps.get(p.id).skills == ["schrijft de code", "draait testscripts"]
+    ps.remove_skill(p.id, "schrijft de code")
+    assert ps.get(p.id).skills == ["draait testscripts"]
 
 
 def _st(tmp_path):
@@ -24,32 +35,47 @@ def _st(tmp_path):
     return dd, cockpit2._Stores(dd)
 
 
-def test_accountability_toont_ai_markering_en_groep(tmp_path):
+def test_ai_genest_onder_accountability(tmp_path):
     dd, st = _st(tmp_path)
-    noochie = st.personas.add("Noochie")
-    role = "mother_earth__nooch__inmate_in_residence"
-    cockpit2.dispatch(dd, "aitask_add", {"role": [role], "acc": ["0"], "agent": [noochie.id],
-                                         "wat": ["genereert ideeën"], "next": ["/"]})
-    page = cockpit2.render_node(cockpit2._Stores(dd), role, "overview", csrf_token="t")
-    assert "aichip" in page and "Noochie" in page and "genereert ideeën" in page
-    assert "Autonome AI-taken (1)" in page           # gegroepeerde weergave op de rol
-    assert "+ AI" in page                             # markeer-link op accountabilities zonder taak
-
-
-def test_circle_aggregeert_autonome_ai_taken(tmp_path):
-    dd, st = _st(tmp_path)
-    noochie = st.personas.add("Noochie")
+    codie = st.personas.add("Codie", skills=["schrijft de code"])
     role = "mother_earth__nooch__website_developer"
-    cockpit2.dispatch(dd, "aitask_add", {"role": [role], "acc": ["0"], "agent": [noochie.id],
-                                         "wat": ["schrijft code-concept"], "next": ["/"]})
-    page = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth__nooch", "overview", csrf_token="t")
-    assert "Autonome AI-taken (1)" in page and "Website Developer" in page and "schrijft code-concept" in page
+    cockpit2.dispatch(dd, "aitask_add", {"role": [role], "acc": ["0"],
+                                         "pick": [f"{codie.id}::schrijft de code"], "next": ["/"]})
+    page = cockpit2.render_node(cockpit2._Stores(dd), role, "overview", csrf_token="t")
+    assert "acc-sub" in page and "Codie" in page and "schrijft de code" in page
+    # geen los blok meer op de rolpagina
+    assert "Autonome AI-taken" not in page
 
 
-def test_aitask_modal_fragment(tmp_path):
+def test_cadeau_icoon_bij_match(tmp_path):
     dd, st = _st(tmp_path)
-    st.personas.add("Noochie")
-    role = "mother_earth__nooch__inmate_in_residence"
+    # skill 'performance' matcht lexicaal 'Optimzing website performance'
+    st.personas.add("Codie", skills=["performance tuning"])
+    role = "mother_earth__nooch__website_developer"
+    page = cockpit2.render_node(cockpit2._Stores(dd), role, "overview", csrf_token="t")
+    assert "ai-gift" in page and "🎁" in page
+
+
+def test_geen_cadeau_zonder_match(tmp_path):
+    dd, st = _st(tmp_path)
+    st.personas.add("Codie", skills=["iets totaal anders xyz"])
+    role = "mother_earth__nooch__website_developer"
+    page = cockpit2.render_node(cockpit2._Stores(dd), role, "overview", csrf_token="t")
+    assert "🎁" not in page and "+ AI" in page
+
+
+def test_modal_selecteert_uit_rugzak_geen_vrije_tekst(tmp_path):
+    dd, st = _st(tmp_path)
+    codie = st.personas.add("Codie", skills=["schrijft de code"])
+    role = "mother_earth__nooch__website_developer"
     frag = cockpit2.render_aitask(cockpit2._Stores(dd), role, 0, csrf_token="t", fragment=True)
     assert "<!doctype" not in frag.lower()
-    assert "Autonome AI-taak" in frag and "aitask_add" in frag and "zelfstandig" in frag
+    assert "selecteert" in frag and f"{codie.id}::schrijft de code" in frag
+    assert "Rugzak van een AI uitbreiden" in frag
+
+
+def test_persona_skill_add_via_dispatch(tmp_path):
+    dd, st = _st(tmp_path)
+    codie = st.personas.add("Codie")
+    cockpit2.dispatch(dd, "persona_skill_add", {"agent": [codie.id], "skill": ["schrijft de code"], "next": ["/"]})
+    assert cockpit2._Stores(dd).personas.get(codie.id).skills == ["schrijft de code"]
