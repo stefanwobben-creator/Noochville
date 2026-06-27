@@ -151,6 +151,23 @@ def test_ai_kladblok(tmp_path):
     assert kb and kb[0]["who"] == "jij" and kb[0]["text"] == "even sparren"
 
 
+def test_rol_verwijderen_via_overleg(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
+    iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
+    f = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
+    assert "rov-delrole" in f and "Rol verwijderen" in f
+    # maak er een verwijder-voorstel van
+    cockpit2.dispatch(dd, "rov2_setkind", {"iid": [iid], "kind": ["remove_role"], "next": ["/"]})
+    f2 = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
+    assert "Consent — rol verwijderen" in f2 and "terug naar wijzigen" in f2
+    # consent + sluiten -> rol gearchiveerd (verweesd werk = advies, geen blok)
+    cockpit2.dispatch(dd, "rov2_consent", {"iid": [iid], "circle": [C], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_end", {"circle": [C], "next": ["/"]})
+    rec = cockpit2._Stores(dd).records.get(RID)
+    assert rec is None or rec.archived
+
+
 def test_select_en_verwijderen(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})

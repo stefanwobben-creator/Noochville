@@ -199,6 +199,8 @@ ul.clean li:last-child{border-bottom:none}
 .kb-who{font-size:.72rem;font-weight:700;color:var(--subtle)}
 .kb-text{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .55rem;margin-top:.15rem}
 .kb-form textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .55rem}
+.rov-delrole{margin-top:1rem;padding-top:.6rem;border-top:1px solid var(--border)}
+.rov-delrole .flink{color:var(--coral)}
 .rov-by{flex:0 0 auto}
 .av.role{background:var(--green-dark);color:#fff}
 .fkind{font-size:.64rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700;border-radius:var(--radius-pill);padding:.03rem .45rem}
@@ -1225,6 +1227,8 @@ def _rov_initials(text: str):
 def _rov_hard(st: _Stores, item: dict):
     """Mens-regel voor consent: een rol heeft een naam én minstens één accountability nodig
     (purpose is optioneel). Geeft een lijst blokkades terug (leeg = consent kan)."""
+    if item.get("kind") == "remove_role":
+        return []   # verwijderen mag (ook met verweesd werk; dat is advies, geen blok)
     d = _rov_draft(st, item)
     out = []
     if not (d.get("name") or "").strip():
@@ -1369,6 +1373,25 @@ def _rov_editor(st: _Stores, item: dict, csrf: str, back: str, circle_id: str = 
 
     sub = ("this.form.requestSubmit?this.form.requestSubmit():this.form.submit()")
     keep = f"data-reopen='{_e(back)}'"   # blijf na elke bewerking op DIT punt (niet auto-springen)
+    rbase = f"/roloverleg2?circle={circle_id}"
+
+    # Verwijder-voorstel: aparte, simpele weergave (geen veld-editor).
+    if item.get("kind") == "remove_role":
+        nm = _name(st.records.get(item.get("role_id"))) or item.get("title")
+        adv = _rov_signals(st, item)
+        sec = ""
+        if adv:
+            body = "".join(f"<div class='sec-issue let'>📋 {_e(i['msg'])}</div>" for i in adv)
+            sec = f"<div class='sec-block'><div class='sec-kop'>📋 Secretaris (advies)</div>{body}</div>"
+        consent = (f"<form method='post' action='/action'>{hid()}<input type='hidden' name='iid' value='{_e(iid)}'>"
+                   f"<button class='btn no' type='submit' name='action' value='rov2_consent' "
+                   f"data-reopen='{_e(rbase)}'>Consent — rol verwijderen</button></form>")
+        revert = (f"<form method='post' action='/action' {keep}>{hid()}"
+                  f"<input type='hidden' name='kind' value='amend_role'>"
+                  f"<button class='flink' type='submit' name='action' value='rov2_setkind'>← terug naar wijzigen</button></form>")
+        return (f"<div class='rov-editor'><div class='psec-h'>{_IC_INFO}<span>Voorstel · rol verwijderen</span></div>"
+                f"<p>Dit voorstel <b>verwijdert</b> de rol <b>{_e(nm)}</b>.</p>{sec}"
+                f"<div class='rov-consent'>{consent}</div><div style='margin-top:.5rem'>{revert}</div></div>")
     name_f = (f"<form method='post' action='/action' {keep}>{hid()}"
               f"<input type='hidden' name='action' value='rov2_set'><input type='hidden' name='field' value='name'>"
               f"<label class='att-lbl'>Rolnaam</label>"
@@ -1407,7 +1430,6 @@ def _rov_editor(st: _Stores, item: dict, csrf: str, back: str, circle_id: str = 
     if general:
         kop = "⛔ Secretaris: los dit eerst op" if blok else "📋 Secretaris (advies)"
         sec = f"<div class='sec-block'><div class='sec-kop'>{kop}</div>{_iss_html(general)}</div>"
-    rbase = f"/roloverleg2?circle={circle_id}"
     if blok:
         consent = "<button class='btn ok' disabled>Consent</button> <span class='muted'>los de blokkade(s) op</span>"
     else:
@@ -1431,10 +1453,18 @@ def _rov_editor(st: _Stores, item: dict, csrf: str, back: str, circle_id: str = 
                 f"<span>Meedenken met AI{f' ({len(kb)})' if kb else ''}</span></summary>"
                 f"<div class='kb-body'>{kb_msgs}{kb_comp}</div></details>")
 
+    # Rol verwijderen (alleen bij een bestaande rol): maakt er een verwijder-voorstel van.
+    delrole = ""
+    if item.get("kind") == "amend_role":
+        delrole = (f"<div class='rov-delrole'><form method='post' action='/action' {keep}>{hid()}"
+                   f"<input type='hidden' name='kind' value='remove_role'>"
+                   f"<button class='flink' type='submit' name='action' value='rov2_setkind'>Rol verwijderen</button>"
+                   f"</form></div>")
+
     head = f"<div class='psec-h'>{_IC_INFO}<span>Voorstel · {_rov_kindlabel(item['kind'])}</span></div>"
     return (f"<div class='rov-editor'>{head}{name_f}{purpose_f}"
             f"<div class='rov-block'>{acc_b}</div><div class='rov-block'>{dom_b}</div>"
-            f"{sec}<div class='rov-consent'>{consent}</div>{kladblok}</div>")
+            f"{sec}<div class='rov-consent'>{consent}</div>{kladblok}{delrole}</div>")
 
 
 def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: str = "",
@@ -2356,6 +2386,10 @@ def dispatch(data_dir: str, action: str, form: dict):
             msg = "✓ agendapunt toegevoegd"
     elif action == "rov2_remove":
         st.agenda.remove(g("iid")); msg = "🗑 agendapunt verwijderd"
+    elif action == "rov2_setkind":
+        if g("kind") in ("amend_role", "remove_role"):
+            st.agenda.update_fields(g("iid"), kind=g("kind"))
+            msg = "voorstel: rol verwijderen" if g("kind") == "remove_role" else "voorstel: rol wijzigen"
     elif action == "rov2_consent":
         item = st.agenda.get(g("iid"))
         if item is not None:
