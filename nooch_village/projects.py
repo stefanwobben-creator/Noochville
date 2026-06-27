@@ -191,10 +191,11 @@ class ProjectLedger:
              private: bool | None = None, description: str | None = None,
              label: str | None = None) -> bool:
         """Bewerk de inhoud van een project (scope, owner, trekker mens/AI, zichtbaarheid).
-        Status blijft ongemoeid; done-projecten zijn vergrendeld. Lege strings voor person/agent
-        wissen de trekker; None laat het veld ongemoeid. Geeft True bij succes."""
+        Status blijft ongemoeid. Inhoud bewerken mag ook bij een afgerond project (titel/omschrijving
+        van een done-project aanpassen is onschuldig). Lege strings voor person/agent wissen de
+        trekker; None laat het veld ongemoeid. Geeft True bij succes."""
         p = self._projects.get(pid)
-        if p is None or p["status"] in _TERMINAL:
+        if p is None:
             return False
         if scope is not None and str(scope).strip():
             p["scope"] = scope

@@ -17,9 +17,10 @@ def test_detail_overzicht_kop(tmp_path):
     dd, pid = _setup(tmp_path)
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "<!doctype" not in frag.lower()
-    # tweekoloms: zijbalk-details met de kernvelden
-    for k in ("pgrid", "pside", "smeta", "Trekker", "Rol / eigenaar", "Label", "Zichtbaarheid", "Voortgang"):
+    # tweekoloms: zijbalk-details met de kernvelden (Voortgang hoort nu bij de checklist, niet hier)
+    for k in ("pgrid", "pside", "smeta", "Trekker", "Rol / eigenaar", "Label", "Zichtbaarheid", "Aangemaakt"):
         assert k in frag
+    assert "Voortgang" not in frag
     # status-schakelaar (4 kolommen als knoppen)
     assert "swrow" in frag and "Actief" in frag and "Done" in frag
 
@@ -40,14 +41,21 @@ def test_detail_readonly_geen_schakelaar(tmp_path):
 def test_redesign_layout(tmp_path):
     dd, pid = _setup(tmp_path)
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    # titel inline bewerkbaar, …-menu, Details ingeklapt met status erin
-    assert "titleform" in frag and "title-edit" in frag and "cardmenu" in frag
-    assert "detailsbox" in frag and "<dt>Status</dt>" in frag and "swrow" in frag
+    # titel inline bewerkbaar, Details ingeklapt met status + archiveren-link erin
+    assert "titleform" in frag and "title-edit" in frag
+    assert "detailsbox" in frag and "<dt>Status</dt>" in frag and "swrow" in frag and "swlink" in frag
     # omschrijving inline, verrijking-placeholder, en rechterkolom = dialoog
     assert "descform" in frag and "enrich-ghost" in frag
     assert "pdisc" in frag and "Dialoog" in frag
-    # geen apart 'Acties'-blok meer
-    assert "Acties" not in frag
+    # verwijderen onderaan de kaart; geen apart 'Acties'-blok of …-menu meer
+    assert "card-del" in frag and "cardmenu" not in frag and "Acties" not in frag
+
+
+def test_done_project_blijft_bewerkbaar(tmp_path):
+    dd, pid = _setup(tmp_path)
+    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "csrf": ["t"], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_describe", {"pid": [pid], "description": ["toch nog"], "next": ["/"]})
+    assert cockpit2._Stores(dd).projects.get(pid)["description"] == "toch nog"
 
 
 def test_inline_edits_partieel(tmp_path):

@@ -162,7 +162,10 @@ ul.clean li:last-child{border-bottom:none}
 .fieldsave{flex:0 0 auto;border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);padding:.12rem .5rem;font-size:.72rem;cursor:pointer}
 .descform textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .55rem}
 .enrich-add{display:flex;gap:.4rem;flex-wrap:wrap}
-.enrich-ghost{border:1px dashed var(--border);border-radius:var(--radius-pill);padding:.18rem .65rem;font-size:.78rem;color:var(--subtle)}
+.enrich-ghost{background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .7rem;font-size:.8rem;color:var(--gray);font-weight:600}
+.swlink{border:none;background:none;color:var(--subtle);font-size:.78rem;cursor:pointer;text-decoration:underline;padding:.2rem .3rem}
+.swlink:hover{color:var(--green-dark)}
+.card-del{margin-top:1.2rem;padding-top:.6rem;border-top:1px solid var(--border)}
 .pdisc .psec{background:none;border:none;padding:0;margin:0}
 @media(min-width:620px){.pdisc{border-left:1px solid var(--border);padding-left:1.1rem}}
 .pdetail-h h2{margin:.1rem 0 .5rem;font-family:var(--font-display);font-size:1.35rem;line-height:1.2}
@@ -530,6 +533,18 @@ def _age(ts) -> str:
     if d < 365:
         return f"{d//30} mnd oud"
     return f"{d//365} jr oud"
+
+
+_NL_MND = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
+
+
+def _created_full(ts) -> str:
+    """Relatieve leeftijd + absolute datum, bijv. 'vandaag · 27 jun 2026' of '1 week oud · 20 jun 2026'."""
+    if not ts:
+        return "—"
+    import datetime
+    d = datetime.datetime.fromtimestamp(ts)
+    return f"{_age(ts)} · {d.day} {_NL_MND[d.month - 1]} {d.year}"
 
 
 def _trekker_html(st: _Stores, p: dict) -> str:
@@ -1067,24 +1082,16 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                     f"<textarea name='text' rows='2' placeholder='update of reactie…'></textarea>"
                     f"<button class='btn ok' type='submit' name='action' value='proj_feed' "
                     f"style='margin-top:.3rem'>plaatsen</button></form>")
-    discussie = _psec(_IC_CHAT, "Dialoog", feed + composer)
+    discussie = _psec(_IC_CHAT, "Dialoog", composer + feed)   # schrijf-box boven, reacties eronder
 
-    # ---- Titel (inline bewerkbaar) + …-menu (archiveren/verwijderen) ----
+    # ---- Titel (inline bewerkbaar) ----
     if rw:
         title = (f"<form method='post' action='/action' class='titleform'>{hid()}"
                  f"<input class='title-edit' name='scope' value='{_e(_scope_text(p))}' aria-label='projecttitel'>"
                  f"<button class='title-save' type='submit' name='action' value='proj_rename'>opslaan</button></form>")
-        menu = (f"<details class='cardmenu'><summary>⋯</summary><div class='cardmenu-b'>"
-                f"<form method='post' action='/action'>{hid()}<input type='hidden' name='next' value='{_e(back)}'>"
-                f"<button class='menuitem' type='submit' name='action' value='proj_archive'>Archiveren</button></form>"
-                f"<form method='post' action='/action'>{hid()}<input type='hidden' name='next' value='{_e(back)}'>"
-                f"<button class='menuitem danger' type='submit' name='action' value='proj_delete' "
-                f"onclick=\"return confirm('Definitief verwijderen? Archiveren bewaart het project.')\">Verwijderen</button>"
-                f"</form></div></details>")
     else:
         title = f"<h2 class='ptitle-ro'>{_e(_scope_text(p))}</h2>"
-        menu = ""
-    head = f"<div class='pdetail-h'>{title}{menu}</div>"
+    head = f"<div class='pdetail-h'>{title}</div>"
 
     # ---- Details (ingeklapt blok boven de omschrijving): status + bewerkbare velden ----
     if rw:
@@ -1095,7 +1102,11 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
             on = " on" if status in statuses else ""
             sw_btns += (f"<form method='post' action='/action' style='display:inline'>{hid()}{to}"
                         f"<button class='sw{on}' type='submit' name='action' value='{act}'>{_e(label)}</button></form>")
-        status_ctl = f"<div class='swrow'>{sw_btns}</div>"
+        # archiveren als subtiel linkje naast de statusknoppen
+        arch = (f"<form method='post' action='/action' style='display:inline'>{hid()}"
+                f"<input type='hidden' name='next' value='{_e(back)}'>"
+                f"<button class='swlink' type='submit' name='action' value='proj_archive'>archiveren</button></form>")
+        status_ctl = f"<div class='swrow'>{sw_btns}{arch}</div>"
         trekker_ctl = (f"<form method='post' action='/action' class='fieldform'>{hid()}"
                        f"<select name='trekker'>{_trekker_options(st, p.get('person') or '', p.get('agent') or '')}</select>"
                        f"<button class='fieldsave' type='submit' name='action' value='proj_settrekker'>ok</button></form>")
@@ -1114,15 +1125,13 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         label_ctl = (f"<span class='dot' style='background:{_LABELS[p['label']]}'></span>{_e(p.get('label'))}"
                      if _LABELS.get(p.get("label")) else "<span class='muted'>—</span>")
         vis_ctl = "Alleen deze cirkel" if p.get("private") else "Hele cirkel-boom"
-    prog = f"{pr[2]}% ({pr[0]}/{pr[1]})" if pr else "<span class='muted'>—</span>"
     details_body = ("<dl class='smeta'>"
                     f"<dt>Status</dt><dd>{status_ctl}</dd>"
                     f"<dt>Trekker</dt><dd>{trekker_ctl}</dd>"
                     f"<dt>Rol / eigenaar</dt><dd>{owner_link}</dd>"
                     f"<dt>Label</dt><dd>{label_ctl}</dd>"
+                    f"<dt>Aangemaakt</dt><dd>{_e(_created_full(p.get('created_at')))}</dd>"
                     f"<dt>Zichtbaarheid</dt><dd>{vis_ctl}</dd>"
-                    f"<dt>Voortgang</dt><dd>{prog}</dd>"
-                    f"<dt>Aangemaakt</dt><dd>{_e(_age(p.get('created_at')))}</dd>"
                     "</dl>")
     details = (f"<details class='detailsbox'><summary>{_IC_INFO}<span>Details</span></summary>"
                f"<div class='detailsbox-b'>{details_body}</div></details>")
@@ -1149,11 +1158,20 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
 
     checklist = _psec(_IC_CHECK, "Checklist", checklist_body)
 
+    # Verwijderen: onderaan de kaart (archiveren staat in Details).
+    del_link = ""
+    if rw:
+        del_link = (f"<div class='card-del'><form method='post' action='/action'>{hid()}"
+                    f"<input type='hidden' name='next' value='{_e(back)}'>"
+                    f"<button class='dellink' type='submit' name='action' value='proj_delete' "
+                    f"onclick=\"return confirm('Definitief verwijderen? Archiveren bewaart het project.')\">"
+                    f"Verwijderen</button></form></div>")
+
     labelbar = ""
     if _LABELS.get(p.get("label")):
         labelbar = f"<div class='clabel' style='background:{_LABELS[p['label']]};height:8px;border-radius:4px;margin-bottom:.6rem'></div>"
 
-    maincol = head + details + omschrijving + verrijking + checklist
+    maincol = head + details + omschrijving + verrijking + checklist + del_link
     detail = (f"{labelbar}{_banner(msg)}"
               f"<div class='pgrid'><div class='pmain'>{maincol}</div>"
               f"<aside class='pside pdisc'>{discussie}</aside></div>")
