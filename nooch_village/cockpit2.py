@@ -80,10 +80,12 @@ ul.clean li:last-child{border-bottom:none}
 .pbar{height:6px;background:var(--border);border-radius:999px;overflow:hidden;width:70px}
 .pbar>div{height:100%;background:var(--green)}
 .pcol.over{outline:2px dashed var(--green);outline-offset:-2px;background:var(--green-tint)}
-.qadd{margin-top:.2rem}
-.qadd>summary{list-style:none;cursor:pointer;color:var(--gray);font-size:.84rem;padding:.4rem .5rem;border-radius:var(--radius)}
-.qadd>summary:hover{background:rgba(27,27,27,.06);color:var(--ink)}
+/* override de basis-details-stijl (wit kaartje) → ghost in de kolomkleur, Trello-stijl */
+.qadd{margin-top:.15rem;background:none;border:none;box-shadow:none;padding:0}
+.qadd>summary{list-style:none;cursor:pointer;color:var(--gray);font-family:var(--font-body);font-weight:500;font-size:.84rem;padding:.4rem .55rem;border-radius:var(--radius)}
+.qadd>summary:hover{background:rgba(27,27,27,.07);color:var(--ink)}
 .qadd>summary::-webkit-details-marker{display:none}
+.qadd[open]{padding:0}
 .qadd[open]>summary{display:none}
 .qadd-form{display:flex;flex-direction:column;gap:.4rem;margin-top:.1rem}
 .qadd-form textarea{width:100%;box-sizing:border-box;padding:.45rem .55rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow);font:inherit;font-size:.85rem;resize:vertical}
