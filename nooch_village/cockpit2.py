@@ -170,22 +170,21 @@ ul.clean li:last-child{border-bottom:none}
 .titleform:focus-within .title-save{opacity:1}
 .ptitle-ro{margin:.1rem 0;font-family:var(--font-display)}
 .cardmenu{position:relative;flex:0 0 auto}
-.cardmenu>summary{list-style:none;cursor:pointer;color:var(--gray);font-size:1.25rem;line-height:1;padding:.1rem .45rem;border-radius:var(--radius)}
+.cardmenu>summary{list-style:none;cursor:pointer;color:var(--gray);font-size:1.25rem;line-height:1;padding:.25rem .6rem;border:1px solid transparent;border-radius:var(--radius)}
 .cardmenu>summary::-webkit-details-marker{display:none}
-.cardmenu>summary:hover{background:var(--cream-2)}
+.cardmenu>summary:hover,.cardmenu[open]>summary{border-color:var(--border);background:var(--surface)}
 .cardmenu-b{position:absolute;right:0;top:2rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.3rem;z-index:5;min-width:150px}
 .menuitem{display:block;width:100%;text-align:left;border:none;background:none;padding:.4rem .55rem;border-radius:var(--radius);cursor:pointer;font-size:.85rem;color:var(--ink)}
 .menuitem:hover{background:var(--cream-2)}
 .menuitem.danger{color:var(--coral)}
 .detailsbox{margin:0 0 1.1rem;border:1px solid var(--border);border-radius:var(--radius);padding:.7rem .8rem}
 .detailsbox .psec-h{margin-bottom:.5rem}
-.details-cols{display:grid;grid-template-columns:1fr;gap:0 .4rem}
-@media(min-width:520px){.details-cols{grid-template-columns:1fr 1fr;gap:0 1.4rem}}
-.dcol{min-width:0}
-.dfield{display:flex;gap:.6rem;align-items:baseline;padding:.18rem 0;text-align:left}
-.dk{flex:0 0 5.2rem;color:var(--subtle);font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
-.dv{flex:1 1 auto;min-width:0;font-size:.88rem}
-.visform,.visform label{font-size:.85rem;margin:0}
+.details-cols{display:grid;grid-template-columns:1fr;gap:.1rem 1.6rem}
+@media(min-width:520px){.details-cols{grid-template-columns:1fr 1fr}}
+.dcol{display:grid;grid-template-columns:auto 1fr;gap:.3rem .7rem;align-content:start;min-width:0}
+.dk{align-self:baseline;color:var(--subtle);font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;font-weight:700;padding-top:.12rem}
+.dv{min-width:0;font-size:.88rem}
+.visform,.visform label{font-size:.85rem;margin:0;display:inline}
 .fieldform{display:flex;gap:.4rem;align-items:center}
 .fieldform select{flex:1 1 auto;min-width:0}
 .fieldsave{flex:0 0 auto;border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);padding:.12rem .5rem;font-size:.72rem;cursor:pointer}
@@ -1307,8 +1306,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                          f"🤖 Vraag {_e(ai.name)} om mee te denken</button></form>")
     discussie = _psec(_IC_CHAT, "Dialoog", composer + feed)   # schrijf-box boven, reacties eronder
 
-    # ---- Status: chip in de header, wisselen via het …-menu (+ archiveren/verwijderen) ----
-    status_chip = _proj_chip(status)
+    # ---- Status zit volledig in het …-menu (huidige status gemarkeerd); geen los chip-label ----
     menu = ""
     if rw:
         st_items = ""
@@ -1335,7 +1333,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     else:
         title = f"<h2 class='ptitle-ro'>{_e(_scope_text(p))}</h2>"
     head = (f"<div class='pcard-head'>{title}"
-            f"<div class='pcard-head-r'>{status_chip}{menu}</div></div>")
+            f"<div class='pcard-head-r'>{menu}</div></div>")
 
     # ---- Details: kader zonder achtergrond, tweekoloms, links uitgelijnd, altijd open ----
     owner = p.get("owner", "")
@@ -1364,12 +1362,12 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         f"<div class='detailsbox'><div class='psec-h'>{_IC_INFO}<span>Details</span></div>"
         f"<div class='details-cols'>"
         f"<div class='dcol'>"
-        f"<div class='dfield'><span class='dk'>Rol</span><span class='dv'>{rol_v}</span></div>"
-        f"<div class='dfield'><span class='dk'>Persoon</span><span class='dv'>{pers_v}</span></div>"
+        f"<span class='dk'>Rol</span><span class='dv'>{rol_v}</span>"
+        f"<span class='dk'>Persoon</span><span class='dv'>{pers_v}</span>"
         f"</div>"
         f"<div class='dcol'>"
-        f"<div class='dfield'><span class='dk'>Aangemaakt</span><span class='dv'>{_e(_created_full(p.get('created_at')))}</span></div>"
-        f"<div class='dfield'><span class='dk'>Zichtbaar</span><span class='dv'>{vis_v}</span></div>"
+        f"<span class='dk'>Aangemaakt</span><span class='dv'>{_e(_created_full(p.get('created_at')))}</span>"
+        f"<span class='dk'>Zichtbaar</span><span class='dv'>{vis_v}</span>"
         f"</div></div></div>")
 
     # ---- Omschrijving (inline, omkaderd) ----
