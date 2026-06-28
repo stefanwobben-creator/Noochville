@@ -82,6 +82,9 @@ ul.clean li:last-child{border-bottom:none}
 .pcol-h{font-family:var(--font-display);font-weight:700;font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:var(--green-dark);margin-bottom:.3rem}
 .pcol .card{padding:.4rem .5rem;margin:.25rem 0;font-size:.85rem}
 .dellink{background:none;border:none;color:var(--coral);font:inherit;font-size:.78rem;text-decoration:underline;cursor:pointer;padding:0;margin-left:.3rem}
+.kpi-exp{color:var(--subtle);display:inline-flex;align-items:center;margin-left:.3rem}
+.kpi-exp:hover{color:var(--green-dark)}
+.kpi-exp svg{width:15px;height:15px}
 .card.arch{opacity:.6}
 .pcard{cursor:pointer;position:relative;transition:box-shadow .1s,border-color .1s}
 .pcard:hover{border-color:var(--green);box-shadow:0 0 0 2px var(--green-tint)}
@@ -1923,7 +1926,9 @@ def _kpi_data_row(st: _Stores, item: dict, csrf: str) -> str:
                f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=metrics'>"
                f"<input name='value' inputmode='decimal' placeholder='meting' size='6'>"
                f"<button class='btn ok sm' type='submit' name='action' value='m_sample'>+</button></form>")
-    exp = (f"<a class='dellink' href='/metric_export?mid={_e(item['id'])}' "
+    # grondslag (definitie + meetmoment) op de rij zelf, naast de naam (klik op de ⓘ)
+    info = _grondslag_popover(_grondslag(st, f"kpi:{item['id']}", "value"))
+    exp = (f"<a class='kpi-exp' href='/metric_export?mid={_e(item['id'])}' "
            f"title='Metingen exporteren (CSV)'>{_IC_DL}</a>")
     rm = ""
     if csrf:
@@ -1934,7 +1939,7 @@ def _kpi_data_row(st: _Stores, item: dict, csrf: str) -> str:
               f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='mid' value='{_e(item['id'])}'>"
               f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=metrics'>"
               f"<button class='dellink' type='submit' name='action' value='m_remove'>✕</button></form>")
-    return (f"<div class='kpidata-row'><span class='kpidata-n'>{_e(item['name'])}{src}</span>"
+    return (f"<div class='kpidata-row'><span class='kpidata-n'>{_e(item['name'])}{src} {info}</span>"
             f"<span class='kpidata-v'>{val}{unit}</span>{_spark_svg(pts)}{add}{exp}{rm}</div>")
 
 
