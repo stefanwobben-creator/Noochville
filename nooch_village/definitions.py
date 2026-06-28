@@ -76,9 +76,11 @@ _DEFINITION_SEED: tuple[dict, ...] = (
     {"name": "Gemiddelde orderwaarde (Shopify)", "source": "shopify", "unit": "EUR", "direction": "up",
      "cadence": "maand", "meettype": "venster", "window": "30d",
      "definition": "Omzet gedeeld door aantal orders (AOV)."},
-    {"name": "Conversieratio (Shopify×Plausible)", "source": "shopify", "unit": "%", "direction": "up",
+    {"name": "Conversie (orders ÷ unieke bezoekers)", "source": "shopify", "unit": "%", "direction": "up",
      "cadence": "maand", "meettype": "venster", "window": "30d",
-     "definition": "Orders gedeeld door bezoekers in dezelfde periode."},
+     "definition": "Shopify-orders gedeeld door unieke bezoekers (Plausible) in dezelfde periode. "
+                   "LET OP: niet gelijk aan Shopify's eigen conversie, die sessie-gebaseerd is "
+                   "(orders ÷ sessies); sessies > unieke bezoekers, dus dit getal valt hoger uit."},
     # Google Trends (interesse)
     {"name": "Zoekinteresse (Trends)", "source": "trends", "unit": "index", "direction": "up",
      "cadence": "week", "meettype": "snapshot",
@@ -123,6 +125,26 @@ _DEFINITION_SEED: tuple[dict, ...] = (
     {"name": "Besteed budget", "source": "budget", "unit": "EUR", "direction": "down",
      "cadence": "maand", "meettype": "cumulatief",
      "definition": "Totaal besteed bedrag over alle budgetlijnen."},
+    # Werkoverleg / facilitator (gezondheid van de tactical meetings) — intern gemeten,
+    # geen externe API. Per overleg vastgelegd; de facilitator rapporteert maandelijks.
+    {"name": "Tevredenheid werkoverleg", "source": "werkoverleg", "unit": "0-10", "direction": "up",
+     "cadence": "week", "meettype": "snapshot",
+     "definition": "Gemiddelde check-out-score (0-10) van de aanwezigen per overleg."},
+    {"name": "Behandelde spanningen", "source": "werkoverleg", "unit": "n", "direction": "",
+     "cadence": "week", "meettype": "snapshot",
+     "definition": "Aantal in de agenda behandelde spanningen per overleg."},
+    {"name": "Info-uitkomsten", "source": "werkoverleg", "unit": "n", "direction": "",
+     "cadence": "week", "meettype": "snapshot",
+     "definition": "Aantal spanningen dat als 'informatie delen' is afgehandeld."},
+    {"name": "Projecten uit overleg", "source": "werkoverleg", "unit": "n", "direction": "",
+     "cadence": "week", "meettype": "snapshot",
+     "definition": "Aantal spanningen dat tot een nieuw project leidde."},
+    {"name": "Acties uit overleg", "source": "werkoverleg", "unit": "n", "direction": "",
+     "cadence": "week", "meettype": "snapshot",
+     "definition": "Aantal spanningen dat tot een losse of gekoppelde actie leidde."},
+    {"name": "Doorlooptijd werkoverleg", "source": "werkoverleg", "unit": "min", "direction": "down",
+     "cadence": "week", "meettype": "snapshot",
+     "definition": "Duur van het overleg in minuten (korter bij gelijke output is efficiënter)."},
 )
 
 # de velden die een versie van een definitie vastlegt (subset van het indicator-schema)
