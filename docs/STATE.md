@@ -34,6 +34,8 @@ verhuisd. Metrics-tab is nu zuiver lees/uitvoer-oppervlak.
   (werkoverleg: je bekijkt KPI's, maakt ze niet aan).
 - **2 tests bijgewerkt** — zoeklocatie voor cadence/meettype-fields en catalogus-picker verplaatst naar
   de juiste render-functies (`render_catalog` resp. `render_kpi_composer`).
+- **Opschoon-clusters getest en gecommit** (`ac7ef79`): volledige suite groen (8 pre-existing failures
+  ongewijzigd — LLM/Gemini-afhankelijk of test-isolatie-flaky, bevestigd op vorige commit).
 
 ### Sessie 2026-06-25 (vervolg 4): triage-UX, governance-grounding, roloverleg
 
