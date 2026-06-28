@@ -34,6 +34,7 @@ from nooch_village.metrics import MetricStore, window_cutoff, filter_samples
 from nooch_village.notifications import NotifStore
 from nooch_village.noochie import NoochieStore
 from nooch_village.roloverleg import Agenda
+from nooch_village.werkoverleg import WerkoverlegStore, STEPS as _WO_STEPS
 from nooch_village import ai_match
 from nooch_village import org
 from nooch_village.glassfrog_import import import_org, nooch_poc_org
@@ -412,6 +413,14 @@ ul.clean li:last-child{border-bottom:none}
 .kpidata-row{display:flex;align-items:center;gap:.6rem;padding:.35rem 0;border-bottom:1px solid var(--border);flex-wrap:wrap}
 .kpidata-n{flex:1 1 auto;min-width:0;font-weight:600}
 .kpidata-v{font-variant-numeric:tabular-nums;color:var(--green-dark);font-weight:700}
+/* Werkoverleg: stap-navigatie (hergebruikt rov-grid + rov-foot) */
+.wo-nav{display:flex;flex-direction:column;gap:.2rem}
+.wo-step{display:flex;align-items:center;gap:.5rem;text-decoration:none;color:var(--gray);padding:.4rem .5rem;border-radius:var(--radius);font-size:.86rem}
+.wo-step:hover{background:var(--cream-2)}
+.wo-step.on{background:var(--green-tint);color:var(--green-dark);font-weight:700}
+.wo-num{display:inline-flex;align-items:center;justify-content:center;width:1.4rem;height:1.4rem;border-radius:50%;background:var(--cream-2);color:var(--gray);font-size:.72rem;font-weight:700;flex:0 0 auto}
+.wo-step.on .wo-num{background:var(--green);color:#fff}
+.wo-sec{font-size:.8rem;margin-top:.4rem}
 .pdetail-h h2{margin:.1rem 0 .5rem;font-family:var(--font-display);font-size:1.35rem;line-height:1.2}
 .psec{margin:0 0 1.15rem}
 .psec-h{display:flex;align-items:center;gap:.4rem;color:var(--subtle);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:.45rem}
@@ -502,6 +511,7 @@ class _Stores:
         self.noochie = NoochieStore(os.path.join(dd, "noochie.json"))
         self.checklists = ChecklistStore(os.path.join(dd, "checklists.json"))
         self.metrics = MetricStore(os.path.join(dd, "metrics.json"))
+        self.werk = WerkoverlegStore(os.path.join(dd, "werkoverleg.json"))
 
 
 def _bootstrap(dd: str) -> None:
@@ -1041,7 +1051,7 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "else{var data=new URLSearchParams(new FormData(f));"
         "if(e.submitter&&e.submitter.name){data.set(e.submitter.name,e.submitter.value);}opts={method:'POST',body:data};}"
         "fetch('/action',opts).then(function(){"
-        "if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'||act==='rov2_end'){shut();}"
+        "if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'||act==='rov2_end'||act==='wo_close'){shut();}"
         "else{var r=f.getAttribute('data-reopen');if(r){last=r;}reopen();}});});});"
         "bd.querySelectorAll('textarea').forEach(mentionWire);"
         "bd.querySelectorAll('a.js-modal[data-href]').forEach(function(a){"
@@ -1726,9 +1736,11 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     if is_c and csrf_token:
         rov_url = f"/roloverleg2?circle={_e(node_id)}"
         open_cls = "btn ok" if _rov_items(st, node_id) else "btn"   # groen = lopend roloverleg
+        wo_url = f"/werkoverleg?circle={_e(node_id)}"
+        wo_cls = "btn ok" if st.werk.is_open(node_id) else "btn"    # groen = lopend werkoverleg
         meet = (f"<div class='c2-meet'>"
                 f"<a class='{open_cls} js-modal' href='{rov_url}' data-href='{rov_url}'>Governance meeting</a>"
-                f"<span class='btn grey' title='nog te bouwen'>Tactical meeting</span></div>")
+                f"<a class='{wo_cls} js-modal' href='{wo_url}' data-href='{wo_url}'>Tactical meeting</a></div>")
     else:
         meet = ""
     main = (f"<div class='c2-main'><div class='c2-bar'>{crumb}</div>"
@@ -2366,6 +2378,71 @@ def _noochie_chrome() -> str:
           "var nv=document.getElementById('novl');if(nv)nv.addEventListener('click',function(e){if(e.target===nv)nv.style.display='none';});"
           "})();</script>")
     return rail + overlay + js
+
+
+def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_token: str = "",
+                       fragment: bool = False) -> str:
+    """Werkoverleg-modal: links de vaste stap-navigatie, rechts de inhoud per stap. De inhoud
+    HERGEBRUIKT de bestaande schermen (members/checklists/metrics/projecten). Alleen de secretaris
+    opent en sluit. Brok 1: frame + ingebedde schermen; de overleg-specifieke stappen volgen."""
+    crec = st.records.get(circle_id)
+    if crec is None or not org.is_circle(crec):
+        return ("<p class='muted'>Geen cirkel.</p>" if fragment
+                else _page("Niet gevonden", "<p>Geen cirkel.</p>"))
+    base = f"/werkoverleg?circle={circle_id}"
+    sec = "<div class='wo-sec muted'>Alleen de secretaris opent en sluit dit overleg.</div>"
+
+    def hid(nextu):
+        return (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                f"<input type='hidden' name='circle' value='{_e(circle_id)}'>"
+                f"<input type='hidden' name='next' value='{_e(nextu)}'>")
+
+    if not st.werk.is_open(circle_id):
+        start = ""
+        if csrf_token:
+            su = f"{base}&step=checkin"
+            start = (f"<form method='post' action='/action'>{hid(su)}"
+                     f"<button class='btn ok' type='submit' name='action' value='wo_open' "
+                     f"data-reopen='{_e(su)}'>Werkoverleg starten</button></form>")
+        body = (f"<h2 style='margin-top:0'>Werkoverleg — {_e(_name(crec))}</h2>"
+                f"<p class='muted'>Vaste volgorde: check-in, checklist, metrics, projecten, agenda, "
+                f"check-out, sluiten.</p>{sec}<div style='margin-top:1rem'>{start}</div>")
+        return body if fragment else _page(
+            "Werkoverleg", f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>{body}</div>")
+
+    cur = step if step in dict(_WO_STEPS) else "checkin"
+    nav = ""
+    for i, (k, lbl) in enumerate(_WO_STEPS, 1):
+        url = f"{base}&step={k}"
+        nav += (f"<a class='wo-step{(' on' if k == cur else '')} js-modal' href='{url}' data-href='{url}'>"
+                f"<span class='wo-num'>{i}</span>{_e(lbl)}</a>")
+    left = _psec(_IC_CHECK, "Overleg", f"<div class='wo-nav'>{nav}</div>")
+
+    if cur == "checkin":
+        content = _members_html(st, crec)            # presence-interactie komt in brok 2
+    elif cur == "checklist":
+        content = _checklists_tab_html(st, crec, csrf_token, "due")
+    elif cur == "metrics":
+        content = _metrics_tab_html(st, crec, csrf_token, "maand")
+    elif cur == "projecten":
+        content = _projects_tab_html(st, crec, csrf_token, group="")
+    elif cur == "agenda":
+        content = _todo("Agenda opbouwen + spanningen verwerken — volgende brok.")
+    elif cur == "checkout":
+        content = _todo("Check-out (tevredenheid 0-10 per persoon) — volgende brok.")
+    else:
+        content = _todo("Samenvatting + sluiten met confetti — volgende brok.")
+
+    foot = (f"<div class='rov-foot'><form method='post' action='/action'>{hid(f'/node?id={circle_id}')}"
+            f"<button class='btn ok' type='submit' name='action' value='wo_close'>Sluit overleg</button></form>"
+            f"<span class='muted'>loopt {st.werk.duration_min(circle_id)} min</span></div>")
+    detail = (f"<h2 style='margin-top:0'>Werkoverleg — {_e(_name(crec))}</h2>"
+              f"<div class='pgrid rov-grid'><div class='pmain'>{left}</div>"
+              f"<aside class='pdisc'>{content}</aside></div>{foot}")
+    if fragment:
+        return detail
+    return _page("Werkoverleg", f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>"
+                 f"<div class='c2-main' style='max-width:1000px'>{detail}</div></div>")
 
 
 def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: str = "",
@@ -3351,6 +3428,10 @@ def dispatch(data_dir: str, action: str, form: dict):
     elif action == "rov2_end":
         done = _rov_apply(st)
         msg = f"✓ overleg gesloten — {len(done)} doorgevoerd" if done else "overleg gesloten"
+    elif action == "wo_open":
+        st.werk.open(g("circle")); msg = "✓ werkoverleg gestart"
+    elif action == "wo_close":
+        st.werk.close(g("circle")); msg = "✓ werkoverleg gesloten"
     elif action == "noochie_send":
         s = st.noochie
         if g("text").strip():
@@ -3525,6 +3606,12 @@ def make_handler(data_dir: str, csrf_token: str):
                 return
             if path == "/noochie":
                 self._send(render_noochie(st, csrf_token, (qs.get("ctx") or [""])[0]))
+                return
+            if path == "/werkoverleg":
+                fr = (qs.get("fragment") or [""])[0] == "1"
+                self._send(_frag(render_werkoverleg(st, (qs.get("circle") or [""])[0],
+                                                    (qs.get("step") or ["checkin"])[0],
+                                                    csrf_token=csrf_token, fragment=fr), fr))
                 return
             if path == "/roloverleg2":
                 fr = (qs.get("fragment") or [""])[0] == "1"
