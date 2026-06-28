@@ -420,6 +420,8 @@ ul.clean li:last-child{border-bottom:none}
 .wo-step.on{background:var(--green-tint);color:var(--green-dark);font-weight:700}
 .wo-num{display:inline-flex;align-items:center;justify-content:center;width:1.4rem;height:1.4rem;border-radius:50%;background:var(--cream-2);color:var(--gray);font-size:.72rem;font-weight:700;flex:0 0 auto}
 .wo-step.on .wo-num{background:var(--green);color:#fff}
+.wo-step.done{color:var(--green-dark)}
+.wo-step.done .wo-num{background:var(--green);color:#fff}
 .wo-sec{font-size:.8rem;margin-top:.4rem}
 .wo-mems:focus{outline:none}
 .wo-mem{display:flex;align-items:center;gap:.6rem;padding:.4rem .5rem;border-radius:var(--radius);border:1px solid transparent;border-bottom:1px solid var(--border)}
@@ -431,9 +433,21 @@ ul.clean li:last-child{border-bottom:none}
 .cl-num{width:3.2rem;border:1px solid var(--border);border-radius:var(--radius);padding:.15rem .35rem;text-align:right}
 .cl-val{font-variant-numeric:tabular-nums;color:var(--green-dark);font-weight:700;margin-left:.3rem}
 .cl-rep{display:inline-flex;gap:.25rem;align-items:center}
+.row-danger{margin-left:.7rem;padding-left:.7rem;border-left:1px solid var(--border);opacity:.6}
+.row-danger:hover{opacity:1}
 .wo-kpitabs{display:flex;flex-wrap:wrap;gap:.3rem;margin-bottom:.6rem}
 .wo-focus .mtab{margin-top:.5rem}
 .wo-outcomes{margin-top:.9rem;display:flex;flex-direction:column;gap:.5rem}
+.wo-ocd{border:1px solid var(--border);border-radius:var(--radius)}
+.wo-ocd>summary{cursor:pointer;list-style:none;padding:.4rem .6rem;font-weight:600;font-size:.86rem}
+.wo-ocd>summary::-webkit-details-marker{display:none}
+.wo-ocd>summary:hover{background:var(--cream-2)}
+.wo-ocd[open]>summary{border-bottom:1px solid var(--border)}
+.wo-ocd .wo-oc{padding:.5rem .6rem}
+.wo-scale{display:inline-flex;flex-wrap:wrap;gap:.2rem}
+.wo-sc{width:1.7rem;height:1.7rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer;font-size:.78rem;color:var(--gray)}
+.wo-sc.on{background:var(--green);color:#fff;border-color:var(--green)}
+.wo-avg{font-weight:700;color:var(--green-dark)}
 .wo-oc{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
 .wo-oc input,.wo-oc textarea,.wo-oc select{flex:1 1 12rem;min-width:0;border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .45rem}
 .wo-oc button{flex:0 0 auto}
@@ -1304,8 +1318,9 @@ def _cl_row(st: _Stores, item: dict, csrf: str) -> str:
         rep = "" if status is None else (f"<span class='cl-check {'ok' if status else 'no'} on'>"
                                          f"{'✓' if status else '✗'}</span>")
         rm = ""
+    danger = f"<span class='row-danger'>{rm}</span>" if rm else ""
     return (f"<div class='cl-row'><div class='cl-main'><span class='cl-desc'>{_e(item['description'])}</span> {tgt}{valbadge}</div>"
-            f"<div class='cl-act'>{_cl_spark(item)}<span class='cl-checks'>{rep}</span>{rm}</div></div>")
+            f"<div class='cl-act'>{_cl_spark(item)}<span class='cl-checks'>{rep}</span>{danger}</div></div>")
 
 
 def _checklists_tab_html(st: _Stores, rec, csrf: str = "", flt: str = "due") -> str:
@@ -1590,6 +1605,12 @@ def _agg(res):
 
 def _render_form(res, form, target=None):
     unit = res.get("unit", "")
+    kind = res.get("kind")
+    # Vorm/dimensie-mismatch: val terug op een zinnige vorm i.p.v. een lege melding.
+    if form in ("verdeling", "tabel") and kind != "breakdown":
+        form = "trend" if kind == "series" else "getal"
+    if form == "trend" and kind != "series":
+        form = "getal"
     if form == "trend":
         pts = res.get("points") or []
         return (f"<div class='tile-trend'><span class='kpi-val sm'>{_num(pts[-1][1] if pts else None)}</span>"
@@ -1614,10 +1635,12 @@ def _render_form(res, form, target=None):
         pct = int(min(100, v / t * 100)) if t else 0
         return (f"<div class='goal'><span class='kpi-val sm'>{_num(v)} <span class='kpi-unit'>/ {_num(t)}</span></span>"
                 f"<span class='bar-t'><span class='bar-f' style='width:{pct}%'></span></span></div>")
-    # getal
+    # getal — leeg (None) is iets anders dan de waarde 0
     v = _agg(res)
-    u = f" <span class='kpi-unit'>{_e(unit)}</span>" if unit and v is not None else ""
-    return f"<div class='kpi-val'>{_num(v)}{u}</div>"
+    if v is None:
+        return "<div class='kpi-val'><span class='muted' style='font-size:.9rem'>geen data</span></div>"
+    u = f" <span class='kpi-unit'>{_e(unit)}</span>" if unit else ""
+    return f"<div class='kpi-val'>{v:g}{u}</div>"
 
 
 def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str) -> str:
@@ -2396,6 +2419,9 @@ def _noochie_chrome() -> str:
                "<div class='noo-head'><span>🐸 Noochie</span><button type='button' class='noo-x'>✕</button></div>"
                "<div id='noo-body'></div></div></div>")
     js = ("<script>(function(){"
+          "document.addEventListener('submit',function(e){var f=e.target;"
+          "var c=f&&f.getAttribute&&f.getAttribute('data-confirm');"
+          "if(c&&!window.confirm(c)){e.preventDefault();e.stopPropagation();}},true);"
           "function ctxLabel(){var el=document.querySelector('.c2-main h2,.c2-main h1,h2,h1');"
           "return (el?el.textContent:document.title||'').trim().slice(0,80);}"
           "function load(show,ctx){fetch('/noochie?fragment=1&ctx='+encodeURIComponent(ctx!=null?ctx:ctxLabel()))"
@@ -2445,7 +2471,11 @@ def _wo_checkin(st: _Stores, crec, csrf: str) -> str:
         leave = "" if present else "<span class='wo-leave muted'>op verlof — taken gepauzeerd</span>"
         rows += (f"<div class='wo-mem{'' if present else ' absent'}'><span class='av'>{_e(_initials(p.name))}</span>"
                  f"<span class='wo-mem-n'>{_e(p.name)}</span>{leave}<span class='cl-checks'>{ctrl}</span></div>")
-    return (f"<div class='c2-sec'><h3>Check-in</h3>"
+    allbtn = ""
+    if csrf:
+        allbtn = (f"<form method='post' action='/action'>{_wo_hid(csrf, crec.id, nxt)}"
+                  f"<button class='btn sm' type='submit' name='action' value='wo_present_all'>Allen aanwezig</button></form>")
+    return (f"<div class='c2-sec'><div class='cl-head'><h3>Check-in</h3>{allbtn}</div>"
             f"<p class='muted' style='font-size:.8rem'>Wie doet mee? Klik of gebruik ↑/↓ en dan "
             f"<b>v</b> (aanwezig) / <b>x</b> (afwezig). ✗ = op verlof: niet aanwezig en taken pauzeren.</p>"
             f"<div class='wo-mems' tabindex='0'>{rows}</div></div>")
@@ -2569,19 +2599,24 @@ def _wo_triage(st: _Stores, crec, csrf: str, item: dict) -> str:
                 f"<select name='value' onchange='{sub}'><option value=''>—</option>{ropts}</select></form></div>"
               + setf("need", "Wat heb je nodig?", note.get("need", ""), ta=True))
 
-    def outcome_form(otype, label, extra="", btncls="btn"):
-        return (f"<form method='post' action='/action' {keep} class='wo-oc'>{_wo_hid(csrf, crec.id, base)}"
+    # Progressive disclosure: kies eerst het type, dan verschijnt het juiste veld. Gelijkwaardig
+    # (geen primary-kleur die naar één uitkomst stuurt).
+    def oc_details(otype, summary, inner):
+        return (f"<details class='wo-ocd'><summary>{summary}</summary>"
+                f"<form method='post' action='/action' {keep} class='wo-oc'>{_wo_hid(csrf, crec.id, base)}"
                 f"<input type='hidden' name='iid' value='{_e(iid)}'><input type='hidden' name='otype' value='{otype}'>"
-                f"{extra}<button class='{btncls} sm' type='submit' name='action' value='wo_ag_resolve'>{label}</button></form>")
+                f"{inner}<button class='btn sm' type='submit' name='action' value='wo_ag_resolve'>Vastleggen</button></form></details>")
 
-    info = outcome_form("info", "Informatie delen",
-                        "<input name='detail' placeholder='wat deel/geef je?' autocomplete='off'>")
-    proj = outcome_form("project", "Project toevoegen",
-                        f"<select name='owner'>{ropts}</select>"
-                        f"<input name='detail' placeholder='scope van het project' autocomplete='off'>", "btn ok")
-    rov = outcome_form("roloverleg", "Punt voor roloverleg",
-                       "<textarea name='detail' rows='2' placeholder='kans / probleem / behoefte / eerste rol-schets'></textarea>")
-    nm = outcome_form("nevermind", "Nevermind", "", "btn")
+    info = oc_details("info", "Informatie delen",
+                      "<input name='detail' placeholder='wat deel/geef je?' autocomplete='off'>")
+    proj = oc_details("project", "Project toevoegen",
+                      f"<select name='owner'>{ropts}</select>"
+                      f"<input name='detail' placeholder='scope van het project' autocomplete='off'>")
+    rov = oc_details("roloverleg", "Punt voor roloverleg",
+                     "<textarea name='detail' rows='2' placeholder='kans / probleem / behoefte / eerste rol-schets'></textarea>")
+    nm = (f"<form method='post' action='/action' {keep} class='wo-oc'>{_wo_hid(csrf, crec.id, base)}"
+          f"<input type='hidden' name='iid' value='{_e(iid)}'><input type='hidden' name='otype' value='nevermind'>"
+          f"<button class='flink' type='submit' name='action' value='wo_ag_resolve'>Niet nodig</button></form>")
     noochie = (f"<button class='btn sm' type='button' onclick=\"window.noochieAsk&&noochieAsk('{_e(item['title'])}')\">"
                f"🐸 Vraag Noochie om hulp</button>")
     # secretaris-signaal (licht): mis je info/scope?
@@ -2589,7 +2624,7 @@ def _wo_triage(st: _Stores, crec, csrf: str, item: dict) -> str:
     if not (note.get("spanning") or "").strip():
         hint = "<div class='sec-issue let'>📋 Secretaris: noteer kort de spanning zodat 'm te verwerken is.</div>"
     return (f"<div class='c2-sec'>{head}<p><b>{_e(item['title'])}</b></p>{hint}{fields}"
-            f"<div class='wo-outcomes'><div class='sec-kop'>Uitkomst</div>{info}{proj}{rov}{nm}</div>"
+            f"<div class='wo-outcomes'><div class='sec-kop'>Uitkomst kiezen</div>{info}{proj}{rov}{nm}</div>"
             f"<div style='margin-top:.6rem'>{noochie}</div></div>")
 
 
@@ -2600,19 +2635,24 @@ def _wo_checkout(st: _Stores, crec, csrf: str) -> str:
     scores = st.werk.checkout(crec.id)
     if not ppl:
         return "<div class='c2-sec'><h3>Check-out</h3><p class='muted'>Geen leden.</p></div>"
+    vals = [v for v in scores.values() if isinstance(v, int)]
+    avg = f"{round(sum(vals) / len(vals), 1)}/10" if vals else "—"
     rows = ""
     for p in ppl:
         cur = scores.get(p.id)
-        opts = "".join(f"<option value='{n}'{' selected' if cur == n else ''}>{n}</option>" for n in range(0, 11))
-        sel = (f"<form method='post' action='/action' style='display:inline'>{_wo_hid(csrf, crec.id, nxt)}"
-               f"<input type='hidden' name='pid' value='{_e(p.id)}'>"
-               f"<select name='score' onchange='this.form.requestSubmit?this.form.requestSubmit():this.form.submit()' "
-               f"name='action'><option value=''>—</option>{opts}</select>"
-               f"<input type='hidden' name='action' value='wo_checkout'></form>") if csrf else (
-            f"<span class='kpidata-v'>{cur if cur is not None else '—'}</span>")
+        if csrf:
+            scale = "".join(
+                f"<form method='post' action='/action' style='display:inline'>{_wo_hid(csrf, crec.id, nxt)}"
+                f"<input type='hidden' name='pid' value='{_e(p.id)}'><input type='hidden' name='score' value='{n}'>"
+                f"<button class='wo-sc{(' on' if cur == n else '')}' type='submit' name='action' value='wo_checkout'>{n}</button></form>"
+                for n in range(0, 11))
+            sel = f"<span class='wo-scale'>{scale}</span>"
+        else:
+            sel = f"<span class='kpidata-v'>{cur if cur is not None else '—'}</span>"
         rows += (f"<div class='wo-mem'><span class='av'>{_e(_initials(p.name))}</span>"
                  f"<span class='wo-mem-n'>{_e(p.name)}</span>{sel}</div>")
-    return (f"<div class='c2-sec'><h3>Check-out</h3>"
+    return (f"<div class='c2-sec'><div class='cl-head'><h3>Check-out</h3>"
+            f"<span class='muted'>gemiddeld: <span class='wo-avg'>{avg}</span></span></div>"
             f"<p class='muted' style='font-size:.8rem'>Op een schaal van 0-10: hoe tevreden ben je met "
             f"de uitkomst van dit overleg?</p>{rows}</div>")
 
@@ -2633,8 +2673,7 @@ def _wo_summary(st: _Stores, crec, csrf: str) -> str:
             + rij("Projecten toegevoegd", s["projecten"])
             + rij("Punten voor roloverleg", s["roloverleg"])
             + rij("Gemiddelde tevredenheid", tev)
-            + rij("Duur", f"{s['duur_min']} min")
-            + rij("Volgende overleg", "n.t.b. (uit secretaris-note)"))
+            + rij("Duur", f"{s['duur_min']} min"))
     return (f"<div class='c2-sec'><h3>Samenvatting</h3><div class='wo-sum'>{body}</div>"
             f"<p class='muted' style='font-size:.8rem;margin-top:.6rem'>Klik “Sluit overleg” onderaan: "
             f"alle uitkomsten worden verwerkt en het overleg sluit.</p></div>")
@@ -2671,11 +2710,16 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
             "Werkoverleg", f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>{body}</div>")
 
     cur = step if step in dict(_WO_STEPS) else "checkin"
+    st.werk.mark_visited(circle_id, cur)                 # voortgang: bezochte stappen
+    visited = set(st.werk.visited(circle_id))
     nav = ""
     for i, (k, lbl) in enumerate(_WO_STEPS, 1):
         url = f"{base}&step={k}"
-        nav += (f"<a class='wo-step{(' on' if k == cur else '')} js-modal' href='{url}' data-href='{url}'>"
-                f"<span class='wo-num'>{i}</span>{_e(lbl)}</a>")
+        done = k in visited and k != cur
+        num = "✓" if done else str(i)
+        cls = "wo-step" + (" on" if k == cur else "") + (" done" if done else "")
+        nav += (f"<a class='{cls} js-modal' href='{url}' data-href='{url}'>"
+                f"<span class='wo-num'>{num}</span>{_e(lbl)}</a>")
     left = _psec(_IC_CHECK, "Overleg", f"<div class='wo-nav'>{nav}</div>")
 
     if cur == "checkin":
@@ -2693,7 +2737,9 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
     else:
         content = _wo_summary(st, crec, csrf_token)
 
-    foot = (f"<div class='rov-foot'><form method='post' action='/action'>{hid(f'/node?id={circle_id}')}"
+    foot = (f"<div class='rov-foot'><form method='post' action='/action' "
+            f"data-confirm='Overleg sluiten en alle uitkomsten verwerken? Dit kan niet ongedaan.'>"
+            f"{hid(f'/node?id={circle_id}')}"
             f"<button class='btn ok' type='submit' name='action' value='wo_close'>Sluit overleg</button></form>"
             f"<span class='muted'>loopt {st.werk.duration_min(circle_id)} min</span></div>")
     detail = (f"<h2 style='margin-top:0'>Werkoverleg — {_e(_name(crec))}</h2>"
@@ -3695,6 +3741,10 @@ def dispatch(data_dir: str, action: str, form: dict):
     elif action == "wo_presence":
         st.werk.set_presence(g("circle"), g("pid"), g("present") == "1")
         msg = "✓ aanwezig" if g("present") == "1" else "✗ afwezig (taken gepauzeerd)"
+    elif action == "wo_present_all":
+        for p in _members_of_circle(st, g("circle")):
+            st.werk.set_presence(g("circle"), p.id, True)
+        msg = "✓ allen aanwezig"
     elif action == "wo_ag_add":
         naam, by = _rov_initials(g("naam"))
         if st.werk.agenda_add(g("circle"), naam, by=by):

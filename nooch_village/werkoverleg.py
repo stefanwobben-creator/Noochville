@@ -41,6 +41,18 @@ class WerkoverlegStore:
     def is_open(self, circle: str) -> bool:
         return (self._m.get(circle) or {}).get("status") == "open"
 
+    def mark_visited(self, circle: str, step: str) -> None:
+        st = self._m.get(circle)
+        if st is None:
+            return
+        vis = st.setdefault("visited", [])
+        if step and step not in vis:
+            vis.append(step)
+            self._save()
+
+    def visited(self, circle: str) -> list:
+        return (self._m.get(circle) or {}).get("visited", [])
+
     def open(self, circle: str) -> dict:
         """Start een overleg (idempotent zolang het open is)."""
         st = self._m.get(circle)
