@@ -31,6 +31,7 @@ from nooch_village.projects import ProjectLedger
 from nooch_village.ai_tasks import AITaskStore
 from nooch_village.checklists import ChecklistStore, CADENCES, CADENCE_LABEL
 from nooch_village.metrics import MetricStore, window_cutoff, filter_samples
+from nooch_village.metric_schema import CADANS_LABEL, MEETTYPE_LABEL
 from nooch_village.notifications import NotifStore
 from nooch_village.noochie import NoochieStore
 from nooch_village.roloverleg import Agenda
@@ -1785,22 +1786,43 @@ def _grondslag(st: _Stores, source: str, measure: str) -> dict:
         it = st.metrics.get(source[4:]) or {}
         return {"definitie": it.get("definition", ""), "eenheid": it.get("unit", ""),
                 "bron": "Bron-KPI" if it.get("source") else "Handmatig (jij voert in)",
-                "richting": it.get("direction", ""), "drempel": it.get("threshold")}
+                "richting": it.get("direction", ""), "drempel": it.get("threshold"),
+                "cadans": it.get("cadence", ""), "meettype": it.get("meettype", ""),
+                "venster": it.get("window", "")}
     if source.startswith("werk:"):
         d, u, r = _WERK_GRONDSLAG.get(measure, ("", "", ""))
-        return {"definitie": d, "eenheid": u, "bron": "Werkoverleg-archief", "richting": r, "drempel": None}
+        return {"definitie": d, "eenheid": u, "bron": "Werkoverleg-archief", "richting": r,
+                "drempel": None, "cadans": "maand", "meettype": "snapshot", "venster": ""}
     d, u, b, r = _SOURCE_GRONDSLAG.get(f"{source}|{measure}", ("", "", "", ""))
-    return {"definitie": d, "eenheid": u, "bron": b, "richting": r, "drempel": None}
+    return {"definitie": d, "eenheid": u, "bron": b, "richting": r, "drempel": None,
+            "cadans": "", "meettype": "", "venster": ""}
 
 
 def _grondslag_popover(g: dict) -> str:
     rij = lambda k, v: f"<div class='gr-row'><span class='gr-k'>{k}</span><span>{_e(str(v))}</span></div>" if v else ""
+    # meetmoment: cadans (hoe vaak) + meettype (hoe een waarde geldt) + eventueel venster
+    cad = CADANS_LABEL.get(g.get("cadans"), "")
+    mt = MEETTYPE_LABEL.get(g.get("meettype"), "")
+    meet = ", ".join(x for x in (cad, mt) if x)
+    if g.get("venster"):
+        meet = f"{meet} ({g['venster']})" if meet else g["venster"]
     body = (rij("Definitie", g.get("definitie") or "— (nog niet vastgelegd)")
             + rij("Eenheid", g.get("eenheid")) + rij("Bron", g.get("bron"))
             + rij("Richting", _RICHTING.get(g.get("richting"), "—"))
-            + (rij("Drempel", g.get("drempel")) if g.get("drempel") is not None else ""))
+            + (rij("Drempel", g.get("drempel")) if g.get("drempel") is not None else "")
+            + rij("Meetmoment", meet))
     return (f"<details class='tile-info'><summary title='grondslag'>{_IC_INFO}</summary>"
             f"<div class='gr-pop'>{body}</div></details>")
+
+
+def _definition_datalist(st: _Stores) -> str:
+    """Bestaande definities (eigen KPI's + ingebouwde grondslagen) als datalist, zodat je een
+    bestaande grondslag hergebruikt i.p.v. een nieuwe te verzinnen (vergelijkbaarheid)."""
+    defs = {it.get("definition", "").strip() for it in st.metrics._items.values()
+            if it.get("kind") == "kpi" and it.get("definition", "").strip()}
+    defs |= {d for (d, *_rest) in _SOURCE_GRONDSLAG.values() if d}
+    opts = "".join(f"<option value='{_e(d)}'>" for d in sorted(defs))
+    return f"<datalist id='gr-defs'>{opts}</datalist>"
 
 
 def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str) -> str:
@@ -1868,6 +1890,26 @@ def _goal_options(st: _Stores, rec) -> str:
     return out
 
 
+def _metric_csv(st: _Stores, mid: str) -> tuple[str, str] | None:
+    """(bestandsnaam, csv-tekst) met alle metingen van een KPI; None als de KPI niet bestaat."""
+    it = st.metrics.get(mid)
+    if it is None or it.get("kind") != "kpi":
+        return None
+    raw = _source_samples(st.dd, it["source"]) if it.get("source") else it.get("samples", [])
+    pts = filter_samples(raw, None)
+    import csv as _csv
+    import datetime as _dt
+    import io as _io
+    buf = _io.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(["datum", "waarde", "eenheid"])
+    for at, v in pts:
+        dt = _dt.datetime.fromtimestamp(at).strftime("%Y-%m-%d %H:%M")
+        w.writerow([dt, v, it.get("unit", "")])
+    safe = "".join(c if c.isalnum() else "_" for c in (it.get("name") or "kpi"))[:40]
+    return f"{safe}.csv", buf.getvalue()
+
+
 def _kpi_data_row(st: _Stores, item: dict, csrf: str) -> str:
     raw = _source_samples(st.dd, item["source"]) if item.get("source") else item.get("samples", [])
     pts = filter_samples(raw, None)
@@ -1881,14 +1923,19 @@ def _kpi_data_row(st: _Stores, item: dict, csrf: str) -> str:
                f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=metrics'>"
                f"<input name='value' inputmode='decimal' placeholder='meting' size='6'>"
                f"<button class='btn ok sm' type='submit' name='action' value='m_sample'>+</button></form>")
+    exp = (f"<a class='dellink' href='/metric_export?mid={_e(item['id'])}' "
+           f"title='Metingen exporteren (CSV)'>{_IC_DL}</a>")
     rm = ""
     if csrf:
-        rm = (f"<form method='post' action='/action' style='display:inline'>"
+        # destructief: vraagt bevestiging (en wijst op export) — een KPI met historie is niet terug te halen
+        conf = (f"&#39;{_e(item['name'])}&#39; en alle metingen verwijderen? "
+                "Dit kan niet ongedaan worden. Exporteer eventueel eerst de data.")
+        rm = (f"<form method='post' action='/action' style='display:inline' data-confirm='{conf}'>"
               f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='mid' value='{_e(item['id'])}'>"
               f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=metrics'>"
               f"<button class='dellink' type='submit' name='action' value='m_remove'>✕</button></form>")
     return (f"<div class='kpidata-row'><span class='kpidata-n'>{_e(item['name'])}{src}</span>"
-            f"<span class='kpidata-v'>{val}{unit}</span>{_spark_svg(pts)}{add}{rm}</div>")
+            f"<span class='kpidata-v'>{val}{unit}</span>{_spark_svg(pts)}{add}{exp}{rm}</div>")
 
 
 def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "maand", nav: str = "") -> str:
@@ -1925,10 +1972,18 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "maand", nav:
                   f"<select name='pick'><option value='manual'>Nieuwe KPI (handmatig)</option>{src_opts}</select>"
                   f"<input name='name' placeholder='Naam (bij handmatig)' autocomplete='off'>"
                   f"<input name='unit' placeholder='Eenheid (€, %, stuks)' autocomplete='off'>"
-                  f"<input name='definition' placeholder='Definitie: wat telt mee? (grondslag)' autocomplete='off'>"
+                  f"<input name='definition' list='gr-defs' placeholder='Definitie: wat telt mee? (grondslag — kies bestaande of typ nieuw)' autocomplete='off'>"
+                  f"{_definition_datalist(st)}"
                   f"<select name='direction'><option value=''>Richting (geen)</option>"
                   f"<option value='up'>hoger = beter</option><option value='down'>lager = beter</option></select>"
                   f"<input name='threshold' inputmode='decimal' placeholder='Drempel (signaal, optioneel)' autocomplete='off'>"
+                  f"<select name='cadence' title='meetmoment: hoe vaak'>"
+                  + "".join(f"<option value='{k}'{' selected' if k == 'ad-hoc' else ''}>meet: {_e(v)}</option>"
+                            for k, v in CADANS_LABEL.items())
+                  + f"</select>"
+                  f"<select name='meettype' title='meetmoment: hoe een waarde geldt'>"
+                  + "".join(f"<option value='{k}'>{_e(v)}</option>" for k, v in MEETTYPE_LABEL.items())
+                  + f"</select>"
                   f"<button class='btn ok sm' type='submit' name='action' value='m_add_kpi'>KPI toevoegen</button></form></details>")
     out += f"<div class='c2-sec'><div class='cl-head'><h3>Eigen KPI's</h3>{define}</div>{rows}</div>"
 
@@ -3256,6 +3311,7 @@ _IC_GEAR = _ic("<circle cx='12' cy='12' r='3'/><path d='M19 12a7 7 0 0 0-.1-1l2-
 _IC_LINK = _ic("<path d='M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1'/><path d='M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1'/>")
 _IC_CLOCK = _ic("<circle cx='12' cy='12' r='9'/><polyline points='12 7 12 12 15 14'/>")
 _IC_FILE = _ic("<path d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z'/><path d='M14 3v5h5'/>")
+_IC_DL = _ic("<path d='M12 4v10'/><polyline points='8 11 12 15 16 11'/><line x1='5' y1='19' x2='19' y2='19'/>")
 
 
 def _parse_multipart(body: bytes, boundary: str):
@@ -4085,7 +4141,9 @@ def dispatch(data_dir: str, action: str, form: dict):
             msg = "✓ KPI uit data toegevoegd" if it else "⛔ onbekende bron-KPI"
         else:
             it = st.metrics.add_kpi(g("node"), g("name"), g("unit"), definition=g("definition"),
-                                    direction=g("direction"), threshold=g("threshold"))
+                                    direction=g("direction"), threshold=g("threshold"),
+                                    cadence=g("cadence") or "ad-hoc", meettype=g("meettype") or "snapshot",
+                                    window=g("window"))
             msg = "✓ KPI toegevoegd" if it else "⛔ geef een naam"
     elif action == "m_add_link":
         it = st.metrics.add_link(g("node"), g("name"), g("url"))
@@ -4147,9 +4205,11 @@ def make_handler(data_dir: str, csrf_token: str):
             self.end_headers()
             self.wfile.write(b)
 
-        def _send_bytes(self, data: bytes, content_type: str):
+        def _send_bytes(self, data: bytes, content_type: str, filename: str = ""):
             self.send_response(200)
             self.send_header("Content-Type", content_type)
+            if filename:
+                self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -4224,6 +4284,13 @@ def make_handler(data_dir: str, csrf_token: str):
                                                     (qs.get("iid") or [""])[0],
                                                     csrf_token=csrf_token, fragment=fr,
                                                     chat=(qs.get("chat") or [""])[0] == "1"), fr))
+                return
+            if path == "/metric_export":
+                res = _metric_csv(st, (qs.get("mid") or [""])[0])
+                if res is None:
+                    self._send("<p>KPI niet gevonden</p>", 404); return
+                fname, body = res
+                self._send_bytes(body.encode("utf-8"), "text/csv; charset=utf-8", fname)
                 return
             if path == "/file":
                 p = st.projects.get((qs.get("pid") or [""])[0])

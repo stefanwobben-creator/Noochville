@@ -14,6 +14,7 @@ import os
 import time
 import uuid
 
+from nooch_village.metric_schema import normalize as _normalize_indicator
 from nooch_village.util import atomic_write_json
 
 
@@ -81,21 +82,19 @@ class MetricStore:
         return it
 
     def add_kpi(self, node: str, name: str, unit: str = "", source: str = "",
-                definition: str = "", direction: str = "", threshold=None) -> dict | None:
-        name = (name or "").strip()
-        if not node or not name:
+                definition: str = "", direction: str = "", threshold=None,
+                cadence: str = "ad-hoc", meettype: str = "snapshot", window: str = "") -> dict | None:
+        if not node:
             return None
-        try:
-            thr = float(threshold) if str(threshold or "").strip() not in ("", "None") else None
-        except (TypeError, ValueError):
-            thr = None
+        # grondslag + meetmoment worden gevalideerd/genormaliseerd door het indicator-schema
+        # (GAAP/IRIS: wat telt mee, eenheid, richting, drempel; meetmoment: cadans + meettype).
+        spec = _normalize_indicator(name=name, unit=unit, source=source, definition=definition,
+                                    direction=direction, threshold=threshold, cadence=cadence,
+                                    meettype=meettype, window=window)
+        if spec is None:                       # ongeldig (lege naam): KPI niet aanmaken
+            return None
         mid = uuid.uuid4().hex[:12]
-        # grondslag-laag (GAAP/IRIS): wat telt mee, eenheid, richting (hoger/lager=beter), drempel
-        it = {"id": mid, "kind": "kpi", "node": node, "name": name[:120],
-              "unit": (unit or "").strip()[:24], "source": (source or "").strip(),
-              "definition": (definition or "").strip()[:300],
-              "direction": direction if direction in ("up", "down") else "",
-              "threshold": thr, "samples": [], "created_at": time.time()}
+        it = {"id": mid, "kind": "kpi", "node": node, **spec, "samples": [], "created_at": time.time()}
         self._items[mid] = it
         self._save()
         return it

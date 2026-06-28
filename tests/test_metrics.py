@@ -121,6 +121,53 @@ def test_handmatige_kpi_wordt_bron_in_wizard(tmp_path):
     assert "NPS: NPS · over tijd" in page
 
 
+def test_meetmoment_schema_normalisatie(tmp_path):
+    # Pydantic-schema valideert/normaliseert: meetmoment (cadans + meettype) + onzin valt terug
+    m = MetricStore(str(tmp_path / "m.json"))
+    k = m.add_kpi(RID, "Bezoekers", "n", cadence="week", meettype="venster", window="7d")
+    assert k["cadence"] == "week" and k["meettype"] == "venster" and k["window"] == "7d"
+    k2 = m.add_kpi(RID, "X", cadence="onzin", meettype="zwabber", direction="zijwaarts", threshold="nan")
+    assert k2["cadence"] == "ad-hoc" and k2["meettype"] == "snapshot"
+    assert k2["direction"] == "" and k2["threshold"] is None
+    # lege naam => geen KPI
+    assert m.add_kpi(RID, "   ") is None
+
+
+def test_meetmoment_in_form_en_popover(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "m_add_kpi", {"node": [RID], "pick": ["manual"], "name": ["Voorraad"],
+                                        "unit": ["paar"], "cadence": ["dag"], "meettype": ["snapshot"],
+                                        "next": ["/"]})
+    it = [i for i in cockpit2._Stores(dd).metrics.for_node(RID) if i["kind"] == "kpi"][0]
+    assert it["cadence"] == "dag"
+    page = cockpit2.render_node(cockpit2._Stores(dd), RID, "metrics", csrf_token="t")
+    # form heeft meetmoment-velden + definitie-datalist (hergebruik bestaande definitie)
+    assert "name='cadence'" in page and "name='meettype'" in page and "id='gr-defs'" in page
+    g = cockpit2._grondslag(cockpit2._Stores(dd), f"kpi:{it['id']}", "value")
+    assert g["cadans"] == "dag"
+
+
+def test_kpi_export_csv(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "m_add_kpi", {"node": [RID], "pick": ["manual"], "name": ["Conversie"],
+                                        "unit": ["%"], "next": ["/"]})
+    mid = [i for i in cockpit2._Stores(dd).metrics.for_node(RID) if i["kind"] == "kpi"][0]["id"]
+    cockpit2.dispatch(dd, "m_sample", {"mid": [mid], "value": ["4.2"], "next": ["/"]})
+    res = cockpit2._metric_csv(cockpit2._Stores(dd), mid)
+    assert res is not None
+    fname, body = res
+    assert fname == "Conversie.csv" and "datum,waarde,eenheid" in body and "4.2" in body
+    assert cockpit2._metric_csv(cockpit2._Stores(dd), "bestaatniet") is None
+
+
+def test_verwijderen_vraagt_bevestiging(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "m_add_kpi", {"node": [RID], "pick": ["manual"], "name": ["NPS"], "next": ["/"]})
+    page = cockpit2.render_node(cockpit2._Stores(dd), RID, "metrics", csrf_token="t")
+    # delete heeft data-confirm + er is een exportlink
+    assert "data-confirm=" in page and "verwijderen?" in page and "/metric_export?mid=" in page
+
+
 def test_link_metric(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "m_add_link", {"node": [C], "name": ["Jaarcijfers"],
