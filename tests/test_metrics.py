@@ -261,21 +261,6 @@ def test_burnup_zonder_doel_vraagt_koppeling(tmp_path):
     assert "Koppel een doel" in page
 
 
-def test_co2_vermeden_berekend(tmp_path):
-    dd = _dd(tmp_path)
-    # berekende bron in de wizard + correcte rekensom (13,6 - 4,75) x paren verkocht
-    page0 = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
-    assert "CO2 vermeden: Vermeden (cumulatief)" in page0
-    cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": ["co2_avoided|avoided|none"],
-                                       "form": ["getal"], "target": [""], "next": ["/"]})
-    val = cockpit2._co2_avoided(cockpit2._Stores(dd))
-    assert val is not None and val > 0
-    page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
-    # waarde + eenheid + voorlopig-badge + bewijs-link in de grondslag
-    assert f"{val:g}" in page and "kg CO2e" in page
-    assert "voorlopig" in page and "bewijs ↗" in page
-
-
 def test_link_metric(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "m_add_link", {"node": [C], "name": ["Jaarcijfers"],

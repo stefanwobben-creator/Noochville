@@ -1694,30 +1694,6 @@ def _shopify_window(dd: str):
     return None
 
 
-# Reference, don't copy: geen hardcoded PCF/conventioneel. De waarden komen uit de catalogus
-# (gezaghebbende definitie-`waarde`); hier staat alleen de naam-verwijzing + de bewijs-link.
-_CO2_PCF_DEF = "CO2 per paar"
-_CO2_CONV_DEF = "CO2 conventioneel (referentie)"
-_CO2_BRON_URL = "/carbon-footprint-of-shoes"
-
-
-def _def_waarde(st: _Stores, name: str):
-    d = st.defs.by_name(name)
-    cur = st.defs.current(d["id"]) if d else None
-    return (cur or {}).get("waarde") if cur else None
-
-
-def _co2_avoided(st: _Stores):
-    """Cumulatief vermeden CO2 = (conventioneel - Nooch PCF) x paren verkocht (Shopify).
-    PCF en conventioneel worden uit de catalogus gelezen, nooit gehardcode (reference, don't copy)."""
-    pcf, conv = _def_waarde(st, _CO2_PCF_DEF), _def_waarde(st, _CO2_CONV_DEF)
-    w = _shopify_window(st.dd) or {}
-    pairs = w.get("pairs_sold")
-    if not all(isinstance(x, (int, float)) for x in (pcf, conv, pairs)):
-        return None
-    return round((conv - pcf) * pairs, 1)
-
-
 def _sources_for(st: _Stores, rec):
     """Zelf-beschrijvende bron-catalogus voor de tegel-wizard: elke bron declareert measures + dims.
     Op een cirkel tellen ook de handmatige KPI's van de onderliggende rollen mee."""
@@ -1729,8 +1705,6 @@ def _sources_for(st: _Stores, rec):
          "measures": [("pairs_sold", "Paren verkocht"), ("orders", "Orders"),
                       ("revenue", "Omzet"), ("aov", "Gem. orderwaarde")],
          "dims": [("none", "totaal"), ("country", "per land"), ("product", "per product")]},
-        {"id": "co2_avoided", "label": "CO2 vermeden",
-         "measures": [("avoided", "Vermeden (cumulatief)")], "dims": [("none", "totaal")]},
     ]
     # Werkoverleg-gezondheid (facilitator): leest het archief van de cirkel waar deze node onder valt.
     circle = rec.id if is_c else getattr(rec, "parent", None)
@@ -1807,8 +1781,6 @@ def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff):
             return {"kind": "breakdown", "rows": [(p, n) for p, n in w.get("top_products", [])]}
         unit = "EUR" if measure in ("revenue", "aov") else ("paren" if measure == "pairs_sold" else "")
         return {"kind": "number", "value": w.get(measure), "unit": unit}
-    if source == "co2_avoided":
-        return {"kind": "number", "value": _co2_avoided(st), "unit": "kg CO2e"}
     if source.startswith("werk:"):
         return _werk_fetch(st, source[5:], measure, dim, cutoff)
     if source.startswith("kpi:"):
@@ -2027,18 +1999,6 @@ def _grondslag(st: _Stores, source: str, measure: str) -> dict:
                 "venster": it.get("window", ""), "meetwijze": it.get("meetwijze", ""),
                 "benchmark": it.get("benchmark", ""), "bron_url": it.get("bron_url", ""),
                 "verificatie": it.get("verificatie", "")}
-    if source == "co2_avoided":
-        pcf, conv = _def_waarde(st, _CO2_PCF_DEF), _def_waarde(st, _CO2_CONV_DEF)
-        formule = (f"(conventioneel {_num(conv)} − Nooch PCF {_num(pcf)}) × paren verkocht"
-                   if pcf is not None and conv is not None
-                   else "(conventioneel − Nooch PCF) × paren verkocht — waarden ontbreken in de catalogus")
-        # erft 'voorlopig' zolang de PCF-definitie voorlopig is (reference, don't copy)
-        ver = (st.defs.current(st.defs.by_name(_CO2_PCF_DEF)["id"]) or {}).get("verificatie", "") \
-            if st.defs.by_name(_CO2_PCF_DEF) else ""
-        return {"definitie": formule + ".", "eenheid": "kg CO2e",
-                "bron": "IRIS+ OI2764 / berekend (ISO 14067)", "richting": "up", "drempel": None,
-                "cadans": "maand", "meettype": "cumulatief", "venster": "", "meetwijze": "systeem",
-                "benchmark": "", "bron_url": _CO2_BRON_URL, "verificatie": ver}
     if source.startswith("werk:"):
         d, u, r = _WERK_GRONDSLAG.get(measure, ("", "", ""))
         return {"definitie": d, "eenheid": u, "bron": "Werkoverleg-archief", "richting": r,
