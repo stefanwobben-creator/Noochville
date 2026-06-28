@@ -64,3 +64,94 @@ class WerkoverlegStore:
         st = self._m.get(circle) or {}
         start, end = st.get("started_at"), st.get("ended_at") or time.time()
         return int((end - start) / 60) if start else 0
+
+    # ── stap 1: aanwezigheid (✗ = op verlof; taken pauzeren) ───────────────────
+    def set_presence(self, circle: str, pid: str, present: bool) -> None:
+        st = self._m.get(circle)
+        if st is None:
+            return
+        st.setdefault("presence", {})[pid] = bool(present)
+        self._save()
+
+    def presence(self, circle: str) -> dict:
+        return (self._m.get(circle) or {}).get("presence", {})
+
+    def is_present(self, circle: str, pid: str) -> bool:
+        # default aanwezig totdat iemand op ✗ klikt
+        return self.presence(circle).get(pid, True)
+
+    # ── stap 5: agenda (spanningen + triage-uitkomst) ──────────────────────────
+    def agenda(self, circle: str) -> list:
+        return (self._m.get(circle) or {}).get("agenda", [])
+
+    def agenda_get(self, circle: str, iid: str) -> dict | None:
+        return next((i for i in self.agenda(circle) if i["id"] == iid), None)
+
+    def agenda_add(self, circle: str, title: str, by: str = "") -> dict | None:
+        st = self._m.get(circle)
+        if st is None or not (title or "").strip():
+            return None
+        import uuid
+        it = {"id": uuid.uuid4().hex[:10], "title": title.strip()[:140], "by": by or "",
+              "status": "open", "note": {"spanning": "", "role": "", "need": ""},
+              "outcome": None, "created_at": time.time()}
+        st.setdefault("agenda", []).append(it)
+        self._save()
+        return it
+
+    def agenda_remove(self, circle: str, iid: str) -> None:
+        st = self._m.get(circle)
+        if st is None:
+            return
+        st["agenda"] = [i for i in self.agenda(circle) if i["id"] != iid]
+        self._save()
+
+    def agenda_set_note(self, circle: str, iid: str, **fields) -> None:
+        it = self.agenda_get(circle, iid)
+        if it is None:
+            return
+        it.setdefault("note", {}).update({k: v for k, v in fields.items() if v is not None})
+        self._save()
+
+    def agenda_resolve(self, circle: str, iid: str, otype: str, detail: str = "") -> None:
+        """Sluit een spanning af met een uitkomst: info / project / roloverleg / nevermind."""
+        it = self.agenda_get(circle, iid)
+        if it is None:
+            return
+        it["outcome"] = {"type": otype, "detail": (detail or "").strip()}
+        it["status"] = "done"
+        self._save()
+
+    # ── stap 6: check-out (tevredenheid 0-10) ──────────────────────────────────
+    def set_checkout(self, circle: str, pid: str, score) -> None:
+        st = self._m.get(circle)
+        if st is None:
+            return
+        try:
+            s = max(0, min(10, int(score)))
+        except (TypeError, ValueError):
+            return
+        st.setdefault("checkout", {})[pid] = s
+        self._save()
+
+    def checkout(self, circle: str) -> dict:
+        return (self._m.get(circle) or {}).get("checkout", {})
+
+    # ── stap 7: samenvatting ───────────────────────────────────────────────────
+    def summary(self, circle: str) -> dict:
+        st = self._m.get(circle) or {}
+        ag = st.get("agenda", [])
+        done = [i for i in ag if i.get("status") == "done"]
+        out = [i.get("outcome", {}).get("type") for i in done]
+        scores = list(st.get("checkout", {}).values())
+        pres = st.get("presence", {})
+        return {
+            "behandeld": len(done),
+            "info": out.count("info"),
+            "projecten": out.count("project"),
+            "roloverleg": out.count("roloverleg"),
+            "nevermind": out.count("nevermind"),
+            "afwezig": [p for p, v in pres.items() if v is False],
+            "tevredenheid": round(sum(scores) / len(scores), 1) if scores else None,
+            "duur_min": self.duration_min(circle),
+        }

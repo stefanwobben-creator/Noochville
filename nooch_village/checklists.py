@@ -86,15 +86,27 @@ class ChecklistStore:
         items = [i for i in self._items.values() if i.get("node") == node]
         return sorted(items, key=lambda i: (order.get(i.get("cadence"), 9), i.get("created_at", 0)))
 
-    def report(self, cid: str, ok: bool, *, by: str = "", now: datetime | None = None) -> bool:
-        """Rapporteer ✓/✗ voor de HUIDIGE periode van het item (idempotent per periode)."""
+    def report(self, cid: str, ok: bool, *, value=None, by: str = "",
+               now: datetime | None = None) -> bool:
+        """Rapporteer ✓/✗ (+ optionele numerieke waarde) voor de HUIDIGE periode (idempotent)."""
         it = self._items.get(cid)
         if it is None:
             return False
         pk = period_key(it.get("cadence", "week"), now)
-        it.setdefault("reports", {})[pk] = {"ok": bool(ok), "at": time.time(), "by": by or ""}
+        rep = {"ok": bool(ok), "at": time.time(), "by": by or ""}
+        try:
+            if value is not None and str(value).strip() != "":
+                rep["value"] = float(value)
+        except (TypeError, ValueError):
+            pass
+        it.setdefault("reports", {})[pk] = rep
         self._save()
         return True
+
+    @staticmethod
+    def current_value(item: dict, now: datetime | None = None):
+        rep = (item.get("reports") or {}).get(period_key(item.get("cadence", "week"), now))
+        return None if rep is None else rep.get("value")
 
     @staticmethod
     def current_period(item: dict, now: datetime | None = None) -> str:

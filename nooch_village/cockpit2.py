@@ -421,6 +421,26 @@ ul.clean li:last-child{border-bottom:none}
 .wo-num{display:inline-flex;align-items:center;justify-content:center;width:1.4rem;height:1.4rem;border-radius:50%;background:var(--cream-2);color:var(--gray);font-size:.72rem;font-weight:700;flex:0 0 auto}
 .wo-step.on .wo-num{background:var(--green);color:#fff}
 .wo-sec{font-size:.8rem;margin-top:.4rem}
+.wo-mems:focus{outline:none}
+.wo-mem{display:flex;align-items:center;gap:.6rem;padding:.4rem .5rem;border-radius:var(--radius);border:1px solid transparent;border-bottom:1px solid var(--border)}
+.wo-mem.sel{background:var(--cream-2);border-color:var(--border)}
+.wo-mem.absent .wo-mem-n{color:var(--muted);text-decoration:line-through}
+.wo-mem-n{flex:1 1 auto;min-width:0;font-weight:600}
+.wo-leave{font-size:.74rem}
+.wo-who{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;margin-bottom:.6rem}
+.cl-num{width:3.2rem;border:1px solid var(--border);border-radius:var(--radius);padding:.15rem .35rem;text-align:right}
+.cl-val{font-variant-numeric:tabular-nums;color:var(--green-dark);font-weight:700;margin-left:.3rem}
+.cl-rep{display:inline-flex;gap:.25rem;align-items:center}
+.wo-kpitabs{display:flex;flex-wrap:wrap;gap:.3rem;margin-bottom:.6rem}
+.wo-focus .mtab{margin-top:.5rem}
+.wo-outcomes{margin-top:.9rem;display:flex;flex-direction:column;gap:.5rem}
+.wo-oc{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
+.wo-oc input,.wo-oc textarea,.wo-oc select{flex:1 1 12rem;min-width:0;border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .45rem}
+.wo-oc button{flex:0 0 auto}
+.wo-sum{display:flex;flex-direction:column;gap:.2rem}
+.wo-sumrow{display:flex;justify-content:space-between;gap:1rem;padding:.3rem 0;border-bottom:1px solid var(--border)}
+.cfetti{position:fixed;top:-14px;width:9px;height:9px;border-radius:2px;z-index:9999;pointer-events:none;animation:cfall 2.2s linear forwards}
+@keyframes cfall{to{transform:translateY(110vh) rotate(600deg);opacity:.5}}
 .pdetail-h h2{margin:.1rem 0 .5rem;font-family:var(--font-display);font-size:1.35rem;line-height:1.2}
 .psec{margin:0 0 1.15rem}
 .psec-h{display:flex;align-items:center;gap:.4rem;color:var(--subtle);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:.45rem}
@@ -1045,17 +1065,28 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "fetch(frag(u)).then(function(r){return r.text();}).then(function(h){bd.innerHTML=h;ov.style.display='flex';wire();});}"
         "function reopen(){if(last)openCard(last);}"
         "function shut(){ov.style.display='none';bd.innerHTML='';if(dirty){dirty=false;location.reload();}}"
+        "function confetti(){var c=['#2e7d32','#ef6c5a','#f6c244','#7bb661'];for(var i=0;i<70;i++){"
+        "var d=document.createElement('div');d.className='cfetti';d.style.left=(Math.random()*100)+'vw';"
+        "d.style.background=c[i%4];d.style.animationDelay=(Math.random()*0.4)+'s';document.body.appendChild(d);"
+        "(function(x){setTimeout(function(){x.remove();},2400);})(d);}}"
         "function wire(){bd.querySelectorAll('form').forEach(function(f){f.addEventListener('submit',function(e){"
         "e.preventDefault();dirty=true;var act=(e.submitter&&e.submitter.value)||'';var opts;"
         "if(f.classList.contains('filepost')){opts={method:'POST',body:new FormData(f)};}"
         "else{var data=new URLSearchParams(new FormData(f));"
         "if(e.submitter&&e.submitter.name){data.set(e.submitter.name,e.submitter.value);}opts={method:'POST',body:data};}"
         "fetch('/action',opts).then(function(){"
-        "if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'||act==='rov2_end'||act==='wo_close'){shut();}"
+        "if(act==='wo_close'){confetti();setTimeout(shut,700);}"
+        "else if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'||act==='rov2_end'){shut();}"
         "else{var r=f.getAttribute('data-reopen');if(r){last=r;}reopen();}});});});"
         "bd.querySelectorAll('textarea').forEach(mentionWire);"
         "bd.querySelectorAll('a.js-modal[data-href]').forEach(function(a){"
-        "a.addEventListener('click',function(e){e.preventDefault();openCard(a.getAttribute('data-href'));});});}"
+        "a.addEventListener('click',function(e){e.preventDefault();openCard(a.getAttribute('data-href'));});});"
+        "var mems=bd.querySelector('.wo-mems');if(mems){var rows=[].slice.call(mems.querySelectorAll('.wo-mem')),sel=0;"
+        "function paint(){rows.forEach(function(r,i){r.classList.toggle('sel',i===sel);});}if(rows.length)paint();"
+        "mems.addEventListener('keydown',function(e){if(e.key==='ArrowDown'){sel=Math.min(rows.length-1,sel+1);paint();e.preventDefault();}"
+        "else if(e.key==='ArrowUp'){sel=Math.max(0,sel-1);paint();e.preventDefault();}"
+        "else if(e.key==='v'||e.key==='Enter'){var b=rows[sel]&&rows[sel].querySelector('.cl-check.ok');if(b)b.click();}"
+        "else if(e.key==='x'){var b=rows[sel]&&rows[sel].querySelector('.cl-check.no');if(b)b.click();}});mems.focus();}}"
         "document.querySelectorAll('.pcard[data-href],a.js-modal[data-href]').forEach(function(c){"
         "c.addEventListener('click',function(e){if(window.__pdrag)return;e.preventDefault();"
         "openCard(c.getAttribute('data-href'));});});"
@@ -1249,31 +1280,31 @@ def _cl_spark(item: dict) -> str:
 def _cl_row(st: _Stores, item: dict, csrf: str) -> str:
     cid = item["id"]
     status = ChecklistStore.current_status(item)
+    curval = ChecklistStore.current_value(item)
     tgt = f"<span class='chip muted'>{_e(_cl_target_label(st, item))}</span>"
-    # rapporteer ✓/✗ voor de huidige periode (de huidige keuze is gemarkeerd)
-    rep = ""
+    valbadge = "" if curval is None else f"<span class='cl-val'>{curval:g}</span>"
+    # rapporteer ✓/✗ (+ optionele numerieke waarde) voor de huidige periode, in één formulier
     if csrf:
-        def b(ok, lbl, cls):
-            on = " on" if status is (ok) else ""
-            return (f"<form method='post' action='/action' style='display:inline'>"
-                    f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
-                    f"<input type='hidden' name='cid' value='{_e(cid)}'>"
-                    f"<input type='hidden' name='ok' value='{'1' if ok else '0'}'>"
-                    f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=checklists'>"
-                    f"<button class='cl-check{cls}{on}' type='submit' name='action' value='cl_report' "
-                    f"title='{lbl}'>{'✓' if ok else '✗'}</button></form>")
-        rep = b(True, "check", " ok") + b(False, "geen check", " no")
-    else:
-        rep = "" if status is None else (f"<span class='cl-check {'ok' if status else 'no'} on'>"
-                                         f"{'✓' if status else '✗'}</span>")
-    rm = ""
-    if csrf:
+        vstr = "" if curval is None else f"{curval:g}"
+        rep = (f"<form method='post' action='/action' class='cl-rep'>"
+               f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+               f"<input type='hidden' name='cid' value='{_e(cid)}'>"
+               f"<input type='hidden' name='action' value='cl_report'>"
+               f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=checklists'>"
+               f"<input class='cl-num' name='value' inputmode='decimal' value='{vstr}' "
+               f"placeholder='#' title='waarde (optioneel)'>"
+               f"<button class='cl-check ok{(' on' if status is True else '')}' type='submit' name='ok' value='1' title='check'>✓</button>"
+               f"<button class='cl-check no{(' on' if status is False else '')}' type='submit' name='ok' value='0' title='geen check'>✗</button></form>")
         rm = (f"<form method='post' action='/action' style='display:inline'>"
               f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
               f"<input type='hidden' name='cid' value='{_e(cid)}'>"
               f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=checklists'>"
               f"<button class='dellink' type='submit' name='action' value='cl_remove' title='verwijderen'>✕</button></form>")
-    return (f"<div class='cl-row'><div class='cl-main'><span class='cl-desc'>{_e(item['description'])}</span> {tgt}</div>"
+    else:
+        rep = "" if status is None else (f"<span class='cl-check {'ok' if status else 'no'} on'>"
+                                         f"{'✓' if status else '✗'}</span>")
+        rm = ""
+    return (f"<div class='cl-row'><div class='cl-main'><span class='cl-desc'>{_e(item['description'])}</span> {tgt}{valbadge}</div>"
             f"<div class='cl-act'>{_cl_spark(item)}<span class='cl-checks'>{rep}</span>{rm}</div></div>")
 
 
@@ -2315,7 +2346,10 @@ def render_noochie(st: _Stores, csrf: str, screen_ctx: str = "") -> str:
     vrij gesprek. Schermcontext wordt alleen meegenomen als de mens dat zelf aanzet (chip 'leest: X')."""
     s = st.noochie
     if not s.messages:                                  # zaai de opening (één vraag tegelijk)
-        s.add("noochie", "Hoi, ik ben Noochie, de missiestem van Nooch. Welke spanning voel je?")
+        if screen_ctx:                                  # vanuit een spanning aangeroepen (werkoverleg)
+            s.add("noochie", f"Heb je hulp nodig bij {screen_ctx}? Vertel: wat voel je precies?")
+        else:
+            s.add("noochie", "Hoi, ik ben Noochie, de missiestem van Nooch. Welke spanning voel je?")
 
     def hid():
         return (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
@@ -2364,10 +2398,11 @@ def _noochie_chrome() -> str:
     js = ("<script>(function(){"
           "function ctxLabel(){var el=document.querySelector('.c2-main h2,.c2-main h1,h2,h1');"
           "return (el?el.textContent:document.title||'').trim().slice(0,80);}"
-          "function load(show){fetch('/noochie?fragment=1&ctx='+encodeURIComponent(ctxLabel()))"
+          "function load(show,ctx){fetch('/noochie?fragment=1&ctx='+encodeURIComponent(ctx!=null?ctx:ctxLabel()))"
           ".then(function(r){return r.text();}).then(function(h){"
           "document.getElementById('noo-body').innerHTML=h;"
           "if(show)document.getElementById('novl').style.display='flex';wireN();});}"
+          "window.noochieAsk=function(label){load(true,label);};"
           "function wireN(){document.querySelectorAll('#noo-body form').forEach(function(f){"
           "f.addEventListener('submit',function(e){e.preventDefault();"
           "var d=new URLSearchParams(new FormData(f));var s=e.submitter;if(s&&s.name)d.set(s.name,s.value);"
@@ -2380,8 +2415,233 @@ def _noochie_chrome() -> str:
     return rail + overlay + js
 
 
+def _wo_hid(csrf, circle, nextu):
+    return (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+            f"<input type='hidden' name='circle' value='{_e(circle)}'>"
+            f"<input type='hidden' name='next' value='{_e(nextu)}'>")
+
+
+def _wo_checkin(st: _Stores, crec, csrf: str) -> str:
+    """Stap 1: aanwezigheid. ✓ = aanwezig, ✗ = afwezig/op verlof (taken pauzeren)."""
+    ppl = _members_of_circle(st, crec.id)
+    nxt = f"/werkoverleg?circle={crec.id}&step=checkin"
+    if not ppl:
+        return ("<div class='c2-sec'><h3>Check-in</h3>"
+                "<p class='muted'>Nog geen mensen aan deze cirkel gekoppeld (zie Rollen → rolvervullers).</p></div>")
+    rows = ""
+    for p in ppl:
+        present = st.werk.is_present(crec.id, p.id)
+        if csrf:
+            def b(val, lbl, c):
+                on = " on" if present == val else ""
+                return (f"<form method='post' action='/action' style='display:inline'>{_wo_hid(csrf, crec.id, nxt)}"
+                        f"<input type='hidden' name='pid' value='{_e(p.id)}'>"
+                        f"<input type='hidden' name='present' value='{'1' if val else '0'}'>"
+                        f"<button class='cl-check {c}{on}' type='submit' name='action' value='wo_presence' "
+                        f"title='{lbl}'>{'✓' if val else '✗'}</button></form>")
+            ctrl = b(True, "aanwezig", "ok") + b(False, "afwezig (verlof)", "no")
+        else:
+            ctrl = f"<span class='cl-check {'ok' if present else 'no'} on'>{'✓' if present else '✗'}</span>"
+        leave = "" if present else "<span class='wo-leave muted'>op verlof — taken gepauzeerd</span>"
+        rows += (f"<div class='wo-mem{'' if present else ' absent'}'><span class='av'>{_e(_initials(p.name))}</span>"
+                 f"<span class='wo-mem-n'>{_e(p.name)}</span>{leave}<span class='cl-checks'>{ctrl}</span></div>")
+    return (f"<div class='c2-sec'><h3>Check-in</h3>"
+            f"<p class='muted' style='font-size:.8rem'>Wie doet mee? Klik of gebruik ↑/↓ en dan "
+            f"<b>v</b> (aanwezig) / <b>x</b> (afwezig). ✗ = op verlof: niet aanwezig en taken pauzeren.</p>"
+            f"<div class='wo-mems' tabindex='0'>{rows}</div></div>")
+
+
+def _wo_checklist(st: _Stores, crec, csrf: str) -> str:
+    """Stap 2: de checklist-ronde. Hergebruikt het checklist-scherm; toont wie rapporteert
+    (afwezigen met ✗)."""
+    ppl = _members_of_circle(st, crec.id)
+    chips = "".join(
+        f"<span class='chip {'muted' if st.werk.is_present(crec.id, p.id) else 'coral'}'>"
+        f"{'✗ ' if not st.werk.is_present(crec.id, p.id) else ''}{_e(p.name)}</span>" for p in ppl)
+    who = f"<div class='wo-who'><span class='muted'>Rapporteren:</span> {chips}</div>" if ppl else ""
+    return who + _checklists_tab_html(st, crec, csrf, "due")
+
+
+def _wo_metrics(st: _Stores, crec, csrf: str, kpi: str = "") -> str:
+    """Stap 3: metrics-ronde. Hergebruikt het dashboard; optioneel één tegel uitvergroot met
+    trend + tabel + een knop voor Noochie-duiding."""
+    base = f"/werkoverleg?circle={crec.id}&step=metrics"
+    focus = ""
+    if kpi:
+        tile = next((t for t in st.metrics.tiles_of(crec.id) if t["id"] == kpi), None)
+        if tile is not None:
+            res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), None)
+            pts = res.get("points") or []
+            rows = res.get("rows") or []
+            tbl = ""
+            if pts:
+                tbl = "<table class='mtab'>" + "".join(
+                    f"<tr><td>{_dt(at)}</td><td class='num'>{v:g}</td></tr>" for at, v in pts[-12:]) + "</table>"
+            elif rows:
+                tbl = "<table class='mtab'>" + "".join(
+                    f"<tr><td>{_e(str(l))}</td><td class='num'>{n:g}</td></tr>" for l, n in rows[:12]) + "</table>"
+            ask = _e(f"{_tile_meta(st, crec, tile)} (laatste: {(_num(_agg(res)))})")
+            ai = (f"<button class='btn sm' type='button' onclick=\"window.noochieAsk&&noochieAsk('{ask}')\">"
+                  f"🐸 Noochie duidt deze KPI</button>")
+            focus = (f"<div class='c2-sec wo-focus'><div class='cl-head'><h3>{_e(_tile_meta(st, crec, tile))}</h3>"
+                     f"<a class='flink js-modal' href='{base}' data-href='{base}'>← terug</a></div>"
+                     f"{_spark_svg(pts, 280, 70) if pts else ''}{tbl or '<p class=muted>geen data</p>'}"
+                     f"<div style='margin-top:.6rem'>{ai}</div></div>")
+    # uitvergroot-links per tegel
+    links = ""
+    for t in st.metrics.tiles_of(crec.id):
+        u = f"{base}&kpi={t['id']}"
+        links += f"<a class='chip outline js-modal' href='{u}' data-href='{u}'>{_e(_tile_meta(st, crec, t))}</a> "
+    tabrow = f"<div class='wo-kpitabs'>{links}</div>" if links else ""
+    return focus + tabrow + _metrics_tab_html(st, crec, csrf, "maand")
+
+
+def _wo_agenda(st: _Stores, crec, csrf: str, iid: str = "") -> str:
+    """Stap 5: agenda opbouwen + spanning verwerken (triage)."""
+    base = f"/werkoverleg?circle={crec.id}&step=agenda"
+    item = st.werk.agenda_get(crec.id, iid) if iid else None
+    if item is not None:
+        return _wo_triage(st, crec, csrf, item)
+    # lijst + toevoegen
+    rows = ""
+    for it in st.werk.agenda(crec.id):
+        done = it["status"] == "done"
+        url = f"{base}&iid={it['id']}"
+        by = (it.get("by") or "").strip()
+        av = f"<span class='av rov-by' title='door {_e(by)}'>{_e(by)}</span>" if by else ""
+        otype = (it.get("outcome") or {}).get("type")
+        tag = f"<span class='chip muted'>{_e(otype)}</span>" if otype else ""
+        rm = (f"<form method='post' action='/action' style='display:inline'>{_wo_hid(csrf, crec.id, base)}"
+              f"<input type='hidden' name='iid' value='{_e(it['id'])}'>"
+              f"<button class='flink' type='submit' name='action' value='wo_ag_remove'>✕</button></form>") if csrf else ""
+        rows += (f"<div class='rov-item{(' done' if done else '')}'>"
+                 f"<a class='js-modal rov-link' href='{url}' data-href='{url}'><span class='rov-title'>{_e(it['title'])}</span></a>"
+                 f"{tag}{av}{rm}</div>")
+    if not rows:
+        rows = "<p class='muted'>Nog geen spanningen. Iedereen mag er een inbrengen.</p>"
+    add = ""
+    if csrf:
+        add = (f"<form method='post' action='/action' class='rov-add'>{_wo_hid(csrf, crec.id, base)}"
+               f"<input name='naam' placeholder='Spanning… (-SW voor initialen)' autocomplete='off'>"
+               f"<button class='btn ok sm' type='submit' name='action' value='wo_ag_add'>+</button></form>")
+    return (f"<div class='c2-sec'><h3>Agenda — spanningen</h3>"
+            f"<p class='muted' style='font-size:.8rem'>Breng een spanning in; klik erop om te verwerken. "
+            f"Behandeld = doorgestreept (blijft klikbaar voor de uitkomst).</p>{add}"
+            f"<div class='rov-list'>{rows}</div></div>")
+
+
+def _wo_triage(st: _Stores, crec, csrf: str, item: dict) -> str:
+    """Stap 5b: een spanning verwerken. Noteer spanning/rol/behoefte en kies een uitkomst:
+    info delen, project toevoegen, punt voor roloverleg, of nevermind."""
+    iid = item["id"]
+    base = f"/werkoverleg?circle={crec.id}&step=agenda"
+    back = f"{base}&iid={iid}"
+    note = item.get("note", {})
+    done = item["status"] == "done"
+    roles = sorted(org.roles_of(st.records.all(), crec.id), key=lambda r: _name(r).lower())
+    keep = f"data-reopen='{_e(back)}'"
+    sub = "this.form.requestSubmit?this.form.requestSubmit():this.form.submit()"
+
+    def setf(field, label, value, ta=False):
+        inp = (f"<textarea name='value' rows='2' onchange='{sub}'>{_e(value)}</textarea>" if ta
+               else f"<input name='value' value='{_e(value)}' onchange='{sub}'>")
+        return (f"<div class='rovm-field'><label class='att-lbl'>{label}</label>"
+                f"<form method='post' action='/action' {keep}>{_wo_hid(csrf, crec.id, back)}"
+                f"<input type='hidden' name='iid' value='{_e(iid)}'><input type='hidden' name='field' value='{field}'>"
+                f"<input type='hidden' name='action' value='wo_ag_note'>{inp}</form></div>")
+
+    ropts = "".join(f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>" for r in roles)
+    head = f"<div class='cl-head'><h3>Spanning verwerken</h3><a class='flink js-modal' href='{base}' data-href='{base}'>← agenda</a></div>"
+    if done:
+        oc = item.get("outcome", {})
+        return (f"<div class='c2-sec'>{head}<p><b>{_e(item['title'])}</b></p>"
+                f"<div class='sec-issue let'>Afgehandeld als <b>{_e(oc.get('type', ''))}</b>"
+                f"{(': ' + _e(oc.get('detail', ''))) if oc.get('detail') else ''}</div>"
+                f"<form method='post' action='/action' {keep} style='margin-top:.5rem'>{_wo_hid(csrf, crec.id, back)}"
+                f"<input type='hidden' name='iid' value='{_e(iid)}'>"
+                f"<button class='flink' type='submit' name='action' value='wo_ag_reopen'>↺ heropenen</button></form></div>")
+
+    fields = (setf("spanning", "Wat is de spanning?", note.get("spanning", ""), ta=True)
+              + f"<div class='rovm-field'><label class='att-lbl'>Welke rol voelt 'm?</label>"
+                f"<form method='post' action='/action' {keep}>{_wo_hid(csrf, crec.id, back)}"
+                f"<input type='hidden' name='iid' value='{_e(iid)}'><input type='hidden' name='field' value='role'>"
+                f"<input type='hidden' name='action' value='wo_ag_note'>"
+                f"<select name='value' onchange='{sub}'><option value=''>—</option>{ropts}</select></form></div>"
+              + setf("need", "Wat heb je nodig?", note.get("need", ""), ta=True))
+
+    def outcome_form(otype, label, extra="", btncls="btn"):
+        return (f"<form method='post' action='/action' {keep} class='wo-oc'>{_wo_hid(csrf, crec.id, base)}"
+                f"<input type='hidden' name='iid' value='{_e(iid)}'><input type='hidden' name='otype' value='{otype}'>"
+                f"{extra}<button class='{btncls} sm' type='submit' name='action' value='wo_ag_resolve'>{label}</button></form>")
+
+    info = outcome_form("info", "Informatie delen",
+                        "<input name='detail' placeholder='wat deel/geef je?' autocomplete='off'>")
+    proj = outcome_form("project", "Project toevoegen",
+                        f"<select name='owner'>{ropts}</select>"
+                        f"<input name='detail' placeholder='scope van het project' autocomplete='off'>", "btn ok")
+    rov = outcome_form("roloverleg", "Punt voor roloverleg",
+                       "<textarea name='detail' rows='2' placeholder='kans / probleem / behoefte / eerste rol-schets'></textarea>")
+    nm = outcome_form("nevermind", "Nevermind", "", "btn")
+    noochie = (f"<button class='btn sm' type='button' onclick=\"window.noochieAsk&&noochieAsk('{_e(item['title'])}')\">"
+               f"🐸 Vraag Noochie om hulp</button>")
+    # secretaris-signaal (licht): mis je info/scope?
+    hint = ""
+    if not (note.get("spanning") or "").strip():
+        hint = "<div class='sec-issue let'>📋 Secretaris: noteer kort de spanning zodat 'm te verwerken is.</div>"
+    return (f"<div class='c2-sec'>{head}<p><b>{_e(item['title'])}</b></p>{hint}{fields}"
+            f"<div class='wo-outcomes'><div class='sec-kop'>Uitkomst</div>{info}{proj}{rov}{nm}</div>"
+            f"<div style='margin-top:.6rem'>{noochie}</div></div>")
+
+
+def _wo_checkout(st: _Stores, crec, csrf: str) -> str:
+    """Stap 6: check-out. Per persoon een tevredenheidsscore 0-10."""
+    ppl = _members_of_circle(st, crec.id)
+    nxt = f"/werkoverleg?circle={crec.id}&step=checkout"
+    scores = st.werk.checkout(crec.id)
+    if not ppl:
+        return "<div class='c2-sec'><h3>Check-out</h3><p class='muted'>Geen leden.</p></div>"
+    rows = ""
+    for p in ppl:
+        cur = scores.get(p.id)
+        opts = "".join(f"<option value='{n}'{' selected' if cur == n else ''}>{n}</option>" for n in range(0, 11))
+        sel = (f"<form method='post' action='/action' style='display:inline'>{_wo_hid(csrf, crec.id, nxt)}"
+               f"<input type='hidden' name='pid' value='{_e(p.id)}'>"
+               f"<select name='score' onchange='this.form.requestSubmit?this.form.requestSubmit():this.form.submit()' "
+               f"name='action'><option value=''>—</option>{opts}</select>"
+               f"<input type='hidden' name='action' value='wo_checkout'></form>") if csrf else (
+            f"<span class='kpidata-v'>{cur if cur is not None else '—'}</span>")
+        rows += (f"<div class='wo-mem'><span class='av'>{_e(_initials(p.name))}</span>"
+                 f"<span class='wo-mem-n'>{_e(p.name)}</span>{sel}</div>")
+    return (f"<div class='c2-sec'><h3>Check-out</h3>"
+            f"<p class='muted' style='font-size:.8rem'>Op een schaal van 0-10: hoe tevreden ben je met "
+            f"de uitkomst van dit overleg?</p>{rows}</div>")
+
+
+def _wo_summary(st: _Stores, crec, csrf: str) -> str:
+    """Stap 7: samenvatting + sluiten (confetti via wo_close)."""
+    s = st.werk.summary(crec.id)
+    pres = st.werk.presence(crec.id)
+    ppl = _members_of_circle(st, crec.id)
+    aanwezig = [p.name for p in ppl if pres.get(p.id, True)]
+    afwezig = [p.name for p in ppl if pres.get(p.id) is False]
+    tev = f"{s['tevredenheid']}/10" if s["tevredenheid"] is not None else "n.v.t."
+    rij = lambda k, v: f"<div class='wo-sumrow'><span>{k}</span><b>{v}</b></div>"
+    body = (rij("Aanwezig", ", ".join(aanwezig) or "—")
+            + rij("Afwezig", ", ".join(afwezig) or "—")
+            + rij("Punten behandeld", s["behandeld"])
+            + rij("Informatie verwerkt", s["info"])
+            + rij("Projecten toegevoegd", s["projecten"])
+            + rij("Punten voor roloverleg", s["roloverleg"])
+            + rij("Gemiddelde tevredenheid", tev)
+            + rij("Duur", f"{s['duur_min']} min")
+            + rij("Volgende overleg", "n.t.b. (uit secretaris-note)"))
+    return (f"<div class='c2-sec'><h3>Samenvatting</h3><div class='wo-sum'>{body}</div>"
+            f"<p class='muted' style='font-size:.8rem;margin-top:.6rem'>Klik “Sluit overleg” onderaan: "
+            f"alle uitkomsten worden verwerkt en het overleg sluit.</p></div>")
+
+
 def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_token: str = "",
-                       fragment: bool = False) -> str:
+                       fragment: bool = False, iid: str = "", kpi: str = "") -> str:
     """Werkoverleg-modal: links de vaste stap-navigatie, rechts de inhoud per stap. De inhoud
     HERGEBRUIKT de bestaande schermen (members/checklists/metrics/projecten). Alleen de secretaris
     opent en sluit. Brok 1: frame + ingebedde schermen; de overleg-specifieke stappen volgen."""
@@ -2419,19 +2679,19 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
     left = _psec(_IC_CHECK, "Overleg", f"<div class='wo-nav'>{nav}</div>")
 
     if cur == "checkin":
-        content = _members_html(st, crec)            # presence-interactie komt in brok 2
+        content = _wo_checkin(st, crec, csrf_token)
     elif cur == "checklist":
-        content = _checklists_tab_html(st, crec, csrf_token, "due")
+        content = _wo_checklist(st, crec, csrf_token)
     elif cur == "metrics":
-        content = _metrics_tab_html(st, crec, csrf_token, "maand")
+        content = _wo_metrics(st, crec, csrf_token, kpi)
     elif cur == "projecten":
         content = _projects_tab_html(st, crec, csrf_token, group="")
     elif cur == "agenda":
-        content = _todo("Agenda opbouwen + spanningen verwerken — volgende brok.")
+        content = _wo_agenda(st, crec, csrf_token, iid)
     elif cur == "checkout":
-        content = _todo("Check-out (tevredenheid 0-10 per persoon) — volgende brok.")
+        content = _wo_checkout(st, crec, csrf_token)
     else:
-        content = _todo("Samenvatting + sluiten met confetti — volgende brok.")
+        content = _wo_summary(st, crec, csrf_token)
 
     foot = (f"<div class='rov-foot'><form method='post' action='/action'>{hid(f'/node?id={circle_id}')}"
             f"<button class='btn ok' type='submit' name='action' value='wo_close'>Sluit overleg</button></form>"
@@ -3432,6 +3692,41 @@ def dispatch(data_dir: str, action: str, form: dict):
         st.werk.open(g("circle")); msg = "✓ werkoverleg gestart"
     elif action == "wo_close":
         st.werk.close(g("circle")); msg = "✓ werkoverleg gesloten"
+    elif action == "wo_presence":
+        st.werk.set_presence(g("circle"), g("pid"), g("present") == "1")
+        msg = "✓ aanwezig" if g("present") == "1" else "✗ afwezig (taken gepauzeerd)"
+    elif action == "wo_ag_add":
+        naam, by = _rov_initials(g("naam"))
+        if st.werk.agenda_add(g("circle"), naam, by=by):
+            msg = "✓ spanning op de agenda"
+    elif action == "wo_ag_remove":
+        st.werk.agenda_remove(g("circle"), g("iid")); msg = "🗑 verwijderd"
+    elif action == "wo_ag_note":
+        if g("field") in ("spanning", "role", "need"):
+            st.werk.agenda_set_note(g("circle"), g("iid"), **{g("field"): g("value")})
+            msg = "✓ genoteerd"
+    elif action == "wo_ag_reopen":
+        it = st.werk.agenda_get(g("circle"), g("iid"))
+        if it is not None:
+            it["status"] = "open"; it["outcome"] = None; st.werk._save()
+            msg = "↺ heropend"
+    elif action == "wo_ag_resolve":
+        otype, detail = g("otype"), g("detail")
+        if otype == "project" and g("owner") and detail.strip():
+            st.projects.create(g("owner"), detail.strip(), "human")
+            detail = f"{detail.strip()} → {_name(st.records.get(g('owner')))}"
+        elif otype == "roloverleg" and detail.strip():
+            slug = re.sub(r"[^a-z0-9]+", "_", detail.lower()).strip("_")[:40] or "punt"
+            it = st.werk.agenda_get(g("circle"), g("iid"))
+            st.agenda.add(f"{g('circle')}__{slug}", "add_role",
+                          {"name": (it or {}).get("title", "Nieuwe rol"), "new_role_parent": g("circle"),
+                           "purpose": "", "add_accountabilities": []},
+                          detail.strip(), by="werkoverleg", title=(it or {}).get("title", detail[:60]))
+        st.werk.agenda_resolve(g("circle"), g("iid"), otype, detail)
+        msg = f"✓ verwerkt als {otype}"
+    elif action == "wo_checkout":
+        if g("score"):
+            st.werk.set_checkout(g("circle"), g("pid"), g("score")); msg = "✓ score genoteerd"
     elif action == "noochie_send":
         s = st.noochie
         if g("text").strip():
@@ -3466,7 +3761,7 @@ def dispatch(data_dir: str, action: str, form: dict):
                                    target_type=tt, target_id=tid, by="founder")
             msg = "✓ checklist-item toegevoegd" if it else "⛔ geef een beschrijving"
     elif action == "cl_report":
-        if st.checklists.report(g("cid"), g("ok") == "1", by="founder"):
+        if st.checklists.report(g("cid"), g("ok") == "1", value=g("value"), by="founder"):
             msg = "✓ genoteerd" if g("ok") == "1" else "✗ genoteerd (aandacht nodig)"
     elif action == "cl_remove":
         st.checklists.remove(g("cid")); msg = "🗑 checklist-item verwijderd"
@@ -3611,7 +3906,9 @@ def make_handler(data_dir: str, csrf_token: str):
                 fr = (qs.get("fragment") or [""])[0] == "1"
                 self._send(_frag(render_werkoverleg(st, (qs.get("circle") or [""])[0],
                                                     (qs.get("step") or ["checkin"])[0],
-                                                    csrf_token=csrf_token, fragment=fr), fr))
+                                                    csrf_token=csrf_token, fragment=fr,
+                                                    iid=(qs.get("iid") or [""])[0],
+                                                    kpi=(qs.get("kpi") or [""])[0]), fr))
                 return
             if path == "/roloverleg2":
                 fr = (qs.get("fragment") or [""])[0] == "1"
