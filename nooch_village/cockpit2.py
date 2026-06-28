@@ -2692,6 +2692,9 @@ def _wo_triage(st: _Stores, crec, csrf: str, item: dict) -> str:
                 f"<input type='hidden' name='action' value='wo_ag_note'>{inp}</form></div>")
 
     ropts = "".join(f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>" for r in roles)
+    cur_role = note.get("role", "")
+    ropts_role = "".join(f"<option value='{_e(r.id)}'{' selected' if r.id == cur_role else ''}>{_e(_name(r))}</option>"
+                         for r in roles)
     head = f"<div class='cl-head'><h3>Spanning verwerken</h3><a class='flink js-modal' href='{base}' data-href='{base}'>← agenda</a></div>"
     if done:
         oc = item.get("outcome", {})
@@ -2704,13 +2707,13 @@ def _wo_triage(st: _Stores, crec, csrf: str, item: dict) -> str:
 
     # Spanning + rol (optioneel) als eigen blok, los van de uitkomsten. 'Wat heb je nodig' is weg:
     # dat is altijd de uitkomst zelf.
-    fields = (f"<div class='wo-spanning'><div class='sec-kop'>Spanning</div>"
+    fields = (f"<div class='wo-spanning'>"
               + setf("spanning", "Wat is de spanning?", note.get("spanning", ""), ta=True)
               + f"<div class='rovm-field'><label class='att-lbl'>Welke rol voelt 'm? (optioneel)</label>"
                 f"<form method='post' action='/action' {keep}>{_wo_hid(csrf, crec.id, back)}"
                 f"<input type='hidden' name='iid' value='{_e(iid)}'><input type='hidden' name='field' value='role'>"
                 f"<input type='hidden' name='action' value='wo_ag_note'>"
-                f"<select name='value' onchange='{sub}'><option value=''>—</option>{ropts}</select></form></div></div>")
+                f"<select name='value' onchange='{sub}'><option value=''>—</option>{ropts_role}</select></form></div></div>")
 
     # Progressive disclosure: kies eerst het type, dan verschijnt het juiste veld. Gelijkwaardig
     # (geen primary-kleur die naar één uitkomst stuurt).
@@ -2720,11 +2723,19 @@ def _wo_triage(st: _Stores, crec, csrf: str, item: dict) -> str:
                 f"<input type='hidden' name='iid' value='{_e(iid)}'><input type='hidden' name='otype' value='{otype}'>"
                 f"{inner}<button class='btn sm' type='submit' name='action' value='wo_ag_resolve'>Vastleggen</button></form></details>")
 
-    # projecten onder deze cirkel (om een actie optioneel aan te koppelen = checklist-item)
+    # projecten onder deze cirkel (om een actie optioneel aan te koppelen = checklist-item),
+    # gegroepeerd per rol zodat het ook bij veel projecten navigeerbaar blijft (+ type-ahead).
     circle_nodes = {crec.id} | {r.id for r in roles}
-    pj_opts = "<option value=''>— los (geen project) —</option>" + "".join(
-        f"<option value='{_e(p['id'])}'>{_e(str(p.get('scope') or p['id'])[:60])}</option>"
-        for p in st.projects.all() if p.get("owner") in circle_nodes)
+    by_role: dict = {}
+    for p in st.projects.all():
+        if p.get("owner") in circle_nodes and not p.get("archived"):
+            by_role.setdefault(p["owner"], []).append(p)
+    pj_opts = "<option value=''>— los (geen project) —</option>"
+    for rid in sorted(by_role, key=lambda x: _name(st.records.get(x) or crec).lower()):
+        rn = _name(st.records.get(rid)) if st.records.get(rid) else rid
+        opts = "".join(f"<option value='{_e(p['id'])}'>{_e(str(p.get('scope') or p['id'])[:60])}</option>"
+                       for p in by_role[rid])
+        pj_opts += f"<optgroup label='{_e(rn)}'>{opts}</optgroup>"
 
     info = oc_details("info", "Informatie",
                       "<select name='dir'><option value='delen'>delen</option>"
