@@ -1232,3 +1232,104 @@ verwijderd (bewust; later via settings te ontsluiten).
 **[les]** `retune_kpis_to_def()` had een hardcoded kopijlijst die langzaam uit de pas liep met het
 schema. De fix (`_SCHEMA_FIELDS` als bron) is de "reference, don't copy"-regel die we voor de
 catalogus al hadden, nu ook in de metriek-retuner toegepast.
+
+## 2026-06-28 — cockpit2 volledige architectuur-refactor + village-run + governance-inventarisatie
+
+### Ochtend: cockpit2 brok B — KPI-composer focus-flow
+
+**[ombouw]** Aanmaakflow voor KPI's volledig uit de metrics-tab gehaald naar `/kpi_new`.
+`_catalog_picker()` (~70 r) verwijderd. Metrics-tab is nu zuiver lees/uitvoer-oppervlak.
+
+**[bouw]** `_kpi_id_from_def()` — idempotente get-or-create vanuit catalogusdefinitie.
+Hergebruikt in `m_add_from_def`, `tile_add` en de composer.
+
+**[fix]** `retune_kpis_to_def()`: hardcoded copy-tuple vervangen door afleiding uit
+`_SCHEMA_FIELDS`. `tijd`, `bruikbaar`, `standaard`, `waarde` worden nu ook meegeretund.
+
+**[fix]** `_bron_html()`: externe URLs klikbaar, interne paden tonen als tekst (geen 404).
+
+**[ux]** Build-timestamp in alle navigatiebalken. Catalogus-filter vereenvoudigd (of/of).
+Tabs `metrics` en `checklists` van `basic` naar `live`.
+
+**[les]** `retune_kpis_to_def()` had een hardcoded kopijlijst die langzaam uit de pas liep
+met het schema. Fix past de "reference, don't copy"-regel toe die we al voor de catalogus hadden.
+
+Suite: 996 tests groen (2 helften in sandbox). Commits: `a286446` (focus-flow), `ac7ef79`
+(opschoon-clusters).
+
+---
+
+### Avond: cockpit2 split in 10 broks (~3600 regels verplaatst)
+
+De volledige cockpit2.py monoliet (5144 r) is ontmanteld in een composition root + views/.
+
+**Aanleiding:** code-review wees uit dat cockpit2 routing, rendering en businesslogica mengde.
+Elke bug vergde zoeken in 5000 regels. Stefan vroeg om strak te maken.
+
+**Werkwijze:** één brok per keer, tests groen na elke commit, nooit twee broks tegelijk.
+
+**Broks:**
+1. `cockpit2_util.py` — 15 pure HTML-helpers zonder _Stores (127b918)
+2. `views/feed.py` — 7 feed-functies + emoji-picker (77268d9)
+3. `views/werkoverleg.py` — 10 _wo_* functies + render_werkoverleg (1234a3b)
+4. `views/roloverleg.py` — 19 _rov_* functies + render_roloverleg2 (39b3f76)
+5. `views/checklists.py` — 5 checklist-functies (db9eb5f)
+6. `views/noochie.py` — 4 noochie-functies, _match_ladder lazy geïmporteerd (529554e)
+7. `views/catalog.py` — 4 catalog-functies + _CATALOG_JS (6b79055)
+8. `views/metrics.py` — ~40 metrics/KPI-functies, zwaarste brok (09cabb6)
+9. `views/projects.py` — 19 project-functies + constants
+10. `views/overview.py` — 19 overview-functies incl. alle render_* entry points
+
+**Bijvangsten:**
+- 8 icon-constanten naar cockpit2_util (waren late definities, nu overal direct beschikbaar)
+- `os.path.dirname(__file__)` paden in metrics.py gecorrigeerd (extra `..` door views/ locatie)
+- Circulaire import bij `-m` start opgelost: `_BUILD/_EXTRA_CSS/_CIRCLE_TABS/_ROLE_TABS`
+  naar cockpit2_util
+
+**Resultaat:** cockpit2.py van 5144 → ~1400 regels. Suite: 1333 groen, 8 pre-existing failures.
+Visueel gecontroleerd: beide cockpits werken na refactor.
+
+**Bewust uitgesteld:** dispatch() (~433 r) blijft in cockpit2. Brok 11 voor een rustige sessie.
+
+---
+
+### Village-run na refactor
+
+Eerste volledige run na de architectuur-split. 64 seconden, alles groen.
+
+- 7 inwoners ontwaakt, 25 skills geregistreerd
+- GSC: 152 queries, geen nieuwe high_potential
+- Harry Hemp: microplastics stijgend, 14 termen dalend, 7 OpenAlex-bogen voortgezet
+- Concurrent-scan: LØCI 1M/mnd vs Nooch.earth 0/mnd (signaal, niet bug)
+- Field Note geschreven: data/output/field_note_2026-06-28.md
+- 9 kansen in human inbox
+- Cockpit 1 (8765) en Cockpit 2 (8766): visueel gecontroleerd, werken
+
+---
+
+### Governance-inventarisatie
+
+Eerste grondige inventarisatie van wat er in de codebase leeft vs. wat er zou moeten leven.
+
+**Actieve rollen (7):** website_watcher, trends, librarian, harry_hemp, concurrent_scout,
+noochie, facilitator — allemaal produceren echte output.
+
+**Enige echte stub:** `advise_metrics` in Noochie — hardcoded dict van 4 metrics.
+De rest is bewuste fail-closed logica, geen stubs.
+
+**Rommel geïdentificeerd:**
+- 12 gearchiveerde governance-records (opportunity-overflow, schaduwen, experimenten)
+- 3 orphan data-bestanden
+- `schoenen_voor_duurzame_evenementen_seo` duikt elke puls op als onbemand
+
+**Codie:** bestaat als persona, nog geen governance-record of accountabilities.
+
+**Grote ontwerpvraag geformuleerd:** hybride Holacracy-model. Stefan's formulering:
+werkoverleg = vangnet (mensen, 1x per week), rollen mogen autonoom maar hebben
+transparantieplicht, AI-rollen hangen aan menselijke accountability. Dit uitwerken
+vóór de volgende sprint. Geen code bouwen tot dit beantwoord is.
+
+**Werkoverleg:** heeft geen automatische trigger. Blokkade: WerkoverlegStore leeft in
+HTTP-laag. Besluit: bewust mens-gestuurd houden voor nu.
+
+Suite einde dag: 1333 groen, 8 pre-existing failures.
