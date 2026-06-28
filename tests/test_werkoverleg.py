@@ -56,7 +56,7 @@ def test_stappen_hergebruiken_bestaande_schermen(tmp_path):
     cl = cockpit2.render_werkoverleg(st, C, "checklist", csrf_token="t", fragment=True)
     assert "Checklists" in cl and "+ Checklist-item" in cl          # echte checklist-scherm
     me = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "metrics", csrf_token="t", fragment=True)
-    assert "+ KPI op dashboard" in me and "Periode:" in me          # echte metrics-scherm
+    assert "+ KPI maken" in me and "Periode:" in me                 # echte metrics-scherm
     pr = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "projecten", csrf_token="t", fragment=True)
     assert "proj" in pr.lower()                                     # echte projecten-scherm
 

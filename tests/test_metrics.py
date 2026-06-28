@@ -50,18 +50,37 @@ def test_rol_tab_eigen_kpi_en_meting(tmp_path):
     mid = [i for i in cockpit2._Stores(dd).metrics.for_node(RID) if i["kind"] == "kpi"][0]["id"]
     cockpit2.dispatch(dd, "m_sample", {"mid": [mid], "value": ["4.2"], "next": ["/"]})
     page = cockpit2.render_node(cockpit2._Stores(dd), RID, "metrics", csrf_token="t")
-    # mini-Looker: wizard + eigen KPI's + periode
-    assert "Conversie" in page and "+ KPI op dashboard" in page and "Periode:" in page
+    # mini-Looker: focus-flow CTA + eigen KPI's + periode
+    assert "Conversie" in page and "+ KPI maken" in page and "Periode:" in page
     assert "Eigen KPI's" in page and "+ Link" in page
 
 
-def test_tile_wizard_combos(tmp_path):
+def test_kpi_composer_combos(tmp_path):
     dd = _dd(tmp_path)
-    page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
-    # zelf-beschrijvende bronnen verschijnen als combo's (bron: measure · dimensie)
+    rec = cockpit2._Stores(dd).records.get(C)
+    page = cockpit2.render_kpi_composer(cockpit2._Stores(dd), C, csrf_token="t")
+    # focus-flow: indicator-combo's + referentie-keuze + vorm
     assert "Verkoop: Paren verkocht · per land" in page
     assert "Websitebezoekers: Bezoekers (7d) · over tijd" in page
-    assert "tile_add" in page and "Vorm" in page
+    assert "tile_add" in page and "Referentie" in page and "benchmark" in page and "doel" in page
+
+
+def test_kpi_referentie_op_tegel(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    # benchmark-referentie: vergelijkwaarde in target, geen project
+    cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": ["shopify|pairs_sold|none"],
+                                       "form": ["doelmeter"], "ref_kind": ["benchmark"],
+                                       "target": ["13.6"], "goal_pid": ["irrelevant"], "next": ["/"]})
+    t = cockpit2._Stores(dd).metrics.tiles_of(C)[0]
+    assert t["ref_kind"] == "benchmark" and t["target"] == 13.6 and t["goal_pid"] == ""
+    # doel-referentie: project gekoppeld
+    pid = st.projects.create(C, "1000 paar", "human")
+    cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": ["shopify|pairs_sold|none"],
+                                       "form": ["burnup"], "ref_kind": ["doel"],
+                                       "goal_pid": [pid], "target": ["1000"], "next": ["/"]})
+    t2 = cockpit2._Stores(dd).metrics.tiles_of(C)[1]
+    assert t2["ref_kind"] == "doel" and t2["goal_pid"] == pid and t2["target"] == 1000.0
 
 
 def test_tile_toevoegen_en_vormen(tmp_path):
@@ -116,8 +135,8 @@ def test_handmatige_kpi_wordt_bron_in_wizard(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "m_add_kpi", {"node": [MKT], "pick": ["manual"], "name": ["NPS"],
                                         "unit": ["score"], "next": ["/"]})
-    # op de cirkel verschijnt de rol-KPI als bron in de wizard
-    page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
+    # op de cirkel verschijnt de rol-KPI als indicator in de focus-flow
+    page = cockpit2.render_kpi_composer(cockpit2._Stores(dd), C, csrf_token="t")
     assert "NPS: NPS · over tijd" in page
 
 

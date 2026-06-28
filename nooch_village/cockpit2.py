@@ -132,6 +132,15 @@ ul.clean li:last-child{border-bottom:none}
 .bullet-h b{font-size:1.1rem}
 .bullet{display:block}
 .bullet-bm{font-size:.72rem}
+.kc-form{display:flex;flex-direction:column;gap:14px;max-width:34rem}
+.kc-step{border:0.5px solid var(--border);border-radius:12px;padding:.7rem .9rem;background:var(--surface)}
+.kc-h{display:flex;align-items:center;gap:8px;margin-bottom:.5rem}
+.kc-n{display:inline-flex;align-items:center;justify-content:center;width:1.4rem;height:1.4rem;border-radius:999px;background:var(--green-tint);color:var(--green-dark);font-size:.8rem;font-weight:700}
+.kc-form select,.kc-form input{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem;margin-bottom:.3rem}
+.kc-radio{display:block;font-size:.88rem;padding:.15rem 0}
+.kc-radio input{width:auto;margin-right:.4rem}
+.kc-cond{margin:.3rem 0 .3rem 1.3rem}
+.kc-hint{font-size:.72rem;margin:.2rem 0 0}
 .tile-prov{font-size:.66rem;color:var(--coral);border:1px solid var(--coral);border-radius:var(--radius-pill);padding:0 .35rem;margin-left:.35rem;vertical-align:middle}
 .cat-sec{margin-bottom:.6rem}
 .cat-sec>summary{cursor:pointer;list-style:none;padding:.3rem 0;border-bottom:1px solid var(--border);font-size:.95rem}
@@ -2103,30 +2112,6 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str) -> str:
             f"<div class='tile-b'>{body}</div>{data}{goal}</div>")
 
 
-def _tile_wizard(st: _Stores, rec, csrf: str) -> str:
-    combos = _tile_combos(_sources_for(st, rec))
-    opts = "".join(f"<option value='{_e(v)}' data-form='{df}'>{_e(lbl)}</option>" for v, lbl, df in combos)
-    forms = [("getal", "Getal"), ("trend", "Trend (lijn)"), ("verdeling", "Verdeling (staaf)"),
-             ("tabel", "Tabel"), ("doelmeter", "Bullet (waarde vs doel + benchmark)"),
-             ("burnup", "Doel-tempo (burn-up)")]
-    fopts = "".join(f"<option value='{k}'>{_e(l)}</option>" for k, l in forms)
-    base = f"/node?id={_e(rec.id)}&tab=metrics"
-    return (f"<details class='m-add'><summary class='btn ok sm'>+ KPI op dashboard</summary>"
-            f"<form method='post' action='/action' class='m-addform'>"
-            f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='node' value='{_e(rec.id)}'>"
-            f"<input type='hidden' name='next' value='{base}'>"
-            f"<label class='att-lbl'>Wat wil je zien</label>"
-            f"<select name='combo' onchange=\"var o=this.options[this.selectedIndex];"
-            f"var f=this.form.querySelector('[name=form]');if(o.dataset.form)f.value=o.dataset.form;\">{opts}</select>"
-            f"<label class='att-lbl'>Vorm</label><select name='form'>{fopts}</select>"
-            f"<label class='att-lbl'>Doelmeter: koppel aan een doel (project)</label>"
-            f"<select name='goal_pid'>{_goal_options(st, rec)}</select>"
-            f"<input name='target' inputmode='decimal' placeholder='streefwaarde, bijv. 1000' autocomplete='off'>"
-            f"<p class='muted' style='font-size:.72rem'>De indicator geeft informatie; het doel is "
-            f"het project (outcome + deadline). Nodig bij vorm Doelmeter en Doel-tempo (burn-up).</p>"
-            f"<button class='btn ok sm' type='submit' name='action' value='tile_add'>Op dashboard</button></form></details>")
-
-
 def _goal_options(st: _Stores, rec) -> str:
     """Projecten onder deze node als koppelbare doelen (= outcome + deadline)."""
     is_c = org.is_circle(rec)
@@ -2340,12 +2325,13 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "maand", nav:
         return f"<a class='cl-filter{on}' href='{base}&mw={k}'>{_e(lbl)}</a>"
     wbar = ("<div class='cl-bar'><span class='muted'>Periode:</span> "
             + "".join(pl(k, lbl) for k, lbl in _MW) + "</div>")
-    head = f"<div class='cl-head'><h3>Metrics</h3>{_tile_wizard(st, rec, csrf) if csrf else ''}</div>{wbar}"
+    mk = (f"<a class='btn ok sm' href='/kpi_new?node={_e(rec.id)}'>+ KPI maken</a>" if csrf else "")
+    head = f"<div class='cl-head'><h3>Metrics</h3>{mk}</div>{wbar}"
 
     # 1. Dashboard van tegels (bron + measure + dimensie + vorm), volgt de periode-keuze
     tiles = st.metrics.tiles_of(rec.id)
     dash = ("".join(_render_tile(st, rec, t, cutoff, csrf) for t in tiles) if tiles
-            else "<p class='muted'>Nog geen KPI's op het dashboard. Kies er een met “+ KPI op dashboard”.</p>")
+            else "<p class='muted'>Nog geen KPI's op het dashboard. Maak er een met “+ KPI maken”.</p>")
     out = f"<div class='c2-sec'>{head}</div><div class='c2-sec'><div class='tile-grid'>{dash}</div></div>"
 
     # 2. Eigen KPI's (data invoeren) — handmatige KPI's worden vanzelf bron in de wizard
@@ -2515,6 +2501,79 @@ def _catalog_add_form(st: _Stores, csrf: str) -> str:
             f"{_opt_select('verificatie', VERIFICATIE_LABEL, '', 'verificatie?')}"
             f"<input name='waarde' inputmode='decimal' placeholder='Canonieke waarde (vaste constante, optioneel)' autocomplete='off'>"
             f"<button class='btn ok sm' type='submit' name='action' value='def_add'>Definitie toevoegen</button></form></details>")
+
+
+def render_kpi_composer(st: _Stores, node_id: str, csrf_token: str = "", msg: str = "") -> str:
+    """Focus-flow: stel een KPI samen uit drie zuivere ingrediënten — indicator + referentie + vorm.
+    De indicator blijft puur (uit de bron-catalogus); de referentie (benchmark of doel) en de vorm
+    zijn eigenschappen van de KPI."""
+    rec = st.records.get(node_id)
+    if rec is None:
+        return _page("Niet gevonden", "<p>Node niet gevonden.</p>")
+    back = f"/node?id={_e(node_id)}&tab=metrics"
+    combos = _tile_combos(_sources_for(st, rec))
+    ind_opts = "".join(f"<option value='{_e(v)}'>{_e(lbl)}</option>" for v, lbl, _df in combos)
+    proj_opts = _goal_options(st, rec)
+    step = lambda n, t, inner: (f"<div class='kc-step'><div class='kc-h'><span class='kc-n'>{n}</span>"
+                                f"<b>{_e(t)}</b></div>{inner}</div>")
+    form = (f"<form method='post' action='/action' class='kc-form'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='node' value='{_e(node_id)}'>"
+            f"<input type='hidden' name='next' value='{back}'>"
+            + step("1", "Indicator (wat je meet)",
+                   f"<select name='combo'>{ind_opts}</select>"
+                   "<p class='muted kc-hint'>Puur uit de catalogus. Geen referentie of vorm erin.</p>")
+            + step("2", "Referentie (de vergelijking)",
+                   "<label class='kc-radio'><input type='radio' name='ref_kind' value='' checked> geen — alleen volgen</label>"
+                   "<label class='kc-radio'><input type='radio' name='ref_kind' value='benchmark'> benchmark</label>"
+                   "<div class='kc-cond' data-for='benchmark' style='display:none'>"
+                   "<input name='bench_target' inputmode='decimal' placeholder='benchmark-waarde (bijv. 13.6)' autocomplete='off'>"
+                   "<p class='muted kc-hint'>Later koppelbaar aan de kennisbank. Nu de vergelijkwaarde.</p></div>"
+                   "<label class='kc-radio'><input type='radio' name='ref_kind' value='doel'> doel (project)</label>"
+                   f"<div class='kc-cond' data-for='doel' style='display:none'><select name='goal_pid'>{proj_opts}</select>"
+                   "<input name='doel_target' inputmode='decimal' placeholder='streefwaarde (bijv. 1000)' autocomplete='off'></div>")
+            + step("3", "Vorm (volgt de referentie)",
+                   "<select name='form'>"
+                   "<option value='trend' data-ref=''>Trend (lijn)</option>"
+                   "<option value='getal' data-ref=''>Getal</option>"
+                   "<option value='verdeling' data-ref=''>Verdeling (staaf)</option>"
+                   "<option value='doelmeter' data-ref='benchmark doel'>Bullet (waarde vs referentie)</option>"
+                   "<option value='burnup' data-ref='doel'>Doel-tempo (burn-up)</option>"
+                   "</select>")
+            + step("4", "Plaats", f"<div class='muted'>{_e(_name(rec))} · dashboard</div>"
+                   "<input type='hidden' name='target' value=''>")
+            + "<button class='btn ok' type='submit' name='action' value='tile_add'>Maak KPI</button></form>")
+    main = (f"<div class='c2-main'><div class='c2-bar'><a href='{back}'>← terug</a></div>"
+            f"<h1>KPI maken <span class='chip'>focus</span></h1>{_banner(msg)}"
+            f"<p class='muted'>Een KPI ontstaat door drie ingrediënten bewust samen te stellen.</p>"
+            f"<div class='c2-sec'>{form}</div></div>")
+    inner = (f"<style>{_EXTRA_CSS}</style>"
+             "<div class='bar'>cockpit 2 · GlassFrog-vorm (PoC) · <a href='/'>home</a> · "
+             "<a href='/catalog'>catalogus</a></div>"
+             f"<div class='c2-wrap'>{main}</div>{_KPI_COMPOSER_JS}")
+    return _page("KPI maken", inner)
+
+
+_KPI_COMPOSER_JS = """<script>
+(function(){
+ var f=document.querySelector('.kc-form'); if(!f) return;
+ var sel=f.querySelector('[name=form]'), tgt=f.querySelector('[name=target]');
+ function ref(){var r=f.querySelector('[name=ref_kind]:checked'); return r?r.value:'';}
+ function sync(){
+   var rk=ref();
+   f.querySelectorAll('.kc-cond').forEach(function(c){c.style.display=(c.dataset.for===rk)?'':'none';});
+   Array.prototype.forEach.call(sel.options,function(o){
+     var ok=(o.dataset.ref||'').split(' ').indexOf(rk)>=0 || (rk===''&&o.dataset.ref==='');
+     o.hidden=!ok; o.disabled=!ok;
+   });
+   var cur=sel.options[sel.selectedIndex];
+   if(!cur||cur.disabled){ for(var i=0;i<sel.options.length;i++){if(!sel.options[i].disabled){sel.selectedIndex=i;break;}} }
+   var bt=f.querySelector('[name=bench_target]'), dt=f.querySelector('[name=doel_target]');
+   tgt.value = rk==='benchmark'?(bt?bt.value:'') : rk==='doel'?(dt?dt.value:'') : '';
+ }
+ f.addEventListener('change',sync); f.addEventListener('input',sync); sync();
+})();
+</script>"""
 
 
 def render_catalog(st: _Stores, csrf_token: str = "", msg: str = "") -> str:
@@ -4811,9 +4870,11 @@ def dispatch(data_dir: str, action: str, form: dict):
     elif action == "tile_add":
         parts = (g("combo") or "").split("|")
         if len(parts) == 3 and parts[0]:
+            ref = g("ref_kind")
             t = st.metrics.add_tile(g("node"), parts[0], parts[1], parts[2], g("form"),
-                                    target=g("target"), goal_pid=g("goal_pid"))
-            msg = "✓ tegel op dashboard" if t else "⛔ kon tegel niet maken"
+                                    target=g("target"), goal_pid=("" if ref == "benchmark" else g("goal_pid")),
+                                    ref_kind=ref)
+            msg = "✓ KPI op dashboard" if t else "⛔ kon KPI niet maken"
         else:
             msg = "⛔ kies wat je wilt zien"
     elif action == "tile_remove":
@@ -4920,6 +4981,10 @@ def make_handler(data_dir: str, csrf_token: str):
                 return
             if path == "/catalog":
                 self._send(render_catalog(st, csrf_token=csrf_token, msg=(qs.get("msg") or [""])[0]))
+                return
+            if path == "/kpi_new":
+                self._send(render_kpi_composer(st, (qs.get("node") or [""])[0],
+                                               csrf_token=csrf_token, msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/noochie":
                 self._send(render_noochie(st, csrf_token, (qs.get("ctx") or [""])[0]))

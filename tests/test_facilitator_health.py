@@ -30,7 +30,7 @@ def test_accountability_en_maandchecklist(tmp_path):
 def test_werkoverleg_bron_in_wizard(tmp_path):
     dd = _dd(tmp_path)
     # de Werkoverleg-bron is beschikbaar op de facilitator (rol onder de cirkel)
-    page = cockpit2.render_node(cockpit2._Stores(dd), FAC, "metrics", csrf_token="t")
+    page = cockpit2.render_kpi_composer(cockpit2._Stores(dd), FAC, csrf_token="t")
     assert "Werkoverleg: Tevredenheid · gemiddeld per overleg" in page
     assert "Werkoverleg: Spanningen verwerkt · totaal" in page
 
