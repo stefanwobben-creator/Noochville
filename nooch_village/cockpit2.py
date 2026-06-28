@@ -1197,7 +1197,7 @@ def _group_meta(st: _Stores, p: dict, mode: str, node_owner: str):
 
 
 def _projects_board(st: _Stores, projs: list, owner: str, csrf_token: str, back: str,
-                    group: str = "persoon") -> str:
+                    group: str = "persoon", quickadd: bool = True) -> str:
     """Swimlanes per groep — alleen NIET-lege lanes (lege boards zijn ruis). Lege return → ''."""
     mode = group if group in ("persoon", "rol") else "persoon"
     groups: dict = {}
@@ -1210,7 +1210,7 @@ def _projects_board(st: _Stores, projs: list, owner: str, csrf_token: str, back:
     board = ""
     for gid, g in sorted(groups.items(), key=lambda kv: kv[1]["sk"]):
         board += (f"<div class='swim'><div class='swim-h'>{_e(g['label'])} ({len(g['items'])})</div>"
-                  f"{_columns_html(st, g['items'], g['ao'], g['at'], csrf_token, back, quickadd=True)}"
+                  f"{_columns_html(st, g['items'], g['ao'], g['at'], csrf_token, back, quickadd=quickadd)}"
                   f"</div>")
     return board + _drag_script(csrf_token, back)
 
@@ -1277,19 +1277,20 @@ def _add_project_trigger(rec, csrf_token: str) -> str:
     return f"<a class='js-modal addlink' href='{url}' data-href='{url}'>+ project</a>"
 
 
-def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "") -> str:
+def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: bool = True) -> str:
     allp = st.projects.all()
     back_base = f"/node?id={rec.id}&tab=projects"
 
-    addlink = _add_project_trigger(rec, csrf_token)
+    addlink = _add_project_trigger(rec, csrf_token) if add else ""
 
     if not org.is_circle(rec):
         # ROL: eigen projecten, gegroepeerd per persoon (de doener). Lege lanes tonen we niet.
         projs = [p for p in allp if p.get("owner") == rec.id and not p.get("archived")]
         archived = [p for p in allp if p.get("owner") == rec.id and p.get("archived")]
-        board = _projects_board(st, projs, rec.id, csrf_token, back_base, "persoon")
+        board = _projects_board(st, projs, rec.id, csrf_token, back_base, "persoon", quickadd=add)
         if not board:
-            board = "<p class='muted'>Nog geen projecten. Voeg er een toe met + project.</p>"
+            board = ("<p class='muted'>Nog geen projecten. Voeg er een toe met + project.</p>" if add
+                     else "<p class='muted'>Nog geen projecten.</p>")
         head = (f"<div style='margin-bottom:1rem'>"
                 f"<h3 style='margin:0;display:inline'>Projecten ({len(projs)})</h3> &nbsp; {addlink}</div>")
         return f"<div class='c2-sec'>{head}{board}{_archived_html(st, archived, csrf_token, back_base)}</div>"
@@ -1302,9 +1303,10 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "") -> st
     ii = f"{_II_PREFIX}{rec.id}"
     projs = [p for p in allp if (p.get("owner") in rids or p.get("owner") == ii) and not p.get("archived")]
     back = f"{back_base}&group={g}"
-    board = _projects_board(st, projs, rec.id, csrf_token, back, g)
+    board = _projects_board(st, projs, rec.id, csrf_token, back, g, quickadd=add)
     if not board:
-        board = "<p class='muted'>Nog geen projecten. Voeg er een toe met + project.</p>"
+        board = ("<p class='muted'>Nog geen projecten. Voeg er een toe met + project.</p>" if add
+                 else "<p class='muted'>Nog geen projecten.</p>")
     subs = sorted(org.subcircles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
     sub_html = ""
     if subs:
@@ -2860,7 +2862,8 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
     elif cur == "metrics":
         content = _wo_metrics(st, crec, csrf_token, kpi, win=mw)
     elif cur == "projecten":
-        content = _projects_tab_html(st, crec, csrf_token, group="")
+        # In het overleg worden projecten via de triage (agenda) toegevoegd, niet hier los.
+        content = _projects_tab_html(st, crec, csrf_token, group="", add=False)
     elif cur == "agenda":
         content = _wo_agenda(st, crec, csrf_token, iid)
     elif cur == "checkout":
