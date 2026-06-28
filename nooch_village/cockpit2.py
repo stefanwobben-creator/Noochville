@@ -196,7 +196,7 @@ ul.clean li:last-child{border-bottom:none}
 .rovm-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:0 .2rem}
 .rovm-close:hover{color:var(--coral)}
 .rovm-field{margin-top:.7rem}
-.rovm-field input[name=value]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem}
+.rovm-field input[name=value],.rovm-field textarea,.rovm-field select{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem;background:var(--surface);font:inherit}
 .rovm-was{font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);font-style:italic}
 .rovm-item{display:flex;align-items:center;gap:.5rem;padding:.25rem .4rem;border-radius:var(--radius);border:1px solid var(--border);margin-top:.3rem}
 .rovm-iv{flex:1 1 auto;min-width:0}
@@ -2645,13 +2645,15 @@ def _wo_triage(st: _Stores, crec, csrf: str, item: dict) -> str:
                 f"<input type='hidden' name='iid' value='{_e(iid)}'>"
                 f"<button class='flink' type='submit' name='action' value='wo_ag_reopen'>↺ heropenen</button></form></div>")
 
-    fields = (setf("spanning", "Wat is de spanning?", note.get("spanning", ""), ta=True)
-              + f"<div class='rovm-field'><label class='att-lbl'>Welke rol voelt 'm?</label>"
+    # Spanning + rol (optioneel) als eigen blok, los van de uitkomsten. 'Wat heb je nodig' is weg:
+    # dat is altijd de uitkomst zelf.
+    fields = (f"<div class='wo-spanning'><div class='sec-kop'>Spanning</div>"
+              + setf("spanning", "Wat is de spanning?", note.get("spanning", ""), ta=True)
+              + f"<div class='rovm-field'><label class='att-lbl'>Welke rol voelt 'm? (optioneel)</label>"
                 f"<form method='post' action='/action' {keep}>{_wo_hid(csrf, crec.id, back)}"
                 f"<input type='hidden' name='iid' value='{_e(iid)}'><input type='hidden' name='field' value='role'>"
                 f"<input type='hidden' name='action' value='wo_ag_note'>"
-                f"<select name='value' onchange='{sub}'><option value=''>—</option>{ropts}</select></form></div>"
-              + setf("need", "Wat heb je nodig?", note.get("need", ""), ta=True))
+                f"<select name='value' onchange='{sub}'><option value=''>—</option>{ropts}</select></form></div></div>")
 
     # Progressive disclosure: kies eerst het type, dan verschijnt het juiste veld. Gelijkwaardig
     # (geen primary-kleur die naar één uitkomst stuurt).
@@ -2667,11 +2669,14 @@ def _wo_triage(st: _Stores, crec, csrf: str, item: dict) -> str:
         f"<option value='{_e(p['id'])}'>{_e(str(p.get('scope') or p['id'])[:60])}</option>"
         for p in st.projects.all() if p.get("owner") in circle_nodes)
 
-    info = oc_details("info", "Informatie delen",
-                      "<input name='detail' placeholder='wat deel/geef je?' autocomplete='off'>")
+    info = oc_details("info", "Informatie",
+                      "<select name='dir'><option value='delen'>delen</option>"
+                      "<option value='nodig'>nodig</option></select>"
+                      "<textarea name='detail' rows='2' placeholder='Wat? Gebruik @naam of @rol voor "
+                      "gericht; anders geldt het voor iedereen'></textarea>")
     proj = oc_details("project", "Project toevoegen",
                       f"<select name='owner'>{ropts}</select>"
-                      f"<input name='detail' placeholder='scope van het project' autocomplete='off'>")
+                      f"<input name='detail' placeholder='formulering van het project' autocomplete='off'>")
     act = oc_details("action", "Actie",
                      "<input name='detail' placeholder='wat ga je doen? (bv. meeting plannen, mail doorsturen)' autocomplete='off'>"
                      f"<select name='pid_link'>{pj_opts}</select>"
@@ -3834,7 +3839,17 @@ def dispatch(data_dir: str, action: str, form: dict):
             msg = "↺ heropend"
     elif action == "wo_ag_resolve":
         otype, detail = g("otype"), g("detail")
-        if otype == "project" and g("owner") and detail.strip():
+        it = st.werk.agenda_get(g("circle"), g("iid"))
+        if otype == "info":
+            # richting (delen/nodig) + @-targeting: gericht aan rol/persoon, anders iedereen
+            dr = g("dir") or "delen"
+            _, by_name = _mentionables(st)
+            ment = _mentions_in(detail, by_name)
+            for ty, tid, nm in ment:
+                st.notif.add(ty, tid, "", "", by="werkoverleg", snippet=detail)
+            tgt = ", ".join(nm for _, _, nm in ment) if ment else "iedereen"
+            detail = f"{dr} ({tgt}): {detail.strip()}"
+        elif otype == "project" and g("owner") and detail.strip():
             st.projects.create(g("owner"), detail.strip(), "human")
             detail = f"{detail.strip()} → {_name(st.records.get(g('owner')))}"
         elif otype == "action" and g("pid_link") and detail.strip():
@@ -3849,11 +3864,11 @@ def dispatch(data_dir: str, action: str, form: dict):
                 detail = f"{detail.strip()} → project"
         elif otype == "roloverleg" and detail.strip():
             slug = re.sub(r"[^a-z0-9]+", "_", detail.lower()).strip("_")[:40] or "punt"
-            it = st.werk.agenda_get(g("circle"), g("iid"))
+            by = (it or {}).get("by") or "werkoverleg"   # ingebracht door de indiener van de spanning
             st.agenda.add(f"{g('circle')}__{slug}", "add_role",
                           {"name": (it or {}).get("title", "Nieuwe rol"), "new_role_parent": g("circle"),
                            "purpose": "", "add_accountabilities": []},
-                          detail.strip(), by="werkoverleg", title=(it or {}).get("title", detail[:60]))
+                          detail.strip(), by=by, title=(it or {}).get("title", detail[:60]))
         st.werk.agenda_resolve(g("circle"), g("iid"), otype, detail)
         msg = f"✓ verwerkt als {otype}"
     elif action == "wo_checkout":

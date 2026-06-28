@@ -131,6 +131,21 @@ def test_triage_actie_los_en_aan_project(tmp_path):
     assert any("Cosh login" in t.get("text", "") for t in items)
 
 
+def test_triage_geen_need_veld_en_info_richting(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]})
+    cockpit2.dispatch(dd, "wo_ag_add", {"circle": [C], "naam": ["Iets"], "next": ["/"]})
+    iid = cockpit2._Stores(dd).werk.agenda(C)[0]["id"]
+    frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "agenda", csrf_token="t", fragment=True, iid=iid)
+    assert "Wat heb je nodig" not in frag                     # need-veld is weg
+    assert "wo-spanning" in frag and "Spanning" in frag       # spanning als eigen blok
+    # info met richting (delen/nodig); detail krijgt richting + doelgroep
+    cockpit2.dispatch(dd, "wo_ag_resolve", {"circle": [C], "iid": [iid], "otype": ["info"],
+                                            "dir": ["delen"], "detail": ["losdoc"], "next": ["/"]})
+    oc = cockpit2._Stores(dd).werk.agenda_get(C, iid)["outcome"]
+    assert oc["type"] == "info" and oc["detail"].startswith("delen (iedereen):")
+
+
 def test_triage_roloverleg_punt(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]})
