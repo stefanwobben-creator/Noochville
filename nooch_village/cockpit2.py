@@ -29,6 +29,7 @@ from nooch_village.attachments import AttachmentStore
 from nooch_village.personas import PersonaStore
 from nooch_village.projects import ProjectLedger
 from nooch_village.ai_tasks import AITaskStore
+from nooch_village.checklists import ChecklistStore, CADENCES, CADENCE_LABEL
 from nooch_village.notifications import NotifStore
 from nooch_village.noochie import NoochieStore
 from nooch_village.roloverleg import Agenda
@@ -338,6 +339,32 @@ ul.clean li:last-child{border-bottom:none}
 .md-help{position:absolute;right:0;margin-top:.3rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .6rem;font-size:.72rem;color:var(--gray);white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.12);z-index:5}
 .editor textarea{border:none;width:100%;box-sizing:border-box;padding:.55rem .6rem;background:transparent;border-radius:0 0 var(--radius) var(--radius)}
 .editor textarea:focus{outline:none}
+/* Checklists */
+.cl-head{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+.cl-bar{display:flex;align-items:center;gap:.6rem;margin-top:.5rem;font-size:.82rem}
+.cl-filter{text-decoration:none;color:var(--gray);padding:.1rem .4rem;border-radius:var(--radius)}
+.cl-filter.on{background:var(--green-tint);color:var(--green-dark);font-weight:700}
+.cl-group{margin:.2rem 0 1rem}
+.cl-group h4{margin:.6rem 0 .3rem;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle)}
+.cl-row{display:flex;align-items:center;justify-content:space-between;gap:.8rem;padding:.4rem 0;border-bottom:1px solid var(--border)}
+.cl-main{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.cl-desc{font-weight:600}
+.cl-act{flex:0 0 auto;display:flex;align-items:center;gap:.5rem}
+.cl-spark{display:inline-flex;gap:1px;font-size:.62rem;letter-spacing:0}
+.cl-spark i{font-style:normal;width:.95em;text-align:center}
+.cl-spark i.ok{color:var(--green)}
+.cl-spark i.no{color:var(--coral)}
+.cl-checks{display:inline-flex;gap:.25rem}
+.cl-check{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;width:1.7rem;height:1.7rem;line-height:1;font-size:.85rem;color:var(--muted)}
+.cl-check.ok.on{background:var(--green);color:#fff;border-color:var(--green)}
+.cl-check.no.on{background:var(--coral);color:#fff;border-color:var(--coral)}
+.cl-attn{background:var(--error-tint);border:1px solid var(--coral);border-radius:var(--radius);padding:.65rem .75rem}
+.cl-add{display:inline-block}
+.cl-add>summary{list-style:none;cursor:pointer}
+.cl-add>summary::-webkit-details-marker{display:none}
+.cl-addform{margin-top:.6rem;border:1px solid var(--border);border-radius:var(--radius);padding:.7rem .8rem;background:var(--surface);max-width:30rem}
+.cl-addform input[name=description],.cl-addform select{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem;margin-bottom:.2rem}
+.cl-gate{display:flex;gap:.4rem;align-items:flex-start;font-size:.8rem;color:var(--gray);margin:.5rem 0 .7rem}
 .pdetail-h h2{margin:.1rem 0 .5rem;font-family:var(--font-display);font-size:1.35rem;line-height:1.2}
 .psec{margin:0 0 1.15rem}
 .psec-h{display:flex;align-items:center;gap:.4rem;color:var(--subtle);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:.45rem}
@@ -426,6 +453,7 @@ class _Stores:
         self.notif = NotifStore(os.path.join(dd, "notifications.json"))
         self.agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
         self.noochie = NoochieStore(os.path.join(dd, "noochie.json"))
+        self.checklists = ChecklistStore(os.path.join(dd, "checklists.json"))
 
 
 def _bootstrap(dd: str) -> None:
@@ -1145,8 +1173,118 @@ def _person_projects_html(st: _Stores, pid: str) -> str:
     return f"<div class='c2-sec'><h3>Projecten ({len(projs)})</h3><ul class='clean'>{items}</ul></div>"
 
 
+def _cl_target_label(st: _Stores, item: dict) -> str:
+    if item.get("target_type") == "role" and item.get("target_id"):
+        r = st.records.get(item["target_id"])
+        return _name(r) if r else item["target_id"]
+    return "Alle leden"
+
+
+def _cl_spark(item: dict) -> str:
+    h = ChecklistStore.history(item, 6)
+    if not h:
+        return "<span class='cl-spark muted' title='nog geen historie'>—</span>"
+    dots = "".join(f"<i class='{'ok' if b else 'no'}'>{'✓' if b else '✗'}</i>" for b in h)
+    return f"<span class='cl-spark' title='laatste {len(h)} keer'>{dots}</span>"
+
+
+def _cl_row(st: _Stores, item: dict, csrf: str) -> str:
+    cid = item["id"]
+    status = ChecklistStore.current_status(item)
+    tgt = f"<span class='chip muted'>{_e(_cl_target_label(st, item))}</span>"
+    # rapporteer ✓/✗ voor de huidige periode (de huidige keuze is gemarkeerd)
+    rep = ""
+    if csrf:
+        def b(ok, lbl, cls):
+            on = " on" if status is (ok) else ""
+            return (f"<form method='post' action='/action' style='display:inline'>"
+                    f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+                    f"<input type='hidden' name='cid' value='{_e(cid)}'>"
+                    f"<input type='hidden' name='ok' value='{'1' if ok else '0'}'>"
+                    f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=checklists'>"
+                    f"<button class='cl-check{cls}{on}' type='submit' name='action' value='cl_report' "
+                    f"title='{lbl}'>{'✓' if ok else '✗'}</button></form>")
+        rep = b(True, "check", " ok") + b(False, "geen check", " no")
+    else:
+        rep = "" if status is None else (f"<span class='cl-check {'ok' if status else 'no'} on'>"
+                                         f"{'✓' if status else '✗'}</span>")
+    rm = ""
+    if csrf:
+        rm = (f"<form method='post' action='/action' style='display:inline'>"
+              f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+              f"<input type='hidden' name='cid' value='{_e(cid)}'>"
+              f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=checklists'>"
+              f"<button class='dellink' type='submit' name='action' value='cl_remove' title='verwijderen'>✕</button></form>")
+    return (f"<div class='cl-row'><div class='cl-main'><span class='cl-desc'>{_e(item['description'])}</span> {tgt}</div>"
+            f"<div class='cl-act'>{_cl_spark(item)}<span class='cl-checks'>{rep}</span>{rm}</div></div>")
+
+
+def _checklists_tab_html(st: _Stores, rec, csrf: str = "", flt: str = "due") -> str:
+    is_c = org.is_circle(rec)
+    items = st.checklists.for_node(rec.id)
+    base = f"/node?id={_e(rec.id)}&tab=checklists"
+
+    # Aandacht nodig: gemiste checks (✗ deze periode) bubbelen naar boven -> wordt werk.
+    missed = [i for i in items if ChecklistStore.current_status(i) is False]
+    aandacht = ""
+    if missed:
+        rows = "".join(_cl_row(st, i, csrf) for i in missed)
+        aandacht = (f"<div class='c2-sec cl-attn'><h3>⚠ Aandacht nodig</h3>"
+                    f"<p class='muted' style='font-size:.8rem'>Gemiste checks. Bespreek ze in het "
+                    f"werkoverleg of maak er een agendapunt van.</p>{rows}</div>")
+
+    shown = [i for i in items if ChecklistStore.is_due(i)] if flt == "due" else items
+    # filter-schakelaar
+    def fl(key, lbl):
+        on = " on" if flt == key else ""
+        return f"<a class='cl-filter{on}' href='{base}&clf={key}'>{lbl}</a>"
+    bar = f"<div class='cl-bar'><span class='muted'>Toon:</span> {fl('due', 'Nu te doen')} {fl('all', 'Alles')}</div>"
+
+    # groepering per cadans
+    groups = ""
+    for cad in CADENCES:
+        sub = [i for i in shown if i.get("cadence") == cad]
+        if not sub:
+            continue
+        groups += (f"<div class='cl-group'><h4>{_e(CADENCE_LABEL[cad])}</h4>"
+                   + "".join(_cl_row(st, i, csrf) for i in sub) + "</div>")
+    if not groups:
+        groups = ("<p class='muted'>Niets meer te doen deze periode. 🎉</p>" if flt == "due"
+                  else "<p class='muted'>Nog geen checklist-items.</p>")
+
+    # toevoegen (governance-poort: alleen een al bestaande terugkerende actie)
+    add = ""
+    if csrf:
+        if is_c:
+            roles = sorted(org.roles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
+            opts = "<option value='all'>Alle cirkelleden</option>" + "".join(
+                f"<option value='role:{_e(r.id)}'>{_e(_name(r))}</option>" for r in roles)
+            doel = (f"<label class='att-lbl'>Doel</label><select name='doel'>{opts}</select>")
+        else:
+            doel = "<input type='hidden' name='doel' value='all'>"
+        cadopts = "".join(f"<option value='{c}'>{_e(CADENCE_LABEL[c])}</option>" for c in CADENCES)
+        add = (f"<details class='cl-add'><summary class='btn ok sm'>+ Checklist-item</summary>"
+               f"<form method='post' action='/action' class='cl-addform'>"
+               f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+               f"<input type='hidden' name='node' value='{_e(rec.id)}'>"
+               f"<input type='hidden' name='next' value='{base}'>"
+               f"<label class='att-lbl'>Beschrijving</label>"
+               f"<input name='description' placeholder='Bijv. Facturen verstuurd' autocomplete='off'>"
+               f"<label class='att-lbl'>Cadans</label><select name='cadence'>{cadopts}</select>"
+               f"{doel}"
+               f"<label class='cl-gate'><input type='checkbox' name='bestaand' value='1'> "
+               f"Dit is een al <b>bestaande</b> terugkerende actie (geen nieuwe verwachting).</label>"
+               f"<button class='btn ok sm' type='submit' name='action' value='cl_add'>Toevoegen</button>"
+               f"</form></details>")
+
+    head = (f"<div class='cl-head'><h3>Checklists</h3>{add}</div>"
+            f"<p class='muted' style='font-size:.8rem'>Transparantie over terugkerend werk (pre-flight): "
+            f"✓ of ✗ per periode. Nieuwe verwachtingen lopen via het roloverleg.</p>")
+    return f"<div class='c2-sec'>{head}{bar}</div>{aandacht}{groups}"
+
+
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",
-                group: str = "") -> str:
+                group: str = "", clf: str = "due") -> str:
     rec = st.records.get(node_id)
     if rec is None:
         return _page("Niet gevonden", "<p>Node niet gevonden.</p><p><a href='/'>← home</a></p>")
@@ -1177,8 +1315,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
                    + "<p class='muted' style='font-size:.8rem'>Hierin vouwen we het "
                    "zoekwoord-volume.</p></div>")
     elif tab == "checklists":
-        content = ("<div class='c2-sec'><h3>Checklists</h3>"
-                   + _att_html(st, rec, "checklist", "Nog geen checklist-items.") + "</div>")
+        content = _checklists_tab_html(st, rec, csrf_token, flt=clf)
     elif tab == "projects":
         content = _projects_tab_html(st, rec, csrf_token, group=group)
     elif tab == "policies":
@@ -2839,6 +2976,21 @@ def dispatch(data_dir: str, action: str, form: dict):
         st.noochie.reset(); msg = "↺ Noochie opnieuw"
     elif action == "noochie_ctx":
         st.noochie.set_field("ctx", g("ctx")); msg = "✓ context bijgewerkt"
+    elif action == "cl_add":
+        # Governance-poort: alleen een al bestaande terugkerende actie (geen nieuwe verwachting).
+        if g("bestaand") != "1":
+            msg = "⛔ alleen bestaande terugkerende acties — nieuwe verwachting? via het roloverleg"
+        else:
+            doel = g("doel") or "all"
+            tt, tid = ("role", doel[5:]) if doel.startswith("role:") else ("all", "")
+            it = st.checklists.add(g("node"), g("description"), g("cadence"),
+                                   target_type=tt, target_id=tid, by="founder")
+            msg = "✓ checklist-item toegevoegd" if it else "⛔ geef een beschrijving"
+    elif action == "cl_report":
+        if st.checklists.report(g("cid"), g("ok") == "1", by="founder"):
+            msg = "✓ genoteerd" if g("ok") == "1" else "✗ genoteerd (aandacht nodig)"
+    elif action == "cl_remove":
+        st.checklists.remove(g("cid")); msg = "🗑 checklist-item verwijderd"
     elif action in ("rov2_set", "rov2_acc_add", "rov2_acc_remove", "rov2_dom_add", "rov2_dom_remove"):
         item = st.agenda.get(g("iid"))
         if item is not None:
@@ -2902,7 +3054,8 @@ def make_handler(data_dir: str, csrf_token: str):
                 self._send(render_node(st, (qs.get("id") or [""])[0],
                                        (qs.get("tab") or ["overview"])[0], csrf_token=csrf_token,
                                        msg=(qs.get("msg") or [""])[0],
-                                       group=(qs.get("group") or [""])[0]))
+                                       group=(qs.get("group") or [""])[0],
+                                       clf=(qs.get("clf") or ["due"])[0]))
                 return
             # Modal-fragmenten krijgen hun eigen <style> mee, zodat ze altijd verse CSS tonen
             # (de overlay hergebruikt anders de stylesheet van de eerste pagina-load).
