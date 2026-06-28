@@ -154,3 +154,18 @@ def _link_host(url: str) -> str:
 def _psec(icon: str, title: str, body: str) -> str:
     return (f"<div class='psec'><div class='psec-h'>{icon}<span>{_e(title)}</span></div>"
             f"<div class='psec-b'>{body}</div></div>")
+
+
+_ICON_ADD_EMOJI = (
+    "<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' "
+    "stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'>"
+    "<circle cx='10' cy='12' r='8'/>"
+    "<line x1='7.5' y1='10.5' x2='7.5' y2='10.5'/>"
+    "<line x1='12.5' y1='10.5' x2='12.5' y2='10.5'/>"
+    "<path d='M7 15a3.5 2.5 0 0 0 6 0'/>"
+    "<path d='M20 2.6v4M18 4.6h4'/></svg>")
+
+
+def _person_name(st, pid: str) -> str:
+    p = st.people.get(pid)
+    return p.name if p else (pid or "")
