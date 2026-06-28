@@ -2628,38 +2628,31 @@ def _wo_metrics(st: _Stores, crec, csrf: str, kpi: str = "", win: str = "maand")
     return focus + tabrow + _metrics_tab_html(st, crec, csrf, win, nav=base)
 
 
-def _wo_agenda(st: _Stores, crec, csrf: str, iid: str = "") -> str:
-    """Stap 5: agenda opbouwen + spanning verwerken (triage)."""
+def _wo_agenda_list(st: _Stores, crec, csrf: str, active_iid: str = "") -> str:
+    """Links in de agenda-stap: toevoegen + lijst van spanningen (zelfde patroon als het
+    governance-overleg). Klikken selecteert een spanning; de triage staat rechts."""
     base = f"/werkoverleg?circle={crec.id}&step=agenda"
-    item = st.werk.agenda_get(crec.id, iid) if iid else None
-    if item is not None:
-        return _wo_triage(st, crec, csrf, item)
-    # lijst + toevoegen
-    rows = ""
-    for it in st.werk.agenda(crec.id):
-        done = it["status"] == "done"
-        url = f"{base}&iid={it['id']}"
-        by = (it.get("by") or "").strip()
-        av = f"<span class='av rov-by' title='door {_e(by)}'>{_e(by)}</span>" if by else ""
-        otype = (it.get("outcome") or {}).get("type")
-        tag = f"<span class='chip muted'>{_e(otype)}</span>" if otype else ""
-        rm = (f"<form method='post' action='/action' style='display:inline'>{_wo_hid(csrf, crec.id, base)}"
-              f"<input type='hidden' name='iid' value='{_e(it['id'])}'>"
-              f"<button class='flink' type='submit' name='action' value='wo_ag_remove'>✕</button></form>") if csrf else ""
-        rows += (f"<div class='rov-item{(' done' if done else '')}'>"
-                 f"<a class='js-modal rov-link' href='{url}' data-href='{url}'><span class='rov-title'>{_e(it['title'])}</span></a>"
-                 f"{tag}{av}{rm}</div>")
-    if not rows:
-        rows = "<p class='muted'>Nog geen spanningen. Iedereen mag er een inbrengen.</p>"
     add = ""
     if csrf:
         add = (f"<form method='post' action='/action' class='rov-add'>{_wo_hid(csrf, crec.id, base)}"
                f"<input name='naam' placeholder='Spanning… (-SW voor initialen)' autocomplete='off'>"
                f"<button class='btn ok sm' type='submit' name='action' value='wo_ag_add'>+</button></form>")
-    return (f"<div class='c2-sec'><h3>Agenda — spanningen</h3>"
-            f"<p class='muted' style='font-size:.8rem'>Breng een spanning in; klik erop om te verwerken. "
-            f"Behandeld = doorgestreept (blijft klikbaar voor de uitkomst).</p>{add}"
-            f"<div class='rov-list'>{rows}</div></div>")
+    rows = ""
+    for it in st.werk.agenda(crec.id):
+        done = it["status"] == "done"
+        on = " on" if it["id"] == active_iid else ""
+        url = f"{base}&iid={it['id']}"
+        by = (it.get("by") or "").strip()
+        av = f"<span class='av rov-by' title='door {_e(by)}'>{_e(by)}</span>" if by else ""
+        rm = (f"<form method='post' action='/action' style='display:inline'>{_wo_hid(csrf, crec.id, base)}"
+              f"<input type='hidden' name='iid' value='{_e(it['id'])}'>"
+              f"<button class='flink' type='submit' name='action' value='wo_ag_remove'>✕</button></form>") if csrf else ""
+        rows += (f"<div class='rov-item{on}{(' done' if done else '')}'>"
+                 f"<a class='js-modal rov-link' href='{url}' data-href='{url}'><span class='rov-title'>{_e(it['title'])}</span></a>"
+                 f"{av}{rm}</div>")
+    if not rows:
+        rows = "<p class='muted'>Nog geen spanningen. Iedereen mag er een inbrengen.</p>"
+    return f"{add}<div class='rov-list'>{rows}</div>"
 
 
 def _wo_triage(st: _Stores, crec, csrf: str, item: dict) -> str:
@@ -2843,6 +2836,9 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
         nav += (f"<a class='{cls} js-modal' href='{url}' data-href='{url}'>"
                 f"<span class='wo-num'>{num}</span>{_e(lbl)}</a>")
     left = _psec(_IC_CHECK, "Overleg", f"<div class='wo-nav'>{nav}</div>")
+    # Agenda-stap: spanningen (add + lijst) komen LINKS onder het menu, triage staat rechts.
+    if cur == "agenda":
+        left += _psec(_IC_INFO, "Spanningen", _wo_agenda_list(st, crec, csrf_token, iid))
 
     if cur == "checkin":
         content = _wo_checkin(st, crec, csrf_token)
@@ -2854,7 +2850,10 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
         # In het overleg worden projecten via de triage (agenda) toegevoegd, niet hier los.
         content = _projects_tab_html(st, crec, csrf_token, group="", add=False)
     elif cur == "agenda":
-        content = _wo_agenda(st, crec, csrf_token, iid)
+        item = st.werk.agenda_get(crec.id, iid) if iid else None
+        content = (_wo_triage(st, crec, csrf_token, item) if item is not None
+                   else "<div class='c2-sec'><h3>Spanning verwerken</h3>"
+                        "<p class='muted'>Kies links een spanning om te verwerken, of voeg er een toe.</p></div>")
     elif cur == "checkout":
         content = _wo_checkout(st, crec, csrf_token)
     else:
