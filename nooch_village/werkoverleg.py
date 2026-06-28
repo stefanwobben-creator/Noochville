@@ -54,11 +54,12 @@ class WerkoverlegStore:
         return (self._m.get(circle) or {}).get("visited", [])
 
     def open(self, circle: str) -> dict:
-        """Start een overleg (idempotent zolang het open is)."""
+        """Start een overleg (idempotent zolang het open is). Het archief (`log`) blijft behouden."""
         st = self._m.get(circle)
         if not st or st.get("status") != "open":
+            log = (st or {}).get("log", [])
             st = {"status": "open", "started_at": time.time(), "ended_at": None,
-                  "presence": {}, "agenda": [], "checkout": {}}
+                  "presence": {}, "agenda": [], "checkout": {}, "visited": [], "log": log}
             self._m[circle] = st
             self._save()
         return st
@@ -69,8 +70,15 @@ class WerkoverlegStore:
             return None
         st["status"] = "closed"
         st["ended_at"] = time.time()
+        # archiveer een samenvatting zodat de facilitator over de overleg-gezondheid kan rapporteren
+        snap = self.summary(circle)
+        snap["at"] = st["ended_at"]
+        st.setdefault("log", []).append(snap)
         self._save()
         return st
+
+    def log(self, circle: str) -> list:
+        return (self._m.get(circle) or {}).get("log", [])
 
     def duration_min(self, circle: str) -> int:
         st = self._m.get(circle) or {}

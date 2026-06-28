@@ -548,11 +548,32 @@ class _Stores:
         self.werk = WerkoverlegStore(os.path.join(dd, "werkoverleg.json"))
 
 
+_FAC_ACC = "Rapporteren over de gezondheid van de werkoverleggen"
+_FAC_CHECK = "Gezondheid werkoverleggen gerapporteerd"
+
+
+def _ensure_facilitator_health(st: _Stores) -> None:
+    """Idempotent: de Facilitator krijgt de accountability 'rapporteren over de gezondheid van de
+    werkoverleggen', met een maandelijks checklist-item dat eraan hangt."""
+    for fac in [r for r in st.records.all() if r.id.endswith("__facilitator")]:
+        accs = fac.definition.accountabilities
+        if _FAC_ACC not in accs:
+            accs.append(_FAC_ACC)
+            try:
+                fac.version += 1
+            except Exception:
+                pass
+            st.records.put(fac)
+        if not any(i.get("description") == _FAC_CHECK for i in st.checklists.for_node(fac.id)):
+            st.checklists.add(fac.id, _FAC_CHECK, "maand", target_type="all", by="founder")
+
+
 def _bootstrap(dd: str) -> None:
     """Lege PoC-dataset? Laad dan de echte Nooch-structuur in (eenmalig)."""
     st = _Stores(dd)
     if not st.records.all():
         import_org(nooch_poc_org(), st.records, st.people, st.assign)
+    _ensure_facilitator_health(st)
 
 
 def _name(rec) -> str:
@@ -1538,6 +1559,15 @@ def _sources_for(st: _Stores, rec):
                       ("revenue", "Omzet"), ("aov", "Gem. orderwaarde")],
          "dims": [("none", "totaal"), ("country", "per land"), ("product", "per product")]},
     ]
+    # Werkoverleg-gezondheid (facilitator): leest het archief van de cirkel waar deze node onder valt.
+    circle = rec.id if is_c else getattr(rec, "parent", None)
+    if circle:
+        srcs.append({"id": f"werk:{circle}", "label": "Werkoverleg",
+                     "measures": [("tevredenheid", "Tevredenheid"), ("spanningen", "Spanningen verwerkt"),
+                                  ("informatie", "Informatie verwerkt"), ("projecten", "Projecten"),
+                                  ("acties", "Roloverleg-punten")],
+                     "dims": [("gemiddeld", "gemiddeld per overleg"), ("totaal", "totaal"),
+                              ("over_tijd", "over tijd")]})
     nodes = [rec.id] + ([r.id for r in org.roles_of(st.records.all(), rec.id)] if is_c else [])
     for k in st.metrics.kpis_for_nodes(nodes):
         if k.get("source"):
@@ -1545,6 +1575,28 @@ def _sources_for(st: _Stores, rec):
         srcs.append({"id": f"kpi:{k['id']}", "label": k["name"],
                      "measures": [("value", k["name"])], "dims": [("time", "over tijd")]})
     return srcs
+
+
+_WERK_MEASURE = {"spanningen": "behandeld", "informatie": "info", "projecten": "projecten",
+                 "acties": "roloverleg", "tevredenheid": "tevredenheid"}
+
+
+def _werk_fetch(st: _Stores, circle: str, measure: str, dim: str, cutoff):
+    key = _WERK_MEASURE.get(measure, "behandeld")
+    pts, vals = [], []
+    for m in st.werk.log(circle):
+        v = m.get(key)
+        if v is None:
+            continue
+        pts.append({"at": m.get("at", 0), "value": v})
+        vals.append(v)
+    unit = "/10" if measure == "tevredenheid" else ""
+    if dim == "over_tijd":
+        return {"kind": "series", "points": filter_samples(pts, cutoff), "unit": unit}
+    if dim == "totaal" and measure != "tevredenheid":
+        return {"kind": "number", "value": (sum(vals) if vals else None), "unit": unit}
+    avg = round(sum(vals) / len(vals), 1) if vals else None   # gemiddeld (en tevredenheid-totaal)
+    return {"kind": "number", "value": avg, "unit": unit}
 
 
 def _default_form(dim: str) -> str:
@@ -1582,6 +1634,8 @@ def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff):
             return {"kind": "breakdown", "rows": [(p, n) for p, n in w.get("top_products", [])]}
         unit = "EUR" if measure in ("revenue", "aov") else ("paren" if measure == "pairs_sold" else "")
         return {"kind": "number", "value": w.get(measure), "unit": unit}
+    if source.startswith("werk:"):
+        return _werk_fetch(st, source[5:], measure, dim, cutoff)
     if source.startswith("kpi:"):
         it = st.metrics.get(source[4:])
         if not it:
