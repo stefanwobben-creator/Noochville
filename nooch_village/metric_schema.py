@@ -26,6 +26,11 @@ MEETTYPE = ("snapshot", "venster", "cumulatief")
 #   enquete   = resultaat van een enquête (handmatig ingevoerd, maar apart gelabeld)
 MEETWIJZE = ("systeem", "handmatig", "enquete")
 MEETWIJZE_LABEL = {"systeem": "systeem", "handmatig": "handmatig", "enquete": "enquête"}
+# diagnostische metavelden (Lean Analytics): voorlopend/achterlopend en stuurbaar/ijdel
+TIJD = ("leading", "lagging")
+BRUIKBAAR = ("actionable", "vanity")
+TIJD_LABEL = {"leading": "leading", "lagging": "lagging"}
+BRUIKBAAR_LABEL = {"actionable": "actionable", "vanity": "vanity"}
 
 CADANS_LABEL = {"continu": "continu", "uur": "per uur", "dag": "per dag", "week": "per week",
                 "maand": "per maand", "kwartaal": "per kwartaal", "jaar": "per jaar",
@@ -48,6 +53,10 @@ class IndicatorDefinition(BaseModel):
     meettype: Literal["snapshot", "venster", "cumulatief"] = "snapshot"
     window: str = ""  # bijv. "7d" wanneer meettype = venster
     meetwijze: Literal["systeem", "handmatig", "enquete"] = "handmatig"
+    tijd: Literal["leading", "lagging", ""] = ""        # voorlopend of achterlopend (Lean)
+    bruikbaar: Literal["actionable", "vanity", ""] = ""  # stuurbaar of ijdel (Lean)
+    standaard: str = ""    # grondslag/erkende bron, bv. 'DORA', 'IRIS+ OI...', 'interne aanname'
+    benchmark: str = ""    # referentiewaarde/-range, bv. 'goede shop 1,8-3,2%'
 
     @field_validator("name", mode="before")
     @classmethod
@@ -101,6 +110,21 @@ class IndicatorDefinition(BaseModel):
     @classmethod
     def _mw(cls, v):
         return v if v in MEETWIJZE else "handmatig"
+
+    @field_validator("tijd", mode="before")
+    @classmethod
+    def _tijd(cls, v):
+        return v if v in TIJD else ""
+
+    @field_validator("bruikbaar", mode="before")
+    @classmethod
+    def _bruik(cls, v):
+        return v if v in BRUIKBAAR else ""
+
+    @field_validator("standaard", "benchmark", mode="before")
+    @classmethod
+    def _meta(cls, v):
+        return (str(v or "").strip())[:140]
 
 
 SCHEMA_FIELDS = list(IndicatorDefinition.model_fields)  # volgorde = schema-definitie

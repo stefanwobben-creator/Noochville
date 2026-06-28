@@ -306,9 +306,31 @@ def test_catalogus_navigatie(tmp_path):
     dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
     page = cockpit2.render_catalog(cockpit2._Stores(dd), csrf_token="t")
     # zoekveld + meetwijze-filters + inklapbare secties + filter-data op de kaarten
-    assert "id='cat-q'" in page and "class='cat-f'" in page and "data-mw='systeem'" in page
+    assert "id='cat-q'" in page and "class='cat-f'" in page and "data-val='systeem'" in page
     assert "class='cat-sec'" in page and "data-text=" in page
     assert "meetwijze:" in page
+
+
+def test_metavelden_grondslag_en_aard(tmp_path):
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    # seed is eerlijk gemarkeerd als nog niet gegrond
+    assert all((st.defs.current(d["id"]) or {}).get("standaard") == "interne aanname" for d in st.defs.all())
+    # nieuwe gegronde definitie met aard + benchmark
+    cockpit2.dispatch(dd, "def_add", {"name": ["Lead time for changes"], "unit": ["uur"], "csource": ["monitoring"],
+                                      "tijd": ["lagging"], "bruikbaar": ["actionable"],
+                                      "standaard": ["DORA"], "benchmark": ["elite < 1 dag"],
+                                      "next": ["/catalog"]})
+    d = cockpit2._Stores(dd).defs.by_name("Lead time for changes")
+    cur = cockpit2._Stores(dd).defs.current(d["id"])
+    assert cur["standaard"] == "DORA" and cur["tijd"] == "lagging" and cur["bruikbaar"] == "actionable"
+    assert cur["benchmark"] == "elite < 1 dag"
+    # filter-attributen + Lean/grounded-filters op de pagina
+    page = cockpit2.render_catalog(cockpit2._Stores(dd), csrf_token="t")
+    assert "data-facet='bruikbaar'" in page and "data-val='actionable'" in page
+    assert "data-val='0'" in page and "ongegrond" in page
+    assert "data-bruikbaar='actionable'" in page and "DORA" in page
 
 
 def test_store_in_cockpit(tmp_path):

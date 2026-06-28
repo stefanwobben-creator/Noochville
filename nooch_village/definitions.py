@@ -379,6 +379,7 @@ def seed_catalog(store: DefinitionStore, owner: str = "librarian") -> int:
         if store.find(name, source) is not None:
             continue
         e.setdefault("meetwijze", _meetwijze_for(source))
+        e.setdefault("standaard", "interne aanname")   # eerlijk: nog niet gegrond tegen een erkende bron
         if store.add(name, owner=owner, provenance="seed", **e):  # **e bevat source=gsc/plausible/...
             added += 1
     return added
