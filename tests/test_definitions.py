@@ -315,14 +315,15 @@ def test_metavelden_grondslag_en_aard(tmp_path):
     from nooch_village import cockpit2
     dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
-    # seed is eerlijk gemarkeerd als nog niet gegrond
-    assert all((st.defs.current(d["id"]) or {}).get("standaard") == "interne aanname" for d in st.defs.all())
+    # de meeste seed-definities zijn nog ongegrond (de gegronde IT/DORA-set is de uitzondering)
+    assert st.defs.current(st.defs.by_name("Bezoekers (Plausible)")["id"])["standaard"] == "interne aanname"
+    assert "DORA" in st.defs.current(st.defs.by_name("Deploy-frequentie")["id"])["standaard"]
     # nieuwe gegronde definitie met aard + benchmark
-    cockpit2.dispatch(dd, "def_add", {"name": ["Lead time for changes"], "unit": ["uur"], "csource": ["monitoring"],
+    cockpit2.dispatch(dd, "def_add", {"name": ["Doorvoertijd proef"], "unit": ["uur"], "csource": ["monitoring"],
                                       "tijd": ["lagging"], "bruikbaar": ["actionable"],
                                       "standaard": ["DORA"], "benchmark": ["elite < 1 dag"],
                                       "next": ["/catalog"]})
-    d = cockpit2._Stores(dd).defs.by_name("Lead time for changes")
+    d = cockpit2._Stores(dd).defs.by_name("Doorvoertijd proef")
     cur = cockpit2._Stores(dd).defs.current(d["id"])
     assert cur["standaard"] == "DORA" and cur["tijd"] == "lagging" and cur["bruikbaar"] == "actionable"
     assert cur["benchmark"] == "elite < 1 dag"
@@ -331,6 +332,35 @@ def test_metavelden_grondslag_en_aard(tmp_path):
     assert "data-facet='bruikbaar'" in page and "data-val='actionable'" in page
     assert "data-val='0'" in page and "ongegrond" in page
     assert "data-bruikbaar='actionable'" in page and "DORA" in page
+
+
+def test_it_domein_gegrond_tegen_dora(tmp_path):
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    for naam in ("Deploy-frequentie", "Lead time for changes", "Wijzigingsfaalpercentage",
+                 "Hersteltijd na falen"):
+        d = st.defs.by_name(naam)
+        assert d is not None, naam
+        cur = st.defs.current(d["id"])
+        assert "DORA" in cur["standaard"] and cur["benchmark"] and cur["bruikbaar"] == "actionable"
+    # IT-incidenten eerlijk gemarkeerd als géén DORA-kern
+    inc = st.defs.current(st.defs.by_name("IT-incidenten")["id"])
+    assert "geen DORA" in inc["standaard"]
+
+
+def test_reground_idempotent(tmp_path):
+    from nooch_village import definitions as D
+    s = D.DefinitionStore(str(tmp_path / "d.json"))
+    # bootstrap-achtig: eerst ongegrond zaaien zoals oude data, dan regronden
+    D.seed_catalog(s)
+    dep = s.by_name("Deploy-frequentie")
+    # simuleer 'oude' opslag: zet standaard terug op interne aanname
+    s._d[dep["id"]]["versions"][-1]["standaard"] = "interne aanname"
+    n1 = D.reground_seed(s)
+    assert n1 == 1 and "DORA" in s.current(dep["id"])["standaard"]   # alleen de teruggezette
+    assert s.current(dep["id"])["version"] == 2          # nieuwe versie (clarify)
+    assert D.reground_seed(s) == 0                        # tweede keer: niets te doen
 
 
 def test_store_in_cockpit(tmp_path):

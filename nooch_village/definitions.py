@@ -174,18 +174,27 @@ _DEFINITION_SEED: tuple[dict, ...] = (
      "cadence": "kwartaal", "meettype": "snapshot",
      "definition": "Aantal leveranciers met inkoop in de periode."},
     # IT (monitoring)
-    {"name": "Gem. hersteltijd (MTTR)", "source": "monitoring", "unit": "uur", "direction": "down",
-     "cadence": "maand", "meettype": "venster", "window": "30d",
-     "definition": "Gemiddelde tijd om een incident te herstellen (mean time to repair)."},
-    {"name": "IT-incidenten", "source": "monitoring", "unit": "n", "direction": "down",
-     "cadence": "maand", "meettype": "venster", "window": "30d",
-     "definition": "Aantal IT-incidenten in de periode."},
-    {"name": "Deploy-frequentie", "source": "monitoring", "unit": "n", "direction": "up",
-     "cadence": "week", "meettype": "venster", "window": "7d",
-     "definition": "Aantal productie-deploys per week (DORA)."},
+    # IT — gegrond tegen DORA (Accelerate State of DevOps 2024). Twee velocity- + twee stability-metrics.
+    {"name": "Deploy-frequentie", "source": "monitoring", "unit": "deploys", "direction": "up",
+     "cadence": "week", "meettype": "venster", "window": "7d", "tijd": "leading", "bruikbaar": "actionable",
+     "standaard": "DORA (State of DevOps 2024)", "benchmark": "elite: on-demand (meerdere/dag); laag: <1/maand",
+     "definition": "Hoe vaak succesvol naar productie wordt uitgeleverd (DORA velocity)."},
+    {"name": "Lead time for changes", "source": "monitoring", "unit": "uur", "direction": "down",
+     "cadence": "maand", "meettype": "venster", "window": "30d", "tijd": "lagging", "bruikbaar": "actionable",
+     "standaard": "DORA (State of DevOps 2024)", "benchmark": "elite: < 1 dag",
+     "definition": "Tijd van commit tot in productie (DORA velocity)."},
     {"name": "Wijzigingsfaalpercentage", "source": "monitoring", "unit": "%", "direction": "down",
-     "cadence": "maand", "meettype": "venster", "window": "30d",
-     "definition": "Aandeel deploys dat tot een incident of rollback leidt (DORA)."},
+     "cadence": "maand", "meettype": "venster", "window": "30d", "tijd": "lagging", "bruikbaar": "actionable",
+     "standaard": "DORA (State of DevOps 2024)", "benchmark": "elite ~5%, high ~20%, laag ~40%",
+     "definition": "Aandeel deploys dat een incident in productie veroorzaakt (DORA stability)."},
+    {"name": "Hersteltijd na falen", "source": "monitoring", "unit": "uur", "direction": "down",
+     "cadence": "maand", "meettype": "venster", "window": "30d", "tijd": "lagging", "bruikbaar": "actionable",
+     "standaard": "DORA (State of DevOps 2024)", "benchmark": "elite: < 1 uur",
+     "definition": "Tijd om de dienst te herstellen na een mislukte deploy (DORA; voorheen MTTR)."},
+    {"name": "IT-incidenten", "source": "monitoring", "unit": "n", "direction": "down",
+     "cadence": "maand", "meettype": "venster", "window": "30d", "tijd": "lagging", "bruikbaar": "actionable",
+     "standaard": "operationeel (ITIL); geen DORA-kernmetric",
+     "definition": "Aantal IT-incidenten in de periode."},
     # Klanttevredenheid (enquête + klantenservice)
     {"name": "NPS", "source": "survey", "unit": "NPS", "direction": "up",
      "cadence": "kwartaal", "meettype": "snapshot",
@@ -383,3 +392,28 @@ def seed_catalog(store: DefinitionStore, owner: str = "librarian") -> int:
         if store.add(name, owner=owner, provenance="seed", **e):  # **e bevat source=gsc/plausible/...
             added += 1
     return added
+
+
+_GROUND_FIELDS = ("definition", "unit", "direction", "cadence", "meettype", "window",
+                  "tijd", "bruikbaar", "standaard", "benchmark")
+
+
+def reground_seed(store: DefinitionStore) -> int:
+    """Werk bestaande definities bij die in de seed inmiddels een echte grondslag hebben gekregen
+    (standaard != 'interne aanname'), maar in de opslag nog ongegrond staan. Idempotent: doet niets
+    zodra de opgeslagen grondslag al gelijk is. Bewaart historie als nieuwe versie (clarify)."""
+    n = 0
+    for entry in _DEFINITION_SEED:
+        std = entry.get("standaard", "")
+        if std in ("", "interne aanname"):
+            continue
+        d = store.find(entry["name"], entry.get("source", ""))
+        if d is None:
+            continue
+        cur = store.current(d["id"]) or {}
+        if cur.get("standaard", "") == std:        # al gegrond → niets doen
+            continue
+        fields = {k: entry[k] for k in _GROUND_FIELDS if k in entry}
+        if store.amend(d["id"], "clarify", **fields):
+            n += 1
+    return n
