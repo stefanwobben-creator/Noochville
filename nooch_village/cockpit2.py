@@ -118,6 +118,16 @@ ul.clean li:last-child{border-bottom:none}
 .bu-ok{color:var(--green-dark);font-weight:700}
 .bu-no{color:var(--coral);font-weight:700}
 .bu-proj{font-size:.74rem}
+.tile-data{margin-top:.35rem;font-size:.76rem}
+.tile-data>summary{cursor:pointer;list-style:none;color:var(--subtle);display:flex;align-items:center;gap:.4rem}
+.tile-data>summary::-webkit-details-marker{display:none}
+.tile-data>summary::before{content:'▸';color:var(--subtle)}
+.tile-data[open]>summary::before{content:'▾'}
+.tile-data .mtab{margin-top:.3rem;width:100%}
+.delta{font-weight:700}
+.delta.up{color:var(--green-dark)}
+.delta.down{color:var(--coral)}
+.delta.flat{color:var(--subtle)}
 .cat-sec{margin-bottom:.6rem}
 .cat-sec>summary{cursor:pointer;list-style:none;padding:.3rem 0;border-bottom:1px solid var(--border);font-size:.95rem}
 .cat-sec>summary::-webkit-details-marker{display:none}
@@ -1789,6 +1799,41 @@ def _agg(res):
     return res.get("value")
 
 
+def _data_table(res) -> str:
+    """Tufte 'show the data': de exacte getallen onder een grafiek, compact."""
+    kind = res.get("kind")
+    if kind == "series":
+        pts = res.get("points") or []
+        if not pts:
+            return ""
+        import datetime as _dt
+        rows = "".join(f"<tr><td>{_dt.datetime.fromtimestamp(t).strftime('%d-%m-%y')}</td>"
+                       f"<td class='num'>{_num(v)}</td></tr>" for t, v in pts[-12:])
+        return f"<table class='mtab'><tr><th>datum</th><th class='num'>waarde</th></tr>{rows}</table>"
+    if kind == "breakdown":
+        rows = res.get("rows") or []
+        if not rows:
+            return ""
+        body = "".join(f"<tr><td>{_e(str(l))}</td><td class='num'>{_num(n)}</td></tr>" for l, n in rows[:12])
+        return f"<table class='mtab'>{body}</table>"
+    v = _agg(res)
+    return f"<table class='mtab'><tr><td>waarde</td><td class='num'>{_num(v)}</td></tr></table>" if v is not None else ""
+
+
+def _delta_badge(res) -> str:
+    """Tufte 'comparison': verschil t.o.v. de vorige meting bij een reeks."""
+    if res.get("kind") != "series":
+        return ""
+    pts = res.get("points") or []
+    if len(pts) < 2:
+        return ""
+    d = pts[-1][1] - pts[-2][1]
+    if d == 0:
+        return "<span class='delta flat'>±0</span>"
+    arrow, cls = ("▲", "up") if d > 0 else ("▼", "down")
+    return f"<span class='delta {cls}'>{arrow} {abs(d):g}</span>"
+
+
 def _render_burnup(res, target, project) -> str:
     """Burn-up naar een doel: cumulatieve werkelijke lijn tegen de ideaallijn (0 → streefwaarde
     over start → deadline), plus het dynamische catch-up-tempo (werkelijk/dag vs benodigd/dag)."""
@@ -1981,10 +2026,17 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str) -> str:
     # Doel-koppeling: de indicator geeft info, het project is het doel (outcome + deadline).
     goal = ""
     gp = st.projects.get(tile.get("goal_pid")) if tile.get("goal_pid") else None
-    if tile.get("form") == "burnup":
+    form = tile.get("form", "getal")
+    if form == "burnup":
         body = _render_burnup(res, tile.get("target"), gp)
     else:
-        body = _render_form(res, tile.get("form", "getal"), tile.get("target"))
+        body = _render_form(res, form, tile.get("target"))
+    # Tufte: bij elke grafiek standaard de exacte data (inklapbaar) + vergelijking met vorige.
+    data = ""
+    if form in ("trend", "verdeling", "doelmeter", "burnup"):
+        dt = _data_table(res)
+        if dt:
+            data = f"<details class='tile-data'><summary>data{_delta_badge(res)}</summary>{dt}</details>"
     if gp is not None:
         due = _fmt_due(gp.get("due")) if gp.get("due") else ""
         goal = (f"<div class='tile-goal muted'>naar doel: <b>{_e(str(gp.get('scope') or gp['id'])[:50])}</b>"
@@ -2005,7 +2057,7 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str) -> str:
               f"<button class='dellink' type='submit' name='action' value='tile_remove'>✕</button></form>")
     return (f"<div class='tile'><div class='tile-h'><span class='tile-t'>{_e(_tile_meta(st, rec, tile))}{warn}</span>"
             f"<span class='tile-h-r'>{info}{rm}</span></div>"
-            f"<div class='tile-b'>{body}</div>{goal}</div>")
+            f"<div class='tile-b'>{body}</div>{data}{goal}</div>")
 
 
 def _tile_wizard(st: _Stores, rec, csrf: str) -> str:

@@ -172,6 +172,33 @@ def test_verwijderen_vraagt_bevestiging(tmp_path):
     assert "data-confirm=" in page and "verwijderen?" in page and "/metric_export?mid=" in page
 
 
+def test_tufte_datatabel_en_delta_bij_grafiek(tmp_path):
+    import time
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    k = st.metrics.add_kpi(C, "Trendje", "n")
+    now = time.time()
+    st.metrics.add_sample(k["id"], 10, at=now - 3 * 86400)
+    st.metrics.add_sample(k["id"], 14, at=now - 1 * 86400)
+    cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": [f"kpi:{k['id']}|value|none"],
+                                       "form": ["trend"], "target": [""], "next": ["/"]})
+    page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
+    # Tufte: inklapbare datatabel onder de grafiek + delta t.o.v. vorige meting
+    assert "<details class='tile-data'>" in page and "datum" in page and "waarde" in page
+    assert "▲ 4" in page
+
+
+def test_getal_geen_datatabel(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    k = st.metrics.add_kpi(C, "Losse waarde", "n")
+    st.metrics.add_sample(k["id"], 7)
+    cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": [f"kpi:{k['id']}|value|none"],
+                                       "form": ["getal"], "target": [""], "next": ["/"]})
+    page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
+    assert "<details class='tile-data'>" not in page   # bij een enkel getal geen tabel forceren
+
+
 def test_burnup_doeltempo(tmp_path):
     import time
     dd = _dd(tmp_path)
