@@ -172,6 +172,41 @@ def test_verwijderen_vraagt_bevestiging(tmp_path):
     assert "data-confirm=" in page and "verwijderen?" in page and "/metric_export?mid=" in page
 
 
+def test_burnup_doeltempo(tmp_path):
+    import time
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    # handmatige cumulatieve KPI (paren) met metingen over de tijd
+    k = st.metrics.add_kpi(C, "Paren cumulatief", "paar", cadence="dag", meettype="cumulatief")
+    now = time.time()
+    st.metrics.add_sample(k["id"], 100, at=now - 20 * 86400)
+    st.metrics.add_sample(k["id"], 300, at=now - 5 * 86400)
+    # doel-project met deadline in de toekomst
+    pid = st.projects.create(C, "1000 paar", "human")
+    p = st.projects.get(pid)
+    import datetime
+    p["due"] = (datetime.date.today() + datetime.timedelta(days=40)).isoformat()
+    p["created_at"] = now - 25 * 86400
+    st.projects._save()
+    # burn-up tegel die de KPI als bron neemt, gekoppeld aan het doel
+    cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": [f"kpi:{k['id']}|value|none"],
+                                       "form": ["burnup"], "target": ["1000"], "goal_pid": [pid], "next": ["/"]})
+    t = cockpit2._Stores(dd).metrics.tiles_of(C)[0]
+    assert t["form"] == "burnup" and t["goal_pid"] == pid
+    page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
+    assert "burnup" in page and "/dag" in page and "benodigd" in page and "prognose" in page
+
+
+def test_burnup_zonder_doel_vraagt_koppeling(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    k = st.metrics.add_kpi(C, "Paren cum", "paar", meettype="cumulatief")
+    cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": [f"kpi:{k['id']}|value|none"],
+                                       "form": ["burnup"], "target": [""], "next": ["/"]})
+    page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
+    assert "Koppel een doel" in page
+
+
 def test_link_metric(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "m_add_link", {"node": [C], "name": ["Jaarcijfers"],

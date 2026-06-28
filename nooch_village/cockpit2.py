@@ -111,6 +111,13 @@ ul.clean li:last-child{border-bottom:none}
 .cat-f-x{color:var(--subtle)}
 .cat-count{margin-left:auto}
 .cat-fg{display:inline-flex;align-items:center;gap:.3rem;flex-wrap:wrap}
+.burnup-wrap{display:flex;flex-direction:column;gap:.25rem}
+.bu-head b{font-size:1.2rem}
+.burnup{display:block;border-bottom:1px solid var(--border)}
+.bu-tempo{font-size:.85rem}
+.bu-ok{color:var(--green-dark);font-weight:700}
+.bu-no{color:var(--coral);font-weight:700}
+.bu-proj{font-size:.74rem}
 .cat-sec{margin-bottom:.6rem}
 .cat-sec>summary{cursor:pointer;list-style:none;padding:.3rem 0;border-bottom:1px solid var(--border);font-size:.95rem}
 .cat-sec>summary::-webkit-details-marker{display:none}
@@ -1782,6 +1789,65 @@ def _agg(res):
     return res.get("value")
 
 
+def _render_burnup(res, target, project) -> str:
+    """Burn-up naar een doel: cumulatieve werkelijke lijn tegen de ideaallijn (0 → streefwaarde
+    over start → deadline), plus het dynamische catch-up-tempo (werkelijk/dag vs benodigd/dag)."""
+    import datetime as _dt
+    import time as _t
+    try:
+        tgt = float(target)
+    except (TypeError, ValueError):
+        tgt = 0.0
+    due = (project or {}).get("due")
+    if not (project and due and tgt > 0):
+        return "<p class='muted'>Koppel een doel (project met deadline) én een streefwaarde.</p>"
+    try:
+        d = _dt.date.fromisoformat(str(due)[:10])
+        deadline = _dt.datetime(d.year, d.month, d.day).timestamp()
+    except Exception:
+        return "<p class='muted'>Het gekoppelde doel heeft geen geldige deadline.</p>"
+    day, now = 86400.0, _t.time()
+    pts = list(res.get("points") or [])
+    if not pts:
+        v = _agg(res)
+        pts = [(now, float(v))] if isinstance(v, (int, float)) else []
+    latest = pts[-1][1] if pts else 0.0
+    start = (project.get("created_at") or (pts[0][0] if pts else deadline - 90 * day))
+    span = max(deadline - start, day)
+    W, H = 240.0, 96.0
+    fx = lambda ts: max(0.0, min(1.0, (ts - start) / span)) * W
+    fy = lambda v: H - max(0.0, min(1.0, (v / tgt) if tgt else 0)) * H
+    ideal = f"<line x1='{fx(start):.1f}' y1='{fy(0):.1f}' x2='{fx(deadline):.1f}' y2='{fy(tgt):.1f}' stroke='var(--subtle)' stroke-width='1' stroke-dasharray='3 3'/>"
+    nowx = fx(now)
+    nowline = f"<line x1='{nowx:.1f}' y1='0' x2='{nowx:.1f}' y2='{H:.0f}' stroke='var(--border)' stroke-width='1'/>"
+    actual = ""
+    if len(pts) >= 2:
+        poly = " ".join(f"{fx(t):.1f},{fy(v):.1f}" for t, v in pts)
+        actual = f"<polyline points='{poly}' fill='none' stroke='var(--green)' stroke-width='1.8'/>"
+    elif pts:
+        actual = f"<circle cx='{fx(pts[0][0]):.1f}' cy='{fy(latest):.1f}' r='2.4' fill='var(--green)'/>"
+    svg = (f"<svg class='burnup' viewBox='0 0 {W:.0f} {H:.0f}' width='100%' height='96' preserveAspectRatio='none'>"
+           f"{ideal}{nowline}{actual}</svg>")
+    # tempo: dynamisch benodigd (catch-up) vs werkelijk
+    days_left = max(0.0, (deadline - now) / day)
+    remaining = max(0.0, tgt - latest)
+    req = remaining / days_left if days_left > 0 else 0.0
+    pace = None
+    if len(pts) >= 2 and (pts[-1][0] - pts[0][0]) > 0:
+        pace = (pts[-1][1] - pts[0][1]) / ((pts[-1][0] - pts[0][0]) / day)
+    if pace is None:
+        tempo = "<span class='muted'>nog te weinig metingen voor een tempo</span>"
+    else:
+        ontrack = pace >= req
+        proj = latest + pace * days_left
+        cls = "bu-ok" if ontrack else "bu-no"
+        tempo = (f"<div class='bu-tempo'><span class='{cls}'>{pace:.1f}/dag</span> "
+                 f"<span class='muted'>benodigd {req:.1f}/dag</span></div>"
+                 f"<div class='muted bu-proj'>prognose: {proj:.0f} van {tgt:.0f} op de deadline</div>")
+    head = f"<div class='bu-head'><b>{latest:.0f}</b> <span class='muted'>/ {tgt:.0f}</span></div>"
+    return f"<div class='burnup-wrap'>{head}{svg}{tempo}</div>"
+
+
 def _render_form(res, form, target=None):
     unit = res.get("unit", "")
     kind = res.get("kind")
@@ -1910,12 +1976,15 @@ def _definition_datalist(st: _Stores) -> str:
 
 def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str) -> str:
     res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), cutoff)
-    body = _render_form(res, tile.get("form", "getal"), tile.get("target"))
     g = _grondslag(st, tile["source"], tile["measure"])
     info = _grondslag_popover(g)
     # Doel-koppeling: de indicator geeft info, het project is het doel (outcome + deadline).
     goal = ""
     gp = st.projects.get(tile.get("goal_pid")) if tile.get("goal_pid") else None
+    if tile.get("form") == "burnup":
+        body = _render_burnup(res, tile.get("target"), gp)
+    else:
+        body = _render_form(res, tile.get("form", "getal"), tile.get("target"))
     if gp is not None:
         due = _fmt_due(gp.get("due")) if gp.get("due") else ""
         goal = (f"<div class='tile-goal muted'>naar doel: <b>{_e(str(gp.get('scope') or gp['id'])[:50])}</b>"
@@ -1943,7 +2012,7 @@ def _tile_wizard(st: _Stores, rec, csrf: str) -> str:
     combos = _tile_combos(_sources_for(st, rec))
     opts = "".join(f"<option value='{_e(v)}' data-form='{df}'>{_e(lbl)}</option>" for v, lbl, df in combos)
     forms = [("getal", "Getal"), ("trend", "Trend (lijn)"), ("verdeling", "Verdeling (staaf)"),
-             ("tabel", "Tabel"), ("doelmeter", "Doelmeter")]
+             ("tabel", "Tabel"), ("doelmeter", "Doelmeter"), ("burnup", "Doel-tempo (burn-up)")]
     fopts = "".join(f"<option value='{k}'>{_e(l)}</option>" for k, l in forms)
     base = f"/node?id={_e(rec.id)}&tab=metrics"
     return (f"<details class='m-add'><summary class='btn ok sm'>+ KPI op dashboard</summary>"
@@ -1958,7 +2027,7 @@ def _tile_wizard(st: _Stores, rec, csrf: str) -> str:
             f"<select name='goal_pid'>{_goal_options(st, rec)}</select>"
             f"<input name='target' inputmode='decimal' placeholder='streefwaarde, bijv. 1000' autocomplete='off'>"
             f"<p class='muted' style='font-size:.72rem'>De indicator geeft informatie; het doel is "
-            f"het project (outcome + deadline). Alleen nodig bij vorm Doelmeter.</p>"
+            f"het project (outcome + deadline). Nodig bij vorm Doelmeter en Doel-tempo (burn-up).</p>"
             f"<button class='btn ok sm' type='submit' name='action' value='tile_add'>Op dashboard</button></form></details>")
 
 
