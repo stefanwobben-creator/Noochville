@@ -88,12 +88,9 @@ def test_kpi_uit_catalogus_en_defv(tmp_path):
     st = cockpit2._Stores(dd)
     it = [i for i in st.metrics.for_node(rid) if i.get("kind") == "kpi"][0]
     assert it["def_id"] == d["id"] and it["def_version"] == 1
-    assert it["origin"] == "plausible" and it["source"] == ""   # handmatig invoerbaar, herkomst bewaard
+    assert it["origin"] == "plausible" and it["auto"] is True   # systeem-bron: geen handmatige invoer
     assert it["cadence"] == "dag" and it["unit"] == "bezoekers"
-    # meting krijgt het versiestempel defv
-    cockpit2.dispatch(dd, "m_sample", {"mid": [it["id"]], "value": ["120"], "next": ["/"]})
-    s = cockpit2._Stores(dd).metrics.get(it["id"])["samples"][0]
-    assert s["value"] == 120.0 and s["defv"] == 1
+    assert st.metrics.add_sample(it["id"], 120) is False        # systeem-KPI weigert handmatige meting
 
 
 def test_zoek_op_naam_en_losse_kpi_met_delen(tmp_path):
@@ -113,7 +110,36 @@ def test_zoek_op_naam_en_losse_kpi_met_delen(tmp_path):
     st = cockpit2._Stores(dd)
     assert len(st.defs.all()) == n0 + 1
     nk = [i for i in st.metrics.for_node(rid) if i.get("name") == "Retourpercentage"][0]
-    assert nk["def_id"] and nk["def_version"] == 1
+    assert nk["def_id"] and nk["def_version"] == 1 and nk["auto"] is False
+    # handmatige (gedeelde) KPI: meting krijgt het versiestempel defv = 1
+    cockpit2.dispatch(dd, "m_sample", {"mid": [nk["id"]], "value": ["4.5"], "next": ["/"]})
+    s = cockpit2._Stores(dd).metrics.get(nk["id"])["samples"][0]
+    assert s["value"] == 4.5 and s["defv"] == 1
+
+
+def test_systeem_kpi_blokkeert_handmatige_invoer(tmp_path):
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    rid = "mother_earth__nooch__facilitator"
+    if st.records.get(rid) is None:
+        rid = "mother_earth__nooch"
+    d = st.defs.by_name("Tevredenheid werkoverleg")
+    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [d["id"]], "next": ["/"]})
+    st = cockpit2._Stores(dd)
+    it = [i for i in st.metrics.for_node(rid) if i.get("def_id") == d["id"]][0]
+    assert it["auto"] is True and it["origin"] == "werkoverleg"
+    # store weigert handmatige meting voor een systeem-KPI
+    assert st.metrics.add_sample(it["id"], 8) is False
+    # UI toont geen invoerveld maar wel het 'systeem'-label
+    page = cockpit2.render_node(cockpit2._Stores(dd), rid, "metrics", csrf_token="t")
+    assert "systeem" in page
+    # een losse handmatige KPI mag wél
+    cockpit2.dispatch(dd, "m_add_kpi", {"node": [rid], "pick": ["manual"], "name": ["Eigen telling"], "next": ["/"]})
+    st = cockpit2._Stores(dd)
+    mk = [i for i in st.metrics.for_node(rid) if i.get("name") == "Eigen telling"][0]
+    assert mk.get("auto") is False and st.metrics.add_sample(mk["id"], 3) is True
 
 
 def test_rol_aanbevelingen_in_picker(tmp_path):

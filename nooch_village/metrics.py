@@ -84,7 +84,8 @@ class MetricStore:
     def add_kpi(self, node: str, name: str, unit: str = "", source: str = "",
                 definition: str = "", direction: str = "", threshold=None,
                 cadence: str = "ad-hoc", meettype: str = "snapshot", window: str = "",
-                def_id: str = "", def_version: int = 0, origin: str = "") -> dict | None:
+                def_id: str = "", def_version: int = 0, origin: str = "",
+                auto: bool = False) -> dict | None:
         if not node:
             return None
         # grondslag + meetmoment worden gevalideerd/genormaliseerd door het indicator-schema
@@ -99,15 +100,15 @@ class MetricStore:
         # Leeg = een losse, niet-gedeelde KPI (de toegestane uitzondering).
         it = {"id": mid, "kind": "kpi", "node": node, **spec, "samples": [],
               "def_id": (def_id or "").strip(), "def_version": int(def_version or 0),
-              "origin": (origin or "").strip(), "created_at": time.time()}
+              "origin": (origin or "").strip(), "auto": bool(auto), "created_at": time.time()}
         self._items[mid] = it
         self._save()
         return it
 
     def add_sample(self, mid: str, value, at: float | None = None) -> bool:
         it = self._items.get(mid)
-        if it is None or it.get("kind") != "kpi" or it.get("source"):
-            return False                       # bron-KPI's lezen extern; geen handmatige sample
+        if it is None or it.get("kind") != "kpi" or it.get("source") or it.get("auto"):
+            return False                       # bron-/systeem-KPI's worden gevoed; geen handmatige sample
         try:
             v = float(value)
         except (TypeError, ValueError):

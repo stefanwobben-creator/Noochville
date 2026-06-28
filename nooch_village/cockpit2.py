@@ -1942,9 +1942,11 @@ def _kpi_data_row(st: _Stores, item: dict, csrf: str) -> str:
     pts = filter_samples(raw, None)
     val = _num(pts[-1][1]) if pts else "—"
     unit = f" {_e(item.get('unit', ''))}" if item.get("unit") else ""
-    src = " <span class='chip muted'>auto</span>" if item.get("source") else ""
+    # systeem-gemeten KPI (live-bron of catalogus-origin uit een systeembron): geen handmatige invoer
+    is_sys = bool(item.get("source") or item.get("auto"))
+    src = " <span class='chip muted'>systeem</span>" if is_sys else ""
     add = ""
-    if csrf and not item.get("source"):
+    if csrf and not is_sys:
         add = (f"<form method='post' action='/action' class='kpi-add'>"
                f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='mid' value='{_e(item['id'])}'>"
                f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=metrics'>"
@@ -1967,6 +1969,11 @@ def _kpi_data_row(st: _Stores, item: dict, csrf: str) -> str:
             f"<span class='kpidata-v'>{val}{unit}</span>{_spark_svg(pts)}{add}{exp}{rm}</div>")
 
 
+# bronnen die het systeem/een API meet — hiervoor mag je NOOIT handmatig invoeren (integriteit).
+# De waarde komt uit de bron; tot een live-koppeling bestaat toont de KPI 'nog niet gekoppeld'.
+_SYSTEM_SOURCES = {"gsc", "plausible", "shopify", "trends", "keywords_everywhere", "ngram",
+                   "openalex", "semantic_scholar", "site_health", "competitor_news",
+                   "linkbuilding", "budget", "werkoverleg"}
 # bron-herkomst → leesbaar label (voor de grondslag-popover van een catalogus-KPI)
 _ORIGIN_LABEL = {
     "gsc": "Google Search Console", "plausible": "Plausible", "shopify": "Shopify",
@@ -4300,7 +4307,8 @@ def dispatch(data_dir: str, action: str, form: dict):
                                     threshold=cur.get("threshold"), cadence=cur.get("cadence", "ad-hoc"),
                                     meettype=cur.get("meettype", "snapshot"), window=cur.get("window", ""),
                                     def_id=did, def_version=st.defs.current_version_no(did),
-                                    origin=cur.get("source", ""))
+                                    origin=cur.get("source", ""),
+                                    auto=cur.get("source", "") in _SYSTEM_SOURCES)
             msg = "✓ KPI uit catalogus toegevoegd" if it else "⛔ kon KPI niet toevoegen"
         else:
             msg = "⛔ kies een bestaande definitie uit de catalogus"
