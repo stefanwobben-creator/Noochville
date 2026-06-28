@@ -315,8 +315,8 @@ def test_metavelden_grondslag_en_aard(tmp_path):
     from nooch_village import cockpit2
     dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
-    # de meeste seed-definities zijn nog ongegrond (de gegronde IT/DORA-set is de uitzondering)
-    assert st.defs.current(st.defs.by_name("Bezoekers (Plausible)")["id"])["standaard"] == "interne aanname"
+    # na de sweep zijn de zaad-definities gegrond tegen erkende bronnen
+    assert "Plausible" in st.defs.current(st.defs.by_name("Bezoekers (Plausible)")["id"])["standaard"]
     assert "DORA" in st.defs.current(st.defs.by_name("Deploy-frequentie")["id"])["standaard"]
     # nieuwe gegronde definitie met aard + benchmark
     cockpit2.dispatch(dd, "def_add", {"name": ["Doorvoertijd proef"], "unit": ["uur"], "csource": ["monitoring"],

@@ -371,6 +371,88 @@ def seed_catalog(store: DefinitionStore, owner: str = "librarian") -> int:
     """Laad de zaad-catalogus idempotent in (dedup op naam+bron). Geeft het aantal toegevoegde
     definities terug. Tegelijk de praktijktoets op het schema: een ongeldige zaad-regel zou hier
     None opleveren en dus niet worden toegevoegd (de test dekt dit af)."""
+# Gronding-overlay: per definitie de erkende bron (standaard), leading/lagging (tijd),
+# actionable/vanity (bruikbaar) en een benchmark waar een verdedigbaar cijfer bestaat.
+# Bronnen: DORA, Bain/Reichheld (NPS), ACSI (CSAT), SCOR/ASCM (OTIF), GHG Protocol + IRIS+,
+# ECDB/Smart Insights (e-commerce 2024), Holacracy (tactical meeting). IT staat al inline.
+_GROUNDING: dict[str, dict] = {
+    # Marketing / zoekprestaties (Google Search Console)
+    "Vertoningen (GSC)": {"standaard": "Google Search Console", "tijd": "lagging", "bruikbaar": "vanity"},
+    "Klikken (GSC)": {"standaard": "Google Search Console", "tijd": "lagging", "bruikbaar": "actionable"},
+    "CTR (GSC)": {"standaard": "Google Search Console", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Gemiddelde positie (GSC)": {"standaard": "Google Search Console", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Aandeel op pagina 1 (GSC)": {"standaard": "afgeleide (GSC posities 1-10)", "tijd": "lagging", "bruikbaar": "actionable"},
+    # Web-analytics (Plausible)
+    "Bezoekers (Plausible)": {"standaard": "Plausible (web-analytics)", "tijd": "lagging", "bruikbaar": "vanity"},
+    "Paginaweergaven (Plausible)": {"standaard": "Plausible (web-analytics)", "tijd": "lagging", "bruikbaar": "vanity"},
+    "Bezoekduur (Plausible)": {"standaard": "Plausible (web-analytics)", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Bouncepercentage (Plausible)": {"standaard": "Plausible (web-analytics)", "tijd": "lagging", "bruikbaar": "actionable", "benchmark": "e-commerce gem. ~60% (2024)"},
+    # Verkoop (e-commerce standaard)
+    "Paren verkocht (Shopify)": {"standaard": "e-commerce standaard", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Orders (Shopify)": {"standaard": "e-commerce standaard", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Omzet (Shopify)": {"standaard": "e-commerce standaard", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Gemiddelde orderwaarde (Shopify)": {"standaard": "e-commerce standaard (AOV)", "tijd": "lagging", "bruikbaar": "actionable", "benchmark": "wereldwijd ~€110 (2024)"},
+    "Conversie (orders ÷ unieke bezoekers)": {"standaard": "e-commerce standaard (definitie-afwijking)", "tijd": "lagging", "bruikbaar": "actionable", "benchmark": "e-commerce ~2,7% (2024); noemer hier = unieke bezoekers, niet sessies"},
+    # Zoekvraag / cultuur / onderzoek (vraagsignalen, meestal leading)
+    "Zoekinteresse (Trends)": {"standaard": "Google Trends (zoekindex 0-100)", "tijd": "leading", "bruikbaar": "actionable"},
+    "Zoekvolume (Keywords Everywhere)": {"standaard": "Keywords Everywhere (Google Ads-data)", "tijd": "leading", "bruikbaar": "actionable"},
+    "CPC (Keywords Everywhere)": {"standaard": "Keywords Everywhere (Google Ads-data)", "tijd": "leading", "bruikbaar": "vanity"},
+    "Concurrentie (Keywords Everywhere)": {"standaard": "Keywords Everywhere (Google Ads-data)", "tijd": "leading", "bruikbaar": "vanity"},
+    "Woordfrequentie (Ngram)": {"standaard": "Google Books Ngram", "tijd": "leading", "bruikbaar": "vanity"},
+    "Academische werken (OpenAlex)": {"standaard": "OpenAlex (academische index)", "tijd": "leading", "bruikbaar": "vanity"},
+    "Gem. citaties (OpenAlex)": {"standaard": "OpenAlex (academische index)", "tijd": "lagging", "bruikbaar": "vanity"},
+    "Papers (Semantic Scholar)": {"standaard": "Semantic Scholar (academische index)", "tijd": "leading", "bruikbaar": "vanity"},
+    "Nieuwsitems concurrenten": {"standaard": "intern (nieuws-monitor)", "tijd": "leading", "bruikbaar": "vanity"},
+    "Hoge-prioriteit linkdoelen": {"standaard": "intern (SEO-prioritering)", "tijd": "leading", "bruikbaar": "actionable"},
+    # IT-infra
+    "Beschikbaarheid (Site health)": {"standaard": "SRE / SLO (uptime)", "tijd": "lagging", "bruikbaar": "actionable", "benchmark": "SLO vaak 99,9%"},
+    # Supply chain / inkoop (SCOR / ASCM)
+    "Leverbetrouwbaarheid": {"standaard": "SCOR / OTIF (ASCM)", "tijd": "lagging", "bruikbaar": "actionable", "benchmark": "goed: 95-99% (OTIF)"},
+    "Voorraadrotatie": {"standaard": "SCOR (asset management, ASCM)", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Gem. doorlooptijd order": {"standaard": "SCOR (order fulfillment cycle time)", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Voorraadwaarde": {"standaard": "boekhouding / ERP", "tijd": "lagging", "bruikbaar": "vanity"},
+    "Inkoopuitgaven": {"standaard": "intern (inkoop)", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Leveranciers op tijd": {"standaard": "SCOR / OTIF (leverancier)", "tijd": "lagging", "bruikbaar": "actionable", "benchmark": "goed: 95-99%"},
+    "Afkeurpercentage inkoop": {"standaard": "kwaliteit (incoming quality)", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Actieve leveranciers": {"standaard": "intern (inkoop)", "tijd": "lagging", "bruikbaar": "vanity"},
+    "Retourpercentage": {"standaard": "e-commerce standaard", "tijd": "lagging", "bruikbaar": "actionable"},
+    # Klantenservice (SLA)
+    "Eerste reactietijd": {"standaard": "SLA (klantenservice)", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Oplostijd klantvraag": {"standaard": "SLA (klantenservice)", "tijd": "lagging", "bruikbaar": "actionable"},
+    # Klant- en medewerkerstevredenheid (Bain / ACSI / afgeleid)
+    "NPS": {"standaard": "NPS (Reichheld, Bain)", "tijd": "leading", "bruikbaar": "actionable", "benchmark": "B2C gem. ~49 (varieert per sector)"},
+    "CSAT": {"standaard": "CSAT (ACSI / industrie)", "tijd": "lagging", "bruikbaar": "actionable", "benchmark": "goed 75-85%, top 90%+"},
+    "eNPS": {"standaard": "eNPS (afgeleid van NPS)", "tijd": "leading", "bruikbaar": "actionable", "benchmark": "mediaan 0-30, top 30-50"},
+    "Medewerkerstevredenheid": {"standaard": "medewerkersenquête (intern)", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Personeelsverloop": {"standaard": "HR-standaard (turnover)", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Ziekteverzuim": {"standaard": "HR-standaard (verzuim)", "tijd": "lagging", "bruikbaar": "actionable"},
+    # Maatschappelijke impact (GHG Protocol / IRIS+)
+    "CO2 per paar": {"standaard": "GHG Protocol / IRIS+ (PD9427)", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Aandeel gerecycled materiaal": {"standaard": "IRIS+ (circulair)", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Aandeel biobased materiaal": {"standaard": "intern (circulair)", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Donaties goede doelen": {"standaard": "intern (impact)", "tijd": "lagging", "bruikbaar": "vanity"},
+    # Financiën
+    "Brutomarge": {"standaard": "boekhouding (GAAP)", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Cashpositie": {"standaard": "boekhouding", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Runway": {"standaard": "startup-finance (cash ÷ burn)", "tijd": "leading", "bruikbaar": "actionable"},
+    # Werkoverleg (Holacracy tactical meeting)
+    "Tevredenheid werkoverleg": {"standaard": "Holacracy (tactical meeting)", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Behandelde spanningen": {"standaard": "Holacracy (tactical meeting)", "tijd": "lagging", "bruikbaar": "vanity"},
+    "Info-uitkomsten": {"standaard": "Holacracy (tactical meeting)", "tijd": "lagging", "bruikbaar": "vanity"},
+    "Projecten uit overleg": {"standaard": "Holacracy (tactical meeting)", "tijd": "lagging", "bruikbaar": "vanity"},
+    "Acties uit overleg": {"standaard": "Holacracy (tactical meeting)", "tijd": "lagging", "bruikbaar": "vanity"},
+    "Doorlooptijd werkoverleg": {"standaard": "Holacracy (tactical meeting)", "tijd": "lagging", "bruikbaar": "actionable"},
+    "Besteed budget": {"standaard": "intern (boekhouding)", "tijd": "lagging", "bruikbaar": "actionable"},
+}
+
+
+def _merge_grounding(entry: dict) -> dict:
+    """Voeg de gronding-overlay (standaard/tijd/bruikbaar/benchmark) toe aan een zaad-entry."""
+    e = dict(entry)
+    e.update(_GROUNDING.get(e.get("name", ""), {}))
+    return e
+
+
 # standaard meetwijze per bron (de Librarian kan dit per definitie overschrijven)
 _SOURCE_MEETWIJZE = {"survey": "enquete", "impact": "handmatig", "": "handmatig"}
 
@@ -383,7 +465,7 @@ def _meetwijze_for(source: str) -> str:
 def seed_catalog(store: DefinitionStore, owner: str = "librarian") -> int:
     added = 0
     for entry in _DEFINITION_SEED:
-        e = dict(entry)
+        e = _merge_grounding(entry)
         name, source = e.pop("name"), e.get("source", "")
         if store.find(name, source) is not None:
             continue
@@ -404,16 +486,17 @@ def reground_seed(store: DefinitionStore) -> int:
     zodra de opgeslagen grondslag al gelijk is. Bewaart historie als nieuwe versie (clarify)."""
     n = 0
     for entry in _DEFINITION_SEED:
-        std = entry.get("standaard", "")
+        m = _merge_grounding(entry)
+        std = m.get("standaard", "")
         if std in ("", "interne aanname"):
             continue
-        d = store.find(entry["name"], entry.get("source", ""))
+        d = store.find(m["name"], m.get("source", ""))
         if d is None:
             continue
         cur = store.current(d["id"]) or {}
         if cur.get("standaard", "") == std:        # al gegrond → niets doen
             continue
-        fields = {k: entry[k] for k in _GROUND_FIELDS if k in entry}
+        fields = {k: m[k] for k in _GROUND_FIELDS if k in m}
         if store.amend(d["id"], "clarify", **fields):
             n += 1
     return n
