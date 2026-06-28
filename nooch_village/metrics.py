@@ -137,6 +137,34 @@ class MetricStore:
     def for_node(self, node: str) -> list[dict]:
         return [i for i in self._items.values() if i.get("node") == node]
 
+    def kpis_for_def(self, did: str) -> list[dict]:
+        return [i for i in self._items.values() if i.get("kind") == "kpi" and i.get("def_id") == did]
+
+    def retune_kpis_to_def(self, did: str, version: int, fields: dict, migration: str) -> int:
+        """Pas alle KPI's die naar deze definitie verwijzen aan op een nieuwe definitie-versie.
+
+        - clarify : grondslag bijwerken, def_version ophogen; samples blijven één doorlopende reeks.
+        - backcast: idem, plus alle bestaande samples herstempelen op de nieuwe versie (de mens
+                    stelt dat de historie vergelijkbaar blijft) → nog steeds één reeks.
+        - break   : grondslag bijwerken, def_version ophogen; oude samples houden hun oude defv en
+                    de nieuwe versie wordt als breukpunt vastgelegd (sparkline tekent een lijn)."""
+        copy = ("name", "unit", "definition", "direction", "threshold", "cadence", "meettype", "window")
+        n = 0
+        for it in self.kpis_for_def(did):
+            for k in copy:
+                if k in fields:
+                    it[k] = fields[k]
+            it["def_version"] = int(version)
+            if migration == "backcast":
+                for s in it.get("samples", []):
+                    s["defv"] = int(version)
+            elif migration == "break":
+                it.setdefault("breaks", []).append(int(version))
+            n += 1
+        if n:
+            self._save()
+        return n
+
     def kpis_for_nodes(self, node_ids) -> list[dict]:
         s = set(node_ids)
         return [i for i in self._items.values() if i.get("kind") == "kpi" and i.get("node") in s]

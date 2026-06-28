@@ -247,6 +247,24 @@ class DefinitionStore:
         return None
 
 
+_MEASURABLE = ("unit", "direction", "threshold", "cadence", "meettype", "window", "source")
+
+
+def suggest_migration(old: dict, new: dict) -> tuple[str, str]:
+    """Stel de migratie voor bij een definitiewijziging (heuristiek; de LLM/mens kan overrulen).
+
+    - Alleen de definitietekst gewijzigd → 'clarify' (zelfde meting, reeks blijft heel).
+    - Een meetbaar veld gewijzigd (eenheid/richting/drempel/cadans/meettype/venster/bron) → 'break'
+      als veilige default; de mens kan dit naar 'backcast' zetten als hij stelt dat de historie
+      vergelijkbaar blijft (eventueel met LLM-advies)."""
+    changed = [f for f in _MEASURABLE if f in new and str(old.get(f) or "") != str(new.get(f) or "")]
+    if changed:
+        return "break", "meetbare grondslag gewijzigd (" + ", ".join(changed) + ")"
+    if "definition" in new and (old.get("definition") or "") != (new.get("definition") or ""):
+        return "clarify", "alleen de definitietekst is verduidelijkt"
+    return "clarify", "geen meetbare wijziging"
+
+
 def seed_catalog(store: DefinitionStore, owner: str = "librarian") -> int:
     """Laad de zaad-catalogus idempotent in (dedup op naam+bron). Geeft het aantal toegevoegde
     definities terug. Tegelijk de praktijktoets op het schema: een ongeldige zaad-regel zou hier

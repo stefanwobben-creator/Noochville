@@ -156,6 +156,73 @@ def test_rol_aanbevelingen_in_picker(tmp_path):
     assert recs, "verwacht aanbevelingen voor de marketing-rol"
 
 
+def test_suggest_migration_heuristiek():
+    from nooch_village.definitions import suggest_migration
+    old = {"definition": "orders / bezoekers", "unit": "%", "meettype": "venster"}
+    # alleen tekst → clarify
+    m, _ = suggest_migration(old, {"definition": "orders / unieke bezoekers"})
+    assert m == "clarify"
+    # meetbaar veld (eenheid) → break
+    m, _ = suggest_migration(old, {"unit": "ratio"})
+    assert m == "break"
+    # niets gewijzigd → clarify
+    assert suggest_migration(old, {})[0] == "clarify"
+
+
+def _manual_def_kpi(dd, rid="mother_earth__nooch__marketing_lead"):
+    from nooch_village import cockpit2
+    # losse KPI gedeeld → een handmatige catalogus-definitie + een KPI die ernaar verwijst
+    cockpit2.dispatch(dd, "m_add_kpi", {"node": [rid], "pick": ["manual"], "name": ["NPS"],
+                                        "unit": ["score"], "definition": ["promoters - detractors"],
+                                        "share": ["1"], "next": ["/"]})
+    st = cockpit2._Stores(dd)
+    kpi = [i for i in st.metrics.for_node(rid) if i.get("name") == "NPS"][0]
+    for v in (10, 20, 30):
+        cockpit2.dispatch(dd, "m_sample", {"mid": [kpi["id"]], "value": [str(v)], "next": ["/"]})
+    return kpi["def_id"], kpi["id"]
+
+
+def test_amend_clarify_houdt_reeks_heel(tmp_path):
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
+    did, mid = _manual_def_kpi(dd)
+    cockpit2.dispatch(dd, "def_amend", {"def_id": [did], "definition": ["promoters minus detractors"],
+                                        "migration": ["auto"], "next": ["/"]})
+    st = cockpit2._Stores(dd)
+    kpi = st.metrics.get(mid)
+    assert kpi["def_version"] == 2 and not kpi.get("breaks")        # geen breuk
+    assert kpi["definition"] == "promoters minus detractors"        # grondslag bijgewerkt
+    assert all("defv" in s for s in kpi["samples"])                 # samples behouden
+
+
+def test_amend_break_zet_breukpunt(tmp_path):
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
+    did, mid = _manual_def_kpi(dd)
+    # eenheid wijzigt → meetbaar → break (geen LLM-key in test → veilige default)
+    cockpit2.dispatch(dd, "def_amend", {"def_id": [did], "unit": ["%"], "migration": ["auto"], "next": ["/"]})
+    st = cockpit2._Stores(dd)
+    kpi = st.metrics.get(mid)
+    assert kpi["def_version"] == 2 and kpi["breaks"] == [2]
+    # oude samples houden defv=1; een nieuwe meting krijgt defv=2 → breukpunt in de reeks
+    assert {s["defv"] for s in kpi["samples"]} == {1}
+    cockpit2.dispatch(dd, "m_sample", {"mid": [mid], "value": ["40"], "next": ["/"]})
+    kpi = cockpit2._Stores(dd).metrics.get(mid)
+    assert kpi["samples"][-1]["defv"] == 2
+    assert cockpit2._break_indices(kpi["samples"]) == [3]           # breuk na de 3 oude punten
+
+
+def test_amend_backcast_hertagt_historie(tmp_path):
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
+    did, mid = _manual_def_kpi(dd)
+    # expliciete back-cast: mens stelt dat historie vergelijkbaar blijft → herstempelen, één reeks
+    cockpit2.dispatch(dd, "def_amend", {"def_id": [did], "unit": ["pt"], "migration": ["backcast"], "next": ["/"]})
+    kpi = cockpit2._Stores(dd).metrics.get(mid)
+    assert kpi["def_version"] == 2 and not kpi.get("breaks")
+    assert {s["defv"] for s in kpi["samples"]} == {2}              # alles op nieuwe versie
+
+
 def test_store_in_cockpit(tmp_path):
     from nooch_village import cockpit2
     dd = str(tmp_path / "poc")

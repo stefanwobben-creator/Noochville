@@ -1524,7 +1524,7 @@ def _metric_points(st: _Stores, item: dict, cutoff):
     return filter_samples(samples, cutoff)
 
 
-def _spark_svg(points, w=84, h=22) -> str:
+def _spark_svg(points, w=84, h=22, breaks_at=None) -> str:
     vals = [v for _, v in points]
     if len(vals) < 2:
         return "<span class='muted' style='font-size:.7rem'>—</span>"
@@ -1532,8 +1532,27 @@ def _spark_svg(points, w=84, h=22) -> str:
     rng = (hi - lo) or 1
     n = len(vals)
     pts = " ".join(f"{(i / (n - 1)) * w:.1f},{h - ((v - lo) / rng) * h:.1f}" for i, v in enumerate(vals))
+    # reeksbreuk(en): een gestreepte verticale lijn waar de definitie-versie wisselt
+    marks = ""
+    for idx in (breaks_at or []):
+        if 0 < idx < n:
+            x = (idx / (n - 1)) * w
+            marks += (f"<line x1='{x:.1f}' y1='0' x2='{x:.1f}' y2='{h}' stroke='var(--coral)' "
+                      f"stroke-width='1' stroke-dasharray='2 2'/>")
     return (f"<svg class='spark' viewBox='0 0 {w} {h}' width='{w}' height='{h}' preserveAspectRatio='none'>"
-            f"<polyline points='{pts}' fill='none' stroke='var(--green)' stroke-width='1.5'/></svg>")
+            f"<polyline points='{pts}' fill='none' stroke='var(--green)' stroke-width='1.5'/>{marks}</svg>")
+
+
+def _break_indices(samples) -> list:
+    """Indexen (in op-tijd-gesorteerde samples) waar de definitie-versie (defv) omhoog springt."""
+    sv = sorted(samples or [], key=lambda s: s.get("at", 0))
+    out, prev = [], None
+    for i, s in enumerate(sv):
+        dv = s.get("defv")
+        if prev is not None and dv is not None and dv != prev:
+            out.append(i)
+        prev = dv if dv is not None else prev
+    return out
 
 
 def _kpi_card(st: _Stores, item: dict, cutoff, csrf: str, *, provider=False, circle="") -> str:
@@ -1834,6 +1853,24 @@ def _grondslag_popover(g: dict) -> str:
             f"<div class='gr-pop'>{body}</div></details>")
 
 
+def _llm_says_comparable(old: dict, new: dict) -> bool:
+    """LLM-check: blijft de historie vergelijkbaar onder de gewijzigde definitie? Zonder LLM-key
+    (geen antwoord) → False, zodat de veilige default (reeksbreuk) geldt."""
+    try:
+        from nooch_village import llm
+        prompt = (
+            "Een indicator-definitie wijzigt. Blijven eerder gemeten waarden vergelijkbaar onder de "
+            "nieuwe definitie (zodat we ze in dezelfde reeks mogen houden), of niet?\n"
+            f"OUD: {old.get('definition','')} | eenheid {old.get('unit','')} | meettype {old.get('meettype','')}\n"
+            f"NIEUW: {new.get('definition', old.get('definition',''))} | eenheid {new.get('unit', old.get('unit',''))} "
+            f"| meettype {new.get('meettype', old.get('meettype',''))}\n"
+            "Antwoord met exact één woord: VERGELIJKBAAR of BREUK.")
+        out = (llm.reason(prompt) or "").strip().lower()
+        return "vergelijkbaar" in out and "breuk" not in out
+    except Exception:
+        return False
+
+
 def _definition_datalist(st: _Stores) -> str:
     """Bestaande definities (eigen KPI's + ingebouwde grondslagen) als datalist, zodat je een
     bestaande grondslag hergebruikt i.p.v. een nieuwe te verzinnen (vergelijkbaarheid)."""
@@ -1965,8 +2002,9 @@ def _kpi_data_row(st: _Stores, item: dict, csrf: str) -> str:
               f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='mid' value='{_e(item['id'])}'>"
               f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=metrics'>"
               f"<button class='dellink' type='submit' name='action' value='m_remove'>✕</button></form>")
+    bidx = _break_indices(item.get("samples", [])) if item.get("breaks") else None
     return (f"<div class='kpidata-row'><span class='kpidata-n'>{_e(item['name'])}{src} {info}</span>"
-            f"<span class='kpidata-v'>{val}{unit}</span>{_spark_svg(pts)}{add}{exp}{rm}</div>")
+            f"<span class='kpidata-v'>{val}{unit}</span>{_spark_svg(pts, breaks_at=bidx)}{add}{exp}{rm}</div>")
 
 
 # bronnen die het systeem/een API meet — hiervoor mag je NOOIT handmatig invoeren (integriteit).
@@ -4312,6 +4350,32 @@ def dispatch(data_dir: str, action: str, form: dict):
             msg = "✓ KPI uit catalogus toegevoegd" if it else "⛔ kon KPI niet toevoegen"
         else:
             msg = "⛔ kies een bestaande definitie uit de catalogus"
+    elif action == "def_amend":
+        # wijzig een gedeelde catalogus-definitie; migratie bepaalt wat met de historie gebeurt
+        did = g("def_id")
+        old = st.defs.current(did) if did else None
+        if not old:
+            msg = "⛔ onbekende definitie"
+        else:
+            from nooch_village.definitions import suggest_migration
+            new = {k: g(k) for k in ("definition", "unit", "direction", "threshold",
+                                     "cadence", "meettype", "window") if g(k) != ""}
+            mig = g("migration") or "auto"
+            if mig == "auto":
+                mig, _why = suggest_migration(old, new)
+                if mig == "break" and _llm_says_comparable(old, new):
+                    mig = "backcast"     # LLM: historie blijft vergelijkbaar → één reeks
+            ver = st.defs.amend(did, mig, **new)
+            if ver:
+                fields = {k: ver.get(k) for k in ("name", "unit", "definition", "direction",
+                                                  "threshold", "cadence", "meettype", "window")}
+                st.metrics.retune_kpis_to_def(did, ver["version"], fields, mig)
+                label = {"clarify": "verduidelijking (reeks intact)",
+                         "backcast": "back-cast (historie hergebruikt)",
+                         "break": "reeksbreuk (nieuwe versie)"}.get(mig, mig)
+                msg = f"✓ definitie v{ver['version']} — {label}"
+            else:
+                msg = "⛔ wijziging ongeldig"
     elif action == "m_add_link":
         it = st.metrics.add_link(g("node"), g("name"), g("url"))
         msg = "✓ link toegevoegd" if it else "⛔ geef naam en URL"
