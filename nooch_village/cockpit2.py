@@ -406,10 +406,11 @@ ul.clean li:last-child{border-bottom:none}
 .kpi-val.sm{font-size:1.15rem}
 .tile-h-r{display:inline-flex;align-items:center;gap:.3rem}
 .tile-info{position:relative;display:inline-block}
-.tile-info>summary{list-style:none;cursor:pointer;color:var(--subtle);display:inline-flex}
+.tile-info>summary{list-style:none;cursor:pointer;color:var(--subtle);display:inline-flex;background:none;border:none;box-shadow:none;padding:0;opacity:.5}
+.tile-info>summary:hover,.tile-info[open]>summary{opacity:1}
 .tile-info>summary::-webkit-details-marker{display:none}
-.tile-info>summary svg{width:14px;height:14px}
-.gr-pop{position:absolute;right:0;z-index:6;width:15rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 8px 24px rgba(0,0,0,.14);padding:.5rem .6rem;font-size:.74rem}
+.tile-info>summary svg{width:13px;height:13px}
+.gr-pop{position:absolute;right:0;bottom:calc(100% + 5px);z-index:6;width:15rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 8px 24px rgba(0,0,0,.14);padding:.5rem .6rem;font-size:.74rem}
 .gr-row{display:flex;gap:.5rem;padding:.12rem 0;border-bottom:1px solid var(--border)}
 .gr-k{flex:0 0 4.5rem;color:var(--subtle);font-weight:700}
 .tile-goal{font-size:.72rem;margin-top:.3rem}
@@ -1903,8 +1904,16 @@ def _metric_csv(st: _Stores, mid: str) -> tuple[str, str] | None:
     import csv as _csv
     import datetime as _dt
     import io as _io
+    from nooch_village.metric_schema import SCHEMA_FIELDS
     buf = _io.StringIO()
     w = _csv.writer(buf)
+    # 1. het volledige indicator-schema (grondslag + meetmoment), ook lege velden
+    w.writerow(["indicator-schema", ""])
+    for f in SCHEMA_FIELDS:
+        v = it.get(f, "")
+        w.writerow([f, "" if v is None else v])
+    w.writerow([])
+    # 2. de metingen
     w.writerow(["datum", "waarde", "eenheid"])
     for at, v in pts:
         dt = _dt.datetime.fromtimestamp(at).strftime("%Y-%m-%d %H:%M")

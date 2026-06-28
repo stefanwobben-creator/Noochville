@@ -90,6 +90,9 @@ class IndicatorDefinition(BaseModel):
         return v if v in MEETTYPE else "snapshot"
 
 
+SCHEMA_FIELDS = list(IndicatorDefinition.model_fields)  # volgorde = schema-definitie
+
+
 def normalize(**kwargs) -> dict | None:
     """Valideer/normaliseer een indicator-definitie. Geeft een schone dict terug, of None
     als de definitie ongeldig is (lege naam)."""

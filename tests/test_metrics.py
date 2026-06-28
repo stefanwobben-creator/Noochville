@@ -157,6 +157,10 @@ def test_kpi_export_csv(tmp_path):
     assert res is not None
     fname, body = res
     assert fname == "Conversie.csv" and "datum,waarde,eenheid" in body and "4.2" in body
+    # volledig indicator-schema in de export, ook lege velden (definition, cadence, meettype...)
+    assert "indicator-schema" in body
+    for f in ("name", "definition", "direction", "cadence", "meettype", "window"):
+        assert f in body
     assert cockpit2._metric_csv(cockpit2._Stores(dd), "bestaatniet") is None
 
 
