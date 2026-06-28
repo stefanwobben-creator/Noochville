@@ -1694,20 +1694,28 @@ def _shopify_window(dd: str):
     return None
 
 
-# CO2 vermeden — VOORLOPIGE constanten (PCF-blocker open; herijken na verificatie).
-# vermeden per paar = conventioneel - Nooch PCF. Bron: content pillar + ISO 14067 (2030calculator).
-_CO2_CONVENTIONEEL = 13.6
-_CO2_NOOCH_PCF = 4.75
+# Reference, don't copy: geen hardcoded PCF/conventioneel. De waarden komen uit de catalogus
+# (gezaghebbende definitie-`waarde`); hier staat alleen de naam-verwijzing + de bewijs-link.
+_CO2_PCF_DEF = "CO2 per paar"
+_CO2_CONV_DEF = "CO2 conventioneel (referentie)"
 _CO2_BRON_URL = "/carbon-footprint-of-shoes"
 
 
-def _co2_avoided(dd: str):
-    """Cumulatief vermeden CO2 = (conventioneel - Nooch PCF) x paren verkocht (Shopify)."""
-    w = _shopify_window(dd) or {}
+def _def_waarde(st: _Stores, name: str):
+    d = st.defs.by_name(name)
+    cur = st.defs.current(d["id"]) if d else None
+    return (cur or {}).get("waarde") if cur else None
+
+
+def _co2_avoided(st: _Stores):
+    """Cumulatief vermeden CO2 = (conventioneel - Nooch PCF) x paren verkocht (Shopify).
+    PCF en conventioneel worden uit de catalogus gelezen, nooit gehardcode (reference, don't copy)."""
+    pcf, conv = _def_waarde(st, _CO2_PCF_DEF), _def_waarde(st, _CO2_CONV_DEF)
+    w = _shopify_window(st.dd) or {}
     pairs = w.get("pairs_sold")
-    if not isinstance(pairs, (int, float)):
+    if not all(isinstance(x, (int, float)) for x in (pcf, conv, pairs)):
         return None
-    return round((_CO2_CONVENTIONEEL - _CO2_NOOCH_PCF) * pairs, 1)
+    return round((conv - pcf) * pairs, 1)
 
 
 def _sources_for(st: _Stores, rec):
@@ -1800,7 +1808,7 @@ def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff):
         unit = "EUR" if measure in ("revenue", "aov") else ("paren" if measure == "pairs_sold" else "")
         return {"kind": "number", "value": w.get(measure), "unit": unit}
     if source == "co2_avoided":
-        return {"kind": "number", "value": _co2_avoided(st.dd), "unit": "kg CO2e"}
+        return {"kind": "number", "value": _co2_avoided(st), "unit": "kg CO2e"}
     if source.startswith("werk:"):
         return _werk_fetch(st, source[5:], measure, dim, cutoff)
     if source.startswith("kpi:"):
@@ -2020,11 +2028,17 @@ def _grondslag(st: _Stores, source: str, measure: str) -> dict:
                 "benchmark": it.get("benchmark", ""), "bron_url": it.get("bron_url", ""),
                 "verificatie": it.get("verificatie", "")}
     if source == "co2_avoided":
-        return {"definitie": f"(conventioneel {_CO2_CONVENTIONEEL} − Nooch PCF {_CO2_NOOCH_PCF}) × paren verkocht.",
-                "eenheid": "kg CO2e", "bron": "IRIS+ OI2764 / berekend (ISO 14067)", "richting": "up",
-                "drempel": None, "cadans": "maand", "meettype": "cumulatief", "venster": "",
-                "meetwijze": "systeem", "benchmark": "", "bron_url": _CO2_BRON_URL,
-                "verificatie": "voorlopig"}
+        pcf, conv = _def_waarde(st, _CO2_PCF_DEF), _def_waarde(st, _CO2_CONV_DEF)
+        formule = (f"(conventioneel {_num(conv)} − Nooch PCF {_num(pcf)}) × paren verkocht"
+                   if pcf is not None and conv is not None
+                   else "(conventioneel − Nooch PCF) × paren verkocht — waarden ontbreken in de catalogus")
+        # erft 'voorlopig' zolang de PCF-definitie voorlopig is (reference, don't copy)
+        ver = (st.defs.current(st.defs.by_name(_CO2_PCF_DEF)["id"]) or {}).get("verificatie", "") \
+            if st.defs.by_name(_CO2_PCF_DEF) else ""
+        return {"definitie": formule + ".", "eenheid": "kg CO2e",
+                "bron": "IRIS+ OI2764 / berekend (ISO 14067)", "richting": "up", "drempel": None,
+                "cadans": "maand", "meettype": "cumulatief", "venster": "", "meetwijze": "systeem",
+                "benchmark": "", "bron_url": _CO2_BRON_URL, "verificatie": ver}
     if source.startswith("werk:"):
         d, u, r = _WERK_GRONDSLAG.get(measure, ("", "", ""))
         return {"definitie": d, "eenheid": u, "bron": "Werkoverleg-archief", "richting": r,
@@ -2469,6 +2483,7 @@ def _catalog_edit_form(st: _Stores, did: str, cur: dict, csrf: str) -> str:
             f"<input name='benchmark' value=\"{_e(cur.get('benchmark', ''))}\" placeholder='Benchmark/referentiewaarde' autocomplete='off'>"
             f"<input name='bron_url' value=\"{_e(cur.get('bron_url', ''))}\" placeholder='Bron-link (kenniskaart / LCA-rapport, http of /pad)' autocomplete='off'>"
             f"{_opt_select('verificatie', VERIFICATIE_LABEL, cur.get('verificatie', ''), 'verificatie?')}"
+            f"<input name='waarde' value=\"{_e('' if cur.get('waarde') is None else _num(cur.get('waarde')))}\" inputmode='decimal' placeholder='Canonieke waarde (vaste constante, optioneel)' autocomplete='off'>"
             f"{mig}"
             f"<button class='btn ok sm' type='submit' name='action' value='def_amend'>Doorvoeren</button></form></details>")
 
@@ -2482,6 +2497,7 @@ def _catalog_card(st: _Stores, d: dict, cur: dict, csrf: str) -> str:
         meet = f"{meet} ({cur['window']})" if meet else cur["window"]
     body = (rij("Definitie", cur.get("definition") or "— (nog niet vastgelegd)")
             + rij("Eenheid", cur.get("unit")) + rij("Richting", _RICHTING.get(cur.get("direction"), "—"))
+            + (rij("Waarde", _num(cur.get("waarde"))) if cur.get("waarde") is not None else "")
             + (rij("Drempel", _num(cur.get("threshold"))) if cur.get("threshold") is not None else "")
             + rij("Meetmoment", meet)
             + rij("Grondslag", cur.get("standaard"))
@@ -2537,6 +2553,7 @@ def _catalog_add_form(st: _Stores, csrf: str) -> str:
             f"<input name='benchmark' placeholder='Benchmark/referentiewaarde (optioneel)' autocomplete='off'>"
             f"<input name='bron_url' placeholder='Bron-link (kenniskaart / rapport, optioneel)' autocomplete='off'>"
             f"{_opt_select('verificatie', VERIFICATIE_LABEL, '', 'verificatie?')}"
+            f"<input name='waarde' inputmode='decimal' placeholder='Canonieke waarde (vaste constante, optioneel)' autocomplete='off'>"
             f"<button class='btn ok sm' type='submit' name='action' value='def_add'>Definitie toevoegen</button></form></details>")
 
 
@@ -4789,7 +4806,7 @@ def dispatch(data_dir: str, action: str, form: dict):
                         window=g("window"), meetwijze=g("meetwijze") or "handmatig",
                         tijd=g("tijd"), bruikbaar=g("bruikbaar"),
                         standaard=g("standaard"), benchmark=g("benchmark"),
-                        bron_url=g("bron_url"), verificatie=g("verificatie"))
+                        bron_url=g("bron_url"), verificatie=g("verificatie"), waarde=g("waarde"))
         msg = "✓ definitie toegevoegd aan de catalogus" if d else "⛔ geef een naam"
     elif action == "def_amend":
         # wijzig een gedeelde catalogus-definitie; migratie bepaalt wat met de historie gebeurt
@@ -4801,7 +4818,8 @@ def dispatch(data_dir: str, action: str, form: dict):
             from nooch_village.definitions import suggest_migration
             new = {k: g(k) for k in ("definition", "unit", "direction", "threshold", "cadence",
                                      "meettype", "window", "meetwijze", "tijd", "bruikbaar",
-                                     "standaard", "benchmark", "bron_url", "verificatie") if g(k) != ""}
+                                     "standaard", "benchmark", "bron_url", "verificatie",
+                                     "waarde") if g(k) != ""}
             mig = g("migration") or "auto"
             if mig == "auto":
                 mig, _why = suggest_migration(old, new)

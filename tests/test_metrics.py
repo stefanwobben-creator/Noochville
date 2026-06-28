@@ -268,7 +268,7 @@ def test_co2_vermeden_berekend(tmp_path):
     assert "CO2 vermeden: Vermeden (cumulatief)" in page0
     cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": ["co2_avoided|avoided|none"],
                                        "form": ["getal"], "target": [""], "next": ["/"]})
-    val = cockpit2._co2_avoided(dd)
+    val = cockpit2._co2_avoided(cockpit2._Stores(dd))
     assert val is not None and val > 0
     page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
     # waarde + eenheid + voorlopig-badge + bewijs-link in de grondslag

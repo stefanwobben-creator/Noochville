@@ -228,6 +228,9 @@ _DEFINITION_SEED: tuple[dict, ...] = (
     {"name": "CO2 per paar", "source": "impact", "unit": "kg CO2e", "direction": "down",
      "cadence": "kwartaal", "meettype": "snapshot",
      "definition": "Levenscyclus-emissies per paar schoenen (LCA-onderbouwing vereist)."},
+    {"name": "CO2 conventioneel (referentie)", "source": "impact", "unit": "kg CO2e", "direction": "down",
+     "cadence": "jaar", "meettype": "snapshot",
+     "definition": "Referentie-voetafdruk van een conventioneel paar (meest geciteerde studie)."},
     {"name": "Aandeel gerecycled materiaal", "source": "impact", "unit": "%", "direction": "up",
      "cadence": "kwartaal", "meettype": "snapshot",
      "definition": "Massa-aandeel gerecycled materiaal in het product."},
@@ -250,8 +253,9 @@ _DEFINITION_SEED: tuple[dict, ...] = (
 )
 
 # de velden die een versie van een definitie vastlegt (subset van het indicator-schema)
-_FIELDS = ("name", "unit", "definition", "source", "direction",
-           "threshold", "cadence", "meettype", "window")
+_FIELDS = ("name", "unit", "definition", "source", "direction", "threshold", "cadence",
+           "meettype", "window", "meetwijze", "tijd", "bruikbaar", "standaard", "benchmark",
+           "bron_url", "verificatie", "waarde")
 
 
 class DefinitionStore:
@@ -430,7 +434,10 @@ _GROUNDING: dict[str, dict] = {
     "CO2 per paar": {"standaard": "ISO 14067 (2030calculator) / GHG Protocol / IRIS+ PD9427",
                      "tijd": "lagging", "bruikbaar": "actionable",
                      "benchmark": "conventioneel ~13,6 kg → −65% (voorlopig, herrekenen)",
-                     "bron_url": "/carbon-footprint-of-shoes", "verificatie": "voorlopig"},
+                     "bron_url": "/carbon-footprint-of-shoes", "verificatie": "voorlopig", "waarde": 4.75},
+    "CO2 conventioneel (referentie)": {"standaard": "MIT (Cheah et al. 2013) / content pillar",
+                                       "tijd": "lagging", "bruikbaar": "vanity", "waarde": 13.6,
+                                       "bron_url": "/carbon-footprint-of-shoes", "verificatie": "geverifieerd"},
     "Aandeel gerecycled materiaal": {"standaard": "IRIS+ (circulair)", "tijd": "lagging", "bruikbaar": "actionable"},
     "Aandeel biobased materiaal": {"standaard": "intern (circulair)", "tijd": "lagging", "bruikbaar": "actionable"},
     "Donaties goede doelen": {"standaard": "intern (impact)", "tijd": "lagging", "bruikbaar": "vanity"},
@@ -480,7 +487,7 @@ def seed_catalog(store: DefinitionStore, owner: str = "librarian") -> int:
 
 
 _GROUND_FIELDS = ("definition", "unit", "direction", "cadence", "meettype", "window",
-                  "tijd", "bruikbaar", "standaard", "benchmark", "bron_url", "verificatie")
+                  "tijd", "bruikbaar", "standaard", "benchmark", "bron_url", "verificatie", "waarde")
 
 
 def reground_seed(store: DefinitionStore) -> int:

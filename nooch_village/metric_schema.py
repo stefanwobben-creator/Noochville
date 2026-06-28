@@ -62,6 +62,7 @@ class IndicatorDefinition(BaseModel):
     benchmark: str = ""    # referentiewaarde/-range, bv. 'goede shop 1,8-3,2%'
     bron_url: str = ""     # link naar het bewijs (kenniskaart, LCA-rapport, standaard-pagina)
     verificatie: Literal["geverifieerd", "voorlopig", ""] = ""  # status van de waarde
+    waarde: Optional[float] = None   # canonieke constante (bv. een geauditeerde PCF); ÉÉN bron
 
     @field_validator("name", mode="before")
     @classmethod
@@ -141,6 +142,19 @@ class IndicatorDefinition(BaseModel):
     @classmethod
     def _ver(cls, v):
         return v if v in VERIFICATIE else ""
+
+    @field_validator("waarde", mode="before")
+    @classmethod
+    def _waarde(cls, v):
+        import math
+        s = str(v if v is not None else "").strip()
+        if s in ("", "None"):
+            return None
+        try:
+            f = float(s)
+        except ValueError:
+            return None
+        return f if math.isfinite(f) else None
 
 
 SCHEMA_FIELDS = list(IndicatorDefinition.model_fields)  # volgorde = schema-definitie
