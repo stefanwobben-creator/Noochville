@@ -85,6 +85,33 @@ def test_tile_toevoegen_en_vormen(tmp_path):
     assert len(cockpit2._Stores(dd).metrics.tiles_of(C)) == 1
 
 
+def test_grondslag_en_doelkoppeling(tmp_path):
+    dd = _dd(tmp_path)
+    # handmatige KPI met grondslag (definitie/richting/drempel)
+    cockpit2.dispatch(dd, "m_add_kpi", {"node": [RID], "pick": ["manual"], "name": ["Conversie"],
+                                        "unit": ["%"], "definition": ["betaalde orders / bezoekers"],
+                                        "direction": ["up"], "threshold": ["2"], "next": ["/"]})
+    it = [i for i in cockpit2._Stores(dd).metrics.for_node(RID) if i["kind"] == "kpi"][0]
+    assert it["definition"] == "betaalde orders / bezoekers" and it["direction"] == "up" and it["threshold"] == 2.0
+    g = cockpit2._grondslag(cockpit2._Stores(dd), f"kpi:{it['id']}", "value")
+    assert g["definitie"] and g["richting"] == "up"
+    # tegel met doel-koppeling aan een project
+    st = cockpit2._Stores(dd)
+    pid = st.projects.create(RID, "1000 paar in Q4", "human")
+    cockpit2.dispatch(dd, "tile_add", {"node": [RID], "combo": ["shopify|pairs_sold|none"],
+                                       "form": ["doelmeter"], "target": ["1000"], "goal_pid": [pid], "next": ["/"]})
+    t = cockpit2._Stores(dd).metrics.tiles_of(RID)[0]
+    assert t["goal_pid"] == pid and t["target"] == 1000.0
+    page = cockpit2.render_node(cockpit2._Stores(dd), RID, "metrics", csrf_token="t")
+    assert "tile-info" in page and "naar doel:" in page and "1000 paar in Q4" in page   # grondslag + doel zichtbaar
+
+
+def test_built_in_grondslag(tmp_path):
+    dd = _dd(tmp_path)
+    g = cockpit2._grondslag(cockpit2._Stores(dd), "shopify", "pairs_sold")
+    assert "paren" in g["eenheid"] and g["bron"] == "Shopify" and g["richting"] == "up"
+
+
 def test_handmatige_kpi_wordt_bron_in_wizard(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "m_add_kpi", {"node": [MKT], "pick": ["manual"], "name": ["NPS"],

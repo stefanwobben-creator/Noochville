@@ -39,7 +39,7 @@ class MetricStore:
 
     # ── tegels (dashboard-compositie: bron + measure + dimensie + vorm) ────────
     def add_tile(self, node: str, source: str, measure: str, dim: str, form: str,
-                 target=None) -> dict | None:
+                 target=None, goal_pid: str = "") -> dict | None:
         if not node or not source or not measure:
             return None
         try:
@@ -47,8 +47,11 @@ class MetricStore:
         except (TypeError, ValueError):
             tgt = None
         tid = uuid.uuid4().hex[:12]
+        # goal_pid koppelt de indicator aan een doel (project = outcome + deadline). De indicator
+        # geeft informatie; het doel is het project, niet de meter.
         tile = {"id": tid, "node": node, "source": source, "measure": measure,
-                "dim": dim or "none", "form": form or "getal", "target": tgt}
+                "dim": dim or "none", "form": form or "getal", "target": tgt,
+                "goal_pid": (goal_pid or "").strip()}
         self._tiles.setdefault(node, []).append(tile)
         self._save()
         return tile
@@ -77,14 +80,22 @@ class MetricStore:
         self._save()
         return it
 
-    def add_kpi(self, node: str, name: str, unit: str = "", source: str = "") -> dict | None:
+    def add_kpi(self, node: str, name: str, unit: str = "", source: str = "",
+                definition: str = "", direction: str = "", threshold=None) -> dict | None:
         name = (name or "").strip()
         if not node or not name:
             return None
+        try:
+            thr = float(threshold) if str(threshold or "").strip() not in ("", "None") else None
+        except (TypeError, ValueError):
+            thr = None
         mid = uuid.uuid4().hex[:12]
+        # grondslag-laag (GAAP/IRIS): wat telt mee, eenheid, richting (hoger/lager=beter), drempel
         it = {"id": mid, "kind": "kpi", "node": node, "name": name[:120],
               "unit": (unit or "").strip()[:24], "source": (source or "").strip(),
-              "samples": [], "created_at": time.time()}
+              "definition": (definition or "").strip()[:300],
+              "direction": direction if direction in ("up", "down") else "",
+              "threshold": thr, "samples": [], "created_at": time.time()}
         self._items[mid] = it
         self._save()
         return it

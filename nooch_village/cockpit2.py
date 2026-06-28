@@ -400,6 +400,16 @@ ul.clean li:last-child{border-bottom:none}
 .tile-t{font-size:.74rem;color:var(--subtle);font-weight:700;text-transform:uppercase;letter-spacing:.03em}
 .tile-trend{display:flex;align-items:flex-end;justify-content:space-between;gap:.5rem}
 .kpi-val.sm{font-size:1.15rem}
+.tile-h-r{display:inline-flex;align-items:center;gap:.3rem}
+.tile-info{position:relative;display:inline-block}
+.tile-info>summary{list-style:none;cursor:pointer;color:var(--subtle);display:inline-flex}
+.tile-info>summary::-webkit-details-marker{display:none}
+.tile-info>summary svg{width:14px;height:14px}
+.gr-pop{position:absolute;right:0;z-index:6;width:15rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 8px 24px rgba(0,0,0,.14);padding:.5rem .6rem;font-size:.74rem}
+.gr-row{display:flex;gap:.5rem;padding:.12rem 0;border-bottom:1px solid var(--border)}
+.gr-k{flex:0 0 4.5rem;color:var(--subtle);font-weight:700}
+.tile-goal{font-size:.72rem;margin-top:.3rem}
+.tile-warn{color:var(--coral);margin-left:.3rem}
 .bars{display:flex;flex-direction:column;gap:.25rem}
 .bar-row{display:grid;grid-template-columns:minmax(0,7rem) 1fr auto;align-items:center;gap:.5rem;font-size:.78rem}
 .bar-l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1751,9 +1761,67 @@ def _render_form(res, form, target=None):
     return f"<div class='kpi-val'>{v:g}{u}</div>"
 
 
+# Grondslag-laag (GAAP/IRIS): definitie, eenheid, bron, richting per bron-measure.
+_SOURCE_GRONDSLAG = {
+    "pulse_visitors|visitors": ("Unieke websitebezoekers, voortschrijdend 7-daags venster.",
+                                "bezoekers", "pulse_history (Plausible-puls)", "up"),
+    "shopify|pairs_sold": ("Verkochte paren uit betaalde orders.", "paren", "Shopify", "up"),
+    "shopify|orders": ("Aantal betaalde orders.", "orders", "Shopify", "up"),
+    "shopify|revenue": ("Omzet uit betaalde orders.", "EUR", "Shopify", "up"),
+    "shopify|aov": ("Gemiddelde orderwaarde (omzet ÷ orders).", "EUR", "Shopify", "up"),
+}
+_WERK_GRONDSLAG = {
+    "tevredenheid": ("Gemiddelde check-out-score (0-10) per overleg.", "0-10", "up"),
+    "spanningen": ("Aantal behandelde spanningen per overleg.", "", ""),
+    "informatie": ("Aantal info-uitkomsten per overleg.", "", ""),
+    "projecten": ("Aantal als project verwerkte uitkomsten.", "", ""),
+    "acties": ("Aantal als actie verwerkte uitkomsten.", "", ""),
+}
+_RICHTING = {"up": "hoger = beter", "down": "lager = beter", "": "—"}
+
+
+def _grondslag(st: _Stores, source: str, measure: str) -> dict:
+    if source.startswith("kpi:"):
+        it = st.metrics.get(source[4:]) or {}
+        return {"definitie": it.get("definition", ""), "eenheid": it.get("unit", ""),
+                "bron": "Bron-KPI" if it.get("source") else "Handmatig (jij voert in)",
+                "richting": it.get("direction", ""), "drempel": it.get("threshold")}
+    if source.startswith("werk:"):
+        d, u, r = _WERK_GRONDSLAG.get(measure, ("", "", ""))
+        return {"definitie": d, "eenheid": u, "bron": "Werkoverleg-archief", "richting": r, "drempel": None}
+    d, u, b, r = _SOURCE_GRONDSLAG.get(f"{source}|{measure}", ("", "", "", ""))
+    return {"definitie": d, "eenheid": u, "bron": b, "richting": r, "drempel": None}
+
+
+def _grondslag_popover(g: dict) -> str:
+    rij = lambda k, v: f"<div class='gr-row'><span class='gr-k'>{k}</span><span>{_e(str(v))}</span></div>" if v else ""
+    body = (rij("Definitie", g.get("definitie") or "— (nog niet vastgelegd)")
+            + rij("Eenheid", g.get("eenheid")) + rij("Bron", g.get("bron"))
+            + rij("Richting", _RICHTING.get(g.get("richting"), "—"))
+            + (rij("Drempel", g.get("drempel")) if g.get("drempel") is not None else ""))
+    return (f"<details class='tile-info'><summary title='grondslag'>{_IC_INFO}</summary>"
+            f"<div class='gr-pop'>{body}</div></details>")
+
+
 def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str) -> str:
     res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), cutoff)
     body = _render_form(res, tile.get("form", "getal"), tile.get("target"))
+    g = _grondslag(st, tile["source"], tile["measure"])
+    info = _grondslag_popover(g)
+    # Doel-koppeling: de indicator geeft info, het project is het doel (outcome + deadline).
+    goal = ""
+    gp = st.projects.get(tile.get("goal_pid")) if tile.get("goal_pid") else None
+    if gp is not None:
+        due = _fmt_due(gp.get("due")) if gp.get("due") else ""
+        goal = (f"<div class='tile-goal muted'>naar doel: <b>{_e(str(gp.get('scope') or gp['id'])[:50])}</b>"
+                f"{(' · ' + _e(due)) if due else ''}</div>")
+    # Drempel-signaal (Kaizen 'aandacht nodig'): waarde de verkeerde kant op t.o.v. de drempel.
+    warn = ""
+    thr, val = g.get("drempel"), _agg(res)
+    if thr is not None and isinstance(val, (int, float)):
+        bad = (val < thr) if g.get("richting") == "up" else (val > thr) if g.get("richting") == "down" else False
+        if bad:
+            warn = f"<span class='tile-warn' title='onder/over de drempel ({thr:g})'>⚠</span>"
     rm = ""
     if csrf:
         rm = (f"<form method='post' action='/action' style='display:inline'>"
@@ -1761,8 +1829,9 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str) -> str:
               f"<input type='hidden' name='tid' value='{_e(tile['id'])}'>"
               f"<input type='hidden' name='next' value='/node?id={_e(rec.id)}&tab=metrics'>"
               f"<button class='dellink' type='submit' name='action' value='tile_remove'>✕</button></form>")
-    return (f"<div class='tile'><div class='tile-h'><span class='tile-t'>{_e(_tile_meta(st, rec, tile))}</span>{rm}</div>"
-            f"<div class='tile-b'>{body}</div></div>")
+    return (f"<div class='tile'><div class='tile-h'><span class='tile-t'>{_e(_tile_meta(st, rec, tile))}{warn}</span>"
+            f"<span class='tile-h-r'>{info}{rm}</span></div>"
+            f"<div class='tile-b'>{body}</div>{goal}</div>")
 
 
 def _tile_wizard(st: _Stores, rec, csrf: str) -> str:
@@ -1780,9 +1849,23 @@ def _tile_wizard(st: _Stores, rec, csrf: str) -> str:
             f"<select name='combo' onchange=\"var o=this.options[this.selectedIndex];"
             f"var f=this.form.querySelector('[name=form]');if(o.dataset.form)f.value=o.dataset.form;\">{opts}</select>"
             f"<label class='att-lbl'>Vorm</label><select name='form'>{fopts}</select>"
-            f"<label class='att-lbl'>Doel (alleen voor doelmeter, optioneel)</label>"
-            f"<input name='target' inputmode='decimal' placeholder='bijv. 1000' autocomplete='off'>"
+            f"<label class='att-lbl'>Doelmeter: koppel aan een doel (project)</label>"
+            f"<select name='goal_pid'>{_goal_options(st, rec)}</select>"
+            f"<input name='target' inputmode='decimal' placeholder='streefwaarde, bijv. 1000' autocomplete='off'>"
+            f"<p class='muted' style='font-size:.72rem'>De indicator geeft informatie; het doel is "
+            f"het project (outcome + deadline). Alleen nodig bij vorm Doelmeter.</p>"
             f"<button class='btn ok sm' type='submit' name='action' value='tile_add'>Op dashboard</button></form></details>")
+
+
+def _goal_options(st: _Stores, rec) -> str:
+    """Projecten onder deze node als koppelbare doelen (= outcome + deadline)."""
+    is_c = org.is_circle(rec)
+    nodes = {rec.id} | ({r.id for r in org.roles_of(st.records.all(), rec.id)} if is_c else set())
+    out = "<option value=''>— geen doel —</option>"
+    for p in st.projects.all():
+        if p.get("owner") in nodes and not p.get("archived"):
+            out += f"<option value='{_e(p['id'])}'>{_e(str(p.get('scope') or p['id'])[:50])}</option>"
+    return out
 
 
 def _kpi_data_row(st: _Stores, item: dict, csrf: str) -> str:
@@ -1842,6 +1925,10 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "maand", nav:
                   f"<select name='pick'><option value='manual'>Nieuwe KPI (handmatig)</option>{src_opts}</select>"
                   f"<input name='name' placeholder='Naam (bij handmatig)' autocomplete='off'>"
                   f"<input name='unit' placeholder='Eenheid (€, %, stuks)' autocomplete='off'>"
+                  f"<input name='definition' placeholder='Definitie: wat telt mee? (grondslag)' autocomplete='off'>"
+                  f"<select name='direction'><option value=''>Richting (geen)</option>"
+                  f"<option value='up'>hoger = beter</option><option value='down'>lager = beter</option></select>"
+                  f"<input name='threshold' inputmode='decimal' placeholder='Drempel (signaal, optioneel)' autocomplete='off'>"
                   f"<button class='btn ok sm' type='submit' name='action' value='m_add_kpi'>KPI toevoegen</button></form></details>")
     out += f"<div class='c2-sec'><div class='cl-head'><h3>Eigen KPI's</h3>{define}</div>{rows}</div>"
 
@@ -3997,7 +4084,8 @@ def dispatch(data_dir: str, action: str, form: dict):
                                     (cat or {}).get("unit", ""), source=src) if cat else None
             msg = "✓ KPI uit data toegevoegd" if it else "⛔ onbekende bron-KPI"
         else:
-            it = st.metrics.add_kpi(g("node"), g("name"), g("unit"))
+            it = st.metrics.add_kpi(g("node"), g("name"), g("unit"), definition=g("definition"),
+                                    direction=g("direction"), threshold=g("threshold"))
             msg = "✓ KPI toegevoegd" if it else "⛔ geef een naam"
     elif action == "m_add_link":
         it = st.metrics.add_link(g("node"), g("name"), g("url"))
@@ -4013,7 +4101,8 @@ def dispatch(data_dir: str, action: str, form: dict):
     elif action == "tile_add":
         parts = (g("combo") or "").split("|")
         if len(parts) == 3 and parts[0]:
-            t = st.metrics.add_tile(g("node"), parts[0], parts[1], parts[2], g("form"), target=g("target"))
+            t = st.metrics.add_tile(g("node"), parts[0], parts[1], parts[2], g("form"),
+                                    target=g("target"), goal_pid=g("goal_pid"))
             msg = "✓ tegel op dashboard" if t else "⛔ kon tegel niet maken"
         else:
             msg = "⛔ kies wat je wilt zien"
