@@ -22,18 +22,48 @@ class MetricStore:
         self.path = path
         self._items: dict[str, dict] = {}
         self._pins: dict[str, list] = {}
+        self._tiles: dict[str, list] = {}
         if os.path.exists(path):
             try:
                 d = json.load(open(path))
                 if isinstance(d, dict):
                     self._items = d.get("items", {}) if "items" in d else {}
                     self._pins = d.get("pins", {})
+                    self._tiles = d.get("tiles", {})
             except Exception:
-                self._items, self._pins = {}, {}
+                self._items, self._pins, self._tiles = {}, {}, {}
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-        atomic_write_json(self.path, {"items": self._items, "pins": self._pins})
+        atomic_write_json(self.path, {"items": self._items, "pins": self._pins, "tiles": self._tiles})
+
+    # ── tegels (dashboard-compositie: bron + measure + dimensie + vorm) ────────
+    def add_tile(self, node: str, source: str, measure: str, dim: str, form: str,
+                 target=None) -> dict | None:
+        if not node or not source or not measure:
+            return None
+        try:
+            tgt = float(target) if str(target or "").strip() not in ("", "None") else None
+        except (TypeError, ValueError):
+            tgt = None
+        tid = uuid.uuid4().hex[:12]
+        tile = {"id": tid, "node": node, "source": source, "measure": measure,
+                "dim": dim or "none", "form": form or "getal", "target": tgt}
+        self._tiles.setdefault(node, []).append(tile)
+        self._save()
+        return tile
+
+    def tiles_of(self, node: str) -> list[dict]:
+        return list(self._tiles.get(node, []))
+
+    def remove_tile(self, node: str, tid: str) -> bool:
+        before = self._tiles.get(node, [])
+        after = [t for t in before if t.get("id") != tid]
+        if len(after) != len(before):
+            self._tiles[node] = after
+            self._save()
+            return True
+        return False
 
     # ── toevoegen ────────────────────────────────────────────────────────────
     def add_link(self, node: str, name: str, url: str) -> dict | None:

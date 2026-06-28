@@ -43,35 +43,58 @@ def test_bron_kpi_pulse_visitors(tmp_path):
     assert cockpit2._Stores(dd).metrics.add_sample(it["id"], 5) is False
 
 
-def test_rol_tab_kpi_en_meting(tmp_path):
+def test_rol_tab_eigen_kpi_en_meting(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "m_add_kpi", {"node": [RID], "pick": ["manual"], "name": ["Conversie"],
                                         "unit": ["%"], "next": ["/"]})
     mid = [i for i in cockpit2._Stores(dd).metrics.for_node(RID) if i["kind"] == "kpi"][0]["id"]
     cockpit2.dispatch(dd, "m_sample", {"mid": [mid], "value": ["4.2"], "next": ["/"]})
     page = cockpit2.render_node(cockpit2._Stores(dd), RID, "metrics", csrf_token="t")
-    assert "Conversie" in page and "kpi-card" in page and "Periode:" in page
-    assert "m_add_kpi" in page and "Link toevoegen" in page          # combi KPI + link
+    # mini-Looker: wizard + eigen KPI's + periode
+    assert "Conversie" in page and "+ Tegel" in page and "Periode:" in page
+    assert "Eigen KPI's" in page and "+ Link" in page
 
 
-def test_cirkel_dashboard_pin_uit_rol_kpis(tmp_path):
+def test_tile_wizard_combos(tmp_path):
     dd = _dd(tmp_path)
-    # KPI op een rol -> verschijnt in de cirkel-selectie met provider-rol
-    cockpit2.dispatch(dd, "m_add_kpi", {"node": [MKT], "pick": ["source:pulse_visitors"], "next": ["/"]})
-    mid = cockpit2._Stores(dd).metrics.for_node(MKT)[0]["id"]
     page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
-    assert "KPI's selecteren" in page and "Marketing Lead" in page    # provider zichtbaar
-    # Lead Link pint de KPI op het cirkeldashboard
-    cockpit2.dispatch(dd, "m_pin", {"circle": [C], "mid": [mid], "next": ["/"]})
-    assert cockpit2._Stores(dd).metrics.is_pinned(C, mid)
+    # zelf-beschrijvende bronnen verschijnen als combo's (bron: measure · dimensie)
+    assert "Verkoop: Paren verkocht · per land" in page
+    assert "Websitebezoekers: Bezoekers (7d) · over tijd" in page
+    assert "tile_add" in page and "Vorm" in page
+
+
+def test_tile_toevoegen_en_vormen(tmp_path):
+    dd = _dd(tmp_path)
+    # tegel: verkoop per land als verdeling (staaf)
+    cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": ["shopify|orders|country"],
+                                       "form": ["verdeling"], "target": [""], "next": ["/"]})
+    t = cockpit2._Stores(dd).metrics.tiles_of(C)[0]
+    assert t["source"] == "shopify" and t["dim"] == "country" and t["form"] == "verdeling"
+    page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
+    assert "tile" in page and ("bars" in page or "geen uitsplitsing" in page)
+    # doelmeter met target
+    cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": ["shopify|pairs_sold|none"],
+                                       "form": ["doelmeter"], "target": ["1000"], "next": ["/"]})
+    assert cockpit2._Stores(dd).metrics.tiles_of(C)[1]["target"] == 1000.0
     dash = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
-    assert "Cirkeldashboard" in dash and "levert:" in dash
-    # weer losmaken
-    cockpit2.dispatch(dd, "m_unpin", {"circle": [C], "mid": [mid], "next": ["/"]})
-    assert not cockpit2._Stores(dd).metrics.is_pinned(C, mid)
+    assert "goal" in dash and "/ 1000" in dash
+    # verwijderen
+    tid = cockpit2._Stores(dd).metrics.tiles_of(C)[0]["id"]
+    cockpit2.dispatch(dd, "tile_remove", {"node": [C], "tid": [tid], "next": ["/"]})
+    assert len(cockpit2._Stores(dd).metrics.tiles_of(C)) == 1
 
 
-def test_link_metric_op_cirkel(tmp_path):
+def test_handmatige_kpi_wordt_bron_in_wizard(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "m_add_kpi", {"node": [MKT], "pick": ["manual"], "name": ["NPS"],
+                                        "unit": ["score"], "next": ["/"]})
+    # op de cirkel verschijnt de rol-KPI als bron in de wizard
+    page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
+    assert "NPS: NPS · over tijd" in page
+
+
+def test_link_metric(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "m_add_link", {"node": [C], "name": ["Jaarcijfers"],
                                          "url": ["https://docs.example/x"], "next": ["/"]})

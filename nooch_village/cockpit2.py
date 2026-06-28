@@ -391,6 +391,27 @@ ul.clean li:last-child{border-bottom:none}
 .m-addform input,.m-addform select{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .45rem;margin-bottom:.25rem}
 .m-selrow{display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.25rem 0;border-bottom:1px solid var(--border);font-size:.84rem}
 .flink.on{color:var(--green-dark);font-weight:700}
+/* Mini-Looker tegels */
+.tile-grid{display:grid;gap:.7rem;grid-template-columns:1fr}
+@media(min-width:560px){.tile-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.tile{border:1px solid var(--border);border-radius:var(--radius);padding:.6rem .7rem;background:var(--surface);min-width:0}
+.tile-h{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.4rem}
+.tile-t{font-size:.74rem;color:var(--subtle);font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.tile-trend{display:flex;align-items:flex-end;justify-content:space-between;gap:.5rem}
+.kpi-val.sm{font-size:1.15rem}
+.bars{display:flex;flex-direction:column;gap:.25rem}
+.bar-row{display:grid;grid-template-columns:minmax(0,7rem) 1fr auto;align-items:center;gap:.5rem;font-size:.78rem}
+.bar-l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-t{display:block;height:.55rem;background:var(--cream-2);border-radius:var(--radius-pill);overflow:hidden}
+.bar-f{display:block;height:100%;background:var(--green)}
+.bar-v{color:var(--subtle);font-variant-numeric:tabular-nums}
+.mtab{width:100%;border-collapse:collapse;font-size:.8rem}
+.mtab td{padding:.2rem .3rem;border-bottom:1px solid var(--border)}
+.mtab td.num{text-align:right;font-variant-numeric:tabular-nums}
+.goal{display:flex;flex-direction:column;gap:.35rem}
+.kpidata-row{display:flex;align-items:center;gap:.6rem;padding:.35rem 0;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.kpidata-n{flex:1 1 auto;min-width:0;font-weight:600}
+.kpidata-v{font-variant-numeric:tabular-nums;color:var(--green-dark);font-weight:700}
 .pdetail-h h2{margin:.1rem 0 .5rem;font-family:var(--font-display);font-size:1.35rem;line-height:1.2}
 .psec{margin:0 0 1.15rem}
 .psec-h{display:flex;align-items:center;gap:.4rem;color:var(--subtle);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:.45rem}
@@ -1434,59 +1455,233 @@ def _metric_add_forms(st: _Stores, rec, csrf: str) -> str:
             f"<div class='m-addgrid'>{kpi}{link}</div></details>")
 
 
-def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "maand") -> str:
+def _shopify_window(dd: str):
+    """Het 'alles'-venster uit shopify_metrics.json (snapshot met paren/orders/omzet/land/product)."""
+    repo = os.path.join(os.path.dirname(__file__), "..", "data", "shopify_metrics.json")
+    for p in (os.path.join(dd, "shopify_metrics.json"), repo):
+        if not os.path.exists(p):
+            continue
+        try:
+            d = json.load(open(p))
+            ws = d.get("windows") or {}
+            return ws.get("0") or (list(ws.values())[0] if ws else None)
+        except Exception:
+            return None
+    return None
+
+
+def _sources_for(st: _Stores, rec):
+    """Zelf-beschrijvende bron-catalogus voor de tegel-wizard: elke bron declareert measures + dims.
+    Op een cirkel tellen ook de handmatige KPI's van de onderliggende rollen mee."""
     is_c = org.is_circle(rec)
+    srcs = [
+        {"id": "pulse_visitors", "label": "Websitebezoekers",
+         "measures": [("visitors", "Bezoekers (7d)")], "dims": [("time", "over tijd")]},
+        {"id": "shopify", "label": "Verkoop",
+         "measures": [("pairs_sold", "Paren verkocht"), ("orders", "Orders"),
+                      ("revenue", "Omzet"), ("aov", "Gem. orderwaarde")],
+         "dims": [("none", "totaal"), ("country", "per land"), ("product", "per product")]},
+    ]
+    nodes = [rec.id] + ([r.id for r in org.roles_of(st.records.all(), rec.id)] if is_c else [])
+    for k in st.metrics.kpis_for_nodes(nodes):
+        if k.get("source"):
+            continue                                  # bron-KPI's al gedekt door built-ins
+        srcs.append({"id": f"kpi:{k['id']}", "label": k["name"],
+                     "measures": [("value", k["name"])], "dims": [("time", "over tijd")]})
+    return srcs
+
+
+def _default_form(dim: str) -> str:
+    return {"time": "trend", "none": "getal"}.get(dim, "verdeling")
+
+
+def _tile_combos(sources):
+    out = []
+    for s in sources:
+        for mid, ml in s["measures"]:
+            for did, dl in s["dims"]:
+                out.append((f"{s['id']}|{mid}|{did}", f"{s['label']}: {ml} · {dl}", _default_form(did)))
+    return out
+
+
+def _tile_meta(st: _Stores, rec, tile) -> str:
+    for s in _sources_for(st, rec):
+        if s["id"] == tile["source"]:
+            ml = dict(s["measures"]).get(tile["measure"], tile["measure"])
+            dl = dict(s["dims"]).get(tile.get("dim", "none"), tile.get("dim", ""))
+            return f"{s['label']}: {ml} · {dl}"
+    return tile.get("measure", "metric")
+
+
+def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff):
+    """Haal de data voor een tegel op. Resultaat: series (punten), breakdown (rijen) of number."""
+    if source == "pulse_visitors":
+        return {"kind": "series", "points": filter_samples(_source_samples(st.dd, "pulse_visitors"), cutoff),
+                "unit": "bezoekers"}
+    if source == "shopify":
+        w = _shopify_window(st.dd) or {}
+        if dim == "country":
+            return {"kind": "breakdown", "rows": [(c, n) for c, n in w.get("by_country", [])]}
+        if dim == "product":
+            return {"kind": "breakdown", "rows": [(p, n) for p, n in w.get("top_products", [])]}
+        unit = "EUR" if measure in ("revenue", "aov") else ("paren" if measure == "pairs_sold" else "")
+        return {"kind": "number", "value": w.get(measure), "unit": unit}
+    if source.startswith("kpi:"):
+        it = st.metrics.get(source[4:])
+        if not it:
+            return {"kind": "number", "value": None, "unit": ""}
+        raw = _source_samples(st.dd, it["source"]) if it.get("source") else it.get("samples", [])
+        return {"kind": "series", "points": filter_samples(raw, cutoff), "unit": it.get("unit", "")}
+    return {"kind": "number", "value": None, "unit": ""}
+
+
+def _num(v):
+    return f"{v:g}" if isinstance(v, (int, float)) else "—"
+
+
+def _agg(res):
+    if res["kind"] == "series":
+        return res["points"][-1][1] if res.get("points") else None
+    if res["kind"] == "breakdown":
+        return sum(n for _, n in res.get("rows", [])) if res.get("rows") else None
+    return res.get("value")
+
+
+def _render_form(res, form, target=None):
+    unit = res.get("unit", "")
+    if form == "trend":
+        pts = res.get("points") or []
+        return (f"<div class='tile-trend'><span class='kpi-val sm'>{_num(pts[-1][1] if pts else None)}</span>"
+                f"{_spark_svg(pts)}</div>")
+    if form in ("verdeling", "tabel"):
+        rows = res.get("rows") or []
+        if not rows:
+            return "<p class='muted'>geen uitsplitsing</p>"
+        if form == "tabel":
+            body = "".join(f"<tr><td>{_e(str(l))}</td><td class='num'>{_num(n)}</td></tr>" for l, n in rows[:12])
+            return f"<table class='mtab'>{body}</table>"
+        mx = max((n for _, n in rows), default=1) or 1
+        out = ""
+        for l, n in rows[:8]:
+            out += (f"<div class='bar-row'><span class='bar-l'>{_e(str(l))}</span>"
+                    f"<span class='bar-t'><span class='bar-f' style='width:{int(n / mx * 100)}%'></span></span>"
+                    f"<span class='bar-v'>{_num(n)}</span></div>")
+        return f"<div class='bars'>{out}</div>"
+    if form == "doelmeter":
+        v = _agg(res) or 0
+        t = target or 0
+        pct = int(min(100, v / t * 100)) if t else 0
+        return (f"<div class='goal'><span class='kpi-val sm'>{_num(v)} <span class='kpi-unit'>/ {_num(t)}</span></span>"
+                f"<span class='bar-t'><span class='bar-f' style='width:{pct}%'></span></span></div>")
+    # getal
+    v = _agg(res)
+    u = f" <span class='kpi-unit'>{_e(unit)}</span>" if unit and v is not None else ""
+    return f"<div class='kpi-val'>{_num(v)}{u}</div>"
+
+
+def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str) -> str:
+    res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), cutoff)
+    body = _render_form(res, tile.get("form", "getal"), tile.get("target"))
+    rm = ""
+    if csrf:
+        rm = (f"<form method='post' action='/action' style='display:inline'>"
+              f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='node' value='{_e(rec.id)}'>"
+              f"<input type='hidden' name='tid' value='{_e(tile['id'])}'>"
+              f"<input type='hidden' name='next' value='/node?id={_e(rec.id)}&tab=metrics'>"
+              f"<button class='dellink' type='submit' name='action' value='tile_remove'>✕</button></form>")
+    return (f"<div class='tile'><div class='tile-h'><span class='tile-t'>{_e(_tile_meta(st, rec, tile))}</span>{rm}</div>"
+            f"<div class='tile-b'>{body}</div></div>")
+
+
+def _tile_wizard(st: _Stores, rec, csrf: str) -> str:
+    combos = _tile_combos(_sources_for(st, rec))
+    opts = "".join(f"<option value='{_e(v)}' data-form='{df}'>{_e(lbl)}</option>" for v, lbl, df in combos)
+    forms = [("getal", "Getal"), ("trend", "Trend (lijn)"), ("verdeling", "Verdeling (staaf)"),
+             ("tabel", "Tabel"), ("doelmeter", "Doelmeter")]
+    fopts = "".join(f"<option value='{k}'>{_e(l)}</option>" for k, l in forms)
+    base = f"/node?id={_e(rec.id)}&tab=metrics"
+    return (f"<details class='m-add'><summary class='btn ok sm'>+ Tegel</summary>"
+            f"<form method='post' action='/action' class='m-addform'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='node' value='{_e(rec.id)}'>"
+            f"<input type='hidden' name='next' value='{base}'>"
+            f"<label class='att-lbl'>Wat wil je zien</label>"
+            f"<select name='combo' onchange=\"var o=this.options[this.selectedIndex];"
+            f"var f=this.form.querySelector('[name=form]');if(o.dataset.form)f.value=o.dataset.form;\">{opts}</select>"
+            f"<label class='att-lbl'>Vorm</label><select name='form'>{fopts}</select>"
+            f"<label class='att-lbl'>Doel (alleen voor doelmeter, optioneel)</label>"
+            f"<input name='target' inputmode='decimal' placeholder='bijv. 1000' autocomplete='off'>"
+            f"<button class='btn ok sm' type='submit' name='action' value='tile_add'>Op dashboard</button></form></details>")
+
+
+def _kpi_data_row(st: _Stores, item: dict, csrf: str) -> str:
+    raw = _source_samples(st.dd, item["source"]) if item.get("source") else item.get("samples", [])
+    pts = filter_samples(raw, None)
+    val = _num(pts[-1][1]) if pts else "—"
+    unit = f" {_e(item.get('unit', ''))}" if item.get("unit") else ""
+    src = " <span class='chip muted'>auto</span>" if item.get("source") else ""
+    add = ""
+    if csrf and not item.get("source"):
+        add = (f"<form method='post' action='/action' class='kpi-add'>"
+               f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='mid' value='{_e(item['id'])}'>"
+               f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=metrics'>"
+               f"<input name='value' inputmode='decimal' placeholder='meting' size='6'>"
+               f"<button class='btn ok sm' type='submit' name='action' value='m_sample'>+</button></form>")
+    rm = ""
+    if csrf:
+        rm = (f"<form method='post' action='/action' style='display:inline'>"
+              f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='mid' value='{_e(item['id'])}'>"
+              f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=metrics'>"
+              f"<button class='dellink' type='submit' name='action' value='m_remove'>✕</button></form>")
+    return (f"<div class='kpidata-row'><span class='kpidata-n'>{_e(item['name'])}{src}</span>"
+            f"<span class='kpidata-v'>{val}{unit}</span>{_spark_svg(pts)}{add}{rm}</div>")
+
+
+def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "maand") -> str:
     cutoff = window_cutoff(win)
     base = f"/node?id={_e(rec.id)}&tab=metrics"
+    wbar = ("<div class='cl-bar'><span class='muted'>Periode:</span> "
+            + "".join(f"<a class='cl-filter{(' on' if win == k else '')}' href='{base}&mw={k}'>{_e(lbl)}</a>"
+                      for k, lbl in _MW) + "</div>")
+    head = f"<div class='cl-head'><h3>Metrics</h3>{_tile_wizard(st, rec, csrf) if csrf else ''}</div>{wbar}"
 
-    def wbar():
-        out = "".join(f"<a class='cl-filter{(' on' if win == k else '')}' href='{base}&mw={k}'>{_e(lbl)}</a>"
-                      for k, lbl in _MW)
-        return f"<div class='cl-bar'><span class='muted'>Periode:</span> {out}</div>"
+    # 1. Dashboard van tegels (bron + measure + dimensie + vorm), volgt de periode-keuze
+    tiles = st.metrics.tiles_of(rec.id)
+    dash = ("".join(_render_tile(st, rec, t, cutoff, csrf) for t in tiles) if tiles
+            else "<p class='muted'>Nog geen tegels. Voeg er een toe met “+ Tegel”.</p>")
+    out = f"<div class='c2-sec'>{head}</div><div class='c2-sec'><div class='tile-grid'>{dash}</div></div>"
 
-    head = (f"<div class='cl-head'><h3>Metrics</h3>{_metric_add_forms(st, rec, csrf) if csrf else ''}</div>{wbar()}")
-
-    if not is_c:
-        kpis = [i for i in st.metrics.for_node(rec.id) if i.get("kind") == "kpi"]
-        links = st.metrics.links_for(rec.id)
-        kc = ("".join(_kpi_card(st, i, cutoff, csrf) for i in kpis)
-              if kpis else "<p class='muted'>Nog geen KPI's op deze rol.</p>")
-        lc = "".join(_link_card(i, csrf) for i in links)
-        body = (f"<div class='c2-sec'><h3>KPI's</h3><div class='kpi-grid'>{kc}</div></div>"
-                + (f"<div class='c2-sec'><h3>Links</h3><div class='kpi-grid'>{lc}</div></div>" if links else ""))
-        return f"<div class='c2-sec'>{head}</div>{body}"
-
-    # cirkel: dashboard van gepinde KPI's + selectie uit alle KPI's onder de cirkel
-    roles = org.roles_of(st.records.all(), rec.id)
-    under = [rec.id] + [r.id for r in roles]
-    all_kpis = st.metrics.kpis_for_nodes(under)
-    by_id = {i["id"]: i for i in all_kpis}
-    pinned = [by_id[mid] for mid in st.metrics.pins_of(rec.id) if mid in by_id]
-    dash = ("".join(_kpi_card(st, i, cutoff, csrf, provider=True, circle=rec.id) for i in pinned)
-            if pinned else "<p class='muted'>Nog geen KPI's op het cirkeldashboard. Selecteer ze hieronder.</p>")
-    # selectie (Lead Link kiest)
-    selrows = ""
-    for i in sorted(all_kpis, key=lambda x: _name(st.records.get(x["node"]) or rec).lower()):
-        r = st.records.get(i["node"])
-        prov = _name(r) if r else i["node"]
-        pinned_b = st.metrics.is_pinned(rec.id, i["id"])
-        act, lbl = ("m_unpin", "✓ op dashboard") if pinned_b else ("m_pin", "+ toevoegen")
-        selrows += (f"<div class='m-selrow'><span>{_e(i['name'])} <span class='muted'>· {_e(prov)}</span></span>"
-                    f"<form method='post' action='/action' style='display:inline'>"
-                    f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='mid' value='{_e(i['id'])}'>"
-                    f"<input type='hidden' name='circle' value='{_e(rec.id)}'>"
-                    f"<input type='hidden' name='next' value='{base}'>"
-                    f"<button class='flink{(' on' if pinned_b else '')}' type='submit' name='action' value='{act}'>{lbl}</button></form></div>")
-    sel = ""
+    # 2. Eigen KPI's (data invoeren) — handmatige KPI's worden vanzelf bron in de wizard
+    kpis = [i for i in st.metrics.for_node(rec.id) if i.get("kind") == "kpi"]
+    rows = "".join(_kpi_data_row(st, i, csrf) for i in kpis) if kpis else "<p class='muted'>Nog geen eigen KPI's.</p>"
+    define = ""
     if csrf:
-        sel = (f"<details class='m-sel'><summary class='btn sm'>KPI's selecteren voor het dashboard</summary>"
-               f"<p class='muted' style='font-size:.8rem'>De Lead Link kiest welke KPI's op het cirkeldashboard staan.</p>"
-               f"{selrows or '<p class=muted>Nog geen KPIs onder deze cirkel.</p>'}</details>")
+        src_opts = "".join(f"<option value='source:{k}'>{_e(v['name'])} (uit data)</option>"
+                           for k, v in _SOURCE_KPIS.items())
+        define = (f"<details class='m-add'><summary class='btn sm'>+ KPI</summary>"
+                  f"<form method='post' action='/action' class='m-addform'>"
+                  f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='node' value='{_e(rec.id)}'>"
+                  f"<input type='hidden' name='next' value='{base}'>"
+                  f"<select name='pick'><option value='manual'>Nieuwe KPI (handmatig)</option>{src_opts}</select>"
+                  f"<input name='name' placeholder='Naam (bij handmatig)' autocomplete='off'>"
+                  f"<input name='unit' placeholder='Eenheid (€, %, stuks)' autocomplete='off'>"
+                  f"<button class='btn ok sm' type='submit' name='action' value='m_add_kpi'>KPI toevoegen</button></form></details>")
+    out += f"<div class='c2-sec'><div class='cl-head'><h3>Eigen KPI's</h3>{define}</div>{rows}</div>"
+
+    # 3. Links naar externe bestanden
     links = st.metrics.links_for(rec.id)
     lc = "".join(_link_card(i, csrf) for i in links)
-    body = (f"<div class='c2-sec'><h3>Cirkeldashboard</h3><div class='kpi-grid'>{dash}</div>{sel}</div>"
-            + (f"<div class='c2-sec'><h3>Links</h3><div class='kpi-grid'>{lc}</div></div>" if links else ""))
-    return f"<div class='c2-sec'>{head}</div>{body}"
+    addlink = ""
+    if csrf:
+        addlink = (f"<details class='m-add'><summary class='btn sm'>+ Link</summary>"
+                   f"<form method='post' action='/action' class='m-addform'>"
+                   f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='node' value='{_e(rec.id)}'>"
+                   f"<input type='hidden' name='next' value='{base}'>"
+                   f"<input name='name' placeholder='Naam' autocomplete='off'>"
+                   f"<input name='url' placeholder='https://…' autocomplete='off'>"
+                   f"<button class='btn ok sm' type='submit' name='action' value='m_add_link'>Link toevoegen</button></form></details>")
+    out += (f"<div class='c2-sec'><div class='cl-head'><h3>Links</h3>{addlink}</div>"
+            f"<div class='kpi-grid'>{lc or '<p class=muted>Geen links.</p>'}</div></div>")
+    return out
 
 
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",
@@ -3216,6 +3411,15 @@ def dispatch(data_dir: str, action: str, form: dict):
         st.metrics.pin(g("circle"), g("mid")); msg = "✓ op cirkeldashboard"
     elif action == "m_unpin":
         st.metrics.unpin(g("circle"), g("mid")); msg = "✓ van dashboard gehaald"
+    elif action == "tile_add":
+        parts = (g("combo") or "").split("|")
+        if len(parts) == 3 and parts[0]:
+            t = st.metrics.add_tile(g("node"), parts[0], parts[1], parts[2], g("form"), target=g("target"))
+            msg = "✓ tegel op dashboard" if t else "⛔ kon tegel niet maken"
+        else:
+            msg = "⛔ kies wat je wilt zien"
+    elif action == "tile_remove":
+        st.metrics.remove_tile(g("node"), g("tid")); msg = "🗑 tegel verwijderd"
     elif action in ("rov2_set", "rov2_acc_add", "rov2_acc_remove", "rov2_dom_add", "rov2_dom_remove"):
         item = st.agenda.get(g("iid"))
         if item is not None:
