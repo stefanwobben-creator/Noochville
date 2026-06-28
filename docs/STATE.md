@@ -1,12 +1,39 @@
-# NoochVille — State & Handover (2026-06-25)
+# NoochVille — State & Handover (2026-06-28)
 
 > STATE = huidige waarheid, vervang bij update. `docs/JOURNAL.md` = historie, append-only.
 
-## Waar we staan (2026-06-25)
+## Waar we staan (2026-06-28)
 
 **Suite: ~996 tests groen** (in de sandbox in twee helften gedraaid wegens tijdslimiet; op de Mac
 in één keer). Elke stap met mutatie-check. `test_loop::test_discovery_loop` is een bekende flaky
 threaded-timing-test (slaagt bij herhaling), niet gerelateerd aan deze wijzigingen.
+
+### Sessie 2026-06-28: cockpit2 brok B — KPI-composer focus-flow, metrics-tab opruiming
+
+De aanmaakflow voor KPI's is volledig uit de metrics-tab getild en naar `/kpi_new` (de KPI-composer)
+verhuisd. Metrics-tab is nu zuiver lees/uitvoer-oppervlak.
+
+- **`_catalog_picker()` verwijderd** (~70 r): zoekbalk + typeahead + rol-aanbevelingen +
+  losse-KPI-uitzondering op de metrics-tab zijn weg. Aanmaken gaat altijd via `+ KPI maken → /kpi_new`.
+- **KPI-composer: catalogus als tweede optgroup** — indicator-dropdown toont nu twee groepen:
+  "Beschikbaar op deze plek" (live meetpunten) en "Uit de catalogus" (definitievelden, rol-relevant
+  eerst). Een `def:`-keuze wordt via `_kpi_id_from_def()` direct als KPI gepind op de node.
+- **`_kpi_id_from_def()` idempotente get-or-create** — creëert KPI vanuit catalogusdefinitie als hij
+  nog niet bestaat voor de node; kopieert ALLE definitievelden (geen veld-lek). Hergebruikt in
+  `m_add_from_def`, `tile_add` en de composer.
+- **`retune_kpis_to_def()` afgeleid van `_SCHEMA_FIELDS`** — hardcoded copy-tuple vervangen;
+  `tijd`, `bruikbaar`, `standaard`, `waarde` worden nu ook meegeretund bij definitiewijziging.
+- **`_bron_html()` helper** — externe URLs klikbaar; interne paden tonen `(nog niet live)` i.p.v.
+  dode 404-link naar de kennisbank die nog niet gerouteerd is.
+- **Tabs**: `metrics` en `checklists` nu `live`; `history` bewust uit de navigatie (later via settings).
+- **Build-timestamp in balk** — alle bars tonen `build HH:MM` (proces-starttijd, zichtbaar of herstart aankwam).
+- **Catalogus-filter vereenvoudigd** — één actief filter (of/of), niet en/en; "alle" start `on`; meetwijze-
+  groep samengevouwen met de Lean-groep tot één filtergroep.
+- **Metrics-tab leegruimte weg** — lege "Eigen KPI's" en "Links" secties worden niet meer getoond.
+- **`+ KPI maken` / `+ Link` geblokkeerd in nav-context** — aanmaak uitgeschakeld wanneer `nav` gezet is
+  (werkoverleg: je bekijkt KPI's, maakt ze niet aan).
+- **2 tests bijgewerkt** — zoeklocatie voor cadence/meettype-fields en catalogus-picker verplaatst naar
+  de juiste render-functies (`render_catalog` resp. `render_kpi_composer`).
 
 ### Sessie 2026-06-25 (vervolg 4): triage-UX, governance-grounding, roloverleg
 

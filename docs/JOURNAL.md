@@ -1189,3 +1189,46 @@ Eerste, toetsbare brok van docs/ONTWERP_prikbord_kanban.md (geen autonome loop/c
 - Bewijs: test_pinboard_kanban.py bouwt de sokken-feasibility-keten met de hand (idee → Harry →
   Scout → Harry), gelinkt als één gesprek + via het prikbord aangeboden/afgehandeld.
 Suite groen (559 + 526). Volgende: brok 2 (autonome pull-loop in de puls met de guardrails).
+
+## 2026-06-28 — cockpit2 brok B: KPI-composer focus-flow, metrics-tab opruiming
+
+**[ombouw/opruiming]** De aanmaakflow voor KPI's is volledig uit de metrics-tab gehaald.
+`_catalog_picker()` (~70 r: zoekbalk, typeahead, rol-aanbevelingen, losse-KPI-uitzondering) is
+verwijderd. Metrics-tab toont nu alleen: tegel-dashboard + periode-filter, data-invoer voor
+bestaande handmatige KPI's (als er zijn), links (als er zijn). Leeg = geen sectie meer.
+
+**[bouw]** `_kpi_id_from_def()` — idempotente get-or-create: geeft bestaande KPI terug als de node
+hem al heeft voor die `def_id`, anders maakt hij hem aan met ALLE definitievelden (geen veld-lek;
+één bron blijft de catalogus). Hergebruikt op drie plekken in dispatch (`m_add_from_def`,
+`tile_add`) en in de composer.
+
+**[bouw]** KPI-composer (`/kpi_new`) krijgt catalogus als tweede optgroup. Indicator-dropdown:
+"Beschikbaar op deze plek" (live meetpunten op de node) + "Uit de catalogus" (alle definities,
+rol-relevant eerst). Een `def:`-keuze in `tile_add` roept `_kpi_id_from_def()` aan en pinnt het
+resultaat als tegel. Volledige flow: kies catalogus-indicator → KPI wordt aangemaakt of gevonden →
+als tegel gepind → terug naar metrics-tab.
+
+**[fix]** `retune_kpis_to_def()`: hardcoded copy-tuple vervangen door afleiding uit `_SCHEMA_FIELDS`
+(minus `source`). `tijd`, `bruikbaar`, `standaard`, `waarde` werden niet meegeretund bij
+definitiewijzigingen; nu wel.
+
+**[fix]** `_bron_html()`: externe URLs worden klikbaar (`<a href=... target='_blank'>`); interne paden
+(kennisbank, nog niet gerouteerd) tonen als `<span class='muted'>pad (nog niet live)</span>`.
+Voorkomt dode 404-links.
+
+**[ux]** Build-timestamp (`_BUILD = strftime("%H:%M")`) in alle navigatiebalken. Zichtbaar of de
+server hergestart is.
+
+**[ux]** Catalogus-filter: één actief filter tegelijk (of/of, niet en/en); JavaScript herschreven
+van `F={}` dict naar `AF/AV` single-value. "Alle"-knop start met `on`. Meetwijze-filtergroep
+samengevoegd met Lean-filtergroep tot één groep.
+
+**[ux]** Tabs: `metrics` en `checklists` van `basic` naar `live`. `history` uit de navigatielijsten
+verwijderd (bewust; later via settings te ontsluiten).
+
+**[ux]** `+ KPI maken` en `+ Link` worden niet getoond wanneer de metrics-tab in nav-context
+(werkoverleg) geladen is — je bekijkt KPI's daar, maakt ze niet aan.
+
+**[les]** `retune_kpis_to_def()` had een hardcoded kopijlijst die langzaam uit de pas liep met het
+schema. De fix (`_SCHEMA_FIELDS` als bron) is de "reference, don't copy"-regel die we voor de
+catalogus al hadden, nu ook in de metriek-retuner toegepast.
