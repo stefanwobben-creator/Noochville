@@ -2027,6 +2027,9 @@ _ORIGIN_LABEL = {
     "openalex": "OpenAlex", "semantic_scholar": "Semantic Scholar", "site_health": "Site health",
     "competitor_news": "Nieuws-monitor", "linkbuilding": "Linkbuilding", "budget": "Budget",
     "werkoverleg": "Werkoverleg-archief",
+    # cross-domein bronnen (nog geen live-koppeling; handmatig in te voeren tot we ze koppelen)
+    "erp": "ERP / voorraad", "monitoring": "IT-monitoring", "support": "Klantenservice",
+    "survey": "Enquête", "hris": "HR-systeem", "impact": "Impact / LCA", "finance": "Boekhouding",
 }
 # lichte bron→functie-affiniteit bovenop tekstoverlap (zodat de juiste rol de juiste bron ziet)
 _SOURCE_AFFINITY = {

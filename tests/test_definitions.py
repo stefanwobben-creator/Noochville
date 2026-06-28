@@ -241,12 +241,12 @@ def test_def_add_via_dispatch(tmp_path):
     from nooch_village import cockpit2
     dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
     n0 = len(cockpit2._Stores(dd).defs.all())
-    cockpit2.dispatch(dd, "def_add", {"name": ["eNPS"], "unit": ["score"], "csource": [""],
-                                      "definition": ["promoters - detractors onder medewerkers"],
+    cockpit2.dispatch(dd, "def_add", {"name": ["Winkel-NPS regio"], "unit": ["NPS"], "csource": [""],
+                                      "definition": ["promoters - detractors in de fysieke winkel"],
                                       "direction": ["up"], "cadence": ["kwartaal"], "next": ["/catalog"]})
     st = cockpit2._Stores(dd)
     assert len(st.defs.all()) == n0 + 1
-    d = st.defs.by_name("eNPS")
+    d = st.defs.by_name("Winkel-NPS regio")
     cur = st.defs.current(d["id"])
     assert cur["cadence"] == "kwartaal" and cur["direction"] == "up" and cur["source"] == ""
 
