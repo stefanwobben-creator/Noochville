@@ -197,13 +197,20 @@ class WebsiteWatcherWorker(Inhabitant):
         return trends
 
     def _log_pulse_metrics(self, plausible: dict) -> None:
-        """Log de metrics die in het monitoring-overzicht staan én in de puls aanwezig zijn."""
+        """Log de metrics die in het monitoring-overzicht staan én in de puls aanwezig zijn.
+
+        UTM-source metrics (visitors_via_*) worden altijd gelogd als ze aanwezig zijn —
+        kanaaldata vereist geen MonitoringStore-configuratie vooraf.
+        """
         obs        = getattr(self.context, "observations", None)
         monitoring = getattr(self.context, "monitoring",   None)
         if obs is None:
             return
-        monitored   = monitoring.get_metrics(self.id) if monitoring else []
-        pulse_dict  = dict(_extract_pulse_metrics(plausible))
+        pulse_dict = dict(_extract_pulse_metrics(plausible))
+        for key, value in pulse_dict.items():
+            if key.startswith("visitors_via_"):
+                obs.record(self.id, key, value)
+        monitored = monitoring.get_metrics(self.id) if monitoring else []
         for metric in monitored:
             if metric in pulse_dict:
                 obs.record(self.id, metric, pulse_dict[metric])

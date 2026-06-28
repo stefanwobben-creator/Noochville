@@ -157,3 +157,31 @@ def test_pulse_no_monitoring_store_is_noop(analyst_bus, obs):
     plausible = {"results": {"visitors": {"value": 99}}}
     analyst._log_pulse_metrics(plausible)
     assert obs.latest("website_watcher", "visitors") is None
+
+
+def test_pulse_logs_utm_sources_without_monitoring_store(analyst_bus, obs):
+    analyst, _ = analyst_bus
+    analyst.context.monitoring = None
+    plausible = {
+        "results": {"visitors": {"value": 50}},
+        "utm_sources": [
+            {"utm_source": "bluemarble", "visitors": 7},
+            {"utm_source": "ig", "visitors": 2},
+        ],
+    }
+    analyst._log_pulse_metrics(plausible)
+    assert obs.latest("website_watcher", "visitors_via_bluemarble")["value"] == 7.0
+    assert obs.latest("website_watcher", "visitors_via_ig")["value"] == 2.0
+    assert obs.latest("website_watcher", "visitors") is None
+
+
+def test_pulse_logs_utm_sources_alongside_monitored(analyst_bus, obs, monitoring):
+    analyst, _ = analyst_bus
+    monitoring.add_metrics("website_watcher", ["visitors"])
+    plausible = {
+        "results": {"visitors": {"value": 50}},
+        "utm_sources": [{"utm_source": "bluemarble", "visitors": 7}],
+    }
+    analyst._log_pulse_metrics(plausible)
+    assert obs.latest("website_watcher", "visitors")["value"] == 50.0
+    assert obs.latest("website_watcher", "visitors_via_bluemarble")["value"] == 7.0
