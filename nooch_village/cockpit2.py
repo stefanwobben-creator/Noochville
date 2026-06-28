@@ -568,12 +568,35 @@ def _ensure_facilitator_health(st: _Stores) -> None:
             st.checklists.add(fac.id, _FAC_CHECK, "maand", target_type="all", by="founder")
 
 
+_TRANSP_POLICY = "Rolvervullers zijn transparant over hun projecten (projectenbord bijgewerkt)."
+_TRANSP_CHECK = "Projectenbord bijgewerkt (transparantie)"
+
+
+def _ensure_transparency_policy(st: _Stores) -> None:
+    """Idempotent: één transparantie-policy op de BREEDSTE cirkel (de rest erft die later over),
+    met een gekoppeld wekelijks checklist-item dat de spelregel operationeel checkt."""
+    roots = org.roots(st.records.all())
+    root = roots[0] if roots else None
+    if root is None:
+        return
+    if _TRANSP_POLICY not in root.definition.policies:
+        root.definition.policies.append(_TRANSP_POLICY)
+        try:
+            root.version += 1
+        except Exception:
+            pass
+        st.records.put(root)
+    if not any(i.get("description") == _TRANSP_CHECK for i in st.checklists.for_node(root.id)):
+        st.checklists.add(root.id, _TRANSP_CHECK, "week", target_type="all", by="founder")
+
+
 def _bootstrap(dd: str) -> None:
     """Lege PoC-dataset? Laad dan de echte Nooch-structuur in (eenmalig)."""
     st = _Stores(dd)
     if not st.records.all():
         import_org(nooch_poc_org(), st.records, st.people, st.assign)
     _ensure_facilitator_health(st)
+    _ensure_transparency_policy(st)
 
 
 def _name(rec) -> str:
@@ -2657,11 +2680,13 @@ def _wo_triage(st: _Stores, crec, csrf: str, item: dict) -> str:
 
     # Progressive disclosure: kies eerst het type, dan verschijnt het juiste veld. Gelijkwaardig
     # (geen primary-kleur die naar één uitkomst stuurt).
-    def oc_details(otype, summary, inner):
+    def oc_details(otype, summary, inner, borg=True):
+        borgbox = ("<label class='wo-borg'><input type='checkbox' name='borg' value='1'> "
+                   "ook borgen via roloverleg (bij een nieuwe verwachting)</label>" if borg else "")
         return (f"<details class='wo-ocd'><summary>{summary}</summary>"
                 f"<form method='post' action='/action' {keep} class='wo-oc'>{_wo_hid(csrf, crec.id, base)}"
                 f"<input type='hidden' name='iid' value='{_e(iid)}'><input type='hidden' name='otype' value='{otype}'>"
-                f"{inner}<button class='btn sm' type='submit' name='action' value='wo_ag_resolve'>Vastleggen</button></form></details>")
+                f"{inner}{borgbox}<button class='btn sm' type='submit' name='action' value='wo_ag_resolve'>Vastleggen</button></form></details>")
 
     # projecten onder deze cirkel (om een actie optioneel aan te koppelen = checklist-item)
     circle_nodes = {crec.id} | {r.id for r in roles}
@@ -2683,7 +2708,8 @@ def _wo_triage(st: _Stores, crec, csrf: str, item: dict) -> str:
                      "<span class='muted' style='font-size:.74rem'>Gaat altijd door. Aan een project gekoppeld "
                      "= checklist-item; los = losse actie. Terugkerend werk? Overweeg het roloverleg.</span>")
     rov = oc_details("roloverleg", "Punt voor roloverleg",
-                     "<textarea name='detail' rows='2' placeholder='kans / probleem / behoefte / eerste rol-schets'></textarea>")
+                     "<textarea name='detail' rows='2' placeholder='kans / probleem / behoefte / eerste rol-schets'></textarea>",
+                     borg=False)
     nm = (f"<form method='post' action='/action' {keep} class='wo-oc'>{_wo_hid(csrf, crec.id, base)}"
           f"<input type='hidden' name='iid' value='{_e(iid)}'><input type='hidden' name='otype' value='nevermind'>"
           f"<button class='flink' type='submit' name='action' value='wo_ag_resolve'>Niet nodig</button></form>")
@@ -3869,8 +3895,20 @@ def dispatch(data_dir: str, action: str, form: dict):
                           {"name": (it or {}).get("title", "Nieuwe rol"), "new_role_parent": g("circle"),
                            "purpose": "", "add_accountabilities": []},
                           detail.strip(), by=by, title=(it or {}).get("title", detail[:60]))
+        # Borging: ga door met de uitkomst én zet een punt op de roloverleg-agenda om het te
+        # verankeren (bijv. een nieuwe verwachting -> policy). Tactical handelt nu, governance borgt.
+        if g("borg") == "1" and otype not in ("roloverleg", "nevermind"):
+            title = (it or {}).get("title", "Borging")
+            slug = re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_")[:40] or "borging"
+            by = (it or {}).get("by") or "werkoverleg"
+            st.agenda.add(f"{g('circle')}__{slug}", "add_role",
+                          {"name": f"Borgen: {title}", "new_role_parent": g("circle"),
+                           "purpose": "", "add_accountabilities": []},
+                          f"Borgen vanuit werkoverleg: {detail}", by=by, title=f"Borgen: {title}")
+            msg = "✓ verwerkt + op roloverleg-agenda gezet"
         st.werk.agenda_resolve(g("circle"), g("iid"), otype, detail)
-        msg = f"✓ verwerkt als {otype}"
+        if not msg:
+            msg = f"✓ verwerkt als {otype}"
     elif action == "wo_checkout":
         if g("score"):
             st.werk.set_checkout(g("circle"), g("pid"), g("score")); msg = "✓ score genoteerd"

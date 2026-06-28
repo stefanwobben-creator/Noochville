@@ -146,6 +146,28 @@ def test_triage_geen_need_veld_en_info_richting(tmp_path):
     assert oc["type"] == "info" and oc["detail"].startswith("delen (iedereen):")
 
 
+def test_transparantie_policy_op_breedste_cirkel(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    root = cockpit2.org.roots(st.records.all())[0]
+    assert cockpit2._TRANSP_POLICY in root.definition.policies
+    assert any(i["description"] == cockpit2._TRANSP_CHECK for i in st.checklists.for_node(root.id))
+
+
+def test_borg_via_roloverleg(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]})
+    cockpit2.dispatch(dd, "wo_ag_add", {"circle": [C], "naam": ["Transparantie afspreken"], "next": ["/"]})
+    iid = cockpit2._Stores(dd).werk.agenda(C)[0]["id"]
+    # actie + borgen via roloverleg
+    cockpit2.dispatch(dd, "wo_ag_resolve", {"circle": [C], "iid": [iid], "otype": ["action"],
+                                            "detail": ["iedereen update bord"], "pid_link": [""],
+                                            "borg": ["1"], "next": ["/"]})
+    assert cockpit2._Stores(dd).werk.agenda_get(C, iid)["outcome"]["type"] == "action"   # gaat door
+    ro = cockpit2._Stores(dd).agenda.open()
+    assert any(it["title"].startswith("Borgen:") for it in ro)                            # + op roloverleg
+
+
 def test_triage_roloverleg_punt(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]})
