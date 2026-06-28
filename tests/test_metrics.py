@@ -159,9 +159,10 @@ def test_meetmoment_in_form_en_popover(tmp_path):
                                         "next": ["/"]})
     it = [i for i in cockpit2._Stores(dd).metrics.for_node(RID) if i["kind"] == "kpi"][0]
     assert it["cadence"] == "dag"
-    page = cockpit2.render_node(cockpit2._Stores(dd), RID, "metrics", csrf_token="t")
-    # form heeft meetmoment-velden + definitie-datalist (hergebruik bestaande definitie)
-    assert "name='cadence'" in page and "name='meettype'" in page and "id='gr-defs'" in page
+    # meetmoment-velden leven in de catalogus (add/edit), niet meer op de metrics-tab
+    cat = cockpit2.render_catalog(cockpit2._Stores(dd), csrf_token="t")
+    assert "name='cadence'" in cat and "name='meettype'" in cat
+    # de popover op de KPI-rij toont het meetmoment (grondslag)
     g = cockpit2._grondslag(cockpit2._Stores(dd), f"kpi:{it['id']}", "value")
     assert g["cadans"] == "dag"
 

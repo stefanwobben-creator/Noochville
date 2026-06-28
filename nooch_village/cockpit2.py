@@ -35,6 +35,8 @@ from nooch_village.metric_schema import (CADANS_LABEL, MEETTYPE_LABEL, MEETWIJZE
                                          TIJD_LABEL, BRUIKBAAR_LABEL, VERIFICATIE_LABEL)
 from nooch_village.definitions import (DefinitionStore, seed_catalog as _seed_catalog,
                                        reground_seed as _reground_seed)
+import time as _time
+_BUILD = _time.strftime("%H:%M")   # proces-starttijd: zichtbaar in de balk, zo zie je of een herstart aankwam
 from nooch_village.notifications import NotifStore
 from nooch_village.noochie import NoochieStore
 from nooch_village.roloverleg import Agenda
@@ -599,17 +601,17 @@ ul.clean li:last-child{border-bottom:none}
 # Welke tabs "leven" (echt werken) en welke nog grijs zijn. Status: live | basic | grey.
 _TAB_STATUS = {
     "overview": "live", "roles": "live", "members": "live", "notes": "basic",
-    "metrics": "basic", "checklists": "basic", "projects": "live",
-    "policies": "grey", "history": "grey",
+    "metrics": "live", "checklists": "live", "projects": "live",
+    "policies": "grey",
 }
 _TAB_LABEL = {
     "overview": "Overview", "roles": "Roles", "members": "Members", "policies": "Policies",
-    "notes": "Notes", "projects": "Projects", "checklists": "Checklists",
-    "metrics": "Metrics", "history": "History",
+    "notes": "Notes", "projects": "Projects", "checklists": "Checklists", "metrics": "Metrics",
 }
+# History is bewust weg uit de navigatie (later via settings te ontsluiten).
 _CIRCLE_TABS = ["overview", "roles", "members", "policies", "notes", "projects",
-                "checklists", "metrics", "history"]
-_ROLE_TABS = ["overview", "policies", "notes", "projects", "checklists", "metrics", "history"]
+                "checklists", "metrics"]
+_ROLE_TABS = ["overview", "policies", "notes", "projects", "checklists", "metrics"]
 
 
 def _default_data_dir() -> str:
@@ -2017,6 +2019,15 @@ def _grondslag(st: _Stores, source: str, measure: str) -> dict:
             "cadans": "", "meettype": "", "venster": ""}
 
 
+def _bron_html(url: str) -> str:
+    """Bron-bewijs: een echte klikbare link bij http(s); een intern pad zonder route tonen we als
+    tekst (geen dode 404-link) tot de kennisbank-koppeling live is."""
+    u = (url or "").strip()
+    if u.startswith("http://") or u.startswith("https://"):
+        return f"<a href='{_e(u)}' target='_blank' rel='noopener'>bewijs ↗</a>"
+    return f"<span class='muted' title='koppeling nog niet live'>{_e(u)} (nog niet live)</span>"
+
+
 def _grondslag_popover(g: dict) -> str:
     rij = lambda k, v: f"<div class='gr-row'><span class='gr-k'>{k}</span><span>{_e(str(v))}</span></div>" if v else ""
     # meetmoment: cadans (hoe vaak) + meettype (hoe een waarde geldt) + eventueel venster
@@ -2032,8 +2043,7 @@ def _grondslag_popover(g: dict) -> str:
             + rij("Meetmoment", meet)
             + rij("Meetwijze", MEETWIJZE_LABEL.get(g.get("meetwijze"), ""))
             + rij("Verificatie", VERIFICATIE_LABEL.get(g.get("verificatie"), ""))
-            + (f"<div class='gr-row'><span class='gr-k'>Bron</span>"
-               f"<a href='{_e(g['bron_url'])}' target='_blank' rel='noopener'>bewijs ↗</a></div>"
+            + (f"<div class='gr-row'><span class='gr-k'>Bron</span>{_bron_html(g['bron_url'])}</div>"
                if g.get("bron_url") else ""))
     return (f"<details class='tile-info'><summary title='grondslag'>{_IC_INFO}</summary>"
             f"<div class='gr-pop'>{body}</div></details>")
@@ -2055,16 +2065,6 @@ def _llm_says_comparable(old: dict, new: dict) -> bool:
         return "vergelijkbaar" in out and "breuk" not in out
     except Exception:
         return False
-
-
-def _definition_datalist(st: _Stores) -> str:
-    """Bestaande definities (eigen KPI's + ingebouwde grondslagen) als datalist, zodat je een
-    bestaande grondslag hergebruikt i.p.v. een nieuwe te verzinnen (vergelijkbaarheid)."""
-    defs = {it.get("definition", "").strip() for it in st.metrics._items.values()
-            if it.get("kind") == "kpi" and it.get("definition", "").strip()}
-    defs |= {d for (d, *_rest) in _SOURCE_GRONDSLAG.values() if d}
-    opts = "".join(f"<option value='{_e(d)}'>" for d in sorted(defs))
-    return f"<datalist id='gr-defs'>{opts}</datalist>"
 
 
 def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str) -> str:
@@ -2110,6 +2110,28 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str) -> str:
     return (f"<div class='tile'><div class='tile-h'><span class='tile-t'>{_e(_tile_meta(st, rec, tile))}{warn}</span>"
             f"<span class='tile-h-r'>{info}{rm}</span></div>"
             f"<div class='tile-b'>{body}</div>{data}{goal}</div>")
+
+
+def _kpi_id_from_def(st: _Stores, node: str, did: str):
+    """Geef de KPI-id voor een catalogus-definitie op deze node; maak hem aan als hij nog niet
+    bestaat. Kopieert ALLE definitievelden mee (geen veld-lek). Eén bron blijft de catalogus."""
+    cur = st.defs.current(did) if did else None
+    if not cur:
+        return None
+    for it in st.metrics.for_node(node):
+        if it.get("kind") == "kpi" and it.get("def_id") == did:
+            return it["id"]
+    it = st.metrics.add_kpi(
+        node, cur.get("name"), cur.get("unit", ""), definition=cur.get("definition", ""),
+        direction=cur.get("direction", ""), threshold=cur.get("threshold"),
+        cadence=cur.get("cadence", "ad-hoc"), meettype=cur.get("meettype", "snapshot"),
+        window=cur.get("window", ""), def_id=did, def_version=st.defs.current_version_no(did),
+        origin=cur.get("source", ""), meetwijze=cur.get("meetwijze", ""),
+        auto=cur.get("meetwijze") == "systeem", benchmark=cur.get("benchmark", ""),
+        bron_url=cur.get("bron_url", ""), verificatie=cur.get("verificatie", ""),
+        tijd=cur.get("tijd", ""), bruikbaar=cur.get("bruikbaar", ""),
+        standaard=cur.get("standaard", ""), waarde=cur.get("waarde"))
+    return it["id"] if it else None
 
 
 def _goal_options(st: _Stores, rec) -> str:
@@ -2245,74 +2267,6 @@ def _role_relevant_defs(st: _Stores, rec, limit: int = 6) -> list[tuple[str, dic
     return [(did, cur) for _s, _n, did, cur in scored[:limit]]
 
 
-def _catalog_picker(st: _Stores, rec, csrf: str, base: str) -> str:
-    """Picker voor een nieuwe KPI: catalogus is de norm (knows-exactly zoek + knows-approximately
-    aanbevelingen voor de rol), met een losse KPI als toegestane uitzondering."""
-    hidden = (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
-              f"<input type='hidden' name='node' value='{_e(rec.id)}'>"
-              f"<input type='hidden' name='next' value='{base}'>")
-    allcur = [(d["id"], st.defs.current(d["id"]) or {}) for d in st.defs.all()]
-    allcur = [(i, c) for i, c in allcur if c.get("name")]
-
-    # knows exactly: zoekveld met typeahead over alle catalogus-namen
-    dl = "".join(f"<option value=\"{_e(c['name'])}\">" for _i, c in sorted(allcur, key=lambda x: x[1]["name"]))
-    search = (f"<form method='post' action='/action' class='m-addform'>{hidden}"
-              f"<label class='att-lbl'>Zoek een indicator (uit de catalogus)</label>"
-              f"<input name='def_name' list='cat-defs' placeholder='typ een naam, bijv. Omzet' autocomplete='off'>"
-              f"<datalist id='cat-defs'>{dl}</datalist>"
-              f"<button class='btn ok sm' type='submit' name='action' value='m_add_from_def'>Toevoegen</button></form>")
-
-    # knows approximately: aanbevolen voor deze rol
-    chips = ""
-    for did, cur in _role_relevant_defs(st, rec, 6):
-        chips += (f"<form method='post' action='/action' class='def-rec'>{hidden}"
-                  f"<input type='hidden' name='def_id' value='{_e(did)}'>"
-                  f"<button class='btn ghost sm' type='submit' name='action' value='m_add_from_def' "
-                  f"title='{_e(cur.get('definition', ''))}'>+ {_e(cur['name'])}</button></form>")
-    recblock = f"<div class='def-recs'><span class='muted'>Voor jouw rol:</span>{chips}</div>" if chips else ""
-
-    # vangnet: alle definities gegroepeerd per bron (voor wie scrollend zoekt)
-    bysrc: dict[str, list] = {}
-    for did, c in sorted(allcur, key=lambda x: x[1]["name"]):
-        bysrc.setdefault(c.get("source", ""), []).append((did, c))
-    groups = ""
-    for s in sorted(bysrc):
-        items = "".join(
-            f"<form method='post' action='/action' class='def-rec'>{hidden}"
-            f"<input type='hidden' name='def_id' value='{_e(did)}'>"
-            f"<button class='btn ghost sm' type='submit' name='action' value='m_add_from_def' "
-            f"title='{_e(c.get('definition', ''))}'>+ {_e(c['name'])}</button></form>"
-            for did, c in bysrc[s])
-        groups += f"<div class='def-grp'><span class='muted'>{_e(_ORIGIN_LABEL.get(s, s or 'overig'))}</span>{items}</div>"
-    allblock = f"<details class='def-all'><summary class='muted'>Alle definities ({len(allcur)})</summary>{groups}</details>"
-
-    # uitzondering: losse (niet-gedeelde) KPI of een nieuwe gedeelde definitie
-    src_opts = "".join(f"<option value='source:{k}'>{_e(v['name'])} (uit data)</option>"
-                       for k, v in _SOURCE_KPIS.items())
-    loose = (f"<details class='m-add'><summary class='att-lbl' style='cursor:pointer'>Losse KPI of nieuwe definitie</summary>"
-             f"<form method='post' action='/action' class='m-addform'>{hidden}"
-             f"<select name='pick'><option value='manual'>Handmatige KPI</option>{src_opts}</select>"
-             f"<input name='name' placeholder='Naam' autocomplete='off'>"
-             f"<input name='unit' placeholder='Eenheid (€, %, stuks)' autocomplete='off'>"
-             f"<input name='definition' list='gr-defs' placeholder='Definitie: wat telt mee? (grondslag)' autocomplete='off'>"
-             f"{_definition_datalist(st)}"
-             f"<select name='direction'><option value=''>Richting (geen)</option>"
-             f"<option value='up'>hoger = beter</option><option value='down'>lager = beter</option></select>"
-             f"<input name='threshold' inputmode='decimal' placeholder='Drempel (optioneel)' autocomplete='off'>"
-             f"<select name='cadence' title='meetmoment: hoe vaak'>"
-             + "".join(f"<option value='{k}'{' selected' if k == 'ad-hoc' else ''}>meet: {_e(v)}</option>"
-                       for k, v in CADANS_LABEL.items())
-             + "</select>"
-             f"<select name='meettype' title='meetmoment: hoe een waarde geldt'>"
-             + "".join(f"<option value='{k}'>{_e(v)}</option>" for k, v in MEETTYPE_LABEL.items())
-             + "</select>"
-             f"<label class='def-share'><input type='checkbox' name='share' value='1'> Deel in de catalogus (Librarian)</label>"
-             f"<button class='btn ok sm' type='submit' name='action' value='m_add_kpi'>KPI toevoegen</button></form></details>")
-
-    return (f"<details class='m-add'><summary class='btn sm'>+ KPI toevoegen</summary>"
-            f"<div class='def-pick'>{search}{recblock}{allblock}{loose}</div></details>")
-
-
 def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "maand", nav: str = "") -> str:
     cutoff = window_cutoff(win)
     base = f"/node?id={_e(rec.id)}&tab=metrics"
@@ -2325,26 +2279,10 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "maand", nav:
         return f"<a class='cl-filter{on}' href='{base}&mw={k}'>{_e(lbl)}</a>"
     wbar = ("<div class='cl-bar'><span class='muted'>Periode:</span> "
             + "".join(pl(k, lbl) for k, lbl in _MW) + "</div>")
-    mk = (f"<a class='btn ok sm' href='/kpi_new?node={_e(rec.id)}'>+ KPI maken</a>" if csrf else "")
-    head = f"<div class='cl-head'><h3>Metrics</h3>{mk}</div>{wbar}"
-
-    # 1. Dashboard van tegels (bron + measure + dimensie + vorm), volgt de periode-keuze
-    tiles = st.metrics.tiles_of(rec.id)
-    dash = ("".join(_render_tile(st, rec, t, cutoff, csrf) for t in tiles) if tiles
-            else "<p class='muted'>Nog geen KPI's op het dashboard. Maak er een met “+ KPI maken”.</p>")
-    out = f"<div class='c2-sec'>{head}</div><div class='c2-sec'><div class='tile-grid'>{dash}</div></div>"
-
-    # 2. Eigen KPI's (data invoeren) — handmatige KPI's worden vanzelf bron in de wizard
-    kpis = [i for i in st.metrics.for_node(rec.id) if i.get("kind") == "kpi"]
-    rows = "".join(_kpi_data_row(st, i, csrf) for i in kpis) if kpis else "<p class='muted'>Nog geen eigen KPI's.</p>"
-    define = _catalog_picker(st, rec, csrf, base) if csrf else ""
-    out += f"<div class='c2-sec'><div class='cl-head'><h3>Eigen KPI's</h3>{define}</div>{rows}</div>"
-
-    # 3. Links naar externe bestanden
-    links = st.metrics.links_for(rec.id)
-    lc = "".join(_link_card(i, csrf) for i in links)
+    # In het werkoverleg (nav gezet) selecteer/bekijk je KPI's, je maakt ze daar niet aan.
+    creating = bool(csrf) and not nav
     addlink = ""
-    if csrf:
+    if creating:
         addlink = (f"<details class='m-add'><summary class='btn sm'>+ Link</summary>"
                    f"<form method='post' action='/action' class='m-addform'>"
                    f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='node' value='{_e(rec.id)}'>"
@@ -2352,8 +2290,26 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "maand", nav:
                    f"<input name='name' placeholder='Naam' autocomplete='off'>"
                    f"<input name='url' placeholder='https://…' autocomplete='off'>"
                    f"<button class='btn ok sm' type='submit' name='action' value='m_add_link'>Link toevoegen</button></form></details>")
-    out += (f"<div class='c2-sec'><div class='cl-head'><h3>Links</h3>{addlink}</div>"
-            f"<div class='kpi-grid'>{lc or '<p class=muted>Geen links.</p>'}</div></div>")
+    mk = (f"<a class='btn ok sm' href='/kpi_new?node={_e(rec.id)}'>+ KPI maken</a>" if creating else "")
+    head = f"<div class='cl-head'><h3>Metrics</h3><span class='kc-actions'>{mk}{addlink}</span></div>{wbar}"
+
+    # 1. Dashboard van tegels (de KPI's) — volgt de periode-keuze
+    tiles = st.metrics.tiles_of(rec.id)
+    dash = ("".join(_render_tile(st, rec, t, cutoff, csrf) for t in tiles) if tiles
+            else "<p class='muted'>Nog geen KPI's op het dashboard. Maak er een met “+ KPI maken”.</p>")
+    out = f"<div class='c2-sec'>{head}</div><div class='c2-sec'><div class='tile-grid'>{dash}</div></div>"
+
+    # 2. Eigen KPI's: data invoeren voor handmatige KPI's (aanmaken gaat via + KPI maken / de catalogus)
+    kpis = [i for i in st.metrics.for_node(rec.id) if i.get("kind") == "kpi"]
+    if kpis:
+        rows = "".join(_kpi_data_row(st, i, csrf) for i in kpis)
+        out += f"<div class='c2-sec'><div class='cl-head'><h3>Eigen KPI's (data invoeren)</h3></div>{rows}</div>"
+
+    # 3. Links naar externe bestanden (cijfers die elders leven)
+    links = st.metrics.links_for(rec.id)
+    if links:
+        lc = "".join(_link_card(i, csrf) for i in links)
+        out += f"<div class='c2-sec'><div class='cl-head'><h3>Links</h3></div><div class='kpi-grid'>{lc}</div></div>"
     return out
 
 
@@ -2448,8 +2404,7 @@ def _catalog_card(st: _Stores, d: dict, cur: dict, csrf: str) -> str:
             + rij("Meetmoment", meet)
             + rij("Grondslag", cur.get("standaard"))
             + rij("Benchmark", cur.get("benchmark"))
-            + (f"<div class='gr-row'><span class='gr-k'>Bron</span>"
-               f"<a href='{_e(cur['bron_url'])}' target='_blank' rel='noopener'>bewijs ↗</a></div>"
+            + (f"<div class='gr-row'><span class='gr-k'>Bron</span>{_bron_html(cur['bron_url'])}</div>"
                if cur.get("bron_url") else ""))
     ks = st.metrics.kpis_for_def(did)
     users = sorted({_name(st.records.get(k["node"])) for k in ks if st.records.get(k["node"])})
@@ -2512,7 +2467,16 @@ def render_kpi_composer(st: _Stores, node_id: str, csrf_token: str = "", msg: st
         return _page("Niet gevonden", "<p>Node niet gevonden.</p>")
     back = f"/node?id={_e(node_id)}&tab=metrics"
     combos = _tile_combos(_sources_for(st, rec))
-    ind_opts = "".join(f"<option value='{_e(v)}'>{_e(lbl)}</option>" for v, lbl, _df in combos)
+    avail = "".join(f"<option value='{_e(v)}'>{_e(lbl)}</option>" for v, lbl, _df in combos)
+    # ook direct uit de catalogus kiezen (wordt dan als KPI op deze node gezet). Rol-relevant eerst.
+    rel = _role_relevant_defs(st, rec, 8)
+    rel_ids = {did for did, _c in rel}
+    rest = sorted(((d["id"], st.defs.current(d["id"]) or {}) for d in st.defs.all()
+                   if d["id"] not in rel_ids), key=lambda x: x[1].get("name", ""))
+    cat = "".join(f"<option value='def:{_e(did)}'>{_e(c.get('name', ''))}</option>"
+                  for did, c in (rel + rest) if c.get("name"))
+    ind_opts = (f"<optgroup label='Beschikbaar op deze plek'>{avail}</optgroup>"
+                f"<optgroup label='Uit de catalogus'>{cat}</optgroup>")
     proj_opts = _goal_options(st, rec)
     step = lambda n, t, inner: (f"<div class='kc-step'><div class='kc-h'><span class='kc-n'>{n}</span>"
                                 f"<b>{_e(t)}</b></div>{inner}</div>")
@@ -2548,7 +2512,7 @@ def render_kpi_composer(st: _Stores, node_id: str, csrf_token: str = "", msg: st
             f"<p class='muted'>Een KPI ontstaat door drie ingrediënten bewust samen te stellen.</p>"
             f"<div class='c2-sec'>{form}</div></div>")
     inner = (f"<style>{_EXTRA_CSS}</style>"
-             "<div class='bar'>cockpit 2 · GlassFrog-vorm (PoC) · <a href='/'>home</a> · "
+             f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · <a href='/'>home</a> · "
              "<a href='/catalog'>catalogus</a></div>"
              f"<div class='c2-wrap'>{main}</div>{_KPI_COMPOSER_JS}")
     return _page("KPI maken", inner)
@@ -2597,12 +2561,10 @@ def render_catalog(st: _Stores, csrf_token: str = "", msg: str = "") -> str:
     bf = lambda facet, val, lbl: f"<button type='button' class='cat-f' data-facet='{facet}' data-val='{val}'>{_e(lbl)}</button>"
     nav = ("<div class='cat-nav'>"
            "<input id='cat-q' class='cat-q' placeholder='Zoek een indicator…' autocomplete='off'>"
-           "<span class='cat-fg'><span class='muted'>meetwijze:</span>"
-           + bf("mw", "systeem", "systeem") + bf("mw", "handmatig", "handmatig") + bf("mw", "enquete", "enquête")
-           + "</span><span class='cat-fg'><span class='muted'>Lean:</span>"
+           "<span class='cat-fg'><span class='muted'>toon:</span>"
            + bf("bruikbaar", "actionable", "actionable") + bf("tijd", "leading", "leading")
-           + bf("grounded", "0", "ongegrond") + bf("ver", "voorlopig", "voorlopig") + "</span>"
-           "<button type='button' class='cat-f cat-f-x' data-facet='' data-val=''>alle</button>"
+           + bf("grounded", "0", "ongegrond") + bf("ver", "voorlopig", "voorlopig")
+           + "<button type='button' class='cat-f cat-f-x on' data-facet='' data-val=''>alle</button></span>"
            f"<span class='muted cat-count' id='cat-count'>{total} definities · {ungrounded} ongegrond</span></div>")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
             f"<h1>Metrics-catalogus <span class='chip'>Librarian</span></h1>{_banner(msg)}"
@@ -2610,7 +2572,7 @@ def render_catalog(st: _Stores, csrf_token: str = "", msg: str = "") -> str:
             f"wijzigen versioneert nooit in-place, maar als verduidelijking, back-cast of reeksbreuk.</p>"
             f"<div class='c2-sec'>{addform}</div>{nav}{sections}</div>")
     inner = (f"<style>{_EXTRA_CSS}</style>"
-             "<div class='bar'>cockpit 2 · GlassFrog-vorm (PoC) · <a href='/'>home</a> · "
+             f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · <a href='/'>home</a> · "
              "<a href='/catalog'>catalogus</a></div>"
              f"<div class='c2-wrap'>{main}</div>{_CATALOG_JS}")
     return _page("Metrics-catalogus", inner)
@@ -2618,15 +2580,15 @@ def render_catalog(st: _Stores, csrf_token: str = "", msg: str = "") -> str:
 
 _CATALOG_JS = """<script>
 (function(){
- var q=document.getElementById('cat-q'), cnt=document.getElementById('cat-count'), F={};
+ var q=document.getElementById('cat-q'), cnt=document.getElementById('cat-count');
+ var AF='', AV='';                         // één actief filter (of/of, niet en/en)
  function apply(){
    var t=(q&&q.value||'').toLowerCase().trim(), shown=0;
    document.querySelectorAll('.cat-card').forEach(function(c){
-     var ok=(!t||(c.dataset.text||'').indexOf(t)>=0);
-     for(var f in F){ if(F[f]&&c.dataset[f]!==F[f]) ok=false; }
+     var ok=(!t||(c.dataset.text||'').indexOf(t)>=0) && (!AF || c.dataset[AF]===AV);
      c.classList.toggle('hide',!ok); if(ok)shown++;
    });
-   var active=t; for(var k in F){if(F[k])active=true;}
+   var active=t||!!AF;
    document.querySelectorAll('.cat-sec').forEach(function(s){
      var any=s.querySelectorAll('.cat-card:not(.hide)').length;
      s.style.display=any?'':'none'; if(any&&active)s.open=true;
@@ -2636,10 +2598,11 @@ _CATALOG_JS = """<script>
  q&&q.addEventListener('input',apply);
  document.querySelectorAll('.cat-f').forEach(function(b){b.addEventListener('click',function(){
    var facet=b.dataset.facet, val=b.dataset.val;
-   if(!facet){F={};}                       // 'alle' reset
-   else {F[facet]=(F[facet]===val)?'':val;}
+   if(!facet || (AF===facet && AV===val)){ AF=''; AV=''; }   // 'alle' of nogmaals = wissen
+   else { AF=facet; AV=val; }
    document.querySelectorAll('.cat-f').forEach(function(x){
-     x.classList.toggle('on', !!x.dataset.facet && F[x.dataset.facet]===x.dataset.val && x.dataset.val!=='');
+     var sel = x.dataset.facet ? (x.dataset.facet===AF && x.dataset.val===AV) : (AF==='');
+     x.classList.toggle('on', sel);
    });
    apply();
  });});
@@ -2702,7 +2665,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     rail = f"<div class='c2-rail'>{_tree_html(st, node_id)}</div>"
     modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
     inner = (f"<style>{_EXTRA_CSS}</style>"
-             "<div class='bar'>cockpit 2 · GlassFrog-vorm (PoC) · "
+             f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
              "<a href='/'>home</a> · <a href='/catalog'>catalogus</a></div>"
              f"<div class='c2-wrap'>{main}{rail}</div>{modal}")
     return _page(_name(rec), inner)
@@ -2747,7 +2710,7 @@ def render_person(st: _Stores, pid: str) -> str:
             + "</div>" + _person_projects_html(st, pid) + "</div>")
     rail = f"<div class='c2-rail'>{_tree_html(st, '')}</div>"
     inner = (f"<style>{_EXTRA_CSS}</style>"
-             "<div class='bar'>cockpit 2 · GlassFrog-vorm (PoC) · <a href='/'>home</a></div>"
+             f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · <a href='/'>home</a></div>"
              f"<div class='c2-wrap'>{main}{rail}</div>")
     return _page(p.name, inner)
 
@@ -4803,20 +4766,8 @@ def dispatch(data_dir: str, action: str, form: dict):
         if not did and g("def_name"):
             d = st.defs.by_name(g("def_name"))
             did = d["id"] if d else ""
-        cur = st.defs.current(did) if did else None
-        if cur:
-            # catalogus-KPI: handmatig invoerbaar; herkomst bewaard als origin (geen live-feed)
-            it = st.metrics.add_kpi(g("node"), cur.get("name"), cur.get("unit", ""),
-                                    definition=cur.get("definition", ""), direction=cur.get("direction", ""),
-                                    threshold=cur.get("threshold"), cadence=cur.get("cadence", "ad-hoc"),
-                                    meettype=cur.get("meettype", "snapshot"), window=cur.get("window", ""),
-                                    def_id=did, def_version=st.defs.current_version_no(did),
-                                    origin=cur.get("source", ""), meetwijze=cur.get("meetwijze", ""),
-                                    auto=cur.get("meetwijze") == "systeem", benchmark=cur.get("benchmark", ""),
-                                    bron_url=cur.get("bron_url", ""), verificatie=cur.get("verificatie", ""))
-            msg = "✓ KPI uit catalogus toegevoegd" if it else "⛔ kon KPI niet toevoegen"
-        else:
-            msg = "⛔ kies een bestaande definitie uit de catalogus"
+        kid = _kpi_id_from_def(st, g("node"), did)
+        msg = "✓ KPI uit catalogus toegevoegd" if kid else "⛔ kies een bestaande definitie uit de catalogus"
     elif action == "def_add":
         d = st.defs.add(g("name"), owner="librarian", provenance="sensed",
                         unit=g("unit"), definition=g("definition"), direction=g("direction"),
@@ -4848,7 +4799,8 @@ def dispatch(data_dir: str, action: str, form: dict):
             if ver:
                 fields = {k: ver.get(k) for k in ("name", "unit", "definition", "direction",
                                                   "threshold", "cadence", "meettype", "window",
-                                                  "meetwijze", "benchmark", "bron_url", "verificatie")}
+                                                  "meetwijze", "benchmark", "bron_url", "verificatie",
+                                                  "tijd", "bruikbaar", "standaard", "waarde")}
                 st.metrics.retune_kpis_to_def(did, ver["version"], fields, mig)
                 label = {"clarify": "verduidelijking (reeks intact)",
                          "backcast": "back-cast (historie hergebruikt)",
@@ -4868,7 +4820,11 @@ def dispatch(data_dir: str, action: str, form: dict):
     elif action == "m_unpin":
         st.metrics.unpin(g("circle"), g("mid")); msg = "✓ van dashboard gehaald"
     elif action == "tile_add":
-        parts = (g("combo") or "").split("|")
+        combo = g("combo") or ""
+        if combo.startswith("def:"):     # indicator direct uit de catalogus → zet als KPI op de node
+            kid = _kpi_id_from_def(st, g("node"), combo[4:])
+            combo = f"kpi:{kid}|value|none" if kid else ""
+        parts = combo.split("|")
         if len(parts) == 3 and parts[0]:
             ref = g("ref_kind")
             t = st.metrics.add_tile(g("node"), parts[0], parts[1], parts[2], g("form"),

@@ -14,7 +14,7 @@ import os
 import time
 import uuid
 
-from nooch_village.metric_schema import normalize as _normalize_indicator
+from nooch_village.metric_schema import normalize as _normalize_indicator, SCHEMA_FIELDS as _SCHEMA_FIELDS
 from nooch_village.util import atomic_write_json
 
 
@@ -87,7 +87,8 @@ class MetricStore:
                 cadence: str = "ad-hoc", meettype: str = "snapshot", window: str = "",
                 def_id: str = "", def_version: int = 0, origin: str = "",
                 auto: bool = False, meetwijze: str = "", benchmark: str = "",
-                bron_url: str = "", verificatie: str = "") -> dict | None:
+                bron_url: str = "", verificatie: str = "", tijd: str = "", bruikbaar: str = "",
+                standaard: str = "", waarde=None) -> dict | None:
         if not node:
             return None
         # grondslag + meetmoment worden gevalideerd/genormaliseerd door het indicator-schema
@@ -105,6 +106,8 @@ class MetricStore:
               "origin": (origin or "").strip(), "auto": bool(auto),
               "meetwijze": (meetwijze or "").strip(), "benchmark": (benchmark or "").strip(),
               "bron_url": (bron_url or "").strip(), "verificatie": (verificatie or "").strip(),
+              "tijd": (tijd or "").strip(), "bruikbaar": (bruikbaar or "").strip(),
+              "standaard": (standaard or "").strip(), "waarde": waarde,
               "created_at": time.time()}
         self._items[mid] = it
         self._save()
@@ -153,8 +156,9 @@ class MetricStore:
                     stelt dat de historie vergelijkbaar blijft) → nog steeds één reeks.
         - break   : grondslag bijwerken, def_version ophogen; oude samples houden hun oude defv en
                     de nieuwe versie wordt als breukpunt vastgelegd (sparkline tekent een lijn)."""
-        copy = ("name", "unit", "definition", "direction", "threshold", "cadence", "meettype",
-                "window", "meetwijze", "benchmark", "bron_url", "verificatie")
+        # alle definitievelden behalve `source` (de KPI bewaart herkomst als `origin`); afgeleid uit
+        # het schema zodat de lijst niet uit de pas loopt (reference, don't copy / één bron).
+        copy = tuple(f for f in _SCHEMA_FIELDS if f != "source")
         n = 0
         for it in self.kpis_for_def(did):
             for k in copy:

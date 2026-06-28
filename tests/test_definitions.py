@@ -149,8 +149,9 @@ def test_rol_aanbevelingen_in_picker(tmp_path):
     st = cockpit2._Stores(dd)
     rid = "mother_earth__nooch__marketing_lead"
     rec = st.records.get(rid)
-    page = cockpit2.render_node(st, rid, "metrics", csrf_token="t")
-    assert "+ KPI toevoegen" in page and "Voor jouw rol" in page and "id='cat-defs'" in page
+    # de focus-flow biedt catalogus-indicatoren aan (rol-relevant eerst)
+    page = cockpit2.render_kpi_composer(st, rid, csrf_token="t")
+    assert "Uit de catalogus" in page and "value='def:" in page
     # relevantie: voor een marketing-rol komen marketing/SEO-bronnen bovendrijven
     recs = [c["name"] for _did, c in cockpit2._role_relevant_defs(st, rec, 8)]
     assert recs, "verwacht aanbevelingen voor de marketing-rol"
@@ -305,10 +306,10 @@ def test_catalogus_navigatie(tmp_path):
     from nooch_village import cockpit2
     dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
     page = cockpit2.render_catalog(cockpit2._Stores(dd), csrf_token="t")
-    # zoekveld + meetwijze-filters + inklapbare secties + filter-data op de kaarten
-    assert "id='cat-q'" in page and "class='cat-f'" in page and "data-val='systeem'" in page
+    # zoekveld + filters (meetwijze-groep verwijderd; Lean-filters blijven) + inklapbare secties
+    assert "id='cat-q'" in page and "class='cat-f'" in page and "data-val='actionable'" in page
     assert "class='cat-sec'" in page and "data-text=" in page
-    assert "meetwijze:" in page
+    assert "toon:" in page
 
 
 def test_metavelden_grondslag_en_aard(tmp_path):
@@ -372,7 +373,8 @@ def test_co2_bron_en_verificatie(tmp_path):
     assert cur["bron_url"] == "/carbon-footprint-of-shoes" and "−65%" in cur["benchmark"]
     # catalogus toont verificatie-chip + bron-link + filter
     page = cockpit2.render_catalog(st, csrf_token="t")
-    assert "voorlopig" in page and "bewijs ↗" in page and "data-ver='voorlopig'" in page
+    # intern pad → _bron_html toont "(nog niet live)" i.p.v. een dode externe link
+    assert "voorlopig" in page and "nog niet live" in page and "data-ver='voorlopig'" in page
     # velden stromen mee naar een KPI uit de catalogus, en de tegel toont 'voorlopig'
     rid = "mother_earth__nooch__marketing_lead"
     cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [st.defs.by_name("CO2 per paar")["id"]], "next": ["/"]})
