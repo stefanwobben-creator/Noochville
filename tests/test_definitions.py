@@ -105,11 +105,11 @@ def test_zoek_op_naam_en_losse_kpi_met_delen(tmp_path):
     assert it["def_id"] and it["origin"] == "shopify"
     # losse KPI met 'deel in catalogus' maakt een nieuwe gedeelde definitie
     n0 = len(st.defs.all())
-    cockpit2.dispatch(dd, "m_add_kpi", {"node": [rid], "pick": ["manual"], "name": ["Retourpercentage"],
+    cockpit2.dispatch(dd, "m_add_kpi", {"node": [rid], "pick": ["manual"], "name": ["Retour winkel proef"],
                                         "unit": ["%"], "direction": ["down"], "share": ["1"], "next": ["/"]})
     st = cockpit2._Stores(dd)
     assert len(st.defs.all()) == n0 + 1
-    nk = [i for i in st.metrics.for_node(rid) if i.get("name") == "Retourpercentage"][0]
+    nk = [i for i in st.metrics.for_node(rid) if i.get("name") == "Retour winkel proef"][0]
     assert nk["def_id"] and nk["def_version"] == 1 and nk["auto"] is False
     # handmatige (gedeelde) KPI: meting krijgt het versiestempel defv = 1
     cockpit2.dispatch(dd, "m_sample", {"mid": [nk["id"]], "value": ["4.5"], "next": ["/"]})
@@ -172,11 +172,11 @@ def test_suggest_migration_heuristiek():
 def _manual_def_kpi(dd, rid="mother_earth__nooch__marketing_lead"):
     from nooch_village import cockpit2
     # losse KPI gedeeld → een handmatige catalogus-definitie + een KPI die ernaar verwijst
-    cockpit2.dispatch(dd, "m_add_kpi", {"node": [rid], "pick": ["manual"], "name": ["NPS"],
+    cockpit2.dispatch(dd, "m_add_kpi", {"node": [rid], "pick": ["manual"], "name": ["Teamscore proef"],
                                         "unit": ["score"], "definition": ["promoters - detractors"],
                                         "share": ["1"], "next": ["/"]})
     st = cockpit2._Stores(dd)
-    kpi = [i for i in st.metrics.for_node(rid) if i.get("name") == "NPS"][0]
+    kpi = [i for i in st.metrics.for_node(rid) if i.get("name") == "Teamscore proef"][0]
     for v in (10, 20, 30):
         cockpit2.dispatch(dd, "m_sample", {"mid": [kpi["id"]], "value": [str(v)], "next": ["/"]})
     return kpi["def_id"], kpi["id"]
@@ -260,6 +260,55 @@ def test_catalogus_usage_telt_gebruik(tmp_path):
     cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [d["id"]], "next": ["/"]})
     page = cockpit2.render_catalog(cockpit2._Stores(dd), csrf_token="t")
     assert "1× in gebruik" in page
+
+
+def test_meetwijze_per_bron_en_invoer(tmp_path):
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    # systeem-bron (ERP) → meetwijze systeem → KPI blokkeert handmatige invoer
+    erp = st.defs.by_name("Voorraadwaarde")
+    assert st.defs.current(erp["id"])["meetwijze"] == "systeem"
+    # enquête-bron → handmatig invoerbaar
+    nps = st.defs.by_name("NPS")
+    assert st.defs.current(nps["id"])["meetwijze"] == "enquete"
+    rid = "mother_earth__nooch__marketing_lead"
+    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [erp["id"]], "next": ["/"]})
+    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [nps["id"]], "next": ["/"]})
+    st = cockpit2._Stores(dd)
+    kerp = [i for i in st.metrics.for_node(rid) if i.get("def_id") == erp["id"]][0]
+    knps = [i for i in st.metrics.for_node(rid) if i.get("def_id") == nps["id"]][0]
+    assert kerp["auto"] is True and st.metrics.add_sample(kerp["id"], 5) is False
+    assert knps["auto"] is False and st.metrics.add_sample(knps["id"], 42) is True
+
+
+def test_meetwijze_wijzigen_flipt_invoer(tmp_path):
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    # nieuwe handmatige definitie + KPI
+    cockpit2.dispatch(dd, "def_add", {"name": ["Eigen meter"], "unit": ["n"], "csource": [""],
+                                      "meetwijze": ["handmatig"], "next": ["/catalog"]})
+    did = cockpit2._Stores(dd).defs.by_name("Eigen meter")["id"]
+    rid = "mother_earth__nooch__marketing_lead"
+    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [did], "next": ["/"]})
+    mid = [i for i in cockpit2._Stores(dd).metrics.for_node(rid) if i.get("def_id") == did][0]["id"]
+    assert cockpit2._Stores(dd).metrics.add_sample(mid, 1) is True
+    # zet meetwijze op systeem → KPI's flippen naar auto, invoer geblokkeerd
+    cockpit2.dispatch(dd, "def_amend", {"def_id": [did], "meetwijze": ["systeem"],
+                                        "migration": ["clarify"], "next": ["/catalog"]})
+    st = cockpit2._Stores(dd)
+    assert st.metrics.get(mid)["auto"] is True and st.metrics.add_sample(mid, 2) is False
+
+
+def test_catalogus_navigatie(tmp_path):
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
+    page = cockpit2.render_catalog(cockpit2._Stores(dd), csrf_token="t")
+    # zoekveld + meetwijze-filters + inklapbare secties + filter-data op de kaarten
+    assert "id='cat-q'" in page and "class='cat-f'" in page and "data-mw='systeem'" in page
+    assert "class='cat-sec'" in page and "data-text=" in page
+    assert "meetwijze:" in page
 
 
 def test_store_in_cockpit(tmp_path):

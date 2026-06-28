@@ -31,7 +31,7 @@ from nooch_village.projects import ProjectLedger
 from nooch_village.ai_tasks import AITaskStore
 from nooch_village.checklists import ChecklistStore, CADENCES, CADENCE_LABEL
 from nooch_village.metrics import MetricStore, window_cutoff, filter_samples
-from nooch_village.metric_schema import CADANS_LABEL, MEETTYPE_LABEL
+from nooch_village.metric_schema import CADANS_LABEL, MEETTYPE_LABEL, MEETWIJZE_LABEL
 from nooch_village.definitions import DefinitionStore, seed_catalog as _seed_catalog
 from nooch_village.notifications import NotifStore
 from nooch_village.noochie import NoochieStore
@@ -102,6 +102,20 @@ ul.clean li:last-child{border-bottom:none}
 .cat-hist{margin-top:.3rem;font-size:.78rem}
 .cat-hist ul{margin:.3rem 0 0 1rem;padding:0}
 .cat-hist summary{cursor:pointer;list-style:none}
+.cat-nav{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin:.4rem 0 .9rem;position:sticky;top:0;background:var(--cream-2);padding:.5rem 0;z-index:5}
+.cat-q{flex:1 1 14rem;min-width:10rem;border:1px solid var(--border);border-radius:var(--radius-pill);padding:.4rem .8rem;font:inherit}
+.cat-f{border:1px solid var(--border);background:var(--surface);color:var(--gray);border-radius:var(--radius-pill);padding:.25rem .7rem;font-size:.8rem;cursor:pointer}
+.cat-f.on{background:var(--green);color:#fff;border-color:var(--green)}
+.cat-f-x{color:var(--subtle)}
+.cat-count{margin-left:auto}
+.cat-sec{margin-bottom:.6rem}
+.cat-sec>summary{cursor:pointer;list-style:none;padding:.3rem 0;border-bottom:1px solid var(--border);font-size:.95rem}
+.cat-sec>summary::-webkit-details-marker{display:none}
+.cat-sec[open]>summary{margin-bottom:.5rem}
+.cat-sec>summary::before{content:'▸ ';color:var(--subtle)}
+.cat-sec[open]>summary::before{content:'▾ '}
+.cat-tags{display:inline-flex;gap:.3rem;align-items:center}
+.cat-card.hide{display:none}
 .card.arch{opacity:.6}
 .pcard{cursor:pointer;position:relative;transition:box-shadow .1s,border-color .1s}
 .pcard:hover{border-color:var(--green);box-shadow:0 0 0 2px var(--green-tint)}
@@ -1834,7 +1848,7 @@ def _grondslag(st: _Stores, source: str, measure: str) -> dict:
         return {"definitie": it.get("definition", ""), "eenheid": it.get("unit", ""),
                 "bron": bron, "richting": it.get("direction", ""), "drempel": it.get("threshold"),
                 "cadans": it.get("cadence", ""), "meettype": it.get("meettype", ""),
-                "venster": it.get("window", "")}
+                "venster": it.get("window", ""), "meetwijze": it.get("meetwijze", "")}
     if source.startswith("werk:"):
         d, u, r = _WERK_GRONDSLAG.get(measure, ("", "", ""))
         return {"definitie": d, "eenheid": u, "bron": "Werkoverleg-archief", "richting": r,
@@ -1856,7 +1870,8 @@ def _grondslag_popover(g: dict) -> str:
             + rij("Eenheid", g.get("eenheid")) + rij("Bron", g.get("bron"))
             + rij("Richting", _RICHTING.get(g.get("richting"), "—"))
             + (rij("Drempel", g.get("drempel")) if g.get("drempel") is not None else "")
-            + rij("Meetmoment", meet))
+            + rij("Meetmoment", meet)
+            + rij("Meetwijze", MEETWIJZE_LABEL.get(g.get("meetwijze"), "")))
     return (f"<details class='tile-info'><summary title='grondslag'>{_IC_INFO}</summary>"
             f"<div class='gr-pop'>{body}</div></details>")
 
@@ -2015,11 +2030,6 @@ def _kpi_data_row(st: _Stores, item: dict, csrf: str) -> str:
             f"<span class='kpidata-v'>{val}{unit}</span>{_spark_svg(pts, breaks_at=bidx)}{add}{exp}{rm}</div>")
 
 
-# bronnen die het systeem/een API meet — hiervoor mag je NOOIT handmatig invoeren (integriteit).
-# De waarde komt uit de bron; tot een live-koppeling bestaat toont de KPI 'nog niet gekoppeld'.
-_SYSTEM_SOURCES = {"gsc", "plausible", "shopify", "trends", "keywords_everywhere", "ngram",
-                   "openalex", "semantic_scholar", "site_health", "competitor_news",
-                   "linkbuilding", "budget", "werkoverleg"}
 # bron-herkomst → leesbaar label (voor de grondslag-popover van een catalogus-KPI)
 _ORIGIN_LABEL = {
     "gsc": "Google Search Console", "plausible": "Plausible", "shopify": "Shopify",
@@ -2211,6 +2221,17 @@ def _mt_select(name: str, cur: str) -> str:
                       for k, v in MEETTYPE_LABEL.items()) + "</select>")
 
 
+def _mw_select(name: str, cur: str) -> str:
+    return (f"<select name='{name}' title='meetwijze: hoe komt de waarde tot stand?'>"
+            + "".join(f"<option value='{k}'{' selected' if k == cur else ''}>meetwijze: {_e(v)}</option>"
+                      for k, v in MEETWIJZE_LABEL.items()) + "</select>")
+
+
+def _mw_chip(mw: str) -> str:
+    cls = {"systeem": "chip muted", "handmatig": "chip outline", "enquete": "chip coral"}.get(mw, "chip muted")
+    return f"<span class='{cls}'>{_e(MEETWIJZE_LABEL.get(mw, mw or 'handmatig'))}</span>"
+
+
 def _catalog_edit_form(st: _Stores, did: str, cur: dict, csrf: str) -> str:
     base = "/catalog"
     hidden = (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
@@ -2230,6 +2251,7 @@ def _catalog_edit_form(st: _Stores, did: str, cur: dict, csrf: str) -> str:
             f"<input name='threshold' value=\"{_e(str(thr))}\" inputmode='decimal' placeholder='Drempel (optioneel)' autocomplete='off'>"
             f"{_cad_select('cadence', cur.get('cadence', 'ad-hoc'))}{_mt_select('meettype', cur.get('meettype', 'snapshot'))}"
             f"<input name='window' value=\"{_e(cur.get('window', ''))}\" placeholder='Venster (bijv. 7d)' autocomplete='off'>"
+            f"{_mw_select('meetwijze', cur.get('meetwijze', 'handmatig'))}"
             f"{mig}"
             f"<button class='btn ok sm' type='submit' name='action' value='def_amend'>Doorvoeren</button></form></details>")
 
@@ -2255,8 +2277,12 @@ def _catalog_card(st: _Stores, d: dict, cur: dict, csrf: str) -> str:
                         for v in d["versions"])
         vhist = f"<details class='cat-hist'><summary class='muted'>historie ({nver} versies)</summary><ul>{items}</ul></details>"
     edit = _catalog_edit_form(st, did, cur, csrf) if csrf else ""
-    return (f"<div class='cat-card'><div class='cat-h'><b>{_e(cur.get('name', ''))}</b>"
-            f"<span class='chip muted'>v{d.get('current', 1)}</span></div>"
+    mw = cur.get("meetwijze", "handmatig")
+    label = _ORIGIN_LABEL.get(cur.get("source", ""), cur.get("source", "") or "eigen")
+    txt = _e(f"{cur.get('name','')} {cur.get('definition','')} {label}".lower())
+    return (f"<div class='cat-card' data-mw='{_e(mw)}' data-text=\"{txt}\">"
+            f"<div class='cat-h'><b>{_e(cur.get('name', ''))}</b>"
+            f"<span class='cat-tags'>{_mw_chip(mw)}<span class='chip muted'>v{d.get('current', 1)}</span></span></div>"
             f"<div class='gr-pop' style='position:static;width:auto;box-shadow:none;border:none;padding:0'>{body}</div>"
             f"<div class='muted cat-use'>{_e(usage)}</div>{vhist}{edit}</div>")
 
@@ -2275,6 +2301,7 @@ def _catalog_add_form(st: _Stores, csrf: str) -> str:
             f"<input name='threshold' inputmode='decimal' placeholder='Drempel (optioneel)' autocomplete='off'>"
             f"{_cad_select('cadence', 'ad-hoc')}{_mt_select('meettype', 'snapshot')}"
             f"<input name='window' placeholder='Venster (bijv. 7d, optioneel)' autocomplete='off'>"
+            f"{_mw_select('meetwijze', 'handmatig')}"
             f"<button class='btn ok sm' type='submit' name='action' value='def_add'>Definitie toevoegen</button></form></details>")
 
 
@@ -2284,24 +2311,59 @@ def render_catalog(st: _Stores, csrf_token: str = "", msg: str = "") -> str:
     for d in defs:
         cur = st.defs.current(d["id"]) or {}
         bysrc.setdefault(cur.get("source", ""), []).append((d, cur))
+    total = len(defs)
     sections = ""
     for s in sorted(bysrc, key=lambda x: _ORIGIN_LABEL.get(x, "zzz" + (x or "zzz"))):
         cards = "".join(_catalog_card(st, d, cur, csrf_token)
                         for d, cur in sorted(bysrc[s], key=lambda t: t[1].get("name", "")))
         label = _ORIGIN_LABEL.get(s, s or "Eigen / handmatig")
-        sections += (f"<div class='c2-sec'><h3>{_e(label)} <span class='muted'>({len(bysrc[s])})</span></h3>"
-                     f"<div class='cat-grid'>{cards}</div></div>")
+        sections += (f"<details class='cat-sec' open><summary><b>{_e(label)}</b> "
+                     f"<span class='muted'>({len(bysrc[s])})</span></summary>"
+                     f"<div class='cat-grid'>{cards}</div></details>")
     addform = _catalog_add_form(st, csrf_token) if csrf_token else ""
+    nav = ("<div class='cat-nav'>"
+           "<input id='cat-q' class='cat-q' placeholder='Zoek een indicator…' autocomplete='off'>"
+           "<span class='muted'>meetwijze:</span>"
+           "<button type='button' class='cat-f' data-mw='systeem'>systeem</button>"
+           "<button type='button' class='cat-f' data-mw='handmatig'>handmatig</button>"
+           "<button type='button' class='cat-f' data-mw='enquete'>enquête</button>"
+           "<button type='button' class='cat-f cat-f-x' data-mw=''>alle</button>"
+           f"<span class='muted cat-count' id='cat-count'>{total} definities</span></div>")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
             f"<h1>Metrics-catalogus <span class='chip'>Librarian</span></h1>{_banner(msg)}"
             f"<p class='muted'>Eén bron voor indicator-definities: rollen kiezen hieruit. Een definitie "
             f"wijzigen versioneert nooit in-place, maar als verduidelijking, back-cast of reeksbreuk.</p>"
-            f"<div class='c2-sec'>{addform}</div>{sections}</div>")
+            f"<div class='c2-sec'>{addform}</div>{nav}{sections}</div>")
     inner = (f"<style>{_EXTRA_CSS}</style>"
              "<div class='bar'>cockpit 2 · GlassFrog-vorm (PoC) · <a href='/'>home</a> · "
              "<a href='/catalog'>catalogus</a></div>"
-             f"<div class='c2-wrap'>{main}</div>")
+             f"<div class='c2-wrap'>{main}</div>{_CATALOG_JS}")
     return _page("Metrics-catalogus", inner)
+
+
+_CATALOG_JS = """<script>
+(function(){
+ var q=document.getElementById('cat-q'), cnt=document.getElementById('cat-count'), mw='';
+ function apply(){
+   var t=(q&&q.value||'').toLowerCase().trim(), shown=0;
+   document.querySelectorAll('.cat-card').forEach(function(c){
+     var ok=(!t||(c.dataset.text||'').indexOf(t)>=0)&&(!mw||c.dataset.mw===mw);
+     c.classList.toggle('hide',!ok); if(ok)shown++;
+   });
+   document.querySelectorAll('.cat-sec').forEach(function(s){
+     var any=s.querySelectorAll('.cat-card:not(.hide)').length;
+     s.style.display=any?'':'none'; if(any&&(t||mw))s.open=true;
+   });
+   if(cnt)cnt.textContent=shown+' definities';
+ }
+ q&&q.addEventListener('input',apply);
+ document.querySelectorAll('.cat-f').forEach(function(b){b.addEventListener('click',function(){
+   mw=b.dataset.mw;
+   document.querySelectorAll('.cat-f').forEach(function(x){x.classList.toggle('on',x.dataset.mw===mw&&mw!=='');});
+   apply();
+ });});
+})();
+</script>"""
 
 
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",
@@ -4468,8 +4530,8 @@ def dispatch(data_dir: str, action: str, form: dict):
                                     threshold=cur.get("threshold"), cadence=cur.get("cadence", "ad-hoc"),
                                     meettype=cur.get("meettype", "snapshot"), window=cur.get("window", ""),
                                     def_id=did, def_version=st.defs.current_version_no(did),
-                                    origin=cur.get("source", ""),
-                                    auto=cur.get("source", "") in _SYSTEM_SOURCES)
+                                    origin=cur.get("source", ""), meetwijze=cur.get("meetwijze", ""),
+                                    auto=cur.get("meetwijze") == "systeem")
             msg = "✓ KPI uit catalogus toegevoegd" if it else "⛔ kon KPI niet toevoegen"
         else:
             msg = "⛔ kies een bestaande definitie uit de catalogus"
@@ -4478,7 +4540,7 @@ def dispatch(data_dir: str, action: str, form: dict):
                         unit=g("unit"), definition=g("definition"), direction=g("direction"),
                         source=g("csource"), threshold=g("threshold"),
                         cadence=g("cadence") or "ad-hoc", meettype=g("meettype") or "snapshot",
-                        window=g("window"))
+                        window=g("window"), meetwijze=g("meetwijze") or "handmatig")
         msg = "✓ definitie toegevoegd aan de catalogus" if d else "⛔ geef een naam"
     elif action == "def_amend":
         # wijzig een gedeelde catalogus-definitie; migratie bepaalt wat met de historie gebeurt
@@ -4489,7 +4551,7 @@ def dispatch(data_dir: str, action: str, form: dict):
         else:
             from nooch_village.definitions import suggest_migration
             new = {k: g(k) for k in ("definition", "unit", "direction", "threshold",
-                                     "cadence", "meettype", "window") if g(k) != ""}
+                                     "cadence", "meettype", "window", "meetwijze") if g(k) != ""}
             mig = g("migration") or "auto"
             if mig == "auto":
                 mig, _why = suggest_migration(old, new)
@@ -4498,7 +4560,7 @@ def dispatch(data_dir: str, action: str, form: dict):
             ver = st.defs.amend(did, mig, **new)
             if ver:
                 fields = {k: ver.get(k) for k in ("name", "unit", "definition", "direction",
-                                                  "threshold", "cadence", "meettype", "window")}
+                                                  "threshold", "cadence", "meettype", "window", "meetwijze")}
                 st.metrics.retune_kpis_to_def(did, ver["version"], fields, mig)
                 label = {"clarify": "verduidelijking (reeks intact)",
                          "backcast": "back-cast (historie hergebruikt)",

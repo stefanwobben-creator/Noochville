@@ -20,6 +20,12 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 
 CADANS = ("continu", "uur", "dag", "week", "maand", "kwartaal", "jaar", "ad-hoc")
 MEETTYPE = ("snapshot", "venster", "cumulatief")
+# meetwijze = HOE een waarde tot stand komt; bepaalt of handmatig invoeren mag:
+#   systeem   = automatisch uit een bron/berekening → géén handmatige invoer (integriteit)
+#   handmatig = je voert de waarde zelf in
+#   enquete   = resultaat van een enquête (handmatig ingevoerd, maar apart gelabeld)
+MEETWIJZE = ("systeem", "handmatig", "enquete")
+MEETWIJZE_LABEL = {"systeem": "systeem", "handmatig": "handmatig", "enquete": "enquête"}
 
 CADANS_LABEL = {"continu": "continu", "uur": "per uur", "dag": "per dag", "week": "per week",
                 "maand": "per maand", "kwartaal": "per kwartaal", "jaar": "per jaar",
@@ -41,6 +47,7 @@ class IndicatorDefinition(BaseModel):
     cadence: Literal["continu", "uur", "dag", "week", "maand", "kwartaal", "jaar", "ad-hoc"] = "ad-hoc"
     meettype: Literal["snapshot", "venster", "cumulatief"] = "snapshot"
     window: str = ""  # bijv. "7d" wanneer meettype = venster
+    meetwijze: Literal["systeem", "handmatig", "enquete"] = "handmatig"
 
     @field_validator("name", mode="before")
     @classmethod
@@ -89,6 +96,11 @@ class IndicatorDefinition(BaseModel):
     @classmethod
     def _mt(cls, v):
         return v if v in MEETTYPE else "snapshot"
+
+    @field_validator("meetwijze", mode="before")
+    @classmethod
+    def _mw(cls, v):
+        return v if v in MEETWIJZE else "handmatig"
 
 
 SCHEMA_FIELDS = list(IndicatorDefinition.model_fields)  # volgorde = schema-definitie

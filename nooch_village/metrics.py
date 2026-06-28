@@ -85,7 +85,7 @@ class MetricStore:
                 definition: str = "", direction: str = "", threshold=None,
                 cadence: str = "ad-hoc", meettype: str = "snapshot", window: str = "",
                 def_id: str = "", def_version: int = 0, origin: str = "",
-                auto: bool = False) -> dict | None:
+                auto: bool = False, meetwijze: str = "") -> dict | None:
         if not node:
             return None
         # grondslag + meetmoment worden gevalideerd/genormaliseerd door het indicator-schema
@@ -100,7 +100,8 @@ class MetricStore:
         # Leeg = een losse, niet-gedeelde KPI (de toegestane uitzondering).
         it = {"id": mid, "kind": "kpi", "node": node, **spec, "samples": [],
               "def_id": (def_id or "").strip(), "def_version": int(def_version or 0),
-              "origin": (origin or "").strip(), "auto": bool(auto), "created_at": time.time()}
+              "origin": (origin or "").strip(), "auto": bool(auto),
+              "meetwijze": (meetwijze or "").strip(), "created_at": time.time()}
         self._items[mid] = it
         self._save()
         return it
@@ -148,12 +149,15 @@ class MetricStore:
                     stelt dat de historie vergelijkbaar blijft) → nog steeds één reeks.
         - break   : grondslag bijwerken, def_version ophogen; oude samples houden hun oude defv en
                     de nieuwe versie wordt als breukpunt vastgelegd (sparkline tekent een lijn)."""
-        copy = ("name", "unit", "definition", "direction", "threshold", "cadence", "meettype", "window")
+        copy = ("name", "unit", "definition", "direction", "threshold", "cadence", "meettype",
+                "window", "meetwijze")
         n = 0
         for it in self.kpis_for_def(did):
             for k in copy:
                 if k in fields:
                     it[k] = fields[k]
+            if "meetwijze" in fields:            # meetwijze bepaalt of handmatig invoeren mag
+                it["auto"] = fields["meetwijze"] == "systeem"
             it["def_version"] = int(version)
             if migration == "backcast":
                 for s in it.get("samples", []):

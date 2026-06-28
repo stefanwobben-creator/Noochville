@@ -362,12 +362,23 @@ def seed_catalog(store: DefinitionStore, owner: str = "librarian") -> int:
     """Laad de zaad-catalogus idempotent in (dedup op naam+bron). Geeft het aantal toegevoegde
     definities terug. Tegelijk de praktijktoets op het schema: een ongeldige zaad-regel zou hier
     None opleveren en dus niet worden toegevoegd (de test dekt dit af)."""
+# standaard meetwijze per bron (de Librarian kan dit per definitie overschrijven)
+_SOURCE_MEETWIJZE = {"survey": "enquete", "impact": "handmatig", "": "handmatig"}
+
+
+def _meetwijze_for(source: str) -> str:
+    # alles wat uit een systeem/API/berekening komt = 'systeem'; enquête en impact afwijkend
+    return _SOURCE_MEETWIJZE.get(source, "systeem")
+
+
+def seed_catalog(store: DefinitionStore, owner: str = "librarian") -> int:
     added = 0
     for entry in _DEFINITION_SEED:
         e = dict(entry)
         name, source = e.pop("name"), e.get("source", "")
         if store.find(name, source) is not None:
             continue
+        e.setdefault("meetwijze", _meetwijze_for(source))
         if store.add(name, owner=owner, provenance="seed", **e):  # **e bevat source=gsc/plausible/...
             added += 1
     return added
