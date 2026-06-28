@@ -7,11 +7,11 @@ from nooch_village.cockpit import _e, _page, _banner
 from nooch_village.cockpit2_util import _name, _bron_html
 from nooch_village.metric_schema import (CADANS_LABEL, MEETTYPE_LABEL,
                                          TIJD_LABEL, BRUIKBAAR_LABEL, VERIFICATIE_LABEL)
-from nooch_village.cockpit2 import (
+from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD
+from nooch_village.views.metrics import (
     _num, _dir_select, _cad_select, _mt_select, _mw_select, _opt_select,
     _aard_chips, _mw_chip,
     _RICHTING, _ORIGIN_LABEL,
-    _EXTRA_CSS, _BUILD,
 )
 
 if TYPE_CHECKING:

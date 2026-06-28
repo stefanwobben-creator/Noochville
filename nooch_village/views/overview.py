@@ -18,7 +18,7 @@ from nooch_village.views.projects import (
     _projects_tab_html, _scope_text, _person_projects_html, _modal_html,
 )
 from nooch_village import org, ai_match
-from nooch_village.cockpit2 import _EXTRA_CSS, _BUILD, _CIRCLE_TABS, _ROLE_TABS
+from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD, _CIRCLE_TABS, _ROLE_TABS
 
 if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores

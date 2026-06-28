@@ -15,7 +15,7 @@ from nooch_village.cockpit2_util import (
 from nooch_village.views.feed import _mentionables, _feed_entry_html
 from nooch_village.views.checklists import _checklists_html
 from nooch_village import org
-from nooch_village.cockpit2 import _EXTRA_CSS
+from nooch_village.cockpit2_util import _EXTRA_CSS
 
 if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores

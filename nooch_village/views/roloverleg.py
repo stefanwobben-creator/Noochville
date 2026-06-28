@@ -5,9 +5,7 @@ from typing import TYPE_CHECKING
 
 from nooch_village.cockpit import _e, _page
 from nooch_village.cockpit2_util import _name, _md, _psec, _IC_CHECK, _IC_CHAT
-# Helpers die nog in cockpit2 leven; import is veilig omdat cockpit2.py dit bestand pas
-# laadt nadat _EXTRA_CSS en _match_ladder zijn gedefinieerd (zie einde van cockpit2.py).
-from nooch_village.cockpit2 import _EXTRA_CSS, _match_ladder
+from nooch_village.cockpit2_util import _EXTRA_CSS
 
 if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores
@@ -150,6 +148,7 @@ def _rov_ai_kladblok(st: _Stores, item: dict, mode: str = "", ask=None):
         return ask(prompt)
     try:
         from nooch_village import llm
+        from nooch_village.cockpit2 import _match_ladder
         return llm.reason(prompt, ladder=_match_ladder())
     except Exception:
         return None

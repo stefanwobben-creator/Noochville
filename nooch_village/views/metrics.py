@@ -17,7 +17,7 @@ from nooch_village.metric_schema import (
 )
 from nooch_village.metrics import window_cutoff, filter_samples
 from nooch_village import org
-from nooch_village.cockpit2 import _EXTRA_CSS, _BUILD
+from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD
 
 if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores

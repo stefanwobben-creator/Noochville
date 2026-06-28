@@ -6,15 +6,11 @@ from nooch_village import org
 from nooch_village.cockpit import _e, _page
 from nooch_village.cockpit2_util import _name, _initials, _psec, _IC_CHECK, _IC_INFO
 from nooch_village.werkoverleg import STEPS as _WO_STEPS
-# Helpers die nog in cockpit2 leven (toekomstige broks verplaatsen ze verder).
-# De import staat laag in cockpit2.py (na alle definities), dus de gedeeltelijk
-# geladen module heeft deze namen al wanneer dit bestand wordt ingeladen.
-from nooch_village.cockpit2 import (
-    _EXTRA_CSS,
-    _members_of_circle, _spark_svg, _tile_meta,
-    _fetch, _num, _agg,
-    _metrics_tab_html, _checklists_tab_html, _projects_tab_html,
-)
+from nooch_village.cockpit2_util import _EXTRA_CSS
+from nooch_village.views.overview import _members_of_circle
+from nooch_village.views.metrics import _spark_svg, _tile_meta, _fetch, _num, _agg, _metrics_tab_html
+from nooch_village.views.checklists import _checklists_tab_html
+from nooch_village.views.projects import _projects_tab_html
 
 if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores
