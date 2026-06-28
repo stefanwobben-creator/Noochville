@@ -75,6 +75,61 @@ def test_seed_catalog_idempotent(tmp_path):
     assert any(s.current(d["id"])["cadence"] == "uur" for d in s.all())
 
 
+def test_kpi_uit_catalogus_en_defv(tmp_path):
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    rid = "mother_earth__nooch__marketing_lead"
+    # pak een bestaande catalogus-definitie (Bezoekers Plausible)
+    d = st.defs.by_name("Bezoekers (Plausible)")
+    assert d is not None
+    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [d["id"]], "next": ["/"]})
+    st = cockpit2._Stores(dd)
+    it = [i for i in st.metrics.for_node(rid) if i.get("kind") == "kpi"][0]
+    assert it["def_id"] == d["id"] and it["def_version"] == 1
+    assert it["origin"] == "plausible" and it["source"] == ""   # handmatig invoerbaar, herkomst bewaard
+    assert it["cadence"] == "dag" and it["unit"] == "bezoekers"
+    # meting krijgt het versiestempel defv
+    cockpit2.dispatch(dd, "m_sample", {"mid": [it["id"]], "value": ["120"], "next": ["/"]})
+    s = cockpit2._Stores(dd).metrics.get(it["id"])["samples"][0]
+    assert s["value"] == 120.0 and s["defv"] == 1
+
+
+def test_zoek_op_naam_en_losse_kpi_met_delen(tmp_path):
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    rid = "mother_earth__nooch__marketing_lead"
+    # knows-exactly: zoeken op naam koppelt aan de catalogus
+    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_name": ["Omzet (Shopify)"], "next": ["/"]})
+    st = cockpit2._Stores(dd)
+    it = [i for i in st.metrics.for_node(rid) if i.get("kind") == "kpi"][0]
+    assert it["def_id"] and it["origin"] == "shopify"
+    # losse KPI met 'deel in catalogus' maakt een nieuwe gedeelde definitie
+    n0 = len(st.defs.all())
+    cockpit2.dispatch(dd, "m_add_kpi", {"node": [rid], "pick": ["manual"], "name": ["Retourpercentage"],
+                                        "unit": ["%"], "direction": ["down"], "share": ["1"], "next": ["/"]})
+    st = cockpit2._Stores(dd)
+    assert len(st.defs.all()) == n0 + 1
+    nk = [i for i in st.metrics.for_node(rid) if i.get("name") == "Retourpercentage"][0]
+    assert nk["def_id"] and nk["def_version"] == 1
+
+
+def test_rol_aanbevelingen_in_picker(tmp_path):
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    rid = "mother_earth__nooch__marketing_lead"
+    rec = st.records.get(rid)
+    page = cockpit2.render_node(st, rid, "metrics", csrf_token="t")
+    assert "+ KPI toevoegen" in page and "Voor jouw rol" in page and "id='cat-defs'" in page
+    # relevantie: voor een marketing-rol komen marketing/SEO-bronnen bovendrijven
+    recs = [c["name"] for _did, c in cockpit2._role_relevant_defs(st, rec, 8)]
+    assert recs, "verwacht aanbevelingen voor de marketing-rol"
+
+
 def test_store_in_cockpit(tmp_path):
     from nooch_village import cockpit2
     dd = str(tmp_path / "poc")

@@ -238,6 +238,14 @@ class DefinitionStore:
                 return d
         return None
 
+    def by_name(self, name: str) -> dict | None:
+        """Eerste definitie met deze huidige naam (bron-onafhankelijk) — voor 'knows exactly'-zoek."""
+        key = (name or "").strip().lower()
+        for d in self._d.values():
+            if (self.current(d["id"]) or {}).get("name", "").strip().lower() == key:
+                return d
+        return None
+
 
 def seed_catalog(store: DefinitionStore, owner: str = "librarian") -> int:
     """Laad de zaad-catalogus idempotent in (dedup op naam+bron). Geeft het aantal toegevoegde

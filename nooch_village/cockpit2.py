@@ -86,6 +86,14 @@ ul.clean li:last-child{border-bottom:none}
 .kpi-exp{color:var(--subtle);display:inline-flex;align-items:center;margin-left:.3rem}
 .kpi-exp:hover{color:var(--green-dark)}
 .kpi-exp svg{width:15px;height:15px}
+.def-pick{display:flex;flex-direction:column;gap:.6rem;margin-top:.5rem}
+.def-recs{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem}
+.def-rec{display:inline}
+.def-grp{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem;padding:.25rem 0;border-bottom:1px solid var(--border)}
+.def-grp>.muted{flex:0 0 9rem}
+.def-all{margin-top:.2rem}
+.def-all>summary{cursor:pointer;list-style:none}
+.def-share{display:flex;align-items:center;gap:.4rem;font-size:.82rem;color:var(--gray);margin:.2rem 0}
 .card.arch{opacity:.6}
 .pcard{cursor:pointer;position:relative;transition:box-shadow .1s,border-color .1s}
 .pcard:hover{border-color:var(--green);box-shadow:0 0 0 2px var(--green-tint)}
@@ -1791,9 +1799,13 @@ _RICHTING = {"up": "hoger = beter", "down": "lager = beter", "": "—"}
 def _grondslag(st: _Stores, source: str, measure: str) -> dict:
     if source.startswith("kpi:"):
         it = st.metrics.get(source[4:]) or {}
+        origin = it.get("origin", "")
+        bron = (_ORIGIN_LABEL.get(origin, origin) if origin
+                else "Bron-KPI" if it.get("source") else "Handmatig (jij voert in)")
+        if it.get("def_id"):
+            bron += f" · catalogus v{it.get('def_version', 1)}"
         return {"definitie": it.get("definition", ""), "eenheid": it.get("unit", ""),
-                "bron": "Bron-KPI" if it.get("source") else "Handmatig (jij voert in)",
-                "richting": it.get("direction", ""), "drempel": it.get("threshold"),
+                "bron": bron, "richting": it.get("direction", ""), "drempel": it.get("threshold"),
                 "cadans": it.get("cadence", ""), "meettype": it.get("meettype", ""),
                 "venster": it.get("window", "")}
     if source.startswith("werk:"):
@@ -1955,6 +1967,132 @@ def _kpi_data_row(st: _Stores, item: dict, csrf: str) -> str:
             f"<span class='kpidata-v'>{val}{unit}</span>{_spark_svg(pts)}{add}{exp}{rm}</div>")
 
 
+# bron-herkomst → leesbaar label (voor de grondslag-popover van een catalogus-KPI)
+_ORIGIN_LABEL = {
+    "gsc": "Google Search Console", "plausible": "Plausible", "shopify": "Shopify",
+    "trends": "Google Trends", "keywords_everywhere": "Keywords Everywhere", "ngram": "Google Ngram",
+    "openalex": "OpenAlex", "semantic_scholar": "Semantic Scholar", "site_health": "Site health",
+    "competitor_news": "Nieuws-monitor", "linkbuilding": "Linkbuilding", "budget": "Budget",
+    "werkoverleg": "Werkoverleg-archief",
+}
+# lichte bron→functie-affiniteit bovenop tekstoverlap (zodat de juiste rol de juiste bron ziet)
+_SOURCE_AFFINITY = {
+    "gsc": "marketing seo zoek vindbaarheid content website",
+    "trends": "marketing seo zoek trend content",
+    "keywords_everywhere": "marketing seo zoek content",
+    "plausible": "marketing website verkeer bezoekers analytics",
+    "shopify": "verkoop sales omzet order webshop commerce conversie",
+    "ngram": "content cultuur taal merk",
+    "openalex": "onderzoek kennis wetenschap bewijs",
+    "semantic_scholar": "onderzoek kennis wetenschap bewijs",
+    "site_health": "website techniek beschikbaarheid developer ontwikkelaar",
+    "competitor_news": "concurrent markt merk nieuws",
+    "linkbuilding": "marketing seo link backlink",
+    "budget": "budget kosten inkoop financ",
+    "werkoverleg": "facilitator overleg proces governance gezondheid",
+}
+_DEF_STOP = {"beheert", "bewaakt", "zorgt", "rondom", "binnen", "deze", "wordt", "worden"}
+
+
+def _def_tokens(text: str) -> set:
+    return {w for w in re.findall(r"[a-zà-ÿ]+", (text or "").lower())
+            if len(w) > 3 and w not in _DEF_STOP}
+
+
+def _role_text(rec) -> str:
+    d = rec.definition
+    parts = [getattr(d, "name", "") or "", d.purpose or ""]
+    parts += list(d.accountabilities or [])
+    parts += list(d.domains or [])
+    return " ".join(parts)
+
+
+def _role_relevant_defs(st: _Stores, rec, limit: int = 6) -> list[tuple[str, dict]]:
+    """Catalogus-definities gerangschikt op relevantie voor deze rol (knows-approximately).
+    Score = tekstoverlap (rol-purpose/accountabilities/domeinen × definitie) + bron-affiniteit."""
+    rt = _def_tokens(_role_text(rec))
+    if not rt:
+        return []
+    scored = []
+    for d in st.defs.all():
+        cur = st.defs.current(d["id"]) or {}
+        dt = _def_tokens(cur.get("name", "") + " " + cur.get("definition", ""))
+        aff = _def_tokens(_SOURCE_AFFINITY.get(cur.get("source", ""), ""))
+        score = len(rt & dt) * 2 + len(rt & aff)
+        if score > 0:
+            scored.append((score, cur.get("name", ""), d["id"], cur))
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    return [(did, cur) for _s, _n, did, cur in scored[:limit]]
+
+
+def _catalog_picker(st: _Stores, rec, csrf: str, base: str) -> str:
+    """Picker voor een nieuwe KPI: catalogus is de norm (knows-exactly zoek + knows-approximately
+    aanbevelingen voor de rol), met een losse KPI als toegestane uitzondering."""
+    hidden = (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+              f"<input type='hidden' name='node' value='{_e(rec.id)}'>"
+              f"<input type='hidden' name='next' value='{base}'>")
+    allcur = [(d["id"], st.defs.current(d["id"]) or {}) for d in st.defs.all()]
+    allcur = [(i, c) for i, c in allcur if c.get("name")]
+
+    # knows exactly: zoekveld met typeahead over alle catalogus-namen
+    dl = "".join(f"<option value=\"{_e(c['name'])}\">" for _i, c in sorted(allcur, key=lambda x: x[1]["name"]))
+    search = (f"<form method='post' action='/action' class='m-addform'>{hidden}"
+              f"<label class='att-lbl'>Zoek een indicator (uit de catalogus)</label>"
+              f"<input name='def_name' list='cat-defs' placeholder='typ een naam, bijv. Omzet' autocomplete='off'>"
+              f"<datalist id='cat-defs'>{dl}</datalist>"
+              f"<button class='btn ok sm' type='submit' name='action' value='m_add_from_def'>Toevoegen</button></form>")
+
+    # knows approximately: aanbevolen voor deze rol
+    chips = ""
+    for did, cur in _role_relevant_defs(st, rec, 6):
+        chips += (f"<form method='post' action='/action' class='def-rec'>{hidden}"
+                  f"<input type='hidden' name='def_id' value='{_e(did)}'>"
+                  f"<button class='btn ghost sm' type='submit' name='action' value='m_add_from_def' "
+                  f"title='{_e(cur.get('definition', ''))}'>+ {_e(cur['name'])}</button></form>")
+    recblock = f"<div class='def-recs'><span class='muted'>Voor jouw rol:</span>{chips}</div>" if chips else ""
+
+    # vangnet: alle definities gegroepeerd per bron (voor wie scrollend zoekt)
+    bysrc: dict[str, list] = {}
+    for did, c in sorted(allcur, key=lambda x: x[1]["name"]):
+        bysrc.setdefault(c.get("source", ""), []).append((did, c))
+    groups = ""
+    for s in sorted(bysrc):
+        items = "".join(
+            f"<form method='post' action='/action' class='def-rec'>{hidden}"
+            f"<input type='hidden' name='def_id' value='{_e(did)}'>"
+            f"<button class='btn ghost sm' type='submit' name='action' value='m_add_from_def' "
+            f"title='{_e(c.get('definition', ''))}'>+ {_e(c['name'])}</button></form>"
+            for did, c in bysrc[s])
+        groups += f"<div class='def-grp'><span class='muted'>{_e(_ORIGIN_LABEL.get(s, s or 'overig'))}</span>{items}</div>"
+    allblock = f"<details class='def-all'><summary class='muted'>Alle definities ({len(allcur)})</summary>{groups}</details>"
+
+    # uitzondering: losse (niet-gedeelde) KPI of een nieuwe gedeelde definitie
+    src_opts = "".join(f"<option value='source:{k}'>{_e(v['name'])} (uit data)</option>"
+                       for k, v in _SOURCE_KPIS.items())
+    loose = (f"<details class='m-add'><summary class='att-lbl' style='cursor:pointer'>Losse KPI of nieuwe definitie</summary>"
+             f"<form method='post' action='/action' class='m-addform'>{hidden}"
+             f"<select name='pick'><option value='manual'>Handmatige KPI</option>{src_opts}</select>"
+             f"<input name='name' placeholder='Naam' autocomplete='off'>"
+             f"<input name='unit' placeholder='Eenheid (€, %, stuks)' autocomplete='off'>"
+             f"<input name='definition' list='gr-defs' placeholder='Definitie: wat telt mee? (grondslag)' autocomplete='off'>"
+             f"{_definition_datalist(st)}"
+             f"<select name='direction'><option value=''>Richting (geen)</option>"
+             f"<option value='up'>hoger = beter</option><option value='down'>lager = beter</option></select>"
+             f"<input name='threshold' inputmode='decimal' placeholder='Drempel (optioneel)' autocomplete='off'>"
+             f"<select name='cadence' title='meetmoment: hoe vaak'>"
+             + "".join(f"<option value='{k}'{' selected' if k == 'ad-hoc' else ''}>meet: {_e(v)}</option>"
+                       for k, v in CADANS_LABEL.items())
+             + "</select>"
+             f"<select name='meettype' title='meetmoment: hoe een waarde geldt'>"
+             + "".join(f"<option value='{k}'>{_e(v)}</option>" for k, v in MEETTYPE_LABEL.items())
+             + "</select>"
+             f"<label class='def-share'><input type='checkbox' name='share' value='1'> Deel in de catalogus (Librarian)</label>"
+             f"<button class='btn ok sm' type='submit' name='action' value='m_add_kpi'>KPI toevoegen</button></form></details>")
+
+    return (f"<details class='m-add'><summary class='btn sm'>+ KPI toevoegen</summary>"
+            f"<div class='def-pick'>{search}{recblock}{allblock}{loose}</div></details>")
+
+
 def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "maand", nav: str = "") -> str:
     cutoff = window_cutoff(win)
     base = f"/node?id={_e(rec.id)}&tab=metrics"
@@ -1978,30 +2116,7 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "maand", nav:
     # 2. Eigen KPI's (data invoeren) — handmatige KPI's worden vanzelf bron in de wizard
     kpis = [i for i in st.metrics.for_node(rec.id) if i.get("kind") == "kpi"]
     rows = "".join(_kpi_data_row(st, i, csrf) for i in kpis) if kpis else "<p class='muted'>Nog geen eigen KPI's.</p>"
-    define = ""
-    if csrf:
-        src_opts = "".join(f"<option value='source:{k}'>{_e(v['name'])} (uit data)</option>"
-                           for k, v in _SOURCE_KPIS.items())
-        define = (f"<details class='m-add'><summary class='btn sm'>+ Eigen KPI (data)</summary>"
-                  f"<form method='post' action='/action' class='m-addform'>"
-                  f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='node' value='{_e(rec.id)}'>"
-                  f"<input type='hidden' name='next' value='{base}'>"
-                  f"<select name='pick'><option value='manual'>Nieuwe KPI (handmatig)</option>{src_opts}</select>"
-                  f"<input name='name' placeholder='Naam (bij handmatig)' autocomplete='off'>"
-                  f"<input name='unit' placeholder='Eenheid (€, %, stuks)' autocomplete='off'>"
-                  f"<input name='definition' list='gr-defs' placeholder='Definitie: wat telt mee? (grondslag — kies bestaande of typ nieuw)' autocomplete='off'>"
-                  f"{_definition_datalist(st)}"
-                  f"<select name='direction'><option value=''>Richting (geen)</option>"
-                  f"<option value='up'>hoger = beter</option><option value='down'>lager = beter</option></select>"
-                  f"<input name='threshold' inputmode='decimal' placeholder='Drempel (signaal, optioneel)' autocomplete='off'>"
-                  f"<select name='cadence' title='meetmoment: hoe vaak'>"
-                  + "".join(f"<option value='{k}'{' selected' if k == 'ad-hoc' else ''}>meet: {_e(v)}</option>"
-                            for k, v in CADANS_LABEL.items())
-                  + f"</select>"
-                  f"<select name='meettype' title='meetmoment: hoe een waarde geldt'>"
-                  + "".join(f"<option value='{k}'>{_e(v)}</option>" for k, v in MEETTYPE_LABEL.items())
-                  + f"</select>"
-                  f"<button class='btn ok sm' type='submit' name='action' value='m_add_kpi'>KPI toevoegen</button></form></details>")
+    define = _catalog_picker(st, rec, csrf, base) if csrf else ""
     out += f"<div class='c2-sec'><div class='cl-head'><h3>Eigen KPI's</h3>{define}</div>{rows}</div>"
 
     # 3. Links naar externe bestanden
@@ -4157,11 +4272,38 @@ def dispatch(data_dir: str, action: str, form: dict):
                                     (cat or {}).get("unit", ""), source=src) if cat else None
             msg = "✓ KPI uit data toegevoegd" if it else "⛔ onbekende bron-KPI"
         else:
+            # losse KPI; optioneel 'deel in catalogus' → maak eerst een gedeelde definitie aan
+            def_id, def_version = "", 0
+            if g("share") == "1":
+                d = st.defs.add(g("name"), owner=g("node"), provenance="sensed",
+                                unit=g("unit"), definition=g("definition"), direction=g("direction"),
+                                cadence=g("cadence") or "ad-hoc", meettype=g("meettype") or "snapshot",
+                                window=g("window"))
+                if d:
+                    def_id, def_version = d["id"], st.defs.current_version_no(d["id"])
             it = st.metrics.add_kpi(g("node"), g("name"), g("unit"), definition=g("definition"),
                                     direction=g("direction"), threshold=g("threshold"),
                                     cadence=g("cadence") or "ad-hoc", meettype=g("meettype") or "snapshot",
-                                    window=g("window"))
-            msg = "✓ KPI toegevoegd" if it else "⛔ geef een naam"
+                                    window=g("window"), def_id=def_id, def_version=def_version)
+            msg = ("✓ KPI + catalogus-definitie toegevoegd" if (it and def_id)
+                   else "✓ KPI toegevoegd" if it else "⛔ geef een naam")
+    elif action == "m_add_from_def":
+        did = g("def_id")
+        if not did and g("def_name"):
+            d = st.defs.by_name(g("def_name"))
+            did = d["id"] if d else ""
+        cur = st.defs.current(did) if did else None
+        if cur:
+            # catalogus-KPI: handmatig invoerbaar; herkomst bewaard als origin (geen live-feed)
+            it = st.metrics.add_kpi(g("node"), cur.get("name"), cur.get("unit", ""),
+                                    definition=cur.get("definition", ""), direction=cur.get("direction", ""),
+                                    threshold=cur.get("threshold"), cadence=cur.get("cadence", "ad-hoc"),
+                                    meettype=cur.get("meettype", "snapshot"), window=cur.get("window", ""),
+                                    def_id=did, def_version=st.defs.current_version_no(did),
+                                    origin=cur.get("source", ""))
+            msg = "✓ KPI uit catalogus toegevoegd" if it else "⛔ kon KPI niet toevoegen"
+        else:
+            msg = "⛔ kies een bestaande definitie uit de catalogus"
     elif action == "m_add_link":
         it = st.metrics.add_link(g("node"), g("name"), g("url"))
         msg = "✓ link toegevoegd" if it else "⛔ geef naam en URL"

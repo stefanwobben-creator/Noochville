@@ -83,7 +83,8 @@ class MetricStore:
 
     def add_kpi(self, node: str, name: str, unit: str = "", source: str = "",
                 definition: str = "", direction: str = "", threshold=None,
-                cadence: str = "ad-hoc", meettype: str = "snapshot", window: str = "") -> dict | None:
+                cadence: str = "ad-hoc", meettype: str = "snapshot", window: str = "",
+                def_id: str = "", def_version: int = 0, origin: str = "") -> dict | None:
         if not node:
             return None
         # grondslag + meetmoment worden gevalideerd/genormaliseerd door het indicator-schema
@@ -94,7 +95,11 @@ class MetricStore:
         if spec is None:                       # ongeldig (lege naam): KPI niet aanmaken
             return None
         mid = uuid.uuid4().hex[:12]
-        it = {"id": mid, "kind": "kpi", "node": node, **spec, "samples": [], "created_at": time.time()}
+        # def_id/def_version koppelen de KPI aan een gedeelde catalogus-definitie (Librarian).
+        # Leeg = een losse, niet-gedeelde KPI (de toegestane uitzondering).
+        it = {"id": mid, "kind": "kpi", "node": node, **spec, "samples": [],
+              "def_id": (def_id or "").strip(), "def_version": int(def_version or 0),
+              "origin": (origin or "").strip(), "created_at": time.time()}
         self._items[mid] = it
         self._save()
         return it
@@ -107,7 +112,10 @@ class MetricStore:
             v = float(value)
         except (TypeError, ValueError):
             return False
-        it.setdefault("samples", []).append({"at": at or time.time(), "value": v})
+        # defv = de definitie-versie waaronder gemeten is; nodig om later te back-casten of een
+        # reeksbreuk te tonen. 0 voor een losse KPI zonder catalogus-definitie.
+        it.setdefault("samples", []).append({"at": at or time.time(), "value": v,
+                                             "defv": int(it.get("def_version", 0))})
         self._save()
         return True
 
