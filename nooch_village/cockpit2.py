@@ -455,6 +455,8 @@ ul.clean li:last-child{border-bottom:none}
 .wo-sumrow{display:flex;justify-content:space-between;gap:1rem;padding:.3rem 0;border-bottom:1px solid var(--border)}
 .cfetti{position:fixed;top:-14px;width:9px;height:9px;border-radius:2px;z-index:9999;pointer-events:none;animation:cfall 2.2s linear forwards}
 @keyframes cfall{to{transform:translateY(110vh) rotate(600deg);opacity:.5}}
+.c2-toast{position:fixed;left:50%;bottom:2.2rem;transform:translateX(-50%) translateY(8px);z-index:9998;background:var(--green-dark);color:#fff;padding:.45rem .9rem;border-radius:var(--radius-pill);font-size:.82rem;font-weight:700;box-shadow:0 6px 20px rgba(0,0,0,.2);opacity:0;transition:opacity .15s,transform .15s;pointer-events:none}
+.c2-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .pdetail-h h2{margin:.1rem 0 .5rem;font-family:var(--font-display);font-size:1.35rem;line-height:1.2}
 .psec{margin:0 0 1.15rem}
 .psec-h{display:flex;align-items:center;gap:.4rem;color:var(--subtle);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:.45rem}
@@ -1127,6 +1129,9 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "var d=document.createElement('div');d.className='cfetti';d.style.left=(Math.random()*100)+'vw';"
         "d.style.background=c[i%4];d.style.animationDelay=(Math.random()*0.4)+'s';document.body.appendChild(d);"
         "(function(x){setTimeout(function(){x.remove();},2400);})(d);}}"
+        "function toast(t){var d=document.createElement('div');d.className='c2-toast';d.textContent=t;"
+        "document.body.appendChild(d);setTimeout(function(){d.classList.add('show');},10);"
+        "setTimeout(function(){d.classList.remove('show');},1600);setTimeout(function(){d.remove();},2000);}"
         "function wire(){bd.querySelectorAll('form').forEach(function(f){f.addEventListener('submit',function(e){"
         "e.preventDefault();dirty=true;var act=(e.submitter&&e.submitter.value)||'';var opts;"
         "if(f.classList.contains('filepost')){opts={method:'POST',body:new FormData(f)};}"
@@ -1135,7 +1140,7 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "fetch('/action',opts).then(function(){"
         "if(act==='wo_close'||act==='rov2_end'){confetti();setTimeout(shut,700);}"
         "else if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'){shut();}"
-        "else{var r=f.getAttribute('data-reopen');if(r){last=r;}reopen();}});});});"
+        "else{var r=f.getAttribute('data-reopen');if(r){last=r;}reopen();toast('\\u2713 opgeslagen');}});});});"
         "bd.querySelectorAll('textarea').forEach(mentionWire);"
         "bd.querySelectorAll('a.js-modal[data-href]').forEach(function(a){"
         "a.addEventListener('click',function(e){e.preventDefault();openCard(a.getAttribute('data-href'));});});"
@@ -1367,7 +1372,7 @@ def _cl_row(st: _Stores, item: dict, csrf: str) -> str:
             f"<div class='cl-act'>{_cl_spark(item)}<span class='cl-checks'>{rep}</span>{danger}</div></div>")
 
 
-def _checklists_tab_html(st: _Stores, rec, csrf: str = "", flt: str = "due") -> str:
+def _checklists_tab_html(st: _Stores, rec, csrf: str = "", flt: str = "due", nav: str = "") -> str:
     is_c = org.is_circle(rec)
     items = st.checklists.for_node(rec.id)
     base = f"/node?id={_e(rec.id)}&tab=checklists"
@@ -1385,6 +1390,9 @@ def _checklists_tab_html(st: _Stores, rec, csrf: str = "", flt: str = "due") -> 
     # filter-schakelaar
     def fl(key, lbl):
         on = " on" if flt == key else ""
+        if nav:   # in het werkoverleg: blijf in de modal
+            u = f"{nav}&clf={key}"
+            return f"<a class='cl-filter{on} js-modal' href='{u}' data-href='{u}'>{lbl}</a>"
         return f"<a class='cl-filter{on}' href='{base}&clf={key}'>{lbl}</a>"
     bar = f"<div class='cl-bar'><span class='muted'>Toon:</span> {fl('due', 'Nu te doen')} {fl('all', 'Alles')}</div>"
 
@@ -1777,12 +1785,18 @@ def _kpi_data_row(st: _Stores, item: dict, csrf: str) -> str:
             f"<span class='kpidata-v'>{val}{unit}</span>{_spark_svg(pts)}{add}{rm}</div>")
 
 
-def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "maand") -> str:
+def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "maand", nav: str = "") -> str:
     cutoff = window_cutoff(win)
     base = f"/node?id={_e(rec.id)}&tab=metrics"
+
+    def pl(k, lbl):
+        on = " on" if win == k else ""
+        if nav:   # in het werkoverleg: blijf in de modal
+            u = f"{nav}&mw={k}"
+            return f"<a class='cl-filter{on} js-modal' href='{u}' data-href='{u}'>{_e(lbl)}</a>"
+        return f"<a class='cl-filter{on}' href='{base}&mw={k}'>{_e(lbl)}</a>"
     wbar = ("<div class='cl-bar'><span class='muted'>Periode:</span> "
-            + "".join(f"<a class='cl-filter{(' on' if win == k else '')}' href='{base}&mw={k}'>{_e(lbl)}</a>"
-                      for k, lbl in _MW) + "</div>")
+            + "".join(pl(k, lbl) for k, lbl in _MW) + "</div>")
     head = f"<div class='cl-head'><h3>Metrics</h3>{_tile_wizard(st, rec, csrf) if csrf else ''}</div>{wbar}"
 
     # 1. Dashboard van tegels (bron + measure + dimensie + vorm), volgt de periode-keuze
@@ -2566,10 +2580,12 @@ def _wo_checklist(st: _Stores, crec, csrf: str) -> str:
         f"<span class='chip {'muted' if st.werk.is_present(crec.id, p.id) else 'coral'}'>"
         f"{'✗ ' if not st.werk.is_present(crec.id, p.id) else ''}{_e(p.name)}</span>" for p in ppl)
     who = f"<div class='wo-who'><span class='muted'>Rapporteren:</span> {chips}</div>" if ppl else ""
-    return who + _checklists_tab_html(st, crec, csrf, "due")
+    # In het overleg: toon ALLES (afgevinkte items met hun resultaat blijven staan) en blijf in de modal.
+    nav = f"/werkoverleg?circle={crec.id}&step=checklist"
+    return who + _checklists_tab_html(st, crec, csrf, "all", nav=nav)
 
 
-def _wo_metrics(st: _Stores, crec, csrf: str, kpi: str = "") -> str:
+def _wo_metrics(st: _Stores, crec, csrf: str, kpi: str = "", win: str = "maand") -> str:
     """Stap 3: metrics-ronde. Hergebruikt het dashboard; optioneel één tegel uitvergroot met
     trend + tabel + een knop voor Noochie-duiding."""
     base = f"/werkoverleg?circle={crec.id}&step=metrics"
@@ -2600,7 +2616,7 @@ def _wo_metrics(st: _Stores, crec, csrf: str, kpi: str = "") -> str:
         u = f"{base}&kpi={t['id']}"
         links += f"<a class='chip outline js-modal' href='{u}' data-href='{u}'>{_e(_tile_meta(st, crec, t))}</a> "
     tabrow = f"<div class='wo-kpitabs'>{links}</div>" if links else ""
-    return focus + tabrow + _metrics_tab_html(st, crec, csrf, "maand")
+    return focus + tabrow + _metrics_tab_html(st, crec, csrf, win, nav=base)
 
 
 def _wo_agenda(st: _Stores, crec, csrf: str, iid: str = "") -> str:
@@ -2777,7 +2793,7 @@ def _wo_summary(st: _Stores, crec, csrf: str) -> str:
 
 
 def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_token: str = "",
-                       fragment: bool = False, iid: str = "", kpi: str = "") -> str:
+                       fragment: bool = False, iid: str = "", kpi: str = "", mw: str = "maand") -> str:
     """Werkoverleg-modal: links de vaste stap-navigatie, rechts de inhoud per stap. De inhoud
     HERGEBRUIKT de bestaande schermen (members/checklists/metrics/projecten). Alleen de secretaris
     opent en sluit. Brok 1: frame + ingebedde schermen; de overleg-specifieke stappen volgen."""
@@ -2824,7 +2840,7 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
     elif cur == "checklist":
         content = _wo_checklist(st, crec, csrf_token)
     elif cur == "metrics":
-        content = _wo_metrics(st, crec, csrf_token, kpi)
+        content = _wo_metrics(st, crec, csrf_token, kpi, win=mw)
     elif cur == "projecten":
         content = _projects_tab_html(st, crec, csrf_token, group="")
     elif cur == "agenda":
@@ -4093,7 +4109,8 @@ def make_handler(data_dir: str, csrf_token: str):
                                                     (qs.get("step") or ["checkin"])[0],
                                                     csrf_token=csrf_token, fragment=fr,
                                                     iid=(qs.get("iid") or [""])[0],
-                                                    kpi=(qs.get("kpi") or [""])[0]), fr))
+                                                    kpi=(qs.get("kpi") or [""])[0],
+                                                    mw=(qs.get("mw") or ["maand"])[0]), fr))
                 return
             if path == "/roloverleg2":
                 fr = (qs.get("fragment") or [""])[0] == "1"
