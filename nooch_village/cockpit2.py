@@ -423,7 +423,9 @@ ul.clean li:last-child{border-bottom:none}
 .wo-step.done{color:var(--green-dark)}
 .wo-step.done .wo-num{background:var(--green);color:#fff}
 .wo-sec{font-size:.8rem;margin-top:.4rem}
-.wo-sp-add{position:sticky;top:0;z-index:2;background:var(--surface);padding:.2rem 0;margin-bottom:.4rem}
+.wo-sp-add{margin:0}
+.wo-substeps{padding:.1rem 0 .3rem 1.6rem}
+.wo-substeps .rov-item{padding:.2rem .3rem}
 .wo-back-bar{margin:0 0 .8rem}
 .wo-back-bar.wo-back-foot{margin:1rem 0 0;padding-top:.8rem;border-top:1px solid var(--border)}
 .wo-mems:focus{outline:none}
@@ -2637,15 +2639,19 @@ def _wo_metrics(st: _Stores, crec, csrf: str, kpi: str = "", win: str = "maand")
     return focus + tabrow + _metrics_tab_html(st, crec, csrf, win, nav=base)
 
 
-def _wo_agenda_list(st: _Stores, crec, csrf: str, active_iid: str = "") -> str:
-    """Links in de agenda-stap: toevoegen + lijst van spanningen (zelfde patroon als het
-    governance-overleg). Klikken selecteert een spanning; de triage staat rechts."""
+def _wo_spanning_add(st: _Stores, crec, csrf: str) -> str:
+    """Spanning toevoegen — staat bovenaan de linkerkolom (boven de stappen), altijd bereikbaar."""
+    if not csrf:
+        return "<span class='muted'>—</span>"
     base = f"/werkoverleg?circle={crec.id}&step=agenda"
-    add = ""
-    if csrf:
-        add = (f"<form method='post' action='/action' class='rov-add wo-sp-add'>{_wo_hid(csrf, crec.id, base)}"
-               f"<input name='naam' placeholder='Spanning… (-SW voor initialen)' autocomplete='off'>"
-               f"<button class='btn ok sm' type='submit' name='action' value='wo_ag_add'>+</button></form>")
+    return (f"<form method='post' action='/action' class='rov-add wo-sp-add'>{_wo_hid(csrf, crec.id, base)}"
+            f"<input name='naam' placeholder='Spanning… (-SW voor initialen)' autocomplete='off'>"
+            f"<button class='btn ok sm' type='submit' name='action' value='wo_ag_add'>+</button></form>")
+
+
+def _wo_spanning_items(st: _Stores, crec, csrf: str, active_iid: str = "") -> str:
+    """Ingebrachte spanningen — genest onder de Agenda-stap in het linkermenu (geen microcopy)."""
+    base = f"/werkoverleg?circle={crec.id}&step=agenda"
     rows = ""
     for it in st.werk.agenda(crec.id):
         done = it["status"] == "done"
@@ -2659,9 +2665,7 @@ def _wo_agenda_list(st: _Stores, crec, csrf: str, active_iid: str = "") -> str:
         rows += (f"<div class='rov-item{on}{(' done' if done else '')}'>"
                  f"<a class='js-modal rov-link' href='{url}' data-href='{url}'><span class='rov-title'>{_e(it['title'])}</span></a>"
                  f"{av}{rm}</div>")
-    if not rows:
-        rows = "<p class='muted'>Nog geen spanningen. Iedereen mag er een inbrengen.</p>"
-    return f"{add}<div class='rov-list'>{rows}</div>"
+    return rows
 
 
 def _wo_triage(st: _Stores, crec, csrf: str, item: dict) -> str:
@@ -2844,10 +2848,13 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
         cls = "wo-step" + (" on" if k == cur else "") + (" done" if done else "")
         nav += (f"<a class='{cls} js-modal' href='{url}' data-href='{url}'>"
                 f"<span class='wo-num'>{num}</span>{_e(lbl)}</a>")
-    left = _psec(_IC_CHECK, "Overleg", f"<div class='wo-nav'>{nav}</div>")
-    # Agenda-stap: spanningen (add + lijst) komen LINKS onder het menu, triage staat rechts.
-    if cur == "agenda":
-        left += _psec(_IC_INFO, "Spanningen", _wo_agenda_list(st, crec, csrf_token, iid))
+        if k == "agenda":   # ingebrachte spanningen genest onder de Agenda-stap
+            items = _wo_spanning_items(st, crec, csrf_token, iid)
+            if items:
+                nav += f"<div class='wo-substeps'>{items}</div>"
+    # Spanning toevoegen staat bovenaan (boven Check-in); de stappen eronder.
+    left = (_psec(_IC_INFO, "Spanningen", _wo_spanning_add(st, crec, csrf_token))
+            + _psec(_IC_CHECK, "Overleg", f"<div class='wo-nav'>{nav}</div>"))
 
     if cur == "checkin":
         content = _wo_checkin(st, crec, csrf_token)
