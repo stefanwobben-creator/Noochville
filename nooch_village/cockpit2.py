@@ -1694,6 +1694,22 @@ def _shopify_window(dd: str):
     return None
 
 
+# CO2 vermeden — VOORLOPIGE constanten (PCF-blocker open; herijken na verificatie).
+# vermeden per paar = conventioneel - Nooch PCF. Bron: content pillar + ISO 14067 (2030calculator).
+_CO2_CONVENTIONEEL = 13.6
+_CO2_NOOCH_PCF = 4.75
+_CO2_BRON_URL = "/carbon-footprint-of-shoes"
+
+
+def _co2_avoided(dd: str):
+    """Cumulatief vermeden CO2 = (conventioneel - Nooch PCF) x paren verkocht (Shopify)."""
+    w = _shopify_window(dd) or {}
+    pairs = w.get("pairs_sold")
+    if not isinstance(pairs, (int, float)):
+        return None
+    return round((_CO2_CONVENTIONEEL - _CO2_NOOCH_PCF) * pairs, 1)
+
+
 def _sources_for(st: _Stores, rec):
     """Zelf-beschrijvende bron-catalogus voor de tegel-wizard: elke bron declareert measures + dims.
     Op een cirkel tellen ook de handmatige KPI's van de onderliggende rollen mee."""
@@ -1705,6 +1721,8 @@ def _sources_for(st: _Stores, rec):
          "measures": [("pairs_sold", "Paren verkocht"), ("orders", "Orders"),
                       ("revenue", "Omzet"), ("aov", "Gem. orderwaarde")],
          "dims": [("none", "totaal"), ("country", "per land"), ("product", "per product")]},
+        {"id": "co2_avoided", "label": "CO2 vermeden",
+         "measures": [("avoided", "Vermeden (cumulatief)")], "dims": [("none", "totaal")]},
     ]
     # Werkoverleg-gezondheid (facilitator): leest het archief van de cirkel waar deze node onder valt.
     circle = rec.id if is_c else getattr(rec, "parent", None)
@@ -1781,6 +1799,8 @@ def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff):
             return {"kind": "breakdown", "rows": [(p, n) for p, n in w.get("top_products", [])]}
         unit = "EUR" if measure in ("revenue", "aov") else ("paren" if measure == "pairs_sold" else "")
         return {"kind": "number", "value": w.get(measure), "unit": unit}
+    if source == "co2_avoided":
+        return {"kind": "number", "value": _co2_avoided(st.dd), "unit": "kg CO2e"}
     if source.startswith("werk:"):
         return _werk_fetch(st, source[5:], measure, dim, cutoff)
     if source.startswith("kpi:"):
@@ -1999,6 +2019,12 @@ def _grondslag(st: _Stores, source: str, measure: str) -> dict:
                 "venster": it.get("window", ""), "meetwijze": it.get("meetwijze", ""),
                 "benchmark": it.get("benchmark", ""), "bron_url": it.get("bron_url", ""),
                 "verificatie": it.get("verificatie", "")}
+    if source == "co2_avoided":
+        return {"definitie": f"(conventioneel {_CO2_CONVENTIONEEL} − Nooch PCF {_CO2_NOOCH_PCF}) × paren verkocht.",
+                "eenheid": "kg CO2e", "bron": "IRIS+ OI2764 / berekend (ISO 14067)", "richting": "up",
+                "drempel": None, "cadans": "maand", "meettype": "cumulatief", "venster": "",
+                "meetwijze": "systeem", "benchmark": "", "bron_url": _CO2_BRON_URL,
+                "verificatie": "voorlopig"}
     if source.startswith("werk:"):
         d, u, r = _WERK_GRONDSLAG.get(measure, ("", "", ""))
         return {"definitie": d, "eenheid": u, "bron": "Werkoverleg-archief", "richting": r,
