@@ -35,7 +35,7 @@ def test_knop_op_cirkel_en_niet_op_rol(tmp_path):
     node = cockpit2.render_node(cockpit2._Stores(dd), C, "overview", csrf_token="t")
     assert "/werkoverleg?circle=" in node and "Tactical meeting" in node
     role = cockpit2.render_node(cockpit2._Stores(dd), RID, "overview", csrf_token="t")
-    assert "werkoverleg" not in role
+    assert "Tactical meeting" not in role and "/werkoverleg?circle=" not in role
 
 
 def test_open_toont_stappen_en_checkin_members(tmp_path):

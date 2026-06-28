@@ -424,6 +424,8 @@ ul.clean li:last-child{border-bottom:none}
 .wo-step.done .wo-num{background:var(--green);color:#fff}
 .wo-sec{font-size:.8rem;margin-top:.4rem}
 .wo-sp-add{position:sticky;top:0;z-index:2;background:var(--surface);padding:.2rem 0;margin-bottom:.4rem}
+.wo-back-bar{margin:0 0 .8rem}
+.wo-back-bar.wo-back-foot{margin:1rem 0 0;padding-top:.8rem;border-top:1px solid var(--border)}
 .wo-mems:focus{outline:none}
 .wo-mem{display:flex;align-items:center;gap:.6rem;padding:.4rem .5rem;border-radius:var(--radius);border:1px solid transparent;border-bottom:1px solid var(--border)}
 .wo-mem.sel{background:var(--cream-2);border-color:var(--border)}
@@ -1150,7 +1152,9 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "var k=f.getAttribute('data-k')||'';f.style.display=(!q||k.indexOf(q)>-1)?'':'none';});};"
         "function frag(u){return u+(u.indexOf('?')>-1?'&':'?')+'fragment=1';}"
         "function openCard(u){last=u;"
-        "fetch(frag(u)).then(function(r){return r.text();}).then(function(h){bd.innerHTML=h;ov.style.display='flex';wire();});}"
+        "fetch(frag(u)).then(function(r){return r.text();}).then(function(h){bd.innerHTML=h;ov.style.display='flex';"
+        "window.__noclose=!!bd.querySelector('[data-noclose]');"
+        "var xb=document.querySelector('.ovl-x');if(xb)xb.style.display=window.__noclose?'none':'';wire();});}"
         "function reopen(){if(last)openCard(last);}"
         "function shut(){ov.style.display='none';bd.innerHTML='';if(dirty){dirty=false;location.reload();}}"
         "function confetti(){var c=['#2e7d32','#ef6c5a','#f6c244','#7bb661'];for(var i=0;i<70;i++){"
@@ -1194,14 +1198,17 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "if(to==='done'){d.set('action','proj_done');}else{d.set('action','proj_status');d.set('to',to);}"
         "fetch('/action',{method:'POST',body:d}).then(function(){reopen();toast('\\u2713 verplaatst');});});});"
         "bd.querySelectorAll('.pcard[data-href]').forEach(function(c){"
-        "c.addEventListener('click',function(e){if(window.__pdrag)return;e.preventDefault();openCard(c.getAttribute('data-href'));});});"
+        "c.addEventListener('click',function(e){if(window.__pdrag)return;e.preventDefault();"
+        "var href=c.getAttribute('data-href');"
+        "if(last&&last.indexOf('/werkoverleg')>-1){href+=(href.indexOf('?')>-1?'&':'?')+'back='+encodeURIComponent(last);}"
+        "openCard(href);});});"
         "}"
         "document.querySelectorAll('.pcard[data-href],a.js-modal[data-href]').forEach(function(c){"
         "c.addEventListener('click',function(e){if(window.__pdrag)return;e.preventDefault();"
         "openCard(c.getAttribute('data-href'));});});"
-        "ov.addEventListener('click',function(e){if(e.target===ov)shut();});"
-        "document.querySelector('.ovl-x').addEventListener('click',shut);"
-        "document.addEventListener('keydown',function(e){if(e.key==='Escape'&&ov.style.display!=='none')shut();});"
+        "ov.addEventListener('click',function(e){if(e.target===ov&&!window.__noclose)shut();});"
+        "document.querySelector('.ovl-x').addEventListener('click',function(){if(!window.__noclose)shut();});"
+        "document.addEventListener('keydown',function(e){if(e.key==='Escape'&&ov.style.display!=='none'&&!window.__noclose)shut();});"
         "})();</script>")
 
 
@@ -3439,12 +3446,20 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     if _LABELS.get(p.get("label")):
         labelbar = f"<div class='clabel' style='background:{_LABELS[p['label']]};height:8px;border-radius:4px;margin-bottom:.6rem'></div>"
 
+    # Geopend vanuit het werkoverleg: prominente terug-CTA boven én onder; het kruisje wordt
+    # uitgeschakeld (zie modal-JS via data-noclose) zodat je via deze CTA terugkeert.
+    meeting = back.startswith("/werkoverleg")
+    wo_cta = (f"<a class='btn ok sm js-modal' href='{_e(back)}' data-href='{_e(back)}'>"
+              f"← terug naar werkoverleg</a>") if meeting else ""
+    top_bar = f"<div class='wo-back-bar'>{wo_cta}</div>" if meeting else ""
+    foot_bar = f"<div class='wo-back-bar wo-back-foot'>{wo_cta}</div>" if meeting else ""
+
     maincol = details + actioncards + omschrijving + checklists_html + verrijking
-    detail = (f"{labelbar}{_banner(msg)}{head}"
+    detail = (f"{top_bar}{labelbar}{_banner(msg)}{head}"
               f"<div class='pgrid'><div class='pmain'>{maincol}</div>"
-              f"<aside class='pdisc'>{discussie}</aside></div>")
+              f"<aside class='pdisc'>{discussie}</aside></div>{foot_bar}")
     if fragment:
-        return detail
+        return f"<div data-noclose='1'>{detail}</div>" if meeting else detail
     main = (f"<div class='c2-main' style='max-width:980px'>"
             f"<div class='c2-bar'><a href='{_e(back)}'>← terug</a></div>{detail}</div>")
     inner = (f"<style>{_EXTRA_CSS}</style>"
