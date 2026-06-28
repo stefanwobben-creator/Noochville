@@ -31,3 +31,4 @@ STATE_export.txt
 .env.save
 *.save
 data/poc/attachments/
+scratch/
