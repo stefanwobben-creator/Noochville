@@ -70,15 +70,22 @@ class WerkoverlegStore:
             return None
         st["status"] = "closed"
         st["ended_at"] = time.time()
-        # archiveer een samenvatting zodat de facilitator over de overleg-gezondheid kan rapporteren
+        # archiveer een samenvatting (incl. per-persoon check-out) zodat de facilitator kan
+        # rapporteren én het volgende overleg de vorige scores kan tonen.
         snap = self.summary(circle)
         snap["at"] = st["ended_at"]
+        snap["checkout"] = dict(st.get("checkout", {}))
         st.setdefault("log", []).append(snap)
         self._save()
         return st
 
     def log(self, circle: str) -> list:
         return (self._m.get(circle) or {}).get("log", [])
+
+    def prev_checkout(self, circle: str) -> dict:
+        """Per-persoon check-out van het vorige (laatst gesloten) overleg; leeg als er geen is."""
+        lg = self.log(circle)
+        return dict(lg[-1].get("checkout", {})) if lg else {}
 
     def duration_min(self, circle: str) -> int:
         st = self._m.get(circle) or {}

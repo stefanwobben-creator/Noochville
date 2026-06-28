@@ -154,20 +154,6 @@ def test_transparantie_policy_op_breedste_cirkel(tmp_path):
     assert any(i["description"] == cockpit2._TRANSP_CHECK for i in st.checklists.for_node(root.id))
 
 
-def test_borg_via_roloverleg(tmp_path):
-    dd = _dd(tmp_path)
-    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]})
-    cockpit2.dispatch(dd, "wo_ag_add", {"circle": [C], "naam": ["Transparantie afspreken"], "next": ["/"]})
-    iid = cockpit2._Stores(dd).werk.agenda(C)[0]["id"]
-    # actie + borgen via roloverleg
-    cockpit2.dispatch(dd, "wo_ag_resolve", {"circle": [C], "iid": [iid], "otype": ["action"],
-                                            "detail": ["iedereen update bord"], "pid_link": [""],
-                                            "borg": ["1"], "next": ["/"]})
-    assert cockpit2._Stores(dd).werk.agenda_get(C, iid)["outcome"]["type"] == "action"   # gaat door
-    ro = cockpit2._Stores(dd).agenda.open()
-    assert any(it["title"].startswith("Borgen:") for it in ro)                            # + op roloverleg
-
-
 def test_triage_roloverleg_punt(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]})
@@ -188,6 +174,20 @@ def test_checkout_en_samenvatting(tmp_path):
     assert cockpit2._Stores(dd).werk.checkout(C)[p.id] == 8
     frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "sluiten", csrf_token="t", fragment=True)
     assert "Samenvatting" in frag and "Gemiddelde tevredenheid" in frag and "8" in frag
+
+
+def test_checkout_toont_vorige_score(tmp_path):
+    dd = _dd(tmp_path)
+    p = _with_member(dd)
+    # overleg 1: score 7, sluiten -> wordt 'vorige keer'
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]})
+    cockpit2.dispatch(dd, "wo_checkout", {"circle": [C], "pid": [p.id], "score": ["7"], "next": ["/"]})
+    cockpit2.dispatch(dd, "wo_close", {"circle": [C], "next": ["/"]})
+    assert cockpit2._Stores(dd).werk.prev_checkout(C).get(p.id) == 7
+    # overleg 2: nog niet gescoord -> de 7 verschijnt als ghost (class prev)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]})
+    frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "checkout", csrf_token="t", fragment=True)
+    assert "wo-sc prev" in frag and "vorige keer" in frag
 
 
 def test_noochie_hulp_context_opener(tmp_path):

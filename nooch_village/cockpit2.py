@@ -423,6 +423,7 @@ ul.clean li:last-child{border-bottom:none}
 .wo-step.done{color:var(--green-dark)}
 .wo-step.done .wo-num{background:var(--green);color:#fff}
 .wo-sec{font-size:.8rem;margin-top:.4rem}
+.wo-sp-add{position:sticky;top:0;z-index:2;background:var(--surface);padding:.2rem 0;margin-bottom:.4rem}
 .wo-mems:focus{outline:none}
 .wo-mem{display:flex;align-items:center;gap:.6rem;padding:.4rem .5rem;border-radius:var(--radius);border:1px solid transparent;border-bottom:1px solid var(--border)}
 .wo-mem.sel{background:var(--cream-2);border-color:var(--border)}
@@ -447,6 +448,7 @@ ul.clean li:last-child{border-bottom:none}
 .wo-scale{display:inline-flex;flex-wrap:wrap;gap:.2rem}
 .wo-sc{width:1.7rem;height:1.7rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer;font-size:.78rem;color:var(--gray)}
 .wo-sc.on{background:var(--green);color:#fff;border-color:var(--green)}
+.wo-sc.prev{background:var(--green-tint);color:var(--green-dark);border-color:var(--green-tint)}
 .wo-avg{font-weight:700;color:var(--green-dark)}
 .wo-oc{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
 .wo-oc input,.wo-oc textarea,.wo-oc select{flex:1 1 12rem;min-width:0;border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .45rem}
@@ -2634,7 +2636,7 @@ def _wo_agenda_list(st: _Stores, crec, csrf: str, active_iid: str = "") -> str:
     base = f"/werkoverleg?circle={crec.id}&step=agenda"
     add = ""
     if csrf:
-        add = (f"<form method='post' action='/action' class='rov-add'>{_wo_hid(csrf, crec.id, base)}"
+        add = (f"<form method='post' action='/action' class='rov-add wo-sp-add'>{_wo_hid(csrf, crec.id, base)}"
                f"<input name='naam' placeholder='Spanning… (-SW voor initialen)' autocomplete='off'>"
                f"<button class='btn ok sm' type='submit' name='action' value='wo_ag_add'>+</button></form>")
     rows = ""
@@ -2698,13 +2700,11 @@ def _wo_triage(st: _Stores, crec, csrf: str, item: dict) -> str:
 
     # Progressive disclosure: kies eerst het type, dan verschijnt het juiste veld. Gelijkwaardig
     # (geen primary-kleur die naar één uitkomst stuurt).
-    def oc_details(otype, summary, inner, borg=True):
-        borgbox = ("<label class='wo-borg'><input type='checkbox' name='borg' value='1'> "
-                   "ook borgen via roloverleg (bij een nieuwe verwachting)</label>" if borg else "")
+    def oc_details(otype, summary, inner):
         return (f"<details class='wo-ocd'><summary>{summary}</summary>"
                 f"<form method='post' action='/action' {keep} class='wo-oc'>{_wo_hid(csrf, crec.id, base)}"
                 f"<input type='hidden' name='iid' value='{_e(iid)}'><input type='hidden' name='otype' value='{otype}'>"
-                f"{inner}{borgbox}<button class='btn sm' type='submit' name='action' value='wo_ag_resolve'>Vastleggen</button></form></details>")
+                f"{inner}<button class='btn sm' type='submit' name='action' value='wo_ag_resolve'>Vastleggen</button></form></details>")
 
     # projecten onder deze cirkel (om een actie optioneel aan te koppelen = checklist-item)
     circle_nodes = {crec.id} | {r.id for r in roles}
@@ -2726,20 +2726,16 @@ def _wo_triage(st: _Stores, crec, csrf: str, item: dict) -> str:
                      "<span class='muted' style='font-size:.74rem'>Gaat altijd door. Aan een project gekoppeld "
                      "= checklist-item; los = losse actie. Terugkerend werk? Overweeg het roloverleg.</span>")
     rov = oc_details("roloverleg", "Punt voor roloverleg",
-                     "<textarea name='detail' rows='2' placeholder='kans / probleem / behoefte / eerste rol-schets'></textarea>",
-                     borg=False)
+                     "<textarea name='detail' rows='2' placeholder='kans / probleem / behoefte / eerste rol-schets'></textarea>")
     nm = (f"<form method='post' action='/action' {keep} class='wo-oc'>{_wo_hid(csrf, crec.id, base)}"
           f"<input type='hidden' name='iid' value='{_e(iid)}'><input type='hidden' name='otype' value='nevermind'>"
           f"<button class='flink' type='submit' name='action' value='wo_ag_resolve'>Niet nodig</button></form>")
-    noochie = (f"<button class='btn sm' type='button' onclick=\"window.noochieAsk&&noochieAsk('{_e(item['title'])}')\">"
-               f"🐸 Vraag Noochie om hulp</button>")
-    # secretaris-signaal (licht): mis je info/scope?
+    # secretaris-signaal (licht): mis je info/scope? (Noochie zit al in de balk; geen losse knop.)
     hint = ""
     if not (note.get("spanning") or "").strip():
         hint = "<div class='sec-issue let'>📋 Secretaris: noteer kort de spanning zodat 'm te verwerken is.</div>"
     return (f"<div class='c2-sec'>{head}<p><b>{_e(item['title'])}</b></p>{hint}{fields}"
-            f"<div class='wo-outcomes'><div class='sec-kop'>Uitkomst kiezen</div>{info}{proj}{act}{rov}{nm}</div>"
-            f"<div style='margin-top:.6rem'>{noochie}</div></div>")
+            f"<div class='wo-outcomes'><div class='sec-kop'>Uitkomst kiezen</div>{info}{proj}{act}{rov}{nm}</div></div>")
 
 
 def _wo_checkout(st: _Stores, crec, csrf: str) -> str:
@@ -2749,26 +2745,32 @@ def _wo_checkout(st: _Stores, crec, csrf: str) -> str:
     scores = st.werk.checkout(crec.id)
     if not ppl:
         return "<div class='c2-sec'><h3>Check-out</h3><p class='muted'>Geen leden.</p></div>"
+    prev = st.werk.prev_checkout(crec.id)               # scores van het vorige overleg (ghost)
     vals = [v for v in scores.values() if isinstance(v, int)]
     avg = f"{round(sum(vals) / len(vals), 1)}/10" if vals else "—"
     rows = ""
     for p in ppl:
         cur = scores.get(p.id)
+        pv = prev.get(p.id)
         if csrf:
-            scale = "".join(
-                f"<form method='post' action='/action' style='display:inline'>{_wo_hid(csrf, crec.id, nxt)}"
-                f"<input type='hidden' name='pid' value='{_e(p.id)}'><input type='hidden' name='score' value='{n}'>"
-                f"<button class='wo-sc{(' on' if cur == n else '')}' type='submit' name='action' value='wo_checkout'>{n}</button></form>"
-                for n in range(0, 11))
-            sel = f"<span class='wo-scale'>{scale}</span>"
+            cells = ""
+            for n in range(0, 11):
+                cls = "wo-sc" + (" on" if cur == n else (" prev" if cur is None and pv == n else ""))
+                title = " title='vorige keer'" if (pv == n and cur != n) else ""
+                cells += (f"<form method='post' action='/action' style='display:inline'>{_wo_hid(csrf, crec.id, nxt)}"
+                          f"<input type='hidden' name='pid' value='{_e(p.id)}'><input type='hidden' name='score' value='{n}'>"
+                          f"<button class='{cls}'{title} type='submit' name='action' value='wo_checkout'>{n}</button></form>")
+            sel = f"<span class='wo-scale'>{cells}</span>"
         else:
             sel = f"<span class='kpidata-v'>{cur if cur is not None else '—'}</span>"
         rows += (f"<div class='wo-mem'><span class='av'>{_e(_initials(p.name))}</span>"
                  f"<span class='wo-mem-n'>{_e(p.name)}</span>{sel}</div>")
+    legend = ("<span class='muted' style='font-size:.74rem'>lichter = vorige keer</span>"
+              if prev else "")
     return (f"<div class='c2-sec'><div class='cl-head'><h3>Check-out</h3>"
             f"<span class='muted'>gemiddeld: <span class='wo-avg'>{avg}</span></span></div>"
             f"<p class='muted' style='font-size:.8rem'>Op een schaal van 0-10: hoe tevreden ben je met "
-            f"de uitkomst van dit overleg?</p>{rows}</div>")
+            f"de uitkomst van dit overleg? {legend}</p>{rows}</div>")
 
 
 def _wo_summary(st: _Stores, crec, csrf: str) -> str:
@@ -3907,20 +3909,8 @@ def dispatch(data_dir: str, action: str, form: dict):
                           {"name": (it or {}).get("title", "Nieuwe rol"), "new_role_parent": g("circle"),
                            "purpose": "", "add_accountabilities": []},
                           detail.strip(), by=by, title=(it or {}).get("title", detail[:60]))
-        # Borging: ga door met de uitkomst én zet een punt op de roloverleg-agenda om het te
-        # verankeren (bijv. een nieuwe verwachting -> policy). Tactical handelt nu, governance borgt.
-        if g("borg") == "1" and otype not in ("roloverleg", "nevermind"):
-            title = (it or {}).get("title", "Borging")
-            slug = re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_")[:40] or "borging"
-            by = (it or {}).get("by") or "werkoverleg"
-            st.agenda.add(f"{g('circle')}__{slug}", "add_role",
-                          {"name": f"Borgen: {title}", "new_role_parent": g("circle"),
-                           "purpose": "", "add_accountabilities": []},
-                          f"Borgen vanuit werkoverleg: {detail}", by=by, title=f"Borgen: {title}")
-            msg = "✓ verwerkt + op roloverleg-agenda gezet"
         st.werk.agenda_resolve(g("circle"), g("iid"), otype, detail)
-        if not msg:
-            msg = f"✓ verwerkt als {otype}"
+        msg = f"✓ verwerkt als {otype}"
     elif action == "wo_checkout":
         if g("score"):
             st.werk.set_checkout(g("circle"), g("pid"), g("score")); msg = "✓ score genoteerd"
