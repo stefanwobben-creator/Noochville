@@ -18,11 +18,12 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-CADANS = ("continu", "dag", "week", "maand", "kwartaal", "ad-hoc")
+CADANS = ("continu", "uur", "dag", "week", "maand", "kwartaal", "jaar", "ad-hoc")
 MEETTYPE = ("snapshot", "venster", "cumulatief")
 
-CADANS_LABEL = {"continu": "continu", "dag": "per dag", "week": "per week",
-                "maand": "per maand", "kwartaal": "per kwartaal", "ad-hoc": "ad-hoc"}
+CADANS_LABEL = {"continu": "continu", "uur": "per uur", "dag": "per dag", "week": "per week",
+                "maand": "per maand", "kwartaal": "per kwartaal", "jaar": "per jaar",
+                "ad-hoc": "ad-hoc"}
 MEETTYPE_LABEL = {"snapshot": "momentopname", "venster": "over een venster",
                   "cumulatief": "cumulatief"}
 
@@ -37,7 +38,7 @@ class IndicatorDefinition(BaseModel):
     source: str = ""
     direction: Literal["up", "down", ""] = ""
     threshold: Optional[float] = None
-    cadence: Literal["continu", "dag", "week", "maand", "kwartaal", "ad-hoc"] = "ad-hoc"
+    cadence: Literal["continu", "uur", "dag", "week", "maand", "kwartaal", "jaar", "ad-hoc"] = "ad-hoc"
     meettype: Literal["snapshot", "venster", "cumulatief"] = "snapshot"
     window: str = ""  # bijv. "7d" wanneer meettype = venster
 

@@ -42,10 +42,45 @@ def test_amend_validatie(tmp_path):
     assert set(MIGRATIONS) == {"clarify", "backcast", "break"}
 
 
+def test_zaad_catalogus_valideert_tegen_schema(tmp_path):
+    # de toets: elke zaad-definitie (afgeleid uit de databron-skills) MOET door het
+    # Pydantic indicator-schema komen, met behoud van zijn meetmoment-velden.
+    from nooch_village.definitions import _DEFINITION_SEED
+    from nooch_village.metric_schema import normalize, CADANS, MEETTYPE
+    assert len(_DEFINITION_SEED) >= 20
+    seen = set()
+    for e in _DEFINITION_SEED:
+        spec = normalize(name=e["name"], unit=e.get("unit", ""), source=e.get("source", ""),
+                         definition=e.get("definition", ""), direction=e.get("direction", ""),
+                         cadence=e.get("cadence", "ad-hoc"), meettype=e.get("meettype", "snapshot"),
+                         window=e.get("window", ""))
+        assert spec is not None, f"zaad-definitie valideert niet: {e['name']}"
+        # geen stille terugval: de opgegeven cadans/meettype moeten bewaard blijven
+        assert spec["cadence"] == e.get("cadence", "ad-hoc"), f"cadans gevallen bij {e['name']}"
+        assert spec["meettype"] == e.get("meettype", "snapshot"), f"meettype gevallen bij {e['name']}"
+        assert spec["cadence"] in CADANS and spec["meettype"] in MEETTYPE
+        key = (e["name"], e.get("source", ""))
+        assert key not in seen, f"dubbele zaad-definitie: {key}"
+        seen.add(key)
+
+
+def test_seed_catalog_idempotent(tmp_path):
+    from nooch_village.definitions import seed_catalog, _DEFINITION_SEED
+    s = DefinitionStore(str(tmp_path / "d.json"))
+    n1 = seed_catalog(s)
+    assert n1 == len(_DEFINITION_SEED) and len(s.all()) == n1
+    assert seed_catalog(s) == 0 and len(s.all()) == n1   # tweede keer voegt niets toe
+    # nieuwe cadans-waarden uit de inventaris zijn nu geldig
+    assert any(s.current(d["id"])["cadence"] == "jaar" for d in s.all())
+    assert any(s.current(d["id"])["cadence"] == "uur" for d in s.all())
+
+
 def test_store_in_cockpit(tmp_path):
     from nooch_village import cockpit2
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
+    base = len(st.defs.all())                          # bootstrap heeft de catalogus geseed
+    assert base >= 20
     assert st.defs.add("Omzet", unit="EUR") is not None
-    assert len(cockpit2._Stores(dd).defs.all()) == 1   # persistent
+    assert len(cockpit2._Stores(dd).defs.all()) == base + 1   # persistent

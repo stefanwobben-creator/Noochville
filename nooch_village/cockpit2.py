@@ -32,7 +32,7 @@ from nooch_village.ai_tasks import AITaskStore
 from nooch_village.checklists import ChecklistStore, CADENCES, CADENCE_LABEL
 from nooch_village.metrics import MetricStore, window_cutoff, filter_samples
 from nooch_village.metric_schema import CADANS_LABEL, MEETTYPE_LABEL
-from nooch_village.definitions import DefinitionStore
+from nooch_village.definitions import DefinitionStore, seed_catalog as _seed_catalog
 from nooch_village.notifications import NotifStore
 from nooch_village.noochie import NoochieStore
 from nooch_village.roloverleg import Agenda
@@ -623,6 +623,7 @@ def _bootstrap(dd: str) -> None:
         import_org(nooch_poc_org(), st.records, st.people, st.assign)
     _ensure_facilitator_health(st)
     _ensure_transparency_policy(st)
+    _seed_catalog(st.defs)        # Librarian metrics-database: zaad-definities (idempotent)
 
 
 def _name(rec) -> str:
