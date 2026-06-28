@@ -56,7 +56,7 @@ def test_stappen_hergebruiken_bestaande_schermen(tmp_path):
     cl = cockpit2.render_werkoverleg(st, C, "checklist", csrf_token="t", fragment=True)
     assert "Checklists" in cl and "+ Checklist-item" in cl          # echte checklist-scherm
     me = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "metrics", csrf_token="t", fragment=True)
-    assert "+ Tegel" in me and "Periode:" in me                     # echte metrics-scherm
+    assert "+ KPI op dashboard" in me and "Periode:" in me          # echte metrics-scherm
     pr = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "projecten", csrf_token="t", fragment=True)
     assert "proj" in pr.lower()                                     # echte projecten-scherm
 
@@ -108,6 +108,27 @@ def test_agenda_en_triage_project(tmp_path):
     assert cockpit2._Stores(dd).werk.agenda_get(C, it["id"])["status"] == "done"
     projs = [p for p in cockpit2._Stores(dd).projects.all() if p.get("owner") == RID]
     assert any("Checkout flow fixen" in str(p.get("scope")) for p in projs)
+
+
+def test_triage_actie_los_en_aan_project(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]})
+    # losse actie
+    cockpit2.dispatch(dd, "wo_ag_add", {"circle": [C], "naam": ["Meeting plannen met Lotte"], "next": ["/"]})
+    iid = cockpit2._Stores(dd).werk.agenda(C)[0]["id"]
+    cockpit2.dispatch(dd, "wo_ag_resolve", {"circle": [C], "iid": [iid], "otype": ["action"],
+                                            "detail": ["Lotte bellen"], "pid_link": [""], "next": ["/"]})
+    it = cockpit2._Stores(dd).werk.agenda_get(C, iid)
+    assert it["status"] == "done" and it["outcome"]["type"] == "action"
+    # actie gekoppeld aan een project -> checklist-item op dat project
+    pid = cockpit2._Stores(dd).projects.create(RID, "Website", "human")
+    cockpit2.dispatch(dd, "wo_ag_add", {"circle": [C], "naam": ["Login doorsturen"], "next": ["/"]})
+    iid2 = [i["id"] for i in cockpit2._Stores(dd).werk.agenda(C) if i["status"] != "done"][0]
+    cockpit2.dispatch(dd, "wo_ag_resolve", {"circle": [C], "iid": [iid2], "otype": ["action"],
+                                            "detail": ["Cosh login sturen"], "pid_link": [pid], "next": ["/"]})
+    p = cockpit2._Stores(dd).projects.get(pid)
+    items = [t for cl in p.get("checklists", []) for t in cl.get("items", [])]
+    assert any("Cosh login" in t.get("text", "") for t in items)
 
 
 def test_triage_roloverleg_punt(tmp_path):

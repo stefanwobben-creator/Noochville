@@ -169,6 +169,7 @@ class WerkoverlegStore:
             "behandeld": len(done),
             "info": out.count("info"),
             "projecten": out.count("project"),
+            "acties": out.count("action"),
             "roloverleg": out.count("roloverleg"),
             "nevermind": out.count("nevermind"),
             "afwezig": [p for p, v in pres.items() if v is False],

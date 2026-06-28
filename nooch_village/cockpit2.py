@@ -1565,7 +1565,7 @@ def _sources_for(st: _Stores, rec):
         srcs.append({"id": f"werk:{circle}", "label": "Werkoverleg",
                      "measures": [("tevredenheid", "Tevredenheid"), ("spanningen", "Spanningen verwerkt"),
                                   ("informatie", "Informatie verwerkt"), ("projecten", "Projecten"),
-                                  ("acties", "Roloverleg-punten")],
+                                  ("acties", "Acties")],
                      "dims": [("gemiddeld", "gemiddeld per overleg"), ("totaal", "totaal"),
                               ("over_tijd", "over tijd")]})
     nodes = [rec.id] + ([r.id for r in org.roles_of(st.records.all(), rec.id)] if is_c else [])
@@ -1578,7 +1578,7 @@ def _sources_for(st: _Stores, rec):
 
 
 _WERK_MEASURE = {"spanningen": "behandeld", "informatie": "info", "projecten": "projecten",
-                 "acties": "roloverleg", "tevredenheid": "tevredenheid"}
+                 "acties": "acties", "tevredenheid": "tevredenheid"}
 
 
 def _werk_fetch(st: _Stores, circle: str, measure: str, dim: str, cutoff):
@@ -1718,7 +1718,7 @@ def _tile_wizard(st: _Stores, rec, csrf: str) -> str:
              ("tabel", "Tabel"), ("doelmeter", "Doelmeter")]
     fopts = "".join(f"<option value='{k}'>{_e(l)}</option>" for k, l in forms)
     base = f"/node?id={_e(rec.id)}&tab=metrics"
-    return (f"<details class='m-add'><summary class='btn ok sm'>+ Tegel</summary>"
+    return (f"<details class='m-add'><summary class='btn ok sm'>+ KPI op dashboard</summary>"
             f"<form method='post' action='/action' class='m-addform'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='node' value='{_e(rec.id)}'>"
             f"<input type='hidden' name='next' value='{base}'>"
@@ -1765,7 +1765,7 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "maand") -> s
     # 1. Dashboard van tegels (bron + measure + dimensie + vorm), volgt de periode-keuze
     tiles = st.metrics.tiles_of(rec.id)
     dash = ("".join(_render_tile(st, rec, t, cutoff, csrf) for t in tiles) if tiles
-            else "<p class='muted'>Nog geen tegels. Voeg er een toe met “+ Tegel”.</p>")
+            else "<p class='muted'>Nog geen KPI's op het dashboard. Kies er een met “+ KPI op dashboard”.</p>")
     out = f"<div class='c2-sec'>{head}</div><div class='c2-sec'><div class='tile-grid'>{dash}</div></div>"
 
     # 2. Eigen KPI's (data invoeren) — handmatige KPI's worden vanzelf bron in de wizard
@@ -1775,7 +1775,7 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "maand") -> s
     if csrf:
         src_opts = "".join(f"<option value='source:{k}'>{_e(v['name'])} (uit data)</option>"
                            for k, v in _SOURCE_KPIS.items())
-        define = (f"<details class='m-add'><summary class='btn sm'>+ KPI</summary>"
+        define = (f"<details class='m-add'><summary class='btn sm'>+ Eigen KPI (data)</summary>"
                   f"<form method='post' action='/action' class='m-addform'>"
                   f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='node' value='{_e(rec.id)}'>"
                   f"<input type='hidden' name='next' value='{base}'>"
@@ -2661,11 +2661,22 @@ def _wo_triage(st: _Stores, crec, csrf: str, item: dict) -> str:
                 f"<input type='hidden' name='iid' value='{_e(iid)}'><input type='hidden' name='otype' value='{otype}'>"
                 f"{inner}<button class='btn sm' type='submit' name='action' value='wo_ag_resolve'>Vastleggen</button></form></details>")
 
+    # projecten onder deze cirkel (om een actie optioneel aan te koppelen = checklist-item)
+    circle_nodes = {crec.id} | {r.id for r in roles}
+    pj_opts = "<option value=''>— los (geen project) —</option>" + "".join(
+        f"<option value='{_e(p['id'])}'>{_e(str(p.get('scope') or p['id'])[:60])}</option>"
+        for p in st.projects.all() if p.get("owner") in circle_nodes)
+
     info = oc_details("info", "Informatie delen",
                       "<input name='detail' placeholder='wat deel/geef je?' autocomplete='off'>")
     proj = oc_details("project", "Project toevoegen",
                       f"<select name='owner'>{ropts}</select>"
                       f"<input name='detail' placeholder='scope van het project' autocomplete='off'>")
+    act = oc_details("action", "Actie",
+                     "<input name='detail' placeholder='wat ga je doen? (bv. meeting plannen, mail doorsturen)' autocomplete='off'>"
+                     f"<select name='pid_link'>{pj_opts}</select>"
+                     "<span class='muted' style='font-size:.74rem'>Gaat altijd door. Aan een project gekoppeld "
+                     "= checklist-item; los = losse actie. Terugkerend werk? Overweeg het roloverleg.</span>")
     rov = oc_details("roloverleg", "Punt voor roloverleg",
                      "<textarea name='detail' rows='2' placeholder='kans / probleem / behoefte / eerste rol-schets'></textarea>")
     nm = (f"<form method='post' action='/action' {keep} class='wo-oc'>{_wo_hid(csrf, crec.id, base)}"
@@ -2678,7 +2689,7 @@ def _wo_triage(st: _Stores, crec, csrf: str, item: dict) -> str:
     if not (note.get("spanning") or "").strip():
         hint = "<div class='sec-issue let'>📋 Secretaris: noteer kort de spanning zodat 'm te verwerken is.</div>"
     return (f"<div class='c2-sec'>{head}<p><b>{_e(item['title'])}</b></p>{hint}{fields}"
-            f"<div class='wo-outcomes'><div class='sec-kop'>Uitkomst kiezen</div>{info}{proj}{rov}{nm}</div>"
+            f"<div class='wo-outcomes'><div class='sec-kop'>Uitkomst kiezen</div>{info}{proj}{act}{rov}{nm}</div>"
             f"<div style='margin-top:.6rem'>{noochie}</div></div>")
 
 
@@ -2725,6 +2736,7 @@ def _wo_summary(st: _Stores, crec, csrf: str) -> str:
             + rij("Punten behandeld", s["behandeld"])
             + rij("Informatie verwerkt", s["info"])
             + rij("Projecten toegevoegd", s["projecten"])
+            + rij("Acties", s.get("acties", 0))
             + rij("Punten voor roloverleg", s["roloverleg"])
             + rij("Gemiddelde tevredenheid", tev)
             + rij("Duur", f"{s['duur_min']} min"))
@@ -3825,6 +3837,16 @@ def dispatch(data_dir: str, action: str, form: dict):
         if otype == "project" and g("owner") and detail.strip():
             st.projects.create(g("owner"), detail.strip(), "human")
             detail = f"{detail.strip()} → {_name(st.records.get(g('owner')))}"
+        elif otype == "action" and g("pid_link") and detail.strip():
+            # actie gekoppeld aan een project = checklist-item op dat project
+            pid = g("pid_link"); p = st.projects.get(pid)
+            if p is not None:
+                cl = next((c for c in (p.get("checklists") or []) if c.get("title") == "Acties uit overleg"), None)
+                if cl is None:
+                    cl = st.projects.checklist_add(pid, "Acties uit overleg")
+                if cl:
+                    st.projects.check_add(pid, cl["id"], detail.strip())
+                detail = f"{detail.strip()} → project"
         elif otype == "roloverleg" and detail.strip():
             slug = re.sub(r"[^a-z0-9]+", "_", detail.lower()).strip("_")[:40] or "punt"
             it = st.werk.agenda_get(g("circle"), g("iid"))

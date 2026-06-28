@@ -51,7 +51,7 @@ def test_rol_tab_eigen_kpi_en_meting(tmp_path):
     cockpit2.dispatch(dd, "m_sample", {"mid": [mid], "value": ["4.2"], "next": ["/"]})
     page = cockpit2.render_node(cockpit2._Stores(dd), RID, "metrics", csrf_token="t")
     # mini-Looker: wizard + eigen KPI's + periode
-    assert "Conversie" in page and "+ Tegel" in page and "Periode:" in page
+    assert "Conversie" in page and "+ KPI op dashboard" in page and "Periode:" in page
     assert "Eigen KPI's" in page and "+ Link" in page
 
 
