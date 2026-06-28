@@ -426,6 +426,7 @@ ul.clean li:last-child{border-bottom:none}
 .wo-sp-add{margin:0}
 .wo-substeps{padding:.1rem 0 .3rem 1.6rem}
 .wo-substeps .rov-item{padding:.2rem .3rem}
+.wo-substeps .rov-title{font-weight:400}
 .wo-back-bar{margin:0 0 .8rem}
 .wo-back-bar.wo-back-foot{margin:1rem 0 0;padding-top:.8rem;border-top:1px solid var(--border)}
 .wo-mems:focus{outline:none}
@@ -1202,7 +1203,9 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "bd.querySelectorAll('.pcard[data-href]').forEach(function(c){"
         "c.addEventListener('click',function(e){if(window.__pdrag)return;e.preventDefault();"
         "var href=c.getAttribute('data-href');"
-        "if(last&&last.indexOf('/werkoverleg')>-1){href+=(href.indexOf('?')>-1?'&':'?')+'back='+encodeURIComponent(last);}"
+        "if(last&&last.indexOf('/werkoverleg')>-1){"
+        "href=href.replace(/[?&]back=[^&]*/,'');"
+        "href+=(href.indexOf('?')>-1?'&':'?')+'back='+encodeURIComponent(last);}"
         "openCard(href);});});"
         "}"
         "document.querySelectorAll('.pcard[data-href],a.js-modal[data-href]').forEach(function(c){"
