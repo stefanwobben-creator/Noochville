@@ -1052,6 +1052,32 @@ def _quickadd(owner: str, col: str, csrf_token: str, back: str, trekker: str = "
         f"</form></details>")
 
 
+def _inline_add_project(st: _Stores, rec, csrf_token: str, back: str) -> str:
+    """Universele inline '+ project' (één patroon, geen aparte modal). Op een cirkel kies je de rol;
+    op een rol staat de eigenaar vast. Dekt ook lege rollen/cirkels die per-kolom-quickadd mist."""
+    if not csrf_token:
+        return ""
+    if org.is_circle(rec):
+        roles = sorted(org.roles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
+        ro = "".join(f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>" for r in roles)
+        owner_field = f"<label class='att-lbl'>Rol</label><select name='owner'>{ro}</select>"
+    else:
+        owner_field = f"<input type='hidden' name='owner' value='{_e(rec.id)}'>"
+    return (
+        f"<details class='qadd qadd-top'><summary>+ project</summary>"
+        f"<form method='post' action='/action' class='qadd-form'>"
+        f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+        f"<input type='hidden' name='next' value='{_e(back)}'>"
+        f"<textarea name='scope' rows='2' placeholder='Te bereiken uitkomst…' aria-label='nieuw project'></textarea>"
+        f"{owner_field}"
+        f"<label class='att-lbl'>Status</label><select name='col'>"
+        f"<option value='actief'>Actief</option><option value='wacht'>Wacht</option>"
+        f"<option value='toekomst'>Toekomst</option></select>"
+        f"<label class='att-lbl'>Trekker (persoon of AI)</label><select name='trekker'>{_trekker_options(st)}</select>"
+        f"<div class='qadd-row'><button class='btn ok' type='submit' name='action' value='proj_add'>"
+        f"Project toevoegen</button></div></form></details>")
+
+
 def _columns_html(st: _Stores, items: list, add_owner: str, add_trekker: str,
                   csrf_token: str, back: str, quickadd: bool) -> str:
     cols = ""
@@ -1238,50 +1264,13 @@ def _archived_html(st: _Stores, archived: list, csrf_token: str, back: str) -> s
             f"<ul class='clean'>{rows}</ul></details>")
 
 
-def _add_project_fragment(st: _Stores, rec, csrf_token: str, back: str) -> str:
-    """De inhoud van de Add-Project-modal: titel + rol + persoon + status. Op een cirkel kies je
-    de rol (directe rollen + Individual Initiative); op een rol staat die vast."""
-    if org.is_circle(rec):
-        direct = sorted(org.roles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
-        opts = "".join(f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>" for r in direct)
-        opts += f"<option value='{_II_PREFIX}{_e(rec.id)}'>Individual Initiative</option>"
-        role_field = f"<label>Rol</label><select name='owner'>{opts}</select>"
-    else:
-        role_field = (f"<input type='hidden' name='owner' value='{_e(rec.id)}'>"
-                      f"<label>Rol</label><div class='muted'>{_e(_name(rec))}</div>")
-    return (
-        "<h2 style='margin-top:0'>Project toevoegen</h2>"
-        "<div class='pf'>"
-        "<form method='post' action='/action'>"
-        f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-        f"<input type='hidden' name='next' value='{_e(back)}'>"
-        "<label>Te bereiken uitkomst</label>"
-        "<input name='scope' placeholder='bijv. Productpagina met Product Passport live' autofocus>"
-        f"{role_field}"
-        f"<label>Trekker (persoon of AI-agent)</label><select name='trekker'>{_trekker_options(st)}</select>"
-        "<label>Status</label><select name='col'>"
-        "<option value='actief'>Actief</option><option value='wacht'>Wacht</option>"
-        "<option value='toekomst'>Toekomst</option></select>"
-        "<div style='margin-top:.6rem'>"
-        "<button class='btn ok' type='submit' name='action' value='proj_add'>Opslaan</button> "
-        "<button type='button' class='btn' onclick=\"document.querySelector('.ovl-x').click()\">"
-        "Annuleren</button>"
-        "</div></form></div>")
-
-
-def _add_project_trigger(rec, csrf_token: str) -> str:
-    """Subtiele '+ project'-trigger (tekstlabel) die de Add-Project-modal opent."""
-    if not csrf_token:
-        return ""
-    url = f"/addproject?node={_e(rec.id)}"
-    return f"<a class='js-modal addlink' href='{url}' data-href='{url}'>+ project</a>"
 
 
 def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: bool = True) -> str:
     allp = st.projects.all()
     back_base = f"/node?id={rec.id}&tab=projects"
 
-    addlink = _add_project_trigger(rec, csrf_token) if add else ""
+    addlink = _inline_add_project(st, rec, csrf_token, back_base) if add else ""
 
     if not org.is_circle(rec):
         # ROL: eigen projecten, gegroepeerd per persoon (de doener). Lege lanes tonen we niet.
@@ -3463,19 +3452,6 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     return _page(_scope_text(p), inner)
 
 
-def render_addproject(st: _Stores, node_id: str, csrf_token: str = "", fragment: bool = False) -> str:
-    rec = st.records.get(node_id)
-    if rec is None:
-        return ("<p class='muted'>Onbekende rol/cirkel.</p>" if fragment
-                else _page("Niet gevonden", "<p>Onbekend.</p><p><a href='/'>← home</a></p>"))
-    back = f"/node?id={rec.id}&tab=projects"
-    frag = _add_project_fragment(st, rec, csrf_token, back)
-    if fragment:
-        return frag
-    main = (f"<div class='c2-main' style='max-width:560px'>"
-            f"<div class='c2-bar'><a href='{_e(back)}'>← terug</a></div>{frag}</div>")
-    return _page("Project toevoegen",
-                 f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>{main}</div>")
 
 
 def render_rolefillers(st: _Stores, role_id: str, csrf_token: str = "", fragment: bool = False) -> str:
@@ -4095,11 +4071,6 @@ def make_handler(data_dir: str, csrf_token: str):
                 self._send(_frag(render_project(st, (qs.get("pid") or [""])[0], csrf_token=csrf_token,
                                                 msg=(qs.get("msg") or [""])[0],
                                                 back=(qs.get("back") or ["/"])[0], fragment=fr), fr))
-                return
-            if path == "/addproject":
-                fr = (qs.get("fragment") or [""])[0] == "1"
-                self._send(_frag(render_addproject(st, (qs.get("node") or [""])[0],
-                                                   csrf_token=csrf_token, fragment=fr), fr))
                 return
             if path == "/rolefillers":
                 fr = (qs.get("fragment") or [""])[0] == "1"

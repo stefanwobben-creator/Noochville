@@ -202,10 +202,10 @@ def test_projecten_stap_geen_losse_add(tmp_path):
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]})
     frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "projecten", csrf_token="t", fragment=True)
     # in het overleg geen losse project-add (loopt via de triage)
-    assert "addlink" not in frag and "+ project toevoegen" not in frag
+    assert "qadd-top" not in frag and "+ project toevoegen" not in frag
     # op de gewone tab blijft toevoegen wel bestaan
     tab = cockpit2.render_node(cockpit2._Stores(dd), C, "projects", csrf_token="t")
-    assert "addlink" in tab
+    assert "qadd-top" in tab
 
 
 def test_sluiten(tmp_path):
