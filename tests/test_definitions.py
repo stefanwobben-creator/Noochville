@@ -223,6 +223,45 @@ def test_amend_backcast_hertagt_historie(tmp_path):
     assert {s["defv"] for s in kpi["samples"]} == {2}              # alles op nieuwe versie
 
 
+def test_catalogus_pagina_rendert(tmp_path):
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    page = cockpit2.render_catalog(st, csrf_token="t")
+    assert "Metrics-catalogus" in page and "Librarian" in page
+    assert "+ Nieuwe definitie" in page
+    assert "Bezoekers (Plausible)" in page and "Tevredenheid werkoverleg" in page
+    # bron-secties met leesbare labels
+    assert "Shopify" in page and "Werkoverleg-archief" in page
+    # gebruik + wijzig-actie aanwezig
+    assert "in gebruik" in page and "wijzig definitie" in page
+
+
+def test_def_add_via_dispatch(tmp_path):
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
+    n0 = len(cockpit2._Stores(dd).defs.all())
+    cockpit2.dispatch(dd, "def_add", {"name": ["eNPS"], "unit": ["score"], "csource": [""],
+                                      "definition": ["promoters - detractors onder medewerkers"],
+                                      "direction": ["up"], "cadence": ["kwartaal"], "next": ["/catalog"]})
+    st = cockpit2._Stores(dd)
+    assert len(st.defs.all()) == n0 + 1
+    d = st.defs.by_name("eNPS")
+    cur = st.defs.current(d["id"])
+    assert cur["cadence"] == "kwartaal" and cur["direction"] == "up" and cur["source"] == ""
+
+
+def test_catalogus_usage_telt_gebruik(tmp_path):
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    rid = "mother_earth__nooch__marketing_lead"
+    d = st.defs.by_name("Omzet (Shopify)")
+    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [d["id"]], "next": ["/"]})
+    page = cockpit2.render_catalog(cockpit2._Stores(dd), csrf_token="t")
+    assert "1× in gebruik" in page
+
+
 def test_store_in_cockpit(tmp_path):
     from nooch_village import cockpit2
     dd = str(tmp_path / "poc")

@@ -94,6 +94,14 @@ ul.clean li:last-child{border-bottom:none}
 .def-all{margin-top:.2rem}
 .def-all>summary{cursor:pointer;list-style:none}
 .def-share{display:flex;align-items:center;gap:.4rem;font-size:.82rem;color:var(--gray);margin:.2rem 0}
+.cat-grid{display:grid;gap:.7rem;grid-template-columns:1fr}
+@media(min-width:680px){.cat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.cat-card{border:1px solid var(--border);border-radius:var(--radius);padding:.6rem .7rem;background:var(--surface);min-width:0}
+.cat-h{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.35rem}
+.cat-use{font-size:.76rem;margin-top:.4rem}
+.cat-hist{margin-top:.3rem;font-size:.78rem}
+.cat-hist ul{margin:.3rem 0 0 1rem;padding:0}
+.cat-hist summary{cursor:pointer;list-style:none}
 .card.arch{opacity:.6}
 .pcard{cursor:pointer;position:relative;transition:box-shadow .1s,border-color .1s}
 .pcard:hover{border-color:var(--green);box-shadow:0 0 0 2px var(--green-tint)}
@@ -2181,6 +2189,118 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "maand", nav:
     return out
 
 
+def _dir_select(name: str, cur: str) -> str:
+    opt = [("", "Richting (geen)"), ("up", "hoger = beter"), ("down", "lager = beter")]
+    return (f"<select name='{name}'>"
+            + "".join(f"<option value='{v}'{' selected' if v == (cur or '') else ''}>{_e(l)}</option>"
+                      for v, l in opt) + "</select>")
+
+
+def _cad_select(name: str, cur: str) -> str:
+    return (f"<select name='{name}'>"
+            + "".join(f"<option value='{k}'{' selected' if k == cur else ''}>meet: {_e(v)}</option>"
+                      for k, v in CADANS_LABEL.items()) + "</select>")
+
+
+def _mt_select(name: str, cur: str) -> str:
+    return (f"<select name='{name}'>"
+            + "".join(f"<option value='{k}'{' selected' if k == cur else ''}>{_e(v)}</option>"
+                      for k, v in MEETTYPE_LABEL.items()) + "</select>")
+
+
+def _catalog_edit_form(st: _Stores, did: str, cur: dict, csrf: str) -> str:
+    base = "/catalog"
+    hidden = (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+              f"<input type='hidden' name='def_id' value='{_e(did)}'>"
+              f"<input type='hidden' name='next' value='{base}'>")
+    thr = "" if cur.get("threshold") is None else _num(cur.get("threshold"))
+    mig = ("<select name='migration' title='wat gebeurt er met de historie?'>"
+           "<option value='auto'>migratie: automatisch bepalen</option>"
+           "<option value='clarify'>verduidelijking (reeks intact)</option>"
+           "<option value='backcast'>back-cast (historie hergebruiken)</option>"
+           "<option value='break'>reeksbreuk (nieuwe versie)</option></select>")
+    return (f"<details class='m-add'><summary class='att-lbl' style='cursor:pointer'>✎ wijzig definitie</summary>"
+            f"<form method='post' action='/action' class='m-addform'>{hidden}"
+            f"<input name='definition' value=\"{_e(cur.get('definition', ''))}\" placeholder='Definitie: wat telt mee?' autocomplete='off'>"
+            f"<input name='unit' value=\"{_e(cur.get('unit', ''))}\" placeholder='Eenheid' autocomplete='off'>"
+            f"{_dir_select('direction', cur.get('direction', ''))}"
+            f"<input name='threshold' value=\"{_e(str(thr))}\" inputmode='decimal' placeholder='Drempel (optioneel)' autocomplete='off'>"
+            f"{_cad_select('cadence', cur.get('cadence', 'ad-hoc'))}{_mt_select('meettype', cur.get('meettype', 'snapshot'))}"
+            f"<input name='window' value=\"{_e(cur.get('window', ''))}\" placeholder='Venster (bijv. 7d)' autocomplete='off'>"
+            f"{mig}"
+            f"<button class='btn ok sm' type='submit' name='action' value='def_amend'>Doorvoeren</button></form></details>")
+
+
+def _catalog_card(st: _Stores, d: dict, cur: dict, csrf: str) -> str:
+    did = d["id"]
+    rij = lambda k, v: f"<div class='gr-row'><span class='gr-k'>{k}</span><span>{_e(str(v))}</span></div>" if v else ""
+    meet = ", ".join(x for x in (CADANS_LABEL.get(cur.get("cadence"), ""),
+                                 MEETTYPE_LABEL.get(cur.get("meettype"), "")) if x)
+    if cur.get("window"):
+        meet = f"{meet} ({cur['window']})" if meet else cur["window"]
+    body = (rij("Definitie", cur.get("definition") or "— (nog niet vastgelegd)")
+            + rij("Eenheid", cur.get("unit")) + rij("Richting", _RICHTING.get(cur.get("direction"), "—"))
+            + (rij("Drempel", _num(cur.get("threshold"))) if cur.get("threshold") is not None else "")
+            + rij("Meetmoment", meet))
+    ks = st.metrics.kpis_for_def(did)
+    users = sorted({_name(st.records.get(k["node"])) for k in ks if st.records.get(k["node"])})
+    usage = (f"{len(ks)}× in gebruik" + (": " + ", ".join(users) if users else "")) if ks else "nog niet in gebruik"
+    nver = len(d.get("versions", []))
+    vhist = ""
+    if nver > 1:
+        items = "".join(f"<li>v{v['version']}: {_e({'': 'aangemaakt', 'clarify': 'verduidelijking', 'backcast': 'back-cast', 'break': 'reeksbreuk'}.get(v.get('migration', ''), v.get('migration', '')))}</li>"
+                        for v in d["versions"])
+        vhist = f"<details class='cat-hist'><summary class='muted'>historie ({nver} versies)</summary><ul>{items}</ul></details>"
+    edit = _catalog_edit_form(st, did, cur, csrf) if csrf else ""
+    return (f"<div class='cat-card'><div class='cat-h'><b>{_e(cur.get('name', ''))}</b>"
+            f"<span class='chip muted'>v{d.get('current', 1)}</span></div>"
+            f"<div class='gr-pop' style='position:static;width:auto;box-shadow:none;border:none;padding:0'>{body}</div>"
+            f"<div class='muted cat-use'>{_e(usage)}</div>{vhist}{edit}</div>")
+
+
+def _catalog_add_form(st: _Stores, csrf: str) -> str:
+    origin_opts = "<option value=''>(handmatig / eigen meting)</option>" + "".join(
+        f"<option value='{k}'>{_e(v)}</option>" for k, v in _ORIGIN_LABEL.items())
+    return (f"<details class='m-add'><summary class='btn sm'>+ Nieuwe definitie</summary>"
+            f"<form method='post' action='/action' class='m-addform'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='next' value='/catalog'>"
+            f"<input name='name' placeholder='Naam (bijv. NPS)' autocomplete='off'>"
+            f"<input name='unit' placeholder='Eenheid (%, score, EUR)' autocomplete='off'>"
+            f"<input name='definition' placeholder='Definitie: wat telt mee? (grondslag)' autocomplete='off'>"
+            f"<select name='csource' title='bron/herkomst'>{origin_opts}</select>"
+            f"{_dir_select('direction', '')}"
+            f"<input name='threshold' inputmode='decimal' placeholder='Drempel (optioneel)' autocomplete='off'>"
+            f"{_cad_select('cadence', 'ad-hoc')}{_mt_select('meettype', 'snapshot')}"
+            f"<input name='window' placeholder='Venster (bijv. 7d, optioneel)' autocomplete='off'>"
+            f"<button class='btn ok sm' type='submit' name='action' value='def_add'>Definitie toevoegen</button></form></details>")
+
+
+def render_catalog(st: _Stores, csrf_token: str = "", msg: str = "") -> str:
+    defs = st.defs.all()
+    bysrc: dict[str, list] = {}
+    for d in defs:
+        cur = st.defs.current(d["id"]) or {}
+        bysrc.setdefault(cur.get("source", ""), []).append((d, cur))
+    sections = ""
+    for s in sorted(bysrc, key=lambda x: _ORIGIN_LABEL.get(x, "zzz" + (x or "zzz"))):
+        cards = "".join(_catalog_card(st, d, cur, csrf_token)
+                        for d, cur in sorted(bysrc[s], key=lambda t: t[1].get("name", "")))
+        label = _ORIGIN_LABEL.get(s, s or "Eigen / handmatig")
+        sections += (f"<div class='c2-sec'><h3>{_e(label)} <span class='muted'>({len(bysrc[s])})</span></h3>"
+                     f"<div class='cat-grid'>{cards}</div></div>")
+    addform = _catalog_add_form(st, csrf_token) if csrf_token else ""
+    main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
+            f"<h1>Metrics-catalogus <span class='chip'>Librarian</span></h1>{_banner(msg)}"
+            f"<p class='muted'>Eén bron voor indicator-definities: rollen kiezen hieruit. Een definitie "
+            f"wijzigen versioneert nooit in-place, maar als verduidelijking, back-cast of reeksbreuk.</p>"
+            f"<div class='c2-sec'>{addform}</div>{sections}</div>")
+    inner = (f"<style>{_EXTRA_CSS}</style>"
+             "<div class='bar'>cockpit 2 · GlassFrog-vorm (PoC) · <a href='/'>home</a> · "
+             "<a href='/catalog'>catalogus</a></div>"
+             f"<div class='c2-wrap'>{main}</div>")
+    return _page("Metrics-catalogus", inner)
+
+
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",
                 group: str = "", clf: str = "due", mw: str = "maand") -> str:
     rec = st.records.get(node_id)
@@ -2237,7 +2357,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
     inner = (f"<style>{_EXTRA_CSS}</style>"
              "<div class='bar'>cockpit 2 · GlassFrog-vorm (PoC) · "
-             "<a href='/'>home</a></div>"
+             "<a href='/'>home</a> · <a href='/catalog'>catalogus</a></div>"
              f"<div class='c2-wrap'>{main}{rail}</div>{modal}")
     return _page(_name(rec), inner)
 
@@ -4350,6 +4470,13 @@ def dispatch(data_dir: str, action: str, form: dict):
             msg = "✓ KPI uit catalogus toegevoegd" if it else "⛔ kon KPI niet toevoegen"
         else:
             msg = "⛔ kies een bestaande definitie uit de catalogus"
+    elif action == "def_add":
+        d = st.defs.add(g("name"), owner="librarian", provenance="sensed",
+                        unit=g("unit"), definition=g("definition"), direction=g("direction"),
+                        source=g("csource"), threshold=g("threshold"),
+                        cadence=g("cadence") or "ad-hoc", meettype=g("meettype") or "snapshot",
+                        window=g("window"))
+        msg = "✓ definitie toegevoegd aan de catalogus" if d else "⛔ geef een naam"
     elif action == "def_amend":
         # wijzig een gedeelde catalogus-definitie; migratie bepaalt wat met de historie gebeurt
         did = g("def_id")
@@ -4496,6 +4623,9 @@ def make_handler(data_dir: str, csrf_token: str):
                 return
             if path == "/_patterns":
                 self._send(render_patterns(csrf_token))
+                return
+            if path == "/catalog":
+                self._send(render_catalog(st, csrf_token=csrf_token, msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/noochie":
                 self._send(render_noochie(st, csrf_token, (qs.get("ctx") or [""])[0]))
