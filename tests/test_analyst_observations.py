@@ -25,3 +25,37 @@ def test_extract_failclosed_on_non_dict():
 def test_extract_partial_missing_key():
     plausible = {"results": {"visitors": {"value": 99}}}
     assert _extract_pulse_metrics(plausible) == [("visitors", 99.0)]
+
+
+def test_extract_utm_sources():
+    plausible = {
+        "results": {"visitors": {"value": 50}},
+        "utm_sources": [
+            {"utm_source": "bluemarble", "visitors": 7},
+            {"utm_source": "shopify_email", "visitors": 4},
+        ],
+    }
+    result = dict(_extract_pulse_metrics(plausible))
+    assert result["visitors"] == 50.0
+    assert result["visitors_via_bluemarble"] == 7.0
+    assert result["visitors_via_shopify_email"] == 4.0
+
+
+def test_extract_utm_sources_skips_empty_source():
+    plausible = {
+        "results": {},
+        "utm_sources": [
+            {"utm_source": "", "visitors": 3},
+            {"utm_source": None, "visitors": 2},
+            {"utm_source": "bluemarble", "visitors": 7},
+        ],
+    }
+    keys = [k for k, _ in _extract_pulse_metrics(plausible)]
+    assert keys == ["visitors_via_bluemarble"]
+
+
+def test_extract_utm_sources_absent_is_fine():
+    plausible = {"results": {"visitors": {"value": 10}}}
+    result = dict(_extract_pulse_metrics(plausible))
+    assert "visitors" in result
+    assert not any(k.startswith("visitors_via_") for k in result)

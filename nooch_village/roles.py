@@ -42,6 +42,14 @@ def _extract_pulse_metrics(plausible: dict) -> list[tuple[str, float]]:
                 out.append((key, float(v)))
             except (TypeError, ValueError):
                 pass
+    for row in plausible.get("utm_sources", []) if isinstance(plausible, dict) else []:
+        src = (row.get("utm_source") or "").strip()
+        v = row.get("visitors")
+        if src and v is not None:
+            try:
+                out.append((f"visitors_via_{src}", float(v)))
+            except (TypeError, ValueError):
+                pass
     return out
 
 
