@@ -1354,119 +1354,10 @@ def _person_projects_html(st: _Stores, pid: str) -> str:
     return f"<div class='c2-sec'><h3>Projecten ({len(projs)})</h3><ul class='clean'>{items}</ul></div>"
 
 
-def _cl_target_label(st: _Stores, item: dict) -> str:
-    if item.get("target_type") == "role" and item.get("target_id"):
-        r = st.records.get(item["target_id"])
-        return _name(r) if r else item["target_id"]
-    return "Alle leden"
-
-
-def _cl_spark(item: dict) -> str:
-    h = ChecklistStore.history(item, 6)
-    if not h:
-        return "<span class='cl-spark muted' title='nog geen historie'>—</span>"
-    dots = "".join(f"<i class='{'ok' if b else 'no'}'>{'✓' if b else '✗'}</i>" for b in h)
-    return f"<span class='cl-spark' title='laatste {len(h)} keer'>{dots}</span>"
-
-
-def _cl_row(st: _Stores, item: dict, csrf: str) -> str:
-    cid = item["id"]
-    status = ChecklistStore.current_status(item)
-    curval = ChecklistStore.current_value(item)
-    tgt = f"<span class='chip muted'>{_e(_cl_target_label(st, item))}</span>"
-    valbadge = "" if curval is None else f"<span class='cl-val'>{curval:g}</span>"
-    # rapporteer ✓/✗ (+ optionele numerieke waarde) voor de huidige periode, in één formulier
-    if csrf:
-        vstr = "" if curval is None else f"{curval:g}"
-        rep = (f"<form method='post' action='/action' class='cl-rep'>"
-               f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
-               f"<input type='hidden' name='cid' value='{_e(cid)}'>"
-               f"<input type='hidden' name='action' value='cl_report'>"
-               f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=checklists'>"
-               f"<input class='cl-num' name='value' inputmode='decimal' value='{vstr}' "
-               f"placeholder='#' title='waarde (optioneel)'>"
-               f"<button class='cl-check ok{(' on' if status is True else '')}' type='submit' name='ok' value='1' title='check'>✓</button>"
-               f"<button class='cl-check no{(' on' if status is False else '')}' type='submit' name='ok' value='0' title='geen check'>✗</button></form>")
-        rm = (f"<form method='post' action='/action' style='display:inline'>"
-              f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
-              f"<input type='hidden' name='cid' value='{_e(cid)}'>"
-              f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=checklists'>"
-              f"<button class='dellink' type='submit' name='action' value='cl_remove' title='verwijderen'>✕</button></form>")
-    else:
-        rep = "" if status is None else (f"<span class='cl-check {'ok' if status else 'no'} on'>"
-                                         f"{'✓' if status else '✗'}</span>")
-        rm = ""
-    danger = f"<span class='row-danger'>{rm}</span>" if rm else ""
-    return (f"<div class='cl-row'><div class='cl-main'><span class='cl-desc'>{_e(item['description'])}</span> {tgt}{valbadge}</div>"
-            f"<div class='cl-act'>{_cl_spark(item)}<span class='cl-checks'>{rep}</span>{danger}</div></div>")
-
-
-def _checklists_tab_html(st: _Stores, rec, csrf: str = "", flt: str = "due", nav: str = "") -> str:
-    is_c = org.is_circle(rec)
-    items = st.checklists.for_node(rec.id)
-    base = f"/node?id={_e(rec.id)}&tab=checklists"
-
-    # Aandacht nodig: gemiste checks (✗ deze periode) bubbelen naar boven -> wordt werk.
-    missed = [i for i in items if ChecklistStore.current_status(i) is False]
-    aandacht = ""
-    if missed:
-        rows = "".join(_cl_row(st, i, csrf) for i in missed)
-        aandacht = (f"<div class='c2-sec cl-attn'><h3>⚠ Aandacht nodig</h3>"
-                    f"<p class='muted' style='font-size:.8rem'>Gemiste checks. Bespreek ze in het "
-                    f"werkoverleg of maak er een agendapunt van.</p>{rows}</div>")
-
-    shown = [i for i in items if ChecklistStore.is_due(i)] if flt == "due" else items
-    # filter-schakelaar
-    def fl(key, lbl):
-        on = " on" if flt == key else ""
-        if nav:   # in het werkoverleg: blijf in de modal
-            u = f"{nav}&clf={key}"
-            return f"<a class='cl-filter{on} js-modal' href='{u}' data-href='{u}'>{lbl}</a>"
-        return f"<a class='cl-filter{on}' href='{base}&clf={key}'>{lbl}</a>"
-    bar = f"<div class='cl-bar'><span class='muted'>Toon:</span> {fl('due', 'Nu te doen')} {fl('all', 'Alles')}</div>"
-
-    # groepering per cadans
-    groups = ""
-    for cad in CADENCES:
-        sub = [i for i in shown if i.get("cadence") == cad]
-        if not sub:
-            continue
-        groups += (f"<div class='cl-group'><h4>{_e(CADENCE_LABEL[cad])}</h4>"
-                   + "".join(_cl_row(st, i, csrf) for i in sub) + "</div>")
-    if not groups:
-        groups = ("<p class='muted'>Niets meer te doen deze periode. 🎉</p>" if flt == "due"
-                  else "<p class='muted'>Nog geen checklist-items.</p>")
-
-    # toevoegen (governance-poort: alleen een al bestaande terugkerende actie)
-    add = ""
-    if csrf:
-        if is_c:
-            roles = sorted(org.roles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
-            opts = "<option value='all'>Alle cirkelleden</option>" + "".join(
-                f"<option value='role:{_e(r.id)}'>{_e(_name(r))}</option>" for r in roles)
-            doel = (f"<label class='att-lbl'>Doel</label><select name='doel'>{opts}</select>")
-        else:
-            doel = "<input type='hidden' name='doel' value='all'>"
-        cadopts = "".join(f"<option value='{c}'>{_e(CADENCE_LABEL[c])}</option>" for c in CADENCES)
-        add = (f"<details class='cl-add'><summary class='btn ok sm'>+ Checklist-item</summary>"
-               f"<form method='post' action='/action' class='cl-addform'>"
-               f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
-               f"<input type='hidden' name='node' value='{_e(rec.id)}'>"
-               f"<input type='hidden' name='next' value='{base}'>"
-               f"<label class='att-lbl'>Beschrijving</label>"
-               f"<input name='description' placeholder='Bijv. Facturen verstuurd' autocomplete='off'>"
-               f"<label class='att-lbl'>Cadans</label><select name='cadence'>{cadopts}</select>"
-               f"{doel}"
-               f"<label class='cl-gate'><input type='checkbox' name='bestaand' value='1'> "
-               f"Dit is een al <b>bestaande</b> terugkerende actie (geen nieuwe verwachting).</label>"
-               f"<button class='btn ok sm' type='submit' name='action' value='cl_add'>Toevoegen</button>"
-               f"</form></details>")
-
-    head = (f"<div class='cl-head'><h3>Checklists</h3>{add}</div>"
-            f"<p class='muted' style='font-size:.8rem'>Transparantie over terugkerend werk (pre-flight): "
-            f"✓ of ✗ per periode. Nieuwe verwachtingen lopen via het roloverleg.</p>")
-    return f"<div class='c2-sec'>{head}{bar}</div>{aandacht}{groups}"
-
+from nooch_village.views.checklists import (
+    _cl_target_label, _cl_spark, _cl_row,
+    _checklists_tab_html, _checklists_html,
+)
 
 _MW = [("vandaag", "Vandaag"), ("7d", "7 dagen"), ("maand", "Maand"),
        ("kwartaal", "Kwartaal"), ("alles", "Alles")]
@@ -2808,46 +2699,6 @@ _IC_DL = _ic("<path d='M12 4v10'/><polyline points='8 11 12 15 16 11'/><line x1=
 
 _IC_TARGET = _ic("<circle cx='12' cy='12' r='9'/><circle cx='12' cy='12' r='5'/><circle cx='12' cy='12' r='1.5'/>")
 
-
-def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool) -> str:
-    """Named checklists (Trello-stijl): titel + voortgangsbalk + items + verwijderen."""
-    def hid():
-        nxt = f"/project?pid={pid}&back=" + urllib.parse.quote(back, safe="")
-        return (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
-                f"<input type='hidden' name='pid' value='{_e(pid)}'>"
-                f"<input type='hidden' name='next' value='{_e(nxt)}'>")
-
-    out = ""
-    for cl in (p.get("checklists") or []):
-        items = cl.get("items", [])
-        done = sum(1 for it in items if it.get("done"))
-        tot = len(items)
-        pct = round(100 * done / tot) if tot else 0
-        bar = (f"<div class='ck-prog'><div class='pbar' style='flex:1'><div style='width:{pct}%'></div></div>"
-               f"<span class='muted'>{pct}% ({done}/{tot})</span></div>") if tot else ""
-        rows = ""
-        for it in items:
-            d = it.get("done")
-            clitem = (f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
-                      f"<input type='hidden' name='item' value='{_e(it['id'])}'>")
-            chk = (f"<form method='post' action='/action' style='display:inline'>{hid()}{clitem}"
-                   f"<button class='ck-box{' on' if d else ''}' type='submit' name='action' "
-                   f"value='check_toggle'>{'✓' if d else ''}</button></form>") if rw else ("☑" if d else "☐")
-            rm = (f"<form method='post' action='/action' style='display:inline'>{hid()}{clitem}"
-                  f"<button class='dellink' type='submit' name='action' value='check_remove'>✕</button></form>") if rw else ""
-            rows += f"<li class='ck-item'>{chk}<span class='{'ck-done' if d else ''}'>{_e(it['text'])}</span>{rm}</li>"
-        add = (f"<form method='post' action='/action' class='ckadd'>{hid()}"
-               f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
-               f"<input name='text' placeholder='item toevoegen…'>"
-               f"<button class='btn ok' type='submit' name='action' value='check_add'>+ item</button></form>") if rw else ""
-        delc = (f"<form method='post' action='/action' style='display:inline'>{hid()}"
-                f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
-                f"<button class='dellink cl-del' type='submit' name='action' value='checklist_remove' "
-                f"onclick=\"return confirm('Checklist verwijderen?')\">verwijderen</button></form>") if rw else ""
-        out += (f"<div class='checklist'><div class='cl-head'>{_IC_CHECK}"
-                f"<span class='cl-title'>{_e(cl.get('title', 'Checklist'))}</span>{delc}</div>"
-                f"{bar}<ul class='clean ck-list'>{rows or '<li class=muted>nog geen items</li>'}</ul>{add}</div>")
-    return out
 
 
 def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", back: str = "/",
