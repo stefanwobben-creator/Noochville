@@ -78,7 +78,7 @@ def test_tile_toevoegen_en_vormen(tmp_path):
                                        "form": ["doelmeter"], "target": ["1000"], "next": ["/"]})
     assert cockpit2._Stores(dd).metrics.tiles_of(C)[1]["target"] == 1000.0
     dash = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
-    assert "goal" in dash and "/ 1000" in dash
+    assert "class='bullet'" in dash and "doel 1000" in dash   # doelmeter rendert als bullet
     # verwijderen
     tid = cockpit2._Stores(dd).metrics.tiles_of(C)[0]["id"]
     cockpit2.dispatch(dd, "tile_remove", {"node": [C], "tid": [tid], "next": ["/"]})
@@ -170,6 +170,33 @@ def test_verwijderen_vraagt_bevestiging(tmp_path):
     page = cockpit2.render_node(cockpit2._Stores(dd), RID, "metrics", csrf_token="t")
     # delete heeft data-confirm + er is een exportlink
     assert "data-confirm=" in page and "verwijderen?" in page and "/metric_export?mid=" in page
+
+
+def test_bullet_vervangt_doelmeter(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    # handmatige KPI met waarde + benchmark, richting hoger=beter
+    k = st.metrics.add_kpi(C, "Conversie", "%", direction="up", benchmark="goed 2-3%")
+    st.metrics.add_sample(k["id"], 1.5)
+    cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": [f"kpi:{k['id']}|value|none"],
+                                       "form": ["doelmeter"], "target": ["3"], "next": ["/"]})
+    page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
+    # Few-bullet: balk + doel-tick + benchmark-label, geen vlakke 'goal'-meter
+    assert "class='bullet'" in page and "doel 3" in page and "benchmark: goed 2-3%" in page
+    # 1,5 < doel 3 bij hoger=beter → coral-balk
+    assert "var(--coral)" in page
+
+
+def test_bullet_richtingbewust_lager_is_beter(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    # CO2-achtig: lager = beter, waarde onder het doel → groene balk
+    k = st.metrics.add_kpi(C, "CO2 per paar", "kg", direction="down")
+    st.metrics.add_sample(k["id"], 4.75)
+    cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": [f"kpi:{k['id']}|value|none"],
+                                       "form": ["doelmeter"], "target": ["6"], "next": ["/"]})
+    page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
+    assert "class='bullet'" in page and "var(--green)" in page   # 4,75 <= doel 6 → goed
 
 
 def test_tufte_datatabel_en_delta_bij_grafiek(tmp_path):

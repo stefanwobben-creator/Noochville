@@ -128,6 +128,10 @@ ul.clean li:last-child{border-bottom:none}
 .delta.up{color:var(--green-dark)}
 .delta.down{color:var(--coral)}
 .delta.flat{color:var(--subtle)}
+.bullet-wrap{display:flex;flex-direction:column;gap:.2rem}
+.bullet-h b{font-size:1.1rem}
+.bullet{display:block}
+.bullet-bm{font-size:.72rem}
 .cat-sec{margin-bottom:.6rem}
 .cat-sec>summary{cursor:pointer;list-style:none;padding:.3rem 0;border-bottom:1px solid var(--border);font-size:.95rem}
 .cat-sec>summary::-webkit-details-marker{display:none}
@@ -1799,6 +1803,34 @@ def _agg(res):
     return res.get("value")
 
 
+def _render_bullet(res, target, richting, benchmark="") -> str:
+    """Bullet graph (Few): waarde-balk + doel-tick + een 'goed'-zone, richtingbewust. Vervangt de
+    vlakke doelmeter: toont in één balk waar je staat t.o.v. het doel, met de benchmark als label."""
+    v = _agg(res)
+    try:
+        t = float(target)
+    except (TypeError, ValueError):
+        t = 0.0
+    if not isinstance(v, (int, float)) or t <= 0:
+        return _render_form(res, "doelmeter", target)   # val terug op de simpele meter
+    down = richting == "down"          # lager = beter (CO2, bounce): goed-zone ligt onder het doel
+    M = max(t * 1.25, v * 1.1, t + 1)
+    W, H = 240.0, 26.0
+    fx = lambda x: max(0.0, min(1.0, x / M)) * W
+    # goed-zone: t..M (hoger=beter) of 0..t (lager=beter)
+    gx0, gx1 = (fx(t), W) if not down else (0.0, fx(t))
+    good = f"<rect x='{gx0:.1f}' y='0' width='{max(0, gx1 - gx0):.1f}' height='{H}' fill='var(--green-tint)'/>"
+    on_good = (v >= t) if not down else (v <= t)
+    barcol = "var(--green)" if on_good else "var(--coral)"
+    bar = f"<rect x='0' y='{H*0.32:.0f}' width='{fx(v):.1f}' height='{H*0.36:.0f}' rx='2' fill='{barcol}'/>"
+    tick = f"<line x1='{fx(t):.1f}' y1='2' x2='{fx(t):.1f}' y2='{H-2:.0f}' stroke='var(--ink)' stroke-width='2'/>"
+    svg = (f"<svg class='bullet' viewBox='0 0 {W:.0f} {H:.0f}' width='100%' height='26' preserveAspectRatio='none'>"
+           f"{good}{bar}{tick}</svg>")
+    bm = f"<div class='muted bullet-bm'>benchmark: {_e(benchmark)}</div>" if benchmark else ""
+    return (f"<div class='bullet-wrap'><div class='bullet-h'><b>{_num(v)}</b> "
+            f"<span class='muted'>doel {_num(t)}</span></div>{svg}{bm}</div>")
+
+
 def _data_table(res) -> str:
     """Tufte 'show the data': de exacte getallen onder een grafiek, compact."""
     kind = res.get("kind")
@@ -1963,7 +1995,8 @@ def _grondslag(st: _Stores, source: str, measure: str) -> dict:
         return {"definitie": it.get("definition", ""), "eenheid": it.get("unit", ""),
                 "bron": bron, "richting": it.get("direction", ""), "drempel": it.get("threshold"),
                 "cadans": it.get("cadence", ""), "meettype": it.get("meettype", ""),
-                "venster": it.get("window", ""), "meetwijze": it.get("meetwijze", "")}
+                "venster": it.get("window", ""), "meetwijze": it.get("meetwijze", ""),
+                "benchmark": it.get("benchmark", "")}
     if source.startswith("werk:"):
         d, u, r = _WERK_GRONDSLAG.get(measure, ("", "", ""))
         return {"definitie": d, "eenheid": u, "bron": "Werkoverleg-archief", "richting": r,
@@ -2029,6 +2062,8 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str) -> str:
     form = tile.get("form", "getal")
     if form == "burnup":
         body = _render_burnup(res, tile.get("target"), gp)
+    elif form == "doelmeter":
+        body = _render_bullet(res, tile.get("target"), g.get("richting"), g.get("benchmark"))
     else:
         body = _render_form(res, form, tile.get("target"))
     # Tufte: bij elke grafiek standaard de exacte data (inklapbaar) + vergelijking met vorige.
@@ -2064,7 +2099,8 @@ def _tile_wizard(st: _Stores, rec, csrf: str) -> str:
     combos = _tile_combos(_sources_for(st, rec))
     opts = "".join(f"<option value='{_e(v)}' data-form='{df}'>{_e(lbl)}</option>" for v, lbl, df in combos)
     forms = [("getal", "Getal"), ("trend", "Trend (lijn)"), ("verdeling", "Verdeling (staaf)"),
-             ("tabel", "Tabel"), ("doelmeter", "Doelmeter"), ("burnup", "Doel-tempo (burn-up)")]
+             ("tabel", "Tabel"), ("doelmeter", "Bullet (waarde vs doel + benchmark)"),
+             ("burnup", "Doel-tempo (burn-up)")]
     fopts = "".join(f"<option value='{k}'>{_e(l)}</option>" for k, l in forms)
     base = f"/node?id={_e(rec.id)}&tab=metrics"
     return (f"<details class='m-add'><summary class='btn ok sm'>+ KPI op dashboard</summary>"
@@ -4694,7 +4730,7 @@ def dispatch(data_dir: str, action: str, form: dict):
                                     meettype=cur.get("meettype", "snapshot"), window=cur.get("window", ""),
                                     def_id=did, def_version=st.defs.current_version_no(did),
                                     origin=cur.get("source", ""), meetwijze=cur.get("meetwijze", ""),
-                                    auto=cur.get("meetwijze") == "systeem")
+                                    auto=cur.get("meetwijze") == "systeem", benchmark=cur.get("benchmark", ""))
             msg = "✓ KPI uit catalogus toegevoegd" if it else "⛔ kon KPI niet toevoegen"
         else:
             msg = "⛔ kies een bestaande definitie uit de catalogus"
