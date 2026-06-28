@@ -1089,8 +1089,8 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "else{var data=new URLSearchParams(new FormData(f));"
         "if(e.submitter&&e.submitter.name){data.set(e.submitter.name,e.submitter.value);}opts={method:'POST',body:data};}"
         "fetch('/action',opts).then(function(){"
-        "if(act==='wo_close'){confetti();setTimeout(shut,700);}"
-        "else if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'||act==='rov2_end'){shut();}"
+        "if(act==='wo_close'||act==='rov2_end'){confetti();setTimeout(shut,700);}"
+        "else if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'){shut();}"
         "else{var r=f.getAttribute('data-reopen');if(r){last=r;}reopen();}});});});"
         "bd.querySelectorAll('textarea').forEach(mentionWire);"
         "bd.querySelectorAll('a.js-modal[data-href]').forEach(function(a){"
@@ -2813,14 +2813,20 @@ def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: s
         churl = f"{base}&iid={sel['id']}&chat=1"
         ai_btn = (f"<a class='btn js-modal rovchat-toggle' href='{churl}' data-href='{churl}'>"
                   f"{_IC_CHAT}AI-assistent</a>")
-    foot = (f"<div class='rov-foot'><form method='post' action='/action'>"
+    n_consent = sum(1 for it in items_all if it.get("status") == "consented")
+    confirm = (f"Overleg sluiten? {n_consent} aangenomen voorstel(len) worden doorgevoerd in de "
+               f"records. Dit kan niet ongedaan." if n_consent
+               else "Overleg sluiten? Er zijn geen aangenomen voorstellen om door te voeren.")
+    foot = (f"<div class='rov-foot'><form method='post' action='/action' data-confirm='{_e(confirm)}'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='circle' value='{_e(circle_id)}'>"
             f"<input type='hidden' name='next' value='/node?id={_e(circle_id)}'>"
             f"<button class='btn ok' type='submit' name='action' value='rov2_end'>"
             f"Vergadering sluiten</button></form>{ai_btn}</div>")
     chat_panel = _rov_chat(st, sel, csrf_token, circle_id) if (chat and sel) else ""
-    detail = (f"<h2 style='margin-top:0'>Governance meeting — {_e(_name(crec))}</h2>"
+    sec_note = ("<p class='wo-sec muted' style='margin:.2rem 0 .6rem'>Alleen de secretaris opent en "
+                "sluit dit overleg.</p>")
+    detail = (f"<h2 style='margin-top:0'>Governance meeting — {_e(_name(crec))}</h2>{sec_note}"
               f"<div class='pgrid rov-grid'><div class='pmain'>{left}</div>"
               f"<aside class='pdisc'>{right}</aside></div>{foot}{chat_panel}")
     if fragment:

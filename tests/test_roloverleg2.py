@@ -212,6 +212,21 @@ def test_rol_verwijderen_via_overleg(tmp_path):
     assert rec is None or rec.archived
 
 
+def test_secretaris_gate_en_bevestiging_bij_sluiten(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
+    frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
+    assert "Alleen de secretaris opent en sluit" in frag        # secretaris-gate (notitie)
+    assert "data-confirm=" in frag and "rov2_end" in frag        # bevestiging bij sluiten
+    assert "geen aangenomen voorstellen" in frag                 # 0 consented -> melding
+    # met een aangenomen voorstel telt de bevestiging mee
+    iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
+    cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Bewaken van iets"], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_consent", {"iid": [iid], "circle": [C], "next": ["/"]})
+    f2 = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
+    assert "1 aangenomen voorstel(len) worden doorgevoerd" in f2
+
+
 def test_diff_weergave_verwijderd_en_nieuw(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
