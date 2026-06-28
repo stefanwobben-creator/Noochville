@@ -32,6 +32,7 @@ from nooch_village.ai_tasks import AITaskStore
 from nooch_village.checklists import ChecklistStore, CADENCES, CADENCE_LABEL
 from nooch_village.metrics import MetricStore, window_cutoff, filter_samples
 from nooch_village.metric_schema import CADANS_LABEL, MEETTYPE_LABEL
+from nooch_village.definitions import DefinitionStore
 from nooch_village.notifications import NotifStore
 from nooch_village.noochie import NoochieStore
 from nooch_village.roloverleg import Agenda
@@ -569,6 +570,7 @@ class _Stores:
         self.noochie = NoochieStore(os.path.join(dd, "noochie.json"))
         self.checklists = ChecklistStore(os.path.join(dd, "checklists.json"))
         self.metrics = MetricStore(os.path.join(dd, "metrics.json"))
+        self.defs = DefinitionStore(os.path.join(dd, "definitions.json"))
         self.werk = WerkoverlegStore(os.path.join(dd, "werkoverleg.json"))
 
 
