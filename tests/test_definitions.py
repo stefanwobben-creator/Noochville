@@ -363,6 +363,32 @@ def test_reground_idempotent(tmp_path):
     assert D.reground_seed(s) == 0                        # tweede keer: niets te doen
 
 
+def test_co2_bron_en_verificatie(tmp_path):
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    cur = st.defs.current(st.defs.by_name("CO2 per paar")["id"])
+    assert cur["verificatie"] == "voorlopig" and "ISO 14067" in cur["standaard"]
+    assert cur["bron_url"] == "/carbon-footprint-of-shoes" and "−65%" in cur["benchmark"]
+    # catalogus toont verificatie-chip + bron-link + filter
+    page = cockpit2.render_catalog(st, csrf_token="t")
+    assert "voorlopig" in page and "bewijs ↗" in page and "data-ver='voorlopig'" in page
+    # velden stromen mee naar een KPI uit de catalogus, en de tegel toont 'voorlopig'
+    rid = "mother_earth__nooch__marketing_lead"
+    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [st.defs.by_name("CO2 per paar")["id"]], "next": ["/"]})
+    st = cockpit2._Stores(dd)
+    it = [i for i in st.metrics.for_node(rid) if i.get("name") == "CO2 per paar"][0]
+    assert it["verificatie"] == "voorlopig" and it["bron_url"] == "/carbon-footprint-of-shoes"
+
+
+def test_bron_url_validatie(tmp_path):
+    from nooch_village.metric_schema import normalize
+    assert normalize(name="x", bron_url="javascript:alert(1)")["bron_url"] == ""   # geweigerd
+    assert normalize(name="x", bron_url="/pad")["bron_url"] == "/pad"
+    assert normalize(name="x", bron_url="https://a.b/c")["bron_url"] == "https://a.b/c"
+    assert normalize(name="x", verificatie="onzin")["verificatie"] == ""
+
+
 def test_store_in_cockpit(tmp_path):
     from nooch_village import cockpit2
     dd = str(tmp_path / "poc")

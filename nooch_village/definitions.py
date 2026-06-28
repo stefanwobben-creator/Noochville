@@ -427,7 +427,10 @@ _GROUNDING: dict[str, dict] = {
     "Personeelsverloop": {"standaard": "HR-standaard (turnover)", "tijd": "lagging", "bruikbaar": "actionable"},
     "Ziekteverzuim": {"standaard": "HR-standaard (verzuim)", "tijd": "lagging", "bruikbaar": "actionable"},
     # Maatschappelijke impact (GHG Protocol / IRIS+)
-    "CO2 per paar": {"standaard": "GHG Protocol / IRIS+ (PD9427)", "tijd": "lagging", "bruikbaar": "actionable"},
+    "CO2 per paar": {"standaard": "ISO 14067 (2030calculator) / GHG Protocol / IRIS+ PD9427",
+                     "tijd": "lagging", "bruikbaar": "actionable",
+                     "benchmark": "conventioneel ~13,6 kg → −65% (voorlopig, herrekenen)",
+                     "bron_url": "/carbon-footprint-of-shoes", "verificatie": "voorlopig"},
     "Aandeel gerecycled materiaal": {"standaard": "IRIS+ (circulair)", "tijd": "lagging", "bruikbaar": "actionable"},
     "Aandeel biobased materiaal": {"standaard": "intern (circulair)", "tijd": "lagging", "bruikbaar": "actionable"},
     "Donaties goede doelen": {"standaard": "intern (impact)", "tijd": "lagging", "bruikbaar": "vanity"},
@@ -477,7 +480,7 @@ def seed_catalog(store: DefinitionStore, owner: str = "librarian") -> int:
 
 
 _GROUND_FIELDS = ("definition", "unit", "direction", "cadence", "meettype", "window",
-                  "tijd", "bruikbaar", "standaard", "benchmark")
+                  "tijd", "bruikbaar", "standaard", "benchmark", "bron_url", "verificatie")
 
 
 def reground_seed(store: DefinitionStore) -> int:

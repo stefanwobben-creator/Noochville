@@ -32,7 +32,7 @@ from nooch_village.ai_tasks import AITaskStore
 from nooch_village.checklists import ChecklistStore, CADENCES, CADENCE_LABEL
 from nooch_village.metrics import MetricStore, window_cutoff, filter_samples
 from nooch_village.metric_schema import (CADANS_LABEL, MEETTYPE_LABEL, MEETWIJZE_LABEL,
-                                         TIJD_LABEL, BRUIKBAAR_LABEL)
+                                         TIJD_LABEL, BRUIKBAAR_LABEL, VERIFICATIE_LABEL)
 from nooch_village.definitions import (DefinitionStore, seed_catalog as _seed_catalog,
                                        reground_seed as _reground_seed)
 from nooch_village.notifications import NotifStore
@@ -132,6 +132,7 @@ ul.clean li:last-child{border-bottom:none}
 .bullet-h b{font-size:1.1rem}
 .bullet{display:block}
 .bullet-bm{font-size:.72rem}
+.tile-prov{font-size:.66rem;color:var(--coral);border:1px solid var(--coral);border-radius:var(--radius-pill);padding:0 .35rem;margin-left:.35rem;vertical-align:middle}
 .cat-sec{margin-bottom:.6rem}
 .cat-sec>summary{cursor:pointer;list-style:none;padding:.3rem 0;border-bottom:1px solid var(--border);font-size:.95rem}
 .cat-sec>summary::-webkit-details-marker{display:none}
@@ -1996,7 +1997,8 @@ def _grondslag(st: _Stores, source: str, measure: str) -> dict:
                 "bron": bron, "richting": it.get("direction", ""), "drempel": it.get("threshold"),
                 "cadans": it.get("cadence", ""), "meettype": it.get("meettype", ""),
                 "venster": it.get("window", ""), "meetwijze": it.get("meetwijze", ""),
-                "benchmark": it.get("benchmark", "")}
+                "benchmark": it.get("benchmark", ""), "bron_url": it.get("bron_url", ""),
+                "verificatie": it.get("verificatie", "")}
     if source.startswith("werk:"):
         d, u, r = _WERK_GRONDSLAG.get(measure, ("", "", ""))
         return {"definitie": d, "eenheid": u, "bron": "Werkoverleg-archief", "richting": r,
@@ -2019,7 +2021,11 @@ def _grondslag_popover(g: dict) -> str:
             + rij("Richting", _RICHTING.get(g.get("richting"), "—"))
             + (rij("Drempel", g.get("drempel")) if g.get("drempel") is not None else "")
             + rij("Meetmoment", meet)
-            + rij("Meetwijze", MEETWIJZE_LABEL.get(g.get("meetwijze"), "")))
+            + rij("Meetwijze", MEETWIJZE_LABEL.get(g.get("meetwijze"), ""))
+            + rij("Verificatie", VERIFICATIE_LABEL.get(g.get("verificatie"), ""))
+            + (f"<div class='gr-row'><span class='gr-k'>Bron</span>"
+               f"<a href='{_e(g['bron_url'])}' target='_blank' rel='noopener'>bewijs ↗</a></div>"
+               if g.get("bron_url") else ""))
     return (f"<details class='tile-info'><summary title='grondslag'>{_IC_INFO}</summary>"
             f"<div class='gr-pop'>{body}</div></details>")
 
@@ -2083,6 +2089,8 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str) -> str:
         bad = (val < thr) if g.get("richting") == "up" else (val > thr) if g.get("richting") == "down" else False
         if bad:
             warn = f"<span class='tile-warn' title='onder/over de drempel ({thr:g})'>⚠</span>"
+    if g.get("verificatie") == "voorlopig":
+        warn += "<span class='tile-prov' title='voorlopige waarde, nog niet geverifieerd'>voorlopig</span>"
     rm = ""
     if csrf:
         rm = (f"<form method='post' action='/action' style='display:inline'>"
@@ -2433,6 +2441,8 @@ def _catalog_edit_form(st: _Stores, did: str, cur: dict, csrf: str) -> str:
             f"{_opt_select('bruikbaar', BRUIKBAAR_LABEL, cur.get('bruikbaar', ''), 'actionable/vanity?')}"
             f"<input name='standaard' value=\"{_e(cur.get('standaard', ''))}\" placeholder='Grondslag/bron (bijv. DORA, IRIS+)' autocomplete='off'>"
             f"<input name='benchmark' value=\"{_e(cur.get('benchmark', ''))}\" placeholder='Benchmark/referentiewaarde' autocomplete='off'>"
+            f"<input name='bron_url' value=\"{_e(cur.get('bron_url', ''))}\" placeholder='Bron-link (kenniskaart / LCA-rapport, http of /pad)' autocomplete='off'>"
+            f"{_opt_select('verificatie', VERIFICATIE_LABEL, cur.get('verificatie', ''), 'verificatie?')}"
             f"{mig}"
             f"<button class='btn ok sm' type='submit' name='action' value='def_amend'>Doorvoeren</button></form></details>")
 
@@ -2449,7 +2459,10 @@ def _catalog_card(st: _Stores, d: dict, cur: dict, csrf: str) -> str:
             + (rij("Drempel", _num(cur.get("threshold"))) if cur.get("threshold") is not None else "")
             + rij("Meetmoment", meet)
             + rij("Grondslag", cur.get("standaard"))
-            + rij("Benchmark", cur.get("benchmark")))
+            + rij("Benchmark", cur.get("benchmark"))
+            + (f"<div class='gr-row'><span class='gr-k'>Bron</span>"
+               f"<a href='{_e(cur['bron_url'])}' target='_blank' rel='noopener'>bewijs ↗</a></div>"
+               if cur.get("bron_url") else ""))
     ks = st.metrics.kpis_for_def(did)
     users = sorted({_name(st.records.get(k["node"])) for k in ks if st.records.get(k["node"])})
     usage = (f"{len(ks)}× in gebruik" + (": " + ", ".join(users) if users else "")) if ks else "nog niet in gebruik"
@@ -2464,10 +2477,15 @@ def _catalog_card(st: _Stores, d: dict, cur: dict, csrf: str) -> str:
     label = _ORIGIN_LABEL.get(cur.get("source", ""), cur.get("source", "") or "eigen")
     txt = _e(f"{cur.get('name','')} {cur.get('definition','')} {label}".lower())
     grounded = "0" if (cur.get("standaard", "") in ("", "interne aanname")) else "1"
+    ver = cur.get("verificatie", "")
+    vchip = ""
+    if ver:
+        vchip = f"<span class='chip {'green' if ver == 'geverifieerd' else 'coral'}' title='verificatiestatus'>{_e(VERIFICATIE_LABEL.get(ver, ver))}</span>"
     return (f"<div class='cat-card' data-mw='{_e(mw)}' data-tijd='{_e(cur.get('tijd',''))}' "
-            f"data-bruikbaar='{_e(cur.get('bruikbaar',''))}' data-grounded='{grounded}' data-text=\"{txt}\">"
+            f"data-bruikbaar='{_e(cur.get('bruikbaar',''))}' data-grounded='{grounded}' "
+            f"data-ver='{_e(ver)}' data-text=\"{txt}\">"
             f"<div class='cat-h'><b>{_e(cur.get('name', ''))}</b>"
-            f"<span class='cat-tags'>{_aard_chips(cur)}{_mw_chip(mw)}<span class='chip muted'>v{d.get('current', 1)}</span></span></div>"
+            f"<span class='cat-tags'>{vchip}{_aard_chips(cur)}{_mw_chip(mw)}<span class='chip muted'>v{d.get('current', 1)}</span></span></div>"
             f"<div class='gr-pop' style='position:static;width:auto;box-shadow:none;border:none;padding:0'>{body}</div>"
             f"<div class='muted cat-use'>{_e(usage)}</div>{vhist}{edit}</div>")
 
@@ -2491,6 +2509,8 @@ def _catalog_add_form(st: _Stores, csrf: str) -> str:
             f"{_opt_select('bruikbaar', BRUIKBAAR_LABEL, '', 'actionable/vanity?')}"
             f"<input name='standaard' placeholder='Grondslag/bron (bijv. DORA, IRIS+)' autocomplete='off'>"
             f"<input name='benchmark' placeholder='Benchmark/referentiewaarde (optioneel)' autocomplete='off'>"
+            f"<input name='bron_url' placeholder='Bron-link (kenniskaart / rapport, optioneel)' autocomplete='off'>"
+            f"{_opt_select('verificatie', VERIFICATIE_LABEL, '', 'verificatie?')}"
             f"<button class='btn ok sm' type='submit' name='action' value='def_add'>Definitie toevoegen</button></form></details>")
 
 
@@ -2519,7 +2539,7 @@ def render_catalog(st: _Stores, csrf_token: str = "", msg: str = "") -> str:
            + bf("mw", "systeem", "systeem") + bf("mw", "handmatig", "handmatig") + bf("mw", "enquete", "enquête")
            + "</span><span class='cat-fg'><span class='muted'>Lean:</span>"
            + bf("bruikbaar", "actionable", "actionable") + bf("tijd", "leading", "leading")
-           + bf("grounded", "0", "ongegrond") + "</span>"
+           + bf("grounded", "0", "ongegrond") + bf("ver", "voorlopig", "voorlopig") + "</span>"
            "<button type='button' class='cat-f cat-f-x' data-facet='' data-val=''>alle</button>"
            f"<span class='muted cat-count' id='cat-count'>{total} definities · {ungrounded} ongegrond</span></div>")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
@@ -4730,7 +4750,8 @@ def dispatch(data_dir: str, action: str, form: dict):
                                     meettype=cur.get("meettype", "snapshot"), window=cur.get("window", ""),
                                     def_id=did, def_version=st.defs.current_version_no(did),
                                     origin=cur.get("source", ""), meetwijze=cur.get("meetwijze", ""),
-                                    auto=cur.get("meetwijze") == "systeem", benchmark=cur.get("benchmark", ""))
+                                    auto=cur.get("meetwijze") == "systeem", benchmark=cur.get("benchmark", ""),
+                                    bron_url=cur.get("bron_url", ""), verificatie=cur.get("verificatie", ""))
             msg = "✓ KPI uit catalogus toegevoegd" if it else "⛔ kon KPI niet toevoegen"
         else:
             msg = "⛔ kies een bestaande definitie uit de catalogus"
@@ -4741,7 +4762,8 @@ def dispatch(data_dir: str, action: str, form: dict):
                         cadence=g("cadence") or "ad-hoc", meettype=g("meettype") or "snapshot",
                         window=g("window"), meetwijze=g("meetwijze") or "handmatig",
                         tijd=g("tijd"), bruikbaar=g("bruikbaar"),
-                        standaard=g("standaard"), benchmark=g("benchmark"))
+                        standaard=g("standaard"), benchmark=g("benchmark"),
+                        bron_url=g("bron_url"), verificatie=g("verificatie"))
         msg = "✓ definitie toegevoegd aan de catalogus" if d else "⛔ geef een naam"
     elif action == "def_amend":
         # wijzig een gedeelde catalogus-definitie; migratie bepaalt wat met de historie gebeurt
@@ -4753,7 +4775,7 @@ def dispatch(data_dir: str, action: str, form: dict):
             from nooch_village.definitions import suggest_migration
             new = {k: g(k) for k in ("definition", "unit", "direction", "threshold", "cadence",
                                      "meettype", "window", "meetwijze", "tijd", "bruikbaar",
-                                     "standaard", "benchmark") if g(k) != ""}
+                                     "standaard", "benchmark", "bron_url", "verificatie") if g(k) != ""}
             mig = g("migration") or "auto"
             if mig == "auto":
                 mig, _why = suggest_migration(old, new)
@@ -4762,7 +4784,8 @@ def dispatch(data_dir: str, action: str, form: dict):
             ver = st.defs.amend(did, mig, **new)
             if ver:
                 fields = {k: ver.get(k) for k in ("name", "unit", "definition", "direction",
-                                                  "threshold", "cadence", "meettype", "window", "meetwijze")}
+                                                  "threshold", "cadence", "meettype", "window",
+                                                  "meetwijze", "benchmark", "bron_url", "verificatie")}
                 st.metrics.retune_kpis_to_def(did, ver["version"], fields, mig)
                 label = {"clarify": "verduidelijking (reeks intact)",
                          "backcast": "back-cast (historie hergebruikt)",

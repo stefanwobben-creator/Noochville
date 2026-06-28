@@ -85,7 +85,8 @@ class MetricStore:
                 definition: str = "", direction: str = "", threshold=None,
                 cadence: str = "ad-hoc", meettype: str = "snapshot", window: str = "",
                 def_id: str = "", def_version: int = 0, origin: str = "",
-                auto: bool = False, meetwijze: str = "", benchmark: str = "") -> dict | None:
+                auto: bool = False, meetwijze: str = "", benchmark: str = "",
+                bron_url: str = "", verificatie: str = "") -> dict | None:
         if not node:
             return None
         # grondslag + meetmoment worden gevalideerd/genormaliseerd door het indicator-schema
@@ -102,6 +103,7 @@ class MetricStore:
               "def_id": (def_id or "").strip(), "def_version": int(def_version or 0),
               "origin": (origin or "").strip(), "auto": bool(auto),
               "meetwijze": (meetwijze or "").strip(), "benchmark": (benchmark or "").strip(),
+              "bron_url": (bron_url or "").strip(), "verificatie": (verificatie or "").strip(),
               "created_at": time.time()}
         self._items[mid] = it
         self._save()
@@ -151,7 +153,7 @@ class MetricStore:
         - break   : grondslag bijwerken, def_version ophogen; oude samples houden hun oude defv en
                     de nieuwe versie wordt als breukpunt vastgelegd (sparkline tekent een lijn)."""
         copy = ("name", "unit", "definition", "direction", "threshold", "cadence", "meettype",
-                "window", "meetwijze", "benchmark")
+                "window", "meetwijze", "benchmark", "bron_url", "verificatie")
         n = 0
         for it in self.kpis_for_def(did):
             for k in copy:

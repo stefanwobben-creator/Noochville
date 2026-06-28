@@ -31,6 +31,9 @@ TIJD = ("leading", "lagging")
 BRUIKBAAR = ("actionable", "vanity")
 TIJD_LABEL = {"leading": "leading", "lagging": "lagging"}
 BRUIKBAAR_LABEL = {"actionable": "actionable", "vanity": "vanity"}
+# verificatiestatus van de WAARDE (los van de gronding van de methode): is het cijfer getoetst?
+VERIFICATIE = ("geverifieerd", "voorlopig")
+VERIFICATIE_LABEL = {"geverifieerd": "geverifieerd", "voorlopig": "voorlopig"}
 
 CADANS_LABEL = {"continu": "continu", "uur": "per uur", "dag": "per dag", "week": "per week",
                 "maand": "per maand", "kwartaal": "per kwartaal", "jaar": "per jaar",
@@ -57,6 +60,8 @@ class IndicatorDefinition(BaseModel):
     bruikbaar: Literal["actionable", "vanity", ""] = ""  # stuurbaar of ijdel (Lean)
     standaard: str = ""    # grondslag/erkende bron, bv. 'DORA', 'IRIS+ OI...', 'interne aanname'
     benchmark: str = ""    # referentiewaarde/-range, bv. 'goede shop 1,8-3,2%'
+    bron_url: str = ""     # link naar het bewijs (kenniskaart, LCA-rapport, standaard-pagina)
+    verificatie: Literal["geverifieerd", "voorlopig", ""] = ""  # status van de waarde
 
     @field_validator("name", mode="before")
     @classmethod
@@ -125,6 +130,17 @@ class IndicatorDefinition(BaseModel):
     @classmethod
     def _meta(cls, v):
         return (str(v or "").strip())[:140]
+
+    @field_validator("bron_url", mode="before")
+    @classmethod
+    def _url(cls, v):
+        s = (str(v or "").strip())[:300]
+        return s if (s.startswith("http://") or s.startswith("https://") or s.startswith("/")) else ""
+
+    @field_validator("verificatie", mode="before")
+    @classmethod
+    def _ver(cls, v):
+        return v if v in VERIFICATIE else ""
 
 
 SCHEMA_FIELDS = list(IndicatorDefinition.model_fields)  # volgorde = schema-definitie
