@@ -256,36 +256,103 @@ def _roles_html(st: _Stores, rec, csrf_token: str = "") -> str:
     return "".join(out)
 
 
-def _person_add_form(rec, csrf_token: str) -> str:
-    """Formulier 'Persoon toevoegen' op de Members-tab. Alleen in schrijf-modus (met csrf)."""
-    if not csrf_token:
-        return ""
-    back = f"/node?id={_e(rec.id)}&tab=members"
-    return (
-        "<details class='c2-add' style='margin-top:1rem'>"
-        "<summary style='cursor:pointer;font-weight:600'>+ Persoon toevoegen</summary>"
-        "<form method='post' action='/action' style='margin-top:.75rem;display:grid;gap:.5rem;max-width:360px'>"
-        f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-        "<input type='hidden' name='action' value='person_add'>"
-        f"<input type='hidden' name='next' value='{back}'>"
-        "<input type='text' name='voornaam' placeholder='Voornaam' required>"
-        "<input type='text' name='achternaam' placeholder='Achternaam' required>"
-        "<input type='email' name='email' placeholder='E-mailadres' required>"
-        "<button type='submit'>Toevoegen</button>"
-        "</form></details>"
-    )
-
-
 def _members_html(st: _Stores, rec, csrf_token: str = "") -> str:
+    # Deelnemerbeheer (toevoegen/verwijderen/wijzigen) zit op de admin-pagina (/admin),
+    # niet hier. Members toont alleen wie deze cirkel vervullen.
     ppl = _members_of_circle(st, rec.id)
-    add = _person_add_form(rec, csrf_token)
+    admin = ("<p class='muted' style='font-size:.8rem;margin-top:.8rem'>"
+             "Deelnemers toevoegen of beheren? → <a href='/admin'>Deelnemers (admin)</a></p>"
+             if csrf_token else "")
     if not ppl:
         return ("<div class='c2-sec'><h3>Members</h3><span class='muted'>Geen mensen.</span>"
-                f"{add}</div>")
+                f"{admin}</div>")
     cells = "".join(
         f"<div class='card'><span class='person'><span class='av'>{_e(_initials(p.name))}</span>"
         f"<a href='/person?id={_e(p.id)}'>{_e(p.name)}</a></span></div>" for p in ppl)
-    return f"<div class='c2-sec'><h3>Members ({len(ppl)})</h3>{cells}{add}</div>"
+    return f"<div class='c2-sec'><h3>Members ({len(ppl)})</h3>{cells}{admin}</div>"
+
+
+def render_admin(st: _Stores, csrf_token: str = "", msg: str = "") -> str:
+    """Admin-pagina 'Deelnemers': mensen toevoegen, wijzigen (naam/e-mail), wachtwoord
+    resetten en verwijderen. Login vereist (route niet publiek). Eén plek voor people-beheer,
+    los van de Members-tab van een cirkel."""
+    people = st.people.all()
+    rw = bool(csrf_token)
+
+    def _status(p):
+        if getattr(p, "last_login", 0):
+            return f"<span class='chip green'>actief</span> <span class='muted'>· {_e(_age(p.last_login))}</span>"
+        if getattr(p, "password_hash", ""):
+            return "<span class='chip outline'>uitgenodigd</span>"
+        return "<span class='chip muted'>geen toegang</span>"
+
+    rows = ""
+    for p in people:
+        nrol = len(st.assign.roles_of("person", p.id))
+        if rw:
+            edit = (
+                f"<form method='post' action='/action' class='fieldform' style='gap:.4rem'>"
+                f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                f"<input type='hidden' name='pid' value='{_e(p.id)}'>"
+                f"<input type='hidden' name='next' value='/admin'>"
+                f"<input type='text' name='name' value='{_e(p.name)}' aria-label='naam'>"
+                f"<input type='email' name='email' value='{_e(p.email)}' aria-label='e-mail'>"
+                f"<button class='btn ok sm' type='submit' name='action' value='person_edit'>opslaan</button>"
+                f"</form>")
+            pw = (f"<form method='post' action='/action' style='display:inline'>"
+                  f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                  f"<input type='hidden' name='pid' value='{_e(p.id)}'>"
+                  f"<button class='btn sm' type='submit' name='action' value='person_reset_password'>"
+                  f"wachtwoord resetten</button></form>")
+            warn = (f" — verwijdert ook {nrol} rol-toewijzing(en)" if nrol else "")
+            rm = (f"<form method='post' action='/action' style='display:inline'>"
+                  f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                  f"<input type='hidden' name='pid' value='{_e(p.id)}'>"
+                  f"<input type='hidden' name='next' value='/admin'>"
+                  f"<button class='dellink' type='submit' name='action' value='person_remove' "
+                  f"onclick=\"return confirm('{_e(p.name)} verwijderen?{warn}')\">verwijderen</button></form>")
+            actions = f"<div class='admin-act'>{pw} {rm}</div>"
+        else:
+            edit = f"<b>{_e(p.name)}</b> <span class='muted'>· {_e(p.email) or 'geen e-mail'}</span>"
+            actions = ""
+        rows += (f"<div class='admin-row'><div class='admin-main'>{edit}</div>"
+                 f"<div class='admin-meta'>{_status(p)} <span class='muted'>· {nrol} rol(len)</span>"
+                 f"{actions}</div></div>")
+
+    add = ""
+    if rw:
+        add = (
+            f"<details class='c2-add' open style='margin-bottom:1rem'>"
+            f"<summary style='cursor:pointer;font-weight:600'>+ Deelnemer toevoegen</summary>"
+            f"<form method='post' action='/action' style='margin-top:.75rem;display:grid;gap:.5rem;max-width:380px'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='action' value='person_add'>"
+            f"<input type='hidden' name='next' value='/admin'>"
+            f"<input type='text' name='voornaam' placeholder='Voornaam' required>"
+            f"<input type='text' name='achternaam' placeholder='Achternaam' required>"
+            f"<input type='email' name='email' placeholder='E-mailadres' required>"
+            f"<button class='btn ok' type='submit'>Toevoegen</button>"
+            f"</form></details>")
+
+    css = ("<style>"
+           ".admin-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;"
+           "flex-wrap:wrap;padding:.55rem 0;border-bottom:1px solid var(--border)}"
+           ".admin-main{flex:1 1 340px;min-width:0}"
+           ".admin-main .fieldform input[name=name]{flex:0 1 11rem}"
+           ".admin-main .fieldform input[name=email]{flex:1 1 13rem}"
+           ".admin-meta{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;font-size:.85rem}"
+           ".admin-act{display:inline-flex;gap:.4rem;margin-left:.4rem}"
+           "</style>")
+    main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
+            f"<h1>Deelnemers <span class='chip'>admin</span></h1>{_banner(msg)}"
+            f"<p class='muted'>Mensen toevoegen, wijzigen, wachtwoord resetten of verwijderen. "
+            f"Deze pagina vereist login.</p>{add}"
+            f"<div class='c2-sec'><h3>Deelnemers ({len(people)})</h3>{rows or '<span class=muted>Nog niemand.</span>'}</div></div>")
+    inner = (f"<style>{_EXTRA_CSS}</style>{css}"
+             f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
+             f"<a href='/'>home</a> · <a href='/admin'>deelnemers</a></div>"
+             f"<div class='c2-wrap'>{main}</div>")
+    return _page("Deelnemers — admin", inner)
 
 
 def _att_html(st: _Stores, rec, kind: str, leeg: str) -> str:
@@ -359,7 +426,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
     inner = (f"<style>{_EXTRA_CSS}</style>"
              f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
-             "<a href='/'>home</a> · <a href='/catalog'>catalogus</a></div>"
+             "<a href='/'>home</a> · <a href='/catalog'>catalogus</a> · <a href='/admin'>deelnemers</a></div>"
              f"<div class='c2-wrap'>{main}{rail}</div>{modal}")
     return _page(_name(rec), inner)
 

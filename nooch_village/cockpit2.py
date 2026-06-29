@@ -147,7 +147,7 @@ from nooch_village.views.overview import (
     _role_ai_overview, _overview_html, _fillsummary,
     _fillers_block, _role_row, _roles_html,
     _members_html, _att_html,
-    render_node, render_person, render_patterns,
+    render_node, render_person, render_patterns, render_admin,
     render_rolefillers, render_aitask,
     _CORE_ROLE_NAMES, _ICON_ADD_PERSON,
 )
@@ -297,9 +297,37 @@ def _handle_person_add(data_dir: str, form: dict) -> str:
         "<p class='muted'>Geef dit tijdelijke wachtwoord door. Het wordt maar één keer getoond:</p>"
         f"<p style='font-size:1.4rem;font-family:monospace;background:#f4f1ec;"
         f"padding:.6rem 1rem;border-radius:6px;display:inline-block'>{_e(temp)}</p>"
-        f"<p style='margin-top:1rem'><a href='{_e(back)}'>← terug naar de cirkel</a></p></div>"
+        f"<p style='margin-top:1rem'><a href='{_e(back)}'>← terug</a></p></div>"
     )
     return _page("Persoon toegevoegd", body)
+
+
+def _handle_person_reset(data_dir: str, form: dict) -> str:
+    """Reset het wachtwoord van een bestaande deelnemer: zet een nieuw tijdelijk wachtwoord en
+    toon dat éénmalig (niet via redirect, zodat het niet in de URL/history belandt)."""
+    g = lambda k: (form.get(k) or [""])[0].strip()
+    pid = g("pid")
+    back = g("next") or "/admin"
+    if not back.startswith("/"):
+        back = "/admin"
+    st = _Stores(data_dir)
+    person = st.people.get(pid)
+    if person is None:
+        body = ("<div class='c2-sec'><h3>Wachtwoord resetten</h3>"
+                "<p style='color:#c0392b'>Deelnemer niet gevonden.</p>"
+                f"<p><a href='{_e(back)}'>← terug</a></p></div>")
+        return _page("Wachtwoord resetten", body)
+    temp = _auth.generate_temp_password()
+    st.people.set_password(person.id, _auth.hash_password(temp))
+    body = (
+        "<div class='c2-sec'><h3>✓ Wachtwoord gereset</h3>"
+        f"<p><b>{_e(person.name)}</b> — {_e(person.email)}</p>"
+        "<p class='muted'>Geef dit tijdelijke wachtwoord door. Het wordt maar één keer getoond:</p>"
+        f"<p style='font-size:1.4rem;font-family:monospace;background:#f4f1ec;"
+        f"padding:.6rem 1rem;border-radius:6px;display:inline-block'>{_e(temp)}</p>"
+        f"<p style='margin-top:1rem'><a href='{_e(back)}'>← terug</a></p></div>"
+    )
+    return _page("Wachtwoord gereset", body)
 
 
 def dispatch(data_dir: str, action: str, form: dict):
@@ -748,6 +776,20 @@ def dispatch(data_dir: str, action: str, form: dict):
                         pass
             _rov_save_draft(st, g("iid"), draft)
             msg = "✓ voorstel bijgewerkt"
+    elif action == "person_edit":
+        if st.people.update(g("pid"), name=g("name"), email=g("email")):
+            msg = "✓ deelnemer opgeslagen"
+        else:
+            msg = "✗ deelnemer niet gevonden"
+    elif action == "person_remove":
+        pid = g("pid")
+        # ruim ook de rol-toewijzingen op, anders blijven die als wees achter
+        for rid in list(st.assign.roles_of("person", pid)):
+            st.assign.unassign(rid, "person", pid)
+        if st.people.remove(pid):
+            msg = "🗑 deelnemer verwijderd"
+        else:
+            msg = "✗ deelnemer niet gevonden"
     return nxt, msg
 
 
@@ -861,6 +903,9 @@ def make_handler(data_dir: str, csrf_token: str,
                 return
             if path == "/person":
                 self._send(render_person(st, (qs.get("id") or [""])[0]))
+                return
+            if path == "/admin":
+                self._send(render_admin(st, csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/_patterns":
                 self._send(render_patterns(effective_csrf))
@@ -977,6 +1022,9 @@ def make_handler(data_dir: str, csrf_token: str,
             # (niet via redirect, zodat het wachtwoord niet in de URL/history belandt).
             if action == "person_add":
                 self._send(_handle_person_add(data_dir, form))
+                return
+            if action == "person_reset_password":
+                self._send(_handle_person_reset(data_dir, form))
                 return
             nxt, msg = dispatch(data_dir, action, form)
             self._redirect(nxt, msg)
