@@ -2,6 +2,27 @@
 
 > STATE = huidige waarheid, vervang bij update. `docs/JOURNAL.md` = historie, append-only.
 
+## Werkafspraken Pablo (AI-assistent)
+
+1. **Rootcause eerst** — bij elk probleem eerst de fundamentele oorzaak benoemen voordat
+   er een oplossing wordt voorgesteld. Vraag altijd: lost deze oplossing de rootcause op,
+   of is het een pleister?
+
+2. **Fundamentele keuzes voorleggen** — als een beslissing architecturele impact heeft,
+   altijd de echte keuze benoemen met voor- en nadelen. Niet meegaan in de eerste richting
+   zonder dit te doen.
+
+3. **Symptoombestrijding benoemen** — als een voorgestelde oplossing een workaround is,
+   dat expliciet zeggen en de structurele oplossing ernaast zetten.
+
+4. **Pushback geven** — als Stefan een richting kiest die niet structureel is, zeg dat dan
+   direct. Niet meegaan om tijd te besparen.
+
+5. **Credits bewaken** — lange sessies met kringetjes zijn duurder dan één keer goed
+   nadenken. Bij vastlopen: stop, analyseer, kies de juiste richting.
+
+---
+
 ## Waar we staan (2026-06-28)
 
 **Suite: 1333 tests groen**, 8 pre-existing failures (LLM/API-afhankelijk of test-isolatie-flaky,
@@ -232,9 +253,27 @@ Beheer via: `python -m nooch_village.inbox`
    vóórdat je nieuwe code schrijft
 2. **Governance-sessie** — rollen opruimen, Codie toevoegen, menselijke accountabilities koppelen
 3. **Inbox reviewen** — 9 kansen wachten, `python -m nooch_village.inbox`
-4. **Shopify-koppeling** — Dan, voor pairs_sold meting
+4. **Shopify-koppeling** — geblokkeerd tot NoochVille online staat (zie hieronder)
 5. **Dispatch splitsen (brok 11)** — bewust uitgesteld, rustige sessie zonder draaiende village
 6. **advise_metrics Noochie** — hardcoded dict → LLM-stap
+
+## NoochVille online zetten (prioriteit na governance-sessie)
+
+Einddoel: village draait autonoom op een server, niet op Stefan's Mac.
+
+Wat dit oplost:
+- Shopify OAuth werkt met echte publieke URL
+- Village draait 24/7 zonder Mac
+- Cockpit bereikbaar vanaf elke plek
+
+Te onderzoeken:
+- Hosting opties (VPS, Railway, Render, Fly.io)
+- Kosten vs. requirements (altijd aan, weinig RAM)
+- Hoe .env en secrets veilig beheren
+- Deployment pipeline
+
+Shopify-koppeling geblokkeerd tot dit geregeld is.
+`SHOPIFY_CLIENT_ID` en `SHOPIFY_CLIENT_SECRET` verwijderd uit `.env` (waren van oude app, nutteloos).
 
 ---
 
