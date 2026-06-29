@@ -347,8 +347,8 @@ def dispatch(data_dir: str, action: str, form: dict):
         create_status = "future" if col == "toekomst" else "queued"
         orec = st.records.get(owner)
         if orec is not None and org.is_circle(orec):
-            # Een cirkel doet geen uitvoerend werk: projecten horen bij een rol of Individual Initiative.
-            return nxt, "✗ een cirkel kan geen project bevatten — kies een rol of Individual Initiative"
+            # Een cirkel doet geen uitvoerend werk: projecten horen bij een rol of Individueel Initiatief.
+            return nxt, "✗ een cirkel kan geen project bevatten — kies een rol of Individueel Initiatief"
         if owner and scope:
             pid = pj.create(owner, scope[:200], "human", status=create_status,
                             person=person or None, agent=agent or None, private=(g("private") == "1"))

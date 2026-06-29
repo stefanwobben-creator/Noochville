@@ -247,18 +247,18 @@ def test_projecten_groeperen_per_persoon(tmp_path):
 
 
 def test_circle_toont_directe_rollen_plus_ii(tmp_path):
-    # cirkel toont projecten van haar DIRECTE rollen + Individual Initiative; geen eigen werk
+    # cirkel toont projecten van haar DIRECTE rollen + Individueel Initiatief; geen eigen werk
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     cockpit2.dispatch(dd, "proj_add", {"owner": ["mother_earth__nooch__website_developer"],
                                        "scope": ["Rolproject"], "col": ["actief"], "next": ["/"]})
-    # Individual Initiative: een project direct onder de cirkel via de ii:-pseudo-eigenaar
+    # Individueel Initiatief: een project direct onder de cirkel via de ii:-pseudo-eigenaar
     cockpit2.dispatch(dd, "proj_add", {"owner": ["ii:mother_earth__nooch"],
                                        "scope": ["Eigen initiatief"], "col": ["actief"], "next": ["/"]})
     page = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth__nooch", "projects",
                                 csrf_token="t", group="rol")
     assert "Rolproject" in page and "Website Developer" in page and "swim-h" in page
-    assert "Individual Initiative" in page and "Eigen initiatief" in page   # II-lane bij een II-project
+    assert "Individueel Initiatief" in page and "Eigen initiatief" in page   # II-lane bij een II-project
 
 
 def test_circle_aggregeert_geen_subcirkel(tmp_path):
@@ -273,7 +273,7 @@ def test_circle_aggregeert_geen_subcirkel(tmp_path):
 
 
 def test_individual_initiative_owner(tmp_path):
-    # een project oppakken als Individual Initiative (persoon, geen rol)
+    # een project oppakken als Individueel Initiatief (persoon, geen rol)
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
@@ -283,7 +283,7 @@ def test_individual_initiative_owner(tmp_path):
                                        "trekker": [f"person:{stefan.id}"], "next": ["/"]})
     page = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth__nooch", "projects",
                                 csrf_token="t", group="rol")
-    assert "Ad hoc stunt" in page and "Individual Initiative" in page
+    assert "Ad hoc stunt" in page and "Individueel Initiatief" in page
 
 
 def test_leeg_bord_toont_geen_lege_lanes(tmp_path):

@@ -164,7 +164,10 @@ def _inline_add_project(st: _Stores, rec, csrf_token: str, back: str) -> str:
     if org.is_circle(rec):
         roles = sorted(org.roles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
         ro = "".join(f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>" for r in roles)
-        owner_field = f"<label class='att-lbl'>Rol</label><select name='owner'>{ro}</select>"
+        # Individueel Initiatief: een project oppakken zónder rol, direct onder de cirkel.
+        ii_opt = f"<option value='{_II_PREFIX}{_e(rec.id)}'>Individueel Initiatief (geen rol)</option>"
+        owner_field = (f"<label class='att-lbl'>Rol</label>"
+                       f"<select name='owner'>{ro}{ii_opt}</select>")
     else:
         owner_field = f"<input type='hidden' name='owner' value='{_e(rec.id)}'>"
     return (
@@ -319,7 +322,7 @@ def _group_meta(st: _Stores, p: dict, mode: str, node_owner: str):
     owner = p.get("owner") or ""
     if mode == "rol":
         if owner.startswith(_II_PREFIX):
-            return (("ii", owner), "zzz", "Individual Initiative", owner, "")
+            return (("ii", owner), "zzz", "Individueel Initiatief", owner, "")
         orec = st.records.get(owner)
         if orec is None and owner:
             # dangling: de eigenaar-rol bestaat niet meer — maak dat zichtbaar i.p.v. stil "—"
@@ -624,7 +627,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     is_ii = owner.startswith(_II_PREFIX)
     dangling = bool(owner) and not is_ii and orec is None
     if is_ii:
-        rol_naam = "Individual Initiative"
+        rol_naam = "Individueel Initiatief"
     else:
         rol_naam = _name(orec) if orec else (owner or "—")
     if rw and not is_ii:

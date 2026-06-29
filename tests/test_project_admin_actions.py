@@ -157,3 +157,30 @@ def test_kaart_is_modal_div_ingelogd(tmp_path):
     html = P._projects_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROLE),
                                 csrf_token="TOK", add=True)
     assert "<div class='card pcard' data-pid=" in html and "draggable=" in html
+
+
+# ── Individueel Initiatief: project oppakken zonder rol ──────────────────────
+
+def test_toevoegform_biedt_individueel_initiatief_op_cirkel(tmp_path):
+    dd, st = _st(tmp_path)
+    html = P._inline_add_project(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(CIRCLE),
+                                 "TOK", "/back")
+    assert f"value='ii:{CIRCLE}'" in html and "Individueel Initiatief" in html
+
+
+def test_toevoegform_geen_ii_op_rol(tmp_path):
+    dd, st = _st(tmp_path)
+    html = P._inline_add_project(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROLE),
+                                 "TOK", "/back")
+    assert "Individueel Initiatief" not in html      # II is een cirkel-begrip, niet op een rol
+
+def test_ii_project_aanmaken_en_tonen(tmp_path):
+    dd, st = _st(tmp_path)
+    stefan = st.people.all()[0]
+    ii = f"ii:{CIRCLE}"
+    cockpit2.dispatch(dd, "proj_add", {"owner": [ii], "scope": ["Spontane actie"], "col": ["actief"],
+                                       "trekker": [f"person:{stefan.id}"], "next": ["/"]})
+    pj = [p for p in cockpit2._Stores(dd).projects.all() if p["owner"] == ii]
+    assert len(pj) == 1 and pj[0]["person"] == stefan.id
+    page = cockpit2.render_node(cockpit2._Stores(dd), CIRCLE, "projects", csrf_token="TOK", group="rol")
+    assert "Spontane actie" in page and "Individueel Initiatief" in page
