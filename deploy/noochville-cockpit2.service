@@ -1,0 +1,18 @@
+[Unit]
+Description=NoochVille Cockpit 2 — web dashboard
+After=network.target noochville-village.service
+
+[Service]
+Type=simple
+User=nooch
+Group=nooch
+WorkingDirectory=/opt/noochville
+EnvironmentFile=/opt/noochville/.env
+ExecStart=/opt/noochville/venv/bin/python -m nooch_village.cockpit2 --host 127.0.0.1 --port 8766
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,19 @@
+[Unit]
+Description=NoochVille Village — autonome dagelijkse puls
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nooch
+Group=nooch
+WorkingDirectory=/opt/noochville
+EnvironmentFile=/opt/noochville/.env
+ExecStart=/opt/noochville/venv/bin/python -m nooch_village.village run
+Restart=always
+RestartSec=60
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
