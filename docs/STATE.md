@@ -23,6 +23,21 @@
 
 ---
 
+## NoochVille online (2026-06-29)
+
+Server: Hetzner CPX22, Falkenstein
+IP: 138.201.154.162
+Cockpit: https://village.nooch.earth
+Services: noochville-village + noochville-cockpit2 (systemd)
+DNS: village A-record op TransIP → nooch.earth
+
+Openstaande acties:
+- Shopify OAuth redirect URL instellen op `https://village.nooch.earth/shopify/callback`
+- `serpapi_trends` governance-actie voor `website_watcher` (dode capability-melding bij startup)
+- Server naam hernoemen van `ubuntu-4gb-fsn1-1` naar `noochville` in Hetzner console
+
+---
+
 ## Waar we staan (2026-06-28)
 
 **Suite: 1333 tests groen**, 8 pre-existing failures (LLM/API-afhankelijk of test-isolatie-flaky,
