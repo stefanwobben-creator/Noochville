@@ -21,6 +21,7 @@ import urllib.parse
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from nooch_village import auth as _auth
 from nooch_village.cockpit import _e, _page, _banner     # zelfde design system
 from nooch_village.cockpit2_util import (
     _name, _initials, _tabbar, _todo, _avatar, _age, _fmt_due,
@@ -694,8 +695,26 @@ def dispatch(data_dir: str, action: str, form: dict):
     return nxt, msg
 
 
-def make_handler(data_dir: str, csrf_token: str):
+_PUBLIC_GET = {"/", "/index.html", "/node"}
+
+
+def make_handler(data_dir: str, csrf_token: str,
+                 sessions: "_auth.SessionStore | None" = None,
+                 users: "_auth.UserStore | None" = None):
     class H(BaseHTTPRequestHandler):
+        def _session_username(self) -> str | None:
+            if sessions is None:
+                return "guest"
+            token = _auth.get_session_token(self.headers)
+            return sessions.get_username(token) if token else None
+
+        def _redirect_to(self, location: str, cookie: str | None = None) -> None:
+            self.send_response(303)
+            self.send_header("Location", location)
+            if cookie:
+                self.send_header("Set-Cookie", cookie)
+            self.end_headers()
+
         def _send(self, body: str, code: int = 200):
             # Globale Noochie-chrome op elke volledige pagina (niet op fragmenten/zonder csrf).
             if csrf_token and "</body>" in body:
@@ -719,6 +738,28 @@ def make_handler(data_dir: str, csrf_token: str):
         def do_GET(self):
             path, _, query = self.path.partition("?")
             qs = urllib.parse.parse_qs(query)
+
+            # ── Login / logout ──────────────────────────────────────────────
+            if path == "/login":
+                next_url = (qs.get("next") or ["/"])[0]
+                self._send(_auth.login_page(next_url))
+                return
+            if path == "/logout":
+                token = _auth.get_session_token(self.headers)
+                if token and sessions:
+                    sessions.delete(token)
+                self._redirect_to("/login", _auth.clear_cookie())
+                return
+
+            # ── Auth-check voor niet-publieke GETs ─────────────────────────
+            username = self._session_username()
+            if username is None and path not in _PUBLIC_GET:
+                self._redirect_to(f"/login?next={urllib.parse.quote(self.path)}")
+                return
+
+            # Publieke views krijgen geen CSRF-token → geen schrijfknoppen
+            effective_csrf = csrf_token if username else ""
+
             st = _Stores(data_dir)
             if path in ("/", "/index.html"):
                 roots = org.roots(st.records.all())
@@ -731,7 +772,7 @@ def make_handler(data_dir: str, csrf_token: str):
                 return
             if path == "/node":
                 self._send(render_node(st, (qs.get("id") or [""])[0],
-                                       (qs.get("tab") or ["overview"])[0], csrf_token=csrf_token,
+                                       (qs.get("tab") or ["overview"])[0], csrf_token=effective_csrf,
                                        msg=(qs.get("msg") or [""])[0],
                                        group=(qs.get("group") or [""])[0],
                                        clf=(qs.get("clf") or ["due"])[0],
@@ -744,14 +785,14 @@ def make_handler(data_dir: str, csrf_token: str):
 
             if path == "/project":
                 fr = (qs.get("fragment") or [""])[0] == "1"
-                self._send(_frag(render_project(st, (qs.get("pid") or [""])[0], csrf_token=csrf_token,
+                self._send(_frag(render_project(st, (qs.get("pid") or [""])[0], csrf_token=effective_csrf,
                                                 msg=(qs.get("msg") or [""])[0],
                                                 back=(qs.get("back") or ["/"])[0], fragment=fr), fr))
                 return
             if path == "/rolefillers":
                 fr = (qs.get("fragment") or [""])[0] == "1"
                 self._send(_frag(render_rolefillers(st, (qs.get("role") or [""])[0],
-                                                    csrf_token=csrf_token, fragment=fr), fr))
+                                                    csrf_token=effective_csrf, fragment=fr), fr))
                 return
             if path == "/aitask":
                 try:
@@ -760,29 +801,29 @@ def make_handler(data_dir: str, csrf_token: str):
                     acc_i = -1
                 fr = (qs.get("fragment") or [""])[0] == "1"
                 self._send(_frag(render_aitask(st, (qs.get("role") or [""])[0], acc_i,
-                                               csrf_token=csrf_token, fragment=fr), fr))
+                                               csrf_token=effective_csrf, fragment=fr), fr))
                 return
             if path == "/person":
                 self._send(render_person(st, (qs.get("id") or [""])[0]))
                 return
             if path == "/_patterns":
-                self._send(render_patterns(csrf_token))
+                self._send(render_patterns(effective_csrf))
                 return
             if path == "/catalog":
-                self._send(render_catalog(st, csrf_token=csrf_token, msg=(qs.get("msg") or [""])[0]))
+                self._send(render_catalog(st, csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/kpi_new":
                 self._send(render_kpi_composer(st, (qs.get("node") or [""])[0],
-                                               csrf_token=csrf_token, msg=(qs.get("msg") or [""])[0]))
+                                               csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/noochie":
-                self._send(render_noochie(st, csrf_token, (qs.get("ctx") or [""])[0]))
+                self._send(render_noochie(st, effective_csrf, (qs.get("ctx") or [""])[0]))
                 return
             if path == "/werkoverleg":
                 fr = (qs.get("fragment") or [""])[0] == "1"
                 self._send(_frag(render_werkoverleg(st, (qs.get("circle") or [""])[0],
                                                     (qs.get("step") or ["checkin"])[0],
-                                                    csrf_token=csrf_token, fragment=fr,
+                                                    csrf_token=effective_csrf, fragment=fr,
                                                     iid=(qs.get("iid") or [""])[0],
                                                     kpi=(qs.get("kpi") or [""])[0],
                                                     mw=(qs.get("mw") or ["maand"])[0]), fr))
@@ -791,7 +832,7 @@ def make_handler(data_dir: str, csrf_token: str):
                 fr = (qs.get("fragment") or [""])[0] == "1"
                 self._send(_frag(render_roloverleg2(st, (qs.get("circle") or [""])[0],
                                                     (qs.get("iid") or [""])[0],
-                                                    csrf_token=csrf_token, fragment=fr,
+                                                    csrf_token=effective_csrf, fragment=fr,
                                                     chat=(qs.get("chat") or [""])[0] == "1"), fr))
                 return
             if path == "/metric_export":
@@ -823,10 +864,30 @@ def make_handler(data_dir: str, csrf_token: str):
             self.send_response(303); self.send_header("Location", nxt); self.end_headers()
 
         def do_POST(self):
-            if self.path.split("?", 1)[0] != "/action":
-                self._send("<p>404</p>", 404); return
+            path = self.path.split("?", 1)[0]
             ctype = self.headers.get("Content-Type", "")
             length = int(self.headers.get("Content-Length") or 0)
+
+            # ── Login POST ──────────────────────────────────────────────────
+            if path == "/login":
+                raw = self.rfile.read(length).decode("utf-8") if length else ""
+                form = urllib.parse.parse_qs(raw)
+                username = (form.get("username") or [""])[0].strip()
+                password = (form.get("password") or [""])[0]
+                next_url = (form.get("next") or ["/"])[0]
+                if users and users.verify(username, password):
+                    token = sessions.create(username) if sessions else ""
+                    self._redirect_to(next_url or "/", _auth.set_cookie(token))
+                else:
+                    self._send(_auth.login_page(next_url, error="Gebruikersnaam of wachtwoord onjuist."))
+                return
+
+            if path != "/action":
+                self._send("<p>404</p>", 404); return
+
+            # ── Sessie-check voor alle /action POSTs ────────────────────────
+            if sessions is not None and self._session_username() is None:
+                self._send("Niet ingelogd", 403); return
             # Bestand-upload (multipart): apart afhandelen; bestand wegschrijven + registreren.
             if ctype.startswith("multipart/form-data") and "boundary=" in ctype:
                 raw = self.rfile.read(length) if length else b""
@@ -870,7 +931,9 @@ def serve(host: str = "127.0.0.1", port: int = 8766, data_dir: str | None = None
     _load_env()   # LLM-keys beschikbaar maken voor 'AI praat mee'
     _bootstrap(dd)
     csrf_token = secrets.token_urlsafe(32)
-    httpd = ThreadingHTTPServer((host, port), make_handler(dd, csrf_token))
+    users    = _auth.UserStore(os.path.join(dd, "users.json"))
+    sessions = _auth.SessionStore()
+    httpd = ThreadingHTTPServer((host, port), make_handler(dd, csrf_token, sessions, users))
     httpd.daemon_threads = True
     print(f"Cockpit 2 (GlassFrog-vorm, PoC) op http://{host}:{port}  —  Ctrl-C om te stoppen")
     print(f"Dataset: {dd}")

@@ -1,0 +1,106 @@
+"""Auth — sessie- en wachtwoordbeheer voor cockpit2."""
+from __future__ import annotations
+import json, os, secrets, time
+import bcrypt
+
+SESSION_COOKIE = "nv_session"
+SESSION_TTL    = 7 * 24 * 3600   # 1 week
+
+
+class UserStore:
+    def __init__(self, path: str):
+        self._path = path
+        self._data: dict = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {}
+
+    def verify(self, username: str, password: str) -> bool:
+        u = self._data.get(username)
+        if not u:
+            return False
+        return bcrypt.checkpw(password.encode(), u["password_hash"].encode())
+
+    def get(self, username: str) -> dict | None:
+        return self._data.get(username)
+
+    def empty(self) -> bool:
+        return not bool(self._data)
+
+
+class SessionStore:
+    def __init__(self, ttl: int = SESSION_TTL):
+        self._ttl = ttl
+        self._sessions: dict[str, tuple[str, float]] = {}
+
+    def create(self, username: str) -> str:
+        token = secrets.token_urlsafe(32)
+        self._sessions[token] = (username, time.monotonic() + self._ttl)
+        return token
+
+    def get_username(self, token: str) -> str | None:
+        entry = self._sessions.get(token)
+        if not entry:
+            return None
+        username, expires = entry
+        if time.monotonic() > expires:
+            del self._sessions[token]
+            return None
+        return username
+
+    def delete(self, token: str) -> None:
+        self._sessions.pop(token, None)
+
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(12)).decode()
+
+
+def get_session_token(headers) -> str | None:
+    for part in headers.get("Cookie", "").split(";"):
+        name, _, value = part.strip().partition("=")
+        if name == SESSION_COOKIE:
+            return value.strip() or None
+    return None
+
+
+def set_cookie(token: str, max_age: int = SESSION_TTL) -> str:
+    return f"{SESSION_COOKIE}={token}; Max-Age={max_age}; Path=/; HttpOnly; Secure; SameSite=Strict"
+
+
+def clear_cookie() -> str:
+    return f"{SESSION_COOKIE}=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict"
+
+
+def login_page(next_url: str = "/", error: str = "") -> str:
+    err = f'<p style="color:#c0392b;margin:0 0 1rem">{error}</p>' if error else ""
+    nxt = next_url.replace('"', '%22')
+    return f"""<!doctype html><html lang="nl"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Inloggen — NoochVille</title>
+<style>
+:root{{--bg:#f8f6f2;--card:#fff;--border:#d4cfc8;--accent:#2d6a4f;--text:#1a1a1a}}
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:var(--bg);display:flex;align-items:center;justify-content:center;
+     min-height:100vh;font-family:system-ui,sans-serif;color:var(--text)}}
+.card{{background:var(--card);border:1px solid var(--border);border-radius:8px;
+      padding:2.5rem;width:100%;max-width:360px;box-shadow:0 2px 8px rgba(0,0,0,.08)}}
+h1{{font-size:1.25rem;margin-bottom:1.75rem}}
+label{{display:block;font-size:.85rem;font-weight:600;margin-bottom:.35rem}}
+input[type=text],input[type=password]{{width:100%;padding:.6rem .75rem;
+  border:1px solid var(--border);border-radius:4px;font-size:1rem;
+  margin-bottom:1.25rem;background:#fafaf8}}
+input:focus{{outline:2px solid var(--accent);border-color:transparent}}
+button{{width:100%;padding:.7rem;background:var(--accent);color:#fff;border:none;
+       border-radius:4px;font-size:1rem;cursor:pointer;font-weight:600}}
+button:hover{{opacity:.9}}
+</style></head><body>
+<div class="card">
+  <h1>NoochVille — inloggen</h1>
+  {err}
+  <form method="post" action="/login">
+    <input type="hidden" name="next" value="{nxt}">
+    <label for="u">Gebruikersnaam</label>
+    <input type="text" id="u" name="username" autocomplete="username" autofocus required>
+    <label for="p">Wachtwoord</label>
+    <input type="password" id="p" name="password" autocomplete="current-password" required>
+    <button type="submit">Inloggen</button>
+  </form>
+</div></body></html>"""
