@@ -63,7 +63,7 @@ _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 def _default_data_dir() -> str:
     base = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    return os.path.join(base, "data", "poc")
+    return os.path.join(base, "data")
 
 
 class _Stores:
