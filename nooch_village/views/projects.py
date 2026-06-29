@@ -57,6 +57,21 @@ def _trekker_options(st: _Stores, sel_person="", sel_agent="") -> str:
     return "".join(out)
 
 
+def _owner_options(st: _Stores, sel_owner="") -> str:
+    """Alle rollen (geen cirkels) als opties om een project naar een andere rol te verplaatsen.
+    Cirkels doen geen uitvoerend werk, dus die staan niet in de lijst."""
+    roles = [r for r in st.records.all() if not org.is_circle(r)]
+    roles.sort(key=lambda r: _name(r).lower())
+    out = []
+    if sel_owner and st.records.get(sel_owner) is None:
+        # huidige eigenaar bestaat niet meer (dangling) — toon dat expliciet en geselecteerd
+        out.append(f"<option value='{_e(sel_owner)}' selected>⚠ {_e(sel_owner)} (bestaat niet meer)</option>")
+    for r in roles:
+        s = " selected" if r.id == sel_owner else ""
+        out.append(f"<option value='{_e(r.id)}'{s}>{_e(_name(r))}</option>")
+    return "".join(out)
+
+
 _PROJ_COLS = [("Actief", "actief", ("running", "queued")), ("Wacht", "wacht", ("blocked",)),
               ("Done", "done", ("done",)), ("Toekomst", "toekomst", ("future",))]
 
@@ -300,6 +315,10 @@ def _group_meta(st: _Stores, p: dict, mode: str, node_owner: str):
         if owner.startswith(_II_PREFIX):
             return (("ii", owner), "zzz", "Individual Initiative", owner, "")
         orec = st.records.get(owner)
+        if orec is None and owner:
+            # dangling: de eigenaar-rol bestaat niet meer — maak dat zichtbaar i.p.v. stil "—"
+            return (("rol", owner), "zzz_" + owner.lower(),
+                    f"⚠ {owner} (rol bestaat niet meer)", owner, "")
         nm = _name(orec) if orec else (owner or "—")
         return (("rol", owner), nm.lower(), nm, owner, "")
     if p.get("agent"):
@@ -356,6 +375,65 @@ def _archived_html(st: _Stores, archived: list, csrf_token: str, back: str) -> s
 
 
 
+def _drafts_html(st: _Stores, drafts: list, csrf_token: str, back: str) -> str:
+    """Concept-projecten (status draft) die op akkoord wachten: goedkeuren → op het bord,
+    verwerpen → weg. Onzichtbaar als er geen drafts zijn."""
+    if not drafts:
+        return ""
+    rows = ""
+    for p in drafts:
+        scope = p.get("scope")
+        if isinstance(scope, dict):
+            scope = " · ".join(f"{k}: {v}" for k, v in scope.items())
+        trekker = _trekker_html(st, p)
+        ctrl = ""
+        if csrf_token:
+            base = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                    f"<input type='hidden' name='pid' value='{_e(p['id'])}'>"
+                    f"<input type='hidden' name='next' value='{_e(back)}'>")
+            ctrl = (
+                f" <form method='post' action='/action' style='display:inline'>{base}"
+                f"<button class='btn ok sm' type='submit' name='action' value='proj_approve'>goedkeuren</button>"
+                f"</form> <form method='post' action='/action' style='display:inline'>{base}"
+                f"<button class='dellink' type='submit' name='action' value='proj_discard' "
+                f"onclick=\"return confirm('Concept verwerpen?')\">verwerpen</button></form>")
+        rows += (f"<li>{_e(str(scope or '—'))} <span class='muted'>· {trekker}</span>{ctrl}</li>")
+    return (f"<details open style='margin:.6rem 0'><summary>📝 Concepten — wachten op akkoord "
+            f"({len(drafts)})</summary><ul class='clean'>{rows}</ul></details>")
+
+
+def _orphans_html(st: _Stores, orphans: list, csrf_token: str, back: str) -> str:
+    """Wees-projecten: hun eigenaar-rol bestaat niet meer, dus ze vallen door alle bordfilters
+    en zijn anders onzichtbaar. Hier kun je ze opnieuw aan een rol koppelen, archiveren of wissen."""
+    if not orphans:
+        return ""
+    rows = ""
+    for p in orphans:
+        scope = p.get("scope")
+        if isinstance(scope, dict):
+            scope = " · ".join(f"{k}: {v}" for k, v in scope.items())
+        ghost = _e(p.get("owner") or "?")
+        ctrl = ""
+        if csrf_token:
+            base = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                    f"<input type='hidden' name='pid' value='{_e(p['id'])}'>"
+                    f"<input type='hidden' name='next' value='{_e(back)}'>")
+            ctrl = (
+                f" <form method='post' action='/action' style='display:inline'>{base}"
+                f"<select name='owner'>{_owner_options(st)}</select>"
+                f"<button class='btn sm' type='submit' name='action' value='proj_setowner'>koppel aan rol</button>"
+                f"</form> <form method='post' action='/action' style='display:inline'>{base}"
+                f"<button class='btn sm' type='submit' name='action' value='proj_archive'>archiveer</button>"
+                f"<button class='dellink' type='submit' name='action' value='proj_delete' "
+                f"onclick=\"return confirm('Definitief verwijderen?')\">verwijder</button></form>")
+        rows += (f"<li><span class='chip coral-solid'>wees</span> {_e(str(scope or '—'))} "
+                 f"<span class='muted'>· verloren eigenaar: {ghost}</span>{ctrl}</li>")
+    return (f"<div class='c2-sec'><h3>⚠ Wees-projecten ({len(orphans)})</h3>"
+            f"<p class='muted' style='font-size:.8rem'>Deze projecten verwijzen naar een rol die "
+            f"niet meer bestaat. Koppel ze aan een bestaande rol of ruim ze op.</p>"
+            f"<ul class='clean'>{rows}</ul></div>")
+
+
 def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: bool = True) -> str:
     allp = st.projects.all()
     back_base = f"/node?id={rec.id}&tab=projects"
@@ -364,7 +442,9 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
 
     if not org.is_circle(rec):
         # ROL: eigen projecten, gegroepeerd per persoon (de doener). Lege lanes tonen we niet.
-        projs = [p for p in allp if p.get("owner") == rec.id and not p.get("archived")]
+        mine = [p for p in allp if p.get("owner") == rec.id and not p.get("archived")]
+        projs = [p for p in mine if p.get("status") != "draft"]
+        drafts = [p for p in mine if p.get("status") == "draft"]
         archived = [p for p in allp if p.get("owner") == rec.id and p.get("archived")]
         board = _projects_board(st, projs, rec.id, csrf_token, back_base, "persoon", quickadd=add)
         if not board:
@@ -372,7 +452,8 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
                      else "<p class='muted'>Nog geen projecten.</p>")
         head = (f"<div style='margin-bottom:1rem'>"
                 f"<h3 style='margin:0;display:inline'>Projecten ({len(projs)})</h3> &nbsp; {addlink}</div>")
-        return f"<div class='c2-sec'>{head}{board}{_archived_html(st, archived, csrf_token, back_base)}</div>"
+        return (f"<div class='c2-sec'>{head}{_drafts_html(st, drafts, csrf_token, back_base)}"
+                f"{board}{_archived_html(st, archived, csrf_token, back_base)}</div>")
 
     # CIRKEL: doet zelf geen uitvoerend werk. Toont projecten van haar DIRECTE rollen +
     # Individual Initiative. Lege lanes tonen we niet; subcirkels = eigen bord (niet aggregeren).
@@ -380,7 +461,9 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
     direct = sorted(org.roles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
     rids = {r.id for r in direct}
     ii = f"{_II_PREFIX}{rec.id}"
-    projs = [p for p in allp if (p.get("owner") in rids or p.get("owner") == ii) and not p.get("archived")]
+    mine = [p for p in allp if (p.get("owner") in rids or p.get("owner") == ii) and not p.get("archived")]
+    projs = [p for p in mine if p.get("status") != "draft"]
+    drafts = [p for p in mine if p.get("status") == "draft"]
     back = f"{back_base}&group={g}"
     board = _projects_board(st, projs, rec.id, csrf_token, back, g, quickadd=add)
     if not board:
@@ -402,7 +485,16 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
             f"flex-wrap:wrap;gap:.6rem;margin-bottom:1rem'>"
             f"<div><h3 style='margin:0;display:inline'>Projecten ({len(projs)})</h3> &nbsp; {addlink}</div>"
             f"{switch}</div>")
-    return f"<div class='c2-sec'>{head}{board}{sub_html}</div>"
+    # Wees-projecten (verloren eigenaar) tonen we op de wortelcirkel: van daaruit altijd bereikbaar.
+    orphans_html = ""
+    roots = {r.id for r in org.roots(st.records.all())}
+    if rec.id in roots:
+        orphans = [p for p in allp if not p.get("archived")
+                   and (o := p.get("owner")) and not o.startswith(_II_PREFIX)
+                   and st.records.get(o) is None]
+        orphans_html = _orphans_html(st, orphans, csrf_token, back_base)
+    return (f"<div class='c2-sec'>{head}{_drafts_html(st, drafts, csrf_token, back)}"
+            f"{board}{sub_html}</div>{orphans_html}")
 
 
 def _person_projects_html(st: _Stores, pid: str) -> str:
@@ -523,12 +615,33 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
 
     # ---- Details: kader zonder achtergrond, tweekoloms, links uitgelijnd, altijd open ----
     owner = p.get("owner", "")
-    if owner.startswith(_II_PREFIX):
+    is_ii = owner.startswith(_II_PREFIX)
+    dangling = bool(owner) and not is_ii and orec is None
+    if is_ii:
         rol_naam = "Individual Initiative"
     else:
         rol_naam = _name(orec) if orec else (owner or "—")
-    rol_v = (f"<a href='/node?id={_e(owner)}'>{_e(rol_naam)}</a>" if orec else _e(rol_naam))
-    if p.get("agent"):
+    if rw and not is_ii:
+        # Rol verplaatsen: keuzelijst van rollen, direct opslaan bij wijziging.
+        warn = ("<span class='chip coral-solid' style='margin-bottom:.3rem'>"
+                "⚠ rol bestaat niet meer — kies een nieuwe</span>") if dangling else ""
+        rol_v = (f"{warn}<form method='post' action='/action' class='ownerform'>{hid()}"
+                 f"<select name='owner' "
+                 f"onchange='this.form.requestSubmit?this.form.requestSubmit():this.form.submit()'>"
+                 f"{_owner_options(st, owner)}</select>"
+                 f"<button type='submit' name='action' value='proj_setowner' "
+                 f"class='btn sm' style='margin-left:.3rem'>verplaats</button></form>")
+    else:
+        rol_v = (f"<a href='/node?id={_e(owner)}'>{_e(rol_naam)}</a>" if orec else _e(rol_naam))
+    if rw:
+        # Persoon/AI (trekker) wijzigen: keuzelijst, direct opslaan bij wijziging.
+        pers_v = (f"<form method='post' action='/action' class='trekkerform'>{hid()}"
+                  f"<select name='trekker' "
+                  f"onchange='this.form.requestSubmit?this.form.requestSubmit():this.form.submit()'>"
+                  f"{_trekker_options(st, p.get('person') or '', p.get('agent') or '')}</select>"
+                  f"<button type='submit' name='action' value='proj_settrekker' "
+                  f"class='btn sm' style='margin-left:.3rem'>wijzig</button></form>")
+    elif p.get("agent"):
         pa = st.personas.get(p["agent"])
         pers_v = f"{_e(pa.name if pa else p['agent'])} (AI)"
     elif p.get("person"):

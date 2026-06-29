@@ -1,0 +1,138 @@
+"""Projectbeheer-functionaliteit in cockpit2: trekker wijzigen, owner verplaatsen,
+draft goed/afkeuren, wees-projecten zichtbaar maken. Thread-vrij, via dispatch + render."""
+from __future__ import annotations
+
+from nooch_village import cockpit2
+from nooch_village.views import projects as P
+
+ROLE   = "mother_earth__nooch__website_developer"
+ROLE2  = "mother_earth__nooch__brand_visual_designer"
+CIRCLE = "mother_earth__nooch"
+ROOT   = "mother_earth"
+
+
+def _st(tmp_path):
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    return dd, cockpit2._Stores(dd)
+
+
+# ── trekker (persoon) wijzigen ───────────────────────────────────────────────
+
+def test_proj_settrekker_wijzigt_persoon(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "Test", "human", status="queued")
+    person = st.people.all()[0]
+    cockpit2.dispatch(dd, "proj_settrekker", {"pid": [pid], "trekker": [f"person:{person.id}"], "next": ["/"]})
+    assert cockpit2._Stores(dd).projects.get(pid)["person"] == person.id
+
+
+def test_detail_modal_heeft_trekker_form_in_schrijfmodus(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "Test", "human", status="queued")
+    rw = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    ro = P.render_project(cockpit2._Stores(dd), pid, csrf_token="")
+    assert "proj_settrekker" in rw and "name='trekker'" in rw
+    assert "proj_settrekker" not in ro            # read-only: geen formulier
+
+
+# ── owner-rol verplaatsen ────────────────────────────────────────────────────
+
+def test_proj_setowner_verplaatst_naar_andere_rol(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "Test", "human", status="queued")
+    cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": [ROLE2], "next": ["/"]})
+    assert cockpit2._Stores(dd).projects.get(pid)["owner"] == ROLE2
+
+
+def test_proj_setowner_weigert_cirkel(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "Test", "human", status="queued")
+    _, msg = cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": [CIRCLE], "next": ["/"]})
+    assert "cirkel" in msg
+    assert cockpit2._Stores(dd).projects.get(pid)["owner"] == ROLE   # ongewijzigd
+
+
+def test_proj_setowner_weigert_onbekende_rol(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "Test", "human", status="queued")
+    _, msg = cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": ["nietbestaand"], "next": ["/"]})
+    assert "onbekende" in msg
+    assert cockpit2._Stores(dd).projects.get(pid)["owner"] == ROLE
+
+
+def test_owner_options_sluit_cirkels_uit(tmp_path):
+    dd, st = _st(tmp_path)
+    opts = P._owner_options(st)
+    assert f"value='{ROLE}'" in opts
+    assert f"value='{CIRCLE}'" not in opts          # cirkels doen geen uitvoerend werk
+
+
+def test_owner_options_toont_dangling_sentinel(tmp_path):
+    dd, st = _st(tmp_path)
+    opts = P._owner_options(st, sel_owner="ghost_role")
+    assert "bestaat niet meer" in opts and "ghost_role" in opts
+
+
+# ── draft-afhandeling ────────────────────────────────────────────────────────
+
+def test_proj_approve_zet_draft_op_bord(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "Concept", "human", status="draft")
+    cockpit2.dispatch(dd, "proj_approve", {"pid": [pid], "next": ["/"]})
+    assert cockpit2._Stores(dd).projects.get(pid)["status"] == "queued"
+
+
+def test_proj_discard_verwijdert_draft(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "Concept", "human", status="draft")
+    cockpit2.dispatch(dd, "proj_discard", {"pid": [pid], "next": ["/"]})
+    assert cockpit2._Stores(dd).projects.get(pid) is None
+
+
+def test_draft_sectie_zichtbaar_met_knoppen(tmp_path):
+    dd, st = _st(tmp_path)
+    st.projects.create(ROLE, "Concept idee", "human", status="draft")
+    html = P._projects_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROLE),
+                                csrf_token="TOK", add=True)
+    assert "Concepten" in html and "proj_approve" in html and "proj_discard" in html
+
+
+def test_draft_telt_niet_mee_in_bord_aantal(tmp_path):
+    dd, st = _st(tmp_path)
+    st.projects.create(ROLE, "Op bord", "human", status="queued")
+    st.projects.create(ROLE, "Concept", "human", status="draft")
+    html = P._projects_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROLE),
+                                csrf_token="TOK", add=True)
+    assert "Projecten (1)" in html             # alleen het niet-draft project
+
+
+# ── wees-projecten (dangling owner) zichtbaar maken ──────────────────────────
+
+def _make_orphan(dd, st):
+    pid = st.projects.create(ROLE, "Wees project", "human", status="queued")
+    st.projects.edit(pid, owner="ghost_role", allow_done=True)
+    return pid
+
+
+def test_wees_sectie_op_wortelcirkel(tmp_path):
+    dd, st = _st(tmp_path)
+    _make_orphan(dd, st)
+    html = P._projects_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROOT),
+                                csrf_token="TOK", add=True)
+    assert "Wees-projecten" in html and "koppel aan rol" in html
+
+
+def test_wees_project_niet_op_gewone_rol_bord(tmp_path):
+    dd, st = _st(tmp_path)
+    _make_orphan(dd, st)
+    html = P._projects_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROLE),
+                                csrf_token="TOK", add=True)
+    assert "Wees-projecten" not in html       # alleen op de wortel, niet op elke rol
+
+
+def test_wees_project_koppelbaar_aan_rol(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = _make_orphan(dd, st)
+    cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": [ROLE2], "next": ["/"]})
+    assert cockpit2._Stores(dd).projects.get(pid)["owner"] == ROLE2

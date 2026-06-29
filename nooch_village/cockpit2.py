@@ -363,6 +363,22 @@ def dispatch(data_dir: str, action: str, form: dict):
         person, agent = _parse_trekker(g("trekker"))
         if pj.edit(g("pid"), person=person, agent=agent, allow_done=True):
             msg = "✓ trekker opgeslagen"
+    elif action == "proj_setowner":
+        owner = g("owner")
+        orec = st.records.get(owner)
+        if orec is None:
+            msg = "✗ onbekende rol"
+        elif org.is_circle(orec):
+            # Een cirkel doet geen uitvoerend werk: een project hoort bij een rol.
+            msg = "✗ een cirkel kan geen project bevatten — kies een rol"
+        elif pj.edit(g("pid"), owner=owner, allow_done=True):
+            msg = "✓ rol verplaatst"
+    elif action == "proj_approve":
+        if pj.approve(g("pid")):
+            msg = "✓ concept goedgekeurd — staat nu op het bord"
+    elif action == "proj_discard":
+        if pj.discard(g("pid")):
+            msg = "🗑 concept verworpen"
     elif action == "proj_setlabel":
         if pj.edit(g("pid"), label=g("label"), allow_done=True):
             msg = "✓ label opgeslagen"
