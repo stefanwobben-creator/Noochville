@@ -3,10 +3,15 @@
 Een mens is iets anders dan een inwoner (Persona = AI-karakter). Een rol kan vervuld worden door
 mensen én/of AI-inwoners (de hybride vorm). Mensen leven hier (data/people.json); wie welke rol
 vervult staat in assignments.py (los van de governance-records: bemenst, niet geboren).
+
+Auth-velden (password_hash, invited_at, last_login) zijn optioneel. Ontbreken ze in het JSON-
+bestand, dan vult de dataclass-default in. people.json is de enige bron van waarheid: geen
+aparte users.json meer.
 """
 from __future__ import annotations
 import json
 import os
+import time
 import uuid
 from dataclasses import dataclass, asdict
 
@@ -19,6 +24,9 @@ class Person:
     id: str
     name: str
     email: str = ""
+    password_hash: str = ""
+    invited_at: float = 0.0
+    last_login: float = 0.0
 
 
 class PeopleStore:
@@ -36,6 +44,10 @@ class PeopleStore:
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
         atomic_write_json(self.path, self._items)
+
+    def _to_person(self, d: dict) -> Person:
+        known = {f.name for f in Person.__dataclass_fields__.values()}
+        return Person(**{k: v for k, v in d.items() if k in known})
 
     def add(self, name: str, email: str = "") -> Person:
         """Maak een mens. Dedup op (genormaliseerde) naam: bestaat die al, geef de bestaande terug."""
@@ -55,17 +67,26 @@ class PeopleStore:
         nl = (name or "").strip().lower()
         for d in self._items.values():
             if d.get("name", "").strip().lower() == nl:
-                return Person(**d)
+                return self._to_person(d)
+        return None
+
+    def by_email(self, email: str) -> Person | None:
+        el = (email or "").strip().lower()
+        if not el:
+            return None
+        for d in self._items.values():
+            if d.get("email", "").lower() == el:
+                return self._to_person(d)
         return None
 
     def get(self, pid: str | None) -> Person | None:
         if not pid:
             return None
         d = self._items.get(pid)
-        return Person(**d) if d else None
+        return self._to_person(d) if d else None
 
     def all(self) -> list[Person]:
-        return [Person(**d) for d in sorted(self._items.values(), key=lambda x: x.get("name", ""))]
+        return [self._to_person(d) for d in sorted(self._items.values(), key=lambda x: x.get("name", ""))]
 
     def update(self, pid: str, *, name: str | None = None, email: str | None = None) -> Person | None:
         d = self._items.get(pid)
@@ -76,7 +97,22 @@ class PeopleStore:
         if email is not None:
             d["email"] = email.strip()[:120]
         self._save()
-        return Person(**d)
+        return self._to_person(d)
+
+    def set_password(self, pid: str, password_hash: str, invited_at: float | None = None) -> None:
+        d = self._items.get(pid)
+        if d is not None:
+            d["password_hash"] = password_hash
+            d["invited_at"] = invited_at if invited_at is not None else time.time()
+            self._save()
+
+    def touch_login(self, email: str) -> None:
+        el = (email or "").lower()
+        for d in self._items.values():
+            if d.get("email", "").lower() == el:
+                d["last_login"] = time.time()
+                self._save()
+                return
 
     def remove(self, pid: str) -> bool:
         if pid in self._items:

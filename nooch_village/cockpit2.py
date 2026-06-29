@@ -262,6 +262,46 @@ def _parse_trekker(val: str):
     return "", ""
 
 
+def _handle_person_add(data_dir: str, form: dict) -> str:
+    """Maak een persoon aan in people.json met een tijdelijk wachtwoord en toon dat éénmalig.
+
+    Velden: voornaam, achternaam, email. Geeft een volledige HTML-pagina terug (geen redirect),
+    zodat het tijdelijke wachtwoord niet in een URL of browser-history terechtkomt.
+    """
+    g = lambda k: (form.get(k) or [""])[0].strip()
+    voornaam, achternaam, email = g("voornaam"), g("achternaam"), g("email")
+    back = g("next") or "/"
+    if not back.startswith("/"):
+        back = "/"
+    naam = " ".join(p for p in (voornaam, achternaam) if p)
+    if not naam or not email:
+        body = ("<div class='c2-sec'><h3>Persoon toevoegen</h3>"
+                "<p style='color:#c0392b'>Voornaam, achternaam én e-mailadres zijn verplicht.</p>"
+                f"<p><a href='{_e(back)}'>← terug</a></p></div>")
+        return _page("Persoon toevoegen", body)
+
+    st = _Stores(data_dir)
+    if st.people.by_email(email) is not None:
+        body = ("<div class='c2-sec'><h3>Persoon toevoegen</h3>"
+                f"<p style='color:#c0392b'>Er bestaat al een persoon met {_e(email)}.</p>"
+                f"<p><a href='{_e(back)}'>← terug</a></p></div>")
+        return _page("Persoon toevoegen", body)
+
+    person = st.people.add(naam, email)
+    temp = _auth.generate_temp_password()
+    st.people.set_password(person.id, _auth.hash_password(temp))
+
+    body = (
+        "<div class='c2-sec'><h3>✓ Persoon toegevoegd</h3>"
+        f"<p><b>{_e(person.name)}</b> — {_e(email)}</p>"
+        "<p class='muted'>Geef dit tijdelijke wachtwoord door. Het wordt maar één keer getoond:</p>"
+        f"<p style='font-size:1.4rem;font-family:monospace;background:#f4f1ec;"
+        f"padding:.6rem 1rem;border-radius:6px;display:inline-block'>{_e(temp)}</p>"
+        f"<p style='margin-top:1rem'><a href='{_e(back)}'>← terug naar de cirkel</a></p></div>"
+    )
+    return _page("Persoon toegevoegd", body)
+
+
 def dispatch(data_dir: str, action: str, form: dict):
     """Verwerk een POST-actie. Geeft (redirect-URL, korte bevestiging) terug."""
     st = _Stores(data_dir)
@@ -876,6 +916,7 @@ def make_handler(data_dir: str, csrf_token: str,
                 password = (form.get("password") or [""])[0]
                 next_url = (form.get("next") or ["/"])[0]
                 if users and users.verify_by_email(email, password):
+                    _Stores(data_dir).people.touch_login(email)
                     token = sessions.create(email) if sessions else ""
                     self._redirect_to(next_url or "/", _auth.set_cookie(token))
                 else:
@@ -916,6 +957,11 @@ def make_handler(data_dir: str, csrf_token: str,
             if not secrets.compare_digest(token, csrf_token):
                 self._send("CSRF-token ongeldig", 403); return
             action = (form.get("action") or [""])[0]
+            # person_add: rendert een pagina die het tijdelijke wachtwoord éénmalig toont
+            # (niet via redirect, zodat het wachtwoord niet in de URL/history belandt).
+            if action == "person_add":
+                self._send(_handle_person_add(data_dir, form))
+                return
             nxt, msg = dispatch(data_dir, action, form)
             self._redirect(nxt, msg)
 
@@ -931,7 +977,7 @@ def serve(host: str = "127.0.0.1", port: int = 8766, data_dir: str | None = None
     _load_env()   # LLM-keys beschikbaar maken voor 'AI praat mee'
     _bootstrap(dd)
     csrf_token = secrets.token_urlsafe(32)
-    users    = _auth.UserStore(os.path.join(dd, "users.json"))
+    users    = _auth.UserStore(os.path.join(dd, "people.json"))
     sessions = _auth.SessionStore()
     httpd = ThreadingHTTPServer((host, port), make_handler(dd, csrf_token, sessions, users))
     httpd.daemon_threads = True

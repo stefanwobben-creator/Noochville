@@ -1,22 +1,28 @@
-"""Voeg een gebruiker toe aan data/users.json (of update een bestaande)."""
-import getpass, json, os, sys
+"""Zet of reset een wachtwoord voor een persoon in data/people.json.
+
+people.json is de enige bron van waarheid; er is geen aparte users.json meer.
+De persoon moet al bestaan (toevoegen kan via de cockpit, Members-tab).
+"""
+import getpass, os, sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from nooch_village.auth import hash_password
+from nooch_village.people import PeopleStore
 
-USERS_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "users.json")
+PEOPLE_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "people.json")
 
 
 def main():
-    username = input("Interne ID (bijv. stefan): ").strip()
-    if not username:
-        print("ID mag niet leeg zijn.")
+    store = PeopleStore(PEOPLE_PATH)
+    email = input("E-mailadres: ").strip()
+    person = store.by_email(email)
+    if person is None:
+        print(f"Geen persoon gevonden met e-mailadres '{email}'.")
+        print("Voeg de persoon eerst toe via de cockpit (Members-tab → Persoon toevoegen).")
         sys.exit(1)
-    email        = input("E-mailadres (bijv. stefan@nooch.earth): ").strip()
-    person_id    = input("person_id (bijv. dc5685eb2074, of Enter om leeg te laten): ").strip()
-    display_name = input("Display naam (bijv. Stefan Wobben): ").strip()
-    password     = getpass.getpass("Wachtwoord: ")
-    password2    = getpass.getpass("Wachtwoord nogmaals: ")
+    print(f"Gevonden: {person.name} ({person.email})")
+    password  = getpass.getpass("Nieuw wachtwoord: ")
+    password2 = getpass.getpass("Wachtwoord nogmaals: ")
     if password != password2:
         print("Wachtwoorden komen niet overeen.")
         sys.exit(1)
@@ -24,21 +30,8 @@ def main():
         print("Wachtwoord moet minimaal 8 tekens zijn.")
         sys.exit(1)
 
-    users = {}
-    if os.path.exists(USERS_PATH):
-        users = json.load(open(USERS_PATH, encoding="utf-8"))
-
-    users[username] = {
-        "password_hash": hash_password(password),
-        "person_id":     person_id or None,
-        "display_name":  display_name or username,
-        "email":         email or None,
-    }
-
-    with open(USERS_PATH, "w", encoding="utf-8") as f:
-        json.dump(users, f, ensure_ascii=False, indent=2)
-
-    print(f"Gebruiker '{username}' ({email}) opgeslagen in {USERS_PATH}")
+    store.set_password(person.id, hash_password(password))
+    print(f"Wachtwoord voor {person.name} opgeslagen in {PEOPLE_PATH}")
 
 
 if __name__ == "__main__":

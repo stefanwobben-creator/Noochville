@@ -1,4 +1,8 @@
-"""Auth — sessie- en wachtwoordbeheer voor cockpit2."""
+"""Auth — sessie- en wachtwoordbeheer voor cockpit2.
+
+people.json is de enige bron van waarheid. UserStore leest het bestand en bouwt
+een email-index op records met zowel een email- als een password_hash-veld.
+"""
 from __future__ import annotations
 import json, os, secrets, time
 import bcrypt
@@ -6,27 +10,40 @@ import bcrypt
 SESSION_COOKIE = "nv_session"
 SESSION_TTL    = 7 * 24 * 3600   # 1 week
 
+_TEMP_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"  # geen 0/O/l/1 verwarring
+
 
 class UserStore:
+    """Leest people.json en biedt email-gebaseerde authenticatie.
+
+    Werkt op elk JSON-bestand waarvan de waarden een 'email'- én
+    'password_hash'-veld hebben — ongeacht de sleutelvorm (person_id of username).
+    """
+
     def __init__(self, path: str):
         self._path = path
-        self._data: dict = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {}
-        self._by_email: dict = {u["email"].lower(): u for u in self._data.values() if u.get("email")}
+
+    def _by_email(self) -> dict:
+        """Lees people.json vers in: nieuw toegevoegde mensen kunnen meteen inloggen,
+        zonder herstart."""
+        raw: dict = json.load(open(self._path, encoding="utf-8")) if os.path.exists(self._path) else {}
+        return {
+            rec["email"].lower(): rec
+            for rec in raw.values()
+            if rec.get("email") and rec.get("password_hash")
+        }
 
     def verify_by_email(self, email: str, password: str) -> bool:
-        u = self._by_email.get(email.lower())
+        u = self._by_email().get(email.lower())
         if not u:
             return False
         return bcrypt.checkpw(password.encode(), u["password_hash"].encode())
 
     def get_by_email(self, email: str) -> dict | None:
-        return self._by_email.get(email.lower())
-
-    def get(self, username: str) -> dict | None:
-        return self._data.get(username)
+        return self._by_email().get(email.lower())
 
     def empty(self) -> bool:
-        return not bool(self._data)
+        return not bool(self._by_email())
 
 
 class SessionStore:
@@ -55,6 +72,10 @@ class SessionStore:
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt(12)).decode()
+
+
+def generate_temp_password(length: int = 10) -> str:
+    return "".join(secrets.choice(_TEMP_ALPHABET) for _ in range(length))
 
 
 def get_session_token(headers) -> str | None:

@@ -256,14 +256,36 @@ def _roles_html(st: _Stores, rec, csrf_token: str = "") -> str:
     return "".join(out)
 
 
-def _members_html(st: _Stores, rec) -> str:
+def _person_add_form(rec, csrf_token: str) -> str:
+    """Formulier 'Persoon toevoegen' op de Members-tab. Alleen in schrijf-modus (met csrf)."""
+    if not csrf_token:
+        return ""
+    back = f"/node?id={_e(rec.id)}&tab=members"
+    return (
+        "<details class='c2-add' style='margin-top:1rem'>"
+        "<summary style='cursor:pointer;font-weight:600'>+ Persoon toevoegen</summary>"
+        "<form method='post' action='/action' style='margin-top:.75rem;display:grid;gap:.5rem;max-width:360px'>"
+        f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+        "<input type='hidden' name='action' value='person_add'>"
+        f"<input type='hidden' name='next' value='{back}'>"
+        "<input type='text' name='voornaam' placeholder='Voornaam' required>"
+        "<input type='text' name='achternaam' placeholder='Achternaam' required>"
+        "<input type='email' name='email' placeholder='E-mailadres' required>"
+        "<button type='submit'>Toevoegen</button>"
+        "</form></details>"
+    )
+
+
+def _members_html(st: _Stores, rec, csrf_token: str = "") -> str:
     ppl = _members_of_circle(st, rec.id)
+    add = _person_add_form(rec, csrf_token)
     if not ppl:
-        return "<div class='c2-sec'><h3>Members</h3><span class='muted'>Geen mensen.</span></div>"
+        return ("<div class='c2-sec'><h3>Members</h3><span class='muted'>Geen mensen.</span>"
+                f"{add}</div>")
     cells = "".join(
         f"<div class='card'><span class='person'><span class='av'>{_e(_initials(p.name))}</span>"
         f"<a href='/person?id={_e(p.id)}'>{_e(p.name)}</a></span></div>" for p in ppl)
-    return f"<div class='c2-sec'><h3>Members ({len(ppl)})</h3>{cells}</div>"
+    return f"<div class='c2-sec'><h3>Members ({len(ppl)})</h3>{cells}{add}</div>"
 
 
 def _att_html(st: _Stores, rec, kind: str, leeg: str) -> str:
@@ -300,7 +322,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     elif tab == "roles":
         content = _roles_html(st, rec, csrf_token)
     elif tab == "members":
-        content = _members_html(st, rec)
+        content = _members_html(st, rec, csrf_token)
     elif tab == "notes":
         content = ("<div class='c2-sec'><h3>Notes</h3>"
                    + _att_html(st, rec, "note", "Nog geen notities op deze rol/cirkel.")
