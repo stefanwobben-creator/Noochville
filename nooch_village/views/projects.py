@@ -628,25 +628,23 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     else:
         rol_naam = _name(orec) if orec else (owner or "—")
     if rw and not is_ii:
-        # Rol verplaatsen: keuzelijst van rollen, direct opslaan bij wijziging.
-        warn = ("<span class='chip coral-solid' style='margin-bottom:.3rem'>"
+        # Rol verplaatsen: keuzelijst van rollen + expliciete opslaan-knop (de knop is de
+        # submitter, zodat 'action' altijd meekomt). Design: .fieldform (select + knop inline).
+        warn = ("<span class='chip coral-solid' style='margin-bottom:.3rem;display:inline-block'>"
                 "⚠ rol bestaat niet meer — kies een nieuwe</span>") if dangling else ""
-        rol_v = (f"{warn}<form method='post' action='/action' class='ownerform'>{hid()}"
-                 f"<select name='owner' "
-                 f"onchange='this.form.requestSubmit?this.form.requestSubmit():this.form.submit()'>"
-                 f"{_owner_options(st, owner)}</select>"
-                 f"<button type='submit' name='action' value='proj_setowner' "
-                 f"class='btn sm' style='margin-left:.3rem'>verplaats</button></form>")
+        rol_v = (f"{warn}<form method='post' action='/action' class='fieldform'>{hid()}"
+                 f"<select name='owner'>{_owner_options(st, owner)}</select>"
+                 f"<button class='btn ok sm' type='submit' name='action' value='proj_setowner'>"
+                 f"opslaan</button></form>")
     else:
         rol_v = (f"<a href='/node?id={_e(owner)}'>{_e(rol_naam)}</a>" if orec else _e(rol_naam))
     if rw:
-        # Persoon/AI (trekker) wijzigen: keuzelijst, direct opslaan bij wijziging.
-        pers_v = (f"<form method='post' action='/action' class='trekkerform'>{hid()}"
-                  f"<select name='trekker' "
-                  f"onchange='this.form.requestSubmit?this.form.requestSubmit():this.form.submit()'>"
+        # Persoon/AI (trekker) wijzigen: keuzelijst + opslaan-knop, zelfde .fieldform-patroon.
+        pers_v = (f"<form method='post' action='/action' class='fieldform'>{hid()}"
+                  f"<select name='trekker'>"
                   f"{_trekker_options(st, p.get('person') or '', p.get('agent') or '')}</select>"
-                  f"<button type='submit' name='action' value='proj_settrekker' "
-                  f"class='btn sm' style='margin-left:.3rem'>wijzig</button></form>")
+                  f"<button class='btn ok sm' type='submit' name='action' value='proj_settrekker'>"
+                  f"opslaan</button></form>")
     elif p.get("agent"):
         pa = st.personas.get(p["agent"])
         pers_v = f"{_e(pa.name if pa else p['agent'])} (AI)"
