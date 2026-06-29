@@ -10,7 +10,7 @@ Run:
     python -m nooch_village.village <mode>   # zie cli.py voor alle modes
 """
 from __future__ import annotations
-import os, time, json, logging
+import os, time, json, logging, shutil, tempfile
 from nooch_village.event_bus import EventBus, Event
 from nooch_village.config import load_context
 from nooch_village.skills import SkillRegistry
@@ -47,6 +47,7 @@ from nooch_village.skills_impl.content_schrijven import ContentSchrijvenSkill
 from nooch_village.skills_impl.content_check import ContentCheckSkill
 from nooch_village.skills_impl.curate import CurateSkill
 from nooch_village.skills_impl.voorstel import VoorstelSchrijvenSkill
+from nooch_village.skills_impl.shopify_sales import ShopifySalesSkill
 from nooch_village.human_inbox import HumanInbox
 from nooch_village.gap_classifier import classify_gap
 from nooch_village.observations import ObservationStore
@@ -126,6 +127,7 @@ class Village:
             ContentCheckSkill(),
             CurateSkill(),
             VoorstelSchrijvenSkill(),
+            ShopifySalesSkill(),
         ):
             self.registry.register(skill)
         self.records = Records(os.path.join(self.context.data_dir, "governance_records.json"))
@@ -425,9 +427,10 @@ class Village:
         return pid
 
 
-def once():
-    """Eén echte puls en dan stoppen. Ideaal voor een cron-job ('s ochtends)."""
-    v = Village(heartbeat_seconds=0)
+def _run_single_pulse(v: "Village") -> None:
+    """Draai één puls op een al-geconstrueerde Village: print de sleutels, abonneer op de
+    afronding, trap 'dag_begint' af, wacht tot de puls (en Noochie) klaar zijn, print de uitkomst.
+    Gedeeld door once() (tegen data/) en once_sandbox() (tegen een wegwerp-kopie). Puur extractie."""
     print(v.report_keys())
     done = {}
     noochie = {}
@@ -446,6 +449,35 @@ def once():
     print(f"Field Note: {done.get('note_path')} | tension={done.get('tension')}")
     if noochie:
         print(f"\nNoochie: {noochie.get('oordeel', '-')}")
+
+
+def once():
+    """Eén echte puls en dan stoppen. Ideaal voor een cron-job ('s ochtends)."""
+    v = Village(heartbeat_seconds=0)
+    _run_single_pulse(v)
+
+
+def once_sandbox(keep: bool = False, src: str | None = None) -> str:
+    """Draai één puls tegen een wegwerp-KOPIE van data/, zodat de productie-data nooit
+    geschreven wordt. Volgt het simulate()-patroon (Village met data_dir-override), maar
+    kopieert de echte data/ i.p.v. een lege map. Geeft het sandbox-pad terug.
+
+    keep=True laat de kopie staan zodat je de output kunt inzien; standaard wordt hij in een
+    finally opgeruimd. `src` is injecteerbaar voor tests; standaard de echte data/-map."""
+    src = src or os.path.join(BASE_DIR, "data")
+    tmp = tempfile.mkdtemp(prefix="noochville-pulse-")
+    shutil.copytree(src, tmp, dirs_exist_ok=True)
+    print(f"[sandbox] puls draait tegen kopie van data/: {tmp}")
+    try:
+        v = Village(heartbeat_seconds=0, data_dir=tmp)
+        _run_single_pulse(v)
+    finally:
+        if keep:
+            print(f"[sandbox] kopie behouden (--keep): {tmp}")
+        else:
+            shutil.rmtree(tmp, ignore_errors=True)
+            print("[sandbox] kopie opgeruimd.")
+    return tmp
 
 
 if __name__ == "__main__":

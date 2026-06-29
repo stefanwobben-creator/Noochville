@@ -364,7 +364,7 @@ def migrate_records(records: Records) -> None:
     }
     for _rid, _persona in _PERSONAS.items():
         _rec = records.get(_rid)
-        if _rec is not None and not _rec.archived and _rec.persona != _persona:
+        if _rec is not None and not _rec.archived and not _rec.persona:
             _rec.persona = _persona
             _rec.version += 1
             records.put(_rec)

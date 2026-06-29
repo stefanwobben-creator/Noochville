@@ -10,6 +10,10 @@ def main() -> None:
         from nooch_village.village import once
         once()
 
+    elif mode == "once-sandbox":
+        from nooch_village.village import once_sandbox
+        once_sandbox(keep="--keep" in sys.argv)
+
     elif mode == "run":
         from nooch_village.village import Village
         Village().run_forever()   # heartbeat uit settings.ini (lokaal: 5s, prod: 0)

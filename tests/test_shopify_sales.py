@@ -156,6 +156,36 @@ def test_skill_met_static_token():
     assert res["ok"] and res["pairs_sold"] == 1 and res["orders"] == 1 and res["window_days"] == 7
 
 
+def test_skill_stub_modus_geeft_testwaarde_en_markeert_niet_live():
+    # OAuth geparkeerd: expliciete stub-modus geeft een testwaarde voor pairs_sold, duidelijk gemarkeerd.
+    ctx = SimpleNamespace(settings={}, data_dir="/tmp")
+    res = ShopifySalesSkill().run({"stub": True}, ctx)
+    assert res["ok"] and res["live"] is False and res["stub"] is True
+    assert res["pairs_sold"] == 6 and res["orders"] == 3 and res["revenue"] == 540.0
+    assert "geparkeerd" in res["note"]
+
+
+def test_skill_stub_via_settings_flag():
+    ctx = SimpleNamespace(settings={"shopify_stub": "true"}, data_dir="/tmp")
+    res = ShopifySalesSkill().run({}, ctx)
+    assert res["live"] is False and res["pairs_sold"] == 6
+
+
+def test_live_token_heeft_voorrang_boven_stub():
+    # Zelfs met de stub-vlag aan: zodra er een live token is, draait de echte (geïnjecteerde) route.
+    ctx = SimpleNamespace(settings={"SHOPIFY_STORE": "x.myshopify.com", "SHOPIFY_TOKEN": "tok",
+                                    "shopify_stub": "true"}, data_dir="/tmp")
+    post = lambda q, v: _gql_page([_node("NL", 90, [("Groen", 1)])], False)
+    res = ShopifySalesSkill().run({"window_days": 7, "_post": post}, ctx)
+    assert res["ok"] and res.get("stub") is None and res["pairs_sold"] == 1
+
+
+def test_stub_niet_actief_zonder_expliciet_verzoek():
+    # Zonder stub-vlag blijft de skill gewoon fail-closed (geen ongevraagde fixture-data).
+    ctx = SimpleNamespace(settings={}, data_dir="/tmp")
+    assert ShopifySalesSkill().run({}, ctx).get("ok") is None
+
+
 def test_skill_met_client_credentials():
     ctx = SimpleNamespace(settings={"SHOPIFY_STORE": "x.myshopify.com",
                                     "SHOPIFY_CLIENT_ID": "cid", "SHOPIFY_CLIENT_SECRET": "sec"},

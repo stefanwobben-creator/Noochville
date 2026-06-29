@@ -199,6 +199,21 @@ def aggregate_orders(orders: list[dict], window_days: int, *, now=None) -> dict:
     }
 
 
+# Fixture-data voor de STUB-modus. Shopify-OAuth staat geparkeerd; tot er een live token is kan de
+# skill — UITSLUITEND op expliciet verzoek — op deze vaste fixture draaien zodat pairs_sold een
+# testwaarde geeft en de pijplijn niet op de OAuth blijft hangen. Dit is GEEN mock die de echte
+# call dood-codeert (CLAUDE.md regel 5): de live route houdt altijd voorrang en blijft bereikbaar;
+# de stub draait alleen als hij expliciet wordt aangevraagd én er geen live token aanwezig is.
+_STUB_ORDERS = [
+    {"created_at": "2026-06-20T10:00:00Z", "country": "NL", "currency": "EUR",
+     "total": 180.0, "line_items": [{"title": "Sneaker Groen", "quantity": 2}]},
+    {"created_at": "2026-06-18T10:00:00Z", "country": "DE", "currency": "EUR",
+     "total": 90.0, "line_items": [{"title": "Sneaker Zwart", "quantity": 1}]},
+    {"created_at": "2026-05-30T10:00:00Z", "country": "NL", "currency": "EUR",
+     "total": 270.0, "line_items": [{"title": "Sneaker Groen", "quantity": 3}]},
+]   # pairs_sold = 2 + 1 + 3 = 6
+
+
 class ShopifySalesSkill(Skill):
     name = "shopify_sales"
     cost = "free"
@@ -208,8 +223,25 @@ class ShopifySalesSkill(Skill):
         "AOV, per land en topproducten over een venster. Uitsluitend geaggregeerd, geen PII."
     )
 
+    @staticmethod
+    def _truthy(v) -> bool:
+        return str(v).strip().lower() in ("1", "true", "yes", "ja", "on")
+
+    def _stub_result(self) -> dict:
+        """Gemarkeerde fixture-uitkomst: NIET live. Alleen via de expliciete stub-modus."""
+        agg = aggregate_orders(_STUB_ORDERS, 0)
+        return {"ok": True, "live": False, "stub": True,
+                "note": "STUB — Shopify-OAuth staat geparkeerd; dit is fixture-data, niet live.",
+                **agg}
+
     def run(self, payload: dict, context) -> dict:
         s = context.settings
+        # Expliciete stub-modus: payload {"stub": True} of settings shopify_stub. Draait alleen als
+        # er GEEN live token is — zo houdt de echte route voorrang en wordt niets dood-gecodeerd.
+        stub_requested = bool(payload.get("stub")) or self._truthy(s.get("shopify_stub", ""))
+        has_static_token = bool((s.get("SHOPIFY_TOKEN") or s.get("shopify_token", "")).strip())
+        if stub_requested and not has_static_token:
+            return self._stub_result()
         store = (s.get("SHOPIFY_STORE") or s.get("shopify_store", "")).strip()
         if not store:
             return {"error": "SHOPIFY_STORE ontbreekt in .env -> skill faalt closed"}
