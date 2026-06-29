@@ -8,14 +8,15 @@ USERS_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "users.json")
 
 
 def main():
-    username = input("Gebruikersnaam: ").strip()
+    username = input("Interne ID (bijv. stefan): ").strip()
     if not username:
-        print("Gebruikersnaam mag niet leeg zijn.")
+        print("ID mag niet leeg zijn.")
         sys.exit(1)
-    person_id   = input("person_id (bijv. dc5685eb2074, of Enter om leeg te laten): ").strip()
+    email        = input("E-mailadres (bijv. stefan@nooch.earth): ").strip()
+    person_id    = input("person_id (bijv. dc5685eb2074, of Enter om leeg te laten): ").strip()
     display_name = input("Display naam (bijv. Stefan Wobben): ").strip()
-    password    = getpass.getpass("Wachtwoord: ")
-    password2   = getpass.getpass("Wachtwoord nogmaals: ")
+    password     = getpass.getpass("Wachtwoord: ")
+    password2    = getpass.getpass("Wachtwoord nogmaals: ")
     if password != password2:
         print("Wachtwoorden komen niet overeen.")
         sys.exit(1)
@@ -31,12 +32,13 @@ def main():
         "password_hash": hash_password(password),
         "person_id":     person_id or None,
         "display_name":  display_name or username,
+        "email":         email or None,
     }
 
     with open(USERS_PATH, "w", encoding="utf-8") as f:
         json.dump(users, f, ensure_ascii=False, indent=2)
 
-    print(f"Gebruiker '{username}' opgeslagen in {USERS_PATH}")
+    print(f"Gebruiker '{username}' ({email}) opgeslagen in {USERS_PATH}")
 
 
 if __name__ == "__main__":

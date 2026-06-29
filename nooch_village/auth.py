@@ -11,12 +11,16 @@ class UserStore:
     def __init__(self, path: str):
         self._path = path
         self._data: dict = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {}
+        self._by_email: dict = {u["email"].lower(): u for u in self._data.values() if u.get("email")}
 
-    def verify(self, username: str, password: str) -> bool:
-        u = self._data.get(username)
+    def verify_by_email(self, email: str, password: str) -> bool:
+        u = self._by_email.get(email.lower())
         if not u:
             return False
         return bcrypt.checkpw(password.encode(), u["password_hash"].encode())
+
+    def get_by_email(self, email: str) -> dict | None:
+        return self._by_email.get(email.lower())
 
     def get(self, username: str) -> dict | None:
         return self._data.get(username)
@@ -84,7 +88,7 @@ body{{background:var(--bg);display:flex;align-items:center;justify-content:cente
       padding:2.5rem;width:100%;max-width:360px;box-shadow:0 2px 8px rgba(0,0,0,.08)}}
 h1{{font-size:1.25rem;margin-bottom:1.75rem}}
 label{{display:block;font-size:.85rem;font-weight:600;margin-bottom:.35rem}}
-input[type=text],input[type=password]{{width:100%;padding:.6rem .75rem;
+input[type=email],input[type=password]{{width:100%;padding:.6rem .75rem;
   border:1px solid var(--border);border-radius:4px;font-size:1rem;
   margin-bottom:1.25rem;background:#fafaf8}}
 input:focus{{outline:2px solid var(--accent);border-color:transparent}}
@@ -97,8 +101,8 @@ button:hover{{opacity:.9}}
   {err}
   <form method="post" action="/login">
     <input type="hidden" name="next" value="{nxt}">
-    <label for="u">Gebruikersnaam</label>
-    <input type="text" id="u" name="username" autocomplete="username" autofocus required>
+    <label for="u">E-mailadres</label>
+    <input type="email" id="u" name="email" autocomplete="email" autofocus required>
     <label for="p">Wachtwoord</label>
     <input type="password" id="p" name="password" autocomplete="current-password" required>
     <button type="submit">Inloggen</button>

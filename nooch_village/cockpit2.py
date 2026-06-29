@@ -872,14 +872,14 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/login":
                 raw = self.rfile.read(length).decode("utf-8") if length else ""
                 form = urllib.parse.parse_qs(raw)
-                username = (form.get("username") or [""])[0].strip()
+                email    = (form.get("email") or [""])[0].strip()
                 password = (form.get("password") or [""])[0]
                 next_url = (form.get("next") or ["/"])[0]
-                if users and users.verify(username, password):
-                    token = sessions.create(username) if sessions else ""
+                if users and users.verify_by_email(email, password):
+                    token = sessions.create(email) if sessions else ""
                     self._redirect_to(next_url or "/", _auth.set_cookie(token))
                 else:
-                    self._send(_auth.login_page(next_url, error="Gebruikersnaam of wachtwoord onjuist."))
+                    self._send(_auth.login_page(next_url, error="E-mailadres of wachtwoord onjuist."))
                 return
 
             if path != "/action":
