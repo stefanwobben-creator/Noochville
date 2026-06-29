@@ -136,3 +136,24 @@ def test_wees_project_koppelbaar_aan_rol(tmp_path):
     pid = _make_orphan(dd, st)
     cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": [ROLE2], "next": ["/"]})
     assert cockpit2._Stores(dd).projects.get(pid)["owner"] == ROLE2
+
+
+# ── klikbaarheid: publiek = link naar detail (→ login), ingelogd = modal-div ──
+
+def test_kaart_is_link_in_publieke_view(tmp_path):
+    """Read-only (geen csrf): geen modal-JS, dus de kaart moet een <a> zijn die naar /project
+    navigeert (server redirect dan naar /login). Anders is de kaart een dode div."""
+    dd, st = _st(tmp_path)
+    st.projects.create(ROLE, "Zichtbaar", "human", status="queued")
+    html = P._projects_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROLE),
+                                csrf_token="", add=False)
+    assert "<a class='card pcard' href='/project?pid=" in html
+    assert "data-pid" not in html              # geen modal-afhankelijke div in read-only
+
+
+def test_kaart_is_modal_div_ingelogd(tmp_path):
+    dd, st = _st(tmp_path)
+    st.projects.create(ROLE, "Zichtbaar", "human", status="queued")
+    html = P._projects_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROLE),
+                                csrf_token="TOK", add=True)
+    assert "<div class='card pcard' data-pid=" in html and "draggable=" in html

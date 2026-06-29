@@ -124,9 +124,15 @@ def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
         bar = f"<div class='clabel' style='background:{_LABELS[p['label']]}'></div>"
     meta = (f"<div class='muted' style='font-size:.72rem;margin-top:.25rem'>"
             f"{_trekker_html(st, p)} · {_e(_age(p.get('created_at')))}</div>")
-    drag = ' draggable="true"' if csrf_token else ''
-    return (f"<div class='card pcard' data-pid='{_e(pid)}' data-href='{href}'{drag}>"
-            f"{bar}<div class='ptitle'>{_e(_scope_text(p))}</div>{meta}{_progress_badge(p)}</div>")
+    inner = f"{bar}<div class='ptitle'>{_e(_scope_text(p))}</div>{meta}{_progress_badge(p)}"
+    if not csrf_token:
+        # Publiek/alleen-lezen: er is geen modal-JS, dus de kaart moet zelf navigeren.
+        # /project redirect server-side naar /login als de bezoeker niet is ingelogd —
+        # het detail blijft dus achter login, maar de kaart is niet langer een dode div.
+        return (f"<a class='card pcard' href='{_e(href)}' "
+                f"style='display:block;text-decoration:none;color:inherit'>{inner}</a>")
+    return (f"<div class='card pcard' data-pid='{_e(pid)}' data-href='{href}' draggable=\"true\">"
+            f"{inner}</div>")
 
 
 def _quickadd(owner: str, col: str, csrf_token: str, back: str, trekker: str = "") -> str:
