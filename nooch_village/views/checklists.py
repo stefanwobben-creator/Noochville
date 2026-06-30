@@ -31,19 +31,14 @@ def _cl_spark(item: dict) -> str:
 def _cl_row(st: _Stores, item: dict, csrf: str) -> str:
     cid = item["id"]
     status = ChecklistStore.current_status(item)
-    curval = ChecklistStore.current_value(item)
     tgt = f"<span class='chip muted'>{_e(_cl_target_label(st, item))}</span>"
-    valbadge = "" if curval is None else f"<span class='cl-val'>{curval:g}</span>"
-    # rapporteer ✓/✗ (+ optionele numerieke waarde) voor de huidige periode, in één formulier
+    # rapporteer ✓/✗ voor de huidige periode (U5: numerieke waarde niet meer in de UI)
     if csrf:
-        vstr = "" if curval is None else f"{curval:g}"
         rep = (f"<form method='post' action='/action' class='cl-rep'>"
                f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
                f"<input type='hidden' name='cid' value='{_e(cid)}'>"
                f"<input type='hidden' name='action' value='cl_report'>"
                f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=checklists'>"
-               f"<input class='cl-num' name='value' inputmode='decimal' value='{vstr}' "
-               f"placeholder='#' title='waarde (optioneel)'>"
                f"<button class='cl-check ok{(' on' if status is True else '')}' type='submit' name='ok' value='1' title='check'>✓</button>"
                f"<button class='cl-check no{(' on' if status is False else '')}' type='submit' name='ok' value='0' title='geen check'>✗</button></form>")
         rm = (f"<form method='post' action='/action' style='display:inline'>"
@@ -56,33 +51,27 @@ def _cl_row(st: _Stores, item: dict, csrf: str) -> str:
                                          f"{'✓' if status else '✗'}</span>")
         rm = ""
     danger = f"<span class='row-danger'>{rm}</span>" if rm else ""
-    return (f"<div class='cl-row'><div class='cl-main'><span class='cl-desc'>{_e(item['description'])}</span> {tgt}{valbadge}</div>"
+    # Kleurcodering op rij-niveau, wederzijds uitsluitend: gemist=coral, te-doen=geel, gedaan=neutraal.
+    # status is False (gemist) impliceert een rapport deze periode -> nooit tegelijk is_due (te-doen).
+    if status is False:
+        rowcls = " cl-attn"
+    elif ChecklistStore.is_due(item):
+        rowcls = " cl-todo"
+    else:
+        rowcls = ""
+    return (f"<div class='cl-row{rowcls}'><div class='cl-main'><span class='cl-desc'>{_e(item['description'])}</span> {tgt}</div>"
             f"<div class='cl-act'>{_cl_spark(item)}<span class='cl-checks'>{rep}</span>{danger}</div></div>")
 
 
 def _checklists_tab_html(st: _Stores, rec, csrf: str = "", flt: str = "due", nav: str = "") -> str:
+    # flt blijft in de signatuur voor caller-compat (render_node + werkoverleg geven 'm nog door),
+    # maar filtert niet meer: sinds U4 tonen we altijd de hele checklist en highlighten we de
+    # te-doen items met .cl-todo. (clf-threading opruimen kan later, apart.)
     is_c = org.is_circle(rec)
     items = st.checklists.for_node(rec.id)
     base = f"/node?id={_e(rec.id)}&tab=checklists"
 
-    # Aandacht nodig: gemiste checks (✗ deze periode) bubbelen naar boven -> wordt werk.
-    missed = [i for i in items if ChecklistStore.current_status(i) is False]
-    aandacht = ""
-    if missed:
-        rows = "".join(_cl_row(st, i, csrf) for i in missed)
-        aandacht = (f"<div class='c2-sec cl-attn'><h3>⚠ Aandacht nodig</h3>"
-                    f"<p class='muted' style='font-size:.8rem'>Gemiste checks. Bespreek ze in het "
-                    f"werkoverleg of maak er een agendapunt van.</p>{rows}</div>")
-
-    shown = [i for i in items if ChecklistStore.is_due(i)] if flt == "due" else items
-    # filter-schakelaar
-    def fl(key, lbl):
-        on = " on" if flt == key else ""
-        if nav:   # in het werkoverleg: blijf in de modal
-            u = f"{nav}&clf={key}"
-            return f"<a class='cl-filter{on} js-modal' href='{u}' data-href='{u}'>{lbl}</a>"
-        return f"<a class='cl-filter{on}' href='{base}&clf={key}'>{lbl}</a>"
-    bar = f"<div class='cl-bar'><span class='muted'>Toon:</span> {fl('due', 'Nu te doen')} {fl('all', 'Alles')}</div>"
+    shown = items   # geen filter meer: altijd de hele checklist; kleurcodering per rij (cl-todo/cl-attn)
 
     # groepering per cadans
     groups = ""
@@ -93,8 +82,7 @@ def _checklists_tab_html(st: _Stores, rec, csrf: str = "", flt: str = "due", nav
         groups += (f"<div class='cl-group'><h4>{_e(CADENCE_LABEL[cad])}</h4>"
                    + "".join(_cl_row(st, i, csrf) for i in sub) + "</div>")
     if not groups:
-        groups = ("<p class='muted'>Niets meer te doen deze periode. 🎉</p>" if flt == "due"
-                  else "<p class='muted'>Nog geen checklist-items.</p>")
+        groups = "<p class='muted'>Nog geen checklist-items.</p>"
 
     # toevoegen (governance-poort: alleen een al bestaande terugkerende actie)
     add = ""
@@ -124,7 +112,7 @@ def _checklists_tab_html(st: _Stores, rec, csrf: str = "", flt: str = "due", nav
     head = (f"<div class='cl-head'><h3>Checklists</h3>{add}</div>"
             f"<p class='muted' style='font-size:.8rem'>Transparantie over terugkerend werk (pre-flight): "
             f"✓ of ✗ per periode. Nieuwe verwachtingen lopen via het roloverleg.</p>")
-    return f"<div class='c2-sec'>{head}{bar}</div>{aandacht}{groups}"
+    return f"<div class='c2-sec'>{head}</div>{groups}"
 
 
 def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool) -> str:

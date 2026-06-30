@@ -4,7 +4,7 @@ import re
 from typing import TYPE_CHECKING
 
 from nooch_village.cockpit import _e, _page
-from nooch_village.cockpit2_util import _name, _md, _psec, _IC_CHECK, _IC_CHAT
+from nooch_village.cockpit2_util import _name, _psec, _IC_CHECK
 from nooch_village.cockpit2_util import _EXTRA_CSS
 
 if TYPE_CHECKING:
@@ -125,33 +125,6 @@ def _rov_dupes(st: _Stores, text: str, exclude_role: str = ""):
                     or low in al or al in low):
                 hits.append((_name(r), a))
     return hits[:3]
-
-
-def _rov_ai_kladblok(st: _Stores, item: dict, mode: str = "", ask=None):
-    """AI-assistent bij een voorstel. mode: 'spanning' (stelt vragen) of 'accountability'
-    (formuleert sneller). Injecteerbaar via `ask`."""
-    d = _rov_draft(st, item)
-    recent = "\n".join(f"- {m.get('who')}: {m.get('text','')}" for m in (item.get("kladblok") or [])[-6:])
-    if mode == "accountability":
-        taak = ("Help een accountability te formuleren voor deze rol. Antwoord beknopt en geef een "
-                "concrete voorbeeldformulering in de -en-vorm (bijv. 'Bewaken van …').")
-    elif mode == "spanning":
-        taak = ("Help de spanning achter dit voorstel te verhelderen. Stel 1-2 korte, scherpe vragen "
-                "(geen oplossing nog).")
-    else:
-        taak = "Denk kort mee (max 4 zinnen); je wijzigt de rol niet."
-    prompt = (f"Je bent een Holacracy-facilitator. {taak}\n"
-              f"Rol: {d.get('name')}\nPurpose: {d.get('purpose') or '(geen)'}\n"
-              f"Accountabilities: {', '.join(d.get('accs', [])) or '(geen)'}\n"
-              f"Gesprek tot nu:\n{recent or '(leeg)'}")
-    if ask is not None:
-        return ask(prompt)
-    try:
-        from nooch_village import llm
-        from nooch_village.cockpit2 import _match_ladder
-        return llm.reason(prompt, ladder=_match_ladder())
-    except Exception:
-        return None
 
 
 def _rov_apply(st: _Stores):
@@ -390,58 +363,8 @@ def _rov_editor(st: _Stores, item: dict, csrf: str, back: str, circle_id: str = 
             f"<div class='rov-consent'>{consent}</div></div>")
 
 
-def _rov_chat(st: _Stores, item: dict, csrf: str, circle_id: str) -> str:
-    """AI-assistent als chatvenster (vanuit de footer). Eerst de keuze: spanning verhelderen of
-    accountability formuleren. Bij 'accountability' checkt het systeem automatisch of die niet al
-    elders belegd is. Fail-closed zonder AI-key (jouw bericht blijft staan, geen AI-antwoord)."""
-    base = f"/roloverleg2?circle={circle_id}"
-    iid = item["id"]
-    churl = f"{base}&iid={iid}&chat=1"
-    close = f"{base}&iid={iid}"
-
-    def hid():
-        return (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
-                f"<input type='hidden' name='circle' value='{_e(circle_id)}'>"
-                f"<input type='hidden' name='iid' value='{_e(iid)}'>"
-                f"<input type='hidden' name='next' value='{_e(close)}'>")
-    keep = f"data-reopen='{_e(churl)}'"
-    head = (f"<div class='rovchat-head'><span>{_IC_CHAT}AI-assistent</span>"
-            f"<a class='rovchat-x js-modal' href='{close}' data-href='{close}' title='Sluiten'>✕</a></div>")
-
-    mode = item.get("chatmode") or ""
-    if mode not in ("spanning", "accountability"):
-        def opt(m, lbl):
-            return (f"<form method='post' action='/action' {keep}>{hid()}"
-                    f"<input type='hidden' name='mode' value='{m}'>"
-                    f"<button class='btn' type='submit' name='action' value='rov2_chat_start'>{lbl}</button></form>")
-        body = (f"<div class='rovchat-intro'><p class='muted'>Waar kan ik mee helpen?</p>"
-                f"{opt('spanning', 'Spanning verhelderen')}"
-                f"{opt('accountability', 'Accountability formuleren')}</div>")
-        return f"<div class='rovchat'>{head}{body}</div>"
-
-    msgs = ""
-    for m in (item.get("kladblok") or []):
-        who = m.get("who")
-        cls = "ai" if who == "ai" else ("note" if who == "note" else "jij")
-        lbl = {"ai": "🤖 AI", "note": "⚠ Check"}.get(who, "🙋 jij")
-        msgs += (f"<div class='kb-msg {cls}'><span class='kb-who'>{lbl}</span>"
-                 f"<div class='kb-text'>{_md(m.get('text', ''))}</div></div>")
-    ph = "Beschrijf de spanning…" if mode == "spanning" else "Waar gaat de accountability over?"
-    comp = (f"<form method='post' action='/action' class='kb-form' {keep}>{hid()}"
-            f"<textarea name='text' rows='2' placeholder='{ph}'></textarea>"
-            f"<button class='btn ok sm' type='submit' name='action' value='rov2_kladblok' "
-            f"style='margin-top:.3rem'>Stuur</button></form>")
-    label = "Spanning verhelderen" if mode == "spanning" else "Accountability formuleren"
-    reset = (f"<form method='post' action='/action' {keep}>{hid()}"
-             f"<input type='hidden' name='mode' value='reset'>"
-             f"<button class='flink' type='submit' name='action' value='rov2_chat_start'>↺ ander onderwerp</button></form>")
-    sub = f"<div class='rovchat-mode'><span>{label}</span>{reset}</div>"
-    return f"<div class='rovchat'>{head}{sub}<div class='kb-body'>{msgs}{comp}</div></div>"
-
-
-
 def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: str = "",
-                       fragment: bool = False, chat: bool = False) -> str:
+                       fragment: bool = False) -> str:
     """Roloverleg in modal-vorm. Brok 1: frame + agenda links (toevoegen, lijst, selecteren)."""
     crec = st.records.get(circle_id)
     if crec is None:
@@ -496,12 +419,6 @@ def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: s
     else:
         right = "<p class='muted'>Geen open agendapunten meer. Voeg er een toe, of sluit de vergadering.</p>"
 
-    # AI-assistent: knop rechts in de footer; opent een chatvenster (chat=1) bij het actieve punt.
-    ai_btn = ""
-    if sel:
-        churl = f"{base}&iid={sel['id']}&chat=1"
-        ai_btn = (f"<a class='btn js-modal rovchat-toggle' href='{churl}' data-href='{churl}'>"
-                  f"{_IC_CHAT}AI-assistent</a>")
     n_consent = sum(1 for it in items_all if it.get("status") == "consented")
     confirm = (f"Overleg sluiten? {n_consent} aangenomen voorstel(len) worden doorgevoerd in de "
                f"records. Dit kan niet ongedaan." if n_consent
@@ -511,13 +428,12 @@ def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: s
             f"<input type='hidden' name='circle' value='{_e(circle_id)}'>"
             f"<input type='hidden' name='next' value='/node?id={_e(circle_id)}'>"
             f"<button class='btn ok' type='submit' name='action' value='rov2_end'>"
-            f"Vergadering sluiten</button></form>{ai_btn}</div>")
-    chat_panel = _rov_chat(st, sel, csrf_token, circle_id) if (chat and sel) else ""
+            f"Vergadering sluiten</button></form></div>")
     sec_note = ("<p class='wo-sec muted' style='margin:.2rem 0 .6rem'>Alleen de secretaris opent en "
                 "sluit dit overleg.</p>")
     detail = (f"<h2 style='margin-top:0'>Governance meeting — {_e(_name(crec))}</h2>{sec_note}"
               f"<div class='pgrid rov-grid'><div class='pmain'>{left}</div>"
-              f"<aside class='pdisc'>{right}</aside></div>{foot}{chat_panel}")
+              f"<aside class='pdisc'>{right}</aside></div>{foot}")
     if fragment:
         return detail
     main = f"<div class='c2-main' style='max-width:980px'><div class='c2-bar'><a href='/node?id={_e(circle_id)}'>← terug</a></div>{detail}</div>"

@@ -397,8 +397,6 @@ ul.clean li:last-child{border-bottom:none}
 .rov-item.done .rov-title{text-decoration:line-through;color:var(--muted)}
 .rov-by{font-size:.6rem;width:auto;min-width:1.4rem;padding:0 .25rem;height:1.4rem;display:inline-flex;align-items:center;justify-content:center}
 .rov-foot{position:sticky;bottom:-1.3rem;z-index:6;background:var(--surface);border-top:1px solid var(--border);margin:1rem -1.5rem -1.3rem;padding:.8rem 1.5rem 1.3rem;display:flex;align-items:center;justify-content:space-between;gap:.6rem}
-.rovchat-toggle{display:inline-flex;align-items:center;gap:.4rem}
-.rovchat-toggle svg{width:15px;height:15px}
 .rov-editor input[name=value]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem}
 .rovm{border:1px solid var(--border);border-radius:var(--radius);padding:.8rem .9rem;margin-bottom:.9rem;background:var(--surface)}
 .rovm-h{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.6rem}
@@ -433,15 +431,6 @@ ul.clean li:last-child{border-bottom:none}
 .sec-kop{font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;margin-bottom:.3rem}
 .rov-consent{margin-top:1rem}
 .btn.ok:disabled,.btn:disabled{background:var(--cream-2);color:var(--muted);border-color:var(--border);cursor:not-allowed}
-.rovchat{position:fixed;right:1.2rem;bottom:1.2rem;width:min(360px,92vw);max-height:72vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 12px 34px rgba(0,0,0,.2);z-index:60;overflow:hidden}
-.rovchat-head{display:flex;align-items:center;justify-content:space-between;padding:.55rem .7rem;border-bottom:1px solid var(--border);font-weight:700;background:var(--green-tint);color:var(--green-dark)}
-.rovchat-head>span{display:flex;align-items:center;gap:.4rem}
-.rovchat-head svg{width:15px;height:15px}
-.rovchat-x{text-decoration:none;color:var(--green-dark);font-weight:700;padding:0 .2rem}
-.rovchat-intro{padding:.85rem;display:flex;flex-direction:column;gap:.5rem}
-.rovchat-intro .btn{width:100%}
-.rovchat-mode{display:flex;align-items:center;justify-content:space-between;padding:.4rem .7rem;font-size:.72rem;color:var(--subtle);border-bottom:1px solid var(--border)}
-.rovchat .kb-body{padding:.7rem;overflow-y:auto}
 .kb-msg{margin-bottom:.55rem}
 .kb-msg.jij{text-align:right}
 .kb-who{font-size:.7rem;font-weight:700;color:var(--subtle)}
@@ -571,7 +560,8 @@ ul.clean li:last-child{border-bottom:none}
 .cl-check{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;width:1.7rem;height:1.7rem;line-height:1;font-size:.85rem;color:var(--muted)}
 .cl-check.ok.on{background:var(--green);color:#fff;border-color:var(--green)}
 .cl-check.no.on{background:var(--coral);color:#fff;border-color:var(--coral)}
-.cl-attn{background:var(--error-tint);border:1px solid var(--coral);border-radius:var(--radius);padding:.65rem .75rem}
+.cl-attn{background:var(--error-tint)}     /* gemist checklist-item (rij-niveau, coral) */
+.cl-todo{background:var(--yellow-light)}   /* te-doen checklist-item (rij-niveau, geel) */
 .cl-add{display:inline-block}
 .cl-add>summary{list-style:none;cursor:pointer}
 .cl-add>summary::-webkit-details-marker{display:none}
@@ -658,8 +648,6 @@ ul.clean li:last-child{border-bottom:none}
 .wo-mem-n{flex:1 1 auto;min-width:0;font-weight:600}
 .wo-leave{font-size:.74rem}
 .wo-who{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;margin-bottom:.6rem}
-.cl-num{width:3.2rem;border:1px solid var(--border);border-radius:var(--radius);padding:.15rem .35rem;text-align:right}
-.cl-val{font-variant-numeric:tabular-nums;color:var(--green-dark);font-weight:700;margin-left:.3rem}
 .cl-rep{display:inline-flex;gap:.25rem;align-items:center}
 .row-danger{margin-left:.7rem;padding-left:.7rem;border-left:1px solid var(--border);opacity:.6}
 .row-danger:hover{opacity:1}

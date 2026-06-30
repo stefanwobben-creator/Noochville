@@ -32,3 +32,22 @@ sessie opent hiermee.
 - Puls-output (notes.json, output/) is nog niet zichtbaar in cockpit2
   (leest attachments.json). De transparantie-brug bestaat nog niet.
 - Lokaal en server-governance divergeren. Verzoenen vóór de eerstvolgende deploy.
+- CSS-default-details: de globale details{}-regel in cockpit.py:504
+  geeft elke <details> een card-uiterlijk. Negen plekken in de
+  cockpit erven dit wrapper-kader (waaronder .m-add "+Link" en
+  .tile-info), vijf plekken overschrijven het al ad-hoc. Symptoom:
+  visueel dubbel kader rond pill-buttons en info-iconen.
+  Structurele fix: globale details{}-default kaal maken, expliciete
+  .box-details introduceren voor echte cards. Niet ad-hoc oplappen.
+- Autorisatie-laag ontbreekt: elke ingelogde gebruiker mag nu alles
+  in de cockpit. Drie samenhangende stappen ontbreken: (a) de
+  sessie-gebruiker doorgeven aan dispatch, (b) een leadlink-check
+  (is filler van {circle}__circle_lead), (c) een patroon voor
+  "actie X mag door Y, anders 403". Eerste use case die dit
+  blokkeert: afwezig-status op de members-tab (puur informatief,
+  member zelf + leadlink). Niet ad-hoc bouwen — eerst het patroon.
+- Werkoverleg-presence draagt gedrag (taken pauzeren), is
+  session-scoped en niet bruikbaar als algemene aan/afwezig-status.
+  Voor een standalone "afwezig"-status op de members-tab een apart
+  veld nodig. Keuze: per cirkel+persoon (data/availability.json) of
+  per persoon (in people.json).

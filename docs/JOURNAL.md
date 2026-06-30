@@ -1333,3 +1333,44 @@ vóór de volgende sprint. Geen code bouwen tot dit beantwoord is.
 HTTP-laag. Besluit: bewust mens-gestuurd houden voor nu.
 
 Suite einde dag: 1333 groen, 8 pre-existing failures.
+
+## 2026-06-30 — AI's activeren → veiligheidsbug ontdekt → UI-microfixes → volgorde gedraaid
+
+Begonnen met een helder doel: **de AI's activeren**. Persona's koppelen, skills toewijzen,
+een puls draaien om te zien wat de rollen produceren.
+
+**De bug die de dag kantelde.** Bij het draaien van een puls bleek dat bewuste
+persona-hernoemingen werden teruggedraaid: `website_watcher` "Walter Website" → "Corry Coconut",
+`harry_hemp` "Sid the Science Kid" → "Harry Hemp". Eerst toegeschreven aan `seed_records`; bij
+nader onderzoek bleek de echte plek `migrate_records` (seeds.py:357-371) — een `_PERSONAS`-dict
+die bij élke Village-start hardcoded oude namen forceerde op de records. De conditie was
+"overschrijf elke afwijking". Een puls tegen `data/` draaide zo elke menselijke hernoeming terug.
+
+**Rootcause gefixt, niet het symptoom.** Conditie van `_rec.persona != _persona` naar
+`not _rec.persona` — alleen vullen als de persona leeg is. Bewuste namen blijven staan, het
+verlies-herstel-vangnet blijft werken. Twee tests die het bewijzen.
+
+**Structurele veiligheid eromheen.** De bug was mogelijk omdat een puls überhaupt tegen
+productie-data draaide. `once-sandbox` toegevoegd: een puls draait nu tegen een wegwerp-kopie
+van data/ (copytree → Village(data_dir=tmp) → rmtree), `once()` ongewijzigd via een gedeelde
+`_run_single_pulse`. Productie-data kan een puls niet meer raken. Excuses gemaakt dat ik de
+eerste puls wél tegen `data/` draaide.
+
+**Vier UX-microfixes, drie open punten.** Uit een cockpit-review: C1 (info-icoon-kader) bewust
+teruggedraaid toen bleek dat het maar een halve fix was van een grotere `details{}`-CSS-kwestie.
+U4 (checklist als één lijst met kleurcodering), U5 (V/X only), U6 (AI-assistent in governance weg
+wegens overlap met Noochie) wél uitgevoerd. U3 (afwezig-status) en C2 bewust **niet** opgelost
+maar als open punt benoemd — het zijn geen microfixes (eerste-keer-autorisatie, structurele CSS).
+Halve oplossingen vermeden.
+
+**Werkafspraken vastgelegd** in WORKING_AGREEMENTS.md: pulsen via sandbox, één scope per opdracht,
+altijd diff vóór opslaan, niets naar de server zonder lokaal akkoord.
+
+**Het inzicht aan het eind — volgorde gedraaid.** De puls liet zien dat de rollen echte,
+gegronde output produceren (Plausible-data, Google-News-RSS), maar dat een LLM-advies-stap
+"Google Ads" adviseerde — terwijl Nooch geen advertising voert. Conclusie: **advieskwaliteit
+eerst** (strategie + context + databronnen die de agents lezen), de transparantie-brug naar de
+cockpit daarna. De volgorde van morgen is gedraaid: eerst de strategie-laag (`data/strategy.json`
+met do's en don'ts) en een context-patroon voor LLM-stappen, dan pas zichtbaarheid.
+
+Suite einde dag: 1382 groen, 7 pre-existing failures (LLM-zonder-key + isolatie-flaky).

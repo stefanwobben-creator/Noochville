@@ -38,6 +38,47 @@ Openstaande acties:
 
 ---
 
+## Sessie 2026-06-30 — veiligheid + UI-microfixes
+
+**Suite: 1382 tests groen**, 7 pre-existing failures (5× LLM-zonder-key, 2× test-isolatie-flaky;
+bevestigd identiek aan de baseline). Elke stap met diff-tonen + mutatie-check.
+
+### Wat is af
+- **seeds.py-overschrijver onschadelijk gemaakt** — `migrate_records` vult een persona nu alleen-als-leeg
+  i.p.v. elke afwijking overschrijven (seeds.py:367). Een puls draait bewuste hernoemingen niet meer terug.
+- **once-sandbox** — `python -m nooch_village.village once-sandbox [--keep]`: een puls draait tegen een
+  wegwerp-kopie van data/, raakt productie-data nooit. `once()` ongewijzigd via gedeelde `_run_single_pulse`.
+  Productie-data is hiermee structureel veilig.
+- **shopify_sales geregistreerd** in de SkillRegistry + gekoppeld aan `website_watcher`, met expliciete
+  fail-closed stub (geen live data zonder OAuth; opt-in fixture, gemarkeerd `live:False`).
+- **5 persona-koppelingen** in assignments.json: Sid→Scientist, Billy→Trends & Competition, Lara→Library,
+  Walter→Website Watcher, Wendy→Copywriter (zelfde vorm als Noochie).
+- **copywriter-skills** — Wendy's rol gekoppeld aan 3 bestaande content-skills (content_schrijven,
+  content_check, voorstel_schrijven); alleen DNA-koppeling, geen nieuwe code.
+- **WORKING_AGREEMENTS.md aangelegd** — werkafspraken over pulsen, scope, venv + open aandachtspunten.
+- **UI-microfixes:** U4 (checklist altijd tonen, kleurcodering: te-doen geel / gemist coral, aandacht-bubble
+  vervallen → één lijst), U5 (checklist-rapportage alleen V/X, waarde-badge + invoerveld weg, opslag intact),
+  U6 (AI-assistent in governance verwijderd — knop, route, chat-panel, handlers; overlap met Noochie).
+
+### Openstaande punten (zie WORKING_AGREEMENTS.md)
+- **Autorisatie-laag ontbreekt** — elke ingelogde gebruiker mag alles. Nodig: sessie-gebruiker naar dispatch,
+  leadlink-check (filler van `{circle}__circle_lead`), en een "actie X mag door Y, anders 403"-patroon.
+  Eerste geblokkeerde use case: afwezig-status op de members-tab.
+- **Transparantie-brug ontbreekt** — puls-output (notes.json, output/) is niet zichtbaar in cockpit2
+  (die leest attachments.json). Twee gescheiden werelden.
+- **Lokaal ↔ server-governance divergeren** — verzoenen vóór de eerstvolgende deploy.
+- **CSS-default-details** — globale `details{}`-regel (cockpit.py:504) geeft elke `<details>` een card-kader;
+  negen plekken erven het, vijf overschrijven ad-hoc. Structureel: default kaal + expliciete `.box-details`.
+- **Advies-kwaliteit** — LLM-advies-stappen lezen strategie/beleid nog niet (gaven al Google-Ads-advies
+  terwijl Nooch geen advertising voert). Advies tegen beleid toetsen vóór live gebruik.
+
+### Morgen
+- **Strategie-laag ontwerpen** — `data/strategy.json` met do's en don'ts die advies-stappen en agents lezen.
+- **Context-patroon voor LLM-stappen** — hoe elke LLM-aanroep consistent missie/strategie/databronnen meekrijgt.
+- **LLM-leer-model uitleggen** — hoe het dorp leert (welke feedback-lus, welke data, welke grens).
+
+---
+
 ## Waar we staan (2026-06-28)
 
 **Suite: 1333 tests groen**, 8 pre-existing failures (LLM/API-afhankelijk of test-isolatie-flaky,

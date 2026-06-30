@@ -521,36 +521,6 @@ def dispatch(data_dir: str, action: str, form: dict):
             msg = "✓ consent — voorstel aangenomen"
         else:
             msg = "⛔ consent geblokkeerd — los de blokkade(s) op"
-    elif action == "rov2_chat_start":
-        item = st.agenda.get(g("iid"))
-        if item is not None:
-            mode = g("mode")
-            if mode == "reset":
-                st.agenda.update_fields(g("iid"), chatmode="")
-                msg = "↺ ander onderwerp"
-            elif mode in ("spanning", "accountability"):
-                st.agenda.update_fields(g("iid"), chatmode=mode)
-                _load_env()
-                opener = _rov_ai_kladblok(st, st.agenda.get(g("iid")), mode=mode)
-                if opener:
-                    st.agenda.add_kladblok(g("iid"), "ai", opener.strip())
-                msg = "🤖 AI-assistent gestart"
-    elif action == "rov2_kladblok":
-        item = st.agenda.get(g("iid"))
-        if item is not None and g("text").strip():
-            st.agenda.add_kladblok(g("iid"), "jij", g("text"))
-            _load_env()
-            item = st.agenda.get(g("iid"))
-            mode = item.get("chatmode") or ""
-            if mode == "accountability":
-                for nm, a in _rov_dupes(st, g("text"), exclude_role=item.get("role_id") or ""):
-                    st.agenda.add_kladblok(g("iid"), "note",
-                                           f"Lijkt op '{a}' bij {nm}. Beleg het niet dubbel — "
-                                           "of formuleer scherper waarin deze rol verschilt.")
-            reply = _rov_ai_kladblok(st, st.agenda.get(g("iid")), mode=mode)
-            if reply:
-                st.agenda.add_kladblok(g("iid"), "ai", reply.strip())
-            msg = "💬 meegedacht" if reply else "💬 geplaatst (geen AI-antwoord)"
     elif action == "rov2_end":
         done = _rov_apply(st)
         msg = f"✓ overleg gesloten — {len(done)} doorgevoerd" if done else "overleg gesloten"
@@ -933,8 +903,7 @@ def make_handler(data_dir: str, csrf_token: str,
                 fr = (qs.get("fragment") or [""])[0] == "1"
                 self._send(_frag(render_roloverleg2(st, (qs.get("circle") or [""])[0],
                                                     (qs.get("iid") or [""])[0],
-                                                    csrf_token=effective_csrf, fragment=fr,
-                                                    chat=(qs.get("chat") or [""])[0] == "1"), fr))
+                                                    csrf_token=effective_csrf, fragment=fr), fr))
                 return
             if path == "/metric_export":
                 res = _metric_csv(st, (qs.get("mid") or [""])[0])
@@ -1064,9 +1033,9 @@ def _match_ladder() -> str:
 from nooch_village.views.roloverleg import (
     _rov_kindlabel, _rov_children, _rov_items, _rov_open,
     _rov_groups, _rov_initials, _rov_add_item, _rov_hard,
-    _rov_signals, _rov_dupes, _rov_ai_kladblok, _rov_apply,
+    _rov_signals, _rov_dupes, _rov_apply,
     _rov_draft, _rov_snapshot, _rov_save_draft,
-    _rov_member_block, _rov_editor, _rov_chat,
+    _rov_member_block, _rov_editor,
     render_roloverleg2,
 )
 
