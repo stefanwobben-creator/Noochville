@@ -29,3 +29,12 @@ def test_lege_persona_wordt_hersteld(tmp_path):
     recs.put(rec)
     migrate_records(recs)              # moet de seed-naam herstellen
     assert recs.get("website_watcher").persona == "Corry Coconut"
+
+
+def test_root_purpose_edit_overleeft_migrate(tmp_path):
+    recs = _seed(tmp_path)
+    root = recs.root()
+    root.definition.purpose = "Een bewust gekozen eigen root-purpose"   # bewuste edit door de mens
+    recs.put(root)
+    migrate_records(recs)              # mag de bewuste root-purpose NIET terugdraaien
+    assert recs.root().definition.purpose == "Een bewust gekozen eigen root-purpose"

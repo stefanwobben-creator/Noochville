@@ -7,7 +7,7 @@ from nooch_village.cockpit import _e
 
 _BUILD = _time.strftime("%H:%M")   # proces-starttijd: zichtbaar in de balk
 
-_CIRCLE_TABS = ["overview", "roles", "members", "policies", "notes", "projects",
+_CIRCLE_TABS = ["overview", "strategy", "roles", "members", "policies", "notes", "projects",
                 "checklists", "metrics"]
 _ROLE_TABS = ["overview", "policies", "notes", "projects", "checklists", "metrics"]
 
@@ -18,8 +18,9 @@ _TAB_STATUS = {
     "policies": "grey",
 }
 _TAB_LABEL = {
-    "overview": "Overview", "roles": "Roles", "members": "Members", "policies": "Policies",
-    "notes": "Notes", "projects": "Projects", "checklists": "Checklists", "metrics": "Metrics",
+    "overview": "Overview", "strategy": "Strategy", "roles": "Roles", "members": "Members",
+    "policies": "Policies", "notes": "Notes", "projects": "Projects",
+    "checklists": "Checklists", "metrics": "Metrics",
 }
 
 _NL_MND = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]

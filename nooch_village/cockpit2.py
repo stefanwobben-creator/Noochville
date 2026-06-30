@@ -52,6 +52,7 @@ from nooch_village.notifications import NotifStore
 from nooch_village.noochie import NoochieStore
 from nooch_village.roloverleg import Agenda
 from nooch_village.werkoverleg import WerkoverlegStore, STEPS as _WO_STEPS
+from nooch_village.strategy_store import StrategyStore
 from nooch_village import ai_match
 from nooch_village import org
 from nooch_village.glassfrog_import import import_org, nooch_poc_org
@@ -86,6 +87,7 @@ class _Stores:
         self.metrics = MetricStore(os.path.join(dd, "metrics.json"))
         self.defs = DefinitionStore(os.path.join(dd, "definitions.json"))
         self.werk = WerkoverlegStore(os.path.join(dd, "werkoverleg.json"))
+        self.strategies = StrategyStore(os.path.join(dd, "strategies.json"))
 
 
 _FAC_ACC = "Rapporteren over de gezondheid van de werkoverleggen"

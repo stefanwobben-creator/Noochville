@@ -14,6 +14,7 @@ from nooch_village.cockpit2_util import (
 from nooch_village.views.feed import _mentionables
 from nooch_village.views.checklists import _checklists_tab_html
 from nooch_village.views.metrics import _metrics_tab_html
+from nooch_village.views.strategy import _strategy_tab_html
 from nooch_village.views.projects import (
     _projects_tab_html, _scope_text, _person_projects_html, _modal_html,
 )
@@ -386,6 +387,8 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
 
     if tab == "overview":
         content = _overview_html(st, rec, csrf_token)
+    elif tab == "strategy":
+        content = _strategy_tab_html(st, rec)
     elif tab == "roles":
         content = _roles_html(st, rec, csrf_token)
     elif tab == "members":

@@ -231,7 +231,9 @@ def migrate_records(records: Records) -> None:
         if policy not in existing_policies:
             root.definition.policies.append(policy)
             changed = True
-    if root.definition.purpose != _ANCHOR_PURPOSE:
+    if not root.definition.purpose:
+        # alleen vullen als de root-purpose leeg is (bv. vers geseed). NIET overschrijven bij
+        # afwijking — een bewuste root-purpose (Mother Earth) blijft staan. Zelfde fix als _PERSONAS.
         root.definition.purpose = _ANCHOR_PURPOSE
         changed = True
     # (De oude demote-regel voor 'content_strategist' is verwijderd: die degradeerde
