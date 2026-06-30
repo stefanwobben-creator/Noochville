@@ -23,6 +23,12 @@ sessie opent hiermee.
   overschrijft de server.
 - Draai altijd met `./venv/bin/python` of een geactiveerde venv, niet
   systeem-`python3` (mist requests e.d.).
+- Server-data is source of truth. Lokale data-wijzigingen worden NIET
+  via push_data.sh blind naar de server gestuurd. De volgorde is altijd:
+  (1) server-staat ophalen, (2) lokaal-server diff tonen, (3) per
+  wijziging expliciet akkoord vragen, (4) bij akkoord overschrijven,
+  (5) bij geen akkoord lokale wijziging verwijderen. Code-deploys volgen
+  een eigen pad (git pull op de server) en zijn los hiervan.
 
 ## Open aandachtspunten
 - LLM-advies-stappen lezen je strategie/beleid nog niet: ze gaven al
