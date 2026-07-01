@@ -232,6 +232,17 @@ TODO staat er al in. Fix: LLM-stap die `strategy/goals` leest en rankt.
 
 ## Openstaande ontwerpschuld
 
+### Werkoverleg-metrics: geen single source of truth (4 plekken, gedrift)
+De werkoverleg-metrics staan op **vier** handmatig gesyncte plekken zonder SSOT:
+`definitions.py`-seed (`source="werkoverleg"` → catalog-pagina), `_sources_for`
+(`metrics.py` → pulldown/wizard), `_WERK_MEASURE` en `_WERK_GRONDSLAG`. Ze zijn al
+uit de pas: **catalog heeft 6 metrics, pulldown 9**, en de namen wijken af
+("Doorlooptijd werkoverleg" vs "Duur (min)", "Behandelde spanningen" vs
+"Spanningen verwerkt"). Schendt "Reference, don't copy".
+**Fix:** de wizard leest de `werk:`-measures (+ grondslag) uit de DefinitionStore-
+catalogus i.p.v. een hardcoded lijst; catalog wordt de bron, seed compleet maken
+met de 3 ontbrekende (roloverleg, nevermind, afwezigheid).
+
 ### Brok 11 — dispatch splitsen (bewust uitgesteld)
 `dispatch()` in cockpit2.py (~433 regels) handelt alle POST-acties af voor alle views.
 Volgende stap: splitsen naar `views/dispatch_werkoverleg.py` etc., of één centraal `dispatch.py`
