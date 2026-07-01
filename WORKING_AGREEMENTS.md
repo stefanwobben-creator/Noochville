@@ -39,6 +39,9 @@ sessie opent hiermee.
 - Bij handmatige server-commando's als root: altijd daarna
   `chown -R nooch:nooch /opt/noochville/data` draaien, anders kan de
   service de bestanden niet lezen.
+- Tests die data-afhankelijke renders testen (bijv. shopify-tegels) moeten
+  zelf hun testdata zaaien in hun tmp-map. Nooit leunen op bestanden in de
+  repo-root `data/` — die zijn gitignored en bestaan niet in CI.
 
 ## Open aandachtspunten
 - LLM-advies-stappen lezen je strategie/beleid nog niet: ze gaven al
