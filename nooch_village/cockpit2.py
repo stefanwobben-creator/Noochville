@@ -47,12 +47,13 @@ from nooch_village.metric_schema import (CADANS_LABEL, MEETTYPE_LABEL, MEETWIJZE
                                          TIJD_LABEL, BRUIKBAAR_LABEL, VERIFICATIE_LABEL)
 from nooch_village.definitions import (DefinitionStore, seed_catalog as _seed_catalog,
                                        reground_seed as _reground_seed)
-from nooch_village.cockpit2_util import _BUILD, _EXTRA_CSS, _CIRCLE_TABS, _ROLE_TABS
+from nooch_village.cockpit2_util import _BUILD, _EXTRA_CSS, _CIRCLE_TABS, _ROLE_TABS, WEBSITE_DEVELOPER_ROLE
 from nooch_village.notifications import NotifStore
 from nooch_village.noochie import NoochieStore
 from nooch_village.roloverleg import Agenda
 from nooch_village.werkoverleg import WerkoverlegStore, STEPS as _WO_STEPS
 from nooch_village.strategy_store import StrategyStore
+from nooch_village.backlog import BacklogStore
 from nooch_village import ai_match
 from nooch_village import org
 from nooch_village.glassfrog_import import import_org, nooch_poc_org
@@ -88,6 +89,7 @@ class _Stores:
         self.defs = DefinitionStore(os.path.join(dd, "definitions.json"))
         self.werk = WerkoverlegStore(os.path.join(dd, "werkoverleg.json"))
         self.strategies = StrategyStore(os.path.join(dd, "strategies.json"))
+        self.backlog = BacklogStore(os.path.join(dd, "backlog.json"))
 
 
 _FAC_ACC = "Rapporteren over de gezondheid van de werkoverleggen"
@@ -416,6 +418,19 @@ def _member_gate(circle_id: str, username: str | None, st) -> str | None:
     if is_circle_member(actor.id, circle_id, st.records, st.assign):
         return None
     return "Geen toegang — alleen leden van deze cirkel mogen dit"
+
+
+def _wd_gate(username: str | None, st) -> str | None:
+    """Poort voor het beheer van de Backlog Builder: alleen de rolvervuller van de Website
+    Developer-rol. Foutmelding bij weigering, anders None. "guest" (auth uit) mag alles."""
+    if username == "guest":
+        return None
+    actor = st.people.by_email(username)
+    if actor is None:
+        return "Geen toegang — gebruiker niet herkend"
+    if is_role_filler(actor.id, WEBSITE_DEVELOPER_ROLE, st.assign):
+        return None
+    return "Geen toegang — alleen de Website Developer mag de backlog beheren"
 
 
 def _lead_gate(circle_id: str, username: str | None, st) -> str | None:
@@ -1121,6 +1136,27 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
                         pass
             _rov_save_draft(st, g("iid"), draft)
             msg = "✓ voorstel bijgewerkt"
+    elif action == "backlog_add":
+        # AUTHZ: iedereen-ingelogd — elke ingelogde gebruiker mag een backlog-item indienen
+        # (de sessie-check in do_POST dekt "ingelogd = mag"; guest = auth uit = mag ook)
+        actor = st.people.by_email(username) if username != "guest" else None
+        if st.backlog.add(g("titel"), g("beschrijving"), g("type"), g("domein"),
+                          actor.id if actor else ""):
+            msg = "✓ ingediend in de backlog"
+    elif action == "backlog_update_staat":
+        # AUTHZ: rolvervuller website_developer — beheer van de backlog (staat verplaatsen)
+        _deny = _wd_gate(username, st)
+        if _deny:
+            return nxt, _deny
+        if st.backlog.update_staat(g("bid"), g("staat")):
+            msg = "✓ staat bijgewerkt"
+    elif action == "backlog_update_prioriteit":
+        # AUTHZ: rolvervuller website_developer — beheer van de backlog (impact/effort)
+        _deny = _wd_gate(username, st)
+        if _deny:
+            return nxt, _deny
+        if st.backlog.update_prioriteit(g("bid"), g("impact"), g("effort")):
+            msg = "✓ prioriteit bijgewerkt"
     elif action == "person_edit":
         # ── Autorisatie: alleen anchor-lead (mother_earth) ──
         actor = st.people.by_email(username) if username != "guest" else None

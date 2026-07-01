@@ -15,11 +15,12 @@ from nooch_village.views.feed import _mentionables
 from nooch_village.views.checklists import _checklists_tab_html
 from nooch_village.views.metrics import _metrics_tab_html
 from nooch_village.views.strategy import _strategy_tab_html
+from nooch_village.views.backlog import render_backlog_tab
 from nooch_village.views.projects import (
     _projects_tab_html, _scope_text, _person_projects_html, _modal_html,
 )
 from nooch_village import org, ai_match
-from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD, _CIRCLE_TABS, _ROLE_TABS
+from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD, _CIRCLE_TABS, _ROLE_TABS, WEBSITE_DEVELOPER_ROLE
 
 if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores
@@ -394,10 +395,14 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     elif tab == "members":
         content = _members_html(st, rec, csrf_token)
     elif tab == "notes":
-        content = ("<div class='c2-sec'><h3>Notes</h3>"
-                   + _att_html(st, rec, "note", "Nog geen notities op deze rol/cirkel.")
-                   + "<p class='muted' style='font-size:.8rem'>Hierin vouwen we Nooch's "
-                   "concurrenten-notities.</p></div>")
+        if rec.id == WEBSITE_DEVELOPER_ROLE:
+            # De Notes-tab van de Website Developer is de Backlog Builder.
+            content = render_backlog_tab(st, rec, csrf_token, username)
+        else:
+            content = ("<div class='c2-sec'><h3>Notes</h3>"
+                       + _att_html(st, rec, "note", "Nog geen notities op deze rol/cirkel.")
+                       + "<p class='muted' style='font-size:.8rem'>Hierin vouwen we Nooch's "
+                       "concurrenten-notities.</p></div>")
     elif tab == "metrics":
         content = _metrics_tab_html(st, rec, csrf_token, win=mw)
     elif tab == "checklists":

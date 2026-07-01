@@ -7,6 +7,9 @@ from nooch_village.cockpit import _e
 
 _BUILD = _time.strftime("%H:%M")   # proces-starttijd: zichtbaar in de balk
 
+# De rol waarop de Backlog Builder (Notes-vervanger) leeft. Eén bron voor gate + view + coupling.
+WEBSITE_DEVELOPER_ROLE = "mother_earth__nooch__website_developer"
+
 _CIRCLE_TABS = ["overview", "roles", "members", "policies", "notes", "projects",
                 "checklists", "metrics"]
 _ROLE_TABS = ["overview", "policies", "notes", "projects", "checklists", "metrics"]
