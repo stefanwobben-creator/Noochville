@@ -179,7 +179,7 @@ def _wo_triage(st: _Stores, crec, csrf: str, item: dict) -> str:
     # Progressive disclosure: kies eerst het type, dan verschijnt het juiste veld. Gelijkwaardig
     # (geen primary-kleur die naar één uitkomst stuurt).
     def oc_details(otype, summary, inner):
-        return (f"<details class='wo-ocd'><summary>{summary}</summary>"
+        return (f"<details class='wo-ocd box-details'><summary>{summary}</summary>"
                 f"<form method='post' action='/action' {keep} class='wo-oc'>{_wo_hid(csrf, crec.id, base)}"
                 f"<input type='hidden' name='iid' value='{_e(iid)}'><input type='hidden' name='otype' value='{otype}'>"
                 f"{inner}<button class='btn sm' type='submit' name='action' value='wo_ag_resolve'>Vastleggen</button></form></details>")

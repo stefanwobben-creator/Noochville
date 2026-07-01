@@ -190,6 +190,12 @@ _IC_FILE   = _ic("<path d='M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2
 _IC_TARGET = _ic("<circle cx='12' cy='12' r='9'/><circle cx='12' cy='12' r='5'/><circle cx='12' cy='12' r='1.5'/>")
 
 _EXTRA_CSS = """
+/* Cockpit2: <details> is standaard KAAL (geen kaart). Wie een kaart wil, zet expliciet
+   .box-details. Dit overschrijft de globale details{}-regel uit cockpit.py (laadt hierna).
+   Legacy cockpit laadt deze _EXTRA_CSS niet en houdt dus zijn kaart-default. */
+details{background:none;border:none;border-radius:0;box-shadow:none;padding:0}
+.box-details{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin:.5rem 0;padding:.3rem .9rem;box-shadow:var(--shadow)}
+.box-details[open]{padding-bottom:.8rem}
 .c2-bar{color:var(--gray);font-size:.85rem;margin:.2rem 0 .5rem}
 .c2-wrap{display:flex;gap:1.2rem;align-items:flex-start;margin-top:.6rem}
 .c2-main{flex:1 1 auto;min-width:0}
@@ -304,7 +310,7 @@ ul.clean li:last-child{border-bottom:none}
 .pbar>div{height:100%;background:var(--green)}
 .pcol.over{outline:2px dashed var(--green);outline-offset:-2px;background:var(--green-tint)}
 /* override de basis-details-stijl (wit kaartje) → ghost in de kolomkleur, Trello-stijl */
-.qadd{margin-top:.15rem;background:none;border:none;box-shadow:none;padding:0}
+.qadd{margin-top:.15rem;padding:0}
 .qadd>summary{list-style:none;cursor:pointer;color:var(--gray);font-family:var(--font-body);font-weight:500;font-size:.84rem;padding:.4rem .55rem;border-radius:var(--radius)}
 .qadd>summary:hover{background:rgba(27,27,27,.07);color:var(--ink)}
 .qadd>summary::-webkit-details-marker{display:none}
@@ -366,7 +372,7 @@ ul.clean li:last-child{border-bottom:none}
 .fbul{margin:.2rem 0 .2rem 1.1rem}
 .ffoot{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:.25rem}
 .ffoot-l{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;min-width:0}
-.emoji-pick{position:relative;display:inline-block;background:none;border:none;box-shadow:none;padding:0;margin:0}
+.emoji-pick{position:relative;display:inline-block;padding:0;margin:0}
 .emoji-pick>summary{list-style:none;cursor:pointer;line-height:0;color:var(--subtle);display:inline-flex}
 .emoji-pick>summary svg{width:18px;height:18px}
 .emoji-pick>summary::-webkit-details-marker{display:none}
@@ -495,7 +501,7 @@ ul.clean li:last-child{border-bottom:none}
 .acard svg{width:15px;height:15px}
 .acard-off{opacity:.5;cursor:not-allowed}
 .acard-off:hover{border-color:var(--border);color:var(--gray)}
-.acard-d{position:relative;list-style:none;background:none;border:none;box-shadow:none;padding:0;margin:0}
+.acard-d{position:relative;list-style:none;padding:0;margin:0}
 .acard-d>summary{list-style:none}
 .acard-d>summary::-webkit-details-marker{display:none}
 .datepop{position:absolute;left:0;top:2.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.6rem;z-index:7}
@@ -655,7 +661,7 @@ ul.clean li:last-child{border-bottom:none}
 .wo-kpitabs{display:flex;flex-wrap:wrap;gap:.3rem;margin-bottom:.6rem}
 .wo-focus .mtab{margin-top:.5rem}
 .wo-outcomes{margin-top:.9rem;display:flex;flex-direction:column;gap:.5rem}
-.wo-ocd{border:1px solid var(--border);border-radius:var(--radius)}
+/* .wo-ocd krijgt zijn kader nu van .box-details (zie werkoverleg-template) */
 .wo-ocd>summary{cursor:pointer;list-style:none;padding:.4rem .6rem;font-weight:600;font-size:.86rem}
 .wo-ocd>summary::-webkit-details-marker{display:none}
 .wo-ocd>summary:hover{background:var(--cream-2)}
@@ -693,11 +699,11 @@ ul.clean li:last-child{border-bottom:none}
 .actrow{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
 .sugg{background:#F4F1FB;border:1px solid #E0D7F5;border-radius:var(--radius);padding:.5rem .7rem;margin:.5rem 0}
 .sugg-h{font-weight:700;color:#5b3fa6;font-size:.82rem;margin-bottom:.3rem}
-.bagadd{background:none;border:none;box-shadow:none;padding:0;margin-top:.8rem}
+.bagadd{padding:0;margin-top:.8rem}
 .bagadd>summary{cursor:pointer;color:var(--subtle);font-size:.82rem;list-style:none}
 .bagadd>summary:hover{color:#5b3fa6}
 .frow{display:flex;align-items:flex-start;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--border)}
-.ffocus{background:none;border:none;box-shadow:none;padding:0;margin:0}
+.ffocus{padding:0;margin:0}
 .ffocus>summary{list-style:none;cursor:pointer}
 .ffocus>summary::-webkit-details-marker{display:none}
 .ovl{position:fixed;inset:0;background:rgba(27,27,27,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center}

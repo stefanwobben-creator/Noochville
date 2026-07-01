@@ -378,7 +378,7 @@ def _archived_html(st: _Stores, archived: list, csrf_token: str, back: str) -> s
                 f"<button type='submit' name='action' value='proj_delete' class='dellink' "
                 f"onclick=\"return confirm('Definitief verwijderen?')\">verwijderen</button></form>")
         rows += f"<li class='muted'>{_e(str(scope or '—'))}{ctrl}</li>"
-    return (f"<details style='margin-top:.6rem'><summary>🗄 Gearchiveerd ({len(archived)})</summary>"
+    return (f"<details class='box-details' style='margin-top:.6rem'><summary>🗄 Gearchiveerd ({len(archived)})</summary>"
             f"<ul class='clean'>{rows}</ul></details>")
 
 
@@ -407,7 +407,7 @@ def _drafts_html(st: _Stores, drafts: list, csrf_token: str, back: str) -> str:
                 f"<button class='dellink' type='submit' name='action' value='proj_discard' "
                 f"onclick=\"return confirm('Concept verwerpen?')\">verwerpen</button></form>")
         rows += (f"<li>{_e(str(scope or '—'))} <span class='muted'>· {trekker}</span>{ctrl}</li>")
-    return (f"<details open style='margin:.6rem 0'><summary>📝 Concepten — wachten op akkoord "
+    return (f"<details class='box-details' open style='margin:.6rem 0'><summary>📝 Concepten — wachten op akkoord "
             f"({len(drafts)})</summary><ul class='clean'>{rows}</ul></details>")
 
 
