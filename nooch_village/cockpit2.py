@@ -332,8 +332,22 @@ def _handle_person_reset(data_dir: str, form: dict) -> str:
     return _page("Wachtwoord gereset", body)
 
 
-def dispatch(data_dir: str, action: str, form: dict):
-    """Verwerk een POST-actie. Geeft (redirect-URL, korte bevestiging) terug."""
+def is_circle_lead(person_id: str, circle_id: str, assignments) -> bool:
+    """Geeft True als person_id filler is van {circle_id}__circle_lead."""
+    if not person_id or not circle_id:
+        return False
+    role_id = f"{circle_id}__circle_lead"
+    return any(f.type == "person" and f.id == person_id
+               for f in assignments.fillers_of(role_id))
+
+
+def dispatch(data_dir: str, action: str, form: dict, username: str | None = None):
+    """Verwerk een POST-actie. Geeft (redirect-URL, korte bevestiging) terug.
+
+    `username` = e-mailadres van de ingelogde gebruiker (None = onbekend, "guest" = geen auth
+    geconfigureerd). De rol-takken (role_assign/role_unassign/role_focus) dwingen autorisatie af:
+    alleen de Circle Lead van de directe ouder-cirkel mag muteren. "guest" (auth uit) mag alles;
+    een ingelogde maar onbekende gebruiker wordt geweigerd."""
     st = _Stores(data_dir)
     g = lambda k: (form.get(k) or [""])[0]
     nxt = g("next") or "/"
@@ -461,12 +475,26 @@ def dispatch(data_dir: str, action: str, form: dict):
     elif action == "check_remove":
         pj.check_remove(g("pid"), g("clid"), g("item")); msg = "🗑 item verwijderd"
     elif action == "role_assign":
+        actor = st.people.by_email(username) if username != "guest" else None
+        rec = st.records.get(g("role"))
+        circle_id = rec.parent if rec else None
+        if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
+            return nxt, "Geen toegang — alleen Circle Lead mag dit"
+        if actor is None and username != "guest":
+            return nxt, "Geen toegang — gebruiker niet herkend"
         person, agent = _parse_trekker(g("filler"))
         if person and st.assign.assign(g("role"), "person", person):
             msg = "✓ toegewezen"
         elif agent and st.assign.assign(g("role"), "persona", agent):
             msg = "🤖 AI toegewezen"
     elif action == "role_unassign":
+        actor = st.people.by_email(username) if username != "guest" else None
+        rec = st.records.get(g("role"))
+        circle_id = rec.parent if rec else None
+        if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
+            return nxt, "Geen toegang — alleen Circle Lead mag dit"
+        if actor is None and username != "guest":
+            return nxt, "Geen toegang — gebruiker niet herkend"
         person, agent = _parse_trekker(g("filler"))
         if person:
             st.assign.unassign(g("role"), "person", person)
@@ -474,6 +502,13 @@ def dispatch(data_dir: str, action: str, form: dict):
             st.assign.unassign(g("role"), "persona", agent)
         msg = "✓ verwijderd"
     elif action == "role_focus":
+        actor = st.people.by_email(username) if username != "guest" else None
+        rec = st.records.get(g("role"))
+        circle_id = rec.parent if rec else None
+        if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
+            return nxt, "Geen toegang — alleen Circle Lead mag dit"
+        if actor is None and username != "guest":
+            return nxt, "Geen toegang — gebruiker niet herkend"
         person, agent = _parse_trekker(g("filler"))
         if person:
             st.assign.set_focus(g("role"), "person", person, g("focus"))
@@ -959,7 +994,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send("<p>404</p>", 404); return
 
             # ── Sessie-check voor alle /action POSTs ────────────────────────
-            if sessions is not None and self._session_username() is None:
+            username = self._session_username()
+            if sessions is not None and username is None:
                 self._send("Niet ingelogd", 403); return
             # Bestand-upload (multipart): apart afhandelen; bestand wegschrijven + registreren.
             if ctype.startswith("multipart/form-data") and "boundary=" in ctype:
@@ -997,7 +1033,7 @@ def make_handler(data_dir: str, csrf_token: str,
             if action == "person_reset_password":
                 self._send(_handle_person_reset(data_dir, form))
                 return
-            nxt, msg = dispatch(data_dir, action, form)
+            nxt, msg = dispatch(data_dir, action, form, username=username)
             self._redirect(nxt, msg)
 
         def log_message(self, *_):

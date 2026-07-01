@@ -107,3 +107,61 @@ def test_person_remove_onbekend(tmp_path):
     dd, st = _st(tmp_path)
     _, msg = cockpit2.dispatch(dd, "person_remove", {"pid": ["nietbestaand"], "next": ["/admin"]})
     assert "niet gevonden" in msg
+
+
+def test_is_circle_lead(tmp_path):
+    dd, st = _st(tmp_path)
+    p = st.people.all()[0]
+    circle = "mother_earth__nooch"
+    st.assign.assign(f"{circle}__circle_lead", "person", p.id)   # ken p toe als leadlink
+    a = cockpit2._Stores(dd).assign
+    assert cockpit2.is_circle_lead(p.id, circle, a) is True
+    assert cockpit2.is_circle_lead("iemand_anders", circle, a) is False
+    assert cockpit2.is_circle_lead(p.id, "andere_cirkel", a) is False   # andere cirkel
+    assert cockpit2.is_circle_lead("", circle, a) is False
+
+
+# ── autorisatie-poort op de rol-takken (role_assign/unassign/focus) ───────────
+
+_GATE_ROLE = "mother_earth__nooch__brand_visual_designer"     # parent-cirkel: mother_earth__nooch
+_GATE_LEAD = "mother_earth__nooch__circle_lead"
+
+
+def _assign_form(target_id):
+    return {"role": [_GATE_ROLE], "filler": [f"person:{target_id}"], "next": ["/x"]}
+
+
+def test_gate_guest_mag_toewijzen(tmp_path):
+    # auth uit → "guest" → gate laat door, toewijzing slaagt
+    dd, st = _st(tmp_path)
+    target = st.people.add("Doel", "doel@nooch.earth")
+    _, msg = cockpit2.dispatch(dd, "role_assign", _assign_form(target.id), username="guest")
+    assert "toegewezen" in msg
+    assert _GATE_ROLE in cockpit2._Stores(dd).assign.roles_of("person", target.id)
+
+
+def test_gate_circle_lead_mag_toewijzen(tmp_path):
+    dd, st = _st(tmp_path)
+    lead = st.people.add("Lead", "lead@nooch.earth")
+    st.assign.assign(_GATE_LEAD, "person", lead.id)           # lead van de ouder-cirkel
+    target = st.people.add("Doel", "doel@nooch.earth")
+    _, msg = cockpit2.dispatch(dd, "role_assign", _assign_form(target.id), username="lead@nooch.earth")
+    assert "toegewezen" in msg
+    assert _GATE_ROLE in cockpit2._Stores(dd).assign.roles_of("person", target.id)
+
+
+def test_gate_niet_lead_wordt_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    outsider = st.people.add("Buiten", "buiten@nooch.earth")  # ingelogd, maar geen lead
+    target = st.people.add("Doel", "doel@nooch.earth")
+    _, msg = cockpit2.dispatch(dd, "role_assign", _assign_form(target.id), username="buiten@nooch.earth")
+    assert "Geen toegang" in msg and "Circle Lead" in msg
+    assert _GATE_ROLE not in cockpit2._Stores(dd).assign.roles_of("person", target.id)
+
+
+def test_gate_onbekende_gebruiker_wordt_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    target = st.people.add("Doel", "doel@nooch.earth")
+    _, msg = cockpit2.dispatch(dd, "role_assign", _assign_form(target.id), username="niemand@nergens.nl")
+    assert "niet herkend" in msg
+    assert _GATE_ROLE not in cockpit2._Stores(dd).assign.roles_of("person", target.id)
