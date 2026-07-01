@@ -1124,6 +1124,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
     elif action == "person_edit":
         # ── Autorisatie: alleen anchor-lead (mother_earth) ──
         actor = st.people.by_email(username) if username != "guest" else None
+        import sys  # TIJDELIJK debug — verwijderen na diagnose
+        print(f"DEBUG person_edit: username={username!r} actor={actor!r} "
+              f"cl={is_circle_lead(actor.id if actor else '', 'mother_earth', st.assign)} "
+              f"dd={st.dd!r} "
+              f"fillers={[(f.type, f.id) for f in st.assign.fillers_of('mother_earth__circle_lead')]!r}",
+              file=sys.stderr)
         if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
             return nxt, "Geen toegang — alleen anchor-lead mag dit"
         if actor is None and username != "guest":
