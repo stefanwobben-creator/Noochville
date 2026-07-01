@@ -1233,7 +1233,8 @@ def make_handler(data_dir: str, csrf_token: str,
                                        msg=(qs.get("msg") or [""])[0],
                                        group=(qs.get("group") or [""])[0],
                                        clf=(qs.get("clf") or ["due"])[0],
-                                       mw=(qs.get("mw") or ["maand"])[0]))
+                                       mw=(qs.get("mw") or ["maand"])[0],
+                                       username=username))
                 return
             # Modal-fragmenten krijgen hun eigen <style> mee, zodat ze altijd verse CSS tonen
             # (de overlay hergebruikt anders de stylesheet van de eerste pagina-load).

@@ -371,7 +371,7 @@ def _att_html(st: _Stores, rec, kind: str, leeg: str) -> str:
     return out + "</ul>"
 
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",
-                group: str = "", clf: str = "due", mw: str = "maand") -> str:
+                group: str = "", clf: str = "due", mw: str = "maand", username: str | None = None) -> str:
     rec = st.records.get(node_id)
     if rec is None:
         return _page("Niet gevonden", "<p>Node niet gevonden.</p><p><a href='/'>← home</a></p>")
@@ -403,7 +403,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     elif tab == "checklists":
         content = _checklists_tab_html(st, rec, csrf_token, flt=clf)
     elif tab == "projects":
-        content = _projects_tab_html(st, rec, csrf_token, group=group)
+        content = _projects_tab_html(st, rec, csrf_token, group=group, username=username)
     elif tab == "policies":
         content = _todo("Policies per cirkel (nu alleen harde policies op de anchor-cirkel).")
     else:  # history

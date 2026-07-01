@@ -156,11 +156,13 @@ def _quickadd(owner: str, col: str, csrf_token: str, back: str, trekker: str = "
         f"</form></details>")
 
 
-def _inline_add_project(st: _Stores, rec, csrf_token: str, back: str) -> str:
+def _inline_add_project(st: _Stores, rec, csrf_token: str, back: str, username: str | None = None) -> str:
     """Universele inline '+ project' (één patroon, geen aparte modal). Op een cirkel kies je de rol;
     op een rol staat de eigenaar vast. Dekt ook lege rollen/cirkels die per-kolom-quickadd mist."""
     if not csrf_token:
         return ""
+    # standaard-trekker = de ingelogde gebruiker (guest/onbekend → geen voorselectie)
+    me = st.people.by_email(username) if username and username != "guest" else None
     if org.is_circle(rec):
         roles = sorted(org.roles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
         ro = "".join(f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>" for r in roles)
@@ -180,7 +182,7 @@ def _inline_add_project(st: _Stores, rec, csrf_token: str, back: str) -> str:
         f"<label class='att-lbl'>Status</label><select name='col'>"
         f"<option value='actief'>Actief</option><option value='wacht'>Wacht</option>"
         f"<option value='toekomst'>Toekomst</option></select>"
-        f"<label class='att-lbl'>Trekker (persoon of AI)</label><select name='trekker'>{_trekker_options(st)}</select>"
+        f"<label class='att-lbl'>Trekker (persoon of AI)</label><select name='trekker'>{_trekker_options(st, sel_person=(me.id if me else ''))}</select>"
         f"<div class='qadd-row'><button class='btn ok' type='submit' name='action' value='proj_add'>"
         f"Project toevoegen</button></div></form></details>")
 
@@ -443,11 +445,12 @@ def _orphans_html(st: _Stores, orphans: list, csrf_token: str, back: str) -> str
             f"<ul class='clean'>{rows}</ul></div>")
 
 
-def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: bool = True) -> str:
+def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: bool = True,
+                       username: str | None = None) -> str:
     allp = st.projects.all()
     back_base = f"/node?id={rec.id}&tab=projects"
 
-    addlink = _inline_add_project(st, rec, csrf_token, back_base) if add else ""
+    addlink = _inline_add_project(st, rec, csrf_token, back_base, username=username) if add else ""
 
     if not org.is_circle(rec):
         # ROL: eigen projecten, gegroepeerd per persoon (de doener). Lege lanes tonen we niet.
