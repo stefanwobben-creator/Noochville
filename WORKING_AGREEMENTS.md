@@ -36,6 +36,9 @@ sessie opent hiermee.
   wijziging expliciet akkoord vragen, (4) bij akkoord overschrijven,
   (5) bij geen akkoord lokale wijziging verwijderen. Code-deploys volgen
   een eigen pad (git pull op de server) en zijn los hiervan.
+- Bij handmatige server-commando's als root: altijd daarna
+  `chown -R nooch:nooch /opt/noochville/data` draaien, anders kan de
+  service de bestanden niet lezen.
 
 ## Open aandachtspunten
 - LLM-advies-stappen lezen je strategie/beleid nog niet: ze gaven al
