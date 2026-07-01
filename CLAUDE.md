@@ -557,3 +557,23 @@ Discipline: schrijf nooit code die aanneemt dat de bus in-memory is, dat de inbo
 - Nederlandse comments/logs zijn prima.
 - Geen global mutable state. Alles wat een inwoner nodig heeft komt via de constructor (`bus`, `registry`, `context`).
 - **Reference, don't copy (HARDE REGEL).** Een feit/getal leeft op ÉÉN gezaghebbende plek; al het andere verwijst ernaar of leidt het af. Nooit een waarde (PCF, benchmark, constante) hardcoden in code als hij elders thuishoort. Toets: "als dit getal verandert, op hoeveel plekken pas ik het aan?" Het juiste antwoord is altijd één. Indicator-waarden komen uit de catalogus-definitie (`waarde`) of de kennisbank, niet uit een literal in `cockpit2.py`. De guard-test `tests/test_geen_hardcoded_metric.py` bewaakt dit.
+
+## Autorisatie — elke nieuwe dispatch-tak
+
+Elke nieuwe `dispatch`-tak krijgt bij aanmaken direct een bewuste autorisatielaag.
+Keuze uit vier opties — één moet altijd expliciet worden gemaakt:
+
+1. **anchor-lead** — org-brede mutaties (people, catalogus)
+2. **Circle Lead** — structuur van een cirkel (rollen, governance, overleg leiden)
+3. **rolvervuller of Circle Lead** — operationeel werk binnen een rol
+4. **circle-member of iedereen-ingelogd** — deelnemen, communiceren
+
+Geen nieuwe tak zonder één van deze vier labels erboven als comment:
+`# AUTHZ: <keuze> — <één zin waarom>`
+
+De helpers staan klaar: `is_circle_lead`, `is_role_filler`, `is_circle_member`,
+`resolve_circle_id` + de poort-wrappers `_role_gate` / `_member_gate` / `_lead_gate`
+(fail-closed: guest mag alles, ingelogde-onbekende geweigerd). Bewust ongated mag,
+maar dan óók met een `# AUTHZ: iedereen-ingelogd — <waarom>`-comment.
+
+Dit voorkomt de situatie van vóór 1 juli 2026: een volledige `dispatch` zonder enige autorisatie.

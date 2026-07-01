@@ -42,6 +42,9 @@ sessie opent hiermee.
 - Tests die data-afhankelijke renders testen (bijv. shopify-tegels) moeten
   zelf hun testdata zaaien in hun tmp-map. Nooit leunen op bestanden in de
   repo-root `data/` — die zijn gitignored en bestaan niet in CI.
+- Elke nieuwe `dispatch`-tak krijgt een `# AUTHZ: <keuze> — <waarom>`-label uit
+  de vier vaste opties. Volledige regel + helpers in CLAUDE.md ("Autorisatie —
+  elke nieuwe dispatch-tak"). Geen tak zonder bewuste autorisatiekeuze.
 
 ## Open aandachtspunten
 - LLM-advies-stappen lezen je strategie/beleid nog niet: ze gaven al
