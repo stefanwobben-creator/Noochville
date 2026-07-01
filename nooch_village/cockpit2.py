@@ -446,6 +446,8 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         nxt = "/"
     pj = st.projects
     msg = ""
+    import sys  # TIJDELIJK debug — verwijderen na diagnose
+    print(f"DEBUG dispatch: action={action!r} username={username!r}", file=sys.stderr)
     if action == "proj_add":
         owner = g("owner")
         # Autorisatie: bij een rol → rolvervuller of Circle Lead; bij een Individueel
