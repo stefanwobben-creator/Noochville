@@ -7,7 +7,7 @@ from nooch_village.cockpit import _e
 
 _BUILD = _time.strftime("%H:%M")   # proces-starttijd: zichtbaar in de balk
 
-_CIRCLE_TABS = ["overview", "strategy", "roles", "members", "policies", "notes", "projects",
+_CIRCLE_TABS = ["overview", "roles", "members", "policies", "notes", "projects",
                 "checklists", "metrics"]
 _ROLE_TABS = ["overview", "policies", "notes", "projects", "checklists", "metrics"]
 

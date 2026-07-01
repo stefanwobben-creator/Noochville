@@ -365,3 +365,14 @@ def test_members_tab(tmp_path):
     page = cockpit2.render_node(st, "mother_earth__nooch", "members")
     for naam in ("Lotte Mulder", "Stefan Wobben", "Nina Wolter", "Matthijs Boesten"):
         assert naam in page
+
+
+def test_strategie_in_overview_en_tab_verwijderd(tmp_path):
+    # strategy-tab is vervallen: de inhoud staat in de overview-tab, zonder aparte tab-knop
+    st = _st(tmp_path)
+    C = "mother_earth__nooch"
+    st.strategies.set(C, {"core_sentence": "Kernzin ABC", "vision": "Visie", "beliefs": ["b1"]})
+    page = cockpit2.render_node(st, C, "overview", csrf_token="TOK")
+    assert "Kernzin ABC" in page          # strategie-inhoud nu in overview
+    assert ">Purpose<" in page            # eigen Purpose-sectie behouden (geen dubbele chain)
+    assert "&tab=strategy" not in page    # geen strategy-tab-knop meer in de tab-bar

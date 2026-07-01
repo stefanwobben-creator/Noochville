@@ -109,13 +109,14 @@ def _honest_constraints(hc: dict) -> str:
     return _sec("Honest constraints", body)
 
 
-def _strategy_tab_html(st: "_Stores", rec) -> str:
+def _strategy_tab_html(st: "_Stores", rec, with_purpose_chain: bool = True) -> str:
     strat = st.strategies.get(rec.id)
     if not strat:
         return ("<div class='c2-sec'><h3>Strategie</h3>"
                 "<p class='muted'>Geen strategie gedefinieerd voor deze cirkel.</p></div>")
 
-    out = _purpose_chain(st, rec)
+    # In de overview-tab staat de Purpose er al boven → chain overslaan (geen dubbeling).
+    out = _purpose_chain(st, rec) if with_purpose_chain else ""
     out += _sec("Core sentence", _text(strat.get("core_sentence")))
     out += _sec("Vision", _text(strat.get("vision")))
     out += _sec("Mission", _text(strat.get("mission")))

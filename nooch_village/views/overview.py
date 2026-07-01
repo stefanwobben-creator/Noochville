@@ -150,9 +150,9 @@ def _overview_html(st: _Stores, rec, csrf_token: str = "") -> str:
     is_c = org.is_circle(rec)
     parts = [f"<div class='c2-sec'><h3>Purpose</h3><div>{_e(d.purpose) or '<span class=muted>—</span>'}</div></div>"]
     if is_c:
-        parts.append("<div class='c2-sec'><h3>Strategy / Core Values</h3>"
-                     + _todo("Strategie en kernwaarden per cirkel (nu alleen op de anchor-cirkel).")
-                     + "</div>")
+        # Strategie geïntegreerd in overview (aparte strategy-tab vervallen). Purpose staat
+        # hierboven al → chain overslaan.
+        parts.append(_strategy_tab_html(st, rec, with_purpose_chain=False))
     doms = d.domains or []
     parts.append("<div class='c2-sec'><h3>Domains</h3>"
                  + ("<ul class='clean'>" + "".join(f"<li>{_e(x)}</li>" for x in doms) + "</ul>"
