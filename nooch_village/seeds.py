@@ -284,10 +284,12 @@ def migrate_records(records: Records) -> None:
             "het dagelijkse dorpsbulletin schrijven uit de village-events",
         ]
         noochie_changed = False
-        if noochie.definition.purpose != _NOOCHIE_PURPOSE:
+        # Alleen vullen als leeg — NIET overschrijven bij afwijking, zodat een bewuste
+        # governance-amendering aan Noochie blijft staan (zelfde patroon als de Anchor-purpose).
+        if not noochie.definition.purpose:
             noochie.definition.purpose = _NOOCHIE_PURPOSE
             noochie_changed = True
-        if noochie.definition.accountabilities != _NOOCHIE_ACCOUNTABILITIES:
+        if not noochie.definition.accountabilities:
             noochie.definition.accountabilities = _NOOCHIE_ACCOUNTABILITIES
             noochie_changed = True
         if "bulletin_schrijven" not in noochie.definition.skills:
