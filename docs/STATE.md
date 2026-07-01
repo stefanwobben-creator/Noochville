@@ -126,7 +126,10 @@ helpers: is_circle_lead / is_role_filler / is_circle_member / resolve_circle_id
 - **Publieke read-kant**: bepaalde pagina's (strategie, Impact Forest) zichtbaar zonder
   inloggen. (Raakt de open "read-kant"-vraag in de Autorisatie-laag-sectie hierboven.)
 - **PDF-upload bug B1**: oorsprong onduidelijk, mogelijk glued-words-parser in
-  governance_examples.py. Onderzoeken na vrijdag.
+  governance_examples.py. Onderzoeken na vrijdag. (Mogelijke blokkade voor de
+  PDF-upload-stories in `docs/BACKLOG.md` → Uploads.)
+
+> Bredere product-wensenlijst (user stories per thema): zie `docs/BACKLOG.md`.
 
 ### Morgen
 - **Strategie-laag ontwerpen** — `data/strategy.json` met do's en don'ts die advies-stappen en agents lezen.
