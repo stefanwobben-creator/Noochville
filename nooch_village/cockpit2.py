@@ -906,6 +906,8 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         if g("score"):
             st.werk.set_checkout(g("circle"), g("pid"), g("score")); msg = "✓ score genoteerd"
     elif action == "noochie_send":
+        # noochie_* (send/reset/ctx) BEWUST ongated: de assistent-chat mag elke ingelogde
+        # gebruiker gebruiken (sessie-check in do_POST dekt "ingelogd = mag").
         s = st.noochie
         if g("text").strip():
             ph = s.phase
@@ -1060,8 +1062,15 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             return nxt, _deny
         st.metrics.remove(g("mid")); msg = "🗑 metric verwijderd"
     elif action == "m_pin":
+        # Autorisatie: het cirkeldashboard beheren is Circle Lead-werk
+        _deny = _lead_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
         st.metrics.pin(g("circle"), g("mid")); msg = "✓ op cirkeldashboard"
     elif action == "m_unpin":
+        _deny = _lead_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
         st.metrics.unpin(g("circle"), g("mid")); msg = "✓ van dashboard gehaald"
     elif action == "tile_add":
         _deny = _role_gate(g("node"), username, st)

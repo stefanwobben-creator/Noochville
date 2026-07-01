@@ -774,3 +774,40 @@ def test_wo_ag_add_member_gate_onbekende_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     _, msg = cockpit2.dispatch(dd, "wo_ag_add", _wo_ag_add_form(), username="niemand@nergens.nl")
     assert "niet herkend" in msg
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Dashboard-pins m_pin / m_unpin — Circle Lead van g("circle") (_lead_gate).
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _pin_form():
+    return {"circle": [_WO_CIRCLE], "mid": ["willekeurige_metric"], "next": ["/x"]}
+
+
+def test_m_pin_lead_gate_guest_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    _, msg = cockpit2.dispatch(dd, "m_pin", _pin_form(), username="guest")
+    assert "cirkeldashboard" in msg
+
+
+def test_m_pin_lead_gate_circle_lead_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    lead = st.people.add("Lead", "lead@nooch.earth")
+    st.assign.assign(_GATE_LEAD, "person", lead.id)
+    _, msg = cockpit2.dispatch(dd, "m_pin", _pin_form(), username="lead@nooch.earth")
+    assert "cirkeldashboard" in msg
+
+
+def test_m_pin_lead_gate_gewoon_lid_geweigerd(tmp_path):
+    # pinnen is lead-only: een gewoon cirkellid mag niet
+    dd, st = _st(tmp_path)
+    member = st.people.add("Lid", "lid@nooch.earth")
+    st.assign.assign(_GATE_ROLE, "person", member.id)
+    _, msg = cockpit2.dispatch(dd, "m_pin", _pin_form(), username="lid@nooch.earth")
+    assert "Geen toegang" in msg and "Circle Lead" in msg
+
+
+def test_m_unpin_lead_gate_onbekende_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    _, msg = cockpit2.dispatch(dd, "m_unpin", _pin_form(), username="niemand@nergens.nl")
+    assert "niet herkend" in msg
