@@ -1,5 +1,6 @@
 """Metrics: store (link/kpi/samples/venster/pins) + tab/dispatch (rol-KPI's, cirkeldashboard, bron)."""
 from __future__ import annotations
+import json
 import time
 
 from nooch_village import cockpit2
@@ -85,6 +86,11 @@ def test_kpi_referentie_op_tegel(tmp_path):
 
 def test_tile_toevoegen_en_vormen(tmp_path):
     dd = _dd(tmp_path)
+    # Zaai een shopify-snapshot in de eigen tmp-map: de doelmeter rendert alleen als bullet
+    # wanneer er een waarde is. Zonder dit leunt _shopify_window op het gitignored
+    # repo-bestand data/shopify_metrics.json — lokaal aanwezig, in CI niet → test-isolatielek.
+    (tmp_path / "poc" / "shopify_metrics.json").write_text(
+        json.dumps({"windows": {"0": {"pairs_sold": 250}}}))
     # tegel: verkoop per land als verdeling (staaf)
     cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": ["shopify|orders|country"],
                                        "form": ["verdeling"], "target": [""], "next": ["/"]}, username="guest")
