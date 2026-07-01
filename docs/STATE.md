@@ -98,12 +98,13 @@ met poort-wrappers `_role_gate` en `_member_gate`. Regel per default: guest
    handlers geven nu (body, statuscode) terug; do_POST unpackt)
 ✅ roloverleg-bewerking — circle-member (shaping = lid): rov2_add, rov2_add_to_group,
    rov2_setkind, rov2_set/acc/dom. Besluiten (consent/end) blijven Circle Lead.
+✅ werkoverleg wo_* — twee lagen (helper _lead_gate): overleg leiden/agenda-flow =
+   Circle Lead (open/close/present_all/ag_remove/ag_reopen/ag_resolve); deelnemen =
+   circle-member (ag_add/ag_note/presence/checkout).
 ✅ bootstrap: Stefan (dc5685eb2074) gezaaid als mother_earth__circle_lead
    (in data/assignments.json, gitignored — handmatig op server zetten)
 
 ⏳ Nog open:
-- Werkoverleg wo_* (open/close/presence/agenda/resolve/checkout): user-agnostisch.
-  Waarschijnlijk split lead/facilitator (open/close/resolve) vs member (presence/checkout).
 - m_pin / m_unpin: cirkel-dashboard, Circle Lead van g("circle"). Nog ongated.
 - noochie_* (assistent-chat): user-agnostisch (waarschijnlijk "iedereen ingelogd").
 - Read-kant (do_GET/render): privé-projecten worden bij tonen nog niet per gebruiker
