@@ -264,12 +264,19 @@ def _parse_trekker(val: str):
     return "", ""
 
 
-def _handle_person_add(data_dir: str, form: dict) -> str:
+def _handle_person_add(data_dir: str, form: dict, username: str | None = None) -> tuple[str, int]:
     """Maak een persoon aan in people.json met een tijdelijk wachtwoord en toon dat éénmalig.
 
-    Velden: voornaam, achternaam, email. Geeft een volledige HTML-pagina terug (geen redirect),
+    Velden: voornaam, achternaam, email. Geeft (HTML-body, statuscode) terug (geen redirect),
     zodat het tijdelijke wachtwoord niet in een URL of browser-history terechtkomt.
+    Autorisatie: alleen anchor-lead (people-beheer is org-breed); guest mag alles.
     """
+    st = _Stores(data_dir)
+    actor = st.people.by_email(username) if username != "guest" else None
+    if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
+        return "Geen toegang — alleen anchor-lead mag dit", 403
+    if actor is None and username != "guest":
+        return "Geen toegang — gebruiker niet herkend", 403
     g = lambda k: (form.get(k) or [""])[0].strip()
     voornaam, achternaam, email = g("voornaam"), g("achternaam"), g("email")
     back = g("next") or "/"
@@ -280,14 +287,13 @@ def _handle_person_add(data_dir: str, form: dict) -> str:
         body = ("<div class='c2-sec'><h3>Persoon toevoegen</h3>"
                 "<p style='color:#c0392b'>Voornaam, achternaam én e-mailadres zijn verplicht.</p>"
                 f"<p><a href='{_e(back)}'>← terug</a></p></div>")
-        return _page("Persoon toevoegen", body)
+        return _page("Persoon toevoegen", body), 200
 
-    st = _Stores(data_dir)
     if st.people.by_email(email) is not None:
         body = ("<div class='c2-sec'><h3>Persoon toevoegen</h3>"
                 f"<p style='color:#c0392b'>Er bestaat al een persoon met {_e(email)}.</p>"
                 f"<p><a href='{_e(back)}'>← terug</a></p></div>")
-        return _page("Persoon toevoegen", body)
+        return _page("Persoon toevoegen", body), 200
 
     person = st.people.add(naam, email)
     temp = _auth.generate_temp_password()
@@ -301,24 +307,30 @@ def _handle_person_add(data_dir: str, form: dict) -> str:
         f"padding:.6rem 1rem;border-radius:6px;display:inline-block'>{_e(temp)}</p>"
         f"<p style='margin-top:1rem'><a href='{_e(back)}'>← terug</a></p></div>"
     )
-    return _page("Persoon toegevoegd", body)
+    return _page("Persoon toegevoegd", body), 200
 
 
-def _handle_person_reset(data_dir: str, form: dict) -> str:
+def _handle_person_reset(data_dir: str, form: dict, username: str | None = None) -> tuple[str, int]:
     """Reset het wachtwoord van een bestaande deelnemer: zet een nieuw tijdelijk wachtwoord en
-    toon dat éénmalig (niet via redirect, zodat het niet in de URL/history belandt)."""
+    toon dat éénmalig (niet via redirect, zodat het niet in de URL/history belandt).
+    Autorisatie: alleen anchor-lead (people-beheer is org-breed); guest mag alles."""
+    st = _Stores(data_dir)
+    actor = st.people.by_email(username) if username != "guest" else None
+    if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
+        return "Geen toegang — alleen anchor-lead mag dit", 403
+    if actor is None and username != "guest":
+        return "Geen toegang — gebruiker niet herkend", 403
     g = lambda k: (form.get(k) or [""])[0].strip()
     pid = g("pid")
     back = g("next") or "/admin"
     if not back.startswith("/"):
         back = "/admin"
-    st = _Stores(data_dir)
     person = st.people.get(pid)
     if person is None:
         body = ("<div class='c2-sec'><h3>Wachtwoord resetten</h3>"
                 "<p style='color:#c0392b'>Deelnemer niet gevonden.</p>"
                 f"<p><a href='{_e(back)}'>← terug</a></p></div>")
-        return _page("Wachtwoord resetten", body)
+        return _page("Wachtwoord resetten", body), 200
     temp = _auth.generate_temp_password()
     st.people.set_password(person.id, _auth.hash_password(temp))
     body = (
@@ -329,7 +341,7 @@ def _handle_person_reset(data_dir: str, form: dict) -> str:
         f"padding:.6rem 1rem;border-radius:6px;display:inline-block'>{_e(temp)}</p>"
         f"<p style='margin-top:1rem'><a href='{_e(back)}'>← terug</a></p></div>"
     )
-    return _page("Wachtwoord gereset", body)
+    return _page("Wachtwoord gereset", body), 200
 
 
 def is_circle_lead(person_id: str, circle_id: str, assignments) -> bool:
@@ -1299,10 +1311,10 @@ def make_handler(data_dir: str, csrf_token: str,
             # person_add: rendert een pagina die het tijdelijke wachtwoord éénmalig toont
             # (niet via redirect, zodat het wachtwoord niet in de URL/history belandt).
             if action == "person_add":
-                self._send(_handle_person_add(data_dir, form))
+                self._send(*_handle_person_add(data_dir, form, username=username))
                 return
             if action == "person_reset_password":
-                self._send(_handle_person_reset(data_dir, form))
+                self._send(*_handle_person_reset(data_dir, form, username=username))
                 return
             nxt, msg = dispatch(data_dir, action, form, username=username)
             self._redirect(nxt, msg)

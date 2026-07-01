@@ -43,8 +43,9 @@ def test_members_tab_verwijst_naar_admin(tmp_path):
 
 def test_toevoegen_maakt_persoon_en_toont_wachtwoord(tmp_path):
     dd, st = _st(tmp_path)
-    html = cockpit2._handle_person_add(
-        dd, {"voornaam": ["Nieuw"], "achternaam": ["Persoon"], "email": ["nieuw@nooch.earth"], "next": ["/admin"]})
+    html, _ = cockpit2._handle_person_add(
+        dd, {"voornaam": ["Nieuw"], "achternaam": ["Persoon"], "email": ["nieuw@nooch.earth"], "next": ["/admin"]},
+        username="guest")
     temp = _temp_from(html)
     assert auth.UserStore(dd + "/people.json").verify_by_email("nieuw@nooch.earth", temp)
 
@@ -52,14 +53,16 @@ def test_toevoegen_maakt_persoon_en_toont_wachtwoord(tmp_path):
 def test_toevoegen_weigert_dubbele_email(tmp_path):
     dd, st = _st(tmp_path)
     st.people.add("Bestaand", "dub@nooch.earth")
-    html = cockpit2._handle_person_add(
-        dd, {"voornaam": ["X"], "achternaam": ["Y"], "email": ["dub@nooch.earth"], "next": ["/admin"]})
+    html, _ = cockpit2._handle_person_add(
+        dd, {"voornaam": ["X"], "achternaam": ["Y"], "email": ["dub@nooch.earth"], "next": ["/admin"]},
+        username="guest")
     assert "bestaat al" in html
 
 
 def test_toevoegen_vereist_naam_en_email(tmp_path):
     dd, st = _st(tmp_path)
-    html = cockpit2._handle_person_add(dd, {"voornaam": [""], "achternaam": [""], "email": [""], "next": ["/admin"]})
+    html, _ = cockpit2._handle_person_add(dd, {"voornaam": [""], "achternaam": [""], "email": [""], "next": ["/admin"]},
+                                          username="guest")
     assert "verplicht" in html
 
 
@@ -78,14 +81,14 @@ def test_person_edit_wijzigt_naam_en_email(tmp_path):
 def test_reset_password_zet_nieuw_werkend_wachtwoord(tmp_path):
     dd, st = _st(tmp_path)
     p = st.people.add("Reset", "reset@nooch.earth")
-    html = cockpit2._handle_person_reset(dd, {"pid": [p.id], "next": ["/admin"]})
+    html, _ = cockpit2._handle_person_reset(dd, {"pid": [p.id], "next": ["/admin"]}, username="guest")
     temp = _temp_from(html)
     assert auth.UserStore(dd + "/people.json").verify_by_email("reset@nooch.earth", temp)
 
 
 def test_reset_onbekende_persoon(tmp_path):
     dd, st = _st(tmp_path)
-    html = cockpit2._handle_person_reset(dd, {"pid": ["nietbestaand"], "next": ["/admin"]})
+    html, _ = cockpit2._handle_person_reset(dd, {"pid": ["nietbestaand"], "next": ["/admin"]}, username="guest")
     assert "niet gevonden" in html
 
 
@@ -568,3 +571,77 @@ def test_normale_proj_add_blijft_rolvervuller_of_lead(tmp_path):
     form = {"owner": [_GATE_ROLE], "scope": ["Werk"], "next": ["/x"]}
     _, deny = cockpit2.dispatch(dd, "proj_add", form, username="buiten@nooch.earth")
     assert "Geen toegang" in deny and "rolvervuller" in deny
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# People-beheer buiten dispatch: _handle_person_add / _handle_person_reset.
+# Anchor-lead only; retourneren (body, statuscode).
+# ══════════════════════════════════════════════════════════════════════════════
+
+_ANCHOR = "mother_earth__circle_lead"
+
+
+def _add_form():
+    return {"voornaam": ["Nieuw"], "achternaam": ["Persoon"], "email": ["nieuw@nooch.earth"], "next": ["/admin"]}
+
+
+def test_person_add_gate_guest_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    body, code = cockpit2._handle_person_add(dd, _add_form(), username="guest")
+    assert code == 200 and "toegevoegd" in body
+
+
+def test_person_add_gate_anchor_lead_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    lead = st.people.add("Anchor", "anchor@nooch.earth")
+    st.assign.assign(_ANCHOR, "person", lead.id)
+    body, code = cockpit2._handle_person_add(dd, _add_form(), username="anchor@nooch.earth")
+    assert code == 200 and "toegevoegd" in body
+
+
+def test_person_add_gate_niet_lead_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    subly = st.people.add("Sub", "sub@nooch.earth")
+    st.assign.assign(_GATE_LEAD, "person", subly.id)          # subcirkel-lead, geen anchor
+    body, code = cockpit2._handle_person_add(dd, _add_form(), username="sub@nooch.earth")
+    assert code == 403 and "anchor-lead" in body
+    assert cockpit2._Stores(dd).people.by_email("nieuw@nooch.earth") is None
+
+
+def test_person_add_gate_onbekende_gebruiker_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    body, code = cockpit2._handle_person_add(dd, _add_form(), username="niemand@nergens.nl")
+    assert code == 403 and "niet herkend" in body
+    assert cockpit2._Stores(dd).people.by_email("nieuw@nooch.earth") is None
+
+
+def test_person_reset_gate_guest_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    p = st.people.add("Doel", "doel@nooch.earth")
+    body, code = cockpit2._handle_person_reset(dd, {"pid": [p.id], "next": ["/admin"]}, username="guest")
+    assert code == 200 and "gereset" in body
+
+
+def test_person_reset_gate_anchor_lead_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    lead = st.people.add("Anchor", "anchor@nooch.earth")
+    st.assign.assign(_ANCHOR, "person", lead.id)
+    p = st.people.add("Doel", "doel@nooch.earth")
+    body, code = cockpit2._handle_person_reset(dd, {"pid": [p.id], "next": ["/admin"]}, username="anchor@nooch.earth")
+    assert code == 200 and "gereset" in body
+
+
+def test_person_reset_gate_niet_lead_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    subly = st.people.add("Sub", "sub@nooch.earth")
+    st.assign.assign(_GATE_LEAD, "person", subly.id)
+    p = st.people.add("Doel", "doel@nooch.earth")
+    body, code = cockpit2._handle_person_reset(dd, {"pid": [p.id], "next": ["/admin"]}, username="sub@nooch.earth")
+    assert code == 403 and "anchor-lead" in body
+
+
+def test_person_reset_gate_onbekende_gebruiker_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    p = st.people.add("Doel", "doel@nooch.earth")
+    body, code = cockpit2._handle_person_reset(dd, {"pid": [p.id], "next": ["/admin"]}, username="niemand@nergens.nl")
+    assert code == 403 and "niet herkend" in body
