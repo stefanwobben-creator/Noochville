@@ -61,9 +61,10 @@ bevestigd identiek aan de baseline). Elke stap met diff-tonen + mutatie-check.
   U6 (AI-assistent in governance verwijderd — knop, route, chat-panel, handlers; overlap met Noochie).
 
 ### Openstaande punten (zie WORKING_AGREEMENTS.md)
-- **Autorisatie-laag ontbreekt** — elke ingelogde gebruiker mag alles. Nodig: sessie-gebruiker naar dispatch,
-  leadlink-check (filler van `{circle}__circle_lead`), en een "actie X mag door Y, anders 403"-patroon.
-  Eerste geblokkeerde use case: afwezig-status op de members-tab.
+- **Autorisatie-laag (gedeeltelijk live)** — user-threading, `is_circle_lead` en de gate op de rol-takken
+  staan gecommit; zie het kopje "Autorisatie-laag" hieronder voor de volledige stand. Nog open: overige
+  dispatch-takken zijn user-agnostisch, en de eerste concrete use case (afwezig-status op de members-tab)
+  heeft nog geen gate.
 - **Transparantie-brug ontbreekt** — puls-output (notes.json, output/) is niet zichtbaar in cockpit2
   (die leest attachments.json). Twee gescheiden werelden.
 - **Lokaal ↔ server-governance divergeren** — verzoenen vóór de eerstvolgende deploy.
@@ -71,6 +72,23 @@ bevestigd identiek aan de baseline). Elke stap met diff-tonen + mutatie-check.
   negen plekken erven het, vijf overschrijven ad-hoc. Structureel: default kaal + expliciete `.box-details`.
 - **Advies-kwaliteit** — LLM-advies-stappen lezen strategie/beleid nog niet (gaven al Google-Ads-advies
   terwijl Nooch geen advertising voert). Advies tegen beleid toetsen vóór live gebruik.
+
+## Autorisatie-laag (gedeeltelijk live)
+
+Patroon bewezen en gecommit. Stand van zaken:
+
+✅ user-threading: dispatch() ontvangt username via sessie
+✅ is_circle_lead(person_id, circle_id, assignments) — helper + tests
+✅ gate op role_assign / role_unassign / role_focus (Circle Lead only)
+✅ bootstrap: Stefan (dc5685eb2074) gezaaid als mother_earth__circle_lead
+   (in data/assignments.json, gitignored — handmatig op server zetten)
+
+⏳ Nog open:
+- aitask_add en persona_skill_add: AI koppelen aan rol = laag 1,
+  valt ook onder Circle Lead. Nog geen gate.
+- Overige dispatch-takken: nog user-agnostisch.
+- Multipart-pad (attach_file) en person_add/reset_password:
+  gaan langs dispatch heen, nog geen user-injectie.
 
 ### Morgen
 - **Strategie-laag ontwerpen** — `data/strategy.json` met do's en don'ts die advies-stappen en agents lezen.
