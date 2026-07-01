@@ -58,9 +58,9 @@ def test_rolefillers_modal_en_assign(tmp_path):
     assert "kies persoon" in frag and "of AI" not in frag      # alleen mensen vervullen een rol
     # toewijzen + verwijderen via dispatch
     wytse = st.people.by_name("Wytse Valkema")
-    cockpit2.dispatch(dd, "role_assign", {"role": [role], "filler": [f"person:{wytse.id}"], "next": ["/"]})
+    cockpit2.dispatch(dd, "role_assign", {"role": [role], "filler": [f"person:{wytse.id}"], "next": ["/"]}, username="guest")
     assert any(f.id == wytse.id for f in cockpit2._Stores(dd).assign.fillers_of(role))
-    cockpit2.dispatch(dd, "role_unassign", {"role": [role], "filler": [f"person:{wytse.id}"], "next": ["/"]})
+    cockpit2.dispatch(dd, "role_unassign", {"role": [role], "filler": [f"person:{wytse.id}"], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).assign.fillers_of(role) == []
 
 
@@ -71,7 +71,7 @@ def test_rolefiller_focus(tmp_path):
     role = "mother_earth__nooch__community_and_email"
     nina = st.people.by_name("Nina Wolter")
     cockpit2.dispatch(dd, "role_focus", {"role": [role], "filler": [f"person:{nina.id}"],
-                                         "focus": ["nieuwsbrieven"], "next": ["/"]})
+                                         "focus": ["nieuwsbrieven"], "next": ["/"]}, username="guest")
     f = next(x for x in cockpit2._Stores(dd).assign.fillers_of(role) if x.id == nina.id)
     assert f.focus == "nieuwsbrieven"
     # focus zichtbaar in de beheer-modal
@@ -87,7 +87,7 @@ def test_roles_tab_stack_bij_3plus(tmp_path):
     role = "mother_earth__nooch__factory_development_specialist"
     for nm in ("Lotte Mulder", "Stefan Wobben", "Nina Wolter", "Dan Morgan"):
         cockpit2.dispatch(dd, "role_assign",
-                          {"role": [role], "filler": [f"person:{st.people.by_name(nm).id}"], "next": ["/"]})
+                          {"role": [role], "filler": [f"person:{st.people.by_name(nm).id}"], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth__nooch", "roles", csrf_token="t")
     assert "+ nog 1" in page and "stack" in page              # 4 vervullers → 3 avatars + nog 1
 
@@ -180,7 +180,7 @@ def test_project_status_done_delete(tmp_path):
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]})
     assert cockpit2._Stores(dd).projects.get(pid)["status"] == "done"
     # verwijderen
-    cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid) is None
 
 

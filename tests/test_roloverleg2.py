@@ -82,7 +82,7 @@ def test_sluiten_voert_consented_door(tmp_path):
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
     cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Bewaken van performance"], "next": ["/"]})
     cockpit2._Stores(dd).agenda.set_status(iid, "consented")
-    cockpit2.dispatch(dd, "rov2_end", {"circle": [C], "next": ["/node?id=" + C]})
+    cockpit2.dispatch(dd, "rov2_end", {"circle": [C], "next": ["/node?id=" + C]}, username="guest")
     # doorgevoerd in de records + van de agenda af
     rec = cockpit2._Stores(dd).records.get(RID)
     assert "Bewaken van performance" in rec.definition.accountabilities
@@ -119,7 +119,7 @@ def test_consent_geblokkeerd_zonder_purpose(tmp_path):
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
     assert "disabled>Neem voorstel aan" in frag and "rov2_consent" not in frag
     # consent-actie weigert ook serverside
-    cockpit2.dispatch(dd, "rov2_consent", {"iid": [iid], "circle": [C], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_consent", {"iid": [iid], "circle": [C], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).agenda.get(iid)["status"] == "open"
 
 
@@ -128,7 +128,7 @@ def test_consent_en_auto_volgend(tmp_path):
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]})
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Financial Controller"], "next": ["/"]})
     first = cockpit2._Stores(dd).agenda.open()[0]["id"]
-    cockpit2.dispatch(dd, "rov2_consent", {"iid": [first], "circle": [C], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_consent", {"iid": [first], "circle": [C], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).agenda.get(first)["status"] == "consented"
     # zonder iid auto-selecteert de render het volgende OPEN punt
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
@@ -158,8 +158,8 @@ def test_rol_verwijderen_via_overleg(tmp_path):
     f2 = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
     assert "wordt <b>verwijderd</b>" in f2 and "terug naar wijzigen" in f2 and "Neem voorstel aan" in f2
     # consent + sluiten -> rol gearchiveerd (verweesd werk = advies, geen blok)
-    cockpit2.dispatch(dd, "rov2_consent", {"iid": [iid], "circle": [C], "next": ["/"]})
-    cockpit2.dispatch(dd, "rov2_end", {"circle": [C], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_consent", {"iid": [iid], "circle": [C], "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "rov2_end", {"circle": [C], "next": ["/"]}, username="guest")
     rec = cockpit2._Stores(dd).records.get(RID)
     assert rec is None or rec.archived
 
@@ -174,7 +174,7 @@ def test_secretaris_gate_en_bevestiging_bij_sluiten(tmp_path):
     # met een aangenomen voorstel telt de bevestiging mee
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
     cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Bewaken van iets"], "next": ["/"]})
-    cockpit2.dispatch(dd, "rov2_consent", {"iid": [iid], "circle": [C], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_consent", {"iid": [iid], "circle": [C], "next": ["/"]}, username="guest")
     f2 = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
     assert "1 aangenomen voorstel(len) worden doorgevoerd" in f2
 
@@ -227,10 +227,10 @@ def test_groep_consent_en_verwijderen(tmp_path):
     cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [new_iid], "text": ["Rapporteren van trends"], "next": ["/"]})
     cockpit2.dispatch(dd, "rov2_set", {"iid": [new_iid], "field": ["purpose"], "value": ["Inzicht"], "next": ["/"]})
     # consent op één lid zet het HELE voorstel op consented
-    cockpit2.dispatch(dd, "rov2_consent", {"iid": [iid], "circle": [C], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_consent", {"iid": [iid], "circle": [C], "next": ["/"]}, username="guest")
     assert all(m["status"] == "consented" for m in cockpit2._Stores(dd).agenda.members_of_group(gid))
     # heel voorstel verwijderen
-    cockpit2.dispatch(dd, "rov2_remove_group", {"iid": [iid], "circle": [C], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_remove_group", {"iid": [iid], "circle": [C], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).agenda.all() == []
 
 
@@ -240,5 +240,5 @@ def test_select_en_verwijderen(tmp_path):
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
     sel = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
     assert "rov-item on" in sel and "Toevoegen aan voorstel" in sel
-    cockpit2.dispatch(dd, "rov2_remove", {"iid": [iid], "circle": [C], "next": ["/"]})
+    cockpit2.dispatch(dd, "rov2_remove", {"iid": [iid], "circle": [C], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).agenda.open() == []

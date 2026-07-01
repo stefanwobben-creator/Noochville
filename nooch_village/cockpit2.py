@@ -388,6 +388,20 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
     elif action == "proj_unarchive":
         pj.unarchive(g("pid")); msg = "↩ hersteld"
     elif action == "proj_delete":
+        # ── Autorisatie: Circle Lead van de cirkel van het project ──
+        actor = st.people.by_email(username) if username != "guest" else None
+        _proj = pj.get(g("pid"))
+        _owner = (_proj or {}).get("owner") or ""
+        if _owner.startswith(_II_PREFIX):
+            circle_id = _owner[len(_II_PREFIX):]        # Individueel Initiatief: cirkel zit in de owner
+        else:
+            _orec = st.records.get(_owner)
+            circle_id = _orec.parent if _orec else None
+        if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
+            return nxt, "Geen toegang — alleen Circle Lead mag dit"
+        if actor is None and username != "guest":
+            return nxt, "Geen toegang — gebruiker niet herkend"
+        # ── einde autorisatie ──
         pj.remove(g("pid")); msg = "🗑 verwijderd"
     elif action == "proj_edit":
         person, agent = _parse_trekker(g("trekker"))
@@ -537,6 +551,16 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         if agent and acc_i >= 0 and st.ai.add(g("role"), acc_i, agent, skill):
             msg = "🤖 AI gekoppeld aan accountability"
     elif action == "aitask_remove":
+        # ── Autorisatie: Circle Lead van de ouder-cirkel van de rol ──
+        actor = st.people.by_email(username) if username != "guest" else None
+        _task = next((t for t in st.ai.all() if t.id == g("tid")), None)
+        _rec = st.records.get(_task.role) if _task else None
+        circle_id = _rec.parent if _rec else None
+        if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
+            return nxt, "Geen toegang — alleen Circle Lead mag dit"
+        if actor is None and username != "guest":
+            return nxt, "Geen toegang — gebruiker niet herkend"
+        # ── einde autorisatie ──
         st.ai.remove(g("tid")); msg = "✓ verwijderd"
     elif action == "persona_skill_add":
         # ── Autorisatie: alleen anchor-lead (mother_earth) ──
@@ -555,8 +579,24 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         if _rov_add_item(st, g("circle"), g("naam"), group=g("group")):
             msg = "✓ toegevoegd aan voorstel"
     elif action == "rov2_remove":
+        # ── Autorisatie: Circle Lead van de cirkel die het overleg houdt ──
+        actor = st.people.by_email(username) if username != "guest" else None
+        circle_id = g("circle")
+        if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
+            return nxt, "Geen toegang — alleen Circle Lead mag dit"
+        if actor is None and username != "guest":
+            return nxt, "Geen toegang — gebruiker niet herkend"
+        # ── einde autorisatie ──
         st.agenda.remove(g("iid")); msg = "🗑 uit voorstel verwijderd"
     elif action == "rov2_remove_group":
+        # ── Autorisatie: Circle Lead van de cirkel die het overleg houdt ──
+        actor = st.people.by_email(username) if username != "guest" else None
+        circle_id = g("circle")
+        if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
+            return nxt, "Geen toegang — alleen Circle Lead mag dit"
+        if actor is None and username != "guest":
+            return nxt, "Geen toegang — gebruiker niet herkend"
+        # ── einde autorisatie ──
         gid = st.agenda.group_of(g("iid"))
         for m in st.agenda.members_of_group(gid):
             st.agenda.remove(m["id"])
@@ -566,6 +606,14 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             st.agenda.update_fields(g("iid"), kind=g("kind"))
             msg = "voorstel: rol verwijderen" if g("kind") == "remove_role" else "voorstel: rol wijzigen"
     elif action == "rov2_consent":
+        # ── Autorisatie: Circle Lead van de cirkel die het overleg houdt ──
+        actor = st.people.by_email(username) if username != "guest" else None
+        circle_id = g("circle")
+        if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
+            return nxt, "Geen toegang — alleen Circle Lead mag dit"
+        if actor is None and username != "guest":
+            return nxt, "Geen toegang — gebruiker niet herkend"
+        # ── einde autorisatie ──
         gid = st.agenda.group_of(g("iid"))
         members = st.agenda.members_of_group(gid)
         if members and not any(_rov_hard(st, m) for m in members):
@@ -575,6 +623,14 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         else:
             msg = "⛔ consent geblokkeerd — los de blokkade(s) op"
     elif action == "rov2_end":
+        # ── Autorisatie: Circle Lead van de cirkel die het overleg houdt ──
+        actor = st.people.by_email(username) if username != "guest" else None
+        circle_id = g("circle")
+        if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
+            return nxt, "Geen toegang — alleen Circle Lead mag dit"
+        if actor is None and username != "guest":
+            return nxt, "Geen toegang — gebruiker niet herkend"
+        # ── einde autorisatie ──
         done = _rov_apply(st)
         msg = f"✓ overleg gesloten — {len(done)} doorgevoerd" if done else "overleg gesloten"
     elif action == "wo_open":
@@ -710,6 +766,13 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         kid = _kpi_id_from_def(st, g("node"), did)
         msg = "✓ KPI uit catalogus toegevoegd" if kid else "⛔ kies een bestaande definitie uit de catalogus"
     elif action == "def_add":
+        # ── Autorisatie: alleen anchor-lead (mother_earth) ──
+        actor = st.people.by_email(username) if username != "guest" else None
+        if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
+            return nxt, "Geen toegang — alleen anchor-lead mag dit"
+        if actor is None and username != "guest":
+            return nxt, "Geen toegang — gebruiker niet herkend"
+        # ── einde autorisatie ──
         d = st.defs.add(g("name"), owner="librarian", provenance="sensed",
                         unit=g("unit"), definition=g("definition"), direction=g("direction"),
                         source=g("csource"), threshold=g("threshold"),
@@ -720,6 +783,13 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
                         bron_url=g("bron_url"), verificatie=g("verificatie"), waarde=g("waarde"))
         msg = "✓ definitie toegevoegd aan de catalogus" if d else "⛔ geef een naam"
     elif action == "def_amend":
+        # ── Autorisatie: alleen anchor-lead (mother_earth) ──
+        actor = st.people.by_email(username) if username != "guest" else None
+        if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
+            return nxt, "Geen toegang — alleen anchor-lead mag dit"
+        if actor is None and username != "guest":
+            return nxt, "Geen toegang — gebruiker niet herkend"
+        # ── einde autorisatie ──
         # wijzig een gedeelde catalogus-definitie; migratie bepaalt wat met de historie gebeurt
         did = g("def_id")
         old = st.defs.current(did) if did else None
@@ -800,11 +870,25 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             _rov_save_draft(st, g("iid"), draft)
             msg = "✓ voorstel bijgewerkt"
     elif action == "person_edit":
+        # ── Autorisatie: alleen anchor-lead (mother_earth) ──
+        actor = st.people.by_email(username) if username != "guest" else None
+        if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
+            return nxt, "Geen toegang — alleen anchor-lead mag dit"
+        if actor is None and username != "guest":
+            return nxt, "Geen toegang — gebruiker niet herkend"
+        # ── einde autorisatie ──
         if st.people.update(g("pid"), name=g("name"), email=g("email")):
             msg = "✓ deelnemer opgeslagen"
         else:
             msg = "✗ deelnemer niet gevonden"
     elif action == "person_remove":
+        # ── Autorisatie: alleen anchor-lead (mother_earth) ──
+        actor = st.people.by_email(username) if username != "guest" else None
+        if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
+            return nxt, "Geen toegang — alleen anchor-lead mag dit"
+        if actor is None and username != "guest":
+            return nxt, "Geen toegang — gebruiker niet herkend"
+        # ── einde autorisatie ──
         pid = g("pid")
         # ruim ook de rol-toewijzingen op, anders blijven die als wees achter
         for rid in list(st.assign.roles_of("person", pid)):

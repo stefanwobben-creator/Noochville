@@ -40,7 +40,7 @@ def test_ai_genest_onder_accountability(tmp_path):
     codie = st.personas.add("Codie", skills=["schrijft de code"])
     role = "mother_earth__nooch__website_developer"
     cockpit2.dispatch(dd, "aitask_add", {"role": [role], "acc": ["0"],
-                                         "pick": [f"{codie.id}::schrijft de code"], "next": ["/"]})
+                                         "pick": [f"{codie.id}::schrijft de code"], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), role, "overview", csrf_token="t")
     # subtiele AI-marker op de accountability + één gebundeld overzicht (niet dubbel)
     assert "ai-on" in page and "AI in deze rol" in page
@@ -80,5 +80,5 @@ def test_modal_selecteert_uit_rugzak_geen_vrije_tekst(tmp_path):
 def test_persona_skill_add_via_dispatch(tmp_path):
     dd, st = _st(tmp_path)
     codie = st.personas.add("Codie")
-    cockpit2.dispatch(dd, "persona_skill_add", {"agent": [codie.id], "skill": ["schrijft de code"], "next": ["/"]})
+    cockpit2.dispatch(dd, "persona_skill_add", {"agent": [codie.id], "skill": ["schrijft de code"], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).personas.get(codie.id).skills == ["schrijft de code"]

@@ -188,7 +188,7 @@ def test_amend_clarify_houdt_reeks_heel(tmp_path):
     dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
     did, mid = _manual_def_kpi(dd)
     cockpit2.dispatch(dd, "def_amend", {"def_id": [did], "definition": ["promoters minus detractors"],
-                                        "migration": ["auto"], "next": ["/"]})
+                                        "migration": ["auto"], "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
     kpi = st.metrics.get(mid)
     assert kpi["def_version"] == 2 and not kpi.get("breaks")        # geen breuk
@@ -201,7 +201,7 @@ def test_amend_break_zet_breukpunt(tmp_path):
     dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
     did, mid = _manual_def_kpi(dd)
     # eenheid wijzigt → meetbaar → break (geen LLM-key in test → veilige default)
-    cockpit2.dispatch(dd, "def_amend", {"def_id": [did], "unit": ["%"], "migration": ["auto"], "next": ["/"]})
+    cockpit2.dispatch(dd, "def_amend", {"def_id": [did], "unit": ["%"], "migration": ["auto"], "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
     kpi = st.metrics.get(mid)
     assert kpi["def_version"] == 2 and kpi["breaks"] == [2]
@@ -218,7 +218,7 @@ def test_amend_backcast_hertagt_historie(tmp_path):
     dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
     did, mid = _manual_def_kpi(dd)
     # expliciete back-cast: mens stelt dat historie vergelijkbaar blijft → herstempelen, één reeks
-    cockpit2.dispatch(dd, "def_amend", {"def_id": [did], "unit": ["pt"], "migration": ["backcast"], "next": ["/"]})
+    cockpit2.dispatch(dd, "def_amend", {"def_id": [did], "unit": ["pt"], "migration": ["backcast"], "next": ["/"]}, username="guest")
     kpi = cockpit2._Stores(dd).metrics.get(mid)
     assert kpi["def_version"] == 2 and not kpi.get("breaks")
     assert {s["defv"] for s in kpi["samples"]} == {2}              # alles op nieuwe versie
@@ -244,7 +244,7 @@ def test_def_add_via_dispatch(tmp_path):
     n0 = len(cockpit2._Stores(dd).defs.all())
     cockpit2.dispatch(dd, "def_add", {"name": ["Winkel-NPS regio"], "unit": ["NPS"], "csource": [""],
                                       "definition": ["promoters - detractors in de fysieke winkel"],
-                                      "direction": ["up"], "cadence": ["kwartaal"], "next": ["/catalog"]})
+                                      "direction": ["up"], "cadence": ["kwartaal"], "next": ["/catalog"]}, username="guest")
     st = cockpit2._Stores(dd)
     assert len(st.defs.all()) == n0 + 1
     d = st.defs.by_name("Winkel-NPS regio")
@@ -289,7 +289,7 @@ def test_meetwijze_wijzigen_flipt_invoer(tmp_path):
     st = cockpit2._Stores(dd)
     # nieuwe handmatige definitie + KPI
     cockpit2.dispatch(dd, "def_add", {"name": ["Eigen meter"], "unit": ["n"], "csource": [""],
-                                      "meetwijze": ["handmatig"], "next": ["/catalog"]})
+                                      "meetwijze": ["handmatig"], "next": ["/catalog"]}, username="guest")
     did = cockpit2._Stores(dd).defs.by_name("Eigen meter")["id"]
     rid = "mother_earth__nooch__marketing_lead"
     cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [did], "next": ["/"]})
@@ -297,7 +297,7 @@ def test_meetwijze_wijzigen_flipt_invoer(tmp_path):
     assert cockpit2._Stores(dd).metrics.add_sample(mid, 1) is True
     # zet meetwijze op systeem → KPI's flippen naar auto, invoer geblokkeerd
     cockpit2.dispatch(dd, "def_amend", {"def_id": [did], "meetwijze": ["systeem"],
-                                        "migration": ["clarify"], "next": ["/catalog"]})
+                                        "migration": ["clarify"], "next": ["/catalog"]}, username="guest")
     st = cockpit2._Stores(dd)
     assert st.metrics.get(mid)["auto"] is True and st.metrics.add_sample(mid, 2) is False
 
@@ -323,7 +323,7 @@ def test_metavelden_grondslag_en_aard(tmp_path):
     cockpit2.dispatch(dd, "def_add", {"name": ["Doorvoertijd proef"], "unit": ["uur"], "csource": ["monitoring"],
                                       "tijd": ["lagging"], "bruikbaar": ["actionable"],
                                       "standaard": ["DORA"], "benchmark": ["elite < 1 dag"],
-                                      "next": ["/catalog"]})
+                                      "next": ["/catalog"]}, username="guest")
     d = cockpit2._Stores(dd).defs.by_name("Doorvoertijd proef")
     cur = cockpit2._Stores(dd).defs.current(d["id"])
     assert cur["standaard"] == "DORA" and cur["tijd"] == "lagging" and cur["bruikbaar"] == "actionable"

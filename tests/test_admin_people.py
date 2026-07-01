@@ -68,7 +68,7 @@ def test_toevoegen_vereist_naam_en_email(tmp_path):
 def test_person_edit_wijzigt_naam_en_email(tmp_path):
     dd, st = _st(tmp_path)
     p = st.people.add("Oud", "oud@nooch.earth")
-    cockpit2.dispatch(dd, "person_edit", {"pid": [p.id], "name": ["Nieuw"], "email": ["new@nooch.earth"], "next": ["/admin"]})
+    cockpit2.dispatch(dd, "person_edit", {"pid": [p.id], "name": ["Nieuw"], "email": ["new@nooch.earth"], "next": ["/admin"]}, username="guest")
     got = cockpit2._Stores(dd).people.get(p.id)
     assert got.name == "Nieuw" and got.email == "new@nooch.earth"
 
@@ -97,7 +97,7 @@ def test_person_remove_verwijdert_en_ruimt_rollen_op(tmp_path):
     role = "mother_earth__nooch__brand_visual_designer"
     st.assign.assign(role, "person", p.id)
     assert role in cockpit2._Stores(dd).assign.roles_of("person", p.id)
-    cockpit2.dispatch(dd, "person_remove", {"pid": [p.id], "next": ["/admin"]})
+    cockpit2.dispatch(dd, "person_remove", {"pid": [p.id], "next": ["/admin"]}, username="guest")
     st2 = cockpit2._Stores(dd)
     assert st2.people.get(p.id) is None
     assert st2.assign.roles_of("person", p.id) == []     # rol-toewijzing opgeruimd
@@ -105,7 +105,7 @@ def test_person_remove_verwijdert_en_ruimt_rollen_op(tmp_path):
 
 def test_person_remove_onbekend(tmp_path):
     dd, st = _st(tmp_path)
-    _, msg = cockpit2.dispatch(dd, "person_remove", {"pid": ["nietbestaand"], "next": ["/admin"]})
+    _, msg = cockpit2.dispatch(dd, "person_remove", {"pid": ["nietbestaand"], "next": ["/admin"]}, username="guest")
     assert "niet gevonden" in msg
 
 
@@ -242,3 +242,172 @@ def test_gate_persona_skill_onbekende_gebruiker_geweigerd(tmp_path):
     _, msg = cockpit2.dispatch(dd, "persona_skill_add", form, username="niemand@nergens.nl")
     assert "niet herkend" in msg
     assert "nieuwe_skill" not in cockpit2._Stores(dd).personas.get(pid).skills
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Groep A — anchor-lead only (person_edit / person_remove / def_amend / def_add)
+# Representatieve tak: person_remove (destructief, org-breed).
+# ══════════════════════════════════════════════════════════════════════════════
+
+_ANCHOR_LEAD = "mother_earth__circle_lead"
+
+
+def test_gate_anchor_guest_mag_verwijderen(tmp_path):
+    dd, st = _st(tmp_path)
+    target = st.people.add("Doel", "doel@nooch.earth")
+    _, msg = cockpit2.dispatch(dd, "person_remove", {"pid": [target.id], "next": ["/x"]}, username="guest")
+    assert "verwijderd" in msg
+    assert cockpit2._Stores(dd).people.get(target.id) is None
+
+
+def test_gate_anchor_lead_mag_verwijderen(tmp_path):
+    dd, st = _st(tmp_path)
+    lead = st.people.add("Anchor", "anchor@nooch.earth")
+    st.assign.assign(_ANCHOR_LEAD, "person", lead.id)
+    target = st.people.add("Doel", "doel@nooch.earth")
+    _, msg = cockpit2.dispatch(dd, "person_remove", {"pid": [target.id], "next": ["/x"]}, username="anchor@nooch.earth")
+    assert "verwijderd" in msg
+    assert cockpit2._Stores(dd).people.get(target.id) is None
+
+
+def test_gate_anchor_subcirkel_lead_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    subly = st.people.add("Sub", "sub@nooch.earth")
+    st.assign.assign(_GATE_LEAD, "person", subly.id)          # lead van mother_earth__nooch, niet anchor
+    target = st.people.add("Doel", "doel@nooch.earth")
+    _, msg = cockpit2.dispatch(dd, "person_remove", {"pid": [target.id], "next": ["/x"]}, username="sub@nooch.earth")
+    assert "Geen toegang" in msg and "anchor-lead" in msg
+    assert cockpit2._Stores(dd).people.get(target.id) is not None
+
+
+def test_gate_anchor_onbekende_gebruiker_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    target = st.people.add("Doel", "doel@nooch.earth")
+    _, msg = cockpit2.dispatch(dd, "person_remove", {"pid": [target.id], "next": ["/x"]}, username="niemand@nergens.nl")
+    assert "niet herkend" in msg
+    assert cockpit2._Stores(dd).people.get(target.id) is not None
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Groep B — Circle Lead van de cirkel van het project/de rol
+# proj_delete (via pid → owner → cirkel) en aitask_remove (via tid → rol → cirkel).
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _make_project(dd, owner=_GATE_ROLE):
+    pid = cockpit2._Stores(dd).projects.create(owner, "Testproject", "human")
+    return pid
+
+
+def test_gate_projdelete_guest_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = _make_project(dd)
+    _, msg = cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/x"]}, username="guest")
+    assert "verwijderd" in msg
+    assert cockpit2._Stores(dd).projects.get(pid) is None
+
+
+def test_gate_projdelete_circle_lead_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    lead = st.people.add("Lead", "lead@nooch.earth")
+    st.assign.assign(_GATE_LEAD, "person", lead.id)           # lead van mother_earth__nooch (parent van de rol)
+    pid = _make_project(dd)
+    _, msg = cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/x"]}, username="lead@nooch.earth")
+    assert "verwijderd" in msg
+    assert cockpit2._Stores(dd).projects.get(pid) is None
+
+
+def test_gate_projdelete_niet_lead_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    st.people.add("Buiten", "buiten@nooch.earth")
+    pid = _make_project(dd)
+    _, msg = cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/x"]}, username="buiten@nooch.earth")
+    assert "Geen toegang" in msg and "Circle Lead" in msg
+    assert cockpit2._Stores(dd).projects.get(pid) is not None
+
+
+def test_gate_projdelete_onbekende_gebruiker_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = _make_project(dd)
+    _, msg = cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/x"]}, username="niemand@nergens.nl")
+    assert "niet herkend" in msg
+    assert cockpit2._Stores(dd).projects.get(pid) is not None
+
+
+def test_gate_projdelete_individueel_initiatief_lead_van_ii_cirkel(tmp_path):
+    # II-project: owner = "ii:<circle>"; lead van díe cirkel mag verwijderen
+    dd, st = _st(tmp_path)
+    circle = "mother_earth__nooch"
+    lead = st.people.add("Lead", "lead@nooch.earth")
+    st.assign.assign(f"{circle}__circle_lead", "person", lead.id)
+    pid = _make_project(dd, owner=f"{cockpit2._II_PREFIX}{circle}")
+    _, msg = cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/x"]}, username="lead@nooch.earth")
+    assert "verwijderd" in msg
+    assert cockpit2._Stores(dd).projects.get(pid) is None
+
+
+def test_gate_projdelete_individueel_initiatief_niet_lead_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    circle = "mother_earth__nooch"
+    st.people.add("Buiten", "buiten@nooch.earth")
+    pid = _make_project(dd, owner=f"{cockpit2._II_PREFIX}{circle}")
+    _, msg = cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/x"]}, username="buiten@nooch.earth")
+    assert "Geen toegang" in msg
+    assert cockpit2._Stores(dd).projects.get(pid) is not None
+
+
+def _make_aitask(dd):
+    return cockpit2._Stores(dd).ai.add(_GATE_ROLE, 0, "harry", "content_schrijven")
+
+
+def test_gate_aitaskremove_circle_lead_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    lead = st.people.add("Lead", "lead@nooch.earth")
+    st.assign.assign(_GATE_LEAD, "person", lead.id)
+    t = _make_aitask(dd)
+    _, msg = cockpit2.dispatch(dd, "aitask_remove", {"tid": [t.id], "next": ["/x"]}, username="lead@nooch.earth")
+    assert "verwijderd" in msg
+
+
+def test_gate_aitaskremove_niet_lead_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    st.people.add("Buiten", "buiten@nooch.earth")
+    t = _make_aitask(dd)
+    _, msg = cockpit2.dispatch(dd, "aitask_remove", {"tid": [t.id], "next": ["/x"]}, username="buiten@nooch.earth")
+    assert "Geen toegang" in msg and "Circle Lead" in msg
+    assert any(x.id == t.id for x in cockpit2._Stores(dd).ai.all())   # niet verwijderd
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Groep C — Circle Lead van de cirkel die het overleg houdt (circle uit g("circle"))
+# Representatieve tak: rov2_remove.
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _rov_remove_form(circle="mother_earth__nooch"):
+    return {"circle": [circle], "iid": ["willekeurig"], "next": ["/x"]}
+
+
+def test_gate_rov_guest_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    _, msg = cockpit2.dispatch(dd, "rov2_remove", _rov_remove_form(), username="guest")
+    assert "verwijderd" in msg
+
+
+def test_gate_rov_circle_lead_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    lead = st.people.add("Lead", "lead@nooch.earth")
+    st.assign.assign(_GATE_LEAD, "person", lead.id)           # lead van mother_earth__nooch
+    _, msg = cockpit2.dispatch(dd, "rov2_remove", _rov_remove_form(), username="lead@nooch.earth")
+    assert "verwijderd" in msg
+
+
+def test_gate_rov_niet_lead_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    st.people.add("Buiten", "buiten@nooch.earth")
+    _, msg = cockpit2.dispatch(dd, "rov2_remove", _rov_remove_form(), username="buiten@nooch.earth")
+    assert "Geen toegang" in msg and "Circle Lead" in msg
+
+
+def test_gate_rov_onbekende_gebruiker_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    _, msg = cockpit2.dispatch(dd, "rov2_remove", _rov_remove_form(), username="niemand@nergens.nl")
+    assert "niet herkend" in msg
