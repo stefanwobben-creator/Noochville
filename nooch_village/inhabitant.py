@@ -1,6 +1,6 @@
 from __future__ import annotations
 import threading, logging, uuid, re, os, json, time
-from nooch_village.util import atomic_write_json
+from nooch_village.util import atomic_write_json, read_json
 from nooch_village.event_bus import EventBus, Event
 from nooch_village.inbox import Inbox
 from nooch_village.models import Task, Response, Record, RecordType, Tension
@@ -546,11 +546,7 @@ class Inhabitant(threading.Thread):
         path = os.path.join(data_dir, "human_inbox.json")
         if not os.path.exists(path):
             return []
-        try:
-            with open(path) as f:
-                inbox = json.load(f)
-        except Exception:
-            return []
+        inbox = read_json(path, {})
         out = []
         for item in inbox.values():
             ctx = item.get("context") or {}
@@ -567,11 +563,7 @@ class Inhabitant(threading.Thread):
         path = os.path.join(data_dir, "constraints.json")
         if not os.path.exists(path):
             return []
-        try:
-            with open(path) as f:
-                return [c.get("text", "") for c in json.load(f) if c.get("text")]
-        except Exception:
-            return []
+        return [c.get("text", "") for c in read_json(path, [], expect=list) if c.get("text")]
 
     def _training_signals(self) -> str:
         """Zachte oordeel-signalen van de mens (leuk idee / zachte nee / nu niet / elders) als

@@ -10,11 +10,10 @@ De render leest alleen de cache (snel, geen netwerk in de request). `refresh_sem
 cache op de achtergrond met een geinjecteerde `ask`-callable, zodat dit niets weet van llm.py.
 """
 from __future__ import annotations
-import json
 import os
 import re
 
-from nooch_village.util import atomic_write_json
+from nooch_village.util import atomic_write_json, read_json
 
 _STOP = {"the", "a", "an", "of", "and", "to", "for", "in", "on", "new", "with", "your",
          "de", "het", "een", "van", "en", "te", "met", "der", "die", "dat", "ai"}
@@ -69,12 +68,7 @@ class MatchCache:
 
     def __init__(self, path: str):
         self.path = path
-        self._d: dict[str, bool] = {}
-        if os.path.exists(path):
-            try:
-                self._d = {k: bool(v) for k, v in json.load(open(path)).items()}
-            except Exception:
-                self._d = {}
+        self._d: dict[str, bool] = {k: bool(v) for k, v in read_json(path, {}).items()}
 
     def get(self, acc: str, skill: str):
         return self._d.get(_key(acc, skill))

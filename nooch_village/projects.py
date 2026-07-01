@@ -5,8 +5,8 @@ Opslag: data/projects.json (atomic write). Elke entry is een project-record:
 Governance-records en human_inbox blijven ongemoeid.
 """
 from __future__ import annotations
-import json, os, time, uuid
-from nooch_village.util import atomic_write_json
+import os, time, uuid
+from nooch_village.util import atomic_write_json, read_json
 
 _VALID_TRIGGERS = {"clock", "human", "noochie", "tension"}
 _TERMINAL       = {"done"}
@@ -21,12 +21,9 @@ class ProjectLedger:
         self._load()
 
     def _load(self) -> None:
+        self._projects = read_json(self.path, {})
         if os.path.exists(self.path):
-            try:
-                self._projects = json.load(open(self.path))
-                self._mtime = os.path.getmtime(self.path)
-            except Exception:
-                self._projects = {}
+            self._mtime = os.path.getmtime(self.path)
 
     def _maybe_reload(self) -> None:
         """Herlaad van schijf als het bestand door een extern proces is gewijzigd."""

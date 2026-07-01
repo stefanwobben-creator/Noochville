@@ -4,25 +4,17 @@ Lichtgewicht store (data/notifications.json). Een notificatie heeft een doel (ro
 verwijst naar het project + de feed-entry, en draagt een snippet voor de weergave.
 """
 from __future__ import annotations
-import json
 import os
 import time
 import uuid
 
-from nooch_village.util import atomic_write_json
+from nooch_village.util import atomic_write_json, read_json
 
 
 class NotifStore:
     def __init__(self, path: str):
         self.path = path
-        self._items: list[dict] = []
-        if os.path.exists(path):
-            try:
-                d = json.load(open(path))
-                if isinstance(d, list):
-                    self._items = d
-            except Exception:
-                self._items = []
+        self._items: list[dict] = read_json(path, [], expect=list)
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)

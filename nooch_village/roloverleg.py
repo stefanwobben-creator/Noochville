@@ -13,8 +13,8 @@ Niets wordt automatisch doorgevoerd: pas bij consent + einde overleg verandert d
 Opslag: data/roloverleg_agenda.json (gitignored).
 """
 from __future__ import annotations
-import json, os, re, time, uuid
-from nooch_village.util import atomic_write_json
+import os, re, time, uuid
+from nooch_village.util import atomic_write_json, read_json
 
 
 class Agenda:
@@ -22,12 +22,7 @@ class Agenda:
 
     def __init__(self, path: str):
         self.path = path
-        self._items: list[dict] = []
-        if os.path.exists(path):
-            try:
-                self._items = json.load(open(path))
-            except Exception:
-                self._items = []
+        self._items: list[dict] = read_json(path, [], expect=list)
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)

@@ -5,21 +5,15 @@ Ontstaan uit triage: als de mens een kans afwijst met een reden en die als const
 wordt die reden een vaste regel. De opportunity-reflex leest ze en stelt niets meer voor dat
 ertegen botst. Zo maakt jouw oordeel het dorp slimmer. JSON-bestand achter een simpele interface."""
 from __future__ import annotations
-import json
 import os
 import time
-from nooch_village.util import atomic_write_json
+from nooch_village.util import atomic_write_json, read_json
 
 
 class Constraints:
     def __init__(self, path: str):
         self.path = path
-        self._items: list[dict] = []
-        if os.path.exists(path):
-            try:
-                self._items = json.load(open(path))
-            except Exception:
-                self._items = []
+        self._items: list[dict] = read_json(path, [], expect=list)
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)

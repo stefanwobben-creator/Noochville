@@ -15,8 +15,8 @@ HARDE GRENS — vertrouwelijk:
   eigen store, los van NotesStore/Library, en wordt hij niet door cockpit.gather() ingeladen.
 """
 from __future__ import annotations
-import json, os, re
-from nooch_village.util import atomic_write_json
+import os, re
+from nooch_village.util import atomic_write_json, read_json
 
 
 # De canonieke Holacracy-regels voor formulering (bron: holacracy.org). Worden als instructie
@@ -52,12 +52,7 @@ class GovernanceExamples:
 
     def __init__(self, path: str):
         self.path = path
-        self._roles: list[dict] = []
-        if os.path.exists(path):
-            try:
-                self._roles = json.load(open(path))
-            except Exception:
-                self._roles = []
+        self._roles: list[dict] = read_json(path, [], expect=list)
 
     def all(self) -> list[dict]:
         return list(self._roles)

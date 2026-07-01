@@ -10,12 +10,11 @@ voorstel nooit terugkomt). Geen LLM, geen spaced repetition — die kunnen later
 Zie docs/ONDERZOEK_kennismodel.md.
 """
 from __future__ import annotations
-import json
 import os
 import re
 
 from nooch_village.insight import Insight, ClaimKind
-from nooch_village.util import atomic_write_json
+from nooch_village.util import atomic_write_json, read_json
 
 
 def _tokens(text: str) -> set[str]:
@@ -80,12 +79,7 @@ class LinkProposals:
 
     def __init__(self, path: str):
         self.path = path
-        self._decided: dict[str, str] = {}     # key -> "confirmed" | "rejected"
-        if os.path.exists(path):
-            try:
-                self._decided = json.load(open(path))
-            except Exception:
-                self._decided = {}
+        self._decided: dict[str, str] = read_json(path, {})     # key -> "confirmed" | "rejected"
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)

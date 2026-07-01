@@ -4,8 +4,8 @@ Opslag: data/role_metrics.json, keyed op role_id -> gesorteerde lijst metric-nam
 Beheerd door de rol zelf. Niet in het governance-record.
 """
 from __future__ import annotations
-import json, os
-from nooch_village.util import atomic_write_json
+import os
+from nooch_village.util import atomic_write_json, read_json
 
 
 class MonitoringStore:
@@ -16,11 +16,7 @@ class MonitoringStore:
         self._load()
 
     def _load(self) -> None:
-        if os.path.exists(self.path):
-            try:
-                self._data = json.load(open(self.path))
-            except Exception:
-                self._data = {}
+        self._data = read_json(self.path, {})
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)

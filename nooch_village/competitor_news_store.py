@@ -4,20 +4,14 @@ De ConcurrentScout schrijft hier het meest recente nieuwsitem per concurrent weg
 leest het om bij elke gemonitorde concurrent de naam + laatste nieuwsfeit te tonen. Achter
 dezelfde JSON-bestand-interface als de andere stores (schaal-naad: later DB/API)."""
 from __future__ import annotations
-import json
 import os
-from nooch_village.util import atomic_write_json
+from nooch_village.util import atomic_write_json, read_json
 
 
 class CompetitorNews:
     def __init__(self, path: str):
         self.path = path
-        self._data: dict[str, dict] = {}
-        if os.path.exists(path):
-            try:
-                self._data = json.load(open(path))
-            except Exception:
-                self._data = {}
+        self._data: dict[str, dict] = read_json(path, {})
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)

@@ -9,12 +9,11 @@ NB: de naam `Inhabitant` is in code al de levende rol-agent (inhabitant.py). Daa
 karakter-entiteit hier `Persona`. Naar de gebruiker toe heet het "inwoner".
 """
 from __future__ import annotations
-import json
 import os
 import uuid
 from dataclasses import dataclass, asdict, field
 
-from nooch_village.util import atomic_write_json
+from nooch_village.util import atomic_write_json, read_json
 
 # Veelgebruikte MBTI-typen (validatie is licht: vrije tekst mag, maar we normaliseren naar hoofdletters).
 _MBTI = {
@@ -59,12 +58,7 @@ class PersonaStore:
 
     def __init__(self, path: str):
         self.path = path
-        self._items: dict[str, dict] = {}
-        if os.path.exists(path):
-            try:
-                self._items = json.load(open(path))
-            except Exception:
-                self._items = {}
+        self._items: dict[str, dict] = read_json(path, {})
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)

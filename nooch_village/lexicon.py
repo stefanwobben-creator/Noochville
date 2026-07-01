@@ -7,8 +7,8 @@ over alle talen: is 'consument' avoid, dan is 'consumer' dat ook.
 De Librarian cureert (schrijft); anderen lezen vrij.
 """
 from __future__ import annotations
-import json, os
-from nooch_village.util import atomic_write_json
+import os
+from nooch_village.util import atomic_write_json, read_json
 from datetime import datetime
 
 
@@ -36,11 +36,7 @@ class Lexicon:
         self._load()
 
     def _load(self) -> None:
-        if os.path.exists(self.path):
-            try:
-                self._data = json.load(open(self.path))
-            except Exception:
-                self._data = {}
+        self._data = read_json(self.path, {})
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)

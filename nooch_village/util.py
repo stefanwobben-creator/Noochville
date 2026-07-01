@@ -45,6 +45,29 @@ def run_bounded(fn, timeout_s: float):
     return (True, box.get("value"))
 
 
+def read_json(path: str, default, expect=dict):
+    """Lees JSON van `path`.
+
+    - Bestaat het bestand niet → `default` (normale eerste run).
+    - Bestaat het wél maar is het onleesbaar (OSError/PermissionError) of corrupt
+      (JSONDecodeError), of is het top-level type niet `expect` → **RAISE**.
+
+    Zo wordt "kan het bestand niet lezen" nooit stil "leeg": een permissie-fout of
+    corrupt bestand knalt luid i.p.v. dat een store leeg opstart (en bij de volgende
+    save het bestand overschrijft). Zet `expect=None` om de type-check over te slaan.
+    """
+    if not os.path.exists(path):
+        return default
+    try:
+        with open(path, encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        raise RuntimeError(f"Kan {path} niet lezen/parsen: {e}") from e
+    if expect is not None and not isinstance(d, expect):
+        raise RuntimeError(f"{path}: verwacht {expect.__name__}, kreeg {type(d).__name__}")
+    return d
+
+
 def atomic_write_json(path: str, obj) -> None:
     """Schrijf obj als JSON naar path via een tijdelijk bestand in dezelfde map.
 

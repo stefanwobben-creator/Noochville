@@ -13,7 +13,7 @@ import os
 import uuid
 from dataclasses import dataclass, asdict
 
-from nooch_village.util import atomic_write_json
+from nooch_village.util import atomic_write_json, read_json
 
 
 @dataclass
@@ -28,14 +28,7 @@ class AITask:
 class AITaskStore:
     def __init__(self, path: str):
         self.path = path
-        self._items: dict[str, dict] = {}
-        if os.path.exists(path):
-            try:
-                d = json.load(open(path))
-                if isinstance(d, dict):
-                    self._items = d
-            except Exception:
-                self._items = {}
+        self._items: dict[str, dict] = read_json(path, {})
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)

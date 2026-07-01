@@ -12,7 +12,7 @@ import json
 import os
 import time
 
-from nooch_village.util import atomic_write_json
+from nooch_village.util import atomic_write_json, read_json
 
 STEPS = [("checkin", "Check-in"), ("checklist", "Checklist"), ("metrics", "Metrics"),
          ("projecten", "Projecten"), ("agenda", "Agenda"), ("checkout", "Check-out"),
@@ -22,14 +22,7 @@ STEPS = [("checkin", "Check-in"), ("checklist", "Checklist"), ("metrics", "Metri
 class WerkoverlegStore:
     def __init__(self, path: str):
         self.path = path
-        self._m: dict[str, dict] = {}
-        if os.path.exists(path):
-            try:
-                d = json.load(open(path))
-                if isinstance(d, dict):
-                    self._m = d
-            except Exception:
-                self._m = {}
+        self._m: dict[str, dict] = read_json(path, {})
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)

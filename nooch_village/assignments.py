@@ -13,7 +13,7 @@ import json
 import os
 from dataclasses import dataclass
 
-from nooch_village.util import atomic_write_json
+from nooch_village.util import atomic_write_json, read_json
 
 _VALID_TYPES = ("person", "persona")
 
@@ -35,14 +35,7 @@ class Assignments:
 
     def __init__(self, path: str):
         self.path = path
-        self._by_role: dict[str, list[dict]] = {}
-        if os.path.exists(path):
-            try:
-                d = json.load(open(path))
-                if isinstance(d, dict):
-                    self._by_role = {k: list(v) for k, v in d.items()}
-            except Exception:
-                self._by_role = {}
+        self._by_role: dict[str, list[dict]] = {k: list(v) for k, v in read_json(path, {}).items()}
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)

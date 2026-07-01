@@ -8,13 +8,12 @@ vouwen hierin: concurrenten = notes op de scout-rol, zoekwoord-volume = metrics 
 {"value": "210", "unit": "zoekvolume"} voor een metric.
 """
 from __future__ import annotations
-import json
 import os
 import time
 import uuid
 from dataclasses import dataclass, field, asdict
 
-from nooch_village.util import atomic_write_json
+from nooch_village.util import atomic_write_json, read_json
 
 KINDS = ("note", "metric", "checklist", "policy")
 
@@ -36,14 +35,7 @@ class AttachmentStore:
 
     def __init__(self, path: str):
         self.path = path
-        self._items: dict[str, dict] = {}
-        if os.path.exists(path):
-            try:
-                d = json.load(open(path))
-                if isinstance(d, dict):
-                    self._items = d
-            except Exception:
-                self._items = {}
+        self._items: dict[str, dict] = read_json(path, {})
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)

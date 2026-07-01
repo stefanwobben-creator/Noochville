@@ -24,7 +24,7 @@ import time
 import uuid
 
 from nooch_village.metric_schema import normalize as _norm
-from nooch_village.util import atomic_write_json
+from nooch_village.util import atomic_write_json, read_json
 
 MIGRATIONS = ("clarify", "backcast", "break")
 
@@ -258,14 +258,7 @@ _FIELDS = ("name", "unit", "definition", "source", "direction", "threshold", "ca
 class DefinitionStore:
     def __init__(self, path: str):
         self.path = path
-        self._d: dict[str, dict] = {}
-        if os.path.exists(path):
-            try:
-                x = json.load(open(path))
-                if isinstance(x, dict):
-                    self._d = x
-            except Exception:
-                self._d = {}
+        self._d: dict[str, dict] = read_json(path, {})
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)

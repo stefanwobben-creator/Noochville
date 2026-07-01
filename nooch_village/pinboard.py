@@ -14,7 +14,7 @@ import os
 import time
 import uuid
 
-from nooch_village.util import atomic_write_json
+from nooch_village.util import atomic_write_json, read_json
 
 _KINDS = ("request", "outcome")
 _STATUS = ("open", "claimed", "done")
@@ -23,12 +23,7 @@ _STATUS = ("open", "claimed", "done")
 class Pinboard:
     def __init__(self, path: str):
         self.path = path
-        self._items: dict[str, dict] = {}
-        if os.path.exists(path):
-            try:
-                self._items = json.load(open(path))
-            except Exception:
-                self._items = {}
+        self._items: dict[str, dict] = read_json(path, {})
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)

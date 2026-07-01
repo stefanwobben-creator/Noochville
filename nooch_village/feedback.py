@@ -13,8 +13,8 @@ Alleen vision_drop blokkeert (via constraints.py). De rest zijn zachte, gewogen 
 opportunity-reflex kleuren zonder dicht te timmeren. Opslag: data/feedback.json (gitignored).
 """
 from __future__ import annotations
-import json, os, time
-from nooch_village.util import atomic_write_json
+import os, time
+from nooch_village.util import atomic_write_json, read_json
 
 # Zachte verdicts (geen harde blokkade) en hoe ze in de reflex-prompt verschijnen.
 SOFT_VERDICTS = {
@@ -30,12 +30,7 @@ class Feedback:
 
     def __init__(self, path: str):
         self.path = path
-        self._items: list[dict] = []
-        if os.path.exists(path):
-            try:
-                self._items = json.load(open(path))
-            except Exception:
-                self._items = []
+        self._items: list[dict] = read_json(path, [], expect=list)
 
     def add(self, verdict: str, title: str, reason: str = "", by: str = "") -> dict:
         """Leg een oordeel vast. by = de rol die de kans inbracht (voor rol-specifiek leren)."""

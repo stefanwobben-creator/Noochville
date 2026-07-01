@@ -15,9 +15,9 @@ Beveiligingsgrens (ingebakken):
 State in data/human_inbox.json (gitignored met de rest van data/).
 """
 from __future__ import annotations
-import json, os, time, uuid
+import os, time, uuid
 from datetime import datetime
-from nooch_village.util import atomic_write_json
+from nooch_village.util import atomic_write_json, read_json
 
 
 _VALID_STATUSES = {"pending", "approved", "rejected", "amended", "deferred",
@@ -52,11 +52,7 @@ class HumanInbox:
         self._load()
 
     def _load(self) -> None:
-        if os.path.exists(self.path):
-            try:
-                self._items = json.load(open(self.path))
-            except Exception:
-                self._items = {}
+        self._items = read_json(self.path, {})
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
