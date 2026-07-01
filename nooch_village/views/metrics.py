@@ -199,7 +199,7 @@ def _sources_for(st: _Stores, rec):
         srcs.append({"id": f"werk:{circle}", "label": "Werkoverleg",
                      "measures": [("tevredenheid", "Tevredenheid"), ("spanningen", "Spanningen verwerkt"),
                                   ("informatie", "Informatie verwerkt"), ("projecten", "Projecten"),
-                                  ("acties", "Acties")],
+                                  ("acties", "Acties"), ("duur", "Duur (min)")],
                      "dims": [("gemiddeld", "gemiddeld per overleg"), ("totaal", "totaal"),
                               ("over_tijd", "over tijd")]})
     nodes = [rec.id] + ([r.id for r in org.roles_of(st.records.all(), rec.id)] if is_c else [])
@@ -212,7 +212,7 @@ def _sources_for(st: _Stores, rec):
 
 
 _WERK_MEASURE = {"spanningen": "behandeld", "informatie": "info", "projecten": "projecten",
-                 "acties": "acties", "tevredenheid": "tevredenheid"}
+                 "acties": "acties", "tevredenheid": "tevredenheid", "duur": "duur_min"}
 
 
 def _werk_fetch(st: _Stores, circle: str, measure: str, dim: str, cutoff):
@@ -224,7 +224,7 @@ def _werk_fetch(st: _Stores, circle: str, measure: str, dim: str, cutoff):
             continue
         pts.append({"at": m.get("at", 0), "value": v})
         vals.append(v)
-    unit = "/10" if measure == "tevredenheid" else ""
+    unit = "/10" if measure == "tevredenheid" else ("min" if measure == "duur" else "")
     if dim == "over_tijd":
         return {"kind": "series", "points": filter_samples(pts, cutoff), "unit": unit}
     if dim == "totaal" and measure != "tevredenheid":
@@ -468,6 +468,7 @@ _WERK_GRONDSLAG = {
     "informatie": ("Aantal info-uitkomsten per overleg.", "", ""),
     "projecten": ("Aantal als project verwerkte uitkomsten.", "", ""),
     "acties": ("Aantal als actie verwerkte uitkomsten.", "", ""),
+    "duur": ("Duur van het overleg in minuten.", "min", ""),
 }
 _RICHTING = {"up": "hoger = beter", "down": "lager = beter", "": "—"}
 

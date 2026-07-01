@@ -125,6 +125,8 @@ helpers: is_circle_lead / is_role_filler / is_circle_member / resolve_circle_id
   geen change-flow — zie person_reset_password. Nieuwe gate-laag "gebruiker zelf".)
 - **Publieke read-kant**: bepaalde pagina's (strategie, Impact Forest) zichtbaar zonder
   inloggen. (Raakt de open "read-kant"-vraag in de Autorisatie-laag-sectie hierboven.)
+- **PDF-upload bug B1**: oorsprong onduidelijk, mogelijk glued-words-parser in
+  governance_examples.py. Onderzoeken na vrijdag.
 
 ### Morgen
 - **Strategie-laag ontwerpen** — `data/strategy.json` met do's en don'ts die advies-stappen en agents lezen.
