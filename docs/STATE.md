@@ -101,12 +101,17 @@ met poort-wrappers `_role_gate` en `_member_gate`. Regel per default: guest
 ✅ werkoverleg wo_* — twee lagen (helper _lead_gate): overleg leiden/agenda-flow =
    Circle Lead (open/close/present_all/ag_remove/ag_reopen/ag_resolve); deelnemen =
    circle-member (ag_add/ag_note/presence/checkout).
+✅ m_pin / m_unpin — cirkeldashboard beheren = Circle Lead van g("circle").
+✅ noochie_* (send/reset/ctx) — BEWUST ongated (ingelogd = mag).
 ✅ bootstrap: Stefan (dc5685eb2074) gezaaid als mother_earth__circle_lead
    (in data/assignments.json, gitignored — handmatig op server zetten)
 
+**Schrijf-kant van dispatch is nu volledig doorlopen**: elke tak is óf gegated
+(rol/lid/lead/anchor) óf bewust ongated (collaboratie + noochie). Vijf poort-
+helpers: is_circle_lead / is_role_filler / is_circle_member / resolve_circle_id
++ wrappers _role_gate / _member_gate / _lead_gate.
+
 ⏳ Nog open:
-- m_pin / m_unpin: cirkel-dashboard, Circle Lead van g("circle"). Nog ongated.
-- noochie_* (assistent-chat): user-agnostisch (waarschijnlijk "iedereen ingelogd").
 - Read-kant (do_GET/render): privé-projecten worden bij tonen nog niet per gebruiker
   afgeschermd. Aparte beslissing of dat moet.
 - Server: mother_earth__circle_lead-filler nog handmatig zetten (commando staat klaar).
