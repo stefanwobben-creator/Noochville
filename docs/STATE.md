@@ -94,16 +94,20 @@ met poort-wrappers `_role_gate` en `_member_gate`. Regel per default: guest
 ✅ proj_add van een Individueel Initiatief: elk cirkellid mag (_member_gate)
 ✅ collaboratie-takken BEWUST ongated (ingelogd = mag): proj_comment, react_add,
    proj_feed, feed_edit, feed_remove, ai_reply
+✅ people-beheer buiten dispatch: person_add + person_reset_password (anchor-lead,
+   handlers geven nu (body, statuscode) terug; do_POST unpackt)
+✅ roloverleg-bewerking — circle-member (shaping = lid): rov2_add, rov2_add_to_group,
+   rov2_setkind, rov2_set/acc/dom. Besluiten (consent/end) blijven Circle Lead.
 ✅ bootstrap: Stefan (dc5685eb2074) gezaaid als mother_earth__circle_lead
    (in data/assignments.json, gitignored — handmatig op server zetten)
 
 ⏳ Nog open:
-- rov2_add / rov2_add_to_group / rov2_setkind / rov2-draft (rov2_set, acc/dom):
-  overleg-takken nog user-agnostisch.
 - Werkoverleg wo_* (open/close/presence/agenda/resolve/checkout): user-agnostisch.
-- noochie_* (assistent-chat): user-agnostisch.
-- Multipart-pad (attach_file) en person_add/reset_password: lopen langs dispatch
-  heen (do_POST), nog geen user-injectie.
+  Waarschijnlijk split lead/facilitator (open/close/resolve) vs member (presence/checkout).
+- m_pin / m_unpin: cirkel-dashboard, Circle Lead van g("circle"). Nog ongated.
+- noochie_* (assistent-chat): user-agnostisch (waarschijnlijk "iedereen ingelogd").
+- Read-kant (do_GET/render): privé-projecten worden bij tonen nog niet per gebruiker
+  afgeschermd. Aparte beslissing of dat moet.
 - Server: mother_earth__circle_lead-filler nog handmatig zetten (commando staat klaar).
 
 ### Morgen
