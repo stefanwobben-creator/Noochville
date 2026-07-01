@@ -29,7 +29,7 @@ def test_detail_overzicht_kop(tmp_path):
 
 def test_status_menu_markeert_huidige(tmp_path):
     dd, pid = _setup(tmp_path)
-    cockpit2.dispatch(dd, "proj_status", {"pid": [pid], "to": ["actief"], "csrf": ["t"], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_status", {"pid": [pid], "to": ["actief"], "csrf": ["t"], "next": ["/"]}, username="guest")
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "class='menuitem on'" in frag
 
@@ -57,9 +57,9 @@ def test_redesign_layout(tmp_path):
 def test_bijlage_cards_trello(tmp_path):
     dd, pid = _setup(tmp_path)
     cockpit2.dispatch(dd, "attach_add", {"pid": [pid], "url": ["https://nooch.earth/blog"],
-                                         "title": ["Nooch blog"], "next": ["/"]})
+                                         "title": ["Nooch blog"], "next": ["/"]}, username="guest")
     cockpit2.dispatch(dd, "attach_add", {"pid": [pid], "url": ["https://example.com/x"],
-                                         "title": [""], "next": ["/"]})
+                                         "title": [""], "next": ["/"]}, username="guest")
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "attcard" in frag and "Nooch blog" in frag      # met titel
     assert "example.com" in frag                            # zonder titel -> domein
@@ -67,7 +67,7 @@ def test_bijlage_cards_trello(tmp_path):
     assert "Bestand van je computer" in frag               # toevoegen via de Bijlage-actiekaart
     # verwijderen
     aid = cockpit2._Stores(dd).projects.get(pid)["attachments"][0]["id"]
-    cockpit2.dispatch(dd, "attach_remove", {"pid": [pid], "aid": [aid], "next": ["/"]})
+    cockpit2.dispatch(dd, "attach_remove", {"pid": [pid], "aid": [aid], "next": ["/"]}, username="guest")
     assert len(cockpit2._Stores(dd).projects.get(pid)["attachments"]) == 1
 
 
@@ -92,10 +92,10 @@ def test_attach_add_vereist_url(tmp_path):
 
 def test_emoji_reactie(tmp_path):
     dd, pid = _setup(tmp_path)
-    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"], "text": ["hoi"], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_feed", {"pid": [pid], "author": ["human:"], "text": ["hoi"], "next": ["/"]}, username="guest")
     eid = cockpit2._Stores(dd).projects.get(pid)["log"][0]["id"]
-    cockpit2.dispatch(dd, "react_add", {"pid": [pid], "item": [eid], "emoji": ["👍"], "next": ["/"]})
-    cockpit2.dispatch(dd, "react_add", {"pid": [pid], "item": [eid], "emoji": ["👍"], "next": ["/"]})
+    cockpit2.dispatch(dd, "react_add", {"pid": [pid], "item": [eid], "emoji": ["👍"], "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "react_add", {"pid": [pid], "item": [eid], "emoji": ["👍"], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["log"][0]["reactions"] == {"👍": 2}
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "emoji-pick" in frag and "chip outline" in frag and "👍 2" in frag
@@ -113,44 +113,44 @@ def test_datum_card_datepicker(tmp_path):
     assert "acard-d" in frag and "type='date'" in frag and ">Datum<" in frag
     assert "Start date" not in frag and "Recurring" not in frag
     # datum zetten -> label past zich aan; en weer wissen
-    cockpit2.dispatch(dd, "proj_setdue", {"pid": [pid], "due": ["2026-06-25"], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_setdue", {"pid": [pid], "due": ["2026-06-25"], "next": ["/"]}, username="guest")
     f2 = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "25 jun 2026" in f2 and "datum verwijderen" in f2
-    cockpit2.dispatch(dd, "proj_setdue", {"pid": [pid], "due": [""], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_setdue", {"pid": [pid], "due": [""], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["due"] is None
 
 
 def test_named_checklists(tmp_path):
     dd, pid = _setup(tmp_path)
-    cockpit2.dispatch(dd, "checklist_add", {"pid": [pid], "title": ["Stappen"], "next": ["/"]})
+    cockpit2.dispatch(dd, "checklist_add", {"pid": [pid], "title": ["Stappen"], "next": ["/"]}, username="guest")
     clid = cockpit2._Stores(dd).projects.get(pid)["checklists"][0]["id"]
-    cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["Stap 1"], "next": ["/"]})
+    cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["Stap 1"], "next": ["/"]}, username="guest")
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "cl-title" in frag and "Stappen" in frag and "Stap 1" in frag
     assert "Naam checklist" in frag                       # actie-kaart popover
     # checklist verwijderen
-    cockpit2.dispatch(dd, "checklist_remove", {"pid": [pid], "clid": [clid], "next": ["/"]})
+    cockpit2.dispatch(dd, "checklist_remove", {"pid": [pid], "clid": [clid], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["checklists"] == []
 
 
 def test_deadline_overdue_in_header(tmp_path):
     dd, pid = _setup(tmp_path)
-    cockpit2.dispatch(dd, "proj_setdue", {"pid": [pid], "due": ["2020-01-01"], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_setdue", {"pid": [pid], "due": ["2020-01-01"], "next": ["/"]}, username="guest")
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "chip coral" in frag and "Overdue" in frag and "chip coral-solid" in frag
 
 
 def test_done_project_blijft_bewerkbaar(tmp_path):
     dd, pid = _setup(tmp_path)
-    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "csrf": ["t"], "next": ["/"]})
-    cockpit2.dispatch(dd, "proj_describe", {"pid": [pid], "description": ["toch nog"], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "csrf": ["t"], "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "proj_describe", {"pid": [pid], "description": ["toch nog"], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["description"] == "toch nog"
 
 
 def test_inline_edits_partieel(tmp_path):
     dd, pid = _setup(tmp_path)
-    cockpit2.dispatch(dd, "proj_describe", {"pid": [pid], "description": ["beschrijving"], "next": ["/"]})
-    cockpit2.dispatch(dd, "proj_rename", {"pid": [pid], "scope": ["Titel 2"], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_describe", {"pid": [pid], "description": ["beschrijving"], "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "proj_rename", {"pid": [pid], "scope": ["Titel 2"], "next": ["/"]}, username="guest")
     p = cockpit2._Stores(dd).projects.get(pid)
     # rename mag de eerder gezette omschrijving NIET wissen
     assert p["scope"] == "Titel 2" and p["description"] == "beschrijving"

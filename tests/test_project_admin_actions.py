@@ -23,7 +23,7 @@ def test_proj_settrekker_wijzigt_persoon(tmp_path):
     dd, st = _st(tmp_path)
     pid = st.projects.create(ROLE, "Test", "human", status="queued")
     person = st.people.all()[0]
-    cockpit2.dispatch(dd, "proj_settrekker", {"pid": [pid], "trekker": [f"person:{person.id}"], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_settrekker", {"pid": [pid], "trekker": [f"person:{person.id}"], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["person"] == person.id
 
 
@@ -41,14 +41,14 @@ def test_detail_modal_heeft_trekker_form_in_schrijfmodus(tmp_path):
 def test_proj_setowner_verplaatst_naar_andere_rol(tmp_path):
     dd, st = _st(tmp_path)
     pid = st.projects.create(ROLE, "Test", "human", status="queued")
-    cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": [ROLE2], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": [ROLE2], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["owner"] == ROLE2
 
 
 def test_proj_setowner_weigert_cirkel(tmp_path):
     dd, st = _st(tmp_path)
     pid = st.projects.create(ROLE, "Test", "human", status="queued")
-    _, msg = cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": [CIRCLE], "next": ["/"]})
+    _, msg = cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": [CIRCLE], "next": ["/"]}, username="guest")
     assert "cirkel" in msg
     assert cockpit2._Stores(dd).projects.get(pid)["owner"] == ROLE   # ongewijzigd
 
@@ -56,7 +56,7 @@ def test_proj_setowner_weigert_cirkel(tmp_path):
 def test_proj_setowner_weigert_onbekende_rol(tmp_path):
     dd, st = _st(tmp_path)
     pid = st.projects.create(ROLE, "Test", "human", status="queued")
-    _, msg = cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": ["nietbestaand"], "next": ["/"]})
+    _, msg = cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": ["nietbestaand"], "next": ["/"]}, username="guest")
     assert "onbekende" in msg
     assert cockpit2._Stores(dd).projects.get(pid)["owner"] == ROLE
 
@@ -79,14 +79,14 @@ def test_owner_options_toont_dangling_sentinel(tmp_path):
 def test_proj_approve_zet_draft_op_bord(tmp_path):
     dd, st = _st(tmp_path)
     pid = st.projects.create(ROLE, "Concept", "human", status="draft")
-    cockpit2.dispatch(dd, "proj_approve", {"pid": [pid], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_approve", {"pid": [pid], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["status"] == "queued"
 
 
 def test_proj_discard_verwijdert_draft(tmp_path):
     dd, st = _st(tmp_path)
     pid = st.projects.create(ROLE, "Concept", "human", status="draft")
-    cockpit2.dispatch(dd, "proj_discard", {"pid": [pid], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_discard", {"pid": [pid], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid) is None
 
 
@@ -134,7 +134,7 @@ def test_wees_project_niet_op_gewone_rol_bord(tmp_path):
 def test_wees_project_koppelbaar_aan_rol(tmp_path):
     dd, st = _st(tmp_path)
     pid = _make_orphan(dd, st)
-    cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": [ROLE2], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": [ROLE2], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["owner"] == ROLE2
 
 
@@ -179,7 +179,7 @@ def test_ii_project_aanmaken_en_tonen(tmp_path):
     stefan = st.people.all()[0]
     ii = f"ii:{CIRCLE}"
     cockpit2.dispatch(dd, "proj_add", {"owner": [ii], "scope": ["Spontane actie"], "col": ["actief"],
-                                       "trekker": [f"person:{stefan.id}"], "next": ["/"]})
+                                       "trekker": [f"person:{stefan.id}"], "next": ["/"]}, username="guest")
     pj = [p for p in cockpit2._Stores(dd).projects.all() if p["owner"] == ii]
     assert len(pj) == 1 and pj[0]["person"] == stefan.id
     page = cockpit2.render_node(cockpit2._Stores(dd), CIRCLE, "projects", csrf_token="TOK", group="rol")

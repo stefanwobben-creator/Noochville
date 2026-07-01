@@ -423,3 +423,148 @@ def test_gate_rov_onbekende_gebruiker_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     _, msg = cockpit2.dispatch(dd, "rov2_remove", _rov_remove_form(), username="niemand@nergens.nl")
     assert "niet herkend" in msg
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Operationele laag — gate = is_role_filler(rol) OF is_circle_lead(ouder-cirkel).
+# Helpers resolve_circle_id + _role_gate. Representatieve takken per categorie.
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_resolve_circle_id_rol_cirkel_ii(tmp_path):
+    dd, st = _st(tmp_path)
+    recs = st.records
+    # rol → ouder-cirkel
+    assert cockpit2.resolve_circle_id("mother_earth__nooch__brand_visual_designer", recs) == "mother_earth__nooch"
+    # cirkel → zichzelf
+    assert cockpit2.resolve_circle_id("mother_earth__nooch", recs) == "mother_earth__nooch"
+    # Individueel Initiatief → cirkel uit de prefix
+    assert cockpit2.resolve_circle_id(f"{cockpit2._II_PREFIX}mother_earth__nooch", recs) == "mother_earth__nooch"
+    # leeg / onbekend → None
+    assert cockpit2.resolve_circle_id("", recs) is None
+    assert cockpit2.resolve_circle_id("bestaat_niet", recs) is None
+
+
+# ── Categorie 1: role_id direct via g("node") — m_add_kpi ─────────────────────
+
+def _kpi_form():
+    return {"node": [_GATE_ROLE], "pick": ["manual"], "name": ["Testmeter"], "unit": ["n"], "next": ["/x"]}
+
+
+def test_gate_op_guest_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    _, msg = cockpit2.dispatch(dd, "m_add_kpi", _kpi_form(), username="guest")
+    assert "toegevoegd" in msg
+
+
+def test_gate_op_rolvervuller_mag(tmp_path):
+    # de rolvervuller zelf (geen Circle Lead) mag zijn eigen rol beheren
+    dd, st = _st(tmp_path)
+    filler = st.people.add("Vervuller", "vervuller@nooch.earth")
+    st.assign.assign(_GATE_ROLE, "person", filler.id)
+    _, msg = cockpit2.dispatch(dd, "m_add_kpi", _kpi_form(), username="vervuller@nooch.earth")
+    assert "toegevoegd" in msg
+
+
+def test_gate_op_circle_lead_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    lead = st.people.add("Lead", "lead@nooch.earth")
+    st.assign.assign(_GATE_LEAD, "person", lead.id)           # lead van de ouder-cirkel, niet de rol
+    _, msg = cockpit2.dispatch(dd, "m_add_kpi", _kpi_form(), username="lead@nooch.earth")
+    assert "toegevoegd" in msg
+
+
+def test_gate_op_buitenstaander_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    st.people.add("Buiten", "buiten@nooch.earth")             # geen rol, geen lead
+    _, msg = cockpit2.dispatch(dd, "m_add_kpi", _kpi_form(), username="buiten@nooch.earth")
+    assert "Geen toegang" in msg and "rolvervuller" in msg
+
+
+def test_gate_op_onbekende_gebruiker_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    _, msg = cockpit2.dispatch(dd, "m_add_kpi", _kpi_form(), username="niemand@nergens.nl")
+    assert "niet herkend" in msg
+
+
+# ── Categorie 2: role_id afgeleid via pid (proj_status) en cid (cl_report) ────
+
+def test_gate_op_projstatus_afgeleid_via_pid(tmp_path):
+    # rol afgeleid uit het project (pid → owner); rolvervuller mag, buitenstaander niet
+    dd, st = _st(tmp_path)
+    filler = st.people.add("Vervuller", "vervuller@nooch.earth")
+    st.assign.assign(_GATE_ROLE, "person", filler.id)
+    st.people.add("Buiten", "buiten@nooch.earth")
+    pid = cockpit2._Stores(dd).projects.create(_GATE_ROLE, "P", "human")
+    _, ok = cockpit2.dispatch(dd, "proj_status", {"pid": [pid], "to": ["actief"], "next": ["/x"]},
+                              username="vervuller@nooch.earth")
+    assert "verplaatst" in ok
+    _, deny = cockpit2.dispatch(dd, "proj_status", {"pid": [pid], "to": ["wacht"], "next": ["/x"]},
+                                username="buiten@nooch.earth")
+    assert "Geen toegang" in deny
+
+
+def test_gate_op_clreport_afgeleid_via_cid(tmp_path):
+    # rol/node afgeleid uit het checklist-item (cid → node)
+    dd, st = _st(tmp_path)
+    lead = st.people.add("Lead", "lead@nooch.earth")
+    st.assign.assign(_GATE_LEAD, "person", lead.id)
+    st.people.add("Buiten", "buiten@nooch.earth")
+    it = cockpit2._Stores(dd).checklists.add(_GATE_ROLE, "Wekelijkse check", "wekelijks", by="founder")
+    cid = it["id"]
+    _, ok = cockpit2.dispatch(dd, "cl_report", {"cid": [cid], "ok": ["1"], "next": ["/x"]}, username="lead@nooch.earth")
+    assert "genoteerd" in ok
+    _, deny = cockpit2.dispatch(dd, "cl_report", {"cid": [cid], "ok": ["1"], "next": ["/x"]}, username="buiten@nooch.earth")
+    assert "Geen toegang" in deny
+
+
+# ── Punt 1: collaboratie-takken ongated — elke ingelogde gebruiker mag ────────
+
+def test_collaboratie_buitenstaander_mag_reageren(tmp_path):
+    # proj_comment heeft GEEN rol-gate: een ingelogde niet-lid mag reageren
+    dd, st = _st(tmp_path)
+    st.people.add("Buiten", "buiten@nooch.earth")             # geen rol, geen lead
+    pid = cockpit2._Stores(dd).projects.create(_GATE_ROLE, "P", "human")
+    _, msg = cockpit2.dispatch(dd, "proj_comment", {"pid": [pid], "comment": ["hoi"], "next": ["/x"]},
+                               username="buiten@nooch.earth")
+    assert "geplaatst" in msg and "Geen toegang" not in msg
+
+
+# ── Punt 2: proj_add van een Individueel Initiatief — elk cirkellid mag ───────
+
+def test_is_circle_member(tmp_path):
+    dd, st = _st(tmp_path)
+    circle = "mother_earth__nooch"
+    member = st.people.add("Lid", "lid@nooch.earth")
+    st.assign.assign(_GATE_ROLE, "person", member.id)         # rol in de cirkel → lid
+    outsider = st.people.add("Buiten", "buiten@nooch.earth")
+    a, r = cockpit2._Stores(dd).assign, cockpit2._Stores(dd).records
+    assert cockpit2.is_circle_member(member.id, circle, r, a) is True
+    assert cockpit2.is_circle_member(outsider.id, circle, r, a) is False
+
+
+def _ii_add_form(circle="mother_earth__nooch"):
+    return {"owner": [f"{cockpit2._II_PREFIX}{circle}"], "scope": ["Mijn eigen initiatief"], "next": ["/x"]}
+
+
+def test_ii_proj_add_cirkellid_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    member = st.people.add("Lid", "lid@nooch.earth")
+    st.assign.assign(_GATE_ROLE, "person", member.id)         # vervult een rol in mother_earth__nooch
+    _, msg = cockpit2.dispatch(dd, "proj_add", _ii_add_form(), username="lid@nooch.earth")
+    assert "toegevoegd" in msg
+
+
+def test_ii_proj_add_niet_lid_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    st.people.add("Buiten", "buiten@nooch.earth")             # geen rol in de cirkel, geen lead
+    _, msg = cockpit2.dispatch(dd, "proj_add", _ii_add_form(), username="buiten@nooch.earth")
+    assert "Geen toegang" in msg and "cirkel" in msg
+
+
+def test_normale_proj_add_blijft_rolvervuller_of_lead(tmp_path):
+    # een rol-owner (geen ii): buitenstaander geweigerd, rolvervuller mag
+    dd, st = _st(tmp_path)
+    st.people.add("Buiten", "buiten@nooch.earth")
+    form = {"owner": [_GATE_ROLE], "scope": ["Werk"], "next": ["/x"]}
+    _, deny = cockpit2.dispatch(dd, "proj_add", form, username="buiten@nooch.earth")
+    assert "Geen toegang" in deny and "rolvervuller" in deny

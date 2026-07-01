@@ -85,14 +85,14 @@ def test_checklist_numerieke_waarde(tmp_path):
     dd = _dd(tmp_path)
     _with_member(dd)
     cockpit2.dispatch(dd, "cl_add", {"node": [C], "description": ["Facturen"], "cadence": ["week"],
-                                     "doel": ["all"], "bestaand": ["1"], "next": ["/"]})
+                                     "doel": ["all"], "bestaand": ["1"], "next": ["/"]}, username="guest")
     cid = cockpit2._Stores(dd).checklists.for_node(C)[0]["id"]
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]})
     frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "checklist", csrf_token="t", fragment=True)
     assert "cl-check" in frag and "Rapporteren" in frag        # U5: V/X-knoppen + wie rapporteert
     assert "cl-num" not in frag                                # numeriek invoerveld vervallen
     # opslag-compat: een meegestuurde waarde wordt nog bewaard, ook al biedt de UI het veld niet meer
-    cockpit2.dispatch(dd, "cl_report", {"cid": [cid], "ok": ["1"], "value": ["12"], "next": ["/"]})
+    cockpit2.dispatch(dd, "cl_report", {"cid": [cid], "ok": ["1"], "value": ["12"], "next": ["/"]}, username="guest")
     from nooch_village.checklists import ChecklistStore
     assert ChecklistStore.current_value(cockpit2._Stores(dd).checklists.get(cid)) == 12.0
 

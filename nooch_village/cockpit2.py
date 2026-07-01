@@ -349,6 +349,63 @@ def is_role_filler(person_id: str, role_id: str, assignments) -> bool:
                for f in assignments.fillers_of(role_id))
 
 
+def resolve_circle_id(owner: str, records) -> str | None:
+    """De cirkel van een project/metric/checklist-eigenaar, ongeacht de vorm van `owner`:
+    een rol → zijn ouder-cirkel; een cirkel → zichzelf; een Individueel Initiatief
+    ("ii:<circle>") → de cirkel uit de prefix. Onbekend/leeg → None."""
+    if not owner:
+        return None
+    if owner.startswith(_II_PREFIX):
+        return owner[len(_II_PREFIX):]
+    rec = records.get(owner)
+    if rec is None:
+        return None
+    return owner if org.is_circle(rec) else rec.parent
+
+
+def is_circle_member(person_id: str, circle_id: str, records, assignments) -> bool:
+    """True als person_id Circle Lead is van circle_id óf een rol vervult die in die
+    cirkel hangt (parent == circle_id)."""
+    if not person_id or not circle_id:
+        return False
+    if is_circle_lead(person_id, circle_id, assignments):
+        return True
+    return any(getattr(r, "parent", None) == circle_id
+               and any(f.type == "person" and f.id == person_id
+                       for f in assignments.fillers_of(r.id))
+               for r in records.all())
+
+
+def _role_gate(target: str, username: str | None, st) -> str | None:
+    """Poort voor operationele takken. `target` = de eigenaar/node van het object
+    (rol-id, cirkel-id of "ii:<circle>"). Geeft een foutmelding terug bij weigering,
+    anders None (toegang). Regel: rolvervuller van de rol OF Circle Lead van de cirkel.
+    "guest" (auth uit) mag alles; ingelogde-maar-onbekende wordt geweigerd."""
+    if username == "guest":
+        return None
+    actor = st.people.by_email(username)
+    if actor is None:
+        return "Geen toegang — gebruiker niet herkend"
+    if (is_role_filler(actor.id, target, st.assign)
+            or is_circle_lead(actor.id, resolve_circle_id(target, st.records), st.assign)):
+        return None
+    return "Geen toegang — alleen de rolvervuller of Circle Lead mag dit"
+
+
+def _member_gate(circle_id: str, username: str | None, st) -> str | None:
+    """Poort voor acties die elk lid van een cirkel mag doen (bv. een eigen Individueel
+    Initiatief starten). Geeft een foutmelding terug bij weigering, anders None.
+    "guest" mag alles; ingelogde-maar-onbekende wordt geweigerd."""
+    if username == "guest":
+        return None
+    actor = st.people.by_email(username)
+    if actor is None:
+        return "Geen toegang — gebruiker niet herkend"
+    if is_circle_member(actor.id, circle_id, st.records, st.assign):
+        return None
+    return "Geen toegang — alleen leden van deze cirkel mogen dit"
+
+
 def dispatch(data_dir: str, action: str, form: dict, username: str | None = None):
     """Verwerk een POST-actie. Geeft (redirect-URL, korte bevestiging) terug.
 
@@ -365,6 +422,13 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
     msg = ""
     if action == "proj_add":
         owner = g("owner")
+        # Autorisatie: bij een rol → rolvervuller of Circle Lead; bij een Individueel
+        # Initiatief (ii:<circle>) mag elk lid van die cirkel zijn eigen initiatief starten.
+        _deny = (_member_gate(resolve_circle_id(owner, st.records), username, st)
+                 if owner.startswith(_II_PREFIX)
+                 else _role_gate(owner, username, st))
+        if _deny:
+            return nxt, _deny
         scope = g("scope").strip()
         person, agent = _parse_trekker(g("trekker"))
         col = g("col")
@@ -380,6 +444,9 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
                 pj.block(pid, "—")
             msg = "➕ project toegevoegd"
     elif action == "proj_status":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         to = g("to")
         pj.reopen(g("pid"))   # was het 'done', haal dat er eerst af zodat heractiveren kan
         if to == "actief":
@@ -390,21 +457,24 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             pj.to_future(g("pid"))
         msg = "✓ verplaatst"
     elif action == "proj_done":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         pj.complete(g("pid")); msg = "✓ afgerond"
     elif action == "proj_archive":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         pj.archive(g("pid")); msg = "🗄 gearchiveerd (blijft bestaan)"
     elif action == "proj_unarchive":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         pj.unarchive(g("pid")); msg = "↩ hersteld"
     elif action == "proj_delete":
         # ── Autorisatie: Circle Lead van de cirkel van het project ──
         actor = st.people.by_email(username) if username != "guest" else None
-        _proj = pj.get(g("pid"))
-        _owner = (_proj or {}).get("owner") or ""
-        if _owner.startswith(_II_PREFIX):
-            circle_id = _owner[len(_II_PREFIX):]        # Individueel Initiatief: cirkel zit in de owner
-        else:
-            _orec = st.records.get(_owner)
-            circle_id = _orec.parent if _orec else None
+        circle_id = resolve_circle_id((pj.get(g("pid")) or {}).get("owner") or "", st.records)
         if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
             return nxt, "Geen toegang — alleen Circle Lead mag dit"
         if actor is None and username != "guest":
@@ -412,24 +482,41 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         # ── einde autorisatie ──
         pj.remove(g("pid")); msg = "🗑 verwijderd"
     elif action == "proj_edit":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         person, agent = _parse_trekker(g("trekker"))
         pj.edit(g("pid"), scope=g("scope"), person=person, agent=agent,
                 private=(g("private") == "1"), description=g("description"), label=g("label"))
         msg = "💾 opgeslagen"
     elif action == "proj_comment":
+        # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
+        # (de sessie-check in do_POST dekt "ingelogd = mag").
         if pj.add_comment(g("pid"), g("comment")):
             msg = "💬 geplaatst"
     elif action == "proj_rename":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         if pj.edit(g("pid"), scope=g("scope"), allow_done=True):
             msg = "✓ titel opgeslagen"
     elif action == "proj_describe":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         if pj.edit(g("pid"), description=g("description"), allow_done=True):
             msg = "✓ omschrijving opgeslagen"
     elif action == "proj_settrekker":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         person, agent = _parse_trekker(g("trekker"))
         if pj.edit(g("pid"), person=person, agent=agent, allow_done=True):
             msg = "✓ trekker opgeslagen"
     elif action == "proj_setowner":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         owner = g("owner")
         orec = st.records.get(owner)
         if orec is None:
@@ -440,38 +527,69 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         elif pj.edit(g("pid"), owner=owner, allow_done=True):
             msg = "✓ rol verplaatst"
     elif action == "proj_approve":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         if pj.approve(g("pid")):
             msg = "✓ concept goedgekeurd — staat nu op het bord"
     elif action == "proj_discard":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         if pj.discard(g("pid")):
             msg = "🗑 concept verworpen"
     elif action == "proj_setlabel":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         if pj.edit(g("pid"), label=g("label"), allow_done=True):
             msg = "✓ label opgeslagen"
     elif action == "proj_setprivate":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         if pj.edit(g("pid"), private=(g("private") == "1"), allow_done=True):
             msg = "✓ zichtbaarheid opgeslagen"
     elif action == "proj_setdue":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         if pj.set_due(g("pid"), g("due")):
             msg = "📅 datum opgeslagen" if g("due") else "✓ datum verwijderd"
     elif action == "attach_add":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         if pj.attach_add(g("pid"), url=g("url"), title=g("title")):
             msg = "🔗 bijlage toegevoegd"
     elif action == "attach_remove":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         pj.attach_remove(g("pid"), g("aid")); msg = "🗑 bijlage verwijderd"
     elif action == "react_add":
+        # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
+        # (de sessie-check in do_POST dekt "ingelogd = mag").
         if pj.add_reaction(g("pid"), g("item"), g("emoji")):
             msg = "✓ reactie geplaatst"
     elif action == "feed_edit":
+        # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
+        # (de sessie-check in do_POST dekt "ingelogd = mag").
         if pj.feed_edit(g("pid"), g("item"), g("text")):
             msg = "✓ comment gewijzigd"
     elif action == "feed_remove":
+        # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
+        # (de sessie-check in do_POST dekt "ingelogd = mag").
         pj.feed_remove(g("pid"), g("item")); msg = "🗑 comment verwijderd"
     elif action == "ai_reply":
+        # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
+        # (de sessie-check in do_POST dekt "ingelogd = mag").
         _load_env()
         msg = ("🤖 AI heeft meegedacht" if _ai_reply(st, g("pid"))
                else "geen AI-antwoord (geen AI-inwoner op de rol of geen LLM-key)")
     elif action == "proj_feed":
+        # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
+        # (de sessie-check in do_POST dekt "ingelogd = mag").
         atype, _, aid = g("author").partition(":")
         atype = atype or "human"
         kind = "comment" if atype == "human" else "update"
@@ -485,16 +603,31 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             if ment:
                 msg += f" · {len(ment)} genotificeerd"
     elif action == "checklist_add":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         if pj.checklist_add(g("pid"), g("title")):
             msg = "✓ checklist toegevoegd"
     elif action == "checklist_remove":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         pj.checklist_remove(g("pid"), g("clid")); msg = "🗑 checklist verwijderd"
     elif action == "check_add":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         if pj.check_add(g("pid"), g("clid"), g("text")):
             msg = "✓ item toegevoegd"
     elif action == "check_toggle":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         pj.check_toggle(g("pid"), g("clid"), g("item"))
     elif action == "check_remove":
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
         pj.check_remove(g("pid"), g("clid"), g("item")); msg = "🗑 item verwijderd"
     elif action == "role_assign":
         actor = st.people.by_email(username) if username != "guest" else None
@@ -728,6 +861,9 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
     elif action == "noochie_ctx":
         st.noochie.set_field("ctx", g("ctx")); msg = "✓ context bijgewerkt"
     elif action == "cl_add":
+        _deny = _role_gate(g("node"), username, st)
+        if _deny:
+            return nxt, _deny
         # Governance-poort: alleen een al bestaande terugkerende actie (geen nieuwe verwachting).
         if g("bestaand") != "1":
             msg = "⛔ alleen bestaande terugkerende acties — nieuwe verwachting? via het roloverleg"
@@ -738,11 +874,20 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
                                    target_type=tt, target_id=tid, by="founder")
             msg = "✓ checklist-item toegevoegd" if it else "⛔ geef een beschrijving"
     elif action == "cl_report":
+        _deny = _role_gate((st.checklists.get(g("cid")) or {}).get("node") or "", username, st)
+        if _deny:
+            return nxt, _deny
         if st.checklists.report(g("cid"), g("ok") == "1", value=g("value"), by="founder"):
             msg = "✓ genoteerd" if g("ok") == "1" else "✗ genoteerd (aandacht nodig)"
     elif action == "cl_remove":
+        _deny = _role_gate((st.checklists.get(g("cid")) or {}).get("node") or "", username, st)
+        if _deny:
+            return nxt, _deny
         st.checklists.remove(g("cid")); msg = "🗑 checklist-item verwijderd"
     elif action == "m_add_kpi":
+        _deny = _role_gate(g("node"), username, st)
+        if _deny:
+            return nxt, _deny
         pick = g("pick") or "manual"
         if pick.startswith("source:"):
             src = pick[7:]
@@ -767,6 +912,9 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             msg = ("✓ KPI + catalogus-definitie toegevoegd" if (it and def_id)
                    else "✓ KPI toegevoegd" if it else "⛔ geef een naam")
     elif action == "m_add_from_def":
+        _deny = _role_gate(g("node"), username, st)
+        if _deny:
+            return nxt, _deny
         did = g("def_id")
         if not did and g("def_name"):
             d = st.defs.by_name(g("def_name"))
@@ -828,17 +976,29 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             else:
                 msg = "⛔ wijziging ongeldig"
     elif action == "m_add_link":
+        _deny = _role_gate(g("node"), username, st)
+        if _deny:
+            return nxt, _deny
         it = st.metrics.add_link(g("node"), g("name"), g("url"))
         msg = "✓ link toegevoegd" if it else "⛔ geef naam en URL"
     elif action == "m_sample":
+        _deny = _role_gate((st.metrics.get(g("mid")) or {}).get("node") or "", username, st)
+        if _deny:
+            return nxt, _deny
         msg = "✓ meting genoteerd" if st.metrics.add_sample(g("mid"), g("value")) else "⛔ ongeldige meting"
     elif action == "m_remove":
+        _deny = _role_gate((st.metrics.get(g("mid")) or {}).get("node") or "", username, st)
+        if _deny:
+            return nxt, _deny
         st.metrics.remove(g("mid")); msg = "🗑 metric verwijderd"
     elif action == "m_pin":
         st.metrics.pin(g("circle"), g("mid")); msg = "✓ op cirkeldashboard"
     elif action == "m_unpin":
         st.metrics.unpin(g("circle"), g("mid")); msg = "✓ van dashboard gehaald"
     elif action == "tile_add":
+        _deny = _role_gate(g("node"), username, st)
+        if _deny:
+            return nxt, _deny
         combo = g("combo") or ""
         if combo.startswith("def:"):     # indicator direct uit de catalogus → zet als KPI op de node
             kid = _kpi_id_from_def(st, g("node"), combo[4:])
@@ -853,6 +1013,9 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         else:
             msg = "⛔ kies wat je wilt zien"
     elif action == "tile_remove":
+        _deny = _role_gate(g("node"), username, st)
+        if _deny:
+            return nxt, _deny
         st.metrics.remove_tile(g("node"), g("tid")); msg = "🗑 tegel verwijderd"
     elif action in ("rov2_set", "rov2_acc_add", "rov2_acc_remove", "rov2_dom_add", "rov2_dom_remove"):
         item = st.agenda.get(g("iid"))

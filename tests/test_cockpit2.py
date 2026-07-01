@@ -111,7 +111,7 @@ def test_projecten_tab_kolommen_en_inline_add(tmp_path):
     cockpit2._bootstrap(dd)
     role = "mother_earth__nooch__website_developer"
     cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Sleepbaar"], "col": ["actief"],
-                                       "next": ["/"]})
+                                       "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), role, "projects", csrf_token="t")
     # statuskolommen (Trello-stijl) in een niet-lege lane + slepen + top-level toevoegen
     for col in ("Actief", "Wacht", "Toekomst", "Done"):
@@ -127,7 +127,7 @@ def test_inline_add_in_kolom_zet_status(tmp_path):
     cockpit2._bootstrap(dd)
     role = "mother_earth__nooch__website_developer"
     cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Later-idee"],
-                                       "col": ["toekomst"], "next": ["/"]})
+                                       "col": ["toekomst"], "next": ["/"]}, username="guest")
     p = cockpit2._Stores(dd).projects.all()[0]
     assert p["status"] == "future"          # toegevoegd in de Toekomst-kolom
 
@@ -137,7 +137,7 @@ def test_dispatch_geeft_bevestiging(tmp_path):
     cockpit2._bootstrap(dd)
     nxt, msg = cockpit2.dispatch(dd, "proj_add", {
         "owner": ["mother_earth__nooch__website_developer"], "scope": ["X"], "col": ["actief"],
-        "next": ["/"]})
+        "next": ["/"]}, username="guest")
     assert "toegevoegd" in msg
 
 
@@ -149,7 +149,7 @@ def test_project_toevoegen_en_koppeling(tmp_path):
     role = "mother_earth__nooch__website_developer"
     cockpit2.dispatch(dd, "proj_add", {
         "owner": [role], "scope": ["Productpagina live"], "trekker": [f"person:{lotte.id}"],
-        "next": [f"/node?id={role}&tab=projects"]})
+        "next": [f"/node?id={role}&tab=projects"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), role, "projects", csrf_token="t")
     assert "Productpagina live" in page and "Lotte Mulder" in page
     pp = cockpit2.render_person(cockpit2._Stores(dd), lotte.id)
@@ -161,7 +161,7 @@ def test_cirkel_kan_geen_project_bevatten(tmp_path):
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     nxt, msg = cockpit2.dispatch(dd, "proj_add", {
-        "owner": ["mother_earth__nooch"], "scope": ["Jaarplan 2027"], "trekker": [""], "next": ["/"]})
+        "owner": ["mother_earth__nooch"], "scope": ["Jaarplan 2027"], "trekker": [""], "next": ["/"]}, username="guest")
     assert "cirkel kan geen project" in msg.lower()
     assert cockpit2._Stores(dd).projects.all() == []        # niets aangemaakt
 
@@ -171,13 +171,13 @@ def test_project_status_done_delete(tmp_path):
     cockpit2._bootstrap(dd)
     role = "mother_earth__nooch__website_developer"
     cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Bug-sprint"], "trekker": [""],
-                                       "next": ["/"]})
+                                       "next": ["/"]}, username="guest")
     pid = cockpit2._Stores(dd).projects.all()[0]["id"]
     # status → wacht
-    cockpit2.dispatch(dd, "proj_status", {"pid": [pid], "to": ["wacht"], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_status", {"pid": [pid], "to": ["wacht"], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["status"] == "blocked"
     # → done
-    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["status"] == "done"
     # verwijderen
     cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/"]}, username="guest")
@@ -189,21 +189,21 @@ def test_project_detail_checklist_en_feed(tmp_path):
     cockpit2._bootstrap(dd)
     role = "mother_earth__nooch__website_developer"
     cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Detail-test"], "col": ["actief"],
-                                       "next": ["/"]})
+                                       "next": ["/"]}, username="guest")
     pid = cockpit2._Stores(dd).projects.all()[0]["id"]
     # omschrijving + label via edit
     cockpit2.dispatch(dd, "proj_edit", {"pid": [pid], "scope": ["Detail-test"],
                                         "description": ["Een nette omschrijving"], "label": ["groen"],
-                                        "trekker": [""], "next": ["/"]})
+                                        "trekker": [""], "next": ["/"]}, username="guest")
     # named checklist + items + afvinken
-    cockpit2.dispatch(dd, "checklist_add", {"pid": [pid], "title": ["Stappen"], "next": ["/"]})
+    cockpit2.dispatch(dd, "checklist_add", {"pid": [pid], "title": ["Stappen"], "next": ["/"]}, username="guest")
     clid = cockpit2._Stores(dd).projects.get(pid)["checklists"][0]["id"]
-    cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["Stap 1"], "next": ["/"]})
-    cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["Stap 2"], "next": ["/"]})
+    cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["Stap 1"], "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["Stap 2"], "next": ["/"]}, username="guest")
     item1 = cockpit2._Stores(dd).projects.get(pid)["checklists"][0]["items"][0]["id"]
-    cockpit2.dispatch(dd, "check_toggle", {"pid": [pid], "clid": [clid], "item": [item1], "next": ["/"]})
+    cockpit2.dispatch(dd, "check_toggle", {"pid": [pid], "clid": [clid], "item": [item1], "next": ["/"]}, username="guest")
     # opmerking in de feed
-    cockpit2.dispatch(dd, "proj_comment", {"pid": [pid], "comment": ["Eerste voortgang"], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_comment", {"pid": [pid], "comment": ["Eerste voortgang"], "next": ["/"]}, username="guest")
 
     page = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", back="/node?id=" + role)
     assert "Detail-test" in page and "Een nette omschrijving" in page
@@ -218,13 +218,13 @@ def test_project_kaart_toont_label_en_progress(tmp_path):
     cockpit2._bootstrap(dd)
     role = "mother_earth__nooch__website_developer"
     cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Met label"], "col": ["actief"],
-                                       "next": ["/"]})
+                                       "next": ["/"]}, username="guest")
     pid = cockpit2._Stores(dd).projects.all()[0]["id"]
     cockpit2.dispatch(dd, "proj_edit", {"pid": [pid], "scope": ["Met label"], "label": ["koraal"],
-                                        "trekker": [""], "next": ["/"]})
-    cockpit2.dispatch(dd, "checklist_add", {"pid": [pid], "title": ["c"], "next": ["/"]})
+                                        "trekker": [""], "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "checklist_add", {"pid": [pid], "title": ["c"], "next": ["/"]}, username="guest")
     clid = cockpit2._Stores(dd).projects.get(pid)["checklists"][0]["id"]
-    cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["a"], "next": ["/"]})
+    cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["a"], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), role, "projects", csrf_token="t")
     assert "clabel" in page and "FF6B5B" in page    # kleurbalk op de kaart
     assert "0%" in page                              # checklist-progress badge (geen 💬)
@@ -238,9 +238,9 @@ def test_projecten_groeperen_per_persoon(tmp_path):
     lotte = st.people.by_name("Lotte Mulder")
     role = "mother_earth__nooch__website_developer"
     cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Van Lotte"], "col": ["actief"],
-                                       "trekker": [f"person:{lotte.id}"], "next": ["/"]})
+                                       "trekker": [f"person:{lotte.id}"], "next": ["/"]}, username="guest")
     cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Zonder trekker"], "col": ["actief"],
-                                       "trekker": [""], "next": ["/"]})
+                                       "trekker": [""], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), role, "projects", csrf_token="t", group="persoon")
     # swimlanes per persoon: Lotte en 'Geen trekker'
     assert "swim-h" in page and "Lotte Mulder" in page and "Geen trekker" in page
@@ -251,10 +251,10 @@ def test_circle_toont_directe_rollen_plus_ii(tmp_path):
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     cockpit2.dispatch(dd, "proj_add", {"owner": ["mother_earth__nooch__website_developer"],
-                                       "scope": ["Rolproject"], "col": ["actief"], "next": ["/"]})
+                                       "scope": ["Rolproject"], "col": ["actief"], "next": ["/"]}, username="guest")
     # Individueel Initiatief: een project direct onder de cirkel via de ii:-pseudo-eigenaar
     cockpit2.dispatch(dd, "proj_add", {"owner": ["ii:mother_earth__nooch"],
-                                       "scope": ["Eigen initiatief"], "col": ["actief"], "next": ["/"]})
+                                       "scope": ["Eigen initiatief"], "col": ["actief"], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth__nooch", "projects",
                                 csrf_token="t", group="rol")
     assert "Rolproject" in page and "Website Developer" in page and "swim-h" in page
@@ -266,7 +266,7 @@ def test_circle_aggregeert_geen_subcirkel(tmp_path):
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     cockpit2.dispatch(dd, "proj_add", {"owner": ["mother_earth__nooch__website_developer"],
-                                       "scope": ["Diep project"], "col": ["actief"], "next": ["/"]})
+                                       "scope": ["Diep project"], "col": ["actief"], "next": ["/"]}, username="guest")
     me = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth", "projects", csrf_token="t", group="rol")
     assert "Diep project" not in me                  # subcirkel niet geaggregeerd
     assert "Subcirkels" in me and "eigen projectenbord" in me
@@ -280,7 +280,7 @@ def test_individual_initiative_owner(tmp_path):
     stefan = st.people.by_name("Stefan Wobben")
     ii = "ii:mother_earth__nooch"
     cockpit2.dispatch(dd, "proj_add", {"owner": [ii], "scope": ["Ad hoc stunt"], "col": ["actief"],
-                                       "trekker": [f"person:{stefan.id}"], "next": ["/"]})
+                                       "trekker": [f"person:{stefan.id}"], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth__nooch", "projects",
                                 csrf_token="t", group="rol")
     assert "Ad hoc stunt" in page and "Individueel Initiatief" in page
@@ -309,7 +309,7 @@ def test_modal_overlay_en_fragment(tmp_path):
     cockpit2._bootstrap(dd)
     role = "mother_earth__nooch__website_developer"
     cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Modaltest"], "col": ["actief"],
-                                       "next": ["/"]})
+                                       "next": ["/"]}, username="guest")
     pid = cockpit2._Stores(dd).projects.all()[0]["id"]
     # board bevat de overlay + fragment-fetch
     board = cockpit2.render_node(cockpit2._Stores(dd), role, "projects", csrf_token="t")
@@ -327,15 +327,15 @@ def test_project_archiveren_default(tmp_path):
     cockpit2._bootstrap(dd)
     role = "mother_earth__nooch__website_developer"
     cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Oud project"], "trekker": [""],
-                                       "next": ["/"]})
+                                       "next": ["/"]}, username="guest")
     pid = cockpit2._Stores(dd).projects.all()[0]["id"]
-    cockpit2.dispatch(dd, "proj_archive", {"pid": [pid], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_archive", {"pid": [pid], "next": ["/"]}, username="guest")
     p = cockpit2._Stores(dd).projects.get(pid)
     assert p is not None and p["archived"] is True          # blijft bestaan
     page = cockpit2.render_node(cockpit2._Stores(dd), role, "projects", csrf_token="t")
     assert "Gearchiveerd (1)" in page and "Oud project" in page
     # herstellen
-    cockpit2.dispatch(dd, "proj_unarchive", {"pid": [pid], "next": ["/"]})
+    cockpit2.dispatch(dd, "proj_unarchive", {"pid": [pid], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["archived"] is False
 
 
@@ -347,7 +347,7 @@ def test_project_ai_trekker(tmp_path):
     noochie = st.personas.add("Noochie")
     role = "mother_earth__nooch__website_developer"
     cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["SEO-audit"],
-                                       "trekker": [f"persona:{noochie.id}"], "next": ["/"]})
+                                       "trekker": [f"persona:{noochie.id}"], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), role, "projects", csrf_token="t")
     assert "SEO-audit" in page and "Noochie" in page and "(AI)" in page
 

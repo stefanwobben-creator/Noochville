@@ -84,7 +84,7 @@ def test_kpi_uit_catalogus_en_defv(tmp_path):
     # pak een bestaande catalogus-definitie (Bezoekers Plausible)
     d = st.defs.by_name("Bezoekers (Plausible)")
     assert d is not None
-    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [d["id"]], "next": ["/"]})
+    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [d["id"]], "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
     it = [i for i in st.metrics.for_node(rid) if i.get("kind") == "kpi"][0]
     assert it["def_id"] == d["id"] and it["def_version"] == 1
@@ -99,20 +99,20 @@ def test_zoek_op_naam_en_losse_kpi_met_delen(tmp_path):
     cockpit2._bootstrap(dd)
     rid = "mother_earth__nooch__marketing_lead"
     # knows-exactly: zoeken op naam koppelt aan de catalogus
-    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_name": ["Omzet (Shopify)"], "next": ["/"]})
+    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_name": ["Omzet (Shopify)"], "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
     it = [i for i in st.metrics.for_node(rid) if i.get("kind") == "kpi"][0]
     assert it["def_id"] and it["origin"] == "shopify"
     # losse KPI met 'deel in catalogus' maakt een nieuwe gedeelde definitie
     n0 = len(st.defs.all())
     cockpit2.dispatch(dd, "m_add_kpi", {"node": [rid], "pick": ["manual"], "name": ["Retour winkel proef"],
-                                        "unit": ["%"], "direction": ["down"], "share": ["1"], "next": ["/"]})
+                                        "unit": ["%"], "direction": ["down"], "share": ["1"], "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
     assert len(st.defs.all()) == n0 + 1
     nk = [i for i in st.metrics.for_node(rid) if i.get("name") == "Retour winkel proef"][0]
     assert nk["def_id"] and nk["def_version"] == 1 and nk["auto"] is False
     # handmatige (gedeelde) KPI: meting krijgt het versiestempel defv = 1
-    cockpit2.dispatch(dd, "m_sample", {"mid": [nk["id"]], "value": ["4.5"], "next": ["/"]})
+    cockpit2.dispatch(dd, "m_sample", {"mid": [nk["id"]], "value": ["4.5"], "next": ["/"]}, username="guest")
     s = cockpit2._Stores(dd).metrics.get(nk["id"])["samples"][0]
     assert s["value"] == 4.5 and s["defv"] == 1
 
@@ -126,7 +126,7 @@ def test_systeem_kpi_blokkeert_handmatige_invoer(tmp_path):
     if st.records.get(rid) is None:
         rid = "mother_earth__nooch"
     d = st.defs.by_name("Tevredenheid werkoverleg")
-    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [d["id"]], "next": ["/"]})
+    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [d["id"]], "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
     it = [i for i in st.metrics.for_node(rid) if i.get("def_id") == d["id"]][0]
     assert it["auto"] is True and it["origin"] == "werkoverleg"
@@ -136,7 +136,7 @@ def test_systeem_kpi_blokkeert_handmatige_invoer(tmp_path):
     page = cockpit2.render_node(cockpit2._Stores(dd), rid, "metrics", csrf_token="t")
     assert "systeem" in page
     # een losse handmatige KPI mag wél
-    cockpit2.dispatch(dd, "m_add_kpi", {"node": [rid], "pick": ["manual"], "name": ["Eigen telling"], "next": ["/"]})
+    cockpit2.dispatch(dd, "m_add_kpi", {"node": [rid], "pick": ["manual"], "name": ["Eigen telling"], "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
     mk = [i for i in st.metrics.for_node(rid) if i.get("name") == "Eigen telling"][0]
     assert mk.get("auto") is False and st.metrics.add_sample(mk["id"], 3) is True
@@ -175,11 +175,11 @@ def _manual_def_kpi(dd, rid="mother_earth__nooch__marketing_lead"):
     # losse KPI gedeeld → een handmatige catalogus-definitie + een KPI die ernaar verwijst
     cockpit2.dispatch(dd, "m_add_kpi", {"node": [rid], "pick": ["manual"], "name": ["Teamscore proef"],
                                         "unit": ["score"], "definition": ["promoters - detractors"],
-                                        "share": ["1"], "next": ["/"]})
+                                        "share": ["1"], "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
     kpi = [i for i in st.metrics.for_node(rid) if i.get("name") == "Teamscore proef"][0]
     for v in (10, 20, 30):
-        cockpit2.dispatch(dd, "m_sample", {"mid": [kpi["id"]], "value": [str(v)], "next": ["/"]})
+        cockpit2.dispatch(dd, "m_sample", {"mid": [kpi["id"]], "value": [str(v)], "next": ["/"]}, username="guest")
     return kpi["def_id"], kpi["id"]
 
 
@@ -207,7 +207,7 @@ def test_amend_break_zet_breukpunt(tmp_path):
     assert kpi["def_version"] == 2 and kpi["breaks"] == [2]
     # oude samples houden defv=1; een nieuwe meting krijgt defv=2 → breukpunt in de reeks
     assert {s["defv"] for s in kpi["samples"]} == {1}
-    cockpit2.dispatch(dd, "m_sample", {"mid": [mid], "value": ["40"], "next": ["/"]})
+    cockpit2.dispatch(dd, "m_sample", {"mid": [mid], "value": ["40"], "next": ["/"]}, username="guest")
     kpi = cockpit2._Stores(dd).metrics.get(mid)
     assert kpi["samples"][-1]["defv"] == 2
     assert cockpit2._break_indices(kpi["samples"]) == [3]           # breuk na de 3 oude punten
@@ -258,7 +258,7 @@ def test_catalogus_usage_telt_gebruik(tmp_path):
     st = cockpit2._Stores(dd)
     rid = "mother_earth__nooch__marketing_lead"
     d = st.defs.by_name("Omzet (Shopify)")
-    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [d["id"]], "next": ["/"]})
+    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [d["id"]], "next": ["/"]}, username="guest")
     page = cockpit2.render_catalog(cockpit2._Stores(dd), csrf_token="t")
     assert "1× in gebruik" in page
 
@@ -274,8 +274,8 @@ def test_meetwijze_per_bron_en_invoer(tmp_path):
     nps = st.defs.by_name("NPS")
     assert st.defs.current(nps["id"])["meetwijze"] == "enquete"
     rid = "mother_earth__nooch__marketing_lead"
-    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [erp["id"]], "next": ["/"]})
-    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [nps["id"]], "next": ["/"]})
+    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [erp["id"]], "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [nps["id"]], "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
     kerp = [i for i in st.metrics.for_node(rid) if i.get("def_id") == erp["id"]][0]
     knps = [i for i in st.metrics.for_node(rid) if i.get("def_id") == nps["id"]][0]
@@ -292,7 +292,7 @@ def test_meetwijze_wijzigen_flipt_invoer(tmp_path):
                                       "meetwijze": ["handmatig"], "next": ["/catalog"]}, username="guest")
     did = cockpit2._Stores(dd).defs.by_name("Eigen meter")["id"]
     rid = "mother_earth__nooch__marketing_lead"
-    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [did], "next": ["/"]})
+    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [did], "next": ["/"]}, username="guest")
     mid = [i for i in cockpit2._Stores(dd).metrics.for_node(rid) if i.get("def_id") == did][0]["id"]
     assert cockpit2._Stores(dd).metrics.add_sample(mid, 1) is True
     # zet meetwijze op systeem → KPI's flippen naar auto, invoer geblokkeerd
@@ -377,7 +377,7 @@ def test_co2_bron_en_verificatie(tmp_path):
     assert "voorlopig" in page and "nog niet live" in page and "data-ver='voorlopig'" in page
     # velden stromen mee naar een KPI uit de catalogus, en de tegel toont 'voorlopig'
     rid = "mother_earth__nooch__marketing_lead"
-    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [st.defs.by_name("CO2 per paar")["id"]], "next": ["/"]})
+    cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [st.defs.by_name("CO2 per paar")["id"]], "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
     it = [i for i in st.metrics.for_node(rid) if i.get("name") == "CO2 per paar"][0]
     assert it["verificatie"] == "voorlopig" and it["bron_url"] == "/carbon-footprint-of-shoes"
