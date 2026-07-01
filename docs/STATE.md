@@ -80,12 +80,12 @@ Patroon bewezen en gecommit. Stand van zaken:
 ✅ user-threading: dispatch() ontvangt username via sessie
 ✅ is_circle_lead(person_id, circle_id, assignments) — helper + tests
 ✅ gate op role_assign / role_unassign / role_focus (Circle Lead only)
+✅ gate op aitask_add (Circle Lead van de ouder-cirkel) en persona_skill_add
+   (anchor-lead mother_earth, want persona-skill is dorp-breed)
 ✅ bootstrap: Stefan (dc5685eb2074) gezaaid als mother_earth__circle_lead
    (in data/assignments.json, gitignored — handmatig op server zetten)
 
 ⏳ Nog open:
-- aitask_add en persona_skill_add: AI koppelen aan rol = laag 1,
-  valt ook onder Circle Lead. Nog geen gate.
 - Overige dispatch-takken: nog user-agnostisch.
 - Multipart-pad (attach_file) en person_add/reset_password:
   gaan langs dispatch heen, nog geen user-injectie.
