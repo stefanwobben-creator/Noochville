@@ -36,17 +36,17 @@ def test_werkoverleg_bron_in_wizard(tmp_path):
 
 
 def _run_meeting(dd, person_id, satisfaction, resolve=("project", "info")):
-    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]})
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
     for i, otype in enumerate(resolve):
-        cockpit2.dispatch(dd, "wo_ag_add", {"circle": [C], "naam": [f"Spanning {i}"], "next": ["/"]})
+        cockpit2.dispatch(dd, "wo_ag_add", {"circle": [C], "naam": [f"Spanning {i}"], "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
     for it in st.werk.agenda(C):
         idx = int(it["title"].split()[-1])
         otype = resolve[idx]
         extra = {"owner": [FAC], "detail": ["x"]} if otype == "project" else {"detail": ["x"]}
-        cockpit2.dispatch(dd, "wo_ag_resolve", {"circle": [C], "iid": [it["id"]], "otype": [otype], **extra, "next": ["/"]})
-    cockpit2.dispatch(dd, "wo_checkout", {"circle": [C], "pid": [person_id], "score": [str(satisfaction)], "next": ["/"]})
-    cockpit2.dispatch(dd, "wo_close", {"circle": [C], "next": ["/"]})
+        cockpit2.dispatch(dd, "wo_ag_resolve", {"circle": [C], "iid": [it["id"]], "otype": [otype], **extra, "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "wo_checkout", {"circle": [C], "pid": [person_id], "score": [str(satisfaction)], "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "wo_close", {"circle": [C], "next": ["/"]}, username="guest")
 
 
 def test_werkoverleg_metrics_aggregeren_over_log(tmp_path):

@@ -418,6 +418,20 @@ def _member_gate(circle_id: str, username: str | None, st) -> str | None:
     return "Geen toegang — alleen leden van deze cirkel mogen dit"
 
 
+def _lead_gate(circle_id: str, username: str | None, st) -> str | None:
+    """Poort voor acties die alleen de Circle Lead van een cirkel mag (bv. een overleg
+    openen/sluiten of de agenda-flow beheren). Foutmelding bij weigering, anders None.
+    "guest" mag alles; ingelogde-maar-onbekende wordt geweigerd."""
+    if username == "guest":
+        return None
+    actor = st.people.by_email(username)
+    if actor is None:
+        return "Geen toegang — gebruiker niet herkend"
+    if is_circle_lead(actor.id, circle_id, st.assign):
+        return None
+    return "Geen toegang — alleen Circle Lead mag dit"
+
+
 def dispatch(data_dir: str, action: str, form: dict, username: str | None = None):
     """Verwerk een POST-actie. Geeft (redirect-URL, korte bevestiging) terug.
 
@@ -799,32 +813,59 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         done = _rov_apply(st)
         msg = f"✓ overleg gesloten — {len(done)} doorgevoerd" if done else "overleg gesloten"
     elif action == "wo_open":
+        _deny = _lead_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
         st.werk.open(g("circle")); msg = "✓ werkoverleg gestart"
     elif action == "wo_close":
+        _deny = _lead_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
         st.werk.close(g("circle")); msg = "✓ werkoverleg gesloten"
     elif action == "wo_presence":
+        _deny = _member_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
         st.werk.set_presence(g("circle"), g("pid"), g("present") == "1")
         msg = "✓ aanwezig" if g("present") == "1" else "✗ afwezig (taken gepauzeerd)"
     elif action == "wo_present_all":
+        _deny = _lead_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
         for p in _members_of_circle(st, g("circle")):
             st.werk.set_presence(g("circle"), p.id, True)
         msg = "✓ allen aanwezig"
     elif action == "wo_ag_add":
+        _deny = _member_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
         naam, by = _rov_initials(g("naam"))
         if st.werk.agenda_add(g("circle"), naam, by=by):
             msg = "✓ spanning op de agenda"
     elif action == "wo_ag_remove":
+        _deny = _lead_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
         st.werk.agenda_remove(g("circle"), g("iid")); msg = "🗑 verwijderd"
     elif action == "wo_ag_note":
+        _deny = _member_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
         if g("field") in ("spanning", "role", "need"):
             st.werk.agenda_set_note(g("circle"), g("iid"), **{g("field"): g("value")})
             msg = "✓ genoteerd"
     elif action == "wo_ag_reopen":
+        _deny = _lead_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
         it = st.werk.agenda_get(g("circle"), g("iid"))
         if it is not None:
             it["status"] = "open"; it["outcome"] = None; st.werk._save()
             msg = "↺ heropend"
     elif action == "wo_ag_resolve":
+        _deny = _lead_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
         otype, detail = g("otype"), g("detail")
         it = st.werk.agenda_get(g("circle"), g("iid"))
         if otype == "info":
@@ -859,6 +900,9 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         st.werk.agenda_resolve(g("circle"), g("iid"), otype, detail)
         msg = f"✓ verwerkt als {otype}"
     elif action == "wo_checkout":
+        _deny = _member_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
         if g("score"):
             st.werk.set_checkout(g("circle"), g("pid"), g("score")); msg = "✓ score genoteerd"
     elif action == "noochie_send":

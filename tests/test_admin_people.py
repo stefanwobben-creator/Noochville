@@ -707,3 +707,70 @@ def test_rov_set_combined_ook_gegated_via_circle(tmp_path):
     st.assign.assign(_GATE_ROLE, "person", member.id)
     _, ok = cockpit2.dispatch(dd, "rov2_set", form, username="lid@nooch.earth")
     assert "Geen toegang" not in ok
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Werkoverleg wo_* — twee lagen: overleg leiden/agenda-flow = Circle Lead,
+# deelnemen (agenda/presence/checkout) = circle-member. Via g("circle").
+# ══════════════════════════════════════════════════════════════════════════════
+
+_WO_CIRCLE = "mother_earth__nooch"
+
+
+def _wo_open_form():
+    return {"circle": [_WO_CIRCLE], "next": ["/x"]}
+
+
+def test_wo_open_lead_gate_guest_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    _, msg = cockpit2.dispatch(dd, "wo_open", _wo_open_form(), username="guest")
+    assert "gestart" in msg
+
+
+def test_wo_open_lead_gate_circle_lead_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    lead = st.people.add("Lead", "lead@nooch.earth")
+    st.assign.assign(_GATE_LEAD, "person", lead.id)
+    _, msg = cockpit2.dispatch(dd, "wo_open", _wo_open_form(), username="lead@nooch.earth")
+    assert "gestart" in msg
+
+
+def test_wo_open_lead_gate_gewoon_lid_geweigerd(tmp_path):
+    # wo_open is lead-only: een gewoon cirkellid (geen lead) mag NIET
+    dd, st = _st(tmp_path)
+    member = st.people.add("Lid", "lid@nooch.earth")
+    st.assign.assign(_GATE_ROLE, "person", member.id)
+    _, msg = cockpit2.dispatch(dd, "wo_open", _wo_open_form(), username="lid@nooch.earth")
+    assert "Geen toegang" in msg and "Circle Lead" in msg
+
+
+def test_wo_open_lead_gate_onbekende_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    _, msg = cockpit2.dispatch(dd, "wo_open", _wo_open_form(), username="niemand@nergens.nl")
+    assert "niet herkend" in msg
+
+
+def _wo_ag_add_form():
+    return {"circle": [_WO_CIRCLE], "naam": ["Er speelt iets"], "next": ["/x"]}
+
+
+def test_wo_ag_add_member_gate_lid_mag(tmp_path):
+    # wo_ag_add is member-gated: een gewoon cirkellid mag een spanning agenderen
+    dd, st = _st(tmp_path)
+    member = st.people.add("Lid", "lid@nooch.earth")
+    st.assign.assign(_GATE_ROLE, "person", member.id)
+    _, msg = cockpit2.dispatch(dd, "wo_ag_add", _wo_ag_add_form(), username="lid@nooch.earth")
+    assert "Geen toegang" not in msg
+
+
+def test_wo_ag_add_member_gate_niet_lid_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    st.people.add("Buiten", "buiten@nooch.earth")
+    _, msg = cockpit2.dispatch(dd, "wo_ag_add", _wo_ag_add_form(), username="buiten@nooch.earth")
+    assert "Geen toegang" in msg and "cirkel" in msg
+
+
+def test_wo_ag_add_member_gate_onbekende_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    _, msg = cockpit2.dispatch(dd, "wo_ag_add", _wo_ag_add_form(), username="niemand@nergens.nl")
+    assert "niet herkend" in msg
