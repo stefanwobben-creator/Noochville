@@ -116,6 +116,16 @@ helpers: is_circle_lead / is_role_filler / is_circle_member / resolve_circle_id
   afgeschermd. Aparte beslissing of dat moet.
 - Server: mother_earth__circle_lead-filler nog handmatig zetten (commando staat klaar).
 
+## Backlog (na vrijdag)
+
+- **Hernoemen cockpit2 → cockpit**: cockpit2.py, service-namen, imports, tests en
+  documentatie in één refactor-sessie. Doel: schone semantiek en overdraagbaarheid.
+- **Self-service wachtwoord wijzigen**: ingelogde gebruiker kan eigen wachtwoord
+  veranderen zonder anchor-lead tussenkomst. (Nu: alleen anchor-lead reset via /admin;
+  geen change-flow — zie person_reset_password. Nieuwe gate-laag "gebruiker zelf".)
+- **Publieke read-kant**: bepaalde pagina's (strategie, Impact Forest) zichtbaar zonder
+  inloggen. (Raakt de open "read-kant"-vraag in de Autorisatie-laag-sectie hierboven.)
+
 ### Morgen
 - **Strategie-laag ontwerpen** — `data/strategy.json` met do's en don'ts die advies-stappen en agents lezen.
 - **Context-patroon voor LLM-stappen** — hoe elke LLM-aanroep consistent missie/strategie/databronnen meekrijgt.
