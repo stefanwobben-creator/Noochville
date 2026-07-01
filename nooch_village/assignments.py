@@ -36,15 +36,6 @@ class Assignments:
     def __init__(self, path: str):
         self.path = path
         self._by_role: dict[str, list[dict]] = {}
-        import sys  # TIJDELIJK debug — verwijderen na diagnose
-        print(f"DEBUG Assignments init: path={path!r} exists={os.path.exists(path)} "
-              f"size={os.path.getsize(path) if os.path.exists(path) else 'N/A'}", file=sys.stderr)
-        try:
-            d = json.load(open(path))
-            print(f"DEBUG Assignments loaded: type={type(d).__name__} "
-                  f"keys={len(d) if isinstance(d, dict) else 'N/A'}", file=sys.stderr)
-        except Exception as e:
-            print(f"DEBUG Assignments error: {e}", file=sys.stderr)
         if os.path.exists(path):
             try:
                 d = json.load(open(path))
