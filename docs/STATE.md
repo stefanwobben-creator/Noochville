@@ -82,11 +82,17 @@ Patroon bewezen en gecommit. Stand van zaken:
 ✅ gate op role_assign / role_unassign / role_focus (Circle Lead only)
 ✅ gate op aitask_add (Circle Lead van de ouder-cirkel) en persona_skill_add
    (anchor-lead mother_earth, want persona-skill is dorp-breed)
+✅ groep A — anchor-lead only: def_add, def_amend, person_edit, person_remove
+✅ groep B — Circle Lead ouder-cirkel (afgeleid): proj_delete (pid→owner, incl.
+   Individueel Initiatief "ii:<circle>"), aitask_remove (tid→rol)
+✅ groep C — Circle Lead van de overleg-cirkel (g("circle")): rov2_remove,
+   rov2_remove_group, rov2_consent, rov2_end
 ✅ bootstrap: Stefan (dc5685eb2074) gezaaid als mother_earth__circle_lead
    (in data/assignments.json, gitignored — handmatig op server zetten)
 
 ⏳ Nog open:
-- Overige dispatch-takken: nog user-agnostisch.
+- Overige dispatch-takken (proj_*, m_*, cl_*, wo_*, rov2-draft): user-agnostisch.
+  Deel hiervan hoort bij de nog-niet-bestaande "Role Lead eigen rol"-laag.
 - Multipart-pad (attach_file) en person_add/reset_password:
   gaan langs dispatch heen, nog geen user-injectie.
 

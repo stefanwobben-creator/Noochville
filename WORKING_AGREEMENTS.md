@@ -17,6 +17,13 @@ sessie opent hiermee.
 ## Werkwijze met Claude Code
 - Eén scope per opdracht. Geen bundels van vijf wijzigingen.
 - Altijd de diff tonen voordat er iets wordt opgeslagen.
+- Vóór elke commit die `dispatch`, gedeelde helpers of andere breed
+  gebruikte code raakt: draai de **volledige** testsuite
+  (`./venv/bin/python -m pytest tests/`), niet alleen het geraakte
+  testbestand. Reden: de authz-gates op `dispatch` braken cross-file
+  tests die bij een enkel-bestand-run onzichtbaar bleven — en zo gepusht
+  werden. Enkel-bestand-run is prima tijdens het bouwen; de volle suite
+  is de poort vóór de commit.
 - Pablo (de chat) checkt tussen elke stap; Stefan plakt terug wat Claude
   Code rapporteert.
 - Niets naar de server tot Stefan lokaal akkoord is. `push_data.sh`
