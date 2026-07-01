@@ -520,7 +520,12 @@ ul.clean li:last-child{border-bottom:none}
 .visform,.visform label{font-size:.85rem;margin:0;display:inline}
 .fieldform{display:flex;gap:.4rem;align-items:center}
 .fieldform select{flex:1 1 auto;min-width:0}
-.descform textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .55rem}
+.descform textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .55rem;resize:vertical}
+.desc-read{white-space:pre-wrap;line-height:1.4}
+.descedit{margin-top:.3rem}
+.descedit>summary{cursor:pointer;list-style:none;color:var(--subtle);font-size:.8rem;font-weight:500}
+.descedit>summary::-webkit-details-marker{display:none}
+.descedit>summary:hover{color:var(--ink)}
 .att-pop{min-width:230px}
 .att-lbl{display:block;font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;margin-bottom:.25rem}
 .att-pop input[type=text],.att-pop input[name=url],.att-pop input[name=title]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem;font-size:.85rem}

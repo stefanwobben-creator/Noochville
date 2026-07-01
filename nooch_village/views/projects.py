@@ -676,13 +676,20 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         f"<span class='dk'>Zichtbaar</span><span class='dv'>{vis_v}</span>"
         f"</div></div>")
 
-    # ---- Omschrijving (inline, omkaderd) ----
+    # ---- Omschrijving (leesbare tekst + inklapbare editor) ----
     if rw:
-        desc_body = (f"<form method='post' action='/action' class='descform'>{hid()}"
-                     f"<textarea name='description' rows='3' placeholder='Voeg een omschrijving toe…'>"
-                     f"{_e(p.get('description',''))}</textarea>"
-                     f"<button class='btn ok' type='submit' name='action' value='proj_describe' "
-                     f"style='margin-top:.3rem'>opslaan</button></form>")
+        desc = p.get("description", "")
+        # Leesbare tekst schaalt mee met de inhoud; de textarea zit achter "✎ bewerken".
+        # Nog geen omschrijving → editor staat open zodat je meteen kunt toevoegen.
+        lees = f"<div class='desc-read'>{_e(desc) or '<span class=muted>geen omschrijving</span>'}</div>"
+        editor = (f"<details class='descedit'{'' if desc else ' open'}>"
+                  f"<summary>✎ bewerken</summary>"
+                  f"<form method='post' action='/action' class='descform'>{hid()}"
+                  f"<textarea name='description' rows='4' placeholder='Voeg een omschrijving toe…'>"
+                  f"{_e(desc)}</textarea>"
+                  f"<button class='btn ok' type='submit' name='action' value='proj_describe' "
+                  f"style='margin-top:.3rem'>opslaan</button></form></details>")
+        desc_body = lees + editor
     else:
         desc_body = f"<div>{_e(p.get('description','')) or '<span class=muted>geen omschrijving</span>'}</div>"
     omschrijving = _psec(_IC_DESC, "Omschrijving", desc_body)

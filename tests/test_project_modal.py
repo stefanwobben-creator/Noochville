@@ -154,3 +154,23 @@ def test_inline_edits_partieel(tmp_path):
     p = cockpit2._Stores(dd).projects.get(pid)
     # rename mag de eerder gezette omschrijving NIET wissen
     assert p["scope"] == "Titel 2" and p["description"] == "beschrijving"
+
+
+def test_omschrijving_leesbaar_met_bewerken_toggle(tmp_path):
+    # MET omschrijving: leesbare tekst + ingeklapte "bewerken"-editor (bug: was vaste kleine textarea)
+    dd, pid = _setup(tmp_path)   # description="x"
+    frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
+    assert "desc-read" in frag and "✎ bewerken" in frag
+    assert "class='descedit'>" in frag            # ingeklapt (geen ' open')
+    assert "name='description'" in frag           # textarea zit achter de toggle, nog steeds aanwezig
+
+
+def test_omschrijving_editor_open_als_leeg(tmp_path):
+    # ZONDER omschrijving: 'geen omschrijving' + editor staat open om meteen toe te voegen
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    pid = st.projects.create("mother_earth__nooch__website_developer", "Leeg project", "human")
+    frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
+    assert "geen omschrijving" in frag
+    assert "class='descedit' open>" in frag
