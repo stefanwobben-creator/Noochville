@@ -6,6 +6,9 @@ requests>=2.31
 pytrends>=4.9
 pandas>=2.0,<3       # dependency van pytrends; cap op 3 tot compatibiliteit bevestigd
 
+# Cockpit-login: wachtwoord-hashing (auth.py)
+bcrypt>=4.0
+
 # LLM (één key in .env geeft rijkere Field Note)
 anthropic==0.109.1          # met ANTHROPIC_API_KEY -> claude-sonnet
 google-genai==2.8.0         # met GEMINI_API_KEY    -> gemini
