@@ -199,7 +199,9 @@ def _sources_for(st: _Stores, rec):
         srcs.append({"id": f"werk:{circle}", "label": "Werkoverleg",
                      "measures": [("tevredenheid", "Tevredenheid"), ("spanningen", "Spanningen verwerkt"),
                                   ("informatie", "Informatie verwerkt"), ("projecten", "Projecten"),
-                                  ("acties", "Acties"), ("duur", "Duur (min)")],
+                                  ("acties", "Acties"), ("duur", "Duur (min)"),
+                                  ("roloverleg", "Naar roloverleg"), ("nevermind", "Laat maar"),
+                                  ("afwezigheid", "Afwezigheid")],
                      "dims": [("gemiddeld", "gemiddeld per overleg"), ("totaal", "totaal"),
                               ("over_tijd", "over tijd")]})
     nodes = [rec.id] + ([r.id for r in org.roles_of(st.records.all(), rec.id)] if is_c else [])
@@ -212,7 +214,8 @@ def _sources_for(st: _Stores, rec):
 
 
 _WERK_MEASURE = {"spanningen": "behandeld", "informatie": "info", "projecten": "projecten",
-                 "acties": "acties", "tevredenheid": "tevredenheid", "duur": "duur_min"}
+                 "acties": "acties", "tevredenheid": "tevredenheid", "duur": "duur_min",
+                 "roloverleg": "roloverleg", "nevermind": "nevermind", "afwezigheid": "afwezig"}
 
 
 def _werk_fetch(st: _Stores, circle: str, measure: str, dim: str, cutoff):
@@ -220,6 +223,8 @@ def _werk_fetch(st: _Stores, circle: str, measure: str, dim: str, cutoff):
     pts, vals = [], []
     for m in st.werk.log(circle):
         v = m.get(key)
+        if key == "afwezig":
+            v = len(v or [])          # lijst afwezigen → aantal
         if v is None:
             continue
         pts.append({"at": m.get("at", 0), "value": v})
@@ -469,6 +474,9 @@ _WERK_GRONDSLAG = {
     "projecten": ("Aantal als project verwerkte uitkomsten.", "", ""),
     "acties": ("Aantal als actie verwerkte uitkomsten.", "", ""),
     "duur": ("Duur van het overleg in minuten.", "min", ""),
+    "roloverleg": ("Aantal naar roloverleg doorgezette uitkomsten.", "", ""),
+    "nevermind": ("Aantal ingetrokken punten per overleg.", "", ""),
+    "afwezigheid": ("Aantal afwezigen per overleg.", "", ""),
 }
 _RICHTING = {"up": "hoger = beter", "down": "lager = beter", "": "—"}
 
