@@ -73,28 +73,38 @@ bevestigd identiek aan de baseline). Elke stap met diff-tonen + mutatie-check.
 - **Advies-kwaliteit** — LLM-advies-stappen lezen strategie/beleid nog niet (gaven al Google-Ads-advies
   terwijl Nooch geen advertising voert). Advies tegen beleid toetsen vóór live gebruik.
 
-## Autorisatie-laag (gedeeltelijk live)
+## Autorisatie-laag (grotendeels live)
 
-Patroon bewezen en gecommit. Stand van zaken:
+Patroon bewezen en gecommit. Vier helpers dragen de laag:
+`is_circle_lead`, `is_role_filler`, `is_circle_member`, `resolve_circle_id`,
+met poort-wrappers `_role_gate` en `_member_gate`. Regel per default: guest
+(auth uit) mag alles; ingelogde-maar-onbekende wordt geweigerd (fail-closed).
 
 ✅ user-threading: dispatch() ontvangt username via sessie
-✅ is_circle_lead(person_id, circle_id, assignments) — helper + tests
 ✅ gate op role_assign / role_unassign / role_focus (Circle Lead only)
-✅ gate op aitask_add (Circle Lead van de ouder-cirkel) en persona_skill_add
-   (anchor-lead mother_earth, want persona-skill is dorp-breed)
+✅ aitask_add (Circle Lead ouder-cirkel) + persona_skill_add (anchor-lead)
 ✅ groep A — anchor-lead only: def_add, def_amend, person_edit, person_remove
 ✅ groep B — Circle Lead ouder-cirkel (afgeleid): proj_delete (pid→owner, incl.
    Individueel Initiatief "ii:<circle>"), aitask_remove (tid→rol)
 ✅ groep C — Circle Lead van de overleg-cirkel (g("circle")): rov2_remove,
    rov2_remove_group, rov2_consent, rov2_end
+✅ operationele laag — rolvervuller OF Circle Lead, op 38 takken: proj_* (m.u.v.
+   collaboratie), attach_*, checklist_*, check_*, m_add_*, tile_*, cl_*,
+   m_sample/remove. role_id direct (owner/node) of afgeleid (pid/mid/cid).
+✅ proj_add van een Individueel Initiatief: elk cirkellid mag (_member_gate)
+✅ collaboratie-takken BEWUST ongated (ingelogd = mag): proj_comment, react_add,
+   proj_feed, feed_edit, feed_remove, ai_reply
 ✅ bootstrap: Stefan (dc5685eb2074) gezaaid als mother_earth__circle_lead
    (in data/assignments.json, gitignored — handmatig op server zetten)
 
 ⏳ Nog open:
-- Overige dispatch-takken (proj_*, m_*, cl_*, wo_*, rov2-draft): user-agnostisch.
-  Deel hiervan hoort bij de nog-niet-bestaande "Role Lead eigen rol"-laag.
-- Multipart-pad (attach_file) en person_add/reset_password:
-  gaan langs dispatch heen, nog geen user-injectie.
+- rov2_add / rov2_add_to_group / rov2_setkind / rov2-draft (rov2_set, acc/dom):
+  overleg-takken nog user-agnostisch.
+- Werkoverleg wo_* (open/close/presence/agenda/resolve/checkout): user-agnostisch.
+- noochie_* (assistent-chat): user-agnostisch.
+- Multipart-pad (attach_file) en person_add/reset_password: lopen langs dispatch
+  heen (do_POST), nog geen user-injectie.
+- Server: mother_earth__circle_lead-filler nog handmatig zetten (commando staat klaar).
 
 ### Morgen
 - **Strategie-laag ontwerpen** — `data/strategy.json` met do's en don'ts die advies-stappen en agents lezen.
