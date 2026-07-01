@@ -165,3 +165,80 @@ def test_gate_onbekende_gebruiker_wordt_geweigerd(tmp_path):
     _, msg = cockpit2.dispatch(dd, "role_assign", _assign_form(target.id), username="niemand@nergens.nl")
     assert "niet herkend" in msg
     assert _GATE_ROLE not in cockpit2._Stores(dd).assign.roles_of("person", target.id)
+
+
+# ── autorisatie-poort op aitask_add (directe ouder-cirkel-lead) ───────────────
+
+def _aitask_form():
+    return {"role": [_GATE_ROLE], "acc": ["0"], "pick": ["harry::content_schrijven"], "next": ["/x"]}
+
+
+def test_gate_aitask_guest_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    _, msg = cockpit2.dispatch(dd, "aitask_add", _aitask_form(), username="guest")
+    assert "gekoppeld" in msg
+
+
+def test_gate_aitask_circle_lead_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    lead = st.people.add("Lead", "lead@nooch.earth")
+    st.assign.assign(_GATE_LEAD, "person", lead.id)           # lead van mother_earth__nooch
+    _, msg = cockpit2.dispatch(dd, "aitask_add", _aitask_form(), username="lead@nooch.earth")
+    assert "gekoppeld" in msg
+
+
+def test_gate_aitask_niet_lead_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    st.people.add("Buiten", "buiten@nooch.earth")             # ingelogd, geen lead
+    _, msg = cockpit2.dispatch(dd, "aitask_add", _aitask_form(), username="buiten@nooch.earth")
+    assert "Geen toegang" in msg and "Circle Lead" in msg
+
+
+def test_gate_aitask_onbekende_gebruiker_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    _, msg = cockpit2.dispatch(dd, "aitask_add", _aitask_form(), username="niemand@nergens.nl")
+    assert "niet herkend" in msg
+
+
+# ── autorisatie-poort op persona_skill_add (anchor-lead: mother_earth) ────────
+
+def _persona_skill_form(dd):
+    persona = cockpit2._Stores(dd).personas.add("Testinwoner")
+    return persona.id, {"agent": [persona.id], "skill": ["nieuwe_skill"], "next": ["/x"]}
+
+
+def test_gate_persona_skill_guest_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    pid, form = _persona_skill_form(dd)
+    _, msg = cockpit2.dispatch(dd, "persona_skill_add", form, username="guest")
+    assert "rugzak" in msg
+    assert "nieuwe_skill" in cockpit2._Stores(dd).personas.get(pid).skills
+
+
+def test_gate_persona_skill_anchor_lead_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    lead = st.people.add("Anchor", "anchor@nooch.earth")
+    st.assign.assign("mother_earth__circle_lead", "person", lead.id)   # anchor-lead
+    pid, form = _persona_skill_form(dd)
+    _, msg = cockpit2.dispatch(dd, "persona_skill_add", form, username="anchor@nooch.earth")
+    assert "rugzak" in msg
+    assert "nieuwe_skill" in cockpit2._Stores(dd).personas.get(pid).skills
+
+
+def test_gate_persona_skill_niet_anchor_lead_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    # lead van een subcirkel is géén anchor-lead → geweigerd
+    subly = st.people.add("Sub", "sub@nooch.earth")
+    st.assign.assign(_GATE_LEAD, "person", subly.id)          # mother_earth__nooch-lead, niet anchor
+    pid, form = _persona_skill_form(dd)
+    _, msg = cockpit2.dispatch(dd, "persona_skill_add", form, username="sub@nooch.earth")
+    assert "Geen toegang" in msg and "anchor-lead" in msg
+    assert "nieuwe_skill" not in cockpit2._Stores(dd).personas.get(pid).skills
+
+
+def test_gate_persona_skill_onbekende_gebruiker_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    pid, form = _persona_skill_form(dd)
+    _, msg = cockpit2.dispatch(dd, "persona_skill_add", form, username="niemand@nergens.nl")
+    assert "niet herkend" in msg
+    assert "nieuwe_skill" not in cockpit2._Stores(dd).personas.get(pid).skills

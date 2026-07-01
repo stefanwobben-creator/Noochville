@@ -516,6 +516,15 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             st.assign.set_focus(g("role"), "persona", agent, g("focus"))
         msg = "✓ focus opgeslagen"
     elif action == "aitask_add":
+        # ── Autorisatie: Circle Lead van de directe ouder-cirkel ──
+        actor = st.people.by_email(username) if username != "guest" else None
+        rec = st.records.get(g("role"))
+        circle_id = rec.parent if rec else None
+        if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
+            return nxt, "Geen toegang — alleen Circle Lead mag AI-taken koppelen"
+        if actor is None and username != "guest":
+            return nxt, "Geen toegang — gebruiker niet herkend"
+        # ── einde autorisatie ──
         try:
             acc_i = int(g("acc"))
         except ValueError:
@@ -530,6 +539,13 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
     elif action == "aitask_remove":
         st.ai.remove(g("tid")); msg = "✓ verwijderd"
     elif action == "persona_skill_add":
+        # ── Autorisatie: alleen anchor-lead (mother_earth) ──
+        actor = st.people.by_email(username) if username != "guest" else None
+        if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
+            return nxt, "Geen toegang — alleen anchor-lead mag persona-skills toevoegen"
+        if actor is None and username != "guest":
+            return nxt, "Geen toegang — gebruiker niet herkend"
+        # ── einde autorisatie ──
         if st.personas.add_skill(g("agent"), g("skill")):
             msg = "✓ skill aan rugzak toegevoegd"
     elif action == "rov2_add":
