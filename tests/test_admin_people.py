@@ -121,6 +121,18 @@ def test_is_circle_lead(tmp_path):
     assert cockpit2.is_circle_lead("", circle, a) is False
 
 
+def test_is_role_filler(tmp_path):
+    dd, st = _st(tmp_path)
+    p = st.people.all()[0]
+    role = "mother_earth__nooch__brand_visual_designer"
+    st.assign.assign(role, "person", p.id)                      # ken p toe als rolvervuller
+    a = cockpit2._Stores(dd).assign
+    assert cockpit2.is_role_filler(p.id, role, a) is True
+    assert cockpit2.is_role_filler("iemand_anders", role, a) is False
+    assert cockpit2.is_role_filler(p.id, "andere_rol", a) is False   # andere rol
+    assert cockpit2.is_role_filler("", role, a) is False
+
+
 # ── autorisatie-poort op de rol-takken (role_assign/unassign/focus) ───────────
 
 _GATE_ROLE = "mother_earth__nooch__brand_visual_designer"     # parent-cirkel: mother_earth__nooch

@@ -341,6 +341,14 @@ def is_circle_lead(person_id: str, circle_id: str, assignments) -> bool:
                for f in assignments.fillers_of(role_id))
 
 
+def is_role_filler(person_id: str, role_id: str, assignments) -> bool:
+    """Geeft True als person_id een person-filler is van role_id."""
+    if not person_id or not role_id:
+        return False
+    return any(f.type == "person" and f.id == person_id
+               for f in assignments.fillers_of(role_id))
+
+
 def dispatch(data_dir: str, action: str, form: dict, username: str | None = None):
     """Verwerk een POST-actie. Geeft (redirect-URL, korte bevestiging) terug.
 
