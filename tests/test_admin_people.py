@@ -645,3 +645,65 @@ def test_person_reset_gate_onbekende_gebruiker_geweigerd(tmp_path):
     p = st.people.add("Doel", "doel@nooch.earth")
     body, code = cockpit2._handle_person_reset(dd, {"pid": [p.id], "next": ["/admin"]}, username="niemand@nergens.nl")
     assert code == 403 and "niet herkend" in body
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Roloverleg-bewerking — shaping = circle-member (_member_gate via g("circle")).
+# Besluiten (rov2_consent/end) blijven Circle Lead (groep C). Representatief: rov2_add.
+# ══════════════════════════════════════════════════════════════════════════════
+
+_ROV_CIRCLE = "mother_earth__nooch"
+
+
+def _rov_add_form(circle=_ROV_CIRCLE):
+    return {"circle": [circle], "naam": ["Nieuwe rol idee"], "next": ["/x"]}
+
+
+def test_rov_add_guest_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    _, msg = cockpit2.dispatch(dd, "rov2_add", _rov_add_form(), username="guest")
+    assert "toegevoegd" in msg
+
+
+def test_rov_add_cirkellid_mag(tmp_path):
+    # rolvervuller in de cirkel = lid → mag een voorstel brengen (geen Circle Lead nodig)
+    dd, st = _st(tmp_path)
+    member = st.people.add("Lid", "lid@nooch.earth")
+    st.assign.assign(_GATE_ROLE, "person", member.id)
+    _, msg = cockpit2.dispatch(dd, "rov2_add", _rov_add_form(), username="lid@nooch.earth")
+    assert "toegevoegd" in msg
+
+
+def test_rov_add_circle_lead_mag(tmp_path):
+    dd, st = _st(tmp_path)
+    lead = st.people.add("Lead", "lead@nooch.earth")
+    st.assign.assign(_GATE_LEAD, "person", lead.id)
+    _, msg = cockpit2.dispatch(dd, "rov2_add", _rov_add_form(), username="lead@nooch.earth")
+    assert "toegevoegd" in msg
+
+
+def test_rov_add_niet_lid_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    st.people.add("Buiten", "buiten@nooch.earth")             # geen rol in de cirkel, geen lead
+    _, msg = cockpit2.dispatch(dd, "rov2_add", _rov_add_form(), username="buiten@nooch.earth")
+    assert "Geen toegang" in msg and "cirkel" in msg
+
+
+def test_rov_add_onbekende_gebruiker_geweigerd(tmp_path):
+    dd, st = _st(tmp_path)
+    _, msg = cockpit2.dispatch(dd, "rov2_add", _rov_add_form(), username="niemand@nergens.nl")
+    assert "niet herkend" in msg
+
+
+def test_rov_set_combined_ook_gegated_via_circle(tmp_path):
+    # de combined draft-edit tak (rov2_set) gebruikt dezelfde member-gate op g("circle")
+    dd, st = _st(tmp_path)
+    st.people.add("Buiten", "buiten@nooch.earth")
+    form = {"iid": ["willekeurig"], "circle": [_ROV_CIRCLE], "field": ["name"], "value": ["X"], "next": ["/x"]}
+    _, deny = cockpit2.dispatch(dd, "rov2_set", form, username="buiten@nooch.earth")
+    assert "Geen toegang" in deny
+    # cirkellid komt door de gate (geen toegang-melding)
+    member = st.people.add("Lid", "lid@nooch.earth")
+    st.assign.assign(_GATE_ROLE, "person", member.id)
+    _, ok = cockpit2.dispatch(dd, "rov2_set", form, username="lid@nooch.earth")
+    assert "Geen toegang" not in ok

@@ -726,9 +726,17 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         if st.personas.add_skill(g("agent"), g("skill")):
             msg = "✓ skill aan rugzak toegevoegd"
     elif action == "rov2_add":
+        # Autorisatie: elk cirkellid mag een voorstel op de agenda brengen
+        _deny = _member_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
         if _rov_add_item(st, g("circle"), g("naam")):
             msg = "✓ agendapunt toegevoegd"
     elif action == "rov2_add_to_group":
+        # Autorisatie: elk cirkellid mag aan een voorstel bijdragen
+        _deny = _member_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
         if _rov_add_item(st, g("circle"), g("naam"), group=g("group")):
             msg = "✓ toegevoegd aan voorstel"
     elif action == "rov2_remove":
@@ -755,6 +763,10 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             st.agenda.remove(m["id"])
         msg = "🗑 voorstel verwijderd"
     elif action == "rov2_setkind":
+        # Autorisatie: cirkellid mag het type van zijn eigen voorstel vormgeven
+        _deny = _member_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
         if g("kind") in ("amend_role", "remove_role"):
             st.agenda.update_fields(g("iid"), kind=g("kind"))
             msg = "voorstel: rol verwijderen" if g("kind") == "remove_role" else "voorstel: rol wijzigen"
@@ -1030,6 +1042,10 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             return nxt, _deny
         st.metrics.remove_tile(g("node"), g("tid")); msg = "🗑 tegel verwijderd"
     elif action in ("rov2_set", "rov2_acc_add", "rov2_acc_remove", "rov2_dom_add", "rov2_dom_remove"):
+        # Autorisatie: cirkellid mag zijn eigen voorstel vormgeven
+        _deny = _member_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
         item = st.agenda.get(g("iid"))
         if item is not None:
             draft = _rov_draft(st, item)
