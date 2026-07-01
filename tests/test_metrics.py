@@ -293,3 +293,31 @@ def test_link_metric(tmp_path):
                                          "url": ["https://docs.example/x"], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
     assert "Jaarcijfers" in page and "kpi-link" in page
+
+
+def test_werk_fetch_afgeleide_afwezigheid_en_reguliere_count(tmp_path):
+    # Werkoverleg-log → dashboard-measures: afgeleide afwezigheid (lijst → aantal) +
+    # nieuwe reguliere count (roloverleg), plus een bestaande count als controle.
+    from nooch_village.views.metrics import _werk_fetch
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    w = st.werk
+
+    # overleg 1: 2 afwezig, 1 spanning naar roloverleg
+    w.open(C)
+    w.set_presence(C, "a", True); w.set_presence(C, "b", False); w.set_presence(C, "c", False)
+    it = w.agenda_add(C, "spanning 1"); w.agenda_resolve(C, it["id"], "roloverleg")
+    w.close(C)
+
+    # overleg 2: 1 afwezig, 1 spanning naar roloverleg
+    w.open(C)
+    w.set_presence(C, "a", False)
+    it = w.agenda_add(C, "spanning 2"); w.agenda_resolve(C, it["id"], "roloverleg")
+    w.close(C)
+
+    # afgeleide: afwezig-lijst → aantal, som over de twee overleggen = 2 + 1
+    assert _werk_fetch(st, C, "afwezigheid", "totaal", 0)["value"] == 3
+    # nieuwe reguliere count: roloverleg-uitkomsten = 1 + 1
+    assert _werk_fetch(st, C, "roloverleg", "totaal", 0)["value"] == 2
+    # bestaande count blijft werken: behandelde spanningen = 1 + 1
+    assert _werk_fetch(st, C, "spanningen", "totaal", 0)["value"] == 2
