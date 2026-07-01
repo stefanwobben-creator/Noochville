@@ -1131,7 +1131,8 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
               f"cl={is_circle_lead(actor.id if actor else '', 'mother_earth', st.assign)} "
               f"dd={st.dd!r} "
               f"fillers={[(f.type, f.id) for f in st.assign.fillers_of('mother_earth__circle_lead')]!r} "
-              f"keys={list(st.assign._by_role.keys())!r}",
+              f"keys={list(st.assign._by_role.keys())!r} "
+              f"assign_path={st.assign.path!r}",
               file=sys.stderr)
         if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
             return nxt, "Geen toegang — alleen anchor-lead mag dit"
