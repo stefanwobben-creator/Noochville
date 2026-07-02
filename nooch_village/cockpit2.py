@@ -1188,7 +1188,10 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
     return nxt, msg
 
 
-_PUBLIC_GET = {"/", "/index.html", "/node"}
+# Niets is publiek: een uitgelogde bezoeker gaat overal naar /login. /login en /logout worden in
+# do_GET vóór de auth-check afgehandeld en blijven dus bereikbaar. Er is geen asset/health-route die
+# publiek moet blijven (/file staat al achter de auth-check).
+_PUBLIC_GET: set[str] = set()
 
 
 def make_handler(data_dir: str, csrf_token: str,
@@ -1209,8 +1212,9 @@ def make_handler(data_dir: str, csrf_token: str,
             self.end_headers()
 
         def _send(self, body: str, code: int = 200):
-            # Globale Noochie-chrome op elke volledige pagina (niet op fragmenten/zonder csrf).
-            if csrf_token and "</body>" in body:
+            # Globale Noochie-chrome alleen voor een sessie (ingelogd, of "guest" bij auth-uit) —
+            # niet op de login-pagina of bij een uitgelogde bezoeker.
+            if self._session_username() is not None and "</body>" in body:
                 body = body.replace("</body>", _noochie_chrome() + "</body>", 1)
             b = body.encode("utf-8")
             self.send_response(code)
