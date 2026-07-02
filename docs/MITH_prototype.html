@@ -1,0 +1,225 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>MITH Barefoot — canoniek model (prototype)</title>
+<style>
+  :root{
+    --bg:#f7f6f1; --card:#fffdf8; --ink:#2b2a26; --muted:#8a8578; --line:#e6e2d6;
+    --green:#3f6f4f; --green-soft:#e7efe8; --amber:#c98a2b; --amber-soft:#f6ecd8;
+    --blue:#3b6070; --blue-soft:#e5eef1; --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:24px;}
+  h1{font-size:1.35rem;margin:0 0 2px}
+  .sub{color:var(--muted);font-size:.85rem;margin-bottom:18px}
+  .obj{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px 18px;margin-bottom:18px;display:flex;flex-wrap:wrap;gap:22px;align-items:center}
+  .obj .big{font-size:1.05rem;font-weight:600;max-width:520px}
+  .kpi{display:flex;flex-direction:column}
+  .kpi b{font-size:1.4rem}
+  .kpi span{color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.04em}
+  .bar{height:8px;border-radius:6px;background:var(--line);overflow:hidden;min-width:160px;margin-top:4px}
+  .bar>i{display:block;height:100%;background:var(--green)}
+  .tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+  .tab{border:1px solid var(--line);background:var(--card);border-radius:20px;padding:6px 14px;
+    cursor:pointer;font-size:.85rem;color:var(--ink)}
+  .tab.on{background:var(--green);color:#fff;border-color:var(--green)}
+  .grid{display:grid;gap:14px}
+  .kr{grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+  .card h3{margin:0 0 2px;font-size:1rem}
+  .card .meta{color:var(--muted);font-size:.78rem;margin-bottom:10px}
+  .prow{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px dashed var(--line)}
+  .prow:first-of-type{border-top:none}
+  .prow .t{flex:1;font-size:.86rem}
+  .prow.done .t{color:var(--muted);text-decoration:line-through}
+  .chip{font-size:.68rem;padding:2px 7px;border-radius:10px;background:var(--blue-soft);color:var(--blue);white-space:nowrap}
+  .u{font-size:.78rem;color:var(--muted);width:64px;text-align:right}
+  input.hrs{width:48px;padding:3px 5px;border:1px solid var(--line);border-radius:6px;font-size:.8rem;text-align:right}
+  input[type=checkbox]{width:16px;height:16px;accent-color:var(--green)}
+  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);font-size:.88rem}
+  th{background:#f0eee6;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  td.n,th.n{text-align:right}
+  tr.tot td{font-weight:700;background:#f4f2ea;border-top:2px solid var(--line)}
+  .minibar{height:7px;border-radius:5px;background:var(--line);overflow:hidden;width:120px;display:inline-block;vertical-align:middle}
+  .minibar>i{display:block;height:100%;background:var(--amber)}
+  .note{color:var(--muted);font-size:.78rem;margin-top:14px;max-width:760px}
+  .legend{font-size:.72rem;color:var(--muted);margin:2px 0 14px}
+</style>
+
+<h1>MITH "Biobased Noochie Barefoot" — canoniek model</h1>
+<div class="sub">Eén bron (48 rol-projecten, gelabeld per werkpakket, gekoppeld aan het Doel). Drie projecties: OKR-bord, per rol, urenstaat. Zet een project op done en vul de werkelijke uren in, dan rolt alles live door.</div>
+
+<div class="obj">
+  <div class="big">DOEL: aantonen dat een volledig biobased, plasticvrije barefoot schoen technisch en economisch haalbaar is, vastgelegd in het MITH-resultatenverslag.</div>
+  <div class="kpi"><span>Venster</span><b style="font-size:.95rem">mei 2026 – apr 2027</b></div>
+  <div class="kpi"><span>Uren begroot</span><b>500</b></div>
+  <div class="kpi"><span>Gerealiseerd</span><b id="oReal">0</b></div>
+  <div class="kpi"><span>Projecten af</span><b id="oDone">0/48</b><div class="bar"><i id="oBar" style="width:0%"></i></div></div>
+</div>
+
+<div class="tabs">
+  <div class="tab on" data-v="okr">OKR-bord (5 KRs)</div>
+  <div class="tab" data-v="rol">Per rol</div>
+  <div class="tab" data-v="uren">Urenstaat (per werkpakket + persoon)</div>
+</div>
+<div class="legend">Eigenaar = de competentie-rol. Trekker/persoon logt de werkelijke uren bij afronden. Werkpakket = label (tegelijk urenstaat-activiteit én rapportsectie).</div>
+
+<div id="view"></div>
+
+<div class="note">Dit is een projectie-prototype: de 48 rol-projecten zijn de waarheid; het OKR-bord, de rol-werklast en de urenstaat zijn alle drie afgeleide weergaven van dezelfde data. Reference, don't copy. Een paar projecten zijn als voorbeeld al afgerond met werkelijke uren (die kunnen afwijken van het budget) zodat je het doorrollen ziet.</div>
+
+<script>
+const WP = [
+  {n:1, naam:"Deskresearch en literatuuronderzoek", venster:"mei–jun 2026", persoon:"Lotte"},
+  {n:2, naam:"Patentsearch (scoutend)",              venster:"jun–jul 2026", persoon:"Stefan"},
+  {n:3, naam:"Technologie en partners",              venster:"jul–okt 2026", persoon:"Lotte"},
+  {n:4, naam:"Marktverkenning en concurrentie",      venster:"okt–dec 2026", persoon:"Stefan"},
+  {n:5, naam:"Industrieel onderzoek & experimentele ontwikkeling", venster:"jan–apr 2027", persoon:"Lotte"},
+];
+// id, titel, wp, rol, budget-uren  (+ done/real ingevuld door de demo)
+const P = [
+ ["P1","Paardenbloem-rubber (Taraxagum) literatuur + geschiktheid",1,"Scientist",12],
+ ["P2","Overige plantaardige rubbers/elastomeren scouten",1,"Scientist",10],
+ ["P3","Bio-elastanen literatuur + geschiktheid",1,"Scientist",12],
+ ["P4","Biobased verbindings-/lijmtechnieken literatuur",1,"Scientist",12],
+ ["P5","Upper/mesh-materialen scouten (LOVR, Mirum, Bananatex, mycelium)",1,"Creator of Shoes",12],
+ ["P6","Biopolymeren + HyphaLite/Pliant scouten",1,"Scientist",10],
+ ["P7","Materiaaleigenschappen-matrix opstellen",1,"Scientist",12],
+ ["P8","Longlist + eerste technische beoordeling (sectie 1)",1,"Creator of Shoes",20],
+ ["P9","Zoekstrategie + trefwoorden bepalen",2,"Scientist",8],
+ ["P10","Patentsearch EPO",2,"Scientist",10],
+ ["P11","Patentsearch USPTO",2,"Scientist",10],
+ ["P12","Patentsearch WIPO",2,"Scientist",8],
+ ["P13","Relevante octrooien samenvatten (landscape)",2,"Scientist",12],
+ ["P14","FTO-light + IP-ruimte + regulatoire signalen (sectie 2+6)",2,"Strategic Lead",12],
+ ["P15","Productiemethoden biobased zool in kaart brengen",3,"Factory Development Specialist",12],
+ ["P16","Contact Taraxagum-leverancier",3,"Factory Development Specialist",6],
+ ["P17","Contact Pliant/NFW",3,"Factory Development Specialist",6],
+ ["P18","Contact HyphaLite",3,"Factory Development Specialist",6],
+ ["P19","Contact bio-elastaan-leveranciers",3,"Factory Development Specialist",6],
+ ["P20","Contact Paques Biomaterials",3,"Factory Development Specialist",6],
+ ["P21","Contact Helian Polymers",3,"Factory Development Specialist",6],
+ ["P22","Contact revoltech/LOVR (upper)",3,"Factory Development Specialist",6],
+ ["P23","Gesprekken Europese zoolfabrikanten (Procalçado, Eurovilde, Selco)",3,"Factory Development Specialist",12],
+ ["P24","Contact What The Future (3D-print/thermoforming lijmvrij)",3,"Factory Development Specialist",8],
+ ["P25","Contact 3D3 + Knitwear Lab",3,"Factory Development Specialist",6],
+ ["P26","Contact kennispartner Wageningen UR (afbreekbaarheid)",3,"Scientist",6],
+ ["P27","Shortlist productiemethoden + partners + opschaling (sectie 3+7)",3,"Supply Chain Coordinator",24],
+ ["P28","Trends barefoot-segment analyseren",4,"Trends & Competition",12],
+ ["P29","Community-enquête betalingsbereidheid opzetten",4,"Community and Email",10],
+ ["P30","Betalingsbereidheid + prijspunt-conversie analyseren",4,"Marketing Lead",12],
+ ["P31","Voorintentie/pre-order-validatie via community",4,"Community and Email",12],
+ ["P32","Concurrentieanalyse Vivobarefoot",4,"Trends & Competition",8],
+ ["P33","Concurrentieanalyse Wildling",4,"Trends & Competition",8],
+ ["P34","Concurrentieanalyse Xero Shoes",4,"Trends & Competition",8],
+ ["P35","Concurrentieanalyse overige (Groundies, Be Lenka, e.a.)",4,"Trends & Competition",8],
+ ["P36","Duurzaamheidsclaims vs. werkelijkheid (gap-analyse)",4,"Trends & Competition",10],
+ ["P37","Kostprijsmodel waardeketen (grondstof → geleverd paar)",4,"Financial Controller",18],
+ ["P38","Prijspunt 160-220 euro toetsen + brutomarge",4,"Financial Controller",8],
+ ["P39","Marktrapport + positionering + financiering (sectie 4+7)",4,"Marketing Lead",16],
+ ["P40","Testopzet + criteria bepalen (3-6 mm)",5,"Creator of Shoes",10],
+ ["P41","Materiaalcombinaties testen op flexibiliteit",5,"Creator of Shoes",12],
+ ["P42","Testen op grip (verschillende ondergronden)",5,"Creator of Shoes",12],
+ ["P43","Testen op slijtvastheid (asfalt/klinkers/grind)",5,"Creator of Shoes",12],
+ ["P44","Gedrag bij temperatuurwisselingen (-20 tot +60 °C)",5,"Creator of Shoes",8],
+ ["P45","Lijmvrije/biobased verbindingstechnieken testen",5,"Creator of Shoes",12],
+ ["P46","Alternatieve constructiemethoden testen",5,"Creator of Shoes",10],
+ ["P47","Technisch testrapport schrijven (sectie 5)",5,"Creator of Shoes",14],
+ ["P48","Eerste schetsmatig productconcept maken",5,"Creator of Shoes",10],
+].map(a=>({id:a[0],titel:a[1],wp:a[2],rol:a[3],budget:a[4],
+           persoon:WP[a[2]-1].persoon, done:false, real:0}));
+
+// demo-seed: een paar afgerond met werkelijke uren (wijkt af van budget)
+const seed = {P1:14, P2:9, P9:7, P26:6, P32:6, P37:20, P40:11, P41:13};
+P.forEach(p=>{ if(seed[p.id]!=null){ p.done=true; p.real=seed[p.id]; } });
+
+let view = "okr";
+const $ = s=>document.querySelector(s);
+
+function rollObjective(){
+  const done = P.filter(p=>p.done).length;
+  const real = P.reduce((s,p)=>s+(p.done?p.real:0),0);
+  $("#oReal").textContent = real;
+  $("#oDone").textContent = done+"/48";
+  $("#oBar").style.width = (done/48*100).toFixed(0)+"%";
+}
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;");}
+
+function prow(p){
+  return `<div class="prow ${p.done?'done':''}" data-id="${p.id}">
+    <input type="checkbox" ${p.done?'checked':''} onchange="toggle('${p.id}',this.checked)">
+    <span class="t">${esc(p.titel)}</span>
+    <span class="chip">${esc(p.rol)}</span>
+    <span class="u">${p.budget}u begr.</span>
+    <input class="hrs" type="number" min="0" value="${p.done?p.real:''}" placeholder="uren"
+      ${p.done?'':'disabled'} onchange="setReal('${p.id}',this.value)" title="werkelijke uren">
+  </div>`;
+}
+
+function renderOKR(){
+  let h='<div class="grid kr">';
+  WP.forEach(w=>{
+    const ps=P.filter(p=>p.wp===w.n);
+    const budget=ps.reduce((s,p)=>s+p.budget,0);
+    const real=ps.reduce((s,p)=>s+(p.done?p.real:0),0);
+    const done=ps.filter(p=>p.done).length;
+    h+=`<div class="card">
+      <h3>KR${w.n}: ${esc(w.naam)}</h3>
+      <div class="meta">${w.venster} · trekker ${w.persoon} · ${done}/${ps.length} af · ${real}/${budget}u
+        <div class="bar" style="margin-top:5px"><i style="width:${done/ps.length*100}%"></i></div></div>
+      ${ps.map(prow).join('')}
+    </div>`;
+  });
+  return h+'</div>';
+}
+function renderRol(){
+  const map={};
+  P.forEach(p=>{(map[p.rol]??=[]).push(p)});
+  const rows=Object.entries(map).sort((a,b)=>b[1].reduce((s,p)=>s+p.budget,0)-a[1].reduce((s,p)=>s+p.budget,0))
+   .map(([rol,ps])=>{
+     const b=ps.reduce((s,p)=>s+p.budget,0), r=ps.reduce((s,p)=>s+(p.done?p.real:0),0);
+     const d=ps.filter(p=>p.done).length;
+     return `<tr><td>${esc(rol)}</td><td class="n">${ps.length}</td><td class="n">${b}</td>
+       <td class="n">${r}</td><td class="n">${d}/${ps.length}</td>
+       <td><span class="minibar"><i style="width:${d/ps.length*100}%"></i></span></td></tr>`;
+   }).join('');
+  const b=P.reduce((s,p)=>s+p.budget,0), r=P.reduce((s,p)=>s+(p.done?p.real:0),0), d=P.filter(p=>p.done).length;
+  return `<table><tr><th>Rol (eigenaar)</th><th class="n">Projecten</th><th class="n">Begroot u</th>
+    <th class="n">Gerealiseerd u</th><th class="n">Af</th><th>Voortgang</th></tr>${rows}
+    <tr class="tot"><td>Totaal</td><td class="n">${P.length}</td><td class="n">${b}</td><td class="n">${r}</td><td class="n">${d}/48</td><td></td></tr></table>`;
+}
+function renderUren(){
+  // per werkpakket (= activiteit) begroot vs gerealiseerd
+  let a=`<table><tr><th>Werkpakket (activiteit)</th><th>Venster</th><th class="n">Begroot</th>
+    <th class="n">Gerealiseerd</th><th>Voortgang</th></tr>`;
+  let tb=0,tr=0;
+  WP.forEach(w=>{
+    const ps=P.filter(p=>p.wp===w.n);
+    const b=ps.reduce((s,p)=>s+p.budget,0), r=ps.reduce((s,p)=>s+(p.done?p.real:0),0);
+    tb+=b;tr+=r;
+    a+=`<tr><td>${w.n}. ${esc(w.naam)}</td><td>${w.venster}</td><td class="n">${b}</td>
+      <td class="n">${r}</td><td><span class="minibar"><i style="width:${b?r/b*100:0}%"></i></span> ${b?Math.round(r/b*100):0}%</td></tr>`;
+  });
+  a+=`<tr class="tot"><td>Totaal</td><td></td><td class="n">${tb}</td><td class="n">${tr}</td><td></td></tr></table>`;
+  // per persoon
+  const per={};
+  P.forEach(p=>{ per[p.persoon]??={b:0,r:0}; per[p.persoon].b+=p.budget; per[p.persoon].r+=(p.done?p.real:0); });
+  let b2=`<table style="margin-top:16px"><tr><th>Persoon</th><th class="n">Begroot</th><th class="n">Gerealiseerd</th></tr>`;
+  Object.entries(per).forEach(([n,v])=>{ b2+=`<tr><td>${esc(n)}</td><td class="n">${v.b}</td><td class="n">${v.r}</td></tr>`; });
+  b2+=`</table>`;
+  return `<div style="font-size:.8rem;color:var(--muted);margin-bottom:8px">Dit is de urenstaat als afgeleide: exact wat de subsidie toetst (per activiteit + per persoon). Persoon-toewijzing is hier vereenvoudigd per werkpakket-trekker.</div>${a}${b2}`;
+}
+function draw(){
+  rollObjective();
+  $("#view").innerHTML = view==="okr"?renderOKR():view==="rol"?renderRol():renderUren();
+}
+window.toggle=(id,on)=>{const p=P.find(x=>x.id===id);p.done=on; if(on&&!p.real)p.real=p.budget; if(!on)p.real=0; draw();};
+window.setReal=(id,v)=>{const p=P.find(x=>x.id===id);p.real=Math.max(0,parseFloat(v)||0);draw();};
+document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
+  t.classList.add("on"); view=t.dataset.v; draw();
+});
+draw();
+</script>

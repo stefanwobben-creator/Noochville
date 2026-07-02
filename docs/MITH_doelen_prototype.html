@@ -1,0 +1,216 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Doelen op het projectenbord — prototype</title>
+<style>
+  :root{--bg:#f7f6f1;--card:#fffdf8;--ink:#2b2a26;--muted:#8a8578;--line:#e6e2d6;
+    --green:#3f6f4f;--amber:#c98a2b;--blue:#3b6070;--blue-soft:#e5eef1;
+    --goal:#6a4fa0;--goal-soft:#ece5f6;--lane:#f0eee6;--radius:11px;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:22px}
+  h1{font-size:1.28rem;margin:0 0 2px}
+  .sub{color:var(--muted);font-size:.83rem;margin-bottom:16px;max-width:820px}
+  .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+  .flabel{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .pill{border:1px solid var(--line);background:var(--card);border-radius:16px;padding:5px 12px;cursor:pointer;font-size:.82rem}
+  .pill.on{background:var(--goal);color:#fff;border-color:var(--goal)}
+  .pill.add{border-style:dashed;color:var(--goal)}
+  .btn{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:.82rem}
+  .btn.p{background:var(--green);color:#fff;border-color:var(--green)}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;display:none}
+  .panel.show{display:block}
+  .panel h3{margin:0 0 10px;font-size:.95rem}
+  .frow{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:10px}
+  .fld{display:flex;flex-direction:column;gap:3px}
+  .fld label{font-size:.72rem;color:var(--muted)}
+  .fld input,.fld select,.fld textarea{padding:5px 7px;border:1px solid var(--line);border-radius:7px;font-size:.83rem;background:#fff}
+  .checks{display:flex;flex-wrap:wrap;gap:4px 12px;max-width:640px}
+  .checks label{font-size:.8rem;display:flex;gap:4px;align-items:center}
+  .objhead{background:var(--goal-soft);border:1px solid #d9ccef;border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:20px;align-items:center}
+  .objhead .big{font-weight:600;max-width:440px}
+  .kpi{display:flex;flex-direction:column}.kpi b{font-size:1.15rem}
+  .kpi span{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.04em}
+  .bar{height:7px;border-radius:5px;background:#dfd6ef;overflow:hidden;min-width:150px;margin-top:4px}
+  .bar>i{display:block;height:100%;background:var(--goal)}
+  .cols{display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:10px}
+  .col h4{margin:0 0 8px;font-size:.74rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .cell{background:#efeee7;border-radius:var(--radius);padding:7px;min-height:60px;display:flex;flex-direction:column;gap:7px}
+  .kcard{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:8px 9px}
+  .kcard.done{opacity:.72}
+  .kt{font-size:.82rem;font-weight:500;margin-bottom:6px}
+  .kmeta{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:7px}
+  .chip{font-size:.64rem;padding:1px 6px;border-radius:9px;white-space:nowrap}
+  .chip.rol{background:var(--blue-soft);color:var(--blue)}
+  .chip.goal{background:var(--goal-soft);color:var(--goal);font-weight:600}
+  .chip.act{background:#efe6d6;color:#8a6a22}
+  .krow{display:flex;align-items:center;gap:6px}
+  select.st{font-size:.72rem;padding:2px 4px;border:1px solid var(--line);border-radius:6px;background:#fff}
+  input.hrs{width:42px;padding:2px 4px;border:1px solid var(--line);border-radius:6px;font-size:.72rem;text-align:right}
+  .bud{font-size:.67rem;color:var(--muted);margin-left:auto}
+  .note{color:var(--muted);font-size:.77rem;margin-top:14px;max-width:820px}
+</style>
+
+<h1>Doelen op het projectenbord</h1>
+<div class="sub">Jouw simpele versie: maak een Doel met metagegevens aan, koppel projecten via een dropdown, elke deelnemende kaart krijgt een paars doel-label, en bovenin filter je op doel. Het gewone status-bord blijft; geen swimlanes.</div>
+
+<div class="toolbar">
+  <span class="flabel">Filter op doel:</span>
+  <span id="pills"></span>
+  <span class="pill add" onclick="toggle('objForm')">+ Nieuw doel</span>
+  <span style="flex:1"></span>
+  <button class="btn p" onclick="toggle('projForm')">+ Project</button>
+</div>
+
+<div class="panel" id="objForm">
+  <h3>Nieuw doel</h3>
+  <div class="frow">
+    <div class="fld" style="flex:1;min-width:260px"><label>Titel</label><input id="o_titel" value="MITH-rapport Biobased Barefoot"></div>
+    <div class="fld"><label>Budget uren</label><input id="o_budget" type="number" value="500" style="width:90px"></div>
+    <div class="fld"><label>Deadline</label><input id="o_deadline" value="30 apr 2027" style="width:130px"></div>
+  </div>
+  <div class="fld" style="margin-bottom:10px"><label>Rollen die eraan werken</label>
+    <div class="checks" id="o_roles"></div></div>
+  <div class="fld" style="margin-bottom:10px"><label>Activiteiten (voor urenstaat-uitsplitsing, één per regel — optioneel)</label>
+    <textarea id="o_acts" rows="3" style="width:100%;max-width:640px">Deskresearch en literatuuronderzoek
+Patentsearch
+Technologie en partners
+Marktverkenning en concurrentie
+Industrieel onderzoek en experimentele ontwikkeling</textarea></div>
+  <button class="btn p" onclick="saveGoal()">Doel opslaan</button>
+  <span style="font-size:.75rem;color:var(--muted);margin-left:8px">(demo: voegt een filter-pill toe)</span>
+</div>
+
+<div class="panel" id="projForm">
+  <h3>Nieuw project</h3>
+  <div class="frow">
+    <div class="fld" style="flex:1;min-width:240px"><label>Titel / te bereiken uitkomst</label><input id="p_titel" placeholder="bijv. Concurrentieanalyse Groundies"></div>
+    <div class="fld"><label>Rol (eigenaar)</label><select id="p_rol"></select></div>
+    <div class="fld"><label>Uren (budget)</label><input id="p_uren" type="number" value="8" style="width:80px"></div>
+  </div>
+  <div class="frow">
+    <div class="fld"><label>Doel (optioneel)</label><select id="p_doel" onchange="onDoel()"></select></div>
+    <div class="fld" id="p_actwrap"><label>Activiteit</label><select id="p_act"></select></div>
+    <div class="fld"><label>Status</label><select id="p_status"><option value="actief">Actief</option><option value="toekomst">Toekomst</option><option value="wacht">Wacht</option></select></div>
+  </div>
+  <button class="btn p" onclick="saveProj()">Project toevoegen</button>
+</div>
+
+<div id="objhead"></div>
+<div id="board"></div>
+<div class="note">Zo zit het in elkaar: het doel is een lichte entiteit met metagegevens; een project verwijst ernaar (blijft van de rol); de kaart toont een paars label; de filterbalk toont alleen dat doel. Zet een kaart op Done en vul de uren in, dan verschijnt de roll-up in de doel-header. De activiteit-dropdown is de enige toevoeging op je visie, nodig om de urenstaat in 5 activiteiten te splitsen.</div>
+
+<script>
+const ROLES=["Creator of Shoes","Scientist","Factory Development Specialist","Supply Chain Coordinator",
+ "Marketing Lead","Trends & Competition","Community and Email","Financial Controller",
+ "Strategic Lead & Founder Steward","Website Watcher","Copywriter","Brand & Visual Designer"];
+const STATUS=[["actief","Actief"],["wacht","Wacht"],["toekomst","Toekomst"],["done","Done"]];
+const ACTS=["Deskresearch en literatuuronderzoek","Patentsearch","Technologie en partners",
+ "Marktverkenning en concurrentie","Industrieel onderzoek en experimentele ontwikkeling"];
+let goals=[{id:"mith",titel:"MITH-rapport Biobased Barefoot",budget:500,deadline:"30 apr 2027",
+  rollen:ROLES.slice(0,9),activiteiten:ACTS}];
+
+// 48 MITH-projecten (compact) + losse rol-projecten zonder doel
+const M=[
+ ["P1","Taraxagum-rubber literatuur",1,"Scientist",12],["P2","Overige plantaardige rubbers scouten",1,"Scientist",10],
+ ["P3","Bio-elastanen literatuur",1,"Scientist",12],["P4","Verbindingstechnieken literatuur",1,"Scientist",12],
+ ["P5","Upper/mesh-materialen scouten",1,"Creator of Shoes",12],["P6","Biopolymeren + HyphaLite/Pliant",1,"Scientist",10],
+ ["P7","Materiaaleigenschappen-matrix",1,"Scientist",12],["P8","Longlist + technische beoordeling",1,"Creator of Shoes",20],
+ ["P9","Zoekstrategie patenten",2,"Scientist",8],["P10","Patentsearch EPO",2,"Scientist",10],
+ ["P11","Patentsearch USPTO",2,"Scientist",10],["P12","Patentsearch WIPO",2,"Scientist",8],
+ ["P13","Octrooien samenvatten",2,"Scientist",12],["P14","FTO-light + IP-ruimte",2,"Strategic Lead & Founder Steward",12],
+ ["P15","Productiemethoden in kaart",3,"Factory Development Specialist",12],["P16","Contact Taraxagum",3,"Factory Development Specialist",6],
+ ["P17","Contact Pliant/NFW",3,"Factory Development Specialist",6],["P18","Contact HyphaLite",3,"Factory Development Specialist",6],
+ ["P19","Contact bio-elastaan-leveranciers",3,"Factory Development Specialist",6],["P20","Contact Paques",3,"Factory Development Specialist",6],
+ ["P21","Contact Helian Polymers",3,"Factory Development Specialist",6],["P22","Contact revoltech/LOVR",3,"Factory Development Specialist",6],
+ ["P23","Europese zoolfabrikanten",3,"Factory Development Specialist",12],["P24","What The Future (3D-print)",3,"Factory Development Specialist",8],
+ ["P25","3D3 + Knitwear Lab",3,"Factory Development Specialist",6],["P26","Wageningen UR",3,"Scientist",6],
+ ["P27","Shortlist + opschaling",3,"Supply Chain Coordinator",24],
+ ["P28","Trends barefoot-segment",4,"Trends & Competition",12],["P29","Community-enquête opzetten",4,"Community and Email",10],
+ ["P30","Betalingsbereidheid analyseren",4,"Marketing Lead",12],["P31","Pre-order-validatie",4,"Community and Email",12],
+ ["P32","Concurrent Vivobarefoot",4,"Trends & Competition",8],["P33","Concurrent Wildling",4,"Trends & Competition",8],
+ ["P34","Concurrent Xero Shoes",4,"Trends & Competition",8],["P35","Concurrent overige",4,"Trends & Competition",8],
+ ["P36","Claims gap-analyse",4,"Trends & Competition",10],["P37","Kostprijsmodel",4,"Financial Controller",18],
+ ["P38","Prijspunt + marge",4,"Financial Controller",8],["P39","Marktrapport + positionering",4,"Marketing Lead",16],
+ ["P40","Testopzet + criteria",5,"Creator of Shoes",10],["P41","Test flexibiliteit",5,"Creator of Shoes",12],
+ ["P42","Test grip",5,"Creator of Shoes",12],["P43","Test slijtvastheid",5,"Creator of Shoes",12],
+ ["P44","Test temperatuur",5,"Creator of Shoes",8],["P45","Test verbindingstechnieken",5,"Creator of Shoes",12],
+ ["P46","Alt. constructies testen",5,"Creator of Shoes",10],["P47","Technisch testrapport",5,"Creator of Shoes",14],
+ ["P48","Productconcept schetsen",5,"Creator of Shoes",10],
+].map(a=>({id:a[0],titel:a[1],rol:a[3],budget:a[4],doel:"mith",act:ACTS[a[2]-1],status:"toekomst",real:0}));
+
+const los=[
+ {id:"L1",titel:"Homepage verhaal-scroll bouwen",rol:"Website Watcher",budget:0,doel:null,act:null,status:"actief",real:0},
+ {id:"L2",titel:"Pillar page plasticvrij schrijven",rol:"Copywriter",budget:0,doel:null,act:null,status:"toekomst",real:0},
+ {id:"L3",titel:"Community-nieuwsbrief juli",rol:"Community and Email",budget:0,doel:null,act:null,status:"actief",real:0},
+ {id:"L4",titel:"Impact Forest concept",rol:"Brand & Visual Designer",budget:0,doel:null,act:null,status:"toekomst",real:0},
+];
+let P=M.concat(los);
+const doneSeed={P1:14,P2:9,P9:7,P26:6,P32:6,P37:20,P40:11,P41:13};
+const actief=new Set(["P3","P4","P5","P7","P10","P15","P28","P29","P30"]);
+const wacht=new Set(["P17","P23","P31"]);
+P.forEach(p=>{ if(doneSeed[p.id]!=null){p.status="done";p.real=doneSeed[p.id];}
+  else if(actief.has(p.id))p.status="actief"; else if(wacht.has(p.id))p.status="wacht"; });
+
+let filter="mith";
+const $=s=>document.querySelector(s), esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+const goalById=id=>goals.find(g=>g.id===id);
+
+function renderPills(){
+  $("#pills").innerHTML=`<span class="pill ${filter==='alle'?'on':''}" onclick="setF('alle')">Alle</span>`+
+    goals.map(g=>`<span class="pill ${filter===g.id?'on':''}" onclick="setF('${g.id}')">${esc(g.titel.split(' ')[0])}</span>`).join("");
+}
+function renderObjHead(){
+  const g=goalById(filter);
+  if(!g){$("#objhead").innerHTML="";return;}
+  const ps=P.filter(p=>p.doel===g.id);
+  const real=ps.reduce((s,p)=>s+p.real,0), done=ps.filter(p=>p.status==="done").length;
+  $("#objhead").innerHTML=`<div class="objhead">
+    <div class="big">🎯 ${esc(g.titel)}</div>
+    <div class="kpi"><span>Deadline</span><b style="font-size:.9rem">${esc(g.deadline)}</b></div>
+    <div class="kpi"><span>Budget</span><b>${g.budget}u</b></div>
+    <div class="kpi"><span>Gerealiseerd</span><b>${real}u</b></div>
+    <div class="kpi"><span>Af</span><b>${done}/${ps.length}</b><div class="bar"><i style="width:${ps.length?done/ps.length*100:0}%"></i></div></div>
+    <div class="kpi"><span>Rollen</span><b style="font-size:.8rem">${g.rollen.length}</b></div></div>`;
+}
+function card(p){
+  const g=p.doel?goalById(p.doel):null;
+  const opts=STATUS.map(([v,l])=>`<option value="${v}" ${p.status===v?"selected":""}>${l}</option>`).join("");
+  return `<div class="kcard ${p.status==="done"?"done":""}">
+    <div class="kt">${esc(p.titel)}</div>
+    <div class="kmeta">
+      ${g?`<span class="chip goal">${esc(g.titel.split(' ')[0])}</span>`:''}
+      ${p.act?`<span class="chip act">${esc(p.act.split(' ')[0])}</span>`:''}
+      <span class="chip rol">${esc(p.rol)}</span></div>
+    <div class="krow"><select class="st" onchange="setStatus('${p.id}',this.value)">${opts}</select>
+      ${p.status==="done"?`<input class="hrs" type="number" min="0" value="${p.real}" onchange="setReal('${p.id}',this.value)">`:''}
+      ${p.budget?`<span class="bud">${p.budget}u</span>`:''}</div></div>`;
+}
+function renderBoard(){
+  const vis=P.filter(p=> filter==="alle" || p.doel===filter);
+  $("#board").innerHTML=`<div class="cols">`+STATUS.map(([v,l])=>
+    `<div class="col"><h4>${l}</h4><div class="cell">`+vis.filter(p=>p.status===v).map(card).join("")+`</div></div>`).join("")+`</div>`;
+}
+function draw(){renderPills();renderObjHead();renderBoard();}
+window.setF=f=>{filter=f;draw();};
+window.setStatus=(id,v)=>{const p=P.find(x=>x.id===id);p.status=v;if(v==="done"&&!p.real)p.real=p.budget;if(v!=="done")p.real=0;draw();};
+window.setReal=(id,v)=>{const p=P.find(x=>x.id===id);p.real=Math.max(0,parseFloat(v)||0);draw();};
+window.toggle=id=>$("#"+id).classList.toggle("show");
+window.onDoel=()=>{const g=goalById($("#p_doel").value); const w=$("#p_actwrap");
+  if(g&&g.activiteiten.length){w.style.display="flex";$("#p_act").innerHTML=g.activiteiten.map(a=>`<option>${esc(a)}</option>`).join("");}
+  else w.style.display="none";};
+window.saveGoal=()=>{const id="g"+(goals.length); goals.push({id,titel:$("#o_titel").value||"Nieuw doel",
+  budget:+$("#o_budget").value||0,deadline:$("#o_deadline").value,
+  rollen:[...document.querySelectorAll('#o_roles input:checked')].map(x=>x.value),
+  activiteiten:$("#o_acts").value.split("\n").map(s=>s.trim()).filter(Boolean)});
+  fillDoelSelect();toggle('objForm');filter=id;draw();};
+window.saveProj=()=>{const id="N"+(P.length); const doel=$("#p_doel").value||null;
+  const g=doel?goalById(doel):null;
+  P.push({id,titel:$("#p_titel").value||"Nieuw project",rol:$("#p_rol").value,budget:+$("#p_uren").value||0,
+    doel,act:(g&&g.activiteiten.length)?$("#p_act").value:null,status:$("#p_status").value,real:0});
+  toggle('projForm');draw();};
+function fillDoelSelect(){$("#p_doel").innerHTML=`<option value="">— geen —</option>`+goals.map(g=>`<option value="${g.id}">${esc(g.titel)}</option>`).join("");onDoel();}
+// init forms
+$("#o_roles").innerHTML=ROLES.map((r,i)=>`<label><input type="checkbox" value="${r}" ${i<9?'checked':''}>${r}</label>`).join("");
+$("#p_rol").innerHTML=ROLES.map(r=>`<option>${r}</option>`).join("");
+fillDoelSelect();
+draw();
+</script>

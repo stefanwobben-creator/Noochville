@@ -1,0 +1,162 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Backlog Builder — prototype</title>
+<style>
+  :root{--bg:#f7f6f1;--card:#fffdf8;--ink:#2b2a26;--muted:#8a8578;--line:#e6e2d6;
+    --green:#3f6f4f;--green-soft:#e7efe8;--amber:#c98a2b;--amber-soft:#f6ecd8;
+    --blue:#3b6070;--blue-soft:#e5eef1;--goal:#6a4fa0;--goal-soft:#ece5f6;--radius:11px;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:22px}
+  h1{font-size:1.28rem;margin:0 0 2px}
+  .sub{color:var(--muted);font-size:.83rem;margin-bottom:14px;max-width:820px}
+  .tabs{display:flex;gap:8px;margin-bottom:16px}
+  .tab{border:1px solid var(--line);background:var(--card);border-radius:20px;padding:7px 16px;cursor:pointer;font-size:.85rem}
+  .tab.on{background:var(--green);color:#fff;border-color:var(--green)}
+  .two{display:grid;grid-template-columns:minmax(320px,420px) 1fr;gap:18px;align-items:start}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+  .card h3{margin:0 0 4px;font-size:1rem}
+  .card .hint{color:var(--muted);font-size:.78rem;margin-bottom:12px}
+  label.fl{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:10px 0 3px}
+  input,select,textarea{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-size:.86rem;background:#fff;font-family:inherit}
+  textarea{resize:vertical}
+  .rijp{margin:14px 0 6px}
+  .rijp .bar{height:8px;border-radius:5px;background:var(--line);overflow:hidden}
+  .rijp .bar>i{display:block;height:100%;background:var(--green);transition:width .2s}
+  .rijp .lab{font-size:.74rem;color:var(--muted);margin-top:4px}
+  .row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .btn{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:8px 14px;cursor:pointer;font-size:.83rem}
+  .btn.p{background:var(--green);color:#fff;border-color:var(--green)}
+  .btn.ai{border-color:var(--goal);color:var(--goal);background:var(--goal-soft)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .list h4{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 8px}
+  .icard{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+  .icard .t{font-weight:600;font-size:.88rem}
+  .icard .m{color:var(--muted);font-size:.76rem;margin-top:3px}
+  .chip{font-size:.66rem;padding:2px 8px;border-radius:10px;display:inline-block}
+  .chip.ruw{background:var(--amber-soft);color:var(--amber)}
+  .chip.story{background:var(--green-soft);color:var(--green)}
+  .chip.mis{background:var(--goal-soft);color:var(--goal)}
+  .chip.warn{background:#f7e0d8;color:#b4552e}
+  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  th,td{padding:9px 11px;text-align:left;border-bottom:1px solid var(--line);font-size:.83rem;vertical-align:top}
+  th{background:#f0eee6;font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  td.n,th.n{text-align:center}
+  input.mini{width:52px;padding:3px;text-align:center}
+  .prio{font-weight:700}
+  .legend{font-size:.76rem;color:var(--muted);margin-top:10px}
+  .stgrp{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .note{color:var(--muted);font-size:.77rem;margin-top:14px;max-width:820px}
+</style>
+
+<h1>Backlog Builder</h1>
+<div class="sub">Twee stappen, twee rollen. <b>Inbrenger</b>: iedereen tilt een ruw idee op tot een heldere story. <b>Verwerker</b>: prioriteert op waarde versus inspanning, toetst de missie, en zet het door naar maken. Een aangenomen story wordt een project op het bord.</div>
+
+<div class="tabs">
+  <div class="tab on" data-v="in">1 · Inbrengen (ruw idee → story)</div>
+  <div class="tab" data-v="ver">2 · Verwerken (prioriteren → maken)</div>
+</div>
+
+<div id="view"></div>
+<div class="note">Prototype. De rijpheidsmeter beloont een complete story (spanning, uitkomst, wie erbij baat heeft, missie-fit). De verwerker ziet alleen ingebrachte stories, scoort impact en inspanning, en parkeert wat de missie-poort niet haalt. "→ maak project" schuift het door naar het projectenbord (met doel- en werkpakket-koppeling zoals eerder ontworpen).</div>
+
+<script>
+const PIJLERS=["Plant, niet plastic","Planeetveilig","Met zorg gemaakt","Made to order / community"];
+const ROLLEN=["Website Developer","Marketing Lead","Community and Email","Creator of Shoes","Trends & Competition","Factory Development Specialist"];
+let ideas=[
+ {id:1,raw:"karakter-mails van de materialen",titel:"Materiaal-karakters sturen eigen mails",spanning:"Klanten leren niks over waar hun schoen van gemaakt is; de wachttijd voelt leeg.",uitkomst:"Elk materiaal-karakter stuurt 1 mail tijdens de wacht; klant leert iets leuks en voelt meer binding.",baat:"Klant + merkbinding",missie:"Made to order / community",status:"ingebracht",impact:4,effort:2,rol:"Community and Email"},
+ {id:2,raw:"digitaal voeten meten verfijnen",titel:"Voetmeet-app naar productieklaar",spanning:"Maten kloppen niet altijd; app zit nog in pubertfase, te weinig data.",uitkomst:"Betrouwbare meting met smartphone + bankpas, minder retouren door verkeerde maat.",baat:"Klant + productie",missie:"Met zorg gemaakt",status:"ingebracht",impact:5,effort:4,rol:"Website Developer"},
+ {id:3,raw:"referral founding farmer nummer",titel:"Referral: word Founding Farmer #X",spanning:"Groei is volledig organisch; er is geen makkelijke manier voor fans om vrienden mee te nemen.",uitkomst:"Deelbare referral met een oplopend Founding-Farmer-nummer als status.",baat:"Groei + community",missie:"Made to order / community",status:"ingebracht",impact:4,effort:3,rol:"Marketing Lead"},
+ {id:4,raw:"compost defecte schoenen tot citroenboom",titel:"Defecte paren tot compost/boom",spanning:"We hebben defecte paren; weggooien botst met de missie.",uitkomst:"Zichtbaar verhaal: defecte paren worden compost, er groeit iets moois uit.",baat:"Merkverhaal",missie:"Planeetveilig",status:"ingebracht",impact:2,effort:2,rol:"Trends & Competition"},
+ {id:5,raw:"pick-up party locaties door het land",titel:"Pick-up party locaties werven",spanning:"We hebben één locatie (Amsterdamse Bos); landelijk bereik ontbreekt.",uitkomst:"",baat:"",missie:"",status:"shaping",impact:3,effort:3,rol:""},
+ {id:6,raw:"impact forest op de site",titel:"",spanning:"",uitkomst:"",baat:"",missie:"",status:"shaping",impact:3,effort:4,rol:""},
+];
+let draft={raw:"",titel:"",spanning:"",uitkomst:"",baat:"",missie:""};
+let view="in";
+const $=s=>document.querySelector(s), esc=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;");
+const rijp=d=>{let n=0;["titel","spanning","uitkomst","baat","missie"].forEach(k=>{if((d[k]||"").trim())n++});return n/5;};
+const prio=i=>i.effort?Math.round(i.impact/i.effort*10)/10:0;
+
+function renderIn(){
+  const r=rijp(draft), pct=Math.round(r*100);
+  const missOpts=`<option value="">— kies pijler —</option>`+PIJLERS.map(p=>`<option ${draft.missie===p?'selected':''}>${p}</option>`).join("");
+  const shaping=ideas.filter(i=>i.status==="shaping");
+  const done=ideas.filter(i=>i.status==="ingebracht");
+  $("#view").innerHTML=`<div class="two">
+    <div class="card">
+      <h3>Breng een idee in</h3>
+      <div class="hint">Begin ruw. Vul aan tot het een story is die de verwerker kan wegen.</div>
+      <label class="fl">Ruw idee (één zin)</label>
+      <input id="d_raw" value="${esc(draft.raw)}" placeholder="bijv. karakter-mails van de materialen" oninput="setD('raw',this.value)">
+      <div class="rijp"><div class="bar"><i style="width:${pct}%"></i></div>
+        <div class="lab">Story-rijpheid ${pct}% ${pct<100?'· vul aan voor een sterke inbreng':'· klaar om in te brengen'}</div></div>
+      <label class="fl">Titel</label>
+      <input id="d_titel" value="${esc(draft.titel)}" placeholder="korte, duidelijke titel" oninput="setD('titel',this.value)">
+      <label class="fl">De spanning (waarom nu)</label>
+      <textarea id="d_span" rows="2" placeholder="welk probleem of gemis los je op" oninput="setD('spanning',this.value)">${esc(draft.spanning)}</textarea>
+      <label class="fl">Gewenste uitkomst (wanneer is het klaar)</label>
+      <textarea id="d_uit" rows="2" placeholder="wat is er dan waar" oninput="setD('uitkomst',this.value)">${esc(draft.uitkomst)}</textarea>
+      <label class="fl">Wie heeft er baat bij</label>
+      <input id="d_baat" value="${esc(draft.baat)}" placeholder="klant, groei, productie, merk…" oninput="setD('baat',this.value)">
+      <label class="fl">Past bij de missie (waarden-poort)</label>
+      <select id="d_mis" onchange="setD('missie',this.value)">${missOpts}</select>
+      <div class="row">
+        <button class="btn ai" onclick="noochie()">✦ Laat Noochie meedenken</button>
+        <button class="btn p" ${r<1?'disabled':''} onclick="inbrengen()">Inbrengen ▶</button>
+      </div>
+    </div>
+    <div class="list">
+      <h4>In bewerking (${shaping.length})</h4>
+      ${shaping.map(i=>`<div class="icard"><div class="t">${esc(i.titel||i.raw)}</div>
+        <div class="m">${esc(i.raw)}</div>
+        <div style="margin-top:6px"><span class="chip ruw">rijpheid ${Math.round(rijp(i)*100)}%</span></div></div>`).join("")||"<div class='m' style='color:var(--muted)'>Niets in bewerking.</div>"}
+      <h4 style="margin-top:16px">Ingebracht → naar verwerker (${done.length})</h4>
+      ${done.map(i=>`<div class="icard"><div class="t">${esc(i.titel)}</div>
+        <div class="m">${esc(i.spanning)}</div>
+        <div style="margin-top:6px"><span class="chip story">story compleet</span> ${i.missie?`<span class="chip mis">${esc(i.missie)}</span>`:`<span class="chip warn">missie ontbreekt</span>`}</div></div>`).join("")}
+    </div></div>`;
+}
+function renderVer(){
+  const items=ideas.filter(i=>i.status!=="shaping").slice().sort((a,b)=>prio(b)-prio(a));
+  const rows=items.map(i=>{
+    const gate=i.missie?`<span class="chip mis">${esc(i.missie)}</span>`:`<span class="chip warn">toets missie</span>`;
+    const stateOpts=["ingebracht","geprioriteerd","in uitvoering","klaar","geparkeerd"].map(s=>`<option ${i.status===s?'selected':''}>${s}</option>`).join("");
+    const rolOpts=`<option value="">— rol —</option>`+ROLLEN.map(r=>`<option ${i.rol===r?'selected':''}>${r}</option>`).join("");
+    return `<tr>
+      <td><div class="t" style="font-weight:600">${esc(i.titel)}</div>
+          <div class="m" style="color:var(--muted);font-size:.76rem">${esc(i.spanning)}</div>
+          <div style="margin-top:4px">${gate}</div></td>
+      <td class="n"><input class="mini" type="number" min="1" max="5" value="${i.impact}" onchange="setV(${i.id},'impact',this.value)"></td>
+      <td class="n"><input class="mini" type="number" min="1" max="5" value="${i.effort}" onchange="setV(${i.id},'effort',this.value)"></td>
+      <td class="n prio">${prio(i)}</td>
+      <td><select onchange="setV(${i.id},'rol',this.value)" style="min-width:130px">${rolOpts}</select></td>
+      <td><select onchange="setV(${i.id},'status',this.value)">${stateOpts}</select></td>
+      <td><button class="btn p" onclick="maakProject(${i.id})" ${i.missie?'':'disabled'} title="${i.missie?'':'eerst missie-poort'}">→ maak project</button></td>
+    </tr>`;
+  }).join("");
+  $("#view").innerHTML=`<div class="card">
+    <h3>Verwerken</h3>
+    <div class="hint">Gesorteerd op prioriteit (waarde ÷ inspanning, hoog = eerst). Zet impact en inspanning, toets de missie, en zet aangenomen stories door naar het projectenbord.</div>
+    <table><tr><th>Story</th><th class="n">Impact 1-5</th><th class="n">Inspanning 1-5</th><th class="n">Prio</th><th>Rol</th><th>Status</th><th>Actie</th></tr>${rows}</table>
+    <div class="legend">Waarden-poort: een story zonder missie-pijler kan niet doorgezet worden (grijs). Parkeer of stuur terug naar de inbrenger. Zo voorkom je de 129-ideeën-zonder-richting.</div>
+  </div>`;
+}
+function draw(){ view==="in"?renderIn():renderVer(); }
+window.setD=(k,v)=>{draft[k]=v; if(k==='raw'&&!draft.titel){} const bar=document.querySelector('.rijp .bar>i'); if(bar){const p=Math.round(rijp(draft)*100);bar.style.width=p+'%';document.querySelector('.rijp .lab').textContent=`Story-rijpheid ${p}% ${p<100?'· vul aan voor een sterke inbreng':'· klaar om in te brengen'}`;} const b=document.querySelector('.btn.p'); if(b) b.disabled=rijp(draft)<1;};
+window.noochie=()=>{ // mock AI-assist: vult ontbrekende velden plausibel
+  if(!draft.titel&&draft.raw) draft.titel=draft.raw.charAt(0).toUpperCase()+draft.raw.slice(1);
+  if(!draft.spanning) draft.spanning="Noochie: hier hoort de spanning, waarom dit nu speelt.";
+  if(!draft.uitkomst) draft.uitkomst="Noochie: dit is de heldere uitkomst waaraan je 'klaar' herkent.";
+  if(!draft.baat) draft.baat="Klant";
+  if(!draft.missie) draft.missie=PIJLERS[3];
+  draw();
+};
+window.inbrengen=()=>{ if(rijp(draft)<1) return;
+  ideas.push({id:Date.now(),...draft,status:"ingebracht",impact:3,effort:3,rol:""});
+  draft={raw:"",titel:"",spanning:"",uitkomst:"",baat:"",missie:""}; draw();
+};
+window.setV=(id,k,v)=>{const i=ideas.find(x=>x.id===id);i[k]=(k==='impact'||k==='effort')?Math.max(1,Math.min(5,+v||1)):v;draw();};
+window.maakProject=(id)=>{const i=ideas.find(x=>x.id===id); if(!i.missie)return; i.status="in uitvoering";
+  alert(`"${i.titel}" → project aangemaakt op het bord van ${i.rol||'(kies rol)'}.\nGekoppeld doel/werkpakket kan op de projectkaart.`); draw();};
+document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));t.classList.add("on");view=t.dataset.v;draw();});
+draw();
+</script>

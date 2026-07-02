@@ -1,0 +1,168 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Idee inbrengen — chat met Walter Website</title>
+<style>
+  :root{--green:#3f6f4f;--green-d:#33583f;--bg:#efe7db;--me:#e3f1dc;--wa:#fffdf8;
+    --ink:#2b2a26;--muted:#8a8578;--line:#e6e2d6;--goal:#6a4fa0;--goal-soft:#ece5f6;}
+  *{box-sizing:border-box}
+  body{margin:0;background:#d9d2c6;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:var(--ink);
+    display:flex;justify-content:center;padding:20px}
+  .phone{width:100%;max-width:430px;height:88vh;background:var(--bg);border-radius:20px;overflow:hidden;
+    display:flex;flex-direction:column;box-shadow:0 16px 50px rgba(0,0,0,.25)}
+  .hdr{background:var(--green);color:#fff;padding:12px 14px;display:flex;align-items:center;gap:10px}
+  .av{width:38px;height:38px;border-radius:50%;background:#dcecdf;color:var(--green);font-weight:800;
+    display:flex;align-items:center;justify-content:center;font-size:.9rem}
+  .hdr .nm{font-weight:600;line-height:1.1}
+  .hdr .st{font-size:.72rem;opacity:.85}
+  .prog{height:4px;background:rgba(255,255,255,.25)}
+  .prog>i{display:block;height:100%;background:#cdeecf;width:0;transition:width .3s}
+  .chat{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:8px}
+  .b{max-width:80%;padding:8px 11px;border-radius:12px;font-size:.88rem;box-shadow:0 1px 0 rgba(0,0,0,.05);white-space:pre-wrap}
+  .b.wa{background:var(--wa);border:1px solid var(--line);align-self:flex-start;border-top-left-radius:3px}
+  .b.me{background:var(--me);align-self:flex-end;border-top-right-radius:3px}
+  .b .tm{display:block;font-size:.62rem;color:var(--muted);margin-top:3px;text-align:right}
+  .b .lnk{color:var(--goal);word-break:break-all}
+  .thumb{width:150px;height:92px;border-radius:8px;border:1px solid var(--line);background:
+    repeating-linear-gradient(45deg,#eee,#eee 8px,#e4e4e4 8px,#e4e4e4 16px);
+    display:flex;align-items:center;justify-content:center;color:#999;font-size:.72rem;margin-top:2px}
+  .typing{align-self:flex-start;background:var(--wa);border:1px solid var(--line);border-radius:12px;border-top-left-radius:3px;padding:10px 12px}
+  .typing span{display:inline-block;width:6px;height:6px;border-radius:50%;background:#bdb8ab;margin:0 1px;animation:bl 1.2s infinite}
+  .typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
+  @keyframes bl{0%,60%,100%{opacity:.3}30%{opacity:1}}
+  .card-story{background:var(--goal-soft);border:1px solid #d9ccef;border-radius:12px;padding:11px 13px;align-self:flex-start;max-width:88%;font-size:.84rem}
+  .card-story h4{margin:0 0 6px;color:var(--goal);font-size:.9rem}
+  .card-story .rowk{margin:4px 0}.card-story b{color:#5a4790}
+  .card-story .att{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+  .att .chip{font-size:.7rem;background:#fff;border:1px solid #d9ccef;border-radius:8px;padding:2px 8px;color:var(--goal)}
+  .att .th{width:120px;height:74px;border-radius:6px;border:1px solid #d9ccef;background:
+    repeating-linear-gradient(45deg,#eee,#eee 8px,#e4e4e4 8px,#e4e4e4 16px);display:flex;align-items:center;justify-content:center;color:#999;font-size:.68rem}
+  .quick{display:flex;flex-wrap:wrap;gap:6px;padding:6px 12px 0}
+  .qchip{border:1px solid var(--green);color:var(--green);background:#fff;border-radius:16px;padding:5px 11px;font-size:.8rem;cursor:pointer}
+  .attrow{display:flex;gap:6px;padding:4px 12px 0}
+  .attrow .qchip{border-color:var(--goal);color:var(--goal)}
+  .bar{display:flex;gap:8px;padding:10px 12px;background:#e7dfd2;align-items:center}
+  .clip{border:none;background:none;font-size:1.25rem;cursor:pointer;color:var(--muted)}
+  .bar input{flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:20px;font-size:.9rem;background:#fff}
+  .bar .send{background:var(--green);color:#fff;width:42px;height:42px;border-radius:50%;font-size:1.1rem;cursor:pointer;border:none}
+  .done-btn{border:none;background:var(--green);color:#fff;border-radius:16px;padding:8px 14px;font-size:.82rem;cursor:pointer;margin:2px 12px 0}
+  .ghost-btn{border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:16px;padding:8px 14px;font-size:.82rem;cursor:pointer;margin:2px 6px 0}
+</style>
+
+<div class="phone">
+  <div class="hdr">
+    <div class="av">WW</div>
+    <div><div class="nm">Walter Website</div><div class="st" id="hstatus">online · backlog</div></div>
+  </div>
+  <div class="prog"><i id="prog"></i></div>
+  <div class="chat" id="chat"></div>
+  <div id="attrow" class="attrow" style="display:none">
+    <span class="qchip" onclick="addLink()">🔗 Link plakken</span>
+    <span class="qchip" onclick="addShot()">🖼 Screenshot</span>
+  </div>
+  <div id="quick" class="quick"></div>
+  <div class="bar">
+    <button class="clip" title="Bijvoegen" onclick="toggleAtt()">📎</button>
+    <input id="inp" placeholder="Typ een bericht" autocomplete="off" onkeydown="if(event.key==='Enter')send()">
+    <button class="send" onclick="send()">➤</button>
+  </div>
+</div>
+
+<script>
+const PIJLERS=["Plant, niet plastic","Planeetveilig","Met zorg gemaakt","Made to order / community"];
+const story={raw:"",titel:"",spanning:"",uitkomst:"",baat:"",missie:"",note:"",attachments:[]};
+const chat=document.getElementById("chat"), quick=document.getElementById("quick"), inp=document.getElementById("inp");
+const now=()=>new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});
+let step=0, waiting=false, editing=false;
+
+// Interpretatie: haal stopwoorden/hedges weg, kapitaliseer, punt erachter. (In productie doet
+// Walter dit met echte redenering; dit is de light versie zodat je het effect ziet.)
+function tidy(t){ if(!t) return t; let s=t.trim();
+  s=s.replace(/^(nou|ja+|eh+|uh+|gewoon|eigenlijk|dus|kijk|zeg maar)[,\s]+/i,'');
+  s=s.replace(/\b(een beetje|best wel|zeg maar|ofzo|of zo|gewoon|eigenlijk|nou)\b/gi,'')
+     .replace(/\s{2,}/g,' ').replace(/\s+([,.])/g,'$1').trim();
+  if(!s) return s;
+  s=s.charAt(0).toUpperCase()+s.slice(1);
+  if(!/[.!?]$/.test(s)) s+='.';
+  return s;
+}
+
+const flow=[
+  {field:"raw", ask:()=>"Hoi, ik ben Walter. Ik help je je idee scherp te krijgen zodat het écht iets kan worden op het bord.\n\nGooi maar. Wat speelt er? Eén zin is genoeg om te beginnen."},
+  {field:"spanning", ask:a=>`Helder, het gaat over "${a}".\n\nVertel me het waarom. Welk probleem of gemis zit hierachter, en waarom is dit nú belangrijk?\n\n(Is het iets visueels? Plak gerust een screenshot of link met 📎, dan ziet de verwerker precies wat je bedoelt.)`,
+     reflect:true, help:"Geen zorgen, ik doe een gok: er is iets dat niet klopt of niet mooi is, en dat stoort bij het gebruik. Pas het gerust aan."},
+  {field:"uitkomst", ask:()=>"En als dit opgelost is, hoe ziet dat er dan uit? Waaraan zie jij dat het klaar is?",
+     reflect:true, help:"Voorzet: het is klaar als de verandering zichtbaar is en wij het kunnen laten zien."},
+  {field:"baat", ask:()=>"Voor wie doen we dit vooral? De klant, de groei, de productie, of onszelf als gebruikers?",
+     help:"Ik hou het even op: onszelf als gebruikers."},
+  {field:"missie", ask:()=>"Laatste, en misschien de belangrijkste. Waar raakt dit onze missie? Kies een pijler.", quick:PIJLERS},
+];
+
+function bubble(cls,html){const d=document.createElement("div");d.className="b "+cls;
+  d.innerHTML=html+`<span class="tm">${now()}${cls==='me'?' ✓✓':''}</span>`;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;}
+function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/\n/g,"<br>");}
+function typing(){const d=document.createElement("div");d.className="typing";d.id="typing";
+  d.innerHTML="<span></span><span></span><span></span>";chat.appendChild(d);chat.scrollTop=chat.scrollHeight;}
+function stopTyping(){const t=document.getElementById("typing");if(t)t.remove();}
+function setProg(){const f=["titel","spanning","uitkomst","baat","missie"].filter(k=>(story[k]||"").trim()).length;
+  document.getElementById("prog").style.width=(f/5*100)+"%";}
+function renderQuick(opts){quick.innerHTML=(opts||[]).map(o=>`<span class="qchip" onclick="send('${o.replace(/'/g,"\\'")}')">${o}</span>`).join("");}
+function walter(text,cb){waiting=true;document.getElementById("hstatus").textContent="typt…";typing();
+  setTimeout(()=>{stopTyping();bubble("wa",esc(text));document.getElementById("hstatus").textContent="online · backlog";waiting=false;cb&&cb();},
+    Math.min(1500,550+text.length*11));}
+
+// ── Bijlagen ─────────────────────────────────────────────
+function toggleAtt(){const r=document.getElementById("attrow");r.style.display=r.style.display==="none"?"flex":"none";}
+function addLink(){toggleAtt();const u=prompt("Plak een link (bijv. naar de pagina of het design):");if(!u)return;
+  story.attachments.push({type:"link",val:u});bubble("me",`🔗 <span class="lnk">${esc(u)}</span>`);
+  walter("Top, die link neem ik mee in de story.");}
+function addShot(){toggleAtt();story.attachments.push({type:"img"});
+  bubble("me",`<div class="thumb">screenshot.png</div>`);
+  walter("Screenshot ontvangen, dat scheelt de verwerker een hoop giswerk. Ga vooral verder.");}
+
+// ── Gesprek ─────────────────────────────────────────────
+function send(preset){
+  const val=(preset!==undefined?preset:inp.value).trim(); if(!val||waiting) return;
+  bubble("me",esc(val)); inp.value=""; renderQuick([]);
+  if(editing){ story.note=val; editing=false; walter("Genoteerd, ik heb het verwerkt.",()=>assemble()); return; }
+  const cur=flow[step], lc=val.toLowerCase();
+  const wantsHelp=cur.help && (lc.includes("weet")||lc.includes("help")||lc.includes("geen idee")||lc.length<3);
+  if(step===0){ story.raw=tidy(val).replace(/\.$/,''); story.titel=story.raw; }
+  else { story[cur.field]= wantsHelp ? "" : val; }
+  setProg();
+  if(wantsHelp){ walter(cur.help); return; }
+  // interpretatie zichtbaar maken op de vrije-tekst-antwoorden
+  const reflectLine = (cur.reflect && !wantsHelp) ? `Even in mijn woorden: "${tidy(val)}". Ik scherp het straks nog aan.\n\n` : "";
+  step++;
+  if(step<flow.length){ const n=flow[step]; walter(reflectLine+n.ask(story.raw), ()=>renderQuick(n.quick)); }
+  else { if(reflectLine) walter(reflectLine.trim(),()=>assemble()); else assemble(); }
+}
+
+function assemble(){
+  const T={spanning:tidy(story.spanning),uitkomst:tidy(story.uitkomst),baat:tidy(story.baat)||"Onszelf als gebruikers.",titel:story.titel};
+  walter("Ik heb je woorden omgezet naar een heldere story. Niet letterlijk overgenomen, maar samengevat zoals de verwerker het nodig heeft:", ()=>{
+    const c=document.createElement("div");c.className="card-story";
+    const att = story.attachments.length ? `<div class="att">${story.attachments.map(a=>a.type==="link"?`<span class="chip">🔗 link</span>`:`<span class="th">screenshot</span>`).join("")}</div>` : "";
+    c.innerHTML=`<h4>${esc(T.titel)}</h4>
+      <div class="rowk"><b>Spanning:</b> ${esc(T.spanning)}</div>
+      <div class="rowk"><b>Uitkomst:</b> ${esc(T.uitkomst)}</div>
+      <div class="rowk"><b>Wie erbij baat:</b> ${esc(T.baat)}</div>
+      <div class="rowk"><b>Missie-pijler:</b> ${esc(story.missie)}</div>
+      ${story.note?`<div class="rowk"><b>Bijgesteld:</b> ${esc(story.note)}</div>`:""}
+      ${att}`;
+    chat.appendChild(c);chat.scrollTop=chat.scrollHeight;
+    walter("Klopt dit? Dan breng ik 'm in bij de verwerker. Of wil je iets bijstellen?", ()=>{
+      const wrap=document.createElement("div");wrap.style.alignSelf="flex-start";
+      const ok=document.createElement("button");ok.className="done-btn";ok.textContent="Inbrengen ▶";
+      ok.onclick=()=>{wrap.remove();bubble("me","Ja, inbrengen");
+        walter("Ingebracht. Hij staat nu op de verwerk-lijst, met je bijlage erbij, gesorteerd op prioriteit. Mooi idee, dank je. Nog eentje?");
+        inp.placeholder="Typ je volgende idee…";resetSoft();};
+      const ed=document.createElement("button");ed.className="ghost-btn";ed.textContent="Iets aanpassen";
+      ed.onclick=()=>{wrap.remove();editing=true;walter("Prima. Typ wat er anders of scherper moet, dan verwerk ik het.");};
+      wrap.appendChild(ok);wrap.appendChild(ed);chat.appendChild(wrap);chat.scrollTop=chat.scrollHeight;
+    });
+  });
+}
+function resetSoft(){step=0;editing=false;["raw","titel","spanning","uitkomst","baat","missie","note"].forEach(k=>story[k]="");story.attachments=[];setProg();}
+
+walter(flow[0].ask());
+</script>

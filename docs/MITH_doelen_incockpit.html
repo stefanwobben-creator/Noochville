@@ -1,0 +1,206 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Doelen geïntegreerd in het projectenbord — prototype</title>
+<style>
+  :root{--bg:#f7f6f1;--card:#fffdf8;--ink:#2b2a26;--muted:#8a8578;--line:#e6e2d6;
+    --green:#3f6f4f;--goal:#6a4fa0;--goal-soft:#ece5f6;--rail:#2f6b46;--radius:10px;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:13.5px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .rail{position:fixed;left:0;top:0;bottom:0;width:14px;background:var(--rail)}
+  .wrap{padding:18px 22px 60px 30px}
+  .crumb{font-size:.78rem;color:var(--green);margin-bottom:8px}
+  h1{font-size:1.25rem;margin:0 0 2px}.tag{font-size:.7rem;color:var(--muted);font-weight:400}
+  .tabs{display:flex;gap:16px;border-bottom:1px solid var(--line);margin:12px 0 16px;font-size:.85rem}
+  .tabs span{padding:6px 2px;color:var(--muted)}.tabs .on{color:var(--green);font-weight:600;border-bottom:2px solid var(--green)}
+  .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:8px}
+  .flabel{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .pill{border:1px solid var(--line);background:var(--card);border-radius:16px;padding:4px 12px;cursor:pointer;font-size:.8rem}
+  .pill.on{background:var(--goal);color:#fff;border-color:var(--goal)}
+  .grp{font-size:.78rem;color:var(--muted);margin-left:auto}
+  .objhead{background:var(--goal-soft);border:1px solid #d9ccef;border-radius:var(--radius);padding:10px 14px;margin:8px 0 14px;display:flex;flex-wrap:wrap;gap:18px;align-items:center}
+  .objhead .big{font-weight:600;font-size:.92rem}
+  .kpi{display:flex;flex-direction:column}.kpi b{font-size:1.05rem}
+  .kpi span{color:var(--muted);font-size:.66rem;text-transform:uppercase;letter-spacing:.03em}
+  .bar{height:6px;border-radius:5px;background:#dfd6ef;overflow:hidden;min-width:130px;margin-top:3px}
+  .bar>i{display:block;height:100%;background:var(--goal)}
+  .lane{margin-bottom:18px}
+  .lane>h3{font-size:.9rem;margin:0 0 8px;color:#3a3a34}
+  .cols{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px}
+  .col h4{margin:0 0 6px;font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .cell{background:#efeee7;border-radius:var(--radius);padding:6px;min-height:40px;display:flex;flex-direction:column;gap:6px}
+  .kcard{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:8px 9px;cursor:pointer;box-shadow:0 1px 0 rgba(0,0,0,.03)}
+  .kcard:hover{border-color:#cfc9ba}
+  .kcard.done{opacity:.7}
+  .glabel{display:inline-block;font-size:.62rem;font-weight:700;color:var(--goal);background:var(--goal-soft);border-radius:8px;padding:1px 7px;margin-bottom:5px}
+  .kt{font-size:.82rem;font-weight:500;margin-bottom:6px}
+  .who{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:.72rem}
+  .av{width:18px;height:18px;border-radius:50%;background:var(--green);color:#fff;font-size:.6rem;display:flex;align-items:center;justify-content:center;font-weight:700}
+  .pbar{height:5px;border-radius:4px;background:var(--line);overflow:hidden;margin-top:6px}
+  .pbar>i{display:block;height:100%;background:var(--green)}
+  .addp{color:var(--green);font-size:.76rem;cursor:pointer;padding:4px 2px}
+  /* modal */
+  .ov{position:fixed;inset:0;background:rgba(20,18,14,.45);display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;z-index:9}
+  .ov.show{display:flex}
+  .modal{background:var(--card);border-radius:14px;max-width:900px;width:100%;padding:22px 26px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  .modal .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+  .modal h2{margin:0;font-size:1.2rem}
+  .x{cursor:pointer;color:var(--muted);font-size:1.3rem;border:none;background:none}
+  .mgrid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  .box{border:1px solid var(--line);border-radius:10px;padding:14px}
+  .box h5{margin:0 0 10px;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .drow{display:grid;grid-template-columns:90px 1fr;align-items:center;gap:8px;margin-bottom:9px}
+  .drow label{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .drow select,.drow input{padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:.84rem;background:#eef0f4;width:100%}
+  .acts{display:flex;gap:8px;margin:14px 0}
+  .abtn{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:7px 12px;font-size:.8rem;cursor:pointer;display:flex;gap:5px;align-items:center}
+  .abtn.on{border-color:var(--goal);color:var(--goal);background:var(--goal-soft)}
+  .goalbox{border:1px dashed var(--goal);border-radius:10px;padding:14px;background:#faf7ff;margin-top:6px}
+  .hint{font-size:.74rem;color:var(--muted);margin-top:10px}
+</style>
+<div class="rail"></div>
+<div class="wrap">
+  <div class="crumb">Cockpit 2 · Mother Earth › Nooch</div>
+  <h1>Nooch <span class="tag">cirkel</span></h1>
+  <div class="tabs"><span>Overview</span><span>Roles</span><span>Members</span><span>Policies</span><span>Notes</span><span class="on">Projects</span><span>Checklists</span><span>Metrics</span></div>
+
+  <div class="toolbar">
+    <span class="flabel">Doel:</span><span id="pills"></span>
+    <span class="grp">Groeperen: <b>per rol</b></span>
+  </div>
+  <div id="objhead"></div>
+  <div id="board"></div>
+</div>
+
+<div class="ov" id="ov"><div class="modal" id="modal"></div></div>
+
+<script>
+const STATUS=[["actief","Actief"],["wacht","Wacht"],["done","Done"],["toekomst","Toekomst"]];
+const WP=["Deskresearch en literatuuronderzoek","Patentsearch","Technologie en partners","Marktverkenning en concurrentie","Industrieel onderzoek en experimentele ontwikkeling"];
+const goals=[{id:"mith",label:"MITH",titel:"MITH-rapport Biobased Barefoot",budget:500,deadline:"30 apr 2027",activiteiten:WP}];
+const PERSON={ "Creator of Shoes":"Lotte Mulder","Scientist":"Lotte Mulder","Factory Development Specialist":"Lotte Mulder",
+ "Supply Chain Coordinator":"Wytse Valkema","Trends & Competition":"Stefan Wobben","Community and Email":"Nina Wolter",
+ "Marketing Lead":"Matthijs Boesten","Financial Controller":"Stefan Wobben","Strategic Lead & Founder Steward":"Stefan Wobben",
+ "Website Developer":"Stefan Wobben"};
+const M=[
+ ["Taraxagum-rubber literatuur",1,"Scientist",12],["Overige plantaardige rubbers scouten",1,"Scientist",10],
+ ["Bio-elastanen literatuur",1,"Scientist",12],["Verbindingstechnieken literatuur",1,"Scientist",12],
+ ["Upper/mesh-materialen scouten",1,"Creator of Shoes",12],["Biopolymeren + HyphaLite/Pliant",1,"Scientist",10],
+ ["Materiaaleigenschappen-matrix",1,"Scientist",12],["Longlist + technische beoordeling",1,"Creator of Shoes",20],
+ ["Zoekstrategie patenten",2,"Scientist",8],["Patentsearch EPO",2,"Scientist",10],["Patentsearch USPTO",2,"Scientist",10],
+ ["Patentsearch WIPO",2,"Scientist",8],["Octrooien samenvatten",2,"Scientist",12],["FTO-light + IP-ruimte",2,"Strategic Lead & Founder Steward",12],
+ ["Productiemethoden in kaart",3,"Factory Development Specialist",12],["Contact Taraxagum",3,"Factory Development Specialist",6],
+ ["Contact Pliant/NFW",3,"Factory Development Specialist",6],["Contact HyphaLite",3,"Factory Development Specialist",6],
+ ["Contact bio-elastaan-leveranciers",3,"Factory Development Specialist",6],["Contact Paques",3,"Factory Development Specialist",6],
+ ["Contact Helian Polymers",3,"Factory Development Specialist",6],["Contact revoltech/LOVR",3,"Factory Development Specialist",6],
+ ["Europese zoolfabrikanten",3,"Factory Development Specialist",12],["What The Future (3D-print)",3,"Factory Development Specialist",8],
+ ["3D3 + Knitwear Lab",3,"Factory Development Specialist",6],["Wageningen UR",3,"Scientist",6],["Shortlist + opschaling",3,"Supply Chain Coordinator",24],
+ ["Trends barefoot-segment",4,"Trends & Competition",12],["Community-enquête opzetten",4,"Community and Email",10],
+ ["Betalingsbereidheid analyseren",4,"Marketing Lead",12],["Pre-order-validatie",4,"Community and Email",12],
+ ["Concurrent Vivobarefoot",4,"Trends & Competition",8],["Concurrent Wildling",4,"Trends & Competition",8],
+ ["Concurrent Xero Shoes",4,"Trends & Competition",8],["Concurrent overige",4,"Trends & Competition",8],
+ ["Claims gap-analyse",4,"Trends & Competition",10],["Kostprijsmodel",4,"Financial Controller",18],
+ ["Prijspunt + marge",4,"Financial Controller",8],["Marktrapport + positionering",4,"Marketing Lead",16],
+ ["Testopzet + criteria",5,"Creator of Shoes",10],["Test flexibiliteit",5,"Creator of Shoes",12],["Test grip",5,"Creator of Shoes",12],
+ ["Test slijtvastheid",5,"Creator of Shoes",12],["Test temperatuur",5,"Creator of Shoes",8],["Test verbindingstechnieken",5,"Creator of Shoes",12],
+ ["Alt. constructies testen",5,"Creator of Shoes",10],["Technisch testrapport",5,"Creator of Shoes",14],["Productconcept schetsen",5,"Creator of Shoes",10],
+].map((a,i)=>({id:"P"+(i+1),titel:a[0],rol:a[2],persoon:PERSON[a[2]],doel:"mith",wp:a[1]-1,budget:a[3],status:"toekomst",real:0,prog:0}));
+const los=[
+ {id:"L1",titel:"Nooch Shopify Theme Created",rol:"Website Developer",budget:0,doel:null,wp:null,status:"actief",real:0,prog:25},
+ {id:"L2",titel:"PoC Nooch Impact Forest Created",rol:"Website Developer",budget:0,doel:null,wp:null,status:"actief",real:0,prog:15},
+ {id:"L3",titel:"Welcome flow e-mail automation",rol:"Community and Email",budget:0,doel:null,wp:null,status:"actief",real:0,prog:40},
+ {id:"L4",titel:"Pick-up Party organized",rol:"Marketing Lead",budget:0,doel:null,wp:null,status:"actief",real:0,prog:60},
+].map(p=>({...p,persoon:PERSON[p.rol]}));
+let P=M.concat(los);
+const doneSeed={P1:14,P2:9,P9:7,P26:6,P32:6,P37:20,P40:11,P41:13};
+const actief=new Set(["P3","P4","P5","P7","P10","P15","P28","P29","P30"]);
+const wacht=new Set(["P17","P23","P31"]);
+P.forEach(p=>{ if(doneSeed[p.id]!=null){p.status="done";p.real=doneSeed[p.id];p.prog=100;}
+  else if(actief.has(p.id)){p.status="actief";p.prog=30;} else if(wacht.has(p.id))p.status="wacht"; });
+
+let filter="mith", curId=null, showGoals=false;
+const $=s=>document.querySelector(s), esc=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;");
+const initials=n=>n.split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase();
+const goalById=id=>goals.find(g=>g.id===id);
+const rolesInView=()=>[...new Set(P.filter(p=>filter==="alle"||p.doel===filter).map(p=>p.rol))];
+
+function renderPills(){
+  $("#pills").innerHTML=`<span class="pill ${filter==='alle'?'on':''}" onclick="setF('alle')">Alle</span>`+
+    goals.map(g=>`<span class="pill ${filter===g.id?'on':''}" onclick="setF('${g.id}')">${esc(g.label)}</span>`).join("");
+}
+function renderObjHead(){
+  const g=goalById(filter); if(!g){$("#objhead").innerHTML="";return;}
+  const ps=P.filter(p=>p.doel===g.id);const real=ps.reduce((s,p)=>s+p.real,0),done=ps.filter(p=>p.status==="done").length;
+  $("#objhead").innerHTML=`<div class="objhead"><div class="big">🎯 ${esc(g.titel)}</div>
+    <div class="kpi"><span>Deadline</span><b style="font-size:.85rem">${g.deadline}</b></div>
+    <div class="kpi"><span>Budget</span><b>${g.budget}u</b></div>
+    <div class="kpi"><span>Gerealiseerd</span><b>${real}u</b></div>
+    <div class="kpi"><span>Af</span><b>${done}/${ps.length}</b><div class="bar"><i style="width:${done/ps.length*100}%"></i></div></div></div>`;
+}
+function card(p){
+  const g=p.doel?goalById(p.doel):null;
+  return `<div class="kcard ${p.status==='done'?'done':''}" onclick="open_('${p.id}')">
+    ${g?`<span class="glabel">${esc(g.label)}</span>`:''}
+    <div class="kt">${esc(p.titel)}</div>
+    <div class="who"><span class="av">${initials(p.persoon)}</span>${esc(p.persoon)}</div>
+    ${p.prog?`<div class="pbar"><i style="width:${p.prog}%"></i></div>`:''}</div>`;
+}
+function renderBoard(){
+  let h="";
+  rolesInView().forEach(rol=>{
+    const ps=P.filter(p=>p.rol===rol && (filter==="alle"||p.doel===filter));
+    h+=`<div class="lane"><h3>${esc(rol)} (${ps.length})</h3><div class="cols">`;
+    STATUS.forEach(([v,l])=>{const c=ps.filter(p=>p.status===v);
+      h+=`<div class="col"><h4>${l} (${c.length})</h4><div class="cell">${c.map(card).join("")}
+        <div class="addp">+ project toevoegen</div></div></div>`;});
+    h+=`</div></div>`;
+  });
+  $("#board").innerHTML=h;
+}
+function draw(){renderPills();renderObjHead();renderBoard();}
+window.setF=f=>{filter=f;draw();};
+
+function open_(id){curId=id;showGoals=false;renderModal();$("#ov").classList.add("show");}
+window.close_=()=>{$("#ov").classList.remove("show");};
+function renderModal(){
+  const p=P.find(x=>x.id===curId); const g=p.doel?goalById(p.doel):null;
+  const goalOpts=`<option value="">— geen doel —</option>`+goals.map(x=>`<option value="${x.id}" ${p.doel===x.id?'selected':''}>${esc(x.titel)}</option>`).join("");
+  const wpOpts=(g?g.activiteiten:[]).map((a,i)=>`<option value="${i}" ${p.wp===i?'selected':''}>${esc(a)}</option>`).join("");
+  const statusOpts=STATUS.map(([v,l])=>`<option value="${v}" ${p.status===v?'selected':''}>${l}</option>`).join("");
+  $("#modal").innerHTML=`
+    <div class="top"><h2>${esc(p.titel)}</h2>
+      <div><select onchange="setStatus(this.value)" style="padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:#f3 efe;margin-right:8px">${statusOpts}</select>
+      <button class="x" onclick="close_()">✕</button></div></div>
+    <div class="mgrid">
+      <div>
+        <div class="box"><h5>Details</h5>
+          <div class="drow"><label>Rol</label><select disabled><option>${esc(p.rol)}</option></select></div>
+          <div class="drow"><label>Persoon</label><select disabled><option>${esc(p.persoon)}</option></select></div>
+          <div class="drow"><label>Aangemaakt</label><input value="1 jul 2026" disabled></div>
+        </div>
+        <div class="acts">
+          <span class="abtn">🕒 Datum</span><span class="abtn">☑ Checklist</span>
+          <span class="abtn">🔗 Bijlage</span>
+          <span class="abtn ${showGoals?'on':''}" onclick="toggleGoals()">◎ Goals</span>
+        </div>
+        ${showGoals?`<div class="goalbox">
+          <div class="drow"><label>Doel</label><select onchange="setDoel(this.value)">${goalOpts}</select></div>
+          ${g?`<div class="drow"><label>Werkpakket</label><select onchange="setWp(this.value)">${wpOpts}</select></div>`:''}
+          <div class="drow"><label>Budget</label><input type="number" value="${p.budget}" onchange="setBudget(this.value)"></div>
+          <div class="drow"><label>Werkelijk</label><input type="number" value="${p.real}" onchange="setReal(this.value)" ${p.status==='done'?'':'disabled'}></div>
+          <div class="hint">Werkelijke uren invulbaar zodra het project op Done staat. Budget + werkpakket wonen hier op de detailpagina, niet op de kaart.</div>
+        </div>`:`<div class="hint">Klik <b>Goals</b> om dit project aan een doel te koppelen (label MITH), het werkpakket te kiezen en het uren-budget te zetten.</div>`}
+      </div>
+      <div class="box"><h5>Omschrijving</h5>
+        <div style="font-size:.86rem;color:#4a4740">Deelresultaat binnen het MITH-haalbaarheidsonderzoek. De rol vult bij afronden de werkelijke uren in; die rollen op naar het doel en de urenstaat.</div>
+        ${g?`<div style="margin-top:12px;font-size:.8rem;color:var(--muted)">Gekoppeld doel: <b style="color:var(--goal)">${esc(g.titel)}</b>${p.wp!=null?` · activiteit: <b>${esc(g.activiteiten[p.wp])}</b>`:''}</div>`:''}
+      </div>
+    </div>`;
+}
+window.toggleGoals=()=>{showGoals=!showGoals;renderModal();};
+window.setDoel=v=>{const p=P.find(x=>x.id===curId);p.doel=v||null;if(!v)p.wp=null;else if(p.wp==null)p.wp=0;renderModal();draw();};
+window.setWp=v=>{P.find(x=>x.id===curId).wp=+v;renderModal();draw();};
+window.setBudget=v=>{P.find(x=>x.id===curId).budget=+v||0;draw();};
+window.setReal=v=>{P.find(x=>x.id===curId).real=Math.max(0,+v||0);renderObjHead();};
+window.setStatus=v=>{const p=P.find(x=>x.id===curId);p.status=v;p.prog=v==='done'?100:(v==='actief'?30:0);if(v==='done'&&!p.real)p.real=p.budget;if(v!=='done')p.real=0;renderModal();draw();};
+draw();
+</script>

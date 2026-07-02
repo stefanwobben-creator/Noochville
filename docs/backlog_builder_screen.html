@@ -1,0 +1,289 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Backlog Builder — het scherm</title>
+<style>
+  :root{--green:#3f6f4f;--bg:#efe7db;--me:#e3f1dc;--wa:#fffdf8;--card:#fffdf8;
+    --ink:#2b2a26;--muted:#8a8578;--line:#e6e2d6;--goal:#6a4fa0;--goal-soft:#ece5f6;
+    --amber:#c98a2b;--amber-soft:#f6ecd8;--blue:#3b6070;--blue-soft:#e5eef1;--radius:11px;}
+  *{box-sizing:border-box}
+  body{margin:0;background:#d9d2c6;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:var(--ink);padding:18px}
+  h1{font-size:1.2rem;margin:0 0 2px}.sub{color:#5a5344;font-size:.8rem;margin-bottom:14px}
+  .screen{display:grid;grid-template-columns:420px 1fr;gap:18px;align-items:start}
+  @media(max-width:940px){.screen{grid-template-columns:1fr}}
+  .phone{background:var(--bg);border-radius:18px;overflow:hidden;display:flex;flex-direction:column;height:84vh;box-shadow:0 12px 40px rgba(0,0,0,.2)}
+  .hdr{background:var(--green);color:#fff;padding:11px 13px;display:flex;align-items:center;gap:10px}
+  .av{width:36px;height:36px;border-radius:50%;background:#dcecdf;color:var(--green);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:.85rem}
+  .hdr .nm{font-weight:600;line-height:1.1}.hdr .st{font-size:.7rem;opacity:.85}
+  .prog{height:4px;background:rgba(255,255,255,.25)}.prog>i{display:block;height:100%;background:#cdeecf;width:0;transition:width .3s}
+  .chat{flex:1;overflow-y:auto;padding:12px 11px;display:flex;flex-direction:column;gap:7px}
+  .b{max-width:82%;padding:8px 11px;border-radius:12px;font-size:.86rem;box-shadow:0 1px 0 rgba(0,0,0,.05);white-space:pre-wrap}
+  .b.wa{background:var(--wa);border:1px solid var(--line);align-self:flex-start;border-top-left-radius:3px}
+  .b.me{background:var(--me);align-self:flex-end;border-top-right-radius:3px}
+  .b .tm{display:block;font-size:.6rem;color:var(--muted);margin-top:3px;text-align:right}
+  .lnk{color:var(--goal);word-break:break-all}
+  .thumb{width:140px;height:84px;border-radius:8px;border:1px solid var(--line);background:repeating-linear-gradient(45deg,#eee,#eee 8px,#e4e4e4 8px,#e4e4e4 16px);display:flex;align-items:center;justify-content:center;color:#999;font-size:.7rem;margin-top:2px}
+  .typing{align-self:flex-start;background:var(--wa);border:1px solid var(--line);border-radius:12px;border-top-left-radius:3px;padding:9px 11px}
+  .typing span{display:inline-block;width:6px;height:6px;border-radius:50%;background:#bdb8ab;margin:0 1px;animation:bl 1.2s infinite}
+  .typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
+  @keyframes bl{0%,60%,100%{opacity:.3}30%{opacity:1}}
+  .card-story{background:var(--goal-soft);border:1px solid #d9ccef;border-radius:12px;padding:10px 12px;align-self:flex-start;max-width:90%;font-size:.82rem}
+  .card-story h4{margin:0 0 5px;color:var(--goal);font-size:.88rem}.card-story b{color:#5a4790}.card-story .rowk{margin:3px 0}
+  .promptbox{align-self:flex-start;max-width:92%;background:#1e2a24;color:#dfeede;border-radius:10px;padding:10px 11px;font:12px/1.4 ui-monospace,Menlo,monospace;white-space:pre-wrap}
+  .promptbox .cp{margin-top:7px;background:#cdeecf;color:#1e2a24;border:none;border-radius:7px;padding:5px 10px;font-size:.72rem;cursor:pointer;font-family:inherit}
+  .quick{display:flex;flex-wrap:wrap;gap:6px;padding:5px 11px 0}
+  .qchip{border:1px solid var(--green);color:var(--green);background:#fff;border-radius:16px;padding:4px 10px;font-size:.78rem;cursor:pointer}
+  .attrow{display:flex;gap:6px;padding:4px 11px 0}.attrow .qchip{border-color:var(--goal);color:var(--goal)}
+  .disp{display:flex;flex-direction:column;gap:5px;align-self:flex-start;margin-top:2px}
+  .disp button{border:1px solid var(--green);background:#fff;color:var(--green);border-radius:16px;padding:7px 12px;font-size:.8rem;cursor:pointer;text-align:left}
+  .disp button.ghost{border-color:var(--line);color:var(--muted)}
+  .bar{display:flex;gap:7px;padding:9px 11px;background:#e7dfd2;align-items:center}
+  .clip{border:none;background:none;font-size:1.2rem;cursor:pointer;color:var(--muted)}
+  .bar input{flex:1;padding:9px 12px;border:1px solid var(--line);border-radius:20px;font-size:.88rem;background:#fff}
+  .send{background:var(--green);color:#fff;width:40px;height:40px;border-radius:50%;font-size:1rem;cursor:pointer;border:none}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;height:84vh;overflow-y:auto}
+  .ptop{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px}
+  .ptop h3{margin:0;font-size:1.02rem}
+  .who{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--muted)}
+  .who select{padding:5px 8px;border:1px solid var(--line);border-radius:8px;font-size:.8rem;background:#fff}
+  .lock{background:var(--amber-soft);border:1px solid #e8d3a6;color:#7a5a1e;border-radius:8px;padding:7px 11px;font-size:.78rem;margin:6px 0 12px}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:8px 9px;text-align:left;border-bottom:1px solid var(--line);font-size:.82rem;vertical-align:top}
+  th{background:#f0eee6;font-size:.66rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);position:sticky;top:0}
+  td.n,th.n{text-align:center}
+  input.mini{width:44px;padding:3px;text-align:center;border:1px solid var(--line);border-radius:6px}
+  select.sm{padding:3px 5px;border:1px solid var(--line);border-radius:6px;font-size:.76rem;background:#fff;max-width:135px}
+  .prio{font-weight:700}
+  .chip{font-size:.64rem;padding:2px 7px;border-radius:9px;display:inline-block;margin-top:2px}
+  .chip.mis{background:var(--goal-soft);color:var(--goal)}.chip.warn{background:#f7e0d8;color:#b4552e}
+  .chip.att{background:#eef2f4;color:#3b6070;margin-left:4px}
+  .chip.bt{background:#efe6d6;color:#8a6a22}.chip.ba{background:#e7efe8;color:#3f6f4f}.chip.bd{background:#e5eef1;color:#3b6070}
+  .chip.disp{background:#f0ecf7;color:#6a4fa0;margin-left:4px}
+  tr.flash{animation:fl 1.6s ease}@keyframes fl{0%{background:#fbf4c9}100%{background:transparent}}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:7px;padding:5px 9px;font-size:.75rem;cursor:pointer}
+  .btn.p{background:var(--green);color:#fff;border-color:var(--green)}.btn:disabled{opacity:.4;cursor:not-allowed}
+  .legend{font-size:.73rem;color:var(--muted);margin-top:10px}
+</style>
+
+<h1>Backlog Builder</h1>
+<div class="sub">Links breng je een idee in via Walter, die stuurt op de volgende stap. Rechts verschijnt het live in de backlog en stroomt door naar het projectenbord. Alleen de juiste rol mag bewerken.</div>
+
+<div class="screen">
+  <div class="phone">
+    <div class="hdr"><div class="av">WW</div>
+      <div><div class="nm">Walter Website</div><div class="st" id="hstatus">online · backlog</div></div></div>
+    <div class="prog"><i id="prog"></i></div>
+    <div class="chat" id="chat"></div>
+    <div id="attrow" class="attrow" style="display:none">
+      <span class="qchip" onclick="addLink()">🔗 Link plakken</span>
+      <span class="qchip" onclick="addShot()">🖼 Screenshot</span></div>
+    <div id="quick" class="quick"></div>
+    <div class="bar">
+      <button class="clip" title="Bijvoegen" onclick="toggleAtt()">📎</button>
+      <input id="inp" placeholder="Typ een bericht" autocomplete="off" onkeydown="if(event.key==='Enter')send()">
+      <button class="send" onclick="send()">➤</button></div>
+  </div>
+
+  <div class="panel">
+    <div class="ptop"><h3>Backlog · Nooch-cirkel</h3>
+      <div class="who">Ingelogd als
+        <select id="role" onchange="setRole(this.value)">
+          <option value="verwerker">Walter Website (verwerker)</option>
+          <option value="inbrenger">Iemand anders (inbrenger)</option>
+        </select></div></div>
+    <div id="lock"></div>
+    <div id="backlog"></div>
+    <div class="legend">Rol = eigenaar op het bord. Prio = impact ÷ inspanning. Status: ingebracht → verduidelijkt → geprioriteerd (= toekomst op bord) → actief → doen. "→ op bord" zet 'm op geprioriteerd. Waarden-poort: geen missie-pijler = niet door te zetten.</div>
+  </div>
+</div>
+
+<script>
+const PIJLERS=["Plant, niet plastic","Planeetveilig","Met zorg gemaakt","Made to order / community"];
+const ROLLEN=["Website Watcher","Marketing Lead","Community and Email","Creator of Shoes","Trends & Competition","Factory Development Specialist"];
+const STATUSES=["ingebracht","verduidelijkt","geprioriteerd","actief","doen","geparkeerd"];
+let me="verwerker";
+let ideas=[
+ {id:1,titel:"Materiaal-karakters sturen eigen mails",spanning:"De wachttijd voelt leeg en klanten leren niks over hun materialen.",missie:"Made to order / community",status:"geprioriteerd",impact:4,effort:2,rol:"Community and Email",att:0,disp:""},
+ {id:2,titel:"Voetmeet-app naar productieklaar",spanning:"Maten kloppen niet altijd; te weinig data om de app te verfijnen.",missie:"Met zorg gemaakt",status:"actief",impact:5,effort:4,rol:"Website Watcher",att:1,disp:""},
+ {id:3,titel:"Referral: word Founding Farmer #X",spanning:"Geen makkelijke manier voor fans om vrienden mee te nemen.",missie:"Made to order / community",status:"ingebracht",impact:4,effort:3,rol:"Marketing Lead",att:0,disp:""},
+ {id:4,titel:"Pick-up party locaties werven",spanning:"Eén locatie; landelijk bereik ontbreekt.",missie:"",status:"verduidelijkt",impact:3,effort:3,rol:"",att:0,disp:"Bespreken met Community and Email"},
+];
+const prio=i=>i.effort?Math.round(i.impact/i.effort*10)/10:0;
+const esc=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;");
+function boardChip(st){ if(st==="geprioriteerd")return `<span class="chip bt">bord: toekomst</span>`;
+  if(st==="actief")return `<span class="chip ba">bord: actief</span>`; if(st==="doen")return `<span class="chip bd">bord: doen</span>`; return ""; }
+
+function renderBacklog(flashId){
+  const ro=(me!=="verwerker");
+  document.getElementById("lock").innerHTML= ro
+    ? `<div class="lock">🔒 Je kijkt mee als inbrenger. Alleen de Website Watcher (rolvervuller) kan scoren, prioriteren en doorzetten. Inbrengen via de chat kan altijd.</div>` : "";
+  const rows=ideas.slice().sort((a,b)=>prio(b)-prio(a)).map(i=>{
+    const gate=i.missie?`<span class="chip mis">${esc(i.missie)}</span>`:`<span class="chip warn">toets missie</span>`;
+    const att=i.att?`<span class="chip att">📎 ${i.att}</span>`:"";
+    const steun=i.steun?`<span class="chip att">👍 ${i.steun}</span>`:"";
+    const disp=i.disp?`<span class="chip disp">${esc(i.disp)}</span>`:"";
+    const dis=ro?"disabled":"";
+    const stOpts=STATUSES.map(s=>`<option ${i.status===s?'selected':''}>${s}</option>`).join("");
+    const rolOpts=`<option value="">— kies rol —</option>`+ROLLEN.map(r=>`<option ${i.rol===r?'selected':''}>${r}</option>`).join("");
+    const canBoard=!ro&&i.missie&&i.rol;
+    return `<tr class="${flashId===i.id?'flash':''}">
+      <td><div style="font-weight:600">${esc(i.titel)} ${att} ${steun}</div>
+          <div style="color:var(--muted);font-size:.75rem">${esc(i.spanning)}</div>
+          <div>${gate} ${boardChip(i.status)} ${disp}</div></td>
+      <td class="n"><input class="mini" type="number" min="1" max="5" value="${i.impact}" ${dis} onchange="setV(${i.id},'impact',this.value)"></td>
+      <td class="n"><input class="mini" type="number" min="1" max="5" value="${i.effort}" ${dis} onchange="setV(${i.id},'effort',this.value)"></td>
+      <td class="n prio">${prio(i)}</td>
+      <td><select class="sm" ${dis} onchange="setV(${i.id},'rol',this.value)">${rolOpts}</select></td>
+      <td><select class="sm" ${dis} onchange="setV(${i.id},'status',this.value)">${stOpts}</select></td>
+      <td><button class="btn p" ${canBoard?'':'disabled'} title="${canBoard?'zet op het bord als toekomst':'eerst missie + rol'}" onclick="opBord(${i.id})">→ op bord</button>
+          <button class="btn" ${ro?'disabled':''} title="prototype-prompt voor je AI" onclick="promptFor(${i.id})" style="margin-top:4px">✦ prompt</button></td>
+    </tr>`;
+  }).join("");
+  document.getElementById("backlog").innerHTML=`<table><tr><th>Story</th><th class="n">Imp</th><th class="n">Insp</th><th class="n">Prio</th><th>Rol · eigenaar op bord</th><th>Status</th><th></th></tr>${rows}</table>`;
+}
+window.setRole=v=>{me=v;renderBacklog();};
+window.setV=(id,k,v)=>{const i=ideas.find(x=>x.id===id);i[k]=(k==='impact'||k==='effort')?Math.max(1,Math.min(5,+v||1)):v;renderBacklog();};
+window.opBord=id=>{const i=ideas.find(x=>x.id===id);if(me!=="verwerker"||!i.missie||!i.rol)return;i.status="geprioriteerd";
+  renderBacklog(id);};
+window.promptFor=id=>{const i=ideas.find(x=>x.id===id);if(me!=="verwerker")return;
+  const p=`Bouw een klikbaar, standalone HTML-prototype (geen build-stap, één bestand).\n\nTitel: ${i.titel}\nProbleem: ${i.spanning}\nGewenste uitkomst: ${i.uitkomst||'(nog niet bepaald, verduidelijk eerst)'}\n\nHou het klein en toetsbaar, één scherm, nette placeholder-data. Lever één .html.`;
+  if(!i.disp)i.disp="Prototype eerst";if(i.status==="ingebracht")i.status="verduidelijkt";renderBacklog(id);
+  showPrompt(p);};
+function showPrompt(p){let ov=document.getElementById("pm");
+  if(!ov){ov=document.createElement("div");ov.id="pm";
+    ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:20";
+    ov.innerHTML=`<div style="background:#1e2a24;color:#dfeede;max-width:540px;width:90%;border-radius:12px;padding:16px;font:12px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap"><div id="pmt"></div><div style="margin-top:12px"><button id="pmc" style="background:#cdeecf;color:#1e2a24;border:none;border-radius:7px;padding:6px 12px;cursor:pointer;font-family:inherit">Kopieer</button> <button id="pmx" style="background:none;border:1px solid #567;color:#cde;border-radius:7px;padding:6px 12px;cursor:pointer;font-family:inherit">Sluit</button></div></div>`;
+    document.body.appendChild(ov);ov.querySelector("#pmx").onclick=()=>ov.style.display="none";}
+  ov.querySelector("#pmt").textContent=p;
+  ov.querySelector("#pmc").textContent="Kopieer";
+  ov.querySelector("#pmc").onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(p);ov.querySelector("#pmc").textContent="Gekopieerd ✓";};
+  ov.style.display="flex";}
+
+/* ── chat ── */
+const story={raw:"",titel:"",spanning:"",uitkomst:"",baat:"",missie:"",rol:"",att:0};
+// Domeinen: Walter kent zijn eigen straatje en herkent het domein van anderen (Holacracy).
+const DOMAINS=[
+ {role:"Website Watcher",mine:true,kw:["site","website","pagina","page","knop","button","cta","call to action","seo","laadtijd","formulier","checkout","link","menu","navigatie","mobiel","design","interface","scherm","kleur","font","layout"]},
+ {role:"Marketing Lead",kw:["marketing","campagne","ads","advertentie","awareness","positionering","funnel","landingspagina","doelgroep"]},
+ {role:"Community and Email",kw:["mail","email","e-mail","nieuwsbrief","community","enquête","enquete","survey","referral","welkom"]},
+ {role:"Trends & Competition",kw:["concurrent","concurrentie","markt","trend","competitor","vivobarefoot","wildling"]},
+ {role:"Financial Controller",kw:["prijs","kostprijs","marge","budget","financ","betaling","refund"]},
+ {role:"Factory Development Specialist",kw:["fabriek","productie","zool","upper","materiaal","leverancier","portugal","pliant","hyphalite"]},
+ {role:"Creator of Shoes",kw:["schoen","ontwerp","model","pasvorm","maat"]},
+];
+function detectDomain(text){const t=" "+(text||"").toLowerCase()+" ";
+  for(const d of DOMAINS){ if(d.mine) continue; if(d.kw.some(k=>t.includes(k))) return {role:d.role,mine:false}; }
+  return {role:"Website Watcher",mine:true};
+}
+const chat=document.getElementById("chat"),quick=document.getElementById("quick"),inp=document.getElementById("inp");
+const now=()=>new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});
+let step=0,waiting=false,editing=false,askWho=false;
+function tidy(t){if(!t)return t;let s=t.trim();
+  s=s.replace(/^(nou|ja+|eh+|uh+|gewoon|eigenlijk|dus|kijk|zeg maar)[,\s]+/i,'');
+  s=s.replace(/\b(een beetje|best wel|zeg maar|ofzo|of zo|gewoon|eigenlijk|nou)\b/gi,'').replace(/\s{2,}/g,' ').replace(/\s+([,.])/g,'$1').trim();
+  if(!s)return s;s=s.charAt(0).toUpperCase()+s.slice(1);if(!/[.!?]$/.test(s))s+='.';return s;}
+const flow=[
+ {field:"raw",ask:()=>"Hoi, ik ben Walter. Ik help je je idee scherp te krijgen zodat het écht iets kan worden op het bord.\n\nGooi maar. Wat speelt er? Eén zin is genoeg."},
+ {field:"spanning",ask:a=>`Helder, het gaat over "${a}".\n\nWelk probleem of gemis zit hierachter, en waarom is dit nú belangrijk?\n\n(Is het iets visueels? Plak een screenshot of link met 📎.)`,reflect:true,help:"Geen zorgen, ik gok: er is iets dat niet klopt of stoort bij het gebruik. Pas het gerust aan."},
+ {field:"uitkomst",ask:()=>"En als dit opgelost is, hoe ziet dat er dan uit? Waaraan zie je dat het klaar is?",reflect:true,help:"Voorzet: het is klaar als de verandering zichtbaar is en wij het kunnen laten zien."},
+ {field:"baat",ask:()=>"Voor wie doen we dit vooral? Klant, groei, productie, of onszelf als gebruikers?",help:"Ik hou het op: onszelf als gebruikers."},
+ {field:"missie",ask:()=>"En waar raakt dit onze missie? Kies een pijler, of geef aan dat het de missie niet direct raakt.",quick:PIJLERS.concat(["Raakt de missie niet direct"])},
+];
+function bubble(cls,html){const d=document.createElement("div");d.className="b "+cls;d.innerHTML=html+`<span class="tm">${now()}${cls==='me'?' ✓✓':''}</span>`;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;}
+function esc2(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/\n/g,"<br>");}
+function typing(){const d=document.createElement("div");d.className="typing";d.id="typing";d.innerHTML="<span></span><span></span><span></span>";chat.appendChild(d);chat.scrollTop=chat.scrollHeight;}
+function stopTyping(){const t=document.getElementById("typing");if(t)t.remove();}
+function setProg(){const f=["titel","spanning","uitkomst","baat","missie"].filter(k=>(story[k]||"").trim()).length;document.getElementById("prog").style.width=(f/5*100)+"%";}
+function renderQuick(o){quick.innerHTML=(o||[]).map(x=>`<span class="qchip" onclick="send('${x.replace(/'/g,"\\'")}')">${x}</span>`).join("");}
+function walter(t,cb){waiting=true;document.getElementById("hstatus").textContent="typt…";typing();
+  setTimeout(()=>{stopTyping();bubble("wa",esc2(t));document.getElementById("hstatus").textContent="online · backlog";waiting=false;cb&&cb();},Math.min(1500,550+t.length*11));}
+window.toggleAtt=()=>{const r=document.getElementById("attrow");r.style.display=r.style.display==="none"?"flex":"none";};
+window.addLink=()=>{toggleAtt();const u=prompt("Plak een link:");if(!u)return;story.att++;bubble("me",`🔗 <span class="lnk">${esc2(u)}</span>`);walter("Top, die link neem ik mee.");};
+window.addShot=()=>{toggleAtt();story.att++;bubble("me",`<div class="thumb">screenshot.png</div>`);walter("Screenshot ontvangen, dat scheelt de verwerker giswerk.");};
+
+window.send=preset=>{
+  const val=(preset!==undefined?preset:inp.value).trim();if(!val||waiting)return;
+  bubble("me",esc2(val));inp.value="";renderQuick([]);
+  if(askWho){askWho=false;pushIdea("verduidelijkt","Bespreken met "+val);walter("Genoteerd. Ik zet het op 'verduidelijkt' met een notitie dat het eerst met "+val+" besproken wordt. Staat rechts. Nog een idee?");softReset();return;}
+  if(editing){editing=false;story.note=val;walter("Genoteerd.",()=>assemble());return;}
+  const cur=flow[step],lc=val.toLowerCase();
+  const wantsHelp=cur.help&&(lc.includes("weet")||lc.includes("help")||lc.includes("geen idee")||lc.length<3);
+  if(step===0){ story.raw=tidy(val).replace(/\.$/,'');story.titel=story.raw;setProg();afterRaw();return; }
+  story[cur.field]=wantsHelp?"":val;
+  if(cur.field==="missie"&&val==="Raakt de missie niet direct")story.missie="";
+  setProg();
+  if(wantsHelp){walter(cur.help);return;}
+  const refl=(cur.reflect&&!wantsHelp)?`Even in mijn woorden: "${tidy(val)}". Ik scherp het straks aan.\n\n`:"";
+  step++;
+  if(step<flow.length){const n=flow[step];walter(refl+n.ask(story.raw),()=>renderQuick(n.quick));}
+  else{refl?walter(refl.trim(),()=>assemble()):assemble();}
+};
+
+// Na het ruwe idee: eerst dubbel-check tegen de backlog, dan domein-check.
+function afterRaw(){
+  const dup=findSimilar(story.raw);
+  if(dup){ walter(`Wacht even, dit lijkt sterk op iets dat al op de backlog staat:\n\n"${dup.titel}" — ${dup.spanning}\n\nLost dat jouw spanning al op, of wil je het samenvoegen?`,()=>renderMerge(dup.id)); return; }
+  domainStep();
+}
+function domainStep(){
+  const dom=detectDomain(story.raw);
+  if(!dom.mine){ story.rol=dom.role;
+    walter(`Even eerlijk: dit raakt vooral het domein van ${dom.role}, niet het mijne. Dat verwerk ik liever niet zelf. Zal ik het klaarzetten als "bespreken met ${dom.role}", zodat de juiste persoon ermee verdergaat?`,()=>renderRoute(dom.role)); return; }
+  step=1;
+  walter(`Dit is mijn straatje. ${flow[1].ask(story.raw)}\n\nEven scherp voor de website: is dit een bug of een verbetering, en op welke pagina of device speelt het?`,()=>renderQuick(flow[1].quick));
+}
+function findSimilar(text){
+  const words=[...new Set((text||"").toLowerCase().split(/\W+/).filter(w=>w.length>3))];
+  if(!words.length) return null;
+  let best=null,bs=0;
+  ideas.forEach(i=>{const t=(i.titel+" "+i.spanning).toLowerCase();let s=0;words.forEach(w=>{if(t.includes(w))s++;});const r=s/words.length;if(r>bs){bs=r;best=i;}});
+  return bs>=0.34?best:null;
+}
+function renderMerge(id){const d=document.createElement("div");d.className="disp";
+  d.innerHTML=`<button onclick="merge(${id})">🔗 Ja, voeg samen (mijn stem erbij)</button>
+    <button class="ghost" onclick="notDup()">Nee, dit is echt iets anders</button>`;
+  chat.appendChild(d);chat.scrollTop=chat.scrollHeight;}
+window.merge=id=>{document.querySelectorAll(".disp").forEach(x=>x.remove());bubble("me","Ja, samenvoegen");
+  const i=ideas.find(x=>x.id===id);i.steun=(i.steun||0)+1;renderBacklog(id);
+  walter("Mooi, dan hou ik het bij één kaart. Ik heb jouw stem eraan gekoppeld, dat helpt de verwerker met prioriteren. Scheelt weer een dubbele. Nog een idee?");softReset();};
+window.notDup=()=>{document.querySelectorAll(".disp").forEach(x=>x.remove());bubble("me","Nee, iets anders");
+  walter("Helder, dan behandelen we het als nieuw.",()=>domainStep());};
+function renderRoute(role){const d=document.createElement("div");d.className="disp";
+  d.innerHTML=`<button onclick="route('${role.replace(/'/g,"\\'")}')">💬 Ja, klaarzetten als "bespreken met ${esc2(role)}"</button>
+    <button class="ghost" onclick="insistHere()">Nee, ik wil het hier vormgeven</button>`;
+  chat.appendChild(d);chat.scrollTop=chat.scrollHeight;}
+window.route=role=>{document.querySelectorAll(".disp").forEach(x=>x.remove());bubble("me","Ja, routeren naar "+role);
+  pushIdea("verduidelijkt","Bespreken met "+role,role);
+  walter(`Gedaan. Ik heb het rechts op 'verduidelijkt' gezet met de notitie 'bespreken met ${role}' en ${role} als eigenaar. Zo komt het bij de juiste persoon. Nog een idee?`);softReset();};
+window.insistHere=()=>{document.querySelectorAll(".disp").forEach(x=>x.remove());bubble("me","Nee, hier vormgeven");
+  step=1;walter(`Prima, dan pak ik het toch even met je op. ${flow[1].ask(story.raw)}`,()=>renderQuick(flow[1].quick));};
+
+function assemble(){
+  const T={s:tidy(story.spanning),u:tidy(story.uitkomst),b:tidy(story.baat)||"Onszelf als gebruikers."};
+  story.spanning=T.s;story.uitkomst=T.u;story.baat=T.b;
+  walter("Ik heb je woorden omgezet naar een heldere story, niet letterlijk maar samengevat zoals de verwerker het nodig heeft:",()=>{
+    const c=document.createElement("div");c.className="card-story";
+    c.innerHTML=`<h4>${esc2(story.titel)}</h4><div class="rowk"><b>Spanning:</b> ${esc2(T.s)}</div>
+      <div class="rowk"><b>Uitkomst:</b> ${esc2(T.u)}</div><div class="rowk"><b>Wie erbij baat:</b> ${esc2(T.b)}</div>
+      <div class="rowk"><b>Missie:</b> ${esc2(story.missie)}</div>${story.att?`<div class="rowk"><b>Bijlagen:</b> ${story.att}</div>`:""}`;
+    chat.appendChild(c);chat.scrollTop=chat.scrollHeight;
+    walter("Klopt dit? Dan zet ik 'm op de backlog. De verwerker bepaalt daarna de prioriteit en de volgende stap: klein genoeg, verduidelijken, of eerst een prototype.",()=>renderConfirm());
+  });
+}
+function renderConfirm(){
+  const w=document.createElement("div");w.className="disp";
+  w.innerHTML=`<button onclick="confirmIn()">▶ Inbrengen op de backlog</button>
+    <button class="ghost" onclick="confirmEdit()">Iets aanpassen</button>`;
+  chat.appendChild(w);chat.scrollTop=chat.scrollHeight;
+}
+window.confirmIn=()=>{document.querySelectorAll(".disp").forEach(x=>x.remove());bubble("me","Inbrengen");
+  pushIdea("ingebracht","");
+  walter("Ingebracht. Hij staat rechts, klaar voor de verwerker. Die bepaalt prioriteit en volgende stap. Nog een idee?");softReset();};
+window.confirmEdit=()=>{document.querySelectorAll(".disp").forEach(x=>x.remove());editing=true;bubble("me","Iets aanpassen");walter("Prima. Typ wat er scherper moet, dan verwerk ik het.");};
+function pushIdea(status,disp,rol){const nid=Date.now();
+  ideas.push({id:nid,titel:story.titel,spanning:story.spanning||story.raw,uitkomst:story.uitkomst||"",missie:story.missie,status,impact:3,effort:3,rol:rol||story.rol||"",att:story.att,steun:0,disp:disp||""});
+  renderBacklog(nid);}
+function softReset(){step=0;editing=false;askWho=false;["raw","titel","spanning","uitkomst","baat","missie","note","rol"].forEach(k=>story[k]="");story.att=0;setProg();inp.placeholder="Typ je volgende idee…";}
+
+renderBacklog();
+walter(flow[0].ask());
+</script>
