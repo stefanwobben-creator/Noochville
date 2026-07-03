@@ -207,6 +207,12 @@ def _drag_script(csrf_token: str, back: str) -> str:
     return (
         "<script>(function(){"
         f"var csrf={json.dumps(csrf_token)},next={json.dumps(back)},pid=null;"
+        # Drag-drop = volledige page-reload → scrollpositie herstellen op load (verticaal via het
+        # window, horizontaal per .pboard-swimlane). Eenmalig: lezen-en-wissen uit sessionStorage.
+        "try{var _ss=JSON.parse(sessionStorage.getItem('__nvscroll')||'null');if(_ss){"
+        "sessionStorage.removeItem('__nvscroll');requestAnimationFrame(function(){"
+        "window.scrollTo(_ss.x||0,_ss.y||0);var _bs=document.querySelectorAll('.pboard');"
+        "(_ss.b||[]).forEach(function(sl,i){if(_bs[i])_bs[i].scrollLeft=sl;});});}}catch(e){}"
         "document.querySelectorAll('.pcard').forEach(function(c){"
         "c.addEventListener('dragstart',function(e){pid=c.getAttribute('data-pid');window.__pdrag=true;"
         "e.dataTransfer.effectAllowed='move';c.style.opacity='.5';});"
@@ -220,6 +226,10 @@ def _drag_script(csrf_token: str, back: str) -> str:
         "function a(n,v){var i=document.createElement('input');i.type='hidden';i.name=n;i.value=v;f.appendChild(i);}"
         "a('csrf',csrf);a('pid',pid);a('next',next);"
         "if(to==='done'){a('action','proj_done');}else{a('action','proj_status');a('to',to);}"
+        # Verticale (window) + horizontale (elke .pboard) scrollpositie bewaren vóór de reload.
+        "try{var _bs=document.querySelectorAll('.pboard');"
+        "sessionStorage.setItem('__nvscroll',JSON.stringify({x:window.scrollX,y:window.scrollY,"
+        "b:[].map.call(_bs,function(b){return b.scrollLeft;})}));}catch(e){}"
         "document.body.appendChild(f);f.submit();});});})();</script>")
 
 

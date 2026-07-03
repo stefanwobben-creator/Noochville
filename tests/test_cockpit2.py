@@ -480,3 +480,12 @@ def test_strategie_in_overview_en_tab_verwijderd(tmp_path):
     assert "Kernzin ABC" in page          # strategie-inhoud nu in overview
     assert ">Purpose<" in page            # eigen Purpose-sectie behouden (geen dubbele chain)
     assert "&tab=strategy" not in page    # geen strategy-tab-knop meer in de tab-bar
+
+
+def test_drag_script_behoudt_scrollpositie():
+    # bevinding 3: drag-drop mag de scrollpositie niet resetten (verticaal window + horizontaal .pboard)
+    from nooch_village.views.projects import _drag_script
+    s = _drag_script("tok", "/person?id=x&tab=projecten")
+    assert "window.scrollX" in s and "window.scrollY" in s and "scrollLeft" in s   # bewaren
+    assert "window.scrollTo" in s and "requestAnimationFrame" in s                 # herstellen op load
+    assert _drag_script("", "/x") == ""                                            # geen csrf → geen script
