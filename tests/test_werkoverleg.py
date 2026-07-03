@@ -45,7 +45,9 @@ def test_open_toont_stappen_en_checkin_members(tmp_path):
     # vaste volgorde van 7 stappen
     for lbl in ("Check-in", "Checklist", "Metrics", "Projecten", "Agenda", "Check-out", "Sluiten"):
         assert lbl in frag
-    assert "wo-step on" in frag and "Sluit overleg" in frag
+    assert "wo-step on" in frag and "Volgende" in frag            # per-stap actie, geen onderbalk
+    assert "Sluit overleg" not in frag and "rov-foot" not in frag  # afronden alleen op stap 7
+    assert "wo-grid" in frag and "id='wo-video'" in frag          # 3 kolommen + rechter video-mount
     assert "Check-in" in frag                          # stap 1 = check-in (members-basis)
 
 
@@ -175,6 +177,7 @@ def test_checkout_en_samenvatting(tmp_path):
     assert cockpit2._Stores(dd).werk.checkout(C)[p.id] == 8
     frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "sluiten", csrf_token="t", fragment=True)
     assert "Samenvatting" in frag and "Gemiddelde tevredenheid" in frag and "8" in frag
+    assert "Sluit overleg" in frag and "Volgende" not in frag     # stap 7 = centrale sluit-actie
 
 
 def test_checkout_toont_vorige_score(tmp_path):

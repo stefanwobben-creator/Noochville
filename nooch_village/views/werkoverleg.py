@@ -350,15 +350,39 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
     else:
         content = _wo_summary(st, crec, csrf_token)
 
-    foot = (f"<div class='rov-foot'><form method='post' action='/action' "
-            f"data-confirm='Overleg sluiten en alle uitkomsten verwerken? Dit kan niet ongedaan.'>"
+    # Per-stap actie i.p.v. de oude vaste onderbalk: stap 1-6 = "Volgende", stap 7 = centrale
+    # "Sluit overleg" onder de samenvatting (die samenvatting is zelf de bevestiging).
+    _keys = [k for k, _ in _WO_STEPS]
+    _ni = _keys.index(cur)
+    if cur == "sluiten":
+        step_action = (
+            f"<div class='wo-close-wrap'><form method='post' action='/action'>"
             f"{hid(f'/node?id={circle_id}')}"
-            f"<button class='btn ok' type='submit' name='action' value='wo_close'>Sluit overleg</button></form>"
-            f"<span class='muted'>loopt {st.werk.duration_min(circle_id)} min</span></div>")
-    detail = (f"<h2 style='margin-top:0'>Werkoverleg — {_e(_name(crec))}</h2>"
-              f"<div class='pgrid rov-grid'><div class='pmain'>{left}</div>"
-              f"<aside class='pdisc'>{content}</aside></div>{foot}")
+            f"<button class='btn ok wo-close-btn' type='submit' name='action' value='wo_close'>"
+            f"Sluit overleg</button></form>"
+            f"<span class='muted'>Terminale actie · uitkomsten zijn al per item vastgelegd</span></div>")
+    else:
+        _nu = f"{base}&step={_keys[_ni + 1]}"
+        step_action = (f"<div class='wo-next'><a class='btn ok js-modal' href='{_nu}' "
+                       f"data-href='{_nu}'>Volgende →</a></div>")
+
+    # Header: titel + timer (klein rechts) + "verlaat overleg" (sluit je view/room, geen afronden).
+    _leave = f"/node?id={circle_id}"
+    header = (f"<div class='wo-head'><h2>Werkoverleg — {_e(_name(crec))}</h2>"
+              f"<span class='wo-timer' title='loopt sinds start'>⏱ {st.werk.duration_min(circle_id)} min</span>"
+              f"<a class='wo-leave' href='{_leave}' "
+              f"title='Verlaat je view — het overleg loopt door' "
+              f"onclick=\"var o=this.closest('.ovl');if(o){{var x=o.querySelector('.ovl-x');"
+              f"if(x){{x.click();return false;}}}}\">✕ verlaat overleg</a></div>")
+
+    # Rechterkolom: vaste video/presence-kolom met mount-point (LiveKit-tiles volgen in Brok 3).
+    video = ("<aside class='wo-right'><h3 class='wo-right-h'>In de room</h3>"
+             "<div id='wo-video' class='wo-video'>"
+             "<div class='wo-video-empty'>Leeg tot iemand joint</div></div></aside>")
+
+    detail = (f"{header}<div class='wo-grid'><div class='wo-left'>{left}</div>"
+              f"<div class='wo-mid'>{content}{step_action}</div>{video}</div>")
     if fragment:
         return detail
     return _page("Werkoverleg", f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>"
-                 f"<div class='c2-main' style='max-width:1000px'>{detail}</div></div>")
+                 f"<div class='c2-main' style='max-width:1160px'>{detail}</div></div>")
