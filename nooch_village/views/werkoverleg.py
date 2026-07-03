@@ -282,6 +282,22 @@ def _wo_summary(st: _Stores, crec, csrf: str) -> str:
             f"alle uitkomsten worden verwerkt en het overleg sluit.</p></div>")
 
 
+def _wo_ai_presence(st: _Stores, crec) -> str:
+    """AI-rolvervullers van de cirkel als presence-tiles (rechterkolom). Ze joinen de room NIET; ze
+    komen uit de persona-fillers van de cirkel-rollen. Geen camera, geen aanwezig/afwezig. Dedupe
+    per persona. Zo staan AI's rechts, niet in de menselijke check-in-lijst."""
+    seen, tiles = set(), ""
+    for role in org.roles_of(st.records.all(), crec.id):
+        for f in st.assign.fillers_of(role.id):
+            if getattr(f, "type", "") == "persona" and f.id not in seen:
+                seen.add(f.id)
+                pa = st.personas.get(f.id)
+                nm = pa.name if pa else f.id
+                tiles += (f"<div class='wo-tile ai'><div class='wo-cam wo-ai-face'>🤖</div>"
+                          f"<div class='wo-tile-lbl'>{_e(nm)} <span class='wo-ai-badge'>AI</span></div></div>")
+    return tiles
+
+
 def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_token: str = "",
                        fragment: bool = False, iid: str = "", kpi: str = "", mw: str = "maand") -> str:
     """Werkoverleg-modal: links de vaste stap-navigatie, rechts de inhoud per stap. De inhoud
@@ -375,10 +391,14 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
               f"onclick=\"var o=this.closest('.ovl');if(o){{var x=o.querySelector('.ovl-x');"
               f"if(x){{x.click();return false;}}}}\">✕ verlaat overleg</a></div>")
 
-    # Rechterkolom: vaste video/presence-kolom met mount-point (LiveKit-tiles volgen in Brok 3).
+    # Rechterkolom (vast over alle stappen): mens-tiles komen via LiveKit in #wo-video (JS vult 'm
+    # op basis van data-lk-circle); AI-rolvervullers staan er server-side onder als presence-tiles.
+    ai_tiles = _wo_ai_presence(st, crec)
     video = ("<aside class='wo-right'><h3 class='wo-right-h'>In de room</h3>"
-             "<div id='wo-video' class='wo-video'>"
-             "<div class='wo-video-empty'>Leeg tot iemand joint</div></div></aside>")
+             f"<div id='wo-video' class='wo-video' data-lk-circle='{_e(circle_id)}'>"
+             "<div class='wo-video-empty'>Leeg tot iemand joint</div></div>"
+             + (f"<div class='wo-ai-list'>{ai_tiles}</div>" if ai_tiles else "")
+             + "</aside>")
 
     detail = (f"{header}<div class='wo-grid'><div class='wo-left'>{left}</div>"
               f"<div class='wo-mid'>{content}{step_action}</div>{video}</div>")

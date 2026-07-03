@@ -495,6 +495,35 @@ def issue_livekit_token(st, circle: str, username: str | None):
     return 200, {"token": token, "server_url": server_url}
 
 
+def verwijder_livekit_room(room: str) -> bool:
+    """Hef een LiveKit-room op (server-side, fail-soft). True bij succes, False als het niet lukt
+    (geen creds, room al weg, netwerk) — NOOIT een exception naar de caller; het afronden van het
+    overleg mag hier niet op stuklopen. De API-secret lekt niet (geen details in de return)."""
+    url = os.getenv("LIVEKIT_URL", "").strip()
+    if not url:
+        return False
+    api_url = url.replace("wss://", "https://").replace("ws://", "http://")
+    try:
+        import asyncio
+        from livekit import api
+
+        async def _run():
+            lk = api.LiveKitAPI(api_url)          # api_key/secret uit de env
+            try:
+                await lk.room.delete_room(api.DeleteRoomRequest(room=room))
+            finally:
+                await lk.aclose()
+
+        asyncio.run(_run())
+        return True
+    except Exception:
+        return False
+
+
+# Static-assets: whitelist (geen path-traversal). Nu alleen de gevendorde LiveKit-client-bundle.
+_STATIC_TYPES = {"livekit-client.umd.min.js": "application/javascript; charset=utf-8"}
+
+
 def dispatch(data_dir: str, action: str, form: dict, username: str | None = None):
     """Verwerk een POST-actie. Geeft (redirect-URL, korte bevestiging) terug.
 
@@ -884,7 +913,14 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         _deny = _lead_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
-        st.werk.close(g("circle")); msg = "✓ werkoverleg gesloten"
+        # Room-naam vóór het sluiten bepalen (started_at is dan nog beschikbaar), dan sluiten,
+        # dan de LiveKit-room opheffen — fail-soft: het afronden mag hier niet op stuklopen.
+        _m = st.werk.get(g("circle"))
+        _room = f"wo-{g('circle')}-{int(_m['started_at'])}" if _m and _m.get("started_at") else None
+        st.werk.close(g("circle"))
+        if _room:
+            verwijder_livekit_room(_room)
+        msg = "✓ werkoverleg gesloten"
     elif action == "wo_presence":
         _deny = _member_gate(g("circle"), username, st)
         if _deny:
@@ -1397,6 +1433,17 @@ def make_handler(data_dir: str, csrf_token: str,
                 status, payload = issue_livekit_token(st, (qs.get("circle") or [""])[0], username)
                 self._send_json(payload, status)
                 return
+            if path.startswith("/static/"):
+                name = path[len("/static/"):]
+                ct = _STATIC_TYPES.get(name)                 # whitelist → geen path-traversal
+                if ct is None:
+                    self._send("Niet gevonden", 404); return
+                try:
+                    with open(os.path.join(os.path.dirname(__file__), "static", name), "rb") as _f:
+                        _data = _f.read()
+                except OSError:
+                    self._send("Niet gevonden", 404); return
+                self._send_bytes(_data, ct); return
             if path == "/roloverleg2":
                 fr = (qs.get("fragment") or [""])[0] == "1"
                 self._send(_frag(render_roloverleg2(st, (qs.get("circle") or [""])[0],
