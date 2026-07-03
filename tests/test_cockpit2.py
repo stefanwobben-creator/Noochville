@@ -489,3 +489,10 @@ def test_drag_script_behoudt_scrollpositie():
     assert "window.scrollX" in s and "window.scrollY" in s and "scrollLeft" in s   # bewaren
     assert "window.scrollTo" in s and "requestAnimationFrame" in s                 # herstellen op load
     assert _drag_script("", "/x") == ""                                            # geen csrf → geen script
+
+
+def test_kolom_status_tinten_aanwezig():
+    # bevinding 4: subtiele status-tint per kolom (label blijft primaire drager, kleur versterkt).
+    from nooch_village.cockpit2_util import _EXTRA_CSS
+    for key in ("actief", "wacht", "done", "toekomst"):
+        assert f".pcol[data-to='{key}']" in _EXTRA_CSS

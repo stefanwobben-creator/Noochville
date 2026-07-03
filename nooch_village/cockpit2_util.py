@@ -243,6 +243,13 @@ ul.clean li:last-child{border-bottom:none}
 .swim-h{font-family:var(--font-display);font-weight:700;font-size:.85rem;color:var(--green-dark);margin:.2rem 0 .25rem}
 .pcol-h{font-family:var(--font-display);font-weight:700;font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:var(--green-dark);margin-bottom:.3rem}
 .pcol .card{padding:.4rem .5rem;margin:.25rem 0;font-size:.85rem}
+/* Subtiele status-tint per kolom (bevinding 4): het label blijft de primaire drager, de kleur
+   versterkt alleen. doing=blauw (actief), waiting=amber (wacht, geen vol rood), done=groen,
+   todo=grijs (toekomst). Lichte tinten → leesbaar, ook kleurenblind (label draagt de betekenis). */
+.pcol[data-to='actief']{background:#eef3fb;border-color:#d3e0f4}
+.pcol[data-to='wacht']{background:#fdf3e4;border-color:#efdcbf}
+.pcol[data-to='done']{background:var(--green-tint);border-color:#cfe8d6}
+.pcol[data-to='toekomst']{background:#f2f1ee;border-color:#e5e2db}
 .dellink{background:none;border:none;color:var(--coral);font:inherit;font-size:.78rem;text-decoration:underline;cursor:pointer;padding:0;margin-left:.3rem}
 .kpi-exp{color:var(--subtle);display:inline-flex;align-items:center;margin-left:.3rem}
 .kpi-exp:hover{color:var(--green-dark)}
