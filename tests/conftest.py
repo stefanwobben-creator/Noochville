@@ -41,6 +41,20 @@ def _no_llm_throttle():
     llm.reset_cooldowns()
 
 
+@pytest.fixture(autouse=True)
+def _isolate_llm_keys(monkeypatch):
+    """Test-only: verwijder echte LLM-provider-keys uit os.environ vóór elke test.
+
+    config.load_context() doet os.environ.setdefault(...) uit .env (config.py:38) — dat lekt de
+    echte keys process-globaal en blijft plakken tussen tests. No-key/heuristiek-tests falen dan
+    order-afhankelijk: de ladder valt door naar een provider die de test zelf niet delenv't (bijv.
+    Mistral) en geeft een echt antwoord. Deze fixture raakt PRODUCTIE NIET aan (load_context blijft
+    ongewijzigd); ze schoont enkel de test-env, zodat de suite deterministisch is ongeacht een
+    lokale/CI-.env."""
+    for _k in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "MISTRAL_API_KEY"):
+        monkeypatch.delenv(_k, raising=False)
+
+
 @pytest.fixture
 def records(tmp_path):
     """Lege Records backed by een tijdelijk bestand."""
