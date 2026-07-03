@@ -13,17 +13,22 @@ WEBSITE_DEVELOPER_ROLE = "mother_earth__nooch__website_developer"
 _CIRCLE_TABS = ["overview", "roles", "members", "policies", "notes", "projects",
                 "checklists", "metrics"]
 _ROLE_TABS = ["overview", "policies", "notes", "projects", "checklists", "metrics"]
+# Persoon/AI-role-filler-view: een read-only aggregatie-lens over de rollen die iemand vervult,
+# geen nieuwe autoriteitslaag. Spiegelt de rol-view-chrome via _tabbar(base="/person").
+_PERSON_TABS = ["rollen", "projecten", "context", "metrics", "checklist"]
 
 # Welke tabs "leven" (echt werken) en welke nog grijs zijn. Status: live | basic | grey.
 _TAB_STATUS = {
     "overview": "live", "roles": "live", "members": "live", "notes": "basic",
     "metrics": "live", "checklists": "live", "projects": "live",
     "policies": "grey",
+    "rollen": "basic",   # persoon-view: gevuld; de overige persoon-tabs vallen op grey terug
 }
 _TAB_LABEL = {
     "overview": "Overview", "strategy": "Strategy", "roles": "Roles", "members": "Members",
     "policies": "Policies", "notes": "Notes", "projects": "Projects",
     "checklists": "Checklists", "metrics": "Metrics",
+    "rollen": "Rollen", "projecten": "Projecten", "context": "Context", "checklist": "Checklist",
 }
 
 _NL_MND = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
@@ -37,12 +42,14 @@ def _initials(name: str) -> str:
     return "".join(w[0] for w in name.split()[:2]).upper() or "?"
 
 
-def _tabbar(node_id: str, tabs: list, cur: str) -> str:
+def _tabbar(node_id: str, tabs: list, cur: str, base: str = "/node") -> str:
+    # `base` parametriseert de route (rol-view: /node, persoon-view: /person). Component NIET
+    # geforkt; bestaande callers gebruiken de default "/node" en veranderen niet.
     out = []
     for t in tabs:
         status = _TAB_STATUS.get(t, "grey")
         on = " on" if t == cur else ""
-        out.append(f"<a class='c2-tab{on}' href='/node?id={_e(node_id)}&tab={t}'>"
+        out.append(f"<a class='c2-tab{on}' href='{base}?id={_e(node_id)}&tab={t}'>"
                    f"{_e(_TAB_LABEL[t])}<span class='dot {status}'></span></a>")
     return "<div class='c2-tabs'>" + "".join(out) + "</div>"
 

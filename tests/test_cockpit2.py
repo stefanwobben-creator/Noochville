@@ -152,8 +152,6 @@ def test_project_toevoegen_en_koppeling(tmp_path):
         "next": [f"/node?id={role}&tab=projects"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), role, "projects", csrf_token="t")
     assert "Productpagina live" in page and "Lotte Mulder" in page
-    pp = cockpit2.render_person(cockpit2._Stores(dd), lotte.id)
-    assert "Productpagina live" in pp and "Projecten" in pp
 
 
 def test_cirkel_kan_geen_project_bevatten(tmp_path):
@@ -356,7 +354,7 @@ def test_persoonspagina_mijn_rollen(tmp_path):
     st = _st(tmp_path)
     lotte = st.people.by_name("Lotte Mulder")
     page = cockpit2.render_person(st, lotte.id)
-    assert "Lotte Mulder" in page and "Mijn rollen" in page
+    assert "Lotte Mulder" in page and "Rollen" in page
     assert "Creator of Shoes" in page                          # een van haar rollen
 
 

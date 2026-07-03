@@ -20,7 +20,7 @@ from nooch_village.views.projects import (
     _projects_tab_html, _scope_text, _person_projects_html, _modal_html,
 )
 from nooch_village import org, ai_match
-from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD, _CIRCLE_TABS, _ROLE_TABS, WEBSITE_DEVELOPER_ROLE
+from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD, _CIRCLE_TABS, _ROLE_TABS, _PERSON_TABS, WEBSITE_DEVELOPER_ROLE
 
 if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores
@@ -439,48 +439,55 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     return _page(_name(rec), inner)
 
 
-def render_person(st: _Stores, pid: str) -> str:
+def render_person(st: _Stores, pid: str, tab: str = "rollen") -> str:
+    """Persoon/AI-role-filler-view: read-only aggregatie-lens over de rollen die iemand vervult,
+    met de rol-view-chrome (tabs via _tabbar(base="/person")). Deze pass vult alleen de 'rollen'-tab
+    (de bestaande rollen-lijst); de overige tabs zijn read-only placeholders. Geen schrijfacties,
+    geen csrf, geen nieuwe gate. Handelt zowel een mens (people) als een AI-inwoner (personas) af."""
     p = st.people.get(pid)
-    if p is None:
-        return _page("Niet gevonden", "<p>Persoon niet gevonden.</p><p><a href='/'>← home</a></p>")
-    role_ids = st.assign.roles_of("person", pid)
-    rows = ""
-    for rid in sorted(role_ids):
-        rec = st.records.get(rid)
-        if rec is None:
-            continue
-        crumb = " › ".join(_e(_name(st.records.get(i)))
-                           for i in org.breadcrumb(st.records.all(), rid)[:-1])
-        rows += (f"<li><a href='/node?id={_e(rid)}'>{_e(_name(rec))}</a> "
-                 f"<span class='muted'>{('· ' + crumb) if crumb else ''}</span></li>")
-    # Notificaties: @-mentions van mij of van een rol die ik vervul.
-    targets = {("person", pid)} | {("role", rid) for rid in role_ids}
-    notes = st.notif.for_targets(targets)
-    nrows = ""
-    for n in notes[:25]:
-        proj = st.projects.get(n.get("project_id"))
-        ptitle = _scope_text(proj) if proj else "project"
-        href = f"/project?pid={_e(n.get('project_id',''))}&back={urllib.parse.quote('/person?id=' + pid, safe='')}"
-        dot = "" if n.get("read") else "<span class='nt-dot'></span>"
-        nrows += (f"<li class='nt-item'>{dot}<a class='js-modal' href='{href}' data-href='{href}'>"
-                  f"{_e(ptitle)}</a> <span class='muted'>· {_e((n.get('snippet') or '')[:80])}</span> "
-                  f"<span class='muted' style='font-size:.72rem'>{_e(_age(n.get('at')))}</span></li>")
-    unread = sum(1 for n in notes if not n.get("read"))
-    notif_html = (f"<div class='c2-sec'><h3>🔔 Notificaties ({unread} nieuw)</h3>"
-                  + (f"<ul class='clean nt-list'>{nrows}</ul>" if nrows
-                     else "<span class='muted'>Geen notificaties.</span>") + "</div>")
-    main = (f"<div class='c2-main'><h1><span class='av' style='width:28px;height:28px'>"
-            f"{_e(_initials(p.name))}</span> {_e(p.name)}</h1>"
-            f"<div class='muted'>{_e(p.email) or 'geen e-mail'}</div>"
-            f"{notif_html}"
-            f"<div class='c2-sec'><h3>Mijn rollen ({len(role_ids)})</h3>"
-            + (f"<ul class='clean'>{rows}</ul>" if rows else "<span class='muted'>Geen rollen.</span>")
-            + "</div>" + _person_projects_html(st, pid) + "</div>")
+    if p is not None:
+        filler_type, name, subtitle = "person", p.name, (p.email or "geen e-mail")
+        avatar = f"<span class='av' style='width:28px;height:28px'>{_e(_initials(p.name))}</span>"
+        chip = ""
+    else:
+        pa = st.personas.get(pid)
+        if pa is None:
+            return _page("Niet gevonden", "<p>Persoon niet gevonden.</p><p><a href='/'>← home</a></p>")
+        filler_type, name = "persona", pa.name
+        subtitle = "AI-inwoner" + (f" · {pa.mbti}" if pa.mbti else "")
+        avatar = "<span class='av ai' style='width:28px;height:28px'>AI</span>"
+        chip = "<span class='chip'>AI</span>"
+
+    if tab not in _PERSON_TABS:
+        tab = "rollen"
+    role_ids = st.assign.roles_of(filler_type, pid)
+
+    if tab == "rollen":
+        rows = ""
+        for rid in sorted(role_ids):
+            rec = st.records.get(rid)
+            if rec is None:
+                continue
+            crumb = " › ".join(_e(_name(st.records.get(i)))
+                               for i in org.breadcrumb(st.records.all(), rid)[:-1])
+            rows += (f"<li><a href='/node?id={_e(rid)}'>{_e(_name(rec))}</a> "
+                     f"<span class='muted'>{('· ' + crumb) if crumb else ''}</span></li>")
+        content = (f"<div class='c2-sec'><h3>Rollen ({len(role_ids)})</h3>"
+                   + (f"<ul class='clean'>{rows}</ul>" if rows
+                      else "<span class='muted'>Geen rollen.</span>") + "</div>")
+    else:
+        content = ("<div class='c2-sec'><p class='muted'>Read-only aggregatie-lens over de rollen "
+                   "die deze persoon vervult. Deze tab volgt in een losse vervolgtaak — hier is "
+                   "bewust nog geen aggregatie-query en geen schrijfactie.</p></div>")
+
+    main = (f"<div class='c2-main'><h1>{avatar} {_e(name)} {chip}</h1>"
+            f"<div class='muted'>{_e(subtitle)}</div>"
+            f"{_tabbar(pid, _PERSON_TABS, tab, base='/person')}{content}</div>")
     rail = f"<div class='c2-rail'>{_tree_html(st, '')}</div>"
     inner = (f"<style>{_EXTRA_CSS}</style>"
              f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · <a href='/'>home</a></div>"
              f"<div class='c2-wrap'>{main}{rail}</div>")
-    return _page(p.name, inner)
+    return _page(name, inner)
 
 
 def render_patterns(csrf_token: str = "") -> str:

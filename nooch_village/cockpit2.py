@@ -1302,7 +1302,8 @@ def make_handler(data_dir: str, csrf_token: str,
                                                csrf_token=effective_csrf, fragment=fr), fr))
                 return
             if path == "/person":
-                self._send(render_person(st, (qs.get("id") or [""])[0]))
+                self._send(render_person(st, (qs.get("id") or [""])[0],
+                                         tab=(qs.get("tab") or ["rollen"])[0]))
                 return
             if path == "/admin":
                 self._send(render_admin(st, csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0]))
