@@ -463,18 +463,26 @@ def render_person(st: _Stores, pid: str, tab: str = "rollen") -> str:
     role_ids = st.assign.roles_of(filler_type, pid)
 
     if tab == "rollen":
-        rows = ""
-        for rid in sorted(role_ids):
+        # Eén blok per rol, uitklapbaar (<details>, geen JS) naar de accountabilities van de rol
+        # (rec.definition.accountabilities). set() = "toon elke rol één keer", geen dedup-magie.
+        uniek = sorted(set(role_ids))
+        blocks = ""
+        for rid in uniek:
             rec = st.records.get(rid)
             if rec is None:
                 continue
             crumb = " › ".join(_e(_name(st.records.get(i)))
                                for i in org.breadcrumb(st.records.all(), rid)[:-1])
-            rows += (f"<li><a href='/node?id={_e(rid)}'>{_e(_name(rec))}</a> "
-                     f"<span class='muted'>{('· ' + crumb) if crumb else ''}</span></li>")
-        content = (f"<div class='c2-sec'><h3>Rollen ({len(role_ids)})</h3>"
-                   + (f"<ul class='clean'>{rows}</ul>" if rows
-                      else "<span class='muted'>Geen rollen.</span>") + "</div>")
+            crumb_html = f" <span class='muted'>· {crumb}</span>" if crumb else ""
+            accs = rec.definition.accountabilities or []
+            acc_html = ("<ul class='clean'>" + "".join(f"<li>{_e(a)}</li>" for a in accs) + "</ul>"
+                        if accs else "<span class='muted'>Geen accountabilities.</span>")
+            blocks += (f"<details class='c2-acc'><summary>"
+                       f"<a href='/node?id={_e(rid)}'>{_e(_name(rec))}</a>{crumb_html} "
+                       f"<span class='muted' style='font-size:.75rem'>· {len(accs)} accountabilities"
+                       f"</span></summary>{acc_html}</details>")
+        content = (f"<div class='c2-sec'><h3>Rollen ({len(uniek)})</h3>"
+                   + (blocks if blocks else "<span class='muted'>Geen rollen.</span>") + "</div>")
     else:
         content = ("<div class='c2-sec'><p class='muted'>Read-only aggregatie-lens over de rollen "
                    "die deze persoon vervult. Deze tab volgt in een losse vervolgtaak — hier is "
