@@ -185,6 +185,7 @@ def test_persoonspagina_projecten_trekker_is_geen_eigendom(tmp_path):
 
 
 def test_persoonspagina_context_tab_ingelogd(tmp_path):
+    # context-tab: union van note-attachments over de rollen, met tool/doc-onderscheid
     st = _st(tmp_path)
     lotte = st.people.by_name("Lotte Mulder")
     role = "mother_earth__nooch__creator_of_shoes"
@@ -210,6 +211,50 @@ def test_persoonspagina_context_drempel_zonder_sessie(tmp_path):
         pg = cockpit2.render_person(st, lotte.id, tab="context", username=sess)
         assert "Log in om context te zien" in pg
         assert "Geheim" not in pg                              # geen lek zonder sessie
+
+
+def test_persoonspagina_metrics_tab_readonly(tmp_path):
+    st = _st(tmp_path)
+    lotte = st.people.by_name("Lotte Mulder")
+    role = "mother_earth__nooch__creator_of_shoes"
+    st.assign.assign(role, "person", lotte.id)
+    st.metrics.add_tile(role, "shopify", "Orders", "none", "getal")
+    pg = cockpit2.render_person(st, lotte.id, tab="metrics", username="dev@nooch.earth", csrf_token="TOK")
+    assert "Metrics (1)" in pg and "Orders" in pg
+    assert "action=" not in pg and "cl_report" not in pg           # read-only: geen schrijfknop
+
+
+def test_persoonspagina_checklist_afvink_alleen_filler(tmp_path):
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    node = "mother_earth__nooch__website_developer"
+    dev = st.people.add("Dev", "dev@nooch.earth")
+    st.assign.assign(node, "person", dev.id)
+    st.people.add("Buiten", "buiten@nooch.earth")
+    cid = cockpit2._Stores(dd).checklists.add(node, "Wekelijkse review", "week", target_type="all")["id"]
+    # niet-filler → geweigerd, geen rapport geschreven
+    _, deny = cockpit2.dispatch(dd, "cl_report", {"cid": [cid], "ok": ["1"], "next": ["/"]},
+                                username="buiten@nooch.earth")
+    assert "Geen toegang" in deny
+    assert not cockpit2._Stores(dd).checklists.get(cid).get("reports")
+    # filler → gelukt, by = de afvinker (mens), met timestamp
+    _, ok = cockpit2.dispatch(dd, "cl_report", {"cid": [cid], "ok": ["1"], "next": ["/"]},
+                              username="dev@nooch.earth")
+    assert "genoteerd" in ok
+    rep = list(cockpit2._Stores(dd).checklists.get(cid)["reports"].values())[0]
+    assert rep["by"] == "dev@nooch.earth" and rep.get("at", 0) > 0
+
+
+def test_checklist_persona_afvink_met_timestamp(tmp_path):
+    # AI-persona kan afvinken via report(by=<persona>) — uitvoerbewijs met timestamp
+    st = _st(tmp_path)
+    node = "mother_earth__nooch__creator_of_shoes"
+    cid = st.checklists.add(node, "AI-check", "week", target_type="all")["id"]
+    pa = st.personas.add("Codie", "ENTP", "x")
+    assert st.checklists.report(cid, True, by=f"persona:{pa.id}")
+    rep = list(st.checklists.get(cid)["reports"].values())[0]
+    assert rep["by"] == f"persona:{pa.id}" and rep.get("at", 0) > 0
 
 
 def test_cirkel_kan_geen_project_bevatten(tmp_path):
@@ -412,7 +457,7 @@ def test_persoonspagina_mijn_rollen(tmp_path):
     st = _st(tmp_path)
     lotte = st.people.by_name("Lotte Mulder")
     page = cockpit2.render_person(st, lotte.id)
-    assert "Lotte Mulder" in page and "Rollen" in page
+    assert "Lotte Mulder" in page and "Rollen" in page          # rollen-tab (kop was "Mijn rollen")
     assert "Creator of Shoes" in page                          # een van haar rollen
 
 

@@ -12,7 +12,7 @@ from nooch_village.cockpit2_util import (
     _IC_CHECK, _IC_CLOCK, _IC_LINK, _IC_TARGET,
 )
 from nooch_village.views.feed import _mentionables
-from nooch_village.views.checklists import _checklists_tab_html
+from nooch_village.views.checklists import _checklists_tab_html, _cl_row
 from nooch_village.views.metrics import _metrics_tab_html
 from nooch_village.views.strategy import _strategy_tab_html
 from nooch_village.views.backlog import render_backlog_tab
@@ -458,12 +458,58 @@ def _person_context_tab_html(st: _Stores, filler_type: str, pid: str) -> str:
     return f"<div class='c2-sec'><h3>Context ({total})</h3>{body}</div>"
 
 
-def render_person(st: _Stores, pid: str, tab: str = "rollen", username: str | None = None) -> str:
+def _person_metrics_tab_html(st: _Stores, filler_type: str, pid: str) -> str:
+    """Read-only union van metrics.tiles_of(rid) over de rollen. Toont de laatste reading per tile.
+    Puur lezen — schrijven blijft op rol-niveau, dus GEEN schrijfknop hier."""
+    from nooch_village.views.metrics import _source_samples   # dezelfde bron-leesweg als de rol-view
+    rows, total = "", 0
+    for rid in sorted(set(st.assign.roles_of(filler_type, pid))):
+        orec = st.records.get(rid)
+        owner = _e(_name(orec) if orec else rid)
+        for t in st.metrics.tiles_of(rid):
+            total += 1
+            name = _e(t.get("measure") or t.get("source") or t.get("id"))
+            raw = _source_samples(st.dd, t["source"]) if t.get("source") else (t.get("samples") or [])
+            if raw:
+                last = max(raw, key=lambda s: s.get("at", 0))
+                reading = (f"<b>{_e(str(last.get('value')))}</b> "
+                           f"<span class='muted'>· {_e(_age(last.get('at')))}</span>")
+            else:
+                reading = (f"<span class='muted'>geen recente meting "
+                           f"(bron: {_e(t.get('source') or '—')})</span>")
+            rows += f"<li>{name} — {reading} <span class='muted'>· {owner}</span></li>"
+    body = (f"<ul class='clean'>{rows}</ul>" if rows
+            else "<span class='muted'>Geen metrics op de rollen van deze persoon.</span>")
+    return f"<div class='c2-sec'><h3>Metrics ({total})</h3>{body}</div>"
+
+
+def _person_checklists_tab_html(st: _Stores, filler_type: str, pid: str, csrf: str) -> str:
+    """Union van checklists.for_node(rid) over de rollen, gegroepeerd per rol. Hergebruikt _cl_row:
+    die toont het target_type-label ("Alle leden" bij all = cirkel-verplichting, de rol bij role) en
+    de afvink-form ALLEEN met csrf (conform effective_csrf). Geen per-lid-status; wie afvinkte staat
+    in reports.by. Afvinken loopt via cl_report, achter de is_role_filler/Circle-Lead-gate."""
+    sections, total = "", 0
+    for rid in sorted(set(st.assign.roles_of(filler_type, pid))):
+        items = st.checklists.for_node(rid)
+        if not items:
+            continue
+        orec = st.records.get(rid)
+        owner = _e(_name(orec) if orec else rid)
+        rows = "".join(_cl_row(st, it, csrf) for it in items)
+        sections += f"<h4 class='muted' style='margin:.6rem 0 .2rem'>{owner}</h4>{rows}"
+        total += len(items)
+    body = (sections if sections
+            else "<span class='muted'>Geen checklist-items op de rollen van deze persoon.</span>")
+    return f"<div class='c2-sec'><h3>Checklist ({total})</h3>{body}</div>"
+
+
+def render_person(st: _Stores, pid: str, tab: str = "rollen", username: str | None = None,
+                  csrf_token: str = "") -> str:
     """Persoon/AI-role-filler-view: read-only aggregatie-lens over de rollen die iemand vervult,
     met de rol-view-chrome (tabs via _tabbar(base="/person")). Vult rollen/projecten/context; de
-    overige tabs zijn read-only placeholders. `username` = de sessie (voor de context-drempel);
-    GEEN persoons-gate — de context-tab hangt op 'is er een sessie', niet op 'ben jij deze persoon'.
-    Handelt zowel een mens (people) als een AI-inwoner (personas) af."""
+    overige tabs zijn read-only placeholders. Geen schrijfacties, geen csrf. `username` = de sessie
+    (voor de context-drempel); GEEN persoons-gate — de context-tab hangt op 'is er een sessie',
+    niet op 'ben jij deze persoon'. Handelt zowel een mens (people) als een AI-inwoner (personas) af."""
     p = st.people.get(pid)
     if p is not None:
         filler_type, name, subtitle = "person", p.name, (p.email or "geen e-mail")
@@ -514,10 +560,16 @@ def render_person(st: _Stores, pid: str, tab: str = "rollen", username: str | No
             content = "<div class='c2-sec'><p class='muted'>Log in om context te zien.</p></div>"
         else:
             content = _person_context_tab_html(st, filler_type, pid)
+    elif tab == "metrics":
+        # Read-only union van de rol-metrics; schrijven blijft op rol-niveau (geen knop hier).
+        content = _person_metrics_tab_html(st, filler_type, pid)
+    elif tab == "checklist":
+        # Union van de rol-checklists; afvinken via cl_report achter de is_role_filler-gate.
+        # Afvink-form alleen met csrf (effective_csrf) — guest/niet-ingelogd → geen knop.
+        content = _person_checklists_tab_html(st, filler_type, pid, csrf_token)
     else:
         content = ("<div class='c2-sec'><p class='muted'>Read-only aggregatie-lens over de rollen "
-                   "die deze persoon vervult. Deze tab volgt in een losse vervolgtaak — hier is "
-                   "bewust nog geen aggregatie-query en geen schrijfactie.</p></div>")
+                   "die deze persoon vervult. Deze tab volgt in een losse vervolgtaak.</p></div>")
 
     main = (f"<div class='c2-main'><h1>{avatar} {_e(name)} {chip}</h1>"
             f"<div class='muted'>{_e(subtitle)}</div>"

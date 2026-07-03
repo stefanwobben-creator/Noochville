@@ -959,10 +959,14 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
                                    target_type=tt, target_id=tid, by="founder")
             msg = "✓ checklist-item toegevoegd" if it else "⛔ geef een beschrijving"
     elif action == "cl_report":
+        # AUTHZ: rolvervuller of Circle Lead van de betrokken rol/cirkel — afvinken van een
+        # checklist-item (namens de rol/cirkel bij target_type=all). by = wie afvinkte (de mens;
+        # een AI-flow kan report() direct met by=<persona> aanroepen). Geen per-individu-verplichting.
         _deny = _role_gate((st.checklists.get(g("cid")) or {}).get("node") or "", username, st)
         if _deny:
             return nxt, _deny
-        if st.checklists.report(g("cid"), g("ok") == "1", value=g("value"), by="founder"):
+        if st.checklists.report(g("cid"), g("ok") == "1", value=g("value"),
+                                by=(username or "founder")):
             msg = "✓ genoteerd" if g("ok") == "1" else "✗ genoteerd (aandacht nodig)"
     elif action == "cl_remove":
         _deny = _role_gate((st.checklists.get(g("cid")) or {}).get("node") or "", username, st)
@@ -1304,7 +1308,7 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/person":
                 self._send(render_person(st, (qs.get("id") or [""])[0],
                                          tab=(qs.get("tab") or ["rollen"])[0],
-                                         username=username))
+                                         username=username, csrf_token=effective_csrf))
                 return
             if path == "/admin":
                 self._send(render_admin(st, csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0]))
