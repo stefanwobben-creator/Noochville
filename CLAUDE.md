@@ -577,3 +577,10 @@ De helpers staan klaar: `is_circle_lead`, `is_role_filler`, `is_circle_member`,
 maar dan óók met een `# AUTHZ: iedereen-ingelogd — <waarom>`-comment.
 
 Dit voorkomt de situatie van vóór 1 juli 2026: een volledige `dispatch` zonder enige autorisatie.
+
+### Auth-uit guest-keuze (asymmetrie /node vs /person)
+
+Besluit dd 2026-07-03: zolang alles achter login zit, is ingelogd = alles zien. In auth-uit-modus
+ziet een guest losse rol-notes via `/node?tab=notes`; de persoon-context-aggregatie (`/person?tab=context`)
+blijft óók dan afgeschermd. Bij introductie van een public view wordt per-tab opnieuw bepaald wat
+publiek mag. Dit is een bewuste keuze, geen gat.
