@@ -17,7 +17,7 @@ from nooch_village.views.metrics import _metrics_tab_html
 from nooch_village.views.strategy import _strategy_tab_html
 from nooch_village.views.backlog import render_backlog_tab
 from nooch_village.views.projects import (
-    _projects_tab_html, _scope_text, _person_projects_html, _modal_html,
+    _projects_tab_html, _scope_text, _person_projects_tab_html, _modal_html,
 )
 from nooch_village import org, ai_match
 from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD, _CIRCLE_TABS, _ROLE_TABS, _PERSON_TABS, WEBSITE_DEVELOPER_ROLE
@@ -483,6 +483,9 @@ def render_person(st: _Stores, pid: str, tab: str = "rollen") -> str:
                        f"</span></summary>{acc_html}</details>")
         content = (f"<div class='c2-sec'><h3>Rollen ({len(uniek)})</h3>"
                    + (blocks if blocks else "<span class='muted'>Geen rollen.</span>") + "</div>")
+    elif tab == "projecten":
+        # Owner-based aggregatie: projecten van de rollen die deze filler vervult (read-only).
+        content = _person_projects_tab_html(st, filler_type, pid)
     else:
         content = ("<div class='c2-sec'><p class='muted'>Read-only aggregatie-lens over de rollen "
                    "die deze persoon vervult. Deze tab volgt in een losse vervolgtaak — hier is "

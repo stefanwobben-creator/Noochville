@@ -165,7 +165,7 @@ from nooch_village.views.projects import (
     _inline_add_project, _columns_html, _drag_script,
     _modal_html, _group_meta, _projects_board,
     _archived_html, _projects_tab_html,
-    _person_projects_html, render_project,
+    _person_projects_tab_html, render_project,
     _PROJ_CHIP, _PROJ_COLS, _LABELS, _II_PREFIX,
 )
 

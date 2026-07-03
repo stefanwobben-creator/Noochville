@@ -509,23 +509,25 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
             f"{board}{sub_html}</div>{orphans_html}")
 
 
-def _person_projects_html(st: _Stores, pid: str) -> str:
-    role_ids = set(st.assign.roles_of("person", pid))
+def _person_projects_tab_html(st: _Stores, filler_type: str, pid: str) -> str:
+    """Read-only aggregatie-lens voor de persoon-view: de projecten van de rollen die deze filler
+    (mens of AI-inwoner) vervult. BRON VAN WAARHEID = owner ∈ roles_of(filler_type, pid) — een
+    project hangt aan de ROL, niet aan de persoon. De trekker (p.person/p.agent) is puur weergave
+    ("huidige trekker"), GEEN filtergrond en GEEN eigendom; bij herstaffing volgt het bord de rol,
+    niet de trekker-id. Lijst-weergave (GROEN); status-kanban over meerdere rollen is de GEEL-vervolg."""
+    role_ids = set(st.assign.roles_of(filler_type, pid))
     projs = [p for p in st.projects.all()
-             if not p.get("archived") and (p.get("person") == pid or p.get("owner") in role_ids)]
+             if not p.get("archived") and p.get("owner") in role_ids]
     projs.sort(key=lambda p: (p.get("status") == "done", -(p.get("created_at") or 0)))
-    if not projs:
-        return ""
     items = ""
     for p in projs:
         orec = st.records.get(p.get("owner"))
         owner = _e(_name(orec) if orec else (p.get("owner") or ""))
-        scope = p.get("scope")
-        if isinstance(scope, dict):
-            scope = " · ".join(f"{k}: {v}" for k, v in scope.items())
-        items += (f"<li>{_proj_chip(p.get('status',''))} {_e(str(scope or '—'))} "
-                  f"<span class='muted'>· {owner}</span></li>")
-    return f"<div class='c2-sec'><h3>Projecten ({len(projs)})</h3><ul class='clean'>{items}</ul></div>"
+        items += (f"<li>{_proj_chip(p.get('status',''))} {_e(_scope_text(p))} "
+                  f"<span class='muted'>· {owner}</span> · {_trekker_html(st, p)}</li>")
+    body = (f"<ul class='clean'>{items}</ul>" if projs
+            else "<span class='muted'>Geen projecten op de rollen van deze persoon.</span>")
+    return f"<div class='c2-sec'><h3>Projecten ({len(projs)})</h3>{body}</div>"
 
 
 def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", back: str = "/",

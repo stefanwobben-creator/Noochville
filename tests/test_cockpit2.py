@@ -154,6 +154,36 @@ def test_project_toevoegen_en_koppeling(tmp_path):
     assert "Productpagina live" in page and "Lotte Mulder" in page
 
 
+def test_persoonspagina_projecten_tab_owner_based(tmp_path):
+    # projecten-tab: bron van waarheid = owner ∈ de rollen die de persoon vervult
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    lotte = st.people.by_name("Lotte Mulder")
+    role = "mother_earth__nooch__website_developer"
+    st.assign.assign(role, "person", lotte.id)                 # Lotte vervult de owner-rol
+    cockpit2.dispatch(dd, "proj_add", {
+        "owner": [role], "scope": ["Productpagina live"], "trekker": [f"person:{lotte.id}"],
+        "next": ["/"]}, username="guest")
+    pp = cockpit2.render_person(cockpit2._Stores(dd), lotte.id, tab="projecten")
+    assert "Productpagina live" in pp and "Projecten" in pp
+
+
+def test_persoonspagina_projecten_trekker_is_geen_eigendom(tmp_path):
+    # narrowing: p.person is GEEN filtergrond. Een project van een rol die Lotte NIET vervult
+    # verschijnt niet op haar projecten-tab, ook al is zij de trekker.
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    lotte = st.people.by_name("Lotte Mulder")
+    role = "mother_earth__nooch__website_developer"            # Lotte NIET aan deze rol toegewezen
+    cockpit2.dispatch(dd, "proj_add", {
+        "owner": [role], "scope": ["Niet-van-Lotte"], "trekker": [f"person:{lotte.id}"],
+        "next": ["/"]}, username="guest")
+    pp = cockpit2.render_person(cockpit2._Stores(dd), lotte.id, tab="projecten")
+    assert "Niet-van-Lotte" not in pp                          # trekker ≠ eigendom
+
+
 def test_cirkel_kan_geen_project_bevatten(tmp_path):
     # model-regel: een cirkel doet geen uitvoerend werk → geen project owned by een cirkel
     dd = str(tmp_path / "poc")
