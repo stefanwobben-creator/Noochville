@@ -459,28 +459,19 @@ def _person_context_tab_html(st: _Stores, filler_type: str, pid: str) -> str:
 
 
 def _person_metrics_tab_html(st: _Stores, filler_type: str, pid: str) -> str:
-    """Read-only union van metrics.tiles_of(rid) over de rollen. Toont de laatste reading per tile.
-    Puur lezen — schrijven blijft op rol-niveau, dus GEEN schrijfknop hier."""
-    from nooch_village.views.metrics import _source_samples   # dezelfde bron-leesweg als de rol-view
-    rows, total = "", 0
+    """Aggregatie-lens: DEZELFDE metric-render als op rol-niveau (_metrics_tab_html, mét grafieken),
+    per rol die deze filler vervult. Read-only (csrf=""), dus geen '+ KPI maken'/data-invoer. Geen
+    tweede render — een KPI/grafiek die je op een rol toevoegt, verschijnt hier automatisch
+    (reference, not copy)."""
+    out = ""
     for rid in sorted(set(st.assign.roles_of(filler_type, pid))):
-        orec = st.records.get(rid)
-        owner = _e(_name(orec) if orec else rid)
-        for t in st.metrics.tiles_of(rid):
-            total += 1
-            name = _e(t.get("measure") or t.get("source") or t.get("id"))
-            raw = _source_samples(st.dd, t["source"]) if t.get("source") else (t.get("samples") or [])
-            if raw:
-                last = max(raw, key=lambda s: s.get("at", 0))
-                reading = (f"<b>{_e(str(last.get('value')))}</b> "
-                           f"<span class='muted'>· {_e(_age(last.get('at')))}</span>")
-            else:
-                reading = (f"<span class='muted'>geen recente meting "
-                           f"(bron: {_e(t.get('source') or '—')})</span>")
-            rows += f"<li>{name} — {reading} <span class='muted'>· {owner}</span></li>"
-    body = (f"<ul class='clean'>{rows}</ul>" if rows
-            else "<span class='muted'>Geen metrics op de rollen van deze persoon.</span>")
-    return f"<div class='c2-sec'><h3>Metrics ({total})</h3>{body}</div>"
+        rec = st.records.get(rid)
+        if rec is None or not st.metrics.tiles_of(rid):
+            continue
+        out += (f"<h4 class='muted' style='margin:.6rem 0 .2rem'>{_e(_name(rec))}</h4>"
+                + _metrics_tab_html(st, rec, csrf=""))
+    return out or ("<div class='c2-sec'><span class='muted'>Geen metrics op de rollen van "
+                   "deze persoon.</span></div>")
 
 
 def _person_checklists_tab_html(st: _Stores, filler_type: str, pid: str, csrf: str) -> str:
@@ -550,8 +541,8 @@ def render_person(st: _Stores, pid: str, tab: str = "rollen", username: str | No
         content = (f"<div class='c2-sec'><h3>Rollen ({len(uniek)})</h3>"
                    + (blocks if blocks else "<span class='muted'>Geen rollen.</span>") + "</div>")
     elif tab == "projecten":
-        # Owner-based aggregatie: projecten van de rollen die deze filler vervult (read-only).
-        content = _person_projects_tab_html(st, filler_type, pid)
+        # Hergebruikt de kanban-component (_projects_board), gefilterd op mijn rollen; csrf → drag-drop.
+        content = _person_projects_tab_html(st, filler_type, pid, csrf_token)
     elif tab == "context":
         # AUTHZ: iedereen-ingelogd — de context-tab is zichtbaar voor elk INGELOGD village-lid, niet
         # voor anonieme guests. Drempel op "is er een sessie", niet op "ben jij deze persoon" (geen
@@ -575,9 +566,11 @@ def render_person(st: _Stores, pid: str, tab: str = "rollen", username: str | No
             f"<div class='muted'>{_e(subtitle)}</div>"
             f"{_tabbar(pid, _PERSON_TABS, tab, base='/person')}{content}</div>")
     rail = f"<div class='c2-rail'>{_tree_html(st, '')}</div>"
+    # Kaart-klik op het kanban-bord opent de project-detail-modal, net als op de node-view.
+    modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
     inner = (f"<style>{_EXTRA_CSS}</style>"
              f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · <a href='/'>home</a></div>"
-             f"<div class='c2-wrap'>{main}{rail}</div>")
+             f"<div class='c2-wrap'>{main}{rail}</div>{modal}")
     return _page(name, inner)
 
 

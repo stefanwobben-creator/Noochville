@@ -167,6 +167,8 @@ def test_persoonspagina_projecten_tab_owner_based(tmp_path):
         "next": ["/"]}, username="guest")
     pp = cockpit2.render_person(cockpit2._Stores(dd), lotte.id, tab="projecten")
     assert "Productpagina live" in pp and "Projecten" in pp
+    assert "swim" in pp and "pcol" in pp                        # DEZELFDE kanban-component ...
+    assert "<ul class='clean'>" not in pp                       # ... geen aparte lijst-render
 
 
 def test_persoonspagina_projecten_trekker_is_geen_eigendom(tmp_path):
@@ -219,9 +221,10 @@ def test_persoonspagina_metrics_tab_readonly(tmp_path):
     role = "mother_earth__nooch__creator_of_shoes"
     st.assign.assign(role, "person", lotte.id)
     st.metrics.add_tile(role, "shopify", "Orders", "none", "getal")
-    pg = cockpit2.render_person(st, lotte.id, tab="metrics", username="dev@nooch.earth", csrf_token="TOK")
-    assert "Metrics (1)" in pg and "Orders" in pg
-    assert "action=" not in pg and "cl_report" not in pg           # read-only: geen schrijfknop
+    pg = cockpit2.render_person(st, lotte.id, tab="metrics")        # geen csrf → zuivere read-only lens
+    assert "Orders" in pg and "tile-grid" in pg                     # DEZELFDE _metrics_tab_html-render ...
+    assert "<ul class='clean'>" not in pg                           # ... niet de oude lijst
+    assert "+ KPI maken" not in pg and "action=" not in pg          # read-only: geen schrijfpad
 
 
 def test_persoonspagina_checklist_afvink_alleen_filler(tmp_path):
@@ -477,3 +480,19 @@ def test_strategie_in_overview_en_tab_verwijderd(tmp_path):
     assert "Kernzin ABC" in page          # strategie-inhoud nu in overview
     assert ">Purpose<" in page            # eigen Purpose-sectie behouden (geen dubbele chain)
     assert "&tab=strategy" not in page    # geen strategy-tab-knop meer in de tab-bar
+
+
+def test_drag_script_behoudt_scrollpositie():
+    # bevinding 3: drag-drop mag de scrollpositie niet resetten (verticaal window + horizontaal .pboard)
+    from nooch_village.views.projects import _drag_script
+    s = _drag_script("tok", "/person?id=x&tab=projecten")
+    assert "window.scrollX" in s and "window.scrollY" in s and "scrollLeft" in s   # bewaren
+    assert "window.scrollTo" in s and "requestAnimationFrame" in s                 # herstellen op load
+    assert _drag_script("", "/x") == ""                                            # geen csrf → geen script
+
+
+def test_kolom_status_tinten_aanwezig():
+    # bevinding 4: subtiele status-tint per kolom (label blijft primaire drager, kleur versterkt).
+    from nooch_village.cockpit2_util import _EXTRA_CSS
+    for key in ("actief", "wacht", "done", "toekomst"):
+        assert f".pcol[data-to='{key}']" in _EXTRA_CSS

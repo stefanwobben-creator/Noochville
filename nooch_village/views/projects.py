@@ -207,6 +207,12 @@ def _drag_script(csrf_token: str, back: str) -> str:
     return (
         "<script>(function(){"
         f"var csrf={json.dumps(csrf_token)},next={json.dumps(back)},pid=null;"
+        # Drag-drop = volledige page-reload → scrollpositie herstellen op load (verticaal via het
+        # window, horizontaal per .pboard-swimlane). Eenmalig: lezen-en-wissen uit sessionStorage.
+        "try{var _ss=JSON.parse(sessionStorage.getItem('__nvscroll')||'null');if(_ss){"
+        "sessionStorage.removeItem('__nvscroll');requestAnimationFrame(function(){"
+        "window.scrollTo(_ss.x||0,_ss.y||0);var _bs=document.querySelectorAll('.pboard');"
+        "(_ss.b||[]).forEach(function(sl,i){if(_bs[i])_bs[i].scrollLeft=sl;});});}}catch(e){}"
         "document.querySelectorAll('.pcard').forEach(function(c){"
         "c.addEventListener('dragstart',function(e){pid=c.getAttribute('data-pid');window.__pdrag=true;"
         "e.dataTransfer.effectAllowed='move';c.style.opacity='.5';});"
@@ -220,6 +226,10 @@ def _drag_script(csrf_token: str, back: str) -> str:
         "function a(n,v){var i=document.createElement('input');i.type='hidden';i.name=n;i.value=v;f.appendChild(i);}"
         "a('csrf',csrf);a('pid',pid);a('next',next);"
         "if(to==='done'){a('action','proj_done');}else{a('action','proj_status');a('to',to);}"
+        # Verticale (window) + horizontale (elke .pboard) scrollpositie bewaren vóór de reload.
+        "try{var _bs=document.querySelectorAll('.pboard');"
+        "sessionStorage.setItem('__nvscroll',JSON.stringify({x:window.scrollX,y:window.scrollY,"
+        "b:[].map.call(_bs,function(b){return b.scrollLeft;})}));}catch(e){}"
         "document.body.appendChild(f);f.submit();});});})();</script>")
 
 
@@ -539,25 +549,20 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
             f"{board}{sub_html}</div>{orphans_html}")
 
 
-def _person_projects_tab_html(st: _Stores, filler_type: str, pid: str) -> str:
-    """Read-only aggregatie-lens voor de persoon-view: de projecten van de rollen die deze filler
-    (mens of AI-inwoner) vervult. BRON VAN WAARHEID = owner ∈ roles_of(filler_type, pid) — een
-    project hangt aan de ROL, niet aan de persoon. De trekker (p.person/p.agent) is puur weergave
-    ("huidige trekker"), GEEN filtergrond en GEEN eigendom; bij herstaffing volgt het bord de rol,
-    niet de trekker-id. Lijst-weergave (GROEN); status-kanban over meerdere rollen is de GEEL-vervolg."""
+def _person_projects_tab_html(st: _Stores, filler_type: str, pid: str, csrf_token: str = "") -> str:
+    """Aggregatie-lens voor de persoon-view: DEZELFDE kanban-component als op cirkel/rol-niveau
+    (_projects_board), gefilterd op de projecten waarvan de owner een rol is die deze filler vervult.
+    BRON VAN WAARHEID = owner ∈ roles_of(filler_type, pid) — één component op één bron, geen tweede
+    render (reference, not copy). group='rol' → elke swimlane is een van mijn rollen; quickadd=False
+    → de lens voegt niet toe (dat blijft op rol-niveau)."""
     role_ids = set(st.assign.roles_of(filler_type, pid))
-    projs = [p for p in st.projects.all()
-             if not p.get("archived") and p.get("owner") in role_ids]
-    projs.sort(key=lambda p: (p.get("status") == "done", -(p.get("created_at") or 0)))
-    items = ""
-    for p in projs:
-        orec = st.records.get(p.get("owner"))
-        owner = _e(_name(orec) if orec else (p.get("owner") or ""))
-        items += (f"<li>{_proj_chip(p.get('status',''))} {_e(_scope_text(p))} "
-                  f"<span class='muted'>· {owner}</span> · {_trekker_html(st, p)}</li>")
-    body = (f"<ul class='clean'>{items}</ul>" if projs
-            else "<span class='muted'>Geen projecten op de rollen van deze persoon.</span>")
-    return f"<div class='c2-sec'><h3>Projecten ({len(projs)})</h3>{body}</div>"
+    mine = [p for p in st.projects.all()
+            if p.get("owner") in role_ids and not p.get("archived") and p.get("status") != "draft"]
+    back = f"/person?id={pid}&tab=projecten"
+    board = _projects_board(st, mine, "", csrf_token, back, "rol", quickadd=False)
+    if not board:
+        board = "<p class='muted'>Geen projecten op de rollen van deze persoon.</p>"
+    return f"<div class='c2-sec'><h3>Projecten ({len(mine)})</h3>{board}</div>"
 
 
 def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", back: str = "/",
