@@ -184,6 +184,34 @@ def test_persoonspagina_projecten_trekker_is_geen_eigendom(tmp_path):
     assert "Niet-van-Lotte" not in pp                          # trekker ≠ eigendom
 
 
+def test_persoonspagina_context_tab_ingelogd(tmp_path):
+    st = _st(tmp_path)
+    lotte = st.people.by_name("Lotte Mulder")
+    role = "mother_earth__nooch__creator_of_shoes"
+    st.assign.assign(role, "person", lotte.id)
+    st.att.add(role, "note", title="Figma-plugin", subtype="tool")
+    st.att.add(role, "note", title="Merkgids", subtype="doc")
+    st.att.add(role, "note", title="Oude notitie")             # geen subtype → default 'doc'
+    pg = cockpit2.render_person(st, lotte.id, tab="context", username="dev@nooch.earth")
+    assert "Context (3)" in pg
+    assert "Figma-plugin" in pg and "Merkgids" in pg and "Oude notitie" in pg
+    assert "🛠" in pg and "📄" in pg                            # visueel tool/doc-onderscheid
+    assert pg.count(">doc<") == 2                              # note zonder subtype telt als doc
+
+
+def test_persoonspagina_context_drempel_zonder_sessie(tmp_path):
+    # AUTHZ-drempel: geen sessie (guest / None) → "log in", geen inhoud, geen note-lek
+    st = _st(tmp_path)
+    lotte = st.people.by_name("Lotte Mulder")
+    role = "mother_earth__nooch__creator_of_shoes"
+    st.assign.assign(role, "person", lotte.id)
+    st.att.add(role, "note", title="Geheim", subtype="doc")
+    for sess in ("guest", None):
+        pg = cockpit2.render_person(st, lotte.id, tab="context", username=sess)
+        assert "Log in om context te zien" in pg
+        assert "Geheim" not in pg                              # geen lek zonder sessie
+
+
 def test_cirkel_kan_geen_project_bevatten(tmp_path):
     # model-regel: een cirkel doet geen uitvoerend werk → geen project owned by een cirkel
     dd = str(tmp_path / "poc")

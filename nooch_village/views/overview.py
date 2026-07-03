@@ -439,11 +439,31 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     return _page(_name(rec), inner)
 
 
-def render_person(st: _Stores, pid: str, tab: str = "rollen") -> str:
+def _person_context_tab_html(st: _Stores, filler_type: str, pid: str) -> str:
+    """Union van de context-notes (kind='note') over de rollen die deze filler vervult. Eén lijst,
+    tools en docs door elkaar, met een visueel onderscheid op subtype (leeg/ontbrekend → 'doc')."""
+    rows, total = "", 0
+    for rid in sorted(set(st.assign.roles_of(filler_type, pid))):
+        orec = st.records.get(rid)
+        owner = _e(_name(orec) if orec else rid)
+        for a in st.att.list(rid, "note"):
+            total += 1
+            sub = (getattr(a, "subtype", "") or "doc")
+            icon = "🛠" if sub == "tool" else "📄"
+            title = _e(a.title or (a.body[:60] if a.body else "(zonder titel)"))
+            rows += (f"<li>{icon} <span class='chip muted'>{_e(sub)}</span> {title} "
+                     f"<span class='muted'>· {owner}</span></li>")
+    body = (f"<ul class='clean'>{rows}</ul>" if rows
+            else "<span class='muted'>Geen context-notes op de rollen van deze persoon.</span>")
+    return f"<div class='c2-sec'><h3>Context ({total})</h3>{body}</div>"
+
+
+def render_person(st: _Stores, pid: str, tab: str = "rollen", username: str | None = None) -> str:
     """Persoon/AI-role-filler-view: read-only aggregatie-lens over de rollen die iemand vervult,
-    met de rol-view-chrome (tabs via _tabbar(base="/person")). Deze pass vult alleen de 'rollen'-tab
-    (de bestaande rollen-lijst); de overige tabs zijn read-only placeholders. Geen schrijfacties,
-    geen csrf, geen nieuwe gate. Handelt zowel een mens (people) als een AI-inwoner (personas) af."""
+    met de rol-view-chrome (tabs via _tabbar(base="/person")). Vult rollen/projecten/context; de
+    overige tabs zijn read-only placeholders. `username` = de sessie (voor de context-drempel);
+    GEEN persoons-gate — de context-tab hangt op 'is er een sessie', niet op 'ben jij deze persoon'.
+    Handelt zowel een mens (people) als een AI-inwoner (personas) af."""
     p = st.people.get(pid)
     if p is not None:
         filler_type, name, subtitle = "person", p.name, (p.email or "geen e-mail")
@@ -486,6 +506,14 @@ def render_person(st: _Stores, pid: str, tab: str = "rollen") -> str:
     elif tab == "projecten":
         # Owner-based aggregatie: projecten van de rollen die deze filler vervult (read-only).
         content = _person_projects_tab_html(st, filler_type, pid)
+    elif tab == "context":
+        # AUTHZ: iedereen-ingelogd — de context-tab is zichtbaar voor elk INGELOGD village-lid, niet
+        # voor anonieme guests. Drempel op "is er een sessie", niet op "ben jij deze persoon" (geen
+        # persoons-gate). "guest" (auth uit) en geen sessie → geen inhoud.
+        if not username or username == "guest":
+            content = "<div class='c2-sec'><p class='muted'>Log in om context te zien.</p></div>"
+        else:
+            content = _person_context_tab_html(st, filler_type, pid)
     else:
         content = ("<div class='c2-sec'><p class='muted'>Read-only aggregatie-lens over de rollen "
                    "die deze persoon vervult. Deze tab volgt in een losse vervolgtaak — hier is "

@@ -25,6 +25,7 @@ class Attachment:
     kind: str            # note | metric | checklist | policy
     title: str = ""
     body: str = ""
+    subtype: str = ""    # alleen voor kind="note": "tool" | "doc". Leeg/ontbrekend → render als "doc".
     meta: dict = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
@@ -42,12 +43,14 @@ class AttachmentStore:
         atomic_write_json(self.path, self._items)
 
     def add(self, anchor: str, kind: str, title: str = "", body: str = "",
-            meta: dict | None = None) -> Attachment | None:
+            meta: dict | None = None, subtype: str = "") -> Attachment | None:
         if kind not in KINDS or not anchor:
             return None
         aid = uuid.uuid4().hex[:12]
+        # subtype geldt alleen voor notes: "tool" | "doc"; anders (of leeg) → "" (rendert als "doc").
+        subtype = subtype if (kind == "note" and subtype in ("tool", "doc")) else ""
         a = Attachment(id=aid, anchor=anchor, kind=kind, title=(title or "").strip()[:200],
-                       body=(body or "").strip()[:4000], meta=dict(meta or {}))
+                       body=(body or "").strip()[:4000], subtype=subtype, meta=dict(meta or {}))
         self._items[aid] = asdict(a)
         self._save()
         return a
