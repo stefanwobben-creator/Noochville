@@ -167,6 +167,8 @@ def test_persoonspagina_projecten_tab_owner_based(tmp_path):
         "next": ["/"]}, username="guest")
     pp = cockpit2.render_person(cockpit2._Stores(dd), lotte.id, tab="projecten")
     assert "Productpagina live" in pp and "Projecten" in pp
+    assert "swim" in pp and "pcol" in pp                        # DEZELFDE kanban-component ...
+    assert "<ul class='clean'>" not in pp                       # ... geen aparte lijst-render
 
 
 def test_persoonspagina_projecten_trekker_is_geen_eigendom(tmp_path):

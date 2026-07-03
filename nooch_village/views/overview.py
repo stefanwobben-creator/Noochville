@@ -550,8 +550,8 @@ def render_person(st: _Stores, pid: str, tab: str = "rollen", username: str | No
         content = (f"<div class='c2-sec'><h3>Rollen ({len(uniek)})</h3>"
                    + (blocks if blocks else "<span class='muted'>Geen rollen.</span>") + "</div>")
     elif tab == "projecten":
-        # Owner-based aggregatie: projecten van de rollen die deze filler vervult (read-only).
-        content = _person_projects_tab_html(st, filler_type, pid)
+        # Hergebruikt de kanban-component (_projects_board), gefilterd op mijn rollen; csrf → drag-drop.
+        content = _person_projects_tab_html(st, filler_type, pid, csrf_token)
     elif tab == "context":
         # AUTHZ: iedereen-ingelogd — de context-tab is zichtbaar voor elk INGELOGD village-lid, niet
         # voor anonieme guests. Drempel op "is er een sessie", niet op "ben jij deze persoon" (geen
@@ -575,9 +575,11 @@ def render_person(st: _Stores, pid: str, tab: str = "rollen", username: str | No
             f"<div class='muted'>{_e(subtitle)}</div>"
             f"{_tabbar(pid, _PERSON_TABS, tab, base='/person')}{content}</div>")
     rail = f"<div class='c2-rail'>{_tree_html(st, '')}</div>"
+    # Kaart-klik op het kanban-bord opent de project-detail-modal, net als op de node-view.
+    modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
     inner = (f"<style>{_EXTRA_CSS}</style>"
              f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · <a href='/'>home</a></div>"
-             f"<div class='c2-wrap'>{main}{rail}</div>")
+             f"<div class='c2-wrap'>{main}{rail}</div>{modal}")
     return _page(name, inner)
 
 
