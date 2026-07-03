@@ -447,6 +447,54 @@ def _lead_gate(circle_id: str, username: str | None, st) -> str | None:
     return "Geen toegang — alleen Circle Lead mag dit"
 
 
+# ── LiveKit-video: token-uitgifte ───────────────────────────────────────────
+def maak_livekit_token(room: str, identity: str, naam: str) -> str:
+    """Mint een LiveKit-access-token. ÉÉN plek voor de grants-config. Pakt LIVEKIT_API_KEY /
+    LIVEKIT_API_SECRET automatisch uit de env. Lazy import zodat cockpit2 importeerbaar blijft
+    zonder livekit-api (de token-tak faalt dan bewust closed, zie issue_livekit_token)."""
+    from livekit import api
+    from datetime import timedelta
+    return (api.AccessToken()
+            .with_identity(identity)
+            .with_name(naam)
+            .with_grants(api.VideoGrants(room_join=True, room=room))
+            .with_ttl(timedelta(hours=2))
+            .to_jwt())
+
+
+def issue_livekit_token(st, circle: str, username: str | None):
+    """Geef een LiveKit-token uit voor het lopende werkoverleg van `circle`. Geeft
+    (status_code, payload) terug.
+
+    HARDE REGEL: `room` en `identity` worden UITSLUITEND server-side bepaald — nooit uit de
+    request-body. `circle` is de enige request-input en is (a) membership-gated via _member_gate
+    en (b) enkel een lookup-sleutel naar de server-state. Deze functie accepteert dan ook geen
+    room/identity-parameter, zodat een gemanipuleerde body ze onmogelijk kan zetten."""
+    # AUTHZ: circle-member/rol-vervuller — hergebruikt _member_gate (dezelfde poort als
+    # wo_presence/wo_ag_add). Rol-check vóór alles: geen rol in deze cirkel → geen token.
+    deny = _member_gate(circle, username, st)
+    if deny:
+        return 403, {"error": deny}
+    # ROOM: server bepaalt de room-naam uit de meeting-state, niet uit de request.
+    m = st.werk.get(circle)
+    if not m or m.get("status") != "open":
+        return 409, {"error": "Geen lopend werkoverleg voor deze cirkel"}
+    room = f"wo-{circle}-{int(m['started_at'])}"
+    # IDENTITY: server bepaalt de rol-vervuller uit de authz-laag (de ingelogde sessie).
+    actor = st.people.by_email(username) if username and username != "guest" else None
+    if actor is None:
+        return 403, {"error": "Geen herkende rol-vervuller"}
+    server_url = os.getenv("LIVEKIT_URL", "").strip()
+    if not server_url:
+        return 503, {"error": "LiveKit niet geconfigureerd"}
+    try:
+        token = maak_livekit_token(room, actor.id, actor.name)
+    except Exception as e:
+        # De API-secret mag NOOIT lekken: alleen het exceptietype terug, geen details.
+        return 500, {"error": f"token-generatie faalde ({type(e).__name__})"}
+    return 200, {"token": token, "server_url": server_url}
+
+
 def dispatch(data_dir: str, action: str, form: dict, username: str | None = None):
     """Verwerk een POST-actie. Geeft (redirect-URL, korte bevestiging) terug.
 
@@ -1236,6 +1284,14 @@ def make_handler(data_dir: str, csrf_token: str,
             self.end_headers()
             self.wfile.write(data)
 
+        def _send_json(self, payload: dict, code: int = 200):
+            b = json.dumps(payload).encode("utf-8")
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+
         def do_GET(self):
             path, _, query = self.path.partition("?")
             qs = urllib.parse.parse_qs(query)
@@ -1334,6 +1390,12 @@ def make_handler(data_dir: str, csrf_token: str,
                                                     iid=(qs.get("iid") or [""])[0],
                                                     kpi=(qs.get("kpi") or [""])[0],
                                                     mw=(qs.get("mw") or ["maand"])[0]), fr))
+                return
+            if path == "/livekit-token":
+                # Alleen `circle` uit de request; room + identity bepaalt de server zelf
+                # (zie issue_livekit_token). AUTHZ zit in die functie via _member_gate.
+                status, payload = issue_livekit_token(st, (qs.get("circle") or [""])[0], username)
+                self._send_json(payload, status)
                 return
             if path == "/roloverleg2":
                 fr = (qs.get("fragment") or [""])[0] == "1"
