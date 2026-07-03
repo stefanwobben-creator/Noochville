@@ -21,6 +21,13 @@ CADENCES = ("dag", "week", "maand", "kwartaal")
 CADENCE_LABEL = {"dag": "Dagelijks", "week": "Wekelijks", "maand": "Maandelijks",
                  "kwartaal": "Per kwartaal"}
 
+# Waar een checklist-verplichting aan hangt. BEWUST alleen cirkel-breed ("all") of rol-gebonden
+# ("role") — NOOIT per individu. Een "all"-item afgevinkt door één lid telt voor de hele cirkel;
+# wie afvinkte staat in reports[periode].by, er is geen per-lid-status. Deze invariant wordt bewaakt
+# door tests/test_checklist_invariant.py — voeg hier nooit een per-individu-type (individual/person/
+# filler) aan toe zonder die ontwerpbeslissing expliciet te herzien.
+TARGET_TYPES = ("all", "role")
+
 
 def period_key(cadence: str, now: datetime | None = None) -> str:
     """De sleutel van de huidige periode voor een cadans. Lexicaal sorteerbaar per cadans."""
@@ -53,7 +60,7 @@ class ChecklistStore:
             return None
         if cadence not in CADENCES:
             cadence = "week"
-        if target_type not in ("all", "role"):
+        if target_type not in TARGET_TYPES:
             target_type = "all"
         cid = uuid.uuid4().hex[:12]
         item = {"id": cid, "node": node, "description": description[:200],
