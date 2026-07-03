@@ -221,9 +221,10 @@ def test_persoonspagina_metrics_tab_readonly(tmp_path):
     role = "mother_earth__nooch__creator_of_shoes"
     st.assign.assign(role, "person", lotte.id)
     st.metrics.add_tile(role, "shopify", "Orders", "none", "getal")
-    pg = cockpit2.render_person(st, lotte.id, tab="metrics", username="dev@nooch.earth", csrf_token="TOK")
-    assert "Metrics (1)" in pg and "Orders" in pg
-    assert "action=" not in pg and "cl_report" not in pg           # read-only: geen schrijfknop
+    pg = cockpit2.render_person(st, lotte.id, tab="metrics")        # geen csrf → zuivere read-only lens
+    assert "Orders" in pg and "tile-grid" in pg                     # DEZELFDE _metrics_tab_html-render ...
+    assert "<ul class='clean'>" not in pg                           # ... niet de oude lijst
+    assert "+ KPI maken" not in pg and "action=" not in pg          # read-only: geen schrijfpad
 
 
 def test_persoonspagina_checklist_afvink_alleen_filler(tmp_path):
