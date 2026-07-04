@@ -40,7 +40,8 @@ class MetricStore:
 
     # ── tegels (dashboard-compositie: bron + measure + dimensie + vorm) ────────
     def add_tile(self, node: str, source: str, measure: str, dim: str, form: str,
-                 target=None, goal_pid: str = "", ref_kind: str = "") -> dict | None:
+                 target=None, goal_pid: str = "", ref_kind: str = "",
+                 extra: dict | None = None) -> dict | None:
         if not node or not source or not measure:
             return None
         try:
@@ -50,10 +51,13 @@ class MetricStore:
         tid = uuid.uuid4().hex[:12]
         # Een KPI = indicator (source/measure) + referentie + vorm. ref_kind maakt de referentie
         # expliciet: "" geen, "benchmark" (vergelijkwaarde = target), "doel" (project = goal_pid).
+        # `extra` draagt optionele extra velden (bv. een formule: f_a/f_op/f_b/aggregatie).
         tile = {"id": tid, "node": node, "source": source, "measure": measure,
                 "dim": dim or "none", "form": form or "getal", "target": tgt,
                 "goal_pid": (goal_pid or "").strip(),
                 "ref_kind": ref_kind if ref_kind in ("benchmark", "doel") else ""}
+        if extra:
+            tile.update({k: v for k, v in extra.items() if k not in tile})
         self._tiles.setdefault(node, []).append(tile)
         self._save()
         return tile

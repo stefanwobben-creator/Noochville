@@ -489,13 +489,28 @@ _SEED_VELD = {
     "CTR (GSC)": "ctr", "Gemiddelde positie (GSC)": "position",
 }
 
+# Groepering per bron — vult de categorie op bestaande definities zodat de KPI-wizard categorie-eerst
+# kan groeperen. Idempotent via migrate_definitions (alleen waar categorie leeg is).
+_SOURCE_CATEGORIE = {
+    "plausible": "Website", "shopify": "Verkoop", "gsc": "Zoekprestaties",
+    "werkoverleg": "Werkoverleg", "finance": "Financieel", "budget": "Financieel",
+    "erp": "Supply chain", "impact": "Impact",
+    "survey": "Team & klant", "hris": "Team & klant", "support": "Team & klant",
+    "monitoring": "IT", "site_health": "IT",
+    "trends": "Onderzoek", "keywords_everywhere": "Onderzoek", "ngram": "Onderzoek",
+    "openalex": "Onderzoek", "semantic_scholar": "Onderzoek",
+    "competitor_news": "Marketing", "linkbuilding": "Marketing",
+}
+
 
 def migrate_definitions(store: DefinitionStore) -> int:
     """Retroactief de nieuwe verplichte/koppel-velden vullen op bestaande definities. Zelfde patroon
     als `migrate_records` voor `source`: idempotent en in-place, vult alleen ONTBREKENDE velden.
 
     - `aard` wordt afgeleid uit `meettype` waar het ontbreekt (snapshot → moment, anders → reeks);
-    - `aggregatie`/`formule`/`categorie` krijgen hun lege default;
+    - `aggregatie`/`formule` krijgen hun lege default;
+    - `categorie` wordt gezet uit `_SOURCE_CATEGORIE` (op bron) waar het leeg is, zodat de KPI-wizard
+      categorie-eerst kan groeperen;
     - `veld` wordt gezet uit `_SEED_VELD` (op naam) waar het ontbreekt, zodat het koppelscherm de
       al-gekoppelde bron-velden herkent.
 
@@ -509,12 +524,18 @@ def migrate_definitions(store: DefinitionStore) -> int:
             if v.get("aard") not in AARD:
                 v["aard"] = aard_from_meettype(v.get("meettype", "snapshot"))
                 dirty = True
-            for key in ("aggregatie", "categorie"):
-                if key not in v:
-                    v[key] = ""
-                    dirty = True
+            if "aggregatie" not in v:
+                v["aggregatie"] = ""
+                dirty = True
             if "formule" not in v:
                 v["formule"] = False
+                dirty = True
+            mapped_cat = _SOURCE_CATEGORIE.get(v.get("source", ""), "")
+            if "categorie" not in v:
+                v["categorie"] = mapped_cat
+                dirty = True
+            elif mapped_cat and not v.get("categorie"):
+                v["categorie"] = mapped_cat
                 dirty = True
             mapped = _SEED_VELD.get(v.get("name", ""), "")
             if "veld" not in v:
