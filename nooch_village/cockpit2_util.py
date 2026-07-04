@@ -215,7 +215,7 @@ details{background:none;border:none;border-radius:0;box-shadow:none;padding:0}
    Geen rand (transparant); de frames verder ingezoomd zodat de zwarte marge zo dun mogelijk is.
    Lange, zachte fade voor een vloeiende draaiing. */
 .epic-earth{position:relative;box-sizing:border-box;width:92%;aspect-ratio:1/1;margin:.6rem auto .3rem;border-radius:50%;overflow:hidden}
-.epic-frame{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scale(1.25);opacity:0;transition:opacity 4s ease}
+.epic-frame{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scale(1.25);opacity:0;transition:opacity 5s ease}
 .epic-frame.on{opacity:1}
 .epic-cap{text-align:center;font-size:.72rem;color:var(--muted);margin-bottom:.4rem}
 .c2-sec{margin:1.1rem 0}

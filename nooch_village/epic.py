@@ -17,7 +17,8 @@ _META_URL = "https://api.nasa.gov/EPIC/api/natural"
 # De VOLLE 2048px-PNG; we resizen 'm server-side met Pillow naar ~512px (kolombreed genoeg, licht).
 _PNG_URL = "https://api.nasa.gov/EPIC/archive/natural/{y}/{m}/{d}/png/{image}.png"
 _TTL = 3600.0            # 1 uur
-_N_FRAMES = 8            # ~8 frames, gesampled over de hele dag → volle rotatie (ook Europa)
+_N_FRAMES = 24           # max; een EPIC-dag heeft ~13–22 frames → we gebruiken ze allemaal voor
+                         # zo klein mogelijke stapjes tussen de posities (vloeiende draaiing)
 _SIZE = 512             # doelformaat (px) na resize
 
 _meta_cache: dict = {"ts": 0.0, "data": None}
@@ -32,8 +33,8 @@ def _key() -> str:
 
 
 def latest_frames() -> list[dict] | None:
-    """De laatste ~6 EPIC-frames als [{image, date (YYYY-MM-DD), caption (UTC-tijd)}], chronologisch.
-    None bij ontbrekende key of een fout. 1 uur gecachet."""
+    """Alle EPIC-frames van de laatste dag als [{image, date (YYYY-MM-DD), caption (UTC-tijd)}],
+    chronologisch. None bij ontbrekende key of een fout. 1 uur gecachet."""
     now = time.time()
     if _meta_cache["data"] is not None and now - _meta_cache["ts"] < _TTL:
         return _meta_cache["data"]
@@ -48,34 +49,39 @@ def latest_frames() -> list[dict] | None:
         return None
     if not isinstance(raw, list) or not raw:
         return None
-    # Verdeel de frames evenwichtig over de HELE dag i.p.v. alleen het laatste stukje, zodat de aarde
-    # een volle rotatie draait en ook Europa/Afrika langskomt (niet enkel de Pacific).
+    # Gebruik ALLE frames van de dag (een EPIC-dag heeft er ~13–22) voor zo klein mogelijke stapjes
+    # tussen de posities → vloeiende draaiing, volle rotatie (ook Europa/Afrika). Alleen bij een
+    # uitzonderlijk grote dag evenwichtig terugsamplen naar _N_FRAMES zodat de payload begrensd blijft.
     valid = [it for it in raw if it.get("image") and it.get("date")]
     if not valid:
         return None
-    n = min(_N_FRAMES, len(valid))
-    picks = ([valid[(i * (len(valid) - 1)) // (n - 1)] for i in range(n)] if n > 1 else valid[:1])
+    if len(valid) <= _N_FRAMES:
+        picks = valid
+    else:
+        n = _N_FRAMES
+        picks = [valid[(i * (len(valid) - 1)) // (n - 1)] for i in range(n)]
     frames = [{"image": it["image"], "date": it["date"][:10], "caption": it["date"]} for it in picks]
     _meta_cache["ts"] = now
     _meta_cache["data"] = frames
     return frames
 
 
-def _resize_png(src: bytes) -> bytes | None:
-    """Volle EPIC-PNG (2048px) → ~512px PNG via Pillow. None bij een Pillow-fout (fail-closed)."""
+def _resize_frame(src: bytes) -> bytes | None:
+    """Volle EPIC-PNG (2048px) → ~512px JPEG via Pillow. JPEG (i.p.v. PNG) houdt 22 frames licht:
+    ~50 KB i.p.v. ~270 KB per frame. None bij een Pillow-fout (fail-closed)."""
     try:
         from PIL import Image
         im = Image.open(io.BytesIO(src)).convert("RGB")
         im.thumbnail((_SIZE, _SIZE))
         out = io.BytesIO()
-        im.save(out, format="PNG", optimize=True)
+        im.save(out, format="JPEG", quality=82, optimize=True)
         return out.getvalue()
     except Exception:      # noqa: BLE001 — elke Pillow-/decode-fout → nette fallback, geen crash
         return None
 
 
 def frame_bytes(image: str, date: str) -> bytes | None:
-    """De naar ~512px geresizede PNG van één frame (1 uur gecachet). None bij ontbrekende key, een
+    """De naar ~512px geresizede JPEG van één frame (1 uur gecachet). None bij ontbrekende key, een
     API-/Pillow-fout, of een onveilige image-id/datum (voorkomt SSRF/path-traversal in de proxy-url)."""
     if not image or not date or not _IMAGE_RE.fullmatch(image) or not _DATE_RE.fullmatch(date):
         return None
@@ -96,7 +102,7 @@ def frame_bytes(image: str, date: str) -> bytes | None:
         return None
     if not src:
         return None
-    data = _resize_png(src)
+    data = _resize_frame(src)
     if not data:
         return None
     _png_cache[image] = (now, data)

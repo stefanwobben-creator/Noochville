@@ -160,7 +160,7 @@ def _epic_earth_html() -> str:
           "var fr=w.querySelectorAll('.epic-frame'),cap=w.querySelector('.epic-cap');"
           "if(fr.length<2)return;var i=fr.length-1;"
           "setInterval(function(){fr[i].classList.remove('on');i=(i+1)%fr.length;"
-          "fr[i].classList.add('on');if(cap)cap.textContent='Live: '+fr[i].getAttribute('data-cap');},6000);"
+          "fr[i].classList.add('on');if(cap)cap.textContent='Live: '+fr[i].getAttribute('data-cap');},5000);"
           "})();</script>")
     return (f"<div class='epic-earth'>{imgs}</div>"
             f"<div class='epic-cap'>Live: {cap0}</div>{js}")
