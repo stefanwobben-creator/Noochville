@@ -62,7 +62,7 @@ def test_kpi_composer_combos(tmp_path):
     page = cockpit2.render_kpi_composer(cockpit2._Stores(dd), C, csrf_token="t")
     # focus-flow: indicator-combo's + referentie-keuze + vorm
     assert "Verkoop: Paren verkocht · per land" in page
-    assert "Websitebezoekers: Bezoekers (7d) · over tijd" in page
+    assert "Websitebezoekers: Bezoekers (per dag) · over tijd" in page
     assert "tile_add" in page and "Referentie" in page and "benchmark" in page and "doel" in page
 
 
@@ -340,3 +340,39 @@ def test_werk_aggregaat_respecteert_periodefilter(tmp_path):
     # zonder filter (None) → all-time gemiddelde/som over beide records
     assert _werk_fetch(st, C, "tevredenheid", "gemiddeld", None)["value"] == 6.0
     assert _werk_fetch(st, C, "duur", "totaal", None)["value"] == 110
+
+
+# ── bezoekers 'over tijd': echt lijn-diagram uit de dagreeks (observations) ───
+def test_bezoekers_lijndiagram_toont_meerdere_punten(tmp_path):
+    """Zodra er meerdere dagwaarden (bron=plausible) in de observatie-store staan, toont de
+    bezoekers-'over tijd'-tegel een echt lijn-diagram met meerdere punten (geen micro-sparkline)."""
+    import datetime as dt
+    from nooch_village.views.metrics import _fetch, _line_chart_svg, _render_form
+    st = cockpit2._Stores(_dd(tmp_path))
+    base = dt.datetime(2026, 7, 1, 12, 0, tzinfo=dt.timezone.utc)
+    for i, v in enumerate([40, 55, 48]):
+        ts = (base + dt.timedelta(days=i)).timestamp()
+        st.observations.record_daily("website_watcher", "visitors_day", v,
+                                     bron="plausible", datum=f"2026-07-0{i+1}", ts=ts)
+    res = _fetch(st, "pulse_visitors", "visitors", "time", None)
+    assert res["chart"] == "line" and [v for _, v in res["points"]] == [40, 55, 48]
+    svg = _line_chart_svg(res["points"], "bezoekers")
+    assert svg.count("<circle") == 3          # drie echte dagpunten als stippen
+    assert "<polyline" in svg                 # verbonden lijn
+    assert "01-07" in svg and "03-07" in svg  # leesbare x-as (eerste + laatste datum)
+    # de tegel-vorm (verdeling → trend) routeert naar het lijn-diagram, niet de sparkline
+    assert "<polyline" in _render_form(res, "verdeling", None)
+
+
+def test_bezoekers_lijndiagram_geen_data_status(tmp_path):
+    from nooch_village.views.metrics import _fetch, _line_chart_svg
+    st = cockpit2._Stores(_dd(tmp_path))
+    res = _fetch(st, "pulse_visitors", "visitors", "time", None)
+    assert res["points"] == []
+    assert "geen data" in _line_chart_svg(res["points"], "bezoekers")   # nette status, geen vlakke lijn
+
+
+def test_bezoekers_lijndiagram_een_punt_geen_lijn(tmp_path):
+    from nooch_village.views.metrics import _line_chart_svg
+    svg = _line_chart_svg([(1000.0, 42)], "bezoekers")   # één datapunt
+    assert "te weinig" in svg and "<polyline" not in svg  # geen lijn, geen interpolatie

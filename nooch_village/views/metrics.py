@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 _MW = [("vandaag", "Vandaag"), ("7d", "7 dagen"), ("maand", "Maand"),
        ("kwartaal", "Kwartaal"), ("alles", "Alles")]
 # Bron-KPI's: meetbaar uit bestaande dorpsdata (AI/agents schrijven hier al naartoe).
-_SOURCE_KPIS = {"pulse_visitors": {"name": "Websitebezoekers (7-daags)", "unit": "bezoekers"}}
+_SOURCE_KPIS = {"pulse_visitors": {"name": "Websitebezoekers (per dag)", "unit": "bezoekers"}}
 
 
 def _source_samples(dd: str, source: str):
@@ -88,6 +88,45 @@ def _break_indices(samples) -> list:
             out.append(i)
         prev = dv if dv is not None else prev
     return out
+
+
+def _line_chart_svg(points, unit: str = "") -> str:
+    """Echt lijn-diagram (server-side SVG, cockpit2-stijl): x=datum, y=waarde, met leesbare assen.
+    Alleen de echte dagpunten als stippen, verbonden — geen interpolatie van ontbrekende dagen.
+    0 punten → nette 'geen data'; 1 punt → 'te weinig voor een lijn' (nooit een vlakke lijn)."""
+    if not points:
+        return "<div class='kpi-val'><span class='muted' style='font-size:.9rem'>geen data in deze periode</span></div>"
+    import datetime as _dt
+    vals = [v for _, v in points]
+    if len(points) < 2:
+        return (f"<div class='tile-trend'><span class='kpi-val sm'>{_num(vals[-1])}</span>"
+                f"<span class='muted' style='font-size:.7rem'>1 meetpunt — te weinig voor een lijn</span></div>")
+    W, H = 300.0, 140.0
+    ml, mr, mt, mb = 36.0, 8.0, 10.0, 20.0            # marges: links y-labels, onder x-labels
+    iw, ih = W - ml - mr, H - mt - mb
+    xs = [t for t, _ in points]
+    x0, x1 = xs[0], xs[-1]
+    xspan = (x1 - x0) or 1.0
+    ymax = max(vals)
+    ymin = min(0, min(vals))                          # 0-basislijn (of lager bij negatieve waarden)
+    yspan = (ymax - ymin) or 1.0
+    fx = lambda t: ml + (t - x0) / xspan * iw
+    fy = lambda v: mt + (1 - (v - ymin) / yspan) * ih
+    axis = (f"<line x1='{ml:.1f}' y1='{mt:.1f}' x2='{ml:.1f}' y2='{mt+ih:.1f}' stroke='var(--border)' stroke-width='1'/>"
+            f"<line x1='{ml:.1f}' y1='{mt+ih:.1f}' x2='{ml+iw:.1f}' y2='{mt+ih:.1f}' stroke='var(--border)' stroke-width='1'/>")
+    ylab = (f"<text x='{ml-4:.1f}' y='{fy(ymax)+3:.1f}' text-anchor='end' font-size='9' fill='var(--muted)'>{_num(ymax)}</text>"
+            f"<text x='{ml-4:.1f}' y='{fy(ymin)+3:.1f}' text-anchor='end' font-size='9' fill='var(--muted)'>{_num(ymin)}</text>")
+    fmt = lambda t: _dt.datetime.fromtimestamp(t).strftime('%d-%m')
+    xlab = (f"<text x='{ml:.1f}' y='{H-5:.1f}' text-anchor='start' font-size='9' fill='var(--muted)'>{_e(fmt(x0))}</text>"
+            f"<text x='{ml+iw:.1f}' y='{H-5:.1f}' text-anchor='end' font-size='9' fill='var(--muted)'>{_e(fmt(x1))}</text>")
+    poly = " ".join(f"{fx(t):.1f},{fy(v):.1f}" for t, v in points)
+    line = f"<polyline points='{poly}' fill='none' stroke='var(--green)' stroke-width='1.8'/>"
+    dots = "".join(f"<circle cx='{fx(t):.1f}' cy='{fy(v):.1f}' r='2.2' fill='var(--green)'/>" for t, v in points)
+    u = f" <span class='kpi-unit'>{_e(unit)}</span>" if unit else ""
+    head = f"<div class='tile-trend'><span class='kpi-val sm'>{_num(vals[-1])}{u}</span></div>"
+    svg = (f"<svg class='linechart' viewBox='0 0 {W:.0f} {H:.0f}' width='100%' height='140' preserveAspectRatio='xMidYMid meet'>"
+           f"{axis}{ylab}{xlab}{line}{dots}</svg>")
+    return head + svg
 
 
 def _kpi_card(st: _Stores, item: dict, cutoff, csrf: str, *, provider=False, circle="") -> str:
@@ -187,7 +226,7 @@ def _sources_for(st: _Stores, rec):
     is_c = org.is_circle(rec)
     srcs = [
         {"id": "pulse_visitors", "label": "Websitebezoekers",
-         "measures": [("visitors", "Bezoekers (7d)")], "dims": [("time", "over tijd")]},
+         "measures": [("visitors", "Bezoekers (per dag)")], "dims": [("time", "over tijd")]},
         {"id": "shopify", "label": "Verkoop",
          "measures": [("pairs_sold", "Paren verkocht"), ("orders", "Orders"),
                       ("revenue", "Omzet"), ("aov", "Gem. orderwaarde")],
@@ -266,8 +305,12 @@ def _tile_meta(st: _Stores, rec, tile) -> str:
 def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff):
     """Haal de data voor een tegel op. Resultaat: series (punten), breakdown (rijen) of number."""
     if source == "pulse_visitors":
-        return {"kind": "series", "points": filter_samples(_source_samples(st.dd, "pulse_visitors"), cutoff),
-                "unit": "bezoekers"}
+        # De "over tijd"-reeks komt uit de dagelijkse observaties (bron=plausible), niet meer uit de
+        # rollende 7d-total: één datapunt per dag → een echte dagreeks voor het lijn-diagram.
+        rows = st.observations.daily_series("visitors_day", bron="plausible")
+        samples = [{"at": r["ts"], "value": r["value"]} for r in rows]
+        return {"kind": "series", "points": filter_samples(samples, cutoff),
+                "unit": "bezoekers", "chart": "line"}
     if source == "shopify":
         w = _shopify_window(st.dd) or {}
         if dim == "country":
@@ -431,6 +474,8 @@ def _render_form(res, form, target=None):
         form = "getal"
     if form == "trend":
         pts = res.get("points") or []
+        if res.get("chart") == "line":                 # echte dagreeks → lijn-diagram met assen
+            return _line_chart_svg(pts, res.get("unit", ""))
         return (f"<div class='tile-trend'><span class='kpi-val sm'>{_num(pts[-1][1] if pts else None)}</span>"
                 f"{_spark_svg(pts)}</div>")
     if form in ("verdeling", "tabel"):
@@ -463,8 +508,8 @@ def _render_form(res, form, target=None):
 
 # Grondslag-laag (GAAP/IRIS): definitie, eenheid, bron, richting per bron-measure.
 _SOURCE_GRONDSLAG = {
-    "pulse_visitors|visitors": ("Unieke websitebezoekers, voortschrijdend 7-daags venster.",
-                                "bezoekers", "pulse_history (Plausible-puls)", "up"),
+    "pulse_visitors|visitors": ("Unieke websitebezoekers per dag (dagreeks uit de observaties).",
+                                "bezoekers", "observations (Plausible-dagwaarde)", "up"),
     "shopify|pairs_sold": ("Verkochte paren uit betaalde orders.", "paren", "Shopify", "up"),
     "shopify|orders": ("Aantal betaalde orders.", "orders", "Shopify", "up"),
     "shopify|revenue": ("Omzet uit betaalde orders.", "EUR", "Shopify", "up"),

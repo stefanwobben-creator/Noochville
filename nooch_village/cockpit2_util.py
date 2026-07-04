@@ -608,6 +608,7 @@ ul.clean li:last-child{border-bottom:none}
 .kpi-val{font-family:var(--font-display);font-size:1.6rem;line-height:1}
 .kpi-unit{font-size:.8rem;color:var(--subtle);font-family:inherit}
 .spark{display:block}
+.linechart{display:block;margin-top:.3rem}
 .kpi-prov{font-size:.72rem;margin-top:.1rem}
 .kpi-foot{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:.3rem}
 .kpi-add{display:flex;gap:.3rem}
