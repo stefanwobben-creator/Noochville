@@ -399,3 +399,62 @@ def test_context_endpoint_json_en_markdown_en_404(tmp_path):
     assert status == 200 and "text/markdown" in ctype and body.startswith("# Rol-context")
     status, _, _ = cockpit2.role_context(st, "bestaat_niet", "json")
     assert status == 404
+
+
+# ── brok UI: Notes/Policies/Tools tabs ──────────────────────────────────────
+
+def test_ui_vervuller_ziet_editknop_niet_vervuller_niet(tmp_path):
+    st = _stores(tmp_path)
+    st.people.add("Alice", "alice@nooch.earth")
+    st.assign.assign(OWNER, "person", st.people.by_email("alice@nooch.earth").id)
+    st.people.add("Bob", "bob@nooch.earth")                 # bestaat, vervult OWNER niet
+    st.att.add(OWNER, "policy", title="Merkstem", body="burger, geen consument")
+
+    filler = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="alice@nooch.earth")
+    assert "artefact_add" in filler and "artefact_edit" in filler   # add- + edit-formulier zichtbaar
+    assert "Merkstem" in filler
+
+    outsider = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="bob@nooch.earth")
+    assert "Merkstem" in outsider                            # ziet de policy wél (read)
+    assert "artefact_add" not in outsider and "artefact_edit" not in outsider   # maar geen edit-knop
+
+
+def test_ui_geerfd_readonly_met_herkomst(tmp_path):
+    st = _stores(tmp_path)
+    st.att.add(CIRCLE, "policy", title="Cirkelbreed", inherit=True)
+    html = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
+    assert "Geldend hier" in html and "Cirkelbreed" in html
+    assert "via Nooch" in html
+    assert f"/node?id={CIRCLE}&tab=policies" in html         # herkomst-badge springt naar bron-rol
+
+
+def test_ui_anchor_form_eist_governance_ref(tmp_path):
+    st = _stores(tmp_path)
+    anchor = cockpit2.render_node(st, ANCHOR, "policies", csrf_token="tok", username="guest")
+    assert "name='governance_ref' required" in anchor       # anchor-form eist governance_ref
+    owner = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
+    assert "name='governance_ref' required" not in owner     # niet-anchor: geen verplicht veld
+
+
+def test_ui_tools_tab_toont_url_en_icon(tmp_path):
+    st = _stores(tmp_path)
+    st.att.add(OWNER, "tool", title="Serpstat", url="https://serpstat.com")
+    html = cockpit2.render_node(st, OWNER, "tools", csrf_token="tok", username="guest")
+    assert "Tools" in html and "https://serpstat.com" in html and "🛠" in html
+    # de tab zit in de tabbar
+    assert "tab=tools" in cockpit2.render_node(st, OWNER, "overview", csrf_token="tok", username="guest")
+
+
+def test_ui_governance_policy_slot_badge_zonder_edit(tmp_path):
+    st = _stores(tmp_path)
+    html = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
+    assert "🔒" in html and "transparant" in html.lower()   # anchor governance-policy read-only
+    assert "via Mother Earth" in html
+
+
+def test_ui_versiehistorie_uitklapper(tmp_path):
+    st = _stores(tmp_path)
+    a = st.att.add(OWNER, "policy", title="P", body="v1")
+    st.att.update(a.id, body="v2", change_note="verscherpt")
+    html = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
+    assert "historie (2)" in html and "verscherpt" in html

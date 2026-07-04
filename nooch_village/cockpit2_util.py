@@ -10,23 +10,23 @@ _BUILD = _time.strftime("%H:%M")   # proces-starttijd: zichtbaar in de balk
 # De rol waarop de Backlog Builder (Notes-vervanger) leeft. Eén bron voor gate + view + coupling.
 WEBSITE_DEVELOPER_ROLE = "mother_earth__nooch__website_developer"
 
-_CIRCLE_TABS = ["overview", "roles", "members", "policies", "notes", "projects",
+_CIRCLE_TABS = ["overview", "roles", "members", "policies", "notes", "tools", "projects",
                 "checklists", "metrics"]
-_ROLE_TABS = ["overview", "policies", "notes", "projects", "checklists", "metrics"]
+_ROLE_TABS = ["overview", "policies", "notes", "tools", "projects", "checklists", "metrics"]
 # Persoon/AI-role-filler-view: een read-only aggregatie-lens over de rollen die iemand vervult,
 # geen nieuwe autoriteitslaag. Spiegelt de rol-view-chrome via _tabbar(base="/person").
 _PERSON_TABS = ["rollen", "projecten", "context", "metrics", "checklist"]
 
 # Welke tabs "leven" (echt werken) en welke nog grijs zijn. Status: live | basic | grey.
 _TAB_STATUS = {
-    "overview": "live", "roles": "live", "members": "live", "notes": "basic",
+    "overview": "live", "roles": "live", "members": "live", "notes": "live",
     "metrics": "live", "checklists": "live", "projects": "live",
-    "policies": "grey",
+    "policies": "live", "tools": "live",
     "rollen": "basic",   # persoon-view: gevuld; de overige persoon-tabs vallen op grey terug
 }
 _TAB_LABEL = {
     "overview": "Overview", "strategy": "Strategy", "roles": "Roles", "members": "Members",
-    "policies": "Policies", "notes": "Notes", "projects": "Projects",
+    "policies": "Policies", "notes": "Notes", "tools": "Tools", "projects": "Projects",
     "checklists": "Checklists", "metrics": "Metrics",
     "rollen": "Rollen", "projecten": "Projecten", "context": "Context", "checklist": "Checklist",
 }
