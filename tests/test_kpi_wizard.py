@@ -63,4 +63,5 @@ def test_formule_opslag_en_placeholder_render(tmp_path):
     assert t["measure"] == "Conversie" and t["f_op"] == "÷" and t["aggregatie"] == "gemiddelde"
     assert t["f_a"] == "pulse_visitors|visitors|time" and t["f_b"] == "shopify|pairs_sold|none"
     page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
-    assert "berekening volgt" in page                              # eerlijke placeholder, geen verzonnen getal
+    # de formule-tegel wordt nu fail-closed doorgerekend; zonder dagdata → eerlijk 'geen data'
+    assert "Conversie" in page and "berekening volgt" not in page
