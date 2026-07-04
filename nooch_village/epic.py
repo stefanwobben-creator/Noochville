@@ -17,7 +17,7 @@ _META_URL = "https://api.nasa.gov/EPIC/api/natural"
 # De VOLLE 2048px-PNG; we resizen 'm server-side met Pillow naar ~512px (kolombreed genoeg, licht).
 _PNG_URL = "https://api.nasa.gov/EPIC/archive/natural/{y}/{m}/{d}/png/{image}.png"
 _TTL = 3600.0            # 1 uur
-_N_FRAMES = 6            # laatste ~6 frames voor de zachte draaiing
+_N_FRAMES = 8            # ~8 frames, gesampled over de hele dag → volle rotatie (ook Europa)
 _SIZE = 512             # doelformaat (px) na resize
 
 _meta_cache: dict = {"ts": 0.0, "data": None}
@@ -48,13 +48,14 @@ def latest_frames() -> list[dict] | None:
         return None
     if not isinstance(raw, list) or not raw:
         return None
-    frames = []
-    for it in raw[-_N_FRAMES:]:
-        image, dt = it.get("image"), it.get("date", "")   # date bv. "2015-10-31 00:36:33"
-        if image and dt:
-            frames.append({"image": image, "date": dt[:10], "caption": dt})
-    if not frames:
+    # Verdeel de frames evenwichtig over de HELE dag i.p.v. alleen het laatste stukje, zodat de aarde
+    # een volle rotatie draait en ook Europa/Afrika langskomt (niet enkel de Pacific).
+    valid = [it for it in raw if it.get("image") and it.get("date")]
+    if not valid:
         return None
+    n = min(_N_FRAMES, len(valid))
+    picks = ([valid[(i * (len(valid) - 1)) // (n - 1)] for i in range(n)] if n > 1 else valid[:1])
+    frames = [{"image": it["image"], "date": it["date"][:10], "caption": it["date"]} for it in picks]
     _meta_cache["ts"] = now
     _meta_cache["data"] = frames
     return frames
