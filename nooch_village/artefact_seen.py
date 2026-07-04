@@ -1,7 +1,6 @@
 """Seen-markering — per-gebruiker 'gewijzigd sinds laatst gezien' op de artefact-tabs.
 
-Aparte data-file (`data/artefact_seen.json`); dit raakt de statische maturity-dot
-(groen/geel/grijs uit `_TAB_STATUS`) NIET. Het is een tweede, gebruiker-specifiek signaal:
+Aparte data-file (`data/artefact_seen.json`). Een gebruiker-specifiek signaal op tab-niveau:
 
 - **seen-store**: per gebruiker een `last_seen`-tijdstip per (rol, tab).
 - **geel** = er is een artefact-mutatie (brok-2 changelog: ts + erfketen) van die soort met de

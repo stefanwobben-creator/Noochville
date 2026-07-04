@@ -24,7 +24,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from nooch_village import auth as _auth
 from nooch_village.cockpit import _e, _page, _banner     # zelfde design system
 from nooch_village.cockpit2_util import (
-    _name, _initials, _tabbar, _todo, _avatar, _age, _fmt_due,
+    _name, _initials, _tabbar, _avatar, _age, _fmt_due,
     _created_full, _ic, _bron_html, _stamp, _md, _parse_multipart,
     _link_host, _psec, _ICON_ADD_EMOJI, _person_name,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK, _IC_DL,
