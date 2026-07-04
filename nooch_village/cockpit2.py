@@ -38,6 +38,7 @@ from nooch_village.governance import Records
 from nooch_village.people import PeopleStore
 from nooch_village.assignments import Assignments
 from nooch_village.attachments import AttachmentStore, ARTEFACT_KINDS
+from nooch_village.observations import ObservationStore
 from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
 from nooch_village.artefact_seen import SeenStore
@@ -81,6 +82,7 @@ class _Stores:
         self.people = PeopleStore(os.path.join(dd, "people.json"))
         self.assign = Assignments(os.path.join(dd, "assignments.json"))
         self.att = AttachmentStore(os.path.join(dd, "attachments.json"))
+        self.observations = ObservationStore(os.path.join(dd, "observations.jsonl"))
         self.seen = SeenStore(os.path.join(dd, "artefact_seen.json"))
         self.personas = PersonaStore(os.path.join(dd, "personas.json"))
         self.projects = ProjectLedger(os.path.join(dd, "projects.json"))

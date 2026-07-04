@@ -77,3 +77,15 @@ class ObservationStore:
         """Laatste observatie voor role_id + metric, of None."""
         rows = self.series(role_id, metric)
         return rows[-1] if rows else None
+
+    def daily_series(self, metric: str, bron: str | None = None,
+                     role_id: str | None = None) -> list[dict]:
+        """De dagreeks van een metric (optioneel op bron en/of rol gefilterd), oplopend op ts.
+        De één-per-dag-garantie komt van `record_daily`; hier wordt alleen gelezen. Site-brede
+        metrics (bv. bezoekers) laat je role_id weg — dan telt de reeks over alle rollen."""
+        rows = [r for r in self._read_all()
+                if r.get("metric") == metric
+                and (bron is None or r.get("bron") == bron)
+                and (role_id is None or r.get("role_id") == role_id)]
+        rows.sort(key=lambda r: r["ts"])
+        return rows
