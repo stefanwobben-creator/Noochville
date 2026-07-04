@@ -225,9 +225,11 @@ details{background:none;border:none;border-radius:0;box-shadow:none;padding:0}
 .c2-unseen{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--yellow);
   margin-left:.3rem;vertical-align:middle;box-shadow:0 0 0 2px var(--yellow-light)}
 /* NASA-EPIC-aardbol (alleen op de anchor-overview): bijna kolombreed, rond, gestapelde frames die
-   traag cross-faden. width iets smaller dan de sectie-scheidingslijn; vierkant via aspect-ratio. */
-.epic-earth{position:relative;width:92%;aspect-ratio:1/1;margin:.6rem auto .3rem}
-.epic-frame{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;object-fit:cover;opacity:0;transition:opacity 1s ease}
+   traag cross-faden. width iets smaller dan de sectie-scheidingslijn; vierkant via aspect-ratio.
+   Dunne (8px) neongroene rand; de frames iets ingezoomd zodat de aarde de cirkel vult (geen zwarte
+   marge). Zachte, langzame fade voor een vloeiende draaiing. */
+.epic-earth{position:relative;box-sizing:border-box;width:92%;aspect-ratio:1/1;margin:.6rem auto .3rem;border-radius:50%;overflow:hidden;border:8px solid #39ff14}
+.epic-frame{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scale(1.18);opacity:0;transition:opacity 2.5s ease}
 .epic-frame.on{opacity:1}
 .epic-cap{text-align:center;font-size:.72rem;color:var(--muted);margin-bottom:.4rem}
 .c2-sec{margin:1.1rem 0}
