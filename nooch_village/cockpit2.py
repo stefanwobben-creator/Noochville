@@ -37,7 +37,9 @@ from nooch_village.views.feed import (
 from nooch_village.governance import Records
 from nooch_village.people import PeopleStore
 from nooch_village.assignments import Assignments
-from nooch_village.attachments import AttachmentStore
+from nooch_village.attachments import AttachmentStore, ARTEFACT_KINDS
+from nooch_village import artefacts
+from nooch_village.artefacts import can_write_artefact, requires_governance_ref
 from nooch_village.personas import PersonaStore
 from nooch_village.projects import ProjectLedger
 from nooch_village.ai_tasks import AITaskStore
@@ -143,6 +145,7 @@ def _bootstrap(dd: str) -> None:
     _ensure_transparency_policy(st)
     _seed_catalog(st.defs)        # Librarian metrics-database: zaad-definities (idempotent)
     _reground_seed(st.defs)       # bestaande definities bijwerken met nieuwe grondingen (idempotent)
+    st.att.migrate()              # attachments → artefact-model (legacy tool-notes, defaults; idempotent)
 
 
 from nooch_village.views.overview import (
@@ -433,6 +436,34 @@ def _wd_gate(username: str | None, st) -> str | None:
     return "Geen toegang — alleen de Website Developer mag de backlog beheren"
 
 
+class Forbidden(Exception):
+    """Een artefact-schrijfactie is geweigerd. `do_POST` vertaalt dit naar een echte HTTP 403 met
+    de reden — i.p.v. de operationele 303-redirect met melding — zodat een client een expliciete
+    weigering ziet en een ontbrekende governance_ref nooit een 500 wordt."""
+
+
+def _web_actor_id(username: str | None, st) -> str:
+    """Person-id van de ingelogde mens (voor de versie-/changelog-actor). "guest"/onbekend → ""."""
+    if username in (None, "guest"):
+        return ""
+    actor = st.people.by_email(username)
+    return actor.id if actor else ""
+
+
+def _artefact_gate(owner_role_id: str, username: str | None, st) -> str | None:
+    """Poort voor artefact-schrijfacties (add/edit/archive). Regel: rolvervuller van de eigenaar-rol
+    OF Circle Lead van de omvattende cirkel — via `can_write_artefact`, dus identiek voor mens en
+    (op de AI-weg) persona. Foutmelding bij weigering, anders None. "guest" (auth uit) mag alles."""
+    if username == "guest":
+        return None
+    actor = st.people.by_email(username)
+    if actor is None:
+        return "Geen toegang — gebruiker niet herkend"
+    if can_write_artefact("person", actor.id, owner_role_id, st.records, st.assign):
+        return None
+    return "Geen toegang — alleen de rolvervuller of Circle Lead mag artefacten beheren"
+
+
 def _lead_gate(circle_id: str, username: str | None, st) -> str | None:
     """Poort voor acties die alleen de Circle Lead van een cirkel mag (bv. een overleg
     openen/sluiten of de agenda-flow beheren). Foutmelding bij weigering, anders None.
@@ -561,6 +592,70 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             if col == "wacht":
                 pj.block(pid, "—")
             msg = "➕ project toegevoegd"
+    elif action == "artefact_add":
+        # AUTHZ: rolvervuller of Circle Lead — alleen de vervuller van de eigenaar-rol (of de Circle
+        # Lead van de omvattende cirkel) mag artefacten binnen dat domein aanmaken; mens én AI gelijk.
+        owner = g("owner")
+        _deny = _artefact_gate(owner, username, st)          # check vóór de mutatie
+        if _deny:
+            raise Forbidden(_deny)                            # → HTTP 403, geen 303-redirect
+        kind = g("kind")
+        if kind not in ARTEFACT_KINDS:
+            return nxt, "✗ onbekende artefact-soort"
+        gref = g("governance_ref").strip()
+        if requires_governance_ref(owner, st.records) and not gref:
+            raise Forbidden("Anchor-cirkel: een schrijfactie vereist een governance_ref "
+                            "(verwijzing naar het governance-besluit).")
+        actor_id = _web_actor_id(username, st)
+        a = st.att.add(owner, kind, title=g("title"), body=g("body"),
+                       scope=g("scope"), url=g("url"), inherit=(g("inherit") != "0"),
+                       actor_id=actor_id, actor_type="person",
+                       governance_ref=gref, change_note="aangemaakt")
+        if a is None:
+            return nxt, "✗ artefact niet aangemaakt"
+        artefacts.log_change(data_dir, action="add", artefact=a, records=st.records,
+                             actor_id=actor_id, actor_type="person", governance_ref=gref)
+        msg = f"➕ {kind} toegevoegd ({a.id})"
+    elif action == "artefact_edit":
+        # AUTHZ: rolvervuller of Circle Lead — bewerken mag alleen wie de eigenaar-rol vervult.
+        cur = st.att.get(g("aid"))
+        if cur is None:
+            return nxt, "✗ artefact niet gevonden"
+        _deny = _artefact_gate(cur.anchor, username, st)      # check vóór de mutatie
+        if _deny:
+            raise Forbidden(_deny)
+        gref = g("governance_ref").strip()
+        if requires_governance_ref(cur.anchor, st.records) and not gref:
+            raise Forbidden("Anchor-cirkel: een wijziging vereist een governance_ref.")
+        actor_id = _web_actor_id(username, st)
+        upd = st.att.update(cur.id,
+                            title=(g("title") if "title" in form else None),
+                            body=(g("body") if "body" in form else None),
+                            scope=(g("scope") if "scope" in form else None),
+                            url=(g("url") if "url" in form else None),
+                            inherit=(None if "inherit" not in form else (g("inherit") != "0")),
+                            actor_id=actor_id, actor_type="person",
+                            governance_ref=gref, change_note=(g("change_note") or "bewerkt"))
+        artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
+                             actor_id=actor_id, actor_type="person", governance_ref=gref)
+        msg = f"✏️ {upd.kind} bijgewerkt ({upd.id})"
+    elif action == "artefact_archive":
+        # AUTHZ: rolvervuller of Circle Lead — archiveren (nooit hard delete) mag alleen de vervuller.
+        cur = st.att.get(g("aid"))
+        if cur is None:
+            return nxt, "✗ artefact niet gevonden"
+        _deny = _artefact_gate(cur.anchor, username, st)      # check vóór de mutatie
+        if _deny:
+            raise Forbidden(_deny)
+        gref = g("governance_ref").strip()
+        if requires_governance_ref(cur.anchor, st.records) and not gref:
+            raise Forbidden("Anchor-cirkel: archiveren vereist een governance_ref.")
+        actor_id = _web_actor_id(username, st)
+        arch = st.att.archive(cur.id, actor_id=actor_id, actor_type="person",
+                              governance_ref=gref, change_note="gearchiveerd")
+        artefacts.log_change(data_dir, action="archive", artefact=arch, records=st.records,
+                             actor_id=actor_id, actor_type="person", governance_ref=gref)
+        msg = f"🗄️ {arch.kind} gearchiveerd ({arch.id})"
     elif action == "proj_status":
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
@@ -1541,7 +1636,10 @@ def make_handler(data_dir: str, csrf_token: str,
             if action == "person_reset_password":
                 self._send(*_handle_person_reset(data_dir, form, username=username))
                 return
-            nxt, msg = dispatch(data_dir, action, form, username=username)
+            try:
+                nxt, msg = dispatch(data_dir, action, form, username=username)
+            except Forbidden as e:
+                self._send(str(e), 403); return    # geweigerde artefact-mutatie → echte 403 + reden
             self._redirect(nxt, msg)
 
         def log_message(self, *_):

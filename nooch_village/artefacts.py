@@ -15,7 +15,12 @@ autorisatie, geen tweede waarheid.
 """
 from __future__ import annotations
 
+import json
+import os
+import time
+
 from nooch_village import org
+from nooch_village.util import file_lock
 
 
 def _name(rec) -> str:
@@ -66,6 +71,48 @@ def can_write_artefact(actor_type: str, actor_id: str, owner_role_id: str,
                for f in assignments.fillers_of(lead_role, records.get(lead_role))):
             return True
     return False
+
+
+def erfketen(anchor: str, inherit: bool, records) -> list[str]:
+    """De rollen die dit artefact 'zien': de eigenaar zelf, plus — als het erft — al zijn nazaten.
+    Dit is de referentie die de seen-markering (brok 5) nodig heeft om te weten wélke rollen in de
+    keten een 'gewijzigd sinds laatst gezien'-stip krijgen."""
+    chain = [anchor]
+    if inherit:
+        chain += [r.id for r in org.descendants(records.all(), anchor)]
+    return chain
+
+
+def log_change(data_dir: str, *, action: str, artefact, records,
+               actor_id: str = "", actor_type: str = "", governance_ref: str = "") -> dict:
+    """Append-only changelog van artefact-mutaties (`data/artefact_changelog.jsonl`).
+
+    Elke regel legt vast: tijdstip, actie (add|edit|archive), artefact-id, eigenaar (anchor),
+    de erfketen-snapshot (welke rollen dit zien) en de governance_ref. Dit is de databron voor de
+    'gewijzigd sinds laatst gezien'-markering in brok 5.
+
+    De append staat bewust onder hetzelfde per-pad slot (`util.file_lock`) als de store-mutaties,
+    zodat regel-atomiciteit gegarandeerd is en niet toevallig van de regellengte afhangt.
+    """
+    entry = {
+        "ts": time.time(),
+        "action": action,
+        "artefact_id": getattr(artefact, "id", ""),
+        "anchor": getattr(artefact, "anchor", ""),
+        "kind": getattr(artefact, "kind", ""),
+        "inherit": bool(getattr(artefact, "inherit", False)),
+        "actor_id": actor_id or "",
+        "actor_type": actor_type or "",
+        "governance_ref": governance_ref or "",
+        "erfketen": erfketen(getattr(artefact, "anchor", ""),
+                             bool(getattr(artefact, "inherit", False)), records),
+    }
+    path = os.path.join(data_dir, "artefact_changelog.jsonl")
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with file_lock(path):
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    return entry
 
 
 def own_and_inherited(role_id: str, kind: str, records, store) -> dict:

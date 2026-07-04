@@ -6,8 +6,12 @@ Gebruikt een echte geboostrapte org zodat de rol-ids en de breadcrumb kloppen.
 """
 from __future__ import annotations
 
+import json
+import os
 import re
 import threading
+
+import pytest
 
 from nooch_village import cockpit2
 from nooch_village import artefacts
@@ -207,3 +211,130 @@ def test_gelijktijdige_updates_verliezen_geen_versie(tmp_path):
 
     versions = AttachmentStore(path).get(a.id).versions
     assert [v["version_nr"] for v in versions] == [1, 2, 3], "versie-historie kwijt onder concurrency"
+
+
+# ── brok 2: write-routes in dispatch + AUTHZ ────────────────────────────────
+
+def _dd(tmp_path):
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    return dd
+
+
+def _changelog(dd):
+    path = os.path.join(dd, "artefact_changelog.jsonl")
+    if not os.path.exists(path):
+        return []
+    with open(path, encoding="utf-8") as f:
+        return [json.loads(line) for line in f if line.strip()]
+
+
+def test_route_vervuller_mag_toevoegen(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    alice = st.people.add("Alice", "alice@nooch.earth")
+    st.assign.assign(OWNER, "person", alice.id)              # persisteren op schijf
+    nxt, msg = cockpit2.dispatch(dd, "artefact_add",
+        {"owner": [OWNER], "kind": ["policy"], "title": ["Merkstem"],
+         "body": ["Altijd 'burger', nooit 'consument'."], "next": ["/"]},
+        username="alice@nooch.earth")
+    assert "toegevoegd" in msg
+    stored = cockpit2._Stores(dd).att.list(OWNER, "policy")
+    assert [a.title for a in stored] == ["Merkstem"]
+    # changelog-entry met timestamp + erfketen weggeschreven
+    log = _changelog(dd)
+    assert len(log) == 1 and log[0]["action"] == "add" and log[0]["ts"] > 0
+    assert OWNER in log[0]["erfketen"]
+
+
+def test_route_niet_vervuller_krijgt_403(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    st.people.add("Bob", "bob@nooch.earth")                  # bestaat, maar vervult OWNER niet
+    with pytest.raises(cockpit2.Forbidden):
+        cockpit2.dispatch(dd, "artefact_add",
+            {"owner": [OWNER], "kind": ["policy"], "title": ["Sluipweg"], "next": ["/"]},
+            username="bob@nooch.earth")
+    assert cockpit2._Stores(dd).att.list(OWNER, "policy") == []   # niets geschreven
+
+
+def test_route_persona_gelijk_aan_person(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    alice = st.people.add("Alice", "alice@nooch.earth")
+    st.assign.assign(OWNER, "person", alice.id)
+    st.assign.assign(OWNER, "persona", "ai_nooch")
+    st2 = cockpit2._Stores(dd)
+    # de poort die de route gebruikt, staat de mens toe ...
+    assert cockpit2._artefact_gate(OWNER, "alice@nooch.earth", st2) is None
+    # ... en can_write_artefact (de AI-weg) geeft voor de persona exact hetzelfde oordeel
+    assert artefacts.can_write_artefact("persona", "ai_nooch", OWNER, st2.records, st2.assign)
+    assert artefacts.can_write_artefact("person", alice.id, OWNER, st2.records, st2.assign)
+
+
+def test_route_anchor_zonder_governance_ref_faalt_met_403(tmp_path):
+    dd = _dd(tmp_path)
+    # guest passeert de vervuller-poort, maar de anchor eist een governance_ref
+    with pytest.raises(cockpit2.Forbidden) as exc:
+        cockpit2.dispatch(dd, "artefact_add",
+            {"owner": [ANCHOR], "kind": ["policy"], "title": ["Missie-policy"], "next": ["/"]},
+            username="guest")
+    assert "governance_ref" in str(exc.value)
+    assert cockpit2._Stores(dd).att.list(ANCHOR, "policy") == []
+    # mét governance_ref lukt het wél
+    nxt, msg = cockpit2.dispatch(dd, "artefact_add",
+        {"owner": [ANCHOR], "kind": ["policy"], "title": ["Missie-policy"],
+         "governance_ref": ["GOV-2026-07"], "next": ["/"]}, username="guest")
+    assert "toegevoegd" in msg
+    stored = cockpit2._Stores(dd).att.list(ANCHOR, "policy")
+    assert stored and stored[0].versions[-1]["governance_ref"] == "GOV-2026-07"
+
+
+def test_route_edit_en_archive_via_dispatch(tmp_path):
+    dd = _dd(tmp_path)
+    a = cockpit2._Stores(dd).att.add(OWNER, "policy", title="v1", body="oud")
+    cockpit2.dispatch(dd, "artefact_edit",
+        {"aid": [a.id], "body": ["nieuw"], "change_note": ["verscherpt"], "next": ["/"]},
+        username="guest")
+    cockpit2.dispatch(dd, "artefact_archive", {"aid": [a.id], "next": ["/"]}, username="guest")
+    fresh = cockpit2._Stores(dd).att
+    assert fresh.list(OWNER, "policy") == []                 # gearchiveerd → uit de lijst
+    hist = fresh.get(a.id)
+    assert hist.status == "archived"
+    assert [v["change_note"] for v in hist.versions] == ["aangemaakt", "verscherpt", "gearchiveerd"]
+    actions = [e["action"] for e in _changelog(dd)]
+    assert actions == ["edit", "archive"]                    # de directe add ging niet via een route
+
+
+def test_route_changelog_erfketen_bevat_nazaten(tmp_path):
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "artefact_add",
+        {"owner": [CIRCLE], "kind": ["policy"], "title": ["Cirkelbreed"],
+         "inherit": ["1"], "next": ["/"]}, username="guest")
+    chain = _changelog(dd)[0]["erfketen"]
+    assert CIRCLE in chain and OWNER in chain               # de rol erft → staat in de keten
+
+
+def test_changelog_append_serialiseert_onder_slot(tmp_path):
+    """Gelijktijdige changelog-appends mogen elkaar niet overschrijven of half schrijven: elke
+    regel moet geldige JSON zijn en alle N entries moeten aanwezig zijn (onder util.file_lock)."""
+    dd = _dd(tmp_path)
+    a = cockpit2._Stores(dd).att.add(OWNER, "policy", title="p")
+    records = cockpit2._Stores(dd).records
+    N = 30
+    barrier = threading.Barrier(N)
+
+    def worker(i):
+        barrier.wait()
+        artefacts.log_change(dd, action="edit", artefact=a, records=records,
+                             actor_id=f"actor-{i}", actor_type="person")
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(N)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    log = _changelog(dd)                                    # parse't elke regel als JSON
+    assert len(log) == N, f"changelog verloor regels: {len(log)}/{N}"
+    assert len({e["actor_id"] for e in log}) == N           # geen overschreven/gemergde regels

@@ -29,12 +29,11 @@ zodat deze store puur opslag blijft (geen kennis van de org-boom of van vervulle
 from __future__ import annotations
 import os
 import re
-import threading
 import time
 import uuid
 from dataclasses import dataclass, field, asdict
 
-from nooch_village.util import atomic_write_json, read_json
+from nooch_village.util import atomic_write_json, read_json, file_lock
 
 # ── Schrijf-serialisatie ─────────────────────────────────────────────────────
 # De cockpit draait als ThreadingHTTPServer en bouwt per request een verse store die het hele
@@ -42,20 +41,8 @@ from nooch_village.util import atomic_write_json, read_json
 # twee gelijktijdige schrijvers (bv. mens + AI-persona) berekenen hetzelfde NNN-volgnummer en
 # de laatste-schrijver-wint gooit de andere edit weg. `atomic_write_json` voorkomt een corrupt
 # bestand, maar niet verloren updates. Daarom serialiseren we elke mutatie per bestandspad met
-# een proces-breed slot, en her-lezen we binnen het slot vers van schijf (zodat NNN/edits de
-# laatste toestand zien). Eén cockpit-proces schrijft attachments.json → een threading-slot
-# volstaat; multi-proces vergrendeling (fcntl) is hier niet nodig.
-_STORE_LOCKS: dict[str, threading.RLock] = {}
-_STORE_LOCKS_GUARD = threading.Lock()
-
-
-def _lock_for(path: str) -> threading.RLock:
-    key = os.path.abspath(path)
-    with _STORE_LOCKS_GUARD:
-        lk = _STORE_LOCKS.get(key)
-        if lk is None:
-            lk = _STORE_LOCKS[key] = threading.RLock()
-        return lk
+# `util.file_lock` (het proces-brede, gedeelde slot), en her-lezen we binnen het slot vers van
+# schijf zodat NNN/edits de laatste toestand zien.
 
 # Alle soorten die de store kent. metric/checklist zijn géén artefacten (geen erf/versie-eisen).
 KINDS = ("note", "metric", "checklist", "policy", "tool")
@@ -160,7 +147,7 @@ class AttachmentStore:
         subtype = subtype if (kind == "note" and subtype in ("tool", "doc")) else ""
         url = (url or "").strip()[:500] if kind == "tool" else ""
         body = (body or "").strip()[:4000]
-        with _lock_for(self.path):
+        with file_lock(self.path):
             self._items = read_json(self.path, {})   # verse toestand onder slot → uniek NNN
             aid = self._mint_id(kind, anchor)
             a = Attachment(id=aid, anchor=anchor, kind=kind, title=(title or "").strip()[:200],
@@ -204,7 +191,7 @@ class AttachmentStore:
                governance_ref: str = "", change_note: str = "") -> Attachment | None:
         """Werk een attachment bij. Voor artefacten wordt een nieuwe versie-snapshot toegevoegd
         (append-only); de body-wijziging is daardoor altijd terug te lezen."""
-        with _lock_for(self.path):
+        with file_lock(self.path):
             self._items = read_json(self.path, {})   # verse toestand onder slot → geen lost edit
             d = self._items.get(aid)
             if d is None:
@@ -234,7 +221,7 @@ class AttachmentStore:
                 governance_ref: str = "", change_note: str = "") -> Attachment | None:
         """Zet status op "archived" (nooit hard verwijderen). Legt een versie-entry vast zodat
         de archivering in de historie zichtbaar is."""
-        with _lock_for(self.path):
+        with file_lock(self.path):
             self._items = read_json(self.path, {})   # verse toestand onder slot
             d = self._items.get(aid)
             if d is None:
@@ -251,7 +238,7 @@ class AttachmentStore:
 
     def remove(self, aid: str) -> bool:
         """Hard verwijderen — alléén voor migratie/curatie. Voor artefacten gebruik `archive`."""
-        with _lock_for(self.path):
+        with file_lock(self.path):
             self._items = read_json(self.path, {})
             if aid in self._items:
                 del self._items[aid]
@@ -264,7 +251,7 @@ class AttachmentStore:
         - note met subtype=="tool"  → kind="tool" (en subtype gewist).
         - vult ontbrekende artefact-velden (status/inherit/scope/url/versions) met defaults.
         Wijzigt nooit bestaande waarden (overwrite-veilig). Geeft het aantal gewijzigde items terug."""
-        with _lock_for(self.path):
+        with file_lock(self.path):
             self._items = read_json(self.path, {})
             return self._migrate_locked()
 
