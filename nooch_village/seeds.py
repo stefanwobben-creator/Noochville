@@ -7,7 +7,7 @@ from nooch_village.governance import Records
 from nooch_village.lexicon import Lexicon
 from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.mission import ANCHOR_PURPOSE as _ANCHOR_PURPOSE
-from nooch_village.policy import ANCHOR_POLICY_PROSE as _ANCHOR_POLICIES
+# (fase 2) anchor-policies leven als domein-artefacten, niet meer als strings in de seed.
 
 # ── Herkomst-wachter ──────────────────────────────────────────────────────────
 # De founding-bootstrap: de enige rollen die geseed mogen zijn. Elke andere rol hoort via
@@ -145,7 +145,7 @@ def seed_records(records: Records) -> None:
     root = Record(id="noochville", type=RecordType.CIRCLE, parent=None,
                   definition=RoleDefinition(
                       purpose=_ANCHOR_PURPOSE, skills=[],
-                      policies=_ANCHOR_POLICIES),
+                      policies=[]),   # fase 2: policies zijn domein-artefacten, geen strings
                   members=["website_watcher", "librarian", "trends", "facilitator"])
     watcher = Record(id="website_watcher", type=RecordType.ROLE, parent="noochville",
                      definition=RoleDefinition(
@@ -226,11 +226,9 @@ def migrate_records(records: Records) -> None:
         tk.version += 1
         records.put(tk)
         changed = True
-    existing_policies = set(root.definition.policies)
-    for policy in _ANCHOR_POLICIES:
-        if policy not in existing_policies:
-            root.definition.policies.append(policy)
-            changed = True
+    # Fase 2: anchor-policies leven niet meer als strings in definition.policies, maar als
+    # domein-gescopeerde policy-artefacten (zie artefacts.migrate_anchor_policies). De G4-handhaving
+    # blijft in policy.py. Hier daarom NIET meer seeden — geen strings naast de artefacten.
     if not root.definition.purpose:
         # alleen vullen als de root-purpose leeg is (bv. vers geseed). NIET overschrijven bij
         # afwijking — een bewuste root-purpose (Mother Earth) blijft staan. Zelfde fix als _PERSONAS.

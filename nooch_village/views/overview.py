@@ -417,31 +417,21 @@ def _artefact_versions_html(a) -> str:
             f"historie ({len(vs)})</summary><ul class='clean'>{rows}</ul></details>")
 
 
-def _artefact_form_fields(kind: str, is_anchor: bool, *, a=None) -> str:
-    """Gedeelde formuliervelden voor add én edit. `a` = bestaand artefact (edit) of None (add)."""
+def _artefact_form_fields(kind: str, *, a=None) -> str:
+    """Formuliervelden voor add én edit (fase 2): alleen titel + body (+ url voor een tool).
+    Scope, inherit, governance_ref en wijzigingsnotitie zijn weg — inherit staat altijd aan,
+    governance_ref wordt afgeleid uit het domein, 'laatst gewijzigd' toont de datum automatisch."""
     url = _e(a.url) if a else ""
     title = _e(a.title) if a else ""
     body = _e(a.body) if a else ""
-    scope = _e(a.scope) if a else ""
-    inh_yes = "selected" if (a is None or a.inherit) else ""
-    inh_no = "selected" if (a is not None and not a.inherit) else ""
     urlfield = (f"<label>URL<input type='url' name='url' value='{url}' placeholder='https://…'></label>"
                 if kind == "tool" else "")
-    # Anchor-niveau: governance_ref is verplicht (audittrail naar het governance-besluit).
-    govfield = (f"<label>governance_ref *<input name='governance_ref' required "
-                f"placeholder='verwijzing naar het governance-besluit'></label>" if is_anchor else "")
     return (f"<label>Titel<input name='title' value='{title}' required></label>"
             f"<label>Body (markdown)<textarea name='body' rows='3'>{body}</textarea></label>"
-            f"<label>Scope (vrij)<input name='scope' value='{scope}'></label>"
-            f"{urlfield}"
-            f"<label>Geldt voor onderliggende rollen? "
-            f"<select name='inherit'><option value='1' {inh_yes}>ja (erft)</option>"
-            f"<option value='0' {inh_no}>nee</option></select></label>"
-            f"<label>Wijzigingsnotitie<input name='change_note'></label>"
-            f"{govfield}")
+            f"{urlfield}")
 
 
-def _artefact_add_form(rec, kind: str, csrf_token: str, is_anchor: bool) -> str:
+def _artefact_add_form(rec, kind: str, csrf_token: str) -> str:
     return (f"<details class='c2-add' style='margin-top:.6rem'>"
             f"<summary style='cursor:pointer;font-weight:600'>+ {_e(_KIND_LABEL[kind])} toevoegen</summary>"
             f"<form method='post' action='/action' style='display:grid;gap:.4rem;max-width:440px;margin-top:.5rem'>"
@@ -449,93 +439,90 @@ def _artefact_add_form(rec, kind: str, csrf_token: str, is_anchor: bool) -> str:
             f"<input type='hidden' name='owner' value='{_e(rec.id)}'>"
             f"<input type='hidden' name='kind' value='{_e(kind)}'>"
             f"<input type='hidden' name='next' value='/node?id={_e(rec.id)}&tab={_tab_for(kind)}'>"
-            f"{_artefact_form_fields(kind, is_anchor)}"
+            f"{_artefact_form_fields(kind)}"
             f"<button class='btn ok sm' type='submit' name='action' value='artefact_add'>toevoegen</button>"
             f"</form></details>")
 
 
-def _artefact_edit_form(a, csrf_token: str, is_anchor: bool) -> str:
+def _artefact_edit_form(a, csrf_token: str) -> str:
     return (f"<details class='c2-add'><summary class='muted' style='cursor:pointer;font-size:.8rem'>bewerken</summary>"
             f"<form method='post' action='/action' style='display:grid;gap:.4rem;max-width:440px;margin-top:.4rem'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
             f"<input type='hidden' name='next' value='/node?id={_e(a.anchor)}&tab={_tab_for(a.kind)}'>"
-            f"{_artefact_form_fields(a.kind, is_anchor, a=a)}"
+            f"{_artefact_form_fields(a.kind, a=a)}"
             f"<button class='btn ok sm' type='submit' name='action' value='artefact_edit'>opslaan</button>"
             f"</form></details>")
 
 
-def _artefact_archive_form(a, csrf_token: str, is_anchor: bool) -> str:
-    gov = (f"<input name='governance_ref' placeholder='governance_ref *' required>"
-           if is_anchor else "")
+def _artefact_archive_form(a, csrf_token: str) -> str:
     return (f"<form method='post' action='/action' style='display:inline'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
             f"<input type='hidden' name='next' value='/node?id={_e(a.anchor)}&tab={_tab_for(a.kind)}'>"
-            f"{gov}"
             f"<button class='dellink' type='submit' name='action' value='artefact_archive' "
             f"onclick=\"return confirm('{_e(a.title or a.id)} archiveren?')\">archiveren</button></form>")
 
 
-def _artefact_own_li(a, csrf_token: str, is_anchor: bool, can_edit: bool) -> str:
+def _laatst_gewijzigd(a) -> str:
+    return (f"<span class='muted' style='font-size:.78rem'>laatst gewijzigd: "
+            f"{_dt(getattr(a, 'updated_at', 0))}</span>")
+
+
+def _artefact_id_chip(a) -> str:
+    """Stabiel, verwijsbaar id (policy: {DOMEINSLUG}-{NNN}) als code-chip."""
+    return f"<code class='pill'>{_e(a.id)}</code>"
+
+
+def _artefact_own_li(a, csrf_token: str, can_edit: bool) -> str:
     icon = _KIND_ICON.get(a.kind, "")
-    head = f"{icon} <b>{_e(a.title) or _e(a.id)}</b> <span class='chip muted'>{_e(a.id)}</span>"
+    head = f"{icon} {_artefact_id_chip(a)} <b>{_e(a.title) or _e(a.id)}</b>"
     if a.kind == "tool" and a.url:
         head += f" — <a href='{_e(a.url)}' target='_blank' rel='noopener'>{_e(a.url)}</a>"
-    scope = f" <span class='pill'>scope: {_e(a.scope)}</span>" if a.scope else ""
     body = f"<br><span class='muted'>{_e(a.body)}</span>" if a.body else ""
+    meta = f"<br>{_laatst_gewijzigd(a)}"
     actions = ""
     if can_edit:
         actions = (f"<div style='margin-top:.3rem;display:flex;gap:.5rem;align-items:center'>"
-                   f"{_artefact_edit_form(a, csrf_token, is_anchor)}"
-                   f"{_artefact_archive_form(a, csrf_token, is_anchor)}</div>")
-    return f"<li>{head}{scope}{body}{_artefact_versions_html(a)}{actions}</li>"
+                   f"{_artefact_edit_form(a, csrf_token)}"
+                   f"{_artefact_archive_form(a, csrf_token)}</div>")
+    return f"<li>{head}{body}{meta}{_artefact_versions_html(a)}{actions}</li>"
 
 
 def _artefact_inherited_li(it) -> str:
     a = it["artefact"]
     icon = _KIND_ICON.get(a.kind, "")
-    head = f"{icon} <b>{_e(a.title) or _e(a.id)}</b>"
+    head = f"{icon} {_artefact_id_chip(a)} <b>{_e(a.title) or _e(a.id)}</b>"
     if a.kind == "tool" and a.url:
         head += f" — <a href='{_e(a.url)}' target='_blank' rel='noopener'>{_e(a.url)}</a>"
     badge = (f"<a class='chip' href='/node?id={_e(it['origin_id'])}&tab={_tab_for(a.kind)}' "
              f"title='klik = naar de bron-rol'>via {_e(it['origin_name'])}</a>")
     body = f"<br><span class='muted'>{_e(a.body)}</span>" if a.body else ""
-    return f"<li>{head} {badge}{body}</li>"
-
-
-def _gov_policy_li(p) -> str:
-    """Governance-owned policy: read-only, slot-badge, geen edit-knop. Een AI-vervuller volgt hem
-    wel maar stelt nooit een wijziging buiten governance om voor (mutation_path=governance)."""
-    if p.get("origin_path"):
-        origin = (f"<a class='chip' href='/node?id={_e(p['origin_id'])}&tab=policies' "
-                  f"title='klik = naar de bron-cirkel'>via {_e(p['origin_name'])}</a>")
-    else:
-        origin = "<span class='chip'>eigen (governance)</span>"
-    return (f"<li>🔒 <span class='muted'>{_e(p['body'])}</span> {origin} "
-            f"<span class='pill' title='alleen via governance te wijzigen'>governance</span></li>")
+    return f"<li>{head} {badge}{body}<br>{_laatst_gewijzigd(a)}</li>"
 
 
 def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: str | None,
                        *, titel: str, leeg: str) -> str:
     can_edit = _can_edit_artefacts(st, rec, csrf_token, username)
-    is_anchor = not getattr(rec, "parent", None)
     oi = artefacts.own_and_inherited(rec.id, kind, st.records, st.att)
 
-    own = "".join(_artefact_own_li(a, csrf_token, is_anchor, can_edit) for a in oi["own"])
+    # Policies zijn geen verbod maar een voorwaarde, en zijn governance-eigendom: één regel boven de
+    # lijst i.p.v. een badge/slotje per item.
+    kop = ("<p class='muted' style='font-size:.85rem'>Alle policies hieronder zijn "
+           "governance-eigendom.</p>" if kind == "policy" else "")
+
+    own = "".join(_artefact_own_li(a, csrf_token, can_edit) for a in oi["own"])
     own = own or f"<li class='muted'>{_e(leeg)}</li>"
-    add = _artefact_add_form(rec, kind, csrf_token, is_anchor) if can_edit else ""
+    add = _artefact_add_form(rec, kind, csrf_token) if can_edit else ""
     sec_own = (f"<div class='c2-sec'><h3>Van deze rol</h3>"
-               f"<ul class='clean'>{own}</ul>{add}</div>")
+               f"<ol class='clean'>{own}</ol>{add}</div>")
 
     inh = "".join(_artefact_inherited_li(it) for it in oi["inherited"])
-    if kind == "policy":
-        inh += "".join(_gov_policy_li(p) for p in artefacts._governance_policies(rec.id, st.records))
     inh = inh or "<li class='muted'>Niets dat hier van hogerhand geldt.</li>"
     sec_inh = (f"<div class='c2-sec'><h3>Geldend hier</h3>"
                f"<p class='muted' style='font-size:.8rem'>Overgeërfd van bovenliggende rollen/cirkels "
-               f"(read-only) — wijzig bij de bron.</p><ul class='clean'>{inh}</ul></div>")
-    return f"<h2>{_e(titel)}</h2>{sec_own}{sec_inh}"
+               f"(read-only) — wijzig bij de bron.</p><ol class='clean'>{inh}</ol></div>")
+    return f"<h2>{_e(titel)}</h2>{kop}{sec_own}{sec_inh}"
 
 
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",

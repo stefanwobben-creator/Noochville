@@ -51,8 +51,9 @@ ARTEFACT_KINDS = ("note", "policy", "tool")
 # Geldige statussen voor een artefact.
 STATUSES = ("draft", "active", "archived")
 
-# id-prefix per artefact-soort → {TYPE}-{ROLSLUG}-{NNN}
-_TYPE_PREFIX = {"policy": "POL", "note": "NOTE", "tool": "TOOL"}
+# id-prefix voor note/tool → {TYPE}-{ROLSLUG}-{NNN}. Policies zijn domein-gescopeerd (zie _mint_id):
+# {DOMEINSLUG}-{NNN} (bv. MISSION-001), want een policy hoort bij een domein, niet bij een rol.
+_TYPE_PREFIX = {"note": "NOTE", "tool": "TOOL"}
 # Filler-vocabulaire (person|persona) → versie-vocabulaire (human|ai) uit de opdracht.
 _ACTOR_KIND = {"person": "human", "persona": "ai"}
 
@@ -64,6 +65,11 @@ def _rolslug(anchor: str) -> str:
     seg = (anchor or "").split("__")[-1]
     s = re.sub(r"[^A-Z0-9]+", "", seg.upper())
     return s[:6] or "ROL"
+
+
+def _domainslug(domain: str) -> str:
+    """Domein-slug voor in een policy-id (bv. 'Mission' → 'MISSION'). Leeg → "" (val terug op rolslug)."""
+    return re.sub(r"[^A-Z0-9]+", "", (domain or "").upper())[:12]
 
 
 def _actor_kind(filler_type: str) -> str:
@@ -83,8 +89,9 @@ class Attachment:
     # ── artefact-velden (note | policy | tool) ──────────────────────────────
     status: str = "active"       # draft | active | archived
     inherit: bool = True         # geldt voor onderliggende rollen (erf-query)
-    scope: str = ""              # vrije tekst, informatief, NIET filteren
+    scope: str = ""              # vrije tekst, informatief, NIET filteren (UI verborgen sinds fase 2)
     url: str = ""                # alleen zinvol voor kind="tool"
+    domain: str = ""             # alleen voor kind="policy": het domein waar de policy bij hoort
     versions: list = field(default_factory=list)  # append-only historie (zie _version)
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
@@ -116,12 +123,16 @@ class AttachmentStore:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
         atomic_write_json(self.path, self._items)
 
-    def _mint_id(self, kind: str, anchor: str) -> str:
-        """Mens-leesbare id voor artefacten (`{TYPE}-{ROLSLUG}-{NNN}`), anders een uuid.
-        NNN is per (soort, rol) oplopend; scant bestaande ids zodat het uniek blijft."""
-        if kind not in _TYPE_PREFIX:
+    def _mint_id(self, kind: str, anchor: str, domain: str = "") -> str:
+        """Mens-leesbare id voor artefacten. Policy → `{DOMEINSLUG}-{NNN}` (bv. MISSION-001),
+        met terugval op de rol-slug als er geen domein is. Note/tool → `{TYPE}-{ROLSLUG}-{NNN}`.
+        Anders een uuid. NNN is per prefix oplopend; scant bestaande ids zodat het uniek blijft."""
+        if kind == "policy":
+            base = f"{_domainslug(domain) or _rolslug(anchor)}-"
+        elif kind in _TYPE_PREFIX:
+            base = f"{_TYPE_PREFIX[kind]}-{_rolslug(anchor)}-"
+        else:
             return uuid.uuid4().hex[:12]
-        base = f"{_TYPE_PREFIX[kind]}-{_rolslug(anchor)}-"
         hi = 0
         for k in self._items:
             m = re.match(re.escape(base) + r"(\d{3})$", k)
@@ -135,10 +146,11 @@ class AttachmentStore:
     def add(self, anchor: str, kind: str, title: str = "", body: str = "",
             meta: dict | None = None, subtype: str = "", *,
             status: str = "active", inherit: bool = True, scope: str = "", url: str = "",
-            actor_id: str = "", actor_type: str = "",
+            domain: str = "", actor_id: str = "", actor_type: str = "",
             governance_ref: str = "", change_note: str = "") -> Attachment | None:
         """Maak een attachment. Voor artefact-soorten (note/policy/tool) krijgt hij een
-        mens-leesbare id en versie 1. `actor_type` in filler-vocabulaire (person|persona)."""
+        mens-leesbare id en versie 1. `domain` scopet een policy-id. `actor_type` in
+        filler-vocabulaire (person|persona)."""
         if kind not in KINDS or not anchor:
             return None
         if status not in STATUSES:
@@ -146,14 +158,15 @@ class AttachmentStore:
         # subtype geldt alleen legacy voor notes; nieuwe tools hebben een eigen kind.
         subtype = subtype if (kind == "note" and subtype in ("tool", "doc")) else ""
         url = (url or "").strip()[:500] if kind == "tool" else ""
+        domain = (domain or "").strip()[:60] if kind == "policy" else ""
         body = (body or "").strip()[:4000]
         with file_lock(self.path):
             self._items = read_json(self.path, {})   # verse toestand onder slot → uniek NNN
-            aid = self._mint_id(kind, anchor)
+            aid = self._mint_id(kind, anchor, domain)
             a = Attachment(id=aid, anchor=anchor, kind=kind, title=(title or "").strip()[:200],
                            body=body, subtype=subtype, meta=dict(meta or {}),
                            status=status, inherit=bool(inherit),
-                           scope=(scope or "").strip()[:400], url=url,
+                           scope=(scope or "").strip()[:400], url=url, domain=domain,
                            versions=[_version(1, actor_id, actor_type, body,
                                               change_note or "aangemaakt", governance_ref)])
             self._items[aid] = asdict(a)
@@ -263,7 +276,8 @@ class AttachmentStore:
                 d["kind"] = "tool"
                 d["subtype"] = ""
                 touched = True
-            for f_, dv in (("status", "active"), ("inherit", True), ("scope", ""), ("url", "")):
+            for f_, dv in (("status", "active"), ("inherit", True), ("scope", ""),
+                           ("url", ""), ("domain", "")):
                 if f_ not in d:
                     d[f_] = dv
                     touched = True

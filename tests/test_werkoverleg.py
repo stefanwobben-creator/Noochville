@@ -149,11 +149,13 @@ def test_triage_geen_need_veld_en_info_richting(tmp_path):
     assert oc["type"] == "info" and oc["detail"].startswith("delen (iedereen):")
 
 
-def test_transparantie_policy_op_breedste_cirkel(tmp_path):
+def test_transparantie_checklist_op_breedste_cirkel(tmp_path):
+    # Fase 2: de transparantie-POLICY is uit definition.policies gehaald (was eerder een note);
+    # de operationele cadans blijft als checklist-item op de breedste cirkel.
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     root = cockpit2.org.roots(st.records.all())[0]
-    assert cockpit2._TRANSP_POLICY in root.definition.policies
+    assert cockpit2._TRANSP_POLICY not in root.definition.policies      # geen string-policy meer
     assert any(i["description"] == cockpit2._TRANSP_CHECK for i in st.checklists.for_node(root.id))
 
 

@@ -31,17 +31,19 @@ def _stores(tmp_path):
 
 # ── opslaglaag: id-minting ───────────────────────────────────────────────────
 
-def test_mint_id_menstig_per_soort_en_oplopend(tmp_path):
-    st = _stores(tmp_path)
-    a = st.att.add(OWNER, "policy", title="Merkstem")
-    b = st.att.add(OWNER, "policy", title="Tweede")
-    assert re.fullmatch(r"POL-[A-Z0-9]{1,6}-001", a.id), a.id
-    assert b.id.endswith("-002")
-    assert st.att.add(OWNER, "note").id.startswith("NOTE-")
-    assert st.att.add(OWNER, "tool").id.startswith("TOOL-")
+def test_mint_id_policy_domein_note_tool(tmp_path):
+    # verse store (geen bootstrap-migratie) zodat de nummering deterministisch bij 001 begint
+    store = AttachmentStore(str(tmp_path / "att.json"))
+    # policy → {DOMEINSLUG}-{NNN}
+    assert store.add(OWNER, "policy", title="a", domain="Mission").id == "MISSION-001"
+    assert store.add(OWNER, "policy", title="b", domain="Mission").id == "MISSION-002"
+    # policy zonder domein → terugval op rol-slug
+    assert re.fullmatch(r"[A-Z0-9]{1,6}-001", store.add(OWNER, "policy").id)
+    # note/tool houden {TYPE}-{ROLSLUG}
+    assert store.add(OWNER, "note").id.startswith("NOTE-")
+    assert store.add(OWNER, "tool").id.startswith("TOOL-")
     # niet-artefact soorten houden een opake uuid
-    m = st.att.add(OWNER, "metric", title="volume")
-    assert re.fullmatch(r"[0-9a-f]{12}", m.id)
+    assert re.fullmatch(r"[0-9a-f]{12}", store.add(OWNER, "metric", title="volume").id)
 
 
 # ── opslaglaag: versie-historie ─────────────────────────────────────────────
@@ -117,21 +119,19 @@ def test_anchor_vereist_governance_ref(tmp_path):
 
 def test_own_and_inherited_respecteert_inherit_en_herkomst(tmp_path):
     st = _stores(tmp_path)
-    # eigen policy op de rol
     st.att.add(OWNER, "policy", title="Eigen")
-    # cirkel-policy die erft + een die NIET erft
     st.att.add(CIRCLE, "policy", title="Cirkel-erft", inherit=True)
     st.att.add(CIRCLE, "policy", title="Cirkel-privé", inherit=False)
-    # anchor-policy die erft
-    st.att.add(ANCHOR, "policy", title="Anchor-erft", inherit=True)
 
     res = artefacts.own_and_inherited(OWNER, "policy", st.records, st.att)
     assert [a.title for a in res["own"]] == ["Eigen"]
     titles = {i["artefact"].title for i in res["inherited"]}
-    assert titles == {"Cirkel-erft", "Anchor-erft"}       # inherit=False valt weg
+    assert "Cirkel-erft" in titles            # erft
+    assert "Cirkel-privé" not in titles       # inherit=False valt weg
+    # de door de migratie geplaatste anchor-policies erven ook (governance-eigendom, inherit=True)
+    assert {"Missie-toetsing blijft bewaakt", "Plastic- en leer-vrij", "Uitgaven na toetsing"} <= titles
     origins = {i["artefact"].title: i["origin_id"] for i in res["inherited"]}
     assert origins["Cirkel-erft"] == CIRCLE
-    assert origins["Anchor-erft"] == ANCHOR
 
 
 def test_gearchiveerd_erft_niet(tmp_path):
@@ -139,7 +139,7 @@ def test_gearchiveerd_erft_niet(tmp_path):
     p = st.att.add(CIRCLE, "policy", title="Cirkel-erft", inherit=True)
     st.att.archive(p.id)
     res = artefacts.own_and_inherited(OWNER, "policy", st.records, st.att)
-    assert res["inherited"] == []
+    assert "Cirkel-erft" not in {i["artefact"].title for i in res["inherited"]}
 
 
 # ── migratie ────────────────────────────────────────────────────────────────
@@ -272,36 +272,31 @@ def test_route_persona_gelijk_aan_person(tmp_path):
     assert artefacts.can_write_artefact("person", alice.id, OWNER, st2.records, st2.assign)
 
 
-def test_route_anchor_zonder_governance_ref_faalt_met_403(tmp_path):
+def test_route_anchor_policy_governance_ref_auto_afgeleid(tmp_path):
+    # Fase 2: geen govref-invoerveld meer; hij wordt afgeleid uit de rol→domein-koppeling.
     dd = _dd(tmp_path)
-    # guest passeert de vervuller-poort, maar de anchor eist een governance_ref
-    with pytest.raises(cockpit2.Forbidden) as exc:
-        cockpit2.dispatch(dd, "artefact_add",
-            {"owner": [ANCHOR], "kind": ["policy"], "title": ["Missie-policy"], "next": ["/"]},
-            username="guest")
-    assert "governance_ref" in str(exc.value)
-    assert cockpit2._Stores(dd).att.list(ANCHOR, "policy") == []
-    # mét governance_ref lukt het wél
     nxt, msg = cockpit2.dispatch(dd, "artefact_add",
-        {"owner": [ANCHOR], "kind": ["policy"], "title": ["Missie-policy"],
-         "governance_ref": ["GOV-2026-07"], "next": ["/"]}, username="guest")
+        {"owner": [ANCHOR], "kind": ["policy"], "title": ["Missie-policy"], "next": ["/"]},
+        username="guest")
     assert "toegevoegd" in msg
-    stored = cockpit2._Stores(dd).att.list(ANCHOR, "policy")
-    assert stored and stored[0].versions[-1]["governance_ref"] == "GOV-2026-07"
+    added = [a for a in cockpit2._Stores(dd).att.list(ANCHOR, "policy") if a.title == "Missie-policy"]
+    assert added, "anchor-policy is niet aangemaakt"
+    gref = added[0].versions[-1]["governance_ref"]
+    assert gref.startswith(("domain:", "role:")) and gref != ""   # automatisch afgeleid, niet leeg
 
 
 def test_route_edit_en_archive_via_dispatch(tmp_path):
     dd = _dd(tmp_path)
     a = cockpit2._Stores(dd).att.add(OWNER, "policy", title="v1", body="oud")
     cockpit2.dispatch(dd, "artefact_edit",
-        {"aid": [a.id], "body": ["nieuw"], "change_note": ["verscherpt"], "next": ["/"]},
-        username="guest")
+        {"aid": [a.id], "body": ["nieuw"], "next": ["/"]}, username="guest")
     cockpit2.dispatch(dd, "artefact_archive", {"aid": [a.id], "next": ["/"]}, username="guest")
     fresh = cockpit2._Stores(dd).att
     assert fresh.list(OWNER, "policy") == []                 # gearchiveerd → uit de lijst
     hist = fresh.get(a.id)
     assert hist.status == "archived"
-    assert [v["change_note"] for v in hist.versions] == ["aangemaakt", "verscherpt", "gearchiveerd"]
+    # change_note is nu automatisch (geen invoerveld meer)
+    assert [v["change_note"] for v in hist.versions] == ["aangemaakt", "bewerkt", "gearchiveerd"]
     actions = [e["action"] for e in _changelog(dd)]
     assert actions == ["edit", "archive"]                    # de directe add ging niet via een route
 
@@ -360,20 +355,20 @@ def test_context_geerfd_toont_herkomstpad(tmp_path):
     st.att.add(CIRCLE, "policy", title="Cirkelbreed", inherit=True)
     ctx = artefacts.serialize_context(OWNER, st.records, st.att)
     inh = ctx["policies"]["inherited"]
-    assert [p["title"] for p in inh] == ["Cirkelbreed"]
-    assert inh[0]["origin_path"] == "via Nooch"           # circle name = "Nooch"
-    assert inh[0]["editable"] is False
+    cirkelbreed = [p for p in inh if p["title"] == "Cirkelbreed"]
+    assert cirkelbreed and cirkelbreed[0]["origin_path"] == "via Nooch"   # circle name = "Nooch"
+    assert cirkelbreed[0]["editable"] is False
 
 
-def test_context_anchor_governance_policy_readonly(tmp_path):
+def test_context_anchor_policies_zijn_domein_artefacten(tmp_path):
+    # Fase 2: de anchor-policies zijn domein-gescopeerde artefacten, geen apart governance-blok.
     st = _stores(tmp_path)
-    # _bootstrap zet een transparantie-policy op de anchor (definition.policies)
     ctx = artefacts.serialize_context(OWNER, st.records, st.att)
-    gov = ctx["policies"]["governance"]
-    assert gov, "governance-policy van de anchor ontbreekt in de context"
-    tp = next(p for p in gov if "transparant" in p["body"].lower())
-    assert tp["editable"] is False and tp["mutation_path"] == "governance"
-    assert tp["origin_path"] == "via Mother Earth"
+    assert "governance" not in ctx["policies"]            # geen los governance-blok meer
+    inh = ctx["policies"]["inherited"]
+    assert {"Mission", "Materials", "Geld"} <= {p.get("domain") for p in inh}
+    mission = next(p for p in inh if p.get("domain") == "Mission")
+    assert mission["editable"] is False and mission["id"] == "MISSION-001"
 
 
 def test_context_markdown_valide(tmp_path):
@@ -385,8 +380,8 @@ def test_context_markdown_valide(tmp_path):
     assert md.startswith("# Rol-context: Creator of Shoes")
     for header in ("## Overzicht", "## Policies", "## Notes", "## Tools"):
         assert header in md
-    assert "Governance-policies (read-only" in md
-    assert "via Nooch" in md                               # geërfde cirkel-note draagt herkomst
+    assert "Alle policies zijn governance-eigendom" in md   # nieuwe policy-kop
+    assert "via Nooch" in md                                # geërfde cirkel-note draagt herkomst
     assert md.endswith("\n")
 
 
@@ -428,12 +423,13 @@ def test_ui_geerfd_readonly_met_herkomst(tmp_path):
     assert f"/node?id={CIRCLE}&tab=policies" in html         # herkomst-badge springt naar bron-rol
 
 
-def test_ui_anchor_form_eist_governance_ref(tmp_path):
+def test_ui_policy_form_alleen_titel_en_body(tmp_path):
+    # Fase 2: scope/inherit/governance_ref/wijzigingsnotitie zijn uit het formulier verdwenen.
     st = _stores(tmp_path)
-    anchor = cockpit2.render_node(st, ANCHOR, "policies", csrf_token="tok", username="guest")
-    assert "name='governance_ref' required" in anchor       # anchor-form eist governance_ref
-    owner = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
-    assert "name='governance_ref' required" not in owner     # niet-anchor: geen verplicht veld
+    html = cockpit2.render_node(st, ANCHOR, "policies", csrf_token="tok", username="guest")
+    for weg in ("governance_ref", "name='scope'", "name='inherit'", "name='change_note'"):
+        assert weg not in html
+    assert "name='title'" in html and "name='body'" in html
 
 
 def test_ui_tools_tab_toont_url_en_icon(tmp_path):
@@ -445,11 +441,14 @@ def test_ui_tools_tab_toont_url_en_icon(tmp_path):
     assert "tab=tools" in cockpit2.render_node(st, OWNER, "overview", csrf_token="tok", username="guest")
 
 
-def test_ui_governance_policy_slot_badge_zonder_edit(tmp_path):
+def test_ui_policies_governance_eigendom_kop_geen_slotje(tmp_path):
+    # Fase 2: één regel "governance-eigendom" boven de lijst; geen slotje/badge per item.
     st = _stores(tmp_path)
     html = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
-    assert "🔒" in html and "transparant" in html.lower()   # anchor governance-policy read-only
-    assert "via Mother Earth" in html
+    assert "Alle policies hieronder zijn governance-eigendom" in html
+    assert "🔒" not in html
+    # gemigreerde anchor-policy geërfd zichtbaar met domein-id + herkomst
+    assert "MISSION-001" in html and "via Mother Earth" in html
 
 
 def test_ui_versiehistorie_uitklapper(tmp_path):
