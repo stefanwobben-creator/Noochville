@@ -400,3 +400,41 @@ def test_store_in_cockpit(tmp_path):
     assert base >= 20
     assert st.defs.add("Omzet", unit="EUR") is not None
     assert len(cockpit2._Stores(dd).defs.all()) == base + 1   # persistent
+
+
+# ── scope 3: aard + aggregatie + formule ─────────────────────────────────────
+def test_schema_aard_afgeleid_en_aggregatie_formule():
+    from nooch_village.metric_schema import normalize
+    assert normalize(name="x", meettype="snapshot")["aard"] == "moment"
+    assert normalize(name="x", meettype="venster")["aard"] == "reeks"
+    assert normalize(name="x", meettype="cumulatief")["aard"] == "reeks"
+    assert normalize(name="x", meettype="snapshot", aard="categorie")["aard"] == "categorie"  # expliciet
+    assert normalize(name="x", meettype="venster", aard="onzin")["aard"] == "reeks"           # ongeldig → afgeleid
+    assert normalize(name="x", aggregatie="onzin")["aggregatie"] == ""                          # enum-coercie
+    assert normalize(name="x", formule=True) is None                                            # formule vereist aggregatie
+    assert normalize(name="x", formule=True, aggregatie="som")["aggregatie"] == "som"
+
+
+def test_zaad_catalogus_krijgt_verplichte_aard(tmp_path):
+    from nooch_village.definitions import seed_catalog
+    from nooch_village.metric_schema import AARD
+    s = DefinitionStore(str(tmp_path / "d.json"))
+    seed_catalog(s)
+    assert all((s.current(d["id"]) or {}).get("aard") in AARD for d in s.all())
+    assert s.current(s.by_name("Cashpositie")["id"])["aard"] == "moment"            # snapshot → moment
+    assert s.current(s.by_name("Bezoekers (Plausible)")["id"])["aard"] == "reeks"   # venster → reeks
+
+
+def test_migrate_definitions_vult_ontbrekend_idempotent(tmp_path):
+    from nooch_village.definitions import migrate_definitions
+    s = DefinitionStore(str(tmp_path / "d.json"))
+    did = s.add("Legacy", unit="n", meettype="venster", window="7d")["id"]
+    v = s.current(did)                                   # simuleer oude opslag: strip de nieuwe velden
+    for k in ("aard", "aggregatie", "formule"):
+        v.pop(k, None)
+    s._save()
+    assert "aard" not in s.current(did)
+    assert migrate_definitions(s) == 1                   # één definitie aangeraakt
+    cur = s.current(did)
+    assert cur["aard"] == "reeks" and cur["aggregatie"] == "" and cur["formule"] is False
+    assert migrate_definitions(s) == 0                   # idempotent: tweede keer niets

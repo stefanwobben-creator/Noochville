@@ -376,3 +376,18 @@ def test_bezoekers_lijndiagram_een_punt_geen_lijn(tmp_path):
     from nooch_village.views.metrics import _line_chart_svg
     svg = _line_chart_svg([(1000.0, 42)], "bezoekers")   # één datapunt
     assert "te weinig" in svg and "<polyline" not in svg  # geen lijn, geen interpolatie
+
+
+def test_source_samples_ontdubbelt_dagreeks_vs_7d(tmp_path):
+    """pulse_visitors = de dagreeks (observations); pulse_visitors_7d = de rollende 7d (pulse_history).
+    Twee heldere eigen metric_keys — niet langer als hetzelfde ding gelezen."""
+    import os, json as _json
+    from nooch_village.views.metrics import _source_samples
+    dd = _dd(tmp_path); st = cockpit2._Stores(dd)
+    st.observations.record_daily("ww", "visitors_day", 40, bron="plausible", datum="2026-07-01", ts=1.0)
+    st.observations.record_daily("ww", "visitors_day", 55, bron="plausible", datum="2026-07-02", ts=2.0)
+    with open(os.path.join(dd, "pulse_history.jsonl"), "w") as f:
+        f.write(_json.dumps({"ts": 10.0, "visitors_7d": 300}) + "\n")
+        f.write(_json.dumps({"ts": 20.0, "visitors_7d": 320}) + "\n")
+    assert [s["value"] for s in _source_samples(dd, "pulse_visitors")] == [40, 55]        # dagreeks
+    assert [s["value"] for s in _source_samples(dd, "pulse_visitors_7d")] == [300, 320]   # rollende 7d
