@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from nooch_village.cockpit import _e, _page, _banner
 from nooch_village.cockpit2_util import (
-    _name, _initials, _tabbar, _todo, _avatar, _age,
+    _name, _initials, _tabbar, _avatar, _age,
     _psec, _person_name, _ICON_ADD_EMOJI,
     _IC_CHECK, _IC_CLOCK, _IC_LINK, _IC_TARGET,
 )
@@ -631,9 +631,8 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     elif tab == "policies":
         content = _artefact_tab_html(st, rec, "policy", csrf_token, username,
                                      titel="Policies", leeg="Nog geen policies op deze rol/cirkel.")
-    else:  # history
-        content = _todo("Wijzigingsgeschiedenis per rol/cirkel (records dragen al versies; de "
-                        "weergave moet nog).")
+    else:
+        content = ""      # onbekende tab (niet in de tab-lijst) → geen inhoud
 
     # Meetings zijn een CIRKEL-functie (een rol heeft geen governance/tactical meeting).
     if is_c and csrf_token:
