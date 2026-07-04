@@ -1011,7 +1011,15 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             return nxt, "Geen toegang — gebruiker niet herkend"
         # ── einde autorisatie ──
         done = _rov_apply(st)
-        msg = f"✓ overleg gesloten — {len(done)} doorgevoerd" if done else "overleg gesloten"
+        # Sluiten = de vergadering écht afronden: haal de resterende (onbehandelde) agendapunten van
+        # DEZE cirkel van de agenda, zodat de "Governance meeting"-knop niet groen blijft hangen door
+        # open punten. Niet-geconsenteerde voorstellen vervallen; opnieuw indienen kan altijd.
+        cleared = _rov_items(st, circle_id)
+        for it in cleared:
+            st.agenda.remove(it["id"])
+        msg = f"✓ overleg gesloten — {len(done)} doorgevoerd"
+        if cleared:
+            msg += f", {len(cleared)} onbehandeld punt van de agenda gehaald"
     elif action == "wo_open":
         _deny = _lead_gate(g("circle"), username, st)
         if _deny:
