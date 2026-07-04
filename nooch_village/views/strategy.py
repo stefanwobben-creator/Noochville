@@ -117,6 +117,8 @@ def _strategy_tab_html(st: "_Stores", rec, with_purpose_chain: bool = True) -> s
 
     # In de overview-tab staat de Purpose er al boven → chain overslaan (geen dubbeling).
     out = _purpose_chain(st, rec) if with_purpose_chain else ""
+    # Simpele strategie-bullets onder de gewone kop "Strategie" (bv. de Mother-Earth-principes).
+    out += _sec("Strategie", _bullets(strat.get("strategy")))
     out += _sec("Core sentence", _text(strat.get("core_sentence")))
     out += _sec("Vision", _text(strat.get("vision")))
     out += _sec("Mission", _text(strat.get("mission")))
@@ -124,18 +126,26 @@ def _strategy_tab_html(st: "_Stores", rec, with_purpose_chain: bool = True) -> s
     out += _tone_of_voice(strat.get("tone_of_voice"))
     out += _sec("Position statements", _named_items(strat.get("position_statements")))
     out += _sec("Beliefs", _bullets(strat.get("beliefs")))
-    # Placeholder (dynamisch blok 2a): woordkeuze-bewijs leeft in de kennisbank
-    out += _sec("Words that require evidence",
-                "<p class='muted'>Deze lijst wordt onderhouden in de kennisbank door "
-                "Lara the Librarian. Integratie komt later.</p>")
+    # De twee placeholder-secties horen bij een RIJKE strategie (zoals Nooch); een bullets-only
+    # entry (zoals Mother Earth) toont alleen zijn eigen inhoud.
+    _rich = any(strat.get(k) for k in (
+        "core_sentence", "vision", "mission", "operating_values", "tone_of_voice",
+        "position_statements", "beliefs", "honest_constraints", "non_negotiables",
+        "do_list", "dont_list"))
+    if _rich:
+        # Placeholder (dynamisch blok 2a): woordkeuze-bewijs leeft in de kennisbank
+        out += _sec("Words that require evidence",
+                    "<p class='muted'>Deze lijst wordt onderhouden in de kennisbank door "
+                    "Lara the Librarian. Integratie komt later.</p>")
     out += _honest_constraints(strat.get("honest_constraints"))
     out += _sec("Non-negotiables", _named_items(strat.get("non_negotiables")))
     out += _sec("Do", _grouped(strat.get("do_list"), _DO_LABELS))
     out += _sec("Don't", _grouped(strat.get("dont_list"), _DONT_LABELS))
-    # Placeholder (dynamisch blok 2b): kwartaaldoelen leven op het projectbord
-    out += _sec("Current focus",
-                "<p class='muted'>Quarterly goals worden beheerd in NoochVille projectbord. "
-                "Zie de projects-tab van deze cirkel.</p>")
+    if _rich:
+        # Placeholder (dynamisch blok 2b): kwartaaldoelen leven op het projectbord
+        out += _sec("Current focus",
+                    "<p class='muted'>Quarterly goals worden beheerd in NoochVille projectbord. "
+                    "Zie de projects-tab van deze cirkel.</p>")
     ver, upd = strat.get("version"), strat.get("updated_at")
     if ver is not None or upd:
         out += (f"<p class='muted' style='font-size:.78rem;margin-top:.8rem'>"
