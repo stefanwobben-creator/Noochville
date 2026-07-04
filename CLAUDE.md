@@ -562,6 +562,20 @@ Discipline: schrijf nooit code die aanneemt dat de bus in-memory is, dat de inbo
 - Geen global mutable state. Alles wat een inwoner nodig heeft komt via de constructor (`bus`, `registry`, `context`).
 - **Reference, don't copy (HARDE REGEL).** Een feit/getal leeft op ÉÉN gezaghebbende plek; al het andere verwijst ernaar of leidt het af. Nooit een waarde (PCF, benchmark, constante) hardcoden in code als hij elders thuishoort. Toets: "als dit getal verandert, op hoeveel plekken pas ik het aan?" Het juiste antwoord is altijd één. Indicator-waarden komen uit de catalogus-definitie (`waarde`) of de kennisbank, niet uit een literal in `cockpit2.py`. De guard-test `tests/test_geen_hardcoded_metric.py` bewaakt dit.
 
+## UI — designsysteem (HARDE REGEL)
+
+Nieuwe UI (formulieren, lijsten, kaarten) hergebruikt ALTIJD bestaande design-systeem-klassen.
+
+- **Geen inline `style=`-attributen** en **geen nieuwe CSS-klasse zonder expliciet besluit.**
+  Structuur, spacing, kleur en layout komen uit bestaande klassen (`.card`, `.qadd-form`,
+  `.att-lbl`, `.editor`, `.muted`, `.qadd-row`, `.btn`, `.ptitle`, …).
+- **Reference, don't invent:** bestaat er een vergelijkbaar scherm (projecten-overview,
+  node-detail), dan is DÁT de referentie die je kopieert — geen eigen variant.
+- **Verplichte stap vóór het bouwen van een view:** eerst tonen welk bestaand patroon je
+  hergebruikt (zoals bij de artefact-formulieren gedaan). Pas na akkoord bouwen.
+- **Guard:** `tests/test_ui_no_inline_style.py` rendert de governeerde views en faalt op een
+  `style=`-attribuut. Elke nieuwe governeerde view voeg je aan die guard toe.
+
 ## Autorisatie — elke nieuwe dispatch-tak
 
 Elke nieuwe `dispatch`-tak krijgt bij aanmaken direct een bewuste autorisatielaag.
