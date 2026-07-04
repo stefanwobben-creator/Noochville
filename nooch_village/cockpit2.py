@@ -41,6 +41,7 @@ from nooch_village.attachments import AttachmentStore, ARTEFACT_KINDS
 from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
 from nooch_village.artefact_seen import SeenStore
+from nooch_village import epic
 from nooch_village.personas import PersonaStore
 from nooch_village.projects import ProjectLedger
 from nooch_village.ai_tasks import AITaskStore
@@ -1487,6 +1488,14 @@ def make_handler(data_dir: str, csrf_token: str,
                 self.send_header("Content-Length", str(len(b)))
                 self.end_headers()
                 self.wfile.write(b)
+                return
+            if path == "/epic/frame":
+                # NASA EPIC-frame (server-side naar ~512px geresized) doorserveren; key blijft server-side.
+                data = epic.frame_bytes((qs.get("image") or [""])[0], (qs.get("date") or [""])[0])
+                if data:
+                    self._send_bytes(data, "image/png")
+                else:
+                    self._send("", 404)
                 return
             if path in ("/", "/index.html"):
                 roots = org.roots(st.records.all())

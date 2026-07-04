@@ -20,7 +20,7 @@ from nooch_village.views.backlog import render_backlog_tab
 from nooch_village.views.projects import (
     _projects_tab_html, _scope_text, _person_projects_tab_html, _modal_html,
 )
-from nooch_village import org, ai_match, artefacts, artefact_seen
+from nooch_village import org, ai_match, artefacts, artefact_seen, epic
 from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD, _CIRCLE_TABS, _ROLE_TABS, _PERSON_TABS, WEBSITE_DEVELOPER_ROLE
 
 if TYPE_CHECKING:
@@ -147,6 +147,29 @@ def _role_ai_overview(st: _Stores, rec, csrf_token: str = "") -> str:
     return f"<div class='c2-sec'><h3>AI in deze rol</h3>{blocks}</div>"
 
 
+def _epic_earth_html() -> str:
+    """Live NASA-EPIC-aardbol: de laatste frames gestapeld, met een klein script dat ze traag
+    doorloopt (zachte draaiing), plus een UTC-onderschrift. Alleen bestaande + de goedgekeurde
+    .epic-* klassen, geen inline styles. Fail-closed: geen frames → nette melding."""
+    frames = epic.latest_frames()
+    if not frames:
+        return "<div class='card muted'>Live aarde-beeld (NASA EPIC) is even niet beschikbaar.</div>"
+    imgs = "".join(
+        f"<img class='epic-frame{' on' if i == len(frames) - 1 else ''}' "
+        f"src='/epic/frame?image={_e(f['image'])}&date={_e(f['date'])}' "
+        f"data-cap='{_e(f['caption'])} UTC' alt='Aarde vanaf NASA EPIC (DSCOVR)' loading='lazy'>"
+        for i, f in enumerate(frames))
+    cap0 = f"{_e(frames[-1]['caption'])} UTC"
+    js = ("<script>(function(){var w=document.currentScript.parentNode;"
+          "var fr=w.querySelectorAll('.epic-frame'),cap=w.querySelector('.epic-cap');"
+          "if(fr.length<2)return;var i=fr.length-1;"
+          "setInterval(function(){fr[i].classList.remove('on');i=(i+1)%fr.length;"
+          "fr[i].classList.add('on');if(cap)cap.textContent='Live: '+fr[i].getAttribute('data-cap');},2500);"
+          "})();</script>")
+    return (f"<div class='epic-earth'>{imgs}</div>"
+            f"<div class='epic-cap'>Live: {cap0}</div>{js}")
+
+
 def _overview_html(st: _Stores, rec, csrf_token: str = "") -> str:
     d = rec.definition
     is_c = org.is_circle(rec)
@@ -156,9 +179,11 @@ def _overview_html(st: _Stores, rec, csrf_token: str = "") -> str:
         # hierboven al → chain overslaan.
         parts.append(_strategy_tab_html(st, rec, with_purpose_chain=False))
     doms = d.domains or []
-    parts.append("<div class='c2-sec'><h3>Domains</h3>"
-                 + ("<ul class='clean'>" + "".join(f"<li>{_e(x)}</li>" for x in doms) + "</ul>"
-                    if doms else "<span class='muted'>Geen domein.</span>") + "</div>")
+    domains_inner = ("<ul class='clean'>" + "".join(f"<li>{_e(x)}</li>" for x in doms) + "</ul>"
+                     if doms else "<span class='muted'>Geen domein.</span>")
+    if not getattr(rec, "parent", None):     # anchor (Mother Earth) → live NASA-EPIC-aardbol erbij
+        domains_inner = _epic_earth_html() + domains_inner
+    parts.append(f"<div class='c2-sec'><h3>Domains</h3>{domains_inner}</div>")
     accs = d.accountabilities or []
     if not is_c:
         parts.append("<div class='c2-sec'><h3>Accountabilities</h3>"
