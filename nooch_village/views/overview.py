@@ -417,42 +417,67 @@ def _artefact_versions_html(a) -> str:
             f"historie ({len(vs)})</summary><ul class='clean'>{rows}</ul></details>")
 
 
-def _artefact_form_fields(kind: str, *, a=None) -> str:
-    """Formuliervelden voor add én edit (fase 2): alleen titel + body (+ url voor een tool).
-    Scope, inherit, governance_ref en wijzigingsnotitie zijn weg — inherit staat altijd aan,
-    governance_ref wordt afgeleid uit het domein, 'laatst gewijzigd' toont de datum automatisch."""
-    url = _e(a.url) if a else ""
-    title = _e(a.title) if a else ""
-    body = _e(a.body) if a else ""
-    urlfield = (f"<label>URL<input type='url' name='url' value='{url}' placeholder='https://…'></label>"
-                if kind == "tool" else "")
-    return (f"<label>Titel<input name='title' value='{title}' required></label>"
-            f"<label>Body (markdown)<textarea name='body' rows='3'>{body}</textarea></label>"
-            f"{urlfield}")
+def _md_editor(name: str, value: str = "") -> str:
+    """De markdown-body-editor uit het projecten-patroon: mini-toolbar (via `wrapSel`, die
+    render_node al meelevert in _modal_html) boven een textarea, in een `.editor`-kaart."""
+    return (f"<div class='editor'><div class='editor-tb'>"
+            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'**','**')\" title='Vet'><b>B</b></button>"
+            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'*','*')\" title='Cursief'><i>I</i></button>"
+            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'~~','~~')\" title='Doorhalen'><s>S</s></button>"
+            f"<span class='tb-sep'></span>"
+            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'- ','')\" title='Lijst'>•</button>"
+            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'## ','')\" title='Kop'>H</button>"
+            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'[','](url)')\" title='Link'>🔗</button>"
+            f"</div><textarea name='{name}' rows='3' placeholder='Body (markdown)…'>{value}</textarea></div>")
 
 
-def _artefact_add_form(rec, kind: str, csrf_token: str) -> str:
-    return (f"<details class='c2-add' style='margin-top:.6rem'>"
-            f"<summary style='cursor:pointer;font-weight:600'>+ {_e(_KIND_LABEL[kind])} toevoegen</summary>"
-            f"<form method='post' action='/action' style='display:grid;gap:.4rem;max-width:440px;margin-top:.5rem'>"
+def _domain_field(domains: list) -> str:
+    """Domein-keuze voor een policy-add-form. Eén domein → vaste regel (hidden input, geen dropdown);
+    twee of meer → een select. Bron: de écht via governance toegewezen `definition.domains`."""
+    if len(domains) == 1:
+        d = domains[0]
+        return (f"<label class='att-lbl'>Domein</label>"
+                f"<div class='muted' style='margin-bottom:.35rem'>{_e(d)}</div>"
+                f"<input type='hidden' name='domain' value='{_e(d)}'>")
+    opts = "".join(f"<option value='{_e(d)}'>{_e(d)}</option>" for d in domains)
+    return f"<label class='att-lbl'>Domein</label><select name='domain'>{opts}</select>"
+
+
+def _artefact_add_form(rec, kind: str, csrf_token: str, domains: list | None = None) -> str:
+    dom = _domain_field(domains or []) if kind == "policy" else ""
+    urlf = (f"<label class='att-lbl'>URL</label>"
+            f"<input type='url' name='url' placeholder='https://…'>" if kind == "tool" else "")
+    return (f"<details class='qadd qadd-top'><summary>+ {_e(_KIND_LABEL[kind])} toevoegen</summary>"
+            f"<form method='post' action='/action' class='qadd-form'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='owner' value='{_e(rec.id)}'>"
             f"<input type='hidden' name='kind' value='{_e(kind)}'>"
             f"<input type='hidden' name='next' value='/node?id={_e(rec.id)}&tab={_tab_for(kind)}'>"
-            f"{_artefact_form_fields(kind)}"
-            f"<button class='btn ok sm' type='submit' name='action' value='artefact_add'>toevoegen</button>"
-            f"</form></details>")
+            f"<label class='att-lbl'>Titel</label><input name='title' required>"
+            f"{dom}"
+            f"<label class='att-lbl'>Body</label>{_md_editor('body')}"
+            f"{urlf}"
+            f"<div class='qadd-row'>"
+            f"<button class='btn ok' type='submit' name='action' value='artefact_add'>Toevoegen</button>"
+            f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "
+            f"aria-label='annuleren'>✕</button></div></form></details>")
 
 
 def _artefact_edit_form(a, csrf_token: str) -> str:
-    return (f"<details class='c2-add'><summary class='muted' style='cursor:pointer;font-size:.8rem'>bewerken</summary>"
-            f"<form method='post' action='/action' style='display:grid;gap:.4rem;max-width:440px;margin-top:.4rem'>"
+    urlf = (f"<label class='att-lbl'>URL</label>"
+            f"<input type='url' name='url' value='{_e(a.url)}'>" if a.kind == "tool" else "")
+    return (f"<details class='qadd'><summary class='muted' style='font-size:.8rem'>bewerken</summary>"
+            f"<form method='post' action='/action' class='qadd-form'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
             f"<input type='hidden' name='next' value='/node?id={_e(a.anchor)}&tab={_tab_for(a.kind)}'>"
-            f"{_artefact_form_fields(a.kind, a=a)}"
-            f"<button class='btn ok sm' type='submit' name='action' value='artefact_edit'>opslaan</button>"
-            f"</form></details>")
+            f"<label class='att-lbl'>Titel</label><input name='title' value='{_e(a.title)}'>"
+            f"<label class='att-lbl'>Body</label>{_md_editor('body', _e(a.body))}"
+            f"{urlf}"
+            f"<div class='qadd-row'>"
+            f"<button class='btn ok sm' type='submit' name='action' value='artefact_edit'>Opslaan</button>"
+            f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "
+            f"aria-label='annuleren'>✕</button></div></form></details>")
 
 
 def _artefact_archive_form(a, csrf_token: str) -> str:
@@ -465,8 +490,8 @@ def _artefact_archive_form(a, csrf_token: str) -> str:
 
 
 def _laatst_gewijzigd(a) -> str:
-    return (f"<span class='muted' style='font-size:.78rem'>laatst gewijzigd: "
-            f"{_dt(getattr(a, 'updated_at', 0))}</span>")
+    return (f"<div class='muted' style='font-size:.72rem;margin-top:.25rem'>laatst gewijzigd: "
+            f"{_dt(getattr(a, 'updated_at', 0))}</div>")
 
 
 def _artefact_id_chip(a) -> str:
@@ -474,31 +499,33 @@ def _artefact_id_chip(a) -> str:
     return f"<code class='pill'>{_e(a.id)}</code>"
 
 
-def _artefact_own_li(a, csrf_token: str, can_edit: bool) -> str:
+def _artefact_head(a, *, extra: str = "") -> str:
     icon = _KIND_ICON.get(a.kind, "")
-    head = f"{icon} {_artefact_id_chip(a)} <b>{_e(a.title) or _e(a.id)}</b>"
+    dom = (f" <span class='chip muted'>{_e(a.domain)}</span>"
+           if a.kind == "policy" and getattr(a, "domain", "") else "")
+    head = f"<div class='ptitle'>{icon} {_artefact_id_chip(a)} {_e(a.title) or _e(a.id)}{dom}{extra}</div>"
     if a.kind == "tool" and a.url:
-        head += f" — <a href='{_e(a.url)}' target='_blank' rel='noopener'>{_e(a.url)}</a>"
-    body = f"<br><span class='muted'>{_e(a.body)}</span>" if a.body else ""
-    meta = f"<br>{_laatst_gewijzigd(a)}"
+        head += (f"<div class='muted' style='font-size:.8rem;margin-top:.15rem'>"
+                 f"<a href='{_e(a.url)}' target='_blank' rel='noopener'>{_e(a.url)}</a></div>")
+    return head
+
+
+def _artefact_own_card(a, csrf_token: str, can_edit: bool) -> str:
+    body = f"<div class='muted' style='margin-top:.25rem'>{_e(a.body)}</div>" if a.body else ""
     actions = ""
     if can_edit:
-        actions = (f"<div style='margin-top:.3rem;display:flex;gap:.5rem;align-items:center'>"
-                   f"{_artefact_edit_form(a, csrf_token)}"
-                   f"{_artefact_archive_form(a, csrf_token)}</div>")
-    return f"<li>{head}{body}{meta}{_artefact_versions_html(a)}{actions}</li>"
+        actions = (f"<div style='margin-top:.4rem;display:flex;gap:.6rem;align-items:center'>"
+                   f"{_artefact_edit_form(a, csrf_token)}{_artefact_archive_form(a, csrf_token)}</div>")
+    return (f"<div class='card'>{_artefact_head(a)}{body}{_laatst_gewijzigd(a)}"
+            f"{_artefact_versions_html(a)}{actions}</div>")
 
 
-def _artefact_inherited_li(it) -> str:
+def _artefact_inherited_card(it) -> str:
     a = it["artefact"]
-    icon = _KIND_ICON.get(a.kind, "")
-    head = f"{icon} {_artefact_id_chip(a)} <b>{_e(a.title) or _e(a.id)}</b>"
-    if a.kind == "tool" and a.url:
-        head += f" — <a href='{_e(a.url)}' target='_blank' rel='noopener'>{_e(a.url)}</a>"
-    badge = (f"<a class='chip' href='/node?id={_e(it['origin_id'])}&tab={_tab_for(a.kind)}' "
+    badge = (f" <a class='chip' href='/node?id={_e(it['origin_id'])}&tab={_tab_for(a.kind)}' "
              f"title='klik = naar de bron-rol'>via {_e(it['origin_name'])}</a>")
-    body = f"<br><span class='muted'>{_e(a.body)}</span>" if a.body else ""
-    return f"<li>{head} {badge}{body}<br>{_laatst_gewijzigd(a)}</li>"
+    body = f"<div class='muted' style='margin-top:.25rem'>{_e(a.body)}</div>" if a.body else ""
+    return f"<div class='card'>{_artefact_head(a, extra=badge)}{body}{_laatst_gewijzigd(a)}</div>"
 
 
 def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: str | None,
@@ -511,17 +538,28 @@ def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: s
     kop = ("<p class='muted' style='font-size:.85rem'>Alle policies hieronder zijn "
            "governance-eigendom.</p>" if kind == "policy" else "")
 
-    own = "".join(_artefact_own_li(a, csrf_token, can_edit) for a in oi["own"])
-    own = own or f"<li class='muted'>{_e(leeg)}</li>"
-    add = _artefact_add_form(rec, kind, csrf_token) if can_edit else ""
-    sec_own = (f"<div class='c2-sec'><h3>Van deze rol</h3>"
-               f"<ol class='clean'>{own}</ol>{add}</div>")
+    own = "".join(_artefact_own_card(a, csrf_token, can_edit) for a in oi["own"])
+    own = own or f"<div class='card muted'>{_e(leeg)}</div>"
 
-    inh = "".join(_artefact_inherited_li(it) for it in oi["inherited"])
-    inh = inh or "<li class='muted'>Niets dat hier van hogerhand geldt.</li>"
+    add = ""
+    if can_edit:
+        if kind == "policy":
+            # Een policy kan alleen op een domein dat de rol écht via governance bezit.
+            domains = list(getattr(rec.definition, "domains", None) or [])
+            if domains:
+                add = _artefact_add_form(rec, kind, csrf_token, domains)
+            else:
+                add = ("<div class='card muted'>Deze rol heeft nog geen domein — wijs er eerst een "
+                       "toe via governance, daarna kun je hier een policy op dat domein maken.</div>")
+        else:
+            add = _artefact_add_form(rec, kind, csrf_token)
+    sec_own = f"<div class='c2-sec'><h3>Van deze rol</h3>{own}{add}</div>"
+
+    inh = "".join(_artefact_inherited_card(it) for it in oi["inherited"])
+    inh = inh or "<div class='card muted'>Niets dat hier van hogerhand geldt.</div>"
     sec_inh = (f"<div class='c2-sec'><h3>Geldend hier</h3>"
                f"<p class='muted' style='font-size:.8rem'>Overgeërfd van bovenliggende rollen/cirkels "
-               f"(read-only) — wijzig bij de bron.</p><ol class='clean'>{inh}</ol></div>")
+               f"(read-only) — wijzig bij de bron.</p>{inh}</div>")
     return f"<h2>{_e(titel)}</h2>{kop}{sec_own}{sec_inh}"
 
 

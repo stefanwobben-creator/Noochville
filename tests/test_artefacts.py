@@ -409,19 +409,27 @@ def test_context_endpoint_json_en_markdown_en_404(tmp_path):
 
 # ── brok UI: Notes/Policies/Tools tabs ──────────────────────────────────────
 
+def _give_role_domain(st, role_id, domain):
+    rec = st.records.get(role_id)
+    if domain not in rec.definition.domains:
+        rec.definition.domains.append(domain)
+        st.records.put(rec)
+
+
 def test_ui_vervuller_ziet_editknop_niet_vervuller_niet(tmp_path):
     st = _stores(tmp_path)
     st.people.add("Alice", "alice@nooch.earth")
     st.assign.assign(OWNER, "person", st.people.by_email("alice@nooch.earth").id)
     st.people.add("Bob", "bob@nooch.earth")                 # bestaat, vervult OWNER niet
-    st.att.add(OWNER, "policy", title="Merkstem", body="burger, geen consument")
+    _give_role_domain(st, OWNER, "Merkstem")                # governance wijst domein toe → policy mogelijk
+    st.att.add(OWNER, "policy", title="Merkstem-regel", domain="Merkstem")
 
     filler = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="alice@nooch.earth")
     assert "artefact_add" in filler and "artefact_edit" in filler   # add- + edit-formulier zichtbaar
-    assert "Merkstem" in filler
+    assert "Merkstem-regel" in filler
 
     outsider = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="bob@nooch.earth")
-    assert "Merkstem" in outsider                            # ziet de policy wél (read)
+    assert "Merkstem-regel" in outsider                      # ziet de policy wél (read)
     assert "artefact_add" not in outsider and "artefact_edit" not in outsider   # maar geen edit-knop
 
 
@@ -434,13 +442,58 @@ def test_ui_geerfd_readonly_met_herkomst(tmp_path):
     assert f"/node?id={CIRCLE}&tab=policies" in html         # herkomst-badge springt naar bron-rol
 
 
-def test_ui_policy_form_alleen_titel_en_body(tmp_path):
-    # Fase 2: scope/inherit/governance_ref/wijzigingsnotitie zijn uit het formulier verdwenen.
+def test_ui_policy_form_projecten_patroon_titel_body_domein(tmp_path):
+    # Projecten-patroon (qadd-form + att-lbl + editor-toolbar); alleen titel + body + domein.
     st = _stores(tmp_path)
-    html = cockpit2.render_node(st, ANCHOR, "policies", csrf_token="tok", username="guest")
+    _give_role_domain(st, OWNER, "Merkstem")
+    html = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
     for weg in ("governance_ref", "name='scope'", "name='inherit'", "name='change_note'"):
         assert weg not in html
+    assert "class='qadd-form'" in html and "att-lbl" in html and "class='editor'" in html
     assert "name='title'" in html and "name='body'" in html
+    assert "Domein" in html and "name='domain'" in html
+
+
+def test_ui_artefact_lijst_gebruikt_card_patroon(tmp_path):
+    # Lijst-items volgen het projecten-kaart-patroon (.card / .ptitle), geen bare <li>.
+    st = _stores(tmp_path)
+    st.att.add(CIRCLE, "note", title="Cirkel-note", inherit=True)   # note: geen domein nodig
+    html = cockpit2.render_node(st, CIRCLE, "notes", csrf_token="tok", username="guest")
+    assert "class='card'" in html and "ptitle" in html
+    assert "class='qadd-form'" in html and "class='editor'" in html   # add-form ook in het patroon
+
+
+def test_ui_policy_geen_domein_toont_melding_geen_form(tmp_path):
+    st = _stores(tmp_path)                                   # OWNER heeft geen domein
+    html = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
+    assert "nog geen domein" in html
+    assert "value='artefact_add'" not in html               # geen add-form
+
+
+def test_ui_policy_1_domein_vaste_regel_2_domeinen_select(tmp_path):
+    st = _stores(tmp_path)
+    _give_role_domain(st, OWNER, "Merkstem")
+    one = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
+    assert "<input type='hidden' name='domain'" in one and "<select name='domain'>" not in one
+    _give_role_domain(st, OWNER, "Toon")                    # nu 2 domeinen → select
+    two = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
+    assert "<select name='domain'>" in two and "Toon" in two
+
+
+def test_route_policy_domein_server_side_gevalideerd(tmp_path):
+    dd = _dd(tmp_path)
+    _give_domain(dd, CIRCLE, "Money")
+    _give_domain(dd, CIRCLE, "Decision Making")             # 2 domeinen → keuze verplicht + gevalideerd
+    bad = cockpit2.dispatch(dd, "artefact_add",
+        {"owner": [CIRCLE], "kind": ["policy"], "title": ["X"], "domain": ["Verzonnen"], "next": ["/"]},
+        username="guest")[1]
+    assert "kies een domein" in bad
+    assert cockpit2._Stores(dd).att.list(CIRCLE, "policy") == []
+    ok = cockpit2.dispatch(dd, "artefact_add",
+        {"owner": [CIRCLE], "kind": ["policy"], "title": ["Geld-regel"], "domain": ["Money"], "next": ["/"]},
+        username="guest")[1]
+    assert "toegevoegd" in ok
+    assert cockpit2._Stores(dd).att.list(CIRCLE, "policy")[0].domain == "Money"
 
 
 def test_ui_tools_tab_toont_url_en_icon(tmp_path):

@@ -446,21 +446,6 @@ def _web_actor_id(username: str | None, st) -> str:
     return actor.id if actor else ""
 
 
-def _derive_domain_govref(owner: str, kind: str, st) -> tuple[str, str]:
-    """Leid het domein (voor een policy) én de governance_ref af uit de ÉCHTE, governance-toegewezen
-    domeinen van de rol (`definition.domains`). GEEN pseudo-terugval: een policy kan alleen op een
-    domein dat de rol daadwerkelijk via governance bezit. Heeft de rol geen domein, dan is `domain`
-    leeg en weigert de aanroeper de policy (het systeem bakt niets voor). De koppeling rol→domein
-    IS de governance-referentie."""
-    rec = st.records.get(owner)
-    domain = ""
-    if kind == "policy" and rec is not None:
-        doms = list(getattr(rec.definition, "domains", None) or [])
-        domain = doms[0] if doms else ""      # geen domein → geen policy (geen fallback)
-    gref = f"domain:{domain}" if domain else f"role:{owner}"
-    return domain, gref
-
-
 def _artefact_gate(owner_role_id: str, username: str | None, st) -> str | None:
     """Poort voor artefact-schrijfacties (add/edit/archive). Regel: rolvervuller van de eigenaar-rol
     OF Circle Lead van de omvattende cirkel — via `can_write_artefact`, dus identiek voor mens en
@@ -624,11 +609,22 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         kind = g("kind")
         if kind not in ARTEFACT_KINDS:
             return nxt, "✗ onbekende artefact-soort"
-        domain, gref = _derive_domain_govref(owner, kind, st)   # govref auto uit rol→domein
-        if kind == "policy" and not domain:
-            # Geen governance-toegewezen domein op deze rol → geen policy mogelijk (geen voorbak).
-            return nxt, ("✗ deze rol bezit geen domein via governance; een policy kan alleen op een "
-                         "domein dat de rol daadwerkelijk toegewezen heeft gekregen")
+        domain = ""
+        if kind == "policy":
+            # Een policy kan alleen op een domein dat de rol ÉCHT via governance bezit. Het gekozen
+            # domein wordt server-side gevalideerd tegen definition.domains; geen fallback/voorbak.
+            rec = st.records.get(owner)
+            owner_domains = list(getattr(rec.definition, "domains", None) or []) if rec else []
+            if not owner_domains:
+                return nxt, ("✗ deze rol heeft nog geen domein; wijs er eerst een toe via governance, "
+                             "daarna kun je er een policy op maken")
+            chosen = g("domain").strip()
+            if not chosen and len(owner_domains) == 1:
+                chosen = owner_domains[0]            # één domein → vaste keuze (form stuurt 'm mee)
+            if chosen not in owner_domains:
+                return nxt, "✗ kies een domein dat deze rol daadwerkelijk bezit"
+            domain = chosen
+        gref = f"domain:{domain}" if domain else f"role:{owner}"
         actor_id = _web_actor_id(username, st)
         a = st.att.add(owner, kind, title=g("title"), body=g("body"),
                        url=g("url"), domain=domain, inherit=True,   # policies gelden altijd voor iedereen
@@ -647,7 +643,7 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         _deny = _artefact_gate(cur.anchor, username, st)      # check vóór de mutatie
         if _deny:
             raise Forbidden(_deny)
-        _domain, gref = _derive_domain_govref(cur.anchor, cur.kind, st)   # govref auto-afgeleid
+        gref = f"domain:{cur.domain}" if getattr(cur, 'domain', '') else f"role:{cur.anchor}"
         actor_id = _web_actor_id(username, st)
         upd = st.att.update(cur.id,
                             title=(g("title") if "title" in form else None),
@@ -666,7 +662,7 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         _deny = _artefact_gate(cur.anchor, username, st)      # check vóór de mutatie
         if _deny:
             raise Forbidden(_deny)
-        _domain, gref = _derive_domain_govref(cur.anchor, cur.kind, st)   # govref auto-afgeleid
+        gref = f"domain:{cur.domain}" if getattr(cur, 'domain', '') else f"role:{cur.anchor}"
         actor_id = _web_actor_id(username, st)
         arch = st.att.archive(cur.id, actor_id=actor_id, actor_type="person",
                               governance_ref=gref, change_note="gearchiveerd")
