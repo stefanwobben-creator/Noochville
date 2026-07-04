@@ -220,18 +220,21 @@ _WERK_MEASURE = {"spanningen": "behandeld", "informatie": "info", "projecten": "
 
 def _werk_fetch(st: _Stores, circle: str, measure: str, dim: str, cutoff):
     key = _WERK_MEASURE.get(measure, "behandeld")
-    pts, vals = [], []
+    samples = []
     for m in st.werk.log(circle):
         v = m.get(key)
         if key == "afwezig":
             v = len(v or [])          # lijst afwezigen → aantal
         if v is None:
             continue
-        pts.append({"at": m.get("at", 0), "value": v})
-        vals.append(v)
+        samples.append({"at": m.get("at", 0), "value": v})
+    # Alle werkoverleg-tegels respecteren dezelfde periodefilter als de reeks-tegels: filter op
+    # cutoff vóór het aggregeren (gemiddeld/totaal), niet alleen bij de reeks.
+    pts = filter_samples(samples, cutoff)          # [(at, value), ...] binnen het venster
+    vals = [v for _, v in pts]
     unit = "/10" if measure == "tevredenheid" else ("min" if measure == "duur" else "")
     if dim == "over_tijd":
-        return {"kind": "series", "points": filter_samples(pts, cutoff), "unit": unit}
+        return {"kind": "series", "points": pts, "unit": unit}
     if dim == "totaal" and measure != "tevredenheid":
         return {"kind": "number", "value": (sum(vals) if vals else None), "unit": unit}
     avg = round(sum(vals) / len(vals), 1) if vals else None   # gemiddeld (en tevredenheid-totaal)
