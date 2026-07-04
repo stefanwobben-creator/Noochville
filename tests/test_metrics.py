@@ -321,3 +321,22 @@ def test_werk_fetch_afgeleide_afwezigheid_en_reguliere_count(tmp_path):
     assert _werk_fetch(st, C, "roloverleg", "totaal", 0)["value"] == 2
     # bestaande count blijft werken: behandelde spanningen = 1 + 1
     assert _werk_fetch(st, C, "spanningen", "totaal", 0)["value"] == 2
+
+
+def test_werk_aggregaat_respecteert_periodefilter(tmp_path):
+    """Regressie: gemiddeld/totaal aggregeren over de werkoverleg-records BINNEN het venster
+    (cutoff), net als de reeks-tegel — niet all-time (de gedriftte periodefilter is dicht)."""
+    from nooch_village.views.metrics import _werk_fetch
+    st = cockpit2._Stores(_dd(tmp_path))
+    now, day = time.time(), 86400
+    st.werk._m.setdefault(C, {})["log"] = [
+        {"at": now - 60 * day, "tevredenheid": 4.0, "duur_min": 100},   # oud, buiten "maand"
+        {"at": now - 1 * day, "tevredenheid": 8.0, "duur_min": 10},     # recent, binnen "maand"
+    ]
+    st.werk._save()
+    cutoff = window_cutoff("maand", now)                     # alleen het recente record telt mee
+    assert _werk_fetch(st, C, "tevredenheid", "gemiddeld", cutoff)["value"] == 8.0   # niet 6.0
+    assert _werk_fetch(st, C, "duur", "totaal", cutoff)["value"] == 10               # niet 110
+    # zonder filter (None) → all-time gemiddelde/som over beide records
+    assert _werk_fetch(st, C, "tevredenheid", "gemiddeld", None)["value"] == 6.0
+    assert _werk_fetch(st, C, "duur", "totaal", None)["value"] == 110
