@@ -226,9 +226,9 @@ def migrate_records(records: Records) -> None:
         tk.version += 1
         records.put(tk)
         changed = True
-    # Fase 2: anchor-policies leven niet meer als strings in definition.policies, maar als
-    # domein-gescopeerde policy-artefacten (zie artefacts.migrate_anchor_policies). De G4-handhaving
-    # blijft in policy.py. Hier daarom NIET meer seeden — geen strings naast de artefacten.
+    # Policies worden NIET geseed. Ze ontstaan uitsluitend via governance: een domein wordt aan een
+    # rol toegewezen en de eigenaar-rol maakt zelf de policy via het artefact-mechanisme. Het systeem
+    # bakt geen domeinen of policies voor. G4-handhaving blijft los in policy.py.
     if not root.definition.purpose:
         # alleen vullen als de root-purpose leeg is (bv. vers geseed). NIET overschrijven bij
         # afwijking — een bewuste root-purpose (Mother Earth) blijft staan. Zelfde fix als _PERSONAS.

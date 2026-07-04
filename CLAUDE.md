@@ -226,22 +226,23 @@ Ze bestaat uit vijf lagen, van zwaar naar licht:
 | Laag | Wat | Eigenaar | Hoe afgedwongen |
 |------|-----|----------|-----------------|
 | **Missie** | Anchor Circle purpose: het duurzaamste schoenenmerk ter wereld zijn, om een industrie vol menselijk, dierlijk en planetair leed te laten zien dat meliorisme echt kan | Founder | G4-guard: elk voorstel dat de Anchor-purpose raakt escaleert ALTIJD naar de mens |
-| **Policies** | Harde grenzen op de Anchor Circle: geen advertising, alleen nooch.earth, on-demand productie, geen plastic/leer | Founder via records | G4-poort + `intent.prioritize()` markeert overtredingen als `dropped` |
+| **Policies** | Domein-voorwaarden ("mag, mits") die de domein-eigenaar zelf maakt via het artefact-mechanisme, op een domein dat governance aan de rol toewees. De missie-richting (geen advertising/plastic/leer, alleen nooch.earth, on-demand) leeft in missie/statuten, niet als afgedwongen policy | Domein-eigenaar via governance | Geen verstopte handhavingslaag: het systeem bakt geen domeinen/policies voor; niets in G4/intent dwingt materiaal-/kanaal-regels af |
 | **Strategie** | Heuristieken: organisch boven betaald, langetermijn-keywords, eigen website | Founder | `config/strategy.json` — bewerkt direct, niet via governance |
 | **Doelen** | Tijdgebonden targets: 1000 paar schoenen Q4 2026 via nooch.earth | Founder | `config/strategy.json` — agents rangschikken acties op doelbijdrage |
 | **Structuur** | Rollen, cirkels, accountabilities | Agents via governance | G0-G4-poort + Secretary + Reconciler |
 | **Operatie** | Dagelijks autonoom werk binnen de rol | Agents | Vrij binnen bovenstaande kaders |
 
-**Prioriteitsvolgorde (hard ingebakken):**
-Missie > Policy > Strategie > Doel. Een doel mag nooit een policy of de missie overrulen.
-Botst een doel met een policy (bijv. verkoopdoel dreigt niet gehaald zonder advertising),
-dan escaleert de agent naar de mens — de strategie wordt nooit gebroken.
+**Prioriteitsvolgorde:**
+Missie/statuten > domein-policy (via governance) > strategie > doel. De missie-richting is
+niet in code als deterministische poort gehandhaafd; ze leeft in missie/visie en de statuten.
+Gaat iets in de praktijk mis, dan ontstaat een domein + policy via de juiste governance-route.
 
 **`config/strategy.json`** is mens-bewerkbaar en wordt bij elke `load_context` ingeladen in `context.strategy`.
 Het bevat `strategy` (lijst heuristieken) en `goals` (lijst tijdgebonden targets met `metric`, `target`, `window_start/end`, `active`, `contributes_via`).
 
 **`nooch_village/intent.py`** — `prioritize(actions, context) -> list[dict]`:
-- Acties met een policy-schending (`_POLICY_VIOLATIONS`) krijgen `dropped=True`.
+- Off-domein acties (label zonder schoen-woord) krijgen `dropped=True` (domeinfilter). Er is
+  GEEN policy-handhaving meer in deze laag.
 - Overige acties scoren op doelbijdrage (`contributes_via`-signalen) + strategie-afstemming.
 - Gesorteerd: niet-afgevallen eerst (op score desc), afgevallen achteraan.
 - GrowthAnalyst gebruikt dit om gerelateerde Trends-keywords te rangschikken vóór ze worden voorgesteld.
@@ -388,7 +389,7 @@ Principe: maak eerst één inwoner één ding echt waardevol doen (de groei-puls
 | G1 | Domein-botsing: nieuw domein overlapt met bestaande rol | Escaleer naar mens |
 | G2 | Accountability-duplicaat: al bij een andere rol | Escaleer naar mens |
 | G3 | Verweesd werk: verwijdering zonder elders te beleggen | Escaleer naar mens |
-| G4 | Missie-poort: plastic/leer-goedkeuring of overproductie + optioneel LLM | Escaleer naar mens |
+| G4 | Anchor-purpose-poort: een structuurwijziging van de wortelcirkel-purpose is mens-eigendom | Escaleer naar mens |
 
 Slaagt alles: direct aannemen. **Bezwaren worden NOOIT automatisch geïntegreerd** — alleen de mens kan een geëscaleerd voorstel goedkeuren (via `governance_verdict: approve`).
 
@@ -396,7 +397,10 @@ Slaagt alles: direct aannemen. **Bezwaren worden NOOIT automatisch geïntegreerd
 `Proposal` heeft: `proposer_role`, `change` (GovernanceChange met `kind` ∈ {add_role, amend_role, remove_role, add_policy, amend_policy, remove_policy}), `tension`, `trigger_example` (VERPLICHT audittrail), `rationale`, `status`, `created_at`. Escalaties bewaren `escalation_gate` en `escalation_reason`.
 
 ### De missie leeft in de Anchor Circle
-De wortelcirkel heeft een `purpose` die de Nooch-missie verwoordt en `policies` (harde policies waartegen G4 toetst). Governance wijzigt alleen structuur; operatie blijft autonoom binnen de rol (artikel 4 van Holacracy).
+De wortelcirkel heeft een `purpose` die de Nooch-missie verwoordt. G4 bewaakt alleen dat een
+wijziging van díe purpose naar de mens escaleert; er is geen deterministische missie-policy-poort
+meer (policy.py + de _SUSPECT_RE/LLM-tak zijn verwijderd). Governance wijzigt alleen structuur;
+operatie blijft autonoom binnen de rol (artikel 4 van Holacracy).
 
 ### Events
 | Event | Wie publiceert | Betekenis |

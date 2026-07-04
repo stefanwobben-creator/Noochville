@@ -234,28 +234,19 @@ class TestG3:
 # ── G4: missie-poort ─────────────────────────────────────────────────────────
 
 class TestG4:
-    def test_hard_violation_plastic_goedkeuren(self, records_with_root):
-        p = _make_proposal(
-            change=GovernanceChange(
-                kind=ChangeKind.AMEND_ROLE, role_id="website_watcher",
-                add_accountabilities=["plastic goedkeuren voor productie"],
-            ),
-        )
-        passed, gate_name, reason = gate.check(p, records_with_root)
-        assert not passed
-        assert gate_name == "G4"
-        assert "missie-policy" in reason
-
-    def test_hard_violation_google_ads_autoriseren(self, records_with_root):
-        p = _make_proposal(
-            change=GovernanceChange(
-                kind=ChangeKind.AMEND_ROLE, role_id="website_watcher",
-                add_accountabilities=["google ads autoriseren voor campagnes"],
-            ),
-        )
-        passed, gate_name, reason = gate.check(p, records_with_root)
-        assert not passed
-        assert gate_name == "G4"
+    def test_geen_missie_handhaving_meer_in_de_poort(self, records_with_root):
+        # De policy.py-guards én de _SUSPECT_RE/LLM-tak zijn uit G4 gehaald: materiaal-/ads-termen
+        # worden niet meer deterministisch geblokkeerd. De richting leeft in missie/statuten +
+        # domein-policies via governance; misgaat iets, dan ontstaat daar een domein + policy.
+        for acc in ("plastic goedkeuren voor productie", "google ads autoriseren voor campagnes"):
+            p = _make_proposal(
+                change=GovernanceChange(
+                    kind=ChangeKind.AMEND_ROLE, role_id="website_watcher",
+                    add_accountabilities=[acc],
+                ),
+            )
+            passed, gate_name, reason = gate.check(p, records_with_root)
+            assert passed, f"{acc!r} onverwacht geblokkeerd bij {gate_name} ({reason})"
 
     def test_anchor_purpose_wijzigen_escaleert(self, records_with_root):
         root_id = records_with_root.root().id

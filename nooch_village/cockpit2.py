@@ -142,7 +142,6 @@ def _bootstrap(dd: str) -> None:
     _seed_catalog(st.defs)        # Librarian metrics-database: zaad-definities (idempotent)
     _reground_seed(st.defs)       # bestaande definities bijwerken met nieuwe grondingen (idempotent)
     st.att.migrate()              # attachments → artefact-model (legacy tool-notes, defaults; idempotent)
-    artefacts.migrate_anchor_policies(st.records, st.att)   # string-policies → domein-artefacten (idempotent)
 
 
 from nooch_village.views.overview import (
@@ -448,18 +447,16 @@ def _web_actor_id(username: str | None, st) -> str:
 
 
 def _derive_domain_govref(owner: str, kind: str, st) -> tuple[str, str]:
-    """Leid het domein (voor een policy) én de governance_ref af uit de rol→domein-koppeling — er
-    is geen apart invoerveld meer (fase 2). De koppeling rol→domein IS de governance-referentie.
-    OPEN PUNTEN:
-    - domeinen zonder eigenaar-rol (bv. "Geld") vallen terug op de domeinnaam/rol.
-    - een rol ZONDER domein kan nu een policy maken met de rolnaam als pseudo-domein. Aanscherpen
-      zodra Domain guardianship echt gehandhaafd wordt (dan: alleen policies op een domein dat de
-      rol daadwerkelijk bezit)."""
+    """Leid het domein (voor een policy) én de governance_ref af uit de ÉCHTE, governance-toegewezen
+    domeinen van de rol (`definition.domains`). GEEN pseudo-terugval: een policy kan alleen op een
+    domein dat de rol daadwerkelijk via governance bezit. Heeft de rol geen domein, dan is `domain`
+    leeg en weigert de aanroeper de policy (het systeem bakt niets voor). De koppeling rol→domein
+    IS de governance-referentie."""
     rec = st.records.get(owner)
     domain = ""
     if kind == "policy" and rec is not None:
         doms = list(getattr(rec.definition, "domains", None) or [])
-        domain = doms[0] if doms else (getattr(rec.definition, "name", "") or owner)
+        domain = doms[0] if doms else ""      # geen domein → geen policy (geen fallback)
     gref = f"domain:{domain}" if domain else f"role:{owner}"
     return domain, gref
 
@@ -628,6 +625,10 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         if kind not in ARTEFACT_KINDS:
             return nxt, "✗ onbekende artefact-soort"
         domain, gref = _derive_domain_govref(owner, kind, st)   # govref auto uit rol→domein
+        if kind == "policy" and not domain:
+            # Geen governance-toegewezen domein op deze rol → geen policy mogelijk (geen voorbak).
+            return nxt, ("✗ deze rol bezit geen domein via governance; een policy kan alleen op een "
+                         "domein dat de rol daadwerkelijk toegewezen heeft gekregen")
         actor_id = _web_actor_id(username, st)
         a = st.att.add(owner, kind, title=g("title"), body=g("body"),
                        url=g("url"), domain=domain, inherit=True,   # policies gelden altijd voor iedereen
