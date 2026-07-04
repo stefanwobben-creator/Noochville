@@ -121,19 +121,13 @@ _TRANSP_CHECK = "Projectenbord bijgewerkt (transparantie)"
 
 
 def _ensure_transparency_policy(st: _Stores) -> None:
-    """Idempotent: één transparantie-policy op de BREEDSTE cirkel (de rest erft die later over),
-    met een gekoppeld wekelijks checklist-item dat de spelregel operationeel checkt."""
+    """Idempotent: het wekelijkse checklist-item dat transparantie operationeel checkt. De
+    transparantie-POLICY zelf is in fase 2 uit de policy-lijst gehaald (was eerder een note);
+    de cadans blijft via dit checklist-item. Voegt GEEN string meer toe aan definition.policies."""
     roots = org.roots(st.records.all())
     root = roots[0] if roots else None
     if root is None:
         return
-    if _TRANSP_POLICY not in root.definition.policies:
-        root.definition.policies.append(_TRANSP_POLICY)
-        try:
-            root.version += 1
-        except Exception:
-            pass
-        st.records.put(root)
     if not any(i.get("description") == _TRANSP_CHECK for i in st.checklists.for_node(root.id)):
         st.checklists.add(root.id, _TRANSP_CHECK, "week", target_type="all", by="founder")
 
@@ -148,6 +142,7 @@ def _bootstrap(dd: str) -> None:
     _seed_catalog(st.defs)        # Librarian metrics-database: zaad-definities (idempotent)
     _reground_seed(st.defs)       # bestaande definities bijwerken met nieuwe grondingen (idempotent)
     st.att.migrate()              # attachments → artefact-model (legacy tool-notes, defaults; idempotent)
+    artefacts.migrate_anchor_policies(st.records, st.att)   # string-policies → domein-artefacten (idempotent)
 
 
 from nooch_village.views.overview import (
@@ -452,6 +447,19 @@ def _web_actor_id(username: str | None, st) -> str:
     return actor.id if actor else ""
 
 
+def _derive_domain_govref(owner: str, kind: str, st) -> tuple[str, str]:
+    """Leid het domein (voor een policy) én de governance_ref af uit de rol→domein-koppeling — er
+    is geen apart invoerveld meer (fase 2). De koppeling rol→domein IS de governance-referentie.
+    OPEN PUNT: domeinen zonder eigenaar-rol (bv. "Geld") vallen terug op de domeinnaam/rol."""
+    rec = st.records.get(owner)
+    domain = ""
+    if kind == "policy" and rec is not None:
+        doms = list(getattr(rec.definition, "domains", None) or [])
+        domain = doms[0] if doms else (getattr(rec.definition, "name", "") or owner)
+    gref = f"domain:{domain}" if domain else f"role:{owner}"
+    return domain, gref
+
+
 def _artefact_gate(owner_role_id: str, username: str | None, st) -> str | None:
     """Poort voor artefact-schrijfacties (add/edit/archive). Regel: rolvervuller van de eigenaar-rol
     OF Circle Lead van de omvattende cirkel — via `can_write_artefact`, dus identiek voor mens en
@@ -615,13 +623,10 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         kind = g("kind")
         if kind not in ARTEFACT_KINDS:
             return nxt, "✗ onbekende artefact-soort"
-        gref = g("governance_ref").strip()
-        if requires_governance_ref(owner, st.records) and not gref:
-            raise Forbidden("Anchor-cirkel: een schrijfactie vereist een governance_ref "
-                            "(verwijzing naar het governance-besluit).")
+        domain, gref = _derive_domain_govref(owner, kind, st)   # govref auto uit rol→domein
         actor_id = _web_actor_id(username, st)
         a = st.att.add(owner, kind, title=g("title"), body=g("body"),
-                       scope=g("scope"), url=g("url"), inherit=(g("inherit") != "0"),
+                       url=g("url"), domain=domain, inherit=True,   # policies gelden altijd voor iedereen
                        actor_id=actor_id, actor_type="person",
                        governance_ref=gref, change_note="aangemaakt")
         if a is None:
@@ -637,18 +642,14 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         _deny = _artefact_gate(cur.anchor, username, st)      # check vóór de mutatie
         if _deny:
             raise Forbidden(_deny)
-        gref = g("governance_ref").strip()
-        if requires_governance_ref(cur.anchor, st.records) and not gref:
-            raise Forbidden("Anchor-cirkel: een wijziging vereist een governance_ref.")
+        _domain, gref = _derive_domain_govref(cur.anchor, cur.kind, st)   # govref auto-afgeleid
         actor_id = _web_actor_id(username, st)
         upd = st.att.update(cur.id,
                             title=(g("title") if "title" in form else None),
                             body=(g("body") if "body" in form else None),
-                            scope=(g("scope") if "scope" in form else None),
                             url=(g("url") if "url" in form else None),
-                            inherit=(None if "inherit" not in form else (g("inherit") != "0")),
                             actor_id=actor_id, actor_type="person",
-                            governance_ref=gref, change_note=(g("change_note") or "bewerkt"))
+                            governance_ref=gref, change_note="bewerkt")
         artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
                              actor_id=actor_id, actor_type="person", governance_ref=gref)
         msg = f"✏️ {upd.kind} bijgewerkt ({upd.id})"
@@ -660,9 +661,7 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         _deny = _artefact_gate(cur.anchor, username, st)      # check vóór de mutatie
         if _deny:
             raise Forbidden(_deny)
-        gref = g("governance_ref").strip()
-        if requires_governance_ref(cur.anchor, st.records) and not gref:
-            raise Forbidden("Anchor-cirkel: archiveren vereist een governance_ref.")
+        _domain, gref = _derive_domain_govref(cur.anchor, cur.kind, st)   # govref auto-afgeleid
         actor_id = _web_actor_id(username, st)
         arch = st.att.archive(cur.id, actor_id=actor_id, actor_type="person",
                               governance_ref=gref, change_note="gearchiveerd")

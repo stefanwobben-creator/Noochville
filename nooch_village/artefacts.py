@@ -118,8 +118,11 @@ def log_change(data_dir: str, *, action: str, artefact, records,
 def _art_item(a, *, editable: bool) -> dict:
     """Eén artefact als serialisatie-dict. `editable` = mag deze rol het bewerken (eigen=True,
     geërfd=False). `mutation_path="artefact"`: te wijzigen via de artefact-routes (bij de eigenaar)."""
-    d = {"id": a.id, "kind": a.kind, "title": a.title, "body": a.body, "scope": a.scope,
-         "status": a.status, "editable": editable, "mutation_path": "artefact"}
+    d = {"id": a.id, "kind": a.kind, "title": a.title, "body": a.body,
+         "status": a.status, "editable": editable, "mutation_path": "artefact",
+         "updated_at": getattr(a, "updated_at", 0)}
+    if a.kind == "policy":
+        d["domain"] = getattr(a, "domain", "")
     if a.kind == "tool":
         d["url"] = a.url
     return d
@@ -140,29 +143,10 @@ def _art_block(role_id: str, kind: str, records, store) -> dict:
     return {"own": own, "inherited": inherited}
 
 
-def _governance_policies(role_id: str, records) -> list[dict]:
-    """Governance-eigendom-policies langs de erfketen (`definition.policies` van de rol zelf en zijn
-    voorouders — o.a. de anchor). Read-only in de artefact-wereld: `editable=False` +
-    `mutation_path="governance"` zodat een AI-vervuller ze WEL volgt, maar nooit voorstelt ze buiten
-    governance om te wijzigen."""
-    out = []
-    for node_id in org.breadcrumb(records.all(), role_id):
-        rec = records.get(node_id)
-        if rec is None:
-            continue
-        for p in (getattr(rec.definition, "policies", None) or []):
-            out.append({
-                "body": p, "title": "", "editable": False, "mutation_path": "governance",
-                "origin_id": node_id, "origin_name": _name(rec),
-                "origin_path": "" if node_id == role_id else f"via {_name(rec)}",
-            })
-    return out
-
-
 def serialize_context(role_id: str, records, store) -> dict:
     """De volledige rol-context als structuur: overview (purpose/domains/accountabilities) +
-    policies (eigen + geërfd + governance-owned read-only) + notes + tools. Bron voor het
-    /context-endpoint (json en markdown)."""
+    policies (eigen + geërfd; alle domein-gescopeerd en governance-eigendom) + notes + tools.
+    Bron voor het /context-endpoint (json en markdown)."""
     rec = records.get(role_id)
     if rec is None:
         return {}
@@ -172,11 +156,9 @@ def serialize_context(role_id: str, records, store) -> dict:
         "domains": list(getattr(d, "domains", None) or []),
         "accountabilities": list(getattr(d, "accountabilities", None) or []),
     }
-    policies = _art_block(role_id, "policy", records, store)
-    policies["governance"] = _governance_policies(role_id, records)
     return {
         "role": role,
-        "policies": policies,
+        "policies": _art_block(role_id, "policy", records, store),
         "notes": _art_block(role_id, "note", records, store),
         "tools": _art_block(role_id, "tool", records, store),
     }
@@ -191,9 +173,9 @@ def _md_section(block: dict, *, tool: bool = False) -> list[str]:
             extra = f" — {a['body']}"
         else:
             extra = ""
-        tag = f" _({a['origin_path']})_" if inherited else (
-            f" _(scope: {a['scope']})_" if a.get("scope") else "")
-        return f"- **{a.get('title') or a['id']}**{extra}{tag}"
+        prefix = f"`{a['id']}` " if a.get("kind") == "policy" else ""
+        tag = f" _({a['origin_path']})_" if inherited else ""
+        return f"- {prefix}**{a.get('title') or a['id']}**{extra}{tag}"
 
     out = ["### Van deze rol"]
     out += [line(a, False) for a in block["own"]] or ["- —"]
@@ -212,18 +194,73 @@ def render_context_markdown(ctx: dict) -> str:
          f"**Domeinen:** {', '.join(role['domains']) or '—'}",
          "**Accountabilities:**"]
     L += [f"- {a}" for a in role["accountabilities"]] or ["- —"]
-    L += ["", "## Policies"]
+    L += ["", "## Policies", "_Alle policies zijn governance-eigendom (domein-voorwaarden): "
+          "volg ze, stel wijzigingen alleen voor via de domein-eigenaar._"]
     L += _md_section(ctx["policies"])
-    L.append("### Governance-policies (read-only — alleen via governance te wijzigen)")
-    gov = ctx["policies"].get("governance") or []
-    L += [f"- {p['body']}" + (f" _({p['origin_path']})_" if p.get("origin_path") else "")
-          for p in gov] or ["- —"]
     L += ["", "## Notes"]
     L += _md_section(ctx["notes"])
     L += ["", "## Tools"]
     L += _md_section(ctx["tools"], tool=True)
     L.append("")
     return "\n".join(L) + "\n"
+
+
+# ── Fase 2: anchor-policies van string → domein-gescopeerd artefact ─────────
+# De oude anchor-policies leefden als kale strings in root.definition.policies. Fase 2 zet de
+# behouden policies om naar domein-gescopeerde policy-artefacten (één display-vorm) en leegt de
+# strings — geen twee vormen naast elkaar. De G4-HANDHAVING blijft in policy.py (regex/intent) en
+# wordt hier NIET aangeraakt: verwijderd-uit-display ≠ verwijderd-uit-enforcement.
+_ANCHOR_POLICIES_FASE2 = [
+    {"domain": "Mission", "title": "Missie-toetsing blijft bewaakt",
+     "body": ("Een rol mág de structuur wijzigen, mits de missie-toetsing (KeywordReview, "
+              "G4-poort) bewaakt blijft: een voorstel dat die accountability verwijdert, bevat "
+              "in hetzelfde voorstel een gelijkwaardig alternatief.")},
+    {"domain": "Materials", "title": "Plastic- en leer-vrij",
+     "body": ("Een rol mág materialen en accountabilities kiezen, mits ze plastic-vrij en "
+              "dierlijk-leer-vrij zijn.")},
+    # OPEN PUNT: het domein "Geld" heeft nog geen eigenaar-rol (financial_controller is kandidaat);
+    # de governance_ref-afleiding valt tot dan terug op de domein-naam.
+    {"domain": "Geld", "title": "Uitgaven na toetsing",
+     "body": ("Een rol mág geld uitgeven, mits de rol die het domein Geld bezit het expliciet "
+              "heeft getoetst.")},
+]
+
+
+def migrate_anchor_policies(records, store, *, dry_run: bool = False) -> list[dict]:
+    """Zet de kale string-policies op de anchor om naar domein-gescopeerde policy-artefacten.
+
+    - Maakt de behouden/nieuwe policies aan als read-only policy-artefacten op de anchor
+      (inherit=True), idempotent op domein.
+    - Leegt daarna root.definition.policies volledig — geen strings meer naast de records.
+    - Raakt policy.py (G4-handhaving) NIET aan.
+
+    Geeft een rapport (lijst acties) terug. Met dry_run=True wordt niets geschreven.
+    """
+    root = records.root()
+    report: list[dict] = []
+    if root is None:
+        return report
+    have = {a.domain for a in store.list(root.id, "policy", include_archived=True)}
+    for spec in _ANCHOR_POLICIES_FASE2:
+        if spec["domain"] in have:
+            report.append({"actie": "bestaat-al", "domein": spec["domain"], "titel": spec["title"]})
+            continue
+        report.append({"actie": "nieuw-artefact", "domein": spec["domain"], "titel": spec["title"],
+                       "body": spec["body"]})
+        if not dry_run:
+            store.add(root.id, "policy", title=spec["title"], body=spec["body"],
+                      domain=spec["domain"], inherit=True,
+                      governance_ref=f"domain:{spec['domain']}", change_note="migratie fase 2")
+    for s in list(getattr(root.definition, "policies", None) or []):
+        report.append({"actie": "verwijder-string", "tekst": s[:80]})
+    if getattr(root.definition, "policies", None) and not dry_run:
+        root.definition.policies = []
+        try:
+            root.version += 1
+        except Exception:
+            pass
+        records.put(root)
+    return report
 
 
 def read_changelog(data_dir: str) -> list[dict]:
