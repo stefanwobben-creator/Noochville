@@ -149,10 +149,10 @@ def test_rol_aanbevelingen_in_picker(tmp_path):
     st = cockpit2._Stores(dd)
     rid = "mother_earth__nooch__marketing_lead"
     rec = st.records.get(rid)
-    # de focus-flow biedt catalogus-indicatoren aan (rol-relevant eerst)
+    # de wizard biedt catalogus-indicatoren aan, categorie-eerst (scope 5)
     page = cockpit2.render_kpi_composer(st, rid, csrf_token="t")
-    assert "Uit de catalogus" in page and "value='def:" in page
-    # relevantie: voor een marketing-rol komen marketing/SEO-bronnen bovendrijven
+    assert "value='def:" in page and "kc-cat" in page
+    # relevantie-helper blijft bestaan: voor een marketing-rol komen marketing/SEO-bronnen bovendrijven
     recs = [c["name"] for _did, c in cockpit2._role_relevant_defs(st, rec, 8)]
     assert recs, "verwacht aanbevelingen voor de marketing-rol"
 

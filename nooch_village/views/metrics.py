@@ -13,7 +13,7 @@ from nooch_village.cockpit2_util import (
 )
 from nooch_village.metric_schema import (
     CADANS_LABEL, MEETTYPE_LABEL, MEETWIJZE_LABEL,
-    VERIFICATIE_LABEL,
+    VERIFICATIE_LABEL, AGGREGATIE, AGGREGATIE_LABEL,
 )
 from nooch_village.metrics import window_cutoff, filter_samples
 from nooch_village.observations import ObservationStore
@@ -601,6 +601,8 @@ def _llm_says_comparable(old: dict, new: dict) -> bool:
 
 
 def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str) -> str:
+    if tile.get("form") == "formule":          # scope 5: opslag nu, live-berekening apart
+        return _render_formula_tile(st, rec, tile, csrf)
     res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), cutoff)
     g = _grondslag(st, tile["source"], tile["measure"])
     info = _grondslag_popover(g)
@@ -893,62 +895,153 @@ def _mw_chip(mw: str) -> str:
 
 
 
-def render_kpi_composer(st: _Stores, node_id: str, csrf_token: str = "", msg: str = "") -> str:
-    """Focus-flow: stel een KPI samen uit drie zuivere ingrediënten — indicator + referentie + vorm.
-    De indicator blijft puur (uit de bron-catalogus); de referentie (benchmark of doel) en de vorm
-    zijn eigenschappen van de KPI."""
-    rec = st.records.get(node_id)
-    if rec is None:
+# Bronnen die actief data leveren → indicatoren daaruit zijn klikbaar; de rest staat grijs (nog geen
+# data). Combos (source|measure|dim) zijn zelf altijd echte data-paden.
+_LIVE_DEF_SOURCES = {"plausible", "shopify", "gsc", "werkoverleg", "library"}
+_COMBO_CATEGORIE = {"pulse_visitors": "Website", "shopify": "Verkoop"}
+_FORM_AARD = {"trend": "reeks", "getal": "moment", "verdeling": "categorie"}
+
+
+def _wizard_indicators(st: _Stores, rec) -> list[dict]:
+    """Alle kiesbare indicatoren voor de wizard met categorie/aard/heeft-data/bron/uitleg. Twee
+    herkomsten: de 'beschikbaar op deze plek'-combos (echte data-paden) en de catalogus-defs."""
+    out = []
+    if rec is not None:
+        for value, label, df in _tile_combos(_sources_for(st, rec)):
+            source, measure = value.split("|")[0], value.split("|")[1]
+            cat = "Werkoverleg" if source.startswith("werk:") else _COMBO_CATEGORIE.get(source, "Beschikbaar hier")
+            g = _grondslag(st, source, measure) or {}
+            out.append({"value": value, "name": label, "categorie": cat,
+                        "aard": _FORM_AARD.get(df, "reeks"), "has_data": True,
+                        "bron": g.get("bron", source), "uitleg": g.get("definitie", "")})
+    for d in st.defs.all():
+        c = st.defs.current(d["id"]) or {}
+        if not c.get("name"):
+            continue
+        out.append({"value": f"def:{d['id']}", "name": c["name"],
+                    "categorie": c.get("categorie") or "Overig", "aard": c.get("aard") or "moment",
+                    "has_data": c.get("source", "") in _LIVE_DEF_SOURCES,
+                    "bron": c.get("source", ""), "uitleg": c.get("definition", "")})
+    return out
+
+
+def _render_formula_tile(st: _Stores, rec, tile, csrf: str) -> str:
+    """Formule-tegel (scope 5): opslag van A op B + aggregatie. De live-berekening komt apart —
+    tot dan een eerlijke placeholder i.p.v. een verzonnen getal."""
+    op = tile.get("f_op", "÷")
+    agg = tile.get("aggregatie", "")
+    body = f"<div class='kpi-val'><span class='muted'>formule {_e(op)} · berekening volgt</span></div>"
+    meta = f"<div class='tile-goal muted'>aggregatie: {_e(agg)}</div>" if agg else ""
+    rm = ""
+    if csrf:
+        rm = (f"<form method='post' action='/action' class='m-addform'>"
+              f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='node' value='{_e(rec.id)}'>"
+              f"<input type='hidden' name='tid' value='{_e(tile['id'])}'>"
+              f"<input type='hidden' name='next' value='/node?id={_e(rec.id)}&tab=metrics'>"
+              f"<button class='dellink' type='submit' name='action' value='tile_remove'>✕</button></form>")
+    return (f"<div class='tile'><div class='tile-h'><span class='tile-t'>{_e(tile.get('measure', 'formule'))} "
+            f"<span class='chip muted'>formule</span></span><span class='tile-h-r'>{rm}</span></div>"
+            f"<div class='tile-b'>{body}</div>{meta}</div>")
+
+
+def render_kpi_composer(st: _Stores, node_id: str = "", csrf_token: str = "", msg: str = "") -> str:
+    """Wizard (scope 5): stap 1 = 'wat je meet' met een modus-toggle (bestaande indicator vs formule);
+    indicatoren categorie-eerst met zoek + ⓘ-tooltip + grijs-bij-geen-data. Plaats is context-afgeleid
+    (of een keuze bij een losstaande start). Vorm biedt alleen weergaves die bij de aard passen."""
+    rec = st.records.get(node_id) if node_id else None
+    if node_id and rec is None:
         return _page("Niet gevonden", "<p>Node niet gevonden.</p>")
-    back = f"/node?id={_e(node_id)}&tab=metrics"
-    combos = _tile_combos(_sources_for(st, rec))
-    avail = "".join(f"<option value='{_e(v)}'>{_e(lbl)}</option>" for v, lbl, _df in combos)
-    # ook direct uit de catalogus kiezen (wordt dan als KPI op deze node gezet). Rol-relevant eerst.
-    rel = _role_relevant_defs(st, rec, 8)
-    rel_ids = {did for did, _c in rel}
-    rest = sorted(((d["id"], st.defs.current(d["id"]) or {}) for d in st.defs.all()
-                   if d["id"] not in rel_ids), key=lambda x: x[1].get("name", ""))
-    cat = "".join(f"<option value='def:{_e(did)}'>{_e(c.get('name', ''))}</option>"
-                  for did, c in (rel + rest) if c.get("name"))
-    ind_opts = (f"<optgroup label='Beschikbaar op deze plek'>{avail}</optgroup>"
-                f"<optgroup label='Uit de catalogus'>{cat}</optgroup>")
-    proj_opts = _goal_options(st, rec)
+    standalone = rec is None
+    back = "/" if standalone else f"/node?id={_e(node_id)}&tab=metrics"
+
+    inds = _wizard_indicators(st, rec)
+    cats = []
+    for i in inds:
+        if i["categorie"] not in cats:
+            cats.append(i["categorie"])
+    cat_chips = "".join(f"<button type='button' class='cl-filter kc-cat' data-cat='{_e(c)}'>{_e(c)}</button>"
+                        for c in cats)
+
+    def _radio(i: dict) -> str:
+        dis = "" if i["has_data"] else " disabled"
+        mut = "" if i["has_data"] else " muted"
+        tip = "Bron: " + (i["bron"] or "—") + (f" · {i['uitleg']}" if i["uitleg"] else "")
+        tag = "" if i["has_data"] else " <span class='chip muted'>nog geen data</span>"
+        return (f"<label class='kc-radio kc-metric{mut}' data-cat='{_e(i['categorie'])}' "
+                f"data-aard='{_e(i['aard'])}' data-name='{_e(i['name'].lower())}' hidden>"
+                f"<input type='radio' name='combo' value='{_e(i['value'])}'{dis}> "
+                f"<span class='kc-mname'>{_e(i['name'])}</span> "
+                f"<span class='chip muted' title='{_e(tip)}'>ⓘ</span>{tag}</label>")
+    metrics_html = "".join(_radio(i) for i in inds) or "<p class='muted'>Geen indicatoren beschikbaar.</p>"
+    metric_opts = "".join(f"<option value='{_e(i['value'])}'>{_e(i['categorie'])} — {_e(i['name'])}</option>"
+                          for i in inds if i["has_data"])
+    agg_opts = "".join(f"<option value='{a}'>{_e(AGGREGATIE_LABEL[a])}</option>" for a in AGGREGATIE)
+
+    proj_opts = _goal_options(st, rec) if rec is not None else ""
     step = lambda n, t, inner: (f"<div class='kc-step'><div class='kc-h'><span class='kc-n'>{n}</span>"
                                 f"<b>{_e(t)}</b></div>{inner}</div>")
+
+    step1 = (
+        "<div class='cl-bar'>"
+        "<button type='button' class='cl-filter kc-mode-btn on' data-mode='indicator'>Bestaande indicator</button>"
+        "<button type='button' class='cl-filter kc-mode-btn' data-mode='formule'>Formule maken</button></div>"
+        "<input type='hidden' name='mode' value='indicator'>"
+        "<div class='kc-mode' data-mode='indicator'>"
+        f"<div class='cl-bar kc-cats'>{cat_chips}</div>"
+        "<input class='kc-search' type='text' placeholder='Zoek binnen deze categorie…' autocomplete='off' hidden>"
+        f"<div class='kc-metrics'>{metrics_html}</div>"
+        "<p class='muted kc-hint'>Kies een categorie. Metrics zonder data staan grijs; klik ⓘ voor uitleg.</p></div>"
+        "<div class='kc-mode' data-mode='formule' hidden>"
+        f"<label class='att-lbl'>Metric A</label><select name='f_a'>{metric_opts}</select>"
+        "<label class='att-lbl'>Bewerking</label>"
+        "<select name='f_op'><option>÷</option><option>+</option><option>−</option><option>%</option></select>"
+        f"<label class='att-lbl'>Metric B</label><select name='f_b'>{metric_opts}</select>"
+        "<label class='att-lbl'>Naam van de formule</label>"
+        "<input name='f_name' placeholder='bijv. Conversie' autocomplete='off'>"
+        f"<label class='att-lbl'>Aggregatie (verplicht)</label><select name='f_agg'>"
+        f"<option value=''>— kies —</option>{agg_opts}</select>"
+        "<p class='muted kc-hint'>Een formule rekent live over de twee indicatoren (berekening volgt).</p></div>")
+
+    step4_inner = (f"<div class='muted'>{_e(_name(rec))} · dashboard</div>"
+                   f"<input type='hidden' name='node' value='{_e(node_id)}'>") if not standalone else (
+        "<select name='node'>" + "".join(
+            f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>"
+            for r in st.records.all() if not getattr(r, "archived", False)) + "</select>"
+        "<p class='muted kc-hint'>Losstaande start — kies waar de KPI komt.</p>")
+
     form = (f"<form method='post' action='/action' class='kc-form'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-            f"<input type='hidden' name='node' value='{_e(node_id)}'>"
             f"<input type='hidden' name='next' value='{back}'>"
-            + step("1", "Indicator (wat je meet)",
-                   f"<select name='combo'>{ind_opts}</select>"
-                   "<p class='muted kc-hint'>Puur uit de catalogus. Geen referentie of vorm erin.</p>")
+            f"<input type='hidden' name='target' value=''>"
+            + step("1", "Wat je meet", step1)
             + step("2", "Referentie (de vergelijking)",
                    "<label class='kc-radio'><input type='radio' name='ref_kind' value='' checked> geen — alleen volgen</label>"
                    "<label class='kc-radio'><input type='radio' name='ref_kind' value='benchmark'> benchmark</label>"
-                   "<div class='kc-cond' data-for='benchmark' style='display:none'>"
+                   "<div class='kc-cond' data-for='benchmark' hidden>"
                    "<input name='bench_target' inputmode='decimal' placeholder='benchmark-waarde (bijv. 13.6)' autocomplete='off'>"
                    "<p class='muted kc-hint'>Later koppelbaar aan de kennisbank. Nu de vergelijkwaarde.</p></div>"
                    "<label class='kc-radio'><input type='radio' name='ref_kind' value='doel'> doel (project)</label>"
-                   f"<div class='kc-cond' data-for='doel' style='display:none'><select name='goal_pid'>{proj_opts}</select>"
+                   f"<div class='kc-cond' data-for='doel' hidden><select name='goal_pid'>{proj_opts}</select>"
                    "<input name='doel_target' inputmode='decimal' placeholder='streefwaarde (bijv. 1000)' autocomplete='off'></div>")
-            + step("3", "Vorm (volgt de referentie)",
+            + step("3", "Vorm (past bij de aard)",
                    "<select name='form'>"
-                   "<option value='trend' data-ref=''>Trend (lijn)</option>"
-                   "<option value='getal' data-ref=''>Getal</option>"
-                   "<option value='verdeling' data-ref=''>Verdeling (staaf)</option>"
-                   "<option value='doelmeter' data-ref='benchmark doel'>Bullet (waarde vs referentie)</option>"
-                   "<option value='burnup' data-ref='doel'>Doel-tempo (burn-up)</option>"
-                   "</select>")
-            + step("4", "Plaats", f"<div class='muted'>{_e(_name(rec))} · dashboard</div>"
-                   "<input type='hidden' name='target' value=''>")
-            + "<button class='btn ok' type='submit' name='action' value='tile_add'>Maak KPI</button></form>")
+                   "<option value='trend' data-aard='reeks' data-ref=''>Trend (lijn)</option>"
+                   "<option value='getal' data-aard='moment' data-ref=''>Getal</option>"
+                   "<option value='verdeling' data-aard='categorie' data-ref=''>Verdeling (staaf)</option>"
+                   "<option value='doelmeter' data-aard='' data-ref='benchmark doel'>Bullet (waarde vs referentie)</option>"
+                   "<option value='burnup' data-aard='' data-ref='doel'>Doel-tempo (burn-up)</option>"
+                   "</select>"
+                   "<p class='muted kc-hint'>Alleen de opening-weergave; op het dashboard altijd te wijzigen.</p>")
+            + step("4", "Plaats", step4_inner)
+            + "<button class='btn ok' type='submit' name='action' value='tile_add' disabled>Kies eerst een indicator</button></form>")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='{back}'>← terug</a></div>"
             f"<h1>KPI maken <span class='chip'>focus</span></h1>{_banner(msg)}"
-            f"<p class='muted'>Een KPI ontstaat door drie ingrediënten bewust samen te stellen.</p>"
+            f"<p class='muted'>Een KPI is alleen de definitie van wat je meet. Periode en weergave kies "
+            f"je op het dashboard.</p>"
             f"<div class='c2-sec'>{form}</div></div>")
     inner = (f"<style>{_EXTRA_CSS}</style>"
              f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · <a href='/'>home</a> · "
-             "<a href='/catalog'>catalogus</a></div>"
+             "<a href='/catalog'>catalogus</a> · <a href='/catalogus_koppelen'>koppelen</a></div>"
              f"<div class='c2-wrap'>{main}</div>{_KPI_COMPOSER_JS}")
     return _page("KPI maken", inner)
 
@@ -956,20 +1049,64 @@ def render_kpi_composer(st: _Stores, node_id: str, csrf_token: str = "", msg: st
 _KPI_COMPOSER_JS = """<script>
 (function(){
  var f=document.querySelector('.kc-form'); if(!f) return;
+ var modeInp=f.querySelector('[name=mode]');
  var sel=f.querySelector('[name=form]'), tgt=f.querySelector('[name=target]');
+ var search=f.querySelector('.kc-search');
+ var btn=f.querySelector('button[value=tile_add]');
+ var curAard='';
  function ref(){var r=f.querySelector('[name=ref_kind]:checked'); return r?r.value:'';}
- function sync(){
+
+ // stap 1: modus-toggle (bestaande indicator / formule)
+ function setMode(m){
+   modeInp.value=m;
+   f.querySelectorAll('.kc-mode-btn').forEach(function(b){b.classList.toggle('on', b.dataset.mode===m);});
+   f.querySelectorAll('.kc-mode').forEach(function(el){el.hidden=(el.dataset.mode!==m);});
+   syncBtn();
+ }
+ f.querySelectorAll('.kc-mode-btn').forEach(function(b){b.addEventListener('click',function(){setMode(b.dataset.mode);});});
+
+ // categorie-eerst + zoeken (via het hidden-attribuut, geen inline styles)
+ function filter(cat,q){
+   q=(q||'').toLowerCase();
+   f.querySelectorAll('.kc-metric').forEach(function(m){
+     m.hidden=!((m.dataset.cat===cat) && (!q || (m.dataset.name||'').indexOf(q)>=0));
+   });
+ }
+ f.querySelectorAll('.kc-cat').forEach(function(c){c.addEventListener('click',function(){
+   f.querySelectorAll('.kc-cat').forEach(function(x){x.classList.toggle('on',x===c);});
+   if(search) search.hidden=false;
+   filter(c.dataset.cat, search?search.value:'');
+ });});
+ if(search) search.addEventListener('input',function(){
+   var a=f.querySelector('.kc-cat.on'); if(a) filter(a.dataset.cat, search.value);
+ });
+
+ // stap 3: alleen vormen die bij de aard (van de gekozen indicator) en de referentie passen
+ function syncVorm(){
    var rk=ref();
-   f.querySelectorAll('.kc-cond').forEach(function(c){c.style.display=(c.dataset.for===rk)?'':'none';});
+   f.querySelectorAll('.kc-cond').forEach(function(c){c.hidden=(c.dataset.for!==rk);});
    Array.prototype.forEach.call(sel.options,function(o){
-     var ok=(o.dataset.ref||'').split(' ').indexOf(rk)>=0 || (rk===''&&o.dataset.ref==='');
-     o.hidden=!ok; o.disabled=!ok;
+     var aardOk=(!o.dataset.aard)||(o.dataset.aard===curAard)||(curAard==='');
+     var refOk=(o.dataset.ref||'').split(' ').indexOf(rk)>=0 || (rk===''&&o.dataset.ref==='');
+     o.hidden=!(aardOk&&refOk); o.disabled=!(aardOk&&refOk);
    });
    var cur=sel.options[sel.selectedIndex];
-   if(!cur||cur.disabled){ for(var i=0;i<sel.options.length;i++){if(!sel.options[i].disabled){sel.selectedIndex=i;break;}} }
+   if(!cur||cur.disabled){for(var i=0;i<sel.options.length;i++){if(!sel.options[i].disabled){sel.selectedIndex=i;break;}}}
    var bt=f.querySelector('[name=bench_target]'), dt=f.querySelector('[name=doel_target]');
    tgt.value = rk==='benchmark'?(bt?bt.value:'') : rk==='doel'?(dt?dt.value:'') : '';
  }
- f.addEventListener('change',sync); f.addEventListener('input',sync); sync();
+
+ function syncBtn(){
+   if(modeInp.value==='formule'){ btn.disabled=false; btn.textContent='Maak KPI — formule'; return; }
+   var r=f.querySelector('.kc-metric input:checked');
+   btn.disabled=!r; btn.textContent = r ? 'Maak KPI' : 'Kies eerst een indicator';
+ }
+
+ f.addEventListener('change',function(e){
+   if(e.target && e.target.name==='combo'){var lab=e.target.closest('.kc-metric'); curAard=lab?lab.dataset.aard:'';}
+   syncVorm(); syncBtn();
+ });
+ f.addEventListener('input',syncVorm);
+ setMode('indicator'); syncVorm(); syncBtn();
 })();
 </script>"""

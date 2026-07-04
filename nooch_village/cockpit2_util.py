@@ -576,6 +576,7 @@ ul.clean li:last-child{border-bottom:none}
 .cl-bar{display:flex;align-items:center;gap:.6rem;margin-top:.5rem;font-size:.82rem}
 .cl-filter{text-decoration:none;color:var(--gray);padding:.1rem .4rem;border-radius:var(--radius)}
 .cl-filter.on{background:var(--green-tint);color:var(--green-dark);font-weight:700}
+button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .cl-group{margin:.2rem 0 1rem}
 .cl-group h4{margin:.6rem 0 .3rem;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle)}
 .cl-row{display:flex;align-items:center;justify-content:space-between;gap:.8rem;padding:.4rem 0;border-bottom:1px solid var(--border)}

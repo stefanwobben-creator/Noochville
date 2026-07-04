@@ -1322,19 +1322,28 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         _deny = _role_gate(g("node"), username, st)
         if _deny:
             return nxt, _deny
-        combo = g("combo") or ""
-        if combo.startswith("def:"):     # indicator direct uit de catalogus → zet als KPI op de node
-            kid = _kpi_id_from_def(st, g("node"), combo[4:])
-            combo = f"kpi:{kid}|value|none" if kid else ""
-        parts = combo.split("|")
-        if len(parts) == 3 and parts[0]:
-            ref = g("ref_kind")
-            t = st.metrics.add_tile(g("node"), parts[0], parts[1], parts[2], g("form"),
-                                    target=g("target"), goal_pid=("" if ref == "benchmark" else g("goal_pid")),
-                                    ref_kind=ref)
-            msg = "✓ KPI op dashboard" if t else "⛔ kon KPI niet maken"
+        if g("mode") == "formule":       # scope 5: formule = A op B + aggregatie (opslag; berekening volgt)
+            f_a, f_op, f_b = g("f_a"), g("f_op"), g("f_b")
+            f_name, f_agg = g("f_name").strip(), g("f_agg")
+            if not (f_a and f_b and f_name and f_agg):
+                return nxt, "Formule: kies metric A, metric B, een naam én een aggregatie"
+            t = st.metrics.add_tile(g("node"), "formule", f_name, "none", "formule",
+                                    extra={"f_a": f_a, "f_op": f_op, "f_b": f_b, "aggregatie": f_agg})
+            msg = "✓ formule-KPI op dashboard (berekening volgt)" if t else "⛔ kon formule niet maken"
         else:
-            msg = "⛔ kies wat je wilt zien"
+            combo = g("combo") or ""
+            if combo.startswith("def:"):     # indicator direct uit de catalogus → zet als KPI op de node
+                kid = _kpi_id_from_def(st, g("node"), combo[4:])
+                combo = f"kpi:{kid}|value|none" if kid else ""
+            parts = combo.split("|")
+            if len(parts) == 3 and parts[0]:
+                ref = g("ref_kind")
+                t = st.metrics.add_tile(g("node"), parts[0], parts[1], parts[2], g("form"),
+                                        target=g("target"), goal_pid=("" if ref == "benchmark" else g("goal_pid")),
+                                        ref_kind=ref)
+                msg = "✓ KPI op dashboard" if t else "⛔ kon KPI niet maken"
+            else:
+                msg = "⛔ kies wat je wilt zien"
     elif action == "tile_remove":
         _deny = _role_gate(g("node"), username, st)
         if _deny:
