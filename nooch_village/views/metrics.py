@@ -631,8 +631,8 @@ def _compare_delta(res, prev_res) -> str:
 
 
 def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=False, prev_win=None) -> str:
-    if tile.get("form") == "formule":          # scope 5: opslag nu, live-berekening apart
-        return _render_formula_tile(st, rec, tile, csrf)
+    if tile.get("form") == "formule":          # fail-closed live-berekening A op B per dag
+        return _render_formula_tile(st, rec, tile, csrf, cutoff, end)
     res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), cutoff, end)
     prev_res = None
     if compare and prev_win and prev_win[0] is not None:
@@ -1001,23 +1001,94 @@ def _wizard_indicators(st: _Stores, rec) -> list[dict]:
     return out
 
 
-def _render_formula_tile(st: _Stores, rec, tile, csrf: str) -> str:
-    """Formule-tegel (scope 5): opslag van A op B + aggregatie. De live-berekening komt apart —
-    tot dan een eerlijke placeholder i.p.v. een verzonnen getal."""
-    op = tile.get("f_op", "÷")
+_FORMULA_OPS = {
+    "÷": lambda a, b: (a / b) if b else None,          # deling door 0 → geen waarde (fail-closed)
+    "%": lambda a, b: (a / b * 100) if b else None,
+    "+": lambda a, b: a + b,
+    "−": lambda a, b: a - b, "-": lambda a, b: a - b,
+    "×": lambda a, b: a * b, "*": lambda a, b: a * b,
+}
+
+
+def _day_key(ts: float) -> str:
+    import datetime as _dt
+    return _dt.datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+
+
+def _series_day_map(res) -> dict:
+    """{dag → (ts, waarde)} uit een series-res; de laatste meting per dag wint."""
+    out = {}
+    for t, v in (res.get("points") or []):
+        out[_day_key(t)] = (t, v)
+    return out
+
+
+def _formula_daily(st: _Stores, tile, cutoff, end=None) -> list[dict]:
+    """Per-dag A op B over twee bronnen, FAIL-CLOSED: mist één bron een dag, dan is die dag no_data
+    (nooit doorrekenen met een oude waarde, nooit stilzwijgend 0). Deling door 0 → ook no_data.
+    Geeft rijen [{at, value, no_data}] voor álle dagen die in minstens één bron voorkomen."""
+    def _map(combo):
+        parts = (combo or "").split("|")
+        if len(parts) != 3 or not parts[0]:
+            return {}
+        return _series_day_map(_fetch(st, parts[0], parts[1], parts[2], cutoff, end))
+    amap, bmap = _map(tile.get("f_a")), _map(tile.get("f_b"))
+    op = _FORMULA_OPS.get(tile.get("f_op", "÷"))
+    rows = []
+    for day in sorted(set(amap) | set(bmap)):
+        at = (amap.get(day) or bmap.get(day))[0]
+        av = amap.get(day, (None, None))[1]
+        bv = bmap.get(day, (None, None))[1]
+        val = None if (av is None or bv is None or op is None) else op(av, bv)
+        rows.append({"at": at, "value": None if val is None else round(val, 4), "no_data": val is None})
+    return rows
+
+
+def _render_formula_tile(st: _Stores, rec, tile, csrf: str, cutoff=None, end=None) -> str:
+    """Formule-tegel: live A op B per dag, fail-closed. Grafiek toont alleen dagen MÉT waarde
+    (no_data = gat, nooit 0/interpolatie); de tabel toont ÁLLE dagen met no_data expliciet."""
+    rows = _formula_daily(st, tile, cutoff, end)
     agg = tile.get("aggregatie", "")
-    body = f"<div class='kpi-val'><span class='muted'>formule {_e(op)} · berekening volgt</span></div>"
-    meta = f"<div class='tile-goal muted'>aggregatie: {_e(agg)}</div>" if agg else ""
+    vals = [r["value"] for r in rows if not r["no_data"]]          # no_data telt niet mee
+    if agg == "som":
+        head = sum(vals) if vals else None
+    elif agg == "laatste_waarde":
+        head = vals[-1] if vals else None
+    else:
+        head = round(sum(vals) / len(vals), 2) if vals else None    # gemiddelde
+    pts = [(r["at"], r["value"]) for r in rows if not r["no_data"]]  # no_data = gat in de grafiek
+    if len(pts) >= 2:
+        body = _line_chart_svg(pts, "")
+    elif head is not None:
+        body = f"<div class='kpi-val'>{_num(head)}</div>"
+    else:
+        body = "<div class='kpi-val'><span class='muted'>geen data</span></div>"
+    import datetime as _dt
+    trows = "".join(
+        f"<tr><td>{_dt.datetime.fromtimestamp(r['at']).strftime('%d-%m-%y')}</td>"
+        f"<td class='num'>{'—' if r['no_data'] else _num(r['value'])}</td>"
+        f"<td>{'geen data' if r['no_data'] else 'formule'}</td></tr>" for r in rows)
+    data = (f"<details class='tile-data'><summary>ruwe data</summary>"
+            f"<table class='mtab'><tr><th>datum</th><th class='num'>waarde</th><th>bron</th></tr>"
+            f"{trows}</table></details>") if rows else ""
     rm = ""
     if csrf:
-        rm = (f"<form method='post' action='/action' class='m-addform'>"
+        rm = (f"<form method='post' action='/action' class='tile-rm'>"
               f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='node' value='{_e(rec.id)}'>"
               f"<input type='hidden' name='tid' value='{_e(tile['id'])}'>"
               f"<input type='hidden' name='next' value='/node?id={_e(rec.id)}&tab=metrics'>"
               f"<button class='dellink' type='submit' name='action' value='tile_remove'>✕</button></form>")
-    return (f"<div class='tile'><div class='tile-h'><span class='tile-t'>{_e(tile.get('measure', 'formule'))} "
-            f"<span class='chip muted'>formule</span></span><span class='tile-h-r'>{rm}</span></div>"
-            f"<div class='tile-b'>{body}</div>{meta}</div>")
+    flip = "<button class='dellink js-flip' type='button' title='betekenis / formule'>ⓘ</button>"
+    op = tile.get("f_op", "÷")
+    back = (f"<div class='tile-back' hidden><b>{_e(tile.get('measure', 'formule'))}</b>"
+            f"<div class='muted'>Formule: A {_e(op)} B, per dag berekend en dan geaggregeerd "
+            f"({_e(agg or 'gemiddelde')}). Mist één bron een dag, dan telt die dag niet mee (fail-closed).</div>"
+            f"<button class='dellink js-flipback' type='button'>↩ terug</button></div>")
+    front = (f"<div class='tile-front'><div class='tile-h'>"
+             f"<span class='tile-t'>{_e(tile.get('measure', 'formule'))} <span class='chip muted'>formule</span></span>"
+             f"<span class='tile-h-r'>{flip}{rm}</span></div>"
+             f"<div class='tile-b'>{body}</div>{data}</div>")
+    return f"<div class='tile'>{front}{back}</div>"
 
 
 def render_kpi_composer(st: _Stores, node_id: str = "", csrf_token: str = "", msg: str = "") -> str:
