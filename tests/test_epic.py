@@ -102,6 +102,7 @@ def test_widget_alleen_op_anchor(monkeypatch, tmp_path):
     anchor = overview._overview_html(st, st.records.get("mother_earth"))
     assert "epic-earth" in anchor and "/epic/frame?image=" in anchor
     assert "2026-07-04 01:00:00 UTC" in anchor          # onderschrift met timestamp
+    assert "Geen domein" not in anchor                  # geen placeholder-tekst onder de aardbol
     role = overview._overview_html(st, st.records.get("mother_earth__nooch__creator_of_shoes"))
     assert "epic-earth" not in role                     # niet op andere rollen/cirkels
 
