@@ -209,11 +209,17 @@ class WebsiteWatcherWorker(Inhabitant):
         pulse_dict = dict(_extract_pulse_metrics(plausible))
         for key, value in pulse_dict.items():
             if key.startswith("visitors_via_"):
-                obs.record(self.id, key, value)
+                obs.record(self.id, key, value, bron="plausible")
         monitored = monitoring.get_metrics(self.id) if monitoring else []
         for metric in monitored:
             if metric in pulse_dict:
-                obs.record(self.id, metric, pulse_dict[metric])
+                obs.record(self.id, metric, pulse_dict[metric], bron="plausible")
+        # Losse dagwaarde per bron: één schoon datapunt per dag (bezoekers van de vorige volledige
+        # dag), idempotent — draai je de puls twee keer op één dag, dan blijft het één datapunt.
+        day = (plausible or {}).get("visitors_day") or {}
+        if day.get("value") is not None:
+            obs.record_daily(self.id, "visitors_day", day["value"],
+                             bron="plausible", datum=day.get("date"))
 
     def _sense_goal_gap(self, plausible: dict) -> None:
         """Vergelijk werkelijke bezoekerstrend met de run-rate die actieve doelen vereisen.

@@ -47,7 +47,29 @@ class PlausibleSkill(Skill):
         for prop, key_name in _BREAKDOWNS:
             out[key_name] = self._breakdown(hdrs, site, period, prop)
 
+        # Losse dagwaarde: bezoekers van de VORIGE volledige dag (period=day + date), naast de
+        # 7d-call. Één schoon datapunt per dag voor de observatie-store. Extra en best-effort —
+        # nooit het kritieke pad (mag None zijn zonder de 7d-note te blokkeren).
+        out["visitors_day"] = self._daily_visitors(hdrs, site)
+
         return out
+
+    def _daily_visitors(self, hdrs: dict, site: str) -> dict:
+        """Bezoekers van de vorige volledige (UTC-)dag. {date, value} of {date, value:None, error}."""
+        from datetime import datetime, timezone, timedelta
+        day = (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
+        try:
+            r = requests.get(
+                "https://plausible.io/api/v1/stats/aggregate",
+                headers=hdrs,
+                params={"site_id": site, "period": "day", "date": day, "metrics": "visitors"},
+                timeout=10)
+            r.raise_for_status()
+            value = (r.json().get("results", {}).get("visitors") or {}).get("value")
+            return {"date": day, "value": value}
+        except Exception as exc:
+            log.warning("Plausible dagwaarde faalde: %s", exc)
+            return {"date": day, "value": None, "error": str(exc)}
 
     def _breakdown(self, hdrs: dict, site: str, period: str, prop: str) -> list:
         try:
