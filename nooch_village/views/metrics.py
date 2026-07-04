@@ -16,6 +16,7 @@ from nooch_village.metric_schema import (
     VERIFICATIE_LABEL,
 )
 from nooch_village.metrics import window_cutoff, filter_samples
+from nooch_village.observations import ObservationStore
 from nooch_village import org
 from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD
 
@@ -30,28 +31,36 @@ _SOURCE_KPIS = {"pulse_visitors": {"name": "Websitebezoekers (per dag)", "unit":
 
 
 def _source_samples(dd: str, source: str):
-    """Lees samples voor een bron-KPI uit bestaande data. pulse_visitors -> pulse_history.jsonl."""
-    if source != "pulse_visitors":
-        return []
-    repo = os.path.join(os.path.dirname(__file__), "..", "..", "data", "pulse_history.jsonl")
-    out = []
-    for p in (os.path.join(dd, "pulse_history.jsonl"), repo):
-        if not os.path.exists(p):
-            continue
-        try:
-            for line in open(p):
-                line = line.strip()
-                if not line:
-                    continue
-                d = json.loads(line)
-                v = d.get("visitors_7d")
-                if v is not None and d.get("ts"):
-                    out.append({"at": float(d["ts"]), "value": float(v)})
-        except Exception:
-            pass
-        if out:
-            break
-    return out
+    """Lees samples voor een bron-KPI. Twee HELDER onderscheiden reeksen (niet meer één 'pulse_visitors'
+    die twee dingen betekent):
+      - `pulse_visitors`     → de DAGREEKS (visitors_day, bron=plausible) uit observations.jsonl;
+      - `pulse_visitors_7d`  → de rollende 7d-total (visitors_7d) uit pulse_history.jsonl (legacy snapshot).
+    """
+    if source == "pulse_visitors":
+        store = ObservationStore(os.path.join(dd, "observations.jsonl"))
+        return [{"at": r["ts"], "value": r["value"]}
+                for r in store.daily_series("visitors_day", bron="plausible")]
+    if source == "pulse_visitors_7d":
+        repo = os.path.join(os.path.dirname(__file__), "..", "..", "data", "pulse_history.jsonl")
+        out = []
+        for p in (os.path.join(dd, "pulse_history.jsonl"), repo):
+            if not os.path.exists(p):
+                continue
+            try:
+                for line in open(p):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    d = json.loads(line)
+                    v = d.get("visitors_7d")
+                    if v is not None and d.get("ts"):
+                        out.append({"at": float(d["ts"]), "value": float(v)})
+            except Exception:
+                pass
+            if out:
+                break
+        return out
+    return []
 
 
 def _metric_points(st: _Stores, item: dict, cutoff):

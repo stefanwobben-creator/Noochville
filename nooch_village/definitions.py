@@ -252,7 +252,7 @@ _DEFINITION_SEED: tuple[dict, ...] = (
 # de velden die een versie van een definitie vastlegt (subset van het indicator-schema)
 _FIELDS = ("name", "unit", "definition", "source", "direction", "threshold", "cadence",
            "meettype", "window", "meetwijze", "tijd", "bruikbaar", "standaard", "benchmark",
-           "bron_url", "verificatie", "waarde")
+           "bron_url", "verificatie", "waarde", "aard", "aggregatie", "formule")
 
 
 class DefinitionStore:
@@ -475,6 +475,36 @@ def seed_catalog(store: DefinitionStore, owner: str = "librarian") -> int:
 
 _GROUND_FIELDS = ("definition", "unit", "direction", "cadence", "meettype", "window",
                   "tijd", "bruikbaar", "standaard", "benchmark", "bron_url", "verificatie", "waarde")
+
+
+def migrate_definitions(store: DefinitionStore) -> int:
+    """Retroactief de nieuwe verplichte velden vullen op bestaande definities. Zelfde patroon als
+    `migrate_records` voor `source`: idempotent en in-place, vult alleen ONTBREKENDE velden.
+
+    - `aard` wordt afgeleid uit `meettype` waar het ontbreekt (snapshot → moment, anders → reeks);
+    - `aggregatie` en `formule` krijgen hun lege default (geen formules → aggregatie niet verplicht).
+
+    Draait over álle versies zodat elke versie zelf-beschrijvend blijft. Geeft het aantal
+    aangeraakte definities terug."""
+    from nooch_village.metric_schema import AARD, aard_from_meettype
+    changed = 0
+    for d in store.all():
+        dirty = False
+        for v in d.get("versions", []):
+            if v.get("aard") not in AARD:
+                v["aard"] = aard_from_meettype(v.get("meettype", "snapshot"))
+                dirty = True
+            if "aggregatie" not in v:
+                v["aggregatie"] = ""
+                dirty = True
+            if "formule" not in v:
+                v["formule"] = False
+                dirty = True
+        if dirty:
+            changed += 1
+    if changed:
+        store._save()
+    return changed
 
 
 def reground_seed(store: DefinitionStore) -> int:

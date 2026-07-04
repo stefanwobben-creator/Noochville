@@ -51,7 +51,8 @@ from nooch_village.metrics import MetricStore, window_cutoff, filter_samples
 from nooch_village.metric_schema import (CADANS_LABEL, MEETTYPE_LABEL, MEETWIJZE_LABEL,
                                          TIJD_LABEL, BRUIKBAAR_LABEL, VERIFICATIE_LABEL)
 from nooch_village.definitions import (DefinitionStore, seed_catalog as _seed_catalog,
-                                       reground_seed as _reground_seed)
+                                       reground_seed as _reground_seed,
+                                       migrate_definitions as _migrate_definitions)
 from nooch_village.cockpit2_util import _BUILD, _EXTRA_CSS, _CIRCLE_TABS, _ROLE_TABS, WEBSITE_DEVELOPER_ROLE
 from nooch_village.notifications import NotifStore
 from nooch_village.noochie import NoochieStore
@@ -144,6 +145,7 @@ def _bootstrap(dd: str) -> None:
     _ensure_transparency_policy(st)
     _seed_catalog(st.defs)        # Librarian metrics-database: zaad-definities (idempotent)
     _reground_seed(st.defs)       # bestaande definities bijwerken met nieuwe grondingen (idempotent)
+    _migrate_definitions(st.defs)  # nieuwe verplichte velden (aard/aggregatie/formule) retroactief (idempotent)
     st.att.migrate()              # attachments → artefact-model (legacy tool-notes, defaults; idempotent)
 
 
