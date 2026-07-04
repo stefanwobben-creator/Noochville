@@ -76,11 +76,7 @@ def _tree_html(st: _Stores, current_id: str) -> str:
         return f"<li>{label}</li>"
 
     body = "".join(node_li(r) for r in org.roots(recs)) or "<li class='muted'>leeg</li>"
-    legend = ("<div class='legend'>"
-              "<span><span class='dot' style='background:var(--green)'></span>werkt</span>"
-              "<span><span class='dot' style='background:var(--yellow)'></span>basis</span>"
-              "<span><span class='dot' style='background:var(--border)'></span>nog te bouwen</span></div>")
-    return f"<div class='tree'><h3>Organisatie</h3><ul>{body}</ul></div>{legend}"
+    return f"<div class='tree'><h3>Organisatie</h3><ul>{body}</ul></div>"
 
 
 def _ai_chip(st: _Stores, t) -> str:
