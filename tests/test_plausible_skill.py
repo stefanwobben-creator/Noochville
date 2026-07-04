@@ -105,3 +105,33 @@ class TestPlausibleSkillResilience:
         assert result["top_pages"] == []
         # Overige breakdowns onaangetast
         assert len(result["sources"]) > 0
+
+
+class TestPlausibleSkillDagwaarde:
+    def _mock(self, dag_value=7, dag_faalt=False):
+        def _get(url, **kwargs):
+            params = kwargs.get("params", {})
+            resp = MagicMock(); resp.raise_for_status = MagicMock()
+            if "aggregate" in url and params.get("period") == "day":
+                if dag_faalt:
+                    raise ConnectionError("dag-call down")
+                resp.json.return_value = {"results": {"visitors": {"value": dag_value}}}
+            elif "aggregate" in url:
+                resp.json.return_value = _load("aggregate.json")
+            else:
+                resp.json.return_value = {"results": []}
+            return resp
+        return _get
+
+    def test_visitors_day_losse_dagwaarde_vorige_dag(self):
+        with patch("nooch_village.skills_impl.plausible.requests.get", side_effect=self._mock(7)):
+            result = PlausibleSkill().run({}, _ctx())
+        import datetime as dt
+        gisteren = (dt.datetime.now(dt.timezone.utc).date() - dt.timedelta(days=1)).isoformat()
+        assert result["visitors_day"] == {"date": gisteren, "value": 7}
+
+    def test_visitors_day_falen_is_niet_kritiek(self):
+        with patch("nooch_village.skills_impl.plausible.requests.get", side_effect=self._mock(dag_faalt=True)):
+            result = PlausibleSkill().run({}, _ctx())
+        assert isinstance(result["results"]["visitors"]["value"], int)   # 7d-call intact
+        assert result["visitors_day"]["value"] is None                   # dagwaarde faalt closed

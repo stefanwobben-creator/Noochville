@@ -59,3 +59,20 @@ def test_extract_utm_sources_absent_is_fine():
     result = dict(_extract_pulse_metrics(plausible))
     assert "visitors" in result
     assert not any(k.startswith("visitors_via_") for k in result)
+
+
+def test_pulse_schrijft_dagwaarde_als_observatie(tmp_path):
+    """De puls schrijft de losse Plausible-dagwaarde als één datapunt/dag naar de observatie-store,
+    met bron+datum, idempotent (tweede puls dezelfde dag → geen duplicaat)."""
+    from types import SimpleNamespace
+    from nooch_village.roles import WebsiteWatcherWorker
+    from nooch_village.observations import ObservationStore
+    obs = ObservationStore(str(tmp_path / "observations.jsonl"))
+    fake = SimpleNamespace(id="analyst", context=SimpleNamespace(observations=obs, monitoring=None))
+    plausible = {"results": {"visitors": {"value": 55}},
+                 "visitors_day": {"date": "2026-07-03", "value": 7}}
+    WebsiteWatcherWorker._log_pulse_metrics(fake, plausible)
+    row = obs.latest("analyst", "visitors_day")
+    assert row["value"] == 7 and row["bron"] == "plausible" and row["datum"] == "2026-07-03"
+    WebsiteWatcherWorker._log_pulse_metrics(fake, plausible)                     # zelfde dag opnieuw
+    assert len(obs.series("analyst", "visitors_day")) == 1               # geen duplicaat
