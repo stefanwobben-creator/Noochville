@@ -458,3 +458,47 @@ def test_ui_versiehistorie_uitklapper(tmp_path):
     st.att.update(a.id, body="v2", change_note="verscherpt")
     html = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
     assert "historie (2)" in html and "verscherpt" in html
+
+
+# ── brok 5: seen-marker (opdracht-test #8) ──────────────────────────────────
+
+def test_seen_marker_policywijziging_zet_geel_in_keten(tmp_path):
+    """Opdracht-test #8: een wijziging aan een active policy zet de geel-markering bij de rollen
+    in de erfketen; het openen van de tab (mark) haalt hem weer weg."""
+    import time
+    from nooch_village import artefact_seen
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    user = "alice@nooch.earth"
+    st.people.add("Alice", user)
+    st.seen.mark(user, OWNER, "policies")               # Alice heeft de tab net gezien
+    time.sleep(0.02)
+    # policy toegevoegd op de cirkel; OWNER zit in de erfketen (inherit=True)
+    cockpit2.dispatch(dd, "artefact_add",
+        {"owner": [CIRCLE], "kind": ["policy"], "title": ["Nieuw beleid"],
+         "inherit": ["1"], "next": ["/"]}, username="guest")
+    cl = artefacts.read_changelog(dd)
+    assert "policies" in artefact_seen.unseen_tabs(cockpit2._Stores(dd).seen, cl, user, OWNER)
+    # tab openen → last_seen bijgewerkt → markering weg
+    cockpit2._Stores(dd).seen.mark(user, OWNER, "policies")
+    assert "policies" not in artefact_seen.unseen_tabs(cockpit2._Stores(dd).seen, cl, user, OWNER)
+
+
+def test_seen_marker_zichtbaar_in_tabbar_en_niet_voor_guest(tmp_path):
+    import time
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    user = "alice@nooch.earth"
+    st.people.add("Alice", user)
+    st.seen.mark(user, OWNER, "policies")
+    time.sleep(0.02)
+    cockpit2.dispatch(dd, "artefact_add",
+        {"owner": [CIRCLE], "kind": ["policy"], "title": ["X"], "inherit": ["1"], "next": ["/"]},
+        username="guest")
+    marker = "<span class='c2-unseen'"                  # het element, niet de CSS-regel
+    # Alice opent een ANDERE tab → policies-tab draagt de unseen-markering
+    html = cockpit2.render_node(cockpit2._Stores(dd), OWNER, "notes", csrf_token="tok", username=user)
+    assert marker in html
+    # guest heeft geen persistente identiteit → geen markering
+    guest_html = cockpit2.render_node(cockpit2._Stores(dd), OWNER, "notes", csrf_token="tok", username="guest")
+    assert marker not in guest_html

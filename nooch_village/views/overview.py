@@ -20,7 +20,7 @@ from nooch_village.views.backlog import render_backlog_tab
 from nooch_village.views.projects import (
     _projects_tab_html, _scope_text, _person_projects_tab_html, _modal_html,
 )
-from nooch_village import org, ai_match, artefacts
+from nooch_village import org, ai_match, artefacts, artefact_seen
 from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD, _CIRCLE_TABS, _ROLE_TABS, _PERSON_TABS, WEBSITE_DEVELOPER_ROLE
 
 if TYPE_CHECKING:
@@ -596,9 +596,14 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
                 f"<a class='{wo_cls} js-modal' href='{wo_url}' data-href='{wo_url}'>Tactical meeting</a></div>")
     else:
         meet = ""
+    # Seen-markering (los van de statische maturity-dot): geel op tabs met een artefact-wijziging
+    # in de erfketen sinds deze gebruiker ze laatst opende. Guest → geen markering.
+    unseen = set()
+    if username and username != "guest" and getattr(st, "seen", None) is not None:
+        unseen = artefact_seen.unseen_tabs(st.seen, artefacts.read_changelog(st.dd), username, node_id)
     main = (f"<div class='c2-main'><div class='c2-bar'>{crumb}</div>"
             f"<h1>{_e(_name(rec))} {chip}</h1>{_banner(msg)}{meet}"
-            f"{_tabbar(node_id, tabs, tab)}{content}</div>")
+            f"{_tabbar(node_id, tabs, tab, unseen=unseen)}{content}</div>")
     rail = f"<div class='c2-rail'>{_tree_html(st, node_id)}</div>"
     modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
     inner = (f"<style>{_EXTRA_CSS}</style>"

@@ -40,6 +40,7 @@ from nooch_village.assignments import Assignments
 from nooch_village.attachments import AttachmentStore, ARTEFACT_KINDS
 from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
+from nooch_village.artefact_seen import SeenStore
 from nooch_village.personas import PersonaStore
 from nooch_village.projects import ProjectLedger
 from nooch_village.ai_tasks import AITaskStore
@@ -79,6 +80,7 @@ class _Stores:
         self.people = PeopleStore(os.path.join(dd, "people.json"))
         self.assign = Assignments(os.path.join(dd, "assignments.json"))
         self.att = AttachmentStore(os.path.join(dd, "attachments.json"))
+        self.seen = SeenStore(os.path.join(dd, "artefact_seen.json"))
         self.personas = PersonaStore(os.path.join(dd, "personas.json"))
         self.projects = ProjectLedger(os.path.join(dd, "projects.json"))
         self.ai = AITaskStore(os.path.join(dd, "ai_tasks.json"))
@@ -1488,8 +1490,11 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(_page("Leeg", "<p>Nog geen organisatie geladen.</p>"))
                 return
             if path == "/node":
-                self._send(render_node(st, (qs.get("id") or [""])[0],
-                                       (qs.get("tab") or ["overview"])[0], csrf_token=effective_csrf,
+                nid = (qs.get("id") or [""])[0]
+                ntab = (qs.get("tab") or ["overview"])[0]
+                if ntab in ("policies", "notes", "tools"):
+                    st.seen.mark(username, nid, ntab)   # last_seen bij openen → seen-markering weg
+                self._send(render_node(st, nid, ntab, csrf_token=effective_csrf,
                                        msg=(qs.get("msg") or [""])[0],
                                        group=(qs.get("group") or [""])[0],
                                        clf=(qs.get("clf") or ["due"])[0],

@@ -226,6 +226,25 @@ def render_context_markdown(ctx: dict) -> str:
     return "\n".join(L) + "\n"
 
 
+def read_changelog(data_dir: str) -> list[dict]:
+    """Lees de append-only artefact-changelog (`data/artefact_changelog.jsonl`) als lijst dicts.
+    Corrupte regels worden overgeslagen (fail-open per regel). Bron voor de seen-markering."""
+    path = os.path.join(data_dir, "artefact_changelog.jsonl")
+    if not os.path.exists(path):
+        return []
+    out = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                out.append(json.loads(line))
+            except json.JSONDecodeError:
+                pass
+    return out
+
+
 def own_and_inherited(role_id: str, kind: str, records, store) -> dict:
     """Eigen + geërfde artefacten van één soort voor een rol/cirkel.
 
