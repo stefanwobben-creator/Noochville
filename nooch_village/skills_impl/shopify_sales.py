@@ -223,6 +223,10 @@ class ShopifySalesSkill(Skill):
         "AOV, per land en topproducten over een venster. Uitsluitend geaggregeerd, geen PII."
     )
 
+    def available_metrics(self) -> list[str]:
+        """De scalaire verkoopindicatoren die aggregate_orders oplevert (voor het koppelscherm)."""
+        return ["pairs_sold", "orders", "revenue", "aov"]
+
     @staticmethod
     def _truthy(v) -> bool:
         return str(v).strip().lower() in ("1", "true", "yes", "ja", "on")

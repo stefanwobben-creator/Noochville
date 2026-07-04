@@ -83,6 +83,8 @@ class IndicatorDefinition(BaseModel):
     aard: Literal["reeks", "moment", "categorie"] = "moment"    # verplicht; afgeleid uit meettype indien leeg
     aggregatie: Literal["som", "gemiddelde", "laatste_waarde", ""] = ""  # alleen verplicht bij formules
     formule: bool = False            # afgeleide indicator (formule)? dan is aggregatie verplicht
+    categorie: str = ""              # groepering voor catalogus/wizard (Website, Verkoop, …); scope 4/5
+    veld: str = ""                   # ruwe skill-veldsleutel waaruit dit item is gekoppeld (bv. 'visitors')
 
     @field_validator("name", mode="before")
     @classmethod
@@ -188,6 +190,11 @@ class IndicatorDefinition(BaseModel):
         if isinstance(v, str):
             return v.strip().lower() in ("1", "true", "ja", "yes", "on")
         return bool(v)
+
+    @field_validator("categorie", "veld", mode="before")
+    @classmethod
+    def _short2(cls, v):
+        return (str(v or "").strip())[:40]
 
     @model_validator(mode="before")
     @classmethod
