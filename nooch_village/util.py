@@ -68,6 +68,23 @@ def read_json(path: str, default, expect=dict):
     return d
 
 
+_FILE_LOCKS: dict[str, threading.RLock] = {}
+_FILE_LOCKS_GUARD = threading.Lock()
+
+
+def file_lock(path: str) -> threading.RLock:
+    """Proces-breed slot per bestandspad, zodat een read-modify-write óf een append op hetzelfde
+    bestand serialiseert. Eén registry voor de hele app: twee modules die hetzelfde pad schrijven
+    (bv. de AttachmentStore én de artefact-changelog) delen zo hetzelfde slot. Een threading-slot
+    volstaat — één cockpit-proces schrijft; multi-proces vergrendeling (fcntl) is hier niet nodig."""
+    key = os.path.abspath(path)
+    with _FILE_LOCKS_GUARD:
+        lk = _FILE_LOCKS.get(key)
+        if lk is None:
+            lk = _FILE_LOCKS[key] = threading.RLock()
+        return lk
+
+
 def atomic_write_json(path: str, obj) -> None:
     """Schrijf obj als JSON naar path via een tijdelijk bestand in dezelfde map.
 

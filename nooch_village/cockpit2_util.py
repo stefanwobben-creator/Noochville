@@ -10,23 +10,23 @@ _BUILD = _time.strftime("%H:%M")   # proces-starttijd: zichtbaar in de balk
 # De rol waarop de Backlog Builder (Notes-vervanger) leeft. Eén bron voor gate + view + coupling.
 WEBSITE_DEVELOPER_ROLE = "mother_earth__nooch__website_developer"
 
-_CIRCLE_TABS = ["overview", "roles", "members", "policies", "notes", "projects",
+_CIRCLE_TABS = ["overview", "roles", "members", "policies", "notes", "tools", "projects",
                 "checklists", "metrics"]
-_ROLE_TABS = ["overview", "policies", "notes", "projects", "checklists", "metrics"]
+_ROLE_TABS = ["overview", "policies", "notes", "tools", "projects", "checklists", "metrics"]
 # Persoon/AI-role-filler-view: een read-only aggregatie-lens over de rollen die iemand vervult,
 # geen nieuwe autoriteitslaag. Spiegelt de rol-view-chrome via _tabbar(base="/person").
 _PERSON_TABS = ["rollen", "projecten", "context", "metrics", "checklist"]
 
 # Welke tabs "leven" (echt werken) en welke nog grijs zijn. Status: live | basic | grey.
 _TAB_STATUS = {
-    "overview": "live", "roles": "live", "members": "live", "notes": "basic",
+    "overview": "live", "roles": "live", "members": "live", "notes": "live",
     "metrics": "live", "checklists": "live", "projects": "live",
-    "policies": "grey",
+    "policies": "live", "tools": "live",
     "rollen": "basic",   # persoon-view: gevuld; de overige persoon-tabs vallen op grey terug
 }
 _TAB_LABEL = {
     "overview": "Overview", "strategy": "Strategy", "roles": "Roles", "members": "Members",
-    "policies": "Policies", "notes": "Notes", "projects": "Projects",
+    "policies": "Policies", "notes": "Notes", "tools": "Tools", "projects": "Projects",
     "checklists": "Checklists", "metrics": "Metrics",
     "rollen": "Rollen", "projecten": "Projecten", "context": "Context", "checklist": "Checklist",
 }
@@ -42,15 +42,19 @@ def _initials(name: str) -> str:
     return "".join(w[0] for w in name.split()[:2]).upper() or "?"
 
 
-def _tabbar(node_id: str, tabs: list, cur: str, base: str = "/node") -> str:
+def _tabbar(node_id: str, tabs: list, cur: str, base: str = "/node", unseen=None) -> str:
     # `base` parametriseert de route (rol-view: /node, persoon-view: /person). Component NIET
     # geforkt; bestaande callers gebruiken de default "/node" en veranderen niet.
+    # `unseen` = set tab-namen met een 'gewijzigd sinds laatst gezien'-markering (los van de dot).
+    unseen = unseen or set()
     out = []
     for t in tabs:
         status = _TAB_STATUS.get(t, "grey")
         on = " on" if t == cur else ""
+        mark = ("<span class='c2-unseen' title='gewijzigd sinds je laatste bezoek'></span>"
+                if t in unseen else "")
         out.append(f"<a class='c2-tab{on}' href='{base}?id={_e(node_id)}&tab={t}'>"
-                   f"{_e(_TAB_LABEL[t])}<span class='dot {status}'></span></a>")
+                   f"{_e(_TAB_LABEL[t])}<span class='dot {status}'></span>{mark}</a>")
     return "<div class='c2-tabs'>" + "".join(out) + "</div>"
 
 
@@ -216,6 +220,10 @@ details{background:none;border:none;border-radius:0;box-shadow:none;padding:0}
 .c2-tab.on{border-bottom-color:var(--green-dark);color:var(--green-dark);font-weight:700}
 .c2-tab .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:.35rem;vertical-align:middle}
 .dot.live{background:var(--green)}.dot.basic{background:var(--yellow)}.dot.grey{background:var(--border)}
+/* seen-markering: per-gebruiker 'gewijzigd sinds laatst gezien'. Bewust anders dan de maturity-dot
+   (amber met ring i.p.v. platte 7px-stip) zodat de twee signalen niet verward worden. */
+.c2-unseen{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--yellow);
+  margin-left:.3rem;vertical-align:middle;box-shadow:0 0 0 2px var(--yellow-light)}
 .c2-sec{margin:1.1rem 0}
 .c2-sec h3{font-family:var(--font-display);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--green-dark);margin:0 0 .3rem}
 ul.clean{list-style:none;padding:0;margin:0}

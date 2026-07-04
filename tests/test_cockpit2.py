@@ -100,10 +100,12 @@ def test_role_overview_fillers_en_domein(tmp_path):
     assert "Nooch.earth" in page                               # domein
 
 
-def test_grijze_tab(tmp_path):
+def test_policies_tab_is_gebouwd(tmp_path):
+    # De Policies-tab was een grijze placeholder; hij is nu de artefact-view (twee secties).
     st = _st(tmp_path)
-    page = cockpit2.render_node(st, "mother_earth__nooch", "policies")   # nog grijs
-    assert "Nog te bouwen" in page
+    page = cockpit2.render_node(st, "mother_earth__nooch", "policies")
+    assert "Nog te bouwen" not in page
+    assert "Van deze rol" in page and "Geldend hier" in page
 
 
 def test_projecten_tab_kolommen_en_inline_add(tmp_path):
