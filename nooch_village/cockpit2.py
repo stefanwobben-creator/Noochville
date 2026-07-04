@@ -555,6 +555,17 @@ def verwijder_livekit_room(room: str) -> bool:
 _STATIC_TYPES = {"livekit-client.umd.min.js": "application/javascript; charset=utf-8"}
 
 
+def role_context(st, role_id: str, fmt: str = "json"):
+    """Serialiseer de volledige rol-context als (status, content_type, body).
+    `fmt="markdown"` = de systeemprompt-bron voor AI-vervullers; anders JSON."""
+    if not st.records.get(role_id):
+        return 404, "text/plain; charset=utf-8", "Onbekende rol."
+    ctx = artefacts.serialize_context(role_id, st.records, st.att)
+    if fmt == "markdown":
+        return 200, "text/markdown; charset=utf-8", artefacts.render_context_markdown(ctx)
+    return 200, "application/json; charset=utf-8", json.dumps(ctx, ensure_ascii=False, indent=2)
+
+
 def dispatch(data_dir: str, action: str, form: dict, username: str | None = None):
     """Verwerk een POST-actie. Geeft (redirect-URL, korte bevestiging) terug.
 
@@ -1449,6 +1460,24 @@ def make_handler(data_dir: str, csrf_token: str,
             effective_csrf = csrf_token if username else ""
 
             st = _Stores(data_dir)
+            if path == "/context":
+                # AUTHZ: iedereen-ingelogd — rol-context is dezelfde read-scope als /node?tab=notes
+                # (één rol), dus in auth-uit óók voor guest zichtbaar; alleen de persoon-context-
+                # aggregatie blijft gated (besluit 2026-07-03). De login-redirect hierboven dekt de
+                # niet-ingelogde gebruiker al af.
+                # OPEN PUNT (niet nu): geen read-scope-per-rol. Elke ingelogde gebruiker (+ guest in
+                # auth-uit) leest élke rol-context. Nu ongevaarlijk (geen artefacten; anchor-policies
+                # zijn publieke missieprincipes), maar zodra rollen gevoelige policies/notes krijgen
+                # (business-model, leveranciers-afspraken) is een per-rol read-scope nodig.
+                status, ctype, body = role_context(st, (qs.get("id") or [""])[0],
+                                                    (qs.get("format") or ["json"])[0])
+                b = body.encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(b)))
+                self.end_headers()
+                self.wfile.write(b)
+                return
             if path in ("/", "/index.html"):
                 roots = org.roots(st.records.all())
                 if roots:

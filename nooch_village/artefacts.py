@@ -115,6 +115,117 @@ def log_change(data_dir: str, *, action: str, artefact, records,
     return entry
 
 
+def _art_item(a, *, editable: bool) -> dict:
+    """Eén artefact als serialisatie-dict. `editable` = mag deze rol het bewerken (eigen=True,
+    geërfd=False). `mutation_path="artefact"`: te wijzigen via de artefact-routes (bij de eigenaar)."""
+    d = {"id": a.id, "kind": a.kind, "title": a.title, "body": a.body, "scope": a.scope,
+         "status": a.status, "editable": editable, "mutation_path": "artefact"}
+    if a.kind == "tool":
+        d["url"] = a.url
+    return d
+
+
+def _art_block(role_id: str, kind: str, records, store) -> dict:
+    """{"own": [...], "inherited": [...]} voor één artefact-soort; geërfde items dragen het
+    herkomst-pad ("via <naam>")."""
+    oi = own_and_inherited(role_id, kind, records, store)
+    own = [_art_item(a, editable=True) for a in oi["own"]]
+    inherited = []
+    for it in oi["inherited"]:
+        item = _art_item(it["artefact"], editable=False)
+        item["origin_id"] = it["origin_id"]
+        item["origin_name"] = it["origin_name"]
+        item["origin_path"] = f"via {it['origin_name']}"
+        inherited.append(item)
+    return {"own": own, "inherited": inherited}
+
+
+def _governance_policies(role_id: str, records) -> list[dict]:
+    """Governance-eigendom-policies langs de erfketen (`definition.policies` van de rol zelf en zijn
+    voorouders — o.a. de anchor). Read-only in de artefact-wereld: `editable=False` +
+    `mutation_path="governance"` zodat een AI-vervuller ze WEL volgt, maar nooit voorstelt ze buiten
+    governance om te wijzigen."""
+    out = []
+    for node_id in org.breadcrumb(records.all(), role_id):
+        rec = records.get(node_id)
+        if rec is None:
+            continue
+        for p in (getattr(rec.definition, "policies", None) or []):
+            out.append({
+                "body": p, "title": "", "editable": False, "mutation_path": "governance",
+                "origin_id": node_id, "origin_name": _name(rec),
+                "origin_path": "" if node_id == role_id else f"via {_name(rec)}",
+            })
+    return out
+
+
+def serialize_context(role_id: str, records, store) -> dict:
+    """De volledige rol-context als structuur: overview (purpose/domains/accountabilities) +
+    policies (eigen + geërfd + governance-owned read-only) + notes + tools. Bron voor het
+    /context-endpoint (json en markdown)."""
+    rec = records.get(role_id)
+    if rec is None:
+        return {}
+    d = rec.definition
+    role = {
+        "id": role_id, "name": _name(rec), "purpose": getattr(d, "purpose", "") or "",
+        "domains": list(getattr(d, "domains", None) or []),
+        "accountabilities": list(getattr(d, "accountabilities", None) or []),
+    }
+    policies = _art_block(role_id, "policy", records, store)
+    policies["governance"] = _governance_policies(role_id, records)
+    return {
+        "role": role,
+        "policies": policies,
+        "notes": _art_block(role_id, "note", records, store),
+        "tools": _art_block(role_id, "tool", records, store),
+    }
+
+
+def _md_section(block: dict, *, tool: bool = False) -> list[str]:
+    """Markdown voor 'Van deze rol' + 'Geldend hier (geërfd)' van één artefact-soort."""
+    def line(a: dict, inherited: bool) -> str:
+        if tool and a.get("url"):
+            extra = f" — {a['url']}"
+        elif a.get("body"):
+            extra = f" — {a['body']}"
+        else:
+            extra = ""
+        tag = f" _({a['origin_path']})_" if inherited else (
+            f" _(scope: {a['scope']})_" if a.get("scope") else "")
+        return f"- **{a.get('title') or a['id']}**{extra}{tag}"
+
+    out = ["### Van deze rol"]
+    out += [line(a, False) for a in block["own"]] or ["- —"]
+    out.append("### Geldend hier (geërfd)")
+    out += [line(a, True) for a in block["inherited"]] or ["- —"]
+    return out
+
+
+def render_context_markdown(ctx: dict) -> str:
+    """Systeemprompt-bron voor AI-vervullers (Wendy Words): de vier blokken als geldige markdown."""
+    if not ctx:
+        return "# Onbekende rol\n"
+    role = ctx["role"]
+    L = [f"# Rol-context: {role['name']}", "", "## Overzicht",
+         f"**Purpose:** {role['purpose']}",
+         f"**Domeinen:** {', '.join(role['domains']) or '—'}",
+         "**Accountabilities:**"]
+    L += [f"- {a}" for a in role["accountabilities"]] or ["- —"]
+    L += ["", "## Policies"]
+    L += _md_section(ctx["policies"])
+    L.append("### Governance-policies (read-only — alleen via governance te wijzigen)")
+    gov = ctx["policies"].get("governance") or []
+    L += [f"- {p['body']}" + (f" _({p['origin_path']})_" if p.get("origin_path") else "")
+          for p in gov] or ["- —"]
+    L += ["", "## Notes"]
+    L += _md_section(ctx["notes"])
+    L += ["", "## Tools"]
+    L += _md_section(ctx["tools"], tool=True)
+    L.append("")
+    return "\n".join(L) + "\n"
+
+
 def own_and_inherited(role_id: str, kind: str, records, store) -> dict:
     """Eigen + geërfde artefacten van één soort voor een rol/cirkel.
 

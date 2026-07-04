@@ -338,3 +338,64 @@ def test_changelog_append_serialiseert_onder_slot(tmp_path):
     log = _changelog(dd)                                    # parse't elke regel als JSON
     assert len(log) == N, f"changelog verloor regels: {len(log)}/{N}"
     assert len({e["actor_id"] for e in log}) == N           # geen overschreven/gemergde regels
+
+
+# ── brok 3: /context serialisatie (json + markdown) ─────────────────────────
+
+def test_context_bevat_alle_vier_blokken(tmp_path):
+    st = _stores(tmp_path)
+    st.att.add(OWNER, "policy", title="Eigen policy")
+    st.att.add(OWNER, "note", title="Eigen note")
+    st.att.add(OWNER, "tool", title="Figma", url="https://figma.com")
+    ctx = artefacts.serialize_context(OWNER, st.records, st.att)
+    assert set(ctx) == {"role", "policies", "notes", "tools"}
+    assert ctx["role"]["purpose"] and "accountabilities" in ctx["role"] and "domains" in ctx["role"]
+    assert [p["title"] for p in ctx["policies"]["own"]] == ["Eigen policy"]
+    assert [n["title"] for n in ctx["notes"]["own"]] == ["Eigen note"]
+    assert ctx["tools"]["own"][0]["url"] == "https://figma.com"
+
+
+def test_context_geerfd_toont_herkomstpad(tmp_path):
+    st = _stores(tmp_path)
+    st.att.add(CIRCLE, "policy", title="Cirkelbreed", inherit=True)
+    ctx = artefacts.serialize_context(OWNER, st.records, st.att)
+    inh = ctx["policies"]["inherited"]
+    assert [p["title"] for p in inh] == ["Cirkelbreed"]
+    assert inh[0]["origin_path"] == "via Nooch"           # circle name = "Nooch"
+    assert inh[0]["editable"] is False
+
+
+def test_context_anchor_governance_policy_readonly(tmp_path):
+    st = _stores(tmp_path)
+    # _bootstrap zet een transparantie-policy op de anchor (definition.policies)
+    ctx = artefacts.serialize_context(OWNER, st.records, st.att)
+    gov = ctx["policies"]["governance"]
+    assert gov, "governance-policy van de anchor ontbreekt in de context"
+    tp = next(p for p in gov if "transparant" in p["body"].lower())
+    assert tp["editable"] is False and tp["mutation_path"] == "governance"
+    assert tp["origin_path"] == "via Mother Earth"
+
+
+def test_context_markdown_valide(tmp_path):
+    st = _stores(tmp_path)
+    st.att.add(OWNER, "policy", title="Eigen", body="doe dit")
+    st.att.add(CIRCLE, "note", title="Cirkel-note", inherit=True)
+    md = artefacts.render_context_markdown(
+        artefacts.serialize_context(OWNER, st.records, st.att))
+    assert md.startswith("# Rol-context: Creator of Shoes")
+    for header in ("## Overzicht", "## Policies", "## Notes", "## Tools"):
+        assert header in md
+    assert "Governance-policies (read-only" in md
+    assert "via Nooch" in md                               # geërfde cirkel-note draagt herkomst
+    assert md.endswith("\n")
+
+
+def test_context_endpoint_json_en_markdown_en_404(tmp_path):
+    st = _stores(tmp_path)
+    status, ctype, body = cockpit2.role_context(st, OWNER, "json")
+    assert status == 200 and "application/json" in ctype
+    assert set(json.loads(body)) == {"role", "policies", "notes", "tools"}
+    status, ctype, body = cockpit2.role_context(st, OWNER, "markdown")
+    assert status == 200 and "text/markdown" in ctype and body.startswith("# Rol-context")
+    status, _, _ = cockpit2.role_context(st, "bestaat_niet", "json")
+    assert status == 404
