@@ -232,8 +232,6 @@ ul.clean li:last-child{border-bottom:none}
 .tree li{padding:.12rem 0;font-size:.86rem}
 .tree .c{font-weight:700}
 .tree .here{background:var(--green-tint);border-radius:5px;padding:0 .3rem}
-.legend{font-size:.74rem;color:var(--muted);margin-top:.6rem;display:flex;gap:.9rem;flex-wrap:wrap}
-.legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:.25rem}
 .pill{display:inline-block;font-size:.72rem;padding:.05rem .45rem;border-radius:var(--radius-pill);background:var(--cream-2);color:var(--gray);margin-left:.3rem}
 .card{border:1px solid var(--border);border-radius:var(--radius);padding:.5rem .7rem;margin:.3rem 0;background:var(--surface)}
 .pboard{display:flex;gap:.6rem;align-items:flex-start;overflow-x:auto}
