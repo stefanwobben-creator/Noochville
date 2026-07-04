@@ -3,6 +3,7 @@ pytest>=8.0
 
 # Kern van NoochVillage + groei-puls
 requests>=2.31
+Pillow>=11                  # EPIC-aardbol: volle NASA-PNG server-side resizen naar ~512px
 pytrends>=4.9
 pandas>=2.0,<3       # dependency van pytrends; cap op 3 tot compatibiliteit bevestigd
 

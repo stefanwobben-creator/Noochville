@@ -224,6 +224,12 @@ details{background:none;border:none;border-radius:0;box-shadow:none;padding:0}
    (amber met ring i.p.v. platte 7px-stip) zodat de twee signalen niet verward worden. */
 .c2-unseen{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--yellow);
   margin-left:.3rem;vertical-align:middle;box-shadow:0 0 0 2px var(--yellow-light)}
+/* NASA-EPIC-aardbol (alleen op de anchor-overview): bijna kolombreed, rond, gestapelde frames die
+   traag cross-faden. width iets smaller dan de sectie-scheidingslijn; vierkant via aspect-ratio. */
+.epic-earth{position:relative;width:92%;aspect-ratio:1/1;margin:.6rem auto .3rem}
+.epic-frame{position:absolute;inset:0;width:100%;height:100%;border-radius:50%;object-fit:cover;opacity:0;transition:opacity 1s ease}
+.epic-frame.on{opacity:1}
+.epic-cap{text-align:center;font-size:.72rem;color:var(--muted);margin-bottom:.4rem}
 .c2-sec{margin:1.1rem 0}
 .c2-sec h3{font-family:var(--font-display);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--green-dark);margin:0 0 .3rem}
 ul.clean{list-style:none;padding:0;margin:0}
