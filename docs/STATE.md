@@ -139,6 +139,27 @@ met poort-wrappers `_role_gate` en `_member_gate`. Regel per default: guest
 helpers: is_circle_lead / is_role_filler / is_circle_member / resolve_circle_id
 + wrappers _role_gate / _member_gate / _lead_gate.
 
+### Sindsdien bijgekomen (artefacten, read-scope, backlog, labelregel)
+
+✅ **AUTHZ-labelregel** (vastgelegd in CLAUDE.md): elke NIEUWE dispatch-tak krijgt bij aanmaak
+   verplicht één van vier labels als `# AUTHZ:`-comment — anchor-lead / Circle Lead /
+   rolvervuller-of-Circle-Lead / circle-member-of-iedereen-ingelogd. Bewust ongated mag, maar
+   dan óók met label + één zin waarom. Voorkomt de situatie van vóór 1 juli 2026 (dispatch zonder
+   enige autorisatie).
+✅ **Artefact-schrijfgates** (`_artefact_gate` / `can_write_artefact`, `artefacts.py` + `cockpit2.py:450`):
+   artefact_add / artefact_edit / artefact_archive mogen alleen door de vervuller van de eigenaar-rol
+   OF de Circle Lead van de omvattende cirkel — identiek voor mens en agent. Policies vereisen
+   bovendien een governance-referentie (`requires_governance_ref`): een policy hoort bij een
+   governance-toegewezen domein, niet zomaar los. Nieuwe helper `_web_actor_id` (username → actor-id).
+✅ **Read-scope context/notes** (`role_context` / `/context`): iedereen-ingelogd — dezelfde read-scope
+   als `/node?tab=notes`. De context-tab (`/person?tab=context`) is zichtbaar voor elk INGELOGD
+   village-lid.
+✅ **Auth-uit guest-asymmetrie** (besluit 2026-07-03): in auth-uit-modus ziet een guest losse
+   rol-notes via `/node?tab=notes`; de persoon-context-aggregatie (`/person?tab=context`) blijft
+   óók dan afgeschermd. Bewuste keuze, geen gat — bij een publieke view wordt per-tab opnieuw bepaald.
+✅ **Backlog-takken**: een backlog-item indienen = iedereen-ingelogd; de backlog beheren
+   (staat verplaatsen, impact/effort) = rolvervuller `website_developer`.
+
 ⏳ Nog open:
 - Read-kant (do_GET/render): privé-projecten worden bij tonen nog niet per gebruiker
   afgeschermd. Aparte beslissing of dat moet.
