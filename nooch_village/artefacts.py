@@ -205,67 +205,6 @@ def render_context_markdown(ctx: dict) -> str:
     return "\n".join(L) + "\n"
 
 
-# ── Fase 2: anchor-policies van string → domein-gescopeerd artefact ─────────
-# De oude anchor-policies leefden als kale strings in root.definition.policies. Fase 2 zet de
-# behouden policies om naar domein-gescopeerde policy-artefacten (één display-vorm) en leegt de
-# strings — geen twee vormen naast elkaar. De G4-HANDHAVING blijft in policy.py (regex/intent) en
-# wordt hier NIET aangeraakt: verwijderd-uit-display ≠ verwijderd-uit-enforcement.
-# OPEN PUNT: MISSION en MATERIALS zijn akte-verankerd (statuten art. 2a/17 — alleen via de AVA
-# wijzigbaar), maar dat is nog niet als zodanig in de UI gemarkeerd (geen "akte/AVA-slot"-indicatie).
-# Zodra dat er is: deze twee als niet-bewerkbaar-buiten-AVA tonen, los van de gewone domein-eigenaar.
-_ANCHOR_POLICIES_FASE2 = [
-    {"domain": "Mission", "title": "Missie-toetsing blijft bewaakt",
-     "body": ("Een rol mág de structuur wijzigen, mits de missie-toetsing (KeywordReview, "
-              "G4-poort) bewaakt blijft: een voorstel dat die accountability verwijdert, bevat "
-              "in hetzelfde voorstel een gelijkwaardig alternatief.")},
-    {"domain": "Materials", "title": "Plastic- en leer-vrij",
-     "body": ("Een rol mág materialen en accountabilities kiezen, mits ze plastic-vrij en "
-              "dierlijk-leer-vrij zijn.")},
-    # OPEN PUNT: het domein "Geld" heeft nog geen eigenaar-rol (financial_controller is kandidaat);
-    # de governance_ref-afleiding valt tot dan terug op de domein-naam.
-    {"domain": "Geld", "title": "Uitgaven na toetsing",
-     "body": ("Een rol mág geld uitgeven, mits de rol die het domein Geld bezit het expliciet "
-              "heeft getoetst.")},
-]
-
-
-def migrate_anchor_policies(records, store, *, dry_run: bool = False) -> list[dict]:
-    """Zet de kale string-policies op de anchor om naar domein-gescopeerde policy-artefacten.
-
-    - Maakt de behouden/nieuwe policies aan als read-only policy-artefacten op de anchor
-      (inherit=True), idempotent op domein.
-    - Leegt daarna root.definition.policies volledig — geen strings meer naast de records.
-    - Raakt policy.py (G4-handhaving) NIET aan.
-
-    Geeft een rapport (lijst acties) terug. Met dry_run=True wordt niets geschreven.
-    """
-    root = records.root()
-    report: list[dict] = []
-    if root is None:
-        return report
-    have = {a.domain for a in store.list(root.id, "policy", include_archived=True)}
-    for spec in _ANCHOR_POLICIES_FASE2:
-        if spec["domain"] in have:
-            report.append({"actie": "bestaat-al", "domein": spec["domain"], "titel": spec["title"]})
-            continue
-        report.append({"actie": "nieuw-artefact", "domein": spec["domain"], "titel": spec["title"],
-                       "body": spec["body"]})
-        if not dry_run:
-            store.add(root.id, "policy", title=spec["title"], body=spec["body"],
-                      domain=spec["domain"], inherit=True,
-                      governance_ref=f"domain:{spec['domain']}", change_note="migratie fase 2")
-    for s in list(getattr(root.definition, "policies", None) or []):
-        report.append({"actie": "verwijder-string", "tekst": s[:80]})
-    if getattr(root.definition, "policies", None) and not dry_run:
-        root.definition.policies = []
-        try:
-            root.version += 1
-        except Exception:
-            pass
-        records.put(root)
-    return report
-
-
 def read_changelog(data_dir: str) -> list[dict]:
     """Lees de append-only artefact-changelog (`data/artefact_changelog.jsonl`) als lijst dicts.
     Corrupte regels worden overgeslagen (fail-open per regel). Bron voor de seen-markering."""

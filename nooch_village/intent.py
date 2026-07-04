@@ -9,8 +9,6 @@ Terugkeer: gesorteerde lijst (beste eerst) met 'score', 'dropped' en 'drop_reaso
 """
 from __future__ import annotations
 from nooch_village.config import Context
-from nooch_village.policy import INTENT_VIOLATIONS as _POLICY_VIOLATIONS
-
 _SCHOEN_WOORDEN = (
     "schoen", "schoenen", "shoe", "shoes",
     "sneaker", "sneakers", "schuh", "schuhe",
@@ -28,13 +26,6 @@ def _is_schoen_domein(desc_l: str) -> bool:
     Bewust grof — vangt off-domein ruis (brood, kernenergie, funderingsherstel),
     laat aan de randen een enkele legitieme term vallen (kale merknaam). Te verfijnen later."""
     return any(w in desc_l for w in _SCHOEN_WOORDEN)
-
-
-def _violates_policy(desc_l: str) -> str | None:
-    for pattern, reason in _POLICY_VIOLATIONS:
-        if pattern in desc_l:
-            return reason
-    return None
 
 
 def _goal_score(desc_l: str, goals: list[dict]) -> float:
@@ -63,10 +54,9 @@ def _strategy_score(desc_l: str, heuristics: list[str]) -> float:
 def prioritize(actions: list[dict], context: Context) -> list[dict]:
     """Rangschik acties op bijdrage aan doelen binnen de strategie.
 
-    Prioriteitsvolgorde (hard ingebakken):
-      Missie > Policy > Strategie > Doel
-    Een doel mag nooit een policy of de missie overrulen.
-    Acties die een policy schenden worden gemarkeerd als dropped=True.
+    Prioriteitsvolgorde: Strategie > Doel, binnen het schoenen-domein. Missie-handhaving zit
+    NIET meer in deze laag (geen verstopte policy-drop); de richting leeft in missie/statuten en
+    in domein-policies via governance.
     """
     strategy_data = getattr(context, "strategy", None) or {}
     heuristics = strategy_data.get("strategy", [])
@@ -76,10 +66,6 @@ def prioritize(actions: list[dict], context: Context) -> list[dict]:
     for action in actions:
         desc_l = (action.get("description", "") + " " + action.get("label", "")).lower()
         label_l = action.get("label", "").lower()
-        violation = _violates_policy(desc_l)
-        if violation:
-            result.append({**action, "score": -1.0, "dropped": True, "drop_reason": violation})
-            continue
         # Domeinfilter kijkt ALLEEN naar het label: de description (met parent-term) mag
         # een off-domein term niet redden via een schoen-woord dat niet in de term zelf zit.
         if not _is_schoen_domein(label_l):

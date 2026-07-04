@@ -1,8 +1,6 @@
 from __future__ import annotations
-import json, os, re, logging, dataclasses, time
+import json, os, logging, dataclasses, time
 from nooch_village.util import atomic_write_json
-from nooch_village.mission import ANCHOR_PURPOSE as _MISSION
-from nooch_village.policy import HARD_VIOLATION_RE as _HARD_VIOLATION_RE
 from nooch_village.models import (
     Record, RoleDefinition, RecordType,
     Proposal, GovernanceChange, ChangeKind,
@@ -20,13 +18,6 @@ _REPETITION_KW = frozenset([
     # doorlopende/staande work — evengoed bewijs van een beoogde permanente accountability
     "doorlopend", "periodiek", "staande", "continu",
 ])
-
-# Verdachte patronen die de LLM extra toetst (alleen als er een LLM-sleutel is)
-_SUSPECT_RE = re.compile(
-    r"\bplastic\b|\bleer\b|\bleather\b|\bpvc\b|\bsynth\w+\b|\bkunststof\b|"
-    r"\bbulk\b|\boverproduct\w*\b|\bmassaproduct\w*\b",
-    re.I,
-)
 
 
 # ── Serialisatie ───────────────────────────────────────────────────────────────
@@ -222,8 +213,12 @@ class Gate:
 
     # G4: missie-poort — deterministisch + optioneel LLM bij twijfel
     def _g4(self, p: Proposal, records: "Records", context) -> tuple[bool, str]:
+        # Missie-handhaving zit bewust NIET in de poort: de richting leeft in de missie/visie en de
+        # statuten (art. 2a), en waar het praktisch nodig is in domein-policies die via de juiste
+        # governance-route ontstaan. G4 bewaakt daarom alleen dat de anchor-purpose mens-eigendom is:
+        # een structuurwijziging van de wortelcirkel escaleert altijd naar de mens. Geen verstopte
+        # tweede handhavingslaag (regex/LLM) meer.
         c = p.change
-        # Anchor Circle purpose is mens-eigendom: elk voorstel dat de purpose raakt escaleert altijd
         if c.purpose and c.role_id:
             root = records.root() if records else None
             if root and c.role_id == root.id:
@@ -231,49 +226,7 @@ class Gate:
                     "Anchor Circle purpose is mens-eigendom (founder-only); "
                     "structuurwijzigingen van de wortelcirkel escaleren altijd naar de mens"
                 )
-        all_text = " ".join([
-            c.purpose or "",
-            *c.add_accountabilities,
-            *c.add_domains,
-            c.policy_text or "",
-        ])
-        if _HARD_VIOLATION_RE.search(all_text):
-            m = _HARD_VIOLATION_RE.search(all_text)
-            return False, (f"raakt harde missie-policy van de Anchor Circle "
-                           f"(patroon '{m.group()[:40]}')")
-        # LLM-toets als er verdachte termen zijn én een sleutel beschikbaar is
-        if context and _SUSPECT_RE.search(all_text):
-            result = self._llm_check(c)
-            if result:
-                return False, result
         return True, ""
-
-    def _llm_check(self, c: GovernanceChange) -> str | None:
-        from nooch_village.llm import reason
-        change_desc = (
-            f"kind: {c.kind.value}\nrole: {c.role_id}\n"
-            f"purpose: {c.purpose or '-'}\n"
-            f"add_accountabilities: {c.add_accountabilities}\n"
-            f"add_domains: {c.add_domains}"
-        )
-        prompt = (
-            f"Je bent de Facilitator van Nooch.earth, bewaker van de missie in governance.\n"
-            f"Missie: {_MISSION}\n\n"
-            f"Governance-voorstel:\n{change_desc}\n\n"
-            "Raakt dit voorstel de missie (geen plastic, geen leer, eerlijke prijs, transparantie)?\n"
-            "Antwoord op EXACT één regel:\n"
-            "ADOPT | REASON: -\n"
-            "of:\n"
-            "ESCALATE | REASON: <korte reden>"
-        )
-        out = reason(prompt)
-        if not out:
-            # Geen LLM beschikbaar maar verdachte termen → conservatief escaleren
-            return f"verdachte termen in voorstel ({_SUSPECT_RE.findall(c.purpose or ' '.join(c.add_accountabilities))[:3]}); geen LLM beschikbaar voor verificatie"
-        m = re.search(r"ESCALATE\s*\|\s*REASON:\s*(.+)", out, re.I)
-        if m:
-            return m.group(1).strip()
-        return None  # ADOPT
 
 
 class Records:

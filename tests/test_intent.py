@@ -14,35 +14,9 @@ def _ctx(goals=None, strategy=None):
     return ctx
 
 
-# ── policy-schendingen ────────────────────────────────────────────────────────
-
-class TestPolicyViolations:
-    def test_google_ads_actie_wordt_dropped(self):
-        actions = [{"label": "Google Ads campagne", "description": "betaal voor google ads verkeer"}]
-        result = prioritize(actions, _ctx())
-        assert result[0]["dropped"] is True
-        assert "advertising" in result[0]["drop_reason"]
-
-    def test_facebook_ads_wordt_dropped(self):
-        actions = [{"label": "FB ads", "description": "facebook ads draaien"}]
-        result = prioritize(actions, _ctx())
-        assert result[0]["dropped"] is True
-
-    def test_bol_com_wordt_dropped(self):
-        actions = [{"label": "bol.com listing", "description": "schoenen verkopen via bol.com"}]
-        result = prioritize(actions, _ctx())
-        assert result[0]["dropped"] is True
-        assert "externe kanalen" in result[0]["drop_reason"]
-
-    def test_voorraadopbouw_wordt_dropped(self):
-        actions = [{"label": "bulk inkoop", "description": "voorraadopbouw voor Q4"}]
-        result = prioritize(actions, _ctx())
-        assert result[0]["dropped"] is True
-
-    def test_schone_actie_niet_dropped(self):
-        actions = [{"label": "vegan schoenen blogpost", "description": "organische content over vegan schoenen"}]
-        result = prioritize(actions, _ctx())
-        assert result[0]["dropped"] is False
+# NB: de intent-laag handhaaft GEEN policies meer (geen verstopte policy-drop). Missie-richting
+# leeft in missie/statuten + domein-policies via governance. De domeinfilter (schoen) blijft; die
+# is hieronder getest in TestSchoenDomeinfilter.
 
 
 # ── doel-scoring ──────────────────────────────────────────────────────────────
@@ -72,10 +46,12 @@ class TestGoalScoring:
         assert result[0]["score"] >= 2.0
 
 
-# ── policy overrulet doel ────────────────────────────────────────────────────
+# ── domeinfilter overrulet doelscore ─────────────────────────────────────────
 
-class TestPolicyOverrulesDoel:
-    def test_policy_wint_van_hoge_doelscore(self):
+class TestDomeinfilterOverruletDoel:
+    def test_off_domein_wint_niet_van_doelscore(self):
+        # Een off-domein actie (label zonder schoen-woord) wordt gedropt en staat achteraan,
+        # ondanks een hoge doelscore. (De policy-drop is weg; alleen de domeinfilter dropt nog.)
         goals = [{"active": True, "contributes_via": ["advertis", "google ads"]}]
         actions = [
             {"label": "Google Ads",          "description": "advertis via google ads"},
@@ -84,10 +60,9 @@ class TestPolicyOverrulesDoel:
         result = prioritize(actions, _ctx(goals=goals))
         seo = next(a for a in result if "SEO" in a["label"])
         ads = next(a for a in result if "Ads" in a["label"])
-        assert ads["dropped"] is True
+        assert ads["dropped"] is True and "off-domein" in ads["drop_reason"]
         assert seo["dropped"] is False
-        # gedropt staat achteraan ondanks hogere raw score
-        assert result.index(seo) < result.index(ads)
+        assert result.index(seo) < result.index(ads)   # gedropt staat achteraan
 
 
 # ── schoen-domeinfilter ──────────────────────────────────────────────────────
@@ -141,7 +116,7 @@ class TestSchoenDomeinfilter:
 class TestSortering:
     def test_niet_gedropt_staat_voor_gedropt(self):
         actions = [
-            {"label": "google ads sneakers", "description": "google ads voor sneakers"},
+            {"label": "veganistisch brood", "description": "off-domein recept"},   # off-domein → dropped
             {"label": "content over shoes",  "description": "organische content over shoes"},
         ]
         result = prioritize(actions, _ctx())

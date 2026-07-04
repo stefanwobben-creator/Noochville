@@ -126,10 +126,7 @@ def test_own_and_inherited_respecteert_inherit_en_herkomst(tmp_path):
     res = artefacts.own_and_inherited(OWNER, "policy", st.records, st.att)
     assert [a.title for a in res["own"]] == ["Eigen"]
     titles = {i["artefact"].title for i in res["inherited"]}
-    assert "Cirkel-erft" in titles            # erft
-    assert "Cirkel-privé" not in titles       # inherit=False valt weg
-    # de door de migratie geplaatste anchor-policies erven ook (governance-eigendom, inherit=True)
-    assert {"Missie-toetsing blijft bewaakt", "Plastic- en leer-vrij", "Uitgaven na toetsing"} <= titles
+    assert titles == {"Cirkel-erft"}          # inherit=False valt weg; geen voorgebakken anchor-policies
     origins = {i["artefact"].title: i["origin_id"] for i in res["inherited"]}
     assert origins["Cirkel-erft"] == CIRCLE
 
@@ -221,6 +218,16 @@ def _dd(tmp_path):
     return dd
 
 
+def _give_domain(dd, role_id, domain):
+    """Simuleer een governance-domein-toewijzing: geef de rol een écht domein zodat de eigenaar er
+    daarna een policy op mag maken (de juiste route). Persisteert naar de records."""
+    st = cockpit2._Stores(dd)
+    rec = st.records.get(role_id)
+    if domain not in rec.definition.domains:
+        rec.definition.domains.append(domain)
+        st.records.put(rec)
+
+
 def _changelog(dd):
     path = os.path.join(dd, "artefact_changelog.jsonl")
     if not os.path.exists(path):
@@ -234,6 +241,7 @@ def test_route_vervuller_mag_toevoegen(tmp_path):
     st = cockpit2._Stores(dd)
     alice = st.people.add("Alice", "alice@nooch.earth")
     st.assign.assign(OWNER, "person", alice.id)              # persisteren op schijf
+    _give_domain(dd, OWNER, "Merkstem")                      # governance wijst eerst het domein toe
     nxt, msg = cockpit2.dispatch(dd, "artefact_add",
         {"owner": [OWNER], "kind": ["policy"], "title": ["Merkstem"],
          "body": ["Altijd 'burger', nooit 'consument'."], "next": ["/"]},
@@ -272,17 +280,17 @@ def test_route_persona_gelijk_aan_person(tmp_path):
     assert artefacts.can_write_artefact("person", alice.id, OWNER, st2.records, st2.assign)
 
 
-def test_route_anchor_policy_governance_ref_auto_afgeleid(tmp_path):
-    # Fase 2: geen govref-invoerveld meer; hij wordt afgeleid uit de rol→domein-koppeling.
+def test_route_governance_ref_afgeleid_uit_domein(tmp_path):
+    # Geen govref-invoerveld: hij wordt afgeleid uit het écht toegewezen domein van de rol.
     dd = _dd(tmp_path)
+    _give_domain(dd, CIRCLE, "Money")                        # governance wijst domein toe
     nxt, msg = cockpit2.dispatch(dd, "artefact_add",
-        {"owner": [ANCHOR], "kind": ["policy"], "title": ["Missie-policy"], "next": ["/"]},
+        {"owner": [CIRCLE], "kind": ["policy"], "title": ["Geld-regel"], "next": ["/"]},
         username="guest")
     assert "toegevoegd" in msg
-    added = [a for a in cockpit2._Stores(dd).att.list(ANCHOR, "policy") if a.title == "Missie-policy"]
-    assert added, "anchor-policy is niet aangemaakt"
-    gref = added[0].versions[-1]["governance_ref"]
-    assert gref.startswith(("domain:", "role:")) and gref != ""   # automatisch afgeleid, niet leeg
+    added = [a for a in cockpit2._Stores(dd).att.list(CIRCLE, "policy") if a.title == "Geld-regel"]
+    assert added and added[0].domain == "Money"
+    assert added[0].versions[-1]["governance_ref"] == "domain:Money"   # afgeleid uit het domein
 
 
 def test_route_edit_en_archive_via_dispatch(tmp_path):
@@ -303,9 +311,10 @@ def test_route_edit_en_archive_via_dispatch(tmp_path):
 
 def test_route_changelog_erfketen_bevat_nazaten(tmp_path):
     dd = _dd(tmp_path)
+    _give_domain(dd, CIRCLE, "Money")
     cockpit2.dispatch(dd, "artefact_add",
-        {"owner": [CIRCLE], "kind": ["policy"], "title": ["Cirkelbreed"],
-         "inherit": ["1"], "next": ["/"]}, username="guest")
+        {"owner": [CIRCLE], "kind": ["policy"], "title": ["Cirkelbreed"], "next": ["/"]},
+        username="guest")
     chain = _changelog(dd)[0]["erfketen"]
     assert CIRCLE in chain and OWNER in chain               # de rol erft → staat in de keten
 
@@ -360,15 +369,17 @@ def test_context_geerfd_toont_herkomstpad(tmp_path):
     assert cirkelbreed[0]["editable"] is False
 
 
-def test_context_anchor_policies_zijn_domein_artefacten(tmp_path):
-    # Fase 2: de anchor-policies zijn domein-gescopeerde artefacten, geen apart governance-blok.
+def test_context_policies_dragen_domein_geen_governance_blok(tmp_path):
+    # Policies zijn domein-gescopeerde artefacten (geen apart governance-blok, geen voorbak).
     st = _stores(tmp_path)
+    # simuleer: cirkel bezit domein Money, eigenaar maakt er een policy op
+    n = st.records.get(CIRCLE); n.definition.domains.append("Money"); st.records.put(n)
+    st.att.add(CIRCLE, "policy", title="Geld-regel", domain="Money", inherit=True)
     ctx = artefacts.serialize_context(OWNER, st.records, st.att)
     assert "governance" not in ctx["policies"]            # geen los governance-blok meer
     inh = ctx["policies"]["inherited"]
-    assert {"Mission", "Materials", "Geld"} <= {p.get("domain") for p in inh}
-    mission = next(p for p in inh if p.get("domain") == "Mission")
-    assert mission["editable"] is False and mission["id"] == "MISSION-001"
+    geld = next(p for p in inh if p.get("domain") == "Money")
+    assert geld["editable"] is False and geld["id"].startswith("MONEY-")
 
 
 def test_context_markdown_valide(tmp_path):
@@ -442,13 +453,15 @@ def test_ui_tools_tab_toont_url_en_icon(tmp_path):
 
 
 def test_ui_policies_governance_eigendom_kop_geen_slotje(tmp_path):
-    # Fase 2: één regel "governance-eigendom" boven de lijst; geen slotje/badge per item.
+    # Eén regel "governance-eigendom" boven de lijst; geen slotje/badge per item.
     st = _stores(tmp_path)
+    # cirkel bezit domein Money, eigenaar maakt er een policy op → subrol erft 'm
+    n = st.records.get(CIRCLE); n.definition.domains.append("Money"); st.records.put(n)
+    st.att.add(CIRCLE, "policy", title="Geld-regel", domain="Money", inherit=True)
     html = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
     assert "Alle policies hieronder zijn governance-eigendom" in html
     assert "🔒" not in html
-    # gemigreerde anchor-policy geërfd zichtbaar met domein-id + herkomst
-    assert "MISSION-001" in html and "via Mother Earth" in html
+    assert "Geld-regel" in html and "via Nooch" in html   # geërfd met domein-id + herkomst
 
 
 def test_ui_versiehistorie_uitklapper(tmp_path):
@@ -471,11 +484,12 @@ def test_seen_marker_policywijziging_zet_geel_in_keten(tmp_path):
     user = "alice@nooch.earth"
     st.people.add("Alice", user)
     st.seen.mark(user, OWNER, "policies")               # Alice heeft de tab net gezien
+    _give_domain(dd, CIRCLE, "Money")
     time.sleep(0.02)
     # policy toegevoegd op de cirkel; OWNER zit in de erfketen (inherit=True)
     cockpit2.dispatch(dd, "artefact_add",
-        {"owner": [CIRCLE], "kind": ["policy"], "title": ["Nieuw beleid"],
-         "inherit": ["1"], "next": ["/"]}, username="guest")
+        {"owner": [CIRCLE], "kind": ["policy"], "title": ["Nieuw beleid"], "next": ["/"]},
+        username="guest")
     cl = artefacts.read_changelog(dd)
     assert "policies" in artefact_seen.unseen_tabs(cockpit2._Stores(dd).seen, cl, user, OWNER)
     # tab openen → last_seen bijgewerkt → markering weg
@@ -490,9 +504,10 @@ def test_seen_marker_zichtbaar_in_tabbar_en_niet_voor_guest(tmp_path):
     user = "alice@nooch.earth"
     st.people.add("Alice", user)
     st.seen.mark(user, OWNER, "policies")
+    _give_domain(dd, CIRCLE, "Money")
     time.sleep(0.02)
     cockpit2.dispatch(dd, "artefact_add",
-        {"owner": [CIRCLE], "kind": ["policy"], "title": ["X"], "inherit": ["1"], "next": ["/"]},
+        {"owner": [CIRCLE], "kind": ["policy"], "title": ["X"], "next": ["/"]},
         username="guest")
     marker = "<span class='c2-unseen'"                  # het element, niet de CSS-regel
     # Alice opent een ANDERE tab → policies-tab draagt de unseen-markering
@@ -501,3 +516,38 @@ def test_seen_marker_zichtbaar_in_tabbar_en_niet_voor_guest(tmp_path):
     # guest heeft geen persistente identiteit → geen markering
     guest_html = cockpit2.render_node(cockpit2._Stores(dd), OWNER, "notes", csrf_token="tok", username="guest")
     assert marker not in guest_html
+
+
+# ── terugdraai fase 2: systeem bakt geen domein/policy voor ──────────────────
+
+def test_bootstrap_bakt_geen_policy_in(tmp_path):
+    """Uitgangspunt: het systeem start leeg. Domeinen worden via governance aan een rol toegewezen;
+    de eigenaar-rol maakt zélf de policy via het artefact-mechanisme. Deze test faalt zodra seed/
+    bootstrap opnieuw een policy of het voorbak-mechanisme (migrate_anchor_policies) introduceert."""
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    pols = [a.id for r in st.records.all() for a in st.att.list(r.id, "policy", include_archived=True)]
+    assert pols == [], f"bootstrap bakte policies voor: {pols}"
+    # het fase-2 voorbak-mechanisme mag niet terugkeren
+    assert not hasattr(artefacts, "migrate_anchor_policies"), "migrate_anchor_policies is terug"
+    assert not hasattr(artefacts, "_ANCHOR_POLICIES_FASE2"), "_ANCHOR_POLICIES_FASE2 is terug"
+    assert st.records.root().definition.policies == []      # geen string-policies geseeded
+
+
+def test_policy_alleen_op_governance_domein(tmp_path):
+    """Een policy kan alleen op een rol die het domein écht via governance bezit; geen domein →
+    nette weigering, geen pseudo-domein-fallback."""
+    dd = _dd(tmp_path)
+    # OWNER (creator_of_shoes) heeft géén governance-domein → policy geweigerd
+    nxt, msg = cockpit2.dispatch(dd, "artefact_add",
+        {"owner": [OWNER], "kind": ["policy"], "title": ["X"], "next": ["/"]}, username="guest")
+    assert "geen domein" in msg
+    assert cockpit2._Stores(dd).att.list(OWNER, "policy") == []
+    # ná een governance-domein-toewijzing mag het wél, met dat domein
+    _give_domain(dd, CIRCLE, "Money")
+    nxt, msg = cockpit2.dispatch(dd, "artefact_add",
+        {"owner": [CIRCLE], "kind": ["policy"], "title": ["Geld-regel"], "next": ["/"]}, username="guest")
+    assert "toegevoegd" in msg
+    p = cockpit2._Stores(dd).att.list(CIRCLE, "policy")[0]
+    assert p.domain == "Money"                              # het écht toegewezen domein
