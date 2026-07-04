@@ -210,6 +210,9 @@ def render_context_markdown(ctx: dict) -> str:
 # behouden policies om naar domein-gescopeerde policy-artefacten (één display-vorm) en leegt de
 # strings — geen twee vormen naast elkaar. De G4-HANDHAVING blijft in policy.py (regex/intent) en
 # wordt hier NIET aangeraakt: verwijderd-uit-display ≠ verwijderd-uit-enforcement.
+# OPEN PUNT: MISSION en MATERIALS zijn akte-verankerd (statuten art. 2a/17 — alleen via de AVA
+# wijzigbaar), maar dat is nog niet als zodanig in de UI gemarkeerd (geen "akte/AVA-slot"-indicatie).
+# Zodra dat er is: deze twee als niet-bewerkbaar-buiten-AVA tonen, los van de gewone domein-eigenaar.
 _ANCHOR_POLICIES_FASE2 = [
     {"domain": "Mission", "title": "Missie-toetsing blijft bewaakt",
      "body": ("Een rol mág de structuur wijzigen, mits de missie-toetsing (KeywordReview, "

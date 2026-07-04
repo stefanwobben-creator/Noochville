@@ -450,7 +450,11 @@ def _web_actor_id(username: str | None, st) -> str:
 def _derive_domain_govref(owner: str, kind: str, st) -> tuple[str, str]:
     """Leid het domein (voor een policy) én de governance_ref af uit de rol→domein-koppeling — er
     is geen apart invoerveld meer (fase 2). De koppeling rol→domein IS de governance-referentie.
-    OPEN PUNT: domeinen zonder eigenaar-rol (bv. "Geld") vallen terug op de domeinnaam/rol."""
+    OPEN PUNTEN:
+    - domeinen zonder eigenaar-rol (bv. "Geld") vallen terug op de domeinnaam/rol.
+    - een rol ZONDER domein kan nu een policy maken met de rolnaam als pseudo-domein. Aanscherpen
+      zodra Domain guardianship echt gehandhaafd wordt (dan: alleen policies op een domein dat de
+      rol daadwerkelijk bezit)."""
     rec = st.records.get(owner)
     domain = ""
     if kind == "policy" and rec is not None:
