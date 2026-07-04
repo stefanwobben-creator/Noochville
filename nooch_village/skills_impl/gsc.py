@@ -52,6 +52,10 @@ class GscPerformanceSkill(Skill):
         "content_gap / low_ranking."
     )
 
+    def available_metrics(self) -> list[str]:
+        """De ruwe zoekprestatie-velden per query (voor het koppelscherm)."""
+        return ["impressions", "clicks", "ctr", "position"]
+
     def run(self, payload: dict, context) -> dict:
         site = (context.settings.get("GSC_SITE") or context.settings.get("gsc_site", "")).strip()
         if not site:

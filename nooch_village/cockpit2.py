@@ -198,6 +198,7 @@ from nooch_village.views.catalog import (
     _catalog_edit_form, _catalog_card,
     _catalog_add_form, render_catalog,
 )
+from nooch_village.views.catalog_koppelen import render_catalogus_koppelen
 
 
 from nooch_village.views.noochie import (
@@ -1232,6 +1233,27 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
                         standaard=g("standaard"), benchmark=g("benchmark"),
                         bron_url=g("bron_url"), verificatie=g("verificatie"), waarde=g("waarde"))
         msg = "✓ definitie toegevoegd aan de catalogus" if d else "⛔ geef een naam"
+    elif action == "catalog_publish":
+        # AUTHZ: anchor-lead — cureert welke ruwe velden een gebruiker als indicator mag kiezen
+        actor = st.people.by_email(username) if username != "guest" else None
+        if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
+            return nxt, "Geen toegang — alleen anchor-lead mag de catalogus koppelen"
+        if actor is None and username != "guest":
+            return nxt, "Geen toegang — gebruiker niet herkend"
+        # ── einde autorisatie ──
+        naam, categorie, aard = g("naam").strip(), g("categorie").strip(), g("aard").strip()
+        source, veld = g("source").strip(), g("veld").strip()
+        if not (naam and categorie and aard):
+            return nxt, "Naam, categorie en aard zijn verplicht"
+        already = any((st.defs.current(d["id"]) or {}).get("source") == source
+                      and (st.defs.current(d["id"]) or {}).get("veld") == veld for d in st.defs.all())
+        if already:
+            return nxt, "Dit veld staat al in de catalogus"
+        # Scope-3-schema: aard expliciet; aggregatie leeg + formule=False (geen formule-veld hier).
+        d = st.defs.add(naam, owner="anchor-lead", provenance="curated",
+                        source=source, veld=veld, categorie=categorie, aard=aard,
+                        unit=g("unit"), definition=g("definition"), meetwijze="systeem")
+        msg = f"✓ ‘{naam}’ in de catalogus" if d else "Publiceren mislukt (ongeldige invoer)"
     elif action == "def_amend":
         # ── Autorisatie: alleen anchor-lead (mother_earth) ──
         actor = st.people.by_email(username) if username != "guest" else None
@@ -1560,6 +1582,17 @@ def make_handler(data_dir: str, csrf_token: str,
                 return
             if path == "/catalog":
                 self._send(render_catalog(st, csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0]))
+                return
+            if path == "/catalogus_koppelen":
+                # curator-only: alleen anchor-lead ziet/koppelt de catalogus (guest mag alles in auth-uit)
+                actor = st.people.by_email(username) if username and username != "guest" else None
+                if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
+                    self._send(_page("Catalogus koppelen", "<div class='c2-sec'><p class='muted'>Alleen "
+                                     "de curator (anchor-lead) mag de catalogus koppelen.</p></div>"))
+                else:
+                    self._send(render_catalogus_koppelen(st, csrf_token=effective_csrf,
+                                                         source=(qs.get("source") or [""])[0],
+                                                         msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/kpi_new":
                 self._send(render_kpi_composer(st, (qs.get("node") or [""])[0],

@@ -45,6 +45,11 @@ class Skill(ABC):
     Zie run()-docstring voor details.
     """
 
+    def available_metrics(self) -> list[str]:
+        """De ruwe veldsleutels die deze skill oplevert (voor het catalogus-koppelscherm). Default
+        leeg: een skill die géén meetbare velden declareert, levert niets te koppelen. Geen API-call."""
+        return []
+
     @abstractmethod
     def run(self, payload: dict, context) -> dict:
         ...

@@ -252,7 +252,8 @@ _DEFINITION_SEED: tuple[dict, ...] = (
 # de velden die een versie van een definitie vastlegt (subset van het indicator-schema)
 _FIELDS = ("name", "unit", "definition", "source", "direction", "threshold", "cadence",
            "meettype", "window", "meetwijze", "tijd", "bruikbaar", "standaard", "benchmark",
-           "bron_url", "verificatie", "waarde", "aard", "aggregatie", "formule")
+           "bron_url", "verificatie", "waarde", "aard", "aggregatie", "formule",
+           "categorie", "veld")
 
 
 class DefinitionStore:
@@ -477,12 +478,26 @@ _GROUND_FIELDS = ("definition", "unit", "direction", "cadence", "meettype", "win
                   "tijd", "bruikbaar", "standaard", "benchmark", "bron_url", "verificatie", "waarde")
 
 
+# Ruwe skill-veldsleutel per zaad-definitie (op naam) — koppelt bestaande catalogus-items aan het
+# ruwe bron-veld (available_metrics), zodat het koppelscherm ze niet als 'ongekoppeld' toont.
+_SEED_VELD = {
+    "Bezoekers (Plausible)": "visitors", "Paginaweergaven (Plausible)": "pageviews",
+    "Bezoekduur (Plausible)": "visit_duration",
+    "Paren verkocht (Shopify)": "pairs_sold", "Orders (Shopify)": "orders",
+    "Omzet (Shopify)": "revenue", "Gemiddelde orderwaarde (Shopify)": "aov",
+    "Vertoningen (GSC)": "impressions", "Klikken (GSC)": "clicks",
+    "CTR (GSC)": "ctr", "Gemiddelde positie (GSC)": "position",
+}
+
+
 def migrate_definitions(store: DefinitionStore) -> int:
-    """Retroactief de nieuwe verplichte velden vullen op bestaande definities. Zelfde patroon als
-    `migrate_records` voor `source`: idempotent en in-place, vult alleen ONTBREKENDE velden.
+    """Retroactief de nieuwe verplichte/koppel-velden vullen op bestaande definities. Zelfde patroon
+    als `migrate_records` voor `source`: idempotent en in-place, vult alleen ONTBREKENDE velden.
 
     - `aard` wordt afgeleid uit `meettype` waar het ontbreekt (snapshot → moment, anders → reeks);
-    - `aggregatie` en `formule` krijgen hun lege default (geen formules → aggregatie niet verplicht).
+    - `aggregatie`/`formule`/`categorie` krijgen hun lege default;
+    - `veld` wordt gezet uit `_SEED_VELD` (op naam) waar het ontbreekt, zodat het koppelscherm de
+      al-gekoppelde bron-velden herkent.
 
     Draait over álle versies zodat elke versie zelf-beschrijvend blijft. Geeft het aantal
     aangeraakte definities terug."""
@@ -494,11 +509,19 @@ def migrate_definitions(store: DefinitionStore) -> int:
             if v.get("aard") not in AARD:
                 v["aard"] = aard_from_meettype(v.get("meettype", "snapshot"))
                 dirty = True
-            if "aggregatie" not in v:
-                v["aggregatie"] = ""
-                dirty = True
+            for key in ("aggregatie", "categorie"):
+                if key not in v:
+                    v[key] = ""
+                    dirty = True
             if "formule" not in v:
                 v["formule"] = False
+                dirty = True
+            mapped = _SEED_VELD.get(v.get("name", ""), "")
+            if "veld" not in v:
+                v["veld"] = mapped
+                dirty = True
+            elif mapped and not v.get("veld"):
+                v["veld"] = mapped
                 dirty = True
         if dirty:
             changed += 1
