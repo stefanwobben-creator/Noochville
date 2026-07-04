@@ -179,10 +179,11 @@ def _overview_html(st: _Stores, rec, csrf_token: str = "") -> str:
         # hierboven al → chain overslaan.
         parts.append(_strategy_tab_html(st, rec, with_purpose_chain=False))
     doms = d.domains or []
-    domains_inner = ("<ul class='clean'>" + "".join(f"<li>{_e(x)}</li>" for x in doms) + "</ul>"
-                     if doms else "<span class='muted'>Geen domein.</span>")
-    if not getattr(rec, "parent", None):     # anchor (Mother Earth) → live NASA-EPIC-aardbol erbij
-        domains_inner = _epic_earth_html() + domains_inner
+    doms_list = ("<ul class='clean'>" + "".join(f"<li>{_e(x)}</li>" for x in doms) + "</ul>") if doms else ""
+    if not getattr(rec, "parent", None):     # anchor (Mother Earth) → live aardbol; geen "Geen domein."
+        domains_inner = _epic_earth_html() + doms_list
+    else:
+        domains_inner = doms_list or "<span class='muted'>Geen domein.</span>"
     parts.append(f"<div class='c2-sec'><h3>Domains</h3>{domains_inner}</div>")
     accs = d.accountabilities or []
     if not is_c:
