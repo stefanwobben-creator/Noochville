@@ -413,7 +413,7 @@ def _artefact_versions_html(a) -> str:
         gref = f" · gov:{_e(v['governance_ref'])}" if v.get("governance_ref") else ""
         rows += (f"<li><span class='muted'>v{v.get('version_nr')} · {_dt(v.get('ts'))} · "
                  f"{_e(v.get('actor_id') or '—')} · {_e(v.get('change_note') or '')}{gref}</span></li>")
-    return (f"<details class='c2-hist'><summary class='muted' style='cursor:pointer;font-size:.8rem'>"
+    return (f"<details class='c2-hist'><summary class='muted'>"
             f"historie ({len(vs)})</summary><ul class='clean'>{rows}</ul></details>")
 
 
@@ -437,7 +437,7 @@ def _domain_field(domains: list) -> str:
     if len(domains) == 1:
         d = domains[0]
         return (f"<label class='att-lbl'>Domein</label>"
-                f"<div class='muted' style='margin-bottom:.35rem'>{_e(d)}</div>"
+                f"<div class='muted'>{_e(d)}</div>"
                 f"<input type='hidden' name='domain' value='{_e(d)}'>")
     opts = "".join(f"<option value='{_e(d)}'>{_e(d)}</option>" for d in domains)
     return f"<label class='att-lbl'>Domein</label><select name='domain'>{opts}</select>"
@@ -466,7 +466,7 @@ def _artefact_add_form(rec, kind: str, csrf_token: str, domains: list | None = N
 def _artefact_edit_form(a, csrf_token: str) -> str:
     urlf = (f"<label class='att-lbl'>URL</label>"
             f"<input type='url' name='url' value='{_e(a.url)}'>" if a.kind == "tool" else "")
-    return (f"<details class='qadd'><summary class='muted' style='font-size:.8rem'>bewerken</summary>"
+    return (f"<details class='qadd'><summary class='muted'>bewerken</summary>"
             f"<form method='post' action='/action' class='qadd-form'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
@@ -481,7 +481,7 @@ def _artefact_edit_form(a, csrf_token: str) -> str:
 
 
 def _artefact_archive_form(a, csrf_token: str) -> str:
-    return (f"<form method='post' action='/action' style='display:inline'>"
+    return (f"<form method='post' action='/action'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
             f"<input type='hidden' name='next' value='/node?id={_e(a.anchor)}&tab={_tab_for(a.kind)}'>"
@@ -490,7 +490,7 @@ def _artefact_archive_form(a, csrf_token: str) -> str:
 
 
 def _laatst_gewijzigd(a) -> str:
-    return (f"<div class='muted' style='font-size:.72rem;margin-top:.25rem'>laatst gewijzigd: "
+    return (f"<div class='muted'>laatst gewijzigd: "
             f"{_dt(getattr(a, 'updated_at', 0))}</div>")
 
 
@@ -505,16 +505,16 @@ def _artefact_head(a, *, extra: str = "") -> str:
            if a.kind == "policy" and getattr(a, "domain", "") else "")
     head = f"<div class='ptitle'>{icon} {_artefact_id_chip(a)} {_e(a.title) or _e(a.id)}{dom}{extra}</div>"
     if a.kind == "tool" and a.url:
-        head += (f"<div class='muted' style='font-size:.8rem;margin-top:.15rem'>"
+        head += (f"<div class='muted'>"
                  f"<a href='{_e(a.url)}' target='_blank' rel='noopener'>{_e(a.url)}</a></div>")
     return head
 
 
 def _artefact_own_card(a, csrf_token: str, can_edit: bool) -> str:
-    body = f"<div class='muted' style='margin-top:.25rem'>{_e(a.body)}</div>" if a.body else ""
+    body = f"<div class='muted'>{_e(a.body)}</div>" if a.body else ""
     actions = ""
     if can_edit:
-        actions = (f"<div style='margin-top:.4rem;display:flex;gap:.6rem;align-items:center'>"
+        actions = (f"<div class='qadd-row'>"
                    f"{_artefact_edit_form(a, csrf_token)}{_artefact_archive_form(a, csrf_token)}</div>")
     return (f"<div class='card'>{_artefact_head(a)}{body}{_laatst_gewijzigd(a)}"
             f"{_artefact_versions_html(a)}{actions}</div>")
@@ -524,7 +524,7 @@ def _artefact_inherited_card(it) -> str:
     a = it["artefact"]
     badge = (f" <a class='chip' href='/node?id={_e(it['origin_id'])}&tab={_tab_for(a.kind)}' "
              f"title='klik = naar de bron-rol'>via {_e(it['origin_name'])}</a>")
-    body = f"<div class='muted' style='margin-top:.25rem'>{_e(a.body)}</div>" if a.body else ""
+    body = f"<div class='muted'>{_e(a.body)}</div>" if a.body else ""
     return f"<div class='card'>{_artefact_head(a, extra=badge)}{body}{_laatst_gewijzigd(a)}</div>"
 
 
@@ -535,7 +535,7 @@ def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: s
 
     # Policies zijn geen verbod maar een voorwaarde, en zijn governance-eigendom: één regel boven de
     # lijst i.p.v. een badge/slotje per item.
-    kop = ("<p class='muted' style='font-size:.85rem'>Alle policies hieronder zijn "
+    kop = ("<p class='muted'>Alle policies hieronder zijn "
            "governance-eigendom.</p>" if kind == "policy" else "")
 
     own = "".join(_artefact_own_card(a, csrf_token, can_edit) for a in oi["own"])
@@ -558,7 +558,7 @@ def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: s
     inh = "".join(_artefact_inherited_card(it) for it in oi["inherited"])
     inh = inh or "<div class='card muted'>Niets dat hier van hogerhand geldt.</div>"
     sec_inh = (f"<div class='c2-sec'><h3>Geldend hier</h3>"
-               f"<p class='muted' style='font-size:.8rem'>Overgeërfd van bovenliggende rollen/cirkels "
+               f"<p class='muted'>Overgeërfd van bovenliggende rollen/cirkels "
                f"(read-only) — wijzig bij de bron.</p>{inh}</div>")
     return f"<h2>{_e(titel)}</h2>{kop}{sec_own}{sec_inh}"
 
