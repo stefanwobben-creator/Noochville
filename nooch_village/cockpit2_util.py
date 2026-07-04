@@ -109,9 +109,10 @@ def _stamp(ts) -> str:
 
 
 def _md(text: str) -> str:
-    """Lichte opmaak voor reacties: HTML-veilig, met **vet**, regelafbrekingen en '- ' lijstjes."""
+    """Lichte opmaak voor reacties/notities: HTML-veilig, met **vet**, regelafbrekingen en '- '
+    lijstjes. CRLF (uit textareas/imports) wordt genormaliseerd zodat er geen losse \\r overblijft."""
     import re
-    s = _e(text or "")
+    s = _e(text or "").replace("\r\n", "\n").replace("\r", "\n")
     s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
     out, in_ul = [], False
     for ln in s.split("\n"):
@@ -540,6 +541,8 @@ ul.clean li:last-child{border-bottom:none}
 .descedit>summary:hover{color:var(--ink)}
 .att-pop{min-width:230px}
 .att-lbl{display:block;font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;margin-bottom:.25rem}
+/* Leesbare artefact-body (note/policy/tool): donkerder dan .muted + wat regelhoogte. */
+.att-body{color:var(--gray);line-height:1.5}
 .att-pop input[type=text],.att-pop input[name=url],.att-pop input[name=title]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.35rem .5rem;font-size:.85rem}
 .att-sep{height:1px;background:var(--border);margin:.6rem 0}
 .card-del{margin-top:1.2rem;padding-top:.6rem;border-top:1px solid var(--border)}

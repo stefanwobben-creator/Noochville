@@ -604,3 +604,20 @@ def test_policy_alleen_op_governance_domein(tmp_path):
     assert "toegevoegd" in msg
     p = cockpit2._Stores(dd).att.list(CIRCLE, "policy")[0]
     assert p.domain == "Money"                              # het écht toegewezen domein
+
+
+# ── rendering: markdown in de artefact-body ──────────────────────────────────
+def test_artefact_body_rendert_markdown(tmp_path):
+    """De body-opmaak (uit een import/textarea, met CRLF) rendert als markdown: **vet**, '- '
+    lijstjes en regelafbrekingen — niet als platte tekst met letterlijke sterretjes/muur."""
+    from nooch_village.views import overview
+    st = _stores(tmp_path)
+    body = "Intro-zin.\r\n\r\n**Playful Rebellion**\r\nDe attitude.\r\nDo\r\n- We grow shoes.\r\n- Weird flex."
+    a = st.att.add(OWNER, "note", title="Tone of Voice", body=body,
+                   actor_id="alice", actor_type="person")
+    html = overview._artefact_own_card(a, "", False)
+    assert "<strong>Playful Rebellion</strong>" in html      # **vet** gerenderd
+    assert "**" not in html                                  # geen letterlijke sterretjes meer
+    assert "<li>We grow shoes." in html and "<ul" in html    # '- ' → lijst
+    assert "<br>" in html                                    # newlines behouden
+    assert "\r" not in html                                  # geen losse CRLF-resten

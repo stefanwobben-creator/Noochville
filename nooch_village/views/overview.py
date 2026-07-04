@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from nooch_village.cockpit import _e, _page, _banner
 from nooch_village.cockpit2_util import (
-    _name, _initials, _tabbar, _avatar, _age,
+    _name, _initials, _tabbar, _avatar, _age, _md,
     _psec, _person_name, _ICON_ADD_EMOJI,
     _IC_CHECK, _IC_CLOCK, _IC_LINK, _IC_TARGET,
 )
@@ -533,7 +533,7 @@ def _artefact_head(a, *, extra: str = "") -> str:
 
 
 def _artefact_own_card(a, csrf_token: str, can_edit: bool) -> str:
-    body = f"<div class='muted'>{_e(a.body)}</div>" if a.body else ""
+    body = f"<div class='att-body'>{_md(a.body)}</div>" if a.body else ""
     actions = ""
     if can_edit:
         actions = (f"<div class='qadd-row'>"
@@ -546,7 +546,7 @@ def _artefact_inherited_card(it) -> str:
     a = it["artefact"]
     badge = (f" <a class='chip' href='/node?id={_e(it['origin_id'])}&tab={_tab_for(a.kind)}' "
              f"title='klik = naar de bron-rol'>via {_e(it['origin_name'])}</a>")
-    body = f"<div class='muted'>{_e(a.body)}</div>" if a.body else ""
+    body = f"<div class='att-body'>{_md(a.body)}</div>" if a.body else ""
     return f"<div class='card'>{_artefact_head(a, extra=badge)}{body}{_laatst_gewijzigd(a)}</div>"
 
 
