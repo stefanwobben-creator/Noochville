@@ -1,5 +1,39 @@
 # NoochVille — Changelog
 
+## Afgesloten 2026-07-04: Mother-Earth-aardbol, UI-opschoning, governance-fix + metrics-diagnose
+
+Zeven kleine gemergde PR's (elk branch → PR → squash-merge → deploy op Hetzner, suite groen: 1548)
+plus een diagnose-ronde op het metrics-dashboard.
+
+- **Governance-meeting sluit nu écht** (#8, `ed77524`): de groene "Governance meeting"-knop bleef
+  groen na sluiten omdat `rov2_end` alleen geconsenteerde voorstellen verwerkte en open agendapunten
+  liet staan. `rov2_end` haalt nu ook de resterende agendapunten van díe cirkel van de agenda
+  (scoped; andere cirkels ongemoeid). +2 regressietests.
+- **Live NASA-EPIC-aardbol** op de Mother-Earth (anchor) overview, in het DOMAINS-blok (#9–#11):
+  - `nooch_village/epic.py`: `latest_frames()` (metadata, 1u in-memory cache) + `frame_bytes()`
+    (volle EPIC-PNG ophalen → met Pillow naar 512px resizen → 1u cache per frame-id). Key uit
+    `os.getenv("NASA_API_KEY")`, blijft server-side; frames via eigen route `/epic/frame`.
+    Fail-closed op geen-key/API-/Pillow-fout → nette muted-fallback. `Pillow>=11` toegevoegd.
+  - Widget alleen op de anchor; 8 frames gesampled over de héle dag (volle rotatie, ook Europa),
+    trage cross-fade (4s), UTC-onderschrift. CSS `.epic-earth/.epic-frame/.epic-cap` (geen inline
+    styles): bijna kolombreed, rond, geen rand, `scale(1.25)` zodat de zwarte marge wegvalt.
+- **UI-opschoning:**
+  - Geen "Geen domein."-placeholder meer onder de aardbol op de anchor (#12).
+  - Maturity-status-cirkels (groen/geel/grijs) uit de tab-navigatie + de dode "Nog te bouwen"-
+    placeholder (`_todo`) en bijbehorende CSS opgeruimd (#13).
+  - Legenda (werkt/basis/nog te bouwen) onder de organisatie-boom in de rechter-rail weg (#14).
+  - Seen-marker (gewijzigd-sinds-laatst-gezien) bewust behouden.
+- **Metrics-dashboard gediagnosticeerd** (alleen bevindingen, geen fix — besluit volgt):
+  1. Er is géén "over tijd"-grafiek: Chart.js bestaat niet; de enige viz is een 84×22px inline-SVG
+     sparkline (`_spark_svg`), die wél rendert mét variërende data. Wat ontbreekt is een echt
+     grafiek-component.
+  2. "bezoekers (7D)" negeert de periodefilter: de metric is vast 7-daags (`visitors_7d` uit de
+     Plausible-puls, `period` hard `7d`); de filter kan het venster niet wijzigen, en alle samples
+     zijn <7 dagen oud. Aggregaat-werktegels negeren `cutoff` volledig (all-time), reeks-tegels
+     wel → inconsistent. Werkoverleg-cijfers (8.6/10 tevredenheid, 5.1 min duur) zijn échte
+     werk-log-data (geen seed), maar dun/scheef (tevredenheid op 4/16 records; `duur_min` =
+     8×0 min + 1×60 min-uitschieter).
+
 ## Afgesloten 2026-06-19: Academische grounding live
 
 KennisScout grondt nu elke binnenkomende term tegen twee echte bronnen:

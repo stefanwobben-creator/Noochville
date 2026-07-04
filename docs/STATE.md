@@ -38,6 +38,34 @@ Openstaande acties:
 
 ---
 
+## Sessie 2026-07-04 — Mother-Earth-aardbol, UI-opschoning, metrics-diagnose
+
+Zeven kleine PR's, elk branch → squash-merge → deploy (Hetzner), suite groen (1548).
+
+### Wat is af
+- **Governance-meeting sluit écht** (#8): `rov2_end` ruimt nu de resterende open agendapunten van
+  de cirkel op; de "Governance meeting"-knop blijft niet meer groen hangen.
+- **Live NASA-EPIC-aardbol** op de anchor-overview (Mother Earth), DOMAINS-blok (#9–#11):
+  `nooch_village/epic.py` (metadata 1u-cache + volle-PNG→Pillow-512px-proxy, key server-side via
+  `/epic/frame`), widget alleen op de anchor, 8 frames over de hele dag (Europa in beeld),
+  fail-closed fallback. `Pillow>=11` in requirements (server draait 12.3.0).
+- **UI-opschoning**: "Geen domein."-placeholder weg op de anchor (#12); maturity-status-dots +
+  dode "Nog te bouwen"-placeholder uit de tab-navigatie (#13); legenda onder de organisatie-boom
+  weg (#14). Seen-marker behouden.
+
+### Metrics-dashboard — diagnose (nog GEEN fix; besluit welke we aanpakken volgt)
+- **Geen "over tijd"-grafiek**: Chart.js bestaat niet in de codebase; de enige tijdreeks-viz is een
+  84×22px inline-SVG sparkline (`_spark_svg`, `views/metrics.py:62`) die wél rendert mét variërende
+  data. Ontbrekend: een echt grafiek-component.
+- **Periodefilter inconsistent / bezoekers vast 7-daags**: `visitors_7d` komt uit de Plausible-puls
+  met `period` hard `7d` (`skills_impl/plausible.py:34`); de dashboardfilter kan dat venster niet
+  wijzigen (en alle samples zijn <7 dagen oud → filter verandert niets). Reeks-tegels passen `cutoff`
+  toe, aggregaat-werktegels negeren 'm (all-time) → inconsistent (`_werk_fetch`, `views/metrics.py:221`).
+- **Werkoverleg-cijfers zijn echt**: tevredenheid 8.6/10 en duur 5.1 min komen uit `st.werk.log()`
+  (16 echte records), geen seed. Wel dun/scheef: tevredenheid op 4/16 records; `duur_min` =
+  [0,0,0,2,2,60,3,0,0,3,1,2,0,4,5,0] (8×0 min + 1×60 min-uitschieter).
+- Zie ook de eerder gecommitte tech-schuld-notitie (`cd533e1`: werkoverleg-metrics zonder SSOT).
+
 ## Sessie 2026-06-30 — veiligheid + UI-microfixes
 
 **Suite: 1382 tests groen**, 7 pre-existing failures (5× LLM-zonder-key, 2× test-isolatie-flaky;
