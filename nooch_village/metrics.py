@@ -208,16 +208,54 @@ class MetricStore:
 
 
 def window_cutoff(win: str, now: float | None = None) -> float | None:
-    """Begin-timestamp voor een tijdvenster; None = alles."""
+    """Begin-timestamp voor een tijdvenster; None = alles. (Legacy; nieuwe code gebruikt window_range.)"""
     now = now or time.time()
     day = 86400
     return {"vandaag": now - day, "7d": now - 7 * day, "week": now - 7 * day,
             "maand": now - 30 * day, "kwartaal": now - 91 * day}.get(win)
 
 
-def filter_samples(samples, cutoff: float | None):
-    """(at, value)-paren binnen het venster, op tijd gesorteerd."""
+def _parse_date(s: str) -> float | None:
+    import datetime as _dt
+    try:
+        d = _dt.date.fromisoformat((s or "").strip()[:10])
+        return _dt.datetime(d.year, d.month, d.day).timestamp()
+    except Exception:
+        return None
+
+
+def window_range(win: str, now: float | None = None, van: str = "", tot: str = ""):
+    """(start_ts, end_ts) voor de centrale periode-picker. start/end None = onbegrensd aan die kant.
+    Vandaag/Gisteren zijn kalenderdagen; 7d/28d/kwartaal/jaar zijn rollend; Actueel = alles (laatste
+    waarde telt); Aangepast = van/tot (tot inclusief)."""
+    import datetime as _dt
+    now = now or time.time()
+    day = 86400.0
+    d = _dt.datetime.fromtimestamp(now)
+    today0 = _dt.datetime(d.year, d.month, d.day).timestamp()
+    table = {
+        "vandaag": (today0, now),
+        "gisteren": (today0 - day, today0),
+        "7d": (now - 7 * day, now),
+        "28d": (now - 28 * day, now),
+        "kwartaal": (now - 91 * day, now),
+        "jaar": (now - 365 * day, now),
+        "actueel": (None, now),
+    }
+    if win in table:
+        return table[win]
+    if win == "aangepast":
+        s, e = _parse_date(van), _parse_date(tot)
+        return (s, (e + day) if e is not None else now)   # tot-dag inclusief
+    return (None, now)                                     # 'alles' / onbekend
+
+
+def filter_samples(samples, cutoff: float | None, end: float | None = None):
+    """(at, value)-paren binnen [cutoff, end], op tijd gesorteerd. end None = geen bovengrens
+    (backward-compatible met de oude cutoff-aanroepen)."""
     pts = [(s["at"], s["value"]) for s in samples if "at" in s]
     if cutoff is not None:
         pts = [p for p in pts if p[0] >= cutoff]
+    if end is not None:
+        pts = [p for p in pts if p[0] <= end]
     return sorted(pts, key=lambda p: p[0])

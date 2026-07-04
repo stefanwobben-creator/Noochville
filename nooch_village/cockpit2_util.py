@@ -634,6 +634,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .tile-trend{display:flex;align-items:flex-end;justify-content:space-between;gap:.5rem}
 .kpi-val.sm{font-size:1.15rem}
 .tile-h-r{display:inline-flex;align-items:center;gap:.3rem}
+.tile-rm{display:inline}
 .tile-info{position:relative;display:inline-block}
 .tile-info>summary{list-style:none;cursor:pointer;color:var(--subtle);display:inline-flex;background:none;border:none;box-shadow:none;padding:0;opacity:.5}
 .tile-info>summary:hover,.tile-info[open]>summary{opacity:1}
