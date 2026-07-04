@@ -15,7 +15,7 @@ from nooch_village.metric_schema import (
     CADANS_LABEL, MEETTYPE_LABEL, MEETWIJZE_LABEL,
     VERIFICATIE_LABEL, AGGREGATIE, AGGREGATIE_LABEL,
 )
-from nooch_village.metrics import window_cutoff, filter_samples
+from nooch_village.metrics import window_cutoff, window_range, filter_samples
 from nooch_village.observations import ObservationStore
 from nooch_village import org
 from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD
@@ -24,8 +24,12 @@ if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores
 
 
-_MW = [("vandaag", "Vandaag"), ("7d", "7 dagen"), ("maand", "Maand"),
-       ("kwartaal", "Kwartaal"), ("alles", "Alles")]
+# Centrale periode-picker (scope 6). 'actueel' = laatste waarde, alleen bij een live-capabele bron.
+_MW = [("vandaag", "Vandaag"), ("gisteren", "Gisteren"), ("actueel", "Actueel"),
+       ("7d", "7 dagen"), ("28d", "28 dagen"), ("kwartaal", "Kwartaal"),
+       ("jaar", "Jaar"), ("aangepast", "Aangepast")]
+# Bronnen die 'live' bevraagd kunnen worden → 'Actueel' beschikbaar (anders uitgegrijsd).
+_LIVE_TILE_SOURCES = {"pulse_visitors", "shopify"}
 # Bron-KPI's: meetbaar uit bestaande dorpsdata (AI/agents schrijven hier al naartoe).
 _SOURCE_KPIS = {"pulse_visitors": {"name": "Websitebezoekers (per dag)", "unit": "bezoekers"}}
 
@@ -63,9 +67,9 @@ def _source_samples(dd: str, source: str):
     return []
 
 
-def _metric_points(st: _Stores, item: dict, cutoff):
+def _metric_points(st: _Stores, item: dict, cutoff, end=None):
     samples = _source_samples(st.dd, item["source"]) if item.get("source") else item.get("samples", [])
-    return filter_samples(samples, cutoff)
+    return filter_samples(samples, cutoff, end)
 
 
 def _spark_svg(points, w=84, h=22, breaks_at=None) -> str:
@@ -99,9 +103,10 @@ def _break_indices(samples) -> list:
     return out
 
 
-def _line_chart_svg(points, unit: str = "") -> str:
+def _line_chart_svg(points, unit: str = "", prev=None) -> str:
     """Echt lijn-diagram (server-side SVG, cockpit2-stijl): x=datum, y=waarde, met leesbare assen.
     Alleen de echte dagpunten als stippen, verbonden — geen interpolatie van ontbrekende dagen.
+    `prev` (vorige periode) → een tweede, lichtere gestreepte lijn over dezelfde breedte + y-schaal.
     0 punten → nette 'geen data'; 1 punt → 'te weinig voor een lijn' (nooit een vlakke lijn)."""
     if not points:
         return "<div class='kpi-val'><span class='muted' style='font-size:.9rem'>geen data in deze periode</span></div>"
@@ -110,14 +115,16 @@ def _line_chart_svg(points, unit: str = "") -> str:
     if len(points) < 2:
         return (f"<div class='tile-trend'><span class='kpi-val sm'>{_num(vals[-1])}</span>"
                 f"<span class='muted' style='font-size:.7rem'>1 meetpunt — te weinig voor een lijn</span></div>")
+    prev = prev or []
     W, H = 300.0, 140.0
     ml, mr, mt, mb = 36.0, 8.0, 10.0, 20.0            # marges: links y-labels, onder x-labels
     iw, ih = W - ml - mr, H - mt - mb
     xs = [t for t, _ in points]
     x0, x1 = xs[0], xs[-1]
     xspan = (x1 - x0) or 1.0
-    ymax = max(vals)
-    ymin = min(0, min(vals))                          # 0-basislijn (of lager bij negatieve waarden)
+    allvals = vals + [v for _, v in prev]
+    ymax = max(allvals)
+    ymin = min(0, min(allvals))                       # 0-basislijn (of lager bij negatieve waarden)
     yspan = (ymax - ymin) or 1.0
     fx = lambda t: ml + (t - x0) / xspan * iw
     fy = lambda v: mt + (1 - (v - ymin) / yspan) * ih
@@ -128,13 +135,20 @@ def _line_chart_svg(points, unit: str = "") -> str:
     fmt = lambda t: _dt.datetime.fromtimestamp(t).strftime('%d-%m')
     xlab = (f"<text x='{ml:.1f}' y='{H-5:.1f}' text-anchor='start' font-size='9' fill='var(--muted)'>{_e(fmt(x0))}</text>"
             f"<text x='{ml+iw:.1f}' y='{H-5:.1f}' text-anchor='end' font-size='9' fill='var(--muted)'>{_e(fmt(x1))}</text>")
+    prevline = ""
+    if len(prev) >= 2:                                # vorige periode: over dezelfde breedte, lichter+gestreept
+        pxs = [t for t, _ in prev]
+        pspan = (pxs[-1] - pxs[0]) or 1.0
+        pfx = lambda t: ml + (t - pxs[0]) / pspan * iw
+        ppoly = " ".join(f"{pfx(t):.1f},{fy(v):.1f}" for t, v in prev)
+        prevline = f"<polyline points='{ppoly}' fill='none' stroke='var(--subtle)' stroke-width='1.2' stroke-dasharray='3 3'/>"
     poly = " ".join(f"{fx(t):.1f},{fy(v):.1f}" for t, v in points)
     line = f"<polyline points='{poly}' fill='none' stroke='var(--green)' stroke-width='1.8'/>"
     dots = "".join(f"<circle cx='{fx(t):.1f}' cy='{fy(v):.1f}' r='2.2' fill='var(--green)'/>" for t, v in points)
     u = f" <span class='kpi-unit'>{_e(unit)}</span>" if unit else ""
     head = f"<div class='tile-trend'><span class='kpi-val sm'>{_num(vals[-1])}{u}</span></div>"
     svg = (f"<svg class='linechart' viewBox='0 0 {W:.0f} {H:.0f}' width='100%' height='140' preserveAspectRatio='xMidYMid meet'>"
-           f"{axis}{ylab}{xlab}{line}{dots}</svg>")
+           f"{axis}{ylab}{xlab}{prevline}{line}{dots}</svg>")
     return head + svg
 
 
@@ -266,7 +280,7 @@ _WERK_MEASURE = {"spanningen": "behandeld", "informatie": "info", "projecten": "
                  "roloverleg": "roloverleg", "nevermind": "nevermind", "afwezigheid": "afwezig"}
 
 
-def _werk_fetch(st: _Stores, circle: str, measure: str, dim: str, cutoff):
+def _werk_fetch(st: _Stores, circle: str, measure: str, dim: str, cutoff, end=None):
     key = _WERK_MEASURE.get(measure, "behandeld")
     samples = []
     for m in st.werk.log(circle):
@@ -277,8 +291,8 @@ def _werk_fetch(st: _Stores, circle: str, measure: str, dim: str, cutoff):
             continue
         samples.append({"at": m.get("at", 0), "value": v})
     # Alle werkoverleg-tegels respecteren dezelfde periodefilter als de reeks-tegels: filter op
-    # cutoff vóór het aggregeren (gemiddeld/totaal), niet alleen bij de reeks.
-    pts = filter_samples(samples, cutoff)          # [(at, value), ...] binnen het venster
+    # het venster vóór het aggregeren (gemiddeld/totaal), niet alleen bij de reeks.
+    pts = filter_samples(samples, cutoff, end)     # [(at, value), ...] binnen het venster
     vals = [v for _, v in pts]
     unit = "/10" if measure == "tevredenheid" else ("min" if measure == "duur" else "")
     if dim == "over_tijd":
@@ -311,14 +325,14 @@ def _tile_meta(st: _Stores, rec, tile) -> str:
     return tile.get("measure", "metric")
 
 
-def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff):
-    """Haal de data voor een tegel op. Resultaat: series (punten), breakdown (rijen) of number."""
+def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff, end=None):
+    """Haal de data voor een tegel op binnen [cutoff, end]. Resultaat: series/breakdown/number."""
     if source == "pulse_visitors":
         # De "over tijd"-reeks komt uit de dagelijkse observaties (bron=plausible), niet meer uit de
         # rollende 7d-total: één datapunt per dag → een echte dagreeks voor het lijn-diagram.
         rows = st.observations.daily_series("visitors_day", bron="plausible")
         samples = [{"at": r["ts"], "value": r["value"]} for r in rows]
-        return {"kind": "series", "points": filter_samples(samples, cutoff),
+        return {"kind": "series", "points": filter_samples(samples, cutoff, end),
                 "unit": "bezoekers", "chart": "line"}
     if source == "shopify":
         w = _shopify_window(st.dd) or {}
@@ -329,13 +343,13 @@ def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff):
         unit = "EUR" if measure in ("revenue", "aov") else ("paren" if measure == "pairs_sold" else "")
         return {"kind": "number", "value": w.get(measure), "unit": unit}
     if source.startswith("werk:"):
-        return _werk_fetch(st, source[5:], measure, dim, cutoff)
+        return _werk_fetch(st, source[5:], measure, dim, cutoff, end)
     if source.startswith("kpi:"):
         it = st.metrics.get(source[4:])
         if not it:
             return {"kind": "number", "value": None, "unit": ""}
         raw = _source_samples(st.dd, it["source"]) if it.get("source") else it.get("samples", [])
-        return {"kind": "series", "points": filter_samples(raw, cutoff), "unit": it.get("unit", "")}
+        return {"kind": "series", "points": filter_samples(raw, cutoff, end), "unit": it.get("unit", "")}
     return {"kind": "number", "value": None, "unit": ""}
 
 
@@ -379,25 +393,29 @@ def _render_bullet(res, target, richting, benchmark="") -> str:
             f"<span class='muted'>doel {_num(t)}</span></div>{svg}{bm}</div>")
 
 
-def _data_table(res) -> str:
-    """Tufte 'show the data': de exacte getallen onder een grafiek, compact."""
+def _data_table(res, bron: str = "") -> str:
+    """Tufte 'show the data': de exacte ruwe datapunten onder een grafiek (datum · waarde · bron)."""
     kind = res.get("kind")
+    b = _e(bron or "—")
     if kind == "series":
         pts = res.get("points") or []
         if not pts:
             return ""
         import datetime as _dt
         rows = "".join(f"<tr><td>{_dt.datetime.fromtimestamp(t).strftime('%d-%m-%y')}</td>"
-                       f"<td class='num'>{_num(v)}</td></tr>" for t, v in pts[-12:])
-        return f"<table class='mtab'><tr><th>datum</th><th class='num'>waarde</th></tr>{rows}</table>"
+                       f"<td class='num'>{_num(v)}</td><td>{b}</td></tr>" for t, v in pts[-12:])
+        return (f"<table class='mtab'><tr><th>datum</th><th class='num'>waarde</th><th>bron</th></tr>"
+                f"{rows}</table>")
     if kind == "breakdown":
         rows = res.get("rows") or []
         if not rows:
             return ""
-        body = "".join(f"<tr><td>{_e(str(l))}</td><td class='num'>{_num(n)}</td></tr>" for l, n in rows[:12])
-        return f"<table class='mtab'>{body}</table>"
+        body = "".join(f"<tr><td>{_e(str(l))}</td><td class='num'>{_num(n)}</td><td>{b}</td></tr>"
+                       for l, n in rows[:12])
+        return f"<table class='mtab'><tr><th>categorie</th><th class='num'>waarde</th><th>bron</th></tr>{body}</table>"
     v = _agg(res)
-    return f"<table class='mtab'><tr><td>waarde</td><td class='num'>{_num(v)}</td></tr></table>" if v is not None else ""
+    return (f"<table class='mtab'><tr><th>waarde</th><th>bron</th></tr>"
+            f"<tr><td class='num'>{_num(v)}</td><td>{b}</td></tr></table>") if v is not None else ""
 
 
 def _delta_badge(res) -> str:
@@ -473,7 +491,7 @@ def _render_burnup(res, target, project) -> str:
     return f"<div class='burnup-wrap'>{head}{svg}{tempo}</div>"
 
 
-def _render_form(res, form, target=None):
+def _render_form(res, form, target=None, prev=None):
     unit = res.get("unit", "")
     kind = res.get("kind")
     # Vorm/dimensie-mismatch: val terug op een zinnige vorm i.p.v. een lege melding.
@@ -484,7 +502,7 @@ def _render_form(res, form, target=None):
     if form == "trend":
         pts = res.get("points") or []
         if res.get("chart") == "line":                 # echte dagreeks → lijn-diagram met assen
-            return _line_chart_svg(pts, res.get("unit", ""))
+            return _line_chart_svg(pts, res.get("unit", ""), prev=(prev or {}).get("points"))
         return (f"<div class='tile-trend'><span class='kpi-val sm'>{_num(pts[-1][1] if pts else None)}</span>"
                 f"{_spark_svg(pts)}</div>")
     if form in ("verdeling", "tabel"):
@@ -600,12 +618,26 @@ def _llm_says_comparable(old: dict, new: dict) -> bool:
         return False
 
 
-def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str) -> str:
+def _compare_delta(res, prev_res) -> str:
+    """Delta-badge (aard: moment): huidige periode vs de vorige periode."""
+    cur, prv = _agg(res), _agg(prev_res)
+    if not isinstance(cur, (int, float)) or not isinstance(prv, (int, float)):
+        return ""
+    d = cur - prv
+    if d == 0:
+        return "<span class='delta flat'>±0 vs vorige periode</span>"
+    arrow, cls = ("▲", "up") if d > 0 else ("▼", "down")
+    return f"<span class='delta {cls}'>{arrow} {abs(d):g} vs vorige periode</span>"
+
+
+def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=False, prev_win=None) -> str:
     if tile.get("form") == "formule":          # scope 5: opslag nu, live-berekening apart
         return _render_formula_tile(st, rec, tile, csrf)
-    res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), cutoff)
+    res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), cutoff, end)
+    prev_res = None
+    if compare and prev_win and prev_win[0] is not None:
+        prev_res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), prev_win[0], prev_win[1])
     g = _grondslag(st, tile["source"], tile["measure"])
-    info = _grondslag_popover(g)
     # Doel-koppeling: de indicator geeft info, het project is het doel (outcome + deadline).
     goal = ""
     gp = st.projects.get(tile.get("goal_pid")) if tile.get("goal_pid") else None
@@ -615,13 +647,16 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str) -> str:
     elif form == "doelmeter":
         body = _render_bullet(res, tile.get("target"), g.get("richting"), g.get("benchmark"))
     else:
-        body = _render_form(res, form, tile.get("target"))
-    # Tufte: bij elke grafiek standaard de exacte data (inklapbaar) + vergelijking met vorige.
+        body = _render_form(res, form, tile.get("target"), prev=prev_res)
+    # aard: moment → delta-badge naast het getal (reeks krijgt al de tweede lijn in de grafiek)
+    if compare and prev_res is not None and res.get("chart") != "line":
+        body += _compare_delta(res, prev_res)
+    # Uitklap: de exacte ruwe datapunten (datum · waarde · bron)
     data = ""
     if form in ("trend", "verdeling", "doelmeter", "burnup"):
-        dt = _data_table(res)
+        dt = _data_table(res, bron=g.get("bron", tile["source"]))
         if dt:
-            data = f"<details class='tile-data'><summary>data{_delta_badge(res)}</summary>{dt}</details>"
+            data = f"<details class='tile-data'><summary>ruwe data{_delta_badge(res)}</summary>{dt}</details>"
     if gp is not None:
         due = _fmt_due(gp.get("due")) if gp.get("due") else ""
         goal = (f"<div class='tile-goal muted'>naar doel: <b>{_e(str(gp.get('scope') or gp['id'])[:50])}</b>"
@@ -637,14 +672,22 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str) -> str:
         warn += "<span class='tile-prov' title='voorlopige waarde, nog niet geverifieerd'>voorlopig</span>"
     rm = ""
     if csrf:
-        rm = (f"<form method='post' action='/action' style='display:inline'>"
+        rm = (f"<form method='post' action='/action' class='tile-rm'>"
               f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='node' value='{_e(rec.id)}'>"
               f"<input type='hidden' name='tid' value='{_e(tile['id'])}'>"
               f"<input type='hidden' name='next' value='/node?id={_e(rec.id)}&tab=metrics'>"
               f"<button class='dellink' type='submit' name='action' value='tile_remove'>✕</button></form>")
-    return (f"<div class='tile'><div class='tile-h'><span class='tile-t'>{_e(_tile_meta(st, rec, tile))}{warn}</span>"
-            f"<span class='tile-h-r'>{info}{rm}</span></div>"
-            f"<div class='tile-b'>{body}</div>{data}{goal}</div>")
+    flip = "<button class='dellink js-flip' type='button' title='betekenis / formule'>ⓘ</button>"
+    # ⓘ-achterkant: de betekenis uit het catalogus-item (grondslag)
+    std = f" · standaard: {_e(g['standaard'])}" if g.get("standaard") else ""
+    back = (f"<div class='tile-back' hidden><b>{_e(_tile_meta(st, rec, tile))}</b>"
+            f"<div class='muted'>{_e(g.get('definitie') or 'Geen definitie in het catalogus-item.')}</div>"
+            f"<div class='muted'>Bron: {_e(g.get('bron') or tile['source'])}{std}</div>"
+            f"<button class='dellink js-flipback' type='button'>↩ terug</button></div>")
+    front = (f"<div class='tile-front'><div class='tile-h'><span class='tile-t'>{_e(_tile_meta(st, rec, tile))}{warn}</span>"
+             f"<span class='tile-h-r'>{flip}{rm}</span></div>"
+             f"<div class='tile-b'>{body}</div>{data}{goal}</div>")
+    return f"<div class='tile'>{front}{back}</div>"
 
 
 def _kpi_id_from_def(st: _Stores, node: str, did: str):
@@ -802,18 +845,51 @@ def _role_relevant_defs(st: _Stores, rec, limit: int = 6) -> list[tuple[str, dic
     return [(did, cur) for _s, _n, did, cur in scored[:limit]]
 
 
-def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "maand", nav: str = "") -> str:
-    cutoff = window_cutoff(win)
+_METRICS_JS = """<script>(function(){
+ function flip(b,front){var t=b.closest('.tile'); if(!t)return;
+   var f=t.querySelector('.tile-front'), k=t.querySelector('.tile-back');
+   if(f) f.hidden=!front; if(k) k.hidden=front;}
+ document.querySelectorAll('.js-flip').forEach(function(b){b.addEventListener('click',function(){flip(b,false);});});
+ document.querySelectorAll('.js-flipback').forEach(function(b){b.addEventListener('click',function(){flip(b,true);});});
+})();</script>"""
+
+
+def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: str = "",
+                      van: str = "", tot: str = "", compare: bool = False) -> str:
+    import time as _t
+    now = _t.time()
+    start, end = window_range(win, now, van, tot)     # één centraal venster voor ALLE tegels
+    prev_win = None
+    if compare and start is not None and end is not None:
+        prev_win = (start - (end - start), start)     # vorige periode = zelfde lengte, teruggeschoven
     base = f"/node?id={_e(rec.id)}&tab=metrics"
+    tiles = st.metrics.tiles_of(rec.id)
+    live = any((t.get("source") in _LIVE_TILE_SOURCES) or t.get("source", "").startswith("shopify")
+               for t in tiles)
+    cmp_q = "&compare=1" if compare else ""
 
     def pl(k, lbl):
         on = " on" if win == k else ""
+        if k == "actueel" and not live:               # alleen bij een live-capabele bron
+            return f"<span class='cl-filter muted' title='alleen beschikbaar bij een live-capabele bron'>{_e(lbl)}</span>"
         if nav:   # in het werkoverleg: blijf in de modal
             u = f"{nav}&mw={k}"
             return f"<a class='cl-filter{on} js-modal' href='{u}' data-href='{u}'>{_e(lbl)}</a>"
-        return f"<a class='cl-filter{on}' href='{base}&mw={k}'>{_e(lbl)}</a>"
-    wbar = ("<div class='cl-bar'><span class='muted'>Periode:</span> "
-            + "".join(pl(k, lbl) for k, lbl in _MW) + "</div>")
+        return f"<a class='cl-filter{on}' href='{base}&mw={k}{cmp_q}'>{_e(lbl)}</a>"
+    wbar = "<div class='cl-bar'><span class='muted'>Periode:</span> " + "".join(pl(k, lbl) for k, lbl in _MW)
+    if not nav:                                        # compare-toggle (server-side)
+        ct = " on" if compare else ""
+        ct_url = f"{base}&mw={_e(win)}" + ("" if compare else "&compare=1")
+        wbar += f" <span class='muted'>·</span> <a class='cl-filter{ct}' href='{ct_url}'>Vergelijk met vorige periode</a>"
+    wbar += "</div>"
+    if win == "aangepast" and not nav:                 # van/tot-formulier
+        wbar += (f"<form method='get' action='/node' class='cl-bar'>"
+                 f"<input type='hidden' name='id' value='{_e(rec.id)}'>"
+                 f"<input type='hidden' name='tab' value='metrics'><input type='hidden' name='mw' value='aangepast'>"
+                 + ("<input type='hidden' name='compare' value='1'>" if compare else "")
+                 + f"<input type='date' name='van' value='{_e(van)}'> <span class='muted'>tot</span> "
+                 f"<input type='date' name='tot' value='{_e(tot)}'> "
+                 f"<button class='btn sm' type='submit'>Toon</button></form>")
     # In het werkoverleg (nav gezet) selecteer/bekijk je KPI's, je maakt ze daar niet aan.
     creating = bool(csrf) and not nav
     addlink = ""
@@ -828,11 +904,11 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "maand", nav:
     mk = (f"<a class='btn ok sm' href='/kpi_new?node={_e(rec.id)}'>+ KPI maken</a>" if creating else "")
     head = f"<div class='cl-head'><h3>Metrics</h3><span class='kc-actions'>{mk}{addlink}</span></div>{wbar}"
 
-    # 1. Dashboard van tegels (de KPI's) — volgt de periode-keuze
-    tiles = st.metrics.tiles_of(rec.id)
-    dash = ("".join(_render_tile(st, rec, t, cutoff, csrf) for t in tiles) if tiles
+    # 1. Dashboard van tegels (de KPI's) — één centrale periode voor alle tegels
+    dash = ("".join(_render_tile(st, rec, t, start, csrf, end=end, compare=compare, prev_win=prev_win)
+                    for t in tiles) if tiles
             else "<p class='muted'>Nog geen KPI's op het dashboard. Maak er een met “+ KPI maken”.</p>")
-    out = f"<div class='c2-sec'>{head}</div><div class='c2-sec'><div class='tile-grid'>{dash}</div></div>"
+    out = f"<div class='c2-sec'>{head}</div><div class='c2-sec'><div class='tile-grid'>{dash}</div></div>{_METRICS_JS}"
 
     # 2. Eigen KPI's: data invoeren voor handmatige KPI's (aanmaken gaat via + KPI maken / de catalogus)
     kpis = [i for i in st.metrics.for_node(rec.id) if i.get("kind") == "kpi"]

@@ -273,7 +273,8 @@ def test_burnup_doeltempo(tmp_path):
                                        "form": ["burnup"], "target": ["1000"], "goal_pid": [pid], "next": ["/"]}, username="guest")
     t = cockpit2._Stores(dd).metrics.tiles_of(C)[0]
     assert t["form"] == "burnup" and t["goal_pid"] == pid
-    page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
+    # render met een periode die de 20-dagen-oude metingen omvat (default is nu 7 dagen, scope 6)
+    page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t", mw="kwartaal")
     assert "burnup" in page and "/dag" in page and "benodigd" in page and "prognose" in page
 
 

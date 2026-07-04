@@ -586,7 +586,8 @@ def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: s
 
 
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",
-                group: str = "", clf: str = "due", mw: str = "maand", username: str | None = None) -> str:
+                group: str = "", clf: str = "due", mw: str = "7d", username: str | None = None,
+                van: str = "", tot: str = "", compare: bool = False) -> str:
     rec = st.records.get(node_id)
     if rec is None:
         return _page("Niet gevonden", "<p>Node niet gevonden.</p><p><a href='/'>← home</a></p>")
@@ -619,7 +620,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
         content = _artefact_tab_html(st, rec, "tool", csrf_token, username,
                                      titel="Tools", leeg="Nog geen tools op deze rol/cirkel.")
     elif tab == "metrics":
-        content = _metrics_tab_html(st, rec, csrf_token, win=mw)
+        content = _metrics_tab_html(st, rec, csrf_token, win=mw, van=van, tot=tot, compare=compare)
     elif tab == "checklists":
         content = _checklists_tab_html(st, rec, csrf_token, flt=clf)
     elif tab == "projects":

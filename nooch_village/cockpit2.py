@@ -1550,7 +1550,10 @@ def make_handler(data_dir: str, csrf_token: str,
                                        msg=(qs.get("msg") or [""])[0],
                                        group=(qs.get("group") or [""])[0],
                                        clf=(qs.get("clf") or ["due"])[0],
-                                       mw=(qs.get("mw") or ["maand"])[0],
+                                       mw=(qs.get("mw") or ["7d"])[0],
+                                       van=(qs.get("van") or [""])[0],
+                                       tot=(qs.get("tot") or [""])[0],
+                                       compare=(qs.get("compare") or [""])[0] == "1",
                                        username=username))
                 return
             # Modal-fragmenten krijgen hun eigen <style> mee, zodat ze altijd verse CSS tonen
