@@ -346,6 +346,31 @@ this strategy as context. Concretely:
 
 ---
 
+## Domain guardianship (meta-policy, anchor-level)
+
+Anyone guarding a domain (AI or human, same rule) operates in two modes,
+determined by who produced the output under review:
+
+- Producer IS the filler of the guarded domain -> ADVISE. The rejection is
+  a signal with full motivation; the owner decides and may overrule per item.
+- Producer is anyone else -> GATE. The rules must be met; only the domain
+  owner can overrule, not the producer.
+
+Overrule authority is bound to the specific domain you fill, not to owning
+some other domain, and not to being human vs AI.
+
+Safety blocks sit ABOVE the domain model and are overrulable by no one via
+this route (Safety > Accuracy > Instruction).
+
+"Advise" means the same rejection and the same motivation as a gate, minus
+the block. It is not a softer flag.
+
+Erosion guard: every overrule logs a reason; three overrules of the same
+check trigger a proposal to revise that policy in role governance. Counter
+is domain-based, not person-based: a role change does not reset it.
+
+---
+
 *Version 0.2 — built from StoryBrand, manifest values, content pillars, the
 stewardship conversation, and Stefan's working session on 30 June 2026.*
 
