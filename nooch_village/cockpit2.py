@@ -1490,10 +1490,10 @@ def make_handler(data_dir: str, csrf_token: str,
                 self.wfile.write(b)
                 return
             if path == "/epic/frame":
-                # NASA EPIC-frame (server-side naar ~512px geresized) doorserveren; key blijft server-side.
+                # NASA EPIC-frame (server-side naar ~512px JPEG geresized) doorserveren; key blijft server-side.
                 data = epic.frame_bytes((qs.get("image") or [""])[0], (qs.get("date") or [""])[0])
                 if data:
-                    self._send_bytes(data, "image/png")
+                    self._send_bytes(data, "image/jpeg")
                 else:
                     self._send("", 404)
                 return

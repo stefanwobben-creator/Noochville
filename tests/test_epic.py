@@ -77,7 +77,7 @@ def test_api_fout_geeft_none(monkeypatch):
 def test_frame_bytes_resize_naar_512_en_input_validatie(monkeypatch):
     monkeypatch.setattr(epic.requests, "get", lambda *a, **k: _FakeResp(content=_fake_png(1024)))
     out = epic.frame_bytes("epic_1b_20260704010000", "2026-07-04")
-    assert out and out[:4] == b"\x89PNG"                 # geldige PNG terug
+    assert out and out[:3] == b"\xff\xd8\xff"            # geldige JPEG terug (licht voor 22 frames)
     assert max(Image.open(BytesIO(out)).size) <= 512     # server-side geresized naar ~512px
     # onveilige input → None, geen call (voorkomt SSRF/path-traversal)
     assert epic.frame_bytes("../../etc/passwd", "2026-07-04") is None
