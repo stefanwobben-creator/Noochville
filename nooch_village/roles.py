@@ -2,6 +2,7 @@
 from __future__ import annotations
 import hashlib, os, json, time
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 from nooch_village.util import atomic_write_json, run_bounded, is_due
 
 
@@ -984,6 +985,13 @@ class Facilitator(Inhabitant):
             self._fire_hh, self._fire_mm = int(hh), int(mm)
         except Exception:
             self._fire_hh, self._fire_mm = 4, 32
+        # Tijdzone EXPLICIET uit config (IANA, via stdlib zoneinfo), los van de server-tz — Nooch zit
+        # in Spanje. Ongeldige/ontbrekende zone → None = val terug op server-lokale tijd (fail-soft).
+        tz_name = str(self.context.settings.get("dag_begint_tz", "Europe/Madrid")).strip()
+        try:
+            self._tz = ZoneInfo(tz_name) if tz_name else None
+        except Exception:
+            self._tz = None
         # Laatst-gevuurde datum persistent → restart/deploy vuurt niet dubbel en verschuift niet.
         self._last_day: str | None = self._load_last_day()
 
@@ -1010,8 +1018,9 @@ class Facilitator(Inhabitant):
                 self._last_beat = now
                 self._ring("demo-puls", date.today())
             return
-        # productie: één keer per kalenderdag op het vaste kloktijdstip (config), restart-bestendig
-        now_local = datetime.now()
+        # productie: één keer per kalenderdag op het vaste kloktijdstip in de GECONFIGUREERDE tijdzone
+        # (dag_begint_tz), niet de server-tz. _should_fire_daily + de persist-datum rekenen hiertegen.
+        now_local = datetime.now(self._tz)
         if _should_fire_daily(now_local, self._last_day, self._fire_hh, self._fire_mm):
             self._last_day = now_local.date().isoformat()
             self._save_last_day()

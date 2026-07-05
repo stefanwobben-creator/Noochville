@@ -34,3 +34,7 @@ def test_last_day_persisteert_over_restart(tmp_path):
 
 def test_tijdstip_staat_centraal_in_settings():
     assert "dag_begint_time = 04:32" in open("config/settings.ini").read()
+
+
+def test_tijdzone_expliciet_in_settings():
+    assert "dag_begint_tz = Europe/Madrid" in open("config/settings.ini").read()
