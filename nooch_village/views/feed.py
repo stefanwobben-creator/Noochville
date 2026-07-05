@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from nooch_village.web_base import _e
-from nooch_village.cockpit2_util import _stamp, _md, _avatar, _name, _ICON_ADD_EMOJI, _person_name
+from nooch_village.cockpit2_util import _stamp, _md, _avatar, _name, _ICON_ADD_EMOJI, _person_name, md_editor
 
 # Gecureerde set standaard emoji's met zoekwoorden (NL/EN) voor de picker.
 _EMOJIS_FULL = [
@@ -113,7 +113,7 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
                 f"<input type='hidden' name='item' value='{_e(eid)}'>")
         editd = (f"<details class='fedit'><summary class='flink'>Wijzigen</summary>"
                  f"<form method='post' action='/action' class='pf' style='margin-top:.3rem'>{hidf}"
-                 f"<textarea name='text' rows='2'>{_e(entry.get('text', ''))}</textarea>"
+                 f"{md_editor('text', entry.get('text', ''), rows=3, placeholder='Bewerk je reactie…')}"
                  f"<button class='btn ok sm' type='submit' name='action' value='feed_edit' "
                  f"style='margin-top:.3rem'>Opslaan</button></form></details>")
         deld = (f"<form method='post' action='/action' style='display:inline'>{hidf}"
