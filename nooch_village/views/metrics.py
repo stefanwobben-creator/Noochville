@@ -1272,7 +1272,7 @@ def render_kpi_composer(st: _Stores, node_id: str = "", csrf_token: str = "", ms
     for i in inds:
         if i["categorie"] not in cats:
             cats.append(i["categorie"])
-    cat_chips = "".join(f"<button type='button' class='cl-filter kc-cat' data-cat='{_e(c)}'>{_e(c)}</button>"
+    cat_chips = "".join(f"<button type='button' class='chip-opt kc-cat' data-cat='{_e(c)}'>{_e(c)}</button>"
                         for c in cats)
 
     def _radio(i: dict) -> str:
@@ -1302,7 +1302,7 @@ def render_kpi_composer(st: _Stores, node_id: str = "", csrf_token: str = "", ms
         "<input type='hidden' name='mode' value='indicator'>"
         "<div class='kc-mode' data-mode='indicator'>"
         "<p class='muted kc-hint'>Kies eerst een categorie</p>"
-        f"<div class='cl-bar kc-cats'>{cat_chips}</div>"
+        f"<div class='chip-wrap kc-cats'>{cat_chips}</div>"
         "<div class='kc-picked' hidden>"
         "<p class='muted kc-hint kc-picked-label'></p>"
         "<input class='kc-search' type='text' placeholder='Zoek binnen deze categorie…' autocomplete='off' hidden>"
