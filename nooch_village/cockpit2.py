@@ -569,21 +569,19 @@ def role_context(st, role_id: str, fmt: str = "json"):
     return 200, "application/json; charset=utf-8", json.dumps(ctx, ensure_ascii=False, indent=2)
 
 
-def dispatch(data_dir: str, action: str, form: dict, username: str | None = None):
-    """Verwerk een POST-actie. Geeft (redirect-URL, korte bevestiging) terug.
+class _Ctx:
+    """De gedeelde dispatch-state, doorgegeven aan elke geregistreerde actie-handler."""
+    __slots__ = ("st", "g", "nxt", "form", "username", "action", "data_dir", "pj")
 
-    `username` = e-mailadres van de ingelogde gebruiker (None = onbekend, "guest" = geen auth
-    geconfigureerd). De rol-takken (role_assign/role_unassign/role_focus) dwingen autorisatie af:
-    alleen de Circle Lead van de directe ouder-cirkel mag muteren. "guest" (auth uit) mag alles;
-    een ingelogde maar onbekende gebruiker wordt geweigerd."""
-    st = _Stores(data_dir)
-    g = lambda k: (form.get(k) or [""])[0]
-    nxt = g("next") or "/"
-    if not nxt.startswith("/"):
-        nxt = "/"
-    pj = st.projects
-    msg = ""
-    if action == "proj_add":
+    def __init__(self, st, g, nxt, form, username, action, data_dir):
+        self.st, self.g, self.nxt = st, g, nxt
+        self.form, self.username, self.action, self.data_dir = form, username, action, data_dir
+        self.pj = st.projects
+
+
+def _act_proj_add(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         owner = g("owner")
         # Autorisatie: bij een rol → rolvervuller of Circle Lead; bij een Individueel
         # Initiatief (ii:<circle>) mag elk lid van die cirkel zijn eigen initiatief starten.
@@ -606,7 +604,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             if col == "wacht":
                 pj.block(pid, "—")
             msg = "➕ project toegevoegd"
-    elif action == "artefact_add":
+        return nxt, msg
+
+
+def _act_artefact_add(c):
+        nxt, st, g, form, username, action, data_dir = c.nxt, c.st, c.g, c.form, c.username, c.action, c.data_dir
+        msg = ""
         # AUTHZ: rolvervuller of Circle Lead — alleen de vervuller van de eigenaar-rol (of de Circle
         # Lead van de omvattende cirkel) mag artefacten binnen dat domein aanmaken; mens én AI gelijk.
         owner = g("owner")
@@ -642,7 +645,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         artefacts.log_change(data_dir, action="add", artefact=a, records=st.records,
                              actor_id=actor_id, actor_type="person", governance_ref=gref)
         msg = f"➕ {kind} toegevoegd ({a.id})"
-    elif action == "artefact_edit":
+        return nxt, msg
+
+
+def _act_artefact_edit(c):
+        nxt, st, g, form, username, action, data_dir = c.nxt, c.st, c.g, c.form, c.username, c.action, c.data_dir
+        msg = ""
         # AUTHZ: rolvervuller of Circle Lead — bewerken mag alleen wie de eigenaar-rol vervult.
         cur = st.att.get(g("aid"))
         if cur is None:
@@ -661,7 +669,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
                              actor_id=actor_id, actor_type="person", governance_ref=gref)
         msg = f"✏️ {upd.kind} bijgewerkt ({upd.id})"
-    elif action == "artefact_archive":
+        return nxt, msg
+
+
+def _act_artefact_archive(c):
+        nxt, st, g, username, action, data_dir = c.nxt, c.st, c.g, c.username, c.action, c.data_dir
+        msg = ""
         # AUTHZ: rolvervuller of Circle Lead — archiveren (nooit hard delete) mag alleen de vervuller.
         cur = st.att.get(g("aid"))
         if cur is None:
@@ -676,7 +689,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         artefacts.log_change(data_dir, action="archive", artefact=arch, records=st.records,
                              actor_id=actor_id, actor_type="person", governance_ref=gref)
         msg = f"🗄️ {arch.kind} gearchiveerd ({arch.id})"
-    elif action == "proj_status":
+        return nxt, msg
+
+
+def _act_proj_status(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
@@ -689,22 +707,42 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         elif to == "toekomst":
             pj.to_future(g("pid"))
         msg = "✓ verplaatst"
-    elif action == "proj_done":
+        return nxt, msg
+
+
+def _act_proj_done(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         pj.complete(g("pid")); msg = "✓ afgerond"
-    elif action == "proj_archive":
+        return nxt, msg
+
+
+def _act_proj_archive(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         pj.archive(g("pid")); msg = "🗄 gearchiveerd (blijft bestaan)"
-    elif action == "proj_unarchive":
+        return nxt, msg
+
+
+def _act_proj_unarchive(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         pj.unarchive(g("pid")); msg = "↩ hersteld"
-    elif action == "proj_delete":
+        return nxt, msg
+
+
+def _act_proj_delete(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         # ── Autorisatie: Circle Lead van de cirkel van het project ──
         actor = st.people.by_email(username) if username != "guest" else None
         circle_id = resolve_circle_id((pj.get(g("pid")) or {}).get("owner") or "", st.records)
@@ -714,7 +752,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             return nxt, "Geen toegang — gebruiker niet herkend"
         # ── einde autorisatie ──
         pj.remove(g("pid")); msg = "🗑 verwijderd"
-    elif action == "proj_edit":
+        return nxt, msg
+
+
+def _act_proj_edit(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
@@ -722,31 +765,56 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         pj.edit(g("pid"), scope=g("scope"), person=person, agent=agent,
                 private=(g("private") == "1"), description=g("description"), label=g("label"))
         msg = "💾 opgeslagen"
-    elif action == "proj_comment":
+        return nxt, msg
+
+
+def _act_proj_comment(c):
+        nxt, g, pj = c.nxt, c.g, c.pj
+        msg = ""
         # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
         # (de sessie-check in do_POST dekt "ingelogd = mag").
         if pj.add_comment(g("pid"), g("comment")):
             msg = "💬 geplaatst"
-    elif action == "proj_rename":
+        return nxt, msg
+
+
+def _act_proj_rename(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         if pj.edit(g("pid"), scope=g("scope"), allow_done=True):
             msg = "✓ titel opgeslagen"
-    elif action == "proj_describe":
+        return nxt, msg
+
+
+def _act_proj_describe(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         if pj.edit(g("pid"), description=g("description"), allow_done=True):
             msg = "✓ omschrijving opgeslagen"
-    elif action == "proj_settrekker":
+        return nxt, msg
+
+
+def _act_proj_settrekker(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         person, agent = _parse_trekker(g("trekker"))
         if pj.edit(g("pid"), person=person, agent=agent, allow_done=True):
             msg = "✓ trekker opgeslagen"
-    elif action == "proj_setowner":
+        return nxt, msg
+
+
+def _act_proj_setowner(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
@@ -759,68 +827,128 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             msg = "✗ een cirkel kan geen project bevatten — kies een rol"
         elif pj.edit(g("pid"), owner=owner, allow_done=True):
             msg = "✓ rol verplaatst"
-    elif action == "proj_approve":
+        return nxt, msg
+
+
+def _act_proj_approve(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         if pj.approve(g("pid")):
             msg = "✓ concept goedgekeurd — staat nu op het bord"
-    elif action == "proj_discard":
+        return nxt, msg
+
+
+def _act_proj_discard(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         if pj.discard(g("pid")):
             msg = "🗑 concept verworpen"
-    elif action == "proj_setlabel":
+        return nxt, msg
+
+
+def _act_proj_setlabel(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         if pj.edit(g("pid"), label=g("label"), allow_done=True):
             msg = "✓ label opgeslagen"
-    elif action == "proj_setprivate":
+        return nxt, msg
+
+
+def _act_proj_setprivate(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         if pj.edit(g("pid"), private=(g("private") == "1"), allow_done=True):
             msg = "✓ zichtbaarheid opgeslagen"
-    elif action == "proj_setdue":
+        return nxt, msg
+
+
+def _act_proj_setdue(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         if pj.set_due(g("pid"), g("due")):
             msg = "📅 datum opgeslagen" if g("due") else "✓ datum verwijderd"
-    elif action == "attach_add":
+        return nxt, msg
+
+
+def _act_attach_add(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         if pj.attach_add(g("pid"), url=g("url"), title=g("title")):
             msg = "🔗 bijlage toegevoegd"
-    elif action == "attach_remove":
+        return nxt, msg
+
+
+def _act_attach_remove(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         pj.attach_remove(g("pid"), g("aid")); msg = "🗑 bijlage verwijderd"
-    elif action == "react_add":
+        return nxt, msg
+
+
+def _act_react_add(c):
+        nxt, g, pj = c.nxt, c.g, c.pj
+        msg = ""
         # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
         # (de sessie-check in do_POST dekt "ingelogd = mag").
         if pj.add_reaction(g("pid"), g("item"), g("emoji")):
             msg = "✓ reactie geplaatst"
-    elif action == "feed_edit":
+        return nxt, msg
+
+
+def _act_feed_edit(c):
+        nxt, g, pj = c.nxt, c.g, c.pj
+        msg = ""
         # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
         # (de sessie-check in do_POST dekt "ingelogd = mag").
         if pj.feed_edit(g("pid"), g("item"), g("text")):
             msg = "✓ comment gewijzigd"
-    elif action == "feed_remove":
+        return nxt, msg
+
+
+def _act_feed_remove(c):
+        nxt, g, pj = c.nxt, c.g, c.pj
+        msg = ""
         # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
         # (de sessie-check in do_POST dekt "ingelogd = mag").
         pj.feed_remove(g("pid"), g("item")); msg = "🗑 comment verwijderd"
-    elif action == "ai_reply":
+        return nxt, msg
+
+
+def _act_ai_reply(c):
+        nxt, st, g = c.nxt, c.st, c.g
+        msg = ""
         # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
         # (de sessie-check in do_POST dekt "ingelogd = mag").
         _load_env()
         msg = ("🤖 AI heeft meegedacht" if _ai_reply(st, g("pid"))
                else "geen AI-antwoord (geen AI-inwoner op de rol of geen LLM-key)")
-    elif action == "proj_feed":
+        return nxt, msg
+
+
+def _act_proj_feed(c):
+        nxt, st, g, pj = c.nxt, c.st, c.g, c.pj
+        msg = ""
         # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
         # (de sessie-check in do_POST dekt "ingelogd = mag").
         atype, _, aid = g("author").partition(":")
@@ -835,34 +963,64 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
                 st.notif.add(ty, tid, g("pid"), entry["id"], by="dialoog", snippet=g("text"))
             if ment:
                 msg += f" · {len(ment)} genotificeerd"
-    elif action == "checklist_add":
+        return nxt, msg
+
+
+def _act_checklist_add(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         if pj.checklist_add(g("pid"), g("title")):
             msg = "✓ checklist toegevoegd"
-    elif action == "checklist_remove":
+        return nxt, msg
+
+
+def _act_checklist_remove(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         pj.checklist_remove(g("pid"), g("clid")); msg = "🗑 checklist verwijderd"
-    elif action == "check_add":
+        return nxt, msg
+
+
+def _act_check_add(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         if pj.check_add(g("pid"), g("clid"), g("text")):
             msg = "✓ item toegevoegd"
-    elif action == "check_toggle":
+        return nxt, msg
+
+
+def _act_check_toggle(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         pj.check_toggle(g("pid"), g("clid"), g("item"))
-    elif action == "check_remove":
+        return nxt, msg
+
+
+def _act_check_remove(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
         pj.check_remove(g("pid"), g("clid"), g("item")); msg = "🗑 item verwijderd"
-    elif action == "role_assign":
+        return nxt, msg
+
+
+def _act_role_assign(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         actor = st.people.by_email(username) if username != "guest" else None
         rec = st.records.get(g("role"))
         circle_id = rec.parent if rec else None
@@ -875,7 +1033,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             msg = "✓ toegewezen"
         elif agent and st.assign.assign(g("role"), "persona", agent):
             msg = "🤖 AI toegewezen"
-    elif action == "role_unassign":
+        return nxt, msg
+
+
+def _act_role_unassign(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         actor = st.people.by_email(username) if username != "guest" else None
         rec = st.records.get(g("role"))
         circle_id = rec.parent if rec else None
@@ -889,7 +1052,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         elif agent:
             st.assign.unassign(g("role"), "persona", agent)
         msg = "✓ verwijderd"
-    elif action == "role_focus":
+        return nxt, msg
+
+
+def _act_role_focus(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         actor = st.people.by_email(username) if username != "guest" else None
         rec = st.records.get(g("role"))
         circle_id = rec.parent if rec else None
@@ -903,7 +1071,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         elif agent:
             st.assign.set_focus(g("role"), "persona", agent, g("focus"))
         msg = "✓ focus opgeslagen"
-    elif action == "aitask_add":
+        return nxt, msg
+
+
+def _act_aitask_add(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # ── Autorisatie: Circle Lead van de directe ouder-cirkel ──
         actor = st.people.by_email(username) if username != "guest" else None
         rec = st.records.get(g("role"))
@@ -924,7 +1097,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             agent, skill = g("agent"), g("wat")   # fallback (legacy)
         if agent and acc_i >= 0 and st.ai.add(g("role"), acc_i, agent, skill):
             msg = "🤖 AI gekoppeld aan accountability"
-    elif action == "aitask_remove":
+        return nxt, msg
+
+
+def _act_aitask_remove(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # ── Autorisatie: Circle Lead van de ouder-cirkel van de rol ──
         actor = st.people.by_email(username) if username != "guest" else None
         _task = next((t for t in st.ai.all() if t.id == g("tid")), None)
@@ -936,7 +1114,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             return nxt, "Geen toegang — gebruiker niet herkend"
         # ── einde autorisatie ──
         st.ai.remove(g("tid")); msg = "✓ verwijderd"
-    elif action == "persona_skill_add":
+        return nxt, msg
+
+
+def _act_persona_skill_add(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # ── Autorisatie: alleen anchor-lead (mother_earth) ──
         actor = st.people.by_email(username) if username != "guest" else None
         if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
@@ -946,21 +1129,36 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         # ── einde autorisatie ──
         if st.personas.add_skill(g("agent"), g("skill")):
             msg = "✓ skill aan rugzak toegevoegd"
-    elif action == "rov2_add":
+        return nxt, msg
+
+
+def _act_rov2_add(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # Autorisatie: elk cirkellid mag een voorstel op de agenda brengen
         _deny = _member_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
         if _rov_add_item(st, g("circle"), g("naam")):
             msg = "✓ agendapunt toegevoegd"
-    elif action == "rov2_add_to_group":
+        return nxt, msg
+
+
+def _act_rov2_add_to_group(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # Autorisatie: elk cirkellid mag aan een voorstel bijdragen
         _deny = _member_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
         if _rov_add_item(st, g("circle"), g("naam"), group=g("group")):
             msg = "✓ toegevoegd aan voorstel"
-    elif action == "rov2_remove":
+        return nxt, msg
+
+
+def _act_rov2_remove(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # ── Autorisatie: Circle Lead van de cirkel die het overleg houdt ──
         actor = st.people.by_email(username) if username != "guest" else None
         circle_id = g("circle")
@@ -970,7 +1168,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             return nxt, "Geen toegang — gebruiker niet herkend"
         # ── einde autorisatie ──
         st.agenda.remove(g("iid")); msg = "🗑 uit voorstel verwijderd"
-    elif action == "rov2_remove_group":
+        return nxt, msg
+
+
+def _act_rov2_remove_group(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # ── Autorisatie: Circle Lead van de cirkel die het overleg houdt ──
         actor = st.people.by_email(username) if username != "guest" else None
         circle_id = g("circle")
@@ -983,7 +1186,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         for m in st.agenda.members_of_group(gid):
             st.agenda.remove(m["id"])
         msg = "🗑 voorstel verwijderd"
-    elif action == "rov2_setkind":
+        return nxt, msg
+
+
+def _act_rov2_setkind(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # Autorisatie: cirkellid mag het type van zijn eigen voorstel vormgeven
         _deny = _member_gate(g("circle"), username, st)
         if _deny:
@@ -991,7 +1199,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         if g("kind") in ("amend_role", "remove_role"):
             st.agenda.update_fields(g("iid"), kind=g("kind"))
             msg = "voorstel: rol verwijderen" if g("kind") == "remove_role" else "voorstel: rol wijzigen"
-    elif action == "rov2_consent":
+        return nxt, msg
+
+
+def _act_rov2_consent(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # ── Autorisatie: Circle Lead van de cirkel die het overleg houdt ──
         actor = st.people.by_email(username) if username != "guest" else None
         circle_id = g("circle")
@@ -1008,7 +1221,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             msg = "✓ consent — voorstel aangenomen"
         else:
             msg = "⛔ consent geblokkeerd — los de blokkade(s) op"
-    elif action == "rov2_end":
+        return nxt, msg
+
+
+def _act_rov2_end(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # ── Autorisatie: Circle Lead van de cirkel die het overleg houdt ──
         actor = st.people.by_email(username) if username != "guest" else None
         circle_id = g("circle")
@@ -1027,12 +1245,22 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         msg = f"✓ overleg gesloten — {len(done)} doorgevoerd"
         if cleared:
             msg += f", {len(cleared)} onbehandeld punt van de agenda gehaald"
-    elif action == "wo_open":
+        return nxt, msg
+
+
+def _act_wo_open(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         _deny = _lead_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
         st.werk.open(g("circle")); msg = "✓ werkoverleg gestart"
-    elif action == "wo_close":
+        return nxt, msg
+
+
+def _act_wo_close(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         _deny = _lead_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
@@ -1049,39 +1277,69 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         if _room:
             verwijder_livekit_room(_room)
         msg = "✓ werkoverleg gesloten"
-    elif action == "wo_presence":
+        return nxt, msg
+
+
+def _act_wo_presence(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         _deny = _member_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
         st.werk.set_presence(g("circle"), g("pid"), g("present") == "1")
         msg = "✓ aanwezig" if g("present") == "1" else "✗ afwezig (taken gepauzeerd)"
-    elif action == "wo_present_all":
+        return nxt, msg
+
+
+def _act_wo_present_all(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         _deny = _lead_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
         for p in _members_of_circle(st, g("circle")):
             st.werk.set_presence(g("circle"), p.id, True)
         msg = "✓ allen aanwezig"
-    elif action == "wo_ag_add":
+        return nxt, msg
+
+
+def _act_wo_ag_add(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         _deny = _member_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
         naam, by = _rov_initials(g("naam"))
         if st.werk.agenda_add(g("circle"), naam, by=by):
             msg = "✓ spanning op de agenda"
-    elif action == "wo_ag_remove":
+        return nxt, msg
+
+
+def _act_wo_ag_remove(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         _deny = _lead_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
         st.werk.agenda_remove(g("circle"), g("iid")); msg = "🗑 verwijderd"
-    elif action == "wo_ag_note":
+        return nxt, msg
+
+
+def _act_wo_ag_note(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         _deny = _member_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
         if g("field") in ("spanning", "role", "need"):
             st.werk.agenda_set_note(g("circle"), g("iid"), **{g("field"): g("value")})
             msg = "✓ genoteerd"
-    elif action == "wo_ag_reopen":
+        return nxt, msg
+
+
+def _act_wo_ag_reopen(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         _deny = _lead_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
@@ -1089,7 +1347,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         if it is not None:
             it["status"] = "open"; it["outcome"] = None; st.werk._save()
             msg = "↺ heropend"
-    elif action == "wo_ag_resolve":
+        return nxt, msg
+
+
+def _act_wo_ag_resolve(c):
+        nxt, st, g, username, action = c.nxt, c.st, c.g, c.username, c.action
+        msg = ""
         _deny = _lead_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
@@ -1126,13 +1389,23 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
                           detail.strip(), by=by, title=(it or {}).get("title", detail[:60]))
         st.werk.agenda_resolve(g("circle"), g("iid"), otype, detail)
         msg = f"✓ verwerkt als {otype}"
-    elif action == "wo_checkout":
+        return nxt, msg
+
+
+def _act_wo_checkout(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         _deny = _member_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
         if g("score"):
             st.werk.set_checkout(g("circle"), g("pid"), g("score")); msg = "✓ score genoteerd"
-    elif action == "noochie_send":
+        return nxt, msg
+
+
+def _act_noochie_send(c):
+        nxt, st, g = c.nxt, c.st, c.g
+        msg = ""
         # noochie_* (send/reset/ctx) BEWUST ongated: de assistent-chat mag elke ingelogde
         # gebruiker gebruiken (sessie-check in do_POST dekt "ingelogd = mag").
         s = st.noochie
@@ -1153,11 +1426,26 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
                 s.add("noochie", (rep or "Even geen AI-verbinding — denk aan een klein "
                                   "roloverleg-voorstel als vervolgstap.").strip())
                 msg = "💬"
-    elif action == "noochie_reset":
+        return nxt, msg
+
+
+def _act_noochie_reset(c):
+        nxt, st = c.nxt, c.st
+        msg = ""
         st.noochie.reset(); msg = "↺ Noochie opnieuw"
-    elif action == "noochie_ctx":
+        return nxt, msg
+
+
+def _act_noochie_ctx(c):
+        nxt, st, g = c.nxt, c.st, c.g
+        msg = ""
         st.noochie.set_field("ctx", g("ctx")); msg = "✓ context bijgewerkt"
-    elif action == "cl_add":
+        return nxt, msg
+
+
+def _act_cl_add(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         _deny = _role_gate(g("node"), username, st)
         if _deny:
             return nxt, _deny
@@ -1170,7 +1458,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             it = st.checklists.add(g("node"), g("description"), g("cadence"),
                                    target_type=tt, target_id=tid, by="founder")
             msg = "✓ checklist-item toegevoegd" if it else "⛔ geef een beschrijving"
-    elif action == "cl_report":
+        return nxt, msg
+
+
+def _act_cl_report(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # AUTHZ: rolvervuller of Circle Lead van de betrokken rol/cirkel — afvinken van een
         # checklist-item (namens de rol/cirkel bij target_type=all). by = wie afvinkte (de mens;
         # een AI-flow kan report() direct met by=<persona> aanroepen). Geen per-individu-verplichting.
@@ -1180,12 +1473,22 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         if st.checklists.report(g("cid"), g("ok") == "1", value=g("value"),
                                 by=(username or "founder")):
             msg = "✓ genoteerd" if g("ok") == "1" else "✗ genoteerd (aandacht nodig)"
-    elif action == "cl_remove":
+        return nxt, msg
+
+
+def _act_cl_remove(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         _deny = _role_gate((st.checklists.get(g("cid")) or {}).get("node") or "", username, st)
         if _deny:
             return nxt, _deny
         st.checklists.remove(g("cid")); msg = "🗑 checklist-item verwijderd"
-    elif action == "m_add_kpi":
+        return nxt, msg
+
+
+def _act_m_add_kpi(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         _deny = _role_gate(g("node"), username, st)
         if _deny:
             return nxt, _deny
@@ -1212,7 +1515,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
                                     window=g("window"), def_id=def_id, def_version=def_version)
             msg = ("✓ KPI + catalogus-definitie toegevoegd" if (it and def_id)
                    else "✓ KPI toegevoegd" if it else "⛔ geef een naam")
-    elif action == "m_add_from_def":
+        return nxt, msg
+
+
+def _act_m_add_from_def(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         _deny = _role_gate(g("node"), username, st)
         if _deny:
             return nxt, _deny
@@ -1222,7 +1530,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             did = d["id"] if d else ""
         kid = _kpi_id_from_def(st, g("node"), did)
         msg = "✓ KPI uit catalogus toegevoegd" if kid else "⛔ kies een bestaande definitie uit de catalogus"
-    elif action == "def_add":
+        return nxt, msg
+
+
+def _act_def_add(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # ── Autorisatie: alleen anchor-lead (mother_earth) ──
         actor = st.people.by_email(username) if username != "guest" else None
         if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
@@ -1239,7 +1552,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
                         standaard=g("standaard"), benchmark=g("benchmark"),
                         bron_url=g("bron_url"), verificatie=g("verificatie"), waarde=g("waarde"))
         msg = "✓ definitie toegevoegd aan de catalogus" if d else "⛔ geef een naam"
-    elif action == "catalog_publish":
+        return nxt, msg
+
+
+def _act_catalog_publish(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # AUTHZ: anchor-lead — cureert welke ruwe velden een gebruiker als indicator mag kiezen
         actor = st.people.by_email(username) if username != "guest" else None
         if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
@@ -1260,7 +1578,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
                         source=source, veld=veld, categorie=categorie, aard=aard,
                         unit=g("unit"), definition=g("definition"), meetwijze="systeem")
         msg = f"✓ ‘{naam}’ in de catalogus" if d else "Publiceren mislukt (ongeldige invoer)"
-    elif action == "def_amend":
+        return nxt, msg
+
+
+def _act_def_amend(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # ── Autorisatie: alleen anchor-lead (mother_earth) ──
         actor = st.people.by_email(username) if username != "guest" else None
         if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
@@ -1297,34 +1620,64 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
                 msg = f"✓ definitie v{ver['version']} — {label}"
             else:
                 msg = "⛔ wijziging ongeldig"
-    elif action == "m_add_link":
+        return nxt, msg
+
+
+def _act_m_add_link(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         _deny = _role_gate(g("node"), username, st)
         if _deny:
             return nxt, _deny
         it = st.metrics.add_link(g("node"), g("name"), g("url"))
         msg = "✓ link toegevoegd" if it else "⛔ geef naam en URL"
-    elif action == "m_sample":
+        return nxt, msg
+
+
+def _act_m_sample(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         _deny = _role_gate((st.metrics.get(g("mid")) or {}).get("node") or "", username, st)
         if _deny:
             return nxt, _deny
         msg = "✓ meting genoteerd" if st.metrics.add_sample(g("mid"), g("value")) else "⛔ ongeldige meting"
-    elif action == "m_remove":
+        return nxt, msg
+
+
+def _act_m_remove(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         _deny = _role_gate((st.metrics.get(g("mid")) or {}).get("node") or "", username, st)
         if _deny:
             return nxt, _deny
         st.metrics.remove(g("mid")); msg = "🗑 metric verwijderd"
-    elif action == "m_pin":
+        return nxt, msg
+
+
+def _act_m_pin(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # Autorisatie: het cirkeldashboard beheren is Circle Lead-werk
         _deny = _lead_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
         st.metrics.pin(g("circle"), g("mid")); msg = "✓ op cirkeldashboard"
-    elif action == "m_unpin":
+        return nxt, msg
+
+
+def _act_m_unpin(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         _deny = _lead_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
         st.metrics.unpin(g("circle"), g("mid")); msg = "✓ van dashboard gehaald"
-    elif action == "tile_add":
+        return nxt, msg
+
+
+def _act_tile_add(c):
+        nxt, st, g, form, username = c.nxt, c.st, c.g, c.form, c.username
+        msg = ""
         _deny = _role_gate(g("node"), username, st)
         if _deny:
             return nxt, _deny
@@ -1350,12 +1703,22 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
                 msg = "✓ KPI op dashboard" if t else "⛔ kon KPI niet maken"
             else:
                 msg = "⛔ kies wat je wilt zien"
-    elif action == "tile_remove":
+        return nxt, msg
+
+
+def _act_tile_remove(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         _deny = _role_gate(g("node"), username, st)
         if _deny:
             return nxt, _deny
         st.metrics.remove_tile(g("node"), g("tid")); msg = "🗑 tegel verwijderd"
-    elif action in ("rov2_set", "rov2_acc_add", "rov2_acc_remove", "rov2_dom_add", "rov2_dom_remove"):
+        return nxt, msg
+
+
+def _act_rov2_set(c):   # + rov2_acc_add, rov2_acc_remove, rov2_dom_add, rov2_dom_remove
+        nxt, st, g, username, action = c.nxt, c.st, c.g, c.username, c.action
+        msg = ""
         # Autorisatie: cirkellid mag zijn eigen voorstel vormgeven
         _deny = _member_gate(g("circle"), username, st)
         if _deny:
@@ -1382,28 +1745,48 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
                         pass
             _rov_save_draft(st, g("iid"), draft)
             msg = "✓ voorstel bijgewerkt"
-    elif action == "backlog_add":
+        return nxt, msg
+
+
+def _act_backlog_add(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # AUTHZ: iedereen-ingelogd — elke ingelogde gebruiker mag een backlog-item indienen
         # (de sessie-check in do_POST dekt "ingelogd = mag"; guest = auth uit = mag ook)
         actor = st.people.by_email(username) if username != "guest" else None
         if st.backlog.add(g("titel"), g("beschrijving"), g("type"), g("domein"),
                           actor.id if actor else ""):
             msg = "✓ ingediend in de backlog"
-    elif action == "backlog_update_staat":
+        return nxt, msg
+
+
+def _act_backlog_update_staat(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # AUTHZ: rolvervuller website_developer — beheer van de backlog (staat verplaatsen)
         _deny = _wd_gate(username, st)
         if _deny:
             return nxt, _deny
         if st.backlog.update_staat(g("bid"), g("staat")):
             msg = "✓ staat bijgewerkt"
-    elif action == "backlog_update_prioriteit":
+        return nxt, msg
+
+
+def _act_backlog_update_prioriteit(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # AUTHZ: rolvervuller website_developer — beheer van de backlog (impact/effort)
         _deny = _wd_gate(username, st)
         if _deny:
             return nxt, _deny
         if st.backlog.update_prioriteit(g("bid"), g("impact"), g("effort")):
             msg = "✓ prioriteit bijgewerkt"
-    elif action == "person_edit":
+        return nxt, msg
+
+
+def _act_person_edit(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # ── Autorisatie: alleen anchor-lead (mother_earth) ──
         actor = st.people.by_email(username) if username != "guest" else None
         if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
@@ -1415,7 +1798,12 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             msg = "✓ deelnemer opgeslagen"
         else:
             msg = "✗ deelnemer niet gevonden"
-    elif action == "person_remove":
+        return nxt, msg
+
+
+def _act_person_remove(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        msg = ""
         # ── Autorisatie: alleen anchor-lead (mother_earth) ──
         actor = st.people.by_email(username) if username != "guest" else None
         if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
@@ -1431,7 +1819,112 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
             msg = "🗑 deelnemer verwijderd"
         else:
             msg = "✗ deelnemer niet gevonden"
-    return nxt, msg
+        return nxt, msg
+
+
+ACTIONS = {
+    "proj_add": _act_proj_add,
+    "artefact_add": _act_artefact_add,
+    "artefact_edit": _act_artefact_edit,
+    "artefact_archive": _act_artefact_archive,
+    "proj_status": _act_proj_status,
+    "proj_done": _act_proj_done,
+    "proj_archive": _act_proj_archive,
+    "proj_unarchive": _act_proj_unarchive,
+    "proj_delete": _act_proj_delete,
+    "proj_edit": _act_proj_edit,
+    "proj_comment": _act_proj_comment,
+    "proj_rename": _act_proj_rename,
+    "proj_describe": _act_proj_describe,
+    "proj_settrekker": _act_proj_settrekker,
+    "proj_setowner": _act_proj_setowner,
+    "proj_approve": _act_proj_approve,
+    "proj_discard": _act_proj_discard,
+    "proj_setlabel": _act_proj_setlabel,
+    "proj_setprivate": _act_proj_setprivate,
+    "proj_setdue": _act_proj_setdue,
+    "attach_add": _act_attach_add,
+    "attach_remove": _act_attach_remove,
+    "react_add": _act_react_add,
+    "feed_edit": _act_feed_edit,
+    "feed_remove": _act_feed_remove,
+    "ai_reply": _act_ai_reply,
+    "proj_feed": _act_proj_feed,
+    "checklist_add": _act_checklist_add,
+    "checklist_remove": _act_checklist_remove,
+    "check_add": _act_check_add,
+    "check_toggle": _act_check_toggle,
+    "check_remove": _act_check_remove,
+    "role_assign": _act_role_assign,
+    "role_unassign": _act_role_unassign,
+    "role_focus": _act_role_focus,
+    "aitask_add": _act_aitask_add,
+    "aitask_remove": _act_aitask_remove,
+    "persona_skill_add": _act_persona_skill_add,
+    "rov2_add": _act_rov2_add,
+    "rov2_add_to_group": _act_rov2_add_to_group,
+    "rov2_remove": _act_rov2_remove,
+    "rov2_remove_group": _act_rov2_remove_group,
+    "rov2_setkind": _act_rov2_setkind,
+    "rov2_consent": _act_rov2_consent,
+    "rov2_end": _act_rov2_end,
+    "wo_open": _act_wo_open,
+    "wo_close": _act_wo_close,
+    "wo_presence": _act_wo_presence,
+    "wo_present_all": _act_wo_present_all,
+    "wo_ag_add": _act_wo_ag_add,
+    "wo_ag_remove": _act_wo_ag_remove,
+    "wo_ag_note": _act_wo_ag_note,
+    "wo_ag_reopen": _act_wo_ag_reopen,
+    "wo_ag_resolve": _act_wo_ag_resolve,
+    "wo_checkout": _act_wo_checkout,
+    "noochie_send": _act_noochie_send,
+    "noochie_reset": _act_noochie_reset,
+    "noochie_ctx": _act_noochie_ctx,
+    "cl_add": _act_cl_add,
+    "cl_report": _act_cl_report,
+    "cl_remove": _act_cl_remove,
+    "m_add_kpi": _act_m_add_kpi,
+    "m_add_from_def": _act_m_add_from_def,
+    "def_add": _act_def_add,
+    "catalog_publish": _act_catalog_publish,
+    "def_amend": _act_def_amend,
+    "m_add_link": _act_m_add_link,
+    "m_sample": _act_m_sample,
+    "m_remove": _act_m_remove,
+    "m_pin": _act_m_pin,
+    "m_unpin": _act_m_unpin,
+    "tile_add": _act_tile_add,
+    "tile_remove": _act_tile_remove,
+    "rov2_set": _act_rov2_set,
+    "rov2_acc_add": _act_rov2_set,
+    "rov2_acc_remove": _act_rov2_set,
+    "rov2_dom_add": _act_rov2_set,
+    "rov2_dom_remove": _act_rov2_set,
+    "backlog_add": _act_backlog_add,
+    "backlog_update_staat": _act_backlog_update_staat,
+    "backlog_update_prioriteit": _act_backlog_update_prioriteit,
+    "person_edit": _act_person_edit,
+    "person_remove": _act_person_remove,
+}
+
+
+def dispatch(data_dir: str, action: str, form: dict, username: str | None = None):
+    """Verwerk een POST-actie. Geeft (redirect-URL, korte bevestiging) terug.
+
+    `username` = e-mailadres van de ingelogde gebruiker (None = onbekend, "guest" = geen auth
+    geconfigureerd). De rol-takken (role_assign/role_unassign/role_focus) dwingen autorisatie af:
+    alleen de Circle Lead van de directe ouder-cirkel mag muteren. "guest" (auth uit) mag alles;
+    een ingelogde maar onbekende gebruiker wordt geweigerd."""
+    st = _Stores(data_dir)
+    g = lambda k: (form.get(k) or [""])[0]
+    nxt = g("next") or "/"
+    if not nxt.startswith("/"):
+        nxt = "/"
+    handler = ACTIONS.get(action)
+    if handler is None:
+        return nxt, ""                 # onbekende actie: no-op (was: fall-through naar eind-return)
+    return handler(_Ctx(st, g, nxt, form, username, action, data_dir))
 
 
 # Niets is publiek: een uitgelogde bezoeker gaat overal naar /login. /login en /logout worden in

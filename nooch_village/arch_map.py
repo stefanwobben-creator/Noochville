@@ -73,12 +73,24 @@ def routes() -> list[tuple[str, str, str]]:
 
 
 def dispatch_actions() -> list[tuple[str, int]]:
-    """(actie, regelnr in cockpit2.py) uit de if/elif action-keten in dispatch(), in bronvolgorde."""
-    out = []
-    for i, ln in enumerate(_lines(_COCKPIT2)):
-        m = re.match(r"\s*(?:if|elif) action == \"([^\"]+)\":", ln)
+    """(actie, regelnr van de handler in cockpit2.py) uit de ACTIONS-registry, in registervolgorde.
+    Elke actie wijst naar zijn `_act_*`-handlerfunctie; gegroepeerde acties delen één handler."""
+    src = _lines(_COCKPIT2)
+    deflines = {}                       # _act_naam -> def-regelnr
+    for i, ln in enumerate(src):
+        m = re.match(r"def (_act_\w+)\(", ln)
         if m:
-            out.append((m.group(1), i + 1))
+            deflines[m.group(1)] = i + 1
+    out, in_reg = [], False
+    for ln in src:
+        if re.match(r"ACTIONS = \{", ln):
+            in_reg = True
+            continue
+        if in_reg and ln.startswith("}"):
+            break
+        m = re.match(r'\s*"([^"]+)": (_act_\w+),', ln)
+        if in_reg and m:
+            out.append((m.group(1), deflines.get(m.group(2), 0)))
     return out
 
 
@@ -118,10 +130,11 @@ def render_markdown() -> str:
         "De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` = geen "
         "aparte `render_*`, de response wordt in cockpit2 zelf opgebouwd.\n",
         _table(["Route", "Handler", "View-bestand"], rt),
-        "\n## (b) Dispatch-actie → regel\n",
-        "De POST-acties uit de `dispatch()`-keten (cockpit2.py). Elke actie is één `if/elif "
-        "action == \"…\"`-tak; het regelnummer wijst naar het begin ervan.\n",
-        _table(["Actie", "cockpit2.py:regel"], [(a, f"cockpit2.py:{n}") for a, n in ac]),
+        "\n## (b) Dispatch-actie → handler\n",
+        "De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zijn "
+        "`_act_*`-handlerfunctie; het regelnummer is de def-regel. Gegroepeerde acties delen één "
+        "handler.\n",
+        _table(["Actie", "Handler (cockpit2.py:regel)"], [(a, f"cockpit2.py:{n}") for a, n in ac]),
         "\n## (c) Concern → store → bestand\n",
         "De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de store-klasse "
         "en het databestand in `data/` (gitignored).\n",
