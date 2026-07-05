@@ -1,8 +1,18 @@
 """Gespecialiseerde inwoners met eigen gedrag bovenop de generieke Inhabitant."""
 from __future__ import annotations
 import hashlib, os, json, time
-from datetime import date
+from datetime import date, datetime
 from nooch_village.util import atomic_write_json, run_bounded, is_due
+
+
+def _should_fire_daily(now, last_day, fire_hh: int, fire_mm: int) -> bool:
+    """Vuur de dagcyclus zodra de LOKALE tijd het vaste kloktijdstip (fire_hh:fire_mm) heeft bereikt
+    en we die kalenderdag nog niet gevuurd hebben. `last_day` = de laatst-gevuurde datum (persistent),
+    zodat een restart/deploy niet dubbel vuurt en het volgende moment niet verschuift; miste de server
+    04:32 (was down), dan vuurt hij de dag alsnog éénmaal bij de eerste tick erna."""
+    if now.date().isoformat() == last_day:
+        return False
+    return (now.hour, now.minute) >= (fire_hh, fire_mm)
 from nooch_village.mission import ANCHOR_PURPOSE as _NOOCHIE_MISSION
 from nooch_village.inhabitant import Inhabitant
 from nooch_village.event_bus import Event
@@ -964,22 +974,48 @@ class Facilitator(Inhabitant):
         self._gate = Gate()
         self.react("proposal_raised", self._on_proposal_raised)
         # ── dagcyclus-cadans ──────────────────────────────────────────
-        self._last_day: str | None = None
         self._last_beat: float = 0.0
         self._first_ring: bool = True
         self._interval: float = float(self.context.settings.get("heartbeat_seconds", 0) or 0)
+        # Vast kloktijdstip voor dag_begint (config, centraal in settings.ini).
+        raw = str(self.context.settings.get("dag_begint_time", "04:32")).strip()
+        try:
+            hh, mm = raw.split(":")
+            self._fire_hh, self._fire_mm = int(hh), int(mm)
+        except Exception:
+            self._fire_hh, self._fire_mm = 4, 32
+        # Laatst-gevuurde datum persistent → restart/deploy vuurt niet dubbel en verschuift niet.
+        self._last_day: str | None = self._load_last_day()
+
+    def _last_day_path(self) -> str:
+        return os.path.join(self.context.data_dir, "timekeeper_last_day.json")
+
+    def _load_last_day(self):
+        try:
+            with open(self._last_day_path()) as f:
+                return json.load(f).get("last_day")
+        except Exception:
+            return None
+
+    def _save_last_day(self) -> None:
+        try:
+            atomic_write_json(self._last_day_path(), {"last_day": self._last_day})
+        except Exception:
+            pass
 
     def tick(self) -> None:
-        today = date.today()
-        now = time.time()
-        if self._interval > 0:
+        if self._interval > 0:                        # demo/test: relatieve hartslag (heartbeat_seconds)
+            now = time.time()
             if now - self._last_beat >= self._interval:
                 self._last_beat = now
-                self._ring("demo-puls", today)
+                self._ring("demo-puls", date.today())
             return
-        if today.isoformat() != self._last_day:
-            self._last_day = today.isoformat()
-            self._ring(today.isoformat(), today)
+        # productie: één keer per kalenderdag op het vaste kloktijdstip (config), restart-bestendig
+        now_local = datetime.now()
+        if _should_fire_daily(now_local, self._last_day, self._fire_hh, self._fire_mm):
+            self._last_day = now_local.date().isoformat()
+            self._save_last_day()
+            self._ring(self._last_day, now_local.date())
 
     def _ring(self, label: str, today) -> None:
         if not self._first_ring:
