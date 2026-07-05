@@ -78,6 +78,12 @@ class ObservationStore:
         rows = self.series(role_id, metric)
         return rows[-1] if rows else None
 
+    def _actueel(self, metric: str, bron: str | None = None):
+        """De laatste bekende dagwaarde voor een metric (bron), of None. Voor 'Actueel' op het
+        dashboard: dezelfde betekenis als bij Plausible — de meest recente dag-observatie."""
+        rows = self.daily_series(metric, bron=bron)
+        return rows[-1]["value"] if rows else None
+
     def daily_series(self, metric: str, bron: str | None = None,
                      role_id: str | None = None) -> list[dict]:
         """De dagreeks van een metric (optioneel op bron en/of rol gefilterd), oplopend op ts.
@@ -89,3 +95,34 @@ class ObservationStore:
                 and (role_id is None or r.get("role_id") == role_id)]
         rows.sort(key=lambda r: r["ts"])
         return rows
+
+
+# ── dag-observaties per bron (uitrol van de Plausible-aanpak, scope 2) ──────────
+# Metric-namen: <bron>_<measure>_day. record_daily blijft idempotent op rol/metric/bron/dag.
+WERK_DAILY = {"tevredenheid": "werk_tevredenheid_day", "duur": "werk_duur_day"}
+SHOPIFY_DAILY = {m: f"shopify_{m}_day" for m in ("pairs_sold", "orders", "revenue", "aov")}
+
+
+def record_werk_daily(store: "ObservationStore", circle: str, snap: dict) -> None:
+    """Dagwaarden (tevredenheid + duur) van een gesloten werkoverleg → observatie-store, idempotent
+    per dag. NAAST de bestaande all-time aggregaten in de werk-log (niet ter vervanging)."""
+    if not snap:
+        return
+    datum = _utc_date(snap.get("at") or time.time())
+    if snap.get("tevredenheid") is not None:
+        store.record_daily(circle, WERK_DAILY["tevredenheid"], snap["tevredenheid"],
+                           bron="werkoverleg", datum=datum)
+    if snap.get("duur_min") is not None:
+        store.record_daily(circle, WERK_DAILY["duur"], snap["duur_min"], bron="werkoverleg", datum=datum)
+
+
+def record_shopify_daily(store: "ObservationStore", res: dict, role_id: str = "shopify") -> None:
+    """Shopify-dagwaarden (available_metrics: pairs_sold/orders/revenue/aov) → observatie-store,
+    idempotent per dag. Fail-closed: alleen aanwezige metrics worden geschreven."""
+    if not res:
+        return
+    datum = _utc_date(time.time())
+    for measure, metric in SHOPIFY_DAILY.items():
+        v = res.get(measure)
+        if v is not None:
+            store.record_daily(role_id, metric, v, bron="shopify", datum=datum)
