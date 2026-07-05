@@ -145,6 +145,7 @@ class WebsiteWatcherWorker(Inhabitant):
 
             self._log_pulse_metrics(plausible)
             self._collect_daily_observations()             # generiek: elke actieve bron → observaties
+            self._sense_dead_sources()                     # dood-overgang (fresh→stale) → spanning
             self._surface_locale(plausible)
 
             self._propose_related(trends)
@@ -243,6 +244,27 @@ class WebsiteWatcherWorker(Inhabitant):
                 self.log.info("dag-observaties geschreven: %s", written)
         except Exception as exc:
             self.log.warning("dag-observatie-collector faalde: %s", exc)
+
+    def _sense_dead_sources(self) -> None:
+        """Senst op de OVERGANG van 'recente data' naar 'dood' (fresh→stale uit indicator_freshness):
+        publiceert per overgang een `source_died`-event; de Village schrijft er generiek een means-gap
+        voor in de human_inbox. Dedup + kind-aware drempel zitten in de sensor. Fail-closed."""
+        import os
+        from nooch_village.deadsource import DeadSourceState, sense_dead_sources
+        if getattr(self.context, "observations", None) is None or self.registry is None:
+            return
+        state = DeadSourceState(os.path.join(self.context.data_dir, "deadsource_state.json"))
+
+        def emit(source, field, last_datum, days_ago, cadans):
+            self.bus.publish(Event("source_died", {
+                "source": source, "field": field, "last_datum": last_datum,
+                "days_ago": days_ago, "cadans": cadans, "by": self.id}, self.id))
+        try:
+            died = sense_dead_sources(self.registry, self.context, state, emit)
+            if died:
+                self.log.info("dode-bron-overgangen gesensed: %s", died)
+        except Exception as exc:
+            self.log.warning("dode-bron-sensor faalde: %s", exc)
 
     def _sense_goal_gap(self, plausible: dict) -> None:
         """Vergelijk werkelijke bezoekerstrend met de run-rate die actieve doelen vereisen.
