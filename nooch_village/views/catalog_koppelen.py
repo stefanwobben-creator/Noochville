@@ -10,7 +10,7 @@ Autorisatie op de route + de publish-actie (anchor-lead); deze view is puur pres
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
-from nooch_village.web_base import _e, _page, _banner
+from nooch_village.web_base import _e
 from nooch_village.metric_schema import AARD, AARD_LABEL
 from nooch_village.i18n import t
 
@@ -61,7 +61,7 @@ def _field_card(source: str, raw: str, coupled_name: str | None, csrf: str) -> s
         f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
         f"<input type='hidden' name='source' value='{_e(source)}'>"
         f"<input type='hidden' name='veld' value='{_e(raw)}'>"
-        f"<input type='hidden' name='next' value='/catalogus_koppelen?source={_e(source)}'>"
+        f"<input type='hidden' name='next' value='/catalog?koppel={_e(source)}'>"
         f"<label class='att-lbl'>{_e(t('catalogus.koppelen.veld.naam'))}</label>"
         f"<input name='naam' placeholder='{_e(t('catalogus.koppelen.veld.naam.ph'))}' autocomplete='off'>"
         f"<label class='att-lbl'>{_e(t('catalogus.koppelen.veld.categorie'))}</label>"
@@ -77,16 +77,19 @@ def _field_card(source: str, raw: str, coupled_name: str | None, csrf: str) -> s
         f"</form></div>")
 
 
-def render_catalogus_koppelen(st: _Stores, csrf_token: str = "", source: str = "", msg: str = "") -> str:
+def _koppel_section(st: _Stores, csrf_token: str = "", source: str = "") -> str:
+    """De koppel-flow als in-scherm-sectie op /catalog (curator-only): bron-picker + ruwe-veld-kaarten
+    om een veld tot indicator te promoveren. Geen los scherm meer; ingebed via /catalog?koppel=<source>,
+    en publiceren blijft op het samengevoegde scherm (next=/catalog?koppel=<source>)."""
     sources = catalog_sources()
     valid = [s for s, _l, _f in sources]
     sel = source if source in valid else (valid[0] if valid else "")
 
-    def pick(s, lbl):
+    def pick(s, lbl):                       # bron-picker: scope-1-pills (.chip-opt) in een .chip-wrap
         on = " on" if s == sel else ""
-        return f"<a class='cl-filter{on}' href='/catalogus_koppelen?source={_e(s)}'>{_e(lbl)}</a>"
+        return f"<a class='chip-opt{on}' href='/catalog?koppel={_e(s)}'>{_e(lbl)}</a>"
     bar = (f"<div class='cl-bar'><span class='muted'>{_e(t('catalogus.koppelen.bron'))}</span> "
-           + "".join(pick(s, lbl) for s, lbl, _f in sources) + "</div>")
+           f"<span class='chip-wrap'>" + "".join(pick(s, lbl) for s, lbl, _f in sources) + "</span></div>")
     intro = f"<p class='muted'>{_e(t('catalogus.koppelen.intro'))}</p>"
 
     raw_fields = next((flds for s, _l, flds in sources if s == sel), [])
@@ -97,6 +100,6 @@ def render_catalogus_koppelen(st: _Stores, csrf_token: str = "", source: str = "
         fields_html = "".join(_field_card(sel, raw, coupled.get(raw), csrf_token) for raw in raw_fields)
 
     titel = _e(t("catalogus.koppelen.titel"))
-    body = (f"<div class='c2-sec'><h3>{titel}</h3>{intro}{bar}</div>"
+    return (f"<div class='c2-sec'><div class='cl-head'><h3>{titel}</h3>"
+            f"<a class='btn sm' href='/catalog'>← sluiten</a></div>{intro}{bar}</div>"
             f"<div class='c2-sec'>{fields_html}</div>")
-    return _page(t("catalogus.koppelen.titel"), _banner(msg) + body)

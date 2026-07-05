@@ -149,7 +149,8 @@ _CATALOG_JS = """<script>
 </script>"""
 
 
-def render_catalog(st: _Stores, csrf_token: str = "", msg: str = "") -> str:
+def render_catalog(st: _Stores, csrf_token: str = "", msg: str = "",
+                   koppel: str = "", curator: bool = False) -> str:
     defs = st.defs.all()
     bysrc: dict[str, list] = {}
     for d in defs:
@@ -175,10 +176,23 @@ def render_catalog(st: _Stores, csrf_token: str = "", msg: str = "") -> str:
            + bf("grounded", "0", "ongegrond") + bf("ver", "voorlopig", "voorlopig")
            + "<button type='button' class='cat-f cat-f-x on' data-facet='' data-val=''>alle</button></span>"
            f"<span class='muted cat-count' id='cat-count'>{total} definities · {ungrounded} ongegrond</span></div>")
+    # Koppel-flow (ruw bron-veld → indicator) is hier geïntegreerd, curator-only: dicht = een ingang,
+    # open (?koppel=<source>) = de sectie inline. Niet-curators zien niets hiervan.
+    koppel_ui = ""
+    if curator:
+        from nooch_village.views.catalog_koppelen import _koppel_section, catalog_sources
+        if koppel:
+            koppel_ui = _koppel_section(st, csrf_token, koppel)
+        else:
+            srcs = catalog_sources()
+            first = _e(srcs[0][0]) if srcs else ""
+            koppel_ui = (f"<div class='c2-sec'><a class='btn ok' href='/catalog?koppel={first}'>"
+                         f"+ Koppel nieuw veld</a> <span class='muted'>— promoveer een ruw bron-veld tot indicator</span></div>")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
             f"<h1>Metrics-catalogus <span class='chip'>Librarian</span></h1>{_banner(msg)}"
             f"<p class='muted'>Eén bron voor indicator-definities: rollen kiezen hieruit. Een definitie "
             f"wijzigen versioneert nooit in-place, maar als verduidelijking, back-cast of reeksbreuk.</p>"
+            f"{koppel_ui}"
             f"<div class='c2-sec'>{addform}</div>{nav}{sections}</div>")
     inner = (f"<style>{_EXTRA_CSS}</style>"
              f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · <a href='/'>home</a> · "

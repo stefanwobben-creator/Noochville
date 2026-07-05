@@ -1357,7 +1357,7 @@ def render_kpi_composer(st: _Stores, node_id: str = "", csrf_token: str = "", ms
             f"<div class='c2-sec'>{form}</div></div>")
     inner = (f"<style>{_EXTRA_CSS}</style>"
              f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · <a href='/'>home</a> · "
-             "<a href='/catalog'>catalogus</a> · <a href='/catalogus_koppelen'>koppelen</a></div>"
+             "<a href='/catalog'>catalogus</a></div>"
              f"<div class='c2-wrap'>{main}</div>{_KPI_COMPOSER_JS}")
     return _page("KPI maken", inner)
 

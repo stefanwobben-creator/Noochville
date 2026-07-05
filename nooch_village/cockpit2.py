@@ -199,7 +199,6 @@ from nooch_village.views.catalog import (
     _catalog_edit_form, _catalog_card,
     _catalog_add_form, render_catalog,
 )
-from nooch_village.views.catalog_koppelen import render_catalogus_koppelen
 
 
 from nooch_village.views.noochie import (
@@ -2092,18 +2091,17 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(render_patterns(effective_csrf))
                 return
             if path == "/catalog":
-                self._send(render_catalog(st, csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0]))
+                # AUTHZ: anchor-lead — het overzicht is publiek; de geïntegreerde koppel-sectie (ruw veld
+                # → indicator) rendert alleen voor de curator. guest (auth-uit) telt als curator.
+                actor = st.people.by_email(username) if username and username != "guest" else None
+                curator = actor is None or is_circle_lead(actor.id, "mother_earth", st.assign)
+                self._send(render_catalog(st, csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0],
+                                          koppel=(qs.get("koppel") or [""])[0], curator=curator))
                 return
             if path == "/catalogus_koppelen":
-                # curator-only: alleen anchor-lead ziet/koppelt de catalogus (guest mag alles in auth-uit)
-                actor = st.people.by_email(username) if username and username != "guest" else None
-                if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
-                    self._send(_page("Catalogus koppelen", "<div class='c2-sec'><p class='muted'>Alleen "
-                                     "de curator (anchor-lead) mag de catalogus koppelen.</p></div>"))
-                else:
-                    self._send(render_catalogus_koppelen(st, csrf_token=effective_csrf,
-                                                         source=(qs.get("source") or [""])[0],
-                                                         msg=(qs.get("msg") or [""])[0]))
+                # Samengevoegd in /catalog (scope 4): geen los scherm meer → 303 naar het koppel-onderdeel.
+                src = (qs.get("source") or [""])[0]
+                self._redirect_to(f"/catalog?koppel={urllib.parse.quote(src or '1')}")
                 return
             if path == "/kpi_new":
                 self._send(render_kpi_composer(st, (qs.get("node") or [""])[0],
