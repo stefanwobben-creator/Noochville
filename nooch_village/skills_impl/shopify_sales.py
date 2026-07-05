@@ -10,12 +10,15 @@ landcodes. Fail-closed zonder store/token. De pure aggregatie (`aggregate_orders
 """
 from __future__ import annotations
 import json
+import logging
 import urllib.request
 import urllib.parse
 import urllib.error
 from collections import Counter
 from datetime import datetime, timedelta, timezone
-from nooch_village.skills import Skill
+from nooch_village.skills import DataSourceSkill
+
+log = logging.getLogger(__name__)
 
 _API_VERSION = "2026-01"
 
@@ -214,8 +217,9 @@ _STUB_ORDERS = [
 ]   # pairs_sold = 2 + 1 + 3 = 6
 
 
-class ShopifySalesSkill(Skill):
+class ShopifySalesSkill(DataSourceSkill):
     name = "shopify_sales"
+    SOURCE = "shopify"
     cost = "free"
     required_env = ("SHOPIFY_STORE", "SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET")
     description = (
@@ -226,6 +230,51 @@ class ShopifySalesSkill(Skill):
     def available_metrics(self) -> list[str]:
         """De scalaire verkoopindicatoren die aggregate_orders oplevert (voor het koppelscherm)."""
         return ["pairs_sold", "orders", "revenue", "aov"]
+
+    def is_configured(self, context) -> bool:
+        """Read-only creds-check: een winkel + een auth-weg (statisch SHOPIFY_TOKEN óf CLIENT_ID+SECRET).
+        Leest alleen; raakt SHOPIFY_API_SECRET (webhook-secret) nooit aan."""
+        s = context.settings
+        store = (s.get("SHOPIFY_STORE") or s.get("shopify_store", "")).strip()
+        token = (s.get("SHOPIFY_TOKEN") or s.get("shopify_token", "")).strip()
+        cid = (s.get("SHOPIFY_CLIENT_ID") or s.get("shopify_client_id", "")).strip()
+        csec = (s.get("SHOPIFY_CLIENT_SECRET") or s.get("shopify_client_secret", "")).strip()
+        return bool(store and (token or (cid and csec)))
+
+    def daily_values(self, context, datum: str) -> dict:
+        """Dagwaarde per gedeclareerd veld (pairs_sold/orders/revenue/aov) voor de kalenderdag `datum`:
+        haal orders sinds `datum`, filter op exact die dag, aggregeer. Fail-closed per veld (None bij
+        ontbrekende creds/API-fout, geen stub/mock). Alleen lezen — geen enkele Shopify-secret wordt
+        geschreven."""
+        fields = ("pairs_sold", "orders", "revenue", "aov")
+        out = {m: None for m in fields}
+        s = context.settings
+        store = (s.get("SHOPIFY_STORE") or s.get("shopify_store", "")).strip()
+        if not store:
+            return out
+        token = (s.get("SHOPIFY_TOKEN") or s.get("shopify_token", "")).strip()
+        if not token:
+            cid = (s.get("SHOPIFY_CLIENT_ID") or s.get("shopify_client_id", "")).strip()
+            csec = (s.get("SHOPIFY_CLIENT_SECRET") or s.get("shopify_client_secret", "")).strip()
+            if not (cid and csec):
+                return out
+            try:
+                token = get_access_token(store, cid, csec)
+            except Exception as exc:
+                log.warning("Shopify token daily_values faalde: %s", exc)
+                return out
+        if not token:
+            return out
+        try:
+            orders = fetch_orders(store, token, datum)
+            day = [o for o in orders if str(o.get("created_at", ""))[:10] == datum]
+            agg = aggregate_orders(day, 0)
+            for m in fields:
+                if agg.get(m) is not None:
+                    out[m] = agg[m]
+        except Exception as exc:
+            log.warning("Shopify daily_values faalde (%s): %s", datum, exc)
+        return out
 
     @staticmethod
     def _truthy(v) -> bool:

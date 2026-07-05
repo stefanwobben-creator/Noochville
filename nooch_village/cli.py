@@ -653,9 +653,8 @@ def main() -> None:
             print(f"   {res.get('error', 'onbekend')}", file=sys.stderr)
             sys.exit(1)
         atomic_write_json(os.path.join(ctx.data_dir, "shopify_metrics.json"), res)
-        # dag-observatie (pairs_sold/orders/revenue/aov) idempotent wegschrijven, zoals bij Plausible
-        from nooch_village.observations import ObservationStore, record_shopify_daily
-        record_shopify_daily(ObservationStore(os.path.join(ctx.data_dir, "observations.jsonl")), res)
+        # De dag-observaties (pairs_sold/orders/revenue/aov) lopen nu via de generieke collector in de
+        # puls (activeer met `sources activate shopify`), niet meer hier hardcoded.
         print(f"✅ {res['pairs_sold']} paar verkocht · {res['orders']} orders · "
               f"{res['revenue']} {res['currency']} omzet (AOV {res['aov']}"
               f", gem. {res.get('avg_pairs_month', 0)} paar/maand). Dashboard staat in de cockpit.")
