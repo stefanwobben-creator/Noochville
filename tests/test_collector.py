@@ -433,3 +433,62 @@ def test_ke_blijft_inactief_tot_activatie(tmp_path):
     w = collect_daily_observations(reg, cockpit2._Stores(dd).sources, cockpit2._Stores(dd).observations,
                                    _ke_ctx({"vegan shoes": "approved"}), today=datetime.date(2026, 7, 8))
     assert w == []
+
+
+# ── Serpstat: flux-bron, domein-zichtbaarheid (vaste velden, betaald/credits) ───────────────────
+def _serpstat_ctx(token="SERP-TOKEN"):
+    return types.SimpleNamespace(settings=({"SERPSTAT_API_TOKEN": token, "serpstat_domain": "nooch.earth"}
+                                           if token else {}))
+
+
+def _fake_serp(token, domain, se):
+    return {"result": {"data": [{"domain": domain, "visible": 0.42, "keywords": 123, "traff": 4567}],
+                       "summary_info": {"left_lines": 9999}}}
+
+
+def test_serpstat_contract_en_domein_velden(monkeypatch):
+    from nooch_village.skills_impl.serpstat import SerpstatSkill
+    monkeypatch.delenv("SERPSTAT_API_TOKEN", raising=False)                   # hermetisch
+    s = SerpstatSkill()
+    assert isinstance(s, DataSourceSkill) and s.SOURCE == "serpstat" and s.kind == "flux"
+    assert s.frequency("x") == "weekly"
+    assert s.available_metrics() == ["keywords", "traffic", "visibility"]      # vaste domein-velden
+    assert s.is_configured(_serpstat_ctx()) and not s.is_configured(_serpstat_ctx(token=None))
+
+
+def test_serpstat_daily_values_en_failclosed():
+    from nooch_village.skills_impl.serpstat import SerpstatSkill
+    s = SerpstatSkill()
+    assert s.daily_values(_serpstat_ctx(), "2026-07-06", _post=_fake_serp) == {
+        "keywords": 123, "traffic": 4567, "visibility": 0.42}
+    # fail-closed per veld: geen token / API-fout / geen data-rij
+    assert s.daily_values(_serpstat_ctx(token=None), "x", _post=_fake_serp) == {
+        "keywords": None, "traffic": None, "visibility": None}
+    def boom(*a): raise RuntimeError("Serpstat down / geen credits")
+    assert all(v is None for v in s.daily_values(_serpstat_ctx(), "x", _post=boom).values())
+    assert all(v is None for v in s.daily_values(_serpstat_ctx(), "x",
+                                                 _post=lambda *a: {"result": {"data": []}}).values())
+
+
+def test_collector_serpstat_weekly(tmp_path):
+    from nooch_village.skills_impl.serpstat import SerpstatSkill
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd); st.sources.set_active("serpstat", True)
+    sk = SerpstatSkill(); sk._call = _fake_serp                               # geen netwerk
+    reg = SkillRegistry(); reg.register(sk)
+    w = collect_daily_observations(reg, cockpit2._Stores(dd).sources, cockpit2._Stores(dd).observations,
+                                   _serpstat_ctx(), today=datetime.date(2026, 7, 8))   # week-maandag 2026-07-06
+    assert ("serpstat", "keywords", "2026-07-06") in w and ("serpstat", "visibility", "2026-07-06") in w
+    rows = cockpit2._Stores(dd).observations.daily_series("serpstat_visibility_day", bron="serpstat")
+    assert [r["value"] for r in rows] == [0.42]
+
+
+def test_serpstat_blijft_inactief_tot_activatie(tmp_path):
+    from nooch_village.skills_impl.serpstat import SerpstatSkill
+    dd = _dd(tmp_path)
+    assert not cockpit2._Stores(dd).sources.active("serpstat")
+    sk = SerpstatSkill(); sk._call = _fake_serp
+    reg = SkillRegistry(); reg.register(sk)
+    w = collect_daily_observations(reg, cockpit2._Stores(dd).sources, cockpit2._Stores(dd).observations,
+                                   _serpstat_ctx(), today=datetime.date(2026, 7, 8))
+    assert w == []
