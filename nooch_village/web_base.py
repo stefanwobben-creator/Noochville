@@ -36,6 +36,9 @@ _CSS = """
  --shadow:0 1px 2px rgba(27,27,27,.06),0 2px 8px rgba(27,27,27,.04);
 }
 *{box-sizing:border-box}
+/* Het `hidden`-attribuut moet ALTIJD winnen van een author `display:`-regel (bijv. .kc-radio{display:block}),
+   anders werkt geen enkele hidden-gebaseerde show/hide (categorie-filter, .kc-mode, .kc-cond, .tile-back-flip). */
+[hidden]{display:none!important}
 body{font-family:var(--font-body);font-size:14px;line-height:1.5;color:var(--ink);
  background:var(--cream);margin:0;padding:1.6rem 2rem;max-width:1180px}
 h1{font-family:var(--font-display);font-weight:800;font-size:1.5rem;margin:0}
