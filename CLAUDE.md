@@ -24,6 +24,19 @@ python -m nooch_village.village run       # blijft draaien, puls 1x per echte da
 Altijd starten vanuit de map die `nooch_village/` bevat, en met de `-m`-vorm.
 Niet `python nooch_village/village.py` (dan breken de imports). Laat de `__init__.py`'s staan.
 
+## Tests — smoke tijdens bouwen, volledig vóór commit
+
+```bash
+./venv/bin/python -m pytest -m smoke     # ~1s: kern-paden (stores, hoofdviews, dispatch happy-paths)
+./venv/bin/python -m pytest tests/       # de volledige suite — VERPLICHTE poort vóór elke commit
+```
+
+- **Tijdens het bouwen:** draai `pytest -m smoke` (`tests/test_smoke.py`) voor snelle feedback, of het
+  enkele geraakte testbestand. De smoke-subset is representatief, geen volledige dekking.
+- **Vóór elke commit:** de **volledige** suite is verplicht (WORKING_AGREEMENTS.md) — de authz-gates op
+  `dispatch` en gedeelde helpers braken eerder cross-file tests die bij een deel-run onzichtbaar bleven.
+  Smoke groen ≠ klaar om te committen.
+
 ## Architectuur (drie lagen)
 
 1. **Het marktplein** — `EventBus` (`event_bus.py`): broadcast van feiten/aankondigingen. Autonomie: inwoners reageren zelf op events die hen aangaan.

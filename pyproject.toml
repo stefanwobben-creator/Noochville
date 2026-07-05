@@ -1,4 +1,7 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "smoke: representatieve kern-paden per module (stores, hoofdviews, dispatch happy-paths). Draai `pytest -m smoke` tijdens het bouwen; de VOLLEDIGE suite blijft de poort vóór elke commit (WORKING_AGREEMENTS.md).",
+]
 
