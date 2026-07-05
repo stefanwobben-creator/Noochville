@@ -60,22 +60,35 @@ def _members_of_circle(st: _Stores, circle_id: str) -> list:
 
 def _tree_html(st: _Stores, current_id: str) -> str:
     recs = st.records.all()
+    # De cirkel die de huidige node bevat (en zijn ouders) staat open; de rest ingeklapt (native
+    # <details>, geen JS, geen persistentie). Zo blijft de boom overzichtelijk bij 20+ rollen.
+    ancestors = set(org.breadcrumb(recs, current_id)) if current_id else set()
 
-    def node_li(rec) -> str:
+    def kids_of(rec):
+        # Kernrollen (Lead/Rep/Secretary/Facilitator) niet in de navigatie: die zie je via de
+        # cirkel -> Rollen. Houdt de boom rustig.
+        return sorted([k for k in org.children_of(recs, rec.id)
+                       if org.is_circle(k) or _name(k).strip().lower() not in _CORE_ROLE_NAMES],
+                      key=lambda r: (not org.is_circle(r), _name(r).lower()))
+
+    def node_li(rec, depth: int) -> str:
         is_c = org.is_circle(rec)
-        cls = "c" if is_c else ""
-        here = " here" if rec.id == current_id else ""
-        label = f"<a class='{cls}{here}' href='/node?id={_e(rec.id)}'>{_e(_name(rec))}</a>"
-        if is_c:
-            # Kernrollen (Lead/Rep/Secretary/Facilitator) niet in de navigatie: die zie je via
-            # de cirkel -> Rollen. Houdt de boom rustig.
-            kids = sorted([k for k in org.children_of(recs, rec.id)
-                           if org.is_circle(k) or _name(k).strip().lower() not in _CORE_ROLE_NAMES],
-                          key=lambda r: (not org.is_circle(r), _name(r).lower()))
-            return f"<li>{label}<ul>{''.join(node_li(k) for k in kids)}</ul></li>"
-        return f"<li>{label}</li>"
+        cls = ("c" if is_c else "") + (" here" if rec.id == current_id else "")
+        link = f"<a class='{cls}' href='/node?id={_e(rec.id)}'"
+        if not is_c:
+            return f"<li>{link}>{_e(_name(rec))}</a></li>"
+        inner = "".join(node_li(k, depth + 1) for k in kids_of(rec))
+        if depth == 0:
+            # De anchor (Mother Earth) blijft een vaste kop, niet inklapbaar.
+            return f"<li>{link}>{_e(_name(rec))}</a><ul>{inner}</ul></li>"
+        # Sub-cirkel (Nooch e.d.) inklapbaar; open als de huidige node erin zit. Klik op de naam
+        # navigeert (stopPropagation → geen toggle), klik op de caret klapt in/uit.
+        op = " open" if rec.id in ancestors else ""
+        summ = f"{link} onclick='event.stopPropagation()'>{_e(_name(rec))}</a>"
+        return (f"<li><details class='tree-c'{op}><summary>{summ}</summary>"
+                f"<ul>{inner}</ul></details></li>")
 
-    body = "".join(node_li(r) for r in org.roots(recs)) or "<li class='muted'>leeg</li>"
+    body = "".join(node_li(r, 0) for r in org.roots(recs)) or "<li class='muted'>leeg</li>"
     return f"<div class='tree'><h3>Organisatie</h3><ul>{body}</ul></div>"
 
 

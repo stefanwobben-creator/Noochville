@@ -498,3 +498,32 @@ def test_kolom_status_tinten_aanwezig():
     from nooch_village.cockpit2_util import _EXTRA_CSS
     for key in ("actief", "wacht", "done", "toekomst"):
         assert f".pcol[data-to='{key}']" in _EXTRA_CSS
+
+
+def test_home_opent_op_nooch_niet_op_anchor(tmp_path):
+    """'/' opent standaard op de operationele cirkel (Nooch), niet op de anchor (Mother Earth)."""
+    st = _st(tmp_path)
+    assert cockpit2._home_node(st.records.all()) == "mother_earth__nooch"
+
+
+def test_boom_subcirkel_inklapbaar_open_via_breadcrumb(tmp_path):
+    """Sub-cirkels zijn native <details>; de cirkel die de huidige node bevat staat open, de rest dicht.
+    De anchor (Mother Earth) blijft een vaste kop (niet inklapbaar)."""
+    from nooch_village.views.overview import _tree_html
+    st = _st(tmp_path)
+    # huidige node = rol ONDER Nooch → Nooch open, en precies één <details> (alleen de sub-cirkel)
+    t = _tree_html(st, "mother_earth__nooch__website_developer")
+    assert "<details class='tree-c' open>" in t and t.count("<details") == 1
+    assert "Website Developer" in t
+    # huidige node = de anchor → Nooch ingeklapt (geen 'open')
+    t2 = _tree_html(st, "mother_earth")
+    assert "<details class='tree-c'>" in t2 and "<details class='tree-c' open>" not in t2
+
+
+def test_boom_here_highlight_op_summary_van_ingeklapte_cirkel(tmp_path):
+    """De .here-highlight (huidige node) zit op de summary-link, dus zichtbaar ook als de cirkel de
+    inklapbare sub-cirkel zelf is."""
+    from nooch_village.views.overview import _tree_html
+    st = _st(tmp_path)
+    t = _tree_html(st, "mother_earth__nooch")
+    assert "class='c here'" in t and "<details class='tree-c' open>" in t

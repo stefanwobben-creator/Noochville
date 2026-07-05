@@ -258,6 +258,12 @@ ul.clean li:last-child{border-bottom:none}
 .tree li{padding:.12rem 0;font-size:.86rem}
 .tree .c{font-weight:700}
 .tree .here{background:var(--green-tint);border-radius:5px;padding:0 .3rem}
+/* Inklapbare sub-cirkels: native <details>/<summary> met een eigen caret; de naam-link (incl.
+   .here-highlight) blijft in de summary zichtbaar, ook ingeklapt. */
+.tree details.tree-c>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:.2rem}
+.tree details.tree-c>summary::-webkit-details-marker{display:none}
+.tree details.tree-c>summary::before{content:'\25B8';font-size:.6rem;color:var(--gray);flex:none;width:.6rem}
+.tree details.tree-c[open]>summary::before{content:'\25BE'}
 .pill{display:inline-block;font-size:.72rem;padding:.05rem .45rem;border-radius:var(--radius-pill);background:var(--cream-2);color:var(--gray);margin-left:.3rem}
 .card{border:1px solid var(--border);border-radius:var(--radius);padding:.5rem .7rem;margin:.3rem 0;background:var(--surface)}
 .pboard{display:flex;gap:.6rem;align-items:flex-start;overflow-x:auto}
