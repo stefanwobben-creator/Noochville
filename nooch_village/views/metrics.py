@@ -253,7 +253,8 @@ def _sources_for(st: _Stores, rec):
         {"id": "shopify", "label": "Verkoop",
          "measures": [("pairs_sold", "Paren verkocht"), ("orders", "Orders"),
                       ("revenue", "Omzet"), ("aov", "Gem. orderwaarde")],
-         "dims": [("none", "totaal"), ("country", "per land"), ("product", "per product")]},
+         "dims": [("none", "totaal"), ("over_tijd", "over tijd"),
+                  ("country", "per land"), ("product", "per product")]},
     ]
     # Werkoverleg-gezondheid (facilitator): leest het archief van de cirkel waar deze node onder valt.
     circle = rec.id if is_c else getattr(rec, "parent", None)
@@ -325,16 +326,38 @@ def _tile_meta(st: _Stores, rec, tile) -> str:
     return tile.get("measure", "metric")
 
 
+def _measure_unit(source: str, measure: str) -> str:
+    if source == "pulse_visitors":
+        return "bezoekers"
+    if source.startswith("werk:"):
+        return "/10" if measure == "tevredenheid" else ("min" if measure == "duur" else "")
+    if source == "shopify":
+        return "EUR" if measure in ("revenue", "aov") else ("paren" if measure == "pairs_sold" else "")
+    return ""
+
+
+def _daily_obs_series(st: _Stores, source: str, measure: str, cutoff, end=None):
+    """Dezelfde dagreeks-route als de bezoekers-tegel: leest de dag-observaties (daily_series) voor
+    (source, measure) en levert een series-res voor het lijn-diagram (chart:'line'). None als deze
+    bron/measure geen dag-observatie-mapping heeft. Lege dagreeks → lege points (→ 'geen data')."""
+    metric, bron = _daily_obs_key(source, measure)
+    if not metric:
+        return None
+    samples = [{"at": r["ts"], "value": r["value"]}
+               for r in st.observations.daily_series(metric, bron=bron)]
+    return {"kind": "series", "points": filter_samples(samples, cutoff, end),
+            "unit": _measure_unit(source, measure), "chart": "line"}
+
+
 def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff, end=None):
     """Haal de data voor een tegel op binnen [cutoff, end]. Resultaat: series/breakdown/number."""
     if source == "pulse_visitors":
-        # De "over tijd"-reeks komt uit de dagelijkse observaties (bron=plausible), niet meer uit de
-        # rollende 7d-total: één datapunt per dag → een echte dagreeks voor het lijn-diagram.
-        rows = st.observations.daily_series("visitors_day", bron="plausible")
-        samples = [{"at": r["ts"], "value": r["value"]} for r in rows]
-        return {"kind": "series", "points": filter_samples(samples, cutoff, end),
-                "unit": "bezoekers", "chart": "line"}
+        # De "over tijd"-reeks komt uit de dagelijkse observaties (bron=plausible), één datapunt per
+        # dag → een echte dagreeks voor het lijn-diagram.
+        return _daily_obs_series(st, source, measure, cutoff, end)
     if source == "shopify":
+        if dim == "over_tijd":                       # dagreeks uit de observaties (leeg tot Shopify live is)
+            return _daily_obs_series(st, source, measure, cutoff, end)
         w = _shopify_window(st.dd) or {}
         if dim == "country":
             return {"kind": "breakdown", "rows": [(c, n) for c, n in w.get("by_country", [])]}
@@ -343,6 +366,12 @@ def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff, end=None):
         unit = "EUR" if measure in ("revenue", "aov") else ("paren" if measure == "pairs_sold" else "")
         return {"kind": "number", "value": w.get(measure), "unit": unit}
     if source.startswith("werk:"):
+        if dim == "over_tijd":
+            s = _daily_obs_series(st, source, measure, cutoff, end)
+            if s is not None and s["points"]:        # dagreeks heeft data → nieuwe route
+                return s
+            # UITFASEREN: zolang de dagreeks (nog) leeg is, val terug op de oude log-aggregaat-route,
+            # zodat er geen blinde periode ontstaat. Hard verwijderen pas als de nieuwe route vult.
         return _werk_fetch(st, source[5:], measure, dim, cutoff, end)
     if source.startswith("kpi:"):
         it = st.metrics.get(source[4:])
