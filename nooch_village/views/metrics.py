@@ -26,7 +26,8 @@ if TYPE_CHECKING:
 
 
 # Centrale periode-picker (scope 6). 'actueel' = laatste waarde, alleen bij een live-capabele bron.
-_MW = [("vandaag", "Vandaag"), ("gisteren", "Gisteren"), ("actueel", "Actueel"),
+# 'Vandaag' is bewust weggelaten: 'Actueel' (laatste bekende dagwaarde) vervult die rol al.
+_MW = [("gisteren", "Gisteren"), ("actueel", "Actueel"),
        ("7d", "7 dagen"), ("28d", "28 dagen"), ("kwartaal", "Kwartaal"),
        ("jaar", "Jaar"), ("aangepast", "Aangepast")]
 # Bronnen die 'live' bevraagd kunnen worden → 'Actueel' beschikbaar (anders uitgegrijsd).
