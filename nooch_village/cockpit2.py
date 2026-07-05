@@ -1931,6 +1931,18 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
 _PUBLIC_GET: set[str] = set()
 
 
+def _home_node(recs) -> str:
+    """De node waarop '/' opent: de operationele cirkel (Nooch), niet de anchor (Mother Earth) —
+    daar gebeurt het meeste werk. Fallback: eerste sub-cirkel van de root, anders de root zelf,
+    anders '' (geen organisatie geladen)."""
+    roots = org.roots(recs)
+    if not roots:
+        return ""
+    subs = [k for k in org.children_of(recs, roots[0].id) if org.is_circle(k)]
+    return next((s.id for s in subs if s.id == "mother_earth__nooch"),
+                subs[0].id if subs else roots[0].id)
+
+
 def make_handler(data_dir: str, csrf_token: str,
                  sessions: "_auth.SessionStore | None" = None,
                  users: "_auth.UserStore | None" = None):
@@ -2035,10 +2047,10 @@ def make_handler(data_dir: str, csrf_token: str,
                     self._send("", 404)
                 return
             if path in ("/", "/index.html"):
-                roots = org.roots(st.records.all())
-                if roots:
+                default_id = _home_node(st.records.all())
+                if default_id:
                     self.send_response(302)
-                    self.send_header("Location", f"/node?id={roots[0].id}")
+                    self.send_header("Location", f"/node?id={default_id}")
                     self.end_headers()
                     return
                 self._send(_page("Leeg", "<p>Nog geen organisatie geladen.</p>"))
