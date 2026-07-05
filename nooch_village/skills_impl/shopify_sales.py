@@ -227,7 +227,7 @@ class ShopifySalesSkill(DataSourceSkill):
         "AOV, per land en topproducten over een venster. Uitsluitend geaggregeerd, geen PII."
     )
 
-    def available_metrics(self) -> list[str]:
+    def available_metrics(self, context=None) -> list[str]:
         """De scalaire verkoopindicatoren die aggregate_orders oplevert (voor het koppelscherm)."""
         return ["pairs_sold", "orders", "revenue", "aov"]
 
