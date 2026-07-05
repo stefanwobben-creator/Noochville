@@ -4,7 +4,7 @@ from __future__ import annotations
 import time
 
 from nooch_village import cockpit2
-from nooch_village.observations import ObservationStore, record_werk_daily, record_shopify_daily
+from nooch_village.observations import ObservationStore, record_werk_daily
 from nooch_village.views.metrics import _metrics_tab_html, _daily_obs_key
 
 C = "mother_earth__nooch"
@@ -23,15 +23,6 @@ def test_record_werk_daily_idempotent(tmp_path):
     record_werk_daily(obs, C, {"at": now, "tevredenheid": 9.9, "duur_min": 30})  # zelfde dag → skip
     assert [r["value"] for r in obs.daily_series("werk_tevredenheid_day", bron="werkoverleg")] == [8.4]
     assert [r["value"] for r in obs.daily_series("werk_duur_day", bron="werkoverleg")] == [12]
-
-
-def test_record_shopify_daily_failclosed(tmp_path):
-    obs = ObservationStore(str(tmp_path / "o.jsonl"))
-    record_shopify_daily(obs, {"pairs_sold": 40, "orders": 25, "revenue": 1200})  # aov ontbreekt
-    assert [r["value"] for r in obs.daily_series("shopify_pairs_sold_day", bron="shopify")] == [40]
-    assert obs.daily_series("shopify_aov_day", bron="shopify") == []              # ontbrekende metric → niets
-    record_shopify_daily(obs, {"pairs_sold": 99})                                 # zelfde dag → skip
-    assert [r["value"] for r in obs.daily_series("shopify_pairs_sold_day", bron="shopify")] == [40]
 
 
 def test_wo_close_schrijft_dagwaarde(tmp_path):

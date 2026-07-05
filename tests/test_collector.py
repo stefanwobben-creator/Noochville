@@ -86,3 +86,30 @@ def test_datasource_contract_daily_values_subset(tmp_path):
     vals = p.daily_values(_ctx(), "2026-07-05")               # geen creds → alle None, maar wel de juiste sleutels
     assert set(vals) <= set(p.available_metrics()) and set(vals) == set(p.available_metrics())
     assert p.frequency("visitors") == "daily" and p.SOURCE == "plausible"
+
+
+def test_shopify_datasource_contract_en_failclosed():
+    """Fase 2: ShopifySalesSkill is een DataSourceSkill met SOURCE='shopify'. daily_values is fail-closed
+    per veld (geen creds → alle None) en de sleutels ⊆ available_metrics. is_configured checkt store +
+    (token óf client_id+secret) — leest alleen, raakt SHOPIFY_API_SECRET (webhook) niet aan."""
+    from nooch_village.skills_impl.shopify_sales import ShopifySalesSkill
+    sk = ShopifySalesSkill()
+    assert isinstance(sk, DataSourceSkill) and sk.SOURCE == "shopify" and sk.frequency("orders") == "daily"
+    vals = sk.daily_values(_ctx(), "2026-07-05")
+    assert set(vals) == set(sk.available_metrics()) and all(v is None for v in vals.values())
+    assert sk.is_configured(types.SimpleNamespace(settings={"SHOPIFY_STORE": "x", "SHOPIFY_TOKEN": "t"}))
+    assert sk.is_configured(types.SimpleNamespace(
+        settings={"SHOPIFY_STORE": "x", "SHOPIFY_CLIENT_ID": "c", "SHOPIFY_CLIENT_SECRET": "s"}))
+    assert not sk.is_configured(types.SimpleNamespace(settings={"SHOPIFY_STORE": "x"}))
+    assert not sk.is_configured(_ctx())
+
+
+def test_shopify_blijft_inactief_tot_expliciete_activatie(tmp_path):
+    """Shopify staat NIET default actief; de collector pakt 'm pas op na sources activate shopify."""
+    from nooch_village.skills_impl.shopify_sales import ShopifySalesSkill
+    dd = _dd(tmp_path)
+    assert not cockpit2._Stores(dd).sources.active("shopify")     # default inactief
+    reg = SkillRegistry(); reg.register(ShopifySalesSkill())
+    w = collect_daily_observations(reg, cockpit2._Stores(dd).sources,
+                                   cockpit2._Stores(dd).observations, _ctx(), today=datetime.date(2026, 7, 6))
+    assert w == []                                               # inactief → geen fetch/write

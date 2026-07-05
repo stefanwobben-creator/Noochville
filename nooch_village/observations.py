@@ -131,14 +131,5 @@ def record_werk_daily(store: "ObservationStore", circle: str, snap: dict) -> Non
     if snap.get("duur_min") is not None:
         store.record_daily(circle, WERK_DAILY["duur"], snap["duur_min"], bron="werkoverleg", datum=datum)
 
-
-def record_shopify_daily(store: "ObservationStore", res: dict, role_id: str = "shopify") -> None:
-    """Shopify-dagwaarden (available_metrics: pairs_sold/orders/revenue/aov) → observatie-store,
-    idempotent per dag. Fail-closed: alleen aanwezige metrics worden geschreven."""
-    if not res:
-        return
-    datum = _utc_date(time.time())
-    for measure, metric in SHOPIFY_DAILY.items():
-        v = res.get(measure)
-        if v is not None:
-            store.record_daily(role_id, metric, v, bron="shopify", datum=datum)
+# NB: de Shopify-dagwaarden lopen nu via de generieke collector (DataSourceSkill.daily_values →
+# record_daily onder shopify_<field>_day). SHOPIFY_DAILY blijft de sleutel-map voor de tegel-lezer.
