@@ -87,7 +87,7 @@ class OpenalexSkill(DataSourceSkill):
         "gesorteerd op citaties, backoff bij 429, locale-bewust, fail-closed)."
     )
 
-    def available_metrics(self) -> list[str]:
+    def available_metrics(self, context=None) -> list[str]:
         """Cumulatieve tellers voor het missie-concept: totaal aantal publicaties en citaties."""
         return ["works", "citations"]
 

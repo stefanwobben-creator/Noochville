@@ -13,8 +13,10 @@ Output: `rows` (locale-bewust) + `keywords` (backward compat, eerste geo).
 Fail-closed per geo×term: netwerk-/rate-limit-fout faalt alleen dat segment.
 """
 from __future__ import annotations
-import os, json, time, random
-from nooch_village.skills import Skill
+import os, json, time, random, logging
+from nooch_village.skills import DataSourceSkill
+
+log = logging.getLogger(__name__)
 
 # Een realistische browser-User-Agent vermindert 429's: de pytrends-default-UA
 # wordt sneller geblokkeerd door Google.
@@ -22,6 +24,39 @@ _USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
+
+# ── Anker-ratio-normalisatie (snapshot-delta-analoog voor relatieve interesse) ────────────────────
+# Google Trends' 0-100 is relatief aan de piek binnen het venster; waarden uit verschillende queries
+# of vensters zijn dus NIET vergelijkbaar. Oplossing: query elke term SAMEN met een vast anker en sla
+# de RATIO op (term/anker × 100). Die ratio is invariant onder Trends' herschaling (anker en term
+# schalen met dezelfde factor), dus vergelijkbaar tussen termen én over de tijd.
+#
+# EIS AAN HET ANKER (cruciaal): stabiel, hoog volume, NIET-trending. Kiest een curator een trending
+# term als anker, dan weerspiegelt de ratio de ruis van het anker i.p.v. de trend van de term — stil
+# onzin-data. Default 'weather' (constant hoog volume). Stel per geo/taal in via `trends_anchor`.
+_ANCHOR_DEFAULT = "weather"
+_TIMEFRAME_DEFAULT = "today 5-y"        # vast lang venster: genoeg historie voor stabiele normalisatie
+
+
+def _trends_terms(context) -> list[str]:
+    """De curator-termen uit de config (`trends_terms`, komma-gescheiden). Analoog aan openalex_query,
+    maar meervoudig — elke term wordt een eigen observatie-reeks."""
+    raw = (getattr(context, "settings", {}) or {}).get("trends_terms", "") if context else ""
+    return [t.strip() for t in raw.split(",") if t.strip()]
+
+
+def _sanitize_field(term: str) -> str:
+    """Term → veilige observatie-veldsleutel (trends_<veld>_day)."""
+    return "".join(c if c.isalnum() else "_" for c in term.strip().lower()).strip("_") or "term"
+
+
+def _ratio(anchor_recent, term_recent):
+    """De genormaliseerde interesse: term/anker × 100. None als het anker 0 is (niet te normaliseren).
+    Invariant onder Trends' herschaling: als de hele reeks met factor k schaalt, schalen anker én term
+    mee → de ratio blijft gelijk. Dát maakt de waarde vergelijkbaar tussen termen en over de tijd."""
+    if not anchor_recent or anchor_recent <= 0:
+        return None
+    return round(term_recent / anchor_recent * 100)
 
 
 def rotate_window(items: list, cursor: int, size: int) -> tuple[list, int]:
@@ -107,8 +142,13 @@ def _read_keywords(context) -> list[str]:
         _geo_to_locale(context.settings.get("trends_geo", "NL")), context)
 
 
-class TrendsSkill(Skill):
+class TrendsSkill(DataSourceSkill):
     name = "google_trends"
+    SOURCE = "trends"
+    # Flux-bron: relatieve interesse is een niveau op een moment (geen cumulatieve stand) → de tegel
+    # toont de waarde/lijn zelf. Weekly: Trends-data is niet dagvers genoeg voor daily.
+    kind = "flux"
+    DEFAULT_FREQUENCY = "weekly"
     cost = "rate_limited"
     description = (
         "Haalt Google Trends-data op per geo/locale "
@@ -116,6 +156,61 @@ class TrendsSkill(Skill):
         "Woorden per geo komen uit het meertalige Lexicon. "
         "Fail-closed per geo×term."
     )
+
+    def available_metrics(self, context=None) -> list[str]:
+        """DYNAMISCHE velden: de curator-termen (`trends_terms`), als veilige sleutels. Zonder context
+        (bv. het koppelscherm) → leeg, want de termen staan in de config, niet vast in de skill."""
+        return [_sanitize_field(t) for t in _trends_terms(context)]
+
+    def is_configured(self, context) -> bool:
+        """Keyless (pytrends). 'Geconfigureerd' = de pytrends-dependency is importeerbaar. Een pytrends
+        die wél importeert maar bij de CALL breekt (Google wijzigt z'n endpoint) valt fail-closed naar
+        None per term → verschijnt als 'dood', niet als crash of 'niet geconfigureerd'."""
+        try:
+            import pytrends.request  # noqa: F401
+            return True
+        except Exception:
+            return False
+
+    def daily_values(self, context, datum: str) -> dict:
+        """Genormaliseerde interesse per curator-term via de anker-ratio: query [anker, term] SAMEN over
+        een vast lang venster, en leg `term_recent / anker_recent × 100` vast. Die ratio is invariant
+        onder Trends' herschaling → vergelijkbaar tussen termen én over de tijd. Flux (een niveau, geen
+        stand). Volledig fail-closed per term: elke fout (ook een gebroken pytrends bij de call) → None
+        voor die term, de puls crasht niet. Anker_recent == 0 → None (kan niet normaliseren)."""
+        terms = _trends_terms(context)
+        out = {_sanitize_field(t): None for t in terms}
+        if not terms:
+            return out
+        try:
+            from pytrends.request import TrendReq
+        except ImportError:
+            return out                                  # dependency ontbreekt → alles None
+        settings = getattr(context, "settings", {}) or {}
+        anchor = (settings.get("trends_anchor") or _ANCHOR_DEFAULT).strip()
+        geo = (settings.get("trends_geo") or "NL").strip()
+        timeframe = (settings.get("trends_timeframe") or _TIMEFRAME_DEFAULT).strip()
+        hl = settings.get("trends_hl", "nl-NL")
+        try:
+            pytrends = TrendReq(hl=hl, tz=60, timeout=(10, 25),
+                                requests_args={"headers": {"User-Agent": _USER_AGENT}})
+        except Exception as exc:
+            log.warning("Trends init faalde: %s", exc)
+            return out
+        for term in terms:
+            key = _sanitize_field(term)
+            try:
+                pytrends.build_payload([anchor, term], cat=0, timeframe=timeframe, geo=geo, gprop="")
+                df = pytrends.interest_over_time()
+                if df is None or df.empty or anchor not in df or term not in df:
+                    continue                            # None blijft staan
+                a_recent = int(df[anchor].tolist()[-1])
+                t_recent = int(df[term].tolist()[-1])
+                out[key] = _ratio(a_recent, t_recent)
+            except Exception as exc:                    # ook een bij-de-call gebroken pytrends
+                log.warning("Trends daily_values faalde voor '%s': %s", term, exc)
+            time.sleep(1.0)                              # beleefd (onofficieel endpoint)
+        return out
 
     def _select_window(self, keywords: list[str], context) -> list[str]:
         """Beperk tot een roterend venster (default 3) en bewaar de cursor, zodat de

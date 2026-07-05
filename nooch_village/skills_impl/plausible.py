@@ -22,7 +22,7 @@ class PlausibleSkill(DataSourceSkill):
     required_env = ("PLAUSIBLE_API_KEY", "PLAUSIBLE_SITE_ID")
     description = "Haalt echte bezoekersdata uit de Plausible Stats API (geen mock)."
 
-    def available_metrics(self) -> list[str]:
+    def available_metrics(self, context=None) -> list[str]:
         """Menukaart: de metrics die deze skill kan leveren. Geen API-call nodig."""
         return list(_METRICS)
 

@@ -22,7 +22,7 @@ class _FakeSource(DataSourceSkill):
     required_env = ()
     def __init__(self, vals): self._vals = vals
     def run(self, payload, context): return {}
-    def available_metrics(self): return ["clicks", "impressions"]
+    def available_metrics(self, context=None): return ["clicks", "impressions"]
     def is_configured(self, context): return True
     def daily_values(self, context, datum): return dict(self._vals)
 
@@ -195,7 +195,7 @@ class _WeeklySnapshot(DataSourceSkill):
     name = "wk"; SOURCE = "openalex"; DEFAULT_FREQUENCY = "weekly"; required_env = ()
     def __init__(self, vals): self._vals = vals
     def run(self, payload, context): return {}
-    def available_metrics(self): return ["works", "citations"]
+    def available_metrics(self, context=None): return ["works", "citations"]
     def is_configured(self, context): return True
     def daily_values(self, context, datum): return dict(self._vals)
 
@@ -251,7 +251,7 @@ class _MonthlySnapshot(DataSourceSkill):
     name = "ms"; SOURCE = "semanticscholar"; kind = "snapshot"; DEFAULT_FREQUENCY = "monthly"; required_env = ()
     def __init__(self, vals): self._vals = vals
     def run(self, payload, context): return {}
-    def available_metrics(self): return ["papers", "citations"]
+    def available_metrics(self, context=None): return ["papers", "citations"]
     def is_configured(self, context): return True
     def daily_values(self, context, datum): return dict(self._vals)
 
@@ -281,4 +281,81 @@ def test_semanticscholar_blijft_inactief_tot_activatie(tmp_path):
     reg = SkillRegistry(); reg.register(SemanticScholarSkill())
     w = collect_daily_observations(reg, cockpit2._Stores(dd).sources,
                                    cockpit2._Stores(dd).observations, _ctx(), today=datetime.date(2026, 7, 20))
+    assert w == []
+
+
+# ── Google Trends: flux-bron met anker-ratio-normalisatie ──────────────────────────────────────
+import pandas as _pd
+
+
+class _FakeTrendReq:
+    """Fake pytrends.TrendReq zonder netwerk: interest_over_time geeft een df met [anker, term]."""
+    _payload = None
+    def __init__(self, *a, **k): pass
+    def build_payload(self, kws, **k): type(self)._payload = kws
+    def interest_over_time(self):
+        anchor, term = type(self)._payload
+        return _pd.DataFrame({anchor: [40, 50], term: [60, 80]})   # recent: anker 50, term 80 → 160
+
+
+class _BrokenTrendReq(_FakeTrendReq):
+    def interest_over_time(self):
+        raise RuntimeError("Google heeft het endpoint gewijzigd")   # pytrends breekt bij de call
+
+
+def _trends_ctx(terms="vegan shoes"):
+    return types.SimpleNamespace(settings={"trends_terms": terms, "trends_anchor": "weather"}, data_dir="/tmp")
+
+
+def test_trends_contract_en_dynamische_velden():
+    from nooch_village.skills_impl.trends import TrendsSkill, _ratio
+    t = TrendsSkill()
+    assert isinstance(t, DataSourceSkill) and t.SOURCE == "trends" and t.kind == "flux"
+    assert t.frequency("x") == "weekly"
+    assert t.available_metrics(_trends_ctx("vegan shoes, plasticvrij")) == ["vegan_shoes", "plasticvrij"]
+    assert t.available_metrics() == []                          # zonder context (koppelscherm) → leeg
+    # anker-ratio-invariantie: dezelfde verhouding onder herschaling → dezelfde waarde
+    assert _ratio(50, 80) == _ratio(25, 40) == 160 and _ratio(0, 80) is None
+
+
+def test_trends_daily_values_anker_ratio(monkeypatch):
+    from nooch_village.skills_impl import trends as _t
+    monkeypatch.setattr("pytrends.request.TrendReq", _FakeTrendReq)
+    vals = _t.TrendsSkill().daily_values(_trends_ctx("vegan shoes"), "2026-07-06")
+    assert vals == {"vegan_shoes": 160}                         # 80/50 × 100, genormaliseerd op het anker
+
+
+def test_trends_daily_values_failclosed_bij_gebroken_pytrends(monkeypatch):
+    """Een pytrends die wél importeert maar bij de call breekt (Google-wijziging) → None per term, geen
+    crash: de bron verschijnt als 'dood', de puls loopt door."""
+    from nooch_village.skills_impl import trends as _t
+    monkeypatch.setattr("pytrends.request.TrendReq", _BrokenTrendReq)
+    vals = _t.TrendsSkill().daily_values(_trends_ctx("vegan shoes"), "2026-07-06")
+    assert vals == {"vegan_shoes": None}                        # fail-closed
+    # geen termen → lege dict (niets te meten)
+    assert _t.TrendsSkill().daily_values(types.SimpleNamespace(settings={}, data_dir="/tmp"), "x") == {}
+
+
+def test_collector_trends_weekly_per_term(tmp_path, monkeypatch):
+    from nooch_village.skills_impl.trends import TrendsSkill
+    monkeypatch.setattr("pytrends.request.TrendReq", _FakeTrendReq)
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd); st.sources.set_active("trends", True)
+    reg = SkillRegistry(); reg.register(TrendsSkill())
+    ctx = _trends_ctx("vegan shoes")
+    w = collect_daily_observations(reg, cockpit2._Stores(dd).sources, cockpit2._Stores(dd).observations,
+                                   ctx, today=datetime.date(2026, 7, 8))          # week-maandag 2026-07-06
+    assert ("trends", "vegan_shoes", "2026-07-06") in w
+    rows = cockpit2._Stores(dd).observations.daily_series("trends_vegan_shoes_day", bron="trends")
+    assert [r["value"] for r in rows] == [160]
+
+
+def test_trends_blijft_inactief_tot_activatie(tmp_path, monkeypatch):
+    from nooch_village.skills_impl.trends import TrendsSkill
+    monkeypatch.setattr("pytrends.request.TrendReq", _FakeTrendReq)
+    dd = _dd(tmp_path)
+    assert not cockpit2._Stores(dd).sources.active("trends")
+    reg = SkillRegistry(); reg.register(TrendsSkill())
+    w = collect_daily_observations(reg, cockpit2._Stores(dd).sources, cockpit2._Stores(dd).observations,
+                                   _trends_ctx(), today=datetime.date(2026, 7, 8))
     assert w == []

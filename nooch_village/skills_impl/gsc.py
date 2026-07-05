@@ -68,7 +68,7 @@ class GscPerformanceSkill(DataSourceSkill):
         "content_gap / low_ranking."
     )
 
-    def available_metrics(self) -> list[str]:
+    def available_metrics(self, context=None) -> list[str]:
         """De ruwe zoekprestatie-velden per query (voor het koppelscherm)."""
         return ["impressions", "clicks", "ctr", "position"]
 

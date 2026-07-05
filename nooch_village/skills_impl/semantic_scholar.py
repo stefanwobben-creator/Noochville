@@ -48,7 +48,7 @@ class SemanticScholarSkill(DataSourceSkill):
         "optionele API-key via .env, backoff bij 429, locale-bewust, fail-closed)."
     )
 
-    def available_metrics(self) -> list[str]:
+    def available_metrics(self, context=None) -> list[str]:
         """Cumulatieve tellers van de gemeten auteur: totaal aantal publicaties en citaties."""
         return ["papers", "citations"]
 

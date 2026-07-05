@@ -57,7 +57,7 @@ def collect_daily_observations(registry, sources: SourceStatusStore, obs: Observ
             continue
         # Welke velden zijn 'due' (nog geen datapunt voor de verwachte periode)?
         due = {}
-        for field in skill.available_metrics():
+        for field in skill.available_metrics(context):
             datum = _expected_period(skill.frequency(field), today, getattr(skill, "lag_days", 0))
             if not _has_point(obs, f"{src}_{field}_day", src, datum):
                 due[field] = datum
