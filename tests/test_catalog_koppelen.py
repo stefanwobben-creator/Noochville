@@ -3,7 +3,7 @@ scope-3-schema, wizard-zichtbaarheid en anchor-lead-autorisatie."""
 from __future__ import annotations
 
 from nooch_village import cockpit2
-from nooch_village.views.catalog_koppelen import render_catalogus_koppelen, catalog_sources
+from nooch_village.views.catalog_koppelen import _koppel_section, catalog_sources
 
 C = "mother_earth__nooch"
 
@@ -23,8 +23,8 @@ def test_bronnen_en_raw_velden_uit_skills():
 
 def test_geseede_velden_tonen_als_gekoppeld_geen_inline_style(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
-    html = render_catalogus_koppelen(st, source="plausible")
-    assert "cl-filter" in html                               # bron-picker (hergebruikt patroon)
+    html = _koppel_section(st, "", "plausible")
+    assert "chip-opt" in html and "chip-wrap" in html       # bron-picker = scope-1-pills in wrap-rij
     assert html.count("in catalogus") == 3                  # visitors/pageviews/visit_duration al geseed
     assert "Publiceer naar catalogus" not in html           # niets ongekoppeld → geen formulier
     assert "style=" not in html                             # geen inline styles (UI-regel)
@@ -32,13 +32,25 @@ def test_geseede_velden_tonen_als_gekoppeld_geen_inline_style(tmp_path):
 
 def test_ongekoppeld_veld_toont_formulier(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
-    # nieuw ruw veld dat nog niet in de catalogus staat
-    html = render_catalogus_koppelen(st, source="shopify")
+    html = _koppel_section(st, "", "shopify")
     assert html.count("in catalogus") == 4                  # de vier geseede shopify-velden
     # simuleer een ongekoppeld veld via een niet-geseed veld op een verse def-store
     st.defs._d.clear(); st.defs._save()                     # leeg → alle velden ongekoppeld
-    html2 = render_catalogus_koppelen(st, source="shopify")
+    html2 = _koppel_section(st, "", "shopify")
     assert html2.count("Publiceer naar catalogus") == 4 and "in catalogus" not in html2
+    assert "value='/catalog?koppel=shopify'" in html2       # publiceren blijft op het samengevoegde scherm
+
+
+def test_catalog_curator_ingang_open_en_niet_curator_onzichtbaar(tmp_path):
+    """Scope 4: /catalog toont curator-only een 'Koppel nieuw veld'-ingang (dicht) resp. de koppel-sectie
+    (open via ?koppel=<source>); een niet-curator ziet er niets van (content zit niet in de DOM)."""
+    st = cockpit2._Stores(_dd(tmp_path))
+    closed = cockpit2.render_catalog(st, csrf_token="t", curator=True)
+    assert "+ Koppel nieuw veld" in closed and "← sluiten" not in closed
+    opened = cockpit2.render_catalog(st, csrf_token="t", koppel="plausible", curator=True)
+    assert "← sluiten" in opened and "chip-opt" in opened   # sectie + scope-1-bron-picker inline
+    non = cockpit2.render_catalog(st, csrf_token="t", koppel="plausible", curator=False)
+    assert "Koppel nieuw veld" not in non and "← sluiten" not in non
 
 
 def test_publiceren_maakt_item_volgens_scope3(tmp_path):

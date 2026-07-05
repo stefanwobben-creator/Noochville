@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from nooch_village import cockpit2
-from nooch_village.views import (overview, catalog, catalog_koppelen, metrics,
+from nooch_village.views import (overview, catalog, metrics,
                                  werkoverleg, roloverleg)
 
 pytestmark = pytest.mark.smoke   # markeert alle tests in dit bestand als smoke
@@ -47,7 +47,7 @@ def test_smoke_render_hoofdviews(dd):
         overview.render_node(st, CIRCLE, "overview"),
         overview.render_node(st, CIRCLE, "metrics"),
         catalog.render_catalog(st),
-        catalog_koppelen.render_catalogus_koppelen(st, source="plausible"),
+        catalog.render_catalog(st, koppel="plausible", curator=True),   # samengevoegd koppel-scherm
         metrics.render_kpi_composer(st, CIRCLE),
         werkoverleg.render_werkoverleg(st, CIRCLE),
         roloverleg.render_roloverleg2(st, CIRCLE),
