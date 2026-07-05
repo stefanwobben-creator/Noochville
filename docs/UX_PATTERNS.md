@@ -18,8 +18,10 @@ style toe.
 | `.btn` | Knop/actie (ook als `<a>`) | `.ok` (primair groen), `.no` (destructief coral), `.sm` (klein), `.ghost` (randloos); `.dellink` voor een pure verwijder-link | `web_base.py` |
 | `.cl-filter` | Segmented picker: filter-/tab-/periode-/bron-keuze | `.on` (actieve keuze) | `cockpit2_util.py` |
 | `.tile` | KPI-/metric-tegel | `.tile-grid` (responsive 1→2 kolommen), `.tile-h`/`.tile-t` (kop/titel), `.tile-trend` (waarde+grafiek), `.tile-data` (uitklap ruwe data), `.tile-prov` (bron-badge) | `cockpit2_util.py` |
+| `.chip-opt` | Interactieve keuze-pill/chip (categorie-, filter-keuze): pill-vorm, achtergrond, klikbaar (`<a>`/`<button>`) | `.on` (actieve keuze, donkere vulling); zet ze in een **`.chip-wrap`** (flex-wrap-rij) zodat een rij chips netjes **binnen de kaart afbreekt** i.p.v. door te lopen | `cockpit2_util.py` |
+| `.switch` | Schuif-toggle (aan/uit, bv. "vergelijk met vorige periode") | `.on` (aan → knop schuift, groene vulling); wikkel label + toggle in **`.switch-field`** (label links, switch rechts) | `cockpit2_util.py` |
 
-Aanvullend veelgebruikt: `.muted` (gedimde tekst), `.chip` (label), `.ptitle` (blok-titel),
+Aanvullend veelgebruikt: `.muted` (gedimde tekst), `.chip` (label), `.pill` (kleine badge), `.ptitle` (blok-titel),
 `.att-lbl` (formulier-label), `.qadd-form`/`.editor` (toevoeg-/bewerk-formulieren), `.flash` (banner),
 `.cl-bar` (rij van `.cl-filter`'s). Zie `web_base.py`/`cockpit2_util.py` voor de volledige set.
 

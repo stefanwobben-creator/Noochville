@@ -784,5 +784,17 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .ghost-off{opacity:.55;cursor:not-allowed}
 .btn.grey{color:var(--muted);border-style:dashed;cursor:not-allowed}
 @media(max-width:760px){.c2-wrap{flex-direction:column}.c2-rail{max-width:none;flex-basis:auto}}
+/* ── Design-systeem-bouwstenen (metrics-UI visuele pariteit) ────────────────────────────────
+   Herbruikbare interactieve chip/pill + wrap-rij, en een schuif-toggle. Referentie: kpi-wizard-v2.html
+   (chips) en de dashboard-tab van het eerdere prototype (toggle). Nog geen scherm gekoppeld. */
+.chip-wrap{display:flex;flex-wrap:wrap;gap:.5rem}
+.chip-opt{display:inline-block;padding:.4rem .8rem;border-radius:var(--radius-pill);border:1px solid var(--border);background:var(--cream);color:var(--ink);font:inherit;font-size:13px;line-height:1.2;cursor:pointer;text-decoration:none}
+.chip-opt:hover{border-color:var(--muted)}
+.chip-opt.on{background:var(--ink);color:var(--cream);border-color:var(--ink)}
+.switch{display:inline-block;width:34px;height:19px;flex:none;border:none;padding:0;border-radius:var(--radius-pill);background:var(--border);position:relative;cursor:pointer;vertical-align:middle;transition:background .15s}
+.switch::after{content:'';position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:var(--surface);transition:left .15s}
+.switch.on{background:var(--green)}
+.switch.on::after{left:17px}
+.switch-field{display:inline-flex;align-items:center;gap:.5rem;font-size:12.5px;color:var(--muted)}
 """
 
