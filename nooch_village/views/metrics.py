@@ -777,6 +777,84 @@ def _obs_key_for_indicator(source: str, veld: str):
     return (None, None)
 
 
+# ── Snapshot vs flux: declaratief van de DataSourceSkill (niet geraden uit daily_values) ─────────
+_PERIOD_DAYS = {"daily": 1, "weekly": 7, "monthly": 30}
+_PERIOD_LABEL = {"daily": "dag", "weekly": "week", "monthly": "maand"}
+
+
+def _data_source_classes():
+    """De DataSourceSkill-klassen — de declaratieve bron van kind/frequency (class-attributen, geen
+    registry-instantie nodig). Zelfde lijst als catalog_sources()."""
+    from nooch_village.skills_impl.plausible import PlausibleSkill
+    from nooch_village.skills_impl.shopify_sales import ShopifySalesSkill
+    from nooch_village.skills_impl.gsc import GscPerformanceSkill
+    from nooch_village.skills_impl.openalex import OpenalexSkill
+    return (PlausibleSkill, ShopifySalesSkill, GscPerformanceSkill, OpenalexSkill)
+
+
+def _source_kind(source: str) -> str:
+    """'snapshot' of 'flux' — declaratief van de DataSourceSkill, niet afgeleid uit hoe daily_values
+    toevallig geschreven is. Onbekende bron → 'flux' (het bestaande gedrag)."""
+    for sk in _data_source_classes():
+        if sk.SOURCE == source:
+            return getattr(sk, "kind", "flux")
+    return "flux"
+
+
+def _source_frequency(source: str) -> str:
+    for sk in _data_source_classes():
+        if sk.SOURCE == source:
+            return getattr(sk, "DEFAULT_FREQUENCY", "daily")
+    return "daily"
+
+
+def _snapshot_delta(points, frequency: str):
+    """Genormaliseerde delta van een cumulatieve snapshot-reeks: (laatste stand − vorige stand),
+    geschaald naar de frequentie-periode. `points` = [(ts, value), ...]. Geeft (delta_per_periode,
+    interval_dagen), of (None, None) bij < 2 metingen. Het interval is het WERKELIJKE aantal dagen
+    tussen de twee gebruikte metingen, zodat een delta over een gemiste periode niet misleidt."""
+    pts = sorted([p for p in (points or []) if p[1] is not None], key=lambda p: p[0])
+    if len(pts) < 2:
+        return None, None
+    (t_prev, v_prev), (t_last, v_last) = pts[-2], pts[-1]
+    interval_days = max(1, round((t_last - t_prev) / 86400))
+    period = _PERIOD_DAYS.get(frequency, 7)
+    return (v_last - v_prev) * period / interval_days, interval_days
+
+
+def _snapshot_body(st: _Stores, tile: dict, frequency: str):
+    """(body, data) voor een snapshot-tegel: standaard de genormaliseerde delta (+N/periode) met het
+    werkelijke meet-interval; de absolute stand + oplopende reeks blijven beschikbaar in de uitklap."""
+    metric, bron = _obs_key_for_indicator(tile["source"], tile["measure"])
+    rows = st.observations.daily_series(metric, bron=bron) if metric else []
+    points = [(r["ts"], r["value"]) for r in rows]
+    delta, interval = _snapshot_delta(points, frequency)
+    stand = points[-1][1] if points else None
+    plabel = _PERIOD_LABEL.get(frequency, "periode")
+    if delta is None:
+        body = "<div class='kpi-val'><span class='muted'>nog te weinig metingen</span></div>"
+    else:
+        sign = "+" if delta >= 0 else "−"
+        body = (f"<div class='kpi-val'>{sign}{_num(abs(round(delta)))}"
+                f" <span class='muted'>/{_e(plabel)}</span></div>"
+                f"<div class='muted'>gemeten over {interval} dagen · stand nu: {_num(stand)}</div>")
+    data = ""
+    if points:
+        dt = _data_table({"kind": "series", "points": points}, bron=bron)
+        data = f"<details class='tile-data'><summary>ruwe data (absolute stand)</summary>{dt}</details>"
+    return body, data
+
+
+def _fresh_threshold(source: str) -> int:
+    """De vers-drempel in dagen. Flux → vast 7. Snapshot → de frequentie-periode + marge (weekly ≈10,
+    monthly ≈45), zodat een net-gemeten snapshot niet vroegtijdig 'dood' lijkt en een gemiste periode
+    wél. Het kind-veld stuurt hier — de eerder uitgestelde drempel-per-frequentie-koppeling."""
+    if _source_kind(source) != "snapshot":
+        return _FRESH_DAYS
+    period = _PERIOD_DAYS.get(_source_frequency(source), 7)
+    return period + max(3, period // 2)
+
+
 def indicator_freshness(st, source: str, veld: str, today=None):
     """Vier staten van een indicator, uit DEZELFDE observatie-store als de tegels:
       'fresh'        = datapunt ≤ _FRESH_DAYS dagen oud            → bron vult
@@ -801,7 +879,7 @@ def indicator_freshness(st, source: str, veld: str, today=None):
         age = ((today or datetime.date.today()) - datetime.date.fromisoformat(datum)).days
     except (TypeError, ValueError):
         return "none"
-    return "fresh" if age <= _FRESH_DAYS else "stale"
+    return "fresh" if age <= _fresh_threshold(source) else "stale"
 
 
 _FRESH_META = {"fresh": "green", "stale": "coral", "none": "muted", "unconfigured": "amber"}
@@ -826,7 +904,11 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
     # 'Actueel' = laatste bekende dagwaarde uit de observatie-store (dezelfde betekenis als Plausible);
     # geen dag-observaties voor deze bron → 'geen live data'.
     ak_metric, ak_bron = _daily_obs_key(tile["source"], tile["measure"]) if actueel else (None, None)
-    if actueel:
+    if _source_kind(tile["source"]) == "snapshot" and not actueel:
+        # Snapshot-bron: standaard de genormaliseerde delta (+N/periode), niet de oplopende stand.
+        body, data = _snapshot_body(st, tile, _source_frequency(tile["source"]))
+        res = {"kind": "number", "value": None}       # delta-tegel → geen drempel-warn op een stand
+    elif actueel:
         rows = st.observations.daily_series(ak_metric, bron=ak_bron) if ak_metric else []
         pts = [(r["ts"], r["value"]) for r in rows]
         latest = pts[-1][1] if pts else None

@@ -66,6 +66,12 @@ class DataSourceSkill(Skill):
     SOURCE: str = ""
     DEFAULT_FREQUENCY: str = "daily"
 
+    kind: str = "flux"
+    """'flux' = de dagwaarde is de gebeurtenis van die dag (bezoekers, orders) → de tegel toont de
+    waarde zelf. 'snapshot' = de dagwaarde is een cumulatieve STAND (citaties, publicaties) → de tegel
+    toont standaard de genormaliseerde delta (bijv. +80/week), niet de oplopende stand. Declaratief:
+    tegel-render, vers-signaal en delta-afleiding sturen hierop, i.p.v. het uit daily_values te raden."""
+
     lag_days: int = 0
     """Hoeveel dagen deze bron structureel achterloopt. De verwachte periode schuift zoveel terug:
     de collector haalt de meest recente BESCHIKBARE dag op (today − 1 − lag_days), niet blind gisteren.
