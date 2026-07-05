@@ -18,26 +18,71 @@ Segmentatie:
 Fail-closed: bij élke fout retourneert de skill een dict met "error"; nooit mock-data.
 """
 from __future__ import annotations
+import logging
 import time
 import random
 import urllib.request
 import urllib.parse
 import urllib.error
 import json
-from nooch_village.skills import Skill
+from nooch_village.skills import DataSourceSkill
+
+log = logging.getLogger(__name__)
 
 _BASE   = "https://api.semanticscholar.org/graph/v1/paper/search"
 _FIELDS = "title,abstract,year,citationCount,tldr"
+_AUTHOR_SEARCH = "https://api.semanticscholar.org/graph/v1/author/search"
 
 
-class SemanticScholarSkill(Skill):
+class SemanticScholarSkill(DataSourceSkill):
     name = "semscholar_tldr"
+    SOURCE = "semanticscholar"
+    # Snapshot-bron (cumulatieve auteur-tellers, groeien traag) → maandelijks meten. De tegel toont de
+    # genormaliseerde delta i.p.v. de oplopende stand (erft het OpenAlex-snapshot-patroon).
+    kind = "snapshot"
+    DEFAULT_FREQUENCY = "monthly"
     cost = "rate_limited"
     optional_env = ("SEMANTIC_SCHOLAR_API_KEY",)
     description = (
         "Zoekt wetenschappelijke papers op via Semantic Scholar (tldr-veld, "
         "optionele API-key via .env, backoff bij 429, locale-bewust, fail-closed)."
     )
+
+    def available_metrics(self) -> list[str]:
+        """Cumulatieve tellers van de gemeten auteur: totaal aantal publicaties en citaties."""
+        return ["papers", "citations"]
+
+    def is_configured(self, context) -> bool:
+        """Keyless: Semantic Scholar werkt zonder key (rate-limited); een key geeft alleen hogere
+        limieten. 'Niet geconfigureerd' geldt hier dus niet — een lege reeks is een echte fout of
+        nog-niet-gemeten, niet ontbrekende creds."""
+        return True
+
+    def daily_values(self, context, datum: str) -> dict:
+        """Snapshot van de cumulatieve tellers (paperCount/citationCount) van de top-auteur die matcht op
+        de missie-query (`semanticscholar_query`, curator-instelbaar zoals openalex_query). Legt de STAND
+        vast (geen verschil — dat leidt de tegel bij weergave af); `datum` is het periode-LABEL (monthly),
+        geen historische query-datum. Keyless; optionele key voor hogere limieten. Fail-closed per veld."""
+        out = {"papers": None, "citations": None}
+        settings = getattr(context, "settings", {}) or {}
+        query = (settings.get("semanticscholar_query") or "regenerative agriculture").strip()
+        api_key = settings.get("SEMANTIC_SCHOLAR_API_KEY", "")
+        url = (f"{_AUTHOR_SEARCH}?query={urllib.parse.quote(query)}"
+               f"&fields=paperCount,citationCount&limit=1")
+        headers = {"User-Agent": "NoochVillage/1.0 (nooch.earth research bot)"}
+        if api_key:
+            headers["x-api-key"] = api_key
+        data = self._fetch_with_backoff(url, headers)
+        if isinstance(data, str):                 # fout-string uit de backoff-helper
+            log.warning("Semantic Scholar daily_values faalde (%s): %s", query, data)
+            return out
+        results = data.get("data", [])
+        if not results:
+            return out                            # geen auteur gevonden → None (geen 'dood')
+        a = results[0]
+        out["papers"] = int(a.get("paperCount", 0) or 0)
+        out["citations"] = int(a.get("citationCount", 0) or 0)
+        return out
 
     def run(self, payload: dict, context) -> dict:
         term   = payload.get("term", "").strip()

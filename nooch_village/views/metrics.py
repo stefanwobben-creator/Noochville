@@ -761,7 +761,7 @@ def _daily_obs_key(source: str, measure: str):
 # interval) zodra er trage bronnen zijn die met 7 dagen ten onrechte als 'dood' worden gemarkeerd.
 _FRESH_DAYS = 7
 # Bron-velden waarvoor 'recente data' zin heeft (data-bronnen). Manueel/formule/kpi → geen signaal.
-_DATA_SOURCES = {"plausible", "shopify", "gsc", "openalex", "werkoverleg"}
+_DATA_SOURCES = {"plausible", "shopify", "gsc", "openalex", "semanticscholar", "werkoverleg"}
 
 
 def _obs_key_for_indicator(source: str, veld: str):
@@ -789,7 +789,8 @@ def _data_source_classes():
     from nooch_village.skills_impl.shopify_sales import ShopifySalesSkill
     from nooch_village.skills_impl.gsc import GscPerformanceSkill
     from nooch_village.skills_impl.openalex import OpenalexSkill
-    return (PlausibleSkill, ShopifySalesSkill, GscPerformanceSkill, OpenalexSkill)
+    from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
+    return (PlausibleSkill, ShopifySalesSkill, GscPerformanceSkill, OpenalexSkill, SemanticScholarSkill)
 
 
 def _source_kind(source: str) -> str:

@@ -228,3 +228,57 @@ def test_openalex_blijft_inactief_tot_activatie(tmp_path):
     w = collect_daily_observations(reg, cockpit2._Stores(dd).sources,
                                    cockpit2._Stores(dd).observations, _ctx(), today=datetime.date(2026, 7, 8))
     assert w == []                                       # inactief → geen fetch/write
+
+
+def test_semanticscholar_snapshot_contract_en_failclosed(monkeypatch):
+    """Semantic Scholar is een snapshot-DataSourceSkill (SOURCE='semanticscholar', kind='snapshot',
+    monthly, keyless → is_configured=True). daily_values legt de STAND vast (auteur paperCount/
+    citationCount), fail-closed per veld, sleutels ⊆ available_metrics."""
+    from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
+    sk = SemanticScholarSkill()
+    assert isinstance(sk, DataSourceSkill) and sk.SOURCE == "semanticscholar"
+    assert sk.kind == "snapshot" and sk.frequency("papers") == "monthly" and sk.is_configured(_ctx())
+    assert set(sk.available_metrics()) == {"papers", "citations"}
+    monkeypatch.setattr(sk, "_fetch_with_backoff", lambda url, headers: "HTTP 500: boom")   # geen netwerk
+    vals = sk.daily_values(_ctx(), "2026-07-01")
+    assert set(vals) == set(sk.available_metrics()) and all(v is None for v in vals.values())
+    monkeypatch.setattr(sk, "_fetch_with_backoff",
+                        lambda url, headers: {"data": [{"paperCount": 312, "citationCount": 18450}]})
+    assert sk.daily_values(_ctx(), "2026-07-01") == {"papers": 312, "citations": 18450}
+
+
+class _MonthlySnapshot(DataSourceSkill):
+    name = "ms"; SOURCE = "semanticscholar"; kind = "snapshot"; DEFAULT_FREQUENCY = "monthly"; required_env = ()
+    def __init__(self, vals): self._vals = vals
+    def run(self, payload, context): return {}
+    def available_metrics(self): return ["papers", "citations"]
+    def is_configured(self, context): return True
+    def daily_values(self, context, datum): return dict(self._vals)
+
+
+def test_collector_monthly_snapshot_stand_onder_maandsleutel_idempotent(tmp_path):
+    """Een monthly snapshot legt de STAND vast onder de maand-sleutel (1e van de maand), één meting per
+    maand (idempotent); een volgende maand is een nieuwe sleutel."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd); st.sources.set_active("semanticscholar", True)
+    reg = SkillRegistry(); reg.register(_MonthlySnapshot({"papers": 312, "citations": 18450}))
+    srcs = lambda: cockpit2._Stores(dd).sources
+    obs = lambda: cockpit2._Stores(dd).observations
+    w = collect_daily_observations(reg, srcs(), obs(), _ctx(), today=datetime.date(2026, 7, 20))
+    assert ("semanticscholar", "citations", "2026-07-01") in w                 # 1e van juli
+    assert [r["value"] for r in obs().daily_series("semanticscholar_papers_day", bron="semanticscholar")] == [312]
+    # zelfde maand → niets (één meting/maand)
+    assert collect_daily_observations(reg, srcs(), obs(), _ctx(), today=datetime.date(2026, 7, 28)) == []
+    # volgende maand → nieuwe sleutel
+    w3 = collect_daily_observations(reg, srcs(), obs(), _ctx(), today=datetime.date(2026, 8, 5))
+    assert ("semanticscholar", "papers", "2026-08-01") in w3
+
+
+def test_semanticscholar_blijft_inactief_tot_activatie(tmp_path):
+    from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
+    dd = _dd(tmp_path)
+    assert not cockpit2._Stores(dd).sources.active("semanticscholar")
+    reg = SkillRegistry(); reg.register(SemanticScholarSkill())
+    w = collect_daily_observations(reg, cockpit2._Stores(dd).sources,
+                                   cockpit2._Stores(dd).observations, _ctx(), today=datetime.date(2026, 7, 20))
+    assert w == []
