@@ -17,6 +17,7 @@ from nooch_village.metric_schema import (
 )
 from nooch_village.metrics import window_cutoff, window_range, filter_samples
 from nooch_village.observations import ObservationStore
+from nooch_village.i18n import t
 from nooch_village import org
 from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD
 
@@ -109,7 +110,8 @@ def _line_chart_svg(points, unit: str = "", prev=None) -> str:
     `prev` (vorige periode) → een tweede, lichtere gestreepte lijn over dezelfde breedte + y-schaal.
     0 punten → nette 'geen data'; 1 punt → 'te weinig voor een lijn' (nooit een vlakke lijn)."""
     if not points:
-        return "<div class='kpi-val'><span class='muted' style='font-size:.9rem'>geen data in deze periode</span></div>"
+        return (f"<div class='kpi-val'><span class='muted' style='font-size:.9rem'>"
+                f"{_e(t('dashboard.geen_data_periode'))}</span></div>")
     import datetime as _dt
     vals = [v for _, v in points]
     if len(points) < 2:
@@ -689,7 +691,7 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
         latest = pts[-1][1] if pts else None
         res = {"kind": "number", "value": latest}
         body = (f"<div class='kpi-val'>{_num(latest)}</div>" if latest is not None
-                else "<div class='kpi-val'><span class='muted'>geen live data</span></div>")
+                else f"<div class='kpi-val'><span class='muted'>{_e(t('dashboard.geen_live_data'))}</span></div>")
         data = ""
         if pts:
             dt = _data_table({"kind": "series", "points": pts}, bron=ak_bron)
@@ -933,11 +935,13 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: st
             u = f"{nav}&mw={k}"
             return f"<a class='cl-filter{on} js-modal' href='{u}' data-href='{u}'>{_e(lbl)}</a>"
         return f"<a class='cl-filter{on}' href='{base}&mw={k}{cmp_q}'>{_e(lbl)}</a>"
-    wbar = "<div class='cl-bar'><span class='muted'>Periode:</span> " + "".join(pl(k, lbl) for k, lbl in _MW)
+    wbar = (f"<div class='cl-bar'><span class='muted'>{_e(t('dashboard.periode'))}</span> "
+            + "".join(pl(k, lbl) for k, lbl in _MW))
     if not nav:                                        # compare-toggle (server-side)
         ct = " on" if compare else ""
         ct_url = f"{base}&mw={_e(win)}" + ("" if compare else "&compare=1")
-        wbar += f" <span class='muted'>·</span> <a class='cl-filter{ct}' href='{ct_url}'>Vergelijk met vorige periode</a>"
+        wbar += (f" <span class='muted'>·</span> <a class='cl-filter{ct}' href='{ct_url}'>"
+                 f"{_e(t('dashboard.vergelijk'))}</a>")
     wbar += "</div>"
     if win == "aangepast" and not nav:                 # van/tot-formulier
         wbar += (f"<form method='get' action='/node' class='cl-bar'>"
@@ -1187,8 +1191,8 @@ def render_kpi_composer(st: _Stores, node_id: str = "", csrf_token: str = "", ms
 
     step1 = (
         "<div class='cl-bar'>"
-        "<button type='button' class='cl-filter kc-mode-btn on' data-mode='indicator'>Bestaande indicator</button>"
-        "<button type='button' class='cl-filter kc-mode-btn' data-mode='formule'>Formule maken</button></div>"
+        f"<button type='button' class='cl-filter kc-mode-btn on' data-mode='indicator'>{_e(t('wizard.modus.indicator'))}</button>"
+        f"<button type='button' class='cl-filter kc-mode-btn' data-mode='formule'>{_e(t('wizard.modus.formule'))}</button></div>"
         "<input type='hidden' name='mode' value='indicator'>"
         "<div class='kc-mode' data-mode='indicator'>"
         f"<div class='cl-bar kc-cats'>{cat_chips}</div>"
