@@ -39,6 +39,7 @@ from nooch_village.people import PeopleStore
 from nooch_village.assignments import Assignments
 from nooch_village.attachments import AttachmentStore, ARTEFACT_KINDS
 from nooch_village.observations import ObservationStore
+from nooch_village import observations
 from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
 from nooch_village.artefact_seen import SeenStore
@@ -1040,6 +1041,11 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
         _m = st.werk.get(g("circle"))
         _room = f"wo-{g('circle')}-{int(_m['started_at'])}" if _m and _m.get("started_at") else None
         st.werk.close(g("circle"))
+        # dag-observatie (tevredenheid + duur) van dit overleg wegschrijven — idempotent per dag,
+        # naast de bestaande all-time aggregaten in de log.
+        _lg = st.werk.log(g("circle"))
+        if _lg:
+            observations.record_werk_daily(st.observations, g("circle"), _lg[-1])
         if _room:
             verwijder_livekit_room(_room)
         msg = "✓ werkoverleg gesloten"

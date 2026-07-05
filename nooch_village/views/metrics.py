@@ -630,33 +630,61 @@ def _compare_delta(res, prev_res) -> str:
     return f"<span class='delta {cls}'>{arrow} {abs(d):g} vs vorige periode</span>"
 
 
-def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=False, prev_win=None) -> str:
+def _daily_obs_key(source: str, measure: str):
+    """(observatie-metric, bron) voor 'Actueel' — de laatste bekende dagwaarde, zoals bij Plausible.
+    (None, None) = deze bron heeft geen dag-observaties (→ 'geen live data')."""
+    from nooch_village.observations import WERK_DAILY, SHOPIFY_DAILY
+    if source == "pulse_visitors":
+        return ("visitors_day", "plausible")
+    if source.startswith("werk:") and measure in WERK_DAILY:
+        return (WERK_DAILY[measure], "werkoverleg")
+    if source == "shopify" and measure in SHOPIFY_DAILY:
+        return (SHOPIFY_DAILY[measure], "shopify")
+    return (None, None)
+
+
+def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=False,
+                 prev_win=None, actueel=False) -> str:
     if tile.get("form") == "formule":          # fail-closed live-berekening A op B per dag
         return _render_formula_tile(st, rec, tile, csrf, cutoff, end)
-    res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), cutoff, end)
-    prev_res = None
-    if compare and prev_win and prev_win[0] is not None:
-        prev_res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), prev_win[0], prev_win[1])
     g = _grondslag(st, tile["source"], tile["measure"])
-    # Doel-koppeling: de indicator geeft info, het project is het doel (outcome + deadline).
     goal = ""
     gp = st.projects.get(tile.get("goal_pid")) if tile.get("goal_pid") else None
     form = tile.get("form", "getal")
-    if form == "burnup":
-        body = _render_burnup(res, tile.get("target"), gp)
-    elif form == "doelmeter":
-        body = _render_bullet(res, tile.get("target"), g.get("richting"), g.get("benchmark"))
+    # 'Actueel' = laatste bekende dagwaarde uit de observatie-store (dezelfde betekenis als Plausible);
+    # geen dag-observaties voor deze bron → 'geen live data'.
+    ak_metric, ak_bron = _daily_obs_key(tile["source"], tile["measure"]) if actueel else (None, None)
+    if actueel:
+        rows = st.observations.daily_series(ak_metric, bron=ak_bron) if ak_metric else []
+        pts = [(r["ts"], r["value"]) for r in rows]
+        latest = pts[-1][1] if pts else None
+        res = {"kind": "number", "value": latest}
+        body = (f"<div class='kpi-val'>{_num(latest)}</div>" if latest is not None
+                else "<div class='kpi-val'><span class='muted'>geen live data</span></div>")
+        data = ""
+        if pts:
+            dt = _data_table({"kind": "series", "points": pts}, bron=ak_bron)
+            data = f"<details class='tile-data'><summary>ruwe data</summary>{dt}</details>"
     else:
-        body = _render_form(res, form, tile.get("target"), prev=prev_res)
-    # aard: moment → delta-badge naast het getal (reeks krijgt al de tweede lijn in de grafiek)
-    if compare and prev_res is not None and res.get("chart") != "line":
-        body += _compare_delta(res, prev_res)
-    # Uitklap: de exacte ruwe datapunten (datum · waarde · bron)
-    data = ""
-    if form in ("trend", "verdeling", "doelmeter", "burnup"):
-        dt = _data_table(res, bron=g.get("bron", tile["source"]))
-        if dt:
-            data = f"<details class='tile-data'><summary>ruwe data{_delta_badge(res)}</summary>{dt}</details>"
+        res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), cutoff, end)
+        prev_res = None
+        if compare and prev_win and prev_win[0] is not None:
+            prev_res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), prev_win[0], prev_win[1])
+        if form == "burnup":
+            body = _render_burnup(res, tile.get("target"), gp)
+        elif form == "doelmeter":
+            body = _render_bullet(res, tile.get("target"), g.get("richting"), g.get("benchmark"))
+        else:
+            body = _render_form(res, form, tile.get("target"), prev=prev_res)
+        # aard: moment → delta-badge naast het getal (reeks krijgt al de tweede lijn in de grafiek)
+        if compare and prev_res is not None and res.get("chart") != "line":
+            body += _compare_delta(res, prev_res)
+        # Uitklap: de exacte ruwe datapunten (datum · waarde · bron)
+        data = ""
+        if form in ("trend", "verdeling", "doelmeter", "burnup"):
+            dt = _data_table(res, bron=g.get("bron", tile["source"]))
+            if dt:
+                data = f"<details class='tile-data'><summary>ruwe data{_delta_badge(res)}</summary>{dt}</details>"
     if gp is not None:
         due = _fmt_due(gp.get("due")) if gp.get("due") else ""
         goal = (f"<div class='tile-goal muted'>naar doel: <b>{_e(str(gp.get('scope') or gp['id'])[:50])}</b>"
@@ -865,7 +893,7 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: st
     base = f"/node?id={_e(rec.id)}&tab=metrics"
     tiles = st.metrics.tiles_of(rec.id)
     live = any((t.get("source") in _LIVE_TILE_SOURCES) or t.get("source", "").startswith("shopify")
-               for t in tiles)
+               or t.get("source", "").startswith("werk:") for t in tiles)
     cmp_q = "&compare=1" if compare else ""
 
     def pl(k, lbl):
@@ -905,8 +933,8 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: st
     head = f"<div class='cl-head'><h3>Metrics</h3><span class='kc-actions'>{mk}{addlink}</span></div>{wbar}"
 
     # 1. Dashboard van tegels (de KPI's) — één centrale periode voor alle tegels
-    dash = ("".join(_render_tile(st, rec, t, start, csrf, end=end, compare=compare, prev_win=prev_win)
-                    for t in tiles) if tiles
+    dash = ("".join(_render_tile(st, rec, t, start, csrf, end=end, compare=compare, prev_win=prev_win,
+                                 actueel=(win == "actueel")) for t in tiles) if tiles
             else "<p class='muted'>Nog geen KPI's op het dashboard. Maak er een met “+ KPI maken”.</p>")
     out = f"<div class='c2-sec'>{head}</div><div class='c2-sec'><div class='tile-grid'>{dash}</div></div>{_METRICS_JS}"
 
