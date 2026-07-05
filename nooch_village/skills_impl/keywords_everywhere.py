@@ -1,11 +1,26 @@
 from __future__ import annotations
 import logging, os
 import requests
-from nooch_village.skills import Skill
+from nooch_village.skills import DataSourceSkill
 
 log = logging.getLogger(__name__)
 
 _VALID_DATA_SOURCES = {"gkp", "cli"}
+_BATCH = 100                       # KE: max 100 keywords per call (1 credit per keyword)
+
+
+def _approved_keywords(context) -> list[str]:
+    """De gecureerde keywords uit de Library (status 'approved') — de dynamische veldenbron. Zo voedt
+    de discovery-lus KE automatisch; geen aparte termenlijst."""
+    lib = getattr(context, "library", None) if context is not None else None
+    if lib is None:
+        return []
+    return [w for w, e in lib.all().items() if e.get("status") == "approved"]
+
+
+def _sanitize_field(kw: str) -> str:
+    """Keyword → veilige observatie-veldsleutel (keywordseverywhere_<veld>_day)."""
+    return "".join(c if c.isalnum() else "_" for c in kw.strip().lower()).strip("_") or "kw"
 
 
 def opportunity_score(volume, *, position=None, ranks=None) -> int | None:
@@ -55,13 +70,56 @@ def trend_change_pct(trend) -> float | None:
     return round((vals[-1] - vals[0]) / vals[0] * 100, 1)
 
 
-class KeywordsEverywhereSkill(Skill):
+class KeywordsEverywhereSkill(DataSourceSkill):
     name = "keywords_everywhere"
+    SOURCE = "keywordseverywhere"
+    # Flux-bron: zoekvolume is een niveau (geen cumulatieve stand) → de tegel toont de waarde/lijn zelf.
+    # Weekly: KE-volume is een maand-gemiddelde, weekly meten is ruim voldoende.
+    kind = "flux"
+    DEFAULT_FREQUENCY = "weekly"
     needs_secret = True
     cost = "credits"
     required_env = ("KEYWORDS_EVERYWHERE_API_KEY",)
     side_effect_free = True
     description = "Haalt echte search volume, CPC, competitie en 12-maands trend per keyword uit de Keywords Everywhere API (geen mock)."
+
+    def available_metrics(self, context=None) -> list[str]:
+        """DYNAMISCHE velden: de approved Library-keywords als veilige sleutels (alleen zoekvolume).
+        Zonder context → leeg (de keywords staan in de Library, niet vast in de skill)."""
+        return [_sanitize_field(kw) for kw in _approved_keywords(context)]
+
+    def is_configured(self, context) -> bool:
+        """Betaalde API met credits → key vereist. Geen key = 'niet geconfigureerd' (los van 'dood')."""
+        s = getattr(context, "settings", {}) or {}
+        return bool(s.get("KEYWORDS_EVERYWHERE_API_KEY") or os.getenv("KEYWORDS_EVERYWHERE_API_KEY"))
+
+    def daily_values(self, context, datum: str, *, _run=None) -> dict:
+        """Zoekvolume per approved Library-keyword, via de batch-`run` (max 100 keywords/call, 1 credit
+        per keyword — dus in blokken van 100, nooit één call per term). Alleen volume (geen CPC).
+        Volledig fail-closed per veld: een falende chunk laat die keywords op None en crasht de puls
+        niet. `_run` injecteerbaar voor tests (geen netwerk)."""
+        keywords = _approved_keywords(context)
+        out = {_sanitize_field(kw): None for kw in keywords}
+        if not keywords:
+            return out
+        run = _run or self.run
+        s = getattr(context, "settings", {}) or {}
+        country = s.get("keywordseverywhere_country", "nl")
+        currency = s.get("keywordseverywhere_currency", "eur")
+        vols: dict = {}
+        for i in range(0, len(keywords), _BATCH):
+            chunk = keywords[i:i + _BATCH]
+            try:
+                res = run({"kw": chunk, "country": country, "currency": currency}, context)
+                for row in (res.get("keywords") or []):
+                    vols[(row.get("keyword") or "").strip().lower()] = row.get("vol")
+            except Exception as exc:                 # geen key, HTTP-fout, KE-wijziging → chunk faalt
+                log.warning("Keywords Everywhere batch faalde (chunk %d): %s", i // _BATCH, exc)
+        for kw in keywords:
+            v = vols.get(kw.strip().lower())
+            if v is not None:
+                out[_sanitize_field(kw)] = v
+        return out
 
     def run(self, payload: dict, context) -> dict:
         """Haal keyword-data op uit de Keywords Everywhere API.
