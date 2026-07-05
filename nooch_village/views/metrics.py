@@ -39,13 +39,13 @@ _SOURCE_KPIS = {"pulse_visitors": {"name": "Websitebezoekers (per dag)", "unit":
 def _source_samples(dd: str, source: str):
     """Lees samples voor een bron-KPI. Twee HELDER onderscheiden reeksen (niet meer één 'pulse_visitors'
     die twee dingen betekent):
-      - `pulse_visitors`     → de DAGREEKS (visitors_day, bron=plausible) uit observations.jsonl;
+      - `pulse_visitors`     → de DAGREEKS (plausible_visitors_day, bron=plausible) uit observations.jsonl;
       - `pulse_visitors_7d`  → de rollende 7d-total (visitors_7d) uit pulse_history.jsonl (legacy snapshot).
     """
     if source == "pulse_visitors":
         store = ObservationStore(os.path.join(dd, "observations.jsonl"))
         return [{"at": r["ts"], "value": r["value"]}
-                for r in store.daily_series("visitors_day", bron="plausible")]
+                for r in store.daily_series("plausible_visitors_day", bron="plausible")]
     if source == "pulse_visitors_7d":
         repo = os.path.join(os.path.dirname(__file__), "..", "..", "data", "pulse_history.jsonl")
         out = []
@@ -748,7 +748,7 @@ def _daily_obs_key(source: str, measure: str):
     (None, None) = deze bron heeft geen dag-observaties (→ 'geen live data')."""
     from nooch_village.observations import WERK_DAILY, SHOPIFY_DAILY
     if source == "pulse_visitors":
-        return ("visitors_day", "plausible")
+        return ("plausible_visitors_day", "plausible")     # canoniek na de migratie (was visitors_day)
     if source.startswith("werk:") and measure in WERK_DAILY:
         return (WERK_DAILY[measure], "werkoverleg")
     if source == "shopify" and measure in SHOPIFY_DAILY:
@@ -765,27 +765,30 @@ _DATA_SOURCES = {"plausible", "shopify", "gsc", "werkoverleg"}
 
 
 def _obs_key_for_indicator(source: str, veld: str):
-    """(observatie-metric, bron) voor een catalogus-indicator (source+veld), of (None, None) als deze
-    bron/veld niet in de observatie-store wordt gevoed (bv. gsc, plausible pageviews). Hergebruikt
-    dezelfde sleutels als de tegel-schrijvers, zodat sleutel en bron niet uiteenlopen."""
-    from nooch_village.observations import WERK_DAILY, SHOPIFY_DAILY
-    if source == "plausible" and veld == "visitors":
-        return ("visitors_day", "plausible")
-    if source == "shopify" and veld in SHOPIFY_DAILY:
-        return (SHOPIFY_DAILY[veld], "shopify")
+    """(observatie-metric, bron) voor een catalogus-indicator. Canoniek schema: `<source>_<veld>_day`
+    met bron=`<source>` — geen per-veld map meer; de generieke collector schrijft onder ditzelfde
+    schema. Werkoverleg houdt z'n legacy cirkel-sleutel (buiten het API-mechanisme). (None, None) =
+    geen data-bron-veld."""
+    from nooch_village.observations import WERK_DAILY
     if source == "werkoverleg" and veld in WERK_DAILY:
         return (WERK_DAILY[veld], "werkoverleg")
+    if source in _DATA_SOURCES and veld:
+        return (f"{source}_{veld}_day", source)
     return (None, None)
 
 
 def indicator_freshness(st, source: str, veld: str, today=None):
-    """Drie staten van 'recente data' voor een indicator, uit DEZELFDE observatie-store als de tegels:
-      'fresh' = datapunt van ≤ _FRESH_DAYS dagen oud   → bron vult
-      'stale' = reeks bestaat, maar laatste punt ouder  → gekoppeld-maar-dood
-      'none'  = geen reeks (bron-veld wordt niet gevoed)
+    """Vier staten van een indicator, uit DEZELFDE observatie-store als de tegels:
+      'fresh'        = datapunt ≤ _FRESH_DAYS dagen oud            → bron vult
+      'stale'        = reeks bestaat, laatste punt ouder           → gekoppeld-maar-dood (API/data kapot)
+      'unconfigured' = bron actief maar creds ontbreken            → eigen status, los van 'dood'
+      'none'         = geen reeks (bron inactief of niet gevoed)
     Geeft None terug voor niet-bron-velden (manueel/formule) → dan géén chip tonen."""
     if source not in _DATA_SOURCES:
         return None
+    srcs = getattr(st, "sources", None)
+    if srcs is not None and srcs.active(source) and srcs.configured(source) is False:
+        return "unconfigured"        # ontbrekende creds ≠ kapotte API
     metric, bron = _obs_key_for_indicator(source, veld)
     if not metric:
         return "none"
@@ -801,7 +804,7 @@ def indicator_freshness(st, source: str, veld: str, today=None):
     return "fresh" if age <= _FRESH_DAYS else "stale"
 
 
-_FRESH_META = {"fresh": "green", "stale": "coral", "none": "muted"}
+_FRESH_META = {"fresh": "green", "stale": "coral", "none": "muted", "unconfigured": "amber"}
 
 
 def freshness_chip(state) -> str:

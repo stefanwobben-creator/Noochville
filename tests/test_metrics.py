@@ -353,7 +353,7 @@ def test_bezoekers_lijndiagram_toont_meerdere_punten(tmp_path):
     base = dt.datetime(2026, 7, 1, 12, 0, tzinfo=dt.timezone.utc)
     for i, v in enumerate([40, 55, 48]):
         ts = (base + dt.timedelta(days=i)).timestamp()
-        st.observations.record_daily("website_watcher", "visitors_day", v,
+        st.observations.record_daily("website_watcher", "plausible_visitors_day", v,
                                      bron="plausible", datum=f"2026-07-0{i+1}", ts=ts)
     res = _fetch(st, "pulse_visitors", "visitors", "time", None)
     assert res["chart"] == "line" and [v for _, v in res["points"]] == [40, 55, 48]
@@ -385,8 +385,8 @@ def test_source_samples_ontdubbelt_dagreeks_vs_7d(tmp_path):
     import os, json as _json
     from nooch_village.views.metrics import _source_samples
     dd = _dd(tmp_path); st = cockpit2._Stores(dd)
-    st.observations.record_daily("ww", "visitors_day", 40, bron="plausible", datum="2026-07-01", ts=1.0)
-    st.observations.record_daily("ww", "visitors_day", 55, bron="plausible", datum="2026-07-02", ts=2.0)
+    st.observations.record_daily("ww", "plausible_visitors_day", 40, bron="plausible", datum="2026-07-01", ts=1.0)
+    st.observations.record_daily("ww", "plausible_visitors_day", 55, bron="plausible", datum="2026-07-02", ts=2.0)
     with open(os.path.join(dd, "pulse_history.jsonl"), "w") as f:
         f.write(_json.dumps({"ts": 10.0, "visitors_7d": 300}) + "\n")
         f.write(_json.dumps({"ts": 20.0, "visitors_7d": 320}) + "\n")

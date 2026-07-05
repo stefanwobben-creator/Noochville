@@ -57,6 +57,9 @@ _CATALOG: dict[str, dict[str, str]] = {
     "data.vers.stale.tip": {"nl": "Gekoppeld, maar geen datapunt in de afgelopen 7 dagen — de bron levert nu niet."},
     "data.vers.none": {"nl": "geen data", "en": "no data"},
     "data.vers.none.tip": {"nl": "Deze bron wordt (nog) niet in de observatie-store gevoed."},
+    "data.vers.unconfigured": {"nl": "niet geconfigureerd", "en": "not configured"},
+    "data.vers.unconfigured.tip": {"nl": "Bron staat actief, maar de credentials ontbreken — los van een "
+        "kapotte API. Voeg de creds toe zodat de puls 'm kan ophalen."},
     "catalogus.koppelen.gekoppeld_als": {"nl": "Gekoppeld als"},
     "catalogus.koppelen.veld.naam": {"nl": "Naam voor gebruikers"},
     "catalogus.koppelen.veld.naam.ph": {"nl": "bijv. Verkochte paren"},

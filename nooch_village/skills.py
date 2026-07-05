@@ -55,6 +55,37 @@ class Skill(ABC):
         ...
 
 
+class DataSourceSkill(Skill):
+    """Een databron die de dag-puls generiek kan uitlezen: hij declareert zijn velden
+    (`available_metrics`) én levert per veld een dagwaarde (`daily_values`). Zo hoeft de puls niets
+    per bron/veld te hardcoden — hij itereert over de actieve DataSourceSkills en schrijft elk veld
+    weg onder `<SOURCE>_<field>_day`.
+
+    `SOURCE` = de catalogus-bron-id (= observation-`bron`), bewust los van `name` (de skill-id).
+    """
+    SOURCE: str = ""
+    DEFAULT_FREQUENCY: str = "daily"
+
+    def frequency(self, field: str) -> str:
+        """Hoe vaak dit veld hoort te vullen ('daily' voor de huidige drie bronnen). De puls checkt
+        per veld of er al een datapunt is voor de verwachte periode (idempotent + zelfherstellend),
+        niet 'dagen sinds laatste ophaal'. Trage bronnen (Serpstat/Semantic Scholar) overschrijven dit
+        later per veld; curator-override + koppeling aan de vers-drempel zijn een latere fase."""
+        return self.DEFAULT_FREQUENCY
+
+    def is_configured(self, context) -> bool:
+        """Creds aanwezig? Generiek via `required_env` — geen per-bron hardcoding. Actief-maar-niet-
+        geconfigureerd is een eigen zichtbare status (los van 'dood')."""
+        import os
+        return all((context.settings.get(k) or os.getenv(k)) for k in self.required_env)
+
+    @abstractmethod
+    def daily_values(self, context, datum: str) -> dict:
+        """{field: value|None} voor de gedeclareerde velden op `datum` (fail-closed per veld: None bij
+        ontbrekend/fout, geen mock). Sleutels ⊆ available_metrics()."""
+        ...
+
+
 class SkillRegistry:
     def __init__(self):
         self._skills: dict[str, Skill] = {}

@@ -41,6 +41,22 @@ class ObservationStore:
         with open(self.path, "a") as f:
             f.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
 
+    def rename_metric(self, old_metric: str, new_metric: str, bron: str | None = None) -> int:
+        """Hernoem een metric-sleutel in alle bestaande rijen (optioneel per bron); herschrijft het
+        bestand. Idempotent: geen rijen met old_metric → 0 wijzigingen. Voor migratie van legacy-
+        sleutels naar het canonieke <source>_<field>_day-schema."""
+        rows = self._read_all()
+        n = 0
+        for r in rows:
+            if r.get("metric") == old_metric and (bron is None or r.get("bron") == bron):
+                r["metric"] = new_metric
+                n += 1
+        if n:
+            with open(self.path, "w") as f:
+                for r in rows:
+                    f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
+        return n
+
     def record_daily(self, role_id: str, metric: str, value, bron: str,
                      datum: str | None = None, ts: float | None = None) -> bool:
         """Schrijf hoogstens één datapunt per (role_id, metric, bron, datum). Bestaat er al een voor

@@ -47,7 +47,7 @@ def test_wo_close_schrijft_dagwaarde(tmp_path):
 
 
 def test_daily_obs_key_mapping():
-    assert _daily_obs_key("pulse_visitors", "visitors") == ("visitors_day", "plausible")
+    assert _daily_obs_key("pulse_visitors", "visitors") == ("plausible_visitors_day", "plausible")
     assert _daily_obs_key(f"werk:{C}", "tevredenheid") == ("werk_tevredenheid_day", "werkoverleg")
     assert _daily_obs_key("shopify", "aov") == ("shopify_aov_day", "shopify")
     assert _daily_obs_key("kpi:x", "value") == (None, None)

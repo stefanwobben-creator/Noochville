@@ -41,6 +41,8 @@ from nooch_village.attachments import AttachmentStore, ARTEFACT_KINDS
 from nooch_village.observations import ObservationStore
 from nooch_village import observations
 from nooch_village import snake
+from nooch_village.source_status import SourceStatusStore
+from nooch_village.collector import migrate_data_sources
 from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
 from nooch_village import epic
@@ -85,6 +87,7 @@ class _Stores:
         self.assign = Assignments(os.path.join(dd, "assignments.json"))
         self.att = AttachmentStore(os.path.join(dd, "attachments.json"))
         self.observations = ObservationStore(os.path.join(dd, "observations.jsonl"))
+        self.sources = SourceStatusStore(os.path.join(dd, "sources.json"))
         self.personas = PersonaStore(os.path.join(dd, "personas.json"))
         self.projects = ProjectLedger(os.path.join(dd, "projects.json"))
         self.ai = AITaskStore(os.path.join(dd, "ai_tasks.json"))
@@ -147,6 +150,7 @@ def _bootstrap(dd: str) -> None:
     _reground_seed(st.defs)       # bestaande definities bijwerken met nieuwe grondingen (idempotent)
     _migrate_definitions(st.defs)  # nieuwe verplichte velden (aard/aggregatie/formule) retroactief (idempotent)
     st.att.migrate()              # attachments → artefact-model (legacy tool-notes, defaults; idempotent)
+    migrate_data_sources(dd)      # legacy visitors_day → plausible_visitors_day + Plausible actief (idempotent)
 
 
 from nooch_village.views.overview import (
