@@ -1320,8 +1320,7 @@ def render_kpi_composer(st: _Stores, node_id: str = "", csrf_token: str = "", ms
         f"<option value=''>— kies —</option>{agg_opts}</select>"
         "<p class='muted kc-hint'>Een formule rekent live over de twee indicatoren (berekening volgt).</p></div>")
 
-    step4_inner = (f"<div class='muted'>{_e(_name(rec))} · dashboard</div>"
-                   f"<input type='hidden' name='node' value='{_e(node_id)}'>") if not standalone else (
+    step4_inner = (f"<input type='hidden' name='node' value='{_e(node_id)}'>") if not standalone else (
         "<select name='node'>" + "".join(
             f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>"
             for r in st.records.all() if not getattr(r, "archived", False)) + "</select>"
@@ -1345,7 +1344,7 @@ def render_kpi_composer(st: _Stores, node_id: str = "", csrf_token: str = "", ms
                    "<select name='form'><option value=''>—</option></select>"
                    "<p class='muted kc-hint kc-tufte'>Kies eerst een indicator; de weergaves die bij de "
                    "aard passen verschijnen dan.</p>")
-            + step("4", "Plaats", step4_inner)
+            + step4_inner
             + "<button class='btn ok' type='submit' name='action' value='tile_add' disabled>Kies eerst een indicator</button></form>")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='{back}'>← terug</a></div>"
             f"<h1>KPI maken <span class='chip'>focus</span></h1>{_banner(msg)}"
