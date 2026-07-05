@@ -63,3 +63,13 @@ def test_wizard_toont_vers_signaal(tmp_path):
     w = cockpit2.render_kpi_composer(st, C, csrf_token="t")
     assert "recente data" in w                                 # visitors-indicator vult
     assert "geen data" in w                                    # de niet-gevoede bron-indicatoren
+
+
+def test_catalog_toont_vers_signaal(tmp_path):
+    """Op /catalog krijgt elke definitiekaart hetzelfde vers-signaal (via dezelfde helper), zodat je per
+    definitie ziet of de bron vult — naast 'in gebruik'."""
+    st = cockpit2._Stores(_dd(tmp_path))
+    st.observations.record_daily("x", "visitors_day", 8, bron="plausible", datum=datetime.date.today().isoformat())
+    h = cockpit2.render_catalog(st, csrf_token="t")
+    assert "recente data" in h        # de plausible-visitors-definitie vult
+    assert "geen data" in h           # niet-gevoede bron-definities (shopify/gsc/pageviews)
