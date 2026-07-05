@@ -40,6 +40,7 @@ from nooch_village.assignments import Assignments
 from nooch_village.attachments import AttachmentStore, ARTEFACT_KINDS
 from nooch_village.observations import ObservationStore
 from nooch_village import observations
+from nooch_village import snake
 from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
 from nooch_village import epic
@@ -2002,6 +2003,11 @@ def make_handler(data_dir: str, csrf_token: str,
             effective_csrf = csrf_token if username else ""
 
             st = _Stores(data_dir)
+            if path == "/snake":
+                # AUTHZ: ingelogde-member — verborgen easter-egg 'De Veter'; puur fun, los van alles.
+                # De login-redirect hierboven dekt de niet-ingelogde gebruiker al af.
+                self._send(snake.render_snake_page(st, username, effective_csrf))
+                return
             if path == "/context":
                 # AUTHZ: iedereen-ingelogd — rol-context is dezelfde read-scope als /node?tab=notes
                 # (één rol), dus in auth-uit óók voor guest zichtbaar; alleen de persoon-context-
@@ -2184,6 +2190,19 @@ def make_handler(data_dir: str, csrf_token: str,
                     self._redirect_to(next_url or "/", _auth.set_cookie(token))
                 else:
                     self._send(_auth.login_page(next_url, error="E-mailadres of wachtwoord onjuist."))
+                return
+
+            if path == "/snake/score":
+                # AUTHZ: ingelogde-member — iedereen mag spelen; de score wordt ONDER de sessie-gebruiker
+                # geschreven (nooit een meegestuurde naam), en alleen als hij hoger is dan het record.
+                username = self._session_username()
+                if sessions is not None and username is None:
+                    self._send("Niet ingelogd", 403); return
+                raw = self.rfile.read(length).decode("utf-8") if length else ""
+                form = urllib.parse.parse_qs(raw)
+                if not secrets.compare_digest((form.get("csrf") or [""])[0], csrf_token):
+                    self._send("CSRF-token ongeldig", 403); return
+                self._send_json(snake.handle_score(_Stores(data_dir), username, (form.get("score") or ["0"])[0]))
                 return
 
             if path != "/action":
