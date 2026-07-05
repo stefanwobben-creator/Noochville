@@ -113,3 +113,50 @@ def test_shopify_blijft_inactief_tot_expliciete_activatie(tmp_path):
     w = collect_daily_observations(reg, cockpit2._Stores(dd).sources,
                                    cockpit2._Stores(dd).observations, _ctx(), today=datetime.date(2026, 7, 6))
     assert w == []                                               # inactief → geen fetch/write
+
+
+class _LaggedSource(_FakeSource):
+    """Fake bron met vertraging (zoals GSC): de collector moet today − 1 − lag_days ophalen."""
+    SOURCE = "gsc"
+    lag_days = 3
+
+
+def test_gsc_datasource_contract_failclosed_en_lag():
+    """Fase 3: GscPerformanceSkill is een DataSourceSkill (SOURCE='gsc', lag_days=3). daily_values is
+    fail-closed per veld (geen creds → alle None), sleutels ⊆ available_metrics; is_configured checkt
+    site + bestaand token-bestand (unconfigured ≠ dood)."""
+    import os
+    from nooch_village.skills_impl.gsc import GscPerformanceSkill
+    g = GscPerformanceSkill()
+    assert isinstance(g, DataSourceSkill) and g.SOURCE == "gsc" and g.lag_days == 3
+    ctx = types.SimpleNamespace(settings={}, data_dir="/tmp/none")
+    vals = g.daily_values(ctx, "2026-07-02")
+    assert set(vals) == set(g.available_metrics()) and all(v is None for v in vals.values())
+    assert not g.is_configured(ctx)                                  # geen site/token → unconfigured
+
+
+def test_collector_lag_haalt_beschikbare_dag_niet_gisteren(tmp_path):
+    """Een bron met lag_days haalt de meest recente BESCHIKBARE dag (today − 1 − lag), niet gisteren —
+    zodat GSC (2-3 dagen vertraging) wél vult. 'Geen datapunt voor gisteren' is dan normaal."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd); st.sources.set_active("gsc", True)
+    reg = SkillRegistry(); reg.register(_LaggedSource({"clicks": 50, "impressions": 900}))
+    today = datetime.date(2026, 7, 6)
+    w = collect_daily_observations(reg, cockpit2._Stores(dd).sources,
+                                   cockpit2._Stores(dd).observations, _ctx(), today=today)
+    # today − 1 − 3 = 2026-07-02, NIET gisteren (2026-07-05)
+    assert ("gsc", "clicks", "2026-07-02") in w and ("gsc", "impressions", "2026-07-02") in w
+    obs = cockpit2._Stores(dd).observations
+    assert not obs.daily_series("gsc_clicks_day", bron="gsc") == []   # gevuld
+    assert [r["datum"] for r in obs.daily_series("gsc_clicks_day", bron="gsc")] == ["2026-07-02"]
+    # geen datapunt voor gisteren is prima (dat is niet 'due' bij een lag-bron)
+
+
+def test_gsc_blijft_inactief_tot_activatie(tmp_path):
+    from nooch_village.skills_impl.gsc import GscPerformanceSkill
+    dd = _dd(tmp_path)
+    assert not cockpit2._Stores(dd).sources.active("gsc")            # default inactief
+    reg = SkillRegistry(); reg.register(GscPerformanceSkill())
+    w = collect_daily_observations(reg, cockpit2._Stores(dd).sources,
+                                   cockpit2._Stores(dd).observations, _ctx(), today=datetime.date(2026, 7, 6))
+    assert w == []

@@ -18,11 +18,11 @@ from nooch_village.source_status import SourceStatusStore
 log = logging.getLogger("village.collector")
 
 
-def _expected_period(frequency: str, today: datetime.date) -> str:
-    """De datum-sleutel van de verwachte periode voor deze frequentie. Fase 1: alleen 'daily' → de
-    vorige volledige dag. Tragere frequenties (weekly/monthly) volgen in een latere fase; die vallen
-    nu bewust terug op 'daily' zodat het contract al staat maar het gedrag niet verandert."""
-    return (today - datetime.timedelta(days=1)).isoformat()
+def _expected_period(frequency: str, today: datetime.date, lag_days: int = 0) -> str:
+    """De datum-sleutel van de verwachte periode. Fase 1: alleen 'daily' → de vorige volledige dag,
+    `lag_days` dagen teruggeschoven voor bronnen met vertraging (GSC). Tragere frequenties volgen later;
+    die vallen nu bewust terug op 'daily' zodat het contract al staat maar het gedrag niet verandert."""
+    return (today - datetime.timedelta(days=1 + max(0, lag_days))).isoformat()
 
 
 def _has_point(obs: ObservationStore, metric: str, bron: str, datum: str) -> bool:
@@ -50,7 +50,7 @@ def collect_daily_observations(registry, sources: SourceStatusStore, obs: Observ
         # Welke velden zijn 'due' (nog geen datapunt voor de verwachte periode)?
         due = {}
         for field in skill.available_metrics():
-            datum = _expected_period(skill.frequency(field), today)
+            datum = _expected_period(skill.frequency(field), today, getattr(skill, "lag_days", 0))
             if not _has_point(obs, f"{src}_{field}_day", src, datum):
                 due[field] = datum
         if not due:

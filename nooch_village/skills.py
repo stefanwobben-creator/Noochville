@@ -66,6 +66,12 @@ class DataSourceSkill(Skill):
     SOURCE: str = ""
     DEFAULT_FREQUENCY: str = "daily"
 
+    lag_days: int = 0
+    """Hoeveel dagen deze bron structureel achterloopt. De verwachte periode schuift zoveel terug:
+    de collector haalt de meest recente BESCHIKBARE dag op (today − 1 − lag_days), niet blind gisteren.
+    Zo vult een bron met vertraging (GSC ~2-3 dagen) wél, en 'geen datapunt voor gisteren' is normaal —
+    geen teken van 'dood'. De 7-daagse vers-drempel vangt de lag op (een lag-dag telt nog als recent)."""
+
     def frequency(self, field: str) -> str:
         """Hoe vaak dit veld hoort te vullen ('daily' voor de huidige drie bronnen). De puls checkt
         per veld of er al een datapunt is voor de verwachte periode (idempotent + zelfherstellend),
