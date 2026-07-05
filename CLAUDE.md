@@ -561,6 +561,7 @@ Discipline: schrijf nooit code die aanneemt dat de bus in-memory is, dat de inbo
 - Nederlandse comments/logs zijn prima.
 - Geen global mutable state. Alles wat een inwoner nodig heeft komt via de constructor (`bus`, `registry`, `context`).
 - **Reference, don't copy (HARDE REGEL).** Een feit/getal leeft op ÉÉN gezaghebbende plek; al het andere verwijst ernaar of leidt het af. Nooit een waarde (PCF, benchmark, constante) hardcoden in code als hij elders thuishoort. Toets: "als dit getal verandert, op hoeveel plekken pas ik het aan?" Het juiste antwoord is altijd één. Indicator-waarden komen uit de catalogus-definitie (`waarde`) of de kennisbank, niet uit een literal in `cockpit2.py`. De guard-test `tests/test_geen_hardcoded_metric.py` bewaakt dit.
+- **Architectuur-vindkaart bijwerken (HARDE REGEL).** `docs/ARCHITECTUUR.md` is de automatisch afgeleide vindkaart (route → handler → view, dispatch-actie → regel, concern → store → bestand). Voeg je een **nieuwe route, dispatch-actie of store** toe, draai dan `python -m nooch_village.arch_map` en commit het bijgewerkte bestand in dezelfde beurt. De guard-test `tests/test_architectuur.py` faalt zodra de kaart verouderd is — nooit handmatig bewerken.
 
 ## UI — designsysteem (HARDE REGEL)
 
