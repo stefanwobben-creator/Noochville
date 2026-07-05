@@ -5,6 +5,24 @@ token-poort: schending = STOP en eerst hier vastleggen. Elke nieuwe of gewijzigd
 patronen volgen, zodat alle schermen consistent aanvoelen. Onderbouwd met Nielsen's 10 heuristieken
 en gedragspsychologie (Fitts, Hick, affordance, Gestalt, persuasion, von Restorff, peak-end).
 
+## Kern-klassen — het vocabulaire (hergebruik i.p.v. inline style)
+
+Nieuwe UI hergebruikt ALTIJD deze klassen; **geen inline `style=`** (bewaakt door de ratchet-guard
+`tests/test_ui_no_inline_style.py`). Basis-atomen staan in `web_base.py` (`_CSS`), cockpit2-componenten
+in `cockpit2_util.py` (`_EXTRA_CSS`). Kom je iets tekort, breid dan de klasse uit — voeg geen inline
+style toe.
+
+| Klasse | Waarvoor | Varianten | Bron |
+|--------|----------|-----------|------|
+| `.card` | Content-blok (artefact, project, lijst-item) | `.card.arch` (gearchiveerd, gedimd) | `cockpit2_util.py` |
+| `.btn` | Knop/actie (ook als `<a>`) | `.ok` (primair groen), `.no` (destructief coral), `.sm` (klein), `.ghost` (randloos); `.dellink` voor een pure verwijder-link | `web_base.py` |
+| `.cl-filter` | Segmented picker: filter-/tab-/periode-/bron-keuze | `.on` (actieve keuze) | `cockpit2_util.py` |
+| `.tile` | KPI-/metric-tegel | `.tile-grid` (responsive 1→2 kolommen), `.tile-h`/`.tile-t` (kop/titel), `.tile-trend` (waarde+grafiek), `.tile-data` (uitklap ruwe data), `.tile-prov` (bron-badge) | `cockpit2_util.py` |
+
+Aanvullend veelgebruikt: `.muted` (gedimde tekst), `.chip` (label), `.ptitle` (blok-titel),
+`.att-lbl` (formulier-label), `.qadd-form`/`.editor` (toevoeg-/bewerk-formulieren), `.flash` (banner),
+`.cl-bar` (rij van `.cl-filter`'s). Zie `web_base.py`/`cockpit2_util.py` voor de volledige set.
+
 ## 1. Destructief scheiden van frequent (Fitts + Gestalt similarity + error prevention)
 - Een verwijder-/wis-actie staat NOOIT pal naast een veelgebruikte actie, en draagt nooit een
   glyph die op een naburige actie lijkt (geen ✗ "geen check" naast ✕ "verwijderen").

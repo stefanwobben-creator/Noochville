@@ -574,8 +574,14 @@ Nieuwe UI (formulieren, lijsten, kaarten) hergebruikt ALTIJD bestaande design-sy
   node-detail), dan is DÁT de referentie die je kopieert — geen eigen variant.
 - **Verplichte stap vóór het bouwen van een view:** eerst tonen welk bestaand patroon je
   hergebruikt (zoals bij de artefact-formulieren gedaan). Pas na akkoord bouwen.
-- **Guard:** `tests/test_ui_no_inline_style.py` rendert de governeerde views en faalt op een
-  `style=`-attribuut. Elke nieuwe governeerde view voeg je aan die guard toe.
+- **Kern-klassen:** het vocabulaire (`.card`, `.btn`+varianten, `.cl-filter`, `.tile*`, …) staat
+  gedocumenteerd in `docs/UX_PATTERNS.md` → "Kern-klassen". Kom je iets tekort, breid de klasse uit —
+  voeg geen inline style toe.
+- **Guard (project-breed):** `tests/test_ui_no_inline_style.py` telt `style=` per governeerde view en
+  houdt elk bestand op een plafond (`_STYLE_WHITELIST`). Een nieuwe inline style laat de telling
+  stijgen → de guard faalt; schone bestanden moeten 0 blijven. Ruim je schuld op bij een view die je
+  toch aanraakt, verlaag dan het plafond (monotone daling naar nul). Nieuwe views hoef je niet meer
+  handmatig toe te voegen — ze vallen automatisch onder de ratchet (plafond 0).
 
 ## Autorisatie — elke nieuwe dispatch-tak
 
