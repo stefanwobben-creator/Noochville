@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from nooch_village.cockpit import _e, _page, _banner
+from nooch_village.web_base import _e, _page, _banner
 from nooch_village.cockpit2_util import _name, _bron_html
 from nooch_village.metric_schema import (CADANS_LABEL, MEETTYPE_LABEL,
                                          TIJD_LABEL, BRUIKBAAR_LABEL, VERIFICATIE_LABEL)
