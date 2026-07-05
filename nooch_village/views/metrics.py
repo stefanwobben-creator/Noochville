@@ -761,7 +761,7 @@ def _daily_obs_key(source: str, measure: str):
 # interval) zodra er trage bronnen zijn die met 7 dagen ten onrechte als 'dood' worden gemarkeerd.
 _FRESH_DAYS = 7
 # Bron-velden waarvoor 'recente data' zin heeft (data-bronnen). Manueel/formule/kpi → geen signaal.
-_DATA_SOURCES = {"plausible", "shopify", "gsc", "werkoverleg"}
+_DATA_SOURCES = {"plausible", "shopify", "gsc", "openalex", "werkoverleg"}
 
 
 def _obs_key_for_indicator(source: str, veld: str):

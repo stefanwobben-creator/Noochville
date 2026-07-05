@@ -17,6 +17,7 @@ Rate-limit-gedrag:
 Fail-closed: ontbrekende key of definitieve fout → raise, nooit mock-data.
 """
 from __future__ import annotations
+import logging
 import os
 import time
 import random
@@ -24,7 +25,9 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import json
-from nooch_village.skills import Skill
+from nooch_village.skills import DataSourceSkill
+
+log = logging.getLogger(__name__)
 
 _BASE   = "https://api.openalex.org/works"
 _SELECT = ("id,title,publication_year,cited_by_count,"
@@ -68,8 +71,11 @@ def _reconstruct_abstract(inverted_index: dict | None) -> str:
     return " ".join(words[p] for p in sorted(words.keys()))[:400]
 
 
-class OpenalexSkill(Skill):
+class OpenalexSkill(DataSourceSkill):
     name = "openalex_evidence"
+    SOURCE = "openalex"
+    # Snapshot-bron: cumulatieve tellers groeien traag → wekelijks meten (niet dagelijks).
+    DEFAULT_FREQUENCY = "weekly"
     needs_secret = True
     cost = "rate_limited"
     required_env = ("OPENALEX_API_KEY",)
@@ -78,6 +84,44 @@ class OpenalexSkill(Skill):
         "Haalt academische evidentie op via OpenAlex (API-key vereist, polite pool, "
         "gesorteerd op citaties, backoff bij 429, locale-bewust, fail-closed)."
     )
+
+    def available_metrics(self) -> list[str]:
+        """Cumulatieve tellers voor het missie-concept: totaal aantal publicaties en citaties."""
+        return ["works", "citations"]
+
+    def is_configured(self, context) -> bool:
+        """OpenAlex is keyless (polite pool via mailto) → altijd oproepbaar. 'Niet geconfigureerd' geldt
+        hier dus niet; een lege reeks betekent een echte fout of nog-niet-gemeten, niet ontbrekende creds."""
+        return True
+
+    def daily_values(self, context, datum: str) -> dict:
+        """Snapshot van de cumulatieve tellers (works_count/cited_by_count) van het top-concept dat
+        matcht op de missie-query. Legt de STAND vast (geen verschil — dat leid je bij weergave af): de
+        API kent alleen 'nu', dus `datum` is het periode-LABEL (weekly), geen historische query-datum.
+        Keyless via de polite pool (mailto); optionele key voor hogere limieten. Fail-closed per veld
+        (None bij fout of geen concept — geen mock)."""
+        out = {"works": None, "citations": None}
+        settings = getattr(context, "settings", {}) or {}
+        query = (settings.get("openalex_query") or "regenerative").strip()
+        mailto = settings.get("openalex_mailto", "info@nooch.earth")
+        key = settings.get("OPENALEX_API_KEY") or os.getenv("OPENALEX_API_KEY")   # optioneel
+        ua = f"NoochVillage/1.0 (nooch.earth; mailto:{mailto})"
+        url = (f"https://api.openalex.org/concepts?search={urllib.parse.quote(query)}"
+               f"&per_page=1&mailto={urllib.parse.quote(mailto)}")
+        if key:
+            url += f"&api_key={urllib.parse.quote(key)}"
+        try:
+            data = self._fetch_with_backoff(urllib.request.Request(url, headers={"User-Agent": ua}))
+        except Exception as exc:
+            log.warning("OpenAlex daily_values faalde (%s): %s", query, exc)
+            return out
+        results = data.get("results", [])
+        if not results:
+            return out                    # geen concept gevonden → None (geen 'dood')
+        c = results[0]
+        out["works"] = int(c.get("works_count", 0))
+        out["citations"] = int(c.get("cited_by_count", 0))
+        return out
 
     def run(self, payload: dict, context) -> dict:
         key = (getattr(context, "settings", {}).get("OPENALEX_API_KEY")
