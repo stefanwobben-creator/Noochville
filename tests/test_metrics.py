@@ -60,9 +60,9 @@ def test_kpi_composer_combos(tmp_path):
     dd = _dd(tmp_path)
     rec = cockpit2._Stores(dd).records.get(C)
     page = cockpit2.render_kpi_composer(cockpit2._Stores(dd), C, csrf_token="t")
-    # focus-flow: indicator-combo's + referentie-keuze + vorm
-    assert "Verkoop: Paren verkocht · per land" in page
-    assert "Websitebezoekers: Bezoekers (per dag) · over tijd" in page
+    # deelopdracht 3: één regel per metric (def-namen), geen dim-combos
+    assert "Paren verkocht (Shopify)" in page and "Bezoekers (Plausible)" in page
+    assert "· per land" not in page and "(per dag) · over tijd" not in page
     assert "tile_add" in page and "Referentie" in page and "benchmark" in page and "doel" in page
 
 
@@ -141,9 +141,9 @@ def test_handmatige_kpi_wordt_bron_in_wizard(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "m_add_kpi", {"node": [MKT], "pick": ["manual"], "name": ["NPS"],
                                         "unit": ["score"], "next": ["/"]}, username="guest")
-    # op de cirkel verschijnt de rol-KPI als indicator in de focus-flow
+    # op de cirkel verschijnt de handmatige KPI als indicator (categorie 'Eigen KPI's'), één regel
     page = cockpit2.render_kpi_composer(cockpit2._Stores(dd), C, csrf_token="t")
-    assert "NPS: NPS · over tijd" in page
+    assert "NPS" in page and "Eigen KPI" in page
 
 
 def test_meetmoment_schema_normalisatie(tmp_path):
