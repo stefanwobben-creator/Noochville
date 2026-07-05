@@ -165,6 +165,8 @@ class Village:
         self.bus.subscribe("governance_rejected",         self._observe)
         self.bus.subscribe("tension_triaged",             self._observe)
         self.bus.subscribe("human_intervention_needed",   self._observe)
+        self.bus.subscribe("source_died",                 self._observe)
+        self.bus.subscribe("source_died",                 self._on_source_died)
         self.bus.subscribe("role_born",                   self._observe)
         self.bus.subscribe("role_born",                   self._on_role_born)
         self.bus.subscribe("tijdgeest_pulse_completed",   self._observe)
@@ -207,6 +209,22 @@ class Village:
             business_case=d.get("business_case"))
         logging.getLogger("village.inbox").info(
             "💡 kans → inbox (wacht op akkoord): %s [%s]", title[:60], d.get("by", ""))
+
+    def _on_source_died(self, e: Event) -> None:
+        """Een databron ging van 'recente data' naar 'dood' (fresh→stale). Schrijf er GENERIEK een
+        means-gap voor in de human_inbox (role_id=None, geen rol-toewijzing). Per-episode gap_key
+        (met het laatste-meetdatum) zodat een herhaling ná opleving tóch een nieuw item wordt."""
+        d = e.data
+        source, field = d.get("source", "?"), d.get("field", "?")
+        last_datum, days_ago, cadans = d.get("last_datum"), d.get("days_ago"), d.get("cadans", "onbekend")
+        gap_key = f"deadsource:{source}:{field}@{last_datum}"
+        wanneer = (f"laatste data {days_ago} dagen geleden ({last_datum})" if days_ago is not None
+                   else (f"laatste data {last_datum}" if last_datum else "geen datum bekend"))
+        description = (f"Bron '{source}/{field}' levert niet meer — {wanneer}, verwacht {cadans}. "
+                       f"De indicator ging van recente data naar 'dood'.")
+        iid = self.human_inbox.add_means_gap(gap_key, description, sensed_by=d.get("by", "website_watcher"))
+        logging.getLogger("village.inbox").info(
+            "💀 source_died → means-gap in human_inbox: item %s (%s)", iid, gap_key)
 
     def _on_means_gap(self, e: Event) -> None:
         """Classificeer een gesensed gat en dispatch op uitkomst A / B / C.
