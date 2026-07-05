@@ -41,13 +41,22 @@ def t(key: str, /, **kw) -> str:
 _CATALOG: dict[str, dict[str, str]] = {
     # ── Catalogus-koppelscherm (scope 4) ──
     "catalogus.koppelen.titel": {"nl": "Catalogus koppelen", "en": "Link catalogue"},
-    "catalogus.koppelen.intro": {"nl": "Een gekoppelde bron levert ruwe velden op, geen KPI's. "
-        "Per veld wijs je naam, categorie en aard toe. Pas na publiceren verschijnt een veld als "
-        "indicator in de KPI-wizard. Alleen voor de curator (anchor-lead)."},
+    "catalogus.koppelen.intro": {"nl": "Een gekoppelde bron levert ruwe velden op. Een nog niet "
+        "gepubliceerd veld promoveer je tot indicator; nieuwe velden verschijnen hier vanzelf zodra de "
+        "bron ze blootlegt. Alleen voor de curator (anchor-lead)."},
     "catalogus.koppelen.bron": {"nl": "Bron:"},
     "catalogus.koppelen.geen_velden": {"nl": "Deze bron declareert nog geen ruwe velden."},
+    "catalogus.koppelen.all_coupled": {"nl": "Alle velden van deze bron staan in de catalogus. "
+        "Nieuwe velden verschijnen hier zodra de bron ze blootlegt — nu is er niets te koppelen."},
     "catalogus.koppelen.status.gekoppeld": {"nl": "in catalogus"},
     "catalogus.koppelen.status.ongekoppeld": {"nl": "nog niet gepubliceerd"},
+    # Data-vers-signaal (3 staten), gedeeld door koppelscherm + KPI-wizard.
+    "data.vers.fresh": {"nl": "recente data", "en": "recent data"},
+    "data.vers.fresh.tip": {"nl": "Er zijn datapunten van de afgelopen 7 dagen."},
+    "data.vers.stale": {"nl": "geen recente data", "en": "no recent data"},
+    "data.vers.stale.tip": {"nl": "Gekoppeld, maar geen datapunt in de afgelopen 7 dagen — de bron levert nu niet."},
+    "data.vers.none": {"nl": "geen data", "en": "no data"},
+    "data.vers.none.tip": {"nl": "Deze bron wordt (nog) niet in de observatie-store gevoed."},
     "catalogus.koppelen.gekoppeld_als": {"nl": "Gekoppeld als"},
     "catalogus.koppelen.veld.naam": {"nl": "Naam voor gebruikers"},
     "catalogus.koppelen.veld.naam.ph": {"nl": "bijv. Verkochte paren"},

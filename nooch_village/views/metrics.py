@@ -756,6 +756,62 @@ def _daily_obs_key(source: str, measure: str):
     return (None, None)
 
 
+# ── Data-vers-signaal per indicator (3 staten), gedeeld door koppelscherm + KPI-wizard ──────────
+# Vaste drempel voor de huidige dagelijkse bronnen. LATER: cadans-bewuste drempel (mediaan inter-punt-
+# interval) zodra er trage bronnen zijn die met 7 dagen ten onrechte als 'dood' worden gemarkeerd.
+_FRESH_DAYS = 7
+# Bron-velden waarvoor 'recente data' zin heeft (data-bronnen). Manueel/formule/kpi → geen signaal.
+_DATA_SOURCES = {"plausible", "shopify", "gsc", "werkoverleg"}
+
+
+def _obs_key_for_indicator(source: str, veld: str):
+    """(observatie-metric, bron) voor een catalogus-indicator (source+veld), of (None, None) als deze
+    bron/veld niet in de observatie-store wordt gevoed (bv. gsc, plausible pageviews). Hergebruikt
+    dezelfde sleutels als de tegel-schrijvers, zodat sleutel en bron niet uiteenlopen."""
+    from nooch_village.observations import WERK_DAILY, SHOPIFY_DAILY
+    if source == "plausible" and veld == "visitors":
+        return ("visitors_day", "plausible")
+    if source == "shopify" and veld in SHOPIFY_DAILY:
+        return (SHOPIFY_DAILY[veld], "shopify")
+    if source == "werkoverleg" and veld in WERK_DAILY:
+        return (WERK_DAILY[veld], "werkoverleg")
+    return (None, None)
+
+
+def indicator_freshness(st, source: str, veld: str, today=None):
+    """Drie staten van 'recente data' voor een indicator, uit DEZELFDE observatie-store als de tegels:
+      'fresh' = datapunt van ≤ _FRESH_DAYS dagen oud   → bron vult
+      'stale' = reeks bestaat, maar laatste punt ouder  → gekoppeld-maar-dood
+      'none'  = geen reeks (bron-veld wordt niet gevoed)
+    Geeft None terug voor niet-bron-velden (manueel/formule) → dan géén chip tonen."""
+    if source not in _DATA_SOURCES:
+        return None
+    metric, bron = _obs_key_for_indicator(source, veld)
+    if not metric:
+        return "none"
+    rows = st.observations.daily_series(metric, bron=bron)
+    datum = rows[-1].get("datum") if rows else None
+    if not datum:
+        return "none"
+    import datetime
+    try:
+        age = ((today or datetime.date.today()) - datetime.date.fromisoformat(datum)).days
+    except (TypeError, ValueError):
+        return "none"
+    return "fresh" if age <= _FRESH_DAYS else "stale"
+
+
+_FRESH_META = {"fresh": "green", "stale": "coral", "none": "muted"}
+
+
+def freshness_chip(state) -> str:
+    """De 3-staten-chip (recente data / geen recente data / geen data). '' voor None (geen bron-veld)."""
+    if state not in _FRESH_META:
+        return ""
+    return (f"<span class='chip {_FRESH_META[state]}' title='{_e(t('data.vers.' + state + '.tip'))}'>"
+            f"{_e(t('data.vers.' + state))}</span>")
+
+
 def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=False,
                  prev_win=None, actueel=False) -> str:
     if tile.get("form") == "formule":          # fail-closed live-berekening A op B per dag
@@ -1160,7 +1216,8 @@ def _wizard_indicators(st: _Stores, rec) -> list[dict]:
         value, live = _def_value(st, c, d["id"], circle)
         out.append({"value": value, "name": name, "categorie": c.get("categorie") or "Overig",
                     "aard": c.get("aard") or "moment", "has_data": live,
-                    "bron": c.get("source", ""), "uitleg": c.get("definition", "")})
+                    "bron": c.get("source", ""), "veld": c.get("veld", ""),
+                    "uitleg": c.get("definition", "")})
     # node-eigen handmatige KPI's blijven kiesbaar (categorie 'Eigen KPI's'), één regel per KPI.
     if rec is not None:
         for s in _sources_for(st, rec):
@@ -1287,10 +1344,12 @@ def render_kpi_composer(st: _Stores, node_id: str = "", csrf_token: str = "", ms
         # één regel per metric: de aard als tag (reeks/moment/categorie), of grijs 'nog geen data'
         tag = (f"<span class='chip outline'>{_e(AARD_LABEL.get(i['aard'], i['aard']))}</span>"
                if i["has_data"] else "<span class='chip muted'>nog geen data</span>")
+        # tweede signaal naast de aard-tag: levert de bron recente data? (gedeelde helper, 3 staten)
+        vers = freshness_chip(indicator_freshness(st, i["bron"], i.get("veld", "")))
         return (f"<label class='kc-radio kc-metric{mut}' data-cat='{_e(i['categorie'])}' "
                 f"data-aard='{_e(i['aard'])}' data-name='{_e(i['name'].lower())}' hidden>"
                 f"<input type='radio' name='combo' value='{_e(i['value'])}'{dis}> "
-                f"<span class='kc-mname' title='{_e(tip)}'>{_e(i['name'])}</span> {tag}</label>")
+                f"<span class='kc-mname' title='{_e(tip)}'>{_e(i['name'])}</span> {tag}{vers}</label>")
     metrics_html = "".join(_radio(i) for i in inds) or "<p class='muted'>Geen indicatoren beschikbaar.</p>"
     metric_opts = "".join(f"<option value='{_e(i['value'])}'>{_e(i['categorie'])} — {_e(i['name'])}</option>"
                           for i in inds if i["has_data"])
