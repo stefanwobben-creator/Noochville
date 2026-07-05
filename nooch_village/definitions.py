@@ -503,6 +503,22 @@ _SOURCE_CATEGORIE = {
 }
 
 
+# Werk-metric-consolidatie (deelopdracht 1): elke werkoverleg-metric is één def met de scope-3-velden
+# `aard`+`aggregatie`, plus `werk_measure` die 'm aan zijn combo-measure (werk:<circle>|<measure>)
+# koppelt. De losse dim-varianten (gemiddeld/totaal/over_tijd) uit de wizard vallen hierop neer via
+# DIM_AGGREGATIE (metric_schema). Sleutel = def-naam. Aard=reeks want het is een dagreeks; canonieke
+# aggregatie: scores middelen, tellingen sommeren.
+_WERK_CONSOLIDATIE = {
+    # def-naam: (werk_measure, aard, aggregatie)
+    "Tevredenheid werkoverleg": ("tevredenheid", "reeks", "gemiddelde"),
+    "Doorlooptijd werkoverleg": ("duur", "reeks", "gemiddelde"),
+    "Behandelde spanningen": ("spanningen", "reeks", "som"),
+    "Info-uitkomsten": ("informatie", "reeks", "som"),
+    "Projecten uit overleg": ("projecten", "reeks", "som"),
+    "Acties uit overleg": ("acties", "reeks", "som"),
+}
+
+
 def migrate_definitions(store: DefinitionStore) -> int:
     """Retroactief de nieuwe verplichte/koppel-velden vullen op bestaande definities. Zelfde patroon
     als `migrate_records` voor `source`: idempotent en in-place, vult alleen ONTBREKENDE velden.
@@ -544,6 +560,24 @@ def migrate_definitions(store: DefinitionStore) -> int:
             elif mapped and not v.get("veld"):
                 v["veld"] = mapped
                 dirty = True
+            # werk-consolidatie: één def per werk-metric met aard+aggregatie+werk_measure. Anders dan
+            # de fill-only-velden hierboven zetten we hier de CANONIEKE waarde (aard moment→reeks is een
+            # bewuste correctie). Idempotent: alleen schrijven als de waarde afwijkt.
+            if "werk_measure" not in v:
+                v["werk_measure"] = ""
+                dirty = True
+            wm = _WERK_CONSOLIDATIE.get(v.get("name", ""))
+            if wm:
+                measure, aard_c, agg_c = wm
+                if v.get("werk_measure") != measure:
+                    v["werk_measure"] = measure
+                    dirty = True
+                if v.get("aard") != aard_c:
+                    v["aard"] = aard_c
+                    dirty = True
+                if v.get("aggregatie") != agg_c:
+                    v["aggregatie"] = agg_c
+                    dirty = True
         if dirty:
             changed += 1
     if changed:

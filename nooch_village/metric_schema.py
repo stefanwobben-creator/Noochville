@@ -44,6 +44,10 @@ AARD_LABEL = {"reeks": "reeks (over tijd)", "moment": "moment (snapshot)",
 # AGGREGATIE = hoe losse datapunten tot één waarde komen; alleen verplicht bij een formule-indicator
 AGGREGATIE = ("som", "gemiddelde", "laatste_waarde")
 AGGREGATIE_LABEL = {"som": "som", "gemiddelde": "gemiddelde", "laatste_waarde": "laatste waarde"}
+# DIM_AGGREGATIE = canonieke vertaling van een werkoverleg-tegel-dim naar de aggregatie op de
+# geconsolideerde def. `over_tijd` is GEEN aggregatie maar de reeks zelf (aard=reeks) → dat is een
+# weergave-keuze in de wizard/tegel, geen datamigratie-zaak. Eén bron voor deze vertaling.
+DIM_AGGREGATIE = {"gemiddeld": "gemiddelde", "totaal": "som"}
 
 
 def aard_from_meettype(meettype: str) -> str:
@@ -85,6 +89,7 @@ class IndicatorDefinition(BaseModel):
     formule: bool = False            # afgeleide indicator (formule)? dan is aggregatie verplicht
     categorie: str = ""              # groepering voor catalogus/wizard (Website, Verkoop, …); scope 4/5
     veld: str = ""                   # ruwe skill-veldsleutel waaruit dit item is gekoppeld (bv. 'visitors')
+    werk_measure: str = ""           # koppelt een werkoverleg-def aan zijn combo-measure (werk:<circle>|<measure>)
 
     @field_validator("name", mode="before")
     @classmethod
@@ -191,7 +196,7 @@ class IndicatorDefinition(BaseModel):
             return v.strip().lower() in ("1", "true", "ja", "yes", "on")
         return bool(v)
 
-    @field_validator("categorie", "veld", mode="before")
+    @field_validator("categorie", "veld", "werk_measure", mode="before")
     @classmethod
     def _short2(cls, v):
         return (str(v or "").strip())[:40]
