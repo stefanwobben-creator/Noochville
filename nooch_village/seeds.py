@@ -138,6 +138,18 @@ def _migrate_lexicon(lexicon: Lexicon) -> None:
 
 # ── Governance-seeds ──────────────────────────────────────────────────────────
 
+# De governance-Facilitator (CLASS_MAP-id 'facilitator', historisch): één rol, tekst bewust Engels
+# (Holacracy-Facilitator), GEEN NL-duplicaat. Zie de comment bij CLASS_MAP in village.py.
+_FAC_PURPOSE = "Safeguards the validity of governance proposals without judging their substance."
+_FAC_ACCOUNTABILITIES = [
+    "Facilitating the Circle's regular Tactical Meetings",
+    "Facilitating the Circle's Governance Process",
+    "Triggering new elections for the Circle's elected Roles after each election term expires",
+    "Auditing a Sub-Circle's meetings and records on request and declaring a Process Breakdown if one is discovered",
+    "Announcing the daily cadence (dag_begint) and running the automated G0-G4 validity gate on governance proposals",
+]
+
+
 def seed_records(records: Records) -> None:
     """Schrijf de vijf seed-rollen als er nog geen wortelcirkel is. Idempotent."""
     if records.root() is not None:
@@ -171,12 +183,8 @@ def seed_records(records: Records) -> None:
                     persona="Maisy Mushroom")
     facilitator = Record(id="facilitator", type=RecordType.ROLE, parent="noochville",
                          definition=RoleDefinition(
-                             purpose="Bewaakt de geldigheid van governance-voorstellen "
-                                     "zonder inhoudelijk te oordelen",
-                             accountabilities=["de dagcyclus omroepen",
-                                               "voorstellen toetsen op G0-G4",
-                                               "geldige voorstellen direct aannemen",
-                                               "risicovolle voorstellen escaleren naar de mens"],
+                             name="Facilitator", purpose=_FAC_PURPOSE,
+                             accountabilities=list(_FAC_ACCOUNTABILITIES),
                              skills=[]),
                          persona="Rupert Rubber")
     # NB: concurrent_scout is GÉÉN founding-rol. Hij wordt via governance geboren
@@ -195,21 +203,22 @@ def migrate_records(records: Records) -> None:
     if records.get("facilitator") is None:
         facilitator = Record(id="facilitator", type=RecordType.ROLE, parent=root.id,
                              definition=RoleDefinition(
-                                 purpose="Bewaakt de geldigheid van governance-voorstellen "
-                                         "zonder inhoudelijk te oordelen",
-                                 accountabilities=["de dagcyclus omroepen",
-                                                   "voorstellen toetsen op G0-G4",
-                                                   "geldige voorstellen direct aannemen",
-                                                   "risicovolle voorstellen escaleren naar de mens"],
+                                 name="Facilitator", purpose=_FAC_PURPOSE,
+                                 accountabilities=list(_FAC_ACCOUNTABILITIES),
                                  skills=[]),
                              persona="Rupert Rubber")
         records.put(facilitator)
         changed = True
     else:
-        # Idempotent: voeg cadans-accountability toe als die ontbreekt
+        # Idempotent: ruim de historische NL-cadans-regel op en garandeer de Engelse cadans-
+        # accountability (de Facilitator-tekst is bewust Engels — zie CLASS_MAP-comment in village.py).
         fac = records.get("facilitator")
-        if "de dagcyclus omroepen" not in fac.definition.accountabilities:
-            fac.definition.accountabilities.insert(0, "de dagcyclus omroepen")
+        cadence_en = _FAC_ACCOUNTABILITIES[-1]
+        new_acc = [a for a in fac.definition.accountabilities if a != "de dagcyclus omroepen"]
+        if cadence_en not in new_acc:
+            new_acc.append(cadence_en)
+        if new_acc != fac.definition.accountabilities:
+            fac.definition.accountabilities = new_acc
             fac.version += 1
             records.put(fac)
             changed = True
