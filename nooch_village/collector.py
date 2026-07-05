@@ -19,10 +19,18 @@ log = logging.getLogger("village.collector")
 
 
 def _expected_period(frequency: str, today: datetime.date, lag_days: int = 0) -> str:
-    """De datum-sleutel van de verwachte periode. Fase 1: alleen 'daily' → de vorige volledige dag,
-    `lag_days` dagen teruggeschoven voor bronnen met vertraging (GSC). Tragere frequenties volgen later;
-    die vallen nu bewust terug op 'daily' zodat het contract al staat maar het gedrag niet verandert."""
-    return (today - datetime.timedelta(days=1 + max(0, lag_days))).isoformat()
+    """De datum-sleutel van de verwachte periode voor deze frequentie, `lag_days` teruggeschoven voor
+    bronnen met vertraging (GSC). Snapshot-bronnen (weekly/monthly) leggen per periode één stand vast:
+      - daily   → de vorige volledige dag (flux)
+      - weekly  → de maandag van de (lag-)week (snapshot, één meting/week)
+      - monthly → de eerste van de (lag-)maand (snapshot, één meting/maand)
+    De due-check 'is er al een datapunt voor deze sleutel' maakt het idempotent + zelfherstellend."""
+    ref = today - datetime.timedelta(days=max(0, lag_days))
+    if frequency == "weekly":
+        return (ref - datetime.timedelta(days=ref.weekday())).isoformat()   # maandag van de week
+    if frequency == "monthly":
+        return ref.replace(day=1).isoformat()                               # eerste van de maand
+    return (ref - datetime.timedelta(days=1)).isoformat()                   # daily: vorige volledige dag
 
 
 def _has_point(obs: ObservationStore, metric: str, bron: str, datum: str) -> bool:

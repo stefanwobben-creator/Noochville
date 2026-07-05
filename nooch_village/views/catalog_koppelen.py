@@ -29,10 +29,12 @@ def catalog_sources() -> list[tuple[str, str, list[str]]]:
     from nooch_village.skills_impl.plausible import PlausibleSkill
     from nooch_village.skills_impl.shopify_sales import ShopifySalesSkill
     from nooch_village.skills_impl.gsc import GscPerformanceSkill
+    from nooch_village.skills_impl.openalex import OpenalexSkill
     return [
         ("plausible", "Plausible (web-analytics)", PlausibleSkill().available_metrics()),
         ("shopify", "Shopify (verkoop)", ShopifySalesSkill().available_metrics()),
         ("gsc", "Google Search Console", GscPerformanceSkill().available_metrics()),
+        ("openalex", "OpenAlex (academische tellers)", OpenalexSkill().available_metrics()),
     ]
 
 

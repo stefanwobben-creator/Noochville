@@ -160,3 +160,71 @@ def test_gsc_blijft_inactief_tot_activatie(tmp_path):
     w = collect_daily_observations(reg, cockpit2._Stores(dd).sources,
                                    cockpit2._Stores(dd).observations, _ctx(), today=datetime.date(2026, 7, 6))
     assert w == []
+
+
+def test_expected_period_weekly_en_monthly():
+    """De frequentie-bewuste periode-sleutel: weekly = maandag van de week, monthly = eerste van de
+    maand, daily = vorige volledige dag (met lag teruggeschoven). Beide snapshot-sleutels meegebouwd."""
+    from nooch_village.collector import _expected_period
+    wed = datetime.date(2026, 7, 8)                       # woensdag
+    assert _expected_period("weekly", wed) == "2026-07-06"     # maandag van die week
+    assert _expected_period("monthly", wed) == "2026-07-01"    # eerste van de maand
+    assert _expected_period("daily", wed) == "2026-07-07"      # vorige dag
+    assert _expected_period("daily", wed, lag_days=3) == "2026-07-04"
+    assert _expected_period("weekly", wed, lag_days=7) == "2026-06-29"   # maandag van de week ervoor
+
+
+def test_openalex_datasource_contract_snapshot_failclosed(monkeypatch):
+    """OpenAlex is een snapshot-DataSourceSkill: SOURCE='openalex', weekly, keyless (is_configured=True).
+    daily_values legt de STAND vast (absolute tellers), fail-closed per veld, sleutels ⊆ available_metrics."""
+    from nooch_village.skills_impl.openalex import OpenalexSkill
+    sk = OpenalexSkill()
+    assert isinstance(sk, DataSourceSkill) and sk.SOURCE == "openalex"
+    assert sk.frequency("works") == "weekly" and sk.is_configured(_ctx())
+    assert set(sk.available_metrics()) == {"works", "citations"}
+    monkeypatch.setattr(sk, "_fetch_with_backoff",
+                        lambda req: (_ for _ in ()).throw(RuntimeError("boom")))   # geen netwerk
+    vals = sk.daily_values(_ctx(), "2026-07-06")
+    assert set(vals) == set(sk.available_metrics()) and all(v is None for v in vals.values())
+    monkeypatch.setattr(sk, "_fetch_with_backoff",
+                        lambda req: {"results": [{"works_count": 1234, "cited_by_count": 56789}]})
+    assert sk.daily_values(_ctx(), "2026-07-06") == {"works": 1234, "citations": 56789}
+
+
+class _WeeklySnapshot(DataSourceSkill):
+    name = "wk"; SOURCE = "openalex"; DEFAULT_FREQUENCY = "weekly"; required_env = ()
+    def __init__(self, vals): self._vals = vals
+    def run(self, payload, context): return {}
+    def available_metrics(self): return ["works", "citations"]
+    def is_configured(self, context): return True
+    def daily_values(self, context, datum): return dict(self._vals)
+
+
+def test_collector_weekly_snapshot_stand_onder_weeksleutel_idempotent(tmp_path):
+    """Een weekly snapshot-bron legt de STAND vast onder de week-sleutel (maandag), één meting per week
+    (idempotent); een volgende week is een nieuwe sleutel."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd); st.sources.set_active("openalex", True)
+    reg = SkillRegistry(); reg.register(_WeeklySnapshot({"works": 1234, "citations": 56789}))
+    obs = lambda: cockpit2._Stores(dd).observations
+    srcs = lambda: cockpit2._Stores(dd).sources
+    # woensdag 2026-07-08 → week-maandag 2026-07-06
+    w = collect_daily_observations(reg, srcs(), obs(), _ctx(), today=datetime.date(2026, 7, 8))
+    assert ("openalex", "works", "2026-07-06") in w and ("openalex", "citations", "2026-07-06") in w
+    assert [r["value"] for r in obs().daily_series("openalex_works_day", bron="openalex")] == [1234]   # de STAND
+    # zelfde week (vrijdag) → niets (één meting/week)
+    assert collect_daily_observations(reg, srcs(), obs(), _ctx(), today=datetime.date(2026, 7, 10)) == []
+    # volgende week (maandag 2026-07-13) → nieuwe meting onder nieuwe sleutel
+    w3 = collect_daily_observations(reg, srcs(), obs(), _ctx(), today=datetime.date(2026, 7, 15))
+    assert ("openalex", "works", "2026-07-13") in w3
+    assert [r["datum"] for r in obs().daily_series("openalex_works_day", bron="openalex")] == ["2026-07-06", "2026-07-13"]
+
+
+def test_openalex_blijft_inactief_tot_activatie(tmp_path):
+    from nooch_village.skills_impl.openalex import OpenalexSkill
+    dd = _dd(tmp_path)
+    assert not cockpit2._Stores(dd).sources.active("openalex")
+    reg = SkillRegistry(); reg.register(OpenalexSkill())
+    w = collect_daily_observations(reg, cockpit2._Stores(dd).sources,
+                                   cockpit2._Stores(dd).observations, _ctx(), today=datetime.date(2026, 7, 8))
+    assert w == []                                       # inactief → geen fetch/write
