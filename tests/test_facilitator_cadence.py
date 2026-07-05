@@ -19,11 +19,12 @@ D_Q_PRE = date(2026, 3, 31)  # dag vóór kwartaalgrens
 D_Q = date(2026, 4, 1)       # kwartaalgrens
 
 
-def _make_facilitator(tmp_path, heartbeat: str = "0"):
+def _make_facilitator(tmp_path, heartbeat: str = "0", tz: str | None = None):
     bus = EventBus(name="test")
-    context = SimpleNamespace(
-        settings={"heartbeat_seconds": heartbeat, "reflect_interval_seconds": "0"},
-        data_dir=str(tmp_path), records=None, library=None)
+    settings = {"heartbeat_seconds": heartbeat, "reflect_interval_seconds": "0"}
+    if tz is not None:
+        settings["dag_begint_tz"] = tz
+    context = SimpleNamespace(settings=settings, data_dir=str(tmp_path), records=None, library=None)
     record = Record(id="facilitator", type=RecordType.ROLE, parent="noochville",
                     definition=RoleDefinition(purpose="dag-cadans + governance"), source="seed")
     return Facilitator(record, bus, SkillRegistry(), context), bus
@@ -111,3 +112,24 @@ def test_ring_gebruikt_de_door_tick_gelezen_datum(tmp_path):
         fac.tick()
     assert log == ["dag_eindigt", "dag_begint", "maand_begint", "kwartaal_begint"]
     assert fac._last_day == D_Q.isoformat()
+
+
+def test_tijdzone_default_europe_madrid(tmp_path):
+    from zoneinfo import ZoneInfo
+    fac, _ = _make_facilitator(tmp_path)                      # geen tz in settings → default Europe/Madrid
+    assert fac._tz == ZoneInfo("Europe/Madrid")
+
+
+def test_tick_rekent_tegen_geconfigureerde_tz(tmp_path):
+    from zoneinfo import ZoneInfo
+    fac, bus = _make_facilitator(tmp_path); log = _capture(bus)
+    with patch("nooch_village.roles.datetime") as m:
+        m.now.return_value = datetime(2026, 3, 15, 4, 35, tzinfo=ZoneInfo("Europe/Madrid"))  # 04:35 Madrid
+        fac.tick()
+    m.now.assert_called_once_with(fac._tz)                    # rekent tegen de config-tz, niet now() kaal
+    assert log == ["dag_begint"] and fac._last_day == "2026-03-15"   # persist-datum = Madrid-datum
+
+
+def test_ongeldige_tz_valt_terug_op_server_lokaal(tmp_path):
+    fac, _ = _make_facilitator(tmp_path, tz="Onzin/Nergens")
+    assert fac._tz is None                                    # fail-soft → datetime.now(None) = server-lokaal
