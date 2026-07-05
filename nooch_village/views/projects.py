@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from nooch_village.web_base import _e, _page, _banner
 from nooch_village.cockpit2_util import (
-    _name, _initials, _age, _fmt_due, _created_full,
+    _name, _initials, _age, _fmt_due, _created_full, md_editor, _md,
     _link_host, _psec, _person_name,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK,
     _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET,
@@ -247,10 +247,7 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "<script>(function(){"
         "var ov=document.getElementById('ovl'),bd=document.getElementById('ovl-body'),last=null,dirty=false,lkRoom=null,lkCircle=null;"
         f"window.__mentions={mentions_json};"
-        "window.wrapSel=function(btn,pre,post){var f=btn.closest('form');var t=f&&f.querySelector('textarea');"
-        "if(!t)return;var s=t.selectionStart,e=t.selectionEnd,v=t.value;"
-        "t.value=v.slice(0,s)+pre+v.slice(s,e)+post+v.slice(e);t.focus();"
-        "t.selectionStart=s+pre.length;t.selectionEnd=e+pre.length;};"
+        # wrapSel leeft nu in de gedeelde md_editor (guarded); niet meer hier dubbel definiëren.
         "function mentionWire(t){var box=null;function close(){if(box){box.remove();box=null;}}"
         "t.addEventListener('input',function(){var v=t.value.slice(0,t.selectionStart);"
         "var m=v.match(/@([^@\\n]*)$/);close();if(!m)return;var q=m[1].toLowerCase();"
@@ -601,20 +598,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         # Directe textarea met mini-toolbar op de gele achtergrond; Plaatsen links uitgelijnd.
         composer = (f"<form method='post' action='/action' class='pf comp-form'>{hid()}"
                     f"<input type='hidden' name='author' value='human:'>"
-                    f"<div class='editor'>"
-                    f"<div class='editor-tb'>"
-                    f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'**','**')\" title='Vet'><b>B</b></button>"
-                    f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'*','*')\" title='Cursief'><i>I</i></button>"
-                    f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'~~','~~')\" title='Doorhalen'><s>S</s></button>"
-                    f"<span class='tb-sep'></span>"
-                    f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'- ','')\" title='Lijst'>•</button>"
-                    f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'## ','')\" title='Kop'>H</button>"
-                    f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'[','](url)')\" title='Link'>{_IC_LINK}</button>"
-                    f"<details class='emoji-pick tb-help'><summary title='Opmaak-hulp'>?</summary>"
-                    f"<div class='md-help'>**vet** · *cursief* · ~~doorhalen~~ · # kop · - lijst · [tekst](url)</div>"
-                    f"</details></div>"
-                    f"<textarea name='text' rows='2' placeholder='Schrijf een reactie…'></textarea>"
-                    f"</div>"
+                    f"{md_editor('text', rows=2, placeholder='Schrijf een reactie…', help=True)}"
                     f"<div class='comp-row'>"
                     f"<button class='btn ok sm' type='submit' name='action' value='proj_feed'>Plaatsen</button>"
                     f"</div></form>")
@@ -716,19 +700,18 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     # ---- Omschrijving (leesbare tekst + inklapbare editor) ----
     if rw:
         desc = p.get("description", "")
-        # Leesbare tekst schaalt mee met de inhoud; de textarea zit achter "✎ bewerken".
+        # Leesbare tekst (markdown → veilige _md) schaalt mee; de opmaak-editor zit achter "✎ bewerken".
         # Nog geen omschrijving → editor staat open zodat je meteen kunt toevoegen.
-        lees = f"<div class='desc-read'>{_e(desc) or '<span class=muted>geen omschrijving</span>'}</div>"
+        lees = f"<div class='desc-read'>{_md(desc) or '<span class=muted>geen omschrijving</span>'}</div>"
         editor = (f"<details class='descedit'{'' if desc else ' open'}>"
                   f"<summary>✎ bewerken</summary>"
                   f"<form method='post' action='/action' class='descform'>{hid()}"
-                  f"<textarea name='description' rows='4' placeholder='Voeg een omschrijving toe…'>"
-                  f"{_e(desc)}</textarea>"
+                  f"{md_editor('description', desc, placeholder='Voeg een omschrijving toe…')}"
                   f"<button class='btn ok' type='submit' name='action' value='proj_describe' "
                   f"style='margin-top:.3rem'>opslaan</button></form></details>")
         desc_body = lees + editor
     else:
-        desc_body = f"<div>{_e(p.get('description','')) or '<span class=muted>geen omschrijving</span>'}</div>"
+        desc_body = f"<div>{_md(p.get('description','')) or '<span class=muted>geen omschrijving</span>'}</div>"
     omschrijving = _psec(_IC_DESC, "Omschrijving", desc_body)
 
     # ---- Bijlagen-overzicht: Links + Bestanden (card-pattern). Toevoegen via de Bijlage-kaart. ----

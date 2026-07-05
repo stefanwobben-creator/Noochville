@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from nooch_village.web_base import _e
-from nooch_village.cockpit2_util import WEBSITE_DEVELOPER_ROLE
+from nooch_village.cockpit2_util import WEBSITE_DEVELOPER_ROLE, md_editor, _md
 from nooch_village.backlog import TYPES, DOMEINEN, STATEN, IMPACTS, EFFORTS
 
 if TYPE_CHECKING:
@@ -60,7 +60,7 @@ def _inbrenger_view(st: "_Stores", rec, csrf: str, username: str | None) -> str:
     form = (f"<div class='c2-sec'><h3>Item indienen</h3>"
             f"<form method='post' action='/action' class='qadd-form'>{hid}"
             f"<input name='titel' placeholder='Titel…' autocomplete='off' required>"
-            f"<textarea name='beschrijving' rows='3' placeholder='Beschrijving (vrije tekst)…'></textarea>"
+            f"{md_editor('beschrijving', rows=4, placeholder='Beschrijving (vrije tekst)…')}"
             f"<label class='att-lbl'>Type</label><select name='type'>{type_opts}</select>"
             f"<label class='att-lbl'>Domein</label><select name='domein'>{dom_opts}</select>"
             f"<div class='qadd-row'><button class='btn ok' type='submit' name='action' "
@@ -92,7 +92,7 @@ def _item_beheer(rec, it, csrf: str) -> str:
                  f"<select name='impact'>{_opts(IMPACTS, it.impact)}</select>"
                  f"<select name='effort'>{_opts(EFFORTS, it.effort)}</select>"
                  f"<button class='btn sm' type='submit' name='action' value='backlog_update_prioriteit'>prioriteit</button></form>")
-    desc = f"<div class='muted' style='font-size:.85rem'>{_e(it.beschrijving)}</div>" if it.beschrijving else ""
+    desc = f"<div class='muted' style='font-size:.85rem'>{_md(it.beschrijving)}</div>" if it.beschrijving else ""
     return (f"<div class='accrow' style='display:block'><div><b>{_e(it.titel)}</b> {_chips(it)}</div>"
             f"{desc}<div style='margin-top:.35rem'>{staat_form}{prio_form}</div></div>")
 

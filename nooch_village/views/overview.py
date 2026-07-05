@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from nooch_village.web_base import _e, _page, _banner
 from nooch_village.cockpit2_util import (
-    _name, _initials, _tabbar, _avatar, _age, _md,
+    _name, _initials, _tabbar, _avatar, _age, _md, md_editor,
     _psec, _person_name, _ICON_ADD_EMOJI,
     _IC_CHECK, _IC_CLOCK, _IC_LINK, _IC_TARGET,
 )
@@ -439,20 +439,6 @@ def _artefact_versions_html(a) -> str:
             f"historie ({len(vs)})</summary><ul class='clean'>{rows}</ul></details>")
 
 
-def _md_editor(name: str, value: str = "") -> str:
-    """De markdown-body-editor uit het projecten-patroon: mini-toolbar (via `wrapSel`, die
-    render_node al meelevert in _modal_html) boven een textarea, in een `.editor`-kaart."""
-    return (f"<div class='editor'><div class='editor-tb'>"
-            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'**','**')\" title='Vet'><b>B</b></button>"
-            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'*','*')\" title='Cursief'><i>I</i></button>"
-            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'~~','~~')\" title='Doorhalen'><s>S</s></button>"
-            f"<span class='tb-sep'></span>"
-            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'- ','')\" title='Lijst'>•</button>"
-            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'## ','')\" title='Kop'>H</button>"
-            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'[','](url)')\" title='Link'>🔗</button>"
-            f"</div><textarea name='{name}' rows='3' placeholder='Body (markdown)…'>{value}</textarea></div>")
-
-
 def _domain_field(domains: list) -> str:
     """Domein-keuze voor een policy-add-form. Eén domein → vaste regel (hidden input, geen dropdown);
     twee of meer → een select. Bron: de écht via governance toegewezen `definition.domains`."""
@@ -477,7 +463,7 @@ def _artefact_add_form(rec, kind: str, csrf_token: str, domains: list | None = N
             f"<input type='hidden' name='next' value='/node?id={_e(rec.id)}&tab={_tab_for(kind)}'>"
             f"<label class='att-lbl'>Titel</label><input name='title' required>"
             f"{dom}"
-            f"<label class='att-lbl'>Body</label>{_md_editor('body')}"
+            f"<label class='att-lbl'>Body</label>{md_editor('body')}"
             f"{urlf}"
             f"<div class='qadd-row'>"
             f"<button class='btn ok' type='submit' name='action' value='artefact_add'>Toevoegen</button>"
@@ -494,7 +480,7 @@ def _artefact_edit_form(a, csrf_token: str) -> str:
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
             f"<input type='hidden' name='next' value='/node?id={_e(a.anchor)}&tab={_tab_for(a.kind)}'>"
             f"<label class='att-lbl'>Titel</label><input name='title' value='{_e(a.title)}'>"
-            f"<label class='att-lbl'>Body</label>{_md_editor('body', _e(a.body))}"
+            f"<label class='att-lbl'>Body</label>{md_editor('body', a.body)}"
             f"{urlf}"
             f"<div class='qadd-row'>"
             f"<button class='btn ok sm' type='submit' name='action' value='artefact_edit'>Opslaan</button>"

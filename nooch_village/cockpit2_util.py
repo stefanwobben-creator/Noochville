@@ -126,6 +126,39 @@ def _md(text: str) -> str:
     return html[:-4] if html.endswith("<br>") else html
 
 
+# De guarded wrapSel-JS reist mee met de editor: één definitie op de pagina, ongeacht hoeveel
+# editors erop staan (`if(!window.wrapSel)` → nooit dubbel gedefinieerd), en werkt ook op pagina's
+# die _modal_html niet laden. Wrap de selectie in de textarea met de opmaak-markers.
+_WRAPSEL_JS = ("<script>if(!window.wrapSel){window.wrapSel=function(btn,pre,post){"
+               "var f=btn.closest('form');var t=f&&f.querySelector('textarea');if(!t)return;"
+               "var s=t.selectionStart,e=t.selectionEnd,v=t.value;"
+               "t.value=v.slice(0,s)+pre+v.slice(s,e)+post+v.slice(e);t.focus();"
+               "t.selectionStart=s+pre.length;t.selectionEnd=e+pre.length;};}</script>")
+
+
+def md_editor(name: str, value: str = "", rows: int = 6,
+              placeholder: str = "Body (markdown)…", help: bool = False) -> str:
+    """De GEDEELDE opmaak-editor (markdown → veilige `_md`-weergave): `.editor`-kaart met mini-toolbar
+    (vet/cursief/doorhalen/lijst/kop/link via wrapSel) boven een textarea. Zelfvoorzienend — draagt de
+    guarded wrapSel-JS zelf mee, zodat de editor op ELKE pagina werkt (ook zonder _modal_html) en een
+    view 'm niet kan vergeten. `value` wordt hier ge-escaped; callers geven de RUWE waarde door.
+    `help=True` toont een inklapbaar opmaak-spiekbriefje (bestaande `.tb-help`/`.md-help`-klassen)."""
+    hlp = ("<details class='emoji-pick tb-help'><summary title='Opmaak-hulp'>?</summary>"
+           "<div class='md-help'>**vet** · *cursief* · ~~doorhalen~~ · # kop · - lijst · [tekst](url)</div>"
+           "</details>") if help else ""
+    return (f"<div class='editor'><div class='editor-tb'>"
+            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'**','**')\" title='Vet'><b>B</b></button>"
+            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'*','*')\" title='Cursief'><i>I</i></button>"
+            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'~~','~~')\" title='Doorhalen'><s>S</s></button>"
+            f"<span class='tb-sep'></span>"
+            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'- ','')\" title='Lijst'>•</button>"
+            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'## ','')\" title='Kop'>H</button>"
+            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'[','](url)')\" title='Link'>🔗</button>"
+            f"{hlp}</div>"
+            f"<textarea name='{_e(name)}' rows='{rows}' placeholder='{_e(placeholder)}'>{_e(value)}</textarea>"
+            f"</div>{_WRAPSEL_JS}")
+
+
 def _ic(path: str) -> str:
     return (f"<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' "
             f"stroke-linecap='round' stroke-linejoin='round'>{path}</svg>")
