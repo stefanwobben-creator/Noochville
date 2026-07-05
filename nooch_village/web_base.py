@@ -93,8 +93,21 @@ def _banner(msg) -> str:
     return f'<div class="{cls}">{_e(msg)}</div>'
 
 
+# Verborgen easter-egg-trigger op elke ingelogde cockpit-pagina (login gebruikt _page NIET): de
+# Konami-code of 5× klikken op de paginatitel opent /snake. Self-contained (geen imports, verwijst
+# alleen naar de URL) en zonder preventDefault, zodat pijltjestoetsen op echte pagina's niet gekaapt
+# worden. De /snake-route zit achter de sessie-auth; uitgelogd → login-redirect.
+_KONAMI_TRIGGER = """<script>(function(){
+ var K=['arrowup','arrowup','arrowdown','arrowdown','arrowleft','arrowright','arrowleft','arrowright','b','a'],b=[];
+ addEventListener('keydown',function(e){ b.push((e.key||'').toLowerCase()); if(b.length>K.length)b.shift();
+   if(b.length===K.length&&K.every(function(k,i){return b[i]===k;})){b=[];location.href='/snake';} });
+ var h=document.querySelector('h1'); if(h){var c=0,t; h.addEventListener('click',function(){
+   c++; clearTimeout(t); t=setTimeout(function(){c=0;},1500); if(c>=5){c=0;location.href='/snake';} });}
+})();</script>"""
+
+
 def _page(title: str, inner: str) -> str:
     return (f'<!doctype html><html lang="nl"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>{_e(title)}</title>{_FONTS}<style>{_CSS}</style></head>'
-            f'<body>{inner}</body></html>')
+            f'<body>{inner}{_KONAMI_TRIGGER}</body></html>')
