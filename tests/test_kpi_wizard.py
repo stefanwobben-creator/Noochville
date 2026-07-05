@@ -65,3 +65,36 @@ def test_formule_opslag_en_placeholder_render(tmp_path):
     page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
     # de formule-tegel wordt nu fail-closed doorgerekend; zonder dagdata → eerlijk 'geen data'
     assert "Conversie" in page and "berekening volgt" not in page
+
+
+def test_wizard_een_regel_per_metric_werk_geconsolideerd(tmp_path):
+    """Deelopdracht 3: werk staat één keer per metric (geconsolideerde def), niet als 3 dim-combos."""
+    from nooch_village.views.metrics import _wizard_indicators
+    st = cockpit2._Stores(_dd(tmp_path))
+    inds = _wizard_indicators(st, st.records.get(C))
+    namen = [i["name"] for i in inds]
+    assert namen.count("Tevredenheid werkoverleg") == 1                  # één keer
+    tev = next(i for i in inds if i["name"] == "Tevredenheid werkoverleg")
+    assert tev["value"] == f"werk:{C}|tevredenheid|over_tijd" and tev["aard"] == "reeks"
+    assert not any("|gemiddeld" in i["value"] or "|totaal" in i["value"] for i in inds)   # geen dim-combos
+    assert next(i["value"] for i in inds if i["name"] == "Bezoekers (Plausible)") == "pulse_visitors|visitors|time"
+
+
+def test_composer_categorie_eerst_lege_staat_en_placeholder(tmp_path):
+    st = cockpit2._Stores(_dd(tmp_path))
+    h = cockpit2.render_kpi_composer(st, C, csrf_token="t")
+    assert "kc-empty" in h and "kc-picked" in h                          # lege-staat + picked-blok
+    assert "Kies eerst een categorie" in h and "chip outline" in h       # categorie-prompt + aard-tag
+    assert "Standaard weergave" in h and "name='form' value=''" in h     # stap 3 = placeholder (geen select)
+
+
+def test_wizard_werk_tegel_maakt_en_rendert(tmp_path):
+    """Een via de wizard gekozen werk-metric (over_tijd-value) maakt een tegel die rendert."""
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": [f"werk:{C}|tevredenheid|over_tijd"],
+                      "form": ["trend"], "ref_kind": [""], "target": [""], "mode": ["indicator"],
+                      "next": ["/"]}, "guest")
+    tiles = [t for t in cockpit2._Stores(dd).metrics.tiles_of(C) if t.get("measure") == "tevredenheid"]
+    assert tiles and tiles[0]["dim"] == "over_tijd"
+    page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
+    assert "Tevredenheid" in page or "tevredenheid" in page

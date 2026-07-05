@@ -31,8 +31,9 @@ def test_werkoverleg_bron_in_wizard(tmp_path):
     dd = _dd(tmp_path)
     # de Werkoverleg-bron is beschikbaar op de facilitator (rol onder de cirkel)
     page = cockpit2.render_kpi_composer(cockpit2._Stores(dd), FAC, csrf_token="t")
-    assert "Werkoverleg: Tevredenheid · gemiddeld per overleg" in page
-    assert "Werkoverleg: Spanningen verwerkt · totaal" in page
+    # deelopdracht 3: werk staat één keer per metric (geconsolideerde def), niet als 3 dim-combos
+    assert "Tevredenheid werkoverleg" in page and "Behandelde spanningen" in page
+    assert "· gemiddeld per overleg" not in page and "Spanningen verwerkt · totaal" not in page
 
 
 def _run_meeting(dd, person_id, satisfaction, resolve=("project", "info")):
