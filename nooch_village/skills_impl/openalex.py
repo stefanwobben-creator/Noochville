@@ -74,7 +74,9 @@ def _reconstruct_abstract(inverted_index: dict | None) -> str:
 class OpenalexSkill(DataSourceSkill):
     name = "openalex_evidence"
     SOURCE = "openalex"
-    # Snapshot-bron: cumulatieve tellers groeien traag → wekelijks meten (niet dagelijks).
+    # Snapshot-bron: cumulatieve tellers groeien traag → wekelijks meten (niet dagelijks). De tegel
+    # toont de genormaliseerde delta i.p.v. de oplopende stand.
+    kind = "snapshot"
     DEFAULT_FREQUENCY = "weekly"
     needs_secret = True
     cost = "rate_limited"
