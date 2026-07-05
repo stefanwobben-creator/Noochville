@@ -260,10 +260,13 @@ ul.clean li:last-child{border-bottom:none}
 .tree .here{background:var(--green-tint);border-radius:5px;padding:0 .3rem}
 /* Inklapbare sub-cirkels: native <details>/<summary> met een eigen caret; de naam-link (incl.
    .here-highlight) blijft in de summary zichtbaar, ook ingeklapt. */
-.tree details.tree-c>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:.2rem}
+/* padding:0 + [open]-reset overschrijven de globale details>summary/details[open]-regels uit web_base
+   (anders krijgt elk boomitem .45rem summary-padding en .8rem onder een open cirkel — overtollig wit). */
+.tree details.tree-c>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:.2rem;padding:0;font-family:inherit;font-weight:inherit}
+.tree details.tree-c[open]{padding-bottom:0}
 .tree details.tree-c>summary::-webkit-details-marker{display:none}
-.tree details.tree-c>summary::before{content:'\25B8';font-size:.6rem;color:var(--gray);flex:none;width:.6rem}
-.tree details.tree-c[open]>summary::before{content:'\25BE'}
+.tree details.tree-c>summary::before{content:'\\0025B8';font-size:.6rem;color:var(--gray);flex:none;width:.6rem}
+.tree details.tree-c[open]>summary::before{content:'\\0025BE'}
 .pill{display:inline-block;font-size:.72rem;padding:.05rem .45rem;border-radius:var(--radius-pill);background:var(--cream-2);color:var(--gray);margin-left:.3rem}
 .card{border:1px solid var(--border);border-radius:var(--radius);padding:.5rem .7rem;margin:.3rem 0;background:var(--surface)}
 .pboard{display:flex;gap:.6rem;align-items:flex-start;overflow-x:auto}
@@ -591,7 +594,7 @@ ul.clean li:last-child{border-bottom:none}
 .comp-form{margin-bottom:1rem}
 .comp-row{margin-top:.4rem}
 /* Trello-stijl editor: omkaderde box met opmaak-toolbar boven een randloze textarea. */
-.editor{border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);overflow:visible}
+.editor{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);overflow:visible}
 .editor:focus-within{border-color:var(--green)}
 .editor-tb{display:flex;align-items:center;gap:.1rem;padding:.25rem .35rem;border-bottom:1px solid var(--border);background:var(--cream-2);border-radius:var(--radius) var(--radius) 0 0}
 .editor-tb .tb-b{background:none;border:none;cursor:pointer;color:var(--gray);border-radius:var(--radius);padding:.2rem .42rem;font-size:.85rem;line-height:1;display:inline-flex;align-items:center}
