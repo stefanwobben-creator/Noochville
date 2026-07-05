@@ -134,3 +134,14 @@ def test_staaf_tegel_rendert_end_to_end(tmp_path):
     assert tile["form"] == "staaf"                                       # de gekozen vorm is opgeslagen (één plek)
     page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
     assert "barchart" in page                                           # de staaf-renderer draait op de tegel
+
+
+def test_categorie_chips_gebruiken_design_componenten(tmp_path):
+    """Scope 2: de categorie-chips zijn .chip-opt-pills in een .chip-wrap (flex-wrap), niet de oude
+    niet-wrappende .cl-bar-tekst. De actieve categorie krijgt .on (→ .chip-opt.on)."""
+    st = cockpit2._Stores(_dd(tmp_path))
+    h = cockpit2.render_kpi_composer(st, C, csrf_token="t")
+    assert "class='chip-wrap kc-cats'" in h                 # wrap-rij: chips breken af binnen de kaart
+    assert "class='chip-opt kc-cat'" in h                   # interactieve pill (design-systeem-component)
+    assert "cl-bar kc-cats" not in h                        # oude niet-wrappende opmaak weg
+    assert "classList.toggle('on'" in h                     # JS zet .on op de actieve categorie
