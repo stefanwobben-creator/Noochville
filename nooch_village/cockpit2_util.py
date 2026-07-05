@@ -35,18 +35,14 @@ def _initials(name: str) -> str:
     return "".join(w[0] for w in name.split()[:2]).upper() or "?"
 
 
-def _tabbar(node_id: str, tabs: list, cur: str, base: str = "/node", unseen=None) -> str:
+def _tabbar(node_id: str, tabs: list, cur: str, base: str = "/node") -> str:
     # `base` parametriseert de route (rol-view: /node, persoon-view: /person). Component NIET
     # geforkt; bestaande callers gebruiken de default "/node" en veranderen niet.
-    # `unseen` = set tab-namen met een 'gewijzigd sinds laatst gezien'-markering.
-    unseen = unseen or set()
     out = []
     for t in tabs:
         on = " on" if t == cur else ""
-        mark = ("<span class='c2-unseen' title='gewijzigd sinds je laatste bezoek'></span>"
-                if t in unseen else "")
         out.append(f"<a class='c2-tab{on}' href='{base}?id={_e(node_id)}&tab={t}'>"
-                   f"{_e(_TAB_LABEL[t])}{mark}</a>")
+                   f"{_e(_TAB_LABEL[t])}</a>")
     return "<div class='c2-tabs'>" + "".join(out) + "</div>"
 
 
@@ -207,10 +203,6 @@ details{background:none;border:none;border-radius:0;box-shadow:none;padding:0}
 .c2-tabs{display:flex;flex-wrap:wrap;gap:.1rem;border-bottom:1px solid var(--border);margin:.7rem 0 1rem}
 .c2-tab{padding:.4rem .7rem;font-size:.85rem;border-bottom:2px solid transparent;color:var(--gray);text-decoration:none}
 .c2-tab.on{border-bottom-color:var(--green-dark);color:var(--green-dark);font-weight:700}
-/* seen-markering: per-gebruiker 'gewijzigd sinds laatst gezien'. Bewust anders dan de maturity-dot
-   (amber met ring i.p.v. platte 7px-stip) zodat de twee signalen niet verward worden. */
-.c2-unseen{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--yellow);
-  margin-left:.3rem;vertical-align:middle;box-shadow:0 0 0 2px var(--yellow-light)}
 /* NASA-EPIC-aardbol (alleen op de anchor-overview): bijna kolombreed, rond, gestapelde frames die
    traag cross-faden. width iets smaller dan de sectie-scheidingslijn; vierkant via aspect-ratio.
    Geen rand (transparant); de frames verder ingezoomd zodat de zwarte marge zo dun mogelijk is.
