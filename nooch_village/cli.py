@@ -776,6 +776,6 @@ def main() -> None:
               "measure_propose | rereview | ingest | notes_remove | recurate | "
               "ground | harry_run | roster | keys | competitor | formalize | answer_questions | "
               "ingest_governance | review_roles | shopify | work_projects | "
-              "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate",
+              "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify",
               file=sys.stderr)
         sys.exit(1)
