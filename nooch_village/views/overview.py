@@ -6,7 +6,7 @@ import time
 import urllib.parse
 from typing import TYPE_CHECKING
 
-from nooch_village.cockpit import _e, _page, _banner
+from nooch_village.web_base import _e, _page, _banner
 from nooch_village.cockpit2_util import (
     _name, _initials, _tabbar, _avatar, _age, _md,
     _psec, _person_name, _ICON_ADD_EMOJI,

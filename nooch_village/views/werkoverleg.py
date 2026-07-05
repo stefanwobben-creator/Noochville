@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from nooch_village import org
-from nooch_village.cockpit import _e, _page
+from nooch_village.web_base import _e, _page
 from nooch_village.cockpit2_util import _name, _initials, _psec, _IC_CHECK, _IC_INFO
 from nooch_village.werkoverleg import STEPS as _WO_STEPS
 from nooch_village.cockpit2_util import _EXTRA_CSS

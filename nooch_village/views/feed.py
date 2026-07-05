@@ -1,7 +1,7 @@
 """Feed-functies (activiteiten-stroom, mentions, emoji-reacties) — brok 2 van de cockpit2-split."""
 from __future__ import annotations
 
-from nooch_village.cockpit import _e
+from nooch_village.web_base import _e
 from nooch_village.cockpit2_util import _stamp, _md, _avatar, _name, _ICON_ADD_EMOJI, _person_name
 
 # Gecureerde set standaard emoji's met zoekwoorden (NL/EN) voor de picker.

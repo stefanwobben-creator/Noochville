@@ -7,7 +7,7 @@ Prototype: datastructuur + UI, GEEN Noochie/LLM. Twee views:
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
-from nooch_village.cockpit import _e
+from nooch_village.web_base import _e
 from nooch_village.cockpit2_util import WEBSITE_DEVELOPER_ROLE
 from nooch_village.backlog import TYPES, DOMEINEN, STATEN, IMPACTS, EFFORTS
 

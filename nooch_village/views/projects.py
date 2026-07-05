@@ -5,7 +5,7 @@ import json
 import urllib.parse
 from typing import TYPE_CHECKING
 
-from nooch_village.cockpit import _e, _page, _banner
+from nooch_village.web_base import _e, _page, _banner
 from nooch_village.cockpit2_util import (
     _name, _initials, _age, _fmt_due, _created_full,
     _link_host, _psec, _person_name,

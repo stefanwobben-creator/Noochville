@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import time as _time
 
-from nooch_village.cockpit import _e
+from nooch_village.web_base import _e
 
 _BUILD = _time.strftime("%H:%M")   # proces-starttijd: zichtbaar in de balk
 

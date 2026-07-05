@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from nooch_village.cockpit import _e
+from nooch_village.web_base import _e
 from nooch_village.cockpit2_util import _md
 
 if TYPE_CHECKING:
