@@ -10,7 +10,7 @@ from nooch_village.metric_schema import (CADANS_LABEL, MEETTYPE_LABEL,
 from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD
 from nooch_village.views.metrics import (
     _num, _dir_select, _cad_select, _mt_select, _mw_select, _opt_select,
-    _aard_chips, _mw_chip,
+    _aard_chips, _mw_chip, indicator_freshness, freshness_chip,
     _RICHTING, _ORIGIN_LABEL,
 )
 
@@ -68,6 +68,8 @@ def _catalog_card(st: _Stores, d: dict, cur: dict, csrf: str) -> str:
     ks = st.metrics.kpis_for_def(did)
     users = sorted({_name(st.records.get(k["node"])) for k in ks if st.records.get(k["node"])})
     usage = (f"{len(ks)}× in gebruik" + (": " + ", ".join(users) if users else "")) if ks else "nog niet in gebruik"
+    # Tweede signaal naast 'in gebruik': haalt het systeem er ook data voor op? (gedeelde helper, 3 staten)
+    vers = freshness_chip(indicator_freshness(st, cur.get("source", ""), cur.get("veld", "")))
     nver = len(d.get("versions", []))
     vhist = ""
     if nver > 1:
@@ -89,7 +91,7 @@ def _catalog_card(st: _Stores, d: dict, cur: dict, csrf: str) -> str:
             f"<div class='cat-h'><b>{_e(cur.get('name', ''))}</b>"
             f"<span class='cat-tags'>{vchip}{_aard_chips(cur)}{_mw_chip(mw)}<span class='chip muted'>v{d.get('current', 1)}</span></span></div>"
             f"<div class='gr-pop' style='position:static;width:auto;box-shadow:none;border:none;padding:0'>{body}</div>"
-            f"<div class='muted cat-use'>{_e(usage)}</div>{vhist}{edit}</div>")
+            f"<div class='muted cat-use'>{_e(usage)} {vers}</div>{vhist}{edit}</div>")
 
 
 def _catalog_add_form(st: _Stores, csrf: str) -> str:
