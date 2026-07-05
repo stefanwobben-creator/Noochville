@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from nooch_village.web_base import _e
 from nooch_village.metric_schema import AARD, AARD_LABEL
 from nooch_village.i18n import t
+from nooch_village.views.metrics import indicator_freshness, freshness_chip
 
 if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores
@@ -45,18 +46,19 @@ def _coupled_fields(st: _Stores, source: str) -> dict:
     return out
 
 
-def _field_card(source: str, raw: str, coupled_name: str | None, csrf: str) -> str:
+def _field_card(source: str, raw: str, coupled_name: str | None, csrf: str, fresh=None) -> str:
     chip = f"<span class='chip'>{_e(raw)}</span>"
+    vers = freshness_chip(fresh)          # tweede signaal naast 'gekoppeld': levert de bron recente data?
     if coupled_name:
         return (f"<div class='card'><div class='ptitle'>{chip} "
-                f"<span class='chip green'>{_e(t('catalogus.koppelen.status.gekoppeld'))}</span></div>"
+                f"<span class='chip outline'>{_e(t('catalogus.koppelen.status.gekoppeld'))}</span> {vers}</div>"
                 f"<div class='muted'>{_e(t('catalogus.koppelen.gekoppeld_als'))} <b>{_e(coupled_name)}</b>.</div></div>")
     kies = _e(t("catalogus.koppelen.kies"))
     cat_opts = "".join(f"<option>{_e(c)}</option>" for c in _CATEGORIEEN)
     aard_opts = "".join(f"<option value='{a}'>{_e(AARD_LABEL[a])}</option>" for a in AARD)
     return (
         f"<div class='card'><div class='ptitle'>{chip} "
-        f"<span class='chip muted'>{_e(t('catalogus.koppelen.status.ongekoppeld'))}</span></div>"
+        f"<span class='chip muted'>{_e(t('catalogus.koppelen.status.ongekoppeld'))}</span> {vers}</div>"
         f"<form method='post' action='/action' class='m-addform'>"
         f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
         f"<input type='hidden' name='source' value='{_e(source)}'>"
@@ -97,7 +99,14 @@ def _koppel_section(st: _Stores, csrf_token: str = "", source: str = "") -> str:
     if not raw_fields:
         fields_html = f"<p class='muted'>{_e(t('catalogus.koppelen.geen_velden'))}</p>"
     else:
-        fields_html = "".join(_field_card(sel, raw, coupled.get(raw), csrf_token) for raw in raw_fields)
+        fresh = {raw: indicator_freshness(st, sel, raw) for raw in raw_fields}
+        # Alles gekoppeld → expliciete boodschap i.p.v. een rij actieloze kaarten; de kaarten blijven
+        # (nu mét data-vers-signaal) zodat je per veld ziet of de bron ook echt vult.
+        all_coupled = all(raw in coupled for raw in raw_fields)
+        banner = (f"<div class='card'><div class='muted'>{_e(t('catalogus.koppelen.all_coupled'))}</div></div>"
+                  if all_coupled else "")
+        cards = "".join(_field_card(sel, raw, coupled.get(raw), csrf_token, fresh[raw]) for raw in raw_fields)
+        fields_html = banner + cards
 
     titel = _e(t("catalogus.koppelen.titel"))
     return (f"<div class='c2-sec'><div class='cl-head'><h3>{titel}</h3>"
