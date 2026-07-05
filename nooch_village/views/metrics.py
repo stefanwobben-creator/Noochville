@@ -1017,18 +1017,22 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: st
     def pl(k, lbl):
         on = " on" if win == k else ""
         if k == "actueel" and not live:               # alleen bij een live-capabele bron
-            return f"<span class='cl-filter muted' title='alleen beschikbaar bij een live-capabele bron'>{_e(lbl)}</span>"
+            return f"<span class='chip-opt muted' title='alleen beschikbaar bij een live-capabele bron'>{_e(lbl)}</span>"
         if nav:   # in het werkoverleg: blijf in de modal
             u = f"{nav}&mw={k}"
-            return f"<a class='cl-filter{on} js-modal' href='{u}' data-href='{u}'>{_e(lbl)}</a>"
-        return f"<a class='cl-filter{on}' href='{base}&mw={k}{cmp_q}'>{_e(lbl)}</a>"
+            return f"<a class='chip-opt{on} js-modal' href='{u}' data-href='{u}'>{_e(lbl)}</a>"
+        return f"<a class='chip-opt{on}' href='{base}&mw={k}{cmp_q}'>{_e(lbl)}</a>"
+    # periode-opties = pill-cards (.chip-opt) in een wrap-rij (.chip-wrap); compare = schuif-toggle
+    # (.switch in .switch-field). Server-side gedrag ongewijzigd: elke pill is een reload-link, de
+    # switch een link die compare aan/uit zet via de query-parameter.
     wbar = (f"<div class='cl-bar'><span class='muted'>{_e(t('dashboard.periode'))}</span> "
-            + "".join(pl(k, lbl) for k, lbl in _MW))
-    if not nav:                                        # compare-toggle (server-side)
+            f"<span class='chip-wrap'>" + "".join(pl(k, lbl) for k, lbl in _MW) + "</span>")
+    if not nav:
         ct = " on" if compare else ""
         ct_url = f"{base}&mw={_e(win)}" + ("" if compare else "&compare=1")
-        wbar += (f" <span class='muted'>·</span> <a class='cl-filter{ct}' href='{ct_url}'>"
-                 f"{_e(t('dashboard.vergelijk'))}</a>")
+        wbar += (f"<span class='switch-field'>{_e(t('dashboard.vergelijk'))} "
+                 f"<a class='switch{ct}' href='{ct_url}' role='switch' "
+                 f"aria-checked='{'true' if compare else 'false'}' title='vergelijk met de vorige periode'></a></span>")
     wbar += "</div>"
     if win == "aangepast" and not nav:                 # van/tot-formulier
         wbar += (f"<form method='get' action='/node' class='cl-bar'>"

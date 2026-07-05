@@ -74,3 +74,19 @@ def test_flip_voor_en_achterkant(tmp_path):
     h = _metrics_tab_html(cockpit2._Stores(dd), st.records.get(C), csrf="t", win="7d")
     assert "js-flip" in h and "tile-front" in h and "tile-back" in h and "js-flipback" in h
     assert "style='display" not in h                          # geen inline styles
+
+
+def test_periode_picker_gebruikt_design_componenten(tmp_path):
+    """Scope 3: periode-opties = .chip-opt in .chip-wrap; 'vergelijk' = .switch in .switch-field.
+    Server-side gedrag ongewijzigd: pills zijn reload-links (mw=), compare via de query-parameter."""
+    from nooch_village.views import metrics
+    dd = _dd(tmp_path); st = cockpit2._Stores(dd); C = "mother_earth__nooch"
+    cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": ["pulse_visitors|visitors|time"],
+                      "form": ["trend"], "ref_kind": [""], "target": [""], "mode": ["indicator"],
+                      "next": ["/"]}, "guest")
+    st = cockpit2._Stores(dd)
+    h = metrics._metrics_tab_html(st, st.records.get(C), csrf="t")
+    assert "<span class='chip-wrap'>" in h and "class='chip-opt" in h    # pill-cards in een wrap-rij
+    assert "class='switch-field'" in h and "class='switch" in h          # compare = schuif-toggle
+    assert "cl-filter" not in h                                          # oude platte tekstlinks weg
+    assert "mw=7d" in h and "compare=1" in h                             # server-side reload + parameter behouden
