@@ -85,7 +85,7 @@ def test_composer_categorie_eerst_lege_staat_en_placeholder(tmp_path):
     h = cockpit2.render_kpi_composer(st, C, csrf_token="t")
     assert "kc-empty" in h and "kc-picked" in h                          # lege-staat + picked-blok
     assert "Kies eerst een categorie" in h and "chip outline" in h       # categorie-prompt + aard-tag
-    assert "Standaard weergave" in h and "name='form' value=''" in h     # stap 3 = placeholder (geen select)
+    assert "Standaard weergave" in h and "<select name='form'>" in h     # stap 3 = vorm-keuze (Tufte-tabel)
 
 
 def test_wizard_werk_tegel_maakt_en_rendert(tmp_path):
@@ -98,3 +98,39 @@ def test_wizard_werk_tegel_maakt_en_rendert(tmp_path):
     assert tiles and tiles[0]["dim"] == "over_tijd"
     page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
     assert "Tevredenheid" in page or "tevredenheid" in page
+
+
+def test_stap3_vormkeuze_tufte_beslistabel(tmp_path):
+    """Deelopdracht 4: stap 3 is de vorm-keuze (Tufte-tabel), geen placeholder + geen data-aard-brug meer."""
+    st = cockpit2._Stores(_dd(tmp_path))
+    h = cockpit2.render_kpi_composer(st, C, csrf_token="t")
+    assert "name='form'" in h and "kc-tufte" in h                       # vorm-select + tufte-microcopy
+    for key in ("'reeks|0'", "'reeks|1'", "'moment|0'", "'categorie|0'"):
+        assert key in h                                                  # de beslistabel per aard × referentie
+    for vorm in ("trend", "staaf", "bullet", "gestapeld", "horizontaal"):
+        assert vorm in h                                                 # alle vormen kiesbaar
+    assert "AARD_FORM" not in h                                          # de brug uit deelopdracht 3 is weg (één plek)
+
+
+def test_nieuwe_svg_renderers_en_geen_data(tmp_path):
+    from nooch_village.views.metrics import _bar_chart_svg, _stacked_bar_svg, _hbar_svg
+    pts = [(1000.0, 3), (1086400.0, 5)]; rows = [("NL", 40), ("BE", 12)]
+    assert "barchart" in _bar_chart_svg(pts) and "stackbar" in _stacked_bar_svg(rows) and "hbar" in _hbar_svg(rows)
+    assert "style=" not in _bar_chart_svg(pts) + _stacked_bar_svg(rows) + _hbar_svg(rows)   # SVG-attributen, geen inline
+    for r in (_bar_chart_svg([]), _stacked_bar_svg([]), _hbar_svg([])):
+        assert "geen data in deze periode" in r                         # zelfde geen-data als het lijndiagram
+
+
+def test_staaf_tegel_rendert_end_to_end(tmp_path):
+    import time
+    dd = _dd(tmp_path); st = cockpit2._Stores(dd); base = time.time() - 2 * 86400
+    for i, v in enumerate([40, 55, 48]):                 # recente ts → binnen het 7d-standaardvenster
+        st.observations.record_daily("website_watcher", "visitors_day", v, bron="plausible",
+                                     datum=f"2026-07-0{i+1}", ts=base + i * 86400)
+    cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": ["pulse_visitors|visitors|time"],
+                      "form": ["staaf"], "ref_kind": [""], "target": [""], "mode": ["indicator"],
+                      "next": ["/"]}, "guest")
+    tile = [t for t in cockpit2._Stores(dd).metrics.tiles_of(C) if t.get("form") == "staaf"][0]
+    assert tile["form"] == "staaf"                                       # de gekozen vorm is opgeslagen (één plek)
+    page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
+    assert "barchart" in page                                           # de staaf-renderer draait op de tegel

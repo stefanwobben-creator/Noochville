@@ -104,14 +104,20 @@ def _break_indices(samples) -> list:
     return out
 
 
+def _geen_data_html() -> str:
+    """De ENIGE 'geen data in deze periode'-melding — gedeeld door alle reeks/verdeling-renderers
+    (lijn, staaf, gestapelde staaf, horizontale balk), zodat de geen-data-afhandeling overal identiek is."""
+    return (f"<div class='kpi-val'><span class='muted' style='font-size:.9rem'>"
+            f"{_e(t('dashboard.geen_data_periode'))}</span></div>")
+
+
 def _line_chart_svg(points, unit: str = "", prev=None) -> str:
     """Echt lijn-diagram (server-side SVG, cockpit2-stijl): x=datum, y=waarde, met leesbare assen.
     Alleen de echte dagpunten als stippen, verbonden — geen interpolatie van ontbrekende dagen.
     `prev` (vorige periode) → een tweede, lichtere gestreepte lijn over dezelfde breedte + y-schaal.
     0 punten → nette 'geen data'; 1 punt → 'te weinig voor een lijn' (nooit een vlakke lijn)."""
     if not points:
-        return (f"<div class='kpi-val'><span class='muted' style='font-size:.9rem'>"
-                f"{_e(t('dashboard.geen_data_periode'))}</span></div>")
+        return _geen_data_html()
     import datetime as _dt
     vals = [v for _, v in points]
     if len(points) < 2:
@@ -152,6 +158,81 @@ def _line_chart_svg(points, unit: str = "", prev=None) -> str:
     svg = (f"<svg class='linechart' viewBox='0 0 {W:.0f} {H:.0f}' width='100%' height='140' preserveAspectRatio='xMidYMid meet'>"
            f"{axis}{ylab}{xlab}{prevline}{line}{dots}</svg>")
     return head + svg
+
+
+def _bar_chart_svg(points, unit: str = "") -> str:
+    """Staafdiagram voor een reeks (server-side SVG): één staaf per datapunt, 0-basislijn. Zelfde
+    geen-data/1-punt-afhandeling als het lijndiagram (0 → 'geen data', 1 punt → het losse getal)."""
+    if not points:
+        return _geen_data_html()
+    import datetime as _dt
+    vals = [v for _, v in points]
+    if len(points) < 2:
+        return (f"<div class='tile-trend'><span class='kpi-val sm'>{_num(vals[-1])}</span>"
+                f"<span class='muted kc-hint'>1 meetpunt</span></div>")
+    W, H = 300.0, 140.0
+    ml, mr, mt, mb = 36.0, 8.0, 10.0, 20.0
+    iw, ih = W - ml - mr, H - mt - mb
+    ymax = max(vals + [0]); ymin = min(0, min(vals)); yspan = (ymax - ymin) or 1.0
+    fy = lambda v: mt + (1 - (v - ymin) / yspan) * ih
+    slot = iw / len(points); bw = slot * 0.7; y0 = fy(0)
+    bars = ""
+    for i, (_t, v) in enumerate(points):
+        x = ml + i * slot + (slot - bw) / 2
+        yv = fy(v); top = min(yv, y0); h = abs(yv - y0)
+        bars += f"<rect x='{x:.1f}' y='{top:.1f}' width='{bw:.1f}' height='{max(0.5, h):.1f}' rx='1' fill='var(--green)'/>"
+    axis = (f"<line x1='{ml:.1f}' y1='{mt:.1f}' x2='{ml:.1f}' y2='{mt+ih:.1f}' stroke='var(--border)' stroke-width='1'/>"
+            f"<line x1='{ml:.1f}' y1='{fy(0):.1f}' x2='{ml+iw:.1f}' y2='{fy(0):.1f}' stroke='var(--border)' stroke-width='1'/>")
+    ylab = (f"<text x='{ml-4:.1f}' y='{fy(ymax)+3:.1f}' text-anchor='end' font-size='9' fill='var(--muted)'>{_num(ymax)}</text>"
+            f"<text x='{ml-4:.1f}' y='{fy(ymin)+3:.1f}' text-anchor='end' font-size='9' fill='var(--muted)'>{_num(ymin)}</text>")
+    fmt = lambda ts: _dt.datetime.fromtimestamp(ts).strftime('%d-%m')
+    xlab = (f"<text x='{ml:.1f}' y='{H-5:.1f}' text-anchor='start' font-size='9' fill='var(--muted)'>{_e(fmt(points[0][0]))}</text>"
+            f"<text x='{ml+iw:.1f}' y='{H-5:.1f}' text-anchor='end' font-size='9' fill='var(--muted)'>{_e(fmt(points[-1][0]))}</text>")
+    u = f" <span class='kpi-unit'>{_e(unit)}</span>" if unit else ""
+    head = f"<div class='tile-trend'><span class='kpi-val sm'>{_num(vals[-1])}{u}</span></div>"
+    return (head + f"<svg class='barchart' viewBox='0 0 {W:.0f} {H:.0f}' width='100%' height='140' "
+            f"preserveAspectRatio='xMidYMid meet'>{axis}{ylab}{xlab}{bars}</svg>")
+
+
+_CAT_PALETTE = ["var(--green)", "var(--green-dark)", "var(--yellow)", "var(--coral)", "var(--subtle)", "var(--muted)"]
+
+
+def _stacked_bar_svg(rows) -> str:
+    """Gestapelde staaf (deel-op-geheel) voor een categorie-uitsplitsing: één horizontale staaf,
+    per categorie een segment, met een legenda. 0 rijen → 'geen data'."""
+    rows = [(l, n) for l, n in (rows or []) if isinstance(n, (int, float))]
+    if not rows:
+        return _geen_data_html()
+    total = sum(n for _, n in rows) or 1
+    W, H = 300.0, 30.0
+    x = 0.0; segs = ""; legend = ""
+    for i, (l, n) in enumerate(rows[:6]):
+        w = n / total * W; col = _CAT_PALETTE[i % len(_CAT_PALETTE)]
+        segs += f"<rect x='{x:.1f}' y='0' width='{max(0.5, w):.1f}' height='{H}' fill='{col}'/>"
+        x += w
+        legend += f"<span class='chip outline'>{_e(str(l))}: {_num(n)}</span> "
+    svg = (f"<svg class='stackbar' viewBox='0 0 {W:.0f} {H:.0f}' width='100%' height='30' "
+           f"preserveAspectRatio='none'>{segs}</svg>")
+    return f"<div class='tile-trend'>{svg}<div class='muted'>{legend}</div></div>"
+
+
+def _hbar_svg(rows) -> str:
+    """Horizontale balken (gesorteerd) voor een categorie-uitsplitsing: één balk per categorie.
+    0 rijen → 'geen data'."""
+    rows = sorted([(l, n) for l, n in (rows or []) if isinstance(n, (int, float))],
+                  key=lambda r: r[1], reverse=True)[:8]
+    if not rows:
+        return _geen_data_html()
+    mx = max((n for _, n in rows), default=1) or 1
+    W = 300.0; rowh = 18.0; H = len(rows) * rowh; lx = 96.0
+    bars = ""
+    for i, (l, n) in enumerate(rows):
+        y = i * rowh; w = max(0.5, n / mx * (W - lx - 30))
+        bars += (f"<text x='{lx-6:.1f}' y='{y+rowh*0.68:.1f}' text-anchor='end' font-size='9' fill='var(--ink)'>{_e(str(l)[:16])}</text>"
+                 f"<rect x='{lx:.1f}' y='{y+3:.1f}' width='{w:.1f}' height='{rowh-6:.1f}' rx='1' fill='var(--green)'/>"
+                 f"<text x='{lx+w+3:.1f}' y='{y+rowh*0.68:.1f}' font-size='9' fill='var(--muted)'>{_num(n)}</text>")
+    return (f"<svg class='hbar' viewBox='0 0 {W:.0f} {H:.0f}' width='100%' height='{H:.0f}' "
+            f"preserveAspectRatio='xMidYMid meet'>{bars}</svg>")
 
 
 def _kpi_card(st: _Stores, item: dict, cutoff, csrf: str, *, provider=False, circle="") -> str:
@@ -703,8 +784,14 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
             prev_res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), prev_win[0], prev_win[1])
         if form == "burnup":
             body = _render_burnup(res, tile.get("target"), gp)
-        elif form == "doelmeter":
+        elif form in ("doelmeter", "bullet"):          # bullet = de definitieve naam (Tufte-beslistabel)
             body = _render_bullet(res, tile.get("target"), g.get("richting"), g.get("benchmark"))
+        elif form == "staaf":
+            body = _bar_chart_svg(res.get("points") or [], res.get("unit", ""))
+        elif form == "gestapeld":
+            body = _stacked_bar_svg(res.get("rows"))
+        elif form == "horizontaal":
+            body = _hbar_svg(res.get("rows"))
         else:
             body = _render_form(res, form, tile.get("target"), prev=prev_res)
         # aard: moment → delta-badge naast het getal (reeks krijgt al de tweede lijn in de grafiek)
@@ -712,7 +799,7 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
             body += _compare_delta(res, prev_res)
         # Uitklap: de exacte ruwe datapunten (datum · waarde · bron)
         data = ""
-        if form in ("trend", "verdeling", "doelmeter", "burnup"):
+        if form in ("trend", "staaf", "verdeling", "horizontaal", "gestapeld", "doelmeter", "bullet", "burnup"):
             dt = _data_table(res, bron=g.get("bron", tile["source"]))
             if dt:
                 data = f"<details class='tile-data'><summary>ruwe data{_delta_badge(res)}</summary>{dt}</details>"
@@ -1254,12 +1341,10 @@ def render_kpi_composer(st: _Stores, node_id: str = "", csrf_token: str = "", ms
                    "<label class='kc-radio'><input type='radio' name='ref_kind' value='doel'> doel (project)</label>"
                    f"<div class='kc-cond' data-for='doel' hidden><select name='goal_pid'>{proj_opts}</select>"
                    "<input name='doel_target' inputmode='decimal' placeholder='streefwaarde (bijv. 1000)' autocomplete='off'></div>")
-            + step("3", "Standaard weergave",
-                   "<p class='muted kc-hint'>De weergave-keuze (getal / trend / grafiek) volgt de aard "
-                   "van de indicator. Die stap — met de Tufte-beslistabel en de grafiek-renderers — "
-                   "komt in de volgende herbouwstap. Voor nu opent de tegel in de vorm die bij de aard "
-                   "past.</p>"
-                   "<input type='hidden' name='form' value=''>")
+            + step("3", "Standaard weergave (volgt de aard, niet bindend)",
+                   "<select name='form'><option value=''>—</option></select>"
+                   "<p class='muted kc-hint kc-tufte'>Kies eerst een indicator; de weergaves die bij de "
+                   "aard passen verschijnen dan.</p>")
             + step("4", "Plaats", step4_inner)
             + "<button class='btn ok' type='submit' name='action' value='tile_add' disabled>Kies eerst een indicator</button></form>")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='{back}'>← terug</a></div>"
@@ -1278,14 +1363,29 @@ _KPI_COMPOSER_JS = """<script>
 (function(){
  var f=document.querySelector('.kc-form'); if(!f) return;
  var modeInp=f.querySelector('[name=mode]');
- var formInp=f.querySelector('[name=form]'), tgt=f.querySelector('[name=target]');
+ var formSel=f.querySelector('[name=form]'), tgt=f.querySelector('[name=target]');
+ var tufteEl=f.querySelector('.kc-tufte');
  var search=f.querySelector('.kc-search');
  var picked=f.querySelector('.kc-picked'), pickLbl=f.querySelector('.kc-picked-label');
  var empty=f.querySelector('.kc-empty');
  var btn=f.querySelector('button[value=tile_add]');
- // stap 3 is placeholder: de vorm volgt de aard van de gekozen indicator (reeks→trend, moment→getal,
- // categorie→verdeling). De echte vorm-keuze komt in deelopdracht 4.
- var AARD_FORM={reeks:'trend',moment:'getal',categorie:'verdeling'};
+ // stap 3 — Tufte-beslistabel: de passende vormen per aard × referentie. De eerste is de aanbevolen
+ // (voorgeselecteerd), met de reden als microcopy. Dit is de ENIGE plek die de vorm van een tegel bepaalt.
+ var VORMEN={
+  'reeks|0':[{v:'trend',l:'Trend (lijn)',t:'een reeks over tijd lees je het snelst als één lijn.'},
+             {v:'staaf',l:'Staaf',t:'losse periodes naast elkaar zetten? staven.'},
+             {v:'getal',l:'Getal',t:'alleen de samengevatte waarde, zonder ruis.'}],
+  'reeks|1':[{v:'bullet',l:'Bullet (waarde vs doel)',t:'waarde tegen de doellijn in één balk (Few).'},
+             {v:'trend',l:'Trend (lijn)',t:'de reeks over tijd als lijn.'},
+             {v:'getal',l:'Getal',t:'de samengevatte waarde.'}],
+  'moment|0':[{v:'getal',l:'Getal',t:'een momentopname is per definitie één getal.'}],
+  'moment|1':[{v:'getal',l:'Getal',t:'een momentopname is per definitie één getal.'}],
+  'categorie|0':[{v:'gestapeld',l:'Gestapelde staaf',t:'deel-op-geheel in één gestapelde staaf.'},
+                 {v:'horizontaal',l:'Horizontale balk',t:'veel categorieën? horizontale balken, gesorteerd.'}],
+  'categorie|1':[{v:'gestapeld',l:'Gestapelde staaf',t:'deel-op-geheel in één gestapelde staaf.'},
+                 {v:'horizontaal',l:'Horizontale balk',t:'veel categorieën? horizontale balken, gesorteerd.'}]
+ };
+ var curAard='';
  function ref(){var r=f.querySelector('[name=ref_kind]:checked'); return r?r.value:'';}
 
  // stap 1: modus-toggle (bestaande indicator / formule)
@@ -1333,14 +1433,35 @@ _KPI_COMPOSER_JS = """<script>
    btn.disabled=!r; btn.textContent = r ? 'Maak KPI' : 'Kies eerst een indicator';
  }
 
+ // stap 3: herbereken de vorm-opties zodra aard (gekozen indicator) of referentie wijzigt.
+ function showTufte(){
+   var o=formSel.options[formSel.selectedIndex];
+   if(tufteEl) tufteEl.textContent = (o && o.dataset.t) ? 'Tufte: '+o.dataset.t : '';
+ }
+ function syncVorm(){
+   if(!curAard){ formSel.innerHTML="<option value=''>—</option>";
+     if(tufteEl) tufteEl.textContent='Kies eerst een indicator; de weergaves die bij de aard passen verschijnen dan.';
+     return; }
+   var list=VORMEN[curAard+'|'+(ref()?1:0)]||VORMEN['reeks|0'];
+   var keep=formSel.value, has=false;
+   formSel.innerHTML='';
+   list.forEach(function(o,i){
+     var opt=document.createElement('option');
+     opt.value=o.v; opt.textContent=o.l+(i===0?' — aanbevolen':''); opt.dataset.t=o.t;
+     formSel.appendChild(opt); if(o.v===keep) has=true;
+   });
+   formSel.value = has ? keep : list[0].v;      // behoud een nog-geldige keuze, anders de aanbevolen
+   showTufte();
+ }
+ formSel.addEventListener('change',showTufte);
+
  f.addEventListener('change',function(e){
-   if(e.target && e.target.name==='combo'){
-     var lab=e.target.closest('.kc-metric');
-     if(formInp && lab) formInp.value = AARD_FORM[lab.dataset.aard] || 'trend';   // vorm volgt de aard
-   }
-   syncRef(); syncBtn();
+   var nm=e.target && e.target.name;
+   if(nm==='combo'){var lab=e.target.closest('.kc-metric'); curAard=lab?lab.dataset.aard:'';}
+   if(nm==='combo'||nm==='ref_kind'){ syncRef(); syncVorm(); }
+   syncBtn();
  });
  f.addEventListener('input',syncRef);
- setMode('indicator'); syncRef(); syncBtn();
+ setMode('indicator'); syncRef(); syncVorm(); syncBtn();
 })();
 </script>"""
