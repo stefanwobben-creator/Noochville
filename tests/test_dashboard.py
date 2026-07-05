@@ -28,8 +28,9 @@ def test_window_range():
 def test_periode_picker_en_actueel_liveness(tmp_path):
     dd = _dd(tmp_path); st = cockpit2._Stores(dd); rec = st.records.get(C)
     h = _metrics_tab_html(st, rec, csrf="t", win="7d")
-    assert all(p in h for p in ("Vandaag", "Gisteren", "Actueel", "7 dagen", "28 dagen",
+    assert all(p in h for p in ("Gisteren", "Actueel", "7 dagen", "28 dagen",
                                 "Kwartaal", "Jaar", "Aangepast"))
+    assert "Vandaag" not in h                      # 'Vandaag' verwijderd — 'Actueel' vervult die rol
     assert "muted' title='alleen beschikbaar bij een live-capabele bron'>Actueel" in h  # grijs zonder live-bron
     st.metrics.add_tile(C, "pulse_visitors", "visitors", "time", "verdeling")
     h2 = _metrics_tab_html(cockpit2._Stores(dd), rec, csrf="t", win="7d")
