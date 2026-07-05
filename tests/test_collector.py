@@ -359,3 +359,77 @@ def test_trends_blijft_inactief_tot_activatie(tmp_path, monkeypatch):
     w = collect_daily_observations(reg, cockpit2._Stores(dd).sources, cockpit2._Stores(dd).observations,
                                    _trends_ctx(), today=datetime.date(2026, 7, 8))
     assert w == []
+
+
+# ── Keywords Everywhere: flux-bron, dynamische velden uit de Library, batch-call (credits) ──────
+def _ke_ctx(words, key="KE-KEY"):
+    """Context met een fake Library (approved-woorden) + settings (API-key)."""
+    lib = types.SimpleNamespace(all=lambda: {w: {"status": s} for w, s in words.items()})
+    return types.SimpleNamespace(library=lib,
+                                 settings=({"KEYWORDS_EVERYWHERE_API_KEY": key} if key else {}))
+
+
+def _fake_ke_run(payload, context):
+    return {"keywords": [{"keyword": kw, "vol": 100 + i} for i, kw in enumerate(payload["kw"])]}
+
+
+def test_ke_contract_en_velden_uit_library(monkeypatch):
+    from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill, _approved_keywords
+    monkeypatch.delenv("KEYWORDS_EVERYWHERE_API_KEY", raising=False)          # hermetisch: env-key weg
+    k = KeywordsEverywhereSkill()
+    ctx = _ke_ctx({"vegan shoes": "approved", "plasticvrij": "approved", "leer": "forbidden"})
+    assert isinstance(k, DataSourceSkill) and k.SOURCE == "keywordseverywhere" and k.kind == "flux"
+    assert k.frequency("x") == "weekly"
+    assert _approved_keywords(ctx) == ["vegan shoes", "plasticvrij"]         # alleen approved
+    assert k.available_metrics(ctx) == ["vegan_shoes", "plasticvrij"]
+    assert k.available_metrics() == []                                       # zonder context → leeg
+    assert k.is_configured(ctx) and not k.is_configured(_ke_ctx({}, key=None))
+
+
+def test_ke_daily_values_batch_en_chunking():
+    from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
+    k = KeywordsEverywhereSkill()
+    calls = []
+    def run(payload, context):
+        calls.append(list(payload["kw"])); return _fake_ke_run(payload, context)
+    vals = k.daily_values(_ke_ctx({"vegan shoes": "approved", "plasticvrij": "approved"}), "2026-07-06", _run=run)
+    assert vals == {"vegan_shoes": 100, "plasticvrij": 101} and len(calls) == 1     # één batch-call
+    # >100 keywords → blokken van 100 (credit-bewust, niet één call per term)
+    calls.clear()
+    many = {f"kw{i}": "approved" for i in range(150)}
+    v2 = k.daily_values(_ke_ctx(many), "2026-07-06", _run=run)
+    assert [len(c) for c in calls] == [100, 50] and len(v2) == 150
+
+
+def test_ke_daily_values_failclosed(tmp_path):
+    from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
+    k = KeywordsEverywhereSkill()
+    def boom(payload, context): raise RuntimeError("KE-wijziging / geen credits")
+    vals = k.daily_values(_ke_ctx({"vegan shoes": "approved"}), "2026-07-06", _run=boom)
+    assert vals == {"vegan_shoes": None}                                     # fail-closed per veld, geen crash
+    assert k.daily_values(_ke_ctx({"x": "forbidden"}), "x", _run=_fake_ke_run) == {}   # geen approved → {}
+
+
+def test_collector_ke_weekly_per_keyword(tmp_path):
+    from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd); st.sources.set_active("keywordseverywhere", True)
+    sk = KeywordsEverywhereSkill(); sk.run = _fake_ke_run          # geen netwerk
+    reg = SkillRegistry(); reg.register(sk)
+    ctx = _ke_ctx({"vegan shoes": "approved"})
+    w = collect_daily_observations(reg, cockpit2._Stores(dd).sources, cockpit2._Stores(dd).observations,
+                                   ctx, today=datetime.date(2026, 7, 8))       # week-maandag 2026-07-06
+    assert ("keywordseverywhere", "vegan_shoes", "2026-07-06") in w
+    rows = cockpit2._Stores(dd).observations.daily_series("keywordseverywhere_vegan_shoes_day", bron="keywordseverywhere")
+    assert [r["value"] for r in rows] == [100]
+
+
+def test_ke_blijft_inactief_tot_activatie(tmp_path):
+    from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
+    dd = _dd(tmp_path)
+    assert not cockpit2._Stores(dd).sources.active("keywordseverywhere")
+    sk = KeywordsEverywhereSkill(); sk.run = _fake_ke_run
+    reg = SkillRegistry(); reg.register(sk)
+    w = collect_daily_observations(reg, cockpit2._Stores(dd).sources, cockpit2._Stores(dd).observations,
+                                   _ke_ctx({"vegan shoes": "approved"}), today=datetime.date(2026, 7, 8))
+    assert w == []
