@@ -1,15 +1,64 @@
 """Harde UI-regel (CLAUDE.md — 'UI — designsysteem'): governeerde views hergebruiken
 design-systeem-klassen en bevatten GEEN inline style-attributen.
 
-Deze guard rendert de artefact-views (policies/notes/tools, inclusief de add- én edit-forms) en
-faalt zodra er een `style=`-attribuut in zit. Elke nieuwe governeerde view voeg je hier toe.
+Twee lagen:
+1. Render-guard (artefact-views): rendert policies/notes/tools en faalt op elk `style=`-attribuut
+   in de OUTPUT. Precies, maar per view apart op te tuigen.
+2. Ratchet-guard (project-breed): telt `style=` in de BRON van élke governeerde view en houdt die
+   telling op een per-bestand plafond. Nieuwe inline styles laten de telling stijgen → faal.
+   Bestaande schuld is gewhitelist op het huidige aantal; ruim je een view op, verlaag het plafond.
+   Doel: monotone daling naar nul, nooit stijging. Zie docs/UX_PATTERNS.md voor de kern-klassen.
 """
 from __future__ import annotations
+
+import glob
+import os
 
 from nooch_village import cockpit2
 from nooch_village.views import overview
 
 CIRCLE = "mother_earth__nooch"
+
+# Per-bestand plafond voor bestaande inline style=-schuld (audit dd 2026-07-05, totaal 137).
+# Niet-vermelde governeerde views moeten 0 zijn (schoon). Verlaag een getal zodra je opruimt.
+_STYLE_WHITELIST = {
+    "views/overview.py": 34,
+    "views/projects.py": 27,
+    "views/strategy.py": 14,
+    "views/werkoverleg.py": 13,
+    "views/metrics.py": 10,
+    "views/roloverleg.py": 7,
+    "views/checklists.py": 7,
+    "views/backlog.py": 7,
+    "cockpit2.py": 7,
+    "views/noochie.py": 5,
+    "views/feed.py": 4,
+    "views/catalog.py": 2,
+}
+
+_PKG = os.path.join(os.path.dirname(os.path.dirname(__file__)), "nooch_village")
+
+
+def _governed_files():
+    files = sorted(glob.glob(os.path.join(_PKG, "views", "*.py")))
+    files.append(os.path.join(_PKG, "cockpit2.py"))
+    return files
+
+
+def test_geen_nieuwe_inline_styles_in_governeerde_views():
+    """Ratchet: elke governeerde view mag exact zijn gewhiteliste aantal inline styles hebben.
+    Meer → nieuwe schuld (faal). Minder → je hebt opgeruimd, verlaag het plafond (faal met uitleg)."""
+    for full in _governed_files():
+        rel = os.path.relpath(full, _PKG).replace(os.sep, "/")
+        count = open(full, encoding="utf-8").read().count("style=")
+        ceiling = _STYLE_WHITELIST.get(rel, 0)
+        assert count <= ceiling, (
+            f"{rel}: {count} inline style=-attributen, plafond {ceiling}. Nieuwe inline style? "
+            f"Gebruik een design-systeem-klasse (docs/UX_PATTERNS.md → Kern-klassen). Bewuste "
+            f"uitzondering? Verhoog het plafond in _STYLE_WHITELIST mét reden.")
+        assert count >= ceiling, (
+            f"{rel}: {count} inline style=-attributen, plafond {ceiling}. Je hebt schuld opgeruimd — "
+            f"verlaag het plafond naar {count} (of verwijder de regel bij 0) zodat de ratchet vastzet.")
 
 
 def _st(tmp_path):
