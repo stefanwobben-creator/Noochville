@@ -65,6 +65,8 @@ CLASS_MAP = {
     "website_watcher": WebsiteWatcherWorker,
     "librarian":       Librarian,
     "trends":          TrendsWorker,
+    # 'facilitator' is de historische seed-id van de governance-motor (G0-G4-poort + dagcadans/dag_begint);
+    # de roltekst is bewust Engels (Holacracy-Facilitator), GEEN vreemd NL-duplicaat. Niet hernoemen/verplaatsen.
     "facilitator":     Facilitator,
     "noochie":         Noochie,
     "harry_hemp":      HarryHemp,
