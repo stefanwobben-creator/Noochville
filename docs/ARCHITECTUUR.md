@@ -42,89 +42,89 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 
 | Actie | Handler (cockpit2.py:regel) |
 |---|---|
-| `proj_add` | `cockpit2.py:580` |
-| `artefact_add` | `cockpit2.py:608` |
-| `artefact_edit` | `cockpit2.py:649` |
-| `artefact_archive` | `cockpit2.py:673` |
-| `proj_status` | `cockpit2.py:693` |
-| `proj_done` | `cockpit2.py:711` |
-| `proj_archive` | `cockpit2.py:721` |
-| `proj_unarchive` | `cockpit2.py:731` |
-| `proj_delete` | `cockpit2.py:741` |
-| `proj_edit` | `cockpit2.py:756` |
-| `proj_comment` | `cockpit2.py:769` |
-| `proj_rename` | `cockpit2.py:779` |
-| `proj_describe` | `cockpit2.py:790` |
-| `proj_settrekker` | `cockpit2.py:801` |
-| `proj_setowner` | `cockpit2.py:813` |
-| `proj_approve` | `cockpit2.py:831` |
-| `proj_discard` | `cockpit2.py:842` |
-| `proj_setlabel` | `cockpit2.py:853` |
-| `proj_setprivate` | `cockpit2.py:864` |
-| `proj_setdue` | `cockpit2.py:875` |
-| `attach_add` | `cockpit2.py:886` |
-| `attach_remove` | `cockpit2.py:897` |
-| `react_add` | `cockpit2.py:907` |
-| `feed_edit` | `cockpit2.py:917` |
-| `feed_remove` | `cockpit2.py:927` |
-| `ai_reply` | `cockpit2.py:936` |
-| `proj_feed` | `cockpit2.py:947` |
-| `checklist_add` | `cockpit2.py:967` |
-| `checklist_remove` | `cockpit2.py:978` |
-| `check_add` | `cockpit2.py:988` |
-| `check_toggle` | `cockpit2.py:999` |
-| `check_remove` | `cockpit2.py:1009` |
-| `role_assign` | `cockpit2.py:1019` |
-| `role_unassign` | `cockpit2.py:1037` |
-| `role_focus` | `cockpit2.py:1056` |
-| `aitask_add` | `cockpit2.py:1075` |
-| `aitask_remove` | `cockpit2.py:1101` |
-| `persona_skill_add` | `cockpit2.py:1118` |
-| `rov2_add` | `cockpit2.py:1133` |
-| `rov2_add_to_group` | `cockpit2.py:1145` |
-| `rov2_remove` | `cockpit2.py:1157` |
-| `rov2_remove_group` | `cockpit2.py:1172` |
-| `rov2_setkind` | `cockpit2.py:1190` |
-| `rov2_consent` | `cockpit2.py:1203` |
-| `rov2_end` | `cockpit2.py:1225` |
-| `wo_open` | `cockpit2.py:1249` |
-| `wo_close` | `cockpit2.py:1259` |
-| `wo_presence` | `cockpit2.py:1281` |
-| `wo_present_all` | `cockpit2.py:1292` |
-| `wo_ag_add` | `cockpit2.py:1304` |
-| `wo_ag_remove` | `cockpit2.py:1316` |
-| `wo_ag_note` | `cockpit2.py:1326` |
-| `wo_ag_reopen` | `cockpit2.py:1338` |
-| `wo_ag_resolve` | `cockpit2.py:1351` |
-| `wo_checkout` | `cockpit2.py:1393` |
-| `noochie_send` | `cockpit2.py:1404` |
-| `noochie_reset` | `cockpit2.py:1430` |
-| `noochie_ctx` | `cockpit2.py:1437` |
-| `cl_add` | `cockpit2.py:1444` |
-| `cl_report` | `cockpit2.py:1462` |
-| `cl_remove` | `cockpit2.py:1477` |
-| `m_add_kpi` | `cockpit2.py:1487` |
-| `m_add_from_def` | `cockpit2.py:1519` |
-| `def_add` | `cockpit2.py:1534` |
-| `catalog_publish` | `cockpit2.py:1556` |
-| `def_amend` | `cockpit2.py:1582` |
-| `m_add_link` | `cockpit2.py:1624` |
-| `m_sample` | `cockpit2.py:1635` |
-| `m_remove` | `cockpit2.py:1645` |
-| `m_pin` | `cockpit2.py:1655` |
-| `m_unpin` | `cockpit2.py:1666` |
-| `tile_add` | `cockpit2.py:1676` |
-| `tile_remove` | `cockpit2.py:1707` |
-| `rov2_set` | `cockpit2.py:1717` |
-| `rov2_acc_add` | `cockpit2.py:1717` |
-| `rov2_acc_remove` | `cockpit2.py:1717` |
-| `rov2_dom_add` | `cockpit2.py:1717` |
-| `rov2_dom_remove` | `cockpit2.py:1717` |
-| `backlog_add` | `cockpit2.py:1749` |
-| `backlog_update_staat` | `cockpit2.py:1761` |
-| `backlog_update_prioriteit` | `cockpit2.py:1773` |
-| `person_edit` | `cockpit2.py:1785` |
-| `person_remove` | `cockpit2.py:1802` |
+| `proj_add` | `cockpit2.py:584` |
+| `artefact_add` | `cockpit2.py:612` |
+| `artefact_edit` | `cockpit2.py:653` |
+| `artefact_archive` | `cockpit2.py:677` |
+| `proj_status` | `cockpit2.py:697` |
+| `proj_done` | `cockpit2.py:715` |
+| `proj_archive` | `cockpit2.py:725` |
+| `proj_unarchive` | `cockpit2.py:735` |
+| `proj_delete` | `cockpit2.py:745` |
+| `proj_edit` | `cockpit2.py:760` |
+| `proj_comment` | `cockpit2.py:773` |
+| `proj_rename` | `cockpit2.py:783` |
+| `proj_describe` | `cockpit2.py:794` |
+| `proj_settrekker` | `cockpit2.py:805` |
+| `proj_setowner` | `cockpit2.py:817` |
+| `proj_approve` | `cockpit2.py:835` |
+| `proj_discard` | `cockpit2.py:846` |
+| `proj_setlabel` | `cockpit2.py:857` |
+| `proj_setprivate` | `cockpit2.py:868` |
+| `proj_setdue` | `cockpit2.py:879` |
+| `attach_add` | `cockpit2.py:890` |
+| `attach_remove` | `cockpit2.py:901` |
+| `react_add` | `cockpit2.py:911` |
+| `feed_edit` | `cockpit2.py:921` |
+| `feed_remove` | `cockpit2.py:931` |
+| `ai_reply` | `cockpit2.py:940` |
+| `proj_feed` | `cockpit2.py:951` |
+| `checklist_add` | `cockpit2.py:971` |
+| `checklist_remove` | `cockpit2.py:982` |
+| `check_add` | `cockpit2.py:992` |
+| `check_toggle` | `cockpit2.py:1003` |
+| `check_remove` | `cockpit2.py:1013` |
+| `role_assign` | `cockpit2.py:1023` |
+| `role_unassign` | `cockpit2.py:1041` |
+| `role_focus` | `cockpit2.py:1060` |
+| `aitask_add` | `cockpit2.py:1079` |
+| `aitask_remove` | `cockpit2.py:1105` |
+| `persona_skill_add` | `cockpit2.py:1122` |
+| `rov2_add` | `cockpit2.py:1137` |
+| `rov2_add_to_group` | `cockpit2.py:1149` |
+| `rov2_remove` | `cockpit2.py:1161` |
+| `rov2_remove_group` | `cockpit2.py:1176` |
+| `rov2_setkind` | `cockpit2.py:1194` |
+| `rov2_consent` | `cockpit2.py:1207` |
+| `rov2_end` | `cockpit2.py:1229` |
+| `wo_open` | `cockpit2.py:1253` |
+| `wo_close` | `cockpit2.py:1263` |
+| `wo_presence` | `cockpit2.py:1285` |
+| `wo_present_all` | `cockpit2.py:1296` |
+| `wo_ag_add` | `cockpit2.py:1308` |
+| `wo_ag_remove` | `cockpit2.py:1320` |
+| `wo_ag_note` | `cockpit2.py:1330` |
+| `wo_ag_reopen` | `cockpit2.py:1342` |
+| `wo_ag_resolve` | `cockpit2.py:1355` |
+| `wo_checkout` | `cockpit2.py:1397` |
+| `noochie_send` | `cockpit2.py:1408` |
+| `noochie_reset` | `cockpit2.py:1434` |
+| `noochie_ctx` | `cockpit2.py:1441` |
+| `cl_add` | `cockpit2.py:1448` |
+| `cl_report` | `cockpit2.py:1466` |
+| `cl_remove` | `cockpit2.py:1481` |
+| `m_add_kpi` | `cockpit2.py:1491` |
+| `m_add_from_def` | `cockpit2.py:1523` |
+| `def_add` | `cockpit2.py:1538` |
+| `catalog_publish` | `cockpit2.py:1560` |
+| `def_amend` | `cockpit2.py:1586` |
+| `m_add_link` | `cockpit2.py:1628` |
+| `m_sample` | `cockpit2.py:1639` |
+| `m_remove` | `cockpit2.py:1649` |
+| `m_pin` | `cockpit2.py:1659` |
+| `m_unpin` | `cockpit2.py:1670` |
+| `tile_add` | `cockpit2.py:1680` |
+| `tile_remove` | `cockpit2.py:1711` |
+| `rov2_set` | `cockpit2.py:1721` |
+| `rov2_acc_add` | `cockpit2.py:1721` |
+| `rov2_acc_remove` | `cockpit2.py:1721` |
+| `rov2_dom_add` | `cockpit2.py:1721` |
+| `rov2_dom_remove` | `cockpit2.py:1721` |
+| `backlog_add` | `cockpit2.py:1753` |
+| `backlog_update_staat` | `cockpit2.py:1765` |
+| `backlog_update_prioriteit` | `cockpit2.py:1777` |
+| `person_edit` | `cockpit2.py:1789` |
+| `person_remove` | `cockpit2.py:1806` |
 
 
 ## (c) Concern → store → bestand
@@ -138,6 +138,7 @@ De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de st
 | `assign` | `Assignments` | `assignments.json` |
 | `att` | `AttachmentStore` | `attachments.json` |
 | `observations` | `ObservationStore` | `observations.jsonl` |
+| `sources` | `SourceStatusStore` | `sources.json` |
 | `personas` | `PersonaStore` | `personas.json` |
 | `projects` | `ProjectLedger` | `projects.json` |
 | `ai` | `AITaskStore` | `ai_tasks.json` |
@@ -154,4 +155,4 @@ De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de st
 
 
 ---
-_23 routes · 83 dispatch-acties · 18 stores._
+_23 routes · 83 dispatch-acties · 19 stores._

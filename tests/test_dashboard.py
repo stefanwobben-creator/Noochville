@@ -40,9 +40,9 @@ def test_periode_picker_en_actueel_liveness(tmp_path):
 def test_compare_reeks_tweede_lijn(tmp_path):
     dd = _dd(tmp_path); st = cockpit2._Stores(dd); now = time.time()
     for i, v in enumerate([40, 55, 48]):                       # huidige 7d-venster
-        st.observations.record_daily("ww", "visitors_day", v, bron="plausible", datum=f"cur{i}", ts=now - i * 86400 - 3600)
+        st.observations.record_daily("ww", "plausible_visitors_day", v, bron="plausible", datum=f"cur{i}", ts=now - i * 86400 - 3600)
     for i, v in enumerate([30, 35, 33]):                       # vorige 7d-venster
-        st.observations.record_daily("ww", "visitors_day", v, bron="plausible", datum=f"prev{i}", ts=now - (8 + i) * 86400)
+        st.observations.record_daily("ww", "plausible_visitors_day", v, bron="plausible", datum=f"prev{i}", ts=now - (8 + i) * 86400)
     st.metrics.add_tile(C, "pulse_visitors", "visitors", "time", "verdeling")
     h = _metrics_tab_html(cockpit2._Stores(dd), st.records.get(C), csrf="t", win="7d", compare=True)
     assert h.count("<polyline") >= 2                          # huidige + vorige periode als twee lijnen
@@ -62,8 +62,8 @@ def test_compare_moment_delta(tmp_path):
 
 def test_uitklap_ruwe_data_met_bron(tmp_path):
     dd = _dd(tmp_path); st = cockpit2._Stores(dd); now = time.time()
-    st.observations.record_daily("ww", "visitors_day", 40, bron="plausible", datum="a", ts=now - 1 * 86400)
-    st.observations.record_daily("ww", "visitors_day", 55, bron="plausible", datum="b", ts=now - 2 * 86400)
+    st.observations.record_daily("ww", "plausible_visitors_day", 40, bron="plausible", datum="a", ts=now - 1 * 86400)
+    st.observations.record_daily("ww", "plausible_visitors_day", 55, bron="plausible", datum="b", ts=now - 2 * 86400)
     st.metrics.add_tile(C, "pulse_visitors", "visitors", "time", "verdeling")
     h = _metrics_tab_html(cockpit2._Stores(dd), st.records.get(C), csrf="t", win="7d")
     assert "ruwe data" in h and "<th>bron</th>" in h

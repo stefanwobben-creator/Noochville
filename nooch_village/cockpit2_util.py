@@ -396,6 +396,8 @@ ul.clean li:last-child{border-bottom:none}
 .chip.muted{background:var(--cream-2);color:var(--gray)}
 .chip.outline{background:transparent;border:1px solid var(--border);color:var(--gray);font-weight:600}
 .chip.coral{background:var(--error-tint);color:var(--coral);border:1px solid var(--coral)}
+/* 'niet geconfigureerd' (ontbrekende creds) — bewust anders dan coral (kapotte API) en muted (geen data) */
+.chip.amber{background:var(--yellow-light);color:#8a6d0b;border:1px solid var(--yellow)}
 .chip.coral-solid{background:var(--coral);color:#fff;font-size:.64rem;text-transform:uppercase;padding:.04rem .4rem}
 .ai-gift{font-size:1rem;text-decoration:none;cursor:pointer;line-height:1}
 .ai-on{font-size:.95rem;text-decoration:none;cursor:pointer;line-height:1;opacity:.8}

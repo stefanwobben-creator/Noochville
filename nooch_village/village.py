@@ -101,6 +101,11 @@ class Village:
             os.path.join(self.context.data_dir, "competitor_brands.json"))
         self.context.observations = ObservationStore(
             os.path.join(self.context.data_dir, "observations.jsonl"))
+        from nooch_village.source_status import SourceStatusStore
+        from nooch_village.collector import migrate_data_sources
+        self.context.sources = SourceStatusStore(
+            os.path.join(self.context.data_dir, "sources.json"))
+        migrate_data_sources(self.context.data_dir)   # legacy visitors_day + Plausible actief (idempotent)
         self.context.monitoring = MonitoringStore(
             os.path.join(self.context.data_dir, "role_metrics.json"))
         self.context.projects = ProjectLedger(

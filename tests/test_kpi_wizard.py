@@ -125,7 +125,7 @@ def test_staaf_tegel_rendert_end_to_end(tmp_path):
     import time
     dd = _dd(tmp_path); st = cockpit2._Stores(dd); base = time.time() - 2 * 86400
     for i, v in enumerate([40, 55, 48]):                 # recente ts → binnen het 7d-standaardvenster
-        st.observations.record_daily("website_watcher", "visitors_day", v, bron="plausible",
+        st.observations.record_daily("website_watcher", "plausible_visitors_day", v, bron="plausible",
                                      datum=f"2026-07-0{i+1}", ts=base + i * 86400)
     cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": ["pulse_visitors|visitors|time"],
                       "form": ["staaf"], "ref_kind": [""], "target": [""], "mode": ["indicator"],

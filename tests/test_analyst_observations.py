@@ -61,9 +61,10 @@ def test_extract_utm_sources_absent_is_fine():
     assert not any(k.startswith("visitors_via_") for k in result)
 
 
-def test_pulse_schrijft_dagwaarde_als_observatie(tmp_path):
-    """De puls schrijft de losse Plausible-dagwaarde als één datapunt/dag naar de observatie-store,
-    met bron+datum, idempotent (tweede puls dezelfde dag → geen duplicaat)."""
+def test_pulse_metrics_schrijft_niet_meer_de_losse_dagwaarde(tmp_path):
+    """Na de refactor schrijft _log_pulse_metrics NIET meer de losse dagwaarde (visitors_day): de
+    per-veld dagwaarden per bron lopen via de generieke collector (zie test_collector). UTM/monitored-
+    metrics blijven wél deze weg gaan."""
     from types import SimpleNamespace
     from nooch_village.roles import WebsiteWatcherWorker
     from nooch_village.observations import ObservationStore
@@ -72,7 +73,4 @@ def test_pulse_schrijft_dagwaarde_als_observatie(tmp_path):
     plausible = {"results": {"visitors": {"value": 55}},
                  "visitors_day": {"date": "2026-07-03", "value": 7}}
     WebsiteWatcherWorker._log_pulse_metrics(fake, plausible)
-    row = obs.latest("analyst", "visitors_day")
-    assert row["value"] == 7 and row["bron"] == "plausible" and row["datum"] == "2026-07-03"
-    WebsiteWatcherWorker._log_pulse_metrics(fake, plausible)                     # zelfde dag opnieuw
-    assert len(obs.series("analyst", "visitors_day")) == 1               # geen duplicaat
+    assert obs.latest("analyst", "visitors_day") is None                # niet meer via deze weg

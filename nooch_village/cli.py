@@ -613,6 +613,27 @@ def main() -> None:
         print(f"✅ Referentiebank: {added} nieuw, totaal {store.count()} rollen "
               f"(vertrouwelijk, lokaal in data/governance_examples.json).")
 
+    elif mode == "sources":
+        # Beheer de actief/inactief-status van databronnen (mens-gated activatie). De puls haalt
+        # alleen ACTIEVE bronnen op. Gebruik: sources [list] | sources activate <bron> | sources deactivate <bron>
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.source_status import SourceStatusStore
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        store = SourceStatusStore(os.path.join(ctx.data_dir, "sources.json"))
+        sub = sys.argv[2] if len(sys.argv) > 2 else "list"
+        if sub in ("activate", "deactivate") and len(sys.argv) > 3:
+            store.set_active(sys.argv[3], sub == "activate")
+            print(f"{'✅ actief' if sub == 'activate' else '⏸️  inactief'}: {sys.argv[3]}")
+        d = store.all()
+        print("Databronnen (actief = puls haalt op):")
+        for src in sorted(d):
+            st = d[src]
+            cfg = st.get("configured")
+            cfg_s = "" if cfg is None else (" · creds ok" if cfg else " · GEEN creds")
+            print(f"  {'●' if st.get('active') else '○'} {src}{cfg_s}")
+
     elif mode == "shopify":
         # Haal verkoopindicatoren op uit Shopify en schrijf ze weg voor het cockpit-dashboard.
         import os, json

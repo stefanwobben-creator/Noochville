@@ -20,7 +20,7 @@ def _dd(tmp_path):
 
 def test_drie_staten_plus_geen_bronveld(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
-    st.observations.record_daily("x", "visitors_day", 10, bron="plausible", datum="2026-07-03")     # 2d
+    st.observations.record_daily("x", "plausible_visitors_day", 10, bron="plausible", datum="2026-07-03")     # 2d
     st.observations.record_daily("s", "shopify_orders_day", 5, bron="shopify", datum="2026-06-01")  # 34d
     assert indicator_freshness(st, "plausible", "visitors", today=TODAY) == "fresh"
     assert indicator_freshness(st, "shopify", "orders", today=TODAY) == "stale"
@@ -32,7 +32,7 @@ def test_drie_staten_plus_geen_bronveld(tmp_path):
 
 def test_drempel_zeven_dagen(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
-    st.observations.record_daily("x", "visitors_day", 1, bron="plausible", datum="2026-06-28")
+    st.observations.record_daily("x", "plausible_visitors_day", 1, bron="plausible", datum="2026-06-28")
     assert indicator_freshness(st, "plausible", "visitors", today=datetime.date(2026, 7, 5)) == "fresh"   # 7d ≤ 7
     assert indicator_freshness(st, "plausible", "visitors", today=datetime.date(2026, 7, 6)) == "stale"   # 8d > 7
 
@@ -40,7 +40,7 @@ def test_drempel_zeven_dagen(tmp_path):
 def test_koppel_all_coupled_boodschap_en_vers(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
     # plausible is in de seed volledig gekoppeld → banner + geen publiceer-formulier
-    st.observations.record_daily("x", "visitors_day", 9, bron="plausible", datum=datetime.date.today().isoformat())
+    st.observations.record_daily("x", "plausible_visitors_day", 9, bron="plausible", datum=datetime.date.today().isoformat())
     h = _koppel_section(st, "t", "plausible")
     assert "Alle velden van deze bron staan in de catalogus" in h
     assert "Publiceer naar catalogus" not in h                 # niets te koppelen → geen formulier
@@ -59,7 +59,7 @@ def test_koppel_mixed_toont_formulier_en_vers(tmp_path):
 
 def test_wizard_toont_vers_signaal(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
-    st.observations.record_daily("x", "visitors_day", 7, bron="plausible", datum=datetime.date.today().isoformat())
+    st.observations.record_daily("x", "plausible_visitors_day", 7, bron="plausible", datum=datetime.date.today().isoformat())
     w = cockpit2.render_kpi_composer(st, C, csrf_token="t")
     assert "recente data" in w                                 # visitors-indicator vult
     assert "geen data" in w                                    # de niet-gevoede bron-indicatoren
@@ -69,7 +69,7 @@ def test_catalog_toont_vers_signaal(tmp_path):
     """Op /catalog krijgt elke definitiekaart hetzelfde vers-signaal (via dezelfde helper), zodat je per
     definitie ziet of de bron vult — naast 'in gebruik'."""
     st = cockpit2._Stores(_dd(tmp_path))
-    st.observations.record_daily("x", "visitors_day", 8, bron="plausible", datum=datetime.date.today().isoformat())
+    st.observations.record_daily("x", "plausible_visitors_day", 8, bron="plausible", datum=datetime.date.today().isoformat())
     h = cockpit2.render_catalog(st, csrf_token="t")
     assert "recente data" in h        # de plausible-visitors-definitie vult
     assert "geen data" in h           # niet-gevoede bron-definities (shopify/gsc/pageviews)

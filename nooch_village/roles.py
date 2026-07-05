@@ -144,6 +144,7 @@ class WebsiteWatcherWorker(Inhabitant):
             note = self.use_skill("field_note", {"plausible": plausible, "trends": trends})
 
             self._log_pulse_metrics(plausible)
+            self._collect_daily_observations()             # generiek: elke actieve bron → observaties
             self._surface_locale(plausible)
 
             self._propose_related(trends)
@@ -225,12 +226,23 @@ class WebsiteWatcherWorker(Inhabitant):
         for metric in monitored:
             if metric in pulse_dict:
                 obs.record(self.id, metric, pulse_dict[metric], bron="plausible")
-        # Losse dagwaarde per bron: één schoon datapunt per dag (bezoekers van de vorige volledige
-        # dag), idempotent — draai je de puls twee keer op één dag, dan blijft het één datapunt.
-        day = (plausible or {}).get("visitors_day") or {}
-        if day.get("value") is not None:
-            obs.record_daily(self.id, "visitors_day", day["value"],
-                             bron="plausible", datum=day.get("date"))
+        # De losse dagwaarden per bron (visitors/pageviews/visit_duration, en straks shopify/gsc) lopen
+        # nu via de generieke collector (_collect_daily_observations), niet meer hier hardcoded.
+
+    def _collect_daily_observations(self) -> None:
+        """Generieke dag-observatie-collector: elke ACTIEVE DataSourceSkill schrijft z'n gedeclareerde
+        velden weg onder `<source>_<field>_day`. Niets per bron/veld hardcoded; fail-closed."""
+        from nooch_village.collector import collect_daily_observations
+        obs = getattr(self.context, "observations", None)
+        sources = getattr(self.context, "sources", None)
+        if obs is None or sources is None or self.registry is None:
+            return
+        try:
+            written = collect_daily_observations(self.registry, sources, obs, self.context)
+            if written:
+                self.log.info("dag-observaties geschreven: %s", written)
+        except Exception as exc:
+            self.log.warning("dag-observatie-collector faalde: %s", exc)
 
     def _sense_goal_gap(self, plausible: dict) -> None:
         """Vergelijk werkelijke bezoekerstrend met de run-rate die actieve doelen vereisen.

@@ -1,6 +1,6 @@
 from __future__ import annotations
 import logging, os, requests
-from nooch_village.skills import Skill
+from nooch_village.skills import DataSourceSkill
 
 log = logging.getLogger(__name__)
 
@@ -14,8 +14,9 @@ _BREAKDOWNS = [
 ]
 
 
-class PlausibleSkill(Skill):
+class PlausibleSkill(DataSourceSkill):
     name = "plausible_stats"
+    SOURCE = "plausible"
     cost = "free"
     needs_secret = True
     required_env = ("PLAUSIBLE_API_KEY", "PLAUSIBLE_SITE_ID")
@@ -24,6 +25,28 @@ class PlausibleSkill(Skill):
     def available_metrics(self) -> list[str]:
         """Menukaart: de metrics die deze skill kan leveren. Geen API-call nodig."""
         return list(_METRICS)
+
+    def daily_values(self, context, datum: str) -> dict:
+        """Dagwaarde per gedeclareerd veld (visitors/pageviews/visit_duration) voor `datum`, in één
+        aggregate-call. Fail-closed per veld: None bij ontbrekende creds of API-fout (geen mock)."""
+        out = {m: None for m in _METRICS}
+        key = context.settings.get("PLAUSIBLE_API_KEY") or os.getenv("PLAUSIBLE_API_KEY")
+        site = context.settings.get("PLAUSIBLE_SITE_ID") or os.getenv("PLAUSIBLE_SITE_ID")
+        if not key or not site:
+            return out
+        try:
+            r = requests.get(
+                "https://plausible.io/api/v1/stats/aggregate",
+                headers={"Authorization": f"Bearer {key}"},
+                params={"site_id": site, "period": "day", "date": datum, "metrics": ",".join(_METRICS)},
+                timeout=10)
+            r.raise_for_status()
+            res = r.json().get("results", {})
+            for m in _METRICS:
+                out[m] = (res.get(m) or {}).get("value")
+        except Exception as exc:
+            log.warning("Plausible daily_values faalde (%s): %s", datum, exc)
+        return out
 
     def run(self, payload: dict, context) -> dict:
         key = context.settings.get("PLAUSIBLE_API_KEY") or os.getenv("PLAUSIBLE_API_KEY")
