@@ -312,3 +312,21 @@ def test_verzwakt_geen_blokkade_op_statuswissel(tmp_path):
     pid = st.projects.create(ROLE, "T", "human", status="queued", missie_impact="verzwakt")
     assert st.projects.start(pid) is True
     assert cockpit2._Stores(dd).projects.get(pid)["status"] == "running"
+
+
+def test_proj_setimpact_effort_zet_leegmaakt_en_weigert(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "T", "human", status="queued")
+    cockpit2.dispatch(dd, "proj_setimpact", {"pid": [pid], "kind": ["effort"], "value": ["2d"], "next": ["/"]}, username="guest")
+    assert cockpit2._Stores(dd).projects.get(pid)["effort"] == "2d"
+    cockpit2.dispatch(dd, "proj_setimpact", {"pid": [pid], "kind": ["effort"], "value": [""], "next": ["/"]}, username="guest")
+    assert cockpit2._Stores(dd).projects.get(pid)["effort"] == ""            # toggle-off
+    _, msg = cockpit2.dispatch(dd, "proj_setimpact", {"pid": [pid], "kind": ["effort"], "value": ["3d"], "next": ["/"]}, username="guest")
+    assert "ongeldig" in msg.lower()
+
+
+def test_effort_rij_in_impact_blok(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "T", "human", status="queued", effort="2d")
+    modal = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    assert "Effort" in modal and all(f">{v}</button>" in modal for v in ("1u", "1d", "2d", "1w"))

@@ -14,6 +14,9 @@ _TERMINAL       = {"done"}
 # ongelabeld project mag elke statuswissel maken). De guard weigert alleen een niet-lege ongeldige waarde.
 _MISSIE_IMPACT   = {"versterkt", "neutraal", "verzwakt"}
 _BUSINESS_IMPACT = {"hoog", "medium", "laag"}
+# effort (optionele inschatting): vervangt op termijn de #effort-hashtag-conventie (bestaande hashtags
+# worden in deze scope NIET gemigreerd). Leeg = geen inschatting.
+_EFFORT          = {"1u", "1d", "2d", "1w"}
 
 
 class ProjectLedger:
@@ -53,7 +56,7 @@ class ProjectLedger:
                links: list[str] | None = None, parent: str | None = None,
                person: str | None = None, agent: str | None = None,
                private: bool = False, description: str = "", label: str = "",
-               missie_impact: str = "", business_impact: str = "") -> str:
+               missie_impact: str = "", business_impact: str = "", effort: str = "") -> str:
         if trigger not in _VALID_TRIGGERS:
             raise ValueError(f"ongeldig trigger: '{trigger}'")
         if status not in ("queued", "draft", "future"):
@@ -62,6 +65,8 @@ class ProjectLedger:
             raise ValueError(f"ongeldige missie_impact: '{missie_impact}'")
         if business_impact and business_impact not in _BUSINESS_IMPACT:
             raise ValueError(f"ongeldige business_impact: '{business_impact}'")
+        if effort and effort not in _EFFORT:
+            raise ValueError(f"ongeldige effort: '{effort}'")
         pid = uuid.uuid4().hex[:12]
         now = time.time()
         # Cluster-lidmaatschap: een kind erft de cluster-root van zijn ouder (master-switch werkt
@@ -78,6 +83,7 @@ class ProjectLedger:
             "label":      label or "",      # kleurlabel (koppeling met organisatiedoel, later)
             "missie_impact":   missie_impact or "",    # optioneel: versterkt/neutraal/verzwakt (leeg = ongelabeld)
             "business_impact": business_impact or "",  # optioneel: hoog/medium/laag (leeg = ongelabeld)
+            "effort":          effort or "",           # optioneel: 1u/1d/2d/1w (leeg = geen inschatting)
             "checklist":  [],               # [{id, text, done}] — één checklist per project
             "archived":   False,            # gearchiveerd = blijft bestaan, uit het actieve zicht
             "scope":      scope,
@@ -299,7 +305,8 @@ class ProjectLedger:
              person: str | None = None, agent: str | None = None,
              private: bool | None = None, description: str | None = None,
              label: str | None = None, missie_impact: str | None = None,
-             business_impact: str | None = None, allow_done: bool = False) -> bool:
+             business_impact: str | None = None, effort: str | None = None,
+             allow_done: bool = False) -> bool:
         """Bewerk de inhoud van een project (scope, owner, trekker mens/AI, zichtbaarheid).
         Status blijft ongemoeid; done-projecten zijn standaard vergrendeld. Met `allow_done=True`
         mag je inhoud (titel/omschrijving/...) van een afgerond project nog aanpassen. Lege strings
@@ -325,6 +332,8 @@ class ProjectLedger:
             p["missie_impact"] = missie_impact
         if business_impact is not None:
             p["business_impact"] = business_impact
+        if effort is not None:
+            p["effort"] = effort
         self._touch(p)
         self._save()
         return True
