@@ -634,6 +634,45 @@ def main() -> None:
             cfg_s = "" if cfg is None else (" · creds ok" if cfg else " · GEEN creds")
             print(f"  {'●' if st.get('active') else '○'} {src}{cfg_s}")
 
+    elif mode == "backfill":
+        # Handmatige historische inhaal: haal per periode de historische dagwaarde op en schrijf 'm
+        # idempotent weg (zelfde canonieke sleutel + record_daily als de collector → geen duplicaten,
+        # botst niet met live-punten). Fase 1: alleen Plausible.
+        # python -m nooch_village.village backfill <bron> <startdatum-YYYY-MM-DD>
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.observations import ObservationStore
+        from nooch_village.backfill import backfill, BACKFILL_SOURCES, BackfillError
+        from nooch_village.village import BASE_DIR
+        args = sys.argv[2:]
+        if len(args) < 2:
+            print("Gebruik: python -m nooch_village.village backfill <bron> <startdatum-YYYY-MM-DD>",
+                  file=sys.stderr)
+            print("Bronnen: " + ", ".join(sorted(BACKFILL_SOURCES))
+                  + "  (snapshot-bronnen zoals openalex/semanticscholar vallen buiten scope)",
+                  file=sys.stderr)
+            sys.exit(1)
+        source, start = args[0], args[1]
+        ctx = load_context(BASE_DIR)
+        obs = ObservationStore(os.path.join(ctx.data_dir, "observations.jsonl"))
+        factory = BACKFILL_SOURCES.get(source)
+        if factory and not factory().is_configured(ctx):
+            print(f"⚠️  '{source}' heeft geen (volledige) creds in .env — de historische calls leveren "
+                  f"leeg op. Zet de creds en probeer opnieuw.", file=sys.stderr)
+
+        def _progress(datum, w, s, leeg, n):
+            if n % 30 == 0:
+                print(f"   … {datum}  ({w} geschreven, {s} al aanwezig, {leeg} leeg)")
+        try:
+            print(f"⏪ Backfill {source} vanaf {start} t/m de laatste volledige dag …")
+            res = backfill(source, start, obs, ctx, on_progress=_progress)
+        except BackfillError as e:
+            print(f"❌ {e}", file=sys.stderr)
+            sys.exit(1)
+        print(f"✅ Backfill klaar: {res['written']} nieuw geschreven, {res['skipped']} waren er al "
+              f"(idempotent), {res['lege_dagen']}/{res['dagen']} dagen leeg (geen data/creds). "
+              f"Herdraaien is veilig.")
+
     elif mode == "shopify":
         # Haal verkoopindicatoren op uit Shopify en schrijf ze weg voor het cockpit-dashboard.
         import os, json
@@ -775,6 +814,6 @@ def main() -> None:
               "measure_propose | rereview | ingest | notes_remove | recurate | "
               "ground | harry_run | roster | keys | competitor | formalize | answer_questions | "
               "ingest_governance | review_roles | shopify | work_projects | "
-              "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify",
+              "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill",
               file=sys.stderr)
         sys.exit(1)
