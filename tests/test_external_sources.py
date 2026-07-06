@@ -8,6 +8,7 @@ import pytest
 
 from nooch_village.observations import ObservationStore
 from nooch_village.skills_impl.stooq import StooqIndexSkill
+from nooch_village.skills_impl.alphavantage import AlphaVantageIndexSkill
 from nooch_village.skills_impl.trends_categorie import TrendsCategorieSkill
 from nooch_village.skills_impl.gdelt_tone import GdeltToneSkill
 
@@ -142,6 +143,58 @@ def test_bevroren_config_wordt_door_de_skills_gelezen():
     from nooch_village.config import load_context
     from nooch_village.village import BASE_DIR
     ctx = load_context(BASE_DIR)
-    assert StooqIndexSkill()._symbols(ctx) == {"spx": "^spx", "aex": "^aex"}
+    assert StooqIndexSkill()._symbols(ctx) == {}                          # Stooq-config verwijderd (gedeactiveerd)
+    assert AlphaVantageIndexSkill()._symbols(ctx) == {"spx": "SPY", "aex": "IAEX.AMS"}   # ETF-proxies
     assert TrendsCategorieSkill()._terms(ctx) == ["footwear", "sustainable shoes", "vegan shoes"]
     assert GdeltToneSkill()._terms(ctx) == ["sustainable footwear", "vegan footwear"]
+
+
+# ── Alpha Vantage (index-tracking-ETF's, vervangt Stooq) ────────────────────────────────────────
+_AV_JSON = {"Meta Data": {"2. Symbol": "SPY"},
+            "Time Series (Daily)": {
+                "2026-07-02": {"1. open": "744", "2. high": "746", "3. low": "743",
+                               "4. close": "744.78", "5. volume": "1"},
+                "2026-07-01": {"4. close": "740.5"}}}
+
+
+def test_alphavantage_config_meta_zonder_key_lek():
+    s = AlphaVantageIndexSkill()
+    ctx = _ctx(alphavantage_symbols="spx:SPY, aex:IAEX.AMS", ALPHAVANTAGE_API_KEY="SECRET",
+               alphavantage_source_version="2")
+    assert set(s.available_metrics(ctx)) == {"spx", "aex"} and s.is_configured(ctx)
+    m = s.observation_meta(ctx, "2026-07-02", "spx")
+    assert m["symbol"] == "SPY" and m["instrument"] == "index-tracking-ETF" and m["source_version"] == 2
+    assert "SECRET" not in m["endpoint"] and "apikey" not in m["endpoint"]     # key lekt NIET in de meta
+
+
+def test_alphavantage_happy_path_exacte_dag():
+    s = AlphaVantageIndexSkill()
+    assert s._close_for("SPY", "2026-07-02", "K", _fetch=lambda sym: _AV_JSON) == 744.78
+    assert s._close_for("SPY", "2026-07-01", "K", _fetch=lambda sym: _AV_JSON) == 740.5
+
+
+def test_alphavantage_fail_closed():
+    s = AlphaVantageIndexSkill()
+    for err in ({"Note": "rate limit"}, {"Information": "premium endpoint"}, {"Error Message": "invalid"}):
+        assert s._close_for("SPY", "2026-07-02", "K", _fetch=lambda x, e=err: e) is None   # AV-fout/limiet
+    assert s._close_for("SPY", "2026-07-09", "K", _fetch=lambda x: _AV_JSON) is None        # geen dag → gat
+    assert s._close_for("SPY", "2026-07-02", "K", _fetch=lambda x: "niet json") is None      # geen dict
+    bad = {"Time Series (Daily)": {"2026-07-02": {"4. close": "nietnum"}}}
+    assert s._close_for("SPY", "2026-07-02", "K", _fetch=lambda x: bad) is None              # niet-numeriek
+    assert s._close_for("SPY", "2026-07-02", "K", _fetch=lambda x: (_ for _ in ()).throw(RuntimeError())) is None
+
+
+def test_alphavantage_geen_key_geen_data():
+    s = AlphaVantageIndexSkill()
+    ctx = _ctx(alphavantage_symbols="spx:SPY")                                # geen key
+    assert not s.is_configured(ctx)
+    assert s.daily_values(ctx, "2026-07-02", _sleep=lambda x: None) == {"spx": None}
+
+
+def test_alphavantage_spatieert_per_symbool(monkeypatch):
+    s = AlphaVantageIndexSkill()
+    ctx = _ctx(alphavantage_symbols="spx:SPY, aex:IAEX.AMS", ALPHAVANTAGE_API_KEY="K")
+    monkeypatch.setattr(s, "_close_for", lambda sym, datum, key, **kw: {"SPY": 744.78, "IAEX.AMS": 100.0}[sym])
+    slept = []
+    out = s.daily_values(ctx, "2026-07-02", _sleep=lambda x: slept.append(x))
+    assert out == {"spx": 744.78, "aex": 100.0} and slept == [13.0]           # één spacing tussen twee symbolen
