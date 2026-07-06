@@ -535,8 +535,10 @@ def _artefact_own_card(a, csrf_token: str, can_edit: bool) -> str:
     body = f"<div class='att-body'>{_md(a.body)}</div>" if a.body else ""
     actions = ""
     if can_edit:
-        actions = (f"<div class='qadd-row'>"
-                   f"{_artefact_edit_form(a, csrf_token)}{_artefact_archive_form(a, csrf_token)}</div>")
+        # Bewerk-formulier op volledige kaartbreedte (eigen blok, NIET als smal flex-item in een .qadd-row
+        # náást 'archiveren'); 'archiveren' als losse actie eronder.
+        actions = (f"{_artefact_edit_form(a, csrf_token)}"
+                   f"<div class='qadd-row'>{_artefact_archive_form(a, csrf_token)}</div>")
     return (f"<div class='card'>{_artefact_head(a)}{body}{_laatst_gewijzigd(a)}"
             f"{_artefact_versions_html(a)}{actions}</div>")
 
