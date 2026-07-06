@@ -492,3 +492,63 @@ def test_serpstat_blijft_inactief_tot_activatie(tmp_path):
     w = collect_daily_observations(reg, cockpit2._Stores(dd).sources, cockpit2._Stores(dd).observations,
                                    _serpstat_ctx(), today=datetime.date(2026, 7, 8))
     assert w == []
+
+
+# ── cross-rol-dedup: legacy role_id → canoniek (role_id==bron) ──────────────────────────────────
+from nooch_village.observations import ObservationStore
+
+
+def _obs(tmp_path): return ObservationStore(str(tmp_path / "obs.jsonl"))
+
+
+def test_normalize_dropt_legacy_dubbel_zelfde_waarde(tmp_path):
+    obs = _obs(tmp_path)
+    obs.record("plausible", "plausible_visitors_day", 9, bron="plausible", datum="2026-07-03")        # canoniek
+    obs.record("website_watcher", "plausible_visitors_day", 9, bron="plausible", datum="2026-07-03")  # legacy, zelfde
+    assert obs.normalize_source_role_ids() == {"dropped": 1, "renamed": 0, "conflicts": 0}
+    rows = obs._read_all()
+    assert len(rows) == 1 and rows[0]["role_id"] == "plausible"
+    assert len(obs.daily_series("plausible_visitors_day", bron="plausible")) == 1     # geen dubbel meer
+
+
+def test_normalize_hernoemt_legacy_zonder_canoniek(tmp_path):
+    obs = _obs(tmp_path)
+    obs.record("website_watcher", "plausible_visitors_day", 7, bron="plausible", datum="2026-07-01")
+    assert obs.normalize_source_role_ids() == {"dropped": 0, "renamed": 1, "conflicts": 0}
+    rows = obs._read_all()
+    assert len(rows) == 1 and rows[0]["role_id"] == "plausible" and rows[0]["value"] == 7
+
+
+def test_normalize_laat_conflict_staan(tmp_path):
+    obs = _obs(tmp_path)
+    obs.record("plausible", "plausible_visitors_day", 10, bron="plausible", datum="2026-07-02")        # canoniek
+    obs.record("website_watcher", "plausible_visitors_day", 99, bron="plausible", datum="2026-07-02")  # ANDERE waarde
+    assert obs.normalize_source_role_ids() == {"dropped": 0, "renamed": 0, "conflicts": 1}
+    assert len(obs._read_all()) == 2                                                  # niets weggegooid
+
+
+def test_normalize_raakt_werkoverleg_en_utm_niet(tmp_path):
+    obs = _obs(tmp_path)
+    obs.record("mother_earth__nooch", "werk_tevredenheid_day", 8, bron="werkoverleg", datum="2026-07-01")
+    obs.record("website_watcher", "visitors_via_ig", 3, bron="plausible", datum="2026-07-01")   # metric ≠ plausible_*_day
+    obs.record("website_watcher", "visitors_via_chatgpt.com", 2, bron="", datum="2026-07-02")   # bron leeg
+    assert obs.normalize_source_role_ids() == {"dropped": 0, "renamed": 0, "conflicts": 0}
+    assert {r["role_id"] for r in obs._read_all()} == {"mother_earth__nooch", "website_watcher"}  # ongewijzigd
+
+
+def test_normalize_idempotent(tmp_path):
+    obs = _obs(tmp_path)
+    obs.record("plausible", "plausible_visitors_day", 9, bron="plausible", datum="2026-07-03")
+    obs.record("website_watcher", "plausible_visitors_day", 9, bron="plausible", datum="2026-07-03")
+    obs.normalize_source_role_ids()
+    assert obs.normalize_source_role_ids() == {"dropped": 0, "renamed": 0, "conflicts": 0}
+
+
+def test_migratie_normaliseert_rol_ids(tmp_path):
+    dd = _dd(tmp_path)
+    obs = cockpit2._Stores(dd).observations
+    obs.record("plausible", "plausible_visitors_day", 9, bron="plausible", datum="2026-07-03")
+    obs.record("website_watcher", "plausible_visitors_day", 9, bron="plausible", datum="2026-07-03")
+    migrate_data_sources(dd)
+    rows = cockpit2._Stores(dd).observations.daily_series("plausible_visitors_day", bron="plausible")
+    assert len(rows) == 1 and rows[0]["role_id"] == "plausible"

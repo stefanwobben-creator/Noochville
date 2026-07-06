@@ -57,6 +57,48 @@ class ObservationStore:
                     f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
         return n
 
+    def normalize_source_role_ids(self) -> dict:
+        """Canoniek: voor een collector-dagmetric `<bron>_<veld>_day` is `role_id == bron`. Legacy-rijen
+        met een andere role_id (bv. `website_watcher` van vóór de generieke collector) worden
+        genormaliseerd:
+          - botst met een canonieke (role_id==bron) rij met DEZELFDE waarde → oude rij droppen (dedup)
+          - geen canonieke rij → role_id hernoemen naar bron (wordt daarmee zelf canoniek)
+          - botst met een ANDERE waarde → laten staan (mens beslist; nooit data verliezen)
+        Precisie-guard: alleen rijen waar `role_id != bron` ÉN `metric == f"{bron}_*_day"` ÉN bron
+        niet-leeg — dat sluit werkoverleg (`werk_*` ≠ `werkoverleg_*`, role_id=cirkel) en de
+        `visitors_via_*`-familie structureel uit. Herschrijft het bestand alleen als er iets verandert;
+        idempotent (niets te doen → geen herschrijf). Geeft {dropped, renamed, conflicts} terug."""
+        rows = self._read_all()
+        canon = {}          # (metric, bron, datum) -> value voor role_id==bron (groeit mee bij rename)
+        for r in rows:
+            if r.get("role_id") == r.get("bron"):
+                canon[(r.get("metric"), r.get("bron"), r.get("datum"))] = r.get("value")
+        kept, dropped, renamed, conflicts = [], 0, 0, 0
+        for r in rows:
+            m, b, rid = r.get("metric"), r.get("bron"), r.get("role_id")
+            in_scope = (bool(b) and rid != b and isinstance(m, str)
+                        and m.startswith(f"{b}_") and m.endswith("_day"))
+            if not in_scope:
+                kept.append(r)
+                continue
+            key = (m, b, r.get("datum"))
+            if key in canon:
+                if canon[key] == r.get("value"):
+                    dropped += 1                       # canonieke rij heeft dezelfde waarde → oude weg
+                else:
+                    conflicts += 1                     # andere waarde → niet aanraken
+                    kept.append(r)
+            else:
+                r["role_id"] = b                       # geen canonieke rij → hernoemen (wordt canoniek)
+                canon[key] = r.get("value")
+                renamed += 1
+                kept.append(r)
+        if dropped or renamed:
+            with open(self.path, "w") as f:
+                for r in kept:
+                    f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
+        return {"dropped": dropped, "renamed": renamed, "conflicts": conflicts}
+
     def record_daily(self, role_id: str, metric: str, value, bron: str,
                      datum: str | None = None, ts: float | None = None) -> bool:
         """Schrijf hoogstens één datapunt per (role_id, metric, bron, datum). Bestaat er al een voor
