@@ -47,15 +47,38 @@ class WerkoverlegStore:
         return (self._m.get(circle) or {}).get("visited", [])
 
     def open(self, circle: str) -> dict:
-        """Start een overleg (idempotent zolang het open is). Het archief (`log`) blijft behouden."""
+        """Start een overleg (idempotent zolang het open is). Het archief (`log`) blijft behouden.
+        Openstaande spanningen uit de persistente backlog komen op de agenda van dit overleg (en de
+        backlog wordt geleegd) — zo landen ge-agendeerde spanningen vanzelf in het eerstvolgende overleg."""
         st = self._m.get(circle)
         if not st or st.get("status") != "open":
-            log = (st or {}).get("log", [])
+            prev = st or {}
+            log = prev.get("log", [])
+            backlog = prev.get("backlog", [])
             st = {"status": "open", "started_at": time.time(), "ended_at": None,
-                  "presence": {}, "agenda": [], "checkout": {}, "visited": [], "log": log}
+                  "presence": {}, "agenda": list(backlog), "checkout": {}, "visited": [], "log": log,
+                  "backlog": []}
             self._m[circle] = st
             self._save()
         return st
+
+    def backlog(self, circle: str) -> list:
+        """Openstaande spanningen die (nog) niet op een lopend overleg staan."""
+        return (self._m.get(circle) or {}).get("backlog", [])
+
+    def backlog_add(self, circle: str, title: str, by: str = "") -> dict | None:
+        """Leg een spanning in de PERSISTENTE per-cirkel backlog — zónder een overleg te openen. Bij het
+        eerstvolgende `open()` komt hij op de agenda. Zelfde item-vorm als een agendapunt (herbruikbaar)."""
+        if not (title or "").strip():
+            return None
+        import uuid
+        st = self._m.setdefault(circle, {"status": "closed", "log": [], "agenda": [], "backlog": []})
+        it = {"id": uuid.uuid4().hex[:10], "title": title.strip()[:140], "by": by or "",
+              "status": "open", "note": {"spanning": "", "role": "", "need": ""},
+              "outcome": None, "created_at": time.time()}
+        st.setdefault("backlog", []).append(it)
+        self._save()
+        return it
 
     def close(self, circle: str) -> dict | None:
         st = self._m.get(circle)

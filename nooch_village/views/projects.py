@@ -110,6 +110,19 @@ def _missie_dot(p) -> str:
     return f"<span class='mdot {col}' title='Missie-impact: {_e(p['missie_impact'])}'></span>"
 
 
+def _verzwakt_block(p, hid, rw: bool) -> str:
+    """Signaal-infoblok bij missie_impact=verzwakt (géén blokkade — statuswissels blijven mogelijk). Toont
+    de boodschap + een knop om het als spanning te agenderen in het werkoverleg van de cirkel (bewerkbaar)."""
+    btn = ""
+    if rw:
+        btn = (f"<form method='post' action='/action' class='vz-form'>{hid()}"
+               f"<button class='btn ok sm' type='submit' name='action' value='proj_agendeer_verzwakt'>"
+               f"Agendeer in werkoverleg</button></form>")
+    return (f"<div class='vzblock'>"
+            f"<div class='vz-h'>Missie verzwakt. Jij besluit als rolvervuller.</div>"
+            f"<div class='vz-t'>Wil je dit als spanning agenderen in het werkoverleg?</div>{btn}</div>")
+
+
 def _proj_progress(p: dict):
     items = [it for cl in (p.get("checklists") or []) for it in cl.get("items", [])]
     if not items:
@@ -149,6 +162,7 @@ def _scope_text(p) -> str:
 def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
     pid = p["id"]
     href = f"/project?pid={_e(pid)}&back={urllib.parse.quote(back, safe='')}"
+    verz = " verzwakt" if p.get("missie_impact") == "verzwakt" else ""   # rode rand = signaal, geen blokkade
     bar = ""
     if p.get("label") in _LABELS and _LABELS.get(p.get("label")):
         bar = f"<div class='clabel' style='background:{_LABELS[p['label']]}'></div>"
@@ -159,9 +173,9 @@ def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
         # Publiek/alleen-lezen: er is geen modal-JS, dus de kaart moet zelf navigeren.
         # /project redirect server-side naar /login als de bezoeker niet is ingelogd —
         # het detail blijft dus achter login, maar de kaart is niet langer een dode div.
-        return (f"<a class='card pcard' href='{_e(href)}' "
+        return (f"<a class='card pcard{verz}' href='{_e(href)}' "
                 f"style='display:block;text-decoration:none;color:inherit'>{inner}</a>")
-    return (f"<div class='card pcard' data-pid='{_e(pid)}' data-href='{href}' draggable=\"true\">"
+    return (f"<div class='card pcard{verz}' data-pid='{_e(pid)}' data-href='{href}' draggable=\"true\">"
             f"{inner}</div>")
 
 
@@ -837,7 +851,8 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     top_bar = f"<div class='wo-back-bar'>{wo_cta}</div>" if meeting else ""
     foot_bar = f"<div class='wo-back-bar wo-back-foot'>{wo_cta}</div>" if meeting else ""
 
-    maincol = details + actioncards + omschrijving + checklists_html + verrijking
+    verzwakt_block = _verzwakt_block(p, hid, rw) if p.get("missie_impact") == "verzwakt" else ""
+    maincol = verzwakt_block + details + actioncards + omschrijving + checklists_html + verrijking
     detail = (f"{top_bar}{labelbar}{_banner(msg)}{head}"
               f"<div class='pgrid'><div class='pmain'>{maincol}</div>"
               f"<aside class='pdisc'>{discussie}</aside></div>{foot_bar}")

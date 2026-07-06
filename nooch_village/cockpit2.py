@@ -917,6 +917,30 @@ def _act_proj_setimpact(c):
         return nxt, ""
 
 
+def _act_proj_agendeer_verzwakt(c):
+        # AUTHZ: circle-member — een spanning inbrengen is dezelfde laag als elders in het werkoverleg
+        # (_member_gate). Signaal, geen blokkade: statuswissels blijven hier los van mogelijk.
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        p = pj.get(g("pid"))
+        if p is None:
+            return nxt, "project niet gevonden"
+        circle = resolve_circle_id(p.get("owner") or "", st.records)
+        if not circle:
+            return nxt, "geen cirkel voor dit project"
+        _deny = _member_gate(circle, username, st)
+        if _deny:
+            return nxt, _deny
+        scope = p.get("scope")
+        titel = (" · ".join(f"{k}: {v}" for k, v in scope.items())
+                 if isinstance(scope, dict) else str(scope or "project"))
+        actor = st.people.by_email(username) if username and username != "guest" else None
+        # In de PERSISTENTE werkoverleg-backlog van de cirkel — opent géén overleg; komt bij het
+        # eerstvolgende overleg vanzelf op de agenda.
+        if st.werk.backlog_add(circle, f"Missie verzwakt: {titel}"[:140], by=(actor.name if actor else "")):
+            return nxt, "✓ als spanning in de werkoverleg-backlog van de cirkel gezet"
+        return nxt, ""
+
+
 def _act_proj_setprivate(c):
         nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
         msg = ""
@@ -1896,6 +1920,7 @@ ACTIONS = {
     "proj_discard": _act_proj_discard,
     "proj_setlabel": _act_proj_setlabel,
     "proj_setimpact": _act_proj_setimpact,
+    "proj_agendeer_verzwakt": _act_proj_agendeer_verzwakt,
     "proj_setprivate": _act_proj_setprivate,
     "proj_setdue": _act_proj_setdue,
     "attach_add": _act_attach_add,
