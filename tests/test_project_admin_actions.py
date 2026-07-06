@@ -200,3 +200,51 @@ def test_trekker_default_is_ingelogde_gebruiker(tmp_path):
                                  csrf_token="TOK", username="guest")
     opts2 = re.search(r"<select name='trekker'>(.*?)</select>", page2, re.DOTALL).group(1)
     assert "selected" not in opts2
+
+
+# ── impact-pills (scope 2): missie_impact / business_impact ──────────────────────────────────────
+def test_proj_setimpact_zet_missie_en_business(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "Test", "human", status="queued")
+    cockpit2.dispatch(dd, "proj_setimpact",
+                      {"pid": [pid], "kind": ["missie"], "value": ["versterkt"], "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "proj_setimpact",
+                      {"pid": [pid], "kind": ["business"], "value": ["hoog"], "next": ["/"]}, username="guest")
+    p = cockpit2._Stores(dd).projects.get(pid)
+    assert p["missie_impact"] == "versterkt" and p["business_impact"] == "hoog"
+
+
+def test_proj_setimpact_leegmaken(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "Test", "human", status="queued", missie_impact="verzwakt")
+    cockpit2.dispatch(dd, "proj_setimpact",
+                      {"pid": [pid], "kind": ["missie"], "value": [""], "next": ["/"]}, username="guest")
+    assert cockpit2._Stores(dd).projects.get(pid)["missie_impact"] == ""   # toggle-off → ongelabeld
+
+
+def test_proj_setimpact_weigert_ongeldige_waarde(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "Test", "human", status="queued")
+    _, msg = cockpit2.dispatch(dd, "proj_setimpact",
+                               {"pid": [pid], "kind": ["missie"], "value": ["banaan"], "next": ["/"]}, username="guest")
+    assert "ongeldig" in msg.lower()
+    assert cockpit2._Stores(dd).projects.get(pid)["missie_impact"] == ""   # ongewijzigd
+
+
+def test_proj_setimpact_onbekend_veld(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "Test", "human", status="queued")
+    _, msg = cockpit2.dispatch(dd, "proj_setimpact",
+                               {"pid": [pid], "kind": ["xyz"], "value": ["hoog"], "next": ["/"]}, username="guest")
+    assert "onbekend" in msg.lower()
+
+
+def test_impact_pills_in_schrijfmodus_niet_read_only(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "Test", "human", status="queued", missie_impact="neutraal")
+    rw = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    ro = P.render_project(cockpit2._Stores(dd), pid, csrf_token="")
+    assert "proj_setimpact" in rw and "imp-pill" in rw
+    assert "Missie-impact" in rw and "Business-impact" in rw
+    assert "proj_setimpact" not in ro          # read-only: geen bewerk-form
+    assert "imp-pill n on" in ro               # wel de gekozen waarde als statische pill

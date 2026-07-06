@@ -402,6 +402,16 @@ ul.clean li:last-child{border-bottom:none}
 /* 'niet geconfigureerd' (ontbrekende creds) — bewust anders dan coral (kapotte API) en muted (geen data) */
 .chip.amber{background:var(--yellow-light);color:#8a6d0b;border:1px solid var(--yellow)}
 .chip.coral-solid{background:var(--coral);color:#fff;font-size:.64rem;text-transform:uppercase;padding:.04rem .4rem}
+/* Impact-pills (scope 2): klikbare optie-chips met semantische kleur; elke pill toont z'n kleur (gedempt),
+   de gekozen pill (.on) staat vol + met inset-ring. Kleuren per spec: g=groen, n=grijs, r=rood, l=lichtgrijs. */
+.imp-wrap{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center}
+.imp-pill{padding:.14rem .55rem;border-radius:var(--radius-pill);border:1px solid transparent;font:inherit;font-size:.7rem;font-weight:700;line-height:1.5;cursor:pointer;opacity:.5}
+.imp-pill:hover{opacity:.8}
+.imp-pill.on{opacity:1;box-shadow:inset 0 0 0 1.5px currentColor}
+.imp-pill.g{background:var(--green-tint);color:var(--green-dark)}
+.imp-pill.n{background:var(--cream-2);color:var(--gray)}
+.imp-pill.r{background:var(--error-tint);color:var(--coral)}
+.imp-pill.l{background:var(--cream);color:var(--muted)}
 .ai-gift{font-size:1rem;text-decoration:none;cursor:pointer;line-height:1}
 .ai-on{font-size:.95rem;text-decoration:none;cursor:pointer;line-height:1;opacity:.8}
 .ai-on:hover{opacity:1}

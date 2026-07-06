@@ -47,7 +47,7 @@ from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
 from nooch_village import epic
 from nooch_village.personas import PersonaStore
-from nooch_village.projects import ProjectLedger
+from nooch_village.projects import ProjectLedger, _MISSIE_IMPACT, _BUSINESS_IMPACT
 from nooch_village.ai_tasks import AITaskStore
 from nooch_village.checklists import ChecklistStore, CADENCES, CADENCE_LABEL
 from nooch_village.metrics import MetricStore, window_cutoff, filter_samples
@@ -893,6 +893,28 @@ def _act_proj_setlabel(c):
         if pj.edit(g("pid"), label=g("label"), allow_done=True):
             msg = "✓ label opgeslagen"
         return nxt, msg
+
+
+_IMPACT_FIELDS = {"missie": ("missie_impact", _MISSIE_IMPACT), "business": ("business_impact", _BUSINESS_IMPACT)}
+
+
+def _act_proj_setimpact(c):
+        # AUTHZ: rolvervuller-of-Circle-Lead — impact-labels zijn operationeel projectwerk (zelfde gate als
+        # de andere proj_set*-takken). Leeg = wissen (ongelabeld); dat mag ook.
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
+        spec = _IMPACT_FIELDS.get(g("kind"))
+        if spec is None:
+            return nxt, "onbekend impact-veld"
+        field, allowed = spec
+        value = g("value")
+        if value and value not in allowed:
+            return nxt, "ongeldige impact-waarde"
+        if pj.edit(g("pid"), allow_done=True, **{field: value}):
+            return nxt, ("✓ impact opgeslagen" if value else "✓ impact leeggemaakt")
+        return nxt, ""
 
 
 def _act_proj_setprivate(c):
@@ -1873,6 +1895,7 @@ ACTIONS = {
     "proj_approve": _act_proj_approve,
     "proj_discard": _act_proj_discard,
     "proj_setlabel": _act_proj_setlabel,
+    "proj_setimpact": _act_proj_setimpact,
     "proj_setprivate": _act_proj_setprivate,
     "proj_setdue": _act_proj_setdue,
     "attach_add": _act_attach_add,
