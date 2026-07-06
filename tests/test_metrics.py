@@ -30,8 +30,8 @@ def test_venster_filtert_samples():
     now = time.time()
     samples = [{"at": now - 100 * 86400, "value": 1}, {"at": now - 2 * 86400, "value": 2},
                {"at": now, "value": 3}]
-    assert [v for _, v in filter_samples(samples, window_cutoff("7d", now))] == [2, 3]
-    assert [v for _, v in filter_samples(samples, window_cutoff("alles", now))] == [1, 2, 3]
+    assert [p[1] for p in filter_samples(samples, window_cutoff("7d", now))] == [2, 3]
+    assert [p[1] for p in filter_samples(samples, window_cutoff("alles", now))] == [1, 2, 3]
 
 
 def test_bron_kpi_pulse_visitors(tmp_path):
@@ -356,7 +356,7 @@ def test_bezoekers_lijndiagram_toont_meerdere_punten(tmp_path):
         st.observations.record_daily("website_watcher", "plausible_visitors_day", v,
                                      bron="plausible", datum=f"2026-07-0{i+1}", ts=ts)
     res = _fetch(st, "pulse_visitors", "visitors", "time", None)
-    assert res["chart"] == "line" and [v for _, v in res["points"]] == [40, 55, 48]
+    assert res["chart"] == "line" and [p[1] for p in res["points"]] == [40, 55, 48]
     svg = _line_chart_svg(res["points"], "bezoekers")
     assert svg.count("<circle") == 3          # drie echte dagpunten als stippen
     assert "<polyline" in svg                 # verbonden lijn
@@ -392,3 +392,26 @@ def test_source_samples_ontdubbelt_dagreeks_vs_7d(tmp_path):
         f.write(_json.dumps({"ts": 20.0, "visitors_7d": 320}) + "\n")
     assert [s["value"] for s in _source_samples(dd, "pulse_visitors")] == [40, 55]        # dagreeks
     assert [s["value"] for s in _source_samples(dd, "pulse_visitors_7d")] == [300, 320]   # rollende 7d
+
+
+def test_backfill_geval_sorteert_en_labelt_op_datum(tmp_path):
+    """Backfill schrijft historische dagen op één dag → gelijke ts, verschillende datums. De tegel-lezing
+    moet op MEETDAG (datum) sorteren en labelen, niet op de schrijf-ts. Regressie: vóór de fix stond alles
+    onder de backfill-dag (bv. '06-07') en was 'Actueel' de laatste-op-ts i.p.v. de laatste meetdag."""
+    import re
+    from nooch_village.views.metrics import _fetch, _data_table
+    st = cockpit2._Stores(_dd(tmp_path))
+    # ZELFDE ts=17.0 (één schrijfmoment), verschillende datums, in willekeurige schrijf-volgorde
+    for datum, val in [("2026-06-05", 21), ("2026-05-26", 151), ("2026-07-05", 15), ("2026-06-02", 246)]:
+        st.observations.record_daily("plausible", "plausible_visitors_day", val,
+                                     bron="plausible", datum=datum, ts=17.0)
+    res = _fetch(st, "pulse_visitors", "visitors", "time", None)
+    # (1) chronologisch OP MEETDAG, niet op (gelijke) ts
+    assert [p[2] for p in res["points"]] == ["2026-05-26", "2026-06-02", "2026-06-05", "2026-07-05"]
+    assert [p[1] for p in res["points"]] == [151, 246, 21, 15]
+    # (2) ruwe-data-tabel labelt per MEETDAG (vier verschillende datums, niet 4× de ts-datum)
+    tab = _data_table(res, bron="plausible")
+    assert re.findall(r"<td>(\d\d-\d\d-\d\d)</td>", tab) == ["26-05-26", "02-06-26", "05-06-26", "05-07-26"]
+    # (3) 'Actueel' = laatste MEETDAG (2026-07-05 → 15), niet de laatste-op-ts (2026-06-05 → 21)
+    last = st.observations.daily_series("plausible_visitors_day", bron="plausible")[-1]
+    assert last["datum"] == "2026-07-05" and last["value"] == 15

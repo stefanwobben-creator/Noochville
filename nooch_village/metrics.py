@@ -253,7 +253,7 @@ def window_range(win: str, now: float | None = None, van: str = "", tot: str = "
 def filter_samples(samples, cutoff: float | None, end: float | None = None):
     """(at, value)-paren binnen [cutoff, end], op tijd gesorteerd. end None = geen bovengrens
     (backward-compatible met de oude cutoff-aanroepen)."""
-    pts = [(s["at"], s["value"]) for s in samples if "at" in s]
+    pts = [(s["at"], s["value"], s.get("datum")) for s in samples if "at" in s]
     if cutoff is not None:
         pts = [p for p in pts if p[0] >= cutoff]
     if end is not None:

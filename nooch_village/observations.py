@@ -151,7 +151,9 @@ class ObservationStore:
                 if r.get("metric") == metric
                 and (bron is None or r.get("bron") == bron)
                 and (role_id is None or r.get("role_id") == role_id)]
-        rows.sort(key=lambda r: r["ts"])
+        # Sorteer op MEETDAG (datum), niet op schrijf-ts: na een backfill (historische dagen allemaal op
+        # één dag geschreven) wijkt ts-volgorde af van datum-volgorde. ts blijft tiebreak + audit.
+        rows.sort(key=lambda r: (r.get("datum") or "", r.get("ts", 0)))
         return rows
 
 

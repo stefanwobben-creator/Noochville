@@ -36,6 +36,36 @@ _LIVE_TILE_SOURCES = {"pulse_visitors", "shopify"}
 _SOURCE_KPIS = {"pulse_visitors": {"name": "Websitebezoekers (per dag)", "unit": "bezoekers"}}
 
 
+def _row_at(r) -> float:
+    """De tijd-as van een dag-observatie = de MEETDAG (`datum`), niet de schrijf-`ts`. Zo staan en
+    sorteren reeksen chronologisch op meetdag; een backfill schrijft historische dagen op één dag (gelijke
+    ts) en zou anders alles op die dag samenklonteren. `ts` dient daarna alleen als audit-veld. Terugval
+    op ts als datum ontbreekt (legacy-reeksen zonder datum)."""
+    import datetime as _dt
+    d = r.get("datum")
+    if d:
+        try:
+            return _dt.datetime.fromisoformat(d).timestamp()
+        except (TypeError, ValueError):
+            pass
+    return r.get("ts", 0) or 0
+
+
+def _pt_datum_label(p) -> str:
+    """dd-mm-yy-label voor een punt: uit het meegedragen `datum` (3e tuple-element), anders round-trip via
+    de datum-as (at). Nooit de schrijf-ts, zodat de ruwe-data-tabel de meetdag toont, niet de backfill-dag."""
+    import datetime as _dt
+    d = p[2] if len(p) > 2 else None
+    if d:
+        return f"{d[8:10]}-{d[5:7]}-{d[2:4]}"
+    return _dt.datetime.fromtimestamp(p[0]).strftime('%d-%m-%y')
+
+
+def _obs_points(rows) -> list:
+    """Punten uit dag-observatie-rijen: (datum-as, waarde, datum). Meetdag stuurt sortering/positie/labels."""
+    return [(_row_at(r), r.get("value"), r.get("datum")) for r in rows]
+
+
 def _source_samples(dd: str, source: str):
     """Lees samples voor een bron-KPI. Twee HELDER onderscheiden reeksen (niet meer één 'pulse_visitors'
     die twee dingen betekent):
@@ -44,7 +74,7 @@ def _source_samples(dd: str, source: str):
     """
     if source == "pulse_visitors":
         store = ObservationStore(os.path.join(dd, "observations.jsonl"))
-        return [{"at": r["ts"], "value": r["value"]}
+        return [{"at": _row_at(r), "value": r["value"], "datum": r.get("datum")}
                 for r in store.daily_series("plausible_visitors_day", bron="plausible")]
     if source == "pulse_visitors_7d":
         repo = os.path.join(os.path.dirname(__file__), "..", "..", "data", "pulse_history.jsonl")
@@ -75,7 +105,7 @@ def _metric_points(st: _Stores, item: dict, cutoff, end=None):
 
 
 def _spark_svg(points, w=84, h=22, breaks_at=None) -> str:
-    vals = [v for _, v in points]
+    vals = [p[1] for p in points]
     if len(vals) < 2:
         return "<span class='muted' style='font-size:.7rem'>—</span>"
     lo, hi = min(vals), max(vals)
@@ -120,7 +150,7 @@ def _line_chart_svg(points, unit: str = "", prev=None) -> str:
     if not points:
         return _geen_data_html()
     import datetime as _dt
-    vals = [v for _, v in points]
+    vals = [p[1] for p in points]
     if len(points) < 2:
         return (f"<div class='tile-trend'><span class='kpi-val sm'>{_num(vals[-1])}</span>"
                 f"<span class='muted' style='font-size:.7rem'>1 meetpunt — te weinig voor een lijn</span></div>")
@@ -128,10 +158,10 @@ def _line_chart_svg(points, unit: str = "", prev=None) -> str:
     W, H = 300.0, 140.0
     ml, mr, mt, mb = 36.0, 8.0, 10.0, 20.0            # marges: links y-labels, onder x-labels
     iw, ih = W - ml - mr, H - mt - mb
-    xs = [t for t, _ in points]
+    xs = [p[0] for p in points]
     x0, x1 = xs[0], xs[-1]
     xspan = (x1 - x0) or 1.0
-    allvals = vals + [v for _, v in prev]
+    allvals = vals + [p[1] for p in prev]
     ymax = max(allvals)
     ymin = min(0, min(allvals))                       # 0-basislijn (of lager bij negatieve waarden)
     yspan = (ymax - ymin) or 1.0
@@ -146,14 +176,14 @@ def _line_chart_svg(points, unit: str = "", prev=None) -> str:
             f"<text x='{ml+iw:.1f}' y='{H-5:.1f}' text-anchor='end' font-size='9' fill='var(--muted)'>{_e(fmt(x1))}</text>")
     prevline = ""
     if len(prev) >= 2:                                # vorige periode: over dezelfde breedte, lichter+gestreept
-        pxs = [t for t, _ in prev]
+        pxs = [p[0] for p in prev]
         pspan = (pxs[-1] - pxs[0]) or 1.0
         pfx = lambda t: ml + (t - pxs[0]) / pspan * iw
-        ppoly = " ".join(f"{pfx(t):.1f},{fy(v):.1f}" for t, v in prev)
+        ppoly = " ".join(f"{pfx(p[0]):.1f},{fy(p[1]):.1f}" for p in prev)
         prevline = f"<polyline points='{ppoly}' fill='none' stroke='var(--subtle)' stroke-width='1.2' stroke-dasharray='3 3'/>"
-    poly = " ".join(f"{fx(t):.1f},{fy(v):.1f}" for t, v in points)
+    poly = " ".join(f"{fx(p[0]):.1f},{fy(p[1]):.1f}" for p in points)
     line = f"<polyline points='{poly}' fill='none' stroke='var(--green)' stroke-width='1.8'/>"
-    dots = "".join(f"<circle cx='{fx(t):.1f}' cy='{fy(v):.1f}' r='2.2' fill='var(--green)'/>" for t, v in points)
+    dots = "".join(f"<circle cx='{fx(p[0]):.1f}' cy='{fy(p[1]):.1f}' r='2.2' fill='var(--green)'/>" for p in points)
     u = f" <span class='kpi-unit'>{_e(unit)}</span>" if unit else ""
     head = f"<div class='tile-trend'><span class='kpi-val sm'>{_num(vals[-1])}{u}</span></div>"
     svg = (f"<svg class='linechart' viewBox='0 0 {W:.0f} {H:.0f}' width='100%' height='140' preserveAspectRatio='xMidYMid meet'>"
@@ -167,7 +197,7 @@ def _bar_chart_svg(points, unit: str = "") -> str:
     if not points:
         return _geen_data_html()
     import datetime as _dt
-    vals = [v for _, v in points]
+    vals = [p[1] for p in points]
     if len(points) < 2:
         return (f"<div class='tile-trend'><span class='kpi-val sm'>{_num(vals[-1])}</span>"
                 f"<span class='muted kc-hint'>1 meetpunt</span></div>")
@@ -178,7 +208,8 @@ def _bar_chart_svg(points, unit: str = "") -> str:
     fy = lambda v: mt + (1 - (v - ymin) / yspan) * ih
     slot = iw / len(points); bw = slot * 0.7; y0 = fy(0)
     bars = ""
-    for i, (_t, v) in enumerate(points):
+    for i, p in enumerate(points):
+        v = p[1]
         x = ml + i * slot + (slot - bw) / 2
         yv = fy(v); top = min(yv, y0); h = abs(yv - y0)
         bars += f"<rect x='{x:.1f}' y='{top:.1f}' width='{bw:.1f}' height='{max(0.5, h):.1f}' rx='1' fill='var(--green)'/>"
@@ -377,8 +408,8 @@ def _werk_fetch(st: _Stores, circle: str, measure: str, dim: str, cutoff, end=No
         samples.append({"at": m.get("at", 0), "value": v})
     # Alle werkoverleg-tegels respecteren dezelfde periodefilter als de reeks-tegels: filter op
     # het venster vóór het aggregeren (gemiddeld/totaal), niet alleen bij de reeks.
-    pts = filter_samples(samples, cutoff, end)     # [(at, value), ...] binnen het venster
-    vals = [v for _, v in pts]
+    pts = filter_samples(samples, cutoff, end)     # [(at, value, datum), ...] binnen het venster
+    vals = [p[1] for p in pts]
     unit = "/10" if measure == "tevredenheid" else ("min" if measure == "duur" else "")
     if dim == "over_tijd":
         return {"kind": "series", "points": pts, "unit": unit}
@@ -427,7 +458,7 @@ def _daily_obs_series(st: _Stores, source: str, measure: str, cutoff, end=None):
     metric, bron = _daily_obs_key(source, measure)
     if not metric:
         return None
-    samples = [{"at": r["ts"], "value": r["value"]}
+    samples = [{"at": _row_at(r), "value": r["value"], "datum": r.get("datum")}
                for r in st.observations.daily_series(metric, bron=bron)]
     return {"kind": "series", "points": filter_samples(samples, cutoff, end),
             "unit": _measure_unit(source, measure), "chart": "line"}
@@ -514,9 +545,8 @@ def _data_table(res, bron: str = "") -> str:
         pts = res.get("points") or []
         if not pts:
             return ""
-        import datetime as _dt
-        rows = "".join(f"<tr><td>{_dt.datetime.fromtimestamp(t).strftime('%d-%m-%y')}</td>"
-                       f"<td class='num'>{_num(v)}</td><td>{b}</td></tr>" for t, v in pts[-12:])
+        rows = "".join(f"<tr><td>{_pt_datum_label(p)}</td>"
+                       f"<td class='num'>{_num(p[1])}</td><td>{b}</td></tr>" for p in pts[-12:])
         return (f"<table class='mtab'><tr><th>datum</th><th class='num'>waarde</th><th>bron</th></tr>"
                 f"{rows}</table>")
     if kind == "breakdown":
@@ -578,7 +608,7 @@ def _render_burnup(res, target, project) -> str:
     nowline = f"<line x1='{nowx:.1f}' y1='0' x2='{nowx:.1f}' y2='{H:.0f}' stroke='var(--border)' stroke-width='1'/>"
     actual = ""
     if len(pts) >= 2:
-        poly = " ".join(f"{fx(t):.1f},{fy(v):.1f}" for t, v in pts)
+        poly = " ".join(f"{fx(p[0]):.1f},{fy(p[1]):.1f}" for p in pts)
         actual = f"<polyline points='{poly}' fill='none' stroke='var(--green)' stroke-width='1.8'/>"
     elif pts:
         actual = f"<circle cx='{fx(pts[0][0]):.1f}' cy='{fy(latest):.1f}' r='2.4' fill='var(--green)'/>"
@@ -822,8 +852,9 @@ def _snapshot_delta(points, frequency: str):
     pts = sorted([p for p in (points or []) if p[1] is not None], key=lambda p: p[0])
     if len(pts) < 2:
         return None, None
-    (t_prev, v_prev), (t_last, v_last) = pts[-2], pts[-1]
-    interval_days = max(1, round((t_last - t_prev) / 86400))
+    t_prev, v_prev = pts[-2][0], pts[-2][1]
+    t_last, v_last = pts[-1][0], pts[-1][1]
+    interval_days = max(1, round((t_last - t_prev) / 86400))    # meetdag-as → écht aantal dagen ertussen
     period = _PERIOD_DAYS.get(frequency, 7)
     return (v_last - v_prev) * period / interval_days, interval_days
 
@@ -833,7 +864,7 @@ def _snapshot_body(st: _Stores, tile: dict, frequency: str):
     werkelijke meet-interval; de absolute stand + oplopende reeks blijven beschikbaar in de uitklap."""
     metric, bron = _obs_key_for_indicator(tile["source"], tile["measure"])
     rows = st.observations.daily_series(metric, bron=bron) if metric else []
-    points = [(r["ts"], r["value"]) for r in rows]
+    points = _obs_points(rows)                         # (meetdag-as, waarde, datum), datum-gesorteerd
     delta, interval = _snapshot_delta(points, frequency)
     stand = points[-1][1] if points else None
     plabel = _PERIOD_LABEL.get(frequency, "periode")
@@ -916,7 +947,7 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
         res = {"kind": "number", "value": None}       # delta-tegel → geen drempel-warn op een stand
     elif actueel:
         rows = st.observations.daily_series(ak_metric, bron=ak_bron) if ak_metric else []
-        pts = [(r["ts"], r["value"]) for r in rows]
+        pts = _obs_points(rows)                        # datum-gesorteerd → [-1] = laatste MEETDAG
         latest = pts[-1][1] if pts else None
         res = {"kind": "number", "value": latest}
         body = (f"<div class='kpi-val'>{_num(latest)}</div>" if latest is not None
@@ -1038,9 +1069,9 @@ def _metric_csv(st: _Stores, mid: str) -> tuple[str, str] | None:
     w.writerow([])
     # 2. de metingen
     w.writerow(["datum", "waarde", "eenheid"])
-    for at, v in pts:
-        dt = _dt.datetime.fromtimestamp(at).strftime("%Y-%m-%d %H:%M")
-        w.writerow([dt, v, it.get("unit", "")])
+    for p in pts:
+        d = p[2] if len(p) > 2 and p[2] else _dt.datetime.fromtimestamp(p[0]).strftime("%Y-%m-%d")
+        w.writerow([d, p[1], it.get("unit", "")])
     safe = "".join(c if c.isalnum() else "_" for c in (it.get("name") or "kpi"))[:40]
     return f"{safe}.csv", buf.getvalue()
 
@@ -1337,8 +1368,8 @@ def _day_key(ts: float) -> str:
 def _series_day_map(res) -> dict:
     """{dag → (ts, waarde)} uit een series-res; de laatste meting per dag wint."""
     out = {}
-    for t, v in (res.get("points") or []):
-        out[_day_key(t)] = (t, v)
+    for p in (res.get("points") or []):
+        out[_day_key(p[0])] = (p[0], p[1])
     return out
 
 
@@ -1359,7 +1390,8 @@ def _formula_daily(st: _Stores, tile, cutoff, end=None) -> list[dict]:
         av = amap.get(day, (None, None))[1]
         bv = bmap.get(day, (None, None))[1]
         val = None if (av is None or bv is None or op is None) else op(av, bv)
-        rows.append({"at": at, "value": None if val is None else round(val, 4), "no_data": val is None})
+        rows.append({"at": at, "value": None if val is None else round(val, 4),
+                     "datum": day, "no_data": val is None})
     return rows
 
 
