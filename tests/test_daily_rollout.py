@@ -69,7 +69,7 @@ def test_werk_over_tijd_fallback_dan_dagreeks(tmp_path):
     st.observations.record_daily(C, "werk_tevredenheid_day", 8.5, bron="werkoverleg", datum="2026-07-01", ts=now - 2 * 86400)
     st.observations.record_daily(C, "werk_tevredenheid_day", 7.5, bron="werkoverleg", datum="2026-07-02", ts=now - 1 * 86400)
     r2 = _fetch(cockpit2._Stores(dd), f"werk:{C}", "tevredenheid", "over_tijd", None, None)
-    assert r2["chart"] == "line" and [v for _, v in r2["points"]] == [8.5, 7.5]           # uit de dagreeks
+    assert r2["chart"] == "line" and [p[1] for p in r2["points"]] == [8.5, 7.5]           # uit de dagreeks
 
 
 def test_shopify_over_tijd_leest_dagreeks(tmp_path):
@@ -80,7 +80,7 @@ def test_shopify_over_tijd_leest_dagreeks(tmp_path):
     st.observations.record_daily("shopify", "shopify_pairs_sold_day", 40, bron="shopify", datum="2026-07-01", ts=now - 2 * 86400)
     st.observations.record_daily("shopify", "shopify_pairs_sold_day", 55, bron="shopify", datum="2026-07-02", ts=now - 1 * 86400)
     r = _fetch(cockpit2._Stores(dd), "shopify", "pairs_sold", "over_tijd", None, None)
-    assert r["chart"] == "line" and [v for _, v in r["points"]] == [40, 55]
+    assert r["chart"] == "line" and [p[1] for p in r["points"]] == [40, 55]
 
 
 def test_dagreeks_render_geen_data_1_punt_2_punten(tmp_path):
