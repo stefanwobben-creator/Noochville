@@ -78,3 +78,39 @@ def test_mutate_nonexistent_returns_false(ledger):
     assert ledger.start("bestaat-niet") is False
     assert ledger.block("bestaat-niet", "x") is False
     assert ledger.complete("bestaat-niet") is False
+
+
+# ── optionele impact-labels (hulpmiddel, geen verplichting) ──────────────────────────────────────
+def test_impact_velden_default_leeg(ledger):
+    """Additief: zonder opgave zijn beide velden leeg (ongelabeld)."""
+    p = ledger.get(ledger.create("website_watcher", {"doel": "x"}, "clock"))
+    assert p["missie_impact"] == "" and p["business_impact"] == ""
+
+
+def test_impact_velden_accepteren_geldige_waarden(ledger):
+    p = ledger.get(ledger.create("website_watcher", {"doel": "x"}, "clock",
+                                 missie_impact="versterkt", business_impact="hoog"))
+    assert p["missie_impact"] == "versterkt" and p["business_impact"] == "hoog"
+
+
+def test_ongelabeld_project_mag_naar_actief(ledger):
+    """Geen labeling afgedwongen: een ongelabeld project mag gewoon starten (→ running)."""
+    pid = ledger.create("website_watcher", {"doel": "x"}, "clock")
+    assert ledger.start(pid) is True and ledger.get(pid)["status"] == "running"
+
+
+def test_ongeldige_niet_lege_waarde_wordt_geweigerd(ledger):
+    with pytest.raises(ValueError):
+        ledger.create("website_watcher", {"doel": "x"}, "clock", missie_impact="banaan")
+    with pytest.raises(ValueError):
+        ledger.create("website_watcher", {"doel": "x"}, "clock", business_impact="enorm")
+
+
+def test_bestaand_record_zonder_veld_blijft_geldig(tmp_path):
+    """Legacy-project zonder de nieuwe keys blijft geldig; lezers vallen terug op ''."""
+    import json
+    path = str(tmp_path / "projects.json")
+    json.dump({"p1": {"id": "p1", "owner": "ww", "scope": {}, "trigger": "clock", "status": "queued"}},
+              open(path, "w"))
+    p = ProjectLedger(path).get("p1")
+    assert p.get("missie_impact", "") == "" and p.get("business_impact", "") == ""

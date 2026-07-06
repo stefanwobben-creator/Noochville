@@ -10,6 +10,10 @@ from nooch_village.util import atomic_write_json, read_json
 
 _VALID_TRIGGERS = {"clock", "human", "noochie", "tension"}
 _TERMINAL       = {"done"}
+# Optionele impact-labels: een hulpmiddel, geen verplichting. Leeg = ongelabeld en dwingt niets af (een
+# ongelabeld project mag elke statuswissel maken). De guard weigert alleen een niet-lege ongeldige waarde.
+_MISSIE_IMPACT   = {"versterkt", "neutraal", "verzwakt"}
+_BUSINESS_IMPACT = {"hoog", "medium", "laag"}
 
 
 class ProjectLedger:
@@ -48,11 +52,16 @@ class ProjectLedger:
                dod_outcome: str = "", done_when: str = "", goes_to: str = "",
                links: list[str] | None = None, parent: str | None = None,
                person: str | None = None, agent: str | None = None,
-               private: bool = False, description: str = "", label: str = "") -> str:
+               private: bool = False, description: str = "", label: str = "",
+               missie_impact: str = "", business_impact: str = "") -> str:
         if trigger not in _VALID_TRIGGERS:
             raise ValueError(f"ongeldig trigger: '{trigger}'")
         if status not in ("queued", "draft", "future"):
             raise ValueError(f"ongeldige start-status: '{status}'")
+        if missie_impact and missie_impact not in _MISSIE_IMPACT:
+            raise ValueError(f"ongeldige missie_impact: '{missie_impact}'")
+        if business_impact and business_impact not in _BUSINESS_IMPACT:
+            raise ValueError(f"ongeldige business_impact: '{business_impact}'")
         pid = uuid.uuid4().hex[:12]
         now = time.time()
         # Cluster-lidmaatschap: een kind erft de cluster-root van zijn ouder (master-switch werkt
@@ -67,6 +76,8 @@ class ProjectLedger:
             "private":    bool(private),    # 'alleen zichtbaar voor de cirkel' (GlassFrog-zichtbaarheid)
             "description": description or "",  # omschrijving (kaartdetail)
             "label":      label or "",      # kleurlabel (koppeling met organisatiedoel, later)
+            "missie_impact":   missie_impact or "",    # optioneel: versterkt/neutraal/verzwakt (leeg = ongelabeld)
+            "business_impact": business_impact or "",  # optioneel: hoog/medium/laag (leeg = ongelabeld)
             "checklist":  [],               # [{id, text, done}] — één checklist per project
             "archived":   False,            # gearchiveerd = blijft bestaan, uit het actieve zicht
             "scope":      scope,
