@@ -47,7 +47,7 @@ from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
 from nooch_village import epic
 from nooch_village.personas import PersonaStore
-from nooch_village.projects import ProjectLedger, _MISSIE_IMPACT, _BUSINESS_IMPACT
+from nooch_village.projects import ProjectLedger, _MISSIE_IMPACT, _BUSINESS_IMPACT, _EFFORT
 from nooch_village.ai_tasks import AITaskStore
 from nooch_village.checklists import ChecklistStore, CADENCES, CADENCE_LABEL
 from nooch_village.metrics import MetricStore, window_cutoff, filter_samples
@@ -895,7 +895,8 @@ def _act_proj_setlabel(c):
         return nxt, msg
 
 
-_IMPACT_FIELDS = {"missie": ("missie_impact", _MISSIE_IMPACT), "business": ("business_impact", _BUSINESS_IMPACT)}
+_IMPACT_FIELDS = {"missie": ("missie_impact", _MISSIE_IMPACT), "business": ("business_impact", _BUSINESS_IMPACT),
+                  "effort": ("effort", _EFFORT)}
 
 
 def _act_proj_setimpact(c):

@@ -84,6 +84,8 @@ _LABELS = {"groen": "#1F9D55", "geel": "#FFCE2E", "koraal": "#FF6B5B",
 # r=rood, l=lichtgrijs. Mechaniek volgt het bestaande label-patroon (form-knop → proj_setimpact).
 _MISSIE_OPTS   = [("versterkt", "g"), ("neutraal", "n"), ("verzwakt", "r")]
 _BUSINESS_OPTS = [("hoog", "g"), ("medium", "n"), ("laag", "l")]
+# Effort is een maat, geen goed/slecht-oordeel → alle pills neutraal (grijs), zelfde pill-mechaniek.
+_EFFORT_OPTS   = [("1u", "n"), ("1d", "n"), ("2d", "n"), ("1w", "n")]
 
 
 def _impact_row(p, field: str, kind: str, opts, hid, rw: bool) -> str:
@@ -741,6 +743,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         f"<span class='dk'>Zichtbaar</span><span class='dv'>{vis_v}</span>"
         f"<span class='dk'>Missie-impact</span><span class='dv'>{_impact_row(p, 'missie_impact', 'missie', _MISSIE_OPTS, hid, rw)}</span>"
         f"<span class='dk'>Business-impact</span><span class='dv'>{_impact_row(p, 'business_impact', 'business', _BUSINESS_OPTS, hid, rw)}</span>"
+        f"<span class='dk'>Effort</span><span class='dv'>{_impact_row(p, 'effort', 'effort', _EFFORT_OPTS, hid, rw)}</span>"
         f"</div></div>")
 
     # ---- Omschrijving (leesbare tekst + inklapbare editor) ----

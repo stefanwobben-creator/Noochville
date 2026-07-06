@@ -114,3 +114,21 @@ def test_bestaand_record_zonder_veld_blijft_geldig(tmp_path):
               open(path, "w"))
     p = ProjectLedger(path).get("p1")
     assert p.get("missie_impact", "") == "" and p.get("business_impact", "") == ""
+
+
+def test_effort_veld_default_leeg_en_geldig(ledger):
+    p = ledger.get(ledger.create("website_watcher", {"doel": "x"}, "clock"))
+    assert p["effort"] == ""                                        # optioneel, default leeg
+    p2 = ledger.get(ledger.create("website_watcher", {"doel": "x"}, "clock", effort="1w"))
+    assert p2["effort"] == "1w"
+
+
+def test_effort_ongeldige_waarde_geweigerd(ledger):
+    with pytest.raises(ValueError):
+        ledger.create("website_watcher", {"doel": "x"}, "clock", effort="3d")
+
+
+def test_effort_edit_zet_en_wist(ledger):
+    pid = ledger.create("website_watcher", {"doel": "x"}, "clock", effort="1d")
+    assert ledger.edit(pid, effort="2d") and ledger.get(pid)["effort"] == "2d"
+    assert ledger.edit(pid, effort="") and ledger.get(pid)["effort"] == ""   # leegmaken
