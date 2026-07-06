@@ -417,6 +417,12 @@ ul.clean li:last-child{border-bottom:none}
 .mdot.g{background:var(--green)}
 .mdot.n{background:var(--gray)}
 .mdot.r{background:var(--coral)}
+/* Missie verzwakt: rode kaart-rand (signaal, geen blokkade) + infoblok in de modal. */
+.pcard.verzwakt{border-color:var(--coral)}
+.vzblock{border:1px solid var(--coral);background:var(--error-tint);border-radius:var(--radius);padding:.7rem .85rem;margin-bottom:.7rem}
+.vz-h{font-weight:700;color:var(--coral);margin-bottom:.1rem}
+.vz-t{color:var(--gray);font-size:.85rem;margin-bottom:.5rem}
+.vz-form{margin:0}
 .ai-gift{font-size:1rem;text-decoration:none;cursor:pointer;line-height:1}
 .ai-on{font-size:.95rem;text-decoration:none;cursor:pointer;line-height:1;opacity:.8}
 .ai-on:hover{opacity:1}

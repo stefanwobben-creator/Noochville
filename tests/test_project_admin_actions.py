@@ -267,3 +267,48 @@ def test_missie_stip_op_bordkaart(tmp_path):
     assert "mdot" not in P._proj_card(st, st.projects.get(pid_b), "TOK", "/")
     pid_0 = st.projects.create(ROLE, "O", "human", status="queued")
     assert "mdot" not in P._proj_card(st, st.projects.get(pid_0), "TOK", "/")
+
+
+# ── signaalgedrag bij missie_impact = verzwakt (rode rand + agendeer-spanning, geen blokkade) ─────
+_VZ_TXT = "Missie verzwakt. Jij besluit als rolvervuller."
+
+
+def test_verzwakt_kaart_rode_rand(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "T", "human", status="queued", missie_impact="verzwakt")
+    assert "pcard verzwakt" in P._proj_card(st, st.projects.get(pid), "TOK", "/")
+    pid2 = st.projects.create(ROLE, "T2", "human", status="queued", missie_impact="versterkt")
+    assert "pcard verzwakt" not in P._proj_card(st, st.projects.get(pid2), "TOK", "/")   # alleen bij verzwakt
+
+
+def test_verzwakt_modal_infoblok_en_knop(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "T", "human", status="queued", missie_impact="verzwakt")
+    modal = P.render_project(st, pid, csrf_token="TOK")
+    assert _VZ_TXT in modal and "Agendeer in werkoverleg" in modal and "proj_agendeer_verzwakt" in modal
+    # niet-verzwakt → geen infoblok (toets op de bloktekst, niet de CSS-klasse)
+    pid2 = st.projects.create(ROLE, "T2", "human", status="queued", missie_impact="versterkt")
+    assert _VZ_TXT not in P.render_project(st, pid2, csrf_token="TOK")
+
+
+def test_agendeer_verzwakt_landt_in_backlog_zonder_overleg_te_openen(tmp_path):
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "Vegan-pagina", "human", status="queued", missie_impact="verzwakt")
+    _, msg = cockpit2.dispatch(dd, "proj_agendeer_verzwakt", {"pid": [pid], "next": ["/"]}, username="guest")
+    w = cockpit2._Stores(dd).werk
+    assert w.is_open(CIRCLE) is False                               # géén overleg geopend
+    backlog = w.backlog(CIRCLE)                                     # cirkel = ouder van de rol
+    assert len(backlog) == 1 and backlog[0]["title"].startswith("Missie verzwakt") and "✓" in msg
+    # bij het eerstvolgende overleg komt de spanning op de agenda en wordt de backlog geleegd
+    cockpit2._Stores(dd).werk.open(CIRCLE)
+    w2 = cockpit2._Stores(dd).werk
+    assert [it["title"] for it in w2.agenda(CIRCLE)] == [backlog[0]["title"]]
+    assert w2.backlog(CIRCLE) == []
+
+
+def test_verzwakt_geen_blokkade_op_statuswissel(tmp_path):
+    """Signaal, geen blokkade: een verzwakt project mag gewoon naar running (geen verstopte guard)."""
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "T", "human", status="queued", missie_impact="verzwakt")
+    assert st.projects.start(pid) is True
+    assert cockpit2._Stores(dd).projects.get(pid)["status"] == "running"
