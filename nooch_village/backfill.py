@@ -16,6 +16,7 @@ import time
 from nooch_village.collector import _expected_period
 from nooch_village.observations import ObservationStore
 from nooch_village.skills_impl.plausible import PlausibleSkill
+from nooch_village.skills_impl.gsc import GscPerformanceSkill
 
 log = logging.getLogger("village.backfill")
 
@@ -24,7 +25,7 @@ log = logging.getLogger("village.backfill")
 # (gsc/shopify/trends) = pas ná die contract-test hier toevoegen. Een runtime kind=="flux"-check is niet
 # genoeg: een flux-skill die de datum negeert en altijd 'gisteren' teruggeeft, zou dezelfde waarde onder
 # elke historische sleutel schrijven — de contract-test maakt dat een falende test i.p.v. stille vervuiling.
-BACKFILL_SOURCES = {"plausible": PlausibleSkill}
+BACKFILL_SOURCES = {"plausible": PlausibleSkill, "gsc": GscPerformanceSkill}
 
 
 class BackfillError(ValueError):
@@ -85,6 +86,14 @@ def backfill(source: str, start_iso: str, obs: ObservationStore, context,
 
     today = today or datetime.datetime.now(datetime.timezone.utc).date()
     end = datetime.date.fromisoformat(_expected_period(freq, today, getattr(skill, "lag_days", 0)))
+    # Bron-horizon: bronnen met een beperkte historie (GSC ~16 maanden) klemmen de start af, zodat je
+    # geen dagen bevraagt die de bron sowieso niet heeft (die zouden enkel als lege_dagen tellen).
+    clamped = False
+    horizon = getattr(skill, "backfill_history_days", None)
+    if horizon:
+        earliest = today - datetime.timedelta(days=int(horizon))
+        if start < earliest:
+            start, clamped = earliest, True
     if start > end:
         raise BackfillError(
             f"startdatum {start.isoformat()} ligt ná de laatste volledige dag {end.isoformat()} — niets te doen")
@@ -113,4 +122,5 @@ def backfill(source: str, start_iso: str, obs: ObservationStore, context,
             on_progress(datum, written, skipped, lege_dagen, dagen)
         if sleep:
             time.sleep(sleep)
-    return {"written": written, "skipped": skipped, "lege_dagen": lege_dagen, "dagen": dagen}
+    return {"written": written, "skipped": skipped, "lege_dagen": lege_dagen, "dagen": dagen,
+            "start": start.isoformat(), "end": end.isoformat(), "clamped": clamped}

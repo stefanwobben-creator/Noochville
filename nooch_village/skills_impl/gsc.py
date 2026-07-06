@@ -62,6 +62,9 @@ class GscPerformanceSkill(DataSourceSkill):
     # GSC-data heeft ~2-3 dagen vertraging → gisteren is nog leeg. De collector richt zich daarom op
     # today − 1 − lag_days; 'geen datapunt voor gisteren' is bij GSC normaal, geen teken van 'dood'.
     lag_days = 3
+    # GSC bewaart ~16 maanden historie. Een backfill vóór die horizon levert enkel None → de backfill
+    # klemt de startdatum hierop af zodat je geen honderden lege dagen bevraagt.
+    backfill_history_days = 480
     description = (
         "Haalt Search Analytics-data op uit Google Search Console (dimensie 'query', "
         "laatste 28 dagen) en classificeert queries in page1 / high_potential / "
@@ -78,30 +81,34 @@ class GscPerformanceSkill(DataSourceSkill):
         site = (context.settings.get("GSC_SITE") or context.settings.get("gsc_site", "")).strip()
         return bool(site) and os.path.exists(_token_path(context))
 
-    def daily_values(self, context, datum: str) -> dict:
+    def daily_values(self, context, datum: str, *, _query=None) -> dict:
         """Site-dag-totalen (impressions/clicks/ctr/position) voor de kalenderdag `datum`, via een APARTE
         Search Analytics-query (dimensie=date, één dag). Náást de bestaande zoekwoord-run — die blijft
         ongemoeid. Fail-closed per veld: None bij ontbrekende creds/API-fout/geen data (geen mock).
-        Geen data voor `datum` is bij GSC's vertraging normaal (→ dan gewoon None, geen 'dood')."""
+        Geen data voor `datum` is bij GSC's vertraging normaal (→ dan gewoon None, geen 'dood').
+        `_query(body)` is injecteerbaar zodat de backfill-contract-test kan bewijzen dat `datum` écht als
+        startDate/endDate meegaat (zonder netwerk)."""
         fields = ("impressions", "clicks", "ctr", "position")
         out = {m: None for m in fields}
         site = (context.settings.get("GSC_SITE") or context.settings.get("gsc_site", "")).strip()
         if not site:
             return out
-        creds, err = _get_creds(_token_path(context))
-        if err:
-            log.warning("GSC daily_values auth mislukt: %s", err)
-            return out
+        body = {"startDate": datum, "endDate": datum, "dimensions": ["date"], "rowLimit": 1}
+        if _query is None:
+            creds, err = _get_creds(_token_path(context))
+            if err:
+                log.warning("GSC daily_values auth mislukt: %s", err)
+                return out
+            try:
+                from googleapiclient.discovery import build
+            except ImportError:
+                return out
+
+            def _query(b):
+                return build("webmasters", "v3", credentials=creds).searchanalytics().query(
+                    siteUrl=site, body=b).execute()
         try:
-            from googleapiclient.discovery import build
-        except ImportError:
-            return out
-        try:
-            service = build("webmasters", "v3", credentials=creds)
-            response = service.searchanalytics().query(
-                siteUrl=site,
-                body={"startDate": datum, "endDate": datum, "dimensions": ["date"], "rowLimit": 1},
-            ).execute()
+            response = _query(body)
         except Exception as exc:
             log.warning("GSC daily_values API-fout (%s): %s", datum, exc)
             return out
