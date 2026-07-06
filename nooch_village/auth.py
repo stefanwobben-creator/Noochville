@@ -69,6 +69,13 @@ class SessionStore:
     def delete(self, token: str) -> None:
         self._sessions.pop(token, None)
 
+    def invalidate_user(self, username: str, keep_token: str | None = None) -> int:
+        """Haak: verbreek alle sessies van een gebruiker (bijv. na een wachtwoordwijziging), behalve
+        `keep_token` (de eigen, net-vernieuwde sessie). NO-OP in deze in-memory store — de call-site
+        bestaat alvast zodat een toekomstige PERSISTENTE SessionStore dit invult zonder de aanroepers te
+        herbouwen. Geeft het aantal verbroken sessies terug (nu 0)."""
+        return 0
+
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt(12)).decode()
@@ -127,5 +134,48 @@ button:hover{{opacity:.9}}
     <label for="p">Wachtwoord</label>
     <input type="password" id="p" name="password" autocomplete="current-password" required>
     <button type="submit">Inloggen</button>
+  </form>
+</div></body></html>"""
+
+
+def password_change_page(next_url: str = "/", error: str = "", forced: bool = False) -> str:
+    """Self-service wachtwoord-wijzigen (dezelfde auth-interstitial-stijl als login_page). `forced=True`
+    bij een verplichte eerste-login-wijziging (temp-wachtwoord)."""
+    err = f'<p style="color:#c0392b;margin:0 0 1rem">{error}</p>' if error else ""
+    intro = ('<p style="color:#5a5a5a;font-size:.9rem;margin:-.75rem 0 1.5rem">Je gebruikt een tijdelijk '
+             'wachtwoord. Kies nu een eigen wachtwoord om verder te gaan.</p>') if forced else ""
+    nxt = next_url.replace('"', '%22')
+    return f"""<!doctype html><html lang="nl"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wachtwoord wijzigen — NoochVille</title>
+<style>
+:root{{--bg:#f8f6f2;--card:#fff;--border:#d4cfc8;--accent:#2d6a4f;--text:#1a1a1a}}
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:var(--bg);display:flex;align-items:center;justify-content:center;
+     min-height:100vh;font-family:system-ui,sans-serif;color:var(--text)}}
+.card{{background:var(--card);border:1px solid var(--border);border-radius:8px;
+      padding:2.5rem;width:100%;max-width:360px;box-shadow:0 2px 8px rgba(0,0,0,.08)}}
+h1{{font-size:1.25rem;margin-bottom:1.75rem}}
+label{{display:block;font-size:.85rem;font-weight:600;margin-bottom:.35rem}}
+input[type=password]{{width:100%;padding:.6rem .75rem;
+  border:1px solid var(--border);border-radius:4px;font-size:1rem;
+  margin-bottom:1.25rem;background:#fafaf8}}
+input:focus{{outline:2px solid var(--accent);border-color:transparent}}
+button{{width:100%;padding:.7rem;background:var(--accent);color:#fff;border:none;
+       border-radius:4px;font-size:1rem;cursor:pointer;font-weight:600}}
+button:hover{{opacity:.9}}
+</style></head><body>
+<div class="card">
+  <h1>Wachtwoord wijzigen</h1>
+  {intro}{err}
+  <form method="post" action="/wachtwoord">
+    <input type="hidden" name="next" value="{nxt}">
+    <label for="c">Huidig wachtwoord</label>
+    <input type="password" id="c" name="current" autocomplete="current-password" autofocus required>
+    <label for="n">Nieuw wachtwoord</label>
+    <input type="password" id="n" name="new" autocomplete="new-password" required>
+    <label for="n2">Nieuw wachtwoord (bevestig)</label>
+    <input type="password" id="n2" name="confirm" autocomplete="new-password" required>
+    <button type="submit">Opslaan</button>
   </form>
 </div></body></html>"""
