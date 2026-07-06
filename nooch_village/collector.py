@@ -85,6 +85,10 @@ def migrate_data_sources(dd: str) -> None:
       de-activatie blijft gerespecteerd (we zetten alleen bij een ontbrekende entry)."""
     obs = ObservationStore(os.path.join(dd, "observations.jsonl"))
     obs.rename_metric("visitors_day", "plausible_visitors_day", bron="plausible")
+    res = obs.normalize_source_role_ids()          # cross-rol-dedup: legacy role_id → canoniek (==bron)
+    if res["dropped"] or res["renamed"] or res["conflicts"]:
+        log.info("observatie-rol-normalisatie: %s gedropt, %s hernoemd, %s conflict(en)",
+                 res["dropped"], res["renamed"], res["conflicts"])
     sources = SourceStatusStore(os.path.join(dd, "sources.json"))
     if "plausible" not in sources.all():
         sources.set_active("plausible", True)
