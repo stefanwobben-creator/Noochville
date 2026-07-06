@@ -26,6 +26,7 @@ class Person:
     password_hash: str = ""
     invited_at: float = 0.0
     last_login: float = 0.0
+    must_change_password: bool = False   # True = op een admin-uitgegeven temp; wijzigen verplicht
 
 
 class PeopleStore:
@@ -93,12 +94,46 @@ class PeopleStore:
         self._save()
         return self._to_person(d)
 
-    def set_password(self, pid: str, password_hash: str, invited_at: float | None = None) -> None:
+    def set_password(self, pid: str, password_hash: str, invited_at: float | None = None,
+                     must_change: bool = True) -> None:
+        """Admin-weg: zet een (temp-)wachtwoord. Standaard `must_change=True` → de gebruiker moet het bij
+        de eerstvolgende login zelf vervangen (dekt zowel toevoegen als resetten)."""
         d = self._items.get(pid)
         if d is not None:
             d["password_hash"] = password_hash
             d["invited_at"] = invited_at if invited_at is not None else time.time()
+            d["must_change_password"] = must_change
             self._save()
+
+    def set_own_password(self, pid: str, password_hash: str) -> None:
+        """Self-service-weg: de gebruiker kiest zijn eigen wachtwoord → wis de 'moet wijzigen'-flag."""
+        d = self._items.get(pid)
+        if d is not None:
+            d["password_hash"] = password_hash
+            d["must_change_password"] = False
+            self._save()
+
+    def must_change(self, email: str) -> bool:
+        """Moet deze gebruiker (op e-mail) eerst zijn wachtwoord wijzigen? Onbekend → False (fail-open op
+        deze niet-beveiligingskritieke poort; de auth zelf blijft de echte grens)."""
+        p = self.by_email(email)
+        return bool(p and p.must_change_password)
+
+    def backfill_must_change(self) -> int:
+        """Idempotente migratie: markeer uitstaande, nog-nooit-door-de-gebruiker-gewijzigde temps
+        (`invited_at >= last_login and invited_at > 0`). Wie z'n eigen wachtwoord al koos
+        (`last_login > invited_at`) wordt niet geforceerd. Geeft het aantal gemarkeerde records terug."""
+        n = 0
+        for d in self._items.values():
+            if not d.get("password_hash") or d.get("must_change_password"):
+                continue
+            inv, last = d.get("invited_at", 0.0), d.get("last_login", 0.0)
+            if inv > 0 and inv >= last:
+                d["must_change_password"] = True
+                n += 1
+        if n:
+            self._save()
+        return n
 
     def touch_login(self, email: str) -> None:
         el = (email or "").lower()

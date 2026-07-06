@@ -354,6 +354,36 @@ def _handle_person_reset(data_dir: str, form: dict, username: str | None = None)
     return _page("Wachtwoord gereset", body), 200
 
 
+_MIN_PASSWORD_LEN = 10
+
+
+def _password_change(data_dir: str, form: dict, username: str | None):
+    """Self-service wachtwoordwijziging (self óf geforceerd bij een temp). Valideert het huidige
+    wachtwoord, het beleid (min. lengte + ≠ huidig) en de bevestiging. (True, None) bij succes → de
+    caller redirect + verbreekt oude sessies; (False, foutpagina) bij een fout."""
+    st = _Stores(data_dir)
+    g = lambda k: (form.get(k) or [""])[0]
+    current, new, confirm = g("current"), g("new"), g("confirm")
+    forced = st.people.must_change(username or "")
+    person = st.people.by_email(username or "")
+
+    def fail(msg):
+        return False, _auth.password_change_page(error=msg, forced=forced)
+
+    if person is None:
+        return fail("Gebruiker niet herkend.")
+    if not _auth.UserStore(os.path.join(data_dir, "people.json")).verify_by_email(username or "", current):
+        return fail("Huidig wachtwoord onjuist.")
+    if new != confirm:
+        return fail("De nieuwe wachtwoorden komen niet overeen.")
+    if len(new) < _MIN_PASSWORD_LEN:
+        return fail(f"Kies minimaal {_MIN_PASSWORD_LEN} tekens.")
+    if new == current:
+        return fail("Kies een ander wachtwoord dan het huidige.")
+    st.people.set_own_password(person.id, _auth.hash_password(new))
+    return True, None
+
+
 def is_circle_lead(person_id: str, circle_id: str, assignments) -> bool:
     """Geeft True als person_id filler is van {circle_id}__circle_lead."""
     if not person_id or not circle_id:
@@ -2019,6 +2049,14 @@ def make_handler(data_dir: str, csrf_token: str,
             effective_csrf = csrf_token if username else ""
 
             st = _Stores(data_dir)
+            # ── Wachtwoordwijziging (self-service + verplichte eerste-login/na-reset-poort) ──
+            if path == "/wachtwoord":
+                # AUTHZ: circle-member of iedereen-ingelogd — eigen wachtwoord wijzigen
+                self._send(_auth.password_change_page(forced=st.people.must_change(username or "")))
+                return
+            if username and st.people.must_change(username):     # poort: alles → /wachtwoord tot gewijzigd
+                self._redirect_to("/wachtwoord")
+                return
             if path == "/snake":
                 # AUTHZ: ingelogde-member — verborgen easter-egg 'De Veter'; puur fun, los van alles.
                 # De login-redirect hierboven dekt de niet-ingelogde gebruiker al af.
@@ -2221,6 +2259,22 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send_json(snake.handle_score(_Stores(data_dir), username, (form.get("score") or ["0"])[0]))
                 return
 
+            if path == "/wachtwoord":
+                # AUTHZ: circle-member of iedereen-ingelogd — eigen wachtwoord wijzigen (self + geforceerd)
+                username = self._session_username()
+                if sessions is not None and username is None:
+                    self._redirect_to("/login"); return
+                raw = self.rfile.read(length).decode("utf-8") if length else ""
+                form = urllib.parse.parse_qs(raw)
+                ok, page = _password_change(data_dir, form, username)
+                if ok:
+                    if sessions is not None:      # haak: verbreek oude sessies, behoud de eigen (no-op nu)
+                        sessions.invalidate_user(username, keep_token=_auth.get_session_token(self.headers))
+                    self._redirect_to((form.get("next") or ["/"])[0] or "/")
+                else:
+                    self._send(page, 200)
+                return
+
             if path != "/action":
                 self._send("<p>404</p>", 404); return
 
@@ -2284,6 +2338,7 @@ def serve(host: str = "127.0.0.1", port: int = 8766, data_dir: str | None = None
     csrf_token = secrets.token_urlsafe(32)
     users    = _auth.UserStore(os.path.join(dd, "people.json"))
     sessions = _auth.SessionStore()
+    _Stores(dd).people.backfill_must_change()   # markeer uitstaande temps 'moet wijzigen' (idempotent)
     httpd = ThreadingHTTPServer((host, port), make_handler(dd, csrf_token, sessions, users))
     httpd.daemon_threads = True
     print(f"Cockpit 2 (GlassFrog-vorm, PoC) op http://{host}:{port}  —  Ctrl-C om te stoppen")
