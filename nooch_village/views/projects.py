@@ -101,6 +101,15 @@ def _impact_row(p, field: str, kind: str, opts, hid, rw: bool) -> str:
             f"<input type='hidden' name='kind' value='{_e(kind)}'>{pills}</form>")
 
 
+def _missie_dot(p) -> str:
+    """Kleine missie-impact-kleurstip voor de bordkaart (geen tekst/pills): groen (versterkt) / grijs
+    (neutraal) / rood (verzwakt). Ongelabeld = geen stip. Business-impact staat bewust NIET op de kaart."""
+    col = dict(_MISSIE_OPTS).get(p.get("missie_impact", ""))
+    if not col:
+        return ""
+    return f"<span class='mdot {col}' title='Missie-impact: {_e(p['missie_impact'])}'></span>"
+
+
 def _proj_progress(p: dict):
     items = [it for cl in (p.get("checklists") or []) for it in cl.get("items", [])]
     if not items:
@@ -145,7 +154,7 @@ def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
         bar = f"<div class='clabel' style='background:{_LABELS[p['label']]}'></div>"
     meta = (f"<div class='muted' style='font-size:.72rem;margin-top:.25rem'>"
             f"{_trekker_html(st, p)} · {_e(_age(p.get('created_at')))}</div>")
-    inner = f"{bar}<div class='ptitle'>{_e(_scope_text(p))}</div>{meta}{_progress_badge(p)}"
+    inner = f"{bar}<div class='ptitle'>{_missie_dot(p)}{_e(_scope_text(p))}</div>{meta}{_progress_badge(p)}"
     if not csrf_token:
         # Publiek/alleen-lezen: er is geen modal-JS, dus de kaart moet zelf navigeren.
         # /project redirect server-side naar /login als de bezoeker niet is ingelogd —

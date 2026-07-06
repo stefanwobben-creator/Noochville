@@ -248,3 +248,22 @@ def test_impact_pills_in_schrijfmodus_niet_read_only(tmp_path):
     assert "Missie-impact" in rw and "Business-impact" in rw
     assert "proj_setimpact" not in ro          # read-only: geen bewerk-form
     assert "imp-pill n on" in ro               # wel de gekozen waarde als statische pill
+
+
+def test_missie_stip_op_bordkaart(tmp_path):
+    """Missie-impact als kleurstip op de bordkaart; business-impact NIET op de kaart, geen pills/tekst."""
+    dd, st = _st(tmp_path)
+    pid = st.projects.create(ROLE, "T", "human", status="queued",
+                             missie_impact="versterkt", business_impact="hoog")
+    card = P._proj_card(st, st.projects.get(pid), "TOK", "/")
+    assert "mdot g" in card                        # groene stip = versterkt
+    assert "imp-pill" not in card and "hoog" not in card    # geen pills/business op de kaart
+    pid_r = st.projects.create(ROLE, "R", "human", status="queued", missie_impact="verzwakt")
+    assert "mdot r" in P._proj_card(st, st.projects.get(pid_r), "TOK", "/")   # rood = verzwakt
+    pid_n = st.projects.create(ROLE, "N", "human", status="queued", missie_impact="neutraal")
+    assert "mdot n" in P._proj_card(st, st.projects.get(pid_n), "TOK", "/")   # grijs = neutraal
+    # business-only → GEEN stip; ongelabeld → GEEN stip
+    pid_b = st.projects.create(ROLE, "B", "human", status="queued", business_impact="laag")
+    assert "mdot" not in P._proj_card(st, st.projects.get(pid_b), "TOK", "/")
+    pid_0 = st.projects.create(ROLE, "O", "human", status="queued")
+    assert "mdot" not in P._proj_card(st, st.projects.get(pid_0), "TOK", "/")

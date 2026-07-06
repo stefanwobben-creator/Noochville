@@ -412,6 +412,11 @@ ul.clean li:last-child{border-bottom:none}
 .imp-pill.n{background:var(--cream-2);color:var(--gray)}
 .imp-pill.r{background:var(--error-tint);color:var(--coral)}
 .imp-pill.l{background:var(--cream);color:var(--muted)}
+/* Missie-impact-kleurstip op de bordkaart (alleen de stip, geen tekst): g=groen, n=grijs, r=rood. */
+.mdot{display:inline-block;width:.55rem;height:.55rem;border-radius:50%;margin-right:.35rem;vertical-align:middle;flex:none}
+.mdot.g{background:var(--green)}
+.mdot.n{background:var(--gray)}
+.mdot.r{background:var(--coral)}
 .ai-gift{font-size:1rem;text-decoration:none;cursor:pointer;line-height:1}
 .ai-on{font-size:.95rem;text-decoration:none;cursor:pointer;line-height:1;opacity:.8}
 .ai-on:hover{opacity:1}
