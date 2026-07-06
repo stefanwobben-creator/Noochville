@@ -79,6 +79,27 @@ _PROJ_COLS = [("Actief", "actief", ("running", "queued")), ("Wacht", "wacht", ("
 _LABELS = {"groen": "#1F9D55", "geel": "#FFCE2E", "koraal": "#FF6B5B",
            "blauw": "#2B5BB5", "paars": "#7A5BD1", "": ""}
 
+# Impact-pills (scope 2): klik = zetten, klik op de actieve pill = leegmaken (terug naar ongelabeld).
+# Kleur-code per waarde (design-systeem, klassen .imp-pill in cockpit2_util.py): g=groen, n=grijs,
+# r=rood, l=lichtgrijs. Mechaniek volgt het bestaande label-patroon (form-knop → proj_setimpact).
+_MISSIE_OPTS   = [("versterkt", "g"), ("neutraal", "n"), ("verzwakt", "r")]
+_BUSINESS_OPTS = [("hoog", "g"), ("medium", "n"), ("laag", "l")]
+
+
+def _impact_row(p, field: str, kind: str, opts, hid, rw: bool) -> str:
+    """Eén impact-regel: klikbare pills als bewerkbaar (rw), anders de gekozen waarde als statische pill.
+    De actieve pill post value='' → leegmaken (toggle-off)."""
+    cur = p.get(field, "")
+    if not rw:
+        hit = next((f"<span class='imp-pill {col} on'>{_e(val)}</span>" for val, col in opts if val == cur), None)
+        return hit or "<span class='muted'>—</span>"
+    pills = "".join(
+        f"<button class='imp-pill {col}{' on' if val == cur else ''}' type='submit' name='value' "
+        f"value='{'' if val == cur else _e(val)}'>{_e(val)}</button>" for val, col in opts)
+    return (f"<form method='post' action='/action' class='imp-wrap'>{hid()}"
+            f"<input type='hidden' name='action' value='proj_setimpact'>"
+            f"<input type='hidden' name='kind' value='{_e(kind)}'>{pills}</form>")
+
 
 def _proj_progress(p: dict):
     items = [it for cl in (p.get("checklists") or []) for it in cl.get("items", [])]
@@ -695,6 +716,8 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         f"<span class='dk'>Persoon</span><span class='dv'>{pers_v}</span>"
         f"<span class='dk'>Aangemaakt</span><span class='dv'>{_e(_created_full(p.get('created_at')))}</span>"
         f"<span class='dk'>Zichtbaar</span><span class='dv'>{vis_v}</span>"
+        f"<span class='dk'>Missie-impact</span><span class='dv'>{_impact_row(p, 'missie_impact', 'missie', _MISSIE_OPTS, hid, rw)}</span>"
+        f"<span class='dk'>Business-impact</span><span class='dv'>{_impact_row(p, 'business_impact', 'business', _BUSINESS_OPTS, hid, rw)}</span>"
         f"</div></div>")
 
     # ---- Omschrijving (leesbare tekst + inklapbare editor) ----

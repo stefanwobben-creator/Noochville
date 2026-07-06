@@ -298,7 +298,8 @@ class ProjectLedger:
     def edit(self, pid: str, scope=None, owner: str | None = None,
              person: str | None = None, agent: str | None = None,
              private: bool | None = None, description: str | None = None,
-             label: str | None = None, allow_done: bool = False) -> bool:
+             label: str | None = None, missie_impact: str | None = None,
+             business_impact: str | None = None, allow_done: bool = False) -> bool:
         """Bewerk de inhoud van een project (scope, owner, trekker mens/AI, zichtbaarheid).
         Status blijft ongemoeid; done-projecten zijn standaard vergrendeld. Met `allow_done=True`
         mag je inhoud (titel/omschrijving/...) van een afgerond project nog aanpassen. Lege strings
@@ -320,6 +321,10 @@ class ProjectLedger:
             p["description"] = description
         if label is not None:
             p["label"] = label
+        if missie_impact is not None:      # '' = ongelabeld (wissen); validatie op de actie/create-grens
+            p["missie_impact"] = missie_impact
+        if business_impact is not None:
+            p["business_impact"] = business_impact
         self._touch(p)
         self._save()
         return True
