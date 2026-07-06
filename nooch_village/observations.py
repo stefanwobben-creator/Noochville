@@ -100,16 +100,18 @@ class ObservationStore:
         return {"dropped": dropped, "renamed": renamed, "conflicts": conflicts}
 
     def record_daily(self, role_id: str, metric: str, value, bron: str,
-                     datum: str | None = None, ts: float | None = None) -> bool:
+                     datum: str | None = None, ts: float | None = None,
+                     meta: dict | None = None) -> bool:
         """Schrijf hoogstens één datapunt per (role_id, metric, bron, datum). Bestaat er al een voor
-        die dag+bron, dan niets doen (append-only, idempotent). Geeft True als er geschreven is."""
+        die dag+bron, dan niets doen (append-only, idempotent). Geeft True als er geschreven is.
+        `meta` (optioneel) legt bron-specifieke herkomst vast (source_version, endpoint, …)."""
         ts = ts if ts is not None else time.time()
         datum = datum or _utc_date(ts)
         for row in self._read_all():
             if (row.get("role_id") == role_id and row.get("metric") == metric
                     and row.get("bron") == bron and row.get("datum") == datum):
                 return False
-        self.record(role_id, metric, value, ts=ts, bron=bron, datum=datum)
+        self.record(role_id, metric, value, ts=ts, bron=bron, datum=datum, meta=meta)
         return True
 
     def _read_all(self) -> list[dict]:

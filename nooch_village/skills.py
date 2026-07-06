@@ -99,6 +99,12 @@ class DataSourceSkill(Skill):
         ontbrekend/fout, geen mock). Sleutels ⊆ available_metrics()."""
         ...
 
+    def observation_meta(self, context, datum: str, field: str) -> dict:
+        """Bron-specifieke herkomst-metadata voor de observatie van dit veld op deze dag (source_version,
+        endpoint, timeframe/termenset/geo, …). De collector hangt dit aan elke geschreven observatie.
+        Default leeg: bestaande bronnen (Plausible/Shopify) veranderen niet."""
+        return {}
+
 
 class SkillRegistry:
     def __init__(self):

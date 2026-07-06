@@ -39,6 +39,9 @@ from nooch_village.skills_impl.openalex import OpenalexSkill
 from nooch_village.skills_impl.bulletin_schrijven import BulletinSchrijvenSkill
 from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
 from nooch_village.skills_impl.serpstat import SerpstatSkill
+from nooch_village.skills_impl.stooq import StooqIndexSkill
+from nooch_village.skills_impl.trends_categorie import TrendsCategorieSkill
+from nooch_village.skills_impl.gdelt_tone import GdeltToneSkill
 from nooch_village.skills_impl.competitor_news import CompetitorNewsSkill
 from nooch_village.skills_impl.competitor_discover import CompetitorDiscoverSkill
 from nooch_village.skills_impl.linkbuilding import LinkbuildingTargetsSkill
@@ -127,6 +130,7 @@ class Village:
             BulletinSchrijvenSkill(),
             KeywordsEverywhereSkill(),
             SerpstatSkill(),
+            StooqIndexSkill(), TrendsCategorieSkill(), GdeltToneSkill(),   # externe observatie-bronnen (inactief tot activatie + config)
             CompetitorNewsSkill(),
             CompetitorDiscoverSkill(),
             LinkbuildingTargetsSkill(),

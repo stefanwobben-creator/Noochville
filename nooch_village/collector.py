@@ -72,7 +72,13 @@ def collect_daily_observations(registry, sources: SourceStatusStore, obs: Observ
             continue
         for field, dtm in due.items():
             v = vals.get(field)
-            if v is not None and obs.record_daily(src, f"{src}_{field}_day", v, bron=src, datum=dtm):
+            if v is None:
+                continue
+            try:
+                meta = skill.observation_meta(context, dtm, field) or None
+            except Exception:
+                meta = None
+            if obs.record_daily(src, f"{src}_{field}_day", v, bron=src, datum=dtm, meta=meta):
                 written.append((src, field, dtm))
     return written
 
