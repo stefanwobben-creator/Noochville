@@ -59,7 +59,8 @@ def test_datum_wordt_doorgegeven_niet_constant(tmp_path, monkeypatch):
     assert {(r["datum"], r["metric"], r["value"]) for r in obs._read_all()} == {
         ("2026-01-01", "fake_a_day", 10), ("2026-01-01", "fake_b_day", 1),
         ("2026-01-02", "fake_a_day", 20), ("2026-01-02", "fake_b_day", 2)}
-    assert res == {"written": 4, "skipped": 0, "lege_dagen": 0, "dagen": 2}
+    assert (res["written"], res["skipped"], res["lege_dagen"], res["dagen"]) == (4, 0, 0, 2)
+    assert res["start"] == "2026-01-01" and res["end"] == "2026-01-02" and res["clamped"] is False
 
 
 def test_idempotent_herdraaien(tmp_path, monkeypatch):
@@ -140,6 +141,37 @@ def test_onconfigureerd_geen_crash(tmp_path, monkeypatch):
     obs = _obs(tmp_path)
     res = backfill("fake", "2026-01-01", obs, _ctx(), today=_d("2026-01-02"), sleep=0)
     assert res["written"] == 0 and res["lege_dagen"] == res["dagen"] == 1
+
+
+def test_horizon_klemt_start_af(tmp_path, monkeypatch):
+    """Een bron met beperkte historie (GSC ~16 mnd) klemt de startdatum af naar zijn horizon, zodat je
+    geen dagen bevraagt die de bron sowieso niet heeft."""
+    fake = FakeFlux({d: {"a": 1, "b": 1} for d in
+                     ["2026-07-03", "2026-07-04", "2026-07-05", "2026-07-06", "2026-07-07"]})
+    fake.backfill_history_days = 5                                  # bron bewaart 5 dagen
+    _install(monkeypatch, fake)
+    obs = _obs(tmp_path)
+    # today=2026-07-08, lag0 → end=2026-07-07; horizon 5 → earliest=2026-07-03
+    res = backfill("fake", "2026-01-01", obs, _ctx(), today=_d("2026-07-08"), sleep=0)
+    assert res["clamped"] is True and res["start"] == "2026-07-03" and res["end"] == "2026-07-07"
+    assert fake.seen[0] == "2026-07-03"                            # niet 2026-01-01
+
+
+def test_contract_gsc_daily_values_stuurt_datum_mee():
+    """Hard vereist voor whitelist-lidmaatschap van GSC: daily_values stuurt de meegegeven datum als
+    startDate én endDate mee (dimensie=date) → 'herhaal een andere dag onder elke sleutel' onmogelijk."""
+    from nooch_village.skills_impl.gsc import GscPerformanceSkill
+    captured = {}
+
+    def fake_query(body):
+        captured.update(body)
+        return {"rows": [{"impressions": 100, "clicks": 5, "ctr": 0.05, "position": 3.2}]}
+
+    ctx = types.SimpleNamespace(settings={"GSC_SITE": "sc-domain:nooch.earth"})
+    vals = GscPerformanceSkill().daily_values(ctx, "2026-01-02", _query=fake_query)
+    assert captured.get("startDate") == "2026-01-02" and captured.get("endDate") == "2026-01-02"
+    assert captured.get("dimensions") == ["date"]
+    assert vals == {"impressions": 100, "clicks": 5, "ctr": 0.05, "position": 3.2}
 
 
 def test_contract_plausible_daily_values_stuurt_datum_mee(monkeypatch):

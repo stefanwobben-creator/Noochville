@@ -638,6 +638,7 @@ def main() -> None:
         # Handmatige historische inhaal: haal per periode de historische dagwaarde op en schrijf 'm
         # idempotent weg (zelfde canonieke sleutel + record_daily als de collector → geen duplicaten,
         # botst niet met live-punten). Fase 1: alleen Plausible.
+        # botst niet met live-punten). Fase 1: alleen daily-bronnen (plausible, gsc).
         # python -m nooch_village.village backfill <bron> <startdatum-YYYY-MM-DD>
         import os
         from nooch_village.config import load_context
@@ -669,9 +670,11 @@ def main() -> None:
         except BackfillError as e:
             print(f"❌ {e}", file=sys.stderr)
             sys.exit(1)
-        print(f"✅ Backfill klaar: {res['written']} nieuw geschreven, {res['skipped']} waren er al "
-              f"(idempotent), {res['lege_dagen']}/{res['dagen']} dagen leeg (geen data/creds). "
-              f"Herdraaien is veilig.")
+        if res.get("clamped"):
+            print(f"ℹ️  Startdatum afgeklemd naar {res['start']} — '{source}' bewaart geen oudere historie.")
+        print(f"✅ Backfill {source} {res['start']}..{res['end']} klaar: {res['written']} nieuw geschreven, "
+              f"{res['skipped']} waren er al (idempotent), {res['lege_dagen']}/{res['dagen']} dagen leeg "
+              f"(geen data/creds). Herdraaien is veilig.")
 
     elif mode == "shopify":
         # Haal verkoopindicatoren op uit Shopify en schrijf ze weg voor het cockpit-dashboard.
