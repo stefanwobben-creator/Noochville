@@ -16,6 +16,7 @@ import json
 import mimetypes
 import os
 import re
+import time
 import secrets
 import urllib.parse
 import uuid
@@ -189,7 +190,7 @@ from nooch_village.views.metrics import (
     _tile_combos, _tile_meta, _fetch, _num, _agg,
     _render_bullet, _data_table, _delta_badge, _render_burnup,
     _render_form, _grondslag, _grondslag_popover, _llm_says_comparable,
-    _render_tile, _kpi_id_from_def, _goal_options, _metric_csv,
+    _render_tile, _kpi_id_from_def, _goal_options, _metric_csv, _default_form,
     _kpi_data_row, _def_tokens, _role_text, _role_relevant_defs,
     _metrics_tab_html, _break_indices, _link_card,
     _dir_select, _cad_select, _mt_select, _opt_select,
@@ -1759,6 +1760,34 @@ def _act_m_unpin(c):
         return nxt, msg
 
 
+def _act_indicator_activate(c):
+        # AUTHZ: circle-member-of-iedereen-ingelogd — open-books-besluit: iedereen met catalogus-toegang mag
+        # een indicator MÉT data op een rol/cirkel-dashboard activeren (bewust ongated). Wie/wat/wanneer
+        # wordt wél geregistreerd in de audit-trail (system_log.jsonl).
+        nxt, st, username = c.nxt, c.st, c.username
+        node = c.g("node")
+        dids = [d for d in (c.form.get("did") or []) if d]
+        if not node or not dids:
+            return nxt, "⛔ kies minstens één indicator en een dashboard"
+        added = 0
+        for did in dids:
+            kid = _kpi_id_from_def(st, node, did)
+            if not kid:
+                continue
+            cur = st.defs.current(did) or {}
+            dim = "time" if cur.get("aard") == "reeks" else "none"   # reeks → grafiek, moment → los getal
+            if st.metrics.add_tile(node, f"kpi:{kid}", "value", dim, _default_form(dim)):
+                added += 1
+        try:                                    # geen bus in dispatch → direct naar de audit-trail
+            with open(os.path.join(st.dd, "system_log.jsonl"), "a") as f:
+                f.write(json.dumps({"event": "indicator_activated", "by": username or "?",
+                                    "node": node, "def_ids": dids, "at": time.time()},
+                                   ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+        return nxt, (f"✓ {added} indicator(en) geactiveerd op het dashboard" if added else "⛔ niets geactiveerd")
+
+
 def _act_tile_add(c):
         nxt, st, g, form, username = c.nxt, c.st, c.g, c.form, c.username
         msg = ""
@@ -1984,6 +2013,7 @@ ACTIONS = {
     "m_pin": _act_m_pin,
     "m_unpin": _act_m_unpin,
     "tile_add": _act_tile_add,
+    "indicator_activate": _act_indicator_activate,
     "tile_remove": _act_tile_remove,
     "rov2_set": _act_rov2_set,
     "rov2_acc_add": _act_rov2_set,
