@@ -822,16 +822,17 @@ _DATA_SOURCES = {"plausible", "shopify", "gsc", "openalex", "semanticscholar", "
                  "keywordseverywhere", "serpstat", "werkoverleg"}
 
 
-def _obs_key_for_indicator(source: str, veld: str):
+def _obs_key_for_indicator(source: str, veld: str, dim: str = ""):
     """(observatie-metric, bron) voor een catalogus-indicator. Canoniek schema: `<source>_<veld>_day`
-    met bron=`<source>` — geen per-veld map meer; de generieke collector schrijft onder ditzelfde
-    schema. Werkoverleg houdt z'n legacy cirkel-sleutel (buiten het API-mechanisme). (None, None) =
-    geen data-bron-veld."""
+    met bron=`<source>`. `dim` (een dimensie-slug, bijv. een Library-keyword) hangt als `::<dim>`-suffix
+    aan de sleutel → `<source>_<veld>_day::<dim>` — de dimensie-naad (scope 2). Zonder `dim` ongewijzigd.
+    Werkoverleg houdt z'n legacy cirkel-sleutel (buiten het API-mechanisme). (None, None) = geen bron-veld."""
     from nooch_village.observations import WERK_DAILY
     if source == "werkoverleg" and veld in WERK_DAILY:
         return (WERK_DAILY[veld], "werkoverleg")
     if source in _DATA_SOURCES and veld:
-        return (f"{source}_{veld}_day", source)
+        base = f"{source}_{veld}_day"
+        return (f"{base}::{dim}" if dim else base, source)
     return (None, None)
 
 

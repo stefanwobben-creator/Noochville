@@ -65,6 +65,7 @@ class GscPerformanceSkill(DataSourceSkill):
     # GSC bewaart ~16 maanden historie. Een backfill vóór die horizon levert enkel None → de backfill
     # klemt de startdatum hierop af zodat je geen honderden lege dagen bevraagt.
     backfill_history_days = 480
+    DIMENSION = "query"          # scope 2: reeksen per Library-keyword via de native query-dimensie
     description = (
         "Haalt Search Analytics-data op uit Google Search Console (dimensie 'query', "
         "laatste 28 dagen) en classificeert queries in page1 / high_potential / "
@@ -120,6 +121,46 @@ class GscPerformanceSkill(DataSourceSkill):
         out["clicks"] = int(r.get("clicks", 0))
         out["ctr"] = round(r.get("ctr", 0.0), 4)
         out["position"] = round(r.get("position", 0.0), 1)
+        return out
+
+    def daily_dimension_values(self, context, datum: str, keywords, *, _query=None) -> dict:
+        """Per Library-keyword de zoekprestaties voor `datum` via ÉÉN call met dimensie=query (native GSC).
+        `keywords` = de gecureerde selectie (collector: approved+doelwit, gecapt). Match exact (case-
+        insensitive) op de GSC-query. Geeft {(veld, keyword): waarde}; een keyword dat die dag niet in de
+        respons zit (bijv. <10 impressies, GSC-anonimisering) → géén entry → gat. Fail-closed → lege dict.
+        `_query(body)` injecteerbaar zodat de contract-test datum + dimensions:['query'] kan bewijzen."""
+        want = {k.lower(): k for k in (keywords or [])}
+        out = {}
+        site = (context.settings.get("GSC_SITE") or context.settings.get("gsc_site", "")).strip()
+        if not want or not site:
+            return out
+        body = {"startDate": datum, "endDate": datum, "dimensions": ["query"], "rowLimit": 25000}
+        if _query is None:
+            creds, err = _get_creds(_token_path(context))
+            if err:
+                log.warning("GSC daily_dimension_values auth mislukt: %s", err)
+                return out
+            try:
+                from googleapiclient.discovery import build
+            except ImportError:
+                return out
+
+            def _query(b):
+                return build("webmasters", "v3", credentials=creds).searchanalytics().query(
+                    siteUrl=site, body=b).execute()
+        try:
+            response = _query(body)
+        except Exception as exc:
+            log.warning("GSC daily_dimension_values API-fout (%s): %s", datum, exc)
+            return out
+        for row in response.get("rows", []):
+            kw = want.get((row.get("keys") or [""])[0].lower())
+            if kw is None:
+                continue                        # GSC-query hoort niet bij een gecureerd keyword
+            out[("impressions", kw)] = int(row.get("impressions", 0))
+            out[("clicks", kw)] = int(row.get("clicks", 0))
+            out[("ctr", kw)] = round(row.get("ctr", 0.0), 4)
+            out[("position", kw)] = round(row.get("position", 0.0), 1)
         return out
 
     def run(self, payload: dict, context) -> dict:
