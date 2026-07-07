@@ -845,7 +845,8 @@ def _source_dimensions() -> dict:
 
 # DIMENSION → (tegel-dim-sleutel, label in de composer). De dim-sleutel is wat de tegel opslaat; _fetch
 # behandelt elke dim-sleutel hieruit als een breakdown per dimensie-waarde.
-_DIM_LABEL = {"query": ("keyword", "per keyword"), "country": ("country", "per land")}
+_DIM_LABEL = {"query": ("keyword", "per keyword"), "country": ("country", "per land"),
+              "concept": ("concept", "per concept")}
 _DIM_KEYS = {k for k, _l in _DIM_LABEL.values()}
 
 

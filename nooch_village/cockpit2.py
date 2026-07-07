@@ -153,6 +153,8 @@ def _bootstrap(dd: str) -> None:
     st.att.migrate()              # attachments → artefact-model (legacy tool-notes, defaults; idempotent)
     migrate_data_sources(dd)      # legacy visitors_day → plausible_visitors_day + Plausible actief (idempotent)
     st.metrics.migrate_metric_bindings(st.defs)   # wees-KPI's: veld/categorie uit de def + reeks-tegel-dim (idempotent)
+    for _m in ("openalex_works_day", "openalex_citations_day"):   # vervuilde undimensioned OpenAlex-totalen
+        st.observations.remove_metric(_m, bron="openalex")        # (search→'Regeneration (biology)') → weg, niet doortellen
 
 
 from nooch_village.views.overview import (

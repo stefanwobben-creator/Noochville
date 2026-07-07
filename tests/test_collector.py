@@ -174,21 +174,22 @@ def test_expected_period_weekly_en_monthly():
     assert _expected_period("weekly", wed, lag_days=7) == "2026-06-29"   # maandag van de week ervoor
 
 
-def test_openalex_datasource_contract_snapshot_failclosed(monkeypatch):
-    """OpenAlex is een snapshot-DataSourceSkill: SOURCE='openalex', weekly, keyless (is_configured=True).
-    daily_values legt de STAND vast (absolute tellers), fail-closed per veld, sleutels ⊆ available_metrics."""
+def test_openalex_datasource_contract_snapshot_dimensieonly():
+    """OpenAlex is een snapshot-DataSourceSkill: SOURCE='openalex', weekly, keyless. Sinds de concept-
+    dimensie is daily_values DIMENSIE-ONLY (altijd None — geen undimensioned naamgenoot-totaal); de stand
+    komt per GEPIND concept via daily_dimension_values (/concepts/<id> direct, fail-closed per concept)."""
     from nooch_village.skills_impl.openalex import OpenalexSkill
     sk = OpenalexSkill()
     assert isinstance(sk, DataSourceSkill) and sk.SOURCE == "openalex"
-    assert sk.frequency("works") == "weekly" and sk.is_configured(_ctx())
+    assert sk.frequency("works") == "weekly" and sk.is_configured(_ctx()) and sk.DIMENSION == "concept"
     assert set(sk.available_metrics()) == {"works", "citations"}
-    monkeypatch.setattr(sk, "_fetch_with_backoff",
-                        lambda req: (_ for _ in ()).throw(RuntimeError("boom")))   # geen netwerk
-    vals = sk.daily_values(_ctx(), "2026-07-06")
-    assert set(vals) == set(sk.available_metrics()) and all(v is None for v in vals.values())
-    monkeypatch.setattr(sk, "_fetch_with_backoff",
-                        lambda req: {"results": [{"works_count": 1234, "cited_by_count": 56789}]})
-    assert sk.daily_values(_ctx(), "2026-07-06") == {"works": 1234, "citations": 56789}
+    assert sk.daily_values(_ctx(), "2026-07-06") == {"works": None, "citations": None}   # dimensie-only
+    cctx = types.SimpleNamespace(settings={"openalex_concepts": "C123:circular economy"})
+    assert sk.daily_dimension_values(cctx, "2026-07-06", ["circular economy"],
+                                     _fetch=lambda u: (_ for _ in ()).throw(RuntimeError("boom"))) == {}
+    assert sk.daily_dimension_values(cctx, "2026-07-06", ["circular economy"],
+                                     _fetch=lambda u: {"works_count": 1234, "cited_by_count": 56789}) == \
+        {("works", "circular economy"): 1234, ("citations", "circular economy"): 56789}
 
 
 class _WeeklySnapshot(DataSourceSkill):

@@ -96,6 +96,21 @@ class ObservationStore:
             self._invalidate()          # in-place mutatie + herschrijf → index opnieuw opbouwen
         return n
 
+    def remove_metric(self, metric: str, bron: str | None = None) -> int:
+        """Verwijder ALLE rijen met deze metric (optioneel per bron) uit het bestand. Voor het opruimen van
+        een vervuilde reeks (geen doortelling). Herschrijft alleen bij een echte verwijdering; idempotent.
+        Geeft het aantal verwijderde rijen terug."""
+        rows = self._read_all()
+        kept = [r for r in rows
+                if not (r.get("metric") == metric and (bron is None or r.get("bron") == bron))]
+        n = len(rows) - len(kept)
+        if n:
+            with open(self.path, "w") as f:
+                for r in kept:
+                    f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
+            self._invalidate()          # herschrijf → index opnieuw opbouwen
+        return n
+
     def normalize_source_role_ids(self) -> dict:
         """Canoniek: voor een collector-dagmetric `<bron>_<veld>_day` is `role_id == bron`. Legacy-rijen
         met een andere role_id (bv. `website_watcher` van vóór de generieke collector) worden

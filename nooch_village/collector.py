@@ -59,6 +59,13 @@ def _dimension_values(context, dimension: str) -> list[str]:
         raw = settings.get("plausible_dimension_countries") or ",".join(_DEFAULT_DIMENSION_COUNTRIES)
         values = [c.strip().upper() for c in raw.split(",") if c.strip()]
         cap_key = "plausible_dimension_max"
+    elif dimension == "concept":
+        # De labels uit `openalex_concepts = C…:label, C…:label` (de gepinde ID's leven ernaast in de config;
+        # de skill mapt label→ID en query't /concepts/<id> direct). De dimensie-waarde = het label.
+        raw = settings.get("openalex_concepts", "") or ""
+        values = [p.split(":", 1)[1].strip() for p in raw.split(",")
+                  if ":" in p and p.split(":", 1)[1].strip()]
+        cap_key = "openalex_dimension_max"
     else:
         return []
     try:
