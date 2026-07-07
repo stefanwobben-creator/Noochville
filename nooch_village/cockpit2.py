@@ -366,20 +366,24 @@ def _password_change(data_dir: str, form: dict, username: str | None):
     current, new, confirm = g("current"), g("new"), g("confirm")
     forced = st.people.must_change(username or "")
     person = st.people.by_email(username or "")
+    us = _auth.UserStore(os.path.join(data_dir, "people.json"))
 
     def fail(msg):
         return False, _auth.password_change_page(error=msg, forced=forced)
 
     if person is None:
         return fail("Gebruiker niet herkend.")
-    if not _auth.UserStore(os.path.join(data_dir, "people.json")).verify_by_email(username or "", current):
+    # Een VRIJWILLIGE wijziging vraagt het huidige wachtwoord; een VERPLICHTE (temp na eerste login/reset)
+    # NIET — de gebruiker is net via login geauthenticeerd (die verifieerde het temp al). Het huidig-veld
+    # lokt daar bovendien browser-autofill van het OUDE wachtwoord uit → een onmogelijk-op-te-lossen loop.
+    if not forced and not us.verify_by_email(username or "", current):
         return fail("Huidig wachtwoord onjuist.")
     if new != confirm:
         return fail("De nieuwe wachtwoorden komen niet overeen.")
     if len(new) < _MIN_PASSWORD_LEN:
         return fail(f"Kies minimaal {_MIN_PASSWORD_LEN} tekens.")
-    if new == current:
-        return fail("Kies een ander wachtwoord dan het huidige.")
+    if us.verify_by_email(username or "", new):      # nieuw ≠ het huidige/temp wachtwoord (zonder typen)
+        return fail("Kies een ander wachtwoord dan je huidige.")
     st.people.set_own_password(person.id, _auth.hash_password(new))
     return True, None
 
