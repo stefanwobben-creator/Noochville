@@ -650,6 +650,25 @@ def main() -> None:
         path = write_biweekly_report(st, ctx.data_dir, today, window_days=days)
         print(f"📋 Bi-weekly bevindingen-rapport ({days} dagen) → {path}")
 
+    elif mode == "verslag":
+        # Noochie's tweewekelijkse woordelijk verslag (LLM-synthese in Noochie's stem, gegrond op de
+        # data-roll-up + Field Notes + agent-activiteit). python -m nooch_village.village verslag [dagen]
+        import datetime
+        from nooch_village.config import load_context
+        from nooch_village.verslag import write_noochie_verslag
+        from nooch_village import cockpit2
+        from nooch_village.village import BASE_DIR
+        days = next((int(a) for a in sys.argv[2:] if a.isdigit()), 14)
+        ctx = load_context(BASE_DIR)
+        st = cockpit2._Stores(ctx.data_dir)
+        today = datetime.datetime.now(datetime.timezone.utc).date()
+        path = write_noochie_verslag(st, ctx.data_dir, today, window_days=days)
+        if path:
+            print(f"📖 Noochie's tweewekelijkse verslag ({days} dagen) → {path}")
+        else:
+            print("⚠️  Geen verslag: de LLM gaf niets terug (geen key of rate-limit). "
+                  "De feiten zijn wél verzameld — probeer later opnieuw (geen verzonnen tekst).")
+
     elif mode == "backfill":
         # Handmatige historische inhaal: haal per periode de historische dagwaarde op en schrijf 'm
         # idempotent weg (zelfde canonieke sleutel + record_daily als de collector → geen duplicaten,
@@ -833,6 +852,6 @@ def main() -> None:
               "measure_propose | rereview | ingest | notes_remove | recurate | "
               "ground | harry_run | roster | keys | competitor | formalize | answer_questions | "
               "ingest_governance | review_roles | shopify | work_projects | "
-              "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | rapport",
+              "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | rapport | verslag",
               file=sys.stderr)
         sys.exit(1)
