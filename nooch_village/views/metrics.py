@@ -1273,8 +1273,11 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: st
     # Een systeembron-KPI (bron/auto/meetwijze) hoort NOOIT in de invoer-sectie — hij heeft geen handmatige
     # meting. Het criterium is _is_system_kpi (meetwijze/auto/origin/source), niet alleen `source`.
     kpis = [i for i in st.metrics.for_node(rec.id) if i.get("kind") == "kpi"]
+    # Systeem-KPI's die AL als tegel op dit dashboard staan niet nóg eens in de lijst tonen: de lijst is
+    # aanvullend ("wat kan ik nog meer activeren"), geen herhaling van de tegels bovenaan.
+    tiled_kids = {t.get("source", "")[4:] for t in tiles if t.get("source", "").startswith("kpi:")}
     handmatig = [i for i in kpis if not _is_system_kpi(i)]
-    systeem = [i for i in kpis if _is_system_kpi(i)]
+    systeem = [i for i in kpis if _is_system_kpi(i) and i["id"] not in tiled_kids]
     if handmatig:
         rows = "".join(_kpi_data_row(st, i, csrf) for i in handmatig)
         out += f"<div class='c2-sec'><div class='cl-head'><h3>Eigen KPI's (data invoeren)</h3></div>{rows}</div>"
