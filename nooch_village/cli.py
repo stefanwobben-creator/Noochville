@@ -634,6 +634,22 @@ def main() -> None:
             cfg_s = "" if cfg is None else (" · creds ok" if cfg else " · GEEN creds")
             print(f"  {'●' if st.get('active') else '○'} {src}{cfg_s}")
 
+    elif mode == "rapport":
+        # Bi-weekly bevindingen-rapport (deterministisch, data + gegronde inzichten) → markdown in
+        # data/output/bevindingen_<datum>.md. Optioneel aantal dagen (default 14).
+        # python -m nooch_village.village rapport [dagen]
+        import datetime, os
+        from nooch_village.config import load_context
+        from nooch_village.biweekly_report import write_biweekly_report
+        from nooch_village import cockpit2
+        from nooch_village.village import BASE_DIR
+        days = next((int(a) for a in sys.argv[2:] if a.isdigit()), 14)
+        ctx = load_context(BASE_DIR)
+        st = cockpit2._Stores(ctx.data_dir)
+        today = datetime.datetime.now(datetime.timezone.utc).date()
+        path = write_biweekly_report(st, ctx.data_dir, today, window_days=days)
+        print(f"📋 Bi-weekly bevindingen-rapport ({days} dagen) → {path}")
+
     elif mode == "backfill":
         # Handmatige historische inhaal: haal per periode de historische dagwaarde op en schrijf 'm
         # idempotent weg (zelfde canonieke sleutel + record_daily als de collector → geen duplicaten,
@@ -817,6 +833,6 @@ def main() -> None:
               "measure_propose | rereview | ingest | notes_remove | recurate | "
               "ground | harry_run | roster | keys | competitor | formalize | answer_questions | "
               "ingest_governance | review_roles | shopify | work_projects | "
-              "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill",
+              "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | rapport",
               file=sys.stderr)
         sys.exit(1)
