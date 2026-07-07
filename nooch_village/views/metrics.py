@@ -99,9 +99,33 @@ def _source_samples(dd: str, source: str):
     return []
 
 
+def _is_system_kpi(item: dict) -> bool:
+    """Systeem-gevoed (bron/auto/meetwijze) → geen handmatige invoer. NIET alleen `source`: een KPI die
+    vóór de bron-veld-fix is aangemaakt heeft source='' maar auto=True/origin gezet. Eén criterium,
+    gedeeld door de rij-render en de sectie-split (reference, don't copy)."""
+    return bool(item.get("source") or item.get("origin") or item.get("auto")
+                or item.get("meetwijze") == "systeem")
+
+
+def _kpi_samples(st: _Stores, item: dict):
+    """Samples voor een (bron-)KPI — één centrale route (voorheen 4× gedupliceerd):
+      - bron + veld (source óf origin ∈ _DATA_SOURCES, + veld) → de dagreeks <source>_<veld>_day uit de
+        ObservationStore. Dit is de generieke route; de dimensie-naad is `_obs_key_for_indicator` (later
+        een dimensie-suffix), dus geen harde koppeling aan één reeks.
+      - legacy bron-id (bv. pulse_visitors) → _source_samples;
+      - anders → de handmatige samples van de KPI."""
+    metric, bron = _obs_key_for_indicator(item.get("source") or item.get("origin") or "",
+                                          item.get("veld", ""))
+    if metric:
+        return [{"at": _row_at(r), "value": r["value"], "datum": r.get("datum")}
+                for r in st.observations.daily_series(metric, bron=bron)]
+    if item.get("source"):
+        return _source_samples(st.dd, item["source"])
+    return item.get("samples", [])
+
+
 def _metric_points(st: _Stores, item: dict, cutoff, end=None):
-    samples = _source_samples(st.dd, item["source"]) if item.get("source") else item.get("samples", [])
-    return filter_samples(samples, cutoff, end)
+    return filter_samples(_kpi_samples(st, item), cutoff, end)
 
 
 def _spark_svg(points, w=84, h=22, breaks_at=None) -> str:
@@ -387,7 +411,8 @@ def _sources_for(st: _Stores, rec):
         if k.get("source"):
             continue                                  # bron-KPI's al gedekt door built-ins
         srcs.append({"id": f"kpi:{k['id']}", "label": k["name"],
-                     "measures": [("value", k["name"])], "dims": [("time", "over tijd")]})
+                     "measures": [("value", "waarde")],                    # niet de KPI-naam → geen dubbele naam
+                     "dims": [("time", "over tijd"), ("none", "laatste waarde")]})   # 'none' → geen "· NONE"
     return srcs
 
 
@@ -492,7 +517,7 @@ def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff, end=None):
         it = st.metrics.get(source[4:])
         if not it:
             return {"kind": "number", "value": None, "unit": ""}
-        raw = _source_samples(st.dd, it["source"]) if it.get("source") else it.get("samples", [])
+        raw = _kpi_samples(st, it)          # bron+veld → dagreeks uit de store; anders legacy/handmatig
         return {"kind": "series", "points": filter_samples(raw, cutoff, end), "unit": it.get("unit", "")}
     return {"kind": "number", "value": None, "unit": ""}
 
@@ -778,7 +803,9 @@ def _daily_obs_key(source: str, measure: str):
     (None, None) = deze bron heeft geen dag-observaties (→ 'geen live data')."""
     from nooch_village.observations import WERK_DAILY, SHOPIFY_DAILY
     if source == "pulse_visitors":
-        return ("plausible_visitors_day", "plausible")     # canoniek na de migratie (was visitors_day)
+        # Via dezelfde generieke bron-veld-derivatie als een plausible/visitors-KPI (één sleutel-route):
+        # levert plausible_visitors_day — identieke waardes, geen aparte special-case meer.
+        return _obs_key_for_indicator("plausible", "visitors")
     if source.startswith("werk:") and measure in WERK_DAILY:
         return (WERK_DAILY[measure], "werkoverleg")
     if source == "shopify" and measure in SHOPIFY_DAILY:
@@ -1033,7 +1060,8 @@ def _kpi_id_from_def(st: _Stores, node: str, did: str):
         auto=cur.get("meetwijze") == "systeem", benchmark=cur.get("benchmark", ""),
         bron_url=cur.get("bron_url", ""), verificatie=cur.get("verificatie", ""),
         tijd=cur.get("tijd", ""), bruikbaar=cur.get("bruikbaar", ""),
-        standaard=cur.get("standaard", ""), waarde=cur.get("waarde"))
+        standaard=cur.get("standaard", ""), waarde=cur.get("waarde"),
+        veld=cur.get("veld", ""), categorie=cur.get("categorie", ""), aard=cur.get("aard", ""))
     return it["id"] if it else None
 
 
@@ -1053,7 +1081,7 @@ def _metric_csv(st: _Stores, mid: str) -> tuple[str, str] | None:
     it = st.metrics.get(mid)
     if it is None or it.get("kind") != "kpi":
         return None
-    raw = _source_samples(st.dd, it["source"]) if it.get("source") else it.get("samples", [])
+    raw = _kpi_samples(st, it)
     pts = filter_samples(raw, None)
     import csv as _csv
     import datetime as _dt
@@ -1077,12 +1105,12 @@ def _metric_csv(st: _Stores, mid: str) -> tuple[str, str] | None:
 
 
 def _kpi_data_row(st: _Stores, item: dict, csrf: str) -> str:
-    raw = _source_samples(st.dd, item["source"]) if item.get("source") else item.get("samples", [])
+    raw = _kpi_samples(st, item)
     pts = filter_samples(raw, None)
     val = _num(pts[-1][1]) if pts else "—"
     unit = f" {_e(item.get('unit', ''))}" if item.get("unit") else ""
-    # systeem-gemeten KPI (live-bron of catalogus-origin uit een systeembron): geen handmatige invoer
-    is_sys = bool(item.get("source") or item.get("auto"))
+    # systeem-gemeten KPI (bron/auto/meetwijze): geen handmatige invoer
+    is_sys = _is_system_kpi(item)
     src = " <span class='chip muted'>systeem</span>" if is_sys else ""
     add = ""
     if csrf and not is_sys:
@@ -1241,11 +1269,18 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: st
             else "<p class='muted'>Nog geen KPI's op het dashboard. Maak er een met “+ KPI maken”.</p>")
     out = f"<div class='c2-sec'>{head}</div><div class='c2-sec'><div class='tile-grid'>{dash}</div></div>{_METRICS_JS}"
 
-    # 2. Eigen KPI's: data invoeren voor handmatige KPI's (aanmaken gaat via + KPI maken / de catalogus)
+    # 2. KPI's onder deze node, gesplitst: handmatige (data invoeren) vs systeembron (automatisch gevoed).
+    # Een systeembron-KPI (bron/auto/meetwijze) hoort NOOIT in de invoer-sectie — hij heeft geen handmatige
+    # meting. Het criterium is _is_system_kpi (meetwijze/auto/origin/source), niet alleen `source`.
     kpis = [i for i in st.metrics.for_node(rec.id) if i.get("kind") == "kpi"]
-    if kpis:
-        rows = "".join(_kpi_data_row(st, i, csrf) for i in kpis)
+    handmatig = [i for i in kpis if not _is_system_kpi(i)]
+    systeem = [i for i in kpis if _is_system_kpi(i)]
+    if handmatig:
+        rows = "".join(_kpi_data_row(st, i, csrf) for i in handmatig)
         out += f"<div class='c2-sec'><div class='cl-head'><h3>Eigen KPI's (data invoeren)</h3></div>{rows}</div>"
+    if systeem:
+        rows = "".join(_kpi_data_row(st, i, csrf) for i in systeem)
+        out += f"<div class='c2-sec'><div class='cl-head'><h3>Systeem-KPI's (automatisch gevoed)</h3></div>{rows}</div>"
 
     # 3. Links naar externe bestanden (cijfers die elders leven)
     links = st.metrics.links_for(rec.id)

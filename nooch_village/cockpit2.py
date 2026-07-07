@@ -151,6 +151,7 @@ def _bootstrap(dd: str) -> None:
     _migrate_definitions(st.defs)  # nieuwe verplichte velden (aard/aggregatie/formule) retroactief (idempotent)
     st.att.migrate()              # attachments → artefact-model (legacy tool-notes, defaults; idempotent)
     migrate_data_sources(dd)      # legacy visitors_day → plausible_visitors_day + Plausible actief (idempotent)
+    st.metrics.migrate_metric_bindings(st.defs)   # wees-KPI's: veld/categorie uit de def + reeks-tegel-dim (idempotent)
 
 
 from nooch_village.views.overview import (
@@ -1775,8 +1776,11 @@ def _act_tile_add(c):
         else:
             combo = g("combo") or ""
             if combo.startswith("def:"):     # indicator direct uit de catalogus → zet als KPI op de node
-                kid = _kpi_id_from_def(st, g("node"), combo[4:])
-                combo = f"kpi:{kid}|value|none" if kid else ""
+                did = combo[4:]
+                kid = _kpi_id_from_def(st, g("node"), did)
+                cur = st.defs.current(did) or {}
+                dim = "time" if cur.get("aard") == "reeks" else "none"   # reeks → grafiek, moment → los getal
+                combo = f"kpi:{kid}|value|{dim}" if kid else ""
             parts = combo.split("|")
             if len(parts) == 3 and parts[0]:
                 ref = g("ref_kind")
