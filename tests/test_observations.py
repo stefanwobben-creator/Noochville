@@ -111,3 +111,19 @@ def test_index_invalidatie_na_rename(tmp_path):
     # na de herschrijf leest de index de nieuwe sleutel (geen stale index)
     assert o.daily_series("visitors_day", bron="plausible") == []
     assert [r["value"] for r in o.daily_series("plausible_visitors_day", bron="plausible")] == [10]
+
+
+def test_remove_bron_behoudt_prefix(tmp_path):
+    """remove_bron verwijdert alle rijen van een bron behalve een keep_prefix (opruimen verworpen ontwerp)."""
+    from nooch_village.observations import ObservationStore
+    o = ObservationStore(str(tmp_path / "o.jsonl"))
+    o.record_daily("trends", "trends_footwear_day", 5, bron="trends", datum="2026-07-06")       # oud ontwerp
+    o.record_daily("trends", "trends_vegan_shoes_day", 2, bron="trends", datum="2026-07-06")    # oud ontwerp
+    o.record_daily("trends", "trends_ratio_thrift_luxury_day", 0.25, bron="trends", datum="2026-07-13")  # nieuw
+    o.record_daily("plausible", "plausible_visitors_day", 10, bron="plausible", datum="2026-07-06")      # andere bron
+    n = o.remove_bron("trends", keep_prefix="trends_ratio_")
+    assert n == 2                                                # de 2 oude trends-reeksen weg
+    left = {(r["bron"], r["metric"]) for r in o._read_all()}
+    assert ("trends", "trends_ratio_thrift_luxury_day") in left and ("plausible", "plausible_visitors_day") in left
+    assert not any(m in ("trends_footwear_day", "trends_vegan_shoes_day") for _, m in left)
+    assert o.remove_bron("trends", keep_prefix="trends_ratio_") == 0    # idempotent

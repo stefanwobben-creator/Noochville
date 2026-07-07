@@ -25,42 +25,46 @@ _USER_AGENT = (
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
-# ── Anker-ratio-normalisatie (snapshot-delta-analoog voor relatieve interesse) ────────────────────
-# Google Trends' 0-100 is relatief aan de piek binnen het venster; waarden uit verschillende queries
-# of vensters zijn dus NIET vergelijkbaar. Oplossing: query elke term SAMEN met een vast anker en sla
-# de RATIO op (term/anker × 100). Die ratio is invariant onder Trends' herschaling (anker en term
-# schalen met dezelfde factor), dus vergelijkbaar tussen termen én over de tijd.
+# ── Stemming-paren (ratio A/B, geen gedeeld anker) ────────────────────────────────────────────────
+# Google Trends' 0-100 is relatief aan de zwaarste term per request; naast een dominant anker comprimeert
+# elke niche naar 0-1 (gemeten 2026-07-08, iteratie 1: docs/trends_sentiment_termset_meting_2026-07-08.md).
+# Herontwerp: PAREN van tegengestelde stemming met vergelijkbare grootte. Per paar één request [A, B];
+# ratio per datapunt = waarde_A / waarde_B uit dezelfde response — geen gedeeld anker, geen schaling.
 #
-# EIS AAN HET ANKER (cruciaal): stabiel, hoog volume, NIET-trending. Kiest een curator een trending
-# term als anker, dan weerspiegelt de ratio de ruis van het anker i.p.v. de trend van de term — stil
-# onzin-data. Het anker komt uit config-sleutel `trends_anchor` — FAIL-CLOSED, GEEN code-default: een
-# ontbrekend/leeg anker is een luide error, de bron levert dan niets (nooit een stille default-term).
-_TIMEFRAME_DEFAULT = "today 5-y"        # vast lang venster: genoeg historie voor stabiele normalisatie
-_TRENDS_BATCH = 4                       # pytrends vergelijkt max 5 termen/request → 4 termen + het anker
+# ORIËNTATIE (meetconstante — paren omdraaien breekt de reeks): A = zuinigheid/behoud-kant, B =
+# toegeeflijkheid/nieuw-kant. Ratio A/B stijgt = versobering-stemming stijgt (socionomics). De paren komen
+# uit config-sleutel `trends_pairs` — FAIL-CLOSED, GEEN default, GEEN partial parse: ontbrekend/leeg/één
+# misvormd paar → luide error, bron levert niets.
+_TIMEFRAME_DEFAULT = "today 5-y"        # weekly resolutie; de ratio gebruikt het recente (laatste) punt
 
 
-def _approved_library_terms(context) -> list[str]:
-    """De teller-termen: de approved-set uit de Library (status 'approved') — DEZELFDE bron/query als de
-    Library→Keywords-Everywhere-koppeling (zie keywords_everywhere._approved_keywords). Dynamisch: de
-    discovery-lus voedt Trends automatisch, geen aparte config-termenlijst meer."""
-    lib = getattr(context, "library", None) if context is not None else None
-    if lib is None:
-        return []
-    return [w for w, e in lib.all().items() if e.get("status") == "approved"]
+def _parse_pairs(raw: str):
+    """Parse `trends_pairs` ('A:B, A:B') → [(A, B), ...]. FAIL-CLOSED: None bij leeg, of bij één misvormd
+    paar (geen ':' of lege A/B) — liever luid stuk dan stil half. Termen mogen spaties bevatten; whitespace
+    rond termen en scheiders wordt getrimd."""
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    pairs = []
+    for part in raw.split(","):
+        part = part.strip()
+        if part.count(":") != 1:                # geen of meerdere ':' → misvormd
+            return None
+        a, b = (x.strip() for x in part.split(":", 1))
+        if not a or not b:
+            return None
+        pairs.append((a, b))
+    return pairs or None
+
+
+def _pair_field(a: str, b: str) -> str:
+    """Veldsleutel per paar → metric `trends_ratio_<A>_<B>_day` (bijv. trends_ratio_second_hand_brand_new_day)."""
+    return f"ratio_{_sanitize_field(a)}_{_sanitize_field(b)}"
 
 
 def _sanitize_field(term: str) -> str:
     """Term → veilige observatie-veldsleutel (trends_<veld>_day)."""
     return "".join(c if c.isalnum() else "_" for c in term.strip().lower()).strip("_") or "term"
-
-
-def _ratio(anchor_recent, term_recent):
-    """De genormaliseerde interesse: term/anker × 100. None als het anker 0 is (niet te normaliseren).
-    Invariant onder Trends' herschaling: als de hele reeks met factor k schaalt, schalen anker én term
-    mee → de ratio blijft gelijk. Dát maakt de waarde vergelijkbaar tussen termen en over de tijd."""
-    if not anchor_recent or anchor_recent <= 0:
-        return None
-    return round(term_recent / anchor_recent * 100)
 
 
 def rotate_window(items: list, cursor: int, size: int) -> tuple[list, int]:
@@ -162,9 +166,10 @@ class TrendsSkill(DataSourceSkill):
     )
 
     def available_metrics(self, context=None) -> list[str]:
-        """DYNAMISCHE velden: de approved Library-termen als veilige sleutels (zoals KE de Library volgt).
-        Zonder context (bv. het koppelscherm) → leeg, want de termen komen uit de Library, niet vast in de skill."""
-        return [_sanitize_field(t) for t in _approved_library_terms(context)]
+        """DYNAMISCHE velden: één ratio-veld per stemming-paar uit `trends_pairs`. Zonder context, of bij een
+        ongeldige/lege config → leeg (de paren staan in de config, niet vast in de klasse)."""
+        pairs = _parse_pairs((getattr(context, "settings", {}) or {}).get("trends_pairs", "")) if context else None
+        return [_pair_field(a, b) for a, b in pairs] if pairs else []
 
     def is_configured(self, context) -> bool:
         """Keyless (pytrends). 'Geconfigureerd' = de pytrends-dependency is importeerbaar. Een pytrends
@@ -177,39 +182,37 @@ class TrendsSkill(DataSourceSkill):
             return False
 
     def daily_values(self, context, datum: str, *, _fetch=None) -> dict:
-        """Genormaliseerde interesse per approved Library-term via de anker-ratio. Batcht de termen in
-        groepjes van 4 met het anker als 5e term in ELKE request (pytrends-max = 5), zodat term én anker
-        binnen dezelfde request/normalisatie zitten; ratio = term_recent / anker_recent × 100.
+        """Stemming-ratio per paar uit `trends_pairs`: per paar één request [A, B]; ratio = waarde_A /
+        waarde_B uit dezelfde response (float, ONGESCHAALD, niet naar int afronden). Oriëntatie A =
+        zuinigheid/behoud, B = toegeeflijkheid/nieuw (meetconstante; paren omdraaien breekt de reeks).
+        Veld/metric = trends_ratio_<A>_<B>_day.
 
         Fail-closed:
-          - geen Library-termen → alles None (niets te doen).
-          - `trends_anchor` ontbreekt/leeg → ERROR-log, bron levert niets (GEEN code-default).
-          - een batch die faalt/leeg terugkomt → die termen blijven een GAT (None) + ERROR-log.
-          - anker 0 of afwezig in een batch-respons → hele batch geskipt + ERROR-log (deel-door-nul-guard;
-            een anker hoort nooit 0 te zijn).
-        Een term die 0 teruggeeft is een ECHTE observatie → als 0 weggeschreven, geen gat.
+          - `trends_pairs` ontbreekt/leeg/één misvormd paar → ERROR-log, bron levert niets (geen default,
+            geen partial parse).
+          - NUL-GUARD op de noemer: B == 0 of afwezig op het recente punt → dat punt NIET schrijven + ERROR
+            (scope 0 mat 100% niet-nul voor alle B; een 0 daar is een verdachte response, geen observatie).
+          - A == 0 bij geldige B → ratio 0 wegschrijven (echte observatie).
+          - mislukte/lege request → gat (None) + ERROR (geen interpolatie).
         `_fetch(payload, timeframe, geo) -> df` injecteerbaar (geen netwerk in tests)."""
-        terms = _approved_library_terms(context)
-        out = {_sanitize_field(t): None for t in terms}
-        if not terms:
-            return out
         settings = getattr(context, "settings", {}) or {}
-        anchor = (settings.get("trends_anchor") or "").strip()
-        if not anchor:
-            log.error("Trends anker-ratio: config 'trends_anchor' ontbreekt of is leeg — bron levert niets "
-                      "(fail-closed, geen default-anker).")
-            return out
-        geo = (settings.get("trends_geo") or "NL").strip()
+        pairs = _parse_pairs(settings.get("trends_pairs", ""))
+        if pairs is None:
+            log.error("Trends stemming-paren: config 'trends_pairs' ontbreekt, is leeg of bevat een misvormd "
+                      "paar (verwacht 'A:B, A:B') — bron levert niets (fail-closed, geen partial parse).")
+            return {}
+        out = {_pair_field(a, b): None for a, b in pairs}
+        geo = (settings.get("trends_geo") or "").strip()          # leeg = worldwide (zoals de scope-0-meting)
         timeframe = (settings.get("trends_timeframe") or _TIMEFRAME_DEFAULT).strip()
-        hl = settings.get("trends_hl", "nl-NL")
+        hl = settings.get("trends_hl", "en-US")
         real = _fetch is None
         if real:
             try:
                 from pytrends.request import TrendReq
             except ImportError:
-                return out                                  # dependency ontbreekt → alles None
+                return out                                        # dependency ontbreekt → alles None
             try:
-                pytrends = TrendReq(hl=hl, tz=60, timeout=(10, 25),
+                pytrends = TrendReq(hl=hl, tz=0, timeout=(10, 25),
                                     requests_args={"headers": {"User-Agent": _USER_AGENT}})
             except Exception as exc:
                 log.error("Trends init faalde: %s — bron levert niets.", exc)
@@ -218,28 +221,24 @@ class TrendsSkill(DataSourceSkill):
             def _fetch(payload, tf, g):
                 pytrends.build_payload(payload, cat=0, timeframe=tf, geo=g, gprop="")
                 return pytrends.interest_over_time()
-        for i in range(0, len(terms), _TRENDS_BATCH):
-            batch = terms[i:i + _TRENDS_BATCH]
-            b = i // _TRENDS_BATCH
+        for a, b in pairs:
+            field = _pair_field(a, b)
             try:
-                df = _fetch([anchor] + batch, timeframe, geo)
+                df = _fetch([a, b], timeframe, geo)
             except Exception as exc:
-                log.error("Trends batch %d faalde: %s — geen write voor deze batch (gat).", b, exc)
+                log.error("Trends paar '%s÷%s' request faalde: %s — gat.", a, b, exc)
                 continue
-            if df is None or getattr(df, "empty", True) or anchor not in df:
-                log.error("Trends: anker '%s' ontbreekt in respons van batch %d — batch geskipt.", anchor, b)
+            if df is None or getattr(df, "empty", True) or a not in df or b not in df:
+                log.error("Trends paar '%s÷%s': lege/incomplete respons — gat.", a, b)
                 continue
-            a_recent = int(df[anchor].tolist()[-1])
-            if a_recent == 0:
-                log.error("Trends: anker '%s' geeft 0 in batch %d — batch geskipt (anker hoort nooit 0 te "
-                          "zijn; iets mis met de request).", anchor, b)
+            b_recent = df[b].tolist()[-1]
+            if not b_recent:                                      # noemer 0/afwezig → verdacht (scope 0: 100% niet-nul)
+                log.error("Trends paar '%s÷%s': noemer B=%r op het recente punt — punt geskipt "
+                          "(verdachte respons).", a, b, b_recent)
                 continue
-            for term in batch:
-                if term not in df:
-                    continue                                # term afwezig in respons → gat (None blijft)
-                out[_sanitize_field(term)] = _ratio(a_recent, int(df[term].tolist()[-1]))   # 0 → 0 (echte obs)
+            out[field] = round(df[a].tolist()[-1] / b_recent, 4)  # float, ongeschaald; A=0 → 0 (echte obs)
             if real:
-                time.sleep(1.0)                             # beleefd (onofficieel endpoint)
+                time.sleep(1.0)                                   # beleefd tussen paar-requests
         return out
 
     def _select_window(self, keywords: list[str], context) -> list[str]:

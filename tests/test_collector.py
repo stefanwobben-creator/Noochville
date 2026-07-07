@@ -286,110 +286,118 @@ def test_semanticscholar_blijft_inactief_tot_activatie(tmp_path):
     assert w == []
 
 
-# ── Google Trends: flux-bron met anker-ratio-normalisatie (Library-teller + config-anker) ────────
-class _FakeLib:                                                  # approved Library-set (teller-bron, zoals KE)
-    def __init__(self, terms): self._t = list(terms)
-    def all(self): return {w: {"status": "approved"} for w in self._t}
-    def function_of(self, w): return "doelwit"
-
-
-def _trends_ctx(terms=("vegan shoes",), anchor="shoes"):
-    s = {"trends_geo": "NL"}
-    if anchor is not None:
-        s["trends_anchor"] = anchor
-    return types.SimpleNamespace(settings=s, library=_FakeLib(terms), data_dir="/tmp")
-
-
+# ── Google Trends: flux-bron met stemming-PAREN (ratio A/B, geen gedeeld anker) ──────────────────
 def _df(cols_to_val: dict):
     """1-rijs pandas-DataFrame per kolom → simuleert interest_over_time (recent = laatste rij)."""
     import pandas as pd
     return pd.DataFrame({c: [v] for c, v in cols_to_val.items()})
 
 
-# (a) available_metrics volgt de Library (zoals KE)
-def test_trends_available_metrics_volgt_library():
-    from nooch_village.skills_impl.trends import TrendsSkill, _ratio
+def _pair_ctx(pairs="thrift:luxury, second hand:brand new, repair:replace"):
+    s = {}
+    if pairs is not None:
+        s["trends_pairs"] = pairs
+    return types.SimpleNamespace(settings=s, data_dir="/tmp")
+
+
+# (a) trends_pairs met N paren → N velden, correcte veldnamen
+def test_trends_available_metrics_uit_pairs():
+    from nooch_village.skills_impl.trends import TrendsSkill
     t = TrendsSkill()
     assert t.SOURCE == "trends" and t.kind == "flux" and t.frequency("x") == "weekly"
-    assert t.available_metrics(_trends_ctx(["vegan shoes", "plasticvrij"])) == ["vegan_shoes", "plasticvrij"]
+    assert t.available_metrics(_pair_ctx()) == [
+        "ratio_thrift_luxury", "ratio_second_hand_brand_new", "ratio_repair_replace"]
     assert t.available_metrics() == []                          # zonder context → leeg
-    assert _ratio(50, 80) == _ratio(25, 40) == 160 and _ratio(50, 0) == 0 and _ratio(0, 80) is None
 
 
-# (b) trends_anchor ontbreekt → error-pad, geen writes, geen fetch
-def test_trends_anker_ontbreekt_failclosed(caplog):
+# (b) trends_pairs ontbreekt/leeg → error-pad, geen writes, geen fetch
+def test_trends_pairs_ontbreekt_failclosed(caplog):
+    from nooch_village.skills_impl.trends import TrendsSkill
+    called = []
+    for ctx in (_pair_ctx(pairs=None), _pair_ctx(pairs="   ")):
+        with caplog.at_level(logging.ERROR):
+            vals = TrendsSkill().daily_values(ctx, "x", _fetch=lambda *a: called.append(a))
+        assert vals == {} and called == []
+    assert "trends_pairs" in caplog.text and "levert niets" in caplog.text
+
+
+# (c) misvormd paar → hele config ongeldig, error, niets (GEEN partial parse)
+def test_trends_misvormd_paar_hele_config_ongeldig(caplog):
     from nooch_village.skills_impl.trends import TrendsSkill
     called = []
     with caplog.at_level(logging.ERROR):
-        vals = TrendsSkill().daily_values(_trends_ctx(["vegan shoes"], anchor=None), "x",
+        vals = TrendsSkill().daily_values(_pair_ctx("thrift:luxury, repair"), "x",   # 'repair' zonder :B
                                           _fetch=lambda *a: called.append(a))
-    assert vals == {"vegan_shoes": None} and called == []       # geen fetch, geen write
-    assert "trends_anchor" in caplog.text and "levert niets" in caplog.text
+    assert vals == {} and called == []                          # ook het geldige paar valt weg (geen partial)
+    assert "misvormd" in caplog.text
 
 
-# (c) batching: 9 termen → 3 batches (4+anker), (4+anker), (1+anker); anker als 1e in ELKE batch
-def test_trends_batching_4_plus_anker():
+# (d) termen met spaties parsen correct
+def test_trends_pairs_spaties_parsen():
+    from nooch_village.skills_impl.trends import _parse_pairs, _pair_field
+    assert _parse_pairs("second hand:brand new") == [("second hand", "brand new")]
+    assert _pair_field("second hand", "brand new") == "ratio_second_hand_brand_new"
+    assert _parse_pairs(" a : b , c:d ") == [("a", "b"), ("c", "d")]     # whitespace getrimd
+
+
+# (e) A=0, B geldig → ratio 0 geschreven (echte observatie); float, ongeschaald
+def test_trends_A_nul_ratio_0_float():
     from nooch_village.skills_impl.trends import TrendsSkill
-    terms = [f"term{i}" for i in range(9)]
-    payloads = []
-
-    def fetch(payload, tf, g):
-        payloads.append(list(payload))
-        return _df({c: 50 for c in payload})                    # anker=50, elke term=50 → ratio 100
-    vals = TrendsSkill().daily_values(_trends_ctx(terms), "x", _fetch=fetch)
-    assert [len(p) for p in payloads] == [5, 5, 2]              # (4+anker)(4+anker)(1+anker)
-    assert all(p[0] == "shoes" for p in payloads)              # anker in ELKE batch, als eerste
-    assert list(vals.values()) == [100] * 9
+    vals = TrendsSkill().daily_values(_pair_ctx("thrift:luxury"), "x",
+                                      _fetch=lambda p, tf, g: _df({p[0]: 0, p[1]: 40}))
+    assert vals == {"ratio_thrift_luxury": 0.0}                 # 0/40 = 0 (geen gat)
+    vals2 = TrendsSkill().daily_values(_pair_ctx("thrift:luxury"), "x",
+                                       _fetch=lambda p, tf, g: _df({p[0]: 10, p[1]: 40}))
+    assert vals2 == {"ratio_thrift_luxury": 0.25}              # 10/40 = 0.25 float, niet naar int
 
 
-# (d) API geeft 0 voor een term → 0 geschreven (echte observatie, geen gat)
-def test_trends_nul_is_echte_observatie():
+# (f) B=0 → punt geskipt + ERROR (noemer-guard)
+def test_trends_B_nul_geskipt(caplog):
     from nooch_village.skills_impl.trends import TrendsSkill
-    def fetch(payload, tf, g):
-        return _df({"shoes": 50, "term0": 0, "term1": 80})
-    vals = TrendsSkill().daily_values(_trends_ctx(["term0", "term1"]), "x", _fetch=fetch)
-    assert vals == {"term0": 0, "term1": 160}                   # 0/50×100=0 (geen gat), 80/50×100=160
-
-
-# (e) anker 0 in response → batch geskipt + error (deel-door-nul-guard)
-def test_trends_anker_nul_batch_geskipt(caplog):
-    from nooch_village.skills_impl.trends import TrendsSkill
-    def fetch(payload, tf, g):
-        return _df({c: (0 if c == "shoes" else 80) for c in payload})   # anker 0
     with caplog.at_level(logging.ERROR):
-        vals = TrendsSkill().daily_values(_trends_ctx(["vegan shoes"]), "x", _fetch=fetch)
-    assert vals == {"vegan_shoes": None}                        # batch geskipt → gat
-    assert "anker" in caplog.text.lower() and "0" in caplog.text
+        vals = TrendsSkill().daily_values(_pair_ctx("thrift:luxury"), "x",
+                                          _fetch=lambda p, tf, g: _df({p[0]: 30, p[1]: 0}))   # noemer 0
+    assert vals == {"ratio_thrift_luxury": None} and "noemer" in caplog.text.lower()
 
 
-# (f) mislukte/lege batch-respons → gat (None) + error, geen crash
-def test_trends_batch_faalt_is_gat(caplog):
+# (g) request-fout → gat + ERROR
+def test_trends_request_fout_is_gat(caplog):
     from nooch_village.skills_impl.trends import TrendsSkill
-    boom = lambda *a: (_ for _ in ()).throw(RuntimeError("pytrends 429"))
+    boom = lambda *a: (_ for _ in ()).throw(RuntimeError("429"))
     with caplog.at_level(logging.ERROR):
-        vals = TrendsSkill().daily_values(_trends_ctx(["vegan shoes"]), "x", _fetch=boom)
-    assert vals == {"vegan_shoes": None} and "faalde" in caplog.text
+        vals = TrendsSkill().daily_values(_pair_ctx("thrift:luxury"), "x", _fetch=boom)
+    assert vals == {"ratio_thrift_luxury": None} and "faalde" in caplog.text
 
 
-# collector-integratie: actieve trends-bron schrijft echte reeksen (pytrends gemockt, geen netwerk)
+# (h) anker/Library-code volledig weg uit trends.py (geen dood pad)
+def test_trends_anker_en_library_code_weg():
+    import inspect
+    import nooch_village.skills_impl.trends as _t
+    src = inspect.getsource(_t)
+    for dead in ("trends_anchor", "_approved_library_terms", "_TRENDS_BATCH", "def _ratio"):
+        assert dead not in src, f"dood pad nog aanwezig in trends.py: {dead}"
+
+
+# collector-integratie: actieve trends-bron schrijft de ratio-reeksen (pytrends gemockt)
 class _FakeTrendReq2:
     def __init__(self, *a, **k): pass
     def build_payload(self, payload, **k): self._p = payload
     def interest_over_time(self):
-        return _df({c: 50 for c in self._p})                    # ratio 100 per term
+        a, b = self._p
+        return _df({a: 30, b: 15})                              # ratio 2.0
 
 
-def test_collector_trends_weekly_schrijft(tmp_path, monkeypatch):
+def test_collector_trends_weekly_schrijft_ratio(tmp_path, monkeypatch):
     from nooch_village.skills_impl.trends import TrendsSkill
     monkeypatch.setattr("pytrends.request.TrendReq", _FakeTrendReq2)
     dd = _dd(tmp_path)
     cockpit2._Stores(dd).sources.set_active("trends", True)
     reg = SkillRegistry(); reg.register(TrendsSkill())
     w = collect_daily_observations(reg, cockpit2._Stores(dd).sources, cockpit2._Stores(dd).observations,
-                                   _trends_ctx(["vegan shoes"]), today=datetime.date(2026, 7, 8))  # ma 2026-07-06
-    assert ("trends", "vegan_shoes", "2026-07-06") in w
-    rows = cockpit2._Stores(dd).observations.daily_series("trends_vegan_shoes_day", bron="trends")
-    assert [r["value"] for r in rows] == [100]
+                                   _pair_ctx("thrift:luxury"), today=datetime.date(2026, 7, 8))  # ma 2026-07-06
+    assert ("trends", "ratio_thrift_luxury", "2026-07-06") in w
+    rows = cockpit2._Stores(dd).observations.daily_series("trends_ratio_thrift_luxury_day", bron="trends")
+    assert [r["value"] for r in rows] == [2.0]
 
 
 def test_trends_blijft_inactief_tot_activatie(tmp_path):
@@ -398,7 +406,7 @@ def test_trends_blijft_inactief_tot_activatie(tmp_path):
     assert not cockpit2._Stores(dd).sources.active("trends")
     reg = SkillRegistry(); reg.register(TrendsSkill())
     w = collect_daily_observations(reg, cockpit2._Stores(dd).sources, cockpit2._Stores(dd).observations,
-                                   _trends_ctx(), today=datetime.date(2026, 7, 8))
+                                   _pair_ctx(), today=datetime.date(2026, 7, 8))
     assert w == []
 
 

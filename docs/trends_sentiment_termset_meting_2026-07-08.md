@@ -81,3 +81,24 @@ geslaagde paren zijn stemmings-tegenstellingen van vergelijkbare orde en houden 
 ## Definitieve paarset (onder voorbehoud van curator-bevestiging)
 `thrift÷luxury`, `second hand÷brand new`, `repair÷replace`. Scope 1 volgt pas na bevestiging (ontwerp
 wijzigt mee: `trends_pairs` i.p.v. `trends_terms`+`trends_anchor`).
+
+---
+
+# Scope 1 gerealiseerd (2026-07-08) — vaste paarset + opruiming
+
+Curator bevestigde de paarset. De `trends`-bron is omgebouwd van anker-ratio naar stemming-paren:
+- **Config:** `trends_pairs = thrift:luxury, second hand:brand new, repair:replace` (settings.ini);
+  `trends_anchor` verwijderd (sleutel + code). Fail-closed op `trends_pairs` (ontbreekt/leeg/misvormd
+  paar → ERROR + niets, geen partial parse).
+- **Gedrag:** één request per paar `[A, B]`; veld/metric `trends_ratio_<A>_<B>_day`; waarde = A/B
+  (float, ongeschaald). Noemer-guard: B=0/afwezig → punt geskipt + ERROR. A=0 → ratio 0 (echte obs).
+  Request-fout → gat + ERROR. De Library-koppeling, anker-batching en `_ratio` zijn volledig verwijderd.
+- **Oriëntatie (meetconstante):** A = zuinigheid/behoud, B = toegeeflijkheid/nieuw; A/B stijgt =
+  versobering-stemming stijgt.
+
+## Store-opruiming (verworpen ontwerp)
+De 28 reeksen die de `trends`-bron op **2026-07-06** schreef onder het verworpen Library-anker-ontwerp
+(metrics `trends_<keyword>_day`, vóór meetstart) zijn **verwijderd** via `remove_bron("trends",
+keep_prefix="trends_ratio_")` in `_bootstrap` (idempotent; behoudt de nieuwe `trends_ratio_*`-reeksen).
+**Aantal verwijderde rijen: 28.** Reden: geschreven onder een ontwerp dat de meting (iteratie 1/2) heeft
+verworpen; niet doortellen.

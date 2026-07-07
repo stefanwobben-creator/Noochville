@@ -155,6 +155,9 @@ def _bootstrap(dd: str) -> None:
     st.metrics.migrate_metric_bindings(st.defs)   # wees-KPI's: veld/categorie uit de def + reeks-tegel-dim (idempotent)
     for _m in ("openalex_works_day", "openalex_citations_day"):   # vervuilde undimensioned OpenAlex-totalen
         st.observations.remove_metric(_m, bron="openalex")        # (search→'Regeneration (biology)') → weg, niet doortellen
+    # Trends: de Library-anker-reeksen (verworpen ontwerp, vóór meetstart) weg; alleen de nieuwe
+    # stemming-paar-reeksen (trends_ratio_*) blijven. Idempotent. Zie de meetverantwoording in docs/.
+    st.observations.remove_bron("trends", keep_prefix="trends_ratio_")
 
 
 from nooch_village.views.overview import (
