@@ -103,9 +103,20 @@ def collect_daily_observations(registry, sources: SourceStatusStore, obs: Observ
         if not configured:
             log.warning("bron '%s' actief maar niet geconfigureerd — overslaan", src)
             continue
+        # SCOPE 2 fail-closed guard: een ACTIEVE + geconfigureerde bron die NUL velden aanbiedt schrijft stil
+        # niets (de trends-klassefout: active=True + available_metrics()==[]). Luid loggen, maar NIET raisen —
+        # de puls moet de overige bronnen blijven verzamelen. Alleen actieve bronnen bereiken dit punt (regel
+        # 99: inactief → continue), dus bewust-inactieve bronnen (Shopify, Semantic Scholar) geven géén alarm.
+        # available_metrics wordt door het totaal- én dimensie-pad gedeeld, dus deze check dekt beide. Het
+        # geval 'velden wél, maar 0 dimensie-waarden' is GEEN volledige stille no-op (de totalen verzamelen
+        # dan wél) → bewust buiten deze guard (zie rapport).
+        fields = skill.available_metrics(context)
+        if not fields:
+            log.error("bron '%s' is actief + geconfigureerd maar biedt 0 velden aan (available_metrics leeg) — "
+                      "schrijft niets deze puls; controleer de config/termenbron.", src)
         # Welke velden zijn 'due' (nog geen datapunt voor de verwachte periode)?
         due = {}
-        for field in skill.available_metrics(context):
+        for field in fields:
             datum = _expected_period(skill.frequency(field), today, getattr(skill, "lag_days", 0))
             if not _has_point(obs, f"{src}_{field}_day", src, datum):
                 due[field] = datum
@@ -133,7 +144,7 @@ def collect_daily_observations(registry, sources: SourceStatusStore, obs: Observ
         # blijven gaten (record_daily dedupliceert incl. de ::slug). Zie ARCHITECTUUR: de due-scan + write
         # is lineair per (veld×keyword) — vóór een TWEEDE dimensie-bron is een store-index vereist.
         dim = getattr(skill, "DIMENSION", None)
-        metrics = skill.available_metrics(context) if dim else []
+        metrics = fields if dim else []
         vals_sel = _dimension_values(context, dim) if dim else []
         if dim and metrics and vals_sel:
             ddat = _expected_period(skill.frequency(metrics[0]), today, getattr(skill, "lag_days", 0))
