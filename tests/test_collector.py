@@ -287,10 +287,14 @@ def test_semanticscholar_blijft_inactief_tot_activatie(tmp_path):
 
 
 # ── Google Trends: flux-bron met stemming-PAREN (ratio A/B, geen gedeeld anker) ──────────────────
-def _df(cols_to_val: dict):
-    """1-rijs pandas-DataFrame per kolom → simuleert interest_over_time (recent = laatste rij)."""
+def _df(cols_to_val: dict, partial_last=False):
+    """pandas-DataFrame + isPartial-kolom (zoals interest_over_time). Waarden scalar (1 rij) of list
+    (meerdere rijen); partial_last markeert de laatste rij als lopende, onvolledige week."""
     import pandas as pd
-    return pd.DataFrame({c: [v] for c, v in cols_to_val.items()})
+    data = {c: (list(v) if isinstance(v, list) else [v]) for c, v in cols_to_val.items()}
+    n = len(next(iter(data.values()))) if data else 0
+    data["isPartial"] = [False] * max(0, n - 1) + ([partial_last] if n else [])
+    return pd.DataFrame(data)
 
 
 def _pair_ctx(pairs="thrift:luxury, second hand:brand new, repair:replace"):
@@ -378,26 +382,76 @@ def test_trends_anker_en_library_code_weg():
         assert dead not in src, f"dood pad nog aanwezig in trends.py: {dead}"
 
 
-# collector-integratie: actieve trends-bron schrijft de ratio-reeksen (pytrends gemockt)
-class _FakeTrendReq2:
-    def __init__(self, *a, **k): pass
-    def build_payload(self, payload, **k): self._p = payload
-    def interest_over_time(self):
-        a, b = self._p
-        return _df({a: 30, b: 15})                              # ratio 2.0
+# ── isPartial-fix: laatste COMPLETE week i.p.v. lopende partiële week ─────────────────────────────
+def test_trends_last_complete_week_en_expected_datum():
+    from nooch_village.skills_impl.trends import _last_complete_week, TrendsSkill
+    assert _last_complete_week(datetime.date(2026, 7, 8)) == datetime.date(2026, 6, 28)   # wo → vorige zondag-week
+    assert TrendsSkill().expected_datum(datetime.date(2026, 7, 8)) == "2026-06-28"
 
 
-def test_collector_trends_weekly_schrijft_ratio(tmp_path, monkeypatch):
+# (a) partiële laatste rij → voorlaatste (complete) week gebruikt; datumlabel = complete week (via collector)
+def test_trends_partiele_laatste_week_geskipt(tmp_path, monkeypatch):
     from nooch_village.skills_impl.trends import TrendsSkill
-    monkeypatch.setattr("pytrends.request.TrendReq", _FakeTrendReq2)
-    dd = _dd(tmp_path)
-    cockpit2._Stores(dd).sources.set_active("trends", True)
+    vals = TrendsSkill().daily_values(_pair_ctx("second hand:brand new"), "x",
+                                      _fetch=lambda p, tf, g: _df({p[0]: [50, 99], p[1]: [58, 99]}, partial_last=True))
+    assert vals == {"ratio_second_hand_brand_new": round(50 / 58, 4)}   # complete week, niet 99/99=1.0
+
+    class _FR:
+        def __init__(s, *a, **k): pass
+        def build_payload(s, p, **k): s._p = p
+        def interest_over_time(s):
+            a, b = s._p; return _df({a: [50, 99], b: [58, 99]}, partial_last=True)
+    monkeypatch.setattr("pytrends.request.TrendReq", _FR)
+    dd = _dd(tmp_path); cockpit2._Stores(dd).sources.set_active("trends", True)
     reg = SkillRegistry(); reg.register(TrendsSkill())
     w = collect_daily_observations(reg, cockpit2._Stores(dd).sources, cockpit2._Stores(dd).observations,
-                                   _pair_ctx("thrift:luxury"), today=datetime.date(2026, 7, 8))  # ma 2026-07-06
-    assert ("trends", "ratio_thrift_luxury", "2026-07-06") in w
-    rows = cockpit2._Stores(dd).observations.daily_series("trends_ratio_thrift_luxury_day", bron="trends")
-    assert [r["value"] for r in rows] == [2.0]
+                                   _pair_ctx("second hand:brand new"), today=datetime.date(2026, 7, 8))
+    assert ("trends", "ratio_second_hand_brand_new", "2026-06-28") in w   # complete-week-label
+    assert not any(x[2] == "2026-07-06" for x in w)                       # NIET de pulsperiode
+
+
+# (b) geen partiële rijen → laatste rij gewoon gebruikt
+def test_trends_geen_partiele_rij_laatste_gebruikt():
+    from nooch_village.skills_impl.trends import TrendsSkill
+    vals = TrendsSkill().daily_values(_pair_ctx("thrift:luxury"), "x",
+                                      _fetch=lambda p, tf, g: _df({p[0]: [10, 20], p[1]: [40, 40]}))  # geen partial
+    assert vals == {"ratio_thrift_luxury": 0.5}                          # laatste rij 20/40
+
+
+# (c) alles partial / isPartial-kolom afwezig → gat + ERROR, geen write
+def test_trends_alles_partial_of_geen_kolom_is_gat(caplog):
+    import pandas as pd
+    from nooch_village.skills_impl.trends import TrendsSkill
+    with caplog.at_level(logging.ERROR):
+        alles = TrendsSkill().daily_values(_pair_ctx("thrift:luxury"), "x",
+                                           _fetch=lambda p, tf, g: _df({p[0]: 30, p[1]: 15}, partial_last=True))
+        geen_kol = TrendsSkill().daily_values(_pair_ctx("thrift:luxury"), "x",
+                                              _fetch=lambda p, tf, g: pd.DataFrame({p[0]: [30], p[1]: [15]}))
+    assert alles == {"ratio_thrift_luxury": None}                        # nooit terugvallen op partiële rij
+    assert geen_kol == {"ratio_thrift_luxury": None}                     # isPartial-kolom afwezig → gat
+    assert "complete" in caplog.text.lower()
+
+
+# (d) zelfde complete week al aanwezig → geen tweede write (idempotent)
+def test_trends_complete_week_idempotent(tmp_path, monkeypatch):
+    from nooch_village.skills_impl.trends import TrendsSkill
+
+    class _FR:
+        def __init__(s, *a, **k): pass
+        def build_payload(s, p, **k): s._p = p
+        def interest_over_time(s):
+            a, b = s._p; return _df({a: [30, 99], b: [15, 99]}, partial_last=True)   # complete: 30/15=2.0
+    monkeypatch.setattr("pytrends.request.TrendReq", _FR)
+    dd = _dd(tmp_path); cockpit2._Stores(dd).sources.set_active("trends", True)
+    reg = SkillRegistry(); reg.register(TrendsSkill())
+    st = lambda: cockpit2._Stores(dd)
+    w1 = collect_daily_observations(reg, st().sources, st().observations,
+                                    _pair_ctx("thrift:luxury"), today=datetime.date(2026, 7, 8))
+    w2 = collect_daily_observations(reg, st().sources, st().observations,
+                                    _pair_ctx("thrift:luxury"), today=datetime.date(2026, 7, 8))
+    assert ("trends", "ratio_thrift_luxury", "2026-06-28") in w1 and w2 == []   # 2e puls: niets nieuws
+    rows = st().observations.daily_series("trends_ratio_thrift_luxury_day", bron="trends")
+    assert [r["value"] for r in rows] == [2.0]                           # geen duplicaat
 
 
 def test_trends_blijft_inactief_tot_activatie(tmp_path):

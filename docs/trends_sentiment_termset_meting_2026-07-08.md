@@ -102,3 +102,25 @@ De 28 reeksen die de `trends`-bron op **2026-07-06** schreef onder het verworpen
 keep_prefix="trends_ratio_")` in `_bootstrap` (idempotent; behoudt de nieuwe `trends_ratio_*`-reeksen).
 **Aantal verwijderde rijen: 28.** Reden: geschreven onder een ontwerp dat de meting (iteratie 1/2) heeft
 verworpen; niet doortellen.
+
+---
+
+# isPartial-fix (2026-07-08) — laatste COMPLETE week i.p.v. lopende partiële week
+
+De eerste puls (PR #99) schreef de **lopende, onvolledige week** (Trends `isPartial=True`): elke ratio
+was een partiële-week-waarde. Fail-closed-keuze: een partieel punt is geen betrouwbaar punt.
+
+- **Gedrag:** `daily_values` filtert `isPartial=True`-rijen (`_drop_partial`) vóór het laatste punt gekozen
+  wordt → de ratio komt van de laatste **complete** week. Geen enkele complete rij / isPartial-kolom
+  afwezig → gat + ERROR (nooit terugvallen op een partiële rij).
+- **Datumlabel:** de observatie draagt de datum van díe complete week (via `expected_datum` →
+  `_last_complete_week(today)`, deterministisch: Trends-weken starten zondag, de lopende week is partieel
+  → de vorige is de laatste complete). Voor `today=2026-07-08` = **2026-06-28**. Dit label (de meetweek,
+  niet de pulsdatum) is essentieel voor latere lead/lag-analyse. De collector gebruikt dezelfde datum voor
+  de due-check → idempotent, geen dag-refetch.
+
+## Store-opruiming (partiële rijen)
+De 3 `trends_ratio_*`-rijen van **2026-07-06** (berekend op partiële weekdata, geschreven vóór meetstart)
+zijn **verwijderd** via een eenmalige `remove_bron("trends")` op prod; de puls herschrijft ze met het
+complete-week-label. **Aantal verwijderde rijen: 3.** Reden: partiële-week-waarden, geen betrouwbare
+observatie.

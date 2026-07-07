@@ -105,6 +105,14 @@ class DataSourceSkill(Skill):
         Default leeg: bestaande bronnen (Plausible/Shopify) veranderen niet."""
         return {}
 
+    def expected_datum(self, today):
+        """Optionele datum-override voor de due-check ÉN het datumlabel van de observatie. Default None →
+        de collector gebruikt `_expected_period` (de pulsperiode). Een bron die een specifieke meetperiode
+        beschrijft (bijv. Trends: de laatste COMPLETE week, niet de lopende partiële week) geeft hier de
+        datum die de observatie moet dragen — essentieel voor latere lead/lag-analyse. Deterministisch uit
+        `today`, zodat de due-check en de write dezelfde sleutel gebruiken (idempotent, geen dag-refetch)."""
+        return None
+
 
 class SkillRegistry:
     def __init__(self):
