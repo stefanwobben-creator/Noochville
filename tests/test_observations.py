@@ -80,3 +80,34 @@ def test_record_daily_een_datapunt_per_bron_per_dag(store):
 def test_oude_rijen_zonder_datum_bron_blijven_leesbaar(store):
     store.record("ww", "bezoekers", 42, ts=1.0)            # legacy-vorm (geen bron/datum meegegeven)
     assert store.latest("ww", "bezoekers")["value"] == 42  # series/latest werken nog
+
+
+# ── scope 2 punt 5: in-memory index (dedup O(1), incrementele update, invalidatie na migratie) ────
+def test_index_dedup_en_incrementeel(tmp_path):
+    from nooch_village.observations import ObservationStore
+    o = ObservationStore(str(tmp_path / "o.jsonl"))
+    assert o.record_daily("plausible", "plausible_visitors_day", 10, bron="plausible", datum="2026-07-06")
+    assert not o.record_daily("plausible", "plausible_visitors_day", 99, bron="plausible", datum="2026-07-06")  # dup → O(1) via index
+    assert o.record_daily("plausible", "plausible_visitors_day", 11, bron="plausible", datum="2026-07-07")
+    # de reeks klopt (incrementeel geïndexeerd, geen file-herlees per call)
+    assert [r["value"] for r in o.daily_series("plausible_visitors_day", bron="plausible")] == [10, 11]
+
+
+def test_index_ziet_bestaande_data_bij_nieuwe_instance(tmp_path):
+    from nooch_village.observations import ObservationStore
+    p = str(tmp_path / "o.jsonl")
+    ObservationStore(p).record_daily("gsc", "gsc_impressions_day", 77, bron="gsc", datum="2026-07-06")
+    o2 = ObservationStore(p)                                   # verse instance leest het bestand één keer
+    assert not o2.record_daily("gsc", "gsc_impressions_day", 5, bron="gsc", datum="2026-07-06")  # idempotent over instances
+    assert [r["value"] for r in o2.daily_series("gsc_impressions_day", bron="gsc")] == [77]
+
+
+def test_index_invalidatie_na_rename(tmp_path):
+    from nooch_village.observations import ObservationStore
+    o = ObservationStore(str(tmp_path / "o.jsonl"))
+    o.record_daily("plausible", "visitors_day", 10, bron="plausible", datum="2026-07-06")
+    _ = o.daily_series("visitors_day", bron="plausible")      # bouwt de index
+    o.rename_metric("visitors_day", "plausible_visitors_day", bron="plausible")
+    # na de herschrijf leest de index de nieuwe sleutel (geen stale index)
+    assert o.daily_series("visitors_day", bron="plausible") == []
+    assert [r["value"] for r in o.daily_series("plausible_visitors_day", bron="plausible")] == [10]

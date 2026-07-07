@@ -25,14 +25,44 @@ def dim_slug(value: str) -> str:
 
 
 class ObservationStore:
+    """Append-only tijdreeks met een lazy in-memory index (scope 2, punt 5). De index (alle rijen +
+    een dedup-set + een (metric,bron)-index) wordt éénmaal per instance uit het bestand opgebouwd, en
+    incrementeel bijgewerkt bij `record`. Zo is `record_daily` O(1) i.p.v. een lineaire scan per write
+    (was O(N·rijen) = kwadratisch bij N dimensie-reeksen/dag) en herlezen we het bestand niet per call.
+    De twee herschrijf-migraties (rename_metric, normalize_source_role_ids) invalideren de index.
+    Aanname: één schrijvende instance per proces (collector = één `obs`; cockpit = verse store per
+    request). Geen gedeelde langlevende instance met een externe schrijver."""
 
     def __init__(self, path: str):
         self.path = path
+        self._rows = None        # lazy cache: alle rijen (list[dict])
+        self._dedup = None       # set van (role_id, metric, bron, datum) → O(1) idempotentie
+        self._by_mb = None       # {(metric, bron): [rows]} → O(1) daily_series op metric+bron
+
+    def _ensure_cache(self) -> None:
+        if self._rows is not None:
+            return
+        self._rows, self._dedup, self._by_mb = [], set(), {}
+        if os.path.exists(self.path):
+            with open(self.path) as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        self._index(json.loads(line))
+
+    def _index(self, r: dict) -> None:
+        self._rows.append(r)
+        self._dedup.add((r.get("role_id"), r.get("metric"), r.get("bron"), r.get("datum")))
+        self._by_mb.setdefault((r.get("metric"), r.get("bron")), []).append(r)
+
+    def _invalidate(self) -> None:
+        """Na een herschrijf van het bestand (in-place mutatie): index opnieuw opbouwen bij volgend gebruik."""
+        self._rows = self._dedup = self._by_mb = None
 
     def record(self, role_id: str, metric: str, value,
                ts: float | None = None, meta: dict | None = None,
                bron: str = "", datum: str | None = None) -> None:
-        """Voeg één observatie toe aan het einde van het bestand."""
+        """Voeg één observatie toe aan het einde van het bestand (en aan de index als die geladen is)."""
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         ts = ts if ts is not None else time.time()
         row = {
@@ -46,6 +76,8 @@ class ObservationStore:
         }
         with open(self.path, "a") as f:
             f.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
+        if self._rows is not None:
+            self._index(row)
 
     def rename_metric(self, old_metric: str, new_metric: str, bron: str | None = None) -> int:
         """Hernoem een metric-sleutel in alle bestaande rijen (optioneel per bron); herschrijft het
@@ -61,6 +93,7 @@ class ObservationStore:
             with open(self.path, "w") as f:
                 for r in rows:
                     f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
+            self._invalidate()          # in-place mutatie + herschrijf → index opnieuw opbouwen
         return n
 
     def normalize_source_role_ids(self) -> dict:
@@ -103,6 +136,7 @@ class ObservationStore:
             with open(self.path, "w") as f:
                 for r in kept:
                     f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
+            self._invalidate()          # in-place mutatie + herschrijf → index opnieuw opbouwen
         return {"dropped": dropped, "renamed": renamed, "conflicts": conflicts}
 
     def record_daily(self, role_id: str, metric: str, value, bron: str,
@@ -112,30 +146,24 @@ class ObservationStore:
         die dag+bron, dan niets doen (append-only, idempotent). Geeft True als er geschreven is.
         `meta` (optioneel) legt bron-specifieke herkomst vast (source_version, endpoint, …).
 
-        SCHAAL-VOORWAARDE (scope 2): de dedup-check hieronder is een LINEAIRE scan per write. Bij één
-        dimensie-bron (GSC, ~80 reeksen/dag) nog prima; vóór een TWEEDE dimensie-bron (bijv. Plausible
-        per land, Trends per geo) moet hier eerst een index/dag-bucket komen, anders wordt het schrijven
-        van N reeksen per dag O(N·rijen) = kwadratisch."""
+        Schaal (scope 2, punt 5 opgelost): de idempotentie-check loopt via de in-memory dedup-index (O(1)),
+        niet meer via een lineaire scan per write. N dimensie-reeksen/dag is daardoor O(N), niet O(N·rijen).
+        De index (zie de class-docstring) leest het bestand hoogstens één keer per instance."""
         ts = ts if ts is not None else time.time()
         datum = datum or _utc_date(ts)
-        for row in self._read_all():
-            if (row.get("role_id") == role_id and row.get("metric") == metric
-                    and row.get("bron") == bron and row.get("datum") == datum):
-                return False
+        self._ensure_cache()
+        if (role_id, metric, bron, datum) in self._dedup:
+            return False            # al een datapunt voor die dag+bron → idempotent, O(1) via de index
         self.record(role_id, metric, value, ts=ts, bron=bron, datum=datum, meta=meta)
         return True
 
     def _read_all(self) -> list[dict]:
-        """Alle regels als dicts (ongefilterd, ongesorteerd). Lege regels worden overgeslagen."""
-        if not os.path.exists(self.path):
-            return []
-        rows = []
-        with open(self.path) as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    rows.append(json.loads(line))
-        return rows
+        """Alle rijen (ongefilterd) uit de in-memory index; het bestand wordt hoogstens één keer per
+        instance gelezen. Geeft een KOPIE van de lijst terug, zodat een caller die sorteert of de lijst
+        muteert de index niet corrumpeert (de rij-dicts zelf zijn gedeeld — in-place mutatie gebeurt alleen
+        in de herschrijf-migraties, die daarna invalideren)."""
+        self._ensure_cache()
+        return list(self._rows)
 
     def series(self, role_id: str, metric: str) -> list[dict]:
         """Alle observaties voor role_id + metric, oplopend op ts."""
@@ -160,10 +188,10 @@ class ObservationStore:
         """De dagreeks van een metric (optioneel op bron en/of rol gefilterd), oplopend op ts.
         De één-per-dag-garantie komt van `record_daily`; hier wordt alleen gelezen. Site-brede
         metrics (bv. bezoekers) laat je role_id weg — dan telt de reeks over alle rollen."""
-        rows = [r for r in self._read_all()
-                if r.get("metric") == metric
-                and (bron is None or r.get("bron") == bron)
-                and (role_id is None or r.get("role_id") == role_id)]
+        self._ensure_cache()
+        base = self._by_mb.get((metric, bron), []) if bron is not None \
+            else [r for r in self._rows if r.get("metric") == metric]     # O(1) op metric+bron via de index
+        rows = [r for r in base if role_id is None or r.get("role_id") == role_id]
         # Sorteer op MEETDAG (datum), niet op schrijf-ts: na een backfill (historische dagen allemaal op
         # één dag geschreven) wijkt ts-volgorde af van datum-volgorde. ts blijft tiebreak + audit.
         rows.sort(key=lambda r: (r.get("datum") or "", r.get("ts", 0)))
