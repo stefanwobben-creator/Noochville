@@ -487,6 +487,7 @@ _SEED_VELD = {
     "Omzet (Shopify)": "revenue", "Gemiddelde orderwaarde (Shopify)": "aov",
     "Vertoningen (GSC)": "impressions", "Klikken (GSC)": "clicks",
     "CTR (GSC)": "ctr", "Gemiddelde positie (GSC)": "position",
+    "Academische werken (OpenAlex)": "works", "Gem. citaties (OpenAlex)": "citations",
 }
 
 # Groepering per bron — vult de categorie op bestaande definities zodat de KPI-wizard categorie-eerst

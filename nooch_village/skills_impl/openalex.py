@@ -82,6 +82,7 @@ class OpenalexSkill(DataSourceSkill):
     cost = "rate_limited"
     required_env = ("OPENALEX_API_KEY",)
     optional_env = ("openalex_mailto",)
+    DIMENSION = "concept"        # scope: reeksen per GEPIND concept-ID (query via /concepts/<id>, geen naamgenoot)
     description = (
         "Haalt academische evidentie op via OpenAlex (API-key vereist, polite pool, "
         "gesorteerd op citaties, backoff bij 429, locale-bewust, fail-closed)."
@@ -97,32 +98,53 @@ class OpenalexSkill(DataSourceSkill):
         return True
 
     def daily_values(self, context, datum: str) -> dict:
-        """Snapshot van de cumulatieve tellers (works_count/cited_by_count) van het top-concept dat
-        matcht op de missie-query. Legt de STAND vast (geen verschil — dat leid je bij weergave af): de
-        API kent alleen 'nu', dus `datum` is het periode-LABEL (weekly), geen historische query-datum.
-        Keyless via de polite pool (mailto); optionele key voor hogere limieten. Fail-closed per veld
-        (None bij fout of geen concept — geen mock)."""
-        out = {"works": None, "citations": None}
+        """OpenAlex is DIMENSIE-ONLY (per gepind concept, zie daily_dimension_values). Bewust GÉÉN
+        undimensioned totaal meer: dat liep via /concepts?search=<term> en pakte het TOP-gerankte concept —
+        precies het naamgenoot-pad dat 'regenerative' → 'Regeneration (biology)' binnenhaalde. Dus None."""
+        return {"works": None, "citations": None}
+
+    def _concept_map(self, context) -> dict:
+        """label → gepind concept-ID uit de bevroren config `openalex_concepts = C…:label, C…:label`."""
+        raw = (getattr(context, "settings", {}) or {}).get("openalex_concepts", "") or ""
+        out = {}
+        for part in raw.split(","):
+            if ":" in part:
+                cid, label = part.split(":", 1)
+                if cid.strip() and label.strip():
+                    out[label.strip()] = cid.strip()
+        return out
+
+    def daily_dimension_values(self, context, datum: str, labels, *, _fetch=None) -> dict:
+        """Per gepind concept (label→ID uit config) de cumulatieve tellers works/citations, via een DIRECTE
+        `GET /concepts/<id>`-call — géén `search=`, dus nooit meer een naamgenoot. `labels` = de gecureerde
+        selectie (collector). Snapshot: `datum` is het periode-label, niet een historische query-datum.
+        Fail-closed per concept (geen entry bij fout). `_fetch(url)` injecteerbaar zodat de contract-test
+        de directe /concepts/<id>-URL kan bewijzen."""
+        cmap = self._concept_map(context)
         settings = getattr(context, "settings", {}) or {}
-        query = (settings.get("openalex_query") or "regenerative").strip()
         mailto = settings.get("openalex_mailto", "info@nooch.earth")
         key = settings.get("OPENALEX_API_KEY") or os.getenv("OPENALEX_API_KEY")   # optioneel
         ua = f"NoochVillage/1.0 (nooch.earth; mailto:{mailto})"
-        url = (f"https://api.openalex.org/concepts?search={urllib.parse.quote(query)}"
-               f"&per_page=1&mailto={urllib.parse.quote(mailto)}")
-        if key:
-            url += f"&api_key={urllib.parse.quote(key)}"
-        try:
-            data = self._fetch_with_backoff(urllib.request.Request(url, headers={"User-Agent": ua}))
-        except Exception as exc:
-            log.warning("OpenAlex daily_values faalde (%s): %s", query, exc)
-            return out
-        results = data.get("results", [])
-        if not results:
-            return out                    # geen concept gevonden → None (geen 'dood')
-        c = results[0]
-        out["works"] = int(c.get("works_count", 0))
-        out["citations"] = int(c.get("cited_by_count", 0))
+        out = {}
+        for label in (labels or []):
+            cid = cmap.get(label)
+            if not cid:
+                continue                  # label niet in de bevroren config → overslaan
+            url = (f"https://api.openalex.org/concepts/{urllib.parse.quote(cid)}"
+                   f"?mailto={urllib.parse.quote(mailto)}")
+            if key:
+                url += f"&api_key={urllib.parse.quote(key)}"
+            try:
+                data = (_fetch(url) if _fetch else
+                        self._fetch_with_backoff(urllib.request.Request(url, headers={"User-Agent": ua})))
+            except Exception as exc:
+                log.warning("OpenAlex concept '%s' (%s) faalde: %s", label, cid, exc)
+                continue
+            w, c = data.get("works_count"), data.get("cited_by_count")
+            if w is not None:
+                out[("works", label)] = int(w)
+            if c is not None:
+                out[("citations", label)] = int(c)
         return out
 
     def run(self, payload: dict, context) -> dict:
