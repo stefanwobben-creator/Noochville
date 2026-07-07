@@ -94,3 +94,21 @@ def test_systeem_kpi_niet_in_invoer_sectie(tmp_path):
     inv = page.split("Eigen KPI's (data invoeren)")[1].split("Systeem-KPI's")[0]
     assert "Handmatige conversie" in inv and "Systeem paginaweergaven" not in inv
     assert "Systeem paginaweergaven" in page.split("Systeem-KPI's")[1]
+
+
+def test_systeem_lijst_toont_alleen_niet_getegelde(tmp_path):
+    """De systeemlijst is aanvullend: een systeem-KPI die al als tegel op het dashboard staat, wordt niet
+    nóg eens in de lijst herhaald (bug: dubbele weergave)."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    tiled = st.metrics.add_kpi(C, "Vertoningen (GSC)", "n", origin="gsc", veld="impressions",
+                               categorie="Zoekprestaties", aard="reeks", meetwijze="systeem", auto=True)
+    st.metrics.add_kpi(C, "Beschikbaar paginaweergaven", "n", origin="plausible", veld="pageviews",
+                       categorie="Website", aard="reeks", meetwijze="systeem", auto=True)
+    st.metrics.add_tile(C, f"kpi:{tiled['id']}", "value", "time", "trend")   # de eerste staat al als tegel
+    page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
+    lijst = page.split("Systeem-KPI's")[1]
+    assert "Beschikbaar paginaweergaven" in lijst          # nog niet getegeld → wél in de lijst
+    assert "Vertoningen (GSC)" not in lijst                 # al als tegel → niet herhaald in de lijst
+    assert any(t["source"] == f"kpi:{tiled['id']}"         # de tegel staat er wél (bovenaan), niet weg-gefilterd
+               for t in cockpit2._Stores(dd).metrics.tiles_of(C))
