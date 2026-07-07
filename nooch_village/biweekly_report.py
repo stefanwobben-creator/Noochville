@@ -19,7 +19,6 @@ _BRON_LABEL = {
     "gsc": "Zoekprestaties (Search Console)",
     "openalex": "Academische tellers (OpenAlex)",
     "semanticscholar": "Academische tellers (Semantic Scholar)",
-    "serpstat": "Domein-zichtbaarheid (Serpstat)",
     "keywordseverywhere": "Zoekvolume (Keywords Everywhere)",
     "trends": "Zoekinteresse anker-ratio (Trends)",
     "werkoverleg": "Werkoverleg",

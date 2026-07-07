@@ -78,5 +78,5 @@ def test_activeer_form_toont_alleen_indicatoren_met_data(tmp_path):
 
 def test_formulier_hulp_per_bron(tmp_path):
     dd = _dd(tmp_path)
-    html = _koppel_section(cockpit2._Stores(dd), "t", "serpstat")   # Serpstat nog ongekoppeld → hulp toont
-    assert "Voorbeeld" in html and "Serpstat zichtbaarheid" in html              # concrete invul-hulp (quotes ge-escaped)
+    html = _koppel_section(cockpit2._Stores(dd), "t", "semanticscholar")   # nog ongekoppeld → hulp toont
+    assert "Voorbeeld" in html and "Semantic Scholar citaties" in html           # concrete invul-hulp (quotes ge-escaped)

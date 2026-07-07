@@ -38,7 +38,6 @@ from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
 from nooch_village.skills_impl.openalex import OpenalexSkill
 from nooch_village.skills_impl.bulletin_schrijven import BulletinSchrijvenSkill
 from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
-from nooch_village.skills_impl.serpstat import SerpstatSkill
 from nooch_village.skills_impl.stooq import StooqIndexSkill
 from nooch_village.skills_impl.alphavantage import AlphaVantageIndexSkill
 from nooch_village.skills_impl.trends_categorie import TrendsCategorieSkill
@@ -130,7 +129,6 @@ class Village:
             OpenalexSkill(),
             BulletinSchrijvenSkill(),
             KeywordsEverywhereSkill(),
-            SerpstatSkill(),
             StooqIndexSkill(), AlphaVantageIndexSkill(),                    # index-bronnen (Stooq gedeactiveerd; AV = ETF-proxy)
             TrendsCategorieSkill(), GdeltToneSkill(),                       # externe observatie-bronnen (inactief tot activatie + config)
             CompetitorNewsSkill(),

@@ -83,7 +83,7 @@ class DataSourceSkill(Skill):
     def frequency(self, field: str) -> str:
         """Hoe vaak dit veld hoort te vullen ('daily' voor de huidige drie bronnen). De puls checkt
         per veld of er al een datapunt is voor de verwachte periode (idempotent + zelfherstellend),
-        niet 'dagen sinds laatste ophaal'. Trage bronnen (Serpstat/Semantic Scholar) overschrijven dit
+        niet 'dagen sinds laatste ophaal'. Trage bronnen (Semantic Scholar) overschrijven dit
         later per veld; curator-override + koppeling aan de vers-drempel zijn een latere fase."""
         return self.DEFAULT_FREQUENCY
 

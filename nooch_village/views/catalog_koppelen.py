@@ -30,8 +30,6 @@ _FIELD_HELP = {
                 "uitleg 'Totaal aantal werken in OpenAlex voor deze term.'",
     "semanticscholar": "Voorbeeld — naam 'Semantic Scholar citaties', eenheid 'n', aard 'stand', "
                        "uitleg 'Citatie-telling van het meest geciteerde paper.'",
-    "serpstat": "Voorbeeld — naam 'Serpstat zichtbaarheid', eenheid 'index', aard 'reeks' (over tijd), "
-                "uitleg 'Domein-zichtbaarheidsindex.'",
 }
 
 
@@ -44,14 +42,12 @@ def catalog_sources() -> list[tuple[str, str, list[str]]]:
     from nooch_village.skills_impl.gsc import GscPerformanceSkill
     from nooch_village.skills_impl.openalex import OpenalexSkill
     from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
-    from nooch_village.skills_impl.serpstat import SerpstatSkill
     return [
         ("plausible", "Plausible (web-analytics)", PlausibleSkill().available_metrics()),
         ("shopify", "Shopify (verkoop)", ShopifySalesSkill().available_metrics()),
         ("gsc", "Google Search Console", GscPerformanceSkill().available_metrics()),
         ("openalex", "OpenAlex (academische tellers)", OpenalexSkill().available_metrics()),
         ("semanticscholar", "Semantic Scholar (auteur-tellers)", SemanticScholarSkill().available_metrics()),
-        ("serpstat", "Serpstat (domein-zichtbaarheid)", SerpstatSkill().available_metrics()),
     ]
 
 
