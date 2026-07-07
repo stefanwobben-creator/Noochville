@@ -90,7 +90,8 @@ def test_geldige_wijziging_wist_flag_en_laat_door(tmp_path):
     sessions = _auth.SessionStore(); tok = sessions.create(EMAIL)
     httpd, port = _server(dd, sessions)
     try:
-        body = f"current={TEMP}&new=MijnNieuwe99&confirm=MijnNieuwe99&next=/"
+        # Lotte-fix: een VERPLICHTE wijziging vraagt géén 'huidig wachtwoord' → POST zónder 'current' slaagt
+        body = "new=MijnNieuwe99&confirm=MijnNieuwe99&next=/"
         r, _ = _req(port, "POST", "/wachtwoord", cookie=tok, body=body)
         assert r.status == 303 and (r.getheader("Location") or "") == "/"
         assert _flag(dd) is False                                    # flag gewist
@@ -100,21 +101,40 @@ def test_geldige_wijziging_wist_flag_en_laat_door(tmp_path):
         httpd.shutdown()
 
 
-def test_fout_wachtwoord_en_beleid_blokkeren_de_wijziging(tmp_path):
+def test_forced_beleid_blokkeert_zonder_huidig_wachtwoord_check(tmp_path):
+    """Verplichte wijziging: geen huidig-wachtwoord-check (die veroorzaakte de autofill-loop), maar het
+    beleid blokkeert nog steeds — en 'nieuw ≠ het temp' zonder dat het huidige getypt hoeft te worden."""
     dd = _bootstrap(tmp_path); _seed_person(dd, must_change=True)
     sessions = _auth.SessionStore(); tok = sessions.create(EMAIL)
     httpd, port = _server(dd, sessions)
     try:
         cases = [
-            (f"current=FOUT&new=MijnNieuwe99&confirm=MijnNieuwe99", "Huidig wachtwoord onjuist"),
-            (f"current={TEMP}&new=MijnNieuwe99&confirm=Anders99xx", "komen niet overeen"),
-            (f"current={TEMP}&new=kort&confirm=kort", "minimaal 10"),
-            (f"current={TEMP}&new={TEMP}&confirm={TEMP}", "ander wachtwoord dan het huidige"),
+            ("new=MijnNieuwe99&confirm=Anders99xx", "komen niet overeen"),
+            ("new=kort&confirm=kort", "minimaal 10"),
+            (f"new={TEMP}&confirm={TEMP}", "ander wachtwoord"),      # nieuw ≠ het temp (via verify, niet getypt)
         ]
         for body, needle in cases:
             r, txt = _req(port, "POST", "/wachtwoord", cookie=tok, body=body)
             assert r.status == 200 and needle in txt
             assert _flag(dd) is True                                 # nog steeds geflagd, niets gewijzigd
+    finally:
+        httpd.shutdown()
+
+
+def test_vrijwillige_wijziging_vraagt_wel_huidig_wachtwoord(tmp_path):
+    """Niet-geforceerd (self-service): het huidig-wachtwoord-veld blijft staan én wordt geverifieerd."""
+    dd = _bootstrap(tmp_path); _seed_person(dd, must_change=False)   # eigen wachtwoord = TEMP, geen flag
+    sessions = _auth.SessionStore(); tok = sessions.create(EMAIL)
+    httpd, port = _server(dd, sessions)
+    try:
+        _, page = _req(port, "GET", "/wachtwoord", cookie=tok)
+        assert "Huidig wachtwoord" in page and 'name="current"' in page
+        r1, t1 = _req(port, "POST", "/wachtwoord", cookie=tok,
+                      body="current=FOUT&new=MijnNieuwe99&confirm=MijnNieuwe99")
+        assert r1.status == 200 and "Huidig wachtwoord onjuist" in t1   # fout huidig → geblokkeerd
+        r2, _ = _req(port, "POST", "/wachtwoord", cookie=tok,
+                     body=f"current={TEMP}&new=MijnNieuwe99&confirm=MijnNieuwe99")
+        assert r2.status == 303                                      # juist huidig → slaagt
     finally:
         httpd.shutdown()
 
@@ -155,9 +175,12 @@ def test_backfill_flagt_uitstaande_temps_en_spaart_gewijzigde(tmp_path):
 
 
 # ── auth-eenheden ───────────────────────────────────────────────────────────────────────────────
-def test_password_change_page_forced_en_error():
+def test_password_change_page_forced_verbergt_huidig_veld():
     forced = _auth.password_change_page(forced=True)
     assert "tijdelijk wachtwoord" in forced and 'action="/wachtwoord"' in forced
+    assert "Huidig wachtwoord" not in forced and 'name="current"' not in forced   # geen autofill-val
+    vrij = _auth.password_change_page(forced=False)
+    assert "Huidig wachtwoord" in vrij and 'name="current"' in vrij                # vrijwillig: wél
     assert "onjuist" in _auth.password_change_page(error="onjuist")
 
 

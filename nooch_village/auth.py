@@ -145,6 +145,13 @@ def password_change_page(next_url: str = "/", error: str = "", forced: bool = Fa
     intro = ('<p style="color:#5a5a5a;font-size:.9rem;margin:-.75rem 0 1.5rem">Je gebruikt een tijdelijk '
              'wachtwoord. Kies nu een eigen wachtwoord om verder te gaan.</p>') if forced else ""
     nxt = next_url.replace('"', '%22')
+    # Bij een VERPLICHTE wijziging geen 'huidig wachtwoord'-veld: de gebruiker is net via login
+    # geauthenticeerd (die verifieerde het temp al), en het veld lokt browser-autofill van het OUDE
+    # wachtwoord uit → een onmogelijk-op-te-lossen loop. Voor een vrijwillige wijziging blijft het staan.
+    current_field = "" if forced else (
+        '<label for="c">Huidig wachtwoord</label>'
+        '<input type="password" id="c" name="current" autocomplete="current-password" autofocus required>')
+    new_focus = " autofocus" if forced else ""
     return f"""<!doctype html><html lang="nl"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Wachtwoord wijzigen — NoochVille</title>
@@ -170,10 +177,9 @@ button:hover{{opacity:.9}}
   {intro}{err}
   <form method="post" action="/wachtwoord">
     <input type="hidden" name="next" value="{nxt}">
-    <label for="c">Huidig wachtwoord</label>
-    <input type="password" id="c" name="current" autocomplete="current-password" autofocus required>
+    {current_field}
     <label for="n">Nieuw wachtwoord</label>
-    <input type="password" id="n" name="new" autocomplete="new-password" required>
+    <input type="password" id="n" name="new" autocomplete="new-password"{new_focus} required>
     <label for="n2">Nieuw wachtwoord (bevestig)</label>
     <input type="password" id="n2" name="confirm" autocomplete="new-password" required>
     <button type="submit">Opslaan</button>
