@@ -190,11 +190,15 @@ def render_catalog(st: _Stores, csrf_token: str = "", msg: str = "",
             first = _e(srcs[0][0]) if srcs else ""
             koppel_ui = (f"<div class='c2-sec'><a class='btn ok' href='/catalog?koppel={first}'>"
                          f"+ Koppel nieuw veld</a> <span class='muted'>— promoveer een ruw bron-veld tot indicator</span></div>")
+    # Stap 2 (STATUS) + stap 3 (ACTIVEREN): open voor iedereen met catalogus-toegang (open books).
+    from nooch_village.views.catalog_koppelen import _status_section, _activate_section
+    status_ui = _status_section(st)
+    activate_ui = _activate_section(st, csrf_token) if csrf_token else ""
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
             f"<h1>Metrics-catalogus <span class='chip'>Librarian</span></h1>{_banner(msg)}"
             f"<p class='muted'>Eén bron voor indicator-definities: rollen kiezen hieruit. Een definitie "
             f"wijzigen versioneert nooit in-place, maar als verduidelijking, back-cast of reeksbreuk.</p>"
-            f"{koppel_ui}"
+            f"{koppel_ui}{status_ui}{activate_ui}"
             f"<div class='c2-sec'>{addform}</div>{nav}{sections}</div>")
     inner = (f"<style>{_EXTRA_CSS}</style>"
              f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · <a href='/'>home</a> · "
