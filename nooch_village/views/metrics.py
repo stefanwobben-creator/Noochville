@@ -410,9 +410,12 @@ def _sources_for(st: _Stores, rec):
     for k in st.metrics.kpis_for_nodes(nodes):
         if k.get("source"):
             continue                                  # bron-KPI's al gedekt door built-ins
+        dims = [("time", "over tijd"), ("none", "laatste waarde")]        # 'none' → geen "· NONE"
+        if (k.get("origin") or k.get("source")) in _dimensioned_sources() and k.get("veld"):
+            dims.append(("keyword", "per keyword"))                        # scope 2: bron mét DIMENSION
         srcs.append({"id": f"kpi:{k['id']}", "label": k["name"],
                      "measures": [("value", "waarde")],                    # niet de KPI-naam → geen dubbele naam
-                     "dims": [("time", "over tijd"), ("none", "laatste waarde")]})   # 'none' → geen "· NONE"
+                     "dims": dims})
     return srcs
 
 
@@ -517,6 +520,17 @@ def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff, end=None):
         it = st.metrics.get(source[4:])
         if not it:
             return {"kind": "number", "value": None, "unit": ""}
+        if dim == "keyword":                # scope 2: uitsplitsing per Library-keyword → breakdown
+            base, bron = _obs_key_for_indicator(it.get("source") or it.get("origin") or "", it.get("veld", ""))
+            rows = []
+            if base:
+                for kw, series in st.observations.dimensioned_series(base, bron=bron).items():
+                    pts = filter_samples([{"at": _row_at(r), "value": r["value"], "datum": r.get("datum")}
+                                          for r in series], cutoff, end)
+                    if pts:
+                        rows.append((kw, pts[-1][1]))       # laatste waarde binnen het venster per keyword
+            rows.sort(key=lambda x: (-(x[1] or 0), x[0]))
+            return {"kind": "breakdown", "rows": rows, "unit": it.get("unit", "")}
         raw = _kpi_samples(st, it)          # bron+veld → dagreeks uit de store; anders legacy/handmatig
         return {"kind": "series", "points": filter_samples(raw, cutoff, end), "unit": it.get("unit", "")}
     return {"kind": "number", "value": None, "unit": ""}
@@ -820,6 +834,13 @@ _FRESH_DAYS = 7
 # Bron-velden waarvoor 'recente data' zin heeft (data-bronnen). Manueel/formule/kpi → geen signaal.
 _DATA_SOURCES = {"plausible", "shopify", "gsc", "openalex", "semanticscholar", "trends",
                  "keywordseverywhere", "serpstat", "werkoverleg"}
+
+
+def _dimensioned_sources() -> set:
+    """Bron-id's van skills die een dimensie ondersteunen (class-attr DIMENSION), afgeleid uit de skills
+    zelf — geen aparte lijst om te onderhouden. Nu: {'gsc'} (scope 2). Bepaalt waar de tegel-composer de
+    'per keyword'-dim aanbiedt."""
+    return {cls.SOURCE for cls in _data_source_classes() if getattr(cls, "DIMENSION", None)}
 
 
 def _obs_key_for_indicator(source: str, veld: str, dim: str = ""):

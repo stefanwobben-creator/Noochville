@@ -105,3 +105,52 @@ def test_collector_schrijft_dimensie_met_meta_idempotent(tmp_path):
     w2 = collect_daily_observations(reg, sources, obs, ctx, today=datetime.date(2026, 7, 8))
     assert w2 == [] and len([r for r in obs._read_all()
                              if r["metric"] == "gsc_impressions_day::vegan_shoes"]) == 1   # idempotent
+
+
+# ── 2b: tegel-weergave (store-groepering, breakdown-fetch, keyword-dim aanbod) ────────────────────
+from nooch_village import cockpit2
+from nooch_village.metrics import MetricStore
+from nooch_village.views import metrics as vm
+
+C = "mother_earth__nooch"
+
+
+def test_dimensioned_series_groepeert_op_keyword(tmp_path):
+    obs = ObservationStore(str(tmp_path / "o.jsonl"))
+    for d, v in [("2026-07-06", 77), ("2026-07-07", 80)]:
+        obs.record_daily("gsc", "gsc_impressions_day::vegan_shoes", v, bron="gsc", datum=d,
+                         meta={"dimension": "query", "keyword": "vegan shoes"})
+    obs.record_daily("gsc", "gsc_impressions_day::earth_shoes", 12, bron="gsc", datum="2026-07-07",
+                     meta={"dimension": "query", "keyword": "earth shoes"})
+    groups = obs.dimensioned_series("gsc_impressions_day", bron="gsc")
+    assert set(groups) == {"vegan shoes", "earth shoes"}                     # rauwe keywords uit de meta
+    assert [r["value"] for r in groups["vegan shoes"]] == [77, 80]           # oplopend op meetdag
+
+
+def test_fetch_dim_keyword_geeft_breakdown(tmp_path):
+    obs = ObservationStore(str(tmp_path / "o.jsonl"))
+    obs.record_daily("gsc", "gsc_impressions_day::vegan_shoes", 80, bron="gsc", datum="2026-07-07",
+                     meta={"dimension": "query", "keyword": "vegan shoes"})
+    obs.record_daily("gsc", "gsc_impressions_day::earth_shoes", 12, bron="gsc", datum="2026-07-07",
+                     meta={"dimension": "query", "keyword": "earth shoes"})
+    m = MetricStore(str(tmp_path / "m.json"))
+    it = m.add_kpi("n1", "Vertoningen (GSC)", "n", origin="gsc", veld="impressions",
+                   categorie="Zoekprestaties", aard="reeks", meetwijze="systeem", auto=True)
+    st = types.SimpleNamespace(observations=obs, metrics=m, dd=str(tmp_path))
+    res = vm._fetch(st, f"kpi:{it['id']}", "value", "keyword", None)
+    assert res["kind"] == "breakdown"
+    assert res["rows"] == [("vegan shoes", 80), ("earth shoes", 12)]         # gesorteerd op waarde desc
+
+
+def test_keyword_dim_alleen_bij_dimensie_bron(tmp_path):
+    dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    gsc = st.metrics.add_kpi(C, "Vertoningen (GSC)", "n", origin="gsc", veld="impressions",
+                             categorie="Zoekprestaties", aard="reeks", meetwijze="systeem", auto=True)
+    pla = st.metrics.add_kpi(C, "Bezoekers (Plausible)", "n", origin="plausible", veld="visitors",
+                             categorie="Website", aard="reeks", meetwijze="systeem", auto=True)
+    st2 = cockpit2._Stores(dd)
+    srcs = {s["id"]: s for s in vm._sources_for(st2, st2.records.get(C))}
+    gsc_dims = [d[0] for d in srcs[f"kpi:{gsc['id']}"]["dims"]]
+    pla_dims = [d[0] for d in srcs[f"kpi:{pla['id']}"]["dims"]]
+    assert "keyword" in gsc_dims and "keyword" not in pla_dims               # GSC heeft DIMENSION, Plausible niet
