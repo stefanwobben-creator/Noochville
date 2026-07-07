@@ -411,8 +411,9 @@ def _sources_for(st: _Stores, rec):
         if k.get("source"):
             continue                                  # bron-KPI's al gedekt door built-ins
         dims = [("time", "over tijd"), ("none", "laatste waarde")]        # 'none' → geen "· NONE"
-        if (k.get("origin") or k.get("source")) in _dimensioned_sources() and k.get("veld"):
-            dims.append(("keyword", "per keyword"))                        # scope 2: bron mét DIMENSION
+        dimension = _source_dimensions().get(k.get("origin") or k.get("source"))
+        if dimension and k.get("veld") and dimension in _DIM_LABEL:        # scope 2/4: bron mét DIMENSION
+            dims.append(_DIM_LABEL[dimension])                             # 'per keyword' (GSC) / 'per land' (Plausible)
         srcs.append({"id": f"kpi:{k['id']}", "label": k["name"],
                      "measures": [("value", "waarde")],                    # niet de KPI-naam → geen dubbele naam
                      "dims": dims})
@@ -520,7 +521,7 @@ def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff, end=None):
         it = st.metrics.get(source[4:])
         if not it:
             return {"kind": "number", "value": None, "unit": ""}
-        if dim == "keyword":                # scope 2: uitsplitsing per Library-keyword → breakdown
+        if dim in _DIM_KEYS:                # scope 2/4: uitsplitsing per dimensie-waarde (keyword/land) → breakdown
             base, bron = _obs_key_for_indicator(it.get("source") or it.get("origin") or "", it.get("veld", ""))
             rows = []
             if base:
@@ -836,11 +837,16 @@ _DATA_SOURCES = {"plausible", "shopify", "gsc", "openalex", "semanticscholar", "
                  "keywordseverywhere", "serpstat", "werkoverleg"}
 
 
-def _dimensioned_sources() -> set:
-    """Bron-id's van skills die een dimensie ondersteunen (class-attr DIMENSION), afgeleid uit de skills
-    zelf — geen aparte lijst om te onderhouden. Nu: {'gsc'} (scope 2). Bepaalt waar de tegel-composer de
-    'per keyword'-dim aanbiedt."""
-    return {cls.SOURCE for cls in _data_source_classes() if getattr(cls, "DIMENSION", None)}
+def _source_dimensions() -> dict:
+    """{bron-id: DIMENSION} voor skills die een dimensie declareren (class-attr DIMENSION), afgeleid uit
+    de skills zelf — geen aparte lijst. Nu {'gsc':'query', 'plausible':'country'}."""
+    return {cls.SOURCE: cls.DIMENSION for cls in _data_source_classes() if getattr(cls, "DIMENSION", None)}
+
+
+# DIMENSION → (tegel-dim-sleutel, label in de composer). De dim-sleutel is wat de tegel opslaat; _fetch
+# behandelt elke dim-sleutel hieruit als een breakdown per dimensie-waarde.
+_DIM_LABEL = {"query": ("keyword", "per keyword"), "country": ("country", "per land")}
+_DIM_KEYS = {k for k, _l in _DIM_LABEL.values()}
 
 
 def _obs_key_for_indicator(source: str, veld: str, dim: str = ""):

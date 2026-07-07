@@ -23,6 +23,7 @@ class PlausibleSkill(DataSourceSkill):
     cost = "free"
     needs_secret = True
     required_env = ("PLAUSIBLE_API_KEY", "PLAUSIBLE_SITE_ID")
+    DIMENSION = "country"        # scope 4: reeksen per land via de native visit:country-breakdown
     description = "Haalt echte bezoekersdata uit de Plausible Stats API (geen mock)."
 
     def available_metrics(self, context=None) -> list[str]:
@@ -57,6 +58,41 @@ class PlausibleSkill(DataSourceSkill):
         if field == "bounce_rate":
             return {"reeks_start": _BOUNCE_REEKS_START}
         return {}
+
+    def daily_dimension_values(self, context, datum: str, countries, *, _get=None) -> dict:
+        """Per land de dagwaarden (visitors/pageviews/visit_duration/bounce_rate) voor `datum`, via ÉÉN
+        breakdown-call (property=visit:country). `countries` = de gecureerde config-selectie (ISO-codes).
+        Exacte match op de landcode; een land dat die dag niet in de respons zit → géén entry → gat.
+        Fail-closed → lege dict. `_get(params)` injecteerbaar zodat de contract-test datum + property kan
+        bewijzen."""
+        want = {c.upper() for c in (countries or [])}
+        out = {}
+        key = context.settings.get("PLAUSIBLE_API_KEY") or os.getenv("PLAUSIBLE_API_KEY")
+        site = context.settings.get("PLAUSIBLE_SITE_ID") or os.getenv("PLAUSIBLE_SITE_ID")
+        if not want or not key or not site:
+            return out
+        params = {"site_id": site, "period": "day", "date": datum, "property": "visit:country",
+                  "metrics": ",".join(_METRICS), "limit": 1000}
+        if _get is None:
+            def _get(p):
+                r = requests.get("https://plausible.io/api/v1/stats/breakdown",
+                                 headers={"Authorization": f"Bearer {key}"}, params=p, timeout=10)
+                r.raise_for_status()
+                return r.json().get("results", [])
+        try:
+            rows = _get(params)
+        except Exception as exc:
+            log.warning("Plausible daily_dimension_values faalde (%s): %s", datum, exc)
+            return out
+        for row in rows:
+            c = str(row.get("country", "")).upper()
+            if c not in want:
+                continue                        # land hoort niet bij de gecureerde selectie
+            for field in _METRICS:
+                v = row.get(field)
+                if v is not None:
+                    out[(field, c)] = v
+        return out
 
     def run(self, payload: dict, context) -> dict:
         key = context.settings.get("PLAUSIBLE_API_KEY") or os.getenv("PLAUSIBLE_API_KEY")

@@ -208,8 +208,9 @@ class ObservationStore:
             m = r.get("metric") or ""
             if not m.startswith(prefix) or (bron is not None and r.get("bron") != bron):
                 continue
-            kw = (r.get("meta") or {}).get("keyword") or m[len(prefix):]
-            groups.setdefault(kw, []).append(r)
+            meta = r.get("meta") or {}
+            label = meta.get("value") or meta.get("keyword") or m[len(prefix):]  # generiek; keyword = scope-2-GSC
+            groups.setdefault(label, []).append(r)
         for rows in groups.values():
             rows.sort(key=lambda r: (r.get("datum") or "", r.get("ts", 0)))
         return groups

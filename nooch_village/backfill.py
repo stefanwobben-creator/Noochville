@@ -13,8 +13,8 @@ import datetime
 import logging
 import time
 
-from nooch_village.collector import _expected_period
-from nooch_village.observations import ObservationStore
+from nooch_village.collector import _expected_period, _dimension_values
+from nooch_village.observations import ObservationStore, dim_slug
 from nooch_village.skills_impl.plausible import PlausibleSkill
 from nooch_village.skills_impl.gsc import GscPerformanceSkill
 
@@ -124,3 +124,62 @@ def backfill(source: str, start_iso: str, obs: ObservationStore, context,
             time.sleep(sleep)
     return {"written": written, "skipped": skipped, "lege_dagen": lege_dagen, "dagen": dagen,
             "start": start.isoformat(), "end": end.isoformat(), "clamped": clamped}
+
+
+def backfill_dimensions(source: str, start_iso: str, obs: ObservationStore, context,
+                        today: datetime.date | None = None, sleep: float = 0.3, on_progress=None) -> dict:
+    """Aparte, idempotente backfill van de GEDIMENSIONEERDE reeksen (bijv. Plausible per land) over de
+    historie: per dag één `daily_dimension_values`-call, per (veld, dimensie-waarde) idempotent weg onder
+    dezelfde `<source>_<veld>_day::<slug>`-sleutel + meta als de live-collector. Gaten blijven gaten, geen
+    interpolatie. Zelfde dedup als de live-reeks → herdraaien geeft geen duplicaten, botst niet met live."""
+    if source not in BACKFILL_SOURCES:
+        raise BackfillError(f"'{source}' is geen backfill-bron. Kies uit: {', '.join(sorted(BACKFILL_SOURCES))}.")
+    skill = BACKFILL_SOURCES[source]()
+    dimension = getattr(skill, "DIMENSION", None)
+    if not dimension:
+        raise BackfillError(f"'{source}' heeft geen dimensie (DIMENSION) om te backfillen")
+    try:
+        start = datetime.date.fromisoformat(start_iso)
+    except ValueError:
+        raise BackfillError(f"ongeldige startdatum '{start_iso}', verwacht YYYY-MM-DD")
+    values = _dimension_values(context, dimension)
+    if not values:
+        raise BackfillError(f"geen gecureerde dimensie-waarden voor '{dimension}' (leeg config/Library?)")
+
+    today = today or datetime.datetime.now(datetime.timezone.utc).date()
+    end = datetime.date.fromisoformat(_expected_period("daily", today, getattr(skill, "lag_days", 0)))
+    horizon = getattr(skill, "backfill_history_days", None)
+    clamped = False
+    if horizon:
+        earliest = today - datetime.timedelta(days=int(horizon))
+        if start < earliest:
+            start, clamped = earliest, True
+    if start > end:
+        raise BackfillError(
+            f"startdatum {start.isoformat()} ligt ná de laatste volledige dag {end.isoformat()} — niets te doen")
+
+    written = skipped = lege_dagen = dagen = 0
+    for datum in _daily_periods(start, end):
+        dagen += 1
+        try:
+            dvals = skill.daily_dimension_values(context, datum, values) or {}
+        except Exception as exc:
+            log.warning("backfill_dim %s %s: daily_dimension_values faalde: %s", source, datum, exc)
+            dvals = {}
+        if not dvals:
+            lege_dagen += 1
+        for (field, val), v in dvals.items():
+            if v is None:
+                continue
+            metric = f"{source}_{field}_day::{dim_slug(val)}"
+            if obs.record_daily(source, metric, v, bron=source, datum=datum,
+                                meta={"dimension": dimension, "value": val}):
+                written += 1
+            else:
+                skipped += 1
+        if on_progress:
+            on_progress(datum, written, skipped, lege_dagen, dagen)
+        if sleep:
+            time.sleep(sleep)
+    return {"written": written, "skipped": skipped, "lege_dagen": lege_dagen, "dagen": dagen,
+            "start": start.isoformat(), "end": end.isoformat(), "clamped": clamped, "dimension": dimension}
