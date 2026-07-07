@@ -834,7 +834,7 @@ def _daily_obs_key(source: str, measure: str):
 _FRESH_DAYS = 7
 # Bron-velden waarvoor 'recente data' zin heeft (data-bronnen). Manueel/formule/kpi → geen signaal.
 _DATA_SOURCES = {"plausible", "shopify", "gsc", "openalex", "semanticscholar", "trends",
-                 "keywordseverywhere", "serpstat", "werkoverleg"}
+                 "keywordseverywhere", "werkoverleg"}
 
 
 def _source_dimensions() -> dict:
@@ -879,9 +879,8 @@ def _data_source_classes():
     from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
     from nooch_village.skills_impl.trends import TrendsSkill
     from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
-    from nooch_village.skills_impl.serpstat import SerpstatSkill
     return (PlausibleSkill, ShopifySalesSkill, GscPerformanceSkill, OpenalexSkill,
-            SemanticScholarSkill, TrendsSkill, KeywordsEverywhereSkill, SerpstatSkill)
+            SemanticScholarSkill, TrendsSkill, KeywordsEverywhereSkill)
 
 
 def _source_kind(source: str) -> str:
