@@ -110,7 +110,12 @@ class ObservationStore:
                      meta: dict | None = None) -> bool:
         """Schrijf hoogstens één datapunt per (role_id, metric, bron, datum). Bestaat er al een voor
         die dag+bron, dan niets doen (append-only, idempotent). Geeft True als er geschreven is.
-        `meta` (optioneel) legt bron-specifieke herkomst vast (source_version, endpoint, …)."""
+        `meta` (optioneel) legt bron-specifieke herkomst vast (source_version, endpoint, …).
+
+        SCHAAL-VOORWAARDE (scope 2): de dedup-check hieronder is een LINEAIRE scan per write. Bij één
+        dimensie-bron (GSC, ~80 reeksen/dag) nog prima; vóór een TWEEDE dimensie-bron (bijv. Plausible
+        per land, Trends per geo) moet hier eerst een index/dag-bucket komen, anders wordt het schrijven
+        van N reeksen per dag O(N·rijen) = kwadratisch."""
         ts = ts if ts is not None else time.time()
         datum = datum or _utc_date(ts)
         for row in self._read_all():
@@ -163,6 +168,23 @@ class ObservationStore:
         # één dag geschreven) wijkt ts-volgorde af van datum-volgorde. ts blijft tiebreak + audit.
         rows.sort(key=lambda r: (r.get("datum") or "", r.get("ts", 0)))
         return rows
+
+    def dimensioned_series(self, base_metric: str, bron: str | None = None) -> dict:
+        """Alle dimensie-reeksen `<base_metric>::<slug>` (scope 2), gegroepeerd op keyword. Sleutel = het
+        rauwe keyword uit de meta (fallback: de slug); waarde = de dagreeks (oplopend op meetdag). LET OP:
+        dit scant `_read_all()` met een prefix-filter — lineair; vóór een TWEEDE dimensie-bron is een
+        index/dag-bucket vereist (zie record_daily)."""
+        prefix = base_metric + "::"
+        groups: dict[str, list] = {}
+        for r in self._read_all():
+            m = r.get("metric") or ""
+            if not m.startswith(prefix) or (bron is not None and r.get("bron") != bron):
+                continue
+            kw = (r.get("meta") or {}).get("keyword") or m[len(prefix):]
+            groups.setdefault(kw, []).append(r)
+        for rows in groups.values():
+            rows.sort(key=lambda r: (r.get("datum") or "", r.get("ts", 0)))
+        return groups
 
 
 # ── dag-observaties per bron (uitrol van de Plausible-aanpak, scope 2) ──────────
