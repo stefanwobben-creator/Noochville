@@ -74,6 +74,50 @@ class MetricStore:
             return True
         return False
 
+    def migrate_metric_bindings(self, defs) -> dict:
+        """Wezen-sweep (idempotent): systeem-KPI's met ontbrekende `veld`/`categorie` krijgen die alsnog
+        uit hun catalogus-def (alleen lege velden vullen; niet-afleidbare → rapporteren, niet gokken).
+        Plus: kpi:-tegels die naar een reeks-KPI wijzen maar dim='none' hebben → dim='time' (grafiek i.p.v.
+        los getal). Geeft {repaired, unresolved, tiles_fixed} en schrijft alleen bij een echte wijziging."""
+        repaired, unresolved, tiles_fixed = [], [], []
+        changed = False
+        for mid, it in list(self._items.items()):
+            if it.get("kind") != "kpi":
+                continue
+            # systeem = door een bron/auto/meetwijze gevoed (NIET alleen `source`: een pre-fix KPI heeft
+            # source='' maar auto=True). Zie ook _is_system_kpi in views/metrics.py (één criterium).
+            is_sys = bool(it.get("source") or it.get("origin") or it.get("auto")
+                          or it.get("meetwijze") == "systeem")
+            if not is_sys or (it.get("veld") and it.get("categorie")):
+                continue
+            cur = defs.current(it.get("def_id")) if it.get("def_id") else None
+            if not cur:
+                if not it.get("veld"):
+                    unresolved.append({"id": mid, "name": it.get("name"),
+                                       "reason": "geen catalogus-def om veld af te leiden"})
+                continue
+            for f in ("veld", "categorie", "aard"):
+                if not it.get(f) and cur.get(f):
+                    it[f] = cur[f]
+                    changed = True
+            if it.get("veld"):
+                repaired.append({"id": mid, "name": it.get("name"),
+                                 "veld": it.get("veld"), "categorie": it.get("categorie")})
+            else:
+                unresolved.append({"id": mid, "name": it.get("name"), "reason": "def draagt zelf geen veld"})
+        for node, tl in self._tiles.items():
+            for t in tl:
+                src = t.get("source", "")
+                if src.startswith("kpi:") and t.get("dim") == "none":
+                    k = self._items.get(src[4:])
+                    if k and k.get("aard") == "reeks":
+                        t["dim"] = "time"
+                        tiles_fixed.append({"node": node, "tile": t.get("id"), "kpi": src[4:]})
+                        changed = True
+        if changed:
+            self._save()
+        return {"repaired": repaired, "unresolved": unresolved, "tiles_fixed": tiles_fixed}
+
     # ── toevoegen ────────────────────────────────────────────────────────────
     def add_link(self, node: str, name: str, url: str) -> dict | None:
         name, url = (name or "").strip(), (url or "").strip()
@@ -92,14 +136,21 @@ class MetricStore:
                 def_id: str = "", def_version: int = 0, origin: str = "",
                 auto: bool = False, meetwijze: str = "", benchmark: str = "",
                 bron_url: str = "", verificatie: str = "", tijd: str = "", bruikbaar: str = "",
-                standaard: str = "", waarde=None) -> dict | None:
+                standaard: str = "", waarde=None, veld: str = "", categorie: str = "",
+                aard: str = "") -> dict | None:
         if not node:
             return None
         # grondslag + meetmoment worden gevalideerd/genormaliseerd door het indicator-schema
         # (GAAP/IRIS: wat telt mee, eenheid, richting, drempel; meetmoment: cadans + meettype).
+        # veld/categorie/aard komen mee uit de catalogus-def (create-flow): zonder `veld` kan geen enkel
+        # pad de bron-dagreeks (<source>_<veld>_day) reconstrueren. `aard` alleen doorgeven als gezet;
+        # anders leidt het schema 'm af uit het meettype.
+        extra = {"veld": veld, "categorie": categorie}
+        if aard:
+            extra["aard"] = aard
         spec = _normalize_indicator(name=name, unit=unit, source=source, definition=definition,
                                     direction=direction, threshold=threshold, cadence=cadence,
-                                    meettype=meettype, window=window)
+                                    meettype=meettype, window=window, **extra)
         if spec is None:                       # ongeldig (lege naam): KPI niet aanmaken
             return None
         mid = uuid.uuid4().hex[:12]
