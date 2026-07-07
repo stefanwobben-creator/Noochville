@@ -111,6 +111,23 @@ class ObservationStore:
             self._invalidate()          # herschrijf → index opnieuw opbouwen
         return n
 
+    def remove_bron(self, bron: str, keep_prefix: str = "") -> int:
+        """Verwijder ALLE rijen van een bron, behalve die waarvan de metric met `keep_prefix` begint. Voor
+        het opruimen van reeksen die onder een verworpen ontwerp zijn geschreven (geen doortelling) terwijl
+        een nieuw ontwerp onder dezelfde bron een andere metric-prefix schrijft. Idempotent; herschrijft
+        alleen bij een echte verwijdering. Geeft het aantal verwijderde rijen terug."""
+        rows = self._read_all()
+        kept = [r for r in rows
+                if not (r.get("bron") == bron
+                        and not (keep_prefix and (r.get("metric") or "").startswith(keep_prefix)))]
+        n = len(rows) - len(kept)
+        if n:
+            with open(self.path, "w") as f:
+                for r in kept:
+                    f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
+            self._invalidate()
+        return n
+
     def normalize_source_role_ids(self) -> dict:
         """Canoniek: voor een collector-dagmetric `<bron>_<veld>_day` is `role_id == bron`. Legacy-rijen
         met een andere role_id (bv. `website_watcher` van vóór de generieke collector) worden
