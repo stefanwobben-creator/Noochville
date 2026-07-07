@@ -4,7 +4,10 @@ from nooch_village.skills import DataSourceSkill
 
 log = logging.getLogger(__name__)
 
-_METRICS = ["visitors", "pageviews", "visit_duration"]
+_METRICS = ["visitors", "pageviews", "visit_duration", "bounce_rate"]
+# Live-verzameling van bounce_rate start hier; er is GEEN historie vóór deze datum (de historische bounce
+# komt via de aparte sweep, ronde 1b). De reeks-start staat als meta op elke bounce-observatie.
+_BOUNCE_REEKS_START = "2026-07-07"
 
 _BREAKDOWNS = [
     ("event:page",       "top_pages"),
@@ -47,6 +50,13 @@ class PlausibleSkill(DataSourceSkill):
         except Exception as exc:
             log.warning("Plausible daily_values faalde (%s): %s", datum, exc)
         return out
+
+    def observation_meta(self, context, datum: str, field: str) -> dict:
+        # bounce_rate is een nieuwe reeks vanaf nu: de reeks-start markeert dat er vóór deze datum geen
+        # bounce-data is (geen backfill in deze ronde). visitors/pageviews/visit_duration: geen meta (ongewijzigd).
+        if field == "bounce_rate":
+            return {"reeks_start": _BOUNCE_REEKS_START}
+        return {}
 
     def run(self, payload: dict, context) -> dict:
         key = context.settings.get("PLAUSIBLE_API_KEY") or os.getenv("PLAUSIBLE_API_KEY")

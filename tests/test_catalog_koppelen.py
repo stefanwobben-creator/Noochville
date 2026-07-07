@@ -25,7 +25,7 @@ def test_geseede_velden_tonen_als_gekoppeld_geen_inline_style(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
     html = _koppel_section(st, "", "plausible")
     assert "chip-opt" in html and "chip-wrap" in html       # bron-picker = scope-1-pills in wrap-rij
-    assert html.count("in catalogus") == 3                  # visitors/pageviews/visit_duration al geseed
+    assert html.count("in catalogus") == 4                  # visitors/pageviews/visit_duration/bounce_rate geseed (A2)
     assert "Publiceer naar catalogus" not in html           # niets ongekoppeld → geen formulier
     assert "style=" not in html                             # geen inline styles (UI-regel)
 

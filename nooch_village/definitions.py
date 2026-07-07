@@ -482,7 +482,7 @@ _GROUND_FIELDS = ("definition", "unit", "direction", "cadence", "meettype", "win
 # ruwe bron-veld (available_metrics), zodat het koppelscherm ze niet als 'ongekoppeld' toont.
 _SEED_VELD = {
     "Bezoekers (Plausible)": "visitors", "Paginaweergaven (Plausible)": "pageviews",
-    "Bezoekduur (Plausible)": "visit_duration",
+    "Bezoekduur (Plausible)": "visit_duration", "Bouncepercentage (Plausible)": "bounce_rate",
     "Paren verkocht (Shopify)": "pairs_sold", "Orders (Shopify)": "orders",
     "Omzet (Shopify)": "revenue", "Gemiddelde orderwaarde (Shopify)": "aov",
     "Vertoningen (GSC)": "impressions", "Klikken (GSC)": "clicks",
