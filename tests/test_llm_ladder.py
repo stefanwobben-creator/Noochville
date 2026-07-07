@@ -28,9 +28,9 @@ def test_default_ladder_begint_goedkoop():
 
 def test_ladder_pakt_eerste_werkende_trede(monkeypatch):
     calls = []
-    monkeypatch.setattr(llm, "_try_gemini", lambda p, model=None: (calls.append("g"), None)[1])
-    monkeypatch.setattr(llm, "_try_mistral", lambda p, model=None: (calls.append("m"), "MISTRAL")[1])
-    monkeypatch.setattr(llm, "_try_anthropic", lambda p, model=None: (calls.append("a"), "A")[1])
+    monkeypatch.setattr(llm, "_try_gemini", lambda p, model=None, **kw: (calls.append("g"), None)[1])
+    monkeypatch.setattr(llm, "_try_mistral", lambda p, model=None, **kw: (calls.append("m"), "MISTRAL")[1])
+    monkeypatch.setattr(llm, "_try_anthropic", lambda p, model=None, **kw: (calls.append("a"), "A")[1])
     out = llm.reason("hoi", ladder="gemini:g1,mistral:m1,anthropic:a1")
     assert out == "MISTRAL"
     assert calls == ["g", "m"]          # gestopt zodra Mistral antwoordde; Anthropic niet bereikt
@@ -39,10 +39,10 @@ def test_ladder_pakt_eerste_werkende_trede(monkeypatch):
 # ── Rate-limit → cooldown + door naar de volgende trede ───────────────────────
 
 def test_rate_limit_zet_trede_in_cooldown_en_gaat_door(monkeypatch):
-    def boom(p, model=None):
+    def boom(p, model=None, **kw):
         raise llm._RateLimit("429 RESOURCE_EXHAUSTED")
     monkeypatch.setattr(llm, "_try_gemini", boom)
-    monkeypatch.setattr(llm, "_try_mistral", lambda p, model=None: "MISTRAL")
+    monkeypatch.setattr(llm, "_try_mistral", lambda p, model=None, **kw: "MISTRAL")
     out = llm.reason("hoi", ladder="gemini:g1,mistral:m1")
     assert out == "MISTRAL"
     assert llm._in_cooldown("gemini:g1")        # uitgeputte trede staat in cooldown
@@ -51,11 +51,11 @@ def test_rate_limit_zet_trede_in_cooldown_en_gaat_door(monkeypatch):
 def test_trede_in_cooldown_wordt_overgeslagen(monkeypatch):
     geraakt = {"gemini": False}
 
-    def gem(p, model=None):
+    def gem(p, model=None, **kw):
         geraakt["gemini"] = True
         return "GEMINI"
     monkeypatch.setattr(llm, "_try_gemini", gem)
-    monkeypatch.setattr(llm, "_try_mistral", lambda p, model=None: "MISTRAL")
+    monkeypatch.setattr(llm, "_try_mistral", lambda p, model=None, **kw: "MISTRAL")
     llm._set_cooldown("gemini:g1")              # alsof Gemini's dagcap op is
     out = llm.reason("hoi", ladder="gemini:g1,mistral:m1")
     assert out == "MISTRAL"
@@ -73,9 +73,9 @@ def test_cooldown_verloopt_na_de_tijd(monkeypatch):
 # ── Fail-closed + geen sleutel = trede overslaan ──────────────────────────────
 
 def test_alle_treden_falen_geeft_none(monkeypatch):
-    monkeypatch.setattr(llm, "_try_gemini", lambda p, model=None: None)
-    monkeypatch.setattr(llm, "_try_mistral", lambda p, model=None: None)
-    monkeypatch.setattr(llm, "_try_anthropic", lambda p, model=None: None)
+    monkeypatch.setattr(llm, "_try_gemini", lambda p, model=None, **kw: None)
+    monkeypatch.setattr(llm, "_try_mistral", lambda p, model=None, **kw: None)
+    monkeypatch.setattr(llm, "_try_anthropic", lambda p, model=None, **kw: None)
     assert llm.reason("hoi") is None
 
 
@@ -86,8 +86,8 @@ def test_mistral_zonder_key_geeft_none(monkeypatch):
 
 def test_custom_ladder_voor_premium_skill(monkeypatch):
     calls = []
-    monkeypatch.setattr(llm, "_try_gemini", lambda p, model=None: (calls.append("g"), "G")[1])
-    monkeypatch.setattr(llm, "_try_anthropic", lambda p, model=None: (calls.append("a"), "SONNET")[1])
+    monkeypatch.setattr(llm, "_try_gemini", lambda p, model=None, **kw: (calls.append("g"), "G")[1])
+    monkeypatch.setattr(llm, "_try_anthropic", lambda p, model=None, **kw: (calls.append("a"), "SONNET")[1])
     out = llm.reason("hoi", ladder="anthropic:claude-sonnet-4-6")
     assert out == "SONNET"
     assert calls == ["a"]                       # alleen de premium-trede, Gemini niet geraakt

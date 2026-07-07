@@ -18,6 +18,7 @@ import os
 from nooch_village.biweekly_report import build_biweekly_report
 
 _FN_PREFIX, _FN_SUFFIX = "field_note_", ".md"
+_VERSLAG_MAX_TOKENS = 2200      # ruim genoeg voor een verhalend verslag van 5 secties (default reason = 700)
 
 
 def _read_field_notes(data_dir: str, start: str, end: str) -> list[tuple[str, str]]:
@@ -103,8 +104,10 @@ def build_noochie_verslag(st, data_dir: str, today: datetime.date, window_days: 
     """Geeft (markdown, facts). markdown is None als de LLM niets teruggaf (fail-closed: nooit verzinnen)."""
     facts = gather_facts(st, data_dir, today, window_days)
     if reason is None:
+        import functools
         from nooch_village import llm
-        reason = llm.reason
+        # Een verhalend verslag van 5 secties past niet in de default 700 tokens → ruimer vragen.
+        reason = functools.partial(llm.reason, max_tokens=_VERSLAG_MAX_TOKENS)
     narrative = (reason(_build_prompt(facts)) or "").strip()
     if not narrative:
         return None, facts

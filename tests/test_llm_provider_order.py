@@ -19,21 +19,21 @@ def test_geen_keys_geeft_none(monkeypatch):
 
 
 def test_gemini_is_default(monkeypatch):
-    monkeypatch.setattr(llm, "_try_gemini", lambda p, model=None: "GEMINI")
-    monkeypatch.setattr(llm, "_try_mistral", lambda p, model=None: None)
-    monkeypatch.setattr(llm, "_try_anthropic", lambda p, model=None: "ANTHROPIC")
+    monkeypatch.setattr(llm, "_try_gemini", lambda p, model=None, **kw: "GEMINI")
+    monkeypatch.setattr(llm, "_try_mistral", lambda p, model=None, **kw: None)
+    monkeypatch.setattr(llm, "_try_anthropic", lambda p, model=None, **kw: "ANTHROPIC")
     assert llm.reason("hoi") == "GEMINI"      # goedkoopste trede (Gemini) wint
 
 
 def test_valt_terug_op_anthropic_als_de_rest_niets_geeft(monkeypatch):
-    monkeypatch.setattr(llm, "_try_gemini", lambda p, model=None: None)
-    monkeypatch.setattr(llm, "_try_mistral", lambda p, model=None: None)
-    monkeypatch.setattr(llm, "_try_anthropic", lambda p, model=None: "ANTHROPIC")
+    monkeypatch.setattr(llm, "_try_gemini", lambda p, model=None, **kw: None)
+    monkeypatch.setattr(llm, "_try_mistral", lambda p, model=None, **kw: None)
+    monkeypatch.setattr(llm, "_try_anthropic", lambda p, model=None, **kw: "ANTHROPIC")
     assert llm.reason("hoi") == "ANTHROPIC"
 
 
 def test_none_als_alle_treden_falen(monkeypatch):
-    monkeypatch.setattr(llm, "_try_gemini", lambda p, model=None: None)
-    monkeypatch.setattr(llm, "_try_mistral", lambda p, model=None: None)
-    monkeypatch.setattr(llm, "_try_anthropic", lambda p, model=None: None)
+    monkeypatch.setattr(llm, "_try_gemini", lambda p, model=None, **kw: None)
+    monkeypatch.setattr(llm, "_try_mistral", lambda p, model=None, **kw: None)
+    monkeypatch.setattr(llm, "_try_anthropic", lambda p, model=None, **kw: None)
     assert llm.reason("hoi") is None

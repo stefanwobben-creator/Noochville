@@ -158,7 +158,7 @@ def reset_cooldowns() -> None:
 
 # ── De vendor-treden ──────────────────────────────────────────────────────────
 
-def _try_gemini(prompt: str, *, model: str | None = None, sleep=time.sleep) -> str | None:
+def _try_gemini(prompt: str, *, model: str | None = None, sleep=time.sleep, max_tokens: int = 700) -> str | None:
     """Probeer Gemini. Eén retry bij een transiente fout (bijv. SSL-timeout).
     Bij een rate-limit/quota → `_RateLimit` (de ladder zet de trede in cooldown en gaat door)."""
     key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
@@ -174,6 +174,7 @@ def _try_gemini(prompt: str, *, model: str | None = None, sleep=time.sleep) -> s
                 model=model,
                 contents=prompt,
                 config=genai_types.GenerateContentConfig(
+                    max_output_tokens=max_tokens,
                     http_options=genai_types.HttpOptions(timeout=_GEMINI_TIMEOUT_MS)
                 ),
             )
@@ -190,7 +191,7 @@ def _try_gemini(prompt: str, *, model: str | None = None, sleep=time.sleep) -> s
     return None
 
 
-def _try_mistral(prompt: str, *, model: str | None = None) -> str | None:
+def _try_mistral(prompt: str, *, model: str | None = None, max_tokens: int = 700) -> str | None:
     """Probeer Mistral via de OpenAI-compatibele chat-completions-API (dependency-vrij,
     enkel urllib). Geen key → trede overslaan. Rate-limit/quota → `_RateLimit`."""
     key = os.getenv("MISTRAL_API_KEY")
@@ -203,7 +204,7 @@ def _try_mistral(prompt: str, *, model: str | None = None) -> str | None:
     body = json.dumps({
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 700,
+        "max_tokens": max_tokens,
     }).encode("utf-8")
     req = urllib.request.Request(
         "https://api.mistral.ai/v1/chat/completions",
@@ -231,7 +232,7 @@ def _try_mistral(prompt: str, *, model: str | None = None) -> str | None:
         return None
 
 
-def _try_anthropic(prompt: str, *, model: str | None = None) -> str | None:
+def _try_anthropic(prompt: str, *, model: str | None = None, max_tokens: int = 700) -> str | None:
     """Probeer Anthropic (duur; alleen als vangnet in de ladder).
     Rate-limit/quota → `_RateLimit`."""
     key = os.getenv("ANTHROPIC_API_KEY")
@@ -242,7 +243,7 @@ def _try_anthropic(prompt: str, *, model: str | None = None) -> str | None:
         import anthropic
         client = anthropic.Anthropic(api_key=key, timeout=_HTTP_TIMEOUT_S)
         msg = client.messages.create(
-            model=model, max_tokens=700,
+            model=model, max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}])
         text = "".join(b.text for b in msg.content
                        if getattr(b, "type", "") == "text").strip()
@@ -266,7 +267,7 @@ _VENDOR_FNS = {
 }
 
 
-def _call_tier(vendor: str, model: str | None, prompt: str) -> str | None:
+def _call_tier(vendor: str, model: str | None, prompt: str, max_tokens: int = 700) -> str | None:
     name = _VENDOR_FNS.get(vendor)
     if name is None:
         log.warning("onbekende LLM-vendor in ladder: %r (trede overgeslagen)", vendor)
@@ -274,7 +275,7 @@ def _call_tier(vendor: str, model: str | None, prompt: str) -> str | None:
     fn = getattr(sys.modules[__name__], name, None)
     if fn is None:
         return None
-    return fn(prompt, model=model)
+    return fn(prompt, model=model, max_tokens=max_tokens)
 
 
 def _parse_ladder(raw: str) -> list[tuple[str, str | None]]:
@@ -297,7 +298,7 @@ def _ladder() -> list[tuple[str, str | None]]:
     return _parse_ladder(raw) if raw else _parse_ladder(",".join(_DEFAULT_LADDER))
 
 
-def reason(prompt: str, *, ladder: str | None = None) -> str | None:
+def reason(prompt: str, *, ladder: str | None = None, max_tokens: int = 700) -> str | None:
     """Optionele LLM-redenering via de getrapte ladder (goedkoop → duur).
 
     Loopt de treden af tot er één een antwoord geeft. Een trede zonder sleutel of in
@@ -317,7 +318,7 @@ def reason(prompt: str, *, ladder: str | None = None) -> str | None:
             log.debug("LLM-trede %s in cooldown — overgeslagen", tier)
             continue
         try:
-            out = _call_tier(vendor, model, prompt)
+            out = _call_tier(vendor, model, prompt, max_tokens=max_tokens)
         except _RateLimit as exc:
             log.info("LLM-trede %s tegen rate-limit (%s) — cooldown + door naar volgende",
                      tier, exc)
