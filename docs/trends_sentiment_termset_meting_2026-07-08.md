@@ -49,3 +49,35 @@ Een van:
    het anker het volume domineert).
 
 Meetopzet en ruwe cijfers hierboven zijn reproduceerbaar met dezelfde timeframe/geo/anker.
+
+---
+
+# Iteratie 2 (2026-07-08) — herontwerp: stemming-PAREN i.p.v. anker-ratio
+
+## Waarom
+Iteratie 1 faalde structureel: Trends normaliseert op de zwaarste term per request, dus naast een
+dominant anker (`shoes`) comprimeert elke niche naar 0-1. Herontwerp: **paren van tegengestelde stemming
+met vergelijkbare grootte**, ratio per punt = term_A / term_B, **geen gedeeld anker**.
+
+## Opzet
+- Eén request per paar (2 termen), timeframe `today 5-y` (weekly), geo worldwide (leeg).
+- **Beslisregel per paar (beide termen):** mean ≥ 5 op de 0-100-schaal van de eigen request, én
+  ≥ 90% van de weekpunten niet-nul.
+
+## Resultaat
+
+| paar (A ÷ B) | mean A | mean B | %niet-nul A | %niet-nul B | oordeel |
+|---|---|---|---|---|---|
+| thrift ÷ luxury | 9.5 | 36.5 | 100% | 100% | **GESLAAGD** |
+| second hand ÷ brand new | 44.4 | 18.7 | 100% | 100% | **GESLAAGD** |
+| repair ÷ replace | 45.2 | 16.9 | 100% | 100% | **GESLAAGD** |
+| barefoot shoes ÷ running shoes | 1.7 | 19.7 | 95% | 100% | AFGEWEZEN — mean A < 5 |
+| minimalism ÷ shopping | 0.1 | 68.9 | 6.9% | 100% | AFGEWEZEN — mean A < 5, %niet-nul A < 90 |
+
+**Geslaagde paren: 3.** Poort (≥2) is **OPEN**. De twee afgewezen paren mengen een niche (barefoot shoes,
+minimalism) met een veel groter woord (running shoes, shopping) → de niche comprimeert weer; de drie
+geslaagde paren zijn stemmings-tegenstellingen van vergelijkbare orde en houden 100% niet-nul over 5 jaar.
+
+## Definitieve paarset (onder voorbehoud van curator-bevestiging)
+`thrift÷luxury`, `second hand÷brand new`, `repair÷replace`. Scope 1 volgt pas na bevestiging (ontwerp
+wijzigt mee: `trends_pairs` i.p.v. `trends_terms`+`trends_anchor`).
