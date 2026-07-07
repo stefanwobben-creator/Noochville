@@ -70,7 +70,7 @@ def test_cap_en_drop_log(caplog):
     ctx = types.SimpleNamespace(library=_FakeLib(e), settings={"gsc_dimension_max": 10})
     with caplog.at_level(logging.WARNING):
         got = _dimension_keywords(ctx)
-    assert len(got) == 10 and "afgekapt op 10" in caplog.text and "50 keyword(s) gedropt" in caplog.text
+    assert len(got) == 10 and "afgekapt op 10" in caplog.text and "50 waarde(n) gedropt" in caplog.text
 
 
 # ── (d) collector schrijft de ::slug-reeksen + meta, idempotent ──────────────
@@ -101,7 +101,7 @@ def test_collector_schrijft_dimensie_met_meta_idempotent(tmp_path):
     collect_daily_observations(reg, sources, obs, ctx, today=datetime.date(2026, 7, 8))
     imp = [r for r in obs._read_all() if r["metric"] == "gsc_impressions_day::vegan_shoes"]
     assert imp and imp[0]["value"] == 77
-    assert imp[0]["meta"] == {"dimension": "query", "keyword": "vegan shoes"}     # rauw keyword in de meta
+    assert imp[0]["meta"] == {"dimension": "query", "value": "vegan shoes"}       # generieke meta.value
     w2 = collect_daily_observations(reg, sources, obs, ctx, today=datetime.date(2026, 7, 8))
     assert w2 == [] and len([r for r in obs._read_all()
                              if r["metric"] == "gsc_impressions_day::vegan_shoes"]) == 1   # idempotent

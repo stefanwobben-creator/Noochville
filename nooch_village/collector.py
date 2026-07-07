@@ -37,26 +37,45 @@ def _has_point(obs: ObservationStore, metric: str, bron: str, datum: str) -> boo
     return any(r.get("datum") == datum for r in obs.daily_series(metric, bron=bron))
 
 
-def _dimension_keywords(context) -> list[str]:
-    """De gecureerde selectie voor dimensie-reeksen (scope 2): uit de Library de woorden met
-    status 'approved' ÉN function 'doelwit' (rank-targets; 'volg'-seeds tellen niet mee). Afgekapt op
-    `gsc_dimension_max` (default 50); gedropte woorden worden GELOGD — geen stille truncatie.
-    (Sortering nu alfabetisch/stabiel; later op impressies/prioriteit.)"""
-    lib = getattr(context, "library", None)
-    if lib is None:
+# Zaad-landenlijst voor de country-dimensie (config-bewerkbaar via plausible_dimension_countries). ISO
+# 3166-1 alpha-2. Start = de waargenomen + doelmarkten van Nooch (NL dominant, dan ES/FR; + BE/DE/GB/US).
+_DEFAULT_DIMENSION_COUNTRIES = ["NL", "BE", "DE", "FR", "ES", "GB", "US"]
+
+
+def _dimension_values(context, dimension: str) -> list[str]:
+    """De gecureerde selectie per dimensie (scope 2/4), afgekapt + gedropte GELOGD (geen stille truncatie):
+      - 'query'   → Library-woorden met status 'approved' ÉN function 'doelwit' (rank-targets), cap
+                    `gsc_dimension_max`;
+      - 'country' → de config-landenlijst `plausible_dimension_countries` (ISO-codes), cap
+                    `plausible_dimension_max`.
+    Onbekende dimensie → lege lijst."""
+    settings = getattr(context, "settings", {}) or {}
+    if dimension == "query":
+        lib = getattr(context, "library", None)
+        values = sorted(w for w, e in lib.all().items()
+                        if e.get("status") == "approved" and lib.function_of(w) == "doelwit") if lib else []
+        cap_key = "gsc_dimension_max"
+    elif dimension == "country":
+        raw = settings.get("plausible_dimension_countries") or ",".join(_DEFAULT_DIMENSION_COUNTRIES)
+        values = [c.strip().upper() for c in raw.split(",") if c.strip()]
+        cap_key = "plausible_dimension_max"
+    else:
         return []
-    words = sorted(w for w, e in lib.all().items()
-                   if e.get("status") == "approved" and lib.function_of(w) == "doelwit")
     try:
-        cap = int((getattr(context, "settings", {}) or {}).get("gsc_dimension_max", 50))
+        cap = int(settings.get(cap_key, 50))
     except (TypeError, ValueError):
         cap = 50
-    if len(words) > cap:
-        dropped = words[cap:]
-        log.warning("dimensie-selectie afgekapt op %d — %d keyword(s) gedropt: %s%s", cap, len(dropped),
-                    ", ".join(dropped[:10]), "…" if len(dropped) > 10 else "")
-        words = words[:cap]
-    return words
+    if len(values) > cap:
+        dropped = values[cap:]
+        log.warning("dimensie '%s' afgekapt op %d — %d waarde(n) gedropt: %s%s", dimension, cap,
+                    len(dropped), ", ".join(dropped[:10]), "…" if len(dropped) > 10 else "")
+        values = values[:cap]
+    return values
+
+
+def _dimension_keywords(context) -> list[str]:
+    """Backward-compat alias voor de query-dimensie (scope 2a)."""
+    return _dimension_values(context, "query")
 
 
 def collect_daily_observations(registry, sources: SourceStatusStore, obs: ObservationStore,
@@ -108,23 +127,23 @@ def collect_daily_observations(registry, sources: SourceStatusStore, obs: Observ
         # is lineair per (veld×keyword) — vóór een TWEEDE dimensie-bron is een store-index vereist.
         dim = getattr(skill, "DIMENSION", None)
         metrics = skill.available_metrics(context) if dim else []
-        kws = _dimension_keywords(context) if dim else []
-        if dim and metrics and kws:
+        vals_sel = _dimension_values(context, dim) if dim else []
+        if dim and metrics and vals_sel:
             ddat = _expected_period(skill.frequency(metrics[0]), today, getattr(skill, "lag_days", 0))
-            if any(not _has_point(obs, f"{src}_{f}_day::{dim_slug(kw)}", src, ddat)
-                   for f in metrics for kw in kws):                       # iets nog niet geschreven?
+            if any(not _has_point(obs, f"{src}_{f}_day::{dim_slug(val)}", src, ddat)
+                   for f in metrics for val in vals_sel):                 # iets nog niet geschreven?
                 try:
-                    dvals = skill.daily_dimension_values(context, ddat, kws) or {}
+                    dvals = skill.daily_dimension_values(context, ddat, vals_sel) or {}
                 except Exception as exc:
                     log.warning("daily_dimension_values '%s' faalde: %s", src, exc)
                     dvals = {}
-                for (field, kw), v in dvals.items():
+                for (field, val), v in dvals.items():
                     if v is None:
                         continue
-                    metric = f"{src}_{field}_day::{dim_slug(kw)}"
+                    metric = f"{src}_{field}_day::{dim_slug(val)}"
                     if obs.record_daily(src, metric, v, bron=src, datum=ddat,
-                                        meta={"dimension": dim, "keyword": kw}):
-                        written.append((src, f"{field}::{dim_slug(kw)}", ddat))
+                                        meta={"dimension": dim, "value": val}):
+                        written.append((src, f"{field}::{dim_slug(val)}", ddat))
     return written
 
 

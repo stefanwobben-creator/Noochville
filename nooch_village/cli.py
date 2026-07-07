@@ -711,6 +711,41 @@ def main() -> None:
               f"{res['skipped']} waren er al (idempotent), {res['lege_dagen']}/{res['dagen']} dagen leeg "
               f"(geen data/creds). Herdraaien is veilig.")
 
+    elif mode == "backfill_dim":
+        # Aparte historische inhaal van de GEDIMENSIONEERDE reeksen (bijv. Plausible per land). Zelfde
+        # idempotente sleutel als de live-collector; gaten blijven gaten.
+        # python -m nooch_village.village backfill_dim <bron> <startdatum-YYYY-MM-DD>
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.observations import ObservationStore
+        from nooch_village.library import Library
+        from nooch_village.backfill import backfill_dimensions, BACKFILL_SOURCES, BackfillError
+        from nooch_village.village import BASE_DIR
+        args = sys.argv[2:]
+        if len(args) < 2:
+            print("Gebruik: python -m nooch_village.village backfill_dim <bron> <startdatum-YYYY-MM-DD>",
+                  file=sys.stderr)
+            sys.exit(1)
+        source, start = args[0], args[1]
+        ctx = load_context(BASE_DIR)
+        ctx.library = Library(os.path.join(ctx.data_dir, "library.json"))   # nodig voor de query-dimensie
+        obs = ObservationStore(os.path.join(ctx.data_dir, "observations.jsonl"))
+
+        def _progress(datum, w, s, leeg, n):
+            if n % 30 == 0:
+                print(f"   … {datum}  ({w} geschreven, {s} al aanwezig, {leeg} leeg)")
+        try:
+            print(f"⏪ Dimensie-backfill {source} vanaf {start} t/m de laatste volledige dag …")
+            res = backfill_dimensions(source, start, obs, ctx, on_progress=_progress)
+        except BackfillError as e:
+            print(f"❌ {e}", file=sys.stderr)
+            sys.exit(1)
+        if res.get("clamped"):
+            print(f"ℹ️  Startdatum afgeklemd naar {res['start']} — '{source}' bewaart geen oudere historie.")
+        print(f"✅ Dimensie-backfill {source} ({res['dimension']}) {res['start']}..{res['end']} klaar: "
+              f"{res['written']} nieuw, {res['skipped']} al aanwezig (idempotent), "
+              f"{res['lege_dagen']}/{res['dagen']} dagen leeg. Herdraaien is veilig.")
+
     elif mode == "shopify":
         # Haal verkoopindicatoren op uit Shopify en schrijf ze weg voor het cockpit-dashboard.
         import os, json
@@ -852,6 +887,6 @@ def main() -> None:
               "measure_propose | rereview | ingest | notes_remove | recurate | "
               "ground | harry_run | roster | keys | competitor | formalize | answer_questions | "
               "ingest_governance | review_roles | shopify | work_projects | "
-              "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | rapport | verslag",
+              "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | rapport | verslag",
               file=sys.stderr)
         sys.exit(1)
