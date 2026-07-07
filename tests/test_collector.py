@@ -402,6 +402,60 @@ def test_trends_blijft_inactief_tot_activatie(tmp_path):
     assert w == []
 
 
+# ── Scope 2: fail-closed guard — actieve bron die 0 velden aanbiedt logt LUID (geen stille no-op) ──
+class _EmptyFieldsSkill(DataSourceSkill):
+    name = "leeg"; SOURCE = "leeg_bron"
+    def available_metrics(self, context=None): return []            # de trends-klassefout: 0 velden
+    def is_configured(self, context): return True
+    def daily_values(self, context, datum): return {}
+    def run(self, payload, context): return {}
+
+
+class _OkSkill(DataSourceSkill):
+    name = "ok"; SOURCE = "ok_bron"
+    def available_metrics(self, context=None): return ["veld"]
+    def is_configured(self, context): return True
+    def daily_values(self, context, datum): return {"veld": 42}
+    def run(self, payload, context): return {}
+
+
+class _Reg2:
+    def __init__(self, s): self._s = s
+    def all(self): return self._s
+
+
+def test_guard_actieve_lege_bron_logt_error_en_puls_gaat_door(tmp_path, caplog):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    st.sources.set_active("leeg_bron", True); st.sources.set_active("ok_bron", True)
+    reg = _Reg2([_EmptyFieldsSkill(), _OkSkill()])
+    with caplog.at_level(logging.ERROR):
+        w = collect_daily_observations(reg, cockpit2._Stores(dd).sources,
+                                       cockpit2._Stores(dd).observations, _ctx(), today=datetime.date(2026, 7, 8))
+    assert "leeg_bron" in caplog.text and "0 velden" in caplog.text     # (a) luid gelogd
+    assert ("ok_bron", "veld", "2026-07-07") in w                       # (a) puls draait door: andere bron verzameld
+    assert not any(x[0] == "leeg_bron" for x in w)                      # lege bron schreef niets
+
+
+def test_guard_inactieve_lege_bron_geen_alarm(tmp_path, caplog):
+    dd = _dd(tmp_path)                                                  # leeg_bron NIET geactiveerd
+    reg = _Reg2([_EmptyFieldsSkill()])
+    with caplog.at_level(logging.ERROR):
+        w = collect_daily_observations(reg, cockpit2._Stores(dd).sources,
+                                       cockpit2._Stores(dd).observations, _ctx(), today=datetime.date(2026, 7, 8))
+    assert w == [] and "leeg_bron" not in caplog.text                   # (b) bewust-inactief → stil
+
+
+def test_guard_actieve_bron_met_velden_geen_alarm(tmp_path, caplog):
+    dd = _dd(tmp_path)
+    cockpit2._Stores(dd).sources.set_active("ok_bron", True)
+    reg = _Reg2([_OkSkill()])
+    with caplog.at_level(logging.ERROR):
+        w = collect_daily_observations(reg, cockpit2._Stores(dd).sources,
+                                       cockpit2._Stores(dd).observations, _ctx(), today=datetime.date(2026, 7, 8))
+    assert ("ok_bron", "veld", "2026-07-07") in w and "0 velden" not in caplog.text   # (c) normaal, geen alarm
+
+
 # ── Keywords Everywhere: flux-bron, dynamische velden uit de Library, batch-call (credits) ──────
 def _ke_ctx(words, key="KE-KEY"):
     """Context met een fake Library (approved-woorden) + settings (API-key)."""
