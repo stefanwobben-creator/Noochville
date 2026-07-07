@@ -114,10 +114,13 @@ def collect_daily_observations(registry, sources: SourceStatusStore, obs: Observ
         if not fields:
             log.error("bron '%s' is actief + geconfigureerd maar biedt 0 velden aan (available_metrics leeg) — "
                       "schrijft niets deze puls; controleer de config/termenbron.", src)
-        # Welke velden zijn 'due' (nog geen datapunt voor de verwachte periode)?
+        # Welke velden zijn 'due' (nog geen datapunt voor de verwachte periode)? Een bron mag via
+        # expected_datum(today) de meetperiode-datum overschrijven (bijv. Trends = laatste COMPLETE week);
+        # die datum stuurt zowel de due-check als het datumlabel van de write → idempotent, geen dag-refetch.
+        override = skill.expected_datum(today)
         due = {}
         for field in fields:
-            datum = _expected_period(skill.frequency(field), today, getattr(skill, "lag_days", 0))
+            datum = override or _expected_period(skill.frequency(field), today, getattr(skill, "lag_days", 0))
             if not _has_point(obs, f"{src}_{field}_day", src, datum):
                 due[field] = datum
         # Fase 1: alle velden zijn 'daily' → dezelfde datum; één fetch per bron (alleen als er iets due is).

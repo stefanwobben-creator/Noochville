@@ -13,7 +13,7 @@ Output: `rows` (locale-bewust) + `keywords` (backward compat, eerste geo).
 Fail-closed per geo×term: netwerk-/rate-limit-fout faalt alleen dat segment.
 """
 from __future__ import annotations
-import os, json, time, random, logging
+import os, json, time, random, logging, datetime
 from nooch_village.skills import DataSourceSkill
 
 log = logging.getLogger(__name__)
@@ -60,6 +60,25 @@ def _parse_pairs(raw: str):
 def _pair_field(a: str, b: str) -> str:
     """Veldsleutel per paar → metric `trends_ratio_<A>_<B>_day` (bijv. trends_ratio_second_hand_brand_new_day)."""
     return f"ratio_{_sanitize_field(a)}_{_sanitize_field(b)}"
+
+
+def _last_complete_week(today: datetime.date) -> datetime.date:
+    """De laatste COMPLETE Google-Trends-week vóór `today`. Trends' weekly-reeks markeert de lopende week
+    als isPartial (onvolledig); die is dus altijd de voorlaatste. Trends-weken starten op ZONDAG. Deze
+    datum labelt de observatie = de week die de waarde werkelijk beschrijft (deterministisch uit today,
+    zodat de due-check en de write dezelfde sleutel gebruiken → idempotent, geen dag-refetch)."""
+    days_since_sunday = (today.weekday() + 1) % 7          # ma=0..zo=6 → zondag=0
+    this_week_sunday = today - datetime.timedelta(days=days_since_sunday)
+    return this_week_sunday - datetime.timedelta(days=7)   # vorige (laatste complete) week
+
+
+def _drop_partial(df):
+    """Verwijder de lopende, onvolledige week (isPartial=True) vóór het laatste punt gekozen wordt.
+    FAIL-CLOSED: ontbreekt de isPartial-kolom onverwacht → None (behandel als 'geen betrouwbare complete
+    week'; nooit terugvallen op een partiële rij)."""
+    if "isPartial" not in df:
+        return None
+    return df[~df["isPartial"].astype(bool)]
 
 
 def _sanitize_field(term: str) -> str:
@@ -181,17 +200,29 @@ class TrendsSkill(DataSourceSkill):
         except Exception:
             return False
 
+    def expected_datum(self, today):
+        """Datumlabel + due-sleutel = de laatste COMPLETE Trends-week (niet de pulsdatum, niet de lopende
+        partiële week). Zie _last_complete_week."""
+        return _last_complete_week(today).isoformat()
+
     def daily_values(self, context, datum: str, *, _fetch=None) -> dict:
         """Stemming-ratio per paar uit `trends_pairs`: per paar één request [A, B]; ratio = waarde_A /
-        waarde_B uit dezelfde response (float, ONGESCHAALD, niet naar int afronden). Oriëntatie A =
+        waarde_B van de laatste COMPLETE week (float, ONGESCHAALD, niet naar int afronden). Oriëntatie A =
         zuinigheid/behoud, B = toegeeflijkheid/nieuw (meetconstante; paren omdraaien breekt de reeks).
         Veld/metric = trends_ratio_<A>_<B>_day.
+
+        COMPLETE WEEK: de lopende week is in Trends isPartial=True (onvolledig). Die wordt weggefilterd
+        (_drop_partial) vóór het laatste punt gekozen wordt; de ratio komt van de laatste complete week.
+        Het datumlabel van de observatie is die complete week (via expected_datum), niet de pulsdatum —
+        essentieel voor latere lead/lag-analyse.
 
         Fail-closed:
           - `trends_pairs` ontbreekt/leeg/één misvormd paar → ERROR-log, bron levert niets (geen default,
             geen partial parse).
-          - NUL-GUARD op de noemer: B == 0 of afwezig op het recente punt → dat punt NIET schrijven + ERROR
-            (scope 0 mat 100% niet-nul voor alle B; een 0 daar is een verdachte response, geen observatie).
+          - geen enkele complete (niet-partiële) week / isPartial-kolom afwezig → gat + ERROR (nooit
+            terugvallen op een partiële rij).
+          - NUL-GUARD op de noemer: B == 0 of afwezig op de laatste complete week → dat punt NIET schrijven
+            + ERROR (scope 0 mat 100% niet-nul voor alle B; een 0 daar is een verdachte response).
           - A == 0 bij geldige B → ratio 0 wegschrijven (echte observatie).
           - mislukte/lege request → gat (None) + ERROR (geen interpolatie).
         `_fetch(payload, timeframe, geo) -> df` injecteerbaar (geen netwerk in tests)."""
@@ -231,12 +262,17 @@ class TrendsSkill(DataSourceSkill):
             if df is None or getattr(df, "empty", True) or a not in df or b not in df:
                 log.error("Trends paar '%s÷%s': lege/incomplete respons — gat.", a, b)
                 continue
-            b_recent = df[b].tolist()[-1]
+            complete = _drop_partial(df)                          # lopende partiële week weg → laatste COMPLETE week
+            if complete is None or getattr(complete, "empty", True):
+                log.error("Trends paar '%s÷%s': geen complete (niet-partiële) week in de respons — gat "
+                          "(nooit terugvallen op een partiële rij).", a, b)
+                continue
+            b_recent = complete[b].tolist()[-1]
             if not b_recent:                                      # noemer 0/afwezig → verdacht (scope 0: 100% niet-nul)
-                log.error("Trends paar '%s÷%s': noemer B=%r op het recente punt — punt geskipt "
+                log.error("Trends paar '%s÷%s': noemer B=%r op de laatste complete week — punt geskipt "
                           "(verdachte respons).", a, b, b_recent)
                 continue
-            out[field] = round(df[a].tolist()[-1] / b_recent, 4)  # float, ongeschaald; A=0 → 0 (echte obs)
+            out[field] = round(complete[a].tolist()[-1] / b_recent, 4)  # laatste COMPLETE week; float, ongeschaald
             if real:
                 time.sleep(1.0)                                   # beleefd tussen paar-requests
         return out
