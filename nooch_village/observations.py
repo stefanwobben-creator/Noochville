@@ -9,13 +9,19 @@ de waarde en welke bron heeft 'm geleverd. `record_daily` bewaakt "één datapun
 (idempotent), zodat een tweede puls op dezelfde dag niet dubbel schrijft.
 """
 from __future__ import annotations
-import json, os, time
+import json, os, re, time
 from datetime import datetime, timezone
 
 
 def _utc_date(ts: float) -> str:
     """De UTC-dag (YYYY-MM-DD) waarin een timestamp valt."""
     return datetime.fromtimestamp(ts, timezone.utc).date().isoformat()
+
+
+def dim_slug(value: str) -> str:
+    """Veilige, stabiele sleutel voor een dimensie-waarde (bijv. een Library-keyword) in de metric-sleutel
+    `<source>_<veld>_day::<slug>`. Het rauwe woord leeft in de observatie-meta; de slug in de sleutel."""
+    return re.sub(r"[^a-z0-9]+", "_", (value or "").lower()).strip("_")
 
 
 class ObservationStore:
