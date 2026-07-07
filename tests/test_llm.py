@@ -102,7 +102,8 @@ def test_gemini_timeout_is_set(monkeypatch):
         reason("test prompt")
 
     fake_types.HttpOptions.assert_called_once_with(timeout=30000)   # ms, niet seconden
-    fake_types.GenerateContentConfig.assert_called_once_with(http_options=fake_http_options)
+    fake_types.GenerateContentConfig.assert_called_once_with(
+        max_output_tokens=700, http_options=fake_http_options)   # default token-cap
     assert captured.get("config") is fake_config
 
 

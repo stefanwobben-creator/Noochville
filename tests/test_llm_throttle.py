@@ -75,7 +75,7 @@ def test_reason_gaat_door_de_limiter(monkeypatch):
             calls["acquire"] += 1
 
     monkeypatch.setattr(llm, "LIMITER", Spy())
-    monkeypatch.setattr(llm, "_try_gemini", lambda p, model=None: "antwoord")
+    monkeypatch.setattr(llm, "_try_gemini", lambda p, model=None, **kw: "antwoord")
     out = llm.reason("test")
     assert out == "antwoord"
     assert calls["acquire"] == 1
