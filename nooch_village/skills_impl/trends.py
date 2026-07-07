@@ -33,16 +33,20 @@ _USER_AGENT = (
 #
 # EIS AAN HET ANKER (cruciaal): stabiel, hoog volume, NIET-trending. Kiest een curator een trending
 # term als anker, dan weerspiegelt de ratio de ruis van het anker i.p.v. de trend van de term — stil
-# onzin-data. Default 'weather' (constant hoog volume). Stel per geo/taal in via `trends_anchor`.
-_ANCHOR_DEFAULT = "weather"
+# onzin-data. Het anker komt uit config-sleutel `trends_anchor` — FAIL-CLOSED, GEEN code-default: een
+# ontbrekend/leeg anker is een luide error, de bron levert dan niets (nooit een stille default-term).
 _TIMEFRAME_DEFAULT = "today 5-y"        # vast lang venster: genoeg historie voor stabiele normalisatie
+_TRENDS_BATCH = 4                       # pytrends vergelijkt max 5 termen/request → 4 termen + het anker
 
 
-def _trends_terms(context) -> list[str]:
-    """De curator-termen uit de config (`trends_terms`, komma-gescheiden). Analoog aan openalex_query,
-    maar meervoudig — elke term wordt een eigen observatie-reeks."""
-    raw = (getattr(context, "settings", {}) or {}).get("trends_terms", "") if context else ""
-    return [t.strip() for t in raw.split(",") if t.strip()]
+def _approved_library_terms(context) -> list[str]:
+    """De teller-termen: de approved-set uit de Library (status 'approved') — DEZELFDE bron/query als de
+    Library→Keywords-Everywhere-koppeling (zie keywords_everywhere._approved_keywords). Dynamisch: de
+    discovery-lus voedt Trends automatisch, geen aparte config-termenlijst meer."""
+    lib = getattr(context, "library", None) if context is not None else None
+    if lib is None:
+        return []
+    return [w for w, e in lib.all().items() if e.get("status") == "approved"]
 
 
 def _sanitize_field(term: str) -> str:
@@ -158,9 +162,9 @@ class TrendsSkill(DataSourceSkill):
     )
 
     def available_metrics(self, context=None) -> list[str]:
-        """DYNAMISCHE velden: de curator-termen (`trends_terms`), als veilige sleutels. Zonder context
-        (bv. het koppelscherm) → leeg, want de termen staan in de config, niet vast in de skill."""
-        return [_sanitize_field(t) for t in _trends_terms(context)]
+        """DYNAMISCHE velden: de approved Library-termen als veilige sleutels (zoals KE de Library volgt).
+        Zonder context (bv. het koppelscherm) → leeg, want de termen komen uit de Library, niet vast in de skill."""
+        return [_sanitize_field(t) for t in _approved_library_terms(context)]
 
     def is_configured(self, context) -> bool:
         """Keyless (pytrends). 'Geconfigureerd' = de pytrends-dependency is importeerbaar. Een pytrends
@@ -172,44 +176,70 @@ class TrendsSkill(DataSourceSkill):
         except Exception:
             return False
 
-    def daily_values(self, context, datum: str) -> dict:
-        """Genormaliseerde interesse per curator-term via de anker-ratio: query [anker, term] SAMEN over
-        een vast lang venster, en leg `term_recent / anker_recent × 100` vast. Die ratio is invariant
-        onder Trends' herschaling → vergelijkbaar tussen termen én over de tijd. Flux (een niveau, geen
-        stand). Volledig fail-closed per term: elke fout (ook een gebroken pytrends bij de call) → None
-        voor die term, de puls crasht niet. Anker_recent == 0 → None (kan niet normaliseren)."""
-        terms = _trends_terms(context)
+    def daily_values(self, context, datum: str, *, _fetch=None) -> dict:
+        """Genormaliseerde interesse per approved Library-term via de anker-ratio. Batcht de termen in
+        groepjes van 4 met het anker als 5e term in ELKE request (pytrends-max = 5), zodat term én anker
+        binnen dezelfde request/normalisatie zitten; ratio = term_recent / anker_recent × 100.
+
+        Fail-closed:
+          - geen Library-termen → alles None (niets te doen).
+          - `trends_anchor` ontbreekt/leeg → ERROR-log, bron levert niets (GEEN code-default).
+          - een batch die faalt/leeg terugkomt → die termen blijven een GAT (None) + ERROR-log.
+          - anker 0 of afwezig in een batch-respons → hele batch geskipt + ERROR-log (deel-door-nul-guard;
+            een anker hoort nooit 0 te zijn).
+        Een term die 0 teruggeeft is een ECHTE observatie → als 0 weggeschreven, geen gat.
+        `_fetch(payload, timeframe, geo) -> df` injecteerbaar (geen netwerk in tests)."""
+        terms = _approved_library_terms(context)
         out = {_sanitize_field(t): None for t in terms}
         if not terms:
             return out
-        try:
-            from pytrends.request import TrendReq
-        except ImportError:
-            return out                                  # dependency ontbreekt → alles None
         settings = getattr(context, "settings", {}) or {}
-        anchor = (settings.get("trends_anchor") or _ANCHOR_DEFAULT).strip()
+        anchor = (settings.get("trends_anchor") or "").strip()
+        if not anchor:
+            log.error("Trends anker-ratio: config 'trends_anchor' ontbreekt of is leeg — bron levert niets "
+                      "(fail-closed, geen default-anker).")
+            return out
         geo = (settings.get("trends_geo") or "NL").strip()
         timeframe = (settings.get("trends_timeframe") or _TIMEFRAME_DEFAULT).strip()
         hl = settings.get("trends_hl", "nl-NL")
-        try:
-            pytrends = TrendReq(hl=hl, tz=60, timeout=(10, 25),
-                                requests_args={"headers": {"User-Agent": _USER_AGENT}})
-        except Exception as exc:
-            log.warning("Trends init faalde: %s", exc)
-            return out
-        for term in terms:
-            key = _sanitize_field(term)
+        real = _fetch is None
+        if real:
             try:
-                pytrends.build_payload([anchor, term], cat=0, timeframe=timeframe, geo=geo, gprop="")
-                df = pytrends.interest_over_time()
-                if df is None or df.empty or anchor not in df or term not in df:
-                    continue                            # None blijft staan
-                a_recent = int(df[anchor].tolist()[-1])
-                t_recent = int(df[term].tolist()[-1])
-                out[key] = _ratio(a_recent, t_recent)
-            except Exception as exc:                    # ook een bij-de-call gebroken pytrends
-                log.warning("Trends daily_values faalde voor '%s': %s", term, exc)
-            time.sleep(1.0)                              # beleefd (onofficieel endpoint)
+                from pytrends.request import TrendReq
+            except ImportError:
+                return out                                  # dependency ontbreekt → alles None
+            try:
+                pytrends = TrendReq(hl=hl, tz=60, timeout=(10, 25),
+                                    requests_args={"headers": {"User-Agent": _USER_AGENT}})
+            except Exception as exc:
+                log.error("Trends init faalde: %s — bron levert niets.", exc)
+                return out
+
+            def _fetch(payload, tf, g):
+                pytrends.build_payload(payload, cat=0, timeframe=tf, geo=g, gprop="")
+                return pytrends.interest_over_time()
+        for i in range(0, len(terms), _TRENDS_BATCH):
+            batch = terms[i:i + _TRENDS_BATCH]
+            b = i // _TRENDS_BATCH
+            try:
+                df = _fetch([anchor] + batch, timeframe, geo)
+            except Exception as exc:
+                log.error("Trends batch %d faalde: %s — geen write voor deze batch (gat).", b, exc)
+                continue
+            if df is None or getattr(df, "empty", True) or anchor not in df:
+                log.error("Trends: anker '%s' ontbreekt in respons van batch %d — batch geskipt.", anchor, b)
+                continue
+            a_recent = int(df[anchor].tolist()[-1])
+            if a_recent == 0:
+                log.error("Trends: anker '%s' geeft 0 in batch %d — batch geskipt (anker hoort nooit 0 te "
+                          "zijn; iets mis met de request).", anchor, b)
+                continue
+            for term in batch:
+                if term not in df:
+                    continue                                # term afwezig in respons → gat (None blijft)
+                out[_sanitize_field(term)] = _ratio(a_recent, int(df[term].tolist()[-1]))   # 0 → 0 (echte obs)
+            if real:
+                time.sleep(1.0)                             # beleefd (onofficieel endpoint)
         return out
 
     def _select_window(self, keywords: list[str], context) -> list[str]:
