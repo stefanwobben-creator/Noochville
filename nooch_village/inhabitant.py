@@ -827,6 +827,7 @@ class Inhabitant(threading.Thread):
         self._claim_run_complete(pid)
 
     _PREP_CHECKLIST_TITLE = "Uitvoerplan"
+    _WIP_POLICY_ID = "WIP-001"                    # cirkelpolicy die de voorbereidings-WIP-limiet aanzet
 
     @staticmethod
     def _extract_json(text):
@@ -859,18 +860,54 @@ class Inhabitant(threading.Thread):
         return None
 
     def _tend_projects(self, event: "Event | None" = None) -> None:
-        """Dagelijkse verzorging van mijn EIGEN projecten: voorbereiden in TOEKOMST (status future),
-        uitvoeren in ACTIEF (status queued/running). Andere kolommen worden niet aangeraakt."""
+        """Dagelijkse verzorging van mijn EIGEN projecten: voorbereiden in TOEKOMST (status future, begrensd
+        door de WIP-cirkelpolicy), uitvoeren in ACTIEF (status queued/running). Andere kolommen ongemoeid."""
         ledger = getattr(self.context, "projects", None)
         if ledger is None:
             return
-        for p in ledger.by_status("future"):                     # TOEKOMST → voorbereiden (DEEL A)
-            if p.get("owner") == self.id:
-                self.prepare_project(p["id"])
+        my_future = [p for p in ledger.by_status("future") if p.get("owner") == self.id]
+        limit = self._wip_prepare_limit()                        # WIP-001 aan + AI-manned → N; anders None
+        if limit is None:
+            to_prepare = my_future                               # geen policy/limiet → alle (idempotent)
+        else:
+            prepared = sum(1 for p in my_future if self._project_checklist(p) is not None)
+            slots = max(0, limit - prepared)                     # vrije WIP-plekken
+            unprepared = sorted((p for p in my_future if self._project_checklist(p) is None),
+                                key=lambda p: p.get("created_at", 0))   # FIFO: oudste TOEKOMST eerst
+            to_prepare = unprepared[:slots]                      # de rest WACHT tot een plek vrijkomt
+        for p in to_prepare:
+            self.prepare_project(p["id"])
         for status in ("queued", "running"):                     # ACTIEF → uitvoeren (DEEL B)
             for p in ledger.by_status(status):
                 if p.get("owner") == self.id:
                     self._claim_run_complete(p["id"])
+
+    def _wip_prepare_limit(self):
+        """De WIP-limiet op voorbereiding (int), of None (geen limiet). De cirkelpolicy WIP-001 is de
+        expliciete AAN-schakelaar (via own_and_inherited op de omvattende cirkel); het getal N komt uit
+        config (`wip_prepare_limit`, default 8) — NIET uit de policy-body. Geldt alleen voor AI-bemande
+        rollen (persona_id gezet); mens-bemande rollen bereiden niet autonoom voor. Fail-closed: ontbreekt
+        een leesbron → None (huidig, ongelimiteerd gedrag)."""
+        if not getattr(self.record, "persona_id", None):
+            return None                                          # mens-bemand → geen autonome voorbereiding
+        att = getattr(self.context, "att", None)
+        records = getattr(self.context, "records", None)
+        if att is None or records is None:
+            return None
+        from nooch_village import artefacts
+        try:
+            pols = artefacts.own_and_inherited(self.id, "policy", records, att)
+        except Exception:
+            return None
+        active = list(pols.get("own", [])) + [d["artefact"] for d in pols.get("inherited", [])]
+        on = any(getattr(a, "id", "") == self._WIP_POLICY_ID and getattr(a, "status", "") == "active"
+                 for a in active)
+        if not on:
+            return None                                          # policy afwezig/inactief → geen limiet
+        try:
+            return max(0, int(self.context.settings.get("wip_prepare_limit", "8")))
+        except (TypeError, ValueError):
+            return 8
 
     # ── DEEL A: voorbereiding (alleen voor een string-scope project in TOEKOMST) ──────────────
     def prepare_project(self, pid: str) -> None:
