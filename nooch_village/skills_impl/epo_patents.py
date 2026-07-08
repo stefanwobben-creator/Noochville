@@ -38,6 +38,15 @@ def _dedup(names) -> list[str]:
     return sorted({(n or "").strip() for n in names if (n or "").strip()})
 
 
+def _party_names(ed, tag: str) -> list[str]:
+    """Namen van applicants/inventors uit een exchange-document. OPS levert elke partij in meerdere
+    data-formats (epodoc/docdb/original); we prefereren 'epodoc' (leesbare naam, bv. 'ASICS CORP [JP]')
+    en vallen anders terug op alle formats — zodat partijen niet gedropt worden."""
+    parts = ed.findall(f".//{{*}}{tag}")
+    epodoc = [p.findtext(".//{*}name") for p in parts if p.get("data-format") == "epodoc"]
+    return _dedup(epodoc or [p.findtext(".//{*}name") for p in parts])
+
+
 class EpoPatentsSkill(DataSourceSkill):
     name = "epo_patents"
     SOURCE = "epo_patents"                 # los van de meetcatalogus: research-skill, geen dagobservatie
@@ -152,10 +161,8 @@ class EpoPatentsSkill(DataSourceSkill):
                     break
             if not pub_no:                 # fallback op de exchange-document-attributen
                 pub_no = f"{ed.get('country', '')}{ed.get('doc-number', '')}{ed.get('kind', '')}"
-            applicants = _dedup(app.findtext(".//{*}name") for app in ed.findall(".//{*}applicant")
-                                if app.get("data-format") in (None, "docdb"))
-            inventors = _dedup(inv.findtext(".//{*}name") for inv in ed.findall(".//{*}inventor")
-                               if inv.get("data-format") in (None, "docdb"))
+            applicants = _party_names(ed, "applicant")
+            inventors = _party_names(ed, "inventor")
             rec = {"title": title, "publication_number": pub_no, "publication_date": pub_date}
             if abstract:
                 rec["abstract"] = abstract[:400]
