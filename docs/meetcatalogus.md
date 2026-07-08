@@ -1,143 +1,144 @@
 # Meetcatalogus — alles wat de ObservationStore in gaat
 
-Read-only gegenereerd op 2026-07-08 (store: ~10.900 rijen). Twee doelen: **(1) keuring nu** (per reeks
-houden/fixen/weg) en **(2) voorbereiding op een signaleringslaag** (per reeks: wat is een opmerkelijke
-wekelijkse verandering). Twee invalshoeken gekruist: **data** (distinct `(bron, metric, dimensie)` in de
-store) én **code** (alle `record_daily(`-schrijfpaden — óók slapende paden zonder data).
+Read-only afgeleid, afgesloten 2026-07-08 (sluitpakket). Twee doelen: **(1) keuring** (OORDEEL per reeks)
+en **(2) signaleringslaag** (OPMERKELIJK-DREMPEL: wat een opmerkelijke verandering is). Twee invalshoeken
+gekruist: **data** (distinct `(bron, metric, dimensie)`) én **code** (alle `record_daily(`-schrijfpaden).
 
-**Stefan vult met de hand:** `OORDEEL` (houden / fixen / weg) en `OPMERKELIJK-DREMPEL` (wat een wekelijkse
-rimpel waard is — bijv. "nieuw keyword", "±15% w/w", "meerjarige piek"; mag leeg waar nog onbekend).
+`OORDEEL` = houden / fixen / weg. `OPMERKELIJK-DREMPEL` = ruis-drempel (procentueel/absoluut) én/of een
+**categorische** trigger (een gebeurtenis die op zich al een signaal is).
 
 ---
 
-## Conventie-notities (lees eerst — staan vast)
+## De meetcatalogus als KAART van één stroom (reinforcing loop — mechanisme, nog niet geautomatiseerd)
 
-1. **OpenAlex = 90/30-FLOW, geen voorraad.** `openalex_works_90d::<concept>` = het aantal works dat per
-   concept in een 90-daags publicatievenster VERSCHEEN. Label = **venster-eind (R−30)**, waarbij R = einde
-   laatste complete week. Analyse direct op niveau (geen eerste-verschillen). **`ecodesign` is de dunste
-   reeks** (~130/venster) → week-ruis verwacht, geen defect.
+De bronnen zijn geen losse metertjes; samen vormen ze een **zelfversterkende lus**:
+
+```
+  OpenAlex + Trends   →   Keywords Everywhere   →   content (mens)   →   GSC + Plausible page_path
+   RADAR                  VALIDATIE                  INTERVENTIE           EFFECT-TERUGKOPPELING
+  (brede vroege seeds)   (is er zoekvraag?)         (mens handelt)        (werkte de seed?)
+        ▲                                                                        │
+        └──────────────────────────  de lus leert welke seeds werken  ──────────┘
+```
+
+- **Radar** (OpenAlex-concepten, Trends-stemming-paren): brede, vroege culturele/academische seeds.
+- **Validatie** (Keywords Everywhere): is er daadwerkelijk zoekvraag naar een seed?
+- **Interventie** (content): de mens maakt content op een gevalideerde seed.
+- **Effect-terugkoppeling** (GSC-keyword-dimensie + Plausible page_path): rankt/bezoekt het?
+
+**Rand-principe (expliciet):** de lus **versterkt wat werkt** (bewezen seeds → meer content) **én houdt de
+radar open voor seeds zónder bewezen effect** — *innovatie gebeurt aan de randen*. Een seed zonder
+zoekvraag of effect wordt niet weggegooid maar blijft in de radar; de brede OpenAlex/Trends-dekking is
+bewust breder dan wat nu converteert. De catalogus is de **kaart van deze stroom**, geen losse KPI-lijst.
+
+---
+
+## Conventie-notities (staan vast)
+
+1. **OpenAlex = 90/30-FLOW** (works die per concept in een 90-daags publicatievenster verschenen), label =
+   venster-eind R−30. Analyse direct op niveau. `ecodesign` = dunste reeks (week-ruis verwacht).
 2. **Trends stemming-paren = ratio A/B**, complete-week-label (zondag-grens). A = zuinigheid/behoud,
-   B = nieuw/luxe; ↑ = versobering ↑. `repair` / `textile recycling` / `vegan leather` zijn **bewust NIET
-   in OpenAlex** gedekt (geen bruikbaar concept) — het repair-signaal komt uit deze Trends-paren.
-3. **OpenAlex-label ligt op een andere weekgrens dan Trends** (R−30 ≈ 5-6 weken vóór het Trends-zondag-
-   label van dezelfde puls). Bij latere cross-correlatie is dat een **grid-offset, geen echte lead/lag** —
-   nooit 1-op-1 op datum joinen.
+   B = nieuw/luxe; ↑ = versobering ↑. `repair`/`textile recycling`/`vegan leather` bewust NIET in OpenAlex.
+3. **OpenAlex-label ligt op een andere weekgrens dan Trends** (R−30 vs zondag) → grid-offset, geen echte
+   lead/lag; nooit 1-op-1 op datum joinen.
 
-**Datumlabel-conventies (collector):** daily → laatst-complete dag `today−1−lag`; weekly → ISO-maandag;
-Trends → complete Trends-week (zondag); OpenAlex → venster-eind R−30.
+**Datumlabel-conventies:** daily → `today−1−lag`; weekly → ISO-maandag; Trends → complete Trends-week
+(zondag); OpenAlex → venster-eind R−30; Plausible page_path/visitors_via → laatst-complete dag.
 
-## Controlepunten (expliciet)
+## Controlepunten
 
-- **KE 29 reeksen (we spraken over 28):** de **29e is `vegan shoes`** — **bewust approved** (rank-target /
-  doelwit, global volume 22.200, goedgekeurd via de Librarian-KE-check tijdens een puls), **geen stray**.
-  Alle 29 KE-velden = de approved-set van de Library (available_metrics volgt de Library dynamisch).
-- **`werk_duur_day` twee circles** (`mother_earth` + `mother_earth__nooch`): **bewuste twee-circle-
-  situatie, GEEN duplicaat** — twee geldige circles, elk hun eigen werkoverleg (record_daily houdt ze
-  apart op role_id).
-- **`trends_categorie` vs `trends`:** twee APARTE bronnen — categorie-interesse (bevroren termen, daily)
-  versus stemming-paren (ratio, weekly). Eigen blok elk; niet verwarren.
+- **KE 27 reeksen** (was 29): sluitpakket Scope 1 verwijderde `carbonkiller` + `noochwear.com reviews`
+  (0 volume/ruis, → forbidden). `noech` (typo-variant) **bewust behouden** (Stefan).
+- **`werk_duur_day` twee circles** (`mother_earth` + `mother_earth__nooch`): bewuste twee-circle-situatie,
+  GEEN duplicaat.
+- **`trends_categorie` VERWIJDERD** (Scope 1): gedeactiveerd + reeksen weg (bevroren, comprimeert, overlapt
+  met KE + stemming-paren).
+- **Nieuw:** Plausible `page_path`-dimensie (Scope 2) en het 4e Trends-paar `slow÷fast fashion` (Scope 3).
 
 ---
 
 ## plausible  (actief, daily)
 
-| metric | dim | schrijfpad | cadans | label | laatste | orde v. grootte | betekenis (voor Nooch) | OORDEEL | OPMERKELIJK-DREMPEL |
-|---|---|---|---|---|---|---|---|---|---|
-| `plausible_visitors_day` | — | collector.py:142 | daily | today−1 | 6 | 0–2.365 | Hoeveel mensen de site per dag bezoeken (bereik) | [ ] | [ ] |
-| `plausible_pageviews_day` | — | collector.py:142 | daily | today−1 | 13 | 0–7.333 | Hoeveel pagina's per dag bekeken worden | [ ] | [ ] |
-| `plausible_visit_duration_day` | — | collector.py:142 | daily | today−1 | 57 | 0–1.938 (sec) | Hoe lang bezoekers gemiddeld blijven (betrokkenheid) | [ ] | [ ] |
-| `plausible_bounce_rate_day` | — | collector.py:142 | daily | today−1 | 50 | 0–100 (%) | Aandeel dat direct weer weggaat (reeks-start 2026-07-07) | [ ] | [ ] |
-| `plausible_*_day::<land>` | country | collector.py:165 (+ backfill 115/175, historisch) | daily | today−1 | 7 landen | zie totalen, per land | Zelfde 4 metrics uitgesplitst per land — waar het bereik zit | [ ] | [ ] |
-| `visitors_via_<utm>_day` | — | roles.py:233 | per puls | today−1 (laatst-complete dag) | 1–3 | 1–9 | Bezoekers per kanaal (ig, shopify_email, bluemarble) — 7-daags aggregaat | [ ] | [ ] |
-| *(gemonitorde metrics)* | — | geen write (curatie-lijst) | — | — | n.v.t. | — | Curatie-lijst van metrics die een rol volgt (MonitoringStore, `data/role_metrics.json`, gevuld via Noochie's keep-verdicts). GEEN kopie-reeks: de waarden leest een rol-view/signaleringslaag via referentie uit de canonieke reeksen (plausible_*_day). Slapend tot het eerste project door de advies→keep-flow gaat. | [ ] | [ ] |
+| metric | dim | schrijfpad | cadans | label | laatste | betekenis (voor Nooch) | OORDEEL | OPMERKELIJK-DREMPEL |
+|---|---|---|---|---|---|---|---|---|
+| `plausible_visitors_day` | — | collector.py:142 | daily | today−1 | 6 | Hoeveel mensen de site per dag bezoeken (bereik) | **houden** | **Procentueel** (0–2.365, campagne-batch-model): de spike ~2.365 was een campagne-batch; markeer campagnedagen als bekende uitschieters. Categorisch: **nieuw record** = signaal. |
+| `plausible_pageviews_day` | — | collector.py:142 | daily | today−1 | 13 | Hoeveel pagina's per dag bekeken worden | **houden** | Idem procentueel (campagnedagen bekende uitschieters); categorisch nieuw record. |
+| `plausible_visit_duration_day` | — | collector.py:142 | daily | today−1 | 57 | Gem. bezoekduur (sec) — betrokkenheid | **houden** | Procentueel w/w. |
+| `plausible_bounce_rate_day` | — | collector.py:142 | daily | today−1 | 50 | Aandeel dat direct weggaat | **houden** | **Jonge reeks (start 2026-07-07)** → baseline-drempel voorlopig het minst betrouwbaar; geen scherpe drempel tot er ~4-6 weken staat. |
+| `plausible_*_day::<land>` | country | collector.py:165 (+backfill) | daily | today−1 | 7 landen | 4 metrics per land — waar het bereik zit | **houden** | Categorisch: **nieuw of verdwenen land** = signaal. |
+| `plausible_page_visitors_day::<page>` | page_path | plausible.py:collect_extra_series (+backfill) | daily | today−1 | 1 pagina (`/`) | Bezoekers per pagina; een pagina komt erbij bij ≥3/dag, daarna volledige dagreeks — de effect-terugkoppeling van de lus | **houden** | Categorisch: **nieuwe pagina kwalificeert** (≥3) = ripple (content sloeg aan). Per pagina procentueel w/w. |
+| `visitors_via_<utm>_day` | — | roles.py:233 | per puls | today−1 | 1–3 | Bezoekers per kanaal (7-daags aggregaat) | **houden** | Geen canoniek origineel (Plausible levert UTM alleen zo) → **bewuste uitzondering op reference-don't-copy**. Categorisch: **nieuw kanaal** = signaal. |
 
-*Landen (7): NL, BE, DE, FR, ES, GB, US. De historische per-land- én totaal-reeksen (terug tot 2024) komen
-uit een backfill (backfill.py:115/175), dezelfde metrics idempotent aangevuld.*
+*Landen: NL, BE, DE, FR, ES, GB, US. page_path-opslag = per pagina (stabiel); top-10 = afgeleide view.*
 
 ## gsc  (actief, daily, lag 3)
 
-| metric | dim | schrijfpad | cadans | label | laatste | orde v. grootte | betekenis (voor Nooch) | OORDEEL | OPMERKELIJK-DREMPEL |
-|---|---|---|---|---|---|---|---|---|---|
-| `gsc_impressions_day` | — | collector.py:142 | daily | today−4 | 61 | 61–77 | Hoe vaak de site in Google-resultaten verscheen/dag | [ ] | [ ] |
-| `gsc_clicks_day` | — | collector.py:142 | daily | today−4 | 3 | 2–3 | Hoeveel mensen vanuit Google doorklikten/dag | [ ] | [ ] |
-| `gsc_ctr_day` | — | collector.py:142 | daily | today−4 | 0,049 | 0,026–0,049 | Klik-door-ratio: hoe aantrekkelijk het zoekresultaat is | [ ] | [ ] |
-| `gsc_position_day` | — | collector.py:142 | daily | today−4 | 15,1 | 11–15 | Gem. positie in Google (lager = beter) | [ ] | [ ] |
-| `gsc_*_day::<keyword>` | query | collector.py:165 | daily | today−4 | **1 keyword** (`nothing shoes`) | schaars | Zoekprestaties per Library-doelwit-keyword; vult alleen waar de site echt impressies heeft | [ ] | [ ] |
+| metric | dim | schrijfpad | cadans | label | laatste | betekenis (voor Nooch) | OORDEEL | OPMERKELIJK-DREMPEL |
+|---|---|---|---|---|---|---|---|---|
+| `gsc_impressions_day` | — | collector.py:142 | daily | today−4 | 61 | Zoek-vertoningen/dag | **houden** | **Lage volumes** → een **absolute sprong** is betekenisvoller dan een %; drempel op absolute stap. |
+| `gsc_clicks_day` | — | collector.py:142 | daily | today−4 | 3 | Klikken vanuit Google/dag | **houden** | Idem: absolute sprong (bij 2–3/dag zegt % weinig). |
+| `gsc_ctr_day` | — | collector.py:142 | daily | today−4 | 0,049 | Klik-door-ratio | **houden** | Absolute stap (lage volumes). |
+| `gsc_position_day` | — | collector.py:142 | daily | today−4 | 15,1 | Gem. positie in Google | **houden** | **LAAG = BETER.** Drempel: een daling (verbetering) onder een positie-grens is het signaal, niet een stijging. |
+| `gsc_*_day::<keyword>` | query | collector.py:165 | daily | today−4 | 1 keyword | Zoekprestaties per doelwit-keyword (effect-terugkoppeling) | **houden** | **1 keyword is de VERWACHTE staat, geen alarm.** Categorisch: **nieuw keyword verschijnt** (site rankt op een extra term) = ripple. |
 
 ## openalex  (actief, weekly, FLOW 90/30-venster)
 
-| metric | dim | schrijfpad | cadans | label | laatste | orde v. grootte | betekenis (voor Nooch) | OORDEEL | OPMERKELIJK-DREMPEL |
-|---|---|---|---|---|---|---|---|---|---|
-| `openalex_works_90d::<concept>` | concept | openalex.py:193 | weekly | venster-eind (R−30) | 6 concepten | 129–1.593 | Wetenschappelijke aandacht per missie-concept (works in een 90d-venster) — het culturele/academische tij | [ ] | [ ] |
+| metric | dim | schrijfpad | cadans | label | laatste | betekenis (voor Nooch) | OORDEEL | OPMERKELIJK-DREMPEL |
+|---|---|---|---|---|---|---|---|---|
+| `openalex_works_90d::<concept>` | concept | openalex.py:193 | weekly | R−30 | 6 concepten | Wetenschappelijke aandacht per missie-concept — de radar | **houden** | **Procentueel PER CONCEPT** (niet absoluut over de 6 samen; ze verschillen sterk in orde). `ecodesign` (~130) krijgt een **hogere** drempel (dunne reeks, week-ruis). |
 
-*Concepten (6, laatste waarde 2026-06-04): biomaterial 1593, sustainable consumption 1392, mycelium 1210,
-natural fibers 742, biodegradable polymers 541, **ecodesign 129 (dunste reeks — week-ruis verwacht)**.*
+*Concepten: biomaterial 1593, sustainable consumption 1392, mycelium 1210, natural fibers 742,
+biodegradable polymers 541, ecodesign 129.*
 
-## trends  (actief, weekly, stemming-paren)
+## trends  (actief, weekly, stemming-paren — 4)
 
-| metric | dim | schrijfpad | cadans | label | laatste | orde v. grootte | betekenis (voor Nooch) | OORDEEL | OPMERKELIJK-DREMPEL |
-|---|---|---|---|---|---|---|---|---|---|
-| `trends_ratio_<A>_<B>_day` | — | collector.py:142 | weekly | complete-week (zondag) | 3 paren | 0,20–3,15 | Massa-stemming zuinig↔nieuw (ratio A/B); ↑ = versoberingsstemming stijgt | [ ] | [ ] |
+| metric | dim | schrijfpad | cadans | label | laatste | betekenis (voor Nooch) | OORDEEL | OPMERKELIJK-DREMPEL |
+|---|---|---|---|---|---|---|---|---|
+| `trends_ratio_<A>_<B>_day` | — | collector.py:142 (+backfill_pairs) | weekly | complete-week | 4 paren | Massa-stemming zuinig↔nieuw per paar (ratio A/B); de radar | **houden** | Categorisch: **meerjarige piek/dal** in een ratio = signaal (5-jaars historie beschikbaar als baseline). |
 
-*Paren (2026-06-28): repair÷replace 3,15 · second hand÷brand new 0,86 · thrift÷luxury 0,20.*
-
-## trends_categorie  (actief, daily, bevroren termen)
-
-| metric | dim | schrijfpad | cadans | label | laatste | orde v. grootte | betekenis (voor Nooch) | OORDEEL | OPMERKELIJK-DREMPEL |
-|---|---|---|---|---|---|---|---|---|---|
-| `trends_categorie_<term>_day` | — | collector.py:142 | daily | today−1 | 3 termen | 0,7–63 | Zoekinteresse per categorieterm (footwear/sustainable shoes/vegan shoes) — vraag naar de categorie | [ ] | [ ] |
+*Paren (voetnoot per paar): `repair÷replace` = **reparatiecultuur**; `second hand÷brand new` =
+**circulariteit**; `thrift÷luxury` = **consumptie(-versobering)**; `slow fashion÷fast fashion` =
+**marktpositionering** (duurzaamheids-framing). Alle 4 met 5-jaars historie (2021→).*
 
 ## keywordseverywhere  (actief, weekly, dynamisch uit Library)
 
-| metric | dim | schrijfpad | cadans | label | laatste | orde v. grootte | betekenis (voor Nooch) | OORDEEL | OPMERKELIJK-DREMPEL |
-|---|---|---|---|---|---|---|---|---|---|
-| `keywordseverywhere_<keyword>_day` | — | collector.py:142 | weekly | ISO-maandag | 29 keywords | 0–110.000 | Maandelijks global zoekvolume per approved Library-keyword — hoeveel vraag er naar een term is | [ ] | [ ] |
+| metric | dim | schrijfpad | cadans | label | laatste | betekenis (voor Nooch) | OORDEEL | OPMERKELIJK-DREMPEL |
+|---|---|---|---|---|---|---|---|---|
+| `keywordseverywhere_<keyword>_day` | — | collector.py:142 | weekly | ISO-maandag | 27 keywords | Maandelijks **global** zoekvolume per approved keyword (validatie-stap van de lus) | **houden** | **country: global** (`ke_country` leeg). Categorisch: een **merkterm die van 0 loskomt** = mijlpaal (merk-bekendheid groeit); een **nieuw auto-approved keyword** verschijnt = signaal. |
 
-*29 reeksen (velden = approved-set van de Library, dynamisch). Volumes 2026-07-06 (steekproef): footwear
-110.000, nooches/nootch 49.500, earth shoes 33.100, sustainable shoes 27.100, **vegan shoes 22.200 (de 29e,
-bewust approved)**, plastic shoes 8.100, no shoes/no i shoes/nos shoes 5.400, … 3× 0 (carbonkiller, noech,
-noochwear.com reviews — echte volume-loze merktermen, geen defect).*
+*27 reeksen (approved-set van de Library, dynamisch). Steekproef: footwear 110.000, nooches/nootch 49.500,
+earth shoes 33.100, sustainable shoes 27.100, vegan shoes 22.200, … noech 0 (behouden brand-typo-variant).*
 
 ## alphavantage  (actief, daily, ETF-proxy)
 
-| metric | dim | schrijfpad | cadans | label | laatste | orde v. grootte | betekenis (voor Nooch) | OORDEEL | OPMERKELIJK-DREMPEL |
-|---|---|---|---|---|---|---|---|---|---|
-| `alphavantage_<symbool>_day` | — | collector.py:142 | daily | today−1 | spx 747,71 · aex 107,8 | 100–751 | Beurs-slotkoers (tracking-ETF spx→SPY, aex→IAEX.AMS) — macro-stemmingsproxy | [ ] | [ ] |
+| metric | dim | schrijfpad | cadans | label | laatste | betekenis (voor Nooch) | OORDEEL | OPMERKELIJK-DREMPEL |
+|---|---|---|---|---|---|---|---|---|
+| `alphavantage_<symbool>_day` | — | collector.py:142 | daily | today−1 | spx 747,71 · aex 107,8 | **HYPOTHESE**: beursstemming loopt mogelijk vóór op consumptie (macro-proxy) — **nog te valideren** | **houden** | Drempel **dagbeweging > 2–3%**. **Weekend/feestdag-gaten = normaal, GEEN alarm** (beurs dicht). |
 
 ## werkoverleg  (intern, per circle)
 
-| metric | dim | schrijfpad | cadans | label | laatste | orde v. grootte | betekenis (voor Nooch) | OORDEEL | OPMERKELIJK-DREMPEL |
-|---|---|---|---|---|---|---|---|---|---|
-| `werk_duur_day` | — | observations.py:267 | per overleg | overleg-datum | 0 | klein | Duur van het werkoverleg per circle — **2 circles = 2 legit reeksen** (mother_earth + mother_earth__nooch) | [ ] | [ ] |
-| `werk_tevredenheid_day` | — | observations.py:264 | per overleg | overleg-datum | 8.7 (1 historisch punt) | 0-10 | Gem. check-out-tevredenheid (0-10) per circle. 1 punt: eenmalige inhaal 2026-07-03=8.7 (mother_earth__nooch, meta backfill), meting van vóór het schrijfpad; zie docs/werk_tevredenheid_inhaal_2026-07-08.md | [ ] | [ ] |
+| metric | dim | schrijfpad | cadans | label | laatste | betekenis (voor Nooch) | OORDEEL | OPMERKELIJK-DREMPEL |
+|---|---|---|---|---|---|---|---|---|
+| `werk_duur_day` | — | observations.py:267 | per overleg | overleg-datum | 0 | Duur werkoverleg per circle (2 legit circles) | **houden** | — |
+| `werk_tevredenheid_day` | — | observations.py:264 | per overleg | overleg-datum | 8.7 (1 hist. inhaal) | Gem. check-out-tevredenheid (0-10) per circle | **houden** | **Zorg-drempel: score < 6 verdient aandacht** (inhoudelijke grens, geen ruis-drempel). |
 
-## Inactieve bronnen  (schrijfpad in code, bewust geen data)
+## Inactieve bronnen  (schrijfpad in code, bewust geen data — uit ≠ kapot, GEEN 0-rijen-alarm)
 
-| metric | bron | schrijfpad | status | OORDEEL | OPMERKELIJK-DREMPEL |
-|---|---|---|---|---|---|
-| `gdelt_<term>_day` | gdelt_tone | collector.py:142 | inactief (bevroren termen aanwezig) | [ ] | [ ] |
-| `shopify_*_day` | shopify | collector.py:142 | inactief (geen SHOPIFY_CLIENT_ID/SECRET) | [ ] | [ ] |
-| `semanticscholar_*_day` | semanticscholar | collector.py:142 | inactief (monthly, niet geactiveerd) | [ ] | [ ] |
+| metric | bron | status-label | OORDEEL |
+|---|---|---|---|
+| `gdelt_<term>_day` | gdelt_tone | **rate-limiting op datacenter-IP; heractiveren na oplossing** | houden (uit) |
+| `shopify_*_day` | shopify | **bewust uit, geen credentials; activeren bij webshop-koppeling** | houden (uit) |
+| `semanticscholar_*_day` | semanticscholar | **monthly te grof voor het venster; heroverwegen als kwartaal-indicator na 2026-08-23** | houden (uit) |
 
 ---
 
 ## Code-vs-data-kruising
 
-**Schrijfpaden (9 in code; `observations.py:189` is de interne record_daily→record-delegatie, geen eigen reeks):**
-collector.py:142 (totaal), collector.py:165 (dimensie), roles.py:233 (visitors_via),
-observations.py:264 (werk_tevredenheid), observations.py:267 (werk_duur),
-openalex.py:193 (openalex-flow via collect_series), backfill.py:115/175 (historische backfill, zelfde metrics).
-*(De oude monitored-kopie-tak in roles.py is verwijderd — reference, don't copy; de MonitoringStore blijft
-als curatie-lijst, zonder eigen write.)*
+**Schrijfpaden (10):** collector.py:142 (totaal), collector.py:165 (dimensie), roles.py:233 (visitors_via),
+observations.py:264 (werk_tevredenheid), observations.py:267 (werk_duur), openalex.py:193 (openalex-flow),
+plausible.py:collect_extra_series (page_path, additief) + backfill_page_paths, backfill.py:115/175 +
+trends backfill_pairs (historische backfill). `observations.py:189` = interne delegatie (geen eigen reeks).
 
-**In code, NIET in data** (slapend of inactief — alleen zichtbaar via de code-invalshoek):
-- gdelt / shopify / semanticscholar (collector.py:142) — **inactieve bronnen**.
+**In code, NIET in data:** gdelt / shopify / semanticscholar — **inactieve bronnen** (gelabeld, geen alarm).
 
-*(`werk_tevredenheid_day` had lang geen data; sinds 2026-07-08 staat er 1 punt — de eenmalige historische
-inhaal van 2026-07-03=8.7. Het reguliere pad vult verder zodra een overleg met een check-out-score sluit.)*
-
-De **MonitoringStore** (curatie-lijst van gevolgde metrics) is bewust géén schrijfpad meer: waarden komen
-via referentie uit de canonieke reeksen. Slapend tot het eerste project door de advies→keep-flow gaat.
-
-**In data, GEEN vindbaar schrijfpad:** **geen.** Elke reeks is herleidbaar tot een `record_daily`-pad
-(collector totaal/dimensie, openalex-flow, roles visitors_via, werkoverleg). Geen verdachte weesdata.
+**In data, GEEN vindbaar schrijfpad:** **geen** — elke reeks is herleidbaar. Geen weesdata.
