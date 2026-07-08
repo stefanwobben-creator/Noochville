@@ -36,6 +36,7 @@ from nooch_village.skills_impl.ngram import NgramCultureSkill
 from nooch_village.skills_impl.openlibrary_search_inside import OpenlibrarySearchInsideSkill
 from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
 from nooch_village.skills_impl.openalex import OpenalexSkill
+from nooch_village.skills_impl.epo_patents import EpoPatentsSkill
 from nooch_village.skills_impl.bulletin_schrijven import BulletinSchrijvenSkill
 from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
 from nooch_village.skills_impl.alphavantage import AlphaVantageIndexSkill
@@ -129,6 +130,7 @@ class Village:
             OpenlibrarySearchInsideSkill(),
             SemanticScholarSkill(),
             OpenalexSkill(),
+            EpoPatentsSkill(),                                             # wereldwijde patenten (EPO OPS) — harry_hemp
             BulletinSchrijvenSkill(),
             KeywordsEverywhereSkill(),
             AlphaVantageIndexSkill(),                                      # index-bron (ETF-proxy; Stooq verwijderd — vervangen)
