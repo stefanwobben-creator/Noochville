@@ -112,6 +112,8 @@ def _window(today: datetime.date):
 
 class OpenalexSkill(DataSourceSkill):
     name = "openalex_evidence"
+    input_schema = "term: str (zoekterm, wordt als exacte frase gezocht). optioneel: limit: int, locale: str"
+    output_schema = "lijst: total: int, hits: list[{title, authors, year, citations, topic, abstract}] | no_data | error"
     SOURCE = "openalex"
     # Flow-bron: per puls tellen we de works die in een 90-daags publicatievenster VERSCHENEN (niet de
     # cumulatieve voorraad). De tegel toont het niveau zelf — geen eerste-verschillen nodig.

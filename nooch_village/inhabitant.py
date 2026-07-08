@@ -944,7 +944,8 @@ class Inhabitant(threading.Thread):
         n_skill = n_open = 0
         for it in plan["items"]:
             skill = it.get("skill")
-            ledger.check_add(pid, cl["id"], it.get("text", ""), skill=skill,
+            payload = it.get("payload") if isinstance(it.get("payload"), dict) else None
+            ledger.check_add(pid, cl["id"], it.get("text", ""), skill=skill, payload=payload,
                              query=it.get("query", ""), reason=it.get("reason", ""))
             n_skill, n_open = (n_skill + 1, n_open) if skill else (n_skill, n_open + 1)
         opens = [f"{it.get('text','')}: {it.get('reason') or 'geen skill'}"
@@ -956,21 +957,33 @@ class Inhabitant(threading.Thread):
         self.log.info("📋 project '%s' voorbereid: %d skill-items, %d zonder skill", pid, n_skill, n_open)
 
     def _plan_checklist(self, goal: str) -> dict | None:
-        """LLM-stap (Noochie): toets het doel tegen mijn accountabilities + skills → checklist.
-        Machine-check: een voorgestelde skill die niet in mijn harde DNA-lijst zit wordt 'geen skill' + reden."""
+        """LLM-stap (Noochie): toets het doel tegen mijn accountabilities + skills → checklist met per item
+        de skill ÉN een payload in de vorm die de skill z'n input_schema voorschrijft. Machine-check: een
+        skill buiten mijn harde DNA-lijst wordt 'geen skill' + reden. Fail-soft: een skill zonder ingevuld
+        input_schema laat de LLM terugvallen op naam + description."""
         from nooch_village.llm import reason as llm_reason
         skills = list(self.dna.skills)
+        catalog_lines = []
+        for name in skills:                                      # catalogus mét description + input-vorm
+            obj = self.registry.get(name) if self.registry else None
+            desc = (getattr(obj, "description", "") or "").strip() if obj else ""
+            insch = (getattr(obj, "input_schema", "") or "").strip() if obj else ""
+            catalog_lines.append(f"- {name}: {desc[:160]}\n    input: " +
+                                 (insch or "(geen schema — leid af uit naam/omschrijving)"))
+        catalog = "\n".join(catalog_lines) or "(geen skills)"
         prompt = (
             f"Je bent {self.name}, een autonome rol. Projectdoel:\n\"{goal}\"\n\n"
-            f"Jouw skills (de ENIGE tools die je hebt): {skills or '(geen)'}\n"
+            f"Jouw skills (de ENIGE tools die je hebt), met hun INPUT-vorm:\n{catalog}\n\n"
             f"Jouw accountabilities: {list(self.dna.accountabilities) or '(geen)'}\n\n"
             "Breek het doel op in 2 tot 5 concrete deel-items. Voor ELK item: als één van jouw skills het "
-            "kan uitvoeren, geef de exacte skill-naam + een korte zoekterm (query). Kan geen enkele skill "
-            "het item uitvoeren, zet \"skill\": null en geef een korte reden (bv. \"geen patent-skill\"). "
+            "kan uitvoeren, geef de exacte skill-naam ÉN een 'payload'-object dat EXACT voldoet aan de "
+            "'input'-vorm van die skill (bv. een term-skill wil {\"term\": \"...\"}, keywords_everywhere wil "
+            "{\"kw\": [\"...\"]}, een merken-skill wil {\"brands\": [\"...\"]}). Kan geen enkele skill het item "
+            "uitvoeren, zet \"skill\": null, \"payload\": {} en geef een korte reden (bv. \"geen patent-skill\"). "
             "Bepaal ook welke accountability het doel raakt en welke deliverable erbij hoort. "
             "Antwoord UITSLUITEND met JSON, exact dit schema:\n"
-            "{\"deliverable\": \"...\", \"accountability\": \"...\", \"items\": "
-            "[{\"text\": \"...\", \"skill\": \"skillnaam of null\", \"query\": \"...\", \"reason\": \"...\"}]}"
+            "{\"deliverable\": \"...\", \"accountability\": \"...\", \"items\": [{\"text\": \"...\", "
+            "\"skill\": \"skillnaam of null\", \"payload\": {}, \"reason\": \"...\"}]}"
         )
         data = self._extract_json(llm_reason(prompt))
         if not isinstance(data, dict) or not isinstance(data.get("items"), list) or not data["items"]:
@@ -980,6 +993,7 @@ class Inhabitant(threading.Thread):
             if sk and sk not in skills:                          # machine-check tegen de harde DNA-lijst
                 it["reason"] = ((it.get("reason") or "") + f" (voorgestelde skill '{sk}' niet in DNA)").strip()
                 it["skill"] = None
+                it["payload"] = {}
         return data
 
     # ── DEEL B: uitvoering (bij de puls voor projecten in ACTIEF) ─────────────────────────────
@@ -1030,16 +1044,22 @@ class Inhabitant(threading.Thread):
             skill = item.get("skill")
             if not skill:
                 continue                                         # geen-skill-item blijft open (reden in item)
-            result = self.use_skill(skill, {"term": item.get("query", ""), "locale": item.get("locale", "")})
-            if self._skill_ok(result):
-                ledger.add_role_message(pid, self._deliverable_note(item, result))
+            payload = item.get("payload")
+            if not isinstance(payload, dict) or not payload:
+                q = item.get("query", "")
+                payload = {"term": q} if q else {}               # legacy back-compat ({term: query})
+            result = self.use_skill(skill, payload)
+            status, archetype = self._classify_result(result)    # normaliseer beide fail-conventies
+            if status == "gelukt":
+                ledger.add_role_message(pid, self._deliverable_note(item, result, archetype))
                 ledger.check_toggle(pid, clid, item["id"])
                 self.log.info("✅ project '%s': item '%s' via %s afgerond", pid, item.get("text", "")[:40], skill)
             else:
-                why = (result.get("error") or result.get("reason") or "skill leverde geen resultaat")
-                ledger.add_role_message(pid, f"⚠️ '{item.get('text','')}' via {skill} niet gelukt: {why}")
-                self.log.warning("⚠️ project '%s': item '%s' via %s faalde: %s",
-                                 pid, item.get("text", "")[:40], skill, why)
+                why = (result.get("error") or result.get("reason") or
+                       ("geen resultaat" if status == "leeg" else "skill leverde geen resultaat"))
+                ledger.add_role_message(pid, f"⚠️ '{item.get('text','')}' via {skill} niet gelukt ({status}): {why}")
+                self.log.warning("⚠️ project '%s': item '%s' via %s %s: %s",
+                                 pid, item.get("text", "")[:40], skill, status, why)
         ledger.mark_tended(pid, today)
         fresh_cl = self._project_checklist(ledger.get(pid)) or {}
         items = fresh_cl.get("items", [])
@@ -1050,22 +1070,83 @@ class Inhabitant(threading.Thread):
         self.log.info("⏳ project '%s' voortgang %d/%d — blijft in ACTIEF", pid, done, total)
         return None
 
-    @staticmethod
-    def _skill_ok(result) -> bool:
-        if not isinstance(result, dict) or result.get("error") or result.get("no_data"):
-            return False
-        return bool(result.get("hits") or result.get("total"))
+    # Container-keys per archetype — de note-opmaak volgt de VORM van de output, niet de skill-naam.
+    _LIST_KEYS = ("hits", "rows", "candidates", "items", "targets", "cards", "keywords")
+    _TEXT_KEYS = ("text", "vraag", "voorstel")
+    _METRIC_KEYS = ("values", "value", "results", "series")
 
-    def _deliverable_note(self, item: dict, result: dict) -> str:
-        hits = result.get("hits", []) or []
-        lines = [f"📎 {item.get('text','')} — via {item.get('skill')}: {result.get('total', len(hits))} resultaten"]
-        for h in hits[:5]:
-            title = (h.get("title") or "").strip()
-            extra = (h.get("tldr") or h.get("topic") or "").strip()
-            yr, cit = h.get("year"), h.get("citations")
-            meta = " · ".join(x for x in [str(yr) if yr else "", f"{cit} cit." if cit else ""] if x)
-            lines.append(f"• {title}" + (f" — {extra}" if extra else "") + (f" ({meta})" if meta else ""))
-        return "\n".join(lines)
+    @classmethod
+    def _classify_result(cls, result):
+        """Normaliseer de twee fail-conventies ({error}/{no_data} en {ok:False,error}) naar één uitkomst:
+        ('gelukt'|'leeg'|'fout', archetype). archetype = ('list'|'dictlist'|'text'|'metric', container_key)
+        bij succes, anders None. Hierop vinkt het primitief af (gelukt) of laat open (leeg/fout)."""
+        if not isinstance(result, dict):
+            return "fout", None
+        if result.get("error") or result.get("ok") is False:
+            return "fout", None
+        if result.get("no_data"):
+            return "leeg", None
+        for k in cls._LIST_KEYS:
+            v = result.get(k)
+            if isinstance(v, list):
+                return ("gelukt" if v else "leeg"), ("list", k)
+            if isinstance(v, dict):                              # bv. keywords_everywhere: {keyword: {...}}
+                return ("gelukt" if v else "leeg"), ("dictlist", k)
+        for k in cls._TEXT_KEYS:
+            v = result.get(k)
+            if isinstance(v, str) and v.strip():
+                return "gelukt", ("text", k)
+        for k in cls._METRIC_KEYS:
+            if result.get(k) not in (None, "", [], {}):
+                return "gelukt", ("metric", k)
+        return "leeg", None                                     # geen herkende inhoud → leeg
+
+    def _deliverable_note(self, item: dict, result: dict, archetype) -> str:
+        """Rauw-maar-leesbaar per archetype; geen velden weggooien, geen gemene-deler-vorm."""
+        head = f"📎 {item.get('text','')} — via {item.get('skill')}"
+        kind, key = archetype if archetype else (None, None)
+        if kind == "list":
+            recs = result.get(key, [])
+            return "\n".join([f"{head}: {result.get('total', len(recs))} resultaten"]
+                             + ["• " + self._format_record(r) for r in recs[:5]])
+        if kind == "dictlist":
+            d = result.get(key, {})
+            return "\n".join([f"{head}: {len(d)} resultaten"]
+                             + ["• " + self._format_record({"key": n, **(r if isinstance(r, dict) else {"value": r})})
+                                for n, r in list(d.items())[:5]])
+        if kind == "text":
+            return f"{head}:\n{(result.get(key) or '')[:1500]}"
+        if kind == "metric":
+            return f"{head}:\n{self._format_metric(result.get(key))}"
+        return f"{head}: {self._format_record(result)}"
+
+    @staticmethod
+    def _format_record(rec) -> str:
+        """Elk record met zijn EIGEN velden (title-achtig veld eerst), rauw maar leesbaar, gecapt."""
+        if not isinstance(rec, dict):
+            return str(rec)[:200]
+        first = [k for k in ("title", "titel", "term", "query", "brand", "name", "word", "key") if k in rec]
+        rest = [k for k in rec if k not in first and k not in ("source", "locale")]
+        out = []
+        for k in first + rest:
+            v = rec.get(k)
+            if v in (None, "", [], {}):
+                continue
+            if isinstance(v, str):
+                v = (v[:160] + "…") if len(v) > 160 else v
+            elif isinstance(v, (list, dict)):
+                s = json.dumps(v, ensure_ascii=False)
+                v = (s[:120] + "…") if len(s) > 120 else s
+            out.append(f"{k}: {v}")
+        return " | ".join(out[:8])
+
+    @staticmethod
+    def _format_metric(vals) -> str:
+        if isinstance(vals, dict):
+            return "; ".join(f"{k}={v}" for k, v in list(vals.items())[:12])
+        if isinstance(vals, list):
+            return "; ".join(str(x) for x in vals[:12])
+        return str(vals)[:200]
 
     # --- het werk ---
 
