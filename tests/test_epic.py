@@ -1,21 +1,14 @@
-"""EPIC-aardbol: metadata-parsing + 1u-cache, fail-closed zonder key/bij API-fout, de PNG-proxy met
-input-validatie, en de widget (alleen op de anchor, met nette fallback, zonder inline styles).
-Alle NASA-calls zijn gemockt — geen live requests."""
+"""EPIC-aardbol: metadata-parsing + 1u-cache (in-memory + schijf), fail-closed zonder key/bij API-fout,
+de thumbnail-proxy met input-validatie + JPEG-check, de schijf-cache die een herstart overleeft, en de
+widget (alleen op de anchor, met nette fallback, zonder inline styles). Alle NASA-calls gemockt."""
 from __future__ import annotations
 
-from io import BytesIO
-
 import pytest
-from PIL import Image
 
 from nooch_village import epic, cockpit2
 from nooch_village.views import overview
 
-
-def _fake_png(size: int = 1024, color=(0, 80, 180)) -> bytes:
-    b = BytesIO()
-    Image.new("RGB", (size, size), color).save(b, format="PNG")
-    return b.getvalue()
+_JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01" + b"\x00" * 40 + b"\xff\xd9"   # begint met JPEG-magic
 
 
 class _FakeResp:
@@ -33,9 +26,13 @@ class _FakeResp:
 
 
 @pytest.fixture(autouse=True)
-def _reset(monkeypatch):
+def _reset(monkeypatch, tmp_path):
     epic._meta_cache.update(ts=0.0, data=None)
-    epic._png_cache.clear()
+    epic._frame_mem.clear()
+    cdir = str(tmp_path / "epic_cache")                     # geïsoleerde schijf-cache per test
+    monkeypatch.setattr(epic, "_CACHE_DIR", cdir)
+    monkeypatch.setattr(epic, "_META_FILE", cdir + "/meta.json")
+    monkeypatch.setattr(epic, "_FRAME_DIR", cdir + "/frames")
     monkeypatch.setenv("NASA_API_KEY", "TESTKEY")
     yield
 
@@ -63,6 +60,14 @@ def test_latest_frames_parst_en_cachet_1u(monkeypatch):
     assert calls["n"] == 1
 
 
+def test_latest_frames_teruggesampled_naar_n(monkeypatch):
+    big = [{"image": f"epic_1b_202607040{i:03d}0", "date": f"2026-07-04 0{i//60}:{i%60:02d}:00"}
+           for i in range(20)]
+    monkeypatch.setattr(epic.requests, "get", lambda *a, **k: _FakeResp(json_data=big))
+    fr = epic.latest_frames()
+    assert epic._N_FRAMES == 8 and len(fr) == 8            # 20 frames → teruggesampled naar 8 posities
+
+
 def test_geen_key_geeft_none(monkeypatch):
     monkeypatch.setenv("NASA_API_KEY", "")
     monkeypatch.setattr(epic.requests, "get", lambda *a, **k: _FakeResp(json_data=_META_RAW))
@@ -74,20 +79,36 @@ def test_api_fout_geeft_none(monkeypatch):
     assert epic.latest_frames() is None
 
 
-def test_frame_bytes_resize_naar_512_en_input_validatie(monkeypatch):
-    monkeypatch.setattr(epic.requests, "get", lambda *a, **k: _FakeResp(content=_fake_png(1024)))
+def test_frame_bytes_thumbnail_en_input_validatie(monkeypatch):
+    seen = {}
+    def fake_get(url, **k):
+        seen["url"] = url
+        return _FakeResp(content=_JPEG)
+    monkeypatch.setattr(epic.requests, "get", fake_get)
     out = epic.frame_bytes("epic_1b_20260704010000", "2026-07-04")
-    assert out and out[:3] == b"\xff\xd8\xff"            # geldige JPEG terug (licht voor 22 frames)
-    assert max(Image.open(BytesIO(out)).size) <= 512     # server-side geresized naar ~512px
-    # onveilige input → None, geen call (voorkomt SSRF/path-traversal)
-    assert epic.frame_bytes("../../etc/passwd", "2026-07-04") is None
+    assert out == _JPEG and out[:3] == b"\xff\xd8\xff"     # thumbnail-JPEG direct doorgeserveerd (geen resize)
+    assert "/thumbs/" in seen["url"] and seen["url"].endswith(".jpg")   # kleine thumbnail-bron
+    assert epic.frame_bytes("../../etc/passwd", "2026-07-04") is None    # SSRF/path-traversal geweerd
     assert epic.frame_bytes("ok", "geen-datum") is None
 
 
-def test_frame_bytes_pillow_fout_geeft_none(monkeypatch):
-    # NASA geeft iets terug dat geen geldige afbeelding is → Pillow faalt → None (geen crash)
+def test_frame_bytes_geen_jpeg_geeft_none(monkeypatch):
     monkeypatch.setattr(epic.requests, "get", lambda *a, **k: _FakeResp(content=b"geen-afbeelding"))
-    assert epic.frame_bytes("epic_1b_20260704010000", "2026-07-04") is None
+    assert epic.frame_bytes("epic_1b_20260704010000", "2026-07-04") is None   # geen JPEG-magic → fail-closed
+
+
+def test_schijf_cache_overleeft_herstart(monkeypatch):
+    resp = _FakeResp(json_data=_META_RAW, content=_JPEG)
+    monkeypatch.setattr(epic.requests, "get", lambda *a, **k: resp)
+    epic.latest_frames()                                   # → meta.json op schijf
+    assert epic.frame_bytes("epic_1b_20260704010000", "2026-07-04") == _JPEG   # → frames/*.jpg op schijf
+    epic._meta_cache.update(ts=0.0, data=None)             # simuleer een herstart: in-memory leeg
+    epic._frame_mem.clear()
+    def boom(*a, **k):
+        raise AssertionError("mag NASA niet bellen — moet uit de schijf-cache komen")
+    monkeypatch.setattr(epic.requests, "get", boom)
+    assert epic.latest_frames()[-1]["image"] == "epic_1b_20260704010000"       # uit meta.json
+    assert epic.frame_bytes("epic_1b_20260704010000", "2026-07-04") == _JPEG    # uit frames/*.jpg
 
 
 def _st(tmp_path):
@@ -101,19 +122,19 @@ def test_widget_alleen_op_anchor(monkeypatch, tmp_path):
     st = _st(tmp_path)
     anchor = overview._overview_html(st, st.records.get("mother_earth"))
     assert "epic-earth" in anchor and "/epic/frame?image=" in anchor
-    assert "2026-07-04 01:00:00 UTC" in anchor          # onderschrift met timestamp
-    assert "Geen domein" not in anchor                  # geen placeholder-tekst onder de aardbol
+    assert "2026-07-04 01:00:00 UTC" in anchor
+    assert "Geen domein" not in anchor
     role = overview._overview_html(st, st.records.get("mother_earth__nooch__creator_of_shoes"))
-    assert "epic-earth" not in role                     # niet op andere rollen/cirkels
+    assert "epic-earth" not in role
 
 
 def test_widget_fallback_zonder_frames(monkeypatch, tmp_path):
     monkeypatch.setattr(epic, "latest_frames", lambda: None)
     st = _st(tmp_path)
     html = overview._overview_html(st, st.records.get("mother_earth"))
-    assert "niet beschikbaar" in html and "epic-frame" not in html   # nette fallback, geen kapotte pagina
+    assert "niet beschikbaar" in html and "epic-frame" not in html
 
 
 def test_widget_geen_inline_style(monkeypatch):
     monkeypatch.setattr(epic, "latest_frames", lambda: list(_FRAMES))
-    assert "style=" not in overview._epic_earth_html()   # UI-regel: geen inline styles
+    assert "style=" not in overview._epic_earth_html()
