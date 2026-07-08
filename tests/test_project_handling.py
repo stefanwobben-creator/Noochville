@@ -43,10 +43,13 @@ def inhabitant(tmp_path, ledger):
     return _make_inhabitant(tmp_path, ledger)
 
 
-def test_claim_run_complete_sets_done(inhabitant, ledger):
+def test_claim_run_complete_zonder_checklist_geen_valse_done(inhabitant, ledger):
+    # ACTIEF zonder voorbereiding → geen uitvoering, geen valse done, geen stub:done-marker
     pid = ledger.create("website_watcher", "schrijf vegan-pagina", "human")
     inhabitant._claim_run_complete(pid)
-    assert ledger.get(pid)["status"] == "done"
+    p = ledger.get(pid)
+    assert p["status"] != "done"
+    assert p.get("outcome") != "stub:done"
 
 
 def test_claim_run_complete_calls_run_project(inhabitant, ledger):
@@ -70,10 +73,10 @@ def test_claim_run_complete_outcome_from_run_project(inhabitant, ledger):
     assert ledger.get(pid)["outcome"] == "prop_123"
 
 
-def test_claim_run_complete_default_stub_outcome(inhabitant, ledger):
+def test_run_project_zonder_checklist_geeft_geen_stub(inhabitant, ledger):
+    # de stub:done-marker is vervangen: geen checklist → run_project geeft None (geen valse success)
     pid = ledger.create("website_watcher", "werk", "human")
-    inhabitant._claim_run_complete(pid)
-    assert ledger.get(pid)["outcome"] == "stub:done"
+    assert inhabitant.run_project(ledger.get(pid)) is None
 
 
 def test_on_project_queued_skips_wrong_owner(inhabitant, ledger):
@@ -83,8 +86,9 @@ def test_on_project_queued_skips_wrong_owner(inhabitant, ledger):
     assert ledger.get(pid)["status"] == "queued"
 
 
-def test_on_project_queued_triggers_for_correct_owner(inhabitant, ledger):
+def test_on_project_queued_zonder_checklist_geen_valse_done(inhabitant, ledger):
+    # correcte eigenaar, maar geen voorbereiding → geen valse done (niet meer de oude stub:done-flow)
     pid = ledger.create("website_watcher", "werk", "human")
     event = Event("project_queued", {"project_id": pid, "owner": "website_watcher"}, "village")
     inhabitant._on_project_queued(event)
-    assert ledger.get(pid)["status"] == "done"
+    assert ledger.get(pid)["status"] != "done"
