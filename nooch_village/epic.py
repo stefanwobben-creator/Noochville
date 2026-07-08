@@ -1,17 +1,15 @@
 """EPIC-aardbol — NASA EPIC (natural) ophalen en de frames proxyen, zodat de NASA-key nooit in de
 browser lekt.
 
-Snel + licht (2026-07-08):
-- We halen de kleine ~512px **thumbnail-JPEG's** op i.p.v. de volle 2048px-PNG die we tóch terugschaalden
-  → veel kleinere download én geen server-side Pillow-resize meer nodig.
-- We beperken tot `_N_FRAMES` posities (genoeg voor een vloeiende draaiing, minder downloads).
-- We cachen op **SCHIJF** (`data/epic_cache/`), zodat een deploy/herstart geen koude her-download geeft
-  (de in-memory cache was elke herstart weg). Frame-bytes zijn immutable → geen TTL nodig; metadata 1u.
+Beeldkwaliteit als vanouds: de VOLLE 2048px-PNG wordt server-side met Pillow naar ~512px JPEG geschaald
+(scherper dan NASA's eigen thumbnail), met alle frames van de dag voor een vloeiende draaiing. Wél behouden:
+de **schijf-cache** (`data/epic_cache/`), zodat een deploy/herstart geen koude her-download geeft. De UI
+toont bovendien een "Mother Earth is loading…"-indicator zolang het beeld nog binnenkomt.
 
-Fail-closed: geen `NASA_API_KEY` of een API-/parse-/format-fout → None. De UI valt terug op een nette
-melding; nooit een kapotte pagina.
+Fail-closed: geen `NASA_API_KEY` of een API-/Pillow-fout → None. De UI valt terug op een nette melding.
 """
 from __future__ import annotations
+import io
 import json
 import os
 import re
@@ -20,11 +18,11 @@ import time
 import requests
 
 _META_URL = "https://api.nasa.gov/EPIC/api/natural"
-# De KLEINE thumbnail (~512px JPEG) i.p.v. de volle 2048px-PNG. De ronde CSS-container (object-fit:cover)
-# verzorgt de weergave, dus terugschalen is overbodig.
-_THUMB_URL = "https://api.nasa.gov/EPIC/archive/natural/{y}/{m}/{d}/thumbs/{image}.jpg"
+# De VOLLE 2048px-PNG; we resizen 'm server-side met Pillow naar ~512px JPEG (scherp + licht).
+_PNG_URL = "https://api.nasa.gov/EPIC/archive/natural/{y}/{m}/{d}/png/{image}.png"
 _TTL = 3600.0            # metadata: 1 uur
-_N_FRAMES = 8            # posities voor de draaiing — genoeg voor een vloeiende spin, licht qua downloads
+_N_FRAMES = 24           # max; een EPIC-dag heeft er ~13–22 → allemaal gebruiken voor kleine stapjes
+_SIZE = 512             # doelformaat (px) na resize
 _FRAME_MAX_AGE = 14 * 86400   # oude frame-bestanden opruimen (schijf-groei begrenzen)
 
 # Schijf-cache: overleeft deploys/herstarts. Onder data/ (gitignored). Override via EPIC_CACHE_DIR.
@@ -110,10 +108,24 @@ def latest_frames() -> list[dict] | None:
     return frames
 
 
+def _resize_frame(src: bytes) -> bytes | None:
+    """Volle EPIC-PNG (2048px) → ~512px JPEG via Pillow. JPEG i.p.v. PNG houdt de frames licht
+    (~50 KB i.p.v. ~270 KB). None bij een Pillow-/decode-fout (fail-closed)."""
+    try:
+        from PIL import Image
+        im = Image.open(io.BytesIO(src)).convert("RGB")
+        im.thumbnail((_SIZE, _SIZE))
+        out = io.BytesIO()
+        im.save(out, format="JPEG", quality=82, optimize=True)
+        return out.getvalue()
+    except Exception:      # noqa: BLE001 — elke Pillow-/decode-fout → nette fallback, geen crash
+        return None
+
+
 def frame_bytes(image: str, date: str) -> bytes | None:
-    """De ~512px thumbnail-JPEG van één frame. None bij ontbrekende key, een API-fout, geen geldige JPEG,
-    of een onveilige image-id/datum (voorkomt SSRF/path-traversal in de proxy-url). Gecachet op schijf →
-    overleeft een deploy/herstart (frame-bytes zijn immutable)."""
+    """De naar ~512px geresizede JPEG van één frame. None bij ontbrekende key, een API-/Pillow-fout, of een
+    onveilige image-id/datum (voorkomt SSRF/path-traversal in de proxy-url). Gecachet op schijf → overleeft
+    een deploy/herstart (frame-bytes zijn immutable)."""
     if not image or not date or not _IMAGE_RE.fullmatch(image) or not _DATE_RE.fullmatch(date):
         return None
     if image in _frame_mem:
@@ -132,14 +144,17 @@ def frame_bytes(image: str, date: str) -> bytes | None:
     if not key:
         return None
     y, m, d = date.split("-")
-    url = _THUMB_URL.format(y=y, m=m, d=d, image=image)
+    url = _PNG_URL.format(y=y, m=m, d=d, image=image)
     try:
         r = requests.get(url, params={"api_key": key}, timeout=15)
         r.raise_for_status()
-        data = r.content
+        src = r.content
     except requests.RequestException:
         return None
-    if not data or not data.startswith(b"\xff\xd8\xff"):   # geen geldige JPEG → fail-closed, geen crash
+    if not src:
+        return None
+    data = _resize_frame(src)                     # 2048px PNG → scherpe 512px JPEG
+    if not data:
         return None
     _frame_mem[image] = data
     _ensure_dirs()
