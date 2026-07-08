@@ -11,16 +11,17 @@ onzichtbaar in de data alleen (de `visitors_via_*`-les).
 
 ## Twee conventie-notities (lees eerst)
 
-1. **OpenAlex = cumulatieve voorraad, geen periodewaarde.** `openalex_works_day` / `openalex_citations_day`
-   zijn een lópend totaal (alle werken/citaties ooit voor dat concept), niet de aanwas van die week.
-   Analyseer daarom op **eerste verschillen** (delta tussen twee weken = nieuwe werken/citaties), nooit de
-   absolute stand als "weekwaarde".
-2. **Weekgrens-offset OpenAlex vs. Trends.** Twee weekly-bronnen met een verschillend week-anker:
-   - OpenAlex labelt met de **ISO-maandag van de puls-week** (`_expected_period`, bv. 2026-07-06) — een
-     momentopname van de cumulatieve stand.
-   - Trends labelt met de **laatste COMPLETE Trends-week (zondag-start)** (`_last_complete_week`, bv.
-     2026-06-28). Bij het uitlijnen van weekreeksen: deze twee delen géén weekgrens (± enkele dagen +
-     OpenAlex = lopende week, Trends = afgesloten week). Nooit 1-op-1 op datum joinen.
+1. **OpenAlex = FLOW in een 90/30-venster, geen cumulatieve voorraad** (herzien 2026-07-08).
+   `openalex_works_90d::<concept>` telt de works die per concept in een 90-daags publicatievenster
+   VERSCHENEN (`works?filter=concepts.id:X,from_publication_date,to_publication_date` → meta.count). Dit is
+   een niveau per venster → **analyse direct op niveau, GEEN eerste-verschillen**. Vervangt de bevroren
+   `/concepts/<id>.works_count`-aggregaat (counts_by_year 2023-2025 = 0). Zie
+   docs/openalex_conceptset_herontwerp_2026-07-08.md.
+2. **Weekgrens-offset OpenAlex vs. Trends.** Beide weekly, beide op de Trends-weekgrens (R = einde laatste
+   complete week, zaterdag). Verschil: **Trends** labelt met de weekstart-zondag (bv. 2026-06-28);
+   **OpenAlex** labelt met het venster-eind **R−30** (bv. 2026-06-04) — dus ~5-6 weken vóór het Trends-
+   label van dezelfde puls. Het OpenAlex-label is de meetweek van het FLOW-venster (de 30d-buffer dekt de
+   indexeer-lag), niet de pulsweek. Bij het uitlijnen van weekreeksen: nooit 1-op-1 op datum joinen.
 
 **Datumlabel-conventies (collector):** daily → laatst-complete dag = `today − 1 − lag` (UTC); weekly →
 ISO-maandag van de (lag-)week; Trends weekly → laatste complete Trends-zondag-week (skill-override).
@@ -52,15 +53,15 @@ ISO-maandag van de (lag-)week; Trends weekly → laatste complete Trends-zondag-
 | `gsc_position_day` | — | collector.py:142 | daily | today−4 | 11–15 | Gem. positie/dag | [ ] |
 | `gsc_*_day::<keyword>` | query | collector.py:165 | daily | today−4 | **nu 1 keyword** (`nothing shoes`) | Zelfde 4 metrics per Library-doelwit-keyword; vult alleen waar de site impressies heeft | [ ] |
 
-## openalex  (bron actief, weekly, concept-dimensie)  — ⚠ cumulatieve voorraad, zie notitie 1
+## openalex  (bron actief, weekly, FLOW per concept — 90/30-venster)
 
 | metric | dim | schrijfpad | cadans | datumlabel | orde v. grootte | betekenis | OORDEEL |
 |---|---|---|---|---|---|---|---|
-| `openalex_works_day::<concept>` | concept | collector.py:165 | weekly | ISO-maandag | 3.135–97.598 | Cumulatief aantal werken per gepind concept | [ ] |
-| `openalex_citations_day::<concept>` | concept | collector.py:165 | weekly | ISO-maandag | 53.333–840.784 | Cumulatief aantal citaties per gepind concept | [ ] |
+| `openalex_works_90d::<concept>` | concept | openalex.py:collect_series (via collector.py:collect_series-hook) | weekly | venster-eind (R−30) | ~200–4.000 | Aantal works dat per concept in een 90-daags publicatievenster verscheen (FLOW, geen voorraad) | [ ] |
 
-*Concepten (3): circular economy, sustainable agriculture, vegan diet. Undimensioned totaal bestaat
-bewust NIET (daily_values geeft None) — alleen de concept-dimensie.*
+*6 concepten: biodegradable polymers, natural fibers, sustainable consumption, ecodesign, mycelium,
+biomaterial. Venster = 90d breed, eindigend 30d vóór R (einde laatste complete week); alle 6 delen
+hetzelfde venster. Meta draagt from/to_publication_date. Zie docs/openalex_conceptset_herontwerp_2026-07-08.md.*
 
 ## trends  (bron actief, weekly, stemming-paren)  — zie notitie 2 (Trends-zondag-week)
 
