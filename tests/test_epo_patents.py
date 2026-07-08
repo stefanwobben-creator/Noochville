@@ -1,4 +1,4 @@
-"""EPO OPS patent-skill: OAuth-token (cache/fail-closed), search+biblio-parsing, lijst-archetype-output,
+"""EPO OPS patent-skill (XML-interface): OAuth-token (cache/fail-closed), OPS-XML-parse, lijst-archetype,
 fail-soft (0 patenten / 403). Geen netwerk (fetch/post geïnjecteerd), geen credential-waarden in de test."""
 from __future__ import annotations
 import pytest
@@ -24,19 +24,42 @@ def _inh():
     return Inhabitant(rec, EventBus(name="t"), SkillRegistry(), SimpleNamespace(settings={"reflect_interval_seconds": "0"}))
 
 
-_SEARCH_JSON = {"ops:world-patent-data": {"ops:biblio-search": {
-    "@total-result-count": "42",
-    "ops:search-result": {"ops:publication-reference": [
-        {"document-id": {"@document-id-type": "docdb",
-                         "country": {"$": "US"}, "doc-number": {"$": "1234567"}, "kind": {"$": "A1"}}}]}}}}
+# Realistische OPS-search/biblio-XML (namespaces zoals de officiële structuur).
+_OPS_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
+<ops:world-patent-data xmlns:ops="http://ops.epo.org" xmlns="http://www.epo.org/exchange">
+  <ops:biblio-search total-result-count="42">
+    <ops:search-result>
+      <exchange-documents>
+        <exchange-document country="US" doc-number="1234567" kind="A1" family-id="99">
+          <bibliographic-data>
+            <publication-reference>
+              <document-id document-id-type="docdb">
+                <country>US</country><doc-number>1234567</doc-number><kind>A1</kind><date>20200101</date>
+              </document-id>
+            </publication-reference>
+            <invention-title lang="de">Barfussschuh</invention-title>
+            <invention-title lang="en">Barefoot shoe</invention-title>
+            <parties>
+              <applicants>
+                <applicant data-format="docdb"><applicant-name><name>VIVOBAREFOOT LTD</name></applicant-name></applicant>
+                <applicant data-format="epodoc"><applicant-name><name>Vivobarefoot [GB]</name></applicant-name></applicant>
+              </applicants>
+              <inventors>
+                <inventor data-format="docdb"><inventor-name><name>SMITH JOHN</name></inventor-name></inventor>
+              </inventors>
+            </parties>
+          </bibliographic-data>
+          <abstract lang="en"><p>A shoe that mimics barefoot walking.</p></abstract>
+        </exchange-document>
+      </exchange-documents>
+    </ops:search-result>
+  </ops:biblio-search>
+</ops:world-patent-data>"""
 
-_BIBLIO_JSON = {"ops:world-patent-data": {"exchange-documents": {"exchange-document": {
-    "bibliographic-data": {
-        "invention-title": [{"@lang": "de", "$": "Barfussschuh"}, {"@lang": "en", "$": "Barefoot shoe"}],
-        "publication-reference": {"document-id": {"@document-id-type": "docdb", "country": {"$": "US"},
-                                  "doc-number": {"$": "1234567"}, "kind": {"$": "A1"}, "date": {"$": "20200101"}}},
-        "parties": {"applicants": {"applicant": {"applicant-name": {"name": {"$": "Vivobarefoot Ltd"}}}}}},
-    "abstract": [{"@lang": "en", "p": {"$": "A shoe that mimics barefoot walking."}}]}}}}
+_OPS_XML_EMPTY = b"""<?xml version="1.0"?>
+<ops:world-patent-data xmlns:ops="http://ops.epo.org">
+  <ops:biblio-search total-result-count="0"><ops:search-result/></ops:biblio-search>
+</ops:world-patent-data>"""
 
 
 # ── a. auth ─────────────────────────────────────────────────────────────────────
@@ -46,10 +69,10 @@ def test_a_token_uit_creds_en_cache():
     def _post(url, data, headers):
         posts.append(headers); return {"access_token": "TOK", "expires_in": 1200}
     assert sk._get_token(_ctx(), _post=_post) == "TOK"
-    assert posts[0]["Authorization"].startswith("Basic ")           # Basic-auth met key:secret
+    assert posts[0]["Authorization"].startswith("Basic ")
     def _boom(*a):
-        raise AssertionError("cache miste — mag geen tweede token-call doen")
-    assert sk._get_token(_ctx(), _post=_boom) == "TOK"              # gecachet
+        raise AssertionError("cache miste — geen tweede token-call verwacht")
+    assert sk._get_token(_ctx(), _post=_boom) == "TOK"
 
 
 def test_a_ontbrekende_creds_failclosed():
@@ -59,45 +82,45 @@ def test_a_ontbrekende_creds_failclosed():
         with pytest.raises(RuntimeError, match="ontbreekt"):
             sk._get_token(ctx, _post=lambda *a: {"access_token": "x"})
         r = sk.run({"term": "x"}, ctx)
-    assert r.get("error") and r["patents"] == []                    # geen kale call, geen crash
+    assert r.get("error") and r["patents"] == []
 
 
 def test_a_secret_key_alias_geaccepteerd():
     sk = EpoPatentsSkill()
     ctx = SimpleNamespace(settings={"EPO_CONSUMER_KEY": "k", "EPO_CONSUMER_SECRET_KEY": "s"})
-    assert sk.is_configured(ctx)                                    # .env-naam EPO_CONSUMER_SECRET_KEY werkt
+    assert sk.is_configured(ctx)
     assert sk._get_token(ctx, _post=lambda *a: {"access_token": "T", "expires_in": 10}) == "T"
 
 
-# ── b. query → lijst met verwachte velden ───────────────────────────────────────
-def test_b_search_parst_refs():
-    total, refs = EpoPatentsSkill()._search("tok", 'ti="x"', 5, _get=lambda u: _SEARCH_JSON)
-    assert total == 42 and refs == ["US.1234567.A1"]
+# ── b/c. XML-parse → velden correct uit de OPS-XML ──────────────────────────────
+def test_c_xml_parse_velden():
+    total, patents = EpoPatentsSkill._parse_patents(_OPS_XML)
+    assert total == 42 and len(patents) == 1
+    p = patents[0]
+    assert p["title"] == "Barefoot shoe"                            # en-titel geprefereerd
+    assert p["publication_number"] == "US1234567A1"
+    assert p["publication_date"] == "20200101"
+    assert "barefoot walking" in p["abstract"]
+    assert p["applicants"] == ["VIVOBAREFOOT LTD"]                  # docdb-format, epodoc-dubbel eruit
+    assert p["inventors"] == ["SMITH JOHN"]
 
 
-def test_b_biblio_parst_velden():
-    rec = EpoPatentsSkill()._biblio("tok", "US.1234567.A1", _get=lambda u: _BIBLIO_JSON)
-    assert rec["title"] == "Barefoot shoe"                          # en-titel geprefereerd
-    assert rec["publication_number"] == "US1234567A1"
-    assert rec["publication_date"] == "20200101"
-    assert "barefoot walking" in rec["abstract"]
-    assert rec["applicants"] == ["Vivobarefoot Ltd"]
-
-
-def test_b_run_levert_lijst(monkeypatch):
+def test_b_search_en_run(monkeypatch):
     sk = EpoPatentsSkill()
     seen = {}
     monkeypatch.setattr(sk, "_get_token", lambda ctx: "tok")
-    monkeypatch.setattr(sk, "_search", lambda tok, cql, limit: seen.update(cql=cql) or (2, ["US.1.A1", "US.2.A1"]))
-    monkeypatch.setattr(sk, "_biblio", lambda tok, ref: {"title": f"Patent {ref}", "publication_number": ref,
-                                                         "publication_date": "20200101"})
-    r = sk.run({"term": "barefoot shoes"}, _ctx())
-    assert seen["cql"] == 'ti="barefoot shoes"'                     # zoekt op titel-frase
-    assert r["total"] == 2 and len(r["patents"]) == 2 and r["patents"][0]["title"] == "Patent US.1.A1"
+    def _fake_get(url, token):
+        seen["url"] = url
+        return _OPS_XML
+    monkeypatch.setattr(sk, "_default_get", _fake_get)
+    # _search bouwt de URL (q + Range) en parset de XML
+    r = sk.run({"term": "barefoot shoes", "limit": 5}, _ctx())
+    assert "q=barefoot%20shoes" in seen["url"] and "Range=1-5" in seen["url"]
+    assert r["total"] == 42 and len(r["patents"]) == 1 and r["patents"][0]["title"] == "Barefoot shoe"
 
 
-# ── c. lijst-archetype → note-formatter toont eigen velden per patent ────────────
-def test_c_archetype_en_note():
+# ── d. lijst-archetype → note-formatter toont eigen velden per patent ────────────
+def test_d_archetype_en_note():
     result = {"total": 1, "patents": [{"title": "Barefoot shoe", "publication_number": "US1A1",
                                        "publication_date": "20200101", "applicants": ["Vivo"]}]}
     assert Inhabitant._classify_result(result) == ("gelukt", ("list", "patents"))
@@ -105,17 +128,17 @@ def test_c_archetype_en_note():
     assert "Barefoot shoe" in note and "publication_date: 20200101" in note and "Vivo" in note
 
 
-# ── d. fail-soft: 0 patenten (echte observatie) / 403 → gat + error ──────────────
-def test_d_lege_set_nul_patenten(monkeypatch):
+# ── e. fail-soft: 0 patenten (echte observatie) / 403 → gat + error ──────────────
+def test_e_lege_set_nul_patenten(monkeypatch):
     sk = EpoPatentsSkill()
     monkeypatch.setattr(sk, "_get_token", lambda ctx: "tok")
-    monkeypatch.setattr(sk, "_search", lambda *a: (0, []))
+    monkeypatch.setattr(sk, "_default_get", staticmethod(lambda url, token: _OPS_XML_EMPTY))
     r = sk.run({"term": "zzxq"}, _ctx())
     assert r["total"] == 0 and r["patents"] == [] and r.get("no_data")
-    assert Inhabitant._classify_result(r)[0] == "leeg"             # → item blijft open, geen fout
+    assert Inhabitant._classify_result(r)[0] == "leeg"
 
 
-def test_d_search_403_gat_error(monkeypatch):
+def test_e_search_403_gat_error(monkeypatch):
     sk = EpoPatentsSkill()
     monkeypatch.setattr(sk, "_get_token", lambda ctx: "tok")
     def _boom(*a):
@@ -126,8 +149,8 @@ def test_d_search_403_gat_error(monkeypatch):
     assert Inhabitant._classify_result(r)[0] == "fout"
 
 
-# ── e. capability zichtbaar + cost/schema gedeclareerd ──────────────────────────
-def test_e_available_metrics_en_metadata():
+# ── f. capability zichtbaar + metadata ──────────────────────────────────────────
+def test_f_available_metrics_en_metadata():
     sk = EpoPatentsSkill()
     assert sk.available_metrics() == ["patents"]
     assert sk.cost == "rate_limited" and "term" in sk.input_schema and "patents" in sk.output_schema
