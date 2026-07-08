@@ -879,6 +879,7 @@ def main() -> None:
             print("   ⚠️ Referentiebank leeg — draai eerst 'ingest_governance' voor grounding.")
 
     elif mode == "healthcheck":
+        import os
         from nooch_village.config import load_context
         from nooch_village.village import BASE_DIR
         from nooch_village.observations import ObservationStore
