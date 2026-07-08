@@ -122,33 +122,18 @@ def test_no_governance_proposal(analyst_bus, ledger):
     assert proposals == []
 
 
-# ── pulse logt gemonitorde metrics ───────────────────────────────────────────
+# ── pulse: reference, don't copy — GEEN kopie van gemonitorde metrics ─────────
 
-def test_pulse_logs_monitored_metrics(analyst_bus, obs, monitoring):
+def test_pulse_geen_kopie_van_monitored_metrics(analyst_bus, obs, monitoring):
+    """De rol VOLGT metrics (curatie), maar schrijft de rauwe waarden NIET meer onder role_id — de
+    canonieke plausible_*_day loopt via de collector. De curatie-lijst blijft intact als referentie."""
     analyst, _ = analyst_bus
     monitoring.add_metrics("website_watcher", ["visitors", "pageviews"])
     plausible = {"results": {"visitors": {"value": 42}, "pageviews": {"value": 88}}}
     analyst._log_pulse_metrics(plausible)
-    assert obs.latest("website_watcher", "visitors")["value"] == 42.0
-    assert obs.latest("website_watcher", "pageviews")["value"] == 88.0
-
-
-def test_pulse_skips_unmonitored_metrics(analyst_bus, obs, monitoring):
-    analyst, _ = analyst_bus
-    monitoring.add_metrics("website_watcher", ["visitors"])
-    plausible = {"results": {"visitors": {"value": 10}, "pageviews": {"value": 20}}}
-    analyst._log_pulse_metrics(plausible)
-    assert obs.latest("website_watcher", "visitors") is not None
+    assert obs.latest("website_watcher", "visitors") is None        # geen rauwe-naam-kopie onder role_id
     assert obs.latest("website_watcher", "pageviews") is None
-
-
-def test_pulse_skips_absent_metrics(analyst_bus, obs, monitoring):
-    analyst, _ = analyst_bus
-    monitoring.add_metrics("website_watcher", ["visitors", "pageviews"])
-    plausible = {"results": {"visitors": {"value": 5}}}
-    analyst._log_pulse_metrics(plausible)
-    assert obs.latest("website_watcher", "visitors") is not None
-    assert obs.latest("website_watcher", "pageviews") is None
+    assert set(monitoring.get_metrics("website_watcher")) == {"visitors", "pageviews"}   # curatie intact
 
 
 def test_pulse_no_monitoring_store_is_noop(analyst_bus, obs):
@@ -175,7 +160,9 @@ def test_pulse_logs_utm_sources_without_monitoring_store(analyst_bus, obs):
     assert obs.latest("website_watcher", "visitors") is None
 
 
-def test_pulse_logs_utm_sources_alongside_monitored(analyst_bus, obs, monitoring):
+def test_pulse_logs_utm_sources_geen_monitored_kopie(analyst_bus, obs, monitoring):
+    """UTM-kanaaldata (visitors_via_*) wordt wél gelogd (eigen bron, geen collector-pad); een gemonitorde
+    canonieke metric (visitors) wordt NIET gekopieerd onder role_id."""
     analyst, _ = analyst_bus
     monitoring.add_metrics("website_watcher", ["visitors"])
     plausible = {
@@ -183,5 +170,5 @@ def test_pulse_logs_utm_sources_alongside_monitored(analyst_bus, obs, monitoring
         "utm_sources": [{"utm_source": "bluemarble", "visitors": 7}],
     }
     analyst._log_pulse_metrics(plausible)
-    assert obs.latest("website_watcher", "visitors")["value"] == 50.0
-    assert obs.latest("website_watcher", "visitors_via_bluemarble")["value"] == 7.0
+    assert obs.latest("website_watcher", "visitors") is None        # geen kopie van de canonieke metric
+    assert obs.latest("website_watcher", "visitors_via_bluemarble")["value"] == 7.0   # UTM-kanaal wél

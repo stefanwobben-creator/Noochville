@@ -210,20 +210,21 @@ class WebsiteWatcherWorker(Inhabitant):
         return trends
 
     def _log_pulse_metrics(self, plausible: dict) -> None:
-        """Log de metrics die in het monitoring-overzicht staan én in de puls aanwezig zijn.
+        """Log de UTM-kanaal-metrics (visitors_via_*) uit de puls — kanaaldata heeft géén eigen
+        DataSourceSkill/collector-pad, dus die schrijft de rol hier weg.
 
-        UTM-source metrics (visitors_via_*) worden altijd gelogd als ze aanwezig zijn —
-        kanaaldata vereist geen MonitoringStore-configuratie vooraf.
+        REFERENCE, DON'T COPY: de rol dupliceert GEEN canonieke waarden meer. De gemonitorde-metric-lijst
+        (MonitoringStore, gevuld via `_on_advice_ready` uit Noochie's keep-verdicts) bewaart alleen WELKE
+        metrics een rol volgt — een lijst verwijzingen. De waarden zelf leest een rol-view/signaleringslaag
+        straks via referentie uit de canonieke reeksen (plausible_visitors_day etc.) die de generieke
+        collector schrijft; hier wordt dus GEEN tweede waarde-kopie onder role_id weggeschreven. (Vóór deze
+        refactor schreef een Stap-9-tak de rauwe metric-waarde onder role_id — een kopie, verwijderd.)
 
-        DATUMLABEL + IDEMPOTENTIE: de pulse-metrics zijn een 7-daags Plausible-aggregaat (period='7d'),
-        per puls ververst. Ze worden gelabeld met de LAATST-COMPLETE dag (UTC gisteren) en via
-        `record_daily` weggeschreven — dus één waarde per dag, consistent met de daily-collector en de
-        isPartial-filosofie (nooit de lopende, onvolledige dag). Een tweede puls dezelfde dag
-        overschrijft niet en dupliceert niet: record_daily dedupliceert op (role_id, metric, bron, datum).
-        Vóór deze fix schreef dit pad via `record` (kale append) → een nieuwe rij per puls (duplicaten).
+        DATUMLABEL + IDEMPOTENTIE: de visitors_via_*-waarden zijn een 7-daags Plausible-aggregaat, per puls
+        ververst. Gelabeld met de LAATST-COMPLETE dag (UTC gisteren) en via record_daily weggeschreven —
+        één waarde per dag (dedup op (role_id, metric, bron, datum); nooit de lopende, onvolledige dag).
         """
-        obs        = getattr(self.context, "observations", None)
-        monitoring = getattr(self.context, "monitoring",   None)
+        obs = getattr(self.context, "observations", None)
         if obs is None:
             return
         datum = (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()   # laatst-complete dag (UTC)
@@ -231,12 +232,9 @@ class WebsiteWatcherWorker(Inhabitant):
         for key, value in pulse_dict.items():
             if key.startswith("visitors_via_"):
                 obs.record_daily(self.id, key, value, bron="plausible", datum=datum)
-        monitored = monitoring.get_metrics(self.id) if monitoring else []
-        for metric in monitored:
-            if metric in pulse_dict:
-                obs.record_daily(self.id, metric, pulse_dict[metric], bron="plausible", datum=datum)
-        # De losse dagwaarden per bron (visitors/pageviews/visit_duration, en straks shopify/gsc) lopen
-        # nu via de generieke collector (_collect_daily_observations), niet meer hier hardcoded.
+        # De losse dagwaarden per bron (visitors/pageviews/visit_duration/shopify/gsc) lopen via de
+        # generieke collector (_collect_daily_observations); een rol die metrics "volgt" leest die
+        # canonieke reeksen via referentie (MonitoringStore = curatie-lijst), zonder ze te kopiëren.
 
     def _collect_daily_observations(self) -> None:
         """Generieke dag-observatie-collector: elke ACTIEVE DataSourceSkill schrijft z'n gedeclareerde
