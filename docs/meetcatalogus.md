@@ -109,7 +109,7 @@ noochwear.com reviews — echte volume-loze merktermen, geen defect).*
 | metric | dim | schrijfpad | cadans | label | laatste | orde v. grootte | betekenis (voor Nooch) | OORDEEL | OPMERKELIJK-DREMPEL |
 |---|---|---|---|---|---|---|---|---|---|
 | `werk_duur_day` | — | observations.py:267 | per overleg | overleg-datum | 0 | klein | Duur van het werkoverleg per circle — **2 circles = 2 legit reeksen** (mother_earth + mother_earth__nooch) | [ ] | [ ] |
-| `werk_tevredenheid_day` | — | observations.py:264 | per overleg | overleg-datum | **geen data** | — | Tevredenheid werkoverleg per circle — schrijfpad bestaat, nog nooit geschreven | [ ] | [ ] |
+| `werk_tevredenheid_day` | — | observations.py:264 | per overleg | overleg-datum | 8.7 (1 historisch punt) | 0-10 | Gem. check-out-tevredenheid (0-10) per circle. 1 punt: eenmalige inhaal 2026-07-03=8.7 (mother_earth__nooch, meta backfill), meting van vóór het schrijfpad; zie docs/werk_tevredenheid_inhaal_2026-07-08.md | [ ] | [ ] |
 
 ## Inactieve bronnen  (schrijfpad in code, bewust geen data)
 
@@ -131,9 +131,10 @@ openalex.py:193 (openalex-flow via collect_series), backfill.py:115/175 (histori
 als curatie-lijst, zonder eigen write.)*
 
 **In code, NIET in data** (slapend of inactief — alleen zichtbaar via de code-invalshoek):
-- `werk_tevredenheid_day` (observations.py:264) — **slapend**: schrijfpad bestaat, de werkoverleg-snapshots
-  leverden nog geen tevredenheid-waarde (de gevulde 8.7/10.0-overleggen dateren van vóór het schrijfpad).
 - gdelt / shopify / semanticscholar (collector.py:142) — **inactieve bronnen**.
+
+*(`werk_tevredenheid_day` had lang geen data; sinds 2026-07-08 staat er 1 punt — de eenmalige historische
+inhaal van 2026-07-03=8.7. Het reguliere pad vult verder zodra een overleg met een check-out-score sluit.)*
 
 De **MonitoringStore** (curatie-lijst van gevolgde metrics) is bewust géén schrijfpad meer: waarden komen
 via referentie uit de canonieke reeksen. Slapend tot het eerste project door de advies→keep-flow gaat.
