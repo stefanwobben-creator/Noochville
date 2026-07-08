@@ -113,6 +113,15 @@ class DataSourceSkill(Skill):
         `today`, zodat de due-check en de write dezelfde sleutel gebruiken (idempotent, geen dag-refetch)."""
         return None
 
+    def collect_series(self, context, today, obs):
+        """Optioneel EIGEN collectie-pad. Default None → de collector gebruikt de generieke totaal-/
+        dimensie-paden. Een bron met afwijkende semantiek (custom metric-naam, label, meta of telvenster —
+        bijv. OpenAlex' 90/30-flow-venster) schrijft z'n reeksen hier ZELF via `obs.record_daily`
+        (idempotent) en geeft een lijst geschreven `(bron, veld, datum)`-tuples terug. Een niet-None
+        return (óók een lege lijst) betekent 'ik bezit deze bron' → de collector slaat de generieke paden
+        én de lege-velden-guard over."""
+        return None
+
 
 class SkillRegistry:
     def __init__(self):

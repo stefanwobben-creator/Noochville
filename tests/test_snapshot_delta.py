@@ -20,7 +20,8 @@ def _dd(tmp_path):
 
 
 def test_kind_declaratief_van_de_skill():
-    assert _source_kind("openalex") == "snapshot" and _source_frequency("openalex") == "weekly"
+    assert _source_kind("semanticscholar") == "snapshot" and _source_frequency("semanticscholar") == "monthly"
+    assert _source_kind("openalex") == "flux"                # OpenAlex is nu een 90/30-flow, geen snapshot meer
     assert _source_kind("plausible") == "flux" and _source_kind("shopify") == "flux"
     assert _source_kind("gsc") == "flux" and _source_kind("onbekend") == "flux"
 
@@ -39,28 +40,29 @@ def test_snapshot_delta_normalisatie_en_interval():
 
 
 def test_vers_drempel_kind_aware():
-    # snapshot (weekly) tolereert langer dan flux: 9 dagen oud = nog fresh voor openalex, dood voor plausible
-    assert _fresh_threshold("openalex") == 10 and _fresh_threshold("plausible") == 7
+    # snapshot (monthly) tolereert langer dan flux: semanticscholar 45d; plausible + openalex (flux) 7d
+    assert _fresh_threshold("semanticscholar") == 45 and _fresh_threshold("plausible") == 7
+    assert _fresh_threshold("openalex") == 7                 # flux nu
 
 
 def test_indicator_freshness_snapshot_ruimer_dan_flux(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
-    negen = (datetime.date(2026, 7, 15) - datetime.timedelta(days=9)).isoformat()
-    st.observations.record_daily("o", "openalex_works_day", 1000, bron="openalex", datum=negen)
-    st.observations.record_daily("p", "plausible_visitors_day", 42, bron="plausible", datum=negen)
+    veertig = (datetime.date(2026, 7, 15) - datetime.timedelta(days=40)).isoformat()
+    st.observations.record_daily("s", "semanticscholar_papers_day", 1000, bron="semanticscholar", datum=veertig)
+    st.observations.record_daily("p", "plausible_visitors_day", 42, bron="plausible", datum=veertig)
     today = datetime.date(2026, 7, 15)
-    assert indicator_freshness(st, "openalex", "works", today=today) == "fresh"   # 9 ≤ 10 (snapshot)
-    assert indicator_freshness(st, "plausible", "visitors", today=today) == "stale"  # 9 > 7 (flux)
+    assert indicator_freshness(st, "semanticscholar", "papers", today=today) == "fresh"  # 40 ≤ 45 (monthly snapshot)
+    assert indicator_freshness(st, "plausible", "visitors", today=today) == "stale"      # 40 > 7 (flux)
 
 
 def test_render_snapshot_tegel_toont_delta_stand_optioneel(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path)); rec = st.records.get(C)
     now = time.time()
-    st.observations.record_daily("o", "openalex_works_day", 1000, bron="openalex", datum="2026-06-29", ts=now - 14 * DAY)
-    st.observations.record_daily("o", "openalex_works_day", 1080, bron="openalex", datum="2026-07-06", ts=now - 7 * DAY)
-    h = _render_tile(st, rec, {"id": "t1", "source": "openalex", "measure": "works", "form": "getal"},
+    st.observations.record_daily("s", "semanticscholar_papers_day", 1000, bron="semanticscholar", datum="2026-06-06", ts=now - 30 * DAY)
+    st.observations.record_daily("s", "semanticscholar_papers_day", 1080, bron="semanticscholar", datum="2026-07-06", ts=now)
+    h = _render_tile(st, rec, {"id": "t1", "source": "semanticscholar", "measure": "papers", "form": "getal"},
                      cutoff=None, csrf="")
-    assert "/week" in h and "gemeten over 7 dagen" in h        # genormaliseerde delta + interval
+    assert "/maand" in h and "gemeten over 30 dagen" in h      # genormaliseerde delta + interval (monthly snapshot)
     assert "absolute stand" in h and "1080" in h               # stand blijft beschikbaar (uitklap), niet default
 
 

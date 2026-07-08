@@ -17,6 +17,7 @@ Rate-limit-gedrag:
 Fail-closed: ontbrekende key of definitieve fout → raise, nooit mock-data.
 """
 from __future__ import annotations
+import datetime
 import logging
 import os
 import time
@@ -71,81 +72,129 @@ def _reconstruct_abstract(inverted_index: dict | None) -> str:
     return " ".join(words[p] for p in sorted(words.keys()))[:400]
 
 
+_WORKS = "https://api.openalex.org/works"
+
+
+def _sanitize_concept(name: str) -> str:
+    """Conceptnaam → veilige dimensie-slug (openalex_works_90d::<slug>)."""
+    return "".join(c if c.isalnum() else "_" for c in name.strip().lower()).strip("_") or "concept"
+
+
+def _parse_concepts(raw: str):
+    """Parse `openalex_concepts` = 'naam:ID, naam:ID' → [(naam, ID), ...]. FAIL-CLOSED: None bij leeg, of
+    bij één paar zonder geldig concept-ID (moet 'C'+cijfers zijn) — geen default, geen partial parse."""
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    out = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part or ":" not in part:
+            return None
+        name, cid = (x.strip() for x in part.rsplit(":", 1))
+        if not name or not (cid.startswith("C") and cid[1:].isdigit()):
+            return None
+        out.append((name, cid))
+    return out or None
+
+
+def _window(today: datetime.date):
+    """90/30-telvenster (identiek voor alle concepten, voor vergelijkbaarheid). R = einde laatste COMPLETE
+    week (zaterdag; zelfde weekgrens-logica als Trends). eind = R−30 (buffer voor indexeer-lag), start =
+    R−120 (90 dagen breed). Label = venster-eind. Geeft (start_iso, end_iso, label_iso)."""
+    dss = (today.weekday() + 1) % 7                                  # ma=0..zo=6 → zondag=0
+    last_complete_sunday = today - datetime.timedelta(days=dss + 7)  # start (zo) van de laatste complete week
+    R = last_complete_sunday + datetime.timedelta(days=6)           # zaterdag = einde laatste complete week
+    end = R - datetime.timedelta(days=30)
+    start = R - datetime.timedelta(days=120)
+    return start.isoformat(), end.isoformat(), end.isoformat()
+
+
 class OpenalexSkill(DataSourceSkill):
     name = "openalex_evidence"
     SOURCE = "openalex"
-    # Snapshot-bron: cumulatieve tellers groeien traag → wekelijks meten (niet dagelijks). De tegel
-    # toont de genormaliseerde delta i.p.v. de oplopende stand.
-    kind = "snapshot"
+    # Flow-bron: per puls tellen we de works die in een 90-daags publicatievenster VERSCHENEN (niet de
+    # cumulatieve voorraad). De tegel toont het niveau zelf — geen eerste-verschillen nodig.
+    kind = "flux"
     DEFAULT_FREQUENCY = "weekly"
     needs_secret = True
     cost = "rate_limited"
     required_env = ("OPENALEX_API_KEY",)
     optional_env = ("openalex_mailto",)
-    DIMENSION = "concept"        # scope: reeksen per GEPIND concept-ID (query via /concepts/<id>, geen naamgenoot)
     description = (
-        "Haalt academische evidentie op via OpenAlex (API-key vereist, polite pool, "
-        "gesorteerd op citaties, backoff bij 429, locale-bewust, fail-closed)."
+        "Academische evidentie via OpenAlex (polite pool, backoff bij 429, fail-closed) + wekelijkse "
+        "works-flow per gepind concept in een 90/30-venster (collect_series)."
     )
 
     def available_metrics(self, context=None) -> list[str]:
-        """Cumulatieve tellers voor het missie-concept: totaal aantal publicaties en citaties."""
-        return ["works", "citations"]
+        """Eén nominaal veld; de echte reeksen (openalex_works_90d::<concept>) schrijft collect_series zelf."""
+        return ["works_90d"]
 
     def is_configured(self, context) -> bool:
-        """OpenAlex is keyless (polite pool via mailto) → altijd oproepbaar. 'Niet geconfigureerd' geldt
-        hier dus niet; een lege reeks betekent een echte fout of nog-niet-gemeten, niet ontbrekende creds."""
+        """OpenAlex is keyless (polite pool via mailto) → altijd oproepbaar."""
         return True
 
     def daily_values(self, context, datum: str) -> dict:
-        """OpenAlex is DIMENSIE-ONLY (per gepind concept, zie daily_dimension_values). Bewust GÉÉN
-        undimensioned totaal meer: dat liep via /concepts?search=<term> en pakte het TOP-gerankte concept —
-        precies het naamgenoot-pad dat 'regenerative' → 'Regeneration (biology)' binnenhaalde. Dus None."""
-        return {"works": None, "citations": None}
+        """OpenAlex schrijft via collect_series (eigen pad met custom venster/label/meta), niet via het
+        generieke totaal-pad. Hier dus niets."""
+        return {"works_90d": None}
 
-    def _concept_map(self, context) -> dict:
-        """label → gepind concept-ID uit de bevroren config `openalex_concepts = C…:label, C…:label`."""
-        raw = (getattr(context, "settings", {}) or {}).get("openalex_concepts", "") or ""
-        out = {}
-        for part in raw.split(","):
-            if ":" in part:
-                cid, label = part.split(":", 1)
-                if cid.strip() and label.strip():
-                    out[label.strip()] = cid.strip()
-        return out
+    def collect_series(self, context, today, obs, *, _fetch=None):
+        """FLOW-collectie per gepind concept: het aantal works dat in een 90-daags publicatievenster
+        VERSCHEEN — `works?filter=concepts.id:<ID>,from_publication_date:<start>,to_publication_date:<end>`
+        → `meta.count`. Vervangt de BEVROREN `/concepts/<id>.works_count`-aggregaat (counts_by_year
+        2023-2025 = 0). Dit is een FLOW (niveau per venster), GEEN cumulatieve stand → analyse direct op
+        niveau, geen eerste-verschillen nodig.
 
-    def daily_dimension_values(self, context, datum: str, labels, *, _fetch=None) -> dict:
-        """Per gepind concept (label→ID uit config) de cumulatieve tellers works/citations, via een DIRECTE
-        `GET /concepts/<id>`-call — géén `search=`, dus nooit meer een naamgenoot. `labels` = de gecureerde
-        selectie (collector). Snapshot: `datum` is het periode-label, niet een historische query-datum.
-        Fail-closed per concept (geen entry bij fout). `_fetch(url)` injecteerbaar zodat de contract-test
-        de directe /concepts/<id>-URL kan bewijzen."""
-        cmap = self._concept_map(context)
+        Venster (identiek voor alle concepten → vergelijkbaar): 90d breed, eindigend 30d vóór R (= einde
+        laatste complete week, zelfde weekgrens als Trends). De 30d-buffer dekt de OpenAlex-indexeer-lag.
+        Label = venster-eind (de meetperiode, niet de pulsdatum). Meta draagt from/to_publication_date zodat
+        elk punt reproduceerbaar is en de buffer later herzien kan worden zonder de reeks weg te gooien.
+
+        Fail-closed: `openalex_concepts` leeg/ontbrekend/paar-zonder-geldig-ID → ERROR + niets (geen default).
+        API-fout/timeout/lege meta → gat + ERROR (geen write, geen interpolatie). meta.count=0 bij een
+        geldige respons → 0 wegschrijven (echte observatie, bv. ecodesign in dunne weken). Idempotent: label
+        al aanwezig voor een veld → niet opnieuw fetchen. `_fetch(url)` injecteerbaar voor tests."""
+        concepts = _parse_concepts((getattr(context, "settings", {}) or {}).get("openalex_concepts", ""))
+        if concepts is None:
+            log.error("OpenAlex: config 'openalex_concepts' ontbreekt, is leeg of bevat een paar zonder "
+                      "geldig concept-ID (verwacht 'naam:C123, naam:C456') — bron levert niets "
+                      "(fail-closed, geen default).")
+            return []
+        start, end, label = _window(today)
         settings = getattr(context, "settings", {}) or {}
         mailto = settings.get("openalex_mailto", "info@nooch.earth")
-        key = settings.get("OPENALEX_API_KEY") or os.getenv("OPENALEX_API_KEY")   # optioneel
+        key = settings.get("OPENALEX_API_KEY") or os.getenv("OPENALEX_API_KEY")   # optioneel (polite pool)
         ua = f"NoochVillage/1.0 (nooch.earth; mailto:{mailto})"
-        out = {}
-        for label in (labels or []):
-            cid = cmap.get(label)
-            if not cid:
-                continue                  # label niet in de bevroren config → overslaan
-            url = (f"https://api.openalex.org/concepts/{urllib.parse.quote(cid)}"
-                   f"?mailto={urllib.parse.quote(mailto)}")
+        written = []
+        for name, cid in concepts:
+            slug = _sanitize_concept(name)
+            metric = f"openalex_works_90d::{slug}"
+            if any(r.get("datum") == label for r in obs.daily_series(metric, bron="openalex")):
+                continue                                          # idempotent → geen refetch
+            url = (f"{_WORKS}?filter=concepts.id:{urllib.parse.quote(cid)},"
+                   f"from_publication_date:{start},to_publication_date:{end}"
+                   f"&per_page=1&mailto={urllib.parse.quote(mailto)}")
             if key:
                 url += f"&api_key={urllib.parse.quote(key)}"
             try:
                 data = (_fetch(url) if _fetch else
                         self._fetch_with_backoff(urllib.request.Request(url, headers={"User-Agent": ua})))
+                cnt = (data.get("meta") or {}).get("count")
             except Exception as exc:
-                log.warning("OpenAlex concept '%s' (%s) faalde: %s", label, cid, exc)
+                log.error("OpenAlex concept '%s' (%s) venster %s..%s faalde: %s — gat.",
+                          name, cid, start, end, exc)
                 continue
-            w, c = data.get("works_count"), data.get("cited_by_count")
-            if w is not None:
-                out[("works", label)] = int(w)
-            if c is not None:
-                out[("citations", label)] = int(c)
-        return out
+            if cnt is None:
+                log.error("OpenAlex concept '%s' (%s): geldige respons maar lege meta.count — gat.", name, cid)
+                continue
+            meta = {"dimension": "concept", "value": name,
+                    "from_publication_date": start, "to_publication_date": end}
+            if obs.record_daily("openalex", metric, int(cnt), bron="openalex", datum=label, meta=meta):
+                written.append(("openalex", f"works_90d::{slug}", label))
+            if _fetch is None:
+                time.sleep(0.5)
+        return written
 
     def run(self, payload: dict, context) -> dict:
         key = (getattr(context, "settings", {}).get("OPENALEX_API_KEY")

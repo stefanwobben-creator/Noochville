@@ -175,22 +175,125 @@ def test_expected_period_weekly_en_monthly():
     assert _expected_period("weekly", wed, lag_days=7) == "2026-06-29"   # maandag van de week ervoor
 
 
-def test_openalex_datasource_contract_snapshot_dimensieonly():
-    """OpenAlex is een snapshot-DataSourceSkill: SOURCE='openalex', weekly, keyless. Sinds de concept-
-    dimensie is daily_values DIMENSIE-ONLY (altijd None — geen undimensioned naamgenoot-totaal); de stand
-    komt per GEPIND concept via daily_dimension_values (/concepts/<id> direct, fail-closed per concept)."""
-    from nooch_village.skills_impl.openalex import OpenalexSkill
+# ── OpenAlex: 90/30-flow-venster per gepind concept (collect_series) ──────────────────────────────
+def _oa_ctx(concepts="mycelium:C133479454, ecodesign:C2779439448"):
+    return types.SimpleNamespace(settings={"openalex_concepts": concepts})
+
+
+def _oa_fetch(count):
+    return lambda url: {"meta": {"count": count}}
+
+
+def _oa_obs(tmp_path, name="o.jsonl"):
+    from nooch_village.observations import ObservationStore
+    return ObservationStore(str(tmp_path / name))
+
+
+def test_openalex_contract_en_config():
+    from nooch_village.skills_impl.openalex import OpenalexSkill, _parse_concepts
     sk = OpenalexSkill()
-    assert isinstance(sk, DataSourceSkill) and sk.SOURCE == "openalex"
-    assert sk.frequency("works") == "weekly" and sk.is_configured(_ctx()) and sk.DIMENSION == "concept"
-    assert set(sk.available_metrics()) == {"works", "citations"}
-    assert sk.daily_values(_ctx(), "2026-07-06") == {"works": None, "citations": None}   # dimensie-only
-    cctx = types.SimpleNamespace(settings={"openalex_concepts": "C123:circular economy"})
-    assert sk.daily_dimension_values(cctx, "2026-07-06", ["circular economy"],
-                                     _fetch=lambda u: (_ for _ in ()).throw(RuntimeError("boom"))) == {}
-    assert sk.daily_dimension_values(cctx, "2026-07-06", ["circular economy"],
-                                     _fetch=lambda u: {"works_count": 1234, "cited_by_count": 56789}) == \
-        {("works", "circular economy"): 1234, ("citations", "circular economy"): 56789}
+    assert isinstance(sk, DataSourceSkill) and sk.SOURCE == "openalex" and sk.kind == "flux"
+    assert sk.frequency("x") == "weekly" and sk.is_configured(_ctx()) and sk.available_metrics() == ["works_90d"]
+    assert _parse_concepts("mycelium:C133479454, ecodesign:C2779439448") == \
+        [("mycelium", "C133479454"), ("ecodesign", "C2779439448")]
+
+
+# (a) config met N concepten → N reeksen, correcte veldnamen
+def test_openalex_a_velden_uit_config(tmp_path):
+    from nooch_village.skills_impl.openalex import OpenalexSkill, _window
+    obs = _oa_obs(tmp_path)
+    w = OpenalexSkill().collect_series(_oa_ctx(), datetime.date(2026, 7, 8), obs, _fetch=_oa_fetch(1500))
+    _, _, label = _window(datetime.date(2026, 7, 8))
+    assert {r["metric"] for r in obs._read_all()} == {"openalex_works_90d::mycelium", "openalex_works_90d::ecodesign"}
+    assert len(w) == 2 and all(t[2] == label for t in w)
+
+
+# (b) openalex_concepts leeg/ontbrekend → error-pad, geen writes, geen fetch
+def test_openalex_b_leeg_failclosed(tmp_path, caplog):
+    from nooch_village.skills_impl.openalex import OpenalexSkill
+    obs = _oa_obs(tmp_path); called = []
+    for ctx in (_oa_ctx(concepts=""), types.SimpleNamespace(settings={})):
+        with caplog.at_level(logging.ERROR):
+            w = OpenalexSkill().collect_series(ctx, datetime.date(2026, 7, 8), obs,
+                                               _fetch=lambda u: called.append(u) or {})
+        assert w == []
+    assert obs._read_all() == [] and called == [] and "openalex_concepts" in caplog.text
+
+
+# (c) paar zonder geldig ID → hele config ongeldig, error, niets
+def test_openalex_c_ongeldig_id_failclosed(tmp_path):
+    from nooch_village.skills_impl.openalex import OpenalexSkill
+    obs = _oa_obs(tmp_path)
+    w = OpenalexSkill().collect_series(_oa_ctx("mycelium:C133479454, kapot:X999"),
+                                       datetime.date(2026, 7, 8), obs, _fetch=_oa_fetch(1))
+    assert w == [] and obs._read_all() == []          # één ongeldig paar → geen partial
+
+
+# (d) venster: R correct → start/eind = R−120 / R−30
+def test_openalex_d_window():
+    from nooch_village.skills_impl.openalex import _window
+    start, end, label = _window(datetime.date(2026, 7, 8))   # wo → R = za 2026-07-04
+    assert start == "2026-03-06" and end == "2026-06-04" and label == "2026-06-04"
+
+
+# (e) count=0 → 0 geschreven (echte obs); API-fout → gat + ERROR
+def test_openalex_e_nul_en_fout(tmp_path, caplog):
+    from nooch_village.skills_impl.openalex import OpenalexSkill
+    obs = _oa_obs(tmp_path)
+    OpenalexSkill().collect_series(_oa_ctx("ecodesign:C2779439448"), datetime.date(2026, 7, 8), obs, _fetch=_oa_fetch(0))
+    rows = obs._read_all()
+    assert len(rows) == 1 and rows[0]["value"] == 0                       # 0 = echte observatie
+    obs2 = _oa_obs(tmp_path, "o2.jsonl")
+    boom = lambda u: (_ for _ in ()).throw(RuntimeError("429"))
+    with caplog.at_level(logging.ERROR):
+        w = OpenalexSkill().collect_series(_oa_ctx("ecodesign:C2779439448"), datetime.date(2026, 7, 8), obs2, _fetch=boom)
+    assert w == [] and obs2._read_all() == [] and "faalde" in caplog.text  # gat, geen write, geen interpolatie
+
+
+# (f) label = venster-eind, meta bevat van/tot-datum
+def test_openalex_f_label_en_meta(tmp_path):
+    from nooch_village.skills_impl.openalex import OpenalexSkill
+    obs = _oa_obs(tmp_path)
+    OpenalexSkill().collect_series(_oa_ctx("mycelium:C133479454"), datetime.date(2026, 7, 8), obs, _fetch=_oa_fetch(1210))
+    r = obs._read_all()[0]
+    assert r["datum"] == "2026-06-04" and r["value"] == 1210 and r["meta"]["value"] == "mycelium"
+    assert r["meta"]["from_publication_date"] == "2026-03-06" and r["meta"]["to_publication_date"] == "2026-06-04"
+
+
+# (g) idempotent: zelfde label niet herschreven, geen refetch
+def test_openalex_g_idempotent(tmp_path):
+    from nooch_village.skills_impl.openalex import OpenalexSkill
+    obs = _oa_obs(tmp_path); calls = []
+    fetch = lambda u: (calls.append(u), {"meta": {"count": 1210}})[1]
+    sk = OpenalexSkill()
+    w1 = sk.collect_series(_oa_ctx("mycelium:C133479454"), datetime.date(2026, 7, 8), obs, _fetch=fetch)
+    w2 = sk.collect_series(_oa_ctx("mycelium:C133479454"), datetime.date(2026, 7, 8), obs, _fetch=fetch)
+    assert len(w1) == 1 and w2 == [] and len(calls) == 1                  # 2e keer: geen fetch, geen write
+    assert len([r for r in obs._read_all() if r["metric"] == "openalex_works_90d::mycelium"]) == 1
+
+
+# (h) oude cumulatieve reeksen verwijderd (bootstrap-opruiming)
+def test_openalex_h_oude_cumulatief_weg(tmp_path):
+    obs = _oa_obs(tmp_path)
+    obs.record_daily("openalex", "openalex_works_day::circular_economy", 60727, bron="openalex", datum="2026-07-06")
+    obs.record_daily("openalex", "openalex_works_90d::mycelium", 1210, bron="openalex", datum="2026-06-04")
+    n = obs.remove_bron("openalex", keep_prefix="openalex_works_90d")
+    assert n == 1 and {r["metric"] for r in obs._read_all()} == {"openalex_works_90d::mycelium"}
+
+
+# collector-integratie: actieve OpenAlex-bron loopt via collect_series (pytrends-loos, fetch gemockt)
+def test_collector_openalex_via_collect_series(tmp_path, monkeypatch):
+    from nooch_village.skills_impl.openalex import OpenalexSkill
+    dd = _dd(tmp_path)
+    cockpit2._Stores(dd).sources.set_active("openalex", True)
+    sk = OpenalexSkill()
+    monkeypatch.setattr(sk, "_fetch_with_backoff", lambda req, **k: {"meta": {"count": 777}})
+    reg = SkillRegistry(); reg.register(sk)
+    w = collect_daily_observations(reg, cockpit2._Stores(dd).sources, cockpit2._Stores(dd).observations,
+                                   _oa_ctx("mycelium:C133479454"), today=datetime.date(2026, 7, 8))
+    assert ("openalex", "works_90d::mycelium", "2026-06-04") in w
+    rows = cockpit2._Stores(dd).observations.daily_series("openalex_works_90d::mycelium", bron="openalex")
+    assert [r["value"] for r in rows] == [777]
 
 
 class _WeeklySnapshot(DataSourceSkill):

@@ -59,15 +59,8 @@ def _dimension_values(context, dimension: str) -> list[str]:
         raw = settings.get("plausible_dimension_countries") or ",".join(_DEFAULT_DIMENSION_COUNTRIES)
         values = [c.strip().upper() for c in raw.split(",") if c.strip()]
         cap_key = "plausible_dimension_max"
-    elif dimension == "concept":
-        # De labels uit `openalex_concepts = C…:label, C…:label` (de gepinde ID's leven ernaast in de config;
-        # de skill mapt label→ID en query't /concepts/<id> direct). De dimensie-waarde = het label.
-        raw = settings.get("openalex_concepts", "") or ""
-        values = [p.split(":", 1)[1].strip() for p in raw.split(",")
-                  if ":" in p and p.split(":", 1)[1].strip()]
-        cap_key = "openalex_dimension_max"
     else:
-        return []
+        return []               # 'concept' vervalt: OpenAlex schrijft zelf via collect_series (90/30-flow)
     try:
         cap = int(settings.get(cap_key, 50))
     except (TypeError, ValueError):
@@ -102,6 +95,13 @@ def collect_daily_observations(registry, sources: SourceStatusStore, obs: Observ
         sources.set_configured(src, configured)          # voedt de 'niet geconfigureerd'-status in de UI
         if not configured:
             log.warning("bron '%s' actief maar niet geconfigureerd — overslaan", src)
+            continue
+        # Bron met een EIGEN collectie-pad (custom metric/label/meta/venster, bijv. OpenAlex' 90/30-flow):
+        # die schrijft zelf via obs.record_daily. Een niet-None return betekent 'ik bezit deze bron' → sla de
+        # generieke totaal-/dimensie-paden én de lege-velden-guard over.
+        own = skill.collect_series(context, today, obs)
+        if own is not None:
+            written.extend(own)
             continue
         # SCOPE 2 fail-closed guard: een ACTIEVE + geconfigureerde bron die NUL velden aanbiedt schrijft stil
         # niets (de trends-klassefout: active=True + available_metrics()==[]). Luid loggen, maar NIET raisen —

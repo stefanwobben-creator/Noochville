@@ -153,8 +153,10 @@ def _bootstrap(dd: str) -> None:
     st.att.migrate()              # attachments → artefact-model (legacy tool-notes, defaults; idempotent)
     migrate_data_sources(dd)      # legacy visitors_day → plausible_visitors_day + Plausible actief (idempotent)
     st.metrics.migrate_metric_bindings(st.defs)   # wees-KPI's: veld/categorie uit de def + reeks-tegel-dim (idempotent)
-    for _m in ("openalex_works_day", "openalex_citations_day"):   # vervuilde undimensioned OpenAlex-totalen
-        st.observations.remove_metric(_m, bron="openalex")        # (search→'Regeneration (biology)') → weg, niet doortellen
+    # OpenAlex: alle oude CUMULATIEVE concept-reeksen (openalex_works_day/citations_day, incl. ::concept)
+    # weg; alleen de nieuwe 90/30-FLOW (openalex_works_90d::…) blijft. Verworpen meetopzet (bevroren
+    # aggregaat), vóór meetstart. Idempotent.
+    st.observations.remove_bron("openalex", keep_prefix="openalex_works_90d")
     # Trends: de Library-anker-reeksen (verworpen ontwerp, vóór meetstart) weg; alleen de nieuwe
     # stemming-paar-reeksen (trends_ratio_*) blijven. Idempotent. Zie de meetverantwoording in docs/.
     st.observations.remove_bron("trends", keep_prefix="trends_ratio_")
