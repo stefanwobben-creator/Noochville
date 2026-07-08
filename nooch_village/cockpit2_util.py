@@ -244,6 +244,13 @@ details{background:none;border:none;border-radius:0;box-shadow:none;padding:0}
 .epic-frame{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scale(1.25);opacity:0;transition:opacity 5s ease}
 .epic-frame.on{opacity:1}
 .epic-cap{text-align:center;font-size:.72rem;color:var(--muted);margin-bottom:.4rem}
+/* Wachtindicator: draaiende 🌍 + tekst over de (nog zwarte) bol, verdwijnt zodra het frame geladen is. */
+.epic-loading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;z-index:2;color:var(--muted)}
+.epic-earth.loaded .epic-loading{display:none}
+.epic-globe{font-size:2.6rem;line-height:1;animation:epic-spin 3s linear infinite}
+.epic-load-txt{font-size:.8rem;letter-spacing:.02em}
+@keyframes epic-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.epic-globe{animation:none}}
 .c2-sec{margin:1.1rem 0}
 .c2-sec h3{font-family:var(--font-display);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--green-dark);margin:0 0 .3rem}
 ul.clean{list-style:none;padding:0;margin:0}

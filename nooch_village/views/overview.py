@@ -169,13 +169,21 @@ def _epic_earth_html() -> str:
         f"data-cap='{_e(f['caption'])} UTC' alt='Aarde vanaf NASA EPIC (DSCOVR)' loading='lazy'>"
         for i, f in enumerate(frames))
     cap0 = f"{_e(frames[-1]['caption'])} UTC"
+    # Wachtindicator: draaiende 🌍 + tekst, zichtbaar tot het beeld binnen is (JS zet .loaded op load).
+    loader = ("<div class='epic-loading'><span class='epic-globe' aria-hidden='true'>🌍</span>"
+              "<span class='epic-load-txt'>Mother Earth is loading…</span></div>")
     js = ("<script>(function(){var w=document.currentScript.parentNode;"
+          "var earth=w.querySelector('.epic-earth');"
+          "var on=earth?earth.querySelector('.epic-frame.on'):null;"
+          "function done(){if(earth)earth.classList.add('loaded');}"
+          "if(on){if(on.complete)done();else{on.addEventListener('load',done);on.addEventListener('error',done);}}"
+          "else{done();}"
           "var fr=w.querySelectorAll('.epic-frame'),cap=w.querySelector('.epic-cap');"
           "if(fr.length<2)return;var i=fr.length-1;"
           "setInterval(function(){fr[i].classList.remove('on');i=(i+1)%fr.length;"
           "fr[i].classList.add('on');if(cap)cap.textContent='Live: '+fr[i].getAttribute('data-cap');},5000);"
           "})();</script>")
-    return (f"<div class='epic-earth'>{imgs}</div>"
+    return (f"<div class='epic-earth'>{loader}{imgs}</div>"
             f"<div class='epic-cap'>Live: {cap0}</div>{js}")
 
 
