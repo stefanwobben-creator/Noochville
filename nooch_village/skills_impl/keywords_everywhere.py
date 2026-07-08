@@ -103,8 +103,12 @@ class KeywordsEverywhereSkill(DataSourceSkill):
         if not keywords:
             return out
         run = _run or self.run
-        s = getattr(context, "settings", {}) or {}
-        country = s.get("keywordseverywhere_country", "nl")
+        s = getattr(context, "settings", None)
+        if s is None:
+            log.error("Keywords Everywhere: geen settings beschikbaar — bron levert niets "
+                      "(fail-closed, geen fallback-land).")
+            return out
+        country = (s.get("ke_country") or "").strip()     # leeg/afwezig = bewust global; GEEN 'nl'-fallback
         currency = s.get("keywordseverywhere_currency", "eur")
         vols: dict = {}
         for i in range(0, len(keywords), _BATCH):
@@ -126,7 +130,7 @@ class KeywordsEverywhereSkill(DataSourceSkill):
 
         Input (payload):
           kw          list[str]  — verplicht, 1–100 termen; leeg → ValueError, >100 → ValueError
-          country     str        — default "nl"
+          country     str        — default "" (leeg = global; GEEN 'nl'-default)
           currency    str        — default "eur"
           data_source str        — "gkp" (default) of "cli"; andere waarde → ValueError
 
@@ -149,7 +153,7 @@ class KeywordsEverywhereSkill(DataSourceSkill):
         if len(kw) > 100:
             raise ValueError(f"payload['kw'] bevat {len(kw)} termen — max 100 per request (caller batcht zelf)")
 
-        country     = payload.get("country", "nl")
+        country     = payload.get("country", "")          # leeg = global; GEEN 'nl'-default
         currency    = payload.get("currency", "eur")
         data_source = payload.get("data_source", "gkp")
         if data_source not in _VALID_DATA_SOURCES:
