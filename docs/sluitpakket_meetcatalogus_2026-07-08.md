@@ -44,3 +44,18 @@ draait i.p.v. ze te vervangen).
 
 Tests (test_plausible_page_path.py): drempel-entree (≥3 wel, <3 niet), persistent doormeten onder de
 drempel, afwezig=0, backfill-meta, fail-closed, en de additieve collector-hook (totaal + extra samen).
+
+## Scope 3 — Trends-paar slow÷fast fashion (erbij)
+
+- **Config:** `trends_pairs` uitgebreid met **`slow fashion:fast fashion`** (A=slow/behoud, B=fast/nieuw,
+  consistent met de oriëntatie A=zuinig/behoud). Gevalideerd op 2026-07-08 (mean slow 5.4 / fast 38.3,
+  100% niet-nul, semantiek zuiver op 1 ruis-query na — zie iteratie 3). Ratio slow÷fast stijgt =
+  slow-fashion-stemming wint = versobering/duurzaamheid.
+- **Mechaniek = zelfde als de bestaande 3 paren:** ratio A/B, complete-week-label (Trends-zondag-week),
+  isPartial-filter. Een 4e ratio-reeks `trends_ratio_slow_fashion_fast_fashion_day` vult per puls.
+- **Backfill 5 jaar:** nieuwe `TrendsSkill.backfill_pairs` — per paar de volledige interest_over_time
+  (today 5-y), partiële week weg, per complete week ratio A/B → punt met meta `backfill:true`, datum = de
+  weekgrens. Noemer 0 → week overgeslagen. Idempotent (reeds live geschreven week blijft). Toegepast op
+  alle 4 paren zodat de bestaande 3 óók hun 5-jaars historie krijgen (consistent).
+
+Tests: slow÷fast paar-parse + backfill_pairs per-week (ratio, meta, partieel weg, noemer 0 over).

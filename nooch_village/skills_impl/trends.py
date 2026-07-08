@@ -277,6 +277,58 @@ class TrendsSkill(DataSourceSkill):
                 time.sleep(1.0)                                   # beleefd tussen paar-requests
         return out
 
+    def backfill_pairs(self, context, obs, pairs, *, _fetch=None):
+        """Eenmalige 5-jaars backfill van de ratio-reeks per stemming-paar. Voor elk paar de VOLLEDIGE
+        interest_over_time-reeks (today 5-y); de partiële laatste week weg (_drop_partial); per COMPLETE week
+        ratio = A/B → `trends_ratio_<A>_<B>_day`, datum = de weekgrens (df-index, zondag), meta backfill:true.
+        Noemer 0/afwezig → die week overgeslagen (geen deel-door-nul, geen interpolatie). Idempotent: een
+        reeds live geschreven week (zelfde datum) blijft staan (record_daily dedupt). `_fetch` injecteerbaar."""
+        settings = getattr(context, "settings", {}) or {}
+        geo = (settings.get("trends_geo") or "").strip()
+        timeframe = (settings.get("trends_timeframe") or _TIMEFRAME_DEFAULT).strip()
+        hl = settings.get("trends_hl", "en-US")
+        real = _fetch is None
+        if real:
+            try:
+                from pytrends.request import TrendReq
+            except ImportError:
+                return []
+            try:
+                pytrends = TrendReq(hl=hl, tz=0, timeout=(10, 25),
+                                    requests_args={"headers": {"User-Agent": _USER_AGENT}})
+            except Exception as exc:
+                log.error("Trends init faalde (backfill): %s", exc)
+                return []
+
+            def _fetch(payload, tf, g):
+                pytrends.build_payload(payload, cat=0, timeframe=tf, geo=g, gprop="")
+                return pytrends.interest_over_time()
+        written = []
+        for a, b in pairs:
+            metric = f"trends_{_pair_field(a, b)}_day"
+            try:
+                df = _fetch([a, b], timeframe, geo)
+            except Exception as exc:
+                log.error("Trends backfill paar '%s÷%s' faalde: %s", a, b, exc)
+                continue
+            if df is None or getattr(df, "empty", True) or a not in df or b not in df:
+                log.error("Trends backfill '%s÷%s': lege/incomplete respons", a, b)
+                continue
+            complete = _drop_partial(df)
+            if complete is None or getattr(complete, "empty", True):
+                continue
+            for idx, row in complete.iterrows():
+                bv = row[b]
+                if not bv:
+                    continue                                      # noemer 0/afwezig → week overslaan
+                datum = idx.date().isoformat() if hasattr(idx, "date") else str(idx)
+                if obs.record_daily("trends", metric, round(row[a] / bv, 4), bron="trends", datum=datum,
+                                    meta={"backfill": True}):
+                    written.append(("trends", _pair_field(a, b), datum))
+            if real:
+                time.sleep(1.0)
+        return written
+
     def _select_window(self, keywords: list[str], context) -> list[str]:
         """Beperk tot een roterend venster (default 3) en bewaar de cursor, zodat de
         request-burst begrensd blijft en de set over meerdere pulsen toch rondkomt."""
