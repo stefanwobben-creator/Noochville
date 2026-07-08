@@ -267,13 +267,18 @@ class ProjectLedger:
             return True
         return False
 
-    def check_add(self, pid: str, clid: str, text: str) -> bool:
+    def check_add(self, pid: str, clid: str, text: str, *,
+                  skill: str | None = None, query: str = "", reason: str = "") -> bool:
         p = self._projects.get(pid)
         text = (text or "").strip()
         cl = self._checklist(p, clid) if p else None
         if cl is None or not text:
             return False
-        cl.setdefault("items", []).append({"id": uuid.uuid4().hex[:8], "text": text[:200], "done": False})
+        item = {"id": uuid.uuid4().hex[:8], "text": text[:200], "done": False}
+        if skill:  item["skill"]  = skill            # uitvoer-primitief: welke skill dit item draait
+        if query:  item["query"]  = query[:200]
+        if reason: item["reason"] = reason[:300]     # 'geen skill' → waarom (blijft open)
+        cl.setdefault("items", []).append(item)
         self._touch(p); self._save()
         return True
 
@@ -406,6 +411,17 @@ class ProjectLedger:
             p["status"] = "running"
         self._touch(p)
         self._save()
+        return True
+
+    def mark_tended(self, pid: str, date_iso: str) -> bool:
+        """Idempotentie-anker voor het uitvoer-primitief: leg vast dat de eigenaar-rol dit project op deze
+        dag heeft uitgevoerd, zodat een tweede puls dezelfde dag het niet opnieuw oppakt (geen dubbele
+        notes). Done-projecten blijven ongemoeid."""
+        p = self._projects.get(pid)
+        if p is None or p["status"] in _TERMINAL:
+            return False
+        p["last_tended"] = date_iso
+        self._touch(p); self._save()
         return True
 
     def add_comment(self, pid: str, text: str) -> bool:

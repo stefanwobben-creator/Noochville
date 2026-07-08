@@ -87,8 +87,11 @@ def test_catalog_not_stored_in_ledger(analyst_bus, ledger):
     assert "visitors" not in str(p.get("outcome") or "")
 
 
-def test_non_discovery_project_completes_normally(analyst_bus, ledger):
+def test_non_discovery_zonder_checklist_geen_valse_done(analyst_bus, ledger):
+    # string-scope zonder voorbereiding → geen uitvoering, geen valse done (stub:done vervangen door de
+    # checklist-flow: uitvoer-primitief fase 1). Met checklist zou het wél uitvoeren.
     analyst, _ = analyst_bus
     pid = ledger.create("website_watcher", "gewoon schrijfwerk", "human")
     analyst._claim_run_complete(pid)
-    assert ledger.get(pid)["status"] == "done"
+    p = ledger.get(pid)
+    assert p["status"] != "done" and p.get("outcome") != "stub:done"

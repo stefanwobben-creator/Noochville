@@ -63,6 +63,9 @@ class Inhabitant(threading.Thread):
             self.context.settings.get("reflect_interval_seconds", str(7 * 24 * 3600)))
         self._setup_events()
         self.react("project_queued", self._on_project_queued)
+        # Uitvoer-primitief: elke dag mijn eigen projecten verzorgen (TOEKOMST=voorbereiden,
+        # ACTIEF=uitvoeren). Universeel gewired (niet in _setup_events, dat subklassen overschrijven).
+        self.react("dag_begint", self._tend_projects)
 
     def _setup_events(self) -> None:
         """Koppel dag_begint aan _maybe_reflect. Rollen met een eigen pulsgate overschrijven dit."""
@@ -823,10 +826,118 @@ class Inhabitant(threading.Thread):
             return
         self._claim_run_complete(pid)
 
+    _PREP_CHECKLIST_TITLE = "Uitvoerplan"
+
+    @staticmethod
+    def _extract_json(text):
+        """Pak het eerste JSON-object uit een LLM-antwoord (robuust tegen omringende proza/markdown)."""
+        if not text:
+            return None
+        m = re.search(r"\{.*\}", text, re.DOTALL)
+        if not m:
+            return None
+        try:
+            return json.loads(m.group(0))
+        except Exception:
+            return None
+
+    def _scope_text(self, project: dict) -> str:
+        sc = project.get("scope")
+        if isinstance(sc, str):
+            return sc.strip()
+        if isinstance(sc, dict):
+            return str(sc.get("goal") or sc.get("title") or "").strip()
+        return ""
+
+    def _project_checklist(self, project: dict) -> dict | None:
+        """Het voorbereide uitvoerplan (named checklist met onze titel), of None."""
+        if not project:
+            return None
+        for cl in project.get("checklists", []):
+            if cl.get("title") == self._PREP_CHECKLIST_TITLE:
+                return cl
+        return None
+
+    def _tend_projects(self, event: "Event | None" = None) -> None:
+        """Dagelijkse verzorging van mijn EIGEN projecten: voorbereiden in TOEKOMST (status future),
+        uitvoeren in ACTIEF (status queued/running). Andere kolommen worden niet aangeraakt."""
+        ledger = getattr(self.context, "projects", None)
+        if ledger is None:
+            return
+        for p in ledger.by_status("future"):                     # TOEKOMST → voorbereiden (DEEL A)
+            if p.get("owner") == self.id:
+                self.prepare_project(p["id"])
+        for status in ("queued", "running"):                     # ACTIEF → uitvoeren (DEEL B)
+            for p in ledger.by_status(status):
+                if p.get("owner") == self.id:
+                    self._claim_run_complete(p["id"])
+
+    # ── DEEL A: voorbereiding (alleen voor een string-scope project in TOEKOMST) ──────────────
+    def prepare_project(self, pid: str) -> None:
+        """Breek het projectdoel op in een checklist: per item een skill-referentie OF 'geen skill' + reden.
+        Draait ALLEEN voor een string-scope project in TOEKOMST zonder checklist. Voert NIETS uit; het
+        project blijft in TOEKOMST."""
+        ledger = getattr(self.context, "projects", None)
+        if ledger is None:
+            return
+        p = ledger.get(pid)
+        if p is None or p.get("status") != "future" or not isinstance(p.get("scope"), str):
+            return                                                # alleen TOEKOMST + string-doel
+        goal = self._scope_text(p)
+        if not goal or self._project_checklist(p) is not None:
+            return                                                # geen doel of al voorbereid (idempotent)
+        plan = self._plan_checklist(goal)
+        if plan is None:
+            self.log.warning("📋 project '%s': geen checklist voorbereid (LLM-plan mislukte); blijft in TOEKOMST", pid)
+            return
+        cl = ledger.checklist_add(pid, title=self._PREP_CHECKLIST_TITLE)
+        if cl is None:
+            return
+        n_skill = n_open = 0
+        for it in plan["items"]:
+            skill = it.get("skill")
+            ledger.check_add(pid, cl["id"], it.get("text", ""), skill=skill,
+                             query=it.get("query", ""), reason=it.get("reason", ""))
+            n_skill, n_open = (n_skill + 1, n_open) if skill else (n_skill, n_open + 1)
+        opens = [f"{it.get('text','')}: {it.get('reason') or 'geen skill'}"
+                 for it in plan["items"] if not it.get("skill")]
+        ledger.add_role_message(pid, (
+            f"📋 Uitvoerplan voor '{goal}'. Deliverable: {plan.get('deliverable','')}. "
+            f"{n_skill} item(s) skill-gekoppeld, {n_open} zonder skill"
+            + (": " + "; ".join(opens) if opens else "") + "."))
+        self.log.info("📋 project '%s' voorbereid: %d skill-items, %d zonder skill", pid, n_skill, n_open)
+
+    def _plan_checklist(self, goal: str) -> dict | None:
+        """LLM-stap (Noochie): toets het doel tegen mijn accountabilities + skills → checklist.
+        Machine-check: een voorgestelde skill die niet in mijn harde DNA-lijst zit wordt 'geen skill' + reden."""
+        from nooch_village.llm import reason as llm_reason
+        skills = list(self.dna.skills)
+        prompt = (
+            f"Je bent {self.name}, een autonome rol. Projectdoel:\n\"{goal}\"\n\n"
+            f"Jouw skills (de ENIGE tools die je hebt): {skills or '(geen)'}\n"
+            f"Jouw accountabilities: {list(self.dna.accountabilities) or '(geen)'}\n\n"
+            "Breek het doel op in 2 tot 5 concrete deel-items. Voor ELK item: als één van jouw skills het "
+            "kan uitvoeren, geef de exacte skill-naam + een korte zoekterm (query). Kan geen enkele skill "
+            "het item uitvoeren, zet \"skill\": null en geef een korte reden (bv. \"geen patent-skill\"). "
+            "Bepaal ook welke accountability het doel raakt en welke deliverable erbij hoort. "
+            "Antwoord UITSLUITEND met JSON, exact dit schema:\n"
+            "{\"deliverable\": \"...\", \"accountability\": \"...\", \"items\": "
+            "[{\"text\": \"...\", \"skill\": \"skillnaam of null\", \"query\": \"...\", \"reason\": \"...\"}]}"
+        )
+        data = self._extract_json(llm_reason(prompt))
+        if not isinstance(data, dict) or not isinstance(data.get("items"), list) or not data["items"]:
+            return None
+        for it in data["items"]:
+            sk = it.get("skill")
+            if sk and sk not in skills:                          # machine-check tegen de harde DNA-lijst
+                it["reason"] = ((it.get("reason") or "") + f" (voorgestelde skill '{sk}' niet in DNA)").strip()
+                it["skill"] = None
+        return data
+
+    # ── DEEL B: uitvoering (bij de puls voor projecten in ACTIEF) ─────────────────────────────
     def _claim_run_complete(self, pid: str) -> None:
-        """Start het project, voer het uit en markeer het als afgerond.
-        Losgekoppeld van _on_project_queued zodat tests 'm direct kunnen aanroepen.
-        """
+        """Voer een ACTIEF project uit via zijn checklist. Markeert DONE ALLEEN als run_project een outcome
+        teruggeeft (alle items af). Geen valse done: onvoltooide checklist → blijft in ACTIEF."""
         ledger = getattr(self.context, "projects", None)
         if ledger is None:
             self.log.warning("project '%s': geen ProjectLedger in context", pid)
@@ -836,23 +947,77 @@ class Inhabitant(threading.Thread):
             self.log.warning("project '%s': niet gevonden", pid)
             return
         ledger.start(pid)
-        self.log.info("▶ project '%s' gestart: %s", pid, str(project.get("scope", ""))[:60])
         outcome = self.run_project(project)
         current = ledger.get(pid)
-        if current and current["status"] == "running":
+        if outcome is not None and current and current["status"] == "running":
             ledger.complete(pid, outcome)
             self.log.info("✅ project '%s' afgerond (outcome=%s)", pid, outcome)
         else:
-            self.log.info("⏸ project '%s' niet afgerond door run_project (status=%s)",
-                          pid, current and current["status"])
+            self.log.info("⏸ project '%s' nog niet af (status=%s)", pid, current and current["status"])
 
     def run_project(self, project: dict) -> str | None:
-        """Overridebaar: voer het projectwerk uit. Geef een outcome-marker terug.
-        Default-stub: logt de scope en geeft een vaste marker terug.
-        """
-        scope = str(project.get("scope", ""))[:60]
-        self.log.info("🔨 project: '%s'", scope)
-        return "stub:done"
+        """Uitvoering van een string-scope project via zijn voorbereide checklist (DEEL B). Geeft een
+        outcome-marker terug ALLEEN als alle items af zijn; anders None (blijft in ACTIEF). Géén stub:done.
+        (Discovery-scope wordt door de subklasse-override afgevangen vóór deze basis wordt bereikt.)"""
+        import datetime
+        today = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+        return self._execute_checklist(project, today)
+
+    def _execute_checklist(self, project: dict, today: str) -> str | None:
+        pid = project["id"]
+        ledger = self.context.projects
+        cl = self._project_checklist(project)
+        if cl is None or not cl.get("items"):
+            self.log.warning("⚠️ project '%s' in ACTIEF zonder voorbereiding — sleep terug naar TOEKOMST "
+                             "voor voorbereiding", pid)
+            self.bus.publish(Event("project_needs_preparation",
+                                   {"project_id": pid, "owner": self.id}, self.id))
+            return None
+        if project.get("last_tended") == today:
+            return None                                          # idempotent: al vandaag uitgevoerd
+        clid = cl["id"]
+        for item in cl["items"]:
+            if item.get("done"):
+                continue                                         # idempotent: reeds afgevinkt
+            skill = item.get("skill")
+            if not skill:
+                continue                                         # geen-skill-item blijft open (reden in item)
+            result = self.use_skill(skill, {"term": item.get("query", ""), "locale": item.get("locale", "")})
+            if self._skill_ok(result):
+                ledger.add_role_message(pid, self._deliverable_note(item, result))
+                ledger.check_toggle(pid, clid, item["id"])
+                self.log.info("✅ project '%s': item '%s' via %s afgerond", pid, item.get("text", "")[:40], skill)
+            else:
+                why = (result.get("error") or result.get("reason") or "skill leverde geen resultaat")
+                ledger.add_role_message(pid, f"⚠️ '{item.get('text','')}' via {skill} niet gelukt: {why}")
+                self.log.warning("⚠️ project '%s': item '%s' via %s faalde: %s",
+                                 pid, item.get("text", "")[:40], skill, why)
+        ledger.mark_tended(pid, today)
+        fresh_cl = self._project_checklist(ledger.get(pid)) or {}
+        items = fresh_cl.get("items", [])
+        done = sum(1 for it in items if it.get("done"))
+        total = len(items)
+        if total and done == total:
+            return f"checklist voltooid ({done}/{total})"
+        self.log.info("⏳ project '%s' voortgang %d/%d — blijft in ACTIEF", pid, done, total)
+        return None
+
+    @staticmethod
+    def _skill_ok(result) -> bool:
+        if not isinstance(result, dict) or result.get("error") or result.get("no_data"):
+            return False
+        return bool(result.get("hits") or result.get("total"))
+
+    def _deliverable_note(self, item: dict, result: dict) -> str:
+        hits = result.get("hits", []) or []
+        lines = [f"📎 {item.get('text','')} — via {item.get('skill')}: {result.get('total', len(hits))} resultaten"]
+        for h in hits[:5]:
+            title = (h.get("title") or "").strip()
+            extra = (h.get("tldr") or h.get("topic") or "").strip()
+            yr, cit = h.get("year"), h.get("citations")
+            meta = " · ".join(x for x in [str(yr) if yr else "", f"{cit} cit." if cit else ""] if x)
+            lines.append(f"• {title}" + (f" — {extra}" if extra else "") + (f" ({meta})" if meta else ""))
+        return "\n".join(lines)
 
     # --- het werk ---
 
