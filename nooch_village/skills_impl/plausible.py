@@ -1,10 +1,18 @@
 from __future__ import annotations
 import logging, os, requests
 from nooch_village.skills import DataSourceSkill
+from nooch_village.observations import dim_slug
 
 log = logging.getLogger(__name__)
 
 _METRICS = ["visitors", "pageviews", "visit_duration", "bounce_rate"]
+# page_path-dimensie: een pagina komt in de meetset zodra hij op één dag ≥ deze drempel bezoeken haalt.
+_PAGE_THRESHOLD = 3
+
+
+def _page_slug(page: str) -> str:
+    """Page-path → veilige dimensie-slug; de homepage '/' (lege slug) → 'home'."""
+    return dim_slug(page) or "home"
 # Live-verzameling van bounce_rate start hier; er is GEEN historie vóór deze datum (de historische bounce
 # komt via de aparte sweep, ronde 1b). De reeks-start staat als meta op elke bounce-observatie.
 _BOUNCE_REEKS_START = "2026-07-07"
@@ -93,6 +101,83 @@ class PlausibleSkill(DataSourceSkill):
                 if v is not None:
                     out[(field, c)] = v
         return out
+
+    def collect_extra_series(self, context, today, obs, *, _get=None):
+        """page_path-dimensie (drempel-gebaseerd, persistent), ADDITIEF naast de country-dimensie + totalen.
+        Een pagina komt in de meetset zodra hij op één dag ≥ _PAGE_THRESHOLD bezoeken haalt; **daarna** wordt
+        zijn VOLLEDIGE dagreeks vastgelegd (ook lagere dagen / 0 = echte waarde, geen gat). Opslag = per
+        pagina (`plausible_page_visitors_day::<slug>`, meta `page_path`); een top-10 is een AFGELEIDE view,
+        niet de opslag (stabiel/terugleesbaar per pagina). De reeds gekwalificeerde set = de pagina's die al
+        een reeks in de store hebben; die worden altijd doorgemeten, ook onder de drempel.
+        Fail-closed: geen creds / API-fout → geen write, geen interpolatie. `_get(params)` injecteerbaar."""
+        from datetime import timedelta
+        datum = (today - timedelta(days=1)).isoformat()           # laatst-complete dag (lag 0)
+        key = context.settings.get("PLAUSIBLE_API_KEY") or os.getenv("PLAUSIBLE_API_KEY")
+        site = context.settings.get("PLAUSIBLE_SITE_ID") or os.getenv("PLAUSIBLE_SITE_ID")
+        if not key or not site:
+            return []
+        params = {"site_id": site, "period": "day", "date": datum, "property": "event:page",
+                  "metrics": "visitors", "limit": 1000}
+        if _get is None:
+            def _get(p):
+                r = requests.get("https://plausible.io/api/v1/stats/breakdown",
+                                 headers={"Authorization": f"Bearer {key}"}, params=p, timeout=10)
+                r.raise_for_status()
+                return r.json().get("results", [])
+        try:
+            rows = _get(params)
+        except Exception as exc:
+            log.warning("Plausible page_path-breakdown faalde (%s): %s", datum, exc)
+            return []
+        today_pages = {}
+        for row in rows:
+            p, v = row.get("page"), row.get("visitors")
+            if p is not None and v is not None:
+                today_pages[p] = int(v)
+        already = set(obs.dimensioned_series("plausible_page_visitors_day", bron="plausible").keys())
+        collect = already | {p for p, v in today_pages.items() if v >= _PAGE_THRESHOLD}
+        written = []
+        for page in sorted(collect):
+            v = today_pages.get(page, 0)                          # niet in respons = 0 bezoeken (echte waarde)
+            metric = f"plausible_page_visitors_day::{_page_slug(page)}"
+            if obs.record_daily("plausible", metric, v, bron="plausible", datum=datum,
+                                meta={"dimension": "page_path", "value": page}):
+                written.append(("plausible", f"page_visitors::{_page_slug(page)}", datum))
+        return written
+
+    def backfill_page_paths(self, context, obs, start_iso, end_iso, pages, *, _get=None):
+        """Eenmalige backfill van de dagreeks per gekwalificeerde pagina over [start, end], via Plausible
+        timeseries met filter `event:page==<page>`. Elk punt draagt meta `backfill: true` zodat het later
+        herkenbaar is als inhaal. Idempotent (record_daily dedupt op datum); gaten blijven gaten (Plausible
+        geeft 0 voor lege dagen = echte waarde, geen interpolatie). Fail-closed per pagina."""
+        key = context.settings.get("PLAUSIBLE_API_KEY") or os.getenv("PLAUSIBLE_API_KEY")
+        site = context.settings.get("PLAUSIBLE_SITE_ID") or os.getenv("PLAUSIBLE_SITE_ID")
+        if not key or not site or not pages:
+            return []
+        if _get is None:
+            def _get(p):
+                r = requests.get("https://plausible.io/api/v1/stats/timeseries",
+                                 headers={"Authorization": f"Bearer {key}"}, params=p, timeout=15)
+                r.raise_for_status()
+                return r.json().get("results", [])
+        written = []
+        for page in pages:
+            params = {"site_id": site, "period": "custom", "date": f"{start_iso},{end_iso}",
+                      "metrics": "visitors", "interval": "date", "filters": f"event:page=={page}"}
+            try:
+                rows = _get(params)
+            except Exception as exc:
+                log.warning("Plausible page-backfill '%s' faalde: %s", page, exc)
+                continue
+            metric = f"plausible_page_visitors_day::{_page_slug(page)}"
+            for row in rows:
+                d, v = row.get("date"), row.get("visitors")
+                if d is None or v is None:
+                    continue
+                if obs.record_daily("plausible", metric, int(v), bron="plausible", datum=d,
+                                    meta={"dimension": "page_path", "value": page, "backfill": True}):
+                    written.append(("plausible", f"page_visitors::{_page_slug(page)}", d))
+        return written
 
     def run(self, payload: dict, context) -> dict:
         key = context.settings.get("PLAUSIBLE_API_KEY") or os.getenv("PLAUSIBLE_API_KEY")

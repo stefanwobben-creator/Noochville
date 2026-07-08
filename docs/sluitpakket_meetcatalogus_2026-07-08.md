@@ -23,3 +23,24 @@ Per scope: wat, waarom, en de effecten op de store.
 
 Prod-verificatie (read-only, na restart): trends_categorie actief=False, 0 reeksen; KE 27 approved,
 27 reeksen; carbonkiller/noochwear niet meer approved; noech nog approved.
+
+## Scope 2 — Plausible page_path-dimensie (erbij)
+
+Nieuwe **drempel-gebaseerde, persistente** dimensie op de Plausible-bron, additief naast de country-
+dimensie + totalen (via een nieuwe collector-hook `collect_extra_series`, die NAAST de generieke paden
+draait i.p.v. ze te vervangen).
+
+- **Drempel + persistentie:** een pagina komt in de meetset zodra hij op **één dag ≥ 3 bezoeken** haalt
+  (`_PAGE_THRESHOLD=3`); **daarna** wordt zijn **volledige dagreeks** vastgelegd — ook lagere dagen en
+  0 (echte waarde, geen gat). De reeds gekwalificeerde set = de pagina's die al een reeks in de store
+  hebben (`obs.dimensioned_series`), die worden altijd doorgemeten.
+- **Opslag = per pagina** (`plausible_page_visitors_day::<slug>`, meta `{dimension: page_path, value:
+  <page_path>}`); de homepage `/` → slug `home`. Een **top-10 is een AFGELEIDE view**, niet de opslag
+  (stabiel/terugleesbaar per pagina).
+- **Bron:** Plausible `event:page`-breakdown per dag (visitors); fail-closed bij geen creds/API-fout, geen
+  interpolatie.
+- **Backfill:** `backfill_page_paths` haalt per gekwalificeerde pagina de dagreeks over een venster op
+  (Plausible timeseries, filter `event:page==<page>`), elk punt **meta `backfill: true`**. Idempotent.
+
+Tests (test_plausible_page_path.py): drempel-entree (≥3 wel, <3 niet), persistent doormeten onder de
+drempel, afwezig=0, backfill-meta, fail-closed, en de additieve collector-hook (totaal + extra samen).
