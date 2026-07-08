@@ -581,6 +581,38 @@ def test_collector_ke_weekly_per_keyword(tmp_path):
     assert [r["value"] for r in rows] == [100]
 
 
+# Scope A: KE leest ke_country (leeg=global), oude sleutel weg, geen 'nl'-fallback
+def test_ke_country_uit_ke_country_leeg_is_global():
+    from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
+    k = KeywordsEverywhereSkill(); seen = {}
+    def run(payload, context):
+        seen["country"] = payload.get("country"); return _fake_ke_run(payload, context)
+    k.daily_values(_ke_ctx({"vegan shoes": "approved"}), "2026-07-06", _run=run)
+    assert seen["country"] == ""                                  # ke_country afwezig → global, GEEN 'nl'
+    ctx2 = _ke_ctx({"vegan shoes": "approved"}); ctx2.settings["ke_country"] = "be"
+    k.daily_values(ctx2, "2026-07-06", _run=run)
+    assert seen["country"] == "be"                                # gezet → die waarde
+    ctx3 = _ke_ctx({"vegan shoes": "approved"}); ctx3.settings["keywordseverywhere_country"] = "nl"
+    k.daily_values(ctx3, "2026-07-06", _run=run)
+    assert seen["country"] == ""                                  # OUDE sleutel genegeerd → global, geen nl-fallback
+
+
+def test_ke_oude_sleutel_weg_uit_source():
+    import inspect
+    import nooch_village.skills_impl.keywords_everywhere as _ke
+    assert "keywordseverywhere_country" not in inspect.getsource(_ke)   # oude sleutel volledig weg
+
+
+def test_ke_geen_settings_failclosed(caplog):
+    from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
+    k = KeywordsEverywhereSkill()
+    lib = types.SimpleNamespace(all=lambda: {"vegan shoes": {"status": "approved"}})
+    ctx = types.SimpleNamespace(library=lib, settings=None)
+    with caplog.at_level(logging.ERROR):
+        vals = k.daily_values(ctx, "2026-07-06", _run=_fake_ke_run)
+    assert vals == {"vegan_shoes": None} and "fallback-land" in caplog.text   # settings weg → niets, geen fallback
+
+
 def test_ke_blijft_inactief_tot_activatie(tmp_path):
     from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
     dd = _dd(tmp_path)

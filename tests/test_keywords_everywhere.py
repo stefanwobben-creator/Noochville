@@ -34,7 +34,7 @@ def test_normalizes_response():
 
     assert result == {
         "source":             "keywords_everywhere",
-        "country":            "nl",
+        "country":            "",                     # default leeg = global (geen 'nl'-default meer)
         "currency":           "eur",
         "data_source":        "gkp",
         "credits_consumed":   1,
