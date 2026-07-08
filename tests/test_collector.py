@@ -567,6 +567,29 @@ def test_trends_blijft_inactief_tot_activatie(tmp_path):
     assert w == []
 
 
+# Scope 3: slow÷fast fashion-paar + 5-jaars backfill
+def test_trends_slow_fast_pair_parse():
+    from nooch_village.skills_impl.trends import _parse_pairs, _pair_field
+    assert _parse_pairs("slow fashion:fast fashion") == [("slow fashion", "fast fashion")]
+    assert _pair_field("slow fashion", "fast fashion") == "ratio_slow_fashion_fast_fashion"
+
+
+def test_trends_backfill_pairs_per_week(tmp_path):
+    """backfill_pairs: ratio A/B per COMPLETE week, meta backfill:true; partiële week weg, noemer 0 over."""
+    import pandas as pd
+    from nooch_village.skills_impl.trends import TrendsSkill
+    from nooch_village.observations import ObservationStore
+    obs = ObservationStore(str(tmp_path / "o.jsonl"))
+    df = pd.DataFrame({"slow fashion": [10, 5, 20], "fast fashion": [40, 0, 60],
+                       "isPartial": [False, False, True]},
+                      index=pd.to_datetime(["2026-06-14", "2026-06-21", "2026-06-28"]))
+    w = TrendsSkill().backfill_pairs(_pair_ctx("slow fashion:fast fashion"), obs,
+                                     [("slow fashion", "fast fashion")], _fetch=lambda p, tf, g: df)
+    rows = {r["datum"]: (r["value"], r["meta"].get("backfill")) for r in obs._read_all()}
+    assert rows == {"2026-06-14": (0.25, True)}          # wk1 10/40=0.25; wk2 noemer 0 → over; wk3 partieel → weg
+    assert w == [("trends", "ratio_slow_fashion_fast_fashion", "2026-06-14")]
+
+
 # ── Scope 2: fail-closed guard — actieve bron die 0 velden aanbiedt logt LUID (geen stille no-op) ──
 class _EmptyFieldsSkill(DataSourceSkill):
     name = "leeg"; SOURCE = "leeg_bron"
