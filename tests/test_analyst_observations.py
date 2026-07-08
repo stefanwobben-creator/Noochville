@@ -94,3 +94,36 @@ def test_pulse_metrics_visitors_via_idempotent(tmp_path):
     grp = collections.Counter((r.get("role_id"), r.get("bron"), r.get("metric"), r.get("datum"))
                               for r in obs._read_all())
     assert max(grp.values()) == 1                                    # geen enkele (role,bron,metric,datum)-duplicaat
+
+
+def test_pulse_metrics_geen_kopie_van_canonieke_metrics(tmp_path):
+    """Reference, don't copy: een rol met keep-metrics (visitors/pageviews) schrijft GEEN parallelle
+    rauwe-naam-reeks meer onder role_id — de canonieke plausible_*_day loopt via de collector. (a)+(b)."""
+    from types import SimpleNamespace
+    from nooch_village.roles import WebsiteWatcherWorker
+    from nooch_village.observations import ObservationStore
+    from nooch_village.monitoring import MonitoringStore
+    obs = ObservationStore(str(tmp_path / "o.jsonl"))
+    mon = MonitoringStore(str(tmp_path / "role_metrics.json"))
+    mon.add_metrics("analyst", ["visitors", "pageviews"])            # rol volgt deze metrics (curatie)
+    fake = SimpleNamespace(id="analyst", context=SimpleNamespace(observations=obs, monitoring=mon))
+    plausible = {"results": {"visitors": {"value": 55}, "pageviews": {"value": 120}},
+                 "utm_sources": [{"utm_source": "ig", "visitors": 3}]}
+    WebsiteWatcherWorker._log_pulse_metrics(fake, plausible)
+    metrics = {r["metric"] for r in obs._read_all()}
+    assert "visitors" not in metrics and "pageviews" not in metrics  # (a) GEEN rauwe-naam-kopie onder role_id
+    assert metrics == {"visitors_via_ig"}                            # alleen de UTM-kanaaldata (eigen bron)
+    assert mon.get_metrics("analyst") == ["pageviews", "visitors"]   # (b) curatie-lijst intact, leesbaar als referentie
+
+
+def test_pulse_metrics_leeg_monitoring_stil(tmp_path):
+    """(d) Leeg role_metrics + geen UTM in de puls → niets geschreven, geen error (slapend blijft stil)."""
+    from types import SimpleNamespace
+    from nooch_village.roles import WebsiteWatcherWorker
+    from nooch_village.observations import ObservationStore
+    from nooch_village.monitoring import MonitoringStore
+    obs = ObservationStore(str(tmp_path / "o.jsonl"))
+    mon = MonitoringStore(str(tmp_path / "rm.json"))                 # leeg
+    fake = SimpleNamespace(id="analyst", context=SimpleNamespace(observations=obs, monitoring=mon))
+    WebsiteWatcherWorker._log_pulse_metrics(fake, {"results": {"visitors": {"value": 55}}})
+    assert obs._read_all() == []                                    # geen kopie, geen UTM → niets, geen error

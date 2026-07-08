@@ -49,7 +49,7 @@ Trends → complete Trends-week (zondag); OpenAlex → venster-eind R−30.
 | `plausible_bounce_rate_day` | — | collector.py:142 | daily | today−1 | 50 | 0–100 (%) | Aandeel dat direct weer weggaat (reeks-start 2026-07-07) | [ ] | [ ] |
 | `plausible_*_day::<land>` | country | collector.py:165 (+ backfill 115/175, historisch) | daily | today−1 | 7 landen | zie totalen, per land | Zelfde 4 metrics uitgesplitst per land — waar het bereik zit | [ ] | [ ] |
 | `visitors_via_<utm>_day` | — | roles.py:233 | per puls | today−1 (laatst-complete dag) | 1–3 | 1–9 | Bezoekers per kanaal (ig, shopify_email, bluemarble) — 7-daags aggregaat | [ ] | [ ] |
-| `<monitored metric>` | — | roles.py:237 | per puls | today−1 | **geen data** | — | Door MonitoringStore geconfigureerde plausible-metric per rol; nu leeg | [ ] | [ ] |
+| *(gemonitorde metrics)* | — | geen write (curatie-lijst) | — | — | n.v.t. | — | Curatie-lijst van metrics die een rol volgt (MonitoringStore, `data/role_metrics.json`, gevuld via Noochie's keep-verdicts). GEEN kopie-reeks: de waarden leest een rol-view/signaleringslaag via referentie uit de canonieke reeksen (plausible_*_day). Slapend tot het eerste project door de advies→keep-flow gaat. | [ ] | [ ] |
 
 *Landen (7): NL, BE, DE, FR, ES, GB, US. De historische per-land- én totaal-reeksen (terug tot 2024) komen
 uit een backfill (backfill.py:115/175), dezelfde metrics idempotent aangevuld.*
@@ -123,16 +123,20 @@ noochwear.com reviews — echte volume-loze merktermen, geen defect).*
 
 ## Code-vs-data-kruising
 
-**Schrijfpaden (10 in code; `observations.py:189` is de interne record_daily→record-delegatie, geen eigen reeks):**
-collector.py:142 (totaal), collector.py:165 (dimensie), roles.py:233 (visitors_via), roles.py:237
-(monitored), observations.py:264 (werk_tevredenheid), observations.py:267 (werk_duur),
+**Schrijfpaden (9 in code; `observations.py:189` is de interne record_daily→record-delegatie, geen eigen reeks):**
+collector.py:142 (totaal), collector.py:165 (dimensie), roles.py:233 (visitors_via),
+observations.py:264 (werk_tevredenheid), observations.py:267 (werk_duur),
 openalex.py:193 (openalex-flow via collect_series), backfill.py:115/175 (historische backfill, zelfde metrics).
+*(De oude monitored-kopie-tak in roles.py is verwijderd — reference, don't copy; de MonitoringStore blijft
+als curatie-lijst, zonder eigen write.)*
 
 **In code, NIET in data** (slapend of inactief — alleen zichtbaar via de code-invalshoek):
 - `werk_tevredenheid_day` (observations.py:264) — **slapend**: schrijfpad bestaat, de werkoverleg-snapshots
-  leverden nog geen tevredenheid-waarde.
-- monitored-metric-tak (roles.py:237) — **slapend**: leeg zonder MonitoringStore-config.
+  leverden nog geen tevredenheid-waarde (de gevulde 8.7/10.0-overleggen dateren van vóór het schrijfpad).
 - gdelt / shopify / semanticscholar (collector.py:142) — **inactieve bronnen**.
+
+De **MonitoringStore** (curatie-lijst van gevolgde metrics) is bewust géén schrijfpad meer: waarden komen
+via referentie uit de canonieke reeksen. Slapend tot het eerste project door de advies→keep-flow gaat.
 
 **In data, GEEN vindbaar schrijfpad:** **geen.** Elke reeks is herleidbaar tot een `record_daily`-pad
 (collector totaal/dimensie, openalex-flow, roles visitors_via, werkoverleg). Geen verdachte weesdata.
