@@ -72,3 +72,23 @@ doel al vervulde (incl. de 4 paren, de proef 0/5 vs 3/5, de oriëntatie), maar m
 ("…Google TrendsHet principe"). Ik heb mijn per ongeluk toegevoegde duplicaat (`NOTE-CONCUR-002`)
 verwijderd en **alleen de titel van 001 gecorrigeerd** naar "Zo meten we stemming via Google Trends" —
 geen mens-geschreven inhoud weggegooid. Eindstaat: precies één schone methode-note op `concurrent_scout`.
+
+## Scope 6 — Contract activeren (healthcheck)
+
+Machine-leesbaar catalogus-contract (`nooch_village/meetcatalog.py`, `CATALOG`) + `healthcheck(obs)`:
+
+- **Ongecatalogiseerde reeks:** een reeks in de store die geen enkele catalogus-family matcht → signaal
+  ("er is iets nieuws verschenen dat we niet kennen").
+- **Niet-vullend:** een gecatalogiseerde ACTIEVE family die te lang geen nieuwe **schrijf** kreeg
+  (N=2 daily, N=1 weekly). **Bewust op schrijf-recency (ts), niet op het datum-label** — labels
+  verschillen per bron (OpenAlex R−30, Trends complete-week, GSC lag) en zouden anders vals alarm geven.
+- **Geen vals alarm:** inactieve bronnen (gdelt/shopify/semanticscholar, gelabeld) → nooit alarm; families
+  zonder data (known-future / nog niet gevuld) → geen alarm; `irregular` (werkoverleg) → geen recency-check.
+- **Known-future families vooraf gedekt door de patterns:** page_path (`plausible_page_visitors_day::*`),
+  slow÷fast (`trends_ratio_*_day`), werk_tevredenheid (irregular), monitored-referentie (geen write meer →
+  niets in de store → geen flag).
+- **Geactiveerd:** draait elke puls na de collectie (`roles._collect_daily_observations` → logt signalen,
+  nooit blokkerend) + handmatig via `python -m nooch_village.village healthcheck`.
+
+Tests: ongecatalogiseerd → signaal; inactieve bron → stil; niet-vullend na N; weekly-marge ruimer;
+leeg/known-future → 0; irregular → geen recency; dimensie-/dynamische families bekend; schone store → 0.

@@ -248,6 +248,14 @@ class WebsiteWatcherWorker(Inhabitant):
             written = collect_daily_observations(self.registry, sources, obs, self.context)
             if written:
                 self.log.info("dag-observaties geschreven: %s", written)
+            # Contract-healthcheck (meetcatalogus): ongecatalogiseerde reeks of niet-vullende ACTIEVE family
+            # → luid signaal. Bewust-inactieve bronnen zwijgen. Nooit blokkerend voor de puls.
+            try:
+                from nooch_village.meetcatalog import healthcheck
+                for sig in healthcheck(obs):
+                    self.log.warning("🩺 meetcatalogus-signaal: %s", sig)
+            except Exception as exc:
+                self.log.warning("meetcatalogus-healthcheck faalde: %s", exc)
         except Exception as exc:
             self.log.warning("dag-observatie-collector faalde: %s", exc)
 
