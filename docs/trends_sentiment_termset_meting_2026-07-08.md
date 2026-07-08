@@ -124,3 +124,26 @@ De 3 `trends_ratio_*`-rijen van **2026-07-06** (berekend op partiële weekdata, 
 zijn **verwijderd** via een eenmalige `remove_bron("trends")` op prod; de puls herschrijft ze met het
 complete-week-label. **Aantal verwijderde rijen: 3.** Reden: partiële-week-waarden, geen betrouwbare
 observatie.
+
+---
+
+# Iteratie 3 (2026-07-08) — 4 kandidaat-paren, read-only dry-run
+
+Zelfde poort als de gevalideerde set (5-jaars weekly, geo worldwide, één request per paar) **plus** een
+**semantische zuiverheidscheck**: top-5 related queries per term (pytrends). Beslisregel: beide termen
+mean ≥ 5 én ≥ 90% niet-nul; **én** related queries on-target. Off-target related = AFGEWEZEN, ook bij
+voldoende volume. Geen writes; Stefan stempelt de definitieve toevoeging.
+
+| paar (A÷B) | mean A | mean B | %nz A/B | volume | semantiek (top related) | oordeel |
+|---|---|---|---|---|---|---|
+| fast fashion ÷ slow fashion | 38.3 | 5.4 | 100/100 | ✅ | A zuiver (shein, "what is", brands); B 4/5 zuiver + 1 ruis ("slow cooker") | ✅ **KANDIDAAT** |
+| made to stock ÷ made on demand | 25.3 | 11.7 | 100/100 | ✅ | beide **geen related queries** → zuiverheid niet te bevestigen | ❌ afgewezen |
+| consumers ÷ citizens | 13.5 | 53.0 | 100/100 | ✅ | **vervuild**: consumers→Consumers Energy/Credit + biologie; citizens→Citizens Bank/First Citizens | ❌ afgewezen |
+| fossil ÷ biobased | 20.1 | 0 | 100/**0** | ❌ | fossil→merk *Fossil* (horloges) + fossiele brandstof (niet materiaal); biobased zelf zuiver | ❌ afgewezen |
+
+**Uitkomst:** alleen **`fast fashion ÷ slow fashion`** haalt beide poorten (volume + grotendeels zuivere
+related queries; slow fashion = behoud/duurzaamheid, fast fashion = consumptie — past op de zuinig↔nieuw-
+as). De andere drie vallen af: made-to-stock/on-demand is semantisch niet verifieerbaar (geen related
+queries), consumers/citizens is precies de gewaarschuwde merk-/biologie-contaminatie, en fossil÷biobased
+faalt de volume-poort (biobased verdwijnt naast fossil) + fossil is merk/brandstof-vervuild. Toevoeging
+aan `trends_pairs` is een aparte scope ná Stefans stempel.
