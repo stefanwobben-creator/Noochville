@@ -29,7 +29,7 @@ Read-only inventarisatie (code + docs). Vier categorieën, meest-relevant eerst.
 
 | bestand:regel | wat | waarom STUK |
 |---|---|---|
-| `cli.py:248` (`ask_accountability`) | Abonneert op event **`accountability_check_completed`** dat **nergens** wordt gepubliceerd. Enige echte accountability (`nl_corpus_coverage`, `roles.py:1178`) emit `nl_corpus_check_completed`. | Voor élke andere accountability nooit een completion → altijd "Geen antwoord binnen de tijd". De generieke offer→complete-lus is half af. |
+| ~~`cli.py:248` (`ask_accountability`)~~ **[OPGELOST 2026-07-08]** | Abonneerde op `accountability_check_completed` dat nergens werd gepubliceerd. **Fix:** `_on_accountability_requested` publiceert dat event nu generiek na élke aangeboden accountability (met het handler-resultaat). De offer→complete-lus is nu compleet. | ~~Voor élke andere accountability nooit een completion.~~ Opgelost: elke aangeboden accountability meldt nu af. |
 | `governance.py:309` | `_on_legacy_amendment` luistert op **`propose_amendment`** ("legacy/backward compat"); dat event wordt nergens meer gepubliceerd. | Dode luister-tak — vuurt nooit. |
 | `cli.py:186-192` | Insight-migratie: `classify()` in `except Exception: pass` → stille val naar "niet-geclassificeerd". | Milde stille slikker (eenmalig migratiepad, verbergt een LLM-fout). |
 | `tests/test_project_feed.py:80` | `@pytest.mark.xfail("notificatie-aggregatie op /person is deferred; person-view is read-only placeholder")`. | Uitgezette test = deferred feature (overlapt met de /person-xfail in ONAF/roadmap). |

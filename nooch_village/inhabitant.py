@@ -111,7 +111,18 @@ class Inhabitant(threading.Thread):
             return
         self.log.info("📨 verzoek van %s: voer accountability '%s' uit",
                       event.data.get("from", "?"), key)
-        handler(event.data.get("payload", {}))
+        result = handler(event.data.get("payload", {}))
+        # Sluit de generieke offer→complete-lus: elke AANGEBODEN accountability meldt af met een
+        # completion-event, zodat een wachter (bv. de ask_accountability-CLI) altijd antwoord krijgt —
+        # ook als de handler geen eigen, specifiek event publiceert (voorheen deed alleen nl_corpus dat,
+        # waardoor elke andere accountability eeuwig op 'geen antwoord' bleef staan).
+        self.bus.publish(Event("accountability_check_completed", {
+            "target":         self.id,
+            "accountability": key,
+            "from":           event.data.get("from", "?"),
+            "result":         result if isinstance(result, dict) else {},
+            "ok":             True,
+        }, self.id))
 
     def propose_close(self, gap_key: str, reason: str) -> None:
         """Stel voor een inbox-item (met deze gap_key) te sluiten omdat ik de accountability nu
