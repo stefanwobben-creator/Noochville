@@ -218,7 +218,11 @@ class OpenalexSkill(DataSourceSkill):
         if payload.get("mode") == "yearly":
             return self._yearly(term, locale, mailto, key, ua)
 
-        q   = urllib.parse.quote(term)
+        # Exacte frase (aanhalingstekens om de term): het brede search= matcht anders losse woorden en
+        # de citatie-sort surfacet dan hoog-geciteerde off-topic papers (diagnose 2026-07-08:
+        # "barefoot shoes" gaf 14.906 hits, top-5 diabetes/vaatlijden; met frase → 204, top-5 on-topic).
+        # Enkelwoord-termen zijn met quotes neutraal. `term` is hier gegarandeerd niet-leeg (guard hierboven).
+        q   = urllib.parse.quote(f'"{term}"')
         url = (f"{_BASE}?search={q}"
                f"&per_page={limit}"
                f"&sort=cited_by_count:desc"

@@ -112,3 +112,51 @@ def test_hits_structuur_ongewijzigd():
     assert hit["locale"]    == "en"
     assert hit["title"]     == "Sustainable Footwear Lifecycle"
     assert hit["citations"] == 57
+
+
+# ── Frase-match query-fix (diagnose 2026-07-08) ─────────────────────────────────
+
+def test_meerwoords_term_als_exacte_frase():
+    """search=<term> matcht anders losse woorden → de term gaat als exacte frase (quotes) mee."""
+    skill = OpenalexSkill()
+    captured: list[str] = []
+
+    def fake_urlopen(req, timeout=None):
+        captured.append(req.full_url)
+        return _ok_response()
+
+    with patch("urllib.request.urlopen", fake_urlopen), patch("time.sleep"):
+        skill.run({"term": "barefoot shoes", "locale": "en", "limit": 5}, _ctx_with_key())
+
+    assert "search=%22barefoot%20shoes%22" in captured[0]      # frase (aanhalingstekens), niet losse woorden
+    assert "sort=cited_by_count:desc" in captured[0]           # citatie-sort blijft behouden
+
+
+def test_enkelwoord_term_werkt_geen_lege_quotes():
+    skill = OpenalexSkill()
+    captured: list[str] = []
+
+    def fake_urlopen(req, timeout=None):
+        captured.append(req.full_url)
+        return _ok_response()
+
+    with patch("urllib.request.urlopen", fake_urlopen), patch("time.sleep"):
+        result = skill.run({"term": "mycelium", "locale": "en", "limit": 1}, _ctx_with_key())
+
+    assert "search=%22mycelium%22" in captured[0]              # enkel woord: quotes neutraal, correct
+    assert "%22%22" not in captured[0]                         # geen dubbele/lege quotes
+    assert result["hits"]                                      # levert nog gewoon hits
+
+
+def test_lege_term_fail_closed_geen_api_call():
+    skill = OpenalexSkill()
+    calls = {"n": 0}
+
+    def fake_urlopen(req, timeout=None):
+        calls["n"] += 1
+        return _ok_response()
+
+    with patch("urllib.request.urlopen", fake_urlopen), patch("time.sleep"):
+        result = skill.run({"term": "   ", "locale": "en"}, _ctx_with_key())   # whitespace → leeg na strip
+
+    assert result.get("error") and calls["n"] == 0            # fail-closed: geen kale API-call, geen ""-frase
