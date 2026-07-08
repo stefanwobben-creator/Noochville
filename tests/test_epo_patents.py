@@ -101,8 +101,8 @@ def test_c_xml_parse_velden():
     assert p["publication_number"] == "US1234567A1"
     assert p["publication_date"] == "20200101"
     assert "barefoot walking" in p["abstract"]
-    assert p["applicants"] == ["VIVOBAREFOOT LTD"]                  # docdb-format, epodoc-dubbel eruit
-    assert p["inventors"] == ["SMITH JOHN"]
+    assert p["applicants"] == ["Vivobarefoot [GB]"]                 # epodoc-voorkeur (leesbare naam)
+    assert p["inventors"] == ["SMITH JOHN"]                         # geen epodoc → terugval op alle formats
 
 
 def test_b_search_en_run(monkeypatch):
