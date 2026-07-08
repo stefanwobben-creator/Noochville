@@ -59,3 +59,16 @@ drempel, afwezig=0, backfill-meta, fail-closed, en de additieve collector-hook (
   alle 4 paren zodat de bestaande 3 óók hun 5-jaars historie krijgen (consistent).
 
 Tests: slow÷fast paar-parse + backfill_pairs per-week (ratio, meta, partieel weg, noemer 0 over).
+
+## Scope 5 — Methode-note bij de trends-and-competition-rol
+
+De methode "Zo meten we stemming via Google Trends" (principe: ratio van vergelijkbare termen; recept:
+volume-poort ≥5/≥90%, semantiek-poort via related queries, vaste oriëntatie A=zuinig/behoud) staat als
+**note-artefact op de rol `concurrent_scout`** (leesbaar voor mens én AI-rolvervuller, naast de repo-doc
+`docs/methode_trends_stemming_paren.md`).
+
+**Bevinding tijdens uitvoering:** er bestond al een rijke, mens-geschreven note (`NOTE-CONCUR-001`) die dit
+doel al vervulde (incl. de 4 paren, de proef 0/5 vs 3/5, de oriëntatie), maar met een **corrupte titel**
+("…Google TrendsHet principe"). Ik heb mijn per ongeluk toegevoegde duplicaat (`NOTE-CONCUR-002`)
+verwijderd en **alleen de titel van 001 gecorrigeerd** naar "Zo meten we stemming via Google Trends" —
+geen mens-geschreven inhoud weggegooid. Eindstaat: precies één schone methode-note op `concurrent_scout`.
