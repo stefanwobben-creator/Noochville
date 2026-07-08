@@ -74,3 +74,23 @@ def test_pulse_metrics_schrijft_niet_meer_de_losse_dagwaarde(tmp_path):
                  "visitors_day": {"date": "2026-07-03", "value": 7}}
     WebsiteWatcherWorker._log_pulse_metrics(fake, plausible)
     assert obs.latest("analyst", "visitors_day") is None                # niet meer via deze weg
+
+
+def test_pulse_metrics_visitors_via_idempotent(tmp_path):
+    """Scope B: visitors_via_* gaat via record_daily → twee pulsen dezelfde dag = één rij (geen
+    duplicaat), gelabeld met de laatst-complete dag (UTC gisteren)."""
+    import collections, datetime
+    from types import SimpleNamespace
+    from nooch_village.roles import WebsiteWatcherWorker
+    from nooch_village.observations import ObservationStore
+    obs = ObservationStore(str(tmp_path / "observations.jsonl"))
+    fake = SimpleNamespace(id="analyst", context=SimpleNamespace(observations=obs, monitoring=None))
+    plausible = {"utm_sources": [{"utm_source": "ig", "visitors": 3}]}
+    WebsiteWatcherWorker._log_pulse_metrics(fake, plausible)
+    WebsiteWatcherWorker._log_pulse_metrics(fake, plausible)          # tweede puls zelfde dag
+    rows = [r for r in obs._read_all() if r["metric"] == "visitors_via_ig"]
+    yest = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=1)).isoformat()
+    assert len(rows) == 1 and rows[0]["datum"] == yest and rows[0]["value"] == 3.0   # geen duplicaat, complete dag
+    grp = collections.Counter((r.get("role_id"), r.get("bron"), r.get("metric"), r.get("datum"))
+                              for r in obs._read_all())
+    assert max(grp.values()) == 1                                    # geen enkele (role,bron,metric,datum)-duplicaat
