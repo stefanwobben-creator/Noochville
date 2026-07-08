@@ -1,55 +1,20 @@
-"""Drie externe observatie-bronnen (Stooq / Trends-categorie / GDELT-tone): contract, strikte
+"""Externe observatie-bronnen (Trends-categorie / GDELT-tone / AlphaVantage): contract, strikte
 validatie/fail-closed, idempotentie en metadata. Externe calls zijn geïnjecteerd (`_fetch`) zodat de
-suite offline + deterministisch draait; de échte sandbox-calls staan in de rapportage."""
+suite offline + deterministisch draait; de échte sandbox-calls staan in de rapportage.
+(Stooq is verwijderd — vervangen door AlphaVantage.)"""
 from __future__ import annotations
 import types
 
 import pytest
 
 from nooch_village.observations import ObservationStore
-from nooch_village.skills_impl.stooq import StooqIndexSkill
 from nooch_village.skills_impl.alphavantage import AlphaVantageIndexSkill
 from nooch_village.skills_impl.trends_categorie import TrendsCategorieSkill
 from nooch_village.skills_impl.gdelt_tone import GdeltToneSkill
 
-# de échte anti-bot/rate-limit-responses die de sandbox teruggaf (regressie-fixtures)
-_STOOQ_CHALLENGE = ('<!DOCTYPE html><html><head><meta charset="utf-8">'
-                    '<noscript>This site requires JavaScript to verify your browser.</noscript></head></html>')
-_STOOQ_CSV = ("Date,Open,High,Low,Close,Volume\n"
-              "2026-07-02,5000,5050,4990,5010.5,0\n"
-              "2026-07-03,5010,5080,5005,5075.25,0\n")
-
 
 def _ctx(**settings):
     return types.SimpleNamespace(settings=settings)
-
-
-# ── Stooq ─────────────────────────────────────────────────────────────────────────────────────
-def test_stooq_config_en_meta():
-    s = StooqIndexSkill()
-    ctx = _ctx(stooq_symbols="spx:^spx, aex:^aex", stooq_source_version="2")
-    assert s.SOURCE == "stooq" and s.kind == "flux"
-    assert set(s.available_metrics(ctx)) == {"spx", "aex"} and s.is_configured(ctx)
-    m = s.observation_meta(ctx, "2026-07-03", "aex")
-    assert m["source_version"] == 2 and m["symbol"] == "^aex" and "s=%5Eaex" in m["endpoint"]
-
-
-def test_stooq_happy_path_exacte_dag():
-    s = StooqIndexSkill()
-    # daily_values gebruikt _close_for; test die met geïnjecteerde CSV (exacte-dag-keying)
-    assert s._close_for("^spx", "2026-07-03", _fetch=lambda sym: _STOOQ_CSV) == 5075.25
-    assert s._close_for("^spx", "2026-07-02", _fetch=lambda sym: _STOOQ_CSV) == 5010.5
-
-
-def test_stooq_fail_closed():
-    s = StooqIndexSkill()
-    f = lambda sym: _STOOQ_CHALLENGE
-    assert s._close_for("^spx", "2026-07-03", _fetch=f) is None              # JS-challenge HTML → None
-    assert s._close_for("^spx", "2026-07-09", _fetch=lambda x: _STOOQ_CSV) is None   # geen rij → gat
-    assert s._close_for("^spx", "2026-07-03", _fetch=lambda x: "wrong,header\n1,2") is None  # verkeerde header
-    bad = "Date,Open,High,Low,Close,Volume\n2026-07-03,a,b,c,nietnum,0\n"
-    assert s._close_for("^spx", "2026-07-03", _fetch=lambda x: bad) is None   # niet-numerieke close
-    assert s._close_for("^spx", "2026-07-03", _fetch=lambda x: (_ for _ in ()).throw(RuntimeError())) is None
 
 
 # ── Trends-categorie ──────────────────────────────────────────────────────────────────────────
@@ -143,8 +108,7 @@ def test_bevroren_config_wordt_door_de_skills_gelezen():
     from nooch_village.config import load_context
     from nooch_village.village import BASE_DIR
     ctx = load_context(BASE_DIR)
-    assert StooqIndexSkill()._symbols(ctx) == {}                          # Stooq-config verwijderd (gedeactiveerd)
-    assert AlphaVantageIndexSkill()._symbols(ctx) == {"spx": "SPY", "aex": "IAEX.AMS"}   # ETF-proxies
+    assert AlphaVantageIndexSkill()._symbols(ctx) == {"spx": "SPY", "aex": "IAEX.AMS"}   # ETF-proxies (vervangt Stooq)
     assert TrendsCategorieSkill()._terms(ctx) == ["footwear", "sustainable shoes", "vegan shoes"]
     assert GdeltToneSkill()._terms(ctx) == ["sustainable footwear", "vegan footwear"]
 

@@ -306,34 +306,10 @@ class Secretary:
         self.records = records
         self.bus = bus
         self._pending: dict[str, Proposal] = {}   # proposal_id → Proposal (wacht op menselijk verdict)
-        bus.subscribe("propose_amendment", self._on_legacy_amendment)  # legacy: directe amendementen
         bus.subscribe("proposal_gate_passed", self._on_gate_passed)
         bus.subscribe("governance_verdict", self._on_governance_verdict)
         bus.subscribe("_store_pending_proposal", lambda e: self.store_pending(
             proposal_from_dict(e.data["proposal"])))
-
-    # ── Legacy: directe propose_amendment (voor backward compat) ──────────────
-    def _on_legacy_amendment(self, e: Event) -> None:
-        rid = e.data["record_id"]
-        new_skills = e.data.get("add_skills", [])
-        new_accs = e.data.get("add_accountabilities", [])
-        record = self.records.get(rid)
-        if record is None:
-            self._reject_legacy(rid, "record bestaat niet"); return
-        for acc in new_accs:
-            if len(acc.split()) < 2:
-                self._reject_legacy(rid, f"accountability '{acc}' is te kort"); return
-        d = record.definition
-        d.skills = sorted(set(d.skills) | set(new_skills))
-        d.accountabilities = sorted(set(d.accountabilities) | set(new_accs))
-        record.version += 1
-        self.records.put(record)
-        log.info("legacy-amendement aangenomen voor '%s' -> v%s", rid, record.version)
-        self.bus.publish(Event("role_adopted", {"record_id": rid}, "Secretary"))
-
-    def _reject_legacy(self, rid, reason):
-        log.warning("legacy-amendement afgewezen voor '%s': %s", rid, reason)
-        self.bus.publish(Event("proposal_rejected", {"record_id": rid, "reason": reason}, "Secretary"))
 
     # ── Nieuw governance-pad: Facilitator heeft de poort gedraaid ─────────────
     def _on_gate_passed(self, e: Event) -> None:
