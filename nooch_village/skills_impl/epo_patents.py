@@ -118,7 +118,10 @@ class EpoPatentsSkill(DataSourceSkill):
     # ── search/biblio → (total, [patent-dicts]) via XML-parse ───────────────
     def _search(self, token, term, limit, *, _get=None):
         get = _get or (lambda u: self._default_get(u, token))
-        url = f"{_SEARCH_BIBLIO_URL}?q={urllib.parse.quote(term)}&Range=1-{limit}"
+        # Titel-frase (CQL ti="<term>") i.p.v. brede losse-woorden-match — zelfde ruis-reductie als de
+        # openalex-fix: 'barefoot shoes' → ~10-tal on-topic patenten i.p.v. duizenden footwear-adjacent hits.
+        cql = f'ti="{term}"'
+        url = f"{_SEARCH_BIBLIO_URL}?q={urllib.parse.quote(cql)}&Range=1-{limit}"
         return self._parse_patents(get(url))
 
     @staticmethod
