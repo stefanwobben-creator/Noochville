@@ -165,6 +165,9 @@ def collect_daily_observations(registry, sources: SourceStatusStore, obs: Observ
                     if obs.record_daily(src, metric, v, bron=src, datum=ddat,
                                         meta={"dimension": dim, "value": val}):
                         written.append((src, f"{field}::{dim_slug(val)}", ddat))
+        # Additieve reeksen met eigen selectie-logica (bijv. Plausible page_path-drempel) — draaien NAAST
+        # de totaal-/dimensie-paden (niet in plaats daarvan, anders dan collect_series).
+        written.extend(skill.collect_extra_series(context, today, obs) or [])
     return written
 
 

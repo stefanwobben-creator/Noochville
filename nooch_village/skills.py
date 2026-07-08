@@ -122,6 +122,14 @@ class DataSourceSkill(Skill):
         én de lege-velden-guard over."""
         return None
 
+    def collect_extra_series(self, context, today, obs):
+        """Optionele ADDITIEVE reeksen NAAST de generieke totaal-/dimensie-paden (die blijven draaien —
+        anders dan collect_series die ze vervangt). Voor een dimensie met eigen selectie-logica die niet in
+        het fixed-list-dimensiepad past (bijv. Plausible page_path: een pagina komt in de meetset zodra hij
+        één dag ≥3 bezoeken haalt, daarna de volledige dagreeks). Schrijft zelf via `obs.record_daily`
+        (idempotent), geeft geschreven `(bron, veld, datum)`-tuples terug. Default: niets."""
+        return []
+
 
 class SkillRegistry:
     def __init__(self):
