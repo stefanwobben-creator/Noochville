@@ -63,6 +63,28 @@ van de body**):
   de rest **wacht** (geen weigering) tot een plek vrijkomt doordat een voorbereid project naar ACTIEF gaat.
   Zo geen voorbereidings-burst over veel TOEKOMST-projecten.
 
+## Generalisatie voorbij {term}→{hits} (optie C — skill-schema's)
+
+Het primitief kende aanvankelijk alleen `{term}→{hits}`; de prep-LLM kreeg alleen skill-namen en gokte de
+payload (gokte `term` voor `kw`-lijst/`brands`-lijst-skills → concurrent_scout kon niet uitvoeren). Opgelost
+via de al bestaande `Skill.input_schema`/`output_schema`-velden:
+
+- **Schema's ingevuld** voor de werk-skills (openalex_evidence, semscholar_tldr, keywords_everywhere,
+  ngram_culture, openlibrary_search_inside; de competitor-/onderzoeksvraag-skills hadden er al).
+- **Doorgegeven aan de prep-LLM:** `_plan_checklist` bouwt een catalogus met per skill `description` +
+  `input_schema`. De LLM levert nu per item de skill **én** een `payload` in de voorgeschreven vorm
+  (`{"term":…}` / `{"kw":[…]}` / `{"brands":[…]}`). Fail-soft: een skill zonder schema → de LLM valt terug
+  op naam + omschrijving.
+- **Status genormaliseerd (de enige echte normalisatie):** `_classify_result` vertaalt beide fail-conventies
+  (`{error}`/`{no_data}` én `{ok:False,error}`) naar één uitkomst **gelukt / leeg / fout** — daarop wordt
+  afgevinkt of open gelaten.
+- **Note-inhoud rauw-maar-leesbaar per archetype** (bepaald door de output-vorm, geen per-skill hardcoding):
+  lijst-van-records → opgesomd, elk record met zijn **eigen** velden (paper: titel/abstract/citaties; merk:
+  merk-info); enkele tekst → direct; metriek-serie → waarde-per-datum. Geen velden weggegooid, geen
+  gemene-deler-vorm.
+
+Legacy back-compat: een item met alleen `query` (oud) valt terug op `{"term": query}`.
+
 ## Bewust NIET in Fase 1
 Meerdere named checklists per project als parallelle sporen; her-voorbereiding bij een gewijzigd doel;
 automatische kolom-overgang TOEKOMST→ACTIEF (nu mens-gedreven via het bord); niet-`term`-payloads voor

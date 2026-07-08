@@ -14,6 +14,8 @@ from nooch_village.skills import Skill
 
 class OpenlibrarySearchInsideSkill(Skill):
     name = "openlibrary_search_inside"
+    input_schema = "term: str (zoekterm in boek-voltekst). optioneel: limit: int"
+    output_schema = "lijst: total: int, hits: list[{title, ...}] | error"
     cost = "free"
     description = (
         "Zoekt op OpenLibrary naar boeken die een term bevatten en retourneert "
