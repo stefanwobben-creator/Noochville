@@ -1,4 +1,4 @@
-# NoochVille — State & Handover (2026-06-28)
+# NoochVille — State & Handover (2026-07-08)
 
 > STATE = huidige waarheid, vervang bij update. `docs/JOURNAL.md` = historie, append-only.
 
@@ -20,6 +20,45 @@
 
 5. **Credits bewaken** — lange sessies met kringetjes zijn duurder dan één keer goed
    nadenken. Bij vastlopen: stop, analyseer, kies de juiste richting.
+
+---
+
+## Sessie 2026-07-08 — de werk-laag wordt echt (uitvoer-primitief, eerste gedrag-policy, patent-skill)
+
+**Suite: 1873 groen** (was 1382 op 2026-06-30), 1 xfail (deferred /person-notificatie). ~15 PR's,
+elk branch → squash-merge → deploy (Hetzner), volle suite per commit.
+
+**Grote lijn:** de projecten-laag doet nu écht werk. Een rol bereidt een project autonoom voor (checklist)
+en voert het uit via zijn skills → deliverables als notes. Bewezen: harry_hemp's project *"Patents and
+scientific studies on barefoot shoes researched"* liep bij de puls **100% (4/4) autonoom af** met echte,
+on-topic resultaten (12 patenten + 204 studies + samenvattingen + cultuurtrend). Eerste volledig autonoom
+afgeronde onderzoeksproject in de werk-laag.
+
+**Wat er nu staat:**
+- **Uitvoer-primitief (Fase 1)** — bord-gedreven statusmachine: TOEKOMST=voorbereiden (LLM-checklist met
+  skill + payload per item, machine-check tegen DNA), ACTIEF=uitvoeren (skill→note→afvinken, status-
+  normalisatie gelukt/leeg/fout, note-opmaak per archetype), DONE=alles af. **Geen valse `stub:done` meer.**
+  `dag_begint → _tend_projects` universeel gewired. Idempotent via `last_tended`. Docs:
+  `docs/uitvoer_primitief_fase1.md`.
+- **WIP-cirkelpolicy (WIP-001)** — de **eerste gedrag-sturende** policy (de 3 bestaande zijn beschrijvend):
+  begrenst autonome voorbereiding tot N (config `wip_prepare_limit`, default 8) per AI-rol, FIFO. Policy =
+  de expliciete aan-knop (via `own_and_inherited` op de cirkel); N uit config, **niet** uit de body-tekst.
+  Scheiding governance-verankert / code-dwingt-af strikt bewaakt.
+- **Schema-gedreven skills** — `Skill.input_schema`/`output_schema` gevuld voor de werk-skills en
+  doorgegeven aan de prep-LLM, zodat elk item de juiste payload-vorm krijgt (`{term}` / `{kw:[…]}` /
+  `{brands:[…]}` / `{terms:[…]}`) i.p.v. een gegokte `term`.
+- **Nieuwe skill `epo_patents`** (EPO OPS, XML-interface, OAuth) — wereldwijde patenten, titel-frase-query
+  (on-topic), in harry_hemp's DNA. Dekt de accountability "searching global patent registries".
+- **Meetcatalogus afgesloten** (sluitpakket, 6 scopes): trends_categorie weg, Plausible page_path-dimensie,
+  4e stemming-paar slow÷fast, catalogus + **healthcheck-contract** (`meetcatalog.py`) geactiveerd — 0 vals
+  alarm op de schone store. Methode-note bij concurrent_scout.
+- **openalex_evidence frase-fix** — exacte frase i.p.v. losse woorden (14.906 → 204 hits, on-topic).
+- **Opruiming:** `ask_accountability` generieke offer→complete-lus gedicht; dood hout weg (stooq-skill,
+  propose_amendment-legacy-handler). Read-only inventarisatie: `docs/codebase_staat_2026-07-08.md`.
+
+**Bewust NIET (mens/beslissing):** gefaseerde activering van alle 47 TOEKOMST-projecten (WIP-cap dekt de
+burst); Copywriter (Wendy Words) heeft nog **geen skills** (content_schrijven/content_check bestaan maar
+zijn aan niemand gegrant); de Gemini free-tier (20/dag) knelt bij voorbereidings-volume.
 
 ---
 

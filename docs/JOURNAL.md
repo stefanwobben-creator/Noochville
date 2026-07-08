@@ -1374,3 +1374,72 @@ cockpit daarna. De volgorde van morgen is gedraaid: eerst de strategie-laag (`da
 met do's en don'ts) en een context-patroon voor LLM-stappen, dan pas zichtbaarheid.
 
 Suite einde dag: 1382 groen, 7 pre-existing failures (LLM-zonder-key + isolatie-flaky).
+
+---
+
+## 2026-07-08 — de werk-laag wordt echt: uitvoer-primitief, eerste gedrag-policy, patent-skill
+
+Lange sessie (~15 PR's, branch → squash → deploy, volle suite per commit; 1382 → 1873 groen). Rode draad:
+de projecten-laag van no-op naar autonoom-werkend maken.
+
+**[beslissing/afsluiting]** SLUITPAKKET meetcatalogus (6 scopes, strikt na elkaar): trends_categorie
+gedeactiveerd + reeksen weg (overlapt met KE + stemming-paren); Plausible **page_path**-dimensie (drempel
+≥3, persistent, backfill); 4e Trends-stemming-paar **slow÷fast fashion** (5-jaars backfill); catalogus
+afgerond (OORDEEL + drempels + reinforcing-loop-kopsectie); methode-note "stemming via Trends" bij
+concurrent_scout; **contract geactiveerd** (`meetcatalog.py` + healthcheck: ongecatalogiseerd → signaal,
+niet-vullend → signaal op **schrijf-recency/ts** i.p.v. het per-bron verschillende datum-label; 0 vals
+alarm op de schone store).
+
+**[ontdekking]** Diagnose: waarom pakken harry_hemp/concurrent_scout hun ACTIEVE projecten niet op? →
+(a) hun rollen misten de `_scan_queued_projects`-catch-up (alleen de GrowthAnalyst had 'm), en (b)
+`run_project` gaf voor string-scope een `stub:done` — niets wire'de projectdoel → skill → resultaat.
+
+**[fix — het grote werk]** **Uitvoer-primitief Fase 1**: bord-gedreven statusmachine (TOEKOMST=voorbereiden,
+ACTIEF=uitvoeren, DONE). Voorbereiding = LLM breekt het doel op in een checklist met per item een skill +
+payload (of "geen skill" + reden), machine-check tegen de harde DNA-lijst. Uitvoering = per item de skill
+draaien → note (deliverable) → afvinken; alle af → DONE, anders blijft ACTIEF (eerlijke X/Y, geen valse
+done). `dag_begint → _tend_projects` universeel gewired (dicht het catch-up-gat). Idempotent via
+`last_tended`.
+
+**[beslissing]** **WIP-cirkelpolicy** — de eerste policy die GEDRAG stuurt (de 3 bestaande — Money /
+Decision-Making / Tone-of-Voice — zijn beschrijvend). Vooronderzoek bevestigde: policies leven als
+artefacten (AttachmentStore, kind=policy) op rol óf cirkel, code-uitleesbaar via `own_and_inherited`;
+niks las ze voor gedrag. WIP-001 op de NoochVille-cirkel begrenst autonome voorbereiding tot N (config,
+default 8) per AI-rol (persona_id), FIFO. **Policy = de expliciete aan-knop**, N uit config (niet uit de
+body-tekst) — scheiding "governance verankert / code dwingt af" strikt bewaakt.
+
+**[faalmodus → fix]** openalex_evidence gaf voor "barefoot shoes" 14.906 hits, top-5 off-topic (diabetes,
+hoge citaties) — brede losse-woorden-`search=` + citatie-sort. Fix: exacte frase `search="<term>"` → 204
+hits, top-5 on-topic. Dezelfde logica later op epo_patents (`ti="<term>"`: 3857 → 12).
+
+**[ontdekking → fix]** Bij het generaliseren van het primitief bleek: skills hebben totaal verschillende
+contracten (payload: term / kw-lijst / brands-lijst / kaart-dict; output: hits / candidates / targets /
+vraag), en de prep-LLM kreeg alleen skill-NAMEN → gokte de payload. De `Skill`-ABC hàd al
+`input_schema`/`output_schema`, maar 21/28 leeg + ze bereikten de LLM niet. **Optie C**: schema's ingevuld
++ doorgegeven aan de prep-LLM (payload per item in de juiste vorm), status-normalisatie (beide
+fail-conventies → gelukt/leeg/fout) + note-opmaak per archetype (rauw, eigen velden per record).
+
+**[fix]** `ask_accountability` (inventarisatie-STUK #1): de generieke offer→complete-lus was half af —
+`accountability_check_completed` werd nergens gepubliceerd. Nu meldt elke aangeboden accountability
+generiek af.
+
+**[opruiming]** Dood hout weg: `stooq`-skill (vervangen door AlphaVantage, 0 store-rijen) + de dode
+`propose_amendment`-legacy-handler. Read-only inventarisatie vastgelegd in
+`docs/codebase_staat_2026-07-08.md` (af/onaf/stuk/dood).
+
+**[beslissing/bouw]** Nieuwe skill **`epo_patents`** (EPO Open Patent Services). Vooronderzoek: geen
+keyless patent-API; EPO OPS is globaal + OAuth. Gebouwd op de OPS **XML-interface** (op verzoek — JSON
+werkte óók, tweemaal gemeld, maar Stefan koos bewust XML): OAuth-token-cache → `published-data/search/biblio`
+→ ElementTree-parse → `{patents:[…]}` (lijst-archetype). Gegrant aan harry_hemp via governance.
+Verificatie-vondst: partijen zitten in `data-format="epodoc"` (parser was te streng op docdb) → gefixt.
+
+**[les/mijlpaal]** Alles kwam samen: harry_hemp's project *"Patents and scientific studies on barefoot
+shoes researched"* liep bij de puls **100% (4/4) autonoom af** — echte deliverables per skill: 12 on-topic
+patenten (epo_patents), 204 on-topic studies (openalex), semscholar-samenvattingen, ngram-cultuurtrend. Het
+eerste volledig autonoom afgeronde onderzoeksproject in de werk-laag.
+
+**[faalmodus]** De Gemini free-tier (20 req/dag) knelde meermaals bij het voorbereiden — de directe
+skill-call diende als bewijs zonder quota te verbranden. Aandachtspunt voor voorbereidings-volume (mede
+reden dat de WIP-cap nuttig is).
+
+Suite einde: **1873 groen**, 1 xfail (deferred /person-notificatie).
