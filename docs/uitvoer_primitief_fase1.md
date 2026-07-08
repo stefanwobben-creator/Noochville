@@ -44,6 +44,25 @@ gekoppeld aan `openalex_evidence`/`semscholar_tldr` (afvinkbaar) + een patent-it
 Na uitvoering: studies-items gedraaid → notes met resultaat, patent-item open → project blijft in ACTIEF,
 checklist toont de deel-voortgang. (Geen patent-skill = eerlijk zichtbaar, geen verzonnen dekking.)
 
+## WIP-limiet op voorbereiding (cirkelpolicy WIP-001 — eerste gedrag-sturende policy)
+
+Autonome voorbereiding is begrensd door een **work-in-progress-limiet**, verankerd als **cirkelpolicy** op
+NoochVille (`mother_earth__nooch`, `kind=policy`, id **`WIP-001`**, `inherit=True`) — zichtbaar in de
+Policies-tab, net als MONEY-001. Dit is de eerste policy die **gedrag stuurt** i.p.v. alleen beschrijft;
+de scheiding blijft strikt (governance verankert de afspraak; code dwingt af, **geen tekst-interpretatie
+van de body**):
+
+- **Aan-schakelaar = de policy:** de hook `_wip_prepare_limit` checkt via `own_and_inherited` of `WIP-001`
+  actief is op de omvattende cirkel. Afwezig/inactief → **geen limiet** (huidig gedrag). De policy is dus
+  de expliciete, zichtbare aan-knop.
+- **Getal N = config:** `wip_prepare_limit` (default 8) uit `settings.ini` — **niet** uit de policy-body
+  geparsed. Body wijzigen verandert het gedrag niet.
+- **Alleen AI-bemande rollen** (`record.persona_id` gezet). Mens-bemande rollen bereiden niet autonoom voor
+  → limiet raakt hen in de praktijk niet.
+- **Gedrag (FIFO):** per AI-rol worden max N future-projecten voorbereid, **oudste (`created_at`) eerst**;
+  de rest **wacht** (geen weigering) tot een plek vrijkomt doordat een voorbereid project naar ACTIEF gaat.
+  Zo geen voorbereidings-burst over veel TOEKOMST-projecten.
+
 ## Bewust NIET in Fase 1
 Meerdere named checklists per project als parallelle sporen; her-voorbereiding bij een gewijzigd doel;
 automatische kolom-overgang TOEKOMST→ACTIEF (nu mens-gedreven via het bord); niet-`term`-payloads voor

@@ -113,6 +113,9 @@ class Village:
             os.path.join(self.context.data_dir, "role_metrics.json"))
         self.context.projects = ProjectLedger(
             os.path.join(self.context.data_dir, "projects.json"))
+        from nooch_village.attachments import AttachmentStore as _AttachmentStore
+        self.context.att = _AttachmentStore(          # policies/notes/tools — o.a. de WIP-cirkelpolicy
+            os.path.join(self.context.data_dir, "attachments.json"))
         from nooch_village.pinboard import Pinboard as _Pinboard
         self.context.pinboard = _Pinboard(
             os.path.join(self.context.data_dir, "pinboard.json"))
