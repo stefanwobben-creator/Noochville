@@ -115,7 +115,7 @@ def test_b_search_en_run(monkeypatch):
     monkeypatch.setattr(sk, "_default_get", _fake_get)
     # _search bouwt de URL (q + Range) en parset de XML
     r = sk.run({"term": "barefoot shoes", "limit": 5}, _ctx())
-    assert "q=barefoot%20shoes" in seen["url"] and "Range=1-5" in seen["url"]
+    assert 'q=ti%3D%22barefoot%20shoes%22' in seen["url"] and "Range=1-5" in seen["url"]   # titel-frase-CQL
     assert r["total"] == 42 and len(r["patents"]) == 1 and r["patents"][0]["title"] == "Barefoot shoe"
 
 
