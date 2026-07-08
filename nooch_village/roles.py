@@ -1,7 +1,7 @@
 """Gespecialiseerde inwoners met eigen gedrag bovenop de generieke Inhabitant."""
 from __future__ import annotations
 import hashlib, os, json, time
-from datetime import date, datetime
+from datetime import date, datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from nooch_village.util import atomic_write_json, run_bounded, is_due
 
@@ -214,19 +214,27 @@ class WebsiteWatcherWorker(Inhabitant):
 
         UTM-source metrics (visitors_via_*) worden altijd gelogd als ze aanwezig zijn —
         kanaaldata vereist geen MonitoringStore-configuratie vooraf.
+
+        DATUMLABEL + IDEMPOTENTIE: de pulse-metrics zijn een 7-daags Plausible-aggregaat (period='7d'),
+        per puls ververst. Ze worden gelabeld met de LAATST-COMPLETE dag (UTC gisteren) en via
+        `record_daily` weggeschreven — dus één waarde per dag, consistent met de daily-collector en de
+        isPartial-filosofie (nooit de lopende, onvolledige dag). Een tweede puls dezelfde dag
+        overschrijft niet en dupliceert niet: record_daily dedupliceert op (role_id, metric, bron, datum).
+        Vóór deze fix schreef dit pad via `record` (kale append) → een nieuwe rij per puls (duplicaten).
         """
         obs        = getattr(self.context, "observations", None)
         monitoring = getattr(self.context, "monitoring",   None)
         if obs is None:
             return
+        datum = (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()   # laatst-complete dag (UTC)
         pulse_dict = dict(_extract_pulse_metrics(plausible))
         for key, value in pulse_dict.items():
             if key.startswith("visitors_via_"):
-                obs.record(self.id, key, value, bron="plausible")
+                obs.record_daily(self.id, key, value, bron="plausible", datum=datum)
         monitored = monitoring.get_metrics(self.id) if monitoring else []
         for metric in monitored:
             if metric in pulse_dict:
-                obs.record(self.id, metric, pulse_dict[metric], bron="plausible")
+                obs.record_daily(self.id, metric, pulse_dict[metric], bron="plausible", datum=datum)
         # De losse dagwaarden per bron (visitors/pageviews/visit_duration, en straks shopify/gsc) lopen
         # nu via de generieke collector (_collect_daily_observations), niet meer hier hardcoded.
 
