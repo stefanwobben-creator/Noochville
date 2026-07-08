@@ -878,6 +878,22 @@ def main() -> None:
         if ge.count() == 0:
             print("   ⚠️ Referentiebank leeg — draai eerst 'ingest_governance' voor grounding.")
 
+    elif mode == "healthcheck":
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+        from nooch_village.observations import ObservationStore
+        from nooch_village.meetcatalog import healthcheck
+        ctx = load_context(BASE_DIR)
+        obs = ObservationStore(os.path.join(ctx.data_dir, "observations.jsonl"))
+        sigs = healthcheck(obs)
+        if not sigs:
+            print("🩺 meetcatalogus-healthcheck: 0 signalen — contract gezond.")
+        else:
+            print(f"🩺 meetcatalogus-healthcheck: {len(sigs)} signaal/signalen:")
+            for s in sigs:
+                print("   -", s)
+            sys.exit(1)
+
     else:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
@@ -887,6 +903,6 @@ def main() -> None:
               "measure_propose | rereview | ingest | notes_remove | recurate | "
               "ground | harry_run | roster | keys | competitor | formalize | answer_questions | "
               "ingest_governance | review_roles | shopify | work_projects | "
-              "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | rapport | verslag",
+              "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | rapport | verslag | healthcheck",
               file=sys.stderr)
         sys.exit(1)
