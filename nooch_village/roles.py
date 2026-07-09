@@ -1450,6 +1450,7 @@ class HarryHemp(Inhabitant):
 
     # ── Autonoom onderzoeksproject van een goedgekeurd high_potential GSC-keyword ──────────
     _KW_RESEARCH_ORIGIN = "keyword_research"
+    _BRANDED_DEFAULT = "nooch,noech,nootch,noogh,nooches"     # merk-varianten; komma-gescheiden, lowercase
     _KW_RESEARCH_SCOPE = ("Onderzoek naar '{kw}': patenten, wetenschappelijke studies "
                           "en culturele trend in kaart gebracht")
 
@@ -1469,6 +1470,15 @@ class HarryHemp(Inhabitant):
         evidence = (lib.status(word) or {}).get("evidence") or {}
         if evidence.get("source") != "gsc" or evidence.get("bucket") != "high_potential":
             self.log.debug("kw-research: '%s' overgeslagen — geen gsc/high_potential-evidence", word)
+            return
+        # Merkqueries (nooch-varianten e.d.) blijven approved in de library (correct voor SEO), maar
+        # spawnen géén onderzoeksproject → stil overslaan. Config-geschakeld; lege lijst = filter uit.
+        branded = [t.strip() for t in
+                   (self.context.settings.get("branded_tokens", self._BRANDED_DEFAULT) or "").lower().split(",")
+                   if t.strip()]
+        wl = word.lower()
+        if any(t in wl for t in branded):
+            self.log.debug("branded keyword overgeslagen: %s", word)
             return
         kw = word.lower()
         projects = ledger.all()
