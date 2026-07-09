@@ -81,3 +81,13 @@ sessie opent hiermee.
   `Inhabitant._claim_run_complete`); mens-DONE via `cockpit2._act_proj_done`
   is een apart proces en bereikt de in-memory bus niet. Heroverwegen bij de
   netwerk-bus-naad.
+- Stale-daemon-les (09-07): een daemon die een deploy-restart mist draait stil
+  door op een oude build (de nachtpuls draaide op een build van de vorige avond
+  en viel niet door naar de werkende LLM-trede). Bij rare nachtelijke output
+  eerst `pid` + starttijd van het proces matchen met de laatste deploy vóór je
+  de code verdenkt. Kandidaat-micro-scope: git-hash + processtart loggen bij
+  `dag_begint`.
+- Micro-scope open: `reason()` in `llm.py` splitst "geen antwoord (geen sleutel
+  of leeg)" nog niet in geen-sleutel / lege-respons / weggevangen-exceptie (de
+  `_try_*` vangen auth/timeout weg als `None`). Bemoeilijkte de diagnose van
+  09-07; een fijnere uitsplitsing zou de laddertoestand direct leesbaar maken.
