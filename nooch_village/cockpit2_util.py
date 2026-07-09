@@ -833,6 +833,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 @media(min-width:620px){.pside.psticky{position:sticky;top:.8rem;align-self:start}}
 .wall-head{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.6rem}
 .wall-head h2{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin:0;font-weight:700}
+.wall-scroll{max-height:62vh;overflow-y:auto}
 .opdracht-add{margin:0 0 .85rem}
 .c2-main.pdetail{max-width:1120px}
 .dangling-warn{margin-bottom:.3rem}
