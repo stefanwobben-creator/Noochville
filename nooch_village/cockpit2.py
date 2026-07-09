@@ -857,6 +857,31 @@ def _act_proj_settrekker(c):
         return nxt, msg
 
 
+def _resync_trekker(pj, st, pid: str, owner: str, orec) -> None:
+    """Na een owner-wissel mag de trekker niet VERWEESD achterblijven: is de huidige trekker een echte
+    trekker maar géén filler van de nieuwe rol, zet 'm op de enige filler van die rol (indien precies
+    één) of op leeg. Een al-lege trekker blijft leeg (dat is niet verweesd)."""
+    p = pj.get(pid)
+    if p is None:
+        return
+    fillers = st.assign.fillers_of(owner, record=orec)
+    keys = {(f.type, f.id) for f in fillers}
+    if p.get("person"):
+        cur = ("person", p["person"])
+    elif p.get("agent"):
+        cur = ("persona", p["agent"])
+    else:
+        return                                                 # geen trekker → niets verweesd
+    if cur in keys:
+        return                                                 # trekker bezet de nieuwe rol → laat staan
+    if len(fillers) == 1:                                      # precies één filler → daarheen
+        f = fillers[0]
+        pj.edit(pid, person=(f.id if f.type == "person" else ""),
+                agent=(f.id if f.type == "persona" else ""), allow_done=True)
+    else:                                                      # 0 of meerdere fillers → leeg (nooit verweesd)
+        pj.edit(pid, person="", agent="", allow_done=True)
+
+
 def _act_proj_setowner(c):
         nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
         msg = ""
@@ -871,6 +896,7 @@ def _act_proj_setowner(c):
             # Een cirkel doet geen uitvoerend werk: een project hoort bij een rol.
             msg = "✗ een cirkel kan geen project bevatten — kies een rol"
         elif pj.edit(g("pid"), owner=owner, allow_done=True):
+            _resync_trekker(pj, st, g("pid"), owner, orec)     # geen verweesde trekker laten staan
             msg = "✓ rol verplaatst"
         return nxt, msg
 

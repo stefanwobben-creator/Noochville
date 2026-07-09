@@ -186,20 +186,17 @@ def test_ii_project_aanmaken_en_tonen(tmp_path):
     assert "Spontane actie" in page and "Individueel Initiatief" in page
 
 
-def test_trekker_default_is_ingelogde_gebruiker(tmp_path):
-    # bij '+ project' staat de ingelogde gebruiker standaard voorgeselecteerd als trekker
+def test_trekker_add_form_gescoped_op_owner_rol(tmp_path):
+    # Owner/trekker-scope: de trekker in '+ project' is gescoped op de owner-ROL (fillers), niet meer
+    # de ingelogde gebruiker. Op een CIRKEL-node is de owner nog niet gekozen → alleen 'geen trekker'.
     import re
     dd, st = _st(tmp_path)
     me = st.people.add("Ingelogd Persoon", "ingelogd@nooch.earth")
     page = cockpit2.render_node(cockpit2._Stores(dd), CIRCLE, "projects",
                                 csrf_token="TOK", username="ingelogd@nooch.earth")
     opts = re.search(r"<select name='trekker'>(.*?)</select>", page, re.DOTALL).group(1)
-    assert re.search(rf"<option value='person:{me.id}' selected>", opts)
-    # guest → geen voorselectie
-    page2 = cockpit2.render_node(cockpit2._Stores(dd), CIRCLE, "projects",
-                                 csrf_token="TOK", username="guest")
-    opts2 = re.search(r"<select name='trekker'>(.*?)</select>", page2, re.DOTALL).group(1)
-    assert "selected" not in opts2
+    assert "geen trekker" in opts and "selected" not in opts
+    assert f"person:{me.id}" not in opts     # geen me-default: de gebruiker bezet de (ongekozen) rol niet
 
 
 # ── impact-pills (scope 2): missie_impact / business_impact ──────────────────────────────────────
