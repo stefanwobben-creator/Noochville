@@ -91,6 +91,12 @@ sessie opent hiermee.
   of leeg)" nog niet in geen-sleutel / lege-respons / weggevangen-exceptie (de
   `_try_*` vangen auth/timeout weg als `None`). Bemoeilijkte de diagnose van
   09-07; een fijnere uitsplitsing zou de laddertoestand direct leesbaar maken.
+- Prep-idempotentie-guard is titel-gebaseerd: `prepare_project` slaat alleen over als er al een
+  checklist met de eigen titel `"Uitvoerplan"` bestaat (`_project_checklist`). Een mens-checklist met
+  een ANDERE titel voorkomt de prep-checklist dus niet — een puls kan er een tweede `"Uitvoerplan"`
+  naast zetten (bestaande items blijven wel intact; prep overschrijft nooit). Workaround: een
+  mens-checklist die de prep moet vervangen `"Uitvoerplan"` noemen. Structurele fix (guard op de
+  aanwezigheid van élke checklist, niet alleen die titel) is een eigen scope.
 - Mention-ontwerp: v1 bestaat (09-07). Een `@persona` op de project-wall laat die
   persona eenmalig meedenken — het antwoord ontstaat synchroon in het **cockpit-proces**
   (`_reply_to_mentions` → `_ai_reply`), als een gesprek. Bewust licht: geen daemon,
