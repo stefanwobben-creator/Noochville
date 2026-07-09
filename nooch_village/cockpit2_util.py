@@ -573,7 +573,7 @@ ul.clean li:last-child{border-bottom:none}
 .fkind.upd{background:var(--green-tint);color:var(--green-dark)}
 .fkind.cmt{background:var(--cream-2);color:var(--gray)}
 .pgrid{display:grid;grid-template-columns:1fr;gap:1rem}
-@media(min-width:620px){.pgrid{grid-template-columns:minmax(0,3fr) minmax(0,1fr)}}
+@media(min-width:620px){.pgrid{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}}
 .pmain{min-width:0}.pside{min-width:0}
 .pcard-head{display:flex;align-items:flex-start;gap:.6rem;padding:0 2.6rem .8rem 0;border-bottom:1px solid var(--border);margin-bottom:1.1rem}
 .pcard-head .titleform,.pcard-head .ptitle-ro{flex:1 1 auto;min-width:0}
@@ -622,6 +622,11 @@ ul.clean li:last-child{border-bottom:none}
 .visform,.visform label{font-size:.85rem;margin:0;display:inline}
 .fieldform{display:flex;gap:.4rem;align-items:center}
 .fieldform select{flex:1 1 auto;min-width:0}
+/* Bewerkbare Rol/Trekker in de zijbalk: label op een eigen regel (uitgelijnd) + dropdown op volle
+   breedte eronder (label+veld spannen beide dcol-kolommen). .wide = bewust besluit, geen inline style. */
+.dcol .dk.wide,.dcol .dv.wide{grid-column:1/-1}
+.pside .fieldform{flex-wrap:wrap}
+.pside .fieldform select{flex:1 1 100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .45rem;background:var(--surface)}
 .descform textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .55rem;resize:vertical}
 .desc-read{white-space:pre-wrap;line-height:1.4}
 .descedit{margin-top:.3rem}

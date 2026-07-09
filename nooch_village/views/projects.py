@@ -825,10 +825,11 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     else:
         vis_v = "Alleen voor deze cirkel" if p.get("private") else "Hele cirkel-boom"
     verzwakt_block = _verzwakt_block(p, hid, rw) if p.get("missie_impact") == "verzwakt" else ""
+    w = " wide" if rw else ""                    # bewerkbaar → label boven + dropdown op volle breedte
     details_dcol = (
         f"<div class='dcol'>"
-        f"<span class='dk'>Rol</span><span class='dv'>{rol_v}</span>"
-        f"<span class='dk'>Trekker</span><span class='dv'>{pers_v}</span>"
+        f"<span class='dk{w}'>Rol</span><span class='dv{w}'>{rol_v}</span>"
+        f"<span class='dk{w}'>Trekker</span><span class='dv{w}'>{pers_v}</span>"
         f"<span class='dk'>Aangemaakt</span><span class='dv'>{_e(_created_full(p.get('created_at')))}</span>"
         f"<span class='dk'>Zichtbaar</span><span class='dv'>{vis_v}</span>"
         f"<span class='dk'>Missie-impact</span><span class='dv'>{_impact_row(p, 'missie_impact', 'missie', _MISSIE_OPTS, hid, rw)}</span>"
