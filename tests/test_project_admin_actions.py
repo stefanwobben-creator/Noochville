@@ -241,7 +241,7 @@ def test_impact_dropdown_in_schrijfmodus_niet_read_only(tmp_path):
     pid = st.projects.create(ROLE, "Test", "human", status="queued", missie_impact="neutraal")
     rw = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
     ro = P.render_project(cockpit2._Stores(dd), pid, csrf_token="")
-    assert "proj_setimpact" in rw and "<select name='value'>" in rw     # dropdown i.p.v. pills
+    assert "proj_setimpact" in rw and "<select name='value' onchange=" in rw   # dropdown + auto-opslaan
     assert "value='neutraal' selected" in rw                            # huidige waarde voorgeselecteerd
     assert "Missie-impact" in rw and "Business-impact" in rw
     assert "proj_setimpact" not in ro          # read-only: geen bewerk-form
