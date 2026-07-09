@@ -158,9 +158,11 @@ def reset_cooldowns() -> None:
 
 # ── De vendor-treden ──────────────────────────────────────────────────────────
 
-def _try_gemini(prompt: str, *, model: str | None = None, sleep=time.sleep, max_tokens: int = 700) -> str | None:
+def _try_gemini(prompt: str, *, model: str | None = None, sleep=time.sleep, max_tokens: int = 700,
+                json_mode: bool = False) -> str | None:
     """Probeer Gemini. Eén retry bij een transiente fout (bijv. SSL-timeout).
-    Bij een rate-limit/quota → `_RateLimit` (de ladder zet de trede in cooldown en gaat door)."""
+    Bij een rate-limit/quota → `_RateLimit` (de ladder zet de trede in cooldown en gaat door).
+    json_mode=True forceert JSON-output (response_mime_type)."""
     key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not key:
         return None
@@ -170,13 +172,14 @@ def _try_gemini(prompt: str, *, model: str | None = None, sleep=time.sleep, max_
             from google import genai
             from google.genai import types as genai_types
             client = genai.Client(api_key=key)
+            _cfg = dict(max_output_tokens=max_tokens,
+                        http_options=genai_types.HttpOptions(timeout=_GEMINI_TIMEOUT_MS))
+            if json_mode:
+                _cfg["response_mime_type"] = "application/json"
             resp = client.models.generate_content(
                 model=model,
                 contents=prompt,
-                config=genai_types.GenerateContentConfig(
-                    max_output_tokens=max_tokens,
-                    http_options=genai_types.HttpOptions(timeout=_GEMINI_TIMEOUT_MS)
-                ),
+                config=genai_types.GenerateContentConfig(**_cfg),
             )
             text = (resp.text or "").strip()
             if text:
@@ -191,9 +194,11 @@ def _try_gemini(prompt: str, *, model: str | None = None, sleep=time.sleep, max_
     return None
 
 
-def _try_mistral(prompt: str, *, model: str | None = None, max_tokens: int = 700) -> str | None:
+def _try_mistral(prompt: str, *, model: str | None = None, max_tokens: int = 700,
+                 json_mode: bool = False) -> str | None:
     """Probeer Mistral via de OpenAI-compatibele chat-completions-API (dependency-vrij,
-    enkel urllib). Geen key → trede overslaan. Rate-limit/quota → `_RateLimit`."""
+    enkel urllib). Geen key → trede overslaan. Rate-limit/quota → `_RateLimit`.
+    json_mode=True forceert JSON-output (response_format; vereist 'json' in de prompt — die staat er)."""
     key = os.getenv("MISTRAL_API_KEY")
     if not key:
         return None
@@ -201,11 +206,14 @@ def _try_mistral(prompt: str, *, model: str | None = None, max_tokens: int = 700
     import json
     import urllib.error
     import urllib.request
-    body = json.dumps({
+    _payload = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": max_tokens,
-    }).encode("utf-8")
+    }
+    if json_mode:
+        _payload["response_format"] = {"type": "json_object"}
+    body = json.dumps(_payload).encode("utf-8")
     req = urllib.request.Request(
         "https://api.mistral.ai/v1/chat/completions",
         data=body,
@@ -232,9 +240,11 @@ def _try_mistral(prompt: str, *, model: str | None = None, max_tokens: int = 700
         return None
 
 
-def _try_anthropic(prompt: str, *, model: str | None = None, max_tokens: int = 700) -> str | None:
-    """Probeer Anthropic (duur; alleen als vangnet in de ladder).
-    Rate-limit/quota → `_RateLimit`."""
+def _try_anthropic(prompt: str, *, model: str | None = None, max_tokens: int = 700,
+                   json_mode: bool = False) -> str | None:
+    """Probeer Anthropic (duur; alleen als vangnet in de ladder). Rate-limit/quota → `_RateLimit`.
+    (json_mode wordt geaccepteerd maar Anthropic kent geen strikte json-modus — de robuuste parse +
+    strakke prompt-instructie vangen dit af.)"""
     key = os.getenv("ANTHROPIC_API_KEY")
     if not key:
         return None
@@ -267,7 +277,8 @@ _VENDOR_FNS = {
 }
 
 
-def _call_tier(vendor: str, model: str | None, prompt: str, max_tokens: int = 700) -> str | None:
+def _call_tier(vendor: str, model: str | None, prompt: str, max_tokens: int = 700,
+               json_mode: bool = False) -> str | None:
     name = _VENDOR_FNS.get(vendor)
     if name is None:
         log.warning("onbekende LLM-vendor in ladder: %r (trede overgeslagen)", vendor)
@@ -275,7 +286,7 @@ def _call_tier(vendor: str, model: str | None, prompt: str, max_tokens: int = 70
     fn = getattr(sys.modules[__name__], name, None)
     if fn is None:
         return None
-    return fn(prompt, model=model, max_tokens=max_tokens)
+    return fn(prompt, model=model, max_tokens=max_tokens, json_mode=json_mode)
 
 
 def _parse_ladder(raw: str) -> list[tuple[str, str | None]]:
@@ -298,15 +309,18 @@ def _ladder() -> list[tuple[str, str | None]]:
     return _parse_ladder(raw) if raw else _parse_ladder(",".join(_DEFAULT_LADDER))
 
 
-def reason(prompt: str, *, ladder: str | None = None, max_tokens: int = 700) -> str | None:
+def reason(prompt: str, *, ladder: str | None = None, max_tokens: int = 700,
+           json_mode: bool = False, return_tier: bool = False):
     """Optionele LLM-redenering via de getrapte ladder (goedkoop → duur).
 
     Loopt de treden af tot er één een antwoord geeft. Een trede zonder sleutel of in
     cooldown wordt overgeslagen; een rate-limit zet de trede in cooldown en gaat door.
     Geen werkende trede → None (de caller valt terug op zijn heuristiek).
 
-    `ladder`: optioneel een eigen ladder-string voor een specifieke (premium) skill,
-    bijv. "anthropic:claude-sonnet-4-6". Default = env LLM_LADDER of de standaardladder.
+    `ladder`: optioneel een eigen ladder-string voor een specifieke (premium) skill.
+    `json_mode`: forceer JSON-output waar de provider het ondersteunt (Gemini/Mistral).
+    `return_tier`: geef `(tekst, trede)` terug i.p.v. alleen `tekst` (bij falen `(None, None)`),
+      zodat de caller kan loggen wélke trede het antwoord leverde.
 
     Alle LLM-aanroepen van het dorp lopen door dit ene poortje en worden hier in de tijd
     uitgesmeerd (LIMITER), zodat het dorp onder de gratis limiet blijft."""
@@ -320,7 +334,7 @@ def reason(prompt: str, *, ladder: str | None = None, max_tokens: int = 700) -> 
             outcomes.append(f"{tier}=cooldown")
             continue
         try:
-            out = _call_tier(vendor, model, prompt, max_tokens=max_tokens)
+            out = _call_tier(vendor, model, prompt, max_tokens=max_tokens, json_mode=json_mode)
         except _RateLimit:
             log.info("LLM-trede %s: rate-limit (429) — cooldown + door naar volgende", tier)
             _set_cooldown(tier)
@@ -332,10 +346,10 @@ def reason(prompt: str, *, ladder: str | None = None, max_tokens: int = 700) -> 
             continue
         if out:
             log.info("LLM-trede %s: geslaagd", tier)
-            return out
+            return (out, tier) if return_tier else out
         log.info("LLM-trede %s: geen antwoord (geen sleutel of leeg) — door naar volgende", tier)
         outcomes.append(f"{tier}=leeg")
     # Alle tredes op: log expliciet waaróm (voorheen zag de caller alleen "LLM-plan mislukt").
     log.warning("LLM: alle %d trede(s) uitgeput — geen antwoord. Per trede: %s",
                 len(outcomes), "; ".join(outcomes) or "(geen tredes geconfigureerd)")
-    return None
+    return (None, None) if return_tier else None

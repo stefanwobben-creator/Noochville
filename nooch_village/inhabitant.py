@@ -842,10 +842,15 @@ class Inhabitant(threading.Thread):
 
     @staticmethod
     def _extract_json(text):
-        """Pak het eerste JSON-object uit een LLM-antwoord (robuust tegen omringende proza/markdown)."""
+        """Pak het eerste JSON-object uit een LLM-antwoord, robuust tegen markdown-fences (```json …```),
+        leidend/volgend proza en whitespace. None als er geen geldig object in zit."""
         if not text:
             return None
-        m = re.search(r"\{.*\}", text, re.DOTALL)
+        s = text.strip()
+        fence = re.search(r"```(?:json)?\s*(.*?)```", s, re.DOTALL | re.IGNORECASE)   # ```json … ``` eraf
+        if fence:
+            s = fence.group(1).strip()
+        m = re.search(r"\{.*\}", s, re.DOTALL)                                        # eerste {…}-blok
         if not m:
             return None
         try:
@@ -985,9 +990,21 @@ class Inhabitant(threading.Thread):
             "{\"deliverable\": \"...\", \"accountability\": \"...\", \"items\": [{\"text\": \"...\", "
             "\"skill\": \"skillnaam of null\", \"payload\": {}, \"reason\": \"...\"}]}"
         )
-        data = self._extract_json(llm_reason(prompt))
-        if not isinstance(data, dict) or not isinstance(data.get("items"), list) or not data["items"]:
+        raw, tier = llm_reason(prompt, json_mode=True, return_tier=True)   # JSON-mode waar de provider het kent
+        if raw is None:                                          # onderscheid: LLM gaf niets terug…
+            self.log.warning("📋 plan: LLM leverde geen antwoord (alle tredes uitgeput)")
             return None
+        data = self._extract_json(raw)
+        if not self._is_valid_plan(data):                        # …vs LLM antwoordde maar niet-parsebaar
+            self.log.info("📋 plan: antwoord van %s niet parsebaar — gerichte retry (strak JSON)", tier)
+            strak = prompt + ("\n\nBELANGRIJK: antwoord met ALLEEN het JSON-object — geen ``` fences, "
+                              "geen uitleg ervoor of erna.")
+            raw2, tier2 = llm_reason(strak, json_mode=True, return_tier=True)
+            data = self._extract_json(raw2) if raw2 is not None else None
+            if not self._is_valid_plan(data):
+                self.log.warning("📋 plan: LLM-antwoord NIET PARSEBAAR (via %s). Rauw (afgekapt): %r",
+                                 tier2 or tier, (raw2 or raw or "")[:400].replace("\n", " "))
+                return None
         for it in data["items"]:
             sk = it.get("skill")
             if sk and sk not in skills:                          # machine-check tegen de harde DNA-lijst
@@ -995,6 +1012,11 @@ class Inhabitant(threading.Thread):
                 it["skill"] = None
                 it["payload"] = {}
         return data
+
+    @staticmethod
+    def _is_valid_plan(data) -> bool:
+        """Een bruikbaar plan = dict met een niet-lege 'items'-lijst."""
+        return isinstance(data, dict) and isinstance(data.get("items"), list) and bool(data["items"])
 
     # ── DEEL B: uitvoering (bij de puls voor projecten in ACTIEF) ─────────────────────────────
     def _claim_run_complete(self, pid: str) -> None:
