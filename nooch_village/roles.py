@@ -1170,6 +1170,8 @@ class HarryHemp(Inhabitant):
             self.context.settings.get("grounding_batch_size", "1")))
         self._pending_groundings: list[dict] = []
         self.react("keyword_proposed", self._on_keyword_proposed)
+        # Autonoom: van een GOEDGEKEURD high_potential GSC-keyword een onderzoeksproject maken.
+        self.react("keyword_decided", self._on_keyword_decided)
         # Restbundel legen bij de dagelijkse hartslag, zodat niets blijft hangen.
         self.react("dag_begint", self._flush_groundings)
         # Seed-oplevingen (door enrich gesignaleerd) academisch duiden.
@@ -1445,6 +1447,46 @@ class HarryHemp(Inhabitant):
         self._pending_groundings.append({"word": word, "locale": locale, "demand": demand})
         if len(self._pending_groundings) >= self._batch_size:
             self._flush_groundings()
+
+    # ── Autonoom onderzoeksproject van een goedgekeurd high_potential GSC-keyword ──────────
+    _KW_RESEARCH_ORIGIN = "keyword_research"
+    _KW_RESEARCH_SCOPE = ("Onderzoek naar '{kw}': patenten, wetenschappelijke studies "
+                          "en culturele trend in kaart gebracht")
+
+    def _on_keyword_decided(self, event: Event) -> None:
+        """Reageer op keyword_decided: maak — fail-closed — een onderzoeksproject in TOEKOMST voor een
+        zojuist GOEDGEKEURD high_potential GSC-keyword. Herkomst komt NIET uit de event-payload (die
+        draagt geen demand) maar uit de library-evidence. Geen dubbel project (dedup over álle statussen),
+        en niet boven het open-plafond. Elke ontbrekende schakel → geen project + één debug-logregel."""
+        if event.data.get("status") != "approved":
+            return                                                   # forbidden/known/... stil negeren
+        word = (event.data.get("word") or "").strip()
+        lib = getattr(self.context, "library", None)
+        ledger = getattr(self.context, "projects", None)
+        if not word or lib is None or ledger is None:
+            return
+        # Herkomst-check uit de library: alleen GSC + high_potential. Fail-closed bij ontbreken.
+        evidence = (lib.status(word) or {}).get("evidence") or {}
+        if evidence.get("source") != "gsc" or evidence.get("bucket") != "high_potential":
+            self.log.debug("kw-research: '%s' overgeslagen — geen gsc/high_potential-evidence", word)
+            return
+        kw = word.lower()
+        projects = ledger.all()
+        # Dedup over ALLE statussen (ook DONE) op keyword-veld + origin.
+        if any(p.get("origin") == self._KW_RESEARCH_ORIGIN and (p.get("keyword") or "").lower() == kw
+               for p in projects):
+            self.log.debug("kw-research: '%s' bestaat al — geen dubbel project", word)
+            return
+        # Plafond: max N OPEN (niet-DONE) keyword_research-projecten. Vol → niet aanmaken, geen wachtrij.
+        limit = int(self.context.settings.get("keyword_research_open_limit", "5"))
+        open_n = sum(1 for p in projects
+                     if p.get("origin") == self._KW_RESEARCH_ORIGIN and p.get("status") != "done")
+        if open_n >= limit:
+            self.log.info("kw-research: plafond bereikt (%d/%d open) — '%s' niet aangemaakt", open_n, limit, word)
+            return
+        pid = ledger.create(self.id, self._KW_RESEARCH_SCOPE.format(kw=word), "role",
+                            status="future", origin=self._KW_RESEARCH_ORIGIN, keyword=word)
+        self.log.info("🔬 autonoom onderzoeksproject in TOEKOMST voor '%s' (pid=%s)", word, pid)
 
     def _flush_groundings(self, event: Event | None = None) -> None:
         """Grond de verzamelde termen. Eén term → het bestaande pad (_distill); meerdere

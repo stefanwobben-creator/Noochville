@@ -8,7 +8,10 @@ from __future__ import annotations
 import os, time, uuid
 from nooch_village.util import atomic_write_json, read_json
 
-_VALID_TRIGGERS = {"clock", "human", "noochie", "tension"}
+# MODELWIJZIGING (scope harry_hemp keyword_research): 'role' toegevoegd als geldige trigger voor een
+# project dat een ROL autonoom initieert (niet 'human'/UI, niet 'clock'/puls, niet 'tension', niet
+# 'noochie'/assistent). Eerste gebruiker: HarryHemp._on_keyword_decided.
+_VALID_TRIGGERS = {"clock", "human", "noochie", "tension", "role"}
 _TERMINAL       = {"done"}
 # Optionele impact-labels: een hulpmiddel, geen verplichting. Leeg = ongelabeld en dwingt niets af (een
 # ongelabeld project mag elke statuswissel maken). De guard weigert alleen een niet-lege ongeldige waarde.
@@ -56,7 +59,8 @@ class ProjectLedger:
                links: list[str] | None = None, parent: str | None = None,
                person: str | None = None, agent: str | None = None,
                private: bool = False, description: str = "", label: str = "",
-               missie_impact: str = "", business_impact: str = "", effort: str = "") -> str:
+               missie_impact: str = "", business_impact: str = "", effort: str = "",
+               keyword: str = "") -> str:
         if trigger not in _VALID_TRIGGERS:
             raise ValueError(f"ongeldig trigger: '{trigger}'")
         if status not in ("queued", "draft", "future"):
@@ -95,7 +99,9 @@ class ProjectLedger:
             "outcome":    None,              # geleverde eind-uitkomst (gevuld bij done)
             "hypothesis":    hypothesis or "",
             "business_case": business_case,
-            "origin":     origin or "",      # "experiment" = stolt later tot accountability bij herhaling
+            "origin":     origin or "",      # "experiment" = stolt later tot accountability bij herhaling;
+            #                                  "keyword_research" = autonoom door een rol aangemaakt
+            "keyword":    keyword or "",      # gestructureerd + opvraagbaar bronwoord (dedup-sleutel bij keyword_research)
             "executions": 0,                 # hoe vaak een rol dit experiment heeft uitgevoerd
             "formalized": False,             # al voorgesteld als accountability? (dedup)
             "comments":   [],                # stuur-opmerkingen van de mens (de rol leest ze mee)
