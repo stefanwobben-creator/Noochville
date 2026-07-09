@@ -66,6 +66,11 @@ class Inhabitant(threading.Thread):
         # Uitvoer-primitief: elke dag mijn eigen projecten verzorgen (TOEKOMST=voorbereiden,
         # ACTIEF=uitvoeren). Universeel gewired (niet in _setup_events, dat subklassen overschrijven).
         self.react("dag_begint", self._tend_projects)
+        # Versnelling: een statuswijziging naar ACTIEF (meestal een bord-drag in het losse
+        # cockpit-proces) wordt door de village-board-watch vertaald naar project_activated. Pak dan
+        # meteen ALLEEN dat ene project op, zonder op de dag-puls (dag_begint) te wachten — dat blijft
+        # het vangnet. Zie Village._poll_board voor de cross-proces-brug.
+        self.react("project_activated", self._on_project_activated)
 
     def _setup_events(self) -> None:
         """Koppel dag_begint aan _maybe_reflect. Rollen met een eigen pulsgate overschrijven dit."""
@@ -833,6 +838,18 @@ class Inhabitant(threading.Thread):
         if event.data.get("owner") != self.id:
             return
         pid = event.data.get("project_id")
+        if pid is None:
+            return
+        self._claim_run_complete(pid)
+
+    def _on_project_activated(self, event: Event) -> None:
+        """Reageer op project_activated (statuswijziging → ACTIEF, meestal een bord-drag): alleen als
+        ik de eigenaar ben. Voer UITSLUITEND dit ene project uit (niet _tend_projects over het hele
+        bord). Idempotent via last_tended; geen checklist → project_needs_preparation — beide zitten al
+        in _claim_run_complete/_execute_checklist, dus geen dubbele notes en geen stil falen."""
+        if event.data.get("owner") != self.id:
+            return
+        pid = event.data.get("pid")
         if pid is None:
             return
         self._claim_run_complete(pid)
