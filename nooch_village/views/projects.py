@@ -426,6 +426,8 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "else if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'){shut();}"
         "else{var r=f.getAttribute('data-reopen');if(r){last=r;}reopen();toast('\\u2713 opgeslagen');}});});});"
         "bd.querySelectorAll('textarea').forEach(mentionWire);"
+        # wall scrollt naar het laatste bericht: bij openen én na elke actie (reopen()→wire()), scoped op bd
+        "var ws=bd.querySelector('.wall-scroll');if(ws){requestAnimationFrame(function(){ws.scrollTop=ws.scrollHeight;});}"
         "bd.querySelectorAll('a.js-modal[data-href]').forEach(function(a){"
         "a.addEventListener('click',function(e){e.preventDefault();openCard(a.getAttribute('data-href'));});});"
         "var mems=bd.querySelector('.wo-mems');if(mems){var rows=[].slice.call(mems.querySelectorAll('.wo-mem')),sel=0;"
@@ -920,8 +922,15 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         stream.append((a.get("at") or 0, _attach_post(a, pid, hid, rw)))
     stream.sort(key=lambda t: t[0])
     opdracht_add = _opdracht_add(hid) if (not heeft_opdracht and rw) else ""
+    # De wall-container scrollt naar het laatste bericht bij openen (focus op het recentste; omhoog =
+    # historie). Zelf-meegedragen snippet (vgl. _WRAPSEL_JS) voor de standalone volle pagina; in de modal
+    # draait een <script> niet bij innerHTML, dus daar doet wire() dezelfde scroll (scoped op de container,
+    # niet het window). Korter dan de viewport → scrollTop==scrollHeight is een no-op, geen error.
+    scroll_js = ("<script>(function(){var w=document.querySelector('.wall-scroll');"
+                 "if(w){requestAnimationFrame(function(){w.scrollTop=w.scrollHeight;});}})();</script>")
     wall = (f"<div class='wall-head'><h2>Wall — inhoud &amp; gesprek</h2></div>"
-            f"{composer}{opdracht_add}{''.join(h for _, h in stream)}")
+            f"{composer}{opdracht_add}"
+            f"<div class='wall-scroll'>{''.join(h for _, h in stream)}</div>{scroll_js}")
 
     # ---- Bovenrand/labels + werkoverleg-CTA (conditioneel) ----
     labelbar = ""
