@@ -21,6 +21,8 @@ def test_md_editor_rendert_en_escapet_value():
     assert "class='editor'" in h and "class='editor-tb'" in h
     assert "<textarea name='body' rows='5'" in h
     assert "if(!window.wrapSel)" in h                          # zelfvoorzienend + guarded
+    assert "title='Vet'" in h and "title='Kop'" in h           # toolbar-knoppen aanwezig
+    assert "title='Link'" not in h and "🔗" not in h           # link-knop bewust weg (renderer blijft)
     voor_ta = h.split("</textarea>")[0]
     assert "&lt;script&gt;" in voor_ta and "<script>" not in voor_ta   # value ge-escaped in de textarea
     assert md_editor("x", help=True).count("md-help") == 1 and "md-help" not in md_editor("x")
