@@ -46,9 +46,10 @@ def test_redesign_layout(tmp_path):
     # full-width header met titel inline + …-menu (status/archiveren/verwijderen)
     assert "pcard-head" in frag and "titleform" in frag and "title-edit" in frag
     assert "cardmenu" in frag and "menu-h" in frag and "Archiveren" in frag and "Verwijderen" in frag
-    # Structuur-kantlijn: Projectdetails + Checklist-panel; opdracht bewerkbaar (proj_describe);
-    # Bijlage in de composer; LINKS = de wall (geen aparte dialoog-aside meer)
-    assert "Projectdetails" in frag and "value='proj_describe'" in frag
+    # Structuur-kantlijn: Projectdetails + Checklist-panel; de opdracht-editor is uit de UI verwijderd
+    # (geen proj_describe-form meer); Bijlage in de composer; LINKS = de wall (geen aparte dialoog-aside)
+    assert "Projectdetails" in frag and "value='proj_describe'" not in frag
+    assert "Sturen doe je via de checklist" in frag        # nieuwe composer-label
     assert "Bestand van je computer" in frag                 # bijlage-affordance in de composer
     assert "pside" in frag and "Wall — inhoud" in frag
     # geen apart 'Acties'-blok
@@ -157,24 +158,24 @@ def test_inline_edits_partieel(tmp_path):
     assert p["scope"] == "Titel 2" and p["description"] == "beschrijving"
 
 
-def test_opdracht_post_met_bewerken_toggle(tmp_path):
-    # MET opdracht: de opdracht is de eerste wall-post (fentry-opdracht) met ingeklapte bewerk-editor
+def test_opdracht_post_readonly(tmp_path):
+    # MET opdracht: de opdracht blijft de eerste wall-post (fentry-opdracht), maar READ-ONLY —
+    # de bewerk-editor is uit de UI verwijderd (opdracht-veld weg; API/prep blijven bereikbaar).
     dd, pid = _setup(tmp_path)   # description="x"
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    assert "fentry-opdracht" in frag and "✎ bewerken" in frag
-    assert "class='descedit'>" in frag            # ingeklapt (geen ' open')
-    assert "name='description'" in frag           # textarea zit achter de toggle, nog steeds aanwezig
-    assert "value='proj_describe'" in frag        # bewerken blijft proj_describe
+    assert "fentry-opdracht" in frag                              # de opdracht blijft zichtbaar
+    assert "✎ bewerken" not in frag and "descedit" not in frag    # geen editor meer
+    assert "name='description'" not in frag                       # geen opdracht-textarea in de UI
+    assert "value='proj_describe'" not in frag                    # geen UI-ingang naar proj_describe
 
 
-def test_geen_opdracht_geen_post_wel_toevoeglink(tmp_path):
-    # ZONDER opdracht: GEEN opdracht-post (geen gat), wel een subtiele '+ opdracht toevoegen'-link
+def test_geen_opdracht_geen_post_geen_toevoeglink(tmp_path):
+    # ZONDER opdracht: GEEN opdracht-post én GEEN '+ opdracht toevoegen'-link (editor uit de UI verwijderd)
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
     pid = st.projects.create("mother_earth__nooch__website_developer", "Leeg project", "human")
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    assert "fentry-opdracht" not in frag              # geen (lege) opdracht-post
-    assert "Nog geen opdracht" not in frag            # geen placeholder-tekst
-    assert "opdracht-add" in frag and "+ opdracht toevoegen" in frag
-    assert "value='proj_describe'" in frag            # toevoegen blijft proj_describe
+    assert "fentry-opdracht" not in frag                          # geen (lege) opdracht-post
+    assert "opdracht-add" not in frag and "+ opdracht toevoegen" not in frag   # geen toevoeg-ingang
+    assert "value='proj_describe'" not in frag                    # geen UI-ingang naar proj_describe
