@@ -46,26 +46,55 @@ def _trekker_html(st: _Stores, p: dict) -> str:
     return "<span class='muted'>geen trekker</span>"
 
 
-def _trekker_options(st: _Stores, sel_person="", sel_agent="") -> str:
+# Holacracy-kernrollen (governance): doen geen uitvoerend werk → geen owner van een operationeel
+# project, en dus niet in de owner-dropdown. Er is GEEN machine-vlag op het record; de seeds genereren
+# ze per cirkel als '<cirkel>__<suffix>', plus de historische wortel-facilitator 'facilitator'. We
+# herkennen ze aan hun DETERMINISTISCHE id-suffix (niet aan de vrije weergavenaam), expliciet en leesbaar.
+_CORE_ROLE_IDS = frozenset({"facilitator"})           # wortel-facilitator draagt geen cirkel-prefix
+_CORE_ROLE_SUFFIXES = ("__facilitator", "__secretary", "__circle_lead", "__circle_rep", "__shareholder")
+
+
+def _is_core_role(rid: str) -> bool:
+    """True voor een Holacracy-governance-kernrol (facilitator/secretary/lead-link/rep-link/shareholder)."""
+    return rid in _CORE_ROLE_IDS or rid.endswith(_CORE_ROLE_SUFFIXES)
+
+
+def _trekker_options(st: _Stores, owner: str, sel_person="", sel_agent="") -> str:
+    """Trekker-keuze = UITSLUITEND de fillers (mens/AI) van de owner-ROL, net als de composer
+    (_feed_author_options). Geen owner/fillers → alleen 'geen trekker'. Zo kan een trekker nooit iemand
+    zijn die de rol niet bezet (en het werk dus niet doet)."""
     out = ["<option value=''>— geen trekker —</option>"]
-    for pr in st.people.all():
-        s = " selected" if pr.id == sel_person else ""
-        out.append(f"<option value='person:{_e(pr.id)}'{s}>{_e(pr.name)}</option>")
-    for pa in st.personas.all():
-        s = " selected" if pa.id == sel_agent else ""
-        out.append(f"<option value='persona:{_e(pa.id)}'{s}>🤖 {_e(pa.name)} (AI)</option>")
+    orec = st.records.get(owner) if owner else None
+    if orec is not None:
+        for f in st.assign.fillers_of(orec.id, record=orec):
+            if f.type == "person":
+                s = " selected" if f.id == sel_person else ""
+                out.append(f"<option value='person:{_e(f.id)}'{s}>{_e(_person_name(st, f.id))}</option>")
+            else:
+                pa = st.personas.get(f.id)
+                s = " selected" if f.id == sel_agent else ""
+                out.append(f"<option value='persona:{_e(f.id)}'{s}>🤖 {_e(pa.name if pa else f.id)} (AI)</option>")
     return "".join(out)
 
 
-def _owner_options(st: _Stores, sel_owner="") -> str:
-    """Alle rollen (geen cirkels) als opties om een project naar een andere rol te verplaatsen.
-    Cirkels doen geen uitvoerend werk, dus die staan niet in de lijst."""
-    roles = [r for r in st.records.all() if not org.is_circle(r)]
+def _owner_options(st: _Stores, sel_owner="", circle: str | None = None) -> str:
+    """Rollen om een project naar te verplaatsen, GESCOPED op de cirkel waar het project hangt
+    (circle = de ouder-cirkel van de owner-rol). None = dorp-breed (bv. dangling of nog ongekoppeld).
+    Cirkels én Holacracy-kernrollen vallen weg (geen uitvoerend werk). De huidige owner blijft altijd
+    zichtbaar-en-geselecteerd, ook als hij buiten de scope of dangling is."""
+    if circle is not None:
+        pool = org.roles_of(st.records.all(), circle)          # directe rollen in de cirkel (geen subcirkels)
+    else:
+        pool = [r for r in st.records.all() if not org.is_circle(r)]
+    roles = [r for r in pool if not org.is_circle(r) and not _is_core_role(r.id)]
     roles.sort(key=lambda r: _name(r).lower())
-    out = []
-    if sel_owner and st.records.get(sel_owner) is None:
-        # huidige eigenaar bestaat niet meer (dangling) — toon dat expliciet en geselecteerd
-        out.append(f"<option value='{_e(sel_owner)}' selected>⚠ {_e(sel_owner)} (bestaat niet meer)</option>")
+    out, role_ids = [], {r.id for r in roles}
+    if sel_owner and sel_owner not in role_ids:
+        cur = st.records.get(sel_owner)
+        if cur is None:                                        # dangling: bestaat niet meer
+            out.append(f"<option value='{_e(sel_owner)}' selected>⚠ {_e(sel_owner)} (bestaat niet meer)</option>")
+        else:                                                  # geldige owner buiten de scope/kernrol → toch tonen
+            out.append(f"<option value='{_e(sel_owner)}' selected>{_e(_name(cur))}</option>")
     for r in roles:
         s = " selected" if r.id == sel_owner else ""
         out.append(f"<option value='{_e(r.id)}'{s}>{_e(_name(r))}</option>")
@@ -228,7 +257,8 @@ def _inline_add_project(st: _Stores, rec, csrf_token: str, back: str, username: 
         f"<label class='att-lbl'>Status</label><select name='col'>"
         f"<option value='actief'>Actief</option><option value='wacht'>Wacht</option>"
         f"<option value='toekomst'>Toekomst</option></select>"
-        f"<label class='att-lbl'>Trekker (persoon of AI)</label><select name='trekker'>{_trekker_options(st, sel_person=(me.id if me else ''))}</select>"
+        f"<label class='att-lbl'>Trekker (persoon of AI)</label><select name='trekker'>"
+        f"{_trekker_options(st, '' if org.is_circle(rec) else rec.id)}</select>"
         f"<div class='qadd-row'><button class='btn ok' type='submit' name='action' value='proj_add'>"
         f"Project toevoegen</button></div></form></details>")
 
@@ -759,15 +789,17 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     if rw and not is_ii:
         warn = ("<div class='dangling-warn'><span class='chip coral-solid'>"
                 "⚠ rol bestaat niet meer — kies een nieuwe</span></div>") if dangling else ""
+        # scope de owner-dropdown op de cirkel waar dit project hangt (= ouder-cirkel van de owner-rol)
+        owner_circle = orec.parent if orec else None
         rol_v = (f"{warn}<form method='post' action='/action' class='fieldform'>{hid()}"
-                 f"<select name='owner'>{_owner_options(st, owner)}</select>"
+                 f"<select name='owner'>{_owner_options(st, owner, circle=owner_circle)}</select>"
                  f"<button class='btn ok sm' type='submit' name='action' value='proj_setowner'>opslaan</button></form>")
     else:
         rol_v = (f"<a href='/node?id={_e(owner)}'>{_e(rol_naam)}</a>" if orec else _e(rol_naam))
     if rw:
         pers_v = (f"<form method='post' action='/action' class='fieldform'>{hid()}"
                   f"<select name='trekker'>"
-                  f"{_trekker_options(st, p.get('person') or '', p.get('agent') or '')}</select>"
+                  f"{_trekker_options(st, owner, p.get('person') or '', p.get('agent') or '')}</select>"
                   f"<button class='btn ok sm' type='submit' name='action' value='proj_settrekker'>opslaan</button></form>")
     elif p.get("agent"):
         pa = st.personas.get(p["agent"])
