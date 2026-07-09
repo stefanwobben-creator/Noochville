@@ -144,14 +144,16 @@ def _md(text: str) -> str:
     return html[:-4] if html.endswith("<br>") else html
 
 
-# De guarded wrapSel-JS reist mee met de editor: één definitie op de pagina, ongeacht hoeveel
-# editors erop staan (`if(!window.wrapSel)` → nooit dubbel gedefinieerd), en werkt ook op pagina's
-# die _modal_html niet laden. Wrap de selectie in de textarea met de opmaak-markers.
-_WRAPSEL_JS = ("<script>if(!window.wrapSel){window.wrapSel=function(btn,pre,post){"
-               "var f=btn.closest('form');var t=f&&f.querySelector('textarea');if(!t)return;"
-               "var s=t.selectionStart,e=t.selectionEnd,v=t.value;"
-               "t.value=v.slice(0,s)+pre+v.slice(s,e)+post+v.slice(e);t.focus();"
-               "t.selectionStart=s+pre.length;t.selectionEnd=e+pre.length;};}</script>")
+# De guarded wrapSel-definitie: één authoritatieve bron (`_WRAPSEL_DEF`), gebruikt door zowel de
+# meegedragen editor-<script> (`_WRAPSEL_JS`) als de modal-controller (`_modal_html`). `if(!window.wrapSel)`
+# → nooit dubbel gedefinieerd, ongeacht hoeveel editors of dat de modal 'm óók definieert. De modal heeft
+# een eigen kopie nodig want een <script> in een fragment draait niet bij innerHTML (zie _modal_html).
+_WRAPSEL_DEF = ("if(!window.wrapSel){window.wrapSel=function(btn,pre,post){"
+                "var f=btn.closest('form');var t=f&&f.querySelector('textarea');if(!t)return;"
+                "var s=t.selectionStart,e=t.selectionEnd,v=t.value;"
+                "t.value=v.slice(0,s)+pre+v.slice(s,e)+post+v.slice(e);t.focus();"
+                "t.selectionStart=s+pre.length;t.selectionEnd=e+pre.length;};}")
+_WRAPSEL_JS = f"<script>{_WRAPSEL_DEF}</script>"
 
 
 def md_editor(name: str, value: str = "", rows: int = 6,

@@ -32,7 +32,9 @@ def test_editor_werkt_op_pagina_zonder_modal_html(tmp_path):
     rec = st.records.get(CIRCLE)
     tab = render_backlog_tab(st, rec, csrf="t", username="x@y.nl")
     assert "class='editor'" in tab and "if(!window.wrapSel)" in tab
-    assert "window.wrapSel=" not in _modal_html()             # de modal definieert 'm niet meer
+    # de modal definieert wrapSel nu WÉL (guarded): een <script> in een fragment draait niet bij
+    # innerHTML, dus zonder deze definitie deden de WYSIWYG-knoppen in de modal niets.
+    assert "window.wrapSel=" in _modal_html() and "if(!window.wrapSel)" in _modal_html()
 
 
 def test_wrapsel_nooit_dubbel_gedefinieerd():
