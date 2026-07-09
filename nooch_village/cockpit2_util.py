@@ -159,7 +159,8 @@ _WRAPSEL_JS = f"<script>{_WRAPSEL_DEF}</script>"
 def md_editor(name: str, value: str = "", rows: int = 6,
               placeholder: str = "Body (markdown)…", help: bool = False) -> str:
     """De GEDEELDE opmaak-editor (markdown → veilige `_md`-weergave): `.editor`-kaart met mini-toolbar
-    (vet/cursief/doorhalen/lijst/kop/link via wrapSel) boven een textarea. Zelfvoorzienend — draagt de
+    (vet/cursief/doorhalen/lijst/kop via wrapSel) boven een textarea. De link-knop is bewust weg; de
+    renderer ondersteunt [tekst](url) nog wél (handmatig typen of plakken). Zelfvoorzienend — draagt de
     guarded wrapSel-JS zelf mee, zodat de editor op ELKE pagina werkt (ook zonder _modal_html) en een
     view 'm niet kan vergeten. `value` wordt hier ge-escaped; callers geven de RUWE waarde door.
     `help=True` toont een inklapbaar opmaak-spiekbriefje (bestaande `.tb-help`/`.md-help`-klassen)."""
@@ -173,7 +174,6 @@ def md_editor(name: str, value: str = "", rows: int = 6,
             f"<span class='tb-sep'></span>"
             f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'- ','')\" title='Lijst'>•</button>"
             f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'## ','')\" title='Kop'>H</button>"
-            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'[','](url)')\" title='Link'>🔗</button>"
             f"{hlp}</div>"
             f"<textarea name='{_e(name)}' rows='{rows}' placeholder='{_e(placeholder)}'>{_e(value)}</textarea>"
             f"</div>{_WRAPSEL_JS}")
