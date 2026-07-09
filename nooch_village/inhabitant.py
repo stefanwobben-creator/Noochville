@@ -990,7 +990,9 @@ class Inhabitant(threading.Thread):
             "{\"deliverable\": \"...\", \"accountability\": \"...\", \"items\": [{\"text\": \"...\", "
             "\"skill\": \"skillnaam of null\", \"payload\": {}, \"reason\": \"...\"}]}"
         )
-        raw, tier = llm_reason(prompt, json_mode=True, return_tier=True)   # JSON-mode waar de provider het kent
+        # Ruim token-budget: een verbose trede (bv. mistral) kapt het plan-JSON anders middenin af →
+        # onparsebaar. 1500 tokens is genoeg voor 2-5 items met payloads en langere velden.
+        raw, tier = llm_reason(prompt, json_mode=True, return_tier=True, max_tokens=1500)
         if raw is None:                                          # onderscheid: LLM gaf niets terug…
             self.log.warning("📋 plan: LLM leverde geen antwoord (alle tredes uitgeput)")
             return None
@@ -998,8 +1000,8 @@ class Inhabitant(threading.Thread):
         if not self._is_valid_plan(data):                        # …vs LLM antwoordde maar niet-parsebaar
             self.log.info("📋 plan: antwoord van %s niet parsebaar — gerichte retry (strak JSON)", tier)
             strak = prompt + ("\n\nBELANGRIJK: antwoord met ALLEEN het JSON-object — geen ``` fences, "
-                              "geen uitleg ervoor of erna.")
-            raw2, tier2 = llm_reason(strak, json_mode=True, return_tier=True)
+                              "geen uitleg ervoor of erna. Houd de tekst-, reason- en deliverable-velden kort.")
+            raw2, tier2 = llm_reason(strak, json_mode=True, return_tier=True, max_tokens=1500)
             data = self._extract_json(raw2) if raw2 is not None else None
             if not self._is_valid_plan(data):
                 self.log.warning("📋 plan: LLM-antwoord NIET PARSEBAAR (via %s). Rauw (afgekapt): %r",
