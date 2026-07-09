@@ -108,3 +108,11 @@ sessie opent hiermee.
   **zware variant**: een mention als **inbox-job in de daemon**, voor wanneer een mention
   wérk moet worden (een toegewezen taak die áf moet) in plaats van een reactie. Dat is de
   postbus-route (Inbox + matchmaker), niet de wall — pas bouwen als de behoefte er is.
+- Policy-body-cap (4000 tekens) kapt STIL af: `AttachmentStore.add`/`update`
+  doen `body.strip()[:4000]` zonder waarschuwing. Gevolg gezien (09-07): de
+  Tone-of-Voice-policy én de Design-System-policy stonden op exact 4000 en
+  waren onopgemerkt afgekapt (ToV miste de Contrast-Principle-check + de 5e
+  position statement; Design System is nog afgekapt — apart besluit). Minimale
+  fix later: bij overschrijding WEIGEREN of WAARSCHUWEN i.p.v. stil trunceren;
+  overweeg de cap te verhogen. Tot dan: lange policies splitsen (zoals ToV →
+  Tone of Voice + Position Statements) en na opslaan de body-lengte checken.
