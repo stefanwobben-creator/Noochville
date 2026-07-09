@@ -449,6 +449,13 @@ ul.clean li:last-child{border-bottom:none}
 .fname{font-weight:700}
 .frole{color:var(--subtle);font-weight:400;font-size:.85rem}
 .fbubble{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.5rem .65rem}
+/* wall-post-accenten (scope 1): opdracht (groen) en bijlage (grijs) onderscheidbaar via linker rand.
+   Bewuste afwijking van het prototype: deliverable-notes krijgen GEEN eigen accent — ze zijn in het
+   huidige log-schema niet te onderscheiden van gewone rol-updates/faalnotities (add_role_message,
+   {who:rol}). Een 'Deliverable'-badge vereist een schema-tag = datawijziging → scope 2. */
+.fentry-opdracht .fbubble{border-left:3px solid var(--green);padding-top:.55rem}
+.fentry-attach .fbubble{border-left:3px solid var(--border)}
+.fkicker{display:inline-block;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin-bottom:.3rem}
 .fbul{margin:.2rem 0 .2rem 1.1rem}
 .ffoot{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:.25rem}
 .ffoot-l{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;min-width:0}
@@ -803,6 +810,13 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .psec-h{display:flex;align-items:center;gap:.4rem;color:var(--subtle);font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:.45rem}
 .psec-h svg{width:14px;height:14px;opacity:.75;flex:0 0 auto}
 .pside .psec{background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.65rem .75rem;margin-bottom:.8rem}
+/* structuur-kantlijn blijft in beeld tijdens scrollen door de wall (scope 1) */
+@media(min-width:620px){.pside.psticky{position:sticky;top:.8rem;align-self:start}}
+.wall-head{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.6rem}
+.wall-head h2{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin:0;font-weight:700}
+.wall-note{font-size:.72rem;color:var(--subtle)}
+.c2-main.pdetail{max-width:1120px}
+.dangling-warn{margin-bottom:.3rem}
 .smeta{margin:0}
 .smeta dt{font-size:.62rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:700;margin-top:.55rem}
 .smeta dt:first-child{margin-top:0}
@@ -839,6 +853,19 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .ck-item .dellink{margin-left:auto;opacity:0}
 .ck-item:hover .dellink{opacity:1}
 .ck-done{text-decoration:line-through;color:var(--muted)}
+/* checklist-item-states (scope 1): ✓ done · uitvoerbaar ⚠ payload-onvolledig ○ geen-skill.
+   ⚠ (coral) en ○ (grijs/sand) MOETEN visueel verschillen — ze vragen om verschillende actie. */
+.ck-item{align-items:flex-start}
+.ck-item .ck-box{margin-top:.1rem}
+.ck-txt{flex:1 1 auto;min-width:0}
+.ck-meta{display:block;margin-top:.15rem;font-size:.7rem;line-height:1.5}
+.ck-skill{font-family:ui-monospace,Menlo,monospace;font-size:.66rem;color:var(--green-dark);background:var(--green-tint);padding:.02rem .35rem;border-radius:5px}
+.ck-payload{font-family:ui-monospace,Menlo,monospace;font-size:.64rem;color:var(--subtle)}
+.ck-warn{font-size:.68rem;color:var(--coral);background:var(--error-tint);padding:.02rem .35rem;border-radius:5px}
+.ck-noskill{font-size:.68rem;color:var(--gray);background:var(--sand);padding:.02rem .35rem;border-radius:5px}
+.ck-box.b-warn{border-color:var(--coral)}
+.ck-box.b-noskill{border-color:var(--subtle);border-style:dashed}
+.ck-item form{display:contents}
 .attcard{display:flex;align-items:center;gap:.55rem;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .6rem;margin-bottom:.4rem}
 .att-ic{flex:0 0 auto;color:var(--gray);display:inline-flex}
 .att-ic svg{width:16px;height:16px}
