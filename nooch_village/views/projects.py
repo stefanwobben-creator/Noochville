@@ -927,14 +927,20 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                    f"<input name='title' placeholder='Naam (optioneel)'>"
                    f"<button class='btn ok sm' type='submit' name='action' value='attach_add'>Toevoegen</button></form>"
                    f"</div></details>")
-        composer = (f"<form method='post' action='/action' class='pf comp-form'>{hid()}"
+        # De toolbar-rij (bijlage + Plaatsen) staat BUITEN de composer-form. Anders zit het upload-form
+        # (class='filepost', multipart) genest ín comp-form — ongeldige HTML → de browser dropt de inner
+        # form → de File wordt niet als multipart verstuurd (form-encoded, bestand valt weg). Plaatsen
+        # submit de composer via het form=-attribuut; de bijlage is nu een eigen sibling-form.
+        _cfid = f"cf-{_e(pid)}"
+        composer = (f"<form id='{_cfid}' method='post' action='/action' class='pf comp-form'>{hid()}"
                     f"<input type='hidden' name='author' value='human:'>"
                     f"<label class='att-lbl'>Gesprek — @naam vraagt een inwoner om mee te denken. Sturen doe je via de checklist.</label>"
                     f"{md_editor('text', rows=2, placeholder='Schrijf een reactie…', help=True)}"
+                    f"</form>"
                     f"<div class='comp-row'>"
-                    f"{bijlage}"                                    # bijlage links op de toolbar-rij…
-                    f"<button class='btn ok sm' type='submit' name='action' value='proj_feed'>Plaatsen</button>"
-                    f"</div></form>")                               # …Plaatsen rechts (via .comp-attach margin-right:auto)
+                    f"{bijlage}"                                    # bijlage links op de toolbar-rij (eigen form)…
+                    f"<button class='btn ok sm' type='submit' form='{_cfid}' name='action' value='proj_feed'>Plaatsen</button>"
+                    f"</div>")                                      # …Plaatsen rechts (via .comp-attach margin-right:auto)
         ai = _owner_ai(st, orec)
         if ai is not None:
             composer += (f"<form method='post' action='/action' class='ai-ask'>{hid()}"
