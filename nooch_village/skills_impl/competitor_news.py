@@ -85,7 +85,8 @@ class CompetitorNewsSkill(Skill):
     required_env = ()              # keyless (Google News RSS)
     description = ("Monitort strategisch marktnieuws over directe duurzame concurrenten via "
                    "Google News RSS en schrijft een Markdown field report. Fail-closed.")
-    input_schema = "brands: list[str] (optioneel), days: int (optioneel, default 7)"
+    input_schema = "brands: list[str] (verplicht — concurrenten om nieuws over te zoeken). optioneel: days: int (default 7)"
+    required_payload = ("brands",)
     output_schema = "ok: bool, path: str, items: list[dict], total: int, brands: list[str] | error"
 
     def _brands(self, payload: dict, context) -> list[str]:

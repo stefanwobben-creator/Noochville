@@ -73,6 +73,7 @@ def trend_change_pct(trend) -> float | None:
 class KeywordsEverywhereSkill(DataSourceSkill):
     name = "keywords_everywhere"
     input_schema = "kw: list[str] (keywords, max 100 per call). optioneel: country: str (leeg=global), currency, data_source"
+    required_payload = ("kw",)
     output_schema = "lijst: keywords: dict{keyword: {vol, cpc, competition, trend}} | error"
     SOURCE = "keywordseverywhere"
     # Flux-bron: zoekvolume is een niveau (geen cumulatieve stand) → de tegel toont de waarde/lijn zelf.

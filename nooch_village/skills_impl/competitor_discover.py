@@ -65,6 +65,7 @@ class CompetitorDiscoverSkill(Skill):
     description = ("Vindt gids-artikelen via SerpAPI (echte URLs), leest ze, en laat de LLM "
                    "de genoemde merknamen extraheren als kandidaat-concurrenten. Fail-closed.")
     input_schema = "brands: list[str] (bekende merken, worden gefilterd), limit: int (gidsen)"
+    required_payload = ("brands",)
     output_schema = "ok: bool, candidates: list[{brand, article, link}] | error"
 
     def run(self, payload: dict, context=None) -> dict:

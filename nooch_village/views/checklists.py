@@ -141,7 +141,9 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool) -> str:
                    f"value='check_toggle'>{'✓' if d else ''}</button></form>") if rw else ("☑" if d else "☐")
             rm = (f"<form method='post' action='/action' style='display:inline'>{hid()}{clitem}"
                   f"<button class='dellink' type='submit' name='action' value='check_remove'>✕</button></form>") if rw else ""
-            rows += f"<li class='ck-item'>{chk}<span class='{'ck-done' if d else ''}'>{_e(it['text'])}</span>{rm}</li>"
+            warn = (f" <span class='muted'>⚠ {_e(it.get('reason') or 'onvolledige payload')}</span>"
+                    if it.get("payload_ok") is False else "")   # fail-fast: zichtbaar bij de keuring in TOEKOMST
+            rows += f"<li class='ck-item'>{chk}<span class='{'ck-done' if d else ''}'>{_e(it['text'])}</span>{warn}{rm}</li>"
         add = (f"<form method='post' action='/action' class='ckadd'>{hid()}"
                f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
                f"<input name='text' placeholder='item toevoegen…'>"

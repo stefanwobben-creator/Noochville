@@ -45,6 +45,12 @@ class Skill(ABC):
     Zie run()-docstring voor details.
     """
 
+    required_payload: tuple[str, ...] = ()
+    """De payload-sleutels die VERPLICHT (aanwezig én niet-leeg) moeten zijn om zinvol te draaien —
+    machine-leesbaar, zodat het uitvoer-primitief een onvolledige checklist-payload fail-fast herkent bij
+    het opstellen (i.p.v. de skill leeg te laten draaien). Optionele velden (limit, days, country) staan
+    hier NIET in. Leeg = geen validatie mogelijk (fail-soft: item blijft uitvoerbaar)."""
+
     def available_metrics(self, context=None) -> list[str]:
         """De ruwe veldsleutels die deze skill oplevert (voor het catalogus-koppelscherm). Default
         leeg: een skill die géén meetbare velden declareert, levert niets te koppelen. Geen API-call.

@@ -42,6 +42,7 @@ class LinkbuildingTargetsSkill(Skill):
     description = ("Spot gidsen/lijstjes over duurzame sneakers (SerpAPI, echte URLs), leest ze, "
                    "en prioriteert op 'noemt concurrenten maar niet Nooch'. Fail-closed.")
     input_schema = "brands: list[str] (concurrenten, voor prioritering), limit: int"
+    required_payload = ("brands",)
     output_schema = "ok: bool, targets: list[{title, link, source, priority, mentions}] | error"
 
     def run(self, payload: dict, context=None) -> dict:

@@ -15,6 +15,7 @@ class OnderzoeksvraagSkill(Skill):
     side_effect_free = True
     description = "Leidt uit een bevestigde trend-kaart één onderzoeksvraag af naar de waaróm erachter."
     input_schema = "payload['kaart'] = {'word': str, 'claim': str} — de trend-kaart."
+    required_payload = ("kaart",)
     output_schema = "{'vraag': str|None} — één onderzoekbare vraag, of None (fail-closed)."
 
     def run(self, payload: dict, context) -> dict:

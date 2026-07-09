@@ -16,7 +16,7 @@ TODAY = "2026-07-08"
 
 class _KwSkill(Skill):
     name = "keywords_everywhere"; description = "keyword-volumes"; input_schema = "kw: list[str] (keywords)"
-    cost = "credits"
+    cost = "credits"; required_payload = ("kw",); last = None
     def run(self, payload, context):
         self.last = payload
         return {"keywords": {"barefoot shoes": {"vol": 1000, "cpc": 0.5, "competition": 0.3}}}
@@ -24,7 +24,7 @@ class _KwSkill(Skill):
 
 class _BrandSkill(Skill):
     name = "competitor_discover"; description = "concurrenten"; input_schema = "brands: list[str], limit: int"
-    cost = "credits"
+    cost = "credits"; required_payload = ("brands",); last = None
     def run(self, payload, context):
         self.last = payload
         return {"ok": True, "candidates": [{"brand": "Vivobarefoot", "article": "launch", "link": "http://x"}]}
@@ -32,7 +32,7 @@ class _BrandSkill(Skill):
 
 class _TermSkill(Skill):
     name = "openalex_evidence"; description = "studies"; input_schema = "term: str"
-    cost = "rate_limited"
+    cost = "rate_limited"; required_payload = ("term",); last = None
     def run(self, payload, context):
         self.last = payload
         return {"total": 2, "hits": [{"title": "Study on barefoot", "year": 2021, "citations": 7,
@@ -206,3 +206,70 @@ def test_prep_geen_antwoord_onderscheiden_van_niet_parsebaar(tmp_path, ledger, m
         inh.prepare_project(pid)
     msgs = " ".join(r.getMessage() for r in caplog.records)
     assert "geen antwoord" in msgs and "PARSEBAAR" not in msgs       # 'geen antwoord' ≠ 'niet parsebaar'
+
+
+# ── Payload-validatie tegen required_payload (fail-fast bij prepare, niet fail-silent bij uitvoering) ──
+def _mock_plan(monkeypatch, plan_json):
+    import nooch_village.llm as llm
+    monkeypatch.setattr(llm, "reason",
+                        lambda *a, **k: (plan_json, "mock") if k.get("return_tier") else plan_json)
+
+
+def test_missing_required_helper(tmp_path, ledger):
+    inh = _inhabitant(tmp_path, ledger, [_BrandSkill(), _KwSkill()], ["competitor_discover", "keywords_everywhere"])
+    assert inh._missing_required("competitor_discover", {"limit": 20}) == ["brands"]     # verplicht ontbreekt
+    assert inh._missing_required("competitor_discover", {"brands": ["x"]}) == []         # compleet
+    assert inh._missing_required("competitor_discover", {"brands": []}) == ["brands"]    # leeg = ontbrekend
+    assert inh._missing_required("onbekende_skill", {}) == []                            # onbekend → fail-soft
+
+
+def test_a_volledige_payload_uitvoerbaar(tmp_path, ledger, monkeypatch):
+    _mock_plan(monkeypatch, '{"deliverable":"d","items":[{"text":"volumes","skill":"keywords_everywhere",'
+                            '"payload":{"kw":["barefoot shoes"]},"reason":""}]}')
+    inh = _inhabitant(tmp_path, ledger, [_KwSkill()], ["keywords_everywhere"])
+    pid = ledger.create("rol", "doel", "human", status="future"); inh.prepare_project(pid)
+    it = inh._project_checklist(ledger.get(pid))["items"][0]
+    assert it.get("payload_ok") is not False and it["skill"] == "keywords_everywhere"   # valide, uitvoerbaar
+
+
+def test_b_competitor_zonder_brands_gemarkeerd_en_niet_uitgevoerd(tmp_path, ledger, monkeypatch):
+    br = _BrandSkill()
+    _mock_plan(monkeypatch, '{"deliverable":"d","items":[{"text":"concurrenten","skill":"competitor_discover",'
+                            '"payload":{"limit":20},"reason":""}]}')
+    inh = _inhabitant(tmp_path, ledger, [br], ["competitor_discover"])
+    pid = ledger.create("rol", "doel", "human", status="future"); inh.prepare_project(pid)
+    it = inh._project_checklist(ledger.get(pid))["items"][0]
+    assert it["payload_ok"] is False and "brands" in it["reason"]         # gemarkeerd + reden
+    ledger.start(pid); inh._execute_checklist(ledger.get(pid), TODAY)     # uitvoering slaat het over
+    assert br.last is None                                                # skill NIET aangeroepen
+    assert inh._project_checklist(ledger.get(pid))["items"][0]["done"] is False   # blijft open
+
+
+def test_c_keywords_zonder_kw_gemarkeerd(tmp_path, ledger, monkeypatch):
+    _mock_plan(monkeypatch, '{"deliverable":"d","items":[{"text":"volumes","skill":"keywords_everywhere",'
+                            '"payload":{"country":"global"},"reason":""}]}')
+    inh = _inhabitant(tmp_path, ledger, [_KwSkill()], ["keywords_everywhere"])
+    pid = ledger.create("rol", "doel", "human", status="future"); inh.prepare_project(pid)
+    it = inh._project_checklist(ledger.get(pid))["items"][0]
+    assert it["payload_ok"] is False and "kw" in it["reason"]
+
+
+def test_d_optioneel_veld_ontbreekt_valide(tmp_path, ledger, monkeypatch):
+    # brands aanwezig, limit (optioneel) ontbreekt → valide
+    _mock_plan(monkeypatch, '{"deliverable":"d","items":[{"text":"concurrenten","skill":"competitor_discover",'
+                            '"payload":{"brands":["Nooch"]},"reason":""}]}')
+    inh = _inhabitant(tmp_path, ledger, [_BrandSkill()], ["competitor_discover"])
+    pid = ledger.create("rol", "doel", "human", status="future"); inh.prepare_project(pid)
+    it = inh._project_checklist(ledger.get(pid))["items"][0]
+    assert it.get("payload_ok") is not False                              # optioneel veld mag ontbreken
+
+
+def test_e_skill_zonder_required_payload_failsoft(tmp_path, ledger, monkeypatch):
+    class _NoReq(Skill):
+        name = "mystery"; description = "geen required_payload"; cost = "free"
+        def run(self, payload, context): return {"text": "ok"}
+    _mock_plan(monkeypatch, '{"deliverable":"d","items":[{"text":"t","skill":"mystery","payload":{},"reason":""}]}')
+    inh = _inhabitant(tmp_path, ledger, [_NoReq()], ["mystery"])
+    pid = ledger.create("rol", "doel", "human", status="future"); inh.prepare_project(pid)   # mag niet crashen
+    it = inh._project_checklist(ledger.get(pid))["items"][0]
+    assert it.get("payload_ok") is not False                              # geen validatie mogelijk → uitvoerbaar

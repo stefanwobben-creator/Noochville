@@ -37,6 +37,7 @@ _AUTHOR_SEARCH = "https://api.semanticscholar.org/graph/v1/author/search"
 class SemanticScholarSkill(DataSourceSkill):
     name = "semscholar_tldr"
     input_schema = "term: str (zoekterm). optioneel: limit: int, locale: str"
+    required_payload = ("term",)
     output_schema = "lijst: total: int, hits: list[{title, year, citations, tldr, abstract}] | no_data | error"
     SOURCE = "semanticscholar"
     # Snapshot-bron (cumulatieve auteur-tellers, groeien traag) → maandelijks meten. De tegel toont de

@@ -269,7 +269,7 @@ class ProjectLedger:
 
     def check_add(self, pid: str, clid: str, text: str, *,
                   skill: str | None = None, query: str = "", reason: str = "",
-                  payload: dict | None = None) -> bool:
+                  payload: dict | None = None, payload_ok: bool = True) -> bool:
         p = self._projects.get(pid)
         text = (text or "").strip()
         cl = self._checklist(p, clid) if p else None
@@ -280,7 +280,9 @@ class ProjectLedger:
         if isinstance(payload, dict) and payload:
             item["payload"] = payload                # de LLM-gevormde input, in de vorm van input_schema
         if query:  item["query"]  = query[:200]      # legacy back-compat (→ {term: query} bij uitvoer)
-        if reason: item["reason"] = reason[:300]     # 'geen skill' → waarom (blijft open)
+        if reason: item["reason"] = reason[:300]     # 'geen skill' of 'payload onvolledig' → waarom (blijft open)
+        if not payload_ok:
+            item["payload_ok"] = False               # payload mist een verplicht veld → niet uitvoerbaar
         cl.setdefault("items", []).append(item)
         self._touch(p); self._save()
         return True
