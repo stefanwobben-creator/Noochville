@@ -465,12 +465,14 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "if(f.classList.contains('filepost')){opts={method:'POST',body:new FormData(f)};}"
         "else{var data=new URLSearchParams(new FormData(f));"
         "if(e.submitter&&e.submitter.name){data.set(e.submitter.name,e.submitter.value);}opts={method:'POST',body:data};}"
-        "fetch('/action',opts).then(function(){"
+        "fetch('/action',opts).then(function(resp){"
+        # response.ok-poort (generiek voor ELKE modal-actie, incl. de auto-opslaan-controls): een 413
+        # (bestand te groot) of elke andere niet-2xx toont de server-melding en NOOIT '✓ opgeslagen'.
+        "if(!resp.ok){resp.text().then(function(t){reopen();toast('\\u26a0 '+(((t||'').trim()||'niet opgeslagen').slice(0,90)));});return;}"
         "if(act==='wo_close'||act==='rov2_end'){confetti();setTimeout(shut,700);}"
         "else if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'){shut();}"
-        "else{var r=f.getAttribute('data-reopen');if(r){last=r;}reopen();toast('\\u2713 opgeslagen');}})"
-        # foutpad: geen stille mislukking — melding + best-effort revert door het fragment te herladen
-        # (server-staat is gezaghebbend, dus een niet-opgeslagen waarde springt terug).
+        "else{var dr=f.getAttribute('data-reopen');if(dr){last=dr;}reopen();toast('\\u2713 opgeslagen');}})"
+        # netwerk-foutpad (geen response): melding + best-effort revert door het fragment te herladen.
         ".catch(function(){reopen();toast('\\u26a0 niet opgeslagen');});});});"
         "bd.querySelectorAll('textarea').forEach(mentionWire);"
         # wall scrollt naar het laatste bericht: bij openen én na elke actie (reopen()→wire()), scoped op bd
