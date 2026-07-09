@@ -1076,6 +1076,11 @@ class Inhabitant(threading.Thread):
         current = ledger.get(pid)
         if outcome is not None and current and current["status"] == "running":
             ledger.complete(pid, outcome)
+            # Levenscyclus-event: de ENIGE autonome DONE-route (de guard hierboven is de idempotentie —
+            # een tweede passage op een al-done project valt buiten 'status==running' en vuurt niets).
+            # Sleutel heet project_id (conform project_queued/needs_preparation; NIET 'pid').
+            self.bus.publish(Event("project_completed",
+                                   {"project_id": pid, "owner": self.id, "outcome": outcome}, self.id))
             self.log.info("✅ project '%s' afgerond (outcome=%s)", pid, outcome)
         else:
             self.log.info("⏸ project '%s' nog niet af (status=%s)", pid, current and current["status"])

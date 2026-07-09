@@ -73,3 +73,11 @@ sessie opent hiermee.
   Voor een standalone "afwezig"-status op de members-tab een apart
   veld nodig. Keuze: per cirkel+persoon (data/availability.json) of
   per persoon (in people.json).
+- Deliverable-notes in `p["log"]` hebben geen id (alleen `add_feed_entry`
+  heeft er een). Consumenten verwijzen daarom op `project_id` en lezen de
+  wall integraal. Zodra een consument één specifieke note moet aanwijzen:
+  het id-patroon van `add_feed_entry` overnemen voor `add_role_message`.
+- `project_completed` dekt alleen autonome afronding (via
+  `Inhabitant._claim_run_complete`); mens-DONE via `cockpit2._act_proj_done`
+  is een apart proces en bereikt de in-memory bus niet. Heroverwegen bij de
+  netwerk-bus-naad.
