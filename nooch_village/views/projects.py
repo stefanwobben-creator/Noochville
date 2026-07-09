@@ -899,8 +899,9 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                     f"<label class='att-lbl'>Gesprek — zichtbaar voor iedereen, stuurt de planning niet</label>"
                     f"{md_editor('text', rows=2, placeholder='Schrijf een reactie…', help=True)}"
                     f"<div class='comp-row'>"
+                    f"{bijlage}"                                    # bijlage links op de toolbar-rij…
                     f"<button class='btn ok sm' type='submit' name='action' value='proj_feed'>Plaatsen</button>"
-                    f"{bijlage}</div></form>")
+                    f"</div></form>")                               # …Plaatsen rechts (via .comp-attach margin-right:auto)
         ai = _owner_ai(st, orec)
         if ai is not None:
             composer += (f"<form method='post' action='/action' class='ai-ask'>{hid()}"
