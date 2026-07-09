@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from nooch_village.web_base import _e, _page, _banner
 from nooch_village.cockpit2_util import (
-    _name, _initials, _age, _fmt_due, _created_full, md_editor, _md,
+    _name, _initials, _age, _fmt_due, _created_full, md_editor, _md, _WRAPSEL_DEF,
     _link_host, _psec, _person_name, _stamp,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK,
     _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET,
@@ -345,7 +345,10 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "<script>(function(){"
         "var ov=document.getElementById('ovl'),bd=document.getElementById('ovl-body'),last=null,dirty=false,lkRoom=null,lkCircle=null;"
         f"window.__mentions={mentions_json};"
-        # wrapSel leeft nu in de gedeelde md_editor (guarded); niet meer hier dubbel definiëren.
+        # wrapSel MOET hier (guarded) staan: de modal voegt fragmenten in via innerHTML, en een <script>
+        # in een fragment (zoals de meegedragen editor-JS) draait dan niet — zónder deze definitie doen
+        # de WYSIWYG-knoppen in de modal niets. Guarded → geen dubbele definitie op de volle pagina.
+        f"{_WRAPSEL_DEF}"
         "function mentionWire(t){var box=null;function close(){if(box){box.remove();box=null;}}"
         "t.addEventListener('input',function(){var v=t.value.slice(0,t.selectionStart);"
         "var m=v.match(/@([^@\\n]*)$/);close();if(!m)return;var q=m[1].toLowerCase();"
