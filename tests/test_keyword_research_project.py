@@ -5,6 +5,7 @@ niet uit de event-payload; fail-closed bij ontbrekend record/evidence; dedup ove
 (ook DONE) op keyword+origin; open-plafond uit config. Thread-vrij: de handler wordt direct aangeroepen.
 """
 from __future__ import annotations
+import logging
 from types import SimpleNamespace
 
 from nooch_village.roles import HarryHemp
@@ -101,3 +102,36 @@ def test_open_plafond(tmp_path):
     ledger.get(ps[0]["id"])["status"] = "done"; ledger._save()
     harry._on_keyword_decided(_decided("woord twee"))
     assert len(_kw_projects(ledger)) == 2
+
+
+# ── Branded-filter: merkqueries blijven approved in de library maar spawnen geen project ──
+def test_branded_woord_geen_project(tmp_path, caplog):
+    harry, lib, ledger = _make(tmp_path)                       # default branded_tokens (incl. 'nooch')
+    _approve(lib, "nooches")                                    # merkquery, approved + gsc/high_potential
+    with caplog.at_level(logging.DEBUG):
+        harry._on_keyword_decided(_decided("nooches"))
+    assert _kw_projects(ledger) == []
+    assert any("branded keyword overgeslagen" in r.message for r in caplog.records)
+
+
+def test_niet_branded_wel_project(tmp_path):
+    harry, lib, ledger = _make(tmp_path)
+    _approve(lib, "barefoot shoes")
+    harry._on_keyword_decided(_decided("barefoot shoes"))
+    ps = _kw_projects(ledger)
+    assert len(ps) == 1 and ps[0]["keyword"] == "barefoot shoes"   # niet-branded → project zoals voorheen
+
+
+def test_branded_substring_gefilterd(tmp_path):
+    harry, lib, ledger = _make(tmp_path)
+    _approve(lib, "nooch amsterdam")                            # 'nooch' als substring
+    harry._on_keyword_decided(_decided("nooch amsterdam"))
+    assert _kw_projects(ledger) == []
+
+
+def test_lege_config_filter_uit(tmp_path):
+    harry, lib, ledger = _make(tmp_path, branded_tokens="")     # lege config → filter uit
+    _approve(lib, "nooches")
+    harry._on_keyword_decided(_decided("nooches"))
+    ps = _kw_projects(ledger)
+    assert len(ps) == 1 and ps[0]["keyword"] == "nooches"      # alles door
