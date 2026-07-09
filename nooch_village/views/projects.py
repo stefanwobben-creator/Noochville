@@ -153,23 +153,30 @@ def _effort_hours(eff) -> int | None:
     return None
 
 
+# Auto-opslaan: onchange/onblur submit het form (zelfde patroon als de zichtbaarheid-checkbox). In de
+# modal vangt wire() de submit → fetch → reopen (fragment-re-render) + toast; op de volle pagina reload.
+# requestSubmit() vuurt een submit-event (zodat wire 'm ziet); .submit() is de no-requestSubmit-fallback.
+_AUTOSAVE = "this.form.requestSubmit?this.form.requestSubmit():this.form.submit()"
+
+
 def _impact_select(p, field: str, kind: str, opts, rw: bool, hid) -> str:
-    """Impact-dropdown: zelfde select+opslaan-patroon als ROL/TREKKER (.fieldform → proj_setimpact).
-    Zelfde datawaarden; leeg (—) = ongelabeld. Read-only → de gekozen waarde als tekst."""
+    """Impact-dropdown: zelfde select-patroon als ROL/TREKKER (.fieldform → proj_setimpact), maar
+    auto-opslaan bij selectie (geen knop). Zelfde datawaarden; leeg (—) = ongelabeld. Read-only → tekst."""
     cur = p.get(field, "")
     if not rw:
         return _e(cur) if cur else "<span class='muted'>—</span>"
     options = "<option value=''>—</option>" + "".join(
         f"<option value='{_e(val)}'{' selected' if val == cur else ''}>{_e(val)}</option>" for val, _ in opts)
     return (f"<form method='post' action='/action' class='fieldform'>{hid()}"
-            f"<select name='value'>{options}</select>"
+            f"<input type='hidden' name='action' value='proj_setimpact'>"
             f"<input type='hidden' name='kind' value='{_e(kind)}'>"
-            f"<button class='btn ok sm' type='submit' name='action' value='proj_setimpact'>opslaan</button></form>")
+            f"<select name='value' onchange='{_AUTOSAVE}'>{options}</select></form>")
 
 
 def _effort_control(p, rw: bool, hid) -> str:
-    """Effort als numeriek veld + uren/dagen-toggle (zelfde rij-patroon → proj_seteffort). Een veelvoud
-    van 8 uur toont standaard in dagen. Leeg/ontbrekend → geen getal, default uren. Read-only → tekst."""
+    """Effort als numeriek veld + uren/dagen-toggle (zelfde rij-patroon → proj_seteffort). Auto-opslaan:
+    de toggle bij selectie (onchange), het getal bij blur (onblur) — geen knop. Een veelvoud van 8 uur
+    toont standaard in dagen. Leeg/ontbrekend → geen getal, default uren. Read-only → tekst."""
     hours = _effort_hours(p.get("effort"))
     if not rw:
         if not hours:
@@ -183,9 +190,9 @@ def _effort_control(p, rw: bool, hid) -> str:
         num, unit = "", "uren"
     units = "".join(f"<option value='{u}'{' selected' if u == unit else ''}>{u}</option>" for u in ("uren", "dagen"))
     return (f"<form method='post' action='/action' class='fieldform eff'>{hid()}"
-            f"<input type='number' name='number' value='{num}' min='0' step='1' placeholder='0'>"
-            f"<select name='unit'>{units}</select>"
-            f"<button class='btn ok sm' type='submit' name='action' value='proj_seteffort'>opslaan</button></form>")
+            f"<input type='hidden' name='action' value='proj_seteffort'>"
+            f"<input type='number' name='number' value='{num}' min='0' step='1' placeholder='0' onblur='{_AUTOSAVE}'>"
+            f"<select name='unit' onchange='{_AUTOSAVE}'>{units}</select></form>")
 
 
 def _missie_dot(p) -> str:
@@ -461,7 +468,10 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "fetch('/action',opts).then(function(){"
         "if(act==='wo_close'||act==='rov2_end'){confetti();setTimeout(shut,700);}"
         "else if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'){shut();}"
-        "else{var r=f.getAttribute('data-reopen');if(r){last=r;}reopen();toast('\\u2713 opgeslagen');}});});});"
+        "else{var r=f.getAttribute('data-reopen');if(r){last=r;}reopen();toast('\\u2713 opgeslagen');}})"
+        # foutpad: geen stille mislukking — melding + best-effort revert door het fragment te herladen
+        # (server-staat is gezaghebbend, dus een niet-opgeslagen waarde springt terug).
+        ".catch(function(){reopen();toast('\\u26a0 niet opgeslagen');});});});"
         "bd.querySelectorAll('textarea').forEach(mentionWire);"
         # wall scrollt naar het laatste bericht: bij openen én na elke actie (reopen()→wire()), scoped op bd
         "var ws=bd.querySelector('.wall-scroll');if(ws){requestAnimationFrame(function(){ws.scrollTop=ws.scrollHeight;});}"
@@ -836,15 +846,15 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         # scope de owner-dropdown op de cirkel waar dit project hangt (= ouder-cirkel van de owner-rol)
         owner_circle = orec.parent if orec else None
         rol_v = (f"{warn}<form method='post' action='/action' class='fieldform'>{hid()}"
-                 f"<select name='owner'>{_owner_options(st, owner, circle=owner_circle)}</select>"
-                 f"<button class='btn ok sm' type='submit' name='action' value='proj_setowner'>opslaan</button></form>")
+                 f"<input type='hidden' name='action' value='proj_setowner'>"
+                 f"<select name='owner' onchange='{_AUTOSAVE}'>{_owner_options(st, owner, circle=owner_circle)}</select></form>")
     else:
         rol_v = (f"<a href='/node?id={_e(owner)}'>{_e(rol_naam)}</a>" if orec else _e(rol_naam))
     if rw:
         pers_v = (f"<form method='post' action='/action' class='fieldform'>{hid()}"
-                  f"<select name='trekker'>"
-                  f"{_trekker_options(st, owner, p.get('person') or '', p.get('agent') or '')}</select>"
-                  f"<button class='btn ok sm' type='submit' name='action' value='proj_settrekker'>opslaan</button></form>")
+                  f"<input type='hidden' name='action' value='proj_settrekker'>"
+                  f"<select name='trekker' onchange='{_AUTOSAVE}'>"
+                  f"{_trekker_options(st, owner, p.get('person') or '', p.get('agent') or '')}</select></form>")
     elif p.get("agent"):
         pa = st.personas.get(p["agent"])
         pers_v = f"{_e(pa.name if pa else p['agent'])} (AI)"
