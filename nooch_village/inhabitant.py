@@ -946,20 +946,42 @@ class Inhabitant(threading.Thread):
         cl = ledger.checklist_add(pid, title=self._PREP_CHECKLIST_TITLE)
         if cl is None:
             return
-        n_skill = n_open = 0
+        n_skill = n_open = n_invalid = 0
+        opens = []
         for it in plan["items"]:
             skill = it.get("skill")
             payload = it.get("payload") if isinstance(it.get("payload"), dict) else None
+            reason = it.get("reason", "")
+            payload_ok = True
+            if skill:                                            # fail-fast: payload compleet vóór opslag?
+                missing = self._missing_required(skill, payload or {})
+                if missing:
+                    payload_ok = False
+                    reason = f"payload onvolledig: {', '.join(missing)} ontbreekt"
             ledger.check_add(pid, cl["id"], it.get("text", ""), skill=skill, payload=payload,
-                             query=it.get("query", ""), reason=it.get("reason", ""))
-            n_skill, n_open = (n_skill + 1, n_open) if skill else (n_skill, n_open + 1)
-        opens = [f"{it.get('text','')}: {it.get('reason') or 'geen skill'}"
-                 for it in plan["items"] if not it.get("skill")]
+                             query=it.get("query", ""), reason=reason, payload_ok=payload_ok)
+            if not skill:
+                n_open += 1
+                opens.append(f"{it.get('text','')}: {reason or 'geen skill'}")
+            elif not payload_ok:
+                n_invalid += 1
+                opens.append(f"{it.get('text','')}: {reason}")
+            else:
+                n_skill += 1
         ledger.add_role_message(pid, (
             f"📋 Uitvoerplan voor '{goal}'. Deliverable: {plan.get('deliverable','')}. "
-            f"{n_skill} item(s) skill-gekoppeld, {n_open} zonder skill"
+            f"{n_skill} item(s) uitvoerbaar, {n_open} zonder skill, {n_invalid} met onvolledige payload"
             + (": " + "; ".join(opens) if opens else "") + "."))
-        self.log.info("📋 project '%s' voorbereid: %d skill-items, %d zonder skill", pid, n_skill, n_open)
+        self.log.info("📋 project '%s' voorbereid: %d uitvoerbaar, %d zonder skill, %d onvolledige payload",
+                      pid, n_skill, n_open, n_invalid)
+
+    def _missing_required(self, skill: str, payload: dict) -> list[str]:
+        """Verplichte payload-velden (skill.required_payload) die ontbreken of leeg zijn. Leeg = geen
+        validatie mogelijk (skill onbekend of geen required_payload) → fail-soft (item blijft uitvoerbaar)."""
+        obj = self.registry.get(skill) if self.registry else None
+        req = tuple(getattr(obj, "required_payload", ()) or ()) if obj is not None else ()
+        pl = payload if isinstance(payload, dict) else {}
+        return [f for f in req if not pl.get(f)]                  # ontbreekt of leeg (None/""/[]/{})
 
     def _plan_checklist(self, goal: str) -> dict | None:
         """LLM-stap (Noochie): toets het doel tegen mijn accountabilities + skills → checklist met per item
@@ -1068,6 +1090,8 @@ class Inhabitant(threading.Thread):
             skill = item.get("skill")
             if not skill:
                 continue                                         # geen-skill-item blijft open (reden in item)
+            if item.get("payload_ok") is False:
+                continue                                         # onvolledige payload → skill NIET draaien, blijft open (reden in item)
             payload = item.get("payload")
             if not isinstance(payload, dict) or not payload:
                 q = item.get("query", "")
