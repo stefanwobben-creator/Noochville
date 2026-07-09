@@ -629,6 +629,9 @@ ul.clean li:last-child{border-bottom:none}
 .dcol .dk.wide,.dcol .dv.wide{grid-column:1/-1}
 .pside .fieldform{flex-wrap:wrap}
 .pside .fieldform select{flex:1 1 100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .45rem;background:var(--surface)}
+/* Effort-rij (.eff): getal + uren/dagen-toggle + opslaan op één rij — de select niet full-width. */
+.pside .fieldform.eff select{flex:0 0 auto}
+.pside .fieldform.eff input{flex:0 0 4rem;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .45rem;background:var(--surface)}
 .descform textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .55rem;resize:vertical}
 .desc-read{white-space:pre-wrap;line-height:1.4}
 .descedit{margin-top:.3rem}

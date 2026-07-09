@@ -236,15 +236,16 @@ def test_proj_setimpact_onbekend_veld(tmp_path):
     assert "onbekend" in msg.lower()
 
 
-def test_impact_pills_in_schrijfmodus_niet_read_only(tmp_path):
+def test_impact_dropdown_in_schrijfmodus_niet_read_only(tmp_path):
     dd, st = _st(tmp_path)
     pid = st.projects.create(ROLE, "Test", "human", status="queued", missie_impact="neutraal")
     rw = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
     ro = P.render_project(cockpit2._Stores(dd), pid, csrf_token="")
-    assert "proj_setimpact" in rw and "imp-pill" in rw
+    assert "proj_setimpact" in rw and "<select name='value'>" in rw     # dropdown i.p.v. pills
+    assert "value='neutraal' selected" in rw                            # huidige waarde voorgeselecteerd
     assert "Missie-impact" in rw and "Business-impact" in rw
     assert "proj_setimpact" not in ro          # read-only: geen bewerk-form
-    assert "imp-pill n on" in ro               # wel de gekozen waarde als statische pill
+    assert "neutraal" in ro                    # wel de gekozen waarde als tekst
 
 
 def test_missie_stip_op_bordkaart(tmp_path):
@@ -311,14 +312,14 @@ def test_verzwakt_geen_blokkade_op_statuswissel(tmp_path):
     assert cockpit2._Stores(dd).projects.get(pid)["status"] == "running"
 
 
-def test_proj_setimpact_effort_zet_leegmaakt_en_weigert(tmp_path):
+def test_proj_seteffort_zet_leegmaakt_en_weigert(tmp_path):
     dd, st = _st(tmp_path)
     pid = st.projects.create(ROLE, "T", "human", status="queued")
-    cockpit2.dispatch(dd, "proj_setimpact", {"pid": [pid], "kind": ["effort"], "value": ["2d"], "next": ["/"]}, username="guest")
-    assert cockpit2._Stores(dd).projects.get(pid)["effort"] == "2d"
-    cockpit2.dispatch(dd, "proj_setimpact", {"pid": [pid], "kind": ["effort"], "value": [""], "next": ["/"]}, username="guest")
-    assert cockpit2._Stores(dd).projects.get(pid)["effort"] == ""            # toggle-off
-    _, msg = cockpit2.dispatch(dd, "proj_setimpact", {"pid": [pid], "kind": ["effort"], "value": ["3d"], "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "proj_seteffort", {"pid": [pid], "number": ["2"], "unit": ["dagen"], "next": ["/"]}, username="guest")
+    assert cockpit2._Stores(dd).projects.get(pid)["effort"] == {"hours": 16}   # 2 dagen × 8u
+    cockpit2.dispatch(dd, "proj_seteffort", {"pid": [pid], "number": [""], "unit": ["uren"], "next": ["/"]}, username="guest")
+    assert cockpit2._Stores(dd).projects.get(pid)["effort"] == ""            # leeg → wissen
+    _, msg = cockpit2.dispatch(dd, "proj_seteffort", {"pid": [pid], "number": ["abc"], "unit": ["uren"], "next": ["/"]}, username="guest")
     assert "ongeldig" in msg.lower()
 
 
@@ -326,4 +327,6 @@ def test_effort_rij_in_impact_blok(tmp_path):
     dd, st = _st(tmp_path)
     pid = st.projects.create(ROLE, "T", "human", status="queued", effort="2d")
     modal = P.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
-    assert "Effort" in modal and all(f">{v}</button>" in modal for v in ("1u", "1d", "2d", "1w"))
+    # legacy "2d" (16u) rendert als numeriek veld (getal 2 + dagen-toggle), geen pills meer
+    assert "Effort" in modal and "value='proj_seteffort'" in modal
+    assert "name='number' value='2'" in modal and "value='dagen' selected" in modal

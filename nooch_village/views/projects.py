@@ -132,26 +132,60 @@ _LABELS = {"groen": "#1F9D55", "geel": "#FFCE2E", "koraal": "#FF6B5B",
 
 # Impact-pills (scope 2): klik = zetten, klik op de actieve pill = leegmaken (terug naar ongelabeld).
 # Kleur-code per waarde (design-systeem, klassen .imp-pill in cockpit2_util.py): g=groen, n=grijs,
-# r=rood, l=lichtgrijs. Mechaniek volgt het bestaande label-patroon (form-knop → proj_setimpact).
+# r=rood, l=lichtgrijs. Nog gebruikt door _missie_dot (kaart-stip); de detail-view toont ze nu als
+# <select> (zelfde datawaarden, alleen de weergave werd een dropdown i.p.v. pills).
 _MISSIE_OPTS   = [("versterkt", "g"), ("neutraal", "n"), ("verzwakt", "r")]
 _BUSINESS_OPTS = [("hoog", "g"), ("medium", "n"), ("laag", "l")]
-# Effort is een maat, geen goed/slecht-oordeel → alle pills neutraal (grijs), zelfde pill-mechaniek.
-_EFFORT_OPTS   = [("1u", "n"), ("1d", "n"), ("2d", "n"), ("1w", "n")]
+
+# Effort-model: uren als canonieke opslag ({"hours": N}). Legacy enum-strings (1u/1d/2d/1w) worden LUI
+# geconverteerd bij lezen — geen migratie-script. 1u=1, 1d=8, 2d=16, 1w=40 (8-urige werkdag).
+_EFFORT_ENUM_HOURS = {"1u": 1, "1d": 8, "2d": 16, "1w": 40}
 
 
-def _impact_row(p, field: str, kind: str, opts, hid, rw: bool) -> str:
-    """Eén impact-regel: klikbare pills als bewerkbaar (rw), anders de gekozen waarde als statische pill.
-    De actieve pill post value='' → leegmaken (toggle-off)."""
+def _effort_hours(eff) -> int | None:
+    """Effort → uren (int) of None. Nieuw: {"hours": N}. Legacy enum-string → via _EFFORT_ENUM_HOURS.
+    Leeg/ontbrekend/onbekend → None (nette default, geen crash)."""
+    if isinstance(eff, dict):
+        h = eff.get("hours")
+        return int(h) if isinstance(h, (int, float)) and h > 0 else None
+    if isinstance(eff, str):
+        return _EFFORT_ENUM_HOURS.get(eff)
+    return None
+
+
+def _impact_select(p, field: str, kind: str, opts, rw: bool, hid) -> str:
+    """Impact-dropdown: zelfde select+opslaan-patroon als ROL/TREKKER (.fieldform → proj_setimpact).
+    Zelfde datawaarden; leeg (—) = ongelabeld. Read-only → de gekozen waarde als tekst."""
     cur = p.get(field, "")
     if not rw:
-        hit = next((f"<span class='imp-pill {col} on'>{_e(val)}</span>" for val, col in opts if val == cur), None)
-        return hit or "<span class='muted'>—</span>"
-    pills = "".join(
-        f"<button class='imp-pill {col}{' on' if val == cur else ''}' type='submit' name='value' "
-        f"value='{'' if val == cur else _e(val)}'>{_e(val)}</button>" for val, col in opts)
-    return (f"<form method='post' action='/action' class='imp-wrap'>{hid()}"
-            f"<input type='hidden' name='action' value='proj_setimpact'>"
-            f"<input type='hidden' name='kind' value='{_e(kind)}'>{pills}</form>")
+        return _e(cur) if cur else "<span class='muted'>—</span>"
+    options = "<option value=''>—</option>" + "".join(
+        f"<option value='{_e(val)}'{' selected' if val == cur else ''}>{_e(val)}</option>" for val, _ in opts)
+    return (f"<form method='post' action='/action' class='fieldform'>{hid()}"
+            f"<select name='value'>{options}</select>"
+            f"<input type='hidden' name='kind' value='{_e(kind)}'>"
+            f"<button class='btn ok sm' type='submit' name='action' value='proj_setimpact'>opslaan</button></form>")
+
+
+def _effort_control(p, rw: bool, hid) -> str:
+    """Effort als numeriek veld + uren/dagen-toggle (zelfde rij-patroon → proj_seteffort). Een veelvoud
+    van 8 uur toont standaard in dagen. Leeg/ontbrekend → geen getal, default uren. Read-only → tekst."""
+    hours = _effort_hours(p.get("effort"))
+    if not rw:
+        if not hours:
+            return "<span class='muted'>—</span>"
+        return _e(f"{hours // 8} dagen" if hours % 8 == 0 else f"{hours} uren")
+    if hours and hours % 8 == 0:
+        num, unit = hours // 8, "dagen"
+    elif hours:
+        num, unit = hours, "uren"
+    else:
+        num, unit = "", "uren"
+    units = "".join(f"<option value='{u}'{' selected' if u == unit else ''}>{u}</option>" for u in ("uren", "dagen"))
+    return (f"<form method='post' action='/action' class='fieldform eff'>{hid()}"
+            f"<input type='number' name='number' value='{num}' min='0' step='1' placeholder='0'>"
+            f"<select name='unit'>{units}</select>"
+            f"<button class='btn ok sm' type='submit' name='action' value='proj_seteffort'>opslaan</button></form>")
 
 
 def _missie_dot(p) -> str:
@@ -835,9 +869,9 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         f"<span class='dk{w}'>Trekker</span><span class='dv{w}'>{pers_v}</span>"
         f"<span class='dk'>Aangemaakt</span><span class='dv'>{_e(_created_full(p.get('created_at')))}</span>"
         f"<span class='dk'>Zichtbaar</span><span class='dv'>{vis_v}</span>"
-        f"<span class='dk'>Missie-impact</span><span class='dv'>{_impact_row(p, 'missie_impact', 'missie', _MISSIE_OPTS, hid, rw)}</span>"
-        f"<span class='dk'>Business-impact</span><span class='dv'>{_impact_row(p, 'business_impact', 'business', _BUSINESS_OPTS, hid, rw)}</span>"
-        f"<span class='dk'>Effort</span><span class='dv'>{_impact_row(p, 'effort', 'effort', _EFFORT_OPTS, hid, rw)}</span>"
+        f"<span class='dk{w}'>Missie-impact</span><span class='dv{w}'>{_impact_select(p, 'missie_impact', 'missie', _MISSIE_OPTS, rw, hid)}</span>"
+        f"<span class='dk{w}'>Business-impact</span><span class='dv{w}'>{_impact_select(p, 'business_impact', 'business', _BUSINESS_OPTS, rw, hid)}</span>"
+        f"<span class='dk{w}'>Effort</span><span class='dv{w}'>{_effort_control(p, rw, hid)}</span>"
         f"</div>")
     details_panel = _psec(_IC_INFO, "Projectdetails", details_dcol + verzwakt_block)
 
