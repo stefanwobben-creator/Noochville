@@ -122,11 +122,13 @@ def test_nieuwe_svg_renderers_en_geen_data(tmp_path):
 
 
 def test_staaf_tegel_rendert_end_to_end(tmp_path):
-    import time
+    import time, datetime
     dd = _dd(tmp_path); st = cockpit2._Stores(dd); base = time.time() - 2 * 86400
-    for i, v in enumerate([40, 55, 48]):                 # recente ts → binnen het 7d-standaardvenster
+    today = datetime.date.today()
+    for i, v in enumerate([40, 55, 48]):                 # recente datum+ts → binnen het 7d-standaardvenster
+        d = (today - datetime.timedelta(days=2 - i)).isoformat()   # dynamisch (niet hardcoded, geen datum-rollover)
         st.observations.record_daily("website_watcher", "plausible_visitors_day", v, bron="plausible",
-                                     datum=f"2026-07-0{i+1}", ts=base + i * 86400)
+                                     datum=d, ts=base + i * 86400)
     cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": ["pulse_visitors|visitors|time"],
                       "form": ["staaf"], "ref_kind": [""], "target": [""], "mode": ["indicator"],
                       "next": ["/"]}, "guest")
