@@ -11,6 +11,11 @@ from nooch_village.util import atomic_write_json, read_json
 # MODELWIJZIGING (scope harry_hemp keyword_research): 'role' toegevoegd als geldige trigger voor een
 # project dat een ROL autonoom initieert (niet 'human'/UI, niet 'clock'/puls, niet 'tension', niet
 # 'noochie'/assistent). Eerste gebruiker: HarryHemp._on_keyword_decided.
+# De titel van de checklist die de daemon als uitvoerplan herkent (prep schrijft 'm, _execute_checklist
+# draait 'm). Eén authoritatieve bron: Inhabitant._PREP_CHECKLIST_TITLE en de cockpit-match verwijzen
+# hiernaar (reference, don't copy) i.p.v. de literal "Uitvoerplan" te herhalen.
+PREP_CHECKLIST_TITLE = "Uitvoerplan"
+
 _VALID_TRIGGERS = {"clock", "human", "noochie", "tension", "role"}
 _TERMINAL       = {"done"}
 # Optionele impact-labels: een hulpmiddel, geen verplichting. Leeg = ongelabeld en dwingt niets af (een
@@ -315,6 +320,45 @@ class ProjectLedger:
         if len(cl["items"]) != n:
             self._touch(p); self._save()
             return True
+        return False
+
+    def set_item_offer(self, pid: str, clid: str, item_id: str, offer: dict) -> bool:
+        """Hang een STIL skill-aanbod aan een item: een suggestie (skill+payload), NOG geen skill. Alleen
+        als het item nog geen skill heeft. `offer` = {skill, payload, payload_ok}. Accepteren gebeurt via
+        accept_item_offer; negeren = afwijzen (het aanbod blijft staan tot acceptatie)."""
+        p = self._projects.get(pid)
+        cl = self._checklist(p, clid) if p else None
+        if cl is None or not (offer or {}).get("skill"):
+            return False
+        for it in cl.get("items", []):
+            if it["id"] == item_id and not it.get("skill"):
+                pl = offer.get("payload")
+                it["offer"] = {"skill": offer["skill"],
+                               "payload": pl if isinstance(pl, dict) else {},
+                               "payload_ok": bool(offer.get("payload_ok", True))}
+                self._touch(p); self._save()
+                return True
+        return False
+
+    def accept_item_offer(self, pid: str, clid: str, item_id: str) -> bool:
+        """Accepteer het aanbod: hang skill+payload aan het item via het bestaande checklist-model en
+        verwijder het aanbod. payload_ok=False (onvolledige payload) markeert het item als niet-uitvoerbaar
+        (de daemon slaat het dan over) — identiek aan het prep-pad."""
+        p = self._projects.get(pid)
+        cl = self._checklist(p, clid) if p else None
+        if cl is None:
+            return False
+        for it in cl.get("items", []):
+            if it["id"] == item_id and it.get("offer"):
+                off = it.pop("offer")
+                it["skill"] = off.get("skill")
+                pl = off.get("payload")
+                if isinstance(pl, dict) and pl:
+                    it["payload"] = pl
+                if off.get("payload_ok") is False:
+                    it["payload_ok"] = False
+                self._touch(p); self._save()
+                return True
         return False
 
     def edit(self, pid: str, scope=None, owner: str | None = None,

@@ -97,6 +97,10 @@ sessie opent hiermee.
   naast zetten (bestaande items blijven wel intact; prep overschrijft nooit). Workaround: een
   mens-checklist die de prep moet vervangen `"Uitvoerplan"` noemen. Structurele fix (guard op de
   aanwezigheid van élke checklist, niet alleen die titel) is een eigen scope.
+  **Urgentie verhoogd (skill-aanbod-scope):** het stille skill-aanbod bij checklist-toevoeging biedt
+  bewust alleen aan op de `"Uitvoerplan"`-checklist, juist omdat alleen die door de daemon wordt
+  uitgevoerd. Zolang de title-guard bestaat, blijft een item in een anders-getitelde mens-checklist
+  onaangeboden én onuitgevoerd — dat maakt de structurele-fix-scope nu urgenter.
 - Mention-ontwerp: v1 bestaat (09-07). Een `@persona` op de project-wall laat die
   persona eenmalig meedenken — het antwoord ontstaat synchroon in het **cockpit-proces**
   (`_reply_to_mentions` → `_ai_reply`), als een gesprek. Bewust licht: geen daemon,

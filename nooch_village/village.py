@@ -24,34 +24,7 @@ from nooch_village.roles import (
 from nooch_village.library import Library
 from nooch_village.lexicon import Lexicon
 from nooch_village.observers.coherence_observer import CoherenceObserver
-from nooch_village.skills_impl.site_health import SiteHealthSkill
-from nooch_village.skills_impl.plausible import PlausibleSkill
-from nooch_village.skills_impl.trends import TrendsSkill
-from nooch_village.skills_impl.serpapi_trends import SerpapiTrendsSkill
-from nooch_village.skills_impl.field_note import FieldNoteSkill
-from nooch_village.skills_impl.library_skills import LibraryLookupSkill, KeywordReviewSkill, LibraryListSkill
-from nooch_village.skills_impl.gsc import GscPerformanceSkill
-from nooch_village.skills_impl.gsc_report import GscReportSkill
-from nooch_village.skills_impl.ngram import NgramCultureSkill
-from nooch_village.skills_impl.openlibrary_search_inside import OpenlibrarySearchInsideSkill
-from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
-from nooch_village.skills_impl.openalex import OpenalexSkill
-from nooch_village.skills_impl.epo_patents import EpoPatentsSkill
-from nooch_village.skills_impl.bulletin_schrijven import BulletinSchrijvenSkill
-from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
-from nooch_village.skills_impl.alphavantage import AlphaVantageIndexSkill
-from nooch_village.skills_impl.trends_categorie import TrendsCategorieSkill
-from nooch_village.skills_impl.gdelt_tone import GdeltToneSkill
-from nooch_village.skills_impl.competitor_news import CompetitorNewsSkill
-from nooch_village.skills_impl.competitor_discover import CompetitorDiscoverSkill
-from nooch_village.skills_impl.linkbuilding import LinkbuildingTargetsSkill
-from nooch_village.skills_impl.verband_voorstel import VerbandVoorstelSkill
-from nooch_village.skills_impl.onderzoeksvraag import OnderzoeksvraagSkill
-from nooch_village.skills_impl.content_schrijven import ContentSchrijvenSkill
-from nooch_village.skills_impl.content_check import ContentCheckSkill
-from nooch_village.skills_impl.curate import CurateSkill
-from nooch_village.skills_impl.voorstel import VoorstelSchrijvenSkill
-from nooch_village.skills_impl.shopify_sales import ShopifySalesSkill
+from nooch_village.registry_factory import build_skill_registry
 from nooch_village.human_inbox import HumanInbox
 from nooch_village.gap_classifier import classify_gap
 from nooch_village.observations import ObservationStore
@@ -129,32 +102,7 @@ class Village:
         self.context.pinboard = _Pinboard(
             os.path.join(self.context.data_dir, "pinboard.json"))
         self.human_inbox = HumanInbox(os.path.join(self.context.data_dir, "human_inbox.json"))
-        self.registry = SkillRegistry()
-        for skill in (
-            SiteHealthSkill(), PlausibleSkill(), TrendsSkill(), SerpapiTrendsSkill(),
-            FieldNoteSkill(), LibraryLookupSkill(), LibraryListSkill(), KeywordReviewSkill(),
-            GscPerformanceSkill(), GscReportSkill(),
-            NgramCultureSkill(),
-            OpenlibrarySearchInsideSkill(),
-            SemanticScholarSkill(),
-            OpenalexSkill(),
-            EpoPatentsSkill(),                                             # wereldwijde patenten (EPO OPS) — harry_hemp
-            BulletinSchrijvenSkill(),
-            KeywordsEverywhereSkill(),
-            AlphaVantageIndexSkill(),                                      # index-bron (ETF-proxy; Stooq verwijderd — vervangen)
-            TrendsCategorieSkill(), GdeltToneSkill(),                       # externe observatie-bronnen (inactief tot activatie + config)
-            CompetitorNewsSkill(),
-            CompetitorDiscoverSkill(),
-            LinkbuildingTargetsSkill(),
-            VerbandVoorstelSkill(),
-            OnderzoeksvraagSkill(),
-            ContentSchrijvenSkill(),
-            ContentCheckSkill(),
-            CurateSkill(),
-            VoorstelSchrijvenSkill(),
-            ShopifySalesSkill(),
-        ):
-            self.registry.register(skill)
+        self.registry = build_skill_registry()                            # gedeelde factory (ook cockpit-match)
         self.records = Records(os.path.join(self.context.data_dir, "governance_records.json"))
         seed_records(self.records)
         migrate_records(self.records)
