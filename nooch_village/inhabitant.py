@@ -956,7 +956,7 @@ class Inhabitant(threading.Thread):
         goal = self._scope_text(p)
         if not goal or self._project_checklist(p) is not None:
             return                                                # geen doel of al voorbereid (idempotent)
-        plan = self._plan_checklist(goal)
+        plan = self._plan_checklist(goal, keyword=p.get("keyword") or "", exclude_pid=pid)
         if plan is None:
             self.log.warning("📋 project '%s': geen checklist voorbereid (LLM-plan mislukte); blijft in TOEKOMST", pid)
             return
@@ -1000,11 +1000,13 @@ class Inhabitant(threading.Thread):
         pl = payload if isinstance(payload, dict) else {}
         return [f for f in req if not pl.get(f)]                  # ontbreekt of leeg (None/""/[]/{})
 
-    def _plan_checklist(self, goal: str) -> dict | None:
+    def _plan_checklist(self, goal: str, *, keyword: str = "", exclude_pid: str = "") -> dict | None:
         """LLM-stap (Noochie): toets het doel tegen mijn accountabilities + skills → checklist met per item
         de skill ÉN een payload in de vorm die de skill z'n input_schema voorschrijft. Machine-check: een
         skill buiten mijn harde DNA-lijst wordt 'geen skill' + reden. Fail-soft: een skill zonder ingevuld
-        input_schema laat de LLM terugvallen op naam + description."""
+        input_schema laat de LLM terugvallen op naam + description.
+
+        `keyword`/`exclude_pid`: voeden de geheugen-laag (bestaande deliverables als context), fail-closed."""
         from nooch_village.llm import reason as llm_reason
         skills = list(self.dna.skills)
         catalog_lines = []
@@ -1015,10 +1017,24 @@ class Inhabitant(threading.Thread):
             catalog_lines.append(f"- {name}: {desc[:160]}\n    input: " +
                                  (insch or "(geen schema — leid af uit naam/omschrijving)"))
         catalog = "\n".join(catalog_lines) or "(geen skills)"
+        # Geheugen-laag (fase 1): bestaande deliverables als context. Config-geschakeld, fail-closed —
+        # een leeg blok laat de sectie volledig weg (geen lege kop in de prompt).
+        memory_section = ""
+        if str(self.context.settings.get("deliverable_context_enabled", "1")) == "1":
+            from nooch_village.deliverable_context import gather_deliverable_context
+            blok = gather_deliverable_context(
+                getattr(self.context, "projects", None), goal, keyword=keyword,
+                max_notes=int(self.context.settings.get("deliverable_context_max_notes", "5")),
+                max_chars=int(self.context.settings.get("deliverable_context_max_chars", "2000")),
+                exclude_pid=exclude_pid)
+            if blok:
+                memory_section = ("Eerder afgerond onderzoek in het dorp (gebruik dit; plan geen items "
+                                  f"die dit al beantwoordt):\n{blok}\n\n")
         prompt = (
             f"Je bent {self.name}, een autonome rol. Projectdoel:\n\"{goal}\"\n\n"
             f"Jouw skills (de ENIGE tools die je hebt), met hun INPUT-vorm:\n{catalog}\n\n"
             f"Jouw accountabilities: {list(self.dna.accountabilities) or '(geen)'}\n\n"
+            f"{memory_section}"
             "Breek het doel op in 2 tot 5 concrete deel-items. Voor ELK item: als één van jouw skills het "
             "kan uitvoeren, geef de exacte skill-naam ÉN een 'payload'-object dat EXACT voldoet aan de "
             "'input'-vorm van die skill (bv. een term-skill wil {\"term\": \"...\"}, keywords_everywhere wil "
