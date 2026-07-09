@@ -1443,3 +1443,69 @@ skill-call diende als bewijs zonder quota te verbranden. Aandachtspunt voor voor
 reden dat de WIP-cap nuttig is).
 
 Suite einde: **1873 groen**, 1 xfail (deferred /person-notificatie).
+
+---
+
+## 2026-07-09 — avond: projectdetail-UX-ronde + de bijlage-upload-saga (vier onafhankelijke bugs)
+
+Lange sessie, twee blokken: eerst een reeks projectdetail-UX-scopes, daarna een diagnose-gedreven jacht
+op waarom bijlage-uploads faalden — die vier losse bugs bleek te bevatten.
+
+**[bouw]** **Projectdetail-UX** (elk eigen commit, diff-vooraf, volle suite als poort):
+- Opdracht (`description`) bereikt nu de prep-prompt van de daemon (#148); `@mention` van een AI-persona
+  op de wall triggert een eenmalig antwoord in het cockpit-proces (#149, `_reply_to_mentions`, cap +
+  fail-closed).
+- Vier micro-fixes (#150, rebase-merge → vier commits): `_md` rendert nu *cursief*/~~doorhalen~~/`##`/
+  `[tekst](url)` (link alleen http(s), XSS-veilig); kolomverhouding; bijlage naar de composer-toolbar-rij;
+  wall scrollt bij openen naar het laatste bericht.
+- Opdracht-veld uit de UI (#151) — prep + API blijven; `proj_describe` werd UI-verweesd, niet dood.
+- Ronde 2 (#152): ratio terug naar 2:1; **WYSIWYG werkt nu in de modal** (wrapSel guarded in `_modal_html`
+  — een `<script>` in een fragment draait niet bij `innerHTML`); 🔗-knop weg (renderer blijft);
+  hoogte-koppeling main/zijbalk.
+- Stil **skill-aanbod** bij een mens-toegevoegd Uitvoerplan-item (#153): cockpit-match tegen de DNA-skills
+  van de owner-rol → "🤖 kan dit oppakken"; gedeelde `build_skill_registry()`-factory (cockpit alleen
+  metadata, nooit `run()`).
+- Impact als dropdowns, effort numeriek in uren (`{"hours": N}` + lazy enum-conversie) (#154);
+  auto-opslaan in de zijbalk (onchange/onblur, knoppen weg) + foutpad-melding (#155).
+
+**[faalmodus → diagnose → fix — de bijlage-upload-saga]** Stefans PDF-upload "deed niks". Read-only
+diagnose eerst, daarna gerichte fixes — het bleken **vier onafhankelijke bugs**:
+1. **nginx-default 1 MB** (geen `client_max_body_size`) → kale 413's in de logs. Fix (#157): 25M-cap in
+   nginx (conf.d drop-in op de server, certbot-veilig) + app-limiet `upload_max_bytes` (default 20M,
+   bewust ónder de nginx-cap) + **eerlijke fout** (413/400 i.p.v. de stille lege redirect) + de
+   modal-fetch checkt nu `response.ok` (geen valse "✓ opgeslagen" bij een 413).
+2. **`_parse_multipart` strípte `\r\n`** van de content → laatste byte van elk binair bestand weg =
+   stille corruptie. Fix (#159): alleen de framing verwijderen, content byte-exact. (Bekende corruptie-bron
+   voor eerder geüploade files.)
+3. **Lost-update race op `projects.json`** — bestand wél op schijf, wall-entry verdween. De ProjectLedger
+   deed read-modify-write zonder slot (de AttachmentStore had er 7). Fix in twee lagen: `file_lock` +
+   verse read op **alle 35 schrijfpaden** via één `_synchronized`-decorator (#158, intra-proces), daarna
+   **`fcntl.flock`** om de threading-lock in `util.file_lock` (#161) — cross-proces (cockpit ↔ daemon),
+   crash-veilig (OS-cleanup), timeout, dekt óók de AttachmentStore. Cross-proces getest met echte
+   subprocessen (raw → één verloren; synchronized → beide overleven).
+4. **Geneste `<form>`** — de smoking gun. Gecontroleerde reproductie met **bestand-logging**
+   (`data/upload_debug.log`, niet stdout — systemd toonde de app-`print`s niet door buffering) toonde:
+   `ctype='application/x-www-form-urlencoded' length=315`, géén multipart. Root cause: het upload-form
+   (`class='filepost'`) stond genest ín de composer-`<form>` → ongeldige HTML → de browser dropt de inner
+   form → `wire()` stuurt form-encoded → de File wordt gedropt → het bestand verliet de browser nooit.
+   Fix (#162): toolbar-rij buiten de composer-form, Plaatsen submit via `form=`, filepost is nu een eigen
+   sibling. Regressietest (HTMLParser) bewaakt dat geen enkel `<form>` meer genest raakt.
+
+**[les]** Vier bugs stapelden. De eerste drie waren echt en nodig, maar #4 was waarom de upload *nu*
+faalde — het request bereikte de upload-logica nooit als upload. Diagnose-les: de debug-logging naar
+**stdout** gaf een false-negative-risico (journal-buffering); naar een **bestand** was het meteen eenduidig.
+
+**[tool]** Read-only wees-bestand-rapport (#160, `python -m nooch_village.orphan_report`) — lijst bestanden
+op schijf zonder `projects.json`-entry (vond 4 wezen uit de race-periode); herstelt niets, mens beslist.
+
+**[data-operatie]** ToV-borging: de "Tone of Voice"-policy zat op de 4000-tekencap afgekapt (miste de
+Contrast-Principle-check + de 5e position statement). Gesplitst in **Tone of Voice** + **Position
+Statements** (uit de strategie-versie in `strategies.json`), `tone_of_voice`+`position_statements` uit de
+strategie verwijderd, "Desing System"-titeltypo gefixt. Via de store-API (versioning + cap), server-data-
+protocol. WORKING_AGREEMENTS-notitie: de 4000-cap kapt stil af (#156).
+
+**[fix]** Bord-drag-drop-move checkt nu ook `response.ok` (#163) — het laatste `.then` zonder ok-check;
+geen valse "✓ verplaatst" meer bij een mislukte move.
+
+Suite einde: **2000 groen**, 1 xfail. PR's #148–#163. Beide services op de nieuwe code; cross-proces-fix
+bewust op cockpit + daemon tegelijk gedeployed (halve deploy = schijnveiligheid).

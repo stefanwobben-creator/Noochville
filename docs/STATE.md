@@ -1,4 +1,4 @@
-# NoochVille — State & Handover (2026-07-08)
+# NoochVille — State & Handover (2026-07-09)
 
 > STATE = huidige waarheid, vervang bij update. `docs/JOURNAL.md` = historie, append-only.
 
@@ -20,6 +20,46 @@
 
 5. **Credits bewaken** — lange sessies met kringetjes zijn duurder dan één keer goed
    nadenken. Bij vastlopen: stop, analyseer, kies de juiste richting.
+
+---
+
+## Sessie 2026-07-09 — projectdetail-UX-ronde + bijlage-upload dichtgetimmerd
+
+**Suite: 2000 groen** (was 1873 op 2026-07-08), 1 xfail. 16 PR's (#148–#163), elk branch → squash/rebase-
+merge → deploy (Hetzner), volle suite per commit.
+
+**Blok 1 — projectdetail-UX.** `description` stuurt nu de prep-prompt (#148); `@mention` van een AI-persona
+op de wall geeft een eenmalig antwoord (#149). Vier micro-fixes (#150): `_md` rendert cursief/doorhalen/
+kop/http(s)-link; wall scrollt naar het laatste bericht; bijlage op de composer-toolbar-rij. Opdracht-veld
+uit de UI (#151, prep+API blijven). Ronde 2 (#152): ratio 2:1, **WYSIWYG werkt nu in de modal** (wrapSel
+guarded in `_modal_html` — fragment-`<script>`s draaien niet bij `innerHTML`), 🔗 weg, hoogte-koppeling.
+Stil **skill-aanbod** bij een Uitvoerplan-item (#153, gedeelde `build_skill_registry()`-factory, cockpit
+alleen metadata). Impact-dropdowns + effort numeriek in uren `{"hours": N}` met lazy enum-conversie (#154).
+Auto-opslaan in de zijbalk (onchange/onblur, knoppen weg) + foutpad-melding (#155).
+
+**Blok 2 — de bijlage-upload-saga: VIER onafhankelijke bugs**, diagnose-gedreven:
+1. **nginx-default 1 MB** → 25M-cap (conf.d drop-in, certbot-veilig) + app-limiet `upload_max_bytes` (20M,
+   onder de cap) + eerlijke fout (413/400 i.p.v. stille no-op) + modal-fetch checkt `response.ok` (#157).
+2. **`_parse_multipart` corruptie** — strípte de laatste byte van elk bestand → byte-exact gemaakt (#159).
+3. **Lost-update race op `projects.json`** (bestand op schijf, entry verdween): `file_lock` + verse read op
+   alle 35 schrijfpaden (#158, `_synchronized`-decorator, intra-proces) → daarna **`fcntl.flock`** in
+   `util.file_lock` (#161) voor cross-proces (cockpit ↔ daemon), crash-veilig + timeout, dekt óók de
+   AttachmentStore. Getest met echte subprocessen.
+4. **Geneste `<form>`** (de eigenlijke oorzaak dat de upload NU faalde): het upload-form (`filepost`) zat
+   genest ín de composer-`<form>` → browser dropt de inner form → `wire()` stuurt form-encoded → de File
+   valt weg → het bestand kwam nooit binnen. Un-nested via `form=`-attribuut (#162). Geverifieerd door
+   Stefan: **upload werkt**.
+
+Plus: read-only wees-bestand-rapport (#160, `python -m nooch_village.orphan_report`, vond 4 wezen uit de
+race-periode — herstelt niets, mens beslist); bord-drag-drop checkt nu ook `response.ok` (#163);
+WORKING_AGREEMENTS-notitie over de stille 4000-cap op policy-bodies (#156).
+
+**Data-operatie (server, protocol gevolgd):** de "Tone of Voice"-policy zat op de 4000-cap afgekapt →
+gesplitst in **Tone of Voice** + **Position Statements** (bron: `strategies.json`), en het strategie-
+duplicaat (`tone_of_voice`+`position_statements`) verwijderd; "Desing System"-titeltypo gefixt.
+
+**Open (geen haast):** de 4 wees-bestanden op schijf zonder wall-entry — nu de bugs weg zijn kan Stefan ze
+opnieuw uploaden (blijven nu staan), of per geval opruimen na akkoord. Verder niks blokkerends.
 
 ---
 
