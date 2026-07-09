@@ -674,36 +674,17 @@ def _person_projects_tab_html(st: _Stores, filler_type: str, pid: str, csrf_toke
     return f"<div class='c2-sec'><h3>Projecten ({len(mine)})</h3>{board}</div>"
 
 
-def _opdracht_post(p: dict, hid, rw: bool) -> str:
-    """De opdracht (p['description']) als eerste, oudste wall-post. ALLEEN aangeroepen wanneer er een
-    opdracht IS — het lege geval toont geen post maar een subtiele toevoeg-link (zie _opdracht_add).
-    proj_describe blijft de bewerk-actie (inline, ingeklapt)."""
+def _opdracht_post(p: dict) -> str:
+    """De opdracht (p['description']) als eerste, oudste wall-post — ALLEEN read-only weergave, ALLEEN
+    aangeroepen wanneer er een opdracht IS. De UI-ingang om een opdracht te zetten/bewerken is bewust
+    verwijderd (scope: opdracht-veld uit de UI); het veld blijft via prep (description → prompt-sectie)
+    én via de API (proj_describe-dispatch) bereikbaar. Bestaande descriptions blijven dus zichtbaar."""
     desc = p.get("description", "")
-    editor = ""
-    if rw:
-        editor = (f"<details class='descedit'>"
-                  f"<summary class='flink'>✎ bewerken</summary>"
-                  f"<form method='post' action='/action' class='pf'>{hid()}"
-                  f"<label class='att-lbl'>Opdracht — stuurt de planning van de rol</label>"
-                  f"{md_editor('description', desc, placeholder='Beschrijf de opdracht…')}"
-                  f"<button class='btn ok sm' type='submit' name='action' value='proj_describe'>opslaan</button>"
-                  f"</form></details>")
     return (f"<div class='fentry fentry-opdracht'>"
             f"<div class='fhead'><span class='av you'>🙋</span>"
             f"<span class='fwho'><b class='fname'>Opdracht</b></span>"
             f"<span class='fstamp'>{_e(_stamp(p.get('created_at')))}</span></div>"
-            f"<div class='fbubble'><span class='fkicker'>Opdracht</span>{_md(desc)}{editor}</div></div>")
-
-
-def _opdracht_add(hid) -> str:
-    """Subtiele '+ opdracht toevoegen'-link boven de stroom als er nog GEEN opdracht is. Opent de
-    markdown-editor pas bij klik (geen altijd-open gat in de wall). proj_describe ongewijzigd."""
-    return (f"<details class='opdracht-add'><summary class='flink'>+ opdracht toevoegen</summary>"
-            f"<form method='post' action='/action' class='pf'>{hid()}"
-            f"<label class='att-lbl'>Opdracht — stuurt de planning van de rol</label>"
-            f"{md_editor('description', '', placeholder='Beschrijf de opdracht…')}"
-            f"<button class='btn ok sm' type='submit' name='action' value='proj_describe'>opslaan</button>"
-            f"</form></details>")
+            f"<div class='fbubble'><span class='fkicker'>Opdracht</span>{_md(desc)}</div></div>")
 
 
 def _attach_post(a: dict, pid: str, hid, rw: bool) -> str:
@@ -898,7 +879,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                    f"</div></details>")
         composer = (f"<form method='post' action='/action' class='pf comp-form'>{hid()}"
                     f"<input type='hidden' name='author' value='human:'>"
-                    f"<label class='att-lbl'>Gesprek — zichtbaar voor iedereen, stuurt de planning niet</label>"
+                    f"<label class='att-lbl'>Gesprek — @naam vraagt een inwoner om mee te denken. Sturen doe je via de checklist.</label>"
                     f"{md_editor('text', rows=2, placeholder='Schrijf een reactie…', help=True)}"
                     f"<div class='comp-row'>"
                     f"{bijlage}"                                    # bijlage links op de toolbar-rij…
@@ -909,11 +890,11 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
             composer += (f"<form method='post' action='/action' class='ai-ask'>{hid()}"
                          f"<button class='btn ghost sm ai-ask-btn' type='submit' name='action' value='ai_reply'>"
                          f"🤖 Vraag {_e(ai.name)} om mee te denken</button></form>")
-    # Eén chronologische stroom: opdracht (created_at, oudste → bovenaan) ALLEEN als er een opdracht is;
-    # dialoog + deliverables (log-entries) en bijlagen, gesorteerd op tijd. Geen opdracht → een subtiele
-    # toevoeg-link boven de stroom i.p.v. een lege post. Kale mutaties staan niet in de log → niet hier.
+    # Eén chronologische stroom: opdracht (created_at, oudste → bovenaan) ALLEEN als er een opdracht is
+    # (read-only; de opdracht-editor is uit de UI verwijderd); dialoog + deliverables (log-entries) en
+    # bijlagen, gesorteerd op tijd. Kale mutaties staan niet in de log → niet hier.
     heeft_opdracht = bool(p.get("description", "").strip())
-    stream = [(p.get("created_at") or 0, _opdracht_post(p, hid, rw))] if heeft_opdracht else []
+    stream = [(p.get("created_at") or 0, _opdracht_post(p))] if heeft_opdracht else []
     for m in (p.get("log") or []):
         stream.append((m.get("at") or 0,
                        _feed_entry_html(st, m, role_name=role_name, pid=pid,
@@ -921,7 +902,6 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     for a in (p.get("attachments") or []):
         stream.append((a.get("at") or 0, _attach_post(a, pid, hid, rw)))
     stream.sort(key=lambda t: t[0])
-    opdracht_add = _opdracht_add(hid) if (not heeft_opdracht and rw) else ""
     # De wall-container scrollt naar het laatste bericht bij openen (focus op het recentste; omhoog =
     # historie). Zelf-meegedragen snippet (vgl. _WRAPSEL_JS) voor de standalone volle pagina; in de modal
     # draait een <script> niet bij innerHTML, dus daar doet wire() dezelfde scroll (scoped op de container,
@@ -929,7 +909,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     scroll_js = ("<script>(function(){var w=document.querySelector('.wall-scroll');"
                  "if(w){requestAnimationFrame(function(){w.scrollTop=w.scrollHeight;});}})();</script>")
     wall = (f"<div class='wall-head'><h2>Wall — inhoud &amp; gesprek</h2></div>"
-            f"{composer}{opdracht_add}"
+            f"{composer}"
             f"<div class='wall-scroll'>{''.join(h for _, h in stream)}</div>{scroll_js}")
 
     # ---- Bovenrand/labels + werkoverleg-CTA (conditioneel) ----
