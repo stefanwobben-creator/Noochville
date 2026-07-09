@@ -240,20 +240,65 @@ def _owner_ai(st: _Stores, orec):
     return None
 
 
-def _ai_reply(st: _Stores, pid: str, ask=None) -> bool:
-    """Laat de AI-inwoner van de eigenaar-rol kort meedenken in de dialoog (op verzoek).
-    `ask(prompt)->str|None` is injecteerbaar (test); standaard via llm.reason. Fail-closed."""
+def _role_of_persona(st: _Stores, persona):
+    """Eerste niet-gearchiveerde rol die door deze persona wordt vervuld, of None. Puur voor de
+    'Rol: … purpose'-context in de reply; ontbreekt hij, dan valt die regel weg (fail-soft)."""
+    if persona is None:
+        return None
+    for r in st.records.all():
+        if getattr(r, "archived", False):
+            continue
+        f = _owner_ai(st, r)
+        if f is not None and f.id == persona.id:
+            return r
+    return None
+
+
+def _mentioned_personas(st: _Stores, text: str) -> list:
+    """AI-personas die in `text` @genoemd zijn — via rolnaam (→ de persona die de rol vervult) of via
+    de persona-naam zelf. Zelfde match-regel als _mentions_in: substring '@naam' (case-insensitief).
+    Ontdubbeld op persona-id, volgorde-behoudend. Een @mens levert niets op (die krijgt enkel notificatie)."""
+    t = (text or "").lower()
+    out, seen = [], set()
+
+    def _maybe(name, persona):
+        if persona is None or persona.id in seen:
+            return
+        if ("@" + (name or "").strip().lower()) in t:
+            seen.add(persona.id)
+            out.append(persona)
+
+    for r in st.records.all():                       # rolnaam → de persona die de rol vervult
+        if getattr(r, "archived", False):
+            continue
+        _maybe(_name(r), _owner_ai(st, r))
+    for p in st.personas.all():                      # persona-naam → die persona
+        _maybe(p.name, p)
+    return out
+
+
+def _ai_reply(st: _Stores, pid: str, ask=None, *, persona=None, prefix: str = "") -> bool:
+    """Laat een AI-inwoner kort meedenken in de dialoog. Zonder `persona`: de inwoner van de
+    eigenaar-rol (de meedenk-knop). Met `persona`: die specifieke, @genoemde inwoner; `prefix` zet de
+    aanleidende mens-comment bovenaan de context. `ask(prompt)->str|None` is injecteerbaar (test);
+    standaard via llm.reason. Fail-closed."""
     p = st.projects.get(pid)
     if p is None:
         return False
-    orec = st.records.get(p.get("owner"))
-    persona = _owner_ai(st, orec)
+    if persona is None:
+        role = st.records.get(p.get("owner"))        # knop-variant: de eigenaar-persona
+        persona = _owner_ai(st, role)
+    else:
+        role = _role_of_persona(st, persona)         # @mention-variant: rol enkel voor de purpose-regel
     if persona is None:
         return False
     recent = "\n".join(f"- {m.get('text', '')}" for m in (p.get("log") or [])[-6:])
-    ctx = (f"Project: {_scope_text(p)}\n"
+    rol_line = (f"Rol: {_name(role)} — purpose: {role.definition.purpose}\n" if role is not None else "")
+    aanleiding = (prefix.strip() + "\n\n") if (prefix or "").strip() else ""
+    ctx = (f"{aanleiding}"
+           f"Project: {_scope_text(p)}\n"
            f"Omschrijving: {p.get('description', '') or '(geen)'}\n"
-           f"Rol: {_name(orec)} — purpose: {orec.definition.purpose}\n"
+           f"{rol_line}"
            f"Recente dialoog:\n{recent or '(nog leeg)'}\n\n"
            f"Reageer kort (max 4 zinnen) en concreet als deze rol: geef een volgende stap of inzicht.")
     from nooch_village.personas import persona_prompt
@@ -271,6 +316,35 @@ def _ai_reply(st: _Stores, pid: str, ask=None) -> bool:
     st.projects.add_feed_entry(pid, out.strip(), kind="comment",
                               author_type="persona", author_id=persona.id)
     return True
+
+
+def _reply_to_mentions(st: _Stores, pid: str, text: str) -> int:
+    """Laat elke in `text` @genoemde AI-persona één keer meedenken op de wall, met de aanleidende
+    comment bovenaan de context. Cap op mention_reply_limit (default 2, uit .env/env) tegen LLM-budget.
+    Fail-closed: geen persona-match, geen LLM-antwoord of een exceptie → geen post, en het bestaande
+    notificatie-gedrag blijft ongemoeid. Alleen de aanroeper (mens-comment) mag dit triggeren."""
+    try:
+        personas = _mentioned_personas(st, text)
+    except Exception:
+        return 0
+    if not personas:
+        return 0
+    _load_env()
+    try:
+        limit = max(0, int(os.getenv("mention_reply_limit", "2")))
+    except (TypeError, ValueError):
+        limit = 2
+    prefix = f"De mens vraagt jou: {(text or '').strip()}"
+    replied = 0
+    for persona in personas:
+        if replied >= limit:
+            break
+        try:
+            if _ai_reply(st, pid, persona=persona, prefix=prefix):
+                replied += 1
+        except Exception:
+            continue
+    return replied
 
 
 def _parse_trekker(val: str):
@@ -1082,6 +1156,13 @@ def _act_proj_feed(c):
                 st.notif.add(ty, tid, g("pid"), entry["id"], by="dialoog", snippet=g("text"))
             if ment:
                 msg += f" · {len(ment)} genotificeerd"
+            # @mention van een AI-persona → die persona antwoordt eenmalig op de wall. Alleen bij een
+            # mens-comment: een persona-comment kan nooit een nieuwe reply triggeren (geen loop), ook
+            # niet met een @erin. Cap + fail-closed zitten in _reply_to_mentions.
+            if atype == "human":
+                replied = _reply_to_mentions(st, g("pid"), g("text"))
+                if replied:
+                    msg += f" · {replied} AI-antwoord{'en' if replied != 1 else ''}"
         return nxt, msg
 
 
