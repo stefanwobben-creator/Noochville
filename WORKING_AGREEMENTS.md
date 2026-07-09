@@ -91,3 +91,10 @@ sessie opent hiermee.
   of leeg)" nog niet in geen-sleutel / lege-respons / weggevangen-exceptie (de
   `_try_*` vangen auth/timeout weg als `None`). Bemoeilijkte de diagnose van
   09-07; een fijnere uitsplitsing zou de laddertoestand direct leesbaar maken.
+- Mention-ontwerp: v1 bestaat (09-07). Een `@persona` op de project-wall laat die
+  persona eenmalig meedenken — het antwoord ontstaat synchroon in het **cockpit-proces**
+  (`_reply_to_mentions` → `_ai_reply`), als een gesprek. Bewust licht: geen daemon,
+  geen inbox-job, cap op `mention_reply_limit`, fail-closed. Open punt versmald tot de
+  **zware variant**: een mention als **inbox-job in de daemon**, voor wanneer een mention
+  wérk moet worden (een toegewezen taak die áf moet) in plaats van een reactie. Dat is de
+  postbus-route (Inbox + matchmaker), niet de wall — pas bouwen als de behoefte er is.
