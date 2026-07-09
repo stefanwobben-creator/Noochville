@@ -167,12 +167,14 @@ def test_opdracht_post_met_bewerken_toggle(tmp_path):
     assert "value='proj_describe'" in frag        # bewerken blijft proj_describe
 
 
-def test_opdracht_editor_open_als_leeg(tmp_path):
-    # ZONDER opdracht: placeholder + editor staat open om meteen toe te voegen
+def test_geen_opdracht_geen_post_wel_toevoeglink(tmp_path):
+    # ZONDER opdracht: GEEN opdracht-post (geen gat), wel een subtiele '+ opdracht toevoegen'-link
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
     pid = st.projects.create("mother_earth__nooch__website_developer", "Leeg project", "human")
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    assert "Nog geen opdracht" in frag
-    assert "class='descedit' open>" in frag
+    assert "fentry-opdracht" not in frag              # geen (lege) opdracht-post
+    assert "Nog geen opdracht" not in frag            # geen placeholder-tekst
+    assert "opdracht-add" in frag and "+ opdracht toevoegen" in frag
+    assert "value='proj_describe'" in frag            # toevoegen blijft proj_describe
