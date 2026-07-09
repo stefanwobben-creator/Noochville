@@ -312,21 +312,30 @@ def reason(prompt: str, *, ladder: str | None = None, max_tokens: int = 700) -> 
     uitgesmeerd (LIMITER), zodat het dorp onder de gratis limiet blijft."""
     LIMITER.acquire()
     steps = _parse_ladder(ladder) if ladder else _ladder()
+    outcomes: list[str] = []                       # per trede de uitkomst — voor de samenvatting bij falen
     for vendor, model in steps:
         tier = f"{vendor}:{model or 'default'}"
-        if _in_cooldown(tier):
-            log.debug("LLM-trede %s in cooldown — overgeslagen", tier)
+        if _in_cooldown(tier):                     # observeerbaar op INFO (was DEBUG → onzichtbaar)
+            log.info("LLM-trede %s: in cooldown — overgeslagen", tier)
+            outcomes.append(f"{tier}=cooldown")
             continue
         try:
             out = _call_tier(vendor, model, prompt, max_tokens=max_tokens)
-        except _RateLimit as exc:
-            log.info("LLM-trede %s tegen rate-limit (%s) — cooldown + door naar volgende",
-                     tier, exc)
+        except _RateLimit:
+            log.info("LLM-trede %s: rate-limit (429) — cooldown + door naar volgende", tier)
             _set_cooldown(tier)
+            outcomes.append(f"{tier}=429")
             continue
         except Exception as exc:   # defensief: een trede mag de ladder nooit laten crashen
-            log.warning("LLM-trede %s onverwacht gefaald: %s — door naar volgende", tier, exc)
+            log.warning("LLM-trede %s: onverwacht gefaald (%s) — door naar volgende", tier, exc)
+            outcomes.append(f"{tier}=fout:{type(exc).__name__}")
             continue
         if out:
+            log.info("LLM-trede %s: geslaagd", tier)
             return out
+        log.info("LLM-trede %s: geen antwoord (geen sleutel of leeg) — door naar volgende", tier)
+        outcomes.append(f"{tier}=leeg")
+    # Alle tredes op: log expliciet waaróm (voorheen zag de caller alleen "LLM-plan mislukt").
+    log.warning("LLM: alle %d trede(s) uitgeput — geen antwoord. Per trede: %s",
+                len(outcomes), "; ".join(outcomes) or "(geen tredes geconfigureerd)")
     return None
