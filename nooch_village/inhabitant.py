@@ -956,7 +956,8 @@ class Inhabitant(threading.Thread):
         goal = self._scope_text(p)
         if not goal or self._project_checklist(p) is not None:
             return                                                # geen doel of al voorbereid (idempotent)
-        plan = self._plan_checklist(goal, keyword=p.get("keyword") or "", exclude_pid=pid)
+        plan = self._plan_checklist(goal, keyword=p.get("keyword") or "", exclude_pid=pid,
+                                    description=p.get("description"))
         if plan is None:
             self.log.warning("📋 project '%s': geen checklist voorbereid (LLM-plan mislukte); blijft in TOEKOMST", pid)
             return
@@ -1000,7 +1001,25 @@ class Inhabitant(threading.Thread):
         pl = payload if isinstance(payload, dict) else {}
         return [f for f in req if not pl.get(f)]                  # ontbreekt of leeg (None/""/[]/{})
 
-    def _plan_checklist(self, goal: str, *, keyword: str = "", exclude_pid: str = "") -> dict | None:
+    def _opdracht_section(self, description) -> str:
+        """De opdracht van de mens (p['description']) als prompt-sectie — die stuurt de planning.
+        Leeg/ontbrekend → "" (geen lege kop). Hard begrensd op description_context_max_chars (default
+        1500), nette woord-grens-afkap. Fail-closed: een corrupt/onleesbaar veld mag de prep nooit
+        laten vallen (comments/wall lezen we bewust NIET mee — dat dekt de mention-feature later)."""
+        try:
+            d = (description or "").strip()
+            if not d:
+                return ""
+            limit = int(self.context.settings.get("description_context_max_chars", "1500"))
+            if len(d) > limit:
+                cut = d[:limit].rsplit(" ", 1)[0]
+                d = (cut or d[:limit]) + "…"
+            return f"Opdracht van de mens (de checklist moet hieraan voldoen):\n{d}\n\n"
+        except Exception:
+            return ""
+
+    def _plan_checklist(self, goal: str, *, keyword: str = "", exclude_pid: str = "",
+                        description: str = "") -> dict | None:
         """LLM-stap (Noochie): toets het doel tegen mijn accountabilities + skills → checklist met per item
         de skill ÉN een payload in de vorm die de skill z'n input_schema voorschrijft. Machine-check: een
         skill buiten mijn harde DNA-lijst wordt 'geen skill' + reden. Fail-soft: een skill zonder ingevuld
@@ -1030,8 +1049,10 @@ class Inhabitant(threading.Thread):
             if blok:
                 memory_section = ("Eerder afgerond onderzoek in het dorp (gebruik dit; plan geen items "
                                   f"die dit al beantwoordt):\n{blok}\n\n")
+        opdracht_section = self._opdracht_section(description)   # mens-opdracht: stuurt de planning
         prompt = (
             f"Je bent {self.name}, een autonome rol. Projectdoel:\n\"{goal}\"\n\n"
+            f"{opdracht_section}"
             f"Jouw skills (de ENIGE tools die je hebt), met hun INPUT-vorm:\n{catalog}\n\n"
             f"Jouw accountabilities: {list(self.dna.accountabilities) or '(geen)'}\n\n"
             f"{memory_section}"

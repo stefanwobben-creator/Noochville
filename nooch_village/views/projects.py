@@ -682,6 +682,7 @@ def _opdracht_post(p: dict, hid, rw: bool) -> str:
         editor = (f"<details class='descedit'>"
                   f"<summary class='flink'>✎ bewerken</summary>"
                   f"<form method='post' action='/action' class='pf'>{hid()}"
+                  f"<label class='att-lbl'>Opdracht — stuurt de planning van de rol</label>"
                   f"{md_editor('description', desc, placeholder='Beschrijf de opdracht…')}"
                   f"<button class='btn ok sm' type='submit' name='action' value='proj_describe'>opslaan</button>"
                   f"</form></details>")
@@ -697,6 +698,7 @@ def _opdracht_add(hid) -> str:
     markdown-editor pas bij klik (geen altijd-open gat in de wall). proj_describe ongewijzigd."""
     return (f"<details class='opdracht-add'><summary class='flink'>+ opdracht toevoegen</summary>"
             f"<form method='post' action='/action' class='pf'>{hid()}"
+            f"<label class='att-lbl'>Opdracht — stuurt de planning van de rol</label>"
             f"{md_editor('description', '', placeholder='Beschrijf de opdracht…')}"
             f"<button class='btn ok sm' type='submit' name='action' value='proj_describe'>opslaan</button>"
             f"</form></details>")
@@ -894,6 +896,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                    f"</div></details>")
         composer = (f"<form method='post' action='/action' class='pf comp-form'>{hid()}"
                     f"<input type='hidden' name='author' value='human:'>"
+                    f"<label class='att-lbl'>Gesprek — zichtbaar voor iedereen, stuurt de planning niet</label>"
                     f"{md_editor('text', rows=2, placeholder='Schrijf een reactie…', help=True)}"
                     f"<div class='comp-row'>"
                     f"<button class='btn ok sm' type='submit' name='action' value='proj_feed'>Plaatsen</button>"
