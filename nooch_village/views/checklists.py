@@ -115,6 +115,57 @@ def _checklists_tab_html(st: _Stores, rec, csrf: str = "", flt: str = "due", nav
     return f"<div class='c2-sec'>{head}</div>{groups}"
 
 
+def _cl_item_state(it: dict, done, skill) -> tuple[str, str]:
+    """Bepaal de weergave-state van een checklist-item + de extra box-klasse.
+
+    Vier onderscheidbare states (scope 1):
+      done     ✓  afgevinkt
+      exec     ·  uitvoerbaar (skill + payload in orde, nog niet gedraaid)
+      warn     ⚠  payload onvolledig (payload_ok=False) — de checklist deugt niet
+      noskill  ○  geen skill (skill=None) — een mens moet dit doen
+
+    Fail-soft (afgesproken): een ONTBREKEND payload_ok = 'niet gevalideerd' = gewoon uitvoerbaar (·),
+    NIET ongeldig. Alleen expliciet payload_ok is False → ⚠. Zo staat een oud item (geprepareerd vóór
+    PR #136, zonder het veld) niet ten onrechte als onvolledig gemarkeerd — consistent met hoe het
+    primitief fail-soft is op skills zonder required_payload."""
+    if done:
+        return "done", ""
+    if not skill:
+        return "noskill", " b-noskill"
+    if it.get("payload_ok") is False:            # expliciet False; None/afwezig telt NIET als ongeldig
+        return "warn", " b-warn"
+    return "exec", ""
+
+
+def _cl_fmt_payload(it: dict) -> str:
+    """Compacte payload-weergave (zoals in het prototype: {sleutel: waarde}). Valt terug op query."""
+    payload = it.get("payload")
+    if isinstance(payload, dict) and payload:
+        inner = ", ".join(f"{k}: {v}" for k, v in list(payload.items())[:4])
+        return "{" + inner[:80] + "}"
+    q = (it.get("query") or "").strip()
+    return "{" + q[:60] + "}" if q else ""
+
+
+def _cl_item_meta(state: str, skill, it: dict) -> str:
+    """De meta-regel onder een checklist-item: skill-naam + payload, en per state het ⚠/○-signaal.
+    ⚠ (coral) en ○ (grijs) verschillen bewust visueel — ze vragen om verschillende actie."""
+    if state == "done":
+        return ""                                # afgerond → geen ruis; het resultaat staat in de wall
+    reason = (it.get("reason") or "").strip()
+    parts = []
+    if skill:
+        parts.append(f"<span class='ck-skill'>{_e(str(skill))}</span>")
+        pl = _cl_fmt_payload(it)
+        if pl:
+            parts.append(f"<span class='ck-payload'>{_e(pl)}</span>")
+    if state == "warn":
+        parts.append(f"<span class='ck-warn'>⚠ payload onvolledig{': ' + _e(reason) if reason else ''}</span>")
+    elif state == "noskill":
+        parts.append(f"<span class='ck-noskill'>○ geen skill{' · ' + _e(reason) if reason else ' · vereist mens'}</span>")
+    return f"<span class='ck-meta'>{' '.join(parts)}</span>" if parts else ""
+
+
 def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool) -> str:
     """Named checklists (Trello-stijl): titel + voortgangsbalk + items + verwijderen."""
     def hid():
@@ -134,16 +185,18 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool) -> str:
         rows = ""
         for it in items:
             d = it.get("done")
+            skill = it.get("skill")
+            state, box_extra = _cl_item_state(it, d, skill)
             clitem = (f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
                       f"<input type='hidden' name='item' value='{_e(it['id'])}'>")
-            chk = (f"<form method='post' action='/action' style='display:inline'>{hid()}{clitem}"
-                   f"<button class='ck-box{' on' if d else ''}' type='submit' name='action' "
+            chk = (f"<form method='post' action='/action'>{hid()}{clitem}"
+                   f"<button class='ck-box{' on' if d else ''}{box_extra}' type='submit' name='action' "
                    f"value='check_toggle'>{'✓' if d else ''}</button></form>") if rw else ("☑" if d else "☐")
-            rm = (f"<form method='post' action='/action' style='display:inline'>{hid()}{clitem}"
+            rm = (f"<form method='post' action='/action'>{hid()}{clitem}"
                   f"<button class='dellink' type='submit' name='action' value='check_remove'>✕</button></form>") if rw else ""
-            warn = (f" <span class='muted'>⚠ {_e(it.get('reason') or 'onvolledige payload')}</span>"
-                    if it.get("payload_ok") is False else "")   # fail-fast: zichtbaar bij de keuring in TOEKOMST
-            rows += f"<li class='ck-item'>{chk}<span class='{'ck-done' if d else ''}'>{_e(it['text'])}</span>{warn}{rm}</li>"
+            txt = (f"<span class='ck-txt'><span class='{'ck-done' if d else ''}'>{_e(it['text'])}</span>"
+                   f"{_cl_item_meta(state, skill, it)}</span>")
+            rows += f"<li class='ck-item'>{chk}{txt}{rm}</li>"
         add = (f"<form method='post' action='/action' class='ckadd'>{hid()}"
                f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
                f"<input name='text' placeholder='item toevoegen…'>"

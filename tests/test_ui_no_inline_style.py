@@ -23,12 +23,12 @@ CIRCLE = "mother_earth__nooch"
 # Niet-vermelde governeerde views moeten 0 zijn (schoon). Verlaag een getal zodra je opruimt.
 _STYLE_WHITELIST = {
     "views/overview.py": 34,
-    "views/projects.py": 27,
+    "views/projects.py": 19,
     "views/strategy.py": 14,
     "views/werkoverleg.py": 13,
     "views/metrics.py": 10,
     "views/roloverleg.py": 7,
-    "views/checklists.py": 7,
+    "views/checklists.py": 5,
     "views/backlog.py": 7,
     "cockpit2.py": 7,
     "views/noochie.py": 5,

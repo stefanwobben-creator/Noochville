@@ -17,9 +17,9 @@ def test_detail_overzicht_kop(tmp_path):
     dd, pid = _setup(tmp_path)
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "<!doctype" not in frag.lower()
-    # Details: tweekoloms, read-only rol/persoon + aangemaakt/zichtbaarheid (status in het …-menu)
-    for k in ("pgrid", "pdisc", "class='dcol'",
-              "<span class='dk'>Rol</span>", "<span class='dk'>Persoon</span>",
+    # Details in de sticky structuur-kantlijn (pside): tweekoloms rol/trekker + aangemaakt/zichtbaarheid
+    for k in ("pgrid", "pside", "class='dcol'", "Projectdetails",
+              "<span class='dk'>Rol</span>", "<span class='dk'>Trekker</span>",
               "<span class='dk'>Aangemaakt</span>", "<span class='dk'>Zichtbaar</span>"):
         assert k in frag
     assert "Voortgang" not in frag and "<dt>Status</dt>" not in frag
@@ -46,10 +46,11 @@ def test_redesign_layout(tmp_path):
     # full-width header met titel inline + …-menu (status/archiveren/verwijderen)
     assert "pcard-head" in frag and "titleform" in frag and "title-edit" in frag
     assert "cardmenu" in frag and "menu-h" in frag and "Archiveren" in frag and "Verwijderen" in frag
-    # Details ingeklapt zonder status; omschrijving inline; Bijlage-actiekaart; rechterkolom = dialoog
-    assert "detailsbox" in frag and "descform" in frag
-    assert "Bestand van je computer" in frag                 # Bijlage-actiekaart (upload + link)
-    assert "pdisc" in frag and "Dialoog" in frag
+    # Structuur-kantlijn: Projectdetails + Checklist-panel; opdracht bewerkbaar (proj_describe);
+    # Bijlage in de composer; LINKS = de wall (geen aparte dialoog-aside meer)
+    assert "Projectdetails" in frag and "value='proj_describe'" in frag
+    assert "Bestand van je computer" in frag                 # bijlage-affordance in de composer
+    assert "pside" in frag and "Wall — inhoud" in frag
     # geen apart 'Acties'-blok
     assert "Acties" not in frag
 
@@ -63,8 +64,8 @@ def test_bijlage_cards_trello(tmp_path):
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "attcard" in frag and "Nooch blog" in frag      # met titel
     assert "example.com" in frag                            # zonder titel -> domein
-    assert ">Links<" in frag                                # links-overzicht (sectie)
-    assert "Bestand van je computer" in frag               # toevoegen via de Bijlage-actiekaart
+    assert "fentry-attach" in frag                          # bijlage rendert als inhoud-post in de wall
+    assert "Bestand van je computer" in frag               # toevoegen via de composer-bijlage
     # verwijderen
     aid = cockpit2._Stores(dd).projects.get(pid)["attachments"][0]["id"]
     cockpit2.dispatch(dd, "attach_remove", {"pid": [pid], "aid": [aid], "next": ["/"]}, username="guest")
@@ -75,7 +76,7 @@ def test_bijlage_bestand(tmp_path):
     dd, pid = _setup(tmp_path)
     cockpit2._Stores(dd).projects.attach_file(pid, "rapport.pdf", f"attachments/{pid}/x_rapport.pdf")
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    assert ">Bijlagen<" in frag and "rapport.pdf" in frag and f"/file?pid={pid}" in frag
+    assert "fentry-attach" in frag and "rapport.pdf" in frag and f"/file?pid={pid}" in frag
 
 
 def test_multipart_parser():
@@ -109,13 +110,13 @@ def test_emoji_reactie(tmp_path):
 def test_datum_card_datepicker(tmp_path):
     dd, pid = _setup(tmp_path)
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    # minimalistisch: date input, geen start date / tijd / recurring
-    assert "acard-d" in frag and "type='date'" in frag and ">Datum<" in frag
+    # deadline nu in de header: chip-summary opent een date-popover (proj_setdue), minimalistisch
+    assert "acard-d" in frag and "type='date'" in frag and "value='proj_setdue'" in frag
     assert "Start date" not in frag and "Recurring" not in frag
-    # datum zetten -> label past zich aan; en weer wissen
+    # datum zetten -> de header-chip past zich aan; en weer wissen
     cockpit2.dispatch(dd, "proj_setdue", {"pid": [pid], "due": ["2026-06-25"], "next": ["/"]}, username="guest")
     f2 = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    assert "25 jun 2026" in f2 and "datum verwijderen" in f2
+    assert "25 jun 2026" in f2 and "datum wissen" in f2
     cockpit2.dispatch(dd, "proj_setdue", {"pid": [pid], "due": [""], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["due"] is None
 
@@ -156,21 +157,22 @@ def test_inline_edits_partieel(tmp_path):
     assert p["scope"] == "Titel 2" and p["description"] == "beschrijving"
 
 
-def test_omschrijving_leesbaar_met_bewerken_toggle(tmp_path):
-    # MET omschrijving: leesbare tekst + ingeklapte "bewerken"-editor (bug: was vaste kleine textarea)
+def test_opdracht_post_met_bewerken_toggle(tmp_path):
+    # MET opdracht: de opdracht is de eerste wall-post (fentry-opdracht) met ingeklapte bewerk-editor
     dd, pid = _setup(tmp_path)   # description="x"
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    assert "desc-read" in frag and "✎ bewerken" in frag
+    assert "fentry-opdracht" in frag and "✎ bewerken" in frag
     assert "class='descedit'>" in frag            # ingeklapt (geen ' open')
     assert "name='description'" in frag           # textarea zit achter de toggle, nog steeds aanwezig
+    assert "value='proj_describe'" in frag        # bewerken blijft proj_describe
 
 
-def test_omschrijving_editor_open_als_leeg(tmp_path):
-    # ZONDER omschrijving: 'geen omschrijving' + editor staat open om meteen toe te voegen
+def test_opdracht_editor_open_als_leeg(tmp_path):
+    # ZONDER opdracht: placeholder + editor staat open om meteen toe te voegen
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
     pid = st.projects.create("mother_earth__nooch__website_developer", "Leeg project", "human")
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    assert "geen omschrijving" in frag
+    assert "Nog geen opdracht" in frag
     assert "class='descedit' open>" in frag

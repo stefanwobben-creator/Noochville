@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from nooch_village.web_base import _e, _page, _banner
 from nooch_village.cockpit2_util import (
     _name, _initials, _age, _fmt_due, _created_full, md_editor, _md,
-    _link_host, _psec, _person_name,
+    _link_host, _psec, _person_name, _stamp,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK,
     _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET,
 )
@@ -309,12 +309,24 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "inp.parentNode.querySelectorAll('.emo-f').forEach(function(f){"
         "var k=f.getAttribute('data-k')||'';f.style.display=(!q||k.indexOf(q)>-1)?'':'none';});};"
         "function frag(u){return u+(u.indexOf('?')>-1?'&':'?')+'fragment=1';}"
-        "function openCard(u){last=u;"
+        "function openCard(u,push){var wasClosed=(ov.style.display==='none'||!ov.style.display);last=u;"
         "fetch(frag(u)).then(function(r){return r.text();}).then(function(h){bd.innerHTML=h;ov.style.display='flex';"
         "window.__noclose=!!bd.querySelector('[data-noclose]');"
-        "var xb=document.querySelector('.ovl-x');if(xb)xb.style.display=window.__noclose?'none':'';wire();lkMaybe();});}"
-        "function reopen(){if(last)openCard(last);}"
-        "function shut(){lkDisconnect();ov.style.display='none';bd.innerHTML='';if(dirty){dirty=false;location.reload();}}"
+        "var xb=document.querySelector('.ovl-x');if(xb)xb.style.display=window.__noclose?'none':'';wire();lkMaybe();"
+        # URL-sync: alleen voor project-kaarten. Bij de eerste opening zet de vorige (bord-)entry op
+        # de back=<cirkel-url> die de kaart meegeeft (zonder oude msg=), dan pushState /project?pid=.
+        "try{var pm=u.match(/[?&]pid=([^&]+)/);"
+        "if(push!==false&&pm&&u.indexOf('/project')===0){var cu='/project?pid='+pm[1];"
+        "if(wasClosed){var bk=(u.match(/[?&]back=([^&]+)/)||[])[1];"
+        "if(bk){history.replaceState(history.state,'',decodeURIComponent(bk));}"
+        "history.pushState({card:pm[1]},'',cu);}else{history.replaceState({card:pm[1]},'',cu);}}}catch(e){}"
+        "});}"
+        "function reopen(){if(last)openCard(last,false);}"  # verversen na actie: geen nieuwe history-entry
+        "function shut(){if(history.state&&history.state.card){history.back();return;}"  # pushed kaart → pop naar bord-URL
+        "lkDisconnect();ov.style.display='none';bd.innerHTML='';if(dirty){dirty=false;location.reload();}}"
+        # back-knop / gepopte kaart-entry: sluit de modal, herstel de bord-URL (browser deed dat al).
+        "window.addEventListener('popstate',function(){if(ov.style.display!=='none'){"
+        "lkDisconnect();ov.style.display='none';bd.innerHTML='';if(dirty){dirty=false;location.reload();}}});"
         # ── LiveKit-video in het werkoverleg (Brok 3): mens-tiles in #wo-video ──
         "function lkEnsureSdk(cb){if(window.LivekitClient){cb();return;}"
         "var s=document.getElementById('lk-sdk');if(s){s.addEventListener('load',cb);return;}"
@@ -608,6 +620,51 @@ def _person_projects_tab_html(st: _Stores, filler_type: str, pid: str, csrf_toke
     return f"<div class='c2-sec'><h3>Projecten ({len(mine)})</h3>{board}</div>"
 
 
+def _opdracht_post(p: dict, hid, rw: bool) -> str:
+    """De opdracht als eerste (oudste) wall-post. Vervangt het losse omschrijving-blok; de tekst
+    komt uit p['description'] en blijft bewerkbaar via proj_describe (nu inline in de post)."""
+    desc = p.get("description", "")
+    body = _md(desc) or "<span class='muted'>Nog geen opdracht — voeg toe.</span>"
+    editor = ""
+    if rw:
+        editor = (f"<details class='descedit'{'' if desc else ' open'}>"
+                  f"<summary class='flink'>✎ bewerken</summary>"
+                  f"<form method='post' action='/action' class='pf'>{hid()}"
+                  f"{md_editor('description', desc, placeholder='Beschrijf de opdracht…')}"
+                  f"<button class='btn ok sm' type='submit' name='action' value='proj_describe'>opslaan</button>"
+                  f"</form></details>")
+    stamp = _stamp(p.get("created_at"))
+    return (f"<div class='fentry fentry-opdracht'>"
+            f"<div class='fhead'><span class='av you'>🙋</span>"
+            f"<span class='fwho'><b class='fname'>Opdracht</b></span>"
+            f"<span class='fstamp'>{_e(stamp)}</span></div>"
+            f"<div class='fbubble'><span class='fkicker'>Opdracht</span>{body}{editor}</div></div>")
+
+
+def _attach_post(a: dict, pid: str, hid, rw: bool) -> str:
+    """Een bijlage/link als inhoud-post in de wall. Tijd (at) is bekend; 'wie' wordt (nog) niet
+    vastgelegd op het attachment-record → generieke auteur. Het vastleggen van 'wie' is een
+    datawijziging → scope 2 (audit-trail), niet deze pure-weergave-scope."""
+    if a.get("kind", "link") == "file":
+        nm = a.get("title") or a.get("name", "bestand")
+        href = f"/file?pid={_e(pid)}&aid={_e(a.get('id', ''))}"
+        card = (f"<div class='attcard'><span class='att-ic'>{_IC_FILE}</span>"
+                f"<a class='att-name' href='{href}' target='_blank' rel='noopener'>{_e(nm)}</a></div>")
+    else:
+        nm = a.get("title") or _link_host(a.get("url", ""))
+        card = (f"<div class='attcard'><span class='att-ic'>{_IC_LINK}</span>"
+                f"<a class='att-name' href='{_e(a.get('url', ''))}' target='_blank' rel='noopener'>{_e(nm)}</a></div>")
+    rm = ("" if not rw else
+          f"<form method='post' action='/action' class='pf'>{hid()}"
+          f"<input type='hidden' name='aid' value='{_e(a.get('id', ''))}'>"
+          f"<button class='flink' type='submit' name='action' value='attach_remove'>✕ verwijderen</button></form>")
+    return (f"<div class='fentry fentry-attach'>"
+            f"<div class='fhead'><span class='av'>📎</span>"
+            f"<span class='fwho'><b class='fname'>Bijlage toegevoegd</b></span>"
+            f"<span class='fstamp'>{_e(_stamp(a.get('at')))}</span></div>"
+            f"<div class='fbubble'>{card}<div class='ffoot'><div class='ffoot-l'>{rm}</div></div></div></div>")
+
+
 def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", back: str = "/",
                    fragment: bool = False) -> str:
     p = st.projects.get(pid)
@@ -630,32 +687,10 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
 
     status = p.get("status", "")
 
-    # ---- Rechterkolom: de dialoog (mensen + AI) ----
     role_name = _name(orec) if orec else ""
     mention_names = [m["l"] for m in _mentionables(st)[0]]   # voor highlight in de bubble
-    # Nieuwste boven.
-    feed = "".join(_feed_entry_html(st, m, role_name=role_name, pid=pid, csrf_token=csrf_token,
-                                    mention_names=mention_names)
-                   for m in reversed(p.get("log") or []))
-    if not feed:
-        feed = "<p class='muted'>Nog geen updates of reacties.</p>"
-    composer = ""
-    if rw:
-        # Directe textarea met mini-toolbar op de gele achtergrond; Plaatsen links uitgelijnd.
-        composer = (f"<form method='post' action='/action' class='pf comp-form'>{hid()}"
-                    f"<input type='hidden' name='author' value='human:'>"
-                    f"{md_editor('text', rows=2, placeholder='Schrijf een reactie…', help=True)}"
-                    f"<div class='comp-row'>"
-                    f"<button class='btn ok sm' type='submit' name='action' value='proj_feed'>Plaatsen</button>"
-                    f"</div></form>")
-        ai = _owner_ai(st, orec)
-        if ai is not None:
-            composer += (f"<form method='post' action='/action' class='ai-ask'>{hid()}"
-                         f"<button class='btn ghost sm ai-ask-btn' type='submit' name='action' value='ai_reply'>"
-                         f"🤖 Vraag {_e(ai.name)} om mee te denken</button></form>")
-    discussie = _psec(_IC_CHAT, "Dialoog", composer + feed)   # schrijf-box boven, reacties eronder
 
-    # ---- Status zit volledig in het …-menu (huidige status gemarkeerd); geen los chip-label ----
+    # ---- Status-menu (huidige status gemarkeerd) — in de header ----
     menu = ""
     if rw:
         st_items = ""
@@ -675,49 +710,56 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                 f"onclick=\"return confirm('Definitief verwijderen? Archiveren bewaart het project.')\">Verwijderen</button>"
                 f"</form></div></details>")
 
-    # ---- Header (volledige breedte): titel inline + status + …-menu ----
+    # ---- Titel (inline bewerkbaar) ----
     if rw:
         title = (f"<form method='post' action='/action' class='titleform'>{hid()}"
                  f"<input class='title-edit' name='scope' value='{_e(_scope_text(p))}' aria-label='projecttitel'>"
                  f"<button class='btn ok sm title-save' type='submit' name='action' value='proj_rename'>opslaan</button></form>")
     else:
         title = f"<h2 class='ptitle-ro'>{_e(_scope_text(p))}</h2>"
-    # Deadline-chip vóór de status (overzicht), met Overdue-markering.
-    due_head = ""
-    if p.get("due"):
-        over = _due_overdue(p["due"])
-        badge = "<span class='chip coral-solid'>Overdue</span>" if over else ""
-        due_head = (f"<span class='chip {'coral' if over else 'outline'}'>"
-                    f"{_IC_CLOCK}{_e(_fmt_due(p['due']))}</span>{badge}")
+
+    # ---- Deadline-chip + overdue-badge; klikbaar → date-popover (proj_setdue) ----
+    over = _due_overdue(p["due"]) if p.get("due") else False
+    due_lbl = _fmt_due(p.get("due") or "") or "deadline"
+    due_badge = "<span class='chip coral-solid'>Overdue</span>" if over else ""
+    if rw:
+        due = p.get("due") or ""
+        due_rm = ("" if not due else
+                  f"<form method='post' action='/action' class='pf'>{hid()}"
+                  f"<input type='hidden' name='action' value='proj_setdue'><input type='hidden' name='due' value=''>"
+                  f"<button class='dellink' type='submit'>datum wissen</button></form>")
+        due_head = (f"<details class='acard-d'><summary class='chip {'coral' if over else 'outline'}'>"
+                    f"{_IC_CLOCK}{_e(due_lbl)}</summary><div class='datepop'>"
+                    f"<form method='post' action='/action'>{hid()}"
+                    f"<input type='hidden' name='action' value='proj_setdue'>"
+                    f"<input type='date' name='due' value='{_e(due)}' "
+                    f"onchange='this.form.requestSubmit?this.form.requestSubmit():this.form.submit()'>"
+                    f"</form>{due_rm}</div></details>{due_badge}")
+    else:
+        due_head = (f"<span class='chip {'coral' if over else 'outline'}'>{_IC_CLOCK}{_e(due_lbl)}</span>{due_badge}"
+                    if p.get("due") else "")
     head = (f"<div class='pcard-head'>{title}"
             f"<div class='pcard-head-r'>{due_head}{menu or _proj_chip(status)}</div></div>")
 
-    # ---- Details: kader zonder achtergrond, tweekoloms, links uitgelijnd, altijd open ----
+    # ═══ RECHTS: STRUCTUUR (sticky kantlijn) ═══════════════════════════════════════════
+    # 1) Projectdetails (rol+dangling, trekker, aangemaakt, zichtbaar, impacts, effort-buckets)
     owner = p.get("owner", "")
     is_ii = owner.startswith(_II_PREFIX)
     dangling = bool(owner) and not is_ii and orec is None
-    if is_ii:
-        rol_naam = "Individueel Initiatief"
-    else:
-        rol_naam = _name(orec) if orec else (owner or "—")
+    rol_naam = "Individueel Initiatief" if is_ii else (_name(orec) if orec else (owner or "—"))
     if rw and not is_ii:
-        # Rol verplaatsen: keuzelijst van rollen + expliciete opslaan-knop (de knop is de
-        # submitter, zodat 'action' altijd meekomt). Design: .fieldform (select + knop inline).
-        warn = ("<span class='chip coral-solid' style='margin-bottom:.3rem;display:inline-block'>"
-                "⚠ rol bestaat niet meer — kies een nieuwe</span>") if dangling else ""
+        warn = ("<div class='dangling-warn'><span class='chip coral-solid'>"
+                "⚠ rol bestaat niet meer — kies een nieuwe</span></div>") if dangling else ""
         rol_v = (f"{warn}<form method='post' action='/action' class='fieldform'>{hid()}"
                  f"<select name='owner'>{_owner_options(st, owner)}</select>"
-                 f"<button class='btn ok sm' type='submit' name='action' value='proj_setowner'>"
-                 f"opslaan</button></form>")
+                 f"<button class='btn ok sm' type='submit' name='action' value='proj_setowner'>opslaan</button></form>")
     else:
         rol_v = (f"<a href='/node?id={_e(owner)}'>{_e(rol_naam)}</a>" if orec else _e(rol_naam))
     if rw:
-        # Persoon/AI (trekker) wijzigen: keuzelijst + opslaan-knop, zelfde .fieldform-patroon.
         pers_v = (f"<form method='post' action='/action' class='fieldform'>{hid()}"
                   f"<select name='trekker'>"
                   f"{_trekker_options(st, p.get('person') or '', p.get('agent') or '')}</select>"
-                  f"<button class='btn ok sm' type='submit' name='action' value='proj_settrekker'>"
-                  f"opslaan</button></form>")
+                  f"<button class='btn ok sm' type='submit' name='action' value='proj_settrekker'>opslaan</button></form>")
     elif p.get("agent"):
         pa = st.personas.get(p["agent"])
         pers_v = f"{_e(pa.name if pa else p['agent'])} (AI)"
@@ -734,134 +776,100 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                  f" alleen voor deze cirkel</label></form>")
     else:
         vis_v = "Alleen voor deze cirkel" if p.get("private") else "Hele cirkel-boom"
-    details = (
-        f"<div class='detailsbox'><div class='psec-h'>{_IC_INFO}<span>Details</span></div>"
+    verzwakt_block = _verzwakt_block(p, hid, rw) if p.get("missie_impact") == "verzwakt" else ""
+    details_dcol = (
         f"<div class='dcol'>"
         f"<span class='dk'>Rol</span><span class='dv'>{rol_v}</span>"
-        f"<span class='dk'>Persoon</span><span class='dv'>{pers_v}</span>"
+        f"<span class='dk'>Trekker</span><span class='dv'>{pers_v}</span>"
         f"<span class='dk'>Aangemaakt</span><span class='dv'>{_e(_created_full(p.get('created_at')))}</span>"
         f"<span class='dk'>Zichtbaar</span><span class='dv'>{vis_v}</span>"
         f"<span class='dk'>Missie-impact</span><span class='dv'>{_impact_row(p, 'missie_impact', 'missie', _MISSIE_OPTS, hid, rw)}</span>"
         f"<span class='dk'>Business-impact</span><span class='dv'>{_impact_row(p, 'business_impact', 'business', _BUSINESS_OPTS, hid, rw)}</span>"
         f"<span class='dk'>Effort</span><span class='dv'>{_impact_row(p, 'effort', 'effort', _EFFORT_OPTS, hid, rw)}</span>"
-        f"</div></div>")
+        f"</div>")
+    details_panel = _psec(_IC_INFO, "Projectdetails", details_dcol + verzwakt_block)
 
-    # ---- Omschrijving (leesbare tekst + inklapbare editor) ----
-    if rw:
-        desc = p.get("description", "")
-        # Leesbare tekst (markdown → veilige _md) schaalt mee; de opmaak-editor zit achter "✎ bewerken".
-        # Nog geen omschrijving → editor staat open zodat je meteen kunt toevoegen.
-        lees = f"<div class='desc-read'>{_md(desc) or '<span class=muted>geen omschrijving</span>'}</div>"
-        editor = (f"<details class='descedit'{'' if desc else ' open'}>"
-                  f"<summary>✎ bewerken</summary>"
-                  f"<form method='post' action='/action' class='descform'>{hid()}"
-                  f"{md_editor('description', desc, placeholder='Voeg een omschrijving toe…')}"
-                  f"<button class='btn ok' type='submit' name='action' value='proj_describe' "
-                  f"style='margin-top:.3rem'>opslaan</button></form></details>")
-        desc_body = lees + editor
-    else:
-        desc_body = f"<div>{_md(p.get('description','')) or '<span class=muted>geen omschrijving</span>'}</div>"
-    omschrijving = _psec(_IC_DESC, "Omschrijving", desc_body)
-
-    # ---- Bijlagen-overzicht: Links + Bestanden (card-pattern). Toevoegen via de Bijlage-kaart. ----
-    def _att_rm(aid):
-        return ("" if not rw else
-                f"<form method='post' action='/action' class='att-x'>{hid()}"
-                f"<input type='hidden' name='aid' value='{_e(aid)}'>"
-                f"<button class='dellink' type='submit' name='action' value='attach_remove' "
-                f"title='verwijderen'>✕</button></form>")
-    link_cards, file_cards = "", ""
-    for a in (p.get("attachments") or []):
-        if a.get("kind", "link") == "file":
-            nm = a.get("title") or a.get("name", "bestand")
-            href = f"/file?pid={_e(pid)}&aid={_e(a.get('id', ''))}"
-            file_cards += (f"<div class='attcard'><span class='att-ic'>{_IC_FILE}</span>"
-                           f"<a class='att-name' href='{href}' target='_blank' rel='noopener'>{_e(nm)}</a>"
-                           f"{_att_rm(a.get('id', ''))}</div>")
-        else:
-            nm = a.get("title") or _link_host(a.get("url", ""))
-            link_cards += (f"<div class='attcard'><span class='att-ic'>{_IC_LINK}</span>"
-                           f"<a class='att-name' href='{_e(a.get('url', ''))}' target='_blank' rel='noopener'>{_e(nm)}</a>"
-                           f"{_att_rm(a.get('id', ''))}</div>")
-    verrijking = ""
-    if link_cards:
-        verrijking += _psec(_IC_LINK, "Links", link_cards)
-    if file_cards:
-        verrijking += _psec(_IC_FILE, "Bijlagen", file_cards)
-
+    # 2) Checklist — vier onderscheidbare states + skill/payload (zie _checklists_html)
     checklists_html = _checklists_html(p, csrf_token, pid, back, rw)
-
-    # ---- Actie-kaarten (Trello 'Add to card') ----
-    actioncards = ""
+    cl_new = ""
     if rw:
-        due = p.get("due") or ""
-        due_lbl = _fmt_due(due) or "Datum"
-        date_rm = ("" if not due else
-                   f"<form method='post' action='/action' style='margin-top:.5rem'>{hid()}"
-                   f"<input type='hidden' name='action' value='proj_setdue'>"
-                   f"<input type='hidden' name='due' value=''>"
-                   f"<button class='dellink' type='submit'>datum verwijderen</button></form>")
-        date_card = (
-            f"<details class='acard-d'><summary class='acard'>"
-            f"{_IC_CLOCK}<span>{_e(due_lbl)}</span></summary>"
-            f"<div class='datepop'><form method='post' action='/action'>{hid()}"
-            f"<input type='hidden' name='action' value='proj_setdue'>"
-            f"<input type='date' name='due' value='{_e(due)}' "
-            f"onchange='this.form.requestSubmit?this.form.requestSubmit():this.form.submit()'>"
-            f"</form>{date_rm}</div></details>")
-        checklist_card = (
-            f"<details class='acard-d'><summary class='acard'>{_IC_CHECK}<span>Checklist</span></summary>"
-            f"<div class='datepop'><form method='post' action='/action'>{hid()}"
-            f"<input name='title' placeholder='Naam checklist'>"
-            f"<button class='btn ok' type='submit' name='action' value='checklist_add' "
-            f"style='margin-left:.4rem'>Voeg toe</button></form></div></details>")
-        nxt_full = f"/project?pid={pid}&back=" + urllib.parse.quote(back, safe="")
-        bijlage_card = (
-            f"<details class='acard-d'><summary class='acard'>{_IC_LINK}<span>Bijlage</span></summary>"
-            f"<div class='datepop att-pop'>"
-            f"<form method='post' action='/action' enctype='multipart/form-data' class='filepost'>"
-            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-            f"<input type='hidden' name='pid' value='{_e(pid)}'>"
-            f"<input type='hidden' name='action' value='attach_file'>"
-            f"<input type='hidden' name='next' value='{_e(nxt_full)}'>"
-            f"<label class='att-lbl'>Bestand van je computer</label>"
-            f"<input type='file' name='file'>"
-            f"<button class='btn ok sm' type='submit' style='margin-top:.4rem'>Upload</button></form>"
-            f"<div class='att-sep'></div>"
-            f"<form method='post' action='/action'>{hid()}"
-            f"<label class='att-lbl'>Of een link plakken</label>"
-            f"<input name='url' placeholder='https://…'>"
-            f"<input name='title' placeholder='Naam (optioneel)' style='margin-top:.3rem'>"
-            f"<button class='btn ok sm' type='submit' name='action' value='attach_add' "
-            f"style='margin-top:.4rem'>Toevoegen</button></form>"
-            f"</div></details>")
-        actioncards = (
-            "<div class='actioncards'>"
-            f"{date_card}{checklist_card}{bijlage_card}"
-            f"<button type='button' class='acard acard-off' disabled "
-            f"title='binnenkort'>{_IC_TARGET}<span>Goals</span></button>"
-            "</div>")
+        cl_new = (f"<details class='acard-d cl-newlist'><summary class='flink'>+ nieuwe checklist</summary>"
+                  f"<div class='datepop'><form method='post' action='/action'>{hid()}"
+                  f"<input name='title' placeholder='Naam checklist'>"
+                  f"<button class='btn ok sm' type='submit' name='action' value='checklist_add'>Voeg toe</button>"
+                  f"</form></div></details>")
+    cl_inner = (checklists_html or "<p class='muted'>Nog geen checklist.</p>") + cl_new
+    checklist_panel = _psec(_IC_CHECK, "Checklist", cl_inner)
 
+    # 3) Doel & relaties — placeholder (functie later)
+    goals_panel = _psec(_IC_TARGET, "Doel & relaties",
+                        "<p class='muted'>Nog niet gekoppeld aan een doel.</p>"
+                        f"<button type='button' class='acard acard-off' disabled>{_IC_TARGET}"
+                        "<span>Koppel aan doel · binnenkort</span></button>")
+    structure = details_panel + checklist_panel + goals_panel
+
+    # ═══ LINKS: WALL — inhoud & gesprek in tijdsvolgorde ═══════════════════════════════
+    composer = ""
+    if rw:
+        nxt_full = f"/project?pid={pid}&back=" + urllib.parse.quote(back, safe="")
+        bijlage = (f"<details class='acard-d comp-attach'><summary class='flink'>📎 bijlage</summary>"
+                   f"<div class='datepop att-pop'>"
+                   f"<form method='post' action='/action' enctype='multipart/form-data' class='filepost'>"
+                   f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                   f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+                   f"<input type='hidden' name='action' value='attach_file'>"
+                   f"<input type='hidden' name='next' value='{_e(nxt_full)}'>"
+                   f"<label class='att-lbl'>Bestand van je computer</label>"
+                   f"<input type='file' name='file'>"
+                   f"<button class='btn ok sm' type='submit'>Upload</button></form>"
+                   f"<div class='att-sep'></div>"
+                   f"<form method='post' action='/action'>{hid()}"
+                   f"<label class='att-lbl'>Of een link plakken</label>"
+                   f"<input name='url' placeholder='https://…'>"
+                   f"<input name='title' placeholder='Naam (optioneel)'>"
+                   f"<button class='btn ok sm' type='submit' name='action' value='attach_add'>Toevoegen</button></form>"
+                   f"</div></details>")
+        composer = (f"<form method='post' action='/action' class='pf comp-form'>{hid()}"
+                    f"<input type='hidden' name='author' value='human:'>"
+                    f"{md_editor('text', rows=2, placeholder='Schrijf een reactie…', help=True)}"
+                    f"<div class='comp-row'>"
+                    f"<button class='btn ok sm' type='submit' name='action' value='proj_feed'>Plaatsen</button>"
+                    f"{bijlage}</div></form>")
+        ai = _owner_ai(st, orec)
+        if ai is not None:
+            composer += (f"<form method='post' action='/action' class='ai-ask'>{hid()}"
+                         f"<button class='btn ghost sm ai-ask-btn' type='submit' name='action' value='ai_reply'>"
+                         f"🤖 Vraag {_e(ai.name)} om mee te denken</button></form>")
+    # Eén chronologische stroom: opdracht (created_at, oudste → bovenaan), dialoog + deliverables
+    # (log-entries) en bijlagen, gesorteerd op tijd. Kale mutaties staan nergens in de log → niet hier.
+    stream = [(p.get("created_at") or 0, _opdracht_post(p, hid, rw))]
+    for m in (p.get("log") or []):
+        stream.append((m.get("at") or 0,
+                       _feed_entry_html(st, m, role_name=role_name, pid=pid,
+                                        csrf_token=csrf_token, mention_names=mention_names)))
+    for a in (p.get("attachments") or []):
+        stream.append((a.get("at") or 0, _attach_post(a, pid, hid, rw)))
+    stream.sort(key=lambda t: t[0])
+    wall = (f"<div class='wall-head'><h2>Wall — inhoud &amp; gesprek</h2>"
+            f"<span class='wall-note'>alleen inhoud · mutaties → audit (scope 2)</span></div>"
+            f"{composer}{''.join(h for _, h in stream)}")
+
+    # ---- Bovenrand/labels + werkoverleg-CTA (conditioneel) ----
     labelbar = ""
     if _LABELS.get(p.get("label")):
         labelbar = f"<div class='clabel' style='background:{_LABELS[p['label']]};height:8px;border-radius:4px;margin-bottom:.6rem'></div>"
-
-    # Geopend vanuit het werkoverleg: prominente terug-CTA boven én onder; het kruisje wordt
-    # uitgeschakeld (zie modal-JS via data-noclose) zodat je via deze CTA terugkeert.
     meeting = back.startswith("/werkoverleg")
     wo_cta = (f"<a class='btn ok sm js-modal' href='{_e(back)}' data-href='{_e(back)}'>"
               f"← terug naar werkoverleg</a>") if meeting else ""
     top_bar = f"<div class='wo-back-bar'>{wo_cta}</div>" if meeting else ""
     foot_bar = f"<div class='wo-back-bar wo-back-foot'>{wo_cta}</div>" if meeting else ""
 
-    verzwakt_block = _verzwakt_block(p, hid, rw) if p.get("missie_impact") == "verzwakt" else ""
-    maincol = verzwakt_block + details + actioncards + omschrijving + checklists_html + verrijking
     detail = (f"{top_bar}{labelbar}{_banner(msg)}{head}"
-              f"<div class='pgrid'><div class='pmain'>{maincol}</div>"
-              f"<aside class='pdisc'>{discussie}</aside></div>{foot_bar}")
+              f"<div class='pgrid'><div class='pmain'>{wall}</div>"
+              f"<aside class='pside psticky'>{structure}</aside></div>{foot_bar}")
     if fragment:
         return f"<div data-noclose='1'>{detail}</div>" if meeting else detail
-    main = (f"<div class='c2-main' style='max-width:980px'>"
+    main = (f"<div class='c2-main pdetail'>"
             f"<div class='c2-bar'><a href='{_e(back)}'>← terug</a></div>{detail}</div>")
     inner = (f"<style>{_EXTRA_CSS}</style>"
              "<div class='bar'>cockpit 2 · projectdetail · <a href='/'>home</a></div>"
