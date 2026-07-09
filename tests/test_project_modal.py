@@ -17,9 +17,10 @@ def test_detail_overzicht_kop(tmp_path):
     dd, pid = _setup(tmp_path)
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "<!doctype" not in frag.lower()
-    # Details in de sticky structuur-kantlijn (pside): tweekoloms rol/trekker + aangemaakt/zichtbaarheid
+    # Details in de structuur-kantlijn (pside): bewerkbare Rol/Trekker op volle breedte (dk wide),
+    # Aangemaakt/Zichtbaar als compacte label|waarde-rijen (dk)
     for k in ("pgrid", "pside", "class='dcol'", "Projectdetails",
-              "<span class='dk'>Rol</span>", "<span class='dk'>Trekker</span>",
+              "<span class='dk wide'>Rol</span>", "<span class='dk wide'>Trekker</span>",
               "<span class='dk'>Aangemaakt</span>", "<span class='dk'>Zichtbaar</span>"):
         assert k in frag
     assert "Voortgang" not in frag and "<dt>Status</dt>" not in frag
