@@ -48,7 +48,7 @@ from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
 from nooch_village import epic
 from nooch_village.personas import PersonaStore
-from nooch_village.projects import ProjectLedger, PREP_CHECKLIST_TITLE, _MISSIE_IMPACT, _BUSINESS_IMPACT, _EFFORT
+from nooch_village.projects import ProjectLedger, PREP_CHECKLIST_TITLE, _MISSIE_IMPACT, _BUSINESS_IMPACT
 from nooch_village.registry_factory import shared_registry
 from nooch_village.skill_match import plan_offers
 from nooch_village.ai_tasks import AITaskStore
@@ -1011,8 +1011,8 @@ def _act_proj_setlabel(c):
         return nxt, msg
 
 
-_IMPACT_FIELDS = {"missie": ("missie_impact", _MISSIE_IMPACT), "business": ("business_impact", _BUSINESS_IMPACT),
-                  "effort": ("effort", _EFFORT)}
+_IMPACT_FIELDS = {"missie": ("missie_impact", _MISSIE_IMPACT), "business": ("business_impact", _BUSINESS_IMPACT)}
+# effort is geen enum-label meer maar een numeriek veld (uren) → eigen tak proj_seteffort (zie hieronder)
 
 
 def _act_proj_setimpact(c):
@@ -1032,6 +1032,29 @@ def _act_proj_setimpact(c):
         if pj.edit(g("pid"), allow_done=True, **{field: value}):
             return nxt, ("✓ impact opgeslagen" if value else "✓ impact leeggemaakt")
         return nxt, ""
+
+
+def _act_proj_seteffort(c):
+        # AUTHZ: rolvervuller of Circle Lead — effort-inschatting is operationeel projectwerk (zelfde gate
+        # als proj_setimpact). Effort wordt canoniek in uren opgeslagen ({"hours": N}); leeg = wissen.
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
+        raw = (g("number") or "").strip().replace(",", ".")
+        if not raw:                                          # leeg getal → wissen (ongeschat)
+            pj.edit(g("pid"), allow_done=True, effort="")
+            return nxt, "✓ effort leeggemaakt"
+        try:
+            n = float(raw)
+        except ValueError:
+            return nxt, "ongeldige effort-waarde"
+        hours = int(round(n * (8 if g("unit") == "dagen" else 1)))   # dagen → uren (8-urige werkdag)
+        if hours <= 0:
+            pj.edit(g("pid"), allow_done=True, effort="")
+            return nxt, "✓ effort leeggemaakt"
+        pj.edit(g("pid"), allow_done=True, effort={"hours": hours})
+        return nxt, "✓ effort opgeslagen"
 
 
 def _act_proj_agendeer_verzwakt(c):
@@ -2120,6 +2143,7 @@ ACTIONS = {
     "proj_discard": _act_proj_discard,
     "proj_setlabel": _act_proj_setlabel,
     "proj_setimpact": _act_proj_setimpact,
+    "proj_seteffort": _act_proj_seteffort,
     "proj_agendeer_verzwakt": _act_proj_agendeer_verzwakt,
     "proj_setprivate": _act_proj_setprivate,
     "proj_setdue": _act_proj_setdue,
