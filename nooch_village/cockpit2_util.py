@@ -840,7 +840,16 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 @media(min-width:620px){.pside.psticky{position:sticky;top:.8rem;align-self:start}}
 .wall-head{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.6rem}
 .wall-head h2{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin:0;font-weight:700}
-.wall-scroll{max-height:62vh;overflow-y:auto}
+.wall-scroll{overflow-y:auto}
+/* Hoogte-koppeling projectdetail (niet roloverleg): main en zijbalk delen één bounded frame, elk met
+   eigen interne scroll, zodat de onderkanten uitlijnen i.p.v. dat de wall op een vaste hoogte afkapt
+   terwijl de zijbalk doorloopt. Alleen desktop; op mobiel (1 kolom) groeit alles natuurlijk mee. */
+@media(min-width:620px){
+  .pgrid:not(.rov-grid){align-items:stretch;max-height:74vh}
+  .pgrid:not(.rov-grid) .pmain{display:flex;flex-direction:column;min-height:0}
+  .pgrid:not(.rov-grid) .wall-scroll{flex:1 1 0;min-height:0;max-height:none}
+  .pgrid:not(.rov-grid) .pside.psticky{position:static;align-self:stretch;min-height:0;overflow-y:auto}
+}
 .opdracht-add{margin:0 0 .85rem}
 .c2-main.pdetail{max-width:1120px}
 .dangling-warn{margin-bottom:.3rem}
