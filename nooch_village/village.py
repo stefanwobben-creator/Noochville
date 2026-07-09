@@ -114,6 +114,14 @@ class Village:
             os.path.join(self.context.data_dir, "role_metrics.json"))
         self.context.projects = ProjectLedger(
             os.path.join(self.context.data_dir, "projects.json"))
+        # Board-watch: de cockpit draait in een LOS proces met een eigen in-memory bus; een bord-drag
+        # naar ACTIEF schrijft alleen projects.json. Deze village-poll herleest dat bestand en vertaalt
+        # een verse naar-'running'-overgang naar een in-memory project_activated-event, zodat de
+        # eigenaar-rol het binnen seconden oppakt i.p.v. pas bij de volgende dag-puls. `_activated_seen`
+        # dedupliceert (één event per overgang); `board_poll_seconds` stuurt de cadans (default 2s).
+        self._activated_seen: set[str] = set()
+        self._board_poll_seconds: float = float(
+            self.context.settings.get("board_poll_seconds", "2"))
         from nooch_village.attachments import AttachmentStore as _AttachmentStore
         self.context.att = _AttachmentStore(          # policies/notes/tools — o.a. de WIP-cirkelpolicy
             os.path.join(self.context.data_dir, "attachments.json"))
@@ -381,6 +389,7 @@ class Village:
         self.human_inbox.withdraw_archived_activations(self.records.all())
         self._audit_role_provenance()
         self._write_role_status()
+        self._prime_board_watch()          # bestaande 'running'-projecten niet als nieuwe activatie vuren
         self.root.start()
 
     def _write_role_status(self) -> None:
@@ -424,7 +433,8 @@ class Village:
               "op de volgende dag-puls. Ctrl+C om te stoppen.\n")
         try:
             while True:
-                time.sleep(1)
+                time.sleep(self._board_poll_seconds)
+                self._poll_board()          # bord-drag naar ACTIEF → binnen seconden opgepakt
         except KeyboardInterrupt:
             self.stop()
 
@@ -460,6 +470,32 @@ class Village:
         pid = self.context.projects.create(owner, scope, trigger)
         self.bus.publish(Event("project_queued", {"project_id": pid, "owner": owner}, "village"))
         return pid
+
+    def _prime_board_watch(self) -> None:
+        """Zaad de board-watch met de projecten die bij het opstarten AL 'running' zijn. Zo vuurt de
+        eerste poll geen project_activated voor bestaande actieve projecten (die lopen al mee via de
+        normale flow / dag_begint) — alleen NIEUWE naar-ACTIEF-overgangen tijdens de rit tellen."""
+        led = getattr(self.context, "projects", None)
+        self._activated_seen = {p["id"] for p in led.by_status("running")} if led is not None else set()
+
+    def _poll_board(self) -> list[str]:
+        """Board-watch (cross-proces-brug). Detecteer projecten die sinds de vorige poll naar 'running'
+        zijn gezet — meestal een bord-drag naar ACTIEF in het losse cockpit-proces — en kondig ze aan
+        als project_activated zodat de eigenaar-rol ze binnen seconden oppakt. `by_status` triggert
+        `_maybe_reload`, dus een externe schrijf naar projects.json wordt hier zichtbaar. dag_begint
+        blijft het vangnet; dit is een versnelling, geen vervanging. Geeft de nieuw-geactiveerde pids
+        terug (voor tests/observatie)."""
+        led = getattr(self.context, "projects", None)
+        if led is None:
+            return []
+        running = {p["id"]: p for p in led.by_status("running")}
+        new_ids = [pid for pid in running if pid not in self._activated_seen]
+        for pid in new_ids:
+            self.bus.publish(Event("project_activated",
+                                   {"pid": pid, "owner": running[pid].get("owner")}, "board_watch"))
+        # Prune verdwenen pids: een project dat later opnieuw naar ACTIEF gaat mag opnieuw vuren.
+        self._activated_seen = set(running)
+        return new_ids
 
 
 def _run_single_pulse(v: "Village") -> None:
