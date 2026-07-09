@@ -573,7 +573,7 @@ ul.clean li:last-child{border-bottom:none}
 .fkind.upd{background:var(--green-tint);color:var(--green-dark)}
 .fkind.cmt{background:var(--cream-2);color:var(--gray)}
 .pgrid{display:grid;grid-template-columns:1fr;gap:1rem}
-@media(min-width:620px){.pgrid{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}}
+@media(min-width:620px){.pgrid{grid-template-columns:minmax(0,3fr) minmax(0,1fr)}}
 .pmain{min-width:0}.pside{min-width:0}
 .pcard-head{display:flex;align-items:flex-start;gap:.6rem;padding:0 2.6rem .8rem 0;border-bottom:1px solid var(--border);margin-bottom:1.1rem}
 .pcard-head .titleform,.pcard-head .ptitle-ro{flex:1 1 auto;min-width:0}
