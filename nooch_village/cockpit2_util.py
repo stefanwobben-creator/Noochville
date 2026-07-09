@@ -185,14 +185,22 @@ def _ic(path: str) -> str:
 
 
 def _parse_multipart(body: bytes, boundary: str):
-    """Minimale multipart/form-data parser → (velden{str:str}, bestanden{str:(filename,bytes)})."""
+    """Minimale multipart/form-data parser → (velden{str:str}, bestanden{str:(filename,bytes)}).
+
+    Byte-exact: verwijder alleen de multipart-FRAMING rond de content — de leidende CRLF ná de boundary en
+    EXACT één afsluitende CRLF vóór de volgende boundary — nooit méér. Een eerdere `part.strip(b"\\r\\n")`
+    strípte álle trailing \\r/\\n, waardoor de laatste byte(s) van elk binair bestand (bv. een PDF die op
+    `\\n` eindigt) verdwenen → corruptie van elke geüploade file."""
     fields, files = {}, {}
     delim = ("--" + boundary).encode()
     for part in body.split(delim):
-        part = part.strip(b"\r\n")
-        if not part or part == b"--" or b"\r\n\r\n" not in part:
-            continue
+        if part.startswith(b"\r\n"):
+            part = part[2:]                       # leidende CRLF ná de boundary weg
+        if not part or part.startswith(b"--") or b"\r\n\r\n" not in part:
+            continue                              # preamble, sluit-boundary (--), of geen headers
         head, _, content = part.partition(b"\r\n\r\n")
+        if content.endswith(b"\r\n"):
+            content = content[:-2]                # EXACT de afsluitende framing-CRLF weg (niet de content-bytes)
         headers = head.decode("utf-8", "replace")
         mname = re.search(r'name="([^"]*)"', headers)
         if not mname:
