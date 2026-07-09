@@ -662,8 +662,8 @@ ul.clean li:last-child{border-bottom:none}
 .nt-list .nt-item{padding:.3rem 0;border-bottom:1px solid var(--border)}
 .nt-dot{display:inline-block;width:.5rem;height:.5rem;border-radius:50%;background:var(--green);margin-right:.4rem;vertical-align:middle}
 .ai-ask{margin:.1rem 0 1rem}
-.comp-form{margin-bottom:1rem}
-.comp-row{display:flex;align-items:center;gap:.5rem;margin-top:.4rem}
+.comp-form{margin-bottom:.4rem}
+.comp-row{display:flex;align-items:center;gap:.5rem;margin-top:.4rem;margin-bottom:1rem}
 .comp-row .comp-attach{margin-right:auto}
 /* Trello-stijl editor: omkaderde box met opmaak-toolbar boven een randloze textarea. */
 .editor{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);overflow:visible}
