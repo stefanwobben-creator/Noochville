@@ -762,6 +762,7 @@ def _act_proj_done(c):
         if _deny:
             return nxt, _deny
         pj.complete(g("pid")); msg = "✓ afgerond"
+        # geen event — cross-proces, zie netwerk-bus-naad; mens-DONE behoeft geen aankondiging aan de mens
         return nxt, msg
 
 

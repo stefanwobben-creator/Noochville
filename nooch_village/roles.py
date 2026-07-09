@@ -1780,6 +1780,7 @@ class Noochie(Inhabitant):
         "linkbuilding_target",
         "competitor_interest",
         "locale_insight",
+        "project_completed",
     )
 
     def __init__(self, *args, **kwargs):
@@ -1924,11 +1925,42 @@ class Noochie(Inhabitant):
             "name": event.name,
             "by":   event.data.get("by", event.sender),
             "note": event.data.get("boodschap", "") or event.data.get("note_path", ""),
+            "project_id": event.data.get("project_id", ""),   # voor project_completed → scope-lookup bij dag-einde
         })
+
+    def _enrich_completions(self, events: list) -> list:
+        """Geef project_completed-events een leesbare afrondingsregel '<owner> rondde af: <scope>'.
+        Scope + owner komen UIT de ledger op project_id (records/ledger = de waarheid; de payload draagt
+        bewust geen scope). Project onvindbaar in de ledger → regel overslaan (fail-closed), geen crash."""
+        ledger = getattr(self.context, "projects", None)
+        out = []
+        for e in events:
+            if e.get("name") != "project_completed":
+                out.append(e)
+                continue
+            pid = e.get("project_id") or ""
+            p = ledger.get(pid) if (ledger is not None and pid) else None
+            if not p:
+                continue                                    # onvindbaar → regel overslaan
+            sc = p.get("scope")
+            scope = sc if isinstance(sc, str) else ((sc.get("goal") or sc.get("title") or "")
+                                                    if isinstance(sc, dict) else str(sc))
+            out.append({**e, "note": f"{self._owner_label(p.get('owner', ''))} rondde af: {scope}"})
+        return out
+
+    def _owner_label(self, owner_id: str) -> str:
+        """Leesbare naam van een rol (records = waarheid), terugvallend op het id."""
+        recs = getattr(self.context, "records", None)
+        if recs is not None and owner_id:
+            r = recs.get(owner_id)
+            nm = getattr(getattr(r, "definition", None), "name", "") if r else ""
+            if nm:
+                return nm
+        return owner_id or "?"
 
     def _on_dag_eindigt(self, event: Event) -> None:
         """Schrijf het dagbulletin op basis van de events en de Field Note van vandaag."""
-        events = list(self._events_today)
+        events = self._enrich_completions(list(self._events_today))
         self._events_today.clear()
 
         datum = date.today().isoformat()
