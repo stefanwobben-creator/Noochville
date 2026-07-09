@@ -621,24 +621,33 @@ def _person_projects_tab_html(st: _Stores, filler_type: str, pid: str, csrf_toke
 
 
 def _opdracht_post(p: dict, hid, rw: bool) -> str:
-    """De opdracht als eerste (oudste) wall-post. Vervangt het losse omschrijving-blok; de tekst
-    komt uit p['description'] en blijft bewerkbaar via proj_describe (nu inline in de post)."""
+    """De opdracht (p['description']) als eerste, oudste wall-post. ALLEEN aangeroepen wanneer er een
+    opdracht IS — het lege geval toont geen post maar een subtiele toevoeg-link (zie _opdracht_add).
+    proj_describe blijft de bewerk-actie (inline, ingeklapt)."""
     desc = p.get("description", "")
-    body = _md(desc) or "<span class='muted'>Nog geen opdracht — voeg toe.</span>"
     editor = ""
     if rw:
-        editor = (f"<details class='descedit'{'' if desc else ' open'}>"
+        editor = (f"<details class='descedit'>"
                   f"<summary class='flink'>✎ bewerken</summary>"
                   f"<form method='post' action='/action' class='pf'>{hid()}"
                   f"{md_editor('description', desc, placeholder='Beschrijf de opdracht…')}"
                   f"<button class='btn ok sm' type='submit' name='action' value='proj_describe'>opslaan</button>"
                   f"</form></details>")
-    stamp = _stamp(p.get("created_at"))
     return (f"<div class='fentry fentry-opdracht'>"
             f"<div class='fhead'><span class='av you'>🙋</span>"
             f"<span class='fwho'><b class='fname'>Opdracht</b></span>"
-            f"<span class='fstamp'>{_e(stamp)}</span></div>"
-            f"<div class='fbubble'><span class='fkicker'>Opdracht</span>{body}{editor}</div></div>")
+            f"<span class='fstamp'>{_e(_stamp(p.get('created_at')))}</span></div>"
+            f"<div class='fbubble'><span class='fkicker'>Opdracht</span>{_md(desc)}{editor}</div></div>")
+
+
+def _opdracht_add(hid) -> str:
+    """Subtiele '+ opdracht toevoegen'-link boven de stroom als er nog GEEN opdracht is. Opent de
+    markdown-editor pas bij klik (geen altijd-open gat in de wall). proj_describe ongewijzigd."""
+    return (f"<details class='opdracht-add'><summary class='flink'>+ opdracht toevoegen</summary>"
+            f"<form method='post' action='/action' class='pf'>{hid()}"
+            f"{md_editor('description', '', placeholder='Beschrijf de opdracht…')}"
+            f"<button class='btn ok sm' type='submit' name='action' value='proj_describe'>opslaan</button>"
+            f"</form></details>")
 
 
 def _attach_post(a: dict, pid: str, hid, rw: bool) -> str:
@@ -840,9 +849,11 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
             composer += (f"<form method='post' action='/action' class='ai-ask'>{hid()}"
                          f"<button class='btn ghost sm ai-ask-btn' type='submit' name='action' value='ai_reply'>"
                          f"🤖 Vraag {_e(ai.name)} om mee te denken</button></form>")
-    # Eén chronologische stroom: opdracht (created_at, oudste → bovenaan), dialoog + deliverables
-    # (log-entries) en bijlagen, gesorteerd op tijd. Kale mutaties staan nergens in de log → niet hier.
-    stream = [(p.get("created_at") or 0, _opdracht_post(p, hid, rw))]
+    # Eén chronologische stroom: opdracht (created_at, oudste → bovenaan) ALLEEN als er een opdracht is;
+    # dialoog + deliverables (log-entries) en bijlagen, gesorteerd op tijd. Geen opdracht → een subtiele
+    # toevoeg-link boven de stroom i.p.v. een lege post. Kale mutaties staan niet in de log → niet hier.
+    heeft_opdracht = bool(p.get("description", "").strip())
+    stream = [(p.get("created_at") or 0, _opdracht_post(p, hid, rw))] if heeft_opdracht else []
     for m in (p.get("log") or []):
         stream.append((m.get("at") or 0,
                        _feed_entry_html(st, m, role_name=role_name, pid=pid,
@@ -850,9 +861,9 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     for a in (p.get("attachments") or []):
         stream.append((a.get("at") or 0, _attach_post(a, pid, hid, rw)))
     stream.sort(key=lambda t: t[0])
-    wall = (f"<div class='wall-head'><h2>Wall — inhoud &amp; gesprek</h2>"
-            f"<span class='wall-note'>alleen inhoud · mutaties → audit (scope 2)</span></div>"
-            f"{composer}{''.join(h for _, h in stream)}")
+    opdracht_add = _opdracht_add(hid) if (not heeft_opdracht and rw) else ""
+    wall = (f"<div class='wall-head'><h2>Wall — inhoud &amp; gesprek</h2></div>"
+            f"{composer}{opdracht_add}{''.join(h for _, h in stream)}")
 
     # ---- Bovenrand/labels + werkoverleg-CTA (conditioneel) ----
     labelbar = ""

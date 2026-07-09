@@ -455,7 +455,7 @@ ul.clean li:last-child{border-bottom:none}
    {who:rol}). Een 'Deliverable'-badge vereist een schema-tag = datawijziging → scope 2. */
 .fentry-opdracht .fbubble{border-left:3px solid var(--green);padding-top:.55rem}
 .fentry-attach .fbubble{border-left:3px solid var(--border)}
-.fkicker{display:inline-block;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin-bottom:.3rem}
+.fkicker{display:block;font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin-bottom:.3rem}
 .fbul{margin:.2rem 0 .2rem 1.1rem}
 .ffoot{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:.25rem}
 .ffoot-l{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;min-width:0}
@@ -814,7 +814,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 @media(min-width:620px){.pside.psticky{position:sticky;top:.8rem;align-self:start}}
 .wall-head{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.6rem}
 .wall-head h2{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin:0;font-weight:700}
-.wall-note{font-size:.72rem;color:var(--subtle)}
+.opdracht-add{margin:0 0 .85rem}
 .c2-main.pdetail{max-width:1120px}
 .dangling-warn{margin-bottom:.3rem}
 .smeta{margin:0}
