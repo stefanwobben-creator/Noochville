@@ -127,3 +127,35 @@ def test_g_verweesde_trekker_geen_crash_dan_reset(tmp_path):
     cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": [INMATE], "next": ["/"]}, username="guest")
     p = cockpit2._Stores(dd).projects.get(pid)
     assert p.get("agent") == marky.id                        # verweesde Codie is opgeruimd
+
+
+# ── Individueel Initiatief: trekker-kandidaten = cirkel-members (mens + persona) ──
+def test_ii_kandidaten_zijn_cirkelmembers(tmp_path):
+    dd, st = _st(tmp_path)
+    codie = st.personas.add("Codie")
+    st.assign.assign(WEBDEV, "persona", codie.id)          # Codie vervult een rol IN de cirkel → member
+    buiten = st.personas.add("Buiten")                     # nergens toegewezen → geen member
+    opts = _trekker_options(cockpit2._Stores(dd), f"ii:{CIRCLE}")
+    assert f"persona:{codie.id}" in opts                   # persona-member is kandidaat
+    assert f"persona:{buiten.id}" not in opts              # niet-member niet
+    assert "person:" in opts                               # de bootstrap-mens-members van de cirkel ook
+    assert "geen trekker" in opts
+
+
+def test_gewone_rol_alleen_eigen_fillers_ongewijzigd(tmp_path):
+    dd, st = _st(tmp_path)
+    codie = st.personas.add("Codie")
+    st.assign.assign(WEBDEV, "persona", codie.id)          # Codie vervult WEBDEV, niet MARKETING
+    opts = _trekker_options(cockpit2._Stores(dd), MARKETING)
+    assert f"persona:{codie.id}" not in opts               # cirkel-member maar geen MARKETING-filler → niet
+
+
+def test_ii_trekker_opslaan_slaagt_serverside(tmp_path):
+    dd, st = _st(tmp_path)
+    codie = st.personas.add("Codie")
+    st.assign.assign(WEBDEV, "persona", codie.id)
+    pid = st.projects.create(f"ii:{CIRCLE}", "Individueel initiatief", "human")
+    cockpit2.dispatch(dd, "proj_settrekker",
+                      {"pid": [pid], "trekker": [f"persona:{codie.id}"], "next": ["/"]}, username="guest")
+    p = cockpit2._Stores(dd).projects.get(pid)
+    assert p.get("agent") == codie.id                      # server accepteert de cirkel-member als trekker

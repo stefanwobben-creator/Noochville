@@ -59,21 +59,43 @@ def _is_core_role(rid: str) -> bool:
     return rid in _CORE_ROLE_IDS or rid.endswith(_CORE_ROLE_SUFFIXES)
 
 
+def _trekker_candidates(st: _Stores, owner: str) -> list:
+    """De kandidaat-fillers (mens + persona) voor de trekker:
+    - gewone rol → UITSLUITEND de fillers van die owner-ROL;
+    - Individueel Initiatief ('ii:<circle>') → de members van die cirkel = de fillers van alle rollen
+      die in de cirkel hangen (er is geen owner-rol om fillers op te zoeken; resolve_circle_id levert
+      de cirkel uit de sentinel)."""
+    if not owner:
+        return []
+    if owner.startswith(_II_PREFIX):
+        from nooch_village.cockpit2 import resolve_circle_id
+        circle = resolve_circle_id(owner, st.records)
+        fillers = []
+        for r in st.records.all():
+            if getattr(r, "parent", None) == circle:
+                fillers.extend(st.assign.fillers_of(r.id, record=r))
+        return fillers
+    orec = st.records.get(owner)
+    return list(st.assign.fillers_of(orec.id, record=orec)) if orec is not None else []
+
+
 def _trekker_options(st: _Stores, owner: str, sel_person="", sel_agent="") -> str:
-    """Trekker-keuze = UITSLUITEND de fillers (mens/AI) van de owner-ROL, net als de composer
-    (_feed_author_options). Geen owner/fillers → alleen 'geen trekker'. Zo kan een trekker nooit iemand
-    zijn die de rol niet bezet (en het werk dus niet doet)."""
+    """Trekker-keuze = de mens/AI die de eigenaar 'bezetten': fillers van de owner-ROL, of — bij een
+    Individueel Initiatief — de members van de cirkel (zie _trekker_candidates). Geen kandidaten →
+    alleen 'geen trekker'. Zo kan een trekker nooit iemand zijn die er niet bij hoort."""
     out = ["<option value=''>— geen trekker —</option>"]
-    orec = st.records.get(owner) if owner else None
-    if orec is not None:
-        for f in st.assign.fillers_of(orec.id, record=orec):
-            if f.type == "person":
-                s = " selected" if f.id == sel_person else ""
-                out.append(f"<option value='person:{_e(f.id)}'{s}>{_e(_person_name(st, f.id))}</option>")
-            else:
-                pa = st.personas.get(f.id)
-                s = " selected" if f.id == sel_agent else ""
-                out.append(f"<option value='persona:{_e(f.id)}'{s}>🤖 {_e(pa.name if pa else f.id)} (AI)</option>")
+    seen = set()
+    for f in _trekker_candidates(st, owner):
+        if (f.type, f.id) in seen:                    # dedup: een lid kan meerdere rollen vervullen (II)
+            continue
+        seen.add((f.type, f.id))
+        if f.type == "person":
+            s = " selected" if f.id == sel_person else ""
+            out.append(f"<option value='person:{_e(f.id)}'{s}>{_e(_person_name(st, f.id))}</option>")
+        else:
+            pa = st.personas.get(f.id)
+            s = " selected" if f.id == sel_agent else ""
+            out.append(f"<option value='persona:{_e(f.id)}'{s}>🤖 {_e(pa.name if pa else f.id)} (AI)</option>")
     return "".join(out)
 
 
