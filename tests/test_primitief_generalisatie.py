@@ -69,8 +69,9 @@ def test_a_prep_prompt_bevat_input_schemas(tmp_path, ledger, monkeypatch):
     seen = {}
     def fake_reason(prompt, **k):
         seen["prompt"] = prompt
-        return ('{"deliverable":"d","items":[{"text":"volumes","skill":"keywords_everywhere",'
-                '"payload":{"kw":["barefoot shoes"]},"reason":""}]}')
+        r = ('{"deliverable":"d","items":[{"text":"volumes","skill":"keywords_everywhere",'
+             '"payload":{"kw":["barefoot shoes"]},"reason":""}]}')
+        return (r, "mock") if k.get("return_tier") else r
     monkeypatch.setattr(llm, "reason", fake_reason)
     inh = _inhabitant(tmp_path, ledger, [_KwSkill(), _TermSkill()], ["keywords_everywhere", "openalex_evidence"])
     pid = ledger.create("rol", "doel", "human", status="future")
@@ -138,10 +139,70 @@ def test_f_geen_schema_fail_soft(tmp_path, ledger, monkeypatch):
     class _NoSchema(Skill):
         name = "mystery"; description = "iets vaags"; cost = "free"
         def run(self, payload, context): return {"text": "ok"}
-    monkeypatch.setattr(llm, "reason", lambda prompt, **k: seen.update(prompt=prompt) or
-                        '{"deliverable":"d","items":[{"text":"t","skill":"mystery","payload":{},"reason":""}]}')
+    def _fr(prompt, **k):
+        seen["prompt"] = prompt
+        r = '{"deliverable":"d","items":[{"text":"t","skill":"mystery","payload":{},"reason":""}]}'
+        return (r, "mock") if k.get("return_tier") else r
+    monkeypatch.setattr(llm, "reason", _fr)
     inh = _inhabitant(tmp_path, ledger, [_NoSchema()], ["mystery"])
     pid = ledger.create("rol", "doel", "human", status="future")
     inh.prepare_project(pid)                                                      # mag niet crashen
     assert "geen schema" in seen["prompt"]                                        # fallback-tekst in catalogus
     assert inh._project_checklist(ledger.get(pid)) is not None
+
+
+# ── Plan-parse robuust over alle tredes (PR na #133: mistral gaf onparsebare output) ────────────
+def test_extract_json_robuust_fences_en_proza():
+    ex = Inhabitant._extract_json
+    assert ex('{"items":[1]}') == {"items": [1]}                     # d. kale JSON (Gemini) blijft werken
+    assert ex('```json\n{"items":[2]}\n```') == {"items": [2]}       # a. markdown-fences ```json …```
+    assert ex('```\n{"items":[3]}\n```') == {"items": [3]}           # a. fences zonder taal-tag
+    assert ex('Hier is het plan:\n{"items":[4]}\nKlaar.') == {"items": [4]}   # b. leidend/volgend proza
+    assert ex('geen json') is None and ex('') is None               # onparsebaar → None
+
+
+def test_prep_met_markdown_fences_parset(tmp_path, ledger, monkeypatch):
+    """mistral-stijl: JSON in ```json-fences → _extract_json strippt ze → prep slaagt (het geval van Billy)."""
+    import nooch_village.llm as llm
+    fenced = ('```json\n{"deliverable":"d","items":[{"text":"studies","skill":"openalex_evidence",'
+              '"payload":{"term":"barefoot shoes"},"reason":""}]}\n```')
+    monkeypatch.setattr(llm, "reason",
+                        lambda *a, **k: (fenced, "mistral:mistral-small") if k.get("return_tier") else fenced)
+    inh = _inhabitant(tmp_path, ledger, [_TermSkill()], ["openalex_evidence"])
+    pid = ledger.create("rol", "doel", "human", status="future")
+    inh.prepare_project(pid)
+    cl = inh._project_checklist(ledger.get(pid))
+    assert cl and cl["items"][0]["skill"] == "openalex_evidence"
+    assert cl["items"][0]["payload"] == {"term": "barefoot shoes"}
+
+
+def test_prep_onparsebaar_retry_dan_niet_parsebaar_gelogd(tmp_path, ledger, monkeypatch, caplog):
+    """Onparsebare output → één gerichte retry; daarna None + de log zegt 'NIET PARSEBAAR' mét rauwe output."""
+    import logging
+    import nooch_village.llm as llm
+    calls = {"n": 0}
+    def _fr(prompt, **k):
+        calls["n"] += 1
+        r = "sorry, ik kan dit niet als JSON geven"
+        return (r, "mistral:x") if k.get("return_tier") else r
+    monkeypatch.setattr(llm, "reason", _fr)
+    inh = _inhabitant(tmp_path, ledger, [_TermSkill()], ["openalex_evidence"])
+    pid = ledger.create("rol", "doel", "human", status="future")
+    with caplog.at_level(logging.WARNING):
+        inh.prepare_project(pid)
+    assert inh._project_checklist(ledger.get(pid)) is None           # geen checklist
+    assert calls["n"] == 2                                            # eerste poging + één gerichte retry
+    msgs = " ".join(r.getMessage() for r in caplog.records)
+    assert "NIET PARSEBAAR" in msgs and "sorry" in msgs              # onderscheid + rauwe output in de log
+
+
+def test_prep_geen_antwoord_onderscheiden_van_niet_parsebaar(tmp_path, ledger, monkeypatch, caplog):
+    import logging
+    import nooch_village.llm as llm
+    monkeypatch.setattr(llm, "reason", lambda *a, **k: (None, None) if k.get("return_tier") else None)
+    inh = _inhabitant(tmp_path, ledger, [_TermSkill()], ["openalex_evidence"])
+    pid = ledger.create("rol", "doel", "human", status="future")
+    with caplog.at_level(logging.WARNING):
+        inh.prepare_project(pid)
+    msgs = " ".join(r.getMessage() for r in caplog.records)
+    assert "geen antwoord" in msgs and "PARSEBAAR" not in msgs       # 'geen antwoord' ≠ 'niet parsebaar'

@@ -60,7 +60,7 @@ def test_a_voorbereiding_genereert_checklist(tmp_path, ledger, monkeypatch):
     plan = ('{"deliverable":"evidence-dossier","accountability":"research studies","items":['
             '{"text":"wetenschappelijke studies","skill":"openalex_evidence","query":"barefoot shoes","reason":""},'
             '{"text":"patenten","skill":null,"query":"","reason":"geen patent-skill"}]}')
-    monkeypatch.setattr(llm, "reason", lambda *a, **k: plan)
+    monkeypatch.setattr(llm, "reason", lambda *a, **k: (plan, "mock") if k.get("return_tier") else plan)
     inh = _inhabitant(tmp_path, ledger)
     pid = ledger.create("harry_hemp", "Patents and scientific studies on barefoot shoes", "human", status="future")
     inh.prepare_project(pid)
@@ -77,7 +77,7 @@ def test_a_voorbereiding_genereert_checklist(tmp_path, ledger, monkeypatch):
 def test_a2_voorgestelde_skill_buiten_dna_wordt_geen_skill(tmp_path, ledger, monkeypatch):
     import nooch_village.llm as llm
     plan = '{"deliverable":"x","items":[{"text":"t","skill":"patent_api","query":"q","reason":""}]}'
-    monkeypatch.setattr(llm, "reason", lambda *a, **k: plan)
+    monkeypatch.setattr(llm, "reason", lambda *a, **k: (plan, "mock") if k.get("return_tier") else plan)
     inh = _inhabitant(tmp_path, ledger)
     pid = ledger.create("harry_hemp", "doel", "human", status="future")
     inh.prepare_project(pid)
@@ -87,7 +87,7 @@ def test_a2_voorgestelde_skill_buiten_dna_wordt_geen_skill(tmp_path, ledger, mon
 
 def test_a3_geen_llm_geen_checklist_blijft_toekomst(tmp_path, ledger, monkeypatch):
     import nooch_village.llm as llm
-    monkeypatch.setattr(llm, "reason", lambda *a, **k: None)           # geen key → None
+    monkeypatch.setattr(llm, "reason", lambda *a, **k: (None, None) if k.get("return_tier") else None)  # geen key → None
     inh = _inhabitant(tmp_path, ledger)
     pid = ledger.create("harry_hemp", "doel", "human", status="future")
     inh.prepare_project(pid)
