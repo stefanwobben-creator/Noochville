@@ -105,13 +105,31 @@ def _stamp(ts) -> str:
 
 
 def _md(text: str) -> str:
-    """Lichte opmaak voor reacties/notities: HTML-veilig, met **vet**, regelafbrekingen en '- '
-    lijstjes. CRLF (uit textareas/imports) wordt genormaliseerd zodat er geen losse \\r overblijft."""
+    """Lichte opmaak voor reacties/notities: HTML-veilig, met **vet**, *cursief*, ~~doorhalen~~,
+    ## koppen, [tekst](url)-links (alleen http(s)), regelafbrekingen en '- ' lijstjes. CRLF (uit
+    textareas/imports) wordt genormaliseerd zodat er geen losse \\r overblijft. XSS-veilig: de tekst
+    is al ge-escaped (`_e`) vóór de opmaak-regexes draaien, en een link zonder http(s)-schema wordt
+    NIET gelinkt (fail-closed, geen javascript:-urls)."""
     import re
     s = _e(text or "").replace("\r\n", "\n").replace("\r", "\n")
-    s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
+    s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)   # vet — vóór cursief, anders eet * de **
+    s = re.sub(r"~~(.+?)~~", r"<del>\1</del>", s)             # doorhalen
+    s = re.sub(r"\*(.+?)\*", r"<em>\1</em>", s)               # cursief
+
+    def _link(m):
+        label, url = m.group(1), m.group(2)                  # label al ge-escaped; url gevalideerd op schema
+        if url.startswith("http://") or url.startswith("https://"):
+            return f"<a href='{url}' target='_blank' rel='noopener'>{label}</a>"
+        return m.group(0)                                    # geen http(s) → laat de tekst staan (geen link)
+
+    s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _link, s)          # [tekst](url)
     out, in_ul = [], False
     for ln in s.split("\n"):
+        if ln.strip().startswith("## "):                     # kop (regel-niveau, zoals de lijst)
+            if in_ul:
+                out.append("</ul>"); in_ul = False
+            out.append(f"<h4>{ln.strip()[3:]}</h4>")
+            continue
         if ln.strip().startswith("- "):
             if not in_ul:
                 out.append("<ul class='fbul'>"); in_ul = True
