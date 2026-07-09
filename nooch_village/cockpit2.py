@@ -2558,26 +2558,28 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send("Niet ingelogd", 403); return
             # Bestand-upload (multipart): apart afhandelen; bestand wegschrijven + registreren.
             if ctype.startswith("multipart/form-data") and "boundary=" in ctype:
+                # nginx capt de body op 25M (413 vóór de app); de app-limiet ligt bewust lager (20M) zodat
+                # de app zelf de nette fout geeft voor bestanden tussen de app-limiet en de nginx-cap.
                 raw = self.rfile.read(length) if length else b""
                 boundary = ctype.split("boundary=", 1)[1].strip().strip('"')
                 fields, files = _parse_multipart(raw, boundary)
                 if not secrets.compare_digest(fields.get("csrf", ""), csrf_token):
                     self._send("CSRF-token ongeldig", 403); return
-                msg = ""
-                pid = fields.get("pid", "")
-                if fields.get("action") == "attach_file" and files.get("file"):
+                if fields.get("action") == "attach_file":
+                    err = _upload_error(files, _upload_max_bytes())
+                    if err:                                  # te groot / geen bestand → expliciete fout, geen no-op
+                        self._send(err[0], err[1]); return
                     fname, blob = files["file"]
-                    if fname and blob:
-                        safe = os.path.basename(fname).replace("\\", "_")[:120]
-                        rel = os.path.join("attachments", pid, uuid.uuid4().hex[:8] + "_" + safe)
-                        full = os.path.join(data_dir, rel)
-                        os.makedirs(os.path.dirname(full), exist_ok=True)
-                        with open(full, "wb") as fh:
-                            fh.write(blob)
-                        _Stores(data_dir).projects.attach_file(pid, safe, rel)
-                        msg = "📎 bijlage geupload"
-                self._redirect(fields.get("next", "/"), msg)
-                return
+                    pid = fields.get("pid", "")
+                    safe = os.path.basename(fname).replace("\\", "_")[:120]
+                    rel = os.path.join("attachments", pid, uuid.uuid4().hex[:8] + "_" + safe)
+                    full = os.path.join(data_dir, rel)
+                    os.makedirs(os.path.dirname(full), exist_ok=True)
+                    with open(full, "wb") as fh:
+                        fh.write(blob)
+                    _Stores(data_dir).projects.attach_file(pid, safe, rel)
+                    self._redirect(fields.get("next", "/"), "📎 bijlage geupload"); return
+                self._redirect(fields.get("next", "/"), ""); return
             raw = self.rfile.read(length).decode("utf-8") if length else ""
             form = urllib.parse.parse_qs(raw)
             token = (form.get("csrf") or [""])[0]
@@ -2629,6 +2631,34 @@ def _match_ladder() -> str:
     """Eén werkende, lokaal beschikbare trede voor de matcher. Default Anthropic (Gemini vereist
     google-generativeai). Override via env LLM_MATCH_LADDER (bijv. 'mistral')."""
     return os.getenv("LLM_MATCH_LADDER", "anthropic")
+
+
+def _upload_max_bytes() -> int:
+    """Max upload-grootte in bytes (config-key upload_max_bytes, default 20M). BEWUST onder de nginx-cap
+    (25M) zodat de app zelf de nette fout kan geven i.p.v. nginx (413). Accepteert '20M'/'20MB'/bytes."""
+    raw = (os.getenv("upload_max_bytes", "") or "").strip().upper()
+    if not raw:
+        return 20 * 1024 * 1024
+    try:
+        if raw.endswith("MB"):
+            return int(raw[:-2]) * 1024 * 1024
+        if raw.endswith("M"):
+            return int(raw[:-1]) * 1024 * 1024
+        return int(raw)
+    except ValueError:
+        return 20 * 1024 * 1024
+
+
+def _upload_error(files: dict, limit: int):
+    """Valideer een multipart-upload vóór wegschrijven. Geeft (melding, http-status) bij een probleem,
+    anders None. Vervangt de oude stille no-op: een ontbrekend/leeg bestand of een te groot bestand
+    levert nu een expliciete fout i.p.v. een lege redirect."""
+    fname, blob = (files.get("file") or ("", b""))
+    if not (fname and blob):
+        return ("Geen bestand geselecteerd", 400)
+    if len(blob) > limit:
+        return (f"Bestand te groot (max {limit // (1024 * 1024)} MB)", 413)
+    return None
 
 
 from nooch_village.views.roloverleg import (
