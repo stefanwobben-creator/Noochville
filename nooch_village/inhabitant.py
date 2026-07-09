@@ -5,6 +5,7 @@ from nooch_village.event_bus import EventBus, Event
 from nooch_village.inbox import Inbox
 from nooch_village.models import Task, Response, Record, RecordType, Tension
 from nooch_village.skills import SkillRegistry
+from nooch_village.projects import PREP_CHECKLIST_TITLE
 from nooch_village.triage_engine import TriageContext, classify as _triage_classify
 from nooch_village.coherence import evaluate_coherence
 
@@ -854,7 +855,7 @@ class Inhabitant(threading.Thread):
             return
         self._claim_run_complete(pid)
 
-    _PREP_CHECKLIST_TITLE = "Uitvoerplan"
+    _PREP_CHECKLIST_TITLE = PREP_CHECKLIST_TITLE          # gedeelde bron (nooch_village.projects)
     _WIP_POLICY_ID = "WIP-001"                    # cirkelpolicy die de voorbereidings-WIP-limiet aanzet
 
     @staticmethod

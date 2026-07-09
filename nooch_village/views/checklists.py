@@ -196,7 +196,14 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool) -> str:
                   f"<button class='dellink' type='submit' name='action' value='check_remove'>✕</button></form>") if rw else ""
             txt = (f"<span class='ck-txt'><span class='{'ck-done' if d else ''}'>{_e(it['text'])}</span>"
                    f"{_cl_item_meta(state, skill, it)}</span>")
-            rows += f"<li class='ck-item'>{chk}{txt}{rm}</li>"
+            # Stil skill-aanbod (cockpit-match): alleen als het item nog geen skill heeft. Klik = accepteren
+            # (skill+payload aan het item, uitvoering door de daemon); negeren = afwijzen.
+            offer = it.get("offer") if not skill else None
+            offer_html = (f"<form method='post' action='/action'>{hid()}{clitem}"
+                          f"<button class='btn ghost sm' type='submit' name='action' value='check_accept' "
+                          f"title='skill: {_e(str((offer or {}).get('skill','')))}'>🤖 kan dit oppakken</button>"
+                          f"</form>") if (rw and offer) else ""
+            rows += f"<li class='ck-item'>{chk}{txt}{offer_html}{rm}</li>"
         add = (f"<form method='post' action='/action' class='ckadd'>{hid()}"
                f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
                f"<input name='text' placeholder='item toevoegen…'>"

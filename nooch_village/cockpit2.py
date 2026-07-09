@@ -48,7 +48,9 @@ from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
 from nooch_village import epic
 from nooch_village.personas import PersonaStore
-from nooch_village.projects import ProjectLedger, _MISSIE_IMPACT, _BUSINESS_IMPACT, _EFFORT
+from nooch_village.projects import ProjectLedger, PREP_CHECKLIST_TITLE, _MISSIE_IMPACT, _BUSINESS_IMPACT, _EFFORT
+from nooch_village.registry_factory import shared_registry
+from nooch_village.skill_match import plan_offers
 from nooch_village.ai_tasks import AITaskStore
 from nooch_village.checklists import ChecklistStore, CADENCES, CADENCE_LABEL
 from nooch_village.metrics import MetricStore, window_cutoff, filter_samples
@@ -1187,6 +1189,36 @@ def _act_checklist_remove(c):
         return nxt, msg
 
 
+def _offer_skill(st, pj, pid: str, clid: str) -> bool:
+    """Stil skill-aanbod bij een net toegevoegd checklist-item: match het item-tekst tegen de DNA-skills
+    van de owner-rol en, bij een match, hang een aanbod aan het item. UITSLUITEND op de "Uitvoerplan"-
+    checklist (de enige die de daemon uitvoert) en alleen bij een echte rol-owner (geen II, geen dangling).
+    Draait de match in het cockpit-proces via de ladder; fail-closed — nooit een foutmelding.
+    Grens: dit matcht en biedt aan; uitvoeren doet uitsluitend de daemon."""
+    p = pj.get(pid) or {}
+    owner = p.get("owner") or ""
+    if not owner or owner.startswith(_II_PREFIX):        # II / geen owner → geen rol-DNA, stil overslaan
+        return False
+    cl = next((c for c in (p.get("checklists") or []) if c.get("id") == clid), None)
+    if cl is None or cl.get("title") != PREP_CHECKLIST_TITLE:   # alleen de uitvoer-checklist
+        return False
+    items = cl.get("items") or []
+    if not items:
+        return False
+    item = items[-1]                                     # het net toegevoegde item (laatste in de lijst)
+    if item.get("skill") or item.get("offer"):
+        return False
+    orec = st.records.get(owner)
+    if orec is None:
+        return False
+    _load_env()                                          # LLM-keys beschikbaar maken (zoals bij _ai_reply)
+    offers = plan_offers(orec, [item.get("text", "")], shared_registry(), name=_name(orec))
+    off = offers[0] if offers else None
+    if not off:
+        return False
+    return pj.set_item_offer(pid, clid, item["id"], off)
+
+
 def _act_check_add(c):
         nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
         msg = ""
@@ -1195,6 +1227,21 @@ def _act_check_add(c):
             return nxt, _deny
         if pj.check_add(g("pid"), g("clid"), g("text")):
             msg = "✓ item toegevoegd"
+            try:                                         # skill-aanbod is bijzaak: mag de toevoeging nooit breken
+                if _offer_skill(st, pj, g("pid"), g("clid")):
+                    msg += " · 🤖 aanbod"
+            except Exception:
+                pass
+        return nxt, msg
+
+
+def _act_check_accept(c):
+        # AUTHZ: rolvervuller of Circle Lead — operationeel werk binnen een rol (een skill aan een item hangen)
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
+        msg = "🤖 opgepakt door de rol" if pj.accept_item_offer(g("pid"), g("clid"), g("item")) else ""
         return nxt, msg
 
 
@@ -2086,6 +2133,7 @@ ACTIONS = {
     "checklist_add": _act_checklist_add,
     "checklist_remove": _act_checklist_remove,
     "check_add": _act_check_add,
+    "check_accept": _act_check_accept,
     "check_toggle": _act_check_toggle,
     "check_remove": _act_check_remove,
     "role_assign": _act_role_assign,
