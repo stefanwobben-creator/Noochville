@@ -5,8 +5,8 @@ Opslag: data/projects.json (atomic write). Elke entry is een project-record:
 Governance-records en human_inbox blijven ongemoeid.
 """
 from __future__ import annotations
-import os, time, uuid
-from nooch_village.util import atomic_write_json, read_json
+import os, time, uuid, functools
+from nooch_village.util import atomic_write_json, read_json, file_lock
 
 # MODELWIJZIGING (scope harry_hemp keyword_research): 'role' toegevoegd als geldige trigger voor een
 # project dat een ROL autonoom initieert (niet 'human'/UI, niet 'clock'/puls, niet 'tension', niet
@@ -25,6 +25,25 @@ _BUSINESS_IMPACT = {"hoog", "medium", "laag"}
 # effort (optionele inschatting): vervangt op termijn de #effort-hashtag-conventie (bestaande hashtags
 # worden in deze scope NIET gemigreerd). Leeg = geen inschatting.
 _EFFORT          = {"1u", "1d", "2d", "1w"}
+
+
+def _synchronized(method):
+    """Schrijfpad-wrapper (concurrency-safe): serialiseer via het gedeelde bestandsslot (util.file_lock,
+    per pad — hetzelfde patroon als de AttachmentStore) én lees VERS van schijf ONDER het slot vóór de
+    mutatie. Zo muteert geen schrijver meer op een in-memory kopie van vóór het slot, en overleven
+    gelijktijdige schrijvers elkaars mutaties (geen lost update — de bug die geüploade bijlagen liet
+    verdwijnen). Reads blijven ongewrapt → lock-vrij, zodat de board-watch nooit op een write wacht.
+
+    Grens: file_lock is een threading-slot (proces-breed). Binnen één proces (bv. twee cockpit-threads)
+    volledig serieel; tussen processen (cockpit ↔ daemon) verkleint de verse-read-onder-slot het
+    race-venster van uren (oude stale kopie) naar milliseconden. Een harde cross-proces-garantie zou
+    fcntl vereisen — bewust niet nu, conform het bestaande file_lock-patroon."""
+    @functools.wraps(method)
+    def _wrapped(self, *args, **kwargs):
+        with file_lock(self.path):
+            self._load()                        # verse toestand onder het slot
+            return method(self, *args, **kwargs)
+    return _wrapped
 
 
 class ProjectLedger:
@@ -51,6 +70,8 @@ class ProjectLedger:
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         atomic_write_json(self.path, self._projects)
+        if os.path.exists(self.path):
+            self._mtime = os.path.getmtime(self.path)   # in-memory mtime bij → geen spurious _maybe_reload
 
     def _touch(self, project: dict) -> None:
         project["updated_at"] = time.time()
@@ -651,3 +672,19 @@ class ProjectLedger:
     def open(self) -> list[dict]:
         self._maybe_reload()
         return [p for p in self._projects.values() if p["status"] not in _TERMINAL]
+
+
+# ── Concurrency-poort: ALLE schrijfpaden lopen door _synchronized (slot + verse read onder het slot).
+# Eén auditbare lijst (1-op-1 met de methodes die self._save() aanroepen). Een NIEUW schrijfpad MOET hier
+# bij — de guard-test tests/test_projectledger_concurrency.py::test_alle_schrijfpaden_gesynchroniseerd
+# faalt zodra een methode die _save aanroept niet in deze lijst staat. Reads staan er bewust NIET in.
+_WRITE_METHODS = (
+    "create", "start", "set_due", "add_reaction", "attach_add", "attach_file", "attach_remove",
+    "reopen", "block", "unblock", "complete", "checklist_add", "checklist_remove", "check_add",
+    "check_toggle", "check_remove", "set_item_offer", "accept_item_offer", "edit", "approve",
+    "discard", "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
+    "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",
+    "mark_formalized", "to_future",
+)
+for _m in _WRITE_METHODS:
+    setattr(ProjectLedger, _m, _synchronized(getattr(ProjectLedger, _m)))
