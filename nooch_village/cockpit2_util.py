@@ -645,7 +645,8 @@ ul.clean li:last-child{border-bottom:none}
 .nt-dot{display:inline-block;width:.5rem;height:.5rem;border-radius:50%;background:var(--green);margin-right:.4rem;vertical-align:middle}
 .ai-ask{margin:.1rem 0 1rem}
 .comp-form{margin-bottom:1rem}
-.comp-row{margin-top:.4rem}
+.comp-row{display:flex;align-items:center;gap:.5rem;margin-top:.4rem}
+.comp-row .comp-attach{margin-right:auto}
 /* Trello-stijl editor: omkaderde box met opmaak-toolbar boven een randloze textarea. */
 .editor{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);overflow:visible}
 .editor:focus-within{border-color:var(--green)}
