@@ -44,6 +44,13 @@ def test_foutpad_catch_in_wire(tmp_path):
     assert ".catch(function()" in modal and "niet opgeslagen" in modal
 
 
+def test_bord_drag_drop_checkt_response_ok(tmp_path):
+    # de bord-move-fetch checkt nu óók response.ok → toont nooit '✓ verplaatst' bij een mislukte move
+    modal = P._modal_html()
+    assert "niet verplaatst" in modal                   # foutmelding-tak aanwezig
+    assert modal.count("if(!resp.ok)") >= 2             # zowel de wire()-submit als de move-fetch
+
+
 def test_rolwissel_ververst_trekker_opties_en_invalideert(tmp_path):
     dd, st = _st(tmp_path)
     codie = st.personas.add("Codie")

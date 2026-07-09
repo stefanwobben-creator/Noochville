@@ -499,7 +499,11 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "var pid=e.dataTransfer.getData('text');if(!pid)return;var to=col.getAttribute('data-to');"
         "var d=new URLSearchParams();d.set('csrf',dcsrf);d.set('pid',pid);d.set('next','/');"
         "if(to==='done'){d.set('action','proj_done');}else{d.set('action','proj_status');d.set('to',to);}"
-        "fetch('/action',{method:'POST',body:d}).then(function(){reopen();toast('\\u2713 verplaatst');});});});"
+        # response.ok-poort (zoals wire()): een niet-2xx toont de server-melding, nooit '✓ verplaatst'.
+        "fetch('/action',{method:'POST',body:d}).then(function(resp){"
+        "if(!resp.ok){resp.text().then(function(t){reopen();toast('\\u26a0 '+(((t||'').trim()||'niet verplaatst').slice(0,90)));});return;}"
+        "reopen();toast('\\u2713 verplaatst');})"
+        ".catch(function(){reopen();toast('\\u26a0 niet verplaatst');});});});"
         "bd.querySelectorAll('.pcard[data-href]').forEach(function(c){"
         "c.addEventListener('click',function(e){if(window.__pdrag)return;e.preventDefault();"
         "var href=c.getAttribute('data-href');"
