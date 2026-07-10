@@ -921,30 +921,13 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .switch.on::after{left:17px}
 .switch-field{display:inline-flex;align-items:center;gap:.5rem;font-size:12.5px;color:var(--muted)}
 
-/* ── Dorp-brede LiveKit call bar (views/callbar.py). Reuse: .btn/.switch/.c2-toast; nieuw: .c2-callbar
-   + .cb-*. Begint ná de .noo-rail (2.6rem), onder modals (z-index 45 < .ovl 50 → modal dimt mee). */
-.c2-callbar{position:fixed;left:2.6rem;right:0;bottom:0;height:76px;z-index:45;display:flex;align-items:center;gap:12px;padding:0 18px;background:rgba(255,255,255,.93);backdrop-filter:blur(8px);border-top:1px solid var(--border)}
-.c2-callbar[hidden]{display:none}
-.cb-tiles{display:flex;gap:10px;align-items:center}
-.cb-spacer{flex:1}
-.cb-controls{display:flex;gap:10px;align-items:center}
-.cb-controls .btn{height:44px;border-radius:22px;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:0 18px;font-size:14px;margin:0}
-.cb-controls .btn.cb-icon{width:44px;padding:0}
-.cb-hint{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gray)}
-.cb-tile{position:relative;width:56px;height:56px;border-radius:14px;overflow:hidden;box-shadow:0 0 0 1px var(--border);user-select:none;transition:box-shadow .18s ease,transform .12s ease,opacity .2s ease}
-.cb-tile.cb-click{cursor:pointer}
-.cb-tile.cb-click:hover{transform:translateY(-2px)}
-.cb-tile.self{box-shadow:0 0 0 2px var(--green-dark)}
-.cb-tile.speaking,.cb-tile.self.speaking{box-shadow:0 0 0 3px var(--neon),0 0 16px rgba(43,255,111,.65);animation:cb-pulse 1.3s ease-in-out infinite}
-@keyframes cb-pulse{0%,100%{box-shadow:0 0 0 3px var(--neon),0 0 10px rgba(43,255,111,.5)}50%{box-shadow:0 0 0 3px var(--neon),0 0 22px rgba(43,255,111,.85)}}
-@media(prefers-reduced-motion:reduce){.cb-tile.speaking,.cb-tile.self.speaking{animation:none}}
-.cb-face{width:100%;height:100%;object-fit:cover;display:block;background:#2c2a25}
-.cb-initials{width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#44443f;color:#fff;font-weight:800;font-size:16px;letter-spacing:.5px}
-.cb-mute-badge{position:absolute;top:3px;right:3px;width:17px;height:17px;border-radius:50%;background:var(--coral);color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.25);pointer-events:none}
-.cb-hovername{position:absolute;bottom:2px;left:2px;right:2px;background:rgba(0,0,0,.55);color:#fff;font-size:9.5px;font-weight:700;text-align:center;border-radius:8px;padding:2px 0;opacity:0;transition:opacity .15s ease;pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cb-tile:hover .cb-hovername{opacity:1}
-/* toeschouwer: tiles gedempt (je hoort ze niet), niet klikbaar */
-body.cb-observer .cb-tile{opacity:.75;filter:saturate(.75)}
+/* ── Dorp-brede LiveKit call bar: draait in een same-origin iframe (views/callbar.py → /callbar). De
+   parent kent alleen de iframe-strook. De bar-eigen .c2-callbar/.cb-* leven in de iframe-pagina zelf.
+   Begint ná de .noo-rail (2.6rem), onder modals (z-index 45 < .ovl 50 → modal dimt mee). De iframe
+   start `hidden`; de glue onthult 'm pas als LiveKit geconfigureerd is (cb-ready), zodat een lege
+   strook geen clicks vangt. */
+.cb-frame{position:fixed;left:2.6rem;right:0;bottom:0;height:76px;z-index:45;border:0;background:transparent}
+.cb-frame[hidden]{display:none}
 /* vangnet tegen occlusie: alleen op pagina's mét bar; en de toast zweeft erboven */
 body.has-callbar .c2-main{padding-bottom:90px}
 body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}

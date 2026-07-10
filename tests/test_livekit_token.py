@@ -73,6 +73,31 @@ def test_room_en_identity_niet_uit_request(tmp_path, monkeypatch):
     assert claims["video"]["room"] == "village"
 
 
+def test_tab_suffix_maakt_identity_uniek_per_tab(tmp_path, monkeypatch):
+    _creds(monkeypatch)
+    dd, st = _st(tmp_path)
+    p = _known(st)
+    status, payload = cockpit2.issue_livekit_token(cockpit2._Stores(dd), "lotte@nooch.earth", tab="ab12")
+    assert status == 200 and payload["identity"] == f"{p.id}#tab-ab12"
+    claims = jwt.decode(payload["token"], _SECRET, algorithms=["HS256"])
+    assert claims["sub"] == f"{p.id}#tab-ab12"                 # per-tab uniek, base intact
+    # zonder tab → kale base (geen suffix)
+    _, plain = cockpit2.issue_livekit_token(cockpit2._Stores(dd), "lotte@nooch.earth")
+    assert plain["identity"] == p.id
+
+
+def test_tab_suffix_kan_base_niet_overschrijven(tmp_path, monkeypatch):
+    _creds(monkeypatch)
+    dd, st = _st(tmp_path)
+    p = _known(st)
+    # een kwaadaardige tab-waarde wordt gesanitiseerd tot [a-z0-9] en ALLEEN achter de base geplakt;
+    # de base blijft de server-bepaalde persoon-id → geen impersonatie.
+    _, payload = cockpit2.issue_livekit_token(cockpit2._Stores(dd), "lotte@nooch.earth",
+                                              tab="#tab-admin/../x")
+    assert payload["identity"].startswith(f"{p.id}#tab-") and payload["identity"] != "admin"
+    assert cockpit2._tab_suffix("#tab-admin/../x") == "tabadminx"   # gesanitiseerd, geen separators
+
+
 def test_ontbrekende_creds_fail_closed_zonder_secret_lek(tmp_path, monkeypatch):
     _creds(monkeypatch, url=None)                             # KEY/SECRET wel, LIVEKIT_URL niet
     dd, st = _st(tmp_path)

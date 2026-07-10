@@ -219,7 +219,7 @@ from nooch_village.views.noochie import (
     _noochie_suggest, _noochie_reply,
     render_noochie, _noochie_chrome,
 )
-from nooch_village.views.callbar import _callbar_chrome
+from nooch_village.views.callbar import _callbar_frame, render_callbar
 
 from nooch_village.views.werkoverleg import (
     _wo_hid, _wo_checkin, _wo_checklist, _wo_metrics,
@@ -621,27 +621,36 @@ def maak_livekit_token(room: str, identity: str, naam: str) -> str:
 VILLAGE_ROOM = "village"
 
 
-def issue_livekit_token(st, username: str | None):
+def _tab_suffix(tab: str | None) -> str:
+    """Saniteer een client-tab-id tot [a-z0-9], max 12 tekens. Puur een disambiguator per tabblad —
+    hij wordt alleen ACHTER de server-bepaalde base geplakt en kan die base nooit overschrijven."""
+    return re.sub(r"[^a-z0-9]", "", (tab or "").lower())[:12]
+
+
+def issue_livekit_token(st, username: str | None, tab: str | None = None):
     """Geef een LiveKit-token uit voor de DORP-BREDE call bar. Geeft (status_code, payload) terug.
 
-    HARDE REGEL: `room` en `identity` worden UITSLUITEND server-side bepaald — nooit uit de request.
-    Er is één dorp-brede room (`VILLAGE_ROOM`); de request draagt geen enkele parameter, zodat een
-    gemanipuleerde body room noch identity kan zetten. De vroegere wo-<circle>-<started_at>-afleiding
-    en de meeting-open-check zijn vervallen (video hoort niet meer bij één overleg)."""
+    HARDE REGEL: `room` en de identity-BASE worden UITSLUITEND server-side bepaald — nooit uit de
+    request. Er is één dorp-brede room (`VILLAGE_ROOM`). `tab` is de enige request-input en dient
+    alléén als per-tabblad-suffix (`<base>#tab-<tab>`) zodat meerdere tabs van dezelfde gebruiker niet
+    op een duplicate-identity-kick lopen; de suffix wordt gesanitiseerd en kan de base niet vervangen
+    (geen impersonatie). De vroegere wo-<circle>-<started_at>-afleiding is vervallen."""
     # AUTHZ: iedereen-ingelogd — de call bar is dorp-breed; er is geen cirkel-structuur om aan te
     # toetsen. Elke herkende ingelogde actor krijgt een (toeschouwer-)token; deelnemen/muten is een
     # gespreksdaad, geen structuurdaad. Een niet-herkende sessie krijgt geen token (fail-closed).
     server_url = os.getenv("LIVEKIT_URL", "").strip()
     if not server_url:
         return 503, {"error": "LiveKit niet geconfigureerd"}
-    # IDENTITY: de ingelogde actor. Guest = de lokale sessie bij auth-uit → één vaste identity.
+    # IDENTITY-BASE: de ingelogde actor. Guest = de lokale sessie bij auth-uit → één vaste base.
     if username and username != "guest":
         actor = st.people.by_email(username)
         if actor is None:
             return 403, {"error": "Geen herkende gebruiker"}
-        identity, name = actor.id, actor.name
+        base, name = actor.id, actor.name
     else:
-        identity, name = "guest", "Gast"
+        base, name = "guest", "Gast"
+    suffix = _tab_suffix(tab)
+    identity = f"{base}#tab-{suffix}" if suffix else base
     try:
         token = maak_livekit_token(VILLAGE_ROOM, identity, name)
     except Exception as e:
@@ -2454,12 +2463,13 @@ def make_handler(data_dir: str, csrf_token: str,
                 self.send_header("Set-Cookie", cookie)
             self.end_headers()
 
-        def _send(self, body: str, code: int = 200):
-            # Globale chrome (Noochie-rail + dorp-brede call bar) alleen voor een sessie (ingelogd, of
-            # "guest" bij auth-uit) — niet op de login-pagina of bij een uitgelogde bezoeker. De call bar
-            # onthult zichzelf alleen als LiveKit geconfigureerd is (token ok); anders blijft hij verborgen.
-            if self._session_username() is not None and "</body>" in body:
-                body = body.replace("</body>", _noochie_chrome() + _callbar_chrome(csrf_token) + "</body>", 1)
+        def _send(self, body: str, code: int = 200, chrome: bool = True):
+            # Globale chrome (Noochie-rail + dorp-brede call bar-iframe) alleen voor een sessie (ingelogd,
+            # of "guest" bij auth-uit) — niet op de login-pagina of bij een uitgelogde bezoeker. De iframe
+            # onthult zichzelf pas als LiveKit geconfigureerd is (token ok). chrome=False voor de /callbar-
+            # pagina zelf: die IS de bar-body en mag zichzelf niet nog eens injecteren (oneindige nesting).
+            if chrome and self._session_username() is not None and "</body>" in body:
+                body = body.replace("</body>", _noochie_chrome() + _callbar_frame() + "</body>", 1)
             b = body.encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -2636,10 +2646,16 @@ def make_handler(data_dir: str, csrf_token: str,
                                                     kpi=(qs.get("kpi") or [""])[0],
                                                     mw=(qs.get("mw") or ["maand"])[0]), fr))
                 return
+            if path == "/callbar":
+                # AUTHZ: iedereen-ingelogd — de route levert alleen de bar-UI (iframe-body); de
+                # daadwerkelijke toegang bewaakt /livekit-token zelf. Achter de sessie-auth zoals alles.
+                # chrome=False: deze pagina IS de bar en mag de iframe niet in zichzelf injecteren.
+                self._send(render_callbar(csrf_token=effective_csrf), chrome=False)
+                return
             if path == "/livekit-token":
-                # Geen request-parameters: room (VILLAGE_ROOM) + identity bepaalt de server zelf
-                # (zie issue_livekit_token). AUTHZ: iedereen-ingelogd, in die functie.
-                status, payload = issue_livekit_token(st, username)
+                # Enige request-input: `tab` (per-tabblad-suffix). Room + identity-base bepaalt de
+                # server zelf (zie issue_livekit_token). AUTHZ: iedereen-ingelogd, in die functie.
+                status, payload = issue_livekit_token(st, username, (qs.get("tab") or [""])[0])
                 self._send_json(payload, status)
                 return
             if path.startswith("/static/"):
