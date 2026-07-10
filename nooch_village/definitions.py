@@ -504,20 +504,57 @@ _SOURCE_CATEGORIE = {
 }
 
 
+# Canonieke aggregatieregel per indicator, keyed op (source, veld) — dezelfde stabiele identiteit als de
+# observatie-metric `<source>_<veld>_day`. ÉÉN bron (reference, don't copy) voor twee dingen:
+#   (a) het `aggregatie`-veld dat een zaad/gemigreerde catalogus-definitie krijgt (migrate_definitions), en
+#   (b) de venster-samenvatting die de cockpit-kaart als headline toont (views/metrics._tile_agg).
+# som = optellen over het venster (tellingen: bezoekers, klikken, orders); gemiddelde = Ø per dag
+# (ratio's/scores/posities: positie, bounce, bezoekduur, tevredenheid); laatste_waarde = de stand
+# (voorraad/cash/AOV). Onbekend → "" → default DEFAULT_AGGREGATIE (laatste_waarde) bij render.
+_AGGREGATIE: dict[tuple[str, str], str] = {
+    ("plausible", "visitors"): "som",
+    ("plausible", "pageviews"): "som",
+    ("plausible", "visit_duration"): "gemiddelde",
+    ("plausible", "bounce_rate"): "gemiddelde",
+    ("gsc", "impressions"): "som",
+    ("gsc", "clicks"): "som",
+    ("gsc", "ctr"): "gemiddelde",
+    ("gsc", "position"): "gemiddelde",
+    ("shopify", "pairs_sold"): "som",
+    ("shopify", "orders"): "som",
+    ("shopify", "revenue"): "som",
+    ("shopify", "aov"): "laatste_waarde",
+    ("werkoverleg", "tevredenheid"): "gemiddelde",
+    ("werkoverleg", "duur"): "gemiddelde",
+    ("werkoverleg", "spanningen"): "som",
+    ("werkoverleg", "informatie"): "som",
+    ("werkoverleg", "projecten"): "som",
+    ("werkoverleg", "acties"): "som",
+}
+DEFAULT_AGGREGATIE = "laatste_waarde"
+
+
+def aggregatie_for(source: str, veld: str) -> str:
+    """De canonieke aggregatieregel voor (source, veld), of "" als onbekend. Zie _AGGREGATIE."""
+    return _AGGREGATIE.get((source or "", veld or ""), "")
+
+
 # Werk-metric-consolidatie (deelopdracht 1): elke werkoverleg-metric is één def met de scope-3-velden
 # `aard`+`aggregatie`, plus `werk_measure` die 'm aan zijn combo-measure (werk:<circle>|<measure>)
 # koppelt. De losse dim-varianten (gemiddeld/totaal/over_tijd) uit de wizard vallen hierop neer via
-# DIM_AGGREGATIE (metric_schema). Sleutel = def-naam. Aard=reeks want het is een dagreeks; canonieke
-# aggregatie: scores middelen, tellingen sommeren.
-_WERK_CONSOLIDATIE = {
-    # def-naam: (werk_measure, aard, aggregatie)
-    "Tevredenheid werkoverleg": ("tevredenheid", "reeks", "gemiddelde"),
-    "Doorlooptijd werkoverleg": ("duur", "reeks", "gemiddelde"),
-    "Behandelde spanningen": ("spanningen", "reeks", "som"),
-    "Info-uitkomsten": ("informatie", "reeks", "som"),
-    "Projecten uit overleg": ("projecten", "reeks", "som"),
-    "Acties uit overleg": ("acties", "reeks", "som"),
+# DIM_AGGREGATIE (metric_schema). Aard=reeks want het is een dagreeks; de aggregatie komt uit _AGGREGATIE
+# (één bron), zodat de werk-def en de cockpit-kaart nooit uiteen kunnen lopen.
+_WERK_META = {
+    # def-naam: (werk_measure, aard)
+    "Tevredenheid werkoverleg": ("tevredenheid", "reeks"),
+    "Doorlooptijd werkoverleg": ("duur", "reeks"),
+    "Behandelde spanningen": ("spanningen", "reeks"),
+    "Info-uitkomsten": ("informatie", "reeks"),
+    "Projecten uit overleg": ("projecten", "reeks"),
+    "Acties uit overleg": ("acties", "reeks"),
 }
+_WERK_CONSOLIDATIE = {name: (measure, aard, _AGGREGATIE[("werkoverleg", measure)])
+                      for name, (measure, aard) in _WERK_META.items()}
 
 
 def migrate_definitions(store: DefinitionStore) -> int:
@@ -561,6 +598,13 @@ def migrate_definitions(store: DefinitionStore) -> int:
             elif mapped and not v.get("veld"):
                 v["veld"] = mapped
                 dirty = True
+            # aggregatie: canonieke venster-regel per (source, veld) waar nog leeg. Ná het zetten van
+            # `veld` hierboven, zodat de sleutel (source, veld) compleet is. Alleen vullen, nooit overschrijven.
+            if not v.get("aggregatie"):
+                canon = aggregatie_for(v.get("source", ""), v.get("veld", ""))
+                if canon:
+                    v["aggregatie"] = canon
+                    dirty = True
             # werk-consolidatie: één def per werk-metric met aard+aggregatie+werk_measure. Anders dan
             # de fill-only-velden hierboven zetten we hier de CANONIEKE waarde (aard moment→reeks is een
             # bewuste correctie). Idempotent: alleen schrijven als de waarde afwijkt.

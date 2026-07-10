@@ -17,6 +17,7 @@ from nooch_village.metric_schema import (
     VERIFICATIE_LABEL, AGGREGATIE, AGGREGATIE_LABEL, AARD_LABEL,
 )
 from nooch_village.metrics import window_cutoff, window_range, filter_samples
+from nooch_village.definitions import aggregatie_for, DEFAULT_AGGREGATIE
 from nooch_village.observations import ObservationStore
 from nooch_village.meetcatalog import cadence_of
 from nooch_village.i18n import t
@@ -594,24 +595,51 @@ def _num(v):
     return f"{v:g}" if isinstance(v, (int, float)) else "—"
 
 
-def _agg(res):
+def _agg(res, agg: str = DEFAULT_AGGREGATIE):
+    """De headline-waarde van een resultaat, samengevat over het venster volgens de aggregatieregel:
+    som = optellen, gemiddelde = Ø, laatste_waarde = laatste punt. Breakdown = som van de rijen;
+    number = de waarde zelf (aggregatie niet van toepassing)."""
     if res["kind"] == "series":
-        return res["points"][-1][1] if res.get("points") else None
+        pts = res.get("points") or []
+        vals = [p[1] for p in pts if isinstance(p[1], (int, float))]
+        if not vals:
+            return None
+        if agg == "som":
+            return sum(vals)
+        if agg == "gemiddelde":
+            return sum(vals) / len(vals)
+        return pts[-1][1]                       # laatste_waarde (stand)
     if res["kind"] == "breakdown":
         return sum(n for _, n in res.get("rows", [])) if res.get("rows") else None
     return res.get("value")
 
 
-def _render_bullet(res, target, richting, benchmark="") -> str:
+def _tile_agg(st: _Stores, source: str, measure: str) -> str:
+    """De aggregatieregel (som/gemiddelde/laatste_waarde) waarmee de headline over het venster wordt
+    samengevat. Eén bron: de catalogus (definitions.aggregatie_for op (bron, veld)); een kpi:-item dat
+    z'n eigen regel draagt gaat voor. Onbekend → DEFAULT_AGGREGATIE (laatste_waarde = stand)."""
+    if source.startswith("kpi:"):
+        it = st.metrics.get(source[4:]) or {}
+        return (it.get("aggregatie")
+                or aggregatie_for(it.get("source") or it.get("origin") or "", it.get("veld", ""))
+                or DEFAULT_AGGREGATIE)
+    if source == "pulse_visitors":              # legacy bron-id → canonieke plausible-reeks
+        return aggregatie_for("plausible", measure) or DEFAULT_AGGREGATIE
+    if source.startswith("werk:"):
+        return aggregatie_for("werkoverleg", measure) or DEFAULT_AGGREGATIE
+    return aggregatie_for(source, measure) or DEFAULT_AGGREGATIE   # shopify e.d.
+
+
+def _render_bullet(res, target, richting, benchmark="", agg=DEFAULT_AGGREGATIE) -> str:
     """Bullet graph (Few): waarde-balk + doel-tick + een 'goed'-zone, richtingbewust. Vervangt de
     vlakke doelmeter: toont in één balk waar je staat t.o.v. het doel, met de benchmark als label."""
-    v = _agg(res)
+    v = _agg(res, agg)
     try:
         t = float(target)
     except (TypeError, ValueError):
         t = 0.0
     if not isinstance(v, (int, float)) or t <= 0:
-        return _render_form(res, "doelmeter", target)   # val terug op de simpele meter
+        return _render_form(res, "doelmeter", target, agg=agg)   # val terug op de simpele meter
     down = richting == "down"          # lager = beter (CO2, bounce): goed-zone ligt onder het doel
     M = max(t * 1.25, v * 1.1, t + 1)
     W, H = 240.0, 26.0
@@ -638,8 +666,9 @@ def _data_table(res, bron: str = "") -> str:
         pts = res.get("points") or []
         if not pts:
             return ""
+        # géén afkapping: de tabel toont exact dezelfde dataset als de grafiek (zelfde venster, alle punten).
         rows = "".join(f"<tr><td>{_pt_datum_label(p)}</td>"
-                       f"<td class='num'>{_num(p[1])}</td><td>{b}</td></tr>" for p in pts[-12:])
+                       f"<td class='num'>{_num(p[1])}</td><td>{b}</td></tr>" for p in pts)
         return (f"<table class='mtab'><tr><th>datum</th><th class='num'>waarde</th><th>bron</th></tr>"
                 f"{rows}</table>")
     if kind == "breakdown":
@@ -652,20 +681,6 @@ def _data_table(res, bron: str = "") -> str:
     v = _agg(res)
     return (f"<table class='mtab'><tr><th>waarde</th><th>bron</th></tr>"
             f"<tr><td class='num'>{_num(v)}</td><td>{b}</td></tr></table>") if v is not None else ""
-
-
-def _delta_badge(res) -> str:
-    """Tufte 'comparison': verschil t.o.v. de vorige meting bij een reeks."""
-    if res.get("kind") != "series":
-        return ""
-    pts = res.get("points") or []
-    if len(pts) < 2:
-        return ""
-    d = pts[-1][1] - pts[-2][1]
-    if d == 0:
-        return "<span class='delta flat'>±0</span>"
-    arrow, cls = ("▲", "up") if d > 0 else ("▼", "down")
-    return f"<span class='delta {cls}'>{arrow} {abs(d):g}</span>"
 
 
 def _render_burnup(res, target, project) -> str:
@@ -727,7 +742,7 @@ def _render_burnup(res, target, project) -> str:
     return f"<div class='burnup-wrap'>{head}{svg}{tempo}</div>"
 
 
-def _render_form(res, form, target=None, prev=None):
+def _render_form(res, form, target=None, prev=None, agg=DEFAULT_AGGREGATIE):
     unit = res.get("unit", "")
     kind = res.get("kind")
     # Vorm/dimensie-mismatch: val terug op een zinnige vorm i.p.v. een lege melding.
@@ -739,7 +754,7 @@ def _render_form(res, form, target=None, prev=None):
         pts = res.get("points") or []
         if res.get("chart") == "line":                 # echte dagreeks → lijn-diagram met assen
             return _line_chart_svg(pts, res.get("unit", ""), prev=(prev or {}).get("points"))
-        return (f"<div class='tile-trend'><span class='kpi-val sm'>{_num(pts[-1][1] if pts else None)}</span>"
+        return (f"<div class='tile-trend'><span class='kpi-val sm'>{_num(_agg(res, agg))}</span>"
                 f"{_spark_svg(pts)}</div>")
     if form in ("verdeling", "tabel"):
         rows = res.get("rows") or []
@@ -756,13 +771,13 @@ def _render_form(res, form, target=None, prev=None):
                     f"<span class='bar-v'>{_num(n)}</span></div>")
         return f"<div class='bars'>{out}</div>"
     if form == "doelmeter":
-        v = _agg(res) or 0
+        v = _agg(res, agg) or 0
         t = target or 0
         pct = int(min(100, v / t * 100)) if t else 0
         return (f"<div class='goal'><span class='kpi-val sm'>{_num(v)} <span class='kpi-unit'>/ {_num(t)}</span></span>"
                 f"<span class='bar-t'><span class='bar-f' style='width:{pct}%'></span></span></div>")
     # getal — leeg (None) is iets anders dan de waarde 0
-    v = _agg(res)
+    v = _agg(res, agg)
     if v is None:
         return "<div class='kpi-val'><span class='muted' style='font-size:.9rem'>geen data</span></div>"
     u = f" <span class='kpi-unit'>{_e(unit)}</span>" if unit else ""
@@ -854,9 +869,10 @@ def _llm_says_comparable(old: dict, new: dict) -> bool:
         return False
 
 
-def _compare_delta(res, prev_res) -> str:
-    """Delta-badge (aard: moment): huidige periode vs de vorige periode."""
-    cur, prv = _agg(res), _agg(prev_res)
+def _compare_delta(res, prev_res, agg=DEFAULT_AGGREGATIE) -> str:
+    """Delta-badge: aggregaat van de huidige periode vs. dat van de vorige periode, volgens dezelfde
+    aggregatieregel. Alleen zichtbaar als 'Vergelijk met vorige periode' aan staat."""
+    cur, prv = _agg(res, agg), _agg(prev_res, agg)
     if not isinstance(cur, (int, float)) or not isinstance(prv, (int, float)):
         return ""
     d = cur - prv
@@ -1038,14 +1054,48 @@ def freshness_chip(state) -> str:
             f"{_e(t('data.vers.' + state))}</span>")
 
 
+_WIN_LABEL = {"7d": "7d", "28d": "28d", "kwartaal": "kwartaal", "jaar": "jaar",
+              "gisteren": "gisteren", "vandaag": "vandaag", "actueel": "actueel", "aangepast": "periode"}
+
+
+def _agg_label(agg: str, win: str, res, end) -> str:
+    """Label bij de headline volgens de aggregatieregel: 'totaal 7d' (som), 'Ø per dag' (gemiddelde),
+    'stand per <datum>' (laatste_waarde). Hergebruikt .muted; geen nieuwe klasse/inline-style."""
+    if res.get("kind") not in ("series", "number", "breakdown"):
+        return ""
+    if agg == "som":
+        return f"<div class='muted'>totaal {_e(_WIN_LABEL.get(win, 'periode'))}</div>"
+    if agg == "gemiddelde":
+        return "<div class='muted'>Ø per dag</div>"
+    d = ""
+    pts = res.get("points") or []
+    if pts:
+        d = _pt_datum_label(pts[-1])
+    elif end:
+        import datetime as _dt
+        d = _dt.datetime.fromtimestamp(end - 1).strftime('%d-%m-%y')   # end exclusief → laatste dag = end-1
+    return f"<div class='muted'>stand per {_e(d)}</div>" if d else ""
+
+
+def _range_label(cutoff, end) -> str:
+    """Expliciet datumbereik van het venster: '03-07 t/m 09-07'. Leeg bij een open venster (Actueel)."""
+    if cutoff is None or end is None:
+        return ""
+    import datetime as _dt
+    a = _dt.datetime.fromtimestamp(cutoff).strftime('%d-%m')
+    b = _dt.datetime.fromtimestamp(end - 1).strftime('%d-%m')          # end exclusief → laatste dag = end-1
+    return f"<div class='muted'>{a} t/m {b}</div>"
+
+
 def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=False,
-                 prev_win=None, actueel=False) -> str:
+                 prev_win=None, actueel=False, win: str = "") -> str:
     if tile.get("form") == "formule":          # fail-closed live-berekening A op B per dag
         return _render_formula_tile(st, rec, tile, csrf, cutoff, end)
     g = _grondslag(st, tile["source"], tile["measure"])
     goal = ""
     gp = st.projects.get(tile.get("goal_pid")) if tile.get("goal_pid") else None
     form = tile.get("form", "getal")
+    agg = _tile_agg(st, tile["source"], tile["measure"])   # venster-samenvatregel voor de headline
     # 'Actueel' = laatste bekende dagwaarde uit de observatie-store (dezelfde betekenis als Plausible);
     # geen dag-observaties voor deze bron → 'geen live data'.
     ak_metric, ak_bron = _daily_obs_key(tile["source"], tile["measure"]) if actueel else (None, None)
@@ -1072,7 +1122,7 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
         if form == "burnup":
             body = _render_burnup(res, tile.get("target"), gp)
         elif form in ("doelmeter", "bullet"):          # bullet = de definitieve naam (Tufte-beslistabel)
-            body = _render_bullet(res, tile.get("target"), g.get("richting"), g.get("benchmark"))
+            body = _render_bullet(res, tile.get("target"), g.get("richting"), g.get("benchmark"), agg=agg)
         elif form == "staaf":
             body = _bar_chart_svg(res.get("points") or [], res.get("unit", ""))
         elif form == "gestapeld":
@@ -1080,23 +1130,37 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
         elif form == "horizontaal":
             body = _hbar_svg(res.get("rows"))
         else:
-            body = _render_form(res, form, tile.get("target"), prev=prev_res)
-        # aard: moment → delta-badge naast het getal (reeks krijgt al de tweede lijn in de grafiek)
+            body = _render_form(res, form, tile.get("target"), prev=prev_res, agg=agg)
+        # Headline = het venster-aggregaat volgens `agg` (NIET de laatste dagwaarde). Vormen die zelf al
+        # een getal tonen (getal/doelmeter/bullet/trend-spark) krijgen alleen het label; grafiek-only
+        # vormen (lijn/staaf/verdeling/gestapeld/horizontaal) krijgen het aggregaat als headline erboven.
+        chart_only = (form in ("staaf", "verdeling", "gestapeld", "horizontaal")
+                      or (form == "trend" and res.get("chart") == "line"))
+        if form != "burnup":
+            head_num = ""
+            if chart_only:
+                hv = _agg(res, agg)
+                if hv is not None:
+                    hu = res.get("unit", "")
+                    hu = f" <span class='kpi-unit'>{_e(hu)}</span>" if hu else ""
+                    head_num = f"<div class='kpi-val'>{_num(hv)}{hu}</div>"
+            body = head_num + _agg_label(agg, win, res, end) + body + _range_label(cutoff, end)
+        # Delta alleen bij 'Vergelijk met vorige periode': aggregaat huidig venster vs. vorig, zelfde regel.
         if compare and prev_res is not None and res.get("chart") != "line":
-            body += _compare_delta(res, prev_res)
-        # Uitklap: de exacte ruwe datapunten (datum · waarde · bron)
+            body += _compare_delta(res, prev_res, agg=agg)
+        # Uitklap: de exacte ruwe datapunten (datum · waarde · bron) — zelfde dataset als de grafiek.
         data = ""
         if form in ("trend", "staaf", "verdeling", "horizontaal", "gestapeld", "doelmeter", "bullet", "burnup"):
             dt = _data_table(res, bron=g.get("bron", tile["source"]))
             if dt:
-                data = f"<details class='tile-data'><summary>ruwe data{_delta_badge(res)}</summary>{dt}</details>"
+                data = f"<details class='tile-data'><summary>ruwe data</summary>{dt}</details>"
     if gp is not None:
         due = _fmt_due(gp.get("due")) if gp.get("due") else ""
         goal = (f"<div class='tile-goal muted'>naar doel: <b>{_e(str(gp.get('scope') or gp['id'])[:50])}</b>"
                 f"{(' · ' + _e(due)) if due else ''}</div>")
     # Drempel-signaal (Kaizen 'aandacht nodig'): waarde de verkeerde kant op t.o.v. de drempel.
     warn = ""
-    thr, val = g.get("drempel"), _agg(res)
+    thr, val = g.get("drempel"), _agg(res, agg)
     if thr is not None and isinstance(val, (int, float)):
         bad = (val < thr) if g.get("richting") == "up" else (val > thr) if g.get("richting") == "down" else False
         if bad:
@@ -1142,7 +1206,8 @@ def _kpi_id_from_def(st: _Stores, node: str, did: str):
         bron_url=cur.get("bron_url", ""), verificatie=cur.get("verificatie", ""),
         tijd=cur.get("tijd", ""), bruikbaar=cur.get("bruikbaar", ""),
         standaard=cur.get("standaard", ""), waarde=cur.get("waarde"),
-        veld=cur.get("veld", ""), categorie=cur.get("categorie", ""), aard=cur.get("aard", ""))
+        veld=cur.get("veld", ""), categorie=cur.get("categorie", ""), aard=cur.get("aard", ""),
+        aggregatie=cur.get("aggregatie", ""))
     return it["id"] if it else None
 
 
@@ -1346,7 +1411,7 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: st
 
     # 1. Dashboard van tegels (de KPI's) — één centrale periode voor alle tegels
     dash = ("".join(_render_tile(st, rec, t, start, csrf, end=end, compare=compare, prev_win=prev_win,
-                                 actueel=(win == "actueel")) for t in tiles) if tiles
+                                 actueel=(win == "actueel"), win=win) for t in tiles) if tiles
             else "<p class='muted'>Nog geen KPI's op het dashboard. Maak er een met “+ KPI maken”.</p>")
     out = f"<div class='c2-sec'>{head}</div><div class='c2-sec'><div class='tile-grid'>{dash}</div></div>{_METRICS_JS}"
 
