@@ -198,7 +198,7 @@ from nooch_village.views.metrics import (
     _source_samples, _metric_points, _spark_svg, _kpi_card,
     _metric_add_forms, _shopify_window, _sources_for, _werk_fetch,
     _tile_combos, _tile_meta, _fetch, _num, _agg,
-    _render_bullet, _data_table, _delta_badge, _render_burnup,
+    _render_bullet, _data_table, _render_burnup,
     _render_form, _grondslag, _grondslag_popover, _llm_says_comparable,
     _render_tile, _kpi_id_from_def, _goal_options, _metric_csv, _default_form,
     _kpi_data_row, _def_tokens, _role_text, _role_relevant_defs,

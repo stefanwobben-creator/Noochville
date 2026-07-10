@@ -203,7 +203,8 @@ def test_bullet_vervangt_doelmeter(tmp_path):
     st = cockpit2._Stores(dd)
     # handmatige KPI met waarde + benchmark, richting hoger=beter
     k = st.metrics.add_kpi(C, "Conversie", "%", direction="up", benchmark="goed 2-3%")
-    st.metrics.add_sample(k["id"], 1.5)
+    # gisteren gemeten: een complete-dagen-venster (7d) sluit vandaag uit, dus dateer op een volle dag
+    st.metrics.add_sample(k["id"], 1.5, at=time.time() - 86400)
     cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": [f"kpi:{k['id']}|value|none"],
                                        "form": ["doelmeter"], "target": ["3"], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
@@ -218,7 +219,7 @@ def test_bullet_richtingbewust_lager_is_beter(tmp_path):
     st = cockpit2._Stores(dd)
     # CO2-achtig: lager = beter, waarde onder het doel → groene balk
     k = st.metrics.add_kpi(C, "CO2 per paar", "kg", direction="down")
-    st.metrics.add_sample(k["id"], 4.75)
+    st.metrics.add_sample(k["id"], 4.75, at=time.time() - 86400)   # gisteren (complete dag, valt in 7d)
     cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": [f"kpi:{k['id']}|value|none"],
                                        "form": ["doelmeter"], "target": ["6"], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
@@ -236,9 +237,10 @@ def test_tufte_datatabel_en_delta_bij_grafiek(tmp_path):
     cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": [f"kpi:{k['id']}|value|none"],
                                        "form": ["trend"], "target": [""], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
-    # Tufte: inklapbare datatabel onder de grafiek + delta t.o.v. vorige meting
+    # Tufte: inklapbare datatabel onder de grafiek. De dag-op-dag-delta is verwijderd: een delta
+    # verschijnt alleen nog bij 'Vergelijk met vorige periode' (zie test_delta_alleen_bij_compare).
     assert "<details class='tile-data'>" in page and "datum" in page and "waarde" in page
-    assert "▲ 4" in page
+    assert "▲" not in page and "▼" not in page
 
 
 def test_getal_geen_datatabel(tmp_path):

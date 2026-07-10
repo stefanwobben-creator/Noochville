@@ -137,7 +137,7 @@ class MetricStore:
                 auto: bool = False, meetwijze: str = "", benchmark: str = "",
                 bron_url: str = "", verificatie: str = "", tijd: str = "", bruikbaar: str = "",
                 standaard: str = "", waarde=None, veld: str = "", categorie: str = "",
-                aard: str = "") -> dict | None:
+                aard: str = "", aggregatie: str = "") -> dict | None:
         if not node:
             return None
         # grondslag + meetmoment worden gevalideerd/genormaliseerd door het indicator-schema
@@ -145,7 +145,8 @@ class MetricStore:
         # veld/categorie/aard komen mee uit de catalogus-def (create-flow): zonder `veld` kan geen enkel
         # pad de bron-dagreeks (<source>_<veld>_day) reconstrueren. `aard` alleen doorgeven als gezet;
         # anders leidt het schema 'm af uit het meettype.
-        extra = {"veld": veld, "categorie": categorie}
+        # aggregatie = de venster-samenvatregel (som/gemiddelde/laatste_waarde); erft uit de catalogus-def.
+        extra = {"veld": veld, "categorie": categorie, "aggregatie": aggregatie}
         if aard:
             extra["aard"] = aard
         spec = _normalize_indicator(name=name, unit=unit, source=source, definition=definition,
@@ -277,8 +278,11 @@ def _parse_date(s: str) -> float | None:
 
 def window_range(win: str, now: float | None = None, van: str = "", tot: str = ""):
     """(start_ts, end_ts) voor de centrale periode-picker. start/end None = onbegrensd aan die kant.
-    Vandaag/Gisteren zijn kalenderdagen; 7d/28d/kwartaal/jaar zijn rollend; Actueel = alles (laatste
-    waarde telt); Aangepast = van/tot (tot inclusief)."""
+    Het venster is HALF-OPEN [start, end) — end is exclusief (zie filter_samples).
+
+    Vandaag = de lopende dag; Gisteren = de vorige kalenderdag; 7d/28d/kwartaal/jaar = de laatste N
+    VOLLEDIGE kalenderdagen (einde = middernacht vandaag, dus vandaag telt NIET mee); Actueel = alles
+    (laatste waarde telt); Aangepast = van/tot (tot-dag inclusief)."""
     import datetime as _dt
     now = now or time.time()
     day = 86400.0
@@ -287,26 +291,29 @@ def window_range(win: str, now: float | None = None, van: str = "", tot: str = "
     table = {
         "vandaag": (today0, now),
         "gisteren": (today0 - day, today0),
-        "7d": (now - 7 * day, now),
-        "28d": (now - 28 * day, now),
-        "kwartaal": (now - 91 * day, now),
-        "jaar": (now - 365 * day, now),
+        # complete-dagen-vensters eindigen op middernacht vandaag → de lopende dag valt buiten élk venster
+        "7d": (today0 - 7 * day, today0),
+        "28d": (today0 - 28 * day, today0),
+        "kwartaal": (today0 - 91 * day, today0),
+        "jaar": (today0 - 365 * day, today0),
         "actueel": (None, now),
     }
     if win in table:
         return table[win]
     if win == "aangepast":
         s, e = _parse_date(van), _parse_date(tot)
-        return (s, (e + day) if e is not None else now)   # tot-dag inclusief
+        return (s, (e + day) if e is not None else now)   # tot-dag inclusief (end exclusief → +1 dag)
     return (None, now)                                     # 'alles' / onbekend
 
 
 def filter_samples(samples, cutoff: float | None, end: float | None = None):
-    """(at, value)-paren binnen [cutoff, end], op tijd gesorteerd. end None = geen bovengrens
-    (backward-compatible met de oude cutoff-aanroepen)."""
+    """(at, value, datum)-tupels binnen het HALF-OPEN venster [cutoff, end), op tijd gesorteerd.
+    end is EXCLUSIEF: een dag-observatie op middernacht van de einddag valt buiten het venster, zodat
+    een complete-dagen-venster (einde = middernacht vandaag) de lopende dag niet meepakt. end None =
+    geen bovengrens (backward-compatible met de oude cutoff-aanroepen)."""
     pts = [(s["at"], s["value"], s.get("datum")) for s in samples if "at" in s]
     if cutoff is not None:
         pts = [p for p in pts if p[0] >= cutoff]
     if end is not None:
-        pts = [p for p in pts if p[0] <= end]
+        pts = [p for p in pts if p[0] < end]
     return sorted(pts, key=lambda p: p[0])
