@@ -30,6 +30,7 @@ _CSS = """
  --green:#1F9D55;--green-dark:#14713C;--green-tint:#D3EFDD;
  --cream:#FCFAF4;--cream-2:#FBF6EA;--cream-3:#FFF7E8;--sand:#F1ECDF;--surface:#fff;
  --yellow:#FFCE2E;--yellow-light:#FFF1B8;--coral:#FF6B5B;--border:#DDD4C0;--error-tint:#FDEAEA;
+ --neon:#2bff6f;   /* call bar: speaking-glow (enige bar-specifieke token) */
  --font-display:'Bricolage Grotesque',system-ui,sans-serif;
  --font-body:'DM Sans',system-ui,sans-serif;
  --radius:9px;--radius-pill:999px;
