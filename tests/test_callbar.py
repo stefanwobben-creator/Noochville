@@ -44,7 +44,16 @@ def test_render_callbar_standalone_wellformed():
     assert "visibilitychange" in html                                  # throttle-proof: verval-check bij tabwissel/focus
     assert "ander tabblad" in html and "disabled" not in html          # subtiele hint, GEEN uitgegrijsde knop
     assert "cb-audio" in html                                          # audio-render-container
+    assert "overflow-x:auto" in html and "flex:none" in html           # tile-rij scrollt, controls gepind (geen afkap)
     assert "style=" not in html                                        # geen inline styles (ratchet)
+
+
+def test_cb_frame_heeft_expliciete_width():
+    """De iframe-strook krijgt een expliciete breedte: zonder dat rekt Firefox 'm wel maar valt Chrome
+    terug op ~intrinsieke breedte (replaced element met left+right + width:auto) → bar kapt rechts af."""
+    from nooch_village.cockpit2_util import _EXTRA_CSS
+    frame_rule = next(r for r in _EXTRA_CSS.split("}") if ".cb-frame{" in r)
+    assert "width:calc(100% - 2.6rem)" in frame_rule
 
 
 def test_callbar_frame_heeft_iframe_en_origincheck():

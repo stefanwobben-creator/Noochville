@@ -926,7 +926,10 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
    Begint ná de .noo-rail (2.6rem), onder modals (z-index 45 < .ovl 50 → modal dimt mee). De iframe
    start `hidden`; de glue onthult 'm pas als LiveKit geconfigureerd is (cb-ready), zodat een lege
    strook geen clicks vangt. */
-.cb-frame{position:fixed;left:2.6rem;right:0;bottom:0;height:76px;z-index:45;border:0;background:transparent}
+/* Expliciete width: een <iframe> is een replaced element — met alleen left+right (width:auto) rekt
+   Firefox 'm wel maar valt Chrome terug op ~intrinsieke breedte (negeert right). calc dwingt beide
+   naar volle breedte naast de .noo-rail (2.6rem). */
+.cb-frame{position:fixed;left:2.6rem;bottom:0;width:calc(100% - 2.6rem);height:76px;z-index:45;border:0;background:transparent}
 .cb-frame[hidden]{display:none}
 /* vangnet tegen occlusie: alleen op pagina's mét bar; en de toast zweeft erboven */
 body.has-callbar .c2-main{padding-bottom:90px}

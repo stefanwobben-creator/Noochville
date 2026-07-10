@@ -53,9 +53,9 @@ html,body{background:transparent;margin:0;padding:0;max-width:none;height:100%;o
 .switch.on::after{left:17px}
 .switch-field{display:inline-flex;align-items:center;gap:.5rem;font-size:12.5px;color:var(--muted);border:none;background:transparent;cursor:pointer;font:inherit}
 .c2-callbar{display:flex;align-items:center;gap:12px;padding:0 18px;height:100%;background:rgba(255,255,255,.93);backdrop-filter:blur(8px);border-top:1px solid var(--border)}
-.cb-tiles{display:flex;gap:10px;align-items:center}
+.cb-tiles{display:flex;gap:10px;align-items:center;min-width:0;overflow-x:auto}
 .cb-spacer{flex:1}
-.cb-controls{display:flex;gap:10px;align-items:center}
+.cb-controls{display:flex;gap:10px;align-items:center;flex:none}
 .cb-controls .btn{height:44px;border-radius:22px;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:0 18px;font-size:14px;margin:0}
 .cb-controls .btn.cb-icon{width:44px;padding:0}
 .cb-hint{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gray)}
