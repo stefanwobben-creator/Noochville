@@ -360,7 +360,7 @@ def _ladder() -> list[tuple[str, str | None]]:
 
 
 def reason(prompt: str, *, ladder: str | None = None, max_tokens: int = 700,
-           json_mode: bool = False, return_tier: bool = False):
+           json_mode: bool = False, return_tier: bool = False, call_site: str = "onbekend"):
     """Optionele LLM-redenering via de getrapte ladder (goedkoop → duur).
 
     Loopt de treden af tot er één een antwoord geeft. Een trede zonder sleutel of in
@@ -371,6 +371,10 @@ def reason(prompt: str, *, ladder: str | None = None, max_tokens: int = 700,
     `json_mode`: forceer JSON-output waar de provider het ondersteunt (Gemini/Mistral).
     `return_tier`: geef `(tekst, trede)` terug i.p.v. alleen `tekst` (bij falen `(None, None)`),
       zodat de caller kan loggen wélke trede het antwoord leverde.
+    `call_site`: kort, stabiel label van de aanroeplocatie (bv. "plan_checklist", "field_note_narrative").
+      Eén centrale INFO-regel per aanroep logt dit label + de promptlengte + de trede die antwoordde,
+      zodat prompt-omvang en herkomst per call-site zichtbaar zijn. Default "onbekend" maakt niet-gelabelde
+      call-sites vanzelf zichtbaar in de logs.
 
     Alle LLM-aanroepen van het dorp lopen door dit ene poortje en worden hier in de tijd
     uitgesmeerd (LIMITER), zodat het dorp onder de gratis limiet blijft."""
@@ -396,6 +400,7 @@ def reason(prompt: str, *, ladder: str | None = None, max_tokens: int = 700,
             continue
         if out:
             log.info("LLM-trede %s: geslaagd", tier)
+            log.info("LLM-call [%s] prompt=%d tekens → %s", call_site, len(prompt), tier)
             return (out, tier) if return_tier else out
         # None-uitkomst gesplitst: geen sleutel (trede overgeslagen) vs lege respons (wél aangeroepen).
         if not _vendor_has_key(vendor):
@@ -407,4 +412,5 @@ def reason(prompt: str, *, ladder: str | None = None, max_tokens: int = 700,
     # Alle tredes op: log expliciet waaróm (voorheen zag de caller alleen "LLM-plan mislukt").
     log.warning("LLM: alle %d trede(s) uitgeput — geen antwoord. Per trede: %s",
                 len(outcomes), "; ".join(outcomes) or "(geen tredes geconfigureerd)")
+    log.info("LLM-call [%s] prompt=%d tekens → geen antwoord", call_site, len(prompt))
     return (None, None) if return_tier else None

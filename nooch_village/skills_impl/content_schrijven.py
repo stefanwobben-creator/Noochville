@@ -68,5 +68,5 @@ class ContentSchrijvenSkill(Skill):
             + "van het succes).\n"
             + instruction(locale)
         )
-        out = reason(prompt)
+        out = reason(prompt, call_site="skill_content_schrijven")
         return out.strip() if out else None

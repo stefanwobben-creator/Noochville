@@ -1723,7 +1723,7 @@ def _kladblok_ai_reply(item: dict, records, vraag: str) -> str | None:
         f"Accountabilities bij andere rollen:\n{andere_txt}\n\n"
         f"Vraag van de mens: {vraag}")
     try:
-        out = (_reason(prompt) or "").strip()
+        out = (_reason(prompt, call_site="cockpit_kladblok_advies") or "").strip()
     except Exception:
         return None
     return out or None

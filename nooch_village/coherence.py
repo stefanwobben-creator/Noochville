@@ -55,7 +55,7 @@ def evaluate_coherence(gap_description: str) -> tuple[str, str]:
     prompt = _COHERENCE_PROMPT.format(gap_description=gap_description)
     try:
         from nooch_village.llm import reason as _llm_reason
-        raw = _llm_reason(prompt)
+        raw = _llm_reason(prompt, call_site="coherence_gate")
     except Exception as exc:
         return ("error", str(exc))
 

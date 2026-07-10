@@ -89,7 +89,9 @@ def distill_article(article: dict, *, mission: str = "", known_brands=(), llm_re
     if not title:
         return None
     if llm_reason is None:
-        from nooch_village.llm import reason as llm_reason
+        import functools
+        from nooch_village.llm import reason as _reason
+        llm_reason = functools.partial(_reason, call_site="news_distill_article")
     brand = article.get("brand", "")
     known = ", ".join(known_brands) if known_brands else "(geen)"
     prompt = (

@@ -183,7 +183,7 @@ def main() -> None:
                 prompt = ("Classificeer deze bewering in één woord: signaal (trend/mening), "
                           "bevinding (empirie), kader (norm/regel), standpunt (eigen claim), "
                           "of onbeslist. Antwoord met enkel dat woord.\n\nBewering: " + (claim or ""))
-                ans = (reason(prompt) or "").strip().lower()
+                ans = (reason(prompt, call_site="cli_claim_classify") or "").strip().lower()
                 from nooch_village.insight import ClaimKind
                 for kk in ClaimKind:
                     if kk.value in ans:

@@ -36,7 +36,7 @@ class SynthesizeCardsSkill(Skill):
             "SYNTHESE: <één scherpe zin: de emergente hypothese>\n"
             "WAAROM: <één zin: waarom dit voor Nooch relevant is>"
         )
-        out = reason(prompt)
+        out = reason(prompt, call_site="skill_synthesize")
         if not out:
             return {"error": "geen LLM beschikbaar (fail-closed)"}
         synthese, waarom = "", ""

@@ -50,7 +50,7 @@ class BulletinSchrijvenSkill(Skill):
         )
 
         from nooch_village.llm import reason as llm_reason
-        content = llm_reason(prompt)
+        content = llm_reason(prompt, call_site="skill_bulletin")
         if content is None:
             log.warning("BulletinSchrijvenSkill: LLM niet beschikbaar — bulletin overgeslagen")
             return {"error": "llm_unavailable"}

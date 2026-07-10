@@ -63,5 +63,5 @@ class ContentCheckSkill(Skill):
             f"Tekst:\n{text}\n\n"
             + instruction(locale)
         )
-        out = reason(prompt)
+        out = reason(prompt, call_site="skill_content_check")
         return out.strip() if out else None

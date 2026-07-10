@@ -89,7 +89,8 @@ def curate(fuzzy: str, *, source: str, source_date: str,
     Roept de LLM aan (reason_fn, default llm.reason), parseert, valideert en finaliseert.
     Fail-closed op elke stap: geen LLM/onparseerbaar/ongeldig → die kaartjes vervallen.
     """
-    rf = reason_fn or reason
+    import functools
+    rf = reason_fn or functools.partial(reason, call_site="curate_cards")
     out = rf(build_curate_prompt(fuzzy, existing_ids))
     cards = parse_cards(out)
     return [finalize_card(d, source, source_date) for d in cards if validate_card(d)]

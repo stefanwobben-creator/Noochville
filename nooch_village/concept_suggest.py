@@ -12,7 +12,7 @@ def _format_concepts(concepts: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def suggest_concept(keyword: str, concepts: list[dict], reason_fn=reason) -> str | None:
+def suggest_concept(keyword: str, concepts: list[dict], reason_fn=None) -> str | None:
     """Stel met de LLM een concept voor bij een keyword. Fail-closed.
 
     Geeft een concept_id uit `concepts` terug, of None als de LLM niet beschikbaar is,
@@ -31,6 +31,9 @@ def suggest_concept(keyword: str, concepts: list[dict], reason_fn=reason) -> str
         "frame echt past. Geef alleen dat ene woord, geen uitleg. Twijfel je, antwoord "
         f"{GEEN}."
     )
+    if reason_fn is None:
+        import functools
+        reason_fn = functools.partial(reason, call_site="concept_suggest")
     raw = reason_fn(prompt)
     if not raw:
         return None

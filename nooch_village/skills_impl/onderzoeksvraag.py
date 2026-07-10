@@ -41,7 +41,7 @@ class OnderzoeksvraagSkill(Skill):
             "Kun je geen zinvolle vraag vormen, antwoord dan: VRAAG: geen\n"
             + instruction(locale)
         )
-        out = reason(prompt)
+        out = reason(prompt, call_site="skill_onderzoeksvraag")
         if not out:
             return None
         m = re.search(r"VRAAG:\s*(.+)", out, re.IGNORECASE)

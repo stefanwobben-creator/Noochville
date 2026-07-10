@@ -32,7 +32,9 @@ def work_one(scope, role_id: str, role_purpose: str, *, steer: str = "", persona
     de toegewezen inwoner (karakter; kleurt toon, niet capaciteit). Geeft {ok, outcome} of
     {ok: False, needs} als het nieuwe capaciteit/onomkeerbaarheid vraagt. Fail-closed zonder LLM."""
     if llm_reason is None:
-        from nooch_village.llm import reason as llm_reason
+        import functools
+        from nooch_village.llm import reason as _reason
+        llm_reason = functools.partial(_reason, call_site="project_work_one")
     prompt = (
         (persona.strip() + "\n\n" if persona and persona.strip() else "")
         + f"Je bent de rol '{role_id}' in NoochVille (duurzaam, vegan schoenenmerk Nooch.earth). "

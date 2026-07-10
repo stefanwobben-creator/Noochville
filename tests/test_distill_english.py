@@ -18,7 +18,7 @@ def test_distill_geen_bronnen_is_engels(tmp_path):
 
 def test_distill_forceert_engels_ook_bij_nl_locale(tmp_path, monkeypatch):
     captured = {}
-    def fake_reason(prompt):
+    def fake_reason(prompt, **kw):
         captured["prompt"] = prompt
         return "English assessment."
     monkeypatch.setattr(llm, "reason", fake_reason)

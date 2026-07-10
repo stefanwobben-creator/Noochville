@@ -85,7 +85,7 @@ def plan_offers(owner_record, texts, registry, *, name: str = "") -> list:
             "dezelfde volgorde:\n{\"matches\": [{\"skill\": \"skillnaam of null\", \"payload\": {}}]}"
         )
         from nooch_village import llm
-        raw = llm.reason(prompt, json_mode=True, max_tokens=900)
+        raw = llm.reason(prompt, json_mode=True, max_tokens=900, call_site="skill_match_offer")
         if not raw:                                           # ladder gaf niets (geen key / leeg / weggevangen)
             refuse("OFFER_LLM_NONE", "llm.reason gaf geen antwoord", name=name, items=len(texts))
             return [None] * len(texts)
