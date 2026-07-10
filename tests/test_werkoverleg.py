@@ -47,7 +47,7 @@ def test_open_toont_stappen_en_checkin_members(tmp_path):
         assert lbl in frag
     assert "wo-step on" in frag and "Volgende" in frag            # per-stap actie, geen onderbalk
     assert "Sluit overleg" not in frag and "rov-foot" not in frag  # afronden alleen op stap 7
-    assert "wo-grid" in frag and "id='wo-video'" in frag          # 3 kolommen + rechter video-mount
+    assert "wo-grid" in frag and "id='wo-video'" not in frag      # 2 kolommen; video verhuisde naar de call bar
     assert "Check-in" in frag                          # stap 1 = check-in (members-basis)
 
 
