@@ -107,7 +107,8 @@ def build_noochie_verslag(st, data_dir: str, today: datetime.date, window_days: 
         import functools
         from nooch_village import llm
         # Een verhalend verslag van 5 secties past niet in de default 700 tokens → ruimer vragen.
-        reason = functools.partial(llm.reason, max_tokens=_VERSLAG_MAX_TOKENS)
+        reason = functools.partial(llm.reason, max_tokens=_VERSLAG_MAX_TOKENS,
+                                    call_site="field_note_narrative")
     narrative = (reason(_build_prompt(facts)) or "").strip()
     if not narrative:
         return None, facts

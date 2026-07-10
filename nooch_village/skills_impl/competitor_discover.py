@@ -86,7 +86,7 @@ class CompetitorDiscoverSkill(Skill):
             text = self._fetch_text(g["link"])
             if len(text) < 200:                          # niet leesbaar → overslaan
                 continue
-            out = reason(_PROMPT.format(text=text[:6000]))
+            out = reason(_PROMPT.format(text=text[:6000]), call_site="skill_competitor_discover")
             for name in _parse_brand_list(out, brands):
                 if name.lower() in seen:
                     continue

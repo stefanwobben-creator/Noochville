@@ -40,7 +40,7 @@ class VoorstelSchrijvenSkill(Skill):
             "AFWEGING: <de belangrijkste afweging of voorwaarde, één zin>\n"
             "Verzin geen feiten; blijf bij wat uit de spanning volgt. Geen extra tekst."
         )
-        out = reason(prompt)
+        out = reason(prompt, call_site="skill_voorstel")
         if not out or not out.strip():
             return {"ok": False, "error": "geen LLM beschikbaar — geen voorstel (fail-closed)"}
         return {"ok": True, "voorstel": out.strip(), "by": "noochie"}

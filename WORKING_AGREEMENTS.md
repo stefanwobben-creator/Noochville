@@ -39,6 +39,11 @@ sessie opent hiermee.
 - Bij handmatige server-commando's als root: altijd daarna
   `chown -R nooch:nooch /opt/noochville/data` draaien, anders kan de
   service de bestanden niet lezen.
+- Server-staat is niet uit de repo af te leiden: `/opt/noochville/.env` en
+  `LLM_LADDER` op prod kunnen vendors/keys bevatten die de repo niet kent. Bij
+  deploy-adviezen ('deploy niet nodig', 'activeren kan later') eerst de
+  server-staat opvragen of aangeleverd krijgen; nooit vanaf de repo concluderen
+  dat config inactief is.
 - Tests die data-afhankelijke renders testen (bijv. shopify-tegels) moeten
   zelf hun testdata zaaien in hun tmp-map. Nooit leunen op bestanden in de
   repo-root `data/` — die zijn gitignored en bestaan niet in CI.

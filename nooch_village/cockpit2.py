@@ -310,7 +310,7 @@ def _ai_reply(st: _Stores, pid: str, ask=None, *, persona=None, prefix: str = ""
     if ask is None:
         try:
             from nooch_village import llm
-            out = llm.reason(prompt, ladder=_match_ladder())
+            out = llm.reason(prompt, ladder=_match_ladder(), call_site="cockpit_project_reply")
         except Exception:
             out = None
     else:
@@ -2923,7 +2923,7 @@ def refresh_matches(data_dir: str | None = None, ask=None, progress=None) -> int
         def ask(acc: str, skill: str):
             prompt = ("Ondersteunt de vaardigheid een verantwoordelijkheid? Antwoord met enkel "
                       f"'ja' of 'nee'.\nVerantwoordelijkheid: {acc}\nVaardigheid: {skill}")
-            out = llm.reason(prompt, ladder=_match_ladder())
+            out = llm.reason(prompt, ladder=_match_ladder(), call_site="cockpit_match_pair")
             if not out:
                 return None
             o = out.strip().lower()
@@ -2954,7 +2954,7 @@ def main(argv=None) -> None:
         # Snelle key-check: zonder LLM-key heeft de achtergrond-pas niets te doen.
         try:
             from nooch_village import llm
-            has_key = bool(llm.reason("antwoord met 'ok'", ladder=_match_ladder()))
+            has_key = bool(llm.reason("antwoord met 'ok'", ladder=_match_ladder(), call_site="cockpit_match_keycheck"))
         except Exception:
             has_key = False
         if not has_key:

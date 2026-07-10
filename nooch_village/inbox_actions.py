@@ -332,7 +332,9 @@ def answer_pending_questions(inbox, *, records=None, llm_reason=None, limit: int
     Dit is het bovenliggende principe: geen realtime call per vraag, maar één gebundelde
     puls-call — zoals de rest van het dorp werkt."""
     if llm_reason is None:
-        from nooch_village.llm import reason as llm_reason
+        import functools
+        from nooch_village.llm import reason as _reason
+        llm_reason = functools.partial(_reason, call_site="inbox_answer_questions")
     qs = inbox.pending_questions()[:limit]
     if not qs:
         return {"ok": True, "answered": 0, "pending": 0}
@@ -389,7 +391,9 @@ def formulate_accountability(title: str, wat: str, *, examples_block: str = "",
     from nooch_village.governance_examples import ACCOUNTABILITY_RULES
     title = (title or "").strip()
     if llm_reason is None:
-        from nooch_village.llm import reason as llm_reason
+        import functools
+        from nooch_village.llm import reason as _reason
+        llm_reason = functools.partial(_reason, call_site="accountability_formulate")
     prompt = (
         "Je belegt voor NoochVille (duurzaam, vegan schoenenmerk) een kans als accountability "
         "van een rol.\n\n" + ACCOUNTABILITY_RULES + "\n\n"
@@ -414,7 +418,9 @@ def classify_governance_facet(title: str, wat: str, *, llm_reason=None) -> str:
     if any(s in blob for s in _PURPOSE_SIGNALS):
         return "purpose"
     if llm_reason is None:
-        from nooch_village.llm import reason as llm_reason
+        import functools
+        from nooch_village.llm import reason as _reason
+        llm_reason = functools.partial(_reason, call_site="governance_facet_classify")
     out = (llm_reason(
         "In Holacracy is een PURPOSE de reden van bestaan van een rol (geen activiteit) en een "
         "ACCOUNTABILITY een doorlopende activiteit. Gaat onderstaande wijziging over de purpose "
@@ -430,7 +436,9 @@ def formulate_purpose(title: str, wat: str, *, examples_block: str = "", llm_rea
     Fail-closed → de toelichting of titel."""
     title = (title or "").strip()
     if llm_reason is None:
-        from nooch_village.llm import reason as llm_reason
+        import functools
+        from nooch_village.llm import reason as _reason
+        llm_reason = functools.partial(_reason, call_site="purpose_formulate")
     prompt = (
         "Een PURPOSE in Holacracy is de reden van bestaan, het potentieel dat een rol nastreeft of "
         "uitdrukt. GEEN doorlopende activiteit, GEEN -en-vorm vooraan, geen taak of meetbaar doel. "
@@ -449,7 +457,9 @@ def suggest_accountabilities(role_name: str, purpose: str, *, examples_block: st
     gegrond in de referentiebank. Fail-closed zonder LLM → []."""
     from nooch_village.governance_examples import ACCOUNTABILITY_RULES
     if llm_reason is None:
-        from nooch_village.llm import reason as llm_reason
+        import functools
+        from nooch_village.llm import reason as _reason
+        llm_reason = functools.partial(_reason, call_site="accountabilities_suggest")
     prompt = (
         "Stel voor de volgende rol in NoochVille (duurzaam, vegan schoenenmerk) accountabilities "
         "voor.\n\n" + ACCOUNTABILITY_RULES + "\n\n"
@@ -471,7 +481,9 @@ def pick_governance_target(roster_ids, title: str, wat: str, *, examples_block: 
     if not ids:
         return "__new__"
     if llm_reason is None:
-        from nooch_village.llm import reason as llm_reason
+        import functools
+        from nooch_village.llm import reason as _reason
+        llm_reason = functools.partial(_reason, call_site="governance_target_pick")
     prompt = (
         "NoochVille (duurzaam schoenenmerk) gebruikt Holacracy. Een kans moet via governance "
         "belegd worden. Kies of een BESTAANDE rol hiervoor uitgebreid wordt, of dat er een NIEUWE "
@@ -498,7 +510,9 @@ def formulate_project(title: str, wat: str, owner: str = "", *, llm_reason=None)
     toestand (waar je naartoe werkt), niet vaag. Fail-closed zonder LLM → de oorspronkelijke titel."""
     title = (title or "").strip()
     if llm_reason is None:
-        from nooch_village.llm import reason as llm_reason
+        import functools
+        from nooch_village.llm import reason as _reason
+        llm_reason = functools.partial(_reason, call_site="project_formulate")
     prompt = (
         "In Holacracy is een PROJECT een concrete uitkomst, geformuleerd als een AFGERONDE "
         "toestand (voltooid): bijv. 'Reviews zichtbaar op elke productpagina', 'Nieuw logo "

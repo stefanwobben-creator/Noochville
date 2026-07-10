@@ -237,7 +237,7 @@ def test_noochie_reflect_kantel_in_prompt_and_tension(tmp_path):
 
     prompts_gezien: list[str] = []
 
-    def mock_reason(prompt: str):
+    def mock_reason(prompt: str, **kw):
         prompts_gezien.append(prompt)
         return mock_voorstel
 

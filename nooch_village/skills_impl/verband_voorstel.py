@@ -34,7 +34,7 @@ class VerbandVoorstelSkill(Skill):
             "Bij twijfel of geen echt verband: VERBAND: nee\n"
             + instruction()
         )
-        out = reason(prompt)
+        out = reason(prompt, call_site="skill_verband")
         if not out:
             return None
         m = re.search(r"VERBAND:\s*(ja|nee)\s*\|\s*CLAIM:\s*(.+)", out, re.IGNORECASE)

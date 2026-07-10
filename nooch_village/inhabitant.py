@@ -447,7 +447,7 @@ class Inhabitant(threading.Thread):
             "OTHER:<id>  — werk dat bij een andere bestaande rol past (geef de rol-id)\n"
             "TACTICAL    — eenmalig werk, geen passende rol"
         )
-        out = reason(prompt)
+        out = reason(prompt, call_site="classify_tension")
         if not out:
             return None
         out_l = out.strip().lower().split("\n")[0]
@@ -535,7 +535,7 @@ class Inhabitant(threading.Thread):
             "EFFORT: <1 (klein) tot 5 (groot)>\n"
             "CONFIDENCE: <0 tot 1: hoe zeker ben je>"
         )
-        out = reason(prompt)
+        out = reason(prompt, call_site="opportunity_reflex")
         if not out:
             return
         o = _parse_opportunity(out)
@@ -1069,7 +1069,8 @@ class Inhabitant(threading.Thread):
         )
         # Ruim token-budget: een verbose trede (bv. mistral) kapt het plan-JSON anders middenin af →
         # onparsebaar. 1500 tokens is genoeg voor 2-5 items met payloads en langere velden.
-        raw, tier = llm_reason(prompt, json_mode=True, return_tier=True, max_tokens=1500)
+        raw, tier = llm_reason(prompt, json_mode=True, return_tier=True, max_tokens=1500,
+                               call_site="plan_checklist")
         if raw is None:                                          # onderscheid: LLM gaf niets terug…
             self.log.warning("📋 plan: LLM leverde geen antwoord (alle tredes uitgeput)")
             return None
@@ -1078,7 +1079,8 @@ class Inhabitant(threading.Thread):
             self.log.info("📋 plan: antwoord van %s niet parsebaar — gerichte retry (strak JSON)", tier)
             strak = prompt + ("\n\nBELANGRIJK: antwoord met ALLEEN het JSON-object — geen ``` fences, "
                               "geen uitleg ervoor of erna. Houd de tekst-, reason- en deliverable-velden kort.")
-            raw2, tier2 = llm_reason(strak, json_mode=True, return_tier=True, max_tokens=1500)
+            raw2, tier2 = llm_reason(strak, json_mode=True, return_tier=True, max_tokens=1500,
+                                     call_site="plan_checklist_retry")
             data = self._extract_json(raw2) if raw2 is not None else None
             if not self._is_valid_plan(data):
                 self.log.warning("📋 plan: LLM-antwoord NIET PARSEBAAR (via %s). Rauw (afgekapt): %r",

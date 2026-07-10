@@ -590,7 +590,7 @@ class ConcurrentScout(Inhabitant):
             f"onderzoek/rapport > incident/gebeurtenis > aandacht/cultuur > markt. Negeer losse "
             f"vermeldingen.\n\n{lines}\n\n"
             f"Antwoord met ALLEEN het nummer (1-{len(top)}).")
-        out = reason(prompt)
+        out = reason(prompt, call_site="news_driver_pick")
         if out:
             m = re.search(r"\d+", out)
             if m:
@@ -1643,7 +1643,7 @@ class HarryHemp(Inhabitant):
         from nooch_village.language import instruction
         # Knowledge-layer output is ALWAYS English, regardless of the term's locale.
         prompt = prompt + "\n" + instruction()
-        llm_out = llm_reason(prompt)
+        llm_out = llm_reason(prompt, call_site="distill_assessment")
         if llm_out:
             return llm_out.strip()
 
@@ -1678,7 +1678,7 @@ class HarryHemp(Inhabitant):
             '\n\nReturn ONLY a JSON object mapping each exact term string to its '
             "assessment string, no prose, no code fences.\n" + instruction()
         )
-        out = llm_reason(prompt)
+        out = llm_reason(prompt, call_site="distill_batch")
         parsed: dict = {}
         if out:
             import json, re
@@ -1860,7 +1860,7 @@ class Noochie(Inhabitant):
             "REASON: <één zin>\n\n"
             "(gebruik VERDICT: niet_ok als de aanbevolen richting botst met of de missie mist)"
         )
-        result = reason(prompt) or "(geen LLM beschikbaar)"
+        result = reason(prompt, call_site="noochie_weigh_in") or "(geen LLM beschikbaar)"
         verdict, reason_text = parse_verdict_reason(result, frozenset({"ok", "niet_ok"}))
         findings, question = _parse_noochie_report(result)
 
@@ -1921,7 +1921,7 @@ class Noochie(Inhabitant):
             "Max 3 zinnen. Formaat: 'Het dorp mist [wat]. [Voorstel] zou helpen omdat [reden]. "
             "Dit advies kantelt als [voorwaarde waaronder een andere route beter is].'"
         )
-        result = reason(prompt)
+        result = reason(prompt, call_site="noochie_reflect")
         if not result:
             return
         h = hashlib.sha256(result.encode()).hexdigest()[:16]

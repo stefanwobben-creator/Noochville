@@ -49,7 +49,7 @@ def _noochie_reply(st: _Stores, text: str, ask=None):
     try:
         from nooch_village import llm
         from nooch_village.cockpit2 import _match_ladder
-        return llm.reason(prompt, ladder=_match_ladder())
+        return llm.reason(prompt, ladder=_match_ladder(), call_site="noochie_verdict")
     except Exception:
         return None
 

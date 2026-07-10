@@ -861,7 +861,7 @@ def _llm_says_comparable(old: dict, new: dict) -> bool:
             f"NIEUW: {new.get('definition', old.get('definition',''))} | eenheid {new.get('unit', old.get('unit',''))} "
             f"| meettype {new.get('meettype', old.get('meettype',''))}\n"
             "Antwoord met exact één woord: VERGELIJKBAAR of BREUK.")
-        out = (llm.reason(prompt) or "").strip().lower()
+        out = (llm.reason(prompt, call_site="metrics_reeks_vergelijkbaar") or "").strip().lower()
         return "vergelijkbaar" in out and "breuk" not in out
     except Exception:
         return False

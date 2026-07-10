@@ -379,7 +379,9 @@ def amend_with_reaction(item: dict, reaction: str, *, role_snapshot: dict | None
     if not reaction:
         return change
     if llm_reason is None:
-        from nooch_village.llm import reason as llm_reason
+        import functools
+        from nooch_village.llm import reason as _reason
+        llm_reason = functools.partial(_reason, call_site="role_amend_with_reaction")
     is_add = item.get("kind") == "add_role"
     snap = role_snapshot or {}
     # 'Huidige' rol zoals de mens 'm ziet: bij add_role = het voorstel; bij amend = de echte rol

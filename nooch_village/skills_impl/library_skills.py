@@ -178,7 +178,7 @@ class KeywordReviewSkill(Skill):
             "Antwoord op EXACT één regel in dit formaat:\n"
             "DECISION: approve|reject|escalate | REASON: <korte reden>"
         )
-        out = reason(prompt)
+        out = reason(prompt, call_site="skill_library_review")
         if not out:
             return None
         m = re.search(r"DECISION:\s*(approve|reject|escalate)\s*\|\s*REASON:\s*(.+)", out, re.I | re.S)

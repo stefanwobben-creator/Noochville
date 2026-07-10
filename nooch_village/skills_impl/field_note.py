@@ -77,7 +77,7 @@ class FieldNoteSkill(Skill):
             "(2) Wat dit betekent voor de missie-gedreven groei — gegrond in de cijfers uit punt 1.\n"
             "(3) De belangrijkste actie voor morgen."
         )
-        llm = reason(prompt)
+        llm = reason(prompt, call_site="skill_field_note")
         header = f"# Field Note {today}\n\n"
         if tension:
             header += f"> ⚠️ SPANNING: {reason_txt}\n\n"

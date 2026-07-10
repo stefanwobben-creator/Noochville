@@ -43,7 +43,9 @@ def review_role(role: dict, examples_block: str = "", *, llm_reason=None) -> dic
     accountabilities, domains}."""
     from nooch_village.governance_examples import ACCOUNTABILITY_RULES
     if llm_reason is None:
-        from nooch_village.llm import reason as llm_reason
+        import functools
+        from nooch_village.llm import reason as _reason
+        llm_reason = functools.partial(_reason, call_site="governance_review")
     accs = role.get("accountabilities") or []
     acc_txt = "\n".join(f"  - {a}" for a in accs) or "  (geen)"
     prompt = (

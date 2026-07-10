@@ -48,7 +48,7 @@ def test_reflex_leest_trainingssignalen(tmp_path, monkeypatch):
         {"verdict": "soft_reject", "title": "Pop-up store", "reason": "te duur", "by": "analyst"}]))
     s = _stub(tmp_path)
     seen = {}
-    monkeypatch.setattr("nooch_village.llm.reason", lambda p: seen.setdefault("p", p))
+    monkeypatch.setattr("nooch_village.llm.reason", lambda p, **kw: seen.setdefault("p", p))
     s._opportunity_reflex()
     assert "goed denkwerk: Reviews tonen" in seen["p"] and "Pop-up store" in seen["p"]
 
@@ -82,7 +82,7 @@ def test_reflex_leest_afgewezen_kansen(tmp_path, monkeypatch):
     s = _stub(tmp_path)
     seen = {}
 
-    def _capture(p):
+    def _capture(p, **kw):
         seen["p"] = p
         return None
     monkeypatch.setattr("nooch_village.llm.reason", _capture)
@@ -99,7 +99,7 @@ def test_reflex_respecteert_huisregels(tmp_path, monkeypatch):
     s = _stub(tmp_path)
     seen = {}
 
-    def _cap(p):
+    def _cap(p, **kw):
         seen["p"] = p
         return None
     monkeypatch.setattr("nooch_village.llm.reason", _cap)

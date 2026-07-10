@@ -27,7 +27,7 @@ def _collect(bus):
 def test_distill_batch_parseert_json_object(tmp_path, monkeypatch):
     harry, _ = _make_harry(tmp_path)
     monkeypatch.setattr("nooch_village.llm.reason",
-                        lambda p: '{"vegan": "A about vegan.", "leather": "B about leather."}')
+                        lambda p, **kw: '{"vegan": "A about vegan.", "leather": "B about leather."}')
     items = [{"word": "vegan", "locale": "en", "evidence": [{"title": "T", "year": 2020}]},
              {"word": "leather", "locale": "en", "evidence": []}]
     out = harry._distill_batch(items)
@@ -37,7 +37,7 @@ def test_distill_batch_parseert_json_object(tmp_path, monkeypatch):
 
 def test_distill_batch_fail_closed_valt_terug_per_woord(tmp_path, monkeypatch):
     harry, _ = _make_harry(tmp_path)
-    monkeypatch.setattr("nooch_village.llm.reason", lambda p: None)   # LLM weg
+    monkeypatch.setattr("nooch_village.llm.reason", lambda p, **kw: None)   # LLM weg
     items = [{"word": "vegan", "locale": "en", "evidence": []},
              {"word": "hemp", "locale": "en", "evidence": [{"title": "Paper X", "year": 2021}]}]
     out = harry._distill_batch(items)
@@ -48,7 +48,7 @@ def test_distill_batch_fail_closed_valt_terug_per_woord(tmp_path, monkeypatch):
 def test_distill_batch_vult_ontbrekend_woord_aan(tmp_path, monkeypatch):
     """LLM geeft maar één van de twee terug → de ander krijgt de fallback."""
     harry, _ = _make_harry(tmp_path)
-    monkeypatch.setattr("nooch_village.llm.reason", lambda p: '{"vegan": "Only vegan."}')
+    monkeypatch.setattr("nooch_village.llm.reason", lambda p, **kw: '{"vegan": "Only vegan."}')
     items = [{"word": "vegan", "locale": "en", "evidence": []},
              {"word": "leather", "locale": "en", "evidence": []}]
     out = harry._distill_batch(items)
