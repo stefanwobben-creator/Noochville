@@ -17,6 +17,7 @@ from nooch_village.metric_schema import (
 )
 from nooch_village.metrics import window_cutoff, window_range, filter_samples
 from nooch_village.observations import ObservationStore
+from nooch_village.meetcatalog import cadence_of
 from nooch_village.i18n import t
 from nooch_village import org
 from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD
@@ -489,8 +490,28 @@ def _daily_obs_series(st: _Stores, source: str, measure: str, cutoff, end=None):
         return None
     samples = [{"at": _row_at(r), "value": r["value"], "datum": r.get("datum")}
                for r in st.observations.daily_series(metric, bron=bron)]
+    if cadence_of(metric, bron) == "irregular":
+        samples = _collapse_daily_mean(samples)     # meerdere meetpunten/dag → één punt = dag-gemiddelde
     return {"kind": "series", "points": filter_samples(samples, cutoff, end),
             "unit": _measure_unit(source, measure), "chart": "line"}
+
+
+def _collapse_daily_mean(samples: list) -> list:
+    """Klap meerdere meetpunten op dezelfde meetdag samen tot één punt = het dag-GEMIDDELDE. Nodig voor
+    irreguliere reeksen (bv. werkoverleg: meerdere overleggen/dag) zodat de tegel per dag het gemiddelde
+    toont i.p.v. twee losse punten of alleen de laatste. Regulier (≤1/dag) is dit een no-op. De
+    per-overleg-observaties blijven ongewijzigd in de store; dit is puur de display-samenvatting.
+    (De twee irreguliere observatie-metrics — tevredenheid en duur — zijn beide 'gemiddelde'-aard.)"""
+    by_day: dict = {}
+    for s in samples:
+        by_day.setdefault(s.get("datum") or _day_key(s["at"]), []).append(s)
+    out = []
+    for _d, ss in by_day.items():
+        vals = [x["value"] for x in ss if isinstance(x["value"], (int, float))]
+        if vals:
+            out.append({"at": max(x["at"] for x in ss), "value": sum(vals) / len(vals),
+                        "datum": ss[0].get("datum")})
+    return out
 
 
 def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff, end=None):

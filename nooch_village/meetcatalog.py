@@ -14,6 +14,7 @@ Een family zonder data → GEEN alarm (known-future / nog niet gevuld). Inactiev
 from __future__ import annotations
 import collections
 import fnmatch
+import functools
 import time
 
 # (pattern, bron, cadans, status). cadans ∈ daily|weekly|monthly|irregular. status ∈ active|inactive.
@@ -52,6 +53,18 @@ _TS_THRESH = {"daily": 2 * 86400 + 43200, "weekly": 8 * 86400, "monthly": 35 * 8
 
 def _in_catalog(metric: str, bron: str) -> bool:
     return any(bron == pb and fnmatch.fnmatch(metric, pat) for (pat, pb, _c, _s) in CATALOG)
+
+
+@functools.lru_cache(maxsize=4096)
+def cadence_of(metric: str, bron: str | None = None) -> str | None:
+    """De catalogus-cadans van een metric (daily|weekly|monthly|irregular), of None als niet
+    gecatalogiseerd. Matcht op het fnmatch-pattern (bron optioneel). Gebruikt door de ObservationStore
+    om de idempotentie-sleutel cadans-bewust te maken: regulier = één datapunt per dag, irregulier =
+    meerdere per dag toegestaan (ontdubbeld op event_id). CATALOG is een module-constante → lru-cachebaar."""
+    for (pat, pb, cadans, _s) in CATALOG:
+        if (bron is None or bron == pb) and fnmatch.fnmatch(metric, pat):
+            return cadans
+    return None
 
 
 def healthcheck(obs, now_ts: float | None = None, catalog=CATALOG) -> list[dict]:
