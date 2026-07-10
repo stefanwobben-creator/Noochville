@@ -30,11 +30,14 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-# Centrale periode-picker (scope 6). 'actueel' = laatste waarde, alleen bij een live-capabele bron.
-# 'Vandaag' is bewust weggelaten: 'Actueel' (laatste bekende dagwaarde) vervult die rol al.
-_MW = [("gisteren", "Gisteren"), ("actueel", "Actueel"),
+# Centrale periode-picker (scope 6/PR2). Dropdown in Plausible-stijl met single-key sneltoetsen.
+# 'actueel' = laatste waarde, alleen bij een live-capabele bron.
+_MW = [("vandaag", "Vandaag"), ("gisteren", "Gisteren"), ("actueel", "Actueel"),
        ("7d", "7 dagen"), ("28d", "28 dagen"), ("kwartaal", "Kwartaal"),
        ("jaar", "Jaar"), ("aangepast", "Aangepast")]
+# Single-key sneltoets per periode-optie (zoals Plausible): V/G/A/W/M/K/J/C.
+_MW_KEYS = {"vandaag": "V", "gisteren": "G", "actueel": "A", "7d": "W",
+            "28d": "M", "kwartaal": "K", "jaar": "J", "aangepast": "C"}
 # Bronnen die 'live' bevraagd kunnen worden → 'Actueel' beschikbaar (anders uitgegrijsd).
 _LIVE_TILE_SOURCES = {"pulse_visitors", "shopify"}
 # Bron-KPI's: meetbaar uit bestaande dorpsdata (AI/agents schrijven hier al naartoe).
@@ -172,17 +175,19 @@ def _geen_data_html() -> str:
 
 
 def _line_chart_svg(points, unit: str = "", prev=None) -> str:
-    """Echt lijn-diagram (server-side SVG, cockpit2-stijl): x=datum, y=waarde, met leesbare assen.
-    Alleen de echte dagpunten als stippen, verbonden — geen interpolatie van ontbrekende dagen.
-    `prev` (vorige periode) → een tweede, lichtere gestreepte lijn over dezelfde breedte + y-schaal.
-    0 punten → nette 'geen data'; 1 punt → 'te weinig voor een lijn' (nooit een vlakke lijn)."""
+    """Echt lijn-diagram (server-side SVG, cockpit2-stijl): x=datum, y=waarde, met leesbare assen
+    (0-basislijn + datumbereik). ALTIJD met assen — een KPI-kaart toont nooit een assenloze sparkline
+    (die mag alleen in compacte lijstrijen). Alleen de echte dagpunten als stippen, verbonden — geen
+    interpolatie van ontbrekende dagen. `prev` (vorige periode) → een tweede, lichtere gestreepte lijn.
+    De headline (het venster-aggregaat) staat in het kaart-skelet erboven; dit levert dus alleen de grafiek.
+    0 punten → 'geen data'-melding (de visual toont 'm; de headline blijft dan leeg → geen dubbele melding);
+    1 punt → korte notitie (nooit een vlakke lijn)."""
     if not points:
         return _geen_data_html()
     import datetime as _dt
     vals = [p[1] for p in points]
     if len(points) < 2:
-        return (f"<div class='tile-trend'><span class='kpi-val sm'>{_num(vals[-1])}</span>"
-                f"<span class='muted' style='font-size:.7rem'>1 meetpunt — te weinig voor een lijn</span></div>")
+        return "<div class='muted kc-hint'>1 meetpunt — te weinig voor een lijn</div>"
     prev = prev or []
     W, H = 300.0, 140.0
     ml, mr, mt, mb = 36.0, 8.0, 10.0, 20.0            # marges: links y-labels, onder x-labels
@@ -213,23 +218,20 @@ def _line_chart_svg(points, unit: str = "", prev=None) -> str:
     poly = " ".join(f"{fx(p[0]):.1f},{fy(p[1]):.1f}" for p in points)
     line = f"<polyline points='{poly}' fill='none' stroke='var(--green)' stroke-width='1.8'/>"
     dots = "".join(f"<circle cx='{fx(p[0]):.1f}' cy='{fy(p[1]):.1f}' r='2.2' fill='var(--green)'/>" for p in points)
-    u = f" <span class='kpi-unit'>{_e(unit)}</span>" if unit else ""
-    head = f"<div class='tile-trend'><span class='kpi-val sm'>{_num(vals[-1])}{u}</span></div>"
-    svg = (f"<svg class='linechart' viewBox='0 0 {W:.0f} {H:.0f}' width='100%' height='140' preserveAspectRatio='xMidYMid meet'>"
-           f"{axis}{ylab}{xlab}{prevline}{line}{dots}</svg>")
-    return head + svg
+    return (f"<svg class='linechart' viewBox='0 0 {W:.0f} {H:.0f}' width='100%' height='140' preserveAspectRatio='xMidYMid meet'>"
+            f"{axis}{ylab}{xlab}{prevline}{line}{dots}</svg>")
 
 
 def _bar_chart_svg(points, unit: str = "") -> str:
-    """Staafdiagram voor een reeks (server-side SVG): één staaf per datapunt, 0-basislijn. Zelfde
-    geen-data/1-punt-afhandeling als het lijndiagram (0 → 'geen data', 1 punt → het losse getal)."""
+    """Staafdiagram voor een reeks (server-side SVG): één staaf per datapunt, 0-basislijn + datumbereik.
+    De headline staat in het kaart-skelet erboven; dit levert alleen de grafiek. 0 punten → 'geen data';
+    1 punt → korte notitie."""
     if not points:
         return _geen_data_html()
     import datetime as _dt
     vals = [p[1] for p in points]
     if len(points) < 2:
-        return (f"<div class='tile-trend'><span class='kpi-val sm'>{_num(vals[-1])}</span>"
-                f"<span class='muted kc-hint'>1 meetpunt</span></div>")
+        return "<div class='muted kc-hint'>1 meetpunt</div>"
     W, H = 300.0, 140.0
     ml, mr, mt, mb = 36.0, 8.0, 10.0, 20.0
     iw, ih = W - ml - mr, H - mt - mb
@@ -249,9 +251,7 @@ def _bar_chart_svg(points, unit: str = "") -> str:
     fmt = lambda ts: _dt.datetime.fromtimestamp(ts).strftime('%d-%m')
     xlab = (f"<text x='{ml:.1f}' y='{H-5:.1f}' text-anchor='start' font-size='9' fill='var(--muted)'>{_e(fmt(points[0][0]))}</text>"
             f"<text x='{ml+iw:.1f}' y='{H-5:.1f}' text-anchor='end' font-size='9' fill='var(--muted)'>{_e(fmt(points[-1][0]))}</text>")
-    u = f" <span class='kpi-unit'>{_e(unit)}</span>" if unit else ""
-    head = f"<div class='tile-trend'><span class='kpi-val sm'>{_num(vals[-1])}{u}</span></div>"
-    return (head + f"<svg class='barchart' viewBox='0 0 {W:.0f} {H:.0f}' width='100%' height='140' "
+    return (f"<svg class='barchart' viewBox='0 0 {W:.0f} {H:.0f}' width='100%' height='140' "
             f"preserveAspectRatio='xMidYMid meet'>{axis}{ylab}{xlab}{bars}</svg>")
 
 
@@ -654,8 +654,9 @@ def _render_bullet(res, target, richting, benchmark="", agg=DEFAULT_AGGREGATIE) 
     svg = (f"<svg class='bullet' viewBox='0 0 {W:.0f} {H:.0f}' width='100%' height='26' preserveAspectRatio='none'>"
            f"{good}{bar}{tick}</svg>")
     bm = f"<div class='muted bullet-bm'>benchmark: {_e(benchmark)}</div>" if benchmark else ""
-    return (f"<div class='bullet-wrap'><div class='bullet-h'><b>{_num(v)}</b> "
-            f"<span class='muted'>doel {_num(t)}</span></div>{svg}{bm}</div>")
+    # De waarde staat in de kaart-headline; hier de balk + doel-tick + het doel/benchmark als context.
+    return (f"<div class='bullet-wrap'><div class='bullet-h'><span class='muted'>doel {_num(t)}</span></div>"
+            f"{svg}{bm}</div>")
 
 
 def _data_table(res, bron: str = "") -> str:
@@ -751,11 +752,10 @@ def _render_form(res, form, target=None, prev=None, agg=DEFAULT_AGGREGATIE):
     if form == "trend" and kind != "series":
         form = "getal"
     if form == "trend":
+        # In een KPI-kaart ALTIJD het lijn-diagram met assen (0-lijn + datumbereik); nooit een assenloze
+        # sparkline. Sparklines mogen alleen in compacte lijstrijen (_kpi_card / _kpi_data_row).
         pts = res.get("points") or []
-        if res.get("chart") == "line":                 # echte dagreeks → lijn-diagram met assen
-            return _line_chart_svg(pts, res.get("unit", ""), prev=(prev or {}).get("points"))
-        return (f"<div class='tile-trend'><span class='kpi-val sm'>{_num(_agg(res, agg))}</span>"
-                f"{_spark_svg(pts)}</div>")
+        return _line_chart_svg(pts, res.get("unit", ""), prev=(prev or {}).get("points"))
     if form in ("verdeling", "tabel"):
         rows = res.get("rows") or []
         if not rows:
@@ -771,17 +771,15 @@ def _render_form(res, form, target=None, prev=None, agg=DEFAULT_AGGREGATIE):
                     f"<span class='bar-v'>{_num(n)}</span></div>")
         return f"<div class='bars'>{out}</div>"
     if form == "doelmeter":
+        # De waarde staat in de kaart-headline; hier alleen de voortgangsbalk + het doel als context.
         v = _agg(res, agg) or 0
         t = target or 0
         pct = int(min(100, v / t * 100)) if t else 0
-        return (f"<div class='goal'><span class='kpi-val sm'>{_num(v)} <span class='kpi-unit'>/ {_num(t)}</span></span>"
-                f"<span class='bar-t'><span class='bar-f' style='width:{pct}%'></span></span></div>")
-    # getal — leeg (None) is iets anders dan de waarde 0
-    v = _agg(res, agg)
-    if v is None:
-        return "<div class='kpi-val'><span class='muted' style='font-size:.9rem'>geen data</span></div>"
-    u = f" <span class='kpi-unit'>{_e(unit)}</span>" if unit else ""
-    return f"<div class='kpi-val'>{v:g}{u}</div>"
+        return (f"<div class='goal'><span class='bar-t'><span class='bar-f' style='width:{pct}%'></span></span>"
+                f"<span class='muted'>doel {_num(t)}</span></div>")
+    # getal — de headline in het kaart-skelet toont de waarde; hier geen dubbel getal. Bij geen data
+    # (None) toont het skelet niets, dus tonen we hier de 'geen data'-melding (één keer, geen dubbel).
+    return _geen_data_html() if _agg(res, agg) is None else ""
 
 
 # Grondslag-laag (GAAP/IRIS): definitie, eenheid, bron, richting per bron-measure.
@@ -1058,23 +1056,30 @@ _WIN_LABEL = {"7d": "7d", "28d": "28d", "kwartaal": "kwartaal", "jaar": "jaar",
               "gisteren": "gisteren", "vandaag": "vandaag", "actueel": "actueel", "aangepast": "periode"}
 
 
-def _agg_label(agg: str, win: str, res, end) -> str:
+def _agg_label(agg: str, win: str, res, end, now: float | None = None) -> str:
     """Label bij de headline volgens de aggregatieregel: 'totaal 7d' (som), 'Ø per dag' (gemiddelde),
-    'stand per <datum>' (laatste_waarde). Hergebruikt .muted; geen nieuwe klasse/inline-style."""
+    'stand per <datum>' (laatste_waarde). Een stand die vandaag gemeten is → 'stand per nu' (last-standen
+    pakken vandaag mee). Hergebruikt .muted; geen nieuwe klasse/inline-style."""
     if res.get("kind") not in ("series", "number", "breakdown"):
         return ""
     if agg == "som":
         return f"<div class='muted'>totaal {_e(_WIN_LABEL.get(win, 'periode'))}</div>"
     if agg == "gemiddelde":
         return "<div class='muted'>Ø per dag</div>"
-    d = ""
+    # laatste_waarde: 'stand per nu' als de laatste meetdag vandaag is, anders 'stand per <datum>'.
+    import datetime as _dt
+    today = _dt.datetime.fromtimestamp(now).strftime('%Y-%m-%d') if now else None
     pts = res.get("points") or []
     if pts:
-        d = _pt_datum_label(pts[-1])
-    elif end:
-        import datetime as _dt
+        last = pts[-1]
+        ld = last[2] if len(last) > 2 and last[2] else _dt.datetime.fromtimestamp(last[0]).strftime('%Y-%m-%d')
+        if today and ld == today:
+            return "<div class='muted'>stand per nu</div>"
+        return f"<div class='muted'>stand per {_e(_pt_datum_label(last))}</div>"
+    if end:
         d = _dt.datetime.fromtimestamp(end - 1).strftime('%d-%m-%y')   # end exclusief → laatste dag = end-1
-    return f"<div class='muted'>stand per {_e(d)}</div>" if d else ""
+        return f"<div class='muted'>stand per {_e(d)}</div>"
+    return ""
 
 
 def _range_label(cutoff, end) -> str:
@@ -1087,15 +1092,33 @@ def _range_label(cutoff, end) -> str:
     return f"<div class='muted'>{a} t/m {b}</div>"
 
 
+def _tile_headline(res, agg: str, win: str, cutoff, end, now: float | None = None) -> str:
+    """Het vaste kaart-skelet-kopblok: headline (venster-aggregaat, kpi-val) + aggregatielabel +
+    datumbereik. Eén plek, voor élke vorm gelijk. Waarde None → "" (het skelet toont dan niets; de
+    visual/getal-tak toont zelf 'geen data'), zodat er nooit een dubbele 'geen data' verschijnt."""
+    v = _agg(res, agg)
+    if v is None:
+        return ""
+    unit = res.get("unit", "")
+    u = f" <span class='kpi-unit'>{_e(unit)}</span>" if unit else ""
+    num = f"<div class='kpi-val'>{_num(v)}{u}</div>"
+    return num + _agg_label(agg, win, res, end, now) + _range_label(cutoff, end)
+
+
 def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=False,
-                 prev_win=None, actueel=False, win: str = "") -> str:
+                 prev_win=None, actueel=False, win: str = "", now: float | None = None) -> str:
     if tile.get("form") == "formule":          # fail-closed live-berekening A op B per dag
         return _render_formula_tile(st, rec, tile, csrf, cutoff, end)
+    import time as _t
+    now = now if now is not None else _t.time()
     g = _grondslag(st, tile["source"], tile["measure"])
     goal = ""
     gp = st.projects.get(tile.get("goal_pid")) if tile.get("goal_pid") else None
     form = tile.get("form", "getal")
     agg = _tile_agg(st, tile["source"], tile["measure"])   # venster-samenvatregel voor de headline
+    # last-standen pakken vandaag WÉL mee (headline 'stand per nu'): effectief venster-einde = nu i.p.v.
+    # middernacht vandaag. som/gemiddelde blijven strikt complete dagen (vandaag uit).
+    end_eff = now if (agg == "laatste_waarde" and end is not None) else end
     # 'Actueel' = laatste bekende dagwaarde uit de observatie-store (dezelfde betekenis als Plausible);
     # geen dag-observaties voor deze bron → 'geen live data'.
     ak_metric, ak_bron = _daily_obs_key(tile["source"], tile["measure"]) if actueel else (None, None)
@@ -1115,36 +1138,27 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
             dt = _data_table({"kind": "series", "points": pts}, bron=ak_bron)
             data = f"<details class='tile-data'><summary>ruwe data</summary>{dt}</details>"
     else:
-        res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), cutoff, end)
+        res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), cutoff, end_eff)
         prev_res = None
         if compare and prev_win and prev_win[0] is not None:
             prev_res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), prev_win[0], prev_win[1])
+        # De VISUAL (grafiek/meter/bars) — zonder eigen headline-getal; het skelet levert de headline.
         if form == "burnup":
-            body = _render_burnup(res, tile.get("target"), gp)
+            visual = _render_burnup(res, tile.get("target"), gp)
         elif form in ("doelmeter", "bullet"):          # bullet = de definitieve naam (Tufte-beslistabel)
-            body = _render_bullet(res, tile.get("target"), g.get("richting"), g.get("benchmark"), agg=agg)
+            visual = _render_bullet(res, tile.get("target"), g.get("richting"), g.get("benchmark"), agg=agg)
         elif form == "staaf":
-            body = _bar_chart_svg(res.get("points") or [], res.get("unit", ""))
+            visual = _bar_chart_svg(res.get("points") or [], res.get("unit", ""))
         elif form == "gestapeld":
-            body = _stacked_bar_svg(res.get("rows"))
+            visual = _stacked_bar_svg(res.get("rows"))
         elif form == "horizontaal":
-            body = _hbar_svg(res.get("rows"))
+            visual = _hbar_svg(res.get("rows"))
         else:
-            body = _render_form(res, form, tile.get("target"), prev=prev_res, agg=agg)
-        # Headline = het venster-aggregaat volgens `agg` (NIET de laatste dagwaarde). Vormen die zelf al
-        # een getal tonen (getal/doelmeter/bullet/trend-spark) krijgen alleen het label; grafiek-only
-        # vormen (lijn/staaf/verdeling/gestapeld/horizontaal) krijgen het aggregaat als headline erboven.
-        chart_only = (form in ("staaf", "verdeling", "gestapeld", "horizontaal")
-                      or (form == "trend" and res.get("chart") == "line"))
-        if form != "burnup":
-            head_num = ""
-            if chart_only:
-                hv = _agg(res, agg)
-                if hv is not None:
-                    hu = res.get("unit", "")
-                    hu = f" <span class='kpi-unit'>{_e(hu)}</span>" if hu else ""
-                    head_num = f"<div class='kpi-val'>{_num(hv)}{hu}</div>"
-            body = head_num + _agg_label(agg, win, res, end) + body + _range_label(cutoff, end)
+            visual = _render_form(res, form, tile.get("target"), prev=prev_res, agg=agg)
+        # ÉÉN kaart-skelet: headline (venster-aggregaat) + aggregatielabel + datumbereik ALTIJD bovenaan,
+        # dan de visual. Burnup houdt z'n eigen kop (doel-prognose) en krijgt geen los skelet-getal.
+        head = "" if form == "burnup" else _tile_headline(res, agg, win, cutoff, end_eff, now)
+        body = head + visual
         # Delta alleen bij 'Vergelijk met vorige periode': aggregaat huidig venster vs. vorig, zelfde regel.
         if compare and prev_res is not None and res.get("chart") != "line":
             body += _compare_delta(res, prev_res, agg=agg)
@@ -1367,19 +1381,25 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: st
                or t.get("source", "").startswith("werk:") for t in tiles)
     cmp_q = "&compare=1" if compare else ""
 
-    def pl(k, lbl):
+    # Periode-opties = een dropdown-menu (Plausible-stijl), hergebruik van het bestaande cardmenu-patroon
+    # (details/summary + .menuitem, zoals het status-menu in projects). Elke optie blijft een reload-link
+    # (GET &mw=…); de summary toont de actieve periode. Sneltoets-hint per optie via <kbd>.
+    def opt(k, lbl):
         on = " on" if win == k else ""
+        key = _MW_KEYS.get(k, "")
+        kbd = f" <kbd>{_e(key)}</kbd>" if key else ""
         if k == "actueel" and not live:               # alleen bij een live-capabele bron
-            return f"<span class='chip-opt muted' title='alleen beschikbaar bij een live-capabele bron'>{_e(lbl)}</span>"
-        if nav:   # in het werkoverleg: blijf in de modal
-            u = f"{nav}&mw={k}"
-            return f"<a class='chip-opt{on} js-modal' href='{u}' data-href='{u}'>{_e(lbl)}</a>"
-        return f"<a class='chip-opt{on}' href='{base}&mw={k}{cmp_q}'>{_e(lbl)}</a>"
-    # periode-opties = pill-cards (.chip-opt) in een wrap-rij (.chip-wrap); compare = schuif-toggle
-    # (.switch in .switch-field). Server-side gedrag ongewijzigd: elke pill is een reload-link, de
-    # switch een link die compare aan/uit zet via de query-parameter.
-    wbar = (f"<div class='cl-bar'><span class='muted'>{_e(t('dashboard.periode'))}</span> "
-            f"<span class='chip-wrap'>" + "".join(pl(k, lbl) for k, lbl in _MW) + "</span>")
+            return f"<span class='menuitem muted' title='alleen beschikbaar bij een live-capabele bron'>{_e(lbl)}{kbd}</span>"
+        u = f"{nav}&mw={k}" if nav else f"{base}&mw={k}{cmp_q}"
+        cls = "menuitem js-modal" if nav else "menuitem"
+        dh = f" data-href='{u}'" if nav else ""
+        return f"<a class='{cls}{on}' href='{u}'{dh}>{_e(lbl)}{kbd}</a>"
+    active_lbl = dict(_MW).get(win, "Periode")
+    periode_lbl = _e(t('dashboard.periode'))
+    dd = (f"<details class='cardmenu'><summary class='statustrigger' aria-label='periode kiezen'>"
+          f"{_e(active_lbl)} <span class='caret'>▾</span></summary><div class='cardmenu-b'>"
+          f"<div class='menu-h'>{periode_lbl}</div>" + "".join(opt(k, lbl) for k, lbl in _MW) + "</div></details>")
+    wbar = f"<div class='cl-bar'><span class='muted'>{periode_lbl}</span> {dd}"
     if not nav:
         ct = " on" if compare else ""
         ct_url = f"{base}&mw={_e(win)}" + ("" if compare else "&compare=1")
@@ -1408,12 +1428,25 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: st
                    f"<button class='btn ok sm' type='submit' name='action' value='m_add_link'>Link toevoegen</button></form></details>")
     mk = (f"<a class='btn ok sm' href='/kpi_new?node={_e(rec.id)}'>+ KPI maken</a>" if creating else "")
     head = f"<div class='cl-head'><h3>Metrics</h3><span class='kc-actions'>{mk}{addlink}</span></div>{wbar}"
+    # Single-key sneltoetsen voor de periode-dropdown (alleen op de hoofdpagina, niet in de modal).
+    # Vuurt niet in invoervelden of met modifier-toetsen; navigeert naar &mw=<optie>.
+    keys_js = ""
+    if not nav:
+        import json as _json
+        kmap = {v.lower(): f"{base}&mw={k}{cmp_q}" for k, v in _MW_KEYS.items()
+                if not (k == "actueel" and not live)}
+        keys_js = ("<script>(function(){var M=" + _json.dumps(kmap) + ";"
+                   "document.addEventListener('keydown',function(e){"
+                   "if(e.metaKey||e.ctrlKey||e.altKey)return;"
+                   "var t=e.target||{},tn=(t.tagName||'').toLowerCase();"
+                   "if(tn==='input'||tn==='textarea'||tn==='select'||t.isContentEditable)return;"
+                   "var u=M[(e.key||'').toLowerCase()];if(u)location.href=u;});})();</script>")
 
     # 1. Dashboard van tegels (de KPI's) — één centrale periode voor alle tegels
     dash = ("".join(_render_tile(st, rec, t, start, csrf, end=end, compare=compare, prev_win=prev_win,
-                                 actueel=(win == "actueel"), win=win) for t in tiles) if tiles
+                                 actueel=(win == "actueel"), win=win, now=now) for t in tiles) if tiles
             else "<p class='muted'>Nog geen KPI's op het dashboard. Maak er een met “+ KPI maken”.</p>")
-    out = f"<div class='c2-sec'>{head}</div><div class='c2-sec'><div class='tile-grid'>{dash}</div></div>{_METRICS_JS}"
+    out = f"<div class='c2-sec'>{head}</div><div class='c2-sec'><div class='tile-grid'>{dash}</div></div>{_METRICS_JS}{keys_js}"
 
     # 2. KPI's onder deze node, gesplitst: handmatige (data invoeren) vs systeembron (automatisch gevoed).
     # Een systeembron-KPI (bron/auto/meetwijze) hoort NOOIT in de invoer-sectie — hij heeft geen handmatige
