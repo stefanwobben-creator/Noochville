@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import fcntl
+import functools
 import json
 import logging
 import os
@@ -164,3 +165,30 @@ def atomic_write_json(path: str, obj) -> None:
         except OSError:
             pass
         raise
+
+
+def synchronized(method):
+    """Schrijfpad-wrapper (concurrency-safe): serialiseer via het gedeelde bestandsslot (file_lock, per
+    pad) én lees VERS van schijf ONDER het slot (`self._load()`) vóór de mutatie. Zo muteert geen
+    schrijver meer op een in-memory kopie van vóór het slot, en overleven gelijktijdige schrijvers
+    elkaars mutaties (geen lost update). Reads blijven ongewrapt → lock-vrij.
+
+    Eén plek voor ProjectLedger, AttachmentStore-stijl en WerkoverlegStore (reference, don't copy). De
+    store moet `self.path` en een `self._load()` (verse read van schijf) hebben."""
+    @functools.wraps(method)
+    def _wrapped(self, *args, **kwargs):
+        with file_lock(self.path):
+            self._load()                        # verse toestand onder het slot
+            return method(self, *args, **kwargs)
+    return _wrapped
+
+
+_REFUSE_LOG = logging.getLogger("nooch.refuse")
+
+
+def refuse(code: str, reason: str, **ctx) -> bool:
+    """Een bewuste weigering is een gebeurtenis, geen non-event: log een WARNING met een STABIELE
+    `code` + reden + context, en retourneer False (het sentinel). Gedeeld fail-loud-primitief."""
+    extra = " ".join(f"{k}={v!r}" for k, v in ctx.items())
+    _REFUSE_LOG.warning("%s: %s%s", code, reason, (" | " + extra) if extra else "")
+    return False

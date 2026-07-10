@@ -5,8 +5,8 @@ Opslag: data/projects.json (atomic write). Elke entry is een project-record:
 Governance-records en human_inbox blijven ongemoeid.
 """
 from __future__ import annotations
-import os, time, uuid, functools
-from nooch_village.util import atomic_write_json, read_json, file_lock
+import os, time, uuid
+from nooch_village.util import atomic_write_json, read_json, synchronized as _synchronized
 
 # MODELWIJZIGING (scope harry_hemp keyword_research): 'role' toegevoegd als geldige trigger voor een
 # project dat een ROL autonoom initieert (niet 'human'/UI, niet 'clock'/puls, niet 'tension', niet
@@ -25,25 +25,6 @@ _BUSINESS_IMPACT = {"hoog", "medium", "laag"}
 # effort (optionele inschatting): vervangt op termijn de #effort-hashtag-conventie (bestaande hashtags
 # worden in deze scope NIET gemigreerd). Leeg = geen inschatting.
 _EFFORT          = {"1u", "1d", "2d", "1w"}
-
-
-def _synchronized(method):
-    """Schrijfpad-wrapper (concurrency-safe): serialiseer via het gedeelde bestandsslot (util.file_lock,
-    per pad — hetzelfde patroon als de AttachmentStore) én lees VERS van schijf ONDER het slot vóór de
-    mutatie. Zo muteert geen schrijver meer op een in-memory kopie van vóór het slot, en overleven
-    gelijktijdige schrijvers elkaars mutaties (geen lost update — de bug die geüploade bijlagen liet
-    verdwijnen). Reads blijven ongewrapt → lock-vrij, zodat de board-watch nooit op een write wacht.
-
-    Grens: file_lock is een threading-slot (proces-breed). Binnen één proces (bv. twee cockpit-threads)
-    volledig serieel; tussen processen (cockpit ↔ daemon) verkleint de verse-read-onder-slot het
-    race-venster van uren (oude stale kopie) naar milliseconden. Een harde cross-proces-garantie zou
-    fcntl vereisen — bewust niet nu, conform het bestaande file_lock-patroon."""
-    @functools.wraps(method)
-    def _wrapped(self, *args, **kwargs):
-        with file_lock(self.path):
-            self._load()                        # verse toestand onder het slot
-            return method(self, *args, **kwargs)
-    return _wrapped
 
 
 class ProjectLedger:

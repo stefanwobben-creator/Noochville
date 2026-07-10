@@ -1812,7 +1812,8 @@ def _act_wo_checkout(c):
         if _deny:
             return nxt, _deny
         if g("score"):
-            st.werk.set_checkout(g("circle"), g("pid"), g("score")); msg = "✓ score genoteerd"
+            ok = st.werk.set_checkout(g("circle"), g("pid"), g("score"))
+            msg = "✓ score genoteerd" if ok else "⛔ score geweigerd — het overleg is niet (meer) open"
         return nxt, msg
 
 
