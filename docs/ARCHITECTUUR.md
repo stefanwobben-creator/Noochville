@@ -71,6 +71,7 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `react_add` | `cockpit2.py:1127` |
 | `feed_edit` | `cockpit2.py:1137` |
 | `feed_remove` | `cockpit2.py:1147` |
+| `wall_outcome` | `cockpit2.py:1712` |
 | `ai_reply` | `cockpit2.py:1156` |
 | `proj_feed` | `cockpit2.py:1167` |
 | `checklist_add` | `cockpit2.py:1194` |
@@ -100,37 +101,37 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `wo_ag_remove` | `cockpit2.py:1588` |
 | `wo_ag_note` | `cockpit2.py:1598` |
 | `wo_ag_reopen` | `cockpit2.py:1610` |
-| `wo_ag_resolve` | `cockpit2.py:1623` |
-| `wo_checkout` | `cockpit2.py:1665` |
-| `noochie_send` | `cockpit2.py:1676` |
-| `noochie_reset` | `cockpit2.py:1702` |
-| `noochie_ctx` | `cockpit2.py:1709` |
-| `cl_add` | `cockpit2.py:1716` |
-| `cl_report` | `cockpit2.py:1734` |
-| `cl_remove` | `cockpit2.py:1749` |
-| `m_add_kpi` | `cockpit2.py:1759` |
-| `m_add_from_def` | `cockpit2.py:1791` |
-| `def_add` | `cockpit2.py:1806` |
-| `catalog_publish` | `cockpit2.py:1828` |
-| `def_amend` | `cockpit2.py:1854` |
-| `m_add_link` | `cockpit2.py:1896` |
-| `m_sample` | `cockpit2.py:1907` |
-| `m_remove` | `cockpit2.py:1917` |
-| `m_pin` | `cockpit2.py:1927` |
-| `m_unpin` | `cockpit2.py:1938` |
-| `tile_add` | `cockpit2.py:1976` |
-| `indicator_activate` | `cockpit2.py:1948` |
-| `tile_remove` | `cockpit2.py:2010` |
-| `rov2_set` | `cockpit2.py:2020` |
-| `rov2_acc_add` | `cockpit2.py:2020` |
-| `rov2_acc_remove` | `cockpit2.py:2020` |
-| `rov2_dom_add` | `cockpit2.py:2020` |
-| `rov2_dom_remove` | `cockpit2.py:2020` |
-| `backlog_add` | `cockpit2.py:2052` |
-| `backlog_update_staat` | `cockpit2.py:2064` |
-| `backlog_update_prioriteit` | `cockpit2.py:2076` |
-| `person_edit` | `cockpit2.py:2088` |
-| `person_remove` | `cockpit2.py:2105` |
+| `wo_ag_resolve` | `cockpit2.py:1686` |
+| `wo_checkout` | `cockpit2.py:1808` |
+| `noochie_send` | `cockpit2.py:1819` |
+| `noochie_reset` | `cockpit2.py:1845` |
+| `noochie_ctx` | `cockpit2.py:1852` |
+| `cl_add` | `cockpit2.py:1859` |
+| `cl_report` | `cockpit2.py:1877` |
+| `cl_remove` | `cockpit2.py:1892` |
+| `m_add_kpi` | `cockpit2.py:1902` |
+| `m_add_from_def` | `cockpit2.py:1934` |
+| `def_add` | `cockpit2.py:1949` |
+| `catalog_publish` | `cockpit2.py:1971` |
+| `def_amend` | `cockpit2.py:1997` |
+| `m_add_link` | `cockpit2.py:2039` |
+| `m_sample` | `cockpit2.py:2050` |
+| `m_remove` | `cockpit2.py:2060` |
+| `m_pin` | `cockpit2.py:2070` |
+| `m_unpin` | `cockpit2.py:2081` |
+| `tile_add` | `cockpit2.py:2119` |
+| `indicator_activate` | `cockpit2.py:2091` |
+| `tile_remove` | `cockpit2.py:2153` |
+| `rov2_set` | `cockpit2.py:2163` |
+| `rov2_acc_add` | `cockpit2.py:2163` |
+| `rov2_acc_remove` | `cockpit2.py:2163` |
+| `rov2_dom_add` | `cockpit2.py:2163` |
+| `rov2_dom_remove` | `cockpit2.py:2163` |
+| `backlog_add` | `cockpit2.py:2195` |
+| `backlog_update_staat` | `cockpit2.py:2207` |
+| `backlog_update_prioriteit` | `cockpit2.py:2219` |
+| `person_edit` | `cockpit2.py:2231` |
+| `person_remove` | `cockpit2.py:2248` |
 
 
 ## (c) Concern → store → bestand
@@ -161,4 +162,4 @@ De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de st
 
 
 ---
-_24 routes · 88 dispatch-acties · 19 stores._
+_24 routes · 89 dispatch-acties · 19 stores._

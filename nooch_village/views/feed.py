@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from nooch_village.web_base import _e
 from nooch_village.cockpit2_util import _stamp, _md, _avatar, _name, _ICON_ADD_EMOJI, _person_name, md_editor
+from nooch_village import org
 
 # Gecureerde set standaard emoji's met zoekwoorden (NL/EN) voor de picker.
 _EMOJIS_FULL = [
@@ -75,8 +76,64 @@ def _hilite_mentions(html: str, names) -> str:
     return html
 
 
+def _wall_outcome_opts(st):
+    """(role_opts, project_opts) voor het wall-outcome-formulier — één keer per wall berekenen
+    (niet per comment). Rollen (geen cirkels, niet gearchiveerd) voor project-eigenaar + note-rol;
+    projecten gegroepeerd per eigenaar-rol voor de actie-koppeling. De server-side gates blijven leidend."""
+    roles = [r for r in st.records.all() if not org.is_circle(r) and not getattr(r, "archived", False)]
+    role_opts = "".join(f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>" for r in roles)
+    by_role: dict = {}
+    for pp in st.projects.all():
+        if not pp.get("archived") and pp.get("owner"):
+            by_role.setdefault(pp["owner"], []).append(pp)
+    pj_opts = "<option value=''>— kies project —</option>"
+    for rid in sorted(by_role, key=lambda x: (_name(st.records.get(x)) if st.records.get(x) else str(x)).lower()):
+        rn = _name(st.records.get(rid)) if st.records.get(rid) else str(rid)
+        opts = "".join(f"<option value='{_e(pp['id'])}'>{_e(str(pp.get('scope') or pp['id'])[:60])}</option>"
+                       for pp in by_role[rid])
+        pj_opts += f"<optgroup label='{_e(rn)}'>{opts}</optgroup>"
+    return role_opts, pj_opts
+
+
+def _wall_outcome_form(pid: str, eid: str, csrf: str, prefill: str, role_opts: str, pj_opts: str) -> str:
+    """Discrete '→ uitkomst'-actie bij een wall-comment: route 'm naar één van de vijf bestaande
+    uitkomsten. Progressive disclosure per type (mirror van het werkoverleg oc_details). De inhoud is
+    bewerkbaar en voorgevuld met de comment-tekst (voor project/action kort je 'm typisch in tot een
+    titel; voor note/info blijft de volle tekst logisch). De toelichting is verplicht (rationale)."""
+    hid = (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+           f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+           f"<input type='hidden' name='item' value='{_e(eid)}'>")
+
+    def oc(otype: str, summary: str, target_field: str) -> str:
+        return (f"<details class='wo-ocd box-details'><summary>{summary}</summary>"
+                f"<form method='post' action='/action' class='wo-oc'>{hid}"
+                f"<input type='hidden' name='otype' value='{otype}'>"
+                f"<label class='att-lbl'>Inhoud (bewerkbaar)</label>"
+                f"<textarea name='content' rows='2'>{_e(prefill)}</textarea>"
+                f"{target_field}"
+                f"<label class='att-lbl'>Toelichting (verplicht)</label>"
+                f"<textarea name='toelichting' rows='2' required "
+                f"placeholder='waarom deze uitkomst?'></textarea>"
+                f"<button class='btn sm' type='submit' name='action' value='wall_outcome'>Vastleggen</button>"
+                f"</form></details>")
+
+    info = oc("info", "Info",
+              "<span class='muted'>Gebruik @naam of @rol in de inhoud voor gericht; anders iedereen.</span>")
+    proj = oc("project", "Project",
+              f"<label class='att-lbl'>Op welke rol?</label><select name='owner'>{role_opts}</select>")
+    act = oc("action", "Actie",
+             f"<label class='att-lbl'>Aan welk project?</label><select name='pid_link'>{pj_opts}</select>")
+    note = oc("note", "Note",
+              f"<label class='att-lbl'>Note bij welke rol?</label><select name='note_role'>{role_opts}</select>")
+    rov = oc("roloverleg", "Roloverleg",
+             "<span class='muted'>Wordt een add_role-voorstel op de roloverleg-agenda (mens-route).</span>")
+    return (f"<details class='fedit'><summary class='flink'>→ uitkomst</summary>"
+            f"{info}{proj}{act}{note}{rov}</details>")
+
+
 def _feed_entry_html(st, entry: dict, role_name: str = "",
-                     pid: str = "", csrf_token: str = "", mention_names=()) -> str:
+                     pid: str = "", csrf_token: str = "", mention_names=(),
+                     outcome_opts=None) -> str:
     kind, atype, aid = _feed_norm(entry)
     av, nm = _feed_who(st, atype, aid)
     if atype == "role":
@@ -120,6 +177,12 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
                 f"<button class='flink' type='submit' name='action' value='feed_remove' "
                 f"onclick=\"return confirm('Comment verwijderen?')\">Verwijderen</button></form>")
         tools = f"<span class='fsep'>·</span>{editd}<span class='fsep'>·</span>{deld}"
+    # → uitkomst: elke comment (mens én persona) mag de mens naar een uitkomst routeren; niet op
+    # de neutrale system-audit-entry (die is zelf al de uitkomst-trail).
+    if outcome_opts and csrf_token and eid and kind != "system":
+        _ro, _po = outcome_opts
+        oc = _wall_outcome_form(pid, eid, csrf_token, entry.get("text", ""), _ro, _po)
+        tools += f"<span class='fsep'>·</span>{oc}"
     return (f"<div class='fentry'>"
             f"<div class='fhead'>{av}<span class='fwho'>{who}</span>"
             f"<span class='fstamp'>{_e(_stamp(entry.get('at')))}</span></div>"

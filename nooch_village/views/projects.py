@@ -12,7 +12,7 @@ from nooch_village.cockpit2_util import (
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK,
     _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET,
 )
-from nooch_village.views.feed import _mentionables, _feed_entry_html
+from nooch_village.views.feed import _mentionables, _feed_entry_html, _wall_outcome_opts
 from nooch_village.views.checklists import _checklists_html
 from nooch_village import org
 from nooch_village.cockpit2_util import _EXTRA_CSS
@@ -955,10 +955,12 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     # bijlagen, gesorteerd op tijd. Kale mutaties staan niet in de log → niet hier.
     heeft_opdracht = bool(p.get("description", "").strip())
     stream = [(p.get("created_at") or 0, _opdracht_post(p))] if heeft_opdracht else []
+    _oo = _wall_outcome_opts(st)   # rol-/project-opties voor '→ uitkomst' — één keer per wall
     for m in (p.get("log") or []):
         stream.append((m.get("at") or 0,
                        _feed_entry_html(st, m, role_name=role_name, pid=pid,
-                                        csrf_token=csrf_token, mention_names=mention_names)))
+                                        csrf_token=csrf_token, mention_names=mention_names,
+                                        outcome_opts=_oo)))
     for a in (p.get("attachments") or []):
         stream.append((a.get("at") or 0, _attach_post(a, pid, hid, rw)))
     stream.sort(key=lambda t: t[0])

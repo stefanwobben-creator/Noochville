@@ -532,7 +532,7 @@ class ProjectLedger:
     # Gestructureerde feed-entry (Trello-stijl kaart-discussie). Anders dan de oude {who} draagt
     # een entry nu een echte auteur (mens/persoon/AI/rol) en een soort (update vs reactie), zodat
     # zowel mensen als AI's kunnen meepraten en rol-voortgang herkenbaar in dezelfde stroom landt.
-    _FEED_KINDS = ("update", "comment")
+    _FEED_KINDS = ("update", "comment", "system")   # "system" = neutrale audit-entry (geen worked/progress-neveneffect)
     _AUTHOR_TYPES = ("human", "person", "persona", "role")
 
     def add_feed_entry(self, pid: str, text: str, *, kind: str = "comment",
