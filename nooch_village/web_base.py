@@ -107,8 +107,16 @@ _KONAMI_TRIGGER = """<script>(function(){
 })();</script>"""
 
 
+# App-shell cleanup-registry (stub in de <head>, dus beschikbaar vóór álle content-scripts). Content-
+# scripts die een timer/document-listener opzetten registreren hier hun teardown; de shell-swap
+# (views/shell.py) roept ze aan vóór elke .c2-main-swap. Zo lekt geen interval en stapelt geen listener.
+_SHELL_REGISTRY = ("<script>window.__swapCleanups=[];"
+                   "window.registerSwapCleanup=function(f){if(typeof f==='function')window.__swapCleanups.push(f);};"
+                   "</script>")
+
+
 def _page(title: str, inner: str) -> str:
     return (f'<!doctype html><html lang="nl"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
-            f'<title>{_e(title)}</title>{_FONTS}<style>{_CSS}</style></head>'
+            f'<title>{_e(title)}</title>{_FONTS}<style>{_CSS}</style>{_SHELL_REGISTRY}</head>'
             f'<body>{inner}{_KONAMI_TRIGGER}</body></html>')

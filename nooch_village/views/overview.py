@@ -172,16 +172,20 @@ def _epic_earth_html() -> str:
     # Wachtindicator: draaiende 🌍 + tekst, zichtbaar tot het beeld binnen is (JS zet .loaded op load).
     loader = ("<div class='epic-loading'><span class='epic-globe' aria-hidden='true'>🌍</span>"
               "<span class='epic-load-txt'>Mother Earth is loading…</span></div>")
-    js = ("<script>(function(){var w=document.currentScript.parentNode;"
-          "var earth=w.querySelector('.epic-earth');"
-          "var on=earth?earth.querySelector('.epic-frame.on'):null;"
-          "function done(){if(earth)earth.classList.add('loaded');}"
+    # Reinit-veilig: query via een stabiele selector i.p.v. document.currentScript (dat is null bij een
+    # her-eval na een shell-swap). De rotatie-interval registreert zijn teardown in de shell-cleanup-
+    # registry, zodat een swap 'm opruimt (geen tweede interval); na de swap her-evalueert de shell dit
+    # script → nieuwe interval + nieuwe registratie.
+    js = ("<script>(function(){var earth=document.querySelector('.epic-earth');if(!earth)return;"
+          "var on=earth.querySelector('.epic-frame.on');"
+          "function done(){earth.classList.add('loaded');}"
           "if(on){if(on.complete)done();else{on.addEventListener('load',done);on.addEventListener('error',done);}}"
           "else{done();}"
-          "var fr=w.querySelectorAll('.epic-frame'),cap=w.querySelector('.epic-cap');"
+          "var fr=earth.querySelectorAll('.epic-frame'),cap=document.querySelector('.epic-cap');"
           "if(fr.length<2)return;var i=fr.length-1;"
-          "setInterval(function(){fr[i].classList.remove('on');i=(i+1)%fr.length;"
+          "var t=setInterval(function(){fr[i].classList.remove('on');i=(i+1)%fr.length;"
           "fr[i].classList.add('on');if(cap)cap.textContent='Live: '+fr[i].getAttribute('data-cap');},5000);"
+          "if(window.registerSwapCleanup)window.registerSwapCleanup(function(){clearInterval(t);});"
           "})();</script>")
     return (f"<div class='epic-earth'>{loader}{imgs}</div>"
             f"<div class='epic-cap'>Live: {cap0}</div>{js}")

@@ -220,6 +220,7 @@ from nooch_village.views.noochie import (
     render_noochie, _noochie_chrome,
 )
 from nooch_village.views.callbar import _callbar_frame, render_callbar
+from nooch_village.views.shell import _shell_chrome
 
 from nooch_village.views.werkoverleg import (
     _wo_hid, _wo_checkin, _wo_checklist, _wo_metrics,
@@ -2469,7 +2470,8 @@ def make_handler(data_dir: str, csrf_token: str,
             # onthult zichzelf pas als LiveKit geconfigureerd is (token ok). chrome=False voor de /callbar-
             # pagina zelf: die IS de bar-body en mag zichzelf niet nog eens injecteren (oneindige nesting).
             if chrome and self._session_username() is not None and "</body>" in body:
-                body = body.replace("</body>", _noochie_chrome() + _callbar_frame() + "</body>", 1)
+                body = body.replace(
+                    "</body>", _noochie_chrome() + _callbar_frame() + _shell_chrome() + "</body>", 1)
             b = body.encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "text/html; charset=utf-8")
