@@ -16,6 +16,8 @@ from __future__ import annotations
 import json
 import re
 
+from nooch_village.util import refuse
+
 
 def _extract_json(text):
     """Eerste JSON-object uit een LLM-antwoord, robuust tegen ```json-fences en omringend proza."""
@@ -65,6 +67,7 @@ def plan_offers(owner_record, texts, registry, *, name: str = "") -> list:
         dna = owner_record.definition
         skills = list(getattr(dna, "skills", []) or [])
         if not skills:
+            refuse("OFFER_NO_DNA", "owner-rol heeft geen skills in DNA", name=name)
             return [None] * len(texts)
         catalog = _catalog(skills, registry)
         accts = list(getattr(dna, "accountabilities", []) or [])
@@ -83,9 +86,13 @@ def plan_offers(owner_record, texts, registry, *, name: str = "") -> list:
         )
         from nooch_village import llm
         raw = llm.reason(prompt, json_mode=True, max_tokens=900)
+        if not raw:                                           # ladder gaf niets (geen key / leeg / weggevangen)
+            refuse("OFFER_LLM_NONE", "llm.reason gaf geen antwoord", name=name, items=len(texts))
+            return [None] * len(texts)
         data = _extract_json(raw)
         matches = data.get("matches") if isinstance(data, dict) else None
         if not isinstance(matches, list):
+            refuse("OFFER_LLM_UNPARSEABLE", "LLM-antwoord niet parsebaar naar {matches:[...]}", name=name)
             return [None] * len(texts)
         out = []
         for i in range(len(texts)):
@@ -97,5 +104,6 @@ def plan_offers(owner_record, texts, registry, *, name: str = "") -> list:
             pl = m.get("payload") if isinstance(m.get("payload"), dict) else {}
             out.append({"skill": sk, "payload": pl, "payload_ok": _payload_ok(sk, pl, registry)})
         return out
-    except Exception:
+    except Exception as e:
+        refuse("OFFER_LLM_EXC", "plan_offers wierp een exceptie (fail-closed)", exc=type(e).__name__, name=name)
         return [None] * len(texts)

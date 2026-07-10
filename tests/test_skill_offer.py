@@ -131,3 +131,56 @@ def test_render_toont_aanbod_knop(tmp_path):
                                {"skill": "openalex_evidence", "payload": {}, "payload_ok": True})
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "🤖 kan dit oppakken" in frag and "value='check_accept'" in frag
+
+
+# ── observability: elke stille fail-closed logt nu een STABIELE refuse-code ──────
+def _codes(caplog):
+    return " ".join(r.getMessage() for r in caplog.records)
+
+
+def test_refuse_title_gate(tmp_path, caplog):
+    dd, pid, clid = _setup(tmp_path, title="Mijn eigen lijst")
+    with caplog.at_level("WARNING", logger="nooch.refuse"):
+        cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["x"], "next": ["/"]}, "guest")
+    assert "OFFER_SKIP_TITLE" in _codes(caplog)
+
+
+def test_refuse_ii_owner(tmp_path, caplog):
+    dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    pid = st.projects.create("ii:mother_earth__nooch", "Doel", "human")
+    clid = st.projects.checklist_add(pid, title=_TITLE)["id"]
+    with caplog.at_level("WARNING", logger="nooch.refuse"):
+        cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["x"], "next": ["/"]}, "guest")
+    assert "OFFER_SKIP_II" in _codes(caplog)
+
+
+def test_refuse_no_record(tmp_path, caplog):
+    dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
+    st = cockpit2._Stores(dd)
+    pid = st.projects.create("rol_bestaat_niet", "Doel", "human")      # owner matcht geen record
+    clid = st.projects.checklist_add(pid, title=_TITLE)["id"]
+    with caplog.at_level("WARNING", logger="nooch.refuse"):
+        cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["x"], "next": ["/"]}, "guest")
+    assert "OFFER_NO_RECORD" in _codes(caplog)
+
+
+def test_refuse_no_match(tmp_path, caplog):
+    dd, pid, clid = _setup(tmp_path)                                   # seeded owner + Uitvoerplan
+    with patch("nooch_village.cockpit2.plan_offers", return_value=[None]), \
+         caplog.at_level("WARNING", logger="nooch.refuse"):
+        cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["x"], "next": ["/"]}, "guest")
+    assert "OFFER_NO_MATCH" in _codes(caplog)
+
+
+def test_refuse_plan_offers_dna_none_exc(caplog):
+    with caplog.at_level("WARNING", logger="nooch.refuse"):
+        plan_offers(_owner([]), ["x"], shared_registry())                          # geen DNA
+        with patch("nooch_village.llm.reason", side_effect=_fake_reason(None)):     # LLM leeg
+            plan_offers(_owner(["openalex_evidence"]), ["x"], shared_registry())
+        def _boom(prompt, **k):
+            raise RuntimeError("stuk")
+        with patch("nooch_village.llm.reason", side_effect=_boom):                  # exceptie
+            plan_offers(_owner(["openalex_evidence"]), ["x"], shared_registry())
+    m = _codes(caplog)
+    assert "OFFER_NO_DNA" in m and "OFFER_LLM_NONE" in m and "OFFER_LLM_EXC" in m

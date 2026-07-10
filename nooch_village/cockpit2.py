@@ -51,6 +51,7 @@ from nooch_village.personas import PersonaStore
 from nooch_village.projects import ProjectLedger, PREP_CHECKLIST_TITLE, _MISSIE_IMPACT, _BUSINESS_IMPACT
 from nooch_village.registry_factory import shared_registry
 from nooch_village.skill_match import plan_offers
+from nooch_village.util import refuse
 from nooch_village.ai_tasks import AITaskStore
 from nooch_village.checklists import ChecklistStore, CADENCES, CADENCE_LABEL
 from nooch_village.metrics import MetricStore, window_cutoff, filter_samples
@@ -1257,29 +1258,37 @@ def _offer_skill(st, pj, pid: str, clid: str) -> bool:
     van de owner-rol en, bij een match, hang een aanbod aan het item. UITSLUITEND op de "Uitvoerplan"-
     checklist (de enige die de daemon uitvoert) en alleen bij een echte rol-owner (geen II, geen dangling).
     Draait de match in het cockpit-proces via de ladder; fail-closed — nooit een foutmelding.
-    Grens: dit matcht en biedt aan; uitvoeren doet uitsluitend de daemon."""
+    Grens: dit matcht en biedt aan; uitvoeren doet uitsluitend de daemon.
+
+    Elke early-return logt een STABIELE code via refuse() (WARNING, laag volume — het pad draait alleen
+    bij een menselijke check_add). Zonder deze regels kost "waarom geen aanbod?" uren gis-diagnose: de
+    fail-closed maakte II/title-gate/geen-record/geen-DNA/geen-match/exceptie ononderscheidbaar in het log."""
     p = pj.get(pid) or {}
     owner = p.get("owner") or ""
-    if not owner or owner.startswith(_II_PREFIX):        # II / geen owner → geen rol-DNA, stil overslaan
-        return False
+    if not owner or owner.startswith(_II_PREFIX):        # II / geen owner → geen rol-DNA
+        return refuse("OFFER_SKIP_II", "geen rol-owner (II/dangling) → geen skill-match", pid=pid, owner=owner)
     cl = next((c for c in (p.get("checklists") or []) if c.get("id") == clid), None)
-    if cl is None or cl.get("title") != PREP_CHECKLIST_TITLE:   # alleen de uitvoer-checklist
-        return False
+    if cl is None:
+        return refuse("OFFER_SKIP_NO_CL", "checklist niet gevonden op project", pid=pid, clid=clid)
+    if cl.get("title") != PREP_CHECKLIST_TITLE:          # alleen de uitvoer-checklist
+        return refuse("OFFER_SKIP_TITLE", "niet de Uitvoerplan-checklist → geen aanbod (title-gate)",
+                      pid=pid, clid=clid, title=cl.get("title"))
     items = cl.get("items") or []
     if not items:
-        return False
-    item = items[-1]                                     # het net toegevoegde item (laatste in de lijst)
+        return refuse("OFFER_SKIP_EMPTY", "Uitvoerplan leeg", pid=pid, clid=clid)
+    item = items[-1]                                     # het net toegevoegde item (append't, dus laatste)
     if item.get("skill") or item.get("offer"):
-        return False
+        return refuse("OFFER_SKIP_HAS", "laatste item heeft al skill/offer", pid=pid, item=item.get("id"))
     orec = st.records.get(owner)
-    if orec is None:
-        return False
+    if orec is None:                                     # owner-id matcht geen record → geen DNA-lookup mogelijk
+        return refuse("OFFER_NO_RECORD", "owner-record niet gevonden in records", pid=pid, owner=owner)
     _load_env()                                          # LLM-keys beschikbaar maken (zoals bij _ai_reply)
     offers = plan_offers(orec, [item.get("text", "")], shared_registry(), name=_name(orec))
     off = offers[0] if offers else None
-    if not off:
-        return False
-    return pj.set_item_offer(pid, clid, item["id"], off)
+    if not off:                                          # geen match (plan_offers logt LLM-None/-exceptie apart)
+        return refuse("OFFER_NO_MATCH", "geen DNA-skill matcht het item", pid=pid, owner=owner,
+                      text=(item.get("text", "") or "")[:80])
+    return pj.set_item_offer(pid, clid, item["id"], off)   # succes: het aanbod verschijnt in de UI
 
 
 def _act_check_add(c):
@@ -1293,8 +1302,9 @@ def _act_check_add(c):
             try:                                         # skill-aanbod is bijzaak: mag de toevoeging nooit breken
                 if _offer_skill(st, pj, g("pid"), g("clid")):
                     msg += " · 🤖 aanbod"
-            except Exception:
-                pass
+            except Exception as e:                       # bv. een stille registry-bouwfout: niet meer onzichtbaar
+                refuse("OFFER_UNCAUGHT", "skill-aanbod wierp een exceptie (weggevangen)",
+                       pid=g("pid"), exc=type(e).__name__)
         return nxt, msg
 
 
