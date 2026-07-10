@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from typing import TYPE_CHECKING
@@ -24,6 +25,8 @@ from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD
 
 if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores
+
+log = logging.getLogger(__name__)
 
 
 # Centrale periode-picker (scope 6). 'actueel' = laatste waarde, alleen bij een live-capabele bron.
@@ -512,6 +515,35 @@ def _collapse_daily_mean(samples: list) -> list:
             out.append({"at": max(x["at"] for x in ss), "value": sum(vals) / len(vals),
                         "datum": ss[0].get("datum")})
     return out
+
+
+def _def_obs_key(st: _Stores, did: str):
+    """(metric, bron) voor een catalogus-def-id — de ÉNE gedeelde def-resolutie, voor zowel de losse
+    tegel als de formule-operand (reference, don't copy). Loopt via _obs_key_for_indicator, zodat een
+    def-operand exact dezelfde metric-id oplevert als een KPI/tegel op diezelfde indicator. Werk-defs
+    binden aan de werkoverleg-bron via hun werk_measure. (None, None) = def onbekend / geen obs-veld."""
+    c = st.defs.current(did) or {}
+    wm = c.get("werk_measure")
+    if wm:
+        return _obs_key_for_indicator("werkoverleg", wm)
+    return _obs_key_for_indicator(c.get("source", ""), c.get("veld", ""))
+
+
+def _def_series(st: _Stores, did: str, cutoff, end=None) -> dict:
+    """Dagreeks-res voor een `def:<id>`-operand in een formule. Resolvet via de gedeelde _def_obs_key en
+    leest de dag-observaties. FAIL-LOUD (nooit meer een stille lege cel):
+      - niet resolvebaar → issue='unresolved' + WARNING FORMULA_OPERAND_UNRESOLVED
+      - resolvet, maar de metric-id heeft geen rijen → issue='empty' + WARNING FORMULA_OPERAND_EMPTY"""
+    metric, bron = _def_obs_key(st, did)
+    if not metric:
+        log.warning("FORMULA_OPERAND_UNRESOLVED def:%s — def onbekend of zonder observatie-veld", did)
+        return {"kind": "series", "points": [], "issue": "unresolved"}
+    raw = st.observations.daily_series(metric, bron=bron)
+    if not raw:
+        log.warning("FORMULA_OPERAND_EMPTY def:%s → %s (bron=%s) levert geen rijen", did, metric, bron)
+    samples = [{"at": _row_at(r), "value": r["value"], "datum": r.get("datum")} for r in raw]
+    return {"kind": "series", "points": filter_samples(samples, cutoff, end),
+            "issue": None if raw else "empty"}
 
 
 def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff, end=None):
@@ -1402,12 +1434,12 @@ def _def_value(st: _Stores, c: dict, did: str, circle: str) -> tuple[str, bool]:
     data-pad; de rest blijft def:id met liveness uit de bron-whitelist."""
     wm = c.get("werk_measure")
     if wm and circle:
-        return f"werk:{circle}|{wm}|over_tijd", True
-    src, veld = c.get("source", ""), c.get("veld", "")
-    if src == "plausible" and veld == "visitors":
-        return "pulse_visitors|visitors|time", True
-    if src == "shopify" and veld in ("pairs_sold", "orders", "revenue", "aov"):
-        return f"shopify|{veld}|over_tijd", bool(_shopify_window(st.dd))
+        return f"werk:{circle}|{wm}|over_tijd", True     # werk blijft cirkel-gebonden: def:<id> heeft geen cirkel-slot
+    src = c.get("source", "")
+    # Observatie-gebaseerde indicatoren (plausible/shopify/…) → uniform def:<id>. De formule- én
+    # tegel-resolutie leiden de metric-id af via _def_obs_key. De plausible-visitors-special-case is
+    # weg (werd wél nog geresolved): def:<id> resolveert nu symmetrisch naar plausible_visitors_day én
+    # plausible_pageviews_day, zodat "pageviews ÷ visitors" niet meer stil leeg rekent.
     return f"def:{did}", (src in _LIVE_DEF_SOURCES)
 
 
@@ -1464,12 +1496,24 @@ def _formula_daily(st: _Stores, tile, cutoff, end=None) -> list[dict]:
     """Per-dag A op B over twee bronnen, FAIL-CLOSED: mist één bron een dag, dan is die dag no_data
     (nooit doorrekenen met een oude waarde, nooit stilzwijgend 0). Deling door 0 → ook no_data.
     Geeft rijen [{at, value, no_data}] voor álle dagen die in minstens één bron voorkomen."""
-    def _map(combo):
-        parts = (combo or "").split("|")
-        if len(parts) != 3 or not parts[0]:
+    issues: list = []
+
+    def _map(combo, label):
+        combo = combo or ""
+        if combo.startswith("def:"):          # def:<id>-operand → gedeelde def-resolutie (fail-loud in _def_series)
+            res = _def_series(st, combo[4:], cutoff, end)
+            if res.get("issue"):
+                issues.append({"operand": label, "code": res["issue"]})
+            return _series_day_map(res)
+        parts = combo.split("|")
+        if len(parts) != 3 or not parts[0]:   # onparseerbare combo → fail-loud (nooit meer stil leeg)
+            log.warning("FORMULA_OPERAND_UNRESOLVED operand %s=%r — geen parseerbare vorm", label, combo)
+            issues.append({"operand": label, "code": "unresolved"})
             return {}
         return _series_day_map(_fetch(st, parts[0], parts[1], parts[2], cutoff, end))
-    amap, bmap = _map(tile.get("f_a")), _map(tile.get("f_b"))
+
+    amap = _map(tile.get("f_a"), "A")
+    bmap = _map(tile.get("f_b"), "B")
     op = _FORMULA_OPS.get(tile.get("f_op", "÷"))
     rows = []
     for day in sorted(set(amap) | set(bmap)):
@@ -1479,13 +1523,13 @@ def _formula_daily(st: _Stores, tile, cutoff, end=None) -> list[dict]:
         val = None if (av is None or bv is None or op is None) else op(av, bv)
         rows.append({"at": at, "value": None if val is None else round(val, 4),
                      "datum": day, "no_data": val is None})
-    return rows
+    return rows, issues
 
 
 def _render_formula_tile(st: _Stores, rec, tile, csrf: str, cutoff=None, end=None) -> str:
     """Formule-tegel: live A op B per dag, fail-closed. Grafiek toont alleen dagen MÉT waarde
     (no_data = gat, nooit 0/interpolatie); de tabel toont ÁLLE dagen met no_data expliciet."""
-    rows = _formula_daily(st, tile, cutoff, end)
+    rows, issues = _formula_daily(st, tile, cutoff, end)
     agg = tile.get("aggregatie", "")
     vals = [r["value"] for r in rows if not r["no_data"]]          # no_data telt niet mee
     if agg == "som":
@@ -1501,6 +1545,11 @@ def _render_formula_tile(st: _Stores, rec, tile, csrf: str, cutoff=None, end=Non
         body = f"<div class='kpi-val'>{_num(head)}</div>"
     else:
         body = "<div class='kpi-val'><span class='muted'>geen data</span></div>"
+    # fail-loud: een operand die niet resolvet of geen rijen levert → zichtbare hint (nooit stil leeg)
+    if issues:
+        _lbl = {"unresolved": "bron onbekend", "empty": "bron levert geen data"}
+        _txt = "; ".join(f"operand {i['operand']}: {_lbl.get(i['code'], i['code'])}" for i in issues)
+        body += f"<div class='muted'>⚠ {_e(_txt)}</div>"
     import datetime as _dt
     trows = "".join(
         f"<tr><td>{_dt.datetime.fromtimestamp(r['at']).strftime('%d-%m-%y')}</td>"

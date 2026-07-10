@@ -77,7 +77,12 @@ def test_wizard_een_regel_per_metric_werk_geconsolideerd(tmp_path):
     tev = next(i for i in inds if i["name"] == "Tevredenheid werkoverleg")
     assert tev["value"] == f"werk:{C}|tevredenheid|over_tijd" and tev["aard"] == "reeks"
     assert not any("|gemiddeld" in i["value"] or "|totaal" in i["value"] for i in inds)   # geen dim-combos
-    assert next(i["value"] for i in inds if i["name"] == "Bezoekers (Plausible)") == "pulse_visitors|visitors|time"
+    # Observatie-gebaseerde indicatoren emitten nu def:<id> (scope: kanonieke operand-vorm), niet meer
+    # de pulse_visitors-special-case. De def resolveert naar dezelfde metric-id.
+    from nooch_village.views.metrics import _def_obs_key
+    vis = next(i["value"] for i in inds if i["name"] == "Bezoekers (Plausible)")
+    assert vis.startswith("def:")
+    assert _def_obs_key(st, vis[4:]) == ("plausible_visitors_day", "plausible")
 
 
 def test_composer_categorie_eerst_lege_staat_en_placeholder(tmp_path):

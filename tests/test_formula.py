@@ -27,7 +27,7 @@ def test_ontbrekende_dag_bij_bron_b(tmp_path):
     dd, st, a, b = _two_kpis(tmp_path)
     st.metrics.add_sample(a, 100, at=D1); st.metrics.add_sample(a, 200, at=D2)
     st.metrics.add_sample(b, 10, at=D1)                 # B mist dag 2
-    rows = {_day_key(r["at"]): r for r in _formula_daily(cockpit2._Stores(dd), _tile(a, b), None, None)}
+    rows = {_day_key(r["at"]): r for r in _formula_daily(cockpit2._Stores(dd), _tile(a, b), None, None)[0]}
     assert rows["2026-07-01"]["value"] == 10.0 and rows["2026-07-01"]["no_data"] is False   # 100 / 10
     assert rows["2026-07-02"]["no_data"] is True and rows["2026-07-02"]["value"] is None     # B mist → no_data
 
@@ -36,7 +36,7 @@ def test_ontbrekende_dag_bij_bron_a(tmp_path):
     dd, st, a, b = _two_kpis(tmp_path)
     st.metrics.add_sample(a, 100, at=D1)                # A mist dag 2
     st.metrics.add_sample(b, 10, at=D1); st.metrics.add_sample(b, 20, at=D2)
-    rows = {_day_key(r["at"]): r for r in _formula_daily(cockpit2._Stores(dd), _tile(a, b), None, None)}
+    rows = {_day_key(r["at"]): r for r in _formula_daily(cockpit2._Stores(dd), _tile(a, b), None, None)[0]}
     assert rows["2026-07-01"]["value"] == 10.0 and rows["2026-07-01"]["no_data"] is False   # 100 / 10
     assert rows["2026-07-02"]["no_data"] is True and rows["2026-07-02"]["value"] is None     # A mist → no_data
 
@@ -45,7 +45,7 @@ def test_deling_door_nul_is_no_data(tmp_path):
     dd, st, a, b = _two_kpis(tmp_path)
     st.metrics.add_sample(a, 100, at=D1)
     st.metrics.add_sample(b, 0, at=D1)                  # deler 0 → geen verzonnen waarde
-    rows = {_day_key(r["at"]): r for r in _formula_daily(cockpit2._Stores(dd), _tile(a, b), None, None)}
+    rows = {_day_key(r["at"]): r for r in _formula_daily(cockpit2._Stores(dd), _tile(a, b), None, None)[0]}
     assert rows["2026-07-01"]["no_data"] is True and rows["2026-07-01"]["value"] is None
 
 
