@@ -192,3 +192,47 @@ def refuse(code: str, reason: str, **ctx) -> bool:
     extra = " ".join(f"{k}={v!r}" for k, v in ctx.items())
     _REFUSE_LOG.warning("%s: %s%s", code, reason, (" | " + extra) if extra else "")
     return False
+
+
+class JsonStore:
+    """Concurrency-veilige basis voor een JSON-store. Bezit `self.path`, levert `_load()` (verse read
+    van schijf) en `_save()` — de ENIGE `atomic_write_json`-route. Niemand schrijft zelf naar het
+    bestand; wie dat wél doet valt buiten deze basis en wordt door de guard-test geweigerd.
+
+    Subklassen declareren `_WRITE_METHODS` (hun schrijfmethoden); die worden bij class-creatie
+    automatisch met `synchronized` gewrapt: `file_lock` + een verse `_load()` ONDER het slot vóór de
+    mutatie, zodat gelijktijdige processen (cockpit ↔ daemon) elkaars schrijf niet overschrijven (geen
+    lost update). Reads blijven ongewrapt (lock-vrij).
+
+    Subklasse-contract (class-attributen):
+      - `_STATE`   = naam van het in-memory state-attribuut (default '_items').
+      - `_default` = factory voor de lege staat (default `dict`; zet `list` voor een lijst-store).
+      - `_EXPECT`  = verwacht top-level type voor read_json (default `dict`; `list` bij een lijst-store).
+      - `_WRITE_METHODS` = tuple met de namen van de schrijfmethoden die het slot moeten nemen.
+    Een schrijfmethode muteert `self.<_STATE>` en roept `self._save()` aan (nooit `atomic_write_json` zelf)."""
+
+    _WRITE_METHODS: tuple = ()
+    _STATE: str = "_items"
+    _default = dict          # factory (het type zelf → bindt niet aan de instance)
+    _EXPECT: type = dict
+
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        # Wrap ALLEEN de in déze subklasse gedeclareerde schrijfmethoden (geen dubbele wrap bij nesting).
+        for name in cls.__dict__.get("_WRITE_METHODS", ()):
+            meth = cls.__dict__.get(name)
+            if callable(meth):
+                setattr(cls, name, synchronized(meth))
+
+    def __init__(self, path: str):
+        self.path = path
+        self._load()
+
+    def _load(self) -> None:
+        """Verse read van schijf → het state-attribuut. Aangeroepen door `synchronized` ONDER het slot."""
+        setattr(self, self._STATE, read_json(self.path, self._default(), expect=self._EXPECT))
+
+    def _save(self) -> None:
+        """De enige schrijfroute. Alleen aan te roepen vanuit een @synchronized-schrijfmethode."""
+        os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
+        atomic_write_json(self.path, getattr(self, self._STATE))
