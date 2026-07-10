@@ -12,7 +12,7 @@ import json
 import os
 import time
 
-from nooch_village.util import atomic_write_json, read_json
+from nooch_village.util import atomic_write_json, read_json, synchronized, refuse
 
 STEPS = [("checkin", "Check-in"), ("checklist", "Checklist"), ("metrics", "Metrics"),
          ("projecten", "Projecten"), ("agenda", "Agenda"), ("checkout", "Check-out"),
@@ -22,7 +22,13 @@ STEPS = [("checkin", "Check-in"), ("checklist", "Checklist"), ("metrics", "Metri
 class WerkoverlegStore:
     def __init__(self, path: str):
         self.path = path
-        self._m: dict[str, dict] = read_json(path, {})
+        self._m: dict[str, dict] = {}
+        self._load()
+
+    def _load(self) -> None:
+        """Verse read van schijf (aangeroepen door de @synchronized-wrapper ONDER het bestandsslot,
+        vóór elke schrijfmutatie → geen lost update tussen gelijktijdige cockpit/daemon-schrijvers)."""
+        self._m = read_json(self.path, {})
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
@@ -167,16 +173,23 @@ class WerkoverlegStore:
         self._save()
 
     # ── stap 6: check-out (tevredenheid 0-10) ──────────────────────────────────
-    def set_checkout(self, circle: str, pid: str, score) -> None:
+    def set_checkout(self, circle: str, pid: str, score) -> bool:
+        """Check-out-score (0-10) van een deelnemer. Alleen op een OPEN overleg: een score op een
+        gesloten overleg valt buiten elke snapshot en verdween vroeger stil — nu fail-loud geweigerd."""
         st = self._m.get(circle)
         if st is None:
-            return
+            return False
+        if st.get("status") != "open":
+            return refuse("WERK_CHECKOUT_ON_CLOSED",
+                          "check-out-score op een niet-open overleg geweigerd",
+                          circle=circle, pid=pid, status=st.get("status"))
         try:
             s = max(0, min(10, int(score)))
         except (TypeError, ValueError):
-            return
+            return False
         st.setdefault("checkout", {})[pid] = s
         self._save()
+        return True
 
     def checkout(self, circle: str) -> dict:
         return (self._m.get(circle) or {}).get("checkout", {})
@@ -200,3 +213,15 @@ class WerkoverlegStore:
             "tevredenheid": round(sum(scores) / len(scores), 1) if scores else None,
             "duur_min": self.duration_min(circle),
         }
+
+
+# Concurrency-safe schrijfpaden: elke load-modify-save serialiseert via het gedeelde bestandsslot en
+# leest ONDER het slot vers van schijf (self._load()), zodat gelijktijdige cockpit/daemon-schrijvers
+# elkaar niet overschrijven (geen lost update — de bug die snapshots/checkouts liet verdwijnen).
+# Reads blijven ongewrapt → lock-vrij. Zelfde patroon/helper als ProjectLedger (util.synchronized).
+_WRITE_METHODS = (
+    "open", "close", "set_checkout", "set_presence", "mark_visited",
+    "agenda_add", "agenda_remove", "agenda_set_note", "agenda_resolve", "backlog_add",
+)
+for _wm in _WRITE_METHODS:
+    setattr(WerkoverlegStore, _wm, synchronized(getattr(WerkoverlegStore, _wm)))
