@@ -1509,3 +1509,27 @@ geen valse "✓ verplaatst" meer bij een mislukte move.
 
 Suite einde: **2000 groen**, 1 xfail. PR's #148–#163. Beide services op de nieuwe code; cross-proces-fix
 bewust op cockpit + daemon tegelijk gedeployed (halve deploy = schijnveiligheid).
+
+## 2026-07-10 — fail-silent: een PDF die niet plakte, en wat eronder zat
+
+**[faalmodus/systemisch]** Fail-closed zonder signaal is fail-silent. Vier
+onafhankelijke symptomen — verdwijnende bijlagen, stil afgekapte policies,
+geweigerde werkoverleg-meetpunten, lege formule-tegels — bleken terug te
+voeren op twee structurele oorzaken: (1) JSON-stores zonder file_lock
+(36 van de 39; cross-proces lost-update bewezen met subprocess-tests) en
+(2) bewuste weigeringen die niets logden. Gevonden doordat één PDF niet
+wilde uploaden.
+
+**[les]** Een bewuste weigering is een gebeurtenis, geen non-event. En:
+een store die vandaag single-writer is, is dat morgen niet meer — de
+lock-discipline hoort structureel afgedwongen (JsonStore + ratchet-guard),
+niet per store onthouden.
+
+**[fix]** #158/#161 (ProjectLedger + fcntl cross-proces), #168
+(WerkoverlegStore + set_checkout status-guard), #169 (JsonStore-basisklasse
++ guard-test), #166 (irregulaire bronnen mogen meerdere meetpunten per dag),
+#167 (def:<id> als kanonieke formule-operand + fail-loud hints).
+
+**[open]** Fase 4-migratie: batch 0 (projects/attachments/werkoverleg naar
+JsonStore), batch 1 (governance_records + human_inbox — de waarheid en het
+approval-oppervlak), batch 2 (de _Stores-familie).
