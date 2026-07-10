@@ -418,11 +418,14 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "history.pushState({card:pm[1]},'',cu);}else{history.replaceState({card:pm[1]},'',cu);}}}catch(e){}"
         "});}"
         "function reopen(){if(last)openCard(last,false);}"  # verversen na actie: geen nieuwe history-entry
+        # Dirty-close (bv. wo_close): niet de hele pagina herladen (dat sloopt de callbar-iframe), maar de
+        # shell-swap aanroepen (fetch huidige URL, vervang .c2-main). Fallback naar reload zonder shell.
+        "function _refresh(){if(window.shellSwap){window.shellSwap(location.href,{push:false});}else{location.reload();}}"
         "function shut(){if(history.state&&history.state.card){history.back();return;}"  # pushed kaart → pop naar bord-URL
-        "ov.style.display='none';bd.innerHTML='';if(dirty){dirty=false;location.reload();}}"
+        "ov.style.display='none';bd.innerHTML='';if(dirty){dirty=false;_refresh();}}"
         # back-knop / gepopte kaart-entry: sluit de modal, herstel de bord-URL (browser deed dat al).
         "window.addEventListener('popstate',function(){if(ov.style.display!=='none'){"
-        "ov.style.display='none';bd.innerHTML='';if(dirty){dirty=false;location.reload();}}});"
+        "ov.style.display='none';bd.innerHTML='';if(dirty){dirty=false;_refresh();}}});"
         "function confetti(){var c=['#2e7d32','#ef6c5a','#f6c244','#7bb661'];for(var i=0;i<70;i++){"
         "var d=document.createElement('div');d.className='cfetti';d.style.left=(Math.random()*100)+'vw';"
         "d.style.background=c[i%4];d.style.animationDelay=(Math.random()*0.4)+'s';document.body.appendChild(d);"
@@ -482,9 +485,9 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "href+=(href.indexOf('?')>-1?'&':'?')+'back='+encodeURIComponent(last);}"
         "openCard(href);});});"
         "}"
-        "document.querySelectorAll('.pcard[data-href],a.js-modal[data-href]').forEach(function(c){"
-        "c.addEventListener('click',function(e){if(window.__pdrag)return;e.preventDefault();"
-        "openCard(c.getAttribute('data-href'));});});"
+        # Top-level .pcard/.js-modal-kliks NIET meer per-kaart binden (dat overleeft geen .c2-main-swap):
+        # de shell (views/shell.py) delegeert ze op document-niveau naar openCard via window.__shellOpenCard.
+        "window.__shellOpenCard=openCard;"
         "ov.addEventListener('click',function(e){if(e.target===ov&&!window.__noclose)shut();});"
         "document.querySelector('.ovl-x').addEventListener('click',function(){if(!window.__noclose)shut();});"
         "document.addEventListener('keydown',function(e){if(e.key==='Escape'&&ov.style.display!=='none'&&!window.__noclose)shut();});"
