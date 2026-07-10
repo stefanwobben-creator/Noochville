@@ -126,3 +126,12 @@ sessie opent hiermee.
   checklist-item toevoegen, dán `reopen()`, zodat de checklist incompleet is).
   Een structurele guard in `reopen()` of de puls (geen re-complete zonder nieuw
   werk) is een eigen scope.
+- SPA-shell (shellSwap + cleanup-registry + guard-test) ligt klaar op branch
+  `feature/callbar-shell-primitive`, PR #175, groen. Opgepakt worden zodra
+  paginanavigatie zelf een spanning wordt. Niet gemerged: de call bar-spanning is
+  opgelost via de iframe (#173), en de shell laat de bar afhankelijk van correcte
+  cleanup per content-script (het cleanup-contract moet per shell-genoot-pagina kloppen).
+- Call bar reconnect (~1s) bij elke paginanavigatie (node-links, breadcrumbs,
+  "navigeren tussen projecten") én bij `wo_close`. Bewust geaccepteerd: de spanning
+  is klein bij ~4 gebruikers en korte calls. Oplossing ligt klaar: #175 (SPA-shell)
+  + 1a (link-interceptor). Bouwen zodra het knelt.
