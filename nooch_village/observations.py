@@ -9,8 +9,12 @@ de waarde en welke bron heeft 'm geleverd. `record_daily` bewaakt "één datapun
 (idempotent), zodat een tweede puls op dezelfde dag niet dubbel schrijft.
 """
 from __future__ import annotations
-import json, os, re, time
+import json, logging, os, re, time
 from datetime import datetime, timezone
+
+from nooch_village.meetcatalog import cadence_of
+
+log = logging.getLogger(__name__)
 
 
 def _utc_date(ts: float) -> str:
@@ -50,9 +54,21 @@ class ObservationStore:
                     if line:
                         self._index(json.loads(line))
 
+    @staticmethod
+    def _dedup_key(role_id, metric, bron, datum, event_id=""):
+        """Idempotentie-sleutel, cadans-bewust. Regulier (daily/weekly/monthly/ongecatalogiseerd) →
+        per dag: (role_id, metric, bron, datum) — ongewijzigd. Irregulier (bv. werkoverleg) → óók op
+        `event_id`, zodat meerdere meetpunten per dag naast elkaar bestaan maar een herhaalde schrijf
+        met hetzelfde event_id niet dubbel landt."""
+        base = (role_id, metric, bron, datum)
+        if cadence_of(metric, bron) == "irregular":
+            return base + (str(event_id or ""),)
+        return base
+
     def _index(self, r: dict) -> None:
         self._rows.append(r)
-        self._dedup.add((r.get("role_id"), r.get("metric"), r.get("bron"), r.get("datum")))
+        self._dedup.add(self._dedup_key(r.get("role_id"), r.get("metric"), r.get("bron"),
+                                        r.get("datum"), (r.get("meta") or {}).get("event_id", "")))
         self._by_mb.setdefault((r.get("metric"), r.get("bron")), []).append(r)
 
     def _invalidate(self) -> None:
@@ -173,19 +189,32 @@ class ObservationStore:
 
     def record_daily(self, role_id: str, metric: str, value, bron: str,
                      datum: str | None = None, ts: float | None = None,
-                     meta: dict | None = None) -> bool:
-        """Schrijf hoogstens één datapunt per (role_id, metric, bron, datum). Bestaat er al een voor
-        die dag+bron, dan niets doen (append-only, idempotent). Geeft True als er geschreven is.
-        `meta` (optioneel) legt bron-specifieke herkomst vast (source_version, endpoint, …).
+                     meta: dict | None = None, event_id: str = "") -> bool:
+        """Schrijf een dag-datapunt, cadans-bewust idempotent (catalogus-cadans van de metric):
 
-        Schaal (scope 2, punt 5 opgelost): de idempotentie-check loopt via de in-memory dedup-index (O(1)),
-        niet meer via een lineaire scan per write. N dimensie-reeksen/dag is daardoor O(N), niet O(N·rijen).
-        De index (zie de class-docstring) leest het bestand hoogstens één keer per instance."""
+        - REGULIER (daily/weekly/monthly of ongecatalogiseerd): hoogstens één datapunt per
+          (role_id, metric, bron, datum) — ongewijzigd. `event_id` wordt genegeerd.
+        - IRREGULIER (bv. werkoverleg — meerdere meetpunten per dag): ontdubbelt óók op `event_id`
+          (de natuurlijke identiteit van het meetpunt). Meerdere meetpunten per dag bestaan zo naast
+          elkaar, maar een herhaalde schrijf met hetzelfde event_id landt niet dubbel. FAIL-CLOSED:
+          een irregulaire metric ZONDER event_id wordt geweigerd (geen stille terugval op dag-dedup).
+
+        Geeft True als er geschreven is. `meta` legt bron-specifieke herkomst vast; voor irregulier
+        wordt `meta["event_id"]` gezet zodat de dedup-index na een herstart identiek herbouwt.
+
+        Schaal: de idempotentie-check loopt via de in-memory dedup-index (O(1))."""
         ts = ts if ts is not None else time.time()
         datum = datum or _utc_date(ts)
         self._ensure_cache()
-        if (role_id, metric, bron, datum) in self._dedup:
-            return False            # al een datapunt voor die dag+bron → idempotent, O(1) via de index
+        if cadence_of(metric, bron) == "irregular":
+            if not event_id:
+                log.warning("record_daily: irregulaire metric %r (bron=%r) zonder event_id — geweigerd "
+                            "(geen stille dag-dedup-terugval)", metric, bron)
+                return False
+            meta = dict(meta or {})
+            meta["event_id"] = str(event_id)     # zodat _index de sleutel na herstart identiek herbouwt
+        if self._dedup_key(role_id, metric, bron, datum, event_id) in self._dedup:
+            return False            # al een datapunt voor die dag(+event) → idempotent, O(1) via de index
         self.record(role_id, metric, value, ts=ts, bron=bron, datum=datum, meta=meta)
         return True
 
@@ -255,16 +284,25 @@ SHOPIFY_DAILY = {m: f"shopify_{m}_day" for m in ("pairs_sold", "orders", "revenu
 
 
 def record_werk_daily(store: "ObservationStore", circle: str, snap: dict) -> None:
-    """Dagwaarden (tevredenheid + duur) van een gesloten werkoverleg → observatie-store, idempotent
-    per dag. NAAST de bestaande all-time aggregaten in de werk-log (niet ter vervanging)."""
+    """Dagwaarden (tevredenheid + duur) van een gesloten werkoverleg → observatie-store. De metrics
+    zijn IRREGULIER (meerdere overleggen per dag mogelijk), dus we geven een `event_id` mee = de
+    natuurlijke identiteit van HET OVERLEG.
+
+    Keuze event_id: `started_at` (wanneer het overleg begon) — één overleg heeft precies één start,
+    het staat in de snapshot dus is stabiel bij een herstart, en het schuift niet mee zoals een
+    positioneel log-index dat bij toekomstig trimmen/archiveren zou doen. Fallback op `at` (ended_at)
+    voor snapshots van vóór deze wijziging (die geen started_at dragen; ook uniek per overleg)."""
     if not snap:
         return
     datum = _utc_date(snap.get("at") or time.time())
+    ev = snap.get("started_at") or snap.get("at")
+    event_id = str(int(ev)) if ev else ""
     if snap.get("tevredenheid") is not None:
         store.record_daily(circle, WERK_DAILY["tevredenheid"], snap["tevredenheid"],
-                           bron="werkoverleg", datum=datum)
+                           bron="werkoverleg", datum=datum, event_id=event_id)
     if snap.get("duur_min") is not None:
-        store.record_daily(circle, WERK_DAILY["duur"], snap["duur_min"], bron="werkoverleg", datum=datum)
+        store.record_daily(circle, WERK_DAILY["duur"], snap["duur_min"],
+                           bron="werkoverleg", datum=datum, event_id=event_id)
 
 # NB: de Shopify-dagwaarden lopen nu via de generieke collector (DataSourceSkill.daily_values →
 # record_daily onder shopify_<field>_day). SHOPIFY_DAILY blijft de sleutel-map voor de tegel-lezer.

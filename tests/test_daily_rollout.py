@@ -66,8 +66,9 @@ def test_werk_over_tijd_fallback_dan_dagreeks(tmp_path):
     r = _fetch(cockpit2._Stores(dd), f"werk:{C}", "tevredenheid", "over_tijd", None, None)
     assert r["kind"] == "series" and r.get("chart") is None and len(r["points"]) == 2   # log-aggregaat-route
     # MÉT dag-observaties → nieuwe dagreeks-route (chart:line, uit observations)
-    st.observations.record_daily(C, "werk_tevredenheid_day", 8.5, bron="werkoverleg", datum="2026-07-01", ts=now - 2 * 86400)
-    st.observations.record_daily(C, "werk_tevredenheid_day", 7.5, bron="werkoverleg", datum="2026-07-02", ts=now - 1 * 86400)
+    # werk_tevredenheid_day is irregulier → event_id verplicht (natuurlijke overleg-identiteit)
+    st.observations.record_daily(C, "werk_tevredenheid_day", 8.5, bron="werkoverleg", datum="2026-07-01", ts=now - 2 * 86400, event_id="e1")
+    st.observations.record_daily(C, "werk_tevredenheid_day", 7.5, bron="werkoverleg", datum="2026-07-02", ts=now - 1 * 86400, event_id="e2")
     r2 = _fetch(cockpit2._Stores(dd), f"werk:{C}", "tevredenheid", "over_tijd", None, None)
     assert r2["chart"] == "line" and [p[1] for p in r2["points"]] == [8.5, 7.5]           # uit de dagreeks
 

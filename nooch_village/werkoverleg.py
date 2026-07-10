@@ -90,6 +90,7 @@ class WerkoverlegStore:
         # rapporteren én het volgende overleg de vorige scores kan tonen.
         snap = self.summary(circle)
         snap["at"] = st["ended_at"]
+        snap["started_at"] = st.get("started_at")   # natuurlijke overleg-identiteit → event_id voor de dag-observatie
         snap["checkout"] = dict(st.get("checkout", {}))
         st.setdefault("log", []).append(snap)
         self._save()
