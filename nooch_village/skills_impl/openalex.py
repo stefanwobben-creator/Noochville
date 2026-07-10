@@ -20,6 +20,7 @@ from __future__ import annotations
 import datetime
 import logging
 import os
+import re
 import time
 import random
 import urllib.request
@@ -110,11 +111,75 @@ def _window(today: datetime.date):
     return start.isoformat(), end.isoformat(), end.isoformat()
 
 
+def _yr(v) -> int | None:
+    """Parse een jaar (int of str) naar een 4-cijferig jaartal; anders None (veld valt weg)."""
+    try:
+        y = int(str(v).strip())
+    except (TypeError, ValueError):
+        return None
+    return y if 1000 <= y <= 9999 else None
+
+
+def _build_filter(payload: dict) -> tuple[str, str | None]:
+    """Bouw de OpenAlex `filter=`-string uit de optionele payload-velden — DE ENIGE plek waar de mapping
+    veld→filter leeft (reference, don't copy). Een leeg/afwezig veld laat zijn filter WEG; geen enkel
+    filter-veld → lege string (= huidige zoekopdracht, alleen search=). Returnt (filter_string, error):
+    is `error` niet None, dan is de combinatie ongeldig en moet de caller WEIGEREN vóór de API-call.
+
+    Grens: OR (pipe) mag ALLEEN binnen één filter staan (bv. `abstract.search:a|b|c`). Twee verschillende
+    filters met een pipe verbinden (`type:x|is_retracted:false`) geeft een API-fout — dat weigeren we hier
+    deterministisch, vóór de call. Een komma in een waarde zou eveneens een tweede filter fabriceren."""
+    clauses: list[tuple[str, str]] = []
+    wt = str(payload.get("work_type") or "").strip()
+    if wt:
+        clauses.append(("type", wt))
+    if payload.get("journal_only"):
+        clauses.append(("primary_location.source.type", "journal"))
+    if payload.get("exclude_retracted"):
+        clauses.append(("is_retracted", "false"))
+    terms = [str(t).strip() for t in (payload.get("abstract_terms") or []) if str(t).strip()]
+    if terms:
+        clauses.append(("abstract.search", "|".join(terms)))       # OR BINNEN één filter (pipe)
+    fy = _yr(payload.get("from_year"))
+    if fy is not None:
+        clauses.append(("from_publication_date", f"{fy:04d}-01-01"))
+    ty = _yr(payload.get("to_year"))
+    if ty is not None:
+        clauses.append(("to_publication_date", f"{ty:04d}-12-31"))
+    mc = payload.get("min_citations")
+    if mc not in (None, "", 0, "0"):
+        try:
+            clauses.append(("cited_by_count", f">{int(mc)}"))
+        except (TypeError, ValueError):
+            pass
+    # Validatie vóór assemblage: een komma in een waarde zou de filter-grammatica breken (tweede filter).
+    for k, v in clauses:
+        if "," in v:
+            return "", f"filterwaarde voor '{k}' bevat een komma — zou twee filters mengen"
+    fs = ",".join(f"{k}:{v}" for k, v in clauses)
+    # Een pipe direct gevolgd door een nieuwe filter-key (bv. '|type:') = OR tussen twee filters → ongeldig.
+    if re.search(r"\|[A-Za-z_.]+:", fs):
+        return "", "OR (pipe) verbindt twee filters — pipe mag alleen binnen één filter"
+    return fs, None
+
+
 class OpenalexSkill(DataSourceSkill):
     name = "openalex_evidence"
-    input_schema = "term: str (zoekterm, wordt als exacte frase gezocht). optioneel: limit: int, locale: str"
+    input_schema = (
+        "term: str (zoekterm, wordt als exacte frase gezocht via search). "
+        "optioneel (elk leeg → filter valt weg): "
+        "work_type: str (OpenAlex type-filter, aanbevolen 'article' voor peer-reviewed; leeg = alle types) · "
+        "journal_only: bool (alleen tijdschriften: primary_location.source.type:journal) · "
+        "exclude_retracted: bool (sluit ingetrokken werken uit: is_retracted:false; aanbevolen true) · "
+        "abstract_terms: list[str] (elk woord moet in het abstract voorkomen — OR binnen één filter: "
+        "abstract.search:a|b|c) · "
+        "from_year: int / to_year: int (publicatiejaar-grenzen → from/to_publication_date) · "
+        "min_citations: int (minimaal aantal citaties: cited_by_count:>n) · "
+        "limit: int · locale: str"
+    )
     required_payload = ("term",)
-    output_schema = "lijst: total: int, hits: list[{title, authors, year, citations, topic, abstract}] | no_data | error"
+    output_schema = ("lijst: total: int, hits: list[{title, authors, year, citations, topic, abstract}], "
+                     "filter: str (de gebruikte OpenAlex-filter — leeg als filterloos) | no_data | error")
     SOURCE = "openalex"
     # Flow-bron: per puls tellen we de works die in een 90-daags publicatievenster VERSCHENEN (niet de
     # cumulatieve voorraad). De tegel toont het niveau zelf — geen eerste-verschillen nodig.
@@ -210,7 +275,7 @@ class OpenalexSkill(DataSourceSkill):
         term   = payload.get("term", "").strip()
         locale = payload.get("locale", "")
         if not term:
-            return {"error": "geen term opgegeven", "hits": [], "locale": locale}
+            return {"error": "geen term opgegeven", "hits": [], "locale": locale, "filter": ""}
 
         limit  = int(payload.get("limit", 5))
         mailto = getattr(context, "settings", {}).get("openalex_mailto", "info@nooch.earth")
@@ -221,6 +286,12 @@ class OpenalexSkill(DataSourceSkill):
         if payload.get("mode") == "yearly":
             return self._yearly(term, locale, mailto, key, ua)
 
+        # Deterministische filters uit de optionele velden (één plek: _build_filter). Ongeldige combinatie
+        # (bv. een pipe tussen twee filters) → WEIGER vóór de call i.p.v. de API te laten falen.
+        filter_str, ferr = _build_filter(payload)
+        if ferr:
+            return {"error": ferr, "term": term, "locale": locale, "hits": [], "filter": ""}
+
         # Exacte frase (aanhalingstekens om de term): het brede search= matcht anders losse woorden en
         # de citatie-sort surfacet dan hoog-geciteerde off-topic papers (diagnose 2026-07-08:
         # "barefoot shoes" gaf 14.906 hits, top-5 diabetes/vaatlijden; met frase → 204, top-5 on-topic).
@@ -229,9 +300,11 @@ class OpenalexSkill(DataSourceSkill):
         url = (f"{_BASE}?search={q}"
                f"&per_page={limit}"
                f"&sort=cited_by_count:desc"
-               f"&select={_SELECT}"
-               f"&mailto={urllib.parse.quote(mailto)}"
-               f"&api_key={urllib.parse.quote(key)}")
+               f"&select={_SELECT}")
+        if filter_str:                                            # leeg = filterloos = huidige zoekopdracht
+            url += f"&filter={urllib.parse.quote(filter_str, safe=':|,><.-')}"
+        url += (f"&mailto={urllib.parse.quote(mailto)}"
+                f"&api_key={urllib.parse.quote(key)}")
 
         req  = urllib.request.Request(url, headers={"User-Agent": ua})
         data = self._fetch_with_backoff(req)
@@ -243,7 +316,7 @@ class OpenalexSkill(DataSourceSkill):
             time.sleep(0.5)
             return {"term": term, "locale": locale, "total": 0,
                     "no_data": True, "reason": "geen werken gevonden voor deze term",
-                    "hits": []}
+                    "hits": [], "filter": filter_str}
 
         hits = []
         for work in results:
@@ -265,7 +338,7 @@ class OpenalexSkill(DataSourceSkill):
             })
 
         time.sleep(0.5)
-        return {"term": term, "locale": locale, "total": total, "hits": hits}
+        return {"term": term, "locale": locale, "total": total, "hits": hits, "filter": filter_str}
 
     def _yearly(self, term: str, locale: str, mailto: str, key: str, ua: str) -> dict:
         """Twee group_by=publication_year-calls (term + totaal) → relatief aandeel per jaar."""
