@@ -788,26 +788,12 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .wo-leave{font-size:.8rem;color:var(--gray);text-decoration:none;border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .55rem}
 .wo-leave:hover{background:var(--coral-tint,#ffeeea);border-color:var(--coral,#e2574a);color:var(--coral,#e2574a)}
 .wo-grid{display:grid;grid-template-columns:1fr;gap:1rem}
-@media(min-width:760px){.wo-grid{grid-template-columns:250px minmax(0,1fr) 230px}}
+@media(min-width:760px){.wo-grid{grid-template-columns:250px minmax(0,1fr)}}
 .wo-left{min-width:0}
 .wo-mid{min-width:0;display:flex;flex-direction:column}
-.wo-right{background:var(--cream-2);border-radius:var(--radius);padding:.7rem;min-width:0}
-.wo-right-h{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:var(--gray);margin:.1rem .1rem .6rem}
-.wo-video-empty{border:1px dashed var(--border);border-radius:var(--radius);padding:.9rem;text-align:center;color:var(--gray);font-size:.78rem}
 .wo-next{display:flex;justify-content:flex-end;padding-top:1rem;margin-top:auto}
 .wo-close-wrap{display:flex;flex-direction:column;align-items:center;gap:.4rem;padding-top:1.4rem}
 .wo-close-btn{padding:.7rem 2rem;font-size:1rem}
-/* LiveKit-tiles (Brok 3): mens = camera + naam in #wo-video; AI = presence-tile eronder. */
-.wo-video{display:flex;flex-direction:column;gap:.5rem}
-.wo-ai-list{display:flex;flex-direction:column;gap:.5rem;margin-top:.5rem}
-.wo-tile{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:#fff}
-.wo-cam{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;background:#2c2a25}
-.wo-cam-off{display:grid;place-items:center;color:#9a9382;font-size:1.4rem}
-.wo-tile-lbl{display:flex;align-items:center;gap:.35rem;padding:.3rem .5rem;font-size:.78rem}
-.wo-tile.ai{border-color:var(--purple,#7a5bd1);background:var(--purple-tint,#eee9fa)}
-.wo-tile.ai .wo-tile-lbl{color:var(--purple,#7a5bd1);font-weight:700}
-.wo-ai-face{background:var(--purple-tint,#eee9fa);color:var(--purple,#7a5bd1);font-size:1.6rem}
-.wo-ai-badge{margin-left:auto;font-size:.62rem;background:var(--purple,#7a5bd1);color:#fff;border-radius:1rem;padding:.05rem .4rem}
 .wo-back-bar.wo-back-foot{margin:1rem 0 0;padding-top:.8rem;border-top:1px solid var(--border)}
 .wo-mems:focus{outline:none}
 .wo-mem{display:flex;align-items:center;gap:.6rem;padding:.4rem .5rem;border-radius:var(--radius);border:1px solid transparent;border-bottom:1px solid var(--border)}

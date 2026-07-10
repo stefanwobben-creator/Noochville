@@ -1534,18 +1534,12 @@ def _act_wo_close(c):
         _deny = _lead_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
-        # Room-naam vóór het sluiten bepalen (started_at is dan nog beschikbaar), dan sluiten,
-        # dan de LiveKit-room opheffen — fail-soft: het afronden mag hier niet op stuklopen.
-        _m = st.werk.get(g("circle"))
-        _room = f"wo-{g('circle')}-{int(_m['started_at'])}" if _m and _m.get("started_at") else None
         st.werk.close(g("circle"))
         # dag-observatie (tevredenheid + duur) van dit overleg wegschrijven — idempotent per dag,
         # naast de bestaande all-time aggregaten in de log.
         _lg = st.werk.log(g("circle"))
         if _lg:
             observations.record_werk_daily(st.observations, g("circle"), _lg[-1])
-        if _room:
-            verwijder_livekit_room(_room)
         msg = "✓ werkoverleg gesloten"
         return nxt, msg
 
