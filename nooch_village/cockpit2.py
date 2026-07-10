@@ -219,6 +219,7 @@ from nooch_village.views.noochie import (
     _noochie_suggest, _noochie_reply,
     render_noochie, _noochie_chrome,
 )
+from nooch_village.views.callbar import _callbar_chrome
 
 from nooch_village.views.werkoverleg import (
     _wo_hid, _wo_checkin, _wo_checklist, _wo_metrics,
@@ -617,37 +618,36 @@ def maak_livekit_token(room: str, identity: str, naam: str) -> str:
             .to_jwt())
 
 
-def issue_livekit_token(st, circle: str, username: str | None):
-    """Geef een LiveKit-token uit voor het lopende werkoverleg van `circle`. Geeft
-    (status_code, payload) terug.
+VILLAGE_ROOM = "village"
 
-    HARDE REGEL: `room` en `identity` worden UITSLUITEND server-side bepaald — nooit uit de
-    request-body. `circle` is de enige request-input en is (a) membership-gated via _member_gate
-    en (b) enkel een lookup-sleutel naar de server-state. Deze functie accepteert dan ook geen
-    room/identity-parameter, zodat een gemanipuleerde body ze onmogelijk kan zetten."""
-    # AUTHZ: circle-member/rol-vervuller — hergebruikt _member_gate (dezelfde poort als
-    # wo_presence/wo_ag_add). Rol-check vóór alles: geen rol in deze cirkel → geen token.
-    deny = _member_gate(circle, username, st)
-    if deny:
-        return 403, {"error": deny}
-    # ROOM: server bepaalt de room-naam uit de meeting-state, niet uit de request.
-    m = st.werk.get(circle)
-    if not m or m.get("status") != "open":
-        return 409, {"error": "Geen lopend werkoverleg voor deze cirkel"}
-    room = f"wo-{circle}-{int(m['started_at'])}"
-    # IDENTITY: server bepaalt de rol-vervuller uit de authz-laag (de ingelogde sessie).
-    actor = st.people.by_email(username) if username and username != "guest" else None
-    if actor is None:
-        return 403, {"error": "Geen herkende rol-vervuller"}
+
+def issue_livekit_token(st, username: str | None):
+    """Geef een LiveKit-token uit voor de DORP-BREDE call bar. Geeft (status_code, payload) terug.
+
+    HARDE REGEL: `room` en `identity` worden UITSLUITEND server-side bepaald — nooit uit de request.
+    Er is één dorp-brede room (`VILLAGE_ROOM`); de request draagt geen enkele parameter, zodat een
+    gemanipuleerde body room noch identity kan zetten. De vroegere wo-<circle>-<started_at>-afleiding
+    en de meeting-open-check zijn vervallen (video hoort niet meer bij één overleg)."""
+    # AUTHZ: iedereen-ingelogd — de call bar is dorp-breed; er is geen cirkel-structuur om aan te
+    # toetsen. Elke herkende ingelogde actor krijgt een (toeschouwer-)token; deelnemen/muten is een
+    # gespreksdaad, geen structuurdaad. Een niet-herkende sessie krijgt geen token (fail-closed).
     server_url = os.getenv("LIVEKIT_URL", "").strip()
     if not server_url:
         return 503, {"error": "LiveKit niet geconfigureerd"}
+    # IDENTITY: de ingelogde actor. Guest = de lokale sessie bij auth-uit → één vaste identity.
+    if username and username != "guest":
+        actor = st.people.by_email(username)
+        if actor is None:
+            return 403, {"error": "Geen herkende gebruiker"}
+        identity, name = actor.id, actor.name
+    else:
+        identity, name = "guest", "Gast"
     try:
-        token = maak_livekit_token(room, actor.id, actor.name)
+        token = maak_livekit_token(VILLAGE_ROOM, identity, name)
     except Exception as e:
         # De API-secret mag NOOIT lekken: alleen het exceptietype terug, geen details.
         return 500, {"error": f"token-generatie faalde ({type(e).__name__})"}
-    return 200, {"token": token, "server_url": server_url}
+    return 200, {"token": token, "server_url": server_url, "identity": identity}
 
 
 def verwijder_livekit_room(room: str) -> bool:
@@ -671,6 +671,37 @@ def verwijder_livekit_room(room: str) -> bool:
 
         asyncio.run(_run())
         return True
+    except Exception:
+        return False
+
+
+def livekit_mute_participant(identity: str, muted: bool = True) -> bool:
+    """Mute/unmute de audio-track(s) van een deelnemer server-side (voor iedereen), fail-soft. True als
+    er minstens één audio-track is (un)gemute, False bij geen creds / deelnemer of track weg / netwerk —
+    NOOIT een exception naar de caller. De API-secret lekt niet. Zelfde patroon als
+    verwijder_livekit_room (api.LiveKitAPI, wss->https-conversie, async in één asyncio.run)."""
+    url = os.getenv("LIVEKIT_URL", "").strip()
+    if not url or not (identity or "").strip():
+        return False
+    api_url = url.replace("wss://", "https://").replace("ws://", "http://")
+    try:
+        import asyncio
+        from livekit import api
+
+        async def _run():
+            lk = api.LiveKitAPI(api_url)          # api_key/secret uit de env
+            try:
+                p = await lk.room.get_participant(
+                    api.RoomParticipantIdentity(room=VILLAGE_ROOM, identity=identity))
+                sids = [t.sid for t in p.tracks if t.type == api.TrackType.AUDIO]
+                for sid in sids:
+                    await lk.room.mute_published_track(api.MuteRoomTrackRequest(
+                        room=VILLAGE_ROOM, identity=identity, track_sid=sid, muted=muted))
+                return bool(sids)
+            finally:
+                await lk.aclose()
+
+        return asyncio.run(_run())
     except Exception:
         return False
 
@@ -2261,6 +2292,20 @@ def _act_person_remove(c):
         return nxt, msg
 
 
+def _act_lk_mute(c):
+        # AUTHZ: circle-member of iedereen-ingelogd — muten is een gespreksdaad, geen structuurdaad;
+        # toeschouwers zijn uitgesloten via de client-state (observer-tiles zijn niet klikbaar), niet
+        # via authz. De sessie-check in do_POST dekt "ingelogd = mag" (guest = auth uit = mag ook).
+        nxt, g = c.nxt, c.g
+        target = g("identity").strip()
+        if not target:
+            return nxt, ""
+        muted = g("muted") != "0"                 # muted=0 → unmute; anders mute
+        ok = livekit_mute_participant(target, muted)
+        verb = "gemute" if muted else "ge-unmute"
+        return nxt, (f"✓ {verb}" if ok else "muten niet gelukt")
+
+
 ACTIONS = {
     "proj_add": _act_proj_add,
     "artefact_add": _act_artefact_add,
@@ -2352,6 +2397,7 @@ ACTIONS = {
     "backlog_update_prioriteit": _act_backlog_update_prioriteit,
     "person_edit": _act_person_edit,
     "person_remove": _act_person_remove,
+    "lk_mute": _act_lk_mute,
 }
 
 
@@ -2409,10 +2455,11 @@ def make_handler(data_dir: str, csrf_token: str,
             self.end_headers()
 
         def _send(self, body: str, code: int = 200):
-            # Globale Noochie-chrome alleen voor een sessie (ingelogd, of "guest" bij auth-uit) —
-            # niet op de login-pagina of bij een uitgelogde bezoeker.
+            # Globale chrome (Noochie-rail + dorp-brede call bar) alleen voor een sessie (ingelogd, of
+            # "guest" bij auth-uit) — niet op de login-pagina of bij een uitgelogde bezoeker. De call bar
+            # onthult zichzelf alleen als LiveKit geconfigureerd is (token ok); anders blijft hij verborgen.
             if self._session_username() is not None and "</body>" in body:
-                body = body.replace("</body>", _noochie_chrome() + "</body>", 1)
+                body = body.replace("</body>", _noochie_chrome() + _callbar_chrome(csrf_token) + "</body>", 1)
             b = body.encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -2590,9 +2637,9 @@ def make_handler(data_dir: str, csrf_token: str,
                                                     mw=(qs.get("mw") or ["maand"])[0]), fr))
                 return
             if path == "/livekit-token":
-                # Alleen `circle` uit de request; room + identity bepaalt de server zelf
-                # (zie issue_livekit_token). AUTHZ zit in die functie via _member_gate.
-                status, payload = issue_livekit_token(st, (qs.get("circle") or [""])[0], username)
+                # Geen request-parameters: room (VILLAGE_ROOM) + identity bepaalt de server zelf
+                # (zie issue_livekit_token). AUTHZ: iedereen-ingelogd, in die functie.
+                status, payload = issue_livekit_token(st, username)
                 self._send_json(payload, status)
                 return
             if path.startswith("/static/"):
@@ -2733,6 +2780,12 @@ def make_handler(data_dir: str, csrf_token: str,
                 return
             if action == "person_reset_password":
                 self._send(*_handle_person_reset(data_dir, form, username=username))
+                return
+            if action == "lk_mute":
+                # AJAX-actie vanuit de call bar: geen full-page redirect (de bar blijft staan),
+                # alleen een korte 200 met de bevestiging. Business-logica leeft in de dispatch-tak.
+                _, msg = dispatch(data_dir, action, form, username=username)
+                self._send(msg or "ok", 200)
                 return
             try:
                 nxt, msg = dispatch(data_dir, action, form, username=username)
