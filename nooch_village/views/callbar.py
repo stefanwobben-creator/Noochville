@@ -26,7 +26,9 @@ Multi-tab (elke tab = eigen iframe = eigen participant):
   andere tabs van dezelfde base tonen dan een subtiele status-hint ("je neemt deel in een ander tabblad")
   i.p.v. de Join-knop — geen uitgegrijsde knop die als permanente blokkade oogt. Sluit die tab
   (pagehide → leave) dan komt Join direct terug; crasht die tab (geen unload) dan vervalt de claim na
-  15s zonder heartbeat en keert Join VANZELF terug, zonder reload. GEEN leader-election, GEEN gedeelde
+  15s zonder heartbeat en keert Join VANZELF terug, zonder reload — binnen ~15s bij een zichtbaar
+  tabblad, en DIRECT bij focus/tabwissel (een visibilitychange/focus-listener draait dezelfde
+  verval-check, want een achtergrondtab throttlet de interval). GEEN leader-election, GEEN gedeelde
   verbinding: observer-tabs blijven elk verbonden (kost N observer-subscriptions per gebruiker; geen
   echo want observers renderen geen audio).
 
@@ -128,11 +130,17 @@ _CALLBAR_JS = r"""
     };
     setInterval(function(){
       if(joined)bcSend('alive');                           // heartbeat zolang wij deelnemen
-      if(otherTab&&Date.now()-otherTab.ts>EXPIRE){otherTab=null;updateControls();}  // claim vervallen (crash/geen unload)
+      checkClaim();                                        // periodieke verval-check (in de achtergrond gethrottled)
     },HB);
+    // Een achtergrondtab throttlet de interval → "binnen ~15s" geldt alleen zichtbaar. Bij tabwissel/focus
+    // direct opnieuw checken (en, als wij deelnemen, meteen een 'alive' sturen zodat observers verversen).
+    document.addEventListener('visibilitychange',function(){if(!document.hidden)onVisible();});
+    window.addEventListener('focus',onVisible);
     // vertelt andere tabs dat onze claim vervalt als deze tab sluit/navigeert
     window.addEventListener('pagehide',function(){if(joined)bcSend('leave');});
   }
+  function checkClaim(){if(otherTab&&Date.now()-otherTab.ts>EXPIRE){otherTab=null;updateControls();}}
+  function onVisible(){if(joined)bcSend('alive');checkClaim();}   // tabwissel: her-announce + verval-check direct
   function bcSend(type){if(bc){try{bc.postMessage({type:type,base:MYBASE,tab:TAB});}catch(e){}}}
 
   function loadSdk(cb){

@@ -41,6 +41,7 @@ def test_render_callbar_standalone_wellformed():
     assert "/livekit-token?tab=" in html and "csrf123" in html         # token-fetch mét tab + csrf ingebed
     assert "BroadcastChannel" in html and "sessionStorage" in html     # multi-tab-coördinatie + tab-suffix
     assert "15000" in html                                             # claim-verval 15s bij crash
+    assert "visibilitychange" in html                                  # throttle-proof: verval-check bij tabwissel/focus
     assert "ander tabblad" in html and "disabled" not in html          # subtiele hint, GEEN uitgegrijsde knop
     assert "cb-audio" in html                                          # audio-render-container
     assert "style=" not in html                                        # geen inline styles (ratchet)
