@@ -1,6 +1,12 @@
 # Ontwerp — App-shell zodat de call-bar navigatie overleeft
 
-Status: **voorstel** (nog niet gebouwd). Beoordeel dit doc eerst.
+Status: **Route A besloten** (dd 2026-07-10). Deze scope bouwt het **fundament**: de swap-primitive +
+cleanup-contract + delegatie, met `wo_close` als eerste call-site. De globale **link-interceptor (1a)**
+is een **aparte vervolgscope** zodra dit fundament gemerged is (zie "Buiten scope"). De inventaris-tabel
+hieronder is de actuele waarheid.
+
+**Buiten scope (komt later, 1a):** de globale `<a href>`-interceptor die álle navigatie door `shellSwap`
+leidt. Dit fundament levert `shellSwap` + het contract; 1a hangt er alleen de interceptor voor.
 
 ## Waarom
 
