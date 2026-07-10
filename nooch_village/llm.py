@@ -16,6 +16,11 @@ Sonnet zit bewust NIET in de auto-ladder (te duur; het oude kostenlek). Wil je v
 specifieke skill toch premium-kwaliteit, geef dan een eigen ladder mee via
 `reason(prompt, ladder="anthropic:claude-sonnet-4-6")`.
 
+Vendors met een OpenAI-compatibele /chat/completions-API (mistral, openai, openrouter) lopen
+allemaal door één generieke trede (`_try_openai_compatible`, registry `_OPENAI_COMPAT`). openai en
+openrouter zijn pure config: activeer ze door een key te zetten en ze in `LLM_LADDER` op te nemen met
+een expliciet model, bv. `LLM_LADDER=...,openrouter:meta-llama/llama-3.1-70b-instruct,...`.
+
 Ontwerpregels:
 - **Fail-closed.** Geen werkende trede → None; de caller valt terug op zijn heuristiek.
 - **Geen sleutel = trede overslaan.** Zo kun je met alleen Gemini + Anthropic starten en
@@ -39,6 +44,18 @@ log = logging.getLogger("village.llm")
 _DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite"
 _DEFAULT_MISTRAL_MODEL = "mistral-small-latest"
 _DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
+
+# Vendors met een OpenAI-compatibele /chat/completions-API worden allemaal door één generieke trede
+# (`_try_openai_compatible`) bediend: (base_url, env-var voor de key). De model-env-var wordt afgeleid
+# als <env_key zonder _API_KEY>_MODEL (bv. MISTRAL_MODEL). Nieuwe zo'n vendor toevoegen = één regel hier.
+_OPENAI_COMPAT = {
+    "mistral":    ("https://api.mistral.ai/v1",    "MISTRAL_API_KEY"),
+    "openai":     ("https://api.openai.com/v1",    "OPENAI_API_KEY"),
+    "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
+}
+# Default-model per OpenAI-compatibele vendor, alleen waar een zinnige default bestaat. openai/openrouter
+# zijn "pure config": zonder expliciet model (in de ladder of via <VENDOR>_MODEL) wordt de trede overgeslagen.
+_DEFAULT_MODELS = {"mistral": _DEFAULT_MISTRAL_MODEL}
 
 # De getrapte ladder: goedkoop → duur. Instelbaar via env LLM_LADDER.
 _DEFAULT_LADDER = (
@@ -194,15 +211,24 @@ def _try_gemini(prompt: str, *, model: str | None = None, sleep=time.sleep, max_
     return None
 
 
-def _try_mistral(prompt: str, *, model: str | None = None, max_tokens: int = 700,
-                 json_mode: bool = False) -> str | None:
-    """Probeer Mistral via de OpenAI-compatibele chat-completions-API (dependency-vrij,
-    enkel urllib). Geen key → trede overslaan. Rate-limit/quota → `_RateLimit`.
-    json_mode=True forceert JSON-output (response_format; vereist 'json' in de prompt — die staat er)."""
-    key = os.getenv("MISTRAL_API_KEY")
+def _try_openai_compatible(vendor: str, prompt: str, *, model: str | None = None,
+                           max_tokens: int = 700, json_mode: bool = False) -> str | None:
+    """Generieke trede voor elke vendor met een OpenAI-compatibele /chat/completions-API (dependency-vrij,
+    enkel urllib). De vendor komt uit de registry `_OPENAI_COMPAT` (base_url + env-key).
+
+    - Geen key → trede overslaan (`None`); de ladder gaat door naar de volgende trede.
+    - Model-resolutie: expliciet `model` → env `<VENDOR>_MODEL` → `_DEFAULT_MODELS[vendor]`. Geen model
+      (pure-config vendor zonder opgave) → trede overslaan.
+    - Rate-limit/quota (HTTP 429 of bekende markers) → `_RateLimit` (cooldown + door, beheerd in `reason`).
+    - `json_mode=True` forceert JSON-output (`response_format`; OpenAI-compatibel)."""
+    base_url, env_key = _OPENAI_COMPAT[vendor]
+    key = os.getenv(env_key)
     if not key:
         return None
-    model = model or os.getenv("MISTRAL_MODEL", _DEFAULT_MISTRAL_MODEL)
+    model = model or os.getenv(env_key.replace("_API_KEY", "_MODEL")) or _DEFAULT_MODELS.get(vendor)
+    if not model:
+        log.warning("LLM %s: geen model opgegeven (pure config) — trede overgeslagen", vendor)
+        return None
     import json
     import urllib.error
     import urllib.request
@@ -215,7 +241,7 @@ def _try_mistral(prompt: str, *, model: str | None = None, max_tokens: int = 700
         _payload["response_format"] = {"type": "json_object"}
     body = json.dumps(_payload).encode("utf-8")
     req = urllib.request.Request(
-        "https://api.mistral.ai/v1/chat/completions",
+        f"{base_url}/chat/completions",
         data=body,
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         method="POST",
@@ -225,19 +251,26 @@ def _try_mistral(prompt: str, *, model: str | None = None, max_tokens: int = 700
             data = json.loads(resp.read().decode("utf-8"))
         text = (data["choices"][0]["message"]["content"] or "").strip()
         if text:
-            log.debug("LLM via Mistral (%s)", model)
+            log.debug("LLM via %s (%s)", vendor, model)
             return text
         return None
     except urllib.error.HTTPError as exc:
-        log.warning("LLM Mistral (%s) faalde: HTTP %s", model, exc.code)
+        log.warning("LLM %s (%s) faalde: HTTP %s", vendor, model, exc.code)
         if exc.code == 429:
             raise _RateLimit(f"HTTP 429 {exc}") from exc
         return None
     except Exception as exc:
-        log.warning("LLM Mistral (%s) faalde: %s", model, exc)
+        log.warning("LLM %s (%s) faalde: %s", vendor, model, exc)
         if _is_rate_limit(exc):
             raise _RateLimit(str(exc)) from exc
         return None
+
+
+def _try_mistral(prompt: str, *, model: str | None = None, max_tokens: int = 700,
+                 json_mode: bool = False) -> str | None:
+    """Mistral-trede — dunne delegator naar de generieke OpenAI-compatibele adapter. Behoudt de
+    named seam (monkeypatch-punt voor de tests); het HTTP-pad is identiek aan de andere compat-vendors."""
+    return _try_openai_compatible("mistral", prompt, model=model, max_tokens=max_tokens, json_mode=json_mode)
 
 
 def _try_anthropic(prompt: str, *, model: str | None = None, max_tokens: int = 700,
@@ -279,14 +312,31 @@ _VENDOR_FNS = {
 
 def _call_tier(vendor: str, model: str | None, prompt: str, max_tokens: int = 700,
                json_mode: bool = False) -> str | None:
+    module = sys.modules[__name__]
+    # Native adapters (gemini/anthropic) + de mistral-delegator: via getattr op naam, zodat een test die
+    # de trede-functie monkeypatcht ook echt door de ladder wordt opgepikt.
     name = _VENDOR_FNS.get(vendor)
-    if name is None:
-        log.warning("onbekende LLM-vendor in ladder: %r (trede overgeslagen)", vendor)
-        return None
-    fn = getattr(sys.modules[__name__], name, None)
-    if fn is None:
-        return None
-    return fn(prompt, model=model, max_tokens=max_tokens, json_mode=json_mode)
+    if name is not None:
+        fn = getattr(module, name, None)
+        return fn(prompt, model=model, max_tokens=max_tokens, json_mode=json_mode) if fn else None
+    # Overige OpenAI-compatibele vendors (openai/openrouter): pure config → de generieke trede.
+    if vendor in _OPENAI_COMPAT:
+        fn = getattr(module, "_try_openai_compatible", None)
+        return fn(vendor, prompt, model=model, max_tokens=max_tokens, json_mode=json_mode) if fn else None
+    log.warning("onbekende LLM-vendor in ladder: %r (trede overgeslagen)", vendor)
+    return None
+
+
+def _vendor_has_key(vendor: str) -> bool:
+    """Heeft deze vendor een API-sleutel geconfigureerd? Pure env-check (geen call), zodat `reason()`
+    een None-uitkomst kan splitsen in 'geen sleutel' (trede overgeslagen) vs 'lege respons' (wél
+    aangeroepen, maar leeg). Geen adapter-wijziging: de treden blijven ongewijzigd None teruggeven."""
+    if vendor == "gemini":
+        return bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
+    if vendor == "anthropic":
+        return bool(os.getenv("ANTHROPIC_API_KEY"))
+    reg = _OPENAI_COMPAT.get(vendor)
+    return bool(os.getenv(reg[1])) if reg else False
 
 
 def _parse_ladder(raw: str) -> list[tuple[str, str | None]]:
@@ -342,13 +392,18 @@ def reason(prompt: str, *, ladder: str | None = None, max_tokens: int = 700,
             continue
         except Exception as exc:   # defensief: een trede mag de ladder nooit laten crashen
             log.warning("LLM-trede %s: onverwacht gefaald (%s) — door naar volgende", tier, exc)
-            outcomes.append(f"{tier}=fout:{type(exc).__name__}")
+            outcomes.append(f"{tier}=fout (zie warning)")
             continue
         if out:
             log.info("LLM-trede %s: geslaagd", tier)
             return (out, tier) if return_tier else out
-        log.info("LLM-trede %s: geen antwoord (geen sleutel of leeg) — door naar volgende", tier)
-        outcomes.append(f"{tier}=leeg")
+        # None-uitkomst gesplitst: geen sleutel (trede overgeslagen) vs lege respons (wél aangeroepen).
+        if not _vendor_has_key(vendor):
+            log.info("LLM-trede %s: geen sleutel — overgeslagen", tier)
+            outcomes.append(f"{tier}=geen sleutel")
+        else:
+            log.info("LLM-trede %s: lege respons — door naar volgende", tier)
+            outcomes.append(f"{tier}=lege respons")
     # Alle tredes op: log expliciet waaróm (voorheen zag de caller alleen "LLM-plan mislukt").
     log.warning("LLM: alle %d trede(s) uitgeput — geen antwoord. Per trede: %s",
                 len(outcomes), "; ".join(outcomes) or "(geen tredes geconfigureerd)")
