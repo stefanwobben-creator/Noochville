@@ -28,9 +28,8 @@ def test_window_range():
 def test_periode_picker_en_actueel_liveness(tmp_path):
     dd = _dd(tmp_path); st = cockpit2._Stores(dd); rec = st.records.get(C)
     h = _metrics_tab_html(st, rec, csrf="t", win="7d")
-    assert all(p in h for p in ("Gisteren", "Actueel", "7 dagen", "28 dagen",
-                                "Kwartaal", "Jaar", "Aangepast"))
-    assert "Vandaag" not in h                      # 'Vandaag' verwijderd — 'Actueel' vervult die rol
+    assert all(p in h for p in ("Vandaag", "Gisteren", "Actueel", "7 dagen", "28 dagen",
+                                "Kwartaal", "Jaar", "Aangepast"))   # alle 8 opties in de dropdown
     assert "muted' title='alleen beschikbaar bij een live-capabele bron'>Actueel" in h  # grijs zonder live-bron
     st.metrics.add_tile(C, "pulse_visitors", "visitors", "time", "verdeling")
     h2 = _metrics_tab_html(cockpit2._Stores(dd), rec, csrf="t", win="7d")
@@ -78,8 +77,9 @@ def test_flip_voor_en_achterkant(tmp_path):
 
 
 def test_periode_picker_gebruikt_design_componenten(tmp_path):
-    """Scope 3: periode-opties = .chip-opt in .chip-wrap; 'vergelijk' = .switch in .switch-field.
-    Server-side gedrag ongewijzigd: pills zijn reload-links (mw=), compare via de query-parameter."""
+    """PR2: periode-opties = een dropdown (bestaand cardmenu-patroon: details/summary + .menuitem);
+    'vergelijk' = .switch in .switch-field. Server-side gedrag ongewijzigd: opties zijn reload-links
+    (mw=), compare via de query-parameter. Elke optie draagt een single-key sneltoets (<kbd>)."""
     from nooch_village.views import metrics
     dd = _dd(tmp_path); st = cockpit2._Stores(dd); C = "mother_earth__nooch"
     cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": ["pulse_visitors|visitors|time"],
@@ -87,7 +87,8 @@ def test_periode_picker_gebruikt_design_componenten(tmp_path):
                       "next": ["/"]}, "guest")
     st = cockpit2._Stores(dd)
     h = metrics._metrics_tab_html(st, st.records.get(C), csrf="t")
-    assert "<span class='chip-wrap'>" in h and "class='chip-opt" in h    # pill-cards in een wrap-rij
+    assert "class='cardmenu'" in h and "class='menuitem" in h            # dropdown-menu (design-systeem)
+    assert "<kbd>W</kbd>" in h                                           # sneltoets-hint per optie (7d → W)
     assert "class='switch-field'" in h and "class='switch" in h          # compare = schuif-toggle
-    assert "cl-filter" not in h                                          # oude platte tekstlinks weg
+    assert "chip-opt" not in h                                           # oude pill-rij weg
     assert "mw=7d" in h and "compare=1" in h                             # server-side reload + parameter behouden

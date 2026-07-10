@@ -26,7 +26,7 @@ _STYLE_WHITELIST = {
     "views/projects.py": 19,
     "views/strategy.py": 14,
     "views/werkoverleg.py": 13,
-    "views/metrics.py": 10,
+    "views/metrics.py": 8,
     "views/roloverleg.py": 7,
     "views/checklists.py": 5,
     "views/backlog.py": 7,
