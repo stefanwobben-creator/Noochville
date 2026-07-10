@@ -116,3 +116,13 @@ sessie opent hiermee.
   fix later: bij overschrijding WEIGEREN of WAARSCHUWEN i.p.v. stil trunceren;
   overweeg de cap te verhogen. Tot dan: lange policies splitsen (zoals ToV →
   Tone of Voice + Position Statements) en na opslaan de body-lengte checken.
+- Note-artefacten hebben een JSON-body (max 4000 tekens in `attachments.json`),
+  géén `.md`-bestand. De wall-outcome-`note` weigert nu bewust bij >4000 i.p.v.
+  te trunceren. Wens: een echt `.md`-artefact bij de rol voor afgeronde kennis
+  (bestand op schijf i.p.v. JSON-body). Eigen scope.
+- DONE→ACTIEF wist `outcome` (in `reopen()`) en de dagpuls voltooit een compleet
+  ge-vinkte checklist meteen opnieuw met een vals `project_completed`-event. De
+  wall-outcome-`action` beschermt hiertegen door de VOLGORDE (eerst het open
+  checklist-item toevoegen, dán `reopen()`, zodat de checklist incompleet is).
+  Een structurele guard in `reopen()` of de puls (geen re-complete zonder nieuw
+  werk) is een eigen scope.

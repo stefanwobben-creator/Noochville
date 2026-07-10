@@ -1620,9 +1620,71 @@ def _act_wo_ag_reopen(c):
         return nxt, msg
 
 
+# ── Gedeelde uitkomst-routes (reference, don't copy) ───────────────────────────────
+# Eén plek waar een uitkomst naar de BESTAANDE stores schrijft. Gebruikt door zowel het
+# werkoverleg (_act_wo_ag_resolve) als de wall-outcome-flow (_act_wall_outcome). `provenance`
+# (herkomst) reist mee waar de bron een wall-comment is; het werkoverleg heeft zijn eigen audit
+# (de agenda) en laat 'm leeg. Zo dupliceren we de routing-logica niet.
+
+def _prov_feed(st, pid: str, provenance: str, actor_id: str = "") -> None:
+    """Leg herkomst/rationale vast als neutrale systeem-entry op een project. No-op zonder herkomst
+    of pid (dan draagt de agenda de audit — werkoverleg)."""
+    if pid and provenance:
+        st.projects.add_feed_entry(pid, provenance, kind="system", author_type="human", author_id=actor_id)
+
+
+def _outcome_info(st, detail: str, by: str = "", *, src_pid: str = "", src_eid: str = ""):
+    """Info → notificatie(s), @-gericht (rol/persoon), anders niemand. Herkomst reist mee in de
+    notif-payload (project_id/entry_id). Retourneert (doel-omschrijving, mentions)."""
+    _, by_name = _mentionables(st)
+    ment = _mentions_in(detail, by_name)
+    for ty, tid, _nm in ment:
+        st.notif.add(ty, tid, src_pid, src_eid, by=by or "werkoverleg", snippet=detail)
+    tgt = ", ".join(nm for _, _, nm in ment) if ment else "iedereen"
+    return tgt, ment
+
+
+def _outcome_project(st, owner: str, title: str, *, provenance: str = "", actor_id: str = "") -> str:
+    """Project → nieuw project op `owner` (trigger 'human'). Herkomst als eerste systeem-entry."""
+    pid = st.projects.create(owner, (title or "").strip()[:200], "human")
+    _prov_feed(st, pid, provenance, actor_id)
+    return pid
+
+
+def _outcome_action(st, pid_link: str, title: str):
+    """Action → checklist-item 'Acties uit overleg' op een bestaand project. Retourneert de checklist of None.
+    LET OP: doet zelf GEEN reopen — de wall-flow reopent ná dit item (harde rand: item eerst, dán reopen)."""
+    p = st.projects.get(pid_link)
+    if p is None:
+        return None
+    cl = next((cc for cc in (p.get("checklists") or []) if cc.get("title") == "Acties uit overleg"), None)
+    if cl is None:
+        cl = st.projects.checklist_add(pid_link, "Acties uit overleg")
+    if cl:
+        st.projects.check_add(pid_link, cl["id"], (title or "").strip())
+    return cl
+
+
+def _outcome_note(st, note_role: str, body: str, *, actor_id: str = "", change_note: str = ""):
+    """Note → artefact kind='note' op een rol. De caller checkt len(body) <= 4000 VOORAF (geen truncatie)."""
+    return st.att.add(note_role, "note", body=body, actor_id=actor_id,
+                      actor_type="person", change_note=change_note or "aangemaakt")
+
+
+def _outcome_roloverleg(st, circle: str, name: str, title: str, detail: str,
+                        by: str = "", *, provenance: str = "") -> str:
+    """Roloverleg → add_role-voorstel op de roloverleg-agenda (mens-route via Secretary, NIET de
+    autonome Facilitator/G0-G4). Herkomst in het `example`-veld van het voorstel."""
+    slug = re.sub(r"[^a-z0-9]+", "_", (detail or "").lower()).strip("_")[:40] or "punt"
+    return st.agenda.add(f"{circle}__{slug}", "add_role",
+                         {"name": name or "Nieuwe rol", "new_role_parent": circle,
+                          "purpose": "", "add_accountabilities": []},
+                         detail, by=by or "werkoverleg", title=title or (detail or "")[:60],
+                         example=provenance)
+
+
 def _act_wo_ag_resolve(c):
         nxt, st, g, username, action = c.nxt, c.st, c.g, c.username, c.action
-        msg = ""
         _deny = _lead_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
@@ -1631,35 +1693,116 @@ def _act_wo_ag_resolve(c):
         if otype == "info":
             # richting (delen/nodig) + @-targeting: gericht aan rol/persoon, anders iedereen
             dr = g("dir") or "delen"
-            _, by_name = _mentionables(st)
-            ment = _mentions_in(detail, by_name)
-            for ty, tid, nm in ment:
-                st.notif.add(ty, tid, "", "", by="werkoverleg", snippet=detail)
-            tgt = ", ".join(nm for _, _, nm in ment) if ment else "iedereen"
+            tgt, _ment = _outcome_info(st, detail, by="werkoverleg")
             detail = f"{dr} ({tgt}): {detail.strip()}"
         elif otype == "project" and g("owner") and detail.strip():
-            st.projects.create(g("owner"), detail.strip(), "human")
+            _outcome_project(st, g("owner"), detail.strip())
             detail = f"{detail.strip()} → {_name(st.records.get(g('owner')))}"
         elif otype == "action" and g("pid_link") and detail.strip():
-            # actie gekoppeld aan een project = checklist-item op dat project
-            pid = g("pid_link"); p = st.projects.get(pid)
-            if p is not None:
-                cl = next((c for c in (p.get("checklists") or []) if c.get("title") == "Acties uit overleg"), None)
-                if cl is None:
-                    cl = st.projects.checklist_add(pid, "Acties uit overleg")
-                if cl:
-                    st.projects.check_add(pid, cl["id"], detail.strip())
+            if _outcome_action(st, g("pid_link"), detail.strip()) is not None:
                 detail = f"{detail.strip()} → project"
         elif otype == "roloverleg" and detail.strip():
-            slug = re.sub(r"[^a-z0-9]+", "_", detail.lower()).strip("_")[:40] or "punt"
             by = (it or {}).get("by") or "werkoverleg"   # ingebracht door de indiener van de spanning
-            st.agenda.add(f"{g('circle')}__{slug}", "add_role",
-                          {"name": (it or {}).get("title", "Nieuwe rol"), "new_role_parent": g("circle"),
-                           "purpose": "", "add_accountabilities": []},
-                          detail.strip(), by=by, title=(it or {}).get("title", detail[:60]))
+            _outcome_roloverleg(st, g("circle"), (it or {}).get("title", "Nieuwe rol"),
+                                (it or {}).get("title", detail[:60]), detail.strip(), by=by)
         st.werk.agenda_resolve(g("circle"), g("iid"), otype, detail)
-        msg = f"✓ verwerkt als {otype}"
-        return nxt, msg
+        return nxt, f"✓ verwerkt als {otype}"
+
+
+def _act_wall_outcome(c):
+        # Mens routeert een wall-comment naar één van de vijf bestaande uitkomsten (dezelfde routes als
+        # het werkoverleg, via de gedeelde _outcome_*-helpers). Puur mens-gestuurd: geen LLM, geen
+        # persona-voorstellen (dat is deel 2). HERKOMST is verplicht: elke uitkomst draagt de bron-comment
+        # mee (feed-entry / change_note / notif-payload). GEEN bus-events — cross-proces, zie de
+        # netwerk-bus-naad; consistent met _act_proj_done (mens-routing behoeft geen aankondiging).
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        otype = g("otype")
+        src_pid, src_eid = g("pid"), g("item")
+        content = (g("content") or "").strip()       # bewerkbaar inhoud-veld, voorgevuld met de comment-tekst
+        toel = (g("toelichting") or "").strip()       # verplichte rationale
+        # Herkomst verplicht: zonder geldige bron-comment geen uitkomst.
+        src_p = pj.get(src_pid)
+        src_entry = next((e for e in (src_p or {}).get("log", []) if e.get("id") == src_eid), None) if src_p else None
+        if src_p is None or src_entry is None:
+            return nxt, "✗ bron-comment niet gevonden — een uitkomst vereist herkomst"
+        if not toel:
+            return nxt, "✗ toelichting is verplicht"
+        if not content:
+            return nxt, "✗ inhoud is verplicht"
+        actor = st.people.by_email(username)
+        aid = actor.id if actor else ""
+        prov = f"↳ uit wall-comment op {src_pid}#{src_eid} — {toel}"   # herkomst + rationale
+        title = content[:60]
+        _LBL = {"info": "info gedeeld", "project": "project", "action": "actie",
+                "note": "note", "roloverleg": "roloverleg-punt"}
+
+        if otype == "info":
+            # AUTHZ: circle-member of iedereen-ingelogd — info delen binnen de cirkel raakt geen structuur
+            circle = resolve_circle_id(src_p.get("owner") or "", st.records)
+            _deny = _member_gate(circle, username, st)
+            if _deny:
+                return nxt, _deny
+            _outcome_info(st, content, by=f"wall:{src_pid}", src_pid=src_pid, src_eid=src_eid)
+
+        elif otype == "project":
+            # AUTHZ: rolvervuller of Circle Lead — een project aanmaken raakt de rol/cirkel van de eigenaar
+            owner = g("owner")
+            if not owner:
+                return nxt, "✗ kies een rol-eigenaar voor het project"
+            _deny = (_member_gate(resolve_circle_id(owner, st.records), username, st)
+                     if owner.startswith(_II_PREFIX) else _role_gate(owner, username, st))
+            if _deny:
+                return nxt, _deny
+            orec = st.records.get(owner)
+            if orec is not None and org.is_circle(orec):
+                return nxt, "✗ een cirkel kan geen project bevatten — kies een rol of Individueel Initiatief"
+            _outcome_project(st, owner, content, provenance=prov, actor_id=aid)
+
+        elif otype == "action":
+            # AUTHZ: rolvervuller of Circle Lead — een actie toevoegen raakt het doel-project van de eigenaar
+            pid_link = g("pid_link")
+            tgt = pj.get(pid_link)
+            if tgt is None:
+                return nxt, "✗ doel-project niet gevonden"
+            _deny = _role_gate(tgt.get("owner") or "", username, st)
+            if _deny:
+                return nxt, _deny
+            # HARDE RAND 1: eerst het checklist-item toevoegen, DÁN reopen — nooit andersom. reopen wist
+            # outcome; met een compleet ge-vinkte checklist zou de puls het project meteen weer op DONE
+            # zetten met een vals project_completed-event. Het nieuwe (open) item maakt de checklist
+            # incompleet, zodat reopen veilig is. reopen() is een no-op als het project niet terminal is.
+            _outcome_action(st, pid_link, content)
+            _prov_feed(st, pid_link, prov, aid)      # herkomst op het doel-project
+            pj.reopen(pid_link)
+
+        elif otype == "note":
+            # AUTHZ: rolvervuller of Circle Lead — een note is een artefact bij de rol (_artefact_gate)
+            note_role = g("note_role")
+            if not note_role:
+                return nxt, "✗ kies een rol voor de note"
+            _deny = _artefact_gate(note_role, username, st)
+            if _deny:
+                return nxt, _deny
+            # HARDE RAND note: >4000 tekens → weigeren met melding, geen stille truncatie.
+            if len(content) > 4000:
+                return nxt, f"✗ note te lang ({len(content)}/4000 tekens) — kort in; geen automatische afkap"
+            _outcome_note(st, note_role, content, actor_id=aid, change_note=prov)
+
+        elif otype == "roloverleg":
+            # AUTHZ: circle-member — een punt voor het roloverleg agenderen mag elk cirkellid
+            circle = resolve_circle_id(src_p.get("owner") or "", st.records)
+            _deny = _member_gate(circle, username, st)
+            if _deny:
+                return nxt, _deny
+            _outcome_roloverleg(st, circle, title, title, content, by=f"wall:{src_pid}", provenance=prov)
+
+        else:
+            return nxt, "✗ onbekende uitkomst"
+
+        # Systeem-entry op de BRON-wall: de audittrail (met toelichting) leeft op de wall.
+        pj.add_feed_entry(src_pid, f"→ {_LBL[otype]} aangemaakt: {title} — {toel}",
+                          kind="system", author_type="human", author_id=aid)
+        return nxt, f"✓ {_LBL[otype]} aangemaakt"
 
 
 def _act_wo_checkout(c):
@@ -2152,6 +2295,8 @@ ACTIONS = {
     "react_add": _act_react_add,
     "feed_edit": _act_feed_edit,
     "feed_remove": _act_feed_remove,
+    "wall_outcome": _act_wall_outcome,
+
     "ai_reply": _act_ai_reply,
     "proj_feed": _act_proj_feed,
     "checklist_add": _act_checklist_add,
