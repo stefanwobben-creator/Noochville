@@ -101,6 +101,8 @@ class Village:
         # Gedeelde set (daemon-intern): pids die _claim_run_complete AL inline als route="autonoom"
         # aankondigde. De board-watch skipt die zodat een autonome afronding niet dubbel vuurt.
         self.context._autonomous_done = set()
+        from nooch_village.project_doc_store import ProjectDocStore
+        self.context.project_docs = ProjectDocStore(self.context.data_dir)   # levend einddocument per project
         # Board-watch: de cockpit draait in een LOS proces met een eigen in-memory bus; een bord-drag
         # naar ACTIEF schrijft alleen projects.json. Deze village-poll herleest dat bestand en vertaalt
         # een verse naar-'running'-overgang naar een in-memory project_activated-event, zodat de

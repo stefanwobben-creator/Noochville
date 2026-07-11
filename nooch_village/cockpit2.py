@@ -50,6 +50,7 @@ from nooch_village import epic
 from nooch_village.personas import PersonaStore
 from nooch_village.projects import ProjectLedger, PREP_CHECKLIST_TITLE, _MISSIE_IMPACT, _BUSINESS_IMPACT
 from nooch_village.deliverable_store import DeliverableStore
+from nooch_village.project_doc_store import ProjectDocStore
 from nooch_village.registry_factory import shared_registry
 from nooch_village.skill_match import plan_offers
 from nooch_village.util import refuse
@@ -96,6 +97,7 @@ class _Stores:
         self.personas = PersonaStore(os.path.join(dd, "personas.json"))
         self.projects = ProjectLedger(os.path.join(dd, "projects.json"))
         self.deliverables = DeliverableStore(os.path.join(dd, "deliverables.json"))
+        self.project_docs = ProjectDocStore(dd)   # levend einddocument per project (weergave + edit-route)
         self.ai = AITaskStore(os.path.join(dd, "ai_tasks.json"))
         self.match = ai_match.MatchCache(os.path.join(dd, "ai_match_cache.json"))
         self.notif = NotifStore(os.path.join(dd, "notifications.json"))
@@ -934,6 +936,11 @@ def _act_proj_delete(c):
         dstore = getattr(st, "deliverables", None)
         if dstore is not None:
             dstore.delete_for_project(pid)
+        # Cascade: het levende einddocument (sidecar-.md) mee-verwijderen.
+        docstore = getattr(st, "project_docs", None)
+        if docstore is not None and docstore.delete_for(pid):
+            logging.getLogger("village.project_docs").info(
+                "cascade: einddocument verwijderd bij project-delete %s", pid)
         msg = "🗑 verwijderd"
         return nxt, msg
 
@@ -981,6 +988,19 @@ def _act_proj_describe(c):
         if pj.edit(g("pid"), description=g("description"), allow_done=True):
             msg = "✓ omschrijving opgeslagen"
         return nxt, msg
+
+
+def _act_proj_doc_edit(c):
+        # AUTHZ: rolvervuller of Circle Lead — het einddocument is operationeel werk binnen de rol; de
+        # mens redigeert het bij review via dezelfde poort als andere project-operaties.
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
+        store = getattr(st, "project_docs", None)
+        if store is not None:                              # atomic write; last-writer wint (v1, geen merge)
+            store.write(g("pid"), g("doc"))
+        return nxt, "📄 einddocument opgeslagen"
 
 
 def _act_proj_settrekker(c):
@@ -2359,6 +2379,7 @@ ACTIONS = {
     "proj_comment": _act_proj_comment,
     "proj_rename": _act_proj_rename,
     "proj_describe": _act_proj_describe,
+    "proj_doc_edit": _act_proj_doc_edit,
     "proj_settrekker": _act_proj_settrekker,
     "proj_setowner": _act_proj_setowner,
     "proj_approve": _act_proj_approve,

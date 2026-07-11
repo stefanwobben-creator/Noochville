@@ -1153,6 +1153,7 @@ class Inhabitant(threading.Thread):
         if project.get("last_tended") == today:
             return None                                          # idempotent: al vandaag uitgevoerd
         clid = cl["id"]
+        succeeded = 0                                            # geslaagde items deze puls → één synthese-pass
         for pos, item in enumerate(cl["items"]):
             if item.get("done"):
                 continue                                         # idempotent: reeds afgevinkt
@@ -1172,6 +1173,7 @@ class Inhabitant(threading.Thread):
                 wall_note_id = ledger.add_role_message(pid, summary)
                 self._store_deliverable(project, item, pos, skill, result, summary, wall_note_id)
                 ledger.check_toggle(pid, clid, item["id"])
+                succeeded += 1
                 self.log.info("✅ project '%s': item '%s' via %s afgerond", pid, item.get("text", "")[:40], skill)
             else:
                 why = (result.get("error") or result.get("reason") or
@@ -1191,13 +1193,75 @@ class Inhabitant(threading.Thread):
             # teruggesleept project niet elke puls (Q2).
             if not (ledger.get(pid) or {}).get("review_raised"):
                 ledger.mark_awaiting_review(pid)
+                self._synthesize_einddocument(ledger.get(pid), done, total, force_final=True)
                 ledger.add_role_message(pid, "✅ Checklist voltooid — klaar voor review.")
                 self.bus.publish(Event("project_awaiting_review",
                                        {"project_id": pid, "owner": self.id}, self.id))
                 self.log.info("✅ project '%s' checklist voltooid (%d/%d) — wacht op review", pid, done, total)
             return None                                          # geen autonome DONE meer
+        if succeeded:                                            # ≥1 item geslaagd deze puls → één reguliere pass
+            self._synthesize_einddocument(ledger.get(pid), done, total, force_final=False)
         self.log.info("⏳ project '%s' voortgang %d/%d — blijft in ACTIEF", pid, done, total)
         return None
+
+    def _synthesize_einddocument(self, project: dict, done: int, total: int, *, force_final: bool) -> None:
+        """Constitutie-plicht (basisklasse, GEEN skill, GEEN governance per rol): werk het levende
+        einddocument van het project bij in de PERSONA-stem. Eén synthese-call per project per puls
+        (de caller vuurt hooguit één keer). Fail-closed: geen LLM-antwoord of exceptie → document
+        ONGEWIJZIGD, logregel; wall/store/gate draaien door (de review-gate werkt ook zonder document).
+
+        v1-besluit: de AI schrijft het HELE document (geen diff, geen merge-logica). Mens-edits via de
+        edit-route zijn input voor de VOLGENDE pass (last-writer geldt tot dan). #task-comments van
+        mensen (project["comments"]) gaan als sturing mee — dezelfde bron die de worker leest.
+        #task-regels ÍN de documenttekst worden NIET geparseerd (v2-idee: liften naar de wall; nu niet)."""
+        store = getattr(self.context, "project_docs", None)
+        if store is None or project is None:
+            return
+        pid = project["id"]
+        try:
+            from nooch_village.llm import reason
+            from nooch_village.project_worker import _persona_for
+            persona = _persona_for(self.record, getattr(self.context, "personas", None))
+            current = store.read(pid)
+            dstore = getattr(self.context, "deliverables", None)
+            recs = dstore.for_project(pid) if dstore is not None else []
+            d_lines = []
+            for r in recs:                                       # summaries altijd; content als GECAPTE preview
+                d_lines.append(f"- {r.get('summary', '')}")
+                content = dstore.content_for(r["id"]) if dstore is not None else None
+                if content is not None:
+                    d_lines.append(f"  (preview: {str(content)[:500]})")
+            steer = " · ".join(c.get("text", "") for c in project.get("comments", []) if c.get("text"))
+            scope = project.get("scope")
+            scope_txt = (" · ".join(f"{k}: {v}" for k, v in scope.items())
+                         if isinstance(scope, dict) else str(scope or ""))
+            # Harde input-cap vóór de call (fail-loud bij afkap — nooit stil, call_site="einddocument").
+            cap = int(self.context.settings.get("einddocument_input_max_chars", "20000"))
+            variable = ("HUIDIG DOCUMENT:\n" + (current or "(nog geen document)") + "\n\n"
+                        + "OPGELEVERDE DELIVERABLES:\n" + ("\n".join(d_lines) or "(nog geen)") + "\n\n"
+                        + (f"STURING VAN DE MENS (#task-comments, volg dit): {steer}\n\n" if steer else ""))
+            if len(variable) > cap:
+                self.log.warning("DOC_INPUT_CAP: einddocument-input %d tekens > max %d — afgekapt | project=%s",
+                                 len(variable), cap, pid)
+                variable = variable[:cap]
+            prompt = (
+                (persona.strip() + "\n\n" if persona and persona.strip() else "")
+                + f"Je werkt aan het lopende einddocument van dit project in NoochVille (Nooch.earth). "
+                f"Projectdoel: {scope_txt}\n\n" + variable
+                + "Schrijf het VOLLEDIGE, bijgewerkte einddocument in markdown — een lopend, leesbaar "
+                "verhaal dat de opgeleverde deliverables integreert"
+                + (" en klaar is voor review" if force_final else "")
+                + ". Geef alleen het document terug, geen meta-uitleg.")
+            out = reason(prompt, call_site="einddocument", max_tokens=1500)
+        except Exception as e:                                   # fail-closed: document intact, puls draait door
+            self.log.warning("einddocument-synthese overgeslagen (document intact): %s", e)
+            return
+        if not out or not out.strip():
+            self.log.info("einddocument: geen LLM-antwoord voor project '%s' — document ongewijzigd", pid)
+            return
+        store.write(pid, out.strip())
+        if force_final:
+            self.context.projects.add_role_message(pid, "📄 Einddocument bijgewerkt — klaar voor review.")
 
     # Container-keys per archetype — de note-opmaak volgt de VORM van de output, niet de skill-naam.
     _LIST_KEYS = ("hits", "rows", "candidates", "items", "targets", "cards", "keywords", "patents")
