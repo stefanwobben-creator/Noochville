@@ -71,6 +71,14 @@ class Village:
         self.context.library = Library(os.path.join(self.context.data_dir, "library.json"))
         self.context.lexicon = Lexicon(os.path.join(self.context.data_dir, "lexicon.json"))
         seed_lexicon(self.context.lexicon)
+        # Community-listening (Billy Buzz): configureerbare zoek-sets + observatie-store.
+        from nooch_village.buzz_query_sets import BuzzQuerySets, seed_buzz_query_sets
+        from nooch_village.buzz_observations import BuzzObservationStore
+        self.context.buzz_query_sets = BuzzQuerySets(
+            os.path.join(self.context.data_dir, "buzz_query_sets.json"))
+        seed_buzz_query_sets(self.context.buzz_query_sets)
+        self.context.buzz_observations = BuzzObservationStore(
+            os.path.join(self.context.data_dir, "buzz_observations.jsonl"))
         self.context.notes = NotesStore(os.path.join(self.context.data_dir, "notes.json"))
         # Gedeelde concurrent-store: confirmed merken die de scout heeft laten bevestigen
         # zijn nu leesbaar voor élke rol (voor KE/SerpAPI-analyses).
