@@ -573,18 +573,18 @@ def main() -> None:
         ctx.buzz_observations = BuzzObservationStore(
             os.path.join(ctx.data_dir, "buzz_observations.jsonl"))
         set_id = sys.argv[2] if len(sys.argv) > 2 else "barefoot_ervaringen"
-        print(f"🎧 community_listening draait op set '{set_id}' (Reddit publieke JSON)…")
+        print(f"🎧 community_listening draait op set '{set_id}' (YouTube + Bluesky; Reddit inactief)…")
         res = CommunityListeningSkill().run({"query_set_id": set_id}, ctx)
         if not res.get("ok"):
             print(f"Overgeslagen [{res.get('refuse', '?')}]: {res.get('error', 'onbekend')}",
                   file=sys.stderr)
             sys.exit(1)
-        print(f"✅ {res['new']} nieuwe observatie(s), {res['fetched']} gefetcht, "
-              f"{res['cached']} gecachet (<6u).")
+        print(f"✅ {res['new']} nieuwe observatie(s) totaal — {res.get('summary', '')}")
         top = ctx.buzz_observations.top_by_score(set_id, limit=5)
         for r in top:
-            print(f"   · [{r.get('score', 0)}] r/{r.get('subreddit', '')} — "
-                  f"{(r.get('title') or '')[:70]}\n     {r.get('permalink', '')}")
+            ctx_title = f" — “{r.get('context_title')}”" if r.get('context_title') else ""
+            print(f"   · [{r.get('platform', '?')} · {r.get('score', 0)}]{ctx_title}\n"
+                  f"     {(r.get('fragment') or r.get('title') or '')[:80]}\n     {r.get('permalink', '')}")
 
     elif mode == "answer_questions":
         # Gebundelde beantwoording: alle openstaande mens-vragen aan rollen in één LLM-call
