@@ -32,6 +32,7 @@ from nooch_village.skills_impl.trends_categorie import TrendsCategorieSkill
 from nooch_village.skills_impl.gdelt_tone import GdeltToneSkill
 from nooch_village.skills_impl.competitor_news import CompetitorNewsSkill
 from nooch_village.skills_impl.competitor_discover import CompetitorDiscoverSkill
+from nooch_village.skills_impl.community_listening import CommunityListeningSkill
 from nooch_village.skills_impl.linkbuilding import LinkbuildingTargetsSkill
 from nooch_village.skills_impl.verband_voorstel import VerbandVoorstelSkill
 from nooch_village.skills_impl.onderzoeksvraag import OnderzoeksvraagSkill
@@ -61,6 +62,7 @@ def build_skill_registry() -> SkillRegistry:
         TrendsCategorieSkill(), GdeltToneSkill(),
         CompetitorNewsSkill(),
         CompetitorDiscoverSkill(),
+        CommunityListeningSkill(),
         LinkbuildingTargetsSkill(),
         VerbandVoorstelSkill(),
         OnderzoeksvraagSkill(),

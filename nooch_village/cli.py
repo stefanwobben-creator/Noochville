@@ -559,6 +559,33 @@ def main() -> None:
         else:
             print(f"   linkbuilding overgeslagen: {lt.get('error', 'onbekend')}")
 
+    elif mode == "community_listening":
+        # Billy Buzz: haal Reddit-ervaringen op als observaties (grounded, geen oordeel).
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.buzz_query_sets import BuzzQuerySets, seed_buzz_query_sets
+        from nooch_village.buzz_observations import BuzzObservationStore
+        from nooch_village.skills_impl.community_listening import CommunityListeningSkill
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        ctx.buzz_query_sets = BuzzQuerySets(os.path.join(ctx.data_dir, "buzz_query_sets.json"))
+        seed_buzz_query_sets(ctx.buzz_query_sets)
+        ctx.buzz_observations = BuzzObservationStore(
+            os.path.join(ctx.data_dir, "buzz_observations.jsonl"))
+        set_id = sys.argv[2] if len(sys.argv) > 2 else "barefoot_ervaringen"
+        print(f"🎧 community_listening draait op set '{set_id}' (Reddit publieke JSON)…")
+        res = CommunityListeningSkill().run({"query_set_id": set_id}, ctx)
+        if not res.get("ok"):
+            print(f"Overgeslagen [{res.get('refuse', '?')}]: {res.get('error', 'onbekend')}",
+                  file=sys.stderr)
+            sys.exit(1)
+        print(f"✅ {res['new']} nieuwe observatie(s), {res['fetched']} gefetcht, "
+              f"{res['cached']} gecachet (<6u).")
+        top = ctx.buzz_observations.top_by_score(set_id, limit=5)
+        for r in top:
+            print(f"   · [{r.get('score', 0)}] r/{r.get('subreddit', '')} — "
+                  f"{(r.get('title') or '')[:70]}\n     {r.get('permalink', '')}")
+
     elif mode == "answer_questions":
         # Gebundelde beantwoording: alle openstaande mens-vragen aan rollen in één LLM-call
         # (het bovenliggende principe: geen realtime per-vraag-call, maar één puls-call).
@@ -902,7 +929,7 @@ def main() -> None:
               "content_strategist | grant_serpapi_trends | grant_skill | revoke_skill | "
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "
               "measure_propose | rereview | ingest | notes_remove | recurate | "
-              "ground | harry_run | roster | keys | competitor | formalize | answer_questions | "
+              "ground | harry_run | roster | keys | competitor | community_listening | formalize | answer_questions | "
               "ingest_governance | review_roles | shopify | work_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | rapport | verslag | healthcheck",
               file=sys.stderr)

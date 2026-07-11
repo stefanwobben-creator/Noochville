@@ -610,6 +610,7 @@ class ConcurrentScout(Inhabitant):
             self._run_discovery(monitored, store)
             self._run_linkbuilding(monitored)
             self._run_market_interest(monitored, store)
+            self._run_community_listening()
         finally:
             self._busy = False
 
@@ -723,6 +724,103 @@ class ConcurrentScout(Inhabitant):
         self.log.info("📊 marktinteresse concurrenten: %s",
                       ", ".join(f"{b} {v}/mnd" for b, v in ranked[:8]))
         self.bus.publish(Event("competitor_interest", {"by": self.id, "volumes": vols}, self.id))
+
+    def _run_community_listening(self) -> None:
+        """Billy Buzz: verzamel Reddit-ervaringen over een onderwerp als observaties en post een
+        wall-samenvatting op de eigen rol-notes. Gegate op DNA (skill via governance toegekend);
+        zonder grant doet deze puls niets. Grounded: geen kansen-taal, geen oordeel — alleen wat er staat."""
+        if "community_listening" not in self.dna.skills:
+            return
+        set_id = self.context.settings.get("buzz_query_set", "barefoot_ervaringen")
+        res = self.use_skill("community_listening", {"query_set_id": set_id})
+        if not res.get("ok"):
+            self.log.info("🎧 community_listening overgeslagen: %s",
+                          res.get("error") or res.get("refuse"))
+            return
+        count = int(res.get("new", 0) or 0)
+        self.bus.publish(Event("buzz.observations.new",
+            {"by": self.id, "count": count, "query_set_id": set_id}, self.id))
+        self.log.info("🎧 community_listening: %d nieuwe observatie(s) voor set '%s' (%d gecachet)",
+                      count, set_id, res.get("cached", 0))
+        if count:                                     # alleen bij nieuw materiaal een wall-post
+            self._post_buzz_wall(set_id)
+
+    def _post_buzz_wall(self, set_id: str) -> None:
+        """Vat de max 5 opvallendste rijen (op score) samen en post ze als note-artefact op de rol.
+        Elk punt eindigt met de permalink; een rij zonder permalink wordt overgeslagen (geen link →
+        niet gepost). De parafrase komt van de LLM (persona-toon); zonder LLM valt hij terug op de
+        feitelijke titel — beide grounded, geen verzonnen inhoud."""
+        store = getattr(self.context, "buzz_observations", None)
+        att = getattr(self.context, "att", None)
+        if store is None or att is None:
+            return
+        rows = [r for r in store.top_by_score(set_id, limit=5) if (r.get("permalink") or "").strip()]
+        if not rows:
+            return
+        label = self._buzz_set_label(set_id)
+        bullets = self._buzz_bullets(rows, label)
+        if not bullets:
+            self.log.info("🎧 geen wall-punten met link — niets gepost")
+            return
+        from datetime import date
+        body = f"Wat er speelt op Reddit over {label} (top {len(bullets)} op score):\n\n" + "\n".join(bullets)
+        if len(body) > 4000:                          # body-cap: bewust weigeren i.p.v. stil afkappen
+            self.log.warning("🎧 wall-samenvatting >4000 tekens — niet gepost (splits de set of kort de fragmenten in)")
+            return
+        title = f"Reddit-observaties — {label} ({date.today().isoformat()})"
+        att.add(anchor=self.id, kind="note", title=title, body=body,
+                actor_id=(self.record.persona_id or ""), actor_type="persona",
+                change_note=f"community_listening puls ({set_id})")
+        self.log.info("🎧 wall-samenvatting (%d punten) gepost op %s → notes", len(bullets), self.id)
+
+    def _buzz_set_label(self, set_id: str) -> str:
+        qs = getattr(self.context, "buzz_query_sets", None)
+        rec = qs.get(set_id) if qs is not None else None
+        return (rec or {}).get("label") or set_id
+
+    def _buzz_bullets(self, rows: list[dict], label: str) -> list[str]:
+        """Bouw per rij één bullet '- <parafrase> — <permalink>'. De parafrase komt uit de LLM
+        (genummerd, in rij-volgorde); de permalink hangen we deterministisch aan zodat elk punt
+        gegarandeerd een werkende link draagt. Fail-closed: geen/onvolledig LLM-antwoord → de rij
+        valt terug op zijn feitelijke titel."""
+        import re
+        paraphrases: dict[int, str] = {}
+        try:
+            from nooch_village.llm import reason
+            from nooch_village.personas import persona_prompt, PersonaStore
+            persona = None
+            if getattr(self.record, "persona_id", None):
+                try:
+                    persona = PersonaStore(
+                        os.path.join(self.context.data_dir, "personas.json")).get(self.record.persona_id)
+                except Exception:
+                    persona = None
+            listing = "\n".join(
+                f"{i + 1}. [r/{r.get('subreddit','')}, score {r.get('score',0)}] "
+                f"{(r.get('title') or '').strip()} — {(r.get('fragment') or '').strip()}"
+                for i, r in enumerate(rows))
+            prompt = (
+                (persona_prompt(persona) + "\n\n" if persona else "") +
+                f"Hieronder staan Reddit-posts over {label}. Schrijf per post ÉÉN korte, feitelijke "
+                f"parafrase (max 20 woorden) van wat er staat. Geen kansen-taal ('dit is een kans "
+                f"voor…'), geen advies, geen oordeel — alleen wat er staat. Antwoord met genummerde "
+                f"regels 1..{len(rows)}, één regel per post, in dezelfde volgorde.\n\n{listing}")
+            out = reason(prompt, call_site="buzz_wall_summary") or ""
+            for line in out.splitlines():
+                m = re.match(r"\s*(\d+)[.):]\s*(.+)", line)
+                if m:
+                    idx = int(m.group(1)) - 1
+                    if 0 <= idx < len(rows):
+                        paraphrases[idx] = m.group(2).strip().strip('"')
+        except Exception as e:
+            self.log.info("🎧 LLM-parafrase overgeslagen (%s) — feitelijke titels", e)
+        bullets = []
+        for i, r in enumerate(rows):
+            text = paraphrases.get(i) or (r.get("title") or "").strip()
+            if not text:
+                continue
+            bullets.append(f"- {text} — {r['permalink']}")
+        return bullets
 
     def _is_mission_relevant(self, title: str) -> bool:
         from nooch_village.skills_impl.competitor_news import _MISSION_THEMES
