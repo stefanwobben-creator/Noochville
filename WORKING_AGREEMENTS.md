@@ -24,6 +24,13 @@ sessie opent hiermee.
   tests die bij een enkel-bestand-run onzichtbaar bleven — en zo gepusht
   werden. Enkel-bestand-run is prima tijdens het bouwen; de volle suite
   is de poort vóór de commit.
+- **SCOPE.md per meerbeurten-ontwerp.** Elke feature-branch met een ontwerp dat
+  over meerdere beurten loopt, krijgt een `SCOPE.md` in de branch-root: de actuele
+  afspraken (beslissingen, correcties, open vragen), bijgewerkt bij elke ontwerp-
+  iteratie. Bij divergentie tussen chat en `SCOPE.md` **wint `SCOPE.md`**. Bij de
+  merge wordt `SCOPE.md` verwijderd — de afspraken leven dan in code, tests en de
+  commit-message. Reden (11 juli 2026): drie ontwerpdetails lekten tussen beurten
+  weg en er verscheen code uit een spooksessie; dit bestand is de structurele fix.
 - Pablo (de chat) checkt tussen elke stap; Stefan plakt terug wat Claude
   Code rapporteert.
 - Niets naar de server tot Stefan lokaal akkoord is. `push_data.sh`
