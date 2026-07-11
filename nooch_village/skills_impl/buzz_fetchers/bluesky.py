@@ -1,6 +1,6 @@
 """Bluesky-fetcher — publieke AT-Protocol search (geen auth).
 
-GET public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q&sort=latest&limit=25, nette UA zoals
+GET api.bsky.app/xrpc/app.bsky.feed.searchPosts?q&sort=latest&limit=25, nette UA zoals
 Reddit. 1 req/s, backoff op 429; harde fail → BUZZ_FETCH_FAILED per query en doorgaan.
 
 Rij: permalink=https://bsky.app/profile/{handle}/post/{rkey} (rkey = laatste segment van de
@@ -14,7 +14,7 @@ from nooch_village.util import refuse
 from nooch_village.skills_impl.buzz_fetchers.base import (
     BuzzFetcher, RateLimited, UA, CACHE_TTL, RATE_DELAY, MAX_RETRIES, FRAGMENT_MAX)
 
-_SEARCH = "https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts"
+_SEARCH = "https://api.bsky.app/xrpc/app.bsky.feed.searchPosts"
 
 
 class BlueskyFetcher(BuzzFetcher):
