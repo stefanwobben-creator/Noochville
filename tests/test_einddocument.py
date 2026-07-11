@@ -168,3 +168,40 @@ def test_task_in_documenttekst_geen_parsing(tmp_path):
     prompt = m.call_args[0][0]
     assert "#task herschrijf de intro" in prompt               # verschijnt als HUIDIG DOCUMENT
     assert "STURING VAN DE MENS" not in prompt                 # maar NIET geparseerd tot sturing
+
+
+# ── cockpit-dispatch: edit-route-AUTHZ + delete-cascade (via de publieke dispatch) ────────────────
+def _cockpit_project(dd):
+    """Bootstrap + één actief project op een bemande rol; geef (pid, ProjectDocStore)."""
+    from nooch_village import cockpit2
+    cockpit2._bootstrap(dd)
+    role = "mother_earth__nooch__website_developer"
+    cockpit2.dispatch(dd, "proj_add",
+                      {"owner": [role], "scope": ["Doc-scope"], "col": ["actief"], "next": ["/"]},
+                      username="guest")
+    pid = next(p["id"] for p in cockpit2._Stores(dd).projects.all() if p.get("scope") == "Doc-scope")
+    return pid, ProjectDocStore(dd)
+
+
+# 9. Edit-route-AUTHZ: ingelogde-onbekende geweigerd (geen schrijf); guest (auth uit) mag wél
+def test_doc_edit_route_authz(tmp_path):
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc")
+    pid, docs = _cockpit_project(dd)
+    cockpit2.dispatch(dd, "proj_doc_edit", {"pid": [pid], "doc": ["geheim"], "next": ["/"]},
+                      username="onbekend@x")                 # ingelogde-maar-onbekende → _role_gate weigert
+    assert docs.read(pid) == ""                              # niets geschreven
+    cockpit2.dispatch(dd, "proj_doc_edit", {"pid": [pid], "doc": ["# Doc"], "next": ["/"]},
+                      username="guest")                       # auth uit → toegestaan
+    assert docs.read(pid) == "# Doc"
+
+
+# 10. Doc-delete-cascade: project-delete verwijdert ook het einddocument-.md
+def test_doc_delete_cascade(tmp_path):
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc")
+    pid, docs = _cockpit_project(dd)
+    docs.write(pid, "# Doc")
+    assert docs.read(pid) == "# Doc"
+    cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/"]}, username="guest")
+    assert docs.read(pid) == ""                              # sidecar mee-verwijderd door de cascade
