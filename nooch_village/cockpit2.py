@@ -880,8 +880,19 @@ def _act_proj_done(c):
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
-        pj.complete(g("pid")); msg = "✓ afgerond"
-        # geen event — cross-proces, zie netwerk-bus-naad; mens-DONE behoeft geen aankondiging aan de mens
+        pid = g("pid")
+        # Outcome met behoud van de telling; de mens kent Done toe ná review (Q3).
+        p = pj.get(pid) or {}
+        cl = next((c for c in p.get("checklists", []) if c.get("title") == PREP_CHECKLIST_TITLE), None)
+        if cl is not None:
+            items = cl.get("items", [])
+            done = sum(1 for it in items if it.get("done"))
+            outcome = f"checklist voltooid ({done}/{len(items)}) — goedgekeurd na review"
+        else:
+            outcome = "goedgekeurd na review"
+        pj.complete(pid, outcome); msg = "✓ afgerond"
+        # Geen event vanuit dit proces — de daemon-board-watch (village._poll_board) detecteert de
+        # wacht→done-overgang (blocked_on=="review") en vuurt project_completed op de in-memory bus (#10-fix).
         return nxt, msg
 
 

@@ -113,7 +113,8 @@ def test_c_alle_af_done_open_blijft_actief(tmp_path, ledger):
     pid1 = ledger.create("harry_hemp", "doel", "human", status="queued")
     _prep(ledger, pid1, [("s", "openalex_evidence", "x", "")])
     inh._claim_run_complete(pid1)
-    assert ledger.get(pid1)["status"] == "done"                       # alles af → DONE
+    p1 = ledger.get(pid1)
+    assert p1["status"] == "blocked" and p1["blocked_on"] == "review"  # review-gate: alles af → WACHT, niet done
 
     pid2 = ledger.create("harry_hemp", "doel", "human", status="queued")
     _prep(ledger, pid2, [("s", "openalex_evidence", "x", ""), ("p", None, "", "geen patent-skill")])

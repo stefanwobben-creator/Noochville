@@ -1121,9 +1121,13 @@ class Inhabitant(threading.Thread):
             # Sleutel heet project_id (conform project_queued/needs_preparation; NIET 'pid').
             dstore = getattr(self.context, "deliverables", None)
             deliverable_ids = [r["id"] for r in dstore.for_project(pid)] if dstore is not None else []
+            # Markeer als autonoom aangekondigd zodat de board-watch deze done niet dubbel vuurt.
+            auto = getattr(self.context, "_autonomous_done", None)
+            if auto is not None:
+                auto.add(pid)
             self.bus.publish(Event("project_completed",
                                    {"project_id": pid, "owner": self.id, "outcome": outcome,
-                                    "deliverable_ids": deliverable_ids}, self.id))
+                                    "deliverable_ids": deliverable_ids, "route": "autonoom"}, self.id))
             self.log.info("✅ project '%s' afgerond (outcome=%s)", pid, outcome)
         else:
             self.log.info("⏸ project '%s' nog niet af (status=%s)", pid, current and current["status"])
@@ -1181,7 +1185,17 @@ class Inhabitant(threading.Thread):
         done = sum(1 for it in items if it.get("done"))
         total = len(items)
         if total and done == total:
-            return f"checklist voltooid ({done}/{total})"
+            # Review-gate: checklist volledig af → status 'wacht' (blocked, blocked_on='review'), NIET done.
+            # De outcome-marker wordt pas bij Done-toekenning (mens sleept wacht→done) gezet. Alleen op een
+            # VERSE all-done-overgang (review_raised nog niet gezet) — zo herblokkeert een afgewezen-en-
+            # teruggesleept project niet elke puls (Q2).
+            if not (ledger.get(pid) or {}).get("review_raised"):
+                ledger.mark_awaiting_review(pid)
+                ledger.add_role_message(pid, "✅ Checklist voltooid — klaar voor review.")
+                self.bus.publish(Event("project_awaiting_review",
+                                       {"project_id": pid, "owner": self.id}, self.id))
+                self.log.info("✅ project '%s' checklist voltooid (%d/%d) — wacht op review", pid, done, total)
+            return None                                          # geen autonome DONE meer
         self.log.info("⏳ project '%s' voortgang %d/%d — blijft in ACTIEF", pid, done, total)
         return None
 

@@ -98,6 +98,9 @@ class Village:
         from nooch_village.deliverable_store import DeliverableStore
         self.context.deliverables = DeliverableStore(       # skill-resultaten overleven het project
             os.path.join(self.context.data_dir, "deliverables.json"))
+        # Gedeelde set (daemon-intern): pids die _claim_run_complete AL inline als route="autonoom"
+        # aankondigde. De board-watch skipt die zodat een autonome afronding niet dubbel vuurt.
+        self.context._autonomous_done = set()
         # Board-watch: de cockpit draait in een LOS proces met een eigen in-memory bus; een bord-drag
         # naar ACTIEF schrijft alleen projects.json. Deze village-poll herleest dat bestand en vertaalt
         # een verse naar-'running'-overgang naar een in-memory project_activated-event, zodat de
@@ -436,6 +439,9 @@ class Village:
         normale flow / dag_begint) — alleen NIEUWE naar-ACTIEF-overgangen tijdens de rit tellen."""
         led = getattr(self.context, "projects", None)
         self._activated_seen = {p["id"] for p in led.by_status("running")} if led is not None else set()
+        # DONE-brug (#10): al-afgeronde projecten primen zodat de eerste poll geen historische
+        # project_completed vuurt — alleen NIEUWE review-goedkeuringen tijdens de rit tellen.
+        self._completed_seen = {p["id"] for p in led.by_status("done")} if led is not None else set()
 
     def _poll_board(self) -> list[str]:
         """Board-watch (cross-proces-brug). Detecteer projecten die sinds de vorige poll naar 'running'
@@ -454,6 +460,27 @@ class Village:
                                    {"pid": pid, "owner": running[pid].get("owner")}, "board_watch"))
         # Prune verdwenen pids: een project dat later opnieuw naar ACTIEF gaat mag opnieuw vuren.
         self._activated_seen = set(running)
+        # ── DONE-brug (#10-fix): project_completed vuurt voor ELKE nieuwe done (lifecycle-feit), zodat
+        # ook een mens-DONE in het losse cockpit-proces de in-memory bus bereikt. De route wordt afgeleid:
+        #   • autonoom — de rol-thread kondigde 'm al inline aan (_autonomous_done) → hier SKIPPEN (geen dubbel);
+        #   • review   — via de gate: complete() liet blocked_on=="review" als marker staan;
+        #   • direct    — mens sleepte Actief→Done zonder de gate.
+        # Consumenten filteren zelf op route/deliverable_ids (zie WORKING_AGREEMENTS, kanaal-model).
+        auto = getattr(self.context, "_autonomous_done", set())
+        done = {p["id"]: p for p in led.by_status("done")}
+        for pid, p in done.items():
+            if pid in self._completed_seen or pid in auto:
+                continue                                        # al gezien, of al inline aangekondigd (autonoom)
+            route = "review" if p.get("blocked_on") == "review" else "direct"
+            dstore = getattr(self.context, "deliverables", None)
+            deliverable_ids = [r["id"] for r in dstore.for_project(pid)] if dstore is not None else []
+            self.bus.publish(Event("project_completed",
+                                   {"project_id": pid, "owner": p.get("owner"), "outcome": p.get("outcome"),
+                                    "deliverable_ids": deliverable_ids, "route": route}, "board_watch"))
+        # Prune: een heropend (done→running) project mag bij een latere her-afronding opnieuw vuren;
+        # houd _autonomous_done gelijk aan de nog-done autonome pids.
+        self._completed_seen = set(done)
+        auto &= set(done)
         return new_ids
 
 
