@@ -49,6 +49,7 @@ from nooch_village.artefacts import can_write_artefact, requires_governance_ref
 from nooch_village import epic
 from nooch_village.personas import PersonaStore
 from nooch_village.projects import ProjectLedger, PREP_CHECKLIST_TITLE, _MISSIE_IMPACT, _BUSINESS_IMPACT
+from nooch_village.deliverable_store import DeliverableStore
 from nooch_village.registry_factory import shared_registry
 from nooch_village.skill_match import plan_offers
 from nooch_village.util import refuse
@@ -94,6 +95,7 @@ class _Stores:
         self.sources = SourceStatusStore(os.path.join(dd, "sources.json"))
         self.personas = PersonaStore(os.path.join(dd, "personas.json"))
         self.projects = ProjectLedger(os.path.join(dd, "projects.json"))
+        self.deliverables = DeliverableStore(os.path.join(dd, "deliverables.json"))
         self.ai = AITaskStore(os.path.join(dd, "ai_tasks.json"))
         self.match = ai_match.MatchCache(os.path.join(dd, "ai_match_cache.json"))
         self.notif = NotifStore(os.path.join(dd, "notifications.json"))
@@ -914,7 +916,14 @@ def _act_proj_delete(c):
         if actor is None and username != "guest":
             return nxt, "Geen toegang — gebruiker niet herkend"
         # ── einde autorisatie ──
-        pj.remove(g("pid")); msg = "🗑 verwijderd"
+        pid = g("pid")
+        pj.remove(pid)
+        # Cascade bij definitieve delete: index-records ÉN write-once sidecars mee-verwijderen.
+        # delete_for_project logt zelf beide aantallen (records + sidecars); geen status-overgang komt hier.
+        dstore = getattr(st, "deliverables", None)
+        if dstore is not None:
+            dstore.delete_for_project(pid)
+        msg = "🗑 verwijderd"
         return nxt, msg
 
 

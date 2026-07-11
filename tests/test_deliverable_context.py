@@ -137,3 +137,29 @@ def test_4b_leeg_blok_geen_sectie(tmp_path):
     inh = _inhabitant(tmp_path, ledger)
     prompt = _capture_prompt(inh, "barefoot onderzoek", keyword="barefoot", exclude_pid="ander")
     assert "Eerder afgerond onderzoek" not in prompt        # leeg blok → sectie volledig weggelaten
+
+
+# ── DeliverableStore als bron (met wall-fallback) ─────────────────────────────
+def _store(records_by_pid):
+    """Store-stub: alleen for_project, zoals gather_deliverable_context 'm aanroept."""
+    return SimpleNamespace(for_project=lambda pid: list(records_by_pid.get(pid, [])))
+
+
+def test_store_pad_gedragsgelijk_aan_wall(tmp_path):
+    txt = "📎 studie — via openalex_evidence: barefoot loopschoenen verbeteren de voethouding"
+    p = _proj("p1", "harry_hemp", "Onderzoek naar barefoot shoes", "barefoot shoes", [_note(txt)])
+    store = _store({"p1": [{"summary": txt, "created_at": 1}]})          # store bevat dezelfde summary
+    via_wall = gather_deliverable_context(_ledger([p]), "barefoot loopschoenen onderzoek",
+                                          max_notes=5, max_chars=2000)
+    via_store = gather_deliverable_context(_ledger([p]), "barefoot loopschoenen onderzoek",
+                                           max_notes=5, max_chars=2000, store=store)
+    assert via_store and via_store == via_wall               # store-pad ≡ wall-pad (gedragsgelijk)
+
+
+def test_store_valt_terug_op_wall_bij_oud_project(tmp_path):
+    txt = "📎 studie — via openalex_evidence: barefoot loopschoenen bevindingen"
+    p = _proj("p1", "o", "barefoot shoes", "barefoot", [_note(txt)])
+    store = _store({})                                       # geen records voor p1 → fallback
+    blok = gather_deliverable_context(_ledger([p]), "barefoot loopschoenen", max_notes=5,
+                                      max_chars=2000, store=store)
+    assert "barefoot loopschoenen bevindingen" in blok       # wall-fallback voor oud project werkt

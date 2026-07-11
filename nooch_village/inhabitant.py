@@ -1046,7 +1046,7 @@ class Inhabitant(threading.Thread):
                 getattr(self.context, "projects", None), goal, keyword=keyword,
                 max_notes=int(self.context.settings.get("deliverable_context_max_notes", "5")),
                 max_chars=int(self.context.settings.get("deliverable_context_max_chars", "2000")),
-                exclude_pid=exclude_pid)
+                exclude_pid=exclude_pid, store=getattr(self.context, "deliverables", None))
             if blok:
                 memory_section = ("Eerder afgerond onderzoek in het dorp (gebruik dit; plan geen items "
                                   f"die dit al beantwoordt):\n{blok}\n\n")
@@ -1119,8 +1119,11 @@ class Inhabitant(threading.Thread):
             # Levenscyclus-event: de ENIGE autonome DONE-route (de guard hierboven is de idempotentie —
             # een tweede passage op een al-done project valt buiten 'status==running' en vuurt niets).
             # Sleutel heet project_id (conform project_queued/needs_preparation; NIET 'pid').
+            dstore = getattr(self.context, "deliverables", None)
+            deliverable_ids = [r["id"] for r in dstore.for_project(pid)] if dstore is not None else []
             self.bus.publish(Event("project_completed",
-                                   {"project_id": pid, "owner": self.id, "outcome": outcome}, self.id))
+                                   {"project_id": pid, "owner": self.id, "outcome": outcome,
+                                    "deliverable_ids": deliverable_ids}, self.id))
             self.log.info("✅ project '%s' afgerond (outcome=%s)", pid, outcome)
         else:
             self.log.info("⏸ project '%s' nog niet af (status=%s)", pid, current and current["status"])
@@ -1146,7 +1149,7 @@ class Inhabitant(threading.Thread):
         if project.get("last_tended") == today:
             return None                                          # idempotent: al vandaag uitgevoerd
         clid = cl["id"]
-        for item in cl["items"]:
+        for pos, item in enumerate(cl["items"]):
             if item.get("done"):
                 continue                                         # idempotent: reeds afgevinkt
             skill = item.get("skill")
@@ -1161,7 +1164,9 @@ class Inhabitant(threading.Thread):
             result = self.use_skill(skill, payload)
             status, archetype = self._classify_result(result)    # normaliseer beide fail-conventies
             if status == "gelukt":
-                ledger.add_role_message(pid, self._deliverable_note(item, result, archetype))
+                summary = self._deliverable_note(item, result, archetype)
+                wall_note_id = ledger.add_role_message(pid, summary)
+                self._store_deliverable(project, item, pos, skill, result, summary, wall_note_id)
                 ledger.check_toggle(pid, clid, item["id"])
                 self.log.info("✅ project '%s': item '%s' via %s afgerond", pid, item.get("text", "")[:40], skill)
             else:
@@ -1210,6 +1215,29 @@ class Inhabitant(threading.Thread):
             if result.get(k) not in (None, "", [], {}):
                 return "gelukt", ("metric", k)
         return "leeg", None                                     # geen herkende inhoud → leeg
+
+    def _store_deliverable(self, project: dict, item: dict, position: int, skill: str, result,
+                           summary: str, wall_note_id) -> None:
+        """Bewaar het VOLLEDIGE skill-resultaat als gestructureerd record (naast de wall-note). Additief
+        en NOOIT blokkerend: geen store in context → skip; een schrijffout → luide logregel en door
+        (de wall-note staat al). Alleen voor geslaagde items; faalnotes (⚠️) komen hier niet.
+
+        `checklist_item` = het adresseerbare item-id; ontbreekt dat (afwijkend/legacy item), dan de
+        positie `pos:<index>` als adres, mét een luide logregel. `title` = de leesbare item-tekst."""
+        store = getattr(self.context, "deliverables", None)
+        if store is None:
+            return
+        item_ref = item.get("id")
+        if not item_ref:                                    # geen id → positie als adres, luid gemeld
+            item_ref = f"pos:{position}"
+            self.log.warning("deliverable: checklist-item zonder id → positie-adres '%s' gebruikt", item_ref)
+        try:
+            store.add(project_id=project.get("id", ""), role=self.id, skill=skill,
+                      checklist_item=item_ref, title=item.get("text", ""),
+                      content=result, summary=summary, wall_note_id=wall_note_id or "",
+                      max_bytes=int(self.context.settings.get("deliverable_content_max_bytes", "100000")))
+        except Exception as e:                              # store is additief → nooit de puls breken
+            self.log.warning("deliverable-record niet opgeslagen (wall-note staat wél): %s", e)
 
     def _deliverable_note(self, item: dict, result: dict, archetype) -> str:
         """Rauw-maar-leesbaar per archetype; geen velden weggooien, geen gemene-deler-vorm."""
