@@ -2539,9 +2539,12 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._redirect_to("/wachtwoord")
                 return
             if path == "/snake":
-                # AUTHZ: ingelogde-member — verborgen easter-egg 'De Veter'; puur fun, los van alles.
+                # AUTHZ: ingelogde-member — verborgen easter-egg 'Snaker'; puur fun, los van alles.
                 # De login-redirect hierboven dekt de niet-ingelogde gebruiker al af.
-                self._send(snake.render_snake_page(st, username, effective_csrf))
+                # chrome=False: geen dorp-brede call bar/Noochie-rail injecteren — de pagina draait als
+                # fullscreen-overlay-iframe op de cockpit; de bar leeft in de PARENT en wordt daar via
+                # body.overlay-open verborgen. Injecteren zou hier een tweede (ongestylede) bar geven.
+                self._send(snake.render_snake_page(st, username, effective_csrf), chrome=False)
                 return
             if path == "/context":
                 # AUTHZ: iedereen-ingelogd — rol-context is dezelfde read-scope als /node?tab=notes

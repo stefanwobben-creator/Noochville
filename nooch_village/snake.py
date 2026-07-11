@@ -1,4 +1,4 @@
-"""'De Veter' — verborgen snake-easter-egg in de cockpit. Puur voor fun, bewust LOS van alles:
+"""'Snaker' (voorheen 'De Veter') — verborgen snake-easter-egg in de cockpit. Puur voor fun, bewust LOS van alles:
 raakt geen dispatch-authz, geen kritieke stores, geen governance. Eigen JSON-store + één GET-pagina
 (/snake) + één POST-score-route (/snake/score), beide achter de sessie-auth van do_GET/do_POST.
 
@@ -85,10 +85,10 @@ def render_snake_page(st, username: str | None, csrf: str = "") -> str:
     return (
         "<!doctype html><html lang='nl'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<title>De Veter</title><style>" + _SNAKE_CSS + "</style></head><body>"
+        "<title>Snaker</title><style>" + _SNAKE_CSS + "</style></head><body>"
         "<div class='egg-box'>"
-        "<button class='sluit' onclick='history.back()' aria-label='Sluiten'>×</button>"
-        "<h2>🥾 De Veter</h2>"
+        "<button class='sluit' id='egg-sluit' aria-label='Sluiten'>×</button>"
+        "<h2>🥾 Snaker</h2>"
         "<div class='tag'>Een verdwaalde schoenveter met honger naar sneakers. Pijltjes of WASD.</div>"
         "<canvas id='c' width='440' height='330'></canvas>"
         "<div class='statusrow'><span>Sneakers gegeten: <b id='score'>0</b></span>"
@@ -131,6 +131,14 @@ canvas{background:#1E241C;border:1px solid var(--ring);border-radius:10px;displa
 
 _SNAKE_JS = """
 (function(){
+ // Sluiten: als embedded (overlay-iframe) → parent laten sluiten via postMessage; anders (directe
+ // /snake-route als fallback) → history.back(). × en Escape roepen beide closeEgg aan.
+ function closeEgg(){
+   if(window.parent&&window.parent!==window){try{window.parent.postMessage({type:'snake-close'},location.origin);}catch(e){}}
+   else{history.back();}
+ }
+ var _sl=document.getElementById('egg-sluit');if(_sl)_sl.addEventListener('click',closeEgg);
+ document.addEventListener('keydown',function(e){if((e.key||'')==='Escape')closeEgg();});
  var D=JSON.parse(document.getElementById('snake-data').textContent);
  var vets=D.vets||[], best=D.best||0;
  var cv=document.getElementById('c'), ctx=cv.getContext('2d');
