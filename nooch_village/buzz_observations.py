@@ -35,7 +35,7 @@ class BuzzCache(JsonStore):
     voor de YouTube-quota-guard. De 6u-ts/mark-logica blijft ongewijzigd; de teller deelt alleen het
     bestand + slot."""
 
-    _WRITE_METHODS = ("mark", "quota_add")
+    _WRITE_METHODS = ("mark", "quota_add", "set_sync_terms")
     _STATE = "_items"
     _default = dict
     _EXPECT = dict
@@ -45,6 +45,15 @@ class BuzzCache(JsonStore):
 
     def mark(self, key: str, ts: float, n: int = 0) -> None:
         self._items[key] = {"ts": ts, "n": int(n)}
+        self._save()
+
+    # ── library-sync-stand (v2.1: vorige gesyncte term-set per set/platform) ────
+    # Bewust in de cache, NIET in de query-set: die blijft mens-bewerkbaar zonder machine-writes.
+    def sync_terms(self, key: str) -> list:
+        return list((self._items.get(key) or {}).get("terms") or [])
+
+    def set_sync_terms(self, key: str, terms) -> None:
+        self._items[key] = {"terms": list(terms)}
         self._save()
 
     # ── quota-teller (YouTube) ────────────────────────────────────────────────
