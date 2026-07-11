@@ -84,6 +84,13 @@ details>summary{cursor:pointer;font-family:var(--font-display);font-weight:700;p
 .flash{background:var(--green-tint);border:1px solid var(--green);color:var(--green-dark);
  border-radius:var(--radius);padding:.5rem .8rem;margin:.4rem 0 1rem;font-weight:600}
 .flash.err{background:var(--error-tint);border-color:var(--coral);color:#A8322A}
+/* Fullscreen-overlay (bv. de Snake-easter-egg): draait als iframe OP de huidige pagina i.p.v. een
+   navigatie, zodat de call bar-iframe niet wordt weggegooid (verbinding + audio lopen door). Zolang
+   een overlay open is, verbergen we de bar — generiek via body.overlay-open, geen easter-egg-specifieke
+   hack. .cb-frame leeft in _EXTRA_CSS; deze regel matcht 'm ook als die elders is gedefinieerd. */
+.snake-overlay{position:fixed;inset:0;z-index:1000;border:0;background:transparent}
+.snake-frame{width:100%;height:100%;border:0;background:transparent}
+body.overlay-open .cb-frame{display:none}
 """
 
 
@@ -95,15 +102,32 @@ def _banner(msg) -> str:
 
 
 # Verborgen easter-egg-trigger op elke ingelogde cockpit-pagina (login gebruikt _page NIET): de
-# Konami-code of 5× klikken op de paginatitel opent /snake. Self-contained (geen imports, verwijst
-# alleen naar de URL) en zonder preventDefault, zodat pijltjestoetsen op echte pagina's niet gekaapt
-# worden. De /snake-route zit achter de sessie-auth; uitgelogd → login-redirect.
+# Konami-code of 5× klikken op de paginatitel opent Snake. Self-contained (geen imports) en zonder
+# preventDefault, zodat pijltjestoetsen op echte pagina's niet gekaapt worden.
+#
+# Snake opent als IN-PAGE OVERLAY (fullscreen iframe /snake) i.p.v. een navigatie: zo overleeft de
+# call bar-iframe (geen full-page nav → verbinding + audio lopen door). body.overlay-open verbergt de
+# bar; de snake-pagina meldt sluiten via postMessage (× of Escape). /snake zit achter de sessie-auth.
 _KONAMI_TRIGGER = """<script>(function(){
+ function openSnake(){
+   if(document.getElementById('snake-overlay'))return;
+   var ov=document.createElement('div');ov.id='snake-overlay';ov.className='snake-overlay';
+   var fr=document.createElement('iframe');fr.className='snake-frame';fr.src='/snake';fr.title='Snaker';
+   fr.setAttribute('allow','autoplay');
+   fr.addEventListener('load',function(){try{fr.contentWindow.focus();}catch(e){}});
+   ov.appendChild(fr);document.body.appendChild(ov);document.body.classList.add('overlay-open');
+ }
+ function closeSnake(){var ov=document.getElementById('snake-overlay');if(ov)ov.remove();
+   document.body.classList.remove('overlay-open');}
+ window.addEventListener('message',function(e){
+   if(e.origin!==location.origin)return;
+   if((e.data||{}).type==='snake-close')closeSnake();
+ });
  var K=['arrowup','arrowup','arrowdown','arrowdown','arrowleft','arrowright','arrowleft','arrowright','b','a'],b=[];
  addEventListener('keydown',function(e){ b.push((e.key||'').toLowerCase()); if(b.length>K.length)b.shift();
-   if(b.length===K.length&&K.every(function(k,i){return b[i]===k;})){b=[];location.href='/snake';} });
+   if(b.length===K.length&&K.every(function(k,i){return b[i]===k;})){b=[];openSnake();} });
  var h=document.querySelector('h1'); if(h){var c=0,t; h.addEventListener('click',function(){
-   c++; clearTimeout(t); t=setTimeout(function(){c=0;},1500); if(c>=5){c=0;location.href='/snake';} });}
+   c++; clearTimeout(t); t=setTimeout(function(){c=0;},1500); if(c>=5){c=0;openSnake();} });}
 })();</script>"""
 
 

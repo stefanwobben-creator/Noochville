@@ -53,3 +53,37 @@ def test_niet_ingelogd_geen_toegang_tot_beide_routes(tmp_path):
     # de /snake-pagina lekt geen persoonlijk record voor een niet-herkende gebruiker
     h = snake.render_snake_page(cockpit2._Stores(dd), None)
     assert '"me": ""' in h and "<canvas id='c'" in h
+
+
+# ── v2: rename 'De Veter' → 'Snaker' + overlay/close-gedrag ──────────────────────
+
+def test_render_heet_snaker_maar_behoudt_veter_thematiek(tmp_path):
+    h = snake.render_snake_page(cockpit2._Stores(_dd(tmp_path)), None)
+    assert "<title>Snaker</title>" in h and "🥾 Snaker" in h
+    assert "<h2>🥾 De Veter</h2>" not in h              # spelnaam is niet meer 'De Veter'
+    assert "De veter zit in de knoop" in h and "Veteranen" in h   # thematiek-copy blijft
+
+
+def test_snake_sluit_via_postmessage_naar_parent(tmp_path):
+    h = snake.render_snake_page(cockpit2._Stores(_dd(tmp_path)), None)
+    assert "id='egg-sluit'" in h                        # × is in JS gewired, geen inline onclick
+    assert "onclick='history.back()'" not in h
+    assert "snake-close" in h and "postMessage" in h    # embedded → parent laten sluiten
+    assert "'Escape'" in h                              # Escape sluit ook
+
+
+def test_konami_trigger_opent_overlay_niet_navigatie():
+    from nooch_village.web_base import _KONAMI_TRIGGER, _CSS
+    assert "openSnake()" in _KONAMI_TRIGGER and "snake-overlay" in _KONAMI_TRIGGER
+    assert "overlay-open" in _KONAMI_TRIGGER
+    assert "location.href='/snake'" not in _KONAMI_TRIGGER   # geen full-page navigatie meer
+    # de bar wordt verborgen zolang een overlay open is (generiek, geen snake-specifieke hack)
+    assert "body.overlay-open .cb-frame{display:none}" in _CSS
+    assert ".snake-overlay{" in _CSS and ".snake-frame{" in _CSS
+
+
+def test_snake_route_wordt_chrome_loos_geserveerd():
+    import inspect
+    src = inspect.getsource(cockpit2)
+    # /snake mag de dorp-brede call bar/rail niet in de iframe-doc geïnjecteerd krijgen
+    assert "render_snake_page(st, username, effective_csrf), chrome=False" in src
