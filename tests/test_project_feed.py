@@ -119,6 +119,27 @@ def test_oude_log_entries_blijven_leesbaar(tmp_path):
     assert "oude update" in frag and "oude reactie" in frag      # oud schema blijft leesbaar
 
 
+def test_add_role_message_krijgt_id(tmp_path):
+    dd, rid, pid, codie = _setup(tmp_path)
+    st = cockpit2._Stores(dd)
+    nid = st.projects.add_role_message(pid, "deliverable klaar")
+    assert nid and len(nid) == 10                                    # id-patroon van add_feed_entry
+    entry = cockpit2._Stores(dd).projects.get(pid)["log"][-1]
+    assert entry["id"] == nid and entry["who"] == "rol" and entry["text"] == "deliverable klaar"
+    assert cockpit2._Stores(dd).projects.get(pid)["progress"] == "deliverable klaar"   # bestaand gedrag
+    assert st.projects.add_role_message(pid, "   ") is None          # lege tekst → None (was False, blijft falsy)
+
+
+def test_oude_role_note_zonder_id_blijft_geldig(tmp_path):
+    dd, rid, pid, codie = _setup(tmp_path)
+    st = cockpit2._Stores(dd)
+    p = st.projects.get(pid)
+    p.setdefault("log", []).append({"who": "rol", "text": "oude deliverable", "at": 1.0})  # geen id (pre-fix)
+    st.projects._save()
+    frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
+    assert "oude deliverable" in frag                                # geen migratie nodig; rendert prima
+
+
 def test_human_reactie_zet_worked_false(tmp_path):
     dd, rid, pid, codie = _setup(tmp_path)
     st = cockpit2._Stores(dd)

@@ -496,19 +496,24 @@ class ProjectLedger:
         self._save()
         return True
 
-    def add_role_message(self, pid: str, text: str) -> bool:
+    def add_role_message(self, pid: str, text: str) -> str | None:
         """Voeg een DIRECT antwoord van de rol toe aan het gesprek (chat-reply op een opmerking).
         Anders dan record_progress telt dit NIET als een experiment-uitvoering en raakt het de
-        'worked'-vlag niet — het is conversatie, geen puls-werk."""
+        'worked'-vlag niet — het is conversatie, geen puls-werk.
+
+        Geeft het note-`id` terug (of None bij lege input) — het id-patroon van add_feed_entry, zodat
+        een specifieke note adresseerbaar/linkbaar is (bijv. een deliverable-store die ernaar verwijst).
+        Bestaande notes zonder id blijven geldig (geen migratie); lezers filteren op `who`/`text`, niet op id."""
         p = self._projects.get(pid)
         text = (text or "").strip()
         if p is None or not text:
-            return False
-        p.setdefault("log", []).append({"who": "rol", "text": text[:1500], "at": time.time()})
+            return None
+        nid = uuid.uuid4().hex[:10]
+        p.setdefault("log", []).append({"id": nid, "who": "rol", "text": text[:1500], "at": time.time()})
         p["progress"] = text
         self._touch(p)
         self._save()
-        return True
+        return nid
 
     # Gestructureerde feed-entry (Trello-stijl kaart-discussie). Anders dan de oude {who} draagt
     # een entry nu een echte auteur (mens/persoon/AI/rol) en een soort (update vs reactie), zodat
