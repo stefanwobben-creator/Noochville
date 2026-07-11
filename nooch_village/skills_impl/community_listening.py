@@ -29,6 +29,18 @@ def _refuse(code: str, reason: str, **ctx) -> dict:
     return {"ok": False, "refuse": code, "error": reason, **ctx}
 
 
+def _dedup_ci(items) -> list[str]:
+    """Case-insensitive, gestripte dedup met behoud van volgorde (handmatige queries eerst)."""
+    seen, out = set(), []
+    for it in items:
+        s = str(it).strip()
+        k = s.lower()
+        if s and k not in seen:
+            seen.add(k)
+            out.append(s)
+    return out
+
+
 class CommunityListeningSkill(Skill):
     name = "community_listening"
     cost = "rate_limited"          # publieke endpoints, beleefde 1 req/s + backoff
@@ -64,6 +76,20 @@ class CommunityListeningSkill(Skill):
         from nooch_village.buzz_observations import BuzzCache
         return BuzzCache(os.path.join(getattr(context, "data_dir", "."), "buzz_cache.json"))
 
+    def _merge_library(self, set_id: str, platform: str, cfg: dict, library, cache) -> dict:
+        """v2.1: als dit platform een actief library_link heeft, sync de research-approved Library-
+        termen en merge ze (case-insensitive) met de handmatige queries. De fetcher weet niets van de
+        Library — hij krijgt gewoon een cfg-kopie met meer queries. Geen link/geen termen → cfg ongewijzigd.
+        Fail-open: bij BUZZ_LIBRARY_UNAVAILABLE komen er geen termen bij en draaien de handmatige queries door."""
+        link = cfg.get("library_link")
+        if not link or not link.get("active"):
+            return cfg
+        from nooch_village.buzz_library_sync import sync_library_terms
+        lib_terms = sync_library_terms(set_id, platform, link, library, cache)
+        if not lib_terms:
+            return cfg
+        return {**cfg, "queries": _dedup_ci(list(cfg.get("queries") or []) + lib_terms)}
+
     # ── run ─────────────────────────────────────────────────────────────────────
     def run(self, payload: dict, context=None) -> dict:
         set_id = (payload.get("query_set_id") or "").strip()
@@ -83,6 +109,7 @@ class CommunityListeningSkill(Skill):
 
         store = self._obs_store(context)
         cache = self._cache(context)
+        library = getattr(context, "library", None)
         opts = {"now": time.time(), "time_window": payload.get("time_window") or "7d"}
 
         counts: dict = {}
@@ -104,7 +131,8 @@ class CommunityListeningSkill(Skill):
                 summary.append(f"{platform}: onbekende fetcher")
                 refuse("BUZZ_UNKNOWN_PLATFORM", "geen fetcher voor platform", platform=platform)
                 continue
-            res = fetcher.fetch(set_id, cfg, context, cache, opts)
+            eff_cfg = self._merge_library(set_id, platform, cfg, library, cache)
+            res = fetcher.fetch(set_id, eff_cfg, context, cache, opts)
             new = 0
             for row in res.get("rows", []):
                 if store.record_observation(row):

@@ -20,6 +20,18 @@ from __future__ import annotations
 
 from nooch_village.util import JsonStore
 
+# Library-koppeling (v2.1): naast de handmatige queries óók research-approved Library-termen.
+# 'exclude' is het mens-wint-mechanisme: verwijder je een gesyncte term handmatig uit de effectieve
+# queries, zet 'm dan hier — anders walst de volgende sync eroverheen. YouTube krijgt BEWUST GEEN
+# library_link: library-termen draaien alleen op gratis platforms (quota-kader). Reddit krijgt het blok
+# alvast op active=True; het vuurt pas als het reddit-PLATFORM actief wordt (geen vergeten tweede flip).
+def _library_link_seed() -> dict:
+    return {"active": True,
+            "filter": {"status": "research_approved", "tags": [], "locale": ["nl", "en"]},
+            "max_queries": 10,
+            "exclude": []}
+
+
 # Zaad-set uit de briefing. Reddit staat BEWUST inactief (wacht op API-approval) maar houdt zijn
 # volledige config (subreddits + queries) zodat reactivering later niet stil kapot is.
 _SEED_SETS: dict[str, dict] = {
@@ -32,6 +44,7 @@ _SEED_SETS: dict[str, dict] = {
                 "active": False,
                 "subreddits": ["BarefootRunning", "barefootshoestalk", "vegan", "veganfashion"],
                 "queries": ["barefoot shoes experience", "barefoot shoes review", "vegan barefoot"],
+                "library_link": _library_link_seed(),   # vuurt zodra het reddit-platform live gaat
             },
             "youtube": {
                 "active": True,
@@ -45,6 +58,7 @@ _SEED_SETS: dict[str, dict] = {
             "bluesky": {
                 "active": True,
                 "queries": ["barefoot shoes", "vegan shoes", "barefoot schoenen"],
+                "library_link": _library_link_seed(),
             },
         },
     }
@@ -107,6 +121,22 @@ class BuzzQuerySets(JsonStore):
         return (rec.get("platforms") or {}).get(platform)
 
 
+def _clean_library_link(link: dict) -> dict:
+    """Normaliseer een library_link-blok (v2.1)."""
+    link = dict(link or {})
+    flt = dict(link.get("filter") or {})
+    return {
+        "active": bool(link.get("active", False)),
+        "filter": {
+            "status": str(flt.get("status") or "research_approved"),
+            "tags": [str(t).strip() for t in (flt.get("tags") or []) if str(t).strip()],
+            "locale": [str(l).strip().lower() for l in (flt.get("locale") or []) if str(l).strip()],
+        },
+        "max_queries": int(link.get("max_queries") or 0),
+        "exclude": [str(x).strip() for x in (link.get("exclude") or []) if str(x).strip()],
+    }
+
+
 def _clean_platforms(platforms: dict) -> dict:
     """Normaliseer een platforms-object licht (strings trimmen, listen schoonvegen)."""
     out: dict = {}
@@ -116,6 +146,8 @@ def _clean_platforms(platforms: dict) -> dict:
         for key in ("subreddits", "queries", "channel_ids"):
             if key in cfg:
                 c[key] = [str(x).strip()[:120] for x in (cfg.get(key) or []) if str(x).strip()]
+        if "library_link" in cfg:
+            c["library_link"] = _clean_library_link(cfg["library_link"])
         out[plat] = c
     return out
 
@@ -149,6 +181,12 @@ def migrate_buzz_query_sets(store: BuzzQuerySets) -> int:
             for plat, cfg in seed["platforms"].items():
                 if plat not in platforms:
                     platforms[plat] = dict(cfg)
+                    changed = True
+                elif cfg.get("library_link") and not (platforms.get(plat) or {}).get("library_link"):
+                    # v2.1: bestaand platform mist het library_link-blok → additief aanvullen uit de
+                    # seed, zonder de rest van de (mens-gecureerde) platform-config te raken.
+                    platforms[plat] = {**(platforms[plat] or {}),
+                                       "library_link": dict(cfg["library_link"])}
                     changed = True
         if changed:
             rec["platforms"] = _clean_platforms(platforms)
