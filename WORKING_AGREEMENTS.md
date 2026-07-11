@@ -92,10 +92,6 @@ sessie opent hiermee.
   eerst `pid` + starttijd van het proces matchen met de laatste deploy vóór je
   de code verdenkt. Kandidaat-micro-scope: git-hash + processtart loggen bij
   `dag_begint`.
-- Micro-scope open: `reason()` in `llm.py` splitst "geen antwoord (geen sleutel
-  of leeg)" nog niet in geen-sleutel / lege-respons / weggevangen-exceptie (de
-  `_try_*` vangen auth/timeout weg als `None`). Bemoeilijkte de diagnose van
-  09-07; een fijnere uitsplitsing zou de laddertoestand direct leesbaar maken.
 - Prep-idempotentie-guard is titel-gebaseerd: `prepare_project` slaat alleen over als er al een
   checklist met de eigen titel `"Uitvoerplan"` bestaat (`_project_checklist`). Een mens-checklist met
   een ANDERE titel voorkomt de prep-checklist dus niet — een puls kan er een tweede `"Uitvoerplan"`
