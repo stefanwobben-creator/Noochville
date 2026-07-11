@@ -734,6 +734,31 @@ def _attach_post(a: dict, pid: str, hid, rw: bool) -> str:
             f"<div class='fbubble'>{card}<div class='ffoot'><div class='ffoot-l'>{rm}</div></div></div></div>")
 
 
+def _einddocument_html(st: _Stores, pid: str, rw: bool, hid) -> str:
+    """Het levende einddocument: read-only weergave (📄, via `_md`) + edit-form (mens redigeert bij
+    review). Hergebruikt de Opdracht-post-weergave (`.fbubble`) en de gesprek-composer (`md_editor`).
+    De AI werkt het document bij; mens-edits zijn input voor de volgende synthese-pass (geen merge)."""
+    store = getattr(st, "project_docs", None)
+    doc = store.read(pid) if store is not None else ""
+    head = "<div class='wall-head'><h2>📄 Einddocument</h2></div>"
+    if doc.strip():
+        view = f"<div class='fentry'><div class='fbubble'>{_md(doc)}</div></div>"
+    else:
+        view = ("<div class='fentry'><div class='fbubble'><span class='muted'>Nog geen einddocument — "
+                "de toegewezen inwoner schrijft dit bij elke geslaagde puls.</span></div></div>")
+    if not rw:
+        return f"{head}{view}"
+    editor = (f"<details class='cardmenu'><summary class='flink'>✏️ document bewerken</summary>"
+              f"<form method='post' action='/action' class='pf'>{hid()}"
+              f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+              f"<label class='att-lbl'>De AI werkt dit document bij; blijvende aanwijzingen geef je via "
+              f"een #task-comment op de wall.</label>"
+              f"{md_editor('doc', value=doc, rows=10, help=True)}"
+              f"<button class='btn ok sm' type='submit' name='action' value='proj_doc_edit'>Document opslaan</button>"
+              f"</form></details>")
+    return f"{head}{view}{editor}"
+
+
 def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", back: str = "/",
                    fragment: bool = False) -> str:
     p = st.projects.get(pid)
@@ -954,8 +979,9 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     top_bar = f"<div class='wo-back-bar'>{wo_cta}</div>" if meeting else ""
     foot_bar = f"<div class='wo-back-bar wo-back-foot'>{wo_cta}</div>" if meeting else ""
 
+    einddoc = _einddocument_html(st, pid, rw, hid)
     detail = (f"{top_bar}{labelbar}{_banner(msg)}{head}"
-              f"<div class='pgrid'><div class='pmain'>{wall}</div>"
+              f"<div class='pgrid'><div class='pmain'>{einddoc}{wall}</div>"
               f"<aside class='pside psticky'>{structure}</aside></div>{foot_bar}")
     if fragment:
         return f"<div data-noclose='1'>{detail}</div>" if meeting else detail
