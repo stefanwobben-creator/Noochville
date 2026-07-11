@@ -726,9 +726,9 @@ class ConcurrentScout(Inhabitant):
         self.bus.publish(Event("competitor_interest", {"by": self.id, "volumes": vols}, self.id))
 
     def _run_community_listening(self) -> None:
-        """Billy Buzz: verzamel Reddit-ervaringen over een onderwerp als observaties en post een
-        wall-samenvatting op de eigen rol-notes. Gegate op DNA (skill via governance toegekend);
-        zonder grant doet deze puls niets. Grounded: geen kansen-taal, geen oordeel — alleen wat er staat."""
+        """Billy Buzz: verzamel gebruikerservaringen (YouTube + Bluesky, Reddit inactief) over een
+        onderwerp als observaties en post een wall-samenvatting op de eigen rol-notes. Gegate op DNA
+        (skill via governance toegekend); zonder grant doet deze puls niets. Grounded: geen kansen-taal."""
         if "community_listening" not in self.dna.skills:
             return
         set_id = self.context.settings.get("buzz_query_set", "barefoot_ervaringen")
@@ -739,22 +739,23 @@ class ConcurrentScout(Inhabitant):
             return
         count = int(res.get("new", 0) or 0)
         self.bus.publish(Event("buzz.observations.new",
-            {"by": self.id, "count": count, "query_set_id": set_id}, self.id))
-        self.log.info("🎧 community_listening: %d nieuwe observatie(s) voor set '%s' (%d gecachet)",
-                      count, set_id, res.get("cached", 0))
+            {"by": self.id, "count": count, "counts": res.get("counts", {}),
+             "query_set_id": set_id}, self.id))
+        self.log.info("🎧 community_listening [%s]: %s", set_id, res.get("summary", ""))
         if count:                                     # alleen bij nieuw materiaal een wall-post
             self._post_buzz_wall(set_id)
 
     def _post_buzz_wall(self, set_id: str) -> None:
-        """Vat de max 5 opvallendste rijen (op score) samen en post ze als note-artefact op de rol.
-        Elk punt eindigt met de permalink; een rij zonder permalink wordt overgeslagen (geen link →
-        niet gepost). De parafrase komt van de LLM (persona-toon); zonder LLM valt hij terug op de
-        feitelijke titel — beide grounded, geen verzonnen inhoud."""
+        """Vat de opvallendste rijen over platforms heen samen en post ze als note-artefact op de rol.
+        Geen normalisatie (YT-likes vs Bluesky-likes = appels/peren): top-3 YouTube + top-2 Bluesky op
+        eigen score, aangevuld tot 5 als één bron leeg is. Elk punt krijgt een platform-prefix, bij
+        YouTube de videotitel, en eindigt op de permalink. Parafrase van de LLM (persona-toon), zonder
+        LLM een grounded terugval op het fragment — geen verzonnen inhoud, geen kansen-taal."""
         store = getattr(self.context, "buzz_observations", None)
         att = getattr(self.context, "att", None)
         if store is None or att is None:
             return
-        rows = [r for r in store.top_by_score(set_id, limit=5) if (r.get("permalink") or "").strip()]
+        rows = self._buzz_top(store, set_id)
         if not rows:
             return
         label = self._buzz_set_label(set_id)
@@ -763,26 +764,45 @@ class ConcurrentScout(Inhabitant):
             self.log.info("🎧 geen wall-punten met link — niets gepost")
             return
         from datetime import date
-        body = f"Wat er speelt op Reddit over {label} (top {len(bullets)} op score):\n\n" + "\n".join(bullets)
+        body = f"Wat er speelt over {label} (top {len(bullets)}, YouTube + Bluesky):\n\n" + "\n".join(bullets)
         if len(body) > 4000:                          # body-cap: bewust weigeren i.p.v. stil afkappen
             self.log.warning("🎧 wall-samenvatting >4000 tekens — niet gepost (splits de set of kort de fragmenten in)")
             return
-        title = f"Reddit-observaties — {label} ({date.today().isoformat()})"
+        title = f"Community-observaties — {label} ({date.today().isoformat()})"
         att.add(anchor=self.id, kind="note", title=title, body=body,
                 actor_id=(self.record.persona_id or ""), actor_type="persona",
                 change_note=f"community_listening puls ({set_id})")
         self.log.info("🎧 wall-samenvatting (%d punten) gepost op %s → notes", len(bullets), self.id)
+
+    def _buzz_top(self, store, set_id: str) -> list[dict]:
+        """Top-3 YouTube + top-2 Bluesky (op eigen score, met permalink), aangevuld tot 5 uit de
+        overige bronnen als één platform niet levert. Nooit normaliseren tussen platforms."""
+        def _linked(rows):
+            return [r for r in rows if (r.get("permalink") or "").strip()]
+        rows = _linked(store.top_by_score(set_id, limit=3, platform="youtube")) + \
+            _linked(store.top_by_score(set_id, limit=2, platform="bluesky"))
+        if len(rows) < 5:
+            seen = {r["permalink"] for r in rows}
+            for r in _linked(store.top_by_score(set_id, limit=12)):
+                if r["permalink"] not in seen:
+                    rows.append(r)
+                    seen.add(r["permalink"])
+                if len(rows) >= 5:
+                    break
+        return rows[:5]
 
     def _buzz_set_label(self, set_id: str) -> str:
         qs = getattr(self.context, "buzz_query_sets", None)
         rec = qs.get(set_id) if qs is not None else None
         return (rec or {}).get("label") or set_id
 
+    _BUZZ_PREFIX = {"youtube": "[YouTube]", "bluesky": "[Bluesky]", "reddit": "[Reddit]"}
+
     def _buzz_bullets(self, rows: list[dict], label: str) -> list[str]:
-        """Bouw per rij één bullet '- <parafrase> — <permalink>'. De parafrase komt uit de LLM
-        (genummerd, in rij-volgorde); de permalink hangen we deterministisch aan zodat elk punt
-        gegarandeerd een werkende link draagt. Fail-closed: geen/onvolledig LLM-antwoord → de rij
-        valt terug op zijn feitelijke titel."""
+        """Bouw per rij één bullet met platform-prefix (bij YouTube de videotitel) die eindigt op de
+        permalink. De parafrase komt uit de LLM (genummerd, in rij-volgorde); de permalink hangen we
+        deterministisch aan zodat elk punt gegarandeerd een werkende link draagt. Fail-closed:
+        geen/onvolledig LLM-antwoord → de rij valt terug op zijn feitelijke fragment (grounded)."""
         import re
         paraphrases: dict[int, str] = {}
         try:
@@ -796,15 +816,18 @@ class ConcurrentScout(Inhabitant):
                 except Exception:
                     persona = None
             listing = "\n".join(
-                f"{i + 1}. [r/{r.get('subreddit','')}, score {r.get('score',0)}] "
-                f"{(r.get('title') or '').strip()} — {(r.get('fragment') or '').strip()}"
+                f"{i + 1}. [{r.get('platform','?')}] "
+                + (f"video “{r.get('context_title','')}” — "
+                   if r.get('platform') == 'youtube' and r.get('context_title') else "")
+                + f"(score {r.get('score',0)}) {(r.get('fragment') or r.get('title') or '').strip()}"
                 for i, r in enumerate(rows))
             prompt = (
                 (persona_prompt(persona) + "\n\n" if persona else "") +
-                f"Hieronder staan Reddit-posts over {label}. Schrijf per post ÉÉN korte, feitelijke "
-                f"parafrase (max 20 woorden) van wat er staat. Geen kansen-taal ('dit is een kans "
-                f"voor…'), geen advies, geen oordeel — alleen wat er staat. Antwoord met genummerde "
-                f"regels 1..{len(rows)}, één regel per post, in dezelfde volgorde.\n\n{listing}")
+                f"Hieronder staan community-reacties (YouTube-comments en Bluesky-posts) over {label}. "
+                f"Schrijf per item ÉÉN korte, feitelijke parafrase (max 20 woorden) van wat er staat. "
+                f"Geen kansen-taal ('dit is een kans voor…'), geen advies, geen oordeel — alleen wat er "
+                f"staat. Antwoord met genummerde regels 1..{len(rows)}, één regel per item, in dezelfde "
+                f"volgorde.\n\n{listing}")
             out = reason(prompt, call_site="buzz_wall_summary") or ""
             for line in out.splitlines():
                 m = re.match(r"\s*(\d+)[.):]\s*(.+)", line)
@@ -813,13 +836,16 @@ class ConcurrentScout(Inhabitant):
                     if 0 <= idx < len(rows):
                         paraphrases[idx] = m.group(2).strip().strip('"')
         except Exception as e:
-            self.log.info("🎧 LLM-parafrase overgeslagen (%s) — feitelijke titels", e)
+            self.log.info("🎧 LLM-parafrase overgeslagen (%s) — feitelijke fragmenten", e)
         bullets = []
         for i, r in enumerate(rows):
-            text = paraphrases.get(i) or (r.get("title") or "").strip()
+            text = paraphrases.get(i) or (r.get("fragment") or r.get("title") or "").strip()[:140]
             if not text:
                 continue
-            bullets.append(f"- {text} — {r['permalink']}")
+            prefix = self._BUZZ_PREFIX.get(r.get("platform"), f"[{r.get('platform','?')}]")
+            ctx = (r.get("context_title") or "").strip()
+            mid = f' “{ctx}” —' if (r.get("platform") == "youtube" and ctx) else " —"
+            bullets.append(f"- {prefix} {text}{mid} {r['permalink']}")
         return bullets
 
     def _is_mission_relevant(self, title: str) -> bool:

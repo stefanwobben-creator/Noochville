@@ -26,11 +26,16 @@ log = logging.getLogger(__name__)
 
 
 class BuzzCache(JsonStore):
-    """6u-response-cache per (subreddit, query) zodat een dubbele puls geen dubbele requests doet.
-    Achter de JsonStore-basis: flock + verse read onder het slot, zoals elke store. Sleutel =
-    "<sub>::<query>", waarde = {"ts": laatste-fetch, "n": aantal resultaten}."""
+    """6u-response-cache per (platform, query/kanaal) zodat een dubbele puls geen dubbele requests
+    doet. Achter de JsonStore-basis: flock + verse read onder het slot, zoals elke store. Sleutel =
+    fetcher-specifiek (bv. "reddit::<sub>::<query>", "youtube::q::<query>"), waarde =
+    {"ts": laatste-fetch, "n": aantal resultaten}.
 
-    _WRITE_METHODS = ("mark",)
+    Additief (v2): een dag-quotateller onder een EIGEN namespaced sleutel `quota:<platform>:<datum>`
+    voor de YouTube-quota-guard. De 6u-ts/mark-logica blijft ongewijzigd; de teller deelt alleen het
+    bestand + slot."""
+
+    _WRITE_METHODS = ("mark", "quota_add")
     _STATE = "_items"
     _default = dict
     _EXPECT = dict
@@ -42,9 +47,27 @@ class BuzzCache(JsonStore):
         self._items[key] = {"ts": ts, "n": int(n)}
         self._save()
 
+    # ── quota-teller (YouTube) ────────────────────────────────────────────────
+    @staticmethod
+    def _quota_key(platform: str, day: str) -> str:
+        return f"quota:{platform}:{day}"
+
+    def quota_used(self, platform: str, day: str) -> int:
+        return int((self._items.get(self._quota_key(platform, day)) or {}).get("units", 0) or 0)
+
+    def quota_add(self, platform: str, day: str, units: int) -> int:
+        k = self._quota_key(platform, day)
+        total = int((self._items.get(k) or {}).get("units", 0) or 0) + int(units)
+        self._items[k] = {"units": total}
+        self._save()
+        return total
+
 # De velden die een observatie-rij draagt (self-documenting; ook de test leunt hierop).
+# v2: context_id/context_title (nullable) duiden een comment aan zijn video/post — tegen het
+# frame-effect. Oude rijen zonder deze velden blijven geldig (append-only, geen herschrijf).
 FIELDS = ("id", "platform", "subreddit", "permalink", "title", "fragment",
-          "score", "num_comments", "created_utc", "fetched_at", "query", "query_set_id")
+          "score", "num_comments", "created_utc", "fetched_at", "query", "query_set_id",
+          "context_id", "context_title")
 
 
 class BuzzObservationStore:
@@ -113,8 +136,11 @@ class BuzzObservationStore:
         """Alle rijen van één zoek-set."""
         return [r for r in self.all() if r.get("query_set_id") == query_set_id]
 
-    def top_by_score(self, query_set_id: str, limit: int = 5) -> list[dict]:
-        """De hoogst scorende rijen van een set (voor de wall-samenvatting van Billy Buzz)."""
-        rows = self.for_set(query_set_id)
+    def top_by_score(self, query_set_id: str, limit: int = 5, platform: str | None = None) -> list[dict]:
+        """De hoogst scorende rijen van een set (voor de wall-samenvatting van Billy Buzz),
+        optioneel gefilterd op platform. Score-vergelijking tússen platforms is appels/peren
+        (YT-likes vs Bluesky-likes) — daarom filtert de wall per platform en normaliseert niet."""
+        rows = [r for r in self.for_set(query_set_id)
+                if platform is None or r.get("platform") == platform]
         rows.sort(key=lambda r: (r.get("score") or 0), reverse=True)
         return rows[:limit]
