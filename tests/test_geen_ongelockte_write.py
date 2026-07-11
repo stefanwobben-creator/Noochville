@@ -57,6 +57,8 @@ _WHITELIST = {
     "link_targets.py":   (1, "single-writer: alleen de daemon"),
     "seed_surge_store.py": (1, "single-writer: alleen de daemon"),
     "keyword_scheduler.py": (1, "single-writer: alleen een daemon-skill"),
+    "deliverable_store.py": (1, "write-once sidecar per deliverable (data/deliverables/<id>.json); "
+                               "lock-vrij want elk id is uniek — NIET de index, die loopt via JsonStore._save"),
     # ── daemon-lokaal: per-thread/single-writer state, geen gedeelde store ──
     "inhabitant.py":     (5, "daemon-lokaal: per-rol-thread reflect-/goal-state (eigen bestand per rol)"),
     "roles.py":          (3, "daemon-lokaal: per-rol single-writer state (last_day/seed)"),

@@ -95,6 +95,9 @@ class Village:
             os.path.join(self.context.data_dir, "role_metrics.json"))
         self.context.projects = ProjectLedger(
             os.path.join(self.context.data_dir, "projects.json"))
+        from nooch_village.deliverable_store import DeliverableStore
+        self.context.deliverables = DeliverableStore(       # skill-resultaten overleven het project
+            os.path.join(self.context.data_dir, "deliverables.json"))
         # Board-watch: de cockpit draait in een LOS proces met een eigen in-memory bus; een bord-drag
         # naar ACTIEF schrijft alleen projects.json. Deze village-poll herleest dat bestand en vertaalt
         # een verse naar-'running'-overgang naar een in-memory project_activated-event, zodat de

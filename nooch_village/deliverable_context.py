@@ -41,15 +41,45 @@ def _clip(text: str, n: int) -> str:
     return (cut or s[:n]) + "…"
 
 
-def gather_deliverable_context(ledger, goal, keyword=None, *, max_notes, max_chars, exclude_pid=None) -> str:
+def _wall_notes(p) -> list[tuple]:
+    """[(text, at)] van de 📎-rol-deliverables op de project-wall — fallback voor oude projecten
+    (van vóór de DeliverableStore). ⚠️-faalnotes en mens/voortgang-entries eruit."""
+    out = []
+    for entry in (p.get("log") or []):
+        if entry.get("who") != "rol":
+            continue
+        text = entry.get("text") or ""
+        if not text.startswith(_NOTE_MARK):
+            continue
+        out.append((text, entry.get("at", 0) or 0))
+    return out
+
+
+def _store_notes(store, pid) -> list[tuple] | None:
+    """[(summary, created_at)] uit de DeliverableStore. None als de store ontbreekt of dit project
+    géén records heeft → de caller valt dan terug op de wall (oud project). De `summary` is exact de
+    📎-rendering die óók op de wall staat, dus de scoring is gedragsgelijk."""
+    if store is None:
+        return None
+    try:
+        recs = store.for_project(pid)
+    except Exception:
+        return None
+    if not recs:
+        return None
+    return [((r.get("summary") or ""), r.get("created_at", 0) or 0) for r in recs]
+
+
+def gather_deliverable_context(ledger, goal, keyword=None, *, max_notes, max_chars,
+                               exclude_pid=None, store=None) -> str:
     """Bouw een compact contextblok van relevante, eerder opgeleverde deliverables.
 
-    Score = woord-overlap tussen (goal + keyword) en (project-keyword + project-scope + note-text).
-    Score 0 → niet opnemen. Sortering: score desc, dan recentste eerst. max_notes en max_chars zijn hard.
-    Output per note: "[<owner>/<scope[:60]>] <note-text[:200]>". Leeg → "".
+    Bron: de DeliverableStore (records per afgerond project); voor oude projecten zonder records
+    valt hij terug op de wall-parsing (📎-notes). Score = woord-overlap tussen (goal + keyword) en
+    (project-keyword + project-scope + note-text). Score 0 → niet opnemen. Sortering: score desc, dan
+    recentste eerst. max_notes en max_chars zijn hard. Output per note: "[<owner>/<scope[:60]>] <note[:200]>".
 
-    `exclude_pid`: sluit het huidige project uit als bron (geen zelf-referentie). Aanvulling op de
-    scope-signatuur; nodig omdat een project in principe ook een afgeronde eigen bron kan zijn."""
+    `exclude_pid`: sluit het huidige project uit als bron (geen zelf-referentie)."""
     try:
         query = _tokens(f"{goal or ''} {keyword or ''}")
         if not query:
@@ -61,16 +91,14 @@ def gather_deliverable_context(ledger, goal, keyword=None, *, max_notes, max_cha
             owner = p.get("owner", "") or ""
             scope = _scope_text(p.get("scope"))
             pkw = p.get("keyword", "") or ""
-            for entry in (p.get("log") or []):
-                if entry.get("who") != "rol":
-                    continue                                      # mens/voortgang-entries eruit
-                text = entry.get("text") or ""
-                if not text.startswith(_NOTE_MARK):
-                    continue                                      # alleen 📎-deliverables; ⚠️-faalnotes eruit
+            notes = _store_notes(store, p.get("id"))
+            if notes is None:                                     # geen store-records → wall-fallback
+                notes = _wall_notes(p)
+            for text, at in notes:
                 score = len(query & _tokens(f"{pkw} {scope} {text}"))
                 if score <= 0:
                     continue                                      # geen overlap → niet opnemen
-                scored.append((score, entry.get("at", 0) or 0, owner, scope, text))
+                scored.append((score, at, owner, scope, text))
         if not scored:
             return ""
         scored.sort(key=lambda t: (-t[0], -t[1]))                 # score desc, dan recentste eerst
