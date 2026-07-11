@@ -163,11 +163,22 @@ def test_store_fout_laat_wall_note_intact(tmp_path):
 
 
 def test_project_completed_draagt_deliverable_ids(tmp_path):
+    # Review-gate: uitvoer schrijft de deliverable + zet WACHT; project_completed (mét deliverable_ids)
+    # komt pas bij mens-DONE via de board-watch (village._poll_board), niet autonoom.
+    from types import SimpleNamespace as _NS
+    from nooch_village.village import Village
     ledger, ds = _stores(tmp_path)
     inh = _inh(tmp_path, ledger, ds)
-    events = []
-    inh.bus.subscribe("project_completed", lambda e: events.append(e.data))
     pid = ledger.create("harry_hemp", "doel", "human", status="queued")
     _prep(ledger, pid, [("studies", "openalex_evidence", "barefoot", "")])
-    inh._claim_run_complete(pid)
-    assert events and events[0]["deliverable_ids"] == [ds.for_project(pid)[0]["id"]]
+    inh._claim_run_complete(pid)                            # → deliverable geschreven, project in WACHT
+    did = ds.for_project(pid)[0]["id"]
+    assert ledger.get(pid)["status"] == "blocked" and ledger.get(pid)["blocked_on"] == "review"
+    # mens kent Done toe → board-watch vuurt project_completed met de deliverable_ids
+    ledger.complete(pid, "checklist voltooid (1/1) — goedgekeurd na review")
+    events = []
+    bus = inh.bus; bus.subscribe("project_completed", lambda e: events.append(e.data))
+    stub = _NS(context=_NS(projects=ledger, deliverables=ds, _autonomous_done=set()), bus=bus,
+               _activated_seen=set(), _completed_seen=set())
+    Village._poll_board(stub)
+    assert events and events[0]["deliverable_ids"] == [did] and events[0]["route"] == "review"

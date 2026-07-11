@@ -246,6 +246,23 @@ class ProjectLedger:
             return False
         p["status"] = "done"
         p["outcome"] = outcome
+        # blocked_on blijft bewust staan: een review-goedkeuring is 'done' MÉT blocked_on=="review".
+        # De board-watch (village._poll_board) leest die marker om cross-proces project_completed te vuren.
+        self._touch(p)
+        self._save()
+        return True
+
+    def mark_awaiting_review(self, pid: str) -> bool:
+        """Checklist volledig af → wacht-op-review: status=blocked, blocked_on='review', plus het
+        PERSISTENTE `review_raised`-vlag (restart-bestendig; gewist bij elke checklist-mutatie). Dat vlag
+        voorkomt dat een volgende puls herblokkeert nadat de review is afgewezen en de rol doorwerkt.
+        GEEN outcome — die wordt pas bij Done-toekenning (mens sleept wacht→done) gezet."""
+        p = self._projects.get(pid)
+        if p is None or p["status"] in _TERMINAL:
+            return False
+        p["status"] = "blocked"
+        p["blocked_on"] = "review"
+        p["review_raised"] = True
         self._touch(p)
         self._save()
         return True
@@ -266,6 +283,7 @@ class ProjectLedger:
             return None
         cl = {"id": uuid.uuid4().hex[:8], "title": (title or "").strip()[:80] or "Checklist", "items": []}
         self._checklists(p).append(cl)
+        p.pop("review_raised", None)                  # checklist-mutatie → review-vlag wissen (Q2)
         self._touch(p); self._save()
         return cl
 
@@ -276,6 +294,7 @@ class ProjectLedger:
         before = len(self._checklists(p))
         p["checklists"] = [cl for cl in self._checklists(p) if cl.get("id") != clid]
         if len(p["checklists"]) != before:
+            p.pop("review_raised", None)              # checklist-mutatie → review-vlag wissen (Q2)
             self._touch(p); self._save()
             return True
         return False
@@ -297,6 +316,7 @@ class ProjectLedger:
         if not payload_ok:
             item["payload_ok"] = False               # payload mist een verplicht veld → niet uitvoerbaar
         cl.setdefault("items", []).append(item)
+        p.pop("review_raised", None)                  # checklist-mutatie → review-vlag wissen (Q2)
         self._touch(p); self._save()
         return True
 
@@ -308,6 +328,7 @@ class ProjectLedger:
         for it in cl.get("items", []):
             if it["id"] == item_id:
                 it["done"] = not it.get("done")
+                p.pop("review_raised", None)          # checklist-mutatie → review-vlag wissen (Q2)
                 self._touch(p); self._save()
                 return True
         return False
@@ -320,6 +341,7 @@ class ProjectLedger:
         n = len(cl.get("items", []))
         cl["items"] = [it for it in cl.get("items", []) if it["id"] != item_id]
         if len(cl["items"]) != n:
+            p.pop("review_raised", None)              # checklist-mutatie → review-vlag wissen (Q2)
             self._touch(p); self._save()
             return True
         return False
@@ -359,6 +381,7 @@ class ProjectLedger:
                     it["payload"] = pl
                 if off.get("payload_ok") is False:
                     it["payload_ok"] = False
+                p.pop("review_raised", None)          # checklist-mutatie → review-vlag wissen (Q2)
                 self._touch(p); self._save()
                 return True
         return False
@@ -666,7 +689,7 @@ class ProjectLedger:
 # faalt zodra een methode die _save aanroept niet in deze lijst staat. Reads staan er bewust NIET in.
 _WRITE_METHODS = (
     "create", "start", "set_due", "add_reaction", "attach_add", "attach_file", "attach_remove",
-    "reopen", "block", "unblock", "complete", "checklist_add", "checklist_remove", "check_add",
+    "reopen", "block", "unblock", "complete", "mark_awaiting_review", "checklist_add", "checklist_remove", "check_add",
     "check_toggle", "check_remove", "set_item_offer", "accept_item_offer", "edit", "approve",
     "discard", "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
     "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",

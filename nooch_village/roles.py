@@ -1915,6 +1915,7 @@ class Noochie(Inhabitant):
         "competitor_interest",
         "locale_insight",
         "project_completed",
+        "project_awaiting_review",
     )
 
     def __init__(self, *args, **kwargs):
@@ -2062,14 +2063,19 @@ class Noochie(Inhabitant):
             "project_id": event.data.get("project_id", ""),   # voor project_completed → scope-lookup bij dag-einde
         })
 
+    # Bulletin-werkwoord per levenscyclus-event: afgerond én wacht-op-review (review-gate) op één regel.
+    _BULLETIN_VERBS = {"project_completed": "rondde af", "project_awaiting_review": "wacht op review"}
+
     def _enrich_completions(self, events: list) -> list:
-        """Geef project_completed-events een leesbare afrondingsregel '<owner> rondde af: <scope>'.
-        Scope + owner komen UIT de ledger op project_id (records/ledger = de waarheid; de payload draagt
-        bewust geen scope). Project onvindbaar in de ledger → regel overslaan (fail-closed), geen crash."""
+        """Geef levenscyclus-events een leesbare regel: '<owner> rondde af: <scope>' (Done) of
+        '<owner> wacht op review: <scope>' (checklist af, review-gate). Scope + owner komen UIT de ledger
+        op project_id (records/ledger = de waarheid; de payload draagt bewust geen scope). Project
+        onvindbaar in de ledger → regel overslaan (fail-closed), geen crash."""
         ledger = getattr(self.context, "projects", None)
         out = []
         for e in events:
-            if e.get("name") != "project_completed":
+            verb = self._BULLETIN_VERBS.get(e.get("name"))
+            if verb is None:
                 out.append(e)
                 continue
             pid = e.get("project_id") or ""
@@ -2079,7 +2085,7 @@ class Noochie(Inhabitant):
             sc = p.get("scope")
             scope = sc if isinstance(sc, str) else ((sc.get("goal") or sc.get("title") or "")
                                                     if isinstance(sc, dict) else str(sc))
-            out.append({**e, "note": f"{self._owner_label(p.get('owner', ''))} rondde af: {scope}"})
+            out.append({**e, "note": f"{self._owner_label(p.get('owner', ''))} {verb}: {scope}"})
         return out
 
     def _owner_label(self, owner_id: str) -> str:

@@ -82,10 +82,19 @@ sessie opent hiermee.
   heeft er een). Consumenten verwijzen daarom op `project_id` en lezen de
   wall integraal. Zodra een consument één specifieke note moet aanwijzen:
   het id-patroon van `add_feed_entry` overnemen voor `add_role_message`.
-- `project_completed` dekt alleen autonome afronding (via
-  `Inhabitant._claim_run_complete`); mens-DONE via `cockpit2._act_proj_done`
-  is een apart proces en bereikt de in-memory bus niet. Heroverwegen bij de
-  netwerk-bus-naad.
+- ~~`project_completed` dekt alleen autonome afronding; mens-DONE via
+  `cockpit2._act_proj_done` bereikt de in-memory bus niet.~~ **OPGELOST (review-gate):**
+  Done is nu een mens-toegekende status. `_act_proj_done` laat `blocked_on=="review"`
+  als marker staan; de daemon-board-watch (`village._poll_board`) detecteert de
+  wacht→done-overgang cross-proces en vuurt `project_completed` (met `deliverable_ids`)
+  op de daemon-bus — precies één keer.
+- **Kanaal-model — `project_completed` als lifecycle-feit.** `project_completed` vuurt voor
+  ELKE done (lifecycle-feit), met een `route`-veld: `"autonoom"` (rol-thread rondde autonoom af),
+  `"review"` (via de gate: checklist af → wacht → mens keurt goed), `"direct"` (mens sleepte
+  Actief→Done zonder de gate). Consumenten FILTEREN zelf: machinerie die op deliverables werkt,
+  negeert events zonder `deliverable_ids` of met `route != "review"`. AI-aandacht op een handmatige
+  done vraagt de mens expliciet via `@mention` of `#task` — het lifecycle-event zelf trekt geen
+  autonoom werk aan.
 - Stale-daemon-les (09-07): een daemon die een deploy-restart mist draait stil
   door op een oude build (de nachtpuls draaide op een build van de vorige avond
   en viel niet door naar de werkende LLM-trede). Bij rare nachtelijke output
@@ -121,12 +130,14 @@ sessie opent hiermee.
   géén `.md`-bestand. De wall-outcome-`note` weigert nu bewust bij >4000 i.p.v.
   te trunceren. Wens: een echt `.md`-artefact bij de rol voor afgeronde kennis
   (bestand op schijf i.p.v. JSON-body). Eigen scope.
-- DONE→ACTIEF wist `outcome` (in `reopen()`) en de dagpuls voltooit een compleet
-  ge-vinkte checklist meteen opnieuw met een vals `project_completed`-event. De
-  wall-outcome-`action` beschermt hiertegen door de VOLGORDE (eerst het open
-  checklist-item toevoegen, dán `reopen()`, zodat de checklist incompleet is).
-  Een structurele guard in `reopen()` of de puls (geen re-complete zonder nieuw
-  werk) is een eigen scope.
+- ~~DONE→ACTIEF wist `outcome` en de dagpuls voltooit een compleet ge-vinkte
+  checklist meteen opnieuw met een vals `project_completed`-event.~~ **OPGELOST
+  (review-gate):** de dagpuls voltooit niets meer autonoom — een volle checklist
+  gaat naar WACHT (review), en de persistente `review_raised`-vlag voorkomt
+  herblokkeren zonder nieuw werk. Een heropend done-project met een volle checklist
+  blijft dus in ACTIEF staan zonder vals event; pas een checklist-mutatie (nieuw/uit-
+  gevinkt item) wist de vlag en opent een nieuwe review-ronde. Pad is nu bovendien
+  zeldzaam (Done is mens-toegekend).
 - SPA-shell (shellSwap + cleanup-registry + guard-test) ligt klaar op branch
   `feature/callbar-shell-primitive`, PR #175, groen. Opgepakt worden zodra
   paginanavigatie zelf een spanning wordt. Niet gemerged: de call bar-spanning is
