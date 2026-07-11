@@ -35,7 +35,11 @@ _SEED_SETS: dict[str, dict] = {
             },
             "youtube": {
                 "active": True,
-                "channel_ids": [],
+                # Geresolved via channels.list?forHandle= (eenmalig, geverifieerd tegen de API-titel):
+                #   UCCJOX9b_oojDzit600t3ORA = Anya's Reviews (@anyasreviews)
+                #   UCId9g4zlQ9BOn6fLKIt1Y0A = Rose Anvil (@roseanvil)
+                # 'The Barefoot Shoe Guy' was niet resolvebaar via forHandle → bewust weggelaten (niet gokken).
+                "channel_ids": ["UCCJOX9b_oojDzit600t3ORA", "UCId9g4zlQ9BOn6fLKIt1Y0A"],
                 "queries": ["barefoot shoes review", "barefoot shoes 1 year"],
             },
             "bluesky": {

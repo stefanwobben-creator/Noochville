@@ -112,7 +112,8 @@ def test_youtube_permalink_en_context_title(tmp_path):
     ctx = SimpleNamespace(settings={"YOUTUBE_API_KEY": "k"}, data_dir=str(tmp_path))
     cfg = {"active": True, "channel_ids": [], "queries": ["barefoot"]}
     get = _router(search=_yt_search("VID1", "Great barefoot review"),
-                  comments=_yt_comments(("C1", "love it", 12), ("C2", "hurts", 3)))
+                  comments=_yt_comments(("C1", "love these barefoot shoes", 12),
+                                        ("C2", "my feet hurt after a run", 3)))
     with patch("requests.get", get):
         res = YouTubeFetcher().fetch("s", cfg, ctx, cache, _opts())
     assert res["refuse"] is None and len(res["rows"]) == 2
@@ -141,6 +142,17 @@ def test_youtube_quota_guard_stopt(tmp_path):
         res = YouTubeFetcher().fetch("s", {"active": True, "queries": ["x"]}, ctx, cache, _opts())
     assert res["refuse"] == "BUZZ_QUOTA" and res["rows"] == []
     assert cache.quota_used("youtube", day) == QUOTA_BUDGET - 1    # geen unit meer uitgegeven
+
+
+def test_youtube_telt_te_korte_comments(tmp_path):
+    cache = BuzzCache(str(tmp_path / "cache.json"))
+    ctx = SimpleNamespace(settings={"YOUTUBE_API_KEY": "k"}, data_dir=str(tmp_path))
+    get = _router(search=_yt_search("V", "t"),
+                  comments=_yt_comments(("C1", "een echt bruikbare ervaring hier", 5),
+                                        ("C2", "nice!", 2), ("C3", "🔥", 1)))
+    with patch("requests.get", get):
+        res = YouTubeFetcher().fetch("s", {"active": True, "queries": ["x"]}, ctx, cache, _opts())
+    assert len(res["rows"]) == 1 and res["short"] == 2      # twee te kort overgeslagen
 
 
 def test_youtube_comments_disabled_skipt(tmp_path):
@@ -181,7 +193,8 @@ def _skill_ctx(tmp_path, with_key=True):
 @pytest.mark.smoke
 def test_skill_mengt_youtube_en_bluesky(tmp_path):
     ctx = _skill_ctx(tmp_path, with_key=True)
-    get = _router(search=_yt_search("V", "vid"), comments=_yt_comments(("C1", "a", 1)),
+    get = _router(search=_yt_search("V", "vid"),
+                  comments=_yt_comments(("C1", "een lange genoeg comment hier", 1)),
                   bsky=_bsky_posts(("at://d/app.bsky.feed.post/r1", "bob.bsky.social", "b", 2)))
     with patch("time.sleep"), patch("requests.get", get):
         res = CommunityListeningSkill().run({"query_set_id": "barefoot_ervaringen"}, ctx)

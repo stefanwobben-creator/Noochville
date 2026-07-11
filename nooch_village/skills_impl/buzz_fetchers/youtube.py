@@ -26,6 +26,7 @@ _COST = {"search": 100, "playlistItems": 1, "commentThreads": 1}
 _VIDEOS_PER_CHANNEL = 5
 _VIDEOS_PER_QUERY = 3
 _COMMENTS_PER_VIDEO = 50
+_MIN_COMMENT_LEN = 15         # kortere comments ("nice!", "🔥", "first") tellen als 'te kort' en worden overgeslagen
 
 
 class _QuotaExceeded(Exception):
@@ -46,6 +47,7 @@ class YouTubeFetcher(BuzzFetcher):
     def __init__(self):
         self._cache = None
         self._day = None
+        self._short = 0          # aantal comments dat als 'te kort' is overgeslagen (per fetch)
 
     def _get(self, endpoint: str, params: dict) -> dict:
         import requests
@@ -110,6 +112,9 @@ class YouTubeFetcher(BuzzFetcher):
             text = (sn.get("textOriginal") or sn.get("textDisplay") or "").strip()
             if not cid or not text:
                 continue
+            if len(text) < _MIN_COMMENT_LEN:            # ruis ('nice!', emoji) → 'te kort', overslaan
+                self._short += 1
+                continue
             rows.append({
                 "platform": "youtube",
                 "permalink": f"https://www.youtube.com/watch?v={vid}&lc={cid}",
@@ -140,6 +145,7 @@ class YouTubeFetcher(BuzzFetcher):
             refuse("BUZZ_NO_KEY", "YOUTUBE_API_KEY ontbreekt — YouTube-fetcher slaat over")
             return {"rows": [], "refuse": "BUZZ_NO_KEY", "requests": 0, "note": "geen key"}
         self._cache = cache
+        self._short = 0
         now = opts["now"]
         self._day = _utc_day(now)
         channels = cfg.get("channel_ids") or []
@@ -180,6 +186,7 @@ class YouTubeFetcher(BuzzFetcher):
         except _QuotaExceeded:
             refuse("BUZZ_QUOTA", f"YouTube dagbudget {QUOTA_BUDGET} units bereikt",
                    used=cache.quota_used("youtube", self._day))
-            return {"rows": rows, "refuse": "BUZZ_QUOTA", "requests": made, "note": "quota"}
-        return {"rows": rows, "refuse": None, "requests": made,
+            return {"rows": rows, "refuse": "BUZZ_QUOTA", "requests": made,
+                    "short": self._short, "note": "quota"}
+        return {"rows": rows, "refuse": None, "requests": made, "short": self._short,
                 "note": f"{cache.quota_used('youtube', self._day)}u/{QUOTA_BUDGET}"}

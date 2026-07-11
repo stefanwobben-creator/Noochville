@@ -112,6 +112,8 @@ class CommunityListeningSkill(Skill):
             total_new += new
             counts[platform] = new
             label = f"{platform}: {new} nieuw"
+            if res.get("short"):                    # YouTube: comments overgeslagen wegens te kort
+                label += f", {res['short']} te kort"
             if res.get("refuse"):
                 label += f" [{res['refuse']}]"
                 first_refuse = first_refuse or res["refuse"]
