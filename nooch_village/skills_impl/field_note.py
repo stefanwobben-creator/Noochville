@@ -3,6 +3,8 @@ import os, json
 from datetime import datetime
 from nooch_village.skills import Skill
 from nooch_village.llm import reason
+from nooch_village.grounding import ground_field_note
+from nooch_village.evidence_ledger import EvidenceLedger
 
 MISSION = (
     "Nooch.earth bewijst dat ethisch en duurzaam ondernemen winstgevend is. "
@@ -39,6 +41,13 @@ class FieldNoteSkill(Skill):
 
         body = self._compose(plausible, trends, visitors, last_visitors, tension, reason_txt)
 
+        # Grondings-poort (De Kroniek): een LLM-duiding mag geen cijfers/datums verzinnen die niet uit de
+        # data volgen. Ongegrond → MARKEREN i.p.v. schoon publiceren (de mens ziet dat 't onbetrouwbaar is).
+        issues = ground_field_note(body, plausible, today)
+        if issues:
+            body = ("> ⚠️ ONGEGROND — deze Field Note bevat data die niet uit de bron volgt:\n"
+                    + "".join(f">  - {i}\n" for i in issues) + ">\n\n" + body)
+
         out_dir = os.path.join(context.data_dir, "output")
         os.makedirs(out_dir, exist_ok=True)
         raw_path = os.path.join(out_dir, f"pulse_raw_{today}.json")
@@ -47,7 +56,18 @@ class FieldNoteSkill(Skill):
         path = os.path.join(out_dir, f"field_note_{today}.md")
         with open(path, "w") as f:
             f.write(body)
-        return {"path": path, "tension": tension, "reason": reason_txt}
+
+        # Onthouden: leg de grondings-uitkomst vast in de Kroniek (fail-safe — nooit de puls breken).
+        try:
+            led = EvidenceLedger(os.path.join(context.data_dir, "evidence_ledger.jsonl"))
+            led.record(role_id="website_watcher", skill="field_note", query=today, source="grounding",
+                       status="fout" if issues else "bevestigd", result_ref=os.path.basename(path),
+                       meta={"issues": issues} if issues else None)
+        except Exception:
+            pass
+
+        return {"path": path, "tension": tension, "reason": reason_txt,
+                "grounded": not issues, "issues": issues}
 
     # --- helpers ---
     def _visitors(self, plausible):
