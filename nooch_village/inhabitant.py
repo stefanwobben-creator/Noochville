@@ -1149,7 +1149,7 @@ class Inhabitant(threading.Thread):
             EvidenceLedger, run_with_ladder, classify_result, SKILL_LADDERS)
         rung_names = SKILL_LADDERS.get(skill)
         if not rung_names:
-            return self.use_skill(skill, payload)            # geen ladder → onveranderd
+            return self.use_skill(skill, payload), skill     # geen ladder → onveranderd (bron = de skill zelf)
 
         led = EvidenceLedger(os.path.join(self.context.data_dir, "evidence_ledger.jsonl"))
         query = str(payload.get("term") or payload.get("query") or "")
@@ -1168,7 +1168,7 @@ class Inhabitant(threading.Thread):
 
         outcome = run_with_ladder(led, role_id=self.id, skill=skill, query=query,
                                   rungs=rungs, classify=classify_result, escalate=_escalate)
-        return outcome.get("result") or {}
+        return (outcome.get("result") or {}), (outcome.get("source") or skill)   # (resultaat, echte bron)
 
     def _execute_checklist(self, project: dict, today: str) -> str | None:
         pid = project["id"]
@@ -1196,22 +1196,23 @@ class Inhabitant(threading.Thread):
             if not isinstance(payload, dict) or not payload:
                 q = item.get("query", "")
                 payload = {"term": q} if q else {}               # legacy back-compat ({term: query})
-            result = self._use_skill_with_ladder(skill, payload)   # De Kroniek: reroute + onthouden
-
+            result, used_source = self._use_skill_with_ladder(skill, payload)   # De Kroniek: reroute + onthouden
+            # label toont een reroute: 'google_patents (fallback voor epo_patents)'. Zonder ladder = de skill zelf.
+            src_label = used_source if used_source == skill else f"{used_source} (fallback voor {skill})"
             status, archetype = self._classify_result(result)    # normaliseer beide fail-conventies
             if status == "gelukt":
-                summary = self._deliverable_note(item, result, archetype)
+                summary = self._deliverable_note(item, result, archetype, source=used_source)
                 wall_note_id = ledger.add_role_message(pid, summary)
-                self._store_deliverable(project, item, pos, skill, result, summary, wall_note_id)
+                self._store_deliverable(project, item, pos, used_source, result, summary, wall_note_id)
                 ledger.check_toggle(pid, clid, item["id"])
                 succeeded += 1
-                self.log.info("✅ project '%s': item '%s' via %s afgerond", pid, item.get("text", "")[:40], skill)
+                self.log.info("✅ project '%s': item '%s' via %s afgerond", pid, item.get("text", "")[:40], src_label)
             else:
                 why = (result.get("error") or result.get("reason") or
                        ("geen resultaat" if status == "leeg" else "skill leverde geen resultaat"))
-                ledger.add_role_message(pid, f"⚠️ '{item.get('text','')}' via {skill} niet gelukt ({status}): {why}")
+                ledger.add_role_message(pid, f"⚠️ '{item.get('text','')}' via {src_label} niet gelukt ({status}): {why}")
                 self.log.warning("⚠️ project '%s': item '%s' via %s %s: %s",
-                                 pid, item.get("text", "")[:40], skill, status, why)
+                                 pid, item.get("text", "")[:40], src_label, status, why)
         ledger.mark_tended(pid, today)
         fresh_cl = self._project_checklist(ledger.get(pid)) or {}
         items = fresh_cl.get("items", [])
@@ -1348,9 +1349,13 @@ class Inhabitant(threading.Thread):
         except Exception as e:                              # store is additief → nooit de puls breken
             self.log.warning("deliverable-record niet opgeslagen (wall-note staat wél): %s", e)
 
-    def _deliverable_note(self, item: dict, result: dict, archetype) -> str:
-        """Rauw-maar-leesbaar per archetype; geen velden weggooien, geen gemene-deler-vorm."""
-        head = f"📎 {item.get('text','')} — via {item.get('skill')}"
+    def _deliverable_note(self, item: dict, result: dict, archetype, source: str | None = None) -> str:
+        """Rauw-maar-leesbaar per archetype; geen velden weggooien, geen gemene-deler-vorm. `source` = de
+        skill die het resultaat écht leverde; wijkt die af van de item-skill (skill-ladder-reroute), dan
+        toont het label '<source> (fallback voor <item-skill>)'."""
+        item_skill = item.get('skill')
+        label = item_skill if (source is None or source == item_skill) else f"{source} (fallback voor {item_skill})"
+        head = f"📎 {item.get('text','')} — via {label}"
         kind, key = archetype if archetype else (None, None)
         if kind == "list":
             recs = result.get(key, [])
