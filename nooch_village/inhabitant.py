@@ -1140,6 +1140,36 @@ class Inhabitant(threading.Thread):
         today = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
         return self._execute_checklist(project, today)
 
+    def _use_skill_with_ladder(self, skill: str, payload: dict):
+        """Skill-uitvoering met De-Kroniek-veerkracht. Heeft de skill een ladder (SKILL_LADDERS, bv.
+        epo_patents → google_patents), loop dan de bronnen af tot één BEVESTIGT; log elke uitkomst in het
+        bewijsregister (onthouden) en escaleer als LÁÁTSTE tree naar de human_inbox als alles faalt (nooit
+        stil). Zónder ladder: exact `use_skill` (ongewijzigd gedrag voor elke andere skill)."""
+        from nooch_village.evidence_ledger import (
+            EvidenceLedger, run_with_ladder, classify_result, SKILL_LADDERS)
+        rung_names = SKILL_LADDERS.get(skill)
+        if not rung_names:
+            return self.use_skill(skill, payload)            # geen ladder → onveranderd
+
+        led = EvidenceLedger(os.path.join(self.context.data_dir, "evidence_ledger.jsonl"))
+        query = str(payload.get("term") or payload.get("query") or "")
+        rungs = [(name, (lambda name=name: self.use_skill(name, payload))) for name in rung_names]
+
+        def _escalate(*, skill, query, trail):
+            try:                                             # best-effort: escalatie mag de puls nooit breken
+                from nooch_village.human_inbox import HumanInbox
+                bronnen = ", ".join(t["source"] for t in trail)
+                HumanInbox(os.path.join(self.context.data_dir, "human_inbox.json")).add_means_gap(
+                    f"skill_ladder:{skill}",
+                    f"Skill-ladder '{skill}' uitgeput ({bronnen}) voor {query!r} — geen bevestigd resultaat, "
+                    f"minstens één bron gaf een fout.", role_id=self.id, sensed_by=self.id)
+            except Exception:
+                pass
+
+        outcome = run_with_ladder(led, role_id=self.id, skill=skill, query=query,
+                                  rungs=rungs, classify=classify_result, escalate=_escalate)
+        return outcome.get("result") or {}
+
     def _execute_checklist(self, project: dict, today: str) -> str | None:
         pid = project["id"]
         ledger = self.context.projects
@@ -1166,7 +1196,8 @@ class Inhabitant(threading.Thread):
             if not isinstance(payload, dict) or not payload:
                 q = item.get("query", "")
                 payload = {"term": q} if q else {}               # legacy back-compat ({term: query})
-            result = self.use_skill(skill, payload)
+            result = self._use_skill_with_ladder(skill, payload)   # De Kroniek: reroute + onthouden
+
             status, archetype = self._classify_result(result)    # normaliseer beide fail-conventies
             if status == "gelukt":
                 summary = self._deliverable_note(item, result, archetype)
