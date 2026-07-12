@@ -25,6 +25,7 @@ from nooch_village.skills_impl.openlibrary_search_inside import OpenlibrarySearc
 from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
 from nooch_village.skills_impl.openalex import OpenalexSkill
 from nooch_village.skills_impl.epo_patents import EpoPatentsSkill
+from nooch_village.skills_impl.google_patents import GooglePatentsSkill
 from nooch_village.skills_impl.bulletin_schrijven import BulletinSchrijvenSkill
 from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
 from nooch_village.skills_impl.alphavantage import AlphaVantageIndexSkill
@@ -56,6 +57,7 @@ def build_skill_registry() -> SkillRegistry:
         SemanticScholarSkill(),
         OpenalexSkill(),
         EpoPatentsSkill(),
+        GooglePatentsSkill(),          # alternatief pad voor de skill-ladder als EPO OPS faalt
         BulletinSchrijvenSkill(),
         KeywordsEverywhereSkill(),
         AlphaVantageIndexSkill(),

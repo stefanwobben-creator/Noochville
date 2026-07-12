@@ -42,6 +42,7 @@ from nooch_village.assignments import Assignments
 from nooch_village.attachments import AttachmentStore, ARTEFACT_KINDS
 from nooch_village.observations import ObservationStore
 from nooch_village import observations
+from nooch_village.evidence_ledger import EvidenceLedger
 from nooch_village import snake
 from nooch_village.source_status import SourceStatusStore
 from nooch_village.collector import migrate_data_sources
@@ -94,6 +95,7 @@ class _Stores:
         self.assign = Assignments(os.path.join(dd, "assignments.json"))
         self.att = AttachmentStore(os.path.join(dd, "attachments.json"))
         self.observations = ObservationStore(os.path.join(dd, "observations.jsonl"))
+        self.evidence = EvidenceLedger(os.path.join(dd, "evidence_ledger.jsonl"))   # De Kroniek — bewijsregister
         self.sources = SourceStatusStore(os.path.join(dd, "sources.json"))
         self.personas = PersonaStore(os.path.join(dd, "personas.json"))
         self.projects = ProjectLedger(os.path.join(dd, "projects.json"))

@@ -121,3 +121,52 @@ class EvidenceLedger:
             else:
                 break
         return n
+
+
+# ── skill-ladder: dode route → alternatief pad, escaleren als LÁÁTSTE tree (leren, De Kroniek) ──
+def classify_result(result) -> str:
+    """Standaard-classificatie van een skill-resultaat → Kroniek-status. fout = de bron faalde
+    (error-veld of None); leeg = de bron werkte maar gaf niets (no_data of een lege resultaatlijst);
+    bevestigd = bruikbaar resultaat. Generaliseert de huisstijl (error/no_data) van de skills."""
+    if result is None:
+        return "leeg"
+    if isinstance(result, dict):
+        if result.get("error"):
+            return "fout"
+        if result.get("no_data"):
+            return "leeg"
+        for k in ("patents", "hits", "results", "rows", "items", "works", "targets"):
+            if k in result and not result[k]:
+                return "leeg"
+    return "bevestigd"
+
+
+def run_with_ladder(ledger, *, role_id, skill, query, rungs, classify=None, escalate=None) -> dict:
+    """Loop de fallback-trappen (`rungs`) af tot een BEVESTIGD resultaat; log elke uitkomst in de Kroniek.
+
+    `rungs` = [(source, callable)]; `callable()` → resultaat (of raise = fout). De eerste bevestigde
+    tree wint en stopt de ladder. Escaleren naar de mens is de LÁÁTSTE tree: alleen als geen enkele tree
+    bevestigde ÉN minstens één een fout gaf (operationeel probleem, bv. bron down). Gaven alle trees
+    'leeg', dan is dat een legitiem no_data — géén escalatie (B3: leeg is een echt feit, geen mislukking).
+
+    Geeft {status, source, result, escalated, trail}."""
+    classify = classify or classify_result
+    trail: list[dict] = []
+    for source, fn in rungs:
+        try:
+            result = fn()
+            status = classify(result)
+        except Exception as exc:
+            result, status = {"error": str(exc)}, "fout"
+        rec = ledger.record(role_id=role_id, skill=skill, query=query, source=source, status=status)
+        trail.append({"source": source, "status": status, "result": result, "record_id": rec["id"]})
+        if status == "bevestigd":
+            return {"status": "bevestigd", "source": source, "result": result,
+                    "escalated": False, "trail": trail}
+    escalated = False
+    if any(t["status"] == "fout" for t in trail) and escalate is not None:
+        escalate(skill=skill, query=query, trail=trail)          # precies één keer, na uitputting
+        escalated = True
+    last = trail[-1] if trail else {"status": "leeg", "source": None, "result": None}
+    return {"status": last["status"], "source": last["source"], "result": last.get("result"),
+            "escalated": escalated, "trail": trail}

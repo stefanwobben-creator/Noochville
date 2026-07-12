@@ -27,11 +27,15 @@ met `[Datum invullen]`). Deelbare pagina + governance-voorstel besproken; the_so
 1. **`EvidenceLedger`** (`nooch_village/evidence_ledger.py`) — append-only `data/evidence_ledger.jsonl`
    + `util.file_lock` (zoals ObservationStore/DeliverableStore). record: `{id, role_id, skill, query,
    source, status(bevestigd|leeg|fout), result_ref, ts}`. ✅ increment 1.
-2. **`run_with_ladder()`** — loopt fallback-trappen af, logt elke uitkomst naar de ledger, escaleert één
-   spanning naar de human_inbox na uitputting (nooit stil). Proef-skill: `epo_patents`. ⏳ increment 2
-   (pattern-akkoord vereist: raakt skill-invocatie).
-3. **Grondings-poort op de field note** — elk cijfer in de body moet matchen met een `plausible`-waarde
-   uit dezelfde run; mismatch → markeren i.p.v. publiceren. ⏳ increment 2 (raakt `field_note`-skill).
+2. **`run_with_ladder()` + `classify_result()`** (in `evidence_ledger.py`) — loopt fallback-trappen af,
+   logt elke uitkomst naar de Kroniek, escaleert (injecteerbare callback) na uitputting ALLEEN bij een
+   fout; alle-leeg = legitiem no_data, geen escalatie. ✅ increment 2.
+   - Alternatief pad = **`google_patents`** (keyless skill, `skills_impl/google_patents.py`),
+     geregistreerd in de factory. VOORBEREID; governance-toewijzing aan harry_hemp = activatie (Stefan).
+3. **Grondings-poort op de field note** (`grounding.py` + `field_note`-skill) — datum-drift + ongegrond
+   bezoekersgetal (getal dat nergens in de plausible-data voorkomt; per-pagina-aantallen blijven gegrond).
+   Ongegrond → ONGEGROND-banner i.p.v. schoon publiceren + `fout` in de Kroniek (fail-safe). ✅ increment 2.
+4. **`st.evidence`** in `_Stores` gedraad (cockpit) + `arch_map` bijgewerkt (nieuwe store). ✅ increment 2.
 
 ## Conventies (branch)
 fcntl-flock (`util.file_lock`) op de store; backup vóór elke serverwrite; geen inline styles;
