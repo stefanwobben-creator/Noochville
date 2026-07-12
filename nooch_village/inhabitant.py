@@ -1140,6 +1140,36 @@ class Inhabitant(threading.Thread):
         today = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
         return self._execute_checklist(project, today)
 
+    def _use_skill_with_ladder(self, skill: str, payload: dict):
+        """Skill-uitvoering met De-Kroniek-veerkracht. Heeft de skill een ladder (SKILL_LADDERS, bv.
+        epo_patents → google_patents), loop dan de bronnen af tot één BEVESTIGT; log elke uitkomst in het
+        bewijsregister (onthouden) en escaleer als LÁÁTSTE tree naar de human_inbox als alles faalt (nooit
+        stil). Zónder ladder: exact `use_skill` (ongewijzigd gedrag voor elke andere skill)."""
+        from nooch_village.evidence_ledger import (
+            EvidenceLedger, run_with_ladder, classify_result, SKILL_LADDERS)
+        rung_names = SKILL_LADDERS.get(skill)
+        if not rung_names:
+            return self.use_skill(skill, payload), skill     # geen ladder → onveranderd (bron = de skill zelf)
+
+        led = EvidenceLedger(os.path.join(self.context.data_dir, "evidence_ledger.jsonl"))
+        query = str(payload.get("term") or payload.get("query") or "")
+        rungs = [(name, (lambda name=name: self.use_skill(name, payload))) for name in rung_names]
+
+        def _escalate(*, skill, query, trail):
+            try:                                             # best-effort: escalatie mag de puls nooit breken
+                from nooch_village.human_inbox import HumanInbox
+                bronnen = ", ".join(t["source"] for t in trail)
+                HumanInbox(os.path.join(self.context.data_dir, "human_inbox.json")).add_means_gap(
+                    f"skill_ladder:{skill}",
+                    f"Skill-ladder '{skill}' uitgeput ({bronnen}) voor {query!r} — geen bevestigd resultaat, "
+                    f"minstens één bron gaf een fout.", role_id=self.id, sensed_by=self.id)
+            except Exception:
+                pass
+
+        outcome = run_with_ladder(led, role_id=self.id, skill=skill, query=query,
+                                  rungs=rungs, classify=classify_result, escalate=_escalate)
+        return (outcome.get("result") or {}), (outcome.get("source") or skill)   # (resultaat, echte bron)
+
     def _execute_checklist(self, project: dict, today: str) -> str | None:
         pid = project["id"]
         ledger = self.context.projects
@@ -1166,21 +1196,23 @@ class Inhabitant(threading.Thread):
             if not isinstance(payload, dict) or not payload:
                 q = item.get("query", "")
                 payload = {"term": q} if q else {}               # legacy back-compat ({term: query})
-            result = self.use_skill(skill, payload)
+            result, used_source = self._use_skill_with_ladder(skill, payload)   # De Kroniek: reroute + onthouden
+            # label toont een reroute: 'google_patents (fallback voor epo_patents)'. Zonder ladder = de skill zelf.
+            src_label = used_source if used_source == skill else f"{used_source} (fallback voor {skill})"
             status, archetype = self._classify_result(result)    # normaliseer beide fail-conventies
             if status == "gelukt":
-                summary = self._deliverable_note(item, result, archetype)
+                summary = self._deliverable_note(item, result, archetype, source=used_source)
                 wall_note_id = ledger.add_role_message(pid, summary)
-                self._store_deliverable(project, item, pos, skill, result, summary, wall_note_id)
+                self._store_deliverable(project, item, pos, used_source, result, summary, wall_note_id)
                 ledger.check_toggle(pid, clid, item["id"])
                 succeeded += 1
-                self.log.info("✅ project '%s': item '%s' via %s afgerond", pid, item.get("text", "")[:40], skill)
+                self.log.info("✅ project '%s': item '%s' via %s afgerond", pid, item.get("text", "")[:40], src_label)
             else:
                 why = (result.get("error") or result.get("reason") or
                        ("geen resultaat" if status == "leeg" else "skill leverde geen resultaat"))
-                ledger.add_role_message(pid, f"⚠️ '{item.get('text','')}' via {skill} niet gelukt ({status}): {why}")
+                ledger.add_role_message(pid, f"⚠️ '{item.get('text','')}' via {src_label} niet gelukt ({status}): {why}")
                 self.log.warning("⚠️ project '%s': item '%s' via %s %s: %s",
-                                 pid, item.get("text", "")[:40], skill, status, why)
+                                 pid, item.get("text", "")[:40], src_label, status, why)
         ledger.mark_tended(pid, today)
         fresh_cl = self._project_checklist(ledger.get(pid)) or {}
         items = fresh_cl.get("items", [])
@@ -1317,9 +1349,13 @@ class Inhabitant(threading.Thread):
         except Exception as e:                              # store is additief → nooit de puls breken
             self.log.warning("deliverable-record niet opgeslagen (wall-note staat wél): %s", e)
 
-    def _deliverable_note(self, item: dict, result: dict, archetype) -> str:
-        """Rauw-maar-leesbaar per archetype; geen velden weggooien, geen gemene-deler-vorm."""
-        head = f"📎 {item.get('text','')} — via {item.get('skill')}"
+    def _deliverable_note(self, item: dict, result: dict, archetype, source: str | None = None) -> str:
+        """Rauw-maar-leesbaar per archetype; geen velden weggooien, geen gemene-deler-vorm. `source` = de
+        skill die het resultaat écht leverde; wijkt die af van de item-skill (skill-ladder-reroute), dan
+        toont het label '<source> (fallback voor <item-skill>)'."""
+        item_skill = item.get('skill')
+        label = item_skill if (source is None or source == item_skill) else f"{source} (fallback voor {item_skill})"
+        head = f"📎 {item.get('text','')} — via {label}"
         kind, key = archetype if archetype else (None, None)
         if kind == "list":
             recs = result.get(key, [])

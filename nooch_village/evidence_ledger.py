@@ -35,6 +35,13 @@ log = logging.getLogger("village.evidence")
 # De drie eersteklas uitkomsten. leeg ≠ fout: een lege bron is een echt (no_data-)feit, geen mislukking.
 STATUSES = ("bevestigd", "leeg", "fout")
 
+# Skill-ladders (leren/veerkracht): een skill met een ladder loopt bij een dode route door naar het
+# alternatieve pad, tot één bevestigt. epo_patents → google_patents (het keyless alternatief als OPS
+# faalt). Uitbreidbaar per skill; skills zonder entry draaien ongewijzigd (één bron).
+SKILL_LADDERS = {
+    "epo_patents": ["epo_patents", "google_patents"],
+}
+
 
 class EvidenceLedger:
     def __init__(self, path: str):
