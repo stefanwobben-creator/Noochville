@@ -1011,6 +1011,28 @@ def _act_proj_describe(c):
         return nxt, msg
 
 
+def _act_proj_regen_doc(c):
+        # AUTHZ: zelfde poort als de edit-route (rolvervuller of Circle Lead) — regenereren overschrijft
+        # het einddocument. Forceert een verse synthese uit de deliverables ('trek oud project bij').
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        p = pj.get(g("pid"))
+        if p is None:
+            return nxt, "✗ project niet gevonden"
+        _deny = _role_gate(p.get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
+        _load_env()                                          # LLM-key beschikbaar maken (zoals _ai_reply)
+        import logging
+        from nooch_village.inhabitant import synthesize_einddocument
+        rec = st.records.get(p.get("owner"))
+        ok = synthesize_einddocument(
+            project_docs=st.project_docs, deliverables=st.deliverables, projects=st.projects,
+            personas=st.personas, record=rec, settings={}, project=p, force_final=True,
+            log=logging.getLogger("village.cockpit_regen"))
+        return nxt, ("📄 rapport opnieuw gegenereerd" if ok
+                     else "geen rapport gegenereerd (geen deliverables of geen LLM-key)")
+
+
 def _act_proj_doc_edit(c):
         # AUTHZ: rolvervuller of Circle Lead — het einddocument is operationeel werk binnen de rol; de
         # mens redigeert het bij review via dezelfde poort als andere project-operaties.
@@ -2404,6 +2426,7 @@ ACTIONS = {
     "proj_rename": _act_proj_rename,
     "proj_describe": _act_proj_describe,
     "proj_doc_edit": _act_proj_doc_edit,
+    "proj_regen_doc": _act_proj_regen_doc,
     "proj_settrekker": _act_proj_settrekker,
     "proj_setowner": _act_proj_setowner,
     "proj_approve": _act_proj_approve,

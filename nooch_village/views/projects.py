@@ -760,7 +760,11 @@ def _einddocument_html(st: _Stores, pid: str, rw: bool, hid) -> str:
               f"{md_editor('doc', value=doc, rows=10, help=True)}"
               f"<button class='btn ok sm' type='submit' name='action' value='proj_doc_edit'>Document opslaan</button>"
               f"</form></details>")
-    return f"{view}{editor}"
+    regen = (f"<form method='post' action='/action' class='pf einddoc-regen'>{hid()}"
+             f"<button class='flink' type='submit' name='action' value='proj_regen_doc' "
+             f"onclick=\"return confirm('Rapport opnieuw genereren uit de laatste deliverables? "
+             f"Dit overschrijft de huidige tekst.')\">🔄 rapport opnieuw genereren</button></form>")
+    return f"{view}{editor}{regen}"
 
 
 def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", back: str = "/",

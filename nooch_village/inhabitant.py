@@ -1245,85 +1245,18 @@ class Inhabitant(threading.Thread):
         return None
 
     def _synthesize_einddocument(self, project: dict, done: int, total: int, *, force_final: bool) -> None:
-        """Constitutie-plicht (basisklasse, GEEN skill, GEEN governance per rol): werk het levende
-        einddocument van het project bij in de PERSONA-stem. Eén synthese-call per project per puls
-        (de caller vuurt hooguit één keer). Fail-closed: geen LLM-antwoord of exceptie → document
-        ONGEWIJZIGD, logregel; wall/store/gate draaien door (de review-gate werkt ook zonder document).
-
-        v1-besluit: de AI schrijft het HELE document (geen diff, geen merge-logica). Mens-edits via de
-        edit-route zijn input voor de VOLGENDE pass (last-writer geldt tot dan). #task-comments van
-        mensen (project["comments"]) gaan als sturing mee — dezelfde bron die de worker leest.
-        #task-regels ÍN de documenttekst worden NIET geparseerd (v2-idee: liften naar de wall; nu niet)."""
-        store = getattr(self.context, "project_docs", None)
-        if store is None or project is None:
-            return
-        pid = project["id"]
-        try:
-            from nooch_village.llm import reason
-            from nooch_village.project_worker import _persona_for
-            persona = _persona_for(self.record, getattr(self.context, "personas", None))
-            current = store.read(pid)
-            dstore = getattr(self.context, "deliverables", None)
-            recs = dstore.for_project(pid) if dstore is not None else []
-            # Per-deliverable ROYAAL de échte inhoud meegeven (niet 500 tekens): de LLM moet de feitelijke
-            # bevindingen zien om de taak te kunnen beantwoorden. Afkap per deliverable is LUID, niet stil.
-            dc = int(self.context.settings.get("einddocument_deliverable_chars", "3000"))
-            d_blocks = []
-            for r in recs:
-                block = f"- {r.get('summary', '')}"
-                content = dstore.content_for(r["id"]) if dstore is not None else None
-                if content is not None:
-                    body = str(content)
-                    if len(body) > dc:
-                        self.log.warning("DOC_DELIVERABLE_CAP: deliverable %s ingekort %d>%d tekens | project=%s",
-                                         r.get("id"), len(body), dc, pid)
-                        body = body[:dc] + " …[ingekort]"
-                    block += f"\n  (inhoud: {body})"
-                d_blocks.append(block)
-            steer = " · ".join(c.get("text", "") for c in project.get("comments", []) if c.get("text"))
-            scope = project.get("scope")
-            scope_txt = (" · ".join(f"{k}: {v}" for k, v in scope.items())
-                         if isinstance(scope, dict) else str(scope or ""))
-            head = ("HUIDIG DOCUMENT:\n" + (current or "(nog geen document)") + "\n\n"
-                    + (f"STURING VAN DE MENS (#task-comments, volg dit): {steer}\n\n" if steer else "")
-                    + "OPGELEVERDE DELIVERABLES (per taak):\n")
-            # Input-budget: houd zoveel HELE deliverables als passen (géén blinde midden-in-afkap die een
-            # bevinding halveert); wat niet past → LUID gerapporteerd, niet stil weggeslikt.
-            cap = int(self.context.settings.get("einddocument_input_max_chars", "40000"))
-            kept, used, dropped = [], len(head), 0
-            for b in d_blocks:
-                if used + len(b) + 1 <= cap:
-                    kept.append(b); used += len(b) + 1
-                else:
-                    dropped += 1
-            if dropped:
-                self.log.warning("DOC_INPUT_CAP: %d van %d deliverables buiten het input-budget (%d tekens) "
-                                 "| project=%s", dropped, len(d_blocks), cap, pid)
-            variable = head + ("\n".join(kept) or "(nog geen)") + "\n\n"
-            prompt = (
-                (persona.strip() + "\n\n" if persona and persona.strip() else "")
-                + f"Je werkt aan het lopende einddocument van dit project in NoochVille (Nooch.earth). "
-                f"Projectdoel: {scope_txt}\n\n" + variable
-                + "Schrijf het VOLLEDIGE, bijgewerkte einddocument in markdown. STRUCTUUR (verplicht, voor "
-                "traceerbaarheid): geef voor ELKE taak een kop (begin de regel met '## ') met de TAAK, en "
-                "daaronder de FEITELIJKE BEVINDINGEN uit de deliverables die die taak beantwoorden. Beantwoord "
-                "elke taak expliciet; is er niets gevonden, schrijf dat expliciet — verzin niets. Sluit ALTIJD "
-                "af met twee aparte secties, elk met een '## '-kop: '## Conclusie' (een korte synthese in "
-                "gewone taal van wat dit project heeft opgeleverd) en '## Aanbevelingen' (concrete "
-                "vervolgstappen als '- '-opsomming)"
-                + (". Vermeld in de conclusie expliciet dat het project klaar is voor review" if force_final else "")
-                + ". Geef alleen het document terug, geen meta-uitleg.")
-            out = reason(prompt, call_site="einddocument",
-                         max_tokens=int(self.context.settings.get("einddocument_max_tokens", "4000")))
-        except Exception as e:                                   # fail-closed: document intact, puls draait door
-            self.log.warning("einddocument-synthese overgeslagen (document intact): %s", e)
-            return
-        if not out or not out.strip():
-            self.log.info("einddocument: geen LLM-antwoord voor project '%s' — document ongewijzigd", pid)
-            return
-        store.write(pid, out.strip())
-        if force_final:
-            self.context.projects.add_role_message(pid, "📄 Einddocument bijgewerkt — klaar voor review.")
+        """Constitutie-plicht (basisklasse): werk het levende einddocument bij in de PERSONA-stem, één
+        synthese-call per project per puls. Delegeert naar de herbruikbare module-functie
+        `synthesize_einddocument` (dezelfde die de cockpit-actie 'rapport opnieuw genereren' aanroept).
+        done/total blijven in de signatuur voor de callers, maar sturen de synthese zelf niet."""
+        synthesize_einddocument(
+            project_docs=getattr(self.context, "project_docs", None),
+            deliverables=getattr(self.context, "deliverables", None),
+            projects=self.context.projects,
+            personas=getattr(self.context, "personas", None),
+            record=self.record,
+            settings=self.context.settings,
+            project=project, force_final=force_final, log=self.log)
 
     # Container-keys per archetype — de note-opmaak volgt de VORM van de output, niet de skill-naam.
     _LIST_KEYS = ("hits", "rows", "candidates", "items", "targets", "cards", "keywords", "patents")
@@ -1581,3 +1514,79 @@ class Circle(Inhabitant):
         for m in self.members.values():
             m.stop()
         super().stop()
+
+
+def synthesize_einddocument(*, project_docs, deliverables, projects, personas, record,
+                            settings, project, force_final, log) -> bool:
+    """Herbruikbare einddocument-synthese, los van de Inhabitant-instance: schrijft het VOLLEDIGE
+    document opnieuw op basis van de deliverables + mens-sturing. Aangeroepen door de puls
+    (Inhabitant._synthesize_einddocument) én door de cockpit-actie 'rapport opnieuw genereren'.
+    Fail-closed: geen document-store/LLM-antwoord of een exceptie → document ONGEWIJZIGD, return False.
+    Bij succes: document geschreven (+ role-message bij force_final), return True."""
+    store = project_docs
+    if store is None or project is None:
+        return False
+    pid = project["id"]
+    try:
+        from nooch_village.llm import reason
+        from nooch_village.project_worker import _persona_for
+        persona = _persona_for(record, personas)
+        current = store.read(pid)
+        dstore = deliverables
+        recs = dstore.for_project(pid) if dstore is not None else []
+        dc = int(settings.get("einddocument_deliverable_chars", "3000"))
+        d_blocks = []
+        for r in recs:
+            block = f"- {r.get('summary', '')}"
+            content = dstore.content_for(r["id"]) if dstore is not None else None
+            if content is not None:
+                body = str(content)
+                if len(body) > dc:
+                    log.warning("DOC_DELIVERABLE_CAP: deliverable %s ingekort %d>%d tekens | project=%s",
+                                r.get("id"), len(body), dc, pid)
+                    body = body[:dc] + " …[ingekort]"
+                block += f"\n  (inhoud: {body})"
+            d_blocks.append(block)
+        steer = " · ".join(c.get("text", "") for c in project.get("comments", []) if c.get("text"))
+        scope = project.get("scope")
+        scope_txt = (" · ".join(f"{k}: {v}" for k, v in scope.items())
+                     if isinstance(scope, dict) else str(scope or ""))
+        head = ("HUIDIG DOCUMENT:\n" + (current or "(nog geen document)") + "\n\n"
+                + (f"STURING VAN DE MENS (#task-comments, volg dit): {steer}\n\n" if steer else "")
+                + "OPGELEVERDE DELIVERABLES (per taak):\n")
+        cap = int(settings.get("einddocument_input_max_chars", "40000"))
+        kept, used, dropped = [], len(head), 0
+        for b in d_blocks:
+            if used + len(b) + 1 <= cap:
+                kept.append(b); used += len(b) + 1
+            else:
+                dropped += 1
+        if dropped:
+            log.warning("DOC_INPUT_CAP: %d van %d deliverables buiten het input-budget (%d tekens) "
+                        "| project=%s", dropped, len(d_blocks), cap, pid)
+        variable = head + ("\n".join(kept) or "(nog geen)") + "\n\n"
+        prompt = (
+            (persona.strip() + "\n\n" if persona and persona.strip() else "")
+            + f"Je werkt aan het lopende einddocument van dit project in NoochVille (Nooch.earth). "
+            f"Projectdoel: {scope_txt}\n\n" + variable
+            + "Schrijf het VOLLEDIGE, bijgewerkte einddocument in markdown. STRUCTUUR (verplicht, voor "
+            "traceerbaarheid): geef voor ELKE taak een kop (begin de regel met '## ') met de TAAK, en "
+            "daaronder de FEITELIJKE BEVINDINGEN uit de deliverables die die taak beantwoorden. Beantwoord "
+            "elke taak expliciet; is er niets gevonden, schrijf dat expliciet — verzin niets. Sluit ALTIJD "
+            "af met twee aparte secties, elk met een '## '-kop: '## Conclusie' (een korte synthese in "
+            "gewone taal van wat dit project heeft opgeleverd) en '## Aanbevelingen' (concrete "
+            "vervolgstappen als '- '-opsomming)"
+            + (". Vermeld in de conclusie expliciet dat het project klaar is voor review" if force_final else "")
+            + ". Geef alleen het document terug, geen meta-uitleg.")
+        out = reason(prompt, call_site="einddocument",
+                     max_tokens=int(settings.get("einddocument_max_tokens", "4000")))
+    except Exception as e:
+        log.warning("einddocument-synthese overgeslagen (document intact): %s", e)
+        return False
+    if not out or not out.strip():
+        log.info("einddocument: geen LLM-antwoord voor project '%s' — document ongewijzigd", pid)
+        return False
+    store.write(pid, out.strip())
+    if force_final:
+        projects.add_role_message(pid, "📄 Einddocument bijgewerkt — klaar voor review.")
+    return True

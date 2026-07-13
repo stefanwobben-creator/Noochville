@@ -223,3 +223,14 @@ def test_doc_delete_cascade(tmp_path):
     assert docs.read(pid) == "# Doc"
     cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/"]}, username="guest")
     assert docs.read(pid) == ""                              # sidecar mee-verwijderd door de cascade
+
+
+# 11. Cockpit-actie: rapport handmatig opnieuw genereren (zelfde synthese als de puls)
+def test_regen_doc_action(tmp_path):
+    from unittest.mock import patch
+    from nooch_village import cockpit2
+    dd = str(tmp_path / "poc")
+    pid, docs = _cockpit_project(dd)
+    with patch("nooch_village.llm.reason", return_value="## Conclusie\nAlles klaar."):
+        cockpit2.dispatch(dd, "proj_regen_doc", {"pid": [pid], "next": ["/"]}, username="guest")
+    assert "Conclusie" in docs.read(pid)            # verse synthese geschreven via de herbruikbare functie
