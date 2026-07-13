@@ -21,6 +21,7 @@ from nooch_village.views.projects import (
     _projects_tab_html, _scope_text, _person_projects_tab_html, _modal_html,
 )
 from nooch_village import org, ai_match, artefacts, epic
+from nooch_village.radar_store import feeds_for_role
 from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD, _CIRCLE_TABS, _ROLE_TABS, _PERSON_TABS, WEBSITE_DEVELOPER_ROLE
 
 if TYPE_CHECKING:
@@ -594,6 +595,67 @@ def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: s
     return f"<h2>{_e(titel)}</h2>{kop}{sec_own}{sec_inh}"
 
 
+_RADAR_KIND = {
+    "kaart": ("🃏", "signaal"),
+    "seed":  ("🌱", "kiem"),
+    "doelwit": ("🎯", "doelwit"),
+    "concurrent": ("🏁", "concurrent"),
+}
+
+
+def _radar_item(it: dict, csrf: str, node_id: str, *, archief: bool) -> str:
+    """Eén radar-signaal: in de wachtrij met ✓/✗-knoppen, in het archief als platte regel."""
+    emoji, klabel = _RADAR_KIND.get(it.get("kind", ""), ("•", it.get("kind", "")))
+    rat = (it.get("rationale") or "").strip()
+    src = (it.get("source") or "").strip()
+    link = (it.get("link") or "").strip()
+    bron = (f"<a href='{_e(link)}' target='_blank' rel='noopener'>{_e(src or 'bron')}</a>"
+            if link else (_e(src) if src else ""))
+    meta = " · ".join(x for x in (f"<span class='chip muted'>{emoji} {_e(klabel)}</span>", bron) if x)
+    body = (f"<div class='rdr-body'><div class='rdr-sig'>{_e(it.get('content', ''))}</div>"
+            + (f"<div class='muted rdr-rat'>{_e(rat)}</div>" if rat else "")
+            + f"<div class='rdr-meta'>{meta}</div></div>")
+    if archief or not csrf:
+        return f"<div class='rdr-row rdr-arch'>{body}</div>"
+    nxt = f"/node?id={_e(node_id)}&tab=tools"
+    ctl = (f"<form method='post' action='/action' class='cl-rep'>"
+           f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+           f"<input type='hidden' name='rid' value='{_e(it['id'])}'>"
+           f"<input type='hidden' name='next' value='{nxt}'>"
+           f"<button class='cl-check ok' type='submit' name='action' value='radar_approve' "
+           f"title='relevant — naar archief'>✓</button>"
+           f"<button class='cl-check no' type='submit' name='action' value='radar_dismiss' "
+           f"title='niet relevant — wegklikken'>✗</button></form>")
+    return f"<div class='rdr-row'>{ctl}{body}</div>"
+
+
+def _radar_tool_html(st: _Stores, rec, csrf_token: str, username: str | None) -> str:
+    """Radar-toolblok bovenaan de Tools-tab, alleen voor rollen met een gekoppelde feed.
+    Wachtrij (status 'wacht') met goedkeur-toggle + wegklik, plus een uitklapbaar archief
+    (goedgekeurd) dat de rol als groeiende context meeleest. Geen feed → lege string."""
+    feeds = feeds_for_role(rec.id, st.dd)
+    if not feeds:
+        return ""
+    label = feeds[0].get("label") or "Radar"
+    pending = st.radar.pending(rec.id)
+    approved = st.radar.approved(rec.id)
+    if pending:
+        wacht = "".join(_radar_item(it, csrf_token, rec.id, archief=False) for it in pending)
+        wacht = (f"<div class='rdr-sub'>Wachtrij <span class='muted'>· {len(pending)}"
+                 f" nieuw signaal{'en' if len(pending) != 1 else ''}, jij bepaalt wat relevant is</span></div>"
+                 f"{wacht}")
+    else:
+        wacht = "<p class='muted'>Geen nieuwe signalen in de wachtrij.</p>"
+    if approved:
+        arch = "".join(_radar_item(it, csrf_token, rec.id, archief=True) for it in approved)
+        arch = (f"<details class='c2-hist rdr-archief'><summary class='muted'>"
+                f"Archief · {len(approved)} goedgekeurd (context voor deze rol)</summary>{arch}</details>")
+    else:
+        arch = ""
+    return (f"<div class='rdr-tool'><h3 class='rdr-h'>🛰 Radar "
+            f"<span class='muted'>· {_e(label)}</span></h3>{wacht}{arch}</div>")
+
+
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",
                 group: str = "", clf: str = "due", mw: str = "7d", username: str | None = None,
                 van: str = "", tot: str = "", compare: bool = False) -> str:
@@ -626,8 +688,9 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
             content = _artefact_tab_html(st, rec, "note", csrf_token, username,
                                          titel="Notes", leeg="Nog geen notities op deze rol/cirkel.")
     elif tab == "tools":
-        content = _artefact_tab_html(st, rec, "tool", csrf_token, username,
-                                     titel="Tools", leeg="Nog geen tools op deze rol/cirkel.")
+        content = (_radar_tool_html(st, rec, csrf_token, username)
+                   + _artefact_tab_html(st, rec, "tool", csrf_token, username,
+                                        titel="Tools", leeg="Nog geen tools op deze rol/cirkel."))
     elif tab == "metrics":
         content = _metrics_tab_html(st, rec, csrf_token, win=mw, van=van, tot=tot, compare=compare)
     elif tab == "checklists":

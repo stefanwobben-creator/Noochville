@@ -765,6 +765,20 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .cl-check{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;width:1.7rem;height:1.7rem;line-height:1;font-size:.85rem;color:var(--muted)}
 .cl-check.ok.on{background:var(--green);color:#fff;border-color:var(--green)}
 .cl-check.no.on{background:var(--coral);color:#fff;border-color:var(--coral)}
+.cl-check.ok:hover{background:var(--green);color:#fff;border-color:var(--green)}
+.cl-check.no:hover{background:var(--coral);color:#fff;border-color:var(--coral)}
+/* Radar-tool (Tools-tab): gecureerde Inoreader-signalen per rol */
+.rdr-tool{margin:0 0 1.2rem;padding:.75rem .9rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+.rdr-h{margin:0 0 .5rem;font-size:1rem;font-family:var(--font-display)}
+.rdr-sub{font-size:.85rem;font-weight:600;margin:.3rem 0 .4rem}
+.rdr-row{display:flex;gap:.55rem;align-items:flex-start;padding:.45rem 0;border-top:1px solid var(--border)}
+.rdr-row .cl-rep{display:inline-flex;gap:.25rem;flex:0 0 auto}
+.rdr-body{flex:1;min-width:0}
+.rdr-sig{font-weight:600;line-height:1.3}
+.rdr-rat{font-size:.82rem;margin:.15rem 0}
+.rdr-meta{font-size:.78rem;margin-top:.15rem;display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
+.rdr-arch{opacity:.85}
+.rdr-archief{margin-top:.6rem}
 .cl-attn{background:var(--error-tint)}     /* gemist checklist-item (rij-niveau, coral) */
 .cl-todo{background:var(--yellow-light)}   /* te-doen checklist-item (rij-niveau, geel) */
 .cl-add{display:inline-block}

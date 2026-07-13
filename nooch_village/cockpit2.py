@@ -53,6 +53,7 @@ from nooch_village.personas import PersonaStore
 from nooch_village.projects import ProjectLedger, PREP_CHECKLIST_TITLE, _MISSIE_IMPACT, _BUSINESS_IMPACT
 from nooch_village.deliverable_store import DeliverableStore
 from nooch_village.project_doc_store import ProjectDocStore
+from nooch_village.radar_store import RadarStore
 from nooch_village.registry_factory import shared_registry
 from nooch_village.skill_match import plan_offers
 from nooch_village.util import refuse
@@ -112,6 +113,7 @@ class _Stores:
         self.werk = WerkoverlegStore(os.path.join(dd, "werkoverleg.json"))
         self.strategies = StrategyStore(os.path.join(dd, "strategies.json"))
         self.backlog = BacklogStore(os.path.join(dd, "backlog.json"))
+        self.radar = RadarStore(os.path.join(dd, "radar.json"))   # Radar-tool: gecureerde Inoreader-signalen per rol
 
 
 _FAC_ACC = "Rapporteren over de gezondheid van de werkoverleggen"
@@ -1480,6 +1482,28 @@ def _act_role_focus(c):
         return nxt, msg
 
 
+def _act_radar_set(c, status: str, ok_msg: str):
+        """Radar-signaal goedkeuren/wegklikken. Poort op de EIGEN rol van het item (niet op een
+        meegestuurde rol), zodat alleen de rolvervuller of Circle Lead cureert."""
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        it = st.radar.get(g("rid"))
+        if it is None:
+            return nxt, "✗ onbekend radar-signaal"
+        _deny = _role_gate(it["role"], username, st)
+        if _deny:
+            return nxt, _deny
+        st.radar.set_status(g("rid"), status)
+        return nxt, ok_msg
+
+
+def _act_radar_approve(c):
+        return _act_radar_set(c, "goedgekeurd", "✓ aan het archief toegevoegd")
+
+
+def _act_radar_dismiss(c):
+        return _act_radar_set(c, "afgewezen", "🗑 signaal weggeklikt")
+
+
 def _act_aitask_add(c):
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
         msg = ""
@@ -2455,6 +2479,8 @@ ACTIONS = {
     "role_assign": _act_role_assign,
     "role_unassign": _act_role_unassign,
     "role_focus": _act_role_focus,
+    "radar_approve": _act_radar_approve,
+    "radar_dismiss": _act_radar_dismiss,
     "aitask_add": _act_aitask_add,
     "aitask_remove": _act_aitask_remove,
     "persona_skill_add": _act_persona_skill_add,
