@@ -1265,34 +1265,53 @@ class Inhabitant(threading.Thread):
             current = store.read(pid)
             dstore = getattr(self.context, "deliverables", None)
             recs = dstore.for_project(pid) if dstore is not None else []
-            d_lines = []
-            for r in recs:                                       # summaries altijd; content als GECAPTE preview
-                d_lines.append(f"- {r.get('summary', '')}")
+            # Per-deliverable ROYAAL de échte inhoud meegeven (niet 500 tekens): de LLM moet de feitelijke
+            # bevindingen zien om de taak te kunnen beantwoorden. Afkap per deliverable is LUID, niet stil.
+            dc = int(self.context.settings.get("einddocument_deliverable_chars", "3000"))
+            d_blocks = []
+            for r in recs:
+                block = f"- {r.get('summary', '')}"
                 content = dstore.content_for(r["id"]) if dstore is not None else None
                 if content is not None:
-                    d_lines.append(f"  (preview: {str(content)[:500]})")
+                    body = str(content)
+                    if len(body) > dc:
+                        self.log.warning("DOC_DELIVERABLE_CAP: deliverable %s ingekort %d>%d tekens | project=%s",
+                                         r.get("id"), len(body), dc, pid)
+                        body = body[:dc] + " …[ingekort]"
+                    block += f"\n  (inhoud: {body})"
+                d_blocks.append(block)
             steer = " · ".join(c.get("text", "") for c in project.get("comments", []) if c.get("text"))
             scope = project.get("scope")
             scope_txt = (" · ".join(f"{k}: {v}" for k, v in scope.items())
                          if isinstance(scope, dict) else str(scope or ""))
-            # Harde input-cap vóór de call (fail-loud bij afkap — nooit stil, call_site="einddocument").
-            cap = int(self.context.settings.get("einddocument_input_max_chars", "20000"))
-            variable = ("HUIDIG DOCUMENT:\n" + (current or "(nog geen document)") + "\n\n"
-                        + "OPGELEVERDE DELIVERABLES:\n" + ("\n".join(d_lines) or "(nog geen)") + "\n\n"
-                        + (f"STURING VAN DE MENS (#task-comments, volg dit): {steer}\n\n" if steer else ""))
-            if len(variable) > cap:
-                self.log.warning("DOC_INPUT_CAP: einddocument-input %d tekens > max %d — afgekapt | project=%s",
-                                 len(variable), cap, pid)
-                variable = variable[:cap]
+            head = ("HUIDIG DOCUMENT:\n" + (current or "(nog geen document)") + "\n\n"
+                    + (f"STURING VAN DE MENS (#task-comments, volg dit): {steer}\n\n" if steer else "")
+                    + "OPGELEVERDE DELIVERABLES (per taak):\n")
+            # Input-budget: houd zoveel HELE deliverables als passen (géén blinde midden-in-afkap die een
+            # bevinding halveert); wat niet past → LUID gerapporteerd, niet stil weggeslikt.
+            cap = int(self.context.settings.get("einddocument_input_max_chars", "40000"))
+            kept, used, dropped = [], len(head), 0
+            for b in d_blocks:
+                if used + len(b) + 1 <= cap:
+                    kept.append(b); used += len(b) + 1
+                else:
+                    dropped += 1
+            if dropped:
+                self.log.warning("DOC_INPUT_CAP: %d van %d deliverables buiten het input-budget (%d tekens) "
+                                 "| project=%s", dropped, len(d_blocks), cap, pid)
+            variable = head + ("\n".join(kept) or "(nog geen)") + "\n\n"
             prompt = (
                 (persona.strip() + "\n\n" if persona and persona.strip() else "")
                 + f"Je werkt aan het lopende einddocument van dit project in NoochVille (Nooch.earth). "
                 f"Projectdoel: {scope_txt}\n\n" + variable
-                + "Schrijf het VOLLEDIGE, bijgewerkte einddocument in markdown — een lopend, leesbaar "
-                "verhaal dat de opgeleverde deliverables integreert"
-                + (" en klaar is voor review" if force_final else "")
+                + "Schrijf het VOLLEDIGE, bijgewerkte einddocument in markdown. STRUCTUUR (verplicht, voor "
+                "traceerbaarheid): geef voor ELKE taak een kop met de TAAK, en daaronder de FEITELIJKE "
+                "BEVINDINGEN uit de deliverables die die taak beantwoorden. Beantwoord elke taak expliciet; "
+                "is er niets gevonden, schrijf dat expliciet — verzin niets. Sluit af met een korte synthese"
+                + (" en een 'klaar voor review'-conclusie" if force_final else "")
                 + ". Geef alleen het document terug, geen meta-uitleg.")
-            out = reason(prompt, call_site="einddocument", max_tokens=1500)
+            out = reason(prompt, call_site="einddocument",
+                         max_tokens=int(self.context.settings.get("einddocument_max_tokens", "4000")))
         except Exception as e:                                   # fail-closed: document intact, puls draait door
             self.log.warning("einddocument-synthese overgeslagen (document intact): %s", e)
             return

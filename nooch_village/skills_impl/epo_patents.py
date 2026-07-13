@@ -115,12 +115,26 @@ class EpoPatentsSkill(DataSourceSkill):
         with urllib.request.urlopen(req, timeout=25) as r:
             return r.read()
 
+    @staticmethod
+    def _normalize_term(term: str) -> str:
+        """Reduceer een (LLM-)zoekstring tot een kernfrase die EPO's CQL title-search (ti="…") aankan.
+        Complexe boolean-strings ('X OR Y', '"A" AND ("B" OR "C")') geven anders een HTTP 400/404 (de
+        operators/haakjes/quotes breken de CQL). We nemen de eerste OR-clausule (de dominante frase) en
+        strippen quotes/haakjes/AND → een schone woordfrase. Leeg na normalisatie → val terug op de ruwe
+        term zonder quotes."""
+        import re as _re
+        t = _re.split(r"\s+OR\s+", term or "", flags=_re.IGNORECASE)[0]
+        t = t.replace('"', " ").replace("(", " ").replace(")", " ")
+        t = _re.sub(r"\s+AND\s+", " ", t, flags=_re.IGNORECASE)
+        t = _re.sub(r"\s+", " ", t).strip()
+        return t or (term or "").replace('"', " ").strip()
+
     # ── search/biblio → (total, [patent-dicts]) via XML-parse ───────────────
     def _search(self, token, term, limit, *, _get=None):
         get = _get or (lambda u: self._default_get(u, token))
-        # Titel-frase (CQL ti="<term>") i.p.v. brede losse-woorden-match — zelfde ruis-reductie als de
-        # openalex-fix: 'barefoot shoes' → ~10-tal on-topic patenten i.p.v. duizenden footwear-adjacent hits.
-        cql = f'ti="{term}"'
+        # Titel-frase (CQL ti="<term>"). De term wordt eerst genormaliseerd: een complexe boolean-string
+        # (OR/AND/quotes) breekt de CQL → 400/404. Kernfrase werkt ('barefoot shoes' → ~10-tal patenten).
+        cql = f'ti="{self._normalize_term(term)}"'
         url = f"{_SEARCH_BIBLIO_URL}?q={urllib.parse.quote(cql)}&Range=1-{limit}"
         return self._parse_patents(get(url))
 
