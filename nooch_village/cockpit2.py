@@ -358,6 +358,24 @@ def _reply_to_mentions(st: _Stores, pid: str, text: str) -> int:
     return replied
 
 
+# De @mention-reply doet blokkerende LLM-calls; die mogen de POST (en dus het verschijnen van de eigen
+# comment op de wall) niet ophouden. Async = default (prod); tests zetten dit op False voor determinisme.
+_MENTION_REPLY_ASYNC = True
+
+
+def _run_mention_reply(st: _Stores, pid: str, text: str):
+    """Draai de @mention-reply. Async (default): start 'm in een daemon-thread en geef de Thread terug
+    (de comment staat dan al op de wall; het AI-antwoord landt zodra de LLM klaar is, zichtbaar bij de
+    volgende refresh). Sync (test): draai inline en geef het aantal replies (int) terug. De stores zijn
+    flock-veilig, dus een schrijf vanuit de thread is veilig; _reply_to_mentions is al fail-closed."""
+    if _MENTION_REPLY_ASYNC:
+        import threading
+        t = threading.Thread(target=lambda: _reply_to_mentions(st, pid, text), daemon=True)
+        t.start()
+        return t                                     # niet-int → "AI denkt mee…"; joinbaar in de test
+    return _reply_to_mentions(st, pid, text)         # int aantal replies
+
+
 def _parse_trekker(val: str):
     """'person:<id>' of 'persona:<id>' → (person_id of '', agent_id of '')."""
     val = (val or "").strip()
@@ -1269,9 +1287,12 @@ def _act_proj_feed(c):
             # mens-comment: een persona-comment kan nooit een nieuwe reply triggeren (geen loop), ook
             # niet met een @erin. Cap + fail-closed zitten in _reply_to_mentions.
             if atype == "human":
-                replied = _reply_to_mentions(st, g("pid"), g("text"))
-                if replied:
-                    msg += f" · {replied} AI-antwoord{'en' if replied != 1 else ''}"
+                res = _run_mention_reply(st, g("pid"), g("text"))   # async: blokkeert de POST niet
+                if isinstance(res, int):
+                    if res:
+                        msg += f" · {res} AI-antwoord{'en' if res != 1 else ''}"
+                elif any(ty == "persona" for ty, _, _ in ment):
+                    msg += " · AI denkt mee…"                        # async: antwoord landt zo op de wall
         return nxt, msg
 
 
