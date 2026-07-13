@@ -18,6 +18,7 @@ def test_blocklist_en_distill(tmp_path):
     ]
     res = ing.ingest_items(items, str(tmp_path), llm_reason=_reason_veja)
     assert res["blocked"] == 1                                      # porno-domein eruit
+    assert len(res["trace"]) == 3 and any(v == "geblokkeerd" for _, v in res["trace"])
     assert res["proposed"] == 1                                     # veja-voorstel
     props = NewsProposals(str(tmp_path / "inoreader_proposals.json"))
     pend = props.pending()

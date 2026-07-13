@@ -80,17 +80,20 @@ def ingest_items(items: list, data_dir: str, *, mission: str = "", limit: int = 
         known = []
 
     res = {"fetched": len(items), "blocked": 0, "seen": 0, "distilled": 0,
-           "proposed": 0, "own_brand": 0}
+           "proposed": 0, "own_brand": 0, "trace": []}
     for it in (items[:limit] if limit else items):
         link = (it.get("url") or "").strip()
         title = (it.get("title") or "").strip()
         if not title or not link:
+            res["trace"].append(("(geen titel/link)", "overgeslagen"))
             continue
         if _blocked(link):
             res["blocked"] += 1
+            res["trace"].append((title[:75], "geblokkeerd"))
             continue
         if props.seen(link):
             res["seen"] += 1
+            res["trace"].append((title[:75], "al gezien"))
             continue
         art = _to_article(it)
         try:
@@ -98,9 +101,11 @@ def ingest_items(items: list, data_dir: str, *, mission: str = "", limit: int = 
         except Exception as e:                                   # fail-closed: item overslaan, niet crashen
             log.warning("distill faalde voor %s: %s", link, e)
             props.mark_seen(link)                                # niet eeuwig herproberen op een kapot item
+            res["trace"].append((title[:75], "distill-fout"))
             continue
         props.mark_seen(link)
         if not d:
+            res["trace"].append((title[:75], "geen"))
             continue
         res["distilled"] += 1
         # Eigen-merk-signaal apart labelen: een artikel OVER Nooch is reputatie, geen concurrent-zet.
@@ -111,6 +116,7 @@ def ingest_items(items: list, data_dir: str, *, mission: str = "", limit: int = 
         rationale = ("[eigen merk] " if own_hit else "") + (d.get("rationale") or "")
         if props.add(d["kind"], d["content"], rationale, art["brand"], title, link):
             res["proposed"] += 1
+        res["trace"].append((title[:75], d["kind"] + (" [eigen merk]" if own_hit else "")))
     return res
 
 
@@ -125,6 +131,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="inoreader_ingest")
     ap.add_argument("--reset", action="store_true", help="leeg de Inoreader-review-lijst vóór je draait")
     ap.add_argument("--limit", type=int, default=40, help="max artikelen per run")
+    ap.add_argument("--debug", action="store_true", help="toon per artikel de titel + het oordeel")
     args = ap.parse_args(argv)
     try:
         from nooch_village.cockpit2 import _load_env
@@ -156,6 +163,10 @@ def main(argv=None) -> int:
     from nooch_village.news_distill import NewsProposals
     for p in NewsProposals(store).pending()[:res["proposed"]]:
         print(f"  - [{p.get('kind')}] {p.get('content')}  ({p.get('brand')}) - {(p.get('rationale') or '')[:80]}")
+    if args.debug:
+        print("  debug - alle opgehaalde artikelen en hun oordeel:")
+        for t, v in res.get("trace", []):
+            print(f"    - [{v}] {t}")
     return 0
 
 
