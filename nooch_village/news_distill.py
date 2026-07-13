@@ -82,7 +82,45 @@ class NewsProposals:
         return True
 
 
-def distill_article(article: dict, *, mission: str = "", known_brands=(), llm_reason=None) -> dict | None:
+def _distill_prompt(title: str, brand: str, known: str, mission: str, strict: bool) -> str:
+    """De destilleer-prompt. `strict=True` (Inoreader-ingest): hoge lat, standaard 'geen', geen
+    geforceerde missie-links. `strict=False` (Google-News-pijplijn): de oorspronkelijke, gulle prompt."""
+    m = mission or "organische groei via missie-gedreven SEO; duurzaam, vegan, plasticvrij"
+    if strict:
+        return (
+            "Je bent de KRITISCHE Scout van NoochVille (duurzaam, vegan schoenenmerk Nooch.earth). "
+            f"Missie: {m}.\n\n"
+            f"Bron: {brand}. Nieuwskop:\n\"{title}\"\n\n"
+            "WEES STRENG. De standaard is 'geen'. Kies ALLEEN iets anders als de kop DIRECT en CONCREET "
+            "over schoenen, schoenmaterialen of een schoenenmerk gaat én NoochVille echt verder helpt. "
+            "Forceer GEEN missie-link: een kop die alleen zijdelings met duurzaamheid, gezondheid, mode of "
+            "lifestyle te maken heeft is 'geen'. Celebrity-, reis-, deal- en algemene trendkoppen zijn 'geen'.\n\n"
+            "Types:\n"
+            "- concurrent: een NOG NIET gevolgd schoenenmerk dat een concrete zet doet (lancering, claim, groei)\n"
+            "- doelwit: een SPECIFIEK meerwoord-zoekwoord met koopintentie\n"
+            "- kaart: een HARD, herbruikbaar feit of cijfer over de markt of een concurrent (geen mening, geen fluff)\n"
+            "- seed: alleen als een breed zoekwoord echt NIEUW radar-signaal is (spaarzaam)\n"
+            "- geen: al het andere — bij twijfel ALTIJD 'geen'\n\n"
+            f"Al gevolgde merken (NIET als concurrent kiezen): {known}\n\n"
+            "Antwoord EXACT zo:\nSOORT: concurrent|doelwit|kaart|seed|geen\n"
+            "INHOUD: <kort: het merk, zoekwoord of feit>\nWAAROM: <één korte zin>")
+    return (
+        "Je bent de Scout van NoochVille (duurzaam, vegan schoenenmerk Nooch.earth). "
+        f"Missie/strategie: {m}.\n\n"
+        f"Lees deze nieuwskop over '{brand}':\n\"{title}\"\n\n"
+        "Destilleer ER ÉÉN ding uit dat NoochVille verder helpt. Kies het type:\n"
+        "- kaart: een herbruikbaar feit/inzicht voor onze kennisbasis (geen zoekwoord)\n"
+        "- seed: een BREED zoekwoord dat onze radar voedt (één/twee woorden)\n"
+        "- doelwit: een SPECIFIEK zoekwoord met intentie waar we op willen ranken (meerwoord)\n"
+        "- concurrent: een nog niet gevolgd merk dat we zouden moeten volgen\n"
+        "- geen: er zit niets bruikbaars in deze kop\n\n"
+        f"Al gevolgde merken (kies die NIET als concurrent): {known}\n\n"
+        "Antwoord EXACT zo:\nSOORT: kaart|seed|doelwit|concurrent|geen\n"
+        "INHOUD: <het feit, het zoekwoord, of de merknaam>\nWAAROM: <één korte zin>")
+
+
+def distill_article(article: dict, *, mission: str = "", known_brands=(), llm_reason=None,
+                    strict: bool = False) -> dict | None:
     """Destilleer één nieuwsartikel tot één voorstel {kind, content, rationale}, of None.
     Fail-closed zonder LLM of zonder bruikbaar antwoord."""
     title = (article.get("title") or "").strip()
@@ -94,19 +132,7 @@ def distill_article(article: dict, *, mission: str = "", known_brands=(), llm_re
         llm_reason = functools.partial(_reason, call_site="news_distill_article")
     brand = article.get("brand", "")
     known = ", ".join(known_brands) if known_brands else "(geen)"
-    prompt = (
-        "Je bent de Scout van NoochVille (duurzaam, vegan schoenenmerk Nooch.earth). "
-        f"Missie/strategie: {mission or 'organische groei via missie-gedreven SEO; duurzaam, vegan, plasticvrij'}.\n\n"
-        f"Lees deze nieuwskop over '{brand}':\n\"{title}\"\n\n"
-        "Destilleer ER ÉÉN ding uit dat NoochVille verder helpt. Kies het type:\n"
-        "- kaart: een herbruikbaar feit/inzicht voor onze kennisbasis (geen zoekwoord)\n"
-        "- seed: een BREED zoekwoord dat onze radar voedt (één/twee woorden)\n"
-        "- doelwit: een SPECIFIEK zoekwoord met intentie waar we op willen ranken (meerwoord)\n"
-        "- concurrent: een nog niet gevolgd merk dat we zouden moeten volgen\n"
-        "- geen: er zit niets bruikbaars in deze kop\n\n"
-        f"Al gevolgde merken (kies die NIET als concurrent): {known}\n\n"
-        "Antwoord EXACT zo:\nSOORT: kaart|seed|doelwit|concurrent|geen\n"
-        "INHOUD: <het feit, het zoekwoord, of de merknaam>\nWAAROM: <één korte zin>")
+    prompt = _distill_prompt(title, brand, known, mission, strict)
     out = (llm_reason(prompt) or "").strip()
     if not out:
         return None

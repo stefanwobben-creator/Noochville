@@ -73,7 +73,7 @@ def ingest_items(items: list, data_dir: str, *, mission: str = "", limit: int = 
     from nooch_village.news_distill import NewsProposals, distill_article
     from nooch_village.competitor_brands import CompetitorBrands
 
-    props = NewsProposals(os.path.join(data_dir, "news_proposals.json"))
+    props = NewsProposals(os.path.join(data_dir, "inoreader_proposals.json"))
     try:
         known = CompetitorBrands(os.path.join(data_dir, "competitor_brands.json")).confirmed()
     except Exception:
@@ -94,7 +94,7 @@ def ingest_items(items: list, data_dir: str, *, mission: str = "", limit: int = 
             continue
         art = _to_article(it)
         try:
-            d = distill_article(art, mission=mission, known_brands=known, llm_reason=llm_reason)
+            d = distill_article(art, mission=mission, known_brands=known, llm_reason=llm_reason, strict=True)
         except Exception as e:                                   # fail-closed: item overslaan, niet crashen
             log.warning("distill faalde voor %s: %s", link, e)
             props.mark_seen(link)                                # niet eeuwig herproberen op een kapot item
@@ -120,29 +120,42 @@ def ingest(url: str, data_dir: str, **kw) -> dict:
 
 
 def main(argv=None) -> int:
+    import argparse
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    ap = argparse.ArgumentParser(prog="inoreader_ingest")
+    ap.add_argument("--reset", action="store_true", help="leeg de Inoreader-review-lijst vóór je draait")
+    ap.add_argument("--limit", type=int, default=40, help="max artikelen per run")
+    args = ap.parse_args(argv)
     try:
         from nooch_village.cockpit2 import _load_env
-        _load_env()                                              # .env laden (URL + LLM-key), no-quote-conventie
+        _load_env()
     except Exception as e:
         log.warning("kon .env niet laden: %s", e)
     dd = os.environ.get("NOOCH_DATA_DIR", "data")
+    store = os.path.join(dd, "inoreader_proposals.json")
+    if args.reset:
+        try:
+            if os.path.exists(store):
+                os.remove(store)
+            print("→ Inoreader-review-lijst geleegd.")
+        except OSError as e:
+            print(f"kon de lijst niet legen: {e}")
+            return 1
     url = (os.environ.get("INOREADER_COMPETITOR_JSON_URL") or "").strip()
     if not url:
-        print("✗ zet INOREADER_COMPETITOR_JSON_URL in /opt/noochville/.env (de JSON-URL van de folder Competitor Watch)")
+        print("zet INOREADER_COMPETITOR_JSON_URL in /opt/noochville/.env (de JSON-URL van de Competitor-folder)")
         return 2
     try:
-        res = ingest(url, dd)
+        res = ingest(url, dd, limit=args.limit)
     except Exception as e:
-        print(f"✗ ophalen/verwerken mislukt: {e}")
+        print(f"ophalen/verwerken mislukt: {e}")
         return 1
-    print(f"📥 Inoreader Competitor Watch: {res['fetched']} opgehaald · {res['blocked']} geblokkeerd "
-          f"· {res['seen']} al gezien · {res['distilled']} gedistilleerd · {res['proposed']} nieuwe "
+    print(f"Inoreader Competitor: {res['fetched']} opgehaald - {res['blocked']} geblokkeerd "
+          f"- {res['seen']} al gezien - {res['distilled']} gedistilleerd - {res['proposed']} nieuwe "
           f"voorstellen ({res['own_brand']} eigen-merk).")
     from nooch_village.news_distill import NewsProposals
-    pend = NewsProposals(os.path.join(dd, "news_proposals.json")).pending()
-    for p in pend[:res["proposed"]]:
-        print(f"  - [{p.get('kind')}] {p.get('content')}  ({p.get('brand')}) — {p.get('rationale', '')[:80]}")
+    for p in NewsProposals(store).pending()[:res["proposed"]]:
+        print(f"  - [{p.get('kind')}] {p.get('content')}  ({p.get('brand')}) - {(p.get('rationale') or '')[:80]}")
     return 0
 
 
