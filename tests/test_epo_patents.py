@@ -154,3 +154,15 @@ def test_f_available_metrics_en_metadata():
     sk = EpoPatentsSkill()
     assert sk.available_metrics() == ["patents"]
     assert sk.cost == "rate_limited" and "term" in sk.input_schema and "patents" in sk.output_schema
+
+
+# ── g. query-normalisatie: complexe boolean-string → kernfrase (CQL breekt anders → 404) ──────────
+def test_g_normalize_term():
+    n = EpoPatentsSkill._normalize_term
+    assert n("barefoot shoes biodegradable sole OR barefoot shoes compostable sole") \
+        == "barefoot shoes biodegradable sole"                      # eerste OR-clausule
+    got = n('"ISO 4649" AND ("PHA" OR "polyhydroxyalkanoate")')
+    assert all(x not in got for x in ('"', "(", ")", " OR ", " AND "))   # operators/quotes/haakjes weg
+    assert "ISO 4649" in got and "PHA" in got
+    assert n("barefoot shoes") == "barefoot shoes"                  # simpel blijft simpel
+    assert n('"only quotes"') == "only quotes"                      # leeg-na-normalisatie-fallback
