@@ -7,7 +7,15 @@ De echte LLM wordt gestubd via nooch_village.llm.reason.
 """
 from __future__ import annotations
 
+import pytest
+
 from nooch_village import cockpit2
+
+
+@pytest.fixture(autouse=True)
+def _sync_mention_reply(monkeypatch):
+    # De reply-logica (cap / no-loop / fail-closed / prompt) test synchroon; async heeft z'n eigen test.
+    monkeypatch.setattr(cockpit2, "_MENTION_REPLY_ASYNC", False)
 
 
 def _setup(tmp_path):
@@ -86,3 +94,16 @@ def test_geen_llm_antwoord_geen_post(tmp_path, monkeypatch):
     log = cockpit2._Stores(dd).projects.get(pid)["log"]
     assert all(e.get("author", {}).get("type") != "persona" for e in log)
     assert len(log) == 1                                                 # alleen de mens-comment
+
+
+# 6. Async (prod-default): de POST blokkeert niet op de LLM; het antwoord landt via de thread.
+def test_async_reply_landt_na_join(tmp_path, monkeypatch):
+    dd, rid, pid, codie = _setup(tmp_path)
+    monkeypatch.setattr(cockpit2, "_MENTION_REPLY_ASYNC", True)          # overschrijf de sync-fixture
+    monkeypatch.setattr("nooch_village.llm.reason", lambda p, **k: "async antwoord")
+    import threading
+    t = cockpit2._run_mention_reply(cockpit2._Stores(dd), pid, "@Codie hoi")
+    assert isinstance(t, threading.Thread)                              # async → joinbare thread, geen int
+    t.join(timeout=5)
+    log = cockpit2._Stores(dd).projects.get(pid)["log"]
+    assert any(e.get("author", {}).get("type") == "persona" and "async antwoord" in e["text"] for e in log)
