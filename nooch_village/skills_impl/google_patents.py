@@ -36,6 +36,21 @@ class GooglePatentsSkill(DataSourceSkill):
     description = ("Zoekt wereldwijde patenten via het keyless xhr-endpoint van Google Patents. Het "
                    "alternatieve pad voor de skill-ladder als EPO OPS faalt. Fail-closed.")
 
+    _MIN_INTERVAL = 1.2                    # min. seconden tussen calls (burst-throttle); test zet 0
+    _last_call_ts = 0.0                    # class-state: tijdstip laatste call, over de puls-burst heen
+
+    @classmethod
+    def _throttle(cls, *, _now=None, _sleep=None):
+        """Burst-throttle: houd minimaal _MIN_INTERVAL tussen opeenvolgende calls, zodat een puls die veel
+        patent-items achter elkaar draait het keyless endpoint niet plat vuurt (retry redt losse calls,
+        niet een burst). _now/_sleep injecteerbaar voor de test."""
+        import time as _t
+        now = (_now or _t.time)()
+        wait = cls._MIN_INTERVAL - (now - cls._last_call_ts)
+        if wait > 0:
+            (_sleep or _t.sleep)(wait)
+        cls._last_call_ts = (_now or _t.time)()
+
     def available_metrics(self, context=None):
         return ["patents"]
 
@@ -47,13 +62,15 @@ class GooglePatentsSkill(DataSourceSkill):
 
     # ── HTTP → JSON ─────────────────────────────────────────────────────────
     @staticmethod
-    def _default_get(url, *, _open=None, _sleep=None):
-        """HTTP-GET → JSON met beleefde backoff-retry tegen de rate-limit/blokkade van het keyless
-        endpoint (3 pogingen, oplopende sleep). Pas na 3 mislukte pogingen faalt 'ie — zodat een
-        transiënte 429/403 een 'fout' wordt maar geen dagelijkse doodloper. _open/_sleep injecteerbaar."""
+    def _default_get(url, *, _open=None, _sleep=None, _now=None):
+        """HTTP-GET → JSON met burst-throttle vooraf + beleefde jittered backoff-retry tegen de rate-limit/
+        blokkade van het keyless endpoint (3 pogingen). Pas na 3 mislukte pogingen faalt 'ie — zodat een
+        transiënte 429/403 een 'fout' wordt maar geen dagelijkse doodloper. _open/_sleep/_now injecteerbaar
+        (zodat een geïnjecteerde _fetch/_get in de test nooit echt slaapt of throttlet)."""
         import time as _t
         opener = _open or (lambda rq: urllib.request.urlopen(rq, timeout=20))
         sleep = _sleep or _t.sleep
+        GooglePatentsSkill._throttle(_now=_now, _sleep=sleep)   # burst-throttle over opeenvolgende calls
         last = None
         for attempt in range(3):
             try:
@@ -63,7 +80,8 @@ class GooglePatentsSkill(DataSourceSkill):
             except Exception as exc:
                 last = exc
                 if attempt < 2:
-                    sleep(1.0 + attempt)          # 1s, dan 2s — beleefd tegen het onofficiële endpoint
+                    import random as _r
+                    sleep(1.0 + attempt + _r.uniform(0, 0.5))   # jittered backoff (~1-1.5s, ~2-2.5s)
         raise last
 
     def _fetch(self, term, limit, *, _get=None):

@@ -78,3 +78,14 @@ def test_default_get_faalt_na_drie_pogingen():
     import pytest
     with pytest.raises(OSError):
         GooglePatentsSkill._default_get("http://x", _open=always_fail, _sleep=lambda *_: None)
+
+
+def test_throttle_wacht_bij_snelle_calls():
+    """Burst-throttle: een call kort na de vorige wacht tot _MIN_INTERVAL; een latere call niet."""
+    slept = []
+    GooglePatentsSkill._last_call_ts = 100.0
+    GooglePatentsSkill._throttle(_now=lambda: 100.5, _sleep=lambda s: slept.append(s))
+    assert slept and 0.6 < slept[0] <= GooglePatentsSkill._MIN_INTERVAL   # ~0.7s wachten (1.2 - 0.5)
+    slept.clear()
+    GooglePatentsSkill._throttle(_now=lambda: 500.0, _sleep=lambda s: slept.append(s))
+    assert slept == []                                                    # ruim later → geen wacht
