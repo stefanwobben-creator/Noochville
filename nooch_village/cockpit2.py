@@ -223,6 +223,7 @@ from nooch_village.views.catalog import (
     _catalog_edit_form, _catalog_card,
     _catalog_add_form, render_catalog,
 )
+from nooch_village.views.signals import render_signals
 
 
 from nooch_village.views.noochie import (
@@ -2776,6 +2777,11 @@ def make_handler(data_dir: str, csrf_token: str,
                 return
             if path == "/_patterns":
                 self._send(render_patterns(effective_csrf))
+                return
+            if path == "/signals":
+                # Dorp-brede lijst van goedgekeurde radar-signalen (read-only aggregatie). Publiek zoals
+                # het overzicht; achter de sessie-auth zoals alles.
+                self._send(render_signals(st, csrf_token=effective_csrf, feed=(qs.get("feed") or [""])[0]))
                 return
             if path == "/catalog":
                 # AUTHZ: anchor-lead — het overzicht is publiek; de geïntegreerde koppel-sectie (ruw veld

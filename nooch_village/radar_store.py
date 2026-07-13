@@ -116,6 +116,12 @@ class RadarStore(JsonStore):
     def approved(self, role: str) -> list:
         return self._by_status(role, "goedgekeurd")
 
+    def all_approved(self) -> list:
+        """Alle goedgekeurde signalen over álle rollen, nieuwste eerst — de dorp-brede Signals-lijst
+        (het startpunt voor inzichten). Read-only aggregatie, geen nieuwe opslag."""
+        return sorted((it for it in self._data["items"].values() if it["status"] == "goedgekeurd"),
+                      key=lambda it: it["at"], reverse=True)
+
     def set_status(self, item_id: str, status: str) -> bool:
         if status not in _STATUSES:
             return False
