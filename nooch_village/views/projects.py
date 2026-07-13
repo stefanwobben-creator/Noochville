@@ -446,7 +446,7 @@ def _modal_html(mentions_json: str = "[]") -> str:
         ".catch(function(){reopen();toast('\\u26a0 niet opgeslagen');});});});"
         "bd.querySelectorAll('textarea').forEach(mentionWire);"
         # wall scrollt naar het laatste bericht: bij openen én na elke actie (reopen()→wire()), scoped op bd
-        "var ws=bd.querySelector('.wall-scroll');if(ws){requestAnimationFrame(function(){ws.scrollTop=ws.scrollHeight;});}"
+        "var ws=bd.querySelector('.wall-scroll');if(ws){requestAnimationFrame(function(){ws.scrollTop=0;});}"
         "bd.querySelectorAll('a.js-modal[data-href]').forEach(function(a){"
         "a.addEventListener('click',function(e){e.preventDefault();openCard(a.getAttribute('data-href'));});});"
         "var mems=bd.querySelector('.wo-mems');if(mems){var rows=[].slice.call(mems.querySelectorAll('.wo-mem')),sel=0;"
@@ -772,7 +772,6 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     owner_link = (f"<a href='/node?id={_e(p['owner'])}'>{_e(_name(orec))}</a>" if orec
                   else _e(p.get("owner") or ""))
     rw = bool(csrf_token)
-    from nooch_village.cockpit2 import _owner_ai
 
     def hid():
         return (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
@@ -940,34 +939,26 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                     f"{bijlage}"                                    # bijlage links op de toolbar-rij (eigen form)…
                     f"<button class='btn ok sm' type='submit' form='{_cfid}' name='action' value='proj_feed'>Plaatsen</button>"
                     f"</div>")                                      # …Plaatsen rechts (via .comp-attach margin-right:auto)
-        ai = _owner_ai(st, orec)
-        if ai is not None:
-            composer += (f"<form method='post' action='/action' class='ai-ask'>{hid()}"
-                         f"<button class='btn ghost sm ai-ask-btn' type='submit' name='action' value='ai_reply'>"
-                         f"🤖 Vraag {_e(ai.name)} om mee te denken</button></form>")
-    # Eén chronologische stroom: opdracht (created_at, oudste → bovenaan) ALLEEN als er een opdracht is
-    # (read-only; de opdracht-editor is uit de UI verwijderd); dialoog + deliverables (log-entries) en
-    # bijlagen, gesorteerd op tijd. Kale mutaties staan niet in de log → niet hier.
+    # Wall-volgorde: de opdracht (de brief) blijft als context bovenaan gepind; daaronder het gesprek en
+    # de deliverables/bijlagen met de NIEUWSTE bovenaan. Zo staat je net-geplaatste reactie meteen in beeld
+    # (onder de composer) i.p.v. onderaan een lange rapport-wall waar je aan voorbij scrollt.
     heeft_opdracht = bool(p.get("description", "").strip())
-    stream = [(p.get("created_at") or 0, _opdracht_post(p))] if heeft_opdracht else []
     _oo = _wall_outcome_opts(st)   # rol-/project-opties voor '→ uitkomst' — één keer per wall
+    entries = []                    # log + bijlagen; los van de gepinde opdracht, want die staat altijd bovenaan
     for m in (p.get("log") or []):
-        stream.append((m.get("at") or 0,
-                       _feed_entry_html(st, m, role_name=role_name, pid=pid,
-                                        csrf_token=csrf_token, mention_names=mention_names,
-                                        outcome_opts=_oo)))
+        entries.append((m.get("at") or 0,
+                        _feed_entry_html(st, m, role_name=role_name, pid=pid,
+                                         csrf_token=csrf_token, mention_names=mention_names,
+                                         outcome_opts=_oo)))
     for a in (p.get("attachments") or []):
-        stream.append((a.get("at") or 0, _attach_post(a, pid, hid, rw)))
-    stream.sort(key=lambda t: t[0])
-    # De wall-container scrollt naar het laatste bericht bij openen (focus op het recentste; omhoog =
-    # historie). Zelf-meegedragen snippet (vgl. _WRAPSEL_JS) voor de standalone volle pagina; in de modal
-    # draait een <script> niet bij innerHTML, dus daar doet wire() dezelfde scroll (scoped op de container,
-    # niet het window). Korter dan de viewport → scrollTop==scrollHeight is een no-op, geen error.
-    scroll_js = ("<script>(function(){var w=document.querySelector('.wall-scroll');"
-                 "if(w){requestAnimationFrame(function(){w.scrollTop=w.scrollHeight;});}})();</script>")
+        entries.append((a.get("at") or 0, _attach_post(a, pid, hid, rw)))
+    entries.sort(key=lambda t: t[0], reverse=True)   # nieuwste eerst
+    stream_html = (_opdracht_post(p) if heeft_opdracht else "") + "".join(h for _, h in entries)
+    # Nieuwste bovenaan (zie stream_html): geen auto-scroll-naar-onder meer; de wall opent bovenaan zodat
+    # de composer + de recentste berichten meteen in beeld staan.
     wall = (f"<div class='wall-head'><h2>Wall — inhoud &amp; gesprek</h2></div>"
             f"{composer}"
-            f"<div class='wall-scroll'>{''.join(h for _, h in stream)}</div>{scroll_js}")
+            f"<div class='wall-scroll'>{stream_html}</div>")
 
     # ---- Bovenrand/labels + werkoverleg-CTA (conditioneel) ----
     labelbar = ""

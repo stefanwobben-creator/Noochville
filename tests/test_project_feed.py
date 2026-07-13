@@ -91,9 +91,9 @@ def test_persoonspagina_toont_notificatie(tmp_path):
 
 def test_ai_praat_mee_op_verzoek(tmp_path):
     dd, rid, pid, codie = _setup(tmp_path)
-    # knop zichtbaar omdat de eigenaar-rol een AI-inwoner heeft
+    # de expliciete 'Vraag …'-knop is verwijderd: een rol nodig je nu uit via @mention in een reactie
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    assert "ai-ask-btn" in frag and "Vraag Codie" in frag
+    assert "ai-ask-btn" not in frag and "Vraag Codie" not in frag
     # AI plaatst een reactie (LLM gestubd)
     ok = cockpit2._ai_reply(cockpit2._Stores(dd), pid, ask=lambda prompt: "Stap 1: meet de conversie.")
     assert ok

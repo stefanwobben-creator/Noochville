@@ -42,16 +42,17 @@ def test_a_alle_acties_bereikbaar(tmp_path):
     cl = st.projects.checklist_add(pid, title="Uitvoerplan")
     st.projects.check_add(pid, cl["id"], "onderzoek", skill="openalex_evidence", query="x")
     frag = _frag(dd, pid)
-    # proj_describe staat hier BEWUST niet meer: de opdracht-editor is uit de UI verwijderd (scope e).
-    # De dispatch-tak blijft bestaan en is via de API bereikbaar (zie test_project_modal: dispatch
-    # proj_describe werkt nog), maar heeft geen UI-caller meer — daarom niet in deze UI-bereikbaarheidslijst.
+    # proj_describe én ai_reply staan hier BEWUST niet meer: hun UI-ingang is verwijderd (opdracht-editor
+    # resp. de 'Vraag …'-knop — een rol nodig je nu uit via @mention). De dispatch-takken blijven bestaan
+    # en zijn via de API bereikbaar; ze hebben alleen geen UI-caller meer — daarom niet in deze lijst.
     for action in ("proj_rename", "proj_status", "proj_done", "proj_archive", "proj_delete",
                    "proj_setowner", "proj_settrekker", "proj_setprivate", "proj_setimpact",
                    "proj_setdue", "checklist_add", "check_toggle", "check_add",
                    "check_remove", "attach_file", "attach_add", "attach_remove", "proj_feed",
-                   "ai_reply", "react_add", "feed_edit", "feed_remove", "proj_agendeer_verzwakt"):
+                   "react_add", "feed_edit", "feed_remove", "proj_agendeer_verzwakt"):
         assert f"value='{action}'" in frag or f'value="{action}"' in frag, f"actie ontbreekt: {action}"
     assert "value='proj_describe'" not in frag        # UI-ingang verwijderd; dispatch blijft API-bereikbaar
+    assert "value='ai_reply'" not in frag             # 'Vraag …'-knop weg; rol uitnodigen gaat via @mention
 
 
 # b. checklist rendert de vier states onderscheidbaar; ⚠ toont de reden; ontbrekend payload_ok = uitvoerbaar

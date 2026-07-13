@@ -22,7 +22,8 @@ def test_bijlage_staat_voor_plaatsen_in_comp_row(tmp_path):
     assert "value='attach_file'" in frag and "value='attach_add'" in frag
 
 
-def test_wall_scroll_container_en_snippet(tmp_path):
+def test_wall_scroll_container_nieuwste_bovenaan(tmp_path):
     frag = _frag(tmp_path)
     assert "class='wall-scroll'" in frag              # de scrollbare wall-container bestaat
-    assert "w.scrollTop=w.scrollHeight" in frag       # zelf-meegedragen scroll-naar-onderen-snippet
+    # nieuwste bovenaan: de auto-scroll-naar-onderen op de standalone pagina is bewust weg
+    assert "w.scrollTop=w.scrollHeight" not in frag

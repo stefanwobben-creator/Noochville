@@ -1305,10 +1305,13 @@ class Inhabitant(threading.Thread):
                 + f"Je werkt aan het lopende einddocument van dit project in NoochVille (Nooch.earth). "
                 f"Projectdoel: {scope_txt}\n\n" + variable
                 + "Schrijf het VOLLEDIGE, bijgewerkte einddocument in markdown. STRUCTUUR (verplicht, voor "
-                "traceerbaarheid): geef voor ELKE taak een kop met de TAAK, en daaronder de FEITELIJKE "
-                "BEVINDINGEN uit de deliverables die die taak beantwoorden. Beantwoord elke taak expliciet; "
-                "is er niets gevonden, schrijf dat expliciet — verzin niets. Sluit af met een korte synthese"
-                + (" en een 'klaar voor review'-conclusie" if force_final else "")
+                "traceerbaarheid): geef voor ELKE taak een kop (begin de regel met '## ') met de TAAK, en "
+                "daaronder de FEITELIJKE BEVINDINGEN uit de deliverables die die taak beantwoorden. Beantwoord "
+                "elke taak expliciet; is er niets gevonden, schrijf dat expliciet — verzin niets. Sluit ALTIJD "
+                "af met twee aparte secties, elk met een '## '-kop: '## Conclusie' (een korte synthese in "
+                "gewone taal van wat dit project heeft opgeleverd) en '## Aanbevelingen' (concrete "
+                "vervolgstappen als '- '-opsomming)"
+                + (". Vermeld in de conclusie expliciet dat het project klaar is voor review" if force_final else "")
                 + ". Geef alleen het document terug, geen meta-uitleg.")
             out = reason(prompt, call_site="einddocument",
                          max_tokens=int(self.context.settings.get("einddocument_max_tokens", "4000")))
