@@ -743,6 +743,39 @@ def livekit_mute_participant(identity: str, muted: bool = True) -> bool:
         return False
 
 
+def livekit_presence():
+    """Aantal deelnemers in de dorp-room, server-side via list_participants — GEEN eigen
+    deelnemer-verbinding, dus kost GEEN WebRTC-minuten (in tegenstelling tot de oude observer-connect).
+    Fail-soft: (0, []) zonder creds of bij een fout. Ontdubbelt op de identity-base (tab-suffix eraf)
+    zodat meerdere tabs van één persoon als één deelnemer tellen. Zelfde async-in-asyncio.run-patroon
+    als livekit_mute_participant."""
+    url = os.getenv("LIVEKIT_URL", "").strip()
+    if not url:
+        return 0, []
+    api_url = url.replace("wss://", "https://").replace("ws://", "http://")
+    try:
+        import asyncio
+        from livekit import api
+
+        async def _run():
+            lk = api.LiveKitAPI(api_url)          # api_key/secret uit de env
+            try:
+                res = await lk.room.list_participants(api.ListParticipantsRequest(room=VILLAGE_ROOM))
+                return list(res.participants)
+            finally:
+                await lk.aclose()
+
+        parts = asyncio.run(_run())
+        seen = {}
+        for p in parts:
+            base = (p.identity or "").split("#tab-")[0]
+            if base:
+                seen[base] = p.name or base
+        return len(seen), list(seen.values())[:8]
+    except Exception:
+        return 0, []
+
+
 # Static-assets: whitelist (geen path-traversal). Nu alleen de gevendorde LiveKit-client-bundle.
 _STATIC_TYPES = {"livekit-client.umd.min.js": "application/javascript; charset=utf-8"}
 
@@ -2784,6 +2817,12 @@ def make_handler(data_dir: str, csrf_token: str,
                 # server zelf (zie issue_livekit_token). AUTHZ: iedereen-ingelogd, in die functie.
                 status, payload = issue_livekit_token(st, username, (qs.get("tab") or [""])[0])
                 self._send_json(payload, status)
+                return
+            if path == "/livekit-presence":
+                # Goedkope presence voor de callbar: telt deelnemers in de dorp-room server-side, ZONDER
+                # zelf te verbinden. Vervangt de oude observer-connect die WebRTC-minuten opslurpte.
+                count, names = livekit_presence()
+                self._send_json({"count": count, "names": names}, 200)
                 return
             if path.startswith("/static/"):
                 name = path[len("/static/"):]

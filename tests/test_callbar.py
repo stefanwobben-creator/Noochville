@@ -23,6 +23,11 @@ def test_mute_lege_identity_is_false(monkeypatch):
     assert cockpit2.livekit_mute_participant("", True) is False
 
 
+def test_presence_fail_soft_zonder_creds(monkeypatch):
+    monkeypatch.delenv("LIVEKIT_URL", raising=False)
+    assert cockpit2.livekit_presence() == (0, [])                       # geen creds → (0, []), geen exception
+
+
 def test_lk_mute_dispatch_tak(tmp_path, monkeypatch):
     monkeypatch.delenv("LIVEKIT_URL", raising=False)
     dd = _dd(tmp_path)
@@ -36,9 +41,14 @@ def test_lk_mute_dispatch_tak(tmp_path, monkeypatch):
 def test_render_callbar_standalone_wellformed():
     html = render_callbar("csrf123")
     assert html.startswith("<!doctype html>") and "<html" in html      # eigen document
-    assert "c2-callbar" in html and "cb-observer" in html              # bar-markup + observer-default
+    assert "c2-callbar" in html                                        # bar-markup
     assert "background:transparent" in html                            # transparante iframe-body
     assert "/livekit-token?tab=" in html and "csrf123" in html         # token-fetch mét tab + csrf ingebed
+    # ── lazy connect (kostenbewust): GEEN auto-connect meer op page-load ──
+    assert "/livekit-presence" in html                                 # presence via goedkope poll
+    assert "function joinCall" in html and "connect(publish)" in html   # verbinden pas op de Join-gesture
+    assert "room.disconnect" in html                                    # verlaten koppelt écht los (minuten stoppen)
+    assert "Join gesprek" in html                                       # niet-verbonden default toont Join
     assert "BroadcastChannel" in html and "sessionStorage" in html     # multi-tab-coördinatie + tab-suffix
     assert "15000" in html                                             # claim-verval 15s bij crash
     assert "visibilitychange" in html                                  # throttle-proof: verval-check bij tabwissel/focus

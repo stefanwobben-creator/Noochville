@@ -3,38 +3,29 @@ cockpit-pagina, naast de Noochie-rail. De iframe isoleert de LiveKit-realm in ee
 eigen tokens/CSS; de parent bevat GEEN LiveKit-code (alleen de iframe + een dunne glue: postMessage-
 toast met origin-check + de `.has-callbar`-klasse).
 
-⚠ Overlevingsgrens: een per-pagina geïnjecteerde iframe is een child browsing context en wordt bij
-elke full-page navigatie/reload mét het parent-document weggegooid → de verbinding reconnect dan
-(en valt terug naar toeschouwer). Deze iframe isoleert de bar, maar maakt 'm NIET navigatie-bestendig;
-dat vergt een app-shell (client-side nav). Wel: de tab-suffix zit in sessionStorage, dus binnen één
-tab reconnect je met dezelfde identity (geen ghost-stapeling), en modal-kaart-navigatie (fragment,
-geen reload) loopt gewoon door.
+⚠ KOSTENBEWUST — lazy connect. De bar verbindt NIET automatisch met de dorp-room. Op page-load haalt-ie
+alleen een token op (bevestigt dat LiveKit geconfigureerd is) en pollt `/livekit-presence` om te tonen
+of er een gesprek gaande is. Een echte WebRTC-verbinding (en dus LiveKit-deelnemer-minuten) ontstaat
+PAS bij 'Join gesprek', en 'Verlaten' koppelt écht los (`room.disconnect`). Zo kost een open tabblad
+zonder gesprek nul minuten. (Vroeger verbond iedereen zich meteen als stille toeschouwer — dat slurpte
+de gratis WebRTC-minuten leeg zonder dat er ook maar gebeld werd.)
 
 Twee states:
-- **Toeschouwer** (default): auto-connect naar de dorp-room `village`, video gesubscribed maar GEEN
-  audio-playback, tiles gedempt en niet klikbaar, camera-voorkeur-toggle + "Join gesprek".
-- **Deelnemer** (na Join): mic aan + camera volgens voorkeur, audio aan, eigen tile vooraan
-  (--green-dark rand), muten van jezelf/een ander. Verlaten = mic+cam unpublishen + audio uit,
-  NIET disconnecten.
+- **Niet-verbonden** (default): geen WebRTC-verbinding. Presence-hint via poll ("🟢 N in gesprek"),
+  camera-voorkeur-toggle + "Join gesprek" (of "Start gesprek" als er nog niemand is). Kost geen minuten.
+- **Deelnemer** (na Join): room.connect + mic aan + camera volgens voorkeur + audio; eigen tile vooraan
+  (--green-dark rand), muten van jezelf/een ander. Verlaten = room.disconnect → terug naar poll-only.
 
-Multi-tab (elke tab = eigen iframe = eigen participant):
-- **Tab-suffix in identity**: identity = `<server-base>#tab-<sessionStorage-id>`, uniek per tab → geen
-  duplicate-identity-kick. De base blijft server-bepaald (de suffix kan de base niet overschrijven).
-- **Tile-dedup op base-identity**: N tabs van één gebruiker = één tile; die toont de deelnemende sessie
-  als er één is, anders een observer-sessie.
-- **Dubbel-join-preventie via BroadcastChannel** ('callbar'): de tab die deelnemer wordt roept dat om;
-  andere tabs van dezelfde base tonen dan een subtiele status-hint ("je neemt deel in een ander tabblad")
-  i.p.v. de Join-knop — geen uitgegrijsde knop die als permanente blokkade oogt. Sluit die tab
-  (pagehide → leave) dan komt Join direct terug; crasht die tab (geen unload) dan vervalt de claim na
-  15s zonder heartbeat en keert Join VANZELF terug, zonder reload — binnen ~15s bij een zichtbaar
-  tabblad, en DIRECT bij focus/tabwissel (een visibilitychange/focus-listener draait dezelfde
-  verval-check, want een achtergrondtab throttlet de interval). GEEN leader-election, GEEN gedeelde
-  verbinding: observer-tabs blijven elk verbonden (kost N observer-subscriptions per gebruiker; geen
-  echo want observers renderen geen audio).
+Multi-tab (elke tab = eigen iframe): identity = `<server-base>#tab-<sessionStorage-id>`, uniek per tab.
+Dubbel-join-preventie via BroadcastChannel ('callbar'): de tab die deelnemer wordt roept dat om; andere
+tabs van dezelfde base tonen een subtiele hint ("je neemt deel in een ander tabblad") i.p.v. de Join-
+knop. Sluit die tab (pagehide → leave + disconnect) dan komt Join direct terug; crasht die tab dan
+vervalt de claim na 15s zonder heartbeat en keert Join VANZELF terug (visibilitychange/focus-check omdat
+een achtergrondtab de interval throttlet). Geen observers meer → geen ghost-stapeling van verbindingen.
 
-De "beeld zonder geluid"-bug is op drie plekken geborgd (zie de JS-commentaren): (1) audio-render-
-container die remote audio pas áán de DOM hangt zodra je deelnemer bent, (2) startAudio() op de
-Join-gesture + AudioPlaybackStatusChanged-handler, (3) mic-publish-verificatie (console.info).
+De "beeld zonder geluid"-bug blijft geborgd op de Join-gesture: (1) audio-render-container die remote
+audio pas áán de DOM hangt zodra je deelnemer bent, (2) startAudio() op de Join-gesture, (3) mic-publish-
+verificatie (console.info).
 
 Reuse: web_base._CSS (tokens + .btn), .switch (camera-voorkeur). Toast: postMessage → parent .c2-toast."""
 from __future__ import annotations
@@ -56,8 +47,6 @@ html,body{background:transparent;margin:0;padding:0;max-width:none;height:100%;o
 .cb-tiles{display:flex;gap:10px;align-items:center;min-width:0;overflow-x:auto}
 .cb-spacer{flex:1}
 .cb-controls{display:flex;gap:10px;align-items:center;flex:none}
-.cb-controls .btn{height:44px;border-radius:22px;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:0 18px;font-size:14px;margin:0}
-.cb-controls .btn.cb-icon{width:44px;padding:0}
 .cb-hint{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gray)}
 .cb-elsewhere{color:var(--muted);font-style:italic}
 .cb-tile{position:relative;width:56px;height:56px;border-radius:14px;overflow:hidden;box-shadow:0 0 0 1px var(--border);user-select:none;transition:box-shadow .18s ease,transform .12s ease,opacity .2s ease}
@@ -72,15 +61,13 @@ html,body{background:transparent;margin:0;padding:0;max-width:none;height:100%;o
 .cb-mute-badge{position:absolute;top:3px;right:3px;width:17px;height:17px;border-radius:50%;background:var(--coral);color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.25);pointer-events:none}
 .cb-hovername{position:absolute;bottom:2px;left:2px;right:2px;background:rgba(0,0,0,.55);color:#fff;font-size:9.5px;font-weight:700;text-align:center;border-radius:8px;padding:2px 0;opacity:0;transition:opacity .15s ease;pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cb-tile:hover .cb-hovername{opacity:1}
-body.cb-observer .cb-tile{opacity:.75;filter:saturate(.75)}
 """
 
 
 _CALLBAR_JS = r"""
 (function(){
   var CSRF='__CSRF__';
-  // Tab-suffix: uniek per tab, stabiel over same-tab navigatie/reload (sessionStorage). Zo reconnect
-  // je binnen één tab met DEZELFDE identity i.p.v. als nieuwe ghost-participant.
+  // Tab-suffix: uniek per tab, stabiel over same-tab navigatie/reload (sessionStorage).
   var TAB=(function(){try{var t=sessionStorage.getItem('cb-tab');
     if(!t){t=Math.random().toString(36).slice(2,10);sessionStorage.setItem('cb-tab',t);}return t;}
     catch(e){return 'nostore';}})();
@@ -89,7 +76,10 @@ _CALLBAR_JS = r"""
   var speaking={};                 // full-identity -> true
   var audioMap={};                 // trackSid -> <audio>
   var bc=null,otherTab=null;       // BroadcastChannel + {tab,ts} van een deelnemende tab van dezelfde base
-  var HB=2500,EXPIRE=15000;        // claim-verval na 15s zonder heartbeat (crash/geen nette unload) → Join komt vanzelf terug
+  var HB=2500,EXPIRE=15000;        // claim-verval na 15s zonder heartbeat (crash) → Join komt vanzelf terug
+  var POLL=12000;                  // presence-poll interval (alleen NIET-verbonden + tab zichtbaar)
+  var presence={count:0};
+  var pollTimer=null;
   var bar=document.getElementById('c2-callbar');
   var tilesEl=document.getElementById('cb-tiles');
   var hintEl=document.getElementById('cb-hint');
@@ -105,19 +95,21 @@ _CALLBAR_JS = r"""
   function isPart(p){return !!((p.audioTrackPublications&&p.audioTrackPublications.size>0)||
                                (p.videoTrackPublications&&p.videoTrackPublications.size>0));}
   function pName(p){return p.name||baseOf(p.identity);}
-
-  // Toast loopt via de parent (past niet in 76px): postMessage met strikte eigen-origin.
   function toast(t){try{window.parent.postMessage({type:'cb-toast',text:String(t).slice(0,120)},ORIGIN);}catch(e){}}
 
-  // ── init: token halen (met tab-suffix); zonder LIVEKIT_URL (503) blijft de iframe verborgen ──
+  // ── init: token halen (bevestigt configuratie + levert token voor LATER). GEEN auto-connect: de
+  //    dorp-room verbindt PAS bij 'Join gesprek'. Zo kost een open tabblad nul WebRTC-minuten. De
+  //    "wie is er in gesprek"-awareness loopt via een goedkope server-poll (/livekit-presence). ──
   fetch('/livekit-token?tab='+encodeURIComponent(TAB))
     .then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
     .then(function(res){
-      if(!res.ok||!res.d||!res.d.token||!res.d.server_url){return;}   // niet geconfigureerd → parent laat verborgen
+      if(!res.ok||!res.d||!res.d.token||!res.d.server_url){return;}   // niet geconfigureerd → verborgen
       TOKEN=res.d.token;LKURL=res.d.server_url;MYID=res.d.identity;MYBASE=baseOf(MYID);
       try{window.parent.postMessage({type:'cb-ready'},ORIGIN);}catch(e){}   // parent: toon iframe + .has-callbar
-      document.body.classList.add('cb-observer');
-      setupBC();loadSdk(connect);
+      setupBC();
+      loadSdk(function(){});          // SDK vast voorladen zodat Join meteen kan verbinden
+      startPolling();                 // presence via poll i.p.v. een eigen (betaalde) toeschouwer-verbinding
+      render();
     }).catch(function(){});
 
   function setupBC(){
@@ -130,18 +122,31 @@ _CALLBAR_JS = r"""
     };
     setInterval(function(){
       if(joined)bcSend('alive');                           // heartbeat zolang wij deelnemen
-      checkClaim();                                        // periodieke verval-check (in de achtergrond gethrottled)
+      checkClaim();
     },HB);
-    // Een achtergrondtab throttlet de interval → "binnen ~15s" geldt alleen zichtbaar. Bij tabwissel/focus
-    // direct opnieuw checken (en, als wij deelnemen, meteen een 'alive' sturen zodat observers verversen).
-    document.addEventListener('visibilitychange',function(){if(!document.hidden)onVisible();});
+    document.addEventListener('visibilitychange',function(){
+      if(document.hidden){stopPolling();}else{onVisible();}});
     window.addEventListener('focus',onVisible);
-    // vertelt andere tabs dat onze claim vervalt als deze tab sluit/navigeert
-    window.addEventListener('pagehide',function(){if(joined)bcSend('leave');});
+    // deze tab sluit/navigeert: laat andere tabs los EN koppel onze eigen verbinding echt af
+    window.addEventListener('pagehide',function(){
+      if(joined){bcSend('leave');try{room&&room.disconnect();}catch(e){}}});
   }
   function checkClaim(){if(otherTab&&Date.now()-otherTab.ts>EXPIRE){otherTab=null;updateControls();}}
-  function onVisible(){if(joined)bcSend('alive');checkClaim();}   // tabwissel: her-announce + verval-check direct
+  function onVisible(){if(joined)bcSend('alive');checkClaim();if(!joined)startPolling();}
   function bcSend(type){if(bc){try{bc.postMessage({type:type,base:MYBASE,tab:TAB});}catch(e){}}}
+
+  // ── presence: goedkope server-poll i.p.v. een eigen WebRTC-verbinding ──
+  function startPolling(){
+    if(joined||document.hidden||!LKURL)return;
+    stopPolling();pollPresence();pollTimer=setInterval(pollPresence,POLL);
+  }
+  function stopPolling(){if(pollTimer){clearInterval(pollTimer);pollTimer=null;}}
+  function pollPresence(){
+    if(joined){stopPolling();return;}
+    fetch('/livekit-presence').then(function(r){return r.json();}).then(function(d){
+      presence={count:(d&&d.count)||0};if(!joined)render();
+    }).catch(function(){});
+  }
 
   function loadSdk(cb){
     if(window.LivekitClient){cb();return;}
@@ -151,8 +156,10 @@ _CALLBAR_JS = r"""
     s.addEventListener('load',cb);document.head.appendChild(s);
   }
 
-  function connect(){
-    var C=LK();var ev=C.RoomEvent;
+  // connect wordt UITSLUITEND vanuit joinCall aangeroepen (nooit meer op page-load)
+  function connect(after){
+    var C=LK();if(!C){toast('videolaag nog niet geladen, probeer zo weer');return;}
+    var ev=C.RoomEvent;
     room=new C.Room({adaptiveStream:true,dynacast:true});
     [ev.ParticipantConnected,ev.ParticipantDisconnected,ev.TrackSubscribed,ev.TrackUnsubscribed,
      ev.TrackMuted,ev.TrackUnmuted,ev.LocalTrackPublished,ev.LocalTrackUnpublished]
@@ -162,31 +169,34 @@ _CALLBAR_JS = r"""
     room.on(ev.ActiveSpeakersChanged,function(sps){speaking={};
       sps.forEach(function(p){speaking[p.identity]=true;});render();});
     room.on(ev.AudioPlaybackStatusChanged,function(){updateControls();});
+    room.on(ev.Disconnected,function(){cleanupRoom();});
     room.on(ev.DataReceived,function(payload,participant,kind,topic){
       if(topic!=='mute')return;
       try{var m=JSON.parse(new TextDecoder().decode(payload));
         toast(esc(m.by)+' heeft '+esc(m.who)+(m.muted?' gemute':' ge-unmute'));}catch(e){}
     });
     try{room.prepareConnection&&room.prepareConnection(LKURL,TOKEN);}catch(e){}
-    room.connect(LKURL,TOKEN,{autoSubscribe:true}).then(render)
-      .catch(function(e){console.error('[callbar] connect faalde',e);});
+    room.connect(LKURL,TOKEN,{autoSubscribe:true}).then(function(){if(after)after();render();})
+      .catch(function(e){console.error('[callbar] connect faalde',e);toast('verbinden niet gelukt');cleanupRoom();});
   }
 
-  // RoomAudioRenderer-equivalent: remote audio pas áán de DOM als je DEELNEMER bent (observer hoort niets).
+  // volledig loskoppelen → terug naar poll-only (en de minuten stoppen)
+  function cleanupRoom(){
+    joined=false;
+    Object.keys(audioMap).forEach(function(sid){try{audioMap[sid].remove();}catch(e){}});audioMap={};
+    room=null;speaking={};
+    startPolling();render();
+  }
+
+  // remote audio pas áán de DOM als je DEELNEMER bent (er zijn geen observers meer; de guard blijft)
   function renderAudio(){
-    if(!room)return;
-    if(joined){
-      room.remoteParticipants.forEach(function(p){p.audioTrackPublications.forEach(function(pub){
-        if(pub.track&&!audioMap[pub.trackSid]){var el=pub.track.attach();audioEl.appendChild(el);audioMap[pub.trackSid]=el;}
-      });});
-    } else {
-      room.remoteParticipants.forEach(function(p){p.audioTrackPublications.forEach(function(pub){
-        if(pub.track){try{pub.track.detach();}catch(e){}}});});
-      Object.keys(audioMap).forEach(function(sid){try{audioMap[sid].remove();}catch(e){}});audioMap={};
-    }
+    if(!room||!joined)return;
+    room.remoteParticipants.forEach(function(p){p.audioTrackPublications.forEach(function(pub){
+      if(pub.track&&!audioMap[pub.trackSid]){var el=pub.track.attach();audioEl.appendChild(el);audioMap[pub.trackSid]=el;}
+    });});
   }
 
-  // Dedup: één tile per base-identity; representant = de deelnemende sessie als die er is, anders observer.
+  // Dedup: één tile per base-identity; representant = de deelnemende sessie als die er is.
   function groupByBase(){
     var all=[];room.remoteParticipants.forEach(function(p){all.push(p);});all.push(room.localParticipant);
     var by={},order=[];
@@ -217,40 +227,44 @@ _CALLBAR_JS = r"""
   }
 
   function render(){
-    if(!room)return;
-    tilesEl.innerHTML='';
-    var reps=groupByBase();
-    reps.forEach(function(rep){tilesEl.appendChild(tileFor(rep));});
-    // hint alleen bij toeschouwer én als er iemand anders in de room is
-    hintEl.textContent=(!joined&&reps.length>1)?'🔇 Gesprek gaande · je luistert niet mee':'';
+    if(joined&&room){
+      tilesEl.innerHTML='';
+      groupByBase().forEach(function(rep){tilesEl.appendChild(tileFor(rep));});
+      hintEl.textContent='';
+    } else {
+      tilesEl.innerHTML='';
+      hintEl.textContent=presence.count>0
+        ? '🟢 '+presence.count+(presence.count===1?' iemand in gesprek':' mensen in gesprek')
+        : '';
+    }
     updateControls();
   }
 
   function updateControls(){
-    if(!room){ctlEl.innerHTML='';return;}
-    var mic=room.localParticipant.isMicrophoneEnabled;
-    var cam=room.localParticipant.isCameraEnabled;
+    if(!LKURL){ctlEl.innerHTML='';return;}
     var h='';
     if(!joined){
       if(otherTab){
-        // Subtiele status-hint, GEEN uitgegrijsde knop (leest niet als permanente blokkade): zodra de
-        // andere tab sluit (leave) of z'n heartbeat 15s wegblijft, vervalt otherTab en keert Join vanzelf terug.
+        // Subtiele status-hint, GEEN uitgegrijsde knop: zodra de andere tab sluit (leave) of z'n
+        // heartbeat 15s wegblijft, vervalt otherTab en keert Join vanzelf terug.
         h+='<span class="cb-hint cb-elsewhere" title="De Join-knop komt terug zodra dat tabblad sluit">🎧 je neemt deel in een ander tabblad</span>';
       } else {
         h+='<button type="button" class="switch-field cb-camtoggle" title="Kies of je met camera joint">'
           +'<span>🎥 met camera</span><span class="switch'+(camPref?' on':'')+'"></span></button>';
-        h+='<button type="button" class="btn ok cb-join">Join gesprek</button>';
+        h+='<button type="button" class="btn ok cb-join">'+(presence.count>0?'Join gesprek':'Start gesprek')+'</button>';
       }
     } else {
+      var mic=room.localParticipant.isMicrophoneEnabled;
+      var cam=room.localParticipant.isCameraEnabled;
       h+='<button type="button" class="btn'+(mic?'':' no')+' cb-mic" title="'
         +(mic?'Je mic staat aan · klik om te muten':'Je staat op mute · klik om te unmuten')+'">'
         +(mic?'🎙️ Mute':'🔇 Unmute')+'</button>';
       h+='<button type="button" class="btn cb-icon cb-cam" title="'+(cam?'Camera uitzetten':'Camera aanzetten')+'">'
         +(cam?'🎥':'🚫')+'</button>';
       h+='<button type="button" class="btn cb-icon cb-leave" title="Gesprek verlaten">✕</button>';
-    }
-    if(joined&&room.canPlaybackAudio===false){
-      h+='<button type="button" class="btn no cb-audio-on">🔈 klik om geluid aan te zetten</button>';
+      if(room.canPlaybackAudio===false){
+        h+='<button type="button" class="btn no cb-audio-on">🔈 klik om geluid aan te zetten</button>';
+      }
     }
     ctlEl.innerHTML=h;wireControls();
   }
@@ -265,26 +279,29 @@ _CALLBAR_JS = r"""
     var ao=q('.cb-audio-on');if(ao)ao.addEventListener('click',function(){room.startAudio().then(updateControls).catch(function(){});});
   }
 
+  // ── join: verbind NU pas met de dorp-room, dan mic/cam publiceren ──
   function joinCall(){
-    if(!room||otherTab)return;                             // dubbel-join-preventie
-    joined=true;document.body.classList.remove('cb-observer');bcSend('join');
-    room.localParticipant.setMicrophoneEnabled(true).then(function(){
-      var pubs=room.localParticipant.audioTrackPublications;
-      console.info('[callbar] mic gepubliceerd:',!!(pubs&&pubs.size>0));render();   // bug #3: mic-publish-verificatie
-    }).catch(function(e){console.error('[callbar] mic publiceren faalde',e);});
-    if(camPref){room.localParticipant.setCameraEnabled(true).then(render).catch(function(){});}
-    renderAudio();
-    if(room.canPlaybackAudio===false){room.startAudio().catch(function(){});}   // bug #2: startAudio op de gesture
-    toast('Je doet mee met het gesprek'+(camPref?'':' · camera uit'));render();
+    if(otherTab||joined)return;                            // dubbel-join-preventie
+    joined=true;stopPolling();bcSend('join');updateControls();
+    var publish=function(){
+      room.localParticipant.setMicrophoneEnabled(true).then(function(){
+        var pubs=room.localParticipant.audioTrackPublications;
+        console.info('[callbar] mic gepubliceerd:',!!(pubs&&pubs.size>0));render();   // bug #3
+      }).catch(function(e){console.error('[callbar] mic publiceren faalde',e);});
+      if(camPref){room.localParticipant.setCameraEnabled(true).then(render).catch(function(){});}
+      renderAudio();
+      if(room.canPlaybackAudio===false){room.startAudio().catch(function(){});}       // bug #2
+      toast('Je doet mee met het gesprek'+(camPref?'':' · camera uit'));render();
+    };
+    if(room){publish();}else{connect(publish);}            // verbind pas op deze gesture
   }
 
+  // ── leave: ECHT loskoppelen (i.t.t. vroeger, toen de verbinding bleef staan) → minuten stoppen ──
   function leaveCall(){
-    if(!room)return;
-    joined=false;document.body.classList.add('cb-observer');bcSend('leave');
-    try{room.localParticipant.setMicrophoneEnabled(false);}catch(e){}
-    try{room.localParticipant.setCameraEnabled(false);}catch(e){}
-    renderAudio();                                         // detacht remote audio → playback stopt
-    toast('Je bent uit het gesprek gestapt · verbinding blijft');render();
+    var r=room;joined=false;bcSend('leave');
+    try{r&&r.disconnect();}catch(e){}                       // Disconnected-event → cleanupRoom
+    cleanupRoom();
+    toast('Je bent uit het gesprek · verbinding gesloten');
   }
 
   function toggleSelfMic(){
@@ -324,7 +341,7 @@ def render_callbar(csrf_token: str = "") -> str:
     head = (f'<!doctype html><html lang="nl"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>call bar</title>{_FONTS}<style>{_CSS}{_CALLBAR_CSS}</style></head>')
-    body = ("<body class='cb-observer'>"
+    body = ("<body>"
             "<div id='c2-callbar' class='c2-callbar'>"
             "<div id='cb-tiles' class='cb-tiles'></div>"
             "<div id='cb-hint' class='cb-hint'></div>"
