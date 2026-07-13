@@ -144,6 +144,72 @@ def _md(text: str) -> str:
     return html[:-4] if html.endswith("<br>") else html
 
 
+def _md_doc(text: str) -> str:
+    """Vollere markdown-render voor het einddocument (leesbaar i.p.v. rauw). Kent kop-niveaus
+    (# .. ###### -> h3..h6), **vet**/*cursief*/~~doorhalen~~, geordende (1.) en ongeordende (- )
+    lijsten, [tekst](url)-links (alleen http(s)), alinea's en regelafbrekingen. Omringende
+    codefences (```), waar de LLM het document soms in wikkelt, worden gestript. XSS-veilig: de
+    tekst wordt eerst ge-escaped (`_e`), pas daarna draaien de opmaak-regexes. Losstaand van `_md`
+    (de lichte comment-formatter blijft ongemoeid)."""
+    import re
+    s = (text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    if s.startswith("```"):                                   # LLM-codefence om het hele document -> strippen
+        lines = s.split("\n")[1:]
+        while lines and not lines[-1].strip():
+            lines.pop()
+        if lines and lines[-1].strip().startswith("```"):
+            lines.pop()
+        s = "\n".join(lines)
+    s = _e(s)                                                 # eerst escapen (fail-closed tegen XSS)
+    s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)   # vet vóór cursief
+    s = re.sub(r"~~(.+?)~~", r"<del>\1</del>", s)
+    s = re.sub(r"\*(.+?)\*", r"<em>\1</em>", s)
+
+    def _link(m):
+        url = m.group(2)
+        if url.startswith("http://") or url.startswith("https://"):
+            return f"<a href='{url}' target='_blank' rel='noopener'>{m.group(1)}</a>"
+        return m.group(0)
+
+    s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _link, s)
+    out, mode = [], None                                      # mode: None | 'ul' | 'ol'
+    for ln in s.split("\n"):
+        t = ln.strip()
+        h = re.match(r"(#{1,6})\s+(.*)", t)
+        if h:
+            if mode:
+                out.append("</ul>" if mode == "ul" else "</ol>")
+                mode = None
+            tag = {1: "h3", 2: "h4", 3: "h5"}.get(len(h.group(1)), "h6")
+            out.append(f"<{tag}>{h.group(2)}</{tag}>")
+            continue
+        o = re.match(r"\d+\.\s+(.*)", t)
+        if o:
+            if mode != "ol":
+                if mode == "ul":
+                    out.append("</ul>")
+                out.append("<ol class='fbul'>")
+                mode = "ol"
+            out.append(f"<li>{o.group(1)}</li>")
+            continue
+        if t.startswith("- "):
+            if mode != "ul":
+                if mode == "ol":
+                    out.append("</ol>")
+                out.append("<ul class='fbul'>")
+                mode = "ul"
+            out.append(f"<li>{t[2:]}</li>")
+            continue
+        if mode:
+            out.append("</ul>" if mode == "ul" else "</ol>")
+            mode = None
+        if t:
+            out.append(f"<p>{ln}</p>")
+    if mode:
+        out.append("</ul>" if mode == "ul" else "</ol>")
+    return "".join(out)
+
+
 # De guarded wrapSel-definitie: één authoritatieve bron (`_WRAPSEL_DEF`), gebruikt door zowel de
 # meegedragen editor-<script> (`_WRAPSEL_JS`) als de modal-controller (`_modal_html`). `if(!window.wrapSel)`
 # → nooit dubbel gedefinieerd, ongeacht hoeveel editors of dat de modal 'm óók definieert. De modal heeft
@@ -838,6 +904,14 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .wall-head{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem;margin-bottom:.6rem}
 .wall-head h2{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);margin:0;font-weight:700}
 .wall-scroll{overflow-y:auto}
+.einddoc-d{margin-bottom:.6rem}
+.einddoc-d>summary{list-style:none;cursor:pointer}
+.einddoc-d>summary::-webkit-details-marker{display:none}
+.einddoc-toggle{font-size:.62rem;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle);font-weight:700}
+.einddoc-body{max-height:46vh;overflow-y:auto;padding-right:.4rem}
+.einddoc-body h3,.einddoc-body h4,.einddoc-body h5,.einddoc-body h6{margin:.7rem 0 .35rem;font-family:var(--font-display);line-height:1.2}
+.einddoc-body h3{font-size:1.05rem}.einddoc-body h4{font-size:.95rem}.einddoc-body h5{font-size:.85rem}.einddoc-body h6{font-size:.8rem}
+.einddoc-body p{margin:.4rem 0}.einddoc-body ul,.einddoc-body ol{margin:.35rem 0 .35rem 1.1rem}.einddoc-body li{margin:.15rem 0}
 /* Hoogte-koppeling projectdetail (niet roloverleg): main en zijbalk delen één bounded frame, elk met
    eigen interne scroll, zodat de onderkanten uitlijnen i.p.v. dat de wall op een vaste hoogte afkapt
    terwijl de zijbalk doorloopt. Alleen desktop; op mobiel (1 kolom) groeit alles natuurlijk mee. */

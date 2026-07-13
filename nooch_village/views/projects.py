@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from nooch_village.web_base import _e, _page, _banner
 from nooch_village.cockpit2_util import (
-    _name, _initials, _age, _fmt_due, _created_full, md_editor, _md, _WRAPSEL_DEF,
+    _name, _initials, _age, _fmt_due, _created_full, md_editor, _md, _md_doc, _WRAPSEL_DEF,
     _link_host, _psec, _person_name, _stamp,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK,
     _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET,
@@ -735,19 +735,23 @@ def _attach_post(a: dict, pid: str, hid, rw: bool) -> str:
 
 
 def _einddocument_html(st: _Stores, pid: str, rw: bool, hid) -> str:
-    """Het levende einddocument: read-only weergave (📄, via `_md`) + edit-form (mens redigeert bij
-    review). Hergebruikt de Opdracht-post-weergave (`.fbubble`) en de gesprek-composer (`md_editor`).
-    De AI werkt het document bij; mens-edits zijn input voor de volgende synthese-pass (geen merge)."""
+    """Het levende einddocument: in-/uitklapbare, leesbaar-gerenderde weergave (📄, via `_md_doc`) +
+    edit-form (mens redigeert bij review). De weergave zit in een <details open> met een eigen
+    hoogte-cap (.einddoc-body) zodat een lang rapport de composer eronder niet uit beeld duwt; inklappen
+    maakt de composer direct bereikbaar. De AI werkt het document bij; mens-edits zijn input voor de
+    volgende synthese-pass (geen merge)."""
     store = getattr(st, "project_docs", None)
     doc = store.read(pid) if store is not None else ""
-    head = "<div class='wall-head'><h2>📄 Einddocument</h2></div>"
     if doc.strip():
-        view = f"<div class='fentry'><div class='fbubble'>{_md(doc)}</div></div>"
+        body = f"<div class='fentry'><div class='fbubble einddoc-body'>{_md_doc(doc)}</div></div>"
     else:
-        view = ("<div class='fentry'><div class='fbubble'><span class='muted'>Nog geen einddocument — "
+        body = ("<div class='fentry'><div class='fbubble'><span class='muted'>Nog geen einddocument — "
                 "de toegewezen inwoner schrijft dit bij elke geslaagde puls.</span></div></div>")
+    view = (f"<details class='einddoc-d' open><summary class='wall-head einddoc-sum'>"
+            f"<h2>📄 Einddocument</h2><span class='einddoc-toggle'>in-/uitklappen</span></summary>"
+            f"{body}</details>")
     if not rw:
-        return f"{head}{view}"
+        return view
     editor = (f"<details class='cardmenu'><summary class='flink'>✏️ document bewerken</summary>"
               f"<form method='post' action='/action' class='pf'>{hid()}"
               f"<input type='hidden' name='pid' value='{_e(pid)}'>"
@@ -756,7 +760,7 @@ def _einddocument_html(st: _Stores, pid: str, rw: bool, hid) -> str:
               f"{md_editor('doc', value=doc, rows=10, help=True)}"
               f"<button class='btn ok sm' type='submit' name='action' value='proj_doc_edit'>Document opslaan</button>"
               f"</form></details>")
-    return f"{head}{view}{editor}"
+    return f"{view}{editor}"
 
 
 def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", back: str = "/",
