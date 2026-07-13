@@ -47,10 +47,24 @@ class GooglePatentsSkill(DataSourceSkill):
 
     # ── HTTP → JSON ─────────────────────────────────────────────────────────
     @staticmethod
-    def _default_get(url):
-        req = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
-        with urllib.request.urlopen(req, timeout=20) as r:
-            return json.loads(r.read().decode("utf-8"))
+    def _default_get(url, *, _open=None, _sleep=None):
+        """HTTP-GET → JSON met beleefde backoff-retry tegen de rate-limit/blokkade van het keyless
+        endpoint (3 pogingen, oplopende sleep). Pas na 3 mislukte pogingen faalt 'ie — zodat een
+        transiënte 429/403 een 'fout' wordt maar geen dagelijkse doodloper. _open/_sleep injecteerbaar."""
+        import time as _t
+        opener = _open or (lambda rq: urllib.request.urlopen(rq, timeout=20))
+        sleep = _sleep or _t.sleep
+        last = None
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
+                with opener(req) as r:
+                    return json.loads(r.read().decode("utf-8"))
+            except Exception as exc:
+                last = exc
+                if attempt < 2:
+                    sleep(1.0 + attempt)          # 1s, dan 2s — beleefd tegen het onofficiële endpoint
+        raise last
 
     def _fetch(self, term, limit, *, _get=None):
         get = _get or self._default_get

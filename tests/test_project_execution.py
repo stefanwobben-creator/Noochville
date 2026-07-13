@@ -158,3 +158,17 @@ def test_f_skill_fout_item_open_met_reden(tmp_path, ledger):
     assert inh._project_checklist(p)["items"][0]["done"] is False     # blijft open
     logtxt = " ".join(e["text"] for e in p.get("log", []))
     assert "niet gelukt" in logtxt                                    # reden in de note, geen stille skip
+
+
+# g. skill uitgevoerd maar leeg → item AF (no-data is een uitkomst), 📭 op de wall zodat de mens kan
+#    beoordelen of het project klaar is (De Kroniek B3: leeg is een feit, geen mislukking).
+def test_g_leeg_is_afgerond_op_de_wall(tmp_path, ledger):
+    inh = _inhabitant(tmp_path, ledger)
+    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    _prep(ledger, pid, [("leeg-item", "openalex_evidence", "leeg", "")])
+    inh._execute_checklist(ledger.get(pid), TODAY)
+    p = ledger.get(pid)
+    assert inh._project_checklist(p)["items"][0]["done"] is True      # leeg = uitgevoerd → afgevinkt
+    logtxt = " ".join(e["text"] for e in p.get("log", []))
+    assert "📭" in logtxt and "geen resultaat" in logtxt              # wegschreven op de wall
+    assert "niet gelukt" not in logtxt                               # geen ⚠️: het is geen mislukking

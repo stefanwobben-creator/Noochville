@@ -27,9 +27,9 @@ def _fake_inhabitant(tmp_path, results):
 
 
 def test_skill_zonder_ladder_ongewijzigd(tmp_path):
-    self = _fake_inhabitant(tmp_path, {"openalex_evidence": {"hits": [1]}})
-    out, source = Inhabitant._use_skill_with_ladder(self, "openalex_evidence", {"term": "x"})
-    assert out == {"hits": [1]} and source == "openalex_evidence" and self._calls == ["openalex_evidence"]
+    self = _fake_inhabitant(tmp_path, {"ngram_culture": {"hits": [1]}})   # ngram_culture zit niet in SKILL_LADDERS
+    out, source = Inhabitant._use_skill_with_ladder(self, "ngram_culture", {"term": "x"})
+    assert out == {"hits": [1]} and source == "ngram_culture" and self._calls == ["ngram_culture"]
     assert not os.path.exists(os.path.join(str(tmp_path), "evidence_ledger.jsonl"))   # geen ladder → geen log
 
 
