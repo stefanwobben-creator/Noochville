@@ -132,9 +132,13 @@ class EpoPatentsSkill(DataSourceSkill):
     # ── search/biblio → (total, [patent-dicts]) via XML-parse ───────────────
     def _search(self, token, term, limit, *, _get=None):
         get = _get or (lambda u: self._default_get(u, token))
-        # Titel-frase (CQL ti="<term>"). De term wordt eerst genormaliseerd: een complexe boolean-string
-        # (OR/AND/quotes) breekt de CQL → 400/404. Kernfrase werkt ('barefoot shoes' → ~10-tal patenten).
-        cql = f'ti="{self._normalize_term(term)}"'
+        # De term wordt genormaliseerd (boolean/quotes strippen). CQL-vorm hangt af van de lengte: EPO's
+        # exacte titel-frase ti="a b" werkt tot ~2 woorden, maar 404't bij ≥3 (empirisch). ti any "…" (elk
+        # woord in de titel) werkt voor élke lengte zonder 404 — breder, maar levert kandidaten i.p.v. een
+        # doodloper. Zo blijft een korte query precies en rondt een lange query af i.p.v. eeuwig te falen.
+        words = self._normalize_term(term).split()
+        inner = " ".join(words) or (term or "")
+        cql = f'ti="{inner}"' if len(words) <= 2 else f'ti any "{inner}"'
         url = f"{_SEARCH_BIBLIO_URL}?q={urllib.parse.quote(cql)}&Range=1-{limit}"
         return self._parse_patents(get(url))
 

@@ -166,3 +166,14 @@ def test_g_normalize_term():
     assert "ISO 4649" in got and "PHA" in got
     assert n("barefoot shoes") == "barefoot shoes"                  # simpel blijft simpel
     assert n('"only quotes"') == "only quotes"                      # leeg-na-normalisatie-fallback
+
+
+# ── h. CQL-vorm: ≤2 woorden = exacte titel-frase; ≥3 woorden = ti any (frase 404't anders) ─────────
+def test_h_lange_query_gebruikt_ti_any(monkeypatch):
+    sk = EpoPatentsSkill()
+    seen = {}
+    monkeypatch.setattr(sk, "_get_token", lambda ctx: "tok")
+    monkeypatch.setattr(sk, "_default_get",
+                        lambda url, token: (seen.__setitem__("url", url), _OPS_XML)[1])
+    sk.run({"term": '"barefoot shoes" biodegradable sole OR compostable', "limit": 3}, _ctx())
+    assert "ti%20any%20" in seen["url"] and "ti%3D%22" not in seen["url"]   # ti any "…", geen exacte frase
