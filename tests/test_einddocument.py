@@ -146,6 +146,24 @@ def test_persona_stem_in_prompt(tmp_path):
     assert "Sid" in prompt and m.call_args[1]["call_site"] == "einddocument"
 
 
+# 6b. Rapport-kwaliteit: volledige deliverable-inhoud (niet op 500 afgekapt) + taak/bevindingen-structuur
+#     + hogere output-cap → rapporten worden niet meer stil afgekapt en beantwoorden de taak.
+def test_volledige_inhoud_en_structuur_en_hogere_cap(tmp_path):
+    ledger, ds, docs = _stores(tmp_path)
+    inh = _inh(tmp_path, ledger, ds, docs)
+    pid = ledger.create("sid", "doel", "human", status="queued")
+    big = "BEVINDING-" + "x" * 1200            # > 500 (oude preview-cap), < 3000 (nieuwe per-deliverable cap)
+    ds.add(project_id=pid, role="sid", skill="openalex_evidence", checklist_item="i1",
+           title="Zoek X", content={"detail": big},
+           summary="📎 Zoek X — via openalex_evidence: 1 resultaat")
+    with patch(_REASON, return_value="doc") as m:
+        inh._synthesize_einddocument(ledger.get(pid), done=1, total=1, force_final=True)
+    prompt = m.call_args[0][0]
+    assert big in prompt                                          # volledige inhoud, niet op 500 afgekapt
+    assert "FEITELIJKE BEVINDINGEN" in prompt and "elke taak" in prompt.lower()   # taak/bevindingen-structuur
+    assert m.call_args[1]["max_tokens"] == 4000                   # hogere output-cap (default)
+
+
 # 7. Atomic write: nooit een half bestand leesbaar; geen achtergebleven .tmp
 def test_atomic_write_nooit_half_bestand(tmp_path):
     docs = ProjectDocStore(str(tmp_path))
