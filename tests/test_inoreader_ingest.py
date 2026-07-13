@@ -20,7 +20,8 @@ def _radar(tmp_path):
 def test_blocklist_en_distill(tmp_path):
     items = [
         {"title": "These feet beckon you!", "url": "https://rawporn.org/threads/x", "content_html": "<p>...</p>"},
-        {"title": "Veja launches new sneaker", "url": "https://example.com/veja", "content_html": "<p>Veja...</p>"},
+        {"title": "Veja launches new sneaker", "url": "https://example.com/veja", "content_html": "<p>Veja...</p>",
+         "date_published": "2019-06-01T08:00:00Z"},
         {"title": "", "url": "https://x.com/leeg"},                 # geen titel -> overgeslagen
     ]
     res = ing.ingest_feed_items(items, role=_ROLE, feed=_FEED, data_dir=str(tmp_path),
@@ -31,6 +32,7 @@ def test_blocklist_en_distill(tmp_path):
     pend = _radar(tmp_path).pending(_ROLE)
     assert len(pend) == 1 and pend[0]["kind"] == "concurrent" and pend[0]["content"] == "Veja"
     assert pend[0]["feed"] == _FEED and pend[0]["status"] == "wacht"
+    assert pend[0]["published_at"] == "2019-06-01T08:00:00Z"        # publicatiedatum uit de feed bewaard
 
 
 def test_idempotent_op_link(tmp_path):

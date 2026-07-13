@@ -15,10 +15,13 @@ def _store(tmp_path):
 def test_add_pending_and_get(tmp_path):
     r = _store(tmp_path)
     rid = r.add(role=_ROLE, feed="Competitor", kind="concurrent", content="Veja",
-                rationale="lancering", source="example.com", link="https://x/veja")
+                rationale="lancering", source="example.com", link="https://x/veja",
+                published_at="2019-03-14T10:00:00Z")
     assert rid
     it = r.get(rid)
     assert it["status"] == "wacht" and it["role"] == _ROLE and it["kind"] == "concurrent"
+    assert it["published_at"] == "2019-03-14T10:00:00Z"    # publicatiedatum bewaard, los van 'at'
+    assert it["at"] != it["published_at"]                  # ingest-tijd != artikeldatum
     pend = r.pending(_ROLE)
     assert len(pend) == 1 and pend[0]["id"] == rid
     assert r.approved(_ROLE) == []

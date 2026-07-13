@@ -78,8 +78,10 @@ class RadarStore(JsonStore):
             self._save()
 
     def add(self, *, role: str, feed: str, kind: str, content: str, rationale: str = "",
-            source: str = "", link: str = "") -> str | None:
-        """Voeg een signaal toe (status 'wacht'). Dedup op (rol, kind, inhoud) over niet-afgewezen items."""
+            source: str = "", link: str = "", published_at: str = "") -> str | None:
+        """Voeg een signaal toe (status 'wacht'). Dedup op (rol, kind, inhoud) over niet-afgewezen items.
+        `published_at` = de publicatiedatum van het artikel (uit de feed), los van `at` (moment van
+        ingest): een oud artikel is historisch bewijs, geen vers nieuws."""
         content = (content or "").strip()
         if not role or not content:
             return None
@@ -92,6 +94,7 @@ class RadarStore(JsonStore):
         self._data["items"][rid] = {
             "id": rid, "role": role, "feed": feed, "kind": kind, "content": content[:200],
             "rationale": (rationale or "")[:300], "source": source, "link": link,
+            "published_at": (published_at or "")[:40],
             "status": "wacht", "at": time.time()}
         self._save()
         return rid

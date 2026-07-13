@@ -115,7 +115,8 @@ def ingest_feed_items(items: list, *, role: str, feed: str, data_dir: str, missi
             res["own_brand"] += 1
         rationale = ("[eigen merk] " if own_hit else "") + (d.get("rationale") or "")
         if radar.add(role=role, feed=feed, kind=d["kind"], content=d["content"],
-                     rationale=rationale, source=art["brand"], link=link):
+                     rationale=rationale, source=art["brand"], link=link,
+                     published_at=art.get("date", "")):
             res["proposed"] += 1
         res["trace"].append((title[:75], d["kind"] + (" [eigen merk]" if own_hit else "")))
     return res

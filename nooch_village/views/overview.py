@@ -603,15 +603,24 @@ _RADAR_KIND = {
 }
 
 
+def _radar_date(s: str) -> str:
+    """Korte publicatiedatum (YYYY-MM-DD) uit de RFC3339-string van de feed; leeg als er niks is."""
+    s = (s or "").strip()
+    return s[:10] if s else ""
+
+
 def _radar_item(it: dict, csrf: str, node_id: str, *, archief: bool) -> str:
     """Eén radar-signaal: in de wachtrij met ✓/✗-knoppen, in het archief als platte regel."""
     emoji, klabel = _RADAR_KIND.get(it.get("kind", ""), ("•", it.get("kind", "")))
     rat = (it.get("rationale") or "").strip()
     src = (it.get("source") or "").strip()
     link = (it.get("link") or "").strip()
+    pub = _radar_date(it.get("published_at", ""))
     bron = (f"<a href='{_e(link)}' target='_blank' rel='noopener'>{_e(src or 'bron')}</a>"
             if link else (_e(src) if src else ""))
-    meta = " · ".join(x for x in (f"<span class='chip muted'>{emoji} {_e(klabel)}</span>", bron) if x)
+    date_chip = f"<span class='chip muted rdr-date'>📅 {_e(pub)}</span>" if pub else ""
+    meta = " · ".join(x for x in (f"<span class='chip muted'>{emoji} {_e(klabel)}</span>",
+                                  date_chip, bron) if x)
     body = (f"<div class='rdr-body'><div class='rdr-sig'>{_e(it.get('content', ''))}</div>"
             + (f"<div class='muted rdr-rat'>{_e(rat)}</div>" if rat else "")
             + f"<div class='rdr-meta'>{meta}</div></div>")
