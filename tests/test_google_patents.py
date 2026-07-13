@@ -51,3 +51,30 @@ def test_geen_term():
 def test_geregistreerd_in_factory():
     from nooch_village.registry_factory import build_skill_registry
     assert "google_patents" in build_skill_registry().names()
+
+
+def test_default_get_retryt_bij_transiente_fout():
+    """Backoff-retry: twee transiënte fouten (bv. 429) → derde poging slaagt. Sleep gemockt."""
+    calls = {"n": 0}
+
+    class _Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b'{"results":{"total_num_results":0,"cluster":[]}}'
+
+    def flaky_open(req):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise OSError("HTTP 429 rate limited")
+        return _Resp()
+
+    data = GooglePatentsSkill._default_get("http://x", _open=flaky_open, _sleep=lambda *_: None)
+    assert calls["n"] == 3 and data == {"results": {"total_num_results": 0, "cluster": []}}
+
+
+def test_default_get_faalt_na_drie_pogingen():
+    def always_fail(req):
+        raise OSError("HTTP 403 blocked")
+    import pytest
+    with pytest.raises(OSError):
+        GooglePatentsSkill._default_get("http://x", _open=always_fail, _sleep=lambda *_: None)

@@ -39,7 +39,8 @@ STATUSES = ("bevestigd", "leeg", "fout")
 # alternatieve pad, tot één bevestigt. epo_patents → google_patents (het keyless alternatief als OPS
 # faalt). Uitbreidbaar per skill; skills zonder entry draaien ongewijzigd (één bron).
 SKILL_LADDERS = {
-    "epo_patents": ["epo_patents", "google_patents"],
+    "epo_patents": ["epo_patents", "google_patents"],       # OPS faalt → keyless Google Patents
+    "openalex_evidence": ["openalex_evidence", "semscholar_tldr"],   # OpenAlex leeg/fout → Semantic Scholar
 }
 
 
@@ -152,9 +153,10 @@ def run_with_ladder(ledger, *, role_id, skill, query, rungs, classify=None, esca
     """Loop de fallback-trappen (`rungs`) af tot een BEVESTIGD resultaat; log elke uitkomst in de Kroniek.
 
     `rungs` = [(source, callable)]; `callable()` → resultaat (of raise = fout). De eerste bevestigde
-    tree wint en stopt de ladder. Escaleren naar de mens is de LÁÁTSTE tree: alleen als geen enkele tree
-    bevestigde ÉN minstens één een fout gaf (operationeel probleem, bv. bron down). Gaven alle trees
-    'leeg', dan is dat een legitiem no_data — géén escalatie (B3: leeg is een echt feit, geen mislukking).
+    tree wint en stopt de ladder. Geen bevestigde maar wél een 'leeg' → uitkomst = leeg (een bron gaf een
+    écht 'niets gevonden'; B3: leeg is een feit, geen mislukking) — géén escalatie. Escaleren naar de mens
+    is de LÁÁTSTE tree en gebeurt ALLEEN als geen enkele tree een bruikbaar antwoord gaf (bevestigd óf
+    leeg) — dus alle bronnen fout (operationeel probleem, bv. alle bronnen down).
 
     Geeft {status, source, result, escalated, trail}."""
     classify = classify or classify_result
@@ -171,9 +173,13 @@ def run_with_ladder(ledger, *, role_id, skill, query, rungs, classify=None, esca
             return {"status": "bevestigd", "source": source, "result": result,
                     "escalated": False, "trail": trail}
     escalated = False
-    if any(t["status"] == "fout" for t in trail) and escalate is not None:
-        escalate(skill=skill, query=query, trail=trail)          # precies één keer, na uitputting
-        escalated = True
-    last = trail[-1] if trail else {"status": "leeg", "source": None, "result": None}
-    return {"status": last["status"], "source": last["source"], "result": last.get("result"),
+    leeg = next((t for t in trail if t["status"] == "leeg"), None)
+    if leeg is not None:
+        final = leeg                                             # minstens één bron gaf een écht 'niets gevonden'
+    else:                                                        # alle bronnen fout → geen bruikbaar antwoord
+        final = trail[-1] if trail else {"status": "leeg", "source": None, "result": None}
+        if any(t["status"] == "fout" for t in trail) and escalate is not None:
+            escalate(skill=skill, query=query, trail=trail)      # láátste tree: mens wekken (één keer)
+            escalated = True
+    return {"status": final["status"], "source": final["source"], "result": final.get("result"),
             "escalated": escalated, "trail": trail}

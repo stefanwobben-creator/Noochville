@@ -59,3 +59,16 @@ def test_alles_leeg_is_legitiem_no_data_geen_escalatie(tmp_path):
                           rungs=[("epo", lambda: {"no_data": True}), ("google", lambda: {"patents": []})],
                           escalate=lambda **kw: esc.append(kw))
     assert res["status"] == "leeg" and not res["escalated"] and esc == []
+
+
+def test_leeg_wint_van_latere_fout_geen_escalatie(tmp_path):
+    """Bron 1 geeft een écht 'niets gevonden' (leeg), bron 2 is stuk (fout) → uitkomst = leeg (er ís een
+    no-data-antwoord), géén escalatie. De kapotte fallback blokkeert het echte feit niet."""
+    led = _led(tmp_path)
+    esc = []
+    res = run_with_ladder(led, role_id="harry_hemp", skill="openalex_evidence", query="niche",
+                          rungs=[("openalex_evidence", lambda: {"no_data": True}),
+                                 ("semscholar_tldr", lambda: {"error": "HTTP 429"})],
+                          escalate=lambda **kw: esc.append(kw))
+    assert res["status"] == "leeg" and res["source"] == "openalex_evidence" and not res["escalated"]
+    assert esc == [] and [r["status"] for r in led.all_records()] == ["leeg", "fout"]   # beide onthouden

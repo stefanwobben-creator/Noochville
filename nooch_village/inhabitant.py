@@ -1207,12 +1207,20 @@ class Inhabitant(threading.Thread):
                 ledger.check_toggle(pid, clid, item["id"])
                 succeeded += 1
                 self.log.info("✅ project '%s': item '%s' via %s afgerond", pid, item.get("text", "")[:40], src_label)
-            else:
-                why = (result.get("error") or result.get("reason") or
-                       ("geen resultaat" if status == "leeg" else "skill leverde geen resultaat"))
-                ledger.add_role_message(pid, f"⚠️ '{item.get('text','')}' via {src_label} niet gelukt ({status}): {why}")
-                self.log.warning("⚠️ project '%s': item '%s' via %s %s: %s",
-                                 pid, item.get("text", "")[:40], src_label, status, why)
+            elif status == "leeg":
+                # Actie UITGEVOERD, geen resultaat — eersteklas no-data-uitkomst (De Kroniek B3), géén
+                # mislukking: schrijf 't naar de wall ÉN vink af, zodat het project de review-gate haalt en
+                # de mens kan beoordelen of het klaar is (i.p.v. eeuwig een lege bron te herproberen).
+                why = result.get("reason") or "onderzocht, niets gevonden"
+                ledger.add_role_message(pid, f"📭 '{item.get('text','')}' via {src_label}: geen resultaat — {why}")
+                ledger.check_toggle(pid, clid, item["id"])
+                self.log.info("📭 project '%s': item '%s' via %s afgerond zonder resultaat", pid,
+                              item.get("text", "")[:40], src_label)
+            else:   # fout: de bron faalde (niet 'niets gevonden') → item blijft open, wordt opnieuw geprobeerd
+                why = result.get("error") or result.get("reason") or "skill leverde geen resultaat"
+                ledger.add_role_message(pid, f"⚠️ '{item.get('text','')}' via {src_label} niet gelukt (fout): {why}")
+                self.log.warning("⚠️ project '%s': item '%s' via %s fout: %s",
+                                 pid, item.get("text", "")[:40], src_label, why)
         ledger.mark_tended(pid, today)
         fresh_cl = self._project_checklist(ledger.get(pid)) or {}
         items = fresh_cl.get("items", [])
