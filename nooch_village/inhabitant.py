@@ -1563,6 +1563,46 @@ class Circle(Inhabitant):
         super().stop()
 
 
+def _ungrounded_tasks(project: dict, deliverables) -> list:
+    """De checklist-taken ZONDER gegrond deliverable. Alleen geslaagde items krijgen een deliverable
+    (zie _store_deliverable), dus een taak wiens item-id niet in de deliverable-records voorkomt heeft
+    geen data — daarover mag de synthese NIETS beweren. Conservatief: een item zonder id telt als
+    ongegrond (liever een gegronde taak dubbel laten checken dan een ongegronde laten fabriceren)."""
+    covered = {r.get("checklist_item") for r in (deliverables or []) if r.get("checklist_item")}
+    out = []
+    for cl in (project.get("checklists") or []):
+        for it in (cl.get("items") or []):
+            text = (it.get("text") or "").strip()
+            if text and it.get("id") not in covered:
+                out.append(text)
+    return out
+
+
+def _fabrication_suspects(document: str, ungrounded: list) -> list:
+    """Fail-loud vangnet: secties van ONGEGRONDE taken die tóch data (een tabel of prijzen) tonen in
+    plaats van 'niet onderzocht'. Heuristiek op de '## '-koppen; geeft de verdachte taak-teksten terug
+    (leeg = schoon). Bewust grof maar zichtbaar: liever een terechte waarschuwing dan stille fabricage."""
+    import re
+    if not document or not ungrounded:
+        return []
+    low_tasks = [(t, t.strip().lower()) for t in ungrounded if t.strip()]
+    suspects = []
+    for sec in re.split(r"(?m)^##\s+", document):
+        lines = sec.splitlines()
+        if not lines:
+            continue
+        head = lines[0].strip().lower()
+        body = sec.lower()
+        has_data = bool(re.search(r"\|\s*:?-{2,}", body)) or bool(re.search(r"[€$]\s?\d", body))
+        if not has_data or "niet onderzocht" in body:
+            continue
+        for t, tl in low_tasks:
+            if len(head) > 3 and (tl in head or head in tl) and t not in suspects:
+                suspects.append(t)
+                break
+    return suspects
+
+
 def synthesize_einddocument(*, project_docs, deliverables, projects, personas, record,
                             settings, project, force_final, log) -> bool:
     """Herbruikbare einddocument-synthese, los van de Inhabitant-instance: schrijft het VOLLEDIGE
@@ -1574,6 +1614,7 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
     if store is None or project is None:
         return False
     pid = project["id"]
+    ungrounded: list = []                                   # ongegronde taken (voor de fabricage-vangst na de LLM)
     try:
         from nooch_village.llm import reason
         from nooch_village.project_worker import _persona_for
@@ -1612,17 +1653,28 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
             log.warning("DOC_INPUT_CAP: %d van %d deliverables buiten het input-budget (%d tekens) "
                         "| project=%s", dropped, len(d_blocks), cap, pid)
         variable = head + ("\n".join(kept) or "(nog geen)") + "\n\n"
+        ungrounded = _ungrounded_tasks(project, recs)
+        gap_rule = ""
+        if ungrounded:
+            gap_rule = ("TAKEN ZONDER GEGROND RESULTAAT (géén deliverable — je hebt hier GEEN data over):\n"
+                        + "\n".join(f"- {t}" for t in ungrounded)
+                        + "\nSchrijf onder de kop van ELK van deze taken EXACT: 'Niet onderzocht — geen "
+                          "gegrond resultaat.' Verzin voor deze taken GEEN getallen, prijzen, percentages, "
+                          "tabellen of bronnen, en claim NOOIT een herkomst zoals 'op basis van handmatig "
+                          "onderzoek'.\n\n")
         prompt = (
             (persona.strip() + "\n\n" if persona and persona.strip() else "")
             + f"Je werkt aan het lopende einddocument van dit project in NoochVille (Nooch.earth). "
-            f"Projectdoel: {scope_txt}\n\n" + variable
+            f"Projectdoel: {scope_txt}\n\n" + variable + gap_rule
             + "Schrijf het VOLLEDIGE, bijgewerkte einddocument in markdown. STRUCTUUR (verplicht, voor "
             "traceerbaarheid): geef voor ELKE taak een kop (begin de regel met '## ') met de TAAK, en "
-            "daaronder de FEITELIJKE BEVINDINGEN uit de deliverables die die taak beantwoorden. Beantwoord "
-            "elke taak expliciet; is er niets gevonden, schrijf dat expliciet — verzin niets. Sluit ALTIJD "
-            "af met twee aparte secties, elk met een '## '-kop: '## Conclusie' (een korte synthese in "
-            "gewone taal van wat dit project heeft opgeleverd) en '## Aanbevelingen' (concrete "
-            "vervolgstappen als '- '-opsomming)"
+            "daaronder de FEITELIJKE BEVINDINGEN uit de deliverables die die taak beantwoorden. HARDE "
+            "GRONDINGS-REGEL: elk getal, elke prijs en elke tabel MOET letterlijk uit een deliverable komen; "
+            "staat het daar niet, dan bestaat het niet — schrijf dan 'Niet onderzocht — geen gegrond "
+            "resultaat' en verzin niets, ook geen herkomst. Beantwoord elke taak expliciet; is er niets "
+            "gevonden, schrijf dat expliciet. Sluit ALTIJD af met twee aparte secties, elk met een "
+            "'## '-kop: '## Conclusie' (een korte synthese in gewone taal van wat dit project heeft "
+            "opgeleverd) en '## Aanbevelingen' (concrete vervolgstappen als '- '-opsomming)"
             + (". Vermeld in de conclusie expliciet dat het project klaar is voor review" if force_final else "")
             + ". Geef alleen het document terug, geen meta-uitleg.")
         out = reason(prompt, call_site="einddocument",
@@ -1633,6 +1685,16 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
     if not out or not out.strip():
         log.info("einddocument: geen LLM-antwoord voor project '%s' — document ongewijzigd", pid)
         return False
+    # Fail-loud vangnet: fabriceerde de synthese tóch data (tabel/prijzen) onder een ongegronde taak?
+    suspects = _fabrication_suspects(out, ungrounded)
+    if suspects:
+        log.warning("DOC_FABRICATION_SUSPECT: project=%s — mogelijk ONGEGRONDE data (tabel/prijzen zonder "
+                    "deliverable) in taak/taken: %s", pid, "; ".join(suspects))
+        if projects is not None:
+            projects.add_role_message(pid, "⚠️ Mogelijk ONGEGRONDE data in het einddocument (getallen/tabel "
+                                           "zonder deliverable): " + "; ".join(suspects)
+                                           + ". Controleer dit handmatig — de synthese hoort hier 'niet "
+                                             "onderzocht' te schrijven.")
     store.write(pid, out.strip())
     if force_final:
         projects.add_role_message(pid, "📄 Einddocument bijgewerkt — klaar voor review.")
