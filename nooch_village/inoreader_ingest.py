@@ -66,7 +66,8 @@ def fetch_items(url: str) -> list:
 
 
 def ingest_feed_items(items: list, *, role: str, feed: str, data_dir: str, mission: str = "",
-                      limit: int = 40, own_brand_terms=("nooch", "nooch.earth"), llm_reason=None) -> dict:
+                      limit: int = 40, own_brand_terms=("nooch", "nooch.earth"), llm_reason=None,
+                      focus: str = "competitor") -> dict:
     """Verwerk de items van één feed naar de RadarStore van de gekoppelde rol (status 'wacht'). Strenge
     distill (precisie), idempotent op artikel-URL, fail-closed per item. Houdt een trace bij (--debug)."""
     from nooch_village.news_distill import distill_article
@@ -97,7 +98,8 @@ def ingest_feed_items(items: list, *, role: str, feed: str, data_dir: str, missi
             continue
         art = _to_article(it)
         try:
-            d = distill_article(art, mission=mission, known_brands=known, llm_reason=llm_reason, strict=True)
+            d = distill_article(art, mission=mission, known_brands=known, llm_reason=llm_reason,
+                                strict=True, focus=focus)
         except Exception as e:                                   # fail-closed: item overslaan, niet crashen
             log.warning("distill faalde voor %s: %s", link, e)
             radar.mark_seen(link)
@@ -140,7 +142,8 @@ def ingest_all(data_dir: str, *, limit: int = 40) -> dict:
             continue
         label = f.get("label") or f.get("env")
         try:
-            out[label] = ingest_feed(url, role=f["role"], feed=label, data_dir=data_dir, limit=limit)
+            out[label] = ingest_feed(url, role=f["role"], feed=label, data_dir=data_dir, limit=limit,
+                                     focus=f.get("focus", "competitor"))
         except Exception as e:
             print(f"feed '{label}' overgeslagen: {e}")
     return out

@@ -66,3 +66,26 @@ def test_strict_distill_param(tmp_path):
                         llm_reason=lambda p: "SOORT: concurrent\nINHOUD: Merk X\nWAAROM: lancering",
                         strict=True)
     assert d and d["kind"] == "concurrent"
+
+
+def test_materials_focus_prompt_and_distill():
+    from nooch_village.news_distill import distill_article, _distill_prompt
+    p = _distill_prompt("iets", "bron", "(geen)", "", strict=True, focus="materials")
+    assert "materiaalwetenschapper" in p and "afbreekbaarheid" in p   # materiaal-bril
+    assert "concurrent" not in p                                      # geen concurrent-bril
+    d = distill_article({"title": "Nieuwe biologisch afbreekbare vezel uit schimmel", "brand": "x"},
+                        llm_reason=lambda pr: "SOORT: kaart\nINHOUD: schimmelvezel\nWAAROM: afbreekbaar",
+                        focus="materials")
+    assert d and d["kind"] == "kaart" and d["content"] == "schimmelvezel"
+
+
+def test_materials_focus_via_ingest(tmp_path):
+    def reason(pr):
+        assert "materiaalwetenschapper" in pr                         # de materials-prompt is gebruikt
+        return "SOORT: kaart\nINHOUD: hennepvezel\nWAAROM: bio-based"
+    items = [{"title": "Doorbraak in hennepvezel voor schoenen", "url": "https://x/hemp", "content_html": "hemp"}]
+    res = ing.ingest_feed_items(items, role="harry_hemp", feed="Material Innovation",
+                                data_dir=str(tmp_path), llm_reason=reason, focus="materials")
+    assert res["proposed"] == 1
+    p = _radar(tmp_path).pending("harry_hemp")[0]
+    assert p["kind"] == "kaart" and p["content"] == "hennepvezel" and p["feed"] == "Material Innovation"

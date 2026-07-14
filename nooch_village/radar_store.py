@@ -22,16 +22,17 @@ _STATUSES = ("wacht", "goedgekeurd", "afgewezen")
 def _radar_default() -> dict:
     return {"items": {}, "seen": []}
 
-# Feed → rol → modus. De env-var houdt de (niet-geheime, deployment-specifieke) JSON-URL. Overschrijfbaar
-# via data/feeds.json. 'precisie' = per-item naar de radar (Competitor, Legal). 'recall' = latere
-# synthese-staart (Materials), nog niet in deze stap verwerkt.
+# Feed → rol → modus + focus. De env-var houdt de (niet-geheime, deployment-specifieke) JSON-URL.
+# Overschrijfbaar via data/feeds.json. 'precisie' = per-item naar de radar. 'focus' kiest de distill-bril:
+# 'competitor' (default: concurrent-zetten/markt) of 'materials' (nieuwe materialen, afbreekbaarheids-
+# bewijs, certificeringen — voor de wetenschapper). 'recall' (synthese-staart) volgt later.
 _DEFAULT_FEEDS = [
     {"env": "INOREADER_COMPETITOR_JSON_URL", "role": "concurrent_scout",
      "mode": "precisie", "label": "Competitor Watch"},
     {"env": "INOREADER_LEGAL_JSON_URL", "role": "mother_earth__nooch__strategic_lead_founder_steward",
      "mode": "precisie", "label": "Legal & Green Claims"},
     {"env": "INOREADER_MATERIALS_JSON_URL", "role": "harry_hemp",
-     "mode": "recall", "label": "Material Innovation"},
+     "mode": "precisie", "focus": "materials", "label": "Material Innovation"},
 ]
 
 

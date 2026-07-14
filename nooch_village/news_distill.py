@@ -82,10 +82,30 @@ class NewsProposals:
         return True
 
 
-def _distill_prompt(title: str, brand: str, known: str, mission: str, strict: bool) -> str:
-    """De destilleer-prompt. `strict=True` (Inoreader-ingest): hoge lat, standaard 'geen', geen
-    geforceerde missie-links. `strict=False` (Google-News-pijplijn): de oorspronkelijke, gulle prompt."""
+def _distill_prompt(title: str, brand: str, known: str, mission: str, strict: bool,
+                    focus: str = "competitor") -> str:
+    """De destilleer-prompt. `focus='materials'` geeft de wetenschapper een materiaal-bril (geen
+    concurrent-bril): nieuwe/bio-based materialen, afbreekbaarheids-bewijs, certificeringen, labresultaten.
+    `strict=True` (Inoreader-ingest): hoge lat, standaard 'geen'. `strict=False`: de gulle Scout-prompt."""
     m = mission or "organische groei via missie-gedreven SEO; duurzaam, vegan, plasticvrij"
+    if focus == "materials":
+        return (
+            "Je bent de materiaalwetenschapper van NoochVille (plasticvrij, vegan, biologisch afbreekbaar "
+            f"schoeisel — Nooch.earth). Missie: {m}.\n\n"
+            f"Bron: {brand}. Nieuwskop:\n\"{title}\"\n\n"
+            "Je zoekt ECHTE materiaal-signalen: een nieuw of verbeterd (bio-based, plasticvrij, gerecycled) "
+            "materiaal, bewijs of onderbouwing van afbreekbaarheid (labresultaat, certificering, norm), een "
+            "doorbraak in recycling of biofabricage, of een grondstof/vezel die relevant is voor duurzaam "
+            "schoeisel.\n\n"
+            "Types:\n"
+            "- kaart: een concreet materiaal-signaal (nieuw materiaal, afbreekbaarheids-bewijs, "
+            "certificering, labresultaat, recycling/biofabricage-doorbraak)\n"
+            "- seed: een pril, opkomend materiaal-idee dat het volgen waard is (spaarzaam)\n"
+            "- geen: alles wat NIET over materialen of materiaalinnovatie gaat\n\n"
+            "GEEN bij: mode/trends zonder materiaal-inhoud, algemene duurzaamheids-marketing zonder "
+            "onderbouwing, bedrijfs-/financieel nieuws, en niet-materiaal-onderwerpen. Bij echte twijfel: 'geen'.\n\n"
+            "Antwoord EXACT zo:\nSOORT: kaart|seed|geen\n"
+            "INHOUD: <kort: het materiaal of het signaal>\nWAAROM: <één korte zin>")
     if strict:
         return (
             "Je bent de scherpe concurrentie-analist van NoochVille (duurzaam, vegan schoenenmerk Nooch.earth). "
@@ -124,7 +144,7 @@ def _distill_prompt(title: str, brand: str, known: str, mission: str, strict: bo
 
 
 def distill_article(article: dict, *, mission: str = "", known_brands=(), llm_reason=None,
-                    strict: bool = False) -> dict | None:
+                    strict: bool = False, focus: str = "competitor") -> dict | None:
     """Destilleer één nieuwsartikel tot één voorstel {kind, content, rationale}, of None.
     Fail-closed zonder LLM of zonder bruikbaar antwoord."""
     title = (article.get("title") or "").strip()
@@ -136,7 +156,7 @@ def distill_article(article: dict, *, mission: str = "", known_brands=(), llm_re
         llm_reason = functools.partial(_reason, call_site="news_distill_article")
     brand = article.get("brand", "")
     known = ", ".join(known_brands) if known_brands else "(geen)"
-    prompt = _distill_prompt(title, brand, known, mission, strict)
+    prompt = _distill_prompt(title, brand, known, mission, strict, focus)
     out = (llm_reason(prompt) or "").strip()
     if not out:
         return None
