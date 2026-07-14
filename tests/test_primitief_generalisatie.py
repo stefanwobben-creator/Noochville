@@ -39,6 +39,15 @@ class _TermSkill(Skill):
                                       "abstract": "biomechanics", "source": "openalex"}]}
 
 
+class _RefSkill(Skill):
+    name = "ref_skill"; description = "verwijst naar iets"; input_schema = "ref: str"
+    required_payload = ("ref",)
+    def run(self, payload, context): return {}
+    def validate_payload(self, payload, context) -> list:
+        ref = (payload or {}).get("ref")
+        return [] if ref in getattr(context, "known_refs", ()) else [f"ref '{ref}' bestaat niet"]
+
+
 def _inhabitant(tmp_path, ledger, skills, dna):
     reg = SkillRegistry()
     for s in skills:
@@ -221,6 +230,37 @@ def test_missing_required_helper(tmp_path, ledger):
     assert inh._missing_required("competitor_discover", {"brands": ["x"]}) == []         # compleet
     assert inh._missing_required("competitor_discover", {"brands": []}) == ["brands"]    # leeg = ontbrekend
     assert inh._missing_required("onbekende_skill", {}) == []                            # onbekend → fail-soft
+
+
+def test_payload_issues_grounds_references(tmp_path, ledger):
+    inh = _inhabitant(tmp_path, ledger, [_RefSkill(), _KwSkill()], ["ref_skill", "keywords_everywhere"])
+    inh.context.known_refs = ("bestaat",)
+    assert inh._payload_issues("ref_skill", {"ref": "bestaat"}) == []                     # echte verwijzing → ok
+    issues = inh._payload_issues("ref_skill", {"ref": "verzonnen"})
+    assert issues and "verzonnen" in issues[0]                                            # spook → reden
+    assert inh._payload_issues("keywords_everywhere", {"kw": ["x"]}) == []                # geen validate_payload → geen check
+
+
+def test_community_listening_validate_payload(tmp_path):
+    from nooch_village.skills_impl.community_listening import CommunityListeningSkill
+    from nooch_village.buzz_query_sets import BuzzQuerySets
+    qs = BuzzQuerySets(str(tmp_path / "buzz_query_sets.json"))
+    qs.add("bestaat", "Bestaat", {"bluesky": {"active": True, "queries": ["x"]}})
+    ctx = SimpleNamespace(data_dir=str(tmp_path), buzz_query_sets=qs)
+    sk = CommunityListeningSkill()
+    assert sk.validate_payload({"query_set_id": "bestaat"}, ctx) == []
+    assert sk.validate_payload({"query_set_id": "verzonnen"}, ctx) == ["query-set 'verzonnen' bestaat niet"]
+    assert sk.validate_payload({}, ctx) == []                                             # ontbreken vangt required_payload
+
+
+def test_verzonnen_query_set_gemarkeerd_niet_uitvoerbaar(tmp_path, ledger, monkeypatch):
+    from nooch_village.skills_impl.community_listening import CommunityListeningSkill
+    _mock_plan(monkeypatch, '{"deliverable":"d","items":[{"text":"crowd","skill":"community_listening",'
+                            '"payload":{"query_set_id":"verzonnen_set"},"reason":""}]}')
+    inh = _inhabitant(tmp_path, ledger, [CommunityListeningSkill()], ["community_listening"])
+    pid = ledger.create("rol", "doel", "human", status="future"); inh.prepare_project(pid)
+    it = inh._project_checklist(ledger.get(pid))["items"][0]
+    assert it["payload_ok"] is False and "verzonnen_set" in it["reason"]                  # spook-verwijzing → geblokkeerd
 
 
 def test_a_volledige_payload_uitvoerbaar(tmp_path, ledger, monkeypatch):

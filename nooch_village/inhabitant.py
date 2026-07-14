@@ -977,6 +977,11 @@ class Inhabitant(threading.Thread):
                 if missing:
                     payload_ok = False
                     reason = f"payload onvolledig: {', '.join(missing)} ontbreekt"
+                else:                                            # velden aanwezig → aarden: bestaan de verwijzingen?
+                    issues = self._payload_issues(skill, payload or {})
+                    if issues:
+                        payload_ok = False
+                        reason = "; ".join(issues)
             ledger.check_add(pid, cl["id"], it.get("text", ""), skill=skill, payload=payload,
                              query=it.get("query", ""), reason=reason, payload_ok=payload_ok)
             if not skill:
@@ -1001,6 +1006,22 @@ class Inhabitant(threading.Thread):
         req = tuple(getattr(obj, "required_payload", ()) or ()) if obj is not None else ()
         pl = payload if isinstance(payload, dict) else {}
         return [f for f in req if not pl.get(f)]                  # ontbreekt of leeg (None/""/[]/{})
+
+    def _payload_issues(self, skill: str, payload: dict) -> list[str]:
+        """Grondings-poort op de payload: laat de skill (indien ze dat kan via validate_payload) haar
+        VERWIJZENDE velden aarden tegen de werkelijkheid — bestaat de query-set / het merk / de
+        deliverable echt? Een verzonnen verwijzing → een reden, waardoor het item niet-uitvoerbaar wordt
+        i.p.v. live te sterven. Skills zonder validate_payload → geen extra check (fail-soft, ongewijzigd).
+        Een kapotte validator mag de prep nooit breken."""
+        obj = self.registry.get(skill) if self.registry else None
+        vp = getattr(obj, "validate_payload", None)
+        if not callable(vp):
+            return []
+        try:
+            return list(vp(payload if isinstance(payload, dict) else {}, self.context) or [])
+        except Exception as e:
+            self.log.warning("payload-grondingscheck faalde voor %s: %s", skill, e)
+            return []
 
     def _opdracht_section(self, description) -> str:
         """De opdracht van de mens (p['description']) als prompt-sectie — die stuurt de planning.

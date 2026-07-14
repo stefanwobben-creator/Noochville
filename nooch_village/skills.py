@@ -51,6 +51,14 @@ class Skill(ABC):
     het opstellen (i.p.v. de skill leeg te laten draaien). Optionele velden (limit, days, country) staan
     hier NIET in. Leeg = geen validatie mogelijk (fail-soft: item blijft uitvoerbaar)."""
 
+    def validate_payload(self, payload: dict, context) -> list:
+        """Grondings-poort op de payload (opt-in). Geeft REDENEN terug waarom deze payload niet kan
+        draaien, náást het loutere aanwezig-zijn van verplichte velden (dat dekt required_payload al):
+        typisch een VERWIJZEND veld dat naar iets niet-bestaands wijst (een door de planner verzonnen id).
+        Default: geen extra check. Skills met verwijzingen overschrijven dit, zodat een spook-verwijzing
+        niet als 'uitvoerbaar' de plan-fase in glipt en pas live sterft. Fail-soft: bij twijfel [] terug."""
+        return []
+
     def available_metrics(self, context=None) -> list[str]:
         """De ruwe veldsleutels die deze skill oplevert (voor het catalogus-koppelscherm). Default
         leeg: een skill die géén meetbare velden declareert, levert niets te koppelen. Geen API-call.

@@ -56,6 +56,19 @@ class CommunityListeningSkill(Skill):
     output_schema = ("ok: bool, count/new: int (nieuwe rijen totaal), counts: {platform: int|'inactief'}, "
                      "summary: str, query_set_id: str | refuse-dict met code BUZZ_*")
 
+    def validate_payload(self, payload, context) -> list:
+        """Grondings-poort: de query_set_id MOET naar een bestaande set verwijzen. Een planner mag er
+        geen verzinnen (dat leidt anders tot een 'uitvoerbaar' item dat live sterft met BUZZ_NO_SET).
+        Onbekende set → één reden → het plan-item wordt niet-uitvoerbaar. Fail-soft als de store onleesbaar is."""
+        set_id = ((payload or {}).get("query_set_id") or "").strip()
+        if not set_id:
+            return []                                # ontbreken vangt required_payload al af
+        try:
+            exists = self._query_sets(context).get(set_id) is not None
+        except Exception:
+            return []                                # store onleesbaar → niet blokkeren
+        return [] if exists else [f"query-set '{set_id}' bestaat niet"]
+
     # ── injectie-punten (met fallback op data_dir, zoals competitor_news) ─────────
     def _query_sets(self, context):
         qs = getattr(context, "buzz_query_sets", None)
