@@ -291,6 +291,35 @@ def _mentioned_personas(st: _Stores, text: str) -> list:
     return out
 
 
+def _role_capabilities_block(role) -> str:
+    """Accountabilities + skills (naam + korte omschrijving) van de rol, als context zodat een @genoemde
+    rol kan toetsen of dialoog-info bij één van haar verantwoordelijkheden past en een concrete stap kan
+    voorstellen. Fail-soft: geen rol / geen DNA / registry-bouwfout → een lege string (geen blok, geen
+    fout). Verzint niets: alleen wat echt in het DNA en de registry staat."""
+    if role is None:
+        return ""
+    try:
+        dna = role.definition
+        accts = list(getattr(dna, "accountabilities", []) or [])
+        skills = list(getattr(dna, "skills", []) or [])
+        reg = None
+        try:
+            reg = shared_registry()
+        except Exception:
+            reg = None
+        skill_lines = []
+        for name in skills:
+            obj = reg.get(name) if reg else None
+            desc = (getattr(obj, "description", "") or "").strip() if obj else ""
+            skill_lines.append(f"- {name}: {desc[:120]}" if desc else f"- {name}")
+        acc_txt = "\n".join(f"- {a}" for a in accts) or "(geen)"
+        sk_txt = "\n".join(skill_lines) or "(geen)"
+        return (f"Jouw accountabilities:\n{acc_txt}\n"
+                f"Jouw skills (de ENIGE concrete tools die je hebt):\n{sk_txt}\n")
+    except Exception:
+        return ""
+
+
 def _ai_reply(st: _Stores, pid: str, ask=None, *, persona=None, prefix: str = "") -> bool:
     """Laat een AI-inwoner kort meedenken in de dialoog. Zonder `persona`: de inwoner van de
     eigenaar-rol (de meedenk-knop). Met `persona`: die specifieke, @genoemde inwoner; `prefix` zet de
@@ -308,13 +337,18 @@ def _ai_reply(st: _Stores, pid: str, ask=None, *, persona=None, prefix: str = ""
         return False
     recent = "\n".join(f"- {m.get('text', '')}" for m in (p.get("log") or [])[-6:])
     rol_line = (f"Rol: {_name(role)} — purpose: {role.definition.purpose}\n" if role is not None else "")
+    capab = _role_capabilities_block(role)          # accountabilities + skills → aanleiding tot een concrete stap
     aanleiding = (prefix.strip() + "\n\n") if (prefix or "").strip() else ""
     ctx = (f"{aanleiding}"
            f"Project: {_scope_text(p)}\n"
            f"Omschrijving: {p.get('description', '') or '(geen)'}\n"
            f"{rol_line}"
+           f"{capab}"
            f"Recente dialoog:\n{recent or '(nog leeg)'}\n\n"
-           f"Reageer kort (max 4 zinnen) en concreet als deze rol: geef een volgende stap of inzicht.")
+           "Toets de dialoog aan JOUW accountabilities en skills. Raakt de info één van jouw "
+           "verantwoordelijkheden en kun je er iets concreets mee (het liefst met één van je skills), stel "
+           "dan die ene stap voor ('zal ik ...?') en noem de skill. Raakt het jou niet, zeg dat kort. "
+           "Reageer als deze rol, max 4 zinnen, geen aannames verzinnen.")
     from nooch_village.personas import persona_prompt
     prompt = (persona_prompt(persona) + "\n\n" + ctx).strip()
     if ask is None:

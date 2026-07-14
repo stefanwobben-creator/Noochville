@@ -50,15 +50,39 @@ def _feed_who(st, atype: str, aid: str):
 
 
 def _mentionables(st):
-    """(lijst voor de JS-autocomplete, naam→doel-map voor het parsen). Rollen + mensen."""
+    """(lijst voor de JS-autocomplete, naam→doel-map voor het parsen). Rollen + AI-inwoners (persona-naam)
+    + mensen. Een persona-naam wijst naar de rol die de persona vervult, zodat @rolnaam en @persona-naam
+    exact hetzelfde doel (notificatie + reply) raken. Rolnamen winnen bij een naam-botsing (niet overschrijven)."""
     js, by_name = [], {}
     for r in st.records.all():
         if getattr(r, "archived", False):
             continue
         nm = _name(r)
-        js.append({"l": nm}); by_name[nm.lower()] = ("role", r.id)
+        js.append({"l": nm}); by_name.setdefault(nm.lower(), ("role", r.id))
+    # persona-naam → de rol die 'm vervult (via de assignments-laag, zelfde bron als _owner_ai)
+    role_by_persona = {}
+    assign = getattr(st, "assign", None)
+    if assign is not None:
+        for r in st.records.all():
+            if getattr(r, "archived", False):
+                continue
+            try:
+                for f in assign.fillers_of(r.id, record=r):
+                    if getattr(f, "type", None) == "persona":
+                        role_by_persona.setdefault(f.id, r.id)
+            except Exception:
+                continue
+    personas = getattr(st, "personas", None)
+    for p in (personas.all() if personas else []):
+        role_id = role_by_persona.get(p.id)
+        if not role_id or not (p.name or "").strip():
+            continue
+        key = p.name.lower()
+        if key in by_name:                          # rolnaam met dezelfde naam wint
+            continue
+        js.append({"l": p.name}); by_name[key] = ("role", role_id)
     for pr in st.people.all():
-        js.append({"l": pr.name}); by_name[pr.name.lower()] = ("person", pr.id)
+        js.append({"l": pr.name}); by_name.setdefault(pr.name.lower(), ("person", pr.id))
     return js, by_name
 
 

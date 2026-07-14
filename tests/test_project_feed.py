@@ -107,6 +107,34 @@ def test_ai_praat_mee_zonder_inwoner(tmp_path):
     assert cockpit2._ai_reply(cockpit2._Stores(dd), pid2, ask=lambda p: "x") is False
 
 
+def test_ai_reply_prompt_bevat_accountabilities_en_toetsinstructie(tmp_path):
+    # de @mention-reply moet de rol laten TOETSEN aan haar accountabilities/skills en een concrete stap
+    # voorstellen — dus die context + de toets-instructie horen in de prompt te staan.
+    dd, rid, pid, codie = _setup(tmp_path)
+    gezien = {}
+    cockpit2._ai_reply(cockpit2._Stores(dd), pid,
+                       ask=lambda prompt: gezien.setdefault("p", prompt) or "ok")
+    p = gezien["p"]
+    assert "Jouw accountabilities:" in p and "Jouw skills" in p
+    assert "Toets de dialoog" in p                      # de relevantie-toets-instructie
+    assert "zal ik" in p.lower()                        # het concrete-stap-voorstel
+
+
+def test_role_capabilities_block_faalt_zacht_zonder_rol():
+    # geen rol → lege string, nooit een exceptie (fail-soft)
+    assert cockpit2._role_capabilities_block(None) == ""
+
+
+def test_mention_op_persona_naam_raakt_de_rol(tmp_path):
+    # @Codie (persona-naam) moet exact hetzelfde doel raken als @Website Developer (rolnaam): de rol.
+    dd, rid, pid, codie = _setup(tmp_path)
+    from nooch_village.views.feed import _mentionables, _mentions_in
+    js, by_name = _mentionables(cockpit2._Stores(dd))
+    assert {"l": "Codie"} in js                          # persona-naam in de autofill-lijst
+    ment = _mentions_in("hoi @Codie kijk even", by_name)
+    assert ment and ment[0][0] == "role" and ment[0][1] == rid
+
+
 def test_oude_log_entries_blijven_leesbaar(tmp_path):
     dd, rid, pid, codie = _setup(tmp_path)
     st = cockpit2._Stores(dd)
