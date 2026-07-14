@@ -65,6 +65,97 @@ def review_role(role: dict, examples_block: str = "", *, llm_reason=None) -> dic
     return _parse_review(llm_reason(prompt))
 
 
+def _ing_start(line: str) -> bool:
+    """Begint deze accountability met een -ing-werkwoord (gerund)? Best-effort: eerste woord eindigt op
+    'ing'. Gebruikt om te markeren welke herformuleringen nog niet aan de vorm voldoen (mens ziet dit)."""
+    w = re.sub(r"^[\-\*\s]+", "", line or "").split()
+    return bool(w) and w[0].lower().endswith("ing")
+
+
+def _parse_teleology(text: str) -> dict | None:
+    """Lees PURPOSE / ACCOUNTABILITIES / WAAROM uit het LLM-antwoord van de teleologie-review.
+    'GEEN' → None (rol is al scherp). Geeft {purpose, accountabilities:[...], why} of None bij leeg."""
+    if not text or text.strip().upper().startswith("GEEN"):
+        return None
+    pur = re.search(r"PURPOSE\s*:\s*(.+?)(?:\nACCOUNTABILITIES\s*:|\Z)", text, re.IGNORECASE | re.DOTALL)
+    acc = re.search(r"ACCOUNTABILITIES\s*:\s*(.+?)(?:\nWAAROM\s*:|\Z)", text, re.IGNORECASE | re.DOTALL)
+    why = re.search(r"WAAROM\s*:\s*(.+)", text, re.IGNORECASE | re.DOTALL)
+    purpose = _collapse(pur.group(1)) if pur else ""
+    accs = []
+    if acc:
+        for ln in acc.group(1).splitlines():
+            ln = ln.strip()
+            if ln.startswith(("-", "*", "•")):
+                a = _collapse(ln.lstrip("-*• ").strip())
+                if a:
+                    accs.append(a[:200])
+    if not purpose and not accs:
+        return None
+    return {"purpose": purpose[:400], "accountabilities": accs[:12],
+            "why": (_collapse(why.group(1))[:400] if why else "")}
+
+
+def review_role_teleology(role: dict, *, llm_reason=None) -> dict | None:
+    """Teleologie-review van één rol: toets de purpose op het BESTAANSDOEL (het einde dat de rol dient,
+    niet de taken) en herformuleer 'm zo nodig; herformuleer ELKE accountability in het ENGELS, op
+    B1-niveau, beginnend met een -ing-werkwoord (gerund). Geeft {purpose, accountabilities, why} of None.
+    Fail-closed: geen LLM/leeg → None (niets geforceerd)."""
+    if llm_reason is None:
+        import functools
+        from nooch_village.llm import reason as _reason
+        llm_reason = functools.partial(_reason, call_site="governance_teleology")
+    accs = role.get("accountabilities") or []
+    acc_txt = "\n".join(f"  - {a}" for a in accs) or "  (geen)"
+    prompt = (
+        "Je bent de Facilitator van NoochVille (duurzaam, vegan schoenenmerk) en begeleidt een "
+        "TELEOLOGIE-review van één rol.\n\n"
+        "TELEOLOGIE: de purpose moet het BESTAANSDOEL van de rol uitdrukken — het einde/de reden waarvoor "
+        "de rol bestaat — NIET de taken of de methode. Toets de huidige purpose daaraan en herformuleer 'm "
+        "zo nodig, in het Engels op B1-niveau (eenvoudig en helder).\n"
+        "ACCOUNTABILITIES: herformuleer ELKE accountability in het ENGELS, op B1-niveau, en begin ELKE "
+        "accountability met een werkwoord in de -ing-vorm (gerund): bv. 'Guarding ...', 'Translating ...', "
+        "'Verifying ...', 'Delivering ...'. Behoud de betekenis; splits of schrap niet zomaar.\n\n"
+        f"Rol: {role.get('id')}\nHuidige purpose: {role.get('purpose','')}\n"
+        f"Huidige accountabilities:\n{acc_txt}\n\n"
+        "Antwoord EXACT in dit formaat (of 'GEEN' als de rol al volledig aan de standaard voldoet):\n"
+        "PURPOSE: <herijkte purpose, Engels, B1, bestaansdoel>\n"
+        "ACCOUNTABILITIES:\n- <-ing ... >\n- <-ing ... >\n"
+        "WAAROM: <korte reden: wat er teleologisch/qua vorm scherper is geworden>")
+    return _parse_teleology(llm_reason(prompt))
+
+
+def teleology_review_all_roles(records, inbox, *, llm_reason=None) -> dict:
+    """De governance-teleologie-review over alle operationele dorp-rollen (kernrollen/cirkels overslaan).
+    De Facilitator herijkt per rol purpose + accountabilities naar de standaard (Engels, B1, -ing-vorm);
+    de Secretary legt elk resultaat vast als kans in de human inbox — mens-gated, niks auto-toegepast.
+    Geeft {reviewed, proposed, skipped, incomplete}. Fail-closed: zonder LLM → 0 voorstellen."""
+    from nooch_village.models import RecordType
+    reviewed = proposed = skipped = incomplete = 0
+    for rec in records.all():
+        if getattr(rec, "archived", False):
+            continue
+        if rec.type != RecordType.ROLE or rec.id in _SKIP:
+            skipped += 1
+            continue
+        d = rec.definition
+        role = {"id": rec.id, "purpose": d.purpose, "accountabilities": list(d.accountabilities)}
+        reviewed += 1
+        res = review_role_teleology(role, llm_reason=llm_reason)
+        if not res:
+            continue
+        niet_ing = [a for a in res["accountabilities"] if not _ing_start(a)]
+        if niet_ing:
+            incomplete += 1                                   # gemarkeerd, niet geweigerd: de mens beslist
+        acc_block = "\n".join(f"- {a}" for a in res["accountabilities"]) or "- (geen)"
+        wat = (f"Purpose (EN): {res['purpose']}\n\nAccountabilities (EN, B1, -ing):\n{acc_block}"
+               + (f"\n\n⚠️ Nog niet in -ing-vorm: {'; '.join(niet_ing)}" if niet_ing else ""))
+        inbox.add_opportunity(
+            f"Teleologie-review '{rec.id}': purpose + accountabilities (EN, B1, -ing)",
+            by="facilitator", kind="governance", wat=wat, waarom=res["why"])
+        proposed += 1
+    return {"reviewed": reviewed, "proposed": proposed, "skipped": skipped, "incomplete": incomplete}
+
+
 def review_all_roles(records, examples_store, inbox, *, llm_reason=None) -> dict:
     """Loop alle operationele dorp-rollen langs, en zet per rol één verbetervoorstel als kans in
     de human inbox (by='facilitator'). Mens-gated: jij verwerkt ze in de triage. Geeft

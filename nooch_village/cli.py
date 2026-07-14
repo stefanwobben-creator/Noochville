@@ -913,6 +913,26 @@ def main() -> None:
         if ge.count() == 0:
             print("   ⚠️ Referentiebank leeg — draai eerst 'ingest_governance' voor grounding.")
 
+    elif mode == "teleology_review":
+        # Teleologie-review: de Facilitator herijkt per rol de purpose (bestaansdoel) + accountabilities
+        # naar de standaard (Engels, B1, -ing-vorm); de Secretary legt elk als kans in de human inbox.
+        # Mens-gated: niks auto-toegepast, jij keurt goed in de triage.
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.governance import Records
+        from nooch_village.governance_review import teleology_review_all_roles
+        from nooch_village.human_inbox import HumanInbox
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
+        inbox = HumanInbox(os.path.join(ctx.data_dir, "human_inbox.json"))
+        print("🏛️ Teleologie-review: Facilitator herijkt purpose + accountabilities (EN, B1, -ing)…")
+        res = teleology_review_all_roles(recs, inbox)
+        print(f"✅ {res['reviewed']} rollen gereviewd, {res['proposed']} voorstel(len) door de Secretary "
+              f"vastgelegd in je inbox (mens-gated). {res['skipped']} overgeslagen (kernrollen/cirkels)"
+              + (f", {res['incomplete']} met een accountability die nog niet in -ing-vorm staat (gemarkeerd)."
+                 if res['incomplete'] else "."))
+
     elif mode == "healthcheck":
         import os
         from nooch_village.config import load_context
@@ -938,7 +958,7 @@ def main() -> None:
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "
               "measure_propose | rereview | ingest | notes_remove | recurate | "
               "ground | harry_run | roster | keys | competitor | community_listening | formalize | answer_questions | "
-              "ingest_governance | review_roles | shopify | work_projects | "
+              "ingest_governance | review_roles | teleology_review | shopify | work_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | rapport | verslag | healthcheck",
               file=sys.stderr)
         sys.exit(1)
