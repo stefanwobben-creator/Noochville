@@ -154,3 +154,18 @@ sessie opent hiermee.
   "navigeren tussen projecten") én bij `wo_close`. Bewust geaccepteerd: de spanning
   is klein bij ~4 gebruikers en korte calls. Oplossing ligt klaar: #175 (SPA-shell)
   + 1a (link-interceptor). Bouwen zodra het knelt.
+- **VOORSTEL — ghost-skill-guard (record → registry).** Een rol-record kan een
+  skill-naam in zijn `skills`-lijst dragen die in de `SkillRegistry` niet bestaat
+  (een "ghost"): `use_skill` faalt dan pas runtime. Ontdekt 11-07: `harry_hemp`
+  droeg `patent_search` (dode branch-naam; live equivalent = `epo_patents`) én
+  `evidence_triage` (impl leeft op ongemergde branch `feat/evidence-triage-scientist`,
+  record lokaal vooruitgelopen). Oorzaak telkens een branch/record-desync.
+  Voorgestelde guard: een test die élke skill-naam in élk (niet-gearchiveerd)
+  rol-record aftoetst tegen `build_skill_registry().names()`; onbekende naam → fail
+  met "ghost: rol X noemt skill Y die niet geregistreerd is". **Bewust éénrichting:**
+  alleen record → registry. De omgekeerde kant (registry-skill zonder rol = "orphan")
+  is legitiem — skills mogen op de plank liggen voor een latere governance-koppeling,
+  dus die kant NIET afdwingen. Randvoorwaarde: de guard kan pas groen aan zolang er
+  nog een ghost leeft — `evidence_triage` moet éérst opgelost zijn (branch mergen óf
+  record-verwijzing terugdraaien) voordat de test aangezet wordt. Alleen voorstel;
+  test nog niet gebouwd.
