@@ -117,6 +117,11 @@ class DataSourceSkill(Skill):
     SOURCE: str = ""
     DEFAULT_FREQUENCY: str = "daily"
 
+    CATALOG_LABEL: str = ""
+    """Korte, leesbare naam voor de bron-picker in het koppel-scherm (bijv. 'Plausible (web-analytics)').
+    Leeg → de view maakt er zelf een nette naam van uit SOURCE. Het label hoort BIJ de skill (config op de
+    skill), niet in een losse view-lijst — zo drijft het niet uiteen met de registry."""
+
     kind: str = "flux"
     """'flux' = de dagwaarde is de gebeurtenis van die dag (bezoekers, orders) → de tegel toont de
     waarde zelf. 'snapshot' = de dagwaarde is een cumulatieve STAND (citaties, publicaties) → de tegel

@@ -40,6 +40,7 @@ class SemanticScholarSkill(DataSourceSkill):
     required_payload = ("term",)
     output_schema = "lijst: total: int, hits: list[{title, year, citations, tldr, abstract}] | no_data | error"
     SOURCE = "semanticscholar"
+    CATALOG_LABEL = "Semantic Scholar (auteur-tellers)"
     # Snapshot-bron (cumulatieve auteur-tellers, groeien traag) → maandelijks meten. De tegel toont de
     # genormaliseerde delta i.p.v. de oplopende stand (erft het OpenAlex-snapshot-patroon).
     kind = "snapshot"

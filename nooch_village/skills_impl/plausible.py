@@ -28,6 +28,7 @@ _BREAKDOWNS = [
 class PlausibleSkill(DataSourceSkill):
     name = "plausible_stats"
     SOURCE = "plausible"
+    CATALOG_LABEL = "Plausible (web-analytics)"
     cost = "free"
     needs_secret = True
     required_env = ("PLAUSIBLE_API_KEY", "PLAUSIBLE_SITE_ID")

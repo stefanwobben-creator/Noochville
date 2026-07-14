@@ -57,6 +57,7 @@ def _token_path(context) -> str:
 class GscPerformanceSkill(DataSourceSkill):
     name = "gsc_performance"
     SOURCE = "gsc"
+    CATALOG_LABEL = "Google Search Console"
     cost = "free"
     required_env = ("GSC_TOKEN_PATH", "GSC_SITE")
     # GSC-data heeft ~2-3 dagen vertraging → gisteren is nog leeg. De collector richt zich daarom op

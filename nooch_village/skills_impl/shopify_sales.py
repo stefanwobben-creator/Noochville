@@ -220,6 +220,7 @@ _STUB_ORDERS = [
 class ShopifySalesSkill(DataSourceSkill):
     name = "shopify_sales"
     SOURCE = "shopify"
+    CATALOG_LABEL = "Shopify (verkoop)"
     cost = "free"
     required_env = ("SHOPIFY_STORE", "SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET")
     description = (

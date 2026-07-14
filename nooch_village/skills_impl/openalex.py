@@ -181,6 +181,7 @@ class OpenalexSkill(DataSourceSkill):
     output_schema = ("lijst: total: int, hits: list[{title, authors, year, citations, topic, abstract}], "
                      "filter: str (de gebruikte OpenAlex-filter — leeg als filterloos) | no_data | error")
     SOURCE = "openalex"
+    CATALOG_LABEL = "OpenAlex (academische tellers)"
     # Flow-bron: per puls tellen we de works die in een 90-daags publicatievenster VERSCHENEN (niet de
     # cumulatieve voorraad). De tegel toont het niveau zelf — geen eerste-verschillen nodig.
     kind = "flux"

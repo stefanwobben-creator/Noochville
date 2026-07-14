@@ -78,6 +78,36 @@ def test_co2_village_geregistreerd():
     assert build_skill_registry().get("co2_village") is not None
 
 
+# ── koppel-laag leidt af uit de registry (structureel, niet meer hardcoded) ────────────────────────
+
+def test_co2_village_is_koppelbare_databron():
+    # de KPI-tegel kan alleen vullen als de binding-route de dagreeks co2_village_gram_co2e_day vindt;
+    # dat vereist dat co2_village als databron herkend wordt (geen handmatige literal meer).
+    from nooch_village.views import metrics as vm
+    assert "co2_village" in vm._data_sources()
+    assert vm._obs_key_for_indicator("co2_village", "gram_co2e") == ("co2_village_gram_co2e_day", "co2_village")
+
+
+def test_catalog_sources_afgeleid_uit_registry_met_labels():
+    # co2_village verschijnt nu in het koppel-scherm met zijn eigen label; de bestaande curated labels
+    # (Plausible) blijven behouden — het label hoort bij de skill (CATALOG_LABEL), niet in een view-lijst.
+    from nooch_village.views.catalog_koppelen import catalog_sources
+    by_src = {s: (label, fields) for s, label, fields in catalog_sources()}
+    assert "co2_village" in by_src and "gram_co2e" in by_src["co2_village"][1]
+    assert by_src["co2_village"][0] == "CO2 van het dorp (LLM-emissies)"
+    assert by_src["plausible"][0] == "Plausible (web-analytics)"   # curated label niet geregresseerd
+
+
+def test_data_sources_dekt_alle_registered_datasourceskills():
+    # regressie tegen het oude lek: elke geregistreerde DataSourceSkill hoort koppelbaar te zijn.
+    from nooch_village.registry_factory import build_skill_registry
+    from nooch_village.skills import DataSourceSkill
+    from nooch_village.views import metrics as vm
+    registered = {s.SOURCE for s in build_skill_registry().all()
+                  if isinstance(s, DataSourceSkill) and getattr(s, "SOURCE", "")}
+    assert registered and registered <= vm._data_sources()          # geen enkele bron ontbreekt meer
+
+
 # ── de haak in reason() ───────────────────────────────────────────────────────
 
 def test_reason_legt_usage_vast():

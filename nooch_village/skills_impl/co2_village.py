@@ -23,6 +23,7 @@ def _today() -> str:
 class Co2VillageSource(DataSourceSkill):
     name = "co2_village"
     SOURCE = "co2_village"
+    CATALOG_LABEL = "CO2 van het dorp (LLM-emissies)"
     cost = "free"
     side_effect_free = True
     kind = "flux"                  # de dagwaarde is de emissie ván die dag (geen oplopende stand)

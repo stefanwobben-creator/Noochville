@@ -901,8 +901,10 @@ def _daily_obs_key(source: str, measure: str):
 # interval) zodra er trage bronnen zijn die met 7 dagen ten onrechte als 'dood' worden gemarkeerd.
 _FRESH_DAYS = 7
 # Bron-velden waarvoor 'recente data' zin heeft (data-bronnen). Manueel/formule/kpi → geen signaal.
-_DATA_SOURCES = {"plausible", "shopify", "gsc", "openalex", "semanticscholar", "trends",
-                 "keywordseverywhere", "werkoverleg"}
+# AFGELEID uit de geregistreerde DataSourceSkills (zie _data_source_classes) plus de legacy niet-skill-
+# bron 'werkoverleg' — geen handmatige literal meer die achterloopt op de registry.
+def _data_sources() -> set:
+    return {getattr(cls, "SOURCE", "") for cls in _data_source_classes()} | {"werkoverleg"}
 
 
 def _source_dimensions() -> dict:
@@ -926,7 +928,7 @@ def _obs_key_for_indicator(source: str, veld: str, dim: str = ""):
     from nooch_village.observations import WERK_DAILY
     if source == "werkoverleg" and veld in WERK_DAILY:
         return (WERK_DAILY[veld], "werkoverleg")
-    if source in _DATA_SOURCES and veld:
+    if source in _data_sources() and veld:
         base = f"{source}_{veld}_day"
         return (f"{base}::{dim}" if dim else base, source)
     return (None, None)
@@ -938,17 +940,22 @@ _PERIOD_LABEL = {"daily": "dag", "weekly": "week", "monthly": "maand"}
 
 
 def _data_source_classes():
-    """De DataSourceSkill-klassen — de declaratieve bron van kind/frequency (class-attributen, geen
-    registry-instantie nodig). Zelfde lijst als catalog_sources()."""
-    from nooch_village.skills_impl.plausible import PlausibleSkill
-    from nooch_village.skills_impl.shopify_sales import ShopifySalesSkill
-    from nooch_village.skills_impl.gsc import GscPerformanceSkill
-    from nooch_village.skills_impl.openalex import OpenalexSkill
-    from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
-    from nooch_village.skills_impl.trends import TrendsSkill
-    from nooch_village.skills_impl.keywords_everywhere import KeywordsEverywhereSkill
-    return (PlausibleSkill, ShopifySalesSkill, GscPerformanceSkill, OpenalexSkill,
-            SemanticScholarSkill, TrendsSkill, KeywordsEverywhereSkill)
+    """De DataSourceSkill-klassen — AFGELEID uit de skill-registry (de bron van waarheid), niet meer een
+    handmatige lijst die uiteendreef met de werkelijkheid. Elke geregistreerde DataSourceSkill is zo
+    automatisch koppelbaar (kind/frequency/velden komen uit de class-attributen). Ontdubbeld op klasse,
+    volgorde-stabiel. Fail-soft: een registry-bouwfout → lege tuple (de metrics-view crasht nooit)."""
+    try:
+        from nooch_village.registry_factory import build_skill_registry
+        from nooch_village.skills import DataSourceSkill
+        seen, out = set(), []
+        for s in build_skill_registry().all():
+            cls = type(s)
+            if isinstance(s, DataSourceSkill) and getattr(cls, "SOURCE", None) and cls not in seen:
+                seen.add(cls)
+                out.append(cls)
+        return tuple(out)
+    except Exception:
+        return ()
 
 
 def _source_kind(source: str) -> str:
@@ -1022,7 +1029,7 @@ def indicator_freshness(st, source: str, veld: str, today=None):
       'unconfigured' = bron actief maar creds ontbreken            → eigen status, los van 'dood'
       'none'         = geen reeks (bron inactief of niet gevoed)
     Geeft None terug voor niet-bron-velden (manueel/formule) → dan géén chip tonen."""
-    if source not in _DATA_SOURCES:
+    if source not in _data_sources():
         return None
     srcs = getattr(st, "sources", None)
     if srcs is not None and srcs.active(source) and srcs.configured(source) is False:

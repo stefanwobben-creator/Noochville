@@ -33,22 +33,30 @@ _FIELD_HELP = {
 }
 
 
+def _pretty_source(source: str) -> str:
+    """Nette weergavenaam voor een bron zonder eigen CATALOG_LABEL: onderstrepingen weg, hoofdletter."""
+    return (source or "").replace("_", " ").strip().capitalize() or (source or "")
+
+
 def catalog_sources() -> list[tuple[str, str, list[str]]]:
-    """(catalogus-bronnaam, label, ruwe velden) per gekoppelde databron. De velden komen uit de
-    skill zelf (available_metrics, geen API-call); de bronnaam is de `source` zoals in de catalogus
-    (definitions.py) — die wijkt bewust af van de langere skill-naam (plausible vs plausible_stats)."""
-    from nooch_village.skills_impl.plausible import PlausibleSkill
-    from nooch_village.skills_impl.shopify_sales import ShopifySalesSkill
-    from nooch_village.skills_impl.gsc import GscPerformanceSkill
-    from nooch_village.skills_impl.openalex import OpenalexSkill
-    from nooch_village.skills_impl.semantic_scholar import SemanticScholarSkill
-    return [
-        ("plausible", "Plausible (web-analytics)", PlausibleSkill().available_metrics()),
-        ("shopify", "Shopify (verkoop)", ShopifySalesSkill().available_metrics()),
-        ("gsc", "Google Search Console", GscPerformanceSkill().available_metrics()),
-        ("openalex", "OpenAlex (academische tellers)", OpenalexSkill().available_metrics()),
-        ("semanticscholar", "Semantic Scholar (auteur-tellers)", SemanticScholarSkill().available_metrics()),
-    ]
+    """(catalogus-bronnaam, label, ruwe velden) per databron — AFGELEID uit de geregistreerde
+    DataSourceSkills (zie _data_source_classes), niet meer een handmatige lijst van 5. Elke nieuwe
+    DataSourceSkill verschijnt zo automatisch in het koppel-scherm. Het label komt van de skill
+    (CATALOG_LABEL) of anders een nette afleiding uit SOURCE; de velden uit available_metrics (geen
+    API-call). Volgorde-stabiel (registry-volgorde). Fail-soft per bron: een kapotte skill wordt
+    overgeslagen i.p.v. het hele scherm te breken."""
+    out = []
+    for cls in _data_source_classes():
+        source = getattr(cls, "SOURCE", "")
+        if not source:
+            continue
+        try:
+            fields = list(cls().available_metrics(None) or [])
+        except Exception:
+            continue
+        label = (getattr(cls, "CATALOG_LABEL", "") or "").strip() or _pretty_source(source)
+        out.append((source, label, fields))
+    return out
 
 
 def _coupled_fields(st: _Stores, source: str) -> dict:
