@@ -547,3 +547,151 @@ def birth_content_strategist() -> None:
         print(f"Poort   : {outcome.get('gate', '-')}")
         print(f"Reden   : {outcome.get('reason', '')}")
     print("\n========== einde ==========")
+
+
+# ── Compliance-rol: bewaker van de claim-keuring (merk-claims nu, eigen teksten later) ──────────
+
+def build_compliance_proposal() -> Proposal:
+    """ADD_ROLE-voorstel voor de Compliance-rol: bezit de claim-keuring en verifieert
+    afbreekbaarheids-/duurzaamheidsclaims van externe merken tegen bewijs.
+
+    G0-herhalingsbewijs in de trigger, uniek domein 'claim-keuring' (G1) en een accountability
+    die niet botst met bestaande rollen (G2). Onbemand geboren; de eigen-teksten-accountability
+    volgt later via amend_role zodra daar een skill voor bestaat."""
+    return Proposal(
+        proposer_role="the_source",
+        change=GovernanceChange(
+            kind=ChangeKind.ADD_ROLE,
+            role_id="compliance",
+            purpose=(
+                "Bewaakt de gegrondheid van duurzaamheids- en afbreekbaarheidsclaims: "
+                "verifieert claims van externe merken tegen bewijs en legt de status vast, "
+                "zodat het dorp op onderbouwde feiten stuurt in plaats van op marketing."
+            ),
+            add_accountabilities=[
+                "afbreekbaarheids- en duurzaamheidsclaims van externe merken verifiëren "
+                "tegen bewijs (certificering, norm, labresultaat) en de status vastleggen",
+            ],
+            add_domains=["claim-keuring"],
+            new_role_parent="noochville",
+        ),
+        tension=(
+            "Het dorp identificeert wel merken met afbreekbaarheidsclaims, maar niemand "
+            "controleert die claims tegen bewijs; de claim-keuring waar content_strategist "
+            "al naar verwijst heeft geen eigenaar."
+        ),
+        trigger_example=(
+            "Structureel en terugkerend: taken om merkclaims op bewijs te controleren blijven "
+            "op 'geen skill' staan, en content_strategist verwijst naar een claim-keuring die "
+            "geen enkele rol bezit."
+        ),
+        rationale=(
+            "Een staande Compliance-rol bezit de claim-keuring doorlopend: hij verifieert claims "
+            "structureel tegen bewijs in plaats van eenmalig. De rol wordt onbemand geboren; "
+            "activatie (persona) blijft mens-gated."
+        ),
+    )
+
+
+def build_compliance_skills_proposal() -> Proposal:
+    """amend_role: ken de Compliance-rol de claim_evidence-skill toe, via de gate.
+
+    Zodra de skill toegekend is, materialiseert de reconciler de rol als generieke Inhabitant
+    (geen CLASS_MAP-entry nodig — een geregistreerde skill volstaat). Persona-toewijzing
+    (AI-bemanning) volgt daarna mens-gated in de cockpit."""
+    return Proposal(
+        proposer_role="the_source",
+        change=GovernanceChange(
+            kind=ChangeKind.AMEND_ROLE,
+            role_id="compliance",
+            add_skills=["claim_evidence"],
+        ),
+        tension=("De Compliance-rol is geboren maar onbemand; hij mist de skill om merkclaims "
+                 "tegen bewijs te verifiëren."),
+        trigger_example="the_source: activatie van de geboren compliance-rol",
+        rationale=("De rol bestaat al via governance; nu krijgt hij zijn capaciteit "
+                   "(claim_evidence) via amend_role, zodat de reconciler hem als generieke "
+                   "Inhabitant materialiseert. Persona-toewijzing volgt mens-gated."),
+    )
+
+
+def birth_compliance() -> None:
+    """Dien het Compliance-ADD_ROLE-voorstel in via het live governance-proces en rapporteer de
+    uitkomst. De rol wordt onbemand geboren als de poort 'm aanneemt."""
+    from nooch_village.village import Village
+
+    v = Village(heartbeat_seconds=86400)
+    outcome: dict = {}
+    v.bus.subscribe("governance_changed",
+                    lambda e: outcome.update({"status": "aangenomen", **e.data}))
+    v.bus.subscribe("governance_review_requested",
+                    lambda e: outcome.update({"status": "geëscaleerd",
+                                              "gate": e.data.get("gate"),
+                                              "reason": e.data.get("reason")}))
+    v.bus.subscribe("proposal_invalid",
+                    lambda e: outcome.update({"status": "ongeldig", "gate": "G0",
+                                              "reason": e.data.get("reason")}))
+    v.start()
+    voorstel = build_compliance_proposal()
+    print("\n========== VOORSTEL: Compliance (via governance) ==========\n")
+    print(f"Proposer: {voorstel.proposer_role}  |  Rol-ID: {voorstel.change.role_id}")
+    print(f"Domein  : {voorstel.change.add_domains}")
+    print("Accountabilities:")
+    for a in voorstel.change.add_accountabilities:
+        print(f"  · {a}")
+    v.submit_proposal(voorstel)
+    print("\n─── Facilitator draait de G0-G4-poort… ───\n")
+    for _ in range(200):
+        if outcome:
+            break
+        time.sleep(0.05)
+    time.sleep(0.3)
+    v.stop()
+    status = outcome.get("status", "?")
+    print(f"Uitkomst: {status}")
+    if status == "aangenomen":
+        rec = v.records.get("compliance")
+        unmanned = "compliance" in v.reconciler.unmanned
+        print(f"Record  : compliance v{rec.version if rec else '?'} [source={rec.source if rec else '?'}]")
+        print(f"Status  : {'onbemand (ken de skill toe met: compliance_skills)' if unmanned else 'live'}")
+    else:
+        print(f"Poort   : {outcome.get('gate', '-')}")
+        print(f"Reden   : {outcome.get('reason', '')}")
+    print("\n========== einde ==========")
+
+
+def grant_compliance_skills() -> None:
+    """Dien het amend_role-voorstel voor de claim_evidence-skill van Compliance in via de gate.
+    Na toekenning materialiseert de reconciler de rol als generieke Inhabitant (bij herstart)."""
+    from nooch_village.village import Village
+
+    v = Village(heartbeat_seconds=86400)
+    outcome: dict = {}
+    v.bus.subscribe("governance_changed",
+                    lambda e: outcome.update({"status": "aangenomen", **e.data}))
+    v.bus.subscribe("governance_review_requested",
+                    lambda e: outcome.update({"status": "geëscaleerd",
+                                              "gate": e.data.get("gate"),
+                                              "reason": e.data.get("reason")}))
+    v.bus.subscribe("proposal_invalid",
+                    lambda e: outcome.update({"status": "ongeldig", "gate": "G0",
+                                              "reason": e.data.get("reason")}))
+    v.start()
+    v.submit_proposal(build_compliance_skills_proposal())
+    print("\n===== amend_role: Compliance-skill (claim_evidence) via governance =====\n")
+    for _ in range(200):
+        if outcome:
+            break
+        time.sleep(0.05)
+    time.sleep(0.3)
+    v.stop()
+    status = outcome.get("status", "?")
+    print(f"Uitkomst: {status}")
+    if status == "aangenomen":
+        rec = v.records.get("compliance")
+        live = "compliance" in v.reconciler.live
+        print(f"Skills nu: {rec.definition.skills if rec else '?'}")
+        print(f"Status   : {'LEVEND (gematerialiseerd als Inhabitant)' if live else 'onbemand (herstart village om te materialiseren)'}")
+    else:
+        print(f"Poort   : {outcome.get('gate', '-')}  Reden: {outcome.get('reason', '')}")
+    print("\n===== einde =====")

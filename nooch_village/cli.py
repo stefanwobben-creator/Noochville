@@ -229,6 +229,14 @@ def main() -> None:
         from nooch_village.role_proposals import grant_content_strategist_skills
         grant_content_strategist_skills()
 
+    elif mode == "compliance":
+        from nooch_village.role_proposals import birth_compliance
+        birth_compliance()
+
+    elif mode == "compliance_skills":
+        from nooch_village.role_proposals import grant_compliance_skills
+        grant_compliance_skills()
+
     elif mode == "grant_serpapi_trends":
         from nooch_village.role_proposals import grant_website_watcher_serpapi
         grant_website_watcher_serpapi()
