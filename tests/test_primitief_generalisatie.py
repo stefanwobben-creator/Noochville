@@ -250,7 +250,9 @@ def test_community_listening_validate_payload(tmp_path):
     sk = CommunityListeningSkill()
     assert sk.validate_payload({"query_set_id": "bestaat"}, ctx) == []
     assert sk.validate_payload({"query_set_id": "verzonnen"}, ctx) == ["query-set 'verzonnen' bestaat niet"]
-    assert sk.validate_payload({}, ctx) == []                                             # ontbreken vangt required_payload
+    assert sk.validate_payload({"queries": ["barefoot slijtage"]}, ctx) == []             # discovery: inline termen zijn gegrond
+    assert sk.validate_payload({}, ctx) == [                                              # geen scope → niet uitvoerbaar
+        "geef een bestaande query_set_id (monitor) of discovery-queries op"]
 
 
 def test_verzonnen_query_set_gemarkeerd_niet_uitvoerbaar(tmp_path, ledger, monkeypatch):
