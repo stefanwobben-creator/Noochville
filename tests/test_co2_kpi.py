@@ -35,18 +35,28 @@ def test_co2_for_day_zonder_factor_is_ongeschat_niet_nul():
     assert agg["ongeschat_calls"] == 2 and agg["ongeschat_tokens"] == 1500
 
 
-def test_co2_for_day_met_factor_telt_alleen_gedekte_calls():
-    rows = [{"tier": "mistral:m", "tokens": 2000}, {"tier": "gemini:g", "tokens": 1000}]
-    agg = co2.co2_for_day(rows, factors={"mistral": 0.02})  # alleen mistral bronvermeld
+def test_co2_for_day_met_factor_per_model_telt_alleen_gedekte_calls():
+    rows = [{"tier": "mistral:mistral-small-latest", "tokens": 2000},
+            {"tier": "gemini:gemini-2.5-flash", "tokens": 1000}]
+    # factor per EXACT model, niet per vendor
+    agg = co2.co2_for_day(rows, factors={"mistral:mistral-small-latest": 0.02})
     assert agg["gram_co2e"] == 0.04                         # 2000/1000 * 0.02
     assert agg["tokens_geschat"] == 2000
-    assert agg["ongeschat_calls"] == 1                      # gemini nog ongeschat
+    assert agg["ongeschat_calls"] == 1                      # het gemini-model nog ongeschat
+
+
+def test_factor_per_model_niet_per_vendor():
+    rows = [{"tier": "gemini:gemini-2.5-flash-lite", "tokens": 1000},
+            {"tier": "gemini:gemini-2.5-flash", "tokens": 1000}]
+    # alleen het lite-model heeft een factor → het grote flash-model blijft ongeschat (geen vendor-smearing)
+    agg = co2.co2_for_day(rows, factors={"gemini:gemini-2.5-flash-lite": 0.01})
+    assert agg["gram_co2e"] == 0.01 and agg["ongeschat_calls"] == 1
 
 
 def test_factoren_zijn_leeg_by_default():
     # bewust: geen verzonnen factoren; alles ongeschat tot een mens bronvermelde waarden invult
     assert co2.EMISSION_FACTORS == {}
-    assert co2.factor_for("mistral:foo") is None
+    assert co2.factor_for("mistral:mistral-small-latest") is None
 
 
 # ── DataSourceSkill ───────────────────────────────────────────────────────────
