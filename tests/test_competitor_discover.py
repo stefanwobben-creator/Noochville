@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from nooch_village.skills_impl.competitor_discover import (
-    CompetitorDiscoverSkill, _parse_brand_list, _strip_html)
+    CompetitorDiscoverSkill, _parse_brand_list, _strip_html, _GUIDE_QUERY)
 from nooch_village.competitor_brands import CompetitorBrands
 from nooch_village.inbox_actions import decide_competitor_candidate
 from nooch_village.roles import ConcurrentScout
@@ -64,6 +64,33 @@ def test_run_gidsen_ophalen_faalt():
     with patch.object(skill, "_serpapi_guides", side_effect=RuntimeError("geen key")):
         res = skill.run({"brands": []}, SimpleNamespace(settings={}))
     assert not res["ok"]
+
+
+# ── het onderwerp stuurt de zoekopdracht (kwaliteit: juiste categorie) ──────────
+
+def test_query_voorrang_payload_boven_setting_boven_default():
+    skill = CompetitorDiscoverSkill()
+    assert skill._query(SimpleNamespace(settings={}), "best barefoot shoe brands") == "best barefoot shoe brands"
+    assert skill._query(SimpleNamespace(settings={}), "") == _GUIDE_QUERY
+    assert skill._query(SimpleNamespace(settings={"discover_query": "sustainable X"}), "") == "sustainable X"
+
+
+def test_run_zoekt_op_projectonderwerp_niet_op_vegan_default():
+    skill = CompetitorDiscoverSkill()
+    captured = {}
+
+    def fake_search(query, key, num=10):
+        captured["query"] = query
+        return [{"title": "Best barefoot shoe brands", "link": "http://g"}]
+
+    with patch("nooch_village.web_read.serpapi_search", fake_search), \
+         patch.object(skill, "_fetch_text", return_value="x" * 300 + " Wildling and Vivobarefoot"), \
+         patch("nooch_village.llm.reason", return_value="Wildling, Vivobarefoot"):
+        res = skill.run({"brands": [], "topic": "best barefoot shoe brands"},
+                        SimpleNamespace(settings={"SERPAPI_API_KEY": "k"}))
+    assert captured["query"] == "best barefoot shoe brands"     # barefoot, niet de vegan-default
+    assert res["query"] == "best barefoot shoe brands"
+    assert "Wildling" in [c["brand"] for c in res["candidates"]]
 
 
 # ── store: mens-gated, hoofdletter-ongevoelige dedup ────────────────────────────
