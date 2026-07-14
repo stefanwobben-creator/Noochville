@@ -1231,6 +1231,7 @@ class Inhabitant(threading.Thread):
             return None                                          # idempotent: al vandaag uitgevoerd
         clid = cl["id"]
         succeeded = 0                                            # geslaagde items deze puls → één synthese-pass
+        fail_reasons: dict = {}                                  # item_id → laatste foutreden (voor de hulpvraag)
         for pos, item in enumerate(cl["items"]):
             if item.get("done"):
                 continue                                         # idempotent: reeds afgevinkt
@@ -1263,11 +1264,14 @@ class Inhabitant(threading.Thread):
                 ledger.check_toggle(pid, clid, item["id"])
                 self.log.info("📭 project '%s': item '%s' via %s afgerond zonder resultaat", pid,
                               item.get("text", "")[:40], src_label)
-            else:   # fout: de bron faalde (niet 'niets gevonden') → item blijft open, wordt opnieuw geprobeerd
+            else:   # fout: de bron faalde (niet 'niets gevonden') → item blijft open; poging tellen
                 why = result.get("error") or result.get("reason") or "skill leverde geen resultaat"
-                ledger.add_role_message(pid, f"⚠️ '{item.get('text','')}' via {src_label} niet gelukt (fout): {why}")
-                self.log.warning("⚠️ project '%s': item '%s' via %s fout: %s",
-                                 pid, item.get("text", "")[:40], src_label, why)
+                fail_reasons[item["id"]] = why                  # bewaar voor de concrete hulpvraag bij vastlopen
+                n_fail = ledger.note_item_fail(pid, clid, item["id"])   # retry-teller: bounded, niet eeuwig
+                ledger.add_role_message(pid, f"⚠️ '{item.get('text','')}' via {src_label} niet gelukt "
+                                             f"(fout, poging {n_fail}): {why}")
+                self.log.warning("⚠️ project '%s': item '%s' via %s fout (poging %d): %s",
+                                 pid, item.get("text", "")[:40], src_label, n_fail, why)
         ledger.mark_tended(pid, today)
         fresh_cl = self._project_checklist(ledger.get(pid)) or {}
         items = fresh_cl.get("items", [])
@@ -1286,10 +1290,56 @@ class Inhabitant(threading.Thread):
                                        {"project_id": pid, "owner": self.id}, self.id))
                 self.log.info("✅ project '%s' checklist voltooid (%d/%d) — wacht op review", pid, done, total)
             return None                                          # geen autonome DONE meer
+        # Vastloop-klep: items die de retry-grens raakten → project naar WAITING (blocked) met de blokkade
+        # bovenaan, i.p.v. eeuwig op ACTIEF blijven herproberen. Zo verdwijnt het uit de actieve lane en
+        # ziet de mens wat op hem wacht; na feedback sleept hij het terug naar ACTIEF (verse pogingen, want
+        # de fail-tellers worden hier gereset — dus geen stuck-vlag nodig om herblokkeren te voorkomen).
+        limit = self._item_fail_limit()
+        stuck = [it for it in items
+                 if not it.get("done") and it.get("skill") and int(it.get("fails") or 0) >= limit] \
+            if limit > 0 else []
+        if stuck:
+            vraag = self._formulate_stuck_question(project, stuck, fail_reasons, limit)
+            ledger.add_role_message(pid, f"⏸️ {vraag}")          # de rol zet zijn concrete hulpvraag neer
+            ledger.reset_item_fails(pid, clid, [it["id"] for it in stuck])   # verse pogingen na reactivering
+            ledger.block(pid, f"vastgelopen op {len(stuck)} item(s) — wacht op antwoord")
+            self.bus.publish(Event("project_stuck",
+                                   {"project_id": pid, "owner": self.id, "items": len(stuck),
+                                    "vraag": vraag}, self.id))
+            self.log.info("⏸️ project '%s' → WAITING: %d item(s) vastgelopen na %d pogingen", pid, len(stuck), limit)
+            return None
         if succeeded:                                            # ≥1 item geslaagd deze puls → één reguliere pass
             self._synthesize_einddocument(ledger.get(pid), done, total, force_final=False)
         self.log.info("⏳ project '%s' voortgang %d/%d — blijft in ACTIEF", pid, done, total)
         return None
+
+    def _item_fail_limit(self) -> int:
+        """Aantal mislukte pogingen op één item voordat het project naar WAITING gaat (config
+        `item_fail_limit`, default 3). ≤0 zet de klep uit (ongewijzigd, eeuwig herproberen)."""
+        try:
+            return int(getattr(self.context, "settings", {}).get("item_fail_limit", "3"))
+        except (TypeError, ValueError):
+            return 3
+
+    def _formulate_stuck_question(self, project: dict, stuck: list, reasons: dict, limit: int) -> str:
+        """De rol formuleert ÉÉN concrete, beantwoordbare hulpvraag om de blokkade op te heffen, GEGROND
+        in de echte foutredenen (niet 'het lukte niet' maar 'bron X bleef leeg op query Y'). Een mens óf
+        een andere rol kan 'm beantwoorden; het antwoord in het project brengt het weer naar ACTIEF.
+        Fail-soft: geen LLM/fout → een gegronde sjabloon-vraag met item + reden."""
+        detail = "; ".join(f"'{str(it.get('text',''))[:60]}' ({str(reasons.get(it['id'],'onbekende fout'))[:90]})"
+                           for it in stuck[:3])
+        fallback = (f"Vastgelopen na {limit} pogingen op: {detail}. Wat heb ik nodig om verder te kunnen — "
+                    f"een andere bron, een scherpere query, of jouw feedback?")
+        try:
+            from nooch_village.llm import reason
+            prompt = (f"Je bent {self.name}, een autonome rol. Je project '{project.get('scope','')}' loopt vast "
+                      f"op deze item(s), met de echte fout erbij: {detail}. Formuleer ÉÉN concrete, "
+                      f"beantwoordbare hulpvraag (aan een mens of een andere rol) waarmee je verder kunt. "
+                      f"Wees specifiek over wat je nodig hebt; max 2 zinnen, geen omhaal.")
+            out = reason(prompt, call_site="stuck_question")
+            return (out or "").strip() or fallback
+        except Exception:
+            return fallback
 
     def _synthesize_einddocument(self, project: dict, done: int, total: int, *, force_final: bool) -> None:
         """Constitutie-plicht (basisklasse): werk het levende einddocument bij in de PERSONA-stem, één

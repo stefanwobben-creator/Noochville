@@ -160,6 +160,54 @@ def test_f_skill_fout_item_open_met_reden(tmp_path, ledger):
     assert "niet gelukt" in logtxt                                    # reden in de note, geen stille skip
 
 
+# h. ledger: fail-teller optellen en resetten
+def test_h_note_en_reset_item_fails(tmp_path, ledger):
+    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    cl = ledger.checklist_add(pid, "cl")
+    ledger.check_add(pid, cl["id"], "item", skill="openalex_evidence")
+    iid = ledger.get(pid)["checklists"][0]["items"][0]["id"]
+    assert ledger.note_item_fail(pid, cl["id"], iid) == 1
+    assert ledger.note_item_fail(pid, cl["id"], iid) == 2
+    ledger.reset_item_fails(pid, cl["id"], [iid])
+    assert (ledger.get(pid)["checklists"][0]["items"][0].get("fails") or 0) == 0
+
+
+# i. vastgelopen item → na de retry-grens naar WAITING met een concrete hulpvraag (niet eeuwig ACTIEF)
+def test_i_vastgelopen_na_grens_naar_waiting(tmp_path, ledger, monkeypatch):
+    import nooch_village.llm as llm
+    monkeypatch.setattr(llm, "reason", lambda *a, **k: "Kan iemand een alternatieve bron voor 'boom' aandragen?")
+    inh = _inhabitant(tmp_path, ledger)
+    inh.context.settings["item_fail_limit"] = "3"
+    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    _prep(ledger, pid, [("boom-item", "openalex_evidence", "boom", "")])
+    events = []
+    inh.bus.subscribe("project_stuck", lambda e: events.append(e.data))
+
+    for day in ("2026-07-08", "2026-07-09"):                       # 2 pogingen < grens 3
+        inh._execute_checklist(ledger.get(pid), day)
+    p = ledger.get(pid)
+    assert p["status"] == "queued" and p["checklists"][0]["items"][0]["fails"] == 2
+
+    inh._execute_checklist(ledger.get(pid), "2026-07-10")          # 3e poging → grens geraakt → WAITING
+    p = ledger.get(pid)
+    assert p["status"] == "blocked" and "wacht op antwoord" in (p.get("blocked_on") or "")
+    assert p["checklists"][0]["items"][0]["fails"] == 0            # gereset → verse pogingen na reactivering
+    assert events and events[-1]["vraag"] and events[-1]["items"] == 1
+    logtxt = " ".join(e["text"] for e in p.get("log", []))
+    assert "⏸️" in logtxt and "alternatieve bron" in logtxt        # de concrete hulpvraag staat op de wall
+
+
+# j. grens 0 zet de klep uit → eeuwig herproberen (ongewijzigd oud gedrag)
+def test_j_grens_nul_zet_klep_uit(tmp_path, ledger):
+    inh = _inhabitant(tmp_path, ledger)
+    inh.context.settings["item_fail_limit"] = "0"
+    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    _prep(ledger, pid, [("boom-item", "openalex_evidence", "boom", "")])
+    for day in ("2026-07-08", "2026-07-09", "2026-07-10"):
+        inh._execute_checklist(ledger.get(pid), day)
+    assert ledger.get(pid)["status"] == "queued"                  # nooit geblokkeerd, blijft ACTIEF
+
+
 # g. skill uitgevoerd maar leeg → item AF (no-data is een uitkomst), 📭 op de wall zodat de mens kan
 #    beoordelen of het project klaar is (De Kroniek B3: leeg is een feit, geen mislukking).
 def test_g_leeg_is_afgerond_op_de_wall(tmp_path, ledger):

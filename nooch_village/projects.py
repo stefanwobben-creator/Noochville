@@ -353,6 +353,37 @@ class ProjectLedger:
                 return True
         return False
 
+    def note_item_fail(self, pid: str, clid: str, item_id: str) -> int:
+        """Tel een mislukte poging (skill-fout) op een checklist-item; returnt de nieuwe teller. De
+        autonome worker gebruikt dit om na een grens níét eindeloos te herproberen maar het project op
+        WAITING te zetten. 'leeg' (no-data) telt NIET als fout — die vinkt het item af."""
+        p = self._projects.get(pid)
+        cl = self._checklist(p, clid) if p else None
+        if cl is None:
+            return 0
+        for it in cl.get("items", []):
+            if it["id"] == item_id:
+                it["fails"] = int(it.get("fails") or 0) + 1
+                self._touch(p); self._save()
+                return it["fails"]
+        return 0
+
+    def reset_item_fails(self, pid: str, clid: str, item_ids) -> None:
+        """Zet de fail-teller van deze items terug op 0 — bij het naar-WAITING-zetten, zodat een
+        reactivering door de mens (waiting → actief) weer een verse reeks pogingen krijgt."""
+        p = self._projects.get(pid)
+        cl = self._checklist(p, clid) if p else None
+        if cl is None:
+            return
+        ids = set(item_ids or [])
+        changed = False
+        for it in cl.get("items", []):
+            if it["id"] in ids and it.get("fails"):
+                it["fails"] = 0
+                changed = True
+        if changed:
+            self._touch(p); self._save()
+
     def check_remove(self, pid: str, clid: str, item_id: str) -> bool:
         p = self._projects.get(pid)
         cl = self._checklist(p, clid) if p else None
@@ -723,7 +754,7 @@ _WRITE_METHODS = (
     "check_toggle", "check_remove", "set_item_offer", "accept_item_offer", "edit", "approve",
     "discard", "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
     "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",
-    "mark_formalized", "to_future", "mark_scope_nudge",
+    "mark_formalized", "to_future", "mark_scope_nudge", "note_item_fail", "reset_item_fails",
 )
 for _m in _WRITE_METHODS:
     setattr(ProjectLedger, _m, _synchronized(getattr(ProjectLedger, _m)))
