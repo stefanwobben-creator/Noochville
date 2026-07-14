@@ -230,6 +230,7 @@ def test_scout_discovery_zet_kandidaten_klaar(tmp_path):
     s.log = logging.getLogger("test.scout")
     s._events = []
     s.bus = SimpleNamespace(publish=lambda e: s._events.append(e))
+    s.context = SimpleNamespace(settings={"discover_query": "best barefoot shoe brands"})   # opt-in AAN
     s.use_skill = lambda cap, payload: {"ok": True, "candidates": [
         {"brand": "Cariuma", "article": "art", "link": "http://a"}]}
     s._run_discovery = types.MethodType(ConcurrentScout._run_discovery, s)
@@ -237,3 +238,20 @@ def test_scout_discovery_zet_kandidaten_klaar(tmp_path):
     s._run_discovery(["Veja"], store)
     assert store.status("Cariuma") == "candidate"
     assert any(e.name == "competitor_candidate" for e in s._events)
+
+
+def test_scout_discovery_uit_zonder_discover_query(tmp_path):
+    # geen discover_query → opt-in staat uit: de SerpAPI-scrape draait niet, de Inoreader-feed blijft de bron
+    called = []
+    s = SimpleNamespace()
+    s.id = "concurrent_scout"
+    s.dna = SimpleNamespace(skills=["competitor_discover"])
+    s.log = logging.getLogger("test.scout")
+    s._events = []
+    s.bus = SimpleNamespace(publish=lambda e: s._events.append(e))
+    s.context = SimpleNamespace(settings={})                     # géén discover_query
+    s.use_skill = lambda cap, payload: called.append(cap) or {"ok": True, "candidates": []}
+    s._run_discovery = types.MethodType(ConcurrentScout._run_discovery, s)
+    store = CompetitorBrands(str(tmp_path / "b.json"))
+    s._run_discovery(["Veja"], store)
+    assert called == []                                          # competitor_discover NIET aangeroepen

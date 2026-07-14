@@ -666,9 +666,16 @@ class ConcurrentScout(Inhabitant):
              "path": res.get("path")}, self.id))
 
     def _run_discovery(self, monitored: list[str], store) -> None:
-        """Spot kandidaat-concurrenten en zet ze (deduped) in de store voor jouw oordeel."""
+        """Spot kandidaat-concurrenten en zet ze (deduped) in de store voor jouw oordeel.
+
+        OPT-IN: de auto-discovery via SerpAPI-listicles draait alleen als er expliciet een `discover_query`
+        (het onderwerp/de categorie) in de config staat. Standaard komen concurrenten uit de gecureerde
+        Inoreader-feed, niet uit een ongecureerde scrape — die scrape was de bron van de merk-ruis. Geen
+        `discover_query` → stil overslaan (geen puls-ruis), zodat de feed de bron blijft."""
         if "competitor_discover" not in self.dna.skills:
             return
+        if not str((getattr(self.context, "settings", {}) or {}).get("discover_query", "")).strip():
+            return                                            # geen onderwerp geconfigureerd → discovery uit
         res = self.use_skill("competitor_discover", {"brands": monitored})
         if not res.get("ok"):
             self.log.info("🔮 ontdekking overgeslagen: %s", res.get("error"))
