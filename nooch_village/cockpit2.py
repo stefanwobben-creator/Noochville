@@ -224,6 +224,7 @@ from nooch_village.views.catalog import (
     _catalog_add_form, render_catalog,
 )
 from nooch_village.views.signals import render_signals
+from nooch_village.views.inbox import render_inbox
 
 
 from nooch_village.views.noochie import (
@@ -252,6 +253,28 @@ def _owner_ai(st: _Stores, orec):
         if f.type == "persona":
             return st.personas.get(f.id)
     return None
+
+
+def _person_targets(st: _Stores, username: str) -> list:
+    """De inbox-doelen van de ingelogde mens: hemzelf als persoon ÉN elke rol die hij vervult. Zo bundelt
+    de inbox mentions aan de persoon (individuele actie) en aan al zijn rollen. Onbekend/guest → []."""
+    if not username or username == "guest":
+        return []
+    person = st.people.by_email(username)
+    if person is None:
+        return []
+    targets = [("person", person.id)]
+    for r in st.records.all():
+        if getattr(r, "archived", False):
+            continue
+        try:
+            for f in st.assign.fillers_of(r.id, record=r):
+                if getattr(f, "type", None) == "person" and f.id == person.id:
+                    targets.append(("role", r.id))
+                    break
+        except Exception:
+            continue
+    return targets
 
 
 def _role_of_persona(st: _Stores, persona):
@@ -2161,6 +2184,21 @@ def _act_mention_to_task(c):
         return nxt, f"✓ taak gemaakt voor {_name(orec)}"
 
 
+def _act_notif_read(c):
+        c.st.notif.mark_item_read(c.g("nid"))
+        return c.nxt, "✓ gemarkeerd als gelezen"
+
+
+def _act_notif_processed(c):
+        c.st.notif.mark_item_processed(c.g("nid"))
+        return c.nxt, "✓ verwerkt"
+
+
+def _act_notif_archive(c):
+        ok = c.st.notif.archive_item(c.g("nid"))
+        return c.nxt, ("🗄 gearchiveerd" if ok else "⛔ alleen verwerkte items kunnen worden gearchiveerd")
+
+
 def _act_wo_checkout(c):
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
         msg = ""
@@ -2670,6 +2708,9 @@ ACTIONS = {
     "feed_remove": _act_feed_remove,
     "wall_outcome": _act_wall_outcome,
     "mention_to_task": _act_mention_to_task,
+    "notif_read": _act_notif_read,
+    "notif_processed": _act_notif_processed,
+    "notif_archive": _act_notif_archive,
 
     "ai_reply": _act_ai_reply,
     "proj_feed": _act_proj_feed,
@@ -2954,6 +2995,15 @@ def make_handler(data_dir: str, csrf_token: str,
                 # Dorp-brede lijst van goedgekeurde radar-signalen (read-only aggregatie). Publiek zoals
                 # het overzicht; achter de sessie-auth zoals alles.
                 self._send(render_signals(st, csrf_token=effective_csrf, feed=(qs.get("feed") or [""])[0]))
+                return
+            if path == "/inbox":
+                # De inbox van de ingelogde mens: mentions aan hem (als persoon of via zijn rollen).
+                tgts = _person_targets(st, username)
+                nm = ""
+                if username and username != "guest":
+                    _p = st.people.by_email(username)
+                    nm = _p.name if _p else ""
+                self._send(render_inbox(st, tgts, csrf_token=effective_csrf, naam=nm))
                 return
             if path == "/catalog":
                 # AUTHZ: anchor-lead — het overzicht is publiek; de geïntegreerde koppel-sectie (ruw veld

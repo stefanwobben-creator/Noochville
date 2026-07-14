@@ -51,5 +51,49 @@ class NotifStore:
         if changed:
             self._save()
 
+    # ── inbox-levenscyclus: nieuw → gelezen → verwerkt (+ archiveren) ─────────────
+    @staticmethod
+    def status_of(n: dict) -> str:
+        """De inbox-status van één notificatie: 'verwerkt' (mens is klaar), 'gelezen' (geopend, nog te
+        doen), of 'nieuw' (nog niet bekeken). Afgeleid van de vlaggen, backward-compat met oude items."""
+        if n.get("processed"):
+            return "verwerkt"
+        return "gelezen" if n.get("read") else "nieuw"
+
+    def open_for_targets(self, targets) -> list[dict]:
+        """De inbox-wachtrij: NIET-gearchiveerde notificaties voor deze doelen, nieuwste eerst."""
+        return [n for n in self.for_targets(targets) if not n.get("archived")]
+
+    def _find(self, notif_id: str) -> dict | None:
+        return next((n for n in self._items if n.get("id") == notif_id), None)
+
+    def mark_item_read(self, notif_id: str) -> bool:
+        """Nieuw → gelezen (geopend, maar nog te verwerken). Idempotent; verandert 'verwerkt' niet."""
+        n = self._find(notif_id)
+        if n is None or n.get("read"):
+            return False
+        n["read"] = True
+        self._save()
+        return True
+
+    def mark_item_processed(self, notif_id: str) -> bool:
+        """Markeer als verwerkt (mens heeft het bij de bron afgehandeld). Handmatig, voorspelbaar."""
+        n = self._find(notif_id)
+        if n is None:
+            return False
+        n["read"] = True
+        n["processed"] = True
+        self._save()
+        return True
+
+    def archive_item(self, notif_id: str) -> bool:
+        """Verwerkt item uit de wachtrij halen. Alleen wat verwerkt is mag weg (schone regie)."""
+        n = self._find(notif_id)
+        if n is None or not n.get("processed"):
+            return False
+        n["archived"] = True
+        self._save()
+        return True
+
     def all(self) -> list[dict]:
         return list(self._items)
