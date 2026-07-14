@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from nooch_village.web_base import _e, _page, _banner
 from nooch_village.cockpit2_util import (
+    _DS_LINK,
     _name, _initials, _age, _fmt_due, _created_full, md_editor, _md, _md_doc, _WRAPSEL_DEF,
     _link_host, _psec, _person_name, _stamp,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK,
@@ -15,7 +16,6 @@ from nooch_village.cockpit2_util import (
 from nooch_village.views.feed import _mentionables, _feed_entry_html, _wall_outcome_opts
 from nooch_village.views.checklists import _checklists_html
 from nooch_village import org
-from nooch_village.cockpit2_util import _EXTRA_CSS
 
 if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores
@@ -986,7 +986,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         return f"<div data-noclose='1'>{detail}</div>" if meeting else detail
     main = (f"<div class='c2-main pdetail'>"
             f"<div class='c2-bar'><a href='{_e(back)}'>← terug</a></div>{detail}</div>")
-    inner = (f"<style>{_EXTRA_CSS}</style>"
+    inner = (f"{_DS_LINK}"
              "<div class='bar'>cockpit 2 · projectdetail · <a href='/'>home</a></div>"
              f"<div class='c2-wrap'>{main}</div>")
     return _page(_scope_text(p), inner)

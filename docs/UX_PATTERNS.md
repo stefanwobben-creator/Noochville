@@ -8,18 +8,24 @@ en gedragspsychologie (Fitts, Hick, affordance, Gestalt, persuasion, von Restorf
 ## Kern-klassen — het vocabulaire (hergebruik i.p.v. inline style)
 
 Nieuwe UI hergebruikt ALTIJD deze klassen; **geen inline `style=`** (bewaakt door de ratchet-guard
-`tests/test_ui_no_inline_style.py`). Basis-atomen staan in `web_base.py` (`_CSS`), cockpit2-componenten
-in `cockpit2_util.py` (`_EXTRA_CSS`). Kom je iets tekort, breid dan de klasse uit — voeg geen inline
-style toe.
+`tests/test_ui_no_inline_style.py`). Basis-atomen (tokens + typografie) staan in `web_base.py`
+(`_CSS`, inline in de head); de component-laag is een écht CSS-bestand:
+`nooch_village/static/nooch.css`, geserveerd als `/static/nooch.css?v=<inhoud-hash>` en door views
+gelinkt via `cockpit2_util._DS_LINK`. Kom je iets tekort, breid dan de klasse uit in `nooch.css` —
+voeg geen inline style en geen ad-hoc `<style>`-blok toe (bewaakt door `tests/test_ui_ratchets.py`).
+
+**Formuliervelden:** gebruik `web_base._field(label, name, …)` — die genereert `<label for>` en
+veld-`id` altijd als paar, zodat label-klik en screenreader-koppeling werken. Losse
+`<label>`/`<input>`-paren zijn bevroren schuld (ratchet).
 
 | Klasse | Waarvoor | Varianten | Bron |
 |--------|----------|-----------|------|
-| `.card` | Content-blok (artefact, project, lijst-item) | `.card.arch` (gearchiveerd, gedimd) | `cockpit2_util.py` |
+| `.card` | Content-blok (artefact, project, lijst-item) | `.card.arch` (gearchiveerd, gedimd) | `static/nooch.css` |
 | `.btn` | Knop/actie (ook als `<a>`) | `.ok` (primair groen), `.no` (destructief coral), `.sm` (klein), `.ghost` (randloos); `.dellink` voor een pure verwijder-link | `web_base.py` |
-| `.cl-filter` | Segmented picker: filter-/tab-/periode-/bron-keuze | `.on` (actieve keuze) | `cockpit2_util.py` |
-| `.tile` | KPI-/metric-tegel | `.tile-grid` (responsive 1→2 kolommen), `.tile-h`/`.tile-t` (kop/titel), `.tile-trend` (waarde+grafiek), `.tile-data` (uitklap ruwe data), `.tile-prov` (bron-badge) | `cockpit2_util.py` |
-| `.chip-opt` | Interactieve keuze-pill/chip (categorie-, filter-keuze): pill-vorm, achtergrond, klikbaar (`<a>`/`<button>`) | `.on` (actieve keuze, donkere vulling); zet ze in een **`.chip-wrap`** (flex-wrap-rij) zodat een rij chips netjes **binnen de kaart afbreekt** i.p.v. door te lopen | `cockpit2_util.py` |
-| `.switch` | Schuif-toggle (aan/uit, bv. "vergelijk met vorige periode") | `.on` (aan → knop schuift, groene vulling); wikkel label + toggle in **`.switch-field`** (label links, switch rechts) | `cockpit2_util.py` |
+| `.cl-filter` | Segmented picker: filter-/tab-/periode-/bron-keuze | `.on` (actieve keuze) | `static/nooch.css` |
+| `.tile` | KPI-/metric-tegel | `.tile-grid` (responsive 1→2 kolommen), `.tile-h`/`.tile-t` (kop/titel), `.tile-trend` (waarde+grafiek), `.tile-data` (uitklap ruwe data), `.tile-prov` (bron-badge) | `static/nooch.css` |
+| `.chip-opt` | Interactieve keuze-pill/chip (categorie-, filter-keuze): pill-vorm, achtergrond, klikbaar (`<a>`/`<button>`) | `.on` (actieve keuze, donkere vulling); zet ze in een **`.chip-wrap`** (flex-wrap-rij) zodat een rij chips netjes **binnen de kaart afbreekt** i.p.v. door te lopen | `static/nooch.css` |
+| `.switch` | Schuif-toggle (aan/uit, bv. "vergelijk met vorige periode") | `.on` (aan → knop schuift, groene vulling); wikkel label + toggle in **`.switch-field`** (label links, switch rechts) | `static/nooch.css` |
 
 Aanvullend veelgebruikt: `.muted` (gedimde tekst), `.chip` (label), `.pill` (kleine badge), `.ptitle` (blok-titel),
 `.att-lbl` (formulier-label), `.qadd-form`/`.editor` (toevoeg-/bewerk-formulieren), `.flash` (banner),

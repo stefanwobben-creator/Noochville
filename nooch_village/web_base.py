@@ -37,6 +37,9 @@ _CSS = """
  --shadow:0 1px 2px rgba(27,27,27,.06),0 2px 8px rgba(27,27,27,.04);
 }
 *{box-sizing:border-box}
+/* Toetsenbord-zichtbaarheid: één focusregel voor de hele app. :focus-visible i.p.v. :focus,
+   zodat muisklikken geen ring tekenen maar Tab-navigatie altijd zichtbaar is (WCAG 2.4.7). */
+:focus-visible{outline:2px solid var(--green-dark);outline-offset:2px}
 /* Het `hidden`-attribuut moet ALTIJD winnen van een author `display:`-regel (bijv. .kc-radio{display:block}),
    anders werkt geen enkele hidden-gebaseerde show/hide (categorie-filter, .kc-mode, .kc-cond, .tile-back-flip). */
 [hidden]{display:none!important}
@@ -94,6 +97,35 @@ body.overlay-open .cb-frame{display:none}
 """
 
 
+def _field(label: str, name: str, *, kind: str = "text", value: str = "",
+           fid: str = "", required: bool = False, placeholder: str = "",
+           attrs: str = "", label_cls: str = "att-lbl") -> str:
+    """Label + veld als onlosmakelijk paar: de <label for> wijst ALTIJD naar de veld-id.
+
+    Dit is de structurele fix voor het patroon "label zonder for / input zonder id"
+    (label-klik doet niets, screenreader ziet een los veld). Gebruik deze helper voor
+    elk nieuw formulierveld; losse <label>/<input>-paren worden door de ratchet
+    (tests/test_ui_ratchets.py) op hun huidige aantal bevroren.
+
+    kind: een input-type ("text", "email", "number", "date", …) of "textarea".
+    fid:  expliciete id; default "f-<name>". Meerdere velden met dezelfde name op één
+          pagina? Geef dan zelf een unieke fid mee.
+    attrs: extra rauwe attributen (bv. "min='0' step='1'" of "form='filepost'").
+    """
+    fid = fid or f"f-{name}"
+    req = " required" if required else ""
+    ph = f' placeholder="{_e(placeholder)}"' if placeholder else ""
+    extra = f" {attrs}" if attrs else ""
+    lab = f'<label class="{_e(label_cls)}" for="{_e(fid)}">{_e(label)}</label>'
+    if kind == "textarea":
+        veld = (f'<textarea id="{_e(fid)}" name="{_e(name)}"{ph}{req}{extra}>'
+                f'{_e(value)}</textarea>')
+    else:
+        veld = (f'<input type="{_e(kind)}" id="{_e(fid)}" name="{_e(name)}" '
+                f'value="{_e(value)}"{ph}{req}{extra}>')
+    return lab + veld
+
+
 def _banner(msg) -> str:
     if not msg:
         return ""
@@ -132,7 +164,10 @@ _KONAMI_TRIGGER = """<script>(function(){
 
 
 def _page(title: str, inner: str) -> str:
+    # <main> als landmark om de pagina-inhoud: screenreaders en toetsenbord-gebruikers kunnen
+    # direct naar de inhoud springen. De chrome (Noochie-rail, call bar) wordt door _send ná
+    # </main> geïnjecteerd en blijft zo buiten de hoofdinhoud.
     return (f'<!doctype html><html lang="nl"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>{_e(title)}</title>{_FONTS}<style>{_CSS}</style></head>'
-            f'<body>{inner}{_KONAMI_TRIGGER}</body></html>')
+            f'<body><main>{inner}</main>{_KONAMI_TRIGGER}</body></html>')

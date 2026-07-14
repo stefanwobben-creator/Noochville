@@ -4,8 +4,7 @@ import re
 from typing import TYPE_CHECKING
 
 from nooch_village.web_base import _e, _page
-from nooch_village.cockpit2_util import _name, _psec, _IC_CHECK
-from nooch_village.cockpit2_util import _EXTRA_CSS
+from nooch_village.cockpit2_util import _DS_LINK, _name, _psec, _IC_CHECK
 
 if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores
@@ -437,5 +436,5 @@ def render_roloverleg2(st: _Stores, circle_id: str, iid: str = "", csrf_token: s
     if fragment:
         return detail
     main = f"<div class='c2-main' style='max-width:980px'><div class='c2-bar'><a href='/node?id={_e(circle_id)}'>← terug</a></div>{detail}</div>"
-    return _page("Roloverleg", f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>{main}</div>")
+    return _page("Roloverleg", f"{_DS_LINK}<div class='c2-wrap'>{main}</div>")
 

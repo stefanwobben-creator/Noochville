@@ -4,11 +4,11 @@ Het startpunt van de library: hier komen de signalen samen die mensen op de Tool
 rol relevant achtten (status 'goedgekeurd'). Read-only aggregatie via RadarStore.all_approved — geen
 nieuwe opslag, raakt de radar-flow niet. Vanaf hier maak je later inzichten. Filterbaar op feed.
 
-Hergebruik: web_base (_e/_page), cockpit2_util (_name/_EXTRA_CSS/_BUILD) en de .rdr-*/.chip-opt-stijl."""
+Hergebruik: web_base (_e/_page), cockpit2_util (_name/_DS_LINK/_BUILD) en de .rdr-*/.chip-opt-stijl."""
 from __future__ import annotations
 
 from nooch_village.web_base import _e, _page
-from nooch_village.cockpit2_util import _name, _EXTRA_CSS, _BUILD
+from nooch_village.cockpit2_util import _DS_LINK, _name, _BUILD
 
 _KIND = {"kaart": "🃏 signaal", "seed": "🌱 kiem", "doelwit": "🎯 doelwit", "concurrent": "🏁 concurrent"}
 
@@ -61,7 +61,7 @@ def render_signals(st, csrf_token: str = "", feed: str = "") -> str:
             f"<p class='muted'>Goedgekeurde radar-signalen, verzameld uit de rollen. "
             f"Het startpunt voor inzichten.</p>{chips}"
             f"<div class='rdr-tool'>{body}</div></div>")
-    inner = (f"<style>{_EXTRA_CSS}</style>"
+    inner = (f"{_DS_LINK}"
              f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
              "<a href='/'>home</a> · <a href='/catalog'>catalogus</a> · <a href='/signals'>signalen</a></div>"
              f"<div class='c2-wrap'>{main}</div>")

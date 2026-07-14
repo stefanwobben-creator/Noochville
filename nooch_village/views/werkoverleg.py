@@ -4,9 +4,8 @@ from typing import TYPE_CHECKING
 
 from nooch_village import org
 from nooch_village.web_base import _e, _page
-from nooch_village.cockpit2_util import _name, _initials, _psec, _IC_CHECK, _IC_INFO
+from nooch_village.cockpit2_util import _DS_LINK, _name, _initials, _psec, _IC_CHECK, _IC_INFO
 from nooch_village.werkoverleg import STEPS as _WO_STEPS
-from nooch_village.cockpit2_util import _EXTRA_CSS
 from nooch_village.views.overview import _members_of_circle
 from nooch_village.views.metrics import _spark_svg, _tile_meta, _fetch, _num, _agg, _metrics_tab_html
 from nooch_village.views.checklists import _checklists_tab_html
@@ -310,7 +309,7 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
                 f"<p class='muted'>Vaste volgorde: check-in, checklist, metrics, projecten, agenda, "
                 f"check-out, sluiten.</p>{sec}<div style='margin-top:1rem'>{start}</div>")
         return body if fragment else _page(
-            "Werkoverleg", f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>{body}</div>")
+            "Werkoverleg", f"{_DS_LINK}<div class='c2-wrap'>{body}</div>")
 
     cur = step if step in dict(_WO_STEPS) else "checkin"
     st.werk.mark_visited(circle_id, cur)                 # voortgang: bezochte stappen
@@ -381,5 +380,5 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
               f"<div class='wo-mid'>{content}{step_action}</div></div>")
     if fragment:
         return detail
-    return _page("Werkoverleg", f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>"
+    return _page("Werkoverleg", f"{_DS_LINK}<div class='c2-wrap'>"
                  f"<div class='c2-main' style='max-width:1160px'>{detail}</div></div>")

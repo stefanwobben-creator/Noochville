@@ -592,6 +592,12 @@ Nieuwe UI (formulieren, lijsten, kaarten) hergebruikt ALTIJD bestaande design-sy
 - **Kern-klassen:** het vocabulaire (`.card`, `.btn`+varianten, `.cl-filter`, `.tile*`, …) staat
   gedocumenteerd in `docs/UX_PATTERNS.md` → "Kern-klassen". Kom je iets tekort, breid de klasse uit —
   voeg geen inline style toe.
+- **CSS is een bestand, geen string:** de component-laag leeft in `nooch_village/static/nooch.css`
+  (geserveerd met inhoud-hash + cache-header; views linken via `cockpit2_util._DS_LINK`). Tokens en
+  basis-atomen blijven inline in `web_base._CSS`. Geen ad-hoc `<style>`-blokken in views.
+- **Formuliervelden via `web_base._field()`:** genereert `<label for>` + veld-`id` als paar.
+  `tests/test_ui_ratchets.py` bevriest labels-zonder-for, `<style>`-blokken en het aantal
+  klasse-prefix-families (monotone daling, zelfde principe als de inline-style-ratchet).
 - **Guard (project-breed):** `tests/test_ui_no_inline_style.py` telt `style=` per governeerde view en
   houdt elk bestand op een plafond (`_STYLE_WHITELIST`). Een nieuwe inline style laat de telling
   stijgen → de guard faalt; schone bestanden moeten 0 blijven. Ruim je schuld op bij een view die je

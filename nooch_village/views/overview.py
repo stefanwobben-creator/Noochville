@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from nooch_village.web_base import _e, _page, _banner
 from nooch_village.cockpit2_util import (
+    _DS_LINK,
     _name, _initials, _tabbar, _avatar, _age, _md, md_editor,
     _psec, _person_name, _ICON_ADD_EMOJI,
     _IC_CHECK, _IC_CLOCK, _IC_LINK, _IC_TARGET,
@@ -22,7 +23,7 @@ from nooch_village.views.projects import (
 )
 from nooch_village import org, ai_match, artefacts, epic
 from nooch_village.radar_store import feeds_for_role
-from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD, _CIRCLE_TABS, _ROLE_TABS, _PERSON_TABS, WEBSITE_DEVELOPER_ROLE
+from nooch_village.cockpit2_util import _BUILD, _CIRCLE_TABS, _ROLE_TABS, _PERSON_TABS, WEBSITE_DEVELOPER_ROLE
 
 if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores
@@ -395,7 +396,7 @@ def render_admin(st: _Stores, csrf_token: str = "", msg: str = "") -> str:
             f"<p class='muted'>Mensen toevoegen, wijzigen, wachtwoord resetten of verwijderen. "
             f"Deze pagina vereist login.</p>{add}"
             f"<div class='c2-sec'><h3>Deelnemers ({len(people)})</h3>{rows or '<span class=muted>Nog niemand.</span>'}</div></div>")
-    inner = (f"<style>{_EXTRA_CSS}</style>{css}"
+    inner = (f"{_DS_LINK}{css}"
              f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
              f"<a href='/'>home</a> · <a href='/admin'>deelnemers</a></div>"
              f"<div class='c2-wrap'>{main}</div>")
@@ -729,7 +730,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
             f"{_tabbar(node_id, tabs, tab)}{content}</div>")
     rail = f"<div class='c2-rail'>{_tree_html(st, node_id)}</div>"
     modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
-    inner = (f"<style>{_EXTRA_CSS}</style>"
+    inner = (f"{_DS_LINK}"
              f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
              "<a href='/'>home</a> · <a href='/catalog'>catalogus</a> · <a href='/signals'>signalen</a> · <a href='/admin'>deelnemers</a></div>"
              f"<div class='c2-wrap'>{main}{rail}</div>{modal}")
@@ -865,7 +866,7 @@ def render_person(st: _Stores, pid: str, tab: str = "rollen", username: str | No
     rail = f"<div class='c2-rail'>{_tree_html(st, '')}</div>"
     # Kaart-klik op het kanban-bord opent de project-detail-modal, net als op de node-view.
     modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
-    inner = (f"<style>{_EXTRA_CSS}</style>"
+    inner = (f"{_DS_LINK}"
              f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · <a href='/'>home</a></div>"
              f"<div class='c2-wrap'>{main}{rail}</div>{modal}")
     return _page(name, inner)
@@ -904,7 +905,7 @@ def render_patterns(csrf_token: str = "") -> str:
             + sec("Avatar", av))
     main = (f"<div class='c2-main'><h1>Patterns</h1>"
             f"<p class='muted'>Levende referentie. Gebruik deze atomen en moleculen; verzin geen varianten.</p>{body}</div>")
-    inner = (f"<style>{_EXTRA_CSS}</style>"
+    inner = (f"{_DS_LINK}"
              "<div class='bar'>cockpit 2 · patterns · <a href='/'>home</a></div>"
              f"<div class='c2-wrap'>{main}</div>")
     return _page("Patterns", inner)
@@ -964,7 +965,7 @@ def render_rolefillers(st: _Stores, role_id: str, csrf_token: str = "", fragment
         return frag
     main = (f"<div class='c2-main' style='max-width:560px'>"
             f"<div class='c2-bar'><a href='{_e(back)}'>← terug</a></div>{frag}</div>")
-    return _page("Rolvervullers", f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>{main}</div>")
+    return _page("Rolvervullers", f"{_DS_LINK}<div class='c2-wrap'>{main}</div>")
 
 
 def render_aitask(st: _Stores, role_id: str, acc_index: int, csrf_token: str = "",
@@ -1044,5 +1045,5 @@ def render_aitask(st: _Stores, role_id: str, acc_index: int, csrf_token: str = "
         return frag
     main = (f"<div class='c2-main' style='max-width:560px'>"
             f"<div class='c2-bar'><a href='{_e(back)}'>← terug</a></div>{frag}</div>")
-    return _page("AI op accountability", f"<style>{_EXTRA_CSS}</style><div class='c2-wrap'>{main}</div>")
+    return _page("AI op accountability", f"{_DS_LINK}<div class='c2-wrap'>{main}</div>")
 

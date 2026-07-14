@@ -4,10 +4,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from nooch_village.web_base import _e, _page, _banner
-from nooch_village.cockpit2_util import _name, _bron_html
+from nooch_village.cockpit2_util import _DS_LINK, _name, _bron_html
 from nooch_village.metric_schema import (CADANS_LABEL, MEETTYPE_LABEL,
                                          TIJD_LABEL, BRUIKBAAR_LABEL, VERIFICATIE_LABEL)
-from nooch_village.cockpit2_util import _EXTRA_CSS, _BUILD
+from nooch_village.cockpit2_util import _BUILD
 from nooch_village.views.metrics import (
     _num, _dir_select, _cad_select, _mt_select, _mw_select, _opt_select,
     _aard_chips, _mw_chip, indicator_freshness, freshness_chip,
@@ -200,7 +200,7 @@ def render_catalog(st: _Stores, csrf_token: str = "", msg: str = "",
             f"wijzigen versioneert nooit in-place, maar als verduidelijking, back-cast of reeksbreuk.</p>"
             f"{koppel_ui}{status_ui}{activate_ui}"
             f"<div class='c2-sec'>{addform}</div>{nav}{sections}</div>")
-    inner = (f"<style>{_EXTRA_CSS}</style>"
+    inner = (f"{_DS_LINK}"
              f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · <a href='/'>home</a> · "
              "<a href='/catalog'>catalogus</a></div>"
              f"<div class='c2-wrap'>{main}</div>{_CATALOG_JS}")

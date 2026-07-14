@@ -23,6 +23,43 @@
 
 ---
 
+## Sessie 2026-07-14 — designsysteem fase 1: de HTML-basis (Pablo/Cowork)
+
+**Suite: 2201 groen** (was 2195), 1 skip, 1 xfail. Wijzigingen staan LOKAAL in de working tree,
+nog niet gecommit — Stefan reviewt de diff en commit zelf (werkafspraak: diff tonen vóór opslaan).
+
+**Aanleiding:** designer-review van de broncode (bevestigde de eerdere Claude Code-review, plus
+nieuwe vondsten: 4 verschillende mobile-breakpoints, z-index zonder schaal, 0× :focus-visible,
+±70 dode selectors, en de correctie dat cockpit.py wél door 35+ testbestanden wordt geïmporteerd).
+Besluit Stefan: eerst de HTML-basis, vormgeving pas als die staat; cockpit 1-only-tests mogen weg
+(linkbuilding + Noochie-rapport blijven als prototype tot migratie naar cockpit 2).
+
+**Fase 1a — CSS is een bestand geworden.** `_EXTRA_CSS` (56 KB) verhuisd naar
+`nooch_village/static/nooch.css`; `cockpit2_util` leest het bestand en exporteert `_DS_LINK`
+(`/static/nooch.css?v=<inhoud-hash>`). Views linken i.p.v. 56 KB inline per pagina; `/static/`
+serveert nu met `Cache-Control: public, max-age=86400` (veilig: inhoud-hash bust). Laadvolgorde
+ongewijzigd (basis in head, componenten erna) → geen visuele verschuiving. `_frag` injecteert
+fragmenten nog steeds inline (bewust: verse CSS in modals). Bekende `.chip`-dubbeldefinitie
+gedocumenteerd in de css-header; harmoniseren = fase-2-besluit.
+
+**Fase 1b — semantische basis.** `_page()` wikkelt de inhoud in `<main>` (landmark; chrome komt
+er via `_send` buiten te staan). Eén globale `:focus-visible`-regel (WCAG 2.4.7). Nieuwe helper
+`web_base._field()`: genereert `<label for>` + veld-`id` altijd als paar (rootcause-fix voor
+55 labels zonder for / 288 inputs zonder id).
+
+**Fase 1c — ratchets uitgebreid** (`tests/test_ui_ratchets.py`, zelfde principe als de
+inline-style-ratchet): (1) labels-zonder-for per view bevroren op audit-aantal, (2) ad-hoc
+`<style>`-blokken bevroren (4 totaal), (3) klasse-prefix-families projectbreed bevroren op 58.
+Plus positieve tests voor `_field`, `<main>` en de css-link. Docs bijgewerkt: UX_PATTERNS.md
+(kern-klassen wijzen naar nooch.css, _field-regel), CLAUDE.md (UI-sectie), ARCHITECTUUR.md
+(hergegenereerd, alleen regelnummers).
+
+**Open:** fase 2 = vocabulaire-sessie (inventarisatie-doc staat klaar in het Claude-project):
+417 klassen → kern-atomen + varianten, .chip harmoniseren, breakpoint-tokens, z-index-schaal,
+dode selectors schrappen. Fase 3 = migratie per scherm bij aanraking, ratchets zetten vast.
+
+---
+
 ## Sessie 2026-07-09 — projectdetail-UX-ronde + bijlage-upload dichtgetimmerd
 
 **Suite: 2000 groen** (was 1873 op 2026-07-08), 1 xfail. 16 PR's (#148–#163), elk branch → squash/rebase-

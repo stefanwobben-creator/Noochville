@@ -778,7 +778,12 @@ def livekit_presence():
 
 
 # Static-assets: whitelist (geen path-traversal). Nu alleen de gevendorde LiveKit-client-bundle.
-_STATIC_TYPES = {"livekit-client.umd.min.js": "application/javascript; charset=utf-8"}
+_STATIC_TYPES = {
+    "livekit-client.umd.min.js": "application/javascript; charset=utf-8",
+    # Design-systeem-CSS (component-laag). URL draagt ?v=<inhoud-hash> (_DS_LINK),
+    # dus de browser mag lang cachen: nieuwe CSS = nieuwe URL.
+    "nooch.css": "text/css; charset=utf-8",
+}
 
 
 def role_context(st, role_id: str, fmt: str = "json"):
@@ -2635,11 +2640,14 @@ def make_handler(data_dir: str, csrf_token: str,
             self.end_headers()
             self.wfile.write(b)
 
-        def _send_bytes(self, data: bytes, content_type: str, filename: str = ""):
+        def _send_bytes(self, data: bytes, content_type: str, filename: str = "",
+                        cache_secs: int = 0):
             self.send_response(200)
             self.send_header("Content-Type", content_type)
             if filename:
                 self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            if cache_secs:
+                self.send_header("Cache-Control", f"public, max-age={cache_secs}")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -2840,7 +2848,9 @@ def make_handler(data_dir: str, csrf_token: str,
                         _data = _f.read()
                 except OSError:
                     self._send("Niet gevonden", 404); return
-                self._send_bytes(_data, ct); return
+                # Alle whitelisted statics zijn versieloos-of-gehasht → dag-cache is veilig
+                # (nooch.css draagt een inhoud-hash in de URL, zie _DS_LINK).
+                self._send_bytes(_data, ct, cache_secs=86400); return
             if path == "/roloverleg2":
                 fr = (qs.get("fragment") or [""])[0] == "1"
                 self._send(_frag(render_roloverleg2(st, (qs.get("circle") or [""])[0],
