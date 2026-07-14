@@ -7,7 +7,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from nooch_village.skills_impl.competitor_discover import (
-    CompetitorDiscoverSkill, _parse_brand_list, _strip_html, _GUIDE_QUERY)
+    CompetitorDiscoverSkill, _parse_brand_list, _strip_html)
+from nooch_village.skills import resolve_source_scope
 from nooch_village.competitor_brands import CompetitorBrands
 from nooch_village.inbox_actions import decide_competitor_candidate
 from nooch_village.roles import ConcurrentScout
@@ -39,7 +40,9 @@ def _run_with(llm_out, *, text="x" * 300 + " Veja and Cariuma"):
                       return_value=[{"title": "15 Best Vegan Sneakers - Good On You", "link": "http://g"}]), \
          patch.object(skill, "_fetch_text", return_value=text), \
          patch("nooch_village.llm.reason", return_value=llm_out):
-        return skill.run({"brands": ["Veja"]}, SimpleNamespace(settings={}))
+        # scope komt uit het project (topic); zonder scope zou de skill nu bewust weigeren
+        return skill.run({"brands": ["Veja"], "topic": "best vegan sneaker brands"},
+                         SimpleNamespace(settings={}))
 
 
 def test_run_extraheert_echte_merken_uit_gids():
@@ -62,17 +65,46 @@ def test_run_slaat_lege_pagina_over():
 def test_run_gidsen_ophalen_faalt():
     skill = CompetitorDiscoverSkill()
     with patch.object(skill, "_serpapi_guides", side_effect=RuntimeError("geen key")):
-        res = skill.run({"brands": []}, SimpleNamespace(settings={}))
+        res = skill.run({"brands": [], "topic": "barefoot"}, SimpleNamespace(settings={}))
     assert not res["ok"]
 
 
-# ── het onderwerp stuurt de zoekopdracht (kwaliteit: juiste categorie) ──────────
+# ── het scope-contract: onderwerp stuurt de zoekopdracht, geen code-default ─────
 
-def test_query_voorrang_payload_boven_setting_boven_default():
+def test_resolve_source_scope_voorrang_payload_config_of_weigeren():
+    # payload wint
+    scope, err = resolve_source_scope("barefoot", "vegan", veld="onderwerp", config_key="discover_query")
+    assert scope == "barefoot" and err == ""
+    # geen payload → config
+    scope, err = resolve_source_scope("", "vegan", veld="onderwerp", config_key="discover_query")
+    assert scope == "vegan" and err == ""
+    # geen van beide → zichtbaar weigeren, GEEN code-default
+    scope, err = resolve_source_scope("", "", veld="onderwerp", config_key="discover_query")
+    assert scope == "" and "discover_query" in err
+
+
+def test_run_weigert_zonder_scope():
     skill = CompetitorDiscoverSkill()
-    assert skill._query(SimpleNamespace(settings={}), "best barefoot shoe brands") == "best barefoot shoe brands"
-    assert skill._query(SimpleNamespace(settings={}), "") == _GUIDE_QUERY
-    assert skill._query(SimpleNamespace(settings={"discover_query": "sustainable X"}), "") == "sustainable X"
+    # geen topic in de payload én geen config → bewust weigeren i.p.v. een categorie gokken
+    res = skill.run({"brands": []}, SimpleNamespace(settings={}))
+    assert res["ok"] is False and "onderwerp" in res["error"]
+
+
+def test_run_gebruikt_config_scope_als_project_geen_onderwerp_geeft():
+    skill = CompetitorDiscoverSkill()
+    captured = {}
+
+    def fake_search(query, key, num=10):
+        captured["query"] = query
+        return [{"title": "guide", "link": "http://g"}]
+
+    with patch("nooch_village.web_read.serpapi_search", fake_search), \
+         patch.object(skill, "_fetch_text", return_value="x" * 300 + " Cariuma"), \
+         patch("nooch_village.llm.reason", return_value="Cariuma"):
+        res = skill.run({"brands": []},
+                        SimpleNamespace(settings={"SERPAPI_API_KEY": "k", "discover_query": "best barefoot brands"}))
+    assert captured["query"] == "best barefoot brands"    # staande monitor uit config, niet uit code
+    assert res["ok"]
 
 
 def test_run_zoekt_op_projectonderwerp_niet_op_vegan_default():

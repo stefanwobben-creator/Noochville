@@ -5,6 +5,32 @@ import logging
 log = logging.getLogger("village.skill")
 
 
+def resolve_source_scope(payload_scope: str, config_scope: str, *, veld: str, config_key: str) -> tuple:
+    """Gedeeld scope-contract voor externe-bron-skills (community_listening, competitor_discover, …).
+
+    De SCOPE van een bron (wat zoek ik: een onderwerp, een termen-set, merken) is projectkennis, geen code.
+    Hij komt uit het PROJECT (payload, door de planner afgeleid uit het doel) of uit de CONFIG (een staande
+    monitor), maar NOOIT uit een in de code gebakken default — want een code-default gokt een categorie en
+    dat is precies de klasse bug die dit contract sluit (de vegan-in-plaats-van-barefoot-fout).
+
+    Voorrang: payload > config > zichtbaar weigeren. Geeft (scope, "") bij succes, of ("", reden) als er
+    geen scope is; de skill hoort dan fail-closed te weigeren i.p.v. iets te gokken. Zo krijgt élke bron
+    zijn scope op dezelfde, gegronde manier, en valt de volgende bron er vanzelf goed uit.
+
+    NB: skills met een RIJKERE scope (bv. community_listening's monitor-set vs discovery-queries) hoeven
+    deze helper niet letterlijk te gebruiken — ze volgen het contract via hun eigen validate_payload/
+    required_payload. Het contract is het PRINCIPE (project/config, nooit code-default, fail-visible); deze
+    helper is de gemaksvorm voor het meest voorkomende geval: één vrije scope met config-fallback."""
+    p = (payload_scope or "").strip()
+    if p:
+        return p, ""
+    c = (config_scope or "").strip()
+    if c:
+        return c, ""
+    return "", (f"geen {veld}: geef het mee via het project of zet '{config_key}' in de config — "
+                f"de skill gokt bewust geen scope (fail-closed)")
+
+
 class Skill(ABC):
     """Een echte vaardigheid. Inwoners krijgen skills geinjecteerd."""
     name: str = "abstract"

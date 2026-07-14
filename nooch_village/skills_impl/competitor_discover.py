@@ -14,11 +14,9 @@ import logging
 import os
 import re
 
-from nooch_village.skills import Skill
+from nooch_village.skills import Skill, resolve_source_scope
 
 log = logging.getLogger("village.skill.discover")
-
-_GUIDE_QUERY = "best sustainable vegan sneaker brands"
 
 _PROMPT = (
     "Hieronder staat de tekst van een artikel over {topic}.\n"
@@ -77,25 +75,31 @@ class CompetitorDiscoverSkill(Skill):
         payload = payload or {}
         brands = payload.get("brands") or []
         topic = (payload.get("topic") or payload.get("query") or "").strip()
+        config_scope = str((getattr(context, "settings", {}) or {}).get("discover_query", "")).strip()
+        # Scope-contract: onderwerp uit het project of de config, nooit een code-default. Ontbreekt het,
+        # dan weigert de skill zichtbaar i.p.v. een categorie te gokken (de vegan-in-plaats-van-barefoot-fout).
+        query, err = resolve_source_scope(topic, config_scope, veld="onderwerp (topic)",
+                                          config_key="discover_query")
+        if err:
+            log.warning("competitor_discover: %s", err)
+            return {"ok": False, "error": err}
         try:
             limit = int(payload.get("limit", 4))
         except (TypeError, ValueError):
             limit = 4
-        query = self._query(context, topic)
         try:
             guides = self._serpapi_guides(context, query)
         except Exception as exc:
             log.warning("competitor_discover: SerpAPI-zoekopdracht faalde: %s", exc)
             return {"ok": False, "error": str(exc)}
 
-        topic_label = topic or "duurzame, ethische of vegan schoenen"
         from nooch_village.llm import reason
         seen, candidates = set(), []
         for g in guides[:limit]:
             text = self._fetch_text(g["link"])
             if len(text) < 200:                          # niet leesbaar → overslaan
                 continue
-            out = reason(_PROMPT.format(topic=topic_label, text=text[:6000]),
+            out = reason(_PROMPT.format(topic=query, text=text[:6000]),
                          call_site="skill_competitor_discover")
             for name in _parse_brand_list(out, brands):
                 if name.lower() in seen:
@@ -103,15 +107,6 @@ class CompetitorDiscoverSkill(Skill):
                 seen.add(name.lower())
                 candidates.append({"brand": name, "article": g["title"], "link": g["link"]})
         return {"ok": True, "candidates": candidates, "guides": len(guides), "query": query}
-
-    def _query(self, context, topic: str) -> str:
-        """De gids-zoekopdracht. Voorrang: het projectkennis-onderwerp (payload) → globale setting →
-        default. Zo zoekt een barefoot-project naar barefoot-gidsen, niet naar de vaste vegan-default.
-        Het onderwerp is CONTENT (komt uit het project), niet in de code gebakken."""
-        if topic:
-            return topic
-        setting = str((getattr(context, "settings", {}) or {}).get("discover_query", "")).strip()
-        return setting or _GUIDE_QUERY
 
     def _serpapi_guides(self, context, query: str) -> list[dict]:
         from nooch_village import web_read
