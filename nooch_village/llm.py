@@ -401,6 +401,11 @@ def reason(prompt: str, *, ladder: str | None = None, max_tokens: int = 700,
         if out:
             log.info("LLM-trede %s: geslaagd", tier)
             log.info("LLM-call [%s] prompt=%d tekens → %s", call_site, len(prompt), tier)
+            try:                                   # CO2-KPI-boekhouding: usage vastleggen, fail-soft
+                from nooch_village import llm_usage
+                llm_usage.record(call_site, tier, llm_usage.estimate_tokens(prompt, out), estimated=True)
+            except Exception:                      # boekhouding mag de LLM-call nooit breken
+                pass
             return (out, tier) if return_tier else out
         # None-uitkomst gesplitst: geen sleutel (trede overgeslagen) vs lege respons (wél aangeroepen).
         if not _vendor_has_key(vendor):

@@ -86,6 +86,8 @@ class Village:
             os.path.join(self.context.data_dir, "competitor_brands.json"))
         self.context.observations = ObservationStore(
             os.path.join(self.context.data_dir, "observations.jsonl"))
+        from nooch_village import llm_usage          # CO2-KPI: LLM-usage-log naar de juiste data_dir
+        llm_usage.set_path(os.path.join(self.context.data_dir, "llm_usage.jsonl"))
         from nooch_village.source_status import SourceStatusStore
         from nooch_village.collector import migrate_data_sources
         self.context.sources = SourceStatusStore(

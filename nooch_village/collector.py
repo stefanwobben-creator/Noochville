@@ -186,3 +186,5 @@ def migrate_data_sources(dd: str) -> None:
     sources = SourceStatusStore(os.path.join(dd, "sources.json"))
     if "plausible" not in sources.all():
         sources.set_active("plausible", True)
+    if "co2_village" not in sources.all():          # CO2-KPI: standaard actief (geen sleutel nodig)
+        sources.set_active("co2_village", True)

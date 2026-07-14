@@ -44,6 +44,7 @@ from nooch_village.skills_impl.voorstel import VoorstelSchrijvenSkill
 from nooch_village.skills_impl.shopify_sales import ShopifySalesSkill
 from nooch_village.skills_impl.claim_evidence import ClaimEvidenceSkill
 from nooch_village.skills_impl.kroniek_interpret import KroniekInterpretSkill
+from nooch_village.skills_impl.co2_village import Co2VillageSource
 
 
 def build_skill_registry() -> SkillRegistry:
@@ -77,6 +78,7 @@ def build_skill_registry() -> SkillRegistry:
         ShopifySalesSkill(),
         ClaimEvidenceSkill(),
         KroniekInterpretSkill(),
+        Co2VillageSource(),
     ):
         reg.register(skill)
     return reg
