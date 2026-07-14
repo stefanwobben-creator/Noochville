@@ -59,6 +59,15 @@ class Skill(ABC):
         niet als 'uitvoerbaar' de plan-fase in glipt en pas live sterft. Fail-soft: bij twijfel [] terug."""
         return []
 
+    def evidence_records(self, result: dict, *, role_id: str) -> list:
+        """Optioneel: map het skill-RESULTAAT naar EvidenceLedger-records (De Kroniek — de brug naar fase 2).
+        Default: niets. De meeste skills leveren geen bewijs. Een grounding-/verificatie-skill overschrijft
+        dit zodat de dispatch-laag zijn bevestigd/leeg/fout in het register schrijft. De skill blijft
+        side-effect-free: hij BESCHRIJFT alleen de records ({role_id, skill, query, source, status,
+        result_ref}); de inhabitant schrijft ze. Onbekende/lege uitkomst → []. Zo voedt élke bewijs-skill
+        de Kroniek zonder dat de uitvoer-keten per skill hoeft te weten hoe zijn output eruitziet."""
+        return []
+
     def available_metrics(self, context=None) -> list[str]:
         """De ruwe veldsleutels die deze skill oplevert (voor het catalogus-koppelscherm). Default
         leeg: een skill die géén meetbare velden declareert, levert niets te koppelen. Geen API-call.

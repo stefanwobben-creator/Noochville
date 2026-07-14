@@ -93,6 +93,29 @@ class ClaimEvidenceSkill(Skill):
     output_schema = ("ok: bool, rows: list[{brand, claim, status, evidence, source}], "
                      "counts: {status: int} | error")
 
+    # ── De Kroniek-brug (fase 2): bewijsrijen → EvidenceLedger-records ────────────
+    # De ledger kent drie eersteklas statussen. 'onduidelijk' (claim gevonden, geen onderbouwing) is
+    # vanuit het BEWIJS-register een kennisgat: er is geen bevestigd bewijs → 'leeg'. Zo houdt harry_hemp's
+    # waarheidslat stand: alleen echt onderbouwde claims tellen als 'bevestigd'.
+    _LEDGER_STATUS = {"bevestigd": "bevestigd", "onduidelijk": "leeg", "leeg": "leeg", "fout": "fout"}
+
+    def evidence_records(self, result: dict, *, role_id: str) -> list:
+        if not isinstance(result, dict) or not result.get("ok"):
+            return []
+        out = []
+        for row in result.get("rows", []):
+            status = self._LEDGER_STATUS.get(row.get("status"))
+            if status is None:
+                continue
+            query = " — ".join(p for p in (str(row.get("brand", "")).strip(),
+                                           str(row.get("claim", "")).strip()) if p)
+            out.append({
+                "role_id": role_id, "skill": self.name, "query": query or "(onbekend merk)",
+                "source": row.get("source") or "web", "status": status,
+                "result_ref": str(row.get("evidence") or "")[:200],
+            })
+        return out
+
     def run(self, payload: dict, context=None) -> dict:
         payload = payload or {}
         brands = [str(b).strip() for b in (payload.get("brands") or []) if str(b).strip()]

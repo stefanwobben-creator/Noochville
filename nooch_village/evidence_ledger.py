@@ -183,3 +183,46 @@ def run_with_ladder(ledger, *, role_id, skill, query, rungs, classify=None, esca
             escalated = True
     return {"status": final["status"], "source": final["source"], "result": final.get("result"),
             "escalated": escalated, "trail": trail}
+
+
+def interpret(ledger, topic: str) -> dict:
+    """Fase 2 — De Kroniek interpreteren: van losse bewijsregels naar één geïnterpreteerde bevinding
+    voor een onderwerp.
+
+    Rolt de LAATSTE stand per (skill, query, bron) op — een oudere fout telt niet meer als diezelfde bron
+    later bevestigde — en splitst in drie eersteklas uitkomsten: bevestigd (bruikbaar bewijs, met bron),
+    leeg (kennisgaten: onderzocht, niets gevonden) en fout (de bron faalde technisch).
+
+    Fail-closed (harry_hemp's waarheidslat): de conclusie leunt UITSLUITEND op bevestigde records. Geen
+    bevestigd record → geen waarheidsclaim, alleen de gaten en fouten benoemd. Deterministisch, geen LLM,
+    zuiver leesbaar (side-effect-free). Match op onderwerp = case-insensitive substring in de query, zodat
+    één term ('barefoot') de verwante vragen samenpakt over skills heen."""
+    t = (topic or "").strip().lower()
+    empty = {"onderwerp": topic, "bevestigd": [], "leeg": [], "fout": [], "conclusie": ""}
+    if not t:
+        return {**empty, "conclusie": "geen onderwerp opgegeven"}
+
+    latest: dict = {}
+    for r in ledger.all_records():
+        if t not in str(r.get("query", "")).lower():
+            continue
+        key = (r.get("skill"), r.get("query"), r.get("source"))
+        if key not in latest or r.get("ts", 0) >= latest[key].get("ts", 0):
+            latest[key] = r
+
+    buckets: dict = {"bevestigd": [], "leeg": [], "fout": []}
+    for r in latest.values():
+        entry = {"skill": r.get("skill"), "query": r.get("query"), "source": r.get("source"),
+                 "bewijs": r.get("result_ref", ""), "ts": r.get("ts")}
+        buckets.get(r.get("status"), buckets["leeg"]).append(entry)
+
+    bevestigd, leeg, fout = buckets["bevestigd"], buckets["leeg"], buckets["fout"]
+    if bevestigd:
+        bronnen = ", ".join(sorted({e["source"] for e in bevestigd if e["source"]}))
+        conclusie = f"{len(bevestigd)}x bevestigd bewijs voor '{topic}'" + (f" (bronnen: {bronnen})" if bronnen else "")
+        if leeg or fout:
+            conclusie += f"; daarnaast {len(leeg)} kennisgat(en) en {len(fout)} bronfout(en)"
+    else:
+        conclusie = (f"GEEN bevestigd bewijs voor '{topic}' — geen conclusie mogelijk. "
+                     f"{len(leeg)} kennisgat(en), {len(fout)} bronfout(en).")
+    return {"onderwerp": topic, "bevestigd": bevestigd, "leeg": leeg, "fout": fout, "conclusie": conclusie}

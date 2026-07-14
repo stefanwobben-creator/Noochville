@@ -1170,7 +1170,9 @@ class Inhabitant(threading.Thread):
             EvidenceLedger, run_with_ladder, classify_result, SKILL_LADDERS)
         rung_names = SKILL_LADDERS.get(skill)
         if not rung_names:
-            return self.use_skill(skill, payload), skill     # geen ladder → onveranderd (bron = de skill zelf)
+            result = self.use_skill(skill, payload)
+            self._record_skill_evidence(skill, result)       # De Kroniek-brug: bewijs-skills voeden het register
+            return result, skill                             # geen ladder → onveranderd (bron = de skill zelf)
 
         led = EvidenceLedger(os.path.join(self.context.data_dir, "evidence_ledger.jsonl"))
         query = str(payload.get("term") or payload.get("query") or "")
@@ -1190,6 +1192,30 @@ class Inhabitant(threading.Thread):
         outcome = run_with_ladder(led, role_id=self.id, skill=skill, query=query,
                                   rungs=rungs, classify=classify_result, escalate=_escalate)
         return (outcome.get("result") or {}), (outcome.get("source") or skill)   # (resultaat, echte bron)
+
+    def _record_skill_evidence(self, skill: str, result) -> None:
+        """De Kroniek-brug voor niet-ladder skills: als de skill zijn resultaat naar bewijs-records mapt
+        (evidence_records, opt-in), schrijf die in het register. Ladder-skills doen dit al in run_with_ladder,
+        dus die overschrijven evidence_records niet (geen dubbeltelling). Fail-soft: een schrijffout mag de
+        puls nooit breken — de Kroniek is geheugen, geen kritiek pad."""
+        obj = self.registry.get(skill) if self.registry else None
+        fn = getattr(obj, "evidence_records", None)
+        if not callable(fn):
+            return
+        try:
+            recs = list(fn(result if isinstance(result, dict) else {}, role_id=self.id) or [])
+        except Exception as e:
+            self.log.warning("Kroniek: evidence_records faalde voor %s: %s", skill, e)
+            return
+        if not recs:
+            return
+        from nooch_village.evidence_ledger import EvidenceLedger
+        led = EvidenceLedger(os.path.join(self.context.data_dir, "evidence_ledger.jsonl"))
+        for r in recs:
+            try:
+                led.record(**r)
+            except Exception as e:                           # bv. ongeldige status → fail-loud, niet-fataal
+                self.log.warning("Kroniek: record faalde voor %s (%s): %s", skill, r.get("query"), e)
 
     def _execute_checklist(self, project: dict, today: str) -> str | None:
         pid = project["id"]

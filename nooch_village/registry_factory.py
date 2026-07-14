@@ -43,6 +43,7 @@ from nooch_village.skills_impl.curate import CurateSkill
 from nooch_village.skills_impl.voorstel import VoorstelSchrijvenSkill
 from nooch_village.skills_impl.shopify_sales import ShopifySalesSkill
 from nooch_village.skills_impl.claim_evidence import ClaimEvidenceSkill
+from nooch_village.skills_impl.kroniek_interpret import KroniekInterpretSkill
 
 
 def build_skill_registry() -> SkillRegistry:
@@ -75,6 +76,7 @@ def build_skill_registry() -> SkillRegistry:
         VoorstelSchrijvenSkill(),
         ShopifySalesSkill(),
         ClaimEvidenceSkill(),
+        KroniekInterpretSkill(),
     ):
         reg.register(skill)
     return reg

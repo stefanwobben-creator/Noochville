@@ -21,8 +21,12 @@ def _fake_inhabitant(tmp_path, results):
         id="harry_hemp",
         context=types.SimpleNamespace(data_dir=str(tmp_path)),
         use_skill=use_skill,
+        registry=types.SimpleNamespace(get=lambda name: None),   # geen skill-obj → geen evidence_records-brug
     )
     self._calls = calls
+    # De Kroniek-brug draait in het niet-ladder-pad; bind de echte methode zodat het pad realistisch is
+    # (geen skill-obj → niets geschreven, conform 'geen ladder → geen log').
+    self._record_skill_evidence = lambda skill, result: Inhabitant._record_skill_evidence(self, skill, result)
     return self
 
 
