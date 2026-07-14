@@ -551,9 +551,19 @@ def birth_content_strategist() -> None:
 
 # ── Compliance-rol: bewaker van de claim-keuring (merk-claims nu, eigen teksten later) ──────────
 
-def build_compliance_proposal() -> Proposal:
+# De operationele cirkel waar de AI-rollen (concurrent_scout, harry_hemp, …) wonen. Deployment-
+# structuur, GEEN inhoud: overschrijfbaar via het CLI-argument, zodat de tree-id niet brittle in de
+# code vastzit. Default = de huidige live-boom.
+_COMPLIANCE_PARENT = "mother_earth__nooch__noochville"
+
+
+def build_compliance_proposal(parent: str = _COMPLIANCE_PARENT) -> Proposal:
     """ADD_ROLE-voorstel voor de Compliance-rol: bezit de claim-keuring en verifieert
     afbreekbaarheids-/duurzaamheidsclaims van externe merken tegen bewijs.
+
+    `parent` = de id van de cirkel waar de rol in komt te hangen (deployment-structuur). Wijst die naar
+    een bestaande cirkel, dan hangt de adopt de rol in `members` en wordt hij zichtbaar én
+    gematerialiseerd; wijst hij naar een niet-bestaande id, dan blijft de rol buiten de boom (onzichtbaar).
 
     G0-herhalingsbewijs in de trigger, uniek domein 'claim-keuring' (G1) en een accountability
     die niet botst met bestaande rollen (G2). Onbemand geboren; de eigen-teksten-accountability
@@ -573,7 +583,7 @@ def build_compliance_proposal() -> Proposal:
                 "tegen bewijs (certificering, norm, labresultaat) en de status vastleggen",
             ],
             add_domains=["claim-keuring"],
-            new_role_parent="noochville",
+            new_role_parent=parent,
         ),
         tension=(
             "Het dorp identificeert wel merken met afbreekbaarheidsclaims, maar niemand "
@@ -615,9 +625,10 @@ def build_compliance_skills_proposal() -> Proposal:
     )
 
 
-def birth_compliance() -> None:
+def birth_compliance(parent: str | None = None) -> None:
     """Dien het Compliance-ADD_ROLE-voorstel in via het live governance-proces en rapporteer de
-    uitkomst. De rol wordt onbemand geboren als de poort 'm aanneemt."""
+    uitkomst. De rol wordt onbemand geboren als de poort 'm aanneemt. `parent` = de cirkel-id waar de
+    rol in komt (CLI-override; default = de huidige live operationele cirkel)."""
     from nooch_village.village import Village
 
     v = Village(heartbeat_seconds=86400)
@@ -632,9 +643,10 @@ def birth_compliance() -> None:
                     lambda e: outcome.update({"status": "ongeldig", "gate": "G0",
                                               "reason": e.data.get("reason")}))
     v.start()
-    voorstel = build_compliance_proposal()
+    voorstel = build_compliance_proposal(parent or _COMPLIANCE_PARENT)
     print("\n========== VOORSTEL: Compliance (via governance) ==========\n")
     print(f"Proposer: {voorstel.proposer_role}  |  Rol-ID: {voorstel.change.role_id}")
+    print(f"Ouder   : {voorstel.change.new_role_parent}")
     print(f"Domein  : {voorstel.change.add_domains}")
     print("Accountabilities:")
     for a in voorstel.change.add_accountabilities:
@@ -651,9 +663,13 @@ def birth_compliance() -> None:
     print(f"Uitkomst: {status}")
     if status == "aangenomen":
         rec = v.records.get("compliance")
-        unmanned = "compliance" in v.reconciler.unmanned
+        par = v.records.get(rec.parent) if rec and rec.parent else None
+        in_tree = bool(par and "compliance" in par.members)
         print(f"Record  : compliance v{rec.version if rec else '?'} [source={rec.source if rec else '?'}]")
-        print(f"Status  : {'onbemand (ken de skill toe met: compliance_skills)' if unmanned else 'live'}")
+        print(f"Ouder   : {rec.parent if rec else '?'}  |  in cirkel-members: {in_tree}")
+        print("Status  : onbemand (ken de skill toe met: compliance_skills)"
+              if in_tree else
+              "LET OP  : hangt NIET in de cirkel — controleer de ouder-id")
     else:
         print(f"Poort   : {outcome.get('gate', '-')}")
         print(f"Reden   : {outcome.get('reason', '')}")

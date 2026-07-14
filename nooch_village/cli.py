@@ -231,7 +231,7 @@ def main() -> None:
 
     elif mode == "compliance":
         from nooch_village.role_proposals import birth_compliance
-        birth_compliance()
+        birth_compliance(sys.argv[2] if len(sys.argv) > 2 else None)
 
     elif mode == "compliance_skills":
         from nooch_village.role_proposals import grant_compliance_skills

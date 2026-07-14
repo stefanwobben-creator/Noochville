@@ -28,6 +28,13 @@ def test_voorstel_is_add_role_compliance():
     assert p.change.purpose
     assert p.change.add_domains == ["claim-keuring"]
     assert p.change.add_accountabilities
+    # default-ouder = de live operationele cirkel (naast concurrent_scout/harry_hemp)
+    assert p.change.new_role_parent == "mother_earth__nooch__noochville"
+
+
+def test_ouder_is_overschrijfbaar():
+    p = build_compliance_proposal(parent="een_andere_cirkel")
+    assert p.change.new_role_parent == "een_andere_cirkel"
 
 
 def test_voorstel_heeft_herhalingsbewijs_in_trigger():
