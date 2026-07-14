@@ -408,6 +408,27 @@ class WebsiteWatcherWorker(Inhabitant):
                     "_rising": True,
                     "_breakout": related.get("breakout", False) if isinstance(related, dict) else False,
                 })
+        # Verbreed niche-research met de umbrella-term: 'biodegradable barefoot shoes' → 'barefoot shoes'.
+        # Zo mist de scout de brede context niet, ook als de niche-term op 0 volume uitkomt. Lichte
+        # LLM-stap (config-schakelbaar via keyword_umbrella, default aan; fail-closed → geen umbrella).
+        # De umbrella gaat als eigen kandidaat de pipeline in (dedup tegen de bibliotheek + bestaande
+        # labels, gedekt op 5), zodat hij ook echt onderzocht en beoordeeld wordt.
+        if str(getattr(self.context, "settings", {}).get("keyword_umbrella", "1")) == "1" and candidates:
+            from nooch_village.umbrella import umbrella_terms
+            have = {c["label"].strip().lower() for c in candidates}
+            umap = umbrella_terms([c["label"] for c in candidates], name=self.id)
+            for u in umap.values():
+                if len([c for c in candidates if c.get("_umbrella")]) >= 5:
+                    break
+                ul = u.strip().lower()
+                if ul in have or lib.status(u) is not None:
+                    continue
+                have.add(ul)
+                candidates.append({
+                    "label": u,
+                    "description": "brede umbrella-term voor niche-research (rijkere context)",
+                    "_value": 0, "_parent": "umbrella", "_umbrella": True,
+                })
         ranked = prioritize(candidates, self.context)
         proposed = 0
         for action in ranked:
