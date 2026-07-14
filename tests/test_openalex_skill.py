@@ -148,6 +148,44 @@ def test_enkelwoord_term_werkt_geen_lege_quotes():
     assert result["hits"]                                      # levert nog gewoon hits
 
 
+def test_boolean_or_wordt_gesplitst_in_frase_deelzoekopdrachten():
+    """OpenAlex kent geen boolean OR: een ' OR '-keten als één frase gezocht geeft ALTIJD 0 (de
+    Kroniek-leegloop). Fix: splitsen op ' OR ', elk deelconcept apart (exact-frase) zoeken, verenigen."""
+    skill = OpenalexSkill()
+    captured: list[str] = []
+
+    def fake_urlopen(req, timeout=None):
+        captured.append(req.full_url)
+        idx = len(captured)                                    # elk deel geeft een uniek werk
+        w = _fake_work(); w["id"] = f"https://openalex.org/W{idx}"; w["cited_by_count"] = idx
+        return _FakeResp({"results": [w], "meta": {"count": 1}})
+
+    with patch("urllib.request.urlopen", fake_urlopen), patch("time.sleep"):
+        result = skill.run({"term": "vegan shoes OR compostable footwear OR mycelium sole",
+                            "locale": "en", "limit": 5}, _ctx_with_key())
+
+    assert len(captured) == 3                                   # drie deel-frases → drie calls
+    assert "search=%22vegan%20shoes%22" in captured[0]         # elk deel als EIGEN exacte frase
+    assert "search=%22compostable%20footwear%22" in captured[1]
+    assert "search=%22mycelium%20sole%22" in captured[2]
+    assert len(result["hits"]) == 3                            # unie van de drie deelzoekopdrachten
+    assert result["hits"][0]["citations"] == 3                # meest geciteerd eerst
+
+
+def test_boolean_or_dedupt_op_work_id():
+    """Eén werk dat in twee deelzoekopdrachten terugkomt, telt één keer (dedup op work-id)."""
+    skill = OpenalexSkill()
+
+    def fake_urlopen(req, timeout=None):
+        w = _fake_work(); w["id"] = "https://openalex.org/WSAME"
+        return _FakeResp({"results": [w], "meta": {"count": 1}})
+
+    with patch("urllib.request.urlopen", fake_urlopen), patch("time.sleep"):
+        result = skill.run({"term": "a OR b", "locale": "en", "limit": 5}, _ctx_with_key())
+
+    assert len(result["hits"]) == 1                            # zelfde id in beide → één hit
+
+
 def test_lege_term_fail_closed_geen_api_call():
     skill = OpenalexSkill()
     calls = {"n": 0}

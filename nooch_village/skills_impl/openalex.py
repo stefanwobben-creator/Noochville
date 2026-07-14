@@ -35,6 +35,19 @@ _BASE   = "https://api.openalex.org/works"
 _SELECT = ("id,title,publication_year,cited_by_count,"
            "abstract_inverted_index,primary_topic,authorships")
 
+# OpenAlex' vrije `search=` kent GEEN boolean OR-operator (patent-bronnen als EPO/Google Patents wél).
+# Een boolean-keten die als één exacte frase wordt gezocht (bv. `"a OR b OR c"`) matcht dus NOOIT — de
+# 'OR' is een gewoon woord in de frase. Diagnose (Kroniek): OpenAlex 0× bevestigd op zulke ketens, terwijl
+# de losse deelconcepten wél treffen. Daarom splitsen we op ' OR ' en zoeken elke deel-frase apart.
+_MAX_OR_CLAUSES = 10          # dek-plafond: verhindert dat een enorme keten tientallen calls afvuurt
+
+
+def _split_or(term: str) -> list[str]:
+    """Splits een boolean-keten op ' OR ' (het patent-conventie-woord, hoofdletters) in losse deel-frases.
+    Geen ' OR ' → één-element-lijst (ongewijzigd gedrag). Lege delen vallen weg."""
+    parts = re.split(r"\s+OR\s+", (term or "").strip())
+    return [p.strip() for p in parts if p.strip()]
+
 
 def _parse_year_groups(data: dict) -> dict[int, int]:
     """Zet een OpenAlex group_by=publication_year-respons om naar {jaar: aantal}.
@@ -293,28 +306,31 @@ class OpenalexSkill(DataSourceSkill):
         if ferr:
             return {"error": ferr, "term": term, "locale": locale, "hits": [], "filter": ""}
 
-        # Exacte frase (aanhalingstekens om de term): het brede search= matcht anders losse woorden en
-        # de citatie-sort surfacet dan hoog-geciteerde off-topic papers (diagnose 2026-07-08:
-        # "barefoot shoes" gaf 14.906 hits, top-5 diabetes/vaatlijden; met frase → 204, top-5 on-topic).
-        # Enkelwoord-termen zijn met quotes neutraal. `term` is hier gegarandeerd niet-leeg (guard hierboven).
-        q   = urllib.parse.quote(f'"{term}"')
-        url = (f"{_BASE}?search={q}"
-               f"&per_page={limit}"
-               f"&sort=cited_by_count:desc"
-               f"&select={_SELECT}")
-        if filter_str:                                            # leeg = filterloos = huidige zoekopdracht
-            url += f"&filter={urllib.parse.quote(filter_str, safe=':|,><.-')}"
-        url += (f"&mailto={urllib.parse.quote(mailto)}"
-                f"&api_key={urllib.parse.quote(key)}")
-
-        req  = urllib.request.Request(url, headers={"User-Agent": ua})
-        data = self._fetch_with_backoff(req)
-
-        results = data.get("results", [])
-        total   = data.get("meta", {}).get("count", len(results))
+        # Boolean-keten? OpenAlex kent geen OR in search=, dus splitsen we op ' OR ' en zoeken elke
+        # deel-frase apart, elk nog steeds als EXACTE frase (de 8-juli-fix: `"barefoot shoes"` → 204
+        # on-topic i.p.v. 14.906 losse-woord-hits). De unie (dedup op work-id, meest geciteerd eerst)
+        # is het antwoord. Eén clause → precies het oude gedrag (één call, één frase-zoek).
+        clauses = _split_or(term)
+        if len(clauses) <= 1:
+            results, total = self._search_results(clauses[0] if clauses else term,
+                                                  limit, filter_str, mailto, key, ua)
+            time.sleep(0.5)
+        else:
+            seen: dict = {}
+            merged: list = []
+            for clause in clauses[:_MAX_OR_CLAUSES]:
+                part, _tot = self._search_results(clause, limit, filter_str, mailto, key, ua)
+                for w in part:
+                    wid = w.get("id")
+                    if wid and wid not in seen:
+                        seen[wid] = w
+                        merged.append(w)
+                time.sleep(0.2)                                   # kleine pauze tussen deel-calls
+            merged.sort(key=lambda w: w.get("cited_by_count", 0), reverse=True)
+            results = merged[:limit]
+            total = len(results)
 
         if total == 0 or not results:
-            time.sleep(0.5)
             return {"term": term, "locale": locale, "total": 0,
                     "no_data": True, "reason": "geen werken gevonden voor deze term",
                     "hits": [], "filter": filter_str}
@@ -340,6 +356,24 @@ class OpenalexSkill(DataSourceSkill):
 
         time.sleep(0.5)
         return {"term": term, "locale": locale, "total": total, "hits": hits, "filter": filter_str}
+
+    def _search_results(self, phrase: str, limit: int, filter_str: str,
+                        mailto: str, key: str, ua: str):
+        """Eén EXACTE-frase-zoekopdracht op OpenAlex → (results-lijst, meta-count). De frase gaat tussen
+        aanhalingstekens (de 8-juli-fix tegen off-topic losse-woord-hits). Fail-soft: een lege respons
+        geeft ([], 0). DE plek waar de search-URL wordt gebouwd — één bron van waarheid."""
+        q   = urllib.parse.quote(f'"{phrase}"')
+        url = (f"{_BASE}?search={q}"
+               f"&per_page={limit}"
+               f"&sort=cited_by_count:desc"
+               f"&select={_SELECT}")
+        if filter_str:                                            # leeg = filterloos = huidige zoekopdracht
+            url += f"&filter={urllib.parse.quote(filter_str, safe=':|,><.-')}"
+        url += (f"&mailto={urllib.parse.quote(mailto)}"
+                f"&api_key={urllib.parse.quote(key)}")
+        req  = urllib.request.Request(url, headers={"User-Agent": ua})
+        data = self._fetch_with_backoff(req)
+        return data.get("results", []), data.get("meta", {}).get("count", 0)
 
     def _yearly(self, term: str, locale: str, mailto: str, key: str, ua: str) -> dict:
         """Twee group_by=publication_year-calls (term + totaal) → relatief aandeel per jaar."""
