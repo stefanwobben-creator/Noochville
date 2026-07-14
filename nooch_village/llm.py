@@ -403,7 +403,8 @@ def reason(prompt: str, *, ladder: str | None = None, max_tokens: int = 700,
             log.info("LLM-call [%s] prompt=%d tekens → %s", call_site, len(prompt), tier)
             try:                                   # CO2-KPI-boekhouding: usage vastleggen, fail-soft
                 from nooch_village import llm_usage
-                llm_usage.record(call_site, tier, llm_usage.estimate_tokens(prompt, out), estimated=True)
+                it, ot = llm_usage.estimate_split(prompt, out)
+                llm_usage.record(call_site, tier, it, ot, estimated=True)
             except Exception:                      # boekhouding mag de LLM-call nooit breken
                 pass
             return (out, tier) if return_tier else out

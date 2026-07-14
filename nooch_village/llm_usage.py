@@ -38,18 +38,20 @@ def _day(ts: float) -> str:
     return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).date().isoformat()
 
 
-def estimate_tokens(prompt: str, output: str) -> int:
-    """Grove tokenschatting uit tekenlengte (~4 tekens per token). Bewust conservatief-simpel;
-    de bron van waarheid wordt later de vendor-usage waar die beschikbaar is."""
-    return (len(prompt or "") + len(output or "")) // 4
+def estimate_split(prompt: str, output: str) -> tuple:
+    """(input_tokens, output_tokens) geschat uit tekenlengte (~4 tekens per token). APART, omdat
+    input- en output-tokens verschillende emissiefactoren hebben (input ≈ output/5). Bron van waarheid
+    wordt later de vendor-usage waar die beschikbaar is."""
+    return len(prompt or "") // 4, len(output or "") // 4
 
 
-def record(call_site: str, tier: str, tokens: int, *, estimated: bool = True,
+def record(call_site: str, tier: str, in_tokens: int, out_tokens: int, *, estimated: bool = True,
            ts: float | None = None, path: str | None = None) -> None:
-    """Append één usage-regel. Fail-soft (nooit de LLM-call breken)."""
+    """Append één usage-regel (input- en output-tokens apart). Fail-soft (nooit de LLM-call breken)."""
     t = time.time() if ts is None else ts
-    row = {"ts": t, "day": _day(t), "call_site": call_site or "onbekend",
-           "tier": tier or "onbekend", "tokens": int(tokens or 0), "estimated": bool(estimated)}
+    it, ot = int(in_tokens or 0), int(out_tokens or 0)
+    row = {"ts": t, "day": _day(t), "call_site": call_site or "onbekend", "tier": tier or "onbekend",
+           "in_tokens": it, "out_tokens": ot, "tokens": it + ot, "estimated": bool(estimated)}
     p = path or _path()
     try:
         os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
