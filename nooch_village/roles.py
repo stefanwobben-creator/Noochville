@@ -1925,10 +1925,13 @@ class Noochie(Inhabitant):
         "project_awaiting_review",
     )
 
+    _MAX_NUDGES_PER_PULSE = 5          # dek-plafond: Noochie overspoelt de borden niet met nudges
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # ── missie-werk ───────────────────────────────────────────────────────
         self.react("pulse_completed", self._on_pulse_completed)
+        self.react("pulse_completed", self._nudge_scope_matches)   # Level 3: proactief de juiste rol wijzen
         self.react("project_discovery_ready", self._on_discovery_ready)
         # ── bulletin-mandaat ──────────────────────────────────────────────────
         self._events_today: list[dict] = []
@@ -1956,6 +1959,79 @@ class Noochie(Inhabitant):
             owner   = (project or {}).get("owner", "website_watcher")
             ledger.block(pid, owner)
         self.log.info("🎯 discovery-advies: %d metrics beoordeeld, project terug bij eigenaar", len(advice))
+
+    # ── Level 3: proactieve scope-nudge (optie 1 — alleen wijzen, de rol beslist) ────────────────
+    def _scope_roster(self, records) -> list:
+        """De roster voor de match: niet-gearchiveerde rollen (geen cirkels, niet Noochie zelf) MÉT
+        skills, elk met naam + accountabilities + skills. Zonder skills → weglaten (kan niets concreets)."""
+        from nooch_village import org
+        out = []
+        for r in records.all():
+            if getattr(r, "archived", False) or r.id == self.id or org.is_circle(r):
+                continue
+            sk = list(getattr(r.definition, "skills", []) or [])
+            if not sk:
+                continue
+            out.append({"role_id": r.id,
+                        "name": getattr(r.definition, "name", "") or r.id.split("__")[-1],
+                        "accountabilities": list(getattr(r.definition, "accountabilities", []) or []),
+                        "skills": sk})
+        return out
+
+    @staticmethod
+    def _project_text(p: dict) -> str:
+        """Scope + omschrijving + laatste dialoog van een project → context voor de match."""
+        recent = " | ".join(str(m.get("text", "")) for m in (p.get("log") or [])[-5:])
+        return f"{p.get('scope', '')}. {p.get('description', '') or ''}. Dialoog: {recent}".strip()
+
+    def _notify_role(self, role_id: str, pid: str) -> None:
+        """Notificatie aan de genudgede rol, zodat de nudge de rol ook echt bereikt (fail-soft)."""
+        try:
+            import os
+            from nooch_village.notifications import NotifStore
+            NotifStore(os.path.join(self.context.data_dir, "notifications.json")).add(
+                "role", role_id, pid, by="noochie", snippet="scope-nudge: dit lijkt binnen jouw scope")
+        except Exception:
+            pass
+
+    def _nudge_scope_matches(self, event: Event = None) -> None:
+        """Loop actieve projecten langs; waar één rol (niet de eigenaar, niet Noochie) het project binnen
+        haar accountabilities ÉN skill heeft, plaats een nudge-comment + notificatie. ALLEEN wijzen (optie
+        1): Noochie maakt zelf geen taken. Hard: de skill moet in het DNA (afgedwongen in scope_nudge).
+        Gededupt per (project, rol), gedekt op _MAX_NUDGES_PER_PULSE. Fail-closed: elke fout → geen nudge."""
+        projects = getattr(self.context, "projects", None)
+        records = getattr(self.context, "records", None)
+        if projects is None or records is None:
+            return
+        try:
+            from nooch_village.scope_nudge import match_project_to_role
+            roster = self._scope_roster(records)
+            if not roster:
+                return
+            done = 0
+            for p in projects.active():
+                if done >= self._MAX_NUDGES_PER_PULSE:
+                    break
+                pid, owner = p.get("id"), p.get("owner")
+                text = self._project_text(p)
+                if not pid or not text:
+                    continue
+                cand = [r for r in roster if r["role_id"] != owner]     # niet de eigenaar nudgen
+                m = match_project_to_role(text, cand, name=self.id)
+                if not m or projects.already_scope_nudged(pid, m["role_id"]):
+                    continue
+                naam = m["name"] or m["role_id"]
+                projects.add_feed_entry(
+                    pid, f"@{naam}, dit lijkt binnen jouw scope (skill: {m['skill']}). Oppakken?",
+                    kind="comment", author_type="persona",
+                    author_id=getattr(self.record, "persona_id", "") or "")
+                projects.mark_scope_nudge(pid, m["role_id"])
+                self._notify_role(m["role_id"], pid)
+                done += 1
+            if done:
+                self.log.info("🔔 Noochie nudgde %d scope-match(es) proactief", done)
+        except Exception as e:
+            self.log.debug("scope-nudge overgeslagen (fail-closed): %s", e)
 
     def _on_pulse_completed(self, event: Event) -> None:
         note_path = event.data.get("note_path")

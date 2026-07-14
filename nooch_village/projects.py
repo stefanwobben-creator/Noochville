@@ -132,6 +132,26 @@ class ProjectLedger:
         return {str(p.get("scope")) for p in self._projects.values()
                 if p.get("status") not in _TERMINAL}
 
+    def active(self) -> list:
+        """Alle niet-afgeronde projecten (status niet terminal) — de scan-lijst voor Noochie's nudge."""
+        return [p for p in self._projects.values() if p.get("status") not in _TERMINAL]
+
+    def already_scope_nudged(self, pid: str, role_id: str) -> bool:
+        """Heeft Noochie deze rol al eens voor dit project genudged? (dedup, geen herhaal-nudge)."""
+        p = self._projects.get(pid)
+        return bool(p) and role_id in (p.get("scope_nudges") or [])
+
+    def mark_scope_nudge(self, pid: str, role_id: str) -> None:
+        """Leg vast dat Noochie deze rol voor dit project heeft genudged (idempotent, persistent)."""
+        p = self._projects.get(pid)
+        if p is None:
+            return
+        lst = p.setdefault("scope_nudges", [])
+        if role_id not in lst:
+            lst.append(role_id)
+            self._touch(p)
+            self._save()
+
     def start(self, pid: str) -> bool:
         p = self._projects.get(pid)
         if p is None or p["status"] in _TERMINAL:
@@ -703,7 +723,7 @@ _WRITE_METHODS = (
     "check_toggle", "check_remove", "set_item_offer", "accept_item_offer", "edit", "approve",
     "discard", "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
     "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",
-    "mark_formalized", "to_future",
+    "mark_formalized", "to_future", "mark_scope_nudge",
 )
 for _m in _WRITE_METHODS:
     setattr(ProjectLedger, _m, _synchronized(getattr(ProjectLedger, _m)))
