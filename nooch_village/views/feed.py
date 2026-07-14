@@ -207,6 +207,19 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
         _ro, _po = outcome_opts
         oc = _wall_outcome_form(pid, eid, csrf_token, entry.get("text", ""), _ro, _po)
         tools += f"<span class='fsep'>·</span>{oc}"
+    # Level 2 @mention: een rol-voorstel ('zal ik ...?') krijgt een expliciete bevestig-knop. Pas bij een
+    # klik (mens beslist) wordt het een echte taak — geen automatische, ongevraagde projecten.
+    _vst = entry.get("voorstel") if atype == "persona" else None
+    if _vst and _vst.get("titel") and csrf_token and eid:
+        _tt = _vst["titel"]
+        _sk = f" <span class='chip outline'>{_e(_vst['skill'])}</span>" if _vst.get("skill") else ""
+        mk = (f"<form method='post' action='/action' class='emo-f'>"
+              f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+              f"<input type='hidden' name='pid' value='{_e(pid)}'>"
+              f"<input type='hidden' name='item' value='{_e(eid)}'>"
+              f"<button class='btn ok sm' type='submit' name='action' value='mention_to_task' "
+              f"title='{_e(_tt)}'>✓ Ja, maak hier een taak van</button>{_sk}</form>")
+        tools += f"<span class='fsep'>·</span>{mk}"
     return (f"<div class='fentry'>"
             f"<div class='fhead'>{av}<span class='fwho'>{who}</span>"
             f"<span class='fstamp'>{_e(_stamp(entry.get('at')))}</span></div>"

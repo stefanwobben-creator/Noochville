@@ -125,6 +125,121 @@ def test_role_capabilities_block_faalt_zacht_zonder_rol():
     assert cockpit2._role_capabilities_block(None) == ""
 
 
+def test_parse_reply_voorstel_json_en_fallback():
+    from types import SimpleNamespace
+    role = SimpleNamespace(id="r1", definition=SimpleNamespace(skills=["openalex_evidence"]))
+    # geldig JSON-voorstel met een skill die in het DNA zit
+    out = ('{"reactie": "Dat raakt mij. Zal ik het checken?", "voorstel": {"doen": true, '
+           '"titel": "Onderzoek barefoot-claim", "skill": "openalex_evidence", "payload": {}}}')
+    reactie, vst = cockpit2._parse_reply_voorstel(out, role)
+    assert "Zal ik" in reactie and vst["titel"] == "Onderzoek barefoot-claim"
+    assert vst["skill"] == "openalex_evidence" and vst["role_id"] == "r1"
+    # skill buiten het DNA → genegeerd (geen verzonnen tool), voorstel blijft met skill None
+    _, vst2 = cockpit2._parse_reply_voorstel(
+        '{"reactie": "ok", "voorstel": {"doen": true, "titel": "X", "skill": "niet_bestaand"}}', role)
+    assert vst2 and vst2["skill"] is None
+    # doen=false → geen voorstel
+    _, vst3 = cockpit2._parse_reply_voorstel(
+        '{"reactie": "raakt me niet", "voorstel": {"doen": false, "titel": ""}}', role)
+    assert vst3 is None
+    # platte tekst (geen JSON) → tekst als reactie, geen voorstel (backward compat met oude stubs)
+    reactie4, vst4 = cockpit2._parse_reply_voorstel("gewoon een reactie", role)
+    assert reactie4 == "gewoon een reactie" and vst4 is None
+
+
+def test_ai_reply_slaat_voorstel_op_de_entry(tmp_path):
+    dd, rid, pid, codie = _setup(tmp_path)
+    js = ('{"reactie": "Zal ik dit onderzoeken?", "voorstel": {"doen": true, '
+          '"titel": "Onderzoek claim", "skill": null, "payload": {}}}')
+    assert cockpit2._ai_reply(cockpit2._Stores(dd), pid, ask=lambda p: js)
+    last = cockpit2._Stores(dd).projects.get(pid)["log"][-1]
+    assert "Zal ik" in last["text"] and last.get("voorstel", {}).get("titel") == "Onderzoek claim"
+    assert last["voorstel"]["role_id"] == rid
+
+
+def test_mention_to_task_maakt_project_voor_de_rol(tmp_path):
+    dd, rid, pid, codie = _setup(tmp_path)
+    st = cockpit2._Stores(dd)
+    st.projects.add_feed_entry(pid, "Zal ik dit oppakken?", kind="comment", author_type="persona",
+                               author_id=codie.id,
+                               voorstel={"titel": "Onderzoek barefoot-claim", "skill": None,
+                                         "payload": {}, "role_id": rid})
+    eid = st.projects.get(pid)["log"][-1]["id"]
+    cockpit2.dispatch(dd, "mention_to_task", {"pid": [pid], "item": [eid], "next": ["/"]}, username="guest")
+    st2 = cockpit2._Stores(dd)
+    # 1) nieuw project owned door de rol, met de voorgestelde titel als scope
+    nieuw = [p for p in st2.projects._projects.values()
+             if p.get("owner") == rid and p.get("id") != pid and p.get("scope") == "Onderzoek barefoot-claim"]
+    assert len(nieuw) == 1
+    cls = nieuw[0].get("checklists") or []
+    assert cls and cls[0]["items"][0]["text"] == "Onderzoek barefoot-claim"
+    # 2) trail op het bron-project + het voorstel is weg (geen dubbele taak bij tweede klik)
+    src = st2.projects.get(pid)
+    assert any(e.get("kind") == "system" and "taak gemaakt" in e.get("text", "") for e in src["log"])
+    pe = next(e for e in src["log"] if e["id"] == eid)
+    assert "voorstel" not in pe                                   # de persona-entry heeft geen voorstel meer
+    # tweede klik doet niets meer (voorstel weg)
+    _, msg = cockpit2.dispatch(dd, "mention_to_task", {"pid": [pid], "item": [eid], "next": ["/"]}, username="guest")
+    assert "geen voorstel" in msg
+
+
+def test_create_task_from_voorstel_maakt_project_met_skill(tmp_path):
+    dd, rid, pid, codie = _setup(tmp_path)
+    st = cockpit2._Stores(dd)
+    vst = {"titel": "Onderzoek claim", "skill": "openalex_evidence", "payload": {}, "role_id": rid}
+    new_pid = cockpit2._create_task_from_voorstel(st, st.records.get(rid), vst)
+    assert new_pid
+    p = cockpit2._Stores(dd).projects.get(new_pid)
+    assert p["owner"] == rid and p["scope"] == "Onderzoek claim"
+    item = p["checklists"][0]["items"][0]
+    assert item["text"] == "Onderzoek claim" and item.get("skill") == "openalex_evidence"
+
+
+def test_ai_reply_autotask_binnen_scope_maakt_zelf_taak(tmp_path, monkeypatch):
+    # experiment aan: een stap die op een EIGEN skill (in het DNA) draait, is binnen scope → de rol maakt
+    # 'm zelf aan, geen knop. 'Binnen scope' is hard: de skill zit echt in het DNA.
+    monkeypatch.setenv("mention_autotask", "1")
+    dd, rid, pid, codie = _setup(tmp_path)
+    st = cockpit2._Stores(dd)
+    r = st.records.get(rid); r.definition.skills = ["openalex_evidence"]; st.records.put(r)
+    js = ('{"reactie": "Dat raakt mij, ik pak het op.", "voorstel": {"doen": true, '
+          '"titel": "Onderzoek barefoot-claim", "skill": "openalex_evidence", "payload": {}}}')
+    assert cockpit2._ai_reply(cockpit2._Stores(dd), pid, ask=lambda p: js)
+    st2 = cockpit2._Stores(dd)
+    nieuw = [p for p in st2.projects._projects.values() if p.get("owner") == rid and p.get("id") != pid
+             and p.get("scope") == "Onderzoek barefoot-claim"]
+    assert len(nieuw) == 1                                        # de rol maakte binnen scope zelf een project
+    pcomment = [e for e in st2.projects.get(pid)["log"] if e.get("author", {}).get("type") == "persona"][-1]
+    assert "voorstel" not in pcomment                            # zelf gedaan → geen knop meer
+
+
+def test_ai_reply_autotask_buiten_scope_blijft_knop(tmp_path, monkeypatch):
+    # experiment aan, maar de voorgestelde skill zit NIET in het DNA → buiten scope → geen auto, het
+    # voorstel blijft staan zodat de mens via de knop beslist.
+    monkeypatch.setenv("mention_autotask", "1")
+    dd, rid, pid, codie = _setup(tmp_path)
+    js = ('{"reactie": "Zal ik dit oppakken?", "voorstel": {"doen": true, '
+          '"titel": "Iets buiten scope", "skill": "niet_van_mij", "payload": {}}}')
+    assert cockpit2._ai_reply(cockpit2._Stores(dd), pid, ask=lambda p: js)
+    st2 = cockpit2._Stores(dd)
+    assert not [p for p in st2.projects._projects.values() if p.get("owner") == rid and p.get("id") != pid]
+    last = st2.projects.get(pid)["log"][-1]
+    assert last.get("voorstel", {}).get("titel") == "Iets buiten scope" and last["voorstel"]["skill"] is None
+
+
+def test_ai_reply_zonder_experiment_altijd_knop(tmp_path):
+    # experiment UIT (default): ook een binnen-scope-voorstel blijft via de knop lopen (veilige default).
+    dd, rid, pid, codie = _setup(tmp_path)
+    st = cockpit2._Stores(dd)
+    r = st.records.get(rid); r.definition.skills = ["openalex_evidence"]; st.records.put(r)
+    js = ('{"reactie": "Ik kan dit.", "voorstel": {"doen": true, "titel": "T", '
+          '"skill": "openalex_evidence", "payload": {}}}')
+    assert cockpit2._ai_reply(cockpit2._Stores(dd), pid, ask=lambda p: js)
+    st2 = cockpit2._Stores(dd)
+    assert not [p for p in st2.projects._projects.values() if p.get("owner") == rid and p.get("id") != pid]
+    assert st2.projects.get(pid)["log"][-1]["voorstel"]["skill"] == "openalex_evidence"   # blijft: knop
+
+
 def test_mention_op_persona_naam_raakt_de_rol(tmp_path):
     # @Codie (persona-naam) moet exact hetzelfde doel raken als @Website Developer (rolnaam): de rol.
     dd, rid, pid, codie = _setup(tmp_path)

@@ -347,23 +347,106 @@ def _ai_reply(st: _Stores, pid: str, ask=None, *, persona=None, prefix: str = ""
            f"Recente dialoog:\n{recent or '(nog leeg)'}\n\n"
            "Toets de dialoog aan JOUW accountabilities en skills. Raakt de info één van jouw "
            "verantwoordelijkheden en kun je er iets concreets mee (het liefst met één van je skills), stel "
-           "dan die ene stap voor ('zal ik ...?') en noem de skill. Raakt het jou niet, zeg dat kort. "
-           "Reageer als deze rol, max 4 zinnen, geen aannames verzinnen.")
+           "dan die ene stap voor ('zal ik ...?') en noem de skill. Raakt het jou niet, zeg dat kort, "
+           "geen aannames verzinnen.\n\n"
+           "Antwoord UITSLUITEND met JSON, exact dit schema: {\"reactie\": \"<jouw korte reactie als deze "
+           "rol, max 4 zinnen>\", \"voorstel\": {\"doen\": true of false, \"titel\": \"<korte taaktitel, "
+           "leeg als doen=false>\", \"skill\": \"<exacte skillnaam uit JOUW lijst hierboven, of null>\", "
+           "\"payload\": {}}}. Zet \"doen\": false zodra de info je niet raakt of je geen concrete stap met "
+           "een eigen skill hebt.")
     from nooch_village.personas import persona_prompt
     prompt = (persona_prompt(persona) + "\n\n" + ctx).strip()
     if ask is None:
         try:
             from nooch_village import llm
-            out = llm.reason(prompt, ladder=_match_ladder(), call_site="cockpit_project_reply")
+            out = llm.reason(prompt, ladder=_match_ladder(), json_mode=True,
+                             call_site="cockpit_project_reply")
         except Exception:
             out = None
     else:
         out = ask(prompt)
     if not out:
         return False
-    st.projects.add_feed_entry(pid, out.strip(), kind="comment",
-                              author_type="persona", author_id=persona.id)
+    reactie, voorstel = _parse_reply_voorstel(out, role)
+    if not reactie:
+        return False
+    entry = st.projects.add_feed_entry(pid, reactie, kind="comment", author_type="persona",
+                                       author_id=persona.id, voorstel=voorstel)
+    # Binnen scope + experiment aan → de rol pakt het zelf op (geen knop). 'Binnen scope' is HARD: het
+    # voorstel draait op een skill die echt in het DNA van de rol zit (zo door _parse_reply_voorstel
+    # gefilterd). Zonder eigen skill (buiten scope) blijft het voorstel staan → de mens beslist via de knop.
+    if entry and voorstel and voorstel.get("skill") and role is not None and _mention_autotask_on():
+        new_pid = _create_task_from_voorstel(st, role, voorstel)
+        if new_pid:
+            _prov_feed(st, new_pid, f"↳ binnen scope zelf opgepakt uit dialoog op {pid}#{entry['id']}", "")
+            _prov_feed(st, pid, f"→ {_name(role)} pakte dit binnen scope zelf op: {voorstel['titel']}", "")
+            p2 = st.projects.get(pid)                  # vers ophalen (tussentijdse schrijf → mogelijke reload)
+            for e in (p2 or {}).get("log", []):
+                if e.get("id") == entry["id"]:
+                    e.pop("voorstel", None)            # geen knop meer; het is al een taak
+            st.projects._save()
     return True
+
+
+def _mention_autotask_on() -> bool:
+    """Experiment-schakelaar: mogen rollen een binnen-scope-stap (eigen skill) zelf tot taak maken, zonder
+    mens-knop? Default UIT (env `mention_autotask` ontbreekt → veilig, alles via de knop). Aan met
+    mention_autotask=1 in .env — omkeerbaar voor een week-experiment. Buiten-scope blijft altijd de knop."""
+    _load_env()
+    return os.getenv("mention_autotask", "0").strip().lower() in ("1", "true", "yes", "on", "ja")
+
+
+def _create_task_from_voorstel(st, orec, vst) -> str | None:
+    """Maak een project owned door rol `orec` uit een dialoog-voorstel, met de voorgestelde skill als
+    checklist-item (de daemon voert projectwerk uit onder de EIGENAAR-rol, dus de voorstellende rol is de
+    eigenaar). Returnt het nieuwe pid, of None bij een ongeldige rol/cirkel/lege titel. Puur de creatie;
+    herkomst-trail en het weghalen van het voorstel doet de caller. Gedeeld door de auto- en knop-route."""
+    if orec is None or org.is_circle(orec):
+        return None
+    titel = str((vst or {}).get("titel", "")).strip()[:200]
+    if not titel:
+        return None
+    new_pid = st.projects.create(orec.id, titel, "human")
+    sk = vst.get("skill") or None
+    payload = vst.get("payload") if isinstance(vst.get("payload"), dict) else {}
+    ok = True
+    if sk:
+        try:
+            from nooch_village.skill_match import _payload_ok
+            ok = _payload_ok(sk, payload, shared_registry())
+        except Exception:
+            ok = True
+    cl = st.projects.checklist_add(new_pid, "Uit dialoog")
+    if cl:
+        st.projects.check_add(new_pid, cl["id"], titel, skill=sk, payload=payload, payload_ok=ok)
+    return new_pid
+
+
+def _parse_reply_voorstel(out: str, role):
+    """Split het reply-antwoord in (reactie-tekst, voorstel|None). Verwacht JSON {reactie, voorstel:
+    {doen,titel,skill,payload}}, maar valt fail-closed terug op de platte tekst als reactie zonder
+    voorstel (zo blijven oude/gestubde antwoorden werken). De skill wordt machine-gecheckt tegen de harde
+    DNA-lijst van de rol: een voorgestelde skill buiten die lijst wordt genegeerd (geen verzonnen tool)."""
+    txt = (out or "").strip()
+    data = None
+    try:
+        from nooch_village.skill_match import _extract_json
+        data = _extract_json(txt)
+    except Exception:
+        data = None
+    if not isinstance(data, dict) or not str(data.get("reactie", "")).strip():
+        return txt, None                              # geen JSON → platte tekst, geen voorstel
+    reactie = str(data["reactie"]).strip()
+    v = data.get("voorstel") if isinstance(data.get("voorstel"), dict) else None
+    if not v or not v.get("doen") or not str(v.get("titel", "")).strip() or role is None:
+        return reactie, None
+    dna_skills = list(getattr(getattr(role, "definition", None), "skills", []) or [])
+    sk = v.get("skill")
+    sk = sk if (sk and sk in dna_skills) else None    # machine-check: geen skill buiten het DNA
+    voorstel = {"titel": str(v.get("titel")).strip(), "skill": sk,
+                "payload": v.get("payload") if isinstance(v.get("payload"), dict) else {},
+                "role_id": role.id}
+    return reactie, voorstel
 
 
 def _reply_to_mentions(st: _Stores, pid: str, text: str) -> int:
@@ -2032,6 +2115,52 @@ def _act_wall_outcome(c):
         return nxt, f"✓ {_LBL[otype]} aangemaakt"
 
 
+def _act_mention_to_task(c):
+        """Level 2 @mention: de mens bevestigt (knop) een rol-voorstel ('zal ik ...?') → het wordt een
+        echt project owned door die rol, met de voorgestelde skill als checklist-item. De daemon voert
+        projectwerk uit onder de EIGENAAR-rol, dus de rol die het voorstelt moet ook de eigenaar zijn —
+        zo pakt precies de juiste rol (met de juiste skill in haar DNA) het op. Herkomst blijft als trail
+        op het bron-project; het voorstel wordt van de entry gehaald zodat één klik nooit twee taken maakt.
+        Fail-closed op elke ontbrekende schakel."""
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        src_pid, src_eid = g("pid"), g("item")
+        src_p = pj.get(src_pid)
+        src_entry = next((e for e in (src_p or {}).get("log", []) if e.get("id") == src_eid), None) if src_p else None
+        if src_p is None or src_entry is None:
+            return nxt, "✗ bron-comment niet gevonden"
+        vst = src_entry.get("voorstel")
+        if not isinstance(vst, dict) or not vst.get("titel"):
+            return nxt, "✗ geen voorstel om een taak van te maken"
+        owner = vst.get("role_id") or ""
+        orec = st.records.get(owner)
+        if orec is None:
+            return nxt, "✗ de voorstellende rol bestaat niet meer"
+        if org.is_circle(orec):
+            return nxt, "✗ een cirkel voert geen taken uit — voorstel ongeldig"
+        _deny = (_member_gate(resolve_circle_id(owner, st.records), username, st)
+                 if owner.startswith(_II_PREFIX) else _role_gate(owner, username, st))
+        if _deny:
+            return nxt, _deny
+        actor = st.people.by_email(username); aid = actor.id if actor else ""
+        titel = str(vst.get("titel")).strip()[:200]
+        prov = f"↳ uit dialoog-voorstel op {src_pid}#{src_eid}"
+        # 1+2) nieuw project owned door de voorstellende rol, met de skill als checklist-item (gedeelde helper).
+        new_pid = _create_task_from_voorstel(st, orec, vst)
+        if not new_pid:
+            return nxt, "✗ kon geen taak aanmaken uit het voorstel"
+        _prov_feed(st, new_pid, prov, aid)
+        # 3) trail op het bron-project + het voorstel weghalen (geen dubbele taak bij een tweede klik).
+        # LET OP: de tussentijdse schrijven hierboven kunnen de projects-store hebben herladen (get →
+        # _maybe_reload), dus haal de entry VERS op i.p.v. de oude referentie te muteren.
+        _prov_feed(st, src_pid, f"→ taak gemaakt voor @{_name(orec)}: {titel}", aid)
+        src_p2 = st.projects.get(src_pid)
+        for e in (src_p2 or {}).get("log", []):
+            if e.get("id") == src_eid:
+                e.pop("voorstel", None)
+        st.projects._save()
+        return nxt, f"✓ taak gemaakt voor {_name(orec)}"
+
+
 def _act_wo_checkout(c):
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
         msg = ""
@@ -2540,6 +2669,7 @@ ACTIONS = {
     "feed_edit": _act_feed_edit,
     "feed_remove": _act_feed_remove,
     "wall_outcome": _act_wall_outcome,
+    "mention_to_task": _act_mention_to_task,
 
     "ai_reply": _act_ai_reply,
     "proj_feed": _act_proj_feed,

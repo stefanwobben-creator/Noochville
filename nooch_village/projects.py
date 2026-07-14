@@ -545,9 +545,12 @@ class ProjectLedger:
     _AUTHOR_TYPES = ("human", "person", "persona", "role")
 
     def add_feed_entry(self, pid: str, text: str, *, kind: str = "comment",
-                       author_type: str = "human", author_id: str = "") -> dict | None:
+                       author_type: str = "human", author_id: str = "",
+                       voorstel: dict | None = None) -> dict | None:
         """Voeg een feed-item toe. `kind`: 'update' (voortgang door een rol/AI) of 'comment'
-        (reactie/sturing). `author_type` ∈ human|person|persona|role. Geeft de entry terug."""
+        (reactie/sturing). `author_type` ∈ human|person|persona|role. `voorstel` = een optioneel
+        machine-leesbaar actie-voorstel dat een rol bij haar reactie doet ({titel, skill, payload,
+        role_id}); de feed rendert er een 'maak taak'-knop bij (Level 2 @mention). Geeft de entry terug."""
         p = self._projects.get(pid)
         text = (text or "").strip()
         if p is None or not text:
@@ -563,6 +566,13 @@ class ProjectLedger:
             "text": text[:1500],
             "at": time.time(),
         }
+        if isinstance(voorstel, dict) and voorstel.get("titel"):
+            entry["voorstel"] = {
+                "titel": str(voorstel.get("titel", ""))[:200],
+                "skill": (str(voorstel["skill"])[:60] if voorstel.get("skill") else None),
+                "payload": voorstel.get("payload") if isinstance(voorstel.get("payload"), dict) else {},
+                "role_id": str(voorstel.get("role_id", ""))[:120],
+            }
         p.setdefault("log", []).append(entry)
         # Een menselijke reactie is sturing: de rol pakt het opnieuw op (zoals add_comment).
         if kind == "comment" and author_type == "human":
