@@ -12,6 +12,8 @@ beslisboom). Geen nieuwe opslag — leunt op NotifStore (met het verwerk-record)
 """
 from __future__ import annotations
 
+import json
+
 from nooch_village.web_base import _e, _page, _field
 from nooch_village.cockpit2_util import _name, _BUILD, _stamp
 from nooch_village.inbox_wizard import INTENTS, OTYPE_LABEL
@@ -128,7 +130,11 @@ def _outcome_form(otype: str, nid: str, csrf: str, prefill: str, role_opts: str,
            f"<input type='hidden' name='nid' value='{_e(nid)}'>"
            f"<input type='hidden' name='otype' value='{_e(otype)}'>"
            f"<input type='hidden' name='next' value='{_e(nxt)}'>")
-    if otype == "project":
+    if otype == "ping":
+        sid = f"sel-{uid}"
+        tgt = (f"<label class='att-lbl' for='{sid}'>Aan welke rol?</label>"
+               f"<select id='{sid}' name='ping_role'>{role_opts}</select>")
+    elif otype == "project":
         sid = f"sel-{uid}"
         tgt = (f"<label class='att-lbl' for='{sid}'>Op welke rol?</label>"
                f"<select id='{sid}' name='owner'>{role_opts}</select>")
@@ -191,3 +197,123 @@ def render_verwerk(st, n: dict, csrf_token: str = "", role_opts: str = "", pj_op
              "<a href='/'>home</a> · <a href='/inbox'>inbox</a></div>"
              f"<div class='c2-wrap'>{main}</div>")
     return _page("Verwerk", inner)
+
+
+# ── de globale inbox-drawer (chrome op elke pagina) + het lijst-fragment ──────────
+def _ibx_row(st, n: dict) -> str:
+    """Eén kaartje in de drawer. Open item → klik opent de modal-wizard; verwerkt item → sleep naar
+    rechts om te archiveren."""
+    nid = n.get("id", "")
+    status = st.notif.status_of(n)
+    title = _e(_one_line(n.get("snippet")))
+    who = _e(_who(st, n))
+    if status == "verwerkt":
+        vs = st.notif.verwerkingen_of(n)
+        kader = "".join(f"<div class='ibx-kader'>✓ {_e(v.get('label') or 'uitkomst')}</div>" for v in vs)
+        return (f"<div class='ibx-row done' data-nid='{_e(nid)}'><span class='ibx-dot read'></span>"
+                f"<div class='ibx-rb'><div class='ibx-title'>{title}</div>"
+                f"<div class='ibx-meta'>verwerkt · {who}</div>{kader}</div>"
+                f"<span class='ibx-swipe'>sleep &rarr; archiveer</span></div>")
+    dot = "ibx-dot read" if status == "gelezen" else "ibx-dot"
+    return (f"<div class='ibx-row' data-nid='{_e(nid)}' onclick=\"ibxOpen('{_e(nid)}')\">"
+            f"<span class='{dot}'></span><div class='ibx-rb'><div class='ibx-title'>{title}</div>"
+            f"<div class='ibx-meta'>via {who} &middot; {_e(_stamp(n.get('at')))}</div></div>"
+            f"<button class='ibx-trash' title='weggooien' "
+            f"onclick=\"event.stopPropagation();ibxTrash('{_e(nid)}')\">&#128465;</button></div>")
+
+
+def render_inbox_frag(st, targets, csrf_token: str = "") -> str:
+    """Het dynamische deel van de drawer: telling + rijen, opgehaald via /inbox?frag=1. Geen page-shell
+    (de shell is de chrome). De drawer-JS leest data-count/data-sub en vult de lijst."""
+    items = st.notif.open_for_targets(targets)
+    nieuw = sum(1 for n in items if st.notif.status_of(n) == "nieuw")
+    rows = "".join(_ibx_row(st, n) for n in items) or \
+        "<div class='ibx-empty'><div class='ibx-party'>&#127881;</div>Je inbox is leeg.</div>"
+    sub = f"{len(items)} open, waarvan {nieuw} nieuw" if items else "Alles verwerkt — geniet ervan."
+    return f"<div data-count='{len(items)}' data-sub='{_e(sub)}'>{rows}</div>"
+
+
+def _person_role_options(st, targets) -> str:
+    """Opties voor 'vanuit welke rol voel je het' bij zelf een spanning toevoegen: de rollen die de
+    ingelogde persoon vervult, plus 'als mezelf'."""
+    opts = ["<option value=''>als mezelf</option>"]
+    for ty, tid in targets:
+        if ty == "role":
+            rec = st.records.get(tid)
+            if rec is not None:
+                opts.append(f"<option value='{_e(tid)}'>{_e(_name(rec))}</option>")
+    return "".join(opts)
+
+
+_IBX_JS = """
+var IBX_CSRF=__IBX_CSRF__;
+function ibxToggle(){var d=document.getElementById('ibx-drawer');d.classList.toggle('open');
+  if(d.classList.contains('open'))ibxRefresh();}
+function ibxAddToggle(){document.getElementById('ibx-add').classList.toggle('open');}
+function ibxPost(a,x){return fetch('/action',{method:'POST',
+  headers:{'Content-Type':'application/x-www-form-urlencoded'},
+  body:new URLSearchParams(Object.assign({action:a,csrf:IBX_CSRF,next:'/inbox'},x||{}))});}
+function ibxRefresh(){return fetch('/inbox?frag=1').then(function(r){return r.text();}).then(function(h){
+  var t=document.createElement('div');t.innerHTML=h;var w=t.firstElementChild;
+  var cnt=w?parseInt(w.getAttribute('data-count')||'0',10):0;
+  document.getElementById('ibx-list').innerHTML=w?w.innerHTML:h;
+  document.getElementById('ibx-hct').textContent=cnt;
+  var b=document.getElementById('ibx-badge');b.textContent=cnt;b.classList.toggle('hide',cnt===0);
+  document.getElementById('ibx-launch').classList.toggle('zero',cnt===0);
+  document.getElementById('ibx-icon').textContent=cnt?'\\uD83D\\uDCE5':'\\uD83C\\uDF89';
+  document.getElementById('ibx-sub').textContent=w?(w.getAttribute('data-sub')||''):'';
+  ibxBindSwipe();});}
+function ibxOpen(nid){var f=document.getElementById('ibx-frame');
+  f.src='/inbox/verwerk?nid='+encodeURIComponent(nid);
+  document.getElementById('ibx-scrim').classList.add('open');}
+function ibxCloseModal(){document.getElementById('ibx-scrim').classList.remove('open');
+  document.getElementById('ibx-frame').src='about:blank';}
+function ibxFrameLoad(){try{var p=document.getElementById('ibx-frame').contentWindow.location.pathname;
+  if(p==='/inbox'){ibxCloseModal();ibxThumb();ibxRefresh();}}catch(e){}}
+function ibxAddSubmit(){var t=document.getElementById('ibx-addtext'),r=document.getElementById('ibx-addrole');
+  if(!t.value.trim())return;ibxPost('notif_add',{text:t.value.trim(),role:r.value}).then(function(){
+    t.value='';ibxAddToggle();ibxRefresh();});}
+function ibxTrash(nid){ibxPost('notif_delete',{nid:nid}).then(ibxRefresh);}
+function ibxThumb(){var t=document.getElementById('ibx-thumb');t.classList.add('on');
+  setTimeout(function(){t.classList.remove('on');},900);}
+function ibxBindSwipe(){var rows=document.querySelectorAll('.ibx-row.done');
+  for(var i=0;i<rows.length;i++){(function(el){var sx=0,dx=0,drag=false;
+    el.onpointerdown=function(e){drag=true;sx=e.clientX;el.setPointerCapture(e.pointerId);};
+    el.onpointermove=function(e){if(!drag)return;dx=Math.max(0,e.clientX-sx);
+      el.style.setProperty('transform','translateX('+dx+'px)');
+      el.style.setProperty('opacity',String(1-Math.min(dx/220,.6)));};
+    var end=function(){if(!drag)return;drag=false;
+      if(dx>90){el.style.setProperty('transform','translateX(120%)');el.style.setProperty('opacity','0');
+        ibxPost('notif_archive',{nid:el.getAttribute('data-nid')}).then(function(){setTimeout(ibxRefresh,160);});}
+      else{el.style.setProperty('transform','');el.style.setProperty('opacity','');}dx=0;};
+    el.onpointerup=end;el.onpointercancel=end;})(rows[i]);}}
+document.getElementById('ibx-frame').addEventListener('load',ibxFrameLoad);
+ibxRefresh();
+"""
+
+
+def render_inbox_chrome(csrf_token: str = "", role_opts: str = "") -> str:
+    """De globale inbox-drawer die op elke ingelogde pagina wordt geïnjecteerd: launcher-knop met badge,
+    uitschuif-paneel links, en de modal die de bestaande verwerk-pagina in een iframe toont. De lijst en
+    de telling worden lui opgehaald via /inbox?frag=1 (JS), zodat de injectie zelf licht blijft."""
+    launch = ("<button class='ibx-launch' id='ibx-launch' title='Inbox' onclick='ibxToggle()'>"
+              "<span id='ibx-icon'>&#128229;</span><span class='ibx-ct hide' id='ibx-badge'>0</span></button>")
+    add = ("<div class='ibx-add' id='ibx-add'>"
+           "<label for='ibx-addtext'>Wat voel je?</label>"
+           "<textarea id='ibx-addtext' placeholder='een spanning, vraag of losse gedachte…'></textarea>"
+           "<label for='ibx-addrole'>Vanuit welke rol?</label>"
+           f"<select id='ibx-addrole'>{role_opts}</select>"
+           "<div class='rdr-rec'><button class='btn ok sm' onclick='ibxAddSubmit()'>Toevoegen</button> "
+           "<button class='btn sm' onclick='ibxAddToggle()'>Annuleer</button></div></div>")
+    drawer = ("<aside class='ibx-drawer' id='ibx-drawer'>"
+              "<div class='ibx-head'><h2>Inbox</h2><span class='ibx-hct' id='ibx-hct'>0</span>"
+              "<button class='ibx-plus' title='Spanning toevoegen' onclick='ibxAddToggle()'>+</button>"
+              "<button class='ibx-x' title='sluiten' onclick='ibxToggle()'>&times;</button></div>"
+              "<div class='ibx-sub' id='ibx-sub'></div>" + add +
+              "<div class='ibx-list' id='ibx-list'></div></aside>")
+    modal = ("<div class='ibx-scrim' id='ibx-scrim'><div class='ibx-modal'>"
+             "<button class='ibx-mx' title='sluiten' onclick='ibxCloseModal()'>&times;</button>"
+             "<iframe class='ibx-iframe' id='ibx-frame' title='Verwerk spanning'></iframe></div></div>"
+             "<div class='ibx-thumb' id='ibx-thumb'>&#128077;</div>")
+    return (launch + drawer + modal + "<script>"
+            + _IBX_JS.replace("__IBX_CSRF__", json.dumps(csrf_token)) + "</script>")

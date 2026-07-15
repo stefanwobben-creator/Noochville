@@ -225,7 +225,9 @@ from nooch_village.views.catalog import (
     _catalog_add_form, render_catalog,
 )
 from nooch_village.views.signals import render_signals
-from nooch_village.views.inbox import render_inbox, render_verwerk
+from nooch_village.views.inbox import (
+    render_inbox, render_verwerk, render_inbox_frag, render_inbox_chrome, _person_role_options,
+)
 
 
 from nooch_village.views.noochie import (
@@ -276,6 +278,25 @@ def _person_targets(st: _Stores, username: str) -> list:
         except Exception:
             continue
     return targets
+
+
+def _scoped_project_opts(st: _Stores, n) -> str:
+    """Projectlijst voor de actie-uitkomst, GESCOPET op de rol die bij deze spanning hoort (de doel-rol
+    van de mention, anders de eigenaar van het bron-project). Alleen díe projecten — niet alles van
+    iedereen (dat was de klacht). Fail-soft: geen rol → alleen de placeholder."""
+    rid = ""
+    if isinstance(n, dict):
+        if n.get("target_type") == "role":
+            rid = n.get("target_id") or ""
+        if not rid and n.get("project_id"):
+            p = st.projects.get(n.get("project_id"))
+            rid = (p or {}).get("owner") or ""
+    opts = ["<option value=''>— kies project —</option>"]
+    if rid:
+        for p in st.projects.all():
+            if p.get("owner") == rid and not p.get("archived"):
+                opts.append(f"<option value='{_e(p['id'])}'>{_e(str(p.get('scope') or p['id'])[:60])}</option>")
+    return "".join(opts)
 
 
 def _role_of_persona(st: _Stores, persona):
@@ -2260,6 +2281,22 @@ def _act_notif_delete(c):
         return c.nxt, ("🗑 weggegooid" if ok else "✗ item niet gevonden")
 
 
+def _act_notif_add(c):
+        # Zelf een spanning toevoegen (GlassFrog-capture): vrij tekstveld + vanuit welke rol je 'm voelt.
+        # Landt in je eigen inbox om daarna te verwerken. Leeg → niets.
+        st, g, username = c.st, c.g, c.username
+        text = (g("text") or "").strip()
+        role = (g("role") or "").strip()
+        if not text:
+            return c.nxt, "✗ lege spanning"
+        if role and st.records.get(role) is not None:
+            st.notif.add("role", role, "", by="zelf", snippet=text)
+        else:
+            actor = st.people.by_email(username) if username and username != "guest" else None
+            st.notif.add("person", actor.id if actor else "guest", "", by="zelf", snippet=text)
+        return c.nxt, "✓ spanning toegevoegd"
+
+
 def _act_notif_klaar(c):
         # 'Klaar met deze spanning': het ENIGE sluitmodel. Sloot je met nul uitkomsten, dan legt de handler
         # zelf 'geen uitkomst' vast (zichtbaar voor de raadsvergadering). Redirect naar de inbox met de
@@ -2296,7 +2333,16 @@ def _act_notif_outcome(c):
         prov = f"↳ uit inbox-spanning {nid}"
         label = OTYPE_LABEL.get(otype, otype)
         made = ""
-        if otype == "project":
+        if otype == "ping":
+            # Ping = een licht pingetje: de inhoud landt als mention in de inbox van de gekozen rol. Geen
+            # note, geen overleg. (Iedere ingelogde mag pingen — het is puur een bericht, geen structuur.)
+            ping_role = g("ping_role")
+            prec = st.records.get(ping_role) if ping_role else None
+            if prec is None:
+                return nxt, "✗ kies een rol om te pingen"
+            st.notif.add("role", ping_role, src_pid, src_eid, by=(by_name or "inbox"), snippet=content)
+            made = f"{label} naar {_name(prec)}: {content[:50]}"
+        elif otype == "project":
             owner = g("owner")
             if not owner:
                 return nxt, "✗ kies een rol-eigenaar voor het project"
@@ -2870,6 +2916,7 @@ ACTIONS = {
     "notif_outcome": _act_notif_outcome,
     "notif_klaar": _act_notif_klaar,
     "notif_delete": _act_notif_delete,
+    "notif_add": _act_notif_add,
     "notif_archive": _act_notif_archive,
 
     "ai_reply": _act_ai_reply,
@@ -2992,11 +3039,17 @@ def make_handler(data_dir: str, csrf_token: str,
             self.end_headers()
 
         def _send(self, body: str, code: int = 200, chrome: bool = True):
-            # De Noochie-rail + dorp-brede call bar zijn uit de cockpit gehaald (op verzoek): één-op-één
-            # chatten met Noochie vervalt; 'chatten met de raad' (een vraag aan álle AI's) pakken we later
-            # als eigen feature op. De `chrome`-parameter blijft bestaan voor bestaande aanroepers, maar
-            # injecteert niets meer. De /noochie- en /callbar-routes + de LiveKit-machinerie blijven staan
-            # (ongebruikt vanuit de UI), zodat een latere raad-chat erop kan voortbouwen.
+            # Globale chrome = de inbox-drawer (launcher + uitschuif-paneel links + modal). Alleen voor een
+            # sessie en alleen op volledige HTML-pagina's (met </body>). chrome=False voor de inbox-routes
+            # zelf (die zijn de drawer-inhoud / het fragment; injecteren zou de drawer in zichzelf nesten).
+            # De Noochie-rail + call bar zijn eruit; 'chatten met de raad' komt later als eigen feature.
+            if chrome and self._session_username() is not None and "</body>" in body:
+                try:
+                    _st = _Stores(data_dir)
+                    _ro = _person_role_options(_st, _person_targets(_st, self._session_username()))
+                except Exception:
+                    _ro = ""
+                body = body.replace("</body>", render_inbox_chrome(csrf_token, _ro) + "</body>", 1)
             b = body.encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -3158,19 +3211,27 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/inbox":
                 # De inbox van de ingelogde mens: mentions aan hem (als persoon of via zijn rollen).
                 tgts = _person_targets(st, username)
+                # chrome=False: de drawer wordt door _send geïnjecteerd op ANDERE pagina's; deze route IS
+                # de drawer-inhoud (fragment) of de standalone-fallback, dus geen drawer-in-drawer.
+                if (qs.get("frag") or [""])[0]:
+                    self._send(render_inbox_frag(st, tgts, csrf_token=effective_csrf), chrome=False)
+                    return
                 nm = ""
                 if username and username != "guest":
                     _p = st.people.by_email(username)
                     nm = _p.name if _p else ""
                 done = (qs.get("done") or [""])[0]
-                self._send(render_inbox(st, tgts, csrf_token=effective_csrf, naam=nm, done=done))
+                self._send(render_inbox(st, tgts, csrf_token=effective_csrf, naam=nm, done=done), chrome=False)
                 return
             if path == "/inbox/verwerk":
                 # De twee-panelen-verwerkpagina voor één spanning: links de spanning, rechts de wizard.
+                # chrome=False: draait als modal-iframe binnen de drawer; geen tweede drawer injecteren.
                 nid = (qs.get("nid") or [""])[0]
                 n = st.notif._find(nid)
-                ro, po = _wall_outcome_opts(st) if n is not None else ("", "")
-                self._send(render_verwerk(st, n, csrf_token=effective_csrf, role_opts=ro, pj_opts=po))
+                ro = _wall_outcome_opts(st)[0] if n is not None else ""
+                po = _scoped_project_opts(st, n) if n is not None else ""
+                self._send(render_verwerk(st, n, csrf_token=effective_csrf, role_opts=ro, pj_opts=po),
+                           chrome=False)
                 return
             if path == "/catalog":
                 # AUTHZ: anchor-lead — het overzicht is publiek; de geïntegreerde koppel-sectie (ruw veld

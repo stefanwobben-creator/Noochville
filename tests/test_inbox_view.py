@@ -149,3 +149,47 @@ def test_verwerk_onbekend_item(tmp_path):
     dd = _dd(tmp_path)
     html = cockpit2.render_verwerk(cockpit2._Stores(dd), None, csrf_token="t")
     assert "bestaat niet meer" in html
+
+
+def test_inbox_chrome_bevat_launcher_drawer_modal(tmp_path):
+    html = cockpit2.render_inbox_chrome(csrf_token="tok")
+    assert "ibx-launch" in html and "ibx-drawer" in html and "ibx-frame" in html   # launcher + drawer + modal-iframe
+    assert "ibxOpen" in html and "ibxRefresh" in html                              # de drawer-JS
+    assert '"tok"' in html and "src='/callbar'" not in html                        # csrf ingebed, geen call bar
+
+
+def test_inbox_frag_geeft_count_en_rijen(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    person = st.people.all()[0]
+    _spanning(st, person, "@jij kijk hier")
+    frag = cockpit2.render_inbox_frag(st, [("person", person.id)], csrf_token="t")
+    assert "data-count='1'" in frag and "ibx-row" in frag and "kijk hier" in frag
+
+
+def test_notif_add_zelf_spanning_toevoegen(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    cockpit2.dispatch(dd, "notif_add", {"text": ["eigen gedachte"], "role": [_OWNER], "next": ["/inbox"]},
+                      username="guest")
+    st2 = cockpit2._Stores(dd)
+    hits = [n for n in st2.notif.for_targets([("role", _OWNER)]) if n.get("snippet") == "eigen gedachte"]
+    assert len(hits) == 1 and hits[0]["by"] == "zelf"
+
+
+def test_ping_uitkomst_landt_in_inbox_van_rol(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    person = st.people.all()[0]
+    src, eid, n = _spanning(st, person, "@jij deel dit met Library")
+    cockpit2.dispatch(dd, "notif_outcome",
+                      {"csrf": ["t"], "nid": [n["id"]], "otype": ["ping"], "ping_role": [_OWNER],
+                       "content": ["wat denk jij?"], "next": [f"/inbox/verwerk?nid={n['id']}"]},
+                      username="guest")
+    st2 = cockpit2._Stores(dd)
+    # de ping landde als mention in de inbox van de gekozen rol
+    pinged = [x for x in st2.notif.for_targets([("role", _OWNER)]) if x.get("snippet") == "wat denk jij?"]
+    assert len(pinged) == 1
+    # en het is vastgelegd in het verwerk-record van de bron-spanning
+    vs = st2.notif.verwerkingen_of(st2.notif._find(n["id"]))
+    assert vs and vs[0]["otype"] == "ping"

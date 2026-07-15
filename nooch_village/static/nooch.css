@@ -484,6 +484,57 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .rdr-vier{background:var(--green-tint);border:1px solid var(--green);border-radius:var(--radius);padding:.4rem .6rem;margin:.3rem 0}
 .rdr-kader{margin-top:.5rem;padding:.4rem .6rem;background:var(--surface);border:1px solid var(--green);border-radius:var(--radius);font-size:.85rem}
 .rdr-act{display:flex;gap:.4rem;align-items:center;flex:0 0 auto}
+
+/* ── inbox-drawer (globale chrome): launcher + uitschuif-paneel links + modal ─────── */
+.ibx-launch{position:fixed;left:20px;bottom:20px;z-index:1200;width:54px;height:54px;
+  border-radius:var(--radius-pill);background:var(--green);color:#fff;border:none;cursor:pointer;
+  box-shadow:0 4px 16px rgba(27,27,27,.18);font-size:20px;display:flex;align-items:center;justify-content:center;transition:transform .15s}
+.ibx-launch:hover{transform:scale(1.06)}
+.ibx-launch.zero{background:var(--green-tint)}
+.ibx-ct{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 5px;background:var(--coral);
+  color:#fff;border-radius:var(--radius-pill);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid var(--cream)}
+.ibx-ct.hide{display:none}
+.ibx-drawer{position:fixed;top:0;left:0;height:100vh;width:380px;max-width:92vw;z-index:1210;background:var(--cream);
+  border-right:1px solid var(--border);box-shadow:8px 0 30px rgba(27,27,27,.12);
+  transform:translateX(-100%);transition:transform .22s ease;display:flex;flex-direction:column}
+.ibx-drawer.open{transform:none}
+.ibx-head{background:var(--green-tint);padding:.85rem 1rem;display:flex;align-items:center;gap:.5rem;border-bottom:1px solid var(--border)}
+.ibx-head h2{font-family:var(--font-display);font-size:1.05rem;color:var(--green-dark);margin:0}
+.ibx-hct{background:var(--green);color:#fff;border-radius:var(--radius-pill);font-size:12px;font-weight:700;padding:.05rem .5rem;min-width:20px;text-align:center}
+.ibx-plus{margin-left:auto;width:28px;height:28px;border-radius:var(--radius-pill);border:1px solid var(--green);background:var(--surface);color:var(--green-dark);font-size:18px;line-height:1;cursor:pointer}
+.ibx-x{background:none;border:none;font-size:20px;color:var(--gray);cursor:pointer;line-height:1}
+.ibx-sub{padding:.5rem 1rem;color:var(--subtle);font-size:12.5px;border-bottom:1px solid var(--border)}
+.ibx-add{display:none;padding:.7rem 1rem;border-bottom:1px solid var(--border);background:var(--cream-2)}
+.ibx-add.open{display:block}
+.ibx-add label{display:block;font-size:12px;color:var(--gray);margin:.3rem 0 .15rem}
+.ibx-add textarea,.ibx-add select{width:100%;font-family:inherit;font-size:13px;border:1px solid var(--border);border-radius:7px;padding:.45rem;background:var(--surface)}
+.ibx-add textarea{min-height:58px;resize:vertical}
+.ibx-list{overflow:auto;flex:1;padding:.4rem}
+.ibx-row{display:flex;gap:.6rem;align-items:flex-start;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:.6rem .7rem;margin:.4rem 0;cursor:pointer;transition:box-shadow .12s,border-color .12s;position:relative}
+.ibx-row:hover{box-shadow:var(--shadow);border-color:var(--green)}
+.ibx-dot{width:9px;height:9px;border-radius:50%;background:var(--green);flex:0 0 auto;margin-top:.35rem}
+.ibx-dot.read{background:var(--muted)}
+.ibx-rb{min-width:0;flex:1}
+.ibx-title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ibx-meta{color:var(--subtle);font-size:12px;margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ibx-trash{opacity:0;background:none;border:none;cursor:pointer;font-size:15px;flex:0 0 auto;color:var(--gray)}
+.ibx-row:hover .ibx-trash{opacity:.7}
+.ibx-row.done{background:var(--green-tint);border-color:var(--green);cursor:grab;touch-action:pan-y}
+.ibx-kader{margin-top:.35rem;font-size:12.5px;color:var(--green-dark)}
+.ibx-swipe{position:absolute;right:.6rem;top:.55rem;font-size:11px;color:var(--green-dark);opacity:.5}
+.ibx-empty{padding:2rem 1rem;text-align:center;color:var(--subtle)}
+.ibx-empty .ibx-party{font-size:32px}
+.ibx-scrim{position:fixed;inset:0;background:rgba(27,27,27,.34);z-index:1220;display:none;align-items:flex-start;justify-content:center;padding:3vh 1rem;overflow:auto}
+.ibx-scrim.open{display:flex}
+.ibx-modal{background:var(--cream);border-radius:14px;box-shadow:var(--shadow);width:min(900px,100%);overflow:hidden;position:relative}
+.ibx-mx{position:absolute;top:8px;right:12px;background:none;border:none;font-size:24px;color:var(--gray);cursor:pointer;z-index:2}
+.ibx-iframe{width:100%;height:78vh;border:none;display:block;background:var(--cream)}
+.ibx-thumb{position:fixed;left:50%;top:38vh;transform:translate(-50%,-50%) scale(0) rotate(-12deg);font-size:96px;z-index:1300;
+  transition:transform .28s cubic-bezier(.2,1.4,.4,1);pointer-events:none;filter:drop-shadow(0 8px 14px rgba(27,27,27,.18))}
+.ibx-thumb.on{transform:translate(-50%,-50%) scale(1) rotate(0)}
+/* grotere textarea's in de verwerk-formulieren */
+.wo-oc textarea{min-height:88px}
 .cl-attn{background:var(--error-tint)}     /* gemist checklist-item (rij-niveau, coral) */
 .cl-todo{background:var(--yellow-light)}   /* te-doen checklist-item (rij-niveau, geel) */
 .cl-add{display:inline-block}

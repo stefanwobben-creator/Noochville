@@ -94,7 +94,7 @@ def test_geen_nieuwe_style_blokken():
 # Audit dd 2026-07-14: 58 families. Doel: een klein vocabulaire (card, btn, chip,
 # tile, field, …) + varianten — zie de fase-2-inventarisatie. Dit plafond voorkomt
 # dat er ondertussen nieuwe privé-prefixen bijkomen.
-_PREFIX_CEILING = 58
+_PREFIX_CEILING = 59   # +1: 'ibx-' — de inbox-drawer is een bewust nieuw UI-component (globale chrome)
 
 
 def _prefix_families() -> set[str]:

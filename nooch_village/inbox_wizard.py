@@ -19,9 +19,9 @@ INTENTS = [
         "key": "info",
         "label": "Info delen, halen of vastleggen",
         "options": [
+            {"q": "Even iemand pingen?", "otype": "ping", "label": "Ping iemand", "ready": True},
             {"q": "Moet het besproken worden?", "otype": "tactical",
              "label": "Op het werkoverleg zetten", "ready": False},
-            {"q": "Wil je het vastleggen?", "otype": "note", "label": "Note toevoegen", "ready": True},
         ],
     },
     {
@@ -54,7 +54,7 @@ INTENTS = [
 # dan legt de handler zelf 'geen uitkomst' vast in het record. Eén sluitmodel.
 
 # Leesbaar label per uitkomst-type (voor het verwerk-record en de historie).
-OTYPE_LABEL = {"note": "note", "action": "actie", "project": "project",
+OTYPE_LABEL = {"ping": "ping", "note": "note", "action": "actie", "project": "project",
                "roloverleg": "roloverleg-punt", "tactical": "werkoverleg-punt",
                "none": "afgehandeld zonder uitkomst"}
 
