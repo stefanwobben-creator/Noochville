@@ -89,6 +89,38 @@ class MetricStore:
                 return True
         return False
 
+    def set_tile_dim(self, node: str, tid: str, dim: str, form: str = "") -> bool:
+        """Segmenteer één tegel: wissel de dimensie (bv. per land / per product / over tijd). Optioneel
+        meteen een passende vorm meesturen (de segmentatie bepaalt welke weergaves kloppen)."""
+        dim = (dim or "").strip() or "none"
+        for t in self._tiles.get(node, []):
+            if t.get("id") == tid:
+                t["dim"] = dim
+                if form:
+                    t["form"] = form
+                self._save()
+                return True
+        return False
+
+    def set_tile_compare(self, node: str, tid: str, cmp_source: str = "",
+                         cmp_measure: str = "", cmp_dim: str = "over_tijd") -> bool:
+        """Koppel (of ontkoppel) een tweede meting aan een tegel voor een metric-vs-metric combo
+        (staaf + lijn, dubbele as). Leeg cmp_measure → vergelijking eraf."""
+        cmp_measure = (cmp_measure or "").strip()
+        for t in self._tiles.get(node, []):
+            if t.get("id") == tid:
+                if not cmp_measure:
+                    t.pop("cmp_source", None)
+                    t.pop("cmp_measure", None)
+                    t.pop("cmp_dim", None)
+                else:
+                    t["cmp_source"] = (cmp_source or t.get("source") or "").strip()
+                    t["cmp_measure"] = cmp_measure
+                    t["cmp_dim"] = (cmp_dim or "over_tijd").strip()
+                self._save()
+                return True
+        return False
+
     def migrate_metric_bindings(self, defs) -> dict:
         """Wezen-sweep (idempotent): systeem-KPI's met ontbrekende `veld`/`categorie` krijgen die alsnog
         uit hun catalogus-def (alleen lege velden vullen; niet-afleidbare → rapporteren, niet gokken).

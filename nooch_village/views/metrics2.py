@@ -65,6 +65,67 @@ def _forms_for(dim: str) -> list[str]:
     return ["getal"]
 
 
+def _source_of(st, rec, sid: str):
+    for s in _sources_for(st, rec):
+        if s["id"] == sid:
+            return s
+    return None
+
+
+def _series_dim(s: dict) -> str:
+    """De reeks-dimensie (over tijd) die deze bron aanbiedt, of "" als de bron geen reeks kent."""
+    dims = {d for d, _l in (s.get("dims") or [])}
+    for cand in ("over_tijd", "time"):
+        if cand in dims:
+            return cand
+    return ""
+
+
+def _segment_menu(st, rec, node: str, tile: dict, csrf: str) -> str:
+    """Segmentatie-schakelaar: wissel de dimensie van deze tegel (over tijd / per land / per product /
+    totaal). Alleen tonen als de bron meer dan één dimensie aanbiedt."""
+    s = _source_of(st, rec, tile.get("source"))
+    dims = (s.get("dims") if s else None) or []
+    if len(dims) < 2:
+        return ""
+    cur = tile.get("dim", "none")
+    items = []
+    for did, dl in dims:
+        on = " on" if did == cur else ""
+        items.append(_post("metrics2_dim", node, dl, f"menuitem{on}", csrf,
+                           tid=tile.get("id", ""), dim=did, form=_default_form(did)))
+    cur_lbl = dict(dims).get(cur, cur)
+    return (f"<details class='cardmenu'><summary class='statustrigger' aria-label='segment kiezen'>"
+            f"↔ {_e(cur_lbl)} <span class='caret'>▾</span></summary>"
+            f"<div class='cardmenu-b'><div class='menu-h'>Segment</div>{''.join(items)}</div></details>")
+
+
+def _compare_menu(st, rec, node: str, tile: dict, csrf: str) -> str:
+    """Metric-vs-metric: koppel een tweede reeks als lijn over deze staven (combo, dubbele as). Alleen
+    zinvol op een reeks-tegel (over tijd); anders verborgen. 'Geen' haalt de vergelijking eraf."""
+    if tile.get("dim") not in _SERIES_DIMS:
+        return ""
+    cur = tile.get("cmp_measure") or ""
+    items = [_post("metrics2_compare", node, "— geen —", "menuitem" + ("" if cur else " on"), csrf,
+                   tid=tile.get("id", ""), cmp_source="", cmp_measure="", cmp_dim="")]
+    for s in _sources_for(st, rec):
+        sdim = _series_dim(s)
+        if not sdim:
+            continue
+        for mid, ml in s["measures"]:
+            if s["id"] == tile.get("source") and mid == tile.get("measure"):
+                continue                                  # jezelf combineren heeft geen zin
+            on = " on" if (cur == mid) else ""
+            items.append(_post("metrics2_compare", node, f"{ml} · {s['label']}", f"menuitem{on}", csrf,
+                               tid=tile.get("id", ""), cmp_source=s["id"], cmp_measure=mid, cmp_dim=sdim))
+    if len(items) < 2:
+        return ""
+    lbl = "vergelijk" if not cur else f"vs {_e(cur)}"
+    return (f"<details class='cardmenu'><summary class='statustrigger' aria-label='meting vergelijken'>"
+            f"⇄ {lbl} <span class='caret'>▾</span></summary>"
+            f"<div class='cardmenu-b'><div class='menu-h'>Vergelijk met</div>{''.join(items)}</div></details>")
+
+
 def _weergave_menu(node: str, tile: dict, csrf: str) -> str:
     """Dropdown om de vorm van deze tegel te wisselen (POST → metrics2_form). Alleen tonen als er
     echt wat te kiezen valt (meer dan één passende vorm)."""
@@ -153,9 +214,13 @@ def _favorites(st, rec, tiles, csrf: str, win: str, compare: bool, van: str, tot
         # (weergave-schakelaar + verwijderen van het dashboard) zodat 'verwijderen' op /metrics2 blijft.
         chart = _render_tile(st, rec, t, start, "", end=end, compare=compare, prev_win=prev_win,
                              actueel=(win == "actueel"), win=win, now=now)
-        weergave = _weergave_menu(node, t, csrf)
+        segment = _segment_menu(st, rec, node, t, csrf)
+        # bij een actieve combo bepaalt de combo de visual → geen losse weergave-keuze
+        weergave = "" if t.get("cmp_measure") else _weergave_menu(node, t, csrf)
+        vergelijk = _compare_menu(st, rec, node, t, csrf)
         rm = _post("metrics2_unfav", node, "verwijderen", "dellink", csrf, tid=t.get("id", ""))
-        foot = f"<div class='tile-foot'>{weergave}<div class='tile-foot-r'>{rm}</div></div>"
+        ctrls = f"<div class='tile-foot-l'>{segment}{weergave}{vergelijk}</div>"
+        foot = f"<div class='tile-foot'>{ctrls}<div class='tile-foot-r'>{rm}</div></div>"
         cells.append(f"<div class='tile-wrap'>{chart}{foot}</div>")
     return f"<div class='tile-grid'>{''.join(cells)}</div>"
 

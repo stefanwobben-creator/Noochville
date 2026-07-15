@@ -2303,6 +2303,21 @@ def _act_metrics2_form(c):
         return c.nxt, ("weergave gewijzigd" if ok else "✗ niet gevonden")
 
 
+def _act_metrics2_dim(c):
+        # Segmentatie: de dimensie van een tegel wisselen (bv. per land / per product / over tijd).
+        # De view stuurt een passende vorm mee (segmentatie bepaalt welke weergaves kloppen).
+        ok = c.st.metrics.set_tile_dim(c.g("node"), c.g("tid"), c.g("dim"), c.g("form"))
+        return c.nxt, ("gesegmenteerd" if ok else "✗ niet gevonden")
+
+
+def _act_metrics2_compare(c):
+        # Metric-vs-metric: een tweede meting koppelen (combo staaf+lijn) of leeg → vergelijking eraf.
+        g = c.g
+        ok = c.st.metrics.set_tile_compare(g("node"), g("tid"), g("cmp_source"),
+                                           g("cmp_measure"), g("cmp_dim") or "over_tijd")
+        return c.nxt, ("vergelijking ingesteld" if ok else "✗ niet gevonden")
+
+
 def _act_notif_add(c):
         # Zelf een spanning toevoegen (GlassFrog-capture): vrij tekstveld + vanuit welke rol je 'm voelt.
         # Landt in je eigen inbox om daarna te verwerken. Leeg → niets.
@@ -2943,6 +2958,8 @@ ACTIONS = {
     "metrics2_fav": _act_metrics2_fav,
     "metrics2_unfav": _act_metrics2_unfav,
     "metrics2_form": _act_metrics2_form,
+    "metrics2_dim": _act_metrics2_dim,
+    "metrics2_compare": _act_metrics2_compare,
 
     "ai_reply": _act_ai_reply,
     "proj_feed": _act_proj_feed,

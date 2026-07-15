@@ -256,6 +256,49 @@ def _bar_chart_svg(points, unit: str = "") -> str:
             f"preserveAspectRatio='xMidYMid meet'>{axis}{ylab}{xlab}{bars}</svg>")
 
 
+def _combo_svg(a_points, b_points, a_label: str = "", b_label: str = "") -> str:
+    """Metric-vs-metric combo: reeks A als staven (linker-as, groen), reeks B als lijn (rechter-as,
+    koraal). Dubbele y-as, want twee metingen met mogelijk verschillende eenheden. Fail-loud als een
+    van beide geen reeks levert (geen verzonnen nul-lijn)."""
+    a = [(p[0], p[1]) for p in (a_points or []) if isinstance(p[1], (int, float))]
+    b = [(p[0], p[1]) for p in (b_points or []) if isinstance(p[1], (int, float))]
+    if not a or not b:
+        return "<div class='muted kc-hint'>geen twee reeksen om te combineren in dit venster</div>"
+    import datetime as _dt
+    W, H = 300.0, 140.0
+    ml, mr, mt, mb = 34.0, 32.0, 10.0, 20.0
+    iw, ih = W - ml - mr, H - mt - mb
+    xs = [t for t, _ in a] + [t for t, _ in b]
+    x0, x1 = min(xs), max(xs); xspan = (x1 - x0) or 1.0
+    amax = max(v for _, v in a); amin = min(0, min(v for _, v in a)); aspan = (amax - amin) or 1.0
+    bmax = max(v for _, v in b); bmin = min(0, min(v for _, v in b)); bspan = (bmax - bmin) or 1.0
+    fx = lambda t: ml + (t - x0) / xspan * iw
+    fya = lambda v: mt + (1 - (v - amin) / aspan) * ih
+    fyb = lambda v: mt + (1 - (v - bmin) / bspan) * ih
+    slot = iw / max(1, len(a)); bw = slot * 0.6; y0 = fya(0)
+    bars = ""
+    for t, v in a:
+        x = fx(t) - bw / 2; yv = fya(v); top = min(yv, y0); h = abs(yv - y0)
+        bars += (f"<rect x='{x:.1f}' y='{top:.1f}' width='{max(1.0, bw):.1f}' "
+                 f"height='{max(0.5, h):.1f}' rx='1' fill='var(--green)' opacity='.6'/>")
+    poly = " ".join(f"{fx(t):.1f},{fyb(v):.1f}" for t, v in b)
+    line = f"<polyline points='{poly}' fill='none' stroke='var(--coral)' stroke-width='1.8'/>"
+    dots = "".join(f"<circle cx='{fx(t):.1f}' cy='{fyb(v):.1f}' r='2.2' fill='var(--coral)'/>" for t, v in b)
+    axis = (f"<line x1='{ml:.1f}' y1='{mt:.1f}' x2='{ml:.1f}' y2='{mt+ih:.1f}' stroke='var(--border)' stroke-width='1'/>"
+            f"<line x1='{ml+iw:.1f}' y1='{mt:.1f}' x2='{ml+iw:.1f}' y2='{mt+ih:.1f}' stroke='var(--border)' stroke-width='1'/>"
+            f"<line x1='{ml:.1f}' y1='{mt+ih:.1f}' x2='{ml+iw:.1f}' y2='{mt+ih:.1f}' stroke='var(--border)' stroke-width='1'/>")
+    ylab = (f"<text x='{ml-4:.1f}' y='{fya(amax)+3:.1f}' text-anchor='end' font-size='9' fill='var(--green-dark)'>{_num(amax)}</text>"
+            f"<text x='{ml+iw+4:.1f}' y='{fyb(bmax)+3:.1f}' text-anchor='start' font-size='9' fill='var(--coral)'>{_num(bmax)}</text>")
+    fmt = lambda t: _dt.datetime.fromtimestamp(t).strftime('%d-%m')
+    xlab = (f"<text x='{ml:.1f}' y='{H-5:.1f}' text-anchor='start' font-size='9' fill='var(--muted)'>{_e(fmt(x0))}</text>"
+            f"<text x='{ml+iw:.1f}' y='{H-5:.1f}' text-anchor='end' font-size='9' fill='var(--muted)'>{_e(fmt(x1))}</text>")
+    svg = (f"<svg class='combochart' viewBox='0 0 {W:.0f} {H:.0f}' width='100%' height='140' "
+           f"preserveAspectRatio='xMidYMid meet'>{axis}{ylab}{xlab}{bars}{line}{dots}</svg>")
+    legend = (f"<div class='muted'><span class='chip'>{_e(a_label)} (staaf)</span> "
+              f"<span class='chip amber'>{_e(b_label)} (lijn)</span></div>")
+    return f"{svg}{legend}"
+
+
 _CAT_PALETTE = ["var(--green)", "var(--green-dark)", "var(--yellow)", "var(--coral)", "var(--subtle)", "var(--muted)"]
 
 
@@ -1151,7 +1194,13 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
         if compare and prev_win and prev_win[0] is not None:
             prev_res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), prev_win[0], prev_win[1])
         # De VISUAL (grafiek/meter/bars) — zonder eigen headline-getal; het skelet levert de headline.
-        if form == "burnup":
+        cmp_meas = tile.get("cmp_measure")
+        if cmp_meas:                                     # metric-vs-metric combo (staaf A + lijn B, dubbele as)
+            b_res = _fetch(st, tile.get("cmp_source") or tile["source"], cmp_meas,
+                           tile.get("cmp_dim", "over_tijd"), cutoff, end_eff)
+            visual = _combo_svg(res.get("points") or [], b_res.get("points") or [],
+                                tile["measure"], cmp_meas)
+        elif form == "burnup":
             visual = _render_burnup(res, tile.get("target"), gp)
         elif form in ("doelmeter", "bullet"):          # bullet = de definitieve naam (Tufte-beslistabel)
             visual = _render_bullet(res, tile.get("target"), g.get("richting"), g.get("benchmark"), agg=agg)
@@ -1168,7 +1217,7 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
         head = "" if form == "burnup" else _tile_headline(res, agg, win, cutoff, end_eff, now)
         body = head + visual
         # Delta alleen bij 'Vergelijk met vorige periode': aggregaat huidig venster vs. vorig, zelfde regel.
-        if compare and prev_res is not None and res.get("chart") != "line":
+        if compare and prev_res is not None and res.get("chart") != "line" and not cmp_meas:
             body += _compare_delta(res, prev_res, agg=agg)
         # Uitklap: de exacte ruwe datapunten (datum · waarde · bron) — zelfde dataset als de grafiek.
         data = ""

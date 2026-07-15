@@ -581,7 +581,8 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .tile{border:1px solid var(--border);border-radius:var(--radius);padding:.6rem .7rem;background:var(--surface);min-width:0}
 .tile-wrap{display:flex;flex-direction:column;gap:.35rem;min-width:0}
 .tile-wrap>.tile{flex:1 1 auto}
-.tile-foot{display:flex;align-items:center;justify-content:space-between;gap:.5rem;font-size:.8rem}
+.tile-foot{display:flex;align-items:center;justify-content:space-between;gap:.5rem;font-size:.8rem;flex-wrap:wrap}
+.tile-foot-l{display:inline-flex;align-items:center;gap:.5rem;flex-wrap:wrap}
 .tile-foot-r{display:inline-flex;align-items:center;gap:.4rem}
 .tile-h{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.4rem}
 .tile-t{font-size:.74rem;color:var(--subtle);font-weight:700;text-transform:uppercase;letter-spacing:.03em}
