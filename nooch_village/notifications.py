@@ -61,8 +61,10 @@ class NotifStore:
         return "gelezen" if n.get("read") else "nieuw"
 
     def open_for_targets(self, targets) -> list[dict]:
-        """De inbox-wachtrij: NIET-gearchiveerde notificaties voor deze doelen, nieuwste eerst."""
-        return [n for n in self.for_targets(targets) if not n.get("archived")]
+        """De inbox-wachtrij: NIET-gearchiveerde, NIET-weggegooide notificaties voor deze doelen, nieuwste
+        eerst."""
+        return [n for n in self.for_targets(targets)
+                if not n.get("archived") and not n.get("deleted")]
 
     def _find(self, notif_id: str) -> dict | None:
         return next((n for n in self._items if n.get("id") == notif_id), None)
@@ -98,6 +100,59 @@ class NotifStore:
         if n is None or not n.get("processed"):
             return False
         n["archived"] = True
+        self._save()
+        return True
+
+    # ── verwerk-record: stapelbare uitkomsten per spanning (mens én AI) ─────────────
+    def add_outcome(self, notif_id: str, intent: str = "", otype: str = "", ref: str = "",
+                    label: str = "", by: str = "") -> dict | None:
+        """Voeg een uitkomst toe aan het verwerk-record van een item ZONDER het te sluiten. Zo kun je
+        meerdere uitkomsten op één spanning stapelen (het item blijft open) tot je expliciet 'klaar' bent.
+        Elke entry legt intentie, uitkomst-type, een verwijzing, een leesbaar label, wie en wanneer vast:
+        het gedrag-record dat je later op een raadsvergadering kunt bespreken (stopt een rol bij de eerste
+        uitkomst of haalt hij er meer uit?). Zet het item op 'gelezen'. Onbekend id → None."""
+        n = self._find(notif_id)
+        if n is None:
+            return None
+        entry = {"intent": str(intent)[:40], "otype": str(otype)[:40], "ref": str(ref)[:120],
+                 "label": str(label)[:200], "by": str(by)[:80], "at": time.time()}
+        n.setdefault("verwerkingen", []).append(entry)
+        n["read"] = True
+        self._save()
+        return entry
+
+    def mark_done(self, notif_id: str, by: str = "") -> bool:
+        """Sluit een item ('klaar'): het is verwerkt. De gestapelde uitkomsten in `verwerkingen` blijven
+        als record staan. Gebruik na add_outcome(s), of direct voor een FYI zonder uitkomst."""
+        n = self._find(notif_id)
+        if n is None:
+            return False
+        n["read"] = True
+        n["processed"] = True
+        if by:
+            n["processed_by"] = str(by)[:80]
+        self._save()
+        return True
+
+    @staticmethod
+    def verwerkingen_of(n: dict) -> list[dict]:
+        """Het verwerk-record van een item, oudste eerst. Backward-compat: een oud item met alleen een
+        enkel `outcome`-veld wordt als één entry getoond."""
+        vs = list(n.get("verwerkingen") or [])
+        if vs:
+            return vs
+        if n.get("outcome"):
+            return [{"intent": "", "otype": "", "ref": "", "label": n.get("outcome"),
+                     "by": n.get("processed_by", ""), "at": n.get("at")}]
+        return []
+
+    def delete_item(self, notif_id: str) -> bool:
+        """Prullenbak: haal ruis die je niet wilt verwerken uit de wachtrij. Anders dan archiveren mag dit
+        ook op een nog-niet-verwerkt item. Zacht (dismissed-vlag), zodat de data niet echt verdwijnt."""
+        n = self._find(notif_id)
+        if n is None:
+            return False
+        n["deleted"] = True
         self._save()
         return True
 

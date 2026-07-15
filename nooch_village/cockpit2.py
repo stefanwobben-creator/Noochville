@@ -35,6 +35,7 @@ from nooch_village.cockpit2_util import (
 from nooch_village.views.feed import (
     _feed_norm, _feed_who, _mentionables, _mentions_in,
     _hilite_mentions, _feed_entry_html, _feed_author_options,
+    _wall_outcome_opts,
 )
 from nooch_village.governance import Records
 from nooch_village.people import PeopleStore
@@ -224,7 +225,7 @@ from nooch_village.views.catalog import (
     _catalog_add_form, render_catalog,
 )
 from nooch_village.views.signals import render_signals
-from nooch_village.views.inbox import render_inbox
+from nooch_village.views.inbox import render_inbox, render_verwerk
 
 
 from nooch_village.views.noochie import (
@@ -2155,19 +2156,16 @@ def _act_wall_outcome(c):
         otype = g("otype")
         src_pid, src_eid = g("pid"), g("item")
         content = (g("content") or "").strip()       # bewerkbaar inhoud-veld, voorgevuld met de comment-tekst
-        toel = (g("toelichting") or "").strip()       # verplichte rationale
         # Herkomst verplicht: zonder geldige bron-comment geen uitkomst.
         src_p = pj.get(src_pid)
         src_entry = next((e for e in (src_p or {}).get("log", []) if e.get("id") == src_eid), None) if src_p else None
         if src_p is None or src_entry is None:
             return nxt, "✗ bron-comment niet gevonden — een uitkomst vereist herkomst"
-        if not toel:
-            return nxt, "✗ toelichting is verplicht"
         if not content:
             return nxt, "✗ inhoud is verplicht"
         actor = st.people.by_email(username)
         aid = actor.id if actor else ""
-        prov = f"↳ uit wall-comment op {src_pid}#{src_eid} — {toel}"   # herkomst + rationale
+        prov = f"↳ uit wall-comment op {src_pid}#{src_eid}"   # herkomst (geen verplichte rationale)
         title = content[:60]
         _LBL = {"info": "info gedeeld", "project": "project", "action": "actie",
                 "note": "note", "roloverleg": "roloverleg-punt"}
@@ -2235,8 +2233,8 @@ def _act_wall_outcome(c):
         else:
             return nxt, "✗ onbekende uitkomst"
 
-        # Systeem-entry op de BRON-wall: de audittrail (met toelichting) leeft op de wall.
-        pj.add_feed_entry(src_pid, f"→ {_LBL[otype]} aangemaakt: {title} — {toel}",
+        # Systeem-entry op de BRON-wall: de audittrail (met herkomst) leeft op de wall.
+        pj.add_feed_entry(src_pid, f"→ {_LBL[otype]} aangemaakt: {title}",
                           kind="system", author_type="human", author_id=aid)
         # Kwam dit uit de inbox (nid meegegeven)? Dan is die mention nu verwerkt: leg de uitkomst + reden
         # vast als historie en haal 'm uit de nieuw/gelezen-wachtrij. Eén klik: uitkomst maken én afvinken.
@@ -2256,11 +2254,102 @@ def _act_notif_processed(c):
         return c.nxt, "✓ verwerkt"
 
 
-def _act_notif_done(c):
-        # 'Afgehandeld, geen uitkomst': een pure FYI die je gezien hebt, zonder dat er een project/actie/
-        # note uit hoeft. Zet 'm verwerkt met die reden als historie (keuze 2: vijf uitkomsten + deze klep).
-        c.st.notif.mark_item_processed(c.g("nid"), outcome="afgehandeld, geen uitkomst")
-        return c.nxt, "✓ afgehandeld (geen uitkomst)"
+def _act_notif_delete(c):
+        # Prullenbak: ruis die je niet wilt verwerken uit de wachtrij halen (zacht, dismissed-vlag).
+        ok = c.st.notif.delete_item(c.g("nid"))
+        return c.nxt, ("🗑 weggegooid" if ok else "✗ item niet gevonden")
+
+
+def _act_notif_klaar(c):
+        # 'Klaar met deze spanning': het ENIGE sluitmodel. Sloot je met nul uitkomsten, dan legt de handler
+        # zelf 'geen uitkomst' vast (zichtbaar voor de raadsvergadering). Redirect naar de inbox met de
+        # zojuist-verwerkte spanning gemarkeerd — een klein viermoment.
+        st, nid = c.st, c.g("nid")
+        n = st.notif._find(nid)
+        if n is not None and not st.notif.verwerkingen_of(n):
+            st.notif.add_outcome(nid, intent="none", otype="none", label="geen uitkomst")
+        actor = st.people.by_email(c.username) if c.username and c.username != "guest" else None
+        by = _person_name(st, actor.id) if actor else ""
+        st.notif.mark_done(nid, by=by)
+        return f"/inbox?done={nid}", "✓ klaar met deze spanning 🎉"
+
+
+def _act_notif_outcome(c):
+        # Eén uitkomst vastleggen vanuit de verwerk-wizard: maak 'm via dezelfde _outcome_*-helpers als de
+        # wall (met de bron-spanning als herkomst) ÉN voeg 'm toe aan het verwerk-record. Sluit het item
+        # NIET — zo kun je meerdere uitkomsten op één spanning stapelen; 'Klaar' sluit pas.
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        from nooch_village.inbox_wizard import intent_of, OTYPE_LABEL
+        nid = g("nid")
+        n = st.notif._find(nid)
+        if n is None:
+            return nxt, "✗ spanning niet gevonden"
+        otype = g("otype")
+        content = (g("content") or "").strip()
+        if not content:
+            return nxt, "✗ inhoud is verplicht"
+        src_pid, src_eid = n.get("project_id", ""), n.get("entry_id", "")
+        src_p = pj.get(src_pid) if src_pid else None
+        actor = st.people.by_email(username) if username and username != "guest" else None
+        aid = actor.id if actor else ""
+        by_name = _person_name(st, aid) if aid else (username or "")
+        prov = f"↳ uit inbox-spanning {nid}"
+        label = OTYPE_LABEL.get(otype, otype)
+        made = ""
+        if otype == "project":
+            owner = g("owner")
+            if not owner:
+                return nxt, "✗ kies een rol-eigenaar voor het project"
+            _deny = (_member_gate(resolve_circle_id(owner, st.records), username, st)
+                     if owner.startswith(_II_PREFIX) else _role_gate(owner, username, st))
+            if _deny:
+                return nxt, _deny
+            orec = st.records.get(owner)
+            if orec is not None and org.is_circle(orec):
+                return nxt, "✗ een cirkel kan geen project bevatten — kies een rol"
+            _outcome_project(st, owner, content, provenance=prov, actor_id=aid)
+            made = f"{label}: {content[:60]}"
+        elif otype == "action":
+            pid_link = g("pid_link")
+            tgt = pj.get(pid_link)
+            if tgt is None:
+                return nxt, "✗ doel-project niet gevonden"
+            _deny = _role_gate(tgt.get("owner") or "", username, st)
+            if _deny:
+                return nxt, _deny
+            _outcome_action(st, pid_link, content)
+            _prov_feed(st, pid_link, prov, aid)
+            pj.reopen(pid_link)
+            made = f"{label}: {content[:60]}"
+        elif otype == "note":
+            note_role = g("note_role")
+            if not note_role:
+                return nxt, "✗ kies een rol voor de note"
+            _deny = _artefact_gate(note_role, username, st)
+            if _deny:
+                return nxt, _deny
+            if len(content) > 4000:
+                return nxt, f"✗ note te lang ({len(content)}/4000) — kort in"
+            _outcome_note(st, note_role, content, actor_id=aid, change_note=prov)
+            made = f"{label} bij {_name(st.records.get(note_role))}"
+        elif otype == "roloverleg":
+            if src_p is None:
+                return nxt, "✗ geen bron-cirkel voor een roloverleg-punt"
+            circle = resolve_circle_id(src_p.get("owner") or "", st.records)
+            _deny = _member_gate(circle, username, st)
+            if _deny:
+                return nxt, _deny
+            _outcome_roloverleg(st, circle, content[:60], content[:60], content,
+                                by=f"inbox:{nid}", provenance=prov)
+            made = f"{label}: {content[:60]}"
+        else:
+            return nxt, "✗ onbekende uitkomst"
+        # Audittrail op de bron-wall (als er een bron is) + de uitkomst in het verwerk-record.
+        if src_pid:
+            pj.add_feed_entry(src_pid, f"→ {label} aangemaakt uit inbox: {content[:60]}",
+                              kind="system", author_type="human", author_id=aid)
+        st.notif.add_outcome(nid, intent=intent_of(otype), otype=otype, label=made, by=by_name)
+        return nxt, f"✓ {label} vastgelegd — nog een uitkomst, of klik Klaar."
 
 
 def _act_notif_archive(c):
@@ -2778,7 +2867,9 @@ ACTIONS = {
     "wall_outcome": _act_wall_outcome,
     "notif_read": _act_notif_read,
     "notif_processed": _act_notif_processed,
-    "notif_done": _act_notif_done,
+    "notif_outcome": _act_notif_outcome,
+    "notif_klaar": _act_notif_klaar,
+    "notif_delete": _act_notif_delete,
     "notif_archive": _act_notif_archive,
 
     "ai_reply": _act_ai_reply,
@@ -3072,7 +3163,15 @@ def make_handler(data_dir: str, csrf_token: str,
                 if username and username != "guest":
                     _p = st.people.by_email(username)
                     nm = _p.name if _p else ""
-                self._send(render_inbox(st, tgts, csrf_token=effective_csrf, naam=nm))
+                done = (qs.get("done") or [""])[0]
+                self._send(render_inbox(st, tgts, csrf_token=effective_csrf, naam=nm, done=done))
+                return
+            if path == "/inbox/verwerk":
+                # De twee-panelen-verwerkpagina voor één spanning: links de spanning, rechts de wizard.
+                nid = (qs.get("nid") or [""])[0]
+                n = st.notif._find(nid)
+                ro, po = _wall_outcome_opts(st) if n is not None else ("", "")
+                self._send(render_verwerk(st, n, csrf_token=effective_csrf, role_opts=ro, pj_opts=po))
                 return
             if path == "/catalog":
                 # AUTHZ: anchor-lead — het overzicht is publiek; de geïntegreerde koppel-sectie (ruw veld

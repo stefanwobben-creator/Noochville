@@ -124,7 +124,8 @@ def _wall_outcome_form(pid: str, eid: str, csrf: str, prefill: str, role_opts: s
     """Discrete '→ uitkomst'-actie bij een bron-comment: route 'm naar één van de vijf bestaande
     uitkomsten. Progressive disclosure per type (mirror van het werkoverleg oc_details). De inhoud is
     bewerkbaar en voorgevuld met de comment-tekst (voor project/action kort je 'm typisch in tot een
-    titel; voor note/info blijft de volle tekst logisch). De toelichting is verplicht (rationale).
+    titel; voor note/info blijft de volle tekst logisch). Geen toelichting-veld: wil je context, vraag 'm
+    aan de indiener.
 
     Herbruikbaar: `extra_hid` voegt extra verborgen velden toe aan elk formulier (de inbox geeft zo een
     `nid` + `next=/inbox` mee zodat dezelfde `wall_outcome`-handler het inbox-item op verwerkt zet).
@@ -141,9 +142,6 @@ def _wall_outcome_form(pid: str, eid: str, csrf: str, prefill: str, role_opts: s
                 f"<label class='att-lbl'>Inhoud (bewerkbaar)</label>"
                 f"<textarea name='content' rows='2'>{_e(prefill)}</textarea>"
                 f"{target_field}"
-                f"<label class='att-lbl'>Toelichting (verplicht)</label>"
-                f"<textarea name='toelichting' rows='2' required "
-                f"placeholder='waarom deze uitkomst?'></textarea>"
                 f"<button class='btn sm' type='submit' name='action' value='wall_outcome'>Vastleggen</button>"
                 f"</form></details>")
 

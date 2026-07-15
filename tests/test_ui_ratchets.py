@@ -39,7 +39,7 @@ _LABEL_WHITELIST = {
     "views/backlog.py": 2,
     "views/catalog_koppelen.py": 7,
     "views/checklists.py": 4,
-    "views/feed.py": 5,
+    "views/feed.py": 4,
     "views/metrics.py": 11,
     "views/overview.py": 12,
     "views/projects.py": 8,
