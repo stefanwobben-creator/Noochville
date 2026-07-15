@@ -22,7 +22,7 @@ CIRCLE = "mother_earth__nooch"
 # Per-bestand plafond voor bestaande inline style=-schuld (audit dd 2026-07-05, totaal 137).
 # Niet-vermelde governeerde views moeten 0 zijn (schoon). Verlaag een getal zodra je opruimt.
 _STYLE_WHITELIST = {
-    "views/overview.py": 34,
+    "views/overview.py": 33,
     "views/projects.py": 19,
     "views/strategy.py": 14,
     "views/werkoverleg.py": 13,

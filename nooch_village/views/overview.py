@@ -15,7 +15,8 @@ from nooch_village.cockpit2_util import (
 )
 from nooch_village.views.feed import _mentionables
 from nooch_village.views.checklists import _checklists_tab_html, _cl_row
-from nooch_village.views.metrics import _metrics_tab_html
+from nooch_village.views.metrics import _metrics_tab_html, _METRICS_JS
+from nooch_village.views.metrics2 import render_metrics2_tab, render_metrics2_person
 from nooch_village.views.strategy import _strategy_tab_html
 from nooch_village.views.backlog import render_backlog_tab
 from nooch_village.views.projects import (
@@ -702,7 +703,9 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
                    + _artefact_tab_html(st, rec, "tool", csrf_token, username,
                                         titel="Tools", leeg="Nog geen tools op deze rol/cirkel."))
     elif tab == "metrics":
-        content = _metrics_tab_html(st, rec, csrf_token, win=mw, van=van, tot=tot, compare=compare)
+        # Het nieuwe metrics-scherm (catalogus + dashboard + segmentatie + vergelijken), ingebed als
+        # node-tab. Vervangt het oude _metrics_tab_html; KPI-aanmaken loopt via de rijke composer.
+        content = render_metrics2_tab(st, rec, csrf_token, win=mw, compare=compare, van=van, tot=tot)
     elif tab == "checklists":
         content = _checklists_tab_html(st, rec, csrf_token, flt=clf)
     elif tab == "projects":
@@ -757,8 +760,8 @@ def _person_context_tab_html(st: _Stores, filler_type: str, pid: str) -> str:
 
 
 def _person_metrics_tab_html(st: _Stores, filler_type: str, pid: str) -> str:
-    """Aggregatie-lens: DEZELFDE metric-render als op rol-niveau (_metrics_tab_html, mét grafieken),
-    per rol die deze filler vervult. Read-only (csrf=""), dus geen '+ KPI maken'/data-invoer. Geen
+    """Aggregatie-lens: DEZELFDE metric-render als op rol-niveau (het nieuwe metrics-scherm, mét
+    grafieken), per rol die deze filler vervult. Read-only, dus geen '+ KPI maken'/data-invoer. Geen
     tweede render — een KPI/grafiek die je op een rol toevoegt, verschijnt hier automatisch
     (reference, not copy)."""
     out = ""
@@ -766,10 +769,13 @@ def _person_metrics_tab_html(st: _Stores, filler_type: str, pid: str) -> str:
         rec = st.records.get(rid)
         if rec is None or not st.metrics.tiles_of(rid):
             continue
-        out += (f"<h4 class='muted' style='margin:.6rem 0 .2rem'>{_e(_name(rec))}</h4>"
-                + _metrics_tab_html(st, rec, csrf=""))
-    return out or ("<div class='c2-sec'><span class='muted'>Geen metrics op de rollen van "
-                   "deze persoon.</span></div>")
+        base = f"/node?id={_e(rid)}&tab=metrics"
+        out += (f"<h4 class='muted'>{_e(_name(rec))}</h4>"
+                + render_metrics2_person(st, rec, base))
+    if not out:
+        return ("<div class='c2-sec'><span class='muted'>Geen metrics op de rollen van "
+                "deze persoon.</span></div>")
+    return out + _METRICS_JS      # één keer de kaart-omdraai-JS voor alle rol-tegels samen
 
 
 def _person_checklists_tab_html(st: _Stores, filler_type: str, pid: str, csrf: str) -> str:

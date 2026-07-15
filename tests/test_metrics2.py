@@ -87,7 +87,7 @@ def test_moment_tegel_heeft_geen_weergave_keuze(tmp_path):
                        "dim": ["none"], "form": ["getal"], "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
     from nooch_village.views import metrics2
-    assert metrics2._weergave_menu(_NODE, st.metrics.tiles_of(_NODE)[0], "t") == ""
+    assert metrics2._weergave_menu(_NODE, st.metrics.tiles_of(_NODE)[0], "t", "/") == ""
 
 
 # ── deel 3: segmentatie ────────────────────────────────────────────────────────
@@ -139,3 +139,30 @@ def test_combo_svg_faalt_luid_zonder_twee_reeksen(tmp_path):
     assert "geen twee reeksen" in _combo_svg([], [(1, 2)], "a", "b")
     out = _combo_svg([(1, 5), (2, 7)], [(1, 3), (2, 4)], "Bezoekers", "Orders")
     assert "combochart" in out and "staaf" in out and "lijn" in out
+
+
+# ── vervanging: metrics-node-tab toont het nieuwe scherm + KPI-maken ────────────
+
+def test_metrics_node_tab_toont_nieuw_scherm_met_kpi_maken(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    rec = st.records.get(_NODE)
+    from nooch_village.views.overview import render_node
+    html = render_node(st, _NODE, "metrics", csrf_token="t")
+    # het nieuwe scherm (catalogus + dashboard), niet het oude
+    assert "Catalogus" in html and "Mijn dashboard" in html
+    # KPI aanmaken via de juiste, rijke composer
+    assert "/kpi_new?node=" in html
+    # de tijdvenster/terugkeer blijft op de node-tab (niet wegspringen naar /metrics2)
+    assert "tab=metrics&amp;mw=" in html or "tab=metrics&mw=" in html
+    # favoriet-acties komen ook terug op de node-tab
+    assert "metrics2_fav" in html
+
+
+def test_kpi_new_composer_gebruikt_juiste_flow(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    from nooch_village.views.metrics import render_kpi_composer
+    html = render_kpi_composer(st, _NODE, csrf_token="t")
+    assert "tile_add" in html                               # de canonieke KPI-composer-actie
+    assert "tab=metrics" in html                            # keert terug naar de metrics-tab

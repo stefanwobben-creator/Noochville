@@ -1424,6 +1424,44 @@ _METRICS_JS = """<script>(function(){
 })();</script>"""
 
 
+def _metrics_manage_html(st: _Stores, rec, csrf: str = "") -> str:
+    """Het beheer-blok onder het dashboard: eigen (handmatige) KPI's om data in te voeren, de aanvullende
+    lijst systeem-KPI's (automatisch gevoed, nog niet getegeld), en links naar externe cijfers. Eén bron,
+    hergebruikt door zowel het oude als het nieuwe metrics-scherm zodat er niets verloren gaat."""
+    out = ""
+    tiles = st.metrics.tiles_of(rec.id)
+    kpis = [i for i in st.metrics.for_node(rec.id) if i.get("kind") == "kpi"]
+    # Systeem-KPI's die AL als tegel op dit dashboard staan niet nóg eens in de lijst tonen: de lijst is
+    # aanvullend ("wat kan ik nog meer activeren"), geen herhaling van de tegels bovenaan.
+    tiled_kids = {t.get("source", "")[4:] for t in tiles if t.get("source", "").startswith("kpi:")}
+    # Een systeembron-KPI (bron/auto/meetwijze) hoort NOOIT in de invoer-sectie — hij heeft geen handmatige
+    # meting. Het criterium is _is_system_kpi (meetwijze/auto/origin/source), niet alleen `source`.
+    handmatig = [i for i in kpis if not _is_system_kpi(i)]
+    systeem = [i for i in kpis if _is_system_kpi(i) and i["id"] not in tiled_kids]
+    if handmatig:
+        rows = "".join(_kpi_data_row(st, i, csrf) for i in handmatig)
+        out += f"<div class='c2-sec'><div class='cl-head'><h3>Eigen KPI's (data invoeren)</h3></div>{rows}</div>"
+    if systeem:
+        rows = "".join(_kpi_data_row(st, i, csrf) for i in systeem)
+        out += f"<div class='c2-sec'><div class='cl-head'><h3>Systeem-KPI's (automatisch gevoed)</h3></div>{rows}</div>"
+    links = st.metrics.links_for(rec.id)
+    if links:
+        lc = "".join(_link_card(i, csrf) for i in links)
+        out += f"<div class='c2-sec'><div class='cl-head'><h3>Links</h3></div><div class='kpi-grid'>{lc}</div></div>"
+    return out
+
+
+def _add_link_details(rec, csrf: str, nxt: str) -> str:
+    """De '+ Link'-affordance (externe cijfers die elders leven). Gedeeld tussen oud en nieuw scherm."""
+    return (f"<details class='m-add'><summary class='btn sm'>+ Link</summary>"
+            f"<form method='post' action='/action' class='m-addform'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='node' value='{_e(rec.id)}'>"
+            f"<input type='hidden' name='next' value='{_e(nxt)}'>"
+            f"<input name='name' placeholder='Naam' autocomplete='off'>"
+            f"<input name='url' placeholder='https://…' autocomplete='off'>"
+            f"<button class='btn ok sm' type='submit' name='action' value='m_add_link'>Link toevoegen</button></form></details>")
+
+
 def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: str = "",
                       van: str = "", tot: str = "", compare: bool = False) -> str:
     import time as _t
@@ -1505,27 +1543,9 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: st
             else "<p class='muted'>Nog geen KPI's op het dashboard. Maak er een met “+ KPI maken”.</p>")
     out = f"<div class='c2-sec'>{head}</div><div class='c2-sec'><div class='tile-grid'>{dash}</div></div>{_METRICS_JS}{keys_js}"
 
-    # 2. KPI's onder deze node, gesplitst: handmatige (data invoeren) vs systeembron (automatisch gevoed).
-    # Een systeembron-KPI (bron/auto/meetwijze) hoort NOOIT in de invoer-sectie — hij heeft geen handmatige
-    # meting. Het criterium is _is_system_kpi (meetwijze/auto/origin/source), niet alleen `source`.
-    kpis = [i for i in st.metrics.for_node(rec.id) if i.get("kind") == "kpi"]
-    # Systeem-KPI's die AL als tegel op dit dashboard staan niet nóg eens in de lijst tonen: de lijst is
-    # aanvullend ("wat kan ik nog meer activeren"), geen herhaling van de tegels bovenaan.
-    tiled_kids = {t.get("source", "")[4:] for t in tiles if t.get("source", "").startswith("kpi:")}
-    handmatig = [i for i in kpis if not _is_system_kpi(i)]
-    systeem = [i for i in kpis if _is_system_kpi(i) and i["id"] not in tiled_kids]
-    if handmatig:
-        rows = "".join(_kpi_data_row(st, i, csrf) for i in handmatig)
-        out += f"<div class='c2-sec'><div class='cl-head'><h3>Eigen KPI's (data invoeren)</h3></div>{rows}</div>"
-    if systeem:
-        rows = "".join(_kpi_data_row(st, i, csrf) for i in systeem)
-        out += f"<div class='c2-sec'><div class='cl-head'><h3>Systeem-KPI's (automatisch gevoed)</h3></div>{rows}</div>"
-
-    # 3. Links naar externe bestanden (cijfers die elders leven)
-    links = st.metrics.links_for(rec.id)
-    if links:
-        lc = "".join(_link_card(i, csrf) for i in links)
-        out += f"<div class='c2-sec'><div class='cl-head'><h3>Links</h3></div><div class='kpi-grid'>{lc}</div></div>"
+    # 2/3. Het beheer-blok (eigen KPI's om data in te voeren, systeem-KPI's, links) — gedeeld met het
+    # nieuwe metrics-scherm zodat de migratie niets van deze functionaliteit verliest.
+    out += _metrics_manage_html(st, rec, csrf)
     return out
 
 
