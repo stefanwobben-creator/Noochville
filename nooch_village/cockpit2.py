@@ -2318,6 +2318,21 @@ def _act_metrics2_compare(c):
         return c.nxt, ("vergelijking ingesteld" if ok else "✗ niet gevonden")
 
 
+def _act_metrics2_formula(c):
+        # Eigen formule van twee bestaande reeks-metingen (A op B per dag), als formule-tegel.
+        st, g, username = c.st, c.g, c.username
+        _deny = _member_gate(resolve_circle_id(g("node"), st.records), username, st)
+        if _deny:
+            return c.nxt, _deny
+        f_a, f_b, f_op = g("f_a"), g("f_b"), g("f_op") or "÷"
+        f_name, f_agg = g("f_name").strip(), g("f_agg") or "gemiddelde"
+        if not (f_a and f_b and f_name):
+            return c.nxt, "Formule: kies meting A, meting B en een naam"
+        t = st.metrics.add_tile(g("node"), "formule", f_name, "none", "formule",
+                                extra={"f_a": f_a, "f_op": f_op, "f_b": f_b, "aggregatie": f_agg})
+        return c.nxt, ("✓ formule op je dashboard" if t else "⛔ kon formule niet maken")
+
+
 def _act_notif_add(c):
         # Zelf een spanning toevoegen (GlassFrog-capture): vrij tekstveld + vanuit welke rol je 'm voelt.
         # Landt in je eigen inbox om daarna te verwerken. Leeg → niets.
@@ -2960,6 +2975,7 @@ ACTIONS = {
     "metrics2_form": _act_metrics2_form,
     "metrics2_dim": _act_metrics2_dim,
     "metrics2_compare": _act_metrics2_compare,
+    "metrics2_formula": _act_metrics2_formula,
 
     "ai_reply": _act_ai_reply,
     "proj_feed": _act_proj_feed,

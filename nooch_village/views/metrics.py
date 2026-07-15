@@ -455,6 +455,18 @@ def _sources_for(st: _Stores, rec):
                                   ("afwezigheid", "Afwezigheid")],
                      "dims": [("gemiddeld", "gemiddeld per overleg"), ("totaal", "totaal"),
                               ("over_tijd", "over tijd")]})
+    # Interne bronnen die live uit de stores rekenen (geen sleutel nodig, meteen data).
+    srcs.append({"id": f"projects:{rec.id}", "label": "Projecten",
+                 "measures": [("afgerond", "Afgerond"), ("lopend", "In uitvoering"),
+                              ("doorlooptijd", "Doorlooptijd (dagen)")],
+                 "dims": [("over_tijd", "over tijd"), ("totaal", "totaal"), ("per_status", "per status")]})
+    srcs.append({"id": f"inbox:{rec.id}", "label": "Inbox / spanningen",
+                 "measures": [("verwerkt", "Verwerkt"), ("open", "Open")],
+                 "dims": [("over_tijd", "over tijd"), ("totaal", "totaal"), ("per_type", "per uitkomst")]})
+    srcs.append({"id": "co2", "label": "LLM-gebruik & CO₂",
+                 "measures": [("gram_co2e", "CO₂ (gram)"), ("calls", "LLM-calls"),
+                              ("ongeschat_calls", "Calls zonder telling")],
+                 "dims": [("over_tijd", "over tijd"), ("totaal", "totaal")]})
     nodes = [rec.id] + ([r.id for r in org.roles_of(st.records.all(), rec.id)] if is_c else [])
     for k in st.metrics.kpis_for_nodes(nodes):
         if k.get("source"):
@@ -497,8 +509,123 @@ def _werk_fetch(st: _Stores, circle: str, measure: str, dim: str, cutoff, end=No
     return {"kind": "number", "value": avg, "unit": unit}
 
 
+# ── Interne bronnen: projecten-doorstroom, inbox/spanningen, LLM-gebruik & CO₂ ──────────────────
+# Deze rekenen LIVE uit de stores (geen aparte observatie-schrijf nodig), dus ze hebben meteen data.
+# Fail-loud: geen data in het venster → lege reeks (→ 'geen data'), nooit een verzonnen nul.
+_PROJ_STATUS_LABEL = {"draft": "concept", "queued": "wachtrij", "running": "in uitvoering",
+                      "blocked": "geblokkeerd", "future": "toekomst", "done": "afgerond"}
+
+
+def _project_scope(st: _Stores, node: str) -> set:
+    """De node zelf, plus (op een cirkel) de rollen eronder — zodat een cirkel de projecten van haar
+    rollen meetelt, net als de werkoverleg-bron."""
+    rec = st.records.get(node)
+    if rec is None:
+        return {node}
+    if org.is_circle(rec):
+        return {rec.id} | {r.id for r in org.roles_of(st.records.all(), rec.id)}
+    return {rec.id}
+
+
+def _project_fetch(st: _Stores, node: str, measure: str, dim: str, cutoff, end=None):
+    projs = [p for p in st.projects.all() if p.get("owner") in _project_scope(st, node)]
+    if dim == "per_status":
+        counts: dict = {}
+        for p in projs:
+            if p.get("archived"):
+                continue
+            counts[p.get("status", "")] = counts.get(p.get("status", ""), 0) + 1
+        rows = sorted(((_PROJ_STATUS_LABEL.get(s, s or "?"), n) for s, n in counts.items()),
+                      key=lambda x: -x[1])
+        return {"kind": "breakdown", "rows": rows, "unit": "projecten"}
+    if measure == "lopend":
+        return {"kind": "number", "value": sum(1 for p in projs if p.get("status") == "running"),
+                "unit": "projecten"}
+    if measure == "doorlooptijd":                    # gemiddelde doorlooptijd (dagen) van afgeronde projecten
+        samples = []
+        for p in projs:
+            up, cr = p.get("updated_at"), p.get("created_at")
+            if p.get("status") == "done" and up and cr:
+                samples.append({"at": up, "value": max(0.0, (up - cr)) / 86400.0, "datum": _day_key(up)})
+        pts = filter_samples(samples, cutoff, end)
+        if dim == "over_tijd":
+            return {"kind": "series", "points": pts, "unit": "dagen", "chart": "line"}
+        vals = [v for _a, v, _d in pts]
+        return {"kind": "number", "value": (round(sum(vals) / len(vals), 1) if vals else None),
+                "unit": "dagen"}
+    # measure == "afgerond": doorstroom — afgeronde projecten per dag (updated_at = afrondmoment)
+    by_day: dict = {}
+    for p in projs:
+        at = p.get("updated_at")
+        if p.get("status") == "done" and at:
+            e = by_day.setdefault(_day_key(at), [0, at])
+            e[0] += 1
+            e[1] = max(e[1], at)
+    samples = [{"at": at, "value": c, "datum": d} for d, (c, at) in by_day.items()]
+    pts = filter_samples(samples, cutoff, end)
+    if dim == "over_tijd":
+        return {"kind": "series", "points": pts, "unit": "projecten", "chart": "line"}
+    return {"kind": "number", "value": (sum(v for _a, v, _d in pts) if pts else 0), "unit": "projecten"}
+
+
+def _inbox_targets(st: _Stores, node: str) -> set:
+    rec = st.records.get(node)
+    if rec is not None and org.is_circle(rec):
+        return {("role", r.id) for r in org.roles_of(st.records.all(), rec.id)} | {("role", rec.id)}
+    return {("role", node)}
+
+
+def _inbox_fetch(st: _Stores, node: str, measure: str, dim: str, cutoff, end=None):
+    tgts = _inbox_targets(st, node)
+    items = [n for n in st.notif.all()
+             if (n.get("target_type"), n.get("target_id")) in tgts and not n.get("deleted")]
+    if dim == "per_type":                            # uitkomsten per type (uit de verwerkingen)
+        counts: dict = {}
+        for n in items:
+            for v in st.notif.verwerkingen_of(n):
+                counts[v.get("otype") or "onbekend"] = counts.get(v.get("otype") or "onbekend", 0) + 1
+        rows = sorted(((k, v) for k, v in counts.items()), key=lambda x: -x[1])
+        return {"kind": "breakdown", "rows": rows, "unit": ""}
+    if measure == "open":
+        n = sum(1 for it in items if not it.get("processed") and not it.get("archived"))
+        return {"kind": "number", "value": n, "unit": ""}
+    # measure == "verwerkt": verwerkte spanningen per dag (op verwerkmoment = laatste verwerking, anders at)
+    by_day: dict = {}
+    for it in items:
+        if not it.get("processed"):
+            continue
+        vs = st.notif.verwerkingen_of(it)
+        at = (vs[-1].get("at") if vs else None) or it.get("at")
+        if not at:
+            continue
+        e = by_day.setdefault(_day_key(at), [0, at])
+        e[0] += 1
+        e[1] = max(e[1], at)
+    samples = [{"at": at, "value": c, "datum": d} for d, (c, at) in by_day.items()]
+    pts = filter_samples(samples, cutoff, end)
+    if dim == "over_tijd":
+        return {"kind": "series", "points": pts, "unit": "", "chart": "line"}
+    return {"kind": "number", "value": (sum(v for _a, v, _d in pts) if pts else 0), "unit": ""}
+
+
+def _co2_fetch(st: _Stores, measure: str, dim: str, cutoff, end=None):
+    """Dorpsbrede LLM-uitstoot/-gebruik uit de dag-observaties (bron=co2_village, gevoed door de pulse)."""
+    metric, bron = _obs_key_for_indicator("co2_village", measure)
+    if not metric:
+        return {"kind": "number", "value": None, "unit": ""}
+    samples = [{"at": _row_at(r), "value": r["value"], "datum": r.get("datum")}
+               for r in st.observations.daily_series(metric, bron=bron)]
+    pts = filter_samples(samples, cutoff, end)
+    unit = _measure_unit("co2", measure)
+    if dim == "totaal":
+        vals = [v for _a, v, _d in pts]
+        return {"kind": "number", "value": (sum(vals) if vals else None), "unit": unit}
+    return {"kind": "series", "points": pts, "unit": unit, "chart": "line"}
+
+
 def _default_form(dim: str) -> str:
-    return {"time": "trend", "none": "getal"}.get(dim, "verdeling")
+    return {"time": "trend", "over_tijd": "trend", "none": "getal", "totaal": "getal",
+            "per_status": "horizontaal", "per_type": "horizontaal"}.get(dim, "verdeling")
 
 
 def _tile_combos(sources):
@@ -526,6 +653,10 @@ def _measure_unit(source: str, measure: str) -> str:
         return "/10" if measure == "tevredenheid" else ("min" if measure == "duur" else "")
     if source == "shopify":
         return "EUR" if measure in ("revenue", "aov") else ("paren" if measure == "pairs_sold" else "")
+    if source.startswith("projects:"):
+        return "dagen" if measure == "doorlooptijd" else "projecten"
+    if source == "co2":
+        return "g CO₂e" if measure == "gram_co2e" else "calls"
     return ""
 
 
@@ -615,6 +746,12 @@ def _fetch(st: _Stores, source: str, measure: str, dim: str, cutoff, end=None):
             # UITFASEREN: zolang de dagreeks (nog) leeg is, val terug op de oude log-aggregaat-route,
             # zodat er geen blinde periode ontstaat. Hard verwijderen pas als de nieuwe route vult.
         return _werk_fetch(st, source[5:], measure, dim, cutoff, end)
+    if source.startswith("projects:"):
+        return _project_fetch(st, source[len("projects:"):], measure, dim, cutoff, end)
+    if source.startswith("inbox:"):
+        return _inbox_fetch(st, source[len("inbox:"):], measure, dim, cutoff, end)
+    if source == "co2":
+        return _co2_fetch(st, measure, dim, cutoff, end)
     if source.startswith("kpi:"):
         it = st.metrics.get(source[4:])
         if not it:
@@ -671,6 +808,13 @@ def _tile_agg(st: _Stores, source: str, measure: str) -> str:
         return aggregatie_for("plausible", measure) or DEFAULT_AGGREGATIE
     if source.startswith("werk:"):
         return aggregatie_for("werkoverleg", measure) or DEFAULT_AGGREGATIE
+    if source.startswith("projects:"):
+        return {"afgerond": "som", "lopend": "laatste_waarde", "doorlooptijd": "gemiddelde"}.get(
+            measure, DEFAULT_AGGREGATIE)
+    if source.startswith("inbox:"):
+        return {"verwerkt": "som", "open": "laatste_waarde"}.get(measure, DEFAULT_AGGREGATIE)
+    if source == "co2":
+        return "som"                              # dorpsbrede uitstoot/gebruik telt op over het venster
     return aggregatie_for(source, measure) or DEFAULT_AGGREGATIE   # shopify e.d.
 
 
@@ -834,6 +978,21 @@ _SOURCE_GRONDSLAG = {
     "shopify|orders": ("Aantal betaalde orders.", "orders", "Shopify", "up"),
     "shopify|revenue": ("Omzet uit betaalde orders.", "EUR", "Shopify", "up"),
     "shopify|aov": ("Gemiddelde orderwaarde (omzet ÷ orders).", "EUR", "Shopify", "up"),
+    "co2|gram_co2e": ("Geschatte CO₂-uitstoot van alle LLM-calls in het dorp.", "g CO₂e",
+                      "co2_village (llm_usage.jsonl)", "down"),
+    "co2|calls": ("Aantal LLM-calls in het dorp.", "calls", "co2_village (llm_usage.jsonl)", ""),
+    "co2|ongeschat_calls": ("LLM-calls zonder tokentelling (schatting).", "calls",
+                            "co2_village (llm_usage.jsonl)", "down"),
+}
+_PROJECT_GRONDSLAG = {
+    "afgerond": ("Afgeronde projecten (status 'done') per periode.", "projecten", "up"),
+    "lopend": ("Projecten die nu in uitvoering zijn (status 'running').", "projecten", ""),
+    "doorlooptijd": ("Gemiddelde doorlooptijd (aangemaakt → afgerond) van afgeronde projecten.",
+                     "dagen", "down"),
+}
+_INBOX_GRONDSLAG = {
+    "verwerkt": ("Verwerkte spanningen/berichten per periode.", "", "up"),
+    "open": ("Nog openstaande (onverwerkte) items in de inbox.", "", "down"),
 }
 _WERK_GRONDSLAG = {
     "tevredenheid": ("Gemiddelde check-out-score (0-10) per overleg.", "0-10", "up"),
@@ -867,6 +1026,14 @@ def _grondslag(st: _Stores, source: str, measure: str) -> dict:
         d, u, r = _WERK_GRONDSLAG.get(measure, ("", "", ""))
         return {"definitie": d, "eenheid": u, "bron": "Werkoverleg-archief", "richting": r,
                 "drempel": None, "cadans": "maand", "meettype": "snapshot", "venster": ""}
+    if source.startswith("projects:"):
+        d, u, r = _PROJECT_GRONDSLAG.get(measure, ("", "", ""))
+        return {"definitie": d, "eenheid": u, "bron": "Projectenboek", "richting": r,
+                "drempel": None, "cadans": "", "meettype": "", "venster": ""}
+    if source.startswith("inbox:"):
+        d, u, r = _INBOX_GRONDSLAG.get(measure, ("", "", ""))
+        return {"definitie": d, "eenheid": u, "bron": "Inbox / notificaties", "richting": r,
+                "drempel": None, "cadans": "", "meettype": "", "venster": ""}
     d, u, b, r = _SOURCE_GRONDSLAG.get(f"{source}|{measure}", ("", "", "", ""))
     return {"definitie": d, "eenheid": u, "bron": b, "richting": r, "drempel": None,
             "cadans": "", "meettype": "", "venster": ""}

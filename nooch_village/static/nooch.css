@@ -579,6 +579,26 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .tile-grid{display:grid;gap:.7rem;grid-template-columns:1fr}
 @media(min-width:560px){.tile-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .tile{border:1px solid var(--border);border-radius:var(--radius);padding:.6rem .7rem;background:var(--surface);min-width:0}
+/* ── metrics2 (prototype-look): sub-tabs, catalogus-kaarten met sparkline, segmenten ── */
+.subtabs{display:flex;gap:.4rem;border-bottom:1px solid var(--border);margin:.2rem 0 1rem}
+.subtab{border:none;background:none;font:inherit;font-weight:600;font-size:.9rem;color:var(--muted);padding:.5rem .8rem;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.subtab.on{color:var(--green-dark);border-bottom-color:var(--green-dark)}
+.subtab .chip{margin-left:.3rem}
+.catgroup>h3{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--green-dark);margin:1.1rem 0 .5rem}
+.catgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.7rem}
+.catcard{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.75rem .85rem;box-shadow:var(--shadow)}
+.catcard .nm{font-weight:600;padding-right:1.7rem}
+.catcard .src{font-size:.72rem;color:var(--subtle);margin-top:.05rem}
+.catcard .spark{margin-top:.5rem;min-height:24px}
+.catcard .emo-f{position:absolute;top:.4rem;right:.5rem;line-height:1}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:var(--radius-pill);overflow:hidden;vertical-align:middle}
+.seg>form,.seg>a{display:inline-flex;margin:0}
+.seg>form button,.seg>a{border:none;border-right:1px solid var(--border);background:var(--surface);font:inherit;font-size:.72rem;padding:.28rem .62rem;cursor:pointer;color:var(--muted);text-decoration:none;line-height:1.4}
+.seg>form:last-child button,.seg>a:last-child{border-right:none}
+.seg>form button.on,.seg>a.on{background:var(--green);color:#fff}
+.selseg{font:inherit;font-size:.72rem;border:1px solid var(--border);border-radius:7px;padding:.25rem .4rem;background:var(--cream-2);color:var(--ink)}
+.m2empty{text-align:center;color:var(--subtle);padding:2.4rem 1rem}
+.m2empty .big{font-size:34px;display:block;color:var(--border)}
 .tile-wrap{display:flex;flex-direction:column;gap:.35rem;min-width:0}
 .tile-wrap>.tile{flex:1 1 auto}
 .tile-foot{display:flex;align-items:center;justify-content:space-between;gap:.5rem;font-size:.8rem;flex-wrap:wrap}

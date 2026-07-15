@@ -132,8 +132,9 @@ def test_systeem_kpi_blokkeert_handmatige_invoer(tmp_path):
     assert it["auto"] is True and it["origin"] == "werkoverleg"
     # store weigert handmatige meting voor een systeem-KPI
     assert st.metrics.add_sample(it["id"], 8) is False
-    # UI toont geen invoerveld maar wel het 'systeem'-label
-    page = cockpit2.render_node(cockpit2._Stores(dd), rid, "metrics", csrf_token="t")
+    # UI toont geen invoerveld maar wel het 'systeem'-label (beheer-blok, nu via _metrics_tab_html)
+    from nooch_village.views.metrics import _metrics_tab_html
+    page = _metrics_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(rid), "t")
     assert "systeem" in page
     # een losse handmatige KPI mag wél
     cockpit2.dispatch(dd, "m_add_kpi", {"node": [rid], "pick": ["manual"], "name": ["Eigen telling"], "next": ["/"]}, username="guest")

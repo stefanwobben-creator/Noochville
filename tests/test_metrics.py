@@ -5,10 +5,18 @@ import time
 
 from nooch_village import cockpit2
 from nooch_village.metrics import MetricStore, window_cutoff, filter_samples
+from nooch_village.views.metrics import _metrics_tab_html
 
 C = "mother_earth__nooch"
 RID = "mother_earth__nooch__website_developer"
 MKT = "mother_earth__nooch__marketing_lead"
+
+
+def _mtab(dd, node):
+    # Het beheer-blok (eigen KPI's, systeem-KPI's, links) leeft sinds de nieuwe metrics-tab in het
+    # oude _metrics_tab_html (niet meer op de node-tab getoond). Deze helper test dat blok direct.
+    st = cockpit2._Stores(dd)
+    return _metrics_tab_html(st, st.records.get(node), "t")
 
 
 def _dd(tmp_path):
@@ -50,7 +58,7 @@ def test_rol_tab_eigen_kpi_en_meting(tmp_path):
                                         "unit": ["%"], "next": ["/"]}, username="guest")
     mid = [i for i in cockpit2._Stores(dd).metrics.for_node(RID) if i["kind"] == "kpi"][0]["id"]
     cockpit2.dispatch(dd, "m_sample", {"mid": [mid], "value": ["4.2"], "next": ["/"]}, username="guest")
-    page = cockpit2.render_node(cockpit2._Stores(dd), RID, "metrics", csrf_token="t")
+    page = _mtab(dd, RID)
     # mini-Looker: focus-flow CTA + eigen KPI's + periode
     assert "Conversie" in page and "+ KPI maken" in page and "Periode:" in page
     assert "Eigen KPI's" in page and "+ Link" in page
@@ -128,7 +136,7 @@ def test_grondslag_en_doelkoppeling(tmp_path):
     t = cockpit2._Stores(dd).metrics.tiles_of(RID)[0]
     assert t["goal_pid"] == pid and t["target"] == 1000.0
     page = cockpit2.render_node(cockpit2._Stores(dd), RID, "metrics", csrf_token="t")
-    assert "tile-info" in page and "naar doel:" in page and "1000 paar in Q4" in page   # grondslag + doel zichtbaar
+    assert "js-flip" in page and "naar doel:" in page and "1000 paar in Q4" in page   # grondslag (kaart-omdraaien) + doel zichtbaar
 
 
 def test_built_in_grondslag(tmp_path):
@@ -193,7 +201,7 @@ def test_kpi_export_csv(tmp_path):
 def test_verwijderen_vraagt_bevestiging(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "m_add_kpi", {"node": [RID], "pick": ["manual"], "name": ["NPS"], "next": ["/"]}, username="guest")
-    page = cockpit2.render_node(cockpit2._Stores(dd), RID, "metrics", csrf_token="t")
+    page = _mtab(dd, RID)
     # delete heeft data-confirm + er is een exportlink
     assert "data-confirm=" in page and "verwijderen?" in page and "/metric_export?mid=" in page
 
@@ -294,7 +302,7 @@ def test_link_metric(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "m_add_link", {"node": [C], "name": ["Jaarcijfers"],
                                          "url": ["https://docs.example/x"], "next": ["/"]}, username="guest")
-    page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
+    page = _mtab(dd, C)
     assert "Jaarcijfers" in page and "kpi-link" in page
 
 

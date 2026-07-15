@@ -73,7 +73,7 @@ def test_weergave_schakelaar_wisselt_de_vorm(tmp_path):
     st = cockpit2._Stores(dd)
     tid = st.metrics.tiles_of(_NODE)[0]["id"]
     html = cockpit2.render_metrics2(st, st.records.get(_NODE), csrf_token="t")
-    assert "metrics2_form" in html and "Staaf" in html     # reeks → trend/staaf/getal kiesbaar
+    assert "metrics2_form" in html and ">staaf<" in html    # reeks → lijn/staaf/getal segment-knoppen
     cockpit2.dispatch(dd, "metrics2_form",
                       {"node": [_NODE], "tid": [tid], "form": ["staaf"], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).metrics.tiles_of(_NODE)[0]["form"] == "staaf"
