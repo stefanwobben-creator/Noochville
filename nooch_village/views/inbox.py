@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 
 from nooch_village.web_base import _e, _page, _field
-from nooch_village.cockpit2_util import _name, _BUILD, _stamp
+from nooch_village.cockpit2_util import _name, _BUILD, _stamp, _DS_LINK
 from nooch_village.inbox_wizard import INTENTS, OTYPE_LABEL
 
 _STATUS = {"nieuw": ("● nieuw", "chip ok"), "gelezen": ("bezig", "chip muted"),
@@ -96,7 +96,7 @@ def render_inbox(st, targets, csrf_token: str = "", naam: str = "", done: str = 
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
             f"<h1>{kop} <span class='chip'>{len(items)}</span></h1>{telling}"
             f"<div class='rdr-tool'>{body}</div></div>")
-    inner = (f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
+    inner = (f"{_DS_LINK}<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
              "<a href='/'>home</a> · <a href='/inbox'>inbox</a></div>"
              f"<div class='c2-wrap'>{main}</div>")
     return _page("Inbox", inner)
@@ -186,16 +186,13 @@ def _wizard_pane(n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
 def render_verwerk(st, n: dict, csrf_token: str = "", role_opts: str = "", pj_opts: str = "") -> str:
     """De verwerk-pagina voor één inbox-item: links de spanning, rechts de intentie-wizard."""
     if n is None:
-        inner = ("<div class='c2-wrap'><div class='c2-main'><a href='/inbox'>← inbox</a>"
+        inner = (f"{_DS_LINK}<div class='c2-wrap'><div class='c2-main'><a href='/inbox'>← inbox</a>"
                  "<p class='muted'>Deze spanning bestaat niet meer.</p></div></div>")
         return _page("Verwerk", inner)
     split = (f"<div class='rdr-split'>"
              f"{_spanning_pane(st, n)}{_wizard_pane(n, csrf_token, role_opts, pj_opts)}</div>")
-    main = (f"<div class='c2-main'><div class='c2-bar'><a href='/inbox'>← inbox</a></div>"
-            f"<h1>Verwerk spanning</h1>{split}</div>")
-    inner = (f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
-             "<a href='/'>home</a> · <a href='/inbox'>inbox</a></div>"
-             f"<div class='c2-wrap'>{main}</div>")
+    main = (f"<div class='c2-main'><h1>Verwerk spanning</h1>{split}</div>")
+    inner = (f"{_DS_LINK}<div class='c2-wrap'>{main}</div>")
     return _page("Verwerk", inner)
 
 
