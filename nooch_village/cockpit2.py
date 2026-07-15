@@ -229,6 +229,7 @@ from nooch_village.views.inbox import (
     render_inbox, render_verwerk, render_inbox_frag, render_inbox_chrome, _person_role_options,
 )
 from nooch_village.views.metrics2 import render_metrics2
+from nooch_village.views.bronnen import render_bronnen
 
 
 from nooch_village.views.noochie import (
@@ -2318,6 +2319,23 @@ def _act_metrics2_compare(c):
         return c.nxt, ("vergelijking ingesteld" if ok else "✗ niet gevonden")
 
 
+def _act_source_activate(c):
+        # Externe bron aanzetten (mens-gated). Haalt pas bij de volgende pulse data op.
+        src = (c.g("source") or "").strip()
+        if not src or c.username in (None, "guest"):
+            return c.nxt, "✗ niet toegestaan"
+        c.st.sources.set_active(src, True)
+        return c.nxt, f"✓ {src} staat aan (data volgt bij de volgende pulse)"
+
+
+def _act_source_deactivate(c):
+        src = (c.g("source") or "").strip()
+        if not src or c.username in (None, "guest"):
+            return c.nxt, "✗ niet toegestaan"
+        c.st.sources.set_active(src, False)
+        return c.nxt, f"○ {src} staat uit"
+
+
 def _act_metrics2_formula(c):
         # Eigen formule van twee bestaande reeks-metingen (A op B per dag), als formule-tegel.
         st, g, username = c.st, c.g, c.username
@@ -2976,6 +2994,8 @@ ACTIONS = {
     "metrics2_dim": _act_metrics2_dim,
     "metrics2_compare": _act_metrics2_compare,
     "metrics2_formula": _act_metrics2_formula,
+    "source_activate": _act_source_activate,
+    "source_deactivate": _act_source_deactivate,
 
     "ai_reply": _act_ai_reply,
     "proj_feed": _act_proj_feed,
@@ -3280,6 +3300,10 @@ def make_handler(data_dir: str, csrf_token: str,
                     nm = _p.name if _p else ""
                 done = (qs.get("done") or [""])[0]
                 self._send(render_inbox(st, tgts, csrf_token=effective_csrf, naam=nm, done=done), chrome=False)
+                return
+            if path == "/bronnen":
+                # Aansluit-scherm voor externe databronnen (status + aan/uit).
+                self._send(render_bronnen(st, os.path.dirname(data_dir), csrf_token=effective_csrf))
                 return
             if path == "/metrics2":
                 # Nieuw catalogus-plus-dashboard-scherm, náást het bestaande metrics-scherm.
