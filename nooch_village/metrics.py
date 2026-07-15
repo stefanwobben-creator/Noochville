@@ -74,6 +74,21 @@ class MetricStore:
             return True
         return False
 
+    def set_tile_form(self, node: str, tid: str, form: str) -> bool:
+        """Wissel de weergave (vorm) van één tegel. De vorm bepaalt alleen de visualisatie, niet de
+        data: van tegel losgekoppeld, altijd wijzigbaar zonder de tegel opnieuw te maken (regel 2)."""
+        form = (form or "").strip()
+        if not form:
+            return False
+        for t in self._tiles.get(node, []):
+            if t.get("id") == tid:
+                if t.get("form") == form:
+                    return True
+                t["form"] = form
+                self._save()
+                return True
+        return False
+
     def migrate_metric_bindings(self, defs) -> dict:
         """Wezen-sweep (idempotent): systeem-KPI's met ontbrekende `veld`/`categorie` krijgen die alsnog
         uit hun catalogus-def (alleen lege velden vullen; niet-afleidbare → rapporteren, niet gokken).

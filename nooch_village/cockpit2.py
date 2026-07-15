@@ -2297,6 +2297,12 @@ def _act_metrics2_unfav(c):
         return c.nxt, ("verwijderd van je dashboard" if ok else "✗ niet gevonden")
 
 
+def _act_metrics2_form(c):
+        # Weergave-schakelaar: de vorm van een tegel wisselen (view losgekoppeld van data).
+        ok = c.st.metrics.set_tile_form(c.g("node"), c.g("tid"), c.g("form"))
+        return c.nxt, ("weergave gewijzigd" if ok else "✗ niet gevonden")
+
+
 def _act_notif_add(c):
         # Zelf een spanning toevoegen (GlassFrog-capture): vrij tekstveld + vanuit welke rol je 'm voelt.
         # Landt in je eigen inbox om daarna te verwerken. Leeg → niets.
@@ -2936,6 +2942,7 @@ ACTIONS = {
     "notif_archive": _act_notif_archive,
     "metrics2_fav": _act_metrics2_fav,
     "metrics2_unfav": _act_metrics2_unfav,
+    "metrics2_form": _act_metrics2_form,
 
     "ai_reply": _act_ai_reply,
     "proj_feed": _act_proj_feed,
@@ -3242,10 +3249,15 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(render_inbox(st, tgts, csrf_token=effective_csrf, naam=nm, done=done), chrome=False)
                 return
             if path == "/metrics2":
-                # Nieuw catalogus-plus-dashboard-scherm (deel 1), náást het bestaande metrics-scherm.
+                # Nieuw catalogus-plus-dashboard-scherm, náást het bestaande metrics-scherm.
                 node = (qs.get("node") or [""])[0]
                 rec = st.records.get(node) if node else None
-                self._send(render_metrics2(st, rec, csrf_token=effective_csrf))
+                win = (qs.get("mw") or ["7d"])[0]
+                compare = (qs.get("compare") or [""])[0] in ("1", "true", "on")
+                van = (qs.get("van") or [""])[0]
+                tot = (qs.get("tot") or [""])[0]
+                self._send(render_metrics2(st, rec, csrf_token=effective_csrf, win=win,
+                                           compare=compare, van=van, tot=tot))
                 return
             if path == "/inbox/verwerk":
                 # De twee-panelen-verwerkpagina voor één spanning: links de spanning, rechts de wizard.
