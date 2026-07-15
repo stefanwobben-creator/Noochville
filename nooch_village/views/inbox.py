@@ -66,20 +66,20 @@ def _inbox_row(st, n: dict, csrf: str, done_nid: str = "") -> str:
         vs = st.notif.verwerkingen_of(n)
         chips = " ".join(f"<span class='chip outline'>{_e(v.get('label') or 'uitkomst')}</span>" for v in vs) \
             or "<span class='chip outline'>verwerkt</span>"
-        foot = f"<div class='ffoot-l'>{chips} {sep} {_btn(csrf, nid, 'notif_archive', 'archiveren')}</div>"
+        body = f"{meta}{title}<div class='ffoot-l'>{chips}</div>"
+        act = f"<div class='rdr-act'>{_btn(csrf, nid, 'notif_archive', 'archiveren')}</div>"
         # Viermoment: de zojuist afgeronde spanning krijgt een groene rand + een kader met wat je vastlegde.
         if nid and nid == done_nid:
             regels = "".join(f"<li>{_e(v.get('label') or v.get('otype') or 'uitkomst')}</li>" for v in vs) \
                 or "<li>geen uitkomst</li>"
-            kader = (f"<div class='rdr-kader'>✓ Verwerkt. Dit legde je vast:<ul>{regels}</ul></div>")
-            return (f"<div class='rdr-row rdr-vier'><div class='rdr-body'>{meta}{title}{foot}{kader}"
-                    f"</div></div>")
-        return f"<div class='rdr-row'><div class='rdr-body'>{meta}{title}{foot}</div></div>"
+            body += f"<div class='rdr-kader'>✓ Verwerkt. Dit legde je vast:<ul>{regels}</ul></div>"
+            return f"<div class='rdr-row rdr-vier'><div class='rdr-body'>{body}</div>{act}</div>"
+        return f"<div class='rdr-row'><div class='rdr-body'>{body}</div>{act}</div>"
 
-    verwerk = (f"<a class='btn ok sm' href='/inbox/verwerk?nid={_e(nid)}'>Verwerk</a>")
+    verwerk = f"<a class='btn ok sm' href='/inbox/verwerk?nid={_e(nid)}'>Verwerk</a>"
     prullenbak = _btn(csrf, nid, "notif_delete", "🗑", cls="flink")
-    foot = f"<div class='ffoot-l'>{verwerk} {sep} {prullenbak}</div>"
-    return f"<div class='rdr-row'><div class='rdr-body'>{meta}{title}{foot}</div></div>"
+    act = f"<div class='rdr-act'>{verwerk}{prullenbak}</div>"
+    return f"<div class='rdr-row'><div class='rdr-body'>{meta}{title}</div>{act}</div>"
 
 
 def render_inbox(st, targets, csrf_token: str = "", naam: str = "", done: str = "") -> str:

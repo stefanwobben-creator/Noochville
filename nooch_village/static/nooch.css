@@ -483,6 +483,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .rdr-dim{opacity:.5}
 .rdr-vier{background:var(--green-tint);border:1px solid var(--green);border-radius:var(--radius);padding:.4rem .6rem;margin:.3rem 0}
 .rdr-kader{margin-top:.5rem;padding:.4rem .6rem;background:var(--surface);border:1px solid var(--green);border-radius:var(--radius);font-size:.85rem}
+.rdr-act{display:flex;gap:.4rem;align-items:center;flex:0 0 auto}
 .cl-attn{background:var(--error-tint)}     /* gemist checklist-item (rij-niveau, coral) */
 .cl-todo{background:var(--yellow-light)}   /* te-doen checklist-item (rij-niveau, geel) */
 .cl-add{display:inline-block}
