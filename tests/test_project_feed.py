@@ -107,17 +107,17 @@ def test_ai_praat_mee_zonder_inwoner(tmp_path):
     assert cockpit2._ai_reply(cockpit2._Stores(dd), pid2, ask=lambda p: "x") is False
 
 
-def test_ai_reply_prompt_bevat_accountabilities_en_toetsinstructie(tmp_path):
-    # de @mention-reply moet de rol laten TOETSEN aan haar accountabilities/skills en een concrete stap
-    # voorstellen — dus die context + de toets-instructie horen in de prompt te staan.
+def test_ai_reply_prompt_bevat_accountabilities_en_triage_instructie(tmp_path):
+    # de @mention-reply moet de rol laten TRIAGEREN tegen haar accountabilities/skills: past het, kan ik
+    # het direct beantwoorden, of verwerk ik het via mijn inbox — die context + instructie horen erin.
     dd, rid, pid, codie = _setup(tmp_path)
     gezien = {}
     cockpit2._ai_reply(cockpit2._Stores(dd), pid,
                        ask=lambda prompt: gezien.setdefault("p", prompt) or "ok")
     p = gezien["p"]
     assert "Jouw accountabilities:" in p and "Jouw skills" in p
-    assert "Toets de dialoog" in p                      # de relevantie-toets-instructie
-    assert "zal ik" in p.lower()                        # het concrete-stap-voorstel
+    assert "Triageer dit signaal" in p                  # de triage-instructie
+    assert "Past het bij jouw rol" in p and "kan_direct" in p   # fit + direct-antwoord-toets
 
 
 def test_role_capabilities_block_faalt_zacht_zonder_rol():
@@ -147,14 +147,45 @@ def test_parse_reply_voorstel_json_en_fallback():
     assert reactie4 == "gewoon een reactie" and vst4 is None
 
 
-def test_ai_reply_slaat_voorstel_op_de_entry(tmp_path):
+def test_parse_triage():
+    ok = ('{"fit": "ja", "welk_stuk": "", "kan_direct": true, '
+          '"reactie": "Barefoot-schoenen verlagen de hakhoogte."}')
+    t = cockpit2._parse_triage(ok)
+    assert t["fit"] == "ja" and t["kan_direct"] is True and "Barefoot" in t["reactie"]
+    # ongeldige fit → None (val terug op platte tekst)
+    assert cockpit2._parse_triage('{"fit": "misschien", "reactie": "x"}') is None
+    # lege reactie → None
+    assert cockpit2._parse_triage('{"fit": "ja", "reactie": ""}') is None
+    # geen JSON → None
+    assert cockpit2._parse_triage("gewoon tekst") is None
+
+
+def test_triage_fit_nee_wijst_kort_af_en_verwerkt_item(tmp_path):
+    # past niet bij de rol → korte afwijzing op de wall; geen project; het inbox-item is verwerkt met reden.
     dd, rid, pid, codie = _setup(tmp_path)
-    js = ('{"reactie": "Zal ik dit onderzoeken?", "voorstel": {"doen": true, '
-          '"titel": "Onderzoek claim", "skill": null, "payload": {}}}')
+    js = ('{"fit": "nee", "welk_stuk": "de juridische check", "kan_direct": false, '
+          '"reactie": "Dit is niet mijn rol; de juridische check kan ik wel."}')
     assert cockpit2._ai_reply(cockpit2._Stores(dd), pid, ask=lambda p: js)
-    last = cockpit2._Stores(dd).projects.get(pid)["log"][-1]
-    assert "Zal ik" in last["text"] and last.get("voorstel", {}).get("titel") == "Onderzoek claim"
-    assert last["voorstel"]["role_id"] == rid
+    st2 = cockpit2._Stores(dd)
+    last = st2.projects.get(pid)["log"][-1]
+    assert last["author"]["type"] == "persona" and "niet mijn rol" in last["text"]
+    assert not [p for p in st2.projects._projects.values() if p.get("owner") == rid and p.get("id") != pid]
+    n = [x for x in st2.notif.for_targets([("role", rid)]) if x.get("project_id") == pid]
+    assert n and st2.notif.status_of(n[0]) == "verwerkt" and "past niet" in (n[0].get("outcome") or "")
+
+
+def test_triage_direct_antwoord_op_de_wall(tmp_path):
+    # kan direct uit kennis beantwoorden (geen skill) → antwoord staat op de wall, item verwerkt met reden.
+    dd, rid, pid, codie = _setup(tmp_path)
+    js = ('{"fit": "ja", "welk_stuk": "", "kan_direct": true, '
+          '"reactie": "Kort antwoord: gebruik term X, die is stabiel."}')
+    assert cockpit2._ai_reply(cockpit2._Stores(dd), pid, ask=lambda p: js)
+    st2 = cockpit2._Stores(dd)
+    last = st2.projects.get(pid)["log"][-1]
+    assert "Kort antwoord" in last["text"]
+    assert not [p for p in st2.projects._projects.values() if p.get("owner") == rid and p.get("id") != pid]
+    n = [x for x in st2.notif.for_targets([("role", rid)]) if x.get("project_id") == pid]
+    assert n and st2.notif.status_of(n[0]) == "verwerkt" and "direct beantwoord" in (n[0].get("outcome") or "")
 
 
 def test_mention_to_task_maakt_project_voor_de_rol(tmp_path):
@@ -195,49 +226,53 @@ def test_create_task_from_voorstel_maakt_project_met_skill(tmp_path):
     assert item["text"] == "Onderzoek claim" and item.get("skill") == "openalex_evidence"
 
 
-def test_ai_reply_autotask_binnen_scope_maakt_zelf_taak(tmp_path, monkeypatch):
-    # experiment aan: een stap die op een EIGEN skill (in het DNA) draait, is binnen scope → de rol maakt
-    # 'm zelf aan, geen knop. 'Binnen scope' is hard: de skill zit echt in het DNA.
+def test_triage_binnen_scope_verwerkt_zelf_via_inbox(tmp_path, monkeypatch):
+    # experiment aan + een skill die ECHT in het DNA zit (machine-check via _dna_skill_for) → de rol maakt
+    # er zelf een project van EN markeert het inbox-item verwerkt met de uitkomst (historie). Eén flow.
     monkeypatch.setenv("mention_autotask", "1")
+    monkeypatch.setattr(cockpit2, "_dna_skill_for",
+                        lambda st, role, ask: {"skill": "openalex_evidence", "payload": {}, "payload_ok": True})
     dd, rid, pid, codie = _setup(tmp_path)
     st = cockpit2._Stores(dd)
     r = st.records.get(rid); r.definition.skills = ["openalex_evidence"]; st.records.put(r)
-    js = ('{"reactie": "Dat raakt mij, ik pak het op.", "voorstel": {"doen": true, '
-          '"titel": "Onderzoek barefoot-claim", "skill": "openalex_evidence", "payload": {}}}')
+    js = ('{"fit": "ja", "welk_stuk": "", "kan_direct": false, '
+          '"reactie": "Ik verwerk dit via mijn inbox."}')
     assert cockpit2._ai_reply(cockpit2._Stores(dd), pid, ask=lambda p: js)
     st2 = cockpit2._Stores(dd)
-    nieuw = [p for p in st2.projects._projects.values() if p.get("owner") == rid and p.get("id") != pid
-             and p.get("scope") == "Onderzoek barefoot-claim"]
-    assert len(nieuw) == 1                                        # de rol maakte binnen scope zelf een project
-    pcomment = [e for e in st2.projects.get(pid)["log"] if e.get("author", {}).get("type") == "persona"][-1]
-    assert "voorstel" not in pcomment                            # zelf gedaan → geen knop meer
+    nieuw = [p for p in st2.projects._projects.values() if p.get("owner") == rid and p.get("id") != pid]
+    assert len(nieuw) == 1                                        # binnen scope → zelf een project gemaakt
+    assert nieuw[0]["checklists"][0]["items"][0].get("skill") == "openalex_evidence"
+    n = [x for x in st2.notif.for_targets([("role", rid)]) if x.get("project_id") == pid]
+    assert n and st2.notif.status_of(n[0]) == "verwerkt" and "als project" in (n[0].get("outcome") or "")
 
 
-def test_ai_reply_autotask_buiten_scope_blijft_knop(tmp_path, monkeypatch):
-    # experiment aan, maar de voorgestelde skill zit NIET in het DNA → buiten scope → geen auto, het
-    # voorstel blijft staan zodat de mens via de knop beslist.
+def test_triage_buiten_scope_blijft_nieuw_in_inbox(tmp_path, monkeypatch):
+    # experiment aan, maar geen eigen skill matcht (buiten scope) → geen auto-project; het inbox-item blijft
+    # 'nieuw' voor de mens om via de vijf-uitkomsten te verwerken.
     monkeypatch.setenv("mention_autotask", "1")
+    monkeypatch.setattr(cockpit2, "_dna_skill_for", lambda st, role, ask: None)
     dd, rid, pid, codie = _setup(tmp_path)
-    js = ('{"reactie": "Zal ik dit oppakken?", "voorstel": {"doen": true, '
-          '"titel": "Iets buiten scope", "skill": "niet_van_mij", "payload": {}}}')
+    js = ('{"fit": "deels", "welk_stuk": "de meting", "kan_direct": false, '
+          '"reactie": "Ik verwerk dit via mijn inbox."}')
     assert cockpit2._ai_reply(cockpit2._Stores(dd), pid, ask=lambda p: js)
     st2 = cockpit2._Stores(dd)
     assert not [p for p in st2.projects._projects.values() if p.get("owner") == rid and p.get("id") != pid]
-    last = st2.projects.get(pid)["log"][-1]
-    assert last.get("voorstel", {}).get("titel") == "Iets buiten scope" and last["voorstel"]["skill"] is None
+    n = [x for x in st2.notif.for_targets([("role", rid)]) if x.get("project_id") == pid]
+    assert n and st2.notif.status_of(n[0]) == "nieuw"            # wacht op de mens
 
 
-def test_ai_reply_zonder_experiment_altijd_knop(tmp_path):
-    # experiment UIT (default): ook een binnen-scope-voorstel blijft via de knop lopen (veilige default).
+def test_triage_zonder_experiment_blijft_nieuw(tmp_path, monkeypatch):
+    # experiment UIT (default): ook binnen scope maakt de rol niet automatisch een project; het item blijft
+    # 'nieuw' in de inbox (veilige default, alles via de mens).
+    monkeypatch.setattr(cockpit2, "_dna_skill_for",
+                        lambda st, role, ask: {"skill": "openalex_evidence", "payload": {}, "payload_ok": True})
     dd, rid, pid, codie = _setup(tmp_path)
-    st = cockpit2._Stores(dd)
-    r = st.records.get(rid); r.definition.skills = ["openalex_evidence"]; st.records.put(r)
-    js = ('{"reactie": "Ik kan dit.", "voorstel": {"doen": true, "titel": "T", '
-          '"skill": "openalex_evidence", "payload": {}}}')
+    js = ('{"fit": "ja", "welk_stuk": "", "kan_direct": false, "reactie": "Ik verwerk dit via mijn inbox."}')
     assert cockpit2._ai_reply(cockpit2._Stores(dd), pid, ask=lambda p: js)
     st2 = cockpit2._Stores(dd)
     assert not [p for p in st2.projects._projects.values() if p.get("owner") == rid and p.get("id") != pid]
-    assert st2.projects.get(pid)["log"][-1]["voorstel"]["skill"] == "openalex_evidence"   # blijft: knop
+    n = [x for x in st2.notif.for_targets([("role", rid)]) if x.get("project_id") == pid]
+    assert n and st2.notif.status_of(n[0]) == "nieuw"
 
 
 def test_mention_op_persona_naam_raakt_de_rol(tmp_path):

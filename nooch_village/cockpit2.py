@@ -344,10 +344,20 @@ def _role_capabilities_block(role) -> str:
 
 
 def _ai_reply(st: _Stores, pid: str, ask=None, *, persona=None, prefix: str = "") -> bool:
-    """Laat een AI-inwoner kort meedenken in de dialoog. Zonder `persona`: de inwoner van de
-    eigenaar-rol (de meedenk-knop). Met `persona`: die specifieke, @genoemde inwoner; `prefix` zet de
-    aanleidende mens-comment bovenaan de context. `ask(prompt)->str|None` is injecteerbaar (test);
-    standaard via llm.reason. Fail-closed."""
+    """Een @genoemde (of via de meedenk-knop aangesproken) AI-rol TRIAGEERT een signaal, i.p.v. blind een
+    voorstel te posten. De beslisboom (zie `_parse_triage` + `_settle_inbox`):
+
+      1. Past het bij mijn rol?  Nee → korte afwijzing (+ optioneel welk stuk wél), item verwerkt met reden.
+      2. Ja/deels, en kan ik het puur uit mijn kennis beantwoorden (geen skill/project nodig)? → antwoord
+         nu direct op de wall; het inbox-item wordt verwerkt met reden 'direct beantwoord'.
+      3. Ja/deels, maar er is een skill/meerdere stappen nodig? → 'ik verwerk dit via mijn inbox'. Binnen
+         scope (een skill die ECHT in het DNA zit, machine-gecheckt via plan_offers) + experiment aan →
+         de rol maakt er meteen zelf een project van en markeert het inbox-item verwerkt met de uitkomst.
+         Buiten scope / experiment uit → het item blijft 'nieuw' voor de mens.
+
+    Zo is er één verwerkingsplek (de inbox) met historie: elk signaal krijgt een herkomst en een uitkomst,
+    of het nu van een mens kwam of de rol het zichzelf toebedeelt. `ask(prompt)->str|None` is injecteerbaar
+    (test); standaard via llm.reason. Fail-closed: geen persona / geen LLM-antwoord → geen post."""
     p = st.projects.get(pid)
     if p is None:
         return False
@@ -360,7 +370,7 @@ def _ai_reply(st: _Stores, pid: str, ask=None, *, persona=None, prefix: str = ""
         return False
     recent = "\n".join(f"- {m.get('text', '')}" for m in (p.get("log") or [])[-6:])
     rol_line = (f"Rol: {_name(role)} — purpose: {role.definition.purpose}\n" if role is not None else "")
-    capab = _role_capabilities_block(role)          # accountabilities + skills → aanleiding tot een concrete stap
+    capab = _role_capabilities_block(role)          # accountabilities + skills → grondslag voor de toets
     aanleiding = (prefix.strip() + "\n\n") if (prefix or "").strip() else ""
     ctx = (f"{aanleiding}"
            f"Project: {_scope_text(p)}\n"
@@ -368,47 +378,145 @@ def _ai_reply(st: _Stores, pid: str, ask=None, *, persona=None, prefix: str = ""
            f"{rol_line}"
            f"{capab}"
            f"Recente dialoog:\n{recent or '(nog leeg)'}\n\n"
-           "Toets de dialoog aan JOUW accountabilities en skills. Raakt de info één van jouw "
-           "verantwoordelijkheden en kun je er iets concreets mee (het liefst met één van je skills), stel "
-           "dan die ene stap voor ('zal ik ...?') en noem de skill. Raakt het jou niet, zeg dat kort, "
-           "geen aannames verzinnen.\n\n"
-           "Antwoord UITSLUITEND met JSON, exact dit schema: {\"reactie\": \"<jouw korte reactie als deze "
-           "rol, max 4 zinnen>\", \"voorstel\": {\"doen\": true of false, \"titel\": \"<korte taaktitel, "
-           "leeg als doen=false>\", \"skill\": \"<exacte skillnaam uit JOUW lijst hierboven, of null>\", "
-           "\"payload\": {}}}. Zet \"doen\": false zodra de info je niet raakt of je geen concrete stap met "
-           "een eigen skill hebt.")
+           "Triageer dit signaal tegen JOUW accountabilities en skills. Beantwoord drie dingen:\n"
+           "1. Past het bij jouw rol? (ja / deels / nee — bij deels of nee: welk stuk kun je wél oppakken)\n"
+           "2. Kun je het NU beantwoorden puur uit wat je al weet (informatie delen), zonder een skill te "
+           "draaien of een project te starten? Zo ja: geef dat antwoord.\n"
+           "3. Kan het niet direct (er is een skill of meerdere stappen nodig)? Zeg dan kort dat je het via "
+           "je inbox verwerkt. Verzin niets en claim nooit dat je iets deed wat je niet deed.\n\n"
+           "Antwoord UITSLUITEND met JSON, exact dit schema: {\"fit\": \"ja|deels|nee\", \"welk_stuk\": "
+           "\"<bij deels/nee: welk deel je wél kunt, anders leeg>\", \"kan_direct\": true of false, "
+           "\"reactie\": \"<bij kan_direct=true je informatie-antwoord; anders een korte reactie/afwijzing, "
+           "max 4 zinnen>\"}.")
     from nooch_village.personas import persona_prompt
     prompt = (persona_prompt(persona) + "\n\n" + ctx).strip()
     if ask is None:
         try:
             from nooch_village import llm
             out = llm.reason(prompt, ladder=_match_ladder(), json_mode=True,
-                             call_site="cockpit_project_reply")
+                             call_site="cockpit_mention_triage")
         except Exception:
             out = None
     else:
         out = ask(prompt)
     if not out:
         return False
-    reactie, voorstel = _parse_reply_voorstel(out, role)
-    if not reactie:
-        return False
-    entry = st.projects.add_feed_entry(pid, reactie, kind="comment", author_type="persona",
-                                       author_id=persona.id, voorstel=voorstel)
-    # Binnen scope + experiment aan → de rol pakt het zelf op (geen knop). 'Binnen scope' is HARD: het
-    # voorstel draait op een skill die echt in het DNA van de rol zit (zo door _parse_reply_voorstel
-    # gefilterd). Zonder eigen skill (buiten scope) blijft het voorstel staan → de mens beslist via de knop.
-    if entry and voorstel and voorstel.get("skill") and role is not None and _mention_autotask_on():
-        new_pid = _create_task_from_voorstel(st, role, voorstel)
+    tri = _parse_triage(out)
+    if tri is None:
+        # Fail-closed: geen bruikbare triage-JSON → plaats de platte tekst als gewone reactie (geen gok,
+        # geen inbox-actie). Zo blijven oude/gestubde platte-tekst-antwoorden gewoon zichtbaar.
+        txt = (out or "").strip()
+        if not txt:
+            return False
+        st.projects.add_feed_entry(pid, txt, kind="comment", author_type="persona", author_id=persona.id)
+        return True
+    return _apply_triage(st, pid, role, persona, tri, prefix)
+
+
+def _ask_text(p: dict, prefix: str) -> str:
+    """De tekst die aan de rol gevraagd wordt (het te triageren signaal), voor de skill-machinecheck. Uit
+    de aanleidende mens-comment (`prefix`, ontdaan van de 'De mens vraagt jou:'-omlijsting) of anders de
+    laatste dialoog-regel. Puur afgeleid, verzint niets."""
+    t = (prefix or "").strip()
+    for lead in ("De mens vraagt jou:", "De mens vraagt:"):
+        if t.startswith(lead):
+            t = t[len(lead):].strip()
+            break
+    if t:
+        return t
+    for m in reversed(p.get("log") or []):
+        if (m.get("text") or "").strip():
+            return m["text"].strip()
+    return ""
+
+
+def _apply_triage(st: _Stores, pid: str, role, persona, tri: dict, prefix: str) -> bool:
+    """Voer de getriageerde beslissing uit: post de reactie op de wall en verwerk/laat-staan het inbox-item
+    (met historie). Zie `_ai_reply` voor de beslisboom. Fail-closed op deelfouten."""
+    p = st.projects.get(pid)
+    reactie = tri.get("reactie") or ""
+    fit = tri.get("fit")
+    welk = (tri.get("welk_stuk") or "").strip()
+    ask = _ask_text(p or {}, prefix)
+
+    # 1. Past niet bij de rol → korte afwijzing; item is afgehandeld (met reden), geen skill/geen project.
+    if fit == "nee":
+        txt = reactie or ("Dit past niet bij mijn rol." + (f" Wel oppakbaar: {welk}" if welk else ""))
+        entry = st.projects.add_feed_entry(pid, txt, kind="comment", author_type="persona", author_id=persona.id)
+        reden = "past niet bij mijn rol" + (f" — wel: {welk}" if welk else "")
+        _settle_inbox(st, role, pid, (entry or {}).get("id", ""), ask, processed=True, reason=reden)
+        return True
+
+    # 2/3. Past (deels): heeft beantwoorden een EIGEN skill nodig? Harde machine-check tegen het DNA.
+    off = _dna_skill_for(st, role, ask)
+    skill_needed = bool(off and off.get("skill"))
+
+    # 2. Puur kennisantwoord (geen skill nodig én de rol zegt kan_direct) → nu direct op de wall.
+    if not skill_needed and tri.get("kan_direct") and reactie:
+        entry = st.projects.add_feed_entry(pid, reactie, kind="comment", author_type="persona", author_id=persona.id)
+        _settle_inbox(st, role, pid, (entry or {}).get("id", ""), ask, processed=True,
+                      reason="direct beantwoord op de wall")
+        return True
+
+    # 3. Skill/meerdere stappen nodig → 'ik verwerk dit via mijn inbox'.
+    ack = reactie or "Ik pak dit op en verwerk het via mijn inbox."
+    entry = st.projects.add_feed_entry(pid, ack, kind="comment", author_type="persona", author_id=persona.id)
+    eid = (entry or {}).get("id", "")
+
+    # Binnen scope (eigen skill in DNA) + experiment aan → de rol verwerkt het item meteen zelf als project
+    # via de vijf-uitkomsten-flow, en markeert het inbox-item verwerkt met de uitkomst (historie).
+    if skill_needed and role is not None and not org.is_circle(role) and _mention_autotask_on():
+        titel = (ask or reactie).strip()[:200]
+        vst = {"titel": titel, "skill": off["skill"],
+               "payload": off.get("payload") if isinstance(off.get("payload"), dict) else {},
+               "role_id": role.id}
+        new_pid = _create_task_from_voorstel(st, role, vst)
         if new_pid:
-            _prov_feed(st, new_pid, f"↳ binnen scope zelf opgepakt uit dialoog op {pid}#{entry['id']}", "")
-            _prov_feed(st, pid, f"→ {_name(role)} pakte dit binnen scope zelf op: {voorstel['titel']}", "")
-            p2 = st.projects.get(pid)                  # vers ophalen (tussentijdse schrijf → mogelijke reload)
-            for e in (p2 or {}).get("log", []):
-                if e.get("id") == entry["id"]:
-                    e.pop("voorstel", None)            # geen knop meer; het is al een taak
-            st.projects._save()
+            _prov_feed(st, new_pid, f"↳ binnen scope zelf opgepakt uit dialoog op {pid}#{eid}", "")
+            _prov_feed(st, pid, f"→ {_name(role)} pakte dit binnen scope zelf op: {titel}", "")
+            _settle_inbox(st, role, pid, eid, ask, processed=True, reason=f"zelf opgepakt als project: {titel}")
+            return True
+
+    # Buiten scope / experiment uit / geen project gemaakt → item blijft 'nieuw' voor de mens (of de rol
+    # zelf) om via de vijf-uitkomsten te verwerken.
+    _settle_inbox(st, role, pid, eid, ask, processed=False, reason="")
     return True
+
+
+def _dna_skill_for(st: _Stores, role, ask_text: str):
+    """Harde machine-check: matcht het gevraagde (`ask_text`) op een skill die ECHT in het DNA van de rol
+    zit? Retourneert {skill, payload, ...} of None. Hergebruikt plan_offers (dat de skill tegen de harde
+    DNA-lijst toetst). Fail-closed: geen rol / geen skills / geen tekst / fout → None."""
+    if role is None or org.is_circle(role) or not (ask_text or "").strip():
+        return None
+    try:
+        offers = plan_offers(role, [ask_text], shared_registry(), name=_name(role))
+    except Exception:
+        return None
+    return offers[0] if offers else None
+
+
+def _settle_inbox(st: _Stores, role, pid: str, entry_id: str, ask_text: str, *,
+                  processed: bool, reason: str):
+    """Eén verwerkingsplek: zorg dat er een inbox-item voor deze rol op dit project bestaat en zet de
+    status. Bestond er al een open item (bv. van een mens-@mention), dan wordt DAT verwerkt/gelaten; anders
+    vijlt de rol er zelf één (autonome trigger). `processed=True` → verwerkt met `reason` als historie;
+    `processed=False` → blijft 'nieuw' voor de mens. Fail-closed: geen rol → niets."""
+    if role is None:
+        return None
+    rid = getattr(role, "id", "") or ""
+    if not rid:
+        return None
+    try:
+        open_items = [n for n in st.notif.for_targets([("role", rid)])
+                      if n.get("project_id") == pid and not n.get("processed") and not n.get("archived")]
+        n = open_items[0] if open_items else st.notif.add("role", rid, pid, entry_id,
+                                                          by=_name(role), snippet=ask_text or "")
+        if processed:
+            st.notif.mark_item_processed(n["id"], outcome=reason, by=_name(role))
+        return n
+    except Exception:
+        return None
 
 
 def _mention_autotask_on() -> bool:
@@ -443,6 +551,28 @@ def _create_task_from_voorstel(st, orec, vst) -> str | None:
     if cl:
         st.projects.check_add(new_pid, cl["id"], titel, skill=sk, payload=payload, payload_ok=ok)
     return new_pid
+
+
+def _parse_triage(out: str):
+    """Split het triage-antwoord in {fit, welk_stuk, kan_direct, reactie} of None (fail-closed). Verwacht
+    JSON {fit:'ja|deels|nee', welk_stuk, kan_direct:bool, reactie}. Ongeldige fit of lege reactie → None,
+    zodat de caller terugvalt op een gewone platte-tekst-reactie (geen triage-gok op rommel)."""
+    txt = (out or "").strip()
+    try:
+        from nooch_village.skill_match import _extract_json
+        data = _extract_json(txt)
+    except Exception:
+        data = None
+    if not isinstance(data, dict):
+        return None
+    fit = str(data.get("fit", "")).strip().lower()
+    if fit not in ("ja", "deels", "nee"):
+        return None
+    reactie = str(data.get("reactie", "")).strip()
+    if not reactie:
+        return None
+    return {"fit": fit, "welk_stuk": str(data.get("welk_stuk", "")).strip(),
+            "kan_direct": bool(data.get("kan_direct")), "reactie": reactie}
 
 
 def _parse_reply_voorstel(out: str, role):

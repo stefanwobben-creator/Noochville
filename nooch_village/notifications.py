@@ -76,13 +76,19 @@ class NotifStore:
         self._save()
         return True
 
-    def mark_item_processed(self, notif_id: str) -> bool:
-        """Markeer als verwerkt (mens heeft het bij de bron afgehandeld). Handmatig, voorspelbaar."""
+    def mark_item_processed(self, notif_id: str, outcome: str = "", by: str = "") -> bool:
+        """Markeer als verwerkt (bron afgehandeld). Handmatig door de mens, of autonoom door de rol zelf.
+        `outcome` (welke uitkomst) en `by` (wie verwerkte) worden vastgelegd als historie, zodat je later
+        kunt terugkijken hoe een signaal is afgehandeld. Beide optioneel (backward-compat)."""
         n = self._find(notif_id)
         if n is None:
             return False
         n["read"] = True
         n["processed"] = True
+        if outcome:
+            n["outcome"] = str(outcome)[:200]
+        if by:
+            n["processed_by"] = str(by)[:80]
         self._save()
         return True
 
