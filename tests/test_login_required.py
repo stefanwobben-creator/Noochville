@@ -60,23 +60,25 @@ def test_login_pagina_zonder_noochie_chrome(tmp_path):
         httpd.shutdown()
 
 
-def test_ingelogde_pagina_heeft_chrome(tmp_path):
+def test_ingelogde_pagina_zonder_noochie_chrome(tmp_path):
+    # Noochie-rail + call bar zijn uit de cockpit gehaald: ook een ingelogde pagina toont ze niet meer.
     dd = _bootstrap(tmp_path)
     sessions = _auth.SessionStore()
     token = sessions.create("dev@nooch.earth")
     httpd, port = _server(dd, sessions=sessions)
     try:
         r, body = _get(port, f"/node?id={ROOT}", cookie=token)
-        assert r.status == 200 and "noo-rail" in body
+        # markers van de geïnjecteerde chrome (niet de CSS-klassen, die blijven in de stylesheet):
+        assert r.status == 200 and "src='/callbar'" not in body and "noochie?fragment" not in body
     finally:
         httpd.shutdown()
 
 
-def test_guest_auth_uit_heeft_chrome(tmp_path):
+def test_guest_auth_uit_zonder_noochie_chrome(tmp_path):
     dd = _bootstrap(tmp_path)
     httpd, port = _server(dd, sessions=None)                   # auth uit → _session_username == "guest"
     try:
         r, body = _get(port, f"/node?id={ROOT}")
-        assert r.status == 200 and "noo-rail" in body
+        assert r.status == 200 and "src='/callbar'" not in body and "noochie?fragment" not in body
     finally:
         httpd.shutdown()
