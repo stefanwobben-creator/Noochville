@@ -228,6 +228,7 @@ from nooch_village.views.signals import render_signals
 from nooch_village.views.inbox import (
     render_inbox, render_verwerk, render_inbox_frag, render_inbox_chrome, _person_role_options,
 )
+from nooch_village.views.metrics2 import render_metrics2
 
 
 from nooch_village.views.noochie import (
@@ -2281,6 +2282,21 @@ def _act_notif_delete(c):
         return c.nxt, ("🗑 weggegooid" if ok else "✗ item niet gevonden")
 
 
+def _act_metrics2_fav(c):
+        # Favoriet = een tegel op de node (bestaand mechanisme). Gate: cirkellid.
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _member_gate(resolve_circle_id(g("node"), st.records), username, st)
+        if _deny:
+            return nxt, _deny
+        tile = st.metrics.add_tile(g("node"), g("source"), g("measure"), g("dim") or "none", g("form") or "getal")
+        return nxt, ("★ op je dashboard" if tile else "✗ kon niet toevoegen")
+
+
+def _act_metrics2_unfav(c):
+        ok = c.st.metrics.remove_tile(c.g("node"), c.g("tid"))
+        return c.nxt, ("verwijderd van je dashboard" if ok else "✗ niet gevonden")
+
+
 def _act_notif_add(c):
         # Zelf een spanning toevoegen (GlassFrog-capture): vrij tekstveld + vanuit welke rol je 'm voelt.
         # Landt in je eigen inbox om daarna te verwerken. Leeg → niets.
@@ -2918,6 +2934,8 @@ ACTIONS = {
     "notif_delete": _act_notif_delete,
     "notif_add": _act_notif_add,
     "notif_archive": _act_notif_archive,
+    "metrics2_fav": _act_metrics2_fav,
+    "metrics2_unfav": _act_metrics2_unfav,
 
     "ai_reply": _act_ai_reply,
     "proj_feed": _act_proj_feed,
@@ -3222,6 +3240,12 @@ def make_handler(data_dir: str, csrf_token: str,
                     nm = _p.name if _p else ""
                 done = (qs.get("done") or [""])[0]
                 self._send(render_inbox(st, tgts, csrf_token=effective_csrf, naam=nm, done=done), chrome=False)
+                return
+            if path == "/metrics2":
+                # Nieuw catalogus-plus-dashboard-scherm (deel 1), náást het bestaande metrics-scherm.
+                node = (qs.get("node") or [""])[0]
+                rec = st.records.get(node) if node else None
+                self._send(render_metrics2(st, rec, csrf_token=effective_csrf))
                 return
             if path == "/inbox/verwerk":
                 # De twee-panelen-verwerkpagina voor één spanning: links de spanning, rechts de wizard.

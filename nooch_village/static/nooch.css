@@ -484,6 +484,7 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .rdr-vier{background:var(--green-tint);border:1px solid var(--green);border-radius:var(--radius);padding:.4rem .6rem;margin:.3rem 0}
 .rdr-kader{margin-top:.5rem;padding:.4rem .6rem;background:var(--surface);border:1px solid var(--green);border-radius:var(--radius);font-size:.85rem}
 .rdr-act{display:flex;gap:.4rem;align-items:center;flex:0 0 auto}
+.rdr-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.6rem;margin:.4rem 0 1.2rem}
 
 /* ── inbox-drawer (globale chrome): launcher + uitschuif-paneel links + modal ─────── */
 .ibx-launch{position:fixed;left:20px;bottom:20px;z-index:1200;width:54px;height:54px;
