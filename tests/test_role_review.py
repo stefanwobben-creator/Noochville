@@ -124,6 +124,39 @@ def test_teleology_review_all_roles_legt_vast_en_skipt_kernrollen(tmp_path):
     assert "Guarding" in scout["context"]["wat"] and "Watching" in scout["context"]["wat"]
 
 
+def test_parse_teleology_opportunity():
+    from nooch_village.governance_review import _parse_teleology_opportunity
+    subject = "Teleologie-review 'scout': purpose + accountabilities (EN, B1, -ing)"
+    wat = ("Purpose (EN): Guarding the market awareness**\n\nAccountabilities (EN, B1, -ing):\n"
+           "- Watching competitor movements**\n- Reporting trends weekly\n\n"
+           "⚠️ Nog niet in -ing-vorm: Watch X")
+    rid, purpose, accs = _parse_teleology_opportunity(subject, wat)
+    assert rid == "scout"
+    assert purpose == "Guarding the market awareness"                # ** gestript
+    assert accs == ["Watching competitor movements", "Reporting trends weekly"]  # ⚠️-regel weg
+
+
+def test_route_teleology_naar_roloverleg(tmp_path):
+    from nooch_village.governance_review import (teleology_review_all_roles,
+                                                 route_teleology_to_roloverleg)
+    from nooch_village.roloverleg import Agenda
+    recs = _recs(tmp_path)
+    inbox = HumanInbox(str(tmp_path / "inbox.json"))
+    teleology_review_all_roles(recs, inbox, llm_reason=lambda p: _TELE_OK)     # 2 kansen (scout, librarian)
+    agenda = Agenda(str(tmp_path / "agenda.json"))
+    res = route_teleology_to_roloverleg(inbox, recs, agenda)
+    assert res["routed"] == 2
+    items = agenda.open()
+    assert len(items) == 2 and all(i["kind"] == "amend_role" and i["by"] == "secretary" for i in items)
+    scout = next(i for i in items if i["role_id"] == "scout")
+    assert scout["change"]["purpose"].startswith("Guarding")
+    assert "Watching competitor movements closely" in scout["change"]["add_accountabilities"]
+    assert scout["change"]["remove_accountabilities"] == ["markt kijken"]      # oude eruit
+    # herdraaien dedupt (Agenda.add op signatuur)
+    assert route_teleology_to_roloverleg(inbox, recs, agenda)["routed"] == 2
+    assert len(agenda.open()) == 2
+
+
 def test_teleology_markeert_niet_ing(tmp_path):
     recs = _recs(tmp_path)
     inbox = HumanInbox(str(tmp_path / "inbox.json"))

@@ -156,6 +156,49 @@ def teleology_review_all_roles(records, inbox, *, llm_reason=None) -> dict:
     return {"reviewed": reviewed, "proposed": proposed, "skipped": skipped, "incomplete": incomplete}
 
 
+def _parse_teleology_opportunity(subject: str, wat: str):
+    """Lees (role_id, purpose, [accountabilities]) terug uit een teleologie-kans in de human inbox.
+    role_id staat in de titel ('Teleologie-review '<id>': …'); purpose + accountabilities in `wat`.
+    Strips markdown-vet (**) en laat de ⚠️-markeerregel weg."""
+    m = re.search(r"Teleologie-review '([^']+)'", subject or "")
+    role_id = m.group(1) if m else ""
+    pm = re.search(r"Purpose \(EN\):\s*(.+)", wat or "")
+    purpose = _collapse(pm.group(1)).replace("*", "").strip() if pm else ""
+    accs = []
+    for ln in (wat or "").splitlines():
+        ln = ln.strip()
+        if ln.startswith(("-", "*", "•")) and "Nog niet in -ing-vorm" not in ln:
+            a = _collapse(ln.lstrip("-*• ")).replace("*", "").strip()
+            if a:
+                accs.append(a[:200])
+    return role_id, purpose, accs
+
+
+def route_teleology_to_roloverleg(inbox, records, agenda) -> dict:
+    """De Secretary zet de teleologie-voorstellen (uit de human inbox) op de roloverleg-agenda, zodat de
+    mens ze 1-voor-1 in het roloverleg verwerkt. Per rol één amend_role: de nieuwe purpose, de oude
+    accountabilities eruit en de nieuwe (EN, B1, -ing) erin. Dedup via Agenda.add. Fail-closed per item:
+    geen role_id/record of lege inhoud → overslaan. Geeft {routed, skipped}."""
+    routed = skipped = 0
+    for it in inbox.all():
+        if it.get("type") != "opportunity" or "Teleologie-review" not in it.get("subject", ""):
+            continue
+        role_id, purpose, accs = _parse_teleology_opportunity(
+            it.get("subject", ""), (it.get("context", {}) or {}).get("wat", ""))
+        rec = records.get(role_id) if role_id else None
+        if rec is None or (not purpose and not accs):
+            skipped += 1
+            continue
+        current = list(getattr(rec.definition, "accountabilities", []) or [])
+        change = {"purpose": purpose or None,
+                  "remove_accountabilities": current, "add_accountabilities": accs}
+        agenda.add(role_id, "amend_role", change,
+                   reason="Teleologie-review: purpose als bestaansdoel + accountabilities in EN, B1, -ing.",
+                   by="secretary", title=f"Teleologie: {role_id}")
+        routed += 1
+    return {"routed": routed, "skipped": skipped}
+
+
 def review_all_roles(records, examples_store, inbox, *, llm_reason=None) -> dict:
     """Loop alle operationele dorp-rollen langs, en zet per rol één verbetervoorstel als kans in
     de human inbox (by='facilitator'). Mens-gated: jij verwerkt ze in de triage. Geeft

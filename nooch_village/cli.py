@@ -933,6 +933,25 @@ def main() -> None:
               + (f", {res['incomplete']} met een accountability die nog niet in -ing-vorm staat (gemarkeerd)."
                  if res['incomplete'] else "."))
 
+    elif mode == "teleology_to_roloverleg":
+        # De Secretary zet de teleologie-voorstellen (human inbox) op de roloverleg-agenda, zodat de mens
+        # ze 1-voor-1 in het roloverleg-scherm verwerkt. Mens-gated: adopteren gebeurt pas bij consent.
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.governance import Records
+        from nooch_village.human_inbox import HumanInbox
+        from nooch_village.roloverleg import Agenda
+        from nooch_village.governance_review import route_teleology_to_roloverleg
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
+        inbox = HumanInbox(os.path.join(ctx.data_dir, "human_inbox.json"))
+        agenda = Agenda(os.path.join(ctx.data_dir, "roloverleg_agenda.json"))
+        print("🏛️ Secretary zet de teleologie-voorstellen op de roloverleg-agenda…")
+        res = route_teleology_to_roloverleg(inbox, recs, agenda)
+        print(f"✅ {res['routed']} rollen op de roloverleg-agenda gezet, {res['skipped']} overgeslagen. "
+              f"Verwerk ze in het roloverleg-scherm van de cockpit, 1 voor 1.")
+
     elif mode == "healthcheck":
         import os
         from nooch_village.config import load_context
@@ -958,7 +977,7 @@ def main() -> None:
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "
               "measure_propose | rereview | ingest | notes_remove | recurate | "
               "ground | harry_run | roster | keys | competitor | community_listening | formalize | answer_questions | "
-              "ingest_governance | review_roles | teleology_review | shopify | work_projects | "
+              "ingest_governance | review_roles | teleology_review | teleology_to_roloverleg | shopify | work_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | rapport | verslag | healthcheck",
               file=sys.stderr)
         sys.exit(1)
