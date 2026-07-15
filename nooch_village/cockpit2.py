@@ -2265,6 +2265,11 @@ def _act_wall_outcome(c):
         # Systeem-entry op de BRON-wall: de audittrail (met toelichting) leeft op de wall.
         pj.add_feed_entry(src_pid, f"→ {_LBL[otype]} aangemaakt: {title} — {toel}",
                           kind="system", author_type="human", author_id=aid)
+        # Kwam dit uit de inbox (nid meegegeven)? Dan is die mention nu verwerkt: leg de uitkomst + reden
+        # vast als historie en haal 'm uit de nieuw/gelezen-wachtrij. Eén klik: uitkomst maken én afvinken.
+        nid = (g("nid") or "").strip()
+        if nid:
+            st.notif.mark_item_processed(nid, outcome=f"{_LBL[otype]}: {title}", by=_person_name(st, aid))
         return nxt, f"✓ {_LBL[otype]} aangemaakt"
 
 
@@ -2322,6 +2327,13 @@ def _act_notif_read(c):
 def _act_notif_processed(c):
         c.st.notif.mark_item_processed(c.g("nid"))
         return c.nxt, "✓ verwerkt"
+
+
+def _act_notif_done(c):
+        # 'Afgehandeld, geen uitkomst': een pure FYI die je gezien hebt, zonder dat er een project/actie/
+        # note uit hoeft. Zet 'm verwerkt met die reden als historie (keuze 2: vijf uitkomsten + deze klep).
+        c.st.notif.mark_item_processed(c.g("nid"), outcome="afgehandeld, geen uitkomst")
+        return c.nxt, "✓ afgehandeld (geen uitkomst)"
 
 
 def _act_notif_archive(c):
@@ -2840,6 +2852,7 @@ ACTIONS = {
     "mention_to_task": _act_mention_to_task,
     "notif_read": _act_notif_read,
     "notif_processed": _act_notif_processed,
+    "notif_done": _act_notif_done,
     "notif_archive": _act_notif_archive,
 
     "ai_reply": _act_ai_reply,

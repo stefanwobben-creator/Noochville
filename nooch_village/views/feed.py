@@ -119,14 +119,20 @@ def _wall_outcome_opts(st):
     return role_opts, pj_opts
 
 
-def _wall_outcome_form(pid: str, eid: str, csrf: str, prefill: str, role_opts: str, pj_opts: str) -> str:
-    """Discrete '→ uitkomst'-actie bij een wall-comment: route 'm naar één van de vijf bestaande
+def _wall_outcome_form(pid: str, eid: str, csrf: str, prefill: str, role_opts: str, pj_opts: str,
+                       *, extra_hid: str = "", summary: str = "→ uitkomst") -> str:
+    """Discrete '→ uitkomst'-actie bij een bron-comment: route 'm naar één van de vijf bestaande
     uitkomsten. Progressive disclosure per type (mirror van het werkoverleg oc_details). De inhoud is
     bewerkbaar en voorgevuld met de comment-tekst (voor project/action kort je 'm typisch in tot een
-    titel; voor note/info blijft de volle tekst logisch). De toelichting is verplicht (rationale)."""
+    titel; voor note/info blijft de volle tekst logisch). De toelichting is verplicht (rationale).
+
+    Herbruikbaar: `extra_hid` voegt extra verborgen velden toe aan elk formulier (de inbox geeft zo een
+    `nid` + `next=/inbox` mee zodat dezelfde `wall_outcome`-handler het inbox-item op verwerkt zet).
+    `summary` past de klik-label aan."""
     hid = (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
            f"<input type='hidden' name='pid' value='{_e(pid)}'>"
-           f"<input type='hidden' name='item' value='{_e(eid)}'>")
+           f"<input type='hidden' name='item' value='{_e(eid)}'>"
+           f"{extra_hid}")
 
     def oc(otype: str, summary: str, target_field: str) -> str:
         return (f"<details class='wo-ocd box-details'><summary>{summary}</summary>"
@@ -151,7 +157,7 @@ def _wall_outcome_form(pid: str, eid: str, csrf: str, prefill: str, role_opts: s
               f"<label class='att-lbl'>Note bij welke rol?</label><select name='note_role'>{role_opts}</select>")
     rov = oc("roloverleg", "Roloverleg",
              "<span class='muted'>Wordt een add_role-voorstel op de roloverleg-agenda (mens-route).</span>")
-    return (f"<details class='fedit'><summary class='flink'>→ uitkomst</summary>"
+    return (f"<details class='fedit'><summary class='flink'>{_e(summary)}</summary>"
             f"{info}{proj}{act}{note}{rov}</details>")
 
 
