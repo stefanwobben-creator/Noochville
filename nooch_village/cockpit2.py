@@ -575,33 +575,6 @@ def _parse_triage(out: str):
             "kan_direct": bool(data.get("kan_direct")), "reactie": reactie}
 
 
-def _parse_reply_voorstel(out: str, role):
-    """Split het reply-antwoord in (reactie-tekst, voorstel|None). Verwacht JSON {reactie, voorstel:
-    {doen,titel,skill,payload}}, maar valt fail-closed terug op de platte tekst als reactie zonder
-    voorstel (zo blijven oude/gestubde antwoorden werken). De skill wordt machine-gecheckt tegen de harde
-    DNA-lijst van de rol: een voorgestelde skill buiten die lijst wordt genegeerd (geen verzonnen tool)."""
-    txt = (out or "").strip()
-    data = None
-    try:
-        from nooch_village.skill_match import _extract_json
-        data = _extract_json(txt)
-    except Exception:
-        data = None
-    if not isinstance(data, dict) or not str(data.get("reactie", "")).strip():
-        return txt, None                              # geen JSON → platte tekst, geen voorstel
-    reactie = str(data["reactie"]).strip()
-    v = data.get("voorstel") if isinstance(data.get("voorstel"), dict) else None
-    if not v or not v.get("doen") or not str(v.get("titel", "")).strip() or role is None:
-        return reactie, None
-    dna_skills = list(getattr(getattr(role, "definition", None), "skills", []) or [])
-    sk = v.get("skill")
-    sk = sk if (sk and sk in dna_skills) else None    # machine-check: geen skill buiten het DNA
-    voorstel = {"titel": str(v.get("titel")).strip(), "skill": sk,
-                "payload": v.get("payload") if isinstance(v.get("payload"), dict) else {},
-                "role_id": role.id}
-    return reactie, voorstel
-
-
 def _reply_to_mentions(st: _Stores, pid: str, text: str) -> int:
     """Laat elke in `text` @genoemde AI-persona één keer meedenken op de wall, met de aanleidende
     comment bovenaan de context. Cap op mention_reply_limit (default 2, uit .env/env) tegen LLM-budget.
@@ -2273,52 +2246,6 @@ def _act_wall_outcome(c):
         return nxt, f"✓ {_LBL[otype]} aangemaakt"
 
 
-def _act_mention_to_task(c):
-        """Level 2 @mention: de mens bevestigt (knop) een rol-voorstel ('zal ik ...?') → het wordt een
-        echt project owned door die rol, met de voorgestelde skill als checklist-item. De daemon voert
-        projectwerk uit onder de EIGENAAR-rol, dus de rol die het voorstelt moet ook de eigenaar zijn —
-        zo pakt precies de juiste rol (met de juiste skill in haar DNA) het op. Herkomst blijft als trail
-        op het bron-project; het voorstel wordt van de entry gehaald zodat één klik nooit twee taken maakt.
-        Fail-closed op elke ontbrekende schakel."""
-        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
-        src_pid, src_eid = g("pid"), g("item")
-        src_p = pj.get(src_pid)
-        src_entry = next((e for e in (src_p or {}).get("log", []) if e.get("id") == src_eid), None) if src_p else None
-        if src_p is None or src_entry is None:
-            return nxt, "✗ bron-comment niet gevonden"
-        vst = src_entry.get("voorstel")
-        if not isinstance(vst, dict) or not vst.get("titel"):
-            return nxt, "✗ geen voorstel om een taak van te maken"
-        owner = vst.get("role_id") or ""
-        orec = st.records.get(owner)
-        if orec is None:
-            return nxt, "✗ de voorstellende rol bestaat niet meer"
-        if org.is_circle(orec):
-            return nxt, "✗ een cirkel voert geen taken uit — voorstel ongeldig"
-        _deny = (_member_gate(resolve_circle_id(owner, st.records), username, st)
-                 if owner.startswith(_II_PREFIX) else _role_gate(owner, username, st))
-        if _deny:
-            return nxt, _deny
-        actor = st.people.by_email(username); aid = actor.id if actor else ""
-        titel = str(vst.get("titel")).strip()[:200]
-        prov = f"↳ uit dialoog-voorstel op {src_pid}#{src_eid}"
-        # 1+2) nieuw project owned door de voorstellende rol, met de skill als checklist-item (gedeelde helper).
-        new_pid = _create_task_from_voorstel(st, orec, vst)
-        if not new_pid:
-            return nxt, "✗ kon geen taak aanmaken uit het voorstel"
-        _prov_feed(st, new_pid, prov, aid)
-        # 3) trail op het bron-project + het voorstel weghalen (geen dubbele taak bij een tweede klik).
-        # LET OP: de tussentijdse schrijven hierboven kunnen de projects-store hebben herladen (get →
-        # _maybe_reload), dus haal de entry VERS op i.p.v. de oude referentie te muteren.
-        _prov_feed(st, src_pid, f"→ taak gemaakt voor @{_name(orec)}: {titel}", aid)
-        src_p2 = st.projects.get(src_pid)
-        for e in (src_p2 or {}).get("log", []):
-            if e.get("id") == src_eid:
-                e.pop("voorstel", None)
-        st.projects._save()
-        return nxt, f"✓ taak gemaakt voor {_name(orec)}"
-
-
 def _act_notif_read(c):
         c.st.notif.mark_item_read(c.g("nid"))
         return c.nxt, "✓ gemarkeerd als gelezen"
@@ -2849,7 +2776,6 @@ ACTIONS = {
     "feed_edit": _act_feed_edit,
     "feed_remove": _act_feed_remove,
     "wall_outcome": _act_wall_outcome,
-    "mention_to_task": _act_mention_to_task,
     "notif_read": _act_notif_read,
     "notif_processed": _act_notif_processed,
     "notif_done": _act_notif_done,

@@ -125,28 +125,6 @@ def test_role_capabilities_block_faalt_zacht_zonder_rol():
     assert cockpit2._role_capabilities_block(None) == ""
 
 
-def test_parse_reply_voorstel_json_en_fallback():
-    from types import SimpleNamespace
-    role = SimpleNamespace(id="r1", definition=SimpleNamespace(skills=["openalex_evidence"]))
-    # geldig JSON-voorstel met een skill die in het DNA zit
-    out = ('{"reactie": "Dat raakt mij. Zal ik het checken?", "voorstel": {"doen": true, '
-           '"titel": "Onderzoek barefoot-claim", "skill": "openalex_evidence", "payload": {}}}')
-    reactie, vst = cockpit2._parse_reply_voorstel(out, role)
-    assert "Zal ik" in reactie and vst["titel"] == "Onderzoek barefoot-claim"
-    assert vst["skill"] == "openalex_evidence" and vst["role_id"] == "r1"
-    # skill buiten het DNA → genegeerd (geen verzonnen tool), voorstel blijft met skill None
-    _, vst2 = cockpit2._parse_reply_voorstel(
-        '{"reactie": "ok", "voorstel": {"doen": true, "titel": "X", "skill": "niet_bestaand"}}', role)
-    assert vst2 and vst2["skill"] is None
-    # doen=false → geen voorstel
-    _, vst3 = cockpit2._parse_reply_voorstel(
-        '{"reactie": "raakt me niet", "voorstel": {"doen": false, "titel": ""}}', role)
-    assert vst3 is None
-    # platte tekst (geen JSON) → tekst als reactie, geen voorstel (backward compat met oude stubs)
-    reactie4, vst4 = cockpit2._parse_reply_voorstel("gewoon een reactie", role)
-    assert reactie4 == "gewoon een reactie" and vst4 is None
-
-
 def test_parse_triage():
     ok = ('{"fit": "ja", "welk_stuk": "", "kan_direct": true, '
           '"reactie": "Barefoot-schoenen verlagen de hakhoogte."}')
@@ -186,32 +164,6 @@ def test_triage_direct_antwoord_op_de_wall(tmp_path):
     assert not [p for p in st2.projects._projects.values() if p.get("owner") == rid and p.get("id") != pid]
     n = [x for x in st2.notif.for_targets([("role", rid)]) if x.get("project_id") == pid]
     assert n and st2.notif.status_of(n[0]) == "verwerkt" and "direct beantwoord" in (n[0].get("outcome") or "")
-
-
-def test_mention_to_task_maakt_project_voor_de_rol(tmp_path):
-    dd, rid, pid, codie = _setup(tmp_path)
-    st = cockpit2._Stores(dd)
-    st.projects.add_feed_entry(pid, "Zal ik dit oppakken?", kind="comment", author_type="persona",
-                               author_id=codie.id,
-                               voorstel={"titel": "Onderzoek barefoot-claim", "skill": None,
-                                         "payload": {}, "role_id": rid})
-    eid = st.projects.get(pid)["log"][-1]["id"]
-    cockpit2.dispatch(dd, "mention_to_task", {"pid": [pid], "item": [eid], "next": ["/"]}, username="guest")
-    st2 = cockpit2._Stores(dd)
-    # 1) nieuw project owned door de rol, met de voorgestelde titel als scope
-    nieuw = [p for p in st2.projects._projects.values()
-             if p.get("owner") == rid and p.get("id") != pid and p.get("scope") == "Onderzoek barefoot-claim"]
-    assert len(nieuw) == 1
-    cls = nieuw[0].get("checklists") or []
-    assert cls and cls[0]["items"][0]["text"] == "Onderzoek barefoot-claim"
-    # 2) trail op het bron-project + het voorstel is weg (geen dubbele taak bij tweede klik)
-    src = st2.projects.get(pid)
-    assert any(e.get("kind") == "system" and "taak gemaakt" in e.get("text", "") for e in src["log"])
-    pe = next(e for e in src["log"] if e["id"] == eid)
-    assert "voorstel" not in pe                                   # de persona-entry heeft geen voorstel meer
-    # tweede klik doet niets meer (voorstel weg)
-    _, msg = cockpit2.dispatch(dd, "mention_to_task", {"pid": [pid], "item": [eid], "next": ["/"]}, username="guest")
-    assert "geen voorstel" in msg
 
 
 def test_create_task_from_voorstel_maakt_project_met_skill(tmp_path):

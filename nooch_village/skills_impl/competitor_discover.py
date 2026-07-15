@@ -64,11 +64,16 @@ class CompetitorDiscoverSkill(Skill):
     required_env = ("SERPAPI_API_KEY",)
     description = ("Vindt gids-artikelen via SerpAPI (echte URLs), leest ze, en laat de LLM "
                    "de genoemde merknamen extraheren als kandidaat-concurrenten. Fail-closed.")
-    input_schema = ("brands: list[str] (bekende merken, worden gefilterd) · "
-                    "topic: str (optioneel maar STERK aanbevolen voor een project — de categorie merken om "
-                    "te ontdekken, AFGELEID uit het projectdoel, bv. 'best barefoot shoe brands'; weglaten = "
-                    "de staande categorie uit de config) · limit: int (aantal gidsen)")
-    required_payload = ("brands",)
+    input_schema = ("topic: str (het onderwerp — de categorie merken om te ontdekken, AFGELEID uit het "
+                    "projectdoel, bv. 'best barefoot shoe brands'; als 'query' gegeven wordt telt die ook; "
+                    "weglaten = de staande categorie uit de config) · brands: list[str] (OPTIONEEL — bekende "
+                    "merken die uit de kandidaten worden gefilterd; leeg = niets filteren) · limit: int "
+                    "(aantal gidsen)")
+    # Geen hard-verplicht payload-veld: `brands` is een optioneel filter, en het onderwerp (topic/query)
+    # heeft een config-fallback (discover_query). run() weigert bij de bron zichtbaar als noch onderwerp
+    # noch config een categorie geeft (resolve_source_scope), dus die grens ligt op de uitvoer, niet in een
+    # payload-precheck die de config-fallback toch niet kan zien.
+    required_payload = ()
     output_schema = "ok: bool, candidates: list[{brand, article, link}], query: str | error"
 
     def run(self, payload: dict, context=None) -> dict:
