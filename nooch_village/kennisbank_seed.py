@@ -134,12 +134,52 @@ def seed(data_dir: str = "data", apply: bool = False) -> list[str]:
     return report
 
 
+# key → onderwerp uit kennisbank_intake.SUBJECTS (fase 2: seed-atomen alsnog op hun hub,
+# zodat het ongesorteerd-bakje en de cluster-oprit op echte data werken).
+_SUBJECT_TAGS: dict[str, str] = {
+    "pla": "materiaal", "mylo": "vegan-leer", "ecolabel": "regelgeving",
+    "built": "concurrentie", "cda": "materiaal", "eudr": "regelgeving",
+    "veganplastic": "vegan-leer", "pricebench": "prijs", "design": "segment",
+    "paidanyway": "vraag", "mec": "segment", "abandon": "vraag",
+    "edge_wait": "vraag", "edge_crocs": "concurrentie", "edge_soleic": "materiaal",
+    "edge_zool": "outsole", "bel_lijm": "materiaal", "bel_zool": "outsole",
+    "bel_rest": "duurzame-schoenen", "leer_earthsight": "leer", "leer_amazone": "leer",
+    "leer_90": "ethiek", "leer_karkas": "leer",
+    "prijs_51": "prijs", "prijs_idealist": "prijs", "prijs_vw": "prijs",
+}
+
+
+def tag_subjects(data_dir: str = "data", apply: bool = False) -> list[str]:
+    """Idempotente migratie: geef de fase-1 seed-atomen hun onderwerp als tags[0].
+    Alleen kaarten die het onderwerp nog niet dragen worden geraakt."""
+    from nooch_village.kennisbank_intake import SUBJECTS
+    report: list[str] = []
+    notes = NotesStore(f"{data_dir}/notes.json")
+    for key, subject in _SUBJECT_TAGS.items():
+        assert subject in SUBJECTS, f"onbekend onderwerp {subject!r} voor {key}"
+        kaart = notes.get(f"kbseed_{key}")
+        if kaart is None:
+            report.append(f"- kbseed_{key}: niet aanwezig (seed nog niet toegepast?)")
+            continue
+        if subject in kaart.tags:
+            report.append(f"= kbseed_{key}: draagt '{subject}' al")
+            continue
+        report.append(f"+ kbseed_{key}: tag '{subject}'")
+        if apply:
+            notes.add_tags(kaart.id, [subject])
+    return report
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--apply", action="store_true", help="echt schrijven (default: dry-run)")
     p.add_argument("--data-dir", default="data")
+    p.add_argument("--tag-subjects", action="store_true",
+                   help="alleen de subject-tag-migratie op de seed-atomen draaien")
     args = p.parse_args()
-    for line in seed(args.data_dir, apply=args.apply):
+    regels = (tag_subjects(args.data_dir, apply=args.apply) if args.tag_subjects
+              else seed(args.data_dir, apply=args.apply))
+    for line in regels:
         print(line)
     if not args.apply:
         print("\n(dry-run — niets geschreven; draai met --apply om te schrijven)")
