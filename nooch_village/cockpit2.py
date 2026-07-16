@@ -173,6 +173,10 @@ def _bootstrap(dd: str) -> None:
     # Trends: de Library-anker-reeksen (verworpen ontwerp, vóór meetstart) weg; alleen de nieuwe
     # stemming-paar-reeksen (trends_ratio_*) blijven. Idempotent. Zie de meetverantwoording in docs/.
     st.observations.remove_bron("trends", keep_prefix="trends_ratio_")
+    # Belofte-graaf: zet eenmalig de schoen-ontleding uit de aangeleverde BOM (idempotent;
+    # overschrijft gedane grondingen niet).
+    from nooch_village.belofte_store import BelofteStore, seed_schoen_graaf
+    seed_schoen_graaf(BelofteStore(os.path.join(dd, "belofte_grafen.json")))
 
 
 from nooch_village.views.overview import (
@@ -234,6 +238,7 @@ from nooch_village.views.kennislaag import render_kennislaag
 from nooch_village.views.linkbuilding import render_linkbuilding
 from nooch_village.views.accountabilities import render_accountabilities
 from nooch_village.views.woordenschat import render_woordenschat
+from nooch_village.views.belofte import render_belofte
 
 
 from nooch_village.views.noochie import (
@@ -3365,6 +3370,11 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/woordenschat":
                 # Library-kansenscherm: verrijkte keywords gerangschikt op kansrijkheid (read-only, stap 1).
                 self._send(render_woordenschat(data_dir))
+                return
+            if path == "/belofte":
+                # Belofte-graaf: eerste-principes-ontleding, sterkte op het zwakste onderdeel (read-only, stap 1).
+                bid = (qs.get("id") or [""])[0]
+                self._send(render_belofte(data_dir, bid))
                 return
             if path == "/metrics2":
                 # Nieuw catalogus-plus-dashboard-scherm, náást het bestaande metrics-scherm.
