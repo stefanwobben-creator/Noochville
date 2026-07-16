@@ -231,6 +231,7 @@ from nooch_village.views.inbox import (
 from nooch_village.views.metrics2 import render_metrics2
 from nooch_village.views.bronnen import render_bronnen
 from nooch_village.views.kennislaag import render_kennislaag
+from nooch_village.views.linkbuilding import render_linkbuilding
 
 
 from nooch_village.views.noochie import (
@@ -2320,6 +2321,25 @@ def _act_metrics2_compare(c):
         return c.nxt, ("vergelijking ingesteld" if ok else "✗ niet gevonden")
 
 
+def _act_link_pursue(c):
+        # Linkbuilding-doelwit op 'pitchen' zetten (geborgd in cockpit 2).
+        if c.username in (None, "guest"):
+            return c.nxt, "✗ niet toegestaan"
+        from nooch_village.link_targets import LinkTargets
+        store = LinkTargets(os.path.join(c.data_dir, "linkbuilding_targets.json"))
+        ok = store.pursue((c.g("link") or "").strip())
+        return c.nxt, ("→ wordt gepitcht" if ok else "✗ niet gevonden")
+
+
+def _act_link_ignore(c):
+        if c.username in (None, "guest"):
+            return c.nxt, "✗ niet toegestaan"
+        from nooch_village.link_targets import LinkTargets
+        store = LinkTargets(os.path.join(c.data_dir, "linkbuilding_targets.json"))
+        ok = store.ignore((c.g("link") or "").strip())
+        return c.nxt, ("genegeerd" if ok else "✗ niet gevonden")
+
+
 def _act_source_activate(c):
         # Externe bron aanzetten (mens-gated). Haalt pas bij de volgende pulse data op.
         src = (c.g("source") or "").strip()
@@ -2997,6 +3017,8 @@ ACTIONS = {
     "metrics2_formula": _act_metrics2_formula,
     "source_activate": _act_source_activate,
     "source_deactivate": _act_source_deactivate,
+    "link_pursue": _act_link_pursue,
+    "link_ignore": _act_link_ignore,
 
     "ai_reply": _act_ai_reply,
     "proj_feed": _act_proj_feed,
@@ -3309,6 +3331,10 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/inzichten":
                 # Kennislaag: de inzicht-kaarten die de Librarian ving (read-only).
                 self._send(render_kennislaag(data_dir))
+                return
+            if path == "/linkbuilding":
+                # Linkbuilding-doelwitten geborgd in cockpit 2 (pitchen/negeren).
+                self._send(render_linkbuilding(data_dir, csrf_token=effective_csrf))
                 return
             if path == "/metrics2":
                 # Nieuw catalogus-plus-dashboard-scherm, náást het bestaande metrics-scherm.
