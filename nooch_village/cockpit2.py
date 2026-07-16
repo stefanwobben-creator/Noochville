@@ -230,6 +230,7 @@ from nooch_village.views.inbox import (
 )
 from nooch_village.views.metrics2 import render_metrics2
 from nooch_village.views.bronnen import render_bronnen
+from nooch_village.views.kennislaag import render_kennislaag
 
 
 from nooch_village.views.noochie import (
@@ -3304,6 +3305,10 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/bronnen":
                 # Aansluit-scherm voor externe databronnen (status + aan/uit).
                 self._send(render_bronnen(st, os.path.dirname(data_dir), csrf_token=effective_csrf))
+                return
+            if path == "/inzichten":
+                # Kennislaag: de inzicht-kaarten die de Librarian ving (read-only).
+                self._send(render_kennislaag(data_dir))
                 return
             if path == "/metrics2":
                 # Nieuw catalogus-plus-dashboard-scherm, náást het bestaande metrics-scherm.
