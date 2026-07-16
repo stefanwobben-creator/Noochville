@@ -233,6 +233,7 @@ from nooch_village.views.bronnen import render_bronnen
 from nooch_village.views.kennislaag import render_kennislaag
 from nooch_village.views.linkbuilding import render_linkbuilding
 from nooch_village.views.accountabilities import render_accountabilities
+from nooch_village.views.woordenschat import render_woordenschat
 
 
 from nooch_village.views.noochie import (
@@ -3360,6 +3361,10 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/accountabilities":
                 # Dorpsbrede accountability-check (dubbelingen + formulering).
                 self._send(render_accountabilities(st, data_dir, csrf_token=effective_csrf))
+                return
+            if path == "/woordenschat":
+                # Library-kansenscherm: verrijkte keywords gerangschikt op kansrijkheid (read-only, stap 1).
+                self._send(render_woordenschat(data_dir))
                 return
             if path == "/metrics2":
                 # Nieuw catalogus-plus-dashboard-scherm, náást het bestaande metrics-scherm.
