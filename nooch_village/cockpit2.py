@@ -232,6 +232,7 @@ from nooch_village.views.metrics2 import render_metrics2
 from nooch_village.views.bronnen import render_bronnen
 from nooch_village.views.kennislaag import render_kennislaag
 from nooch_village.views.linkbuilding import render_linkbuilding
+from nooch_village.views.accountabilities import render_accountabilities
 
 
 from nooch_village.views.noochie import (
@@ -2321,6 +2322,25 @@ def _act_metrics2_compare(c):
         return c.nxt, ("vergelijking ingesteld" if ok else "✗ niet gevonden")
 
 
+def _act_acc_check(c):
+        # Dorpsbrede accountability-check (dubbelingen + formulering) via één LLM-call; bewaart de uitkomst.
+        if c.username in (None, "guest"):
+            return c.nxt, "✗ niet toegestaan"
+        from nooch_village.skills_impl.accountability_check import check_accountabilities
+        from nooch_village.views.accountabilities import roles_with_accountabilities
+        from nooch_village import llm
+        roles = roles_with_accountabilities(c.st)
+        res = check_accountabilities(
+            roles, lambda p: llm.reason(p, call_site="cockpit_accountability_check"))
+        try:
+            with open(os.path.join(c.data_dir, "accountability_check.json"), "w", encoding="utf-8") as f:
+                json.dump(res, f, ensure_ascii=False)
+        except Exception:
+            pass
+        n = len(res.get("duplicates") or []) + len(res.get("weak") or [])
+        return c.nxt, f"check klaar: {n} aandachtspunt(en)"
+
+
 def _act_link_pursue(c):
         # Linkbuilding-doelwit op 'pitchen' zetten (geborgd in cockpit 2).
         if c.username in (None, "guest"):
@@ -3019,6 +3039,7 @@ ACTIONS = {
     "source_deactivate": _act_source_deactivate,
     "link_pursue": _act_link_pursue,
     "link_ignore": _act_link_ignore,
+    "acc_check": _act_acc_check,
 
     "ai_reply": _act_ai_reply,
     "proj_feed": _act_proj_feed,
@@ -3335,6 +3356,10 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/linkbuilding":
                 # Linkbuilding-doelwitten geborgd in cockpit 2 (pitchen/negeren).
                 self._send(render_linkbuilding(data_dir, csrf_token=effective_csrf))
+                return
+            if path == "/accountabilities":
+                # Dorpsbrede accountability-check (dubbelingen + formulering).
+                self._send(render_accountabilities(st, data_dir, csrf_token=effective_csrf))
                 return
             if path == "/metrics2":
                 # Nieuw catalogus-plus-dashboard-scherm, náást het bestaande metrics-scherm.

@@ -735,7 +735,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
     inner = (f"{_DS_LINK}"
              f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
-             "<a href='/'>home</a> · <a href='/inbox'>inbox</a> · <a href='/catalog'>catalogus</a> · <a href='/bronnen'>bronnen</a> · <a href='/linkbuilding'>linkbuilding</a> · <a href='/inzichten'>inzichten</a> · <a href='/signals'>signalen</a> · <a href='/admin'>deelnemers</a></div>"
+             "<a href='/'>home</a> · <a href='/inbox'>inbox</a> · <a href='/catalog'>catalogus</a> · <a href='/bronnen'>bronnen</a> · <a href='/linkbuilding'>linkbuilding</a> · <a href='/inzichten'>inzichten</a> · <a href='/signals'>signalen</a> · <a href='/accountabilities'>accountabilities</a> · <a href='/admin'>deelnemers</a></div>"
              f"<div class='c2-wrap'>{main}{rail}</div>{modal}")
     return _page(_name(rec), inner)
 
