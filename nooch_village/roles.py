@@ -141,7 +141,11 @@ class WebsiteWatcherWorker(Inhabitant):
             # Trends: betrouwbaar via SerpApi, maar zuinig (wekelijks) en nooit op het
             # kritieke pad. Buiten de cadans of bij een fout gaat de note gewoon door.
             trends = self._maybe_trends()
-            note = self.use_skill("field_note", {"plausible": plausible, "trends": trends})
+            # De dure LLM-duiding (proza) draait wekelijks; de data (tension, last_pulse, raw json)
+            # blijft dagelijks. Zo bouw je elke dag historie op maar bespaar je dagelijks LLM-verbruik.
+            prose = self._field_note_prose_due()
+            note = self.use_skill("field_note",
+                                  {"plausible": plausible, "trends": trends, "prose": prose})
 
             self._log_pulse_metrics(plausible)
             self._collect_daily_observations()             # generiek: elke actieve bron → observaties
@@ -208,6 +212,29 @@ class WebsiteWatcherWorker(Inhabitant):
             except Exception:
                 pass
         return trends
+
+    def _field_note_prose_due(self) -> bool:
+        """Wekelijkse cadans voor de LLM-proza van de Field Note (zuinig). De dagelijkse data draait
+        sowieso; alleen de dure duiding is gepoort. `field_note_interval_seconds` = 0 → elke puls (oud
+        gedrag). De stempel wordt gezet zodra de proza aan de beurt is."""
+        interval = float(self.context.settings.get("field_note_interval_seconds", "604800") or 604800)
+        if interval <= 0:
+            return True
+        state_path = os.path.join(self.context.data_dir, "field_note_prose_last.json")
+        try:
+            last = float(json.load(open(state_path)).get("ts", 0))
+        except Exception:
+            last = 0.0
+        now = time.time()
+        if is_due(last, now, interval):
+            try:
+                with open(state_path, "w") as f:
+                    json.dump({"ts": now}, f)
+            except Exception:
+                pass
+            return True
+        self.log.info("⏭️ Field Note-proza overgeslagen (wekelijkse cadans nog niet verstreken)")
+        return False
 
     def _log_pulse_metrics(self, plausible: dict) -> None:
         """Log de UTM-kanaal-metrics (visitors_via_*) uit de puls — kanaaldata heeft géén eigen
@@ -407,27 +434,6 @@ class WebsiteWatcherWorker(Inhabitant):
                     "_parent": parent_kw,
                     "_rising": True,
                     "_breakout": related.get("breakout", False) if isinstance(related, dict) else False,
-                })
-        # Verbreed niche-research met de umbrella-term: 'biodegradable barefoot shoes' → 'barefoot shoes'.
-        # Zo mist de scout de brede context niet, ook als de niche-term op 0 volume uitkomt. Lichte
-        # LLM-stap (config-schakelbaar via keyword_umbrella, default aan; fail-closed → geen umbrella).
-        # De umbrella gaat als eigen kandidaat de pipeline in (dedup tegen de bibliotheek + bestaande
-        # labels, gedekt op 5), zodat hij ook echt onderzocht en beoordeeld wordt.
-        if str(getattr(self.context, "settings", {}).get("keyword_umbrella", "1")) == "1" and candidates:
-            from nooch_village.umbrella import umbrella_terms
-            have = {c["label"].strip().lower() for c in candidates}
-            umap = umbrella_terms([c["label"] for c in candidates], name=self.id)
-            for u in umap.values():
-                if len([c for c in candidates if c.get("_umbrella")]) >= 5:
-                    break
-                ul = u.strip().lower()
-                if ul in have or lib.status(u) is not None:
-                    continue
-                have.add(ul)
-                candidates.append({
-                    "label": u,
-                    "description": "brede umbrella-term voor niche-research (rijkere context)",
-                    "_value": 0, "_parent": "umbrella", "_umbrella": True,
                 })
         ranked = prioritize(candidates, self.context)
         proposed = 0

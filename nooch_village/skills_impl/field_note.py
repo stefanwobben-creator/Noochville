@@ -23,9 +23,11 @@ class FieldNoteSkill(Skill):
     def run(self, payload: dict, context) -> dict:
         plausible = payload.get("plausible", {})
         trends = payload.get("trends", {})
+        # `prose` poort de dure LLM-duiding. Standaard True (backward-compat); de puls zet 'm wekelijks.
+        prose = payload.get("prose", True)
         today = datetime.now().strftime("%Y-%m-%d")
 
-        # --- tension-detectie: vergelijk bezoekers met de vorige puls ---
+        # --- tension-detectie: vergelijk bezoekers met de vorige puls (ALTIJD, goedkoop, geen LLM) ---
         visitors = self._visitors(plausible)
         baseline_path = os.path.join(context.data_dir, "last_pulse.json")
         last = json.load(open(baseline_path)) if os.path.exists(baseline_path) else {}
@@ -39,6 +41,18 @@ class FieldNoteSkill(Skill):
         if visitors is not None:
             json.dump({"visitors": visitors, "date": today}, open(baseline_path, "w"))
 
+        # --- ruwe data ALTIJD wegschrijven (goedkoop, bouwt dagelijks historie op) ---
+        out_dir = os.path.join(context.data_dir, "output")
+        os.makedirs(out_dir, exist_ok=True)
+        raw_path = os.path.join(out_dir, f"pulse_raw_{today}.json")
+        with open(raw_path, "w") as f:
+            json.dump({"plausible": plausible, "trends": trends}, f, ensure_ascii=False, indent=2)
+
+        # --- de dure LLM-duiding (proza) is gepoort: standaard wekelijks, niet elke dag ---
+        if not prose:
+            return {"path": None, "tension": tension, "reason": reason_txt,
+                    "grounded": None, "issues": [], "prose": False}
+
         body = self._compose(plausible, trends, visitors, last_visitors, tension, reason_txt)
 
         # Grondings-poort (De Kroniek): een LLM-duiding mag geen cijfers/datums verzinnen die niet uit de
@@ -48,11 +62,6 @@ class FieldNoteSkill(Skill):
             body = ("> ⚠️ ONGEGROND — deze Field Note bevat data die niet uit de bron volgt:\n"
                     + "".join(f">  - {i}\n" for i in issues) + ">\n\n" + body)
 
-        out_dir = os.path.join(context.data_dir, "output")
-        os.makedirs(out_dir, exist_ok=True)
-        raw_path = os.path.join(out_dir, f"pulse_raw_{today}.json")
-        with open(raw_path, "w") as f:
-            json.dump({"plausible": plausible, "trends": trends}, f, ensure_ascii=False, indent=2)
         path = os.path.join(out_dir, f"field_note_{today}.md")
         with open(path, "w") as f:
             f.write(body)
@@ -67,7 +76,7 @@ class FieldNoteSkill(Skill):
             pass
 
         return {"path": path, "tension": tension, "reason": reason_txt,
-                "grounded": not issues, "issues": issues}
+                "grounded": not issues, "issues": issues, "prose": True}
 
     # --- helpers ---
     def _visitors(self, plausible):
