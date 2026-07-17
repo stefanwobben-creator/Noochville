@@ -245,9 +245,14 @@ def _intake_sectie(nieuw: str, atoms: dict, csrf: str) -> str:
 
 def _ongesorteerd_bakje(atoms: dict, inzichten, csrf: str) -> str:
     """Zichtbaar bakje (besluit Stefan): atomen zonder onderwerp-tag, met per atoom een
-    onderwerp-keuze zodat een mens ze naar een hub cureert. Geen stille restcategorie."""
+    onderwerp-keuze zodat een mens ze naar een hub cureert. Geen stille restcategorie.
+
+    Alleen kennisbank-era atomen (met `provenance`, dus seed + intake): de ~190 legacy
+    Librarian-kaartjes in notes.json hebben geen provenance én geen onderwerp-tag en
+    zouden het bakje anders overspoelen — die horen bij de kennislaag-flow, niet hier."""
     los = {aid: a for aid, a in atoms.items()
-           if not subject_van(a) and (a.get("claim") or "").strip()}
+           if not subject_van(a) and a.get("provenance")
+           and (a.get("claim") or "").strip()}
     if not los:
         return ""
     opts = "".join(f"<option value='{_e(s)}'>{_e(s)}</option>" for s in SUBJECTS)
