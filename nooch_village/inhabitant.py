@@ -913,8 +913,16 @@ class Inhabitant(threading.Thread):
             self.prepare_project(p["id"])
         for status in ("queued", "running"):                     # ACTIEF → uitvoeren (DEEL B)
             for p in ledger.by_status(status):
-                if p.get("owner") == self.id:
-                    self._claim_run_complete(p["id"])
+                if p.get("owner") != self.id:
+                    continue
+                # Herstelpad: een project dat ACTIEF werd zonder voorbereide checklist (bijv. een
+                # bord-drag future→actief) zit anders permanent stil — _execute_checklist vindt een
+                # lege checklist en publiceert project_needs_preparation, dat NERGENS een handler had.
+                # Bereid het hier alsnog voor (idempotent: mét checklist → prepare_project doet niets),
+                # daarna uitvoeren. blocked/done blijven ongemoeid (die staan niet in deze lijst).
+                if self._project_checklist(p) is None:
+                    self.prepare_project(p["id"])
+                self._claim_run_complete(p["id"])
 
     def _wip_prepare_limit(self):
         """De WIP-limiet op voorbereiding (int), of None (geen limiet). De cirkelpolicy WIP-001 is de
@@ -946,14 +954,19 @@ class Inhabitant(threading.Thread):
     # ── DEEL A: voorbereiding (alleen voor een string-scope project in TOEKOMST) ──────────────
     def prepare_project(self, pid: str) -> None:
         """Breek het projectdoel op in een checklist: per item een skill-referentie OF 'geen skill' + reden.
-        Draait ALLEEN voor een string-scope project in TOEKOMST zonder checklist. Voert NIETS uit; het
-        project blijft in TOEKOMST."""
+        Draait voor een string-scope project in TOEKOMST, óf voor een ACTIEF (queued/running) project dat
+        nog GEEN checklist heeft (herstelpad na een bord-drag naar actief zonder voorbereiding). Voert
+        niets uit; de status blijft ongewijzigd (uitvoeren gebeurt daarna in DEEL B)."""
         ledger = getattr(self.context, "projects", None)
         if ledger is None:
             return
         p = ledger.get(pid)
-        if p is None or p.get("status") != "future" or not isinstance(p.get("scope"), str):
-            return                                                # alleen TOEKOMST + string-doel
+        if p is None or not isinstance(p.get("scope"), str):
+            return
+        status = p.get("status")
+        actief_zonder_checklist = status in ("queued", "running") and self._project_checklist(p) is None
+        if status != "future" and not actief_zonder_checklist:
+            return                                                # alleen TOEKOMST of actief-zonder-plan
         goal = self._scope_text(p)
         if not goal or self._project_checklist(p) is not None:
             return                                                # geen doel of al voorbereid (idempotent)
@@ -1121,6 +1134,18 @@ class Inhabitant(threading.Thread):
         return isinstance(data, dict) and isinstance(data.get("items"), list) and bool(data["items"])
 
     # ── DEEL B: uitvoering (bij de puls voor projecten in ACTIEF) ─────────────────────────────
+    def _notify_founder(self, project_id: str, snippet: str) -> None:
+        """Zichtbare heads-up naar de founder-rol (NotifStore, naast de human_inbox). GEEN approve-knop —
+        beslissen blijft op het geauthenticeerde human_inbox-oppervlak (CLAUDE.md). Fail-soft: mag de
+        puls nooit breken."""
+        try:
+            from nooch_village.notifications import NotifStore
+            from nooch_village.human_inbox import FOUNDER_ROLE_ID
+            pad = os.path.join(self.context.data_dir, "notifications.json")
+            NotifStore(pad).add("role", FOUNDER_ROLE_ID, project_id, by=self.id, snippet=snippet[:160])
+        except Exception:
+            pass
+
     def _claim_run_complete(self, pid: str) -> None:
         """Voer een ACTIEF project uit via zijn checklist. Markeert DONE ALLEEN als run_project een outcome
         teruggeeft (alle items af). Geen valse done: onvoltooide checklist → blijft in ACTIEF."""
@@ -1303,6 +1328,10 @@ class Inhabitant(threading.Thread):
             ledger.add_role_message(pid, f"⏸️ {vraag}")          # de rol zet zijn concrete hulpvraag neer
             ledger.reset_item_fails(pid, clid, [it["id"] for it in stuck])   # verse pogingen na reactivering
             ledger.block(pid, f"vastgelopen op {len(stuck)} item(s) — wacht op antwoord")
+            # Taak 2: zichtbaar escaleren naar de founder (heads-up, geen approve-knop). Een geblokkeerd
+            # project stond tot nu toe alleen als wall-note op het bord; de founder zag het niet.
+            self._notify_founder(pid, f"⏸️ Project van {self.display_name} vastgelopen op "
+                                 f"{len(stuck)} item(s): {vraag}")
             self.bus.publish(Event("project_stuck",
                                    {"project_id": pid, "owner": self.id, "items": len(stuck),
                                     "vraag": vraag}, self.id))
