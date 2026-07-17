@@ -8,6 +8,30 @@ log = logging.getLogger(__name__)
 _VALID_DATA_SOURCES = {"gkp", "cli"}
 _BATCH = 100                       # KE: max 100 keywords per call (1 credit per keyword)
 
+# Rol-vriendelijke synoniemen → de twee echte KE-codes. Een skill die álle rollen gebruiken
+# hoort geen API-jargon te eisen: "google" (de klassieke rol-gok) mag gewoon 'gkp' worden.
+_DATA_SOURCE_ALIASES = {
+    "gkp": "gkp", "google": "gkp", "google keyword planner": "gkp",
+    "keyword planner": "gkp", "planner": "gkp", "keywordplanner": "gkp",
+    "cli": "cli", "clickstream": "cli", "click stream": "cli", "clickstream data": "cli",
+    "kliks": "cli", "klikstroom": "cli",
+}
+
+
+def resolve_data_source(value, default: str = "gkp") -> tuple[str, str | None]:
+    """Normaliseer een (mogelijk door een rol verzonnen) data_source naar 'gkp' of 'cli'.
+
+    Leeg → de default. Bekend synoniem → de juiste code. Onbekende waarde → val STIL terug op de
+    default en geef een semantische waarschuwing terug (nooit crashen op rol-input). Geeft
+    (bron, waarschuwing|None)."""
+    if value is None or str(value).strip() == "":
+        return (default if default in _VALID_DATA_SOURCES else "gkp"), None
+    key = str(value).strip().lower()
+    if key in _DATA_SOURCE_ALIASES:
+        return _DATA_SOURCE_ALIASES[key], None
+    veilig = default if default in _VALID_DATA_SOURCES else "gkp"
+    return veilig, (f"onbekende zoekvolume-bron '{value}' — ik gebruik de vaste bron '{veilig}'")
+
 
 def _approved_keywords(context) -> list[str]:
     """De gecureerde keywords uit de Library (status 'approved') — de dynamische veldenbron. Zo voedt
@@ -72,7 +96,7 @@ def trend_change_pct(trend) -> float | None:
 
 class KeywordsEverywhereSkill(DataSourceSkill):
     name = "keywords_everywhere"
-    input_schema = "kw: list[str] (keywords, max 100 per call). optioneel: country: str (leeg=global), currency, data_source"
+    input_schema = "kw: list[str] (keywords, max 100 per call). optioneel: country: str (leeg=global), currency, data_source ('gkp'/'cli'; default uit settings, synoniemen ok, onbekend valt terug)"
     required_payload = ("kw",)
     output_schema = "lijst: keywords: dict{keyword: {vol, cpc, competition, trend}} | error"
     SOURCE = "keywordseverywhere"
@@ -135,7 +159,10 @@ class KeywordsEverywhereSkill(DataSourceSkill):
           kw          list[str]  — verplicht, 1–100 termen; leeg → ValueError, >100 → ValueError
           country     str        — default "" (leeg = global; GEEN 'nl'-default)
           currency    str        — default "eur"
-          data_source str        — "gkp" (default) of "cli"; andere waarde → ValueError
+          data_source str        — 'gkp' (Google Keyword Planner) of 'cli' (Clickstream). Default uit
+                                    settings (keywordseverywhere_data_source, standaard 'gkp'). Synoniemen
+                                    als 'google' worden genormaliseerd; onbekende waarde valt stil terug
+                                    op de vaste bron (geen crash).
 
         Output:
           source            str        — "keywords_everywhere"
@@ -158,9 +185,14 @@ class KeywordsEverywhereSkill(DataSourceSkill):
 
         country     = payload.get("country", "")          # leeg = global; GEEN 'nl'-default
         currency    = payload.get("currency", "eur")
-        data_source = payload.get("data_source", "gkp")
-        if data_source not in _VALID_DATA_SOURCES:
-            raise ValueError(f"Onbekende data_source '{data_source}' — kies 'gkp' of 'cli'")
+        # Vaste bron uit settings (x-boven-y-beleid, default 'gkp'); rol-input mag afwijken maar
+        # wordt genormaliseerd. Onbekende waarde crasht niet, maar valt terug op de vaste bron.
+        default_source = (getattr(context, "settings", {}) or {}).get(
+            "keywordseverywhere_data_source", "gkp")
+        default_source, _ = resolve_data_source(default_source, "gkp")   # settings zelf ook aliasbaar
+        data_source, waarschuwing = resolve_data_source(payload.get("data_source"), default_source)
+        if waarschuwing:
+            log.warning("Keywords Everywhere: %s", waarschuwing)
 
         data = [("dataSource", data_source), ("country", country), ("currency", currency)]
         for term in kw:

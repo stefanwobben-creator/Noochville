@@ -83,9 +83,42 @@ def test_empty_keywords_raises():
         mock_post.assert_not_called()
 
 
-def test_unknown_data_source_raises():
+def test_unknown_data_source_valt_terug_op_default():
+    """Onbekende bron crasht niet meer (skill voor álle rollen): stil terug op de vaste bron,
+    zodat een rol-gok als 'xyz' de puls niet meer laat falen."""
     skill = KeywordsEverywhereSkill()
     with patch("nooch_village.skills_impl.keywords_everywhere.requests.post") as mock_post:
-        with pytest.raises(ValueError, match="data_source"):
-            skill.run({"kw": ["test"], "data_source": "xyz"}, _ctx())
-        mock_post.assert_not_called()
+        mock_post.return_value = _mock_response()
+        result = skill.run({"kw": ["test"], "data_source": "xyz"}, _ctx())
+    assert result["data_source"] == "gkp"          # default, geen crash
+    mock_post.assert_called_once()
+
+
+def test_synoniem_google_wordt_gkp():
+    """De klassieke rol-gok 'google' wordt genormaliseerd naar de echte KE-code 'gkp'."""
+    skill = KeywordsEverywhereSkill()
+    with patch("nooch_village.skills_impl.keywords_everywhere.requests.post") as mock_post:
+        mock_post.return_value = _mock_response()
+        result = skill.run({"kw": ["test"], "data_source": "google"}, _ctx())
+    assert result["data_source"] == "gkp"
+
+
+def test_settings_default_wint_bij_lege_input():
+    """x-boven-y-beleid: de vaste bron uit settings geldt als de payload er geen meegeeft."""
+    skill = KeywordsEverywhereSkill()
+    ctx = _ctx()
+    ctx.settings["keywordseverywhere_data_source"] = "cli"
+    with patch("nooch_village.skills_impl.keywords_everywhere.requests.post") as mock_post:
+        mock_post.return_value = _mock_response()
+        result = skill.run({"kw": ["test"]}, ctx)      # geen data_source in payload
+    assert result["data_source"] == "cli"
+
+
+def test_resolve_data_source_helper():
+    from nooch_village.skills_impl.keywords_everywhere import resolve_data_source
+    assert resolve_data_source("google") == ("gkp", None)
+    assert resolve_data_source("Clickstream") == ("cli", None)
+    assert resolve_data_source("") == ("gkp", None)
+    bron, waarschuwing = resolve_data_source("xyz", "gkp")
+    assert bron == "gkp" and "xyz" in waarschuwing
+    assert resolve_data_source("", "cli") == ("cli", None)   # aliasbare default genormaliseerd
