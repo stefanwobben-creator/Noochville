@@ -226,33 +226,85 @@ def _atoom_regel(aid: str, a: dict, selecteerbaar: bool = False) -> str:
             f"{body}</div></div>")
 
 
-def _intake_sectie(nieuw: str, atoms: dict, csrf: str) -> str:
-    """De noteer-box (fase 2, echt) + de bron-adapters (taak 5): tekst, link of PDF —
-    alles gaat door dezelfde atomiser. Daarna tonen we de nieuwe atomen."""
-    form = (f"<form method='post' action='/action'>"
-            f"{_hid(csrf, 'kb_intake', '/kennisbank')}"
-            f"{_field('noteer iets… een idee, een artikel, een cijfer', 'raw', kind='textarea', fid='f-kn-raw', required=True)}"
-            f"{_field('bron (optioneel — als de tekst het zelf niet zegt)', 'source_hint', fid='f-kn-hint')}"
-            f"<button class='btn ok'>Voeg toe</button>"
-            f"<span class='muted'> — we splitsen het in losse notities en hangen ze op de juiste plek</span>"
-            f"</form>"
-            f"<details class='kn-panel'><summary>🔗 Plak een link of upload een PDF</summary>"
-            f"<form method='post' action='/action' class='kn-zoek'>"
-            f"{_hid(csrf, 'kb_intake_url', '/kennisbank')}"
-            f"{_field('plak een link — we halen de leesbare tekst op', 'url', fid='f-kn-url', placeholder='https://…')}"
-            f"<button class='btn'>Haal de pagina op</button></form>"
-            f"<form method='post' action='/action' enctype='multipart/form-data' class='kn-zoek'>"
-            f"{_hid(csrf, 'kb_intake_pdf', '/kennisbank')}"
-            + _field("of upload een PDF (een rapport mag lang zijn — we verwerken het in delen)",
-                     "file", kind="file", fid="f-kn-pdf", attrs="accept='application/pdf'")
-            + f"<button class='btn'>Verwerk de PDF</button></form></details>")
-    resultaat = ""
-    ids = [i for i in (nieuw or "").split(",") if i]
-    rows = "".join(_atoom_regel(aid, atoms[aid]) for aid in ids if aid in atoms)
-    if rows:
-        resultaat = (f"<div class='kn-sectitle'>We splitsten dit in "
-                     f"{len([i for i in ids if i in atoms])} notities</div>{rows}")
-    return f"<div class='card kn-capture'>{form}{resultaat}</div>"
+def _actiebalk(open_: str, st, atoms: dict, inzichten: list, hunch: str, speel: str,
+               cluster: int, csrf: str) -> str:
+    """Zone 1 — de compacte, sticky actiebalk met twee accordions (open-staat via ?open=).
+    Laag als beide dicht zijn; klapt één zone open zonder de pagina te verspringen."""
+    bron_open = open_ == "bron"
+    speel_open = open_ == "speel"
+    knoppen = (f"<div class='kn-actiebtns'>"
+               f"<a class='btn{' ok' if bron_open else ''}' "
+               f"href='/kennisbank{'' if bron_open else '?open=bron'}'>➕ Bron toevoegen</a>"
+               f"<a class='btn{' ok' if speel_open else ''}' "
+               f"href='/kennisbank{'' if speel_open else '?open=speel'}'>🎲 Speel een inzicht</a></div>")
+    paneel = ""
+    if bron_open:
+        paneel = f"<div class='card kn-capture'>{_bron_toevoegen(csrf)}</div>"
+    elif speel_open:
+        paneel = f"<div class='card kn-capture'>{_speel_toevoegen(st, atoms, inzichten, hunch, speel, cluster, csrf)}</div>"
+    return f"<div class='kn-actiebalk'>{knoppen}{paneel}</div>"
+
+
+def _bron_toevoegen(csrf: str) -> str:
+    """Zone 2 — één ingang: plakken (tekst/link) OF een bestand. Auto-detectie server-side;
+    het resultaat gaat naar de staging-ronde ('even nakijken'), niet meteen de bibliotheek in."""
+    return (
+        f"<form method='post' action='/action' enctype='multipart/form-data'>"
+        f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+        f"<input type='hidden' name='action' value='kb_bron_add'>"
+        f"{_field('plak een notitie, een artikel, of een link (website / Google Sheet)', 'bron_text', kind='textarea', fid='f-bron-text')}"
+        + _field("… of kies een bestand (PDF, Excel of CSV)", "file", kind="file",
+                 fid="f-bron-file", attrs="accept='.pdf,.xlsx,.xls,.csv'")
+        + f"<button class='btn ok'>Verwerk de bron</button>"
+        f"<span class='muted'> — we herkennen het type zelf; daarna kijk je de voorstellen "
+        f"na vóór ze de bibliotheek in gaan</span></form>")
+
+
+def _speel_toevoegen(st, atoms: dict, inzichten: list, hunch: str, speel: str,
+                     cluster: int, csrf: str) -> str:
+    """Zone 3 — een hunch typen OF door de clusters bladeren (één tegelijk, vorige/volgende)."""
+    delen = [f"<form method='get' action='/kennisbank' class='kn-zoek'>"
+             f"<input type='hidden' name='open' value='speel'>"
+             + _field("💡 ik heb een hunch", "hunch", value="" if speel else hunch,
+                      fid="f-kn-hunchzoek",
+                      placeholder="bijv. wachttijd is juist een feature, geen kost")
+             + f"<button class='btn'>Zoek de kaarten</button></form>"]
+    cls = kb_clusters(atoms, inzichten)
+    if cls:
+        i = max(0, min(cluster, len(cls) - 1))
+        cl = cls[i]
+        ids = ",".join(cl["atom_ids"])
+        nav = ""
+        if len(cls) > 1:
+            prev = f"<a class='btn' href='/kennisbank?open=speel&cluster={i-1}'>← vorige</a> " if i > 0 else ""
+            nxt = f"<a class='btn' href='/kennisbank?open=speel&cluster={i+1}'>volgende →</a>" if i < len(cls) - 1 else ""
+            nav = f"<span class='muted'>cluster {i+1} van {len(cls)}</span> {prev}{nxt}"
+        delen.append(
+            f"<div class='kn-cluster'><b>🧩 {_e(cl['theme'])}</b> "
+            f"<span class='muted'>· {len(cl['atom_ids'])} kaarten willen een inzicht worden</span><br>"
+            f"<a class='btn ok' href='/kennisbank?open=speel&speel={_e(ids)}&hunch={_e(cl['theme'])}'>Speel deze</a> {nav}</div>")
+    if speel:
+        kandidaten = [{"atom_id": aid, "stance": "support"}
+                      for aid in speel.split(",") if aid in atoms]
+        delen.append(_curatie_sectie("Je set (draai de richting waar nodig)",
+                                     kandidaten, atoms, hunch, csrf))
+    elif hunch:
+        kandidaten = gather(hunch, atoms)
+        delen.append(_curatie_sectie(f"Kaarten bij: “{hunch}”", kandidaten, atoms, hunch, csrf))
+    for s in st.spel.open_spellen()[:3]:
+        delen.append(f"<p class='muted'>🎲 open spel: <a href='/kennisbank/spel?sid={_e(s['id'])}'>"
+                     f"{_e(s.get('hunch') or s['id'])}</a></p>")
+    return "".join(delen)
+
+
+def _nieuw_toast(nieuw: str, atoms: dict) -> str:
+    """Na een staging-commit tonen we kort de net toegevoegde atomen (via ?nieuw=)."""
+    ids = [i for i in (nieuw or "").split(",") if i and i in atoms]
+    if not ids:
+        return ""
+    rows = "".join(_atoom_regel(aid, atoms[aid]) for aid in ids)
+    return (f"<div class='card kn-capture'><div class='kn-sectitle'>Net toegevoegd "
+            f"({len(ids)})</div>{rows}</div>")
 
 
 _PAG = 30
@@ -398,7 +450,7 @@ def _curatie_sectie(titel: str, kandidaten: list[dict], atoms: dict, hunch: str,
                  f"Spelen mag altijd.</div>")
     return (f"<div class='card'><div class='kn-sectitle'>{_e(titel)}</div>{nudge}"
             f"<form method='post' action='/action' id='spelstart'>"
-            f"{_hid(csrf, 'kb_spel_start', '/kennisbank', {'reformulate_of': reformulate_of})}"
+            f"{_hid(csrf, 'kb_spel_start', '/kennisbank?open=speel', {'reformulate_of': reformulate_of})}"
             f"{_field('je vermoeden', 'hunch', value=hunch, fid='f-kn-hunch', required=True)}"
             f"</form>{binnen}"
             f"<button class='btn ok' form='spelstart'>speel het inzicht →</button> "
@@ -406,45 +458,18 @@ def _curatie_sectie(titel: str, kandidaten: list[dict], atoms: dict, hunch: str,
             f"een reframe en een falsifier</span></div>")
 
 
-def _spel_sectie(st, atoms: dict, inzichten: list[dict], hunch: str, speel: str,
-                 csrf: str) -> str:
-    """De 'Speel een inzicht'-strook: clusters (bottom-up), hunch-vak (top-down),
-    en de curatie-sectie zodra één van beide een set heeft opgeleverd."""
-    delen: list[str] = []
-    for cl in kb_clusters(atoms, inzichten):
-        ids = ",".join(cl["atom_ids"])
-        delen.append(
-            f"<div class='card kn-capture'><b>🧩 {_e(cl['theme'])}</b> "
-            f"<span class='muted'>· {len(cl['atom_ids'])} kaarten willen een inzicht worden</span> "
-            f"<a class='btn' href='/kennisbank?speel={_e(ids)}&hunch={_e(cl['theme'])}'>Bekijk de set</a></div>")
-    hunch_veld = _field("💡 ik heb een hunch", "hunch", value="" if speel else hunch,
-                        fid="f-kn-hunchzoek",
-                        placeholder="bijv. wachttijd is juist een feature, geen kost")
-    delen.append(f"<form method='get' action='/kennisbank' class='kn-zoek'>{hunch_veld}"
-                 f"<button class='btn'>Zoek de kaarten</button></form>")
-    if speel:
-        kandidaten = [{"atom_id": aid, "stance": "support"}
-                      for aid in speel.split(",") if aid in atoms]
-        delen.append(_curatie_sectie("Je set (draai de richting waar nodig)",
-                                     kandidaten, atoms, hunch, csrf))
-    elif hunch:
-        kandidaten = gather(hunch, atoms)
-        delen.append(_curatie_sectie(f"Kaarten bij: “{hunch}”", kandidaten, atoms, hunch, csrf))
-    open_spellen = st.spel.open_spellen()[:3]
-    for s in open_spellen:
-        delen.append(f"<p class='muted'>🎲 open spel: <a href='/kennisbank/spel?sid={_e(s['id'])}'>"
-                     f"{_e(s.get('hunch') or s['id'])}</a> ({len(s.get('messages') or [])} beurten)</p>")
-    return "".join(delen)
-
-
 def render_kennisbank(st, kid: str = "", q: str = "", csrf_token: str = "",
                       msg: str = "", hunch: str = "", speel: str = "",
-                      nieuw: str = "", hub: str = "", pag: int = 1) -> str:
+                      nieuw: str = "", hub: str = "", pag: int = 1,
+                      open_: str = "", cluster: int = 0) -> str:
     atoms = load_atoms(st.dd)
     inzichten = st.kennisbank.all()
+    # Een lopende hunch/speel-set houdt de speel-zone vanzelf open.
+    if (hunch or speel) and not open_:
+        open_ = "speel"
     cards = "".join(_topic_card(i, atoms) for i in inzichten) or (
-        "<p class='muted'>Nog geen inzichten. Maak er een met \"+ leeg inzicht\", of seed "
-        "de eerste vulling: <code>python -m nooch_village.kennisbank_seed --apply</code></p>")
+        "<p class='muted'>Nog geen inzichten. Maak er een met \"+ Begin een leeg inzicht\", of "
+        "seed de eerste vulling: <code>python -m nooch_village.kennisbank_seed --apply</code></p>")
 
     nieuw_form = (
         f"<details class='kn-panel'><summary>+ Begin een leeg inzicht</summary>"
@@ -456,8 +481,8 @@ def render_kennisbank(st, kid: str = "", q: str = "", csrf_token: str = "",
         f"<span class='muted'> — groeit van \"nog dun\" naar \"stevig\" door bewijs te koppelen</span>"
         f"</form></details>")
 
-    capture = _intake_sectie(nieuw, atoms, csrf_token)
-    spel = _spel_sectie(st, atoms, inzichten, hunch, speel, csrf_token)
+    actiebalk = _actiebalk(open_, st, atoms, inzichten, hunch, speel, cluster, csrf_token)
+    toast = _nieuw_toast(nieuw, atoms)
     bakje = _ongesorteerd_bakje(atoms, inzichten, csrf_token)
     bieb = _bibliotheek_sectie(st, atoms, hub, pag, csrf_token)
 
@@ -469,11 +494,7 @@ def render_kennisbank(st, kid: str = "", q: str = "", csrf_token: str = "",
 
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
             f"<h1>🌱 Wat Nooch weet</h1>"
-            f"<p class='muted'>Alles wat binnenkomt wordt kleine notities. Hieronder zie je wat "
-            f"we daaruit leren en hoe zeker we zijn. Tik een inzicht open om het bewijs te zien, "
-            f"kaarten te koppelen en er iets aan toe te voegen.</p>"
-            f"{_banner(msg)}{capture}"
-            f"<h2>Speel een inzicht</h2>{spel}"
+            f"{actiebalk}{_banner(msg)}{toast}"
             f"<h2>Onze inzichten</h2>{nieuw_form}{cards}"
             f"{bieb}{bakje}"
             f"<p class='muted'>Elke zekerheid schuift mee als er info bijkomt.</p></div>")

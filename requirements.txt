@@ -26,3 +26,4 @@ pypdf>=4.0
 livekit-api==1.1.1          # gepind — Render moet exact deze meenemen
 python-dotenv==1.2.2        # .env-laden bij de deploy
 trafilatura>=2.0   # kennisbank: URL-hoofdtekst-extractie (source-adapter)
+openpyxl>=3.1   # kennisbank: Excel-tabelbron-adapter

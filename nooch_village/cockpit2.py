@@ -67,6 +67,8 @@ from nooch_village.kennisbank import (KennisbankStore, parse_blok,
                                       load_atoms as kb_load_atoms)
 from nooch_village.kennisbank_intake import SUBJECTS as KB_SUBJECTS, intake as kb_intake
 from nooch_village.kennisbank_spel import SpelStore, spel_finish
+from nooch_village.kennisbank_staging import StagingStore, commit_batch
+from nooch_village.views.kennisbank_staging import render_kennisbank_staging
 from nooch_village.notes_store import NotesStore
 from nooch_village.insight import Insight
 from nooch_village.metric_schema import (CADANS_LABEL, MEETTYPE_LABEL, MEETWIJZE_LABEL,
@@ -126,6 +128,7 @@ class _Stores:
         self.kennisbank = KennisbankStore(os.path.join(dd, "kennisbank.json"))   # laag 2: geversioneerde inzichten
         self.notes = NotesStore(os.path.join(dd, "notes.json"))   # laag 1: de atomen-bibliotheek (kennislaag)
         self.spel = SpelStore(os.path.join(dd, "kennisbank_spel.json"))   # fase 3: inzicht-dialogen
+        self.staging = StagingStore(os.path.join(dd, "kennisbank_staging.json"))   # zone 2: even-nakijken
 
 
 _FAC_ACC = "Rapporteren over de gezondheid van de werkoverleggen"
@@ -3149,6 +3152,50 @@ def _act_kb_intake_url(c):
             f"✂️ we splitsten de pagina in {len(nieuw)} notities{extra}")
 
 
+def _act_kb_stage_edit(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Staging bewerken vóór commit.
+    ok = c.st.staging.edit_atom(c.g("bid"), c.g("sid"), content=c.g("content"),
+                                subject=c.g("subject"), provenance=c.g("provenance"))
+    return c.nxt, ("✏️ bijgewerkt" if ok else "✗ niet gevonden")
+
+
+def _act_kb_stage_delete(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
+    ok = c.st.staging.remove_atom(c.g("bid"), c.g("sid"))
+    return c.nxt, ("🗑 weggegooid" if ok else "✗ niet gevonden")
+
+
+def _act_kb_stage_merge(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
+    sids = [s for s in (c.form.get("sid") or []) if s]
+    if len(sids) < 2:
+        return c.nxt, "✗ vink minstens twee voorstellen aan"
+    if not c.g("kop").strip():
+        return c.nxt, "✗ geef de samengestelde kaart een kop"
+    ok = c.st.staging.merge_atoms(c.g("bid"), sids, c.g("kop"))
+    return c.nxt, ("🧩 samengevoegd" if ok else "✗ samenvoegen niet gelukt")
+
+
+def _act_kb_stage_commit(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Pas hier landen de
+    # nagekeken atomen append-only in de bibliotheek (idempotent op hash content+bron).
+    res = commit_batch(c.st.staging, c.g("bid"), c.data_dir)
+    if res is None:
+        return c.nxt, "✗ deze set bestaat niet meer"
+    nieuw, dubbel = res
+    if not nieuw:
+        return "/kennisbank", (f"Al bekend: {dubbel} notitie(s) stonden er al" if dubbel
+                               else "Niets toegevoegd — de set was leeg")
+    extra = f" ({dubbel} al bekend)" if dubbel else ""
+    return "/kennisbank", f"✅ {nieuw} notities toegevoegd aan de bibliotheek{extra}"
+
+
+def _act_kb_stage_discard(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
+    ok = c.st.staging.discard(c.g("bid"))
+    return "/kennisbank", ("Set weggegooid — niets in de bibliotheek" if ok else "✗ set niet gevonden")
+
+
 def _act_kb_atoom_subject(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Curatie van het
     # ongesorteerd-bakje: een mens hangt een subject-loze notitie aan een hub.
@@ -3263,6 +3310,11 @@ ACTIONS = {
     "kb_new": _act_kb_new,
     "kb_intake": _act_kb_intake,
     "kb_intake_url": _act_kb_intake_url,
+    "kb_stage_edit": _act_kb_stage_edit,
+    "kb_stage_delete": _act_kb_stage_delete,
+    "kb_stage_merge": _act_kb_stage_merge,
+    "kb_stage_commit": _act_kb_stage_commit,
+    "kb_stage_discard": _act_kb_stage_discard,
     "kb_atoom_subject": _act_kb_atoom_subject,
     "kb_atoom_merge": _act_kb_atoom_merge,
     "kb_atoom_archive": _act_kb_atoom_archive,
@@ -3650,6 +3702,10 @@ def make_handler(data_dir: str, csrf_token: str,
                     _pag = max(1, int((qs.get("pag") or ["1"])[0]))
                 except ValueError:
                     _pag = 1
+                try:
+                    _cl = max(0, int((qs.get("cluster") or ["0"])[0]))
+                except ValueError:
+                    _cl = 0
                 self._send(render_kennisbank(st, kid=(qs.get("id") or [""])[0],
                                              q=(qs.get("q") or [""])[0],
                                              csrf_token=effective_csrf,
@@ -3657,7 +3713,14 @@ def make_handler(data_dir: str, csrf_token: str,
                                              hunch=(qs.get("hunch") or [""])[0],
                                              speel=(qs.get("speel") or [""])[0],
                                              nieuw=(qs.get("nieuw") or [""])[0],
-                                             hub=(qs.get("hub") or [""])[0], pag=_pag))
+                                             hub=(qs.get("hub") or [""])[0], pag=_pag,
+                                             open_=(qs.get("open") or [""])[0], cluster=_cl))
+                return
+            if path == "/kennisbank/staging":
+                # Zone 2: de "even nakijken"-ronde vóór de bibliotheek (bewerken/samenvoegen/weggooien).
+                self._send(render_kennisbank_staging(st, (qs.get("batch") or [""])[0],
+                                                     csrf_token=effective_csrf,
+                                                     msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/kennisbank/spel":
                 # Het inzicht-spel, copy-paste-flow: hand cureren → prompt kopiëren →
@@ -3911,6 +3974,40 @@ def make_handler(data_dir: str, csrf_token: str,
                                      f"voor de rest (niets raakt dubbel)")
                     nxt = "/kennisbank" + (f"?nieuw={','.join(nieuw_alles)}" if nieuw_alles else "")
                     self._redirect(nxt, " · ".join(delen)); return
+                if fields.get("action") == "kb_bron_add":
+                    # AUTHZ: iedereen-ingelogd — kennisbank zone 2. Eén ingang: tekst OF bestand →
+                    # auto-detect → adapter → atomiser → STAGING-batch (niet direct de bibliotheek;
+                    # de mens kijkt na op /kennisbank/staging).
+                    from nooch_village.kennisbank_sources import detect_and_extract
+                    from nooch_village.kennisbank_intake import atomiseer
+                    username = self._session_username()
+                    fname, blob = files.get("file", ("", b""))
+                    res = detect_and_extract(text=fields.get("bron_text", ""),
+                                             filename=fname if blob else "", data=blob)
+                    if res["chunks"] is None:
+                        self._redirect("/kennisbank?open=bron",
+                                       f"✗ {res.get('error') or 'niets herkend'}"); return
+                    stores = _Stores(data_dir)
+                    atoms: list[dict] = []
+                    label = res["chunks"][0][1]
+                    mislukt = 0
+                    for craw, clabel in res["chunks"]:
+                        got = atomiseer(craw, clabel, tabular=res["tabular"])
+                        if got is None:
+                            mislukt += 1
+                            continue
+                        atoms += got
+                        label = clabel
+                    if not atoms:
+                        self._redirect("/kennisbank?open=bron",
+                                       "✗ de atomiser gaf niets bruikbaars"); return
+                    bid = stores.staging.create(res["kind"], label, atoms,
+                                                tabular=res["tabular"],
+                                                by=(username if username != "guest" else ""))
+                    extra = f" · {mislukt} deel/delen mislukt" if mislukt else ""
+                    self._redirect(f"/kennisbank/staging?batch={bid}",
+                                   f"✂️ {len(atoms)} voorstellen uit {res['kind']} — even nakijken{extra}")
+                    return
                 self._redirect(fields.get("next", "/"), ""); return
             raw = self.rfile.read(length).decode("utf-8") if length else ""
             form = urllib.parse.parse_qs(raw)
