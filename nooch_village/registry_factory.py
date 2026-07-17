@@ -15,6 +15,7 @@ from nooch_village.skills import SkillRegistry
 from nooch_village.skills_impl.site_health import SiteHealthSkill
 from nooch_village.skills_impl.plausible import PlausibleSkill
 from nooch_village.skills_impl.trends import TrendsSkill
+from nooch_village.skills_impl.trend_reindex import TrendReindexSkill
 from nooch_village.skills_impl.serpapi_trends import SerpapiTrendsSkill
 from nooch_village.skills_impl.field_note import FieldNoteSkill
 from nooch_village.skills_impl.library_skills import LibraryLookupSkill, KeywordReviewSkill, LibraryListSkill
@@ -53,7 +54,7 @@ def build_skill_registry() -> SkillRegistry:
     het cockpit-proces gebruikt het (via `shared_registry`) alleen voor match-metadata."""
     reg = SkillRegistry()
     for skill in (
-        SiteHealthSkill(), PlausibleSkill(), TrendsSkill(), SerpapiTrendsSkill(),
+        SiteHealthSkill(), PlausibleSkill(), TrendsSkill(), TrendReindexSkill(), SerpapiTrendsSkill(),
         FieldNoteSkill(), LibraryLookupSkill(), LibraryListSkill(), KeywordReviewSkill(),
         GscPerformanceSkill(), GscReportSkill(),
         NgramCultureSkill(),

@@ -1334,6 +1334,9 @@ class HarryHemp(Inhabitant):
         self.react("dag_begint", self._flush_groundings)
         # Seed-oplevingen (door enrich gesignaleerd) academisch duiden.
         self.react("dag_begint", self._investigate_seed_surges)
+        # Sid's dagelijkse trend-re-index (raadsvoorstel): elke dag uit zichzelf, één run per
+        # echte dag. Staand zintuig, geen deliverable-project → pulse-hook, net als de tijdgeest-puls.
+        self.react("dag_begint", self._trend_reindex_pulse)
         # ── spelregel 5: bied de NL-dekkingscheck aan op verzoek (modus a+b) ──
         self.offer("nl_corpus_coverage", self._on_nl_corpus_request)
 
@@ -1570,6 +1573,50 @@ class HarryHemp(Inhabitant):
                                {"by": self.id, "ok": True, "terms": missing}, self.id))
 
     # ── grounding-tak ─────────────────────────────────────────────────────────
+
+    def _trend_reindex_pulse(self, event: Event) -> None:
+        """Sid's dagelijkse trend-re-index (taak 2). Idempotent per echte dag: draait één keer,
+        ook als dag_begint onverhoopt tweemaal vuurt. Signalen → keyword_proposed (de bestaande
+        curate/grounding-lus = de curate-hand-off); escalate → zichtbaar naar de founder (taak 3).
+        Alleen-lezen naar buiten: de skill haalt Trends-data op, schrijft enkel zijn eigen
+        append-only bestanden en levert termen aan de Librarian; koopt/verstuurt niets."""
+        import datetime, json, os
+        today = datetime.date.today().isoformat()
+        marker = os.path.join(self.context.data_dir, "trend_reindex_last_day.json")
+        try:                                                   # same-day-guard (persistent vangnet)
+            if json.load(open(marker)).get("last_day") == today:
+                return
+        except Exception:
+            pass
+        result = self.use_skill("trend_reindex", {})
+        if not isinstance(result, dict) or result.get("error"):
+            self.log.warning("trend_reindex: geen bruikbaar resultaat (%s)",
+                             (result or {}).get("error") if isinstance(result, dict) else result)
+            return
+        # Markeer de dag pas ná een geslaagde aanroep (fail-closed: een gefaalde run mag morgen opnieuw).
+        try:
+            from nooch_village.util import atomic_write_json
+            atomic_write_json(marker, {"last_day": today})
+        except Exception:
+            pass
+        esc = result.get("escalate")
+        if esc:
+            self._notify_founder("", f"📉 Sid's trend-re-index kon niet draaien: "
+                                 f"{esc.get('reason', 'onbekende reden')} — "
+                                 f"beoordeel via python -m nooch_village.inbox")
+            return
+        signals = result.get("signals") or []
+        lib = getattr(self.context, "library", None)
+        for row in signals:                                    # curate-hand-off via de bestaande lus
+            _publish_keyword_proposed(
+                self.bus, self.id, row["term"],
+                demand={"signal": "positive", "source": "trend_reindex",
+                        "direction": "stijgend", "signal_type": row.get("signal_type"),
+                        "index_latest": row.get("index_latest")},
+                library=lib)
+        self.log.info("📊 trend-re-index: %d geëvalueerd, %d signaal(en), watchlist=%d",
+                      len(result.get("evaluated") or []), len(signals),
+                      len(result.get("watchlist") or []))
 
     def _investigate_seed_surges(self, event: Event) -> None:
         """Een seed met een aanhoudende recente opleving (door enrich gesignaleerd) vraagt om

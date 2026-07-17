@@ -61,7 +61,7 @@ _WHITELIST = {
                                "lock-vrij want elk id is uniek — NIET de index, die loopt via JsonStore._save"),
     # ── daemon-lokaal: per-thread/single-writer state, geen gedeelde store ──
     "inhabitant.py":     (5, "daemon-lokaal: per-rol-thread reflect-/goal-state (eigen bestand per rol)"),
-    "roles.py":          (3, "daemon-lokaal: per-rol single-writer state (last_day/seed)"),
+    "roles.py":          (4, "daemon-lokaal: per-rol single-writer state (last_day/seed; +trend_reindex_last_day)"),
     "village.py":        (1, "daemon single-writer: role_status.json (cockpit leest read-only)"),
     # ── dormant/legacy: alleen legacy cockpit1 of demo/CLI — geen live concurrente schrijver ──
     "constraints.py":    (1, "dormant: legacy cockpit1"),
