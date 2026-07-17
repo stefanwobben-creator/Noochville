@@ -193,6 +193,11 @@ def _try_gemini(prompt: str, *, model: str | None = None, sleep=time.sleep, max_
                         http_options=genai_types.HttpOptions(timeout=_GEMINI_TIMEOUT_MS))
             if json_mode:
                 _cfg["response_mime_type"] = "application/json"
+                # Gemini 2.5 "denkt" standaard en die thought-tokens tellen mee in
+                # max_output_tokens — de zichtbare JSON werd daardoor afgekapt (kennisbank-
+                # intake: 483 tekens bij een 4000-token-plafond). json_mode = gestructureerde
+                # extractie; denken uit → het hele plafond is voor de output zelf.
+                _cfg["thinking_config"] = genai_types.ThinkingConfig(thinking_budget=0)
             resp = client.models.generate_content(
                 model=model,
                 contents=prompt,

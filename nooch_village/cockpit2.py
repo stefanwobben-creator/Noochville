@@ -65,6 +65,8 @@ from nooch_village.kennisbank import (KennisbankStore, parse_blok,
                                       field as kb_field, verdict as kb_verdict,
                                       WORD_LABEL as KB_WORD_LABEL,
                                       load_atoms as kb_load_atoms)
+from nooch_village.kennisbank_intake import SUBJECTS as KB_SUBJECTS, intake as kb_intake
+from nooch_village.kennisbank_spel import SpelStore, spel_beurt, spel_finish
 from nooch_village.notes_store import NotesStore
 from nooch_village.insight import Insight
 from nooch_village.metric_schema import (CADANS_LABEL, MEETTYPE_LABEL, MEETWIJZE_LABEL,
@@ -123,6 +125,7 @@ class _Stores:
         self.radar = RadarStore(os.path.join(dd, "radar.json"))   # Radar-tool: gecureerde Inoreader-signalen per rol
         self.kennisbank = KennisbankStore(os.path.join(dd, "kennisbank.json"))   # laag 2: geversioneerde inzichten
         self.notes = NotesStore(os.path.join(dd, "notes.json"))   # laag 1: de atomen-bibliotheek (kennislaag)
+        self.spel = SpelStore(os.path.join(dd, "kennisbank_spel.json"))   # fase 3: inzicht-dialogen
 
 
 _FAC_ACC = "Rapporteren over de gezondheid van de werkoverleggen"
@@ -244,6 +247,7 @@ from nooch_village.views.metrics2 import render_metrics2
 from nooch_village.views.bronnen import render_bronnen
 from nooch_village.views.kennislaag import render_kennislaag
 from nooch_village.views.kennisbank import render_kennisbank
+from nooch_village.views.kennisbank_spel import render_kennisbank_spel
 from nooch_village.views.linkbuilding import render_linkbuilding
 from nooch_village.views.accountabilities import render_accountabilities
 from nooch_village.views.woordenschat import render_woordenschat
@@ -3109,8 +3113,86 @@ def _act_kb_reformulate(c):
     return c.nxt, f"↻ geherformuleerd → v{nieuwe} (vorige versie bewaard)"
 
 
+def _act_kb_intake(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Fase 2: ruwe tekst →
+    # LLM-ladder → atomen, idempotent (hash content+bron) append aan de bibliotheek.
+    # Laag 1 blijft dom: geen oordeel, geen veld; trust wordt pas in laag 2 afgeleid.
+    uitkomst = kb_intake(c.g("raw"), c.g("source_hint"), c.data_dir)
+    if uitkomst is None:
+        return c.nxt, "✗ de noteer-hulp gaf geen bruikbaar antwoord — probeer het zo nog eens"
+    nieuw, dubbel = uitkomst
+    if not nieuw and not dubbel:
+        return c.nxt, "✗ typ eerst iets om te noteren"
+    if not nieuw:
+        return c.nxt, f"Al bekend: {dubbel} notitie(s) stonden er al (niets gedupliceerd)"
+    extra = f" ({dubbel} al bekend)" if dubbel else ""
+    return (f"/kennisbank?nieuw={','.join(nieuw)}",
+            f"✂️ we splitsten dit in {len(nieuw)} notities{extra}")
+
+
+def _act_kb_atoom_subject(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Curatie van het
+    # ongesorteerd-bakje: een mens hangt een subject-loze notitie aan een hub.
+    subject = c.g("subject")
+    if subject not in KB_SUBJECTS:
+        return c.nxt, "✗ kies een onderwerp uit de lijst"
+    if not c.st.notes.add_tags(c.g("atom_id"), [subject]):
+        return c.nxt, "✗ notitie niet gevonden"
+    return c.nxt, f"📥 gesorteerd naar '{subject}'"
+
+
+def _kb_spel_set(c) -> list[dict]:
+    """Gecureerde set uit het formulier: checkboxes `kaart` + per kaart `stance_<id>`."""
+    ids = c.form.get("kaart") or []
+    return [{"atom_id": aid, "stance": (c.g(f"stance_{aid}") or "support")}
+            for aid in ids if aid]
+
+
+def _act_kb_spel_start(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Start een dialoog
+    # met de gecureerde set; bij reformulate_of wordt het een versie-spel.
+    kaarten = _kb_spel_set(c)
+    hunch = c.g("hunch").strip()
+    if not hunch:
+        return c.nxt, "✗ typ eerst je vermoeden"
+    if not kaarten:
+        return c.nxt, "✗ vink minstens één kaart aan"
+    sid = c.st.spel.start(hunch, kaarten, reformulate_of=c.g("reformulate_of"),
+                          by=_kb_actor(c))
+    return f"/kennisbank/spel?sid={sid}", "🎲 spel gestart — de denkpartner opent"
+
+
+def _act_kb_spel_reply(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Eén beurt: mijn
+    # antwoord + de ladder antwoordt. Fail-closed: geen antwoord → spel blijft open.
+    sid = c.g("sid")
+    out = spel_beurt(c.st.spel, sid, c.g("text"), kb_load_atoms(c.data_dir))
+    if out is None:
+        return c.nxt, "✗ de denkpartner gaf geen antwoord — probeer het zo nog eens"
+    spel = c.st.spel.get(sid)
+    if spel and spel.get("status") == "klaar":
+        return c.nxt, "het blok is er — je kunt het inzicht munten"
+    return c.nxt, ""
+
+
+def _act_kb_spel_finish(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Munt het inzicht
+    # (v1.0 of versie-bump); het spel wordt afgesloten, de vorige versie blijft bewaard.
+    res = spel_finish(c.st.spel, c.g("sid"), c.st.kennisbank)
+    if res is None:
+        return c.nxt, "✗ geen bruikbaar === INZICHT ===-blok in dit spel"
+    iid, versie = res
+    woord = ("nieuwe versie v" + versie) if versie != "1.0" else "inzicht gemaakt (v1.0)"
+    return f"/kennisbank?id={iid}", f"✓ {woord} — de zekerheid rekent live mee"
+
+
 ACTIONS = {
     "kb_new": _act_kb_new,
+    "kb_intake": _act_kb_intake,
+    "kb_atoom_subject": _act_kb_atoom_subject,
+    "kb_spel_start": _act_kb_spel_start,
+    "kb_spel_reply": _act_kb_spel_reply,
+    "kb_spel_finish": _act_kb_spel_finish,
     "kb_link": _act_kb_link,
     "kb_unlink": _act_kb_unlink,
     "kb_annotate": _act_kb_annotate,
@@ -3481,11 +3563,22 @@ def make_handler(data_dir: str, csrf_token: str,
                 return
             if path == "/kennisbank":
                 # Kennisbank (laag 2): geversioneerde inzichten met een berekend veld van
-                # zekerheid boven de atomen (notes.json). ?id= opent het detail als drawer.
+                # zekerheid boven de atomen (notes.json). ?id= opent het detail als drawer;
+                # ?hunch= zoekt kaarten (top-down), ?speel= toont een cluster-set (bottom-up),
+                # ?nieuw= toont de atomen van de laatste intake.
                 self._send(render_kennisbank(st, kid=(qs.get("id") or [""])[0],
                                              q=(qs.get("q") or [""])[0],
                                              csrf_token=effective_csrf,
-                                             msg=(qs.get("msg") or [""])[0]))
+                                             msg=(qs.get("msg") or [""])[0],
+                                             hunch=(qs.get("hunch") or [""])[0],
+                                             speel=(qs.get("speel") or [""])[0],
+                                             nieuw=(qs.get("nieuw") or [""])[0]))
+                return
+            if path == "/kennisbank/spel":
+                # Fase 3: de server-side inzicht-dialoog (transcript + antwoord + munten).
+                self._send(render_kennisbank_spel(st, (qs.get("sid") or [""])[0],
+                                                  csrf_token=effective_csrf,
+                                                  msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/linkbuilding":
                 # Linkbuilding-doelwitten geborgd in cockpit 2 (pitchen/negeren).

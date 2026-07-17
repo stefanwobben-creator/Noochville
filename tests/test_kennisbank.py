@@ -140,7 +140,9 @@ def test_view_toont_woord_en_meter_geen_percentages(tmp_path):
     kb = KennisbankStore(f"{dd}/kennisbank.json")
     iid = kb.add("Prijs blokkeert onze kern-doelgroep", why="drie signalen, één survey",
                  subject="prijs")
-    st = types.SimpleNamespace(dd=dd, kennisbank=kb)
+    from nooch_village.kennisbank_spel import SpelStore
+    st = types.SimpleNamespace(dd=dd, kennisbank=kb,
+                               spel=SpelStore(f"{dd}/kennisbank_spel.json"))
 
     html = render_kennisbank(st, csrf_token="tok")
     assert "Wat Nooch weet" in html and "nog dun" in html

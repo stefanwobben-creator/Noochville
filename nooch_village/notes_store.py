@@ -66,6 +66,22 @@ class NotesStore:
         self._save()
         return True
 
+    def add_tags(self, note_id: str, tags: list[str]) -> bool:
+        """Voeg tags idempotent toe aan een bestaand kaartje (curatie: bijv. het
+        onderwerp uit het kennisbank-vocabulaire). Volgorde blijft; bestaande tags
+        worden nooit gedupliceerd. False als het kaartje niet bestaat."""
+        bestaand = self.get(note_id)
+        if bestaand is None:
+            return False
+        nieuw = [t for t in tags if t and t not in bestaand.tags]
+        if nieuw:
+            bestaand.tags.extend(nieuw)
+            from datetime import datetime
+            bestaand.last_updated_at = datetime.now()
+            self._notes[note_id] = bestaand.model_dump(mode="json")
+            self._save()
+        return True
+
     def add_relation(self, from_id: str, to_id: str, relation: str) -> Insight | None:
         """Leg een bewijs-relatie: `from_id` STEUNT of SPREEKT TEGEN `to_id`.
         relation ∈ {'supports', 'contradicts'}. Gericht, idempotent, geen zelf-relatie, fail-closed
