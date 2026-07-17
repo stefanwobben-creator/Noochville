@@ -642,16 +642,20 @@ def _radar_item(it: dict, csrf: str, node_id: str, *, archief: bool) -> str:
 # kaart op de Tools-tab van de juiste rol (via Deelnemers → rol → Tools). De schermen blijven losse
 # routes; hier maken we ze vindbaar vanuit de rol. In fase 3 worden de keyword-tools rol-lenzen op
 # één gedeelde datalaag. Sleutel = record-id van de rol.
+# Fase 3: de keyword-tools zijn rol-LENZEN op één gedeelde datalaag (/keywords?lens=…). Elke rol
+# ziet dezelfde laag door zijn eigen bril, dus niet vier losse cijferbronnen.
 _ROLE_TOOLS = {
     "mother_earth__nooch__marketing_lead": [
-        ("Linkbuilding", "Linkbuilding-doelwitten pitchen of negeren", "/linkbuilding")],
+        ("Linkbuilding", "Linkbuilding-doelwitten pitchen of negeren", "/linkbuilding"),
+        ("Keywords — volume & richting", "Waar maak je content voor", "/keywords?lens=marketing")],
     "librarian": [
         ("Woordenschat", "Goedgekeurde woorden, gerangschikt op kansrijkheid", "/woordenschat"),
-        ("Signals & Insights", "Goedgekeurde radar-signalen — het startpunt voor inzichten", "/signals")],
+        ("Signals & Insights", "Goedgekeurde radar-signalen — het startpunt voor inzichten", "/signals"),
+        ("Keywords — convergentie", "Waar signaal + volume + status samenkomen (cureren)", "/keywords?lens=library")],
     "concurrent_scout": [
-        ("Keywords", "Keyword-analyse + suggesties, gerangschikt op kansrijkheid", "/keywords")],
+        ("Keywords — analyse", "Kansrijkheid + suggesties, gerangschikt", "/keywords?lens=trends")],
     "harry_hemp": [
-        ("Long-term trends", "Structurele opkomst versus blip (trend-herindexering)", "/long-term-trends")],
+        ("Long-term trends", "Structurele opkomst versus blip (trend-herindexering)", "/keywords?lens=scientist")],
 }
 
 
