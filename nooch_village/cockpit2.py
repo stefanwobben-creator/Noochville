@@ -254,8 +254,7 @@ from nooch_village.views.kennisbank_spel import render_kennisbank_spel
 from nooch_village.views.linkbuilding import render_linkbuilding
 from nooch_village.views.accountabilities import render_accountabilities
 from nooch_village.views.woordenschat import render_woordenschat
-from nooch_village.views.keywords import render_keywords
-from nooch_village.views.long_term_trends import render_long_term_trends
+from nooch_village.views.keyword_lens import render_keyword_lens
 from nooch_village.views.belofte import render_belofte
 
 
@@ -3825,14 +3824,14 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(render_woordenschat(data_dir))
                 return
             if path == "/keywords":
-                # IA-fase 2: de analyse-lens van de scout (Billy Buzz) — bibliotheek-keywords op
-                # kansrijkheid met status + concurrentie + suggesties (read-only).
-                self._send(render_keywords(data_dir))
+                # IA-fase 3: één keyword-datalaag, vier rol-lenzen (?lens=marketing|scientist|
+                # trends|library). De lens bepaalt filter/kolommen over dezelfde build_keyword_layer.
+                self._send(render_keyword_lens(data_dir, (qs.get("lens") or ["trends"])[0]))
                 return
             if path == "/long-term-trends":
-                # IA-fase 2: de lange-boog-lens van de Scientist (Sid) — trend-herindexering-signalen
-                # (emergence/trend vs. blip) uit trend_signals.jsonl (read-only).
-                self._send(render_long_term_trends(data_dir))
+                # IA-fase 2→3: de Scientist-lens is nu een lens op de gedeelde laag. Oude route
+                # blijft werken via een redirect (geen dode deep-links).
+                self._redirect_to("/keywords?lens=scientist")
                 return
             if path == "/belofte":
                 # Belofte-graaf: eerste-principes-ontleding, sterkte op het zwakste onderdeel (read-only, stap 1).
