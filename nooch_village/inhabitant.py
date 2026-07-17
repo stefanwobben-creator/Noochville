@@ -1563,8 +1563,30 @@ class Inhabitant(threading.Thread):
         def _enqueue(event: Event) -> None:
             if drop_if_busy and getattr(self, "_busy", False):
                 return
-            self.inbox.enqueue(lambda e=event: handler(e))
+            def _job(e=event):
+                try:
+                    handler(e)
+                finally:
+                    # Puls-hartslag (generiek, dead man's switch): elke rol die op dag_begint
+                    # reageert laat vanzelf een marker na — óók als de handler struikelt, want
+                    # de puls BEREIKTE de rol (dat is wat de watchdog op afwezigheid toetst).
+                    if event_name == "dag_begint":
+                        self._record_heartbeat(e)
+            self.inbox.enqueue(_job)
         self.bus.subscribe(event_name, _enqueue)
+
+    def _record_heartbeat(self, event) -> None:
+        """Schrijf een dag_begint-hartslag voor deze rol. De dag komt uit de event-`label` (de
+        Madrid-kalenderdag die TimeKeeper meestuurt), zodat hij exact matcht met de watchdog.
+        Fail-soft: een schrijffout mag de puls nooit breken."""
+        try:
+            import datetime
+            from nooch_village.pulse_watchdog import HeartbeatStore
+            day = (getattr(event, "data", {}) or {}).get("label") or datetime.date.today().isoformat()
+            HeartbeatStore(os.path.join(self.context.data_dir, "pulse_heartbeat.json")).beat(
+                self.id, day, datetime.datetime.now().isoformat(timespec="seconds"))
+        except Exception:
+            pass
 
     def run(self) -> None:
         self.log.info("ontwaakt [source=%s] | purpose=%s | skills=%s",

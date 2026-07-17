@@ -1230,7 +1230,36 @@ class Facilitator(Inhabitant):
         if _should_fire_daily(now_local, self._last_day, self._fire_hh, self._fire_mm):
             self._last_day = now_local.date().isoformat()
             self._save_last_day()
+            self._run_pulse_watchdog(self._last_day)      # dead man's switch op de vorige dag, vóór de cyclus
             self._ring(self._last_day, now_local.date())
+
+    def _run_pulse_watchdog(self, today_iso: str) -> None:
+        """Dorp-brede watchdog: escaleer zichtbaar als een verwachte dagelijkse rol op de zojuist
+        afgesloten vorige dag geen hartslag naliet (mogelijk niet-uitvoering). Verwachte set uit
+        config `daily_pulse_roles` (default: harry_hemp). Fail-soft: mag de cadans nooit breken."""
+        try:
+            from nooch_village.pulse_watchdog import run_watchdog
+            from nooch_village.human_inbox import _notify_founder
+            data_dir = self.context.data_dir
+            expected = [r.strip() for r in
+                        str(self.context.settings.get("daily_pulse_roles", "harry_hemp")).split(",")
+                        if r.strip()]
+            if not expected:
+                return
+
+            def _notify(role, day):
+                _notify_founder(
+                    os.path.join(data_dir, "human_inbox.json"), by="pulse_watchdog",
+                    snippet=(f"⚠️ Puls-uitval: rol '{role}' liet geen hartslag na op {day} — "
+                             f"mogelijk niet-uitvoering (hook/service), geen fout gemeld. "
+                             f"Beoordeel via python -m nooch_village.inbox"))
+
+            gemist = run_watchdog(data_dir, expected, today_iso, _notify)
+            if gemist:
+                self.log.warning("🕳️ puls-watchdog: geen hartslag voor %s op de vorige dag → "
+                                 "founder geëscaleerd", gemist)
+        except Exception as exc:
+            self.log.warning("puls-watchdog faalde (genegeerd): %s", exc)
 
     def _ring(self, label: str, today) -> None:
         if not self._first_ring:
