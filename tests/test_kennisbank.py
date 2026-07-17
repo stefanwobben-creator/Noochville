@@ -152,4 +152,5 @@ def test_view_toont_woord_en_meter_geen_percentages(tmp_path):
 
     detail = render_kennisbank(st, kid=iid, csrf_token="tok")
     assert "kn-drawer" in detail and "Nog geen bewijs verzameld." in detail
-    assert "kb_reformulate" in detail and "=== INZICHT ===" in detail
+    # herformuleren loopt via het copy-paste-spel (kb_spel_start), niet meer inline
+    assert "kb_spel_start" in detail and "Speel opnieuw" in detail

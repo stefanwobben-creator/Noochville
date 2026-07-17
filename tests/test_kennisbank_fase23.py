@@ -12,7 +12,7 @@ from nooch_village.kennisbank import KennisbankStore
 from nooch_village.kennisbank_intake import (build_intake_prompt, parse_intake,
                                              stable_id, intake, SUBJECTS)
 from nooch_village.kennisbank_spel import (SpelStore, clusters, gather, ongebonden,
-                                           spel_beurt, spel_finish, subject_van)
+                                           spel_finish, steun_onafhankelijk, subject_van)
 from nooch_village.notes_store import NotesStore
 
 
@@ -131,7 +131,7 @@ def test_ongesorteerd_bakje_alleen_kennisbank_atomen(tmp_path):
                    "provenance": "media", "tags": ["leer"]},
     }
     html = _ongesorteerd_bakje(atoms, [], csrf="t")
-    assert "ongesorteerd (1)" in html
+    assert "Ongesorteerd (1)" in html
     assert "notitie zonder onderwerp" in html
     assert "librarian card" not in html and "notitie met hub" not in html
 
@@ -148,7 +148,7 @@ def test_gather_stance_via_llm_fail_closed():
     assert kand2 and all(k["stance"] == "support" for k in kand2)
 
 
-# ── fase 3: de dialoog + munten ──────────────────────────────────────────────
+# ── fase 3: het copy-paste-spel + munten ─────────────────────────────────────
 
 _BLOK = ("Goed gescherpt. Hier is het blok:\n\n=== INZICHT ===\n"
          "TITEL: Wachttijd bindt\nCLAIM: Wachttijd bindt de kern-doelgroep.\n"
@@ -157,31 +157,25 @@ _BLOK = ("Goed gescherpt. Hier is het blok:\n\n=== INZICHT ===\n"
 
 
 @pytest.mark.smoke
-def test_spel_tot_blok_en_munten_v10(tmp_path):
+def test_spel_copypaste_munten_v10(tmp_path):
     dd = str(tmp_path)
     store = SpelStore(f"{dd}/spel.json")
     kb = KennisbankStore(f"{dd}/kennisbank.json")
-    atoms = _atoms()
     sid = store.start("wachttijd is een feature",
                       [{"atom_id": "w1", "stance": "support"},
                        {"atom_id": "w2", "stance": "counter"}], by="test")
 
-    beurten = iter(["Sterkste tegenovergestelde: ... Wat vind je?", _BLOK])
-    fake = lambda prompt, **kw: next(beurten)
-    assert spel_beurt(store, sid, "", atoms, reason_fn=fake)      # opening van de AI
-    assert store.get(sid)["status"] == "open"
-    assert spel_finish(store, sid, kb) is None                    # geen blok → niet muntbaar
-    assert spel_beurt(store, sid, "mijn reactie: 70/100", atoms, reason_fn=fake)
-    assert store.get(sid)["status"] == "klaar"
+    assert spel_finish(store, sid, kb, "geen blok hier") is None   # onleesbaar → niet munten
+    assert store.get(sid)["status"] == "open"                      # en niets verloren
 
-    iid, versie = spel_finish(store, sid, kb)
+    iid, versie = spel_finish(store, sid, kb, _BLOK)
     assert versie == "1.0"
     ins = kb.get(iid)
     assert ins["title"] == "Wachttijd bindt de kern-doelgroep."
     assert ins["falsifier"].startswith("Een kortere wachttijd")
     assert [l["atom_id"] for l in ins["evidence"]] == ["w1", "w2"]     # verankerd aan de set
     assert store.get(sid)["status"] == "gemunt"
-    assert spel_finish(store, sid, kb) is None                    # idempotent: nooit dubbel munten
+    assert spel_finish(store, sid, kb, _BLOK) is None              # idempotent: nooit dubbel munten
 
 
 def test_spel_herformuleer_bumpt_versie_met_history(tmp_path):
@@ -195,8 +189,7 @@ def test_spel_herformuleer_bumpt_versie_met_history(tmp_path):
                       reformulate_of=iid, by="test")
     blok = _BLOK.replace("Wachttijd bindt de kern-doelgroep.",
                          "Prijs is de drempel voor de Idealist.")
-    assert spel_beurt(store, sid, "", _atoms(), reason_fn=lambda p, **k: blok)
-    iid2, versie = spel_finish(store, sid, kb)
+    iid2, versie = spel_finish(store, sid, kb, blok)
     assert iid2 == iid and versie == "1.1"
     ins = kb.get(iid)
     assert ins["title"] == "Prijs is de drempel voor de Idealist."
@@ -204,9 +197,97 @@ def test_spel_herformuleer_bumpt_versie_met_history(tmp_path):
     assert [l["atom_id"] for l in ins["evidence"]] == ["p1"]      # evidence stroomt door
 
 
-def test_spel_faalt_closed_zonder_llm(tmp_path):
+@pytest.mark.smoke
+def test_spel_hand_uitbreiden_en_nudge(tmp_path):
+    """Taak 2: start dun (2 kaarten), breid uit via de hand; de nudge-teller kijkt
+    naar ONAFHANKELIJKE steunbronnen (woozle) en komt op 3 zodra de derde losse
+    bron erbij zit."""
     store = SpelStore(str(tmp_path / "spel.json"))
-    sid = store.start("x", [{"atom_id": "a", "stance": "support"}])
-    assert spel_beurt(store, sid, "hoi", {}, reason_fn=lambda *a, **k: None) is None
-    s = store.get(sid)
-    assert s["status"] == "open" and s["messages"][-1]["role"] == "ik"   # niets verloren
+    atoms = _atoms()  # z1/z2: bron WUR (één groep!), z3: rc.eu, w1/w2: shop
+    sid = store.start("composteerbare zool", [{"atom_id": "z1", "stance": "support"},
+                                              {"atom_id": "w2", "stance": "counter"}])
+    assert steun_onafhankelijk(store.get(sid), atoms) == 1
+
+    assert store.add_kaart(sid, "z2", "support")       # zelfde bron (WUR) → geen extra stem
+    assert steun_onafhankelijk(store.get(sid), atoms) == 1
+    assert store.add_kaart(sid, "z3", "support", annotation="onafhankelijk")
+    assert store.add_kaart(sid, "w1", "support")
+    assert steun_onafhankelijk(store.get(sid), atoms) == 3          # nudge-drempel gehaald
+
+    assert store.add_kaart(sid, "z2", "counter")       # idempotent: richting draait, geen dubbel
+    assert sum(1 for k in store.get(sid)["set"] if k["atom_id"] == "z2") == 1
+    assert store.flip_kaart(sid, "z2")                 # één klik terug naar support
+    assert next(k for k in store.get(sid)["set"] if k["atom_id"] == "z2")["stance"] == "support"
+    assert store.remove_kaart(sid, "w2")
+    assert store.add_kaart(sid, "x", "gek") is False   # ongeldige richting → geweigerd
+
+
+# ── taak 4: signalen-backfill ────────────────────────────────────────────────
+
+def test_backfill_idempotent_en_batcht(tmp_path):
+    import json as _json
+    dd = str(tmp_path)
+    radar = {"items": {f"s{i}": {"id": f"s{i}", "status": "goedgekeurd", "at": f"2026-07-{10+i}",
+                                 "content": f"signaal {i}", "rationale": "context",
+                                 "feed": "Materialen"} for i in range(5)}}
+    (tmp_path / "radar.json").write_text(_json.dumps(radar))
+
+    from nooch_village.kennisbank_backfill import backfill, _batch_raw
+    calls = []
+    def fake_intake(raw, hint, data_dir):
+        calls.append(raw)
+        return [f"atom_{len(calls)}"], 0
+    rap = backfill(dd, apply=True, batch_size=2, intake_fn=fake_intake)
+    assert len(calls) == 3                                  # 5 signalen à batch 2 → 3 calls
+    assert "[bron: Materialen]" in calls[0]                 # bron inline per signaal
+    assert any("✓ batch 3/3" in r for r in rap)
+
+    calls.clear()
+    rap2 = backfill(dd, apply=True, batch_size=2, intake_fn=fake_intake)
+    assert calls == []                                      # her-run: state slaat alles over
+    assert any("5 al verwerkt | 0 te doen" in r for r in rap2)
+
+
+def test_backfill_gefaalde_batch_komt_terug(tmp_path):
+    import json as _json
+    dd = str(tmp_path)
+    radar = {"items": {f"s{i}": {"id": f"s{i}", "status": "goedgekeurd", "at": "2026-07-17",
+                                 "content": f"signaal {i}", "feed": "f"} for i in range(2)}}
+    (tmp_path / "radar.json").write_text(_json.dumps(radar))
+    from nooch_village.kennisbank_backfill import backfill
+    rap = backfill(dd, apply=True, batch_size=2, intake_fn=lambda *a: None)
+    assert any("✗ batch" in r for r in rap)
+    rap2 = backfill(dd, apply=False)
+    assert any("2 te doen" in r for r in rap2)              # niets geregistreerd → her-run pakt ze
+
+
+# ── taak 5: source-adapters ──────────────────────────────────────────────────
+
+def test_chunker_verliest_de_staart_niet():
+    from nooch_village.kennisbank_sources import _chunk
+    alineas = [f"Alinea {i}: " + ("x" * 900) for i in range(20)]
+    tekst = "\n\n".join(alineas)
+    blokken = _chunk(tekst, maat=3000)
+    assert all(len(b) <= 3000 + 950 for b in blokken)       # ~maat, nooit hard afgekapt
+    assert "Alinea 19" in blokken[-1]                       # de staart is er
+    plat = "\n\n".join(blokken)
+    for i in range(20):
+        assert f"Alinea {i}" in plat                        # niets verloren
+    assert _chunk("één korte alinea") == ["één korte alinea"]
+
+
+def test_van_pdf_scan_zonder_tekstlaag_meldt(tmp_path):
+    from nooch_village.kennisbank_sources import van_pdf
+    assert van_pdf(b"geen pdf") is None                     # rommel → None, geen halve data
+    # echte maar lege PDF (geen tekstlaag) → None
+    from pypdf import PdfWriter
+    import io as _io
+    w = PdfWriter(); w.add_blank_page(width=200, height=200)
+    buf = _io.BytesIO(); w.write(buf)
+    assert van_pdf(buf.getvalue(), "scan.pdf") is None
+
+
+def test_van_url_faalt_netjes_zonder_netwerk():
+    from nooch_village.kennisbank_sources import van_url
+    assert van_url("ftp://x") is None and van_url("") is None
+    assert van_url("javascript:alert(1)") is None

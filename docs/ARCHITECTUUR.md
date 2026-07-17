@@ -59,10 +59,13 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 |---|---|
 | `kb_new` | `cockpit2.py:3034` |
 | `kb_intake` | `cockpit2.py:3116` |
-| `kb_atoom_subject` | `cockpit2.py:3133` |
-| `kb_spel_start` | `cockpit2.py:3151` |
-| `kb_spel_reply` | `cockpit2.py:3165` |
-| `kb_spel_finish` | `cockpit2.py:3178` |
+| `kb_intake_url` | `cockpit2.py:3133` |
+| `kb_atoom_subject` | `cockpit2.py:3152` |
+| `kb_spel_start` | `cockpit2.py:3170` |
+| `kb_spel_add` | `cockpit2.py:3184` |
+| `kb_spel_remove` | `cockpit2.py:3194` |
+| `kb_spel_flip` | `cockpit2.py:3201` |
+| `kb_spel_finish` | `cockpit2.py:3207` |
 | `kb_link` | `cockpit2.py:3043` |
 | `kb_unlink` | `cockpit2.py:3057` |
 | `kb_annotate` | `cockpit2.py:3068` |
@@ -217,4 +220,4 @@ De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de st
 
 
 ---
-_38 routes · 124 dispatch-acties · 25 stores._
+_38 routes · 127 dispatch-acties · 25 stores._

@@ -59,20 +59,25 @@ def build_intake_prompt(raw: str, source_hint: str = "") -> str:
         "REGELS:\n"
         "- Splits in losse eenheden: één idee per notitie. Niet te grof (verbergt ideeën),\n"
         "  niet te fijn (versplintert). Bij twijfel iets grover. Word geen atomiciteits-zeloot:\n"
-        "  een column van deze omvang levert doorgaans 8 tot 12 notities, geen 20+.\n"
-        "- Alleen inhoudelijke claims, feiten, quotes en signalen worden notities. Negeer\n"
-        "  aanhef, groeten, retorische vragen, de vraag van de lezer en meta-tekst.\n"
+        "  MAXIMAAL 12 notities per input — kies de belangrijkste; liever 8 sterke dan 20 snippers.\n"
+        "- Alleen ZELFSTANDIGE bevindingen, metingen, conclusies, quotes en signalen worden\n"
+        "  notities. Negeer aanhef, groeten, retorische vragen, meta-tekst, methodebeschrijvingen\n"
+        "  zonder uitkomst, inhoudsopgaven en referentielijsten.\n"
         "- \"source\" = de publicatie of spreker (bijv. de column, of 'column, quote X'),\n"
         "  nooit een aanhef of zinsdeel uit de tekst.\n"
         "- Schrijf elke notitie in het Nederlands (vertaal indien nodig), kort en op zichzelf leesbaar.\n"
         "- Behoud de bron letterlijk. Leid het PROVENANCE-type af uit de aard van de bron\n"
         "  (zie lijst). Verzin geen betrouwbaarheidsscore.\n"
         "- Kies het ONDERWERP uit de vaste lijst (zie lijst). Verzin geen nieuwe tags.\n"
-        "  Past er echt geen? Laat subject dan leeg (\"\").\n"
+        "  Kies bij twijfel het dichtstbijzijnde onderwerp; laat subject alleen leeg (\"\")\n"
+        "  als er écht niets past.\n"
         "- Een quote is een quote (grounded dat het gezegd is), geen feit: noem de spreker in de\n"
         "  notitie en zet de flag \"quote\".\n"
         "- Markeer een claim met de flag \"verificatie_vereist\" als er een cijfer of stellige\n"
         "  bewering is zonder primaire bron (bijv. \"een studie zegt 90%\").\n"
+        "- Een GEMETEN getal is een meting, geen vage claim: neem het getal mét methode en\n"
+        "  conditie op in de notitie waar de tekst die geeft (bijv. \"15,6% afbraak in 236\n"
+        "  dagen onder industriële compostering\"), en rond niet af.\n"
         "- Geef per atom een of meer LINK-hints: met welke bestaande onderwerpen/atomen hoort dit samen.\n\n"
         "PROVENANCE-lijst: peer_reviewed | certificate | internal_data | survey | media |\n"
         "  advocacy | expert_opinion | internal_judgment | unknown\n"
@@ -120,7 +125,10 @@ def parse_intake(text: str | None) -> list[dict]:
                     "source": str(r.get("source") or "").strip()[:160],
                     "flags": flags,
                     "link_hints": hints})
-    return out
+    # Backstop op de zeloot-cap uit de prompt: een model dat tóch doorsnippert wordt op
+    # de eerste 15 gehouden (de prompt vraagt "kies de belangrijkste", dus de kop is de
+    # curatie van het model zelf — geen stille aftopping van willekeurige staarten).
+    return out[:15]
 
 
 def stable_id(content: str, source: str) -> str:
@@ -190,12 +198,19 @@ def intake(raw: str, source_hint: str, data_dir: str, reason_fn=reason
     # max_tokens ruim: een volle column produceert ~10 atomen mét hints; te krap =
     # afgekapte JSON → fail-closed (bewust: half salvagen zou via de ledger re-runs
     # blokkeren terwijl de staart van de input stilletjes ontbreekt).
-    out = reason_fn(build_intake_prompt(raw.strip(), source_hint),
-                    ladder=INTAKE_LADDER, max_tokens=4000, json_mode=True,
-                    call_site="kb_intake")
-    if out is None:
-        return None
-    atoms = parse_intake(out)
+    # Eén bounded retry: tredes zijn niet deterministisch (soms onparseerbare JSON) en
+    # na een 429-cooldown antwoordt de tweede poging vaak via een andere trede. Meer dan
+    # één retry is verspilling — dan is de input het probleem, niet het toeval.
+    atoms: list[dict] = []
+    for _poging in range(2):
+        out = reason_fn(build_intake_prompt(raw.strip(), source_hint),
+                        ladder=INTAKE_LADDER, max_tokens=4000, json_mode=True,
+                        call_site="kb_intake")
+        if out is None:
+            return None
+        atoms = parse_intake(out)
+        if atoms:
+            break
     if not atoms:
         return None                            # wél antwoord maar niets bruikbaars → fail-closed
     notes = NotesStore(f"{data_dir}/notes.json")

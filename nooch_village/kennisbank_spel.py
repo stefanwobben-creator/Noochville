@@ -127,21 +127,20 @@ def gather(hunch: str, atoms: dict[str, dict], limit: int = 10,
     return [{"atom_id": aid, "stance": stances[aid]} for aid in top]
 
 
-# ── De dialoog ───────────────────────────────────────────────────────────────
-
-BLOK_MARKER = "=== INZICHT ==="
-
+# ── Het spel (copy-paste: speel in je eigen AI) ─────────────────────────────
 
 def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
 class SpelStore(JsonStore):
-    """Eén spel = {id, hunch, set:[{atom_id,stance}], messages:[{role:'ik'|'ai',text,at}],
-    status:'open'|'klaar'|'gemunt', reformulate_of, insight_id, created_at, updated_at}.
-    Berichten zijn append-only; afronden zet alleen status/insight_id."""
+    """Eén spel = {id, hunch, set:[{atom_id,stance,annotation?}], status:'open'|'gemunt',
+    reformulate_of, insight_id, by, created_at, updated_at}. De set is de "hand" die de
+    mens cureert; het spel zelf speelt hij in zijn eigen AI (besluit Stefan dd 2026-07-17 —
+    de server-side dialoog is bewust verwijderd, scheelt ook ladder-tokens). Munten is
+    eenmalig; een gemunt spel wordt nooit herschreven."""
 
-    _WRITE_METHODS = ("start", "append_message", "mark")
+    _WRITE_METHODS = ("start", "add_kaart", "remove_kaart", "flip_kaart", "mark")
 
     def get(self, sid: str) -> dict | None:
         return self._items.get(sid)
@@ -155,25 +154,61 @@ class SpelStore(JsonStore):
         sid = "spel_" + uuid.uuid4().hex[:8]
         self._items[sid] = {
             "id": sid, "hunch": (hunch or "").strip(),
-            "set": [{"atom_id": k["atom_id"], "stance": k.get("stance") or "support"}
+            "set": [{"atom_id": k["atom_id"], "stance": k.get("stance") or "support",
+                     "annotation": (k.get("annotation") or "").strip() or None}
                     for k in kaarten if k.get("atom_id")],
-            "messages": [], "status": "open",
+            "status": "open",
             "reformulate_of": reformulate_of or None, "insight_id": None,
             "by": by, "created_at": _now(), "updated_at": _now(),
         }
         self._save()
         return sid
 
-    def append_message(self, sid: str, role: str, text: str) -> bool:
+    def add_kaart(self, sid: str, atom_id: str, stance: str = "support",
+                  annotation: str = "") -> bool:
+        """Breid de hand uit (taak 2). Idempotent: bestaat de kaart al in de set, dan
+        worden richting/annotatie bijgewerkt — nooit een dubbele stem."""
         s = self._items.get(sid)
-        if s is None or role not in ("ik", "ai") or not (text or "").strip():
+        if s is None or s.get("status") == "gemunt" or not atom_id \
+                or stance not in ("support", "counter"):
             return False
-        s["messages"].append({"role": role, "text": text.strip(), "at": _now()})
-        if role == "ai" and BLOK_MARKER in text:
-            s["status"] = "klaar"              # de AI heeft het blok gegeven → muntbaar
+        for k in s["set"]:
+            if k["atom_id"] == atom_id:
+                k["stance"] = stance
+                if annotation:
+                    k["annotation"] = annotation.strip()
+                break
+        else:
+            s["set"].append({"atom_id": atom_id, "stance": stance,
+                             "annotation": (annotation or "").strip() or None})
         s["updated_at"] = _now()
         self._save()
         return True
+
+    def remove_kaart(self, sid: str, atom_id: str) -> bool:
+        s = self._items.get(sid)
+        if s is None or s.get("status") == "gemunt":
+            return False
+        voor = len(s["set"])
+        s["set"] = [k for k in s["set"] if k["atom_id"] != atom_id]
+        if len(s["set"]) == voor:
+            return False
+        s["updated_at"] = _now()
+        self._save()
+        return True
+
+    def flip_kaart(self, sid: str, atom_id: str) -> bool:
+        """Richting draaien in één klik (steunt ↔ spreekt tegen)."""
+        s = self._items.get(sid)
+        if s is None or s.get("status") == "gemunt":
+            return False
+        for k in s["set"]:
+            if k["atom_id"] == atom_id:
+                k["stance"] = "counter" if k["stance"] == "support" else "support"
+                s["updated_at"] = _now()
+                self._save()
+                return True
+        return False
 
     def mark(self, sid: str, *, status: str, insight_id: str | None = None) -> bool:
         s = self._items.get(sid)
@@ -188,52 +223,29 @@ class SpelStore(JsonStore):
 
 
 def spel_prompt(spel: dict, atoms: dict[str, dict]) -> str:
-    """Game-prompt §7 (fase-1 bouwsteen) + het transcript. De ladder is single-shot,
-    dus het hele gesprek gaat mee; de AI geeft alleen zijn volgende beurt terug."""
+    """De prompt die de mens meeneemt naar zijn eigen AI: de game-prompt uit de
+    master-brief (§7, fase-1 bouwsteen), geseed met de gecureerde hand."""
     rows = [{"claim": (atoms.get(k["atom_id"]) or {}).get("claim", ""),
              "stance": k["stance"]} for k in spel.get("set") or []]
-    basis = bouw_spel_prompt(spel.get("hunch", ""), rows)
-    transcript = "\n".join(
-        f"{'IK' if m['role'] == 'ik' else 'JIJ (denkpartner)'}: {m['text']}"
-        for m in spel.get("messages") or [])
-    if transcript:
-        return (f"{basis}\n\nGESPREK TOT NU TOE:\n{transcript}\n\n"
-                "Geef ALLEEN je volgende beurt als denkpartner (of het === INZICHT ===-blok "
-                "zodra claim, reframe en een waarneembare falsifier er zijn). Geen meta-tekst.")
-    return (f"{basis}\n\nBegin het gesprek: geef ALLEEN je eerste beurt (stap 1). "
-            "Geen meta-tekst.")
+    return bouw_spel_prompt(spel.get("hunch", ""), rows)
 
 
-def spel_beurt(store: SpelStore, sid: str, user_text: str, atoms: dict[str, dict],
-               reason_fn=reason) -> str | None:
-    """Eén beurt: (optioneel) mijn bericht erbij, dan de ladder laten antwoorden.
-    Fail-closed: geen antwoord → None en het spel blijft gewoon open (niets verloren)."""
-    spel = store.get(sid)
-    if spel is None or spel.get("status") == "gemunt":
-        return None
-    if (user_text or "").strip():
-        store.append_message(sid, "ik", user_text)
-        spel = store.get(sid)
-    out = reason_fn(spel_prompt(spel, atoms), max_tokens=700, call_site="kb_spel")
-    if not out:
-        return None
-    store.append_message(sid, "ai", out)
-    return out
+def steun_onafhankelijk(spel: dict, atoms: dict[str, dict]) -> int:
+    """Aantal ONAFHANKELIJKE steunbronnen in de hand (dezelfde woozle-groepering als
+    het veld). Voedt de zachte rem: onder de 3 een nudge, nooit een blokkade."""
+    from nooch_village.kennisbank import field
+    return field(spel.get("set") or [], atoms)["indep"]
 
 
-def spel_finish(store: SpelStore, sid: str, kb) -> tuple[str, str] | None:
-    """Munt het inzicht uit het === INZICHT ===-blok van de dialoog (trage klok).
+def spel_finish(store: SpelStore, sid: str, kb, blok: str) -> tuple[str, str] | None:
+    """Munt het inzicht uit het teruggeplakte === INZICHT ===-blok (trage klok).
     Nieuw spel → inzicht v1.0 verankerd aan de set; herformuleer-spel → versie-bump
     op het bestaande inzicht (fase-1 reformulate, history bewaart de vorige versie).
-    Geeft (insight_id, versie) of None (geen blok/geen spel)."""
+    Geeft (insight_id, versie) of None (geen bruikbaar blok / al gemunt)."""
     spel = store.get(sid)
     if spel is None or spel.get("status") == "gemunt":
         return None
-    ai_teksten = [m["text"] for m in spel.get("messages") or []
-                  if m["role"] == "ai" and BLOK_MARKER in m["text"]]
-    if not ai_teksten:
-        return None
-    parsed = parse_blok(ai_teksten[-1])
+    parsed = parse_blok(blok or "")
     if not parsed["claim"]:
         return None
     if spel.get("reformulate_of"):
@@ -247,7 +259,8 @@ def spel_finish(store: SpelStore, sid: str, kb) -> tuple[str, str] | None:
                      reframe=parsed["reframe"], falsifier=parsed["falsifier"],
                      by=spel.get("by") or "spel")
         for k in spel.get("set") or []:
-            kb.link(iid, k["atom_id"], k["stance"], by=spel.get("by") or "spel")
+            kb.link(iid, k["atom_id"], k["stance"],
+                    annotation=k.get("annotation") or "", by=spel.get("by") or "spel")
         versie = "1.0"
     store.mark(sid, status="gemunt", insight_id=iid)
     return iid, versie

@@ -66,7 +66,7 @@ from nooch_village.kennisbank import (KennisbankStore, parse_blok,
                                       WORD_LABEL as KB_WORD_LABEL,
                                       load_atoms as kb_load_atoms)
 from nooch_village.kennisbank_intake import SUBJECTS as KB_SUBJECTS, intake as kb_intake
-from nooch_village.kennisbank_spel import SpelStore, spel_beurt, spel_finish
+from nooch_village.kennisbank_spel import SpelStore, spel_finish
 from nooch_village.notes_store import NotesStore
 from nooch_village.insight import Insight
 from nooch_village.metric_schema import (CADANS_LABEL, MEETTYPE_LABEL, MEETWIJZE_LABEL,
@@ -3130,6 +3130,25 @@ def _act_kb_intake(c):
             f"✂️ we splitsten dit in {len(nieuw)} notities{extra}")
 
 
+def _act_kb_intake_url(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. URL = source-adapter:
+    # trafilatura haalt de hoofdtekst op, de bestaande atomiser doet de rest (geen fork).
+    from nooch_village.kennisbank_sources import van_url
+    uit = van_url(c.g("url"))
+    if uit is None:
+        return c.nxt, "✗ kon deze pagina niet ophalen of er geen leesbare tekst uit halen"
+    raw, label = uit
+    uitkomst = kb_intake(raw, label, c.data_dir)
+    if uitkomst is None:
+        return c.nxt, "✗ de noteer-hulp gaf geen bruikbaar antwoord — probeer het zo nog eens"
+    nieuw, dubbel = uitkomst
+    if not nieuw:
+        return c.nxt, f"Al bekend: {dubbel} notitie(s) stonden er al (niets gedupliceerd)"
+    extra = f" ({dubbel} al bekend)" if dubbel else ""
+    return (f"/kennisbank?nieuw={','.join(nieuw)}",
+            f"✂️ we splitsten de pagina in {len(nieuw)} notities{extra}")
+
+
 def _act_kb_atoom_subject(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Curatie van het
     # ongesorteerd-bakje: een mens hangt een subject-loze notitie aan een hub.
@@ -3162,25 +3181,35 @@ def _act_kb_spel_start(c):
     return f"/kennisbank/spel?sid={sid}", "🎲 spel gestart — de denkpartner opent"
 
 
-def _act_kb_spel_reply(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Eén beurt: mijn
-    # antwoord + de ladder antwoordt. Fail-closed: geen antwoord → spel blijft open.
-    sid = c.g("sid")
-    out = spel_beurt(c.st.spel, sid, c.g("text"), kb_load_atoms(c.data_dir))
-    if out is None:
-        return c.nxt, "✗ de denkpartner gaf geen antwoord — probeer het zo nog eens"
-    spel = c.st.spel.get(sid)
-    if spel and spel.get("status") == "klaar":
-        return c.nxt, "het blok is er — je kunt het inzicht munten"
-    return c.nxt, ""
+def _act_kb_spel_add(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. De hand uitbreiden
+    # (taak 2): idempotent, kaart moet in de bibliotheek bestaan.
+    if c.g("atom_id") not in kb_load_atoms(c.data_dir):
+        return c.nxt, "✗ kaart niet gevonden in de bibliotheek"
+    ok = c.st.spel.add_kaart(c.g("sid"), c.g("atom_id"), c.g("stance") or "support",
+                             annotation=c.g("annotation"))
+    return c.nxt, ("🔗 gekoppeld aan je hand" if ok else "✗ koppelen niet gelukt")
+
+
+def _act_kb_spel_remove(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
+    ok = c.st.spel.remove_kaart(c.g("sid"), c.g("atom_id"))
+    return c.nxt, ("Verwijderd uit je hand (kaart blijft in de bibliotheek)" if ok
+                   else "✗ verwijderen niet gelukt")
+
+
+def _act_kb_spel_flip(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Richting in één klik.
+    ok = c.st.spel.flip_kaart(c.g("sid"), c.g("atom_id"))
+    return c.nxt, ("↔ richting gedraaid" if ok else "✗ draaien niet gelukt")
 
 
 def _act_kb_spel_finish(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Munt het inzicht
-    # (v1.0 of versie-bump); het spel wordt afgesloten, de vorige versie blijft bewaard.
-    res = spel_finish(c.st.spel, c.g("sid"), c.st.kennisbank)
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Munt het inzicht uit
+    # het teruggeplakte blok (copy-paste-spel): v1.0, of versie-bump bij herformuleren.
+    res = spel_finish(c.st.spel, c.g("sid"), c.st.kennisbank, c.g("blok"))
     if res is None:
-        return c.nxt, "✗ geen bruikbaar === INZICHT ===-blok in dit spel"
+        return c.nxt, "✗ kon het blok niet lezen — zorg voor een CLAIM:-regel"
     iid, versie = res
     woord = ("nieuwe versie v" + versie) if versie != "1.0" else "inzicht gemaakt (v1.0)"
     return f"/kennisbank?id={iid}", f"✓ {woord} — de zekerheid rekent live mee"
@@ -3189,9 +3218,12 @@ def _act_kb_spel_finish(c):
 ACTIONS = {
     "kb_new": _act_kb_new,
     "kb_intake": _act_kb_intake,
+    "kb_intake_url": _act_kb_intake_url,
     "kb_atoom_subject": _act_kb_atoom_subject,
     "kb_spel_start": _act_kb_spel_start,
-    "kb_spel_reply": _act_kb_spel_reply,
+    "kb_spel_add": _act_kb_spel_add,
+    "kb_spel_remove": _act_kb_spel_remove,
+    "kb_spel_flip": _act_kb_spel_flip,
     "kb_spel_finish": _act_kb_spel_finish,
     "kb_link": _act_kb_link,
     "kb_unlink": _act_kb_unlink,
@@ -3566,17 +3598,24 @@ def make_handler(data_dir: str, csrf_token: str,
                 # zekerheid boven de atomen (notes.json). ?id= opent het detail als drawer;
                 # ?hunch= zoekt kaarten (top-down), ?speel= toont een cluster-set (bottom-up),
                 # ?nieuw= toont de atomen van de laatste intake.
+                try:
+                    _pag = max(1, int((qs.get("pag") or ["1"])[0]))
+                except ValueError:
+                    _pag = 1
                 self._send(render_kennisbank(st, kid=(qs.get("id") or [""])[0],
                                              q=(qs.get("q") or [""])[0],
                                              csrf_token=effective_csrf,
                                              msg=(qs.get("msg") or [""])[0],
                                              hunch=(qs.get("hunch") or [""])[0],
                                              speel=(qs.get("speel") or [""])[0],
-                                             nieuw=(qs.get("nieuw") or [""])[0]))
+                                             nieuw=(qs.get("nieuw") or [""])[0],
+                                             hub=(qs.get("hub") or [""])[0], pag=_pag))
                 return
             if path == "/kennisbank/spel":
-                # Fase 3: de server-side inzicht-dialoog (transcript + antwoord + munten).
+                # Het inzicht-spel, copy-paste-flow: hand cureren → prompt kopiëren →
+                # blok terugplakken → munten. ?zoek= zoekt kaarten voor de hand.
                 self._send(render_kennisbank_spel(st, (qs.get("sid") or [""])[0],
+                                                  zoek=(qs.get("zoek") or [""])[0],
                                                   csrf_token=effective_csrf,
                                                   msg=(qs.get("msg") or [""])[0]))
                 return
@@ -3791,6 +3830,39 @@ def make_handler(data_dir: str, csrf_token: str,
                         fh.write(blob)
                     _Stores(data_dir).projects.attach_file(pid, safe, rel)
                     self._redirect(fields.get("next", "/"), "📎 bijlage geupload"); return
+                if fields.get("action") == "kb_intake_pdf":
+                    # AUTHZ: iedereen-ingelogd — kennisbank-intake. PDF = source-adapter:
+                    # tekst-extractie + chunken, elke chunk door de bestaande atomiser
+                    # (ledger per chunk → her-uploaden idempotent; een gefaalde chunk
+                    # komt bij een volgende upload vanzelf terug).
+                    err = _upload_error(files, _upload_max_bytes())
+                    if err:
+                        self._send(err[0], err[1]); return
+                    from nooch_village.kennisbank_sources import van_pdf
+                    fname, blob = files["file"]
+                    chunks = van_pdf(blob, os.path.basename(fname))
+                    if chunks is None:
+                        self._redirect(fields.get("next", "/kennisbank"),
+                                       "✗ geen tekstlaag gevonden in deze PDF (scan? "
+                                       "OCR valt buiten v1)"); return
+                    nieuw_alles: list[str] = []
+                    dubbel_alles = mislukt = 0
+                    for chunk_raw, label in chunks:
+                        uitkomst = kb_intake(chunk_raw, label, data_dir)
+                        if uitkomst is None:
+                            mislukt += 1
+                            continue
+                        _nieuw, _dubbel = uitkomst
+                        nieuw_alles.extend(_nieuw)
+                        dubbel_alles += _dubbel
+                    delen = [f"✂️ {len(nieuw_alles)} notities uit {len(chunks)} delen"]
+                    if dubbel_alles:
+                        delen.append(f"{dubbel_alles} al bekend")
+                    if mislukt:
+                        delen.append(f"{mislukt} deel/delen mislukt — upload nogmaals "
+                                     f"voor de rest (niets raakt dubbel)")
+                    nxt = "/kennisbank" + (f"?nieuw={','.join(nieuw_alles)}" if nieuw_alles else "")
+                    self._redirect(nxt, " · ".join(delen)); return
                 self._redirect(fields.get("next", "/"), ""); return
             raw = self.rfile.read(length).decode("utf-8") if length else ""
             form = urllib.parse.parse_qs(raw)
