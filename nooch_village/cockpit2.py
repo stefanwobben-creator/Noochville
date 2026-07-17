@@ -129,6 +129,9 @@ class _Stores:
         self.notes = NotesStore(os.path.join(dd, "notes.json"))   # laag 1: de atomen-bibliotheek (kennislaag)
         self.spel = SpelStore(os.path.join(dd, "kennisbank_spel.json"))   # fase 3: inzicht-dialogen
         self.staging = StagingStore(os.path.join(dd, "kennisbank_staging.json"))   # zone 2: even-nakijken
+        self.library = Library(os.path.join(dd, "library.json"))   # beschermde woordenschat (Lara cureert)
+        self.nominations = NominationQueue(os.path.join(dd, "keyword_nominaties.json"))   # fase 4: pending-queue
+        self.nom_kroniek = NominationKroniek(os.path.join(dd, "keyword_nominaties.jsonl"))   # fase 4: beslissings-Kroniek
 
 
 _FAC_ACC = "Rapporteren over de gezondheid van de werkoverleggen"
@@ -255,6 +258,8 @@ from nooch_village.views.linkbuilding import render_linkbuilding
 from nooch_village.views.accountabilities import render_accountabilities
 from nooch_village.views.woordenschat import render_woordenschat
 from nooch_village.views.keyword_lens import render_keyword_lens
+from nooch_village.library import Library
+from nooch_village.keyword_nominations import (NominationQueue, NominationKroniek, valid_reason)
 from nooch_village.views.belofte import render_belofte
 
 
@@ -3371,6 +3376,50 @@ def _act_kb_spel_finish(c):
     return f"/kennisbank?id={iid}", f"✓ {woord} — de zekerheid rekent live mee"
 
 
+def _act_kw_nominate(c):
+    # AUTHZ: circle-member of iedereen-ingelogd — iedereen mag een keyword NOMINEREN; het
+    # schrijven naar de beschermde woordenschat blijft voorbehouden aan Lara (kw_nom_accept).
+    term = c.g("term").strip()
+    if not term:
+        return c.nxt, "✗ geen keyword opgegeven"
+    ok = c.st.nominations.nominate(term, by=_kb_actor(c))
+    return c.nxt, (f"🗳 “{term}” genomineerd — Lara beslist" if ok
+                   else f"“{term}” staat al in de wachtrij")
+
+
+def _act_kw_nom_accept(c):
+    # AUTHZ: rolvervuller of Circle Lead — alleen de Library-rolvervuller (Lara) schrijft de
+    # beschermde woordenschat. _role_gate faalt closed (guest mag; onbekende geweigerd).
+    deny = _role_gate("librarian", c.username, c.st)
+    if deny:
+        return c.nxt, f"✗ {deny}"
+    term = c.g("term").strip()
+    status = c.g("status") or "approved"          # approved | forbidden
+    if status not in ("approved", "forbidden"):
+        return c.nxt, "✗ ongeldige status"
+    reason = c.g("reason").strip()
+    c.st.library.curate(term, status, rationale=reason, by=_kb_actor(c))
+    c.st.nom_kroniek.record(role_id=_kb_actor(c), term=term, decision="accept",
+                            reason=reason or f"aangenomen als {status}")
+    c.st.nominations.remove(term)
+    return c.nxt, f"✓ “{term}” geborgd als {status}"
+
+
+def _act_kw_nom_reject(c):
+    # AUTHZ: rolvervuller of Circle Lead — alleen de Library-rolvervuller (Lara) beslist over
+    # de woordenschat. Afwijzen dwingt een echte reden af (borging), fail-closed.
+    deny = _role_gate("librarian", c.username, c.st)
+    if deny:
+        return c.nxt, f"✗ {deny}"
+    term = c.g("term").strip()
+    reason = c.g("reason").strip()
+    if not valid_reason(reason):
+        return c.nxt, "✗ een afwijzing vereist een echte reden (niet leeg of “n.v.t.”)"
+    c.st.nom_kroniek.record(role_id=_kb_actor(c), term=term, decision="reject", reason=reason)
+    c.st.nominations.remove(term)
+    return c.nxt, f"✗ “{term}” afgewezen — geborgd in de Kroniek"
+
+
 ACTIONS = {
     "kb_new": _act_kb_new,
     "kb_intake": _act_kb_intake,
@@ -3402,6 +3451,9 @@ ACTIONS = {
     "kb_evidence": _act_kb_evidence,
     "kb_discuss": _act_kb_discuss,
     "kb_reformulate": _act_kb_reformulate,
+    "kw_nominate": _act_kw_nominate,
+    "kw_nom_accept": _act_kw_nom_accept,
+    "kw_nom_reject": _act_kw_nom_reject,
     "proj_add": _act_proj_add,
     "artefact_add": _act_artefact_add,
     "artefact_edit": _act_artefact_edit,
@@ -3824,9 +3876,12 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(render_woordenschat(data_dir))
                 return
             if path == "/keywords":
-                # IA-fase 3: één keyword-datalaag, vier rol-lenzen (?lens=marketing|scientist|
-                # trends|library). De lens bepaalt filter/kolommen over dezelfde build_keyword_layer.
-                self._send(render_keyword_lens(data_dir, (qs.get("lens") or ["trends"])[0]))
+                # IA-fase 3: één keyword-datalaag, rol-lenzen (?lens=marketing|scientist|trends|
+                # library|kroniek). IA-fase 4: nomineren kan iedereen; alleen Lara (librarian-
+                # rolvervuller) beslist — can_decide gate bepaalt of accept/reject-controls renderen.
+                can_decide = _role_gate("librarian", username, st) is None
+                self._send(render_keyword_lens(st, (qs.get("lens") or ["trends"])[0],
+                                               csrf_token=effective_csrf, can_decide=can_decide))
                 return
             if path == "/long-term-trends":
                 # IA-fase 2→3: de Scientist-lens is nu een lens op de gedeelde laag. Oude route
