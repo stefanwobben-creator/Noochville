@@ -4,8 +4,21 @@ from __future__ import annotations
 import json
 import os
 
+import types
+
 from nooch_village.keyword_layer import build_keyword_layer, converges
 from nooch_village.views.keyword_lens import render_keyword_lens, _LENS_KEYS
+from nooch_village.keyword_nominations import NominationQueue, NominationKroniek
+from nooch_village.library import Library
+
+
+def _st(dd):
+    import os
+    return types.SimpleNamespace(
+        dd=dd,
+        nominations=NominationQueue(os.path.join(dd, "keyword_nominaties.json")),
+        nom_kroniek=NominationKroniek(os.path.join(dd, "keyword_nominaties.jsonl")),
+        library=Library(os.path.join(dd, "library.json")))
 
 
 def _seed(dd):
@@ -57,9 +70,9 @@ def test_convergentie_signaal_en_volume(tmp_path):
 def test_vier_lenzen_delen_de_laag(tmp_path):
     _seed(str(tmp_path))
     dd = str(tmp_path)
-    assert _LENS_KEYS == {"marketing", "scientist", "trends", "library"}
+    assert {"marketing", "scientist", "trends", "library", "kroniek"} == _LENS_KEYS
     for lens in _LENS_KEYS:
-        h = render_keyword_lens(dd, lens)
+        h = render_keyword_lens(_st(dd), lens)
         assert "chip-opt" in h and "Eén keyword-datalaag" in h  # switcher + gedeelde-laag-framing
         assert h.count("chip-opt on") == 1                      # precies één actieve lens
 
@@ -68,17 +81,17 @@ def test_lens_specifieke_inhoud(tmp_path):
     _seed(str(tmp_path))
     dd = str(tmp_path)
     # scientist: telt echte signalen, toont blip-duiding
-    sci = render_keyword_lens(dd, "scientist")
+    sci = render_keyword_lens(_st(dd), "scientist")
     assert "<b>1</b> van 2" in sci and "opkomst" in sci and "blip" in sci
     # trends: forbidden zichtbaar, suggesties tonen approved
-    tr = render_keyword_lens(dd, "trends")
+    tr = render_keyword_lens(_st(dd), "trends")
     assert "leren schoenen" in tr and "Suggesties" in tr
     # library-convergentie: alleen de samenkomst-term
-    lib = render_keyword_lens(dd, "library")
+    lib = render_keyword_lens(_st(dd), "library")
     assert "ocean plastic shoes" in lib and "upcycled sneakers" not in lib
 
 
 def test_onbekende_lens_valt_terug_op_trends(tmp_path):
     _seed(str(tmp_path))
-    h = render_keyword_lens(str(tmp_path), "zzz")
+    h = render_keyword_lens(_st(str(tmp_path)), "zzz")
     assert "Kansrijkheid" in h                                  # de trends-lens-kolom
