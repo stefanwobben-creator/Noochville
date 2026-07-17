@@ -118,6 +118,24 @@ def test_clusters_bottom_up_alleen_ongebonden():
     assert "los" in ongebonden(atoms, [])
 
 
+def test_ongesorteerd_bakje_alleen_kennisbank_atomen(tmp_path):
+    """Legacy Librarian-kaartjes (geen provenance) overspoelen het bakje niet;
+    een kennisbank-atoom zonder onderwerp staat er wél in."""
+    import types
+    from nooch_village.views.kennisbank import _ongesorteerd_bakje
+    atoms = {
+        "legacy": {"claim": "an english librarian card", "source": "gsc", "tags": ["vegan"]},
+        "kb_los": {"claim": "notitie zonder onderwerp", "source": "x",
+                   "provenance": "unknown", "tags": []},
+        "kb_hub": {"claim": "notitie met hub", "source": "x",
+                   "provenance": "media", "tags": ["leer"]},
+    }
+    html = _ongesorteerd_bakje(atoms, [], csrf="t")
+    assert "ongesorteerd (1)" in html
+    assert "notitie zonder onderwerp" in html
+    assert "librarian card" not in html and "notitie met hub" not in html
+
+
 def test_gather_stance_via_llm_fail_closed():
     atoms = _atoms()
     stance_llm = lambda prompt, **kw: '[{"nr": 1, "stance": "support"}, {"nr": 2, "stance": "counter"}]'
