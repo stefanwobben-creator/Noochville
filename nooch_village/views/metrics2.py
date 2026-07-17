@@ -17,7 +17,7 @@ from __future__ import annotations
 import time as _time
 
 from nooch_village.web_base import _e, _page
-from nooch_village.cockpit2_util import _DS_LINK, _BUILD, _name
+from nooch_village.cockpit2_util import _DS_LINK, _name, _nav
 from nooch_village.metrics import window_range
 from nooch_village.views.metrics import (
     _sources_for, _default_form, _render_tile, _METRICS_JS,
@@ -342,7 +342,6 @@ def render_metrics2(st, rec, csrf_token: str = "", win: str = "7d",
     main = (f"<div class='c2-main'><h1>Metrieken — {_e(_name(rec))}</h1>"
             f"<p class='muted'>Scan de catalogus en zet een ster bij wat je wilt volgen. "
             f"Je hoeft niet te weten wat interessant is; het overzicht staat er.</p>{body}</div>")
-    inner = (f"{_DS_LINK}<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
-             "<a href='/'>home</a></div>"
+    inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
     return _page("Metrieken", inner)

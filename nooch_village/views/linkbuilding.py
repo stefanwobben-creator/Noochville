@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 
 from nooch_village.web_base import _e, _page
-from nooch_village.cockpit2_util import _DS_LINK, _BUILD
+from nooch_village.cockpit2_util import _DS_LINK, _nav
 
 _PRIO_CHIP = {"hoog": "chip amber", "midden": "chip", "laag": "chip outline", "onbekend": "chip outline"}
 
@@ -71,7 +71,6 @@ def render_linkbuilding(data_dir: str, csrf_token: str = "") -> str:
             f"<p class='muted'>Gidsen en lijstjes waar Nooch in vermeld wil worden. Beslis per doelwit: "
             f"ga je pitchen of negeer je het. {len(cands)} te beoordelen.</p>"
             f"<h2>Te beoordelen</h2>{cand_html}{pursued_block}</div>")
-    inner = (f"{_DS_LINK}<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
-             "<a href='/'>home</a> · <a href='/bronnen'>bronnen</a></div>"
+    inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
     return _page("Linkbuilding", inner)

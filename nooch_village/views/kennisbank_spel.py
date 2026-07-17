@@ -8,7 +8,7 @@ nieuwe versie bij herformuleren). Geen LLM-call in de browser voor de dialoog ze
 from __future__ import annotations
 
 from nooch_village.web_base import _e, _page, _banner, _field
-from nooch_village.cockpit2_util import _DS_LINK, _BUILD
+from nooch_village.cockpit2_util import _DS_LINK, _nav
 from nooch_village.kennisbank import load_atoms
 from nooch_village.kennisbank_spel import gather, spel_prompt, steun_onafhankelijk
 
@@ -147,7 +147,6 @@ def render_kennisbank_spel(st, sid: str, zoek: str = "", csrf_token: str = "",
             f"{_hand(spel, atoms, csrf_token, nxt, open_)}"
             + (_koppel_paneel(spel, atoms, zoek, csrf_token, nxt) if open_ else "")
             + f"</div>{stappen}</div>")
-    inner = (f"{_DS_LINK}<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
-             f"<a href='/'>home</a> · <a href='/kennisbank'>kennisbank</a></div>"
+    inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
     return _page("Speel een inzicht", inner)

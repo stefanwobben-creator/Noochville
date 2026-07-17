@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 
 from nooch_village.web_base import _e, _page, _banner, _field
-from nooch_village.cockpit2_util import _DS_LINK, _BUILD
+from nooch_village.cockpit2_util import _DS_LINK, _BUILD, _nav
 from nooch_village.kennisbank import field, verdict, WORD_LABEL, load_atoms, meta_field
 from nooch_village.kennisbank_intake import SUBJECTS
 from nooch_village.kennisbank_spel import clusters as kb_clusters, gather, subject_van
@@ -720,8 +720,6 @@ def render_kennisbank(st, kid: str = "", q: str = "", csrf_token: str = "",
             f"{actiebalk}{_banner(msg)}{toast}"
             f"<div class='kn-cols'>{links}{rechts}</div>"
             f"<p class='muted'>Elke zekerheid schuift mee als er info bijkomt.</p></div>")
-    inner = (f"{_DS_LINK}<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
-             "<a href='/'>home</a> · <a href='/signals'>signalen</a> · "
-             "<a href='/inzichten'>kennislaag</a></div>"
+    inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>{_KN_SEARCH_JS}")
     return _page("Wat Nooch weet", inner)

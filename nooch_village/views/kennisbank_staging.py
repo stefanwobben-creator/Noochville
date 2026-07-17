@@ -7,7 +7,7 @@ staat bovenaan (verklaarbaar). Hergebruikt de kn-/kern-klassen; geen nieuwe mach
 from __future__ import annotations
 
 from nooch_village.web_base import _e, _page, _banner, _field
-from nooch_village.cockpit2_util import _DS_LINK, _BUILD
+from nooch_village.cockpit2_util import _DS_LINK, _nav
 from nooch_village.kennisbank_intake import SUBJECTS
 
 _PROV = ("peer_reviewed", "certificate", "internal_data", "survey", "expert_opinion",
@@ -84,7 +84,6 @@ def render_kennisbank_staging(st, bid: str, csrf_token: str = "", msg: str = "")
             f"<b>{_e(b.get('source_label'))}</b>. Bewerk, voeg samen of gooi weg. Pas op "
             f"“Voeg set toe” landen ze in de bibliotheek.</p>{_banner(msg)}"
             f"{merge}{kaartjes}<div class='kn-sec'>{commit}</div></div>")
-    inner = (f"{_DS_LINK}<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
-             f"<a href='/'>home</a> · <a href='/kennisbank'>kennisbank</a></div>"
+    inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
     return _page("Even nakijken", inner)

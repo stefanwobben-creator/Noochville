@@ -14,7 +14,7 @@ import json
 import os
 
 from nooch_village.web_base import _e, _page
-from nooch_village.cockpit2_util import _DS_LINK, _BUILD
+from nooch_village.cockpit2_util import _DS_LINK, _nav
 from nooch_village.belofte_graaf import Oordeel, Sterkte, weeg_belofte
 
 _OORDEEL_CHIP = {
@@ -116,7 +116,6 @@ def render_belofte(data_dir: str, belofte_id: str = "") -> str:
         main = (f"<div class='c2-main'><h1>Beloftes &amp; eerste principes</h1>"
                 f"<p class='muted'>Elke belofte ontleed in haar constituenten en gewogen op het "
                 f"zwakste onderdeel. Klik door voor de graaf per belofte.</p>{_lijst(data)}</div>")
-    inner = (f"{_DS_LINK}<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
-             "<a href='/'>home</a> · <a href='/woordenschat'>woordenschat</a></div>"
+    inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
     return _page("Beloftes", inner)

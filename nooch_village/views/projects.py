@@ -11,8 +11,7 @@ from nooch_village.cockpit2_util import (
     _name, _initials, _age, _fmt_due, _created_full, md_editor, _md, _md_doc, _WRAPSEL_DEF,
     _link_host, _psec, _person_name, _stamp,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK,
-    _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET,
-)
+    _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET, _nav,)
 from nooch_village.views.feed import _mentionables, _feed_entry_html, _wall_outcome_opts
 from nooch_village.views.checklists import _checklists_html
 from nooch_village import org
@@ -987,7 +986,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     main = (f"<div class='c2-main pdetail'>"
             f"<div class='c2-bar'><a href='{_e(back)}'>← terug</a></div>{detail}</div>")
     inner = (f"{_DS_LINK}"
-             "<div class='bar'>cockpit 2 · projectdetail · <a href='/'>home</a></div>"
+             f"{_nav('projectdetail')}"
              f"<div class='c2-wrap'>{main}</div>")
     return _page(_scope_text(p), inner)
 

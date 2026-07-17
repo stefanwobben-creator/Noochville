@@ -10,7 +10,7 @@ import json
 import os
 
 from nooch_village.web_base import _e, _page
-from nooch_village.cockpit2_util import _DS_LINK, _BUILD
+from nooch_village.cockpit2_util import _DS_LINK, _nav
 
 
 def _card(c: dict) -> str:
@@ -51,7 +51,6 @@ def render_kennislaag(data_dir: str) -> str:
     main = (f"<div class='c2-main'><h1>Inzichten</h1>"
             f"<p class='muted'>De kennislaag: gegronde inzicht-kaarten die de Librarian ving uit bewijs. "
             f"{len(cards)} kaart(en), gesorteerd op hoe vaak ze gegrond zijn.</p>{rows}</div>")
-    inner = (f"{_DS_LINK}<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
-             "<a href='/'>home</a> · <a href='/bronnen'>bronnen</a></div>"
+    inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
     return _page("Inzichten", inner)
