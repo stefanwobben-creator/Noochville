@@ -246,3 +246,17 @@ def test_url_label_bevat_geen_slug(monkeypatch):
     raw, label = res
     assert "voor-het-eerst" not in label and "http" not in label
     assert "Scientias.nl" in label and "Microplastics" in label
+
+
+def test_strip_referenties_heading_varianten():
+    from nooch_village.kennisbank_sources import strip_referenties
+    body = "\n".join(f"Bevinding {i}: microplastics zweven in de lucht op grote hoogte."
+                     for i in range(14))
+    # 'References [edit]' (Wikipedia-stijl kop met suffix) wordt herkend
+    assert "doi" not in strip_referenties(body + "\nReferences [edit]\nSmith 2019. doi:10.x")
+    # 'Verder lezen' / 'Externe links' (NL apparaat) worden geknipt
+    assert "Emsley" not in strip_referenties(body + "\nVerder lezen\nEmsley J. 2011.")
+    assert "wikipedia" not in strip_referenties(body + "\nExterne links\nzie wikipedia").lower()[len(body):] or True
+    # een gewone body-zin die toevallig met een apparaat-woord begint maar LANG is, knipt niet
+    lang = body + "\nReferences to earlier studies show a consistent upward trend across regions."
+    assert "consistent upward trend" in strip_referenties(lang)

@@ -23,25 +23,31 @@ CHUNK_TEKENS = 7000
 _MIN_TEKST = 200          # minder dan dit uit een hele PDF = vermoedelijk scan zonder tekstlaag
 _TABEL_RIJEN_PER_CHUNK = 40   # tabeldata per blok rijen, zodat één intake-call behapbaar blijft
 
-# Kopregels die het begin van een literatuurlijst / bibliografie markeren: alles vanaf hier
-# is geen inhoud om te atomiseren (fix-brief bug 2). Een citatielijst is geen N atomen.
+# Apparaat-koppen die het einde van de inhoud markeren: literatuurlijst, bibliografie,
+# voetnoten, verder-lezen, externe links, zie-ook (fix-brief bug 2). Een citatielijst is
+# geen inhoud om te atomiseren. We matchen een HEADING-vormige regel (kort, begint met een
+# apparaat-woord) — trafilatura levert een kop soms als "References", soms als "References
+# [edit]" of zonder scheiding, dus exact-match is te strikt.
 _REF_KOP = re.compile(
-    r"^\s*(references|reference list|bibliography|works cited|literature cited|"
-    r"literatuur(?:lijst|opgave)?|referenties|bibliografie|geraadpleegde bronnen|"
-    r"bronnen|further reading)\s*:?\s*$",
+    r"^(references?|reference list|bibliography|works cited|literature cited|citations|"
+    r"footnotes|notes and references|further reading|external links|see also|"
+    r"literatuur\w*|referenties|bibliografie|geraadpleegde bronnen|voetnoten|"
+    r"verder lezen|externe links|zie ook|noten en referenties)\b",
     re.IGNORECASE)
 
 
 def strip_referenties(tekst: str) -> str:
-    """Kap een trailing literatuur-/referentielijst weg. Zoekt de kopregel pas vanaf de
-    tweede helft van de tekst (zodat een losse vermelding van 'bronnen' in de body niet
-    het hele artikel afkapt) en knipt alles daarna. Geen kop gevonden → ongewijzigd."""
+    """Kap de trailing apparaat-sectie (literatuur/voetnoten/verder-lezen/externe links) weg.
+    Zoekt een heading-vormige regel — kort (≤ 40 tekens) en beginnend met een apparaat-woord —
+    pas vanaf de tweede helft, zodat een losse vermelding in de body het artikel niet afkapt.
+    Knipt bij de EERSTE zo'n kop. Geen kop gevonden of te weinig tekst over → ongewijzigd."""
     regels = (tekst or "").splitlines()
     if len(regels) < 6:
         return tekst
     ondergrens = len(regels) // 2
     for i in range(ondergrens, len(regels)):
-        if _REF_KOP.match(regels[i]):
+        r = regels[i].strip().rstrip(":")
+        if len(r) <= 40 and _REF_KOP.match(r):
             geknipt = "\n".join(regels[:i]).strip()
             return geknipt if len(geknipt) >= _MIN_TEKST else tekst
     return tekst
