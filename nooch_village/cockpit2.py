@@ -3160,6 +3160,50 @@ def _act_kb_atoom_subject(c):
     return c.nxt, f"📥 gesorteerd naar '{subject}'"
 
 
+def _act_kb_atoom_merge(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Curatie (addendum C):
+    # selectie → één samengestelde kaart; originelen gearchiveerd met merged_from-terugweg.
+    ids = [a for a in (c.form.get("atoom") or []) if a]
+    kop = c.g("kop").strip()
+    if len(ids) < 2:
+        return c.nxt, "✗ selecteer minstens twee notities om samen te voegen"
+    if not kop:
+        return c.nxt, "✗ geef de samengestelde kaart eerst een kop"
+    kaart = c.st.notes.merge(ids, kop, by=_kb_actor(c))
+    if kaart is None:
+        return c.nxt, "✗ samenvoegen niet gelukt (bestaat deze samenvoeging al?)"
+    return c.nxt, (f"🧩 samengevoegd tot één kaart ({len(kaart.merged_from)} originelen "
+                   f"bewaard als gearchiveerd)")
+
+
+def _act_kb_atoom_archive(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Archiveren ≠ wissen.
+    ids = [a for a in (c.form.get("atoom") or []) if a] or [c.g("atom_id")]
+    ok = sum(1 for aid in ids if aid and c.st.notes.archive(aid))
+    if not ok:
+        return c.nxt, "✗ selecteer eerst een notitie"
+    return c.nxt, f"📦 {ok} notitie(s) gearchiveerd — terug te zetten via 'Gearchiveerd'"
+
+
+def _act_kb_atoom_unarchive(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
+    ok = c.st.notes.archive(c.g("atom_id"), archived=False)
+    return c.nxt, ("↩ teruggezet in de bibliotheek" if ok else "✗ terugzetten niet gelukt")
+
+
+def _act_kb_atoom_naar_spel(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Selectie voedt de
+    # spel-hand (koppeling met de hand-uitbreiding; richting draai je in het spel).
+    ids = [a for a in (c.form.get("atoom") or []) if a]
+    sid = c.g("sid")
+    if not ids:
+        return c.nxt, "✗ selecteer eerst een notitie"
+    if not sid or c.st.spel.get(sid) is None:
+        return c.nxt, "✗ kies een open spel"
+    ok = sum(1 for aid in ids if c.st.spel.add_kaart(sid, aid, "support"))
+    return f"/kennisbank/spel?sid={sid}", f"🔗 {ok} kaart(en) aan je hand gekoppeld"
+
+
 def _kb_spel_set(c) -> list[dict]:
     """Gecureerde set uit het formulier: checkboxes `kaart` + per kaart `stance_<id>`."""
     ids = c.form.get("kaart") or []
@@ -3220,6 +3264,10 @@ ACTIONS = {
     "kb_intake": _act_kb_intake,
     "kb_intake_url": _act_kb_intake_url,
     "kb_atoom_subject": _act_kb_atoom_subject,
+    "kb_atoom_merge": _act_kb_atoom_merge,
+    "kb_atoom_archive": _act_kb_atoom_archive,
+    "kb_atoom_unarchive": _act_kb_atoom_unarchive,
+    "kb_atoom_naar_spel": _act_kb_atoom_naar_spel,
     "kb_spel_start": _act_kb_spel_start,
     "kb_spel_add": _act_kb_spel_add,
     "kb_spel_remove": _act_kb_spel_remove,
