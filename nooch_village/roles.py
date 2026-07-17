@@ -435,6 +435,27 @@ class WebsiteWatcherWorker(Inhabitant):
                     "_rising": True,
                     "_breakout": related.get("breakout", False) if isinstance(related, dict) else False,
                 })
+        # Umbrella-verbreding (gated via keyword_umbrella, default uit): leidt per niche-keyword de
+        # bredere basisterm af en voegt die als EIGEN kandidaat toe — dedup tegen de bibliotheek én de
+        # bestaande labels. Fail-closed: geen LLM/onparsebaar → lege map, de research loopt door.
+        _umb_on = str((getattr(self.context, "settings", None) or {}).get("keyword_umbrella", "0")) == "1"
+        if _umb_on and candidates:
+            from nooch_village import umbrella
+            seen = {c["label"] for c in candidates}
+            umap = umbrella.umbrella_terms([c["label"] for c in candidates], name=self.id) or {}
+            for niche, umb in umap.items():
+                umb = (umb or "").strip()
+                if not umb or umb in seen or lib.status(umb) is not None:
+                    continue
+                seen.add(umb)
+                parent = next((c.get("_parent", "") for c in candidates if c["label"] == niche), "")
+                candidates.append({
+                    "label": umb,
+                    "description": f"umbrella-context boven niche-keyword {niche} op nooch.earth",
+                    "_value": 0,
+                    "_parent": parent,
+                    "_umbrella": True,
+                })
         ranked = prioritize(candidates, self.context)
         proposed = 0
         for action in ranked:
