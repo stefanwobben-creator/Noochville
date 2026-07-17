@@ -25,3 +25,4 @@ pypdf>=4.0
 # LiveKit-video in het werkoverleg: server-side token-uitgifte (cockpit2.maak_livekit_token)
 livekit-api==1.1.1          # gepind — Render moet exact deze meenemen
 python-dotenv==1.2.2        # .env-laden bij de deploy
+trafilatura>=2.0   # kennisbank: URL-hoofdtekst-extractie (source-adapter)
