@@ -249,7 +249,7 @@ from nooch_village.views.inbox import (
 from nooch_village.views.metrics2 import render_metrics2
 from nooch_village.views.bronnen import render_bronnen
 from nooch_village.views.kennislaag import render_kennislaag
-from nooch_village.views.kennisbank import render_kennisbank
+from nooch_village.views.kennisbank import render_kennisbank, render_kennisbank_search
 from nooch_village.views.kennisbank_spel import render_kennisbank_spel
 from nooch_village.views.linkbuilding import render_linkbuilding
 from nooch_village.views.accountabilities import render_accountabilities
@@ -3196,6 +3196,25 @@ def _act_kb_stage_discard(c):
     return "/kennisbank", ("Set weggegooid — niets in de bibliotheek" if ok else "✗ set niet gevonden")
 
 
+def _act_kb_atoom_edit(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Bewerken-met-historie
+    # (PR-2): de vorige claim blijft bewaard in edit_history (append-only, extractie-fouten).
+    res = c.st.notes.edit_note(c.g("atom_id"), claim=c.g("claim"))
+    return c.nxt, ("✏️ bijgewerkt (vorige versie bewaard)" if res else "✗ bewerken niet gelukt")
+
+
+def _act_kb_atoom_related(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. "Voeg gerelateerd feit toe":
+    # een NIEUW gelinkt atoom met eigen bron (het 36%-geval), geen verrijking-in-place.
+    actor = _kb_actor(c)
+    bron = c.g("source").strip() or actor
+    prov = "internal_judgment" if bron == actor else "unknown"
+    res = c.st.notes.add_related(c.g("atom_id"), c.g("content"), bron, provenance=prov)
+    if res is None:
+        return c.nxt, "✗ kon geen gerelateerd feit toevoegen (leeg, of bestaat al)"
+    return c.nxt, "➕ gerelateerd feit toegevoegd en gelinkt"
+
+
 def _act_kb_atoom_subject(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Curatie van het
     # ongesorteerd-bakje: een mens hangt een subject-loze notitie aan een hub.
@@ -3316,6 +3335,8 @@ ACTIONS = {
     "kb_stage_commit": _act_kb_stage_commit,
     "kb_stage_discard": _act_kb_stage_discard,
     "kb_atoom_subject": _act_kb_atoom_subject,
+    "kb_atoom_edit": _act_kb_atoom_edit,
+    "kb_atoom_related": _act_kb_atoom_related,
     "kb_atoom_merge": _act_kb_atoom_merge,
     "kb_atoom_archive": _act_kb_atoom_archive,
     "kb_atoom_unarchive": _act_kb_atoom_unarchive,
@@ -3715,6 +3736,15 @@ def make_handler(data_dir: str, csrf_token: str,
                                              nieuw=(qs.get("nieuw") or [""])[0],
                                              hub=(qs.get("hub") or [""])[0], pag=_pag,
                                              open_=(qs.get("open") or [""])[0], cluster=_cl))
+                return
+            if path == "/kennisbank/search":
+                # Live smart-search fragment (PR-2): alleen de resultatenlijst, over de verse
+                # bibliotheek. Zoekt op inhoud én bron; markeert brug-suggesties bij een
+                # actief inzicht. chrome=False: het is een fragment dat de JS inplakt.
+                self._send(render_kennisbank_search(st, (qs.get("q") or [""])[0],
+                                                    (qs.get("hub") or [""])[0],
+                                                    (qs.get("active") or [""])[0],
+                                                    csrf_token=effective_csrf), chrome=False)
                 return
             if path == "/kennisbank/staging":
                 # Zone 2: de "even nakijken"-ronde vóór de bibliotheek (bewerken/samenvoegen/weggooien).

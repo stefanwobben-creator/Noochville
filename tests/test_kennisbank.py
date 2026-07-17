@@ -141,8 +141,10 @@ def test_view_toont_woord_en_meter_geen_percentages(tmp_path):
     iid = kb.add("Prijs blokkeert onze kern-doelgroep", why="drie signalen, één survey",
                  subject="prijs")
     from nooch_village.kennisbank_spel import SpelStore
+    from nooch_village.kennisbank_staging import StagingStore
     st = types.SimpleNamespace(dd=dd, kennisbank=kb,
-                               spel=SpelStore(f"{dd}/kennisbank_spel.json"))
+                               spel=SpelStore(f"{dd}/kennisbank_spel.json"),
+                               staging=StagingStore(f"{dd}/kennisbank_staging.json"))
 
     html = render_kennisbank(st, csrf_token="tok")
     assert "Wat Nooch weet" in html and "nog dun" in html
@@ -151,6 +153,7 @@ def test_view_toont_woord_en_meter_geen_percentages(tmp_path):
         assert verboden not in html
 
     detail = render_kennisbank(st, kid=iid, csrf_token="tok")
-    assert "kn-drawer" in detail and "Nog geen bewijs verzameld." in detail
+    # PR-2: detail staat nu in de linkerkolom (geen overlay-drawer meer)
+    assert "kn-detail" in detail and "Nog geen bewijs verzameld." in detail
     # herformuleren loopt via het copy-paste-spel (kb_spel_start), niet meer inline
     assert "kb_spel_start" in detail and "Speel opnieuw" in detail
