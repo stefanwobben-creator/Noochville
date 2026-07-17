@@ -327,3 +327,57 @@ def test_research_question_zonder_bronnen_meldt_dat(tmp_path):
         evidence, assessment = harry._research_question("een vraag zonder literatuur")
     assert evidence == []
     assert "No academic sources" in assessment       # knowledge layer = English
+
+
+# ── trend_reindex-puls (Sid's dagelijkse re-index, taak 2+3) ──────────────────
+
+def _harry_with_reindex(tmp_path, result):
+    from nooch_village.event_bus import EventBus
+    bus = EventBus(name="test")
+    registry = SkillRegistry()
+    registry.register(_StubSkill("ngram_culture", {"rows": [], "terms": {}}))
+    registry.register(_StubSkill("openalex_evidence", {"no_data": True}))
+    registry.register(_StubSkill("semscholar_tldr", {"no_data": True}))
+    registry.register(_StubSkill("trend_reindex", result))
+    context = SimpleNamespace(
+        settings={"tijdgeest_interval_seconds": "0", "reflect_interval_seconds": "0"},
+        data_dir=str(tmp_path), records=None,
+        library=SimpleNamespace(status=lambda w: None))
+    record = Record(id="harry_hemp", type=RecordType.ROLE, parent="noochville",
+                    definition=RoleDefinition(purpose="The Scientist",
+                        skills=["ngram_culture", "openalex_evidence", "semscholar_tldr",
+                                "trend_reindex"]),   # ← grant, anders dode capability
+                    source="seed")
+    record.persona = "Sid"
+    return HarryHemp(record, bus, registry, context), bus
+
+
+def test_trend_reindex_puls_signalen_naar_keyword_proposed_en_idempotent(tmp_path):
+    result = {"evaluated": [{"term": "barefoot shoes", "signal_type": "trend"}],
+              "signals": [{"term": "barefoot shoes", "signal_type": "trend", "index_latest": 3.1}],
+              "watchlist": ["barefoot shoes"], "candidates_source": "llm",
+              "fuzzy": "barefoot shoes stijgt", "escalate": None}
+    harry, bus = _harry_with_reindex(tmp_path, result)
+    proposed = []
+    bus.subscribe("keyword_proposed", lambda e: proposed.append(dict(e.data)))
+
+    harry._trend_reindex_pulse(None)
+    assert [p["word"] for p in proposed] == ["barefoot shoes"]
+    assert proposed[0]["demand"]["source"] == "trend_reindex"
+    # marker geschreven → dezelfde dag geen tweede run (idempotent)
+    import os
+    assert os.path.exists(os.path.join(str(tmp_path), "trend_reindex_last_day.json"))
+    harry._trend_reindex_pulse(None)
+    assert len(proposed) == 1                          # niet nog een keer
+
+
+def test_trend_reindex_escalatie_zichtbaar_naar_founder(tmp_path):
+    result = {"evaluated": [], "signals": [], "watchlist": [], "candidates_source": "watchlist_only",
+              "fuzzy": "", "escalate": {"reason": "pytrends niet beschikbaar (fail-closed)"}}
+    harry, bus = _harry_with_reindex(tmp_path, result)
+    harry._trend_reindex_pulse(None)
+    from nooch_village.notifications import NotifStore
+    from nooch_village.human_inbox import FOUNDER_ROLE_ID
+    fnd = NotifStore(str(tmp_path / "notifications.json")).for_targets([("role", FOUNDER_ROLE_ID)])
+    assert len(fnd) == 1 and "trend-re-index" in fnd[0]["snippet"]
+    assert "approve" not in fnd[0]["snippet"].lower()   # heads-up, geen beslis-knop
