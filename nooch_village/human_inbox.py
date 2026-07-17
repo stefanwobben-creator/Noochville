@@ -19,6 +19,23 @@ import os, time, uuid
 from datetime import datetime
 from nooch_village.util import atomic_write_json, read_json
 
+# De founder-rol die means-gaps zichtbaar krijgt (heads-up in de cockpit-inbox). Overschrijfbaar
+# via env FOUNDER_ROLE_ID; de cockpit toont notificaties die op de rollen van de ingelogde mens
+# zijn gericht, dus een notificatie op deze rol-id landt bij de founder.
+FOUNDER_ROLE_ID = os.getenv("FOUNDER_ROLE_ID",
+                            "mother_earth__nooch__strategic_lead_founder_steward")
+
+
+def _notify_founder(inbox_path: str, *, by: str, snippet: str) -> None:
+    """Zet een HEADS-UP-notificatie voor de founder naast de human_inbox (zelfde data/-map).
+    Nooit een approve-knop — alleen context + verwijzing terug naar het CLI-oppervlak. Fail-soft."""
+    try:
+        from nooch_village.notifications import NotifStore
+        pad = os.path.join(os.path.dirname(inbox_path) or ".", "notifications.json")
+        NotifStore(pad).add("role", FOUNDER_ROLE_ID, "", by=by, snippet=snippet[:160])
+    except Exception:
+        pass
+
 
 _VALID_STATUSES = {"pending", "approved", "rejected", "amended", "deferred",
                    "withdrawn", "resolved"}
@@ -197,6 +214,15 @@ class HumanInbox:
             "resolution":  None,
         }
         self._save()
+        # Zichtbaar escaleren naar de founder (taak 2): een means-gap belandde tot nu toe alleen in
+        # deze CLI-wachtrij en bleef zo onzichtbaar. We zetten er een HEADS-UP-notificatie bij — met
+        # context en een verwijzing terug naar dit oppervlak, GEEN approve-knop (CLAUDE.md: beslissen
+        # gebeurt uitsluitend op het geauthenticeerde human_inbox-oppervlak). Alleen bij een NIEUWE
+        # gap (de dedup hierboven voorkomt herhaling), en fail-soft — een notificatiefout mag de
+        # escalatie nooit breken.
+        _notify_founder(self.path, by=(sensed_by or role_id or "dorp"),
+                        snippet=(f"⚠️ Capaciteit ontbreekt bij {role_id or 'een rol'}: "
+                                 f"{description} — beoordeel via python -m nooch_village.inbox"))
         return iid
 
     def add_opportunity(self, title: str, *, by: str = "", kind: str = "project",

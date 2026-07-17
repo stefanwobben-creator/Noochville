@@ -220,3 +220,54 @@ def test_g_leeg_is_afgerond_op_de_wall(tmp_path, ledger):
     logtxt = " ".join(e["text"] for e in p.get("log", []))
     assert "📭" in logtxt and "geen resultaat" in logtxt              # wegschreven op de wall
     assert "niet gelukt" not in logtxt                               # geen ⚠️: het is geen mislukking
+
+
+# ── fix-brief: active-without-checklist herstel + zichtbare founder-escalatie ──
+
+def test_tend_prepareert_actief_zonder_checklist(tmp_path, ledger, monkeypatch):
+    """Root cause: een project dat ACTIEF werd zonder voorbereide checklist zat permanent stil
+    (prepare_project weigerde niet-future). De tend bereidt het nu alsnog voor én voert het uit."""
+    import nooch_village.llm as llm
+    plan = ('{"deliverable":"dossier","items":['
+            '{"text":"studies","skill":"openalex_evidence","query":"barefoot","reason":""}]}')
+    monkeypatch.setattr(llm, "reason", lambda *a, **k: (plan, "mock") if k.get("return_tier") else plan)
+    inh = _inhabitant(tmp_path, ledger)
+    # simuleer een bord-drag: project staat 'running' zonder checklist
+    pid = ledger.create("harry_hemp", "onderzoek barefoot", "human", status="queued")
+    ledger.start(pid)
+    assert ledger.get(pid)["status"] == "running" and inh._project_checklist(ledger.get(pid)) is None
+    inh._tend_projects(None)                                   # de dagelijkse verzorging
+    p = ledger.get(pid)
+    cl = inh._project_checklist(p)
+    assert cl is not None and cl["items"][0]["done"] is True   # voorbereid ÉN uitgevoerd
+
+
+def test_prepare_project_verruimd_voor_actief_zonder_checklist(tmp_path, ledger, monkeypatch):
+    import nooch_village.llm as llm
+    plan = '{"deliverable":"x","items":[{"text":"t","skill":"openalex_evidence","query":"q","reason":""}]}'
+    monkeypatch.setattr(llm, "reason", lambda *a, **k: (plan, "mock") if k.get("return_tier") else plan)
+    inh = _inhabitant(tmp_path, ledger)
+    pid = ledger.create("harry_hemp", "doel", "human", status="queued")
+    ledger.start(pid)                                          # → running, geen checklist
+    inh.prepare_project(pid)
+    assert inh._project_checklist(ledger.get(pid)) is not None
+    # idempotent: mét checklist doet prepare niets (geen tweede checklist)
+    inh.prepare_project(pid)
+    assert len(ledger.get(pid).get("checklists", [])) == 1
+
+
+def test_means_gap_escaleert_zichtbaar_naar_founder(tmp_path):
+    """Taak 2: een means-gap zet nu óók een heads-up-notificatie voor de founder (geen approve-knop)."""
+    from nooch_village.human_inbox import HumanInbox, FOUNDER_ROLE_ID
+    from nooch_village.notifications import NotifStore
+    hi = HumanInbox(str(tmp_path / "human_inbox.json"))
+    hi.add_means_gap("skill_ladder:openalex", "Skill-ladder uitgeput voor 'barefoot'",
+                     role_id="harry_hemp", sensed_by="harry_hemp")
+    notif = NotifStore(str(tmp_path / "notifications.json"))
+    fnd = notif.for_targets([("role", FOUNDER_ROLE_ID)])
+    assert len(fnd) == 1
+    assert "Capaciteit ontbreekt" in fnd[0]["snippet"] and "nooch_village.inbox" in fnd[0]["snippet"]
+    assert "approve" not in fnd[0]["snippet"].lower()          # heads-up, geen beslis-knop
+    # dedup: dezelfde gap opnieuw → geen tweede notificatie
+    hi.add_means_gap("skill_ladder:openalex", "nogmaals", role_id="harry_hemp")
+    assert len(NotifStore(str(tmp_path / "notifications.json")).for_targets([("role", FOUNDER_ROLE_ID)])) == 1
