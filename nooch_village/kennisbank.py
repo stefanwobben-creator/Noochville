@@ -121,6 +121,24 @@ def field(evidence: list[dict], atoms: dict[str, dict]) -> dict:
             "indep": len(sg), "indep_counter": len(cg), "n_support": len(sup)}
 
 
+def meta_field(ins: dict, by_id: dict[str, dict], atoms: dict[str, dict]) -> dict:
+    """Zekerheid van een META-inzicht (B1): afgeleid uit de onderliggende inzichten (ins['related']),
+    nooit met de hand. Elk gelinkt inzicht draagt zijn DRAGENDE bewijs (zijn support-atomen) bij,
+    met de richting van de meta-link; field() groepeert dan op de onderliggende atoom-bronnen
+    (woozle), zodat twee gelinkte inzichten die dezelfde bron delen niet dubbeltellen. Zo blijft
+    'zwaarte is afgeleid uit onafhankelijke bronnen' intact, één laag hoger."""
+    synth: list[dict] = []
+    for rel in ins.get("related") or []:
+        other = by_id.get(rel.get("insight_id") or "")
+        if other is None:
+            continue
+        link_stance = rel.get("stance") or "support"
+        for l in other.get("evidence") or []:
+            if l.get("stance") == "support":       # de dragende basis van het onderliggende inzicht
+                synth.append({"atom_id": l.get("atom_id"), "stance": link_stance})
+    return field(synth, atoms)
+
+
 def verdict(f: dict) -> dict:
     """Vertaal het veld naar wat de mens ziet: één gewoon woord + 4-punts meter + één zin.
     NOOIT percentages, groep-ids of ruwe trust naar buiten laten lekken."""
@@ -229,7 +247,8 @@ class KennisbankStore(JsonStore):
      subject, version, history[], evidence[{atom_id, stance, annotation, by, created_at}],
      discussion[{text, by, created_at}], created_at, updated_at}"""
 
-    _WRITE_METHODS = ("add", "link", "unlink", "annotate", "discuss", "reformulate",
+    _WRITE_METHODS = ("add", "link", "unlink", "link_insight", "unlink_insight",
+                      "annotate", "discuss", "reformulate",
                       "set_caveat")
 
     # -- reads (lock-vrij) --
@@ -248,10 +267,43 @@ class KennisbankStore(JsonStore):
             "reframe": (reframe or "").strip(), "falsifier": (falsifier or "").strip(),
             "caveat": (caveat or "").strip(), "subject": (subject or "").strip(),
             "version": "1.0", "history": [], "evidence": [], "discussion": [],
+            "related": [],
             "created_by": by, "created_at": _now(), "updated_at": _now(),
         }
         self._save()
         return iid
+
+    def link_insight(self, iid: str, other_id: str, stance: str, *, by: str = "") -> bool:
+        """Koppel een ander INZICHT als steun/tegen (B1: de Zettelkasten-ladder atoom→inzicht→
+        meta-inzicht). Idempotent (richting bijwerken, geen dubbele stem); geen zelf-link;
+        beide moeten bestaan."""
+        ins = self._items.get(iid)
+        if ins is None or other_id == iid or stance not in ("support", "counter") \
+                or other_id not in self._items:
+            return False
+        ins.setdefault("related", [])
+        for r in ins["related"]:
+            if r["insight_id"] == other_id:
+                r["stance"] = stance
+                break
+        else:
+            ins["related"].append({"insight_id": other_id, "stance": stance,
+                                   "by": by, "created_at": _now()})
+        ins["updated_at"] = _now()
+        self._save()
+        return True
+
+    def unlink_insight(self, iid: str, other_id: str) -> bool:
+        ins = self._items.get(iid)
+        if ins is None:
+            return False
+        voor = len(ins.get("related") or [])
+        ins["related"] = [r for r in ins.get("related") or [] if r["insight_id"] != other_id]
+        if len(ins["related"]) == voor:
+            return False
+        ins["updated_at"] = _now()
+        self._save()
+        return True
 
     def link(self, iid: str, atom_id: str, stance: str, *, annotation: str = "",
              by: str = "") -> bool:

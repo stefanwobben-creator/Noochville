@@ -3215,6 +3215,39 @@ def _act_kb_atoom_related(c):
     return c.nxt, "➕ gerelateerd feit toegevoegd en gelinkt"
 
 
+def _act_kb_insight_link(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. B1: koppel een ander INZICHT
+    # als steun/tegen aan het geopende inzicht (de Zettelkasten-ladder → meta-inzicht).
+    ok = c.st.kennisbank.link_insight(c.g("iid"), c.g("other_id"), c.g("stance"), by=_kb_actor(c))
+    return c.nxt, ("🔗 inzicht gekoppeld" if ok else "✗ koppelen niet gelukt")
+
+
+def _act_kb_insight_unlink(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
+    ok = c.st.kennisbank.unlink_insight(c.g("iid"), c.g("other_id"))
+    return c.nxt, ("ontkoppeld" if ok else "✗ ontkoppelen niet gelukt")
+
+
+def _act_kb_meta_start(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. B1: speel een META-inzicht —
+    # de gekoppelde inzichten van dit inzicht als input aan dezelfde copy-paste-spel-flow.
+    src = c.st.kennisbank.get(c.g("iid"))
+    if src is None:
+        return c.nxt, "✗ inzicht niet gevonden"
+    related = src.get("related") or []
+    if len(related) < 2:
+        return c.nxt, "✗ koppel eerst ≥2 inzichten (steun/tegen) om een meta-inzicht te spelen"
+    kaarten = []
+    for r in related:
+        other = c.st.kennisbank.get(r["insight_id"])
+        if other is not None:
+            kaarten.append({"atom_id": r["insight_id"], "stance": r.get("stance") or "support",
+                            "label": other.get("title") or ""})
+    sid = c.st.spel.start(f"Meta-inzicht over: {src.get('title') or ''}", kaarten,
+                          by=_kb_actor(c), meta=True)
+    return f"/kennisbank/spel?sid={sid}", "🎲 meta-spel gestart — de gekoppelde inzichten zijn de hand"
+
+
 def _act_kb_atoom_reference(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Een URL als bronlink bij een
     # atoom (A3): landt in het reference-veld. Een expliciet-geplakte bronlink houden we (anders
@@ -3350,6 +3383,9 @@ ACTIONS = {
     "kb_atoom_edit": _act_kb_atoom_edit,
     "kb_atoom_related": _act_kb_atoom_related,
     "kb_atoom_reference": _act_kb_atoom_reference,
+    "kb_insight_link": _act_kb_insight_link,
+    "kb_insight_unlink": _act_kb_insight_unlink,
+    "kb_meta_start": _act_kb_meta_start,
     "kb_atoom_merge": _act_kb_atoom_merge,
     "kb_atoom_archive": _act_kb_atoom_archive,
     "kb_atoom_unarchive": _act_kb_atoom_unarchive,
@@ -3748,7 +3784,8 @@ def make_handler(data_dir: str, csrf_token: str,
                                              speel=(qs.get("speel") or [""])[0],
                                              nieuw=(qs.get("nieuw") or [""])[0],
                                              hub=(qs.get("hub") or [""])[0], pag=_pag,
-                                             open_=(qs.get("open") or [""])[0], cluster=_cl))
+                                             open_=(qs.get("open") or [""])[0], cluster=_cl,
+                                             flip=(qs.get("flip") or [""])[0] in ("1", "true", "on")))
                 return
             if path == "/kennisbank/search":
                 # Live smart-search fragment (PR-2): alleen de resultatenlijst, over de verse

@@ -927,3 +927,10 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .kn-msg-text{font-size:.92rem}
 .kn-discrow{display:flex;gap:.45rem;align-items:flex-end;margin-top:.2rem}
 .kn-discrow input{flex:1;border:1px solid var(--border);border-radius:var(--radius);font:inherit;padding:.4rem .55rem;background:var(--surface)}
+
+/* ── Kennisbank Deel B: flip + gerelateerde inzichten ───────────────────────── */
+.kn-flipbar{display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.3rem}
+.kn-flip{border-left:3px solid var(--coral)}
+.kn-flip .kn-claim{color:var(--coral)}
+.kn-topiclink{margin-top:.3rem;opacity:1}
+.kn-topic{display:block}

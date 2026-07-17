@@ -315,3 +315,69 @@ def test_ux_kb_atoom_reference_via_dispatch(tmp_path):
     _, msg2 = dispatch(dd, "kb_atoom_reference", {"atom_id": ["a1"], "url": ["geen url"], "next": ["/x"]},
                        username="guest")
     assert "✗" in msg2
+
+
+# ── Deel B: flip (B2) + gerelateerde inzichten / meta-inzicht (B1) ────────────
+
+def test_meta_field_afgeleid_uit_onderliggende_inzichten(tmp_path):
+    from nooch_village.kennisbank import KennisbankStore, meta_field, verdict
+    from nooch_village.insight import Insight
+    from nooch_village.notes_store import NotesStore
+    dd = str(tmp_path)
+    ns = NotesStore(f"{dd}/notes.json")
+    ns.add(Insight(id="x1", claim="a", source="WUR", provenance="peer_reviewed"))
+    ns.add(Insight(id="x2", claim="b", source="lab", provenance="internal_data"))
+    ns.add(Insight(id="y1", claim="c", source="survey X", provenance="survey"))
+    kb = KennisbankStore(f"{dd}/kb.json")
+    a = kb.add("A"); kb.link(a, "x1", "support"); kb.link(a, "x2", "support")
+    b = kb.add("B"); kb.link(b, "y1", "support")
+    m = kb.add("Meta")
+    assert kb.link_insight(m, a, "support") and kb.link_insight(m, b, "support")
+    assert kb.link_insight(m, m, "support") is False          # geen zelf-link
+    from nooch_village.kennisbank import load_atoms
+    by = {i["id"]: i for i in kb.all()}
+    mv = meta_field(kb.get(m), by, load_atoms(dd))
+    assert mv["indep"] == 3 and verdict(mv)["word"] == "stevig"   # 3 onafhankelijke bronnen
+    # gedeelde bron telt niet dubbel: koppel een inzicht dat óók WUR gebruikt
+    kb2 = kb.add("C"); ns.add(Insight(id="x3", claim="d", source="WUR", provenance="peer_reviewed"))
+    kb.link(kb2, "x3", "support"); kb.link_insight(m, kb2, "support")
+    by = {i["id"]: i for i in kb.all()}
+    assert meta_field(kb.get(m), by, load_atoms(dd))["indep"] == 3   # WUR blijft één stem
+
+
+def test_flip_toont_achterkant(tmp_path):
+    from nooch_village.views.kennisbank import render_kennisbank
+    dd = str(tmp_path); st = _st(dd)
+    iid = st.kennisbank.add("Prijs blokkeert", reframe="Design is de echte drempel",
+                            falsifier="Een A/B-test op 150 die niets beweegt")
+    voor = render_kennisbank(st, kid=iid, csrf_token="t", flip=False)
+    assert "↺ draai om" in voor and "kn-flip'" not in voor
+    achter = render_kennisbank(st, kid=iid, csrf_token="t", flip=True)
+    assert "de andere kant" in achter and "Design is de echte drempel" in achter
+    assert "Bewijs voor de andere kant" in achter and "↺ terug" in achter
+
+
+def test_insight_link_en_meta_spel(tmp_path):
+    from nooch_village.cockpit2 import dispatch, _Stores
+    dd = str(tmp_path)
+    st = _Stores(dd)
+    a = st.kennisbank.add("Inzicht A"); b = st.kennisbank.add("Inzicht B")
+    m = st.kennisbank.add("Hub")
+    dispatch(dd, "kb_insight_link", {"iid": [m], "other_id": [a], "stance": ["support"], "next": ["/x"]}, username="guest")
+    dispatch(dd, "kb_insight_link", {"iid": [m], "other_id": [b], "stance": ["counter"], "next": ["/x"]}, username="guest")
+    st = _Stores(dd)
+    assert len(st.kennisbank.get(m)["related"]) == 2
+    # meta-spel: de gekoppelde inzichten worden de hand (meta-flag), prompt draagt hun claims
+    nxt, msg = dispatch(dd, "kb_meta_start", {"iid": [m], "next": ["/x"]}, username="guest")
+    sid = nxt.split("sid=")[1]
+    st = _Stores(dd)
+    spel = st.spel.get(sid)
+    assert spel["meta"] is True and len(spel["set"]) == 2
+    from nooch_village.kennisbank_spel import spel_prompt, spel_finish
+    prompt = spel_prompt(spel, {})
+    assert "Inzicht A" in prompt and "Inzicht B" in prompt          # claims via label, geen atoom-lookup
+    # munten → nieuw meta-inzicht met related i.p.v. evidence
+    blok = "=== INZICHT ===\nTITEL: Meta\nCLAIM: Overkoepelend inzicht.\nREFRAME: r\nFALSIFIER: f\n=== EINDE ==="
+    iid2, versie = spel_finish(st.spel, sid, st.kennisbank, blok)
+    meta = st.kennisbank.get(iid2)
+    assert versie == "1.0" and len(meta["related"]) == 2 and not meta["evidence"]

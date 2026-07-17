@@ -150,14 +150,18 @@ class SpelStore(JsonStore):
                       key=lambda s: s.get("updated_at") or "", reverse=True)
 
     def start(self, hunch: str, kaarten: list[dict], *, reformulate_of: str = "",
-              by: str = "") -> str:
+              by: str = "", meta: bool = False) -> str:
+        """Start een spel met een gecureerde hand. `meta=True` (B1): de kaarten zijn ANDERE
+        inzichten i.p.v. atomen — elk draagt een `label` (de claim-tekst) zodat de prompt geen
+        atoom-lookup nodig heeft, en spel_finish mint dan een meta-inzicht (related i.p.v. evidence)."""
         sid = "spel_" + uuid.uuid4().hex[:8]
         self._items[sid] = {
             "id": sid, "hunch": (hunch or "").strip(),
             "set": [{"atom_id": k["atom_id"], "stance": k.get("stance") or "support",
-                     "annotation": (k.get("annotation") or "").strip() or None}
+                     "annotation": (k.get("annotation") or "").strip() or None,
+                     "label": (k.get("label") or "").strip() or None}
                     for k in kaarten if k.get("atom_id")],
-            "status": "open",
+            "status": "open", "meta": bool(meta),
             "reformulate_of": reformulate_of or None, "insight_id": None,
             "by": by, "created_at": _now(), "updated_at": _now(),
         }
@@ -225,7 +229,7 @@ class SpelStore(JsonStore):
 def spel_prompt(spel: dict, atoms: dict[str, dict]) -> str:
     """De prompt die de mens meeneemt naar zijn eigen AI: de game-prompt uit de
     master-brief (§7, fase-1 bouwsteen), geseed met de gecureerde hand."""
-    rows = [{"claim": (atoms.get(k["atom_id"]) or {}).get("claim", ""),
+    rows = [{"claim": k.get("label") or (atoms.get(k["atom_id"]) or {}).get("claim", ""),
              "stance": k["stance"]} for k in spel.get("set") or []]
     return bouw_spel_prompt(spel.get("hunch", ""), rows)
 
@@ -254,6 +258,14 @@ def spel_finish(store: SpelStore, sid: str, kb, blok: str) -> tuple[str, str] | 
                                 falsifier=parsed["falsifier"], by=spel.get("by") or "spel")
         if versie is None:
             return None
+    elif spel.get("meta"):
+        # META-inzicht (B1): de kaarten zijn ANDERE inzichten → verankeren via related, niet evidence.
+        iid = kb.add(parsed["claim"], why=f"Meta-inzicht uit {len(spel.get('set') or [])} inzichten.",
+                     reframe=parsed["reframe"], falsifier=parsed["falsifier"],
+                     by=spel.get("by") or "spel")
+        for k in spel.get("set") or []:
+            kb.link_insight(iid, k["atom_id"], k["stance"], by=spel.get("by") or "spel")
+        versie = "1.0"
     else:
         iid = kb.add(parsed["claim"], why=f"Gespeeld uit {len(spel.get('set') or [])} kaarten.",
                      reframe=parsed["reframe"], falsifier=parsed["falsifier"],
