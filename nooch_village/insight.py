@@ -76,6 +76,11 @@ class Insight(BaseModel):
     # merge-kaart verwijst naar zijn originelen — die blijven gearchiveerd bewaard.
     archived: bool = False
     merged_from: list[str] = Field(default_factory=list)
+    # Atomiser-versionering (reatomise-fix): met welke atomiser-versie dit atoom gemaakt is
+    # (None = pre-versionering, dus kandidaat voor re-atomiseren). superseded_by verwijst naar
+    # de nieuwe, schone atomen die dit atoom bij een migratie vervingen (append-only spoor).
+    atomiser_version: int | None = None
+    superseded_by: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _check_grounding(self) -> Self:
