@@ -62,12 +62,23 @@ def build_intake_prompt(raw: str, source_hint: str = "") -> str:
         "  MAXIMAAL 12 notities per input — kies de belangrijkste; liever 8 sterke dan 20 snippers.\n"
         "- Alleen ZELFSTANDIGE bevindingen, metingen, conclusies, quotes en signalen worden\n"
         "  notities. Negeer aanhef, groeten, retorische vragen, meta-tekst, methodebeschrijvingen\n"
-        "  zonder uitkomst, inhoudsopgaven en referentielijsten.\n"
-        "- \"source\" = de publicatie of spreker (bijv. de column, of 'column, quote X'),\n"
-        "  nooit een aanhef of zinsdeel uit de tekst.\n"
+        "  zonder uitkomst, inhoudsopgaven, referentielijsten, auteurslijsten, colofons en\n"
+        "  financierings-/dankwoordvermeldingen.\n"
+        "- Een ENUMERATIE, stappenproces, tabel of opsomming is ÉÉN kenniseenheid, geen N losse\n"
+        "  feiten: maak er één samengestelde notitie van met \"content\" = een korte kop-claim\n"
+        "  (bijv. \"In de leerschoenproductie zijn 19 micro-stappen met kinderarbeid\n"
+        "  geïdentificeerd\") en \"body\" = de stappen/regels zelf (nummering behouden).\n"
+        "  Nooit één notitie per lijstregel.\n"
+        "- Losse triviale definities of glossarium-regels (\"de term X betekent...\") worden GEEN\n"
+        "  notitie — sla ze over (definities horen in het lexicon, niet in de kennisbank).\n"
+        "- \"source\" = een KORTE aanduiding van publicatie of spreker (bijv. \"IDS 2021\" of\n"
+        "  'column, quote X'), nooit een aanhef of zinsdeel uit de tekst. Copyright-regels,\n"
+        "  ISBN en DOI horen NOOIT in \"content\": zet DOI/ISBN/URL één keer in \"reference\".\n"
         "- Schrijf elke notitie in het Nederlands (vertaal indien nodig), kort en op zichzelf leesbaar.\n"
-        "- Behoud de bron letterlijk. Leid het PROVENANCE-type af uit de aard van de bron\n"
-        "  (zie lijst). Verzin geen betrouwbaarheidsscore.\n"
+        "- Leid het PROVENANCE-type af uit de aard van de bron (zie lijst); verzin geen\n"
+        "  betrouwbaarheidsscore. Een onderzoeksinstituut of journal met DOI/ISBN =\n"
+        "  peer_reviewed, ook als de toon geëngageerd is; advocacy is voor belangenorganisaties\n"
+        "  zonder eigen onderzoek.\n"
         "- Kies het ONDERWERP uit de vaste lijst (zie lijst). Verzin geen nieuwe tags.\n"
         "  Kies bij twijfel het dichtstbijzijnde onderwerp; laat subject alleen leeg (\"\")\n"
         "  als er écht niets past.\n"
@@ -83,9 +94,10 @@ def build_intake_prompt(raw: str, source_hint: str = "") -> str:
         "  advocacy | expert_opinion | internal_judgment | unknown\n"
         f"ONDERWERP-lijst: {', '.join(SUBJECTS)}\n\n"
         "OUTPUT: ALLEEN een JSON-array, geen proza, geen code-fences. Elk object:\n"
-        '[ { "content": "...", "subject": "<uit lijst of leeg>", "provenance": "<uit lijst>",\n'
-        '    "source": "<letterlijk>", "flags": ["verificatie_vereist"?, "quote"?],\n'
-        '    "link_hints": ["..."] } ]')
+        '[ { "content": "...", "body": "<alleen bij een samengestelde notitie: de stappen/regels>",\n'
+        '    "subject": "<uit lijst of leeg>", "provenance": "<uit lijst>",\n'
+        '    "source": "<kort>", "reference": "<DOI/ISBN/URL of leeg>",\n'
+        '    "flags": ["verificatie_vereist"?, "quote"?], "link_hints": ["..."] } ]')
 
 
 def parse_intake(text: str | None) -> list[dict]:
@@ -120,9 +132,11 @@ def parse_intake(text: str | None) -> list[dict]:
         flags = [f for f in (r.get("flags") or []) if isinstance(f, str) and f in _GELDIGE_FLAGS]
         hints = [str(h).strip() for h in (r.get("link_hints") or []) if str(h).strip()][:5]
         out.append({"content": content[:500],
+                    "body": str(r.get("body") or "").strip()[:2500] or None,
                     "subject": subject,
                     "provenance": prov,
                     "source": str(r.get("source") or "").strip()[:160],
+                    "reference": str(r.get("reference") or "").strip()[:200] or None,
                     "flags": flags,
                     "link_hints": hints})
     # Backstop op de zeloot-cap uit de prompt: een model dat tóch doorsnippert wordt op
@@ -151,7 +165,9 @@ def atoom_kaart(a: dict) -> Insight:
         + [f"hint:{h}" for h in a["link_hints"]]
     return Insight(id=stable_id(a["content"], a["source"]),
                    claim=a["content"],
+                   body=a.get("body"),
                    source=a["source"] or "onbekend",
+                   reference=a.get("reference"),
                    provenance=a["provenance"],
                    tags=tags)
 

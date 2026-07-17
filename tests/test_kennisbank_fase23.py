@@ -291,3 +291,70 @@ def test_van_url_faalt_netjes_zonder_netwerk():
     from nooch_village.kennisbank_sources import van_url
     assert van_url("ftp://x") is None and van_url("") is None
     assert van_url("javascript:alert(1)") is None
+
+
+# ── addendum A+B: samengestelde kaarten + schone citaties ────────────────────
+
+def test_parse_intake_body_en_reference():
+    rows = parse_intake(json.dumps([{
+        "content": "In de leerschoenproductie zijn 19 micro-stappen met kinderarbeid geïdentificeerd.",
+        "body": "1. huiden sorteren\n2. ontharen\n…\n19. afwerken",
+        "subject": "ethiek", "provenance": "peer_reviewed",
+        "source": "IDS 2021", "reference": "DOI 10.19088/CLARISSA.2021.005"}]))
+    assert len(rows) == 1
+    a = rows[0]
+    assert a["body"].startswith("1. huiden") and a["reference"].startswith("DOI")
+    from nooch_village.kennisbank_intake import atoom_kaart
+    kaart = atoom_kaart(a)
+    assert kaart.body and kaart.reference and kaart.provenance == "peer_reviewed"
+    assert "©" not in kaart.claim and "ISBN" not in kaart.claim
+    p = build_intake_prompt("x")
+    assert "ENUMERATIE" in p and "glossarium" in p and "reference" in p
+
+
+# ── addendum C: merge + archiveren ───────────────────────────────────────────
+
+def test_merge_en_archiveren_append_only(tmp_path):
+    from nooch_village.insight import Insight
+    from nooch_village.kennisbank import load_atoms
+    dd = str(tmp_path)
+    notes = NotesStore(f"{dd}/notes.json")
+    for i in range(3):
+        notes.add(Insight(id=f"stap{i}", claim=f"Stap {i}: iets met huiden",
+                          source="IDS 2021", provenance="peer_reviewed" if i else "media",
+                          tags=["ethiek"]))
+
+    kaart = notes.merge(["stap0", "stap1", "stap2"], "19 micro-stappen (samengevat)")
+    assert kaart is not None
+    assert kaart.merged_from == ["stap0", "stap1", "stap2"]
+    assert kaart.provenance == "peer_reviewed"           # de hoogste van de delen
+    assert "Stap 1" in (kaart.body or "")
+    # originelen bestaan nog, maar gearchiveerd (append-only)
+    assert notes.get("stap0").archived is True
+    atoms = load_atoms(dd)                                # default: archief onzichtbaar
+    assert "stap0" not in atoms and kaart.id in atoms
+    assert "stap0" in load_atoms(dd, include_archived=True)
+    # terugzetten kan
+    assert notes.archive("stap0", archived=False)
+    assert "stap0" in load_atoms(dd)
+    # zelfde delen + zelfde kop nogmaals → geweigerd (idempotent)
+    assert notes.merge(["stap0", "stap1", "stap2"], "19 micro-stappen (samengevat)") is None
+    # merge vereist ≥2 delen en een kop
+    assert notes.merge(["stap0"], "kop") is None
+    assert notes.merge(["stap0", "stap1"], "") is None
+
+
+def test_gearchiveerd_blijft_uit_clusters_en_zoek(tmp_path):
+    from nooch_village.insight import Insight
+    from nooch_village.kennisbank import load_atoms
+    dd = str(tmp_path)
+    notes = NotesStore(f"{dd}/notes.json")
+    notes.add(Insight(id="ruis", claim="de term ripit betekent iets", source="glossarium",
+                      provenance="unknown", tags=["materiaal"]))
+    notes.add(Insight(id="echt", claim="composteerbare zool haalbaar", source="lab",
+                      provenance="internal_data", tags=["materiaal"]))
+    notes.archive("ruis")
+    atoms = load_atoms(dd)
+    assert clusters(atoms, [], min_size=1)[0]["atom_ids"] == ["echt"]
+    assert all(k["atom_id"] != "ruis" for k in gather("ripit betekent", atoms,
+                                                      reason_fn=lambda *a, **k: None))

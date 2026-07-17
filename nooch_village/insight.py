@@ -69,6 +69,13 @@ class Insight(BaseModel):
     # Woozle-guard: expliciete onafhankelijkheidsgroep. Leeg = afgeleid uit de genormaliseerde
     # bron; alleen zetten als kaarten stiekem dezelfde onderliggende bron delen.
     independence_group: str | None = None
+    # Samengestelde kaart (kennisbank-addendum A): een enumeratie/proces/tabel is ÉÉN
+    # kenniseenheid — claim = de kop, body = de stappen/regels. Atomiciteit heeft een plafond.
+    body: str | None = None
+    # Curatie (addendum C, append-only): archiveren i.p.v. wissen (terugdraaibaar), en een
+    # merge-kaart verwijst naar zijn originelen — die blijven gearchiveerd bewaard.
+    archived: bool = False
+    merged_from: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _check_grounding(self) -> Self:

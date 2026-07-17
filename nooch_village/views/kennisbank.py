@@ -203,15 +203,27 @@ def _drawer(ins: dict, atoms: dict, q: str, csrf: str) -> str:
         f"{historie}</div>")
 
 
-def _atoom_regel(aid: str, a: dict) -> str:
-    """Eén atoom compact: inhoud + onderwerp + bron. Geen trust, geen machinerie."""
+def _atoom_regel(aid: str, a: dict, selecteerbaar: bool = False) -> str:
+    """Eén atoom compact: inhoud + onderwerp + bron (+ body-uitklap voor een samengestelde
+    kaart, + optionele selectie-checkbox voor curatie). Geen trust, geen machinerie."""
     hub = subject_van(a)
     chip = f"<span class='chip outline'>{_e(hub)}</span>" if hub else ""
     vlag = (" <span class='chip muted'>verificatie vereist</span>"
             if "verificatie_vereist" in (a.get("tags") or []) else "")
-    return (f"<div class='kn-note support'><span class='kn-dot'></span>"
+    if a.get("merged_from"):
+        chip += f" <span class='chip muted'>samengesteld uit {len(a['merged_from'])}</span>"
+    body = ""
+    if (a.get("body") or "").strip():
+        body_html = _e(a["body"]).replace("\n", "<br>")
+        body = (f"<details class='kn-nctrl'><summary>toon de inhoud</summary>"
+                f"<div class='kn-ann'>{body_html}</div></details>")
+    ref = f" · {_e(a['reference'])}" if a.get("reference") else ""
+    vink = (f"<input type='checkbox' name='atoom' value='{_e(aid)}' "
+            f"aria-label='selecteer notitie'>" if selecteerbaar else "")
+    return (f"<div class='kn-note support'>{vink}<span class='kn-dot'></span>"
             f"<div class='kn-ntext'>{_e(a.get('claim'))}{vlag} {chip}"
-            f"<span class='kn-src'>{_e(a.get('source') or 'bron onbekend')}</span></div></div>")
+            f"<span class='kn-src'>{_e(a.get('source') or 'bron onbekend')}{ref}</span>"
+            f"{body}</div></div>")
 
 
 def _intake_sectie(nieuw: str, atoms: dict, csrf: str) -> str:
@@ -246,10 +258,10 @@ def _intake_sectie(nieuw: str, atoms: dict, csrf: str) -> str:
 _PAG = 30
 
 
-def _bibliotheek_sectie(atoms: dict, hub: str, pag: int) -> str:
-    """Bladeren door de atomen per onderwerp-hub (taak 4: kalm op volume). Chips met
-    aantallen; een gekozen hub toont een gepagineerde lijst van 30. Alleen atomen met
-    een hub — het ongesorteerd-bakje is de aparte curatie-ingang."""
+def _bibliotheek_sectie(st, atoms: dict, hub: str, pag: int, csrf: str) -> str:
+    """Bladeren door de atomen per onderwerp-hub (taak 4: kalm op volume) + curatie
+    (addendum C): selecteer notities en voeg samen, archiveer, of stuur ze naar een
+    open spel. Gearchiveerde notities blijven terughaalbaar in hun eigen uitklap."""
     per_hub: dict[str, int] = {}
     for a in atoms.values():
         h = subject_van(a)
@@ -267,7 +279,8 @@ def _bibliotheek_sectie(atoms: dict, hub: str, pag: int) -> str:
                       key=lambda t: (t[1].get("created_at") or "", t[0]), reverse=True)
         start = max(0, (pag - 1)) * _PAG
         blad = rows[start:start + _PAG]
-        lijst = "".join(_atoom_regel(aid, a) for aid, a in blad) or \
+        nxt = f"/kennisbank?hub={hub}" + (f"&pag={pag}" if pag > 1 else "")
+        regels = "".join(_atoom_regel(aid, a, selecteerbaar=True) for aid, a in blad) or \
             "<p class='muted'>Geen notities op deze pagina.</p>"
         nav = ""
         if start > 0:
@@ -276,8 +289,49 @@ def _bibliotheek_sectie(atoms: dict, hub: str, pag: int) -> str:
             nav += f"<a class='btn' href='/kennisbank?hub={_e(hub)}&pag={pag + 1}'>Volgende →</a>"
         teller = (f"<p class='muted'>{len(rows)} notities in '{_e(hub)}'"
                   + (f" · pagina {pag}" if len(rows) > _PAG else "") + "</p>")
-        lijst = teller + lijst + (f"<p>{nav}</p>" if nav else "")
-    return (f"<h2>Bibliotheek</h2><div class='c2-sec'>{chips}</div>{lijst}")
+        # Eén form; de drie knoppen kiezen de actie (name='action'). Kale vink volstaat.
+        spellen = st.spel.open_spellen()[:8]
+        spel_keuze = ""
+        if spellen:
+            opties = "".join(f"<option value='{_e(s['id'])}'>{_e(s.get('hunch') or s['id'])}"
+                             f"</option>" for s in spellen)
+            spel_keuze = (f"<select name='sid'>{opties}</select>"
+                          f"<button class='btn' name='action' value='kb_atoom_naar_spel'>"
+                          f"Voeg toe aan spel</button>")
+        curatie = (f"<div class='kn-lrow'>"
+                   f"{_field('kop voor de samengestelde kaart', 'kop', fid='f-kn-kop', placeholder='bijv. 19 micro-stappen met kinderarbeid in de leerschoenproductie')}"
+                   f"<button class='btn ok' name='action' value='kb_atoom_merge'>Voeg samen</button>"
+                   f"<button class='btn' name='action' value='kb_atoom_archive'>Archiveer</button>"
+                   f"{spel_keuze}</div>")
+        lijst = (f"{teller}<form method='post' action='/action'>"
+                 f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+                 f"<input type='hidden' name='next' value='{_e(nxt)}'>"
+                 f"{regels}{curatie}</form>" + (f"<p>{nav}</p>" if nav else ""))
+    archief = _gearchiveerd_uitklap(st, hub, csrf)
+    return (f"<h2>Bibliotheek</h2><div class='c2-sec'>{chips}</div>{lijst}{archief}")
+
+
+def _gearchiveerd_uitklap(st, hub: str, csrf: str) -> str:
+    """Archiveren is terugdraaibaar: de gearchiveerde notities met een terugzet-knop."""
+    from nooch_village.kennisbank import load_atoms as _la
+    alles = _la(st.dd, include_archived=True)
+    archief = {aid: a for aid, a in alles.items()
+               if isinstance(a, dict) and a.get("archived")}
+    if not archief:
+        return ""
+    nxt = f"/kennisbank?hub={hub}" if hub else "/kennisbank"
+    rows = ""
+    for aid, a in sorted(archief.items())[:20]:
+        rows += (f"<form method='post' action='/action' class='kn-lrow'>"
+                 f"{_hid(csrf, 'kb_atoom_unarchive', nxt, {'atom_id': aid})}"
+                 f"<div class='kn-lt'>{_e(a.get('claim'))}"
+                 f"<span class='kn-src'>{_e(a.get('source') or '')}</span></div>"
+                 f"<button class='btn'>Zet terug</button></form>")
+    meer = (f"<p class='muted'>… en nog {len(archief) - 20} meer.</p>"
+            if len(archief) > 20 else "")
+    return (f"<details class='kn-panel'><summary>📦 Gearchiveerd ({len(archief)})</summary>"
+            f"<p class='muted'>Uit de lijsten gehaald maar nooit weggegooid — "
+            f"terugzetten kan altijd.</p>{rows}{meer}</details>")
 
 
 def _ongesorteerd_bakje(atoms: dict, inzichten, csrf: str) -> str:
@@ -405,7 +459,7 @@ def render_kennisbank(st, kid: str = "", q: str = "", csrf_token: str = "",
     capture = _intake_sectie(nieuw, atoms, csrf_token)
     spel = _spel_sectie(st, atoms, inzichten, hunch, speel, csrf_token)
     bakje = _ongesorteerd_bakje(atoms, inzichten, csrf_token)
-    bieb = _bibliotheek_sectie(atoms, hub, pag)
+    bieb = _bibliotheek_sectie(st, atoms, hub, pag, csrf_token)
 
     drawer = ""
     if kid:

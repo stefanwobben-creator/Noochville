@@ -82,6 +82,55 @@ class NotesStore:
             self._save()
         return True
 
+    def archive(self, note_id: str, archived: bool = True) -> bool:
+        """Curatie (append-only): archiveren i.p.v. wissen — de kaart verdwijnt uit de
+        lijsten (load_atoms filtert) maar blijft bestaan en is terug te zetten."""
+        bestaand = self.get(note_id)
+        if bestaand is None:
+            return False
+        bestaand.archived = archived
+        from datetime import datetime
+        bestaand.last_updated_at = datetime.now()
+        self._notes[note_id] = bestaand.model_dump(mode="json")
+        self._save()
+        return True
+
+    def merge(self, note_ids: list[str], kop: str, by: str = "") -> Insight | None:
+        """Voeg meerdere kaartjes samen tot ÉÉN samengestelde kaart: claim = de (bewerkbare)
+        kop, body = de inhouden van de delen, bronnen samengevoegd, provenance = de hoogste
+        van de delen. De originelen worden GEARCHIVEERD (niet vernietigd) en de nieuwe kaart
+        verwijst ernaar via merged_from — de terugweg blijft altijd bestaan."""
+        kop = (kop or "").strip()
+        delen = [self.get(nid) for nid in note_ids]
+        delen = [d for d in delen if d is not None]
+        if len(delen) < 2 or not kop:
+            return None
+        regels: list[str] = []
+        for d in delen:
+            regels.append(f"— {d.claim}")
+            if d.body:
+                regels.append(d.body)
+        bronnen = list(dict.fromkeys(d.source for d in delen if d.source))
+        from nooch_village.kennisbank import PROVENANCE_TRUST
+        provs = [d.provenance for d in delen if d.provenance in PROVENANCE_TRUST]
+        prov = max(provs, key=lambda p: PROVENANCE_TRUST[p]) if provs else None
+        refs = [d.reference for d in delen if d.reference]
+        tags = list(dict.fromkeys(t for d in delen for t in d.tags))
+        import hashlib
+        mid = "atom_merge_" + hashlib.sha1(
+            ("|".join(sorted(d.id for d in delen)) + kop).encode("utf-8")).hexdigest()[:12]
+        if self.get(mid) is not None:
+            return None                        # zelfde delen + zelfde kop → al samengevoegd
+        kaart = Insight(id=mid, claim=kop[:500], body="\n".join(regels)[:4000],
+                        source="; ".join(bronnen)[:160] or "samengevoegd",
+                        reference=refs[0] if refs else None,
+                        provenance=prov, tags=tags,
+                        merged_from=[d.id for d in delen])
+        self.add(kaart)
+        for d in delen:
+            self.archive(d.id)
+        return kaart
+
     def add_relation(self, from_id: str, to_id: str, relation: str) -> Insight | None:
         """Leg een bewijs-relatie: `from_id` STEUNT of SPREEKT TEGEN `to_id`.
         relation ∈ {'supports', 'contradicts'}. Gericht, idempotent, geen zelf-relatie, fail-closed

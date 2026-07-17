@@ -200,9 +200,11 @@ def _now() -> str:
 
 # ── Atomen lezen (laag 1) ────────────────────────────────────────────────────
 
-def load_atoms(data_dir: str) -> dict[str, dict]:
+def load_atoms(data_dir: str, include_archived: bool = False) -> dict[str, dict]:
     """Lees de atomen-bibliotheek (notes.json) als ruwe dicts, zodat schema-drift in oude
-    kaartjes het kennisbank-scherm nooit laat crashen (zelfde keuze als views/kennislaag)."""
+    kaartjes het kennisbank-scherm nooit laat crashen (zelfde keuze als views/kennislaag).
+    Gearchiveerde kaarten (curatie, addendum C) blijven standaard buiten beeld — bakje,
+    bibliotheek, clusters, zoeken en spel zijn daarmee in één klap schoon."""
     path = os.path.join(data_dir, "notes.json")
     if not os.path.exists(path):
         return {}
@@ -211,7 +213,12 @@ def load_atoms(data_dir: str) -> dict[str, dict]:
             raw = json.load(f)
     except (OSError, json.JSONDecodeError):
         return {}
-    return raw if isinstance(raw, dict) else {}
+    if not isinstance(raw, dict):
+        return {}
+    if include_archived:
+        return raw
+    return {aid: a for aid, a in raw.items()
+            if not (isinstance(a, dict) and a.get("archived"))}
 
 
 # ── De store (laag 2) ────────────────────────────────────────────────────────
