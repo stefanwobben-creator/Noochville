@@ -47,30 +47,6 @@ def _topic_card(ins: dict, atoms: dict) -> str:
         f"<div class='kn-twhy'>{_e(ins.get('why'))} {chip}</div></div>"
         f"<div class='kn-conf'><span class='kn-word {_e(word)}'>{_e(WORD_LABEL[word])}</span>"
         f"{_dots(word, v['dots'])}</div><span class='kn-arrow'>›</span></div></a>")
-
-
-def _atom_zoek(atoms: dict, ins: dict, q: str, limit: int = 6) -> list[tuple[str, dict]]:
-    """De recall-oprit (fase 1, zonder LLM): rangschik ongelinkte atomen op woord-overlap met
-    de zoekterm (of met de claim van het inzicht als er geen zoekterm is). Precisie blijft
-    bij de mens: insluiten + richting kiezen gebeurt in het paneel."""
-    gelinkt = {l.get("atom_id") for l in (ins.get("evidence") or [])}
-    tekst = q or f"{ins.get('title', '')} {ins.get('why', '')}"
-    toks = {w for w in re.split(r"[^a-z0-9]+", tekst.lower()) if len(w) > 3}
-    scored = []
-    for aid, a in atoms.items():
-        if aid in gelinkt or not a.get("claim"):
-            continue
-        hay = f"{a.get('claim', '')} {a.get('source', '')}".lower()
-        s = sum(1 for w in toks if w in hay)
-        if q:                                  # expliciet zoeken: alleen echte matches
-            if s > 0:
-                scored.append((s, aid, a))
-        elif s > 0:
-            scored.append((s, aid, a))
-    scored.sort(key=lambda t: (-t[0], t[1]))
-    return [(aid, a) for _, aid, a in scored[:limit]]
-
-
 def _note_html(ins: dict, link: dict, atom: dict | None, csrf: str, nxt: str) -> str:
     stance = link.get("stance") or "support"
     claim = (atom or {}).get("claim") or f"(kaart {link.get('atom_id')} niet gevonden)"
@@ -92,35 +68,10 @@ def _note_html(ins: dict, link: dict, atom: dict | None, csrf: str, nxt: str) ->
             f"<div class='kn-ntext'>{_e(claim)}"
             f"<span class='kn-src'>{_e(prefix)}{_e(src)}</span>{ann_html}</div>"
             f"<div class='kn-nctrls'>{ctrl}</div></div>")
-
-
-def _koppel_paneel(ins: dict, atoms: dict, q: str, csrf: str, nxt: str) -> str:
-    kandidaten = _atom_zoek(atoms, ins, q)
-    rows = ""
-    for aid, a in kandidaten:
-        rows += (
-            f"<form method='post' action='/action' class='kn-lrow'>"
-            f"{_hid(csrf, 'kb_link', nxt, {'iid': ins['id'], 'atom_id': aid})}"
-            f"<div class='kn-lt'>{_e(a.get('claim'))}"
-            f"<span class='kn-src'>{_e(a.get('source') or 'bron onbekend')}</span></div>"
-            f"<select name='stance'><option value='support'>steunt</option>"
-            f"<option value='counter'>spreekt tegen</option></select>"
-            f"<input name='annotation' placeholder='waarom? (optioneel)'>"
-            f"<button class='btn ok'>Koppel</button></form>")
-    if not rows:
-        rows = ("<p class='muted'>Geen kandidaten gevonden. Zoek hierboven op een woord, "
-                "of voeg nieuw bewijs toe.</p>")
-    zoek = (f"<form method='get' action='/kennisbank' class='kn-zoek'>"
-            f"<input type='hidden' name='id' value='{_e(ins['id'])}'>"
-            f"{_field('zoek in de bibliotheek', 'q', value=q, fid='f-kn-q')}"
-            f"<button class='btn'>Zoek kaarten</button></form>")
-    return (f"<details class='kn-panel' {'open' if q else ''}>"
-            f"<summary>🔗 Koppel kaarten uit de bibliotheek</summary>"
-            f"<p class='muted'>Het systeem vond deze kaarten. Een kale koppel volstaat; "
-            f"de richting kun je per kaart kiezen.</p>{zoek}{rows}</details>")
-
-
-def _drawer(ins: dict, atoms: dict, q: str, csrf: str) -> str:
+def _inzicht_detail(ins: dict, atoms: dict, csrf: str) -> str:
+    """Het inzicht-detail in de LINKERkolom (PR-2, geen overlay meer): claim + zekerheid +
+    bewijs/tegenspraak + de andere kant + falsifier + gesprek + herformuleer. Het koppelen
+    van bewijs gebeurt nu via de brug in de RECHTERkolom (de bibliotheek), niet hier."""
     nxt = f"/kennisbank?id={ins['id']}"
     v = verdict(field(ins.get("evidence") or [], atoms))
     word = v["word"]
@@ -186,9 +137,10 @@ def _drawer(ins: dict, atoms: dict, q: str, csrf: str) -> str:
              f"<div class='kn-falsi'>{_e(ins.get('falsifier'))}</div></div>"
              if ins.get("falsifier") else "")
 
+    brug_hint = ("<p class='muted'>Koppel bewijs door in de bibliotheek rechts op "
+                 "“+ steunt” of “+ tegen” te klikken — de suggesties staan al gemarkeerd.</p>")
     return (
-        f"<a class='kn-scrim' href='/kennisbank' aria-label='sluiten'></a>"
-        f"<div class='kn-drawer' role='dialog' aria-label='{_e(ins.get('title'))}'>"
+        f"<div class='card kn-detail'>"
         f"<a class='kn-x' href='/kennisbank'>×</a>"
         f"<div class='kn-claim'>{_e(ins.get('title'))}"
         f"<span class='badge ro'>v{_e(ins.get('version') or '1.0')}</span></div>"
@@ -197,7 +149,7 @@ def _drawer(ins: dict, atoms: dict, q: str, csrf: str) -> str:
         f"<div class='kn-sentence'>{v['sentence']}</div>{caveat}"
         f"<div class='kn-sec'><div class='kn-sectitle'>Het bewijs</div>{noten_sup}"
         + (f"<div class='kn-sectitle'>Tegenspraak</div>{noten_cou}" if noten_cou else "")
-        + f"{_koppel_paneel(ins, atoms, q, csrf, nxt)}{nieuw}{herformuleer}</div>"
+        + f"{brug_hint}{nieuw}{herformuleer}</div>"
         f"{andere_kant}{falsi}"
         f"<div class='kn-sec'><div class='kn-sectitle'>Gesprek</div>{gesprek}</div>"
         f"{historie}</div>")
@@ -308,59 +260,181 @@ def _nieuw_toast(nieuw: str, atoms: dict) -> str:
 
 
 _PAG = 30
+_ZOEK_MAX = 60
 
 
-def _bibliotheek_sectie(st, atoms: dict, hub: str, pag: int, csrf: str) -> str:
-    """Bladeren door de atomen per onderwerp-hub (taak 4: kalm op volume) + curatie
-    (addendum C): selecteer notities en voeg samen, archiveer, of stuur ze naar een
-    open spel. Gearchiveerde notities blijven terughaalbaar in hun eigen uitklap."""
+def _bron_link(source: str) -> str:
+    """Klikbaar bron-label → filtert de bibliotheek op die bron (JS zet de zoekbox; de
+    href is de no-JS-fallback naar dezelfde filter)."""
+    s = (source or "bron onbekend").strip()
+    return (f"<a class='kn-srclink' data-src='{_e(s)}' "
+            f"href='/kennisbank?q={_e(s)}'>{_e(s)}</a>")
+
+
+def _bieb_atoom(aid: str, a: dict, csrf: str, nxt: str, active_iid: str,
+                sugg: str = "") -> str:
+    """Eén bibliotheek-kaart (rechterkolom): inhoud + klikbaar bronlabel + curatie-vink,
+    per-kaart bewerken-met-historie en 'voeg gerelateerd feit toe', en — als er links een
+    inzicht open staat — de koppel-brug (+ steunt / + tegen) met suggestie-markering."""
+    hub = subject_van(a)
+    chip = f"<span class='chip outline'>{_e(hub)}</span>" if hub else ""
+    if "verificatie_vereist" in (a.get("tags") or []):
+        chip += " <span class='chip muted'>verificatie vereist</span>"
+    if a.get("merged_from"):
+        chip += f" <span class='chip muted'>samengesteld uit {len(a['merged_from'])}</span>"
+    if a.get("edit_history"):
+        chip += f" <span class='chip muted'>bewerkt {len(a['edit_history'])}×</span>"
+    sugg_chip = ""
+    if sugg == "support":
+        sugg_chip = " <span class='chip'>past mogelijk</span>"
+    elif sugg == "counter":
+        sugg_chip = " <span class='chip muted'>spreekt mogelijk tegen</span>"
+    ref = (a.get("reference") or "").strip()
+    reftxt = f" · {_e(ref)}" if ref else ""
+    body = ""
+    if (a.get("body") or "").strip():
+        body = (f"<details class='kn-nctrl'><summary>toon de inhoud</summary>"
+                f"<div class='kn-ann'>{_e(a['body']).replace(chr(10), '<br>')}</div></details>")
+
+    brug = ""
+    if active_iid:
+        brug = (
+            f"<form method='post' action='/action' class='kn-unlink'>"
+            f"{_hid(csrf, 'kb_link', nxt, {'iid': active_iid, 'atom_id': aid, 'stance': 'support'})}"
+            f"<button class='btn ok'>+ steunt</button></form>"
+            f"<form method='post' action='/action' class='kn-unlink'>"
+            f"{_hid(csrf, 'kb_link', nxt, {'iid': active_iid, 'atom_id': aid, 'stance': 'counter'})}"
+            f"<button class='btn no'>+ tegen</button></form>")
+
+    edit = (f"<details class='kn-nctrl'><summary title='corrigeer een extractie-fout'>✎</summary>"
+            f"<form method='post' action='/action'>"
+            f"{_hid(csrf, 'kb_atoom_edit', nxt, {'atom_id': aid})}"
+            f"{_field('verbeter de tekst (de vorige versie blijft bewaard)', 'claim', kind='textarea', value=a.get('claim') or '', fid=f'f-ed-{aid}')}"
+            f"<button class='btn'>Bewaar</button></form></details>")
+    related = (f"<details class='kn-nctrl'><summary title='voeg een gerelateerd feit toe'>+ feit</summary>"
+               f"<form method='post' action='/action'>"
+               f"{_hid(csrf, 'kb_atoom_related', nxt, {'atom_id': aid})}"
+               f"{_field('een gerelateerd feit (wordt een nieuw, gelinkt atoom)', 'content', kind='textarea', fid=f'f-rel-{aid}')}"
+               f"{_field('bron', 'source', fid=f'f-relsrc-{aid}')}"
+               f"<button class='btn'>Voeg toe</button></form></details>")
+
+    return (f"<div class='kn-note support'>"
+            f"<input type='checkbox' name='atoom' value='{_e(aid)}' form='curatieform' aria-label='selecteer'>"
+            f"<span class='kn-dot'></span><div class='kn-ntext'>"
+            f"{_e(a.get('claim'))}{chip}{sugg_chip}"
+            f"<span class='kn-src'>{_bron_link(a.get('source'))}{reftxt}</span>{body}"
+            f"<div class='kn-nctrls'>{brug}{edit}{related}</div></div></div>")
+
+
+def _bieb_results(st, atoms: dict, q: str, hub: str, active_ins: dict | None,
+                  csrf: str) -> str:
+    """De doorzoekbare atomenlijst (het fragment dat /kennisbank/search vervangt). Zoekt op
+    inhoud ÉN bron over de verse volledige bibliotheek; markeert steun/tegen-suggesties als
+    er een inzicht actief is (anti-cherry-pick, beide kanten)."""
+    ql = (q or "").strip().lower()
+    if ql:
+        rijen = [(aid, a) for aid, a in atoms.items()
+                 if ql in (a.get("claim") or "").lower()
+                 or ql in (a.get("source") or "").lower()]
+        kop = f"{len(rijen)} kaart(en) voor “{_e(q)}”"
+    elif hub:
+        rijen = [(aid, a) for aid, a in atoms.items() if subject_van(a) == hub]
+        kop = f"{len(rijen)} in ‘{_e(hub)}’"
+    else:
+        rijen = list(atoms.items())
+        kop = f"{len(rijen)} kaarten"
+    rijen.sort(key=lambda t: (t[1].get("created_at") or "", t[0]), reverse=True)
+    getoond = rijen[:_ZOEK_MAX]
+
+    sugg: dict[str, str] = {}
+    active_iid = ""
+    if active_ins is not None:
+        active_iid = active_ins["id"]
+        al_gelinkt = {l.get("atom_id") for l in active_ins.get("evidence") or []}
+        # Markeer kandidaten met RECALL (woord-overlap), bewust ZONDER LLM: dit fragment draait
+        # op elke toetsaanslag (debounced live-search), dus een stance-LLM-call per zoekactie zou
+        # de ladder platleggen. De mens kiest de richting expliciet met + steunt / + tegen (dat
+        # ís de anti-cherry-pick-keuze). De support/counter-splitsing via de LLM blijft in het
+        # spel, waar hij één keer draait.
+        for k in gather(active_ins.get("title") or "", atoms, reason_fn=lambda *a, **k: None):
+            if k["atom_id"] not in al_gelinkt:
+                sugg[k["atom_id"]] = "support"       # 'past mogelijk' — richting kiest de mens
+    nxt = f"/kennisbank?id={active_iid}" if active_iid else (f"/kennisbank?hub={hub}" if hub else "/kennisbank")
+    kaarten = "".join(_bieb_atoom(aid, a, csrf, nxt, active_iid, sugg.get(aid, ""))
+                      for aid, a in getoond) or "<p class='muted'>Geen kaarten gevonden.</p>"
+    meer = (f"<p class='muted'>… en nog {len(rijen) - _ZOEK_MAX} meer — verfijn je zoekterm.</p>"
+            if len(rijen) > _ZOEK_MAX else "")
+    return f"<p class='muted'>{kop}</p>{kaarten}{meer}"
+def _bibliotheek_rechts(st, atoms: dict, q: str, hub: str, active_ins: dict | None,
+                        csrf: str) -> str:
+    """De rechterkolom: live smart-search + onderwerp-chips + resultaten + curatie + archief.
+    De zoekbox vervangt (JS, debounced) alleen #kn-biebresults over de verse bibliotheek;
+    de curatie-knoppen en het archief blijven staan."""
+    active_iid = active_ins["id"] if active_ins else ""
     per_hub: dict[str, int] = {}
     for a in atoms.values():
         h = subject_van(a)
-        if h and (a.get("claim") or "").strip():
+        if h:
             per_hub[h] = per_hub.get(h, 0) + 1
-    if not per_hub:
-        return ""
-    chips = "".join(
-        f"<a class='chip-opt{' on' if hub == h else ''}' "
+    chips = ("<a class='chip-opt" + (" on" if not hub and not q else "") + "' "
+             "href='/kennisbank'>alle</a>") + "".join(
+        f"<a class='chip-opt{' on' if hub == h and not q else ''}' "
         f"href='/kennisbank?hub={_e(h)}'>{_e(h)} ({n})</a>"
         for h, n in sorted(per_hub.items(), key=lambda kv: -kv[1]))
-    lijst = ""
-    if hub:
-        rows = sorted(((aid, a) for aid, a in atoms.items() if subject_van(a) == hub),
-                      key=lambda t: (t[1].get("created_at") or "", t[0]), reverse=True)
-        start = max(0, (pag - 1)) * _PAG
-        blad = rows[start:start + _PAG]
-        nxt = f"/kennisbank?hub={hub}" + (f"&pag={pag}" if pag > 1 else "")
-        regels = "".join(_atoom_regel(aid, a, selecteerbaar=True) for aid, a in blad) or \
-            "<p class='muted'>Geen notities op deze pagina.</p>"
-        nav = ""
-        if start > 0:
-            nav += f"<a class='btn' href='/kennisbank?hub={_e(hub)}&pag={pag - 1}'>← Vorige</a> "
-        if start + _PAG < len(rows):
-            nav += f"<a class='btn' href='/kennisbank?hub={_e(hub)}&pag={pag + 1}'>Volgende →</a>"
-        teller = (f"<p class='muted'>{len(rows)} notities in '{_e(hub)}'"
-                  + (f" · pagina {pag}" if len(rows) > _PAG else "") + "</p>")
-        # Eén form; de drie knoppen kiezen de actie (name='action'). Kale vink volstaat.
-        spellen = st.spel.open_spellen()[:8]
-        spel_keuze = ""
-        if spellen:
-            opties = "".join(f"<option value='{_e(s['id'])}'>{_e(s.get('hunch') or s['id'])}"
-                             f"</option>" for s in spellen)
-            spel_keuze = (f"<select name='sid'>{opties}</select>"
-                          f"<button class='btn' name='action' value='kb_atoom_naar_spel'>"
-                          f"Voeg toe aan spel</button>")
-        curatie = (f"<div class='kn-lrow'>"
-                   f"{_field('kop voor de samengestelde kaart', 'kop', fid='f-kn-kop', placeholder='bijv. 19 micro-stappen met kinderarbeid in de leerschoenproductie')}"
-                   f"<button class='btn ok' name='action' value='kb_atoom_merge'>Voeg samen</button>"
-                   f"<button class='btn' name='action' value='kb_atoom_archive'>Archiveer</button>"
-                   f"{spel_keuze}</div>")
-        lijst = (f"{teller}<form method='post' action='/action'>"
-                 f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
-                 f"<input type='hidden' name='next' value='{_e(nxt)}'>"
-                 f"{regels}{curatie}</form>" + (f"<p>{nav}</p>" if nav else ""))
-    archief = _gearchiveerd_uitklap(st, hub, csrf)
-    return (f"<h2>Bibliotheek</h2><div class='c2-sec'>{chips}</div>{lijst}{archief}")
+    zoekbox = (f"<input id='kn-search' class='kn-searchbox' type='search' value='{_e(q)}' "
+               f"placeholder='zoek in inhoud én bron…' autocomplete='off' "
+               f"data-active='{_e(active_iid)}' data-hub='{_e(hub)}'>")
+    results = _bieb_results(st, atoms, q, hub, active_ins, csrf)
+
+    # curatieform: de checkboxes in de (JS-vervangbare) resultaten verwijzen ernaar via form=,
+    # dus samenvoegen/archiveren/naar-spel werkt ook na een live-zoekactie.
+    nxt = f"/kennisbank?id={active_iid}" if active_iid else (f"/kennisbank?hub={hub}" if hub else "/kennisbank")
+    spellen = st.spel.open_spellen()[:8]
+    spel_keuze = ""
+    if spellen:
+        opties = "".join(f"<option value='{_e(s['id'])}'>{_e(s.get('hunch') or s['id'])}</option>"
+                         for s in spellen)
+        spel_keuze = (f"<select name='sid' form='curatieform'>{opties}</select>"
+                      f"<button class='btn' name='action' value='kb_atoom_naar_spel' form='curatieform'>"
+                      f"Voeg toe aan spel</button>")
+    curatie = (f"<form method='post' action='/action' id='curatieform' class='kn-lrow'>"
+               f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+               f"<input type='hidden' name='next' value='{_e(nxt)}'>"
+               f"{_field('kop voor een samengestelde kaart (vink ≥2 aan)', 'kop', fid='f-kn-kop')}"
+               f"<button class='btn ok' name='action' value='kb_atoom_merge'>Voeg samen</button>"
+               f"<button class='btn' name='action' value='kb_atoom_archive'>Archiveer</button>"
+               f"{spel_keuze}</form>")
+    return (f"<h2>Bibliotheek</h2>{zoekbox}<div class='c2-sec'>{chips}</div>"
+            f"<div id='kn-biebresults'>{results}</div>{curatie}"
+            f"{_gearchiveerd_uitklap(st, hub, csrf)}"
+            f"{_ongesorteerd_bakje(atoms, [], csrf)}")
+
+
+def render_kennisbank_search(st, q: str, hub: str, active_iid: str,
+                             csrf_token: str = "") -> str:
+    """Fragment voor het live-search-endpoint: alleen de resultatenlijst (#kn-biebresults),
+    over de VERSE volledige bibliotheek."""
+    atoms = load_atoms(st.dd)
+    active_ins = st.kennisbank.get(active_iid) if active_iid else None
+    return _bieb_results(st, atoms, q, hub, active_ins, csrf_token)
+
+
+_KN_SEARCH_JS = """<script>(function(){
+ var box=document.getElementById('kn-search'); if(!box)return;
+ var host=document.getElementById('kn-biebresults'); var t;
+ function run(){
+   var u='/kennisbank/search?q='+encodeURIComponent(box.value)
+     +'&active='+encodeURIComponent(box.dataset.active||'')
+     +'&hub='+encodeURIComponent(box.dataset.hub||'');
+   fetch(u,{credentials:'same-origin'}).then(function(r){return r.text();})
+     .then(function(h){host.innerHTML=h;});
+ }
+ box.addEventListener('input',function(){clearTimeout(t);t=setTimeout(run,250);});
+ document.addEventListener('click',function(e){
+   var a=e.target.closest('.kn-srclink'); if(!a)return;
+   e.preventDefault(); box.value=a.dataset.src||''; box.focus(); run();
+ });
+})();</script>"""
 
 
 def _gearchiveerd_uitklap(st, hub: str, csrf: str) -> str:
@@ -483,23 +557,22 @@ def render_kennisbank(st, kid: str = "", q: str = "", csrf_token: str = "",
 
     actiebalk = _actiebalk(open_, st, atoms, inzichten, hunch, speel, cluster, csrf_token)
     toast = _nieuw_toast(nieuw, atoms)
-    bakje = _ongesorteerd_bakje(atoms, inzichten, csrf_token)
-    bieb = _bibliotheek_sectie(st, atoms, hub, pag, csrf_token)
 
-    drawer = ""
-    if kid:
-        ins = st.kennisbank.get(kid)
-        if ins is not None:
-            drawer = _drawer(ins, atoms, q, csrf_token)
+    # LINKS: het geopende inzicht (detail) bovenaan, daaronder de inzicht-lijst.
+    active_ins = st.kennisbank.get(kid) if kid else None
+    detail = _inzicht_detail(active_ins, atoms, csrf_token) if active_ins else ""
+    links = (f"<div class='kn-col-left'>{detail}"
+             f"<h2>Onze inzichten</h2>{nieuw_form}{cards}</div>")
+    # RECHTS: de bibliotheek met live smart-search + de koppel-brug (als er een inzicht open is).
+    rechts = f"<div class='kn-col-right'>{_bibliotheek_rechts(st, atoms, q, hub, active_ins, csrf_token)}</div>"
 
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
             f"<h1>🌱 Wat Nooch weet</h1>"
             f"{actiebalk}{_banner(msg)}{toast}"
-            f"<h2>Onze inzichten</h2>{nieuw_form}{cards}"
-            f"{bieb}{bakje}"
+            f"<div class='kn-cols'>{links}{rechts}</div>"
             f"<p class='muted'>Elke zekerheid schuift mee als er info bijkomt.</p></div>")
     inner = (f"{_DS_LINK}<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
              "<a href='/'>home</a> · <a href='/signals'>signalen</a> · "
              "<a href='/inzichten'>kennislaag</a></div>"
-             f"<div class='c2-wrap'>{main}</div>{drawer}")
+             f"<div class='c2-wrap'>{main}</div>{_KN_SEARCH_JS}")
     return _page("Wat Nooch weet", inner)

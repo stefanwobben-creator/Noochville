@@ -7,6 +7,15 @@ def _woorden(tekst: str) -> set[str]:
     return {w for w in re.split(r"[^a-z0-9]+", tekst.lower()) if w}
 
 
+def subject_van_tags(tags: list[str]) -> str:
+    """Het kennisbank-onderwerp = de eerste tag uit het vaste vocabulaire (of '')."""
+    from nooch_village.kennisbank_intake import SUBJECTS
+    for t in tags or []:
+        if t in SUBJECTS:
+            return t
+    return ""
+
+
 class NotesStore:
     def __init__(self, path: str = "data/notes.json"):
         self._path = path
@@ -94,6 +103,52 @@ class NotesStore:
         self._notes[note_id] = bestaand.model_dump(mode="json")
         self._save()
         return True
+
+    def edit_note(self, note_id: str, *, claim: str | None = None,
+                  body: str | None = None) -> Insight | None:
+        """Bewerk een kaart append-only (layout PR-2): de vorige claim/body gaat in
+        edit_history vóór de nieuwe waarde erin komt. Voor extractie-fouten — geen stille
+        overschrijving. Lege claim wordt geweigerd. None als het kaartje niet bestaat."""
+        bestaand = self.get(note_id)
+        if bestaand is None:
+            return None
+        nieuwe_claim = (claim if claim is not None else bestaand.claim).strip()
+        if not nieuwe_claim:
+            return None
+        nieuwe_body = body if body is not None else bestaand.body
+        if nieuwe_claim == bestaand.claim and nieuwe_body == bestaand.body:
+            return bestaand                    # niets veranderd → geen lege historie-entry
+        from datetime import datetime
+        bestaand.edit_history.append({"claim": bestaand.claim, "body": bestaand.body,
+                                      "at": datetime.now().isoformat(timespec="seconds")})
+        bestaand.claim = nieuwe_claim
+        bestaand.body = nieuwe_body
+        bestaand.last_updated_at = datetime.now()
+        self._notes[note_id] = bestaand.model_dump(mode="json")
+        self._save()
+        return bestaand
+
+    def add_related(self, note_id: str, content: str, source: str,
+                    provenance: str = "unknown") -> Insight | None:
+        """"Voeg gerelateerd feit toe" (layout PR-2, het 36%-geval): maak een NIEUW atoom met
+        een EIGEN bron en link het aan het bestaande (append-only, geen verrijking-in-place —
+        zo blijft het een aparte stem voor de woozle-guard). None als het anker niet bestaat,
+        de content leeg is, of het nieuwe atoom al bestaat (idempotent op hash content+bron)."""
+        anker = self.get(note_id)
+        if anker is None or not (content or "").strip():
+            return None
+        from nooch_village.kennisbank_intake import stable_id
+        bron = (source or "").strip() or "onbekend"
+        nid = stable_id(content, bron)
+        if nid in self._notes:
+            return None
+        subject = subject_van_tags(anker.tags)
+        nieuw = Insight(id=nid, claim=content.strip()[:500], source=bron,
+                        provenance=provenance,
+                        tags=([subject] if subject else []), links_to=[note_id])
+        self._notes[nid] = nieuw.model_dump(mode="json")
+        self._save()
+        return nieuw
 
     def supersede(self, note_id: str, nieuwe_ids: list[str]) -> bool:
         """Re-atomiseer-migratie (append-only): archiveer een oud atoom en laat het naar

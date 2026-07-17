@@ -124,3 +124,71 @@ def test_merge_vereist_twee_en_kop(tmp_path):
     sids = [a["sid"] for a in store.get(bid)["atoms"]]
     assert store.merge_atoms(bid, sids[:1], "kop") is False       # <2
     assert store.merge_atoms(bid, sids[:2], "") is False          # geen kop
+
+
+# ── PR-2: live search + koppel-brug + edit/related ───────────────────────────
+
+def _st(dd):
+    import types
+    from nooch_village.kennisbank import KennisbankStore
+    from nooch_village.kennisbank_spel import SpelStore
+    from nooch_village.kennisbank_staging import StagingStore
+    return types.SimpleNamespace(
+        dd=dd, kennisbank=KennisbankStore(f"{dd}/kennisbank.json"),
+        spel=SpelStore(f"{dd}/kennisbank_spel.json"),
+        staging=StagingStore(f"{dd}/kennisbank_staging.json"),
+        notes=__import__("nooch_village.notes_store", fromlist=["NotesStore"]).NotesStore(f"{dd}/notes.json"))
+
+
+def _seed_atoms(dd):
+    from nooch_village.insight import Insight
+    from nooch_village.notes_store import NotesStore
+    ns = NotesStore(f"{dd}/notes.json")
+    ns.add(Insight(id="p1", claim="51% wil de prijs naar 150", source="Survey Fixed Delivery Moments",
+                   provenance="survey", tags=["prijs"]))
+    ns.add(Insight(id="p2", claim="Van Westendorp optimum 120", source="Survey Fixed Delivery Moments",
+                   provenance="survey", tags=["prijs"]))
+    ns.add(Insight(id="w1", claim="natuurrubber zool breekt traag af", source="WUR-rapport",
+                   provenance="peer_reviewed", tags=["outsole"]))
+    return ns
+
+
+def test_search_op_inhoud_en_bron(tmp_path):
+    from nooch_village.views.kennisbank import render_kennisbank_search
+    dd = str(tmp_path); _seed_atoms(dd); st = _st(dd)
+    op_inhoud = render_kennisbank_search(st, "westendorp", "", "", csrf_token="t")
+    assert "Van Westendorp" in op_inhoud and "51% wil" not in op_inhoud
+    # zoeken op BRON vindt alle kaarten van die survey
+    op_bron = render_kennisbank_search(st, "fixed delivery", "", "", csrf_token="t")
+    assert "51% wil" in op_bron and "Van Westendorp" in op_bron and "natuurrubber" not in op_bron
+    # bronlabel is klikbaar
+    assert "kn-srclink" in op_bron and "Survey Fixed Delivery Moments" in op_bron
+
+
+def test_brug_markeert_suggesties_en_koppelknoppen(tmp_path):
+    from nooch_village.views.kennisbank import render_kennisbank_search
+    dd = str(tmp_path); _seed_atoms(dd); st = _st(dd)
+    iid = st.kennisbank.add("Prijs blokkeert de kern-doelgroep", subject="prijs")
+    frag = render_kennisbank_search(st, "", "", iid, csrf_token="t")
+    # met een actief inzicht verschijnen de brug-knoppen + een suggestie-markering
+    assert "+ steunt" in frag and "+ tegen" in frag
+    assert "past mogelijk" in frag                     # prijs-kaart als steun-suggestie
+    assert f"value='{iid}'" in frag                     # kb_link wijst naar dit inzicht
+
+
+def test_edit_history_en_related_via_dispatch(tmp_path):
+    from nooch_village.cockpit2 import dispatch, _Stores
+    from nooch_village.kennisbank import load_atoms
+    dd = str(tmp_path); _seed_atoms(dd)
+    # bewerken bewaart de vorige versie
+    dispatch(dd, "kb_atoom_edit", {"atom_id": ["p1"], "claim": ["51% wil de prijs naar €150 (gecorrigeerd)"],
+                                   "next": ["/kennisbank"]}, username="guest")
+    a = load_atoms(dd)["p1"]
+    assert a["claim"].endswith("(gecorrigeerd)") and a["edit_history"][0]["claim"] == "51% wil de prijs naar 150"
+    # gerelateerd feit → nieuw gelinkt atoom met eigen bron
+    nxt, msg = dispatch(dd, "kb_atoom_related", {"atom_id": ["p1"],
+                        "content": ["Concurrent zit op €140"], "source": ["marktonderzoek"],
+                        "next": ["/kennisbank"]}, username="guest")
+    atoms = load_atoms(dd)
+    rel = [a for a in atoms.values() if "Concurrent" in a["claim"]]
+    assert len(rel) == 1 and rel[0]["links_to"] == ["p1"] and rel[0]["source"] == "marktonderzoek"

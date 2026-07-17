@@ -81,6 +81,9 @@ class Insight(BaseModel):
     # de nieuwe, schone atomen die dit atoom bij een migratie vervingen (append-only spoor).
     atomiser_version: int | None = None
     superseded_by: list[str] = Field(default_factory=list)
+    # Bewerken-met-historie (layout PR-2, append-only): een correctie van een extractie-fout
+    # overschrijft niet stil — de vorige claim/body gaat hierheen. Elk item: {claim, body, at}.
+    edit_history: list[dict] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _check_grounding(self) -> Self:

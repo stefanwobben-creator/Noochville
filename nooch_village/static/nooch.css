@@ -874,3 +874,15 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .kn-cluster{background:var(--surface);border:1px solid var(--blue-tint,#E4EDF6);border-left:3px solid #2C5A87;border-radius:var(--radius);padding:.6rem .8rem;margin:.5rem 0}
 .kn-stage-edit textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);font:inherit;padding:.35rem .5rem;margin-bottom:.3rem}
 .kn-stage-edit select{border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:.84rem;padding:.25rem .4rem;background:var(--surface)}
+
+/* ── Kennisbank PR-2: twee-koloms werkgebied + live search + inzicht-detail links ── */
+.kn-cols{display:flex;gap:1.2rem;align-items:flex-start}
+.kn-col-left{flex:1 1 55%;min-width:0}
+.kn-col-right{flex:1 1 45%;min-width:0}
+@media(max-width:800px){.kn-cols{flex-direction:column}.kn-col-left,.kn-col-right{flex:1 1 auto;width:100%}}
+.kn-detail{position:relative;border-left:3px solid var(--green)}
+.kn-detail .kn-x{position:absolute;top:.5rem;right:.7rem;font-size:1.4rem;color:var(--muted);text-decoration:none;line-height:1}
+.kn-searchbox{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);font:inherit;padding:.45rem .6rem;margin:.3rem 0 .5rem;background:var(--surface)}
+.kn-srclink{color:var(--muted);text-decoration:underline dotted;cursor:pointer}
+.kn-srclink:hover{color:var(--green-dark)}
+#kn-biebresults{max-height:70vh;overflow-y:auto}
