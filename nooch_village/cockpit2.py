@@ -3215,6 +3215,18 @@ def _act_kb_atoom_related(c):
     return c.nxt, "➕ gerelateerd feit toegevoegd en gelinkt"
 
 
+def _act_kb_atoom_reference(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Een URL als bronlink bij een
+    # atoom (A3): landt in het reference-veld. Een expliciet-geplakte bronlink houden we (anders
+    # dan de intake-validator, die een kale artikel-URL juist dropt).
+    url = c.g("url").strip()
+    if not re.match(r"^https?://", url):
+        return c.nxt, "✗ plak een geldige URL (https://…)"
+    if not c.st.notes.set_reference(c.g("atom_id"), url):
+        return c.nxt, "✗ notitie niet gevonden"
+    return c.nxt, "🔗 bronlink gekoppeld"
+
+
 def _act_kb_atoom_subject(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Curatie van het
     # ongesorteerd-bakje: een mens hangt een subject-loze notitie aan een hub.
@@ -3337,6 +3349,7 @@ ACTIONS = {
     "kb_atoom_subject": _act_kb_atoom_subject,
     "kb_atoom_edit": _act_kb_atoom_edit,
     "kb_atoom_related": _act_kb_atoom_related,
+    "kb_atoom_reference": _act_kb_atoom_reference,
     "kb_atoom_merge": _act_kb_atoom_merge,
     "kb_atoom_archive": _act_kb_atoom_archive,
     "kb_atoom_unarchive": _act_kb_atoom_unarchive,
@@ -3971,6 +3984,20 @@ def make_handler(data_dir: str, csrf_token: str,
                         fh.write(blob)
                     _Stores(data_dir).projects.attach_file(pid, safe, rel)
                     self._redirect(fields.get("next", "/"), "📎 bijlage geupload"); return
+                if fields.get("action") == "kb_atoom_ref_pdf":
+                    # AUTHZ: iedereen-ingelogd — kennisbank. Een PDF als bronlink bij een atoom (A3):
+                    # via de bestaande adapter halen we een net documentlabel; dat landt in reference.
+                    err = _upload_error(files, _upload_max_bytes())
+                    if err:
+                        self._send(err[0], err[1]); return
+                    from nooch_village.kennisbank_sources import van_pdf
+                    fname, blob = files["file"]
+                    nxt = fields.get("next", "/kennisbank")
+                    chunks = van_pdf(blob, os.path.basename(fname))
+                    label = chunks[0][1] if chunks else os.path.basename(fname)[:120]
+                    ok = _Stores(data_dir).notes.set_reference(fields.get("atom_id", ""), label)
+                    self._redirect(nxt, "🔗 PDF als bronlink gekoppeld" if ok else "✗ notitie niet gevonden")
+                    return
                 if fields.get("action") == "kb_intake_pdf":
                     # AUTHZ: iedereen-ingelogd — kennisbank-intake. PDF = source-adapter:
                     # tekst-extractie + chunken, elke chunk door de bestaande atomiser

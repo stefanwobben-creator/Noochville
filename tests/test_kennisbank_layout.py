@@ -260,3 +260,58 @@ def test_strip_referenties_heading_varianten():
     # een gewone body-zin die toevallig met een apparaat-woord begint maar LANG is, knipt niet
     lang = body + "\nReferences to earlier studies show a consistent upward trend across regions."
     assert "consistent upward trend" in strip_referenties(lang)
+
+
+# ── UX-ronde (Deel A + C): machinerie treedt terug, dubbele paden weg ─────────
+
+def test_ux_bieb_dedup_geen_comment_geen_feit(tmp_path):
+    from nooch_village.views.kennisbank import render_kennisbank_search
+    from nooch_village.insight import Insight
+    from nooch_village.notes_store import NotesStore
+    dd = str(tmp_path)
+    ns = NotesStore(f"{dd}/notes.json")
+    ns.add(Insight(id="a1", claim="gekoppeld atoom", source="s", provenance="media", tags=["leer"]))
+    ns.add(Insight(id="a2", claim="los atoom", source="s2", provenance="media", tags=["leer"]))
+    st = _st(dd)
+    iid = st.kennisbank.add("Een claim over leer", subject="leer")
+    st.kennisbank.link(iid, "a1", "support")
+    frag = render_kennisbank_search(st, "", "", iid, csrf_token="t")
+    # A4: het al-gekoppelde atoom toont "al gekoppeld", niet + steunt; het losse wél
+    assert "al gekoppeld" in frag
+    # A1/A4: geen comment-per-statement (💬) en geen "+ feit"-pad meer in de bibliotheek
+    assert "💬" not in frag and "+ feit" not in frag and "kb_atoom_related" not in frag
+    # A3: klik-op-tekst bewerken aanwezig (kn-editable), bronlink-affordance aanwezig
+    assert "kn-editable" in frag and "kb_atoom_reference" in frag
+
+
+def test_ux_detail_gesprek_draad_en_geen_derde_pad(tmp_path):
+    from nooch_village.views.kennisbank import render_kennisbank
+    dd = str(tmp_path)
+    st = _st(dd)
+    iid = st.kennisbank.add("Prijs blokkeert de doelgroep", subject="prijs")
+    st.kennisbank.discuss(iid, "eerst design testen", by="Stefan")
+    html = render_kennisbank(st, kid=iid, csrf_token="t")
+    # A1: geen apart "voeg bewijs of een reactie toe"-paneel
+    assert "Voeg bewijs of een reactie toe" not in html and "kb_evidence" not in html
+    # C3: gesprek als draad met afzender + tijd
+    assert "kn-thread" in html and "Stefan" in html and "eerst design testen" in html
+    # A2: tags achter een uitklap; selectie-actiebalk aanwezig (verborgen tot selectie)
+    assert "toon onderwerpen" in html and "kn-selbar" in html
+
+
+def test_ux_kb_atoom_reference_via_dispatch(tmp_path):
+    from nooch_village.cockpit2 import dispatch, _Stores
+    from nooch_village.insight import Insight
+    from nooch_village.notes_store import NotesStore
+    dd = str(tmp_path)
+    NotesStore(f"{dd}/notes.json").add(Insight(id="a1", claim="x", source="s", provenance="media"))
+    # geldige URL → reference gezet
+    nxt, msg = dispatch(dd, "kb_atoom_reference",
+                        {"atom_id": ["a1"], "url": ["https://voorbeeld.nl/studie?utm=1"], "next": ["/x"]},
+                        username="guest")
+    from nooch_village.kennisbank import load_atoms
+    assert load_atoms(dd)["a1"]["reference"] == "https://voorbeeld.nl/studie?utm=1"
+    # geen geldige URL → geweigerd, geen wijziging
+    _, msg2 = dispatch(dd, "kb_atoom_reference", {"atom_id": ["a1"], "url": ["geen url"], "next": ["/x"]},
+                       username="guest")
+    assert "✗" in msg2

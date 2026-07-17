@@ -21,8 +21,12 @@ from nooch_village.kennisbank_spel import clusters as kb_clusters, gather, subje
 
 
 def _dots(word: str, n: int) -> str:
+    # Secundaire meter naast het WOORD (dat de status draagt). Tooltip legt de meter uit;
+    # het woord is de leesbare status (recognition, Nielsen #1).
     balls = "".join(f"<span class='{'' if i < n else 'o'}'>●</span>" for i in range(4))
-    return f"<span class='kn-dots {_e(word)}'>{balls}</span>"
+    return (f"<span class='kn-dots {_e(word)}' "
+            f"title='Zekerheidsmeter: {n} van 4. Berekend uit onafhankelijke bronnen — "
+            f"het woord draagt de status.'>{balls}</span>")
 
 
 def _hid(csrf: str, action: str, nxt: str, extra: dict | None = None) -> str:
@@ -53,18 +57,14 @@ def _note_html(ins: dict, link: dict, atom: dict | None, csrf: str, nxt: str) ->
     src = (atom or {}).get("source") or ""
     ann = link.get("annotation") or ""
     aid = link.get("atom_id") or ""
+    # A1: de comment-per-statement is weg (er is één gesprek onderaan het inzicht). Een
+    # bestaande annotatie blijft leesbaar; alleen ontkoppelen kan hier nog (A4).
     ann_html = f"<span class='kn-ann'>notitie: {_e(ann)}</span>" if ann else ""
     prefix = "tegen · " if stance == "counter" else ""
-    ctrl = (
-        f"<details class='kn-nctrl'><summary title='notitie bij dit bewijs'>💬</summary>"
-        f"<form method='post' action='/action'>"
-        f"{_hid(csrf, 'kb_annotate', nxt, {'iid': ins['id'], 'atom_id': aid})}"
-        f"{_field('notitie bij dit bewijs', 'text', value=ann, fid=f'f-ann-{aid}')}"
-        f"<button class='btn'>Bewaar</button></form></details>"
-        f"<form method='post' action='/action' class='kn-unlink'>"
-        f"{_hid(csrf, 'kb_unlink', nxt, {'iid': ins['id'], 'atom_id': aid})}"
-        f"<button class='btn' title='loskoppelen (kaart blijft in de bibliotheek)'>×</button></form>")
-    return (f"<div class='kn-note {_e(stance)}'><span class='kn-dot'></span>"
+    ctrl = (f"<form method='post' action='/action' class='kn-unlink'>"
+            f"{_hid(csrf, 'kb_unlink', nxt, {'iid': ins['id'], 'atom_id': aid})}"
+            f"<button class='btn' title='ontkoppelen (kaart blijft in de bibliotheek)'>×</button></form>")
+    return (f"<div class='kn-note {_e(stance)}'>"
             f"<div class='kn-ntext'>{_e(claim)}"
             f"<span class='kn-src'>{_e(prefix)}{_e(src)}</span>{ann_html}</div>"
             f"<div class='kn-nctrls'>{ctrl}</div></div>")
@@ -84,18 +84,8 @@ def _inzicht_detail(ins: dict, atoms: dict, csrf: str) -> str:
     caveat = (f"<div class='kn-caveat'>⚠ {_e(ins.get('caveat'))}</div>"
               if ins.get("caveat") else "")
 
-    nieuw = (
-        f"<details class='kn-panel'><summary>+ Voeg bewijs of een reactie toe</summary>"
-        f"<p class='muted'>Een reactie is óók een notitie — jij bent ook een bron "
-        f"(herkomst: intern oordeel).</p>"
-        f"<form method='post' action='/action'>"
-        f"{_hid(csrf, 'kb_evidence', nxt, {'iid': ins['id']})}"
-        f"{_field('wat wijst hierheen (of ertegen)?', 'text', kind='textarea', fid='f-kn-ev')}"
-        f"{_field('bron (een studie, artikel, of jouw naam)', 'source', fid='f-kn-src')}"
-        f"<label class='att-lbl' for='f-kn-stance'>richting</label>"
-        f"<select id='f-kn-stance' name='stance'><option value='support'>steunt</option>"
-        f"<option value='counter'>spreekt tegen</option></select> "
-        f"<button class='btn ok'>Voeg toe</button></form></details>")
+    # A1: geen apart "voeg bewijs/reactie toe"-paneel meer (het derde pad). Bewijs koppel je
+    # rechts uit de bibliotheek; een reactie plaats je in het gesprek onderaan.
 
     # Herformuleren = een nieuw spel, geseed met de huidige evidence-set. Het spel zelf
     # is copy-paste (speel in je eigen AI); de losse prompt/plak-fallback die hier stond
@@ -111,16 +101,21 @@ def _inzicht_detail(ins: dict, atoms: dict, csrf: str) -> str:
         f"<span class='muted'>scherp de claim aan in je eigen AI; het eindigt in een "
         f"nieuwe versie en de vorige blijft bewaard</span></form>")
 
-    gesprek = "".join(
-        f"<div class='kn-comment'>{_e(d.get('text'))}"
-        f"<span class='kn-by'>— {_e(d.get('by'))}</span></div>"
-        for d in ins.get("discussion") or []) or (
-        "<p class='muted'>Nog geen kanttekeningen. Dit is de plek voor opmerkingen "
-        "over het inzicht als geheel.</p>")
-    gesprek += (f"<form method='post' action='/action' class='kn-discrow'>"
-                f"{_hid(csrf, 'kb_discuss', nxt, {'iid': ins['id']})}"
-                f"{_field('plaats een kanttekening over dit inzicht', 'text', fid='f-kn-disc')}"
-                f"<button class='btn'>Plaats</button></form>")
+    # C3: het gesprek OVER het inzicht als geheel — een echte draad (afzender + tijd), met
+    # het invoerveld als natuurlijke afsluiting. Append-only (kb_discuss).
+    draad = "".join(
+        f"<div class='kn-msg'><div class='kn-msg-head'><b>{_e(d.get('by') or 'iemand')}</b>"
+        f"<span class='muted'>{_e((d.get('created_at') or '')[:16].replace('T', ' '))}</span></div>"
+        f"<div class='kn-msg-text'>{_e(d.get('text'))}</div></div>"
+        for d in ins.get("discussion") or [])
+    if not draad:
+        draad = ("<p class='muted'>Nog geen kanttekeningen. Dit is de plek voor opmerkingen "
+                 "over het inzicht als geheel.</p>")
+    gesprek = (f"<div class='kn-thread'>{draad}</div>"
+               f"<form method='post' action='/action' class='kn-discrow'>"
+               f"{_hid(csrf, 'kb_discuss', nxt, {'iid': ins['id']})}"
+               f"{_field('schrijf een kanttekening…', 'text', fid='f-kn-disc', placeholder='je opmerking over dit inzicht')}"
+               f"<button class='btn ok'>Plaats</button></form>")
 
     historie = ""
     if ins.get("history"):
@@ -149,7 +144,7 @@ def _inzicht_detail(ins: dict, atoms: dict, csrf: str) -> str:
         f"<div class='kn-sentence'>{v['sentence']}</div>{caveat}"
         f"<div class='kn-sec'><div class='kn-sectitle'>Het bewijs</div>{noten_sup}"
         + (f"<div class='kn-sectitle'>Tegenspraak</div>{noten_cou}" if noten_cou else "")
-        + f"{brug_hint}{nieuw}{herformuleer}</div>"
+        + f"{brug_hint}{herformuleer}</div>"
         f"{andere_kant}{falsi}"
         f"<div class='kn-sec'><div class='kn-sectitle'>Gesprek</div>{gesprek}</div>"
         f"{historie}</div>")
@@ -200,27 +195,27 @@ def _actiebalk(open_: str, st, atoms: dict, inzichten: list, hunch: str, speel: 
 def _bron_toevoegen(csrf: str) -> str:
     """Zone 2 — één ingang: plakken (tekst/link) OF een bestand. Auto-detectie server-side;
     het resultaat gaat naar de staging-ronde ('even nakijken'), niet meteen de bibliotheek in."""
+    # A5: één rustige verticale indeling — plak-veld, dan bestand, dan één primaire knop,
+    # met de "we herkennen het type zelf"-hint eronder. Design-system-spacing (kn-bronform).
     return (
-        f"<form method='post' action='/action' enctype='multipart/form-data'>"
+        f"<form method='post' action='/action' enctype='multipart/form-data' class='kn-bronform'>"
         f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
         f"<input type='hidden' name='action' value='kb_bron_add'>"
-        f"{_field('plak een notitie, een artikel, of een link (website / Google Sheet)', 'bron_text', kind='textarea', fid='f-bron-text')}"
-        + _field("… of kies een bestand (PDF, Excel of CSV)", "file", kind="file",
+        f"<div class='kn-bronveld'>{_field('Plak een notitie, artikel of link (website / Google Sheet)', 'bron_text', kind='textarea', fid='f-bron-text')}</div>"
+        f"<div class='kn-bronveld'>"
+        + _field("Of kies een bestand (PDF, Excel of CSV)", "file", kind="file",
                  fid="f-bron-file", attrs="accept='.pdf,.xlsx,.xls,.csv'")
-        + f"<button class='btn ok'>Verwerk de bron</button>"
-        f"<span class='muted'> — we herkennen het type zelf; daarna kijk je de voorstellen "
-        f"na vóór ze de bibliotheek in gaan</span></form>")
+        + f"</div>"
+        f"<button class='btn ok'>Verwerk de bron</button>"
+        f"<p class='muted kn-bronhint'>We herkennen het type zelf; daarna kijk je de "
+        f"voorstellen na vóór ze de bibliotheek in gaan.</p></form>")
 
 
 def _speel_toevoegen(st, atoms: dict, inzichten: list, hunch: str, speel: str,
                      cluster: int, csrf: str) -> str:
-    """Zone 3 — een hunch typen OF door de clusters bladeren (één tegelijk, vorige/volgende)."""
-    delen = [f"<form method='get' action='/kennisbank' class='kn-zoek'>"
-             f"<input type='hidden' name='open' value='speel'>"
-             + _field("💡 ik heb een hunch", "hunch", value="" if speel else hunch,
-                      fid="f-kn-hunchzoek",
-                      placeholder="bijv. wachttijd is juist een feature, geen kost")
-             + f"<button class='btn'>Zoek de kaarten</button></form>"]
+    """Zone 3 — de clusters zijn de hoofdingang; de hunch is een ondergeschikte neveningang
+    ónder de clusters (A1/A5). Rustige verticale indeling."""
+    delen: list[str] = []
     cls = kb_clusters(atoms, inzichten)
     if cls:
         i = max(0, min(cluster, len(cls) - 1))
@@ -235,6 +230,15 @@ def _speel_toevoegen(st, atoms: dict, inzichten: list, hunch: str, speel: str,
             f"<div class='kn-cluster'><b>🧩 {_e(cl['theme'])}</b> "
             f"<span class='muted'>· {len(cl['atom_ids'])} kaarten willen een inzicht worden</span><br>"
             f"<a class='btn ok' href='/kennisbank?open=speel&speel={_e(ids)}&hunch={_e(cl['theme'])}'>Speel deze</a> {nav}</div>")
+    # De hunch: ondergeschikte neveningang, ónder de clusters.
+    delen.append(
+        f"<form method='get' action='/kennisbank' class='kn-hunch'>"
+        f"<input type='hidden' name='open' value='speel'>"
+        + _field("Of typ een eigen vermoeden", "hunch", value="" if speel else hunch,
+                 fid="f-kn-hunchzoek", placeholder="bijv. wachttijd is juist een feature, geen kost")
+        + f"<button class='btn'>Zoek de kaarten</button>"
+        f"<span class='muted kn-bronhint'>een neveningang — meestal begin je met een cluster hierboven</span>"
+        f"</form>")
     if speel:
         kandidaten = [{"atom_id": aid, "stance": "support"}
                       for aid in speel.split(",") if aid in atoms]
@@ -243,9 +247,11 @@ def _speel_toevoegen(st, atoms: dict, inzichten: list, hunch: str, speel: str,
     elif hunch:
         kandidaten = gather(hunch, atoms)
         delen.append(_curatie_sectie(f"Kaarten bij: “{hunch}”", kandidaten, atoms, hunch, csrf))
-    for s in st.spel.open_spellen()[:3]:
-        delen.append(f"<p class='muted'>🎲 open spel: <a href='/kennisbank/spel?sid={_e(s['id'])}'>"
-                     f"{_e(s.get('hunch') or s['id'])}</a></p>")
+    open_spellen = st.spel.open_spellen()[:3]
+    if open_spellen:
+        rijen = "".join(f"<a href='/kennisbank/spel?sid={_e(s['id'])}'>{_e(s.get('hunch') or s['id'])}</a>"
+                        for s in open_spellen)
+        delen.append(f"<div class='kn-openspel muted'>Lopende spellen: {rijen}</div>")
     return "".join(delen)
 
 
@@ -272,10 +278,11 @@ def _bron_link(source: str) -> str:
 
 
 def _bieb_atoom(aid: str, a: dict, csrf: str, nxt: str, active_iid: str,
-                sugg: str = "") -> str:
-    """Eén bibliotheek-kaart (rechterkolom): inhoud + klikbaar bronlabel + curatie-vink,
-    per-kaart bewerken-met-historie en 'voeg gerelateerd feit toe', en — als er links een
-    inzicht open staat — de koppel-brug (+ steunt / + tegen) met suggestie-markering."""
+                sugg: str = "", gelinkt: bool = False) -> str:
+    """Eén bibliotheek-kaart (rechterkolom): inhoud (klik = inline bewerken, append-only) +
+    klikbaar bronlabel + curatie-vink + een bronlink (URL/PDF → reference). Staat er links een
+    inzicht open, dan de koppel-brug (+ steunt / + tegen) met suggestie-markering — behalve als
+    de kaart er al aan gekoppeld is (A4: geen dubbel pad)."""
     hub = subject_van(a)
     chip = f"<span class='chip outline'>{_e(hub)}</span>" if hub else ""
     if "verificatie_vereist" in (a.get("tags") or []):
@@ -285,9 +292,9 @@ def _bieb_atoom(aid: str, a: dict, csrf: str, nxt: str, active_iid: str,
     if a.get("edit_history"):
         chip += f" <span class='chip muted'>bewerkt {len(a['edit_history'])}×</span>"
     sugg_chip = ""
-    if sugg == "support":
+    if sugg == "support" and not gelinkt:
         sugg_chip = " <span class='chip'>past mogelijk</span>"
-    elif sugg == "counter":
+    elif sugg == "counter" and not gelinkt:
         sugg_chip = " <span class='chip muted'>spreekt mogelijk tegen</span>"
     ref = (a.get("reference") or "").strip()
     reftxt = f" · {_e(ref)}" if ref else ""
@@ -296,34 +303,44 @@ def _bieb_atoom(aid: str, a: dict, csrf: str, nxt: str, active_iid: str,
         body = (f"<details class='kn-nctrl'><summary>toon de inhoud</summary>"
                 f"<div class='kn-ann'>{_e(a['body']).replace(chr(10), '<br>')}</div></details>")
 
+    # A3: klik op de tekst → inline bewerken (groter veld, Bewaar ónder het veld, primaire kleur).
+    editveld = (f"<details class='kn-editable'><summary>{_e(a.get('claim'))}{chip}{sugg_chip}</summary>"
+                f"<form method='post' action='/action' class='kn-editform'>"
+                f"{_hid(csrf, 'kb_atoom_edit', nxt, {'atom_id': aid})}"
+                f"<textarea name='claim' rows='4'>{_e(a.get('claim') or '')}</textarea>"
+                f"<button class='btn ok'>Bewaar (nieuwe versie)</button></form></details>")
+
     brug = ""
     if active_iid:
-        brug = (
-            f"<form method='post' action='/action' class='kn-unlink'>"
-            f"{_hid(csrf, 'kb_link', nxt, {'iid': active_iid, 'atom_id': aid, 'stance': 'support'})}"
-            f"<button class='btn ok'>+ steunt</button></form>"
-            f"<form method='post' action='/action' class='kn-unlink'>"
-            f"{_hid(csrf, 'kb_link', nxt, {'iid': active_iid, 'atom_id': aid, 'stance': 'counter'})}"
-            f"<button class='btn no'>+ tegen</button></form>")
+        brug = ("<span class='muted kn-al'>al gekoppeld</span>" if gelinkt else
+                f"<form method='post' action='/action' class='kn-unlink'>"
+                f"{_hid(csrf, 'kb_link', nxt, {'iid': active_iid, 'atom_id': aid, 'stance': 'support'})}"
+                f"<button class='btn ok'>+ steunt</button></form>"
+                f"<form method='post' action='/action' class='kn-unlink'>"
+                f"{_hid(csrf, 'kb_link', nxt, {'iid': active_iid, 'atom_id': aid, 'stance': 'counter'})}"
+                f"<button class='btn no'>+ tegen</button></form>")
 
-    edit = (f"<details class='kn-nctrl'><summary title='corrigeer een extractie-fout'>✎</summary>"
-            f"<form method='post' action='/action'>"
-            f"{_hid(csrf, 'kb_atoom_edit', nxt, {'atom_id': aid})}"
-            f"{_field('verbeter de tekst (de vorige versie blijft bewaard)', 'claim', kind='textarea', value=a.get('claim') or '', fid=f'f-ed-{aid}')}"
-            f"<button class='btn'>Bewaar</button></form></details>")
-    related = (f"<details class='kn-nctrl'><summary title='voeg een gerelateerd feit toe'>+ feit</summary>"
-               f"<form method='post' action='/action'>"
-               f"{_hid(csrf, 'kb_atoom_related', nxt, {'atom_id': aid})}"
-               f"{_field('een gerelateerd feit (wordt een nieuw, gelinkt atoom)', 'content', kind='textarea', fid=f'f-rel-{aid}')}"
-               f"{_field('bron', 'source', fid=f'f-relsrc-{aid}')}"
-               f"<button class='btn'>Voeg toe</button></form></details>")
+    bronlink = (
+        f"<details class='kn-nctrl'><summary title='URL of PDF als bron koppelen'>🔗 bronlink</summary>"
+        f"<form method='post' action='/action' class='kn-editform'>"
+        f"{_hid(csrf, 'kb_atoom_reference', nxt, {'atom_id': aid})}"
+        f"{_field('plak een URL als bron', 'url', fid=f'f-refu-{aid}', placeholder='https://…')}"
+        f"<button class='btn'>Koppel URL</button></form>"
+        f"<form method='post' action='/action' enctype='multipart/form-data' class='kn-editform'>"
+        f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+        f"<input type='hidden' name='action' value='kb_atoom_ref_pdf'>"
+        f"<input type='hidden' name='atom_id' value='{_e(aid)}'>"
+        f"<input type='hidden' name='next' value='{_e(nxt)}'>"
+        + _field("… of een PDF als bron", "file", kind="file", fid=f"f-refp-{aid}",
+                 attrs="accept='application/pdf'")
+        + f"<button class='btn'>Koppel PDF</button></form></details>")
 
     return (f"<div class='kn-note support'>"
-            f"<input type='checkbox' name='atoom' value='{_e(aid)}' form='curatieform' aria-label='selecteer'>"
-            f"<span class='kn-dot'></span><div class='kn-ntext'>"
-            f"{_e(a.get('claim'))}{chip}{sugg_chip}"
+            f"<input type='checkbox' name='atoom' value='{_e(aid)}' form='curatieform' "
+            f"class='kn-sel' aria-label='selecteer'>"
+            f"<div class='kn-ntext'>{editveld}"
             f"<span class='kn-src'>{_bron_link(a.get('source'))}{reftxt}</span>{body}"
-            f"<div class='kn-nctrls'>{brug}{edit}{related}</div></div></div>")
+            f"<div class='kn-nctrls'>{brug}{bronlink}</div></div></div>")
 
 
 def _bieb_results(st, atoms: dict, q: str, hub: str, active_ins: dict | None,
@@ -348,6 +365,7 @@ def _bieb_results(st, atoms: dict, q: str, hub: str, active_ins: dict | None,
 
     sugg: dict[str, str] = {}
     active_iid = ""
+    al_gelinkt: set = set()
     if active_ins is not None:
         active_iid = active_ins["id"]
         al_gelinkt = {l.get("atom_id") for l in active_ins.get("evidence") or []}
@@ -360,7 +378,8 @@ def _bieb_results(st, atoms: dict, q: str, hub: str, active_ins: dict | None,
             if k["atom_id"] not in al_gelinkt:
                 sugg[k["atom_id"]] = "support"       # 'past mogelijk' — richting kiest de mens
     nxt = f"/kennisbank?id={active_iid}" if active_iid else (f"/kennisbank?hub={hub}" if hub else "/kennisbank")
-    kaarten = "".join(_bieb_atoom(aid, a, csrf, nxt, active_iid, sugg.get(aid, ""))
+    kaarten = "".join(_bieb_atoom(aid, a, csrf, nxt, active_iid, sugg.get(aid, ""),
+                                  gelinkt=(aid in al_gelinkt))
                       for aid, a in getoond) or "<p class='muted'>Geen kaarten gevonden.</p>"
     meer = (f"<p class='muted'>… en nog {len(rijen) - _ZOEK_MAX} meer — verfijn je zoekterm.</p>"
             if len(rijen) > _ZOEK_MAX else "")
@@ -376,18 +395,21 @@ def _bibliotheek_rechts(st, atoms: dict, q: str, hub: str, active_ins: dict | No
         h = subject_van(a)
         if h:
             per_hub[h] = per_hub.get(h, 0) + 1
+    # A1: onderwerp-tags standaard verborgen achter een uitklap; de balk blijft laag.
     chips = ("<a class='chip-opt" + (" on" if not hub and not q else "") + "' "
              "href='/kennisbank'>alle</a>") + "".join(
         f"<a class='chip-opt{' on' if hub == h and not q else ''}' "
         f"href='/kennisbank?hub={_e(h)}'>{_e(h)} ({n})</a>"
         for h, n in sorted(per_hub.items(), key=lambda kv: -kv[1]))
+    tags = (f"<details class='kn-tags'{' open' if hub else ''}>"
+            f"<summary>toon onderwerpen</summary><div class='c2-sec'>{chips}</div></details>")
     zoekbox = (f"<input id='kn-search' class='kn-searchbox' type='search' value='{_e(q)}' "
                f"placeholder='zoek in inhoud én bron…' autocomplete='off' "
                f"data-active='{_e(active_iid)}' data-hub='{_e(hub)}'>")
     results = _bieb_results(st, atoms, q, hub, active_ins, csrf)
 
-    # curatieform: de checkboxes in de (JS-vervangbare) resultaten verwijzen ernaar via form=,
-    # dus samenvoegen/archiveren/naar-spel werkt ook na een live-zoekactie.
+    # A2: contextuele selectie-actiebalk — verborgen tot je iets aanvinkt (JS toont 'm + telt).
+    # De checkboxes in de (JS-vervangbare) resultaten verwijzen via form= naar curatieform.
     nxt = f"/kennisbank?id={active_iid}" if active_iid else (f"/kennisbank?hub={hub}" if hub else "/kennisbank")
     spellen = st.spel.open_spellen()[:8]
     spel_keuze = ""
@@ -396,16 +418,18 @@ def _bibliotheek_rechts(st, atoms: dict, q: str, hub: str, active_ins: dict | No
                          for s in spellen)
         spel_keuze = (f"<select name='sid' form='curatieform'>{opties}</select>"
                       f"<button class='btn' name='action' value='kb_atoom_naar_spel' form='curatieform'>"
-                      f"Voeg toe aan spel</button>")
-    curatie = (f"<form method='post' action='/action' id='curatieform' class='kn-lrow'>"
-               f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
-               f"<input type='hidden' name='next' value='{_e(nxt)}'>"
-               f"{_field('kop voor een samengestelde kaart (vink ≥2 aan)', 'kop', fid='f-kn-kop')}"
-               f"<button class='btn ok' name='action' value='kb_atoom_merge'>Voeg samen</button>"
-               f"<button class='btn' name='action' value='kb_atoom_archive'>Archiveer</button>"
-               f"{spel_keuze}</form>")
-    return (f"<h2>Bibliotheek</h2>{zoekbox}<div class='c2-sec'>{chips}</div>"
-            f"<div id='kn-biebresults'>{results}</div>{curatie}"
+                      f"Naar spel</button>")
+    selbar = (f"<div id='kn-selbar' class='kn-selbar' hidden>"
+              f"<span class='kn-selcount'></span>"
+              f"<form method='post' action='/action' id='curatieform' class='kn-lrow'>"
+              f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+              f"<input type='hidden' name='next' value='{_e(nxt)}'>"
+              f"{_field('kop (bij ≥2 samenvoegen)', 'kop', fid='f-kn-kop')}"
+              f"<button class='btn ok' name='action' value='kb_atoom_merge'>Voeg samen</button>"
+              f"<button class='btn' name='action' value='kb_atoom_archive'>Archiveer</button>"
+              f"{spel_keuze}</form></div>")
+    return (f"<h2>Bibliotheek</h2>{zoekbox}{tags}"
+            f"<div id='kn-biebresults'>{results}</div>{selbar}"
             f"{_gearchiveerd_uitklap(st, hub, csrf)}"
             f"{_ongesorteerd_bakje(atoms, [], csrf)}")
 
@@ -427,13 +451,21 @@ _KN_SEARCH_JS = """<script>(function(){
      +'&active='+encodeURIComponent(box.dataset.active||'')
      +'&hub='+encodeURIComponent(box.dataset.hub||'');
    fetch(u,{credentials:'same-origin'}).then(function(r){return r.text();})
-     .then(function(h){host.innerHTML=h;});
+     .then(function(h){host.innerHTML=h; syncSel();});
  }
  box.addEventListener('input',function(){clearTimeout(t);t=setTimeout(run,250);});
  document.addEventListener('click',function(e){
    var a=e.target.closest('.kn-srclink'); if(!a)return;
    e.preventDefault(); box.value=a.dataset.src||''; box.focus(); run();
  });
+ // A2: contextuele selectie-actiebalk — verschijnt zodra er iets is aangevinkt, met een teller.
+ function syncSel(){
+   var bar=document.getElementById('kn-selbar'); if(!bar)return;
+   var n=document.querySelectorAll('.kn-sel:checked').length;
+   bar.hidden = n===0;
+   var c=bar.querySelector('.kn-selcount'); if(c) c.textContent = n+' geselecteerd';
+ }
+ document.addEventListener('change',function(e){ if(e.target.classList.contains('kn-sel')) syncSel(); });
 })();</script>"""
 
 

@@ -67,18 +67,19 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `kb_stage_merge` | `cockpit2.py:3168` |
 | `kb_stage_commit` | `cockpit2.py:3179` |
 | `kb_stage_discard` | `cockpit2.py:3193` |
-| `kb_atoom_subject` | `cockpit2.py:3218` |
+| `kb_atoom_subject` | `cockpit2.py:3230` |
 | `kb_atoom_edit` | `cockpit2.py:3199` |
 | `kb_atoom_related` | `cockpit2.py:3206` |
-| `kb_atoom_merge` | `cockpit2.py:3229` |
-| `kb_atoom_archive` | `cockpit2.py:3245` |
-| `kb_atoom_unarchive` | `cockpit2.py:3254` |
-| `kb_atoom_naar_spel` | `cockpit2.py:3260` |
-| `kb_spel_start` | `cockpit2.py:3280` |
-| `kb_spel_add` | `cockpit2.py:3294` |
-| `kb_spel_remove` | `cockpit2.py:3304` |
-| `kb_spel_flip` | `cockpit2.py:3311` |
-| `kb_spel_finish` | `cockpit2.py:3317` |
+| `kb_atoom_reference` | `cockpit2.py:3218` |
+| `kb_atoom_merge` | `cockpit2.py:3241` |
+| `kb_atoom_archive` | `cockpit2.py:3257` |
+| `kb_atoom_unarchive` | `cockpit2.py:3266` |
+| `kb_atoom_naar_spel` | `cockpit2.py:3272` |
+| `kb_spel_start` | `cockpit2.py:3292` |
+| `kb_spel_add` | `cockpit2.py:3306` |
+| `kb_spel_remove` | `cockpit2.py:3316` |
+| `kb_spel_flip` | `cockpit2.py:3323` |
+| `kb_spel_finish` | `cockpit2.py:3329` |
 | `kb_link` | `cockpit2.py:3046` |
 | `kb_unlink` | `cockpit2.py:3060` |
 | `kb_annotate` | `cockpit2.py:3071` |
@@ -234,4 +235,4 @@ De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de st
 
 
 ---
-_40 routes · 138 dispatch-acties · 26 stores._
+_40 routes · 139 dispatch-acties · 26 stores._
