@@ -192,3 +192,57 @@ def test_edit_history_en_related_via_dispatch(tmp_path):
     atoms = load_atoms(dd)
     rel = [a for a in atoms.values() if "Concurrent" in a["claim"]]
     assert len(rel) == 1 and rel[0]["links_to"] == ["p1"] and rel[0]["source"] == "marktonderzoek"
+
+
+# ── fix-brief: staging-layout + schone extractie ─────────────────────────────
+
+def test_staging_kaart_is_verticale_stapel_geen_flex_rij(tmp_path):
+    from nooch_village.views.kennisbank_staging import render_kennisbank_staging
+    dd = str(tmp_path)
+    store = StagingStore(f"{dd}/kennisbank_staging.json")
+    # een atoom met een lange onbreekbare slug in de bron (het collapse-scenario)
+    bid = store.create("website", "Scientias.nl", [{
+        "content": "Microplastics aangetoond op 2000 meter hoogte.", "subject": "materiaal",
+        "provenance": "media", "source": "voor-het-eerst-echt-aangetoond-ook-op-2000-meter",
+        "flags": []}], by="t")
+    from nooch_village.kennisbank_staging import StagingStore as _S
+    import types
+    st = types.SimpleNamespace(dd=dd, staging=store)
+    html = render_kennisbank_staging(st, bid, csrf_token="t")
+    assert "kn-stage" in html and "kn-stage-ctrls" in html
+    assert "kn-note support" not in html          # niet meer de flex-rij van bewijsnoten
+
+
+def test_strip_referenties():
+    from nooch_village.kennisbank_sources import strip_referenties
+    # realistisch: body ruim boven _MIN_TEKST, dan de referentielijst
+    body = "\n".join(f"Bevinding {i}: microplastics gevonden op grote hoogte in verse sneeuw."
+                     for i in range(12))
+    doc = body + "\nReferences\nJambeck et al., 2015.\nGeyer et al., 2020."
+    out = strip_referenties(doc)
+    assert "Jambeck" not in out and "Bevinding 11" in out
+    # een vroege losse vermelding knipt niet het hele stuk weg
+    vroeg = "bronnen tellen\n" + "\n".join(f"regel {i} met genoeg tekst erin" for i in range(20))
+    assert strip_referenties(vroeg) == vroeg
+    # NL-kop wordt ook herkend
+    assert "Smith" not in strip_referenties(body + "\nLiteratuur\nSmith 2019.")
+
+
+def test_url_label_bevat_geen_slug(monkeypatch):
+    import nooch_village.kennisbank_sources as src
+    class _Meta:
+        title = "Microplastics op 2000 meter"
+        sitename = "Scientias.nl"
+    class _Traf:
+        @staticmethod
+        def fetch_url(u): return "<html>body</html>"
+        @staticmethod
+        def extract(d, **k): return "Een lange leesbare hoofdtekst. " * 20
+        @staticmethod
+        def extract_metadata(d): return _Meta()
+    monkeypatch.setitem(__import__("sys").modules, "trafilatura", _Traf)
+    res = src.van_url("https://scientias.nl/voor-het-eerst-echt-aangetoond-ook-op-2000-meter/")
+    assert res is not None
+    raw, label = res
+    assert "voor-het-eerst" not in label and "http" not in label
+    assert "Scientias.nl" in label and "Microplastics" in label

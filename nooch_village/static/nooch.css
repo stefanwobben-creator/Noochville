@@ -874,6 +874,15 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .kn-cluster{background:var(--surface);border:1px solid var(--blue-tint,#E4EDF6);border-left:3px solid #2C5A87;border-radius:var(--radius);padding:.6rem .8rem;margin:.5rem 0}
 .kn-stage-edit textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);font:inherit;padding:.35rem .5rem;margin-bottom:.3rem}
 .kn-stage-edit select{border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:.84rem;padding:.25rem .4rem;background:var(--surface)}
+/* Staging-kaart (fix-brief bug 1): verticale stapel op volle breedte. De middenkolom is
+   minmax(0,1fr) zodat een lange onbreekbare URL-slug de kaart nooit naar ~0 kan persen. */
+.kn-stage{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:.55rem;align-items:start;padding:.6rem 0;border-top:1px solid var(--cream-2)}
+.kn-stage input[type=checkbox]{margin-top:.4rem}
+.kn-stage-edit{min-width:0}
+.kn-stage-edit textarea{overflow-wrap:anywhere}
+.kn-stage-src{display:block;color:var(--muted);font-size:.8rem;margin:.15rem 0;overflow-wrap:anywhere}
+.kn-stage-ctrls{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
+.kn-stage-del{margin:0}
 
 /* ── Kennisbank PR-2: twee-koloms werkgebied + live search + inzicht-detail links ── */
 .kn-cols{display:flex;gap:1.2rem;align-items:flex-start}
