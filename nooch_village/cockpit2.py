@@ -61,6 +61,12 @@ from nooch_village.util import refuse
 from nooch_village.ai_tasks import AITaskStore
 from nooch_village.checklists import ChecklistStore, CADENCES, CADENCE_LABEL
 from nooch_village.metrics import MetricStore, window_cutoff, filter_samples
+from nooch_village.kennisbank import (KennisbankStore, parse_blok,
+                                      field as kb_field, verdict as kb_verdict,
+                                      WORD_LABEL as KB_WORD_LABEL,
+                                      load_atoms as kb_load_atoms)
+from nooch_village.notes_store import NotesStore
+from nooch_village.insight import Insight
 from nooch_village.metric_schema import (CADANS_LABEL, MEETTYPE_LABEL, MEETWIJZE_LABEL,
                                          TIJD_LABEL, BRUIKBAAR_LABEL, VERIFICATIE_LABEL)
 from nooch_village.definitions import (DefinitionStore, seed_catalog as _seed_catalog,
@@ -115,6 +121,8 @@ class _Stores:
         self.strategies = StrategyStore(os.path.join(dd, "strategies.json"))
         self.backlog = BacklogStore(os.path.join(dd, "backlog.json"))
         self.radar = RadarStore(os.path.join(dd, "radar.json"))   # Radar-tool: gecureerde Inoreader-signalen per rol
+        self.kennisbank = KennisbankStore(os.path.join(dd, "kennisbank.json"))   # laag 2: geversioneerde inzichten
+        self.notes = NotesStore(os.path.join(dd, "notes.json"))   # laag 1: de atomen-bibliotheek (kennislaag)
 
 
 _FAC_ACC = "Rapporteren over de gezondheid van de werkoverleggen"
@@ -235,6 +243,7 @@ from nooch_village.views.inbox import (
 from nooch_village.views.metrics2 import render_metrics2
 from nooch_village.views.bronnen import render_bronnen
 from nooch_village.views.kennislaag import render_kennislaag
+from nooch_village.views.kennisbank import render_kennisbank
 from nooch_village.views.linkbuilding import render_linkbuilding
 from nooch_village.views.accountabilities import render_accountabilities
 from nooch_village.views.woordenschat import render_woordenschat
@@ -2996,7 +3005,118 @@ def _act_lk_mute(c):
         return nxt, (f"✓ {verb}" if ok else "muten niet gelukt")
 
 
+# ── Kennisbank (laag 2): inzichten, bewijs-links, gesprek en versies ─────────
+# Alle kb_-takken: AUTHZ: iedereen-ingelogd — kennis verzamelen is dorpsbreed (permissieve
+# intake, strenge uitgang: de garbage-poort staat bij het GEBRUIK van kennis, niet bij de
+# ingang). De herkomst wordt per handeling vastgelegd (by=persoon).
+
+def _kb_actor(c) -> str:
+    """Weergavenaam van de handelende mens (de lezer is ook een bron)."""
+    if c.username in (None, "guest"):
+        return "gast"
+    p = c.st.people.by_email(c.username)
+    return p.name if p else c.username
+
+
+def _kb_word(c, iid: str) -> str:
+    """Het zekerheids-woord van een inzicht ná een mutatie (voor de bevestiging)."""
+    ins = c.st.kennisbank.get(iid)
+    if ins is None:
+        return ""
+    atoms = kb_load_atoms(c.data_dir)
+    return KB_WORD_LABEL[kb_verdict(kb_field(ins.get("evidence") or [], atoms))["word"]]
+
+
+def _act_kb_new(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok
+    title = c.g("title").strip()
+    if not title:
+        return c.nxt, "✗ typ eerst een claim"
+    iid = c.st.kennisbank.add(title, why=c.g("why"), by=_kb_actor(c))
+    return f"/kennisbank?id={iid}", "➕ inzicht gemaakt (v1.0) — koppel bewijs en kijk hoe zeker het wordt"
+
+
+def _act_kb_link(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok
+    iid, atom_id = c.g("iid"), c.g("atom_id")
+    if atom_id not in kb_load_atoms(c.data_dir):
+        return c.nxt, "✗ kaart niet gevonden in de bibliotheek"
+    voor = _kb_word(c, iid)
+    ok = c.st.kennisbank.link(iid, atom_id, c.g("stance"),
+                              annotation=c.g("annotation"), by=_kb_actor(c))
+    if not ok:
+        return c.nxt, "✗ koppelen niet gelukt"
+    na = _kb_word(c, iid)
+    return c.nxt, ("🔗 gekoppeld. " + (f"Zekerheid nu: {na}" if na != voor else "Zekerheid herberekend."))
+
+
+def _act_kb_unlink(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok
+    iid = c.g("iid")
+    voor = _kb_word(c, iid)
+    if not c.st.kennisbank.unlink(iid, c.g("atom_id")):
+        return c.nxt, "✗ loskoppelen niet gelukt"
+    na = _kb_word(c, iid)
+    return c.nxt, ("Losgekoppeld (kaart blijft in de bibliotheek). "
+                   + (f"Zekerheid nu: {na}" if na != voor else "Zekerheid herberekend."))
+
+
+def _act_kb_annotate(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok
+    ok = c.st.kennisbank.annotate(c.g("iid"), c.g("atom_id"), c.g("text"))
+    return c.nxt, ("💬 notitie opgeslagen" if ok else "✗ notitie niet opgeslagen")
+
+
+def _act_kb_evidence(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Nieuw bewijs = een nieuw
+    # ATOOM in de bibliotheek (laag 1, dom: geen oordeel bij de intake) + een link met richting.
+    iid, text = c.g("iid"), c.g("text").strip()
+    if not text:
+        return c.nxt, "✗ typ eerst iets"
+    actor = _kb_actor(c)
+    bron = c.g("source").strip() or actor
+    # Eigen naam als bron = een intern oordeel (meningssterkte ≠ bewijssterkte);
+    # elke andere bron blijft 'unknown' tot een curator de herkomst duidt.
+    prov = "internal_judgment" if bron == actor else "unknown"
+    atom_id = "atom_" + uuid.uuid4().hex[:8]
+    c.st.notes.add(Insight(id=atom_id, claim=text[:500], source=bron, provenance=prov))
+    voor = _kb_word(c, iid)
+    ok = c.st.kennisbank.link(iid, atom_id, c.g("stance") or "support", by=actor)
+    if not ok:
+        return c.nxt, "✗ kaart gemaakt maar koppelen niet gelukt"
+    na = _kb_word(c, iid)
+    return c.nxt, ("➕ toegevoegd. " + (f"Zekerheid nu: {na}" if na != voor else "Zekerheid herberekend."))
+
+
+def _act_kb_discuss(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok
+    ok = c.st.kennisbank.discuss(c.g("iid"), c.g("text"), _kb_actor(c))
+    return c.nxt, ("💬 kanttekening geplaatst" if ok else "✗ typ eerst een kanttekening")
+
+
+def _act_kb_reformulate(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. De trage klok: claim/
+    # reframe/falsifier opnieuw gemunt uit het spel; de vorige versie blijft in history.
+    iid = c.g("iid")
+    parsed = parse_blok(c.g("blok"))
+    if not parsed["claim"]:
+        return c.nxt, "✗ kon het blok niet lezen — zorg voor een CLAIM:-regel"
+    nieuwe = c.st.kennisbank.reformulate(iid, title=parsed["claim"],
+                                         reframe=parsed["reframe"],
+                                         falsifier=parsed["falsifier"], by=_kb_actor(c))
+    if nieuwe is None:
+        return c.nxt, "✗ herformuleren niet gelukt"
+    return c.nxt, f"↻ geherformuleerd → v{nieuwe} (vorige versie bewaard)"
+
+
 ACTIONS = {
+    "kb_new": _act_kb_new,
+    "kb_link": _act_kb_link,
+    "kb_unlink": _act_kb_unlink,
+    "kb_annotate": _act_kb_annotate,
+    "kb_evidence": _act_kb_evidence,
+    "kb_discuss": _act_kb_discuss,
+    "kb_reformulate": _act_kb_reformulate,
     "proj_add": _act_proj_add,
     "artefact_add": _act_artefact_add,
     "artefact_edit": _act_artefact_edit,
@@ -3358,6 +3478,14 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/inzichten":
                 # Kennislaag: de inzicht-kaarten die de Librarian ving (read-only).
                 self._send(render_kennislaag(data_dir))
+                return
+            if path == "/kennisbank":
+                # Kennisbank (laag 2): geversioneerde inzichten met een berekend veld van
+                # zekerheid boven de atomen (notes.json). ?id= opent het detail als drawer.
+                self._send(render_kennisbank(st, kid=(qs.get("id") or [""])[0],
+                                             q=(qs.get("q") or [""])[0],
+                                             csrf_token=effective_csrf,
+                                             msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/linkbuilding":
                 # Linkbuilding-doelwitten geborgd in cockpit 2 (pitchen/negeren).

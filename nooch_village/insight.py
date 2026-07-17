@@ -62,6 +62,13 @@ class Insight(BaseModel):
     evidence_type: EvidenceType | None = None
     reference: str | None = None
     concept_id: str | None = None
+    # Herkomst-type van de bron (kennisbank-trustladder: peer_reviewed | certificate |
+    # internal_data | survey | expert_opinion | media | advocacy | internal_judgment | unknown).
+    # Optioneel: oudere kaartjes vallen terug op evidence_type (zie kennisbank.atom_trust).
+    provenance: str | None = None
+    # Woozle-guard: expliciete onafhankelijkheidsgroep. Leeg = afgeleid uit de genormaliseerde
+    # bron; alleen zetten als kaarten stiekem dezelfde onderliggende bron delen.
+    independence_group: str | None = None
 
     @model_validator(mode="after")
     def _check_grounding(self) -> Self:
