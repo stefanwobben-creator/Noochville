@@ -638,6 +638,37 @@ def _radar_item(it: dict, csrf: str, node_id: str, *, archief: bool) -> str:
     return f"<div class='rdr-row'>{ctl}{body}</div>"
 
 
+# IA-fase 2: een tool "woont" onder zijn eigenaar-rol. Deze registry hangt de tool-schermen als
+# kaart op de Tools-tab van de juiste rol (via Deelnemers → rol → Tools). De schermen blijven losse
+# routes; hier maken we ze vindbaar vanuit de rol. In fase 3 worden de keyword-tools rol-lenzen op
+# één gedeelde datalaag. Sleutel = record-id van de rol.
+_ROLE_TOOLS = {
+    "mother_earth__nooch__marketing_lead": [
+        ("Linkbuilding", "Linkbuilding-doelwitten pitchen of negeren", "/linkbuilding")],
+    "librarian": [
+        ("Woordenschat", "Goedgekeurde woorden, gerangschikt op kansrijkheid", "/woordenschat"),
+        ("Signals & Insights", "Goedgekeurde radar-signalen — het startpunt voor inzichten", "/signals")],
+    "concurrent_scout": [
+        ("Keywords", "Keyword-analyse + suggesties, gerangschikt op kansrijkheid", "/keywords")],
+    "harry_hemp": [
+        ("Long-term trends", "Structurele opkomst versus blip (trend-herindexering)", "/long-term-trends")],
+}
+
+
+def _role_tools_html(rec) -> str:
+    """De tool-schermen die onder deze rol wonen, als kaarten bovenaan de Tools-tab. Geen
+    eigenaar-mapping → lege string (dan toont de tab alleen radar + artefact-tools)."""
+    tools = _ROLE_TOOLS.get(getattr(rec, "id", ""), [])
+    if not tools:
+        return ""
+    cards = "".join(
+        f"<a class='card' href='{href}'><b>🛠 {_e(label)}</b>"
+        f"<div class='muted'>{_e(desc)}</div></a>"
+        for label, desc, href in tools)
+    return (f"<div class='c2-sec'><h3>Tools van deze rol</h3>"
+            f"<div class='tile-grid'>{cards}</div></div>")
+
+
 def _radar_tool_html(st: _Stores, rec, csrf_token: str, username: str | None) -> str:
     """Radar-toolblok bovenaan de Tools-tab, alleen voor rollen met een gekoppelde feed.
     Wachtrij (status 'wacht') met goedkeur-toggle + wegklik, plus een uitklapbaar archief
@@ -697,7 +728,8 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
             content = _artefact_tab_html(st, rec, "note", csrf_token, username,
                                          titel="Notes", leeg="Nog geen notities op deze rol/cirkel.")
     elif tab == "tools":
-        content = (_radar_tool_html(st, rec, csrf_token, username)
+        content = (_role_tools_html(rec)
+                   + _radar_tool_html(st, rec, csrf_token, username)
                    + _artefact_tab_html(st, rec, "tool", csrf_token, username,
                                         titel="Tools", leeg="Nog geen tools op deze rol/cirkel."))
     elif tab == "metrics":
