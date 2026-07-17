@@ -11,7 +11,7 @@ import json
 import os
 
 from nooch_village.web_base import _e, _page
-from nooch_village.cockpit2_util import _DS_LINK, _BUILD, _name
+from nooch_village.cockpit2_util import _DS_LINK, _name, _nav
 
 
 def roles_with_accountabilities(st) -> list[dict]:
@@ -82,7 +82,6 @@ def render_accountabilities(st, data_dir: str, csrf_token: str = "") -> str:
             f"verantwoordelijkheden en zwakke formulering. Draai de check om een verse analyse te maken.</p>"
             f"{result_block}"
             f"<h2>Alle accountabilities per rol</h2>{_roles_overview(roles)}</div>")
-    inner = (f"{_DS_LINK}<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
-             "<a href='/'>home</a> · <a href='/admin'>deelnemers</a></div>"
+    inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
     return _page("Accountability-check", inner)

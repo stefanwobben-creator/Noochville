@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 
 from nooch_village.web_base import _e, _page, _field
-from nooch_village.cockpit2_util import _name, _BUILD, _stamp, _DS_LINK
+from nooch_village.cockpit2_util import _name, _BUILD, _stamp, _DS_LINK, _nav
 from nooch_village.inbox_wizard import INTENTS, OTYPE_LABEL
 
 _STATUS = {"nieuw": ("● nieuw", "chip ok"), "gelezen": ("bezig", "chip muted"),
@@ -96,8 +96,7 @@ def render_inbox(st, targets, csrf_token: str = "", naam: str = "", done: str = 
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
             f"<h1>{kop} <span class='chip'>{len(items)}</span></h1>{telling}"
             f"<div class='rdr-tool'>{body}</div></div>")
-    inner = (f"{_DS_LINK}<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
-             "<a href='/'>home</a> · <a href='/inbox'>inbox</a></div>"
+    inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
     return _page("Inbox", inner)
 

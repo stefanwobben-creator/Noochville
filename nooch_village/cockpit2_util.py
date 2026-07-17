@@ -330,3 +330,23 @@ _DS_VERSION = _hashlib.md5(_EXTRA_CSS.encode("utf-8")).hexdigest()[:10]
 _DS_LINK = f'<link rel="stylesheet" href="/static/nooch.css?v={_DS_VERSION}">'
 
 
+# ── De top-nav: ÉÉN gedeelde balk (was inline gedupliceerd over ~18 views) ──────
+# IA-fase 1: rol-gecentreerd. De nav is geslankt tot drie ankers — Metrics (catalogus
+# + bronnen samengevoegd, landt op het dashboard), Kennisbank ("Wat Nooch weet": waar
+# beloftes/inzichten/signalen samenkomen) en Deelnemers. Home/inbox/beloftes/inzichten/
+# signalen/accountabilities zijn uit de nav; hun routes blijven bestaan (geen dode links),
+# hun inhoud verhuist in latere fasen. "Reference, don't copy": één bron voor de nav.
+_NAV_ITEMS = (
+    ("/metrics2", "Metrics"),
+    ("/kennisbank", "Kennisbank"),
+    ("/admin", "Deelnemers"),
+)
+
+
+def _nav(context: str = "GlassFrog (PoC)") -> str:
+    """De gedeelde top-nav-balk. `context` is het middenlabel (default de PoC-tag; pagina's
+    als projectdetail/patterns geven hun eigen label mee)."""
+    links = " · ".join(f"<a href='{href}'>{label}</a>" for href, label in _NAV_ITEMS)
+    return (f"<div class='bar'>cockpit 2 · {_e(context)} · build {_BUILD} · {links}</div>")
+
+

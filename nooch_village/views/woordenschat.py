@@ -12,7 +12,7 @@ import json
 import os
 
 from nooch_village.web_base import _e, _page
-from nooch_village.cockpit2_util import _DS_LINK, _BUILD
+from nooch_village.cockpit2_util import _DS_LINK, _nav
 
 # fit: een doelwit is een rank-doel (hier maak je content voor); een seed voedt alleen de radar.
 _FIT = {"doelwit": 1.0, "volg": 0.3}
@@ -76,7 +76,6 @@ def render_woordenschat(data_dir: str) -> str:
             f"<p class='muted'>Formule: <b>kansrijkheid = volume × fit ÷ concurrentie</b> "
             f"(fit: doelwit 1,0 · seed 0,3; concurrentie 0-1 uit Keywords Everywhere).</p>"
             f"{tabel}</div>")
-    inner = (f"{_DS_LINK}<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
-             "<a href='/'>home</a> · <a href='/bronnen'>bronnen</a></div>"
+    inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
     return _page("Woordenschat", inner)

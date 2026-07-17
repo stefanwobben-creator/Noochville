@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 
 from nooch_village.web_base import _e, _page
-from nooch_village.cockpit2_util import _DS_LINK, _BUILD
+from nooch_village.cockpit2_util import _DS_LINK, _nav
 
 # Leesbare labels voor bronnen zonder CATALOG_LABEL (fallback = de bron-id).
 _SRC_LABEL = {
@@ -95,7 +95,6 @@ def render_bronnen(st, base_dir: str, csrf_token: str = "") -> str:
             f"<code>.env</code> of <code>config/settings.ini</code> op de server; zodra ze er staan zie "
             f"je hier ‘verbonden’ en kun je de bron aanzetten. Een bron haalt pas bij de volgende "
             f"dagelijkse pulse data op.</p>{rows}</div>")
-    inner = (f"{_DS_LINK}<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · "
-             "<a href='/'>home</a> · <a href='/catalog'>catalogus</a></div>"
+    inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
     return _page("Bronnen", inner)

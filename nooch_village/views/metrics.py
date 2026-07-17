@@ -11,8 +11,7 @@ from nooch_village.web_base import _e, _page, _banner
 from nooch_village.cockpit2_util import (
     _DS_LINK,
     _name, _fmt_due, _bron_html,
-    _IC_INFO, _IC_LINK, _IC_DL,
-)
+    _IC_INFO, _IC_LINK, _IC_DL, _nav,)
 from nooch_village.metric_schema import (
     CADANS_LABEL, MEETTYPE_LABEL, MEETWIJZE_LABEL,
     VERIFICATIE_LABEL, AGGREGATIE, AGGREGATIE_LABEL, AARD_LABEL,
@@ -23,8 +22,6 @@ from nooch_village.observations import ObservationStore
 from nooch_village.meetcatalog import cadence_of
 from nooch_village.i18n import t
 from nooch_village import org
-from nooch_village.cockpit2_util import _BUILD
-
 if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores
 
@@ -2017,8 +2014,7 @@ def render_kpi_composer(st: _Stores, node_id: str = "", csrf_token: str = "", ms
             f"je op het dashboard.</p>"
             f"<div class='c2-sec'>{form}</div></div>")
     inner = (f"{_DS_LINK}"
-             f"<div class='bar'>cockpit 2 · GlassFrog (PoC) · build {_BUILD} · <a href='/'>home</a> · "
-             "<a href='/catalog'>catalogus</a></div>"
+             f"{_nav()}"
              f"<div class='c2-wrap'>{main}</div>{_KPI_COMPOSER_JS}")
     return _page("KPI maken", inner)
 
