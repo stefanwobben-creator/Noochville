@@ -285,6 +285,74 @@ def _append_signal(data_dir: str, record: dict) -> None:
 # De skill
 # ─────────────────────────────────────────────────────────────────────────────
 
+_SERPAPI_ENDPOINT = "https://serpapi.com/search.json"
+
+
+def serpapi_timeseries_df(resp: dict, terms: list[str]):
+    """Normaliseer een SerpApi google_trends TIMESERIES-respons naar de pytrends-DF-vorm:
+    één kolom per term + een `isPartial`-kolom die de lopende (onvolledige) periode markeert.
+    series_from_df/_drop_partial/complete_months leunen hierop — die blijven ongewijzigd.
+    Lege/onbruikbare respons → lege DataFrame (fetch telt dan als mislukt in de run-loop)."""
+    import pandas as pd
+    from datetime import datetime
+    td = (resp.get("interest_over_time") or {}).get("timeline_data") or []
+    idx, rows, partial = [], [], []
+    for point in td:
+        ts = point.get("timestamp")
+        try:
+            d = datetime.fromtimestamp(int(ts)) if ts is not None else None
+        except (TypeError, ValueError, OverflowError, OSError):
+            d = None
+        if d is None:
+            continue
+        vals = point.get("values") or []
+        row = {}
+        for i, term in enumerate(terms):
+            ev = vals[i].get("extracted_value") if i < len(vals) and isinstance(vals[i], dict) else None
+            try:
+                row[term] = float(ev) if ev is not None else 0.0
+            except (TypeError, ValueError):
+                row[term] = 0.0
+        rows.append(row)
+        idx.append(d)
+        partial.append(bool(point.get("partial_data")))
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows, index=pd.DatetimeIndex(idx))
+    # SerpApi markeert de lopende periode soms via partial_data; zo niet, spiegel pytrends en
+    # markeer de laatste (lopende, onvolledige) periode als partieel.
+    if not any(partial):
+        partial[-1] = True
+    df["isPartial"] = partial
+    return df
+
+
+def _serpapi_fetch(cfg, get_fn=None):
+    """Bouw een SerpApi-fetch [term + ankers] → df (pytrends-vorm). get_fn injecteerbaar (tests).
+    Één TIMESERIES-request over alle termen samen → gedeelde 0-100-schaal. Een fout (HTTP,
+    quota, error-veld) → raise, zodat de run-loop de term fail-closed overslaat en de dag,
+    als niets lukt, zichtbaar escaleert."""
+    key = cfg["serpapi_key"]
+
+    def _default_get(params):
+        import requests
+        r = requests.get(_SERPAPI_ENDPOINT, params=params, timeout=25)
+        r.raise_for_status()
+        return r.json()
+
+    getter = get_fn or _default_get
+
+    def _fetch(terms):
+        terms = terms[:5]
+        resp = getter({"engine": "google_trends", "q": ",".join(terms),
+                       "geo": cfg["geo"] or "", "date": cfg["timeframe"],
+                       "data_type": "TIMESERIES", "api_key": key})
+        if isinstance(resp, dict) and resp.get("error"):        # bv. quota uitgeput
+            raise RuntimeError(f"SerpApi-fout: {resp['error']}")
+        return serpapi_timeseries_df(resp or {}, terms)
+    return _fetch
+
+
 class TrendReindexSkill(Skill):
     name = "trend_reindex"
     # rate_limited: pytrends is een onofficieel endpoint met throttling → in de puls met backoff.
@@ -325,11 +393,24 @@ class TrendReindexSkill(Skill):
             "min_months": int(s.get("trend_reindex_min_months", 3)),
             "emergence_floor": float(s.get("trend_reindex_emergence_floor", 1.0)),
             "keep": int(s.get("trend_reindex_keep", 10)),
+            # Databron: pytrends is vanaf datacenter-IP's hard 429-geblokkeerd, dus vallen we terug
+            # op SerpApi's Google-Trends-endpoint zodra er een key is. Override: trend_reindex_source
+            # = "pytrends" | "serpapi" | "auto" (default).
+            "serpapi_key": (s.get("serpapi_api_key") or os.environ.get("SERPAPI_API_KEY") or "").strip(),
+            "source": (s.get("trend_reindex_source") or "auto").strip().lower(),
         }
 
     def _make_fetch(self, cfg):
-        """Bouw een pytrends-fetch [term + ankers] → df. Fail-closed: pytrends ontbreekt/init
-        faalt → None (de skill escaleert dan)."""
+        """Bouw de fetch-poort [term + ankers] → df (pytrends-vorm). Bron: SerpApi zodra er een key
+        is (pytrends is vanaf de box geblokkeerd), anders pytrends. Fail-closed: geen bruikbare bron
+        → None (de skill escaleert dan). De candidate + de ankerset gaan in ÉÉN vergelijkings-request,
+        zodat ze op dezelfde 0-100-schaal blijven — precies als de pytrends-versie."""
+        want = cfg["source"]
+        if cfg["serpapi_key"] and want in ("auto", "serpapi"):
+            return _serpapi_fetch(cfg)
+        if want == "serpapi" and not cfg["serpapi_key"]:
+            log.error("trend_reindex: source=serpapi maar geen SERPAPI_API_KEY.")
+            return None
         try:
             from pytrends.request import TrendReq
         except ImportError:
@@ -386,12 +467,14 @@ class TrendReindexSkill(Skill):
                 to_eval.append(t)
 
         evaluated, signals = [], []
+        fetch_failed = 0                                       # fetches die fail-closed sneuvelden
         real = payload.get("_fetch") is None
         for term in to_eval:
             try:
                 df = fetch([term] + cfg["anchors"])
             except Exception as exc:
                 log.error("trend_reindex: fetch '%s' faalde: %s — term overgeslagen.", term, exc)
+                fetch_failed += 1
                 continue
             series = series_from_df(df, term)
             m = reindex_metrics(series, base_year=cfg["base_year"], factor=cfg["factor"],
@@ -413,6 +496,18 @@ class TrendReindexSkill(Skill):
         # 4) watchlist bijwerken: houd de best presterende (op multiplier / emergentie)
         merged = _merge_watchlist(watchlist, evaluated, keep)
         _save_watchlist(data_dir, merged)
+
+        # Escalatie-gat gedicht: er wáren termen om te her-indexeren, maar er kwam niets uit —
+        # een volledig geblokkeerde/quota-uitgeputte dag mag niet stil zijn. De pulse-hook zet dit
+        # om in een zichtbare _notify_founder-heads-up (idempotent per dag: één puls-run per dag).
+        if escalate is None and to_eval and not evaluated:
+            if fetch_failed:
+                escalate = {"reason": (f"kandidaten gegenereerd maar niets kon worden opgehaald "
+                                       f"({fetch_failed}/{len(to_eval)} fetches faalden) — "
+                                       f"mogelijk bron geblokkeerd of quota uitgeput.")}
+            else:
+                escalate = {"reason": (f"{len(to_eval)} term(en) opgehaald maar geen bruikbare "
+                                       f"reeks (te weinig data) — niets kon worden ge-indexeerd.")}
 
         # 5) curate-hand-off voor de signalen (Librarian schrijft, niet Sid)
         fuzzy = "\n".join(signal_to_fuzzy(r["term"], r) for r in signals)

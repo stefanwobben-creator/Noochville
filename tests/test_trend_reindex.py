@@ -109,3 +109,67 @@ def test_run_escaleert_fail_closed_zonder_pytrends_en_lege_watchlist(tmp_path):
     assert res["escalate"] is not None and "watchlist" in res["escalate"]["reason"].lower() \
         or res["escalate"] is not None
     assert res["signals"] == [] and res["evaluated"] == []
+
+
+# ── SerpApi-fallback + escalatie-gat ─────────────────────────────────────────
+
+def _serpapi_resp(terms, pattern):
+    wks = _weeks("2024-01-07", 104)
+    import datetime as _dt
+    tl = []
+    for i, w in enumerate(wks):
+        vals = [{"query": t, "value": str(int(pattern(i, w, t))),
+                 "extracted_value": int(pattern(i, w, t))} for t in terms]
+        tl.append({"timestamp": str(int(_dt.datetime(w.year, w.month, w.day).timestamp())),
+                   "values": vals})
+    return {"interest_over_time": {"timeline_data": tl}}
+
+
+def test_serpapi_normalisatie_naar_pytrends_vorm():
+    from nooch_village.skills_impl.trend_reindex import serpapi_timeseries_df
+    resp = _serpapi_resp(["barefoot shoes", "vegan shoes"], lambda i, w, t: 20)
+    df = serpapi_timeseries_df(resp, ["barefoot shoes", "vegan shoes"])
+    assert "barefoot shoes" in df and "vegan shoes" in df and "isPartial" in df
+    assert bool(df["isPartial"].iloc[-1]) is True and not bool(df["isPartial"].iloc[0])
+    # series_from_df/_drop_partial werken ongewijzigd op deze vorm
+    assert len(series_from_df(df, "barefoot shoes")) == 103    # 104 − de partiële laatste week
+    # lege respons → lege df (fetch telt dan als mislukt)
+    assert serpapi_timeseries_df({}, ["x"]).empty
+
+
+def test_serpapi_fetch_ankers_in_een_request_en_run(tmp_path):
+    from nooch_village.skills_impl.trend_reindex import _serpapi_fetch
+    calls = []
+    def fake_get(params):
+        calls.append(params["q"])
+        return _serpapi_resp(params["q"].split(","),
+                             lambda i, w, t: (40 if w.year != 2024 else 10) if t == "barefoot shoes" else 10)
+    ctx = SimpleNamespace(data_dir=str(tmp_path), settings={"serpapi_api_key": "K"})
+    skill = TrendReindexSkill()
+    fetch = _serpapi_fetch(skill._cfg(ctx), get_fn=fake_get)
+    res = skill.run({"terms": ["barefoot shoes"], "_fetch": fetch}, ctx)
+    # candidate + ankerset in ÉÉN request (comma-gescheiden, één 0-100-schaal)
+    assert calls and "barefoot shoes" in calls[0] and "vegan shoes" in calls[0]
+    assert [s["term"] for s in res["signals"]] == ["barefoot shoes"] and res["escalate"] is None
+
+
+def test_escalatie_gat_alle_fetches_falen(tmp_path):
+    """Kandidaten gegenereerd maar ALLE fetches faalden (quota/429) → zichtbaar escaleren, niet stil."""
+    from nooch_village.skills_impl.trend_reindex import _serpapi_fetch
+    ctx = SimpleNamespace(data_dir=str(tmp_path), settings={"serpapi_api_key": "K"})
+    skill = TrendReindexSkill()
+    badfetch = _serpapi_fetch(skill._cfg(ctx), get_fn=lambda p: {"error": "out of searches"})
+    res = skill.run({"terms": ["barefoot shoes", "vegan shoes"], "_fetch": badfetch}, ctx)
+    assert res["evaluated"] == [] and res["signals"] == []
+    assert res["escalate"] and "opgehaald" in res["escalate"]["reason"].lower()
+
+
+def test_make_fetch_kiest_serpapi_bij_key(tmp_path, monkeypatch):
+    monkeypatch.delenv("SERPAPI_API_KEY", raising=False)
+    skill = TrendReindexSkill()
+    ctx = SimpleNamespace(data_dir=str(tmp_path), settings={"serpapi_api_key": "K"})
+    fetch = skill._make_fetch(skill._cfg(ctx))
+    assert fetch is not None and getattr(fetch, "__qualname__", "").startswith("_serpapi_fetch")
+    # source=serpapi zonder key → None (fail-closed)
+    ctx2 = SimpleNamespace(data_dir=str(tmp_path), settings={"trend_reindex_source": "serpapi"})
+    assert skill._make_fetch(skill._cfg(ctx2)) is None
