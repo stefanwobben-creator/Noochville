@@ -75,6 +75,20 @@ class NotesStore:
         self._save()
         return True
 
+    def set_reference(self, note_id: str, reference: str) -> bool:
+        """Koppel een bronlink (URL/PDF-label) aan een atoom: zet het reference-veld. Metadata,
+        geen claim/body-wijziging (dus geen edit_history-entry). False als het atoom niet bestaat
+        of de reference leeg is."""
+        bestaand = self.get(note_id)
+        if bestaand is None or not (reference or "").strip():
+            return False
+        bestaand.reference = reference.strip()[:200]
+        from datetime import datetime
+        bestaand.last_updated_at = datetime.now()
+        self._notes[note_id] = bestaand.model_dump(mode="json")
+        self._save()
+        return True
+
     def add_tags(self, note_id: str, tags: list[str]) -> bool:
         """Voeg tags idempotent toe aan een bestaand kaartje (curatie: bijv. het
         onderwerp uit het kennisbank-vocabulaire). Volgorde blijft; bestaande tags

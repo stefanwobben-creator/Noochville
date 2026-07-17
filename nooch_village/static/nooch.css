@@ -895,3 +895,35 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .kn-srclink{color:var(--muted);text-decoration:underline dotted;cursor:pointer}
 .kn-srclink:hover{color:var(--green-dark)}
 #kn-biebresults{max-height:70vh;overflow-y:auto}
+
+/* ── Kennisbank UX-ronde: inhoud boven, machinerie treedt terug ─────────────── */
+.kn-dots{opacity:.6}                        /* secundair; het WOORD draagt de status */
+.kn-note .kn-nctrls{opacity:.55;transition:opacity .12s}
+.kn-note:hover .kn-nctrls,.kn-note:focus-within .kn-nctrls{opacity:1}   /* machinerie pas bij hover/focus */
+.kn-tags>summary{cursor:pointer;color:var(--muted);font-size:.82rem;padding:.2rem 0}
+/* Inline bewerken: klik op de tekst opent het veld; Bewaar ónder, primair, groter veld */
+.kn-editable{margin:0}
+.kn-editable>summary{cursor:text;list-style:none;font-size:.92rem}
+.kn-editable>summary::-webkit-details-marker{display:none}
+.kn-editable[open]>summary{color:var(--muted);font-size:.8rem}
+.kn-editform{margin-top:.35rem;display:flex;flex-direction:column;align-items:flex-start;gap:.35rem}
+.kn-editform textarea,.kn-editform input[type=text]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);font:inherit;padding:.45rem .55rem;background:var(--surface)}
+.kn-al{font-size:.78rem;font-style:italic}
+/* Selectie-actiebalk: verschijnt pas bij aanvinken (Nielsen #1) */
+.kn-selbar{position:sticky;bottom:.4rem;z-index:5;background:var(--surface);border:1px solid var(--green);border-radius:var(--radius);padding:.5rem .7rem;margin:.5rem 0;box-shadow:var(--shadow)}
+.kn-selcount{font-weight:700;color:var(--green-dark);display:block;margin-bottom:.35rem;font-size:.82rem}
+/* Bron toevoegen: rustige verticale indeling */
+.kn-bronform{display:flex;flex-direction:column;gap:.7rem;align-items:flex-start}
+.kn-bronveld{width:100%}
+.kn-bronform textarea,.kn-bronform input[type=file]{width:100%;box-sizing:border-box}
+.kn-bronhint{margin:.2rem 0 0;font-size:.8rem}
+/* Speel: hunch ondergeschikt onder de clusters */
+.kn-hunch{display:flex;flex-direction:column;align-items:flex-start;gap:.3rem;margin-top:.6rem;opacity:.9}
+.kn-openspel{margin-top:.6rem;font-size:.82rem;display:flex;gap:.6rem;flex-wrap:wrap}
+/* Gesprek als echte draad (C3) */
+.kn-thread{display:flex;flex-direction:column;gap:.5rem;margin-bottom:.6rem}
+.kn-msg{background:var(--cream-2);border-radius:var(--radius);padding:.5rem .7rem}
+.kn-msg-head{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem;font-size:.8rem;margin-bottom:.15rem}
+.kn-msg-text{font-size:.92rem}
+.kn-discrow{display:flex;gap:.45rem;align-items:flex-end;margin-top:.2rem}
+.kn-discrow input{flex:1;border:1px solid var(--border);border-radius:var(--radius);font:inherit;padding:.4rem .55rem;background:var(--surface)}
