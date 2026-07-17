@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 
 from nooch_village.insight import Insight
@@ -38,6 +39,14 @@ ONGESORTEERD = "ongesorteerd"
 FLAG_VERIFICATIE = "verificatie_vereist"
 _GELDIGE_FLAGS = {FLAG_VERIFICATIE, "quote", "contested"}
 
+# Intake heeft een eigen ladder die bij de volwaardige flash begint: flash-LITE bleek in
+# de acceptatie een atomiciteits-zeloot (23 snippers uit één column, aanhef als "bron") en
+# gaf soms onparseerbare output. Intake is mens-geïnitieerd en laagfrequent — kwaliteit
+# weegt hier zwaarder dan de laatste cent. Overschrijfbaar via env (geen secret).
+INTAKE_LADDER = os.getenv(
+    "LLM_KB_INTAKE_LADDER",
+    "gemini:gemini-2.5-flash,mistral:mistral-small-latest,anthropic:claude-haiku-4-5-20251001")
+
 
 def build_intake_prompt(raw: str, source_hint: str = "") -> str:
     """De atomisatie-prompt uit de fase-2-brief. Dom en precies: splitsen en labelen."""
@@ -49,7 +58,12 @@ def build_intake_prompt(raw: str, source_hint: str = "") -> str:
         f"INPUT:\n\"\"\"{raw}\"\"\"\n{hint}\n"
         "REGELS:\n"
         "- Splits in losse eenheden: één idee per notitie. Niet te grof (verbergt ideeën),\n"
-        "  niet te fijn (versplintert). Bij twijfel iets grover.\n"
+        "  niet te fijn (versplintert). Bij twijfel iets grover. Word geen atomiciteits-zeloot:\n"
+        "  een column van deze omvang levert doorgaans 8 tot 12 notities, geen 20+.\n"
+        "- Alleen inhoudelijke claims, feiten, quotes en signalen worden notities. Negeer\n"
+        "  aanhef, groeten, retorische vragen, de vraag van de lezer en meta-tekst.\n"
+        "- \"source\" = de publicatie of spreker (bijv. de column, of 'column, quote X'),\n"
+        "  nooit een aanhef of zinsdeel uit de tekst.\n"
         "- Schrijf elke notitie in het Nederlands (vertaal indien nodig), kort en op zichzelf leesbaar.\n"
         "- Behoud de bron letterlijk. Leid het PROVENANCE-type af uit de aard van de bron\n"
         "  (zie lijst). Verzin geen betrouwbaarheidsscore.\n"
@@ -173,8 +187,12 @@ def intake(raw: str, source_hint: str, data_dir: str, reason_fn=reason
     eerder = ledger.seen(raw, source_hint)
     if eerder is not None:                     # zelfde input al verwerkt → geen LLM, niets dubbel
         return [], len(eerder)
+    # max_tokens ruim: een volle column produceert ~10 atomen mét hints; te krap =
+    # afgekapte JSON → fail-closed (bewust: half salvagen zou via de ledger re-runs
+    # blokkeren terwijl de staart van de input stilletjes ontbreekt).
     out = reason_fn(build_intake_prompt(raw.strip(), source_hint),
-                    max_tokens=2000, json_mode=True, call_site="kb_intake")
+                    ladder=INTAKE_LADDER, max_tokens=4000, json_mode=True,
+                    call_site="kb_intake")
     if out is None:
         return None
     atoms = parse_intake(out)
