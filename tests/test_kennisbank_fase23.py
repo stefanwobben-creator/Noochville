@@ -358,3 +358,20 @@ def test_gearchiveerd_blijft_uit_clusters_en_zoek(tmp_path):
     assert clusters(atoms, [], min_size=1)[0]["atom_ids"] == ["echt"]
     assert all(k["atom_id"] != "ruis" for k in gather("ripit betekent", atoms,
                                                       reason_fn=lambda *a, **k: None))
+
+
+def test_schoon_reference():
+    from nooch_village.kennisbank_intake import _schoon_reference, parse_intake
+    import json as _j
+    assert _schoon_reference("https://scientias.nl/artikel-slug/?utm_source=x") is None
+    assert _schoon_reference("https://doi.org/10.1016/j.x?utm=1") == "https://doi.org/10.1016/j.x"
+    assert _schoon_reference("10.19088/CLARISSA.2021.005") == "10.19088/CLARISSA.2021.005"
+    assert _schoon_reference("ISBN 978-1-78118-821-7") == "ISBN 978-1-78118-821-7"
+    assert _schoon_reference("") is None
+    # via de validator: een kale artikel-URL in reference verdwijnt, een DOI blijft
+    rows = parse_intake(_j.dumps([
+        {"content": "x", "subject": "leer", "provenance": "media", "source": "Scientias.nl",
+         "reference": "https://scientias.nl/slug/?utm=1"},
+        {"content": "y", "subject": "leer", "provenance": "peer_reviewed", "source": "Water Research",
+         "reference": "https://doi.org/10.1016/j.watres.2026.005"}]))
+    assert rows[0]["reference"] is None and rows[1]["reference"].startswith("https://doi.org/10.")

@@ -88,7 +88,8 @@ def build_intake_prompt(raw: str, source_hint: str = "", tabular: bool = False) 
         "  notitie — sla ze over (definities horen in het lexicon, niet in de kennisbank).\n"
         "- \"source\" = een KORTE aanduiding van publicatie of spreker (bijv. \"IDS 2021\" of\n"
         "  'column, quote X'), nooit een aanhef of zinsdeel uit de tekst. Copyright-regels,\n"
-        "  ISBN en DOI horen NOOIT in \"content\": zet DOI/ISBN/URL één keer in \"reference\".\n"
+        "  ISBN en DOI horen NOOIT in \"content\": zet een DOI of ISBN één keer in \"reference\".\n"
+        "  Zet NIET de artikel-URL in \"reference\" — de publicatie staat al in \"source\".\n"
         "- Schrijf elke notitie in het Nederlands (vertaal indien nodig), kort en op zichzelf leesbaar.\n"
         "- Leid het PROVENANCE-type af uit de aard van de bron (zie lijst); verzin geen\n"
         "  betrouwbaarheidsscore. Een onderzoeksinstituut of journal met DOI/ISBN =\n"
@@ -151,13 +152,27 @@ def parse_intake(text: str | None) -> list[dict]:
                     "subject": subject,
                     "provenance": prov,
                     "source": str(r.get("source") or "").strip()[:160],
-                    "reference": str(r.get("reference") or "").strip()[:200] or None,
+                    "reference": _schoon_reference(str(r.get("reference") or "")),
                     "flags": flags,
                     "link_hints": hints})
     # Backstop op de zeloot-cap uit de prompt: een model dat tóch doorsnippert wordt op
     # de eerste 15 gehouden (de prompt vraagt "kies de belangrijkste", dus de kop is de
     # curatie van het model zelf — geen stille aftopping van willekeurige staarten).
     return out[:15]
+
+
+def _schoon_reference(ref: str) -> str | None:
+    """Houd het reference-veld een échte citatie: een DOI of ISBN blijft (tracking-query eraf),
+    maar een kale artikel-URL verdwijnt — de publicatie staat al in `source`, en de volle URL
+    (met slug/utm) hoort daar niet als 'citatie' te staan (fix-brief bug 2)."""
+    ref = (ref or "").strip()[:200]
+    if not ref:
+        return None
+    if re.search(r"10\.\d{4,9}/\S+", ref) or "isbn" in ref.lower():
+        return ref.split("?")[0].strip()          # DOI/ISBN: houden, tracking-query weg
+    if re.match(r"^https?://", ref):
+        return None                                # kale artikel-URL is redundant met de bron
+    return ref
 
 
 def stable_id(content: str, source: str) -> str:
