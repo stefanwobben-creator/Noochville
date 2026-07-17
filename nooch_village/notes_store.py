@@ -95,6 +95,21 @@ class NotesStore:
         self._save()
         return True
 
+    def supersede(self, note_id: str, nieuwe_ids: list[str]) -> bool:
+        """Re-atomiseer-migratie (append-only): archiveer een oud atoom en laat het naar
+        de nieuwe, schone atomen verwijzen (superseded_by). Het atoom wordt nooit gewist —
+        het spoor van oud → nieuw blijft. False als het niet bestaat."""
+        bestaand = self.get(note_id)
+        if bestaand is None:
+            return False
+        bestaand.archived = True
+        bestaand.superseded_by = list(dict.fromkeys(nieuwe_ids))
+        from datetime import datetime
+        bestaand.last_updated_at = datetime.now()
+        self._notes[note_id] = bestaand.model_dump(mode="json")
+        self._save()
+        return True
+
     def merge(self, note_ids: list[str], kop: str, by: str = "") -> Insight | None:
         """Voeg meerdere kaartjes samen tot ÉÉN samengestelde kaart: claim = de (bewerkbare)
         kop, body = de inhouden van de delen, bronnen samengevoegd, provenance = de hoogste

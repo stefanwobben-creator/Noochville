@@ -39,6 +39,15 @@ ONGESORTEERD = "ongesorteerd"
 FLAG_VERIFICATIE = "verificatie_vereist"
 _GELDIGE_FLAGS = {FLAG_VERIFICATIE, "quote", "contested"}
 
+# Atomiser-versie: BUMP bij elke logic-wijziging in de atomisatie (prompt/validator).
+#   v1 = pre-A/B (losse enumeratie-broertjes, citatie-smeer in content).
+#   v2 = A/B/addendum: samengestelde enumeratie-kaarten, schone citaties (source+reference).
+# De ledger onthoudt per verwerkte input met welke versie hij liep; content die door een
+# OUDERE versie is verwerkt telt niet meer als "klaar" en kan opnieuw (zie IntakeLedger.seen
+# + --reatomise). Elk atoom draagt zijn eigen atomiser_version, zodat de migratie de oude
+# corpus vindt zonder de nieuwe schone atomen opnieuw aan te raken.
+ATOMISER_VERSION = 2
+
 # Intake heeft een eigen ladder die bij de volwaardige flash begint: flash-LITE bleek in
 # de acceptatie een atomiciteits-zeloot (23 snippers uit één column, aanhef als "bron") en
 # gaf soms onparseerbare output. Intake is mens-geïnitieerd en laagfrequent — kwaliteit
@@ -169,7 +178,8 @@ def atoom_kaart(a: dict) -> Insight:
                    source=a["source"] or "onbekend",
                    reference=a.get("reference"),
                    provenance=a["provenance"],
-                   tags=tags)
+                   tags=tags,
+                   atomiser_version=ATOMISER_VERSION)
 
 
 class IntakeLedger(JsonStore):
@@ -177,7 +187,11 @@ class IntakeLedger(JsonStore):
     bron-hint) → de atoom-ids die eruit ontstonden. Nodig omdat de LLM niet deterministisch
     is: dezelfde input kan bij een re-run nét anders gesplitst worden, en dan zou de
     content-hash-dedup alsnog bijna-duplicaten doorlaten. Dezelfde input nogmaals posten
-    slaat de LLM dus helemaal over (sneller, goedkoper, gegarandeerd niets dubbel)."""
+    slaat de LLM dus helemaal over (sneller, goedkoper, gegarandeerd niets dubbel).
+
+    Elke entry onthoudt ook de `atomiser_version` waarmee hij liep én de ruwe `raw`-tekst
+    (reatomise-fix): zo telt input die door een OUDERE versie is verwerkt niet meer als
+    'klaar', en is her-atomiseren self-contained — het brondocument staat in de ledger."""
 
     _WRITE_METHODS = ("record",)
 
@@ -187,30 +201,48 @@ class IntakeLedger(JsonStore):
                             .encode("utf-8")).hexdigest()[:16]
 
     def seen(self, raw: str, source_hint: str) -> list[str] | None:
+        """Al verwerkt ÉN met de huidige atomiser-versie → de atoom-ids (skip). Verwerkt door
+        een oudere versie (of vóór de versionering) → None, zodat de nieuwe atomiser er alsnog
+        overheen kan (idempotent per versie, niet over versies heen)."""
         rec = self._items.get(self.raw_key(raw, source_hint))
-        return list(rec.get("atom_ids") or []) if rec else None
+        if rec is None:
+            return None
+        if (rec.get("atomiser_version") or 0) < ATOMISER_VERSION:
+            return None
+        return list(rec.get("atom_ids") or [])
 
     def record(self, raw: str, source_hint: str, atom_ids: list[str]) -> None:
         from datetime import datetime
         self._items[self.raw_key(raw, source_hint)] = {
             "atom_ids": atom_ids, "source_hint": source_hint,
+            "atomiser_version": ATOMISER_VERSION, "raw": (raw or "")[:12000],
             "at": datetime.now().isoformat(timespec="seconds")}
         self._save()
 
+    def stale(self) -> list[dict]:
+        """Ledger-entries die door een oudere atomiser-versie zijn verwerkt (of vóór de
+        versionering). Voor de migratie: elk zo'n entry draagt zijn eigen `raw` + `source_hint`
+        zodat her-atomiseren geen extern brondocument nodig heeft."""
+        return [dict(rec) for rec in self._items.values()
+                if (rec.get("atomiser_version") or 0) < ATOMISER_VERSION]
 
-def intake(raw: str, source_hint: str, data_dir: str, reason_fn=reason
-           ) -> tuple[list[str], int] | None:
+
+def intake(raw: str, source_hint: str, data_dir: str, reason_fn=reason,
+           force: bool = False) -> tuple[list[str], int] | None:
     """De hele fase-2-pijplijn: ruwe tekst → LLM-ladder → gevalideerde atomen →
     idempotent append aan notes.json. Twee dedup-lagen: (1) exact dezelfde ruwe input
-    is al eens verwerkt → LLM overslaan, niets toevoegen; (2) per atoom de stabiele
-    hash(content+bron). Geeft (nieuwe_ids, overgeslagen) terug, of None als de ladder
-    geen antwoord gaf (fail-closed, caller meldt het)."""
+    is al eens verwerkt MET de huidige atomiser-versie → LLM overslaan, niets toevoegen;
+    (2) per atoom de stabiele hash(content+bron). `force=True` (reatomise) slaat de
+    versie-skip over en draait de nieuwe atomiser er sowieso overheen; de content-hash
+    zorgt dat schone v2-atomen nieuw zijn en identieke content nooit dubbelt. Geeft
+    (nieuwe_ids, overgeslagen) terug, of None als de ladder geen antwoord gaf (fail-closed)."""
     if not (raw or "").strip():
         return [], 0
     ledger = IntakeLedger(f"{data_dir}/kennisbank_intake.json")
-    eerder = ledger.seen(raw, source_hint)
-    if eerder is not None:                     # zelfde input al verwerkt → geen LLM, niets dubbel
-        return [], len(eerder)
+    if not force:
+        eerder = ledger.seen(raw, source_hint)
+        if eerder is not None:                 # zelfde input, zelfde versie → geen LLM, niets dubbel
+            return [], len(eerder)
     # max_tokens ruim: een volle column produceert ~10 atomen mét hints; te krap =
     # afgekapte JSON → fail-closed (bewust: half salvagen zou via de ledger re-runs
     # blokkeren terwijl de staart van de input stilletjes ontbreekt).
