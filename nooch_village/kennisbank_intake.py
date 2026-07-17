@@ -57,10 +57,16 @@ INTAKE_LADDER = os.getenv(
     "gemini:gemini-2.5-flash,mistral:mistral-small-latest,anthropic:claude-haiku-4-5-20251001")
 
 
-def build_intake_prompt(raw: str, source_hint: str = "") -> str:
-    """De atomisatie-prompt uit de fase-2-brief. Dom en precies: splitsen en labelen."""
+def build_intake_prompt(raw: str, source_hint: str = "", tabular: bool = False) -> str:
+    """De atomisatie-prompt uit de fase-2-brief. Dom en precies: splitsen en labelen.
+    `tabular=True` voor tabeldata (Excel/CSV/Sheet): elke rij is een feit/meting, geen verhaal."""
     hint = f"\nBRON-HINT van de gebruiker (gebruik als de tekst zelf geen bron noemt): {source_hint}\n" \
         if source_hint.strip() else ""
+    if tabular:
+        hint += ("\nDIT IS TABELDATA (rijen 'kolom: waarde | ...'). Maak per rij een concreet\n"
+                 "FEIT of een METING, geen verhaal: neem de getallen letterlijk over met hun\n"
+                 "kolom-context (bijv. 'Betaalbereidheid segment Idealist: €120'). Verzin geen\n"
+                 "verbanden tussen rijen; sla lege of louter technische kolommen over.\n")
     return (
         "Je splitst ruwe input in ATOMAIRE notities voor een kennisbank. Wees dom en precies:\n"
         "je oordeelt NIET over waarheid of zekerheid, je splitst en labelt alleen.\n\n"
@@ -227,8 +233,27 @@ class IntakeLedger(JsonStore):
                 if (rec.get("atomiser_version") or 0) < ATOMISER_VERSION]
 
 
+def atomiseer(raw: str, source_hint: str, reason_fn=reason,
+              tabular: bool = False) -> list[dict] | None:
+    """Alleen de LLM-atomisatie: ruwe tekst → gevalideerde atoom-dicts (geen opslag).
+    Gedeeld door intake() en de staging-flow (die de dicts eerst laat nakijken). Bounded
+    retry + fail-closed, identiek aan intake. None = ladder gaf niets bruikbaars."""
+    if not (raw or "").strip():
+        return []
+    for _poging in range(2):
+        out = reason_fn(build_intake_prompt(raw.strip(), source_hint, tabular=tabular),
+                        ladder=INTAKE_LADDER, max_tokens=4000, json_mode=True,
+                        call_site="kb_intake")
+        if out is None:
+            return None
+        atoms = parse_intake(out)
+        if atoms:
+            return atoms
+    return None
+
+
 def intake(raw: str, source_hint: str, data_dir: str, reason_fn=reason,
-           force: bool = False) -> tuple[list[str], int] | None:
+           force: bool = False, tabular: bool = False) -> tuple[list[str], int] | None:
     """De hele fase-2-pijplijn: ruwe tekst → LLM-ladder → gevalideerde atomen →
     idempotent append aan notes.json. Twee dedup-lagen: (1) exact dezelfde ruwe input
     is al eens verwerkt MET de huidige atomiser-versie → LLM overslaan, niets toevoegen;
@@ -243,24 +268,9 @@ def intake(raw: str, source_hint: str, data_dir: str, reason_fn=reason,
         eerder = ledger.seen(raw, source_hint)
         if eerder is not None:                 # zelfde input, zelfde versie → geen LLM, niets dubbel
             return [], len(eerder)
-    # max_tokens ruim: een volle column produceert ~10 atomen mét hints; te krap =
-    # afgekapte JSON → fail-closed (bewust: half salvagen zou via de ledger re-runs
-    # blokkeren terwijl de staart van de input stilletjes ontbreekt).
-    # Eén bounded retry: tredes zijn niet deterministisch (soms onparseerbare JSON) en
-    # na een 429-cooldown antwoordt de tweede poging vaak via een andere trede. Meer dan
-    # één retry is verspilling — dan is de input het probleem, niet het toeval.
-    atoms: list[dict] = []
-    for _poging in range(2):
-        out = reason_fn(build_intake_prompt(raw.strip(), source_hint),
-                        ladder=INTAKE_LADDER, max_tokens=4000, json_mode=True,
-                        call_site="kb_intake")
-        if out is None:
-            return None
-        atoms = parse_intake(out)
-        if atoms:
-            break
+    atoms = atomiseer(raw, source_hint, reason_fn=reason_fn, tabular=tabular)
     if not atoms:
-        return None                            # wél antwoord maar niets bruikbaars → fail-closed
+        return None                            # geen antwoord / niets bruikbaars → fail-closed
     notes = NotesStore(f"{data_dir}/notes.json")
     nieuw: list[str] = []
     overgeslagen = 0

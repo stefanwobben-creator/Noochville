@@ -867,3 +867,10 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .kn-discrow{display:flex;gap:.45rem;align-items:flex-end;margin-top:.5rem}
 .kn-discrow input{flex:1;border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:.88rem;padding:.4rem .55rem;background:var(--surface)}
 .kn-capture{margin:.6rem 0 1rem}
+
+/* ── Kennisbank zone 1: sticky actiebalk (layout-herinrichting) ────────────── */
+.kn-actiebalk{position:sticky;top:0;z-index:6;background:var(--cream);padding:.5rem 0 .3rem;margin-bottom:.6rem;border-bottom:1px solid var(--border)}
+.kn-actiebtns{display:flex;gap:.5rem;flex-wrap:wrap}
+.kn-cluster{background:var(--surface);border:1px solid var(--blue-tint,#E4EDF6);border-left:3px solid #2C5A87;border-radius:var(--radius);padding:.6rem .8rem;margin:.5rem 0}
+.kn-stage-edit textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);font:inherit;padding:.35rem .5rem;margin-bottom:.3rem}
+.kn-stage-edit select{border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:.84rem;padding:.25rem .4rem;background:var(--surface)}
