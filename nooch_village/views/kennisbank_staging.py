@@ -35,19 +35,21 @@ def _atoom_kaartje(b: dict, a: dict, csrf: str, nxt: str) -> str:
     body = (f"<details class='kn-nctrl'><summary>samengestelde inhoud</summary>"
             f"<div class='kn-ann'>{_e(a['body']).replace(chr(10), '<br>')}</div></details>"
             if (a.get("body") or "").strip() else "")
+    bron = "bron: " + _e(a['source']) + (f" · {_e(a['reference'])}" if a.get("reference") else "")
+    # Verticale stapel-kaart op volle breedte (fix-brief bug 1): een grid met een
+    # middenkolom minmax(0,1fr) zodat lange onbreekbare strings (URL-slugs) de kaart nooit
+    # naar ~0 breedte kunnen persen. Checkbox links, inhoud+controls midden, × rechts.
     return (
-        f"<div class='kn-note support'>"
+        f"<div class='kn-stage'>"
         f"<input type='checkbox' name='sid' value='{_e(sid)}' form='mergeform' aria-label='selecteer'>"
-        f"<span class='kn-dot'></span><div class='kn-ntext'>"
         f"<form method='post' action='/action' class='kn-stage-edit'>"
         f"{_hid(csrf, 'kb_stage_edit', nxt, {'bid': b['id'], 'sid': sid})}"
         f"<textarea name='content' rows='2'>{_e(a['content'])}</textarea>{body}"
-        f"<span class='kn-src'>bron: {_e(a['source'])}"
-        + (f" · {_e(a['reference'])}" if a.get("reference") else "") + "</span>"
-        f"<div class='kn-lrow'><select name='subject'>{subj_opts}</select>"
+        f"<span class='kn-stage-src'>{bron}</span>"
+        f"<div class='kn-stage-ctrls'><select name='subject'>{subj_opts}</select>"
         f"<select name='provenance'>{prov_opts}</select>"
-        f"<button class='btn'>Bewaar</button></form></div>"
-        f"<form method='post' action='/action' class='kn-unlink'>"
+        f"<button class='btn'>Bewaar</button></div></form>"
+        f"<form method='post' action='/action' class='kn-stage-del'>"
         f"{_hid(csrf, 'kb_stage_delete', nxt, {'bid': b['id'], 'sid': sid})}"
         f"<button class='btn' title='weggooien'>×</button></form></div>")
 

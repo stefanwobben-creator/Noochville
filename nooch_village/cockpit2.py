@@ -4021,6 +4021,10 @@ def make_handler(data_dir: str, csrf_token: str,
                     atoms: list[dict] = []
                     label = res["chunks"][0][1]
                     mislukt = 0
+                    # Atomiciteit-bovengrens per document (fix-brief bug 2): een lang stuk of een
+                    # referentielijst mag niet in tientallen mini-kaartjes ontploffen. Zodra de cap
+                    # gehaald is stoppen we met verdere chunks — de mens ziet in de staging wat er is.
+                    _DOC_CAP = 40
                     for craw, clabel in res["chunks"]:
                         got = atomiseer(craw, clabel, tabular=res["tabular"])
                         if got is None:
@@ -4028,6 +4032,9 @@ def make_handler(data_dir: str, csrf_token: str,
                             continue
                         atoms += got
                         label = clabel
+                        if len(atoms) >= _DOC_CAP:
+                            atoms = atoms[:_DOC_CAP]
+                            break
                     if not atoms:
                         self._redirect("/kennisbank?open=bron",
                                        "✗ de atomiser gaf niets bruikbaars"); return

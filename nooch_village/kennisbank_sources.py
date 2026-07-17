@@ -23,11 +23,35 @@ CHUNK_TEKENS = 7000
 _MIN_TEKST = 200          # minder dan dit uit een hele PDF = vermoedelijk scan zonder tekstlaag
 _TABEL_RIJEN_PER_CHUNK = 40   # tabeldata per blok rijen, zodat één intake-call behapbaar blijft
 
+# Kopregels die het begin van een literatuurlijst / bibliografie markeren: alles vanaf hier
+# is geen inhoud om te atomiseren (fix-brief bug 2). Een citatielijst is geen N atomen.
+_REF_KOP = re.compile(
+    r"^\s*(references|reference list|bibliography|works cited|literature cited|"
+    r"literatuur(?:lijst|opgave)?|referenties|bibliografie|geraadpleegde bronnen|"
+    r"bronnen|further reading)\s*:?\s*$",
+    re.IGNORECASE)
+
+
+def strip_referenties(tekst: str) -> str:
+    """Kap een trailing literatuur-/referentielijst weg. Zoekt de kopregel pas vanaf de
+    tweede helft van de tekst (zodat een losse vermelding van 'bronnen' in de body niet
+    het hele artikel afkapt) en knipt alles daarna. Geen kop gevonden → ongewijzigd."""
+    regels = (tekst or "").splitlines()
+    if len(regels) < 6:
+        return tekst
+    ondergrens = len(regels) // 2
+    for i in range(ondergrens, len(regels)):
+        if _REF_KOP.match(regels[i]):
+            geknipt = "\n".join(regels[:i]).strip()
+            return geknipt if len(geknipt) >= _MIN_TEKST else tekst
+    return tekst
+
 
 def van_url(url: str) -> tuple[str, str] | None:
-    """Haal een pagina op en extraheer de leesbare hoofdtekst (trafilatura strip't
-    nav/footer/boilerplate). Geeft (raw, label) met label = titel + URL, of None als
-    de pagina niet op te halen of niet leesbaar te maken is."""
+    """Haal een pagina op en extraheer alléén de leesbare hoofdtekst (trafilatura strip't
+    nav/footer/gerelateerde-links; wij strippen daarna de referentielijst). Geeft (raw, label)
+    met een SCHOON label (titel + sitenaam, nooit de URL-slug — die zou anders als content of
+    bron belanden, fix-brief bug 2). None als de pagina niet leesbaar te maken is."""
     url = (url or "").strip()
     if not re.match(r"^https?://", url):
         return None
@@ -37,16 +61,23 @@ def van_url(url: str) -> tuple[str, str] | None:
         if not downloaded:
             return None
         tekst = trafilatura.extract(downloaded, include_comments=False,
-                                    include_tables=True)
+                                    include_tables=True, include_links=False)
         if not tekst or len(tekst.strip()) < _MIN_TEKST:
             return None
-        titel = ""
+        tekst = strip_referenties(tekst.strip())
+        titel, site = "", ""
         try:
             meta = trafilatura.extract_metadata(downloaded)
-            titel = (meta.title or "").strip() if meta else ""
+            if meta:
+                titel = (meta.title or "").strip()
+                site = (meta.sitename or "").strip()
         except Exception:
             pass
-        label = f"{titel} — {url}" if titel else url
+        if not site:                          # nette fallback: de host, nooit de slug
+            m = re.match(r"https?://(?:www\.)?([^/]+)", url)
+            site = m.group(1) if m else ""
+        # Schoon, mensvriendelijk bronlabel — géén URL/slug erin.
+        label = " · ".join(x for x in (titel, site) if x) or site or "webpagina"
         return tekst.strip(), label[:160]
     except Exception:
         return None                      # netwerk/parse-fout → fail netjes, geen halve rommel
@@ -66,6 +97,7 @@ def van_pdf(data: bytes, filename: str = "") -> list[tuple[str, str]] | None:
     heel = "\n\n".join(t.strip() for t in paginas if t.strip())
     if len(heel) < _MIN_TEKST:
         return None                      # scan zonder tekstlaag → expliciete melding bij caller
+    heel = strip_referenties(heel)       # bibliografie is geen inhoud om te atomiseren
     titel = ""
     try:
         titel = ((reader.metadata or {}).get("/Title") or "").strip()
