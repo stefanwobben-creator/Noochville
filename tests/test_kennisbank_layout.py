@@ -381,3 +381,52 @@ def test_insight_link_en_meta_spel(tmp_path):
     iid2, versie = spel_finish(st.spel, sid, st.kennisbank, blok)
     meta = st.kennisbank.get(iid2)
     assert versie == "1.0" and len(meta["related"]) == 2 and not meta["evidence"]
+
+
+def test_related_sectie_altijd_zichtbaar_en_uitnodigend_bij_open_inzicht(tmp_path):
+    # Taak 1 vindbaarheid: de gerelateerde-inzichten-box staat ALTIJD bij een open inzicht,
+    # ook zonder koppelingen, met een uitnodiging (voorheen kip-ei: alleen zichtbaar bij ≥1).
+    from nooch_village.views.kennisbank import render_kennisbank
+    dd = str(tmp_path); st = _st(dd)
+    iid = st.kennisbank.add("Los inzicht zonder koppeling")
+    st.kennisbank.add("Ander inzicht")
+    html = render_kennisbank(st, kid=iid, csrf_token="t")
+    assert "kn-relbox" in html                                   # de box is er
+    assert "Gerelateerde inzichten" in html
+    assert "Nog niets gekoppeld" in html                         # uitnodiging, geen meta-knop nog
+    assert "Speel een meta-inzicht" not in html
+    # linkerlijst leest als koppel-context, rechterkolom als "koppel bewijs"
+    assert "Koppel een gerelateerd inzicht" in html
+    assert "Koppel bewijs" in html
+    assert "+ steunt" in html and "+ spreekt tegen" in html      # duidelijke koppel-knoppen per inzicht
+
+
+def test_meta_knop_prominent_bij_twee_gekoppeld(tmp_path):
+    # Taak 1: zodra ≥2 gekoppeld, is "Speel een meta-inzicht" prominent (kn-metaplay).
+    from nooch_village.views.kennisbank import render_kennisbank
+    dd = str(tmp_path); st = _st(dd)
+    hub = st.kennisbank.add("Hub-inzicht")
+    a = st.kennisbank.add("Steunend inzicht"); b = st.kennisbank.add("Tegensprekend inzicht")
+    st.kennisbank.link_insight(hub, a, "support")
+    st.kennisbank.link_insight(hub, b, "counter")
+    html = render_kennisbank(st, kid=hub, csrf_token="t")
+    assert "kn-metaplay" in html and "Speel een meta-inzicht" in html
+
+
+def test_flip_spiegelt_elk_bewijs_statement_tegen_de_claim(tmp_path):
+    # Taak 3: op de achterkant leest elk gekoppeld bewijs-statement VAN DE ANDERE KANT.
+    # Geen nieuwe opgeslagen claim — de statement-tekst blijft, alleen de lens-lezing draait.
+    from nooch_village.views.kennisbank import render_kennisbank
+    dd = str(tmp_path); ns = _seed_atoms(dd); st = _st(dd)
+    iid = st.kennisbank.add("Prijs blokkeert", reframe="Design is de echte drempel",
+                            falsifier="Een A/B-test op 150 die niets beweegt")
+    st.kennisbank.link(iid, "p1", "support")     # steunt de claim → pleit tégen de tegenkant
+    st.kennisbank.link(iid, "w1", "counter")     # sprak de claim tegen → pleit vóór de tegenkant
+    achter = render_kennisbank(st, kid=iid, csrf_token="t", flip=True)
+    assert "kn-fliplens" in achter
+    # de statement-teksten zijn er nog (hergebruik, geen rewrite)
+    assert "51% wil de prijs naar 150" in achter
+    assert "natuurrubber zool breekt traag af" in achter
+    # en ze dragen de omgekeerde lezing
+    assert "pleit dit vóór de tegenclaim" in achter
+    assert "pleit dit tégen de tegenclaim" in achter

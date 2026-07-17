@@ -56,15 +56,16 @@ def _topic_card(ins: dict, atoms: dict, csrf: str = "", active_iid: str = "",
     if active_iid and ins["id"] != active_iid:
         nxt = f"/kennisbank?id={active_iid}"
         if ins["id"] in (related_ids or set()):
-            koppel = "<span class='muted kn-al'>al gekoppeld</span>"
+            koppel = "<span class='chip'>✓ gekoppeld</span>"
         else:
-            koppel = (f"<form method='post' action='/action' class='kn-unlink'>"
+            koppel = (f"<span class='kn-koppellbl muted'>koppel aan het open inzicht:</span>"
+                      f"<form method='post' action='/action' class='kn-unlink'>"
                       f"{_hid(csrf, 'kb_insight_link', nxt, {'iid': active_iid, 'other_id': ins['id'], 'stance': 'support'})}"
                       f"<button class='btn ok'>+ steunt</button></form>"
                       f"<form method='post' action='/action' class='kn-unlink'>"
                       f"{_hid(csrf, 'kb_insight_link', nxt, {'iid': active_iid, 'other_id': ins['id'], 'stance': 'counter'})}"
-                      f"<button class='btn no'>+ tegen</button></form>")
-        kaart += f"<div class='kn-nctrls kn-topiclink'>{koppel}</div>"
+                      f"<button class='btn no'>+ spreekt tegen</button></form>")
+        kaart += f"<div class='kn-topiclink'>{koppel}</div>"
     return kaart
 def _note_html(ins: dict, link: dict, atom: dict | None, csrf: str, nxt: str) -> str:
     stance = link.get("stance") or "support"
@@ -83,6 +84,24 @@ def _note_html(ins: dict, link: dict, atom: dict | None, csrf: str, nxt: str) ->
             f"<div class='kn-ntext'>{_e(claim)}"
             f"<span class='kn-src'>{_e(prefix)}{_e(src)}</span>{ann_html}</div>"
             f"<div class='kn-nctrls'>{ctrl}</div></div>")
+def _flip_note_html(atom: dict | None, kant: str) -> str:
+    """Eén bewijs-statement gelezen VAN DE ANDERE KANT (Taak 3). `kant='voor'`: dit statement
+    (dat de oorspronkelijke claim tegensprak) pleit nu vóór de tegenkant; `kant='tegen'`: dit
+    statement (dat de claim steunde) pleit nu tégen de tegenkant. De statement-tekst blijft
+    ongewijzigd (geen nieuwe opgeslagen claim) — alleen de lens-lezing draait mee."""
+    claim = (atom or {}).get("claim") or "(kaart niet gevonden)"
+    src = (atom or {}).get("source") or ""
+    stance = "support" if kant == "voor" else "counter"
+    lens = ("↔ Vanaf de andere kant gelezen pleit dit vóór de tegenclaim "
+            "(het sprak de oorspronkelijke claim tegen)." if kant == "voor"
+            else "↔ Vanaf de andere kant gelezen pleit dit tégen de tegenclaim "
+                 "(het steunde juist de oorspronkelijke claim).")
+    return (f"<div class='kn-note {stance}'>"
+            f"<div class='kn-ntext'>{_e(claim)}"
+            f"<span class='kn-src'>{_e(src)}</span>"
+            f"<span class='kn-fliplens'>{lens}</span></div></div>")
+
+
 def _inzicht_detail(ins: dict, atoms: dict, csrf: str, by_id: dict | None = None,
                     flip: bool = False) -> str:
     """Het inzicht-detail in de LINKERkolom. B2: een "↺ draai om" toont de ACHTERKANT (de
@@ -100,9 +119,13 @@ def _inzicht_detail(ins: dict, atoms: dict, csrf: str, by_id: dict | None = None
     # tegenkant STEUNT, support = wat de tegenkant tegenspreekt). Hergebruikt bestaande velden.
     if flip:
         terug = f"<a class='btn' href='/kennisbank?id={_e(ins['id'])}'>↺ terug</a>"
-        back_sup = "".join(_note_html(ins, l, atoms.get(l.get("atom_id") or ""), csrf, nxt) for l in cou) \
-            or "<p class='muted'>Geen tegenbewijs verzameld.</p>"
-        back_cou = "".join(_note_html(ins, l, atoms.get(l.get("atom_id") or ""), csrf, nxt) for l in sup)
+        # Taak 3: op de achterkant leest ELK statement van de tegenkant. Een statement dat de
+        # oorspronkelijke claim tegensprak pleit nu VÓÓR de andere kant; een dat 'm steunde pleit
+        # er nu TÉGEN. We hergebruiken de bestaande stance (geen nieuwe opgeslagen claim) en
+        # geven per statement een omgekeerde lens-lezing.
+        back_sup = "".join(_flip_note_html(atoms.get(l.get("atom_id") or ""), "voor") for l in cou) \
+            or "<p class='muted'>Geen tegenbewijs verzameld — de andere kant staat er dun voor.</p>"
+        back_cou = "".join(_flip_note_html(atoms.get(l.get("atom_id") or ""), "tegen") for l in sup)
         falsi_back = (f"<div class='kn-sec'><div class='kn-sectitle'>Wat zou de oorspronkelijke "
                       f"claim onderuit halen?</div><div class='kn-falsi'>{_e(ins.get('falsifier'))}</div></div>"
                       if ins.get("falsifier") else "")
@@ -163,32 +186,42 @@ def _inzicht_detail(ins: dict, atoms: dict, csrf: str, by_id: dict | None = None
         historie = (f"<details class='kn-panel'><summary>eerdere versies "
                     f"({len(ins['history'])})</summary>{rows}</details>")
 
-    # B1: gekoppelde inzichten (de Zettelkasten-ladder) + hun afgeleide meta-zekerheid + meta-spel.
+    # B1 (vindbaarheid): de gerelateerde-inzichten-sectie staat ALTIJD bij een open inzicht — ook
+    # leeg, met een uitnodiging — zodat de meta-flow ontdekbaar is (voorheen kip-ei: alleen zichtbaar
+    # als er al iets gekoppeld was). De koppel-actie zelf zit in de lijst eronder.
     related = ins.get("related") or []
-    related_sec = ""
+    rrows = ""
+    for r in related:
+        other = by_id.get(r["insight_id"]) or {}
+        pref = "tegen · " if r.get("stance") == "counter" else ""
+        rrows += (f"<div class='kn-note {_e(r.get('stance') or 'support')}'>"
+                  f"<div class='kn-ntext'><a href='/kennisbank?id={_e(r['insight_id'])}'>"
+                  f"{_e(pref)}{_e(other.get('title') or r['insight_id'])}</a></div>"
+                  f"<div class='kn-nctrls'><form method='post' action='/action' class='kn-unlink'>"
+                  f"{_hid(csrf, 'kb_insight_unlink', nxt, {'iid': ins['id'], 'other_id': r['insight_id']})}"
+                  f"<button class='btn' title='ontkoppelen'>×</button></form></div></div>")
+    meta_woord = ""
     if related:
         mv = verdict(meta_field(ins, by_id, atoms))
-        rrows = ""
-        for r in related:
-            other = by_id.get(r["insight_id"]) or {}
-            pref = "tegen · " if r.get("stance") == "counter" else ""
-            rrows += (f"<div class='kn-note {_e(r.get('stance') or 'support')}'>"
-                      f"<div class='kn-ntext'><a href='/kennisbank?id={_e(r['insight_id'])}'>"
-                      f"{_e(pref)}{_e(other.get('title') or r['insight_id'])}</a></div>"
-                      f"<div class='kn-nctrls'><form method='post' action='/action' class='kn-unlink'>"
-                      f"{_hid(csrf, 'kb_insight_unlink', nxt, {'iid': ins['id'], 'other_id': r['insight_id']})}"
-                      f"<button class='btn' title='ontkoppelen'>×</button></form></div></div>")
-        meta_play = ""
-        if len(related) >= 2:
-            meta_play = (f"<form method='post' action='/action'>"
-                         f"{_hid(csrf, 'kb_meta_start', nxt, {'iid': ins['id']})}"
-                         f"<button class='btn'>🎲 Speel een meta-inzicht</button> "
-                         f"<span class='muted'>de gekoppelde inzichten worden de hand</span></form>")
-        related_sec = (
-            f"<div class='kn-sec'><div class='kn-sectitle'>Gerelateerde inzichten "
-            f"<span class='kn-word {_e(mv['word'])}'>{_e(WORD_LABEL[mv['word']])}</span></div>"
-            f"<p class='muted'>De meta-zekerheid is afgeleid uit de onderliggende inzichten.</p>"
-            f"{rrows}{meta_play}</div>")
+        meta_woord = f" <span class='kn-word {_e(mv['word'])}'>{_e(WORD_LABEL[mv['word']])}</span>"
+    if len(related) >= 2:
+        onderkant = (f"<form method='post' action='/action' class='kn-metaplay'>"
+                     f"{_hid(csrf, 'kb_meta_start', nxt, {'iid': ins['id']})}"
+                     f"<button class='btn ok'>🎲 Speel een meta-inzicht</button> "
+                     f"<span class='muted'>maak van deze gekoppelde inzichten één superinzicht "
+                     f"(zelfde spel-flow)</span></form>")
+    elif related:
+        onderkant = ("<p class='muted'>Koppel nog een inzicht (hieronder) om een meta-inzicht "
+                     "te kunnen spelen.</p>")
+    else:
+        onderkant = ("<p class='muted'>Nog niets gekoppeld. Kies hieronder een inzicht dat dit "
+                     "<b>steunt</b> of <b>tegenspreekt</b> — bij twee of meer speel je een "
+                     "meta-inzicht.</p>")
+    related_sec = (
+        f"<div class='kn-sec kn-relbox'><div class='kn-sectitle'>🔗 Gerelateerde inzichten{meta_woord}</div>"
+        f"<p class='muted'>Koppel inzichten die elkaar steunen of tegenspreken — samen worden ze "
+        f"een superinzicht. De meta-zekerheid volgt uit de onderliggende inzichten.</p>"
+        f"{rrows}{onderkant}</div>")
 
     brug_hint = ("<p class='muted'>Koppel bewijs door in de bibliotheek rechts op "
                  "“+ steunt” of “+ tegen” te klikken — de suggesties staan al gemarkeerd.</p>")
@@ -488,7 +521,19 @@ def _bibliotheek_rechts(st, atoms: dict, q: str, hub: str, active_ins: dict | No
               f"<button class='btn ok' name='action' value='kb_atoom_merge'>Voeg samen</button>"
               f"<button class='btn' name='action' value='kb_atoom_archive'>Archiveer</button>"
               f"{spel_keuze}</form></div>")
-    return (f"<h2>Bibliotheek</h2>{zoekbox}{tags}"
+    # Taak 2: met een open inzicht leest de rechterkolom als "hier koppel je bewijs" — een
+    # expliciete kop + uitleg die de brug tussen 'inzicht links' en 'bewijs rechts' benoemt.
+    if active_ins is not None:
+        kop = (f"<h2>🔎 Koppel bewijs</h2>"
+               f"<p class='muted kn-brugkop'>Je hebt links <b>“{_e((active_ins.get('title') or '')[:60])}”</b> "
+               f"open. Zoek hier een kaart en klik <span class='chip'>+ steunt</span> of "
+               f"<span class='chip muted'>+ tegen</span> — kandidaten staan al gemarkeerd. "
+               f"Gekoppeld bewijs verschijnt links onder “Het bewijs”.</p>")
+    else:
+        kop = ("<h2>Bibliotheek</h2>"
+               "<p class='muted kn-brugkop'>De atomen — het materiaal. Open links een inzicht om "
+               "er bewijs uit te koppelen.</p>")
+    return (f"{kop}{zoekbox}{tags}"
             f"<div id='kn-biebresults'>{results}</div>{selbar}"
             f"{_gearchiveerd_uitklap(st, hub, csrf)}"
             f"{_ongesorteerd_bakje(atoms, [], csrf)}")
@@ -657,9 +702,16 @@ def render_kennisbank(st, kid: str = "", q: str = "", csrf_token: str = "",
 
     # LINKS: het geopende inzicht (detail, evt. geflipt) bovenaan, daaronder de inzicht-lijst.
     detail = _inzicht_detail(active_ins, atoms, csrf_token, by_id, flip=flip) if active_ins else ""
-    lijst_kop = ("Koppel een gerelateerd inzicht" if active_iid else "Onze inzichten")
+    if active_iid:
+        lijst_kop = ("<h2>🔗 Koppel een gerelateerd inzicht</h2>"
+                     "<p class='muted kn-brugkop'>Kies hieronder een inzicht dat "
+                     "<b>“" + _e((active_ins.get('title') or '')[:50]) + "”</b> steunt of "
+                     "tegenspreekt. Bij twee of meer kun je er samen een <b>meta-inzicht</b> "
+                     "spelen (zie de sectie in het detail).</p>")
+    else:
+        lijst_kop = "<h2>Onze inzichten</h2>"
     links = (f"<div class='kn-col-left'>{detail}"
-             f"<h2>{lijst_kop}</h2>{nieuw_form}{cards}</div>")
+             f"{lijst_kop}{nieuw_form}{cards}</div>")
     # RECHTS: de bibliotheek met live smart-search + de koppel-brug (als er een inzicht open is).
     rechts = f"<div class='kn-col-right'>{_bibliotheek_rechts(st, atoms, q, hub, active_ins, csrf_token)}</div>"
 

@@ -932,5 +932,14 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .kn-flipbar{display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.3rem}
 .kn-flip{border-left:3px solid var(--coral)}
 .kn-flip .kn-claim{color:var(--coral)}
-.kn-topiclink{margin-top:.3rem;opacity:1}
+.kn-topiclink{margin-top:.3rem;opacity:1;display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
 .kn-topic{display:block}
+.kn-koppellbl{font-size:.82rem}
+/* Taak 1 vindbaarheid: de gerelateerde-inzichten-box valt op als de plek voor koppelen */
+.kn-relbox{background:var(--cream-2);border-radius:var(--radius);padding:.7rem .8rem;margin-top:1.3rem}
+.kn-relbox .kn-sectitle{margin-top:0}
+.kn-metaplay{margin-top:.6rem;display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+/* Taak 2 rechter-brug: kop + uitleg die links (open inzicht) aan rechts (koppel bewijs) knoopt */
+.kn-brugkop{font-size:.86rem;margin:.15rem 0 .6rem;color:var(--gray)}
+/* Taak 3 flip: per statement de omgekeerde lens-lezing, ondergeschikt aan de statement-tekst */
+.kn-fliplens{display:block;font-size:.8rem;font-style:italic;color:var(--coral);margin-top:.2rem}
