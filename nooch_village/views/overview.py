@@ -23,6 +23,7 @@ from nooch_village.views.projects import (
 )
 from nooch_village import org, ai_match, artefacts, epic
 from nooch_village.radar_store import feeds_for_role
+from nooch_village.views.signals import radar_promote_ctl
 from nooch_village.cockpit2_util import _CIRCLE_TABS, _ROLE_TABS, _PERSON_TABS, WEBSITE_DEVELOPER_ROLE
 
 if TYPE_CHECKING:
@@ -629,9 +630,14 @@ def _radar_item(it: dict, csrf: str, node_id: str, *, archief: bool) -> str:
     body = (f"<div class='rdr-body'><div class='rdr-sig'>{_e(it.get('content', ''))}</div>"
             + (f"<div class='muted rdr-rat'>{_e(rat)}</div>" if rat else "")
             + f"<div class='rdr-meta'>{meta}</div></div>")
-    if archief or not csrf:
-        return f"<div class='rdr-row rdr-arch'>{body}</div>"
     nxt = f"/node?id={_e(node_id)}&tab=tools"
+    if archief:
+        # Archief = goedgekeurd: hier hangt de promotie-control (knop '→ kenniskaartje',
+        # of de '→ in kennisbank'-chip zodra het signaal al gepromoveerd is).
+        ctl = radar_promote_ctl(it, csrf, nxt)
+        return f"<div class='rdr-row rdr-arch'>{ctl}{body}</div>"
+    if not csrf:
+        return f"<div class='rdr-row rdr-arch'>{body}</div>"
     ctl = (f"<form method='post' action='/action' class='cl-rep'>"
            f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
            f"<input type='hidden' name='rid' value='{_e(it['id'])}'>"

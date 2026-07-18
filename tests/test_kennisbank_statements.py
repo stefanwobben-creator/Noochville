@@ -194,6 +194,10 @@ def test_overzicht_is_kaal_detail_heeft_alles(tmp_path):
     assert "kn-koppel contra" in frag and "href='#stmt-a3'" in frag
     # bewerken pas op verzoek, met versie-semantiek
     assert "✏️ bewerk" in frag and "Bewaar (nieuwe versie)" in frag
+    # founder dd 2026-07-18: curatie per statement — archiveer-tekstlink in het detail,
+    # geen selectie-checkbox in de rij en geen bulk-formulier meer
+    assert "kb_atoom_archive" in frag and "📦 archiveer" in frag
+    assert "class='kn-sel'" not in frag and "curatieform" not in frag
 
 
 def test_handle_en_readonly_zonder_csrf(tmp_path):
@@ -202,7 +206,7 @@ def test_handle_en_readonly_zonder_csrf(tmp_path):
     _seed(dd)
     met = _frag(dd)
     assert "kn-handle" in met and "⠿" in met and "draggable='true'" in met
-    # zonder csrf: read-only — geen handle, geen vink, geen formulieren of ✏️
+    # zonder csrf: read-only — geen handle, geen formulieren of ✏️ (dus ook geen curatie)
     zonder = render_kennisbank_search(_st(dd), "", "", "", csrf_token="")
     assert "kn-handle" not in zonder and "⠿" not in zonder
     assert "kn-sel" not in zonder and "<form" not in zonder
@@ -241,3 +245,45 @@ def test_smoke_kennisbank_pagina_met_en_zonder_reference(tmp_path):
     # maar vindt dan niets en doet niets)
     ro = render_kennisbank(_st(dd), csrf_token="")
     assert "id='kn-modal'" not in ro and "class='kn-handle'" not in ro
+
+
+# ── founder-ronde dd 2026-07-18: ruimte winnen (meer content in beeld) ───────
+
+def test_founder_curatie_per_statement_en_naar_spel(tmp_path):
+    from nooch_village.views.kennisbank import render_kennisbank_search
+    dd = str(tmp_path)
+    _seed(dd)
+    st = _st(dd)
+    # zonder open spel: wél de archiveer-tekstlink, geen 'naar spel'-uitklap
+    frag = render_kennisbank_search(st, "", "", "", csrf_token="tok")
+    assert "📦 archiveer" in frag and "🎲 naar spel" not in frag
+    # met een open spel: per statement een naar-spel-uitklap met spel-keuze
+    st.spel.start("een vermoeden", [{"atom_id": "a1", "stance": "support"}], by="t")
+    frag2 = render_kennisbank_search(st, "", "", "", csrf_token="tok")
+    assert "🎲 naar spel" in frag2 and "kb_atoom_naar_spel" in frag2
+    assert "name='atoom'" in frag2 and "name='sid'" in frag2
+
+
+def test_founder_koppen_tagpill_geen_banner_geen_leeg_inzicht(tmp_path):
+    from nooch_village.views.kennisbank import render_kennisbank
+    dd = str(tmp_path)
+    _seed(dd)
+    html = render_kennisbank(_st(dd), csrf_token="tok",
+                             msg="🔗 PDF als bronlink gekoppeld")
+    # 6+7: koppen — "Insights" links, rustige "Signals" rechts (kn-koprustig)
+    assert "<h2>Insights</h2>" in html and "Onze inzichten" not in html
+    assert "<h2 class='kn-koprustig'>Signals</h2>" in html and "Bibliotheek" not in html
+    # 5: de uitlegtekst onder de bibliotheek-kop is weg
+    assert "De atomen — het materiaal" not in html
+    # 4: '+ Begin een leeg inzicht' is weg (de actiebalk bovenin is de ingang)
+    assert "Begin een leeg inzicht" not in html and "kb_new" not in html
+    # 3: de groene succes-banner rendert niet meer; een fout-banner (✗) nog wél
+    assert "PDF als bronlink gekoppeld" not in html
+    err = render_kennisbank(_st(dd), csrf_token="tok",
+                            msg="✗ plak een geldige URL (https://…)")
+    assert "plak een geldige URL" in err
+    # 1: geen bulk-selectie meer
+    assert "kn-selbar" not in html and "curatieform" not in html
+    # 8: tags-pill naast de Signals-kop; chips zetten de tag in het live-zoekveld (JS)
+    assert "kn-tagpill" in html and "kn-tagchip" in html
+    assert "data-tag='materialen'" in html and "data-tag='framing'" in html

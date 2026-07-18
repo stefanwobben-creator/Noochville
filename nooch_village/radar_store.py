@@ -60,7 +60,7 @@ class RadarStore(JsonStore):
     """Schrijft via de JsonStore-basis (flock + verse _load onder het slot); geen directe
     atomic_write_json. State: {"items": {id: {...}}, "seen": [link, ...]}."""
 
-    _WRITE_METHODS = ("mark_seen", "add", "set_status")
+    _WRITE_METHODS = ("mark_seen", "add", "set_status", "mark_promoted")
     _STATE = "_data"
     _default = staticmethod(_radar_default)
     _EXPECT = dict
@@ -122,6 +122,17 @@ class RadarStore(JsonStore):
         (het startpunt voor inzichten). Read-only aggregatie, geen nieuwe opslag."""
         return sorted((it for it in self._data["items"].values() if it["status"] == "goedgekeurd"),
                       key=lambda it: it["at"], reverse=True)
+
+    def mark_promoted(self, item_id: str, atom_id: str) -> bool:
+        """Marker na promotie naar de kennisbank: onthoud op het signaal WELK atoom eruit
+        ontstond (of waarmee het samenging). Idempotentie-anker: een gemarkeerd item wordt
+        nooit een tweede keer gepromoveerd, en de UI toont een chip i.p.v. de knop."""
+        it = self._data["items"].get(item_id)
+        if it is None or not atom_id:
+            return False
+        it["promoted_atom_id"] = atom_id
+        self._save()
+        return True
 
     def set_status(self, item_id: str, status: str) -> bool:
         if status not in _STATUSES:

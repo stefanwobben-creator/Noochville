@@ -14,6 +14,13 @@ bibliotheek rechts is een KAAL statements-overzicht (alleen de claim); klik klap
 detail uit (datum · bron op één plek · versie · gekoppeld · tags · ✏️ bewerk); zoeken =
 typen (ook op bron/reference/tag); de ⠿-handle sleept een statement op een ander →
 merge-modal → kb_atoom_merge (zie tests/test_kennisbank_statements.py).
+
+Founder-ronde dd 2026-07-18 (ruimte winnen — meer content in beeld): de bulk-selectie
+(checkbox + selectiebalk) is weg; archiveren/naar-spel zitten als tekstlinks in het
+statement-detail. Koppen: "Insights" links, rustige "Signals" rechts mét tags-pill
+(chips → live-zoekveld). Geen "+ Begin een leeg inzicht", geen uitlegtekst, geen groene
+succes-banner (fouten blijven zichtbaar). Bron-propagatie: een gekoppelde reference gaat
+óók naar bronloze atomen met dezelfde genormaliseerde bron (cockpit2/notes_store).
 """
 from __future__ import annotations
 
@@ -249,9 +256,9 @@ def _inzicht_detail(ins: dict, atoms: dict, csrf: str, by_id: dict | None = None
         f"{historie}</div>")
 
 
-def _atoom_regel(aid: str, a: dict, selecteerbaar: bool = False) -> str:
+def _atoom_regel(aid: str, a: dict) -> str:
     """Eén atoom compact: inhoud + onderwerp + bron (+ body-uitklap voor een samengestelde
-    kaart, + optionele selectie-checkbox voor curatie). Geen trust, geen machinerie."""
+    kaart). Geen trust, geen machinerie, geen selectie (founder dd 2026-07-18)."""
     hub = subject_van(a)
     chip = f"<span class='chip outline'>{_e(hub)}</span>" if hub else ""
     vlag = (" <span class='chip muted'>verificatie vereist</span>"
@@ -264,9 +271,7 @@ def _atoom_regel(aid: str, a: dict, selecteerbaar: bool = False) -> str:
         body = (f"<details class='kn-nctrl'><summary>toon de inhoud</summary>"
                 f"<div class='kn-ann'>{body_html}</div></details>")
     ref = f" · {_e(a['reference'])}" if a.get("reference") else ""
-    vink = (f"<input type='checkbox' name='atoom' value='{_e(aid)}' "
-            f"aria-label='selecteer notitie'>" if selecteerbaar else "")
-    return (f"<div class='kn-note support'>{vink}<span class='kn-dot'></span>"
+    return (f"<div class='kn-note support'><span class='kn-dot'></span>"
             f"<div class='kn-ntext'>{_e(a.get('claim'))}{vlag} {chip}"
             f"<span class='kn-src'>{_e(a.get('source') or 'bron onbekend')}{ref}</span>"
             f"{body}</div></div>")
@@ -442,13 +447,15 @@ def _stmt_koppels(a: dict, atoms: dict) -> str:
 
 
 def _stmt(aid: str, a: dict, atoms: dict, csrf: str, nxt: str, active_iid: str,
-          sugg: str = "", gelinkt: bool = False) -> str:
+          sugg: str = "", gelinkt: bool = False, spellen: list | None = None) -> str:
     """Eén statement in de bibliotheek (herontwerp dd 2026-07-18, docs/SPEC_kennisbank_statements.html):
     KAAL in het overzicht — alleen de claim-tekst; klik klapt het detail uit met
     datum · bron (één plek) · versie · gekoppeld · tags. Bewerken zit achter een
     '✏️ bewerk'-knop (textarea niet meer standaard open, append-only via kb_atoom_edit).
+    Curatie zit sinds de founder-ronde dd 2026-07-18 óók hier: kleine tekstlinks
+    'archiveer' en 'naar spel' naast de bewerk-knop (geen bulk-selectie meer).
     De ⠿-handle links (zichtbaar bij hover) draagt de drag&drop-merge. Zonder csrf
-    (read-only) geen handle, geen vink en geen formulieren."""
+    (read-only) geen handle en geen formulieren."""
     try:
         versie = int(a.get("version") or 1)
     except (TypeError, ValueError):
@@ -472,6 +479,23 @@ def _stmt(aid: str, a: dict, atoms: dict, csrf: str, nxt: str, active_iid: str,
                   f"{_hid(csrf, 'kb_atoom_edit', nxt, {'atom_id': aid})}"
                   f"<textarea name='claim' rows='4'>{_e(a.get('claim') or '')}</textarea>"
                   f"<button class='btn ok'>Bewaar (nieuwe versie)</button></form></details>")
+        # Curatie per statement (founder dd 2026-07-18, verving de selectiebalk): archiveren
+        # als tekstlink; 'naar spel' klapt een spel-keuze uit (alleen bij open spellen).
+        bewerk += (f"<form method='post' action='/action' class='kn-stmtactie'>"
+                   f"{_hid(csrf, 'kb_atoom_archive', nxt, {'atom_id': aid})}"
+                   f"<button class='kn-actlink' title='uit de lijst, nooit weg — "
+                   f"terugzetten kan via Gearchiveerd'>📦 archiveer</button></form>")
+        if spellen:
+            opties = "".join(
+                f"<option value='{_e(s['id'])}'>{_e(s.get('hunch') or s['id'])}</option>"
+                for s in spellen)
+            bewerk += (f"<details class='kn-spelvorm kn-stmtactie'>"
+                       f"<summary title='koppel dit statement aan een open spel'>🎲 naar spel</summary>"
+                       f"<form method='post' action='/action' class='kn-editform'>"
+                       f"{_hid(csrf, 'kb_atoom_naar_spel', nxt, {'atoom': aid})}"
+                       f"<select name='sid'>{opties}</select>"
+                       f"<button class='btn'>koppel aan dit spel</button></form></details>")
+        bewerk = f"<div class='kn-stmtacties'>{bewerk}</div>"
 
     # Koppel-brug naar het open inzicht (A4: geen dubbel pad als de kaart al gelinkt is).
     brug = ""
@@ -490,12 +514,10 @@ def _stmt(aid: str, a: dict, atoms: dict, csrf: str, nxt: str, active_iid: str,
                    f"<button class='btn no'>+ tegen</button></form>")
         brug = f"<div class='kn-nctrls'>{sugg_chip}{knoppen}</div>"
 
-    vink = (f"<input type='checkbox' name='atoom' value='{_e(aid)}' form='curatieform' "
-            f"class='kn-sel' aria-label='selecteer statement'>" if csrf else "")
     handle = ("<span class='kn-handle' draggable='true' "
               "title='sleep op een ander statement om te mergen'>⠿</span>" if csrf else "")
     return (f"<div class='kn-stmt' id='stmt-{_e(aid)}' data-id='{_e(aid)}'>"
-            f"{vink}{handle}"
+            f"{handle}"
             f"<details class='kn-stmtbody'>"
             f"<summary class='kn-stmttekst'>{_e(a.get('claim'))}</summary>"
             f"<div class='kn-stmtdetail'><dl class='kn-dl'>"
@@ -546,8 +568,9 @@ def _bieb_results(st, atoms: dict, q: str, hub: str, active_ins: dict | None,
             if k["atom_id"] not in al_gelinkt:
                 sugg[k["atom_id"]] = "support"       # 'past mogelijk' — richting kiest de mens
     nxt = f"/kennisbank?id={active_iid}" if active_iid else (f"/kennisbank?hub={hub}" if hub else "/kennisbank")
+    spellen = st.spel.open_spellen()[:8] if csrf else []
     kaarten = "".join(_stmt(aid, a, atoms, csrf, nxt, active_iid, sugg.get(aid, ""),
-                            gelinkt=(aid in al_gelinkt))
+                            gelinkt=(aid in al_gelinkt), spellen=spellen)
                       for aid, a in getoond)
     lijst = (f"<div class='kn-lijst'>{kaarten}</div>" if kaarten
              else "<p class='muted'>Geen statements gevonden.</p>")
@@ -556,9 +579,10 @@ def _bieb_results(st, atoms: dict, q: str, hub: str, active_ins: dict | None,
     return f"<p class='muted'>{kop}</p>{lijst}{meer}"
 def _bibliotheek_rechts(st, atoms: dict, q: str, hub: str, active_ins: dict | None,
                         csrf: str) -> str:
-    """De rechterkolom: live smart-search + onderwerp-chips + resultaten + curatie + archief.
-    De zoekbox vervangt (JS, debounced) alleen #kn-biebresults over de verse bibliotheek;
-    de curatie-knoppen en het archief blijven staan."""
+    """De rechterkolom (Signals): live smart-search + tags-pill + onderwerp-chips +
+    resultaten + archief. De zoekbox vervangt (JS, debounced) alleen #kn-biebresults over
+    de verse bibliotheek. Curatie (archiveren, naar spel) zit sinds de founder-ronde
+    dd 2026-07-18 per statement in het uitklap-detail — geen bulk-selectiebalk meer."""
     active_iid = active_ins["id"] if active_ins else ""
     per_hub: dict[str, int] = {}
     for a in atoms.values():
@@ -578,27 +602,17 @@ def _bibliotheek_rechts(st, atoms: dict, q: str, hub: str, active_ins: dict | No
                f"autocomplete='off' "
                f"data-active='{_e(active_iid)}' data-hub='{_e(hub)}'>")
     results = _bieb_results(st, atoms, q, hub, active_ins, csrf)
-
-    # A2: contextuele selectie-actiebalk — verborgen tot je iets aanvinkt (JS toont 'm + telt).
-    # De checkboxes in de (JS-vervangbare) resultaten verwijzen via form= naar curatieform.
     nxt = f"/kennisbank?id={active_iid}" if active_iid else (f"/kennisbank?hub={hub}" if hub else "/kennisbank")
-    spellen = st.spel.open_spellen()[:8]
-    spel_keuze = ""
-    if spellen:
-        opties = "".join(f"<option value='{_e(s['id'])}'>{_e(s.get('hunch') or s['id'])}</option>"
-                         for s in spellen)
-        spel_keuze = (f"<select name='sid' form='curatieform'>{opties}</select>"
-                      f"<button class='btn' name='action' value='kb_atoom_naar_spel' form='curatieform'>"
-                      f"Naar spel</button>")
-    # Samenvoegen loopt in het herontwerp via slepen (⠿ → modal → kb_atoom_merge);
-    # de selectie-balk houdt de resterende bulk-acties (archiveren, naar spel).
-    selbar = (f"<div id='kn-selbar' class='kn-selbar' hidden>"
-              f"<span class='kn-selcount'></span>"
-              f"<form method='post' action='/action' id='curatieform' class='kn-lrow'>"
-              f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
-              f"<input type='hidden' name='next' value='{_e(nxt)}'>"
-              f"<button class='btn' name='action' value='kb_atoom_archive'>Archiveer</button>"
-              f"{spel_keuze}</form></div>")
+    # Tags-pill naast de Signals-kop (founder dd 2026-07-18): alle voorkomende tags als
+    # klikbare chips; klik zet de tag in het live-zoekveld (JS) — filteren loopt via het
+    # bestaande zoekpad, geen nieuwe backend.
+    alle_tags = sorted({t for a in atoms.values() for t in (a.get("tags") or []) if t})
+    tagpill = ""
+    if alle_tags:
+        tchips = "".join(f"<button type='button' class='kn-tagchip' data-tag='{_e(t)}'>"
+                         f"{_e(t)}</button>" for t in alle_tags)
+        tagpill = (f"<details class='kn-tagpill'><summary title='filter op een tag'>🏷 tags"
+                   f"</summary><div class='kn-tagchips'>{tchips}</div></details>")
     # Taak 2: met een open inzicht leest de rechterkolom als "hier koppel je bewijs" — een
     # expliciete kop + uitleg die de brug tussen 'inzicht links' en 'bewijs rechts' benoemt.
     if active_ins is not None:
@@ -608,11 +622,11 @@ def _bibliotheek_rechts(st, atoms: dict, q: str, hub: str, active_ins: dict | No
                f"<span class='chip muted'>+ tegen</span> — kandidaten staan al gemarkeerd. "
                f"Gekoppeld bewijs verschijnt links onder “Het bewijs”.</p>")
     else:
-        kop = ("<h2>Bibliotheek</h2>"
-               "<p class='muted kn-brugkop'>De atomen — het materiaal. Open links een inzicht om "
-               "er bewijs uit te koppelen.</p>")
+        # Founder dd 2026-07-18: rustige kop "Signals" (kn-koprustig — geen vet/uppercase),
+        # zonder uitlegtekst; de tags-pill staat ernaast.
+        kop = f"<div class='kn-koprij'><h2 class='kn-koprustig'>Signals</h2>{tagpill}</div>"
     return (f"{kop}{zoekbox}{tags}"
-            f"<div id='kn-biebresults'>{results}</div>{selbar}"
+            f"<div id='kn-biebresults'>{results}</div>"
             f"{_merge_modal(csrf, nxt)}"
             f"{_gearchiveerd_uitklap(st, hub, csrf)}"
             f"{_ongesorteerd_bakje(atoms, [], csrf)}")
@@ -667,17 +681,17 @@ _KN_SEARCH_JS = """<script>(function(){
      +'&active='+encodeURIComponent(box.dataset.active||'')
      +'&hub='+encodeURIComponent(box.dataset.hub||'');
    fetch(u,{credentials:'same-origin'}).then(function(r){return r.text();})
-     .then(function(h){host.innerHTML=h; syncSel(); if(typeof cb==='function')cb();});
+     .then(function(h){host.innerHTML=h; if(typeof cb==='function')cb();});
  }
  if(box) box.addEventListener('input',function(){clearTimeout(t);t=setTimeout(run,250);});
- // A2: contextuele selectie-actiebalk — verschijnt zodra er iets is aangevinkt, met een teller.
- function syncSel(){
-   var bar=document.getElementById('kn-selbar'); if(!bar)return;
-   var n=document.querySelectorAll('.kn-sel:checked').length;
-   bar.hidden = n===0;
-   var c=bar.querySelector('.kn-selcount'); if(c) c.textContent = n+' geselecteerd';
- }
- document.addEventListener('change',function(e){ if(e.target.classList.contains('kn-sel')) syncSel(); });
+ // Tags-pill: klik op een tag-chip zet de tag in het live-zoekveld en triggert het
+ // bestaande zoekpad (input-event) — filteren zonder nieuwe backend.
+ document.addEventListener('click',function(e){
+   var b=e.target.closest&&e.target.closest('.kn-tagchip'); if(!b||!box)return;
+   box.value=b.dataset.tag||'';
+   box.dispatchEvent(new Event('input',{bubbles:true}));
+   var d=b.closest('details'); if(d)d.open=false;
+ });
  // Gekoppeld-chips: open het doel-statement en scroll erheen (staat het buiten de
  // huidige zoekfilter, dan eerst de filter wissen en opnieuw laden).
  function openStmt(id){
@@ -862,18 +876,9 @@ def render_kennisbank(st, kid: str = "", q: str = "", csrf_token: str = "",
     related_ids = {r["insight_id"] for r in (active_ins or {}).get("related") or []}
     cards = "".join(_topic_card(i, atoms, csrf_token, active_iid, related_ids)
                     for i in inzichten if i["id"] != active_iid) or (
-        "<p class='muted'>Nog geen inzichten. Maak er een met \"+ Begin een leeg inzicht\", of "
-        "seed de eerste vulling: <code>python -m nooch_village.kennisbank_seed --apply</code></p>")
-
-    nieuw_form = (
-        f"<details class='kn-panel'><summary>+ Begin een leeg inzicht</summary>"
-        f"<form method='post' action='/action'>"
-        f"{_hid(csrf_token, 'kb_new', '/kennisbank')}"
-        f"{_field('de claim (mensentaal, kort)', 'title', fid='f-kn-title', required=True)}"
-        f"{_field('waarom denk je dit? (één zin, optioneel)', 'why', fid='f-kn-why')}"
-        f"<button class='btn ok'>Maak het inzicht</button>"
-        f"<span class='muted'> — groeit van \"nog dun\" naar \"stevig\" door bewijs te koppelen</span>"
-        f"</form></details>")
+        "<p class='muted'>Nog geen inzichten. Speel er een via “🎲 Speel een inzicht” in de "
+        "actiebalk, of seed de eerste vulling: "
+        "<code>python -m nooch_village.kennisbank_seed --apply</code></p>")
 
     actiebalk = _actiebalk(open_, st, atoms, inzichten, hunch, speel, cluster, csrf_token)
     toast = _nieuw_toast(nieuw, atoms)
@@ -887,15 +892,19 @@ def render_kennisbank(st, kid: str = "", q: str = "", csrf_token: str = "",
                      "tegenspreekt. Bij twee of meer kun je er samen een <b>meta-inzicht</b> "
                      "spelen (zie de sectie in het detail).</p>")
     else:
-        lijst_kop = "<h2>Onze inzichten</h2>"
+        lijst_kop = "<h2>Insights</h2>"
     links = (f"<div class='kn-col-left'>{detail}"
-             f"{lijst_kop}{nieuw_form}{cards}</div>")
+             f"{lijst_kop}{cards}</div>")
     # RECHTS: de bibliotheek met live smart-search + de koppel-brug (als er een inzicht open is).
     rechts = f"<div class='kn-col-right'>{_bibliotheek_rechts(st, atoms, q, hub, active_ins, csrf_token)}</div>"
 
+    # Founder dd 2026-07-18: geen groene succes-banner meer op deze pagina — de uitkomst is
+    # zelf zichtbaar (de link/kaart verschijnt). Fouten (✗ …) blijven wél zichtbaar: daar is
+    # er niets op de pagina dat de mislukking toont. Het msg-mechanisme zelf blijft intact.
+    foutbalk = _banner(msg) if str(msg or "").lstrip().startswith("✗") else ""
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
             f"<h1>🌱 Wat Nooch weet</h1>"
-            f"{actiebalk}{_banner(msg)}{toast}"
+            f"{actiebalk}{foutbalk}{toast}"
             f"<div class='kn-cols'>{links}{rechts}</div>"
             f"<p class='muted'>Elke zekerheid schuift mee als er info bijkomt.</p></div>")
     inner = (f"{_DS_LINK}{_nav()}"

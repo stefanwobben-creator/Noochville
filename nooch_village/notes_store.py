@@ -89,6 +89,66 @@ class NotesStore:
         self._save()
         return True
 
+    def propagate_reference(self, note_id: str) -> int:
+        """Bron-propagatie (founder-feedback dd 2026-07-18): koppelt de mens een reference
+        (URL of PDF) aan één statement, zet die dan óók op alle andere zichtbare atomen met
+        dezelfde genormaliseerde bron (norm_bron) die er nog GEEN hebben. Expliciet >
+        afgeleid: een bestaande (ook afwijkende) reference wordt nooit overschreven, en
+        gearchiveerde atomen blijven ongemoeid (de teller weerspiegelt de bibliotheek).
+        Geeft het aantal atomen waarop de reference is bijgezet; 0 bij een onbekend atoom,
+        lege reference of lege bron-sleutel (die zou álle bronloze atomen matchen)."""
+        from nooch_village.kennisbank import norm_bron
+        anker = self.get(note_id)
+        if anker is None or not (anker.reference or "").strip():
+            return 0
+        sleutel = norm_bron(anker.source or "")
+        if not sleutel:
+            return 0
+        from datetime import datetime
+        now = datetime.now()
+        n = 0
+        for aid in list(self._notes):
+            if aid == note_id:
+                continue
+            other = self.get(aid)
+            if (other is None or other.archived or (other.reference or "").strip()
+                    or norm_bron(other.source or "") != sleutel):
+                continue
+            other.reference = anker.reference
+            other.last_updated_at = now
+            self._notes[aid] = other.model_dump(mode="json")
+            n += 1
+        if n:
+            self._save()
+        return n
+
+    def stack_provenance(self, note_id: str, source: str = "",
+                         reference: str = "") -> Insight | None:
+        """Koppel een EXTRA herkomst aan een bestaand kaartje zonder tweede kaart te maken
+        (radar-promotie boven duplicaat): source en reference stapelen "; "-gescheiden — het
+        bestaande mechanisme van merge_into/enrich/merge — en de grounding-teller gaat één
+        omhoog (er is nu een herkomst méér onder deze kaart). Claim, body en status blijven
+        ongemoeid (geen edit_history-entry: metadata, geen tekstwijziging). Idempotent per
+        waarde: een source/reference die er al in staat wordt niet nogmaals gestapeld.
+        None als het kaartje niet bestaat of beide velden leeg zijn."""
+        source = (source or "").strip()
+        reference = (reference or "").strip()
+        bestaand = self.get(note_id)
+        if bestaand is None or not (source or reference):
+            return None
+        if source and source not in (bestaand.source or ""):
+            bestaand.source = ((bestaand.source + "; " + source) if bestaand.source
+                               else source)[:160]
+        if reference and reference not in (bestaand.reference or ""):
+            bestaand.reference = ((bestaand.reference + "; " + reference)
+                                  if bestaand.reference else reference)[:200]
+        bestaand.grounding_count += 1
+        from datetime import datetime
+        bestaand.last_updated_at = datetime.now()
+        self._notes[note_id] = bestaand.model_dump(mode="json")
+        self._save()
+        return bestaand
+
     def add_tags(self, note_id: str, tags: list[str]) -> bool:
         """Voeg tags idempotent toe aan een bestaand kaartje (curatie: bijv. het
         onderwerp uit het kennisbank-vocabulaire). Volgorde blijft; bestaande tags

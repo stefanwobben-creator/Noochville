@@ -57,6 +57,7 @@ from nooch_village.projects import ProjectLedger, PREP_CHECKLIST_TITLE, _MISSIE_
 from nooch_village.deliverable_store import DeliverableStore
 from nooch_village.project_doc_store import ProjectDocStore
 from nooch_village.radar_store import RadarStore
+from nooch_village import radar_promote
 from nooch_village.registry_factory import shared_registry
 from nooch_village.skill_match import plan_offers
 from nooch_village.util import refuse
@@ -1841,11 +1842,31 @@ def _act_radar_set(c, status: str, ok_msg: str):
 
 
 def _act_radar_approve(c):
-        return _act_radar_set(c, "goedgekeurd", "✓ aan het archief toegevoegd")
+        nxt, msg = _act_radar_set(c, "goedgekeurd", "✓ aan het archief toegevoegd")
+        # Config-vlag radar_auto_promote (default uit): goedkeuren promoveert dan meteen
+        # door naar de kennisbank — hetzelfde codepad als de knop, dus dezelfde dedup/marker.
+        if msg == "✓ aan het archief toegevoegd" and radar_promote.auto_promote_enabled(c.data_dir):
+            _aid, pmsg = radar_promote.promote_signal(c.st, c.g("rid"))
+            msg = f"{msg} · {pmsg}"
+        return nxt, msg
 
 
 def _act_radar_dismiss(c):
         return _act_radar_set(c, "afgewezen", "🗑 signaal weggeklikt")
+
+
+def _act_radar_promote(c):
+        """Goedgekeurd radar-signaal → kenniskaartje (atoom in laag 1). Zelfde poort als de
+        andere radar-curatie: de rolvervuller of Circle Lead van de rol van het signaal."""
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        it = st.radar.get(g("rid"))
+        if it is None:
+            return nxt, "✗ onbekend radar-signaal"
+        _deny = _role_gate(it["role"], username, st)
+        if _deny:
+            return nxt, _deny
+        _aid, msg = radar_promote.promote_signal(st, g("rid"))
+        return nxt, msg
 
 
 def _act_aitask_add(c):
@@ -3562,12 +3583,18 @@ def _act_kb_meta_start(c):
 def _act_kb_atoom_reference(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Een URL als bronlink bij een
     # atoom (A3): landt in het reference-veld. Een expliciet-geplakte bronlink houden we (anders
-    # dan de intake-validator, die een kale artikel-URL juist dropt).
+    # dan de intake-validator, die een kale artikel-URL juist dropt). Bron-propagatie (founder
+    # dd 2026-07-18): dezelfde reference gaat óók naar de andere atomen met dezelfde
+    # genormaliseerde bron die er nog geen hebben (nooit een bestaande overschrijven).
     url = c.g("url").strip()
     if not re.match(r"^https?://", url):
         return c.nxt, "✗ plak een geldige URL (https://…)"
     if not c.st.notes.set_reference(c.g("atom_id"), url):
         return c.nxt, "✗ notitie niet gevonden"
+    extra = c.st.notes.propagate_reference(c.g("atom_id"))
+    if extra:
+        return c.nxt, (f"🔗 bronlink gekoppeld — ook gezet op {extra} ander(e) "
+                       f"kaartje(s) met dezelfde bron")
     return c.nxt, "🔗 bronlink gekoppeld"
 
 
@@ -3619,8 +3646,9 @@ def _act_kb_atoom_unarchive(c):
 
 
 def _act_kb_atoom_naar_spel(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Selectie voedt de
-    # spel-hand (koppeling met de hand-uitbreiding; richting draai je in het spel).
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Voedt de spel-hand
+    # (richting draai je in het spel). Sinds de founder-ronde dd 2026-07-18 komt dit uit
+    # het statement-detail (één atoom per keer); de meervoudsvorm blijft fail-soft werken.
     ids = [a for a in (c.form.get("atoom") or []) if a]
     sid = c.g("sid")
     if not ids:
@@ -3854,6 +3882,7 @@ ACTIONS = {
     "role_focus": _act_role_focus,
     "radar_approve": _act_radar_approve,
     "radar_dismiss": _act_radar_dismiss,
+    "radar_promote": _act_radar_promote,
     "aitask_add": _act_aitask_add,
     "aitask_remove": _act_aitask_remove,
     "persona_skill_add": _act_persona_skill_add,
@@ -4528,9 +4557,16 @@ def make_handler(data_dir: str, csrf_token: str,
                     os.makedirs(os.path.dirname(full), exist_ok=True)
                     with open(full, "wb") as fh:
                         fh.write(blob)
-                    ok = _Stores(data_dir).notes.set_reference(fields.get("atom_id", ""),
-                                                               "/kbref/" + stored)
-                    self._redirect(nxt, "🔗 PDF als bronlink gekoppeld" if ok else "✗ notitie niet gevonden")
+                    _notes = _Stores(data_dir).notes
+                    ok = _notes.set_reference(fields.get("atom_id", ""),
+                                              "/kbref/" + stored)
+                    # Bron-propagatie (founder dd 2026-07-18): zelfde genormaliseerde
+                    # bron zonder reference → krijgt dezelfde PDF-link mee.
+                    extra = _notes.propagate_reference(fields.get("atom_id", "")) if ok else 0
+                    msg = ("🔗 PDF als bronlink gekoppeld"
+                           + (f" — ook gezet op {extra} ander(e) kaartje(s) met dezelfde bron"
+                              if extra else "")) if ok else "✗ notitie niet gevonden"
+                    self._redirect(nxt, msg)
                     return
                 if fields.get("action") == "kb_intake_pdf":
                     # AUTHZ: iedereen-ingelogd — kennisbank-intake. PDF = source-adapter:

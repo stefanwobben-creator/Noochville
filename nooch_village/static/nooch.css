@@ -481,6 +481,10 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .rdr-rat{font-size:.82rem;margin:.15rem 0}
 .rdr-meta{font-size:.78rem;margin-top:.15rem;display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
 .rdr-arch{opacity:.85}
+.rdr-promoteform{flex:0 0 auto}
+.rdr-promote{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;font-size:.75rem;padding:.2rem .5rem;color:var(--muted);white-space:nowrap}
+.rdr-promote:hover{background:var(--green);color:#fff;border-color:var(--green)}
+.rdr-inkb{flex:0 0 auto;white-space:nowrap}
 .rdr-archief{margin-top:.6rem}
 .rdr-split{display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start}
 .rdr-pane{flex:1;min-width:0}
@@ -907,9 +911,25 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .kn-editform{margin-top:.35rem;display:flex;flex-direction:column;align-items:flex-start;gap:.35rem}
 .kn-editform textarea,.kn-editform input[type=text]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);font:inherit;padding:.45rem .55rem;background:var(--surface)}
 .kn-al{font-size:.78rem;font-style:italic}
-/* Selectie-actiebalk: verschijnt pas bij aanvinken (Nielsen #1) */
-.kn-selbar{position:sticky;bottom:.4rem;z-index:5;background:var(--surface);border:1px solid var(--green);border-radius:var(--radius);padding:.5rem .7rem;margin:.5rem 0;box-shadow:var(--shadow)}
-.kn-selcount{font-weight:700;color:var(--green-dark);display:block;margin-bottom:.35rem;font-size:.82rem}
+/* Founder-ronde dd 2026-07-18: rustige Signals-kop + tags-pill + curatie-tekstlinks per
+   statement. De bulk-selectiebalk (.kn-selbar/.kn-selcount/.kn-sel) is verwijderd. */
+.kn-koprij{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin:1.8rem 0 .5rem}
+.kn-koprij h2{margin:0}
+.kn-koprustig{font-weight:400;text-transform:none;letter-spacing:0;font-size:1rem;color:var(--gray)}
+.kn-tagpill{position:relative;margin:0}
+.kn-tagpill>summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:.3rem;border:1px solid var(--border);border-radius:var(--radius-pill);padding:.1rem .6rem;font-size:.74rem;color:var(--gray);background:var(--surface)}
+.kn-tagpill>summary::-webkit-details-marker{display:none}
+.kn-tagpill[open]>summary{border-color:var(--green);color:var(--green-dark)}
+.kn-tagchips{position:absolute;z-index:8;top:calc(100% + .3rem);left:0;min-width:16rem;max-width:24rem;display:flex;flex-wrap:wrap;gap:.3rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.5rem .6rem}
+.kn-tagchip{border:none;cursor:pointer;font:inherit;display:inline-flex;align-items:center;border-radius:var(--radius-pill);padding:.1rem .55rem;font-size:.74rem;font-weight:600;line-height:1.5;background:var(--cream-2);color:var(--gray)}
+.kn-tagchip:hover{background:var(--green-tint);color:var(--green-dark)}
+.kn-stmtacties{display:flex;flex-wrap:wrap;gap:.7rem;align-items:center;margin-top:.3rem}
+.kn-stmtactie{margin:0;display:inline-block}
+.kn-actlink{border:none;background:none;box-shadow:none;padding:0;margin:0;font:inherit;font-size:.78rem;color:var(--muted);cursor:pointer;text-decoration:underline}
+.kn-actlink:hover{color:var(--ink)}
+.kn-spelvorm>summary{cursor:pointer;list-style:none;font-size:.78rem;color:var(--muted);text-decoration:underline}
+.kn-spelvorm>summary::-webkit-details-marker{display:none}
+.kn-spelvorm[open]{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem}
 /* Bron toevoegen: rustige verticale indeling */
 .kn-bronform{display:flex;flex-direction:column;gap:.7rem;align-items:flex-start}
 .kn-bronveld{width:100%}
@@ -953,8 +973,6 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .kn-handle{flex:0 0 auto;color:var(--border);cursor:grab;font-size:.9rem;letter-spacing:-1px;line-height:1.1;user-select:none;padding:.6rem .1rem 0;opacity:0;transition:opacity .12s}
 .kn-stmt:hover .kn-handle,.kn-handle:focus-visible{opacity:1}
 .kn-handle:hover{color:var(--muted)}
-.kn-stmt>.kn-sel{margin-top:.65rem;opacity:0;transition:opacity .12s}
-.kn-stmt:hover>.kn-sel,.kn-stmt>.kn-sel:checked,.kn-stmt>.kn-sel:focus-visible{opacity:1}
 .kn-stmtbody{flex:1;min-width:0;margin:0}
 .kn-stmtbody>summary{cursor:pointer;list-style:none;font-weight:500;font-size:.92rem;padding:.5rem .2rem}
 .kn-stmtbody>summary::-webkit-details-marker{display:none}
