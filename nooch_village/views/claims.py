@@ -20,12 +20,27 @@ from nooch_village.web_base import _banner, _e, _field, _page
 # de chip-varianten dekken exact dezelfde drie betekenissen.
 _CHIP = {"red": ("chip coral", "🔴 verboden"),
          "orange": ("chip amber", "🟠 risico"),
-         "green": ("chip", "🟢 veilig")}
+         "green": ("chip", "🟢 veilig"),
+         # Escaleren is geen kleur maar een weigering te oordelen: neutrale outline, zodat het
+         # visueel niet meedoet in de rood-oranje-groen-schaal waar het ook inhoudelijk buiten valt.
+         "escaleren": ("chip outline", "⚖️ compliance beslist")}
 
 _TABS = [("check", "Claim check"), ("werklijst", "Werklijst site-audit"),
          ("database", "Termendatabase"), ("landen", "Per land")]
 
 _MARKTEN = ("NL", "DE", "BE")
+
+
+def bron_badge(bevinding: dict) -> str:
+    """Waar komt dit oordeel vandaan? Bron-letter als badge, de letterlijke onderbouwing als
+    tooltip. Zonder deze badge is een A-oordeel (de wet zegt het) niet te onderscheiden van
+    een C-oordeel (iemand leidde het af) — en dat verschil bepaalt hoe hard je moet ingrijpen."""
+    letter = bevinding.get("bron") or ""
+    if not letter:
+        return ""
+    detail = bevinding.get("bron_detail") or ""
+    titel = f" title='{_e(detail)}'" if detail else ""
+    return f"<span class='chip muted'{titel}>bron {_e(letter)}</span>"
 
 
 def rol_voor(categorie: str) -> str:
@@ -62,17 +77,23 @@ def render_rapport(uitslag: dict, markten: list[str] | None = None,
 
     bevindingen = uitslag.get("bevindingen", [])
     rood, oranje, groen = uitslag.get("rood", 0), uitslag.get("oranje", 0), uitslag.get("groen", 0)
+    escaleren = uitslag.get("escaleren", 0)
     score = uitslag.get("score", 100)
     oordeel = ("niet publiceerbaar — vervang de verboden termen" if rood else
                "publiceerbaar zolang het genoemde bewijs erbij staat" if oranje else
                "publiceerbaar (na de gebruikelijke legal-eindcheck)")
+    if escaleren:
+        oordeel += f" · {escaleren} punt(en) wachten op een oordeel van compliance"
 
     kop = (f"<div class='kpi-card'><div class='kpi-body'>"
            f"<span class='kpi-val'>{score}<span class='kpi-unit'>/100</span></span> "
            f"<span class='{_CHIP['red'][0]}'>{rood} verboden</span> "
            f"<span class='{_CHIP['orange'][0]}'>{oranje} risico</span> "
            f"<span class='{_CHIP['green'][0]}'>{groen} veilig</span>"
-           f"</div><div class='muted'>compliance-score{_e(' · ' + bron if bron else '')}</div></div>")
+           + (f" <span class='{_CHIP['escaleren'][0]}'>{escaleren} te beoordelen</span>"
+              if escaleren else "")
+           + f"</div><div class='muted'>compliance-score — escaleren telt niet mee, daar heeft "
+             f"de tool geen oordeel over{_e(' · ' + bron if bron else '')}</div></div>")
 
     landen = _landnotities(uitslag, markten or [], db)
 
@@ -81,18 +102,22 @@ def render_rapport(uitslag: dict, markten: list[str] | None = None,
                  "<p class='muted'>Let op: dit toetst alleen bekende termen. Nieuwe of creatieve "
                  "formuleringen gaan altijd langs compliance.</p></div>")
     else:
-        volgorde = {"red": 0, "orange": 1, "green": 2}
+        volgorde = {"red": 0, "escaleren": 1, "orange": 2, "green": 3}
         rijen = ""
         for b in sorted(bevindingen, key=lambda x: volgorde.get(x["stoplicht"], 9)):
             cls, label = _CHIP.get(b["stoplicht"], _CHIP["green"])
             alt = (f"<div class='muted'><b>Alternatief:</b> {_e(b['alternatief'])}</div>"
                    if b["stoplicht"] != "green" else "")
+            advies = (f"<div class='muted'>Advies als je tóch moet kiezen: "
+                      f"{_e(b.get('stoplicht_advies', ''))}</div>"
+                      if b.get("stoplicht_advies") else "")
             rijen += (f"<div class='c2-sec'>"
                       f"<span class='{cls}'>{label}</span> <b>{_e(b['term'])}</b>"
                       f"<span class='pill'>{_e(b['categorie'])}</span>"
-                      f"<span class='pill'>rol: {_e(rol_voor(b['categorie']))}</span>"
+                      f"<span class='pill'>rol: {_e(_rol_label(b))}</span>"
+                      f"{bron_badge(b)}"
                       f"<div>Gevonden: <i>{_e(', '.join(b['gevonden']))}</i> — {_e(b['waarom'])}</div>"
-                      f"{alt}</div>")
+                      f"{alt}{advies}</div>")
         lijst = f"<div class='card'><h3>Bevindingen</h3>{rijen}</div>"
 
     preview = _preview(uitslag.get("tekst", ""), bevindingen)
@@ -101,9 +126,16 @@ def render_rapport(uitslag: dict, markten: list[str] | None = None,
             f"{landen}{lijst}{preview}")
 
 
+def _rol_label(bevinding: dict) -> str:
+    """Het rol-label zoals het in het rapport staat — escaleren gaat altijd naar compliance."""
+    if bevinding.get("stoplicht") == "escaleren":
+        return "compliance"
+    return rol_voor(bevinding.get("categorie", ""))
+
+
 def _rapport_acties(uitslag: dict, csrf_token: str, kan_bord: bool, bron: str) -> str:
     """'Zet op het bord' is compliance-werk; de klembord-export mag iedereen (extern gebruik)."""
-    if not (uitslag.get("rood") or uitslag.get("oranje")):
+    if not (uitslag.get("rood") or uitslag.get("oranje") or uitslag.get("escaleren")):
         return ""
     knoppen = ("<button class='btn sm ghost' type='button' data-claims-kopieer='1'>"
                "Kopieer rapport</button>")
@@ -124,8 +156,11 @@ def _bord_payload(uitslag: dict, bron: str) -> str:
     Alleen wat de taak nodig heeft — de rest staat in de database."""
     import json
     kern = [{"term": b["term"], "stoplicht": b["stoplicht"], "categorie": b["categorie"],
-             "gevonden": b["gevonden"][:3], "alternatief": b["alternatief"]}
-            for b in uitslag.get("bevindingen", []) if b["stoplicht"] in ("red", "orange")]
+             "gevonden": b["gevonden"][:3], "alternatief": b["alternatief"],
+             "bron": b.get("bron", ""), "bron_detail": b.get("bron_detail", "")[:200],
+             "stoplicht_advies": b.get("stoplicht_advies", "")}
+            for b in uitslag.get("bevindingen", [])
+            if b["stoplicht"] in ("red", "orange", "escaleren")]
     return json.dumps({"bron": bron, "bevindingen": kern}, ensure_ascii=False)
 
 

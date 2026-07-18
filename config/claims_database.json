@@ -1,7 +1,7 @@
 {
  "meta": {
   "naam": "Nooch claims-database",
-  "versie": "2026-07-18",
+  "versie": "2026-07-18.2",
   "beheerder": "compliance (nooch-legal)",
   "bron_van_waarheid": "deze JSON is de repo-bron; de skill nooch-claims-directive (references/claims-database.md) en de checker-HTML worden hieruit afgeleid",
   "regelgeving": {
@@ -12,7 +12,8 @@
   "stoplicht": {
    "red": "verboden — nooit gebruiken",
    "orange": "risico — alleen met genoemd bewijs",
-   "green": "veilig voor Nooch"
+   "green": "veilig voor Nooch",
+   "escaleren": "geen harde bron (C) — de tool beslist niet, compliance beoordeelt"
   },
   "scoring": "score = max(0, 100 - 12*rood - 5*oranje)",
   "nulmeting": {
@@ -23,11 +24,26 @@
     "Veja": 78
    }
   },
-  "werklijst_statussen": [
-   "open",
-   "in behandeling",
-   "live"
-  ],
+  "toetsingskader": {
+   "principe": "De tool toetst zwart-wit aan de wet. Alleen termen met bron A (EU-wet), B (ACM Leidraad) of D (Nooch-beleid) krijgen een zelfstandig stoplicht. Bron C (interpretatie zonder harde bron) wordt nooit door de tool beslist: stoplicht = escaleren, mens beslist.",
+   "bronnen": {
+    "A": "Richtlijn (EU) 2024/825 — geverifieerd op EUR-Lex: recital 9 voorbeeldlijst (environmentally friendly, eco-friendly, green, nature's friend, ecological, environmentally correct, climate friendly, gentle on the environment, carbon friendly, energy efficient, biodegradable, biobased + soortgelijke uitingen), recital 10 (sustainable, conscious, responsible), Bijlage I punten 2a, 4a, 4b, 4c, 10a (letterlijk geciteerd in bron_detail)",
+    "B": "ACM Leidraad Duurzaamheidsclaims v2 (acm.nl, officieel) — vijf vuistregels, basis voor NL-handhaving",
+    "C": "Interpretatie/afleiding (EcoClaim, COSH!) zonder directe wetsbasis — tool beslist NIET, escaleren naar mens",
+    "D": "Nooch-intern beleid (nooch-legal): WISE, Higg MSI, PETA-status, voorbehoud-regels"
+   },
+   "geverifieerd": {
+    "eur_lex": "https://eur-lex.europa.eu/eli/dir/2024/825/oj/eng (2026-07-18)",
+    "acm": "https://www.acm.nl/nl/publicaties/leidraad-duurzaamheidsclaims-0 (2026-07-18)",
+    "bgh_katjes": "BGH 27-06-2024, I ZR 98/23: klimaneutral-reclame vereist uitleg in de uiting zelf (geverifieerd via dejure.org/LTO)",
+    "fod_economie": "Praktische gids Goede praktijken inzake milieuclaims (economie.fgov.be, officieel PDF). NB: de eerdere paragraafnummers (par.3-par.10) kwamen uit COSH!-output en zijn NIET tegen deze gids geverifieerd - landenlaag BE geldt als bron C tot compliance dit checkt"
+   },
+   "onopgelost": [
+    "PETA-label: 2a-grensgeval en intern conflict met nooch-legal — beslissing mens",
+    "BE-paragraafnummers verifiëren tegen FOD-gids",
+    "DE UWG-itemnummers uit COSH! niet tegen Duitse wettekst gelegd (materieel gedekt door EU-Bijlage I)"
+   ]
+  },
   "scan_paginas": [
    {
     "label": "home",
@@ -50,7 +66,12 @@
     "url": "https://nooch.earth/products/the-269-grizzly-bear"
    }
   ],
-  "_scan_paginas": "De vaste pagina-set van de wekelijkse compliance-scan. Compliance beheert deze lijst; een pagina toevoegen of vervangen gebeurt hier, niet in code."
+  "_scan_paginas": "De vaste pagina-set van de wekelijkse compliance-scan. Compliance beheert deze lijst; een pagina toevoegen of vervangen gebeurt hier, niet in code.",
+  "werklijst_statussen": [
+   "open",
+   "in behandeling",
+   "live"
+  ]
  },
  "termen": [
   {
@@ -59,7 +80,10 @@
    "stoplicht": "red",
    "categorie": "Generiek",
    "waarom": "Expliciet genoemd in EmpCo als verboden generieke claim.",
-   "alternatief": "Benoem het concrete voordeel: 'gemaakt van plantaardige materialen'."
+   "alternatief": "Benoem het concrete voordeel: 'gemaakt van plantaardige materialen'.",
+   "bron": "A",
+   "bron_detail": "Recital 9 (letterlijk genoemd) + Bijlage I punt 4a",
+   "hardheid": "hard"
   },
   {
    "patroon": "planet.?(safe|friendly|loving)|goed voor de planeet|good for the planet",
@@ -67,7 +91,10 @@
    "stoplicht": "red",
    "categorie": "Generiek",
    "waarom": "Absolute claim; geen product is netto goed voor de planeet. Op nooch.earth geflagd door COSH! én EcoClaim.",
-   "alternatief": "Gescoped en feitelijk: 'made without plastics or petrochemical materials'."
+   "alternatief": "Gescoped en feitelijk: 'made without plastics or petrochemical materials'.",
+   "bron": "A",
+   "bron_detail": "Bijlage I 4a + recital 9 (soortgelijke uitingen als eco-friendly/gentle on the environment)",
+   "hardheid": "hard"
   },
   {
    "patroon": "\\bgroene?\\b(?=.{0,30}(keuze|product|schoen|sneaker|merk|optie))|green choice",
@@ -75,7 +102,10 @@
    "stoplicht": "red",
    "categorie": "Generiek",
    "waarom": "Generiek, geen betekenis zonder specificatie.",
-   "alternatief": "Meetbare claim met bron."
+   "alternatief": "Meetbare claim met bron.",
+   "bron": "A",
+   "bron_detail": "Recital 9 (green, letterlijk) + Bijlage I 4a",
+   "hardheid": "hard"
   },
   {
    "patroon": "duurza(am|me|amheid)|sustainab(le|ility)",
@@ -83,7 +113,10 @@
    "stoplicht": "red",
    "categorie": "Generiek",
    "waarom": "Vaag absoluut woord; ACM-vlagwoord én EmpCo-verbod zonder bewijs.",
-   "alternatief": "Specifiek aspect: 'gemaakt in de EU, ontworpen om lang mee te gaan'."
+   "alternatief": "Specifiek aspect: 'gemaakt in de EU, ontworpen om lang mee te gaan'.",
+   "bron": "A+B",
+   "bron_detail": "Recital 10 (sustainable) + ACM vuistregel 1 (vage termen)",
+   "hardheid": "hard"
   },
   {
    "patroon": "klimaatvriendelijk|climate.?friendly",
@@ -91,7 +124,10 @@
    "stoplicht": "red",
    "categorie": "Generiek",
    "waarom": "Geen emissiedata = verboden.",
-   "alternatief": "Concrete emissiedata met bron."
+   "alternatief": "Concrete emissiedata met bron.",
+   "bron": "A",
+   "bron_detail": "Recital 9 (climate friendly, letterlijk) + Bijlage I 4a",
+   "hardheid": "hard"
   },
   {
    "patroon": "\\beco\\b|\\beco-",
@@ -99,7 +135,10 @@
    "stoplicht": "red",
    "categorie": "Generiek",
    "waarom": "Shorthand zonder substantie.",
-   "alternatief": "Volledige, verifieerbare formulering."
+   "alternatief": "Volledige, verifieerbare formulering.",
+   "bron": "A",
+   "bron_detail": "Recital 9 (eco-friendly + soortgelijk) + Bijlage I 4a",
+   "hardheid": "hard"
   },
   {
    "patroon": "ecologisch|ecological",
@@ -107,7 +146,10 @@
    "stoplicht": "red",
    "categorie": "Generiek",
    "waarom": "In meerdere markten gereserveerd voor bio-certificering.",
-   "alternatief": "Erkende certificering noemen."
+   "alternatief": "Erkende certificering noemen.",
+   "bron": "A",
+   "bron_detail": "Recital 9 (ecological, letterlijk) + Bijlage I 4a",
+   "hardheid": "hard"
   },
   {
    "patroon": "niet schadelijk voor het milieu|not harmful to the environment|zonder de planeet|without screwing up the planet",
@@ -115,7 +157,10 @@
    "stoplicht": "red",
    "categorie": "Generiek",
    "waarom": "Elk product heeft impact; absolute onschadelijkheidsclaim is verboden.",
-   "alternatief": "'By producing only what's ordered, we avoid overproduction waste.'"
+   "alternatief": "'By producing only what's ordered, we avoid overproduction waste.'",
+   "bron": "A",
+   "bron_detail": "Recital 9 (gentle on the environment, soortgelijk) + Bijlage I 4a",
+   "hardheid": "hard"
   },
   {
    "patroon": "mother nature|moeder natuur",
@@ -123,7 +168,10 @@
    "stoplicht": "red",
    "categorie": "Generiek",
    "waarom": "Emotie zonder feit telt als generieke milieuclaim (EcoClaim flag #1).",
-   "alternatief": "Veranker aan feiten: 'natural rubber outsole, plant-based upper, produced in Portugal'."
+   "alternatief": "Veranker aan feiten: 'natural rubber outsole, plant-based upper, produced in Portugal'.",
+   "bron": "A",
+   "bron_detail": "Recital 9 (nature's friend, soortgelijk) + Bijlage I 4a",
+   "hardheid": "hard"
   },
   {
    "patroon": "natuurlijk(e)?(?=.{0,25}(materia|product|schoen|sneaker))|\\bnatural\\b",
@@ -131,7 +179,10 @@
    "stoplicht": "orange",
    "categorie": "Generiek",
    "waarom": "Suggereert milieuvoordeel; alleen met ingrediënt + oorsprong.",
-   "alternatief": "'Bovenwerk van appelrestleer uit Zuid-Tirol.'"
+   "alternatief": "'Bovenwerk van appelrestleer uit Zuid-Tirol.'",
+   "bron": "B",
+   "bron_detail": "ACM vuistregel 1: vaag milieuvoordeel zonder specificatie",
+   "hardheid": "hard"
   },
   {
    "patroon": "bewust(e)?(?=.{0,20}(keuze|merk|gemaakt))|conscious",
@@ -139,7 +190,10 @@
    "stoplicht": "orange",
    "categorie": "Generiek",
    "waarom": "Modejargon zonder inhoud.",
-   "alternatief": "Beschrijf de concrete actie."
+   "alternatief": "Beschrijf de concrete actie.",
+   "bron": "A+B",
+   "bron_detail": "Recital 10 (conscious) + ACM vuistregel 1",
+   "hardheid": "hard"
   },
   {
    "patroon": "verantwoord(e)?|responsible",
@@ -147,23 +201,34 @@
    "stoplicht": "orange",
    "categorie": "Generiek",
    "waarom": "Vaag zonder maatregel.",
-   "alternatief": "Benoem de maatregel."
+   "alternatief": "Benoem de maatregel.",
+   "bron": "A+B",
+   "bron_detail": "Recital 10 (responsible) + ACM vuistregel 1",
+   "hardheid": "hard"
   },
   {
    "patroon": "\\bschoon\\b|\\bclean\\b",
    "term": "schoon / clean",
-   "stoplicht": "orange",
+   "stoplicht": "escaleren",
    "categorie": "Generiek",
    "waarom": "Ambigu zonder definitie.",
-   "alternatief": "Definieer wat je bedoelt."
+   "alternatief": "Definieer wat je bedoelt.",
+   "bron": "C",
+   "bron_detail": "Afleiding (EcoClaim); niet letterlijk in wet of Leidraad",
+   "hardheid": "escaleren",
+   "stoplicht_advies": "orange"
   },
   {
    "patroon": "\\bpuur\\b|\\bpure\\b",
    "term": "puur / pure",
-   "stoplicht": "orange",
+   "stoplicht": "escaleren",
    "categorie": "Generiek",
    "waarom": "Suggereert milieuvoordeel.",
-   "alternatief": "Definieer waaruit het bestaat."
+   "alternatief": "Definieer waaruit het bestaat.",
+   "bron": "C",
+   "bron_detail": "Afleiding (EcoClaim); niet letterlijk in wet of Leidraad",
+   "hardheid": "escaleren",
+   "stoplicht_advies": "orange"
   },
   {
    "patroon": "(co2|co₂|carbon|klimaat|climate).?(neutraal|neutral)",
@@ -171,7 +236,10 @@
    "stoplicht": "red",
    "categorie": "CO₂",
    "waarom": "EmpCo verbiedt neutraliteitsclaims op basis van compensatie.",
-   "alternatief": "'X kg CO₂e per paar, berekend volgens [methode]' met bron."
+   "alternatief": "'X kg CO₂e per paar, berekend volgens [methode]' met bron.",
+   "bron": "A",
+   "bron_detail": "Bijlage I punt 4c (letterlijk: neutrale impact o.b.v. compensatie) + BGH I ZR 98/23 (DE)",
+   "hardheid": "hard"
   },
   {
    "patroon": "klimaatpositief|climate.?positive|carbon.?positive",
@@ -179,7 +247,10 @@
    "stoplicht": "red",
    "categorie": "CO₂",
    "waarom": "Netto voordeel niet aantoonbaar.",
-   "alternatief": "Geverifieerde reductiedata."
+   "alternatief": "Geverifieerde reductiedata.",
+   "bron": "A",
+   "bron_detail": "Bijlage I punt 4c (letterlijk: positieve impact o.b.v. compensatie)",
+   "hardheid": "hard"
   },
   {
    "patroon": "net.?zero",
@@ -187,7 +258,10 @@
    "stoplicht": "red",
    "categorie": "CO₂",
    "waarom": "Verboden indien via offsets.",
-   "alternatief": "Tijdsgebonden, extern gevalideerd reductiepad (SBTi)."
+   "alternatief": "Tijdsgebonden, extern gevalideerd reductiepad (SBTi).",
+   "bron": "A",
+   "bron_detail": "Bijlage I 4c indien o.b.v. offsets; toekomstvariant: art. 6-wijziging (verifieerbaar plan vereist)",
+   "hardheid": "hard"
   },
   {
    "patroon": "gecompenseerd|offset|compensated",
@@ -195,7 +269,10 @@
    "stoplicht": "red",
    "categorie": "CO₂",
    "waarom": "Compensatie mag geen basis van de claim zijn.",
-   "alternatief": "Reductie en compensatie strikt gescheiden communiceren."
+   "alternatief": "Reductie en compensatie strikt gescheiden communiceren.",
+   "bron": "A",
+   "bron_detail": "Bijlage I punt 4c",
+   "hardheid": "hard"
   },
   {
    "patroon": "emissievrij|zero.?emission",
@@ -203,7 +280,10 @@
    "stoplicht": "red",
    "categorie": "CO₂",
    "waarom": "Vrijwel nooit waar.",
-   "alternatief": "Specificeer scope met verificatie."
+   "alternatief": "Specificeer scope met verificatie.",
+   "bron": "A+B",
+   "bron_detail": "Bijlage I 4a/4c-categorie + ACM vuistregel 2 (onderbouwing)",
+   "hardheid": "hard"
   },
   {
    "patroon": "(co2|co₂|carbon|voetafdruk|footprint).{0,25}(verlaagd|verkleind|reduced|lower|kleiner)|reduce[sd]?\\s+(our\\s+)?carbon",
@@ -211,7 +291,10 @@
    "stoplicht": "orange",
    "categorie": "CO₂",
    "waarom": "Alleen met baseline, tijdsbestek en verificatie. Nooch: 4,75 kg-claim vereist WISE-verificatie.",
-   "alternatief": "'X% minder CO₂e dan [baseline], berekend door [bron].'"
+   "alternatief": "'X% minder CO₂e dan [baseline], berekend door [bron].'",
+   "bron": "A+B",
+   "bron_detail": "Bijlage I 4c (verminderde impact o.b.v. compensatie) + ACM vr. 2/3: baseline en bron verplicht",
+   "hardheid": "hard"
   },
   {
    "patroon": "biologisch afbreekbaar|biodegrad",
@@ -219,7 +302,10 @@
    "stoplicht": "red",
    "categorie": "Materiaal",
    "waarom": "Niet wettelijk gedefinieerd voor schoenen; FAQ erkent zelf dat EU-definitie niet gehaald wordt. EmpCo art. 3(h).",
-   "alternatief": "'Materialen die terugkeren in de natuur' of 'we onderzoeken het en claimen pas als we het kunnen bewijzen'."
+   "alternatief": "'Materialen die terugkeren in de natuur' of 'we onderzoeken het en claimen pas als we het kunnen bewijzen'.",
+   "bron": "A+D",
+   "bron_detail": "Recital 9 (biodegradable, letterlijk als generieke claim) + Nooch-beleid: FAQ erkent dat EU-definitie niet gehaald wordt",
+   "hardheid": "hard"
   },
   {
    "patroon": "composteer|compost",
@@ -227,7 +313,10 @@
    "stoplicht": "red",
    "categorie": "Materiaal",
    "waarom": "Zelfde probleem als biodegradable; composteer-instructie in FAQ moet weg.",
-   "alternatief": "'Made from natural materials that break down over time without releasing microplastics or toxins.'"
+   "alternatief": "'Made from natural materials that break down over time without releasing microplastics or toxins.'",
+   "bron": "A+D",
+   "bron_detail": "4a-categorie (soortgelijk biodegradable) + Nooch-beleid",
+   "hardheid": "hard"
   },
   {
    "patroon": "in de grond begraven|bury (it|them) in",
@@ -235,7 +324,10 @@
    "stoplicht": "red",
    "categorie": "Materiaal",
    "waarom": "Impliciete biodegradability-claim.",
-   "alternatief": "Zie biologisch afbreekbaar."
+   "alternatief": "Zie biologisch afbreekbaar.",
+   "bron": "D",
+   "bron_detail": "Nooch-beleid: impliciete biodegradability-claim",
+   "hardheid": "hard"
   },
   {
    "patroon": "recyclebaar|recyclable",
@@ -243,7 +335,10 @@
    "stoplicht": "orange",
    "categorie": "Materiaal",
    "waarom": "Misleidend als er geen echte recyclinginfrastructuur is voor het product.",
-   "alternatief": "Beschrijf wat er werkelijk mogelijk is, per onderdeel."
+   "alternatief": "Beschrijf wat er werkelijk mogelijk is, per onderdeel.",
+   "bron": "B",
+   "bron_detail": "ACM vr. 1-2: alleen juist en volledig met echte recyclingmogelijkheid",
+   "hardheid": "hard"
   },
   {
    "patroon": "gerecycled|recycled",
@@ -251,7 +346,10 @@
    "stoplicht": "orange",
    "categorie": "Materiaal",
    "waarom": "Percentage + bron verplicht.",
-   "alternatief": "'Gemaakt met X% gerecycled [materiaal]'."
+   "alternatief": "'Gemaakt met X% gerecycled [materiaal]'.",
+   "bron": "B",
+   "bron_detail": "ACM vr. 2: percentage en bron verplicht",
+   "hardheid": "hard"
   },
   {
    "patroon": "\\borganic\\b|biologisch(e)? katoen|\\bbio\\b",
@@ -259,7 +357,10 @@
    "stoplicht": "orange",
    "categorie": "Materiaal",
    "waarom": "Vereist certificering (GOTS e.d.) — Nooch heeft die NIET.",
-   "alternatief": "Alleen mét certificaatvermelding, anders weglaten."
+   "alternatief": "Alleen mét certificaatvermelding, anders weglaten.",
+   "bron": "B+D",
+   "bron_detail": "ACM vr. 5 (keurmerk-suggestie) + Nooch heeft geen GOTS",
+   "hardheid": "hard"
   },
   {
    "patroon": "plantaardig|plant.?based",
@@ -267,7 +368,10 @@
    "stoplicht": "orange",
    "categorie": "Materiaal",
    "waarom": "Claimbaar mits aantoonbaar per onderdeel. '100%' alleen na verificatie van élk onderdeel (let op: strobel bevat PLA).",
-   "alternatief": "Materiaal-voor-materiaal uitsplitsing; '100%' vermijden tot onafhankelijk geverifieerd."
+   "alternatief": "Materiaal-voor-materiaal uitsplitsing; '100%' vermijden tot onafhankelijk geverifieerd.",
+   "bron": "A",
+   "bron_detail": "Recital 9 (biobased, letterlijk) + Bijlage I 4b (heel product vs. één aspect; strobel bevat PLA)",
+   "hardheid": "hard"
   },
   {
    "patroon": "plasticvrij|plastic.?free",
@@ -275,7 +379,10 @@
    "stoplicht": "orange",
    "categorie": "Materiaal",
    "waarom": "Moet voor élk onderdeel gelden, inclusief coatings en lijmen.",
-   "alternatief": "Alleen na volledige verificatie van alle componenten."
+   "alternatief": "Alleen na volledige verificatie van alle componenten.",
+   "bron": "B",
+   "bron_detail": "ACM vr. 2: absoluut feitelijke claim, moet voor elk onderdeel kloppen",
+   "hardheid": "hard"
   },
   {
    "patroon": "chemicali[eë]nvrij|chemical.?free",
@@ -283,7 +390,10 @@
    "stoplicht": "red",
    "categorie": "Materiaal",
    "waarom": "Wetenschappelijk onjuist: alles is chemie.",
-   "alternatief": "Benoem welke stoffen zijn uitgesloten."
+   "alternatief": "Benoem welke stoffen zijn uitgesloten.",
+   "bron": "B",
+   "bron_detail": "ACM vr. 2: feitelijk onjuist is per definitie misleidend",
+   "hardheid": "hard"
   },
   {
    "patroon": "\\bvegan\\b|veganistisch",
@@ -291,7 +401,10 @@
    "stoplicht": "green",
    "categorie": "Materiaal",
    "waarom": "Voor Nooch aantoonbaar: geen dierlijke materialen.",
-   "alternatief": "Vrij te gebruiken; bij twijfel over lijmen eerst verifiëren."
+   "alternatief": "Vrij te gebruiken; bij twijfel over lijmen eerst verifiëren.",
+   "bron": "D",
+   "bron_detail": "Nooch-beleid: aantoonbaar, vrij te gebruiken",
+   "hardheid": "hard"
   },
   {
    "patroon": "(groener|duurzamer|greener|more sustainable)\\s+(dan|than)?",
@@ -299,7 +412,10 @@
    "stoplicht": "red",
    "categorie": "Vergelijkend",
    "waarom": "Vereist gelijkwaardige LCA-vergelijking (ISO 14040).",
-   "alternatief": "Specifieke impactcategorie + methode + bron."
+   "alternatief": "Specifieke impactcategorie + methode + bron.",
+   "bron": "B",
+   "bron_detail": "ACM vuistregel 3: eerlijke vergelijking, zelfde methode + art. 7 UCPD",
+   "hardheid": "hard"
   },
   {
    "patroon": "beter (voor de planeet|dan leer)|better (for the planet|than leather)",
@@ -307,7 +423,10 @@
    "stoplicht": "orange",
    "categorie": "Vergelijkend",
    "waarom": "'Beter dan leer' mag alléén met Higg MSI-bron; 'beter voor de planeet' is te breed.",
-   "alternatief": "'Lagere materiaalimpact dan leer volgens Higg MSI.'"
+   "alternatief": "'Lagere materiaalimpact dan leer volgens Higg MSI.'",
+   "bron": "B+D",
+   "bron_detail": "ACM vr. 3 + Nooch-beleid: alleen met Higg MSI-bron",
+   "hardheid": "hard"
   },
   {
    "patroon": "de enige|the only",
@@ -315,7 +434,10 @@
    "stoplicht": "orange",
    "categorie": "Vergelijkend",
    "waarom": "Superlatief, niet volledig verifieerbaar.",
-   "alternatief": "Altijd met 'voor zover wij weten'."
+   "alternatief": "Altijd met 'voor zover wij weten'.",
+   "bron": "B+D",
+   "bron_detail": "ACM vr. 2 (superlatief vereist bewijs) + Nooch-beleid: altijd voorbehoud",
+   "hardheid": "hard"
   },
   {
    "patroon": "best in class|koploper|industry.?leading|new standard in",
@@ -323,7 +445,10 @@
    "stoplicht": "red",
    "categorie": "Vergelijkend",
    "waarom": "Vereist onafhankelijke benchmark van de hele markt.",
-   "alternatief": "Alleen bij vermelding in erkende onafhankelijke ranking."
+   "alternatief": "Alleen bij vermelding in erkende onafhankelijke ranking.",
+   "bron": "B",
+   "bron_detail": "ACM vr. 3: benchmark van hele markt vereist",
+   "hardheid": "hard"
   },
   {
    "patroon": "99[.,]9\\s?%|\\b99\\s?%",
@@ -331,7 +456,10 @@
    "stoplicht": "red",
    "categorie": "Vergelijkend",
    "waarom": "Verzonnen precisie zonder bron (COSH! #10).",
-   "alternatief": "Kwalitatief mét bron: 'most footwear brands still rely on plastics [bron]'."
+   "alternatief": "Kwalitatief mét bron: 'most footwear brands still rely on plastics [bron]'.",
+   "bron": "B",
+   "bron_detail": "ACM vr. 2: specifiek cijfer vereist verifieerbare bron",
+   "hardheid": "hard"
   },
   {
    "patroon": "zero.?waste",
@@ -339,7 +467,10 @@
    "stoplicht": "red",
    "categorie": "Toekomst/absoluut",
    "waarom": "Absolute claim; eigen herdefinitie in FAQ telt niet. Productie genereert altijd afval (offcuts, verpakking).",
-   "alternatief": "'Made on demand to minimise overproduction and reduce material waste.'"
+   "alternatief": "'Made on demand to minimise overproduction and reduce material waste.'",
+   "bron": "A+B",
+   "bron_detail": "Bijlage I 4a-categorie (absolute claim) + ACM vr. 1-2",
+   "hardheid": "hard"
   },
   {
    "patroon": "we streven|committed to|working towards|onderweg naar|on track to|transitioning to",
@@ -347,23 +478,34 @@
    "stoplicht": "orange",
    "categorie": "Toekomst",
    "waarom": "Alleen met concreet, meetbaar en extern controleerbaar plan.",
-   "alternatief": "Doel + deadline + wat er al bereikt is."
+   "alternatief": "Doel + deadline + wat er al bereikt is.",
+   "bron": "A",
+   "bron_detail": "Art. 2-wijziging UCPD: toekomstclaims vereisen publiek, verifieerbaar plan met tussendoelen",
+   "hardheid": "hard"
   },
   {
    "patroon": "peta.?approved|peta.?certified|peta",
    "term": "PETA Approved Vegan",
-   "stoplicht": "orange",
+   "stoplicht": "escaleren",
    "categorie": "Labels",
    "waarom": "Zelf-declaratie, geen geaccrediteerde audit. LET OP: nooch-legal zegt 'niet PETA-gecertificeerd' — conflict eerst oplossen.",
-   "alternatief": "Uitleg wat het label wel/niet dekt; overweeg Vegan Society (geaccrediteerd)."
+   "alternatief": "Uitleg wat het label wel/niet dekt; overweeg Vegan Society (geaccrediteerd).",
+   "bron": "C",
+   "bron_detail": "Bijlage I 2a-grensgeval: is PETA een 'certificeringsschema' met onafhankelijke verificatie? Juridisch onbeslist + intern conflict (nooch-legal: niet gecertificeerd)",
+   "hardheid": "escaleren",
+   "stoplicht_advies": "orange"
   },
   {
    "patroon": "plant.?based treaty",
    "term": "Plant Based Treaty",
-   "stoplicht": "orange",
+   "stoplicht": "escaleren",
    "categorie": "Labels",
    "waarom": "Pledge, geen productcertificering.",
-   "alternatief": "'We are signatories to the Plant Based Treaty pledge' — expliciet geen keurmerk."
+   "alternatief": "'We are signatories to the Plant Based Treaty pledge' — expliciet geen keurmerk.",
+   "bron": "C",
+   "bron_detail": "Grensgeval 2a: pledge-logo vs. duurzaamheidskeurmerk; presentatie bepaalt",
+   "hardheid": "escaleren",
+   "stoplicht_advies": "orange"
   },
   {
    "patroon": "gecertificeerd|certified(?!\\s+organic cotton)",
@@ -371,7 +513,10 @@
    "stoplicht": "orange",
    "categorie": "Labels",
    "waarom": "Alleen met erkend label + certificaatnummer.",
-   "alternatief": "Label + nummer + link."
+   "alternatief": "Label + nummer + link.",
+   "bron": "A",
+   "bron_detail": "Bijlage I punt 2a: keurmerk vereist certificeringsschema of overheidsbasis",
+   "hardheid": "hard"
   },
   {
    "patroon": "10\\s?%.{0,40}(emissie|emission|carbon)|20\\s?%.{0,40}(water)",
@@ -379,7 +524,10 @@
    "stoplicht": "orange",
    "categorie": "Statistiek",
    "waarom": "Specifieke cijfers vereisen bron + jaartal; 10%-cijfer is omstreden.",
-   "alternatief": "'According to [bron, jaar], approximately X%...' met link."
+   "alternatief": "'According to [bron, jaar], approximately X%...' met link.",
+   "bron": "B",
+   "bron_detail": "ACM vr. 2: cijfers vereisen actuele, verifieerbare bron",
+   "hardheid": "hard"
   },
   {
    "patroon": "ethisch (geproduceerd|gemaakt)|ethical(ly)?\\s*(produced|made|sourced|materials)?\\b|eerlijke lonen|fair wages",
@@ -387,7 +535,10 @@
    "stoplicht": "orange",
    "categorie": "Sociaal",
    "waarom": "Brede sociale claim; criteria/audit vereist. Loonclaims: eerst Eurovilde-verificatie.",
-   "alternatief": "'Handcrafted in Portugal under EU labour standards' + auditverwijzing."
+   "alternatief": "'Handcrafted in Portugal under EU labour standards' + auditverwijzing.",
+   "bron": "A+B",
+   "bron_detail": "Recital 10 (sociale duurzaamheidsclaims) + ACM: Leidraad dekt ook sociale claims",
+   "hardheid": "hard"
   },
   {
    "patroon": "low.?carbon|koolstofarm",
@@ -395,15 +546,22 @@
    "stoplicht": "orange",
    "categorie": "CO₂",
    "waarom": "Relatieve claim zonder benchmark.",
-   "alternatief": "Vergelijking met norm + bron."
+   "alternatief": "Vergelijking met norm + bron.",
+   "bron": "B",
+   "bron_detail": "ACM vr. 3: relatieve claim vereist benchmark; niet letterlijk in EU-lijst",
+   "hardheid": "hard"
   },
   {
    "patroon": "(smaller|kleinere)\\s+(voetafdruk|footprint)s?|tread(ing)?\\s+light",
    "term": "smaller footprint / tread light",
-   "stoplicht": "orange",
+   "stoplicht": "escaleren",
    "categorie": "CO₂",
    "waarom": "Impliciete vergelijkende voetafdruk-claim zonder baseline.",
-   "alternatief": "Kwantificeer: 'X% lagere materiaalimpact volgens [bron]'."
+   "alternatief": "Kwantificeer: 'X% lagere materiaalimpact volgens [bron]'.",
+   "bron": "C",
+   "bron_detail": "Afleiding: impliciete vergelijking; niet letterlijk in wet/Leidraad",
+   "hardheid": "escaleren",
+   "stoplicht_advies": "orange"
   },
   {
    "patroon": "car(e|ing) for the planet|zorg(en)? voor de planeet|for the planet\\b",
@@ -411,15 +569,22 @@
    "stoplicht": "red",
    "categorie": "Generiek",
    "waarom": "Generieke planeet-claim, zelfde familie als planet-friendly.",
-   "alternatief": "Concrete actie benoemen met bewijs."
+   "alternatief": "Concrete actie benoemen met bewijs.",
+   "bron": "A",
+   "bron_detail": "Recital 9 (nature's friend/gentle on the environment, soortgelijk) + 4a",
+   "hardheid": "hard"
   },
   {
    "patroon": "circular (practices|economy)|circulair",
    "term": "circulair / circular practices",
-   "stoplicht": "orange",
+   "stoplicht": "escaleren",
    "categorie": "Materiaal",
    "waarom": "Alleen met beschrijving van de werkelijke kringloop (terugname, hergebruik-%).",
-   "alternatief": "'We turn worn sneakers into new ones' + cijfers over volume/verwerking."
+   "alternatief": "'We turn worn sneakers into new ones' + cijfers over volume/verwerking.",
+   "bron": "C",
+   "bron_detail": "Afleiding: vereist onderbouwing maar niet letterlijk in wet/Leidraad",
+   "hardheid": "escaleren",
+   "stoplicht_advies": "orange"
   },
   {
    "patroon": "refuse to let regulations|regels (bepalen|dicteren) niet",
@@ -427,7 +592,10 @@
    "stoplicht": "red",
    "categorie": "Framing",
    "waarom": "Non-compliance als merkkeuze is de slechtst denkbare positie bij handhaving (COSH! #9).",
-   "alternatief": "'Certificeringstrajecten passen nog niet bij onze materialen; we claimen pas als we het kunnen bewijzen.'"
+   "alternatief": "'Certificeringstrajecten passen nog niet bij onze materialen; we claimen pas als we het kunnen bewijzen.'",
+   "bron": "D",
+   "bron_detail": "Nooch-beleid (compliance): non-compliance-framing nooit publiceren",
+   "hardheid": "hard"
   },
   {
    "patroon": "bewezen|gegarandeerd|proven|guaranteed",
@@ -435,7 +603,10 @@
    "stoplicht": "orange",
    "categorie": "Algemeen",
    "waarom": "ACM-vlagwoord; alleen met direct bewijs.",
-   "alternatief": "Toon het bewijs bij de claim."
+   "alternatief": "Toon het bewijs bij de claim.",
+   "bron": "B",
+   "bron_detail": "ACM vr. 2: alleen met direct bewijs",
+   "hardheid": "hard"
   },
   {
    "patroon": "klimaneutral",
@@ -443,7 +614,10 @@
    "stoplicht": "red",
    "categorie": "CO₂",
    "waarom": "BGH Katjes-arrest 2024: ambigue term moet in de uiting zelf worden uitgelegd; websiteverwijzing onvoldoende. Duitsland strengste markt.",
-   "alternatief": "Werkelijke emissiedata in de uiting zelf, of term schrappen."
+   "alternatief": "Werkelijke emissiedata in de uiting zelf, of term schrappen.",
+   "bron": "A",
+   "bron_detail": "Bijlage I 4c + BGH I ZR 98/23 (uitleg in de uiting zelf vereist)",
+   "hardheid": "hard"
   },
   {
    "patroon": "umweltfreundlich",
@@ -451,7 +625,10 @@
    "stoplicht": "red",
    "categorie": "Generiek",
    "waarom": "Duitse variant van milieuvriendelijk; UWG item 4a.",
-   "alternatief": "Specifiek voordeel met bewijs."
+   "alternatief": "Specifiek voordeel met bewijs.",
+   "bron": "A",
+   "bron_detail": "Recital 9-equivalent (environmentally friendly) + 4a",
+   "hardheid": "hard"
   },
   {
    "patroon": "nachhaltig",
@@ -459,7 +636,10 @@
    "stoplicht": "red",
    "categorie": "Generiek",
    "waarom": "Duitse variant van duurzaam; verboden zonder bewijs.",
-   "alternatief": "Specifiek aspect benoemen."
+   "alternatief": "Specifiek aspect benoemen.",
+   "bron": "A+B",
+   "bron_detail": "Recital 10-equivalent (sustainable)",
+   "hardheid": "hard"
   },
   {
    "patroon": "ökologisch|\\böko\\b",
@@ -467,7 +647,10 @@
    "stoplicht": "red",
    "categorie": "Generiek",
    "waarom": "In DE gereserveerd/gevoelig; UWG 4a.",
-   "alternatief": "Erkende certificering noemen."
+   "alternatief": "Erkende certificering noemen.",
+   "bron": "A",
+   "bron_detail": "Recital 9-equivalent (ecological/eco) + 4a",
+   "hardheid": "hard"
   },
   {
    "patroon": "biologisch abbaubar",
@@ -475,7 +658,10 @@
    "stoplicht": "red",
    "categorie": "Materiaal",
    "waarom": "Zelfde regel als biodegradable.",
-   "alternatief": "Feitelijke afbraak-beschrijving zonder gereguleerde term."
+   "alternatief": "Feitelijke afbraak-beschrijving zonder gereguleerde term.",
+   "bron": "A",
+   "bron_detail": "Recital 9-equivalent (biodegradable) + 4a",
+   "hardheid": "hard"
   },
   {
    "patroon": "kompostierbar",
@@ -483,7 +669,10 @@
    "stoplicht": "red",
    "categorie": "Materiaal",
    "waarom": "Zelfde regel als compostable.",
-   "alternatief": "Zie biologisch abbaubar."
+   "alternatief": "Zie biologisch abbaubar.",
+   "bron": "A+D",
+   "bron_detail": "4a-categorie + Nooch-beleid",
+   "hardheid": "hard"
   },
   {
    "patroon": "plastikfrei",
@@ -491,7 +680,10 @@
    "stoplicht": "orange",
    "categorie": "Materiaal",
    "waarom": "Moet voor elk onderdeel gelden, incl. coatings/lijmen.",
-   "alternatief": "Alleen na volledige verificatie."
+   "alternatief": "Alleen na volledige verificatie.",
+   "bron": "B",
+   "bron_detail": "ACM-equivalent: absolute feitelijke claim",
+   "hardheid": "hard"
   },
   {
    "patroon": "recycelbar",
@@ -499,7 +691,10 @@
    "stoplicht": "orange",
    "categorie": "Materiaal",
    "waarom": "Alleen met echte recyclinginfrastructuur.",
-   "alternatief": "Beschrijf wat werkelijk mogelijk is."
+   "alternatief": "Beschrijf wat werkelijk mogelijk is.",
+   "bron": "B",
+   "bron_detail": "ACM-equivalent: alleen met echte recyclingmogelijkheid",
+   "hardheid": "hard"
   }
  ],
  "werklijst": [

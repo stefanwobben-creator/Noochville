@@ -100,9 +100,19 @@ def normaliseer(tekst: str) -> str:
     return _NIET_WOORD.sub(" ", (tekst or "").lower()).strip()
 
 
-def rol_id_voor(rol_label: str, records=None) -> str:
-    """De record-id van de rol die deze bevinding oppakt. Bestaat de rol niet (meer) in de
-    records, dan gaat het werk naar compliance in plaats van naar een dood id."""
+def rol_id_voor(rol_label: str, records=None, stoplicht: str = "") -> str:
+    """De record-id van de rol die deze bevinding oppakt.
+
+    Escaleren gaat ALTIJD naar compliance, ongeacht de categorie: er is geen harde bron, dus er
+    valt niets uit te voeren — er valt te oordelen, en oordelen is compliance-domein. Stuur je
+    zo'n bevinding naar de copywriter, dan vraag je iemand een knoop door te hakken die hij niet
+    mag doorhakken.
+
+    Bestaat de rol niet (meer) in de records, dan gaat het werk naar compliance in plaats van
+    naar een dood id."""
+    from nooch_village.claims_db import ESCALEREN
+    if stoplicht == ESCALEREN:
+        return FALLBACK_ROL
     kandidaat = ROL_IDS.get(rol_label, FALLBACK_ROL)
     if records is not None and records.get(kandidaat) is None:
         return FALLBACK_ROL
@@ -167,16 +177,22 @@ def taak_tekst(bevinding: dict, bron: str) -> tuple[str, str]:
     """(titel, beschrijving) van de taak. De beschrijving bevat alles wat de rol nodig heeft
     om het zonder terugvragen op te lossen: claim, vindplaats, oordeel, veilige herformulering
     en de nacheck."""
-    rood = bevinding.get("stoplicht") == "red"
+    from nooch_village.claims_db import ESCALEREN
+    stoplicht = bevinding.get("stoplicht")
+    rood, escaleren = stoplicht == "red", stoplicht == ESCALEREN
     gevonden = ", ".join(bevinding.get("gevonden") or []) or bevinding.get("term", "")
-    werkwoord = "Vervang" if rood else "Onderbouw"
-    titel = f"{'🔴' if rood else '🟠'} {werkwoord}: {gevonden}"
+    werkwoord = "Beoordeel" if escaleren else "Vervang" if rood else "Onderbouw"
+    teken = "⚖️" if escaleren else "🔴" if rood else "🟠"
+    titel = f"{teken} {werkwoord}: {gevonden}"
     beschrijving = (
         f"Claim: {gevonden} ({bevinding.get('term', '')})\n"
         f"Vindplaats: {bron or 'onbekend'}\n"
-        f"Oordeel: {'verboden — niet publiceren' if rood else 'risico — alleen met genoemd bewijs'}"
+        f"Oordeel: {'GEEN tooloordeel — geen harde bron, compliance beslist' if escaleren else 'verboden — niet publiceren' if rood else 'risico — alleen met genoemd bewijs'}"
         f" · categorie {bevinding.get('categorie', '')}\n"
-        f"Waarom: {bevinding.get('waarom', '')}\n"
+        f"Bron: {bevinding.get('bron', '?')} — {bevinding.get('bron_detail', 'geen onderbouwing vastgelegd')}\n"
+        + (f"Advies van de database als je tóch moet kiezen: {bevinding.get('stoplicht_advies')}\n"
+           if bevinding.get("stoplicht_advies") else "")
+        + f"Waarom: {bevinding.get('waarom', '')}\n"
         f"Veilige herformulering: {bevinding.get('alternatief', '')}\n"
         f"Nacheck na aanpassing: tov + legal."
     )
@@ -215,8 +231,9 @@ def zet_op_bord(omgeving, db: dict, bevindingen: list[dict], bron: str,
     records = getattr(omgeving, "records", None)
     bestaand = _bestaande_sleutels(ledger, db)
     aangemaakt, overgeslagen, lopend = [], 0, []
+    from nooch_village.claims_db import ESCALEREN
     for b in bevindingen:
-        if b.get("stoplicht") not in ("red", "orange"):
+        if b.get("stoplicht") not in ("red", "orange", ESCALEREN):
             continue
         if _dekt(b, bestaand):
             overgeslagen += 1
@@ -226,7 +243,7 @@ def zet_op_bord(omgeving, db: dict, bevindingen: list[dict], bron: str,
             continue
         sleutel = taak_sleutel(b)
         titel, beschrijving = taak_tekst(b, b.get("url") or bron)
-        eigenaar = rol_id_voor(rol_voor(b.get("categorie", "")), records)
+        eigenaar = rol_id_voor(rol_voor(b.get("categorie", "")), records, b.get("stoplicht", ""))
         pid = ledger.create(eigenaar, titel, trigger, status="future", origin=ORIGIN,
                             keyword=sleutel, description=beschrijving,
                             dod_outcome="de claim staat compliant op de site",

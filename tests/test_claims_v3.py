@@ -434,3 +434,97 @@ def test_skills_staan_in_de_registry():
     reg = build_skill_registry()
     for naam in ("claims_check", "claims_site_scan", "regulation_watch"):
         assert reg.get(naam) is not None
+
+
+# ── Escaleren: de tool weigert te oordelen ──────────────────────────────────
+
+def _esc_bev(term="puur / pure", gevonden=("volstrekt puur",)):
+    return {"term": term, "gevonden": list(gevonden), "stoplicht": claims_db.ESCALEREN,
+            "categorie": "Generiek", "waarom": "ambigu", "alternatief": "definieer het",
+            "bron": "C", "bron_detail": "Afleiding (EcoClaim); niet in wet",
+            "stoplicht_advies": "orange"}
+
+
+def test_database_draagt_bron_en_bron_detail():
+    """Na de merge heeft elke term een herkomst; zonder bron is een oordeel niet toetsbaar."""
+    db = claims_db.load()
+    zonder = [t["term"] for t in db["termen"] if not t.get("bron")]
+    assert zonder == [], f"termen zonder bron: {zonder}"
+    zonder_detail = [t["term"] for t in db["termen"] if not t.get("bron_detail")]
+    assert zonder_detail == []
+    assert db["meta"]["toetsingskader"]["bronnen"]["C"]
+
+
+def test_escaleren_is_een_geldige_status_met_legenda():
+    db = claims_db.load()
+    assert claims_db.ESCALEREN in claims_db.STOPLICHTEN
+    assert claims_db.ESCALEREN in db["meta"]["stoplicht"]
+    assert any(t["stoplicht"] == claims_db.ESCALEREN for t in db["termen"])
+
+
+def test_escaleren_telt_niet_mee_in_de_score():
+    """Een score die daalt door iets waar de tool geen oordeel over heeft, liegt."""
+    uitslag = claims_db.check_tekst("Onze schone, pure schoenen zijn circulair")
+    assert uitslag["escaleren"] >= 2
+    assert uitslag["rood"] == 0 and uitslag["oranje"] == 0
+    assert uitslag["score"] == 100
+
+
+def test_escaleren_gaat_altijd_naar_compliance():
+    """Ook als de categorie naar een andere rol zou wijzen: er valt te oordelen, niet uit te voeren."""
+    from nooch_village.views.claims import rol_voor
+    assert rol_voor("Labels") == "visual designer"                  # normaal
+    assert claims_board.rol_id_voor("visual designer", None,
+                                    claims_db.ESCALEREN) == "compliance"
+    assert claims_board.rol_id_voor("marketeer", None, "red") != "compliance"
+
+
+def test_escaleren_wordt_een_beoordeel_taak(tmp_path):
+    from nooch_village.views.claims import rol_voor
+    omg = _omg(tmp_path)
+    verslag = claims_board.zet_op_bord(omg, claims_db.load(), [_esc_bev()], "bron", rol_voor)
+    taak = verslag["aangemaakt"][0]
+    assert taak["owner"] == "compliance"
+    assert taak["titel"].startswith("⚖️ Beoordeel")
+    beschrijving = omg.projects.get(taak["pid"])["description"]
+    assert "GEEN tooloordeel" in beschrijving
+    assert "Bron: C" in beschrijving                                # herkomst staat in de taak
+    assert "Advies" in beschrijving                                 # stoplicht_advies meegegeven
+
+
+def test_escaleren_telt_niet_als_rood_in_de_headsup(tmp_path):
+    from nooch_village.views.claims import rol_voor
+    verslag = claims_board.zet_op_bord(_omg(tmp_path), claims_db.load(), [_esc_bev()], "b", rol_voor)
+    assert verslag["rood"] == 0                                     # geen vals alarm bij de founder
+
+
+def test_rapport_toont_escaleren_apart_en_met_bron():
+    from nooch_village.views.claims import render_rapport
+    uitslag = claims_db.check_tekst("Onze pure schoenen")
+    html = render_rapport(uitslag, db=claims_db.load())
+    assert "chip outline" in html                                   # eigen, kleurloze weergave
+    assert "te beoordelen" in html
+    assert "telt niet mee" in html                                  # de score wordt uitgelegd
+    assert "bron C" in html
+    assert "style=" not in html
+
+
+def test_bron_badge_draagt_de_onderbouwing_als_tooltip():
+    from nooch_village.views.claims import bron_badge
+    badge = bron_badge({"bron": "A", "bron_detail": "Bijlage I punt 4a"})
+    assert "bron A" in badge and "Bijlage I punt 4a" in badge
+    assert bron_badge({"bron": ""}) == ""
+
+
+def test_scan_neemt_escaleren_mee(tmp_path, monkeypatch):
+    """De wekelijkse scan mag escaleren niet wegfilteren zoals hij groen wegfiltert."""
+    kopie = tmp_path / "db.json"
+    kopie.write_text(json.dumps(claims_db.load(), ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(claims_db, "DB_PATH", str(kopie))
+    ctx = _omg(tmp_path)
+    ctx.settings = {}
+    pagina = "<html><body>Onze pure, schone schoenen</body></html>"
+    uit = ClaimsSiteScanSkill().run({"_fetch": lambda u: (200, pagina)}, ctx)
+    eigenaren = {t["owner"] for t in uit["aangemaakt"]}
+    assert eigenaren == {"compliance"}
+    assert all(t["titel"].startswith("⚖️") for t in uit["aangemaakt"])

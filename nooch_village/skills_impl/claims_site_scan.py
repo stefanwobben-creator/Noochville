@@ -82,7 +82,7 @@ def verzamel(paginas: list[dict], db: dict, _fetch=None) -> tuple[list[dict], li
         uitslag = claims_db.check_tekst(opgehaald["tekst"], db)
         for b in uitslag["bevindingen"]:
             if b["stoplicht"] == "green":
-                continue
+                continue                                 # escaleren telt wél: compliance beslist
             bevindingen.append({**b, "pagina": pagina.get("label", ""), "url": pagina["url"]})
     return bevindingen, fouten, teksten
 
