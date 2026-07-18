@@ -14,11 +14,28 @@ ontbrekende ids bijgemunt. De migratie is idempotent — een tweede load muteert
 """
 from __future__ import annotations
 
+import hashlib
 import uuid
 
 
-def _mint() -> str:
-    return uuid.uuid4().hex[:12]
+def _mint(text: str = "") -> str:
+    """Het id van een accountability, AFGELEID uit zijn tekst.
+
+    Deterministisch met opzet. Op prod laden de daemon én het cockpit-proces dezelfde
+    records-file; met willekeurige uuid's zou elk proces zijn eigen ids munten, allebei
+    opslaan, en zou de laatste schrijver winnen — koppelingen die naar de verliezende set
+    wijzen zijn dan stil kapot. Een hash van de tekst geeft in elk proces hetzelfde id, dus
+    de race is onschadelijk en de migratie is echt idempotent.
+
+    Uniek hoeft alleen BINNEN een rol te zijn (elke query is `role` + `acc_id`), dus de
+    tekst volstaat als bron. Zonder tekst (mag niet voorkomen) valt hij terug op een uuid.
+
+    Nevengevolg, bewust: wordt een accountability verwijderd en later letterlijk opnieuw
+    aangenomen, dan krijgt ze haar oude id terug — dezelfde belofte, dezelfde koppelingen.
+    """
+    if not text:
+        return uuid.uuid4().hex[:12]
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
 
 
 def ensure_acc_ids(defn) -> bool:
@@ -38,15 +55,16 @@ def ensure_acc_ids(defn) -> bool:
     if len(ids) > len(accs):
         ids = ids[: len(accs)]
         changed = True
-    # Bijmunten: ontbrekende of lege posities.
+    # Bijmunten: ontbrekende of lege posities, afgeleid uit de tekst op die positie.
     while len(ids) < len(accs):
-        ids.append(_mint())
+        ids.append(_mint(accs[len(ids)]))
         changed = True
     for i, v in enumerate(ids):
         if not v:
-            ids[i] = _mint()
+            ids[i] = _mint(accs[i])
             changed = True
-    # Duplicaten opheffen: een id moet binnen de rol uniek zijn.
+    # Duplicaten opheffen: een id moet binnen de rol uniek zijn. Alleen hier is een uuid
+    # nodig — twee identieke teksten geven per definitie dezelfde hash.
     seen: set[str] = set()
     for i, v in enumerate(ids):
         if v in seen:
@@ -112,7 +130,7 @@ def apply_accountability_change(defn, add: list[str], remove: list[str]) -> None
         have = {t for (_, t) in items}
         for t in add:
             if t not in have:
-                items.append((_mint(), t))
+                items.append((_mint(t), t))
                 have.add(t)
         # De adoptie sorteerde de teksten; het id reist mee.
         items.sort(key=lambda p: p[1])

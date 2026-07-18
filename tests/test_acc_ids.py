@@ -137,3 +137,34 @@ def test_migratie_van_onbekende_index_verplaatst_niet_stilzwijgend(tmp_path):
     ai = AITaskStore(path)
     assert ai.migrate_acc_ids(recs) == 0          # fail-soft: blijft zichtbaar kapot
     assert ai.all()[0].acc_id == ""
+
+
+def test_migratie_is_deterministisch_over_processen(tmp_path):
+    """Op prod laden daemon én cockpit dezelfde records-file. Met willekeurige uuid's zou elk
+    proces zijn eigen ids munten en de laatste schrijver winnen — koppelingen naar de
+    verliezende set zijn dan stil kapot. Het id wordt daarom uit de tekst afgeleid."""
+    import json
+    import shutil
+    recs = _records(tmp_path, ["alfa", "beta"])
+    path = str(tmp_path / "rec.json")
+
+    # Zet de file terug in de staat zoals prod hem vandaag heeft: zonder ids.
+    raw = json.load(open(path))
+    raw["rol_x"]["definition"]["accountability_ids"] = []
+    json.dump(raw, open(path, "w"))
+    kopie = path + ".kopie"
+    shutil.copy(path, kopie)
+
+    a = Records(path).get("rol_x").definition.accountability_ids
+    b = Records(kopie).get("rol_x").definition.accountability_ids
+    assert a == b and all(a)
+
+
+def test_zelfde_tekst_geeft_zelfde_id_in_elke_rol(tmp_path):
+    from nooch_village.models import RoleDefinition
+    d1 = RoleDefinition(purpose="p", accountabilities=["site monitoren"])
+    d2 = RoleDefinition(purpose="q", accountabilities=["site monitoren"])
+    acc_ids.ensure_acc_ids(d1)
+    acc_ids.ensure_acc_ids(d2)
+    # Uniek hoeft alleen binnen een rol: elke query is role + acc_id.
+    assert d1.accountability_ids == d2.accountability_ids
