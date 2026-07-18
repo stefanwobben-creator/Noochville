@@ -24,6 +24,13 @@ def _ledger(tmp_path) -> ProjectLedger:
     return ProjectLedger(str(tmp_path / "projects.json"))
 
 
+def _omg(tmp_path, ledger=None):
+    """Minimale omgeving voor zet_op_bord: het projectenbord plus een data_dir waar de
+    berichten-store zichzelf uit kan opbouwen."""
+    return SimpleNamespace(projects=ledger or _ledger(tmp_path), records=None,
+                           data_dir=str(tmp_path))
+
+
 def _bev(term="zero waste", gevonden=("zero waste",), stoplicht="red",
          categorie="Toekomst/absoluut", pagina="home", url="https://nooch.earth/"):
     return {"term": term, "gevonden": list(gevonden), "stoplicht": stoplicht,
@@ -140,7 +147,7 @@ def test_bekende_claim_uit_de_werklijst_levert_geen_taak(tmp_path):
     led = _ledger(tmp_path)
     db = claims_db.load()
     # "100% Planet-Safe" staat als werklijst-item #1; de scan vindt 'Planet-Safe'
-    verslag = claims_board.zet_op_bord(led, None, db, [_bev(gevonden=["Planet-Safe"])],
+    verslag = claims_board.zet_op_bord(_omg(tmp_path, led), db, [_bev(gevonden=["Planet-Safe"])],
                                        "https://nooch.earth/", rol_voor)
     assert verslag["aangemaakt"] == []
     assert verslag["overgeslagen"] == 1
@@ -151,7 +158,7 @@ def test_nieuwe_rode_term_levert_precies_een_taak_bij_de_juiste_rol(tmp_path):
     led = _ledger(tmp_path)
     db = claims_db.load()
     nieuw = _bev(term="gifvrij", gevonden=["volstrekt gifvrij"], categorie="Statistiek")
-    verslag = claims_board.zet_op_bord(led, None, db, [nieuw], "https://nooch.earth/", rol_voor)
+    verslag = claims_board.zet_op_bord(_omg(tmp_path, led), db, [nieuw], "https://nooch.earth/", rol_voor)
     assert len(verslag["aangemaakt"]) == 1
     taak = verslag["aangemaakt"][0]
     assert taak["owner"] == claims_board.ROL_IDS["marketeer"]      # Statistiek → marketeer
@@ -166,8 +173,8 @@ def test_tweede_scan_van_dezelfde_bevinding_dedupliceert(tmp_path):
     led = _ledger(tmp_path)
     db = claims_db.load()
     nieuw = _bev(term="gifvrij", gevonden=["volstrekt gifvrij"])
-    eerste = claims_board.zet_op_bord(led, None, db, [nieuw], "x", rol_voor)
-    tweede = claims_board.zet_op_bord(led, None, db, [nieuw], "x", rol_voor)
+    eerste = claims_board.zet_op_bord(_omg(tmp_path, led), db, [nieuw], "x", rol_voor)
+    tweede = claims_board.zet_op_bord(_omg(tmp_path, led), db, [nieuw], "x", rol_voor)
     assert len(eerste["aangemaakt"]) == 1
     assert tweede["aangemaakt"] == []                              # geen bord-spam
     assert len(led.all()) == 1
@@ -176,7 +183,7 @@ def test_tweede_scan_van_dezelfde_bevinding_dedupliceert(tmp_path):
 def test_dedupe_binnen_een_run(tmp_path):
     led = _ledger(tmp_path)
     nieuw = _bev(term="gifvrij", gevonden=["volstrekt gifvrij"])
-    verslag = claims_board.zet_op_bord(led, None, claims_db.load(), [nieuw, dict(nieuw)],
+    verslag = claims_board.zet_op_bord(_omg(tmp_path, led), claims_db.load(), [nieuw, dict(nieuw)],
                                        "x", rol_voor)
     assert len(verslag["aangemaakt"]) == 1
 
@@ -187,14 +194,14 @@ def test_afgehandelde_werklijst_blokkeert_een_terugkeer_niet(tmp_path):
     db = claims_db.load()
     for w in db["werklijst"]:                       # de hele audit afgehandeld
         w["status"] = "live"
-    verslag = claims_board.zet_op_bord(led, None, db, [_bev(gevonden=["Planet-Safe"])],
+    verslag = claims_board.zet_op_bord(_omg(tmp_path, led), db, [_bev(gevonden=["Planet-Safe"])],
                                        "x", rol_voor)
     assert len(verslag["aangemaakt"]) == 1
 
 
 def test_groene_bevindingen_worden_nooit_werk(tmp_path):
     led = _ledger(tmp_path)
-    verslag = claims_board.zet_op_bord(led, None, claims_db.load(),
+    verslag = claims_board.zet_op_bord(_omg(tmp_path, led), claims_db.load(),
                                        [_bev(term="vegan", gevonden=["vegan"], stoplicht="green")],
                                        "x", rol_voor)
     assert verslag["aangemaakt"] == []
@@ -243,13 +250,22 @@ _PAGINA = ("<html><head><title>Test</title></head><body>"
            "Onze eco-friendly schoenen zijn compleet zero waste.</body></html>")
 
 
-def _ctx(tmp_path):
+def _ctx(tmp_path, monkeypatch=None):
+    """Scan-context met een WEGWERPKOPIE van de claims-database.
+
+    De scan schrijft werklijst-statussen terug naar de bron (v3, zelfverificatie). Zonder deze
+    kopie zou een test de repo-database muteren — `test_config_claims_database_blijft_ongemoeid`
+    bewaakt dat dat nooit meer gebeurt."""
+    if monkeypatch is not None:
+        kopie = tmp_path / "claims_database.json"
+        kopie.write_text(json.dumps(claims_db.load(), ensure_ascii=False), encoding="utf-8")
+        monkeypatch.setattr(claims_db, "DB_PATH", str(kopie))
     return SimpleNamespace(data_dir=str(tmp_path), settings={},
                            projects=_ledger(tmp_path), records=None)
 
 
-def test_scan_maakt_taak_van_nieuwe_term_en_is_weekidempotent(tmp_path):
-    ctx = _ctx(tmp_path)
+def test_scan_maakt_taak_van_nieuwe_term_en_is_weekidempotent(tmp_path, monkeypatch):
+    ctx = _ctx(tmp_path, monkeypatch)
     uit = ClaimsSiteScanSkill().run({"_fetch": lambda u: (200, _PAGINA)}, ctx)
     assert uit["ok"] and not uit["skipped"]
     assert uit["nieuw"] >= 1
@@ -290,8 +306,8 @@ def test_mislukte_scan_markeert_de_week_niet(tmp_path):
     assert not css.week_gedaan(str(tmp_path), css.period_key("week"))
 
 
-def test_force_slaat_de_weekpoort_over(tmp_path):
-    ctx = _ctx(tmp_path)
+def test_force_slaat_de_weekpoort_over(tmp_path, monkeypatch):
+    ctx = _ctx(tmp_path, monkeypatch)
     ClaimsSiteScanSkill().run({"_fetch": lambda u: (200, _PAGINA)}, ctx)
     tweede = ClaimsSiteScanSkill().run({"force": True, "_fetch": lambda u: (200, _PAGINA)}, ctx)
     assert tweede["skipped"] is False

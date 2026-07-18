@@ -237,3 +237,17 @@ def test_view_bevat_geen_gekopieerde_database():
 def test_statisch_prototype_is_weg():
     """Geen twee oppervlakken: het statische bestand hoort niet meer te bestaan."""
     assert not os.path.exists(os.path.join(PKG, "static", "claims_checker.html"))
+
+
+def test_config_claims_database_blijft_ongemoeid():
+    """Guard: geen test mag de claims-database in de repo muteren.
+
+    De wekelijkse scan schrijft werklijst-statussen terug naar de bron (v3-zelfverificatie).
+    Draait zo'n test tegen het echte pad, dan verandert hij versiebeheerde content — en dat
+    zie je pas bij `git diff`, niet bij een rode test. Wie dit ziet falen: geef je test een
+    wegwerpkopie via `monkeypatch.setattr(claims_db, "DB_PATH", ...)`."""
+    import subprocess
+    uit = subprocess.run(["git", "status", "--porcelain", "config/claims_database.json"],
+                         cwd=os.path.dirname(PKG), capture_output=True, text=True)
+    assert uit.stdout.strip() == "", (
+        "config/claims_database.json is gewijzigd tijdens de testrun:\n" + uit.stdout)
