@@ -106,7 +106,16 @@ class FieldNoteSkill(Skill):
             "(2) Wat dit betekent voor de missie-gedreven groei — gegrond in de cijfers uit punt 1.\n"
             "(3) De belangrijkste actie voor morgen."
         )
-        llm = reason(prompt, call_site="skill_field_note")
+        # Grounding-call: de Field Note is de stem van de rol die hem schrijft, dus zijn
+        # persona mag het model kiezen.
+        _ladder = None
+        try:
+            from nooch_village.llm_keuze import llm_voorkeur
+            _ladder = llm_voorkeur(context, getattr(context, "field_note_role", "analyst"),
+                                   "skill_field_note")
+        except Exception:
+            pass
+        llm = reason(prompt, call_site="skill_field_note", ladder=_ladder)
         header = f"# Field Note {today}\n\n"
         if tension:
             header += f"> ⚠️ SPANNING: {reason_txt}\n\n"

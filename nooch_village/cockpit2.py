@@ -254,6 +254,7 @@ from nooch_village.views.inbox import (
 from nooch_village.views.metrics2 import render_metrics2
 from nooch_village.views.bronnen import render_bronnen
 from nooch_village.views.claims import render_claims, render_rapport, rol_voor
+from nooch_village.views.inwoners import render_inwoner, render_inwoners
 from nooch_village.views.kennislaag import render_kennislaag
 from nooch_village.views.kennisbank import render_kennisbank, render_kennisbank_search
 from nooch_village.views.kennisbank_spel import render_kennisbank_spel
@@ -451,7 +452,10 @@ def _ai_reply(st: _Stores, pid: str, ask=None, *, persona=None, prefix: str = ""
     if ask is None:
         try:
             from nooch_village import llm
-            out = llm.reason(prompt, ladder=_match_ladder(), json_mode=True,
+            # Persona-voorkeur vervangt de match-ladder als die er is; anders het oude gedrag.
+            from nooch_village.llm_keuze import llm_voorkeur
+            _lad = llm_voorkeur(st, getattr(role, "id", ""), "cockpit_mention_triage") or _match_ladder()
+            out = llm.reason(prompt, ladder=_lad, json_mode=True,
                              call_site="cockpit_mention_triage")
         except Exception:
             out = None
@@ -1885,6 +1889,142 @@ def _act_aitask_remove(c):
         # ── einde autorisatie ──
         st.ai.remove(g("tid")); msg = "✓ verwijderd"
         return nxt, msg
+
+
+# ── Inwoner-dossier: de persona als drager ──────────────────────────────────
+# Alle takken hieronder: AUTHZ: anchor-lead — de persona is een org-breed object (hij reist mee
+# tussen zetels), dus het beheer ervan hoort bij de anchor-lead. Fail-closed via _anchor_gate.
+#
+# Wat hier NOOIT gebeurt: purpose, accountabilities of domeinen aanraken. Dat is mandaat, dat
+# leeft in de records en wijzigt alleen via governance (G0-G4).
+
+# Voorstellen van de finetune-knop leven per proces, niet in een store: ze zijn een tussenstap
+# in één menselijke handeling, geen feit dat bewaard moet blijven.
+_finetune_cache: dict = {}
+
+
+def _anchor_gate(st, username: str | None) -> str | None:
+    """Alleen de anchor-lead beheert persona's. Guest (auth uit) mag alles."""
+    if username == "guest":
+        return None
+    actor = st.people.by_email(username)
+    if actor is None:
+        return "Geen toegang — gebruiker niet herkend"
+    if not is_circle_lead(actor.id, "mother_earth", st.assign):
+        return "Geen toegang — alleen de anchor-lead beheert inwoners"
+    return None
+
+
+def _persona_kroniek(st, pid: str, veld: str, oud: str, nieuw: str, door: str | None) -> None:
+    """Elke wijziging aan een persona is terug te lezen: oud → nieuw, wie, wanneer.
+    Append-only; fail-soft (een kapotte log mag een bewerking nooit blokkeren)."""
+    try:
+        with open(os.path.join(st.dd, "persona_kroniek.jsonl"), "a", encoding="utf-8") as f:
+            f.write(json.dumps({"pid": pid, "veld": veld, "oud": oud[:500], "nieuw": nieuw[:500],
+                                "door": door or "?", "at": time.time()}, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def _act_persona_edit(c):
+        # AUTHZ: anchor-lead — persona-beheer is org-breed (zie blok-comment hierboven).
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _anchor_gate(st, username)
+        if _deny:
+            return nxt, _deny
+        pid = g("pid")
+        oud = st.personas.get(pid)
+        if oud is None:
+            return nxt, "⛔ onbekende inwoner"
+        st.personas.update(pid, mbti=g("mbti"), instructions=g("instructions"),
+                           avatar=g("avatar"), prompt_extra=g("prompt_extra"))
+        for veld, was in (("instructions", oud.instructions), ("prompt_extra", oud.prompt_extra),
+                          ("mbti", oud.mbti)):
+            if g(veld) != was:
+                _persona_kroniek(st, pid, veld, was, g(veld), username)
+        return nxt, "✓ personality bijgewerkt"
+
+
+def _act_persona_llm(c):
+        # AUTHZ: anchor-lead — modelkeuze raakt het budget van het hele dorp.
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _anchor_gate(st, username)
+        if _deny:
+            return nxt, _deny
+        per_taak = {}
+        for regel in (g("llm_per_taak") or "").splitlines():
+            if "=" in regel:
+                sleutel, _, waarde = regel.partition("=")
+                if sleutel.strip() and waarde.strip():
+                    per_taak[sleutel.strip()] = waarde.strip()
+        if st.personas.update(g("pid"), llm={"default": g("llm_default"), "per_taak": per_taak}) is None:
+            return nxt, "⛔ onbekende inwoner"
+        return nxt, f"✓ modelvoorkeur opgeslagen ({len(per_taak)} taak-override(s))"
+
+
+def _act_persona_finetune(c):
+        # AUTHZ: anchor-lead — de AI stelt voor, de mens kiest; niets wordt hier overschreven.
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _anchor_gate(st, username)
+        if _deny:
+            return nxt, _deny
+        pid = g("pid")
+        persona = st.personas.get(pid)
+        if persona is None:
+            return nxt, "⛔ onbekende inwoner"
+        voorstellen = _finetune_voorstellen(persona)
+        if not voorstellen:
+            # Fail-closed: geen LLM-antwoord → geen voorstellen, en zeker geen lege overschrijving.
+            return nxt, "⛔ de AI gaf geen bruikbaar voorstel — probeer het later opnieuw"
+        _finetune_cache[pid] = voorstellen
+        return nxt, f"✨ {len(voorstellen)} voorstel(len) — kies er een"
+
+
+def _act_persona_finetune_apply(c):
+        # AUTHZ: anchor-lead — pas hier wordt er echt iets overschreven, na een menselijke keuze.
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _anchor_gate(st, username)
+        if _deny:
+            return nxt, _deny
+        pid, keuze = g("pid"), g("keuze")
+        persona = st.personas.get(pid)
+        if persona is None:
+            return nxt, "⛔ onbekende inwoner"
+        if not keuze.strip() or keuze.strip() == "(nu leeg)":
+            _finetune_cache.pop(pid, None)
+            return nxt, "✓ niets gewijzigd"
+        _persona_kroniek(st, pid, "prompt_extra", persona.prompt_extra, keuze, username)
+        st.personas.update(pid, prompt_extra=keuze)
+        _finetune_cache.pop(pid, None)
+        return nxt, "✓ prompt-extra bijgewerkt"
+
+
+def _finetune_voorstellen(persona) -> list:
+    """Twee alternatieven voor de prompt-extra: strakker en ruimer. Fail-closed: bij een
+    onbruikbaar antwoord een lege lijst, nooit een half voorstel."""
+    huidig = (persona.prompt_extra or "").strip() or "(nog geen prompt-extra)"
+    prompt = (f"Je helpt bij het finetunen van een werkinstructie voor een AI-inwoner.\n"
+              f"Inwoner: {persona.name} ({persona.mbti}). Karakter: {persona.instructions}\n"
+              f"Huidige werkinstructie: {huidig}\n\n"
+              f"Geef TWEE alternatieven, elk maximaal twee zinnen:\n"
+              f"STRAKKER: <scherper, minder ruimte voor interpretatie>\n"
+              f"RUIMER: <meer ruimte, maar nog steeds concreet>\n"
+              f"Antwoord met exact die twee regels, zonder inleiding.")
+    try:
+        from nooch_village import llm
+        out = llm.reason(prompt, call_site="persona_finetune", max_tokens=300)
+    except Exception:
+        out = None
+    if not out:
+        return []
+    uit = []
+    for regel in out.splitlines():
+        for kop, naam in (("STRAKKER:", "strakker"), ("RUIMER:", "ruimer")):
+            if regel.strip().upper().startswith(kop):
+                tekst = regel.split(":", 1)[1].strip()
+                if tekst:
+                    uit.append({"naam": naam, "tekst": tekst})
+    return uit
 
 
 def _act_persona_skill_add(c):
@@ -3762,6 +3902,10 @@ ACTIONS = {
     "claims_term_add": _act_claims_term_add,
     "claims_work_status": _act_claims_work_status,
     "claims_to_board": _act_claims_to_board,
+    "persona_edit": _act_persona_edit,
+    "persona_llm": _act_persona_llm,
+    "persona_finetune": _act_persona_finetune,
+    "persona_finetune_apply": _act_persona_finetune_apply,
 }
 
 
@@ -4181,6 +4325,20 @@ def make_handler(data_dir: str, csrf_token: str,
                     kan_cureren=_claims_gate_open(_Stores(data_dir), username),
                     zoek=(qs.get("q") or [""])[0],
                     bordresultaat=_claims_bordresultaat(qs)))
+                return
+            if path == "/inwoners":
+                # AUTHZ: iedereen-ingelogd — het dorp mag zien wie er woont; bewerken zit achter
+                # de anchor-lead-poort in de dispatch-takken.
+                self._send(render_inwoners(_Stores(data_dir), msg=(qs.get("msg") or [""])[0]))
+                return
+            if path == "/inwoner":
+                # AUTHZ: iedereen-ingelogd — lezen mag iedereen; het formulier verschijnt alleen
+                # mét csrf (ingelogd) en de schrijfactie toetst apart op anchor-lead.
+                st = _Stores(data_dir)
+                pid = (qs.get("id") or [""])[0]
+                self._send(render_inwoner(st, pid, csrf_token=effective_csrf,
+                                          msg=(qs.get("msg") or [""])[0],
+                                          voorstellen=_finetune_cache.get(pid, [])))
                 return
             if path.startswith("/static/"):
                 name = path[len("/static/"):]
