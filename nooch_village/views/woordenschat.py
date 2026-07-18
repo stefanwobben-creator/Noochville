@@ -103,7 +103,7 @@ def _rows(words: list, sparks: dict, csrf: str) -> str:
     for w, e, score in words:
         ev = e.get("evidence") or {}
         verbied = (f"<td><span class='kc-actions'>"
-                   f"{_mini_form(csrf, 'ws_forbid', w, '🚫', title='naar de no-follow list — komt niet meer terug in discovery')}"
+                   f"{_mini_form(csrf, 'ws_forbid', w, '🚫', cls='star', title='naar de no-follow list — komt niet meer terug in discovery')}"
                    f"</span></td>") if csrf else ""
         out.append(
             f"<tr><td>{_e(w)}{_nieuw_ster(e)}</td>"
@@ -116,12 +116,13 @@ def _rows(words: list, sparks: dict, csrf: str) -> str:
 
 
 def _status_row(word: str, e: dict, knoppen: str) -> str:
-    """Rij voor een niet-approved woord: woord + rationale + datum + beheer-knoppen."""
+    """Rij voor een niet-approved woord: woord + rationale/datum links, acties rechts uitgelijnd
+    op dezelfde regel (zelfde rij-anatomie als de goedgekeurde tabel)."""
     meta = " · ".join(x for x in (e.get("rationale") or "", e.get("date") or "") if x)
     return (f"<div class='rdr-row'><div class='rdr-body'>"
             f"<div class='rdr-sig'>{_e(word)}</div>"
-            f"<div class='rdr-meta'><span class='muted'>{_e(meta) or '—'}</span></div>"
-            f"<div class='ffoot-l'>{knoppen}</div></div></div>")
+            f"<div class='rdr-meta'><span class='muted'>{_e(meta) or '—'}</span></div></div>"
+            f"<div class='cl-act'>{knoppen}</div></div>")
 
 
 def _sectie(titel: str, rows: list) -> str:
@@ -215,7 +216,7 @@ def render_woordenschat(data_dir: str, csrf_token: str = "", msg: str = "",
         # het scherm de read-only kansrijkheid-lijst (zelfde regel als "geen schrijfknoppen").
         esc = [_status_row(w, e, _esc_knoppen(n, w, csrf_token))
                for n, (w, e) in enumerate(x for x in entries if x[1].get("status") == "escalated")]
-        heractiveer = lambda w: _mini_form(csrf_token, "ws_approve", w, "✅", "btn ok sm",
+        heractiveer = lambda w: _mini_form(csrf_token, "ws_approve", w, "✅", "star",
                                            title="heractiveer — terug naar de woordenschat")
         avoid = [_status_row(w, e, heractiveer(w))
                  for w, e in entries if e.get("status") == "avoid"]
