@@ -892,8 +892,6 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .kn-detail{position:relative;border-left:3px solid var(--green)}
 .kn-detail .kn-x{position:absolute;top:.5rem;right:.7rem;font-size:1.4rem;color:var(--muted);text-decoration:none;line-height:1}
 .kn-searchbox{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);font:inherit;padding:.45rem .6rem;margin:.3rem 0 .5rem;background:var(--surface)}
-.kn-srclink{color:var(--muted);text-decoration:underline dotted;cursor:pointer}
-.kn-srclink:hover{color:var(--green-dark)}
 #kn-biebresults{max-height:70vh;overflow-y:auto}
 
 /* ── Kennisbank UX-ronde: inhoud boven, machinerie treedt terug ─────────────── */
@@ -901,11 +899,11 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .kn-note .kn-nctrls{opacity:.55;transition:opacity .12s}
 .kn-note:hover .kn-nctrls,.kn-note:focus-within .kn-nctrls{opacity:1}   /* machinerie pas bij hover/focus */
 .kn-tags>summary{cursor:pointer;color:var(--muted);font-size:.82rem;padding:.2rem 0}
-/* Inline bewerken: klik op de tekst opent het veld; Bewaar ónder, primair, groter veld */
-.kn-editable{margin:0}
-.kn-editable>summary{cursor:text;list-style:none;font-size:.92rem}
+/* Inline bewerken: '✏️ bewerk' opent het veld pas op verzoek; Bewaar ónder, primair */
+.kn-editable{margin:.3rem 0 0}
+.kn-editable>summary{cursor:pointer;list-style:none;display:inline-block;font-size:.78rem;padding:.25rem .7rem;border:1px solid var(--border);border-radius:var(--radius-pill);background:var(--surface)}
 .kn-editable>summary::-webkit-details-marker{display:none}
-.kn-editable[open]>summary{color:var(--muted);font-size:.8rem}
+.kn-editable[open]>summary{border-color:var(--green);color:var(--green-dark)}
 .kn-editform{margin-top:.35rem;display:flex;flex-direction:column;align-items:flex-start;gap:.35rem}
 .kn-editform textarea,.kn-editform input[type=text]{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);font:inherit;padding:.45rem .55rem;background:var(--surface)}
 .kn-al{font-size:.78rem;font-style:italic}
@@ -944,6 +942,42 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 /* Taak 3 flip: per statement de omgekeerde lens-lezing, ondergeschikt aan de statement-tekst */
 .kn-fliplens{display:block;font-size:.8rem;font-style:italic;color:var(--coral);margin-top:.2rem}
 
+/* ── Kennisbank-statements (herontwerp dd 2026-07-18, SPEC_prototype: kaal overzicht,
+   klik = uitklap-detail, ⠿-handle voor drag&drop-mergen met modal) ─────────── */
+.kn-lijst{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+.kn-stmt{display:flex;gap:.3rem;align-items:flex-start;border-top:1px solid var(--cream-2);padding:.1rem .55rem;position:relative}
+.kn-stmt:first-child{border-top:none}
+.kn-stmt:hover{background:var(--cream-2)}
+.kn-stmt.dragover{outline:2px dashed var(--green);outline-offset:-2px;background:var(--green-tint)}
+.kn-stmt.dragging{opacity:.4}
+.kn-handle{flex:0 0 auto;color:var(--border);cursor:grab;font-size:.9rem;letter-spacing:-1px;line-height:1.1;user-select:none;padding:.6rem .1rem 0;opacity:0;transition:opacity .12s}
+.kn-stmt:hover .kn-handle,.kn-handle:focus-visible{opacity:1}
+.kn-handle:hover{color:var(--muted)}
+.kn-stmt>.kn-sel{margin-top:.65rem;opacity:0;transition:opacity .12s}
+.kn-stmt:hover>.kn-sel,.kn-stmt>.kn-sel:checked,.kn-stmt>.kn-sel:focus-visible{opacity:1}
+.kn-stmtbody{flex:1;min-width:0;margin:0}
+.kn-stmtbody>summary{cursor:pointer;list-style:none;font-weight:500;font-size:.92rem;padding:.5rem .2rem}
+.kn-stmtbody>summary::-webkit-details-marker{display:none}
+.kn-stmtdetail{padding:.1rem .2rem .7rem}
+.kn-dl{display:grid;grid-template-columns:95px 1fr;gap:.12rem .6rem;font-size:.84rem;margin:.3rem 0 .5rem}
+.kn-dl dt{color:var(--muted)}
+.kn-dl dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.kn-koppel{text-decoration:none;background:var(--cream-3);margin:.1rem .25rem .1rem 0}
+.kn-koppel:hover{border-color:var(--green)}
+.kn-koppel.contra{border-color:var(--coral);color:var(--coral)}
+.kn-bronvorm{display:inline-block;margin:0;vertical-align:baseline}
+.kn-bronvorm>summary{display:inline;cursor:pointer;list-style:none;color:var(--muted);font-size:.8rem}
+.kn-bronvorm>summary::-webkit-details-marker{display:none}
+.kn-bronvorm[open]{display:block;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .5rem;margin-top:.2rem}
+/* merge-modal (zelfde stijl als de spec; [hidden] van de UA blijft leidend) */
+.kn-overlay{position:fixed;inset:0;background:rgba(27,27,27,.35);z-index:9}
+.kn-modal{position:fixed;z-index:10;top:12vh;left:50%;transform:translateX(-50%);width:min(560px,92vw);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:1.1rem 1.2rem}
+.kn-modal h2{font-family:var(--font-display);font-size:1rem;margin:0 0 .6rem;color:var(--green-dark)}
+.kn-opt{display:flex;gap:.55rem;align-items:flex-start;padding:.45rem .5rem;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:.45rem;cursor:pointer;font-size:.88rem}
+.kn-opt.on{border-color:var(--green);background:var(--green-tint)}
+.kn-opt input{margin-top:.2rem}
+.kn-modal textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius);font:inherit;font-size:.9rem;padding:.6rem;background:var(--surface);min-height:84px}
+.kn-modalbtns{margin-top:.6rem;display:flex;gap:.5rem;justify-content:flex-end}
 /* Inwoner-dossier: het enige nieuwe atoom van dit scherm. Emoji-avatar in een cirkel — het
    prototype had hem 64px; hier één maat die zowel in de h1 als in een tabelrij werkt. */
 .avatar{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;

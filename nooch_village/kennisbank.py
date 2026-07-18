@@ -249,7 +249,7 @@ class KennisbankStore(JsonStore):
 
     _WRITE_METHODS = ("add", "link", "unlink", "link_insight", "unlink_insight",
                       "annotate", "discuss", "reformulate",
-                      "set_caveat")
+                      "set_caveat", "rewire_atom")
 
     # -- reads (lock-vrij) --
     def get(self, iid: str) -> dict | None:
@@ -338,6 +338,34 @@ class KennisbankStore(JsonStore):
         ins["updated_at"] = _now()
         self._save()
         return True
+
+    def rewire_atom(self, old_id: str, new_id: str) -> int:
+        """Herwijs evidence-links in ALLE inzichten van old_id → new_id (na een atoom-merge:
+        het bron-atoom verdwijnt, de bewijs-links mogen geen wezen worden). Wijst een inzicht
+        al naar new_id, dan vervalt de oude link (geen dubbele stem — zelfde regel als
+        link()-idempotentie). Geeft het aantal aangepaste inzichten terug."""
+        if not old_id or not new_id or old_id == new_id:
+            return 0
+        n = 0
+        for ins in self._items.values():
+            ev = ins.get("evidence") or []
+            if not any(l.get("atom_id") == old_id for l in ev):
+                continue
+            heeft_nieuw = any(l.get("atom_id") == new_id for l in ev)
+            nieuw: list[dict] = []
+            for l in ev:
+                if l.get("atom_id") == old_id:
+                    if heeft_nieuw:
+                        continue                      # target al gelinkt → oude link vervalt
+                    l = {**l, "atom_id": new_id}
+                    heeft_nieuw = True
+                nieuw.append(l)
+            ins["evidence"] = nieuw
+            ins["updated_at"] = _now()
+            n += 1
+        if n:
+            self._save()
+        return n
 
     def annotate(self, iid: str, atom_id: str, text: str) -> bool:
         """De waarom-notitie van de lezer bij één link (kennisdrager, optioneel)."""

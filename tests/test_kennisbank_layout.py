@@ -161,8 +161,9 @@ def test_search_op_inhoud_en_bron(tmp_path):
     # zoeken op BRON vindt alle kaarten van die survey
     op_bron = render_kennisbank_search(st, "fixed delivery", "", "", csrf_token="t")
     assert "51% wil" in op_bron and "Van Westendorp" in op_bron and "natuurrubber" not in op_bron
-    # bronlabel is klikbaar
-    assert "kn-srclink" in op_bron and "Survey Fixed Delivery Moments" in op_bron
+    # statements-herontwerp: de bron staat in het uitklap-detail (één plek), het
+    # klik-op-bron-zet-filter-gedrag (kn-srclink) is verwijderd — zoeken = typen
+    assert "kn-srclink" not in op_bron and "Survey Fixed Delivery Moments" in op_bron
 
 
 def test_brug_markeert_suggesties_en_koppelknoppen(tmp_path):
@@ -280,8 +281,9 @@ def test_ux_bieb_dedup_geen_comment_geen_feit(tmp_path):
     assert "al gekoppeld" in frag
     # A1/A4: geen comment-per-statement (💬) en geen "+ feit"-pad meer in de bibliotheek
     assert "💬" not in frag and "+ feit" not in frag and "kb_atoom_related" not in frag
-    # A3: klik-op-tekst bewerken aanwezig (kn-editable), bronlink-affordance aanwezig
-    assert "kn-editable" in frag and "kb_atoom_reference" in frag
+    # statements-herontwerp: bewerken zit achter '✏️ bewerk' (kn-editable, niet standaard
+    # open); de bron-affordance (kb_atoom_reference) zit inline in de Bron-rij
+    assert "kn-editable" in frag and "✏️ bewerk" in frag and "kb_atoom_reference" in frag
 
 
 def test_ux_detail_gesprek_draad_en_geen_derde_pad(tmp_path):

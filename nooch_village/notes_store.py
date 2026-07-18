@@ -137,6 +137,7 @@ class NotesStore:
                                       "at": datetime.now().isoformat(timespec="seconds")})
         bestaand.claim = nieuwe_claim
         bestaand.body = nieuwe_body
+        bestaand.version = (bestaand.version or 1) + 1     # zichtbare "nieuwe versie"
         bestaand.last_updated_at = datetime.now()
         self._notes[note_id] = bestaand.model_dump(mode="json")
         self._save()
@@ -214,6 +215,83 @@ class NotesStore:
         for d in delen:
             self.archive(d.id)
         return kaart
+
+    def merge_into(self, target_id: str, source_id: str, tekst: str,
+                   by: str = "") -> Insight | None:
+        """Drag&drop-merge (statements-herontwerp): laat het SOURCE-atoom opgaan in het
+        TARGET-atoom. target.claim = de gekozen/aangepaste tekst (de vorige claim gaat
+        append-only in edit_history), target.version += 1.
+
+        Herkomst-keuze (bewust besluit, zodat de tweede bron aantoonbaar blijft):
+        het datamodel kent al twee mechanismen voor "meerdere herkomsten op één kaart" —
+        `merged_from` (curatie-merge: de originelen blijven gearchiveerd bestaan als
+        naspeurbaar spoor) en het "; "-gestapelde source/reference-veld (het patroon van
+        merge() en enrich()). We gebruiken beide:
+          - source_id komt in target.merged_from en het source-atoom wordt gearchiveerd
+            mét superseded_by=[target_id] (het bestaande supersede-spoor) — de volledige
+            tweede herkomst (source, reference, grounds, provenance) blijft dus als
+            atoom in het archief staan en is via merged_from terug te vinden;
+          - source/reference stapelen "; "-gescheiden op het target (heeft target nog
+            geen reference, dan neemt het die van source over) — daarmee weerspiegelt
+            ook de onafhankelijkheidsgroep (norm_bron over de volledige bron-string)
+            dat er nu twee herkomsten onder deze kaart zitten, net als bij merge();
+          - grounds: neemt target die van source over als hij er zelf geen heeft
+            (Toulmin-veld; twee grounds naast elkaar kent het model niet — de tweede
+            blijft leesbaar op het gearchiveerde source-atoom).
+
+        Verder: tags = union; links_to/supports/contradicts = union zonder
+        self-references; alle verwijzingen elders in de bibliotheek naar source_id
+        worden herwezen naar target_id (geen wees-verwijzingen). Fail-closed:
+        zelf-merge, onbekend id of lege tekst → None en er verandert niets."""
+        tekst = (tekst or "").strip()
+        if not tekst or target_id == source_id:
+            return None
+        target = self.get(target_id)
+        src = self.get(source_id)
+        if target is None or src is None:
+            return None
+        from datetime import datetime
+        now = datetime.now()
+        # 1. tekst + versie (append-only: de vorige claim blijft in edit_history)
+        target.edit_history.append({"claim": target.claim, "body": target.body,
+                                    "at": now.isoformat(timespec="seconds")})
+        target.claim = tekst[:500]
+        target.version = (target.version or 1) + 1
+        # 2. herkomst stapelt (zie docstring)
+        if src.source and src.source not in (target.source or ""):
+            target.source = ((target.source + "; " + src.source) if target.source
+                             else src.source)[:160]
+        if src.reference:
+            if not target.reference:
+                target.reference = src.reference
+            elif src.reference not in target.reference:
+                target.reference = (target.reference + "; " + src.reference)[:200]
+        if src.grounds and not target.grounds:
+            target.grounds = src.grounds
+        target.merged_from = list(dict.fromkeys(target.merged_from + [source_id]))
+        # 3. tags + relaties: union, zonder self-references
+        target.tags = list(dict.fromkeys(target.tags + src.tags))
+        for veld in ("links_to", "supports", "contradicts"):
+            samen = list(dict.fromkeys(getattr(target, veld) + getattr(src, veld)))
+            setattr(target, veld, [x for x in samen if x not in (target_id, source_id)])
+        target.last_updated_at = now
+        self._notes[target_id] = target.model_dump(mode="json")
+        # 4. source verdwijnt uit de lijst: archiveren (nooit wissen) + supersede-spoor
+        src.archived = True
+        src.superseded_by = list(dict.fromkeys(src.superseded_by + [target_id]))
+        src.last_updated_at = now
+        self._notes[source_id] = src.model_dump(mode="json")
+        # 5. verwijzingen elders herwijzen: source_id → target_id (ontdubbeld, geen self-ref)
+        for aid, d in self._notes.items():
+            if aid in (target_id, source_id):
+                continue
+            for veld in ("links_to", "supports", "contradicts"):
+                lst = d.get(veld) or []
+                if source_id in lst:
+                    d[veld] = list(dict.fromkeys(
+                        (target_id if x == source_id else x) for x in lst))
+        self._save()
+        return target
 
     def add_relation(self, from_id: str, to_id: str, relation: str) -> Insight | None:
         """Leg een bewijs-relatie: `from_id` STEUNT of SPREEKT TEGEN `to_id`.

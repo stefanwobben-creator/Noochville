@@ -8,6 +8,12 @@ is een URL, geen client-state); sluiten = terug naar /kennisbank. De machinerie
 Hergebruik: web_base (_e/_page/_field/_banner), cockpit2_util (_DS_LINK/_BUILD),
 kern-klassen (.card/.btn/.chip/.muted) + de kn-*-familie in static/nooch.css (drawer,
 meter, noten, koppel-paneel — expliciet vocabulaire-besluit, zie tests/test_ui_ratchets).
+
+Statements-herontwerp (dd 2026-07-18, docs/SPEC_kennisbank_statements.html, akkoord founder): de
+bibliotheek rechts is een KAAL statements-overzicht (alleen de claim); klik klapt het
+detail uit (datum · bron op één plek · versie · gekoppeld · tags · ✏️ bewerk); zoeken =
+typen (ook op bron/reference/tag); de ⠿-handle sleept een statement op een ander →
+merge-modal → kb_atoom_merge (zie tests/test_kennisbank_statements.py).
 """
 from __future__ import annotations
 
@@ -364,97 +370,164 @@ _PAG = 30
 _ZOEK_MAX = 60
 
 
-def _bron_link(source: str) -> str:
-    """Klikbaar bron-label → filtert de bibliotheek op die bron (JS zet de zoekbox; de
-    href is de no-JS-fallback naar dezelfde filter)."""
-    s = (source or "bron onbekend").strip()
-    return (f"<a class='kn-srclink' data-src='{_e(s)}' "
-            f"href='/kennisbank?q={_e(s)}'>{_e(s)}</a>")
+def _stmt_datum(a: dict) -> str:
+    """De Datum-rij (spec): source_date (de datum van de bron) gaat vóór; is die er niet,
+    dan created_at met het label 'toegevoegd' — nooit een valse bron-datum suggereren."""
+    sd = (a.get("source_date") or "").strip()
+    if sd:
+        return _e(sd[:10])
+    ca = (a.get("created_at") or "")[:10]
+    return (f"{_e(ca)} <span class='muted'>· toegevoegd</span>" if ca
+            else "<span class='muted'>—</span>")
 
 
-def _bieb_atoom(aid: str, a: dict, csrf: str, nxt: str, active_iid: str,
-                sugg: str = "", gelinkt: bool = False) -> str:
-    """Eén bibliotheek-kaart (rechterkolom): inhoud (klik = inline bewerken, append-only) +
-    klikbaar bronlabel + curatie-vink + een bronlink (URL/PDF → reference). Staat er links een
-    inzicht open, dan de koppel-brug (+ steunt / + tegen) met suggestie-markering — behalve als
-    de kaart er al aan gekoppeld is (A4: geen dubbel pad)."""
-    hub = subject_van(a)
-    chip = f"<span class='chip outline'>{_e(hub)}</span>" if hub else ""
-    if "verificatie_vereist" in (a.get("tags") or []):
-        chip += " <span class='chip muted'>verificatie vereist</span>"
-    if a.get("merged_from"):
-        chip += f" <span class='chip muted'>samengesteld uit {len(a['merged_from'])}</span>"
-    if a.get("edit_history"):
-        chip += f" <span class='chip muted'>bewerkt {len(a['edit_history'])}×</span>"
-    sugg_chip = ""
-    if sugg == "support" and not gelinkt:
-        sugg_chip = " <span class='chip'>past mogelijk</span>"
-    elif sugg == "counter" and not gelinkt:
-        sugg_chip = " <span class='chip muted'>spreekt mogelijk tegen</span>"
+def _stmt_bron(aid: str, a: dict, csrf: str, nxt: str) -> str:
+    """De Bron-rij — de bron leeft op ÉÉN plek (spec). Een reference-URL of -PDF rendert
+    als externe link (target=_blank; een PDF is een /kbref/-pad naar het geserveerde
+    bestand); een legacy label-reference (DOI/ISBN/documentlabel) als tekst (fail-soft);
+    alleen een bronnaam als kale tekst. Het kleine ✏️ ernaast (of '+ voeg bron toe' als er
+    niets is) klapt inline het compacte koppel-blok uit: URL-veld (kb_atoom_reference) +
+    PDF-upload (het bestaande kb_atoom_ref_pdf-formulier). Zonder csrf: alleen weergave."""
     ref = (a.get("reference") or "").strip()
-    reftxt = f" · {_e(ref)}" if ref else ""
+    src = (a.get("source") or "").strip()
+    if ref.startswith(("http://", "https://", "/kbref/")):
+        label = src or (ref.rsplit("_", 1)[-1] if ref.startswith("/kbref/") else ref)
+        weergave = f"<a href='{_e(ref)}' target='_blank' rel='noopener'>{_e(label)} ↗</a>"
+    elif ref:
+        weergave = _e(f"{src} · {ref}" if src and src not in ref else ref)
+    elif src:
+        weergave = _e(src)
+    else:
+        weergave = ""
+    if not csrf:
+        return weergave or "<span class='muted'>—</span>"
+    # Mét reference: klein ✏️ ernaast. Zonder reference (ook als er wél een bronnaam
+    # staat): '+ voeg bron toe' op diezelfde plek (spec) — de naam blijft leesbaar.
+    knop = "✏️" if ref else "+ voeg bron toe"
+    vorm = (f"<details class='kn-bronvorm'>"
+            f"<summary title='bron wijzigen of toevoegen'>{knop}</summary>"
+            f"<form method='post' action='/action' class='kn-editform'>"
+            f"{_hid(csrf, 'kb_atoom_reference', nxt, {'atom_id': aid})}"
+            f"{_field('plak een URL als bron', 'url', fid=f'f-refu-{aid}', placeholder='https://…')}"
+            f"<button class='btn'>koppel</button></form>"
+            f"<form method='post' action='/action' enctype='multipart/form-data' class='kn-editform'>"
+            f"{_hid(csrf, 'kb_atoom_ref_pdf', nxt, {'atom_id': aid})}"
+            + _field("… of een PDF als bron", "file", kind="file", fid=f"f-refp-{aid}",
+                     attrs="accept='application/pdf'")
+            + f"<button class='btn'>koppel PDF</button></form></details>")
+    return f"{weergave} {vorm}"
+
+
+def _stmt_koppels(a: dict, atoms: dict) -> str:
+    """De Gekoppeld-rij: supports/links_to/contradicts als klikbare chips die het
+    doel-statement openen en erheen scrollen (JS; de href is de anchor-fallback).
+    Contradicts visueel onderscheiden (coral rand). Links naar gearchiveerde of
+    onbekende atomen renderen niet (geen wees-chips)."""
+    delen: list[str] = []
+    gezien: set[str] = set()
+    for veld, extra in (("supports", ""), ("links_to", ""), ("contradicts", " contra")):
+        for tid in a.get(veld) or []:
+            if tid in gezien:
+                continue
+            gezien.add(tid)
+            doel = atoms.get(tid)
+            if not isinstance(doel, dict):
+                continue
+            tekst = (doel.get("claim") or tid).strip()
+            label = _e(tekst[:48]) + ("…" if len(tekst) > 48 else "")
+            titel = " title='spreekt tegen'" if extra else ""
+            delen.append(f"<a class='chip kn-koppel{extra}' "
+                         f"href='#stmt-{_e(tid)}'{titel}>{label}</a>")
+    return " ".join(delen) or "<span class='muted'>—</span>"
+
+
+def _stmt(aid: str, a: dict, atoms: dict, csrf: str, nxt: str, active_iid: str,
+          sugg: str = "", gelinkt: bool = False) -> str:
+    """Eén statement in de bibliotheek (herontwerp dd 2026-07-18, docs/SPEC_kennisbank_statements.html):
+    KAAL in het overzicht — alleen de claim-tekst; klik klapt het detail uit met
+    datum · bron (één plek) · versie · gekoppeld · tags. Bewerken zit achter een
+    '✏️ bewerk'-knop (textarea niet meer standaard open, append-only via kb_atoom_edit).
+    De ⠿-handle links (zichtbaar bij hover) draagt de drag&drop-merge. Zonder csrf
+    (read-only) geen handle, geen vink en geen formulieren."""
+    try:
+        versie = int(a.get("version") or 1)
+    except (TypeError, ValueError):
+        versie = 1
+    vchips = ""
+    if a.get("merged_from"):
+        vchips += f" <span class='chip muted'>samengesteld uit {len(a['merged_from'])}</span>"
+    if a.get("edit_history"):
+        vchips += f" <span class='chip muted'>bewerkt {len(a['edit_history'])}×</span>"
+    tags = " ".join(f"<span class='chip'>{_e(t)}</span>" for t in a.get("tags") or []) \
+        or "<span class='muted'>—</span>"
     body = ""
     if (a.get("body") or "").strip():
         body = (f"<details class='kn-nctrl'><summary>toon de inhoud</summary>"
                 f"<div class='kn-ann'>{_e(a['body']).replace(chr(10), '<br>')}</div></details>")
 
-    # A3: klik op de tekst → inline bewerken (groter veld, Bewaar ónder het veld, primaire kleur).
-    editveld = (f"<details class='kn-editable'><summary>{_e(a.get('claim'))}{chip}{sugg_chip}</summary>"
-                f"<form method='post' action='/action' class='kn-editform'>"
-                f"{_hid(csrf, 'kb_atoom_edit', nxt, {'atom_id': aid})}"
-                f"<textarea name='claim' rows='4'>{_e(a.get('claim') or '')}</textarea>"
-                f"<button class='btn ok'>Bewaar (nieuwe versie)</button></form></details>")
+    bewerk = ""
+    if csrf:
+        bewerk = (f"<details class='kn-editable'><summary>✏️ bewerk</summary>"
+                  f"<form method='post' action='/action' class='kn-editform'>"
+                  f"{_hid(csrf, 'kb_atoom_edit', nxt, {'atom_id': aid})}"
+                  f"<textarea name='claim' rows='4'>{_e(a.get('claim') or '')}</textarea>"
+                  f"<button class='btn ok'>Bewaar (nieuwe versie)</button></form></details>")
 
+    # Koppel-brug naar het open inzicht (A4: geen dubbel pad als de kaart al gelinkt is).
     brug = ""
-    if active_iid:
-        brug = ("<span class='muted kn-al'>al gekoppeld</span>" if gelinkt else
-                f"<form method='post' action='/action' class='kn-unlink'>"
-                f"{_hid(csrf, 'kb_link', nxt, {'iid': active_iid, 'atom_id': aid, 'stance': 'support'})}"
-                f"<button class='btn ok'>+ steunt</button></form>"
-                f"<form method='post' action='/action' class='kn-unlink'>"
-                f"{_hid(csrf, 'kb_link', nxt, {'iid': active_iid, 'atom_id': aid, 'stance': 'counter'})}"
-                f"<button class='btn no'>+ tegen</button></form>")
+    if active_iid and csrf:
+        sugg_chip = ""
+        if sugg == "support" and not gelinkt:
+            sugg_chip = "<span class='chip'>past mogelijk</span> "
+        elif sugg == "counter" and not gelinkt:
+            sugg_chip = "<span class='chip muted'>spreekt mogelijk tegen</span> "
+        knoppen = ("<span class='muted kn-al'>al gekoppeld</span>" if gelinkt else
+                   f"<form method='post' action='/action' class='kn-unlink'>"
+                   f"{_hid(csrf, 'kb_link', nxt, {'iid': active_iid, 'atom_id': aid, 'stance': 'support'})}"
+                   f"<button class='btn ok'>+ steunt</button></form>"
+                   f"<form method='post' action='/action' class='kn-unlink'>"
+                   f"{_hid(csrf, 'kb_link', nxt, {'iid': active_iid, 'atom_id': aid, 'stance': 'counter'})}"
+                   f"<button class='btn no'>+ tegen</button></form>")
+        brug = f"<div class='kn-nctrls'>{sugg_chip}{knoppen}</div>"
 
-    bronlink = (
-        f"<details class='kn-nctrl'><summary title='URL of PDF als bron koppelen'>🔗 bronlink</summary>"
-        f"<form method='post' action='/action' class='kn-editform'>"
-        f"{_hid(csrf, 'kb_atoom_reference', nxt, {'atom_id': aid})}"
-        f"{_field('plak een URL als bron', 'url', fid=f'f-refu-{aid}', placeholder='https://…')}"
-        f"<button class='btn'>Koppel URL</button></form>"
-        f"<form method='post' action='/action' enctype='multipart/form-data' class='kn-editform'>"
-        f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
-        f"<input type='hidden' name='action' value='kb_atoom_ref_pdf'>"
-        f"<input type='hidden' name='atom_id' value='{_e(aid)}'>"
-        f"<input type='hidden' name='next' value='{_e(nxt)}'>"
-        + _field("… of een PDF als bron", "file", kind="file", fid=f"f-refp-{aid}",
-                 attrs="accept='application/pdf'")
-        + f"<button class='btn'>Koppel PDF</button></form></details>")
-
-    return (f"<div class='kn-note support'>"
-            f"<input type='checkbox' name='atoom' value='{_e(aid)}' form='curatieform' "
-            f"class='kn-sel' aria-label='selecteer'>"
-            f"<div class='kn-ntext'>{editveld}"
-            f"<span class='kn-src'>{_bron_link(a.get('source'))}{reftxt}</span>{body}"
-            f"<div class='kn-nctrls'>{brug}{bronlink}</div></div></div>")
+    vink = (f"<input type='checkbox' name='atoom' value='{_e(aid)}' form='curatieform' "
+            f"class='kn-sel' aria-label='selecteer statement'>" if csrf else "")
+    handle = ("<span class='kn-handle' draggable='true' "
+              "title='sleep op een ander statement om te mergen'>⠿</span>" if csrf else "")
+    return (f"<div class='kn-stmt' id='stmt-{_e(aid)}' data-id='{_e(aid)}'>"
+            f"{vink}{handle}"
+            f"<details class='kn-stmtbody'>"
+            f"<summary class='kn-stmttekst'>{_e(a.get('claim'))}</summary>"
+            f"<div class='kn-stmtdetail'><dl class='kn-dl'>"
+            f"<dt>Datum</dt><dd>{_stmt_datum(a)}</dd>"
+            f"<dt>Bron</dt><dd>{_stmt_bron(aid, a, csrf, nxt)}</dd>"
+            f"<dt>Versie</dt><dd>v{versie}{vchips}</dd>"
+            f"<dt>Gekoppeld</dt><dd>{_stmt_koppels(a, atoms)}</dd>"
+            f"<dt>Tags</dt><dd>{tags}</dd>"
+            f"</dl>{body}{bewerk}{brug}</div></details></div>")
 
 
 def _bieb_results(st, atoms: dict, q: str, hub: str, active_ins: dict | None,
                   csrf: str) -> str:
-    """De doorzoekbare atomenlijst (het fragment dat /kennisbank/search vervangt). Zoekt op
-    inhoud ÉN bron over de verse volledige bibliotheek; markeert steun/tegen-suggesties als
-    er een inzicht actief is (anti-cherry-pick, beide kanten)."""
+    """De doorzoekbare statements-lijst (het fragment dat /kennisbank/search vervangt).
+    Zoeken = typen (spec): matcht op inhoud, bron, reference ÉN tags over de verse volledige
+    bibliotheek; markeert steun/tegen-suggesties als er een inzicht actief is
+    (anti-cherry-pick, beide kanten)."""
     ql = (q or "").strip().lower()
     if ql:
-        rijen = [(aid, a) for aid, a in atoms.items()
-                 if ql in (a.get("claim") or "").lower()
-                 or ql in (a.get("source") or "").lower()]
-        kop = f"{len(rijen)} kaart(en) voor “{_e(q)}”"
+        def _raak(a: dict) -> bool:
+            return (ql in (a.get("claim") or "").lower()
+                    or ql in (a.get("source") or "").lower()
+                    or ql in (a.get("reference") or "").lower()
+                    or any(ql in (t or "").lower() for t in a.get("tags") or []))
+        rijen = [(aid, a) for aid, a in atoms.items() if _raak(a)]
+        kop = f"{len(rijen)} statement(s) voor “{_e(q)}”"
     elif hub:
         rijen = [(aid, a) for aid, a in atoms.items() if subject_van(a) == hub]
         kop = f"{len(rijen)} in ‘{_e(hub)}’"
     else:
         rijen = list(atoms.items())
-        kop = f"{len(rijen)} kaarten"
+        kop = f"{len(rijen)} statements"
     rijen.sort(key=lambda t: (t[1].get("created_at") or "", t[0]), reverse=True)
     getoond = rijen[:_ZOEK_MAX]
 
@@ -473,12 +546,14 @@ def _bieb_results(st, atoms: dict, q: str, hub: str, active_ins: dict | None,
             if k["atom_id"] not in al_gelinkt:
                 sugg[k["atom_id"]] = "support"       # 'past mogelijk' — richting kiest de mens
     nxt = f"/kennisbank?id={active_iid}" if active_iid else (f"/kennisbank?hub={hub}" if hub else "/kennisbank")
-    kaarten = "".join(_bieb_atoom(aid, a, csrf, nxt, active_iid, sugg.get(aid, ""),
-                                  gelinkt=(aid in al_gelinkt))
-                      for aid, a in getoond) or "<p class='muted'>Geen kaarten gevonden.</p>"
+    kaarten = "".join(_stmt(aid, a, atoms, csrf, nxt, active_iid, sugg.get(aid, ""),
+                            gelinkt=(aid in al_gelinkt))
+                      for aid, a in getoond)
+    lijst = (f"<div class='kn-lijst'>{kaarten}</div>" if kaarten
+             else "<p class='muted'>Geen statements gevonden.</p>")
     meer = (f"<p class='muted'>… en nog {len(rijen) - _ZOEK_MAX} meer — verfijn je zoekterm.</p>"
             if len(rijen) > _ZOEK_MAX else "")
-    return f"<p class='muted'>{kop}</p>{kaarten}{meer}"
+    return f"<p class='muted'>{kop}</p>{lijst}{meer}"
 def _bibliotheek_rechts(st, atoms: dict, q: str, hub: str, active_ins: dict | None,
                         csrf: str) -> str:
     """De rechterkolom: live smart-search + onderwerp-chips + resultaten + curatie + archief.
@@ -499,7 +574,8 @@ def _bibliotheek_rechts(st, atoms: dict, q: str, hub: str, active_ins: dict | No
     tags = (f"<details class='kn-tags'{' open' if hub else ''}>"
             f"<summary>toon onderwerpen</summary><div class='c2-sec'>{chips}</div></details>")
     zoekbox = (f"<input id='kn-search' class='kn-searchbox' type='search' value='{_e(q)}' "
-               f"placeholder='zoek in inhoud én bron…' autocomplete='off' "
+               f"placeholder='zoek in statements, bronnen en tags — gewoon typen…' "
+               f"autocomplete='off' "
                f"data-active='{_e(active_iid)}' data-hub='{_e(hub)}'>")
     results = _bieb_results(st, atoms, q, hub, active_ins, csrf)
 
@@ -514,13 +590,13 @@ def _bibliotheek_rechts(st, atoms: dict, q: str, hub: str, active_ins: dict | No
         spel_keuze = (f"<select name='sid' form='curatieform'>{opties}</select>"
                       f"<button class='btn' name='action' value='kb_atoom_naar_spel' form='curatieform'>"
                       f"Naar spel</button>")
+    # Samenvoegen loopt in het herontwerp via slepen (⠿ → modal → kb_atoom_merge);
+    # de selectie-balk houdt de resterende bulk-acties (archiveren, naar spel).
     selbar = (f"<div id='kn-selbar' class='kn-selbar' hidden>"
               f"<span class='kn-selcount'></span>"
               f"<form method='post' action='/action' id='curatieform' class='kn-lrow'>"
               f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
               f"<input type='hidden' name='next' value='{_e(nxt)}'>"
-              f"{_field('kop (bij ≥2 samenvoegen)', 'kop', fid='f-kn-kop')}"
-              f"<button class='btn ok' name='action' value='kb_atoom_merge'>Voeg samen</button>"
               f"<button class='btn' name='action' value='kb_atoom_archive'>Archiveer</button>"
               f"{spel_keuze}</form></div>")
     # Taak 2: met een open inzicht leest de rechterkolom als "hier koppel je bewijs" — een
@@ -537,8 +613,40 @@ def _bibliotheek_rechts(st, atoms: dict, q: str, hub: str, active_ins: dict | No
                "er bewijs uit te koppelen.</p>")
     return (f"{kop}{zoekbox}{tags}"
             f"<div id='kn-biebresults'>{results}</div>{selbar}"
+            f"{_merge_modal(csrf, nxt)}"
             f"{_gearchiveerd_uitklap(st, hub, csrf)}"
             f"{_ongesorteerd_bakje(atoms, [], csrf)}")
+
+
+def _merge_modal(csrf: str, nxt: str) -> str:
+    """De merge-modal (spec): na een drop toont JS deze dialoog — radio-keuze welke van de
+    twee teksten de default wordt, een prefilled textarea om aan te passen, en annuleer /
+    'merge → nieuwe versie'. Submit = POST /action kb_atoom_merge (target_id, source_id,
+    tekst, csrf, next). Eén exemplaar per pagina; JS vult de teksten en ids bij een drop.
+    Zonder csrf (read-only) rendert de modal niet — er valt dan ook niets te slepen."""
+    if not csrf:
+        return ""
+    return (
+        f"<div class='kn-overlay' id='kn-overlay' hidden></div>"
+        f"<div class='kn-modal' id='kn-modal' hidden role='dialog' aria-modal='true' "
+        f"aria-labelledby='kn-modaltitel'>"
+        f"<h2 id='kn-modaltitel'>Statements mergen</h2>"
+        f"<p class='muted'>Kies welke tekst de standaard wordt (bronnen, koppelingen en "
+        f"tags van allebei blijven bewaard; dit wordt een nieuwe versie).</p>"
+        f"<form method='post' action='/action' id='kn-mergeform'>"
+        f"{_hid(csrf, 'kb_atoom_merge', nxt)}"
+        f"<input type='hidden' name='target_id' value=''>"
+        f"<input type='hidden' name='source_id' value=''>"
+        f"<label class='kn-opt on' id='kn-opta' for='f-kn-keuze-a'>"
+        f"<input type='radio' name='keuze' value='a' id='f-kn-keuze-a' checked>"
+        f"<span></span></label>"
+        f"<label class='kn-opt' id='kn-optb' for='f-kn-keuze-b'>"
+        f"<input type='radio' name='keuze' value='b' id='f-kn-keuze-b'>"
+        f"<span></span></label>"
+        f"{_field('eventueel nog aanpassen', 'tekst', kind='textarea', fid='f-kn-mergetekst')}"
+        f"<div class='kn-modalbtns'>"
+        f"<button type='button' class='btn' id='kn-mergecancel'>annuleer</button>"
+        f"<button class='btn ok'>merge → nieuwe versie</button></div></form></div>")
 
 
 def render_kennisbank_search(st, q: str, hub: str, active_iid: str,
@@ -551,20 +659,17 @@ def render_kennisbank_search(st, q: str, hub: str, active_iid: str,
 
 
 _KN_SEARCH_JS = """<script>(function(){
- var box=document.getElementById('kn-search'); if(!box)return;
+ var box=document.getElementById('kn-search');
  var host=document.getElementById('kn-biebresults'); var t;
- function run(){
+ function run(cb){
+   if(!box||!host)return;
    var u='/kennisbank/search?q='+encodeURIComponent(box.value)
      +'&active='+encodeURIComponent(box.dataset.active||'')
      +'&hub='+encodeURIComponent(box.dataset.hub||'');
    fetch(u,{credentials:'same-origin'}).then(function(r){return r.text();})
-     .then(function(h){host.innerHTML=h; syncSel();});
+     .then(function(h){host.innerHTML=h; syncSel(); if(typeof cb==='function')cb();});
  }
- box.addEventListener('input',function(){clearTimeout(t);t=setTimeout(run,250);});
- document.addEventListener('click',function(e){
-   var a=e.target.closest('.kn-srclink'); if(!a)return;
-   e.preventDefault(); box.value=a.dataset.src||''; box.focus(); run();
- });
+ if(box) box.addEventListener('input',function(){clearTimeout(t);t=setTimeout(run,250);});
  // A2: contextuele selectie-actiebalk — verschijnt zodra er iets is aangevinkt, met een teller.
  function syncSel(){
    var bar=document.getElementById('kn-selbar'); if(!bar)return;
@@ -573,6 +678,77 @@ _KN_SEARCH_JS = """<script>(function(){
    var c=bar.querySelector('.kn-selcount'); if(c) c.textContent = n+' geselecteerd';
  }
  document.addEventListener('change',function(e){ if(e.target.classList.contains('kn-sel')) syncSel(); });
+ // Gekoppeld-chips: open het doel-statement en scroll erheen (staat het buiten de
+ // huidige zoekfilter, dan eerst de filter wissen en opnieuw laden).
+ function openStmt(id){
+   var el=document.querySelector('.kn-stmt[data-id="'+id+'"]');
+   if(!el&&box&&box.value){box.value='';run(function(){openStmt(id);});return;}
+   if(!el)return;
+   var d=el.querySelector('.kn-stmtbody'); if(d)d.open=true;
+   el.scrollIntoView({behavior:'smooth',block:'center'});
+ }
+ document.addEventListener('click',function(e){
+   var a=e.target.closest&&e.target.closest('.kn-koppel'); if(!a)return;
+   e.preventDefault();
+   openStmt((a.getAttribute('href')||'').replace('#stmt-',''));
+ });
+ // ⠿ drag & drop mergen (HTML5; gedelegeerd zodat het de live-search-vervanging overleeft).
+ var dragSrc=null;
+ function stmtVan(e){return e.target&&e.target.closest?e.target.closest('.kn-stmt'):null;}
+ document.addEventListener('dragstart',function(e){
+   if(!(e.target.closest&&e.target.closest('.kn-handle')))return;
+   var s=stmtVan(e); if(!s)return;
+   dragSrc=s.dataset.id; s.classList.add('dragging');
+   e.dataTransfer.effectAllowed='move';
+   try{e.dataTransfer.setData('text/plain',dragSrc);}catch(_){}
+ });
+ document.addEventListener('dragend',function(){
+   dragSrc=null;
+   document.querySelectorAll('.kn-stmt.dragging,.kn-stmt.dragover').forEach(function(x){
+     x.classList.remove('dragging','dragover');});
+ });
+ document.addEventListener('dragover',function(e){
+   var s=stmtVan(e);
+   if(s&&dragSrc&&s.dataset.id!==dragSrc){e.preventDefault();s.classList.add('dragover');}
+ });
+ document.addEventListener('dragleave',function(e){
+   var s=stmtVan(e); if(s)s.classList.remove('dragover');
+ });
+ document.addEventListener('drop',function(e){
+   var s=stmtVan(e); if(!s||!dragSrc)return;
+   e.preventDefault(); s.classList.remove('dragover');
+   if(s.dataset.id!==dragSrc) openMerge(dragSrc,s.dataset.id);
+ });
+ // De merge-modal: radio kiest de default-tekst, de textarea is wat er wordt opgeslagen.
+ var modal=document.getElementById('kn-modal'), overlay=document.getElementById('kn-overlay');
+ function tekstVan(id){
+   var el=document.querySelector('.kn-stmt[data-id="'+id+'"] .kn-stmttekst');
+   return el?el.textContent.trim():'';
+ }
+ function kies(a){
+   var oa=document.getElementById('kn-opta'), ob=document.getElementById('kn-optb');
+   oa.classList.toggle('on',a); ob.classList.toggle('on',!a);
+   document.getElementById('f-kn-keuze-'+(a?'a':'b')).checked=true;
+   document.getElementById('f-kn-mergetekst').value=(a?oa:ob).querySelector('span').textContent;
+ }
+ function openMerge(srcId,tgtId){
+   if(!modal)return;
+   var f=document.getElementById('kn-mergeform');
+   f.querySelector('[name=target_id]').value=tgtId;
+   f.querySelector('[name=source_id]').value=srcId;
+   document.getElementById('kn-opta').querySelector('span').textContent=tekstVan(srcId);
+   document.getElementById('kn-optb').querySelector('span').textContent=tekstVan(tgtId);
+   kies(true);
+   overlay.hidden=false; modal.hidden=false;
+ }
+ function sluitModal(){ if(modal){overlay.hidden=true; modal.hidden=true;} }
+ if(modal){
+   document.getElementById('kn-opta').addEventListener('click',function(){kies(true);});
+   document.getElementById('kn-optb').addEventListener('click',function(){kies(false);});
+   document.getElementById('kn-mergecancel').addEventListener('click',sluitModal);
+   overlay.addEventListener('click',sluitModal);
+   document.addEventListener('keydown',function(e){if(e.key==='Escape')sluitModal();});
+ }
 })();</script>"""
 
 

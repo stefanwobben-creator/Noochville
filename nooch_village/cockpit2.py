@@ -3583,19 +3583,24 @@ def _act_kb_atoom_subject(c):
 
 
 def _act_kb_atoom_merge(c):
-    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Curatie (addendum C):
-    # selectie → één samengestelde kaart; originelen gearchiveerd met merged_from-terugweg.
-    ids = [a for a in (c.form.get("atoom") or []) if a]
-    kop = c.g("kop").strip()
-    if len(ids) < 2:
-        return c.nxt, "✗ selecteer minstens twee notities om samen te voegen"
-    if not kop:
-        return c.nxt, "✗ geef de samengestelde kaart eerst een kop"
-    kaart = c.st.notes.merge(ids, kop, by=_kb_actor(c))
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Drag&drop-merge
+    # (statements-herontwerp dd 2026-07-18): sleep een statement op een ander → modal →
+    # één kaart met de gekozen tekst als nieuwe versie. De herkomst van het bron-atoom
+    # stapelt op het doel (zie NotesStore.merge_into: merged_from + supersede-spoor +
+    # "; "-gestapelde source/reference); verwijzingen elders — in andere atomen én in
+    # kennisbank-inzichten — worden herwezen; het bron-atoom verdwijnt uit de lijst
+    # (gearchiveerd, nooit gewist). Verving de oude selectie-merge ("Voeg samen") —
+    # die interactie is in het herontwerp opgegaan in het slepen.
+    target_id, source_id = c.g("target_id"), c.g("source_id")
+    if not target_id or not source_id:
+        return c.nxt, "✗ merge: sleep het ene statement op het andere"
+    if target_id == source_id:
+        return c.nxt, "✗ merge met zichzelf doet niets — sleep op een ánder statement"
+    kaart = c.st.notes.merge_into(target_id, source_id, c.g("tekst"), by=_kb_actor(c))
     if kaart is None:
-        return c.nxt, "✗ samenvoegen niet gelukt (bestaat deze samenvoeging al?)"
-    return c.nxt, (f"🧩 samengevoegd tot één kaart ({len(kaart.merged_from)} originelen "
-                   f"bewaard als gearchiveerd)")
+        return c.nxt, "✗ merge niet gelukt — statement niet (meer) gevonden of tekst leeg"
+    c.st.kennisbank.rewire_atom(source_id, target_id)
+    return c.nxt, f"🧩 samengevoegd → v{kaart.version} (herkomst van beide bewaard)"
 
 
 def _act_kb_atoom_archive(c):
@@ -4366,6 +4371,16 @@ def make_handler(data_dir: str, csrf_token: str,
                 fname, body = res
                 self._send_bytes(body.encode("utf-8"), "text/csv; charset=utf-8", fname)
                 return
+            if path.startswith("/kbref/"):
+                # Kennisbank-bron-PDF's (kb_atoom_ref_pdf): geserveerd uit data/kbref/.
+                # Basename-only tegen path-traversal; alleen .pdf. Achter de auth-check.
+                fname = os.path.basename(urllib.parse.unquote(path[len("/kbref/"):]))
+                full = os.path.join(data_dir, "kbref", fname)
+                if not (fname.lower().endswith(".pdf") and os.path.exists(full)):
+                    self._send("<p>Bestand niet gevonden</p>", 404); return
+                with open(full, "rb") as fh:
+                    self._send_bytes(fh.read(), "application/pdf")
+                return
             if path == "/file":
                 p = st.projects.get((qs.get("pid") or [""])[0])
                 aid = (qs.get("aid") or [""])[0]
@@ -4495,17 +4510,26 @@ def make_handler(data_dir: str, csrf_token: str,
                     _Stores(data_dir).projects.attach_file(pid, safe, rel)
                     self._redirect(fields.get("next", "/"), "📎 bijlage geupload"); return
                 if fields.get("action") == "kb_atoom_ref_pdf":
-                    # AUTHZ: iedereen-ingelogd — kennisbank. Een PDF als bronlink bij een atoom (A3):
-                    # via de bestaande adapter halen we een net documentlabel; dat landt in reference.
+                    # AUTHZ: iedereen-ingelogd — kennisbank. Een PDF als bronlink bij een atoom.
+                    # Statements-herontwerp: de PDF wordt óók bewaard (data/kbref/) en reference
+                    # wordt het geserveerde pad (/kbref/…) — zo opent de Bron-link in het detail
+                    # het document zelf. Oudere references (kale document-labels) blijven geldig
+                    # en renderen als tekst (fail-soft).
                     err = _upload_error(files, _upload_max_bytes())
                     if err:
                         self._send(err[0], err[1]); return
-                    from nooch_village.kennisbank_sources import van_pdf
                     fname, blob = files["file"]
                     nxt = fields.get("next", "/kennisbank")
-                    chunks = van_pdf(blob, os.path.basename(fname))
-                    label = chunks[0][1] if chunks else os.path.basename(fname)[:120]
-                    ok = _Stores(data_dir).notes.set_reference(fields.get("atom_id", ""), label)
+                    safe = os.path.basename(fname).replace("\\", "_")[:120]
+                    if not safe.lower().endswith(".pdf"):
+                        safe += ".pdf"
+                    stored = uuid.uuid4().hex[:8] + "_" + safe
+                    full = os.path.join(data_dir, "kbref", stored)
+                    os.makedirs(os.path.dirname(full), exist_ok=True)
+                    with open(full, "wb") as fh:
+                        fh.write(blob)
+                    ok = _Stores(data_dir).notes.set_reference(fields.get("atom_id", ""),
+                                                               "/kbref/" + stored)
                     self._redirect(nxt, "🔗 PDF als bronlink gekoppeld" if ok else "✗ notitie niet gevonden")
                     return
                 if fields.get("action") == "kb_intake_pdf":
