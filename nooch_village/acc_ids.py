@@ -112,15 +112,37 @@ def pairs(defn) -> list[tuple[str, str]]:
     return list(zip(ids, accs))
 
 
-def apply_accountability_change(defn, add: list[str], remove: list[str]) -> None:
+def is_herformulering(add: list[str], remove: list[str]) -> bool:
+    """Is deze change een HERFORMULERING: dezelfde belofte, andere woorden?
+
+    Governance kent geen 'bewerk' — een herformulering komt binnen als precies één remove plus
+    precies één add binnen dezelfde rol. `governance.py` herkent die vorm al (de orphan-check
+    op verweesd werk wordt er expliciet voor overgeslagen); wij laten er het acc_id op meereizen.
+    """
+    return len(remove or []) == 1 and len(add or []) == 1
+
+
+def apply_accountability_change(defn, add: list[str], remove: list[str]) -> list[str]:
     """Pas een governance-wijziging toe op tekst én ids in lockstep.
 
     Zelfde semantiek als de oude losse regels in `_adopt` (toevoegen dedupliceert en sorteert,
     verwijderen filtert op letterlijke tekst) — maar het id reist met zijn tekst mee, zodat
     bestaande koppelingen aan dezelfde belofte blijven hangen na een herordening.
+
+    Bij een HERFORMULERING (één remove + één add) erft de nieuwe tekst het id van de oude:
+    het is dezelfde belofte in andere woorden, dus koppelingen horen mee te verhuizen.
+
+    Geeft de acc_ids terug die door deze change VERDWIJNEN. De aanroeper kan daarmee
+    waarschuwen dat er koppelingen wees raken — stil laten vallen is nooit goed genoeg.
     """
     ensure_acc_ids(defn)
     items = pairs(defn)
+    voor = {i for (i, _) in items}
+
+    # Herformulering: het id van de verwijderde tekst verhuist naar de nieuwe tekst.
+    erft: str = ""
+    if is_herformulering(add, remove):
+        erft = next((i for (i, t) in items if t == remove[0]), "")
 
     if remove:
         drop = set(remove)
@@ -130,10 +152,12 @@ def apply_accountability_change(defn, add: list[str], remove: list[str]) -> None
         have = {t for (_, t) in items}
         for t in add:
             if t not in have:
-                items.append((_mint(t), t))
+                items.append((erft or _mint(t), t))
+                erft = ""                      # het geërfde id gaat maar naar één tekst
                 have.add(t)
         # De adoptie sorteerde de teksten; het id reist mee.
         items.sort(key=lambda p: p[1])
 
     defn.accountabilities = [t for (_, t) in items]
     defn.accountability_ids = [i for (i, _) in items]
+    return sorted(voor - set(defn.accountability_ids))

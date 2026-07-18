@@ -48,6 +48,21 @@ def links_for_acc(ai, role_id: str, acc_id: str) -> list:
         return []
 
 
+def koppelingen_op(ai, role_id: str, acc_ids_: set[str]) -> list:
+    """Alle koppelingen (autonome AI-taken ÉN middelen) op deze accountability-ids.
+
+    Gebruikt om vóór een adoptie te melden hoeveel koppelingen er wees zouden raken. Bewust
+    beide soorten: een verweesde AI-taak is net zo stil kapot als een verweesd middel.
+    """
+    if ai is None or not role_id or not acc_ids_:
+        return []
+    try:
+        return [t for t in ai.for_role(role_id) if t.acc_id in acc_ids_]
+    except Exception as exc:
+        log.warning("skill_links: kon koppelingen van '%s' niet lezen: %s", role_id, exc)
+        return []
+
+
 def linked_skills(ai, role_id: str) -> set[str]:
     """Alleen de capability-ids van de gekoppelde middelen."""
     return {t.skill for t in links_for_role(ai, role_id) if t.skill}

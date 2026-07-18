@@ -146,3 +146,60 @@ def test_meld_als_means_gap_landt_in_de_inbox(tmp_path):
     assert len(gaps) == 1 and "kantoorplanten" in gaps[0]["context"]["description"]
     # …en verschijnt in blok 3 van de catalogus.
     assert any("kantoorplanten" in r["beschrijving"] for r in skills_catalog.gewenst(hi))
+
+
+# ── Waarschuwing: deze ronde maakt koppelingen wees ──────────────────────────
+
+def _amend_item(st, rec, *, add=(), remove=()):
+    st.agenda.add(rec.id, "amend_role",
+                  {"kind": "amend_role", "role_id": rec.id,
+                   "add_accountabilities": list(add),
+                   "remove_accountabilities": list(remove)},
+                  "", by="founder", title="Proefrol")
+    return next(i for i in st.agenda.all() if i.get("role_id") == rec.id)
+
+
+def test_gate_waarschuwt_bij_verweesde_koppelingen(tmp_path):
+    from nooch_village.views.roloverleg import _rov_signals
+    dd, st = _st(tmp_path)
+    rec = _rol(st, accs=["site monitoren", "bezoekersdata duiden"])
+    aid = acc_ids.acc_id_at(rec.definition, 0)
+    st.ai.add_link(rec.id, aid, "site_health")
+
+    item = _amend_item(st, rec, remove=["site monitoren"])
+    msgs = " ".join(s["msg"] for s in _rov_signals(st, item))
+    assert "1 koppeling(en) wees" in msgs and "site_health" in msgs
+
+
+def test_gate_waarschuwt_niet_bij_herformulering(tmp_path):
+    """Eén remove + één add = dezelfde belofte, nieuwe woorden: het id reist mee."""
+    from nooch_village.views.roloverleg import _rov_signals
+    dd, st = _st(tmp_path)
+    rec = _rol(st, accs=["site monitoren", "bezoekersdata duiden"])
+    st.ai.add_link(rec.id, acc_ids.acc_id_at(rec.definition, 0), "site_health")
+
+    item = _amend_item(st, rec, add=["de gezondheid van de site bewaken"],
+                       remove=["site monitoren"])
+    msgs = " ".join(s["msg"] for s in _rov_signals(st, item))
+    assert "koppeling(en) wees" not in msgs
+
+
+def test_gate_waarschuwt_niet_zonder_koppelingen(tmp_path):
+    from nooch_village.views.roloverleg import _rov_signals
+    dd, st = _st(tmp_path)
+    rec = _rol(st, accs=["site monitoren", "bezoekersdata duiden"])
+    item = _amend_item(st, rec, remove=["site monitoren"])
+    assert "koppeling(en) wees" not in " ".join(s["msg"] for s in _rov_signals(st, item))
+
+
+def test_gate_waarschuwing_telt_ook_autonome_ai_taken(tmp_path):
+    """Een verweesde AI-taak is net zo stil kapot als een verweesd middel."""
+    from nooch_village.views.roloverleg import _rov_signals
+    dd, st = _st(tmp_path)
+    rec = _rol(st, accs=["site monitoren", "bezoekersdata duiden"])
+    codie = st.personas.add("Codie", skills=["schrijft de code"])
+    st.ai.add(rec.id, acc_ids.acc_id_at(rec.definition, 0), codie.id, "schrijft de code")
+
+    item = _amend_item(st, rec, remove=["site monitoren"])
+    msgs = " ".join(s["msg"] for s in _rov_signals(st, item))
+    assert "1 koppeling(en) wees" in msgs and "Codie" in msgs

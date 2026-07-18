@@ -315,9 +315,10 @@ class Secretary:
     """Bezit de records en de adoptie-schrijfactie. Heeft GEEN veto:
     de Facilitator heeft de poort al gedraaid. De Secretary schrijft alleen."""
 
-    def __init__(self, records: Records, bus: EventBus):
+    def __init__(self, records: Records, bus: EventBus, links=None):
         self.records = records
         self.bus = bus
+        self.links = links      # optioneel: AITaskStore, alleen om verweesde koppelingen te melden
         self._pending: dict[str, Proposal] = {}   # proposal_id → Proposal (wacht op menselijk verdict)
         bus.subscribe("proposal_gate_passed", self._on_gate_passed)
         bus.subscribe("governance_verdict", self._on_governance_verdict)
@@ -351,6 +352,29 @@ class Secretary:
         """Facilitator slaat een geëscaleerd voorstel op zodat governance_verdict het kan vinden."""
         self._pending[proposal.id] = proposal
 
+    def _meld_verweesde_koppelingen(self, role_id: str, vervallen: list[str]) -> None:
+        """Luid melden dat deze adoptie koppelingen wees maakt.
+
+        Een verweesde koppeling toont in de UI als '—' en werkt verder gewoon niet meer. Stil
+        laten vallen is nooit goed genoeg; de mens moet weten dat hij ze opnieuw moet leggen.
+        Zonder links-store blijft het bij de id-telling — nooit een crash op een melding.
+        """
+        if not vervallen:
+            return
+        try:
+            from nooch_village import skill_links
+            wees = skill_links.koppelingen_op(self.links, role_id, set(vervallen))
+        except Exception:
+            wees = []
+        if wees:
+            log.warning("⚠️ adoptie maakt %d koppeling(en) wees bij rol '%s': %s. "
+                        "Leg ze opnieuw op de nieuwe accountability.",
+                        len(wees), role_id,
+                        sorted({t.skill or t.agent or t.id for t in wees}))
+        else:
+            log.info("adoptie liet %d accountability-id(s) vervallen bij rol '%s' "
+                     "(geen koppelingen geraakt)", len(vervallen), role_id)
+
     def _adopt(self, proposal: Proposal) -> None:
         """Schrijft de change naar de records (Secretary bezit de records)."""
         c = proposal.change
@@ -364,8 +388,11 @@ class Secretary:
             d = rec.definition
             if c.add_accountabilities or c.remove_accountabilities:
                 # Tekst én stabiel id in lockstep: het id reist met zijn belofte mee, ook als
-                # de adoptie de lijst hersorteert. Koppelingen blijven zo aan de juiste acc.
-                apply_accountability_change(d, c.add_accountabilities, c.remove_accountabilities)
+                # de adoptie de lijst hersorteert. Bij een herformulering (1 remove + 1 add)
+                # erft de nieuwe tekst het id, zodat koppelingen meeverhuizen.
+                vervallen = apply_accountability_change(
+                    d, c.add_accountabilities, c.remove_accountabilities)
+                self._meld_verweesde_koppelingen(c.role_id, vervallen)
             if c.add_domains:
                 d.domains = sorted(set(d.domains) | set(c.add_domains))
             if c.remove_domains:

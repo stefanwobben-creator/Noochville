@@ -168,3 +168,38 @@ def test_zelfde_tekst_geeft_zelfde_id_in_elke_rol(tmp_path):
     acc_ids.ensure_acc_ids(d2)
     # Uniek hoeft alleen binnen een rol: elke query is role + acc_id.
     assert d1.accountability_ids == d2.accountability_ids
+
+
+# ── Herformulering: dezelfde belofte, andere woorden ─────────────────────────
+
+def test_herformulering_laat_de_koppeling_meereizen(tmp_path):
+    """Governance kent geen 'bewerk': een herformulering komt binnen als één remove + één add.
+    Het id reist mee, dus de koppeling blijft aan dezelfde belofte hangen."""
+    recs = _records(tmp_path, ["site monitoren", "bezoekersdata duiden"])
+    defn = recs.get("rol_x").definition
+    oud_id = acc_ids.acc_id_at(defn, defn.accountabilities.index("site monitoren"))
+
+    ai = AITaskStore(str(tmp_path / "ai.json"))
+    ai.add_link("rol_x", oud_id, "site_health")
+
+    _amend(recs, add=["de gezondheid van de site bewaken"], remove=["site monitoren"])
+
+    defn2 = Records(str(tmp_path / "rec.json")).get("rol_x").definition
+    assert "site monitoren" not in defn2.accountabilities
+    assert acc_ids.text_for(defn2, oud_id) == "de gezondheid van de site bewaken"
+    assert [t.skill for t in ai.for_acc("rol_x", oud_id)] == ["site_health"]   # niet wees
+
+
+def test_pure_verwijdering_laat_het_id_wel_vervallen(tmp_path):
+    recs = _records(tmp_path, ["alfa", "beta"])
+    defn = recs.get("rol_x").definition
+    alfa_id = acc_ids.acc_id_at(defn, 0)
+    vervallen = acc_ids.apply_accountability_change(defn, [], ["alfa"])
+    assert vervallen == [alfa_id]
+
+
+def test_meervoudige_wijziging_is_geen_herformulering(tmp_path):
+    """Twee removes + één add: welk id zou moeten meereizen? Niet raden — laten vervallen."""
+    assert acc_ids.is_herformulering(["nieuw"], ["a", "b"]) is False
+    assert acc_ids.is_herformulering(["nieuw"], ["a"]) is True
+    assert acc_ids.is_herformulering([], ["a"]) is False

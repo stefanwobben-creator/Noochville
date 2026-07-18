@@ -130,7 +130,7 @@ class Village:
         migrate_records(self.records)
         self.context.records = self.records
         self.matchmaker = Matchmaker(self.bus)
-        self.secretary = Secretary(self.records, self.bus)
+        self.secretary = Secretary(self.records, self.bus, links=self.context.links)
         self.reconciler = Reconciler(self.records, self.bus, self.registry, self.context,
                                      self.matchmaker, class_map=CLASS_MAP)
         self.bus.subscribe("task_completed",              self._observe)

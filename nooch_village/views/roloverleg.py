@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from nooch_village.web_base import _e, _page
 from nooch_village.cockpit2_util import _DS_LINK, _name, _psec, _IC_CHECK
-from nooch_village import acc_ids, skill_labels, skills_catalog
+from nooch_village import acc_ids, skill_labels, skill_links, skills_catalog
 
 if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores
@@ -106,7 +106,38 @@ def _rov_signals(st: _Stores, item: dict):
                     "msg": "Purpose lijkt een woordcluster ('Beheert en bewaakt …'); "
                            "beschrijf een echte functie."})
     out += [i for i in secretary_check(item, st.records) if i["level"] == "let op"]
+    out += _rov_wees_signaal(st, item, c)
     return out
+
+
+def _rov_wees_signaal(st: _Stores, item: dict, change):
+    """Maakt deze ronde koppelingen wees? Melden vóór adoptie, niet erna.
+
+    Een herformulering (precies één remove + één add) laat het acc_id meereizen — dezelfde
+    belofte, nieuwe woorden — dus die raakt niets kwijt. Een pure verwijdering wél: de
+    koppelingen op die belofte verdwijnen en moeten opnieuw gelegd worden.
+    """
+    removes = list(getattr(change, "remove_accountabilities", None) or [])
+    if not removes:
+        return []
+    rec = st.records.get(item.get("role_id"))
+    if rec is None:
+        return []
+    if acc_ids.is_herformulering(getattr(change, "add_accountabilities", None) or [], removes):
+        return []
+    treffers = {aid for aid, tekst in acc_ids.pairs(rec.definition) if tekst in set(removes)}
+    wees = skill_links.koppelingen_op(st.ai, rec.id, treffers)
+    if not wees:
+        return []
+    wat = ", ".join(sorted({t.skill or _persona_naam(st, t.agent) or t.id for t in wees}))
+    return [{"level": "let op",
+             "msg": f"deze ronde maakt {len(wees)} koppeling(en) wees ({wat}); "
+                    f"leg ze na consent opnieuw op de juiste accountability"}]
+
+
+def _persona_naam(st: _Stores, agent_id: str) -> str:
+    pa = st.personas.get(agent_id) if agent_id else None
+    return pa.name if pa else (agent_id or "")
 
 
 def _rov_dupes(st: _Stores, text: str, exclude_role: str = ""):
@@ -133,7 +164,7 @@ def _rov_apply(st: _Stores):
     from nooch_village.event_bus import EventBus
     from nooch_village.governance import Secretary
     from nooch_village.roloverleg import _proposal_from_item
-    sec = Secretary(st.records, EventBus(name="roloverleg2"))
+    sec = Secretary(st.records, EventBus(name="roloverleg2"), links=st.ai)
     done = []
     for item in [i for i in st.agenda.all() if i["status"] == "consented"]:
         if _rov_hard(st, item):
