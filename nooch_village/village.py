@@ -69,6 +69,10 @@ class Village:
         if heartbeat_seconds is not None:
             self.context.settings["heartbeat_seconds"] = str(heartbeat_seconds)
         self.context.library = Library(os.path.join(self.context.data_dir, "library.json"))
+        # Koppelingen van middelen aan accountabilities. Alleen uitvoeringswaarheid als
+        # skill_links_active=1; anders puur weergave (zie skill_links.py).
+        from nooch_village.ai_tasks import AITaskStore
+        self.context.links = AITaskStore(os.path.join(self.context.data_dir, "ai_tasks.json"))
         self.context.lexicon = Lexicon(os.path.join(self.context.data_dir, "lexicon.json"))
         seed_lexicon(self.context.lexicon)
         # Community-listening (Billy Buzz): configureerbare zoek-sets + observatie-store.
@@ -126,7 +130,7 @@ class Village:
         migrate_records(self.records)
         self.context.records = self.records
         self.matchmaker = Matchmaker(self.bus)
-        self.secretary = Secretary(self.records, self.bus)
+        self.secretary = Secretary(self.records, self.bus, links=self.context.links)
         self.reconciler = Reconciler(self.records, self.bus, self.registry, self.context,
                                      self.matchmaker, class_map=CLASS_MAP)
         self.bus.subscribe("task_completed",              self._observe)

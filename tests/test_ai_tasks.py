@@ -2,18 +2,18 @@
 from __future__ import annotations
 
 from nooch_village.ai_tasks import AITaskStore
-from nooch_village import cockpit2
+from nooch_village import acc_ids, cockpit2
 
 
 def test_store_add_for_acc_role(tmp_path):
     st = AITaskStore(str(tmp_path / "ai.json"))
-    t = st.add("role_x", 0, "persona_1", "schrijft de code")
+    t = st.add("role_x", "acc_a", "persona_1", "schrijft de code")
     assert t is not None
-    assert [x.id for x in st.for_acc("role_x", 0)] == [t.id]
-    assert st.for_acc("role_x", 1) == []
+    assert [x.id for x in st.for_acc("role_x", "acc_a")] == [t.id]
+    assert st.for_acc("role_x", "acc_b") == []
     assert len(st.for_role("role_x")) == 1
     assert st.remove(t.id) and st.for_role("role_x") == []
-    st.add("role_x", 2, "persona_1", "x")
+    st.add("role_x", "acc_c", "persona_1", "x")
     assert len(AITaskStore(str(tmp_path / "ai.json")).all()) == 1
 
 
@@ -71,7 +71,9 @@ def test_modal_selecteert_uit_rugzak_geen_vrije_tekst(tmp_path):
     dd, st = _st(tmp_path)
     codie = st.personas.add("Codie", skills=["schrijft de code"])
     role = "mother_earth__nooch__website_developer"
-    frag = cockpit2.render_aitask(cockpit2._Stores(dd), role, 0, csrf_token="t", fragment=True)
+    _st2 = cockpit2._Stores(dd)
+    _aid = acc_ids.acc_id_at(_st2.records.get(role).definition, 0)
+    frag = cockpit2.render_aitask(_st2, role, _aid, csrf_token="t", fragment=True)
     assert "<!doctype" not in frag.lower()
     assert "selecteert" in frag and f"{codie.id}::schrijft de code" in frag
     assert "Rugzak van een AI uitbreiden" in frag

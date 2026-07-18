@@ -42,6 +42,30 @@ def main() -> None:
         from nooch_village.demos.governance_demos import purge_demo
         purge_demo()
 
+    elif mode == "skills_naar_links":
+        # Opdrogen: stel voor welke DNA-skill naar welke accountability verhuist.
+        # Standaard dry-run; alleen met 'apply' worden de koppelingen echt gelegd.
+        # Het VERWIJDEREN uit het rol-DNA gebeurt hier nooit — dat is governance.
+        import os
+        from nooch_village.ai_tasks import AITaskStore
+        from nooch_village.config import load_context
+        from nooch_village.governance import Records
+        from nooch_village.skill_links import SkillLinkKroniek
+        from nooch_village import skills_naar_links
+
+        ctx = load_context(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
+        ai = AITaskStore(os.path.join(ctx.data_dir, "ai_tasks.json"))
+        ai.migrate_acc_ids(recs)
+        dry = "apply" not in sys.argv[2:]
+        if dry:
+            print(skills_naar_links.rapport(skills_naar_links.plan(recs.all(), ai), dry_run=True))
+            print("\nDraai met 'apply' om de koppelingen echt te leggen.")
+        else:
+            kroniek = SkillLinkKroniek(os.path.join(ctx.data_dir, "skill_links_kroniek.jsonl"))
+            gelegd = skills_naar_links.voer_uit(recs.all(), ai, kroniek=kroniek)
+            print(skills_naar_links.rapport(gelegd, dry_run=False))
+
     elif mode == "intent":
         from nooch_village.demos.analysis import intent_demo
         intent_demo()
@@ -1067,6 +1091,7 @@ def main() -> None:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
               "purge | intent | triage | ngram | reflect | simulate | harry_hemp | "
+              "skills_naar_links | "
               "content_strategist | grant_serpapi_trends | grant_skill | revoke_skill | "
               "remove_role | seat_human | upgrade_harry_role | ask_accountability | "
               "measure_propose | rereview | ingest | notes_remove | recurate | "

@@ -15,6 +15,9 @@ class RoleDefinition:
     """Het DNA van een rol. Wordt alleen via governance gewijzigd."""
     purpose: str
     accountabilities: list[str] = field(default_factory=list)
+    # Stabiele ids, positioneel parallel aan `accountabilities`. Koppelingen (AI-taken,
+    # skill-links) verwijzen hiernaar, nooit naar de index — zie acc_ids.py.
+    accountability_ids: list[str] = field(default_factory=list)
     domains: list[str] = field(default_factory=list)
     skills: list[str] = field(default_factory=list)   # capability-ids die deze rol energizet
     policies: list[str] = field(default_factory=list)  # harde policies (alleen voor anchor-cirkel)

@@ -371,7 +371,10 @@ def test_gate_projdelete_individueel_initiatief_niet_lead_geweigerd(tmp_path):
 
 
 def _make_aitask(dd):
-    return cockpit2._Stores(dd).ai.add(_GATE_ROLE, 0, "harry", "content_schrijven")
+    from nooch_village import acc_ids
+    st = cockpit2._Stores(dd)
+    aid = acc_ids.acc_id_at(st.records.get(_GATE_ROLE).definition, 0)
+    return st.ai.add(_GATE_ROLE, aid, "harry", "content_schrijven")
 
 
 def test_gate_aitaskremove_circle_lead_mag(tmp_path):

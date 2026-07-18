@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from nooch_village.web_base import _e, _page
 from nooch_village.cockpit2_util import _DS_LINK, _name, _psec, _IC_CHECK
+from nooch_village import acc_ids, skill_labels, skill_links, skills_catalog
 
 if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores
@@ -105,7 +106,38 @@ def _rov_signals(st: _Stores, item: dict):
                     "msg": "Purpose lijkt een woordcluster ('Beheert en bewaakt …'); "
                            "beschrijf een echte functie."})
     out += [i for i in secretary_check(item, st.records) if i["level"] == "let op"]
+    out += _rov_wees_signaal(st, item, c)
     return out
+
+
+def _rov_wees_signaal(st: _Stores, item: dict, change):
+    """Maakt deze ronde koppelingen wees? Melden vóór adoptie, niet erna.
+
+    Een herformulering (precies één remove + één add) laat het acc_id meereizen — dezelfde
+    belofte, nieuwe woorden — dus die raakt niets kwijt. Een pure verwijdering wél: de
+    koppelingen op die belofte verdwijnen en moeten opnieuw gelegd worden.
+    """
+    removes = list(getattr(change, "remove_accountabilities", None) or [])
+    if not removes:
+        return []
+    rec = st.records.get(item.get("role_id"))
+    if rec is None:
+        return []
+    if acc_ids.is_herformulering(getattr(change, "add_accountabilities", None) or [], removes):
+        return []
+    treffers = {aid for aid, tekst in acc_ids.pairs(rec.definition) if tekst in set(removes)}
+    wees = skill_links.koppelingen_op(st.ai, rec.id, treffers)
+    if not wees:
+        return []
+    wat = ", ".join(sorted({t.skill or _persona_naam(st, t.agent) or t.id for t in wees}))
+    return [{"level": "let op",
+             "msg": f"deze ronde maakt {len(wees)} koppeling(en) wees ({wat}); "
+                    f"leg ze na consent opnieuw op de juiste accountability"}]
+
+
+def _persona_naam(st: _Stores, agent_id: str) -> str:
+    pa = st.personas.get(agent_id) if agent_id else None
+    return pa.name if pa else (agent_id or "")
 
 
 def _rov_dupes(st: _Stores, text: str, exclude_role: str = ""):
@@ -132,7 +164,7 @@ def _rov_apply(st: _Stores):
     from nooch_village.event_bus import EventBus
     from nooch_village.governance import Secretary
     from nooch_village.roloverleg import _proposal_from_item
-    sec = Secretary(st.records, EventBus(name="roloverleg2"))
+    sec = Secretary(st.records, EventBus(name="roloverleg2"), links=st.ai)
     done = []
     for item in [i for i in st.agenda.all() if i["status"] == "consented"]:
         if _rov_hard(st, item):
@@ -193,6 +225,17 @@ def _rov_save_draft(st: _Stores, iid: str, draft: dict) -> None:
     st.agenda.update_fields(iid, draft=draft, change=change, title=title or item.get("title"))
 
 
+def _acc_id_van(rec, acc_text: str) -> str:
+    """Het stabiele id van een accountability die al in het record staat ("" als hij nog
+    voorgesteld wordt — die krijgt zijn id pas bij adoptie)."""
+    if rec is None:
+        return ""
+    for aid, tekst in acc_ids.pairs(rec.definition):
+        if tekst == acc_text:
+            return aid
+    return ""
+
+
 def _rov_member_block(st: _Stores, item: dict, csrf: str, back: str, circle_id: str = "") -> tuple[str, list]:
     """Eén rol-wijziging binnen een voorstel (GlassFrog: een voorstel kan er meerdere bevatten).
     Velden: naam, purpose, domeinen, accountabilities. Diff-weergave: verwijderd = doorgestreept
@@ -213,6 +256,57 @@ def _rov_member_block(st: _Stores, item: dict, csrf: str, back: str, circle_id: 
     def _iss_html(lst):
         return "".join(f"<div class='sec-issue {('blok' if i['level'] == 'blok' else 'let')}'>📋 {_e(i['msg'])}</div>"
                        for i in lst)
+
+    def _stoplicht(acc_text: str) -> str:
+        """Uitvoerbaarheids-stoplicht per (voorgestelde) accountability — puur informatief.
+
+        Groen = middel aanwezig; oranje = het middel bestaat in het dorp maar is niet van deze
+        rol (één klik voor de Circle Lead, mits de domeinpoort het toelaat); rood = geen
+        bestaande skill dekt dit, dus een bouwverzoek. De gate blokkeert hier NOOIT op.
+        """
+        if not (acc_text or "").strip():
+            return ""
+        u = skills_catalog.uitvoerbaarheid(acc_text, rec_for_check, st.ai)
+        if u["kleur"] == "groen":
+            return "<div class='sec-issue let'><span class='chip'>● uitvoerbaar</span></div>"
+        if u["kleur"] == "oranje":
+            lbl = skill_labels.label(u["skill"])
+            knop = ""
+            if u["koppelbaar"] and csrf and rec_for_check is not None:
+                # Alleen een BESTAANDE belofte heeft al een acc_id; een nog voor te stellen
+                # accountability krijgt er pas een bij adoptie. Koppelen kan dus alleen op wat
+                # al in het record staat — anders wijst de link nergens naar.
+                aid = _acc_id_van(rec_for_check, acc_text)
+                if aid:
+                    knop = (f"<form method='post' action='/action' {keep}>"
+                            f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+                            f"<input type='hidden' name='role' value='{_e(rec_for_check.id)}'>"
+                            f"<input type='hidden' name='acc_id' value='{_e(aid)}'>"
+                            f"<input type='hidden' name='skill' value='{_e(u['skill'])}'>"
+                            f"<input type='hidden' name='next' value='{_e(back)}'>"
+                            f"<button class='flink' type='submit' name='action' "
+                            f"value='skilllink_add'>koppel {_e(lbl)}</button></form>")
+                else:
+                    knop = ("<span class='muted'> — koppelen kan zodra de accountability "
+                            "is aangenomen.</span>")
+            elif not u["koppelbaar"] and u.get("blokkade"):
+                knop = f"<span class='muted'> — {_e(u['blokkade'])}</span>"
+            return (f"<div class='sec-issue let'><span class='chip amber'>○ middel bestaat, "
+                    f"niet gekoppeld</span> <span class='muted'>{_e(lbl)}</span>{knop}</div>")
+        # rood — geen bestaande skill dekt dit; melden als means-gap (bestaande inbox-route).
+        meld = ""
+        if csrf:
+            meld = (f"<form method='post' action='/action' {keep}>"
+                    f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+                    f"<input type='hidden' name='role' value='{_e(item.get('role_id', ''))}'>"
+                    f"<input type='hidden' name='acc' value='{_e(acc_text)}'>"
+                    f"<input type='hidden' name='next' value='{_e(back)}'>"
+                    f"<button class='flink' type='submit' name='action' "
+                    f"value='means_gap_add'>meld als means-gap</button></form>")
+        return (f"<div class='sec-issue let'><span class='chip coral'>○ geen middel</span> "
+                f"<span class='muted'>er is nog geen tooling die dit waarmaakt</span>{meld}</div>")
+
+    rec_for_check = st.records.get(item.get("role_id"))
 
     rm_member = (f"<form method='post' action='/action' style='display:inline' {keep}>{hid()}"
                  f"<button class='rovm-close' type='submit' name='action' value='rov2_remove' "
@@ -258,7 +352,8 @@ def _rov_member_block(st: _Stores, item: dict, csrf: str, back: str, circle_id: 
     name_f = field_form("name", "Naam", draft["name"], name_was)
     purpose_f = field_form("purpose", "Purpose", draft["purpose"], purp_was)
 
-    def diff_list(label, orig, drafted, add_action, rm_action, per_issue=None):
+    def diff_list(label, orig, drafted, add_action, rm_action, per_issue=None,
+                  licht=lambda _x: ""):
         ol = {x.lower() for x in orig}
         dl = {x.lower() for x in drafted}
 
@@ -271,7 +366,8 @@ def _rov_member_block(st: _Stores, item: dict, csrf: str, back: str, circle_id: 
             if x.lower() in dl:
                 rows += (f"<div class='rovm-item'><span class='rovm-iv'>{_e(x)}</span>"
                          f"{itform(x, rm_action, '✕', 'dellink')}</div>"
-                         f"{_iss_html(per_issue.get(x, [])) if per_issue else ''}")
+                         f"{_iss_html(per_issue.get(x, [])) if per_issue else ''}"
+                         f"{licht(x)}")
             else:
                 rows += (f"<div class='rovm-item is-del'><span class='rovm-iv'><s>{_e(x)}</s></span>"
                          f"{itform(x, add_action, 'herstel', 'flink')}</div>")
@@ -280,14 +376,16 @@ def _rov_member_block(st: _Stores, item: dict, csrf: str, back: str, circle_id: 
                 badge = "<span class='chip green'>nieuw</span> " if is_amend else ""
                 rows += (f"<div class='rovm-item is-new'><span class='rovm-iv'>{badge}{_e(x)}</span>"
                          f"{itform(x, rm_action, '✕', 'dellink')}</div>"
-                         f"{_iss_html(per_issue.get(x, [])) if per_issue else ''}")
+                         f"{_iss_html(per_issue.get(x, [])) if per_issue else ''}"
+                         f"{licht(x)}")
         addf = (f"<form method='post' action='/action' class='rov-addrow' {keep}>{hid()}"
                 f"<input name='text' placeholder='{_e(label.lower())} toevoegen…'>"
                 f"<button class='btn ok sm' type='submit' name='action' value='{add_action}'>+</button></form>")
         return f"<div class='rovm-field'><label class='att-lbl'>{_e(label)}</label>{rows}{addf}</div>"
 
     acc_b = diff_list("Accountabilities", list(snap["accountabilities"]) if snap else [], draft["accs"],
-                      "rov2_acc_add", "rov2_acc_remove", per_issue=acc_issues)
+                      "rov2_acc_add", "rov2_acc_remove", per_issue=acc_issues,
+                      licht=_stoplicht)
     dom_b = diff_list("Domeinen", list(snap["domains"]) if snap else [], draft["domains"],
                       "rov2_dom_add", "rov2_dom_remove")
 

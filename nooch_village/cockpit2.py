@@ -40,6 +40,8 @@ from nooch_village.views.feed import (
     _wall_outcome_opts,
 )
 from nooch_village.governance import Records
+from nooch_village import acc_ids, skill_meta, skill_links
+from nooch_village.skill_links import SkillLinkKroniek
 from nooch_village.people import PeopleStore
 from nooch_village.assignments import Assignments
 from nooch_village.attachments import AttachmentStore, ARTEFACT_KINDS
@@ -61,7 +63,8 @@ from nooch_village import radar_promote
 from nooch_village.registry_factory import shared_registry
 from nooch_village.skill_match import plan_offers
 from nooch_village.util import refuse
-from nooch_village.ai_tasks import AITaskStore
+from nooch_village.ai_tasks import AITaskStore, KIND_MIDDEL
+from nooch_village import skill_labels
 from nooch_village.checklists import ChecklistStore, CADENCES, CADENCE_LABEL
 from nooch_village.metrics import MetricStore, window_cutoff, filter_samples
 from nooch_village.kennisbank import (KennisbankStore, parse_blok,
@@ -117,6 +120,9 @@ class _Stores:
         self.deliverables = DeliverableStore(os.path.join(dd, "deliverables.json"))
         self.project_docs = ProjectDocStore(dd)   # levend einddocument per project (weergave + edit-route)
         self.ai = AITaskStore(os.path.join(dd, "ai_tasks.json"))
+        # Eenmalig, idempotent: koppelingen die nog aan een index hangen krijgen het stabiele
+        # acc_id van de accountability die nú op die positie staat.
+        self.ai.migrate_acc_ids(self.records)
         self.match = ai_match.MatchCache(os.path.join(dd, "ai_match_cache.json"))
         self.notif = NotifStore(os.path.join(dd, "notifications.json"))
         self.agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
@@ -135,6 +141,7 @@ class _Stores:
         self.library = Library(os.path.join(dd, "library.json"))   # beschermde woordenschat (Lara cureert)
         self.nominations = NominationQueue(os.path.join(dd, "keyword_nominaties.json"))   # fase 4: pending-queue
         self.nom_kroniek = NominationKroniek(os.path.join(dd, "keyword_nominaties.jsonl"))   # fase 4: beslissings-Kroniek
+        self.link_kroniek = SkillLinkKroniek(os.path.join(dd, "skill_links_kroniek.jsonl"))   # koppelingen: wie hing welk middel waar
 
 
 _FAC_ACC = "Rapporteren over de gezondheid van de werkoverleggen"
@@ -254,6 +261,7 @@ from nooch_village.views.inbox import (
 )
 from nooch_village.views.metrics2 import render_metrics2
 from nooch_village.views.bronnen import render_bronnen
+from nooch_village.views.skills import render_skills
 from nooch_village.views.claims import render_claims, render_rapport, rol_voor
 from nooch_village.views.inwoners import render_inwoner, render_inwoners
 from nooch_village.views.kennislaag import render_kennislaag
@@ -1882,6 +1890,22 @@ def _act_radar_promote(c):
         return nxt, msg
 
 
+def _acc_id_param(st, role_id: str, qs) -> str:
+    """Het stabiele accountability-id uit de request. Valt fail-soft terug op de oude
+    `acc`-index (bookmarks, oude fragment-links) door hem éénmalig om te rekenen."""
+    aid = (qs.get("acc_id") or [""])[0]
+    if aid:
+        return aid
+    rec = st.records.get(role_id)
+    if rec is None:
+        return ""
+    try:
+        idx = int((qs.get("acc") or ["-1"])[0])
+    except (TypeError, ValueError):
+        return ""
+    return acc_ids.acc_id_at(rec.definition, idx) if idx >= 0 else ""
+
+
 def _act_aitask_add(c):
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
         msg = ""
@@ -1894,16 +1918,21 @@ def _act_aitask_add(c):
         if actor is None and username != "guest":
             return nxt, "Geen toegang — gebruiker niet herkend"
         # ── einde autorisatie ──
-        try:
-            acc_i = int(g("acc"))
-        except ValueError:
-            acc_i = -1
+        # Stabiel acc_id (fail-soft terugval op de oude index, zie _acc_id_param).
+        aid = g("acc_id")
+        if not aid:
+            rec_a = st.records.get(g("role"))
+            try:
+                acc_i = int(g("acc"))
+            except (TypeError, ValueError):
+                acc_i = -1
+            aid = acc_ids.acc_id_at(rec_a.definition, acc_i) if (rec_a and acc_i >= 0) else ""
         pick = g("pick")
         if "::" in pick:
             agent, skill = pick.split("::", 1)
         else:
             agent, skill = g("agent"), g("wat")   # fallback (legacy)
-        if agent and acc_i >= 0 and st.ai.add(g("role"), acc_i, agent, skill):
+        if agent and aid and st.ai.add(g("role"), aid, agent, skill, gelegd_door=username):
             msg = "🤖 AI gekoppeld aan accountability"
         return nxt, msg
 
@@ -1921,8 +1950,67 @@ def _act_aitask_remove(c):
         if actor is None and username != "guest":
             return nxt, "Geen toegang — gebruiker niet herkend"
         # ── einde autorisatie ──
+        if _task is not None and _task.kind == KIND_MIDDEL:
+            st.link_kroniek.record(action="verwijderd", role_id=_task.role, acc_id=_task.acc_id,
+                                   skill=_task.skill, door=username)
         st.ai.remove(g("tid")); msg = "✓ verwijderd"
         return nxt, msg
+
+
+# ── Skill-links: het dorpsmiddel aan een belofte ────────────────────────────
+# AUTHZ: Circle Lead — de Circle Lead gaat over de middelen van een rol. Een koppeling is
+# operationeel (omkeerbaar, gelogd), dus geen G-ronde; maar het blijft leidingwerk, geen
+# rolhouder-werk. Zelfde poort als de AI-taken hierboven, bewust identiek.
+#
+# Wat hier NOOIT gebeurt: de TEKST van een accountability aanraken. Dat is mandaat en beweegt
+# op governance-snelheid. Een koppeling zegt alleen 'dit middel dient die belofte'.
+
+def _act_skilllink_add(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        role_id, skill = g("role"), g("skill")
+        rec = st.records.get(role_id)
+        # ── Autorisatie: Circle Lead van de directe ouder-cirkel ──
+        actor = st.people.by_email(username) if username != "guest" else None
+        circle_id = rec.parent if rec else None
+        if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
+            return nxt, "Geen toegang — alleen Circle Lead mag middelen koppelen"
+        if actor is None and username != "guest":
+            return nxt, "Geen toegang — gebruiker niet herkend"
+        # ── einde autorisatie ──
+        aid = _acc_id_param(st, role_id, {"acc_id": [g("acc_id")], "acc": [g("acc")]})
+        if not rec or not aid:
+            return nxt, "Onbekende rol of accountability"
+        # Domeinpoort — absoluut, geen policy-omweg. Een beslis-skill kan alleen bij de
+        # domeinhouder; de picker biedt hem elders niet eens aan, dit is de tweede sleutel.
+        mag, reden = skill_meta.koppelbaar(skill, rec)
+        if not mag:
+            return nxt, f"Niet gekoppeld — {reden}"
+        if st.ai.add_link(role_id, aid, skill, gelegd_door=username) is None:
+            return nxt, "Niet gekoppeld — onvolledige gegevens"
+        st.link_kroniek.record(action="gelegd", role_id=role_id, acc_id=aid,
+                               skill=skill, door=username)
+        return nxt, f"🔗 {skill_labels.label(skill)} gekoppeld aan deze accountability"
+
+
+# AUTHZ: circle-member of iedereen-ingelogd — een means-gap melden is signaleren, geen mutatie
+# van structuur of middelen. Het item landt in de human inbox; beslissen gebeurt daar, op het
+# geauthenticeerde lokale oppervlak. Fail-closed op de onbekende ingelogde gebruiker.
+def _act_means_gap_add(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        if username != "guest" and st.people.by_email(username) is None:
+            return nxt, "Geen toegang — gebruiker niet herkend"
+        acc = (g("acc") or "").strip()
+        if not acc:
+            return nxt, "Geen accountability opgegeven"
+        try:
+            from nooch_village.human_inbox import HumanInbox
+            hi = HumanInbox(os.path.join(st.dd, "human_inbox.json"))
+            hi.add_means_gap(f"acc:{acc[:60]}", f"Geen middel dekt: {acc}",
+                             role_id=g("role") or None, sensed_by=username)
+        except Exception as exc:
+            logging.getLogger("cockpit2.means_gap").warning("means_gap_add faalde: %s", exc)
+            return nxt, "Melden lukte niet — zie de logs"
+        return nxt, "📥 als means-gap gemeld; beoordeel via de human inbox"
 
 
 # ── Inwoner-dossier: de persona als drager ──────────────────────────────────
@@ -3898,6 +3986,8 @@ ACTIONS = {
     "radar_promote": _act_radar_promote,
     "aitask_add": _act_aitask_add,
     "aitask_remove": _act_aitask_remove,
+    "skilllink_add": _act_skilllink_add,
+    "means_gap_add": _act_means_gap_add,
     "persona_skill_add": _act_persona_skill_add,
     "rov2_add": _act_rov2_add,
     "rov2_add_to_group": _act_rov2_add_to_group,
@@ -4155,12 +4245,10 @@ def make_handler(data_dir: str, csrf_token: str,
                                                     csrf_token=effective_csrf, fragment=fr), fr))
                 return
             if path == "/aitask":
-                try:
-                    acc_i = int((qs.get("acc") or ["-1"])[0])
-                except ValueError:
-                    acc_i = -1
+                role_id = (qs.get("role") or [""])[0]
+                aid = _acc_id_param(st, role_id, qs)
                 fr = (qs.get("fragment") or [""])[0] == "1"
-                self._send(_frag(render_aitask(st, (qs.get("role") or [""])[0], acc_i,
+                self._send(_frag(render_aitask(st, role_id, aid,
                                                csrf_token=effective_csrf, fragment=fr), fr))
                 return
             if path == "/person":
@@ -4193,6 +4281,17 @@ def make_handler(data_dir: str, csrf_token: str,
                     nm = _p.name if _p else ""
                 done = (qs.get("done") or [""])[0]
                 self._send(render_inbox(st, tgts, csrf_token=effective_csrf, naam=nm, done=done), chrome=False)
+                return
+            if path == "/skills":
+                # Skills-catalogus: wat kan het dorp al, en waarvoor moet tooling komen.
+                # Puur leeswerk. De human inbox voedt het 'gewenst'-blok; fail-soft als hij
+                # er (nog) niet is — dan blijft dat blok simpelweg leeg.
+                try:
+                    from nooch_village.human_inbox import HumanInbox
+                    _hi = HumanInbox(os.path.join(data_dir, "human_inbox.json"))
+                except Exception:
+                    _hi = None
+                self._send(render_skills(st, _hi))
                 return
             if path == "/bronnen":
                 # Aansluit-scherm voor externe databronnen (status + aan/uit).

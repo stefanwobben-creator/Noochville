@@ -6,6 +6,7 @@ from nooch_village.models import (
     Proposal, GovernanceChange, ChangeKind,
 )
 from nooch_village.event_bus import EventBus, Event
+from nooch_village.acc_ids import ensure_acc_ids, apply_accountability_change
 
 log = logging.getLogger("village.governance")
 
@@ -241,6 +242,7 @@ class Records:
         if not os.path.exists(self.path):
             return
         raw = json.load(open(self.path))
+        migrated = False
         for rid, r in raw.items():
             self._data[rid] = Record(
                 id=r["id"], type=RecordType(r["type"]), parent=r["parent"],
@@ -251,6 +253,16 @@ class Records:
                 persona=r.get("persona"),
                 persona_id=r.get("persona_id"),
                 held_by=r.get("held_by"))
+            # Fail-soft migratie: elke accountability krijgt een stabiel id. Idempotent —
+            # een tweede load muteert niets en schrijft dus ook niets.
+            if ensure_acc_ids(self._data[rid].definition):
+                migrated = True
+        if migrated:
+            try:
+                self.save()
+                log.info("records: accountability-ids bijgemunt (eenmalige migratie)")
+            except Exception as exc:                      # nooit de start blokkeren
+                log.warning("records: migratie acc-ids kon niet opslaan: %s", exc)
 
     def save(self) -> None:
         out = {}
@@ -267,6 +279,7 @@ class Records:
         return self._data.get(rid)
 
     def put(self, record: Record) -> None:
+        ensure_acc_ids(record.definition)   # nieuwe accountabilities krijgen meteen een id
         self._data[record.id] = record
         self.save()
 
@@ -302,9 +315,10 @@ class Secretary:
     """Bezit de records en de adoptie-schrijfactie. Heeft GEEN veto:
     de Facilitator heeft de poort al gedraaid. De Secretary schrijft alleen."""
 
-    def __init__(self, records: Records, bus: EventBus):
+    def __init__(self, records: Records, bus: EventBus, links=None):
         self.records = records
         self.bus = bus
+        self.links = links      # optioneel: AITaskStore, alleen om verweesde koppelingen te melden
         self._pending: dict[str, Proposal] = {}   # proposal_id → Proposal (wacht op menselijk verdict)
         bus.subscribe("proposal_gate_passed", self._on_gate_passed)
         bus.subscribe("governance_verdict", self._on_governance_verdict)
@@ -338,6 +352,29 @@ class Secretary:
         """Facilitator slaat een geëscaleerd voorstel op zodat governance_verdict het kan vinden."""
         self._pending[proposal.id] = proposal
 
+    def _meld_verweesde_koppelingen(self, role_id: str, vervallen: list[str]) -> None:
+        """Luid melden dat deze adoptie koppelingen wees maakt.
+
+        Een verweesde koppeling toont in de UI als '—' en werkt verder gewoon niet meer. Stil
+        laten vallen is nooit goed genoeg; de mens moet weten dat hij ze opnieuw moet leggen.
+        Zonder links-store blijft het bij de id-telling — nooit een crash op een melding.
+        """
+        if not vervallen:
+            return
+        try:
+            from nooch_village import skill_links
+            wees = skill_links.koppelingen_op(self.links, role_id, set(vervallen))
+        except Exception:
+            wees = []
+        if wees:
+            log.warning("⚠️ adoptie maakt %d koppeling(en) wees bij rol '%s': %s. "
+                        "Leg ze opnieuw op de nieuwe accountability.",
+                        len(wees), role_id,
+                        sorted({t.skill or t.agent or t.id for t in wees}))
+        else:
+            log.info("adoptie liet %d accountability-id(s) vervallen bij rol '%s' "
+                     "(geen koppelingen geraakt)", len(vervallen), role_id)
+
     def _adopt(self, proposal: Proposal) -> None:
         """Schrijft de change naar de records (Secretary bezit de records)."""
         c = proposal.change
@@ -349,11 +386,13 @@ class Secretary:
                 log.error("adopt AMEND_ROLE: record '%s' niet gevonden", c.role_id)
                 return
             d = rec.definition
-            if c.add_accountabilities:
-                d.accountabilities = sorted(set(d.accountabilities) | set(c.add_accountabilities))
-            if c.remove_accountabilities:
-                d.accountabilities = [a for a in d.accountabilities
-                                       if a not in c.remove_accountabilities]
+            if c.add_accountabilities or c.remove_accountabilities:
+                # Tekst én stabiel id in lockstep: het id reist met zijn belofte mee, ook als
+                # de adoptie de lijst hersorteert. Bij een herformulering (1 remove + 1 add)
+                # erft de nieuwe tekst het id, zodat koppelingen meeverhuizen.
+                vervallen = apply_accountability_change(
+                    d, c.add_accountabilities, c.remove_accountabilities)
+                self._meld_verweesde_koppelingen(c.role_id, vervallen)
             if c.add_domains:
                 d.domains = sorted(set(d.domains) | set(c.add_domains))
             if c.remove_domains:
@@ -472,7 +511,14 @@ class Reconciler:
         # Rol: bestaat er een implementatie (CLASS_MAP) of een actieve skill?
         inh_cls = self.class_map.get(record.id)
         if inh_cls is None:
-            has_active = any(self.registry.get(s) is not None for s in record.definition.skills)
+            # Levensteken: heeft de rol een actieve skill? Lees de EFFECTIEVE set, anders
+            # blijft een rol die alléén via koppelingen werkt onterecht onbemand.
+            from nooch_village import skill_links
+            actief = set(record.definition.skills)
+            settings = getattr(self.context, "settings", None) or {}
+            if str(settings.get("skill_links_active", "0")).strip().lower() in ("1", "true", "yes", "ja"):
+                actief |= skill_links.linked_skills(getattr(self.context, "links", None), record.id)
+            has_active = any(self.registry.get(s) is not None for s in actief)
             if not has_active:
                 self.unmanned[record.id] = record
                 log.info("rol '%s' onbemand [source=%s] (geen CLASS_MAP entry en geen actieve skills)",
