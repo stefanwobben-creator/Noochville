@@ -26,11 +26,13 @@ def _scope_text(scope) -> str:
 
 
 def work_one(scope, role_id: str, role_purpose: str, *, steer: str = "", persona: str = "",
-             llm_reason=None) -> dict:
+             kennis: str = "", llm_reason=None) -> dict:
     """Laat de rol (met bestaande capaciteit, tekst-only, omkeerbaar) aan één project werken.
     `steer` = stuur-opmerkingen van de mens die de rol moet meenemen. `persona` = de preamble van
-    de toegewezen inwoner (karakter; kleurt toon, niet capaciteit). Geeft {ok, outcome} of
-    {ok: False, needs} als het nieuwe capaciteit/onomkeerbaarheid vraagt. Fail-closed zonder LLM."""
+    de toegewezen inwoner (karakter; kleurt toon, niet capaciteit). `kennis` = het (al gerenderde,
+    al gecapte) 'REEDS BEKEND'-blok uit de kennislaag (kennis_context.kennis_blok); leeg = geen
+    injectie. Geeft {ok, outcome} of {ok: False, needs} als het nieuwe capaciteit/onomkeerbaarheid
+    vraagt. Fail-closed zonder LLM."""
     if llm_reason is None:
         import functools
         from nooch_village.llm import reason as _reason
@@ -40,6 +42,7 @@ def work_one(scope, role_id: str, role_purpose: str, *, steer: str = "", persona
         + f"Je bent de rol '{role_id}' in NoochVille (duurzaam, vegan schoenenmerk Nooch.earth). "
         f"Jouw purpose: {role_purpose or '-'}.\n\n"
         f"Pak dit project op: {_scope_text(scope)}\n\n"
+        + (kennis.strip() + "\n\n" if kennis and kennis.strip() else "")
         + (f"STURING van de mens (volg dit nadrukkelijk): {steer}\n\n" if steer else "")
         + "Lever wat je NU concreet kunt met je eigen kennis: een afgeronde tekst-uitkomst, een eerste "
         "draft, een analyse, of de concrete eerstvolgende stap. Regels: alleen tekst (omkeerbaar), "
@@ -82,13 +85,40 @@ def _eligible(p, threshold: int) -> bool:
     return p.get("status") == "queued" and not p.get("worked")
 
 
+def _raadpleeg_kennis(ledger, p: dict, owner: str, data_dir, bus) -> str:
+    """Kennis-eerst: raadpleeg vóór het werken de kennislaag (kaartjes + inzichten + goedgekeurde
+    signalen), meld het op de bus (kennis_geraadpleegd, ook bij 0/0/0) én — als er iets gevonden is —
+    als één systeemregel in de projectfeed. Geeft het (gecapte) 'REEDS BEKEND'-promptblok, of "".
+    Volledig fail-soft: zonder data_dir of bij elke fout gewoon geen injectie."""
+    if data_dir is None:
+        return ""
+    try:
+        from nooch_village.kennis_context import kennis_blok, kennis_voor, meld_raadpleging
+        kennis = kennis_voor(data_dir, _scope_text(p.get("scope")))
+        meld_raadpleging(bus, project_id=p.get("id", ""), rol=owner, kennis=kennis)
+        blok = kennis_blok(kennis)
+        if blok:
+            try:                                       # feed-regel: zichtbaar op de projectkaart
+                ledger.add_feed_entry(p["id"], "📚 raadpleegde de kennisbank: "
+                                      + kennis["samenvatting"], kind="system",
+                                      author_type="role", author_id=owner)
+            except Exception:
+                pass                                   # oude/kale ledger zonder feed → alleen log+event
+        return blok
+    except Exception:
+        return ""
+
+
 def work_projects(ledger, records=None, *, llm_reason=None, limit: int = 5,
-                  agenda=None, formalize_threshold: int = 3, personas=None) -> dict:
+                  agenda=None, formalize_threshold: int = 3, personas=None,
+                  data_dir=None, bus=None) -> dict:
     """Loop de openstaande omkeerbare projecten langs en laat de eigenaar-rol eraan werken. Gewone
     projecten worden één keer opgepakt; experimenten elke puls opnieuw tot ze ≥ `formalize_threshold`
     keer zijn uitgevoerd. Is er een agenda meegegeven, dan worden rijpe experimenten daarna automatisch
     voorgedragen om te stollen tot accountability. `personas` (PersonaStore) kleurt de toon via de aan
-    de rol gekoppelde inwoner. Geeft {worked, blocked, skipped, formalized}."""
+    de rol gekoppelde inwoner. `data_dir` zet de kennis-eerst-raadpleging aan (kennislaag als
+    promptcontext); `bus` maakt die raadpleging zichtbaar via kennis_geraadpleegd-events.
+    Geeft {worked, blocked, skipped, formalized}."""
     todo = [p for p in ledger.all() if _eligible(p, formalize_threshold)]
     worked = blocked = 0
     for p in todo[:limit]:
@@ -100,8 +130,9 @@ def work_projects(ledger, records=None, *, llm_reason=None, limit: int = 5,
             purpose = getattr(getattr(rec, "definition", None), "purpose", "") if rec else ""
             persona = _persona_for(rec, personas)
         steer = " · ".join(c.get("text", "") for c in p.get("comments", []) if c.get("text"))
+        kennis = _raadpleeg_kennis(ledger, p, owner, data_dir, bus)
         res = work_one(p.get("scope"), owner, purpose, steer=steer, persona=persona,
-                       llm_reason=llm_reason)
+                       kennis=kennis, llm_reason=llm_reason)
         if res.get("ok"):
             ledger.record_progress(p["id"], res["outcome"])
             worked += 1

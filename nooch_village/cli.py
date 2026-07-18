@@ -876,7 +876,8 @@ def main() -> None:
         from nooch_village.personas import PersonaStore
         personas = PersonaStore(os.path.join(ctx.data_dir, "personas.json"))
         print(f"🛠️  Rollen werken aan hun omkeerbare projecten (max {limit})…")
-        res = work_projects(ledger, recs, limit=limit, personas=personas)
+        # Kennis-eerst: data_dir zet de kennislaag-raadpleging aan (log + feed-regel; geen bus in de CLI).
+        res = work_projects(ledger, recs, limit=limit, personas=personas, data_dir=ctx.data_dir)
         print(f"✅ {res['worked']} uitgevoerd, {res['blocked']} geblokkeerd (vragen jouw oordeel), "
               f"{res['skipped']} wachten op een volgende ronde. Zie het projectbord in de cockpit.")
 

@@ -164,6 +164,7 @@ class Village:
         self.bus.subscribe("resolution_proposed",         self._on_resolution_proposed)
         self.bus.subscribe("bulletin_geschreven",         self._observe)
         self.bus.subscribe("noochie_weighed_in",          self._observe)
+        self.bus.subscribe("kennis_geraadpleegd",         self._observe)   # kennis-eerst zichtbaar in system_log
         self.coherence_observer = CoherenceObserver(self.bus)
         self.root = self.reconciler.build()
 

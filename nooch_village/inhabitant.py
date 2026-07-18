@@ -987,8 +987,9 @@ class Inhabitant(threading.Thread):
         goal = self._scope_text(p)
         if not goal or self._project_checklist(p) is not None:
             return                                                # geen doel of al voorbereid (idempotent)
+        kennis = self._raadpleeg_kennis(pid, goal, ledger)   # kennis-eerst: vóór de planning
         plan = self._plan_checklist(goal, keyword=p.get("keyword") or "", exclude_pid=pid,
-                                    description=p.get("description"))
+                                    description=p.get("description"), kennis=kennis)
         if plan is None:
             self.log.warning("📋 project '%s': geen checklist voorbereid (LLM-plan mislukte); blijft in TOEKOMST", pid)
             return
@@ -1028,6 +1029,30 @@ class Inhabitant(threading.Thread):
             + (": " + "; ".join(opens) if opens else "") + "."))
         self.log.info("📋 project '%s' voorbereid: %d uitvoerbaar, %d zonder skill, %d onvolledige payload",
                       pid, n_skill, n_open, n_invalid)
+
+    def _raadpleeg_kennis(self, pid: str, goal: str, ledger) -> str:
+        """Kennis-eerst: raadpleeg vóór het plannen Lara's kennislaag (kaartjes + inzichten +
+        goedgekeurde signalen) op het projectdoel. Meldt de raadpleging altijd op de bus
+        (kennis_geraadpleegd, ook bij 0/0/0 — de founder wil de activiteit zien) en zet bij een
+        vondst één systeemregel in de projectfeed. Geeft het gecapte 'REEDS BEKEND'-promptblok
+        (of "" bij niets gevonden). Puur deterministisch (geen LLM) en volledig fail-soft: een
+        kapotte/ontbrekende store mag de voorbereiding nooit blokkeren."""
+        try:
+            from nooch_village.kennis_context import kennis_blok, kennis_voor, meld_raadpleging
+            kennis = kennis_voor(getattr(self.context, "data_dir", None), goal)
+            meld_raadpleging(self.bus, project_id=pid, rol=self.id, kennis=kennis)
+            blok = kennis_blok(kennis)
+            if blok:
+                try:
+                    ledger.add_feed_entry(pid, "📚 raadpleegde de kennisbank: "
+                                          + kennis["samenvatting"], kind="system",
+                                          author_type="role", author_id=self.id)
+                except Exception:
+                    pass                                  # ledger zonder feed → alleen log + event
+            return blok
+        except Exception as e:
+            self.log.warning("kennis-raadpleging faalde fail-soft voor project '%s': %s", pid, e)
+            return ""
 
     def _missing_required(self, skill: str, payload: dict) -> list[str]:
         """Verplichte payload-velden (skill.required_payload) die ontbreken of leeg zijn. Leeg = geen
@@ -1071,13 +1096,15 @@ class Inhabitant(threading.Thread):
             return ""
 
     def _plan_checklist(self, goal: str, *, keyword: str = "", exclude_pid: str = "",
-                        description: str = "") -> dict | None:
+                        description: str = "", kennis: str = "") -> dict | None:
         """LLM-stap (Noochie): toets het doel tegen mijn accountabilities + skills → checklist met per item
         de skill ÉN een payload in de vorm die de skill z'n input_schema voorschrijft. Machine-check: een
         skill buiten mijn harde DNA-lijst wordt 'geen skill' + reden. Fail-soft: een skill zonder ingevuld
         input_schema laat de LLM terugvallen op naam + description.
 
-        `keyword`/`exclude_pid`: voeden de geheugen-laag (bestaande deliverables als context), fail-closed."""
+        `keyword`/`exclude_pid`: voeden de geheugen-laag (bestaande deliverables als context), fail-closed.
+        `kennis`: het al gerenderde, al gecapte 'REEDS BEKEND'-blok uit de kennislaag
+        (kennis_context.kennis_blok); leeg = geen sectie."""
         from nooch_village.llm import reason as llm_reason
         skills = list(self.dna.skills)
         catalog_lines = []
@@ -1102,12 +1129,15 @@ class Inhabitant(threading.Thread):
                 memory_section = ("Eerder afgerond onderzoek in het dorp (gebruik dit; plan geen items "
                                   f"die dit al beantwoordt):\n{blok}\n\n")
         opdracht_section = self._opdracht_section(description)   # mens-opdracht: stuurt de planning
+        # Kennis-eerst: het (al gecapte) 'REEDS BEKEND'-blok uit de kennislaag — vul aan, herhaal niet.
+        kennis_section = (kennis.strip() + "\n\n") if kennis and kennis.strip() else ""
         prompt = (
             f"Je bent {self.name}, een autonome rol. Projectdoel:\n\"{goal}\"\n\n"
             f"{opdracht_section}"
             f"Jouw skills (de ENIGE tools die je hebt), met hun INPUT-vorm:\n{catalog}\n\n"
             f"Jouw accountabilities: {list(self.dna.accountabilities) or '(geen)'}\n\n"
             f"{memory_section}"
+            f"{kennis_section}"
             "Breek het doel op in 2 tot 5 concrete deel-items. Voor ELK item: als één van jouw skills het "
             "kan uitvoeren, geef de exacte skill-naam ÉN een 'payload'-object dat EXACT voldoet aan de "
             "'input'-vorm van die skill (bv. een term-skill wil {\"term\": \"...\"}, keywords_everywhere wil "
