@@ -21,8 +21,9 @@ from nooch_village.views.backlog import render_backlog_tab
 from nooch_village.views.projects import (
     _projects_tab_html, _scope_text, _person_projects_tab_html, _modal_html,
 )
-from nooch_village import org, ai_match, artefacts, epic, acc_ids
-from nooch_village.ai_tasks import KIND_AUTONOOM
+from nooch_village import org, ai_match, artefacts, epic, acc_ids, skill_meta, skill_links, skill_labels
+from nooch_village.ai_tasks import KIND_AUTONOOM, KIND_MIDDEL
+from nooch_village.registry_factory import shared_registry
 from nooch_village.radar_store import feeds_for_role
 from nooch_village.views.signals import radar_promote_ctl
 from nooch_village.cockpit2_util import _CIRCLE_TABS, _ROLE_TABS, _PERSON_TABS, WEBSITE_DEVELOPER_ROLE
@@ -103,6 +104,42 @@ def _ai_chip(st: _Stores, t) -> str:
     return f"<span class='chip'>🤖 {_e(nm)}{skill}</span>"
 
 
+def _link_chip(t) -> str:
+    """Een gekoppeld dorpsmiddel: mensentaal voorop, de technische capability eronder."""
+    dom = skill_meta.schrijft_in_domein(t.skill)
+    mark = f" <span class='muted'>· domein {_e(dom)}</span>" if dom else ""
+    return (f"<span class='chip'>🔗 {_e(skill_labels.label(t.skill))}</span>"
+            f"<span class='muted'> {_e(t.skill)}</span>{mark}")
+
+
+def _middel_picker(st: _Stores, rec, role_id: str, acc_id: str, hid) -> str:
+    """Picker voor dorpsmiddelen op deze belofte.
+
+    Alleen skills die de rol nog niet via deze accountability voert, en alleen skills die de
+    domeinpoort doorlaten: een beslis-skill verschijnt niet eens in de lijst bij een rol die het
+    domein niet houdt. De poort in de dispatch is de tweede sleutel (verdediging in de diepte).
+    """
+    if rec is None:
+        return ""
+    try:
+        namen = sorted(shared_registry().names())
+    except Exception:                              # fail-closed: liever geen picker dan een lege belofte
+        return "<p class='muted'>De middelen-catalogus is even niet beschikbaar.</p>"
+    al = {t.skill for t in skill_links.links_for_acc(st.ai, role_id, acc_id)}
+    kies = [n for n in namen if n not in al and skill_meta.koppelbaar(n, rec)[0]]
+    if not kies:
+        return "<p class='muted'>Er is geen middel meer dat hier nog gekoppeld kan worden.</p>"
+    opts = "".join(
+        f"<option value='{_e(n)}'>{_e(skill_labels.label(n))} — {_e(n)}"
+        f"{' (zwaar: grant via governance)' if skill_meta.is_zwaar(n) else ''}</option>"
+        for n in kies)
+    return (f"<div class='pf'><form method='post' action='/action'>{hid()}"
+            f"<label class='att-lbl' for='f-skilllink'>Koppel een dorpsmiddel aan deze belofte</label>"
+            f"<select id='f-skilllink' name='skill'>{opts}</select>"
+            f"<button class='btn' type='submit' name='action' value='skilllink_add'>"
+            f"Koppel middel</button></form></div>")
+
+
 def _suggest_for_acc(st: _Stores, role_id: str, acc_id: str, acc_text: str):
     """Welke (AI, skill) past bij deze accountability en is nog niet gekoppeld. Voedt het cadeautje.
     Matching loopt via ai_match (lexicaal + concept + optioneel gecachet LLM-oordeel)."""
@@ -115,7 +152,9 @@ def _acc_row(st: _Stores, rec, i: int, text: str, csrf_token: str) -> str:
     klikbaar om te beheren); het 'wat' staat gebundeld in het AI-overzicht onder de rol. Zo niet
     dubbel. Het 🎁 verschijnt alleen als er een passende, nog niet gekoppelde AI-skill is."""
     aid = acc_ids.acc_id_at(rec.definition, i)
-    tasks = st.ai.for_acc(rec.id, aid)
+    alle = st.ai.for_acc(rec.id, aid)
+    tasks = [t for t in alle if t.kind == KIND_AUTONOOM]
+    links = [t for t in alle if t.kind == KIND_MIDDEL]
     url = f"/aitask?role={_e(rec.id)}&acc_id={_e(aid)}"
     marker = ""
     if tasks:
@@ -128,7 +167,13 @@ def _acc_row(st: _Stores, rec, i: int, text: str, csrf_token: str) -> str:
     if csrf_token and _suggest_for_acc(st, rec.id, aid, text):
         aff = (f"<a class='ai-gift js-modal' href='{url}' data-href='{url}' "
                f"title='Er is een AI-skill die deze accountability autonoom kan uitvoeren'>🎁</a>")
-    return (f"<div class='accrow'><div class='acc-text'>{_e(text)}</div>"
+    # De middelen onder de belofte: mensentaal voorop, de technische capability klein erachter.
+    mid = ""
+    if links:
+        chips = "".join(f"<span class='chip'>🔗 {_e(skill_labels.label(t.skill))}</span>"
+                        f"<span class='muted'> {_e(t.skill)}</span>" for t in links)
+        mid = f"<div class='muted'>{chips}</div>"      # bestaande klasse; geen nieuwe CSS
+    return (f"<div class='accrow'><div class='acc-text'>{_e(text)}{mid}</div>"
             f"<div class='acc-ai'>{marker}{aff}</div></div>")
 
 
@@ -1078,16 +1123,24 @@ def render_aitask(st: _Stores, role_id: str, acc_id: str, csrf_token: str = "",
                         f"{pickform(p.id, sk, 'koppel', 'btn ok')}</div>" for p, sk in sugg)
         sugg_html = (f"<div class='sugg'><div class='sugg-h'>🎁 Voorgesteld</div>{items}</div>")
 
-    # 2) Al gekoppeld: verwijderbaar.
+    # 2) Al gekoppeld: verwijderbaar. Autonome AI-taken en dorpsmiddelen delen dezelfde
+    #    verwijder-route; het chip-label verschilt.
+    def delform(tid: str) -> str:
+        return (f"<form method='post' action='/action' style='display:inline'>"
+                f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                f"<input type='hidden' name='tid' value='{_e(tid)}'>"
+                f"<input type='hidden' name='next' value='{_e(back)}'>"
+                f"<button class='dellink' type='submit' name='action' value='aitask_remove'>verwijderen</button>"
+                f"</form>")
+
     rows = ""
     for t in st.ai.for_acc(role_id, acc_id):
-        rows += (f"<div class='frow'><span style='flex:1'>{_ai_chip(st, t)}</span>"
-                 f"<form method='post' action='/action' style='display:inline'>"
-                 f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-                 f"<input type='hidden' name='tid' value='{_e(t.id)}'>"
-                 f"<input type='hidden' name='next' value='{_e(back)}'>"
-                 f"<button class='dellink' type='submit' name='action' value='aitask_remove'>verwijderen</button>"
-                 f"</form></div>")
+        chip = _link_chip(t) if t.kind == KIND_MIDDEL else _ai_chip(st, t)
+        rows += (f"<div class='frow'><span style='flex:1'>{chip}</span>{delform(t.id)}</div>")
+
+    # 2b) Middelen koppelen: registry-skills die deze rol nog niet voert. De domeinpoort filtert
+    #     beslis-skills weg bij een rol die het domein niet houdt — geen uitzonderingsroute.
+    middel = _middel_picker(st, rec, role_id, acc_id, hid)
 
     # 3) Selecteren uit een rugzakje (geen vrije tekst): combinaties AI · skill, niet al gekoppeld.
     personas = st.personas.all()
@@ -1124,7 +1177,7 @@ def render_aitask(st: _Stores, role_id: str, acc_id: str, csrf_token: str = "",
             f"<p class='muted'>Accountability: {_e(acc_text) or '—'}</p>"
             f"<p style='font-size:.82rem;color:var(--gray)'>De mens blijft verantwoordelijk; de AI "
             f"voert <b>zelfstandig</b> een skill uit z'n rugzakje uit. Je typt niets, je "
-            f"<b>selecteert</b> een skill.</p>{sugg_html}{rows}{select}{bag}")
+            f"<b>selecteert</b> een skill.</p>{sugg_html}{rows}{middel}{select}{bag}")
     if fragment:
         return frag
     main = (f"<div class='c2-main' style='max-width:560px'>"
