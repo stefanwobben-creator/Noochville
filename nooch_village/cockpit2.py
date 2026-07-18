@@ -1263,6 +1263,15 @@ def _act_proj_done(c):
         pj.complete(pid, outcome); msg = "✓ afgerond"
         # Geen event vanuit dit proces — de daemon-board-watch (village._poll_board) detecteert de
         # wacht→done-overgang (blocked_on=="review") en vuurt project_completed op de in-memory bus (#10-fix).
+        # Done → signaal op /signals (feed 'Projecten'): done is al de mens-poort, dus het signaal
+        # komt direct goedgekeurd in de RadarStore; de founder promoveert het daar naar de kennisbank.
+        # Link-dedupe ("/project?id=<pid>") maakt dit idempotent met de board-watch-hook. Fail-soft:
+        # een falende signaal-aanmaak mag een done nooit blokkeren.
+        try:
+            from nooch_village.project_signal import signal_from_project
+            signal_from_project(st.radar, pj.get(pid))
+        except Exception:
+            logging.getLogger("cockpit2.signals").exception("project→signaal mislukt (pid=%s)", pid)
         return nxt, msg
 
 

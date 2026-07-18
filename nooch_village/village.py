@@ -472,6 +472,22 @@ class Village:
         # Consumenten filteren zelf op route/deliverable_ids (zie WORKING_AGREEMENTS, kanaal-model).
         auto = getattr(self.context, "_autonomous_done", set())
         done = {p["id"]: p for p in led.by_status("done")}
+        # Done → signaal op /signals (feed 'Projecten'), voor ELKE nieuwe done — óók de autonome,
+        # die hieronder voor het event geskipt worden (al inline aangekondigd). De RadarStore wordt
+        # hier vers geïnstantieerd op data_dir (de daemon-context kent geen _Stores); link-dedupe
+        # ("/project?id=<pid>") maakt dit idempotent met de cockpit-hook. Fail-soft: een falend
+        # signaal mag een done (of dit event) nooit blokkeren.
+        nieuw_done = [pid for pid in done if pid not in self._completed_seen]
+        dd = getattr(self.context, "data_dir", None)
+        if nieuw_done and dd:
+            try:
+                from nooch_village.radar_store import RadarStore
+                from nooch_village.project_signal import signal_from_project
+                radar = RadarStore(os.path.join(dd, "radar.json"))
+                for pid in nieuw_done:
+                    signal_from_project(radar, done[pid])
+            except Exception:
+                logging.getLogger("village.signals").exception("project→signaal mislukt")
         for pid, p in done.items():
             if pid in self._completed_seen or pid in auto:
                 continue                                        # al gezien, of al inline aangekondigd (autonoom)

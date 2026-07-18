@@ -750,6 +750,26 @@ def main() -> None:
               f"{res['skipped']} waren er al (idempotent), {res['lege_dagen']}/{res['dagen']} dagen leeg "
               f"(geen data/creds). Herdraaien is veilig.")
 
+    elif mode == "projects_to_signals":
+        # Backfill: bestaande done-projecten → radar-signalen op /signals (feed 'Projecten').
+        # Zelfde deterministische helper als de done-hooks; link-dedupe ("/project?id=<pid>")
+        # maakt herdraaien veilig en append-only add behoeft geen backup.
+        # python -m nooch_village.village projects_to_signals [--dry-run]
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.projects import ProjectLedger
+        from nooch_village.radar_store import RadarStore
+        from nooch_village.project_signal import backfill_done_projects
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        ledger = ProjectLedger(os.path.join(ctx.data_dir, "projects.json"))
+        radar = RadarStore(os.path.join(ctx.data_dir, "radar.json"))
+        dry = "--dry-run" in sys.argv
+        res = backfill_done_projects(ledger, radar, dry_run=dry)
+        label = "zou er signalen van maken (dry-run)" if dry else "signalen gemaakt"
+        print(f"📡 {res['done']} done-projecten: {res['created']} {label}, "
+              f"{res['skipped']} al aanwezig/overgeslagen. Herdraaien is veilig (link-dedupe).")
+
     elif mode == "backfill_dim":
         # Aparte historische inhaal van de GEDIMENSIONEERDE reeksen (bijv. Plausible per land). Zelfde
         # idempotente sleutel als de live-collector; gaten blijven gaten.
@@ -1028,6 +1048,7 @@ def main() -> None:
               "measure_propose | rereview | ingest | notes_remove | recurate | "
               "ground | harry_run | roster | keys | competitor | community_listening | formalize | answer_questions | "
               "ingest_governance | review_roles | teleology_review | teleology_to_roloverleg | shopify | work_projects | "
-              "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | rapport | verslag | healthcheck",
+              "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
+              "projects_to_signals | rapport | verslag | healthcheck",
               file=sys.stderr)
         sys.exit(1)

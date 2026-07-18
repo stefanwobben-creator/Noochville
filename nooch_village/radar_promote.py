@@ -31,10 +31,14 @@ _PROVENANCE = "media"
 def norm_ref(url: str) -> str:
     """Genormaliseerde artikel-URL voor duplicaat-detectie: schema, www., query/fragment en
     trailing slash eraf, lowercase. Zo matcht dezelfde link ook met utm-staart of http/https-
-    variant. Leeg blijft leeg (en matcht dus nooit)."""
+    variant. Leeg blijft leeg (en matcht dus nooit). Interne links (beginnen met '/', zoals
+    "/project?id=<pid>" van projectsignalen) houden hun query: die IS daar de identiteit —
+    strippen zou alle projectsignalen op '/project' laten samenvallen."""
     u = (url or "").strip().lower()
     if not u:
         return ""
+    if u.startswith("/"):
+        return u.split("#")[0].rstrip("/") or "/"
     u = re.sub(r"^https?://", "", u)
     u = re.sub(r"^www\.", "", u)
     return u.split("?")[0].split("#")[0].rstrip("/")
