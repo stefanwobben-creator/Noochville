@@ -287,3 +287,19 @@ def test_founder_koppen_tagpill_geen_banner_geen_leeg_inzicht(tmp_path):
     # 8: tags-pill naast de Signals-kop; chips zetten de tag in het live-zoekveld (JS)
     assert "kn-tagpill" in html and "kn-tagchip" in html
     assert "data-tag='materialen'" in html and "data-tag='framing'" in html
+
+
+def test_kantelvoorwaarde_op_voorkant_inzicht(tmp_path, monkeypatch):
+    """De falsifier (kantelvoorwaarde) staat op de VOORKANT van het inzicht-detail,
+    niet alleen op de flip-achterkant (founder-regressie 18 jul)."""
+    from nooch_village.views.kennisbank import _inzicht_detail
+    ins = {"id": "i1", "title": "Vegan sneakers bevatten olie.", "version": "1.0",
+           "reframe": "Vegan is niet automatisch fossielvrij.",
+           "falsifier": "Een paar zonder fossiele input in de materiaalstaat.",
+           "evidence": [], "discussion": [], "history": [], "related": []}
+    html = _inzicht_detail(ins, {}, "tok", {})
+    assert "Kantelt als:" in html
+    assert "Een paar zonder fossiele input" in html
+    # en op de achterkant blijft de onderuithaal-variant bestaan
+    back = _inzicht_detail(ins, {}, "tok", {}, flip=True)
+    assert "onderuit" in back

@@ -157,6 +157,12 @@ def _inzicht_detail(ins: dict, atoms: dict, csrf: str, by_id: dict | None = None
                         for l in cou)
     caveat = (f"<div class='kn-caveat'>⚠ {_e(ins.get('caveat'))}</div>"
               if ins.get("caveat") else "")
+    # Kantelvoorwaarde (falsifier) hoort ook op de VOORKANT zichtbaar: elke zekerheid draagt
+    # de voorwaarde waaronder hij kantelt bij zich (founder, 18 jul). De flip-achterkant
+    # toont hem daarnaast als "wat haalt de claim onderuit".
+    kantel = (f"<div class='kn-kantel'>⚖ <span class='muted'>Kantelt als:</span> "
+              f"{_e(ins.get('falsifier'))}</div>"
+              if ins.get("falsifier") else "")
 
     # A1: geen apart "voeg bewijs/reactie toe"-paneel meer (het derde pad). Bewijs koppel je
     # rechts uit de bibliotheek; een reactie plaats je in het gesprek onderaan.
@@ -247,7 +253,7 @@ def _inzicht_detail(ins: dict, atoms: dict, csrf: str, by_id: dict | None = None
         f"<span class='badge ro'>v{_e(ins.get('version') or '1.0')}</span></div>"
         f"<div class='kn-conf'><span class='kn-word {_e(word)}'>{_e(WORD_LABEL[word])}</span>"
         f"{_dots(word, v['dots'])}</div>"
-        f"<div class='kn-sentence'>{v['sentence']}</div>{caveat}"
+        f"<div class='kn-sentence'>{v['sentence']}</div>{caveat}{kantel}"
         f"<div class='kn-sec'><div class='kn-sectitle'>Het bewijs</div>{noten_sup}"
         + (f"<div class='kn-sectitle'>Tegenspraak</div>{noten_cou}" if noten_cou else "")
         + f"{brug_hint}{herformuleer}</div>"
