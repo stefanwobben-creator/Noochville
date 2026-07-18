@@ -123,6 +123,7 @@ def classify_means(
 def classify_gap(
     gap_description: str,
     records,
+    links=None,
 ) -> tuple[str, str, str]:
     """Klasseer een means-gap-beschrijving als A, B of C.
 
@@ -134,6 +135,10 @@ def classify_gap(
         Alle records (gearchiveerde worden overgeslagen). Elk record heeft
         .archived, .id en .definition met .purpose, .accountabilities,
         .domains en .skills.
+    links : AITaskStore | None
+        Optioneel: de koppelingsstore. Meegegeven, dan tellen gekoppelde middelen mee in de
+        middelen-overlap (`effectief(rol)`) en worden B-gaps zeldzamer — dat is de bedoeling.
+        None = alleen rol-DNA, het gedrag van vóór de koppelingslaag.
 
     Returns
     -------
@@ -158,7 +163,11 @@ def classify_gap(
             " ".join(defn.accountabilities or []),
             " ".join(defn.domains or []),
         ])))
-        means_sig = _skill_tokens(defn.skills or [])
+        skills = list(defn.skills or [])
+        if links is not None:
+            from nooch_village.skill_links import linked_skills
+            skills = sorted(set(skills) | linked_skills(links, rec.id))
+        means_sig = _skill_tokens(skills)
 
         m = _coverage(gap_sig, mandate_sig)
         s = _coverage(gap_sig, means_sig)

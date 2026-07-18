@@ -484,7 +484,14 @@ class Reconciler:
         # Rol: bestaat er een implementatie (CLASS_MAP) of een actieve skill?
         inh_cls = self.class_map.get(record.id)
         if inh_cls is None:
-            has_active = any(self.registry.get(s) is not None for s in record.definition.skills)
+            # Levensteken: heeft de rol een actieve skill? Lees de EFFECTIEVE set, anders
+            # blijft een rol die alléén via koppelingen werkt onterecht onbemand.
+            from nooch_village import skill_links
+            actief = set(record.definition.skills)
+            settings = getattr(self.context, "settings", None) or {}
+            if str(settings.get("skill_links_active", "0")).strip().lower() in ("1", "true", "yes", "ja"):
+                actief |= skill_links.linked_skills(getattr(self.context, "links", None), record.id)
+            has_active = any(self.registry.get(s) is not None for s in actief)
             if not has_active:
                 self.unmanned[record.id] = record
                 log.info("rol '%s' onbemand [source=%s] (geen CLASS_MAP entry en geen actieve skills)",

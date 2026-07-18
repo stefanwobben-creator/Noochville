@@ -1589,9 +1589,63 @@ class Inhabitant(threading.Thread):
             self.log.error("skill '%s' faalde: %s", capability, e)
             return False, str(e)
 
+    # ── De middelen-poort ────────────────────────────────────────────────────
+
+    def _skill_links_active(self) -> bool:
+        """Staat de koppelingslaag aan als UITVOERINGSwaarheid? (settings: skill_links_active)"""
+        settings = getattr(self.context, "settings", None) or {}
+        return str(settings.get("skill_links_active", "0")).strip().lower() in ("1", "true", "yes", "ja")
+
+    def effective_skills(self) -> set[str]:
+        """De skills die deze rol daadwerkelijk mag voeren.
+
+        Met de vlag uit: alleen het rol-DNA (byte-voor-byte het gedrag van vóór de
+        koppelingslaag). Met de vlag aan: DNA ∪ de middelen die op zijn accountabilities
+        gekoppeld zijn. Het DNA is altijd de vloer — een koppeling neemt nooit iets af.
+        """
+        dna = set(self.dna.skills)
+        if not self._skill_links_active():
+            return dna
+        from nooch_village import skill_links
+        return dna | skill_links.linked_skills(getattr(self.context, "links", None), self.id)
+
+    def _domein_weigering(self, capability: str) -> str:
+        """Verdediging in de diepte: een skill die BESLIST in een domein wordt geweigerd voor
+        een rol zonder dat domein — óók als hij per ongeluk in het DNA of in een koppeling
+        staat, en ongeacht de vlag-stand. De domeinregel is absoluut, geen policy-omweg.
+
+        Geeft de reden terug ("" = toegestaan).
+        """
+        from nooch_village import skill_meta
+        domein = skill_meta.schrijft_in_domein(capability)
+        if not domein:
+            return ""
+        if domein.lower() in {d.lower() for d in (self.dna.domains or [])}:
+            return ""
+        return (f"'{capability}' beslist in het domein '{domein}'; '{self.id}' houdt dat domein "
+                f"niet. Alleen de domeinhouder mag dit middel voeren")
+
+    def _weiger(self, capability: str) -> str | None:
+        """De volledige poort. Geeft een foutmelding terug, of None als het mag."""
+        if capability not in self.effective_skills():
+            # Luid, niet stil: een miss is bijna altijd een dode feature (de skill wordt
+            # aangeroepen maar nooit gegrant). Stil falen heeft verband_voorstel en curate
+            # maandenlang onzichtbaar dood gehouden.
+            self.log.warning(
+                "⚠️ dode capability: '%s' roept skill '%s' aan, maar voert hem niet (%s). "
+                "Grant via governance óf koppel het middel op de accountability.",
+                self.id, capability, sorted(self.effective_skills()))
+            return f"'{self.id}' heeft skill '{capability}' niet in zijn DNA"
+        reden = self._domein_weigering(capability)
+        if reden:
+            self.log.warning("⛔ domeinpoort: %s", reden)
+            return reden
+        return None
+
     def handle(self, task: Task) -> Response:
-        if task.capability not in self.dna.skills:
-            return Response(success=False, error=f"'{self.id}' heeft skill '{task.capability}' niet in zijn DNA")
+        fout = self._weiger(task.capability)
+        if fout:
+            return Response(success=False, error=fout)
         ok, result = self._execute_skill(task.capability, task.payload)
         if ok:
             return Response(success=True, data=result)
@@ -1599,15 +1653,9 @@ class Inhabitant(threading.Thread):
 
     def use_skill(self, capability: str, payload: dict) -> dict:
         """Zelf een eigen skill gebruiken (voor zelf-geinitieerd werk, niet via de matchmaker)."""
-        if capability not in self.dna.skills:
-            # Luid, niet stil: een DNA-miss is bijna altijd een dode feature
-            # (de skill wordt aangeroepen maar nooit gegrant). Stil falen heeft
-            # verband_voorstel en curate maandenlang onzichtbaar dood gehouden.
-            self.log.warning(
-                "⚠️ dode capability: '%s' roept skill '%s' aan, maar die zit niet "
-                "in zijn DNA (%s). Grant via governance of verwijder de aanroep.",
-                self.id, capability, self.dna.skills)
-            return {"error": f"'{self.id}' heeft skill '{capability}' niet in zijn DNA"}
+        fout = self._weiger(capability)
+        if fout:
+            return {"error": fout}
         ok, result = self._execute_skill(capability, payload)
         if ok:
             return result
@@ -1630,9 +1678,10 @@ class Inhabitant(threading.Thread):
         return found
 
     def dormant_capabilities(self) -> set[str]:
-        """Skills die de rol aanroept maar niet in zijn DNA heeft: dode features.
-        Leeg = gezond. Niet-leeg = grant ontbreekt of de aanroep is dood."""
-        return self.referenced_capabilities() - set(self.dna.skills)
+        """Skills die de rol aanroept maar niet voert: dode features.
+        Leeg = gezond. Niet-leeg = grant ontbreekt, koppeling ontbreekt, of de aanroep is dood.
+        Telt gekoppelde middelen mee zodra skill_links_active aan staat."""
+        return self.referenced_capabilities() - self.effective_skills()
 
     def tick(self) -> None:
         """Hartslag-hook: wordt elke cyclus aangeroepen. Default niets.
@@ -1678,7 +1727,7 @@ class Inhabitant(threading.Thread):
         if dormant:
             self.log.warning(
                 "⚠️ dode capabilities bij ontwaken: '%s' roept %s aan zonder grant. "
-                "Grant via governance of verwijder de aanroep.",
+                "Grant via governance, koppel het middel op de accountability, of verwijder de aanroep.",
                 self.id, sorted(dormant))
         while not self._stop_event.is_set():
             try:
