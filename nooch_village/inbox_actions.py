@@ -164,6 +164,28 @@ def override_library_term(library, word: str, decision: str,
     return {"ok": True, "word": word, "status": status}
 
 
+def curate_library_term(library, word: str, status: str,
+                        reason: str = "", by: str = "human") -> dict:
+    """Menselijke curatie van een bibliotheekterm vanuit het woordenschat-scherm:
+    'approved' (heractiveren), 'avoid' (pauzeren: blijft referentie in de ontologie, telt
+    niet meer als actieve zoekterm) of 'forbidden' (verbieden, met reden). Schrijft via de
+    domein-methode Library.curate (nooit rechtstreeks in de json) en geeft de bestaande
+    evidence door zodat verrijking (volume/concurrentie) een pauze overleeft.
+    Geeft {ok, word?, status?, error?}."""
+    word = (word or "").strip()
+    if not word:
+        return {"ok": False, "error": "geen woord"}
+    entry = library.status(word)
+    if entry is None:
+        return {"ok": False, "error": f"'{word}' staat niet in de bibliotheek"}
+    if status not in ("approved", "avoid", "forbidden"):
+        return {"ok": False, "error": f"onbekende status '{status}'"}
+    library.curate(word, status,
+                   rationale=(reason or "").strip() or "menselijke curatie via cockpit",
+                   evidence=entry.get("evidence"), by=by)
+    return {"ok": True, "word": word, "status": status}
+
+
 def _route_kans_to_governance(records, owner: str, title: str, wat: str, waarom: str,
                               business_case, *, by: str = "", examples_block: str = "",
                               llm_reason=None, agenda=None) -> dict:
