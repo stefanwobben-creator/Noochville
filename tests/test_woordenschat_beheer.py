@@ -103,3 +103,47 @@ def test_trend_sparkline_uit_gsc_reeks(tmp_path):
 def test_trend_zonder_reeks_toont_streepje(tmp_path):
     html = _render(tmp_path, csrf="tok123")
     assert "nog geen GSC-reeks" in html
+
+
+# ── nieuw-ster, ingeklapte verboden-lijst en nominatie-wachtrij ──────────────
+
+def test_nieuw_woord_krijgt_first_seen_en_ster(tmp_path):
+    from datetime import date, timedelta
+    lib = _lib(tmp_path)
+    e = lib.status("vegan sneakers dames")
+    assert e["first_seen"] == e["date"]              # curate legt het geboortemoment vast
+    # her-curatie verplaatst first_seen niet
+    curate_library_term(lib, "vegan sneakers dames", "approved", reason="opnieuw")
+    assert lib.status("vegan sneakers dames")["first_seen"] == e["first_seen"]
+    html = render_woordenschat(str(tmp_path), csrf_token="tok")
+    assert "★ nieuw" in html and "nieuw in de Library sinds" in html
+    # ouder dan 28 dagen → geen ster
+    import json as _json, os as _os
+    path = _os.path.join(str(tmp_path), "library.json")
+    d = _json.load(open(path))
+    oud = (date.today() - timedelta(days=40)).isoformat()
+    d["vegan sneakers dames"]["first_seen"] = oud
+    _json.dump(d, open(path, "w"))
+    assert "★ nieuw" not in render_woordenschat(str(tmp_path), csrf_token="tok")
+
+
+def test_verboden_lijst_is_ingeklapt(tmp_path):
+    html = _render(tmp_path, csrf="tok123")
+    assert "<details class='c2-hist'><summary class='muted'>Verboden · 1</summary>" in html
+    assert "verboden woord" in html                  # inhoud blijft aanwezig (ingeklapt)
+
+
+def test_nominatie_wachtrij_op_woordenschat(tmp_path):
+    import json as _json, os as _os
+    _json.dump({"hemp sneakers": {"term": "hemp sneakers", "by": "concurrent_scout",
+                                  "created_at": "2026-07-17"}},
+               open(_os.path.join(str(tmp_path), "keyword_nominaties.json"), "w"))
+    with open(_os.path.join(str(tmp_path), "library.json"), "w", encoding="utf-8") as f:
+        _json.dump(_LIB, f)
+    html = render_woordenschat(str(tmp_path), csrf_token="tok", can_decide=True)
+    assert "Genomineerd (wacht op jouw oordeel)" in html and "hemp sneakers" in html
+    assert "value='kw_nom_accept'" in html and "value='kw_nom_reject'" in html
+    # zonder beslisrecht: wachtrij zichtbaar, geen knoppen
+    html_ro = render_woordenschat(str(tmp_path), csrf_token="tok", can_decide=False)
+    assert "alleen de Librarian-vervuller beslist" in html_ro
+    assert "kw_nom_accept" not in html_ro

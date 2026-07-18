@@ -276,7 +276,9 @@ def _actiebalk(open_: str, st, atoms: dict, inzichten: list, hunch: str, speel: 
                f"<a class='btn{' ok' if bron_open else ''}' "
                f"href='/kennisbank{'' if bron_open else '?open=bron'}'>➕ Bron toevoegen</a>"
                f"<a class='btn{' ok' if speel_open else ''}' "
-               f"href='/kennisbank{'' if speel_open else '?open=speel'}'>🎲 Speel een inzicht</a></div>")
+               f"href='/kennisbank{'' if speel_open else '?open=speel'}'>🎲 Speel een inzicht</a>"
+               f"<a class='btn' href='/signals' title='Goedgekeurde radar-signalen — het "
+               f"startpunt voor inzichten'>🛰 Signals &amp; Insights</a></div>")
     paneel = ""
     if bron_open:
         paneel = f"<div class='card kn-capture'>{_bron_toevoegen(csrf)}</div>"

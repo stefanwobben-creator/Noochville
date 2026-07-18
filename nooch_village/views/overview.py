@@ -648,10 +648,11 @@ _ROLE_TOOLS = {
     "mother_earth__nooch__marketing_lead": [
         ("Linkbuilding", "Linkbuilding-doelwitten pitchen of negeren", "/linkbuilding"),
         ("Keywords — volume & richting", "Waar maak je content voor", "/keywords?lens=marketing")],
+    # De convergentie-check is automatisch (nieuwe woorden dragen 28 dagen een ster op de
+    # woordenschat) en signalen zijn ontsloten via de Kennisbank — dus hier alleen nog het
+    # ene Library-oppervlak.
     "librarian": [
-        ("Woordenschat", "Goedgekeurde woorden, gerangschikt op kansrijkheid", "/woordenschat"),
-        ("Signals & Insights", "Goedgekeurde radar-signalen — het startpunt voor inzichten", "/signals"),
-        ("Keywords — convergentie", "Waar signaal + volume + status samenkomen (cureren)", "/keywords?lens=library")],
+        ("Woordenschat", "Goedgekeurde woorden, gerangschikt op kansrijkheid", "/woordenschat")],
     "concurrent_scout": [
         ("Keywords — analyse", "Kansrijkheid + suggesties, gerangschikt", "/keywords?lens=trends")],
     "harry_hemp": [

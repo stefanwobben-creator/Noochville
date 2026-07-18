@@ -16,9 +16,10 @@ def test_role_tools_kaarten_per_eigenaar_rol():
     assert "Linkbuilding" in marketing and "/linkbuilding" in marketing and "tile-grid" in marketing
     assert "/keywords?lens=marketing" in marketing
     lara = _role_tools_html(_rec("librarian"))
-    assert "Woordenschat" in lara and "Signals &amp; Insights" in lara
-    assert "/woordenschat" in lara and "/signals" in lara
-    assert "/keywords?lens=library" in lara            # convergentie-lens
+    assert "Woordenschat" in lara and "/woordenschat" in lara
+    # Convergentie is een automatische check (nieuw-ster op de woordenschat) en signalen
+    # zijn ontsloten via de Kennisbank — dus geen aparte tool-kaarten meer bij Lara.
+    assert "/signals" not in lara and "/keywords?lens=library" not in lara
     scout = _role_tools_html(_rec("concurrent_scout"))
     assert "/keywords?lens=trends" in scout
     sid = _role_tools_html(_rec("harry_hemp"))

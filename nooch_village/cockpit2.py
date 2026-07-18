@@ -3900,9 +3900,13 @@ def make_handler(data_dir: str, csrf_token: str,
                 return
             if path == "/woordenschat":
                 # Library-kansenscherm: verrijkte keywords gerangschikt op kansrijkheid; met
-                # csrf-token read-write (beheer: functie-toggle, pauzeer, verbied, heractiveer).
+                # csrf-token read-write (beheer: verbied/heractiveer + nominatie-oordeel).
+                # can_decide: alleen de Librarian-vervuller beslist over nominaties (zelfde
+                # gate als /keywords?lens=library).
+                can_decide = _role_gate("librarian", username, st) is None
                 self._send(render_woordenschat(data_dir, csrf_token=effective_csrf,
-                                               msg=(qs.get("msg") or [""])[0]))
+                                               msg=(qs.get("msg") or [""])[0],
+                                               can_decide=can_decide))
                 return
             if path == "/keywords":
                 # IA-fase 3: één keyword-datalaag, rol-lenzen (?lens=marketing|scientist|trends|

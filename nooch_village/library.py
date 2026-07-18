@@ -72,6 +72,10 @@ class Library:
                  "evidence": evidence or {},
                  "by": by,
                  "date": datetime.now().strftime("%Y-%m-%d")}
+        if not existing:
+            # Echt nieuw woord: leg het geboortemoment vast. De woordenschat toont hierop
+            # 28 dagen een ster (nieuw-markering); her-curatie verplaatst dit moment nooit.
+            entry["first_seen"] = entry["date"]
         # Functie (volg/doelwit) alleen voor approved; een eerdere mens-override blijft staan.
         if status == "approved" and entry.get("function") not in ("volg", "doelwit"):
             entry["function"] = classify_function(word, entry.get("evidence"))

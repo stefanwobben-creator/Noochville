@@ -22,11 +22,13 @@ from nooch_village.web_base import _e, _page, _banner, _field
 from nooch_village.cockpit2_util import _DS_LINK, _nav
 from nooch_village.observations import ObservationStore
 from nooch_village.views.metrics import _spark_svg
+from datetime import date, timedelta
 
 # fit: een doelwit is een rank-doel (hier maak je content voor); een seed voedt alleen de radar.
 _FIT = {"doelwit": 1.0, "volg": 0.3}
 
 _SPARK_DAGEN = 30      # venster van de Trend-sparkline (laatste N dagpunten)
+_STER_DAGEN = 28       # zo lang draagt een nieuw Library-woord de nieuw-ster
 
 
 def kansrijkheid(entry: dict) -> float:
@@ -82,6 +84,19 @@ def _spark_cell(word: str, sparks: dict) -> str:
     return f"<span title='{_e(titel)}'>{_spark_svg(pts)}</span>"
 
 
+def _nieuw_ster(e: dict) -> str:
+    """Ster bij een woord dat korter dan _STER_DAGEN geleden voor het eerst in de Library kwam
+    (library.curate legt first_seen éénmalig vast). Ouder of onbekend → geen ster."""
+    fs = e.get("first_seen") or ""
+    try:
+        d = date.fromisoformat(fs)
+    except (ValueError, TypeError):
+        return ""
+    if date.today() - d > timedelta(days=_STER_DAGEN):
+        return ""
+    return f" <span class='chip amber' title='nieuw in de Library sinds {_e(fs)}'>★ nieuw</span>"
+
+
 def _rows(words: list, sparks: dict, csrf: str) -> str:
     out = []
     for w, e, score in words:
@@ -89,7 +104,7 @@ def _rows(words: list, sparks: dict, csrf: str) -> str:
         verbied = (f"<td><span class='kc-actions'>"
                    f"{_mini_form(csrf, 'ws_forbid', w, '✗ verbied')}</span></td>") if csrf else ""
         out.append(
-            f"<tr><td>{_e(w)}</td>"
+            f"<tr><td>{_e(w)}{_nieuw_ster(e)}</td>"
             f"<td>{_spark_cell(w, sparks)}</td>"
             f"<td class='num'>{_num(ev.get('volume'))}</td>"
             f"<td class='num'>{_num(ev.get('competition'))}</td>"
@@ -113,6 +128,55 @@ def _sectie(titel: str, rows: list) -> str:
     return f"<h2>{_e(titel)} ({len(rows)})</h2><div class='rdr-tool'>{''.join(rows)}</div>"
 
 
+def _sectie_inklap(titel: str, rows: list) -> str:
+    """Als _sectie, maar standaard ingeklapt (details/summary) — voor de Verboden-lijst."""
+    if not rows:
+        return ""
+    return (f"<details class='c2-hist'><summary class='muted'>{_e(titel)} · {len(rows)}</summary>"
+            f"<div class='rdr-tool'>{''.join(rows)}</div></details>")
+
+
+def _nominaties(data_dir: str, csrf: str, can_decide: bool) -> str:
+    """De pending nominatie-wachtrij, hier op de woordenschat (het ene Library-oppervlak).
+    Aannemen schrijft naar de woordenschat; afwijzen vereist een reden; beide borgt de Kroniek
+    (acties kw_nom_accept / kw_nom_reject in cockpit2). Fail-soft: geen queue-bestand → niets."""
+    try:
+        from nooch_village.keyword_nominations import NominationQueue
+        pending = NominationQueue(os.path.join(data_dir, "keyword_nominaties.json")).pending()
+    except Exception:
+        return ""
+    if not pending:
+        return ""
+    rijen = ""
+    for it in pending:
+        term = it.get("term") or ""
+        if can_decide:
+            acties = (
+                f"<form method='post' action='/action' class='qadd-row'>"
+                f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+                f"<input type='hidden' name='action' value='kw_nom_accept'>"
+                f"<input type='hidden' name='next' value='/woordenschat'>"
+                f"<input type='hidden' name='term' value='{_e(term)}'>"
+                f"<input type='hidden' name='status' value='approved'>"
+                f"<button class='btn ok'>✓ neem aan</button></form>"
+                f"<form method='post' action='/action' class='qadd-row'>"
+                f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+                f"<input type='hidden' name='action' value='kw_nom_reject'>"
+                f"<input type='hidden' name='next' value='/woordenschat'>"
+                f"<input type='hidden' name='term' value='{_e(term)}'>"
+                f"<input type='text' name='reason' placeholder='reden voor afwijzing (verplicht)'>"
+                f"<button class='btn no'>✗ wijs af</button></form>")
+        else:
+            acties = "<span class='muted'>alleen de Librarian-vervuller beslist</span>"
+        rijen += (f"<div class='rdr-row'><div class='rdr-body'>"
+                  f"<div class='rdr-sig'>{_e(term)}</div>"
+                  f"<div class='rdr-meta'><span class='muted'>genomineerd door "
+                  f"{_e(it.get('by') or '—')} · {_e(it.get('created_at') or '')}</span></div>"
+                  f"<div class='ffoot-l'>{acties}</div></div></div>")
+    return (f"<h2>Genomineerd (wacht op jouw oordeel) ({len(pending)})</h2>"
+            f"<div class='rdr-tool'>{rijen}</div>")
+
+
 def _esc_knoppen(n: int, word: str, csrf: str) -> str:
     """Geëscaleerd: goedkeuren of verbieden mét klein reden-veld (unieke fid per rij)."""
     reden = _field("Reden", "reason", fid=f"ws-reden-{n}", placeholder="reden (anders default)")
@@ -120,7 +184,8 @@ def _esc_knoppen(n: int, word: str, csrf: str) -> str:
             + _mini_form(csrf, "ws_forbid", word, "✗ verbied", "btn sm", extra=reden))
 
 
-def render_woordenschat(data_dir: str, csrf_token: str = "", msg: str = "") -> str:
+def render_woordenschat(data_dir: str, csrf_token: str = "", msg: str = "",
+                        can_decide: bool = False) -> str:
     path = os.path.join(data_dir, "library.json")
     data = {}
     if os.path.exists(path):
@@ -152,9 +217,10 @@ def render_woordenschat(data_dir: str, csrf_token: str = "", msg: str = "") -> s
                  for w, e in entries if e.get("status") == "avoid"]
         forb = [_status_row(w, e, heractiveer(w))
                 for w, e in entries if e.get("status") == "forbidden"]
-        beheer = (_sectie("Geëscaleerd (wacht op jouw oordeel)", esc)
+        beheer = (_nominaties(data_dir, csrf_token, can_decide)
+                  + _sectie("Geëscaleerd (wacht op jouw oordeel)", esc)
                   + _sectie("Gepauzeerd (avoid)", avoid)
-                  + _sectie("Verboden", forb))
+                  + _sectie_inklap("Verboden", forb))
     main = (f"<div class='c2-main'><h1>Woordenschat &amp; kansen</h1>{_banner(msg)}"
             f"<p class='muted'>De goedgekeurde woorden van de Library, gerangschikt op kansrijkheid zodat "
             f"het meest kansrijke woord bovenaan staat. Rollen leveren de verrijking aan; Library cureert. "
