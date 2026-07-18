@@ -652,7 +652,8 @@ _ROLE_TOOLS = {
     # woordenschat) en signalen zijn ontsloten via de Kennisbank — dus hier alleen nog het
     # ene Library-oppervlak.
     "librarian": [
-        ("Woordenschat", "Goedgekeurde woorden, gerangschikt op kansrijkheid", "/woordenschat")],
+        ("Woordenschat", "Goedgekeurde woorden, gerangschikt op kansrijkheid", "/woordenschat"),
+        ("Kennisbank", "Wat de organisatie weet — geversioneerde inzichten", "/kennisbank")],
     "concurrent_scout": [
         ("Keywords — analyse", "Kansrijkheid + suggesties, gerangschikt", "/keywords?lens=trends")],
     "harry_hemp": [

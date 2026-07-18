@@ -1,6 +1,6 @@
-"""IA-fase 1: de top-nav is één gedeelde, geslankte balk (Metrics · Kennisbank ·
-Deelnemers). Deze test bevriest het contract: de inhoud én de single-source-regel
-(geen view hardcodeert de nav nog inline)."""
+"""IA-fase 1: de top-nav is één gedeelde, geslankte balk (Metrics · Deelnemers).
+De Kennisbank woont onder de Librarian-rol (Tools-tab). Deze test bevriest het
+contract: de inhoud én de single-source-regel (geen view hardcodeert de nav inline)."""
 from __future__ import annotations
 
 import glob
@@ -9,14 +9,14 @@ import re
 from nooch_village.cockpit2_util import _nav
 
 
-def test_nav_is_geslankt_tot_drie_ankers():
+def test_nav_is_geslankt_tot_twee_ankers():
     h = _nav()
-    # de drie ankers, met hun bestemming
+    # de twee ankers, met hun bestemming
     assert "<a href='/metrics2'>Metrics</a>" in h
-    assert "<a href='/kennisbank'>Kennisbank</a>" in h
     assert "<a href='/admin'>Deelnemers</a>" in h
-    # de uit-de-nav-gehaalde items zijn weg
-    for weg in ("/inbox", "/belofte", "/inzichten", "/signals", "/accountabilities"):
+    # de uit-de-nav-gehaalde items zijn weg (Kennisbank woont onder de Librarian-rol)
+    for weg in ("/inbox", "/belofte", "/inzichten", "/signals", "/accountabilities",
+                "/kennisbank"):
         assert weg not in h, f"{weg} hoort niet meer in de nav"
     assert ">home<" not in h and ">deelnemers<" not in h  # home weg; label nu 'Deelnemers'
 

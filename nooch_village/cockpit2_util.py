@@ -336,9 +336,9 @@ _DS_LINK = f'<link rel="stylesheet" href="/static/nooch.css?v={_DS_VERSION}">'
 # beloftes/inzichten/signalen samenkomen) en Deelnemers. Home/inbox/beloftes/inzichten/
 # signalen/accountabilities zijn uit de nav; hun routes blijven bestaan (geen dode links),
 # hun inhoud verhuist in latere fasen. "Reference, don't copy": één bron voor de nav.
+# Kennisbank woont sinds de IA-opruiming onder de Librarian-rol (Tools-tab), niet in de top-nav.
 _NAV_ITEMS = (
     ("/metrics2", "Metrics"),
-    ("/kennisbank", "Kennisbank"),
     ("/admin", "Deelnemers"),
 )
 
