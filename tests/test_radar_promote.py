@@ -241,3 +241,22 @@ def test_rol_tools_archief_toont_knop_en_chip(tmp_path):
     wid = st.radar.add(role=_ROLE, feed="f", kind="kaart", content="Wachtrij-item")
     wrow = _radar_item(st.radar.get(wid), "tok", _ROLE, archief=False)
     assert "radar_promote" not in wrow and "radar_approve" in wrow
+
+
+def test_gepromoveerde_signalen_uit_overzicht(tmp_path):
+    """Signalen zijn de wachtkamer: eenmaal gepromoveerd verdwijnen ze uit /signals
+    (naar een ingeklapte teller) en uit het rol-archief (founder, 18 jul)."""
+    st = cockpit2._Stores(_dd(tmp_path))
+    rid = _approved(st, content="Signaal dat gepromoveerd wordt", link="https://x.example/a")
+    rid2 = _approved(st, content="Signaal dat blijft staan", link="https://x.example/b")
+    promote_signal(st, rid)
+    html = render_signals(st, csrf_token="tok")
+    assert "Signaal dat blijft staan" in html.split("in kennisbank")[0]
+    assert "in kennisbank · 1" in html           # ingeklapte teller
+    # het gepromoveerde signaal staat alleen nog ín die details-sectie
+    assert "Signaal dat gepromoveerd wordt" in html.split("in kennisbank · 1")[1]
+    # en het rol-archief filtert hem er ook uit
+    from nooch_village.views.overview import _radar_tool_html
+    rec = SimpleNamespace(id=_ROLE)
+    arch = _radar_tool_html(st, rec, "tok", None)
+    assert "Signaal dat gepromoveerd wordt" not in arch

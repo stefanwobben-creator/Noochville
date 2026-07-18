@@ -723,7 +723,9 @@ def _radar_tool_html(st: _Stores, rec, csrf_token: str, username: str | None) ->
         return ""
     label = feeds[0].get("label") or "Radar"
     pending = st.radar.pending(rec.id)
-    approved = st.radar.approved(rec.id)
+    # Gepromoveerde signalen leven verder als kenniskaartje — uit het rol-archief
+    # (zelfde regel als /signals; founder, 18 jul).
+    approved = [it for it in st.radar.approved(rec.id) if not it.get("promoted_atom_id")]
     if pending:
         wacht = "".join(_radar_item(it, csrf_token, rec.id, archief=False) for it in pending)
         wacht = (f"<div class='rdr-sub'>Wachtrij <span class='muted'>· {len(pending)}"

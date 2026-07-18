@@ -62,7 +62,12 @@ def _signal_card(st, it, csrf: str = "", nxt: str = "/signals") -> str:
 
 def render_signals(st, csrf_token: str = "", feed: str = "") -> str:
     """De /signals-pagina: alle goedgekeurde signalen, nieuwste eerst, optioneel gefilterd op feed."""
-    items = st.radar.all_approved()
+    alle = st.radar.all_approved()
+    # Gepromoveerde signalen zijn kenniskaartjes geworden — signalen zijn de wachtkamer,
+    # niet het archief (founder, 18 jul). Ze verdwijnen uit de lijst; onderaan blijft een
+    # ingeklapte teller zodat niets spoorloos is.
+    items = [it for it in alle if not it.get("promoted_atom_id")]
+    promoted = [it for it in alle if it.get("promoted_atom_id")]
     feeds = sorted({it.get("feed", "") for it in items if it.get("feed")})
     if feed:
         items = [it for it in items if it.get("feed") == feed]
@@ -77,6 +82,11 @@ def render_signals(st, csrf_token: str = "", feed: str = "") -> str:
     body = ("".join(_signal_card(st, it, csrf_token, nxt) for it in items) if items
             else "<p class='muted'>Nog geen goedgekeurde signalen. Keur ze goed op de Tools-tab "
                  "(Radar) van een rol, dan verschijnen ze hier.</p>")
+    if promoted:
+        body += (f"<details class='c2-hist'><summary class='muted'>→ in kennisbank · "
+                 f"{len(promoted)}</summary>"
+                 + "".join(_signal_card(st, it, csrf_token, nxt) for it in promoted)
+                 + "</details>")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
             f"<h1>Signalen <span class='chip'>library</span></h1>"
             f"<p class='muted'>Goedgekeurde radar-signalen, verzameld uit de rollen. "
