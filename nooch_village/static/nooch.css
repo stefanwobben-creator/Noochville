@@ -943,3 +943,14 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .kn-brugkop{font-size:.86rem;margin:.15rem 0 .6rem;color:var(--gray)}
 /* Taak 3 flip: per statement de omgekeerde lens-lezing, ondergeschikt aan de statement-tekst */
 .kn-fliplens{display:block;font-size:.8rem;font-style:italic;color:var(--coral);margin-top:.2rem}
+
+/* Inwoner-dossier: het enige nieuwe atoom van dit scherm. Emoji-avatar in een cirkel — het
+   prototype had hem 64px; hier één maat die zowel in de h1 als in een tabelrij werkt. */
+.avatar{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;
+ border-radius:50%;background:var(--yellow-light);border:2px solid var(--yellow);font-size:1.1rem;
+ vertical-align:middle}
+/* Vulgraad van een balk in stappen van 10% — een klasse i.p.v. een inline style, zodat de
+   inline-style-ratchet op nul blijft. */
+.bar-w0{width:0}.bar-w1{width:10%}.bar-w2{width:20%}.bar-w3{width:30%}.bar-w4{width:40%}
+.bar-w5{width:50%}.bar-w6{width:60%}.bar-w7{width:70%}.bar-w8{width:80%}.bar-w9{width:90%}
+.bar-w10{width:100%}

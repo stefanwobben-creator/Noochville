@@ -44,6 +44,18 @@ def _parse_opportunity(text: str) -> dict:
     return out
 
 
+def _persona_ladder(context, role_id: str, call_site: str) -> str | None:
+    """De modelvoorkeur van de persona op deze rol, of None voor de dorpsladder.
+
+    Fail-soft: een kapotte voorkeur mag een LLM-aanroep nooit blokkeren — dan valt hij
+    gewoon terug op het bestaande gedrag."""
+    try:
+        from nooch_village.llm_keuze import llm_voorkeur
+        return llm_voorkeur(context, role_id, call_site)
+    except Exception:
+        return None
+
+
 class Inhabitant(threading.Thread):
     """Eén rol per inwoner (leaf). Doet zelf werk via zijn skills."""
 
@@ -451,7 +463,8 @@ class Inhabitant(threading.Thread):
             "OTHER:<id>  — werk dat bij een andere bestaande rol past (geef de rol-id)\n"
             "TACTICAL    — eenmalig werk, geen passende rol"
         )
-        out = reason(prompt, call_site="classify_tension")
+        out = reason(prompt, call_site="classify_tension",
+                     ladder=_persona_ladder(self.context, self.id, "classify_tension"))
         if not out:
             return None
         out_l = out.strip().lower().split("\n")[0]
@@ -1818,7 +1831,14 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
             "opgeleverd) en '## Aanbevelingen' (concrete vervolgstappen als '- '-opsomming)"
             + (". Vermeld in de conclusie expliciet dat het project klaar is voor review" if force_final else "")
             + ". Geef alleen het document terug, geen meta-uitleg.")
-        out = reason(prompt, call_site="einddocument",
+        # De persona van de schrijvende rol mag het model kiezen; None = de dorpsladder.
+        try:
+            from nooch_village.llm_keuze import voorkeur_van
+            _ladder = voorkeur_van(personas.get(getattr(record, "persona_id", None))
+                                   if personas is not None else None, "einddocument")
+        except Exception:
+            _ladder = None
+        out = reason(prompt, call_site="einddocument", ladder=_ladder,
                      max_tokens=int(settings.get("einddocument_max_tokens", "4000")))
     except Exception as e:
         log.warning("einddocument-synthese overgeslagen (document intact): %s", e)

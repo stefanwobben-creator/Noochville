@@ -265,7 +265,10 @@ def _fillers_block(st: _Stores, role) -> str:
         return f"<div class='fillers stack'>{avs}{extra}</div>"
     rows = ""
     for n, ai, fid in resolved:
-        nm = (f"<a href='/person?id={_e(fid)}'>{_e(n)}</a>" if not ai else f"{_e(n)} (AI)")
+        # De AI-inwoner is nu een klikbaar dossier i.p.v. platte tekst — dat is de ingang
+        # naar /inwoner vanaf de rol-pagina.
+        nm = (f"<a href='/person?id={_e(fid)}'>{_e(n)}</a>" if not ai
+              else f"<a href='/inwoner?id={_e(fid)}'>{_e(n)}</a> (AI)")
         rows += f"<div class='fperson'>{_avatar(n, ai)}<span>{nm}</span></div>"
     return f"<div class='fillers'>{rows}</div>"
 
@@ -392,7 +395,9 @@ def render_admin(st: _Stores, csrf_token: str = "", msg: str = "") -> str:
            ".admin-act{display:inline-flex;gap:.4rem;margin-left:.4rem}"
            "</style>")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
-            f"<h1>Deelnemers <span class='chip'>admin</span></h1>{_banner(msg)}"
+            f"<h1>Deelnemers <span class='chip'>admin</span></h1>"
+            # Mensen staan hier; de AI-inwoners hebben hun eigen dossier-overzicht.
+            f"<p class='muted'><a href='/inwoners'>→ Inwoners (AI-persona's)</a></p>{_banner(msg)}"
             f"<p class='muted'>Mensen toevoegen, wijzigen, wachtwoord resetten of verwijderen. "
             f"Deze pagina vereist login.</p>{add}"
             f"<div class='c2-sec'><h3>Deelnemers ({len(people)})</h3>{rows or '<span class=muted>Nog niemand.</span>'}</div></div>")

@@ -973,6 +973,52 @@ def main() -> None:
                 print("   -", s)
             sys.exit(1)
 
+    elif mode == "inwoner_export":
+        # Pakket-export: één inwoner als verkoopbaar bestand. Geen sleutels, geen dorpsdata.
+        import os
+        from nooch_village import inwoner_pakket
+        from nooch_village.config import load_context
+        from nooch_village.personas import PersonaStore
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        store = PersonaStore(os.path.join(ctx.data_dir, "personas.json"))
+        zoek = (sys.argv[2] if len(sys.argv) > 2 else "").strip()
+        treffer = next((p for p in store.all()
+                        if p.id == zoek or p.name.lower() == zoek.lower()), None)
+        if treffer is None:
+            print(f"✗ geen inwoner gevonden voor '{zoek}'. Bekend: "
+                  + ", ".join(p.name for p in store.all()))
+            sys.exit(1)
+        uit = os.path.join(ctx.data_dir, "output",
+                           f"{inwoner_pakket.slug(treffer.name)}.inwoner")
+        inwoner_pakket.exporteer(treffer, uit)
+        manifest = inwoner_pakket.bouw_manifest(treffer)
+        print(f"📦 {treffer.name} → {uit}")
+        print(f"   skills: {len(manifest['skills'])} · modules: {len(set(manifest['skill_modules'].values()))} "
+              f"· vereiste sleutels: {', '.join(manifest['vereiste_sleutels']) or 'geen'}")
+
+    elif mode == "inwoner_install":
+        import os
+        from nooch_village import inwoner_pakket
+        from nooch_village.config import load_context
+        from nooch_village.personas import PersonaStore
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        store = PersonaStore(os.path.join(ctx.data_dir, "personas.json"))
+        pad = sys.argv[2] if len(sys.argv) > 2 else ""
+        if not os.path.exists(pad):
+            print(f"✗ pakket niet gevonden: {pad}")
+            sys.exit(1)
+        res = inwoner_pakket.installeer(store, pad)
+        print(f"📥 '{res['naam']}' geïmporteerd (id={res['persona_id']})")
+        if res["ontbrekende_skills"]:
+            print(f"   ⚠ skills die deze village niet kent: {', '.join(res['ontbrekende_skills'])}")
+            print("     → de code moet hier eerst gebouwd en geregistreerd worden (mens-gated).")
+        if res["ontbrekende_sleutels"]:
+            print(f"   ⚠ ontbrekende API-sleutels: {', '.join(res['ontbrekende_sleutels'])}")
+        if not (res["ontbrekende_skills"] or res["ontbrekende_sleutels"]):
+            print("   ✓ deze village heeft alles wat hij nodig heeft.")
+
     else:
         print(f"Onbekende mode '{mode}'. Geldige modes: "
               "once | run | demo | librarian | governance | proposal | lifecycle | "
