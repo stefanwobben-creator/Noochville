@@ -50,13 +50,14 @@ def _num(v) -> str:
 
 
 def _mini_form(csrf: str, action: str, word: str, label: str, cls: str = "btn sm",
-               extra: str = "") -> str:
+               extra: str = "", title: str = "") -> str:
     """Eén knop = één klein POST-formulier naar /action (zelfde patroon als linkbuilding)."""
+    t = f" title='{_e(title)}'" if title else ""
     return (f"<form method='post' action='/action' class='emo-f'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
             f"<input type='hidden' name='word' value='{_e(word)}'>"
             f"<input type='hidden' name='next' value='/woordenschat'>{extra}"
-            f"<button class='{cls}' name='action' value='{action}'>{_e(label)}</button></form>")
+            f"<button class='{cls}'{t} name='action' value='{action}'>{_e(label)}</button></form>")
 
 
 def _gsc_sparks(data_dir: str) -> dict:
@@ -102,7 +103,8 @@ def _rows(words: list, sparks: dict, csrf: str) -> str:
     for w, e, score in words:
         ev = e.get("evidence") or {}
         verbied = (f"<td><span class='kc-actions'>"
-                   f"{_mini_form(csrf, 'ws_forbid', w, '✗ verbied')}</span></td>") if csrf else ""
+                   f"{_mini_form(csrf, 'ws_forbid', w, '🚫', title='naar de no-follow list — komt niet meer terug in discovery')}"
+                   f"</span></td>") if csrf else ""
         out.append(
             f"<tr><td>{_e(w)}{_nieuw_ster(e)}</td>"
             f"<td>{_spark_cell(w, sparks)}</td>"
@@ -181,7 +183,8 @@ def _esc_knoppen(n: int, word: str, csrf: str) -> str:
     """Geëscaleerd: goedkeuren of verbieden mét klein reden-veld (unieke fid per rij)."""
     reden = _field("Reden", "reason", fid=f"ws-reden-{n}", placeholder="reden (anders default)")
     return (_mini_form(csrf, "ws_approve", word, "✓ keur goed", "btn ok sm")
-            + _mini_form(csrf, "ws_forbid", word, "✗ verbied", "btn sm", extra=reden))
+            + _mini_form(csrf, "ws_forbid", word, "🚫", "btn sm", extra=reden,
+                         title="naar de no-follow list — komt niet meer terug in discovery"))
 
 
 def render_woordenschat(data_dir: str, csrf_token: str = "", msg: str = "",
@@ -212,7 +215,8 @@ def render_woordenschat(data_dir: str, csrf_token: str = "", msg: str = "",
         # het scherm de read-only kansrijkheid-lijst (zelfde regel als "geen schrijfknoppen").
         esc = [_status_row(w, e, _esc_knoppen(n, w, csrf_token))
                for n, (w, e) in enumerate(x for x in entries if x[1].get("status") == "escalated")]
-        heractiveer = lambda w: _mini_form(csrf_token, "ws_approve", w, "✓ heractiveer", "btn ok sm")
+        heractiveer = lambda w: _mini_form(csrf_token, "ws_approve", w, "✅", "btn ok sm",
+                                           title="heractiveer — terug naar de woordenschat")
         avoid = [_status_row(w, e, heractiveer(w))
                  for w, e in entries if e.get("status") == "avoid"]
         forb = [_status_row(w, e, heractiveer(w))
@@ -220,7 +224,7 @@ def render_woordenschat(data_dir: str, csrf_token: str = "", msg: str = "",
         beheer = (_nominaties(data_dir, csrf_token, can_decide)
                   + _sectie("Geëscaleerd (wacht op jouw oordeel)", esc)
                   + _sectie("Gepauzeerd (avoid)", avoid)
-                  + _sectie_inklap("Verboden", forb))
+                  + _sectie_inklap("No-follow list", forb))
     main = (f"<div class='c2-main'><h1>Woordenschat &amp; kansen</h1>{_banner(msg)}"
             f"<p class='muted'>De goedgekeurde woorden van de Library, gerangschikt op kansrijkheid zodat "
             f"het meest kansrijke woord bovenaan staat. Rollen leveren de verrijking aan; Library cureert. "

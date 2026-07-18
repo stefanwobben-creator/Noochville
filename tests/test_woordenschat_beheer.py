@@ -72,12 +72,12 @@ def _render(tmp_path, csrf="", observaties=None):
 
 def test_render_met_csrf_toont_secties_en_knoppen(tmp_path):
     html = _render(tmp_path, csrf="tok123")
-    assert "Geëscaleerd (wacht op jouw oordeel)" in html and "Verboden" in html
+    assert "Geëscaleerd (wacht op jouw oordeel)" in html and "No-follow list" in html
     assert "animal sneakers" in html and "verboden woord" in html
     assert "past niet bij de missie" in html and "2026-07-03" in html   # rationale + datum
     for actie in ("ws_forbid", "ws_approve"):                # knoppen posten /action
         assert f"value='{actie}'" in html
-    assert "heractiveer" in html and "tok123" in html
+    assert "heractiveer" in html and "tok123" in html   # via de button-title
     # bewust GEEN toggle- of pauzeerknoppen meer (versimpeling)
     assert "ws_func" not in html and "ws_pause" not in html
 
@@ -127,10 +127,11 @@ def test_nieuw_woord_krijgt_first_seen_en_ster(tmp_path):
     assert "★ nieuw" not in render_woordenschat(str(tmp_path), csrf_token="tok")
 
 
-def test_verboden_lijst_is_ingeklapt(tmp_path):
+def test_no_follow_list_is_ingeklapt(tmp_path):
     html = _render(tmp_path, csrf="tok123")
-    assert "<details class='c2-hist'><summary class='muted'>Verboden · 1</summary>" in html
+    assert "<details class='c2-hist'><summary class='muted'>No-follow list · 1</summary>" in html
     assert "verboden woord" in html                  # inhoud blijft aanwezig (ingeklapt)
+    assert "🚫" in html and "✅" in html             # icoon-acties: verbied + heractiveer
 
 
 def test_nominatie_wachtrij_op_woordenschat(tmp_path):
