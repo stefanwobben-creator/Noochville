@@ -3423,15 +3423,8 @@ def _act_kw_nom_reject(c):
 # ── Woordenschat-beheer (/woordenschat): de mens cureert de Library vanuit cockpit 2 ────────
 # AUTHZ: iedereen-ingelogd — de sessie-check in do_POST dekt "ingelogd = mag" (zelfde regel als
 # de andere beheer-schrijfacties zonder extra rolcheck). Schrijven loopt uitsluitend via de
-# domein-methodes (inbox_actions → Library.curate / Library.set_function), nooit in de json.
-
-def _act_ws_func(c):
-    # Functie-toggle: doelwit ↔ volg (mens-override van de heuristiek).
-    from nooch_village.inbox_actions import set_word_function
-    res = set_word_function(c.st.library, c.g("word"), c.g("function"))
-    return c.nxt, (f"⇄ “{res['word']}” is nu {res['function']}" if res.get("ok")
-                   else f"✗ {res.get('error')}")
-
+# domein-methodes (inbox_actions → Library.curate), nooit in de json. Bewust minimaal:
+# alleen verbied + heractiveer/goedkeuren; functie (doelwit/volg) bepaalt de heuristiek zelf.
 
 def _act_ws_curate(c, status: str, ok_msg: str):
     # Gedeelde kern voor pauzeer/verbied/heractiveer: curatie via curate_library_term.
@@ -3440,11 +3433,6 @@ def _act_ws_curate(c, status: str, ok_msg: str):
                               reason=c.g("reason"), by=_kb_actor(c))
     return c.nxt, (ok_msg.format(word=res["word"]) if res.get("ok")
                    else f"✗ {res.get('error')}")
-
-
-def _act_ws_pause(c):
-    # Pauzeren: status → avoid (blijft referentie in de ontologie, geen actieve zoekterm meer).
-    return _act_ws_curate(c, "avoid", "⏸ “{word}” gepauzeerd (avoid)")
 
 
 def _act_ws_forbid(c):
@@ -3491,8 +3479,6 @@ ACTIONS = {
     "kw_nominate": _act_kw_nominate,
     "kw_nom_accept": _act_kw_nom_accept,
     "kw_nom_reject": _act_kw_nom_reject,
-    "ws_func": _act_ws_func,
-    "ws_pause": _act_ws_pause,
     "ws_forbid": _act_ws_forbid,
     "ws_approve": _act_ws_approve,
     "proj_add": _act_proj_add,

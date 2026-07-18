@@ -3,10 +3,15 @@
 De Library haalt zelf geen data op: rollen (Trends & Competition, Website Watcher, harry_hemp) voeden
 de woorden met verrijking (KE-volume/concurrentie, GSC-positie, Trends-interesse), Library checkt en
 hangt het aan het woord. Dit scherm maakt de woorden paarsgewijs vergelijkbaar met één transparante
-score, zodat het meest kansrijke woord bovenaan staat. Stap 2 (beheer): met een csrf-token wordt het
-scherm read-write — functie-toggle (volg/doelwit), pauzeren (avoid), verbieden (forbidden) en
-heractiveren (approved), plus de secties geëscaleerd/gepauzeerd/verboden. Alle schrijfacties lopen
-via POST /action (inbox_actions → Library.curate/set_function), nooit rechtstreeks in de json.
+score, zodat het meest kansrijkste woord bovenaan staat.
+
+Beheer (mét csrf-token) is bewust minimaal: per woord alléén ✗ verbied (→ forbidden, komt nooit meer
+terug in discovery), goedkeuren/verbieden bij geëscaleerde woorden, en heractiveren op de
+forbidden-lijst als undo. De functie (doelwit/volg) bepaalt de fit in de score en welke woorden een
+GSC-reeks krijgen, maar wordt automatisch door de heuristiek bepaald (library.classify_function) —
+geen knop. De Trend-kolom toont de GSC-impressies-reeks (scope 2) als sparkline: zo zie je de
+ontwikkeling van een kans zonder te hoeven pauzeren. Alle schrijfacties lopen via POST /action
+(inbox_actions → Library.curate), nooit rechtstreeks in de json.
 """
 from __future__ import annotations
 
@@ -15,9 +20,13 @@ import os
 
 from nooch_village.web_base import _e, _page, _banner, _field
 from nooch_village.cockpit2_util import _DS_LINK, _nav
+from nooch_village.observations import ObservationStore
+from nooch_village.views.metrics import _spark_svg
 
 # fit: een doelwit is een rank-doel (hier maak je content voor); een seed voedt alleen de radar.
 _FIT = {"doelwit": 1.0, "volg": 0.3}
+
+_SPARK_DAGEN = 30      # venster van de Trend-sparkline (laatste N dagpunten)
 
 
 def kansrijkheid(entry: dict) -> float:
@@ -48,30 +57,44 @@ def _mini_form(csrf: str, action: str, word: str, label: str, cls: str = "btn sm
             f"<button class='{cls}' name='action' value='{action}'>{_e(label)}</button></form>")
 
 
-def _acties(word: str, fn: str, csrf: str) -> str:
-    """Beheer-knoppen per goedgekeurd woord: functie-toggle, pauzeer, verbied (default-reden)."""
-    ander = "volg" if fn == "doelwit" else "doelwit"
-    toggle = _mini_form(csrf, "ws_func", word, f"⇄ {ander}",
-                        extra=f"<input type='hidden' name='function' value='{_e(ander)}'>")
-    pauze = _mini_form(csrf, "ws_pause", word, "⏸ pauzeer")
-    verbied = _mini_form(csrf, "ws_forbid", word, "✗ verbied")
-    return f"<span class='kc-actions'>{toggle}{pauze}{verbied}</span>"
+def _gsc_sparks(data_dir: str) -> dict:
+    """Per Library-keyword (lower) de GSC-impressies-dagreeks als (datum, waarde)-punten.
+    Fail-soft: geen observations-bestand of geen reeksen → leeg dict (sparkline toont —)."""
+    try:
+        obs = ObservationStore(os.path.join(data_dir, "observations.jsonl"))
+        groups = obs.dimensioned_series("gsc_impressions_day", bron="gsc")
+    except Exception:
+        return {}
+    out = {}
+    for label, rows in groups.items():
+        pts = [(r.get("datum") or "", r.get("value")) for r in rows
+               if isinstance(r.get("value"), (int, float))]
+        if pts:
+            out[str(label).lower()] = pts[-_SPARK_DAGEN:]
+    return out
 
 
-def _rows(words: list, csrf: str) -> str:
+def _spark_cell(word: str, sparks: dict) -> str:
+    pts = sparks.get(word.lower())
+    if not pts or len(pts) < 2:
+        return "<span class='muted' title='nog geen GSC-reeks'>—</span>"
+    titel = f"GSC-impressies {pts[0][0]} → {pts[-1][0]}"
+    return f"<span title='{_e(titel)}'>{_spark_svg(pts)}</span>"
+
+
+def _rows(words: list, sparks: dict, csrf: str) -> str:
     out = []
     for w, e, score in words:
         ev = e.get("evidence") or {}
-        fn = e.get("function") or "volg"
-        chip = "chip amber" if fn == "doelwit" else "chip outline"
-        acties = f"<td>{_acties(w, fn, csrf)}</td>" if csrf else ""
+        verbied = (f"<td><span class='kc-actions'>"
+                   f"{_mini_form(csrf, 'ws_forbid', w, '✗ verbied')}</span></td>") if csrf else ""
         out.append(
             f"<tr><td>{_e(w)}</td>"
-            f"<td><span class='{chip}'>{_e(fn)}</span></td>"
+            f"<td>{_spark_cell(w, sparks)}</td>"
             f"<td class='num'>{_num(ev.get('volume'))}</td>"
             f"<td class='num'>{_num(ev.get('competition'))}</td>"
             f"<td class='num'>{_num(ev.get('position'))}</td>"
-            f"<td class='num'><b>{_num(score)}</b></td>{acties}</tr>")
+            f"<td class='num'><b>{_num(score)}</b></td>{verbied}</tr>")
     return "".join(out)
 
 
@@ -110,10 +133,11 @@ def render_woordenschat(data_dir: str, csrf_token: str = "", msg: str = "") -> s
     approved = [(w, e) for w, e in entries if e.get("status") == "approved"]
     scored = sorted(((w, e, kansrijkheid(e)) for w, e in approved), key=lambda r: -r[2])
     if scored:
+        sparks = _gsc_sparks(data_dir)
         acties_kop = "<th>Acties</th>" if csrf_token else ""
-        tabel = (f"<table class='mtab'><tr><th>Woord</th><th>Functie</th><th class='num'>Volume</th>"
+        tabel = (f"<table class='mtab'><tr><th>Woord</th><th>Trend</th><th class='num'>Volume</th>"
                  f"<th class='num'>Concurrentie</th><th class='num'>GSC-positie</th>"
-                 f"<th class='num'>Kansrijkheid</th>{acties_kop}</tr>{_rows(scored, csrf_token)}</table>")
+                 f"<th class='num'>Kansrijkheid</th>{acties_kop}</tr>{_rows(scored, sparks, csrf_token)}</table>")
     else:
         tabel = ("<p class='muted'>Nog geen goedgekeurde woorden met verrijking. Rollen voeden de Library; "
                  "zet de bronnen aan (Keywords Everywhere, GSC) zodat volume en positie binnenkomen.</p>")
@@ -133,9 +157,11 @@ def render_woordenschat(data_dir: str, csrf_token: str = "", msg: str = "") -> s
                   + _sectie("Verboden", forb))
     main = (f"<div class='c2-main'><h1>Woordenschat &amp; kansen</h1>{_banner(msg)}"
             f"<p class='muted'>De goedgekeurde woorden van de Library, gerangschikt op kansrijkheid zodat "
-            f"het meest kansrijke woord bovenaan staat. Rollen leveren de verrijking aan; Library cureert.</p>"
+            f"het meest kansrijke woord bovenaan staat. Rollen leveren de verrijking aan; Library cureert. "
+            f"De Trend-kolom is de GSC-impressies-reeks van de laatste {_SPARK_DAGEN} dagen.</p>"
             f"<p class='muted'>Formule: <b>kansrijkheid = volume × fit ÷ concurrentie</b> "
-            f"(fit: doelwit 1,0 · seed 0,3; concurrentie 0-1 uit Keywords Everywhere).</p>"
+            f"(fit: rank-doel 1,0 · brede seed 0,3, automatisch bepaald; concurrentie 0-1 uit "
+            f"Keywords Everywhere).</p>"
             f"{tabel}{beheer}</div>")
     inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
