@@ -18,7 +18,12 @@ import time
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH = os.path.join(BASE_DIR, "config", "claims_database.json")
 
-STOPLICHTEN = ("red", "orange", "green")
+# "escaleren" is geen vierde kleur maar een weigering om te oordelen: de term heeft geen harde
+# bron (categorie C in meta.toetsingskader), dus de tool beslist niet. Dat betekent ook dat hij
+# NIET meetelt in de score — een score die daalt door iets waar de tool geen oordeel over heeft,
+# liegt. De bevinding gaat altijd naar compliance.
+ESCALEREN = "escaleren"
+STOPLICHTEN = ("red", "orange", "green", ESCALEREN)
 
 
 class ClaimsDbError(RuntimeError):
@@ -87,7 +92,10 @@ def compile_termen(db: dict) -> list[tuple[dict, "re.Pattern[str]"]]:
 
 
 def score(rood: int, oranje: int) -> int:
-    """De scoreformule uit meta.scoring: max(0, 100 - 12*rood - 5*oranje)."""
+    """De scoreformule uit meta.scoring: max(0, 100 - 12*rood - 5*oranje).
+
+    Escaleren-bevindingen ontbreken hier bewust: de tool heeft er geen oordeel over, dus mogen
+    ze de score niet bewegen. Ze worden apart geteld en apart getoond."""
     return max(0, 100 - 12 * rood - 5 * oranje)
 
 
@@ -111,13 +119,20 @@ def check_tekst(tekst: str, db: dict | None = None) -> dict:
             "waarom": t.get("waarom", ""),
             "alternatief": t.get("alternatief", ""),
             "gevonden": matches,
+            # Herkomst van het oordeel: bron-letter + de letterlijke onderbouwing uit de
+            # database. Zo kan de lezer zien of hier de wet spreekt of een interpretatie.
+            "bron": t.get("bron", ""),
+            "bron_detail": t.get("bron_detail", ""),
+            "hardheid": t.get("hardheid", ""),
+            "stoplicht_advies": t.get("stoplicht_advies", ""),
         })
     rood = sum(1 for b in bevindingen if b["stoplicht"] == "red")
     oranje = sum(1 for b in bevindingen if b["stoplicht"] == "orange")
     groen = sum(1 for b in bevindingen if b["stoplicht"] == "green")
+    escaleren = sum(1 for b in bevindingen if b["stoplicht"] == ESCALEREN)
     return {
         "bevindingen": bevindingen,
-        "rood": rood, "oranje": oranje, "groen": groen,
+        "rood": rood, "oranje": oranje, "groen": groen, "escaleren": escaleren,
         "score": score(rood, oranje),
         "versie": (db.get("meta") or {}).get("versie", ""),
     }

@@ -239,15 +239,21 @@ def test_statisch_prototype_is_weg():
     assert not os.path.exists(os.path.join(PKG, "static", "claims_checker.html"))
 
 
-def test_config_claims_database_blijft_ongemoeid():
+@pytest.fixture(scope="session", autouse=True)
+def _bewaak_de_bron():
     """Guard: geen test mag de claims-database in de repo muteren.
 
     De wekelijkse scan schrijft werklijst-statussen terug naar de bron (v3-zelfverificatie).
     Draait zo'n test tegen het echte pad, dan verandert hij versiebeheerde content — en dat
-    zie je pas bij `git diff`, niet bij een rode test. Wie dit ziet falen: geef je test een
-    wegwerpkopie via `monkeypatch.setattr(claims_db, "DB_PATH", ...)`."""
-    import subprocess
-    uit = subprocess.run(["git", "status", "--porcelain", "config/claims_database.json"],
-                         cwd=os.path.dirname(PKG), capture_output=True, text=True)
-    assert uit.stdout.strip() == "", (
-        "config/claims_database.json is gewijzigd tijdens de testrun:\n" + uit.stdout)
+    zie je pas bij `git diff`, niet bij een rode test. Meet de INHOUD rond de testrun, niet de
+    git-status: een legitieme handmatige edit van de database mag de suite niet rood maken.
+
+    Wie dit ziet falen: geef je test een wegwerpkopie via
+    `monkeypatch.setattr(claims_db, "DB_PATH", ...)`."""
+    with open(claims_db.DB_PATH, "rb") as f:
+        voor = f.read()
+    yield
+    with open(claims_db.DB_PATH, "rb") as f:
+        na = f.read()
+    assert na == voor, ("config/claims_database.json is tijdens de testrun gewijzigd — een test "
+                        "schrijft naar de echte bron in plaats van naar een kopie.")
