@@ -625,6 +625,79 @@ def build_compliance_skills_proposal() -> Proposal:
     )
 
 
+def build_compliance_claims_proposal() -> Proposal:
+    """amend_role: geef Compliance het domein over de eigen claims-database plus de
+    `claims_check`-capaciteit.
+
+    Bewust een AMEND en geen ADD_ROLE: de Compliance-rol is via governance al geboren
+    (domein 'claim-verification', skill claim_evidence) en keurt claims van externe merken.
+    Wat ontbreekt is het eigenaarschap over de EIGEN claims — de EmpCo/ACM-toets op nooch.earth.
+    Domein 'claims-database' is uniek (G1) en de accountability botst met geen enkele rol (G2)."""
+    return Proposal(
+        proposer_role="the_source",
+        change=GovernanceChange(
+            kind=ChangeKind.AMEND_ROLE,
+            role_id="compliance",
+            add_accountabilities=[
+                "de eigen uitingen van Nooch toetsen aan de EU-richtlijn 2024/825 (EmpCo) en de "
+                "ACM-leidraad duurzaamheidsclaims, en de termen-, werklijst- en landenregels in "
+                "de claims-database actueel houden",
+            ],
+            add_domains=["claims-database"],
+            add_skills=["claims_check"],
+        ),
+        tension=("Nooch.earth scoorde 28/100 in een externe EmpCo-scan met tien verboden claims, "
+                 "en vanaf 27-09-2026 lopen die tot 4% jaaromzet aan boete-exposure op. De "
+                 "claims-database en de checker hebben geen eigenaar: iedereen mag toetsen, "
+                 "niemand cureert."),
+        trigger_example=(
+            "Structureel en terugkerend: bij elke nieuwe uiting (homepage, productpagina, FAQ, "
+            "social) komen dezelfde verboden termen terug — de externe scan telde er meermaals "
+            "tien op drie pagina's, en de ACM handhaaft wekelijks in de schoenensector."),
+        rationale=("Het domein 'claims-database' legt het cureren van de termenlijst, de werklijst "
+                   "en de landenregels bij één rol; lezen blijft vrij voor het hele dorp. De skill "
+                   "claims_check geeft die rol de lokale toets. Activatie/bemensing blijft "
+                   "mens-gated."),
+    )
+
+
+def grant_compliance_claims() -> None:
+    """Dien het amend_role-voorstel voor het claims-database-domein + de claims_check-skill in
+    via de live gate en rapporteer de uitkomst."""
+    from nooch_village.village import Village
+
+    v = Village(heartbeat_seconds=86400)
+    outcome: dict = {}
+    v.bus.subscribe("governance_changed",
+                    lambda e: outcome.update({"status": "aangenomen", **e.data}))
+    v.bus.subscribe("governance_review_requested",
+                    lambda e: outcome.update({"status": "geëscaleerd",
+                                              "gate": e.data.get("gate"),
+                                              "reason": e.data.get("reason")}))
+    v.bus.subscribe("proposal_invalid",
+                    lambda e: outcome.update({"status": "ongeldig", "gate": "G0",
+                                              "reason": e.data.get("reason")}))
+    v.start()
+    print("\n===== amend_role: Compliance krijgt het claims-database-domein =====\n")
+    v.submit_proposal(build_compliance_claims_proposal())
+    for _ in range(200):
+        if outcome:
+            break
+        time.sleep(0.05)
+    time.sleep(0.3)
+    v.stop()
+    status = outcome.get("status", "?")
+    print(f"Uitkomst: {status}")
+    if status == "aangenomen":
+        rec = v.records.get("compliance")
+        print(f"Domeinen: {rec.definition.domains if rec else '?'}")
+        print(f"Skills  : {rec.definition.skills if rec else '?'}")
+        print(f"Versie  : v{rec.version if rec else '?'}")
+    else:
+        print(f"Poort   : {outcome.get('gate', '-')}  Reden: {outcome.get('reason', '')}")
+    print("\n===== einde =====")
+
+
 def birth_compliance(parent: str | None = None) -> None:
     """Dien het Compliance-ADD_ROLE-voorstel in via het live governance-proces en rapporteer de
     uitkomst. De rol wordt onbemand geboren als de poort 'm aanneemt. `parent` = de cirkel-id waar de

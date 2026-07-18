@@ -1,0 +1,658 @@
+{
+ "meta": {
+  "naam": "Nooch claims-database",
+  "versie": "2026-07-18",
+  "beheerder": "compliance (nooch-legal)",
+  "bron_van_waarheid": "deze JSON is de repo-bron; de skill nooch-claims-directive (references/claims-database.md) en de checker-HTML worden hieruit afgeleid",
+  "regelgeving": {
+   "empco": "Richtlijn (EU) 2024/825 — omzetting 27-03-2026, handhaving 27-09-2026, boetes tot 4% jaaromzet",
+   "green_claims_directive": "voorstel ingetrokken juni 2025",
+   "acm": "Leidraad Duurzaamheidsclaims v2 — nu al gehandhaafd, kleding/schoenen prioriteit"
+  },
+  "stoplicht": {
+   "red": "verboden — nooit gebruiken",
+   "orange": "risico — alleen met genoemd bewijs",
+   "green": "veilig voor Nooch"
+  },
+  "scoring": "score = max(0, 100 - 12*rood - 5*oranje)",
+  "nulmeting": {
+   "nooch_ecoclaim": "28/100 (3 paginas, juli 2026)",
+   "benchmark_homepages": {
+    "MoEa": 63,
+    "LOCI": 75,
+    "Veja": 78
+   }
+  },
+  "werklijst_statussen": [
+   "open",
+   "in behandeling",
+   "live"
+  ]
+ },
+ "termen": [
+  {
+   "patroon": "milieuvriendelijk|eco.?friendly|environmentally\\s+friendly|earth.?friendly",
+   "term": "milieuvriendelijk / eco-friendly",
+   "stoplicht": "red",
+   "categorie": "Generiek",
+   "waarom": "Expliciet genoemd in EmpCo als verboden generieke claim.",
+   "alternatief": "Benoem het concrete voordeel: 'gemaakt van plantaardige materialen'."
+  },
+  {
+   "patroon": "planet.?(safe|friendly|loving)|goed voor de planeet|good for the planet",
+   "term": "planet-safe / planet-friendly / planet-loving",
+   "stoplicht": "red",
+   "categorie": "Generiek",
+   "waarom": "Absolute claim; geen product is netto goed voor de planeet. Op nooch.earth geflagd door COSH! én EcoClaim.",
+   "alternatief": "Gescoped en feitelijk: 'made without plastics or petrochemical materials'."
+  },
+  {
+   "patroon": "\\bgroene?\\b(?=.{0,30}(keuze|product|schoen|sneaker|merk|optie))|green choice",
+   "term": "groen (als milieuclaim)",
+   "stoplicht": "red",
+   "categorie": "Generiek",
+   "waarom": "Generiek, geen betekenis zonder specificatie.",
+   "alternatief": "Meetbare claim met bron."
+  },
+  {
+   "patroon": "duurza(am|me|amheid)|sustainab(le|ility)",
+   "term": "duurzaam / sustainable",
+   "stoplicht": "red",
+   "categorie": "Generiek",
+   "waarom": "Vaag absoluut woord; ACM-vlagwoord én EmpCo-verbod zonder bewijs.",
+   "alternatief": "Specifiek aspect: 'gemaakt in de EU, ontworpen om lang mee te gaan'."
+  },
+  {
+   "patroon": "klimaatvriendelijk|climate.?friendly",
+   "term": "klimaatvriendelijk",
+   "stoplicht": "red",
+   "categorie": "Generiek",
+   "waarom": "Geen emissiedata = verboden.",
+   "alternatief": "Concrete emissiedata met bron."
+  },
+  {
+   "patroon": "\\beco\\b|\\beco-",
+   "term": "eco- (voorvoegsel)",
+   "stoplicht": "red",
+   "categorie": "Generiek",
+   "waarom": "Shorthand zonder substantie.",
+   "alternatief": "Volledige, verifieerbare formulering."
+  },
+  {
+   "patroon": "ecologisch|ecological",
+   "term": "ecologisch",
+   "stoplicht": "red",
+   "categorie": "Generiek",
+   "waarom": "In meerdere markten gereserveerd voor bio-certificering.",
+   "alternatief": "Erkende certificering noemen."
+  },
+  {
+   "patroon": "niet schadelijk voor het milieu|not harmful to the environment|zonder de planeet|without screwing up the planet",
+   "term": "geen schade aan milieu/planeet",
+   "stoplicht": "red",
+   "categorie": "Generiek",
+   "waarom": "Elk product heeft impact; absolute onschadelijkheidsclaim is verboden.",
+   "alternatief": "'By producing only what's ordered, we avoid overproduction waste.'"
+  },
+  {
+   "patroon": "mother nature|moeder natuur",
+   "term": "liefde voor Mother Nature (emotieve framing)",
+   "stoplicht": "red",
+   "categorie": "Generiek",
+   "waarom": "Emotie zonder feit telt als generieke milieuclaim (EcoClaim flag #1).",
+   "alternatief": "Veranker aan feiten: 'natural rubber outsole, plant-based upper, produced in Portugal'."
+  },
+  {
+   "patroon": "natuurlijk(e)?(?=.{0,25}(materia|product|schoen|sneaker))|\\bnatural\\b",
+   "term": "natuurlijk / natural",
+   "stoplicht": "orange",
+   "categorie": "Generiek",
+   "waarom": "Suggereert milieuvoordeel; alleen met ingrediënt + oorsprong.",
+   "alternatief": "'Bovenwerk van appelrestleer uit Zuid-Tirol.'"
+  },
+  {
+   "patroon": "bewust(e)?(?=.{0,20}(keuze|merk|gemaakt))|conscious",
+   "term": "bewust / conscious",
+   "stoplicht": "orange",
+   "categorie": "Generiek",
+   "waarom": "Modejargon zonder inhoud.",
+   "alternatief": "Beschrijf de concrete actie."
+  },
+  {
+   "patroon": "verantwoord(e)?|responsible",
+   "term": "verantwoord / responsible",
+   "stoplicht": "orange",
+   "categorie": "Generiek",
+   "waarom": "Vaag zonder maatregel.",
+   "alternatief": "Benoem de maatregel."
+  },
+  {
+   "patroon": "\\bschoon\\b|\\bclean\\b",
+   "term": "schoon / clean",
+   "stoplicht": "orange",
+   "categorie": "Generiek",
+   "waarom": "Ambigu zonder definitie.",
+   "alternatief": "Definieer wat je bedoelt."
+  },
+  {
+   "patroon": "\\bpuur\\b|\\bpure\\b",
+   "term": "puur / pure",
+   "stoplicht": "orange",
+   "categorie": "Generiek",
+   "waarom": "Suggereert milieuvoordeel.",
+   "alternatief": "Definieer waaruit het bestaat."
+  },
+  {
+   "patroon": "(co2|co₂|carbon|klimaat|climate).?(neutraal|neutral)",
+   "term": "CO₂-/klimaatneutraal",
+   "stoplicht": "red",
+   "categorie": "CO₂",
+   "waarom": "EmpCo verbiedt neutraliteitsclaims op basis van compensatie.",
+   "alternatief": "'X kg CO₂e per paar, berekend volgens [methode]' met bron."
+  },
+  {
+   "patroon": "klimaatpositief|climate.?positive|carbon.?positive",
+   "term": "klimaatpositief",
+   "stoplicht": "red",
+   "categorie": "CO₂",
+   "waarom": "Netto voordeel niet aantoonbaar.",
+   "alternatief": "Geverifieerde reductiedata."
+  },
+  {
+   "patroon": "net.?zero",
+   "term": "net zero",
+   "stoplicht": "red",
+   "categorie": "CO₂",
+   "waarom": "Verboden indien via offsets.",
+   "alternatief": "Tijdsgebonden, extern gevalideerd reductiepad (SBTi)."
+  },
+  {
+   "patroon": "gecompenseerd|offset|compensated",
+   "term": "CO₂-gecompenseerd / offset",
+   "stoplicht": "red",
+   "categorie": "CO₂",
+   "waarom": "Compensatie mag geen basis van de claim zijn.",
+   "alternatief": "Reductie en compensatie strikt gescheiden communiceren."
+  },
+  {
+   "patroon": "emissievrij|zero.?emission",
+   "term": "emissievrij / zero emissions",
+   "stoplicht": "red",
+   "categorie": "CO₂",
+   "waarom": "Vrijwel nooit waar.",
+   "alternatief": "Specificeer scope met verificatie."
+  },
+  {
+   "patroon": "(co2|co₂|carbon|voetafdruk|footprint).{0,25}(verlaagd|verkleind|reduced|lower|kleiner)|reduce[sd]?\\s+(our\\s+)?carbon",
+   "term": "CO₂-verlaagd / reduced footprint",
+   "stoplicht": "orange",
+   "categorie": "CO₂",
+   "waarom": "Alleen met baseline, tijdsbestek en verificatie. Nooch: 4,75 kg-claim vereist WISE-verificatie.",
+   "alternatief": "'X% minder CO₂e dan [baseline], berekend door [bron].'"
+  },
+  {
+   "patroon": "biologisch afbreekbaar|biodegrad",
+   "term": "biologisch afbreekbaar / biodegradable",
+   "stoplicht": "red",
+   "categorie": "Materiaal",
+   "waarom": "Niet wettelijk gedefinieerd voor schoenen; FAQ erkent zelf dat EU-definitie niet gehaald wordt. EmpCo art. 3(h).",
+   "alternatief": "'Materialen die terugkeren in de natuur' of 'we onderzoeken het en claimen pas als we het kunnen bewijzen'."
+  },
+  {
+   "patroon": "composteer|compost",
+   "term": "composteerbaar / compost",
+   "stoplicht": "red",
+   "categorie": "Materiaal",
+   "waarom": "Zelfde probleem als biodegradable; composteer-instructie in FAQ moet weg.",
+   "alternatief": "'Made from natural materials that break down over time without releasing microplastics or toxins.'"
+  },
+  {
+   "patroon": "in de grond begraven|bury (it|them) in",
+   "term": "'kan begraven worden'",
+   "stoplicht": "red",
+   "categorie": "Materiaal",
+   "waarom": "Impliciete biodegradability-claim.",
+   "alternatief": "Zie biologisch afbreekbaar."
+  },
+  {
+   "patroon": "recyclebaar|recyclable",
+   "term": "recyclebaar",
+   "stoplicht": "orange",
+   "categorie": "Materiaal",
+   "waarom": "Misleidend als er geen echte recyclinginfrastructuur is voor het product.",
+   "alternatief": "Beschrijf wat er werkelijk mogelijk is, per onderdeel."
+  },
+  {
+   "patroon": "gerecycled|recycled",
+   "term": "gerecycled",
+   "stoplicht": "orange",
+   "categorie": "Materiaal",
+   "waarom": "Percentage + bron verplicht.",
+   "alternatief": "'Gemaakt met X% gerecycled [materiaal]'."
+  },
+  {
+   "patroon": "\\borganic\\b|biologisch(e)? katoen|\\bbio\\b",
+   "term": "organic / biologisch",
+   "stoplicht": "orange",
+   "categorie": "Materiaal",
+   "waarom": "Vereist certificering (GOTS e.d.) — Nooch heeft die NIET.",
+   "alternatief": "Alleen mét certificaatvermelding, anders weglaten."
+  },
+  {
+   "patroon": "plantaardig|plant.?based",
+   "term": "plantaardig / plant-based",
+   "stoplicht": "orange",
+   "categorie": "Materiaal",
+   "waarom": "Claimbaar mits aantoonbaar per onderdeel. '100%' alleen na verificatie van élk onderdeel (let op: strobel bevat PLA).",
+   "alternatief": "Materiaal-voor-materiaal uitsplitsing; '100%' vermijden tot onafhankelijk geverifieerd."
+  },
+  {
+   "patroon": "plasticvrij|plastic.?free",
+   "term": "plasticvrij",
+   "stoplicht": "orange",
+   "categorie": "Materiaal",
+   "waarom": "Moet voor élk onderdeel gelden, inclusief coatings en lijmen.",
+   "alternatief": "Alleen na volledige verificatie van alle componenten."
+  },
+  {
+   "patroon": "chemicali[eë]nvrij|chemical.?free",
+   "term": "chemicaliënvrij",
+   "stoplicht": "red",
+   "categorie": "Materiaal",
+   "waarom": "Wetenschappelijk onjuist: alles is chemie.",
+   "alternatief": "Benoem welke stoffen zijn uitgesloten."
+  },
+  {
+   "patroon": "\\bvegan\\b|veganistisch",
+   "term": "vegan",
+   "stoplicht": "green",
+   "categorie": "Materiaal",
+   "waarom": "Voor Nooch aantoonbaar: geen dierlijke materialen.",
+   "alternatief": "Vrij te gebruiken; bij twijfel over lijmen eerst verifiëren."
+  },
+  {
+   "patroon": "(groener|duurzamer|greener|more sustainable)\\s+(dan|than)?",
+   "term": "groener/duurzamer dan",
+   "stoplicht": "red",
+   "categorie": "Vergelijkend",
+   "waarom": "Vereist gelijkwaardige LCA-vergelijking (ISO 14040).",
+   "alternatief": "Specifieke impactcategorie + methode + bron."
+  },
+  {
+   "patroon": "beter (voor de planeet|dan leer)|better (for the planet|than leather)",
+   "term": "beter dan leer / voor de planeet",
+   "stoplicht": "orange",
+   "categorie": "Vergelijkend",
+   "waarom": "'Beter dan leer' mag alléén met Higg MSI-bron; 'beter voor de planeet' is te breed.",
+   "alternatief": "'Lagere materiaalimpact dan leer volgens Higg MSI.'"
+  },
+  {
+   "patroon": "de enige|the only",
+   "term": "de enige...",
+   "stoplicht": "orange",
+   "categorie": "Vergelijkend",
+   "waarom": "Superlatief, niet volledig verifieerbaar.",
+   "alternatief": "Altijd met 'voor zover wij weten'."
+  },
+  {
+   "patroon": "best in class|koploper|industry.?leading|new standard in",
+   "term": "best in class / new standard",
+   "stoplicht": "red",
+   "categorie": "Vergelijkend",
+   "waarom": "Vereist onafhankelijke benchmark van de hele markt.",
+   "alternatief": "Alleen bij vermelding in erkende onafhankelijke ranking."
+  },
+  {
+   "patroon": "99[.,]9\\s?%|\\b99\\s?%",
+   "term": "99,9% van de merken...",
+   "stoplicht": "red",
+   "categorie": "Vergelijkend",
+   "waarom": "Verzonnen precisie zonder bron (COSH! #10).",
+   "alternatief": "Kwalitatief mét bron: 'most footwear brands still rely on plastics [bron]'."
+  },
+  {
+   "patroon": "zero.?waste",
+   "term": "zero waste",
+   "stoplicht": "red",
+   "categorie": "Toekomst/absoluut",
+   "waarom": "Absolute claim; eigen herdefinitie in FAQ telt niet. Productie genereert altijd afval (offcuts, verpakking).",
+   "alternatief": "'Made on demand to minimise overproduction and reduce material waste.'"
+  },
+  {
+   "patroon": "we streven|committed to|working towards|onderweg naar|on track to|transitioning to",
+   "term": "streven naar / committed to",
+   "stoplicht": "orange",
+   "categorie": "Toekomst",
+   "waarom": "Alleen met concreet, meetbaar en extern controleerbaar plan.",
+   "alternatief": "Doel + deadline + wat er al bereikt is."
+  },
+  {
+   "patroon": "peta.?approved|peta.?certified|peta",
+   "term": "PETA Approved Vegan",
+   "stoplicht": "orange",
+   "categorie": "Labels",
+   "waarom": "Zelf-declaratie, geen geaccrediteerde audit. LET OP: nooch-legal zegt 'niet PETA-gecertificeerd' — conflict eerst oplossen.",
+   "alternatief": "Uitleg wat het label wel/niet dekt; overweeg Vegan Society (geaccrediteerd)."
+  },
+  {
+   "patroon": "plant.?based treaty",
+   "term": "Plant Based Treaty",
+   "stoplicht": "orange",
+   "categorie": "Labels",
+   "waarom": "Pledge, geen productcertificering.",
+   "alternatief": "'We are signatories to the Plant Based Treaty pledge' — expliciet geen keurmerk."
+  },
+  {
+   "patroon": "gecertificeerd|certified(?!\\s+organic cotton)",
+   "term": "gecertificeerd (algemeen)",
+   "stoplicht": "orange",
+   "categorie": "Labels",
+   "waarom": "Alleen met erkend label + certificaatnummer.",
+   "alternatief": "Label + nummer + link."
+  },
+  {
+   "patroon": "10\\s?%.{0,40}(emissie|emission|carbon)|20\\s?%.{0,40}(water)",
+   "term": "mode-industrie statistieken (10% / 20%)",
+   "stoplicht": "orange",
+   "categorie": "Statistiek",
+   "waarom": "Specifieke cijfers vereisen bron + jaartal; 10%-cijfer is omstreden.",
+   "alternatief": "'According to [bron, jaar], approximately X%...' met link."
+  },
+  {
+   "patroon": "ethisch (geproduceerd|gemaakt)|ethical(ly)?\\s*(produced|made|sourced|materials)?\\b|eerlijke lonen|fair wages",
+   "term": "ethisch geproduceerd / ethical",
+   "stoplicht": "orange",
+   "categorie": "Sociaal",
+   "waarom": "Brede sociale claim; criteria/audit vereist. Loonclaims: eerst Eurovilde-verificatie.",
+   "alternatief": "'Handcrafted in Portugal under EU labour standards' + auditverwijzing."
+  },
+  {
+   "patroon": "low.?carbon|koolstofarm",
+   "term": "low carbon",
+   "stoplicht": "orange",
+   "categorie": "CO₂",
+   "waarom": "Relatieve claim zonder benchmark.",
+   "alternatief": "Vergelijking met norm + bron."
+  },
+  {
+   "patroon": "(smaller|kleinere)\\s+(voetafdruk|footprint)s?|tread(ing)?\\s+light",
+   "term": "smaller footprint / tread light",
+   "stoplicht": "orange",
+   "categorie": "CO₂",
+   "waarom": "Impliciete vergelijkende voetafdruk-claim zonder baseline.",
+   "alternatief": "Kwantificeer: 'X% lagere materiaalimpact volgens [bron]'."
+  },
+  {
+   "patroon": "car(e|ing) for the planet|zorg(en)? voor de planeet|for the planet\\b",
+   "term": "caring for the planet",
+   "stoplicht": "red",
+   "categorie": "Generiek",
+   "waarom": "Generieke planeet-claim, zelfde familie als planet-friendly.",
+   "alternatief": "Concrete actie benoemen met bewijs."
+  },
+  {
+   "patroon": "circular (practices|economy)|circulair",
+   "term": "circulair / circular practices",
+   "stoplicht": "orange",
+   "categorie": "Materiaal",
+   "waarom": "Alleen met beschrijving van de werkelijke kringloop (terugname, hergebruik-%).",
+   "alternatief": "'We turn worn sneakers into new ones' + cijfers over volume/verwerking."
+  },
+  {
+   "patroon": "refuse to let regulations|regels (bepalen|dicteren) niet",
+   "term": "'regels dicteren ons niet'",
+   "stoplicht": "red",
+   "categorie": "Framing",
+   "waarom": "Non-compliance als merkkeuze is de slechtst denkbare positie bij handhaving (COSH! #9).",
+   "alternatief": "'Certificeringstrajecten passen nog niet bij onze materialen; we claimen pas als we het kunnen bewijzen.'"
+  },
+  {
+   "patroon": "bewezen|gegarandeerd|proven|guaranteed",
+   "term": "bewezen / gegarandeerd",
+   "stoplicht": "orange",
+   "categorie": "Algemeen",
+   "waarom": "ACM-vlagwoord; alleen met direct bewijs.",
+   "alternatief": "Toon het bewijs bij de claim."
+  },
+  {
+   "patroon": "klimaneutral",
+   "term": "klimaneutral (DE)",
+   "stoplicht": "red",
+   "categorie": "CO₂",
+   "waarom": "BGH Katjes-arrest 2024: ambigue term moet in de uiting zelf worden uitgelegd; websiteverwijzing onvoldoende. Duitsland strengste markt.",
+   "alternatief": "Werkelijke emissiedata in de uiting zelf, of term schrappen."
+  },
+  {
+   "patroon": "umweltfreundlich",
+   "term": "umweltfreundlich (DE)",
+   "stoplicht": "red",
+   "categorie": "Generiek",
+   "waarom": "Duitse variant van milieuvriendelijk; UWG item 4a.",
+   "alternatief": "Specifiek voordeel met bewijs."
+  },
+  {
+   "patroon": "nachhaltig",
+   "term": "nachhaltig (DE)",
+   "stoplicht": "red",
+   "categorie": "Generiek",
+   "waarom": "Duitse variant van duurzaam; verboden zonder bewijs.",
+   "alternatief": "Specifiek aspect benoemen."
+  },
+  {
+   "patroon": "ökologisch|\\böko\\b",
+   "term": "ökologisch / öko (DE)",
+   "stoplicht": "red",
+   "categorie": "Generiek",
+   "waarom": "In DE gereserveerd/gevoelig; UWG 4a.",
+   "alternatief": "Erkende certificering noemen."
+  },
+  {
+   "patroon": "biologisch abbaubar",
+   "term": "biologisch abbaubar (DE)",
+   "stoplicht": "red",
+   "categorie": "Materiaal",
+   "waarom": "Zelfde regel als biodegradable.",
+   "alternatief": "Feitelijke afbraak-beschrijving zonder gereguleerde term."
+  },
+  {
+   "patroon": "kompostierbar",
+   "term": "kompostierbar (DE)",
+   "stoplicht": "red",
+   "categorie": "Materiaal",
+   "waarom": "Zelfde regel als compostable.",
+   "alternatief": "Zie biologisch abbaubar."
+  },
+  {
+   "patroon": "plastikfrei",
+   "term": "plastikfrei (DE)",
+   "stoplicht": "orange",
+   "categorie": "Materiaal",
+   "waarom": "Moet voor elk onderdeel gelden, incl. coatings/lijmen.",
+   "alternatief": "Alleen na volledige verificatie."
+  },
+  {
+   "patroon": "recycelbar",
+   "term": "recycelbar (DE)",
+   "stoplicht": "orange",
+   "categorie": "Materiaal",
+   "waarom": "Alleen met echte recyclinginfrastructuur.",
+   "alternatief": "Beschrijf wat werkelijk mogelijk is."
+  }
+ ],
+ "werklijst": [
+  {
+   "nr": 1,
+   "claim": "“100% Planet-Safe” — homepage, sitewide",
+   "oordeel": "red",
+   "herformulering": "Schrappen of gescoped: 'Made without plastics or petrochemical materials' + bewijslink",
+   "status": "open"
+  },
+  {
+   "nr": 2,
+   "claim": "“100% Plant-Based” — sitewide tagline",
+   "oordeel": "orange",
+   "herformulering": "Materiaal-voor-materiaal uitsplitsing; '100%' alleen na verificatie (strobel bevat PLA)",
+   "status": "open"
+  },
+  {
+   "nr": 3,
+   "claim": "“Zero Waste Footwear” — header",
+   "oordeel": "red",
+   "herformulering": "'Made on demand to avoid overproduction'; zero waste alleen met certificering of definitie ernaast",
+   "status": "open"
+  },
+  {
+   "nr": 4,
+   "claim": "“planet-safe... small batches in the EU” — homepage",
+   "oordeel": "red",
+   "herformulering": "'planet-safe' weg; EU-productie alleen feitelijk ('produced in Portugal')",
+   "status": "open"
+  },
+  {
+   "nr": 5,
+   "claim": "PETA Approved Vegan-logo — footer",
+   "oordeel": "orange",
+   "herformulering": "Uitleg toevoegen + conflict met nooch-legal ('niet gecertificeerd') oplossen",
+   "status": "open"
+  },
+  {
+   "nr": 6,
+   "claim": "Plant Based Treaty-logo — footer",
+   "oordeel": "orange",
+   "herformulering": "Presenteren als pledge, geen productcertificering",
+   "status": "open"
+  },
+  {
+   "nr": 7,
+   "claim": "Zero Waste-definitie alleen in FAQ",
+   "oordeel": "orange",
+   "herformulering": "Definitie bij élk gebruik, of term vervangen",
+   "status": "open"
+  },
+  {
+   "nr": 8,
+   "claim": "“safely compost your old Noochies” — FAQ",
+   "oordeel": "red",
+   "herformulering": "Composteer-instructie verwijderen; feitelijke afbraak-beschrijving zonder gereguleerde termen",
+   "status": "open"
+  },
+  {
+   "nr": 9,
+   "claim": "“we refuse to let regulations dictate...” — FAQ",
+   "oordeel": "red",
+   "herformulering": "Herschrijven: 'we claimen pas als we het kunnen bewijzen' + commitment certificering",
+   "status": "open"
+  },
+  {
+   "nr": 10,
+   "claim": "“99.9% of them still rely on plastics” — FAQ",
+   "oordeel": "orange",
+   "herformulering": "Cijfer schrappen of gesourcede statistiek",
+   "status": "open"
+  },
+  {
+   "nr": 11,
+   "claim": "lijmen “reduce our carbon footprint” — FAQ",
+   "oordeel": "orange",
+   "herformulering": "'Plant-based adhesives are made from renewable, non-fossil resources'",
+   "status": "open"
+  },
+  {
+   "nr": 12,
+   "claim": "“100% planet-loving lining” — productpagina",
+   "oordeel": "red",
+   "herformulering": "'Lining made from [materiaal + certificering], naturally dyed'",
+   "status": "open"
+  },
+  {
+   "nr": 13,
+   "claim": "“PLANET-FRIENDLY.” — productpagina",
+   "oordeel": "red",
+   "herformulering": "Schrappen; evt. 'Plastic-free and made from natural materials'",
+   "status": "open"
+  },
+  {
+   "nr": 14,
+   "claim": "“100% plant-based, biodegradable, ethically produced” — productpagina",
+   "oordeel": "red",
+   "herformulering": "Drie claims splitsen en elk onderbouwen of schrappen",
+   "status": "open"
+  },
+  {
+   "nr": 15,
+   "claim": "“new standard in sustainable comfort” — PLIANT outsole",
+   "oordeel": "orange",
+   "herformulering": "Feitelijk materiaal benoemen; 'sustainable' en 'new standard' weg",
+   "status": "open"
+  },
+  {
+   "nr": 16,
+   "claim": "insoles “reduces pollution... sustainable choice”",
+   "oordeel": "orange",
+   "herformulering": "'Recycled fabric scraps, natural latex, coconut husks — no synthetic polymers'",
+   "status": "open"
+  },
+  {
+   "nr": 17,
+   "claim": "“generating zero waste” — missionpagina",
+   "oordeel": "red",
+   "herformulering": "'Made on demand to minimise overproduction and reduce material waste'",
+   "status": "open"
+  },
+  {
+   "nr": 18,
+   "claim": "“10% of global carbon emissions...” — made on demand",
+   "oordeel": "orange",
+   "herformulering": "Bron + jaartal toevoegen; 10%-cijfer checken",
+   "status": "open"
+  },
+  {
+   "nr": 19,
+   "claim": "“without screwing up the planet” — made on demand",
+   "oordeel": "red",
+   "herformulering": "'By producing only what's ordered, we avoid overproduction waste'",
+   "status": "open"
+  },
+  {
+   "nr": 20,
+   "claim": "“deep love for Mother Nature” — homepage (EcoClaim #1)",
+   "oordeel": "red",
+   "herformulering": "Emotie verankeren aan geverifieerde feiten",
+   "status": "open"
+  }
+ ],
+ "landen": {
+  "NL": {
+   "name": "Nederland — ACM",
+   "punten": [
+    "Handhaaft NÚ al (Leidraad Duurzaamheidsclaims v2), kleding/schoenen = prioriteitssector.",
+    "Bewijs moet vindbaar zijn op het moment en de plek van de claim — uitleg alleen in een FAQ telt niet.",
+    "EmpCo-omzetting nog niet afgerond (juli 2026): NL-wettekst kan nuances toevoegen, monitoren.",
+    "Werkt met toezeggingen en publieke naming; reputatierisico weegt zwaarder dan de boete."
+   ],
+   "note_rood": "ACM-risico: verboden termen in NL-markt, en de ACM handhaaft nu al in jullie sector.",
+   "note_oranje": "ACM: zorg dat het bewijs bij de claim zelf vindbaar is, niet alleen in een FAQ."
+  },
+  "DE": {
+   "name": "Duitsland — UWG",
+   "punten": [
+    "Concurrenten kunnen zelf juridisch aanspreken (Abmahnung) — snelste handhavingsroute van de EU.",
+    "Vanaf 27-09-2026: labels vereisen géaccrediteerde onafhankelijke verificatie (item 2a) — PETA Approved Vegan haalt die drempel waarschijnlijk niet.",
+    "BGH Katjes-arrest: 'klimaneutral' en soortgelijke termen moeten in de uiting zélf uitgelegd worden.",
+    "Ook verboden: wettelijke plicht als bijzonderheid presenteren (10a), scope-mismatch (4b)."
+   ],
+   "note_rood": "DE-risico: verboden termen zijn hier een directe uitnodiging voor een Abmahnung door concurrenten.",
+   "note_oranje": "DE: check of labels/claims de accreditatie-eis (per 27-09-2026) halen."
+  },
+  "BE": {
+   "name": "België — Economische Inspectie",
+   "punten": [
+    "Richtsnoeren milieuclaims: proportionaliteit (§3), percentageclaims vereisen data (§4), herdefinities misleiden (§5), logogebruik (§7).",
+    "Tweetalig: NL- én FR-versie van elke claim moet compliant zijn; afwijkende vertaling = misleiding."
+   ],
+   "note_rood": "BE: vergeet de Franstalige versie van deze claims niet — die moet identiek compliant zijn.",
+   "note_oranje": "BE: vergeet de Franstalige versie van deze claims niet — die moet identiek compliant zijn."
+  },
+  "_toelichting": "note_rood/note_oranje: de marktspecifieke waarschuwing die de checker toont bij ≥1 rode resp. ≥1 oranje bevinding. Verbatim uit het prototype verplaatst."
+ }
+}

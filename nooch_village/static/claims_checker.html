@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nooch Claims Checker</title>
+<!--
+  Statisch, standalone hulpmiddel — bewust GEEN governeerde cockpit-view: eigen vormgeving,
+  eigen inline styles, valt buiten het design-systeem en de view-ratchets (zie CLAUDE.md).
+  De termen, werklijst en landenregels komen uit config/claims_database.json via /claims/db.json.
+  Er staat hier bewust géén termenlijst hardcoded: één bron van waarheid.
+  __CSRF__ en __MAG_CUREREN__ worden server-side ingevuld door de /claims-route in cockpit2.py.
+-->
+<style>
+  :root{
+    --bg:#f6f1e7; --card:#fffdf8; --ink:#22301f; --muted:#6b7263;
+    --green:#2f6b3f; --green-soft:#e4efe2;
+    --red:#b3372b; --red-soft:#f7e3df;
+    --orange:#c07a1f; --orange-soft:#f8ecd8;
+    --accent:#1e3b2f; --line:#e3dcc9;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Georgia,'Times New Roman',serif;background:var(--bg);color:var(--ink);line-height:1.55}
+  header{background:var(--accent);color:#f6f1e7;padding:28px 24px}
+  header h1{font-size:1.5rem;font-weight:700;letter-spacing:.3px}
+  header p{opacity:.85;font-size:.92rem;margin-top:4px;font-family:Helvetica,Arial,sans-serif}
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px 60px}
+  nav{display:flex;gap:8px;margin:20px 0;flex-wrap:wrap}
+  nav button{font-family:Helvetica,Arial,sans-serif;font-size:.9rem;padding:9px 18px;border:1px solid var(--line);
+    background:var(--card);border-radius:999px;cursor:pointer;color:var(--ink)}
+  nav button.active{background:var(--accent);color:#f6f1e7;border-color:var(--accent)}
+  .panel{display:none}.panel.active{display:block}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:16px}
+  textarea{width:100%;min-height:170px;padding:14px;border:1px solid var(--line);border-radius:10px;
+    font-family:Helvetica,Arial,sans-serif;font-size:.95rem;background:#fff;resize:vertical;color:var(--ink)}
+  .btnrow{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center}
+  .btn{font-family:Helvetica,Arial,sans-serif;font-size:.95rem;padding:11px 22px;border:none;border-radius:999px;
+    background:var(--accent);color:#f6f1e7;cursor:pointer}
+  .btn.secondary{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+  .scorebar{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .scorenum{font-size:2.6rem;font-weight:700}
+  .risklabel{font-family:Helvetica,Arial,sans-serif;font-weight:700;font-size:.85rem;padding:4px 12px;border-radius:999px}
+  .r-high{background:var(--red-soft);color:var(--red)}
+  .r-mid{background:var(--orange-soft);color:var(--orange)}
+  .r-low{background:var(--green-soft);color:var(--green)}
+  .counts{font-family:Helvetica,Arial,sans-serif;font-size:.88rem;color:var(--muted)}
+  .flag{border-left:5px solid;border-radius:8px;background:#fff;padding:14px 16px;margin-top:12px;border-top:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .flag.red{border-left-color:var(--red)} .flag.orange{border-left-color:var(--orange)} .flag.green{border-left-color:var(--green)}
+  .flag.accent{border-left-color:var(--accent)}
+  .flag .term{font-weight:700;font-size:1.02rem}
+  .flag .cat{font-family:Helvetica,Arial,sans-serif;font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-left:8px}
+  .flag .why{margin-top:6px;font-size:.93rem}
+  .flag .why.tight{margin-top:4px}
+  .flag ul{margin:8px 0 0 20px;font-size:.92rem}
+  .flag .alt{margin-top:8px;font-size:.93rem;background:var(--green-soft);border-radius:8px;padding:9px 12px}
+  .flag .alt b{color:var(--green)}
+  .badge{font-family:Helvetica,Arial,sans-serif;font-size:.75rem;font-weight:700;padding:2px 10px;border-radius:999px;vertical-align:middle}
+  .b-red{background:var(--red-soft);color:var(--red)} .b-orange{background:var(--orange-soft);color:var(--orange)} .b-green{background:var(--green-soft);color:var(--green)}
+  .b-role{background:#ece7d8;color:var(--accent)}
+  mark{background:#f6d8b8;border-radius:3px;padding:0 2px}
+  mark.m-red{background:#f2c4bd} mark.m-orange{background:#f3ddb3}
+  .preview{margin-top:14px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px;font-family:Helvetica,Arial,sans-serif;font-size:.92rem;white-space:pre-wrap}
+  table{width:100%;border-collapse:collapse;font-family:Helvetica,Arial,sans-serif;font-size:.87rem}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  input[type=search]{width:100%;padding:10px 14px;border:1px solid var(--line);border-radius:999px;font-size:.92rem;margin-bottom:14px;background:#fff}
+  input[type=url],input[type=text]{padding:11px 16px;border:1px solid var(--line);border-radius:999px;font-size:.92rem;
+    font-family:Helvetica,Arial,sans-serif;background:#fff}
+  #urlinput{flex:1;min-width:260px}
+  select{font-family:Helvetica,Arial,sans-serif;padding:4px 8px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  .note{font-family:Helvetica,Arial,sans-serif;font-size:.82rem;color:var(--muted);margin-top:10px}
+  footer{font-family:Helvetica,Arial,sans-serif;font-size:.8rem;color:var(--muted);border-top:1px solid var(--line);margin-top:30px;padding-top:16px}
+  h2{font-size:1.15rem;margin-bottom:10px}
+  .empty{color:var(--muted);font-style:italic;margin-top:12px}
+  .hidden{display:none}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;font-family:Helvetica,Arial,sans-serif;font-size:.9rem}
+  .grid2 input,.grid2 select{padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  .grid2 .wide{grid-column:1/-1}
+  .backlink{color:#f6f1e7;font-family:Helvetica,Arial,sans-serif;font-size:.85rem;opacity:.8}
+</style>
+</head>
+<body>
+<header>
+  <h1>Nooch Claims Checker</h1>
+  <p><a class="backlink" href="/">← cockpit</a> · EU EmpCo 2024/825 + ACM Leidraad · beheer: compliance · geen juridisch advies · database <span id="dbversie">…</span></p>
+</header>
+<div class="wrap">
+  <nav>
+    <button class="active" data-tab="checker">Claim check</button>
+    <button data-tab="worklist">Werklijst site-audit</button>
+    <button data-tab="db">Termendatabase</button>
+    <button data-tab="countries">Per land</button>
+    <button data-tab="admin" id="adminTabBtn" class="hidden">Database beheren</button>
+  </nav>
+
+  <!-- CHECKER -->
+  <section id="checker" class="panel active">
+    <div class="card">
+      <h2>Check een URL (eigen site of concurrent)</h2>
+      <div class="btnrow">
+        <input type="url" id="urlinput" placeholder="https://nooch.earth of een concurrent-URL">
+        <button class="btn" onclick="fetchAndScan()" id="fetchbtn">Haal op &amp; check</button>
+      </div>
+      <p class="note">De paginatekst wordt client-side via een publieke proxy opgehaald; sommige sites blokkeren dat — plak de tekst dan hieronder. De tekst-check is de kern en werkt altijd.</p>
+    </div>
+    <div class="card">
+      <h2>Of plak je tekst (copy, social post, productbeschrijving)</h2>
+      <textarea id="input" placeholder="Bijv.: Onze 100% planet-safe sneakers zijn biologisch afbreekbaar en duurzamer dan leer..."></textarea>
+      <div class="btnrow">
+        <span class="counts"><b>Markt:</b></span>
+        <label class="counts"><input type="checkbox" class="cc" value="NL" checked> NL</label>
+        <label class="counts"><input type="checkbox" class="cc" value="DE"> DE</label>
+        <label class="counts"><input type="checkbox" class="cc" value="BE"> BE</label>
+        <button class="btn" onclick="scan()">Check claims</button>
+        <button class="btn secondary" onclick="loadExample()">Voorbeeld laden</button>
+        <button class="btn secondary hidden" id="copybtn" onclick="copyReport()">Kopieer rapport</button>
+        <button class="btn secondary hidden" id="taskbtn" onclick="exportTasks()">Exporteer als taken</button>
+      </div>
+    </div>
+    <div id="result"></div>
+  </section>
+
+  <!-- WERKLIJST -->
+  <section id="worklist" class="panel">
+    <div class="card">
+      <h2>Site-audit nooch.earth — openstaande fixes</h2>
+      <p class="note">EcoClaim-nulmeting: 28/100 (high risk). Statuswijzigingen zijn compliance-domein en worden in de database opgeslagen — ze overleven een herstart.</p>
+      <div id="worklistTable"></div>
+    </div>
+  </section>
+
+  <!-- BEHEER (alleen compliance / Circle Lead; de server bepaalt dit, niet de browser) -->
+  <section id="admin" class="panel">
+    <div class="card">
+      <h2>Term toevoegen aan de database</h2>
+      <p class="note">Je schrijft in <code>config/claims_database.json</code>: de bron van waarheid voor de checker én de <code>claims_check</code>-skill. De wijziging bumpt de databaseversie en wordt gelogd in de audit-trail.</p>
+      <form method="post" action="/">
+        <input type="hidden" name="csrf" value="__CSRF__">
+        <input type="hidden" name="next" value="/claims">
+        <input type="hidden" name="action" value="claims_term_add">
+        <div class="grid2">
+          <input name="term" placeholder="Term (NL / EN), bijv. 'gifvrij / toxin-free'" required>
+          <input name="patroon" placeholder="Zoekpatroon (regex), bijv. gifvrij|toxin.?free" required>
+          <select name="stoplicht">
+            <option value="red">🔴 verboden</option>
+            <option value="orange">🟠 risico</option>
+            <option value="green">🟢 veilig</option>
+          </select>
+          <select name="categorie" id="nt_cat"></select>
+          <input name="waarom" class="wide" placeholder="Waarom (regelgeving/bron)">
+          <input name="alternatief" class="wide" placeholder="Veilig alternatief">
+        </div>
+        <div class="btnrow"><button class="btn" type="submit">Voeg toe</button></div>
+      </form>
+    </div>
+  </section>
+
+  <!-- LANDEN -->
+  <section id="countries" class="panel">
+    <div class="card">
+      <h2>Landspecifieke regels</h2>
+      <p class="note">Bron van waarheid: <code>config/claims_database.json</code> (sleutel <code>landen</code>). Compliance beheert; nieuwe regels daar toevoegen.</p>
+      <div id="countryCards"></div>
+    </div>
+  </section>
+
+  <!-- TERMENDATABASE -->
+  <section id="db" class="panel">
+    <div class="card">
+      <h2>Termendatabase</h2>
+      <input type="search" id="dbsearch" placeholder="Zoek een term... (bijv. duurzaam, carbon, recycled)" oninput="renderDb()">
+      <div id="dbTable"></div>
+    </div>
+  </section>
+
+  <footer id="kader"></footer>
+</div>
+
+<script>
+// ── Eén bron van waarheid: alles komt uit config/claims_database.json via /claims/db.json.
+// Er staat hier bewust geen termenlijst, werklijst of landenregel hardcoded.
+const MAG_CUREREN = __MAG_CUREREN__;
+let DB = [], WORK = [], COUNTRIES = {}, META = {}, COMPILED = [];
+
+async function loadDb(){
+  const r = await fetch("/claims/db.json", {credentials:"same-origin"});
+  if(!r.ok) throw new Error("HTTP " + r.status);
+  const d = await r.json();
+  if(d.error) throw new Error(d.error);
+  DB = d.termen || []; WORK = d.werklijst || []; META = d.meta || {};
+  COUNTRIES = Object.fromEntries(Object.entries(d.landen || {}).filter(([k]) => !k.startsWith("_")));
+  COMPILED = DB.map(t => ({...t, rx: new RegExp(t.patroon, "gi")}));
+}
+
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function scoreOf(reds, oranges){ return Math.max(0, 100 - reds*12 - oranges*5); }
+
+function selectedCountries(){ return [...document.querySelectorAll(".cc:checked")].map(c=>c.value); }
+
+function renderCountries(){
+  let h="";
+  for(const [code,c] of Object.entries(COUNTRIES)){
+    h+=`<div class="flag accent"><span class="term">${esc(c.name)}</span><ul>`;
+    (c.punten||[]).forEach(p=>h+=`<li>${esc(p)}</li>`);
+    h+=`</ul></div>`;
+  }
+  h+=`<div class="flag green"><span class="term">Concurrenten checken</span><div class="why">Mag, voor intern marktinzicht en onderbouwing van "voor zover wij weten"-claims. Nooit publiek maken als "merk X pleegt greenwashing": dat is zelf een vergelijkende claim en in DE een uitnodiging voor een tegen-Abmahnung.</div></div>`;
+  document.getElementById("countryCards").innerHTML=h;
+}
+
+function renderKader(){
+  const r = META.regelgeving || {};
+  document.getElementById("kader").innerHTML =
+    Object.values(r).map(esc).join(" · ") +
+    "<br>Dit is een intern hulpmiddel van Nooch, geen juridisch advies. Twijfelgevallen escaleren naar compliance.";
+  document.getElementById("dbversie").textContent = "v" + esc(META.versie || "?");
+}
+
+async function fetchAndScan(){
+  const url = document.getElementById("urlinput").value.trim();
+  const btn = document.getElementById("fetchbtn");
+  if(!url){ return; }
+  btn.textContent="Ophalen..."; btn.disabled=true;
+  const proxies = [
+    u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    u=>`https://corsproxy.io/?url=${encodeURIComponent(u)}`
+  ];
+  let text=null;
+  for(const p of proxies){
+    try{
+      const r = await fetch(p(url), {signal: AbortSignal.timeout(15000)});
+      if(!r.ok) continue;
+      const html = await r.text();
+      const doc = new DOMParser().parseFromString(html,"text/html");
+      doc.querySelectorAll("script,style,noscript,svg").forEach(e=>e.remove());
+      const title = doc.querySelector("title")?.textContent||"";
+      const meta = doc.querySelector('meta[name="description"]')?.getAttribute("content")||"";
+      text = (title+"\n"+meta+"\n"+doc.body.innerText).replace(/\n{3,}/g,"\n\n").trim();
+      if(text.length>50) break; else text=null;
+    }catch(e){ /* volgende proxy */ }
+  }
+  btn.textContent="Haal op & check"; btn.disabled=false;
+  if(text){
+    document.getElementById("input").value = text.slice(0,20000);
+    scan();
+  } else {
+    document.getElementById("result").innerHTML = '<div class="card empty">Kon deze URL niet ophalen (site blokkeert proxy-toegang). Kopieer de paginatekst handmatig in het tekstveld.</div>';
+  }
+}
+
+function scan(){
+  const text = document.getElementById("input").value;
+  const res = document.getElementById("result");
+  if(!text.trim()){ res.innerHTML = '<div class="card empty">Plak eerst een tekst.</div>'; return; }
+  const hits = [];
+  for(const d of COMPILED){
+    d.rx.lastIndex = 0;
+    const found = text.match(d.rx);
+    if(found){ hits.push({...d, matches:[...new Set(found.map(m=>m.trim()))] }); }
+  }
+  const reds = hits.filter(h=>h.stoplicht==="red"),
+        oranges = hits.filter(h=>h.stoplicht==="orange"),
+        greens = hits.filter(h=>h.stoplicht==="green");
+  const score = scoreOf(reds.length, oranges.length);
+  const risk = score<40? ["High risk","r-high"] : score<75? ["Aanpassen","r-mid"] : ["Laag risico","r-low"];
+  window._lastReport = {reds, oranges, greens, score};
+
+  let html = `<div class="card"><div class="scorebar">
+      <div><div class="scorenum">${score}</div><div class="counts">compliance-score</div></div>
+      <span class="risklabel ${risk[1]}">${risk[0]}</span>
+      <span class="counts">🔴 ${reds.length} verboden · 🟠 ${oranges.length} risico · 🟢 ${greens.length} veilig</span>
+    </div></div>`;
+
+  const notes = selectedCountries()
+    .map(c=>({c, n: reds.length ? COUNTRIES[c]?.note_rood : oranges.length ? COUNTRIES[c]?.note_oranje : null}))
+    .filter(x=>x.n);
+  if(notes.length){
+    html += `<div class="card"><h2>Marktspecifiek (${esc(selectedCountries().join(", "))})</h2>` +
+      notes.map(x=>`<div class="flag accent"><span class="term">${esc(x.c)}</span><div class="why">${esc(x.n)}</div></div>`).join("") + `</div>`;
+  }
+
+  if(!hits.length){
+    html += `<div class="card">Geen vlagwoorden gevonden. Let op: dit checkt alleen bekende termen. Nieuwe of creatieve formuleringen altijd langs compliance.</div>`;
+  } else {
+    html += `<div class="card"><h2>Bevindingen</h2>`;
+    for(const h of [...reds, ...oranges, ...greens]){
+      const b = h.stoplicht==="red"?["b-red","🔴 VERBODEN"]:h.stoplicht==="orange"?["b-orange","🟠 RISICO"]:["b-green","🟢 VEILIG"];
+      html += `<div class="flag ${esc(h.stoplicht)}">
+        <span class="badge ${b[0]}">${b[1]}</span> <span class="term">${esc(h.term)}</span><span class="cat">${esc(h.categorie)}</span>
+        <div class="why">Gevonden: <em>${esc(h.matches.join(", "))}</em> — ${esc(h.waarom)}</div>
+        <div class="why tight"><span class="badge b-role">rol: ${esc(roleFor(h))}</span></div>
+        ${h.stoplicht!=="green" ? `<div class="alt"><b>Alternatief:</b> ${esc(h.alternatief)}</div>` : ""}
+      </div>`;
+    }
+    html += `</div>`;
+    let marked = text.replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+    for(const h of hits){
+      if(h.stoplicht==="green") continue;
+      h.rx.lastIndex = 0;
+      marked = marked.replace(h.rx, m=>`§§${h.stoplicht}§${m}§§`);
+    }
+    marked = marked.replace(/§§(red|orange)§([^§]*)§§/g, (_,lv,m)=>`<mark class="m-${lv}">${m}</mark>`);
+    html += `<div class="card"><h2>Tekst met markeringen</h2><div class="preview">${marked}</div>
+      <p class="note">Eindoordeel: ${reds.length? "🔴 niet publiceerbaar — verboden termen vervangen" : oranges.length? "🟠 alleen publiceerbaar als het genoemde bewijs aanwezig én vermeld is" : "🟢 publiceerbaar (na gebruikelijke legal-eindcheck)"}</p></div>`;
+  }
+  res.innerHTML = html;
+  document.getElementById("copybtn").classList.toggle("hidden", !hits.length);
+  document.getElementById("taskbtn").classList.toggle("hidden", !(reds.length||oranges.length));
+}
+
+function roleFor(h){
+  if(h.categorie==="Labels") return "visual designer";
+  if(h.categorie==="Vergelijkend"||h.categorie==="Statistiek") return "marketeer";
+  if(h.categorie==="Framing") return "copywriter + compliance";
+  if(h.categorie==="Sociaal") return "compliance";
+  return "copywriter";
+}
+
+function exportTasks(){
+  const r = window._lastReport; if(!r) return;
+  const src = document.getElementById("urlinput").value.trim() || "geplakte tekst";
+  const byRole = {};
+  [...r.reds, ...r.oranges].forEach(h=>{ (byRole[roleFor(h)] ||= []).push(h); });
+  let t = `# Claim-fixes → projectenbord\nBron: ${src} · score ${r.score}/100 · ${new Date().toISOString().slice(0,10)}\n`;
+  for(const [role, items] of Object.entries(byRole)){
+    t += `\n## ${role.toUpperCase()}\n`;
+    items.forEach(h=>{
+      t += `- [ ] ${h.stoplicht==="red"?"🔴 VERVANG":"🟠 ONDERBOUW"}: "${h.matches.join('", "')}" (${h.term})\n`;
+      t += `      → ${h.alternatief}\n      prioriteit: ${h.stoplicht==="red"?"hoog":"middel"}\n`;
+    });
+  }
+  t += `\nAfronding: compliance werkt de werklijst in de claims-database bij.\n`;
+  navigator.clipboard.writeText(t).then(()=>{ const b=document.getElementById("taskbtn"); b.textContent="Taken gekopieerd ✓"; setTimeout(()=>b.textContent="Exporteer als taken",1800); });
+}
+
+function copyReport(){
+  const r = window._lastReport; if(!r) return;
+  let t = `CLAIM CHECK — score ${r.score}/100\n`;
+  r.reds.forEach(h=>t+=`🔴 ${h.term} (${h.matches.join(", ")}) → ${h.waarom} → voorstel: ${h.alternatief}\n`);
+  r.oranges.forEach(h=>t+=`🟠 ${h.term} (${h.matches.join(", ")}) → vereist bewijs: ${h.alternatief}\n`);
+  r.greens.forEach(h=>t+=`🟢 ${h.term} → ok\n`);
+  t += `Eindoordeel: ${r.reds.length? "aanpassen (verboden termen)" : r.oranges.length? "publiceerbaar mits bewijs vermeld" : "publiceerbaar"}\n`;
+  navigator.clipboard.writeText(t).then(()=>{ const b=document.getElementById("copybtn"); b.textContent="Gekopieerd ✓"; setTimeout(()=>b.textContent="Kopieer rapport",1600); });
+}
+
+function loadExample(){
+  document.getElementById("input").value = "Onze 100% planet-safe sneakers zijn volledig plantaardig en biologisch afbreekbaar. Duurzamer dan leer, klimaatneutraal geproduceerd en ethisch geproduceerd in de EU. Zero waste, vegan en gemaakt met gerecycled katoen.";
+  scan();
+}
+
+function renderWork(){
+  const statussen = META.werklijst_statussen || ["open"];   // vocabulaire uit de database, niet uit code
+  let h = `<table><tr><th>#</th><th>Claim</th><th>Oordeel</th><th>Herformulering</th><th>Status</th></tr>`;
+  for(const w of WORK){
+    const b = w.oordeel==="red"?'<span class="badge b-red">🔴</span>':'<span class="badge b-orange">🟠</span>';
+    const opts = statussen.map(s=>`<option value="${s}"${s===(w.status||"open")?" selected":""}>${s}</option>`).join("");
+    const cel = MAG_CUREREN
+      ? `<form method="post" action="/">
+           <input type="hidden" name="csrf" value="__CSRF__">
+           <input type="hidden" name="next" value="/claims">
+           <input type="hidden" name="action" value="claims_work_status">
+           <input type="hidden" name="nr" value="${w.nr}">
+           <select name="status" onchange="this.form.submit()">${opts}</select>
+         </form>`
+      : `<span class="counts">${esc(w.status||"open")}</span>`;
+    h += `<tr><td>${w.nr}</td><td>${esc(w.claim)}</td><td>${b}</td><td>${esc(w.herformulering)}</td><td>${cel}</td></tr>`;
+  }
+  document.getElementById("worklistTable").innerHTML = h + "</table>";
+}
+
+function renderDb(){
+  const q = (document.getElementById("dbsearch").value||"").toLowerCase();
+  let h = `<table><tr><th>Term</th><th>Stoplicht</th><th>Categorie</th><th>Waarom</th><th>Alternatief</th></tr>`;
+  for(const d of DB){
+    if(q && !((d.term+d.categorie+d.waarom+d.alternatief)||"").toLowerCase().includes(q)) continue;
+    const b = d.stoplicht==="red"?'<span class="badge b-red">🔴 verboden</span>':d.stoplicht==="orange"?'<span class="badge b-orange">🟠 risico</span>':'<span class="badge b-green">🟢 veilig</span>';
+    h += `<tr><td><b>${esc(d.term)}</b></td><td>${b}</td><td>${esc(d.categorie)}</td><td>${esc(d.waarom)}</td><td>${esc(d.alternatief)}</td></tr>`;
+  }
+  document.getElementById("dbTable").innerHTML = h + "</table>";
+}
+
+function renderAdmin(){
+  if(!MAG_CUREREN) return;                       // de server bepaalt dit; de browser toont het alleen
+  document.getElementById("adminTabBtn").classList.remove("hidden");
+  const cats = [...new Set(DB.map(d=>d.categorie).filter(Boolean))].sort();
+  document.getElementById("nt_cat").innerHTML = cats.map(c=>`<option>${esc(c)}</option>`).join("");
+}
+
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));
+  document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active");
+  document.getElementById(b.dataset.tab).classList.add("active");
+}));
+
+loadDb()
+  .then(()=>{ renderWork(); renderDb(); renderCountries(); renderKader(); renderAdmin(); })
+  .catch(e=>{
+    // Fail-closed: zonder database geen toets. Liever een zichtbare fout dan "geen bevindingen".
+    document.getElementById("result").innerHTML =
+      `<div class="card"><b>De claims-database kon niet geladen worden</b><div class="note">${esc(e.message)} — de checker doet bewust niets zonder database.</div></div>`;
+    document.querySelectorAll(".btn").forEach(b=>b.disabled=true);
+  });
+</script>
+</body>
+</html>

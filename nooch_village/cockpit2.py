@@ -24,6 +24,7 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from nooch_village import auth as _auth
+from nooch_village import claims_db as _claims_db
 from nooch_village.web_base import _e, _page, _banner     # zelfde design system
 from nooch_village.cockpit2_util import (
     _name, _initials, _tabbar, _avatar, _age, _fmt_due,
@@ -3018,6 +3019,70 @@ def _act_lk_mute(c):
         return nxt, (f"✓ {verb}" if ok else "muten niet gelukt")
 
 
+# ── Claims-checker: cureren van de claims-database ───────────────────────────
+# De database (`config/claims_database.json`) is het domein van de compliance-rol. Lezen is vrij
+# (route /claims/db.json); cureren is exclusief de domein-eigenaar. De juridische inhoud is
+# mensenwerk — deze takken schrijven alleen door wat compliance invoert.
+
+def _claims_gate_open(st, username: str | None) -> bool:
+    """Mag deze gebruiker de claims-database cureren? Eén definitie voor zowel het tonen van de
+    schrijfknoppen als het toestaan van de mutatie — de knop kan dus nooit iets beloven wat de
+    dispatch-tak weigert (reference, don't copy)."""
+    return _role_gate("compliance", username, st) is None
+
+
+def _claims_audit(st, username: str | None, event: str, **velden) -> None:
+    """Leg de mutatie vast in de bestaande audit-trail. Geen bus in dispatch → direct schrijven."""
+    try:
+        with open(os.path.join(st.dd, "system_log.jsonl"), "a") as f:
+            f.write(json.dumps({"event": event, "by": username or "?", "at": time.time(), **velden},
+                               ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def _act_claims_term_add(c):
+        # AUTHZ: rolvervuller of Circle Lead — compliance-domein: alleen de domein-eigenaar cureert
+        # de claims-database.
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _role_gate("compliance", username, st)
+        if _deny:
+            return nxt, _deny
+        db = _claims_db.load()
+        try:
+            nieuw = _claims_db.add_term(db, term=g("term").strip(), patroon=g("patroon").strip(),
+                                        stoplicht=g("stoplicht").strip(),
+                                        categorie=g("categorie").strip(),
+                                        waarom=g("waarom").strip(),
+                                        alternatief=g("alternatief").strip())
+        except ValueError as e:
+            return nxt, f"⛔ {e}"
+        versie = _claims_db.bump_versie(db)
+        _claims_db.save(db)
+        _claims_audit(st, username, "claims_term_added", term=nieuw["term"],
+                      stoplicht=nieuw["stoplicht"], versie=versie)
+        return nxt, f"✓ term toegevoegd — database v{versie}"
+
+
+def _act_claims_work_status(c):
+        # AUTHZ: rolvervuller of Circle Lead — compliance-domein: de werklijst-status van een
+        # site-fix is een compliance-oordeel, geen open bord.
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _role_gate("compliance", username, st)
+        if _deny:
+            return nxt, _deny
+        db = _claims_db.load()
+        try:
+            item = _claims_db.set_werk_status(db, int(g("nr") or 0), g("status").strip())
+        except (ValueError, TypeError) as e:
+            return nxt, f"⛔ {e}"
+        versie = _claims_db.bump_versie(db)
+        _claims_db.save(db)
+        _claims_audit(st, username, "claims_work_status", nr=item["nr"],
+                      status=item["status"], versie=versie)
+        return nxt, f"✓ #{item['nr']} → {item['status']} — database v{versie}"
+
+
 # ── Kennisbank (laag 2): inzichten, bewijs-links, gesprek en versies ─────────
 # Alle kb_-takken: AUTHZ: iedereen-ingelogd — kennis verzamelen is dorpsbreed (permissieve
 # intake, strenge uitgang: de garbage-poort staat bij het GEBRUIK van kennis, niet bij de
@@ -3594,6 +3659,8 @@ ACTIONS = {
     "person_edit": _act_person_edit,
     "person_remove": _act_person_remove,
     "lk_mute": _act_lk_mute,
+    "claims_term_add": _act_claims_term_add,
+    "claims_work_status": _act_claims_work_status,
 }
 
 
@@ -3993,6 +4060,32 @@ def make_handler(data_dir: str, csrf_token: str,
                 # zelf te verbinden. Vervangt de oude observer-connect die WebRTC-minuten opslurpte.
                 count, names = livekit_presence()
                 self._send_json({"count": count, "names": names}, 200)
+                return
+            if path == "/claims/db.json":
+                # AUTHZ: iedereen-ingelogd — naslagwerk, lezen is vrij (domein-regel: cureren is
+                # exclusief compliance, en dat loopt via de dispatch-takken hieronder).
+                try:
+                    self._send_bytes(json.dumps(_claims_db.load(), ensure_ascii=False).encode("utf-8"),
+                                     "application/json; charset=utf-8")
+                except _claims_db.ClaimsDbError as e:
+                    self._send_json({"error": str(e)}, 500)   # fail-closed: liever een fout dan lege lijst
+                return
+            if path == "/claims":
+                # AUTHZ: iedereen-ingelogd — checken is voor alle rollen; muteren kan hier niet
+                # (de schrijfknoppen hangen aan de compliance-gate in _act_claims_*).
+                # Statisch bestand, bewust GEEN governeerde view: het prototype heeft eigen
+                # vormgeving en valt daarom buiten het design-systeem en de view-ratchets.
+                try:
+                    with open(os.path.join(os.path.dirname(__file__), "static",
+                                           "claims_checker.html"), encoding="utf-8") as _f:
+                        _html = _f.read()
+                except OSError:
+                    self._send("Claims-checker niet gevonden", 404); return
+                _mag_cureren = _claims_gate_open(_Stores(data_dir), username)
+                _html = (_html.replace("__CSRF__", effective_csrf)
+                              .replace("__MAG_CUREREN__", "true" if _mag_cureren else "false"))
+                # _send_bytes i.p.v. _send: geen inbox-chrome injecteren in een standalone pagina.
+                self._send_bytes(_html.encode("utf-8"), "text/html; charset=utf-8")
                 return
             if path.startswith("/static/"):
                 name = path[len("/static/"):]
