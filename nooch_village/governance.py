@@ -6,6 +6,7 @@ from nooch_village.models import (
     Proposal, GovernanceChange, ChangeKind,
 )
 from nooch_village.event_bus import EventBus, Event
+from nooch_village.acc_ids import ensure_acc_ids, apply_accountability_change
 
 log = logging.getLogger("village.governance")
 
@@ -241,6 +242,7 @@ class Records:
         if not os.path.exists(self.path):
             return
         raw = json.load(open(self.path))
+        migrated = False
         for rid, r in raw.items():
             self._data[rid] = Record(
                 id=r["id"], type=RecordType(r["type"]), parent=r["parent"],
@@ -251,6 +253,16 @@ class Records:
                 persona=r.get("persona"),
                 persona_id=r.get("persona_id"),
                 held_by=r.get("held_by"))
+            # Fail-soft migratie: elke accountability krijgt een stabiel id. Idempotent —
+            # een tweede load muteert niets en schrijft dus ook niets.
+            if ensure_acc_ids(self._data[rid].definition):
+                migrated = True
+        if migrated:
+            try:
+                self.save()
+                log.info("records: accountability-ids bijgemunt (eenmalige migratie)")
+            except Exception as exc:                      # nooit de start blokkeren
+                log.warning("records: migratie acc-ids kon niet opslaan: %s", exc)
 
     def save(self) -> None:
         out = {}
@@ -267,6 +279,7 @@ class Records:
         return self._data.get(rid)
 
     def put(self, record: Record) -> None:
+        ensure_acc_ids(record.definition)   # nieuwe accountabilities krijgen meteen een id
         self._data[record.id] = record
         self.save()
 
@@ -349,11 +362,10 @@ class Secretary:
                 log.error("adopt AMEND_ROLE: record '%s' niet gevonden", c.role_id)
                 return
             d = rec.definition
-            if c.add_accountabilities:
-                d.accountabilities = sorted(set(d.accountabilities) | set(c.add_accountabilities))
-            if c.remove_accountabilities:
-                d.accountabilities = [a for a in d.accountabilities
-                                       if a not in c.remove_accountabilities]
+            if c.add_accountabilities or c.remove_accountabilities:
+                # Tekst én stabiel id in lockstep: het id reist met zijn belofte mee, ook als
+                # de adoptie de lijst hersorteert. Koppelingen blijven zo aan de juiste acc.
+                apply_accountability_change(d, c.add_accountabilities, c.remove_accountabilities)
             if c.add_domains:
                 d.domains = sorted(set(d.domains) | set(c.add_domains))
             if c.remove_domains:

@@ -40,6 +40,7 @@ from nooch_village.views.feed import (
     _wall_outcome_opts,
 )
 from nooch_village.governance import Records
+from nooch_village import acc_ids
 from nooch_village.people import PeopleStore
 from nooch_village.assignments import Assignments
 from nooch_village.attachments import AttachmentStore, ARTEFACT_KINDS
@@ -117,6 +118,9 @@ class _Stores:
         self.deliverables = DeliverableStore(os.path.join(dd, "deliverables.json"))
         self.project_docs = ProjectDocStore(dd)   # levend einddocument per project (weergave + edit-route)
         self.ai = AITaskStore(os.path.join(dd, "ai_tasks.json"))
+        # Eenmalig, idempotent: koppelingen die nog aan een index hangen krijgen het stabiele
+        # acc_id van de accountability die nú op die positie staat.
+        self.ai.migrate_acc_ids(self.records)
         self.match = ai_match.MatchCache(os.path.join(dd, "ai_match_cache.json"))
         self.notif = NotifStore(os.path.join(dd, "notifications.json"))
         self.agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))
@@ -1882,6 +1886,22 @@ def _act_radar_promote(c):
         return nxt, msg
 
 
+def _acc_id_param(st, role_id: str, qs) -> str:
+    """Het stabiele accountability-id uit de request. Valt fail-soft terug op de oude
+    `acc`-index (bookmarks, oude fragment-links) door hem éénmalig om te rekenen."""
+    aid = (qs.get("acc_id") or [""])[0]
+    if aid:
+        return aid
+    rec = st.records.get(role_id)
+    if rec is None:
+        return ""
+    try:
+        idx = int((qs.get("acc") or ["-1"])[0])
+    except (TypeError, ValueError):
+        return ""
+    return acc_ids.acc_id_at(rec.definition, idx) if idx >= 0 else ""
+
+
 def _act_aitask_add(c):
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
         msg = ""
@@ -1894,16 +1914,21 @@ def _act_aitask_add(c):
         if actor is None and username != "guest":
             return nxt, "Geen toegang — gebruiker niet herkend"
         # ── einde autorisatie ──
-        try:
-            acc_i = int(g("acc"))
-        except ValueError:
-            acc_i = -1
+        # Stabiel acc_id (fail-soft terugval op de oude index, zie _acc_id_param).
+        aid = g("acc_id")
+        if not aid:
+            rec_a = st.records.get(g("role"))
+            try:
+                acc_i = int(g("acc"))
+            except (TypeError, ValueError):
+                acc_i = -1
+            aid = acc_ids.acc_id_at(rec_a.definition, acc_i) if (rec_a and acc_i >= 0) else ""
         pick = g("pick")
         if "::" in pick:
             agent, skill = pick.split("::", 1)
         else:
             agent, skill = g("agent"), g("wat")   # fallback (legacy)
-        if agent and acc_i >= 0 and st.ai.add(g("role"), acc_i, agent, skill):
+        if agent and aid and st.ai.add(g("role"), aid, agent, skill, gelegd_door=username):
             msg = "🤖 AI gekoppeld aan accountability"
         return nxt, msg
 
@@ -4155,12 +4180,10 @@ def make_handler(data_dir: str, csrf_token: str,
                                                     csrf_token=effective_csrf, fragment=fr), fr))
                 return
             if path == "/aitask":
-                try:
-                    acc_i = int((qs.get("acc") or ["-1"])[0])
-                except ValueError:
-                    acc_i = -1
+                role_id = (qs.get("role") or [""])[0]
+                aid = _acc_id_param(st, role_id, qs)
                 fr = (qs.get("fragment") or [""])[0] == "1"
-                self._send(_frag(render_aitask(st, (qs.get("role") or [""])[0], acc_i,
+                self._send(_frag(render_aitask(st, role_id, aid,
                                                csrf_token=effective_csrf, fragment=fr), fr))
                 return
             if path == "/person":

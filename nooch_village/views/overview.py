@@ -21,7 +21,8 @@ from nooch_village.views.backlog import render_backlog_tab
 from nooch_village.views.projects import (
     _projects_tab_html, _scope_text, _person_projects_tab_html, _modal_html,
 )
-from nooch_village import org, ai_match, artefacts, epic
+from nooch_village import org, ai_match, artefacts, epic, acc_ids
+from nooch_village.ai_tasks import KIND_AUTONOOM
 from nooch_village.radar_store import feeds_for_role
 from nooch_village.views.signals import radar_promote_ctl
 from nooch_village.cockpit2_util import _CIRCLE_TABS, _ROLE_TABS, _PERSON_TABS, WEBSITE_DEVELOPER_ROLE
@@ -102,10 +103,10 @@ def _ai_chip(st: _Stores, t) -> str:
     return f"<span class='chip'>🤖 {_e(nm)}{skill}</span>"
 
 
-def _suggest_for_acc(st: _Stores, role_id: str, acc_index: int, acc_text: str):
+def _suggest_for_acc(st: _Stores, role_id: str, acc_id: str, acc_text: str):
     """Welke (AI, skill) past bij deze accountability en is nog niet gekoppeld. Voedt het cadeautje.
     Matching loopt via ai_match (lexicaal + concept + optioneel gecachet LLM-oordeel)."""
-    attached = {(t.agent, t.wat) for t in st.ai.for_acc(role_id, acc_index)}
+    attached = {(t.agent, t.wat) for t in st.ai.for_acc(role_id, acc_id)}
     return ai_match.suggest(st.personas.all(), acc_text, attached, st.match)
 
 
@@ -113,8 +114,9 @@ def _acc_row(st: _Stores, rec, i: int, text: str, csrf_token: str) -> str:
     """Eén accountability-regel. Is er AI op gekoppeld, dan tonen we dat SUBTIEL (één 🤖-marker,
     klikbaar om te beheren); het 'wat' staat gebundeld in het AI-overzicht onder de rol. Zo niet
     dubbel. Het 🎁 verschijnt alleen als er een passende, nog niet gekoppelde AI-skill is."""
-    tasks = st.ai.for_acc(rec.id, i)
-    url = f"/aitask?role={_e(rec.id)}&acc={i}"
+    aid = acc_ids.acc_id_at(rec.definition, i)
+    tasks = st.ai.for_acc(rec.id, aid)
+    url = f"/aitask?role={_e(rec.id)}&acc_id={_e(aid)}"
     marker = ""
     if tasks:
         if csrf_token:
@@ -123,7 +125,7 @@ def _acc_row(st: _Stores, rec, i: int, text: str, csrf_token: str) -> str:
         else:
             marker = "<span class='ai-on' title='AI-empowered'>🤖</span>"
     aff = ""
-    if csrf_token and _suggest_for_acc(st, rec.id, i, text):
+    if csrf_token and _suggest_for_acc(st, rec.id, aid, text):
         aff = (f"<a class='ai-gift js-modal' href='{url}' data-href='{url}' "
                f"title='Er is een AI-skill die deze accountability autonoom kan uitvoeren'>🎁</a>")
     return (f"<div class='accrow'><div class='acc-text'>{_e(text)}</div>"
@@ -133,13 +135,12 @@ def _acc_row(st: _Stores, rec, i: int, text: str, csrf_token: str) -> str:
 def _role_ai_overview(st: _Stores, rec, csrf_token: str = "") -> str:
     """Overzicht (één keer, niet per accountability herhaald): wat doet elke AI autonoom in DEZE rol.
     Gegroepeerd per agent -> per skill de accountabilities die hij dekt."""
-    tasks = st.ai.for_role(rec.id)
+    tasks = [t for t in st.ai.for_role(rec.id) if t.kind == KIND_AUTONOOM]
     if not tasks:
         return ""
-    accs = rec.definition.accountabilities or []
     by_agent: dict[str, dict[str, list]] = {}
     for t in tasks:
-        acc_txt = accs[t.acc_index] if 0 <= t.acc_index < len(accs) else "—"
+        acc_txt = acc_ids.text_for(rec.definition, t.acc_id) or "—"
         by_agent.setdefault(t.agent, {}).setdefault(t.wat or "—", []).append(acc_txt)
     blocks = ""
     for agent, skills in by_agent.items():
@@ -151,7 +152,8 @@ def _role_ai_overview(st: _Stores, rec, csrf_token: str = "") -> str:
             rows += f"<li><b>{_e(wat)}</b> <span class='muted'>· {_e(uniq)}</span></li>"
         manage = ""
         if csrf_token:
-            url = f"/aitask?role={_e(rec.id)}&acc=0"
+            first = acc_ids.acc_id_at(rec.definition, 0)
+            url = f"/aitask?role={_e(rec.id)}&acc_id={_e(first)}"
             manage = f" <a class='flink js-modal' href='{url}' data-href='{url}'>beheren</a>"
         blocks += (f"<div class='ai-ov'><div class='ai-ov-h'>{_avatar(nm, True)}"
                    f"<b>{_e(nm)}</b> <span class='muted'>doet autonoom in deze rol:</span>{manage}</div>"
@@ -1051,17 +1053,16 @@ def render_rolefillers(st: _Stores, role_id: str, csrf_token: str = "", fragment
     return _page("Rolvervullers", f"{_DS_LINK}<div class='c2-wrap'>{main}</div>")
 
 
-def render_aitask(st: _Stores, role_id: str, acc_index: int, csrf_token: str = "",
+def render_aitask(st: _Stores, role_id: str, acc_id: str, csrf_token: str = "",
                   fragment: bool = False) -> str:
     rec = st.records.get(role_id)
-    accs = rec.definition.accountabilities if rec else []
-    acc_text = accs[acc_index] if (rec and 0 <= acc_index < len(accs)) else ""
+    acc_text = acc_ids.text_for(rec.definition, acc_id) if rec else ""
     back = f"/node?id={role_id}&tab=overview"
 
     def hid():
         return (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                 f"<input type='hidden' name='role' value='{_e(role_id)}'>"
-                f"<input type='hidden' name='acc' value='{acc_index}'>"
+                f"<input type='hidden' name='acc_id' value='{_e(acc_id)}'>"
                 f"<input type='hidden' name='next' value='{_e(back)}'>")
 
     def pickform(agent: str, skill: str, label: str, cls: str) -> str:
@@ -1070,7 +1071,7 @@ def render_aitask(st: _Stores, role_id: str, acc_index: int, csrf_token: str = "
                 f"<button class='{cls}' type='submit' name='action' value='aitask_add'>{label}</button></form>")
 
     # 1) Voorgesteld: (AI, skill) die lexicaal bij deze accountability past (het cadeautje).
-    sugg = _suggest_for_acc(st, role_id, acc_index, acc_text)
+    sugg = _suggest_for_acc(st, role_id, acc_id, acc_text)
     sugg_html = ""
     if sugg:
         items = "".join(f"<div class='frow'><span style='flex:1'>🤖 {_e(p.name)} · {_e(sk)}</span>"
@@ -1079,7 +1080,7 @@ def render_aitask(st: _Stores, role_id: str, acc_index: int, csrf_token: str = "
 
     # 2) Al gekoppeld: verwijderbaar.
     rows = ""
-    for t in st.ai.for_acc(role_id, acc_index):
+    for t in st.ai.for_acc(role_id, acc_id):
         rows += (f"<div class='frow'><span style='flex:1'>{_ai_chip(st, t)}</span>"
                  f"<form method='post' action='/action' style='display:inline'>"
                  f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
@@ -1090,7 +1091,7 @@ def render_aitask(st: _Stores, role_id: str, acc_index: int, csrf_token: str = "
 
     # 3) Selecteren uit een rugzakje (geen vrije tekst): combinaties AI · skill, niet al gekoppeld.
     personas = st.personas.all()
-    attached = {(t.agent, t.wat) for t in st.ai.for_acc(role_id, acc_index)}
+    attached = {(t.agent, t.wat) for t in st.ai.for_acc(role_id, acc_id)}
     combos = [(p, sk) for p in personas for sk in (p.skills or []) if (p.id, sk) not in attached]
     if combos:
         opts = "".join(f"<option value='{_e(p.id)}::{_e(sk)}'>🤖 {_e(p.name)} · {_e(sk)}</option>"
@@ -1113,7 +1114,7 @@ def render_aitask(st: _Stores, role_id: str, acc_index: int, csrf_token: str = "
         bag = (f"<details class='bagadd'><summary>Rugzak van een AI uitbreiden</summary>"
                f"<form method='post' action='/action'>"
                f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-               f"<input type='hidden' name='next' value='{_e(back + '&_aitask=' + str(acc_index))}'>"
+               f"<input type='hidden' name='next' value='{_e(back + '&_aitask=' + acc_id)}'>"
                f"<label>AI-inwoner</label><select name='agent'>{popts}</select>"
                f"<label>Nieuwe skill</label><input name='skill' placeholder='bijv. schrijft de code'>"
                f"<button class='btn' type='submit' name='action' value='persona_skill_add' "
