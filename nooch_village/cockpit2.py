@@ -261,6 +261,7 @@ from nooch_village.views.inbox import (
 )
 from nooch_village.views.metrics2 import render_metrics2
 from nooch_village.views.bronnen import render_bronnen
+from nooch_village.views.skills import render_skills
 from nooch_village.views.claims import render_claims, render_rapport, rol_voor
 from nooch_village.views.inwoners import render_inwoner, render_inwoners
 from nooch_village.views.kennislaag import render_kennislaag
@@ -4258,6 +4259,17 @@ def make_handler(data_dir: str, csrf_token: str,
                     nm = _p.name if _p else ""
                 done = (qs.get("done") or [""])[0]
                 self._send(render_inbox(st, tgts, csrf_token=effective_csrf, naam=nm, done=done), chrome=False)
+                return
+            if path == "/skills":
+                # Skills-catalogus: wat kan het dorp al, en waarvoor moet tooling komen.
+                # Puur leeswerk. De human inbox voedt het 'gewenst'-blok; fail-soft als hij
+                # er (nog) niet is — dan blijft dat blok simpelweg leeg.
+                try:
+                    from nooch_village.human_inbox import HumanInbox
+                    _hi = HumanInbox(os.path.join(data_dir, "human_inbox.json"))
+                except Exception:
+                    _hi = None
+                self._send(render_skills(st, _hi))
                 return
             if path == "/bronnen":
                 # Aansluit-scherm voor externe databronnen (status + aan/uit).
