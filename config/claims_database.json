@@ -27,7 +27,30 @@
    "open",
    "in behandeling",
    "live"
-  ]
+  ],
+  "scan_paginas": [
+   {
+    "label": "home",
+    "url": "https://nooch.earth/"
+   },
+   {
+    "label": "faq",
+    "url": "https://nooch.earth/pages/frequently_asked_questions"
+   },
+   {
+    "label": "mission",
+    "url": "https://nooch.earth/pages/mission"
+   },
+   {
+    "label": "impact",
+    "url": "https://nooch.earth/pages/impact-forest"
+   },
+   {
+    "label": "product",
+    "url": "https://nooch.earth/products/the-269-grizzly-bear"
+   }
+  ],
+  "_scan_paginas": "De vaste pagina-set van de wekelijkse compliance-scan. Compliance beheert deze lijst; een pagina toevoegen of vervangen gebeurt hier, niet in code."
  },
  "termen": [
   {

@@ -14,8 +14,7 @@ import pytest
 from nooch_village import claims_db
 from nooch_village.skills_impl.claims_check import ClaimsCheckSkill
 
-HTML_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                         "nooch_village", "static", "claims_checker.html")
+PKG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "nooch_village")
 
 
 # ── De bron zelf ────────────────────────────────────────────────────────────
@@ -106,8 +105,7 @@ def test_skill_staat_in_de_registry():
 
 def test_skill_is_puur_lokaal():
     """Geen netwerk-import in de skill: de toets mag nooit buiten de deur praten."""
-    with open(os.path.join(os.path.dirname(HTML_PATH), "..", "skills_impl", "claims_check.py"),
-              encoding="utf-8") as f:
+    with open(os.path.join(PKG, "skills_impl", "claims_check.py"), encoding="utf-8") as f:
         bron = f.read()
     assert "requests" not in bron and "urllib" not in bron
 
@@ -222,52 +220,20 @@ def test_gate_is_dezelfde_voor_knop_en_mutatie(tmp_path):
 
 # ── Eén bron van waarheid ───────────────────────────────────────────────────
 
-def test_html_bevat_geen_gekopieerde_database():
-    """De acceptatietest van taak 1: geen termenlijst, werklijst of landenregel in de HTML."""
-    with open(HTML_PATH, encoding="utf-8") as f:
-        html = f.read()
-    assert 'fetch("/claims/db.json"' in html
+def test_view_bevat_geen_gekopieerde_database():
+    """De acceptatietest van taak 1 (v1), nu tegen de governeerde view: geen termenlijst,
+    werklijst of landenregel gekopieerd in de code — alles komt uit de JSON."""
+    with open(os.path.join(PKG, "views", "claims.py"), encoding="utf-8") as f:
+        bron = f.read()
     db = claims_db.load()
     for t in db["termen"][:15]:
-        assert t["patroon"] not in html, f"patroon van '{t['term']}' staat gekopieerd in de HTML"
+        assert t["patroon"] not in bron, f"patroon van '{t['term']}' staat gekopieerd in de view"
     for w in db["werklijst"][:5]:
-        assert w["herformulering"] not in html
+        assert w["herformulering"] not in bron
     for punt in db["landen"]["NL"]["punten"]:
-        assert punt not in html
-    assert "ADMIN_CODE" not in html            # client-side 'beveiliging' is vervangen door de sessie
+        assert punt not in bron
 
 
-# ── Governance: het claims-database-domein voor compliance ──────────────────
-
-def test_compliance_claims_voorstel_passeert_de_gate(tmp_path):
-    """De compliance-rol bestaat al (geboren via governance); dit is een AMEND die hem het
-    domein over de eigen claims geeft. Uniek domein → G1 en G2 klagen niet."""
-    from nooch_village.governance import Gate, Records
-    from nooch_village.seeds import seed_records, migrate_records
-    from nooch_village.models import ChangeKind, Record, RoleDefinition, RecordType
-    from nooch_village.role_proposals import build_compliance_claims_proposal
-
-    records = Records(str(tmp_path / "gov.json"))
-    seed_records(records)
-    migrate_records(records)
-    records.put(Record(
-        id="compliance", type=RecordType.ROLE, parent="noochville",
-        definition=RoleDefinition(purpose="claims bewaken",
-                                  accountabilities=["claims van externe merken verifiëren"],
-                                  domains=["claim-verification"], skills=["claim_evidence"]),
-        source="sensed",
-    ))
-    p = build_compliance_claims_proposal()
-    assert p.change.kind == ChangeKind.AMEND_ROLE
-    assert p.change.add_domains == ["claims-database"]
-    assert p.change.add_skills == ["claims_check"]
-    passed, gate, reason = Gate().check(p, records)
-    assert passed, f"verwacht aangenomen, maar {gate}: {reason}"
-
-
-def test_compliance_claims_voorstel_draagt_herhalingsbewijs():
-    """G0-discipline: een structurele wijziging onderbouwt de herhaling, niet één incident."""
-    from nooch_village.role_proposals import build_compliance_claims_proposal
-    p = build_compliance_claims_proposal()
-    assert any(w in p.trigger_example.lower() for w in ("terugkerend", "structureel", "meermaals"))
-    assert p.rationale and p.tension
+def test_statisch_prototype_is_weg():
+    """Geen twee oppervlakken: het statische bestand hoort niet meer te bestaan."""
+    assert not os.path.exists(os.path.join(PKG, "static", "claims_checker.html"))

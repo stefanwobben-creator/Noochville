@@ -658,6 +658,10 @@ _ROLE_TOOLS = {
         ("Keywords — analyse", "Kansrijkheid + suggesties, gerangschikt", "/keywords?lens=trends")],
     "harry_hemp": [
         ("Long-term trends", "Structurele opkomst versus blip (trend-herindexering)", "/keywords?lens=scientist")],
+    # De claims-toets hoort bij compliance, niet bij de website-rol: cureren van de
+    # claims-database en de wekelijkse site-check zijn compliance-domein (claims-database).
+    "compliance": [
+        ("Claims-checker", "EmpCo/ACM-toets op tekst of pagina — rood, oranje, groen", "/claims")],
 }
 
 

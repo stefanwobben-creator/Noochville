@@ -26,8 +26,15 @@ cd /opt/noochville
 tar czf backups/data_$(date +%F_%H%M).tgz data/   # snapshot (vangnet)
 git pull                                          # code bijwerken (data/ blijft, is gitignored)
 ./venv/bin/pip install -r requirements.txt        # nieuwe deps
+chown nooch:nooch config/claims_database.json     # zie hieronder: door de app beschreven config
 sudo systemctl restart noochville-cockpit2 noochville-village
 ```
+
+**Waarom die `chown`:** de pull draait als root, dus nieuwe of vervangen bestanden worden
+`root:root`. Vrijwel alle code wordt alleen gelezen, maar `config/claims_database.json` wordt
+door de app zélf beschreven (compliance cureert de claims-database via de cockpit). Blijft het
+bestand root-eigendom, dan faalt die schrijfactie op permissies. Komt er ooit een tweede
+door-de-app-beschreven bestand in `config/`, zet het dan in dezelfde regel.
 
 ## Impact App — apart, op Render + Neon
 
