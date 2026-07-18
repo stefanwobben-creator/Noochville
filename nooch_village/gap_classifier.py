@@ -76,6 +76,50 @@ def _coverage(gap: frozenset[str], reference: frozenset[str]) -> float:
 
 # ── Publieke API ──────────────────────────────────────────────────────────────
 
+def classify_means(
+    text: str,
+    skills,
+    kandidaten=(),
+) -> tuple[str, str, str]:
+    """Dekt een middel deze tekst — en zo niet, bestaat er dan één in het dorp?
+
+    Het middelen-deel van `classify_gap`, maar tegen ÉÉN rol in plaats van alle rollen.
+    Voedt het uitvoerbaarheids-stoplicht in het gate-scherm. Zelfde tokenizers en dezelfde
+    `MEANS_THRESHOLD` — de drempel leeft op één plek.
+
+    Parameters
+    ----------
+    text : str        de (voorgestelde) accountability-tekst.
+    skills : Iterable[str]  de effectieve skillset van de rol (DNA ∪ koppelingen).
+    kandidaten : Iterable[str]  alle capabilities die het dorp kent (de registry).
+
+    Returns
+    -------
+    (uitkomst, skill, reden)
+        "A" — de rol heeft al een dekkend middel ("" als skill).
+        "B" — het middel bestaat in het dorp maar is niet van deze rol; `skill` is de beste.
+        "C" — geen bestaande skill dekt dit; dit wordt een bouwverzoek.
+    """
+    sig = _tokenize(text)
+    if not sig:
+        return "C", "", "lege of te korte tekst"
+
+    eigen = _coverage(sig, _skill_tokens(list(skills or [])))
+    if eigen >= MEANS_THRESHOLD:
+        return "A", "", f"eigen middel dekt {eigen:.3f} >= {MEANS_THRESHOLD}"
+
+    best_skill, best = "", 0.0
+    for naam in kandidaten or ():
+        s = _coverage(sig, _skill_tokens([naam]))
+        if s > best:
+            best, best_skill = s, naam
+    if best >= MEANS_THRESHOLD:
+        return "B", best_skill, (f"'{best_skill}' dekt {best:.3f} >= {MEANS_THRESHOLD}, "
+                                 f"maar deze rol voert hem niet")
+    return "C", "", (f"geen middel dekt dit; eigen={eigen:.3f}, "
+                     f"beste in het dorp={best:.3f} < {MEANS_THRESHOLD}")
+
+
 def classify_gap(
     gap_description: str,
     records,

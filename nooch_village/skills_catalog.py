@@ -167,6 +167,36 @@ def gewenst(human_inbox) -> list[dict]:
     return out
 
 
+def uitvoerbaarheid(acc_text: str, rec, ai) -> dict:
+    """Het stoplicht van de secretaris: is deze (voorgestelde) belofte uitvoerbaar?
+
+    - **groen** (A) — de rol heeft al een middel dat de tekst dekt (DNA of koppeling).
+    - **oranje** (B) — het middel bestaat in het dorp maar is niet van deze rol. Eén klik voor
+      de Circle Lead — tenzij de domeinpoort het weigert; dan is de suggestie-variant de weg.
+    - **rood** (C) — geen bestaande skill dekt dit: een means-gap / bouwverzoek.
+
+    Puur informatief. De gate blokkeert hier NOOIT op; de mens beslist zoals altijd.
+    """
+    from nooch_village.gap_classifier import classify_means
+
+    try:
+        namen = sorted(_registry().names())
+    except Exception as exc:
+        log.warning("skills_catalog: registry niet leesbaar: %s", exc)
+        namen = []
+
+    eff = skill_links.effectief(rec, ai)
+    uitkomst, skill, reden = classify_means(acc_text, eff, namen)
+
+    if uitkomst == "A":
+        return {"kleur": "groen", "skill": "", "reden": reden, "koppelbaar": False}
+    if uitkomst == "B":
+        mag, waarom = skill_meta.koppelbaar(skill, rec)
+        return {"kleur": "oranje", "skill": skill, "reden": reden,
+                "koppelbaar": mag, "blokkade": "" if mag else waarom}
+    return {"kleur": "rood", "skill": "", "reden": reden, "koppelbaar": False}
+
+
 def catalogus(records, ai, human_inbox=None) -> dict:
     """Alle drie de blokken in één keer — de datalaag onder /skills."""
     recs = list(records)

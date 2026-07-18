@@ -1992,6 +1992,27 @@ def _act_skilllink_add(c):
         return nxt, f"🔗 {skill_labels.label(skill)} gekoppeld aan deze accountability"
 
 
+# AUTHZ: circle-member of iedereen-ingelogd — een means-gap melden is signaleren, geen mutatie
+# van structuur of middelen. Het item landt in de human inbox; beslissen gebeurt daar, op het
+# geauthenticeerde lokale oppervlak. Fail-closed op de onbekende ingelogde gebruiker.
+def _act_means_gap_add(c):
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        if username != "guest" and st.people.by_email(username) is None:
+            return nxt, "Geen toegang — gebruiker niet herkend"
+        acc = (g("acc") or "").strip()
+        if not acc:
+            return nxt, "Geen accountability opgegeven"
+        try:
+            from nooch_village.human_inbox import HumanInbox
+            hi = HumanInbox(os.path.join(st.dd, "human_inbox.json"))
+            hi.add_means_gap(f"acc:{acc[:60]}", f"Geen middel dekt: {acc}",
+                             role_id=g("role") or None, sensed_by=username)
+        except Exception as exc:
+            logging.getLogger("cockpit2.means_gap").warning("means_gap_add faalde: %s", exc)
+            return nxt, "Melden lukte niet — zie de logs"
+        return nxt, "📥 als means-gap gemeld; beoordeel via de human inbox"
+
+
 # ── Inwoner-dossier: de persona als drager ──────────────────────────────────
 # Alle takken hieronder: AUTHZ: anchor-lead — de persona is een org-breed object (hij reist mee
 # tussen zetels), dus het beheer ervan hoort bij de anchor-lead. Fail-closed via _anchor_gate.
@@ -3966,6 +3987,7 @@ ACTIONS = {
     "aitask_add": _act_aitask_add,
     "aitask_remove": _act_aitask_remove,
     "skilllink_add": _act_skilllink_add,
+    "means_gap_add": _act_means_gap_add,
     "persona_skill_add": _act_persona_skill_add,
     "rov2_add": _act_rov2_add,
     "rov2_add_to_group": _act_rov2_add_to_group,
