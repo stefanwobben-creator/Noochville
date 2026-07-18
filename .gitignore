@@ -32,3 +32,10 @@ STATE_export.txt
 *.save
 data/poc/attachments/
 scratch/
+
+# Testrun-artefacten — kwamen bij elke pytest-run terug in de working tree
+:mem:
+notifications.json
+village-core.zip
+_to_delete/
+*.patch
