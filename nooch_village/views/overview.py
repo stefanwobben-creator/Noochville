@@ -679,6 +679,30 @@ def _role_tools_html(rec) -> str:
             f"<div class='tile-grid'>{cards}</div></div>")
 
 
+def _ritme_html(st: _Stores, rec) -> str:
+    """Het terugkerende ritme van deze rol: wat draait er vanzelf, wanneer draaide het laatst,
+    en wat kwam eruit.
+
+    Waarom dit blok bestaat: een rol die 'elke week scant' is een belofte. Zonder zichtbare
+    laatste run moet je erop vertrouwen. Staat de puls over tijd, dan tonen we DAT — een oude
+    datum die er nog netjes uitziet wekt precies het verkeerde vertrouwen."""
+    from nooch_village.role_rhythm import ritmes_voor
+    ritmes = ritmes_voor(getattr(rec, "id", ""), rec, st.dd)
+    if not ritmes:
+        return ""
+    rijen = ""
+    for r in ritmes:
+        if r["overtijd"]:
+            chip = f"<span class='chip coral'>⚠ {_e(r['overtijd_tekst'])}</span>"
+        elif r["laatst"]:
+            chip = f"<span class='chip'>{_e(r['laatst'])}</span>"
+        else:
+            chip = "<span class='chip muted'>nog niet gedraaid</span>"
+        rijen += (f"<div class='c2-sec'><b>{_e(r['naam'])}</b> {chip}"
+                  f"<div class='muted'>{_e(r['uitkomst'])}</div></div>")
+    return f"<div class='c2-sec'><h3>Terugkerend ritme</h3>{rijen}</div>"
+
+
 def _radar_tool_html(st: _Stores, rec, csrf_token: str, username: str | None) -> str:
     """Radar-toolblok bovenaan de Tools-tab, alleen voor rollen met een gekoppelde feed.
     Wachtrij (status 'wacht') met goedkeur-toggle + wegklik, plus een uitklapbaar archief
@@ -739,6 +763,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
                                          titel="Notes", leeg="Nog geen notities op deze rol/cirkel.")
     elif tab == "tools":
         content = (_role_tools_html(rec)
+                   + _ritme_html(st, rec)
                    + _radar_tool_html(st, rec, csrf_token, username)
                    + _artefact_tab_html(st, rec, "tool", csrf_token, username,
                                         titel="Tools", leeg="Nog geen tools op deze rol/cirkel."))

@@ -89,6 +89,31 @@ def haal_tekst(url: str, _fetch=None) -> dict:
     return {"url": veilig, "status": status, "titel": titel, "tekst": tekst}
 
 
+def haal_ruw(url: str, _fetch=None) -> dict:
+    """Haal een bron op zonder hem als HTML te interpreteren: `{url, status, content_type, ruw}`.
+
+    Nodig voor bronnen die geen webpagina zijn (de Belgische PDF-gids). Een PDF door de
+    HTML-stripper halen geeft binaire ruis die per byte kan verschillen zonder dat de inhoud
+    veranderde; op de rauwe bytes hashen is stabiel én eerlijk.
+
+    `_fetch` is injecteerbaar voor tests: callable(url) -> (status, body, content_type)."""
+    veilig = controleer_url(url)
+    if _fetch is not None:
+        status, body, ctype = _fetch(veilig)
+    else:
+        import requests
+        try:
+            r = requests.get(veilig, timeout=TIMEOUT_SECONDS,
+                             headers={"User-Agent": USER_AGENT}, stream=True)
+            body = r.raw.read(MAX_BYTES, decode_content=True)
+            status, ctype = r.status_code, r.headers.get("Content-Type", "")
+        except Exception as e:
+            raise FetchMislukt(f"ophalen mislukt: {e}") from e
+    if status >= 400:
+        raise FetchMislukt(f"de bron gaf HTTP {status}")
+    return {"url": veilig, "status": status, "content_type": ctype or "", "ruw": body}
+
+
 _SCRIPT_RE = re.compile(r"<(script|style|noscript|svg)\b.*?</\1>", re.I | re.S)
 _TAG_RE = re.compile(r"<[^>]+>")
 _TITEL_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)

@@ -143,6 +143,19 @@ def add_term(db: dict, term: str, patroon: str, stoplicht: str, categorie: str,
     return nieuw
 
 
+# Statussen die de scan zélf mag zetten. Ze dragen hun herkomst in de naam, zodat mens- en
+# machine-oordeel nooit verward raken: wie "opgelost (auto-geverifieerd)" leest, weet dat een
+# byte-vergelijking dat vaststelde en geen mens.
+AUTO_OPGELOST = "opgelost (auto-geverifieerd)"
+AUTO_REGRESSIE = "open (regressie)"
+NIET_VERIFIEERBAAR = "niet auto-verifieerbaar"
+AUTO_STATUSSEN = (AUTO_OPGELOST, AUTO_REGRESSIE, NIET_VERIFIEERBAAR)
+
+
+def is_auto(status: str) -> bool:
+    return str(status or "").startswith(("opgelost (auto", "open (regressie", "niet auto"))
+
+
 def werk_statussen(db: dict) -> list[str]:
     """De toegestane werklijst-statussen, uit meta — niet uit een literal in code of HTML."""
     return list((db.get("meta") or {}).get("werklijst_statussen") or ["open"])

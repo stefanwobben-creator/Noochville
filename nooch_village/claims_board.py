@@ -26,6 +26,71 @@ FALLBACK_ROL = "compliance"
 
 _NIET_WOORD = re.compile(r"[^a-z0-9]+")
 
+# Een notificatie-snippet wordt op 160 tekens afgekapt (NotifStore). Daarom draagt het bericht
+# de kern — wat er gevonden is en waar het ligt — en niet het hele dossier; dat staat in de taak.
+_SNIPPET_MAX = 160
+
+
+def _mensen_op(rol_id: str, assignments) -> bool:
+    """Vervult een MENS deze rol? Een rol die alleen door een persona wordt gedragen levert
+    geen inbox-doel op — dan komt een bericht bij niemand aan."""
+    try:
+        return any(getattr(f, "type", None) == "person" for f in assignments.fillers_of(rol_id))
+    except Exception:
+        return False
+
+
+def bericht_aan_rol(context_of_stores, rol_id: str, tekst: str, project_id: str = "",
+                    door: str = "claims-checker") -> list[str]:
+    """Stuur een @rol-bericht naar de inbox van een rol. Geeft de bereikte doelen terug.
+
+    Vangnet voor onbemande rollen: heeft de rol geen menselijke vervuller, dan gaat het bericht
+    óók naar de Circle Lead van zijn cirkel. Dat is geen noodgreep maar het model — de
+    accountabilities van een onbemande rol vallen aan de Circle Lead (Holacracy 1.4.2). Zonder
+    dit vangnet zou een bericht aan compliance (nu onbemand) bij niemand aankomen.
+
+    Fail-soft: berichten mogen een puls of een klik nooit laten klappen."""
+    doelen: list[str] = []
+    try:
+        notif = getattr(context_of_stores, "notif", None)
+        records = getattr(context_of_stores, "records", None)
+        assignments = getattr(context_of_stores, "assign", None)
+        data_dir = getattr(context_of_stores, "data_dir", None) or getattr(context_of_stores, "dd", ".")
+        if notif is None:
+            import os
+
+            from nooch_village.notifications import NotifStore
+            notif = NotifStore(os.path.join(data_dir, "notifications.json"))
+        if assignments is None:
+            import os
+
+            from nooch_village.assignments import Assignments
+            assignments = Assignments(os.path.join(data_dir, "assignments.json"))
+        notif.add("role", rol_id, project_id, by=door, snippet=tekst[:_SNIPPET_MAX])
+        doelen.append(rol_id)
+
+        if assignments is not None and not _mensen_op(rol_id, assignments):
+            lead = _circle_lead_van(rol_id, records)
+            if lead and lead != rol_id:
+                notif.add("role", lead, project_id, by=door,
+                          snippet=f"[rol {rol_id.split('__')[-1]} onbemand] {tekst}"[:_SNIPPET_MAX])
+                doelen.append(lead)
+    except Exception:
+        pass
+    return doelen
+
+
+def _circle_lead_van(rol_id: str, records) -> str | None:
+    """De Circle Lead-rol van de cirkel waar deze rol in hangt."""
+    if records is None:
+        return None
+    try:
+        rec = records.get(rol_id)
+        ouder = getattr(rec, "parent", None) if rec else None
+        return f"{ouder}__circle_lead" if ouder else None
+    except Exception:
+        return None
+
 
 def normaliseer(tekst: str) -> str:
     """Claim-tekst tot een vergelijkbare sleutel: kleine letters, alleen letters en cijfers.
@@ -118,20 +183,46 @@ def taak_tekst(bevinding: dict, bron: str) -> tuple[str, str]:
     return titel[:200], beschrijving
 
 
-def zet_op_bord(ledger, records, db: dict, bevindingen: list[dict], bron: str,
-                rol_voor, trigger: str = "human") -> dict:
-    """Maak een taak per rode/oranje bevinding die nog nergens loopt.
+def _al_lopend(ledger, bevinding: dict, db: dict) -> dict | None:
+    """Wáár loopt deze bevinding al? Geeft de bestaande taak of het werklijst-item terug,
+    zodat de mens na een 'niets nieuws' kan doorklikken in plaats van te moeten geloven."""
+    for term in _zoektermen(bevinding):
+        for p in ledger.all():
+            if p.get("origin") != ORIGIN or p.get("status") == "done":
+                continue
+            if term in normaliseer(f"{p.get('keyword','')} {p.get('scope','')}"):
+                return {"soort": "taak", "pid": p["id"], "titel": p.get("scope", "")}
+        for w in (db or {}).get("werklijst", []):
+            if str(w.get("status", "open")).lower() == "live":
+                continue
+            if term in normaliseer(w.get("claim") or ""):
+                return {"soort": "werklijst", "nr": w.get("nr"), "titel": w.get("claim", "")}
+    return None
 
-    `rol_voor` is de routing-functie (categorie → rol-label); die woont in de view, zodat de
-    checker en het bord dezelfde routing gebruiken. Geeft een verslag terug van wat er is
-    aangemaakt en wat is overgeslagen."""
+
+def zet_op_bord(omgeving, db: dict, bevindingen: list[dict], bron: str,
+                rol_voor, trigger: str = "human") -> dict:
+    """Maak een taak per rode/oranje bevinding die nog nergens loopt, en stuur de rol een bericht.
+
+    `omgeving` levert de stores (`projects`, `records`, en waar beschikbaar `assign`/`notif`):
+    het cockpit-`_Stores`-object of de daemon-`context`. `rol_voor` is de routing-functie
+    (categorie → rol-label); die woont in de view, zodat de checker, de wekelijkse scan en het
+    bord dezelfde routing gebruiken.
+
+    De taak is de administratie, het bericht is de trigger: zonder bericht landt werk stil op
+    een bord dat niemand die dag opent."""
+    ledger = omgeving.projects
+    records = getattr(omgeving, "records", None)
     bestaand = _bestaande_sleutels(ledger, db)
-    aangemaakt, overgeslagen = [], 0
+    aangemaakt, overgeslagen, lopend = [], 0, []
     for b in bevindingen:
         if b.get("stoplicht") not in ("red", "orange"):
             continue
         if _dekt(b, bestaand):
             overgeslagen += 1
+            bestaat = _al_lopend(ledger, b, db)
+            if bestaat and bestaat not in lopend:
+                lopend.append(bestaat)
             continue
         sleutel = taak_sleutel(b)
         titel, beschrijving = taak_tekst(b, b.get("url") or bron)
@@ -141,9 +232,19 @@ def zet_op_bord(ledger, records, db: dict, bevindingen: list[dict], bron: str,
                             dod_outcome="de claim staat compliant op de site",
                             done_when="de herformulering is live en door legal gezien",
                             goes_to="compliance")
+        doelen = bericht_aan_rol(omgeving, eigenaar, f"{titel} — {b.get('alternatief', '')}", pid)
         aangemaakt.append({"pid": pid, "owner": eigenaar, "titel": titel,
-                           "stoplicht": b.get("stoplicht")})
+                           "stoplicht": b.get("stoplicht"), "doelen": doelen})
         bestaand.add(sleutel)                          # binnen één run niet dubbel
         bestaand.update(_zoektermen(b))
-    return {"aangemaakt": aangemaakt, "overgeslagen": overgeslagen,
+    return {"aangemaakt": aangemaakt, "overgeslagen": overgeslagen, "lopend": lopend,
             "rood": sum(1 for t in aangemaakt if t["stoplicht"] == "red")}
+
+
+def per_rol(aangemaakt: list[dict]) -> list[tuple[str, int]]:
+    """Aantallen per rol, voor de terugkoppeling '→ @copywriter (2), @compliance (1)'."""
+    tel: dict[str, int] = {}
+    for t in aangemaakt:
+        naam = t["owner"].split("__")[-1]
+        tel[naam] = tel.get(naam, 0) + 1
+    return sorted(tel.items(), key=lambda kv: (-kv[1], kv[0]))

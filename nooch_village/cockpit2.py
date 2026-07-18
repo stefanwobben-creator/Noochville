@@ -3026,6 +3026,19 @@ def _act_lk_mute(c):
 # (route /claims/db.json); cureren is exclusief de domein-eigenaar. De juridische inhoud is
 # mensenwerk — deze takken schrijven alleen door wat compliance invoert.
 
+def _claims_bordresultaat(qs: dict) -> dict:
+    """Het resultaat van de laatste 'Zet op het bord'-klik, meegegeven in de redirect-URL.
+    Onleesbaar of afwezig → niets tonen; dit is presentatie, geen waarheid."""
+    rauw = (qs.get("bord") or [""])[0]
+    if not rauw:
+        return {}
+    try:
+        uit = json.loads(urllib.parse.unquote(rauw))
+        return uit if isinstance(uit, dict) else {}
+    except (ValueError, TypeError):
+        return {}
+
+
 def _claims_db_stil() -> dict:
     """De claims-database, of een leeg omhulsel als hij onleesbaar is. Alleen voor rand-opmaak
     (landnotities); de scan zelf faalt luid via `_claims_scan`."""
@@ -3143,15 +3156,31 @@ def _act_claims_to_board(c):
         if not bevindingen:
             return nxt, "⛔ geen bevindingen om op het bord te zetten"
         verslag = _claims_board.zet_op_bord(
-            st.projects, st.records, _claims_db_stil(), bevindingen,
+            st, _claims_db_stil(), bevindingen,
             g("bron") or rauw.get("bron", ""), rol_voor, trigger="human")
         _claims_audit(st, username, "claims_to_board", aangemaakt=len(verslag["aangemaakt"]),
                       overgeslagen=verslag["overgeslagen"])
-        n = len(verslag["aangemaakt"])
-        if not n:
-            return nxt, f"✓ niets nieuws — {verslag['overgeslagen']} bevinding(en) lopen al"
-        return nxt, (f"✓ {n} taak/taken op het bord"
-                     + (f" · {verslag['overgeslagen']} liepen al" if verslag["overgeslagen"] else ""))
+        # De klik moet zichtbaar iets doen: wát er is aangemaakt, bij wie, en waar het al liep.
+        # Het resultaat gaat mee als query-parameter zodat de view het uitklapt met links.
+        # Cap: het rapport reist als query-parameter mee, en een URL is geen opslagplek. Wat niet
+        # past staat gewoon op het bord — het aantal in de melding klopt altijd.
+        rapport = json.dumps({"aangemaakt": verslag["aangemaakt"][:12],
+                              "lopend": verslag["lopend"][:12],
+                              "overgeslagen": verslag["overgeslagen"],
+                              "totaal": len(verslag["aangemaakt"])}, ensure_ascii=False)
+        scheiding = "&" if "?" in nxt else "?"
+        return f"{nxt}{scheiding}bord={urllib.parse.quote(rapport)}", _bord_melding(verslag)
+
+
+def _bord_melding(verslag: dict) -> str:
+    """Eén regel die zegt wat er gebeurd is — nooit meer een stille klik."""
+    n = len(verslag["aangemaakt"])
+    if not n:
+        return (f"✓ 0 nieuw — alle {verslag['overgeslagen']} bevinding(en) staan al als "
+                f"taak of werklijst-item")
+    rollen = ", ".join(f"@{naam} ({aantal})" for naam, aantal in _claims_board.per_rol(verslag["aangemaakt"]))
+    staart = f" · {verslag['overgeslagen']} liepen al" if verslag["overgeslagen"] else ""
+    return f"✓ {n} taak/taken aangemaakt → {rollen}{staart}"
 
 
 # ── Kennisbank (laag 2): inzichten, bewijs-links, gesprek en versies ─────────
@@ -4150,7 +4179,8 @@ def make_handler(data_dir: str, csrf_token: str,
                     msg=(qs.get("msg") or [""])[0],
                     tab=(qs.get("tab") or ["check"])[0],
                     kan_cureren=_claims_gate_open(_Stores(data_dir), username),
-                    zoek=(qs.get("q") or [""])[0]))
+                    zoek=(qs.get("q") or [""])[0],
+                    bordresultaat=_claims_bordresultaat(qs)))
                 return
             if path.startswith("/static/"):
                 name = path[len("/static/"):]

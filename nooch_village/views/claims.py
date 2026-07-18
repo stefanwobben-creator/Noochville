@@ -168,6 +168,47 @@ def _preview(tekst: str, bevindingen: list[dict]) -> str:
 
 # ── De tabbladen ────────────────────────────────────────────────────────────
 
+def render_bordresultaat(rapport: dict) -> str:
+    """Wat de klik op 'Zet op het bord' heeft opgeleverd, met links.
+
+    Ook bij nul: dan tóón je waar de bevindingen al liggen. Een klik die niets zichtbaars doet
+    voelt als een kapotte knop, ook als hij precies het juiste deed."""
+    if not rapport:
+        return ""
+    aangemaakt = rapport.get("aangemaakt") or []
+    lopend = rapport.get("lopend") or []
+    if aangemaakt:
+        per = ", ".join(f"@{_e(naam)} ({n})" for naam, n in _per_rol(aangemaakt))
+        rijen = "".join(
+            f"<div class='c2-sec'><a href='/project?pid={_e(t['pid'])}'>{_e(t['titel'])}</a>"
+            f"<span class='pill'>@{_e(t['owner'].split('__')[-1])}</span></div>"
+            for t in aangemaakt)
+        totaal = rapport.get("totaal", len(aangemaakt))
+        meer = (f"<p class='muted'>{totaal - len(aangemaakt)} verder aangemaakt, "
+                f"zichtbaar op het bord.</p>" if totaal > len(aangemaakt) else "")
+        kop = f"<h3>{totaal} taak/taken aangemaakt → {per}</h3>{meer}"
+    else:
+        rijen = ""
+        kop = (f"<h3>0 nieuw</h3><p class='muted'>Alle "
+               f"{rapport.get('overgeslagen', 0)} bevinding(en) staan al als taak of "
+               f"werklijst-item.</p>")
+    if lopend:
+        bestaand = "".join(
+            (f"<div class='c2-sec'><a href='/project?pid={_e(x['pid'])}'>{_e(x['titel'])}</a>"
+             f"<span class='pill'>bestaande taak</span></div>")
+            if x.get("soort") == "taak" else
+            (f"<div class='c2-sec'><a href='/claims?tab=werklijst'>#{_e(str(x.get('nr')))} "
+             f"{_e(x['titel'])}</a><span class='pill'>werklijst</span></div>")
+            for x in lopend)
+        rijen += f"<h3>Loopt al</h3>{bestaand}"
+    return f"<div class='card'>{kop}{rijen}</div>"
+
+
+def _per_rol(aangemaakt: list[dict]) -> list[tuple[str, int]]:
+    from nooch_village.claims_board import per_rol
+    return per_rol(aangemaakt)
+
+
 def _tab_check(csrf_token: str, url: str, tekst: str, markten: list[str], rapport: str) -> str:
     vinkjes = "".join(
         f"<label class='chip-opt' for='f-markt-{m}'>"
@@ -290,7 +331,7 @@ def _blok_beheer(db: dict, csrf_token: str) -> str:
 def render_claims(csrf_token: str = "", msg: str = "", tab: str = "check",
                   kan_cureren: bool = False, zoek: str = "", url: str = "",
                   tekst: str = "", markten: list[str] | None = None,
-                  rapport: str = "") -> str:
+                  rapport: str = "", bordresultaat: dict | None = None) -> str:
     """De hele checker als één governeerd scherm."""
     try:
         db = claims_db.load()
@@ -305,7 +346,8 @@ def render_claims(csrf_token: str = "", msg: str = "", tab: str = "check",
 
     markten = markten if markten is not None else ["NL"]
     if tab == "check":
-        body = _tab_check(csrf_token, url, tekst, markten, rapport)
+        body = render_bordresultaat(bordresultaat or {}) + _tab_check(
+            csrf_token, url, tekst, markten, rapport)
     elif tab == "werklijst":
         body = _tab_werklijst(db, csrf_token, kan_cureren)
         if kan_cureren and csrf_token:
