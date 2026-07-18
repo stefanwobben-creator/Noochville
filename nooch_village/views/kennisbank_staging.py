@@ -35,7 +35,13 @@ def _atoom_kaartje(b: dict, a: dict, csrf: str, nxt: str) -> str:
     body = (f"<details class='kn-nctrl'><summary>samengestelde inhoud</summary>"
             f"<div class='kn-ann'>{_e(a['body']).replace(chr(10), '<br>')}</div></details>"
             if (a.get("body") or "").strip() else "")
-    bron = "bron: " + _e(a['source']) + (f" · {_e(a['reference'])}" if a.get("reference") else "")
+    # Herkomst zichtbaar in de review: bron ("project: <scope>" bij de rapport-lus) + reference.
+    # Een INTERNE reference (bijv. "/project?id=<pid>") wordt klikbaar, zodat de reviewer het
+    # bronproject naast de voorstellen kan openleggen; externe citaties (DOI/ISBN) blijven tekst.
+    ref = a.get("reference") or ""
+    ref_html = (f" · <a href='{_e(ref)}'>{_e(ref)}</a>" if ref.startswith("/")
+                else (f" · {_e(ref)}" if ref else ""))
+    bron = "bron: " + _e(a['source']) + ref_html
     # Verticale stapel-kaart op volle breedte (fix-brief bug 1): een grid met een
     # middenkolom minmax(0,1fr) zodat lange onbreekbare strings (URL-slugs) de kaart nooit
     # naar ~0 breedte kunnen persen. Checkbox links, inhoud+controls midden, × rechts.

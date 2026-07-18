@@ -6,7 +6,9 @@ weggooien — en pas op "Voeg set toe aan bibliotheek" landen de atomen append-o
 Zo ruim je rommel (zoals enumeratie-broertjes) op vóór het de bibliotheek vervuilt.
 
 Bulk/auto-ingest (backfill, re-atomiseer) heeft geen mens om na te kijken en gaat rechtstreeks
-de bibliotheek in — die raakt deze staging dus niet.
+de bibliotheek in — die raakt deze staging dus niet. Uitzondering: de rapport-lus
+(project_signal.report_to_staging) is wél auto-geïnitieerd maar landt bewust HIER — een
+projectrapport verdient dezelfde mens-review als een handmatig toegevoegde bron.
 """
 from __future__ import annotations
 
@@ -49,6 +51,7 @@ class StagingStore(JsonStore):
                        "provenance": a.get("provenance") or "unknown",
                        "source": (a.get("source") or source_label or "onbekend").strip(),
                        "reference": a.get("reference"),
+                       "source_date": a.get("source_date"),
                        "flags": [f for f in (a.get("flags") or [])]}
                       for i, a in enumerate(atoms) if (a.get("content") or "").strip()],
         }
@@ -131,6 +134,7 @@ def commit_batch(store: StagingStore, bid: str, data_dir: str) -> tuple[int, int
         kaart = atoom_kaart({"content": a["content"], "body": a.get("body"),
                              "subject": a["subject"], "provenance": a["provenance"],
                              "source": a["source"], "reference": a.get("reference"),
+                             "source_date": a.get("source_date"),
                              "flags": a.get("flags") or [], "link_hints": []})
         if notes.get(kaart.id) is not None:
             overgeslagen += 1

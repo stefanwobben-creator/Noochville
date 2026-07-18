@@ -1267,6 +1267,10 @@ def _act_proj_done(c):
         # komt direct goedgekeurd in de RadarStore; de founder promoveert het daar naar de kennisbank.
         # Link-dedupe ("/project?id=<pid>") maakt dit idempotent met de board-watch-hook. Fail-soft:
         # een falende signaal-aanmaak mag een done nooit blokkeren.
+        # De rapport-lus (einddocument → intake → kennisbank-STAGING) draait hier bewust NIET:
+        # geen synchrone LLM-call in het cockpit-proces. De daemon-board-watch herleest
+        # projects.json (by_status → _maybe_reload) en pakt óók deze cockpit-done binnen één
+        # poll op — daar draait project_signal.report_to_staging met de LLM-ladder.
         try:
             from nooch_village.project_signal import signal_from_project
             signal_from_project(st.radar, pj.get(pid))

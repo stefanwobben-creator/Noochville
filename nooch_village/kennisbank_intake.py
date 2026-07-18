@@ -198,6 +198,7 @@ def atoom_kaart(a: dict) -> Insight:
                    body=a.get("body"),
                    source=a["source"] or "onbekend",
                    reference=a.get("reference"),
+                   source_date=a.get("source_date"),      # rapport-lus: afronddatum; anders None
                    provenance=a["provenance"],
                    tags=tags,
                    atomiser_version=ATOMISER_VERSION)

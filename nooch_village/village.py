@@ -488,6 +488,33 @@ class Village:
                     signal_from_project(radar, done[pid])
             except Exception:
                 logging.getLogger("village.signals").exception("project→signaal mislukt")
+            # Verdieping (rapport-lus): het EINDDOCUMENT van elke nieuwe done → bestaande
+            # intake-atomiser → kennisbank-STAGING ("even nakijken", mens-gated) — bewust ALLEEN
+            # hier op het daemon-pad, waar de LLM-ladder beschikbaar is. De cockpit-done doet dit
+            # niet synchroon en hoeft dat ook niet: `led.by_status("done")` hierboven herleest
+            # projects.json cross-proces (_maybe_reload), dus élke done — ook een cockpit-done —
+            # verschijnt binnen één poll (_board_poll_seconds) in `nieuw_done`. Fail-soft per
+            # project: geen rapport of stille LLM → één logregel, nooit een geblokkeerde poll.
+            try:
+                from nooch_village.project_signal import report_to_staging
+                for pid in nieuw_done:
+                    try:
+                        res = report_to_staging(dd, done[pid])
+                    except Exception:
+                        logging.getLogger("village.signals").exception(
+                            "project→staging mislukt (pid=%s)", pid)
+                        continue
+                    if res.get("batch"):
+                        # Afzender voor de stille poort: metadata-event zodat Lara's (Librarian)
+                        # log/inbox-flow het ziet. target="staging" laat haar handler ALLEEN
+                        # loggen — de SCHRIJFweg blijft de mens-review in de staging (geen
+                        # dubbel-schrijven; zie roles.Librarian._on_insight_proposed).
+                        self.bus.publish(Event("insight_proposed",
+                                               {"project_id": pid, "atoms": res["atoms"],
+                                                "batch_id": res["batch"], "target": "staging"},
+                                               "board_watch"))
+            except Exception:
+                logging.getLogger("village.signals").exception("project→staging mislukt")
         for pid, p in done.items():
             if pid in self._completed_seen or pid in auto:
                 continue                                        # al gezien, of al inline aangekondigd (autonoom)

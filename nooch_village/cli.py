@@ -770,6 +770,29 @@ def main() -> None:
         print(f"📡 {res['done']} done-projecten: {res['created']} {label}, "
               f"{res['skipped']} al aanwezig/overgeslagen. Herdraaien is veilig (link-dedupe).")
 
+    elif mode == "projects_to_staging":
+        # Verdieping van projects_to_signals (rapport-lus): het EINDDOCUMENT van elk done-project
+        # → bestaande intake-atomiser → kennisbank-STAGING ("even nakijken", mens-gated) — nooit
+        # direct de bibliotheek in. Idempotent via de IntakeLedger (hash van rapport + bron-hint
+        # "project: <scope>"): herdraaien of een ongewijzigd rapport levert niets nieuws.
+        # --dry-run telt alleen (geen LLM, geen schrijf). Zonder LLM-sleutels: fail-closed —
+        # projecten tellen als 'mislukt' en kunnen bij een latere run alsnog.
+        # python -m nooch_village.village projects_to_staging [--dry-run]
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.projects import ProjectLedger
+        from nooch_village.project_signal import backfill_reports_to_staging
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        ledger = ProjectLedger(os.path.join(ctx.data_dir, "projects.json"))
+        dry = "--dry-run" in sys.argv
+        res = backfill_reports_to_staging(ledger, ctx.data_dir, dry_run=dry)
+        label = ("zouden een staging-set opleveren (dry-run)" if dry
+                 else f"staging-set(s) gemaakt ({res['atoms']} voorstellen)")
+        print(f"📚 {res['done']} done-projecten: {res['batches']} {label}, "
+              f"{res['skipped']} zonder rapport/al verwerkt, {res['mislukt']} mislukt (LLM). "
+              f"Nakijken op /kennisbank/staging?batch=… — herdraaien is veilig.")
+
     elif mode == "backfill_dim":
         # Aparte historische inhaal van de GEDIMENSIONEERDE reeksen (bijv. Plausible per land). Zelfde
         # idempotente sleutel als de live-collector; gaten blijven gaten.
@@ -1049,6 +1072,6 @@ def main() -> None:
               "ground | harry_run | roster | keys | competitor | community_listening | formalize | answer_questions | "
               "ingest_governance | review_roles | teleology_review | teleology_to_roloverleg | shopify | work_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
-              "projects_to_signals | rapport | verslag | healthcheck",
+              "projects_to_signals | projects_to_staging | rapport | verslag | healthcheck",
               file=sys.stderr)
         sys.exit(1)

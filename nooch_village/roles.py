@@ -942,7 +942,18 @@ class Librarian(Inhabitant):
     def _on_insight_proposed(self, event: Event) -> None:
         """Enige schrijfweg naar de kennislaag: cureer fuzzy input tot atomaire, Engelse
         kaartjes en schrijf ze weg. De Librarian is domein-eigenaar (regel 7); kwaliteit
-        (Engels, atomair, compleet, gelinkt) wordt hier op één plek afgedwongen."""
+        (Engels, atomair, compleet, gelinkt) wordt hier op één plek afgedwongen.
+
+        Uitzondering (rapport-lus): een event met target="staging" is al gerouteerd — de
+        daemon (project_signal.report_to_staging) zette de atomen in de kennisbank-STAGING
+        en de mens reviewt daar ("even nakijken"). Hier alleen zichtbaarheid in het log
+        (de afzender van de poort), NOOIT schrijven: anders ontstaat een dubbele schrijfweg."""
+        if event.data.get("target") == "staging":
+            self.log.info("🗂️ rapport van project %s → %s voorstel(len) in staging-set %s — "
+                          "even nakijken op /kennisbank/staging",
+                          event.data.get("project_id"), event.data.get("atoms"),
+                          event.data.get("batch_id"))
+            return
         fuzzy = (event.data.get("fuzzy") or event.data.get("text") or "").strip()
         if not fuzzy:
             return
