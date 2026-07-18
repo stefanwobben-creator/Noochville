@@ -67,6 +67,10 @@ class Inhabitant(threading.Thread):
         # Uitvoer-primitief: elke dag mijn eigen projecten verzorgen (TOEKOMST=voorbereiden,
         # ACTIEF=uitvoeren). Universeel gewired (niet in _setup_events, dat subklassen overschrijven).
         self.react("dag_begint", self._tend_projects)
+        # Periodieke skills (nu: de wekelijkse claim-zelfscan van compliance). Meelopen op de
+        # dagpuls; de skill kent zijn eigen ritme en de DNA-grant is de poort. Generiek gehouden:
+        # een skill-naam hier hardcoderen zou hem voor elke andere rol een dode capability maken.
+        self.react("dag_begint", self._run_pulse_skills)
         # Versnelling: een statuswijziging naar ACTIEF (meestal een bord-drag in het losse
         # cockpit-proces) wordt door de village-board-watch vertaald naar project_activated. Pak dan
         # meteen ALLEEN dat ene project op, zonder op de dag-puls (dag_begint) te wachten — dat blijft
@@ -1145,6 +1149,42 @@ class Inhabitant(threading.Thread):
             NotifStore(pad).add("role", FOUNDER_ROLE_ID, project_id, by=self.id, snippet=snippet[:160])
         except Exception:
             pass
+
+    def _periodieke_skills(self) -> list[str]:
+        """Skills die uit zichzelf op de dagpuls meelopen, uit `settings`. De skill bewaakt
+        zélf zijn ritme (dag, week, maand) — deze laag kent alleen 'draai mee met de puls'."""
+        rauw = self.context.settings.get("pulse_skills", "claims_site_scan")
+        return [s.strip() for s in str(rauw).split(",") if s.strip()]
+
+    def _run_pulse_skills(self, event) -> None:
+        """Laat de periodieke skills meelopen op de dagpuls. Twee poorten, allebei bewust:
+
+        1. **DNA-grant** — alleen een rol die de skill via governance kreeg, draait hem. Zonder
+           grant gebeurt hier niets; dat is de capaciteitspoort uit CLAUDE.md.
+        2. **De skill zelf** — die kent zijn eigen periode en geeft `skipped` terug als hij deze
+           periode al draaide. Zo blijft deze laag ritme-loos en werkt hij voor dag én week.
+
+        De skill bepaalt ook wat de mens moet zien: `escalate` (er ging iets mis) of `headsup`
+        (er is iets gevonden dat aandacht vraagt). Alles wat hier staat is generiek — geen
+        skill-specifieke kennis, anders wordt elke skill een dode capability voor elke andere rol."""
+        gegrant = set(self.capabilities())
+        for naam in self._periodieke_skills():
+            if naam not in gegrant:
+                continue
+            uitslag = self.use_skill(naam, {})
+            if not isinstance(uitslag, dict) or uitslag.get("skipped"):
+                continue
+            escalatie = uitslag.get("escalate")
+            if escalatie or not uitslag.get("ok", True):
+                reden = (escalatie or {}).get("reason") or uitslag.get("error") or "onbekende fout"
+                self.log.warning("⏱ periodieke skill '%s' kon niet draaien: %s", naam, reden)
+                self._notify_founder("", f"⏱ '{naam}' kon niet draaien: {reden}")
+                continue
+            headsup = uitslag.get("headsup")
+            if headsup:
+                self._notify_founder("", str(headsup))
+            self.log.info("⏱ periodieke skill '%s' gedraaid%s", naam,
+                          f" — {headsup}" if headsup else "")
 
     def _claim_run_complete(self, pid: str) -> None:
         """Voer een ACTIEF project uit via zijn checklist. Markeert DONE ALLEEN als run_project een outcome

@@ -31,6 +31,15 @@ def test_role_tools_leeg_voor_niet_eigenaar():
     assert _role_tools_html(_rec("")) == ""
 
 
-def test_registry_dekt_de_vier_eigenaars():
+def test_registry_dekt_de_eigenaar_rollen():
     assert set(_ROLE_TOOLS) == {
-        "mother_earth__nooch__marketing_lead", "librarian", "concurrent_scout", "harry_hemp"}
+        "mother_earth__nooch__marketing_lead", "librarian", "concurrent_scout", "harry_hemp",
+        "compliance"}
+
+
+def test_claims_checker_hangt_onder_compliance_en_niet_onder_de_website_rol():
+    """De claims-toets is compliance-domein. De website-rol krijgt hem expliciet niet."""
+    assert "/claims" in _role_tools_html(_rec("compliance"))
+    for ander in ("website_watcher", "mother_earth__nooch__website_developer",
+                  "mother_earth__nooch__marketing_lead"):
+        assert "/claims" not in _role_tools_html(_rec(ander))

@@ -25,6 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from nooch_village import auth as _auth
 from nooch_village import claims_db as _claims_db
+from nooch_village import claims_board as _claims_board
 from nooch_village.web_base import _e, _page, _banner     # zelfde design system
 from nooch_village.cockpit2_util import (
     _name, _initials, _tabbar, _avatar, _age, _fmt_due,
@@ -252,6 +253,7 @@ from nooch_village.views.inbox import (
 )
 from nooch_village.views.metrics2 import render_metrics2
 from nooch_village.views.bronnen import render_bronnen
+from nooch_village.views.claims import render_claims, render_rapport, rol_voor
 from nooch_village.views.kennislaag import render_kennislaag
 from nooch_village.views.kennisbank import render_kennisbank, render_kennisbank_search
 from nooch_village.views.kennisbank_spel import render_kennisbank_spel
@@ -3024,6 +3026,49 @@ def _act_lk_mute(c):
 # (route /claims/db.json); cureren is exclusief de domein-eigenaar. De juridische inhoud is
 # mensenwerk — deze takken schrijven alleen door wat compliance invoert.
 
+def _claims_db_stil() -> dict:
+    """De claims-database, of een leeg omhulsel als hij onleesbaar is. Alleen voor rand-opmaak
+    (landnotities); de scan zelf faalt luid via `_claims_scan`."""
+    try:
+        return _claims_db.load()
+    except _claims_db.ClaimsDbError:
+        return {}
+
+
+def _claims_scan(form: dict) -> tuple[dict, str]:
+    """Toets een URL of een stuk tekst tegen de claims-database. Geeft (uitslag, bron) terug.
+
+    De URL wordt server-side opgehaald via `safe_fetch` — inclusief SSRF-guardrail, zodat een
+    ingetypte URL nooit het interne bereik van de server kan lenen. Elke fout komt als
+    `{"error": ...}` terug: fail-closed, want een mislukte scan mag nooit als 'geen claims' lezen."""
+    from nooch_village import safe_fetch
+
+    url = (form.get("url") or [""])[0].strip()
+    tekst = (form.get("tekst") or [""])[0]
+    bron = ""
+    if url:
+        try:
+            opgehaald = safe_fetch.haal_tekst(url)
+        except safe_fetch.FetchGeweigerd as e:
+            return {"error": f"{e}"}, url
+        except safe_fetch.FetchMislukt as e:
+            return {"error": f"{e} — plak de tekst handmatig in het tekstveld."}, url
+        tekst = opgehaald["tekst"]
+        bron = opgehaald["url"]
+        if not tekst.strip():
+            return {"error": "de pagina gaf geen leesbare tekst — plak de tekst handmatig."}, bron
+    elif not tekst.strip():
+        return {"error": "geef een URL of plak een tekst."}, ""
+    else:
+        bron = "geplakte tekst"
+    try:
+        uitslag = _claims_db.check_tekst(tekst)
+    except _claims_db.ClaimsDbError as e:
+        return {"error": str(e)}, bron
+    uitslag["tekst"] = tekst
+    return uitslag, bron
+
+
 def _claims_gate_open(st, username: str | None) -> bool:
     """Mag deze gebruiker de claims-database cureren? Eén definitie voor zowel het tonen van de
     schrijfknoppen als het toestaan van de mutatie — de knop kan dus nooit iets beloven wat de
@@ -3081,6 +3126,32 @@ def _act_claims_work_status(c):
         _claims_audit(st, username, "claims_work_status", nr=item["nr"],
                       status=item["status"], versie=versie)
         return nxt, f"✓ #{item['nr']} → {item['status']} — database v{versie}"
+
+
+def _act_claims_to_board(c):
+        # AUTHZ: rolvervuller of Circle Lead — compliance zet bevindingen om in werk; andere
+        # rollen zien de knop niet (en de poort weigert ze hier alsnog).
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _role_gate("compliance", username, st)
+        if _deny:
+            return nxt, _deny
+        try:
+            rauw = json.loads(urllib.parse.unquote(g("bevindingen") or "{}"))
+        except (ValueError, TypeError):
+            return nxt, "⛔ onleesbare bevindingen"
+        bevindingen = rauw.get("bevindingen") or []
+        if not bevindingen:
+            return nxt, "⛔ geen bevindingen om op het bord te zetten"
+        verslag = _claims_board.zet_op_bord(
+            st.projects, st.records, _claims_db_stil(), bevindingen,
+            g("bron") or rauw.get("bron", ""), rol_voor, trigger="human")
+        _claims_audit(st, username, "claims_to_board", aangemaakt=len(verslag["aangemaakt"]),
+                      overgeslagen=verslag["overgeslagen"])
+        n = len(verslag["aangemaakt"])
+        if not n:
+            return nxt, f"✓ niets nieuws — {verslag['overgeslagen']} bevinding(en) lopen al"
+        return nxt, (f"✓ {n} taak/taken op het bord"
+                     + (f" · {verslag['overgeslagen']} liepen al" if verslag["overgeslagen"] else ""))
 
 
 # ── Kennisbank (laag 2): inzichten, bewijs-links, gesprek en versies ─────────
@@ -3661,6 +3732,7 @@ ACTIONS = {
     "lk_mute": _act_lk_mute,
     "claims_term_add": _act_claims_term_add,
     "claims_work_status": _act_claims_work_status,
+    "claims_to_board": _act_claims_to_board,
 }
 
 
@@ -4073,19 +4145,12 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/claims":
                 # AUTHZ: iedereen-ingelogd — checken is voor alle rollen; muteren kan hier niet
                 # (de schrijfknoppen hangen aan de compliance-gate in _act_claims_*).
-                # Statisch bestand, bewust GEEN governeerde view: het prototype heeft eigen
-                # vormgeving en valt daarom buiten het design-systeem en de view-ratchets.
-                try:
-                    with open(os.path.join(os.path.dirname(__file__), "static",
-                                           "claims_checker.html"), encoding="utf-8") as _f:
-                        _html = _f.read()
-                except OSError:
-                    self._send("Claims-checker niet gevonden", 404); return
-                _mag_cureren = _claims_gate_open(_Stores(data_dir), username)
-                _html = (_html.replace("__CSRF__", effective_csrf)
-                              .replace("__MAG_CUREREN__", "true" if _mag_cureren else "false"))
-                # _send_bytes i.p.v. _send: geen inbox-chrome injecteren in een standalone pagina.
-                self._send_bytes(_html.encode("utf-8"), "text/html; charset=utf-8")
+                self._send(render_claims(
+                    csrf_token=effective_csrf,
+                    msg=(qs.get("msg") or [""])[0],
+                    tab=(qs.get("tab") or ["check"])[0],
+                    kan_cureren=_claims_gate_open(_Stores(data_dir), username),
+                    zoek=(qs.get("q") or [""])[0]))
                 return
             if path.startswith("/static/"):
                 name = path[len("/static/"):]
@@ -4165,6 +4230,34 @@ def make_handler(data_dir: str, csrf_token: str,
                 if not secrets.compare_digest((form.get("csrf") or [""])[0], csrf_token):
                     self._send("CSRF-token ongeldig", 403); return
                 self._send_json(snake.handle_score(_Stores(data_dir), username, (form.get("score") or ["0"])[0]))
+                return
+
+            if path == "/claims/scan":
+                # AUTHZ: iedereen-ingelogd — lezen/scannen is vrij; muteren blijft compliance.
+                # De URL wordt SERVER-side opgehaald (safe_fetch, met SSRF-guardrail), niet door de
+                # browser via een publieke proxy — die proxies zijn rate-limited of betaald.
+                username = self._session_username()
+                if sessions is not None and username is None:
+                    self._send("Niet ingelogd", 403); return
+                raw = self.rfile.read(length).decode("utf-8") if length else ""
+                form = urllib.parse.parse_qs(raw)
+                if not secrets.compare_digest((form.get("csrf") or [""])[0], csrf_token):
+                    self._send("CSRF-token ongeldig", 403); return
+                st = _Stores(data_dir)
+                uitslag, bron = _claims_scan(form)
+                markten = [m for m in (form.get("markt") or []) if m]
+                frag = render_rapport(uitslag, markten=markten, bron=bron,
+                                      csrf_token=csrf_token,
+                                      kan_bord=_claims_gate_open(st, username),
+                                      db=_claims_db_stil())
+                if (form.get("frag") or [""])[0] == "1":
+                    self._send(frag, chrome=False)           # live scan: alleen het rapport terug
+                else:                                        # zonder JS: de hele pagina mét rapport
+                    self._send(render_claims(csrf_token=csrf_token, tab="check",
+                                             kan_cureren=_claims_gate_open(st, username),
+                                             url=(form.get("url") or [""])[0],
+                                             tekst=(form.get("tekst") or [""])[0],
+                                             markten=markten, rapport=frag))
                 return
 
             if path == "/wachtwoord":
