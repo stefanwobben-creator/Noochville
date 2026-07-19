@@ -56,7 +56,7 @@ def test_promote_maakt_atoom_met_bron_link_datum(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
     rid = _approved(st)
     aid, msg = promote_signal(st, rid)
-    assert aid and "kenniskaartje" in msg
+    assert aid and "Oracle" in msg
     a = st.notes.get(aid)
     assert a is not None
     assert a.claim == _CONTENT                                     # letterlijk, geen LLM
@@ -127,7 +127,7 @@ def test_gearchiveerd_duplicaat_op_reference_telt_niet(tmp_path):
     st.notes.archive("atom_oud1")
     rid = _approved(st)
     aid, msg = promote_signal(st, rid)
-    assert aid != "atom_oud1" and "kenniskaartje" in msg           # archief blokkeert niet
+    assert aid != "atom_oud1" and "Oracle" in msg                 # archief blokkeert niet
 
 
 # ── idempotentie ─────────────────────────────────────────────────────────────
@@ -138,7 +138,7 @@ def test_twee_keer_promoveren_geen_duplicaat(tmp_path):
     aid, _ = promote_signal(st, rid)
     n = len(st.notes.all())
     aid2, msg2 = promote_signal(st, rid)
-    assert aid2 is None and "Al gepromoveerd" in msg2              # nette banner
+    assert aid2 is None and "Al verwerkt" in msg2                  # nette banner
     assert len(st.notes.all()) == n
     assert st.notes.get(aid).grounding_count == 1                  # ook niets gestapeld
 
@@ -190,7 +190,7 @@ def test_auto_promote_vlag_default_uit(tmp_path):
     rid = st.radar.add(role=_ROLE, feed="f", kind="kaart", content="Alleen goedkeuren")
     _, msg = cockpit2.dispatch(dd, "radar_approve",
                                {"rid": [rid], "next": ["/"]}, username="guest")
-    assert "archief" in msg and "kenniskaartje" not in msg
+    assert "archief" in msg and "Oracle" not in msg
     st2 = cockpit2._Stores(dd)
     assert st2.notes.all() == []                                   # default-gedrag onveranderd
     assert "promoted_atom_id" not in st2.radar.get(rid)
@@ -208,7 +208,7 @@ def test_auto_promote_vlag_aan_promoveert_bij_approve(tmp_path):
                        published_at="2026-05-11T00:00:00Z")
     _, msg = cockpit2.dispatch(dd, "radar_approve",
                                {"rid": [rid], "next": ["/"]}, username="guest")
-    assert "archief" in msg and "kenniskaartje" in msg             # zelfde codepad
+    assert "archief" in msg and "Oracle" in msg                    # zelfde codepad
     st2 = cockpit2._Stores(dd)
     aid = st2.radar.get(rid)["promoted_atom_id"]
     assert st2.notes.get(aid).reference == _LINK
@@ -220,7 +220,7 @@ def test_signals_pagina_toont_knop_en_daarna_chip(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
     rid = _approved(st)
     html = render_signals(st, csrf_token="tok")
-    assert "radar_promote" in html and "→ kenniskaartje" in html
+    assert "radar_promote" in html and "→ Oracle" in html
     assert "style=" not in html                                    # geen inline styles (ratchet)
     promote_signal(st, rid)
     html2 = render_signals(st, csrf_token="tok")

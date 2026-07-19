@@ -503,7 +503,7 @@ def _stmt(aid: str, a: dict, atoms: dict, csrf: str, nxt: str, active_iid: str,
         bewerk += (f"<form method='post' action='/action' class='kn-stmtactie'>"
                    f"{_hid(csrf, 'kb_atoom_archive', nxt, {'atom_id': aid})}"
                    f"<button class='kn-actlink' title='uit de lijst, nooit weg — "
-                   f"terugzetten kan via Gearchiveerd'>📦 archiveer</button></form>")
+                   f"verwijderd maar onthouden (black-list) — terugzetten kan via ⚙'>🗑 verwijder</button></form>")
         if spellen:
             opties = "".join(
                 f"<option value='{_e(s['id'])}'>{_e(s.get('hunch') or s['id'])}</option>"
@@ -790,7 +790,9 @@ _KN_SEARCH_JS = """<script>(function(){
 
 
 def _gearchiveerd_uitklap(st, hub: str, csrf: str) -> str:
-    """Archiveren is terugdraaibaar: de gearchiveerde notities met een terugzet-knop."""
+    """⚙-paneel (founder, 19 jul): 'gearchiveerd' is eigenlijk VERWIJDERD — we bewaren ze
+    alleen zodat ze niet opnieuw binnenkomen (black-list, zelfde idee als de verboden
+    woorden in de woordenschat). Hoort niet in de hoofdflow; terugzetten kan altijd."""
     from nooch_village.kennisbank import load_atoms as _la
     alles = _la(st.dd, include_archived=True)
     archief = {aid: a for aid, a in alles.items()
@@ -807,9 +809,11 @@ def _gearchiveerd_uitklap(st, hub: str, csrf: str) -> str:
                  f"<button class='btn'>Zet terug</button></form>")
     meer = (f"<p class='muted'>… en nog {len(archief) - 20} meer.</p>"
             if len(archief) > 20 else "")
-    return (f"<details class='kn-panel'><summary>📦 Gearchiveerd ({len(archief)})</summary>"
-            f"<p class='muted'>Uit de lijsten gehaald maar nooit weggegooid — "
-            f"terugzetten kan altijd.</p>{rows}{meer}</details>")
+    return (f"<details class='kn-panel kn-settings'><summary>⚙ <span class='muted'>"
+            f"instellingen</span></summary>"
+            f"<h3>🗑 Verwijderd ({len(archief)})</h3>"
+            f"<p class='muted'>Verwijderd maar onthouden (black-list): deze signals komen "
+            f"niet opnieuw binnen. Terugzetten kan altijd.</p>{rows}{meer}</details>")
 
 
 def _ongesorteerd_bakje(atoms: dict, inzichten, csrf: str) -> str:
@@ -835,8 +839,9 @@ def _ongesorteerd_bakje(atoms: dict, inzichten, csrf: str) -> str:
                  f"<button class='btn'>Sorteer</button></form>")
     meer = f"<p class='muted'>… en nog {len(los) - 30} meer.</p>" if len(los) > 30 else ""
     return (f"<details class='kn-panel'><summary>📥 Ongesorteerd ({len(los)})</summary>"
-            f"<p class='muted'>Notities zonder onderwerp. Kies een hub, dan tellen ze mee "
-            f"in clusters en zoekopdrachten.</p>{rows}{meer}</details>")
+            f"<p class='muted'>Zonder onderwerp tellen ze niet mee in clusters en "
+            f"zoekopdrachten. De verrijkingsronde (kb_verrijk) sorteert ze automatisch; "
+            f"dit is het restje waar de LLM niet uitkwam.</p>{rows}{meer}</details>")
 
 
 def _curatie_sectie(titel: str, kandidaten: list[dict], atoms: dict, hunch: str,
@@ -926,10 +931,10 @@ def render_kennisbank(st, kid: str = "", q: str = "", csrf_token: str = "",
     # er niets op de pagina dat de mislukking toont. Het msg-mechanisme zelf blijft intact.
     foutbalk = _banner(msg) if str(msg or "").lstrip().startswith("✗") else ""
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
-            f"<h1>🌱 Wat Nooch weet</h1>"
+            f"<h1>🔮 Oracle</h1>"
             f"{actiebalk}{foutbalk}{toast}"
             f"<div class='kn-cols'>{links}{rechts}</div>"
             f"<p class='muted'>Elke zekerheid schuift mee als er info bijkomt.</p></div>")
     inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>{_KN_SEARCH_JS}")
-    return _page("Wat Nooch weet", inner)
+    return _page("Oracle", inner)

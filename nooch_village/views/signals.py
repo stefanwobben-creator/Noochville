@@ -36,8 +36,8 @@ def radar_promote_ctl(it: dict, csrf: str, nxt: str) -> str:
             f"<input type='hidden' name='rid' value='{_e(it.get('id', ''))}'>"
             f"<input type='hidden' name='next' value='{_e(nxt)}'>"
             f"<button class='rdr-promote' type='submit' name='action' value='radar_promote' "
-            f"title='lees de bron en zet voorstellen klaar bij Even nakijken'>"
-            f"→ kenniskaartje</button></form>")
+            f"title='lees de bron en zet voorstellen klaar bij Even nakijken (daarna in Oracle)'>"
+            f"→ Oracle</button></form>")
 
 
 def _sig_body(st, it) -> str:
@@ -121,14 +121,14 @@ def _kb_hint(st, it, csrf: str, nxt: str) -> str:
         doel = find_duplicate(st.notes, content, source, link) or st.notes.find_claim_equal(content)
         if doel is not None:
             kaart = st.notes.get(doel)
-            label = "al in de kennisbank"
+            label = "al in Oracle"
             kort = (kaart.claim if kaart else "")[:120]
         else:
             g = st.notes.gelijkende(content)
             if g is None:
                 return ""
             doel, kort, _score = g
-            label = "lijkt op bestaand kaartje"
+            label = "lijkt op een bestaand signal"
             kort = kort[:120]
     except Exception:
         return ""
@@ -159,7 +159,7 @@ def _merge_modal(csrf: str, nxt: str) -> str:
         f"aria-labelledby='kn-modaltitel'>"
         f"<h2 id='kn-modaltitel'>Signalen mergen</h2>"
         f"<p class='muted'>Kies welke tekst de hoofdtekst wordt; de bronnen van allebei "
-        f"blijven bewaard en stapelen straks mee op het kenniskaartje.</p>"
+        f"blijven bewaard en stapelen straks mee op het signal in Oracle.</p>"
         f"<form method='post' action='/action' id='kn-mergeform'>"
         f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
         f"<input type='hidden' name='action' value='radar_merge'>"
@@ -294,7 +294,7 @@ def render_signals(st, csrf_token: str = "", feed: str = "") -> str:
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
             f"<h1>Signalen <span class='chip'>library</span></h1>"
             f"<p class='muted'>Hier komt alles binnen. Sleep signalen op elkaar om te "
-            f"mergen, promoveer ze tot kenniskaartje of verwijder ze — werk naar nul.</p>"
+            f"mergen, stuur ze door naar Oracle of verwijder ze — werk naar nul.</p>"
             f"{chips}"
             f"{wacht}"
             f"<div class='rdr-sub'>Te verwerken <span class='muted'>· {len(items)} — sleep om "

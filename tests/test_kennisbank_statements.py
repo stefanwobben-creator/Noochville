@@ -196,7 +196,7 @@ def test_overzicht_is_kaal_detail_heeft_alles(tmp_path):
     assert "✏️ bewerk" in frag and "Bewaar (nieuwe versie)" in frag
     # founder dd 2026-07-18: curatie per statement — archiveer-tekstlink in het detail,
     # geen selectie-checkbox in de rij en geen bulk-formulier meer
-    assert "kb_atoom_archive" in frag and "📦 archiveer" in frag
+    assert "kb_atoom_archive" in frag and "🗑 verwijder" in frag
     assert "class='kn-sel'" not in frag and "curatieform" not in frag
 
 
@@ -256,7 +256,7 @@ def test_founder_curatie_per_statement_en_naar_spel(tmp_path):
     st = _st(dd)
     # zonder open spel: wél de archiveer-tekstlink, geen 'naar spel'-uitklap
     frag = render_kennisbank_search(st, "", "", "", csrf_token="tok")
-    assert "📦 archiveer" in frag and "🎲 naar spel" not in frag
+    assert "🗑 verwijder" in frag and "🎲 naar spel" not in frag
     # met een open spel: per statement een naar-spel-uitklap met spel-keuze
     st.spel.start("een vermoeden", [{"atom_id": "a1", "stance": "support"}], by="t")
     frag2 = render_kennisbank_search(st, "", "", "", csrf_token="tok")

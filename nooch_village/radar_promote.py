@@ -81,9 +81,9 @@ def _signaal_guards(st, rid: str) -> tuple[dict | None, str]:
     if it is None:
         return None, "✗ onbekend radar-signaal"
     if it.get("promoted_atom_id"):
-        return None, "Al gepromoveerd — dit signaal staat al in de kennisbank"
+        return None, "Al verwerkt — dit signal staat al in Oracle"
     if it.get("status") != "goedgekeurd":
-        return None, "✗ alleen goedgekeurde signalen kunnen naar de kennisbank"
+        return None, "✗ alleen goedgekeurde signals kunnen naar Oracle"
     if not (it.get("content") or "").strip():
         return None, "✗ leeg signaal — niets om te promoveren"
     return it, ""
@@ -196,7 +196,7 @@ def promote_signal(st, rid: str) -> tuple[str | None, str]:
         st.notes.stack_provenance(dup, source=source, reference=link)
         st.notes.add_tags(dup, ["signal"])
         st.radar.mark_promoted(rid, dup)
-        return dup, "🔗 samengevoegd met bestaand kaartje — herkomst gekoppeld"
+        return dup, "🔗 samengevoegd met een bestaand signal in Oracle — herkomst gekoppeld"
 
     aid = stable_id(content, source)
     kaart = Insight(id=aid, claim=content[:500], source=source[:160],
@@ -212,9 +212,9 @@ def promote_signal(st, rid: str) -> tuple[str | None, str]:
         st.notes.stack_provenance(aid, source=source, reference=link)
         st.notes.add_tags(aid, ["signal"])
         st.radar.mark_promoted(rid, aid)
-        return aid, "🔗 samengevoegd met bestaand kaartje — herkomst gekoppeld"
+        return aid, "🔗 samengevoegd met een bestaand signal in Oracle — herkomst gekoppeld"
     st.radar.mark_promoted(rid, aid)
-    return aid, "🧠 kenniskaartje gemaakt — dit signaal telt nu mee in de kennisbank"
+    return aid, "🧠 signal toegevoegd aan Oracle — het telt nu mee in de kennislaag"
 
 
 def auto_promote_enabled(data_dir: str) -> bool:

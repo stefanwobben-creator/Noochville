@@ -19,10 +19,10 @@ def _notes(tmp_path) -> tuple[str, NotesStore]:
     dd = str(tmp_path)
     notes = NotesStore(f"{dd}/notes.json")
     notes.add(Insight(id="a1", claim="Externe survey onder 1.200 consumenten toont X",
-                      source="Bureau Y", provenance="survey"))
+                      source="Bureau Y", provenance="survey", tags=["markt"]))
     notes.add(Insight(id="a2", claim="Claim zonder herkomst-aanknopingspunt",
-                      source="onbekend"))
-    notes.add(Insight(id="a3", claim="Al voorzien", source="z",
+                      source="onbekend", tags=["prijs"]))
+    notes.add(Insight(id="a3", claim="Al voorzien", source="z", tags=["markt"],
                       provenance="media", provenance_note="bestond al"))
     return dd, notes
 
@@ -97,3 +97,39 @@ def test_store_verrijk_overschrijft_nooit(tmp_path):
     assert notes.verrijk_herkomst("a3", note="nieuwe poging", provenance="survey") is False
     a3 = NotesStore(f"{dd}/notes.json").get("a3")
     assert a3.provenance_note == "bestond al" and a3.provenance == "media"
+
+
+def test_onderwerp_ronde_vult_hub_en_oud_grootboek_telt_alleen_herkomst(tmp_path):
+    """De ronde kent ook onderwerpen toe (ongesorteerd-bakje leegt zichzelf); een kaartje
+    dat onder het OUDE grootboek-formaat al herkomst-geprobeerd was komt alsnog terug voor
+    zijn onderwerp, zonder de herkomst opnieuw te schrijven."""
+    dd = str(tmp_path)
+    notes = NotesStore(f"{dd}/notes.json")
+    notes.add(Insight(id="z1", claim="Kaartje zonder onderwerp", source="s"))
+    # oud formaat: herkomst geprobeerd, leeg bevonden
+    import json as _json, os
+    with open(f"{dd}/herkomst_verrijking.json", "w") as fh:
+        _json.dump({"z1": {"at": "2026-07-19T10:00:00", "uitkomst": "leeg"}}, fh)
+
+    def fake(prompt):
+        return _json.dumps([{"id": "z1", "provenance": "media",
+                             "herkomst": "zou genegeerd moeten worden",
+                             "onderwerp": "materiaal"}])
+
+    t = verrijk_herkomst(dd, reason_fn=fake)
+    assert t["kandidaten"] == 1 and t["onderwerp_gezet"] == 1
+    vers = NotesStore(f"{dd}/notes.json").get("z1")
+    assert "materiaal" in vers.tags
+    assert vers.provenance_note is None                  # herkomst was al geprobeerd: niet opnieuw
+    # nu is alles geprobeerd → geen kandidaten meer
+    assert verrijk_herkomst(dd, reason_fn=fake)["kandidaten"] == 0
+
+
+def test_onderwerp_nooit_verzonnen(tmp_path):
+    dd = str(tmp_path)
+    notes = NotesStore(f"{dd}/notes.json")
+    notes.add(Insight(id="z2", claim="Iets heel anders", source="s"))
+    t = verrijk_herkomst(dd, reason_fn=lambda p: json.dumps(
+        [{"id": "z2", "provenance": "media", "herkomst": "", "onderwerp": "ruimtevaart"}]))
+    assert t["onderwerp_gezet"] == 0                     # buiten de vaste lijst → genegeerd
+    assert not any(x == "ruimtevaart" for x in NotesStore(f"{dd}/notes.json").get("z2").tags)

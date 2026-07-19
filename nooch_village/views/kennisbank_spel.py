@@ -136,7 +136,7 @@ def render_kennisbank_spel(st, sid: str, zoek: str = "", csrf_token: str = "",
 
     her = " · herformuleert een bestaand inzicht" if spel.get("reformulate_of") else ""
     main = (f"<div class='c2-main'><div class='c2-bar'>"
-            f"<a href='/kennisbank'>← wat Nooch weet</a></div>"
+            f"<a href='/kennisbank'>← Oracle</a></div>"
             f"<h1>🎲 Speel een inzicht</h1>"
             f"<p class='muted'>Vermoeden: <b>{_e(spel.get('hunch'))}</b>{her}</p>{_banner(msg)}"
             f"{nudge}"

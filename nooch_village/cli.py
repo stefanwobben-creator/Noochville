@@ -817,13 +817,14 @@ def main() -> None:
               f"{res['skipped']} zonder rapport/al verwerkt, {res['mislukt']} mislukt (LLM). "
               f"Nakijken op /kennisbank/staging?batch=… — herdraaien is veilig.")
 
-    elif mode == "kb_verrijk_herkomst":
+    elif mode in ("kb_verrijk", "kb_verrijk_herkomst"):
         # Verrijkingsronde: bestaande kenniskaartjes zonder herkomst-verantwoording in
         # batches langs de LLM (zelfde regels als de intake: alleen uit de kaarttekst,
         # nooit gokken). Grootboek voorkomt dubbele pogingen; provenance wordt alleen
         # gezet als hij nu 'unknown' is. Dry-run telt alleen. Draai op prod als nooch,
         # met een backup van data/notes.json vóór de echte run.
-        # python -m nooch_village.village kb_verrijk_herkomst [--dry-run] [--limit N]
+        # python -m nooch_village.village kb_verrijk [--dry-run] [--limit N]
+        # (kb_verrijk_herkomst blijft een alias; sinds 19 jul doet de ronde óók onderwerpen)
         from nooch_village.config import load_context
         from nooch_village.herkomst_verrijking import verrijk_herkomst
         from nooch_village.village import BASE_DIR
@@ -841,8 +842,9 @@ def main() -> None:
                   f"({t['overgeslagen']} al voorzien of eerder geprobeerd). "
                   f"Echte run: zelfde commando zonder --dry-run (backup notes.json eerst).")
         else:
-            print(f"🏷 {t['kandidaten']} kaartjes bekeken: {t['gevuld']} verantwoording gezet, "
-                  f"{t['prov_gezet']} provenance ingevuld (was unknown), {t['leeg']} zonder "
+            print(f"🏷 {t['kandidaten']} signals bekeken: {t['gevuld']} verantwoording gezet, "
+                  f"{t['prov_gezet']} provenance ingevuld (was unknown), "
+                  f"{t['onderwerp_gezet']} onderwerp toegekend, {t['leeg']} zonder "
                   f"aanknopingspunt (onthouden), {t['mislukt']} mislukt (LLM — kan later "
                   f"alsnog). Herdraaien is veilig.")
 

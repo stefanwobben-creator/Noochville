@@ -1,7 +1,7 @@
 """Staging-view (/kennisbank/staging?batch=…) — "even nakijken" vóór de bibliotheek.
 
 Toont de voorgestelde atomen uit één bron, bewerkbaar, met samenvoegen en weggooien.
-Pas op "Voeg set toe aan bibliotheek" landen ze append-only in notes.json. Herkend brontype
+Pas op "Voeg set toe aan Oracle" landen ze append-only in notes.json. Herkend brontype
 staat bovenaan (verklaarbaar). Hergebruikt de kn-/kern-klassen; geen nieuwe machinerie zichtbaar.
 """
 from __future__ import annotations
@@ -37,8 +37,8 @@ def _mece_hint(st, b: dict, a: dict, csrf: str, nxt: str) -> str:
         knop = (f"<form method='post' action='/action' class='kn-mece-koppel'>"
                 f"{_hid(csrf, 'kb_stage_koppel', nxt, {'bid': b['id'], 'sid': a['sid'], 'doel': atom_id})}"
                 f"<button class='btn' title='geen tweede kaartje: dit voorstel wordt een extra "
-                f"bron onder het bestaande kaartje'>🔗 koppel als extra bron</button></form>")
-    return (f"<div class='kn-mece'>≈ <span class='muted'>lijkt op bestaand kaartje:</span> "
+                f"bron onder het bestaande signal'>🔗 koppel als extra bron</button></form>")
+    return (f"<div class='kn-mece'>≈ <span class='muted'>lijkt op een bestaand signal:</span> "
             f"{_e(kort)} {knop}</div>")
 
 
@@ -79,7 +79,7 @@ def _atoom_kaartje(st, b: dict, a: dict, csrf: str, nxt: str) -> str:
         f"<span class='kn-stage-src'>{bron}</span>"
         f"<div class='kn-stage-ctrls'>{herkomst}"
         f"<button class='btn ok' title='verwerk dit voorstel meteen: het kaartje gaat de "
-        f"bibliotheek in en verdwijnt uit deze set'>✓ Bewaar → bibliotheek</button>"
+        f"Oracle in en verdwijnt uit deze set'>✓ Bewaar → Oracle</button>"
         f"</div></form>"
         f"<form method='post' action='/action' class='kn-stage-del'>"
         f"{_hid(csrf, 'kb_stage_delete', nxt, {'bid': b['id'], 'sid': sid})}"
@@ -102,16 +102,16 @@ def render_kennisbank_staging(st, bid: str, csrf_token: str = "", msg: str = "")
 
     commit = (f"<form method='post' action='/action'>"
               f"{_hid(csrf_token, 'kb_stage_commit', '/kennisbank', {'bid': bid})}"
-              f"<button class='btn ok'>Voeg set toe aan bibliotheek ({len(atomen)})</button></form>"
+              f"<button class='btn ok'>Voeg set toe aan Oracle ({len(atomen)})</button></form>"
               f"<form method='post' action='/action'>"
               f"{_hid(csrf_token, 'kb_stage_discard', '/kennisbank', {'bid': bid})}"
               f"<button class='btn'>Gooi de hele set weg</button></form>")
 
-    main = (f"<div class='c2-main'><div class='c2-bar'><a href='/kennisbank'>← wat Nooch weet</a></div>"
+    main = (f"<div class='c2-main'><div class='c2-bar'><a href='/kennisbank'>← Oracle</a></div>"
             f"<h1>Even nakijken</h1>"
             f"<p class='muted'>Herkend als <b>{_e(b.get('kind'))}</b>{tab} · bron "
             f"<b>{_e(b.get('source_label'))}</b>. Per voorstel: bewerk en bewaar (→ meteen "
-            f"in de bibliotheek), sleep op een ander voorstel om te mergen, of gooi weg. "
+            f"in Oracle), sleep op een ander voorstel om te mergen, of gooi weg. "
             f"“Voeg set toe” verwerkt alles wat er nog staat in één keer.</p>{_banner(msg)}"
             f"{kaartjes}<div class='kn-sec'>{commit}</div>"
             f"{_stg_merge_modal(bid, csrf_token, nxt)}</div>")

@@ -1936,7 +1936,7 @@ def _act_radar_koppel(c):
                 st.notes.stack_provenance(doel, source=m.get("source") or "",
                                           reference=m.get("link") or "")
         st.radar.mark_promoted(g("rid"), doel)
-        return nxt, "🔗 herkomst gekoppeld aan het bestaande kaartje — signaal verwerkt"
+        return nxt, "🔗 herkomst gekoppeld aan het bestaande signal — verwerkt"
 
 
 def _act_kb_stage_koppel(c):
@@ -1958,7 +1958,7 @@ def _act_kb_stage_koppel(c):
                 if al is not None and not al.get("promoted_atom_id"):
                     st.radar.mark_promoted(rid, doel)
         st.staging.remove_atom(c.g("bid"), c.g("sid"))
-        return c.nxt, "🔗 gekoppeld als extra bron aan het bestaande kaartje"
+        return c.nxt, "🔗 gekoppeld als extra bron aan het bestaande signal"
 
 
 def _acc_id_param(st, role_id: str, qs) -> str:
@@ -3679,9 +3679,9 @@ def _act_kb_stage_accept(c):
     res = commit_atom(c.st.staging, c.g("bid"), c.g("sid"), c.data_dir, radar=c.st.radar)
     if res is None:
         return c.nxt, "✗ voorstel niet gevonden"
-    msg = {"nieuw": "✓ in de bibliotheek",
+    msg = {"nieuw": "✓ in Oracle",
            "bekend": "Al bekend — niets gedupliceerd",
-           "gekoppeld": "🔗 samengevoegd met een bestaand kaartje"}[res["uitkomst"]]
+           "gekoppeld": "🔗 samengevoegd met een bestaand signal"}[res["uitkomst"]]
     if res["leeg"]:
         return "/kennisbank", f"🎉 set verwerkt · laatste voorstel: {msg}"
     return c.nxt, msg
@@ -3718,7 +3718,7 @@ def _act_kb_stage_commit(c):
     if nieuw:
         delen.append(f"✅ {nieuw} notities toegevoegd aan de bibliotheek")
     if gekoppeld:
-        delen.append(f"🔗 {gekoppeld} signaal/signalen samengevoegd met een bestaand kaartje")
+        delen.append(f"🔗 {gekoppeld} signal(s) samengevoegd met een bestaand signal in Oracle")
     if dubbel:
         delen.append(f"{dubbel} al bekend")
     return "/kennisbank", " · ".join(delen)

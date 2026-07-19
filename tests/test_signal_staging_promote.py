@@ -240,7 +240,7 @@ def test_mece_hint_en_koppel_actie(tmp_path):
     bid, _ = stage_signal(st, rid)
     from nooch_village.views.kennisbank_staging import render_kennisbank_staging
     html = render_kennisbank_staging(st, bid, csrf_token="tok")
-    assert "lijkt op bestaand kaartje" in html and "kb_stage_koppel" in html
+    assert "lijkt op een bestaand signal" in html and "kb_stage_koppel" in html
     sid = st.staging.get(bid)["atoms"][0]["sid"]
     c = SimpleNamespace(nxt=f"/kennisbank/staging?batch={bid}", st=st, data_dir=dd,
                         username="guest",
@@ -386,7 +386,7 @@ def test_signals_kb_hint_bij_bestaand_kaartje(tmp_path):
     _approved(st)
     from nooch_village.views.signals import render_signals
     html = render_signals(st, csrf_token="tok")
-    assert "al in de kennisbank" in html and "radar_koppel" in html
+    assert "al in Oracle" in html and "radar_koppel" in html
 
 
 # ── per-voorstel verwerken: bewaard = in de bibliotheek = weg uit de set ─────
@@ -403,7 +403,7 @@ def test_accept_verwerkt_een_voorstel_en_laat_de_rest_staan(tmp_path):
                         username="guest", form={"content": ["Aangescherpte tekst"]},
                         g=lambda k, _m={"bid": bid, "sid": sid}: _m.get(k, ""))
     nxt, msg = cockpit2._act_kb_stage_accept(c)
-    assert "in de bibliotheek" in msg and nxt.startswith("/kennisbank/staging")
+    assert "in Oracle" in msg and nxt.startswith("/kennisbank/staging")
     assert len(st.staging.get(bid)["atoms"]) == 1        # verwerkt = weg, rest blijft
     aid = stable_id("Aangescherpte tekst", "vivobarefoot.com")
     assert cockpit2._Stores(dd).notes.get(aid) is not None
@@ -430,4 +430,4 @@ def test_staging_kaart_heeft_accept_knop(tmp_path):
     bid, _ = stage_signal(st, rid)
     from nooch_village.views.kennisbank_staging import render_kennisbank_staging
     html = render_kennisbank_staging(st, bid, csrf_token="tok")
-    assert "kb_stage_accept" in html and "Bewaar → bibliotheek" in html
+    assert "kb_stage_accept" in html and "Bewaar → Oracle" in html

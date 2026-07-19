@@ -147,7 +147,7 @@ def test_view_toont_woord_en_meter_geen_percentages(tmp_path):
                                staging=StagingStore(f"{dd}/kennisbank_staging.json"))
 
     html = render_kennisbank(st, csrf_token="tok")
-    assert "Wat Nooch weet" in html and "nog dun" in html
+    assert "Oracle" in html and "nog dun" in html
     # de machinerie blijft binnen: geen ruwe trust/strength/groep-ids in de UI
     for verboden in ("strength", "agreement", "independence_group", "0.9", "trust"):
         assert verboden not in html
