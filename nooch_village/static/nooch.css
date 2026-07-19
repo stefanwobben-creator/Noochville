@@ -1054,3 +1054,13 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 /* Tag-onderhoud-review: voorstel-rijen met actie-chip, tags en besluit-knoppen. */
 .kn-tagvoorstel{display:flex;gap:.5rem;align-items:center}
 .kn-tagvoorstel .kn-lt{flex:1;min-width:0}
+/* Spelronde (founder, 19 jul) — de suggestiekaart bovenaan de inzichten-kolom:
+   lichtgeel = "dit is een start, nog niet geverifieerd"; verify start het spel. */
+.kn-sugg{background:var(--yellow-light);border:1px solid var(--yellow)}
+.kn-sugghead{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.35rem}
+.kn-suggflag{background:var(--yellow);color:#5c4a00}
+.kn-suggbtns{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-top:.5rem}
+/* Zoekresultaten op de spel-pagina: wat al in het spel zit kleurt subtiel mee —
+   groen steunt, rood spreekt tegen (zelfde betekenis als de kn-note-stippen). */
+.kn-inhand-sup{background:var(--green-tint);border-radius:var(--radius);padding:.45rem .5rem}
+.kn-inhand-cou{background:var(--error-tint);border-radius:var(--radius);padding:.45rem .5rem}

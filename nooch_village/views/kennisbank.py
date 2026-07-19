@@ -30,7 +30,8 @@ from nooch_village.web_base import _e, _page, _banner, _field
 from nooch_village.cockpit2_util import _DS_LINK, _BUILD, _nav
 from nooch_village.kennisbank import field, verdict, WORD_LABEL, load_atoms, meta_field
 from nooch_village.kennisbank_intake import SUBJECTS
-from nooch_village.kennisbank_spel import clusters as kb_clusters, gather, subject_van
+from nooch_village.kennisbank_spel import (clusters as kb_clusters, gather,
+                                           spel_suggesties, subject_van)
 
 
 def _dots(word: str, n: int) -> str:
@@ -378,6 +379,45 @@ def _speel_toevoegen(st, atoms: dict, inzichten: list, hunch: str, speel: str,
                         for s in open_spellen)
         delen.append(f"<div class='kn-openspel muted'>Lopende spellen: {rijen}</div>")
     return "".join(delen)
+
+
+def _suggestie_kaart(atoms: dict, inzichten: list, sug: int, csrf: str) -> str:
+    """De bovenste plek van de inzichten-kolom (founder, 19 jul): één vóórgevuld inzicht
+    uit het sterkste cluster — lichtgeel, expliciet 'not verified', met een verify-knop
+    die het spel start (kb_spel_start, de kaarten van het cluster als hand) en bladeren
+    naar de volgende kandidaat (?sug=). De voorvulling is deterministisch
+    (kennisbank_spel.spel_suggesties); het scherp formuleren gebeurt in het spel."""
+    if not csrf:
+        return ""
+    kandidaten = spel_suggesties(atoms, inzichten)
+    if not kandidaten:
+        return ""
+    i = max(0, min(sug, len(kandidaten) - 1))
+    kand = kandidaten[i]
+    verborgen = "".join(
+        f"<input type='hidden' name='kaart' value='{_e(aid)}'>"
+        f"<input type='hidden' name='stance_{_e(aid)}' value='support'>"
+        for aid in kand["atom_ids"])
+    nav = ""
+    if len(kandidaten) > 1:
+        prev = (f"<a class='btn' href='/kennisbank?sug={i - 1}' "
+                f"title='vorige kandidaat'>←</a>" if i > 0 else "")
+        volg = (f"<a class='btn' href='/kennisbank?sug={i + 1}' "
+                f"title='volgende kandidaat'>→</a>" if i < len(kandidaten) - 1 else "")
+        nav = (f"<span class='muted'>kandidaat {i + 1} van {len(kandidaten)}</span> "
+               f"{prev}{volg}")
+    return (
+        f"<div class='card kn-sugg'>"
+        f"<div class='kn-sugghead'><span class='chip kn-suggflag'>not verified</span>"
+        f"<span class='muted'>voorzet uit je signals — verifieer om er een inzicht van "
+        f"te maken</span></div>"
+        f"<div class='kn-claim'>{_e(kand['hunch'])}</div>"
+        f"<p class='muted'>🧩 {_e(kand['theme'])} · {len(kand['atom_ids'])} kaarten "
+        f"staan klaar (inclusief wat tegenspreekt)</p>"
+        f"<div class='kn-suggbtns'><form method='post' action='/action' class='kn-unlink'>"
+        f"{_hid(csrf, 'kb_spel_start', '/kennisbank', {'hunch': kand['hunch']})}"
+        f"{verborgen}<button class='btn ok'>✓ Verify — speel dit inzicht</button></form>"
+        f"{nav}</div></div>")
 
 
 def _nieuw_toast(nieuw: str, atoms: dict) -> str:
@@ -924,7 +964,8 @@ def _curatie_sectie(titel: str, kandidaten: list[dict], atoms: dict, hunch: str,
 def render_kennisbank(st, kid: str = "", q: str = "", csrf_token: str = "",
                       msg: str = "", hunch: str = "", speel: str = "",
                       nieuw: str = "", hub: str = "", pag: int = 1,
-                      open_: str = "", cluster: int = 0, flip: bool = False) -> str:
+                      open_: str = "", cluster: int = 0, flip: bool = False,
+                      sug: int = 0) -> str:
     atoms = load_atoms(st.dd)
     inzichten = st.kennisbank.all()
     by_id = {i["id"]: i for i in inzichten}
@@ -944,7 +985,9 @@ def render_kennisbank(st, kid: str = "", q: str = "", csrf_token: str = "",
     toast = _nieuw_toast(nieuw, atoms)
 
     # LINKS: het geopende inzicht (detail, evt. geflipt) bovenaan, daaronder de inzicht-lijst.
+    # Zonder open detail neemt de suggestiekaart de bovenste plek (founder, 19 jul).
     detail = _inzicht_detail(active_ins, atoms, csrf_token, by_id, flip=flip) if active_ins else ""
+    suggestie = "" if active_ins else _suggestie_kaart(atoms, inzichten, sug, csrf_token)
     if active_iid:
         lijst_kop = ("<h2>🔗 Koppel een gerelateerd inzicht</h2>"
                      "<p class='muted kn-brugkop'>Kies hieronder een inzicht dat "
@@ -953,7 +996,7 @@ def render_kennisbank(st, kid: str = "", q: str = "", csrf_token: str = "",
                      "spelen (zie de sectie in het detail).</p>")
     else:
         lijst_kop = "<h2>Insights</h2>"
-    links = (f"<div class='kn-col-left'>{detail}"
+    links = (f"<div class='kn-col-left'>{detail}{suggestie}"
              f"{lijst_kop}{cards}</div>")
     # RECHTS: de bibliotheek met live smart-search + de koppel-brug (als er een inzicht open is).
     rechts = f"<div class='kn-col-right'>{_bibliotheek_rechts(st, atoms, q, hub, active_ins, csrf_token)}</div>"

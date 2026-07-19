@@ -266,7 +266,8 @@ from nooch_village.views.claims import render_claims, render_rapport, rol_voor
 from nooch_village.views.inwoners import render_inwoner, render_inwoners
 from nooch_village.views.kennislaag import render_kennislaag
 from nooch_village.views.kennisbank import render_kennisbank, render_kennisbank_search
-from nooch_village.views.kennisbank_spel import render_kennisbank_spel
+from nooch_village.views.kennisbank_spel import (render_kennisbank_spel,
+                                                 render_kennisbank_spel_search)
 from nooch_village.views.linkbuilding import render_linkbuilding
 from nooch_village.views.accountabilities import render_accountabilities
 from nooch_village.views.woordenschat import render_woordenschat
@@ -4484,6 +4485,10 @@ def make_handler(data_dir: str, csrf_token: str,
                     _cl = max(0, int((qs.get("cluster") or ["0"])[0]))
                 except ValueError:
                     _cl = 0
+                try:
+                    _sug = max(0, int((qs.get("sug") or ["0"])[0]))
+                except ValueError:
+                    _sug = 0
                 self._send(render_kennisbank(st, kid=(qs.get("id") or [""])[0],
                                              q=(qs.get("q") or [""])[0],
                                              csrf_token=effective_csrf,
@@ -4493,7 +4498,8 @@ def make_handler(data_dir: str, csrf_token: str,
                                              nieuw=(qs.get("nieuw") or [""])[0],
                                              hub=(qs.get("hub") or [""])[0], pag=_pag,
                                              open_=(qs.get("open") or [""])[0], cluster=_cl,
-                                             flip=(qs.get("flip") or [""])[0] in ("1", "true", "on")))
+                                             flip=(qs.get("flip") or [""])[0] in ("1", "true", "on"),
+                                             sug=_sug))
                 return
             if path == "/kennisbank/search":
                 # Live smart-search fragment (PR-2): alleen de resultatenlijst, over de verse
@@ -4523,6 +4529,15 @@ def make_handler(data_dir: str, csrf_token: str,
                                                   zoek=(qs.get("zoek") or [""])[0],
                                                   csrf_token=effective_csrf,
                                                   msg=(qs.get("msg") or [""])[0]))
+                return
+            if path == "/kennisbank/spel/search":
+                # Live zoek-fragment op de spel-pagina (Oracle-patroon, founder 19 jul):
+                # alleen de resultaten, over de verse bibliotheek en de verse hand;
+                # in-het-spel-kaarten gemarkeerd groen/rood. chrome=False: fragment.
+                self._send(render_kennisbank_spel_search(st, (qs.get("sid") or [""])[0],
+                                                         zoek=(qs.get("zoek") or [""])[0],
+                                                         csrf_token=effective_csrf),
+                           chrome=False)
                 return
             if path == "/linkbuilding":
                 # Linkbuilding-doelwitten geborgd in cockpit 2 (pitchen/negeren).

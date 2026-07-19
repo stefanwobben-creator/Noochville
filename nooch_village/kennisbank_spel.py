@@ -127,6 +127,26 @@ def gather(hunch: str, atoms: dict[str, dict], limit: int = 10,
     return [{"atom_id": aid, "stance": stances[aid]} for aid in top]
 
 
+def spel_suggesties(atoms: dict[str, dict], inzichten: list[dict],
+                    max_suggesties: int = 6) -> list[dict]:
+    """Kandidaten voor de suggestiekaart bovenaan /kennisbank (founder, 19 jul): per
+    cluster één vóórgevuld inzicht, expliciet 'not verified'. Deterministisch — bewust
+    GEEN LLM-call, dit draait op elke GET: de startformulering is de claim van de meest
+    REPRESENTATIEVE kaart in het cluster (grootste woord-overlap met de rest; tie-break
+    op atom_id). Het scherp formuleren gebeurt tóch in het spel — dit is een startpunt."""
+    uit: list[dict] = []
+    for cl in clusters(atoms, inzichten, max_clusters=max_suggesties):
+        toks = {aid: _tokens((atoms.get(aid) or {}).get("claim", ""))
+                for aid in cl["atom_ids"]}
+        # hoogste overlap met de rest wint; bij gelijkspel de laagste atom_id (stabiel)
+        beste = min(cl["atom_ids"], key=lambda aid: (
+            -sum(len(toks[aid] & toks[bid]) for bid in cl["atom_ids"] if bid != aid), aid))
+        hunch = ((atoms.get(beste) or {}).get("claim") or cl["theme"]).strip()
+        uit.append({"hunch": hunch, "atom_ids": cl["atom_ids"],
+                    "theme": cl["theme"], "hub": cl["hub"]})
+    return uit
+
+
 # ── Het spel (copy-paste: speel in je eigen AI) ─────────────────────────────
 
 def _now() -> str:
