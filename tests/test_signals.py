@@ -33,7 +33,7 @@ def test_render_signals_lists_approved(tmp_path):
                        published_at="2026-05-11T00:00:00Z")
     st.radar.set_status(rid, "goedgekeurd")
     html = render_signals(st)
-    assert "Signalen" in html and "Vivobarefoot Run Club" in html
+    assert "Signals" in html and "Vivobarefoot Run Club" in html
     assert "Competitor Watch" in html and "/signals" in html   # feed-chip + navlink
     assert "2026-05-11" in html                                # datum-badge
 

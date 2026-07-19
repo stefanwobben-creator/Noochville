@@ -13,7 +13,7 @@ from __future__ import annotations
 from nooch_village.web_base import _e, _page
 from nooch_village.cockpit2_util import _DS_LINK, _name, _nav
 
-_KIND = {"kaart": "🃏 signaal", "seed": "🌱 kiem", "doelwit": "🎯 doelwit", "concurrent": "🏁 concurrent"}
+_KIND = {"kaart": "🃏 signal", "seed": "🌱 kiem", "doelwit": "🎯 doelwit", "concurrent": "🏁 concurrent"}
 
 
 def _sig_date(s: str) -> str:
@@ -28,7 +28,7 @@ def radar_promote_ctl(it: dict, csrf: str, nxt: str) -> str:
     bibliotheek linkt. Geen csrf en niet gepromoveerd → niets."""
     if it.get("promoted_atom_id"):
         return ("<a class='chip rdr-inkb' href='/kennisbank?q=signal' "
-                "title='dit signaal is al een kenniskaartje'>→ in kennisbank</a>")
+                "title='dit signal staat al in Oracle'>→ in kennisbank</a>")
     if not csrf:
         return ""
     return (f"<form method='post' action='/action' class='cl-rep rdr-promoteform'>"
@@ -91,7 +91,7 @@ def _signal_card(st, it, csrf: str = "", nxt: str = "/signals") -> str:
     actief = bool(csrf) and not it.get("promoted_atom_id")
     if actief:
         handle = ("<span class='kn-handle' draggable='true' "
-                  "title='sleep op een ander signaal om te mergen'>⠿</span>")
+                  "title='sleep op een ander signal om te mergen'>⠿</span>")
         weg = (f"<form method='post' action='/action' class='rdr-wegform'>"
                f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
                f"<input type='hidden' name='rid' value='{_e(it.get('id', ''))}'>"
@@ -101,7 +101,7 @@ def _signal_card(st, it, csrf: str = "", nxt: str = "/signals") -> str:
     ctl = radar_promote_ctl(it, csrf, nxt)
     rid_attr = f" data-rid='{_e(it.get('id', ''))}'" if actief else ""
     extra = len(it.get("merged_sources") or [])
-    plus = (f"<span class='chip muted' title='herkomst van eerder samengevoegde signalen "
+    plus = (f"<span class='chip muted' title='herkomst van eerder samengevoegde signals "
             f"reist mee'>+{extra} bron{'nen' if extra != 1 else ''}</span>" if extra else "")
     return (f"<div class='rdr-row rdr-arch'{rid_attr}>{handle}{ctl}"
             f"{_sig_body(st, it)}{_kb_hint(st, it, csrf, nxt)}{plus}{weg}</div>")
@@ -140,7 +140,7 @@ def _kb_hint(st, it, csrf: str, nxt: str) -> str:
                 f"<input type='hidden' name='next' value='{_e(nxt)}'>"
                 f"<input type='hidden' name='rid' value='{_e(it.get('id', ''))}'>"
                 f"<input type='hidden' name='doel' value='{_e(doel)}'>"
-                f"<button class='btn' title='geen tweede kaartje: dit signaal wordt een "
+                f"<button class='btn' title='geen tweede signal in Oracle: dit signal wordt een "
                 f"extra bron onder het bestaande kaartje en is daarmee verwerkt'>"
                 f"🔗 koppel herkomst</button></form>")
     return (f"<div class='kn-mece'>≈ <span class='muted'>{label}:</span> {_e(kort)} "
@@ -157,7 +157,7 @@ def _merge_modal(csrf: str, nxt: str) -> str:
         f"<div class='kn-overlay' id='kn-overlay' hidden></div>"
         f"<div class='kn-modal' id='kn-modal' hidden role='dialog' aria-modal='true' "
         f"aria-labelledby='kn-modaltitel'>"
-        f"<h2 id='kn-modaltitel'>Signalen mergen</h2>"
+        f"<h2 id='kn-modaltitel'>Signals mergen</h2>"
         f"<p class='muted'>Kies welke tekst de hoofdtekst wordt; de bronnen van allebei "
         f"blijven bewaard en stapelen straks mee op het signal in Oracle.</p>"
         f"<form method='post' action='/action' id='kn-mergeform'>"
@@ -176,7 +176,7 @@ def _merge_modal(csrf: str, nxt: str) -> str:
         f"<textarea name='tekst' id='f-kn-mergetekst'></textarea>"
         f"<div class='kn-modalbtns'>"
         f"<button type='button' class='btn' id='kn-mergecancel'>annuleer</button>"
-        f"<button class='btn ok'>merge → één signaal</button></div></form></div>")
+        f"<button class='btn ok'>merge → één signal</button></div></form></div>")
 
 
 _MERGE_JS = """<script>(function(){
@@ -296,7 +296,7 @@ def render_signals(st, csrf_token: str = "", feed: str = "") -> str:
     wacht = ""
     if wachtend:
         wacht = (f"<div class='rdr-sub'>Wachtrij <span class='muted'>· {len(wachtend)} nieuw "
-                 f"signaal{'en' if len(wachtend) != 1 else ''}, jij bepaalt wat relevant is"
+                 f"signal{'s' if len(wachtend) != 1 else ''}, jij bepaalt wat relevant is"
                  f"</span></div>"
                  f"<div class='rdr-tool'>"
                  + "".join(_wachtrij_card(st, it, csrf_token, nxt) for it in wachtend)
@@ -305,9 +305,9 @@ def render_signals(st, csrf_token: str = "", feed: str = "") -> str:
             else "<p class='muted'>🎉 Nul — niets meer te verwerken. Wat je in de wachtrij "
                  "goedkeurt verschijnt hier.</p>")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
-            f"<h1>Signalen <span class='chip'>library</span></h1>"
+            f"<h1>Signals <span class='chip'>library</span></h1>"
             f"{_bron_knop(csrf_token)}"
-            f"<p class='muted'>Hier komt alles binnen. Sleep signalen op elkaar om te "
+            f"<p class='muted'>Hier komt alles binnen. Sleep signals op elkaar om te "
             f"mergen, stuur ze door naar Oracle of verwijder ze — werk naar nul.</p>"
             f"{chips}"
             f"{wacht}"
@@ -319,4 +319,4 @@ def render_signals(st, csrf_token: str = "", feed: str = "") -> str:
     inner = (f"{_DS_LINK}"
              f"{_nav()}"
              f"<div class='c2-wrap'>{main}</div>{_MERGE_JS if csrf_token else ''}")
-    return _page("Signalen", inner)
+    return _page("Signals", inner)
