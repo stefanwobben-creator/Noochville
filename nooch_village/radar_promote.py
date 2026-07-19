@@ -148,10 +148,13 @@ def stage_signal(st, rid: str) -> tuple[str | None, str]:
                      if (m.get("source") or m.get("link"))]
     gelezen = _atomen_uit_bron(it)
     if gelezen:
+        # Founder 19 jul: de ÉCHTE artikellink wint van een door de LLM overgetypte
+        # DOI/citatie — die kan gehallucineerd zijn en doodlopen. De atomiser-reference
+        # blijft alleen staan als het signaal zelf geen link had.
         atomen = [{"content": a.get("content"), "body": a.get("body"),
                    "subject": a.get("subject"),
                    "source": (a.get("source") or bron),
-                   "reference": (a.get("reference") or link),
+                   "reference": (link or a.get("reference")),
                    "source_date": (a.get("source_date") or datum),
                    "provenance": a.get("provenance") or _PROVENANCE,
                    "provenance_note": a.get("provenance_note"),

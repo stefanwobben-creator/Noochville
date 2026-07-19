@@ -53,6 +53,18 @@ def strip_referenties(tekst: str) -> str:
     return tekst
 
 
+def bron_reference(text: str, kbref_pad: str = "") -> str | None:
+    """De reference die álle atomen uit één bron-intake meekrijgen (founder, 19 jul): de
+    link of PDF die bij het aanmaken van de signals is GEBRUIKT. Een geplakte URL of het
+    bewaarde PDF-pad (/kbref/…) wint van een door de LLM overgetypte DOI/citatie — die kan
+    gehallucineerd zijn en doodlopen; de gebruikte bron bestaat per definitie. None: er was
+    geen link/bestand (geplakte tekst) → de atomiser-reference blijft staan."""
+    t = (text or "").strip()
+    if re.match(r"^https?://\S+$", t):
+        return t.split()[0][:200]
+    return (kbref_pad or "").strip()[:200] or None
+
+
 def van_url(url: str) -> tuple[str, str] | None:
     """Haal een pagina op en extraheer alléén de leesbare hoofdtekst (trafilatura strip't
     nav/footer/gerelateerde-links; wij strippen daarna de referentielijst). Geeft (raw, label)

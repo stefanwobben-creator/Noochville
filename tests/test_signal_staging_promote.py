@@ -197,7 +197,11 @@ def test_stage_leest_bron_en_zet_atomen_klaar(tmp_path, monkeypatch):
     assert a1["reference"] == _LINK                      # vangnet: artikel-link van het signaal
     assert a1["source_date"] == "2026-05-11"             # vangnet: publicatiedatum signaal
     assert a1["radar_rids"] == [rid] and a2["radar_rids"] == [rid]
-    assert a2["reference"] == "10.1234/doi.5"            # eigen citaat van het atoom wint
+    # Founder 19 jul (omgedraaid t.o.v. eerder): de ÉCHTE artikellink wint van een door
+    # de LLM overgetypte DOI — die kan gehallucineerd zijn en doodlopen. De atomiser-
+    # reference blijft alleen staan als het signaal zelf geen link had (a1-vangnet-case
+    # hierboven toont dat de link er sowieso komt).
+    assert a2["reference"] == _LINK
     assert a2["source_date"] == "2026-06-01"
 
 

@@ -105,6 +105,11 @@ class RadarStore(JsonStore):
     def get(self, item_id: str) -> dict | None:
         return self._data["items"].get(item_id)
 
+    def all_items(self) -> list:
+        """Alle signalen ongeacht status of rol — read-only, voor onderhoudslussen zoals
+        het bronlink-herstel (kennisbank_bronherstel)."""
+        return list(self._data["items"].values())
+
     def for_role(self, role: str) -> list:
         return [it for it in self._data["items"].values() if it["role"] == role]
 

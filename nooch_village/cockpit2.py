@@ -4852,17 +4852,9 @@ def make_handler(data_dir: str, csrf_token: str,
                         self._send(err[0], err[1]); return
                     fname, blob = files["file"]
                     nxt = fields.get("next", "/kennisbank")
-                    safe = os.path.basename(fname).replace("\\", "_")[:120]
-                    if not safe.lower().endswith(".pdf"):
-                        safe += ".pdf"
-                    stored = uuid.uuid4().hex[:8] + "_" + safe
-                    full = os.path.join(data_dir, "kbref", stored)
-                    os.makedirs(os.path.dirname(full), exist_ok=True)
-                    with open(full, "wb") as fh:
-                        fh.write(blob)
+                    kbref_pad = _save_kbref_pdf(data_dir, fname, blob)
                     _notes = _Stores(data_dir).notes
-                    ok = _notes.set_reference(fields.get("atom_id", ""),
-                                              "/kbref/" + stored)
+                    ok = _notes.set_reference(fields.get("atom_id", ""), kbref_pad)
                     # Bron-propagatie (founder dd 2026-07-18): zelfde genormaliseerde
                     # bron zonder reference → krijgt dezelfde PDF-link mee.
                     extra = _notes.propagate_reference(fields.get("atom_id", "")) if ok else 0
@@ -4908,7 +4900,8 @@ def make_handler(data_dir: str, csrf_token: str,
                     # AUTHZ: iedereen-ingelogd — kennisbank zone 2. Eén ingang: tekst OF bestand →
                     # auto-detect → adapter → atomiser → STAGING-batch (niet direct de bibliotheek;
                     # de mens kijkt na op /kennisbank/staging).
-                    from nooch_village.kennisbank_sources import detect_and_extract
+                    from nooch_village.kennisbank_sources import (bron_reference,
+                                                                  detect_and_extract)
                     from nooch_village.kennisbank_intake import atomiseer
                     username = self._session_username()
                     fname, blob = files.get("file", ("", b""))
@@ -4938,6 +4931,18 @@ def make_handler(data_dir: str, csrf_token: str,
                     if not atoms:
                         self._redirect("/kennisbank?open=bron",
                                        "✗ de atomiser gaf niets bruikbaars"); return
+                    # Founder 19 jul: de link of PDF die bij het aanmaken is GEBRUIKT wordt
+                    # de reference van alle kaartjes — een geplakte URL, of de bewaarde
+                    # bron-PDF (data/kbref/, zelfde recept als kb_atoom_ref_pdf). Die wint
+                    # van een LLM-overgetypte DOI (kan doodlopen); alleen bij geplakte
+                    # tekst blijft de atomiser-reference staan.
+                    kbref_pad = ""
+                    if blob and (fname or "").lower().endswith(".pdf"):
+                        kbref_pad = _save_kbref_pdf(data_dir, fname, blob)
+                    echte_bron = bron_reference(fields.get("bron_text", ""), kbref_pad)
+                    if echte_bron:
+                        for a in atoms:
+                            a["reference"] = echte_bron
                     bid = stores.staging.create(res["kind"], label, atoms,
                                                 tabular=res["tabular"],
                                                 by=(username if username != "guest" else ""))
@@ -5003,6 +5008,20 @@ def _match_ladder() -> str:
     """Eén werkende, lokaal beschikbare trede voor de matcher. Default Anthropic (Gemini vereist
     google-generativeai). Override via env LLM_MATCH_LADDER (bijv. 'mistral')."""
     return os.getenv("LLM_MATCH_LADDER", "anthropic")
+
+
+def _save_kbref_pdf(data_dir: str, fname: str, blob: bytes) -> str:
+    """Bewaar een bron-PDF in data/kbref/ en geef het geserveerde pad (/kbref/…) terug —
+    de ene plek voor dit opslag-recept (kb_atoom_ref_pdf én kb_bron_add gebruiken hem)."""
+    safe = os.path.basename(fname).replace("\\", "_")[:120]
+    if not safe.lower().endswith(".pdf"):
+        safe += ".pdf"
+    stored = uuid.uuid4().hex[:8] + "_" + safe
+    full = os.path.join(data_dir, "kbref", stored)
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    with open(full, "wb") as fh:
+        fh.write(blob)
+    return "/kbref/" + stored
 
 
 def _upload_max_bytes() -> int:
