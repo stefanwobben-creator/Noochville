@@ -662,7 +662,7 @@ _ROLE_TOOLS = {
     # ene Library-oppervlak.
     "librarian": [
         ("Woordenschat", "Goedgekeurde woorden, gerangschikt op kansrijkheid", "/woordenschat"),
-        ("Kennisbank", "Wat de organisatie weet — geversioneerde inzichten", "/kennisbank")],
+        ("Oracle", "Wat de organisatie weet — signals en geversioneerde inzichten", "/kennisbank")],
     "concurrent_scout": [
         ("Keywords — analyse", "Kansrijkheid + suggesties, gerangschikt", "/keywords?lens=trends")],
     "harry_hemp": [

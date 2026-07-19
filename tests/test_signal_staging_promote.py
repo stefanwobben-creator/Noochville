@@ -431,3 +431,42 @@ def test_staging_kaart_heeft_accept_knop(tmp_path):
     from nooch_village.views.kennisbank_staging import render_kennisbank_staging
     html = render_kennisbank_staging(st, bid, csrf_token="tok")
     assert "kb_stage_accept" in html and "Bewaar → Oracle" in html
+
+
+# ── /signals: bron toevoegen + project-archief wordt signal ──────────────────
+
+def test_signals_heeft_bron_toevoegen_knop(tmp_path):
+    st = cockpit2._Stores(_dd(tmp_path))
+    html = __import__("nooch_village.views.signals", fromlist=["render_signals"]) \
+        .render_signals(st, csrf_token="tok")
+    assert "Bron toevoegen" in html and "kb_bron_add" in html
+    assert "kn-vgbaan" in html                            # voortgangsbalk reist mee
+    # read-only: geen intake-formulier
+    kaal = __import__("nooch_village.views.signals", fromlist=["render_signals"]) \
+        .render_signals(st)
+    assert "kb_bron_add" not in kaal
+
+
+def test_project_archiveren_zet_done_project_als_signal(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    from nooch_village.projects import ProjectLedger
+    import os
+    pj = ProjectLedger(os.path.join(dd, "projects.json"))
+    pid = pj.create(_ROLE, "Testproject rond zolen", "human", hypothesis="h")
+    pj.complete(pid, "uitkomst: zolen getest")
+    c = SimpleNamespace(nxt="/projects", st=st, g=lambda k, _p={"pid": pid}: _p.get(k, ""),
+                        pj=pj, username="guest", data_dir=dd)
+    nxt, msg = cockpit2._act_proj_archive(c)
+    assert "signal" in msg
+    sigs = [it for it in st.radar.all_approved() if it.get("link") == f"/project?id={pid}"]
+    assert len(sigs) == 1
+    # nogmaals archiveren/heropenen → geen tweede signaal (link-dedupe)
+    nxt, msg2 = cockpit2._act_proj_archive(c)
+    assert "signal" not in msg2
+    # een NIET-done project archiveren maakt geen signaal
+    pid2 = pj.create(_ROLE, "Nog lopend", "human", hypothesis="h")
+    c2 = SimpleNamespace(nxt="/projects", st=st, g=lambda k, _p={"pid": pid2}: _p.get(k, ""),
+                         pj=pj, username="guest", data_dir=dd)
+    _, msg3 = cockpit2._act_proj_archive(c2)
+    assert "signal" not in msg3

@@ -1037,3 +1037,8 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .rdr-wegform{margin-left:auto;flex:0 0 auto}
 .rdr-weg{border:1px solid var(--border);background:var(--surface);border-radius:999px;width:1.7rem;height:1.7rem;line-height:1;cursor:pointer;color:var(--muted);font-size:.85rem}
 .rdr-weg:hover{color:var(--coral,#c0554d);border-color:var(--coral,#c0554d)}
+/* ＋ Bron toevoegen op /signals: uitklapbaar intake-paneel (hergebruik Oracle-paneel). */
+.rdr-bronvorm{display:block;margin:.2rem 0 .6rem}
+.rdr-bronvorm>summary{display:inline-block;cursor:pointer;list-style:none}
+.rdr-bronvorm>summary::-webkit-details-marker{display:none}
+.rdr-bronvorm[open]>.kn-capture{margin-top:.6rem;max-width:640px}

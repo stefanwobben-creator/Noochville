@@ -1294,6 +1294,19 @@ def _act_proj_archive(c):
         if _deny:
             return nxt, _deny
         pj.archive(g("pid")); msg = "🗄 gearchiveerd (blijft bestaan)"
+        # Archiveren is het moment waarop een project echt het bord verlaat — dán hoort het
+        # (ook) als signal op /signals te staan (founder, 19 jul). Idempotent: bestond het
+        # signaal al (done-hook of eerdere archivering), dan gebeurt er niets; is het al
+        # verwerkt naar Oracle, dan komt het niet terug (MECE — de inhoud telt al mee).
+        try:
+            from nooch_village.project_signal import signal_from_project
+            p = pj.get(g("pid"))
+            if (p is not None and p.get("status") == "done"
+                    and signal_from_project(st.radar, p)):
+                msg += " · 📡 als signal op /signals gezet"
+        except Exception:
+            logging.getLogger("cockpit2.signals").exception(
+                "project→signaal bij archiveren mislukt (pid=%s)", g("pid"))
         return nxt, msg
 
 

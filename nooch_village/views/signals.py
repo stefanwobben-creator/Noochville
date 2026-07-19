@@ -251,6 +251,19 @@ _VG_OVERLAY = (
     "})();</script>")
 
 
+def _bron_knop(csrf: str) -> str:
+    """＋ Bron toevoegen, uitklapbaar (founder, 19 jul): dezelfde intake als bij Oracle
+    (plak een link/notitie of kies een bestand → atomiser → Even nakijken), maar dan hier,
+    waar je toch al aan het verwerken bent. Hergebruik van het Oracle-paneel, inclusief de
+    voortgangsbalk."""
+    if not csrf:
+        return ""
+    from nooch_village.views.kennisbank import _bron_toevoegen
+    return (f"<details class='kn-bronvorm rdr-bronvorm'><summary class='btn ok'>"
+            f"＋ Bron toevoegen</summary>"
+            f"<div class='card kn-capture'>{_bron_toevoegen(csrf)}</div></details>")
+
+
 def render_signals(st, csrf_token: str = "", feed: str = "") -> str:
     """De /signals-pagina: centrale wachtrij bovenaan, dan de goedgekeurde signalen
     (nieuwste eerst), optioneel gefilterd op feed."""
@@ -293,6 +306,7 @@ def render_signals(st, csrf_token: str = "", feed: str = "") -> str:
                  "goedkeurt verschijnt hier.</p>")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
             f"<h1>Signalen <span class='chip'>library</span></h1>"
+            f"{_bron_knop(csrf_token)}"
             f"<p class='muted'>Hier komt alles binnen. Sleep signalen op elkaar om te "
             f"mergen, stuur ze door naar Oracle of verwijder ze — werk naar nul.</p>"
             f"{chips}"
