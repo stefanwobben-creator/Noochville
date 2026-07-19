@@ -147,15 +147,18 @@ def test_twee_keer_promoveren_geen_duplicaat(tmp_path):
 # ── de actie (POST /action, radar_promote) ───────────────────────────────────
 
 def test_dispatch_radar_promote(tmp_path):
+    # Sinds de staging-tussenstap stuurt de actie door naar "Even nakijken"; het kaartje
+    # ontstaat pas bij commit van die set (zie test_signal_staging_promote.py).
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     rid = _approved(st)
     nxt, msg = cockpit2.dispatch(dd, "radar_promote",
                                  {"rid": [rid], "next": ["/signals"]}, username="guest")
-    assert nxt == "/signals" and "kenniskaartje" in msg
+    assert nxt.startswith("/kennisbank/staging?batch=") and "Even nakijken" in msg
     st2 = cockpit2._Stores(dd)
-    assert st2.radar.get(rid)["promoted_atom_id"]
-    assert st2.notes.get(st2.radar.get(rid)["promoted_atom_id"]).claim == _CONTENT
+    assert not st2.radar.get(rid).get("promoted_atom_id")          # nog niet: mens kijkt eerst na
+    bid = nxt.split("batch=")[1]
+    assert any(a.get("radar_rids") == [rid] for a in st2.staging.get(bid)["atoms"])
 
 
 def test_dispatch_failsoft_onbekend_en_niet_goedgekeurd(tmp_path):

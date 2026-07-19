@@ -1877,8 +1877,12 @@ def _act_radar_dismiss(c):
 
 
 def _act_radar_promote(c):
-        """Goedgekeurd radar-signaal → kenniskaartje (atoom in laag 1). Zelfde poort als de
-        andere radar-curatie: de rolvervuller of Circle Lead van de rol van het signaal."""
+        """Goedgekeurd radar-signaal → kenniskaartje, MET tussenstap: het signaal wordt
+        klaargezet bij "Even nakijken" (staging), waar de mens het kan bewerken, met andere
+        signalen samenvoegen of weggooien; pas bij commit ontstaat het kaartje. Zelfde poort
+        als de andere radar-curatie: de rolvervuller of Circle Lead van de rol van het
+        signaal. (De radar_auto_promote-vlag blijft de directe route — die is een bewuste
+        opt-out van deze review.)"""
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
         it = st.radar.get(g("rid"))
         if it is None:
@@ -1886,7 +1890,9 @@ def _act_radar_promote(c):
         _deny = _role_gate(it["role"], username, st)
         if _deny:
             return nxt, _deny
-        _aid, msg = radar_promote.promote_signal(st, g("rid"))
+        bid, msg = radar_promote.stage_signal(st, g("rid"))
+        if bid:
+            return f"/kennisbank/staging?batch={bid}", msg
         return nxt, msg
 
 
@@ -3612,15 +3618,21 @@ def _act_kb_stage_merge(c):
 def _act_kb_stage_commit(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Pas hier landen de
     # nagekeken atomen append-only in de bibliotheek (idempotent op hash content+bron).
-    res = commit_batch(c.st.staging, c.g("bid"), c.data_dir)
+    res = commit_batch(c.st.staging, c.g("bid"), c.data_dir, radar=c.st.radar)
     if res is None:
         return c.nxt, "✗ deze set bestaat niet meer"
-    nieuw, dubbel = res
-    if not nieuw:
+    nieuw, dubbel, gekoppeld = res
+    if not nieuw and not gekoppeld:
         return "/kennisbank", (f"Al bekend: {dubbel} notitie(s) stonden er al" if dubbel
                                else "Niets toegevoegd — de set was leeg")
-    extra = f" ({dubbel} al bekend)" if dubbel else ""
-    return "/kennisbank", f"✅ {nieuw} notities toegevoegd aan de bibliotheek{extra}"
+    delen = []
+    if nieuw:
+        delen.append(f"✅ {nieuw} notities toegevoegd aan de bibliotheek")
+    if gekoppeld:
+        delen.append(f"🔗 {gekoppeld} signaal/signalen samengevoegd met een bestaand kaartje")
+    if dubbel:
+        delen.append(f"{dubbel} al bekend")
+    return "/kennisbank", " · ".join(delen)
 
 
 def _act_kb_stage_discard(c):

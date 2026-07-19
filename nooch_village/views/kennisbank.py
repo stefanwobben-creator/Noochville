@@ -320,7 +320,20 @@ def _bron_toevoegen(csrf: str) -> str:
         + f"</div>"
         f"<button class='btn ok'>Verwerk de bron</button>"
         f"<p class='muted kn-bronhint'>We herkennen het type zelf; daarna kijk je de "
-        f"voorstellen na vóór ze de bibliotheek in gaan.</p></form>")
+        f"voorstellen na vóór ze de bibliotheek in gaan.</p></form>"
+        # Voortgangsscherm: verschijnt bij submit (JS haalt [hidden] weg). De balk is pure
+        # CSS-animatie met een ease-in-curve — traag op gang, steeds sneller richting het
+        # einde (goal-gradient: versnellende voortgang voelt als vooruitgang). De echte
+        # redirect van de server onderbreekt hem vanzelf; hij is voortgangsgevoel, geen meting.
+        f"<div class='kn-overlay' id='kn-bronbezig' hidden>"
+        f"<div class='kn-modal kn-vgmodal'><h2>\U0001f331 De bron wordt verwerkt</h2>"
+        f"<div class='kn-vgbaan'><div class='kn-vgbalk'></div></div>"
+        f"<p class='muted'>Lezen, in kaartjes knippen, herkomst eraan… daarna kijk jij "
+        f"ze na.</p></div></div>"
+        f"<script>(function(){{var f=document.querySelector('.kn-bronform');"
+        f"var o=document.getElementById('kn-bronbezig');if(!f||!o)return;"
+        f"f.addEventListener('submit',function(){{o.removeAttribute('hidden');}});}})();"
+        f"</script>")
 
 
 def _speel_toevoegen(st, atoms: dict, inzichten: list, hunch: str, speel: str,

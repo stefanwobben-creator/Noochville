@@ -1007,3 +1007,12 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .bar-w0{width:0}.bar-w1{width:10%}.bar-w2{width:20%}.bar-w3{width:30%}.bar-w4{width:40%}
 .bar-w5{width:50%}.bar-w6{width:60%}.bar-w7{width:70%}.bar-w8{width:80%}.bar-w9{width:90%}
 .bar-w10{width:100%}
+/* Voortgangsbalk bron-intake (kn-vg*): pure CSS-animatie, géén meting. De cubic-bezier is
+   bewust een harde ease-in — de balk komt traag op gang en versnelt daarna steeds verder
+   (goal-gradient-effect: versnellende voortgang voelt als winst). Hij parkeert op 96% en
+   pulseert daar zachtjes tot de server klaar is en de redirect de pagina overneemt. */
+.kn-vgmodal{text-align:center}
+.kn-vgbaan{height:12px;border:1px solid var(--border);border-radius:999px;background:var(--green-tint);overflow:hidden;margin:.7rem 0 .5rem}
+.kn-vgbalk{height:100%;width:0;background:var(--green);border-radius:999px;animation:kn-vgvullen 16s cubic-bezier(.85,.05,.9,.35) forwards,kn-vgpuls 1.6s ease-in-out 16s infinite}
+@keyframes kn-vgvullen{from{width:0}to{width:96%}}
+@keyframes kn-vgpuls{0%,100%{opacity:1}50%{opacity:.55}}

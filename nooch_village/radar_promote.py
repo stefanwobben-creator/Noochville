@@ -75,10 +75,8 @@ def find_duplicate(notes, content: str, source: str, link: str) -> str | None:
     return None
 
 
-def promote_signal(st, rid: str) -> tuple[str | None, str]:
-    """Promoveer één goedgekeurd radar-signaal tot kenniskaartje. Geeft (atom_id, banner)
-    terug; atom_id is None als er niets gebeurde (de banner zegt waarom). Schrijft
-    uitsluitend via de store-methodes; het radar-item krijgt de promoted_atom_id-marker."""
+def _signaal_guards(st, rid: str) -> tuple[dict | None, str]:
+    """Gedeelde vangnetten voor promoveren én klaarzetten: geeft (item, "") of (None, reden)."""
     it = st.radar.get(rid)
     if it is None:
         return None, "✗ onbekend radar-signaal"
@@ -86,9 +84,50 @@ def promote_signal(st, rid: str) -> tuple[str | None, str]:
         return None, "Al gepromoveerd — dit signaal staat al in de kennisbank"
     if it.get("status") != "goedgekeurd":
         return None, "✗ alleen goedgekeurde signalen kunnen naar de kennisbank"
-    content = (it.get("content") or "").strip()
-    if not content:
+    if not (it.get("content") or "").strip():
         return None, "✗ leeg signaal — niets om te promoveren"
+    return it, ""
+
+
+def stage_signal(st, rid: str) -> tuple[str | None, str]:
+    """Zet een goedgekeurd radar-signaal klaar bij "Even nakijken" (staging) in plaats van
+    direct een kaartje te maken: de mens kan het daar bewerken, met andere signalen
+    samenvoegen of alsnog weggooien; pas bij commit ontstaat het kaartje (via hetzelfde
+    dedupe/marker-pad als de directe promotie — zie kennisbank_staging._commit_signaal_atoom).
+
+    Meerdere signalen landen in DEZELFDE open signalen-batch, zodat ze daar samen te mergen
+    zijn. Idempotent: een signaal dat al klaarstaat wordt niet nogmaals toegevoegd.
+    Geeft (batch_id, banner); batch_id None als er niets gebeurde (de banner zegt waarom)."""
+    it, reden = _signaal_guards(st, rid)
+    if it is None:
+        return None, reden
+    # Staat dit signaal al klaar? (dubbelklik / tweede bezoek) — wijs naar die batch.
+    for b in st.staging.open_batches():
+        for a in b.get("atoms", []):
+            if rid in (a.get("radar_rids") or []):
+                return b["id"], "Dit signaal staat al klaar bij Even nakijken"
+    atoom = {"content": (it.get("content") or "").strip(),
+             "source": ((it.get("source") or "").strip()
+                        or (it.get("feed") or "").strip() or "radar"),
+             "reference": ((it.get("link") or "").strip() or None),
+             "source_date": (parse_source_date(it.get("published_at", "")) or None),
+             "provenance": _PROVENANCE,
+             "radar_rids": [rid]}
+    for b in st.staging.open_batches():
+        if b.get("kind") == "signaal" and st.staging.append_atom(b["id"], atoom):
+            return b["id"], "🔎 signaal toegevoegd aan Even nakijken — bewerk, voeg samen of bevestig"
+    bid = st.staging.create("signaal", "signalen", [atoom])
+    return bid, "🔎 signaal staat klaar bij Even nakijken — bewerk, voeg samen of bevestig"
+
+
+def promote_signal(st, rid: str) -> tuple[str | None, str]:
+    """Promoveer één goedgekeurd radar-signaal tot kenniskaartje. Geeft (atom_id, banner)
+    terug; atom_id is None als er niets gebeurde (de banner zegt waarom). Schrijft
+    uitsluitend via de store-methodes; het radar-item krijgt de promoted_atom_id-marker."""
+    it, reden = _signaal_guards(st, rid)
+    if it is None:
+        return None, reden
+    content = (it.get("content") or "").strip()
     source = ((it.get("source") or "").strip() or (it.get("feed") or "").strip() or "radar")
     link = (it.get("link") or "").strip()
 

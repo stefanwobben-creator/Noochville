@@ -85,7 +85,7 @@ def test_rapport_naar_staging_met_herkomst(tmp_path):
 def test_commit_zet_herkomst_door_naar_bibliotheek(tmp_path):
     dd, led, pid = _done_project(tmp_path)
     res = report_to_staging(dd, led.get(pid), reason_fn=_fake_reason)
-    assert commit_batch(_staging(dd), res["batch"], dd) == (2, 0)
+    assert commit_batch(_staging(dd), res["batch"], dd) == (2, 0, 0)
     kaarten = NotesStore(f"{dd}/notes.json").all()
     assert len(kaarten) == 2
     for k in kaarten:

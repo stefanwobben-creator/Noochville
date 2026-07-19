@@ -97,7 +97,7 @@ def test_staging_bewerken_samenvoegen_weggooien_committen(tmp_path):
     assert "Feit A" in atoms[0]["body"] and "Feit B" in atoms[0]["body"]
 
     # commit → append-only in de bibliotheek, batch opgeruimd
-    nieuw, dubbel = commit_batch(store, bid, dd)
+    nieuw, dubbel, _gek = commit_batch(store, bid, dd)
     assert nieuw == 1 and dubbel == 0
     assert store.get(bid) is None
     bib = load_atoms(dd)
@@ -114,7 +114,7 @@ def test_commit_idempotent(tmp_path):
     commit_batch(store, b1, dd)
     # dezelfde content+bron nog eens door staging → commit voegt niets dubbels toe
     b2 = store.create("tekst", "Bron Y", _ATOMS[:2], by="t")
-    nieuw, dubbel = commit_batch(store, b2, dd)
+    nieuw, dubbel, _gek = commit_batch(store, b2, dd)
     assert nieuw == 0 and dubbel == 2
 
 
