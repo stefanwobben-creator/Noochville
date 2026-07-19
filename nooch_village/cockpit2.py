@@ -2914,6 +2914,48 @@ def _act_notif_outcome(c):
         return nxt, f"✓ {label} vastgelegd — nog een uitkomst, of klik Klaar."
 
 
+def _act_notif_besluit(c):
+        # Beslis direct (founder, 19 jul): ja / nee / suggestie op een spanning uit de inbox.
+        # Het antwoord landt als menselijke reactie op de bron-feed (@rol; comment+human zet
+        # worked=False, dus de bewoner pakt het zelf weer op) plus een notificatie aan de
+        # eigenaar-rol, en de spanning sluit — beslissen ís verwerken. Zo leert het dorp
+        # spanningen zelf oplossen in plaats van dat de mens het werk overneemt.
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        nid = g("nid")
+        n = st.notif._find(nid)
+        if n is None:
+            return nxt, "✗ spanning niet gevonden"
+        keuze = g("besluit")
+        if keuze not in ("ja", "nee", "suggestie"):
+            return nxt, "✗ onbekend besluit"
+        toel = (g("toelichting") or "").strip()
+        if keuze == "suggestie" and not toel:
+            return nxt, "✗ een suggestie zonder inhoud helpt de bewoner niet — vul de tekst in"
+        src_pid = n.get("project_id") or ""
+        p = pj.get(src_pid) if src_pid else None
+        if p is None:
+            return nxt, "✗ deze spanning heeft geen bron-project om op te antwoorden — gebruik een ping"
+        owner = p.get("owner") or ""
+        orec = st.records.get(owner)
+        rolnaam = _name(orec) if orec else (owner or "rol")
+        actor = st.people.by_email(username) if username and username != "guest" else None
+        aid = actor.id if actor else ""
+        by_name = (_person_name(st, aid) if aid else (username or "The Source"))
+        kop = {"ja": "✓ JA", "nee": "✗ NEE", "suggestie": "💬 SUGGESTIE"}[keuze]
+        tekst = (f"@{rolnaam} Besluit van The Source op je spanning: {kop}"
+                 + (f" — {toel}" if toel else ""))
+        entry = pj.add_feed_entry(src_pid, tekst[:1500], kind="comment",
+                                  author_type="human", author_id=aid)
+        st.notif.add("role", owner, src_pid, (entry or {}).get("id", ""), by=by_name,
+                     snippet=(f"{kop} op '{(n.get('snippet') or '')[:70]}'"
+                              + (f" — {toel[:60]}" if toel else "")))
+        st.notif.add_outcome(nid, intent="besluit", otype=f"besluit_{keuze}",
+                             label=(f"besluit: {kop}" + (f" — {toel[:60]}" if toel else "")),
+                             by=by_name)
+        st.notif.mark_item_processed(nid, outcome=f"besluit_{keuze}", by=by_name)
+        return nxt, f"✓ {kop} — je antwoord staat bij de bewoner, spanning gesloten"
+
+
 def _act_notif_archive(c):
         ok = c.st.notif.archive_item(c.g("nid"))
         return c.nxt, ("🗄 gearchiveerd" if ok else "⛔ alleen verwerkte items kunnen worden gearchiveerd")
@@ -4150,6 +4192,7 @@ ACTIONS = {
     "notif_read": _act_notif_read,
     "notif_processed": _act_notif_processed,
     "notif_outcome": _act_notif_outcome,
+    "notif_besluit": _act_notif_besluit,
     "notif_klaar": _act_notif_klaar,
     "notif_delete": _act_notif_delete,
     "notif_add": _act_notif_add,

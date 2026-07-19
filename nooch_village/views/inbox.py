@@ -108,6 +108,21 @@ def _spanning_pane(st, n: dict) -> str:
     meta = (f"<div class='rdr-meta'><span class='muted'>via {_e(_who(st, n))}</span> {sep} "
             f"{_source_link(st, n)} {sep} <span class='muted'>{_e(_stamp(n.get('at')))}</span></div>")
     body = _e(n.get("snippet") or "(geen inhoud)").replace("\n", "<br>")
+    # De volledige vraag van de bewoner (founder, 19 jul): de snippet is maar 160 tekens,
+    # het échte voorstel staat in de bron-feed-entry waar de notificatie naar wijst.
+    # Zonder die tekst kan de mens niet beslissen ("er staat 2 besluiten maar niet welke").
+    volledig = ""
+    src_pid, src_eid = n.get("project_id") or "", n.get("entry_id") or ""
+    if src_pid and src_eid:
+        try:
+            p = st.projects.get(src_pid)
+            e = next((x for x in ((p or {}).get("log") or []) if x.get("id") == src_eid), None)
+            tekst = (e or {}).get("text") or ""
+            if tekst and tekst.strip() != (n.get("snippet") or "").strip():
+                volledig = (f"<div class='box rdr-rec'><strong>De volledige vraag</strong>"
+                            f"<div class='fbubble'>{_e(tekst).replace(chr(10), '<br>')}</div></div>")
+        except Exception:
+            volledig = ""                       # fail-soft: geen bron = gewoon de snippet
     vs = st.notif.verwerkingen_of(n)
     record = ""
     if vs:
@@ -116,7 +131,7 @@ def _spanning_pane(st, n: dict) -> str:
         record = (f"<div class='box rdr-rec'><strong>Al vastgelegd "
                   f"({len(vs)})</strong><ul>{rows}</ul></div>")
     return (f"<div class='rdr-pane'><h3>Spanning</h3>{meta}"
-            f"<div class='fbubble rdr-rec'>{body}</div>{record}</div>")
+            f"<div class='fbubble rdr-rec'>{body}</div>{volledig}{record}</div>")
 
 
 def _outcome_form(otype: str, nid: str, csrf: str, prefill: str, role_opts: str, pj_opts: str,
@@ -179,7 +194,33 @@ def _wizard_pane(n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
              f"<input type='hidden' name='nid' value='{_e(nid)}'>"
              f"<input type='hidden' name='next' value='/inbox'>"
              f"<button class='btn ok sm' name='action' value='notif_klaar'>Klaar met deze spanning</button></form>")
-    return (f"<div class='rdr-pane'><h3>Wat heb je nodig?</h3>{''.join(groups)}{klaar}</div>")
+    # Beslis direct (founder, 19 jul): op een vraag van een bewoner wil de mens gewoon ja,
+    # nee of een suggestie kunnen zeggen — het antwoord landt als reactie op de bron-feed
+    # (@rol, de bewoner pakt het zelf op) en de spanning sluit. Alleen als er een
+    # bron-project is; de triage-intenties hieronder blijven voor al het andere.
+    besluit = ""
+    if n.get("project_id"):
+        def _bf(keuze: str, label: str, cls: str, hint: str, verplicht: bool) -> str:
+            req = " required" if verplicht else ""
+            return (f"<details class='wo-ocd box-details'><summary><strong>{label}</strong></summary>"
+                    f"<form method='post' action='/action' class='wo-oc'>"
+                    f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+                    f"<input type='hidden' name='nid' value='{_e(nid)}'>"
+                    f"<input type='hidden' name='besluit' value='{keuze}'>"
+                    f"<input type='hidden' name='next' value='/inbox'>"
+                    f"<textarea name='toelichting' rows='2' placeholder='{_e(hint)}' "
+                    f"aria-label='toelichting'{req}></textarea>"
+                    f"<button class='btn {cls}sm' name='action' value='notif_besluit'>{label}</button>"
+                    f"</form></details>")
+        besluit = (f"<details class='box-details' open><summary><strong>Beslis direct</strong>"
+                   f"</summary><p class='muted'>Je antwoord landt als reactie bij de bewoner, "
+                   f"die er zelf mee verder kan — zo leert het dorp spanningen oplossen. "
+                   f"De spanning sluit meteen.</p>"
+                   + _bf("ja", "✓ Ja", "ok ", "optioneel: toelichting bij je ja", False)
+                   + _bf("nee", "✗ Nee", "", "optioneel: waarom niet — daar leert de bewoner van", False)
+                   + _bf("suggestie", "💬 Suggestie", "", "jouw suggestie of tegenvraag", True)
+                   + "</details>")
+    return (f"<div class='rdr-pane'><h3>Wat heb je nodig?</h3>{besluit}{''.join(groups)}{klaar}</div>")
 
 
 def render_verwerk(st, n: dict, csrf_token: str = "", role_opts: str = "", pj_opts: str = "") -> str:
