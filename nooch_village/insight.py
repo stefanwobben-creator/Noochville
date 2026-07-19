@@ -66,6 +66,10 @@ class Insight(BaseModel):
     # internal_data | survey | expert_opinion | media | advocacy | internal_judgment | unknown).
     # Optioneel: oudere kaartjes vallen terug op evidence_type (zie kennisbank.atom_trust).
     provenance: str | None = None
+    # Korte LLM-verantwoording van de provenance-keuze (founder, 19 jul): survey → intern/
+    # extern + N=, expert_opinion → waarom geloofwaardig, peer_reviewed → journal/DOI.
+    # Alleen gevuld als de brontekst er iets over zei; nooit gegokt. Additief, fail-soft.
+    provenance_note: str | None = None
     # Woozle-guard: expliciete onafhankelijkheidsgroep. Leeg = afgeleid uit de genormaliseerde
     # bron; alleen zetten als kaarten stiekem dezelfde onderliggende bron delen.
     independence_group: str | None = None

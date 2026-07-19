@@ -1027,3 +1027,5 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .kn-stage:hover .kn-handle{opacity:1}
 .kn-stage.dragover{outline:2px dashed var(--green);outline-offset:-2px;background:var(--green-tint)}
 .kn-stage.dragging{opacity:.4}
+/* Provenance-chip + LLM-verantwoording in de staging-review (pulldowns zijn vervangen). */
+.kn-provchip{display:inline-flex;gap:.4rem;align-items:baseline;font-size:.85rem;min-width:0}

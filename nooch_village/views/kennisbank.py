@@ -542,7 +542,11 @@ def _stmt(aid: str, a: dict, atoms: dict, csrf: str, nxt: str, active_iid: str,
             f"<div class='kn-stmtdetail'><dl class='kn-dl'>"
             f"<dt>Datum</dt><dd>{_stmt_datum(a)}</dd>"
             f"<dt>Bron</dt><dd>{_stmt_bron(aid, a, csrf, nxt)}</dd>"
-            f"<dt>Versie</dt><dd>v{versie}{vchips}</dd>"
+            + (f"<dt>Herkomst</dt><dd><span class='chip muted'>"
+               f"{_e(a.get('provenance') or '')}</span> "
+               f"{_e(a.get('provenance_note') or '')}</dd>"
+               if (a.get("provenance_note") or "").strip() else "")
+            + f"<dt>Versie</dt><dd>v{versie}{vchips}</dd>"
             f"<dt>Gekoppeld</dt><dd>{_stmt_koppels(a, atoms)}</dd>"
             f"<dt>Tags</dt><dd>{tags}</dd>"
             f"</dl>{body}{bewerk}{brug}</div></details></div>")

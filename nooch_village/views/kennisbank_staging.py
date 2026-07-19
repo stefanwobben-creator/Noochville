@@ -8,10 +8,6 @@ from __future__ import annotations
 
 from nooch_village.web_base import _e, _page, _banner, _field
 from nooch_village.cockpit2_util import _DS_LINK, _nav
-from nooch_village.kennisbank_intake import SUBJECTS
-
-_PROV = ("peer_reviewed", "certificate", "internal_data", "survey", "expert_opinion",
-         "media", "advocacy", "internal_judgment", "unknown")
 
 
 def _hid(csrf: str, action: str, nxt: str, extra: dict | None = None) -> str:
@@ -47,14 +43,11 @@ def _mece_hint(st, b: dict, a: dict, csrf: str, nxt: str) -> str:
 
 
 def _atoom_kaartje(st, b: dict, a: dict, csrf: str, nxt: str) -> str:
-    """Eén voorgesteld atoom: bewerkbaar (content/onderwerp/provenance) + aanvinken + weggooien."""
+    """Eén voorgesteld atoom: bewerkbare tekst + weggooien. Onderwerp en provenance kiest
+    de mens hier niet meer (founder, 19 jul): de LLM classificeert de provenance en levert
+    de verantwoording erbij (survey: intern/extern + N=; expert: waarom geloofwaardig);
+    het onderwerp lossen we later op met slimme tags. De chip toont wat de LLM koos."""
     sid = a["sid"]
-    subj_opts = "<option value=''>— geen onderwerp —</option>" + "".join(
-        f"<option value='{_e(s)}'{' selected' if a.get('subject') == s else ''}>{_e(s)}</option>"
-        for s in SUBJECTS)
-    prov_opts = "".join(
-        f"<option value='{_e(p)}'{' selected' if a.get('provenance') == p else ''}>{_e(p)}</option>"
-        for p in _PROV)
     body = (f"<details class='kn-nctrl'><summary>samengestelde inhoud</summary>"
             f"<div class='kn-ann'>{_e(a['body']).replace(chr(10), '<br>')}</div></details>"
             if (a.get("body") or "").strip() else "")
@@ -65,6 +58,11 @@ def _atoom_kaartje(st, b: dict, a: dict, csrf: str, nxt: str) -> str:
     ref_html = (f" · <a href='{_e(ref)}'>{_e(ref)}</a>" if ref.startswith("/")
                 else (f" · {_e(ref)}" if ref else ""))
     bron = "bron: " + _e(a['source']) + ref_html
+    prov = (a.get("provenance") or "unknown").strip()
+    note = (a.get("provenance_note") or "").strip()
+    herkomst = (f"<span class='kn-provchip'><span class='chip muted'>{_e(prov)}</span>"
+                + (f" <span class='muted'>{_e(note)}</span>" if note else "")
+                + "</span>")
     # Verticale stapel-kaart op volle breedte (fix-brief bug 1): een grid met een
     # middenkolom minmax(0,1fr) zodat lange onbreekbare strings (URL-slugs) de kaart nooit
     # naar ~0 breedte kunnen persen. ⠿-handle links (drag&drop-merge, zelfde interactie als
@@ -79,8 +77,7 @@ def _atoom_kaartje(st, b: dict, a: dict, csrf: str, nxt: str) -> str:
         f"{_hid(csrf, 'kb_stage_edit', nxt, {'bid': b['id'], 'sid': sid})}"
         f"<textarea name='content' rows='2'>{_e(a['content'])}</textarea>{body}"
         f"<span class='kn-stage-src'>{bron}</span>"
-        f"<div class='kn-stage-ctrls'><select name='subject'>{subj_opts}</select>"
-        f"<select name='provenance'>{prov_opts}</select>"
+        f"<div class='kn-stage-ctrls'>{herkomst}"
         f"<button class='btn'>Bewaar</button></div></form>"
         f"<form method='post' action='/action' class='kn-stage-del'>"
         f"{_hid(csrf, 'kb_stage_delete', nxt, {'bid': b['id'], 'sid': sid})}"

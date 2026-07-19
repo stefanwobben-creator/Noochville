@@ -45,6 +45,7 @@ class StagingStore(JsonStore):
                 "body": a.get("body"),
                 "subject": a.get("subject") if a.get("subject") in SUBJECTS else "",
                 "provenance": a.get("provenance") or "unknown",
+                "provenance_note": (a.get("provenance_note") or "").strip() or None,
                 "source": (a.get("source") or source_label or "onbekend").strip(),
                 "reference": a.get("reference"),
                 "source_date": a.get("source_date"),
@@ -128,6 +129,11 @@ class StagingStore(JsonStore):
         from nooch_village.kennisbank import PROVENANCE_TRUST
         provs = [d["provenance"] for d in delen if d["provenance"] in PROVENANCE_TRUST]
         prov = max(provs, key=lambda p: PROVENANCE_TRUST[p]) if provs else "unknown"
+        # De verantwoording reist mee met de gekozen provenance (anders de eerste die er is).
+        note = (next((d.get("provenance_note") for d in delen
+                      if d["provenance"] == prov and d.get("provenance_note")), None)
+                or next((d.get("provenance_note") for d in delen
+                         if d.get("provenance_note")), None))
         rids: list[str] = []
         for d in delen:
             for r in d.get("radar_rids") or []:
@@ -135,7 +141,8 @@ class StagingStore(JsonStore):
                     rids.append(r)
         samengesteld = {"sid": "m" + uuid.uuid4().hex[:4], "content": kop.strip(),
                         "body": "\n".join(regels)[:4000], "subject": delen[0]["subject"],
-                        "provenance": prov, "source": delen[0]["source"],
+                        "provenance": prov, "provenance_note": note,
+                        "source": delen[0]["source"],
                         "reference": next((d["reference"] for d in delen if d.get("reference")), None),
                         "radar_rids": rids,
                         "flags": []}
@@ -203,7 +210,8 @@ def _commit_signaal_atoom(a: dict, notes, radar) -> tuple[bool, bool]:
                     source=source[:160], reference=(link[:200] or None),
                     source_date=a.get("source_date"),
                     tags=tags, evidence_type="reported",
-                    provenance=a.get("provenance") or "media", version=1)
+                    provenance=a.get("provenance") or "media",
+                    provenance_note=a.get("provenance_note"), version=1)
     try:
         notes.add(kaart)
     except ValueError:
@@ -237,6 +245,7 @@ def commit_batch(store: StagingStore, bid: str, data_dir: str,
             continue
         kaart = atoom_kaart({"content": a["content"], "body": a.get("body"),
                              "subject": a["subject"], "provenance": a["provenance"],
+                             "provenance_note": a.get("provenance_note"),
                              "source": a["source"], "reference": a.get("reference"),
                              "source_date": a.get("source_date"),
                              "flags": a.get("flags") or [], "link_hints": []})

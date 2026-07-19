@@ -3642,8 +3642,13 @@ def _act_kb_intake_url(c):
 
 def _act_kb_stage_edit(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Staging bewerken vóór commit.
+    # Onderwerp/provenance staan niet meer in het formulier (LLM classificeert; slimme
+    # tags volgen later) — alleen doorgeven als ze wél zijn meegestuurd, anders zou een
+    # gewone tekst-bewaar het LLM-onderwerp stilletjes wissen.
+    subject = (c.form.get("subject") or [None])[0]
+    provenance = (c.form.get("provenance") or [None])[0]
     ok = c.st.staging.edit_atom(c.g("bid"), c.g("sid"), content=c.g("content"),
-                                subject=c.g("subject"), provenance=c.g("provenance"))
+                                subject=subject, provenance=provenance)
     return c.nxt, ("✏️ bijgewerkt" if ok else "✗ niet gevonden")
 
 

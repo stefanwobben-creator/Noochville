@@ -150,6 +150,7 @@ def stage_signal(st, rid: str) -> tuple[str | None, str]:
                    "reference": (a.get("reference") or link),
                    "source_date": (a.get("source_date") or datum),
                    "provenance": a.get("provenance") or _PROVENANCE,
+                   "provenance_note": a.get("provenance_note"),
                    "flags": a.get("flags") or [],
                    "van_bron": True,
                    "radar_rids": [rid]}

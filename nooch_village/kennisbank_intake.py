@@ -105,13 +105,20 @@ def build_intake_prompt(raw: str, source_hint: str = "", tabular: bool = False) 
         "- Een GEMETEN getal is een meting, geen vage claim: neem het getal mét methode en\n"
         "  conditie op in de notitie waar de tekst die geeft (bijv. \"15,6% afbraak in 236\n"
         "  dagen onder industriële compostering\"), en rond niet af.\n"
-        "- Geef per atom een of meer LINK-hints: met welke bestaande onderwerpen/atomen hoort dit samen.\n\n"
+        "- Geef per atom een of meer LINK-hints: met welke bestaande onderwerpen/atomen hoort dit samen.\n"
+        "- Geef bij de gekozen provenance een korte VERANTWOORDING in \"herkomst\" (≤1 zin,\n"
+        "  alleen als de tekst er iets over zegt — nooit gokken, anders leeg):\n"
+        "  survey → interne of externe bron en de steekproef (bijv. \"extern, N=1.200\");\n"
+        "  expert_opinion → waarom deze persoon geloofwaardig is (functie, publicaties, boeken);\n"
+        "  peer_reviewed → journal/DOI; certificate → welke standaard/certificeerder;\n"
+        "  internal_data → welk systeem of welke meting.\n\n"
         "PROVENANCE-lijst: peer_reviewed | certificate | internal_data | survey | media |\n"
         "  advocacy | expert_opinion | internal_judgment | unknown\n"
         f"ONDERWERP-lijst: {', '.join(SUBJECTS)}\n\n"
         "OUTPUT: ALLEEN een JSON-array, geen proza, geen code-fences. Elk object:\n"
         '[ { "content": "...", "body": "<alleen bij een samengestelde notitie: de stappen/regels>",\n'
         '    "subject": "<uit lijst of leeg>", "provenance": "<uit lijst>",\n'
+        '    "herkomst": "<korte verantwoording van de provenance-keuze, of leeg>",\n'
         '    "source": "<kort>", "reference": "<DOI/ISBN/URL of leeg>",\n'
         '    "flags": ["verificatie_vereist"?, "quote"?], "link_hints": ["..."] } ]')
 
@@ -151,6 +158,7 @@ def parse_intake(text: str | None) -> list[dict]:
                     "body": str(r.get("body") or "").strip()[:2500] or None,
                     "subject": subject,
                     "provenance": prov,
+                    "provenance_note": str(r.get("herkomst") or "").strip()[:200] or None,
                     "source": str(r.get("source") or "").strip()[:160],
                     "reference": _schoon_reference(str(r.get("reference") or "")),
                     "flags": flags,
@@ -200,6 +208,7 @@ def atoom_kaart(a: dict) -> Insight:
                    reference=a.get("reference"),
                    source_date=a.get("source_date"),      # rapport-lus: afronddatum; anders None
                    provenance=a["provenance"],
+                   provenance_note=a.get("provenance_note"),
                    tags=tags,
                    atomiser_version=ATOMISER_VERSION)
 

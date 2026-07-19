@@ -283,3 +283,63 @@ def test_staging_heeft_sleep_merge_interactie(tmp_path):
     # read-only (geen csrf): geen handle, geen modal
     kaal = render_kennisbank_staging(st, bid)
     assert "kn-handle" not in kaal and "kn-modal" not in kaal
+
+
+# ── herkomst-verantwoording: LLM classificeert, mens kiest niet meer ─────────
+
+def test_parse_intake_herkomst_veld():
+    from nooch_village.kennisbank_intake import parse_intake
+    rows = ('[{"content": "Externe survey toont X", "subject": "markt", '
+            '"provenance": "survey", "herkomst": "extern, N=1.200", "source": "Bureau Y", '
+            '"reference": "", "flags": [], "link_hints": []}]')
+    (a,) = parse_intake(rows)
+    assert a["provenance_note"] == "extern, N=1.200"
+    # leeg of afwezig → None, nooit een gok
+    rows2 = '[{"content": "Claim zonder verantwoording", "provenance": "media"}]'
+    (b,) = parse_intake(rows2)
+    assert b["provenance_note"] is None
+
+
+def test_staging_kaart_zonder_pulldowns_met_provchip(tmp_path):
+    st = cockpit2._Stores(_dd(tmp_path))
+    rid = _approved(st)
+    bid, _ = stage_signal(st, rid)
+    from nooch_village.views.kennisbank_staging import render_kennisbank_staging
+    html = render_kennisbank_staging(st, bid, csrf_token="tok")
+    assert "<select name='subject'" not in html          # pulldown weg (slimme tags later)
+    assert "<select name='provenance'" not in html       # LLM classificeert
+    assert "kn-provchip" in html and "media" in html     # chip toont de LLM-keuze
+
+
+def test_bewaar_wist_subject_en_provenance_niet(tmp_path):
+    """Het formulier stuurt subject/provenance niet meer mee — een gewone tekst-bewaar mag
+    de LLM-classificatie dan niet stilletjes wissen."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    bid = st.staging.create("website", "test", [
+        {"content": "Voorstel met onderwerp", "subject": "markt", "provenance": "survey",
+         "provenance_note": "extern, N=500"}])
+    sid = st.staging.get(bid)["atoms"][0]["sid"]
+    c = SimpleNamespace(nxt="x", st=st, data_dir=dd, username="guest",
+                        form={"content": ["Aangepaste tekst"]},
+                        g=lambda k, _m={"bid": bid, "sid": sid,
+                                        "content": "Aangepaste tekst"}: _m.get(k, ""))
+    cockpit2._act_kb_stage_edit(c)
+    a = st.staging.get(bid)["atoms"][0]
+    assert a["content"] == "Aangepaste tekst"
+    assert a["subject"] == "markt" and a["provenance"] == "survey"
+    assert a["provenance_note"] == "extern, N=500"
+
+
+def test_provenance_note_reist_mee_naar_kaartje(tmp_path, monkeypatch):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    rid = _approved(st)
+    monkeypatch.setattr(rp, "_atomen_uit_bron", lambda it: [
+        {"content": "Expert zegt dat mycelium doorbreekt", "provenance": "expert_opinion",
+         "provenance_note": "hoogleraar materiaalkunde, 40+ publicaties"}])
+    bid, _ = rp.stage_signal(st, rid)
+    commit_batch(st.staging, bid, dd, radar=st.radar)
+    aid = stable_id("Expert zegt dat mycelium doorbreekt", "vivobarefoot.com")
+    kaart = cockpit2._Stores(dd).notes.get(aid)
+    assert kaart.provenance_note == "hoogleraar materiaalkunde, 40+ publicaties"
