@@ -133,3 +133,17 @@ def test_onderwerp_nooit_verzonnen(tmp_path):
         [{"id": "z2", "provenance": "media", "herkomst": "", "onderwerp": "ruimtevaart"}]))
     assert t["onderwerp_gezet"] == 0                     # buiten de vaste lijst → genegeerd
     assert not any(x == "ruimtevaart" for x in NotesStore(f"{dd}/notes.json").get("z2").tags)
+
+
+def test_purge_alleen_op_blacklist_en_bulk(tmp_path):
+    """⚙: definitief weggooien kan alleen op al-verwijderde kaartjes; bulk leegt de lijst."""
+    dd, notes = _notes(tmp_path)
+    assert notes.purge("a1") is False                    # niet verwijderd → geen purge
+    notes.archive("a1")
+    assert notes.purge("a1") is True
+    assert NotesStore(f"{dd}/notes.json").get("a1") is None
+    notes.archive("a2")
+    notes.archive("a3")
+    assert notes.purge_archived() == 2
+    vers = NotesStore(f"{dd}/notes.json")
+    assert vers.get("a2") is None and vers.get("a3") is None

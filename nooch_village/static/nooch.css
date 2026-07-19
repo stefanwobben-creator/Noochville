@@ -1042,3 +1042,12 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .rdr-bronvorm>summary{display:inline-block;cursor:pointer;list-style:none}
 .rdr-bronvorm>summary::-webkit-details-marker{display:none}
 .rdr-bronvorm[open]>.kn-capture{margin-top:.6rem;max-width:640px}
+/* Black-list-rijen in het ⚙-paneel: tekst + terugzet + definitief naast elkaar. */
+.kn-blrow{display:flex;gap:.5rem;align-items:center}
+.kn-blrow .kn-lt{flex:1;min-width:0}
+.kn-blleeg{margin:.3rem 0 .6rem}
+/* Signals in regular gewicht: het vet is voor insights — zo zie je de laag aan de letter. */
+.kn-stmttekst{font-weight:400}
+/* A–Z-taglijst met aantallen (vervangt de onderwerp-chips; tags zijn dé taal). */
+.kn-taglijst{display:flex;flex-wrap:wrap;gap:.3rem}
+.kn-tagtal{margin-left:.35rem;font-weight:400;color:var(--muted)}

@@ -612,14 +612,22 @@ def _bibliotheek_rechts(st, atoms: dict, q: str, hub: str, active_ins: dict | No
         h = subject_van(a)
         if h:
             per_hub[h] = per_hub.get(h, 0) + 1
-    # A1: onderwerp-tags standaard verborgen achter een uitklap; de balk blijft laag.
-    chips = ("<a class='chip-opt" + (" on" if not hub and not q else "") + "' "
-             "href='/kennisbank'>alle</a>") + "".join(
-        f"<a class='chip-opt{' on' if hub == h and not q else ''}' "
-        f"href='/kennisbank?hub={_e(h)}'>{_e(h)} ({n})</a>"
-        for h, n in sorted(per_hub.items(), key=lambda kv: -kv[1]))
+    # Eén taal: TAGS, geen aparte onderwerpen meer in de UI (founder, 19 jul). Alle tags
+    # als A–Z-lijst met aantallen; klik = zoeken (bestaand kn-tagchip-pad). De wekelijkse
+    # tag-onderhoudslus van de Library houdt deze lijst schoon.
+    tel: dict[str, int] = {}
+    for a in atoms.values():
+        for t in (a.get("tags") or []):
+            if t.startswith("hint:"):
+                continue
+            tel[t] = tel.get(t, 0) + 1
+    taglijst = "".join(
+        f"<button type='button' class='kn-tagchip' data-tag='{_e(t)}'>{_e(t)}"
+        f"<span class='kn-tagtal'>{n}</span></button>"
+        for t, n in sorted(tel.items(), key=lambda kv: kv[0].lower()))
     tags = (f"<details class='kn-tags'{' open' if hub else ''}>"
-            f"<summary>toon onderwerpen</summary><div class='c2-sec'>{chips}</div></details>")
+            f"<summary>alle tags (A–Z)</summary>"
+            f"<div class='c2-sec kn-taglijst'>{taglijst}</div></details>")
     zoekbox = (f"<input id='kn-search' class='kn-searchbox' type='search' value='{_e(q)}' "
                f"placeholder='zoek in statements, bronnen en tags — gewoon typen…' "
                f"autocomplete='off' "
@@ -802,18 +810,30 @@ def _gearchiveerd_uitklap(st, hub: str, csrf: str) -> str:
     nxt = f"/kennisbank?hub={hub}" if hub else "/kennisbank"
     rows = ""
     for aid, a in sorted(archief.items())[:20]:
-        rows += (f"<form method='post' action='/action' class='kn-lrow'>"
-                 f"{_hid(csrf, 'kb_atoom_unarchive', nxt, {'atom_id': aid})}"
+        rows += (f"<div class='kn-lrow kn-blrow'>"
                  f"<div class='kn-lt'>{_e(a.get('claim'))}"
                  f"<span class='kn-src'>{_e(a.get('source') or '')}</span></div>"
-                 f"<button class='btn'>Zet terug</button></form>")
+                 f"<form method='post' action='/action'>"
+                 f"{_hid(csrf, 'kb_atoom_unarchive', nxt, {'atom_id': aid})}"
+                 f"<button class='btn'>Zet terug</button></form>"
+                 f"<form method='post' action='/action'>"
+                 f"{_hid(csrf, 'kb_atoom_purge', nxt, {'atom_id': aid})}"
+                 f"<button class='btn no' title='echt weg — hierna kan dezelfde tekst in "
+                 f"principe ooit opnieuw binnenkomen'>🔥 definitief</button></form></div>")
     meer = (f"<p class='muted'>… en nog {len(archief) - 20} meer.</p>"
             if len(archief) > 20 else "")
+    leegknop = (f"<form method='post' action='/action' class='kn-blleeg'>"
+                f"{_hid(csrf, 'kb_blacklist_leeg', nxt)}"
+                f"<button class='btn no' title='gooi alle {len(archief)} definitief weg; "
+                f"wat al geborgd is in andere signals verlies je daarmee niet'>"
+                f"🔥 Leeg de hele lijst definitief ({len(archief)})</button></form>")
     return (f"<details class='kn-panel kn-settings'><summary>⚙ <span class='muted'>"
             f"instellingen</span></summary>"
             f"<h3>🗑 Verwijderd ({len(archief)})</h3>"
             f"<p class='muted'>Verwijderd maar onthouden (black-list): deze signals komen "
-            f"niet opnieuw binnen. Terugzetten kan altijd.</p>{rows}{meer}</details>")
+            f"niet opnieuw binnen. Terugzetten kan altijd; 🔥 definitief gooit ze echt weg "
+            f"(en dan kan dezelfde tekst in principe ooit opnieuw binnenkomen).</p>"
+            f"{leegknop}{rows}{meer}</details>")
 
 
 def _ongesorteerd_bakje(atoms: dict, inzichten, csrf: str) -> str:

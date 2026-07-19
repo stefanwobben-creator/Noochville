@@ -299,7 +299,7 @@ def test_ux_detail_gesprek_draad_en_geen_derde_pad(tmp_path):
     assert "kn-thread" in html and "Stefan" in html and "eerst design testen" in html
     # A2: tags achter een uitklap. Founder dd 2026-07-18: de bulk-selectiebalk is weg —
     # curatie (archiveren/naar spel) zit per statement in het uitklap-detail.
-    assert "toon onderwerpen" in html and "kn-selbar" not in html
+    assert "alle tags (A–Z)" in html and "kn-selbar" not in html
 
 
 def test_ux_kb_atoom_reference_via_dispatch(tmp_path):

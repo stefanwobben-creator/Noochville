@@ -227,6 +227,23 @@ class NotesStore:
             self._save()
         return True
 
+    def purge(self, note_id: str) -> bool:
+        """⚙-actie (founder, 19 jul): een kaartje van de black-list DEFINITIEF weggooien.
+        Alleen toegestaan op al-verwijderde (archived) kaartjes — eerst verwijderen, dan
+        pas definitief. Let op de afweging: de black-list is ook het niet-opnieuw-
+        binnenkomen-anker; na een purge kan exact dezelfde tekst in principe opnieuw
+        binnenkomen (radar-seen en intake-ledger vangen het meeste alsnog af)."""
+        bestaand = self.get(note_id)
+        if bestaand is None or not bestaand.archived:
+            return False
+        return self.remove(note_id)          # remove ruimt ook inkomende touwtjes op
+
+    def purge_archived(self) -> int:
+        """Leeg de hele black-list definitief. Geeft het aantal weggegooide kaartjes."""
+        doelen = [nid for nid, d in self._notes.items()
+                  if isinstance(d, dict) and d.get("archived")]
+        return sum(1 for nid in doelen if self.remove(nid))
+
     def archive(self, note_id: str, archived: bool = True) -> bool:
         """Curatie (append-only): archiveren i.p.v. wissen — de kaart verdwijnt uit de
         lijsten (load_atoms filtert) maar blijft bestaan en is terug te zetten."""

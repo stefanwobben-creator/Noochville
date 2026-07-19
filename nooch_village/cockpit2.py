@@ -3813,6 +3813,22 @@ def _act_kb_atoom_reference(c):
     return c.nxt, "🔗 bronlink gekoppeld"
 
 
+def _act_kb_atoom_purge(c):
+    # AUTHZ: iedereen-ingelogd — ⚙-actie. Definitief weggooien kan alleen op een kaartje dat
+    # al op de black-list staat (eerst verwijderen, dan pas definitief). Afweging bewust bij
+    # de mens: na een purge kan dezelfde tekst in principe opnieuw binnenkomen.
+    ok = c.st.notes.purge(c.g("atom_id"))
+    return c.nxt, ("🔥 definitief weggegooid" if ok
+                   else "✗ niet gevonden of nog niet verwijderd")
+
+
+def _act_kb_blacklist_leeg(c):
+    # AUTHZ: iedereen-ingelogd — ⚙-actie: de hele black-list in één keer definitief legen.
+    n = c.st.notes.purge_archived()
+    return c.nxt, (f"🔥 black-list geleegd: {n} definitief weggegooid" if n
+                   else "De black-list was al leeg")
+
+
 def _act_kb_atoom_subject(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Curatie van het
     # ongesorteerd-bakje: een mens hangt een subject-loze notitie aan een hub.
@@ -4009,6 +4025,8 @@ ACTIONS = {
     "kb_stage_commit": _act_kb_stage_commit,
     "kb_stage_discard": _act_kb_stage_discard,
     "kb_atoom_subject": _act_kb_atoom_subject,
+    "kb_atoom_purge": _act_kb_atoom_purge,
+    "kb_blacklist_leeg": _act_kb_blacklist_leeg,
     "kb_atoom_edit": _act_kb_atoom_edit,
     "kb_atoom_related": _act_kb_atoom_related,
     "kb_atoom_reference": _act_kb_atoom_reference,
