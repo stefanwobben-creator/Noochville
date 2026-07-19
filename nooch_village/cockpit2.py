@@ -1141,8 +1141,15 @@ def _act_proj_add(c):
         if orec is not None and org.is_circle(orec):
             # Een cirkel doet geen uitvoerend werk: projecten horen bij een rol of Individueel Initiatief.
             return nxt, "✗ een cirkel kan geen project bevatten — kies een rol of Individueel Initiatief"
+        # Vang de vage intake bij de bron (founder, 19 jul): een mens-project vereist één
+        # zin done_when — "waar herken je aan dat dit klaar is?" De reparatie die de rol
+        # anders stilletjes in zijn checklist doet, gebeurt zo vooraf, samen met de mens.
+        done_when = (g("done_when") or "").strip()
+        if owner and scope and not done_when:
+            return nxt, "✗ vul ook in waar je aan herkent dat dit klaar is (done-when)"
         if owner and scope:
             pid = pj.create(owner, scope[:200], "human", status=create_status,
+                            done_when=done_when[:200],
                             person=person or None, agent=agent or None, private=(g("private") == "1"))
             if col == "wacht":
                 pj.block(pid, "—")
@@ -1260,6 +1267,12 @@ def _act_proj_done(c):
         if _deny:
             return nxt, _deny
         pid = g("pid")
+        # De projectpoort (founder, 19 jul — naast G0-G4): done = vraag beantwoord, niet
+        # werk gedaan. Zonder ingevuld dod_outcome weigert de cockpit de status Done.
+        from nooch_village.projects import dod_poort
+        _dicht = dod_poort(pj.get(pid))
+        if _dicht:
+            return nxt, "⛔ " + _dicht
         # Outcome met behoud van de telling; de mens kent Done toe ná review (Q3).
         p = pj.get(pid) or {}
         cl = next((c for c in p.get("checklists", []) if c.get("title") == PREP_CHECKLIST_TITLE), None)
@@ -1286,6 +1299,20 @@ def _act_proj_done(c):
         except Exception:
             logging.getLogger("cockpit2.signals").exception("project→signaal mislukt (pid=%s)", pid)
         return nxt, msg
+
+
+def _act_proj_dod(c):
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        # Zelfde autorisatie als de andere kaart-bewerkingen: rolvervuller of Circle Lead.
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
+        veld = g("veld")
+        if veld not in ("done_when", "dod_outcome"):
+            return nxt, "✗ onbekend DoD-veld"
+        if not pj.set_dod(g("pid"), veld, g("tekst")):
+            return nxt, "✗ project bestaat niet"
+        return nxt, "✓ opgeslagen"
 
 
 def _act_proj_archive(c):
@@ -4094,6 +4121,7 @@ ACTIONS = {
     "artefact_archive": _act_artefact_archive,
     "proj_status": _act_proj_status,
     "proj_done": _act_proj_done,
+    "proj_dod": _act_proj_dod,
     "proj_archive": _act_proj_archive,
     "proj_unarchive": _act_proj_unarchive,
     "proj_delete": _act_proj_delete,

@@ -172,6 +172,18 @@ class ProjectLedger:
         self._save()
         return True
 
+    def set_dod(self, pid: str, veld: str, tekst: str) -> bool:
+        """Zet een DoD-contractveld: 'done_when' (waar herken je aan dat dit klaar is) of
+        'dod_outcome' (het antwoord op de projectvraag bij afronding). Onderdeel van de
+        projectpoort (founder, 19 jul): done = vraag beantwoord, niet werk gedaan."""
+        p = self._projects.get(pid)
+        if p is None or veld not in ("done_when", "dod_outcome"):
+            return False
+        p[veld] = (tekst or "").strip()[:1000]
+        self._touch(p)
+        self._save()
+        return True
+
     def add_reaction(self, pid: str, entry_id: str, emoji: str) -> bool:
         """Voeg een emoji-reactie toe aan een feed-entry (per emoji een teller). Alleen entries met
         een id (nieuw schema) kunnen reacties dragen."""
@@ -744,12 +756,24 @@ class ProjectLedger:
         return [p for p in self._projects.values() if p["status"] not in _TERMINAL]
 
 
+def dod_poort(project: dict | None) -> str | None:
+    """De projectpoort (founder, 19 jul — naast G0-G4): Done vereist een ingevuld antwoord
+    op de projectvraag (dod_outcome). Geeft de weiger-reden terug, of None als de poort
+    open is. Deterministisch en dun, zoals de governance-poort: hij oordeelt niet over de
+    kwaliteit van het antwoord, alleen dat het antwoord bestáát — 'checklist voltooid' is
+    uitvoering, geen antwoord."""
+    if not ((project or {}).get("dod_outcome") or "").strip():
+        return ("nog niet af: vul eerst 'Antwoord op de projectvraag' in op de projectkaart "
+                "(wat weten we nu — of waarom is dit onbeantwoordbaar?)")
+    return None
+
+
 # ── Concurrency-poort: ALLE schrijfpaden lopen door _synchronized (slot + verse read onder het slot).
 # Eén auditbare lijst (1-op-1 met de methodes die self._save() aanroepen). Een NIEUW schrijfpad MOET hier
 # bij — de guard-test tests/test_projectledger_concurrency.py::test_alle_schrijfpaden_gesynchroniseerd
 # faalt zodra een methode die _save aanroept niet in deze lijst staat. Reads staan er bewust NIET in.
 _WRITE_METHODS = (
-    "create", "start", "set_due", "add_reaction", "attach_add", "attach_file", "attach_remove",
+    "create", "start", "set_due", "set_dod", "add_reaction", "attach_add", "attach_file", "attach_remove",
     "reopen", "block", "unblock", "complete", "mark_awaiting_review", "checklist_add", "checklist_remove", "check_add",
     "check_toggle", "check_remove", "set_item_offer", "accept_item_offer", "edit", "approve",
     "discard", "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
