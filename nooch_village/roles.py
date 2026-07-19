@@ -1162,6 +1162,18 @@ class Librarian(Inhabitant):
         notes = getattr(self.context, "notes", None)
         if notes is None:
             return
+        # Wekelijkse tag-onderhoudslus (founder, 19 jul): de Library houdt de taglijst
+        # schoon — voorstellen, mens keurt op /kennisbank/tags. De week-marker in de store
+        # maakt deze dagelijkse aanroep effectief wekelijks; fail-soft: een fout hier mag
+        # de dag-reflectie nooit breken.
+        try:
+            from nooch_village.tag_onderhoud import draai_onderhoud
+            res = draai_onderhoud(self.context.data_dir)
+            if res.get("gedraaid") and res.get("nieuw"):
+                self.log.info("🏷 tag-onderhoud: %d voorstel(len) klaar op /kennisbank/tags",
+                              res["nieuw"])
+        except Exception:
+            self.log.exception("tag-onderhoud mislukt (gaat volgende week weer)")
         kaarten = [n for n in notes.all() if n.word]
         if len(kaarten) < 2:
             return

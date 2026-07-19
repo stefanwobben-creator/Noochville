@@ -848,6 +848,24 @@ def main() -> None:
                   f"aanknopingspunt (onthouden), {t['mislukt']} mislukt (LLM — kan later "
                   f"alsnog). Herdraaien is veilig.")
 
+    elif mode == "tag_onderhoud":
+        # Tag-onderhoudslus handmatig draaien (buiten Lara's weekritme om). --dry-run toont
+        # de voorstellen zonder ze op te slaan. python -m nooch_village.village tag_onderhoud
+        from nooch_village.config import load_context
+        from nooch_village.tag_onderhoud import draai_onderhoud
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        dry = "--dry-run" in sys.argv
+        res = draai_onderhoud(ctx.data_dir, force=True, dry_run=dry)
+        if dry:
+            print(f"🔍 dry-run: {res.get('voorstellen', 0)} voorstel(len):")
+            for v in res.get("dry") or []:
+                print(f"  {v['actie']}: {', '.join(v['van'])}"
+                      + (f" → {v['naar']}" if v.get("naar") else "")
+                      + (f"  ({v['waarom']})" if v.get("waarom") else ""))
+        else:
+            print(f"🏷 {res.get('nieuw', 0)} nieuw voorstel(len) — nakijken op /kennisbank/tags")
+
     elif mode == "backfill_dim":
         # Aparte historische inhaal van de GEDIMENSIONEERDE reeksen (bijv. Plausible per land). Zelfde
         # idempotente sleutel als de live-collector; gaten blijven gaten.

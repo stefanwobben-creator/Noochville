@@ -625,9 +625,21 @@ def _bibliotheek_rechts(st, atoms: dict, q: str, hub: str, active_ins: dict | No
         f"<button type='button' class='kn-tagchip' data-tag='{_e(t)}'>{_e(t)}"
         f"<span class='kn-tagtal'>{n}</span></button>"
         for t, n in sorted(tel.items(), key=lambda kv: kv[0].lower()))
+    # Open weekvoorstellen van de Library → één rustige regel naar de review.
+    onderhoud = ""
+    try:
+        from nooch_village.tag_onderhoud import TagVoorstellenStore
+        n_open = len(TagVoorstellenStore(f"{st.dd}/tag_voorstellen.json").open_voorstellen())
+        if n_open:
+            onderhoud = (f"<p class='muted'><a href='/kennisbank/tags'>🏷 {n_open} "
+                         f"tag-voorstel(len) van de Library — nakijken</a></p>")
+    except Exception:
+        pass
     tags = (f"<details class='kn-tags'{' open' if hub else ''}>"
             f"<summary>alle tags (A–Z)</summary>"
-            f"<div class='c2-sec kn-taglijst'>{taglijst}</div></details>")
+            f"<div class='c2-sec kn-taglijst'>{taglijst}"
+            f"<a class='chip-opt' href='/kennisbank/tags' title='wekelijkse schoonmaaklus: "
+            f"samenvoegen, opschonen, abstraheren'>🏷 onderhoud</a></div></details>{onderhoud}")
     zoekbox = (f"<input id='kn-search' class='kn-searchbox' type='search' value='{_e(q)}' "
                f"placeholder='zoek in statements, bronnen en tags — gewoon typen…' "
                f"autocomplete='off' "

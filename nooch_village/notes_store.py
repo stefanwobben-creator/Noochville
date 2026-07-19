@@ -227,6 +227,35 @@ class NotesStore:
             self._save()
         return True
 
+    def retag(self, oud: str, nieuw: str | None = None) -> int:
+        """Tag-onderhoud (founder, 19 jul): hernoem een tag op ALLE niet-verwijderde
+        kaartjes (nieuw=None: haal hem weg). Dedupliceert binnen een kaartje; hint:*-tags
+        blijven ongemoeid via de aanroeper (die biedt ze niet aan). Geeft het aantal
+        bijgewerkte kaartjes."""
+        oud = (oud or "").strip()
+        if not oud:
+            return 0
+        from datetime import datetime
+        now = datetime.now()
+        n = 0
+        for aid, d in self._notes.items():
+            if not isinstance(d, dict) or d.get("archived"):
+                continue
+            tags = d.get("tags") or []
+            if oud not in tags:
+                continue
+            vers: list[str] = []
+            for t in tags:
+                vt = (nieuw if t == oud else t)
+                if vt and vt not in vers:
+                    vers.append(vt)
+            d["tags"] = vers
+            d["last_updated_at"] = now.isoformat()
+            n += 1
+        if n:
+            self._save()
+        return n
+
     def purge(self, note_id: str) -> bool:
         """⚙-actie (founder, 19 jul): een kaartje van de black-list DEFINITIEF weggooien.
         Alleen toegestaan op al-verwijderde (archived) kaartjes — eerst verwijderen, dan

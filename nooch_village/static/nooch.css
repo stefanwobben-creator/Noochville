@@ -1051,3 +1051,6 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 /* A–Z-taglijst met aantallen (vervangt de onderwerp-chips; tags zijn dé taal). */
 .kn-taglijst{display:flex;flex-wrap:wrap;gap:.3rem}
 .kn-tagtal{margin-left:.35rem;font-weight:400;color:var(--muted)}
+/* Tag-onderhoud-review: voorstel-rijen met actie-chip, tags en besluit-knoppen. */
+.kn-tagvoorstel{display:flex;gap:.5rem;align-items:center}
+.kn-tagvoorstel .kn-lt{flex:1;min-width:0}

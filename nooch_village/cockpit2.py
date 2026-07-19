@@ -3813,6 +3813,38 @@ def _act_kb_atoom_reference(c):
     return c.nxt, "🔗 bronlink gekoppeld"
 
 
+def _act_tag_voorstel_besluit(c):
+    # AUTHZ: iedereen-ingelogd — tag-onderhoud-review. ✓ voert het voorstel meteen door op
+    # alle kaartjes (NotesStore.retag); ✗ wijst af (komt niet opnieuw terug).
+    from nooch_village.tag_onderhoud import TagVoorstellenStore, voer_voorstel_uit
+    store = TagVoorstellenStore(f"{c.data_dir}/tag_voorstellen.json")
+    keuze = c.g("keuze")
+    if keuze == "doorvoeren":
+        vs = {v["id"]: v for v in store.open_voorstellen()}
+        v = vs.get(c.g("vid"))
+        if v is None:
+            return c.nxt, "✗ voorstel niet gevonden of al besloten"
+        n = voer_voorstel_uit(c.st.notes, v)
+        store.besluit(c.g("vid"), "doorgevoerd")
+        return c.nxt, f"✓ doorgevoerd op {n} signal(s)"
+    v = store.besluit(c.g("vid"), "afgewezen")
+    return c.nxt, ("✗ afgewezen — komt niet opnieuw terug" if v
+                   else "✗ voorstel niet gevonden of al besloten")
+
+
+def _act_tag_onderhoud_run(c):
+    # AUTHZ: iedereen-ingelogd — de ronde nu draaien (buiten het weekritme om). Fail-closed:
+    # zonder LLM komen er simpelweg geen voorstellen.
+    from nooch_village.tag_onderhoud import draai_onderhoud
+    res = draai_onderhoud(c.data_dir, force=True)
+    if not res.get("gedraaid"):
+        return c.nxt, "Geen tags om te beoordelen"
+    if not res.get("voorstellen"):
+        return c.nxt, "🏷 ronde gedraaid — de LLM zag niets om op te schonen (of was niet beschikbaar)"
+    return c.nxt, (f"🏷 ronde gedraaid: {res['nieuw']} nieuw voorstel(len) "
+                   f"({res['voorstellen'] - res['nieuw']} al bekend/afgewezen)")
+
+
 def _act_kb_atoom_purge(c):
     # AUTHZ: iedereen-ingelogd — ⚙-actie. Definitief weggooien kan alleen op een kaartje dat
     # al op de black-list staat (eerst verwijderen, dan pas definitief). Afweging bewust bij
@@ -4026,6 +4058,8 @@ ACTIONS = {
     "kb_stage_discard": _act_kb_stage_discard,
     "kb_atoom_subject": _act_kb_atoom_subject,
     "kb_atoom_purge": _act_kb_atoom_purge,
+    "tag_voorstel_besluit": _act_tag_voorstel_besluit,
+    "tag_onderhoud_run": _act_tag_onderhoud_run,
     "kb_blacklist_leeg": _act_kb_blacklist_leeg,
     "kb_atoom_edit": _act_kb_atoom_edit,
     "kb_atoom_related": _act_kb_atoom_related,
@@ -4469,6 +4503,12 @@ def make_handler(data_dir: str, csrf_token: str,
                                                     (qs.get("hub") or [""])[0],
                                                     (qs.get("active") or [""])[0],
                                                     csrf_token=effective_csrf), chrome=False)
+                return
+            if path == "/kennisbank/tags":
+                # Tag-onderhoud: de weekvoorstellen van de Library, mens keurt (founder, 19 jul).
+                from nooch_village.views.tag_onderhoud import render_tag_onderhoud
+                self._send(render_tag_onderhoud(st, csrf_token=effective_csrf,
+                                                msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/kennisbank/staging":
                 # Zone 2: de "even nakijken"-ronde vóór de bibliotheek (bewerken/samenvoegen/weggooien).
