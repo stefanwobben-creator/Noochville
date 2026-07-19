@@ -382,12 +382,16 @@ def _speel_toevoegen(st, atoms: dict, inzichten: list, hunch: str, speel: str,
     return "".join(delen)
 
 
-def _suggestie_kaart(atoms: dict, inzichten: list, sug: int, csrf: str) -> str:
+def _suggestie_kaart(atoms: dict, inzichten: list, sug: int, csrf: str,
+                     data_dir: str = "") -> str:
     """De bovenste plek van de inzichten-kolom (founder, 19 jul): één vóórgevuld inzicht
     uit het sterkste cluster — lichtgeel, expliciet 'not verified', met een verify-knop
     die het spel start (kb_spel_start, de kaarten van het cluster als hand) en bladeren
     naar de volgende kandidaat (?sug=). De voorvulling is deterministisch
-    (kennisbank_spel.spel_suggesties); het scherp formuleren gebeurt in het spel."""
+    (kennisbank_spel.spel_suggesties); het scherp formuleren gebeurt in het spel.
+    Spelvraag (founder, 19 jul): de claim is informatie, de vraag is verleiding — als
+    spelvraag.vraag_voor een gecachete/verse vraag heeft, opent de kaart daarmee (Lara
+    stelt hem) en zakt de claim naar een startpunt-regel; anders de claim, zoals altijd."""
     if not csrf:
         return ""
     kandidaten = spel_suggesties(atoms, inzichten)
@@ -407,12 +411,20 @@ def _suggestie_kaart(atoms: dict, inzichten: list, sug: int, csrf: str) -> str:
                 f"title='volgende kandidaat'>→</a>" if i < len(kandidaten) - 1 else "")
         nav = (f"<span class='muted'>kandidaat {i + 1} van {len(kandidaten)}</span> "
                f"{prev}{volg}")
+    vraag = ""
+    if data_dir:
+        from nooch_village.spelvraag import vraag_voor
+        vraag = vraag_voor(kand, atoms, data_dir=data_dir) or ""
+    kop = (f"<div class='kn-spelvraag'><span class='wie'>📚 Lara vraagt zich af</span>"
+           f"{_e(vraag)}</div>"
+           f"<div class='muted kn-spelstart'>startpunt: {_e(kand['hunch'][:140])}</div>"
+           ) if vraag else f"<div class='kn-claim'>{_e(kand['hunch'])}</div>"
     return (
         f"<div class='card kn-sugg'>"
         f"<div class='kn-sugghead'><span class='chip kn-suggflag'>not verified</span>"
         f"<span class='muted'>voorzet uit je signals — verifieer om er een inzicht van "
         f"te maken</span></div>"
-        f"<div class='kn-claim'>{_e(kand['hunch'])}</div>"
+        f"{kop}"
         f"<p class='muted'>🧩 {_e(kand['theme'])} · {len(kand['atom_ids'])} kaarten "
         f"staan klaar (inclusief wat tegenspreekt)</p>"
         f"<div class='kn-suggbtns'><form method='post' action='/action' class='kn-unlink'>"
@@ -996,7 +1008,8 @@ def render_kennisbank(st, kid: str = "", q: str = "", csrf_token: str = "",
     # LINKS: het geopende inzicht (detail, evt. geflipt) bovenaan, daaronder de inzicht-lijst.
     # Zonder open detail neemt de suggestiekaart de bovenste plek (founder, 19 jul).
     detail = _inzicht_detail(active_ins, atoms, csrf_token, by_id, flip=flip) if active_ins else ""
-    suggestie = "" if active_ins else _suggestie_kaart(atoms, inzichten, sug, csrf_token)
+    suggestie = "" if active_ins else _suggestie_kaart(atoms, inzichten, sug, csrf_token,
+                                                       data_dir=st.dd)
     if active_iid:
         lijst_kop = ("<h2>🔗 Koppel een gerelateerd inzicht</h2>"
                      "<p class='muted kn-brugkop'>Kies hieronder een inzicht dat "

@@ -1062,6 +1062,13 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .kn-sugghead{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.35rem}
 .kn-suggflag{background:var(--yellow);color:#5c4a00}
 .kn-suggbtns{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-top:.5rem}
+/* Spelvraag (founder, 19 jul): de claim is informatie, de vraag is verleiding — een kleine
+   LLM herformuleert het cluster tot één vraag (spelvraag.py, gecachet, fail-soft naar
+   .kn-claim). Displayfont op gewicht 500: uitnodigend, niet schreeuwend; de claim zakt
+   naar een startpunt-regel. */
+.kn-spelvraag{font-family:var(--font-display);font-weight:500;font-size:1.02rem;line-height:1.45;margin:.1rem 0 .2rem}
+.kn-spelvraag .wie{display:block;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--green-dark);margin-bottom:.15rem}
+.kn-spelstart{font-size:.78rem;margin:.1rem 0 .3rem}
 /* Zoekresultaten op de spel-pagina: wat al in het spel zit kleurt subtiel mee —
    groen steunt, rood spreekt tegen (zelfde betekenis als de kn-note-stippen). */
 .kn-inhand-sup{background:var(--green-tint);border-radius:var(--radius);padding:.45rem .5rem}
