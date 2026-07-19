@@ -290,11 +290,12 @@ def _actiebalk(open_: str, st, atoms: dict, inzichten: list, hunch: str, speel: 
     Laag als beide dicht zijn; klapt één zone open zonder de pagina te verspringen."""
     bron_open = open_ == "bron"
     speel_open = open_ == "speel"
+    # De 🎲-pill is weg (founder, 19 jul): de suggestiekaart bovenaan de inzichten-kolom
+    # is nu dé ingang naar het spel. De speel-zone zelf blijft bereikbaar via ?open=speel
+    # (eigen vermoeden typen, cluster-navigatie) — alleen de knop in de balk verviel.
     knoppen = (f"<div class='kn-actiebtns'>"
                f"<a class='btn{' ok' if bron_open else ''}' "
                f"href='/kennisbank{'' if bron_open else '?open=bron'}'>➕ Bron toevoegen</a>"
-               f"<a class='btn{' ok' if speel_open else ''}' "
-               f"href='/kennisbank{'' if speel_open else '?open=speel'}'>🎲 Speel een inzicht</a>"
                f"<a class='btn' href='/signals' title='Goedgekeurde radar-signalen — het "
                f"startpunt voor inzichten'>🛰 Signals</a></div>")
     paneel = ""
@@ -977,8 +978,8 @@ def render_kennisbank(st, kid: str = "", q: str = "", csrf_token: str = "",
     related_ids = {r["insight_id"] for r in (active_ins or {}).get("related") or []}
     cards = "".join(_topic_card(i, atoms, csrf_token, active_iid, related_ids)
                     for i in inzichten if i["id"] != active_iid) or (
-        "<p class='muted'>Nog geen inzichten. Speel er een via “🎲 Speel een inzicht” in de "
-        "actiebalk, of seed de eerste vulling: "
+        "<p class='muted'>Nog geen inzichten. Verifieer de voorzet hierboven (zodra er "
+        "signals zijn), of seed de eerste vulling: "
         "<code>python -m nooch_village.kennisbank_seed --apply</code></p>")
 
     actiebalk = _actiebalk(open_, st, atoms, inzichten, hunch, speel, cluster, csrf_token)
