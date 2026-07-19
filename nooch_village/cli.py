@@ -817,6 +817,35 @@ def main() -> None:
               f"{res['skipped']} zonder rapport/al verwerkt, {res['mislukt']} mislukt (LLM). "
               f"Nakijken op /kennisbank/staging?batch=… — herdraaien is veilig.")
 
+    elif mode == "kb_verrijk_herkomst":
+        # Verrijkingsronde: bestaande kenniskaartjes zonder herkomst-verantwoording in
+        # batches langs de LLM (zelfde regels als de intake: alleen uit de kaarttekst,
+        # nooit gokken). Grootboek voorkomt dubbele pogingen; provenance wordt alleen
+        # gezet als hij nu 'unknown' is. Dry-run telt alleen. Draai op prod als nooch,
+        # met een backup van data/notes.json vóór de echte run.
+        # python -m nooch_village.village kb_verrijk_herkomst [--dry-run] [--limit N]
+        from nooch_village.config import load_context
+        from nooch_village.herkomst_verrijking import verrijk_herkomst
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        dry = "--dry-run" in sys.argv
+        lim = None
+        if "--limit" in sys.argv:
+            try:
+                lim = int(sys.argv[sys.argv.index("--limit") + 1])
+            except (IndexError, ValueError):
+                print("✗ --limit verwacht een getal"); return
+        t = verrijk_herkomst(ctx.data_dir, dry_run=dry, limit=lim)
+        if dry:
+            print(f"🔍 dry-run: {t['kandidaten']} kaartjes zonder verantwoording staan klaar "
+                  f"({t['overgeslagen']} al voorzien of eerder geprobeerd). "
+                  f"Echte run: zelfde commando zonder --dry-run (backup notes.json eerst).")
+        else:
+            print(f"🏷 {t['kandidaten']} kaartjes bekeken: {t['gevuld']} verantwoording gezet, "
+                  f"{t['prov_gezet']} provenance ingevuld (was unknown), {t['leeg']} zonder "
+                  f"aanknopingspunt (onthouden), {t['mislukt']} mislukt (LLM — kan later "
+                  f"alsnog). Herdraaien is veilig.")
+
     elif mode == "backfill_dim":
         # Aparte historische inhaal van de GEDIMENSIONEERDE reeksen (bijv. Plausible per land). Zelfde
         # idempotente sleutel als de live-collector; gaten blijven gaten.

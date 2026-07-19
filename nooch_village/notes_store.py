@@ -149,6 +149,29 @@ class NotesStore:
         self._save()
         return bestaand
 
+    def verrijk_herkomst(self, note_id: str, *, note: str | None = None,
+                         provenance: str | None = None) -> bool:
+        """Verrijkingsronde (metadata, geen tekstwijziging dus geen edit_history/versie):
+        zet de herkomst-verantwoording en/of een provenance op een kaartje dat er nog geen
+        had. Een bestaande note of niet-unknown provenance wordt NOOIT overschreven
+        (expliciet > afgeleid). False als het kaartje niet bestaat of er niets te zetten was."""
+        bestaand = self.get(note_id)
+        if bestaand is None:
+            return False
+        veranderd = False
+        if note and not (bestaand.provenance_note or "").strip():
+            bestaand.provenance_note = note.strip()[:200]
+            veranderd = True
+        if provenance and (bestaand.provenance or "unknown") in ("", "unknown"):
+            bestaand.provenance = provenance
+            veranderd = True
+        if veranderd:
+            from datetime import datetime
+            bestaand.last_updated_at = datetime.now()
+            self._notes[note_id] = bestaand.model_dump(mode="json")
+            self._save()
+        return veranderd
+
     def find_claim_equal(self, content: str) -> str | None:
         """Bestaand niet-gearchiveerd kaartje met exact dezelfde genormaliseerde claim,
         ongeacht de bron. MECE-bewaking (founder, 19 jul): hetzelfde inzicht uit een ándere
