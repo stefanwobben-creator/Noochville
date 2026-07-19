@@ -164,8 +164,8 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `radar_approve` | `cockpit2.py:1865` |
 | `radar_dismiss` | `cockpit2.py:1875` |
 | `radar_promote` | `cockpit2.py:1879` |
-| `radar_promote_multi` | `cockpit2.py:1915` |
 | `radar_merge` | `cockpit2.py:1899` |
+| `radar_koppel` | `cockpit2.py:1915` |
 | `kb_stage_koppel` | `cockpit2.py:1942` |
 | `aitask_add` | `cockpit2.py:1980` |
 | `aitask_remove` | `cockpit2.py:2011` |

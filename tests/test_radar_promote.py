@@ -225,9 +225,8 @@ def test_signals_pagina_toont_knop_en_daarna_chip(tmp_path):
     promote_signal(st, rid)
     html2 = render_signals(st, csrf_token="tok")
     assert "radar_promote" not in html2                            # knop weg
-    assert "→ in kennisbank" in html2 and "/kennisbank?q=signal" in html2
-    # zonder csrf: geen knop, chip blijft (read-only weergave)
-    assert "→ in kennisbank" in render_signals(st)
+    # verwerkt = restloos uit de inbox (signalen zijn de wachtkamer, geen archief)
+    assert _CONTENT not in html2
 
 
 def test_rol_tools_toont_alleen_verwijzing_naar_signals(tmp_path):
@@ -275,9 +274,9 @@ def test_gepromoveerde_signalen_uit_overzicht(tmp_path):
     rid2 = _approved(st, content="Signaal dat blijft staan", link="https://x.example/b")
     promote_signal(st, rid)
     html = render_signals(st, csrf_token="tok")
-    assert "Signaal dat blijft staan" in html.split("in kennisbank")[0]
-    assert "in kennisbank · 1" in html           # ingeklapte teller
-    # het gepromoveerde signaal staat alleen nog ín die details-sectie
-    assert "Signaal dat gepromoveerd wordt" in html.split("in kennisbank · 1")[1]
-    # multi-select: het blijvende signaal heeft een selectievakje voor de gezamenlijke promotie
-    assert "radar_promote_multi" in html and "rdr-sel" in html
+    assert "Signaal dat blijft staan" in html
+    # het gepromoveerde signaal is restloos uit de inbox (geen archief-uitklap meer)
+    assert "Signaal dat gepromoveerd wordt" not in html
+    # drag&drop-merge: het blijvende signaal is sleepbaar; de checkbox-route is weg
+    assert "data-rid=" in html and "radar_merge" in html
+    assert "radar_promote_multi" not in html

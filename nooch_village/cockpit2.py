@@ -1912,31 +1912,31 @@ def _act_radar_merge(c):
                      if ok else "✗ samenvoegen niet gelukt")
 
 
-def _act_radar_promote_multi(c):
-        """Meerdere goedgekeurde signalen in één keer naar Even nakijken (multi-select op
-        /signals). Ze landen in dezelfde staging-set, zodat ze daar samen te mergen zijn.
-        Zelfde poort per signaal als de losse promotie."""
+def _act_radar_koppel(c):
+        """/signals MECE-knop: dit signaal staat (vrijwel) al in de kennisbank — koppel de
+        herkomst aan het bestaande kaartje (stack_provenance, grounding +1), markeer het
+        signaal als verwerkt. Zelfde poort als de andere radar-curatie."""
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        rids = [r for r in (c.form.get("rid") or []) if r]
-        if not rids:
-            return nxt, "✗ vink eerst één of meer signalen aan"
-        bid = None
-        gelukt = 0
-        for rid in rids:
-            it = st.radar.get(rid)
-            if it is None:
-                continue
-            if _role_gate(it["role"], username, st):
-                continue                        # geen toegang tot dit signaal: overslaan
-            b, _msg = radar_promote.stage_signal(st, rid)
-            if b:
-                bid = bid or b
-                gelukt += 1
-        if bid is None:
-            return nxt, "✗ geen van de aangevinkte signalen kon worden klaargezet"
-        return (f"/kennisbank/staging?batch={bid}",
-                f"📖 {gelukt} signaal/signalen klaargezet bij Even nakijken — "
-                f"bewerk, voeg samen of bevestig")
+        it = st.radar.get(g("rid"))
+        if it is None:
+            return nxt, "✗ onbekend radar-signaal"
+        _deny = _role_gate(it["role"], username, st)
+        if _deny:
+            return nxt, _deny
+        if it.get("promoted_atom_id"):
+            return nxt, "Al verwerkt — dit signaal is al gekoppeld"
+        doel = g("doel")
+        if not doel or st.notes.get(doel) is None:
+            return nxt, "✗ doelkaartje niet gevonden"
+        source = ((it.get("source") or "").strip() or (it.get("feed") or "").strip() or "radar")
+        st.notes.stack_provenance(doel, source=source, reference=(it.get("link") or "").strip())
+        st.notes.add_tags(doel, ["signal"])
+        for m in it.get("merged_sources") or []:
+            if m.get("source") or m.get("link"):
+                st.notes.stack_provenance(doel, source=m.get("source") or "",
+                                          reference=m.get("link") or "")
+        st.radar.mark_promoted(g("rid"), doel)
+        return nxt, "🔗 herkomst gekoppeld aan het bestaande kaartje — signaal verwerkt"
 
 
 def _act_kb_stage_koppel(c):
@@ -4066,8 +4066,8 @@ ACTIONS = {
     "radar_approve": _act_radar_approve,
     "radar_dismiss": _act_radar_dismiss,
     "radar_promote": _act_radar_promote,
-    "radar_promote_multi": _act_radar_promote_multi,
     "radar_merge": _act_radar_merge,
+    "radar_koppel": _act_radar_koppel,
     "kb_stage_koppel": _act_kb_stage_koppel,
     "aitask_add": _act_aitask_add,
     "aitask_remove": _act_aitask_remove,

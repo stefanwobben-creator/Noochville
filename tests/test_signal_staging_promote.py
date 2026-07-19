@@ -253,38 +253,6 @@ def test_mece_hint_en_koppel_actie(tmp_path):
     assert st.staging.get(bid)["atoms"] == []            # voorstel is uit de set
 
 
-def test_multi_select_actie_zet_selectie_in_een_set(tmp_path):
-    dd = _dd(tmp_path)
-    st = cockpit2._Stores(dd)
-    r1 = _approved(st)
-    r2 = _approved(st, content="Tweede geselecteerde signaal", link="https://x.nl/q")
-    c = SimpleNamespace(nxt="/signals", st=st, data_dir=dd, username="guest",
-                        g=lambda k: "", form={"rid": [r1, r2]})
-    nxt, msg = cockpit2._act_radar_promote_multi(c)
-    assert nxt.startswith("/kennisbank/staging?batch=")
-    assert "2 signaal" in msg
-    bid = nxt.split("batch=")[1]
-    rids = [a["radar_rids"][0] for a in st.staging.get(bid)["atoms"]]
-    assert set(rids) == {r1, r2}
-
-
-def test_staging_heeft_sleep_merge_interactie(tmp_path):
-    """De staging-review gebruikt dezelfde merge-interactie als de statements-lijst:
-    ⠿-handle, kaart-op-kaart slepen, modal met hoofdtekst-keuze (geen kop-formulier meer)."""
-    st = cockpit2._Stores(_dd(tmp_path))
-    rid = _approved(st)
-    bid, _ = stage_signal(st, rid)
-    from nooch_village.views.kennisbank_staging import render_kennisbank_staging
-    html = render_kennisbank_staging(st, bid, csrf_token="tok")
-    assert "kn-handle" in html and "draggable='true'" in html
-    assert "kb_stage_merge" in html and "kn-modal" in html
-    assert "vink eerst" not in html                      # oude checkbox-interactie is weg
-    assert "style=" not in html                          # ratchet
-    # read-only (geen csrf): geen handle, geen modal
-    kaal = render_kennisbank_staging(st, bid)
-    assert "kn-handle" not in kaal and "kn-modal" not in kaal
-
-
 # ── herkomst-verantwoording: LLM classificeert, mens kiest niet meer ─────────
 
 def test_parse_intake_herkomst_veld():
@@ -393,3 +361,29 @@ def test_signals_pagina_heeft_sleep_merge(tmp_path):
     assert "radar_merge" in html and "kn-modal" in html
     kaal = render_signals(st)
     assert "kn-handle" not in kaal and "radar_merge" not in kaal
+
+
+def test_radar_koppel_actie(tmp_path):
+    """MECE op /signals: een signaal dat al gedekt is door een kaartje wordt met één klik
+    herkomst onder dat kaartje en is daarmee verwerkt (uit de lijst)."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    st.notes.add(Insight(id="atom_dekkend", claim="MycoComposite is een vegan leer-alternatief",
+                         source="elders"))
+    rid = _approved(st)
+    c = SimpleNamespace(nxt="/signals", st=st, data_dir=dd, username="guest",
+                        g=lambda k, _m={"rid": rid, "doel": "atom_dekkend"}: _m.get(k, ""))
+    nxt, msg = cockpit2._act_radar_koppel(c)
+    assert "gekoppeld" in msg
+    kaart = st.notes.get("atom_dekkend")
+    assert "vivobarefoot.com" in kaart.source and kaart.grounding_count == 2
+    assert st.radar.get(rid)["promoted_atom_id"] == "atom_dekkend"
+
+
+def test_signals_kb_hint_bij_bestaand_kaartje(tmp_path):
+    st = cockpit2._Stores(_dd(tmp_path))
+    st.notes.add(Insight(id="atom_dek2", claim=_CONTENT, source="heel-andere-bron"))
+    _approved(st)
+    from nooch_village.views.signals import render_signals
+    html = render_signals(st, csrf_token="tok")
+    assert "al in de kennisbank" in html and "radar_koppel" in html

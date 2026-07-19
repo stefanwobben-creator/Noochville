@@ -1033,3 +1033,7 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .rdr-row:hover .kn-handle{opacity:1}
 .rdr-row.dragover{outline:2px dashed var(--green);outline-offset:-2px;background:var(--green-tint)}
 .rdr-row.dragging{opacity:.4}
+/* ✗ als rustig token rechts achteraan de signaal-rij (inbox-actie, geen schreeuwer). */
+.rdr-wegform{margin-left:auto;flex:0 0 auto}
+.rdr-weg{border:1px solid var(--border);background:var(--surface);border-radius:999px;width:1.7rem;height:1.7rem;line-height:1;cursor:pointer;color:var(--muted);font-size:.85rem}
+.rdr-weg:hover{color:var(--coral,#c0554d);border-color:var(--coral,#c0554d)}

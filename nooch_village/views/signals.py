@@ -44,7 +44,10 @@ def _sig_body(st, it) -> str:
     """De gedeelde kern van een signaal-kaart: content, rationale en meta-regel."""
     orec = st.records.get(it.get("role", ""))
     rolenaam = _name(orec) if orec else it.get("role", "")
-    klabel = _KIND.get(it.get("kind", ""), it.get("kind", ""))
+    kind = it.get("kind", "")
+    # Het generieke type verzwijgen we: álles op deze pagina is een signaal. Alleen de
+    # betekenisvolle soorten (kiem/doelwit/concurrent) houden hun chip.
+    klabel = "" if kind in ("", "kaart") else _KIND.get(kind, kind)
     pub = _sig_date(it.get("published_at", ""))
     src = (it.get("source") or "").strip()
     link = (it.get("link") or "").strip()
@@ -52,7 +55,7 @@ def _sig_body(st, it) -> str:
             if link else _e(src))
     rat = (it.get("rationale") or "").strip()
     meta = " · ".join(x for x in (
-        f"<span class='chip muted'>{_e(klabel)}</span>",
+        (f"<span class='chip muted'>{_e(klabel)}</span>" if klabel else ""),
         (f"<span class='chip muted'>📅 {_e(pub)}</span>" if pub else ""),
         (f"<span class='chip'>{_e(it.get('feed', ''))}</span>" if it.get("feed") else ""),
         f"<span class='muted'>via {_e(rolenaam)}</span>",
@@ -84,26 +87,64 @@ def _signal_card(st, it, csrf: str = "", nxt: str = "/signals") -> str:
     """Eén te verwerken signaal: ⠿-handle (sleep op een ander signaal om te mergen),
     selectievakje (multi-promotie), promotie-control en een ✗ om het alsnog te verwijderen —
     de lijst is een inbox en hoort naar nul te kunnen."""
-    sel = weg = handle = ""
+    weg = handle = ""
     actief = bool(csrf) and not it.get("promoted_atom_id")
     if actief:
         handle = ("<span class='kn-handle' draggable='true' "
                   "title='sleep op een ander signaal om te mergen'>⠿</span>")
-        sel = (f"<input type='checkbox' class='rdr-sel' form='rdr-selform' name='rid' "
-               f"value='{_e(it.get('id', ''))}' aria-label='selecteer dit signaal'>")
-        weg = (f"<form method='post' action='/action' class='cl-rep rdr-wegform'>"
+        weg = (f"<form method='post' action='/action' class='rdr-wegform'>"
                f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
                f"<input type='hidden' name='rid' value='{_e(it.get('id', ''))}'>"
                f"<input type='hidden' name='next' value='{_e(nxt)}'>"
-               f"<button class='cl-check no' type='submit' name='action' value='radar_dismiss' "
+               f"<button class='rdr-weg' type='submit' name='action' value='radar_dismiss' "
                f"title='toch niet relevant — verwijderen'>✗</button></form>")
     ctl = radar_promote_ctl(it, csrf, nxt)
     rid_attr = f" data-rid='{_e(it.get('id', ''))}'" if actief else ""
     extra = len(it.get("merged_sources") or [])
     plus = (f"<span class='chip muted' title='herkomst van eerder samengevoegde signalen "
             f"reist mee'>+{extra} bron{'nen' if extra != 1 else ''}</span>" if extra else "")
-    return (f"<div class='rdr-row rdr-arch'{rid_attr}>{handle}{sel}{ctl}{weg}"
-            f"{_sig_body(st, it)}{plus}</div>")
+    return (f"<div class='rdr-row rdr-arch'{rid_attr}>{handle}{ctl}"
+            f"{_sig_body(st, it)}{_kb_hint(st, it, csrf, nxt)}{plus}{weg}</div>")
+
+
+def _kb_hint(st, it, csrf: str, nxt: str) -> str:
+    """MECE op de inbox zelf: staat dit signaal (vrijwel) al in de kennisbank, zeg dat er
+    dan bij — met één knop om de herkomst te koppelen aan het bestaande kaartje, waarna
+    het signaal verwerkt is en uit de lijst verdwijnt. Deterministisch, geen LLM."""
+    if it.get("promoted_atom_id"):
+        return ""
+    content = (it.get("content") or "").strip()
+    source = ((it.get("source") or "").strip() or (it.get("feed") or "").strip() or "radar")
+    link = (it.get("link") or "").strip()
+    try:
+        from nooch_village.radar_promote import find_duplicate
+        doel = find_duplicate(st.notes, content, source, link) or st.notes.find_claim_equal(content)
+        if doel is not None:
+            kaart = st.notes.get(doel)
+            label = "al in de kennisbank"
+            kort = (kaart.claim if kaart else "")[:120]
+        else:
+            g = st.notes.gelijkende(content)
+            if g is None:
+                return ""
+            doel, kort, _score = g
+            label = "lijkt op bestaand kaartje"
+            kort = kort[:120]
+    except Exception:
+        return ""
+    knop = ""
+    if csrf:
+        knop = (f"<form method='post' action='/action' class='kn-mece-koppel'>"
+                f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+                f"<input type='hidden' name='action' value='radar_koppel'>"
+                f"<input type='hidden' name='next' value='{_e(nxt)}'>"
+                f"<input type='hidden' name='rid' value='{_e(it.get('id', ''))}'>"
+                f"<input type='hidden' name='doel' value='{_e(doel)}'>"
+                f"<button class='btn' title='geen tweede kaartje: dit signaal wordt een "
+                f"extra bron onder het bestaande kaartje en is daarmee verwerkt'>"
+                f"🔗 koppel herkomst</button></form>")
+    return (f"<div class='kn-mece'>≈ <span class='muted'>{label}:</span> {_e(kort)} "
+            f"{knop}</div>")
 
 
 def _merge_modal(csrf: str, nxt: str) -> str:
@@ -207,8 +248,7 @@ _VG_OVERLAY = (
     "function toon(){o.removeAttribute('hidden');}"
     "var i,fs=document.querySelectorAll('.rdr-promoteform');"
     "for(i=0;i<fs.length;i++){fs[i].addEventListener('submit',toon);}"
-    "var s=document.getElementById('rdr-selform');"
-    "if(s){s.addEventListener('submit',toon);}})();</script>")
+    "})();</script>")
 
 
 def render_signals(st, csrf_token: str = "", feed: str = "") -> str:
@@ -218,10 +258,8 @@ def render_signals(st, csrf_token: str = "", feed: str = "") -> str:
     wachtend = st.radar.all_pending()
     alle = st.radar.all_approved()
     # Gepromoveerde signalen zijn kenniskaartjes geworden — signalen zijn de wachtkamer,
-    # niet het archief (founder, 18 jul). Ze verdwijnen uit de lijst; onderaan blijft een
-    # ingeklapte teller zodat niets spoorloos is.
+    # niet het archief (founder, 18/19 jul): eenmaal verwerkt verdwijnen ze hier restloos.
     items = [it for it in alle if not it.get("promoted_atom_id")]
-    promoted = [it for it in alle if it.get("promoted_atom_id")]
     # Feed-chips uit de CONFIGURATIE, niet uit wat er toevallig staat (founder, 19 jul):
     # een nieuw aangesloten feed hoort hier meteen zichtbaar te zijn, ook als hij nog
     # leeg is. Feeds die alleen in oude data voorkomen (hernoemd/verdwenen) blijven erbij.
@@ -241,41 +279,26 @@ def render_signals(st, csrf_token: str = "", feed: str = "") -> str:
             f"<a class='chip-opt{(' on' if feed == val else '')}' "
             f"href='/signals{('?feed=' + _e(val)) if val else ''}'>{_e(lbl)}</a>"
             for val, lbl in opts) + "</div>")
-    # ── wachtrij (centraal: alle feeds, alle rollen) ─────────────────────────
+    # ── wachtrij (centraal: alle feeds, alle rollen); leeg → onzichtbaar ─────
+    wacht = ""
     if wachtend:
         wacht = (f"<div class='rdr-sub'>Wachtrij <span class='muted'>· {len(wachtend)} nieuw "
                  f"signaal{'en' if len(wachtend) != 1 else ''}, jij bepaalt wat relevant is"
                  f"</span></div>"
-                 + "".join(_wachtrij_card(st, it, csrf_token, nxt) for it in wachtend))
-    else:
-        wacht = "<p class='muted'>Geen nieuwe signalen in de wachtrij.</p>"
-    # ── goedgekeurd: selecteerbaar voor de gezamenlijke promotie ─────────────
-    selbar = ""
-    if csrf_token and items:
-        selbar = (f"<form method='post' action='/action' id='rdr-selform' class='rdr-selbar'>"
-                  f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-                  f"<input type='hidden' name='action' value='radar_promote_multi'>"
-                  f"<input type='hidden' name='next' value='{_e(nxt)}'>"
-                  f"<button class='btn ok' type='submit' title='lees de bronnen en zet de "
-                  f"selectie samen klaar bij Even nakijken'>→ Even nakijken (selectie)</button>"
-                  f"<span class='muted'>vink signalen aan om ze samen te promoveren en daar "
-                  f"te mergen</span></form>")
+                 f"<div class='rdr-tool'>"
+                 + "".join(_wachtrij_card(st, it, csrf_token, nxt) for it in wachtend)
+                 + "</div>")
     body = ("".join(_signal_card(st, it, csrf_token, nxt) for it in items) if items
             else "<p class='muted'>🎉 Nul — niets meer te verwerken. Wat je in de wachtrij "
                  "goedkeurt verschijnt hier.</p>")
-    if promoted:
-        body += (f"<details class='c2-hist'><summary class='muted'>→ in kennisbank · "
-                 f"{len(promoted)}</summary>"
-                 + "".join(_signal_card(st, it, csrf_token, nxt) for it in promoted)
-                 + "</details>")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
             f"<h1>Signalen <span class='chip'>library</span></h1>"
-            f"<p class='muted'>Hier komt alles binnen: de centrale wachtrij van alle feeds. "
-            f"Wat je goedkeurt kun je hieronder (samen) promoveren tot kenniskaartjes.</p>"
+            f"<p class='muted'>Hier komt alles binnen. Sleep signalen op elkaar om te "
+            f"mergen, promoveer ze tot kenniskaartje of verwijder ze — werk naar nul.</p>"
             f"{chips}"
-            f"<div class='rdr-tool'>{wacht}</div>"
-            f"<div class='rdr-sub'>Te verwerken <span class='muted'>· {len(items)} — mergen, "
-            f"promoveren of verwijderen; net als je mailbox is nul het doel</span></div>{selbar}"
+            f"{wacht}"
+            f"<div class='rdr-sub'>Te verwerken <span class='muted'>· {len(items)} — sleep om "
+            f"te mergen, promoveer of verwijder; net als je mailbox is nul het doel</span></div>"
             f"<div class='rdr-tool'>{body}</div>"
             f"{_merge_modal(csrf_token, nxt)}"
             f"{_VG_OVERLAY if csrf_token else ''}</div>")
