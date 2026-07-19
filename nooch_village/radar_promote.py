@@ -89,11 +89,43 @@ def _signaal_guards(st, rid: str) -> tuple[dict | None, str]:
     return it, ""
 
 
+_BRON_ATOM_CAP = 12   # bovengrens per gelezen bron: geen ontploffing in mini-kaartjes
+
+
+def _atomen_uit_bron(it: dict) -> list[dict] | None:
+    """Lees de gelinkte bron van een signaal en atomiseer hem tot voorstellen (dezelfde
+    pijplijn als "Verwerk de bron": kennisbank_sources → atomiser, met cap). Fail-closed:
+    geen link, fetch-fout of geen LLM → None, en de aanroeper valt terug op de signaaltekst.
+    De atomen dragen géén radar_rids; dat zet de aanroeper erbij."""
+    link = (it.get("link") or "").strip()
+    if not link.lower().startswith("http"):
+        return None
+    try:
+        from nooch_village.kennisbank_intake import atomiseer
+        from nooch_village.kennisbank_sources import detect_and_extract
+        res = detect_and_extract(text=link)
+        if not res.get("chunks"):
+            return None
+        atoms: list[dict] = []
+        for raw, label in res["chunks"]:
+            got = atomiseer(raw, label, tabular=res.get("tabular", False))
+            if got:
+                atoms += got
+            if len(atoms) >= _BRON_ATOM_CAP:
+                atoms = atoms[:_BRON_ATOM_CAP]
+                break
+        return atoms or None
+    except Exception:
+        return None
+
+
 def stage_signal(st, rid: str) -> tuple[str | None, str]:
     """Zet een goedgekeurd radar-signaal klaar bij "Even nakijken" (staging) in plaats van
-    direct een kaartje te maken: de mens kan het daar bewerken, met andere signalen
-    samenvoegen of alsnog weggooien; pas bij commit ontstaat het kaartje (via hetzelfde
-    dedupe/marker-pad als de directe promotie — zie kennisbank_staging._commit_signaal_atoom).
+    direct een kaartje te maken. De stap probeert de GELINKTE BRON te lezen en te atomiseren
+    tot losse voorstellen (atomic insights) — de signaaltekst is het vangnet als dat niet
+    lukt (geen link, fetch-fout, geen LLM). De mens kan alles daar bewerken, samenvoegen of
+    weggooien; pas bij commit ontstaan de kaartjes (via hetzelfde dedupe/marker-pad als de
+    directe promotie — zie kennisbank_staging._commit_signaal_atoom).
 
     Meerdere signalen landen in DEZELFDE open signalen-batch, zodat ze daar samen te mergen
     zijn. Idempotent: een signaal dat al klaarstaat wordt niet nogmaals toegevoegd.
@@ -106,18 +138,37 @@ def stage_signal(st, rid: str) -> tuple[str | None, str]:
         for a in b.get("atoms", []):
             if rid in (a.get("radar_rids") or []):
                 return b["id"], "Dit signaal staat al klaar bij Even nakijken"
-    atoom = {"content": (it.get("content") or "").strip(),
-             "source": ((it.get("source") or "").strip()
-                        or (it.get("feed") or "").strip() or "radar"),
-             "reference": ((it.get("link") or "").strip() or None),
-             "source_date": (parse_source_date(it.get("published_at", "")) or None),
-             "provenance": _PROVENANCE,
-             "radar_rids": [rid]}
+    bron = ((it.get("source") or "").strip()
+            or (it.get("feed") or "").strip() or "radar")
+    link = (it.get("link") or "").strip() or None
+    datum = parse_source_date(it.get("published_at", "")) or None
+    gelezen = _atomen_uit_bron(it)
+    if gelezen:
+        atomen = [{"content": a.get("content"), "body": a.get("body"),
+                   "subject": a.get("subject"),
+                   "source": (a.get("source") or bron),
+                   "reference": (a.get("reference") or link),
+                   "source_date": (a.get("source_date") or datum),
+                   "provenance": a.get("provenance") or _PROVENANCE,
+                   "flags": a.get("flags") or [],
+                   "van_bron": True,
+                   "radar_rids": [rid]}
+                  for a in gelezen]
+        banner = (f"📖 bron gelezen: {len(atomen)} voorstellen staan klaar bij "
+                  f"Even nakijken — bewerk, voeg samen of bevestig")
+    else:
+        atomen = [{"content": (it.get("content") or "").strip(),
+                   "source": bron, "reference": link, "source_date": datum,
+                   "provenance": _PROVENANCE, "radar_rids": [rid]}]
+        banner = ("🔎 signaal staat klaar bij Even nakijken (bron niet leesbaar of geen "
+                  "LLM — de signaaltekst is het voorstel)")
     for b in st.staging.open_batches():
-        if b.get("kind") == "signaal" and st.staging.append_atom(b["id"], atoom):
-            return b["id"], "🔎 signaal toegevoegd aan Even nakijken — bewerk, voeg samen of bevestig"
-    bid = st.staging.create("signaal", "signalen", [atoom])
-    return bid, "🔎 signaal staat klaar bij Even nakijken — bewerk, voeg samen of bevestig"
+        if b.get("kind") == "signaal":
+            ok = all(st.staging.append_atom(b["id"], a) for a in atomen)
+            if ok:
+                return b["id"], banner
+    bid = st.staging.create("signaal", "signalen", atomen)
+    return bid, banner
 
 
 def promote_signal(st, rid: str) -> tuple[str | None, str]:

@@ -149,6 +149,45 @@ class NotesStore:
         self._save()
         return bestaand
 
+    def find_claim_equal(self, content: str) -> str | None:
+        """Bestaand niet-gearchiveerd kaartje met exact dezelfde genormaliseerde claim,
+        ongeacht de bron. MECE-bewaking (founder, 19 jul): hetzelfde inzicht uit een ándere
+        bron wordt géén tweede kaartje — de nieuwe herkomst stapelt op het bestaande
+        (stack_provenance, grounding +1). None als er niets exact matcht."""
+        from nooch_village.kennisbank_intake import _norm_content
+        doel = _norm_content(content)
+        if not doel:
+            return None
+        for a in self.all():
+            if not a.archived and _norm_content(a.claim) == doel:
+                return a.id
+        return None
+
+    def gelijkende(self, content: str, drempel: float = 0.55) -> tuple[str, str, float] | None:
+        """Beste GELIJKENDE (niet exact gelijke) claim in de bibliotheek, op woord-overlap
+        (Jaccard over tokens ≥4 tekens). Voedt de MECE-hint in de staging-review: "lijkt op
+        bestaand kaartje — koppel als extra bron?" — de mens beslist, dit oordeelt niet.
+        Geeft (atom_id, claim, score) of None onder de drempel. Deterministisch, geen LLM."""
+        import re as _re
+
+        def _tok(t: str) -> frozenset:
+            return frozenset(w for w in _re.split(r"[\W_]+", (t or "").lower()) if len(w) >= 4)
+
+        doel = _tok(content)
+        if not doel:
+            return None
+        beste: tuple[str, str, float] | None = None
+        for a in self.all():
+            if a.archived:
+                continue
+            woorden = _tok(a.claim)
+            if not woorden:
+                continue
+            score = len(doel & woorden) / len(doel | woorden)
+            if score >= drempel and (beste is None or score > beste[2]):
+                beste = (a.id, a.claim, score)
+        return beste
+
     def add_tags(self, note_id: str, tags: list[str]) -> bool:
         """Voeg tags idempotent toe aan een bestaand kaartje (curatie: bijv. het
         onderwerp uit het kennisbank-vocabulaire). Volgorde blijft; bestaande tags

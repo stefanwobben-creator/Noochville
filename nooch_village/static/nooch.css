@@ -1016,3 +1016,9 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .kn-vgbalk{height:100%;width:0;background:var(--green);border-radius:999px;animation:kn-vgvullen 16s cubic-bezier(.85,.05,.9,.35) forwards,kn-vgpuls 1.6s ease-in-out 16s infinite}
 @keyframes kn-vgvullen{from{width:0}to{width:96%}}
 @keyframes kn-vgpuls{0%,100%{opacity:1}50%{opacity:.55}}
+/* MECE-hint in de staging-review: volle breedte onder het voorstel, rustig maar zichtbaar. */
+.kn-mece{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;font-size:.85rem;background:var(--green-tint);border:1px solid var(--border);border-radius:var(--radius);padding:.4rem .6rem}
+.kn-mece-koppel{display:inline}
+/* Multi-select op /signals: selectievakje per goedgekeurd signaal + de selectie-balk. */
+.rdr-sel{margin-top:.35rem}
+.rdr-selbar{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.4rem 0 .6rem}

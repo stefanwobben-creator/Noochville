@@ -16,7 +16,6 @@ from nooch_village.insight import Insight
 from nooch_village.kennisbank_intake import stable_id
 from nooch_village.radar_promote import (auto_promote_enabled, norm_ref,
                                          parse_source_date, promote_signal)
-from nooch_village.views.overview import _radar_item
 from nooch_village.views.signals import render_signals
 
 _ROLE = "concurrent_scout"
@@ -231,19 +230,27 @@ def test_signals_pagina_toont_knop_en_daarna_chip(tmp_path):
     assert "→ in kennisbank" in render_signals(st)
 
 
-def test_rol_tools_archief_toont_knop_en_chip(tmp_path):
+def test_rol_tools_toont_alleen_verwijzing_naar_signals(tmp_path):
+    """De radar verhuisde naar de centrale /signals-pagina (founder, 19 jul): de rol-Tools-tab
+    toont voor feed-rollen alleen nog een verwijzing, geen wachtrij of archief meer."""
     st = cockpit2._Stores(_dd(tmp_path))
-    rid = _approved(st)
-    it = st.radar.get(rid)
-    row = _radar_item(it, "tok", _ROLE, archief=True)
-    assert "radar_promote" in row and "→ kenniskaartje" in row
-    promote_signal(st, rid)
-    row2 = _radar_item(st.radar.get(rid), "tok", _ROLE, archief=True)
-    assert "radar_promote" not in row2 and "→ in kennisbank" in row2
-    # wachtrij-items houden alleen ✓/✗ — promoveren kan pas na goedkeuren
-    wid = st.radar.add(role=_ROLE, feed="f", kind="kaart", content="Wachtrij-item")
-    wrow = _radar_item(st.radar.get(wid), "tok", _ROLE, archief=False)
-    assert "radar_promote" not in wrow and "radar_approve" in wrow
+    _approved(st)
+    from nooch_village.views.overview import _radar_verwijzing
+    rec = SimpleNamespace(id=_ROLE)
+    html = _radar_verwijzing(st, rec)
+    assert "/signals" in html and "kennisbank" in html
+    assert "radar_approve" not in html and "radar_promote" not in html
+    # rol zonder feed: geen verwijzing
+    assert _radar_verwijzing(st, SimpleNamespace(id="librarian")) == ""
+
+
+def test_signals_wachtrij_centraal(tmp_path):
+    """De centrale wachtrij op /signals: wachtende signalen van álle rollen, met ✓/✗."""
+    st = cockpit2._Stores(_dd(tmp_path))
+    st.radar.add(role=_ROLE, feed="f", kind="kaart", content="Wachtrij-item centraal")
+    html = render_signals(st, csrf_token="tok")
+    assert "Wachtrij-item centraal" in html
+    assert "radar_approve" in html and "radar_dismiss" in html
 
 
 def test_gepromoveerde_signalen_uit_overzicht(tmp_path):
@@ -258,8 +265,5 @@ def test_gepromoveerde_signalen_uit_overzicht(tmp_path):
     assert "in kennisbank · 1" in html           # ingeklapte teller
     # het gepromoveerde signaal staat alleen nog ín die details-sectie
     assert "Signaal dat gepromoveerd wordt" in html.split("in kennisbank · 1")[1]
-    # en het rol-archief filtert hem er ook uit
-    from nooch_village.views.overview import _radar_tool_html
-    rec = SimpleNamespace(id=_ROLE)
-    arch = _radar_tool_html(st, rec, "tok", None)
-    assert "Signaal dat gepromoveerd wordt" not in arch
+    # multi-select: het blijvende signaal heeft een selectievakje voor de gezamenlijke promotie
+    assert "radar_promote_multi" in html and "rdr-sel" in html

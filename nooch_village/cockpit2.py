@@ -1896,6 +1896,55 @@ def _act_radar_promote(c):
         return nxt, msg
 
 
+def _act_radar_promote_multi(c):
+        """Meerdere goedgekeurde signalen in één keer naar Even nakijken (multi-select op
+        /signals). Ze landen in dezelfde staging-set, zodat ze daar samen te mergen zijn.
+        Zelfde poort per signaal als de losse promotie."""
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        rids = [r for r in (c.form.get("rid") or []) if r]
+        if not rids:
+            return nxt, "✗ vink eerst één of meer signalen aan"
+        bid = None
+        gelukt = 0
+        for rid in rids:
+            it = st.radar.get(rid)
+            if it is None:
+                continue
+            if _role_gate(it["role"], username, st):
+                continue                        # geen toegang tot dit signaal: overslaan
+            b, _msg = radar_promote.stage_signal(st, rid)
+            if b:
+                bid = bid or b
+                gelukt += 1
+        if bid is None:
+            return nxt, "✗ geen van de aangevinkte signalen kon worden klaargezet"
+        return (f"/kennisbank/staging?batch={bid}",
+                f"📖 {gelukt} signaal/signalen klaargezet bij Even nakijken — "
+                f"bewerk, voeg samen of bevestig")
+
+
+def _act_kb_stage_koppel(c):
+        """MECE-knop in de staging-review: dit voorstel is hetzelfde inzicht als een bestaand
+        kaartje — koppel het als extra bron (stack_provenance, grounding +1) in plaats van
+        een tweede kaartje te maken. Signaal-voorstellen krijgen meteen hun promoted-marker."""
+        st = c.st
+        b = st.staging.get(c.g("bid"))
+        a = next((x for x in (b or {}).get("atoms", []) if x["sid"] == c.g("sid")), None)
+        doel = c.g("doel")
+        if a is None or not doel or st.notes.get(doel) is None:
+            return c.nxt, "✗ voorstel of doelkaartje niet gevonden"
+        st.notes.stack_provenance(doel, source=a.get("source") or "",
+                                  reference=(a.get("reference") or ""))
+        if a.get("radar_rids"):
+            st.notes.add_tags(doel, ["signal"])
+            for rid in a["radar_rids"]:
+                al = st.radar.get(rid)
+                if al is not None and not al.get("promoted_atom_id"):
+                    st.radar.mark_promoted(rid, doel)
+        st.staging.remove_atom(c.g("bid"), c.g("sid"))
+        return c.nxt, "🔗 gekoppeld als extra bron aan het bestaande kaartje"
+
+
 def _acc_id_param(st, role_id: str, qs) -> str:
     """Het stabiele accountability-id uit de request. Valt fail-soft terug op de oude
     `acc`-index (bookmarks, oude fragment-links) door hem éénmalig om te rekenen."""
@@ -3996,6 +4045,8 @@ ACTIONS = {
     "radar_approve": _act_radar_approve,
     "radar_dismiss": _act_radar_dismiss,
     "radar_promote": _act_radar_promote,
+    "radar_promote_multi": _act_radar_promote_multi,
+    "kb_stage_koppel": _act_kb_stage_koppel,
     "aitask_add": _act_aitask_add,
     "aitask_remove": _act_aitask_remove,
     "skilllink_add": _act_skilllink_add,

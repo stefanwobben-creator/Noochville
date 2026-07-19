@@ -49,6 +49,7 @@ class StagingStore(JsonStore):
                 "reference": a.get("reference"),
                 "source_date": a.get("source_date"),
                 "radar_rids": [r for r in (a.get("radar_rids") or [])],
+                "van_bron": bool(a.get("van_bron")),
                 "flags": [f for f in (a.get("flags") or [])]}
 
     def get(self, bid: str) -> dict | None:
@@ -169,11 +170,28 @@ def _commit_signaal_atoom(a: dict, notes, radar) -> tuple[bool, bool]:
             return
         for rid in a.get("radar_rids") or []:
             try:
+                # Eén signaal kan meerdere voorstellen opleveren (bron gelezen): het eerste
+                # gecommitte kaartje wordt het anker; latere overschrijven de marker niet.
+                al = radar.get(rid)
+                if al is not None and al.get("promoted_atom_id"):
+                    continue
                 radar.mark_promoted(rid, atom_id)
             except Exception:
                 pass  # fail-soft: een kapotte marker mag de commit nooit breken
 
-    dup = find_duplicate(notes, content, source, link)
+    if a.get("van_bron"):
+        # Atoom uit een GELEZEN bron: meerdere losse insights delen dezelfde artikel-link,
+        # dus de reference-match zou ze onterecht samenvouwen. Dedupe hier op claim:
+        # zelfde content+bron (stable_id) of exact dezelfde claim uit een andere bron.
+        aid0 = stable_id(content, source)
+        bestaand = notes.get(aid0)
+        dup = aid0 if (bestaand is not None and not bestaand.archived) else None
+    else:
+        # Vangnet-atoom (de signaaltekst zelf): zelfde artikel-URL = zelfde signaal.
+        dup = find_duplicate(notes, content, source, link)
+    if dup is None:
+        # MECE: exact dezelfde claim uit een ándere bron is hetzelfde inzicht — stapelen.
+        dup = notes.find_claim_equal(content)
     if dup is not None:
         notes.stack_provenance(dup, source=source, reference=link)
         notes.add_tags(dup, ["signal"])
@@ -224,6 +242,14 @@ def commit_batch(store: StagingStore, bid: str, data_dir: str,
                              "flags": a.get("flags") or [], "link_hints": []})
         if notes.get(kaart.id) is not None:
             overgeslagen += 1
+            continue
+        # MECE: zelfde claim, andere bron → geen tweede kaartje maar herkomst erbij
+        # (stack_provenance: bron/link stapelen, grounding +1).
+        zelfde = notes.find_claim_equal(a["content"])
+        if zelfde is not None:
+            notes.stack_provenance(zelfde, source=a["source"],
+                                   reference=(a.get("reference") or ""))
+            gekoppeld += 1
             continue
         notes.add(kaart)
         nieuw += 1

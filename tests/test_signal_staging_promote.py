@@ -11,13 +11,23 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from nooch_village import cockpit2
+from nooch_village import radar_promote as rp
 from nooch_village.insight import Insight
 from nooch_village.kennisbank_intake import stable_id
 from nooch_village.kennisbank_staging import commit_batch
 from nooch_village.radar_promote import stage_signal
 
 _ROLE = "concurrent_scout"
+
+
+@pytest.fixture(autouse=True)
+def _geen_bron_lezen(monkeypatch):
+    """Standaard geen echte fetch/LLM in tests: stage_signal valt terug op de signaaltekst.
+    De bron-lees-tests overschrijven deze patch met hun eigen atomen."""
+    monkeypatch.setattr(rp, "_atomen_uit_bron", lambda it: None)
 _CONTENT = "Vivobarefoot lanceert een plantaardige sneaker"
 _LINK = "https://www.vivobarefoot.com/nieuws/plant?utm_source=x"
 
@@ -168,3 +178,91 @@ def test_actie_stuurt_door_naar_staging(tmp_path):
     assert "Even nakijken" in msg
     # het kaartje bestaat nog NIET — pas na commit
     assert st.notes.get(stable_id(_CONTENT, "vivobarefoot.com")) is None
+
+
+# ── bron lezen: de gelinkte pagina wordt geatomiseerd ────────────────────────
+
+def test_stage_leest_bron_en_zet_atomen_klaar(tmp_path, monkeypatch):
+    st = cockpit2._Stores(_dd(tmp_path))
+    rid = _approved(st)
+    monkeypatch.setattr(rp, "_atomen_uit_bron", lambda it: [
+        {"content": "Eerste atomic insight uit het artikel", "subject": "", "provenance": "media"},
+        {"content": "Tweede atomic insight uit het artikel", "reference": "10.1234/doi.5",
+         "source_date": "2026-06-01"},
+    ])
+    bid, msg = rp.stage_signal(st, rid)
+    assert bid and "bron gelezen" in msg and "2 voorstellen" in msg
+    a1, a2 = st.staging.get(bid)["atoms"]
+    assert a1["content"] == "Eerste atomic insight uit het artikel"
+    assert a1["reference"] == _LINK                      # vangnet: artikel-link van het signaal
+    assert a1["source_date"] == "2026-05-11"             # vangnet: publicatiedatum signaal
+    assert a1["radar_rids"] == [rid] and a2["radar_rids"] == [rid]
+    assert a2["reference"] == "10.1234/doi.5"            # eigen citaat van het atoom wint
+    assert a2["source_date"] == "2026-06-01"
+
+
+def test_commit_meerdere_atomen_markeert_signaal_eenmaal(tmp_path, monkeypatch):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    rid = _approved(st)
+    monkeypatch.setattr(rp, "_atomen_uit_bron", lambda it: [
+        {"content": "Insight A uit de bron"}, {"content": "Insight B uit de bron"}])
+    bid, _ = rp.stage_signal(st, rid)
+    res = commit_batch(st.staging, bid, dd, radar=st.radar)
+    assert res == (2, 0, 0)
+    marker = cockpit2._Stores(dd).radar.get(rid)["promoted_atom_id"]
+    assert marker == stable_id("Insight A uit de bron", "vivobarefoot.com")   # eerste = anker
+
+
+# ── MECE: zelfde inzicht, andere bron → stapelen, nooit een tweede kaartje ───
+
+def test_commit_zelfde_claim_andere_bron_stapelt(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    st.notes.add(Insight(id="atom_meceA", claim=_CONTENT, source="een-heel-andere-bron"))
+    rid = _approved(st)
+    bid, _ = stage_signal(st, rid)
+    res = commit_batch(st.staging, bid, dd, radar=st.radar)
+    assert res == (0, 0, 1)                              # gekoppeld, geen duplicaat
+    kaart = cockpit2._Stores(dd).notes.get("atom_meceA")
+    assert kaart.grounding_count == 2                    # +1: er is een herkomst bij
+    assert "vivobarefoot.com" in kaart.source
+    assert len([x for x in cockpit2._Stores(dd).notes.all() if not x.archived]) == 1
+
+
+def test_mece_hint_en_koppel_actie(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    st.notes.add(Insight(id="atom_meceB",
+                         claim="Vivobarefoot lanceert een plantaardige sneaker in Europa",
+                         source="elders"))
+    rid = _approved(st)                                  # claim lijkt sterk, is niet exact gelijk
+    bid, _ = stage_signal(st, rid)
+    from nooch_village.views.kennisbank_staging import render_kennisbank_staging
+    html = render_kennisbank_staging(st, bid, csrf_token="tok")
+    assert "lijkt op bestaand kaartje" in html and "kb_stage_koppel" in html
+    sid = st.staging.get(bid)["atoms"][0]["sid"]
+    c = SimpleNamespace(nxt=f"/kennisbank/staging?batch={bid}", st=st, data_dir=dd,
+                        username="guest",
+                        g=lambda k, _m={"bid": bid, "sid": sid, "doel": "atom_meceB"}: _m.get(k, ""))
+    nxt, msg = cockpit2._act_kb_stage_koppel(c)
+    assert "extra bron" in msg
+    kaart = st.notes.get("atom_meceB")
+    assert kaart.grounding_count == 2 and "vivobarefoot.com" in kaart.source
+    assert st.radar.get(rid)["promoted_atom_id"] == "atom_meceB"
+    assert st.staging.get(bid)["atoms"] == []            # voorstel is uit de set
+
+
+def test_multi_select_actie_zet_selectie_in_een_set(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    r1 = _approved(st)
+    r2 = _approved(st, content="Tweede geselecteerde signaal", link="https://x.nl/q")
+    c = SimpleNamespace(nxt="/signals", st=st, data_dir=dd, username="guest",
+                        g=lambda k: "", form={"rid": [r1, r2]})
+    nxt, msg = cockpit2._act_radar_promote_multi(c)
+    assert nxt.startswith("/kennisbank/staging?batch=")
+    assert "2 signaal" in msg
+    bid = nxt.split("batch=")[1]
+    rids = [a["radar_rids"][0] for a in st.staging.get(bid)["atoms"]]
+    assert set(rids) == {r1, r2}

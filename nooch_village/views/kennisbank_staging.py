@@ -23,7 +23,30 @@ def _hid(csrf: str, action: str, nxt: str, extra: dict | None = None) -> str:
     return h
 
 
-def _atoom_kaartje(b: dict, a: dict, csrf: str, nxt: str) -> str:
+def _mece_hint(st, b: dict, a: dict, csrf: str, nxt: str) -> str:
+    """MECE-bewaking in de review: lijkt dit voorstel op een bestaand kaartje, toon dat mét
+    een koppel-knop ("dit is hetzelfde inzicht, andere bron") zodat de bibliotheek geen
+    tweede kaartje krijgt. Exact gelijke claims worden bij commit sowieso gestapeld; deze
+    hint vangt de GELIJKENDE gevallen — en daar beslist de mens. Deterministisch, geen LLM."""
+    try:
+        gelijk = st.notes.gelijkende(a.get("content") or "")
+    except Exception:
+        return ""
+    if gelijk is None:
+        return ""
+    atom_id, claim, _score = gelijk
+    kort = claim if len(claim) <= 140 else claim[:137] + "…"
+    knop = ""
+    if csrf:
+        knop = (f"<form method='post' action='/action' class='kn-mece-koppel'>"
+                f"{_hid(csrf, 'kb_stage_koppel', nxt, {'bid': b['id'], 'sid': a['sid'], 'doel': atom_id})}"
+                f"<button class='btn' title='geen tweede kaartje: dit voorstel wordt een extra "
+                f"bron onder het bestaande kaartje'>🔗 koppel als extra bron</button></form>")
+    return (f"<div class='kn-mece'>≈ <span class='muted'>lijkt op bestaand kaartje:</span> "
+            f"{_e(kort)} {knop}</div>")
+
+
+def _atoom_kaartje(st, b: dict, a: dict, csrf: str, nxt: str) -> str:
     """Eén voorgesteld atoom: bewerkbaar (content/onderwerp/provenance) + aanvinken + weggooien."""
     sid = a["sid"]
     subj_opts = "<option value=''>— geen onderwerp —</option>" + "".join(
@@ -57,7 +80,8 @@ def _atoom_kaartje(b: dict, a: dict, csrf: str, nxt: str) -> str:
         f"<button class='btn'>Bewaar</button></div></form>"
         f"<form method='post' action='/action' class='kn-stage-del'>"
         f"{_hid(csrf, 'kb_stage_delete', nxt, {'bid': b['id'], 'sid': sid})}"
-        f"<button class='btn' title='weggooien'>×</button></form></div>")
+        f"<button class='btn' title='weggooien'>×</button></form>"
+        f"{_mece_hint(st, b, a, csrf, nxt)}</div>")
 
 
 def render_kennisbank_staging(st, bid: str, csrf_token: str = "", msg: str = "") -> str:
@@ -69,7 +93,7 @@ def render_kennisbank_staging(st, bid: str, csrf_token: str = "", msg: str = "")
         return _page("Even nakijken", inner)
     nxt = f"/kennisbank/staging?batch={bid}"
     atomen = b.get("atoms") or []
-    kaartjes = "".join(_atoom_kaartje(b, a, csrf_token, nxt) for a in atomen) or (
+    kaartjes = "".join(_atoom_kaartje(st, b, a, csrf_token, nxt) for a in atomen) or (
         "<p class='muted'>Geen atomen meer in deze set.</p>")
     tab = " <span class='chip muted'>tabeldata</span>" if b.get("tabular") else ""
 

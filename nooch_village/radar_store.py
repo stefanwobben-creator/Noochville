@@ -125,6 +125,12 @@ class RadarStore(JsonStore):
         return sorted((it for it in self._data["items"].values() if it["status"] == "goedgekeurd"),
                       key=lambda it: it["at"], reverse=True)
 
+    def all_pending(self) -> list:
+        """Alle wachtende signalen over álle rollen, nieuwste eerst — de centrale wachtrij op
+        /signals (de radar verhuisde van de rol-pagina's naar de library; founder, 19 jul)."""
+        return sorted((it for it in self._data["items"].values() if it["status"] == "wacht"),
+                      key=lambda it: it["at"], reverse=True)
+
     def mark_promoted(self, item_id: str, atom_id: str) -> bool:
         """Marker na promotie naar de kennisbank: onthoud op het signaal WELK atoom eruit
         ontstond (of waarmee het samenging). Idempotentie-anker: een gemarkeerd item wordt
