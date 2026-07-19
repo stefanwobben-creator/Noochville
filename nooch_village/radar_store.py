@@ -33,6 +33,8 @@ _DEFAULT_FEEDS = [
      "mode": "precisie", "label": "Legal & Green Claims"},
     {"env": "INOREADER_MATERIALS_JSON_URL", "role": "harry_hemp",
      "mode": "precisie", "focus": "materials", "label": "Material Innovation"},
+    {"env": "INOREADER_INDUSTRY_JSON_URL", "role": "mother_earth__nooch__strategic_lead_founder_steward",
+     "mode": "precisie", "label": "Industry Watch"},
 ]
 
 
