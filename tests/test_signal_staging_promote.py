@@ -387,3 +387,47 @@ def test_signals_kb_hint_bij_bestaand_kaartje(tmp_path):
     from nooch_village.views.signals import render_signals
     html = render_signals(st, csrf_token="tok")
     assert "al in de kennisbank" in html and "radar_koppel" in html
+
+
+# ── per-voorstel verwerken: bewaard = in de bibliotheek = weg uit de set ─────
+
+def test_accept_verwerkt_een_voorstel_en_laat_de_rest_staan(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    r1 = _approved(st)
+    r2 = _approved(st, content="Tweede voorstel blijft staan", link="https://x.nl/b2")
+    bid, _ = stage_signal(st, r1)
+    stage_signal(st, r2)
+    sid = st.staging.get(bid)["atoms"][0]["sid"]
+    c = SimpleNamespace(nxt=f"/kennisbank/staging?batch={bid}", st=st, data_dir=dd,
+                        username="guest", form={"content": ["Aangescherpte tekst"]},
+                        g=lambda k, _m={"bid": bid, "sid": sid}: _m.get(k, ""))
+    nxt, msg = cockpit2._act_kb_stage_accept(c)
+    assert "in de bibliotheek" in msg and nxt.startswith("/kennisbank/staging")
+    assert len(st.staging.get(bid)["atoms"]) == 1        # verwerkt = weg, rest blijft
+    aid = stable_id("Aangescherpte tekst", "vivobarefoot.com")
+    assert cockpit2._Stores(dd).notes.get(aid) is not None
+    assert cockpit2._Stores(dd).radar.get(r1)["promoted_atom_id"] == aid
+
+
+def test_accept_laatste_voorstel_sluit_de_set(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    rid = _approved(st)
+    bid, _ = stage_signal(st, rid)
+    sid = st.staging.get(bid)["atoms"][0]["sid"]
+    c = SimpleNamespace(nxt=f"/kennisbank/staging?batch={bid}", st=st, data_dir=dd,
+                        username="guest", form={},
+                        g=lambda k, _m={"bid": bid, "sid": sid}: _m.get(k, ""))
+    nxt, msg = cockpit2._act_kb_stage_accept(c)
+    assert nxt == "/kennisbank" and "🎉" in msg
+    assert st.staging.get(bid) is None                   # set ruimt zichzelf op
+
+
+def test_staging_kaart_heeft_accept_knop(tmp_path):
+    st = cockpit2._Stores(_dd(tmp_path))
+    rid = _approved(st)
+    bid, _ = stage_signal(st, rid)
+    from nooch_village.views.kennisbank_staging import render_kennisbank_staging
+    html = render_kennisbank_staging(st, bid, csrf_token="tok")
+    assert "kb_stage_accept" in html and "Bewaar → bibliotheek" in html

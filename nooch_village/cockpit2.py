@@ -73,7 +73,7 @@ from nooch_village.kennisbank import (KennisbankStore, parse_blok,
                                       load_atoms as kb_load_atoms)
 from nooch_village.kennisbank_intake import SUBJECTS as KB_SUBJECTS, intake as kb_intake
 from nooch_village.kennisbank_spel import SpelStore, spel_finish
-from nooch_village.kennisbank_staging import StagingStore, commit_batch
+from nooch_village.kennisbank_staging import StagingStore, commit_atom, commit_batch
 from nooch_village.views.kennisbank_staging import render_kennisbank_staging
 from nooch_village.notes_store import NotesStore
 from nooch_village.insight import Insight
@@ -3668,6 +3668,25 @@ def _act_kb_stage_edit(c):
     return c.nxt, ("✏️ bijgewerkt" if ok else "✗ niet gevonden")
 
 
+def _act_kb_stage_accept(c):
+    # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. "✓ Bewaar → bibliotheek":
+    # eventuele tekstwijziging bewaren en dit ENE voorstel meteen verwerken (founder, 19 jul:
+    # verwerkt = weg uit de set, anders lijkt de actie niet gebeurd). Zelfde dedupe/MECE/
+    # marker-pad als de set-commit; een leeggeraakte set ruimt zichzelf op.
+    content = (c.form.get("content") or [None])[0]
+    if content and content.strip():
+        c.st.staging.edit_atom(c.g("bid"), c.g("sid"), content=content)
+    res = commit_atom(c.st.staging, c.g("bid"), c.g("sid"), c.data_dir, radar=c.st.radar)
+    if res is None:
+        return c.nxt, "✗ voorstel niet gevonden"
+    msg = {"nieuw": "✓ in de bibliotheek",
+           "bekend": "Al bekend — niets gedupliceerd",
+           "gekoppeld": "🔗 samengevoegd met een bestaand kaartje"}[res["uitkomst"]]
+    if res["leeg"]:
+        return "/kennisbank", f"🎉 set verwerkt · laatste voorstel: {msg}"
+    return c.nxt, msg
+
+
 def _act_kb_stage_delete(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
     ok = c.st.staging.remove_atom(c.g("bid"), c.g("sid"))
@@ -3971,6 +3990,7 @@ ACTIONS = {
     "kb_intake": _act_kb_intake,
     "kb_intake_url": _act_kb_intake_url,
     "kb_stage_edit": _act_kb_stage_edit,
+    "kb_stage_accept": _act_kb_stage_accept,
     "kb_stage_delete": _act_kb_stage_delete,
     "kb_stage_merge": _act_kb_stage_merge,
     "kb_stage_commit": _act_kb_stage_commit,

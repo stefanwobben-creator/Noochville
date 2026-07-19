@@ -237,6 +237,52 @@ def _commit_signaal_atoom(a: dict, notes, radar) -> tuple[bool, bool]:
     return True, False
 
 
+def _verwerk_atoom(a: dict, notes, radar) -> tuple[int, int, int]:
+    """Eén staging-atoom → bibliotheek, met alle dedupe/MECE/marker-regels.
+    Geeft (nieuw, overgeslagen, gekoppeld) — precies één van de drie is 1."""
+    if a.get("radar_rids"):
+        was_nieuw, was_gekoppeld = _commit_signaal_atoom(a, notes, radar)
+        return (1 if was_nieuw else 0, 0, 1 if was_gekoppeld else 0)
+    kaart = atoom_kaart({"content": a["content"], "body": a.get("body"),
+                         "subject": a["subject"], "provenance": a["provenance"],
+                         "provenance_note": a.get("provenance_note"),
+                         "source": a["source"], "reference": a.get("reference"),
+                         "source_date": a.get("source_date"),
+                         "flags": a.get("flags") or [], "link_hints": []})
+    if notes.get(kaart.id) is not None:
+        return 0, 1, 0
+    # MECE: zelfde claim, andere bron → geen tweede kaartje maar herkomst erbij
+    # (stack_provenance: bron/link stapelen, grounding +1).
+    zelfde = notes.find_claim_equal(a["content"])
+    if zelfde is not None:
+        notes.stack_provenance(zelfde, source=a["source"],
+                               reference=(a.get("reference") or ""))
+        return 0, 0, 1
+    notes.add(kaart)
+    return 1, 0, 0
+
+
+def commit_atom(store: StagingStore, bid: str, sid: str, data_dir: str,
+                radar=None) -> dict | None:
+    """Verwerk ÉÉN voorstel uit de set (knop "✓ Bewaar → bibliotheek", founder 19 jul:
+    verwerkt = weg, anders lijkt het alsof er niets gebeurde). Zelfde pad als commit_batch,
+    maar per kaart; het voorstel verdwijnt uit de set en een leeggeraakte set ruimt
+    zichzelf op. Geeft {"uitkomst": "nieuw"|"bekend"|"gekoppeld", "leeg": bool} of None."""
+    b = store.get(bid)
+    a = next((x for x in (b or {}).get("atoms", []) if x["sid"] == sid), None)
+    if a is None:
+        return None
+    notes = NotesStore(f"{data_dir}/notes.json")
+    nieuw, overgeslagen, gekoppeld = _verwerk_atoom(a, notes, radar)
+    store.remove_atom(bid, sid)
+    rest = store.get(bid)
+    leeg = rest is None or not rest.get("atoms")
+    if leeg and rest is not None:
+        store.discard(bid)
+    uitkomst = "nieuw" if nieuw else ("gekoppeld" if gekoppeld else "bekend")
+    return {"uitkomst": uitkomst, "leeg": leeg}
+
+
 def commit_batch(store: StagingStore, bid: str, data_dir: str,
                  radar=None) -> tuple[int, int, int] | None:
     """Zet de (nagekeken) staging-atomen append-only in de bibliotheek. Idempotent op
@@ -251,29 +297,9 @@ def commit_batch(store: StagingStore, bid: str, data_dir: str,
     notes = NotesStore(f"{data_dir}/notes.json")
     nieuw = overgeslagen = gekoppeld = 0
     for a in b["atoms"]:
-        if a.get("radar_rids"):
-            was_nieuw, was_gekoppeld = _commit_signaal_atoom(a, notes, radar)
-            nieuw += 1 if was_nieuw else 0
-            gekoppeld += 1 if was_gekoppeld else 0
-            continue
-        kaart = atoom_kaart({"content": a["content"], "body": a.get("body"),
-                             "subject": a["subject"], "provenance": a["provenance"],
-                             "provenance_note": a.get("provenance_note"),
-                             "source": a["source"], "reference": a.get("reference"),
-                             "source_date": a.get("source_date"),
-                             "flags": a.get("flags") or [], "link_hints": []})
-        if notes.get(kaart.id) is not None:
-            overgeslagen += 1
-            continue
-        # MECE: zelfde claim, andere bron → geen tweede kaartje maar herkomst erbij
-        # (stack_provenance: bron/link stapelen, grounding +1).
-        zelfde = notes.find_claim_equal(a["content"])
-        if zelfde is not None:
-            notes.stack_provenance(zelfde, source=a["source"],
-                                   reference=(a.get("reference") or ""))
-            gekoppeld += 1
-            continue
-        notes.add(kaart)
-        nieuw += 1
+        n, o, g = _verwerk_atoom(a, notes, radar)
+        nieuw += n
+        overgeslagen += o
+        gekoppeld += g
     store.discard(bid)
     return nieuw, overgeslagen, gekoppeld
