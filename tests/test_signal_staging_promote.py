@@ -266,3 +266,20 @@ def test_multi_select_actie_zet_selectie_in_een_set(tmp_path):
     bid = nxt.split("batch=")[1]
     rids = [a["radar_rids"][0] for a in st.staging.get(bid)["atoms"]]
     assert set(rids) == {r1, r2}
+
+
+def test_staging_heeft_sleep_merge_interactie(tmp_path):
+    """De staging-review gebruikt dezelfde merge-interactie als de statements-lijst:
+    ⠿-handle, kaart-op-kaart slepen, modal met hoofdtekst-keuze (geen kop-formulier meer)."""
+    st = cockpit2._Stores(_dd(tmp_path))
+    rid = _approved(st)
+    bid, _ = stage_signal(st, rid)
+    from nooch_village.views.kennisbank_staging import render_kennisbank_staging
+    html = render_kennisbank_staging(st, bid, csrf_token="tok")
+    assert "kn-handle" in html and "draggable='true'" in html
+    assert "kb_stage_merge" in html and "kn-modal" in html
+    assert "vink eerst" not in html                      # oude checkbox-interactie is weg
+    assert "style=" not in html                          # ratchet
+    # read-only (geen csrf): geen handle, geen modal
+    kaal = render_kennisbank_staging(st, bid)
+    assert "kn-handle" not in kaal and "kn-modal" not in kaal

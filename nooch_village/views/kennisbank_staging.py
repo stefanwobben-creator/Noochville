@@ -67,10 +67,14 @@ def _atoom_kaartje(st, b: dict, a: dict, csrf: str, nxt: str) -> str:
     bron = "bron: " + _e(a['source']) + ref_html
     # Verticale stapel-kaart op volle breedte (fix-brief bug 1): een grid met een
     # middenkolom minmax(0,1fr) zodat lange onbreekbare strings (URL-slugs) de kaart nooit
-    # naar ~0 breedte kunnen persen. Checkbox links, inhoud+controls midden, × rechts.
+    # naar ~0 breedte kunnen persen. ⠿-handle links (drag&drop-merge, zelfde interactie als
+    # de statements-lijst), inhoud+controls midden, × rechts.
+    handle = ("<span class='kn-handle' draggable='true' "
+              "title='sleep op een ander voorstel om te mergen'>⠿</span>" if csrf
+              else "<span></span>")
     return (
-        f"<div class='kn-stage'>"
-        f"<input type='checkbox' name='sid' value='{_e(sid)}' form='mergeform' aria-label='selecteer'>"
+        f"<div class='kn-stage' data-sid='{_e(sid)}'>"
+        f"{handle}"
         f"<form method='post' action='/action' class='kn-stage-edit'>"
         f"{_hid(csrf, 'kb_stage_edit', nxt, {'bid': b['id'], 'sid': sid})}"
         f"<textarea name='content' rows='2'>{_e(a['content'])}</textarea>{body}"
@@ -97,10 +101,6 @@ def render_kennisbank_staging(st, bid: str, csrf_token: str = "", msg: str = "")
         "<p class='muted'>Geen atomen meer in deze set.</p>")
     tab = " <span class='chip muted'>tabeldata</span>" if b.get("tabular") else ""
 
-    merge = (f"<form method='post' action='/action' id='mergeform' class='kn-lrow'>"
-             f"{_hid(csrf_token, 'kb_stage_merge', nxt, {'bid': bid})}"
-             f"{_field('kop voor een samengestelde kaart (vink eerst ≥2 aan)', 'kop', fid='f-stg-kop')}"
-             f"<button class='btn'>Voeg samen</button></form>")
     commit = (f"<form method='post' action='/action'>"
               f"{_hid(csrf_token, 'kb_stage_commit', '/kennisbank', {'bid': bid})}"
               f"<button class='btn ok'>Voeg set toe aan bibliotheek ({len(atomen)})</button></form>"
@@ -111,9 +111,102 @@ def render_kennisbank_staging(st, bid: str, csrf_token: str = "", msg: str = "")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/kennisbank'>← wat Nooch weet</a></div>"
             f"<h1>Even nakijken</h1>"
             f"<p class='muted'>Herkend als <b>{_e(b.get('kind'))}</b>{tab} · bron "
-            f"<b>{_e(b.get('source_label'))}</b>. Bewerk, voeg samen of gooi weg. Pas op "
-            f"“Voeg set toe” landen ze in de bibliotheek.</p>{_banner(msg)}"
-            f"{merge}{kaartjes}<div class='kn-sec'>{commit}</div></div>")
+            f"<b>{_e(b.get('source_label'))}</b>. Bewerk, sleep het ene voorstel op het "
+            f"andere om te mergen, of gooi weg. Pas op “Voeg set toe” landen ze in de "
+            f"bibliotheek.</p>{_banner(msg)}"
+            f"{kaartjes}<div class='kn-sec'>{commit}</div>"
+            f"{_stg_merge_modal(bid, csrf_token, nxt)}</div>")
     inner = (f"{_DS_LINK}{_nav()}"
-             f"<div class='c2-wrap'>{main}</div>")
+             f"<div class='c2-wrap'>{main}</div>{_STG_DRAG_JS if csrf_token else ''}")
     return _page("Even nakijken", inner)
+
+
+def _stg_merge_modal(bid: str, csrf: str, nxt: str) -> str:
+    """De merge-modal, dezelfde interactie als de statements-lijst: na een drop kies je met
+    een radio welke tekst de hoofdtekst wordt (of je past hem aan in het tekstveld), en de
+    twee voorstellen worden één samengestelde kaart (kb_stage_merge: gekozen tekst = kop,
+    beide originelen bewaard in de samengestelde inhoud). Zonder csrf niets te slepen."""
+    if not csrf:
+        return ""
+    return (
+        f"<div class='kn-overlay' id='kn-overlay' hidden></div>"
+        f"<div class='kn-modal' id='kn-modal' hidden role='dialog' aria-modal='true' "
+        f"aria-labelledby='kn-modaltitel'>"
+        f"<h2 id='kn-modaltitel'>Voorstellen mergen</h2>"
+        f"<p class='muted'>Kies welke tekst de hoofdtekst wordt (beide originelen blijven "
+        f"bewaard in de samengestelde inhoud; bron en herkomst reizen mee).</p>"
+        f"<form method='post' action='/action' id='kn-mergeform'>"
+        f"{_hid(csrf, 'kb_stage_merge', nxt, {'bid': bid})}"
+        f"<input type='hidden' name='sid' value=''>"
+        f"<input type='hidden' name='sid' value=''>"
+        f"<label class='kn-opt on' id='kn-opta' for='f-kn-keuze-a'>"
+        f"<input type='radio' name='keuze' value='a' id='f-kn-keuze-a' checked>"
+        f"<span></span></label>"
+        f"<label class='kn-opt' id='kn-optb' for='f-kn-keuze-b'>"
+        f"<input type='radio' name='keuze' value='b' id='f-kn-keuze-b'>"
+        f"<span></span></label>"
+        f"{_field('eventueel nog aanpassen', 'kop', kind='textarea', fid='f-kn-mergetekst')}"
+        f"<div class='kn-modalbtns'>"
+        f"<button type='button' class='btn' id='kn-mergecancel'>annuleer</button>"
+        f"<button class='btn ok'>merge → één kaart</button></div></form></div>")
+
+
+_STG_DRAG_JS = """<script>(function(){
+ // ⠿ drag & drop mergen — zelfde interactie als de statements-lijst, maar dan op de
+ // staging-voorstellen (.kn-stage, data-sid; de tekst leeft in de content-textarea).
+ var dragSrc=null;
+ function kaartVan(e){return e.target&&e.target.closest?e.target.closest('.kn-stage'):null;}
+ document.addEventListener('dragstart',function(e){
+   if(!(e.target.closest&&e.target.closest('.kn-handle')))return;
+   var s=kaartVan(e); if(!s)return;
+   dragSrc=s.dataset.sid; s.classList.add('dragging');
+   e.dataTransfer.effectAllowed='move';
+   try{e.dataTransfer.setData('text/plain',dragSrc);}catch(_){}
+ });
+ document.addEventListener('dragend',function(){
+   dragSrc=null;
+   document.querySelectorAll('.kn-stage.dragging,.kn-stage.dragover').forEach(function(x){
+     x.classList.remove('dragging','dragover');});
+ });
+ document.addEventListener('dragover',function(e){
+   var s=kaartVan(e);
+   if(s&&dragSrc&&s.dataset.sid!==dragSrc){e.preventDefault();s.classList.add('dragover');}
+ });
+ document.addEventListener('dragleave',function(e){
+   var s=kaartVan(e); if(s)s.classList.remove('dragover');
+ });
+ document.addEventListener('drop',function(e){
+   var s=kaartVan(e); if(!s||!dragSrc)return;
+   e.preventDefault(); s.classList.remove('dragover');
+   if(s.dataset.sid!==dragSrc) openMerge(dragSrc,s.dataset.sid);
+ });
+ var modal=document.getElementById('kn-modal'), overlay=document.getElementById('kn-overlay');
+ function tekstVan(sid){
+   var el=document.querySelector('.kn-stage[data-sid="'+sid+'"] textarea[name=content]');
+   return el?el.value.trim():'';
+ }
+ function kies(a){
+   var oa=document.getElementById('kn-opta'), ob=document.getElementById('kn-optb');
+   oa.classList.toggle('on',a); ob.classList.toggle('on',!a);
+   document.getElementById('f-kn-keuze-'+(a?'a':'b')).checked=true;
+   document.getElementById('f-kn-mergetekst').value=(a?oa:ob).querySelector('span').textContent;
+ }
+ function openMerge(srcSid,tgtSid){
+   if(!modal)return;
+   var f=document.getElementById('kn-mergeform');
+   var sids=f.querySelectorAll('[name=sid]');
+   sids[0].value=srcSid; sids[1].value=tgtSid;
+   document.getElementById('kn-opta').querySelector('span').textContent=tekstVan(srcSid);
+   document.getElementById('kn-optb').querySelector('span').textContent=tekstVan(tgtSid);
+   kies(true);
+   overlay.hidden=false; modal.hidden=false;
+ }
+ function sluitModal(){ if(modal){overlay.hidden=true; modal.hidden=true;} }
+ if(modal){
+   document.getElementById('kn-opta').addEventListener('click',function(){kies(true);});
+   document.getElementById('kn-optb').addEventListener('click',function(){kies(false);});
+   document.getElementById('kn-mergecancel').addEventListener('click',sluitModal);
+   overlay.addEventListener('click',sluitModal);
+   document.addEventListener('keydown',function(e){if(e.key==='Escape')sluitModal();});
+ }
+})();</script>"""

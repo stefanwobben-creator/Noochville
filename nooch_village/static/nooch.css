@@ -1022,3 +1022,8 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 /* Multi-select op /signals: selectievakje per goedgekeurd signaal + de selectie-balk. */
 .rdr-sel{margin-top:.35rem}
 .rdr-selbar{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.4rem 0 .6rem}
+/* Drag&drop-merge op de staging-voorstellen: zelfde interactie(-stijl) als de statements. */
+.kn-stage .kn-handle{padding-top:.3rem}
+.kn-stage:hover .kn-handle{opacity:1}
+.kn-stage.dragover{outline:2px dashed var(--green);outline-offset:-2px;background:var(--green-tint)}
+.kn-stage.dragging{opacity:.4}
