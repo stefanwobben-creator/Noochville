@@ -120,3 +120,26 @@ def test_zachte_vijf_hint_zonder_blokkade(tmp_path):
     zes = render_kennisbank_spel(st, sid, csrf_token="t")
     assert "sterkste vijf" in zes and "Tegenbewijs mag er altijd bij" in zes
     assert st.spel.add_kaart(sid, "x3", "support") is True    # en de zevende ook
+
+
+# ── kleine fixes dd 2026-07-19 (avond): DOI klikbaar, signals echt regular ──
+
+def test_bron_doi_wordt_link_en_summary_regular(tmp_path):
+    from nooch_village.views.kennisbank import render_kennisbank_search
+    dd = str(tmp_path); st = _st(dd)
+    ns = NotesStore(f"{dd}/notes.json")
+    ns.add(Insight(id="d1", claim="plastic wordt chemicalie met zeewater",
+                   source="Nature (artikel)", provenance="peer_reviewed",
+                   reference="DOI:10.1038/s41586-023-06688-2", tags=["materiaal"]))
+    frag = render_kennisbank_search(st, "zeewater", "", "", csrf_token="t")
+    # de DOI resolvet naar doi.org, opent in een nieuw tabblad, en toont bron + DOI
+    assert "https://doi.org/10.1038/s41586-023-06688-2" in frag
+    assert "target='_blank'" in frag and "rel='noopener'" in frag
+    assert "Nature (artikel)" in frag
+    # het gewicht van de statement-tekst leeft op ÉÉN plek (de summary-regel) en is
+    # regular — de specifiekere selector mag de kn-stmttekst-fallback nooit overstemmen
+    import os
+    css = open(os.path.join(os.path.dirname(__file__), "..", "nooch_village",
+                            "static", "nooch.css"), encoding="utf-8").read()
+    regel = next(r for r in css.splitlines() if r.startswith(".kn-stmtbody>summary{"))
+    assert "font-weight:400" in regel

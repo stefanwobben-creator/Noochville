@@ -975,7 +975,7 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .kn-stmt:hover .kn-handle,.kn-handle:focus-visible{opacity:1}
 .kn-handle:hover{color:var(--muted)}
 .kn-stmtbody{flex:1;min-width:0;margin:0}
-.kn-stmtbody>summary{cursor:pointer;list-style:none;font-weight:500;font-size:.92rem;padding:.5rem .2rem}
+.kn-stmtbody>summary{cursor:pointer;list-style:none;font-weight:400;font-size:.92rem;padding:.5rem .2rem}
 .kn-stmtbody>summary::-webkit-details-marker{display:none}
 .kn-stmtdetail{padding:.1rem .2rem .7rem}
 .kn-dl{display:grid;grid-template-columns:95px 1fr;gap:.12rem .6rem;font-size:.84rem;margin:.3rem 0 .5rem}
@@ -1046,7 +1046,9 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .kn-blrow{display:flex;gap:.5rem;align-items:center}
 .kn-blrow .kn-lt{flex:1;min-width:0}
 .kn-blleeg{margin:.3rem 0 .6rem}
-/* Signals in regular gewicht: het vet is voor insights — zo zie je de laag aan de letter. */
+/* Signals in regular gewicht: het vet is voor insights — zo zie je de laag aan de letter.
+   (Het gewicht zelf staat op .kn-stmtbody>summary hierboven — die selector is specifieker
+   dan deze klasse, dus dáár is de ene gezaghebbende plek; hier alleen de fallback.) */
 .kn-stmttekst{font-weight:400}
 /* A–Z-taglijst met aantallen (vervangt de onderwerp-chips; tags zijn dé taal). */
 .kn-taglijst{display:flex;flex-wrap:wrap;gap:.3rem}

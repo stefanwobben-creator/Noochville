@@ -455,9 +455,17 @@ def _stmt_bron(aid: str, a: dict, csrf: str, nxt: str) -> str:
     PDF-upload (het bestaande kb_atoom_ref_pdf-formulier). Zonder csrf: alleen weergave."""
     ref = (a.get("reference") or "").strip()
     src = (a.get("source") or "").strip()
+    # Een DOI is óók een link (founder, 19 jul): DOI:10.xxxx/… → https://doi.org/10.xxxx/…
+    # — dezelfde weergave als een URL-reference, zodat elke bron met een resolvebaar
+    # kenmerk klikbaar is. Andere legacy labels (ISBN, documentnaam) blijven tekst.
+    doi = re.match(r"(?i)^doi:\s*(10\.\S+)$", ref)
     if ref.startswith(("http://", "https://", "/kbref/")):
         label = src or (ref.rsplit("_", 1)[-1] if ref.startswith("/kbref/") else ref)
         weergave = f"<a href='{_e(ref)}' target='_blank' rel='noopener'>{_e(label)} ↗</a>"
+    elif doi:
+        label = f"{src} · {ref}" if src and src not in ref else ref
+        weergave = (f"<a href='https://doi.org/{_e(doi.group(1))}' target='_blank' "
+                    f"rel='noopener'>{_e(label)} ↗</a>")
     elif ref:
         weergave = _e(f"{src} · {ref}" if src and src not in ref else ref)
     elif src:
