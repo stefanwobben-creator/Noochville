@@ -5,8 +5,14 @@ signaal uit indicator_freshness), niet op de toestand. Dedup via de vorige-statu
 Haakt aan op de bestaande indicator_freshness-status (geen tweede detectie-mechanisme). Alleen de
 echte dood-overgang (fresh→stale) senst; 'niet geconfigureerd' (unconfigured) en 'nooit gevoed' (none)
 sensen niet. Leeft een bron weer op (fresh) en valt hij later opnieuw uit, dan senst hij opnieuw — de
-overgang telt, niet een permanente vlag. De kind-aware drempel zit al in indicator_freshness, dus een
-gezonde trage bron (weekly 10d, monthly 45d) senst niet.
+overgang telt, niet een permanente vlag. De kind- én cadans-aware drempel zit in indicator_freshness
+(_fresh_threshold), dus een gezonde trage bron (snapshot weekly 10d/monthly 45d, bucket-flux weekly
+17d/monthly 75d) senst niet.
+
+Bevestigingsronde (founder, 19 jul — 'alleen echte uitval zien'): de eerste fresh→stale-constatering
+is een stille aantekening ('stale_pending' in de state); pas als een VOLGENDE meetronde de uitval
+bevestigt, escaleert de sensor naar de mens. Herstelt de bron tussentijds, dan wordt de aantekening
+geruisloos gewist en hoort niemand er iets over.
 """
 from __future__ import annotations
 import datetime
@@ -72,7 +78,14 @@ def sense_dead_sources(registry, context, state: DeadSourceState, emit, today=No
         for field in skill.available_metrics(context):
             key = f"{src}:{field}"
             cur = indicator_freshness(shim, src, field, today=today)     # HERGEBRUIK, geen tweede mechanisme
-            if state.previous(key) == "fresh" and cur == "stale":       # de OVERGANG levend→dood
+            prev = state.previous(key)
+            if prev == "fresh" and cur == "stale":
+                # Eerste constatering van de overgang levend→dood: stille aantekening,
+                # nog géén escalatie — een volgende ronde moet de uitval bevestigen
+                # (founder, 19 jul: alleen échte uitval bereikt de mens).
+                state.set(key, "stale_pending")
+                continue
+            if prev == "stale_pending" and cur == "stale":              # tweede ronde bevestigt: nu pas sensen
                 last_datum = _last_datum(obs, src, field)
                 days_ago = None
                 if last_datum:
@@ -82,6 +95,6 @@ def sense_dead_sources(registry, context, state: DeadSourceState, emit, today=No
                         pass
                 emit(src, field, last_datum, days_ago, cadans)
                 emitted.append((src, field))
-            state.set(key, cur)
+            state.set(key, cur)                                         # herstel wist 'stale_pending' geruisloos
     state.save()
     return emitted

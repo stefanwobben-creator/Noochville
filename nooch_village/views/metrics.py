@@ -1220,13 +1220,21 @@ def _snapshot_body(st: _Stores, tile: dict, frequency: str):
 
 
 def _fresh_threshold(source: str) -> int:
-    """De vers-drempel in dagen. Flux → vast 7. Snapshot → de frequentie-periode + marge (weekly ≈10,
-    monthly ≈45), zodat een net-gemeten snapshot niet vroegtijdig 'dood' lijkt en een gemiste periode
-    wél. Het kind-veld stuurt hier — de eerder uitgestelde drempel-per-frequentie-koppeling."""
-    if _source_kind(source) != "snapshot":
-        return _FRESH_DAYS
+    """De vers-drempel in dagen, cadans-bewust voor ALLE bronsoorten.
+    Snapshot → periode + marge (weekly ≈10, monthly ≈45): de meetdatum ís de ophaaldag,
+    dus één gemiste periode is écht een gemiste meting.
+    Flux met week-/maandcadans → 2×periode + marge (weekly ≈17, monthly ≈75): het
+    datumlabel is een bucket die pas één periode ná dato binnenkomt (Google Trends
+    levert de week van de 5e pas op de 12e), dus de gezonde leeftijd pendelt al tussen
+    1× en 2× de periode; de oude vaste 7 verklaarde zo'n bron elke week vals dood
+    (de vier ratio-indicatoren, 13 jul). Pas boven twee volle periodes is er écht iets
+    stuk (founder, 19 jul: 'alleen echte uitval zien'). Dagelijkse flux houdt vast 7."""
     period = _PERIOD_DAYS.get(_source_frequency(source), 7)
-    return period + max(3, period // 2)
+    if _source_kind(source) == "snapshot":
+        return period + max(3, period // 2)
+    if period > 1:                       # week-/maandbucket-flux: label loopt één periode achter
+        return 2 * period + max(3, period // 2)
+    return _FRESH_DAYS
 
 
 def indicator_freshness(st, source: str, veld: str, today=None):
