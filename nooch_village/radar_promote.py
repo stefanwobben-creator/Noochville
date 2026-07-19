@@ -142,6 +142,10 @@ def stage_signal(st, rid: str) -> tuple[str | None, str]:
             or (it.get("feed") or "").strip() or "radar")
     link = (it.get("link") or "").strip() or None
     datum = parse_source_date(it.get("published_at", "")) or None
+    # Herkomst van eerder op /signals samengevoegde signalen reist mee naar het kaartje.
+    extra_bronnen = [{"source": m.get("source") or "", "link": m.get("link") or ""}
+                     for m in (it.get("merged_sources") or [])
+                     if (m.get("source") or m.get("link"))]
     gelezen = _atomen_uit_bron(it)
     if gelezen:
         atomen = [{"content": a.get("content"), "body": a.get("body"),
@@ -153,6 +157,7 @@ def stage_signal(st, rid: str) -> tuple[str | None, str]:
                    "provenance_note": a.get("provenance_note"),
                    "flags": a.get("flags") or [],
                    "van_bron": True,
+                   "extra_bronnen": extra_bronnen,
                    "radar_rids": [rid]}
                   for a in gelezen]
         banner = (f"📖 bron gelezen: {len(atomen)} voorstellen staan klaar bij "
@@ -160,7 +165,8 @@ def stage_signal(st, rid: str) -> tuple[str | None, str]:
     else:
         atomen = [{"content": (it.get("content") or "").strip(),
                    "source": bron, "reference": link, "source_date": datum,
-                   "provenance": _PROVENANCE, "radar_rids": [rid]}]
+                   "provenance": _PROVENANCE, "extra_bronnen": extra_bronnen,
+                   "radar_rids": [rid]}]
         banner = ("🔎 signaal staat klaar bij Even nakijken (bron niet leesbaar of geen "
                   "LLM — de signaaltekst is het voorstel)")
     for b in st.staging.open_batches():

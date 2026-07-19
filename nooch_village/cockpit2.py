@@ -1896,6 +1896,22 @@ def _act_radar_promote(c):
         return nxt, msg
 
 
+def _act_radar_merge(c):
+        """Drag&drop op /signals: twee goedgekeurde signalen worden er één, met de gekozen
+        hoofdtekst uit de modal. Zelfde poort als de andere radar-curatie, op BEIDE signalen."""
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        doel, bron = st.radar.get(g("target_rid")), st.radar.get(g("source_rid"))
+        if doel is None or bron is None:
+            return nxt, "✗ onbekend radar-signaal"
+        for it in (doel, bron):
+            _deny = _role_gate(it["role"], username, st)
+            if _deny:
+                return nxt, _deny
+        ok = st.radar.merge_signals(g("target_rid"), g("source_rid"), g("tekst"))
+        return nxt, ("🧩 signalen samengevoegd — de herkomst van allebei reist mee"
+                     if ok else "✗ samenvoegen niet gelukt")
+
+
 def _act_radar_promote_multi(c):
         """Meerdere goedgekeurde signalen in één keer naar Even nakijken (multi-select op
         /signals). Ze landen in dezelfde staging-set, zodat ze daar samen te mergen zijn.
@@ -4051,6 +4067,7 @@ ACTIONS = {
     "radar_dismiss": _act_radar_dismiss,
     "radar_promote": _act_radar_promote,
     "radar_promote_multi": _act_radar_promote_multi,
+    "radar_merge": _act_radar_merge,
     "kb_stage_koppel": _act_kb_stage_koppel,
     "aitask_add": _act_aitask_add,
     "aitask_remove": _act_aitask_remove,

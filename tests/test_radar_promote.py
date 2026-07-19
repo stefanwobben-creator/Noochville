@@ -253,6 +253,20 @@ def test_signals_wachtrij_centraal(tmp_path):
     assert "radar_approve" in html and "radar_dismiss" in html
 
 
+def test_signals_chips_uit_configuratie(tmp_path):
+    """De feed-chips komen uit de feed-config (alle vier), niet uit wat er toevallig aan
+    signalen staat — een nieuw aangesloten feed is meteen zichtbaar (founder, 19 jul)."""
+    st = cockpit2._Stores(_dd(tmp_path))
+    _approved(st)                                      # alleen Competitor Watch heeft data
+    html = render_signals(st, csrf_token="tok")
+    for label in ("Competitor Watch", "Legal &amp; Green Claims", "Material Innovation",
+                  "Industry Watch"):
+        assert label in html, label
+    # inbox-framing: te verwerken + nul-doel, en een ✗ op elk te-verwerken item
+    assert "Te verwerken" in html and "nul" in html
+    assert "rdr-wegform" in html
+
+
 def test_gepromoveerde_signalen_uit_overzicht(tmp_path):
     """Signalen zijn de wachtkamer: eenmaal gepromoveerd verdwijnen ze uit /signals
     (naar een ingeklapte teller) en uit het rol-archief (founder, 18 jul)."""

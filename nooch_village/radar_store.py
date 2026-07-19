@@ -16,7 +16,7 @@ import uuid
 
 from nooch_village.util import JsonStore
 
-_STATUSES = ("wacht", "goedgekeurd", "afgewezen")
+_STATUSES = ("wacht", "goedgekeurd", "afgewezen", "samengevoegd")
 
 
 def _radar_default() -> dict:
@@ -149,5 +149,33 @@ class RadarStore(JsonStore):
         if it is None:
             return False
         it["status"] = status
+        self._save()
+        return True
+
+    def merge_signals(self, target_id: str, source_id: str, tekst: str) -> bool:
+        """Twee goedgekeurde signalen worden er één (drag&drop op /signals, founder 19 jul):
+        het doel-signaal krijgt de gekozen hoofdtekst en onthoudt de herkomst van het
+        opgeslokte signaal in `merged_sources` (die stapelt bij promotie mee op het
+        kenniskaartje). Het bron-signaal krijgt status 'samengevoegd' + `merged_into` en
+        verdwijnt daarmee uit alle lijsten. Fail-soft: onbekend, gelijk, niet-goedgekeurd
+        of al gepromoveerd → False, niets veranderd."""
+        doel = self._data["items"].get(target_id)
+        bron = self._data["items"].get(source_id)
+        if (doel is None or bron is None or target_id == source_id
+                or doel.get("status") != "goedgekeurd" or bron.get("status") != "goedgekeurd"
+                or doel.get("promoted_atom_id") or bron.get("promoted_atom_id")
+                or not (tekst or "").strip()):
+            return False
+        doel["content"] = tekst.strip()[:500]
+        rat_d, rat_b = (doel.get("rationale") or "").strip(), (bron.get("rationale") or "").strip()
+        if rat_b and rat_b != rat_d:
+            doel["rationale"] = (f"{rat_d}\n— {rat_b}" if rat_d else rat_b)[:1000]
+        extra = list(doel.get("merged_sources") or [])
+        extra.append({"source": bron.get("source") or "", "link": bron.get("link") or "",
+                      "published_at": bron.get("published_at") or ""})
+        extra.extend(bron.get("merged_sources") or [])
+        doel["merged_sources"] = extra
+        bron["status"] = "samengevoegd"
+        bron["merged_into"] = target_id
         self._save()
         return True

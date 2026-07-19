@@ -343,3 +343,53 @@ def test_provenance_note_reist_mee_naar_kaartje(tmp_path, monkeypatch):
     aid = stable_id("Expert zegt dat mycelium doorbreekt", "vivobarefoot.com")
     kaart = cockpit2._Stores(dd).notes.get(aid)
     assert kaart.provenance_note == "hoogleraar materiaalkunde, 40+ publicaties"
+
+
+# ── mergen op /signals zelf: drag&drop, herkomst reist mee ───────────────────
+
+def test_radar_merge_signalen(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    r1 = _approved(st)
+    r2 = _approved(st, content="Zelfde nieuws via ander kanaal",
+                   source="ander-kanaal.nl", link="https://ander.nl/x")
+    ok = st.radar.merge_signals(r1, r2, "De samengevoegde hoofdtekst")
+    assert ok
+    doel = st.radar.get(r1)
+    assert doel["content"] == "De samengevoegde hoofdtekst"
+    assert doel["merged_sources"][0]["source"] == "ander-kanaal.nl"
+    assert st.radar.get(r2)["status"] == "samengevoegd"
+    assert st.radar.get(r2)["merged_into"] == r1
+    # het opgeslokte signaal is uit alle lijsten
+    assert r2 not in [it["id"] for it in st.radar.all_approved()]
+    # guards: nogmaals mergen met een al-samengevoegd signaal faalt netjes
+    assert st.radar.merge_signals(r1, r2, "x") is False
+    assert st.radar.merge_signals(r1, r1, "x") is False
+
+
+def test_merged_sources_stapelen_op_kaartje(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    r1 = _approved(st)
+    r2 = _approved(st, content="Zelfde nieuws elders", source="ander-kanaal.nl",
+                   link="https://ander.nl/x")
+    st.radar.merge_signals(r1, r2, "Samengevoegde tekst over de sneaker")
+    bid, _ = stage_signal(st, r1)
+    commit_batch(st.staging, bid, dd, radar=st.radar)
+    aid = stable_id("Samengevoegde tekst over de sneaker", "vivobarefoot.com")
+    kaart = cockpit2._Stores(dd).notes.get(aid)
+    assert "ander-kanaal.nl" in kaart.source              # herkomst van allebei
+    assert "ander.nl/x" in (kaart.reference or "")
+    assert kaart.grounding_count >= 2
+
+
+def test_signals_pagina_heeft_sleep_merge(tmp_path):
+    st = cockpit2._Stores(_dd(tmp_path))
+    _approved(st)
+    _approved(st, content="Tweede", link="https://x.nl/2")
+    from nooch_village.views.signals import render_signals
+    html = render_signals(st, csrf_token="tok")
+    assert "kn-handle" in html and "data-rid=" in html
+    assert "radar_merge" in html and "kn-modal" in html
+    kaal = render_signals(st)
+    assert "kn-handle" not in kaal and "radar_merge" not in kaal

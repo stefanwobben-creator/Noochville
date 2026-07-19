@@ -81,13 +81,120 @@ def _wachtrij_card(st, it, csrf: str, nxt: str) -> str:
 
 
 def _signal_card(st, it, csrf: str = "", nxt: str = "/signals") -> str:
-    """Eén goedgekeurd signaal: selectievakje (voor de multi-promotie) + promotie-control."""
-    sel = ""
-    if csrf and not it.get("promoted_atom_id"):
+    """Eén te verwerken signaal: ⠿-handle (sleep op een ander signaal om te mergen),
+    selectievakje (multi-promotie), promotie-control en een ✗ om het alsnog te verwijderen —
+    de lijst is een inbox en hoort naar nul te kunnen."""
+    sel = weg = handle = ""
+    actief = bool(csrf) and not it.get("promoted_atom_id")
+    if actief:
+        handle = ("<span class='kn-handle' draggable='true' "
+                  "title='sleep op een ander signaal om te mergen'>⠿</span>")
         sel = (f"<input type='checkbox' class='rdr-sel' form='rdr-selform' name='rid' "
                f"value='{_e(it.get('id', ''))}' aria-label='selecteer dit signaal'>")
+        weg = (f"<form method='post' action='/action' class='cl-rep rdr-wegform'>"
+               f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+               f"<input type='hidden' name='rid' value='{_e(it.get('id', ''))}'>"
+               f"<input type='hidden' name='next' value='{_e(nxt)}'>"
+               f"<button class='cl-check no' type='submit' name='action' value='radar_dismiss' "
+               f"title='toch niet relevant — verwijderen'>✗</button></form>")
     ctl = radar_promote_ctl(it, csrf, nxt)
-    return f"<div class='rdr-row rdr-arch'>{sel}{ctl}{_sig_body(st, it)}</div>"
+    rid_attr = f" data-rid='{_e(it.get('id', ''))}'" if actief else ""
+    extra = len(it.get("merged_sources") or [])
+    plus = (f"<span class='chip muted' title='herkomst van eerder samengevoegde signalen "
+            f"reist mee'>+{extra} bron{'nen' if extra != 1 else ''}</span>" if extra else "")
+    return (f"<div class='rdr-row rdr-arch'{rid_attr}>{handle}{sel}{ctl}{weg}"
+            f"{_sig_body(st, it)}{plus}</div>")
+
+
+def _merge_modal(csrf: str, nxt: str) -> str:
+    """De merge-modal, zelfde interactie als de statements-lijst en de staging-review: na
+    een drop kies je welke tekst de hoofdtekst wordt (of je past hem aan) en de twee
+    signalen worden er één (radar_merge; de herkomst van allebei reist mee)."""
+    if not csrf:
+        return ""
+    return (
+        f"<div class='kn-overlay' id='kn-overlay' hidden></div>"
+        f"<div class='kn-modal' id='kn-modal' hidden role='dialog' aria-modal='true' "
+        f"aria-labelledby='kn-modaltitel'>"
+        f"<h2 id='kn-modaltitel'>Signalen mergen</h2>"
+        f"<p class='muted'>Kies welke tekst de hoofdtekst wordt; de bronnen van allebei "
+        f"blijven bewaard en stapelen straks mee op het kenniskaartje.</p>"
+        f"<form method='post' action='/action' id='kn-mergeform'>"
+        f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+        f"<input type='hidden' name='action' value='radar_merge'>"
+        f"<input type='hidden' name='next' value='{_e(nxt)}'>"
+        f"<input type='hidden' name='target_rid' value=''>"
+        f"<input type='hidden' name='source_rid' value=''>"
+        f"<label class='kn-opt on' id='kn-opta' for='f-kn-keuze-a'>"
+        f"<input type='radio' name='keuze' value='a' id='f-kn-keuze-a' checked>"
+        f"<span></span></label>"
+        f"<label class='kn-opt' id='kn-optb' for='f-kn-keuze-b'>"
+        f"<input type='radio' name='keuze' value='b' id='f-kn-keuze-b'>"
+        f"<span></span></label>"
+        f"<label for='f-kn-mergetekst'>eventueel nog aanpassen</label>"
+        f"<textarea name='tekst' id='f-kn-mergetekst'></textarea>"
+        f"<div class='kn-modalbtns'>"
+        f"<button type='button' class='btn' id='kn-mergecancel'>annuleer</button>"
+        f"<button class='btn ok'>merge → één signaal</button></div></form></div>")
+
+
+_MERGE_JS = """<script>(function(){
+ var dragSrc=null;
+ function kaartVan(e){return e.target&&e.target.closest?e.target.closest('.rdr-row[data-rid]'):null;}
+ document.addEventListener('dragstart',function(e){
+   if(!(e.target.closest&&e.target.closest('.kn-handle')))return;
+   var s=kaartVan(e); if(!s)return;
+   dragSrc=s.dataset.rid; s.classList.add('dragging');
+   e.dataTransfer.effectAllowed='move';
+   try{e.dataTransfer.setData('text/plain',dragSrc);}catch(_){}
+ });
+ document.addEventListener('dragend',function(){
+   dragSrc=null;
+   document.querySelectorAll('.rdr-row.dragging,.rdr-row.dragover').forEach(function(x){
+     x.classList.remove('dragging','dragover');});
+ });
+ document.addEventListener('dragover',function(e){
+   var s=kaartVan(e);
+   if(s&&dragSrc&&s.dataset.rid!==dragSrc){e.preventDefault();s.classList.add('dragover');}
+ });
+ document.addEventListener('dragleave',function(e){
+   var s=kaartVan(e); if(s)s.classList.remove('dragover');
+ });
+ document.addEventListener('drop',function(e){
+   var s=kaartVan(e); if(!s||!dragSrc)return;
+   e.preventDefault(); s.classList.remove('dragover');
+   if(s.dataset.rid!==dragSrc) openMerge(dragSrc,s.dataset.rid);
+ });
+ var modal=document.getElementById('kn-modal'), overlay=document.getElementById('kn-overlay');
+ function tekstVan(rid){
+   var el=document.querySelector('.rdr-row[data-rid="'+rid+'"] .rdr-sig');
+   return el?el.textContent.trim():'';
+ }
+ function kies(a){
+   var oa=document.getElementById('kn-opta'), ob=document.getElementById('kn-optb');
+   oa.classList.toggle('on',a); ob.classList.toggle('on',!a);
+   document.getElementById('f-kn-keuze-'+(a?'a':'b')).checked=true;
+   document.getElementById('f-kn-mergetekst').value=(a?oa:ob).querySelector('span').textContent;
+ }
+ function openMerge(srcRid,tgtRid){
+   if(!modal)return;
+   var f=document.getElementById('kn-mergeform');
+   f.querySelector('[name=target_rid]').value=tgtRid;
+   f.querySelector('[name=source_rid]').value=srcRid;
+   document.getElementById('kn-opta').querySelector('span').textContent=tekstVan(srcRid);
+   document.getElementById('kn-optb').querySelector('span').textContent=tekstVan(tgtRid);
+   kies(false);
+   overlay.hidden=false; modal.hidden=false;
+ }
+ function sluitModal(){ if(modal){overlay.hidden=true; modal.hidden=true;} }
+ if(modal){
+   document.getElementById('kn-opta').addEventListener('click',function(){kies(true);});
+   document.getElementById('kn-optb').addEventListener('click',function(){kies(false);});
+   document.getElementById('kn-mergecancel').addEventListener('click',sluitModal);
+   overlay.addEventListener('click',sluitModal);
+   document.addEventListener('keydown',function(e){if(e.key==='Escape')sluitModal();});
+ }
+})();</script>"""
 
 
 _VG_OVERLAY = (
@@ -115,7 +222,15 @@ def render_signals(st, csrf_token: str = "", feed: str = "") -> str:
     # ingeklapte teller zodat niets spoorloos is.
     items = [it for it in alle if not it.get("promoted_atom_id")]
     promoted = [it for it in alle if it.get("promoted_atom_id")]
-    feeds = sorted({it.get("feed", "") for it in (items + wachtend) if it.get("feed")})
+    # Feed-chips uit de CONFIGURATIE, niet uit wat er toevallig staat (founder, 19 jul):
+    # een nieuw aangesloten feed hoort hier meteen zichtbaar te zijn, ook als hij nog
+    # leeg is. Feeds die alleen in oude data voorkomen (hernoemd/verdwenen) blijven erbij.
+    from nooch_village.radar_store import load_feeds
+    feeds = [f.get("label") or f.get("env") or "" for f in load_feeds(st.dd)]
+    for extra in sorted({it.get("feed", "") for it in (items + wachtend) if it.get("feed")}):
+        if extra not in feeds:
+            feeds.append(extra)
+    feeds = [f for f in feeds if f]
     if feed:
         items = [it for it in items if it.get("feed") == feed]
         wachtend = [it for it in wachtend if it.get("feed") == feed]
@@ -146,8 +261,8 @@ def render_signals(st, csrf_token: str = "", feed: str = "") -> str:
                   f"<span class='muted'>vink signalen aan om ze samen te promoveren en daar "
                   f"te mergen</span></form>")
     body = ("".join(_signal_card(st, it, csrf_token, nxt) for it in items) if items
-            else "<p class='muted'>Nog geen goedgekeurde signalen. Keur ze hierboven goed "
-                 "in de wachtrij, dan verschijnen ze hier.</p>")
+            else "<p class='muted'>🎉 Nul — niets meer te verwerken. Wat je in de wachtrij "
+                 "goedkeurt verschijnt hier.</p>")
     if promoted:
         body += (f"<details class='c2-hist'><summary class='muted'>→ in kennisbank · "
                  f"{len(promoted)}</summary>"
@@ -159,11 +274,12 @@ def render_signals(st, csrf_token: str = "", feed: str = "") -> str:
             f"Wat je goedkeurt kun je hieronder (samen) promoveren tot kenniskaartjes.</p>"
             f"{chips}"
             f"<div class='rdr-tool'>{wacht}</div>"
-            f"<div class='rdr-sub'>Goedgekeurd <span class='muted'>· klaar om te promoveren"
-            f"</span></div>{selbar}"
+            f"<div class='rdr-sub'>Te verwerken <span class='muted'>· {len(items)} — mergen, "
+            f"promoveren of verwijderen; net als je mailbox is nul het doel</span></div>{selbar}"
             f"<div class='rdr-tool'>{body}</div>"
+            f"{_merge_modal(csrf_token, nxt)}"
             f"{_VG_OVERLAY if csrf_token else ''}</div>")
     inner = (f"{_DS_LINK}"
              f"{_nav()}"
-             f"<div class='c2-wrap'>{main}</div>")
+             f"<div class='c2-wrap'>{main}</div>{_MERGE_JS if csrf_token else ''}")
     return _page("Signalen", inner)

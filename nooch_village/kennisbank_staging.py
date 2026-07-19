@@ -50,6 +50,7 @@ class StagingStore(JsonStore):
                 "reference": a.get("reference"),
                 "source_date": a.get("source_date"),
                 "radar_rids": [r for r in (a.get("radar_rids") or [])],
+                "extra_bronnen": [dict(e) for e in (a.get("extra_bronnen") or [])],
                 "van_bron": bool(a.get("van_bron")),
                 "flags": [f for f in (a.get("flags") or [])]}
 
@@ -172,6 +173,15 @@ def _commit_signaal_atoom(a: dict, notes, radar) -> tuple[bool, bool]:
     source = a["source"]
     link = (a.get("reference") or "").strip()
 
+    def _stapel_extra(atom_id: str) -> None:
+        """Herkomst van op /signals samengevoegde signalen stapelt mee op het kaartje."""
+        for e in a.get("extra_bronnen") or []:
+            try:
+                notes.stack_provenance(atom_id, source=e.get("source") or "",
+                                       reference=e.get("link") or "")
+            except Exception:
+                pass
+
     def _markeer(atom_id: str) -> None:
         if radar is None:
             return
@@ -202,6 +212,7 @@ def _commit_signaal_atoom(a: dict, notes, radar) -> tuple[bool, bool]:
     if dup is not None:
         notes.stack_provenance(dup, source=source, reference=link)
         notes.add_tags(dup, ["signal"])
+        _stapel_extra(dup)
         _markeer(dup)
         return False, True
     aid = stable_id(content, source)
@@ -218,8 +229,10 @@ def _commit_signaal_atoom(a: dict, notes, radar) -> tuple[bool, bool]:
         # Race/archief-rand: id bestaat al — herkomst koppelen i.p.v. crashen (append-only).
         notes.stack_provenance(aid, source=source, reference=link)
         notes.add_tags(aid, ["signal"])
+        _stapel_extra(aid)
         _markeer(aid)
         return False, True
+    _stapel_extra(aid)
     _markeer(aid)
     return True, False
 
