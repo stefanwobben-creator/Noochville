@@ -63,9 +63,16 @@ class LibraryLookupSkill(Skill):
     name = "library_lookup"
     cost = "free"
     description = "Leest de status van een woord uit de bibliotheek (read-only, voor iedereen)."
+    # Machine-leesbaar contract: de planner (inhabitant._missing_required) markeert een item
+    # zónder 'word' vóór uitvoering als niet-uitvoerbaar, i.p.v. het te laten draaien en live
+    # te crashen op payload["word"] (de KeyError 'word' die Lara zag, founder 19-20 jul).
+    required_payload = ("word",)
+    input_schema = "word: str (verplicht — één term per aanroep; batch je zelf over meerdere calls)"
 
     def run(self, payload: dict, context) -> dict:
-        word = payload["word"]
+        word = (payload or {}).get("word")
+        if not word:
+            return {"error": "ontbrekende parameter 'word' — geef één term per aanroep"}
         e = context.library.status(word)
         return {"word": word,
                 "status": e["status"] if e else "unknown",
@@ -76,10 +83,17 @@ class KeywordReviewSkill(Skill):
     name = "keyword_review"
     cost = "free"
     description = "Beoordeelt een kandidaat-woord tegen de missie (LLM of heuristiek) + vraag-bewijs."
+    # Eén woord per aanroep (zie library_lookup): het contract laat de planner een bundel-in-één
+    # of leeg 'word' vóór uitvoering afvangen i.p.v. de KeyError 'word' live.
+    required_payload = ("word",)
+    input_schema = ("word: str (verplicht — één kandidaat-term per aanroep); "
+                    "demand: dict (optioneel — zoekvolume-bewijs uit KeywordsEverywhere)")
 
     def run(self, payload: dict, context) -> dict:
-        word = payload["word"]
-        demand = payload.get("demand", {})
+        word = (payload or {}).get("word")
+        if not word:
+            return {"error": "ontbrekende parameter 'word' — beoordeel één term per aanroep"}
+        demand = (payload or {}).get("demand", {})
         existing = context.library.status(word)
         if existing and existing["status"] in ("approved", "forbidden", "avoid"):
             return {"word": word, "decision": "known", "status": existing["status"],
