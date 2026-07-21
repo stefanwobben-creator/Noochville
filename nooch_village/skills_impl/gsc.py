@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 import logging
 import os
 from datetime import datetime, timedelta
@@ -10,17 +11,33 @@ SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
 
 
 def _get_creds(token_path: str):
-    """Laadt en vernieuwt OAuth-credentials. Geen interactieve flow: faalt closed."""
+    """Laadt credentials uit `token_path`. Detecteert automatisch een SERVICE-ACCOUNT-sleutel
+    (type=service_account — robuust, verloopt niet, geen consent-scherm) óf een OAuth
+    authorized_user-token (oude route, met refresh). Faalt closed: geen interactieve flow."""
+    if not os.path.exists(token_path):
+        return None, f"credential-bestand niet gevonden: {token_path}"
+    try:
+        with open(token_path, encoding="utf-8") as fh:
+            blob = json.load(fh)
+    except Exception as e:
+        return None, f"credential-bestand kon niet worden gelezen: {e}"
+
+    # Service-account-sleutel: server-to-server, geen 7-daagse token-verloop, geen browser-flow.
+    if isinstance(blob, dict) and blob.get("type") == "service_account":
+        try:
+            from google.oauth2 import service_account
+            creds = service_account.Credentials.from_service_account_info(blob, scopes=SCOPES)
+            return creds, None
+        except Exception as e:
+            return None, f"service-account-sleutel kon niet worden geladen: {e}"
+
+    # Anders: OAuth authorized_user-token — laden en zo nodig vernieuwen.
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
-
-    if not os.path.exists(token_path):
-        return None, f"token niet gevonden: {token_path}"
     try:
-        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+        creds = Credentials.from_authorized_user_info(blob, SCOPES)
     except Exception as e:
         return None, f"token kon niet worden geladen: {e}"
-
     if not creds.valid:
         if creds.expired and creds.refresh_token:
             try:
@@ -30,8 +47,7 @@ def _get_creds(token_path: str):
             except Exception as e:
                 return None, f"token-refresh mislukt: {e}"
         else:
-            return None, "token verlopen zonder refresh_token; herauthoriseer via get_gsc_data.py"
-
+            return None, "token verlopen zonder refresh_token; gebruik een service-account-sleutel"
     return creds, None
 
 
