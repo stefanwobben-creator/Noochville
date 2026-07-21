@@ -4478,8 +4478,12 @@ def make_handler(data_dir: str, csrf_token: str,
                 return (f"<style>{_EXTRA_CSS}</style>{out}") if is_frag else out
 
             if path == "/project/nieuw":
-                # De geleide project-wizard (founder 20 jul) — vol scherm, geen Noochie-rail.
-                self._send(render_wizard(st, effective_csrf), chrome=False)
+                # De geleide project-wizard (founder 20 jul). Standalone = vol scherm (geen Noochie-rail);
+                # in de modal-overlay (?fragment=1) alleen de body, met een voorgeselecteerde rol.
+                fr = (qs.get("fragment") or [""])[0] == "1"
+                self._send(render_wizard(st, effective_csrf,
+                                         role=(qs.get("role") or [""])[0], fragment=fr),
+                           chrome=False)
                 return
 
             if path == "/project":

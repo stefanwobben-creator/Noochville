@@ -329,6 +329,19 @@ def _inline_add_project(st: _Stores, rec, csrf_token: str, back: str, username: 
         f"Project toevoegen</button></div></form></details>")
 
 
+def _wizard_addlink(rec, csrf_token: str) -> str:
+    """De enige 'project toevoegen'-ingang: opent de geleide wizard in de modal-overlay (js-modal),
+    net als de projectkaarten. Op een rol wordt die rol voorgeselecteerd; op een cirkel kiest de
+    wizard zelf de rol. Zonder JS valt de link terug op de volledige wizard-pagina."""
+    if not csrf_token:
+        return ""
+    href = "/project/nieuw"
+    if not org.is_circle(rec):
+        href += f"?role={_e(rec.id)}"
+    return (f"<a class='addlink js-modal' href='{href}' data-href='{href}'>"
+            f"＋ project toevoegen</a>")
+
+
 def _columns_html(st: _Stores, items: list, add_owner: str, add_trekker: str,
                   csrf_token: str, back: str, quickadd: bool) -> str:
     cols = ""
@@ -388,6 +401,9 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "<div id='ovl-body'></div></div></div>"
         "<script>(function(){"
         "var ov=document.getElementById('ovl'),bd=document.getElementById('ovl-body'),last=null,dirty=false;"
+        # De wizard-flow draait op eigen fetch (buiten wire()); zo kan hij het bord tóch laten verversen
+        # bij het sluiten van de modal nadat er een project is aangemaakt.
+        "window.__ovlDirty=function(){dirty=true;};"
         f"window.__mentions={mentions_json};"
         # wrapSel MOET hier (guarded) staan: de modal voegt fragmenten in via innerHTML, en een <script>
         # in een fragment (zoals de meegedragen editor-JS) draait dan niet — zónder deze definitie doen
@@ -410,6 +426,11 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "function frag(u){return u+(u.indexOf('?')>-1?'&':'?')+'fragment=1';}"
         "function openCard(u,push){var wasClosed=(ov.style.display==='none'||!ov.style.display);last=u;"
         "fetch(frag(u)).then(function(r){return r.text();}).then(function(h){bd.innerHTML=h;ov.style.display='flex';"
+        # Fragmenten die een eigen flow meedragen (de project-wizard) markeren hun <script> met
+        # data-modal-run; innerHTML voert scripts niet uit, dus vervangen we ze door verse elementen.
+        "bd.querySelectorAll('script[data-modal-run]').forEach(function(o){var s=document.createElement('script');"
+        "for(var i=0;i<o.attributes.length;i++){s.setAttribute(o.attributes[i].name,o.attributes[i].value);}"
+        "s.textContent=o.textContent;o.parentNode.replaceChild(s,o);});"
         "window.__noclose=!!bd.querySelector('[data-noclose]');"
         "var xb=document.querySelector('.ovl-x');if(xb)xb.style.display=window.__noclose?'none':'';wire();"
         # URL-sync: alleen voor project-kaarten. Bij de eerste opening zet de vorige (bord-)entry op
@@ -625,8 +646,7 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
     allp = st.projects.all()
     back_base = f"/node?id={rec.id}&tab=projects"
 
-    addlink = (("<a class='addlink' href='/project/nieuw'>✨ geleid nieuw project</a> &nbsp; "
-                + _inline_add_project(st, rec, csrf_token, back_base, username=username)) if add else "")
+    addlink = _wizard_addlink(rec, csrf_token) if add else ""
 
     if not org.is_circle(rec):
         # ROL: eigen projecten, gegroepeerd per persoon (de doener). Lege lanes tonen we niet.
@@ -636,7 +656,7 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
         archived = [p for p in allp if p.get("owner") == rec.id and p.get("archived")]
         board = _projects_board(st, projs, rec.id, csrf_token, back_base, "persoon", quickadd=add)
         if not board:
-            board = ("<p class='muted'>Nog geen projecten. Voeg er een toe met + project.</p>" if add
+            board = ("<p class='muted'>Nog geen projecten. Voeg er een toe met ＋ project toevoegen.</p>" if add
                      else "<p class='muted'>Nog geen projecten.</p>")
         head = (f"<div style='margin-bottom:1rem'>"
                 f"<h3 style='margin:0;display:inline'>Projecten ({len(projs)})</h3> &nbsp; {addlink}</div>")
@@ -655,7 +675,7 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
     back = f"{back_base}&group={g}"
     board = _projects_board(st, projs, rec.id, csrf_token, back, g, quickadd=add)
     if not board:
-        board = ("<p class='muted'>Nog geen projecten. Voeg er een toe met + project.</p>" if add
+        board = ("<p class='muted'>Nog geen projecten. Voeg er een toe met ＋ project toevoegen.</p>" if add
                  else "<p class='muted'>Nog geen projecten.</p>")
     subs = sorted(org.subcircles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
     sub_html = ""

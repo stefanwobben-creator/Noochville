@@ -40,12 +40,19 @@ def _trekker_options(st) -> str:
     return "".join(opts)
 
 
-def render_wizard(st, csrf_token: str = "") -> str:
+def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = False) -> str:
+    """De geleide project-wizard. `role` voorselecteert een rol (dan start de flow bij stap 1).
+    `fragment=True` levert alleen de wizard-body (voor de modal-overlay); het inline <script> is
+    gemarkeerd met data-modal-run zodat de overlay het opnieuw uitvoert na innerHTML-injectie."""
     role_opts = _role_options(st)
     trek_opts = _trekker_options(st)
+    pre = role if role and st.records.get(role) is not None and not org.is_circle(st.records.get(role)) else ""
     body = _WIZ_HTML.replace("__CSRF__", _e(csrf_token)) \
                     .replace("__ROLES__", role_opts) \
-                    .replace("__TREK__", trek_opts)
+                    .replace("__TREK__", trek_opts) \
+                    .replace("__ROLE__", _e(pre))
+    if fragment:
+        return body
     return _page("Nieuw project", body)
 
 
@@ -96,15 +103,16 @@ _WIZ_HTML = r"""
 </style>
 <div class="wz">
   <div class="wz-top">
-    <a class="wz-x" href="/" title="sluiten">✕</a>
+    <a class="wz-x" href="/" title="sluiten" onclick="var x=document.querySelector('.ovl-x');if(x){x.click();return false;}">✕</a>
     <div class="wz-track"><div class="wz-fill" id="wzfill"></div></div>
     <span class="wz-who" id="wzwho"></span>
   </div>
   <div class="wz-card" id="wzcard"></div>
 </div>
-<script>
+<script data-modal-run>
+(function(){
 const CSRF="__CSRF__";
-const ROLEOPTS="__ROLES__", TREKOPTS="__TREK__";
+const ROLEOPTS="__ROLES__", TREKOPTS="__TREK__", PREROLE="__ROLE__";
 const S={step:0,ruw:"",uitkomst:"",checklist:[],tijd:"",missie:"",business:"",role:"",trekker:""};
 const NST=6, card=()=>document.getElementById('wzcard');
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -189,7 +197,7 @@ async function maak(){
  document.getElementById('mk').disabled=true;document.getElementById('mk').textContent='Bezig…';
  const r=await post('/wizard/create',{uitkomst:S.uitkomst,items:JSON.stringify(S.checklist),
    tijd:S.tijd,missie:S.missie,business:S.business,role:S.role,trekker:S.trekker});
- if(r&&r.url){S.url=r.url;go(6);}else{alert((r&&r.error)||'Er ging iets mis');document.getElementById('mk').disabled=false;document.getElementById('mk').textContent='Op het bord zetten';}}
+ if(r&&r.url){S.url=r.url;if(window.__ovlDirty)window.__ovlDirty();go(6);}else{alert((r&&r.error)||'Er ging iets mis');document.getElementById('mk').disabled=false;document.getElementById('mk').textContent='Op het bord zetten';}}
 
 function klaar(){
  const done=S.checklist.filter(i=>i.ok).length,mens=S.checklist.length-done;
@@ -201,6 +209,16 @@ function klaar(){
   <div class="wz-grow"></div>
   <div class="wz-foot"><a class="wz-btn ghost" style="text-align:center;text-decoration:none" href="${esc(S.url||'/')}">Bekijk op het bord</a>
   <button class="wz-btn" onclick="restart()">Nog een project</button></div>`;}
-render();
+// Inline onclick-handlers in de gegenereerde HTML draaien in global scope; die functies moeten
+// dus op window staan. De rest blijft in deze IIFE (zo botst een tweede modal-open niet op const).
+window.S=S;window.go=go;window.draw=draw;window.addI=addI;window.impact=impact;window.maak=maak;window.restart=restart;
+if(PREROLE){
+  S.role=PREROLE;
+  var _t=document.createElement('select');_t.innerHTML=ROLEOPTS;
+  var _o=_t.querySelector("option[value='"+PREROLE+"']");
+  document.getElementById('wzwho').textContent=_o?_o.textContent:'';
+  go(1);
+}else{render();}
+})();
 </script>
 """
