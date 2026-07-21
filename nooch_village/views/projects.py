@@ -638,7 +638,8 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
             board = ("<p class='muted'>Nog geen projecten. Voeg er een toe met + project.</p>" if add
                      else "<p class='muted'>Nog geen projecten.</p>")
         head = (f"<div style='margin-bottom:1rem'>"
-                f"<h3 style='margin:0;display:inline'>Projecten ({len(projs)})</h3> &nbsp; {addlink}</div>")
+                f"<h3 style='margin:0;display:inline'>Projecten ({len(projs)})</h3> &nbsp; "
+                f"<a class='addlink' href='/project/nieuw'>✨ geleid nieuw project</a> &nbsp; {addlink}</div>")
         return (f"<div class='c2-sec'>{head}{_drafts_html(st, drafts, csrf_token, back_base)}"
                 f"{board}{_archived_html(st, archived, csrf_token, back_base)}</div>")
 

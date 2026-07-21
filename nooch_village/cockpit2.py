@@ -55,7 +55,8 @@ from nooch_village import artefacts
 from nooch_village.artefacts import can_write_artefact, requires_governance_ref
 from nooch_village import epic
 from nooch_village.personas import PersonaStore
-from nooch_village.projects import ProjectLedger, PREP_CHECKLIST_TITLE, _MISSIE_IMPACT, _BUSINESS_IMPACT
+from nooch_village.projects import (ProjectLedger, PREP_CHECKLIST_TITLE, _MISSIE_IMPACT,
+                                    _BUSINESS_IMPACT, _EFFORT)
 from nooch_village.deliverable_store import DeliverableStore
 from nooch_village.project_doc_store import ProjectDocStore
 from nooch_village.radar_store import RadarStore
@@ -226,9 +227,10 @@ from nooch_village.views.projects import (
     _inline_add_project, _columns_html, _drag_script,
     _modal_html, _group_meta, _projects_board,
     _archived_html, _projects_tab_html,
-    _person_projects_tab_html, render_project,
+    _person_projects_tab_html, render_project,  # noqa
     _PROJ_CHIP, _PROJ_COLS, _LABELS, _II_PREFIX,
 )
+from nooch_village.views.wizard import render_wizard
 
 
 from nooch_village.views.checklists import (
@@ -4475,6 +4477,11 @@ def make_handler(data_dir: str, csrf_token: str,
             def _frag(out: str, is_frag: bool) -> str:
                 return (f"<style>{_EXTRA_CSS}</style>{out}") if is_frag else out
 
+            if path == "/project/nieuw":
+                # De geleide project-wizard (founder 20 jul) — vol scherm, geen Noochie-rail.
+                self._send(render_wizard(st, effective_csrf), chrome=False)
+                return
+
             if path == "/project":
                 fr = (qs.get("fragment") or [""])[0] == "1"
                 # Accepteer ?id= als alias voor ?pid= (founder 20 jul): de projectsignalen linken
@@ -4841,6 +4848,80 @@ def make_handler(data_dir: str, csrf_token: str,
                     self._send("CSRF-token ongeldig", 403); return
                 self._send_json(snake.handle_score(_Stores(data_dir), username, (form.get("score") or ["0"])[0]))
                 return
+
+            # ── Project-wizard (JSON fetch-endpoints; csrf + sessie, zoals snake) ──────────
+            if path in ("/wizard/sharpen", "/wizard/plan", "/wizard/create"):
+                username = self._session_username()
+                if sessions is not None and username is None:
+                    self._send_json({"error": "niet ingelogd"}, 403); return
+                raw = self.rfile.read(length).decode("utf-8") if length else ""
+                form = urllib.parse.parse_qs(raw)
+                if not secrets.compare_digest((form.get("csrf") or [""])[0], csrf_token):
+                    self._send_json({"error": "csrf"}, 403); return
+                g1 = lambda k: (form.get(k) or [""])[0]
+                st = _Stores(data_dir)
+                try:
+                    if path == "/wizard/sharpen":
+                        from nooch_village.wizard import sharpen_outcome
+                        self._send_json({"uitkomst": sharpen_outcome(g1("ruw"))})
+                        return
+                    if path == "/wizard/plan":
+                        from nooch_village.wizard import plan_items
+                        from nooch_village import skill_links
+                        from nooch_village.registry_factory import shared_registry
+                        rec = st.records.get(g1("role"))
+                        reg = shared_registry()
+                        catalog = []
+                        for nm in sorted(skill_links.effectief(rec, st.ai)):
+                            sk = reg.get(nm)
+                            if sk is not None:
+                                catalog.append({"name": nm,
+                                                "description": getattr(sk, "description", "") or "",
+                                                "input": getattr(sk, "input_schema", "") or ""})
+                        req = lambda nm: tuple(getattr(reg.get(nm), "required_payload", ()) or ())
+                        items = plan_items(g1("uitkomst"), catalog, required_of=req)
+                        self._send_json({"items": items})
+                        return
+                    # /wizard/create
+                    role = g1("role")
+                    orec = st.records.get(role)
+                    if not role or (orec is not None and org.is_circle(orec)):
+                        self._send_json({"error": "kies een geldige rol (geen cirkel)"}, 400); return
+                    _deny = _role_gate(role, username, st)
+                    if _deny:
+                        self._send_json({"error": _deny}, 403); return
+                    uitkomst = g1("uitkomst").strip()
+                    if not uitkomst:
+                        self._send_json({"error": "geen uitkomst"}, 400); return
+                    person, agent = _parse_trekker(g1("trekker"))
+                    missie = g1("missie") if g1("missie") in _MISSIE_IMPACT else ""
+                    business = g1("business") if g1("business") in _BUSINESS_IMPACT else ""
+                    effort = g1("tijd") if g1("tijd") in _EFFORT else ""
+                    pj = st.projects
+                    pid = pj.create(role, uitkomst[:200], "human", status="queued",
+                                    done_when=uitkomst[:200], person=person or None,
+                                    agent=agent or None, missie_impact=missie,
+                                    business_impact=business, effort=effort)
+                    try:
+                        items = json.loads(g1("items") or "[]")
+                    except ValueError:
+                        items = []
+                    if isinstance(items, list) and items:
+                        cl = pj.checklist_add(pid, title=PREP_CHECKLIST_TITLE)
+                        if cl is not None:
+                            for it in items:
+                                if not isinstance(it, dict) or not (it.get("tekst") or "").strip():
+                                    continue
+                                pj.check_add(pid, cl["id"], it["tekst"],
+                                             skill=(it.get("skill") or None),
+                                             payload=(it.get("payload") if isinstance(it.get("payload"), dict) else None),
+                                             payload_ok=bool(it.get("ok", True)))
+                    self._send_json({"pid": pid, "url": f"/project?pid={pid}"})
+                    return
+                except Exception as e:
+                    logging.getLogger("cockpit2.wizard").exception("wizard-endpoint %s faalde", path)
+                    self._send_json({"error": str(e)}, 500)
+                    return
 
             if path == "/claims/scan":
                 # AUTHZ: iedereen-ingelogd — lezen/scannen is vrij; muteren blijft compliance.
