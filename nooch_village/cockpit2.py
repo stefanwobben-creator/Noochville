@@ -4477,7 +4477,11 @@ def make_handler(data_dir: str, csrf_token: str,
 
             if path == "/project":
                 fr = (qs.get("fragment") or [""])[0] == "1"
-                self._send(_frag(render_project(st, (qs.get("pid") or [""])[0], csrf_token=effective_csrf,
+                # Accepteer ?id= als alias voor ?pid= (founder 20 jul): de projectsignalen linken
+                # historisch met ?id= (tevens de dedup-sleutel in `seen`), maar de route las alleen
+                # ?pid= → "Project niet gevonden". Alias ipv linkformaat wijzigen houdt de dedup stabiel.
+                _pid = (qs.get("pid") or qs.get("id") or [""])[0]
+                self._send(_frag(render_project(st, _pid, csrf_token=effective_csrf,
                                                 msg=(qs.get("msg") or [""])[0],
                                                 back=(qs.get("back") or ["/"])[0], fragment=fr), fr))
                 return

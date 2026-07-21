@@ -82,17 +82,22 @@ class RadarStore(JsonStore):
 
     def add(self, *, role: str, feed: str, kind: str, content: str, rationale: str = "",
             source: str = "", link: str = "", published_at: str = "") -> str | None:
-        """Voeg een signaal toe (status 'wacht'). Dedup op (rol, kind, inhoud) over niet-afgewezen items.
+        """Voeg een signaal toe (status 'wacht'). Dedup op (rol, kind, inhoud) over ALLE statussen.
         `published_at` = de publicatiedatum van het artikel (uit de feed), los van `at` (moment van
-        ingest): een oud artikel is historisch bewijs, geen vers nieuws."""
+        ingest): een oud artikel is historisch bewijs, geen vers nieuws.
+
+        Founder 20 jul: afgewezen én verwerkte signalen tellen óók mee in de dedup — wat je
+        gisteren afwees of naar Oracle promoveerde hoort niet als vers 'wacht'-item terug te komen.
+        Eerder sloeg de dedup 'afgewezen' bewust over, waardoor een afgehandeld onderwerp bij het
+        volgende nieuws opnieuw verscheen. Een bestaand exemplaar (welke status dan ook) → dedup;
+        de status blijft ongewijzigd (een afgewezen signaal blijft afgewezen, wordt niet herleefd)."""
         content = (content or "").strip()
         if not role or not content:
             return None
         cl = content.lower()
         for it in self._data["items"].values():
-            if (it["role"] == role and it["kind"] == kind and it["content"].lower() == cl
-                    and it["status"] != "afgewezen"):
-                return it["id"]
+            if it["role"] == role and it["kind"] == kind and it["content"].lower() == cl:
+                return it["id"]                     # al gezien in welke status dan ook → geen duplicaat
         rid = uuid.uuid4().hex[:12]
         self._data["items"][rid] = {
             "id": rid, "role": role, "feed": feed, "kind": kind, "content": content[:200],

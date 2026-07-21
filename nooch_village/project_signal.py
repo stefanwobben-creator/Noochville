@@ -57,8 +57,12 @@ def signal_from_project(radar, project) -> str | None:
     link = project_link(pid)
     if radar.seen(link):
         return None                      # heropend + opnieuw afgerond → geen tweede signaal
+    # De titel is de CONCLUSIE van het inhoudelijke werk (dod_outcome — het antwoord op de
+    # projectvraag, projectpoort), niet de procedurele "checklist voltooid"-mededeling (outcome).
+    # Founder 20 jul: op /signals wil je zien wát er gevonden is, niet dát de checklist af is.
+    dod = str(p.get("dod_outcome") or "").strip()
     outcome = str(p.get("outcome") or "").strip()
-    content = outcome or f"Afgerond: {str(p.get('scope') or pid).strip()}"
+    content = dod or outcome or f"Afgerond: {str(p.get('scope') or pid).strip()}"
     rid = radar.add(role=(p.get("owner") or "village"), feed=FEED, kind=KIND,
                     content=content, rationale=str(p.get("hypothesis") or "").strip(),
                     source=SOURCE, link=link, published_at=_iso(p.get("updated_at")))
