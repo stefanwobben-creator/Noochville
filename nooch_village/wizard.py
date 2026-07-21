@@ -35,6 +35,24 @@ def sharpen_outcome(ruw: str, *, reason_fn=reason) -> str:
     return v or ruw
 
 
+def title_from(dod: str, *, reason_fn=reason) -> str:
+    """Leid een korte, outcome-gerichte titel (max ~8 woorden) af uit de uitgebreide DoD.
+    Fail-soft: valt de LLM weg, dan het eerste zinsdeel, ingekort."""
+    dod = (dod or "").strip()
+    if not dod:
+        return ""
+    out = reason_fn(
+        "Vat deze project-uitkomst samen in een KORTE titel van maximaal 8 woorden. "
+        "Outcome-gericht en concreet, geen werkwoord-opdracht, geen punt aan het eind, geen "
+        "aanhalingstekens.\n\n"
+        f"UITKOMST: {dod}\n\nOUTPUT: alleen de titel.",
+        max_tokens=30, call_site="wizard_title")
+    t = re.sub(r"\s+", " ", (out or "")).strip().strip('"“”‘’. ').strip()
+    if not t:
+        t = re.split(r"[.,:;]", dod)[0].strip()
+    return (t or dod)[:80]
+
+
 def _catalog_block(catalog: list[dict]) -> str:
     lines = []
     for c in catalog or []:

@@ -5,7 +5,7 @@ Opslag: data/projects.json (atomic write). Elke entry is een project-record:
 Governance-records en human_inbox blijven ongemoeid.
 """
 from __future__ import annotations
-import os, time, uuid
+import os, re, time, uuid
 from nooch_village.util import atomic_write_json, read_json, synchronized as _synchronized
 
 # MODELWIJZIGING (scope harry_hemp keyword_research): 'role' toegevoegd als geldige trigger voor een
@@ -756,15 +756,41 @@ class ProjectLedger:
         return [p for p in self._projects.values() if p["status"] not in _TERMINAL]
 
 
-def dod_poort(project: dict | None) -> str | None:
-    """De projectpoort (founder, 19 jul — naast G0-G4): Done vereist een ingevuld antwoord
-    op de projectvraag (dod_outcome). Geeft de weiger-reden terug, of None als de poort
-    open is. Deterministisch en dun, zoals de governance-poort: hij oordeelt niet over de
-    kwaliteit van het antwoord, alleen dat het antwoord bestáát — 'checklist voltooid' is
-    uitvoering, geen antwoord."""
-    if not ((project or {}).get("dod_outcome") or "").strip():
-        return ("nog niet af: vul eerst 'Antwoord op de projectvraag' in op de projectkaart "
-                "(wat weten we nu — of waarom is dit onbeantwoordbaar?)")
+def seed_document(dod: str) -> str:
+    """De start van het levende einddocument: de 'klaar wanneer' (de uitgebreide DoD) als kop.
+    De inwoner schrijft hieronder naar het antwoord toe; zodra het document van deze seed afwijkt
+    is de uitkomst beantwoord (zie dod_poort). Leeg → "" (geen seed)."""
+    d = (dod or "").strip()
+    if not d:
+        return ""
+    return (f"**Klaar wanneer**\n\n{d}\n\n---\n\n"
+            "*De inwoner werkt dit document bij elke puls bij en schrijft hieronder "
+            "naar het antwoord toe.*\n")
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"\s+", " ", s or "").strip()
+
+
+def dod_poort(project: dict | None, doc_text: str = "") -> str | None:
+    """De projectpoort (founder, 19 jul; verhuisd 21 jul naar het einddocument): Done vereist
+    dat de uitkomst beantwoord is IN het einddocument, niet dat het werk 'gedaan' is. De poort is
+    open zodra het document méér bevat dan alleen de geseede opdracht (de 'klaar wanneer'-kop).
+    Deterministisch en dun: hij oordeelt niet over de kwaliteit van het antwoord, alleen dat er
+    een antwoord staat. Geeft de weiger-reden terug, of None als de poort open is.
+
+    Legacy: projecten met een ingevuld 'dod_outcome' (het oude DoD-contract-veld) blijven zo
+    afrondbaar, ook zonder einddocument."""
+    p = project or {}
+    if (p.get("dod_outcome") or "").strip():
+        return None
+    dt = (doc_text or "").strip()
+    if not dt:
+        return ("nog niet af: het einddocument is nog leeg — schrijf eerst het antwoord op de "
+                "uitkomst (of waarom die onbeantwoordbaar is)")
+    if _norm(dt) == _norm(seed_document(p.get("done_when") or "")):
+        return ("nog niet af: het einddocument bevat alleen de opdracht (klaar wanneer), nog geen "
+                "antwoord op de uitkomst")
     return None
 
 

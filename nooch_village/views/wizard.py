@@ -113,7 +113,7 @@ _WIZ_HTML = r"""
 (function(){
 const CSRF="__CSRF__";
 const ROLEOPTS="__ROLES__", TREKOPTS="__TREK__", PREROLE="__ROLE__";
-const S={step:0,ruw:"",uitkomst:"",checklist:[],tijd:"",missie:"",business:"",role:"",trekker:""};
+const S={step:0,ruw:"",uitkomst:"",titel:"",checklist:[],tijd:"",missie:"",business:"",role:"",trekker:""};
 const NST=6, card=()=>document.getElementById('wzcard');
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function prog(){document.getElementById('wzfill').style.width=(S.step/(NST-1)*100)+'%';}
@@ -124,7 +124,7 @@ async function post(url,obj){
 }
 function render(){prog();[start,idee,uitkomst,checklist,impact,bemens,klaar][S.step]();}
 function go(n){S.step=n;render();}
-function restart(){Object.assign(S,{step:0,ruw:"",uitkomst:"",checklist:[],tijd:"",missie:"",business:"",role:"",trekker:""});render();}
+function restart(){Object.assign(S,{step:0,ruw:"",uitkomst:"",titel:"",checklist:[],tijd:"",missie:"",business:"",role:"",trekker:""});render();}
 
 function start(){card().innerHTML=`
  <div class="wz-k">Nieuw project</div>
@@ -197,13 +197,14 @@ async function maak(){
  document.getElementById('mk').disabled=true;document.getElementById('mk').textContent='Bezig…';
  const r=await post('/wizard/create',{uitkomst:S.uitkomst,items:JSON.stringify(S.checklist),
    tijd:S.tijd,missie:S.missie,business:S.business,role:S.role,trekker:S.trekker});
- if(r&&r.url){S.url=r.url;if(window.__ovlDirty)window.__ovlDirty();go(6);}else{alert((r&&r.error)||'Er ging iets mis');document.getElementById('mk').disabled=false;document.getElementById('mk').textContent='Op het bord zetten';}}
+ if(r&&r.url){S.url=r.url;S.titel=(r&&r.titel)||'';if(window.__ovlDirty)window.__ovlDirty();go(6);}else{alert((r&&r.error)||'Er ging iets mis');document.getElementById('mk').disabled=false;document.getElementById('mk').textContent='Op het bord zetten';}}
 
 function klaar(){
  const done=S.checklist.filter(i=>i.ok).length,mens=S.checklist.length-done;
  const meta=[S.tijd&&('⏱ '+S.tijd),S.missie&&('missie: '+S.missie),S.business&&('business: '+S.business)].filter(Boolean).join(' · ')||'geen inschatting';
  card().innerHTML=`<div class="wz-cheer"><div class="big">🎉</div><h2>Op het bord!</h2><p class="wz-hint">${esc(document.getElementById('wzwho').textContent)} pakt het op.</p></div>
-  <div class="wz-srow"><span class="wz-sk">Uitkomst</span><span class="wz-sv">${esc(S.uitkomst)}</span></div>
+  ${S.titel?`<div class="wz-srow"><span class="wz-sk">Titel</span><span class="wz-sv">${esc(S.titel)}</span></div>`:''}
+  <div class="wz-srow"><span class="wz-sk">Klaar wanneer</span><span class="wz-sv">${esc(S.uitkomst)}</span></div>
   <div class="wz-srow"><span class="wz-sk">Checklist</span><span class="wz-sv">${S.checklist.length} stappen · ${done} met skill, ${mens} mens-taak</span></div>
   <div class="wz-srow"><span class="wz-sk">Inschatting</span><span class="wz-sv">${esc(meta)}</span></div>
   <div class="wz-grow"></div>

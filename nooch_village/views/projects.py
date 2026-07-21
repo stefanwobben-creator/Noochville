@@ -917,29 +917,9 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         f"</div>")
     details_panel = _psec(_IC_INFO, "Projectdetails", details_dcol + verzwakt_block)
 
-    # 1b) DoD-contract (founder, 19 jul — de projectpoort): done_when bij de start,
-    # dod_outcome (het antwoord op de projectvraag) verplicht vóór Done. Zelfde
-    # fieldform-patroon als de rest van de kantlijn; action proj_dod.
-    def _dod_veld(veld: str, label: str, waarde: str, hint: str) -> str:
-        if rw:
-            return (f"<span class='dk wide'>{_e(label)}</span><span class='dv wide'>"
-                    f"<form method='post' action='/action' class='fieldform'>{hid()}"
-                    f"<input type='hidden' name='action' value='proj_dod'>"
-                    f"<input type='hidden' name='veld' value='{_e(veld)}'>"
-                    f"<textarea name='tekst' rows='2' placeholder='{_e(hint)}'>{_e(waarde)}</textarea>"
-                    f"<button class='btn ok sm' type='submit'>opslaan</button></form></span>")
-        toon = _e(waarde) or "<span class='muted'>—</span>"
-        return f"<span class='dk'>{_e(label)}</span><span class='dv'>{toon}</span>"
-    dod_leeg = status != "done" and not (p.get("dod_outcome") or "").strip()
-    dod_flag = ("<p class='muted'>⛔ zonder antwoord geen Done — dit is de projectpoort</p>"
-                if dod_leeg and rw else "")
-    dod_panel = _psec(_IC_CHECK, "DoD-contract", (
-        "<div class='dcol'>"
-        + _dod_veld("done_when", "Klaar wanneer", p.get("done_when") or "",
-                    "Waar herken je aan dat dit klaar is?")
-        + _dod_veld("dod_outcome", "Antwoord op de projectvraag", p.get("dod_outcome") or "",
-                    "Wat weten we nu — of waarom is dit onbeantwoordbaar?")
-        + "</div>" + dod_flag))
+    # 1b) De DoD-contract-box is vervallen (founder, 21 jul): de 'klaar wanneer' (uitgebreide DoD)
+    # staat nu als kop van het einddocument (direct onder de titel), en de projectpoort is
+    # doc-gedreven (projects.dod_poort leest het einddocument). Zie _einddocument_html.
 
     # 2) Checklist — vier onderscheidbare states + skill/payload (zie _checklists_html)
     checklists_html = _checklists_html(p, csrf_token, pid, back, rw)
@@ -958,7 +938,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                         "<p class='muted'>Nog niet gekoppeld aan een doel.</p>"
                         f"<button type='button' class='acard acard-off' disabled>{_IC_TARGET}"
                         "<span>Koppel aan doel · binnenkort</span></button>")
-    structure = details_panel + dod_panel + checklist_panel + goals_panel
+    structure = details_panel + checklist_panel + goals_panel
 
     # ═══ LINKS: WALL — inhoud & gesprek in tijdsvolgorde ═══════════════════════════════
     composer = ""

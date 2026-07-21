@@ -1269,10 +1269,13 @@ def _act_proj_done(c):
         if _deny:
             return nxt, _deny
         pid = g("pid")
-        # De projectpoort (founder, 19 jul — naast G0-G4): done = vraag beantwoord, niet
-        # werk gedaan. Zonder ingevuld dod_outcome weigert de cockpit de status Done.
+        # De projectpoort (founder, 19 jul; verhuisd 21 jul naar het einddocument): done = uitkomst
+        # beantwoord in het einddocument, niet werk gedaan. Zolang het document alleen de geseede
+        # opdracht bevat (of leeg is) weigert de cockpit de status Done.
         from nooch_village.projects import dod_poort
-        _dicht = dod_poort(pj.get(pid))
+        _ds = getattr(st, "project_docs", None)
+        _doc = _ds.read(pid) if _ds is not None else ""
+        _dicht = dod_poort(pj.get(pid), _doc)
         if _dicht:
             return nxt, "⛔ " + _dicht
         # Outcome met behoud van de telling; de mens kent Done toe ná review (Q3).
@@ -4901,11 +4904,23 @@ def make_handler(data_dir: str, csrf_token: str,
                     missie = g1("missie") if g1("missie") in _MISSIE_IMPACT else ""
                     business = g1("business") if g1("business") in _BUSINESS_IMPACT else ""
                     effort = g1("tijd") if g1("tijd") in _EFFORT else ""
+                    # Kort = de titel (scope), uitgebreid = de DoD (done_when + kop van het einddocument).
+                    from nooch_village.wizard import title_from
+                    from nooch_village.projects import seed_document
+                    titel = title_from(uitkomst) or uitkomst[:80]
                     pj = st.projects
-                    pid = pj.create(role, uitkomst[:200], "human", status="queued",
-                                    done_when=uitkomst[:200], person=person or None,
+                    pid = pj.create(role, titel[:200], "human", status="queued",
+                                    done_when=uitkomst, person=person or None,
                                     agent=agent or None, missie_impact=missie,
                                     business_impact=business, effort=effort)
+                    # Seed het levende einddocument met de DoD als kop. Vanaf hier is de projectpoort
+                    # doc-gedreven: Done kan pas als het document van deze seed afwijkt (echt antwoord).
+                    try:
+                        ds = getattr(st, "project_docs", None)
+                        if ds is not None:
+                            ds.write(pid, seed_document(uitkomst))
+                    except Exception:
+                        logging.getLogger("cockpit2.wizard").exception("einddoc-seed faalde (pid=%s)", pid)
                     try:
                         items = json.loads(g1("items") or "[]")
                     except ValueError:
@@ -4920,7 +4935,7 @@ def make_handler(data_dir: str, csrf_token: str,
                                              skill=(it.get("skill") or None),
                                              payload=(it.get("payload") if isinstance(it.get("payload"), dict) else None),
                                              payload_ok=bool(it.get("ok", True)))
-                    self._send_json({"pid": pid, "url": f"/project?pid={pid}"})
+                    self._send_json({"pid": pid, "url": f"/project?pid={pid}", "titel": titel})
                     return
                 except Exception as e:
                     logging.getLogger("cockpit2.wizard").exception("wizard-endpoint %s faalde", path)
