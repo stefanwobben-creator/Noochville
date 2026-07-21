@@ -120,10 +120,37 @@ def render_rapport(uitslag: dict, markten: list[str] | None = None,
                       f"{alt}{advies}</div>")
         lijst = f"<div class='card'><h3>Bevindingen</h3>{rijen}</div>"
 
+    incontext_html = _in_context(uitslag.get("in_context", []))
+    ctx_noot = ""
+    if (rood or oranje) and not uitslag.get("context_beoordeeld", False):
+        ctx_noot = ("<p class='muted'>⚠ Context niet automatisch beoordeeld (geen LLM beschikbaar) — "
+                    "elke gevlagde term telt mee, ook waar hij alleen wordt besproken.</p>")
+
     preview = _preview(uitslag.get("tekst", ""), bevindingen)
     acties = _rapport_acties(uitslag, csrf_token, kan_bord, bron)
-    return (f"<div class='card'>{kop}<p class='muted'>Eindoordeel: {_e(oordeel)}</p>{acties}</div>"
-            f"{landen}{lijst}{preview}")
+    return (f"<div class='card'>{kop}<p class='muted'>Eindoordeel: {_e(oordeel)}</p>{ctx_noot}{acties}</div>"
+            f"{landen}{lijst}{incontext_html}{preview}")
+
+
+def _in_context(incontext: list[dict]) -> str:
+    """De termen die de contextlaag als 'geen claim' beoordeelde: zichtbaar maar apart, en ze
+    tellen niet mee in de score. Transparant, zodat compliance een verkeerd oordeel kan zien."""
+    if not incontext:
+        return ""
+    rijen = ""
+    for b in incontext:
+        cls, label = _CHIP.get(b.get("stoplicht", ""), _CHIP["green"])
+        rijen += (f"<div class='c2-sec'>"
+                  f"<span class='{cls}'>{label}</span> <b>{_e(b.get('term', ''))}</b>"
+                  f"<span class='pill'>{_e(b.get('categorie', ''))}</span>"
+                  f"<div>Gevonden: <i>{_e(', '.join(b.get('gevonden', [])))}</i></div>"
+                  + (f"<div class='muted'><b>In context, geen claim:</b> {_e(b.get('context_reden', ''))}</div>"
+                     if b.get("context_reden") else "")
+                  + "</div>")
+    return (f"<div class='card'><h3>In context — geen claim ({len(incontext)})</h3>"
+            f"<p class='muted'>Deze termen komen wel voor, maar er wordt geen claim mee gedaan "
+            f"(kritiek, ontkenning, citaat of uitleg). Ze tellen niet mee in de score. Loop ze "
+            f"steekproefsgewijs na als je twijfelt.</p>{rijen}</div>")
 
 
 def _rol_label(bevinding: dict) -> str:

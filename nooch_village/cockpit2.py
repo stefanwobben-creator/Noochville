@@ -3500,6 +3500,17 @@ def _claims_scan(form: dict) -> tuple[dict, str]:
     except _claims_db.ClaimsDbError as e:
         return {"error": str(e)}, bron
     uitslag["tekst"] = tekst
+    # Contextlaag over de deterministische regex-scan: één LLM-oordeel filtert de rode/oranje
+    # bevindingen die alleen als onderwerp voorkomen (kritiek, ontkenning, citaat, uitleg) naar
+    # een aparte groep, en herweegt de score. Fail-soft: zonder LLM blijft het oude strenge gedrag.
+    try:
+        _load_env()
+        from nooch_village import claims_context
+        claims_context.verrijk(uitslag)
+    except Exception:
+        logging.getLogger("cockpit2.claims").exception("claim-contextlaag faalde")
+        uitslag.setdefault("in_context", [])
+        uitslag.setdefault("context_beoordeeld", False)
     return uitslag, bron
 
 
