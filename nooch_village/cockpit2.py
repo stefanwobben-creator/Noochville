@@ -4361,14 +4361,17 @@ def make_handler(data_dir: str, csrf_token: str,
             # Globale chrome = de inbox-drawer (launcher + uitschuif-paneel links + modal). Alleen voor een
             # sessie en alleen op volledige HTML-pagina's (met </body>). chrome=False voor de inbox-routes
             # zelf (die zijn de drawer-inhoud / het fragment; injecteren zou de drawer in zichzelf nesten).
-            # De Noochie-rail + call bar zijn eruit; 'chatten met de raad' komt later als eigen feature.
+            # De dorp-brede call bar is terug (founder 21 jul); de Noochie-rail blijft bewust weg
+            # ('chatten met de raad' komt later als eigen feature). De call bar-iframe start hidden en
+            # onthult zichzelf pas als LiveKit geconfigureerd is (token ok), dus ongeconfigureerd = geen bar.
             if chrome and self._session_username() is not None and "</body>" in body:
                 try:
                     _st = _Stores(data_dir)
                     _ro = _person_role_options(_st, _person_targets(_st, self._session_username()))
                 except Exception:
                     _ro = ""
-                body = body.replace("</body>", render_inbox_chrome(csrf_token, _ro) + "</body>", 1)
+                body = body.replace(
+                    "</body>", render_inbox_chrome(csrf_token, _ro) + _callbar_frame() + "</body>", 1)
             b = body.encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "text/html; charset=utf-8")
