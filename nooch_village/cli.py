@@ -1090,6 +1090,96 @@ def main() -> None:
                 print("   -", s)
             sys.exit(1)
 
+    elif mode == "sluitronde":
+        # Autonome triage van de kansen-inbox (founder 22 jul): verval + dubbel-check + raadspanel
+        # → project of expliciete 'nee'; onomkeerbaar → escaleer naar de mens. Standaard DRY (toont
+        # alleen); geef 'apply' mee om echt te muteren. Optioneel 'ttl=<dagen>' (default 14).
+        import os, time, collections
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+        from nooch_village.human_inbox import HumanInbox
+        from nooch_village.projects import ProjectLedger, seed_document
+        from nooch_village.project_doc_store import ProjectDocStore
+        from nooch_village.governance import Records
+        from nooch_village import org
+        from nooch_village import sluitronde as SR
+        from nooch_village.cockpit2 import _load_env
+        apply = "apply" in sys.argv[2:]
+        ttl = 14
+        for a in sys.argv[2:]:
+            if a.startswith("ttl="):
+                try:
+                    ttl = int(a.split("=", 1)[1])
+                except ValueError:
+                    pass
+        _load_env()
+        dd = load_context(BASE_DIR).data_dir
+        inbox = HumanInbox(os.path.join(dd, "human_inbox.json"))
+        pj = ProjectLedger(os.path.join(dd, "projects.json"))
+        recs = Records(os.path.join(dd, "governance_records.json"))
+        docs = ProjectDocStore(dd)
+        role_ids = {r.id for r in recs.all() if not org.is_circle(r)}
+        voorkeur = ["mother_earth__nooch__strategic_lead_founder_steward",
+                    "mother_earth__nooch__mother_earth_steward",
+                    "mother_earth__nooch__circle_lead"]
+        lenzen = []
+        for rid in voorkeur:
+            r = recs.get(rid)
+            if r is not None:
+                d = getattr(r, "definition", None)
+                lenzen.append({"id": rid, "naam": getattr(d, "name", "") or rid,
+                               "purpose": getattr(d, "purpose", "") or ""})
+        active = [p for p in pj.all() if not p.get("archived") and p.get("status") != "done"]
+        active_scopes = [p.get("scope") if isinstance(p.get("scope"), str)
+                         else str(p.get("scope") or "") for p in active]
+        kansen = [i for i in inbox.pending() if i.get("type") == "opportunity"]
+        now = time.time()
+        print(f"SLUITRONDE — {len(kansen)} open kansen | panel: "
+              f"{', '.join(l['naam'] for l in lenzen) or '(geen rol-lenzen)'} | ttl={ttl}d | "
+              f"modus: {'UITVOEREN' if apply else 'DRY-RUN (niets muteren)'}\n")
+        tally = collections.Counter()
+        for k in kansen:
+            ctx = k.get("context") or {}
+            titel = (ctx.get("title") or k.get("subject") or "")[:70]
+            b = SR.beslis_kans(k, lenzen, active_scopes, now=now, ttl_days=ttl)
+            actie = b["actie"]
+            owner = None
+            if actie == "project":
+                owner = b.get("owner_rol") if b.get("owner_rol") in role_ids else None
+                if owner is None and ctx.get("by") in role_ids:
+                    owner = ctx.get("by")
+                if owner is None:
+                    actie, b["reden"] = "escaleer", "geen geschikte trekkerrol gevonden — naar jou"
+            sym = {"verlopen": "⌛", "nee": "✗", "project": "✓", "escaleer": "⚑"}.get(actie, "?")
+            print(f"{sym} {actie:8} «{titel}»{(' → ' + owner) if owner else ''}  — {b['reden'][:80]}")
+            tally[actie] += 1
+            if not apply:
+                continue
+            iid = k["id"]
+            if actie in ("verlopen", "nee"):
+                inbox.resolve(iid, "rejected", reason=b["reden"])
+            elif actie == "escaleer":
+                pass  # blijft pending als beslis-signaal voor de mens
+            elif actie == "project":
+                scope = (b.get("scope") or titel)[:200]
+                try:
+                    pid = pj.create(owner, scope, "role", status="queued",
+                                    done_when=scope, origin="sluitronde")
+                    try:
+                        docs.write(pid, seed_document(scope))
+                    except Exception:
+                        pass
+                    inbox.resolve(iid, "approved", reason=b["reden"],
+                                  extra={"project_id": pid, "besloten_door": "sluitronde"})
+                    active_scopes.append(scope)   # binnen deze ronde niet dubbel aanmaken
+                except Exception as e:
+                    print(f"   ⚠ project maken mislukt: {e}")
+        print()
+        print(f"Klaar. project:{tally['project']}  nee:{tally['nee']}  verlopen:{tally['verlopen']}  "
+              f"naar jou (onomkeerbaar):{tally['escaleer']}")
+        if not apply:
+            print("(DRY-RUN — er is niets gemuteerd. Geef 'apply' mee om het uit te voeren.)")
+
     elif mode == "inwoner_export":
         # Pakket-export: één inwoner als verkoopbaar bestand. Geen sleutels, geen dorpsdata.
         import os
@@ -1147,6 +1237,6 @@ def main() -> None:
               "ground | harry_run | roster | keys | competitor | community_listening | formalize | answer_questions | "
               "ingest_governance | review_roles | teleology_review | teleology_to_roloverleg | shopify | work_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
-              "projects_to_signals | projects_to_staging | rapport | verslag | healthcheck",
+              "projects_to_signals | projects_to_staging | rapport | verslag | healthcheck | sluitronde",
               file=sys.stderr)
         sys.exit(1)
