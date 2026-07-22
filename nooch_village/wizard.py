@@ -62,7 +62,7 @@ def _catalog_block(catalog: list[dict]) -> str:
 
 
 def plan_items(goal: str, catalog: list[dict], *, reason_fn=reason,
-               required_of=None, max_items: int = 5) -> list[dict]:
+               required_of=None, max_items: int = 5, kennis: str = "") -> list[dict]:
     """Stel een checklist voor bij `goal`, elk item met een skill uit `catalog` (of null = mens-taak)
     en een payload in de vorm van het input_schema. `catalog` = [{name, description, input}] van de
     skills die de ROL heeft. `required_of(skill)` → verplichte payload-velden (voor de uitvoerbaarheid).
@@ -74,11 +74,19 @@ def plan_items(goal: str, catalog: list[dict], *, reason_fn=reason,
     if not goal:
         return []
     eigen = {c["name"] for c in (catalog or [])}
+    # Geheugen-eerst: het (al gerenderde, gecapte) 'wat weten we al'-blok komt vóór de skills, met
+    # de instructie om voort te bouwen i.p.v. opnieuw te verzamelen. Leeg → geen sectie.
+    kennis_section = (kennis.strip() + "\n\n") if kennis and kennis.strip() else ""
     prompt = (
         "Je breekt een projectdoel op in 2 tot 5 concrete stappen voor een zelfsturende rol.\n\n"
         f"DOEL (de uitkomst):\n\"{goal}\"\n\n"
+        f"{kennis_section}"
         f"De skills van deze rol (de ENIGE tools), met hun input-vorm:\n{_catalog_block(catalog)}\n\n"
-        "Voor ELK item: als één van deze skills het kan uitvoeren, geef de exacte skill-naam ÉN een "
+        + ("GEHEUGEN-EERST: er staat hierboven al kennis of eerder onderzoek. Bouw daarop VOORT: "
+           "herhaal geen bestaand onderzoek en verzamel niet opnieuw wat er al ligt. Begin bij een "
+           "SYNTHESE-stap (lees en combineer wat we al weten) en plan daarna alleen het écht "
+           "ontbrekende stuk.\n" if kennis_section else "")
+        + "Voor ELK item: als één van deze skills het kan uitvoeren, geef de exacte skill-naam ÉN een "
         "'payload'-object dat voldoet aan de 'input'-vorm van die skill. Kan geen enkele skill het, "
         "zet skill=null en payload={} (dan wordt het een menselijke taak). Elk item begint met een "
         "werkwoord en is één stap.\n"

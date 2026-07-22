@@ -4900,7 +4900,31 @@ def make_handler(data_dir: str, csrf_token: str,
                                                 "description": getattr(sk, "description", "") or "",
                                                 "input": getattr(sk, "input_schema", "") or ""})
                         req = lambda nm: tuple(getattr(reg.get(nm), "required_payload", ()) or ())
-                        items = plan_items(g1("uitkomst"), catalog, required_of=req)
+                        goal = g1("uitkomst")
+                        # Geheugen-eerst (zoals de daemon-planner): raadpleeg de kennislaag én eerder
+                        # afgerond onderzoek vóór het plannen, zodat de wizard voortbouwt i.p.v.
+                        # opnieuw verzamelt. Fail-soft: een lege/kapotte store → geen sectie.
+                        kennis = ""
+                        try:
+                            from nooch_village.kennis_context import kennis_voor, kennis_blok
+                            from nooch_village.deliverable_context import gather_deliverable_context
+                            delen = []
+                            try:
+                                dblok = gather_deliverable_context(
+                                    st.projects, goal, max_notes=5, max_chars=2000,
+                                    store=st.deliverables) or ""
+                            except Exception:
+                                dblok = ""
+                            if dblok:
+                                delen.append("Eerder afgerond onderzoek in het dorp (gebruik dit; "
+                                             "plan geen items die dit al beantwoordt):\n" + dblok)
+                            kblok = kennis_blok(kennis_voor(st.dd, goal))
+                            if kblok:
+                                delen.append(kblok)
+                            kennis = "\n\n".join(delen)
+                        except Exception:
+                            logging.getLogger("cockpit2.wizard").exception("geheugen-raadpleging faalde")
+                        items = plan_items(goal, catalog, required_of=req, kennis=kennis)
                         self._send_json({"items": items})
                         return
                     # /wizard/create
