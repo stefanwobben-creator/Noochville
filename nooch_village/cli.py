@@ -1106,10 +1106,16 @@ def main() -> None:
         from nooch_village.cockpit2 import _load_env
         apply = "apply" in sys.argv[2:]
         ttl = 14
+        maxproj = 6
         for a in sys.argv[2:]:
             if a.startswith("ttl="):
                 try:
                     ttl = int(a.split("=", 1)[1])
+                except ValueError:
+                    pass
+            elif a.startswith("maxproj="):
+                try:
+                    maxproj = int(a.split("=", 1)[1])
                 except ValueError:
                     pass
         _load_env()
@@ -1134,34 +1140,62 @@ def main() -> None:
                          else str(p.get("scope") or "") for p in active]
         kansen = [i for i in inbox.pending() if i.get("type") == "opportunity"]
         now = time.time()
+        # 1) Verval: kansen ouder dan ttl zonder actie = de facto 'nee' (geen LLM).
+        verval_ids = {k["id"] for k in kansen
+                      if (now - (k.get("created_at") or now)) / 86400 > ttl}
+        vervallen = [k for k in kansen if k["id"] in verval_ids]
+        fresh = [k for k in kansen if k["id"] not in verval_ids]
+        # 2) Cluster de verse kansen (template-spam → één oordeel per THEMA).
+        clusters = SR.cluster(fresh)
         print(f"SLUITRONDE — {len(kansen)} open kansen | panel: "
               f"{', '.join(l['naam'] for l in lenzen) or '(geen rol-lenzen)'} | ttl={ttl}d | "
-              f"modus: {'UITVOEREN' if apply else 'DRY-RUN (niets muteren)'}\n")
-        tally = collections.Counter()
-        for k in kansen:
-            ctx = k.get("context") or {}
-            titel = (ctx.get("title") or k.get("subject") or "")[:70]
-            b = SR.beslis_kans(k, lenzen, active_scopes, now=now, ttl_days=ttl)
+              f"cap={maxproj} projecten/ronde | modus: {'UITVOEREN' if apply else 'DRY-RUN (niets muteren)'}")
+        print(f"⌛ {len(vervallen)} kansen vervallen (>{ttl}d zonder actie) · "
+              f"{len(fresh)} vers in {len(clusters)} thema-clusters\n")
+        # 3) Eén oordeel per cluster (op de eerste als representant).
+        besluiten = []
+        for leden in clusters:
+            rep = leden[0]
+            b = SR.beslis_kans(rep, lenzen, active_scopes, now=now, ttl_days=ttl)
             actie = b["actie"]
             owner = None
             if actie == "project":
                 owner = b.get("owner_rol") if b.get("owner_rol") in role_ids else None
-                if owner is None and ctx.get("by") in role_ids:
-                    owner = ctx.get("by")
+                if owner is None and (rep.get("context") or {}).get("by") in role_ids:
+                    owner = (rep.get("context") or {}).get("by")
                 if owner is None:
                     actie, b["reden"] = "escaleer", "geen geschikte trekkerrol gevonden — naar jou"
-            sym = {"verlopen": "⌛", "nee": "✗", "project": "✓", "escaleer": "⚑"}.get(actie, "?")
-            print(f"{sym} {actie:8} «{titel}»{(' → ' + owner) if owner else ''}  — {b['reden'][:80]}")
+            besluiten.append({"leden": leden, "b": b, "actie": actie, "owner": owner})
+        # 4) Harde cap: rangschik project-clusters op waarde, hooguit `maxproj`; de rest → uitgesteld.
+        proj = sorted((x for x in besluiten if x["actie"] == "project"),
+                      key=lambda x: -(x["b"].get("waarde") or 3))
+        for i, x in enumerate(proj):
+            if i >= maxproj:
+                x["actie"] = "uitgesteld"
+                x["b"]["reden"] = f"boven de cap van {maxproj} deze ronde (nu niet) — waarde {x['b'].get('waarde', 3)}/5"
+        # 5) Toon + voer uit.
+        tally = collections.Counter()
+        sym = {"nee": "✗", "project": "✓", "escaleer": "⚑", "uitgesteld": "…"}
+        for x in besluiten:
+            leden, b, actie, owner = x["leden"], x["b"], x["actie"], x["owner"]
+            rep_titel = SR._titel_van(leden[0])[:60]
+            grp = f" (+{len(leden) - 1} in cluster)" if len(leden) > 1 else ""
+            print(f"{sym.get(actie, '?')} {actie:10} «{rep_titel}»{grp}"
+                  f"{(' → ' + owner) if owner else ''}  — {b['reden'][:70]}")
             tally[actie] += 1
             if not apply:
                 continue
-            iid = k["id"]
-            if actie in ("verlopen", "nee"):
-                inbox.resolve(iid, "rejected", reason=b["reden"])
+            if actie == "nee":
+                for k in leden:
+                    inbox.resolve(k["id"], "rejected", reason=b["reden"])
+            elif actie == "uitgesteld":
+                for k in leden:
+                    inbox.resolve(k["id"], "deferred", reason=b["reden"])
             elif actie == "escaleer":
-                pass  # blijft pending als beslis-signaal voor de mens
+                for k in leden[1:]:   # representant blijft pending als beslis-signaal; rest opzij
+                    inbox.resolve(k["id"], "deferred", reason="cluster van een geëscaleerde kans")
             elif actie == "project":
-                scope = (b.get("scope") or titel)[:200]
+                scope = (b.get("scope") or rep_titel)[:200]
                 try:
                     pid = pj.create(owner, scope, "role", status="queued",
                                     done_when=scope, origin="sluitronde")
@@ -1169,14 +1203,20 @@ def main() -> None:
                         docs.write(pid, seed_document(scope))
                     except Exception:
                         pass
-                    inbox.resolve(iid, "approved", reason=b["reden"],
-                                  extra={"project_id": pid, "besloten_door": "sluitronde"})
-                    active_scopes.append(scope)   # binnen deze ronde niet dubbel aanmaken
+                    for k in leden:
+                        inbox.resolve(k["id"], "approved", reason=b["reden"],
+                                      extra={"project_id": pid, "besloten_door": "sluitronde"})
+                    active_scopes.append(scope)
                 except Exception as e:
                     print(f"   ⚠ project maken mislukt: {e}")
+        if apply:
+            for k in vervallen:
+                inbox.resolve(k["id"], "rejected", reason=f"verlopen: >{ttl} dagen zonder actie")
+        afgehandeld = len(vervallen) + sum(len(x["leden"]) for x in besluiten)
         print()
-        print(f"Klaar. project:{tally['project']}  nee:{tally['nee']}  verlopen:{tally['verlopen']}  "
-              f"naar jou (onomkeerbaar):{tally['escaleer']}")
+        print(f"Klaar. projecten:{tally['project']}  nee:{tally['nee']}  uitgesteld:{tally['uitgesteld']}  "
+              f"naar jou:{tally['escaleer']}  vervallen:{len(vervallen)}  "
+              f"(kansen afgehandeld: {afgehandeld} van {len(kansen)})")
         if not apply:
             print("(DRY-RUN — er is niets gemuteerd. Geef 'apply' mee om het uit te voeren.)")
 

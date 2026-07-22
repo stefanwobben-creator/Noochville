@@ -47,6 +47,30 @@ def _dedup(titel: str, active_scopes: list[str], drempel: float = 0.6) -> str | 
     return beststr if best >= drempel else None
 
 
+def _jacc(a: set, b: set) -> float:
+    return len(a & b) / len(a | b) if (a or b) else 0.0
+
+
+def _titel_van(kans: dict) -> str:
+    return (kans.get("context") or {}).get("title") or kans.get("subject") or ""
+
+
+def cluster(kansen: list[dict], drempel: float = 0.5) -> list[list[dict]]:
+    """Groepeer near-duplicaat-kansen (template-spam: één idee, tig herformuleringen). Greedy op
+    token-overlap (Jaccard) van de titel. Zo beoordeelt de ronde één keer per THEMA i.p.v. per item."""
+    clusters: list[dict] = []
+    for k in kansen:
+        t = _tokens(_titel_van(k))
+        for c in clusters:
+            if _jacc(t, c["tok"]) >= drempel:
+                c["leden"].append(k)
+                c["tok"] |= t                       # cluster groeit mee (vangt zo de hele familie)
+                break
+        else:
+            clusters.append({"tok": set(t), "leden": [k]})
+    return [c["leden"] for c in clusters]
+
+
 def _lens_block(lenzen: list[dict]) -> str:
     return "\n".join(f"- {l.get('naam') or l.get('id')}: {(l.get('purpose') or '')[:160]}"
                      for l in (lenzen or [])) or "- (geen rol-lenzen)"
@@ -81,6 +105,7 @@ def _panel(titel: str, ctx: dict, lenzen: list[dict], reason_fn, open_werk: int 
         "Antwoord UITSLUITEND met JSON:\n"
         '{"stemmen":[{"rol":"...","stem":"ja of nee","reden":"kort"}],'
         '"besluit":"ja of nee (meerderheid, standaard nee)","onomkeerbaar":true of false,'
+        '"waarde":1-5 (hoe waardevol voor de purpose NU, 5=cruciaal),'
         '"reden":"kernreden","owner_rol":"de rol-id die dit het beste trekt (bij ja)",'
         '"scope":"één korte, toetsbare uitkomst-zin (bij ja)"}')
     raw = reason_fn(prompt, max_tokens=700, json_mode=True, call_site="sluitronde_panel")
@@ -110,8 +135,13 @@ def beslis_kans(kans: dict, lenzen: list[dict], active_scopes: list[str], *,
         return {"actie": "escaleer", "stemmen": stemmen,
                 "reden": (data.get("reden") or "onomkeerbaar gevolg") + " (onomkeerbaar → naar jou)"}
     if str(data.get("besluit", "")).strip().lower().startswith("ja"):
+        try:
+            waarde = int(data.get("waarde") or 3)
+        except (ValueError, TypeError):
+            waarde = 3
         return {"actie": "project", "stemmen": stemmen, "reden": data.get("reden", ""),
                 "owner_rol": (data.get("owner_rol") or "").strip(),
+                "waarde": max(1, min(5, waarde)),
                 "scope": (data.get("scope") or titel).strip()}
     return {"actie": "nee", "stemmen": stemmen,
             "reden": data.get("reden") or "past niet binnen de purpose"}
