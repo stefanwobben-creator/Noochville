@@ -52,24 +52,35 @@ def _lens_block(lenzen: list[dict]) -> str:
                      for l in (lenzen or [])) or "- (geen rol-lenzen)"
 
 
-def _panel(titel: str, ctx: dict, lenzen: list[dict], reason_fn) -> dict | None:
+def _panel(titel: str, ctx: dict, lenzen: list[dict], reason_fn, open_werk: int = 0) -> dict | None:
     """Eén raadspanel-oordeel: elke rol-lens stemt vanuit haar purpose, meerderheid beslist.
     Geeft {stemmen, besluit, onomkeerbaar, owner_rol, scope, reden} of None bij LLM-uitval."""
     wat = ctx.get("wat") or ""
     waarom = ctx.get("waarom") or ""
     by = ctx.get("by") or ""
     prompt = (
-        "Je bent een raadspanel dat namens Nooch beslist of een gesensde KANS werk moet worden. "
-        "Oordeel STRENG: het dorp heeft te veel open werk, dus alleen kansen die de purpose echt "
-        "dienen worden een project.\n\n"
+        "Je bent een raadspanel dat namens Nooch beslist of een gesensde KANS NU werk moet worden.\n\n"
         f"NOOCH PURPOSE:\n{ANCHOR_PURPOSE}\n\n"
+        f"BELANGRIJKE CONTEXT: het dorp heeft AL {open_werk} open projecten en senst veel meer dan "
+        "het afmaakt. Een nieuw project kost een schaarse plek. De lat ligt daarom HOOG en de "
+        "STANDAARD is 'nee'. Stem alleen 'ja' als de kans ALLE vier haalt:\n"
+        "  1. draagt DIRECT bij aan de kern-purpose (duurzaamste veganistische schoenmerk, "
+        "meliorisme via transparantie, organische missie-gedreven groei op nooch.earth);\n"
+        "  2. is concreet en waardevol genoeg om NU een plek te verdienen (geen nice-to-have, geen "
+        "generiek community- of spel-idee, geen vaag 'zichtbaar maken');\n"
+        "  3. is geen bijna-duplicaat van een bestaand project of een andere kans (varianten van "
+        "hetzelfde idee → nee);\n"
+        "  4. is geen interne proces- of governance-review die kan wachten gezien de overload.\n"
+        "Bij twijfel: 'nee'. Onomkeerbaarheid is NIET de goedkeuringstest (zie hieronder), alleen "
+        "purpose-waarde-urgentie telt voor ja/nee.\n\n"
         f"DE KANS:\n  titel: {titel}\n  wat: {wat}\n  waarom: {waarom}\n  gesensd door: {by}\n\n"
         f"HET PANEL (oordeel PER rol vanuit haar eigen purpose-lens):\n{_lens_block(lenzen)}\n\n"
-        "Bepaal ook of uitvoeren een ONOMKEERBAAR gevolg heeft (geld uitgeven, een publieke claim "
-        "doen, een extern commitment aangaan). Zo ja, dan beslist het panel NIET zelf.\n\n"
+        "APART, na de ja/nee: heeft uitvoeren een ONOMKEERBAAR gevolg (geld uitgeven, een publieke "
+        "claim doen, een extern commitment aangaan)? Zo ja, zet onomkeerbaar=true; dan beslist het "
+        "panel niet zelf en gaat de kans naar de mens, ongeacht ja/nee.\n\n"
         "Antwoord UITSLUITEND met JSON:\n"
         '{"stemmen":[{"rol":"...","stem":"ja of nee","reden":"kort"}],'
-        '"besluit":"ja of nee (meerderheid)","onomkeerbaar":true of false,'
+        '"besluit":"ja of nee (meerderheid, standaard nee)","onomkeerbaar":true of false,'
         '"reden":"kernreden","owner_rol":"de rol-id die dit het beste trekt (bij ja)",'
         '"scope":"één korte, toetsbare uitkomst-zin (bij ja)"}')
     raw = reason_fn(prompt, max_tokens=700, json_mode=True, call_site="sluitronde_panel")
@@ -91,7 +102,7 @@ def beslis_kans(kans: dict, lenzen: list[dict], active_scopes: list[str], *,
     if dup:
         return {"actie": "nee", "reden": f"al gedekt door bestaand project: {dup[:70]}"}
 
-    data = _panel(titel, ctx, lenzen, reason_fn)
+    data = _panel(titel, ctx, lenzen, reason_fn, open_werk=len(active_scopes))
     if not isinstance(data, dict):
         return {"actie": "escaleer", "reden": "kon niet automatisch beoordelen (LLM weg) — naar jou"}
     stemmen = data.get("stemmen") if isinstance(data.get("stemmen"), list) else []
