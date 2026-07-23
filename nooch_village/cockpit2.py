@@ -30,7 +30,7 @@ from nooch_village.web_base import _e, _page, _banner     # zelfde design system
 from nooch_village.cockpit2_util import (
     _name, _initials, _tabbar, _avatar, _age, _fmt_due,
     _created_full, _ic, _bron_html, _stamp, _md, _parse_multipart,
-    _link_host, _psec, _ICON_ADD_EMOJI, _person_name,
+    _link_host, _psec, _ICON_ADD_EMOJI, _person_name, _footer,
     _IC_CHECK, _IC_INFO, _IC_CHAT, _IC_LINK, _IC_DL,
     _IC_DESC, _IC_CLOCK, _IC_FILE, _IC_TARGET,
 )
@@ -264,6 +264,7 @@ from nooch_village.views.inbox import (
 from nooch_village.views.metrics2 import render_metrics2
 from nooch_village.views.bronnen import render_bronnen
 from nooch_village.views.skills import render_skills
+from nooch_village.views.search import render_search
 from nooch_village.views.claims import render_claims, render_rapport, rol_voor
 from nooch_village.views.inwoners import render_inwoner, render_inwoners
 from nooch_village.views.kennislaag import render_kennislaag
@@ -4369,9 +4370,22 @@ def make_handler(data_dir: str, csrf_token: str,
                     _st = _Stores(data_dir)
                     _ro = _person_role_options(_st, _person_targets(_st, self._session_username()))
                 except Exception:
-                    _ro = ""
+                    _st, _ro = None, ""
+                # Pattern-fix (founder 23 jul): ELKE pagina die nog geen organisatieboom-rail heeft
+                # krijgt hem hier alsnog, zodat je bij élke tool je navigatie houdt — niet alleen op het
+                # projectenbord. Node-pagina's hebben al een `c2-rail` en worden overgeslagen. De rail
+                # wordt vóór de main geïnjecteerd; flex-order (.c2-rail{order:1}) zet hem toch rechts.
+                if _st is not None and "c2-rail" not in body and "class='c2-wrap'>" in body:
+                    try:
+                        from nooch_village.views.overview import _tree_html
+                        _rail = f"<div class='c2-rail'>{_tree_html(_st, '')}</div>"
+                        body = body.replace("<div class='c2-wrap'>",
+                                            f"<div class='c2-wrap'>{_rail}", 1)
+                    except Exception:
+                        pass
                 body = body.replace(
-                    "</body>", render_inbox_chrome(csrf_token, _ro) + _callbar_frame() + "</body>", 1)
+                    "</body>",
+                    render_inbox_chrome(csrf_token, _ro) + _callbar_frame() + _footer() + "</body>", 1)
             b = body.encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -4555,6 +4569,10 @@ def make_handler(data_dir: str, csrf_token: str,
                     nm = _p.name if _p else ""
                 done = (qs.get("done") or [""])[0]
                 self._send(render_inbox(st, tgts, csrf_token=effective_csrf, naam=nm, done=done), chrome=False)
+                return
+            if path == "/search":
+                # Globale zoekopdracht vanuit de header: rollen, projecten, kennisbank in één beeld.
+                self._send(render_search(st, (qs.get("q") or [""])[0]))
                 return
             if path == "/skills":
                 # Skills-catalogus: wat kan het dorp al, en waarvoor moet tooling komen.

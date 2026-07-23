@@ -1073,3 +1073,27 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
    groen steunt, rood spreekt tegen (zelfde betekenis als de kn-note-stippen). */
 .kn-inhand-sup{background:var(--green-tint);border-radius:var(--radius);padding:.45rem .5rem}
 .kn-inhand-cou{background:var(--error-tint);border-radius:var(--radius);padding:.45rem .5rem}
+
+/* ── Gedeelde shell: logo + globale zoekbalk (header) en meta-footer (founder 23 jul) ──────────── */
+.c2-topbar{display:flex;align-items:center;gap:1rem;margin:.2rem 0 1rem}
+.c2-logo{flex:none;display:inline-flex;align-items:center}
+.c2-logo img{height:26px;width:auto;display:block}
+.c2-search{flex:1 1 auto;max-width:520px}
+.c2-search input{width:100%;box-sizing:border-box;padding:.5rem .8rem;border:1px solid var(--border);
+  border-radius:var(--radius-pill);background:var(--surface);font:inherit;font-size:14px;color:var(--ink)}
+.c2-search input:focus{outline:none;border-color:var(--green)}
+.c2-foot{margin:2.4rem 0 3.2rem;padding-top:.9rem;border-top:1px solid var(--border);
+  color:var(--gray);font-size:13px}
+.c2-foot a{color:var(--gray)}
+/* De organisatieboom-rail staat altijd rechts, ook als hij (op tool-pagina's) vóór de main wordt
+   geïnjecteerd: flex-order dwingt de volgorde af, los van de DOM-volgorde. */
+.c2-main{order:0}
+.c2-rail{order:1}
+/* Globale zoekresultaten */
+.gs-group{margin:1.1rem 0}
+.gs-group h2{font-size:15px;margin:.2rem 0 .5rem}
+.gs-hit{display:block;padding:.5rem .7rem;border:1px solid var(--border);border-radius:var(--radius);
+  margin:.3rem 0;background:var(--surface);text-decoration:none;color:var(--ink)}
+.gs-hit:hover{border-color:var(--green)}
+.gs-hit .gs-kind{font-size:11px;color:var(--gray);text-transform:uppercase;letter-spacing:.04em}
+.gs-hit .gs-snip{color:var(--muted);font-size:13px;display:block;margin-top:.15rem}

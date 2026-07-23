@@ -344,9 +344,25 @@ _NAV_ITEMS = (
 
 
 def _nav(context: str = "GlassFrog (PoC)") -> str:
-    """De gedeelde top-nav-balk. `context` is het middenlabel (default de PoC-tag; pagina's
-    als projectdetail/patterns geven hun eigen label mee)."""
-    links = " · ".join(f"<a href='{href}'>{label}</a>" for href, label in _NAV_ITEMS)
-    return (f"<div class='bar'>cockpit 2 · {_e(context)} · build {_BUILD} · {links}</div>")
+    """De gedeelde top-header: het Nooch-logo links en een globale zoekbalk ernaast (zoekt door
+    rollen, projecten en de kennisbank). Elke pagina roept dit aan, dus logo + zoek staan overal.
+    De meta-links (Metrics, Deelnemers, build) zijn naar de footer verhuisd (zie `_footer`), zodat
+    de bovenrand rustig blijft. `context` blijft in de signatuur voor compat (niet meer getoond)."""
+    return (
+        "<div class='c2-topbar'>"
+        "<a class='c2-logo' href='/' title='home'><img src='/static/nooch-logo.svg' alt='nooch'></a>"
+        "<form class='c2-search' action='/search' method='get' role='search'>"
+        "<input type='search' name='q' placeholder='Zoek rollen, projecten, kennis…' "
+        "autocomplete='off' aria-label='globale zoekopdracht'>"
+        "</form>"
+        "</div>")
+
+
+def _footer() -> str:
+    """De gedeelde footer met de cockpit-meta en de admin-links (Metrics, Deelnemers). Wordt globaal
+    door `_send` vóór </body> geïnjecteerd, zodat hij op elke pagina staat, ook de tool-pagina's."""
+    links = " · ".join(f"<a href='{href}'>{_e(label)}</a>" for href, label in _NAV_ITEMS)
+    return (f"<footer class='c2-foot'>cockpit 2 · {_e('GlassFrog (PoC)')} · build {_BUILD} · "
+            f"{links}</footer>")
 
 
