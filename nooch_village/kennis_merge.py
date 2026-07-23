@@ -120,16 +120,21 @@ def vind_clusters(notes, *, reason_fn=None, data_dir: str = "data",
         groepen.setdefault(vind(nid), []).append(nid)
 
     clusters = []
+    in_cluster: set[str] = set()
     for leden in groepen.values():
         if len(leden) < 2:
             continue
         tgt = _target(leden, byid)
+        in_cluster.update(leden)
         clusters.append({
             "target": tgt,
             "target_claim": byid[tgt].claim,
             "sources": [{"id": nid, "claim": byid[nid].claim} for nid in leden if nid != tgt],
             "reden": "lexicaal bijna-identiek, LLM-bevestigd",
         })
+    # Voorstellen over een kaartje dat de auto-merge tóch opruimt zijn overbodig → weglaten
+    # (kleinere, zuiverdere review-stapel).
+    voorstellen = [v for v in voorstellen if v["a"] not in in_cluster and v["b"] not in in_cluster]
     return {"clusters": clusters, "voorstellen": voorstellen,
             "kandidaat_paren": len(paren) + afgekapt, "beoordeeld": beoordeeld, "afgekapt": afgekapt}
 
