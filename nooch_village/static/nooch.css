@@ -1078,8 +1078,12 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .c2-topbar{display:flex;align-items:center;gap:1rem;margin:0 0 1.2rem;padding:.2rem 0 .95rem;
   border-bottom:1px solid var(--border)}
 .c2-greet{margin-left:auto;flex:none;color:var(--gray);font-size:13.5px;white-space:nowrap}
+.c2-greet a{color:inherit;text-decoration:none;border-bottom:1px solid transparent}
+.c2-greet a:hover{color:var(--ink);border-bottom-color:var(--border)}
 .c2-logo{flex:none;display:inline-flex;align-items:center}
-.c2-logo img{height:26px;width:auto;display:block}
+/* De witte opening in de 'h' zit onder het midden van het logo; ~6px omhoog schuiven zodat die
+   opening op de verticale as van de zoekbalk valt (founder 23 jul). */
+.c2-logo img{height:26px;width:auto;display:block;transform:translateY(-6px)}
 .c2-search{flex:1 1 auto;max-width:520px}
 .c2-search input{width:100%;box-sizing:border-box;padding:.5rem .8rem;border:1px solid var(--border);
   border-radius:var(--radius-pill);background:var(--surface);font:inherit;font-size:14px;color:var(--ink)}
