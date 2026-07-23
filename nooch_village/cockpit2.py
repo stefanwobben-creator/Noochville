@@ -4385,6 +4385,17 @@ def make_handler(data_dir: str, csrf_token: str,
                                             f"<div class='c2-wrap'>{_rail}", 1)
                     except Exception:
                         pass
+                # Persoonlijke begroeting in de header: vul de voornaam van de ingelogde persoon in.
+                if _st is not None:
+                    try:
+                        _p = _st.people.by_email(self._session_username())
+                        _vn = ((getattr(_p, "name", "") or "").split() or [""])[0]
+                        if _vn:
+                            body = body.replace(
+                                "<span class='c2-greet' id='c2-greet'></span>",
+                                f"<span class='c2-greet' id='c2-greet'>Hoi {_e(_vn)}</span>", 1)
+                    except Exception:
+                        pass
                 body = body.replace(
                     "</body>",
                     render_inbox_chrome(csrf_token, _ro) + _callbar_frame() + _footer() + "</body>", 1)

@@ -1,0 +1,208 @@
+<!doctype html><html lang="nl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prototype — Kennisbank: statements</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#1B1B1B;--gray:#4A4A4A;--subtle:#7A7A7A;--muted:#9A9483;--green:#1F9D55;--green-dark:#14713C;
+--green-tint:#D3EFDD;--cream:#FCFAF4;--cream-2:#FBF6EA;--cream-3:#FFF7E8;--surface:#fff;--yellow:#FFCE2E;
+--yellow-light:#FFF1B8;--coral:#FF6B5B;--border:#DDD4C0;--font-display:'Bricolage Grotesque',system-ui,sans-serif;
+--font-body:'DM Sans',system-ui,sans-serif;--radius:9px;--radius-pill:999px;
+--shadow:0 1px 2px rgba(27,27,27,.06),0 2px 8px rgba(27,27,27,.04)}
+*{box-sizing:border-box}
+body{font-family:var(--font-body);font-size:14px;line-height:1.5;color:var(--ink);background:var(--cream);
+margin:0 auto;padding:1.6rem 2rem;max-width:860px}
+h1{font-family:var(--font-display);font-weight:800;font-size:1.5rem;margin:0 0 .2rem}
+a{color:var(--green-dark)}
+.bar{color:var(--gray);margin:.4rem 0 1.2rem;font-size:13px}
+.muted{color:var(--subtle)}
+.chip{display:inline-block;padding:.05rem .5rem;border:1px solid var(--border);border-radius:var(--radius-pill);
+font-size:.7rem;background:var(--surface)}
+.chip.green{background:var(--green-tint);border-color:var(--green);color:var(--green-dark)}
+.zoek{width:100%;padding:.55rem .8rem;border:1px solid var(--border);border-radius:var(--radius);
+font:inherit;background:var(--surface);margin-bottom:1rem}
+.lijst{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+.stmt{border-top:1px solid var(--border);position:relative}
+.stmt:first-child{border-top:none}
+.stmt-kop{display:flex;gap:.5rem;align-items:flex-start;padding:.7rem .9rem;cursor:pointer}
+.stmt-kop:hover{background:var(--cream-2)}
+.handle{flex:0 0 auto;color:var(--border);cursor:grab;font-size:.9rem;letter-spacing:-1px;line-height:1.1;
+user-select:none;padding:.15rem .1rem;opacity:0;transition:opacity .12s}
+.stmt:hover .handle{opacity:1}
+.handle:hover{color:var(--muted)}
+.stmt-tekst{flex:1;font-weight:500}
+.stmt.dragover{outline:2px dashed var(--green);outline-offset:-2px;background:var(--green-tint)}
+.stmt.dragging{opacity:.4}
+.detail{display:none;padding:.2rem .9rem .9rem 2.1rem}
+.stmt.open .detail{display:block}
+.detail dl{display:grid;grid-template-columns:95px 1fr;gap:.12rem .6rem;font-size:.84rem;margin:.3rem 0 .5rem}
+.detail dt{color:var(--muted)}
+.detail dd{margin:0}
+.gekoppeld a{display:inline-block;margin:.1rem .25rem .1rem 0;font-size:.8rem;background:var(--cream-3);
+border:1px solid var(--border);border-radius:var(--radius-pill);padding:.05rem .55rem;text-decoration:none}
+.btn{display:inline-block;padding:.3rem .8rem;border:1px solid var(--border);border-radius:var(--radius-pill);
+background:var(--surface);font:inherit;font-size:.8rem;cursor:pointer;text-decoration:none;color:var(--ink)}
+.btn.ok{border-color:var(--green);color:var(--green-dark)}
+textarea{width:100%;font:inherit;font-size:.9rem;padding:.6rem;border:1px solid var(--border);
+border-radius:var(--radius);background:var(--surface);min-height:84px}
+/* merge-modal */
+.overlay{display:none;position:fixed;inset:0;background:rgba(27,27,27,.35);z-index:9}
+.modal{display:none;position:fixed;z-index:10;top:12vh;left:50%;transform:translateX(-50%);width:min(560px,92vw);
+background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);
+padding:1.1rem 1.2rem}
+.modal h2{font-family:var(--font-display);font-size:1rem;margin:0 0 .6rem;color:var(--green-dark)}
+.modal .opt{display:flex;gap:.55rem;align-items:flex-start;padding:.45rem .5rem;border:1px solid var(--border);
+border-radius:var(--radius);margin-bottom:.45rem;cursor:pointer}
+.modal .opt.on{border-color:var(--green);background:var(--green-tint)}
+.modal .opt input{margin-top:.2rem}
+footer{margin-top:1.6rem;font-size:.75rem;color:var(--muted);border-top:1px solid var(--border);padding-top:.7rem}
+</style></head><body>
+
+<div class="bar">cockpit 2 · GlassFrog (PoC) · <a href="#">Metrics</a> · <a href="#">Deelnemers</a></div>
+<h1>🌱 Wat Nooch weet <span class="chip">prototype</span></h1>
+<p class="muted">Overzicht = alleen het statement. Typ om te zoeken (ook op bron of tag). Klik = uitklappen
+met datum, bron, versie, koppelingen en tags. Sleep aan de ⠿-handle en laat los op een ander statement om te
+mergen. De bron-link opent de externe bron.</p>
+
+<input class="zoek" id="zoek" placeholder="Zoek in statements, bronnen en tags — gewoon typen…">
+
+<div class="lijst" id="lijst"></div>
+
+<div class="overlay" id="overlay"></div>
+<div class="modal" id="modal">
+  <h2>Statements mergen</h2>
+  <p class="muted" style="margin:.2rem 0 .6rem;font-size:.82rem">Kies welke tekst de standaard wordt
+  (bronnen, koppelingen en tags van allebei blijven bewaard; dit wordt een nieuwe versie).</p>
+  <label class="opt on" id="optA"><input type="radio" name="keuze" checked><span id="tekstA"></span></label>
+  <label class="opt" id="optB"><input type="radio" name="keuze"><span id="tekstB"></span></label>
+  <p class="muted" style="font-size:.78rem;margin:.5rem 0 .2rem">Eventueel nog aanpassen:</p>
+  <textarea id="mergeEdit"></textarea>
+  <div style="margin-top:.6rem;display:flex;gap:.5rem;justify-content:flex-end">
+    <button class="btn" onclick="sluitModal()">annuleer</button>
+    <button class="btn ok" onclick="doeMerge()">merge → nieuwe versie</button>
+  </div>
+</div>
+
+<script>
+const DATA = [
+ {id:"lobby_ecolabel", tekst:"Er is toenemende bezorgdheid over lobbyactiviteiten van de financiële sector om de strengheid van het Ecolabel te verzwakken, wat blijkt uit de verlaging van de ambitie van de Ecolabel-criteria tussen het eerste en tweede technische rapport van het JRC.",
+  bron:"EACB, Mar 2019", url:"https://www.eacb.coop/", datum:"2019-03", versie:3, tags:["regelgeving"], links:["niche_ecolabel"]},
+ {id:"niche_ecolabel", tekst:"Het richten op een nichemarkt met het Ecolabel is in tegenspraak met het basisidee van het Actieplan.",
+  bron:"IM_Ecolabel_briefing_April_2020.pdf", url:"#pdf", datum:"2020-04", versie:1, tags:["regelgeving"], links:["lobby_ecolabel"]},
+ {id:"citizen_stable", tekst:"The word 'citizen' is culturally stable in the English book corpus: about 89% of its all-time peak with a flat recent slope.",
+  bron:"Harry Hemp ngram (corpus 26 EN)", url:"#", datum:"2026-06-24", versie:1, tags:["framing","lexicon"], links:["convergentie"]},
+ {id:"consumer_collapsed", tekst:"The word 'consumer' has collapsed from its peak: about 56% of its all-time peak, the steepest faller of the measured mission terms.",
+  bron:"Harry Hemp ngram (corpus 26 EN)", url:"#", datum:"2026-06-24", versie:1, tags:["framing","lexicon"], links:["convergentie"]},
+ {id:"convergentie", tekst:"The two frames are converging: 'consumer' is descending from its peak toward a stable 'citizen', so the citizen frame's relative position improves over time.",
+  bron:"Harry Hemp ngram + OpenAlex", url:"#", datum:"2026-06-24", versie:2, tags:["framing"], links:["citizen_stable","consumer_collapsed"]},
+ {id:"vegan_olie", tekst:"A pair of vegan sneakers contains approximately 0.75 liters of crude oil.",
+  bron:"recurate: vegan_olie_per_paar", url:"#", datum:"2026-06-24", versie:1, tags:["materialen"], links:[]},
+ {id:"vegan_plastic", tekst:"Materials classified as 'vegan' are not inherently free from plastic.",
+  bron:"recurate: vegan_betekenis_correctie", url:"#", datum:"2026-06-24", versie:1, tags:["materialen","definitie"], links:[]},
+];
+const byId = Object.fromEntries(DATA.map(s => [s.id, s]));
+let dragSrc = null, mergeA = null, mergeB = null;
+
+function render() {
+  const q = document.getElementById('zoek').value.toLowerCase();
+  const el = document.getElementById('lijst');
+  el.innerHTML = '';
+  DATA.filter(s => !q || (s.tekst + ' ' + s.bron + ' ' + s.tags.join(' ')).toLowerCase().includes(q))
+      .forEach(s => el.appendChild(kaart(s)));
+}
+function kaart(s) {
+  const d = document.createElement('div');
+  d.className = 'stmt'; d.dataset.id = s.id;
+  const koppel = s.links.map(l => byId[l] ? `<a href="#" onclick="openStmt('${l}');return false">${byId[l].tekst.slice(0,48)}…</a>` : '').join('');
+  d.innerHTML = `
+    <div class="stmt-kop" onclick="this.parentNode.classList.toggle('open')">
+      <span class="handle" draggable="true" title="sleep op een ander statement om te mergen">⠿</span>
+      <span class="stmt-tekst">${s.tekst}</span>
+    </div>
+    <div class="detail">
+      <dl>
+        <dt>Bron</dt><dd>
+          ${s.bron ? `<a href="${s.url}" target="_blank" rel="noopener">${s.bron} ↗</a>
+            <a href="#" class="muted" style="font-size:.75rem" onclick="toggleBron('${s.id}');return false" title="bron wijzigen of toevoegen">✏️</a>`
+                   : `<a href="#" onclick="toggleBron('${s.id}');return false">+ voeg bron toe</a>`}
+          <span class="bronvorm" id="bron-${s.id}" style="display:none">
+            <input type="url" placeholder="https://… of DOI" style="font:inherit;font-size:.8rem;padding:.2rem .45rem;border:1px solid var(--border);border-radius:var(--radius);width:230px">
+            <button class="btn" onclick="return false" style="font-size:.72rem">koppel</button>
+          </span></dd>
+        <dt>Datum</dt><dd>${s.datum}</dd>
+        <dt>Versie</dt><dd>v${s.versie} <a href="#" class="muted" style="font-size:.78rem">(eerdere versies)</a></dd>
+        <dt>Gekoppeld</dt><dd class="gekoppeld">${koppel || '<span class="muted">—</span>'}</dd>
+        <dt>Tags</dt><dd>${s.tags.map(t => `<span class="chip">${t}</span>`).join(' ') || '—'}</dd>
+      </dl>
+      <a class="btn" href="#" onclick="toggleEdit('${s.id}');return false">✏️ bewerk</a>
+      <div class="editvorm" id="edit-${s.id}" style="display:none;margin-top:.5rem">
+        <textarea id="editveld-${s.id}">${s.tekst}</textarea>
+        <div style="margin-top:.4rem"><button class="btn ok" onclick="bewaarEdit('${s.id}')">Bewaar (nieuwe versie)</button></div>
+      </div>
+    </div>`;
+  const h = d.querySelector('.handle');
+  h.addEventListener('dragstart', e => { dragSrc = s.id; d.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+  h.addEventListener('dragend', () => { d.classList.remove('dragging'); document.querySelectorAll('.stmt').forEach(x => x.classList.remove('dragover')); });
+  d.addEventListener('dragover', e => { if (dragSrc && dragSrc !== s.id) { e.preventDefault(); d.classList.add('dragover'); } });
+  d.addEventListener('dragleave', () => d.classList.remove('dragover'));
+  d.addEventListener('drop', e => { e.preventDefault(); d.classList.remove('dragover'); if (dragSrc && dragSrc !== s.id) openMerge(dragSrc, s.id); });
+  return d;
+}
+function openStmt(id) {
+  document.getElementById('zoek').value = ''; render();
+  const el = document.querySelector(`.stmt[data-id="${id}"]`);
+  if (el) { el.classList.add('open'); el.scrollIntoView({behavior:'smooth', block:'center'}); }
+}
+function openMerge(a, b) {
+  mergeA = byId[a]; mergeB = byId[b];
+  document.getElementById('tekstA').textContent = mergeA.tekst;
+  document.getElementById('tekstB').textContent = mergeB.tekst;
+  document.getElementById('mergeEdit').value = mergeA.tekst;
+  const oA = document.getElementById('optA'), oB = document.getElementById('optB');
+  oA.classList.add('on'); oB.classList.remove('on'); oA.querySelector('input').checked = true;
+  oA.onclick = () => { oA.classList.add('on'); oB.classList.remove('on'); document.getElementById('mergeEdit').value = mergeA.tekst; };
+  oB.onclick = () => { oB.classList.add('on'); oA.classList.remove('on'); document.getElementById('mergeEdit').value = mergeB.tekst; };
+  document.getElementById('overlay').style.display = 'block';
+  document.getElementById('modal').style.display = 'block';
+}
+function sluitModal() {
+  document.getElementById('overlay').style.display = 'none';
+  document.getElementById('modal').style.display = 'none';
+}
+function doeMerge() {
+  const tekst = document.getElementById('mergeEdit').value.trim();
+  if (!tekst) return;
+  mergeB.tekst = tekst;
+  mergeB.versie += 1;
+  mergeB.tags = [...new Set([...mergeB.tags, ...mergeA.tags])];
+  mergeB.links = [...new Set([...mergeB.links, ...mergeA.links])].filter(l => l !== mergeB.id && l !== mergeA.id);
+  mergeB.bron = mergeB.bron + ' + ' + mergeA.bron;
+  DATA.splice(DATA.indexOf(mergeA), 1);
+  delete byId[mergeA.id];
+  sluitModal(); render();
+  openStmt(mergeB.id);
+}
+function toggleBron(id) {
+  const el = document.getElementById('bron-' + id);
+  el.style.display = el.style.display === 'none' ? 'inline-flex' : 'none';
+}
+function toggleEdit(id) {
+  const el = document.getElementById('edit-' + id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+function bewaarEdit(id) {
+  const s = byId[id];
+  const t = document.getElementById('editveld-' + id).value.trim();
+  if (!t) return;
+  s.tekst = t; s.versie += 1;
+  render(); openStmt(id);
+}
+document.getElementById('zoek').addEventListener('input', render);
+document.getElementById('overlay').addEventListener('click', sluitModal);
+render();
+</script>
+
+<footer>PROTOTYPE — kennisbank-statements: kaal overzicht, typen = zoeken (ook op bron/tag), bron-link opent
+extern, klik = uitklappen (datum · bron · versie · gekoppeld · tags), ⠿ slepen op een ander statement =
+mergen met keuze-popup. Bron leeft op één plek (de Bron-rij: link + ✏️ om te wijzigen, of '+ voeg bron toe'); bewerken opent inline en bewaart als nieuwe versie. Werkend te proberen in deze pagina. Niet gebouwd; ter bespreking.</footer>
+</body></html>

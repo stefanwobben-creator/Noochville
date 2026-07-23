@@ -1,0 +1,106 @@
+<!doctype html><html lang="nl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prototype — Inwoner: Billy Buzz</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+ --ink:#1B1B1B;--gray:#4A4A4A;--subtle:#7A7A7A;--muted:#9A9483;
+ --green:#1F9D55;--green-dark:#14713C;--green-tint:#D3EFDD;
+ --cream:#FCFAF4;--cream-2:#FBF6EA;--cream-3:#FFF7E8;--sand:#F1ECDF;--surface:#fff;
+ --yellow:#FFCE2E;--yellow-light:#FFF1B8;--coral:#FF6B5B;--border:#DDD4C0;
+ --font-display:'Bricolage Grotesque',system-ui,sans-serif;
+ --font-body:'DM Sans',system-ui,sans-serif;
+ --radius:9px;--radius-pill:999px;
+ --shadow:0 1px 2px rgba(27,27,27,.06),0 2px 8px rgba(27,27,27,.04);
+}
+*{box-sizing:border-box}
+body{font-family:var(--font-body);font-size:14px;line-height:1.5;color:var(--ink);
+ background:var(--cream);margin:0 auto;padding:1.6rem 2rem;max-width:1180px}
+h1{font-family:var(--font-display);font-weight:800;font-size:1.5rem;margin:0}
+h2{font-family:var(--font-display);font-weight:800;font-size:.95rem;text-transform:uppercase;
+ letter-spacing:.03em;margin:1.8rem 0 .5rem;color:var(--green-dark)}
+a{color:var(--green-dark)}
+.bar{color:var(--gray);margin:.4rem 0 1.2rem;font-size:13px}
+.muted{color:var(--subtle)}
+.chip{display:inline-block;padding:.1rem .55rem;border:1px solid var(--border);border-radius:var(--radius-pill);
+ font-size:.72rem;background:var(--surface)}
+.chip.green{background:var(--green-tint);border-color:var(--green);color:var(--green-dark)}
+.chip.amber{background:var(--yellow-light);border-color:var(--yellow);color:#7a5d00}
+.chip.outline{background:none}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+ box-shadow:var(--shadow);padding:1rem 1.15rem}
+.grid{display:grid;grid-template-columns:340px 1fr;gap:1.1rem;align-items:start}
+@media(max-width:820px){.grid{grid-template-columns:1fr}}
+.avatar{width:64px;height:64px;border-radius:50%;background:var(--yellow-light);border:2px solid var(--yellow);
+ display:flex;align-items:center;justify-content:center;font-size:2rem}
+.idrow{display:flex;gap:.9rem;align-items:center;margin-bottom:.6rem}
+.mtab{width:100%;border-collapse:collapse;font-size:.86rem}
+.mtab th{text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+ padding:.45rem .6rem;background:var(--cream-2)}
+.mtab td{padding:.45rem .6rem;border-top:1px solid var(--border)}
+.mtab td.num,.mtab th.num{text-align:right;font-variant-numeric:tabular-nums}
+.skill{display:flex;justify-content:space-between;align-items:center;padding:.42rem 0;border-top:1px solid var(--border)}
+.skill:first-of-type{border-top:none}
+.skill b{font-weight:500}
+.tone{background:var(--cream-3);border-left:3px solid var(--yellow);padding:.6rem .8rem;border-radius:0 var(--radius) var(--radius) 0;
+ font-style:italic;color:var(--gray)}
+.btn{display:inline-block;padding:.32rem .8rem;border:1px solid var(--border);border-radius:var(--radius-pill);
+ background:var(--surface);font:inherit;font-size:.8rem;cursor:pointer;text-decoration:none;color:var(--ink)}
+.btn.ok{border-color:var(--green);color:var(--green-dark)}
+.sec{margin-top:1.1rem}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:.15rem .6rem;font-size:.85rem}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0}
+.match{color:var(--green-dark)}
+.mismatch{color:var(--coral)}
+.rolcard{border:1px dashed var(--border);border-radius:var(--radius);padding:.7rem .9rem;background:var(--cream-2)}
+.usage-bar{height:8px;border-radius:4px;background:var(--green-tint);position:relative;overflow:hidden}
+.usage-bar i{position:absolute;inset:0;background:var(--green);border-radius:4px}
+footer{margin-top:2rem;font-size:.75rem;color:var(--muted);border-top:1px solid var(--border);padding-top:.7rem}
+.ft{border:1px dashed var(--border);border-radius:var(--radius);background:var(--cream-2);padding:.6rem .8rem;margin-top:.5rem}
+.ft .opt{display:flex;gap:.5rem;align-items:flex-start;padding:.35rem 0;border-top:1px solid var(--border)}
+.ft .opt:first-of-type{border-top:none}
+.ft input[type=radio]{margin-top:.2rem}
+</style></head><body>
+
+<div class="bar">cockpit 2 · GlassFrog (PoC) · <a href="#">Metrics</a> · <a href="#">Deelnemers</a></div>
+<div class="bar"><a href="prototype_inwoners_index.html">← Inwoners</a> / <b>Sid the Science Kid</b></div>
+<div class="idrow">
+  <div class="avatar">🔬</div>
+  <div><h1>Sid the Science Kid <span class="chip outline">INFP</span> <span class="chip green">inwoner (AI)</span></h1></div>
+  <div style="margin-left:auto"><a class="btn" href="#">✏️ bewerk persona</a></div>
+</div>
+<div class="grid">
+  <div>
+    <div class="card"><h2 style="margin-top:0">Personality</h2>
+      <dl class="kv"><dt>MBTI</dt><dd>INFP</dd>
+      <dt>Instructies</dt><dd>Aardse, geduldige lange-termijndenker. Denkt in decennia, niet in weken. Rustig, beschouwend, met een zachte rebelse ondertoon.</dd>
+      <dt>Prompt-extra</dt><dd>Onderscheid altijd blip / trend / opkomst; claim nooit een trend op minder dan 3 complete maanden.</dd></dl>
+      <div class="ft">
+        <div style="font-size:.78rem;margin-bottom:.2rem"><b>✨ Finetune met AI</b> <span class="muted">— de configurator kiest, de AI stelt voor</span></div>
+        <div class="opt"><input type="radio" name="ft" checked><div><b>huidig</b><div class="muted" style="font-size:.8rem">Onderscheid altijd blip / trend / opkomst; claim nooit een trend op minder dan 3 complete maanden.</div></div></div>
+        <div class="opt"><input type="radio" name="ft"><div><b>strakker</b><div class="muted" style="font-size:.8rem">Geef bij elk signaal het datavenster en de bron-URL; zonder venster geen signaal.</div></div></div>
+        <div class="opt"><input type="radio" name="ft"><div><b>ruimer</b><div class="muted" style="font-size:.8rem">Je mag speculatieve verbanden aandragen mits gelabeld als hypothese én met een toetsvoorstel erbij.</div></div></div>
+        <div class="sec" style="margin-top:.5rem"><a class="btn ok" href="#">gebruik selectie</a> <a class="btn" href="#">↻ nieuwe voorstellen</a></div>
+      </div></div>
+    <div class="card sec"><h2 style="margin-top:0">LLM-voorkeuren</h2>
+        <dl class="kv"><dt>Default</dt><dd><code>gemini:flash-lite</code> <span class="muted">(dorpsladder als vangnet)</span></dd></dl>
+        <table class="mtab sec"><tr><th>Taak (call_site)</th><th>Model</th><th class="num">14d kosten</th></tr><tr><td>grounding</td><td><code>claude-haiku</code> <span class="chip amber">override</span></td><td class='num'>€ 0,41</td></tr><tr><td>trend_reindex</td><td><code>gemini:flash-lite</code></td><td class='num'>€ 0,09</td></tr><tr><td>onderzoeksvraag</td><td><code>claude-sonnet</code> <span class="chip amber">override</span></td><td class='num'>€ 0,63</td></tr></table>
+        <div class="sec"><div class="muted" style="font-size:.75rem;margin-bottom:.25rem">LLM-verbruik 14 dagen · € 1,13 van € 5,00 budget</div>
+        <div class="usage-bar"><i style="width:23%"></i></div></div></div>
+  </div>
+  <div>
+    <div class="card"><h2 style="margin-top:0">Skills <span class="muted" style="text-transform:none;font-family:var(--font-body);font-weight:400">— wat Sid kan (reist mee naar elke zetel)</span></h2><div class="skill"><div><b>Leest de tijdgeest af aan 200 jaar boekentaal (Google Ngram)</b><div class="muted" style="font-size:.76rem"><code style="font-size:.7rem">ngram_culture</code></div></div> <span><span class="chip green">dagelijks</span></span></div><div class="skill"><div><b>Grondt claims in wetenschappelijke literatuur</b><div class="muted" style="font-size:.76rem"><code style="font-size:.7rem">openalex_evidence</code></div></div> <span><span class="chip green">wetenschap</span></span></div><div class="skill"><div><b>Vat papers samen tot één zin</b><div class="muted" style="font-size:.76rem"><code style="font-size:.7rem">semscholar_tldr</code></div></div> <span><span class="chip outline">tl;dr</span></span></div><div class="skill"><div><b>Zoekt patenten als bewijs van technologische beweging</b><div class="muted" style="font-size:.76rem"><code style="font-size:.7rem">epo_patents</code></div></div> <span><span class="chip outline">op aanvraag</span></span></div><div class="skill"><div><b>Formuleert de vervolgvraag die het onderzoek verdiept</b><div class="muted" style="font-size:.76rem"><code style="font-size:.7rem">onderzoeksvraag</code></div></div> <span><span class="chip outline">verdiep-lus</span></span></div><div class="skill"><div><b>Herindexeert dagelijks: opkomst, trend of blip?</b><div class="muted" style="font-size:.76rem"><code style="font-size:.7rem">trend_reindex</code></div></div> <span><span class="chip amber">nieuw · dagelijks</span></span></div></div>
+    <div class="card sec"><h2 style="margin-top:0">Tools</h2><a class='btn' style='display:block;margin-bottom:.4rem;text-align:left' href='#'><b>🛠 Long-term trends</b><span class='muted' style='display:block;font-size:.76rem'>Structurele opkomst versus blip (trend-herindexering) · <code style='font-size:.7rem'>/keywords?lens=scientist</code></span></a><p class="muted" style="font-size:.78rem;margin-bottom:0">Tool-schermen horen bij de inwoner: download je het pakket, dan krijg je deze UI erbij.</p></div>
+    <div class="card sec"><h2 style="margin-top:0">Zetels</h2><details class="rolcard" style="margin-bottom:.5rem" open><summary style="cursor:pointer"><b>🪑 The Scientist (harry_hemp)</b> <span class="chip outline">rol</span></summary>
+        <div class="muted" style="margin:.35rem 0 .5rem">Purpose: To protect the business from building on illusions.</div>
+        <div style="font-size:.82rem">Vereist door de rol → gedekt: <span class="match">✓ ngram_culture</span> · <span class="match">✓ openalex_evidence</span> · <span class="match">✓ epo_patents</span> · <span class="match">✓ trend_reindex</span></div>
+        <div class="sec" style="margin-top:.5rem"><a class="btn" href="#">→ naar de rol-pagina</a></div></details>
+      <p class="muted" style="font-size:.78rem">De rol houdt het mandaat (via governance). Sid neemt skills en toon mee bij een zetelwissel.</p></div>
+    <div class="card sec"><h2 style="margin-top:0">Recente activiteit</h2><table class="mtab"><tr><th>Wanneer</th><th>Wat</th><th>Uitkomst</th></tr><tr><td class='muted'>vandaag 04:32</td><td>trend_reindex · ankerset</td><td>1 signaal (mycelium ↑) → <a href='#'>watchlist</a></td></tr><tr><td class='muted'>gisteren</td><td>grounding · 3 termen</td><td>2 kaarten met grounds → <a href='#'>kennisbank</a></td></tr><tr><td class='muted'>ma 14 jul</td><td>onderzoeksvraag</td><td>verdiepingsvraag → <a href='#'>projectbord</a></td></tr></table><p class="muted" style="font-size:.74rem;margin-bottom:0">Puur referentie — elke uitkomst linkt naar zijn plek (project, note, inbox-item, tool).</p></div>
+  </div>
+</div>
+<footer>PROTOTYPE — persona-dossier (persona = personality + skills + LLM-voorkeuren; rol = mandaat).
+Het pakket-/installatieverhaal leeft in de catalogus, niet hier. Niet gebouwd; ter bespreking.</footer>
+</body></html>

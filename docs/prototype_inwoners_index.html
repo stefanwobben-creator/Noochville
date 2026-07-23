@@ -1,0 +1,70 @@
+<!doctype html><html lang="nl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prototype — Inwoner: Billy Buzz</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+ --ink:#1B1B1B;--gray:#4A4A4A;--subtle:#7A7A7A;--muted:#9A9483;
+ --green:#1F9D55;--green-dark:#14713C;--green-tint:#D3EFDD;
+ --cream:#FCFAF4;--cream-2:#FBF6EA;--cream-3:#FFF7E8;--sand:#F1ECDF;--surface:#fff;
+ --yellow:#FFCE2E;--yellow-light:#FFF1B8;--coral:#FF6B5B;--border:#DDD4C0;
+ --font-display:'Bricolage Grotesque',system-ui,sans-serif;
+ --font-body:'DM Sans',system-ui,sans-serif;
+ --radius:9px;--radius-pill:999px;
+ --shadow:0 1px 2px rgba(27,27,27,.06),0 2px 8px rgba(27,27,27,.04);
+}
+*{box-sizing:border-box}
+body{font-family:var(--font-body);font-size:14px;line-height:1.5;color:var(--ink);
+ background:var(--cream);margin:0 auto;padding:1.6rem 2rem;max-width:1180px}
+h1{font-family:var(--font-display);font-weight:800;font-size:1.5rem;margin:0}
+h2{font-family:var(--font-display);font-weight:800;font-size:.95rem;text-transform:uppercase;
+ letter-spacing:.03em;margin:1.8rem 0 .5rem;color:var(--green-dark)}
+a{color:var(--green-dark)}
+.bar{color:var(--gray);margin:.4rem 0 1.2rem;font-size:13px}
+.muted{color:var(--subtle)}
+.chip{display:inline-block;padding:.1rem .55rem;border:1px solid var(--border);border-radius:var(--radius-pill);
+ font-size:.72rem;background:var(--surface)}
+.chip.green{background:var(--green-tint);border-color:var(--green);color:var(--green-dark)}
+.chip.amber{background:var(--yellow-light);border-color:var(--yellow);color:#7a5d00}
+.chip.outline{background:none}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+ box-shadow:var(--shadow);padding:1rem 1.15rem}
+.grid{display:grid;grid-template-columns:340px 1fr;gap:1.1rem;align-items:start}
+@media(max-width:820px){.grid{grid-template-columns:1fr}}
+.avatar{width:64px;height:64px;border-radius:50%;background:var(--yellow-light);border:2px solid var(--yellow);
+ display:flex;align-items:center;justify-content:center;font-size:2rem}
+.idrow{display:flex;gap:.9rem;align-items:center;margin-bottom:.6rem}
+.mtab{width:100%;border-collapse:collapse;font-size:.86rem}
+.mtab th{text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+ padding:.45rem .6rem;background:var(--cream-2)}
+.mtab td{padding:.45rem .6rem;border-top:1px solid var(--border)}
+.mtab td.num,.mtab th.num{text-align:right;font-variant-numeric:tabular-nums}
+.skill{display:flex;justify-content:space-between;align-items:center;padding:.42rem 0;border-top:1px solid var(--border)}
+.skill:first-of-type{border-top:none}
+.skill b{font-weight:500}
+.tone{background:var(--cream-3);border-left:3px solid var(--yellow);padding:.6rem .8rem;border-radius:0 var(--radius) var(--radius) 0;
+ font-style:italic;color:var(--gray)}
+.btn{display:inline-block;padding:.32rem .8rem;border:1px solid var(--border);border-radius:var(--radius-pill);
+ background:var(--surface);font:inherit;font-size:.8rem;cursor:pointer;text-decoration:none;color:var(--ink)}
+.btn.ok{border-color:var(--green);color:var(--green-dark)}
+.sec{margin-top:1.1rem}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:.15rem .6rem;font-size:.85rem}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0}
+.match{color:var(--green-dark)}
+.mismatch{color:var(--coral)}
+.rolcard{border:1px dashed var(--border);border-radius:var(--radius);padding:.7rem .9rem;background:var(--cream-2)}
+.usage-bar{height:8px;border-radius:4px;background:var(--green-tint);position:relative;overflow:hidden}
+.usage-bar i{position:absolute;inset:0;background:var(--green);border-radius:4px}
+footer{margin-top:2rem;font-size:.75rem;color:var(--muted);border-top:1px solid var(--border);padding-top:.7rem}
+</style></head><body>
+
+<div class="bar">cockpit 2 · GlassFrog (PoC) · <a href="#">Metrics</a> · <a href="#">Deelnemers</a></div>
+<div class="bar"><a href="#">← Deelnemers</a> / <b>Inwoners</b></div>
+<h1>Inwoners van NoochVille <span class="chip amber">add-on-catalogus</span></h1>
+<p class="muted">Elke AI-inwoner is een installeerbaar pakket: personality + skills + LLM-voorkeuren in één
+bestand, dat hij meeneemt naar elke zetel. De rol (het mandaat) blijft van governance en zit in de
+Village-kern. Klik voor het dossier — met per inwoner wat het pakket bevat, wat het vereist en de richtprijs.</p>
+<div class="card"><table class="mtab"><tr><th>Inwoner</th><th>MBTI</th><th>Zetel</th><th>Status</th><th class="num">Richtprijs</th></tr><tr><td><a href='prototype_persona_billy_buzz.html' style='text-decoration:none'><span style='font-size:1.3rem'>🐝</span> <b>Billy Buzz</b></a></td><td>ISTP</td><td>Concurrent Scout</td><td><span class='chip green'>actief</span></td><td class='num'>€ 29/mnd</td></tr><tr><td><a href='prototype_persona_lara_the_librarian.html' style='text-decoration:none'><span style='font-size:1.3rem'>📚</span> <b>Lara the Librarian</b></a></td><td>ISTJ</td><td>Librarian</td><td><span class='chip green'>actief</span></td><td class='num'>€ 39/mnd</td></tr><tr><td><a href='prototype_persona_sid_the_science_kid.html' style='text-decoration:none'><span style='font-size:1.3rem'>🔬</span> <b>Sid the Science Kid</b></a></td><td>INFP</td><td>The Scientist (harry_hemp)</td><td><span class='chip green'>actief</span></td><td class='num'>€ 39/mnd</td></tr><tr><td><a href='prototype_persona_walter_website.html' style='text-decoration:none'><span style='font-size:1.3rem'>🌐</span> <b>Walter Website</b></a></td><td>—</td><td>Website Watcher</td><td><span class='chip green'>actief</span></td><td class='num'>€ 29/mnd</td></tr><tr><td><a href='prototype_persona_noochie.html' style='text-decoration:none'><span style='font-size:1.3rem'>🌱</span> <b>Noochie</b></a></td><td>ENFJ</td><td>Noochie (missie-hoeder)</td><td><span class='chip green'>actief</span></td><td class='num'>€ 19/mnd</td></tr><tr><td><a href='prototype_persona_wendy_words.html' style='text-decoration:none'><span style='font-size:1.3rem'>✍️</span> <b>Wendy Words</b></a></td><td>—</td><td>Copywriter (noochville)</td><td><span class='chip amber'>concept</span></td><td class='num'>€ 29/mnd · concept</td></tr><tr><td><a href='prototype_persona_codie_code.html' style='text-decoration:none'><span style='font-size:1.3rem'>💻</span> <b>Codie Code</b></a></td><td>—</td><td>Codie Code (noochville)</td><td><span class='chip amber'>concept</span></td><td class='num'>concept</td></tr><tr><td><a href='prototype_persona_rupert_rubber.html' style='text-decoration:none'><span style='font-size:1.3rem'>⚖️</span> <b>Rupert Rubber</b></a></td><td>—</td><td>Facilitator</td><td><span class='chip outline'>motor</span></td><td class='num'>inbegrepen in Village kern</td></tr></table></div>
+<footer>PROTOTYPE — inwoners-catalogus (dossier = verkoopbaar add-on-pakket). Route-idee: /inwoners via Deelnemers.</footer></body></html>

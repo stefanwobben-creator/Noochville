@@ -788,7 +788,8 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
                 f"<a class='{wo_cls} js-modal' href='{wo_url}' data-href='{wo_url}'>Tactical meeting</a></div>")
     else:
         meet = ""
-    main = (f"<div class='c2-main'><div class='c2-bar'>{crumb}</div>"
+    # Breadcrumb weggehaald (founder 23 jul): de hiërarchie staat al in de organisatieboom-rail rechts.
+    main = (f"<div class='c2-main'>"
             f"<h1>{_e(_name(rec))} {chip}</h1>{_banner(msg)}{meet}"
             f"{_tabbar(node_id, tabs, tab)}{content}</div>")
     rail = f"<div class='c2-rail'>{_tree_html(st, node_id)}</div>"

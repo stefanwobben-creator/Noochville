@@ -1075,7 +1075,9 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .kn-inhand-cou{background:var(--error-tint);border-radius:var(--radius);padding:.45rem .5rem}
 
 /* ── Gedeelde shell: logo + globale zoekbalk (header) en meta-footer (founder 23 jul) ──────────── */
-.c2-topbar{display:flex;align-items:center;gap:1rem;margin:.2rem 0 1rem}
+.c2-topbar{display:flex;align-items:center;gap:1rem;margin:0 0 1.2rem;padding:.2rem 0 .95rem;
+  border-bottom:1px solid var(--border)}
+.c2-greet{margin-left:auto;flex:none;color:var(--gray);font-size:13.5px;white-space:nowrap}
 .c2-logo{flex:none;display:inline-flex;align-items:center}
 .c2-logo img{height:26px;width:auto;display:block}
 .c2-search{flex:1 1 auto;max-width:520px}

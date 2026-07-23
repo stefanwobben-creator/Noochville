@@ -357,6 +357,8 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
         "autocomplete='off' aria-label='globale zoekopdracht'>"
         "<div id='gs-drop' class='gs-drop' hidden></div>"
         "</form>"
+        # Persoonlijke begroeting rechts; _send vult de naam van de ingelogde persoon in (leeg = onzichtbaar).
+        "<span class='c2-greet' id='c2-greet'></span>"
         "</div>"
         + _GS_LIVE_JS)
 
