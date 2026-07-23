@@ -1,9 +1,12 @@
-"""Globale zoek-pagina: doorzoekt in één keer rollen/cirkels, projecten en de kennisbank (founder 23 jul).
+"""Globale zoek: doorzoekt in één keer roles, projects, insights (laag 2) en signals (laag 1).
 
-Bereikbaar via de zoekbalk in de gedeelde header (`_nav`). Puur leeswerk, fail-soft per store: een
-store die ontbreekt of afwijkt slaat zijn groep over i.p.v. de pagina te breken. De organisatieboom-rail
-en de footer komen via de gedeelde shell-injectie in `_send`, net als op elke andere pagina."""
+Bereikbaar via de zoekbalk in de gedeelde header (`_nav`) — live terwijl je typt (uitklap-dropdown, via
+de fragment-modus) en als volledige pagina op Enter. Vier duidelijk gescheiden groepen zodat je meteen
+ziet of een treffer een rol, een project, een inzicht of een signal (kenniskaartje) is. Puur leeswerk,
+fail-soft per store."""
 from __future__ import annotations
+
+from urllib.parse import quote
 
 from nooch_village.web_base import _e, _page
 from nooch_village.cockpit2_util import _nav, _DS_LINK, _name
@@ -15,13 +18,13 @@ def _match(tekst: str, termen: list[str]) -> bool:
     return all(term in t for term in termen)
 
 
-def _hit(url: str, kind: str, titel: str, snip: str = "") -> str:
-    snip_html = f"<span class='gs-snip'>{_e(snip[:160])}</span>" if snip else ""
-    return (f"<a class='gs-hit' href='{_e(url)}'>"
-            f"<span class='gs-kind'>{_e(kind)}</span> {_e(titel[:120])}{snip_html}</a>")
+def _kaartje_url(claim: str) -> str:
+    """Signal/kenniskaartje heeft geen eigen detailpagina; open de kennisbank met de claim voorgevuld
+    in de zoek, zodat het kaartje daar bovenaan verschijnt."""
+    return "/kennisbank?q=" + quote(" ".join((claim or "").split()[:6]))
 
 
-def _rollen(st, termen: list[str]) -> list[str]:
+def _roles(st, termen):
     uit = []
     for r in st.records.all():
         if getattr(r, "archived", False):
@@ -31,14 +34,12 @@ def _rollen(st, termen: list[str]) -> list[str]:
         accs = " ".join(getattr(d, "accountabilities", []) or []) if d else ""
         naam = _name(r)
         if _match(f"{naam} {purpose} {accs}", termen):
-            kind = "cirkel" if org.is_circle(r) else "rol"
-            uit.append(_hit(f"/node?id={r.id}", kind, naam, purpose))
-        if len(uit) >= 15:
-            break
+            kind = "circle" if org.is_circle(r) else "role"
+            uit.append({"url": f"/node?id={r.id}", "kind": kind, "titel": naam, "snip": purpose})
     return uit
 
 
-def _projecten(st, termen: list[str]) -> list[str]:
+def _projects(st, termen):
     uit = []
     try:
         alle = st.projects.all()
@@ -47,37 +48,69 @@ def _projecten(st, termen: list[str]) -> list[str]:
     for p in alle:
         scope = str(p.get("scope") or "")
         if _match(scope, termen):
-            status = p.get("status") or ""
-            uit.append(_hit(f"/project?id={p.get('id')}", f"project · {status}", scope))
-        if len(uit) >= 15:
-            break
+            uit.append({"url": f"/project?id={p.get('id')}", "kind": "project",
+                        "titel": scope, "snip": str(p.get("status") or "")})
     return uit
 
 
-def _kennis(st, termen: list[str]) -> list[str]:
+def _insights(st, termen):
     uit = []
-    # Laag 2: geversioneerde standpunten (titel = de claim in mensentaal).
     try:
         for k in st.kennisbank.all():
             if _match(f"{k.get('title','')} {k.get('why','')}", termen):
-                uit.append(_hit(f"/kennisbank?id={k.get('id')}", "standpunt",
-                                k.get("title", ""), k.get("why", "")))
-            if len(uit) >= 12:
-                break
+                uit.append({"url": f"/kennisbank?id={k.get('id')}", "kind": "insight",
+                            "titel": k.get("title", ""), "snip": k.get("why", "")})
     except Exception:
         pass
-    # Laag 1: atomen (kenniskaartjes).
+    return uit
+
+
+def _signals(st, termen):
+    uit = []
     try:
         for a in st.notes.all():
             if getattr(a, "archived", False):
                 continue
-            if _match(getattr(a, "claim", ""), termen):
-                uit.append(_hit("/kennisbank", "kenniskaartje", getattr(a, "claim", "")))
-            if len(uit) >= 24:
-                break
+            claim = getattr(a, "claim", "")
+            if _match(claim, termen):
+                uit.append({"url": _kaartje_url(claim), "kind": "signal",
+                            "titel": claim, "snip": getattr(a, "source", "") or ""})
     except Exception:
         pass
     return uit
+
+
+# Volgorde en labels van de vier groepen (founder 23 jul: signal = kenniskaartje, insight = laag 2).
+_GROEPEN = (("Roles", _roles), ("Projects", _projects), ("Insights", _insights), ("Signals", _signals))
+
+
+def _zoek(st, termen):
+    return [(label, fn(st, termen)) for label, fn in _GROEPEN]
+
+
+def _hit_html(h: dict) -> str:
+    snip = f"<span class='gs-snip'>{_e((h.get('snip') or '')[:150])}</span>" if h.get("snip") else ""
+    return (f"<a class='gs-hit' href='{_e(h['url'])}'>"
+            f"<span class='gs-kind gs-{_e(h['kind'])}'>{_e(h['kind'])}</span> "
+            f"{_e((h.get('titel') or '')[:120])}{snip}</a>")
+
+
+def render_search_fragment(st, q: str = "") -> str:
+    """Compacte dropdown-inhoud voor de live-zoek (max een paar per groep). chrome=False in de route."""
+    termen = [t for t in (q or "").lower().split() if t]
+    if len(q.strip()) < 2:
+        return ""
+    resultaten = _zoek(st, termen)
+    blokken = []
+    for label, hits in resultaten:
+        if hits:
+            rijen = "".join(_hit_html(h) for h in hits[:4])
+            meer = (f"<span class='gs-more'>+{len(hits) - 4} meer</span>" if len(hits) > 4 else "")
+            blokken.append(f"<div class='gs-group'><h2>{_e(label)} ({len(hits)}){meer}</h2>{rijen}</div>")
+    if not blokken:
+        return "<div class='gs-empty'>geen treffers</div>"
+    alle = f"<a class='gs-all' href='/search?q={quote(q)}'>Alle resultaten →</a>"
+    return "".join(blokken) + alle
 
 
 def render_search(st, q: str = "") -> str:
@@ -85,23 +118,21 @@ def render_search(st, q: str = "") -> str:
     termen = [t for t in q.lower().split() if t]
     if not termen:
         main = ("<div class='c2-main'><h1>Zoeken</h1>"
-                "<p class='muted'>Typ in de zoekbalk hierboven om in één keer door rollen, "
-                "projecten en de kennisbank te zoeken.</p></div>")
+                "<p class='muted'>Typ in de zoekbalk hierboven om in één keer door roles, projects, "
+                "insights en signals te zoeken.</p></div>")
         return _page("Zoeken", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 
-    groepen = [("Rollen & cirkels", _rollen(st, termen)),
-               ("Projecten", _projecten(st, termen)),
-               ("Kennisbank", _kennis(st, termen))]
-    totaal = sum(len(h) for _, h in groepen)
-
+    resultaten = _zoek(st, termen)
+    totaal = sum(len(h) for _, h in resultaten)
     blokken = []
-    for titel, hits in groepen:
+    for label, hits in resultaten:
         if hits:
-            blokken.append(f"<div class='gs-group'><h2>{_e(titel)} ({len(hits)})</h2>{''.join(hits)}</div>")
+            rijen = "".join(_hit_html(h) for h in hits[:25])
+            blokken.append(f"<div class='gs-group'><h2>{_e(label)} ({len(hits)})</h2>{rijen}</div>")
     if not blokken:
         blokken.append("<p class='muted'>Niets gevonden. Probeer een ander woord.</p>")
 
     main = (f"<div class='c2-main'><h1>Zoeken naar “{_e(q)}”</h1>"
-            f"<p class='muted'>{totaal} treffer(s) in rollen, projecten en de kennisbank.</p>"
+            f"<p class='muted'>{totaal} treffer(s) in roles, projects, insights en signals.</p>"
             f"{''.join(blokken)}</div>")
     return _page("Zoeken", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")

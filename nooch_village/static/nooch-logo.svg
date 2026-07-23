@@ -1,4 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 60" role="img" aria-label="nooch">
-  <text x="2" y="47" font-family="'Nunito','Arial Rounded MT Bold',system-ui,-apple-system,sans-serif"
-        font-weight="900" font-size="54" letter-spacing="-3" fill="#111111">nooch</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 180" role="img" aria-label="nooch"
+     fill="none" stroke="#111111" stroke-width="36" stroke-linecap="round" stroke-linejoin="round">
+  <!-- n -->
+  <path d="M40 150 V113 A35 35 0 0 1 110 113 V150"/>
+  <!-- o -->
+  <circle cx="165" cy="113" r="35"/>
+  <!-- o -->
+  <circle cx="248" cy="113" r="35"/>
+  <!-- c (ring open aan de rechterkant) -->
+  <path d="M355 88 A35 35 0 1 1 355 138"/>
+  <!-- h (lange linkerstok + boog naar rechterstok) -->
+  <path d="M408 45 V150 M408 113 A35 35 0 0 1 478 113 V150"/>
 </svg>

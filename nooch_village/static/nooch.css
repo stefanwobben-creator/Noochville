@@ -1097,3 +1097,25 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .gs-hit:hover{border-color:var(--green)}
 .gs-hit .gs-kind{font-size:11px;color:var(--gray);text-transform:uppercase;letter-spacing:.04em}
 .gs-hit .gs-snip{color:var(--muted);font-size:13px;display:block;margin-top:.15rem}
+
+/* Live-zoek dropdown onder de headerbalk */
+.c2-search{position:relative}
+.gs-drop{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:60;max-height:70vh;overflow:auto;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  box-shadow:0 8px 28px rgba(0,0,0,.12);padding:.4rem}
+.gs-drop .gs-group{margin:.3rem .2rem}
+.gs-drop .gs-group h2{font-size:12px;color:var(--gray);text-transform:uppercase;letter-spacing:.04em;
+  margin:.3rem 0 .25rem;font-weight:700}
+.gs-more{font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);margin-left:.3rem}
+.gs-all{display:block;padding:.5rem .6rem;margin-top:.3rem;border-top:1px solid var(--border);
+  color:var(--green);font-weight:600;text-decoration:none;font-size:13px}
+.gs-empty{padding:.7rem;color:var(--muted);font-size:13px}
+/* Categorie-badge: eigen kleur per soort zodat role/project/insight/signal meteen te onderscheiden zijn */
+.gs-kind{display:inline-block;min-width:52px;text-align:center;font-size:10.5px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.03em;padding:.08rem .4rem;border-radius:var(--radius-pill);
+  margin-right:.15rem;vertical-align:middle;color:#fff}
+.gs-role{background:#2f6f4f}
+.gs-circle{background:#1f4d5c}
+.gs-project{background:#b06e2f}
+.gs-insight{background:#5a4b9c}
+.gs-signal{background:#8a8340}

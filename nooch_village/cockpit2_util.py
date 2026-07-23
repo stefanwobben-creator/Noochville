@@ -351,11 +351,32 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
     return (
         "<div class='c2-topbar'>"
         "<a class='c2-logo' href='/' title='home'><img src='/static/nooch-logo.svg' alt='nooch'></a>"
-        "<form class='c2-search' action='/search' method='get' role='search'>"
-        "<input type='search' name='q' placeholder='Zoek rollen, projecten, kennis…' "
+        "<form class='c2-search' action='/search' method='get' role='search' autocomplete='off'>"
+        "<input id='gs-input' type='search' name='q' placeholder='Zoek roles, projects, insights, signals…' "
         "autocomplete='off' aria-label='globale zoekopdracht'>"
+        "<div id='gs-drop' class='gs-drop' hidden></div>"
         "</form>"
-        "</div>")
+        "</div>"
+        + _GS_LIVE_JS)
+
+
+# Live-zoek: terwijl je typt haalt dit de dropdown-resultaten op (fragment via /search?frag=1), debounced.
+# Klik buiten de balk sluit de dropdown; Enter opent de volledige /search-pagina (het form submit).
+_GS_LIVE_JS = """<script>(function(){
+ var box=document.getElementById('gs-input'), drop=document.getElementById('gs-drop'), t;
+ if(!box||!drop||box.dataset.wired)return; box.dataset.wired='1';
+ function hide(){drop.hidden=true;} function show(){if(drop.innerHTML.trim())drop.hidden=false;}
+ function run(){
+   var q=box.value.trim();
+   if(q.length<2){drop.innerHTML='';hide();return;}
+   fetch('/search?frag=1&q='+encodeURIComponent(q),{credentials:'same-origin'})
+     .then(function(r){return r.text();})
+     .then(function(h){drop.innerHTML=h; show();}).catch(function(){});
+ }
+ box.addEventListener('input',function(){clearTimeout(t);t=setTimeout(run,180);});
+ box.addEventListener('focus',show);
+ document.addEventListener('click',function(e){if(!e.target.closest('.c2-search'))hide();});
+})();</script>"""
 
 
 def _footer() -> str:
