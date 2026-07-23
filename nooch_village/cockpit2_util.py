@@ -353,7 +353,7 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
         "<a class='c2-logo' href='/' title='home'><img src='/static/nooch-logo.png' alt='nooch' "
         "onerror=\"this.onerror=null;this.src='/static/nooch-logo.svg'\"></a>"
         "<form class='c2-search' action='/search' method='get' role='search' autocomplete='off'>"
-        "<input id='gs-input' type='search' name='q' placeholder='Zoek roles, projects, insights, signals…' "
+        "<input id='gs-input' type='search' name='q' placeholder='Zoek mensen, rollen, accountabilities…' "
         "autocomplete='off' aria-label='globale zoekopdracht'>"
         "<div id='gs-drop' class='gs-drop' hidden></div>"
         "</form>"

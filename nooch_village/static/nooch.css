@@ -1123,6 +1123,8 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 /* Zacht getinte badges met leesbare donkere tekst (i.p.v. felle vlakken met wit) */
 .gs-role{background:#e4efe9;color:#2f6f4f}
 .gs-circle{background:#e0ebef;color:#26545f}
+.gs-person{background:#e6e9f1;color:#414d78}
+.gs-acc{background:#ece7e1;color:#6a5a48}
 .gs-project{background:#f4e9da;color:#8a561f}
 .gs-insight{background:#ebe8f5;color:#4b3f86}
 .gs-signal{background:#eef0dd;color:#6b6630}

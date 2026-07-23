@@ -33,18 +33,94 @@ def _kaartje_url(claim: str) -> str:
     return "/kennisbank?q=" + quote(" ".join((claim or "").split()[:6]))
 
 
+def _vervuller_namen(st, role) -> list:
+    """Namen van wie een rol vervult (mens + AI-inwoner), voor de snippet 'vervuld door ...'."""
+    uit = []
+    try:
+        for f in st.assign.fillers_of(role.id, record=role):
+            if getattr(f, "type", "") == "person":
+                p = st.people.get(f.id)
+                if p:
+                    uit.append(p.name)
+            else:
+                pa = st.personas.get(f.id)
+                if pa:
+                    uit.append(f"{pa.name} (AI)")
+    except Exception:
+        pass
+    return uit
+
+
+def _wie_snip(namen: list) -> str:
+    return ("vervuld door " + ", ".join(namen[:3])) if namen else "niet vervuld"
+
+
 def _roles(st, termen):
+    """Rollen en cirkels op naam of purpose. Accountabilities krijgen hun eigen groep (zie
+    `_accountabilities`), zodat je een treffer op 'rol' en een treffer op 'verantwoordelijkheid'
+    los van elkaar ziet. Snippet toont wie de rol vervult."""
     uit = []
     for r in st.records.all():
         if getattr(r, "archived", False):
             continue
         d = getattr(r, "definition", None)
         purpose = getattr(d, "purpose", "") or ""
-        accs = " ".join(getattr(d, "accountabilities", []) or []) if d else ""
         naam = _name(r)
-        if _match(f"{naam} {purpose} {accs}", termen):
+        if _match(f"{naam} {purpose}", termen):
             kind = "circle" if org.is_circle(r) else "role"
-            uit.append({"url": f"/node?id={r.id}", "kind": kind, "titel": naam, "snip": purpose})
+            namen = _vervuller_namen(st, r)
+            snip = purpose
+            if namen:
+                snip = (snip + " · " if snip else "") + "vervuld door " + ", ".join(namen[:3])
+            uit.append({"url": f"/node?id={r.id}", "kind": kind, "titel": naam, "snip": snip})
+    return uit
+
+
+def _people(st, termen):
+    """Mensen op naam: zo zie je wie er in de organisatie werkt. Snippet = de rollen die iemand
+    vervult (of het e-mailadres als iemand nog geen rol heeft)."""
+    rollen_van: dict = {}
+    try:
+        for r in st.records.all():
+            if getattr(r, "archived", False):
+                continue
+            for f in st.assign.fillers_of(r.id, record=r):
+                if getattr(f, "type", "") == "person":
+                    rollen_van.setdefault(f.id, []).append(_name(r))
+    except Exception:
+        pass
+    uit = []
+    try:
+        for p in st.people.all():
+            if _match(p.name, termen):
+                rollen = rollen_van.get(p.id, [])
+                snip = ", ".join(rollen[:5]) if rollen else (p.email or "nog geen rol")
+                uit.append({"url": f"/person?id={p.id}", "kind": "person",
+                            "titel": p.name, "snip": snip})
+    except Exception:
+        pass
+    return uit
+
+
+def _accountabilities(st, termen):
+    """Losse accountabilities die matchen: waar is deze verantwoordelijkheid belegd (welke rol) en
+    door wie wordt die rol vervuld? Klik opent de rol-pagina. Dit beantwoordt 'waar is X belegd?'."""
+    uit = []
+    try:
+        for r in st.records.all():
+            if getattr(r, "archived", False):
+                continue
+            d = getattr(r, "definition", None)
+            accs = (getattr(d, "accountabilities", []) or []) if d else []
+            namen = None
+            for acc in accs:
+                if _match(acc, termen):
+                    if namen is None:
+                        namen = _vervuller_namen(st, r)
+                    uit.append({"url": f"/node?id={r.id}", "kind": "acc", "titel": acc,
+                                "snip": f"{_name(r)} · {_wie_snip(namen)}"})
+    except Exception:
+        pass
     return uit
 
 
@@ -101,10 +177,11 @@ def _words(st, termen):
     return uit
 
 
-# Volgorde en labels van de groepen (founder 23 jul: signal = kenniskaartje, insight = laag 2,
-# word = library-zoekwoord).
-_GROEPEN = (("Roles", _roles), ("Projects", _projects), ("Insights", _insights),
-            ("Signals", _signals), ("Words", _words))
+# Volgorde en labels van de groepen. Mensen eerst (wie werkt er?), dan rollen en de losse
+# accountabilities (waar is iets belegd?), daarna de kennis-lagen. (founder 23 jul: signal =
+# kenniskaartje, insight = laag 2, word = library-zoekwoord.)
+_GROEPEN = (("Mensen", _people), ("Roles", _roles), ("Accountabilities", _accountabilities),
+            ("Projects", _projects), ("Insights", _insights), ("Signals", _signals), ("Words", _words))
 
 
 def _zoek(st, termen):
@@ -119,6 +196,11 @@ def _vocab(st) -> set:
         for r in st.records.all():
             if not getattr(r, "archived", False):
                 v.update(_woorden(_name(r)))
+    except Exception:
+        pass
+    try:
+        for p in st.people.all():
+            v.update(_woorden(p.name))
     except Exception:
         pass
     try:
@@ -183,8 +265,8 @@ def render_search(st, q: str = "") -> str:
     termen = [t for t in q.lower().split() if t]
     if not termen:
         main = ("<div class='c2-main'><h1>Zoeken</h1>"
-                "<p class='muted'>Typ in de zoekbalk hierboven om in één keer door roles, projects, "
-                "insights en signals te zoeken.</p></div>")
+                "<p class='muted'>Typ in de zoekbalk hierboven om in één keer door mensen, rollen, "
+                "accountabilities, projecten en de kennisbank te zoeken.</p></div>")
         return _page("Zoeken", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 
     resultaten = _zoek(st, termen)
@@ -199,6 +281,7 @@ def render_search(st, q: str = "") -> str:
     sug = _suggestie_html(_suggestie(st, q, totaal))
 
     main = (f"<div class='c2-main'><h1>Zoeken naar “{_e(q)}”</h1>"
-            f"<p class='muted'>{totaal} treffer(s) in roles, projects, insights, signals en words.</p>"
+            f"<p class='muted'>{totaal} treffer(s) in mensen, rollen, accountabilities, projecten "
+            f"en de kennisbank.</p>"
             f"{sug}{''.join(blokken)}</div>")
     return _page("Zoeken", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
