@@ -92,6 +92,54 @@ def test_kennis_dedup_poort():
     assert beoordeel_kaart("", notes, reason_fn=geen_llm)["verdict"] == "nieuw"
 
 
+def test_kennis_embeddings_laag(tmp_path):
+    """Semantische laag: cosine, store-roundtrip, en de poort die een parafrase-buur (lexicaal ver)
+    via de LLM-oordeler alsnog stapelt — de biobased-drieling-case."""
+    import re as _re
+    from nooch_village.kennis_embeddings import cosine, EmbeddingStore, SemantiekIndex
+    from nooch_village.kennis_dedup import beoordeel_kaart
+
+    assert abs(cosine([1, 0, 0], [1, 0, 0]) - 1.0) < 1e-9
+    assert cosine([1, 0], [0, 1]) == 0.0
+    assert cosine([], [1]) == 0.0 and cosine([1, 2], [1, 2, 3]) == 0.0
+
+    # Store round-trip via schijf
+    st = EmbeddingStore(f"{tmp_path}/kennis_embeddings.json")
+    st.upsert("k1", "bio-based is ver genoeg", [1.0, 0.0, 0.0])
+    st.save()
+    st2 = EmbeddingStore(f"{tmp_path}/kennis_embeddings.json")
+    assert len(st2) == 1 and st2.hash_of("k1") == st.hash_of("k1")
+
+    class Note:
+        def __init__(s, i, c): s.id, s.claim, s.archived = i, c, False
+
+    class Notes:
+        _path = f"{tmp_path}/notes.json"
+        def __init__(s, cards): s.cards = [Note(i, c) for i, c in cards]
+        def get(s, i): return next((a for a in s.cards if a.id == i), None)
+        def _n(s, t): return _re.sub(r"[^a-z0-9]", "", (t or "").lower())
+        def find_claim_equal(s, c):
+            d = s._n(c); return next((a.id for a in s.cards if s._n(a.claim) == d), None)
+        def _t(s, t): return frozenset(w for w in _re.split(r"[\W_]+", (t or "").lower()) if len(w) >= 4)
+        def gelijkende(s, c, drempel=0.55): return None      # dwing de semantische tak (lexicaal niets)
+
+    notes = Notes([("k1", "Volledig bio-based materialen zijn ver genoeg ontwikkeld")])
+    # Een index die k1 als sterke betekenis-buur teruggeeft (embed_fn niet nodig — candidate is gefaket)
+    idx = SemantiekIndex(f"{tmp_path}/notes.json")
+    idx.candidate = lambda claim, notes, drempel=0.82: ("k1", notes.get("k1").claim, 0.91)
+
+    zelfde = lambda *a, **k: "ZELFDE"
+    geen = lambda *a, **k: None
+    r = beoordeel_kaart("Voor gelijmde schoenen is composteerbaarheid de route", notes,
+                        reason_fn=zelfde, semantiek=idx)
+    assert r["verdict"] == "stapel" and r["kaart_id"] == "k1"
+    r2 = beoordeel_kaart("Voor gelijmde schoenen is composteerbaarheid de route", notes,
+                         reason_fn=geen, semantiek=idx)
+    assert r2["verdict"] == "twijfel"          # geen LLM → markeren, nooit stil stapelen
+    r3 = beoordeel_kaart("iets totaal anders", notes, reason_fn=zelfde, semantiek=False)
+    assert r3["verdict"] == "nieuw"            # semantiek uit + lexicaal niets → nieuw
+
+
 def test_beide_in_registry():
     from nooch_village.registry_factory import build_skill_registry
     reg = build_skill_registry()

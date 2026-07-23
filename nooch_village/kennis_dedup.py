@@ -31,6 +31,14 @@ from __future__ import annotations
 _STAPEL_HARD = 0.80
 _BAND = 0.35
 
+# Semantische laag (kennis_embeddings): cosinus-drempels op de betekenis-buur.
+#   >= _SEM_KANDIDAAT : dicht genoeg in de betekenisruimte om als kandidaat aan de LLM voor te leggen.
+#   >= _SEM_TWIJFEL   : zó dichtbij dat we het zonder LLM-oordeel toch markeren (twijfel), i.p.v. negeren.
+# Embeddings stapelen NOOIT deterministisch: alleen een expliciet LLM-"zelfde" stapelt (twee feiten over
+# hetzelfde onderwerp liggen dicht bij elkaar maar zijn geen duplicaat).
+_SEM_KANDIDAAT = 0.82
+_SEM_TWIJFEL = 0.90
+
 
 def _llm_zelfde(nieuw: str, bestaand: str, reason_fn) -> str | None:
     """Vraagt de LLM of twee claims HETZELFDE inzicht uitdrukken. Geeft 'zelfde', 'anders' of None
@@ -61,15 +69,33 @@ def _llm_zelfde(nieuw: str, bestaand: str, reason_fn) -> str | None:
     return None
 
 
-def beoordeel_kaart(claim: str, notes, *, reason_fn=None,
+def _semantiek_voor(notes, semantiek):
+    """Bepaal de te gebruiken SemantiekIndex. `semantiek` expliciet meegegeven → die (of False = uit).
+    None → bouw de default naast notes.json. Fail-soft: import/pad-fout → geen semantische laag."""
+    if semantiek is not None:
+        return semantiek or None
+    try:
+        from nooch_village.kennis_embeddings import SemantiekIndex
+        return SemantiekIndex(getattr(notes, "_path", "data/notes.json"))
+    except Exception:
+        return None
+
+
+def beoordeel_kaart(claim: str, notes, *, reason_fn=None, semantiek=None,
                     stapel_hard: float = _STAPEL_HARD, band: float = _BAND) -> dict:
     """Weet-ik-dit-al-poort voor één kandidaat-claim tegen de bestaande bibliotheek.
+
+    Twee kandidaat-ophalers voeden één LLM-oordeler: lexicaal (`gelijkende`, woord-overlap) en
+    semantisch (`SemantiekIndex`, betekenis-buur via embeddings — vangt parafrase en NL/EN die
+    lexicaal onzichtbaar zijn). Embeddings stapelen nooit uit zichzelf: alleen een LLM-"zelfde"
+    stapelt. `semantiek`: None = default-index naast notes.json; False = puur lexicaal; of een
+    eigen index-object (test).
 
     Geeft een dict met 'verdict':
       - 'nieuw'   : geen match → maak een nieuw kaartje.
       - 'stapel'  : dit staat er al → koppel de herkomst aan 'kaart_id' i.p.v. een tweede kaartje.
-      - 'twijfel' : lexicaal dichtbij maar geen LLM-oordeel beschikbaar → maak een NIEUW kaartje,
-                    maar markeer het (fail-open: nooit stil stapelen). 'kaart_id' = de gelijkende kaart.
+      - 'twijfel' : dichtbij (lexicaal of sterk semantisch) maar geen LLM-bevestiging → maak een
+                    NIEUW kaartje, maar markeer het (fail-open: nooit stil stapelen).
     Extra velden waar zinvol: 'kaart_id', 'score', 'reden'. Fail-open: elke fout → 'nieuw'.
     """
     claim = (claim or "").strip()
@@ -82,18 +108,45 @@ def beoordeel_kaart(claim: str, notes, *, reason_fn=None,
         g = notes.gelijkende(claim, drempel=band)
     except Exception:
         return {"verdict": "nieuw"}
-    if not g:
+    # Near-woordelijk gelijk: deterministisch stapelen (geen LLM nodig).
+    if g and g[2] >= stapel_hard:
+        return {"verdict": "stapel", "kaart_id": g[0], "score": g[2],
+                "reden": f"near-woordelijk gelijk ({g[2]:.2f})"}
+
+    # Kandidaten verzamelen: lexicaal (grijze band) + semantisch (betekenis-buur).
+    kandidaten: list[tuple[str, str, float, str]] = []   # (note_id, claim, score, bron)
+    if g and g[2] >= band:
+        kandidaten.append((g[0], g[1], g[2], "lex"))
+    idx = _semantiek_voor(notes, semantiek)
+    if idx is not None:
+        try:
+            sem = idx.candidate(claim, notes, drempel=_SEM_KANDIDAAT)
+        except Exception:
+            sem = None
+        if sem:
+            kandidaten.append((sem[0], sem[1], sem[2], "sem"))
+    if not kandidaten:
         return {"verdict": "nieuw"}
-    kaart_id, bestaand_claim, score = g
-    if score >= stapel_hard:
-        return {"verdict": "stapel", "kaart_id": kaart_id, "score": score,
-                "reden": f"near-woordelijk gelijk ({score:.2f})"}
-    # Grijze band: laat de betekenis beslissen (vangt parafrase en NL/EN).
-    oordeel = _llm_zelfde(claim, bestaand_claim, reason_fn)
-    if oordeel == "zelfde":
-        return {"verdict": "stapel", "kaart_id": kaart_id, "score": score, "reden": "LLM: zelfde inzicht"}
-    if oordeel == "anders":
-        return {"verdict": "nieuw", "kaart_id": kaart_id, "score": score, "reden": "LLM: ander inzicht"}
-    # Geen LLM-oordeel in de grijze band → fail-open: nieuw kaartje, maar gemarkeerd voor de mens.
-    return {"verdict": "twijfel", "kaart_id": kaart_id, "score": score,
-            "reden": "lexicaal dichtbij, geen LLM-oordeel"}
+
+    # Per kaart de sterkste score houden, hoogste eerst; hooguit 2 langs de LLM (bounded kost).
+    beste: dict[str, tuple[str, float, str]] = {}
+    for nid, ncl, sco, bron in kandidaten:
+        if nid not in beste or sco > beste[nid][1]:
+            beste[nid] = (ncl, sco, bron)
+    gerangschikt = sorted(([nid, *v] for nid, v in beste.items()), key=lambda r: r[2], reverse=True)[:2]
+
+    twijfel: tuple[str, float, str] | None = None   # sterkste kandidaat die markering verdient
+    for nid, ncl, sco, bron in gerangschikt:
+        oordeel = _llm_zelfde(claim, ncl, reason_fn)
+        if oordeel == "zelfde":
+            return {"verdict": "stapel", "kaart_id": nid, "score": sco,
+                    "reden": f"LLM: zelfde inzicht ({bron})"}
+        if oordeel is None:                          # geen LLM-oordeel: onthoud als twijfel-kandidaat
+            markeer = (bron == "lex") or (bron == "sem" and sco >= _SEM_TWIJFEL)
+            if markeer and (twijfel is None or sco > twijfel[1]):
+                twijfel = (nid, sco, bron)
+        # oordeel == 'anders' → deze kaart is het niet; door naar de volgende kandidaat
+    if twijfel is not None:
+        return {"verdict": "twijfel", "kaart_id": twijfel[0], "score": twijfel[1],
+                "reden": f"dichtbij ({twijfel[2]}), geen LLM-bevestiging"}
+    return {"verdict": "nieuw"}
