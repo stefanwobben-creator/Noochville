@@ -304,6 +304,22 @@ def intake(raw: str, source_hint: str, data_dir: str, reason_fn=reason,
         if notes.get(kaart.id) is not None:    # zelfde content + zelfde bron → skip (idempotent)
             overgeslagen += 1
             continue
+        # Voorkant-poort (founder 23 jul): de id-check hierboven vangt alleen EXACT content+bron.
+        # Een near-duplicaat (andere bron of iets andere formulering) werd een tweede kaartje. De poort
+        # stapelt bij (semantische) gelijkenis i.p.v. dubbelen; fail-open — bij twijfel een nieuw
+        # kaartje mét markering, nooit stil stapelen. Fail-soft: elke fout → gewoon toevoegen.
+        try:
+            from nooch_village.kennis_dedup import beoordeel_kaart
+            oordeel = beoordeel_kaart(kaart.claim, notes)
+        except Exception:
+            oordeel = {"verdict": "nieuw"}
+        if oordeel.get("verdict") == "stapel" and oordeel.get("kaart_id"):
+            notes.stack_provenance(oordeel["kaart_id"], source=kaart.source or "",
+                                   reference=kaart.reference or "")
+            overgeslagen += 1
+            continue
+        if oordeel.get("verdict") == "twijfel" and oordeel.get("kaart_id"):
+            kaart.tags = list(kaart.tags) + [f"hint:dup?:{oordeel['kaart_id']}"]
         notes.add(kaart)
         nieuw.append(kaart.id)
     ledger.record(raw, source_hint, nieuw)

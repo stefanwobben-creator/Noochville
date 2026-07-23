@@ -193,6 +193,18 @@ def promote_signal(st, rid: str) -> tuple[str | None, str]:
     link = (it.get("link") or "").strip()
 
     dup = find_duplicate(st.notes, content, source, link)
+    if dup is None:
+        # Voorkant-poort (founder 23 jul): find_duplicate vangt alleen EXACT (content+bron of URL).
+        # Een near-duplicaat (andere bron, iets andere formulering) glipte er doorheen en werd een
+        # tweede kaartje — de bron van de PHA/mycelium-verzadiging. De poort stapelt óók bij
+        # semantische gelijkenis; fail-open (bij twijfel juist een nieuw kaartje). Nooit de klik breken.
+        try:
+            from nooch_village.kennis_dedup import beoordeel_kaart
+            oordeel = beoordeel_kaart(content, st.notes)
+            if oordeel.get("verdict") == "stapel":
+                dup = oordeel.get("kaart_id")
+        except Exception:
+            dup = None
     if dup is not None:
         # Geen tweede kaartje: de signal-herkomst stapelt op het bestaande atoom
         # (zelfde "; "-mechanisme als merge_into voor source/reference).
