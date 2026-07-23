@@ -69,9 +69,14 @@ def _target(cluster_ids: list[str], byid: dict) -> str:
 
 def vind_clusters(notes, *, reason_fn=None, data_dir: str = "data",
                   lex_drempel: float = 0.5, sem_drempel: float = 0.82,
-                  max_oordeel: int = 80) -> dict:
-    """Vind bevestigde merge-clusters. Geeft {clusters: [{target, target_claim, sources:[{id,claim}],
-    reden}], kandidaat_paren, beoordeeld, afgekapt}. Past niets toe."""
+                  max_oordeel: int = 200) -> dict:
+    """Vind bevestigde merge-clusters, met twee betrouwbaarheidsniveaus:
+      - clusters   : LEXICAAL bijna-identiek én LLM-bevestigd → veilig om AUTOMATISCH samen te voegen.
+      - voorstellen: SEMANTISCH dichtbij (andere woorden) én LLM-bevestigd → naar de mens ter review,
+                     NIET automatisch mergen. Juist hier zit de gretigheid (bv. 'EU Ecolabel mag
+                     geclaimd worden' vs 'is getoetst en betrouwbaar', of CNC vs chitosan): zelfde
+                     onderwerp, mogelijk ander feit. De mens beslist.
+    Geeft {clusters, voorstellen, kandidaat_paren, beoordeeld, afgekapt}. Past niets toe."""
     actief = [a for a in notes.all() if not a.archived]
     byid = {a.id: a for a in actief}
 
@@ -88,7 +93,7 @@ def vind_clusters(notes, *, reason_fn=None, data_dir: str = "data",
     afgekapt = max(0, len(paren) - max_oordeel)
     paren = paren[:max_oordeel]
 
-    # Union-find over de door de LLM bevestigde paren.
+    # Union-find over ALLEEN de lexicaal-bevestigde paren (auto-merge); semantische apart als voorstel.
     par: dict[str, str] = {}
 
     def vind(x):
@@ -99,10 +104,16 @@ def vind_clusters(notes, *, reason_fn=None, data_dir: str = "data",
         return x
 
     beoordeeld = 0
-    for ia, ib, _reden in paren:
+    voorstellen = []
+    for ia, ib, reden in paren:
         beoordeeld += 1
-        if _llm_zelfde(byid[ia].claim, byid[ib].claim, reason_fn) == "zelfde":
-            par[vind(ia)] = vind(ib)
+        if _llm_zelfde(byid[ia].claim, byid[ib].claim, reason_fn) != "zelfde":
+            continue
+        if reden.startswith("lexicaal"):
+            par[vind(ia)] = vind(ib)                       # veilig: bijna-woordelijk gelijk
+        else:                                              # semantisch → voorstel ter review
+            voorstellen.append({"a": ia, "a_claim": byid[ia].claim,
+                                "b": ib, "b_claim": byid[ib].claim, "reden": reden})
 
     groepen: dict[str, list[str]] = {}
     for nid in list(par):
@@ -117,10 +128,26 @@ def vind_clusters(notes, *, reason_fn=None, data_dir: str = "data",
             "target": tgt,
             "target_claim": byid[tgt].claim,
             "sources": [{"id": nid, "claim": byid[nid].claim} for nid in leden if nid != tgt],
-            "reden": "LLM-bevestigd zelfde",
+            "reden": "lexicaal bijna-identiek, LLM-bevestigd",
         })
-    return {"clusters": clusters, "kandidaat_paren": len(paren) + afgekapt,
-            "beoordeeld": beoordeeld, "afgekapt": afgekapt}
+    return {"clusters": clusters, "voorstellen": voorstellen,
+            "kandidaat_paren": len(paren) + afgekapt, "beoordeeld": beoordeeld, "afgekapt": afgekapt}
+
+
+def post_voorstellen(voorstellen: list[dict], human_inbox) -> int:
+    """Zet de semantische merge-voorstellen als 'lijkt-op'-verbanden in de human inbox (add_verband):
+    twee kaartjes die mogelijk hetzelfde zijn, de mens beoordeelt of ze samen moeten. Geeft het aantal
+    geplaatste voorstellen. Fail-soft per item."""
+    n = 0
+    for v in voorstellen:
+        try:
+            human_inbox.add_verband(v["a"], v["b"],
+                                    f"Mogelijk hetzelfde inzicht (semantisch, {v.get('reden','')}): "
+                                    f"'{v['a_claim'][:80]}' ↔ '{v['b_claim'][:80]}' — samenvoegen?")
+            n += 1
+        except Exception:
+            pass
+    return n
 
 
 def pas_merge_toe(notes, clusters: list[dict], *, by: str = "kennis-onderhoud") -> dict:

@@ -74,17 +74,24 @@ def main(argv) -> int:
         print("[3] MERGE-LUS (bestaande dubbelingen)")
         res = kennis_merge.vind_clusters(notes, data_dir=DATA)
         cl = res["clusters"]
+        vs = res.get("voorstellen", [])
         print(f"   kandidaat-paren {res['kandidaat_paren']} | beoordeeld {res['beoordeeld']}"
               + (f" | afgekapt {res['afgekapt']}" if res["afgekapt"] else ""))
-        print(f"   bevestigde merge-clusters: {len(cl)}")
+        print(f"   AUTO-merge (lexicaal bijna-identiek): {len(cl)} clusters")
         for c in cl[:12]:
             print(f"      ⇒ {c['target_claim'][:70]}")
             for s in c["sources"]:
                 print(f"          + {s['claim'][:66]}")
+        print(f"   VOORSTEL (semantisch → naar jou ter review): {len(vs)}")
+        for v in vs[:10]:
+            print(f"      ? {v['a_claim'][:52]}  ↔  {v['b_claim'][:52]}")
         if apply:
             r = kennis_merge.pas_merge_toe(notes, cl)
+            from nooch_village.human_inbox import HumanInbox
+            hi = HumanInbox(f"{DATA}/human_inbox.json")
+            gepost = kennis_merge.post_voorstellen(vs, hi)
             print(f"   → clusters gemerged {r['clusters_gemerged']}, kaarten opgeruimd "
-                  f"{r['kaarten_opgeruimd']}")
+                  f"{r['kaarten_opgeruimd']}, voorstellen naar inbox {gepost}")
         print()
 
     print("=== klaar ===" + ("" if apply else "  (droog — draai met 'apply' om door te voeren)"))

@@ -52,7 +52,8 @@ def _llm_zelfde(nieuw: str, bestaand: str, reason_fn) -> str | None:
             "het eerste zijn), of zijn het verschillende beweringen (ook als ze over hetzelfde onderwerp "
             "gaan)?\n"
             "Streng: alleen 'ZELFDE' als de kernbewering echt dezelfde is. Zelfde onderwerp maar een "
-            "ander feit, cijfer, of andere invalshoek = 'ANDERS'.\n\n"
+            "ander feit, cijfer, materiaal of stof (bv. PHA vs PHB, CNC vs chitosan), of een andere "
+            "bewering (bv. 'mag geclaimd worden' vs 'is betrouwbaar') = 'ANDERS'.\n\n"
             f"KAART 1 (bestaand): {bestaand[:400]}\n"
             f"KAART 2 (nieuw):    {nieuw[:400]}\n\n"
             "Antwoord met EXACT één woord: ZELFDE of ANDERS.")

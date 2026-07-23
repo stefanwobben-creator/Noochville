@@ -78,7 +78,7 @@ def parse_hint_mapping(text: str | None, concepten: list[str]) -> dict[str, str 
     return uit
 
 
-def plan_hints(notes, *, reason_fn=None, drempel_nieuw: int = 4) -> dict:
+def plan_hints(notes, *, reason_fn=None, drempel_nieuw: int = 2) -> dict:
     """Beslis per hint-concept: 'map' (→ bestaand onderwerp), 'voorstel' (kandidaat-nieuw-onderwerp) of
     'drop' (ruis). Deterministisch waar X exact een onderwerp is; anders één LLM-pass. Geen LLM → alleen
     de exacte maps, de rest blijft ongemoeid (conservatief). Geeft een plan-dict (past niets toe)."""
