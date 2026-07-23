@@ -1120,3 +1120,6 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .gs-project{background:#f4e9da;color:#8a561f}
 .gs-insight{background:#ebe8f5;color:#4b3f86}
 .gs-signal{background:#eef0dd;color:#6b6630}
+.gs-word{background:#f0e5e9;color:#8a4360}
+.gs-didyoumean{padding:.4rem .2rem;color:var(--muted);font-size:13.5px}
+.gs-didyoumean a{color:var(--green);font-weight:600}

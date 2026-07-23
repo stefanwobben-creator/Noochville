@@ -6,6 +6,8 @@ ziet of een treffer een rol, een project, een inzicht of een signal (kenniskaart
 fail-soft per store."""
 from __future__ import annotations
 
+import difflib
+import re
 from urllib.parse import quote
 
 from nooch_village.web_base import _e, _page
@@ -13,9 +15,16 @@ from nooch_village.cockpit2_util import _nav, _DS_LINK, _name
 from nooch_village import org
 
 
+def _woorden(tekst: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", (tekst or "").lower())
+
+
 def _match(tekst: str, termen: list[str]) -> bool:
-    t = (tekst or "").lower()
-    return all(term in t for term in termen)
+    """Elke zoekterm moet aan het BEGIN van een woord matchen (woord-prefix), niet ergens midden in
+    een ander woord. Zo matcht 'pha' wel 'PHA' en 'PHA-outsole', maar niet 'hyphalite'. Prefix (niet
+    exact) houdt de live-zoek fijn: 'veg' vindt 'vegan'."""
+    ws = _woorden(tekst)
+    return all(any(w.startswith(term) for w in ws) for term in termen)
 
 
 def _kaartje_url(claim: str) -> str:
@@ -80,12 +89,66 @@ def _signals(st, termen):
     return uit
 
 
-# Volgorde en labels van de vier groepen (founder 23 jul: signal = kenniskaartje, insight = laag 2).
-_GROEPEN = (("Roles", _roles), ("Projects", _projects), ("Insights", _insights), ("Signals", _signals))
+def _words(st, termen):
+    uit = []
+    try:
+        for w, e in (st.library.all() or {}).items():
+            if _match(w, termen):
+                uit.append({"url": "/woordenschat", "kind": "word",
+                            "titel": w, "snip": str(e.get("status") or "")})
+    except Exception:
+        pass
+    return uit
+
+
+# Volgorde en labels van de groepen (founder 23 jul: signal = kenniskaartje, insight = laag 2,
+# word = library-zoekwoord).
+_GROEPEN = (("Roles", _roles), ("Projects", _projects), ("Insights", _insights),
+            ("Signals", _signals), ("Words", _words))
 
 
 def _zoek(st, termen):
     return [(label, fn(st, termen)) for label, fn in _GROEPEN]
+
+
+def _vocab(st) -> set:
+    """Kleine woordenschat voor de 'bedoelde u'-suggestie: rolnamen, library-woorden en inzicht-titels
+    (geen atomen — dat zou te groot en te ruis-gevoelig worden). Fail-soft per bron."""
+    v: set = set()
+    try:
+        for r in st.records.all():
+            if not getattr(r, "archived", False):
+                v.update(_woorden(_name(r)))
+    except Exception:
+        pass
+    try:
+        for w in (st.library.all() or {}):
+            v.update(_woorden(w))          # library-sleutels zijn vaak meerwoordig → op woord splitsen
+    except Exception:
+        pass
+    try:
+        for k in st.kennisbank.all():
+            v.update(_woorden(k.get("title", "")))
+    except Exception:
+        pass
+    return {w for w in v if len(w) >= 3}
+
+
+def _suggestie(st, q: str, totaal: int) -> str:
+    """Bedoelde-u-misschien: alleen bij weinig treffers en een enkele term; de dichtstbijzijnde bekende
+    term (difflib, geen externe dep). Leeg als er niets dichtbij genoeg is of het gelijk is aan de invoer."""
+    termen = [t for t in q.lower().split() if t]
+    if totaal > 3 or len(termen) != 1 or len(termen[0]) < 3:
+        return ""
+    m = difflib.get_close_matches(termen[0], _vocab(st), n=1, cutoff=0.72)
+    return m[0] if (m and m[0] != termen[0]) else ""
+
+
+def _suggestie_html(sug: str) -> str:
+    if not sug:
+        return ""
+    return (f"<div class='gs-didyoumean'>Bedoelde u: "
+            f"<a href='/search?q={quote(sug)}'>{_e(sug)}</a>?</div>")
 
 
 def _hit_html(h: dict) -> str:
@@ -101,16 +164,18 @@ def render_search_fragment(st, q: str = "") -> str:
     if len(q.strip()) < 2:
         return ""
     resultaten = _zoek(st, termen)
+    totaal = sum(len(h) for _, h in resultaten)
     blokken = []
     for label, hits in resultaten:
         if hits:
             rijen = "".join(_hit_html(h) for h in hits[:4])
             meer = (f"<span class='gs-more'>+{len(hits) - 4} meer</span>" if len(hits) > 4 else "")
             blokken.append(f"<div class='gs-group'><h2>{_e(label)} ({len(hits)}){meer}</h2>{rijen}</div>")
+    sug = _suggestie_html(_suggestie(st, q, totaal))
     if not blokken:
-        return "<div class='gs-empty'>geen treffers</div>"
+        return sug + "<div class='gs-empty'>geen treffers</div>" if sug else "<div class='gs-empty'>geen treffers</div>"
     alle = f"<a class='gs-all' href='/search?q={quote(q)}'>Alle resultaten →</a>"
-    return "".join(blokken) + alle
+    return sug + "".join(blokken) + alle
 
 
 def render_search(st, q: str = "") -> str:
@@ -131,8 +196,9 @@ def render_search(st, q: str = "") -> str:
             blokken.append(f"<div class='gs-group'><h2>{_e(label)} ({len(hits)})</h2>{rijen}</div>")
     if not blokken:
         blokken.append("<p class='muted'>Niets gevonden. Probeer een ander woord.</p>")
+    sug = _suggestie_html(_suggestie(st, q, totaal))
 
     main = (f"<div class='c2-main'><h1>Zoeken naar “{_e(q)}”</h1>"
-            f"<p class='muted'>{totaal} treffer(s) in roles, projects, insights en signals.</p>"
-            f"{''.join(blokken)}</div>")
+            f"<p class='muted'>{totaal} treffer(s) in roles, projects, insights, signals en words.</p>"
+            f"{sug}{''.join(blokken)}</div>")
     return _page("Zoeken", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
