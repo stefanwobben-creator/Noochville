@@ -137,4 +137,8 @@ def render_skills(st, human_inbox=None) -> str:
             f"<h2>Gewenst</h2>"
             f"<p class='muted'>De bouwlijst: waar mandaat bestaat maar het middel ontbreekt.</p>"
             f"{blok3}</div>")
-    return _page("Skills", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
+    # Behoud dezelfde shell als het projectenbord: de organisatieboom in de rail, zodat je bij een
+    # tool/skill je navigatie niet kwijt bent (founder 23 jul).
+    from nooch_village.views.overview import _tree_html
+    rail = f"<div class='c2-rail'>{_tree_html(st, '')}</div>"
+    return _page("Skills", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}{rail}</div>")

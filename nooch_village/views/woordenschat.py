@@ -102,8 +102,10 @@ def _rows(words: list, sparks: dict, csrf: str) -> str:
     out = []
     for w, e, score in words:
         ev = e.get("evidence") or {}
+        # Toggle i.p.v. verbied-emoji: 'aan' = actief in discovery; klik zet het woord op de
+        # no-follow list (ws_forbid). Reuse van de bestaande .switch-stijl.
         verbied = (f"<td><span class='kc-actions'>"
-                   f"{_mini_form(csrf, 'ws_forbid', w, '🚫', cls='star', title='naar de no-follow list — komt niet meer terug in discovery')}"
+                   f"{_mini_form(csrf, 'ws_forbid', w, '', cls='switch on', title='actief in discovery — klik om op de no-follow list te zetten')}"
                    f"</span></td>") if csrf else ""
         out.append(
             f"<tr><td>{_e(w)}{_nieuw_ster(e)}</td>"

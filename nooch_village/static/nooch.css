@@ -64,8 +64,8 @@ ul.clean li:last-child{border-bottom:none}
 .tree details.tree-c>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:.2rem;padding:0;font-family:inherit;font-weight:inherit}
 .tree details.tree-c[open]{padding-bottom:0}
 .tree details.tree-c>summary::-webkit-details-marker{display:none}
-.tree details.tree-c>summary::before{content:'\\0025B8';font-size:.6rem;color:var(--gray);flex:none;width:.6rem}
-.tree details.tree-c[open]>summary::before{content:'\\0025BE'}
+.tree details.tree-c>summary::before{content:'\0025B8';font-size:.6rem;color:var(--gray);flex:none;width:.6rem}
+.tree details.tree-c[open]>summary::before{content:'\0025BE'}
 .pill{display:inline-block;font-size:.72rem;padding:.05rem .45rem;border-radius:var(--radius-pill);background:var(--cream-2);color:var(--gray);margin-left:.3rem}
 .card{border:1px solid var(--border);border-radius:var(--radius);padding:.5rem .7rem;margin:.3rem 0;background:var(--surface)}
 .pboard{display:flex;gap:.6rem;align-items:flex-start;overflow-x:auto}

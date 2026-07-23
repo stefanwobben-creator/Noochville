@@ -87,7 +87,9 @@ def _tree_html(st: _Stores, current_id: str) -> str:
             return f"<li>{link}>{_e(_name(rec))}</a><ul>{inner}</ul></li>"
         # Sub-cirkel (Nooch e.d.) inklapbaar; open als de huidige node erin zit. Klik op de naam
         # navigeert (stopPropagation → geen toggle), klik op de caret klapt in/uit.
-        op = " open" if rec.id in ancestors else ""
+        # Noochville staat altijd standaard open (de thuisbasis), ook zonder huidige node erin.
+        op = " open" if (rec.id in ancestors
+                         or _name(rec).strip().lower() == "noochville") else ""
         summ = f"{link} onclick='event.stopPropagation()'>{_e(_name(rec))}</a>"
         return (f"<li><details class='tree-c'{op}><summary>{summ}</summary>"
                 f"<ul>{inner}</ul></details></li>")
