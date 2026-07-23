@@ -1111,11 +1111,12 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
   color:var(--green);font-weight:600;text-decoration:none;font-size:13px}
 .gs-empty{padding:.7rem;color:var(--muted);font-size:13px}
 /* Categorie-badge: eigen kleur per soort zodat role/project/insight/signal meteen te onderscheiden zijn */
-.gs-kind{display:inline-block;min-width:52px;text-align:center;font-size:10.5px;font-weight:700;
+.gs-kind{display:inline-block;min-width:52px;text-align:center;font-size:10px;font-weight:700;
   text-transform:uppercase;letter-spacing:.03em;padding:.08rem .4rem;border-radius:var(--radius-pill);
-  margin-right:.15rem;vertical-align:middle;color:#fff}
-.gs-role{background:#2f6f4f}
-.gs-circle{background:#1f4d5c}
-.gs-project{background:#b06e2f}
-.gs-insight{background:#5a4b9c}
-.gs-signal{background:#8a8340}
+  margin-right:.15rem;vertical-align:middle}
+/* Zacht getinte badges met leesbare donkere tekst (i.p.v. felle vlakken met wit) */
+.gs-role{background:#e4efe9;color:#2f6f4f}
+.gs-circle{background:#e0ebef;color:#26545f}
+.gs-project{background:#f4e9da;color:#8a561f}
+.gs-insight{background:#ebe8f5;color:#4b3f86}
+.gs-signal{background:#eef0dd;color:#6b6630}
