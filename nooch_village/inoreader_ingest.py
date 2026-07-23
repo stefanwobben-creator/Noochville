@@ -70,7 +70,7 @@ def ingest_feed_items(items: list, *, role: str, feed: str, data_dir: str, missi
                       focus: str = "competitor") -> dict:
     """Verwerk de items van één feed naar de RadarStore van de gekoppelde rol (status 'wacht'). Strenge
     distill (precisie), idempotent op artikel-URL, fail-closed per item. Houdt een trace bij (--debug)."""
-    from nooch_village.news_distill import distill_article
+    from nooch_village.news_distill import distill_articles
     from nooch_village.competitor_brands import CompetitorBrands
     from nooch_village.radar_store import RadarStore
 
@@ -82,6 +82,10 @@ def ingest_feed_items(items: list, *, role: str, feed: str, data_dir: str, missi
 
     res = {"fetched": len(items), "blocked": 0, "seen": 0, "distilled": 0,
            "proposed": 0, "own_brand": 0, "trace": []}
+    # Eerst filteren en de bruikbare artikelen verzamelen; daarna in BATCHES destilleren (founder 23 jul,
+    # tegen de 20/dag-LLM-cap): ~40 losse calls per feed worden zo ~4.
+    werk = []                                                    # [(link, title, art)]
+    gezien_nu: set = set()                                        # dubbele URL's BINNEN deze batch ook ontdubbelen
     for it in (items[:limit] if limit else items):
         link = (it.get("url") or "").strip()
         title = (it.get("title") or "").strip()
@@ -92,20 +96,18 @@ def ingest_feed_items(items: list, *, role: str, feed: str, data_dir: str, missi
             res["blocked"] += 1
             res["trace"].append((title[:75], "geblokkeerd"))
             continue
-        if radar.seen(link):
+        if radar.seen(link) or link in gezien_nu:
             res["seen"] += 1
             res["trace"].append((title[:75], "al gezien"))
             continue
-        art = _to_article(it)
-        try:
-            d = distill_article(art, mission=mission, known_brands=known, llm_reason=llm_reason,
-                                strict=True, focus=focus)
-        except Exception as e:                                   # fail-closed: item overslaan, niet crashen
-            log.warning("distill faalde voor %s: %s", link, e)
-            radar.mark_seen(link)
-            res["trace"].append((title[:75], "distill-fout"))
-            continue
-        radar.mark_seen(link)
+        gezien_nu.add(link)
+        werk.append((link, title, _to_article(it)))
+
+    arts = [w[2] for w in werk]
+    resultaten = distill_articles(arts, mission=mission, known_brands=known, llm_reason=llm_reason,
+                                  strict=True, focus=focus)
+    for (link, title, art), d in zip(werk, resultaten):
+        radar.mark_seen(link)                                   # verwerkt = gezien (ook bij 'geen')
         if not d:
             res["trace"].append((title[:75], "geen"))
             continue

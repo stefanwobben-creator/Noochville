@@ -173,21 +173,103 @@ def distill_article(article: dict, *, mission: str = "", known_brands=(), llm_re
     return {"kind": kind, "content": content, "rationale": rationale}
 
 
+def _distill_batch_prompt(articles: list, *, mission: str, known: str,
+                          strict: bool, focus: str) -> str:
+    """Batch-variant van de destilleer-prompt: N koppen in één call (founder 23 jul, tegen de 20/dag-cap).
+    Hergebruikt de EXACTE regels van `_distill_prompt` via een sentinel-render, zodat de single-prompt
+    ongemoeid blijft en de regels nooit uit elkaar lopen."""
+    single = _distill_prompt("§T§", "§B§", known, mission, strict, focus)
+    i1 = single.index("\n\n")
+    i2 = single.index("\n\n", i1 + 2)
+    persona = single[:i1]                                   # persona + missie (kop-onafhankelijk)
+    rest = single[i2 + 2:]                                  # regels + antwoordformat (art-intro eruit)
+    ai = rest.index("Antwoord EXACT zo:")
+    regels = rest[:ai].rstrip()
+    fmt = rest[ai:].split("\n", 1)[1]                       # SOORT/INHOUD/WAAROM-regels (zonder de aanhef)
+    koppen = "\n".join(f'[[N: {i + 1}]] Bron: {a.get("brand", "")} — kop: "{a.get("title", "")}"'
+                       for i, a in enumerate(articles))
+    return (persona + "\n\nJe krijgt MEERDERE nieuwskoppen; beoordeel ELKE los.\n\n" + regels
+            + "\n\nKOPPEN:\n" + koppen
+            + "\n\nGeef voor ELKE kop, in DEZELFDE nummering, exact dit blok (niets ertussen):\n"
+            + "[[N: <nummer>]]\n" + fmt)
+
+
+def _parse_distill_batch(out: str | None) -> dict:
+    """LLM-batch-output → {nummer(1-based): (kind, content, rationale)}. Split op [[N: n]]; fail-soft."""
+    res: dict = {}
+    if not out:
+        return res
+    delen = re.split(r"\[\[N:\s*(\d+)\s*\]\]", out)
+    for i in range(1, len(delen) - 1, 2):
+        try:
+            n = int(delen[i])
+        except ValueError:
+            continue
+        body = delen[i + 1]
+        sm = re.search(r"SOORT\s*:\s*(\w+)", body, re.I)
+        im = re.search(r"INHOUD\s*:\s*(.+)", body, re.I)
+        wm = re.search(r"WAAROM\s*:\s*(.+)", body, re.I)
+        kind = sm.group(1).strip().lower() if sm else ""
+        content = im.group(1).strip().strip('"').strip() if im else ""
+        rationale = wm.group(1).strip() if wm else ""
+        res[n] = (kind, content, rationale)
+    return res
+
+
+def distill_articles(articles: list, *, mission: str = "", known_brands=(), llm_reason=None,
+                     strict: bool = False, focus: str = "competitor", batch: int = 10) -> list:
+    """Destilleer een LIJST artikelen in BATCHES (default 10 per LLM-call) i.p.v. één call per artikel.
+    Geeft een lijst even lang als de input: per artikel {kind, content, rationale} of None. Fail-closed
+    per artikel (onparseerbaar of buiten de types → None)."""
+    if not articles:
+        return []
+    if llm_reason is None:
+        import functools
+        from nooch_village.llm import reason as _reason
+        llm_reason = functools.partial(_reason, call_site="news_distill_article", max_tokens=1500)
+    known = ", ".join(known_brands) if known_brands else "(geen)"
+    uit: list = [None] * len(articles)
+    for s in range(0, len(articles), batch):
+        groep = articles[s:s + batch]
+        try:
+            out = llm_reason(_distill_batch_prompt(groep, mission=mission, known=known,
+                                                   strict=strict, focus=focus))
+        except Exception:
+            out = None
+        parsed = _parse_distill_batch(out or "")
+        for gi, a in enumerate(groep):
+            d = parsed.get(gi + 1)
+            if not d:
+                continue
+            kind, content, rationale = d
+            if kind not in _KINDS or not content:
+                continue
+            if kind == "concurrent" and content.lower() in {b.lower() for b in known_brands}:
+                continue
+            uit[s + gi] = {"kind": kind, "content": content, "rationale": rationale}
+    return uit
+
+
 def distill_news(news: dict, proposals: NewsProposals, *, mission: str = "",
                  known_brands=(), llm_reason=None, limit: int = 8) -> dict:
     """Loop de gemonitorde nieuwsfeiten langs (één per merk) en destilleer nieuwe artikelen tot
     voorstellen. Slaat al verwerkte links over (idempotent). Geeft {scanned, proposed}."""
     scanned = proposed = 0
+    # Eerst verzamelen (nieuw + niet-gezien), dan in één batch destilleren i.p.v. één call per merk.
+    te_doen = []
     for brand, item in list(news.items())[:limit]:
         link = (item or {}).get("link", "")
         title = (item or {}).get("title", "")
         if not title or proposals.seen(link):
             continue
-        scanned += 1
-        d = distill_article({"brand": brand, "title": title, "link": link,
-                             "date": (item or {}).get("date", "")},
-                            mission=mission, known_brands=known_brands, llm_reason=llm_reason)
-        proposals.mark_seen(link)
-        if d and proposals.add(d["kind"], d["content"], d["rationale"], brand, title, link):
+        te_doen.append({"brand": brand, "title": title, "link": link,
+                        "date": (item or {}).get("date", "")})
+    scanned = len(te_doen)
+    resultaten = distill_articles(te_doen, mission=mission, known_brands=known_brands,
+                                  llm_reason=llm_reason)
+    for art, d in zip(te_doen, resultaten):
+        proposals.mark_seen(art["link"])
+        if d and proposals.add(d["kind"], d["content"], d["rationale"], art["brand"],
+                               art["title"], art["link"]):
             proposed += 1
     return {"scanned": scanned, "proposed": proposed}

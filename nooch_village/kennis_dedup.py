@@ -29,14 +29,17 @@ from __future__ import annotations
 #   [_BAND, _STAPEL_HARD) : grijs gebied → laat een LLM beslissen (parafrase/NL-EN).
 #   <  _BAND : te ver uit elkaar → nieuw kaartje.
 _STAPEL_HARD = 0.80
-_BAND = 0.35
+# _BAND omhoog (0.35 → 0.5) om LLM-calls te sparen (founder 23 jul): kandidaten met minder dan 0.5
+# woordoverlap zijn zelden echt hetzelfde en de LLM zei er meestal 'anders' op — dat was verspilde
+# quota. Onder _BAND → direct 'nieuw', geen LLM. Parafrase wordt nog steeds semantisch gevangen.
+_BAND = 0.5
 
 # Semantische laag (kennis_embeddings): cosinus-drempels op de betekenis-buur.
 #   >= _SEM_KANDIDAAT : dicht genoeg in de betekenisruimte om als kandidaat aan de LLM voor te leggen.
 #   >= _SEM_TWIJFEL   : zó dichtbij dat we het zonder LLM-oordeel toch markeren (twijfel), i.p.v. negeren.
 # Embeddings stapelen NOOIT deterministisch: alleen een expliciet LLM-"zelfde" stapelt (twee feiten over
 # hetzelfde onderwerp liggen dicht bij elkaar maar zijn geen duplicaat).
-_SEM_KANDIDAAT = 0.82
+_SEM_KANDIDAAT = 0.86        # omhoog (0.82): alleen sterke betekenis-buren gaan langs de LLM (quota sparen)
 _SEM_TWIJFEL = 0.90
 
 
@@ -134,7 +137,9 @@ def beoordeel_kaart(claim: str, notes, *, reason_fn=None, semantiek=None,
     for nid, ncl, sco, bron in kandidaten:
         if nid not in beste or sco > beste[nid][1]:
             beste[nid] = (ncl, sco, bron)
-    gerangschikt = sorted(([nid, *v] for nid, v in beste.items()), key=lambda r: r[2], reverse=True)[:2]
+    # Alleen de BESTE kandidaat langs de LLM (was: top 2) — halveert de judge-calls in het 2-kandidaat-
+    # geval, tegen de LLM-quota. De sterkste kandidaat is vrijwel altijd de juiste vergelijking.
+    gerangschikt = sorted(([nid, *v] for nid, v in beste.items()), key=lambda r: r[2], reverse=True)[:1]
 
     twijfel: tuple[str, float, str] | None = None   # sterkste kandidaat die markering verdient
     for nid, ncl, sco, bron in gerangschikt:
