@@ -176,8 +176,17 @@ _CALLBAR_JS = r"""
         toast(esc(m.by)+' heeft '+esc(m.who)+(m.muted?' gemute':' ge-unmute'));}catch(e){}
     });
     try{room.prepareConnection&&room.prepareConnection(LKURL,TOKEN);}catch(e){}
-    room.connect(LKURL,TOKEN,{autoSubscribe:true}).then(function(){if(after)after();render();})
-      .catch(function(e){console.error('[callbar] connect faalde',e);toast('verbinden niet gelukt');cleanupRoom();});
+    // Timeout-vangnet: zonder dit blijft een onbereikbare wss-server eeuwig 'verbinden…' zonder melding.
+    var settled=false;
+    var faal=function(msg,e){
+      if(settled)return;settled=true;clearTimeout(to);
+      if(e)console.error('[callbar] '+msg,e);else console.error('[callbar] '+msg);
+      toast(msg);var r=room;try{r&&r.disconnect();}catch(_){}cleanupRoom();
+    };
+    var to=setTimeout(function(){faal('verbinden duurde te lang');},10000);
+    room.connect(LKURL,TOKEN,{autoSubscribe:true}).then(function(){
+        if(settled)return;settled=true;clearTimeout(to);if(after)after();render();})
+      .catch(function(e){faal('verbinden niet gelukt',e);});
   }
 
   // volledig loskoppelen → terug naar poll-only (en de minuten stoppen)
@@ -253,6 +262,11 @@ _CALLBAR_JS = r"""
           +'<span>🎥 met camera</span><span class="switch'+(camPref?' on':'')+'"></span></button>';
         h+='<button type="button" class="btn ok cb-join">'+(presence.count>0?'Join gesprek':'Start gesprek')+'</button>';
       }
+    } else if(!room){
+      // joinCall zet joined=true en rendert vóórdat connect() de room aanmaakt: laat een
+      // 'verbinden…'-status zien i.p.v. room.localParticipant te lezen (dat crashte de join).
+      h+='<span class="cb-hint">🔄 verbinden…</span>';
+      h+='<button type="button" class="btn cb-icon cb-leave" title="Annuleren">✕</button>';
     } else {
       var mic=room.localParticipant.isMicrophoneEnabled;
       var cam=room.localParticipant.isCameraEnabled;
