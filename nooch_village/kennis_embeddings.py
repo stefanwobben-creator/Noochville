@@ -38,9 +38,13 @@ def _key() -> str | None:
     return os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 
 
-def embed_many(texts: list[str]) -> list[list[float] | None]:
+def embed_many(texts: list[str], *, strict: bool = False) -> list[list[float] | None]:
     """Lijst teksten → lijst vectoren, één API-call (batch). Fail-soft: geen sleutel/SDK/fout, of een
-    lege tekst → None op die plek. Geeft altijd een lijst even lang als de input."""
+    lege tekst → None op die plek. Geeft altijd een lijst even lang als de input.
+
+    strict=True: her-raise de API-fout i.p.v. None terug te geven. Alleen de backfill gebruikt dit, zodat
+    hij een 429 (quota) kan herkennen en netjes kan wachten+herproberen. De daemon-check laat strict=False
+    (fail-soft, nooit wachten in het hete pad)."""
     schoon = [(t or "").strip() for t in texts]
     key = _key()
     if not key or not any(schoon):
@@ -52,13 +56,17 @@ def embed_many(texts: list[str]) -> list[list[float] | None]:
         resp = client.models.embed_content(model=_MODEL, contents=[t or " " for t in schoon])
         embs = list(getattr(resp, "embeddings", []) or [])
         if len(embs) != len(schoon):
+            if strict:
+                raise RuntimeError(f"embed gaf {len(embs)} vectoren voor {len(schoon)} teksten")
             return [None] * len(schoon)
         uit: list[list[float] | None] = []
         for t, e in zip(schoon, embs):
             vals = getattr(e, "values", None)
             uit.append([float(x) for x in vals] if (t and vals) else None)
         return uit
-    except Exception as e:                      # geen SDK, netwerkfout, quota → fail-soft
+    except Exception as e:                      # geen SDK, netwerkfout, quota → fail-soft (of her-raise)
+        if strict:
+            raise
         log.warning("embed faalde (%s): %s", _MODEL, e)
         return [None] * len(schoon)
 
@@ -173,3 +181,71 @@ class SemantiekIndex:
         if a is None or getattr(a, "archived", False):
             return None
         return (nid, a.claim, sc)
+
+
+def _retry_seconden(msg: str) -> float:
+    """Haal de door de API voorgestelde wachttijd uit een 429-boodschap ('retryDelay': '55s' /
+    'Please retry in 55.7s'). Geen match → 60s."""
+    import re
+    m = re.search(r"(\d+(?:\.\d+)?)\s*s(?:econds)?", msg)
+    return float(m.group(1)) if m else 60.0
+
+
+def _is_quota(msg: str) -> bool:
+    m = (msg or "").lower()
+    return "429" in m or "resource_exhausted" in m or "quota" in m or "rate limit" in m
+
+
+def index_backfill(notes, store, *, batch: int = 20, per_min: int = 90,
+                   sleep_fn=None, log=print, max_wachten: int = 6) -> dict:
+    """Getemporiseerde, herstartbare backfill van de embedding-index. Embedt alleen nieuwe/gewijzigde
+    claims (hash-vergelijk), in kleine batches, onder `per_min` verzoeken per minuut (elk kaartje telt
+    als één verzoek op de gratis tier). Bij een 429 wacht hij de voorgestelde tijd en probeert de batch
+    opnieuw (tot `max_wachten` keer). Archiveerde/verdwenen kaartjes gaan uit de index.
+
+    Fail-soft per batch: een niet-quota-fout laat die batch als niet-geïndexeerd en gaat door. Geeft een
+    stats-dict terug. `sleep_fn`/`log` injecteerbaar voor tests (geen echte wachttijd)."""
+    import time as _time
+    sleep_fn = sleep_fn or _time.sleep
+
+    actief = [a for a in notes.all() if not a.archived]
+    actieve_ids = {a.id for a in actief}
+    weg = [nid for nid, _ in list(store.items()) if nid not in actieve_ids]
+    for nid in weg:
+        store.drop(nid)
+    todo = [a for a in actief if store.hash_of(a.id) != _hash(a.claim)]
+    log(f"kaartjes actief: {len(actief)} | al geïndexeerd: {len(actief) - len(todo)} | "
+        f"te (her)indexeren: {len(todo)} | uit index verwijderd: {len(weg)}")
+
+    pauze = (60.0 * batch / per_min) if per_min > 0 else 0.0    # proactief onder de limiet blijven
+    gedaan = mislukt = 0
+    for i in range(0, len(todo), batch):
+        groep = todo[i:i + batch]
+        vecs = None
+        for _poging in range(max_wachten):
+            try:
+                vecs = embed_many([a.claim for a in groep], strict=True)
+                break
+            except Exception as e:                             # noqa: BLE001 — quota vs echte fout
+                s = str(e)
+                if _is_quota(s):
+                    w = _retry_seconden(s) + 1.0
+                    log(f"  quota bereikt — wacht {w:.0f}s en probeer de batch opnieuw")
+                    sleep_fn(w)
+                    continue
+                log(f"  batch overgeslagen (geen quota-fout): {s[:120]}")
+                break
+        if vecs is None:
+            vecs = [None] * len(groep)
+        for a, v in zip(groep, vecs):
+            if v:
+                store.upsert(a.id, a.claim, v)
+                gedaan += 1
+            else:
+                mislukt += 1
+        store.save()                                           # per batch → veilig af te breken/hervatten
+        log(f"  batch {i // batch + 1}: +{sum(1 for v in vecs if v)} (totaal {gedaan}/{len(todo)})")
+        if pauze and i + batch < len(todo):
+            sleep_fn(pauze)
+    return {"actief": len(actief), "geindexeerd": gedaan, "mislukt": mislukt,
+            "verwijderd": len(weg), "index_omvang": len(store)}
