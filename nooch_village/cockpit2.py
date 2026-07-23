@@ -1102,6 +1102,7 @@ _STATIC_TYPES = {
     # dus de browser mag lang cachen: nieuwe CSS = nieuwe URL.
     "nooch.css": "text/css; charset=utf-8",
     "nooch-logo.svg": "image/svg+xml; charset=utf-8",
+    "nooch-logo.png": "image/png",
 }
 
 

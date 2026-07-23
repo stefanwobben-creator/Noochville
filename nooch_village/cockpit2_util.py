@@ -350,7 +350,8 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
     de bovenrand rustig blijft. `context` blijft in de signatuur voor compat (niet meer getoond)."""
     return (
         "<div class='c2-topbar'>"
-        "<a class='c2-logo' href='/' title='home'><img src='/static/nooch-logo.svg' alt='nooch'></a>"
+        "<a class='c2-logo' href='/' title='home'><img src='/static/nooch-logo.png' alt='nooch' "
+        "onerror=\"this.onerror=null;this.src='/static/nooch-logo.svg'\"></a>"
         "<form class='c2-search' action='/search' method='get' role='search' autocomplete='off'>"
         "<input id='gs-input' type='search' name='q' placeholder='Zoek roles, projects, insights, signals…' "
         "autocomplete='off' aria-label='globale zoekopdracht'>"
