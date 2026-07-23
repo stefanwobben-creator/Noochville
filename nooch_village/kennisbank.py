@@ -186,9 +186,20 @@ def bouw_spel_prompt(hunch: str, atoms_rows: list[dict]) -> str:
         "4. Vat 3 tot 5 bewijzen samen uit de kaarten. Te weinig? Zeg \"nog niet rijp\" en stop.\n"
         "5. Vraag wat mij van gedachten zou doen veranderen. Geen business-excuus: "
         "iets dat je in de wereld ZIET gebeuren.\n"
-        "6. Zodra we een claim, een reframe en een echte falsifier hebben, geef dit blok en stop:\n\n"
-        "=== INZICHT ===\nTITEL: <kort>\nCLAIM: <1-2 zinnen>\nREFRAME: <sterkste tegenovergestelde, 1 zin>\n"
-        "FALSIFIER: <wat zou dit onderuit halen>\n=== EINDE ===")
+        "6. Zodra we een claim, een reframe en een echte falsifier hebben, geef dit blok en stop.\n\n"
+        "HARDE EIS aan het inzicht: het moet OP ZICHZELF STAAN. Iemand die het onderwerp niet kent, "
+        "of ikzelf een jaar later, moet uit de CLAIM alléén begrijpen waar het over gaat. Benoem dus "
+        "WAT het ding of de speler IS in één adem: niet 'P-Life's additief', maar 'P-Life's organische "
+        "additief dat gewoon plastic door bacteriën laat afbreken'. Kort en scherp: één zelfstandig "
+        "inzicht-statement, geen verhaal en geen uitleg-alinea. Gewone taal; leg jargon in de zin zelf "
+        "uit. De TITEL is pakkend, maar de betekenis moet in de CLAIM staan, niet in de titel.\n\n"
+        "=== INZICHT ===\n"
+        "TITEL: <kort en pakkend>\n"
+        "CLAIM: <1-2 zinnen, zelfstandig leesbaar — benoem wat het onderwerp IS, niet alleen dat het "
+        "iets doet; iemand zonder voorkennis snapt het>\n"
+        "REFRAME: <sterkste tegenovergestelde, 1 zin>\n"
+        "FALSIFIER: <concreet: wat zou je in de wereld moeten zien gebeuren dat dit onderuithaalt>\n"
+        "=== EINDE ===")
 
 
 def parse_blok(text: str) -> dict:
