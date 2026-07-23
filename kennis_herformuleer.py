@@ -24,10 +24,11 @@ from nooch_village.llm import reason
 
 DATA = os.getenv("NOOCH_DATA_DIR", "data")
 
-# Iets betere kwaliteit dan flash-lite: herschrijven is laagfrequent en kwaliteit weegt zwaar.
+# flash-lite EERST: gemini-2.5-flash heeft op de gratis tier maar 20 verzoeken PER DAG (te weinig voor
+# 21 kaartjes), flash-lite heeft een veel ruimere dagquota. flash blijft als kwaliteits-fallback erachter.
 LADDER = os.getenv("LLM_KB_HERFORMULEER_LADDER",
-                   "gemini:gemini-2.5-flash,mistral:mistral-small-latest,"
-                   "anthropic:claude-haiku-4-5-20251001")
+                   "gemini:gemini-2.5-flash-lite,gemini:gemini-2.5-flash,"
+                   "mistral:mistral-small-latest,anthropic:claude-haiku-4-5-20251001")
 
 
 def bouw_prompt(k: dict) -> str:
