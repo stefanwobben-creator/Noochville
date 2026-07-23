@@ -1131,6 +1131,28 @@ class Inhabitant(threading.Thread):
         opdracht_section = self._opdracht_section(description)   # mens-opdracht: stuurt de planning
         # Kennis-eerst: het (al gecapte) 'REEDS BEKEND'-blok uit de kennislaag — vul aan, herhaal niet.
         kennis_section = (kennis.strip() + "\n\n") if kennis and kennis.strip() else ""
+        # Rol-roster (alleen als deze rol 'projectverzoek' heeft): een deel-item dat bij een andere rol
+        # hoort geef je door i.p.v. het dood te laten lopen op 'geen skill'. Fail-soft.
+        roster_section = ""
+        if "projectverzoek" in skills:
+            try:
+                from nooch_village import org as _org
+                recs = getattr(self.context, "records", None)
+                lijnen = []
+                for r in (recs.all() if recs is not None else []):
+                    if getattr(r, "archived", False) or r.id == self.id or _org.is_circle(r):
+                        continue
+                    d = getattr(r, "definition", None)
+                    accs = list(getattr(d, "accountabilities", []) or [])[:2] if d else []
+                    lijnen.append(f"- {r.id}: {', '.join(accs) or (getattr(d, 'purpose', '') or '')[:70]}")
+                if lijnen:
+                    roster_section = (
+                        "ANDERE ROLLEN (voor 'projectverzoek'): hoort een deel-item duidelijk bij één van "
+                        "deze rollen en kan geen van jouw skills het? Gebruik dan skill 'projectverzoek' met "
+                        'payload {"naar_rol":"<rol-id hieronder>","titel":"...","done_criterium":"..."} i.p.v. '
+                        "skill=null — zo loopt het project niet dood.\n" + "\n".join(lijnen[:18]) + "\n\n")
+            except Exception:
+                roster_section = ""
         prompt = (
             f"Je bent {self.name}, een autonome rol. Projectdoel:\n\"{goal}\"\n\n"
             f"{opdracht_section}"
@@ -1138,6 +1160,7 @@ class Inhabitant(threading.Thread):
             f"Jouw accountabilities: {list(self.dna.accountabilities) or '(geen)'}\n\n"
             f"{memory_section}"
             f"{kennis_section}"
+            f"{roster_section}"
             "Breek het doel op in 2 tot 5 concrete deel-items. Voor ELK item: als één van jouw skills het "
             "kan uitvoeren, geef de exacte skill-naam ÉN een 'payload'-object dat EXACT voldoet aan de "
             "'input'-vorm van die skill (bv. een term-skill wil {\"term\": \"...\"}, keywords_everywhere wil "

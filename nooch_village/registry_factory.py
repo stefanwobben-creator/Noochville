@@ -52,6 +52,7 @@ from nooch_village.skills_impl.weten_we_dit_al import WetenWeDitAlSkill
 from nooch_village.skills_impl.ruis_check import RuisCheckSkill
 from nooch_village.skills_impl.escaleer import EscaleerSkill
 from nooch_village.skills_impl.tegenspraak import TegenspraakSkill
+from nooch_village.skills_impl.projectverzoek import ProjectverzoekSkill
 from nooch_village.skills_impl.co2_village import Co2VillageSource
 from nooch_village.skills_impl.atomic_insights import AtomicInsightsSkill
 
@@ -91,6 +92,7 @@ def build_skill_registry() -> SkillRegistry:
         RuisCheckSkill(),
         EscaleerSkill(),
         TegenspraakSkill(),
+        ProjectverzoekSkill(),
         AtomicInsightsSkill(),
         Co2VillageSource(),
     ):
