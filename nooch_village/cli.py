@@ -783,16 +783,41 @@ def main() -> None:
         from nooch_village.config import load_context
         from nooch_village.projects import ProjectLedger
         from nooch_village.radar_store import RadarStore
+        from nooch_village.project_doc_store import ProjectDocStore
         from nooch_village.project_signal import backfill_done_projects
         from nooch_village.village import BASE_DIR
         ctx = load_context(BASE_DIR)
         ledger = ProjectLedger(os.path.join(ctx.data_dir, "projects.json"))
         radar = RadarStore(os.path.join(ctx.data_dir, "radar.json"))
+        docs = ProjectDocStore(ctx.data_dir)
         dry = "--dry-run" in sys.argv
-        res = backfill_done_projects(ledger, radar, dry_run=dry)
+        res = backfill_done_projects(ledger, radar, dry_run=dry, docs=docs)
         label = "zou er signalen van maken (dry-run)" if dry else "signalen gemaakt"
         print(f"📡 {res['done']} done-projecten: {res['created']} {label}, "
               f"{res['skipped']} al aanwezig/overgeslagen. Herdraaien is veilig (link-dedupe).")
+
+    elif mode == "projects_resignal":
+        # Terugwerkende kracht (non-LLM): herschrijf de content van BESTAANDE project-signalen zodat
+        # ze de conclusie uit het einddocument tonen i.p.v. de procedurele "goedgekeurd na review".
+        # Behoudend: alleen lege/procedurele content wordt vervangen; mens-edits blijven staan.
+        # --dry-run telt alleen. python -m nooch_village.village projects_resignal [--dry-run]
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.projects import ProjectLedger
+        from nooch_village.radar_store import RadarStore
+        from nooch_village.project_doc_store import ProjectDocStore
+        from nooch_village.project_signal import backfill_signal_content
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        ledger = ProjectLedger(os.path.join(ctx.data_dir, "projects.json"))
+        radar = RadarStore(os.path.join(ctx.data_dir, "radar.json"))
+        docs = ProjectDocStore(ctx.data_dir)
+        dry = "--dry-run" in sys.argv
+        res = backfill_signal_content(ledger, radar, docs, dry_run=dry)
+        label = "zou de content herschrijven (dry-run)" if dry else "content herschreven"
+        print(f"✏️  {res['project_signals']} project-signalen: {res['updated']} {label} "
+              f"(conclusie uit einddocument), {res['skipped']} met eigen/inhoudelijke tekst overgeslagen. "
+              f"Herdraaien is veilig.")
 
     elif mode == "projects_to_staging":
         # Verdieping van projects_to_signals (rapport-lus): het EINDDOCUMENT van elk done-project
@@ -1277,6 +1302,6 @@ def main() -> None:
               "ground | harry_run | roster | keys | competitor | community_listening | formalize | answer_questions | "
               "ingest_governance | review_roles | teleology_review | teleology_to_roloverleg | shopify | work_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
-              "projects_to_signals | projects_to_staging | rapport | verslag | healthcheck | sluitronde",
+              "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde",
               file=sys.stderr)
         sys.exit(1)

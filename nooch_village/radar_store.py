@@ -162,6 +162,20 @@ class RadarStore(JsonStore):
         self._save()
         return True
 
+    def update_content(self, item_id: str, content: str, rationale: str | None = None) -> bool:
+        """Herschrijf de inhoud van één signaal in plaats (zelfde 200/300-caps als `add`). Voor
+        onderhoudslussen zoals de project-signaal-backfill die de procedurele afrondtekst vervangt
+        door de conclusie uit het einddocument. False als het item onbekend is of de tekst leeg."""
+        content = (content or "").strip()
+        it = self._data["items"].get(item_id)
+        if it is None or not content:
+            return False
+        it["content"] = content[:200]
+        if rationale is not None:
+            it["rationale"] = (rationale or "")[:300]
+        self._save()
+        return True
+
     def merge_signals(self, target_id: str, source_id: str, tekst: str) -> bool:
         """Twee goedgekeurde signalen worden er één (drag&drop op /signals, founder 19 jul):
         het doel-signaal krijgt de gekozen hoofdtekst en onthoudt de herkomst van het

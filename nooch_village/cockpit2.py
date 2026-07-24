@@ -1303,7 +1303,7 @@ def _act_proj_done(c):
         # poll op — daar draait project_signal.report_to_staging met de LLM-ladder.
         try:
             from nooch_village.project_signal import signal_from_project
-            signal_from_project(st.radar, pj.get(pid))
+            signal_from_project(st.radar, pj.get(pid), _doc)   # einddocument levert de conclusie
         except Exception:
             logging.getLogger("cockpit2.signals").exception("project→signaal mislukt (pid=%s)", pid)
         return nxt, msg

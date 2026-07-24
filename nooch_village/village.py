@@ -489,8 +489,10 @@ class Village:
                 from nooch_village.radar_store import RadarStore
                 from nooch_village.project_signal import signal_from_project
                 radar = RadarStore(os.path.join(dd, "radar.json"))
+                _docs = getattr(self.context, "project_docs", None)
                 for pid in nieuw_done:
-                    signal_from_project(radar, done[pid])
+                    _doc = _docs.read(pid) if _docs is not None else ""
+                    signal_from_project(radar, done[pid], _doc)   # einddocument levert de conclusie
             except Exception:
                 logging.getLogger("village.signals").exception("project→signaal mislukt")
             # Verdieping (rapport-lus): het EINDDOCUMENT van elke nieuwe done → bestaande
