@@ -8,6 +8,7 @@ verwacht dat de AI meedenkt, precies zoals spelvraag. Fail-soft overal.
 from __future__ import annotations
 
 from nooch_village import org
+from nooch_village.cockpit2_util import _DS_LINK
 from nooch_village.web_base import _e, _page
 
 
@@ -43,7 +44,11 @@ def _trekker_options(st) -> str:
 def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = False) -> str:
     """De geleide project-wizard. `role` voorselecteert een rol (dan start de flow bij stap 1).
     `fragment=True` levert alleen de wizard-body (voor de modal-overlay); het inline <script> is
-    gemarkeerd met data-modal-run zodat de overlay het opnieuw uitvoert na innerHTML-injectie."""
+    gemarkeerd met data-modal-run zodat de overlay het opnieuw uitvoert na innerHTML-injectie.
+
+    De wz-CSS staat in static/nooch.css, dus beide paden dragen `_DS_LINK` — als volle pagina
+    (`_page` linkt de component-CSS niet zelf) én als fragment (de overlay kan in een host
+    hangen die het stylesheet nog niet had). Dezelfde URL = één download, geen dubbele kost."""
     role_opts = _role_options(st)
     trek_opts = _trekker_options(st)
     pre = role if role and st.records.get(role) is not None and not org.is_circle(st.records.get(role)) else ""
@@ -52,55 +57,11 @@ def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = 
                     .replace("__TREK__", trek_opts) \
                     .replace("__ROLE__", _e(pre))
     if fragment:
-        return body
-    return _page("Nieuw project", body)
+        return _DS_LINK + body
+    return _page("Nieuw project", _DS_LINK + body)
 
 
 _WIZ_HTML = r"""
-<style>
-.wz{max-width:560px;margin:0 auto;padding:1.4rem 1rem 3rem}
-.wz-top{display:flex;align-items:center;gap:.7rem;margin-bottom:1.3rem}
-.wz-x{border:none;background:none;font-size:1.3rem;color:var(--muted);cursor:pointer;text-decoration:none}
-.wz-track{flex:1;height:.8rem;background:var(--sand);border-radius:999px;overflow:hidden}
-.wz-fill{height:100%;background:linear-gradient(90deg,var(--green),#57c07d);border-radius:999px;width:0;transition:width .35s}
-.wz-who{font-size:.78rem;color:var(--subtle);white-space:nowrap}
-.wz-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 2px 10px rgba(27,27,27,.05);padding:1.4rem 1.3rem;min-height:330px;display:flex;flex-direction:column}
-.wz-k{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--green-dark);margin-bottom:.4rem}
-.wz-card h2{font-family:var(--font-display);font-weight:700;font-size:1.3rem;margin:0 0 .3rem;line-height:1.25}
-.wz-hint{color:var(--subtle);font-size:.9rem;margin:0 0 1rem}
-.wz textarea,.wz input,.wz select{width:100%;font:inherit;padding:.7rem .85rem;border:1.5px solid var(--border);border-radius:10px;background:var(--cream);color:var(--ink)}
-.wz textarea:focus,.wz input:focus,.wz select:focus{outline:none;border-color:var(--green)}
-.wz-grow{flex:1}
-.wz-btn{font:inherit;font-weight:700;font-size:1rem;padding:.75rem 1.1rem;border-radius:999px;border:none;cursor:pointer;background:var(--green);color:#fff;box-shadow:0 3px 0 var(--green-dark)}
-.wz-btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--green-dark)}
-.wz-btn:disabled{background:var(--sand);color:var(--muted);box-shadow:0 3px 0 var(--border);cursor:not-allowed}
-.wz-btn.ghost{background:var(--surface);color:var(--gray);border:1.5px solid var(--border);box-shadow:none;font-weight:600}
-.wz-foot{display:flex;gap:.6rem;align-items:center;margin-top:1.1rem}
-.wz-foot .wz-btn{flex:1}
-.wz-skip{background:none;border:none;color:var(--subtle);font:inherit;font-weight:600;cursor:pointer;text-decoration:underline}
-.wz-was{background:var(--error-tint);border-radius:10px;padding:.6rem .8rem;font-size:.9rem;color:#8f5b52;margin-bottom:.5rem}
-.wz-now{background:var(--green-tint);border-radius:10px;padding:.75rem .85rem;border:1.5px solid var(--green)}
-.wz-now .lb{font-size:.68rem;font-weight:700;text-transform:uppercase;color:var(--green-dark);letter-spacing:.04em}
-.wz-now .tx{font-family:var(--font-display);font-weight:500;font-size:1.02rem;line-height:1.35;margin-top:.15rem}
-.wz-think{color:var(--subtle);font-style:italic;font-size:.9rem;padding:.5rem 0}
-.wz-item{display:flex;align-items:flex-start;gap:.5rem;padding:.55rem .1rem;border-top:1px solid var(--cream-2)}
-.wz-item:first-child{border-top:none}
-.wz-itxt{flex:1;font-size:.92rem}
-.wz-badge{font-size:.64rem;font-weight:700;padding:.1rem .45rem;border-radius:999px;white-space:nowrap;margin-top:.1rem}
-.wz-badge.ok{background:var(--green-tint);color:var(--green-dark)}
-.wz-badge.no{background:var(--error-tint);color:#b3402f}
-.wz-rm{border:none;background:none;color:var(--muted);cursor:pointer;font-size:1rem;margin-top:.1rem}
-.wz-add{display:flex;gap:.4rem;margin-top:.6rem}
-.wz-add input{flex:1}
-.wz-add button{border:1.5px solid var(--border);background:var(--surface);border-radius:10px;padding:0 .9rem;font-weight:700;color:var(--green-dark);cursor:pointer}
-.wz-chips{display:flex;flex-wrap:wrap;gap:.4rem;margin:.2rem 0 .9rem}
-.wz-chip{border:1.5px solid var(--border);background:var(--surface);border-radius:999px;padding:.35rem .8rem;font-size:.85rem;font-weight:600;color:var(--gray);cursor:pointer}
-.wz-chip.on{border-color:var(--green);background:var(--green-tint);color:var(--green-dark)}
-.wz-clab{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);margin:.3rem 0 .1rem}
-.wz-srow{display:flex;gap:.6rem;padding:.5rem 0;border-top:1px solid var(--cream-2);font-size:.9rem}
-.wz-srow:first-child{border-top:none}.wz-sk{width:95px;flex:none;color:var(--subtle);font-weight:600}.wz-sv{flex:1}
-.wz-cheer{text-align:center;padding:1rem 0}.wz-cheer .big{font-size:2.6rem}
-</style>
 <div class="wz">
   <div class="wz-top">
     <a class="wz-x" href="/" title="sluiten" onclick="var x=document.querySelector('.ovl-x');if(x){x.click();return false;}">✕</a>
@@ -208,7 +169,7 @@ function klaar(){
   <div class="wz-srow"><span class="wz-sk">Checklist</span><span class="wz-sv">${S.checklist.length} stappen · ${done} met skill, ${mens} mens-taak</span></div>
   <div class="wz-srow"><span class="wz-sk">Inschatting</span><span class="wz-sv">${esc(meta)}</span></div>
   <div class="wz-grow"></div>
-  <div class="wz-foot"><a class="wz-btn ghost" style="text-align:center;text-decoration:none" href="${esc(S.url||'/')}">Bekijk op het bord</a>
+  <div class="wz-foot"><a class="wz-btn ghost" href="${esc(S.url||'/')}">Bekijk op het bord</a>
   <button class="wz-btn" onclick="restart()">Nog een project</button></div>`;}
 // Inline onclick-handlers in de gegenereerde HTML draaien in global scope; die functies moeten
 // dus op window staan. De rest blijft in deze IIFE (zo botst een tweede modal-open niet op const).
