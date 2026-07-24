@@ -139,14 +139,14 @@ def test_verbruik_telt_onbekende_prijzen_apart(tmp_path):
     import datetime
     dag = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
     (tmp_path / "llm_usage.jsonl").write_text(
-        json.dumps({"day": dag, "call_site": "a", "tier": "gemini:gemini-2.5-flash",
+        json.dumps({"day": dag, "call_site": "a", "tier": "onbekend:model",
                     "in_tokens": 100, "out_tokens": 100, "tokens": 200}) + "\n"
         + json.dumps({"day": "1999-01-01", "call_site": "a", "tier": "x",
                       "in_tokens": 1, "out_tokens": 1, "tokens": 2}) + "\n",
         encoding="utf-8")
     uit = llm_keuze.verbruik(str(tmp_path))
     assert uit["per_site"]["a"]["calls"] == 1              # de oude dag valt buiten het venster
-    assert uit["onbekende_calls"] == 1                     # gemini heeft (nog) geen prijs
+    assert uit["onbekende_calls"] == 1                     # deze trede heeft geen prijs
     assert uit["totaal_eur"] == 0.0
 
 

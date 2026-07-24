@@ -1062,6 +1062,7 @@ body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 .kn-sugg{background:var(--yellow-light);border:1px solid var(--yellow)}
 .kn-sugghead{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.35rem}
 .kn-suggflag{background:var(--yellow);color:#5c4a00}
+.kn-strat{background:var(--green-tint);color:var(--green-dark);font-size:11px}
 .kn-suggbtns{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-top:.5rem}
 /* Spelvraag (founder, 19 jul): de claim is informatie, de vraag is verleiding — een kleine
    LLM herformuleert het cluster tot één vraag (spelvraag.py, gecachet, fail-soft naar

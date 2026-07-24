@@ -419,9 +419,13 @@ def _suggestie_kaart(atoms: dict, inzichten: list, sug: int, csrf: str,
            f"{_e(vraag)}</div>"
            f"<div class='muted kn-spelstart'>startpunt: {_e(kand['hunch'][:140])}</div>"
            ) if vraag else f"<div class='kn-claim'>{_e(kand['hunch'])}</div>"
+    # Strategie-labels: waarom deze voorzet vooraan staat (welke Nooch-kernwaarde hij raakt).
+    themas = kand.get("strategie_themas") or []
+    strat = "".join(f"<span class='chip kn-strat' title='raakt de Nooch-strategie'>🎯 {_e(t)}</span>"
+                    for t in themas[:2])
     return (
         f"<div class='card kn-sugg'>"
-        f"<div class='kn-sugghead'><span class='chip kn-suggflag'>not verified</span>"
+        f"<div class='kn-sugghead'><span class='chip kn-suggflag'>not verified</span>{strat}"
         f"<span class='muted'>voorzet uit je signals — verifieer om er een inzicht van "
         f"te maken</span></div>"
         f"{kop}"

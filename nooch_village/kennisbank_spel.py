@@ -56,24 +56,33 @@ def clusters(atoms: dict[str, dict], inzichten: list[dict],
     GET van /kennisbank en hoort de rate-limiter niet te belasten). Groepeer ongebonden
     atomen per onderwerp-hub; het thema = de hub + de meest onderscheidende woorden.
     Binnen een hub zit tegenspraak vanzelf in de set — de mens zet de richtingen."""
+    from nooch_village.mission import strategie_relevantie
     vrij = ongebonden(atoms, inzichten)
     per_hub: dict[str, list[str]] = {}
     for aid, a in vrij.items():
         hub = subject_van(a)
         if hub:
             per_hub.setdefault(hub, []).append(aid)
-    uit: list[dict] = []
-    for hub, ids in sorted(per_hub.items(), key=lambda kv: -len(kv[1])):
+    kandidaten: list[dict] = []
+    for hub, ids in per_hub.items():
         if len(ids) < min_size:
             continue
         woorden = Counter(w for aid in ids for w in _tokens(vrij[aid].get("claim", ""))
                           if w != hub)
         kern = [w for w, _ in woorden.most_common(3)]
-        uit.append({"hub": hub, "theme": f"{hub}: {' · '.join(kern)}" if kern else hub,
-                    "atom_ids": sorted(ids)})
-        if len(uit) >= max_clusters:
-            break
-    return uit
+        # Strategische relevantie van het hele cluster (hub + alle claims), deterministisch. Zo komen
+        # missie-kernclusters (plasticvrij, leervrij, composteerbaar, transparantie…) vooraan i.p.v.
+        # simpelweg het grootste stapeltje kaartjes (founder 24 jul).
+        blob = hub + " " + " ".join(vrij[aid].get("claim", "") for aid in ids)
+        s_score, s_themas = strategie_relevantie(blob)
+        kandidaten.append({"hub": hub,
+                           "theme": f"{hub}: {' · '.join(kern)}" if kern else hub,
+                           "atom_ids": sorted(ids),
+                           "strategie_score": s_score, "strategie_themas": s_themas})
+    # Zacht herrangschikken: eerst strategische relevantie, dan clustergrootte, dan hub (stabiel).
+    # Niets verdwijnt behalve door de bestaande max_clusters-cap; de suggestiekaart blijft blader-baar.
+    kandidaten.sort(key=lambda c: (-c["strategie_score"], -len(c["atom_ids"]), c["hub"]))
+    return kandidaten[:max_clusters]
 
 
 def gather(hunch: str, atoms: dict[str, dict], limit: int = 10,
@@ -143,7 +152,8 @@ def spel_suggesties(atoms: dict[str, dict], inzichten: list[dict],
             -sum(len(toks[aid] & toks[bid]) for bid in cl["atom_ids"] if bid != aid), aid))
         hunch = ((atoms.get(beste) or {}).get("claim") or cl["theme"]).strip()
         uit.append({"hunch": hunch, "atom_ids": cl["atom_ids"],
-                    "theme": cl["theme"], "hub": cl["hub"]})
+                    "theme": cl["theme"], "hub": cl["hub"],
+                    "strategie_themas": cl.get("strategie_themas", [])})
     return uit
 
 
