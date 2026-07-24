@@ -92,12 +92,36 @@ def _signaal_guards(st, rid: str) -> tuple[dict | None, str]:
 _BRON_ATOM_CAP = 12   # bovengrens per gelezen bron: geen ontploffing in mini-kaartjes
 
 
-def _atomen_uit_bron(it: dict) -> list[dict] | None:
+def _atomen_uit_project(st, pid: str) -> list[dict] | None:
+    """Projectsignaal → lees het EINDDOCUMENT (ProjectDocStore), knip de geseede opdracht eraf en
+    atomiseer het antwoord tot voorstellen (zelfde atomiser als de bron-lus). Fail-closed: geen
+    document, te kort (alleen de seed) of geen LLM → None, dan valt de aanroeper terug op de
+    signaaltekst. De atomen dragen géén radar_rids; dat zet de aanroeper erbij."""
+    docs = getattr(st, "project_docs", None)
+    if docs is None or not pid:
+        return None
+    try:
+        from nooch_village.project_signal import _na_seed, report_source_hint, REPORT_MIN_CHARS
+        from nooch_village.kennisbank_intake import atomiseer
+        body = _na_seed(docs.read(pid) or "").strip()   # alleen het antwoord onder de seed
+        if len(body) < REPORT_MIN_CHARS:
+            return None
+        p = st.projects.get(pid) if getattr(st, "projects", None) else None
+        got = atomiseer(body, report_source_hint(p or {"id": pid}))
+        return (got[:_BRON_ATOM_CAP] if got else None)
+    except Exception:
+        return None
+
+
+def _atomen_uit_bron(it: dict, st=None) -> list[dict] | None:
     """Lees de gelinkte bron van een signaal en atomiseer hem tot voorstellen (dezelfde
-    pijplijn als "Verwerk de bron": kennisbank_sources → atomiser, met cap). Fail-closed:
-    geen link, fetch-fout of geen LLM → None, en de aanroeper valt terug op de signaaltekst.
-    De atomen dragen géén radar_rids; dat zet de aanroeper erbij."""
+    pijplijn als "Verwerk de bron": kennisbank_sources → atomiser, met cap). Een PROJECTsignaal
+    (kind 'project', interne /project-link) leest het einddocument via `_atomen_uit_project`.
+    Fail-closed: geen link, fetch-fout of geen LLM → None, en de aanroeper valt terug op de
+    signaaltekst. De atomen dragen géén radar_rids; dat zet de aanroeper erbij."""
     link = (it.get("link") or "").strip()
+    if it.get("kind") == "project" and st is not None and "id=" in link:
+        return _atomen_uit_project(st, link.split("id=")[-1].strip())
     if not link.lower().startswith("http"):
         return None
     try:
@@ -146,7 +170,7 @@ def stage_signal(st, rid: str) -> tuple[str | None, str]:
     extra_bronnen = [{"source": m.get("source") or "", "link": m.get("link") or ""}
                      for m in (it.get("merged_sources") or [])
                      if (m.get("source") or m.get("link"))]
-    gelezen = _atomen_uit_bron(it)
+    gelezen = _atomen_uit_bron(it, st)
     if gelezen:
         # Founder 19 jul: de ÉCHTE artikellink wint van een door de LLM overgetypte
         # DOI/citatie — die kan gehallucineerd zijn en doodlopen. De atomiser-reference

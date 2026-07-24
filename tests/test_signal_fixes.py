@@ -74,6 +74,44 @@ def test_link_is_dedup_sleutel_en_blijft_stabiel():
     assert project_link("abc") == "/project?id=abc"
 
 
+def test_oracle_leest_einddocument_van_projectsignaal(monkeypatch):
+    # De → Oracle-knop op een projectsignaal atomiseert het EINDDOCUMENT (seed eraf), i.p.v. terug
+    # te vallen op de signaaltekst. Zonder echt antwoord (alleen de seed) → None (vangnet blijft).
+    import nooch_village.kennisbank_intake as ki
+    import nooch_village.radar_promote as rp
+    from nooch_village.projects import seed_document
+
+    gezien = {}
+
+    def fake_atomiseer(text, hint, tabular=False, reason_fn=None):
+        gezien["text"] = text
+        return [{"content": "Xero Shoes leidt op community", "source": hint}]
+
+    monkeypatch.setattr(ki, "atomiseer", fake_atomiseer)
+
+    class Docs:
+        def __init__(self, m): self.m = m
+        def read(self, pid): return self.m.get(pid, "")
+
+    class Projects:
+        def get(self, pid): return {"id": pid, "scope": "Barefoot-scan"}
+
+    class St:
+        pass
+
+    seed = seed_document("Breng de barefoot-concurrenten in kaart")
+    doc = seed + "\n\n## Conclusie\n" + "Xero Shoes leidt de barefoot-markt op community-opbouw. " * 4
+    st = St(); st.project_docs = Docs({"p1": doc}); st.projects = Projects()
+
+    it = {"kind": "project", "link": "/project?id=p1", "content": "Afgerond: Barefoot-scan"}
+    atomen = rp._atomen_uit_bron(it, st)
+    assert atomen and atomen[0]["content"].startswith("Xero Shoes")
+    assert "schrijft hieronder naar het antwoord toe" not in gezien["text"]   # seed weggeknipt
+
+    st2 = St(); st2.project_docs = Docs({"p2": seed}); st2.projects = Projects()
+    assert rp._atomen_uit_bron({"kind": "project", "link": "/project?id=p2", "content": "x"}, st2) is None
+
+
 def test_afgewezen_signaal_komt_niet_terug(tmp_path):
     radar = RadarStore(f"{tmp_path}/radar.json")
     rid = radar.add(role="scout", feed="Industry Watch", kind="nieuws",
