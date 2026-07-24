@@ -696,27 +696,23 @@ def _bibliotheek_rechts(st, atoms: dict, q: str, hub: str, active_ins: dict | No
                          f"tag-voorstel(len) van de Library — nakijken</a></p>")
     except Exception:
         pass
-    tags = (f"<details class='kn-tags'{' open' if hub else ''}>"
-            f"<summary>alle tags (A–Z)</summary>"
-            f"<div class='c2-sec kn-taglijst'>{taglijst}"
-            f"<a class='chip-opt' href='/kennisbank/tags' title='wekelijkse schoonmaaklus: "
-            f"samenvoegen, opschonen, abstraheren'>🏷 onderhoud</a></div></details>{onderhoud}")
     zoekbox = (f"<input id='kn-search' class='kn-searchbox' type='search' value='{_e(q)}' "
                f"placeholder='zoek in statements, bronnen en tags — gewoon typen…' "
                f"autocomplete='off' "
                f"data-active='{_e(active_iid)}' data-hub='{_e(hub)}'>")
     results = _bieb_results(st, atoms, q, hub, active_ins, csrf)
     nxt = f"/kennisbank?id={active_iid}" if active_iid else (f"/kennisbank?hub={hub}" if hub else "/kennisbank")
-    # Tags-pill naast de Signals-kop (founder dd 2026-07-18): alle voorkomende tags als
-    # klikbare chips; klik zet de tag in het live-zoekveld (JS) — filteren loopt via het
-    # bestaande zoekpad, geen nieuwe backend.
-    alle_tags = sorted({t for a in atoms.values() for t in (a.get("tags") or []) if t})
+    # Tags-pill naast de Signals-kop: dit is nu de ENIGE tag-ingang (founder 24 jul). De pill
+    # opent (als popover, dus zonder de signals omlaag te duwen) de volledige A–Z-lijst mét
+    # aantallen + onderhoud; de losse 'alle tags (A–Z)'-uitklap onder de zoekbalk is weg zodat
+    # de signals hoger in beeld komen. Klik op een chip zet de tag in het live-zoekveld (JS).
     tagpill = ""
-    if alle_tags:
-        tchips = "".join(f"<button type='button' class='kn-tagchip' data-tag='{_e(t)}'>"
-                         f"{_e(t)}</button>" for t in alle_tags)
-        tagpill = (f"<details class='kn-tagpill'><summary title='filter op een tag'>🏷 tags"
-                   f"</summary><div class='kn-tagchips'>{tchips}</div></details>")
+    if tel:
+        tagpill = (f"<details class='kn-tagpill'{' open' if hub else ''}>"
+                   f"<summary title='filter op een tag'>🏷 tags</summary>"
+                   f"<div class='kn-tagchips'>{taglijst}"
+                   f"<a class='chip-opt' href='/kennisbank/tags' title='wekelijkse schoonmaaklus: "
+                   f"samenvoegen, opschonen, abstraheren'>🏷 onderhoud</a>{onderhoud}</div></details>")
     # Taak 2: met een open inzicht leest de rechterkolom als "hier koppel je bewijs" — een
     # expliciete kop + uitleg die de brug tussen 'inzicht links' en 'bewijs rechts' benoemt.
     if active_ins is not None:
@@ -729,7 +725,7 @@ def _bibliotheek_rechts(st, atoms: dict, q: str, hub: str, active_ins: dict | No
         # Founder dd 2026-07-18: rustige kop "Signals" (kn-koprustig — geen vet/uppercase),
         # zonder uitlegtekst; de tags-pill staat ernaast.
         kop = f"<div class='kn-koprij'><h2 class='kn-koprustig'>Signals</h2>{tagpill}</div>"
-    return (f"{kop}{zoekbox}{tags}"
+    return (f"{kop}{zoekbox}"
             f"<div id='kn-biebresults'>{results}</div>"
             f"{_merge_modal(csrf, nxt)}"
             f"{_gearchiveerd_uitklap(st, hub, csrf)}"
