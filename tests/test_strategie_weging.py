@@ -28,3 +28,22 @@ def test_klein_strategisch_cluster_verslaat_groot_ruis_cluster():
     assert cls[1]["strategie_score"] == 0
     # De suggesties dragen de thema-labels mee voor de UI-badge.
     assert ks.spel_suggesties(atoms, [])[0]["strategie_themas"]
+
+
+def test_spelprompt_poorten_en_caveat(tmp_path):
+    # De verbeterde spelprompt bevat de kern-poorten, en het CAVEAT-veld stroomt door tot het inzicht.
+    from nooch_village.kennisbank import bouw_spel_prompt, parse_blok, KennisbankStore
+    pr = bouw_spel_prompt("mycelium is een belofte", [{"claim": "x", "stance": "counter"}])
+    for nodig in ("NU:", "wissel nooit stiekem", "geen toetsbaar inzicht", "waarneembaar", "CAVEAT:"):
+        assert nodig in pr
+    blok = ("=== INZICHT ===\nTITEL: T\nCLAIM: C\nREFRAME: R\nFALSIFIER: F\n"
+            "CAVEAT: leunt op één bron\n=== EINDE ===")
+    assert parse_blok(blok)["caveat"] == "leunt op één bron"
+    kb = KennisbankStore(f"{tmp_path}/kb.json")
+    p = parse_blok(blok)
+    iid = kb.add(p["claim"], reframe=p["reframe"], falsifier=p["falsifier"], caveat=p["caveat"], by="t")
+    assert kb.get(iid)["caveat"] == "leunt op één bron"
+    # reformulate bewaart de oude caveat in history en zet de nieuwe.
+    kb.reformulate(iid, title="C2", caveat="nieuwe kanttekening", by="t")
+    assert kb.get(iid)["caveat"] == "nieuwe kanttekening"
+    assert kb.get(iid)["history"][-1]["caveat"] == "leunt op één bron"

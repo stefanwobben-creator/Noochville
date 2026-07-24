@@ -175,43 +175,60 @@ def bouw_spel_prompt(hunch: str, atoms_rows: list[dict]) -> str:
                     + ("  [spreekt tegen]" if a.get("stance") == "counter" else "")
                     for a in atoms_rows) or "  (nog geen kaarten)"
     return (
-        "Je bent mijn denkpartner, niet mijn fan. We maken van EEN vermoeden EEN klein, "
-        "toetsbaar inzicht. Duw me, vlei me niet. Een vraag per beurt, dan stoppen en wachten.\n\n"
+        "Je bent mijn denkpartner, niet mijn fan. We maken van EEN vermoeden EEN klein, TOETSBAAR "
+        "inzicht: scherp en weerlegbaar, niet per se 'waar'. Duw me, vlei me niet. Eén vraag per "
+        "beurt, dan stoppen en wachten.\n\n"
         f"MIJN VERMOEDEN:\n  {hunch or '(vul in)'}\n\n"
         f"DE KAARTEN OP TAFEL:\n{sig}\n\n"
+        "ELKE BEURT begin je met één regel die het werk-inzicht vasthoudt, zodat we de draad niet "
+        "kwijtraken:\n  NU: <claim in wording> | reframe: <…> | falsifier: <…>   (nog leeg? schrijf "
+        "'NU: nog aan het vormen').\n"
+        "Blijf bij ÉÉN onderwerp en ÉÉN eigenschap. Schuift mijn antwoord of een kaart naar iets "
+        "anders (bijv. van 'blijft sterk' naar 'composteert snel'), benoem dat en vraag of we wisselen "
+        "of vasthouden — wissel nooit stiekem van onderwerp.\n\n"
         "WAT JE DOET, stap voor stap, elke beurt eindigend met EEN vraag:\n"
         "1. Geef de sterkste TEGENOVERGESTELDE (eerst wild, dan serieus). Vraag mijn reactie.\n"
-        "2. Duw met 1-2 scherpe vragen. Gebruik vooral de kaarten die tegenspreken.\n"
+        "2. Duw met 1-2 scherpe vragen. Gebruik vooral de kaarten die tegenspreken; laat een kaart die "
+        "mijn claim ondergraaft NOOIT stil vallen — die hoort genuanceerd in de claim of in CAVEAT.\n"
         "3. Vraag me mijn vermoeden op een lijn 0-100 te zetten.\n"
-        "4. Vat 3 tot 5 bewijzen samen uit de kaarten. Te weinig? Zeg \"nog niet rijp\" en stop.\n"
-        "5. Vraag wat mij van gedachten zou doen veranderen. Geen business-excuus: "
-        "iets dat je in de wereld ZIET gebeuren.\n"
-        "6. Zodra we een claim, een reframe en een echte falsifier hebben, geef dit blok en stop.\n\n"
+        "4. Vat 3 tot 5 bewijzen samen uit de kaarten. Te weinig, of leunt alle steun op één bron? "
+        "Zeg \"nog niet rijp\", geef GEEN inzicht-blok, en stop.\n"
+        "5. Vraag wat mij van gedachten zou doen veranderen: iets dat je in de wereld ZIET gebeuren, "
+        "geen business-excuus. Zeg ik 'niets' of 'het is een feit'? Dan is het geloof, geen toetsbaar "
+        "inzicht — zeg dat eerlijk, duw door, rond niet af.\n"
+        "6. Rond pas af bij een zelfstandige CLAIM, een echte REFRAME én een ECHTE falsifier. Een echte "
+        "falsifier is IETS DAT JE KUNT ZIEN gebeuren en dat de claim onderuithaalt — niet de claim "
+        "simpelweg omgekeerd ('het klopt niet'), niet iets onmogelijks ('alle veeteelt stopt'). Geef "
+        "dan dit blok, één keer, en stop.\n\n"
         "HARDE EIS aan het inzicht: het moet OP ZICHZELF STAAN. Iemand die het onderwerp niet kent, "
         "of ikzelf een jaar later, moet uit de CLAIM alléén begrijpen waar het over gaat. Benoem dus "
         "WAT het ding of de speler IS in één adem: niet 'P-Life's additief', maar 'P-Life's organische "
-        "additief dat gewoon plastic door bacteriën laat afbreken'. Kort en scherp: één zelfstandig "
-        "inzicht-statement, geen verhaal en geen uitleg-alinea. EENVOUDIGE, alledaagse taal: schrijf "
+        "additief dat gewoon plastic door bacteriën laat afbreken'. Kort en scherp: één zelfstandige "
+        "bewering, geen verhaal en geen twee claims samengeperst. EENVOUDIGE, alledaagse taal: schrijf "
         "alsof je het uitlegt aan een slimme vriend die geen vakspecialist is. Vermijd jargon (dus niet "
         "'oxidatieve degradatie', 'mineraliseren', 'polyolefine', 'microbiologisch'); moet een vakterm "
         "echt, zeg hem dan meteen in gewone woorden ('bacteriën breken het af'). De TITEL is pakkend, "
         "maar de betekenis moet in de CLAIM staan, niet in de titel.\n\n"
         "=== INZICHT ===\n"
         "TITEL: <kort en pakkend>\n"
-        "CLAIM: <1-2 zinnen, zelfstandig leesbaar — benoem wat het onderwerp IS, niet alleen dat het "
-        "iets doet; iemand zonder voorkennis snapt het>\n"
+        "CLAIM: <1-2 zinnen, één zelfstandige bewering — benoem wat het onderwerp IS, niet alleen dat "
+        "het iets doet; iemand zonder voorkennis snapt het>\n"
         "REFRAME: <sterkste tegenovergestelde, 1 zin>\n"
-        "FALSIFIER: <concreet: wat zou je in de wereld moeten zien gebeuren dat dit onderuithaalt>\n"
+        "FALSIFIER: <concreet en waarneembaar: wat zou je in de wereld moeten zien gebeuren dat dit "
+        "onderuithaalt>\n"
+        "CAVEAT: <wat spreekt dit tegen of maakt het onzeker — vooral de tegenkaarten; laat leeg als "
+        "er echt niets is, maar verzin niets>\n"
         "=== EINDE ===")
 
 
 def parse_blok(text: str) -> dict:
     """Parse het === INZICHT ===-blok dat de AI teruggaf. Fail-soft: ontbrekende regels → ''."""
-    o = {"title": "", "claim": "", "reframe": "", "falsifier": ""}
+    o = {"title": "", "claim": "", "reframe": "", "falsifier": "", "caveat": ""}
     for line in (text or "").splitlines():
         s = line.strip()
         for veld, key in (("TITEL", "title"), ("CLAIM", "claim"),
-                          ("REFRAME", "reframe"), ("FALSIFIER", "falsifier")):
+                          ("REFRAME", "reframe"), ("FALSIFIER", "falsifier"),
+                          ("CAVEAT", "caveat")):
             if re.match(rf"^{veld}:", s, re.I):
                 o[key] = re.sub(rf"^{veld}:", "", s, flags=re.I).strip()
     return o
@@ -415,16 +432,16 @@ class KennisbankStore(JsonStore):
         return True
 
     def reformulate(self, iid: str, *, title: str = "", reframe: str = "",
-                    falsifier: str = "", by: str = "") -> str | None:
-        """De trage klok: claim/reframe/falsifier opnieuw gemunt (het spel opnieuw gespeeld).
+                    falsifier: str = "", caveat: str = "", by: str = "") -> str | None:
+        """De trage klok: claim/reframe/falsifier/caveat opnieuw gemunt (het spel opnieuw gespeeld).
         Bumpt de versie; de vorige versie + de evidence-set-van-toen gaan in `history`
         (reproduceerbaar). De evidence-links zelf blijven doorstromen (de snelle klok)."""
         ins = self._items.get(iid)
-        if ins is None or not (title or reframe or falsifier):
+        if ins is None or not (title or reframe or falsifier or caveat):
             return None
         ins["history"].append({
             "version": ins["version"], "title": ins["title"], "reframe": ins["reframe"],
-            "falsifier": ins["falsifier"],
+            "falsifier": ins["falsifier"], "caveat": ins.get("caveat", ""),
             "evidence_snapshot": copy.deepcopy(ins["evidence"]),
             "at": _now(), "by": by,
         })
@@ -435,6 +452,8 @@ class KennisbankStore(JsonStore):
             ins["reframe"] = reframe.strip()
         if falsifier:
             ins["falsifier"] = falsifier.strip()
+        if caveat:
+            ins["caveat"] = caveat.strip()
         ins["updated_at"] = _now()
         self._save()
         return ins["version"]

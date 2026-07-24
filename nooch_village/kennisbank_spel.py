@@ -285,21 +285,22 @@ def spel_finish(store: SpelStore, sid: str, kb, blok: str) -> tuple[str, str] | 
     if spel.get("reformulate_of"):
         iid = spel["reformulate_of"]
         versie = kb.reformulate(iid, title=parsed["claim"], reframe=parsed["reframe"],
-                                falsifier=parsed["falsifier"], by=spel.get("by") or "spel")
+                                falsifier=parsed["falsifier"], caveat=parsed.get("caveat", ""),
+                                by=spel.get("by") or "spel")
         if versie is None:
             return None
     elif spel.get("meta"):
         # META-inzicht (B1): de kaarten zijn ANDERE inzichten → verankeren via related, niet evidence.
         iid = kb.add(parsed["claim"], why=f"Meta-inzicht uit {len(spel.get('set') or [])} inzichten.",
                      reframe=parsed["reframe"], falsifier=parsed["falsifier"],
-                     by=spel.get("by") or "spel")
+                     caveat=parsed.get("caveat", ""), by=spel.get("by") or "spel")
         for k in spel.get("set") or []:
             kb.link_insight(iid, k["atom_id"], k["stance"], by=spel.get("by") or "spel")
         versie = "1.0"
     else:
         iid = kb.add(parsed["claim"], why=f"Gespeeld uit {len(spel.get('set') or [])} kaarten.",
                      reframe=parsed["reframe"], falsifier=parsed["falsifier"],
-                     by=spel.get("by") or "spel")
+                     caveat=parsed.get("caveat", ""), by=spel.get("by") or "spel")
         for k in spel.get("set") or []:
             kb.link(iid, k["atom_id"], k["stance"],
                     annotation=k.get("annotation") or "", by=spel.get("by") or "spel")
