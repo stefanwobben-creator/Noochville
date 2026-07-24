@@ -1,0 +1,30 @@
+#!/bin/sh
+# Vroegwaarschuwing vóór een push: de smoke-subset (~1s, tests/test_smoke.py).
+#
+# Dit is BEWUST geen slot. Een hook is client-side en `git push --no-verify` loopt eromheen; het
+# echte slot is de branch-protection op main (required check "test" = de volle suite in CI). Deze
+# hook bestaat om de terugkoppeling van drie minuten CI naar één seconde lokaal te halen — main
+# stond 21-24 juli rood omdat niemand de rode CI-mails las.
+#
+# Installeren (eenmalig per clone):   git config core.hooksPath hooks
+# Overslaan (bewust):                 git push --no-verify
+
+PY="./venv/bin/python"
+[ -x "$PY" ] || PY="$(command -v python3 || command -v python)"
+[ -n "$PY" ] || { echo "pre-push: geen python gevonden — smoke overgeslagen"; exit 0; }
+
+"$PY" -m pytest -m smoke -q >/tmp/nooch_smoke.$$ 2>&1
+status=$?
+if [ $status -ne 0 ]; then
+    tail -25 /tmp/nooch_smoke.$$
+    rm -f /tmp/nooch_smoke.$$
+    echo ""
+    echo "✗ pre-push: de smoke-set is rood — push geblokkeerd."
+    echo "  Draai de VOLLEDIGE suite vóór de commit (poort uit CLAUDE.md):"
+    echo "      ./venv/bin/python -m pytest tests/"
+    echo "  Bewust toch pushen: git push --no-verify (CI weigert main dan alsnog)."
+    exit 1
+fi
+rm -f /tmp/nooch_smoke.$$
+echo "✓ pre-push: smoke groen (de volle suite blijft de poort vóór commit)"
+exit 0

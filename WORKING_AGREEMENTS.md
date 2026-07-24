@@ -24,6 +24,15 @@ sessie opent hiermee.
   tests die bij een enkel-bestand-run onzichtbaar bleven — en zo gepusht
   werden. Enkel-bestand-run is prima tijdens het bouwen; de volle suite
   is de poort vóór de commit.
+- **Twee poorten bewaken dit sinds 24 juli 2026** (main stond 21–24 juli rood,
+  ~25 commits lang, terwijl CI het elke push meldde):
+  1. **Branch-protection op `main`** — GitHub weigert een merge zolang de check
+     `test` (de volle suite in CI) niet groen is. Geldt óók voor admins, geen
+     force-push, geen branch-verwijdering. Dit is het echte slot; werk gaat via
+     een PR vanaf een branch van `origin/main`.
+  2. **`hooks/pre-push`** — draait de smoke-set (~1s) vóór elke push. Een
+     vroegwaarschuwing, geen slot (`--no-verify` loopt eromheen). Eenmalig per
+     clone activeren: `git config core.hooksPath hooks`.
 - **SCOPE.md per meerbeurten-ontwerp.** Elke feature-branch met een ontwerp dat
   over meerdere beurten loopt, krijgt een `SCOPE.md` in de branch-root: de actuele
   afspraken (beslissingen, correcties, open vragen), bijgewerkt bij elke ontwerp-
