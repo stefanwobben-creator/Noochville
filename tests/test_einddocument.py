@@ -195,7 +195,8 @@ def _cockpit_project(dd):
     cockpit2._bootstrap(dd)
     role = "mother_earth__nooch__website_developer"
     cockpit2.dispatch(dd, "proj_add",
-                      {"owner": [role], "scope": ["Doc-scope"], "col": ["actief"], "next": ["/"]},
+                      {"owner": [role], "scope": ["Doc-scope"],
+                       "done_when": ["af bij oplevering"], "col": ["actief"], "next": ["/"]},
                       username="guest")
     pid = next(p["id"] for p in cockpit2._Stores(dd).projects.all() if p.get("scope") == "Doc-scope")
     return pid, ProjectDocStore(dd)

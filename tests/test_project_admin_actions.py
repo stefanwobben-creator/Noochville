@@ -178,7 +178,8 @@ def test_ii_project_aanmaken_en_tonen(tmp_path):
     dd, st = _st(tmp_path)
     stefan = st.people.all()[0]
     ii = f"ii:{CIRCLE}"
-    cockpit2.dispatch(dd, "proj_add", {"owner": [ii], "scope": ["Spontane actie"], "col": ["actief"],
+    cockpit2.dispatch(dd, "proj_add", {"owner": [ii], "scope": ["Spontane actie"],
+                                       "done_when": ["af bij oplevering"], "col": ["actief"],
                                        "trekker": [f"person:{stefan.id}"], "next": ["/"]}, username="guest")
     pj = [p for p in cockpit2._Stores(dd).projects.all() if p["owner"] == ii]
     assert len(pj) == 1 and pj[0]["person"] == stefan.id

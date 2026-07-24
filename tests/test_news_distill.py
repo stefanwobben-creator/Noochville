@@ -26,7 +26,8 @@ def test_distill_article_parse_en_failclosed():
 def test_distill_news_dedup_en_seen(tmp_path):
     np = NewsProposals(str(tmp_path / "np.json"))
     news = {"Cariuma": {"title": "Cariuma cactus sneaker", "link": "u1", "date": "2026-06-01"}}
-    fake = lambda p: "SOORT: seed\nINHOUD: cactusleer\nWAAROM: breed"
+    # distill_news gaat via distill_articles: het antwoord draagt de [[N: i]]-nummering van de batch
+    fake = lambda p: "[[N: 1]]\nSOORT: seed\nINHOUD: cactusleer\nWAAROM: breed"
     assert distill_news(news, np, llm_reason=fake) == {"scanned": 1, "proposed": 1}
     # tweede run: link al gezien → niet opnieuw
     assert distill_news(news, np, llm_reason=fake) == {"scanned": 0, "proposed": 0}

@@ -79,7 +79,8 @@ def _dd(tmp_path):
 def test_cockpit_proj_done_maakt_signaal(tmp_path):
     dd = _dd(tmp_path)
     role = "mother_earth__nooch__website_developer"
-    cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Bordklus"], "trekker": [""],
+    cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Bordklus"],
+                                       "done_when": ["af bij oplevering"], "trekker": [""],
                                        "next": ["/"]}, username="guest")
     pid = cockpit2._Stores(dd).projects.all()[0]["id"]
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
@@ -99,7 +100,8 @@ def test_cockpit_proj_done_maakt_signaal(tmp_path):
 def test_signals_pagina_krijgt_projecten_feedchip(tmp_path):
     dd = _dd(tmp_path)
     role = "mother_earth__nooch__website_developer"
-    cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Chip-check"], "trekker": [""],
+    cockpit2.dispatch(dd, "proj_add", {"owner": [role], "scope": ["Chip-check"],
+                                       "done_when": ["af bij oplevering"], "trekker": [""],
                                        "next": ["/"]}, username="guest")
     pid = cockpit2._Stores(dd).projects.all()[0]["id"]
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")

@@ -66,7 +66,8 @@ def test_smoke_dispatch_happy_paths(dd):
     st = cockpit2._Stores(dd)
     voor_proj = len(st.projects.all())
     cockpit2.dispatch(dd, "proj_add",
-                      {"owner": [ROLE], "scope": ["Smoke-project"], "col": ["nu"], "next": ["/"]},
+                      {"owner": [ROLE], "scope": ["Smoke-project"],
+                       "done_when": ["af bij oplevering"], "col": ["nu"], "next": ["/"]},
                       "guest")
     assert len(cockpit2._Stores(dd).projects.all()) == voor_proj + 1
 

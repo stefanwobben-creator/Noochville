@@ -549,7 +549,8 @@ def test_is_circle_member(tmp_path):
 
 
 def _ii_add_form(circle="mother_earth__nooch"):
-    return {"owner": [f"{cockpit2._II_PREFIX}{circle}"], "scope": ["Mijn eigen initiatief"], "next": ["/x"]}
+    return {"owner": [f"{cockpit2._II_PREFIX}{circle}"], "scope": ["Mijn eigen initiatief"],
+                                                     "done_when": ["af bij oplevering"], "next": ["/x"]}
 
 
 def test_ii_proj_add_cirkellid_mag(tmp_path):
@@ -571,7 +572,7 @@ def test_normale_proj_add_blijft_rolvervuller_of_lead(tmp_path):
     # een rol-owner (geen ii): buitenstaander geweigerd, rolvervuller mag
     dd, st = _st(tmp_path)
     st.people.add("Buiten", "buiten@nooch.earth")
-    form = {"owner": [_GATE_ROLE], "scope": ["Werk"], "next": ["/x"]}
+    form = {"owner": [_GATE_ROLE], "scope": ["Werk"], "done_when": ["af bij oplevering"], "next": ["/x"]}
     _, deny = cockpit2.dispatch(dd, "proj_add", form, username="buiten@nooch.earth")
     assert "Geen toegang" in deny and "rolvervuller" in deny
 
