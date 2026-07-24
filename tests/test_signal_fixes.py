@@ -22,6 +22,22 @@ def test_signaal_leest_het_einddocument(tmp_path):
     assert "checklist voltooid" not in it["content"]
 
 
+def test_seed_boilerplate_wordt_nooit_de_conclusie(tmp_path):
+    # Een einddocument dat alleen de geseede opdracht bevat mag NOOIT de sjabloontekst als signaal
+    # opleveren ("De inwoner werkt dit document…"); zonder echt antwoord → "Afgerond: <scope>".
+    from nooch_village.projects import seed_document
+    radar = RadarStore(f"{tmp_path}/radar.json")
+    seed = seed_document("Er staat een compliant claim op de site")
+    p = {"id": "p9", "owner": "compliance", "scope": "Compliance-check",
+         "done_when": "Er staat een compliant claim op de site", "dod_outcome": ""}
+    it = radar.get(signal_from_project(radar, p, seed))
+    assert it["content"] == "Afgerond: Compliance-check"
+    assert "De inwoner werkt dit document" not in it["content"]
+    # Mét een echt antwoord onder de seed komt dát antwoord eruit.
+    doc = seed + "\n\n## Conclusie\nDrie van de vijf claims zijn onderbouwd; twee wachten op labdata."
+    assert project_conclusie(doc, p["done_when"]).startswith("Drie van de vijf")
+
+
 def test_signaal_nooit_procedureel_zonder_document(tmp_path):
     # Geen einddocument en geen inhoudelijke dod → "Afgerond: <scope>", nooit de checklist-tekst.
     radar = RadarStore(f"{tmp_path}/radar.json")

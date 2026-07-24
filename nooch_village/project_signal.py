@@ -33,14 +33,41 @@ SOURCE = "projectbord"
 # Procedurele afrondteksten die GEEN inhoud dragen: nooit als signaal-content gebruiken (dat was de
 # bug — "goedgekeurd na review" zei niets over wat er gevonden is). Substring, case-insensitive.
 _PROCEDUREEL = ("goedgekeurd na review", "checklist voltooid")
+# Seed-boilerplate van het lege einddocument (zie projects.seed_document): het ECHTE antwoord staat
+# ONDER de instructiezin. Deze teksten mogen nooit als conclusie gelden — anders lekt de sjabloon
+# het signaal in ("De inwoner werkt dit document bij elke puls bij…", "Klaar wanneer").
+_SEED_EIND = re.compile(r"schrijft hieronder naar het antwoord toe\.?\**", re.I)
+_BOILERPLATE = ("de inwoner werkt dit document", "schrijft hieronder naar het antwoord toe",
+                "klaar wanneer")
+
+
+def _is_boilerplate(tekst: str) -> bool:
+    t = (tekst or "").strip().lower()
+    return bool(t) and any(b in t for b in _BOILERPLATE)
+
+
+def _na_seed(doc: str) -> str:
+    """Geef alleen het deel ONDER de geseede opdracht terug (het echte antwoord). De seed eindigt met
+    de instructiezin '…schrijft hieronder naar het antwoord toe.'; is die er niet, strip dan een
+    'Klaar wanneer … ---'-kop. Zonder antwoord eronder → "" (dan valt de caller terug op de scope)."""
+    if not doc:
+        return ""
+    m = _SEED_EIND.search(doc)
+    if m:
+        return doc[m.end():]
+    m2 = re.search(r"\n-{3,}\n", doc)
+    if m2 and re.search(r"klaar wanneer", doc[:m2.start()], re.I):
+        return doc[m2.end():]
+    return doc
 
 
 def _is_placeholder(tekst: str) -> bool:
     """Content die inhoudsloos is en dus veilig overschreven mag worden door de backfill: leeg,
-    procedureel, óf het generieke "Afgerond: <scope>" (nog geen conclusie). Een echte, door een
-    mens geschreven of uit een einddocument gehaalde tekst valt hier NIET onder en blijft staan."""
+    procedureel, seed-boilerplate, óf het generieke "Afgerond: <scope>". Een echte, door een mens
+    geschreven of uit een einddocument gehaalde tekst valt hier NIET onder en blijft staan."""
     t = (tekst or "").strip()
-    return t == "" or is_procedureel(t) or bool(re.match(r"(?i)^afgerond:", t))
+    return (t == "" or is_procedureel(t) or _is_boilerplate(t)
+            or bool(re.match(r"(?i)^afgerond:", t)))
 # Koppen die in een einddocument doorgaans de conclusie/uitkomst markeren (case-insensitive).
 _CONCLUSIE_KOPPEN = ("conclusie", "uitkomst", "samenvatting", "antwoord", "bevinding",
                      "bevindingen", "resultaat", "resultaten", "slotsom", "kernboodschap")
@@ -58,19 +85,23 @@ def _schoon(tekst: str) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 
-def project_conclusie(doc: str, max_len: int = 200) -> str:
-    """Haal (zonder LLM) de conclusie/samenvatting uit een project-einddocument. Voorkeur: de tekst
-    onder een conclusie-achtige kop; anders de laatste substantiële paragraaf (afrondingen staan vaak
-    achteraan). Leeg als er niets bruikbaars is (dan valt de caller terug op scope)."""
-    if not doc or not doc.strip():
+def project_conclusie(doc: str, done_when: str = "", max_len: int = 200) -> str:
+    """Haal (zonder LLM) de conclusie/samenvatting uit een project-einddocument. Eerst de geseede
+    opdracht wegknippen (alleen het antwoord ERONDER telt), dan: de tekst onder een conclusie-achtige
+    kop, anders de laatste substantiële paragraaf (afrondingen staan vaak achteraan). Boilerplate en
+    de vraag zelf (`done_when`) worden overgeslagen. Leeg als er niets bruikbaars is (caller → scope)."""
+    body = _na_seed(doc)
+    if not body.strip():
         return ""
+    dw = _schoon(done_when)
     kop = r"^\s{0,3}#{1,6}\s*(?:%s)\b" % "|".join(_CONCLUSIE_KOPPEN)
-    m = re.search(kop + r"[^\n]*\n(.+?)(?=\n\s{0,3}#{1,6}\s|\Z)", doc, re.I | re.S | re.M)
+    m = re.search(kop + r"[^\n]*\n(.+?)(?=\n\s{0,3}#{1,6}\s|\Z)", body, re.I | re.S | re.M)
     if m:
         tekst = _schoon(m.group(1))
-        if len(tekst) >= 40:
+        if len(tekst) >= 40 and not _is_boilerplate(tekst) and tekst != dw:
             return tekst[:max_len].rstrip()
-    paras = [p for p in (_schoon(b) for b in re.split(r"\n\s*\n", doc)) if len(p) >= 40]
+    paras = [p for p in (_schoon(b) for b in re.split(r"\n\s*\n", body))
+             if len(p) >= 40 and not _is_boilerplate(p) and p != dw]
     return paras[-1][:max_len].rstrip() if paras else ""
 
 
@@ -79,7 +110,7 @@ def project_signal_content(project, doc: str = "", max_len: int = 200) -> str:
     EINDDOCUMENT (wat is er gevonden), anders een niet-procedurele `dod_outcome` (de één-zin-
     uitkomst), anders "Afgerond: <scope>". Nooit de procedurele "goedgekeurd na review"."""
     p = project or {}
-    concl = project_conclusie(doc, max_len)
+    concl = project_conclusie(doc, str(p.get("done_when") or ""), max_len)
     if concl:
         return concl
     dod = str(p.get("dod_outcome") or "").strip()
