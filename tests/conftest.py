@@ -29,6 +29,26 @@ def _isolate_village_data(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_llm_usage(monkeypatch):
+    """Het usage-log ook los van de échte data/ trekken.
+
+    `llm_usage._PATH` is een module-singleton die alleen Village() zet (village.py:94). Zonder
+    Village valt hij terug op het RELATIEVE 'data/llm_usage.jsonl' (llm_usage.py:34) — dus op de
+    productiemap, want dat pad hangt aan de CWD en niet aan de BASE_DIR-isolatie hierboven. Elke
+    test die reason() liet slagen schreef zo synthetische tredes ('gemini:x', 'mistral:m1',
+    'openrouter:meta/llama') in het echte log; die tellen daarna mee als ongeschatte calls in de
+    CO2-KPI en als onbekende prijs in llm_keuze.verbruik. Eigen tmp-map (niet tmp_path) om te
+    voorkomen dat tests die op tmp_path-inhoud asserten hier last van krijgen."""
+    import tempfile
+    import shutil
+    from nooch_village import llm_usage
+    d = tempfile.mkdtemp(prefix="nv_test_usage_")
+    monkeypatch.setattr(llm_usage, "_PATH", os.path.join(d, "llm_usage.jsonl"))
+    yield
+    shutil.rmtree(d, ignore_errors=True)
+
+
+@pytest.fixture(autouse=True)
 def _no_llm_throttle():
     """Tests mogen nooit écht wachten op de LLM-rate-limiter. Zet 'm op 'geen limiet'
     (de throttle-logica zelf wordt los getest in test_llm_throttle met een nep-klok)."""
