@@ -208,8 +208,11 @@ def test_dossier_is_readonly_zonder_csrf(tmp_path):
     from nooch_village.views.inwoners import render_inwoner
     st, p = _st(tmp_path)
     html = render_inwoner(st, p.id, csrf_token="")
-    assert "<form" not in html
-    assert "persona_edit" not in html
+    # Zonder csrf-token geen enkel MUTATIE-formulier: geen POST-form, geen dispatch-actie.
+    # (De gedeelde header draagt sinds 23 jul wél een <form> — de globale zoekbalk. Die is een
+    # GET-zoekactie en telt niet als schrijfpad, vandaar de scherpere assertie dan '<form'.)
+    assert "method='post'" not in html.lower() and "persona_edit" not in html
+    assert html.count("<form") == 1 and "class='c2-search'" in html
     assert "Scherpe, droge observator." in html          # lezen mag wel
 
 

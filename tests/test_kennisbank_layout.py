@@ -297,9 +297,12 @@ def test_ux_detail_gesprek_draad_en_geen_derde_pad(tmp_path):
     assert "Voeg bewijs of een reactie toe" not in html and "kb_evidence" not in html
     # C3: gesprek als draad met afzender + tijd
     assert "kn-thread" in html and "Stefan" in html and "eerst design testen" in html
-    # A2: tags achter een uitklap. Founder dd 2026-07-18: de bulk-selectiebalk is weg —
-    # curatie (archiveren/naar spel) zit per statement in het uitklap-detail.
-    assert "alle tags (A–Z)" in html and "kn-selbar" not in html
+    # A2: tags achter één ingang. Founder dd 2026-07-18: de bulk-selectiebalk is weg — curatie
+    # (archiveren/naar spel) zit per statement in het uitklap-detail. Founder dd 2026-07-24: de
+    # tags-pill naast de Signals-kop is de ENIGE tag-ingang; de losse 'alle tags (A–Z)'-uitklap
+    # onder de zoekbalk is weg zodat de signals hoger in beeld komen.
+    # (de pill zelf staat gedekt in test_kennisbank_statements::…_tagpill_…, die wél tags heeft)
+    assert "alle tags (A–Z)" not in html and "kn-selbar" not in html
 
 
 def test_ux_kb_atoom_reference_via_dispatch(tmp_path):

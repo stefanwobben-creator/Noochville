@@ -1,25 +1,35 @@
 """De projectpoort (founder, 19 jul — naast G0-G4): done = vraag beantwoord, niet werk
-gedaan. Drie borgingen: (1) dod_poort weigert Done zolang dod_outcome leeg is en opent
-zodra er een antwoord staat; (2) set_dod schrijft de twee DoD-contractvelden en niets
-anders; (3) een mens-project kan met done_when geboren worden (de intake-eis leeft in de
-handler; create zelf blijft vrij voor rollen)."""
+gedaan. Drie borgingen: (1) dod_poort weigert Done zolang het EINDDOCUMENT geen antwoord
+bevat (sinds 21 jul; een ingevuld dod_outcome blijft als legacy openen); (2) set_dod
+schrijft de twee DoD-contractvelden en niets anders; (3) een mens-project kan met done_when
+geboren worden (de intake-eis leeft in de handler; create zelf blijft vrij voor rollen)."""
 from __future__ import annotations
 
-from nooch_village.projects import ProjectLedger, dod_poort
+from nooch_village.projects import ProjectLedger, dod_poort, seed_document
 
 
 def test_dod_poort_weigert_zonder_antwoord_en_opent_met(tmp_path):
+    """De poort verhuisde 21 jul van het veld `dod_outcome` naar het EINDDOCUMENT: het antwoord
+    hoort in het document te staan, niet in een los veld. Hij oordeelt niet over kwaliteit —
+    alleen dat er méér staat dan de geseede opdracht."""
     pj = ProjectLedger(f"{tmp_path}/projects.json")
-    pid = pj.create("harry_hemp", "Hoeveel massa verliest een schoenzool?", "human")
-    # dicht: geen antwoord → weiger-reden
+    done_when = "Er ligt een getal met bron, of de uitleg waarom dat niet kan."
+    pid = pj.create("harry_hemp", "Hoeveel massa verliest een schoenzool?", "human",
+                    done_when=done_when)
+    # dicht: leeg einddocument
     reden = dod_poort(pj.get(pid))
-    assert reden and "Antwoord op de projectvraag" in reden
+    assert reden and "einddocument is nog leeg" in reden
+    # dicht: alleen de geseede opdracht in het document — dat is de vraag, niet het antwoord
+    reden = dod_poort(pj.get(pid), seed_document(done_when))
+    assert reden and "alleen de opdracht" in reden
     # ook dicht voor None / leeg project (fail-closed)
     assert dod_poort(None)
     assert dod_poort({})
-    # open zodra het antwoord bestaat — de poort oordeelt niet over kwaliteit
-    pj.set_dod(pid, "dod_outcome", "Ca. 1-5 g per 100 km; grotendeels microplastics in "
-                                   "het milieu. Bronnen in het einddocument.")
+    # open zodra het document een antwoord bevat
+    assert dod_poort(pj.get(pid), seed_document(done_when) +
+                     "\n\n## Conclusie\nCa. 1-5 g per 100 km, grotendeels microplastics.") is None
+    # legacy: een project met het oude dod_outcome-veld blijft afrondbaar, ook zonder document
+    pj.set_dod(pid, "dod_outcome", "Ca. 1-5 g per 100 km; bronnen in het einddocument.")
     assert dod_poort(pj.get(pid)) is None
 
 

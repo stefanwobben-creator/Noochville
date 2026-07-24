@@ -27,15 +27,19 @@ def test_add_pending_and_get(tmp_path):
     assert r.approved(_ROLE) == []
 
 
-def test_add_dedup_over_niet_afgewezen(tmp_path):
+def test_add_dedup_over_alle_statussen(tmp_path):
+    """Dedup op (rol, kind, inhoud) over ÁLLE statussen (founder 20 jul): wat je gisteren afwees
+    of naar Oracle promoveerde hoort niet als vers 'wacht'-item terug te komen. Het bestaande
+    exemplaar wint en houdt zijn status — een afgewezen signaal wordt niet herleefd."""
     r = _store(tmp_path)
     a = r.add(role=_ROLE, feed="f", kind="concurrent", content="Veja")
     b = r.add(role=_ROLE, feed="f", kind="concurrent", content="veja")   # zelfde (case-insensitive)
     assert a == b and len(r.pending(_ROLE)) == 1
-    # afgewezen signaal blokkeert een nieuw voorstel niet
     r.set_status(a, "afgewezen")
     c = r.add(role=_ROLE, feed="f", kind="concurrent", content="Veja")
-    assert c and c != a
+    assert c == a                                       # geen tweede item
+    assert r.get(a)["status"] == "afgewezen"            # en de afwijzing blijft staan
+    assert r.pending(_ROLE) == []                       # dus ook niet terug in de wachtrij
 
 
 def test_add_leeg_of_zonder_rol(tmp_path):

@@ -83,12 +83,18 @@ def test_cockpit_proj_done_maakt_signaal(tmp_path):
                                        "done_when": ["af bij oplevering"], "trekker": [""],
                                        "next": ["/"]}, username="guest")
     pid = cockpit2._Stores(dd).projects.all()[0]["id"]
+    # De projectpoort (verhuisd 21 jul naar het einddocument) laat Done pas toe als het document
+    # méér bevat dan de opdracht — dus eerst het antwoord schrijven, dan afronden.
+    cockpit2.dispatch(dd, "proj_doc_edit", {"pid": [pid], "next": ["/"], "doc": [
+        "## Conclusie\nDrie van de vijf productpagina's laadden te traag; twee zijn hersteld."]},
+        username="guest")
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
     sigs = [it for it in st.radar.for_role(role) if it["feed"] == "Projecten"]
     assert len(sigs) == 1
     assert sigs[0]["status"] == "goedgekeurd" and sigs[0]["link"] == f"/project?id={pid}"
     assert sigs[0]["source"] == "projectbord"
+    assert sigs[0]["content"].startswith("Drie van de vijf")     # conclusie uit het einddocument
     # Heropenen (drag terug naar actief) + opnieuw done → nog steeds één signaal.
     cockpit2.dispatch(dd, "proj_status", {"pid": [pid], "to": ["actief"], "next": ["/"]},
                       username="guest")
@@ -104,6 +110,9 @@ def test_signals_pagina_krijgt_projecten_feedchip(tmp_path):
                                        "done_when": ["af bij oplevering"], "trekker": [""],
                                        "next": ["/"]}, username="guest")
     pid = cockpit2._Stores(dd).projects.all()[0]["id"]
+    cockpit2.dispatch(dd, "proj_doc_edit", {"pid": [pid], "next": ["/"], "doc": [
+        "## Conclusie\nDe chip verschijnt zodra er één projectsignaal op de radar staat."]},
+        username="guest")                                     # projectpoort: eerst het antwoord
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
     html = render_signals(cockpit2._Stores(dd))
     assert "?feed=Projecten" in html                                  # feed-chip verschijnt vanzelf

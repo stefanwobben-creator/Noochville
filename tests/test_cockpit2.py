@@ -119,8 +119,9 @@ def test_projecten_tab_kolommen_en_inline_add(tmp_path):
     # statuskolommen (Trello-stijl) in een niet-lege lane + slepen + top-level toevoegen
     for col in ("Actief", "Wacht", "Toekomst", "Done"):
         assert col in page
-    assert "qadd-top" in page and "Te bereiken uitkomst" in page   # universele inline '+ project'
-    assert "+ project toevoegen" in page                     # Trello per-kolom-add in niet-lege lane
+    # Sinds 21 jul loopt toevoegen via de wizard-modal (js-modal → /project/nieuw), niet meer
+    # via de inline qadd-uitklap; de link is voorgeselecteerd op deze rol.
+    assert "/project/nieuw?role=" in page and "project toevoegen" in page
     assert "data-to='toekomst'" in page and "draggable" in page.lower()
     assert "data-href=" in page                 # kaart klikbaar naar detail
 
@@ -244,7 +245,9 @@ def test_persoonspagina_metrics_tab_readonly(tmp_path):
     pg = cockpit2.render_person(st, lotte.id, tab="metrics")        # geen csrf → zuivere read-only lens
     assert "Orders" in pg and "tile-grid" in pg                     # DEZELFDE _metrics_tab_html-render ...
     assert "<ul class='clean'>" not in pg                           # ... niet de oude lijst
-    assert "+ KPI maken" not in pg and "action=" not in pg          # read-only: geen schrijfpad
+    # read-only: geen schrijfpad. Niet op kaal "action=" toetsen — de gedeelde header draagt
+    # sinds 23 jul de zoek-GET (action='/search'); de dispatch-forms posten naar '/action'.
+    assert "+ KPI maken" not in pg and "action='/action'" not in pg
 
 
 def test_persoonspagina_checklist_afvink_alleen_filler(tmp_path):
@@ -302,7 +305,12 @@ def test_project_status_done_delete(tmp_path):
     # status → wacht
     cockpit2.dispatch(dd, "proj_status", {"pid": [pid], "to": ["wacht"], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["status"] == "blocked"
-    # → done
+    # → done. De projectpoort (21 jul) laat Done pas toe met een antwoord in het einddocument.
+    cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+    assert cockpit2._Stores(dd).projects.get(pid)["status"] == "blocked"      # poort dicht
+    cockpit2.dispatch(dd, "proj_doc_edit", {"pid": [pid], "next": ["/"], "doc": [
+        "## Conclusie\nDe drie gemelde bugs zijn verholpen; een vierde bleek geen bug."]},
+        username="guest")
     cockpit2.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["status"] == "done"
     # verwijderen
@@ -425,17 +433,17 @@ def test_leeg_bord_toont_geen_lege_lanes(tmp_path):
     st = _st(tmp_path)
     page = cockpit2.render_node(st, "mother_earth__nooch__circle_rep", "projects", csrf_token="t")
     assert "<div class='swim'>" not in page       # geen lege lanes gerenderd
-    assert "Nog geen projecten" in page and "qadd-top" in page   # wel een inline '+ project'
+    assert "Nog geen projecten" in page and "/project/nieuw?role=" in page   # wel een '+ project'
 
 
 def test_inline_add_project_rol_en_cirkel(tmp_path):
     st = _st(tmp_path)
     role = "mother_earth__nooch__website_developer"
     page = cockpit2.render_node(st, role, "projects", csrf_token="t")
-    assert "qadd-top" in page and "Te bereiken uitkomst" in page and "proj_add" in page
-    # op een cirkel kun je de rol kiezen in de inline-add
+    assert "/project/nieuw?role=" in page and "project toevoegen" in page   # rol voorgeselecteerd
+    # op een cirkel is er nog geen rol gekozen: de wizard opent zonder ?role en vraagt er zelf om
     cpage = cockpit2.render_node(st, "mother_earth__nooch", "projects", csrf_token="t")
-    assert "qadd-top" in cpage and "<select name='owner'>" in cpage
+    assert "href='/project/nieuw'" in cpage and "?role=" not in cpage.split("project/nieuw")[1][:40]
 
 
 def test_modal_overlay_en_fragment(tmp_path):
@@ -453,7 +461,7 @@ def test_modal_overlay_en_fragment(tmp_path):
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "<!doctype" not in frag.lower() and "Modaltest" in frag and "Checklist" in frag
     # kolommen scrollen (pcol-scroll) en er is een inline '+ project' (geen aparte modal)
-    assert "pcol-scroll" in board and "qadd-top" in board
+    assert "pcol-scroll" in board and "/project/nieuw" in board
 
 
 def test_project_archiveren_default(tmp_path):
