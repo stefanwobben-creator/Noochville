@@ -8,9 +8,17 @@ _ROLE = "concurrent_scout"
 _FEED = "Competitor Watch"
 
 
+def _batch(prompt, blok):
+    """Stub-antwoord in het BATCH-formaat dat distill_articles verwacht: één [[N: i]]-blok per kop.
+    news_distill destilleert sinds 546657f meerdere koppen in één call (tegen de dag-cap), dus een
+    los SOORT/INHOUD-antwoord zonder nummering wordt — terecht — door de parser genegeerd."""
+    n = prompt.count("[[N:")
+    return "\n".join(f"[[N: {i}]]\n{blok}" for i in range(1, n + 1))
+
+
 def _reason_veja(prompt):
     # stub-LLM: doet alsof elk aangeboden artikel een concurrent-signaal is
-    return "SOORT: concurrent\nINHOUD: Veja\nWAAROM: nieuwe duurzame sneaker"
+    return _batch(prompt, "SOORT: concurrent\nINHOUD: Veja\nWAAROM: nieuwe duurzame sneaker")
 
 
 def _radar(tmp_path):
@@ -45,7 +53,7 @@ def test_idempotent_op_link(tmp_path):
 
 def test_eigen_merk_label(tmp_path):
     def reason_kaart(prompt):
-        return "SOORT: kaart\nINHOUD: Nooch krijgt lovende review\nWAAROM: reputatie"
+        return _batch(prompt, "SOORT: kaart\nINHOUD: Nooch krijgt lovende review\nWAAROM: reputatie")
     items = [{"title": "Nooch.earth review", "url": "https://blog.example/nooch", "content_html": "Nooch is great"}]
     res = ing.ingest_feed_items(items, role=_ROLE, feed=_FEED, data_dir=str(tmp_path), llm_reason=reason_kaart)
     assert res["own_brand"] == 1
@@ -82,7 +90,7 @@ def test_materials_focus_prompt_and_distill():
 def test_materials_focus_via_ingest(tmp_path):
     def reason(pr):
         assert "materiaalwetenschapper" in pr                         # de materials-prompt is gebruikt
-        return "SOORT: kaart\nINHOUD: hennepvezel\nWAAROM: bio-based"
+        return _batch(pr, "SOORT: kaart\nINHOUD: hennepvezel\nWAAROM: bio-based")
     items = [{"title": "Doorbraak in hennepvezel voor schoenen", "url": "https://x/hemp", "content_html": "hemp"}]
     res = ing.ingest_feed_items(items, role="harry_hemp", feed="Material Innovation",
                                 data_dir=str(tmp_path), llm_reason=reason, focus="materials")

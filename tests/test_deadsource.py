@@ -1,6 +1,8 @@
-"""Dode-bron-sensor: senst op de OVERGANG fresh→stale (indicator_freshness), niet op de toestand.
-Dedup via de vorige-status per indicator; opleving→herdood senst opnieuw; unconfigured/none nooit;
-kind-aware drempel gerespecteerd; de spanning landt generiek in de human_inbox."""
+"""Dode-bron-sensor: senst op de OVERGANG fresh→stale (indicator_freshness), niet op de toestand,
+en pas nadat een tweede ronde de uitval bevestigt (stale_pending). Dedup via de vorige-status per
+indicator; herstel tijdens de bevestigingsronde blijft stil; opleving→herdood senst opnieuw;
+unconfigured/none nooit; kind- én cadans-aware drempel gerespecteerd; de spanning landt generiek
+in de human_inbox."""
 from __future__ import annotations
 import datetime
 import os
@@ -37,15 +39,34 @@ def _run(dd, reg, ctx, today, emitted):
     return sense_dead_sources(reg, ctx, st, lambda *a: emitted.append(a[:2]), today=today)
 
 
-def test_overgang_senst_eenmaal_en_dedupt(tmp_path):
+def test_overgang_senst_pas_na_bevestiging_en_dedupt(tmp_path):
+    """Bevestigingsronde (founder, 19 jul): de eerste fresh→stale is een stille aantekening
+    (stale_pending); pas de VOLGENDE ronde die de uitval bevestigt escaleert naar de mens."""
     dd, obs, _, ctx, reg = _setup(tmp_path)
     D = datetime.date(2026, 7, 1)
     obs.record_daily("g", "gsc_clicks_day", 5, bron="gsc", datum=D.isoformat())      # flux → drempel 7
     em = []
     _run(dd, reg, ctx, D + datetime.timedelta(days=2), em);  assert em == []          # fresh → prev=fresh
-    _run(dd, reg, ctx, D + datetime.timedelta(days=10), em); assert em == [("gsc", "clicks")]   # SENSE
+    _run(dd, reg, ctx, D + datetime.timedelta(days=10), em); assert em == []          # 1e stale: stil
+    _run(dd, reg, ctx, D + datetime.timedelta(days=11), em)
+    assert em == [("gsc", "clicks")]                                                  # bevestigd → SENSE
     em.clear()
-    _run(dd, reg, ctx, D + datetime.timedelta(days=11), em); assert em == []          # stale→stale = dedup
+    _run(dd, reg, ctx, D + datetime.timedelta(days=12), em); assert em == []          # stale→stale = dedup
+
+
+def test_herstel_tijdens_bevestigingsronde_blijft_stil(tmp_path):
+    """Komt de bron terug voordat de tweede ronde de uitval bevestigt, dan hoort de mens er niets
+    over: de aantekening wordt geruisloos gewist (geen spanning over een hobbel van één ronde)."""
+    dd, obs, _, ctx, reg = _setup(tmp_path)
+    D = datetime.date(2026, 7, 1)
+    obs.record_daily("g", "gsc_clicks_day", 5, bron="gsc", datum=D.isoformat())
+    em = []
+    _run(dd, reg, ctx, D + datetime.timedelta(days=2), em)                            # fresh
+    _run(dd, reg, ctx, D + datetime.timedelta(days=10), em); assert em == []          # stale_pending
+    herstel = D + datetime.timedelta(days=11)
+    obs.record_daily("g", "gsc_clicks_day", 6, bron="gsc", datum=herstel.isoformat())  # bron leeft weer
+    _run(dd, reg, ctx, herstel, em)
+    assert em == []                                                                   # niets geëscaleerd
 
 
 def test_pre_existing_stale_senst_niet(tmp_path):
@@ -63,22 +84,24 @@ def test_opleving_dan_herdood_senst_opnieuw(tmp_path):
     obs.record_daily("g", "gsc_clicks_day", 5, bron="gsc", datum=D.isoformat())
     em = []
     _run(dd, reg, ctx, D + datetime.timedelta(days=2), em)                            # fresh
-    _run(dd, reg, ctx, D + datetime.timedelta(days=10), em); em.clear()               # SENSE (1e dood)
-    D2 = D + datetime.timedelta(days=11)
+    _run(dd, reg, ctx, D + datetime.timedelta(days=10), em)                           # stale_pending
+    _run(dd, reg, ctx, D + datetime.timedelta(days=11), em); em.clear()               # SENSE (1e dood)
+    D2 = D + datetime.timedelta(days=12)
     obs.record_daily("g", "gsc_clicks_day", 7, bron="gsc", datum=D2.isoformat())      # opleving
     _run(dd, reg, ctx, D2 + datetime.timedelta(days=1), em); assert em == []          # fresh → geen sense
-    _run(dd, reg, ctx, D2 + datetime.timedelta(days=10), em)                          # opnieuw dood
+    _run(dd, reg, ctx, D2 + datetime.timedelta(days=10), em); assert em == []         # opnieuw dood: stil
+    _run(dd, reg, ctx, D2 + datetime.timedelta(days=11), em)                          # bevestigd
     assert em == [("gsc", "clicks")]                                                  # SENSE opnieuw
 
 
 def test_trage_bron_binnen_kind_aware_drempel_senst_niet(tmp_path):
-    """Een gezonde weekly-bron (drempel 10d) is bij 8 dagen nog 'fresh' — geen valse spanning, terwijl
-    een flux-bron (7d) daar al dood zou zijn."""
-    dd, obs, _, ctx, reg = _setup(tmp_path, source="openalex")                        # weekly → drempel 10
+    """Een gezonde weekly-bron (bucket-flux → drempel 17d) is bij 8 dagen nog 'fresh' — geen valse
+    spanning, terwijl een dagelijkse flux-bron (7d) daar al dood zou zijn."""
+    dd, obs, _, ctx, reg = _setup(tmp_path, source="openalex")                        # weekly flux → drempel 17
     D = datetime.date(2026, 7, 1)
     obs.record_daily("o", "openalex_clicks_day", 5, bron="openalex", datum=D.isoformat())
     em = []
-    _run(dd, reg, ctx, D + datetime.timedelta(days=8), em)                            # age 8 ≤ 10 → fresh
+    _run(dd, reg, ctx, D + datetime.timedelta(days=8), em)                            # age 8 ≤ 17 → fresh
     _run(dd, reg, ctx, D + datetime.timedelta(days=8), em)                            # fresh→fresh
     assert em == []
 

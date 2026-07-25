@@ -94,9 +94,14 @@ def test_geen_nieuwe_style_blokken():
 # Audit dd 2026-07-14: 58 families. Doel: een klein vocabulaire (card, btn, chip,
 # tile, field, …) + varianten — zie de fase-2-inventarisatie. Dit plafond voorkomt
 # dat er ondertussen nieuwe privé-prefixen bijkomen.
-_PREFIX_CEILING = 60   # +1: 'ibx-' — de inbox-drawer is een bewust nieuw UI-component (globale chrome)
+_PREFIX_CEILING = 62   # +1: 'ibx-' — de inbox-drawer is een bewust nieuw UI-component (globale chrome)
                        # +1: 'kn-' — de kennisbank (/kennisbank, prototype nooch-kb): drawer + zekerheids-
                        #      meter + bewijs-noten; expliciet besluit dd 2026-07-16 (akkoord Stefan)
+                       # +1: 'gs-' — de global search in de gedeelde header (eigen dropdown + categorie-
+                       #      badges); globale chrome, zelfde soort uitzondering als 'ibx-'
+                       # +1: 'wz-' — de project-wizard (/project/nieuw + modal-overlay): een eigen
+                       #      Duolingo-achtig scherm met voortgangsbalk en stapkaart, geen cockpit-lijst.
+                       #      De CSS staat sinds 24 jul in static/nooch.css, niet meer als blob in de view.
 
 
 def _prefix_families() -> set[str]:

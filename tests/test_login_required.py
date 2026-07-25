@@ -60,8 +60,9 @@ def test_login_pagina_zonder_noochie_chrome(tmp_path):
         httpd.shutdown()
 
 
-def test_ingelogde_pagina_zonder_noochie_chrome(tmp_path):
-    # Noochie-rail + call bar zijn uit de cockpit gehaald: ook een ingelogde pagina toont ze niet meer.
+def test_ingelogde_pagina_zonder_noochie_rail_maar_met_callbar(tmp_path):
+    # De Noochie-rail is uit de cockpit gehaald en blijft weg; de dorp-brede call bar is bewust
+    # teruggekomen (72de897) en hoort dus juist WEL op een gewone pagina te staan.
     dd = _bootstrap(tmp_path)
     sessions = _auth.SessionStore()
     token = sessions.create("dev@nooch.earth")
@@ -69,16 +70,18 @@ def test_ingelogde_pagina_zonder_noochie_chrome(tmp_path):
     try:
         r, body = _get(port, f"/node?id={ROOT}", cookie=token)
         # markers van de geïnjecteerde chrome (niet de CSS-klassen, die blijven in de stylesheet):
-        assert r.status == 200 and "src='/callbar'" not in body and "noochie?fragment" not in body
+        assert r.status == 200 and "noochie?fragment" not in body      # rail weg
+        assert "src='/callbar'" in body                                # call bar terug
     finally:
         httpd.shutdown()
 
 
-def test_guest_auth_uit_zonder_noochie_chrome(tmp_path):
+def test_guest_auth_uit_zonder_noochie_rail(tmp_path):
     dd = _bootstrap(tmp_path)
     httpd, port = _server(dd, sessions=None)                   # auth uit → _session_username == "guest"
     try:
         r, body = _get(port, f"/node?id={ROOT}")
-        assert r.status == 200 and "src='/callbar'" not in body and "noochie?fragment" not in body
+        assert r.status == 200 and "noochie?fragment" not in body      # rail weg
+        assert "src='/callbar'" in body                                # call bar ook voor guest
     finally:
         httpd.shutdown()

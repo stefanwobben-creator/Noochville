@@ -107,15 +107,24 @@ def project_conclusie(doc: str, done_when: str = "", max_len: int = 200) -> str:
 
 def project_signal_content(project, doc: str = "", max_len: int = 200) -> str:
     """De inhoudelijke signaal-content voor een done-project. Volgorde: de conclusie uit het
-    EINDDOCUMENT (wat is er gevonden), anders een niet-procedurele `dod_outcome` (de één-zin-
-    uitkomst), anders "Afgerond: <scope>". Nooit de procedurele "goedgekeurd na review"."""
+    EINDDOCUMENT (wat is er gevonden), anders de `outcome` van het afronden, anders `dod_outcome`,
+    anders "Afgerond: <scope>". Beide outcome-velden door dezelfde procedureel-filter, zodat
+    "checklist voltooid — goedgekeurd na review" nooit als bevinding doorgaat.
+
+    Waarom outcome VÓÓR dod_outcome: `outcome` is wat er bij afronden werkelijk gevonden is —
+    de AI-paden schrijven de echte bevinding daarheen (inhabitant.py `_work_project` →
+    `ledger.complete(pid, outcome)`, roles.py `_monitoring`), en juist die projecten hebben vaak
+    geen einddocument. `dod_outcome` is bij aanmaak de GEWENSTE uitkomst (een doel, projects.py
+    `create`); een doel mag nooit winnen van een echte bevinding — dan leest een voornemen op
+    /signals als resultaat."""
     p = project or {}
     concl = project_conclusie(doc, str(p.get("done_when") or ""), max_len)
     if concl:
         return concl
-    dod = str(p.get("dod_outcome") or "").strip()
-    if dod and not is_procedureel(dod):
-        return dod[:max_len].rstrip()
+    for veld in ("outcome", "dod_outcome"):
+        tekst = str(p.get(veld) or "").strip()
+        if tekst and not is_procedureel(tekst):
+            return tekst[:max_len].rstrip()
     scope = str(p.get("scope") or p.get("id") or "").strip()
     return f"Afgerond: {scope}" if scope else "Afgerond project"
 
@@ -138,8 +147,8 @@ def signal_from_project(radar, project, doc: str = "") -> str | None:
 
     Geeft de signal-id terug, of None als er al een signaal voor dit project bestaat
     (link-dedupe via `seen`) of het project geen id heeft. Deterministisch, geen LLM:
-    `content` = de conclusie uit het EINDDOCUMENT (`doc`), anders een niet-procedurele
-    dod_outcome, anders "Afgerond: <scope>" — nooit de procedurele "goedgekeurd na review"
+    `content` = de conclusie uit het EINDDOCUMENT (`doc`), anders een niet-procedurele `outcome`,
+    anders `dod_outcome`, anders "Afgerond: <scope>" — nooit de procedurele "goedgekeurd na review"
     (zie `project_signal_content`). rationale = hypothese, role = owner (fallback "village")."""
     p = project or {}
     pid = p.get("id") or ""

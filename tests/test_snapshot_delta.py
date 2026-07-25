@@ -40,9 +40,16 @@ def test_snapshot_delta_normalisatie_en_interval():
 
 
 def test_vers_drempel_kind_aware():
-    # snapshot (monthly) tolereert langer dan flux: semanticscholar 45d; plausible + openalex (flux) 7d
+    """De drempel volgt kind én cadans (founder 19 jul: alleen echte uitval zien).
+
+    - snapshot: periode + marge — de meetdatum ís de ophaaldag, één gemiste periode is echt gemist
+      (semanticscholar, monthly → 30 + 15 = 45).
+    - dagelijkse flux: vast 7 (plausible).
+    - week-/maandbucket-flux: 2× periode + marge (openalex, weekly → 14 + 3 = 17), want het
+      datumlabel komt pas één periode ná dato binnen; met de oude vaste 7 heette zo'n gezonde
+      bron elke week vals dood."""
     assert _fresh_threshold("semanticscholar") == 45 and _fresh_threshold("plausible") == 7
-    assert _fresh_threshold("openalex") == 7                 # flux nu
+    assert _fresh_threshold("openalex") == 17                # weekly flux: bucket loopt achter
 
 
 def test_indicator_freshness_snapshot_ruimer_dan_flux(tmp_path):

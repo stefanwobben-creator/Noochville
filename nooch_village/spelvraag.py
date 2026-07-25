@@ -18,13 +18,12 @@ Regels:
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import re
 import time
 
 from nooch_village.llm import reason
-from nooch_village.util import atomic_write_json
+from nooch_village.util import JsonStore
 
 _CACHE_BESTAND = "spelvraag_cache.json"
 _RETRY_NA_S = 24 * 3600          # mislukte generatie: hooguit één nieuwe poging per dag
@@ -38,12 +37,21 @@ def _sleutel(kand: dict) -> str:
     return hashlib.sha1(basis.encode("utf-8")).hexdigest()[:16]
 
 
-def _laad(pad: str) -> dict:
-    try:
-        with open(pad, encoding="utf-8") as f:
-            return json.load(f) or {}
-    except Exception:
-        return {}
+class _VraagCache(JsonStore):
+    """De spelvraag-cache als echte store i.p.v. een losse read + `atomic_write_json`.
+
+    Cockpit (GET /kennisbank) en de daemon kunnen tegelijk een vraag genereren; via JsonStore
+    neemt de schrijver het bestandsslot en leest hij ONDER dat slot vers in, zodat de een de
+    zojuist gecachete vraag van de ander niet wegschrijft (lost update)."""
+
+    _WRITE_METHODS = ("onthoud",)
+
+    def rij(self, sleutel: str) -> dict:
+        return self._items.get(sleutel) or {}
+
+    def onthoud(self, sleutel: str, vraag: str, at: float) -> None:
+        self._items[sleutel] = {"vraag": vraag or "", "at": at}
+        self._save()
 
 
 def _grond_ok(vraag: str, bronnen: str) -> bool:
@@ -73,11 +81,10 @@ def vraag_voor(kand: dict, atoms: dict, *, data_dir: str, reason_fn=reason,
     Hooguit één generatie per verse kandidaat; een mislukking wordt mét tijdstempel
     gecachet en pas na _RETRY_NA_S opnieuw geprobeerd — geen call-storm op GET, en een
     ladder die tijdelijk plat ligt maakt de kennisbank niet trager dan hij was."""
-    pad = os.path.join(data_dir, _CACHE_BESTAND)
-    cache = _laad(pad)
+    cache = _VraagCache(os.path.join(data_dir, _CACHE_BESTAND))
     k = _sleutel(kand)
     nu = time.time() if nu is None else nu
-    rij = cache.get(k)
+    rij = cache.rij(k)
     if rij:
         if rij.get("vraag"):
             return rij["vraag"]
@@ -100,6 +107,5 @@ def vraag_voor(kand: dict, atoms: dict, *, data_dir: str, reason_fn=reason,
             "OUTPUT: alleen de vraag zelf, geen inleiding of aanhalingstekens.",
             max_tokens=120, call_site="spelvraag")
         vraag = _valide(out, " ".join(claims))
-    cache[k] = {"vraag": vraag or "", "at": nu}
-    atomic_write_json(pad, cache)
+    cache.onthoud(k, vraag or "", nu)
     return vraag

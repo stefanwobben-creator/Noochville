@@ -178,7 +178,8 @@ def test_ii_project_aanmaken_en_tonen(tmp_path):
     dd, st = _st(tmp_path)
     stefan = st.people.all()[0]
     ii = f"ii:{CIRCLE}"
-    cockpit2.dispatch(dd, "proj_add", {"owner": [ii], "scope": ["Spontane actie"], "col": ["actief"],
+    cockpit2.dispatch(dd, "proj_add", {"owner": [ii], "scope": ["Spontane actie"],
+                                       "done_when": ["af bij oplevering"], "col": ["actief"],
                                        "trekker": [f"person:{stefan.id}"], "next": ["/"]}, username="guest")
     pj = [p for p in cockpit2._Stores(dd).projects.all() if p["owner"] == ii]
     assert len(pj) == 1 and pj[0]["person"] == stefan.id
@@ -186,17 +187,24 @@ def test_ii_project_aanmaken_en_tonen(tmp_path):
     assert "Spontane actie" in page and "Individueel Initiatief" in page
 
 
-def test_trekker_add_form_gescoped_op_owner_rol(tmp_path):
-    # Owner/trekker-scope: de trekker in '+ project' is gescoped op de owner-ROL (fillers), niet meer
-    # de ingelogde gebruiker. Op een CIRKEL-node is de owner nog niet gekozen → alleen 'geen trekker'.
+def test_trekker_keuze_gescoped_op_owner_rol(tmp_path):
+    """Trekker-scope: de keuze komt uit de VERVULLERS van de owner-rol, niet uit 'wie is ingelogd'.
+    Zo kan een trekker nooit iemand zijn die de rol niet bezet.
+
+    De inline '+ project'-uitklap waarop dit eerder werd getoetst is 21 jul vervangen door de
+    wizard-modal; de scoping leeft sindsdien op het projectdetail (proj_settrekker), dus daar
+    toetsen we hem — het gedrag is niet verdwenen, alleen verhuisd."""
     import re
     dd, st = _st(tmp_path)
-    me = st.people.add("Ingelogd Persoon", "ingelogd@nooch.earth")
-    page = cockpit2.render_node(cockpit2._Stores(dd), CIRCLE, "projects",
-                                csrf_token="TOK", username="ingelogd@nooch.earth")
-    opts = re.search(r"<select name='trekker'>(.*?)</select>", page, re.DOTALL).group(1)
-    assert "geen trekker" in opts and "selected" not in opts
-    assert f"person:{me.id}" not in opts     # geen me-default: de gebruiker bezet de (ongekozen) rol niet
+    me = st.people.add("Ingelogd Persoon", "ingelogd@nooch.earth")     # bezet ROLE2 níet
+    pid = st.projects.create(ROLE2, "Scope-check", "human", status="queued")
+    page = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
+    opts = re.search(r"<select name='trekker'[^>]*>(.*?)</select>", page, re.DOTALL).group(1)
+    assert "geen trekker" in opts
+    assert f"person:{me.id}" not in opts     # geen me-default: de gebruiker bezet de rol niet
+    # wél de echte vervullers van die rol
+    for f in cockpit2._Stores(dd).assign.fillers_of(ROLE2):
+        assert f"{f.type}:{f.id}" in opts
 
 
 # ── impact-pills (scope 2): missie_impact / business_impact ──────────────────────────────────────

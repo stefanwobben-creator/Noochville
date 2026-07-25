@@ -38,7 +38,7 @@ def test_stage_signal_artikellink_wint_van_llm_doi(tmp_path, monkeypatch):
                        source="Nature", link="https://nature.com/echte-artikel")
     st.radar.set_status(rid, "goedgekeurd")
     # de gelezen bron levert atomen met een LLM-overgetypte DOI als reference
-    monkeypatch.setattr(radar_promote, "_atomen_uit_bron", lambda it: [
+    monkeypatch.setattr(radar_promote, "_atomen_uit_bron", lambda it, st=None: [
         {"content": "claim uit de bron", "subject": "materiaal",
          "reference": "DOI:10.1038/hallucinatie", "provenance": "peer_reviewed"}])
     bid, _ = radar_promote.stage_signal(st, rid)

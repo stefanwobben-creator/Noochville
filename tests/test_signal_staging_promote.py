@@ -26,8 +26,11 @@ _ROLE = "concurrent_scout"
 @pytest.fixture(autouse=True)
 def _geen_bron_lezen(monkeypatch):
     """Standaard geen echte fetch/LLM in tests: stage_signal valt terug op de signaaltekst.
-    De bron-lees-tests overschrijven deze patch met hun eigen atomen."""
-    monkeypatch.setattr(rp, "_atomen_uit_bron", lambda it: None)
+    De bron-lees-tests overschrijven deze patch met hun eigen atomen.
+
+    De stub volgt de echte signatuur `_atomen_uit_bron(it, st=None)`; `st` kwam erbij voor het
+    projectsignaal-pad (einddocument lezen, zie test_signal_fixes)."""
+    monkeypatch.setattr(rp, "_atomen_uit_bron", lambda it, st=None: None)
 _CONTENT = "Vivobarefoot lanceert een plantaardige sneaker"
 _LINK = "https://www.vivobarefoot.com/nieuws/plant?utm_source=x"
 
@@ -185,7 +188,7 @@ def test_actie_stuurt_door_naar_staging(tmp_path):
 def test_stage_leest_bron_en_zet_atomen_klaar(tmp_path, monkeypatch):
     st = cockpit2._Stores(_dd(tmp_path))
     rid = _approved(st)
-    monkeypatch.setattr(rp, "_atomen_uit_bron", lambda it: [
+    monkeypatch.setattr(rp, "_atomen_uit_bron", lambda it, st=None: [
         {"content": "Eerste atomic insight uit het artikel", "subject": "", "provenance": "media"},
         {"content": "Tweede atomic insight uit het artikel", "reference": "10.1234/doi.5",
          "source_date": "2026-06-01"},
@@ -209,7 +212,7 @@ def test_commit_meerdere_atomen_markeert_signaal_eenmaal(tmp_path, monkeypatch):
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     rid = _approved(st)
-    monkeypatch.setattr(rp, "_atomen_uit_bron", lambda it: [
+    monkeypatch.setattr(rp, "_atomen_uit_bron", lambda it, st=None: [
         {"content": "Insight A uit de bron"}, {"content": "Insight B uit de bron"}])
     bid, _ = rp.stage_signal(st, rid)
     res = commit_batch(st.staging, bid, dd, radar=st.radar)
@@ -307,7 +310,7 @@ def test_provenance_note_reist_mee_naar_kaartje(tmp_path, monkeypatch):
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     rid = _approved(st)
-    monkeypatch.setattr(rp, "_atomen_uit_bron", lambda it: [
+    monkeypatch.setattr(rp, "_atomen_uit_bron", lambda it, st=None: [
         {"content": "Expert zegt dat mycelium doorbreekt", "provenance": "expert_opinion",
          "provenance_note": "hoogleraar materiaalkunde, 40+ publicaties"}])
     bid, _ = rp.stage_signal(st, rid)

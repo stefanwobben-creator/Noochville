@@ -60,6 +60,13 @@ LABELS: dict[str, str] = {
     "verband_voorstel": "Ziet of twee kaartjes iets met elkaar te maken hebben",
     "onderzoeksvraag": "Leidt uit een trend de vraag af waarom die trend er is",
 
+    # ── Samenwerken en zelfcontrole ──────────────────────────────────────
+    "weten_we_dit_al": "Kijkt eerst of we het antwoord al ergens hebben liggen",
+    "ruis_check": "Merkt wanneer een zoekopdracht te breed is om iets te betekenen",
+    "tegenspraak": "Spreekt het eigen werk kritisch tegen vóór het 'klaar' heet",
+    "projectverzoek": "Zet werk dat bij een andere rol hoort op diens bord",
+    "escaleer": "Brengt een uitkomst of een beslissing bij de juiste rol of bij de mens",
+
     # ── Bedrijfsvoering ──────────────────────────────────────────────────
     "shopify_sales": "Leest hoeveel paren er verkocht zijn",
     "co2_village": "Rekent uit hoeveel CO2 het denkwerk van het dorp kostte",
