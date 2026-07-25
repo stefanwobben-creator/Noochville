@@ -1,82 +1,40 @@
-# Deploy & ingest — runbook
+# Deployen naar prod
 
-Kort operationeel spoorboekje voor NoochVille (village.nooch.earth). Bedoeld om
-niet elke keer opnieuw uit te hoeven zoeken waar wat staat.
+Eén pad, geen improvisatie. De hele reden hierachter: main stond deze zomer 25 commits rood
+omdat niets de "volle suite groen"-poort afdwong, en losse ssh-deploys braken prod (root-chown,
+verkeerde python). Dit legt de veilige route vast.
 
-## De setup in één blik
+## De flow (elke wijziging)
 
-- **Live server (Hetzner):** `root@138.201.154.162` (host `ubuntu-4gb-fsn1-1`).
-- **Repo op de server:** `/opt/noochville` (hier staat `.git`).
-- **GitHub:** `git@github.com:stefanwobben-creator/Noochville.git`, branch `main`.
-- **Virtualenv op de server:** `/opt/noochville/venv` — let op: `venv`, NIET `.venv`.
-  De system-`python3` mist de dependencies (o.a. `pydantic`), dus gebruik altijd
-  de venv-python voor losse commando's.
-- **Services (systemd):**
-  - `noochville-cockpit2` — het webdashboard.
-  - `noochville-village` — de puls/daemon.
+1. **Branch** van `origin/main`.
+2. **Volle suite lokaal groen** vóór je pusht (CLAUDE.md-eis).
+3. **PR** → CI draait de volle suite. main is branch-protected: rood kan niet mergen, ook admins niet.
+4. **Merge** naar main (squash).
+5. **Deploy**: één commando (zie onder). Nooit meer met de hand `git pull && restart` op de server.
 
-## Deployen (nieuwe code live zetten)
+Zo is wat live gaat per definitie een geteste, gemergede commit.
 
-1. **Lokaal (je Mac):** commit is al gemaakt, push naar GitHub.
-   ```
-   cd ~/noochville && git push origin main
-   ```
-2. **Op de server:** inloggen, pullen, herstarten.
-   ```
-   ssh root@138.201.154.162
-   cd /opt/noochville
-   git pull
-   systemctl restart noochville-cockpit2 noochville-village
-   ```
-3. **Controleren dat ze draaien** (twee keer `active` verwacht):
-   ```
-   systemctl is-active noochville-cockpit2 noochville-village
-   ```
-
-Bij een schone `git pull` zie je `Fast-forward` en de gewijzigde bestanden. Zie
-je `Already up to date` terwijl je een push deed, dan wees je naar de verkeerde
-remote/branch of is de push nog niet doorgekomen.
-
-## Inoreader-ingest draaien (Radar-signalen ophalen)
-
-Draai met de **venv-python** ÉN als de service-gebruiker `nooch` (NIET als root),
-vanuit de repo-root:
+## Deployen
 
 ```
-cd /opt/noochville
-sudo -u nooch /opt/noochville/venv/bin/python -m nooch_village.inoreader_ingest --limit 20 --debug
+ssh root@138.201.154.162 'bash /opt/noochville/scripts/deploy.sh'
 ```
 
-> ⚠️ **Draai NOOIT als root.** De ingest schrijft `data/radar.json`. Als root dat
-> bestand aanmaakt, wordt het `root:root` en kan de webservice (draait als `nooch`)
-> het niet meer lezen → elke pagina crasht met een 502 (`Permission denied:
-> data/radar.json`). Overkwam ons op 13-07. Herstel als het tóch gebeurde:
-> `chown nooch:nooch /opt/noochville/data/radar.json && systemctl restart noochville-cockpit2 noochville-village`.
-> De venv-python zonder `sudo -u nooch` (dus als root) laadt `.env` wél, dus de
-> ingest lijkt te slagen — het venijn zit pas in de volgende paginaload.
+`scripts/deploy.sh` doet, veilig en idempotent:
 
-- `--debug` toont per artikel de titel + het oordeel (kaart/seed/doelwit/concurrent/geen),
-  handig om te zien of de distill goed filtert.
-- `--limit N` begrenst het aantal artikelen per feed.
-- `--reset` leegt `data/radar.json` vóór de run (schone start; gebruik spaarzaam,
-  je gooit dan ook goedgekeurde/afgewezen signalen weg).
+- git-acties draaien als **nooch** (niet root) → bestandsrechten blijven goed, geen PermissionError-crash;
+- alleen **fast-forward naar origin/main** (gedivergeerd of vuil → stop, geen stille merge);
+- `requirements.txt` gewijzigd? → dependencies bijwerken in de venv;
+- `systemctl restart`, dan een **health-check** op `127.0.0.1:8766`;
+- **faalt de health-check → automatische rollback** naar de vorige commit + herstart, met melding.
 
-De feed-URL's staan in `/opt/noochville/.env` als `INOREADER_*_JSON_URL`. De
-routing (welke feed → welke rol) staat in `nooch_village/radar_store.py`
-(`_DEFAULT_FEEDS`), te overschrijven met `data/feeds.json`.
+Uitkomsten: `✅ live op <commit>` (goed), `teruggerold…` (deploy brak, site draait weer op de vorige
+versie — zoek uit wat de nieuwe commit brak), of `handmatig ingrijpen nodig` (ook de rollback is stuk;
+`systemctl status noochville-cockpit2` + `journalctl -u noochville-cockpit2 -n 50`).
 
-Na de run zie je de signalen in het dashboard bij de gekoppelde rol onder
-**Tools** → Radar-blok: wachtrij goedkeuren (✓) of wegklikken (✗); goedgekeurd
-belandt in het archief dat de rol als context meeleest.
+## Bewust (nog) niet
 
-## Valkuilen
-
-- `python: command not found` → gebruik `python3` of, voor de village-code, de
-  venv-python `/opt/noochville/venv/bin/python`.
-- `No module named 'pydantic'` bij de ingest → je draaide met de system-python;
-  gebruik de venv-python.
-- `502 Bad Gateway` na een deploy/ingest → bijna altijd een rechten-probleem op een
-  `data/*.json`-bestand dat als root is aangemaakt. Check `ls -l /opt/noochville/data/`
-  en trek de eigenaar recht met `chown nooch:nooch <bestand>`. Zie de ingest-waarschuwing.
-- Push kan niet vanuit de Cowork-sandbox (geen netwerk): pushen doe je vanaf je
-  eigen Mac, de server pullt.
+- **Geen staging.** Bij ~4 interne gebruikers is dat overkill; je ziet het resultaat op live en de
+  auto-rollback vangt een kapotte deploy. Zet staging op zodra er echte klanten of meer mensen zijn.
+- **Geen automatische deploy bij merge.** Kan later: een GitHub Action (workflow_dispatch of on-merge)
+  die exact ditzelfde script over ssh aanroept. De logica zit al in `deploy.sh`, de knop is dan dun.
