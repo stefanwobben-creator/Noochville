@@ -320,8 +320,20 @@ def _tab_werklijst(db: dict, csrf_token: str, kan_cureren: bool) -> str:
             f"<table class='mtab'>{rijen}</table></div>")
 
 
-def _tab_database(db: dict, zoek: str) -> str:
+def _intrek_knop(patroon: str, csrf_token: str) -> str:
+    """De 'intrekken'-actie per term (alleen voor wie mag cureren). Hergebruikt qadd-row + btn;
+    de curator ziet aan de conflict-melding of een seed-term bleef staan (aanwezigheid wint)."""
+    return (f"<form method='post' action='/action' class='qadd-row'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='next' value='/claims?tab=database'>"
+            f"<input type='hidden' name='patroon' value='{_e(patroon)}'>"
+            f"<button class='btn' name='action' value='claims_term_retract' "
+            f"title='Trek deze term in (een in-git seed-term blijft staan)'>Intrekken</button></form>")
+
+
+def _tab_database(db: dict, zoek: str, csrf_token: str = "", kan_cureren: bool = False) -> str:
     naald = zoek.lower().strip()
+    cureren = bool(kan_cureren and csrf_token)
     rijen = ""
     getoond = 0
     for t in db.get("termen", []):
@@ -330,11 +342,12 @@ def _tab_database(db: dict, zoek: str) -> str:
             continue
         getoond += 1
         cls, label = _CHIP.get(t.get("stoplicht", ""), _CHIP["green"])
+        actie = f"<td>{_intrek_knop(t.get('patroon',''), csrf_token)}</td>" if cureren else ""
         rijen += (f"<tr><td><b>{_e(t.get('term',''))}</b>"
                   f"<div class='muted'>{_e(t.get('waarom',''))}</div></td>"
                   f"<td><span class='{cls}'>{label}</span></td>"
                   f"<td>{_e(t.get('categorie',''))}</td>"
-                  f"<td class='muted'>{_e(t.get('alternatief',''))}</td></tr>")
+                  f"<td class='muted'>{_e(t.get('alternatief',''))}</td>{actie}</tr>")
     leeg = "<p class='muted'>Geen term gevonden.</p>" if not getoond else ""
     return (f"<div class='card'><h3>Termendatabase</h3>"
             f"<form method='get' action='/claims'>"
@@ -393,10 +406,11 @@ def _blok_beheer(db: dict, csrf_token: str) -> str:
 def render_claims(csrf_token: str = "", msg: str = "", tab: str = "check",
                   kan_cureren: bool = False, zoek: str = "", url: str = "",
                   tekst: str = "", markten: list[str] | None = None,
-                  rapport: str = "", bordresultaat: dict | None = None) -> str:
+                  rapport: str = "", bordresultaat: dict | None = None,
+                  data_dir: str | None = None) -> str:
     """De hele checker als één governeerd scherm."""
     try:
-        db = claims_db.load()
+        db = claims_db.load(data_dir=data_dir)
     except claims_db.ClaimsDbError as e:
         # Fail-closed: zonder database geen toets. Liever een zichtbare fout dan een stille 0.
         inner = (f"{_DS_LINK}{_nav()}<div class='c2-wrap'><div class='c2-main'>"
@@ -415,16 +429,25 @@ def render_claims(csrf_token: str = "", msg: str = "", tab: str = "check",
         if kan_cureren and csrf_token:
             body += _blok_beheer(db, csrf_token)
     elif tab == "database":
-        body = _tab_database(db, zoek)
+        body = _tab_database(db, zoek, csrf_token, kan_cureren)
     else:
         body = _tab_landen(db)
+
+    # Conflictmelding (zichtbaar, bewust): een runtime-retractie die een in-git seed-term raakte is
+    # genegeerd — aanwezigheid wint, zodat een juridische term nooit stil verdwijnt.
+    conflict = ""
+    for c in (db.get("_conflicten") or []):
+        conflict += (f"<div class='card'><b>Intrekking genegeerd</b>"
+                     f"<p class='muted'>“{_e(c)}” staat in de seed (via git) en blijft daarom staan; "
+                     f"een runtime-intrekking kan een in-git term niet wegdrukken. Trek 'm zo nodig "
+                     f"via een PR op de seed in.</p></div>")
 
     versie = (db.get("meta") or {}).get("versie", "?")
     kader = " · ".join((db.get("meta") or {}).get("regelgeving", {}).values())
     main = (f"<div class='c2-main'><h1>Claims-checker</h1>"
             f"<p class='muted'>EU EmpCo 2024/825 + ACM-leidraad · database v{_e(versie)} · "
             f"beheer: compliance · geen juridisch advies</p>"
-            f"{_banner(msg)}{_tabbalk(tab)}{body}"
+            f"{_banner(msg)}{conflict}{_tabbalk(tab)}{body}"
             f"<p class='muted'>{_e(kader)}</p></div>")
     return _page("Claims-checker", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>{_SCAN_JS}")
 

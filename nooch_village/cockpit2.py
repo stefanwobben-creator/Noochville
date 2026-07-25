@@ -3463,16 +3463,16 @@ def _claims_bordresultaat(qs: dict) -> dict:
         return {}
 
 
-def _claims_db_stil() -> dict:
-    """De claims-database, of een leeg omhulsel als hij onleesbaar is. Alleen voor rand-opmaak
-    (landnotities); de scan zelf faalt luid via `_claims_scan`."""
+def _claims_db_stil(data_dir: str | None = None) -> dict:
+    """De effectieve claims-database (seed + overlay), of een leeg omhulsel als hij onleesbaar is.
+    Alleen voor rand-opmaak (landnotities); de scan zelf faalt luid via `_claims_scan`."""
     try:
-        return _claims_db.load()
+        return _claims_db.load(data_dir=data_dir)
     except _claims_db.ClaimsDbError:
         return {}
 
 
-def _claims_scan(form: dict) -> tuple[dict, str]:
+def _claims_scan(form: dict, data_dir: str | None = None) -> tuple[dict, str]:
     """Toets een URL of een stuk tekst tegen de claims-database. Geeft (uitslag, bron) terug.
 
     De URL wordt server-side opgehaald via `safe_fetch` — inclusief SSRF-guardrail, zodat een
@@ -3499,7 +3499,7 @@ def _claims_scan(form: dict) -> tuple[dict, str]:
     else:
         bron = "geplakte tekst"
     try:
-        uitslag = _claims_db.check_tekst(tekst)
+        uitslag = _claims_db.check_tekst(tekst, data_dir=data_dir)
     except _claims_db.ClaimsDbError as e:
         return {"error": str(e)}, bron
     uitslag["tekst"] = tekst
@@ -3541,17 +3541,15 @@ def _act_claims_term_add(c):
         _deny = _role_gate("compliance", username, st)
         if _deny:
             return nxt, _deny
-        db = _claims_db.load()
         try:
-            nieuw = _claims_db.add_term(db, term=g("term").strip(), patroon=g("patroon").strip(),
-                                        stoplicht=g("stoplicht").strip(),
-                                        categorie=g("categorie").strip(),
-                                        waarom=g("waarom").strip(),
-                                        alternatief=g("alternatief").strip())
+            # Curatie landt in de runtime-overlay (data/claims_runtime.json), niet in de getrackte
+            # seed — zo blijft config/claims_database.json schoon voor het ff-only-deploymodel.
+            nieuw, versie = _claims_db.overlay_add_term(
+                c.data_dir, term=g("term").strip(), patroon=g("patroon").strip(),
+                stoplicht=g("stoplicht").strip(), categorie=g("categorie").strip(),
+                waarom=g("waarom").strip(), alternatief=g("alternatief").strip())
         except ValueError as e:
             return nxt, f"⛔ {e}"
-        versie = _claims_db.bump_versie(db)
-        _claims_db.save(db)
         _claims_audit(st, username, "claims_term_added", term=nieuw["term"],
                       stoplicht=nieuw["stoplicht"], versie=versie)
         return nxt, f"✓ term toegevoegd — database v{versie}"
@@ -3564,16 +3562,31 @@ def _act_claims_work_status(c):
         _deny = _role_gate("compliance", username, st)
         if _deny:
             return nxt, _deny
-        db = _claims_db.load()
         try:
-            item = _claims_db.set_werk_status(db, int(g("nr") or 0), g("status").strip())
+            nr, status = int(g("nr") or 0), g("status").strip()
+            versie = _claims_db.overlay_set_status(c.data_dir, nr, status)
         except (ValueError, TypeError) as e:
             return nxt, f"⛔ {e}"
-        versie = _claims_db.bump_versie(db)
-        _claims_db.save(db)
-        _claims_audit(st, username, "claims_work_status", nr=item["nr"],
-                      status=item["status"], versie=versie)
-        return nxt, f"✓ #{item['nr']} → {item['status']} — database v{versie}"
+        _claims_audit(st, username, "claims_work_status", nr=nr, status=status, versie=versie)
+        return nxt, f"✓ #{nr} → {status} — database v{versie}"
+
+
+def _act_claims_term_retract(c):
+        # AUTHZ: rolvervuller of Circle Lead — compliance-domein: intrekken is curatie, net als
+        # toevoegen; alleen de domein-eigenaar mag het.
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _role_gate("compliance", username, st)
+        if _deny:
+            return nxt, _deny
+        try:
+            patroon = g("patroon").strip()
+            versie = _claims_db.overlay_retract(c.data_dir, patroon)
+        except ValueError as e:
+            return nxt, f"⛔ {e}"
+        _claims_audit(st, username, "claims_term_retracted", patroon=patroon, versie=versie)
+        # Een seed-term blijft staan (aanwezigheid wint); de curator ziet dat aan de conflict-melding
+        # op het scherm. Een runtime-toegevoegde term is nu echt weg.
+        return nxt, f"✓ term ingetrokken — database v{versie}"
 
 
 def _act_claims_to_board(c):
@@ -3591,7 +3604,7 @@ def _act_claims_to_board(c):
         if not bevindingen:
             return nxt, "⛔ geen bevindingen om op het bord te zetten"
         verslag = _claims_board.zet_op_bord(
-            st, _claims_db_stil(), bevindingen,
+            st, _claims_db_stil(c.data_dir), bevindingen,
             g("bron") or rauw.get("bron", ""), rol_voor, trigger="human")
         _claims_audit(st, username, "claims_to_board", aangemaakt=len(verslag["aangemaakt"]),
                       overgeslagen=verslag["overgeslagen"])
@@ -4298,6 +4311,7 @@ ACTIONS = {
     "person_remove": _act_person_remove,
     "lk_mute": _act_lk_mute,
     "claims_term_add": _act_claims_term_add,
+    "claims_term_retract": _act_claims_term_retract,
     "claims_work_status": _act_claims_work_status,
     "claims_to_board": _act_claims_to_board,
     "persona_edit": _act_persona_edit,
@@ -4790,8 +4804,9 @@ def make_handler(data_dir: str, csrf_token: str,
                 # AUTHZ: iedereen-ingelogd — naslagwerk, lezen is vrij (domein-regel: cureren is
                 # exclusief compliance, en dat loopt via de dispatch-takken hieronder).
                 try:
-                    self._send_bytes(json.dumps(_claims_db.load(), ensure_ascii=False).encode("utf-8"),
-                                     "application/json; charset=utf-8")
+                    self._send_bytes(
+                        json.dumps(_claims_db.load(data_dir=data_dir), ensure_ascii=False).encode("utf-8"),
+                        "application/json; charset=utf-8")
                 except _claims_db.ClaimsDbError as e:
                     self._send_json({"error": str(e)}, 500)   # fail-closed: liever een fout dan lege lijst
                 return
@@ -4804,6 +4819,7 @@ def make_handler(data_dir: str, csrf_token: str,
                     tab=(qs.get("tab") or ["check"])[0],
                     kan_cureren=_claims_gate_open(_Stores(data_dir), username),
                     zoek=(qs.get("q") or [""])[0],
+                    data_dir=data_dir,
                     bordresultaat=_claims_bordresultaat(qs)))
                 return
             if path == "/inwoners":
@@ -5032,12 +5048,12 @@ def make_handler(data_dir: str, csrf_token: str,
                 if not secrets.compare_digest((form.get("csrf") or [""])[0], csrf_token):
                     self._send("CSRF-token ongeldig", 403); return
                 st = _Stores(data_dir)
-                uitslag, bron = _claims_scan(form)
+                uitslag, bron = _claims_scan(form, data_dir)
                 markten = [m for m in (form.get("markt") or []) if m]
                 frag = render_rapport(uitslag, markten=markten, bron=bron,
                                       csrf_token=csrf_token,
                                       kan_bord=_claims_gate_open(st, username),
-                                      db=_claims_db_stil())
+                                      db=_claims_db_stil(data_dir))
                 if (form.get("frag") or [""])[0] == "1":
                     self._send(frag, chrome=False)           # live scan: alleen het rapport terug
                 else:                                        # zonder JS: de hele pagina mét rapport
@@ -5045,7 +5061,7 @@ def make_handler(data_dir: str, csrf_token: str,
                                              kan_cureren=_claims_gate_open(st, username),
                                              url=(form.get("url") or [""])[0],
                                              tekst=(form.get("tekst") or [""])[0],
-                                             markten=markten, rapport=frag))
+                                             markten=markten, rapport=frag, data_dir=data_dir))
                 return
 
             if path == "/wachtwoord":

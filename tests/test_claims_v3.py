@@ -414,7 +414,9 @@ def test_scan_werkt_de_status_bij_en_meldt_regressie(tmp_path, monkeypatch):
     pagina = "<html><body>PLANET-FRIENDLY. sneakers</body></html>"
     uit = ClaimsSiteScanSkill().run({"_fetch": lambda u: (200, pagina)}, ctx)
     assert any(s["naar"] == claims_db.AUTO_REGRESSIE for s in uit["statussen"])
-    assert claims_db.load(str(pad))["werklijst"][0]["status"] == claims_db.AUTO_REGRESSIE
+    # De auto-status landt in de overlay (data_dir), niet in de getrackte seed → lees effectief.
+    assert claims_db.load(str(pad), data_dir=ctx.data_dir)["werklijst"][0]["status"] == claims_db.AUTO_REGRESSIE
+    assert claims_db.load_seed(str(pad))["werklijst"][0]["status"] == "live"   # seed ongemoeid
     assert "regressie" in uit["headsup"].lower()
     assert any("Werklijst #13" in n["snippet"] for n in _notifs(tmp_path))
 
