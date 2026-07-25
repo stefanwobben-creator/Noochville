@@ -19,14 +19,15 @@ _ROLE_TABS = ["overview", "policies", "notes", "tools", "projects", "checklists"
 # geen nieuwe autoriteitslaag. Spiegelt de rol-view-chrome via _tabbar(base="/person").
 _PERSON_TABS = ["rollen", "projecten", "context", "metrics", "checklist"]
 
+# Sleutels zijn logica (tab-parameters in de URL) en blijven; alleen de getoonde labels zijn Engels.
 _TAB_LABEL = {
     "overview": "Overview", "strategy": "Strategy", "roles": "Roles", "members": "Members",
     "policies": "Policies", "notes": "Notes", "tools": "Tools", "projects": "Projects",
     "checklists": "Checklists", "metrics": "Metrics",
-    "rollen": "Rollen", "projecten": "Projecten", "context": "Context", "checklist": "Checklist",
+    "rollen": "Roles", "projecten": "Projects", "context": "Context", "checklist": "Checklist",
 }
 
-_NL_MND = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
+_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
 def _name(rec) -> str:
@@ -60,12 +61,12 @@ def _age(ts) -> str:
     import time as _t
     d = max(0, int((_t.time() - ts) / 86400))
     if d == 0:
-        return "vandaag"
+        return "today"
     if d < 31:
-        return f"{d} d oud"
+        return f"{d}d old"
     if d < 365:
-        return f"{d//30} mnd oud"
-    return f"{d//365} jr oud"
+        return f"{d//30}mo old"
+    return f"{d//365}y old"
 
 
 def _fmt_due(iso: str) -> str:
@@ -74,7 +75,7 @@ def _fmt_due(iso: str) -> str:
         return ""
     try:
         y, m, d = iso.split("-")
-        return f"{int(d)} {_NL_MND[int(m) - 1]} {y}"
+        return f"{int(d)} {_MONTHS[int(m) - 1]} {y}"
     except Exception:
         return iso
 
@@ -85,7 +86,7 @@ def _created_full(ts) -> str:
         return "—"
     import datetime
     d = datetime.datetime.fromtimestamp(ts)
-    return f"{_age(ts)} · {d.day} {_NL_MND[d.month - 1]} {d.year}"
+    return f"{_age(ts)} · {d.day} {_MONTHS[d.month - 1]} {d.year}"
 
 
 def _bron_html(url: str) -> str:
@@ -93,8 +94,8 @@ def _bron_html(url: str) -> str:
     tekst (geen dode 404-link) tot de kennisbank-koppeling live is."""
     u = (url or "").strip()
     if u.startswith("http://") or u.startswith("https://"):
-        return f"<a href='{_e(u)}' target='_blank' rel='noopener'>bewijs ↗</a>"
-    return f"<span class='muted' title='koppeling nog niet live'>{_e(u)} (nog niet live)</span>"
+        return f"<a href='{_e(u)}' target='_blank' rel='noopener'>evidence ↗</a>"
+    return f"<span class='muted' title='link not live yet'>{_e(u)} (not live yet)</span>"
 
 
 def _stamp(ts) -> str:
@@ -103,7 +104,7 @@ def _stamp(ts) -> str:
         return ""
     import datetime
     d = datetime.datetime.fromtimestamp(ts)
-    return f"{d.day} {_NL_MND[d.month - 1]} {d.year}, {d.hour:02d}:{d.minute:02d}"
+    return f"{d.day} {_MONTHS[d.month - 1]} {d.year}, {d.hour:02d}:{d.minute:02d}"
 
 
 def _md(text: str) -> str:
@@ -232,16 +233,16 @@ def md_editor(name: str, value: str = "", rows: int = 6,
     guarded wrapSel-JS zelf mee, zodat de editor op ELKE pagina werkt (ook zonder _modal_html) en een
     view 'm niet kan vergeten. `value` wordt hier ge-escaped; callers geven de RUWE waarde door.
     `help=True` toont een inklapbaar opmaak-spiekbriefje (bestaande `.tb-help`/`.md-help`-klassen)."""
-    hlp = ("<details class='emoji-pick tb-help'><summary title='Opmaak-hulp'>?</summary>"
-           "<div class='md-help'>**vet** · *cursief* · ~~doorhalen~~ · # kop · - lijst · [tekst](url)</div>"
+    hlp = ("<details class='emoji-pick tb-help'><summary title='Formatting help'>?</summary>"
+           "<div class='md-help'>**bold** · *italic* · ~~strikethrough~~ · # heading · - list · [text](url)</div>"
            "</details>") if help else ""
     return (f"<div class='editor'><div class='editor-tb'>"
-            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'**','**')\" title='Vet'><b>B</b></button>"
-            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'*','*')\" title='Cursief'><i>I</i></button>"
-            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'~~','~~')\" title='Doorhalen'><s>S</s></button>"
+            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'**','**')\" title='Bold'><b>B</b></button>"
+            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'*','*')\" title='Italic'><i>I</i></button>"
+            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'~~','~~')\" title='Strikethrough'><s>S</s></button>"
             f"<span class='tb-sep'></span>"
-            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'- ','')\" title='Lijst'>•</button>"
-            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'## ','')\" title='Kop'>H</button>"
+            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'- ','')\" title='List'>•</button>"
+            f"<button type='button' class='tb-b' onclick=\"wrapSel(this,'## ','')\" title='Heading'>H</button>"
             f"{hlp}</div>"
             f"<textarea name='{_e(name)}' rows='{rows}' placeholder='{_e(placeholder)}'>{_e(value)}</textarea>"
             f"</div>{_WRAPSEL_JS}")
@@ -339,7 +340,7 @@ _DS_LINK = f'<link rel="stylesheet" href="/static/nooch.css?v={_DS_VERSION}">'
 # Kennisbank woont sinds de IA-opruiming onder de Librarian-rol (Tools-tab), niet in de top-nav.
 _NAV_ITEMS = (
     ("/metrics2", "Metrics"),
-    ("/admin", "Deelnemers"),
+    ("/admin", "People"),
 )
 
 
@@ -353,8 +354,8 @@ def _nav(context: str = "GlassFrog (PoC)") -> str:
         "<a class='c2-logo' href='/' title='home'><img src='/static/nooch-logo.png' alt='nooch' "
         "onerror=\"this.onerror=null;this.src='/static/nooch-logo.svg'\"></a>"
         "<form class='c2-search' action='/search' method='get' role='search' autocomplete='off'>"
-        "<input id='gs-input' type='search' name='q' placeholder='Zoek mensen, rollen, accountabilities…' "
-        "autocomplete='off' aria-label='globale zoekopdracht'>"
+        "<input id='gs-input' type='search' name='q' placeholder='Search people, roles, accountabilities…' "
+        "autocomplete='off' aria-label='global search'>"
         "<div id='gs-drop' class='gs-drop' hidden></div>"
         "</form>"
         # Persoonlijke begroeting rechts; _send vult de naam van de ingelogde persoon in (leeg = onzichtbaar).
