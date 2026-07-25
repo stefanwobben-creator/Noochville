@@ -39,3 +39,7 @@ notifications.json
 village-core.zip
 _to_delete/
 *.patch
+
+# Runtime-cache op de server (pip/HF e.d.). Puur voor de netheid — de deploy-guard
+# negeert untracked bestanden sowieso (scripts/deploy.sh, --untracked-files=no).
+.cache/
