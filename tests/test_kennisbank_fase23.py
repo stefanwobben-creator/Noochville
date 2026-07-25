@@ -131,7 +131,7 @@ def test_ongesorteerd_bakje_alleen_kennisbank_atomen(tmp_path):
                    "provenance": "media", "tags": ["leer"]},
     }
     html = _ongesorteerd_bakje(atoms, [], csrf="t")
-    assert "Ongesorteerd (1)" in html
+    assert "Unsorted (1)" in html
     assert "notitie zonder onderwerp" in html
     assert "librarian card" not in html and "notitie met hub" not in html
 

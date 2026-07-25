@@ -291,14 +291,14 @@ def spel_finish(store: SpelStore, sid: str, kb, blok: str) -> tuple[str, str] | 
             return None
     elif spel.get("meta"):
         # META-inzicht (B1): de kaarten zijn ANDERE inzichten → verankeren via related, niet evidence.
-        iid = kb.add(parsed["claim"], why=f"Meta-inzicht uit {len(spel.get('set') or [])} inzichten.",
+        iid = kb.add(parsed["claim"], why=f"Meta-insight from {len(spel.get('set') or [])} insights.",
                      reframe=parsed["reframe"], falsifier=parsed["falsifier"],
                      caveat=parsed.get("caveat", ""), by=spel.get("by") or "spel")
         for k in spel.get("set") or []:
             kb.link_insight(iid, k["atom_id"], k["stance"], by=spel.get("by") or "spel")
         versie = "1.0"
     else:
-        iid = kb.add(parsed["claim"], why=f"Gespeeld uit {len(spel.get('set') or [])} kaarten.",
+        iid = kb.add(parsed["claim"], why=f"Played from {len(spel.get('set') or [])} cards.",
                      reframe=parsed["reframe"], falsifier=parsed["falsifier"],
                      caveat=parsed.get("caveat", ""), by=spel.get("by") or "spel")
         for k in spel.get("set") or []:

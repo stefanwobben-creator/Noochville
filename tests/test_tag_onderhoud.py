@@ -121,4 +121,4 @@ def test_oracle_toont_verwijzing_bij_open_voorstellen(tmp_path):
         [{"actie": "weg", "van": ["eenmalig-dingetje"], "naar": ""}])
     from nooch_village.views.kennisbank import render_kennisbank
     html = render_kennisbank(st, csrf_token="tok")
-    assert "/kennisbank/tags" in html and "tag-voorstel" in html
+    assert "/kennisbank/tags" in html and "tag proposal" in html

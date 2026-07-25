@@ -1,7 +1,7 @@
 """Kennisbank (laag 2) — store, veld van zekerheid en view.
 
 Het acceptatiecriterium uit de bouwbrief staat hier als test: drie survey-bevindingen
-uit dezelfde bron zijn één stem ("nog dun"); één onafhankelijke bron erbij → "stevig".
+uit dezelfde bron zijn één stem ("still thin"); één onafhankelijke bron erbij → "solid".
 """
 from __future__ import annotations
 
@@ -38,13 +38,13 @@ def test_woozle_guard_drie_uit_een_bron_is_dun_onafhankelijk_maakt_stevig():
     drie = _links(("a1", "support"), ("a2", "support"), ("a3", "support"))
     v = verdict(field(drie, atoms))
     assert v["word"] == "dun"
-    assert "allemaal uit één bron" in v["sentence"]      # 3 bevindingen ≠ 3 stemmen
+    assert "all come from one source" in v["sentence"]      # 3 bevindingen ≠ 3 stemmen
 
     v2 = verdict(field(drie + _links(("b1", "support")), atoms))
     assert v2["word"] == "stevig"                         # 2 onafhankelijke bronnen, geen tegen
 
 
-def test_verdict_ladder_dun_omstreden_groeit():
+def test_verdict_ladder_dun_contested_groeit():
     atoms = {
         "s1": _atom("x", "bron-a"), "s2": _atom("y", "bron-b"),
         "c1": _atom("z", "bron-c"), "c2": _atom("w", "bron-d"),
@@ -147,13 +147,13 @@ def test_view_toont_woord_en_meter_geen_percentages(tmp_path):
                                staging=StagingStore(f"{dd}/kennisbank_staging.json"))
 
     html = render_kennisbank(st, csrf_token="tok")
-    assert "Oracle" in html and "nog dun" in html
+    assert "Oracle" in html and "still thin" in html
     # de machinerie blijft binnen: geen ruwe trust/strength/groep-ids in de UI
     for verboden in ("strength", "agreement", "independence_group", "0.9", "trust"):
         assert verboden not in html
 
     detail = render_kennisbank(st, kid=iid, csrf_token="tok")
     # PR-2: detail staat nu in de linkerkolom (geen overlay-drawer meer)
-    assert "kn-detail" in detail and "Nog geen bewijs verzameld." in detail
+    assert "kn-detail" in detail and "No evidence collected yet." in detail
     # herformuleren loopt via het copy-paste-spel (kb_spel_start), niet meer inline
-    assert "kb_spel_start" in detail and "Speel opnieuw" in detail
+    assert "kb_spel_start" in detail and "Play again" in detail

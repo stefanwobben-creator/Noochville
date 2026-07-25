@@ -1,6 +1,6 @@
 """Kennisbank-statements (herontwerp dd 2026-07-18, SPEC_prototype.html):
 kaal overzicht · klik = uitklap-detail (datum · bron op één plek · versie · gekoppeld ·
-tags) · '✏️ bewerk' opent de textarea pas op verzoek · ⠿-drag&drop-merge met modal
+tags) · '✏️ edit' opent de textarea pas op verzoek · ⠿-drag&drop-merge met modal
 (kb_atoom_merge: target_id + source_id + tekst)."""
 from __future__ import annotations
 
@@ -180,12 +180,12 @@ def test_overzicht_is_kaal_detail_heeft_alles(tmp_path):
     assert "kn-srclink" not in frag                    # klik-op-bron-filter is weg
     # detail: datum (source_date vóór), bron als externe link, versie, tags als chips
     assert "2019-03" in frag
-    assert "· toegevoegd" in frag                      # atomen zónder source_date
+    assert "· added" in frag                      # atomen zónder source_date
     assert "target='_blank'" in frag and "https://voorbeeld.nl/olie" in frag
     assert "v1" in frag
     assert "<span class='chip'>materialen</span>" in frag
-    # zonder reference: '+ voeg bron toe' op de Bron-plek; mét: het kleine ✏️
-    assert "+ voeg bron toe" in frag and "bron wijzigen of toevoegen" in frag
+    # zonder reference: '+ add source' op de Bron-plek; mét: het kleine ✏️
+    assert "+ add source" in frag and "edit or add source" in frag
     # bron-koppelvormen inline (URL + bestaand PDF-formulier), geen losse bronlink-uitklapper
     assert "kb_atoom_reference" in frag and "kb_atoom_ref_pdf" in frag
     assert "🔗 bronlink" not in frag
@@ -193,10 +193,10 @@ def test_overzicht_is_kaal_detail_heeft_alles(tmp_path):
     assert "href='#stmt-a2'" in frag
     assert "kn-koppel contra" in frag and "href='#stmt-a3'" in frag
     # bewerken pas op verzoek, met versie-semantiek
-    assert "✏️ bewerk" in frag and "Bewaar (nieuwe versie)" in frag
+    assert "✏️ edit" in frag and "Save (new version)" in frag
     # founder dd 2026-07-18: curatie per statement — archiveer-tekstlink in het detail,
     # geen selectie-checkbox in de rij en geen bulk-formulier meer
-    assert "kb_atoom_archive" in frag and "🗑 verwijder" in frag
+    assert "kb_atoom_archive" in frag and "🗑 delete" in frag
     assert "class='kn-sel'" not in frag and "curatieform" not in frag
 
 
@@ -210,7 +210,7 @@ def test_handle_en_readonly_zonder_csrf(tmp_path):
     zonder = render_kennisbank_search(_st(dd), "", "", "", csrf_token="")
     assert "kn-handle" not in zonder and "⠿" not in zonder
     assert "kn-sel" not in zonder and "<form" not in zonder
-    assert "✏️" not in zonder and "+ voeg bron toe" not in zonder
+    assert "✏️" not in zonder and "+ add source" not in zonder
     # de inhoud zelf blijft leesbaar, inclusief de bron-link
     assert "Vegan betekent niet plasticvrij." in zonder
     assert "target='_blank'" in zonder
@@ -233,12 +233,12 @@ def test_smoke_kennisbank_pagina_met_en_zonder_reference(tmp_path):
     html = render_kennisbank(_st(dd), csrf_token="tok")
     # de nieuwe lijst-markup + modal-markup staan op de pagina
     assert "kn-lijst" in html and "kn-stmt" in html and "kn-stmtdetail" in html
-    assert "kn-modal" in html and "Statements mergen" in html
-    assert "merge → nieuwe versie" in html and "annuleer" in html
+    assert "kn-modal" in html and "Merge statements" in html
+    assert "merge → new version" in html and "cancel" in html
     assert "name='target_id'" in html and "name='source_id'" in html
     assert "kb_atoom_merge" in html
     # atoom mét reference → externe link; zonder → voeg-toe-affordance
-    assert "https://voorbeeld.nl/olie" in html and "+ voeg bron toe" in html
+    assert "https://voorbeeld.nl/olie" in html and "+ add source" in html
     # de oude losse samenvoeg-route uit de selectie-balk is weg (mergen = slepen)
     assert "Voeg samen" not in html
     # zonder csrf ook geen modal- of handle-MARKUP (de inline JS noemt de ids wel,
@@ -254,13 +254,13 @@ def test_founder_curatie_per_statement_en_naar_spel(tmp_path):
     dd = str(tmp_path)
     _seed(dd)
     st = _st(dd)
-    # zonder open spel: wél de archiveer-tekstlink, geen 'naar spel'-uitklap
+    # zonder open spel: wél de archiveer-tekstlink, geen 'to game'-uitklap
     frag = render_kennisbank_search(st, "", "", "", csrf_token="tok")
-    assert "🗑 verwijder" in frag and "🎲 naar spel" not in frag
+    assert "🗑 delete" in frag and "🎲 to game" not in frag
     # met een open spel: per statement een naar-spel-uitklap met spel-keuze
     st.spel.start("een vermoeden", [{"atom_id": "a1", "stance": "support"}], by="t")
     frag2 = render_kennisbank_search(st, "", "", "", csrf_token="tok")
-    assert "🎲 naar spel" in frag2 and "kb_atoom_naar_spel" in frag2
+    assert "🎲 to game" in frag2 and "kb_atoom_naar_spel" in frag2
     assert "name='atoom'" in frag2 and "name='sid'" in frag2
 
 
@@ -298,8 +298,8 @@ def test_kantelvoorwaarde_op_voorkant_inzicht(tmp_path, monkeypatch):
            "falsifier": "Een paar zonder fossiele input in de materiaalstaat.",
            "evidence": [], "discussion": [], "history": [], "related": []}
     html = _inzicht_detail(ins, {}, "tok", {})
-    assert "Kantelt als:" in html
+    assert "Tips over if:" in html
     assert "Een paar zonder fossiele input" in html
-    # en op de achterkant blijft de onderuithaal-variant bestaan
+    # en op de achterkant blijft de knock downhaal-variant bestaan
     back = _inzicht_detail(ins, {}, "tok", {}, flip=True)
-    assert "onderuit" in back
+    assert "knock down" in back

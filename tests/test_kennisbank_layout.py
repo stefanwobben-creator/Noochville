@@ -172,8 +172,8 @@ def test_brug_markeert_suggesties_en_koppelknoppen(tmp_path):
     iid = st.kennisbank.add("Prijs blokkeert de kern-doelgroep", subject="prijs")
     frag = render_kennisbank_search(st, "", "", iid, csrf_token="t")
     # met een actief inzicht verschijnen de brug-knoppen + een suggestie-markering
-    assert "+ steunt" in frag and "+ tegen" in frag
-    assert "past mogelijk" in frag                     # prijs-kaart als steun-suggestie
+    assert "+ supports" in frag and "+ against" in frag
+    assert "may fit" in frag                     # prijs-kaart als steun-suggestie
     assert f"value='{iid}'" in frag                     # kb_link wijst naar dit inzicht
 
 
@@ -277,13 +277,13 @@ def test_ux_bieb_dedup_geen_comment_geen_feit(tmp_path):
     iid = st.kennisbank.add("Een claim over leer", subject="leer")
     st.kennisbank.link(iid, "a1", "support")
     frag = render_kennisbank_search(st, "", "", iid, csrf_token="t")
-    # A4: het al-gekoppelde atoom toont "al gekoppeld", niet + steunt; het losse wél
-    assert "al gekoppeld" in frag
+    # A4: het al-gekoppelde atoom toont "already linked", niet + supports; het losse wél
+    assert "already linked" in frag
     # A1/A4: geen comment-per-statement (💬) en geen "+ feit"-pad meer in de bibliotheek
     assert "💬" not in frag and "+ feit" not in frag and "kb_atoom_related" not in frag
-    # statements-herontwerp: bewerken zit achter '✏️ bewerk' (kn-editable, niet standaard
+    # statements-herontwerp: bewerken zit achter '✏️ edit' (kn-editable, niet standaard
     # open); de bron-affordance (kb_atoom_reference) zit inline in de Bron-rij
-    assert "kn-editable" in frag and "✏️ bewerk" in frag and "kb_atoom_reference" in frag
+    assert "kn-editable" in frag and "✏️ edit" in frag and "kb_atoom_reference" in frag
 
 
 def test_ux_detail_gesprek_draad_en_geen_derde_pad(tmp_path):
@@ -298,7 +298,7 @@ def test_ux_detail_gesprek_draad_en_geen_derde_pad(tmp_path):
     # C3: gesprek als draad met afzender + tijd
     assert "kn-thread" in html and "Stefan" in html and "eerst design testen" in html
     # A2: tags achter één ingang. Founder dd 2026-07-18: de bulk-selectiebalk is weg — curatie
-    # (archiveren/naar spel) zit per statement in het uitklap-detail. Founder dd 2026-07-24: de
+    # (archiveren/to game) zit per statement in het uitklap-detail. Founder dd 2026-07-24: de
     # tags-pill naast de Signals-kop is de ENIGE tag-ingang; de losse 'alle tags (A–Z)'-uitklap
     # onder de zoekbalk is weg zodat de signals hoger in beeld komen.
     # (de pill zelf staat gedekt in test_kennisbank_statements::…_tagpill_…, die wél tags heeft)
@@ -357,10 +357,10 @@ def test_flip_toont_achterkant(tmp_path):
     iid = st.kennisbank.add("Prijs blokkeert", reframe="Design is de echte drempel",
                             falsifier="Een A/B-test op 150 die niets beweegt")
     voor = render_kennisbank(st, kid=iid, csrf_token="t", flip=False)
-    assert "↺ draai om" in voor and "kn-flip'" not in voor
+    assert "↺ flip" in voor and "kn-flip'" not in voor
     achter = render_kennisbank(st, kid=iid, csrf_token="t", flip=True)
-    assert "de andere kant" in achter and "Design is de echte drempel" in achter
-    assert "Bewijs voor de andere kant" in achter and "↺ terug" in achter
+    assert "the other side" in achter and "Design is de echte drempel" in achter
+    assert "Evidence for the other side" in achter and "↺ back" in achter
 
 
 def test_insight_link_en_meta_spel(tmp_path):
@@ -398,17 +398,17 @@ def test_related_sectie_altijd_zichtbaar_en_uitnodigend_bij_open_inzicht(tmp_pat
     st.kennisbank.add("Ander inzicht")
     html = render_kennisbank(st, kid=iid, csrf_token="t")
     assert "kn-relbox" in html                                   # de box is er
-    assert "Gerelateerde inzichten" in html
-    assert "Nog niets gekoppeld" in html                         # uitnodiging, geen meta-knop nog
-    assert "Speel een meta-inzicht" not in html
+    assert "Related insights" in html
+    assert "Nothing linked yet" in html                         # uitnodiging, geen meta-knop nog
+    assert "Play a meta-insight" not in html
     # linkerlijst leest als koppel-context, rechterkolom als "koppel bewijs"
-    assert "Koppel een gerelateerd inzicht" in html
-    assert "Koppel bewijs" in html
-    assert "+ steunt" in html and "+ spreekt tegen" in html      # duidelijke koppel-knoppen per inzicht
+    assert "Link a related insight" in html
+    assert "Link evidence" in html
+    assert "+ supports" in html and "+ contradicts" in html      # duidelijke koppel-knoppen per inzicht
 
 
 def test_meta_knop_prominent_bij_twee_gekoppeld(tmp_path):
-    # Taak 1: zodra ≥2 gekoppeld, is "Speel een meta-inzicht" prominent (kn-metaplay).
+    # Taak 1: zodra ≥2 gekoppeld, is "Play a meta-insight" prominent (kn-metaplay).
     from nooch_village.views.kennisbank import render_kennisbank
     dd = str(tmp_path); st = _st(dd)
     hub = st.kennisbank.add("Hub-inzicht")
@@ -416,7 +416,7 @@ def test_meta_knop_prominent_bij_twee_gekoppeld(tmp_path):
     st.kennisbank.link_insight(hub, a, "support")
     st.kennisbank.link_insight(hub, b, "counter")
     html = render_kennisbank(st, kid=hub, csrf_token="t")
-    assert "kn-metaplay" in html and "Speel een meta-inzicht" in html
+    assert "kn-metaplay" in html and "Play a meta-insight" in html
 
 
 def test_flip_spiegelt_elk_bewijs_statement_tegen_de_claim(tmp_path):
@@ -434,5 +434,5 @@ def test_flip_spiegelt_elk_bewijs_statement_tegen_de_claim(tmp_path):
     assert "51% wil de prijs naar 150" in achter
     assert "natuurrubber zool breekt traag af" in achter
     # en ze dragen de omgekeerde lezing
-    assert "pleit dit vóór de tegenclaim" in achter
-    assert "pleit dit tégen de tegenclaim" in achter
+    assert "argues for the counter-claim" in achter
+    assert "argues against the counter-claim" in achter

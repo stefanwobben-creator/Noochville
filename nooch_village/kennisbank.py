@@ -144,27 +144,28 @@ def verdict(f: dict) -> dict:
     NOOIT percentages, groep-ids of ruwe trust naar buiten laten lekken."""
     indep, indep_c, n_sup = f["indep"], f["indep_counter"], f["n_support"]
     if indep == 0:
-        return {"word": "dun", "dots": 0, "sentence": "Nog geen bewijs verzameld."}
+        return {"word": "dun", "dots": 0, "sentence": "No evidence collected yet."}
     if indep == 1:
         if n_sup > 1:
-            zin = (f"Dit lijkt sterk, maar {n_sup} bevindingen komen <b>allemaal uit één "
-                   f"bron</b>. Dat is één stem, niet {n_sup}.")
+            zin = (f"This looks strong, but {n_sup} findings <b>all come from one "
+                   f"source</b>. That's one voice, not {n_sup}.")
         else:
-            zin = "Dit steunt op <b>één bron</b>. Leuk om te testen, nog geen conclusie."
+            zin = "This rests on <b>one source</b>. Worth testing, no conclusion yet."
         return {"word": "dun", "dots": 1, "sentence": zin}
     if indep_c >= indep:
         return {"word": "omstreden", "dots": 2,
-                "sentence": "Losse bronnen wijzen <b>twee kanten</b> op. Nog geen winnaar."}
+                "sentence": "Independent sources point <b>two ways</b>. No winner yet."}
     if indep_c > 0:
         return {"word": "groeit", "dots": min(3, indep),
-                "sentence": f"<b>{indep} losse bronnen</b> wijzen hierheen, "
-                            "maar er is een serieus tegenpunt."}
+                "sentence": f"<b>{indep} independent sources</b> point here, "
+                            "but there's a serious counterpoint."}
     return {"word": "stevig", "dots": 4 if indep >= 3 else 3,
-            "sentence": f"<b>{indep} losse bronnen</b> wijzen hierheen, "
-                        "en niemand spreekt het tegen."}
+            "sentence": f"<b>{indep} independent sources</b> point here, "
+                        "and no one contradicts it."}
 
 
-WORD_LABEL = {"stevig": "stevig", "groeit": "groeit nog", "omstreden": "omstreden", "dun": "nog dun"}
+# Sleutels = opgeslagen verdict-waarden (logica, zie verdict()); waarden = het getoonde eindwoord (Engels).
+WORD_LABEL = {"stevig": "solid", "groeit": "still growing", "omstreden": "contested", "dun": "still thin"}
 
 
 # ── Het spel (fase 1: copy-paste; fase 3 draait dit server-side via de LLM-ladder) ─
