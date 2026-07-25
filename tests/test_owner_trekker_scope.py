@@ -40,15 +40,15 @@ def test_a_trekker_alleen_fillers_van_owner(tmp_path):
     opts = _trekker_options(cockpit2._Stores(dd), WEBDEV)
     assert f"persona:{codie.id}" in opts                      # filler aanwezig
     assert f"persona:{buiten.id}" not in opts                # niet-filler afwezig
-    assert "geen trekker" in opts
+    assert "no owner" in opts
 
 
-# b. owner zonder fillers → alleen "geen trekker"
+# b. owner zonder fillers → alleen "no owner"
 def test_b_owner_zonder_fillers(tmp_path):
     dd, st = _st(tmp_path)
     st.personas.add("Losse AI")                              # bestaat, maar nergens toegewezen
     opts = _trekker_options(cockpit2._Stores(dd), FACTORY)   # rol zonder bootstrap-filler
-    assert opts.count("<option") == 1 and "geen trekker" in opts
+    assert opts.count("<option") == 1 and "no owner" in opts
 
 
 # c. proj_setowner → verweesde trekker wordt gereset; een trekker die de nieuwe rol wél bezet blijft
@@ -97,9 +97,9 @@ def test_e_cirkels_uit_dangling_blijft(tmp_path):
     dd, st = _st(tmp_path)
     opts = _owner_options(cockpit2._Stores(dd), sel_owner=WEBDEV, circle=CIRCLE)
     assert f"value='{CIRCLE}'" not in opts and "value='mother_earth'" not in opts   # geen cirkels
-    # dangling owner (bestaat niet meer) → expliciete ⚠-optie, geselecteerd
+    # dangling owner (no longer exists) → expliciete ⚠-optie, geselecteerd
     dangling = _owner_options(cockpit2._Stores(dd), sel_owner="rol_weg_xyz", circle=None)
-    assert "rol_weg_xyz" in dangling and "bestaat niet meer" in dangling and "selected" in dangling
+    assert "rol_weg_xyz" in dangling and "no longer exists" in dangling and "selected" in dangling
 
 
 # f. kernrol (facilitator) niet in de dropdown
@@ -129,7 +129,7 @@ def test_g_verweesde_trekker_geen_crash_dan_reset(tmp_path):
     assert p.get("agent") == marky.id                        # verweesde Codie is opgeruimd
 
 
-# ── Individueel Initiatief: trekker-kandidaten = cirkel-members (mens + persona) ──
+# ── Individual Action: trekker-kandidaten = cirkel-members (mens + persona) ──
 def test_ii_kandidaten_zijn_cirkelmembers(tmp_path):
     dd, st = _st(tmp_path)
     codie = st.personas.add("Codie")
@@ -139,7 +139,7 @@ def test_ii_kandidaten_zijn_cirkelmembers(tmp_path):
     assert f"persona:{codie.id}" in opts                   # persona-member is kandidaat
     assert f"persona:{buiten.id}" not in opts              # niet-member niet
     assert "person:" in opts                               # de bootstrap-mens-members van de cirkel ook
-    assert "geen trekker" in opts
+    assert "no owner" in opts
 
 
 def test_gewone_rol_alleen_eigen_fillers_ongewijzigd(tmp_path):

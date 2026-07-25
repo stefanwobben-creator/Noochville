@@ -23,5 +23,5 @@ def test_vanuit_werkoverleg_terug_cta_en_noclose(tmp_path):
     dd, pid = _setup(tmp_path)
     back = "/werkoverleg?circle=mother_earth__nooch&step=projecten"
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", back=back, fragment=True)
-    assert frag.count("← terug naar werkoverleg") == 2          # boven én onder
+    assert frag.count("← back to tactical meeting") == 2          # boven én onder
     assert "data-noclose='1'" in frag and "step=projecten" in frag

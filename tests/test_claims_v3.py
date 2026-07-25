@@ -233,7 +233,7 @@ def test_rolpagina_toont_het_blok(tmp_path):
     from nooch_village.checklists import period_key
     markeer_week(str(tmp_path), period_key("week"), {"nieuw": 0, "gescand": 5, "overgeslagen": 12})
     html = _ritme_html(SimpleNamespace(dd=str(tmp_path)), _rec(["claims_site_scan"]))
-    assert "Terugkerend ritme" in html and "Wekelijkse site-scan" in html
+    assert "Recurring rhythm" in html and "Wekelijkse site-scan" in html
     assert "style=" not in html
 
 

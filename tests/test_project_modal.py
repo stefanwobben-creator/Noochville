@@ -17,15 +17,15 @@ def test_detail_overzicht_kop(tmp_path):
     dd, pid = _setup(tmp_path)
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "<!doctype" not in frag.lower()
-    # Details in de structuur-kantlijn (pside): bewerkbare Rol/Trekker op volle breedte (dk wide),
-    # Aangemaakt/Zichtbaar als compacte label|waarde-rijen (dk)
-    for k in ("pgrid", "pside", "class='dcol'", "Projectdetails",
-              "<span class='dk wide'>Rol</span>", "<span class='dk wide'>Trekker</span>",
-              "<span class='dk'>Aangemaakt</span>", "<span class='dk'>Zichtbaar</span>"):
+    # Details in de structuur-kantlijn (pside): bewerkbare Rol/Owner op volle breedte (dk wide),
+    # Created/Visible als compacte label|waarde-rijen (dk)
+    for k in ("pgrid", "pside", "class='dcol'", "Project details",
+              "<span class='dk wide'>Role</span>", "<span class='dk wide'>Owner</span>",
+              "<span class='dk'>Created</span>", "<span class='dk'>Visible</span>"):
         assert k in frag
     assert "Voortgang" not in frag and "<dt>Status</dt>" not in frag
     # statuswissel via het …-menu
-    assert "cardmenu" in frag and "Actief" in frag and "Done" in frag
+    assert "cardmenu" in frag and "Active" in frag and "Done" in frag
 
 
 def test_status_menu_markeert_huidige(tmp_path):
@@ -46,13 +46,13 @@ def test_redesign_layout(tmp_path):
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     # full-width header met titel inline + …-menu (status/archiveren/verwijderen)
     assert "pcard-head" in frag and "titleform" in frag and "title-edit" in frag
-    assert "cardmenu" in frag and "menu-h" in frag and "Archiveren" in frag and "Verwijderen" in frag
-    # Structuur-kantlijn: Projectdetails + Checklist-panel; de opdracht-editor is uit de UI verwijderd
+    assert "cardmenu" in frag and "menu-h" in frag and "Archive" in frag and "Delete" in frag
+    # Structuur-kantlijn: Project details + Checklist-panel; de opdracht-editor is uit de UI verwijderd
     # (geen proj_describe-form meer); Bijlage in de composer; LINKS = de wall (geen aparte dialoog-aside)
-    assert "Projectdetails" in frag and "value='proj_describe'" not in frag
-    assert "Sturen doe je via de checklist" in frag        # nieuwe composer-label
-    assert "Bestand van je computer" in frag                 # bijlage-affordance in de composer
-    assert "pside" in frag and "Wall — inhoud" in frag
+    assert "Project details" in frag and "value='proj_describe'" not in frag
+    assert "Steer via the checklist" in frag        # nieuwe composer-label
+    assert "File from your computer" in frag                 # bijlage-affordance in de composer
+    assert "pside" in frag and "Wall — content" in frag
     # geen apart 'Acties'-blok
     assert "Acties" not in frag
 
@@ -67,7 +67,7 @@ def test_bijlage_cards_trello(tmp_path):
     assert "attcard" in frag and "Nooch blog" in frag      # met titel
     assert "example.com" in frag                            # zonder titel -> domein
     assert "fentry-attach" in frag                          # bijlage rendert als inhoud-post in de wall
-    assert "Bestand van je computer" in frag               # toevoegen via de composer-bijlage
+    assert "File from your computer" in frag               # toevoegen via de composer-bijlage
     # verwijderen
     aid = cockpit2._Stores(dd).projects.get(pid)["attachments"][0]["id"]
     cockpit2.dispatch(dd, "attach_remove", {"pid": [pid], "aid": [aid], "next": ["/"]}, username="guest")
@@ -118,7 +118,7 @@ def test_datum_card_datepicker(tmp_path):
     # datum zetten -> de header-chip past zich aan; en weer wissen
     cockpit2.dispatch(dd, "proj_setdue", {"pid": [pid], "due": ["2026-06-25"], "next": ["/"]}, username="guest")
     f2 = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    assert "25 Jun 2026" in f2 and "datum wissen" in f2
+    assert "25 Jun 2026" in f2 and "clear date" in f2
     cockpit2.dispatch(dd, "proj_setdue", {"pid": [pid], "due": [""], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["due"] is None
 
@@ -130,7 +130,7 @@ def test_named_checklists(tmp_path):
     cockpit2.dispatch(dd, "check_add", {"pid": [pid], "clid": [clid], "text": ["Stap 1"], "next": ["/"]}, username="guest")
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     assert "cl-title" in frag and "Stappen" in frag and "Stap 1" in frag
-    assert "Naam checklist" in frag                       # actie-kaart popover
+    assert "Checklist name" in frag                       # actie-kaart popover
     # checklist verwijderen
     cockpit2.dispatch(dd, "checklist_remove", {"pid": [pid], "clid": [clid], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["checklists"] == []

@@ -19,12 +19,12 @@ from nooch_village import org
 if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores
 
-_PROJ_CHIP = {   # status -> (label, chip-kleur-modifier)
-    "running": ("Actief", "green"),
-    "queued": ("Wachtrij", "muted"),
-    "future": ("Toekomst", "muted"),
-    "blocked": ("Wacht", "coral"),
-    "draft": ("Concept", "muted"),
+_PROJ_CHIP = {   # opgeslagen status-sleutel -> (Engels label, chip-kleur-modifier). Sleutels = logica.
+    "running": ("Active", "green"),
+    "queued": ("Queue", "muted"),
+    "future": ("Future", "muted"),
+    "blocked": ("Waiting", "coral"),
+    "draft": ("Draft", "muted"),
     "done": ("Done", "green"),
 }
 
@@ -42,7 +42,7 @@ def _trekker_html(st: _Stores, p: dict) -> str:
     if p.get("person"):
         return (f"<span class='person'><span class='av'>{_e(_initials(_person_name(st, p['person'])))}"
                 f"</span>{_e(_person_name(st, p['person']))}</span>")
-    return "<span class='muted'>geen trekker</span>"
+    return "<span class='muted'>no owner</span>"
 
 
 # Holacracy-kernrollen (governance): doen geen uitvoerend werk → geen owner van een operationeel
@@ -82,7 +82,7 @@ def _trekker_options(st: _Stores, owner: str, sel_person="", sel_agent="") -> st
     """Trekker-keuze = de mens/AI die de eigenaar 'bezetten': fillers van de owner-ROL, of — bij een
     Individueel Initiatief — de members van de cirkel (zie _trekker_candidates). Geen kandidaten →
     alleen 'geen trekker'. Zo kan een trekker nooit iemand zijn die er niet bij hoort."""
-    out = ["<option value=''>— geen trekker —</option>"]
+    out = ["<option value=''>— no owner —</option>"]
     seen = set()
     for f in _trekker_candidates(st, owner):
         if (f.type, f.id) in seen:                    # dedup: een lid kan meerdere rollen vervullen (II)
@@ -113,7 +113,7 @@ def _owner_options(st: _Stores, sel_owner="", circle: str | None = None) -> str:
     if sel_owner and sel_owner not in role_ids:
         cur = st.records.get(sel_owner)
         if cur is None:                                        # dangling: bestaat niet meer
-            out.append(f"<option value='{_e(sel_owner)}' selected>⚠ {_e(sel_owner)} (bestaat niet meer)</option>")
+            out.append(f"<option value='{_e(sel_owner)}' selected>⚠ {_e(sel_owner)} (no longer exists)</option>")
         else:                                                  # geldige owner buiten de scope/kernrol → toch tonen
             out.append(f"<option value='{_e(sel_owner)}' selected>{_e(_name(cur))}</option>")
     for r in roles:
@@ -122,8 +122,10 @@ def _owner_options(st: _Stores, sel_owner="", circle: str | None = None) -> str:
     return "".join(out)
 
 
-_PROJ_COLS = [("Actief", "actief", ("running", "queued")), ("Wacht", "wacht", ("blocked",)),
-              ("Done", "done", ("done",)), ("Toekomst", "toekomst", ("future",))]
+# Label = weergave (Engels); de tweede waarde ('actief'/'wacht'/…) is de kolom-SLEUTEL die als
+# form-value 'col' naar de dispatch gaat en daar wordt vergeleken — die blijft dus Nederlands.
+_PROJ_COLS = [("Active", "actief", ("running", "queued")), ("Waiting", "wacht", ("blocked",)),
+              ("Done", "done", ("done",)), ("Future", "toekomst", ("future",))]
 
 
 _LABELS = {"groen": "#1F9D55", "geel": "#FFCE2E", "koraal": "#FF6B5B",
@@ -135,6 +137,13 @@ _LABELS = {"groen": "#1F9D55", "geel": "#FFCE2E", "koraal": "#FF6B5B",
 # <select> (zelfde datawaarden, alleen de weergave werd een dropdown i.p.v. pills).
 _MISSIE_OPTS   = [("versterkt", "g"), ("neutraal", "n"), ("verzwakt", "r")]
 _BUSINESS_OPTS = [("hoog", "g"), ("medium", "n"), ("laag", "l")]
+
+# Weergave-labels voor de opgeslagen impact- en effort-enums. De OPGESLAGEN waarde blijft Nederlands
+# (logica-sleutel: proj_setimpact/proj_seteffort vergelijken 'versterkt', 'dagen', … — zie cockpit2);
+# alleen het GETOONDE label is Engels. Precies de display-mapping-regel: nooit de opgeslagen waarde.
+_IMPACT_LABEL = {"versterkt": "Strengthens", "neutraal": "Neutral", "verzwakt": "Weakens",
+                 "hoog": "High", "medium": "Medium", "laag": "Low"}
+_UNIT_LABEL = {"uren": "hours", "dagen": "days"}
 
 # Effort-model: uren als canonieke opslag ({"hours": N}). Legacy enum-strings (1u/1d/2d/1w) worden LUI
 # geconverteerd bij lezen — geen migratie-script. 1u=1, 1d=8, 2d=16, 1w=40 (8-urige werkdag).
@@ -163,9 +172,10 @@ def _impact_select(p, field: str, kind: str, opts, rw: bool, hid) -> str:
     auto-opslaan bij selectie (geen knop). Zelfde datawaarden; leeg (—) = ongelabeld. Read-only → tekst."""
     cur = p.get(field, "")
     if not rw:
-        return _e(cur) if cur else "<span class='muted'>—</span>"
+        return _e(_IMPACT_LABEL.get(cur, cur)) if cur else "<span class='muted'>—</span>"
     options = "<option value=''>—</option>" + "".join(
-        f"<option value='{_e(val)}'{' selected' if val == cur else ''}>{_e(val)}</option>" for val, _ in opts)
+        f"<option value='{_e(val)}'{' selected' if val == cur else ''}>{_e(_IMPACT_LABEL.get(val, val))}</option>"
+        for val, _ in opts)
     return (f"<form method='post' action='/action' class='fieldform'>{hid()}"
             f"<input type='hidden' name='action' value='proj_setimpact'>"
             f"<input type='hidden' name='kind' value='{_e(kind)}'>"
@@ -180,14 +190,16 @@ def _effort_control(p, rw: bool, hid) -> str:
     if not rw:
         if not hours:
             return "<span class='muted'>—</span>"
-        return _e(f"{hours // 8} dagen" if hours % 8 == 0 else f"{hours} uren")
+        return _e(f"{hours // 8} days" if hours % 8 == 0 else f"{hours} hours")
     if hours and hours % 8 == 0:
         num, unit = hours // 8, "dagen"
     elif hours:
         num, unit = hours, "uren"
     else:
         num, unit = "", "uren"
-    units = "".join(f"<option value='{u}'{' selected' if u == unit else ''}>{u}</option>" for u in ("uren", "dagen"))
+    # value blijft 'uren'/'dagen' (proj_seteffort vergelijkt 'dagen'); alleen het label is Engels.
+    units = "".join(f"<option value='{u}'{' selected' if u == unit else ''}>{_UNIT_LABEL[u]}</option>"
+                    for u in ("uren", "dagen"))
     return (f"<form method='post' action='/action' class='fieldform eff'>{hid()}"
             f"<input type='hidden' name='action' value='proj_seteffort'>"
             f"<input type='number' name='number' value='{num}' min='0' step='1' placeholder='0' onblur='{_AUTOSAVE}'>"
@@ -200,7 +212,7 @@ def _missie_dot(p) -> str:
     col = dict(_MISSIE_OPTS).get(p.get("missie_impact", ""))
     if not col:
         return ""
-    return f"<span class='mdot {col}' title='Missie-impact: {_e(p['missie_impact'])}'></span>"
+    return f"<span class='mdot {col}' title='Mission impact: {_e(_IMPACT_LABEL.get(p['missie_impact'], p['missie_impact']))}'></span>"
 
 
 def _verzwakt_block(p, hid, rw: bool) -> str:
@@ -210,10 +222,10 @@ def _verzwakt_block(p, hid, rw: bool) -> str:
     if rw:
         btn = (f"<form method='post' action='/action' class='vz-form'>{hid()}"
                f"<button class='btn ok sm' type='submit' name='action' value='proj_agendeer_verzwakt'>"
-               f"Agendeer in werkoverleg</button></form>")
+               f"Add to tactical meeting</button></form>")
     return (f"<div class='vzblock'>"
-            f"<div class='vz-h'>Missie verzwakt. Jij besluit als rolvervuller.</div>"
-            f"<div class='vz-t'>Wil je dit als spanning agenderen in het werkoverleg?</div>{btn}</div>")
+            f"<div class='vz-h'>Mission weakened. You decide as role filler.</div>"
+            f"<div class='vz-t'>Raise this as a tension in the tactical meeting?</div>{btn}</div>")
 
 
 def _proj_progress(p: dict):
@@ -279,19 +291,19 @@ def _quickadd(owner: str, col: str, csrf_token: str, back: str, trekker: str = "
         return ""
     trek = f"<input type='hidden' name='trekker' value='{_e(trekker)}'>" if trekker else ""
     return (
-        f"<details class='qadd'><summary>+ project toevoegen</summary>"
+        f"<details class='qadd'><summary>+ add project</summary>"
         f"<form method='post' action='/action' class='qadd-form'>"
         f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
         f"<input type='hidden' name='owner' value='{_e(owner)}'>"
         f"<input type='hidden' name='col' value='{_e(col)}'>"
         f"<input type='hidden' name='next' value='{_e(back)}'>{trek}"
-        f"<textarea name='scope' rows='2' placeholder='Titel van het project…' aria-label='nieuw project'></textarea>"
+        f"<textarea name='scope' rows='2' placeholder='Project title…' aria-label='new project'></textarea>"
         f"<textarea name='done_when' rows='2' required "
-        f"placeholder='Waar herken je aan dat dit klaar is?' aria-label='done-when'></textarea>"
+        f"placeholder='How will you know this is done?' aria-label='done-when'></textarea>"
         f"<div class='qadd-row'>"
-        f"<button class='btn ok' type='submit' name='action' value='proj_add'>Project toevoegen</button>"
+        f"<button class='btn ok' type='submit' name='action' value='proj_add'>Add project</button>"
         f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "
-        f"aria-label='annuleren'>✕</button></div>"
+        f"aria-label='cancel'>✕</button></div>"
         f"</form></details>")
 
 
@@ -306,8 +318,8 @@ def _inline_add_project(st: _Stores, rec, csrf_token: str, back: str, username: 
         roles = sorted(org.roles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
         ro = "".join(f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>" for r in roles)
         # Individueel Initiatief: een project oppakken zónder rol, direct onder de cirkel.
-        ii_opt = f"<option value='{_II_PREFIX}{_e(rec.id)}'>Individueel Initiatief (geen rol)</option>"
-        owner_field = (f"<label class='att-lbl'>Rol</label>"
+        ii_opt = f"<option value='{_II_PREFIX}{_e(rec.id)}'>Individual Action (no role)</option>"
+        owner_field = (f"<label class='att-lbl'>Role</label>"
                        f"<select name='owner'>{ro}{ii_opt}</select>")
     else:
         owner_field = f"<input type='hidden' name='owner' value='{_e(rec.id)}'>"
@@ -316,17 +328,17 @@ def _inline_add_project(st: _Stores, rec, csrf_token: str, back: str, username: 
         f"<form method='post' action='/action' class='qadd-form'>"
         f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
         f"<input type='hidden' name='next' value='{_e(back)}'>"
-        f"<textarea name='scope' rows='2' placeholder='Te bereiken uitkomst…' aria-label='nieuw project'></textarea>"
+        f"<textarea name='scope' rows='2' placeholder='Outcome to reach…' aria-label='new project'></textarea>"
         f"<textarea name='done_when' rows='2' required "
-        f"placeholder='Waar herken je aan dat dit klaar is?' aria-label='done-when'></textarea>"
+        f"placeholder='How will you know this is done?' aria-label='done-when'></textarea>"
         f"{owner_field}"
         f"<label class='att-lbl'>Status</label><select name='col'>"
-        f"<option value='actief'>Actief</option><option value='wacht'>Wacht</option>"
-        f"<option value='toekomst'>Toekomst</option></select>"
-        f"<label class='att-lbl'>Trekker (persoon of AI)</label><select name='trekker'>"
+        f"<option value='actief'>Active</option><option value='wacht'>Waiting</option>"
+        f"<option value='toekomst'>Future</option></select>"
+        f"<label class='att-lbl'>Owner (person or AI)</label><select name='trekker'>"
         f"{_trekker_options(st, '' if org.is_circle(rec) else rec.id)}</select>"
         f"<div class='qadd-row'><button class='btn ok' type='submit' name='action' value='proj_add'>"
-        f"Project toevoegen</button></div></form></details>")
+        f"Add project</button></div></form></details>")
 
 
 def _wizard_addlink(rec, csrf_token: str) -> str:
@@ -339,7 +351,7 @@ def _wizard_addlink(rec, csrf_token: str) -> str:
     if not org.is_circle(rec):
         href += f"?role={_e(rec.id)}"
     return (f"<a class='addlink js-modal' href='{href}' data-href='{href}'>"
-            f"＋ project toevoegen</a>")
+            f"＋ add project</a>")
 
 
 def _columns_html(st: _Stores, items: list, add_owner: str, add_trekker: str,
@@ -397,7 +409,7 @@ def _modal_html(mentions_json: str = "[]") -> str:
     de kaart-link naar de volledige /project-pagina. Bedoeld als standaard-patroon (ook kenniskaartjes)."""
     return (
         "<div id='ovl' class='ovl' style='display:none'><div class='ovl-box'>"
-        "<button type='button' class='ovl-x' aria-label='sluiten'>✕</button>"
+        "<button type='button' class='ovl-x' aria-label='close'>✕</button>"
         "<div id='ovl-body'></div></div></div>"
         "<script>(function(){"
         "var ov=document.getElementById('ovl'),bd=document.getElementById('ovl-body'),last=null,dirty=false;"
@@ -462,12 +474,12 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "fetch('/action',opts).then(function(resp){"
         # response.ok-poort (generiek voor ELKE modal-actie, incl. de auto-opslaan-controls): een 413
         # (bestand te groot) of elke andere niet-2xx toont de server-melding en NOOIT '✓ opgeslagen'.
-        "if(!resp.ok){resp.text().then(function(t){reopen();toast('\\u26a0 '+(((t||'').trim()||'niet opgeslagen').slice(0,90)));});return;}"
+        "if(!resp.ok){resp.text().then(function(t){reopen();toast('\\u26a0 '+(((t||'').trim()||'not saved').slice(0,90)));});return;}"
         "if(act==='wo_close'||act==='rov2_end'){confetti();setTimeout(shut,700);}"
         "else if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'){shut();}"
-        "else{var dr=f.getAttribute('data-reopen');if(dr){last=dr;}reopen();toast('\\u2713 opgeslagen');}})"
+        "else{var dr=f.getAttribute('data-reopen');if(dr){last=dr;}reopen();toast('\\u2713 saved');}})"
         # netwerk-foutpad (geen response): melding + best-effort revert door het fragment te herladen.
-        ".catch(function(){reopen();toast('\\u26a0 niet opgeslagen');});});});"
+        ".catch(function(){reopen();toast('\\u26a0 not saved');});});});"
         "bd.querySelectorAll('textarea').forEach(mentionWire);"
         # wall scrollt naar het laatste bericht: bij openen én na elke actie (reopen()→wire()), scoped op bd
         "var ws=bd.querySelector('.wall-scroll');if(ws){requestAnimationFrame(function(){ws.scrollTop=0;});}"
@@ -495,9 +507,9 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "if(to==='done'){d.set('action','proj_done');}else{d.set('action','proj_status');d.set('to',to);}"
         # response.ok-poort (zoals wire()): een niet-2xx toont de server-melding, nooit '✓ verplaatst'.
         "fetch('/action',{method:'POST',body:d}).then(function(resp){"
-        "if(!resp.ok){resp.text().then(function(t){reopen();toast('\\u26a0 '+(((t||'').trim()||'niet verplaatst').slice(0,90)));});return;}"
-        "reopen();toast('\\u2713 verplaatst');})"
-        ".catch(function(){reopen();toast('\\u26a0 niet verplaatst');});});});"
+        "if(!resp.ok){resp.text().then(function(t){reopen();toast('\\u26a0 '+(((t||'').trim()||'not moved').slice(0,90)));});return;}"
+        "reopen();toast('\\u2713 moved');})"
+        ".catch(function(){reopen();toast('\\u26a0 not moved');});});});"
         "bd.querySelectorAll('.pcard[data-href]').forEach(function(c){"
         "c.addEventListener('click',function(e){if(window.__pdrag)return;e.preventDefault();"
         "var href=c.getAttribute('data-href');"
@@ -520,12 +532,12 @@ def _group_meta(st: _Stores, p: dict, mode: str, node_owner: str):
     owner = p.get("owner") or ""
     if mode == "rol":
         if owner.startswith(_II_PREFIX):
-            return (("ii", owner), "zzz", "Individueel Initiatief", owner, "")
+            return (("ii", owner), "zzz", "Individual Action", owner, "")
         orec = st.records.get(owner)
         if orec is None and owner:
             # dangling: de eigenaar-rol bestaat niet meer — maak dat zichtbaar i.p.v. stil "—"
             return (("rol", owner), "zzz_" + owner.lower(),
-                    f"⚠ {owner} (rol bestaat niet meer)", owner, "")
+                    f"⚠ {owner} (role no longer exists)", owner, "")
         nm = _name(orec) if orec else (owner or "—")
         return (("rol", owner), nm.lower(), nm, owner, "")
     if p.get("agent"):
@@ -535,7 +547,7 @@ def _group_meta(st: _Stores, p: dict, mode: str, node_owner: str):
     if p.get("person"):
         nm = _person_name(st, p["person"])
         return (("person", p["person"]), "0_" + nm.lower(), nm, node_owner, f"person:{p['person']}")
-    return (("none",), "2", "Geen trekker", node_owner, "")
+    return (("none",), "2", "No owner", node_owner, "")
 
 
 def _projects_board(st: _Stores, projs: list, owner: str, csrf_token: str, back: str,
@@ -572,11 +584,11 @@ def _archived_html(st: _Stores, archived: list, csrf_token: str, back: str) -> s
                 f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                 f"<input type='hidden' name='pid' value='{_e(p['id'])}'>"
                 f"<input type='hidden' name='next' value='{_e(back)}'>"
-                f"<button class='btn' type='submit' name='action' value='proj_unarchive'>herstellen</button>"
+                f"<button class='btn' type='submit' name='action' value='proj_unarchive'>restore</button>"
                 f"<button type='submit' name='action' value='proj_delete' class='dellink' "
-                f"onclick=\"return confirm('Definitief verwijderen?')\">verwijderen</button></form>")
+                f"onclick=\"return confirm('Delete permanently?')\">delete</button></form>")
         rows += f"<li class='muted'>{_e(str(scope or '—'))}{ctrl}</li>"
-    return (f"<details class='box-details' style='margin-top:.6rem'><summary>🗄 Gearchiveerd ({len(archived)})</summary>"
+    return (f"<details class='box-details' style='margin-top:.6rem'><summary>🗄 Archived ({len(archived)})</summary>"
             f"<ul class='clean'>{rows}</ul></details>")
 
 
@@ -600,12 +612,12 @@ def _drafts_html(st: _Stores, drafts: list, csrf_token: str, back: str) -> str:
                     f"<input type='hidden' name='next' value='{_e(back)}'>")
             ctrl = (
                 f" <form method='post' action='/action' style='display:inline'>{base}"
-                f"<button class='btn ok sm' type='submit' name='action' value='proj_approve'>goedkeuren</button>"
+                f"<button class='btn ok sm' type='submit' name='action' value='proj_approve'>approve</button>"
                 f"</form> <form method='post' action='/action' style='display:inline'>{base}"
                 f"<button class='dellink' type='submit' name='action' value='proj_discard' "
-                f"onclick=\"return confirm('Concept verwerpen?')\">verwerpen</button></form>")
+                f"onclick=\"return confirm('Discard draft?')\">discard</button></form>")
         rows += (f"<li>{_e(str(scope or '—'))} <span class='muted'>· {trekker}</span>{ctrl}</li>")
-    return (f"<details class='box-details' open style='margin:.6rem 0'><summary>📝 Concepten — wachten op akkoord "
+    return (f"<details class='box-details' open style='margin:.6rem 0'><summary>📝 Drafts — awaiting approval "
             f"({len(drafts)})</summary><ul class='clean'>{rows}</ul></details>")
 
 
@@ -628,16 +640,16 @@ def _orphans_html(st: _Stores, orphans: list, csrf_token: str, back: str) -> str
             ctrl = (
                 f" <form method='post' action='/action' style='display:inline'>{base}"
                 f"<select name='owner'>{_owner_options(st)}</select>"
-                f"<button class='btn sm' type='submit' name='action' value='proj_setowner'>koppel aan rol</button>"
+                f"<button class='btn sm' type='submit' name='action' value='proj_setowner'>link to role</button>"
                 f"</form> <form method='post' action='/action' style='display:inline'>{base}"
-                f"<button class='btn sm' type='submit' name='action' value='proj_archive'>archiveer</button>"
+                f"<button class='btn sm' type='submit' name='action' value='proj_archive'>archive</button>"
                 f"<button class='dellink' type='submit' name='action' value='proj_delete' "
-                f"onclick=\"return confirm('Definitief verwijderen?')\">verwijder</button></form>")
-        rows += (f"<li><span class='chip coral-solid'>wees</span> {_e(str(scope or '—'))} "
-                 f"<span class='muted'>· verloren eigenaar: {ghost}</span>{ctrl}</li>")
-    return (f"<div class='c2-sec'><h3>⚠ Wees-projecten ({len(orphans)})</h3>"
-            f"<p class='muted' style='font-size:.8rem'>Deze projecten verwijzen naar een rol die "
-            f"niet meer bestaat. Koppel ze aan een bestaande rol of ruim ze op.</p>"
+                f"onclick=\"return confirm('Delete permanently?')\">delete</button></form>")
+        rows += (f"<li><span class='chip coral-solid'>orphan</span> {_e(str(scope or '—'))} "
+                 f"<span class='muted'>· lost owner: {ghost}</span>{ctrl}</li>")
+    return (f"<div class='c2-sec'><h3>⚠ Orphan projects ({len(orphans)})</h3>"
+            f"<p class='muted' style='font-size:.8rem'>These projects reference a role that no longer "
+            f"exists. Link them to an existing role or clean them up.</p>"
             f"<ul class='clean'>{rows}</ul></div>")
 
 
@@ -656,10 +668,10 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
         archived = [p for p in allp if p.get("owner") == rec.id and p.get("archived")]
         board = _projects_board(st, projs, rec.id, csrf_token, back_base, "persoon", quickadd=add)
         if not board:
-            board = ("<p class='muted'>Nog geen projecten. Voeg er een toe met ＋ project toevoegen.</p>" if add
-                     else "<p class='muted'>Nog geen projecten.</p>")
+            board = ("<p class='muted'>No projects yet. Add one with ＋ add project.</p>" if add
+                     else "<p class='muted'>No projects yet.</p>")
         head = (f"<div style='margin-bottom:1rem'>"
-                f"<h3 style='margin:0;display:inline'>Projecten ({len(projs)})</h3> &nbsp; {addlink}</div>")
+                f"<h3 style='margin:0;display:inline'>Projects ({len(projs)})</h3> &nbsp; {addlink}</div>")
         return (f"<div class='c2-sec'>{head}{_drafts_html(st, drafts, csrf_token, back_base)}"
                 f"{board}{_archived_html(st, archived, csrf_token, back_base)}</div>")
 
@@ -675,23 +687,23 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
     back = f"{back_base}&group={g}"
     board = _projects_board(st, projs, rec.id, csrf_token, back, g, quickadd=add)
     if not board:
-        board = ("<p class='muted'>Nog geen projecten. Voeg er een toe met ＋ project toevoegen.</p>" if add
-                 else "<p class='muted'>Nog geen projecten.</p>")
+        board = ("<p class='muted'>No projects yet. Add one with ＋ add project.</p>" if add
+                 else "<p class='muted'>No projects yet.</p>")
     subs = sorted(org.subcircles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
     sub_html = ""
     if subs:
         lis = "".join(f"<li><a href='/node?id={_e(s.id)}&tab=projects'>{_e(_name(s))}</a> "
-                      f"<span class='muted'>→ eigen projectenbord</span></li>" for s in subs)
-        sub_html = (f"<div class='c2-sec'><h3>Subcirkels</h3>"
-                    f"<p class='muted' style='font-size:.8rem'>Een subcirkel heeft een eigen "
-                    f"projectenbord.</p><ul class='clean'>{lis}</ul></div>")
+                      f"<span class='muted'>→ own project board</span></li>" for s in subs)
+        sub_html = (f"<div class='c2-sec'><h3>Subcircles</h3>"
+                    f"<p class='muted' style='font-size:.8rem'>A subcircle has its own "
+                    f"project board.</p><ul class='clean'>{lis}</ul></div>")
     on = lambda v: " on" if g == v else ""
-    switch = (f"<div class='vswitch'>Groeperen: "
-              f"<a class='vbtn{on('rol')}' href='{back_base}&group=rol'>per rol</a>"
-              f"<a class='vbtn{on('persoon')}' href='{back_base}&group=persoon'>per persoon</a></div>")
+    switch = (f"<div class='vswitch'>Group by: "
+              f"<a class='vbtn{on('rol')}' href='{back_base}&group=rol'>by role</a>"
+              f"<a class='vbtn{on('persoon')}' href='{back_base}&group=persoon'>by person</a></div>")
     head = (f"<div style='display:flex;align-items:center;justify-content:space-between;"
             f"flex-wrap:wrap;gap:.6rem;margin-bottom:1rem'>"
-            f"<div><h3 style='margin:0;display:inline'>Projecten ({len(projs)})</h3> &nbsp; {addlink}</div>"
+            f"<div><h3 style='margin:0;display:inline'>Projects ({len(projs)})</h3> &nbsp; {addlink}</div>"
             f"{switch}</div>")
     # Wees-projecten (verloren eigenaar) tonen we op de wortelcirkel: van daaruit altijd bereikbaar.
     orphans_html = ""
@@ -717,8 +729,8 @@ def _person_projects_tab_html(st: _Stores, filler_type: str, pid: str, csrf_toke
     back = f"/person?id={pid}&tab=projecten"
     board = _projects_board(st, mine, "", csrf_token, back, "rol", quickadd=False)
     if not board:
-        board = "<p class='muted'>Geen projecten op de rollen van deze persoon.</p>"
-    return f"<div class='c2-sec'><h3>Projecten ({len(mine)})</h3>{board}</div>"
+        board = "<p class='muted'>No projects on this person's roles.</p>"
+    return f"<div class='c2-sec'><h3>Projects ({len(mine)})</h3>{board}</div>"
 
 
 def _opdracht_post(p: dict) -> str:
@@ -729,9 +741,9 @@ def _opdracht_post(p: dict) -> str:
     desc = p.get("description", "")
     return (f"<div class='fentry fentry-opdracht'>"
             f"<div class='fhead'><span class='av you'>🙋</span>"
-            f"<span class='fwho'><b class='fname'>Opdracht</b></span>"
+            f"<span class='fwho'><b class='fname'>Assignment</b></span>"
             f"<span class='fstamp'>{_e(_stamp(p.get('created_at')))}</span></div>"
-            f"<div class='fbubble'><span class='fkicker'>Opdracht</span>{_md(desc)}</div></div>")
+            f"<div class='fbubble'><span class='fkicker'>Assignment</span>{_md(desc)}</div></div>")
 
 
 def _attach_post(a: dict, pid: str, hid, rw: bool) -> str:
@@ -739,7 +751,7 @@ def _attach_post(a: dict, pid: str, hid, rw: bool) -> str:
     vastgelegd op het attachment-record → generieke auteur. Het vastleggen van 'wie' is een
     datawijziging → scope 2 (audit-trail), niet deze pure-weergave-scope."""
     if a.get("kind", "link") == "file":
-        nm = a.get("title") or a.get("name", "bestand")
+        nm = a.get("title") or a.get("name", "file")
         href = f"/file?pid={_e(pid)}&aid={_e(a.get('id', ''))}"
         card = (f"<div class='attcard'><span class='att-ic'>{_IC_FILE}</span>"
                 f"<a class='att-name' href='{href}' target='_blank' rel='noopener'>{_e(nm)}</a></div>")
@@ -750,10 +762,10 @@ def _attach_post(a: dict, pid: str, hid, rw: bool) -> str:
     rm = ("" if not rw else
           f"<form method='post' action='/action' class='pf'>{hid()}"
           f"<input type='hidden' name='aid' value='{_e(a.get('id', ''))}'>"
-          f"<button class='flink' type='submit' name='action' value='attach_remove'>✕ verwijderen</button></form>")
+          f"<button class='flink' type='submit' name='action' value='attach_remove'>✕ remove</button></form>")
     return (f"<div class='fentry fentry-attach'>"
             f"<div class='fhead'><span class='av'>📎</span>"
-            f"<span class='fwho'><b class='fname'>Bijlage toegevoegd</b></span>"
+            f"<span class='fwho'><b class='fname'>Attachment added</b></span>"
             f"<span class='fstamp'>{_e(_stamp(a.get('at')))}</span></div>"
             f"<div class='fbubble'>{card}<div class='ffoot'><div class='ffoot-l'>{rm}</div></div></div></div>")
 
@@ -769,25 +781,25 @@ def _einddocument_html(st: _Stores, pid: str, rw: bool, hid) -> str:
     if doc.strip():
         body = f"<div class='fentry'><div class='fbubble einddoc-body'>{_md_doc(doc)}</div></div>"
     else:
-        body = ("<div class='fentry'><div class='fbubble'><span class='muted'>Nog geen einddocument — "
-                "de toegewezen inwoner schrijft dit bij elke geslaagde puls.</span></div></div>")
+        body = ("<div class='fentry'><div class='fbubble'><span class='muted'>No end document yet — "
+                "the assigned inhabitant writes it on every successful pulse.</span></div></div>")
     view = (f"<details class='einddoc-d' open><summary class='wall-head einddoc-sum'>"
-            f"<h2>📄 Einddocument</h2><span class='einddoc-toggle'>in-/uitklappen</span></summary>"
+            f"<h2>📄 End document</h2><span class='einddoc-toggle'>expand/collapse</span></summary>"
             f"{body}</details>")
     if not rw:
         return view
-    editor = (f"<details class='cardmenu'><summary class='flink'>✏️ document bewerken</summary>"
+    editor = (f"<details class='cardmenu'><summary class='flink'>✏️ edit document</summary>"
               f"<form method='post' action='/action' class='pf'>{hid()}"
               f"<input type='hidden' name='pid' value='{_e(pid)}'>"
-              f"<label class='att-lbl'>De AI werkt dit document bij; blijvende aanwijzingen geef je via "
-              f"een #task-comment op de wall.</label>"
+              f"<label class='att-lbl'>The AI updates this document; give lasting instructions via "
+              f"a #task comment on the wall.</label>"
               f"{md_editor('doc', value=doc, rows=10, help=True)}"
-              f"<button class='btn ok sm' type='submit' name='action' value='proj_doc_edit'>Document opslaan</button>"
+              f"<button class='btn ok sm' type='submit' name='action' value='proj_doc_edit'>Save document</button>"
               f"</form></details>")
     regen = (f"<form method='post' action='/action' class='pf einddoc-regen'>{hid()}"
              f"<button class='flink' type='submit' name='action' value='proj_regen_doc' "
-             f"onclick=\"return confirm('Rapport opnieuw genereren uit de laatste deliverables? "
-             f"Dit overschrijft de huidige tekst.')\">🔄 rapport opnieuw genereren</button></form>")
+             f"onclick=\"return confirm('Regenerate the report from the latest deliverables? "
+             f"This overwrites the current text.')\">🔄 regenerate report</button></form>")
     return f"{view}{editor}{regen}"
 
 
@@ -796,8 +808,8 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     p = st.projects.get(pid)
     if p is None:
         if fragment:
-            return "<p class='muted'>Project bestaat niet meer.</p>"
-        return _page("Niet gevonden", "<p>Project niet gevonden.</p><p><a href='/'>← home</a></p>")
+            return "<p class='muted'>Project no longer exists.</p>"
+        return _page("Not found", "<p>Project not found.</p><p><a href='/'>← home</a></p>")
     if not back.startswith("/"):
         back = "/"
     orec = st.records.get(p.get("owner"))
@@ -825,21 +837,21 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
             on = " on" if status in statuses else ""
             st_items += (f"<form method='post' action='/action'>{hid()}{to}"
                          f"<button class='menuitem{on}' type='submit' name='action' value='{act}'>{_e(label)}</button></form>")
-        menu = (f"<details class='cardmenu'><summary class='statustrigger' aria-label='status wijzigen'>"
+        menu = (f"<details class='cardmenu'><summary class='statustrigger' aria-label='change status'>"
                 f"{_proj_chip(status)}<span class='caret'>▾</span></summary><div class='cardmenu-b'>"
                 f"<div class='menu-h'>Status</div>{st_items}<div class='menu-sep'></div>"
                 f"<form method='post' action='/action'>{hid()}<input type='hidden' name='next' value='{_e(back)}'>"
-                f"<button class='menuitem' type='submit' name='action' value='proj_archive'>Archiveren</button></form>"
+                f"<button class='menuitem' type='submit' name='action' value='proj_archive'>Archive</button></form>"
                 f"<form method='post' action='/action'>{hid()}<input type='hidden' name='next' value='{_e(back)}'>"
                 f"<button class='menuitem danger' type='submit' name='action' value='proj_delete' "
-                f"onclick=\"return confirm('Definitief verwijderen? Archiveren bewaart het project.')\">Verwijderen</button>"
+                f"onclick=\"return confirm('Delete permanently? Archiving keeps the project.')\">Delete</button>"
                 f"</form></div></details>")
 
     # ---- Titel (inline bewerkbaar) ----
     if rw:
         title = (f"<form method='post' action='/action' class='titleform'>{hid()}"
-                 f"<input class='title-edit' name='scope' value='{_e(_scope_text(p))}' aria-label='projecttitel'>"
-                 f"<button class='btn ok sm title-save' type='submit' name='action' value='proj_rename'>opslaan</button></form>")
+                 f"<input class='title-edit' name='scope' value='{_e(_scope_text(p))}' aria-label='project title'>"
+                 f"<button class='btn ok sm title-save' type='submit' name='action' value='proj_rename'>save</button></form>")
     else:
         title = f"<h2 class='ptitle-ro'>{_e(_scope_text(p))}</h2>"
 
@@ -852,7 +864,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         due_rm = ("" if not due else
                   f"<form method='post' action='/action' class='pf'>{hid()}"
                   f"<input type='hidden' name='action' value='proj_setdue'><input type='hidden' name='due' value=''>"
-                  f"<button class='dellink' type='submit'>datum wissen</button></form>")
+                  f"<button class='dellink' type='submit'>clear date</button></form>")
         due_head = (f"<details class='acard-d'><summary class='chip {'coral' if over else 'outline'}'>"
                     f"{_IC_CLOCK}{_e(due_lbl)}</summary><div class='datepop'>"
                     f"<form method='post' action='/action'>{hid()}"
@@ -871,10 +883,10 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     owner = p.get("owner", "")
     is_ii = owner.startswith(_II_PREFIX)
     dangling = bool(owner) and not is_ii and orec is None
-    rol_naam = "Individueel Initiatief" if is_ii else (_name(orec) if orec else (owner or "—"))
+    rol_naam = "Individual Action" if is_ii else (_name(orec) if orec else (owner or "—"))
     if rw and not is_ii:
         warn = ("<div class='dangling-warn'><span class='chip coral-solid'>"
-                "⚠ rol bestaat niet meer — kies een nieuwe</span></div>") if dangling else ""
+                "⚠ role no longer exists — pick a new one</span></div>") if dangling else ""
         # scope de owner-dropdown op de cirkel waar dit project hangt (= ouder-cirkel van de owner-rol)
         owner_circle = orec.parent if orec else None
         rol_v = (f"{warn}<form method='post' action='/action' class='fieldform'>{hid()}"
@@ -900,22 +912,22 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
                  f"<label><input type='checkbox' name='private' value='1'"
                  f"{' checked' if p.get('private') else ''} "
                  f"onchange='this.form.requestSubmit?this.form.requestSubmit():this.form.submit()'>"
-                 f" alleen voor deze cirkel</label></form>")
+                 f" only for this circle</label></form>")
     else:
-        vis_v = "Alleen voor deze cirkel" if p.get("private") else "Hele cirkel-boom"
+        vis_v = "Only for this circle" if p.get("private") else "Whole circle tree"
     verzwakt_block = _verzwakt_block(p, hid, rw) if p.get("missie_impact") == "verzwakt" else ""
     w = " wide" if rw else ""                    # bewerkbaar → label boven + dropdown op volle breedte
     details_dcol = (
         f"<div class='dcol'>"
-        f"<span class='dk{w}'>Rol</span><span class='dv{w}'>{rol_v}</span>"
-        f"<span class='dk{w}'>Trekker</span><span class='dv{w}'>{pers_v}</span>"
-        f"<span class='dk'>Aangemaakt</span><span class='dv'>{_e(_created_full(p.get('created_at')))}</span>"
-        f"<span class='dk'>Zichtbaar</span><span class='dv'>{vis_v}</span>"
-        f"<span class='dk{w}'>Missie-impact</span><span class='dv{w}'>{_impact_select(p, 'missie_impact', 'missie', _MISSIE_OPTS, rw, hid)}</span>"
-        f"<span class='dk{w}'>Business-impact</span><span class='dv{w}'>{_impact_select(p, 'business_impact', 'business', _BUSINESS_OPTS, rw, hid)}</span>"
+        f"<span class='dk{w}'>Role</span><span class='dv{w}'>{rol_v}</span>"
+        f"<span class='dk{w}'>Owner</span><span class='dv{w}'>{pers_v}</span>"
+        f"<span class='dk'>Created</span><span class='dv'>{_e(_created_full(p.get('created_at')))}</span>"
+        f"<span class='dk'>Visible</span><span class='dv'>{vis_v}</span>"
+        f"<span class='dk{w}'>Mission impact</span><span class='dv{w}'>{_impact_select(p, 'missie_impact', 'missie', _MISSIE_OPTS, rw, hid)}</span>"
+        f"<span class='dk{w}'>Business impact</span><span class='dv{w}'>{_impact_select(p, 'business_impact', 'business', _BUSINESS_OPTS, rw, hid)}</span>"
         f"<span class='dk{w}'>Effort</span><span class='dv{w}'>{_effort_control(p, rw, hid)}</span>"
         f"</div>")
-    details_panel = _psec(_IC_INFO, "Projectdetails", details_dcol + verzwakt_block)
+    details_panel = _psec(_IC_INFO, "Project details", details_dcol + verzwakt_block)
 
     # 1b) De DoD-contract-box is vervallen (founder, 21 jul): de 'klaar wanneer' (uitgebreide DoD)
     # staat nu als kop van het einddocument (direct onder de titel), en de projectpoort is
@@ -925,41 +937,41 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     checklists_html = _checklists_html(p, csrf_token, pid, back, rw)
     cl_new = ""
     if rw:
-        cl_new = (f"<details class='acard-d cl-newlist'><summary class='flink'>+ nieuwe checklist</summary>"
+        cl_new = (f"<details class='acard-d cl-newlist'><summary class='flink'>+ new checklist</summary>"
                   f"<div class='datepop'><form method='post' action='/action'>{hid()}"
-                  f"<input name='title' placeholder='Naam checklist'>"
-                  f"<button class='btn ok sm' type='submit' name='action' value='checklist_add'>Voeg toe</button>"
+                  f"<input name='title' placeholder='Checklist name'>"
+                  f"<button class='btn ok sm' type='submit' name='action' value='checklist_add'>Add</button>"
                   f"</form></div></details>")
-    cl_inner = (checklists_html or "<p class='muted'>Nog geen checklist.</p>") + cl_new
+    cl_inner = (checklists_html or "<p class='muted'>No checklist yet.</p>") + cl_new
     checklist_panel = _psec(_IC_CHECK, "Checklist", cl_inner)
 
     # 3) Doel & relaties — placeholder (functie later)
-    goals_panel = _psec(_IC_TARGET, "Doel & relaties",
-                        "<p class='muted'>Nog niet gekoppeld aan een doel.</p>"
+    goals_panel = _psec(_IC_TARGET, "Goal & relations",
+                        "<p class='muted'>Not linked to a goal yet.</p>"
                         f"<button type='button' class='acard acard-off' disabled>{_IC_TARGET}"
-                        "<span>Koppel aan doel · binnenkort</span></button>")
+                        "<span>Link to goal · soon</span></button>")
     structure = details_panel + checklist_panel + goals_panel
 
     # ═══ LINKS: WALL — inhoud & gesprek in tijdsvolgorde ═══════════════════════════════
     composer = ""
     if rw:
         nxt_full = f"/project?pid={pid}&back=" + urllib.parse.quote(back, safe="")
-        bijlage = (f"<details class='acard-d comp-attach'><summary class='flink'>📎 bijlage</summary>"
+        bijlage = (f"<details class='acard-d comp-attach'><summary class='flink'>📎 attachment</summary>"
                    f"<div class='datepop att-pop'>"
                    f"<form method='post' action='/action' enctype='multipart/form-data' class='filepost'>"
                    f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                    f"<input type='hidden' name='pid' value='{_e(pid)}'>"
                    f"<input type='hidden' name='action' value='attach_file'>"
                    f"<input type='hidden' name='next' value='{_e(nxt_full)}'>"
-                   f"<label class='att-lbl'>Bestand van je computer</label>"
+                   f"<label class='att-lbl'>File from your computer</label>"
                    f"<input type='file' name='file'>"
                    f"<button class='btn ok sm' type='submit'>Upload</button></form>"
                    f"<div class='att-sep'></div>"
                    f"<form method='post' action='/action'>{hid()}"
-                   f"<label class='att-lbl'>Of een link plakken</label>"
+                   f"<label class='att-lbl'>Or paste a link</label>"
                    f"<input name='url' placeholder='https://…'>"
-                   f"<input name='title' placeholder='Naam (optioneel)'>"
-                   f"<button class='btn ok sm' type='submit' name='action' value='attach_add'>Toevoegen</button></form>"
+                   f"<input name='title' placeholder='Name (optional)'>"
+                   f"<button class='btn ok sm' type='submit' name='action' value='attach_add'>Add</button></form>"
                    f"</div></details>")
         # De toolbar-rij (bijlage + Plaatsen) staat BUITEN de composer-form. Anders zit het upload-form
         # (class='filepost', multipart) genest ín comp-form — ongeldige HTML → de browser dropt de inner
@@ -968,12 +980,12 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         _cfid = f"cf-{_e(pid)}"
         composer = (f"<form id='{_cfid}' method='post' action='/action' class='pf comp-form'>{hid()}"
                     f"<input type='hidden' name='author' value='human:'>"
-                    f"<label class='att-lbl'>Gesprek — @naam vraagt een inwoner om mee te denken. Sturen doe je via de checklist.</label>"
-                    f"{md_editor('text', rows=2, placeholder='Schrijf een reactie…', help=True)}"
+                    f"<label class='att-lbl'>Conversation — @name asks an inhabitant to weigh in. Steer via the checklist.</label>"
+                    f"{md_editor('text', rows=2, placeholder='Write a reply…', help=True)}"
                     f"</form>"
                     f"<div class='comp-row'>"
                     f"{bijlage}"                                    # bijlage links op de toolbar-rij (eigen form)…
-                    f"<button class='btn ok sm' type='submit' form='{_cfid}' name='action' value='proj_feed'>Plaatsen</button>"
+                    f"<button class='btn ok sm' type='submit' form='{_cfid}' name='action' value='proj_feed'>Post</button>"
                     f"</div>")                                      # …Plaatsen rechts (via .comp-attach margin-right:auto)
     # Wall-volgorde: de opdracht (de brief) blijft als context bovenaan gepind; daaronder het gesprek en
     # de deliverables/bijlagen met de NIEUWSTE bovenaan. Zo staat je net-geplaatste reactie meteen in beeld
@@ -992,7 +1004,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     stream_html = (_opdracht_post(p) if heeft_opdracht else "") + "".join(h for _, h in entries)
     # Nieuwste bovenaan (zie stream_html): geen auto-scroll-naar-onder meer; de wall opent bovenaan zodat
     # de composer + de recentste berichten meteen in beeld staan.
-    wall = (f"<div class='wall-head'><h2>Wall — inhoud &amp; gesprek</h2></div>"
+    wall = (f"<div class='wall-head'><h2>Wall — content &amp; conversation</h2></div>"
             f"{composer}"
             f"<div class='wall-scroll'>{stream_html}</div>")
 
@@ -1002,7 +1014,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
         labelbar = f"<div class='clabel' style='background:{_LABELS[p['label']]};height:8px;border-radius:4px;margin-bottom:.6rem'></div>"
     meeting = back.startswith("/werkoverleg")
     wo_cta = (f"<a class='btn ok sm js-modal' href='{_e(back)}' data-href='{_e(back)}'>"
-              f"← terug naar werkoverleg</a>") if meeting else ""
+              f"← back to tactical meeting</a>") if meeting else ""
     top_bar = f"<div class='wo-back-bar'>{wo_cta}</div>" if meeting else ""
     foot_bar = f"<div class='wo-back-bar wo-back-foot'>{wo_cta}</div>" if meeting else ""
 
@@ -1013,7 +1025,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     if fragment:
         return f"<div data-noclose='1'>{detail}</div>" if meeting else detail
     main = (f"<div class='c2-main pdetail'>"
-            f"<div class='c2-bar'><a href='{_e(back)}'>← terug</a></div>{detail}</div>")
+            f"<div class='c2-bar'><a href='{_e(back)}'>← back</a></div>{detail}</div>")
     inner = (f"{_DS_LINK}"
              f"{_nav('projectdetail')}"
              f"<div class='c2-wrap'>{main}</div>")

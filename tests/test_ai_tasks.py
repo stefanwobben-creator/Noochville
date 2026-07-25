@@ -1,4 +1,4 @@
-"""Autonome AI op accountability (cockpit 2): genest, geselecteerd uit het rugzakje, met cadeau-match."""
+"""Autonome AI op accountability (cockpit 2): genest, geselecteerd uit het backpack, met cadeau-match."""
 from __future__ import annotations
 
 from nooch_village.ai_tasks import AITaskStore
@@ -17,7 +17,7 @@ def test_store_add_for_acc_role(tmp_path):
     assert len(AITaskStore(str(tmp_path / "ai.json")).all()) == 1
 
 
-def test_persona_rugzak(tmp_path):
+def test_persona_backpack(tmp_path):
     from nooch_village.personas import PersonaStore
     ps = PersonaStore(str(tmp_path / "p.json"))
     p = ps.add("Codie", skills=["schrijft de code"])
@@ -43,7 +43,7 @@ def test_ai_genest_onder_accountability(tmp_path):
                                          "pick": [f"{codie.id}::schrijft de code"], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), role, "overview", csrf_token="t")
     # subtiele AI-marker op de accountability + één gebundeld overzicht (niet dubbel)
-    assert "ai-on" in page and "AI in deze rol" in page
+    assert "ai-on" in page and "AI in this role" in page
     assert "Codie" in page and "schrijft de code" in page
     assert "acc-sub" not in page                  # geen herhaalde chip per regel meer
     assert "Autonome AI-taken" not in page
@@ -67,7 +67,7 @@ def test_geen_cadeau_en_geen_plusai_zonder_match(tmp_path):
     assert "🎁" not in page and "+ AI" not in page
 
 
-def test_modal_selecteert_uit_rugzak_geen_vrije_tekst(tmp_path):
+def test_modal_select_uit_backpack_geen_vrije_tekst(tmp_path):
     dd, st = _st(tmp_path)
     codie = st.personas.add("Codie", skills=["schrijft de code"])
     role = "mother_earth__nooch__website_developer"
@@ -75,8 +75,8 @@ def test_modal_selecteert_uit_rugzak_geen_vrije_tekst(tmp_path):
     _aid = acc_ids.acc_id_at(_st2.records.get(role).definition, 0)
     frag = cockpit2.render_aitask(_st2, role, _aid, csrf_token="t", fragment=True)
     assert "<!doctype" not in frag.lower()
-    assert "selecteert" in frag and f"{codie.id}::schrijft de code" in frag
-    assert "Rugzak van een AI uitbreiden" in frag
+    assert "select" in frag and f"{codie.id}::schrijft de code" in frag
+    assert "Expand an AI's backpack" in frag
 
 
 def test_persona_skill_add_via_dispatch(tmp_path):

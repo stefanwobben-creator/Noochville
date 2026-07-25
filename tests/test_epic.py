@@ -133,7 +133,7 @@ def test_widget_fallback_zonder_frames(monkeypatch, tmp_path):
     monkeypatch.setattr(epic, "latest_frames", lambda: None)
     st = _st(tmp_path)
     html = overview._overview_html(st, st.records.get("mother_earth"))
-    assert "niet beschikbaar" in html and "epic-frame" not in html
+    assert "unavailable" in html and "epic-frame" not in html
 
 
 def test_widget_geen_inline_style(monkeypatch):

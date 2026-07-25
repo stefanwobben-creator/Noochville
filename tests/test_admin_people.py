@@ -1,4 +1,4 @@
-"""Admin-pagina 'Deelnemers': toevoegen, wijzigen, wachtwoord resetten, verwijderen.
+"""Admin-pagina 'People': toevoegen, wijzigen, wachtwoord resetten, verwijderen.
 People-beheer zit op /admin, niet meer op de Members-tab."""
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def _temp_from(html):
 def test_admin_toont_beheercontrols_in_schrijfmodus(tmp_path):
     dd, st = _st(tmp_path)
     html = cockpit2.render_admin(cockpit2._Stores(dd), csrf_token="TOK")
-    assert "Deelnemers" in html
+    assert "People" in html
     assert "person_add" in html and "name='voornaam'" in html
     assert "person_edit" in html and "person_remove" in html and "person_reset_password" in html
 

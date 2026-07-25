@@ -105,7 +105,7 @@ def test_agenda_en_triage_project(tmp_path):
     cockpit2.dispatch(dd, "wo_ag_add", {"circle": [C], "naam": ["Checkout hapert -SW"], "next": ["/"]}, username="guest")
     it = cockpit2._Stores(dd).werk.agenda(C)[0]
     assert it["title"] == "Checkout hapert" and it["by"] == "SW"
-    # triage -> project toevoegen voor een rol
+    # triage -> add project voor een rol
     cockpit2.dispatch(dd, "wo_ag_resolve", {"circle": [C], "iid": [it["id"]], "otype": ["project"],
                                             "owner": [RID], "detail": ["Checkout flow fixen"], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).werk.agenda_get(C, it["id"])["status"] == "done"
@@ -208,11 +208,11 @@ def test_projecten_stap_geen_losse_add(tmp_path):
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
     frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "projecten", csrf_token="t", fragment=True)
     # in het overleg geen enkel project-add-pad (werk komt via de triage binnen)
-    assert "qadd-top" not in frag and "project toevoegen" not in frag and "/project/nieuw" not in frag
+    assert "qadd-top" not in frag and "add project" not in frag and "/project/nieuw" not in frag
     # op de gewone tab blijft toevoegen wel bestaan — sinds 21 jul via de wizard-modal
     # (de inline qadd-uitklap is dáár door vervangen), zie views/projects.py
     tab = cockpit2.render_node(cockpit2._Stores(dd), C, "projects", csrf_token="t")
-    assert "/project/nieuw" in tab and "project toevoegen" in tab
+    assert "/project/nieuw" in tab and "add project" in tab
 
 
 def test_sluiten(tmp_path):
