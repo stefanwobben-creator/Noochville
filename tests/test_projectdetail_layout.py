@@ -16,7 +16,7 @@ def _frag(tmp_path):
 
 def test_bijlage_staat_voor_plaatsen_in_comp_row(tmp_path):
     frag = _frag(tmp_path)
-    i_att, i_plaats = frag.find("comp-attach"), frag.find(">Plaatsen<")
+    i_att, i_plaats = frag.find("comp-attach"), frag.find(">Post<")
     assert 0 < i_att < i_plaats                       # bijlage links op de toolbar-rij, Plaatsen daarna
     # het bijlage-gedrag (upload + link plakken) blijft ongewijzigd aanwezig
     assert "value='attach_file'" in frag and "value='attach_add'" in frag

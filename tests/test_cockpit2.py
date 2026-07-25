@@ -38,9 +38,9 @@ def test_nooch_roles_tab(tmp_path):
     st = _st(tmp_path)
     page = cockpit2.render_node(st, "mother_earth__nooch", "roles", csrf_token="t")
     assert "Creator of Shoes" in page and "Marketing Lead" in page
-    assert "Organisatie" in page                              # org-boom (rail)
+    assert "Organization" in page                              # org-boom (rail)
     # kernrollen apart + purpose onder de rol + toewijs-icoon
-    assert "Kernrollen" in page and "Circle Lead" in page
+    assert "Core roles" in page and "Circle Lead" in page
     assert "Make Nooch visually consistent" in page          # purpose onder Brand & Visual Designer
     assert "manage-ico" in page and "/rolefillers?role=" in page   # neutraal beheer-icoon
     # vervullers links uitgelijnd met naam-link naar de persoon
@@ -54,8 +54,8 @@ def test_rolefillers_modal_en_assign(tmp_path):
     role = "mother_earth__nooch__factory_development_specialist"   # onbemand
     frag = cockpit2.render_rolefillers(st, role, csrf_token="t", fragment=True)
     assert "<!doctype" not in frag.lower()
-    assert "Rolvervullers beheren" in frag and "role_assign" in frag and "Nog niemand toegewezen" in frag
-    assert "kies persoon" in frag and "of AI" not in frag      # alleen mensen vervullen een rol
+    assert "Manage role fillers" in frag and "role_assign" in frag and "No one assigned yet" in frag
+    assert "pick person" in frag and "of AI" not in frag      # alleen mensen vervullen een rol
     # toewijzen + verwijderen via dispatch
     wytse = st.people.by_name("Wytse Valkema")
     cockpit2.dispatch(dd, "role_assign", {"role": [role], "filler": [f"person:{wytse.id}"], "next": ["/"]}, username="guest")
@@ -89,7 +89,7 @@ def test_roles_tab_stack_bij_3plus(tmp_path):
         cockpit2.dispatch(dd, "role_assign",
                           {"role": [role], "filler": [f"person:{st.people.by_name(nm).id}"], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth__nooch", "roles", csrf_token="t")
-    assert "+ nog 1" in page and "stack" in page              # 4 vervullers → 3 avatars + nog 1
+    assert "+ 1 more" in page and "stack" in page              # 4 vervullers → 3 avatars + 1 more
 
 
 def test_role_overview_fillers_en_domein(tmp_path):
@@ -105,7 +105,7 @@ def test_policies_tab_is_gebouwd(tmp_path):
     st = _st(tmp_path)
     page = cockpit2.render_node(st, "mother_earth__nooch", "policies")
     assert "Nog te bouwen" not in page
-    assert "Van deze rol" in page and "Geldend hier" in page
+    assert "From this role" in page and "Applies here" in page
 
 
 def test_projecten_tab_kolommen_en_inline_add(tmp_path):
@@ -117,11 +117,11 @@ def test_projecten_tab_kolommen_en_inline_add(tmp_path):
                                        "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), role, "projects", csrf_token="t")
     # statuskolommen (Trello-stijl) in een niet-lege lane + slepen + top-level toevoegen
-    for col in ("Actief", "Wacht", "Toekomst", "Done"):
+    for col in ("Active", "Waiting", "Future", "Done"):
         assert col in page
     # Sinds 21 jul loopt toevoegen via de wizard-modal (js-modal → /project/nieuw), niet meer
     # via de inline qadd-uitklap; de link is voorgeselecteerd op deze rol.
-    assert "/project/nieuw?role=" in page and "project toevoegen" in page
+    assert "/project/nieuw?role=" in page and "add project" in page
     assert "data-to='toekomst'" in page and "draggable" in page.lower()
     assert "data-href=" in page                 # kaart klikbaar naar detail
 
@@ -186,7 +186,7 @@ def test_persoonspagina_projecten_tab_owner_based(tmp_path):
         "done_when": ["af bij oplevering"], "trekker": [f"person:{lotte.id}"],
         "next": ["/"]}, username="guest")
     pp = cockpit2.render_person(cockpit2._Stores(dd), lotte.id, tab="projecten")
-    assert "Productpagina live" in pp and "Projecten" in pp
+    assert "Productpagina live" in pp and "Projects" in pp
     assert "swim" in pp and "pcol" in pp                        # DEZELFDE kanban-component ...
     assert "<ul class='clean'>" not in pp                       # ... geen aparte lijst-render
 
@@ -232,7 +232,7 @@ def test_persoonspagina_context_drempel_zonder_sessie(tmp_path):
     st.att.add(role, "note", title="Geheim", subtype="doc")
     for sess in ("guest", None):
         pg = cockpit2.render_person(st, lotte.id, tab="context", username=sess)
-        assert "Log in om context te zien" in pg
+        assert "Log in to see context" in pg
         assert "Geheim" not in pg                              # geen lek zonder sessie
 
 
@@ -380,25 +380,25 @@ def test_projecten_groeperen_per_persoon(tmp_path):
                                        "done_when": ["af bij oplevering"], "col": ["actief"],
                                        "trekker": [""], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), role, "projects", csrf_token="t", group="persoon")
-    # swimlanes per persoon: Lotte en 'Geen trekker'
-    assert "swim-h" in page and "Lotte Mulder" in page and "Geen trekker" in page
+    # swimlanes per persoon: Lotte en 'No owner'
+    assert "swim-h" in page and "Lotte Mulder" in page and "No owner" in page
 
 
 def test_circle_toont_directe_rollen_plus_ii(tmp_path):
-    # cirkel toont projecten van haar DIRECTE rollen + Individueel Initiatief; geen eigen werk
+    # cirkel toont projecten van haar DIRECTE rollen + Individual Action; geen eigen werk
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     cockpit2.dispatch(dd, "proj_add", {"owner": ["mother_earth__nooch__website_developer"],
                                        "scope": ["Rolproject"],
                                        "done_when": ["af bij oplevering"], "col": ["actief"], "next": ["/"]}, username="guest")
-    # Individueel Initiatief: een project direct onder de cirkel via de ii:-pseudo-eigenaar
+    # Individual Action: een project direct onder de cirkel via de ii:-pseudo-eigenaar
     cockpit2.dispatch(dd, "proj_add", {"owner": ["ii:mother_earth__nooch"],
                                        "scope": ["Eigen initiatief"],
                                        "done_when": ["af bij oplevering"], "col": ["actief"], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth__nooch", "projects",
                                 csrf_token="t", group="rol")
     assert "Rolproject" in page and "Website Developer" in page and "swim-h" in page
-    assert "Individueel Initiatief" in page and "Eigen initiatief" in page   # II-lane bij een II-project
+    assert "Individual Action" in page and "Eigen initiatief" in page   # II-lane bij een II-project
 
 
 def test_circle_aggregeert_geen_subcirkel(tmp_path):
@@ -410,11 +410,11 @@ def test_circle_aggregeert_geen_subcirkel(tmp_path):
                                        "done_when": ["af bij oplevering"], "col": ["actief"], "next": ["/"]}, username="guest")
     me = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth", "projects", csrf_token="t", group="rol")
     assert "Diep project" not in me                  # subcirkel niet geaggregeerd
-    assert "Subcirkels" in me and "eigen projectenbord" in me
+    assert "Subcircles" in me and "own project board" in me
 
 
 def test_individual_initiative_owner(tmp_path):
-    # een project oppakken als Individueel Initiatief (persoon, geen rol)
+    # een project oppakken als Individual Action (persoon, geen rol)
     dd = str(tmp_path / "poc")
     cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
@@ -425,7 +425,7 @@ def test_individual_initiative_owner(tmp_path):
                                        "trekker": [f"person:{stefan.id}"], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), "mother_earth__nooch", "projects",
                                 csrf_token="t", group="rol")
-    assert "Ad hoc stunt" in page and "Individueel Initiatief" in page
+    assert "Ad hoc stunt" in page and "Individual Action" in page
 
 
 def test_leeg_bord_toont_geen_lege_lanes(tmp_path):
@@ -433,14 +433,14 @@ def test_leeg_bord_toont_geen_lege_lanes(tmp_path):
     st = _st(tmp_path)
     page = cockpit2.render_node(st, "mother_earth__nooch__circle_rep", "projects", csrf_token="t")
     assert "<div class='swim'>" not in page       # geen lege lanes gerenderd
-    assert "Nog geen projecten" in page and "/project/nieuw?role=" in page   # wel een '+ project'
+    assert "No projects yet" in page and "/project/nieuw?role=" in page   # wel een '+ project'
 
 
 def test_inline_add_project_rol_en_cirkel(tmp_path):
     st = _st(tmp_path)
     role = "mother_earth__nooch__website_developer"
     page = cockpit2.render_node(st, role, "projects", csrf_token="t")
-    assert "/project/nieuw?role=" in page and "project toevoegen" in page   # rol voorgeselecteerd
+    assert "/project/nieuw?role=" in page and "add project" in page   # rol voorgeselecteerd
     # op een cirkel is er nog geen rol gekozen: de wizard opent zonder ?role en vraagt er zelf om
     cpage = cockpit2.render_node(st, "mother_earth__nooch", "projects", csrf_token="t")
     assert "href='/project/nieuw'" in cpage and "?role=" not in cpage.split("project/nieuw")[1][:40]
@@ -477,7 +477,7 @@ def test_project_archiveren_default(tmp_path):
     p = cockpit2._Stores(dd).projects.get(pid)
     assert p is not None and p["archived"] is True          # blijft bestaan
     page = cockpit2.render_node(cockpit2._Stores(dd), role, "projects", csrf_token="t")
-    assert "Gearchiveerd (1)" in page and "Oud project" in page
+    assert "Archived (1)" in page and "Oud project" in page
     # herstellen
     cockpit2.dispatch(dd, "proj_unarchive", {"pid": [pid], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["archived"] is False
@@ -501,7 +501,7 @@ def test_persoonspagina_mijn_rollen(tmp_path):
     st = _st(tmp_path)
     lotte = st.people.by_name("Lotte Mulder")
     page = cockpit2.render_person(st, lotte.id)
-    assert "Lotte Mulder" in page and "Rollen" in page          # rollen-tab (kop was "Mijn rollen")
+    assert "Lotte Mulder" in page and "Roles" in page          # rollen-tab (kop was "Mijn rollen")
     assert "Creator of Shoes" in page                          # een van haar rollen
 
 

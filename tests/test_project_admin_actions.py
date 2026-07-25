@@ -71,7 +71,7 @@ def test_owner_options_sluit_cirkels_uit(tmp_path):
 def test_owner_options_toont_dangling_sentinel(tmp_path):
     dd, st = _st(tmp_path)
     opts = P._owner_options(st, sel_owner="ghost_role")
-    assert "bestaat niet meer" in opts and "ghost_role" in opts
+    assert "no longer exists" in opts and "ghost_role" in opts
 
 
 # ── draft-afhandeling ────────────────────────────────────────────────────────
@@ -95,7 +95,7 @@ def test_draft_sectie_zichtbaar_met_knoppen(tmp_path):
     st.projects.create(ROLE, "Concept idee", "human", status="draft")
     html = P._projects_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROLE),
                                 csrf_token="TOK", add=True)
-    assert "Concepten" in html and "proj_approve" in html and "proj_discard" in html
+    assert "Drafts" in html and "proj_approve" in html and "proj_discard" in html
 
 
 def test_draft_telt_niet_mee_in_bord_aantal(tmp_path):
@@ -104,7 +104,7 @@ def test_draft_telt_niet_mee_in_bord_aantal(tmp_path):
     st.projects.create(ROLE, "Concept", "human", status="draft")
     html = P._projects_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROLE),
                                 csrf_token="TOK", add=True)
-    assert "Projecten (1)" in html             # alleen het niet-draft project
+    assert "Projects (1)" in html             # alleen het niet-draft project
 
 
 # ── wees-projecten (dangling owner) zichtbaar maken ──────────────────────────
@@ -120,7 +120,7 @@ def test_wees_sectie_op_wortelcirkel(tmp_path):
     _make_orphan(dd, st)
     html = P._projects_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROOT),
                                 csrf_token="TOK", add=True)
-    assert "Wees-projecten" in html and "koppel aan rol" in html
+    assert "Orphan projects" in html and "link to role" in html
 
 
 def test_wees_project_niet_op_gewone_rol_bord(tmp_path):
@@ -128,7 +128,7 @@ def test_wees_project_niet_op_gewone_rol_bord(tmp_path):
     _make_orphan(dd, st)
     html = P._projects_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROLE),
                                 csrf_token="TOK", add=True)
-    assert "Wees-projecten" not in html       # alleen op de wortel, niet op elke rol
+    assert "Orphan projects" not in html       # alleen op de wortel, niet op elke rol
 
 
 def test_wees_project_koppelbaar_aan_rol(tmp_path):
@@ -144,7 +144,7 @@ def test_kaart_is_link_in_publieke_view(tmp_path):
     """Read-only (geen csrf): geen modal-JS, dus de kaart moet een <a> zijn die naar /project
     navigeert (server redirect dan naar /login). Anders is de kaart een dode div."""
     dd, st = _st(tmp_path)
-    st.projects.create(ROLE, "Zichtbaar", "human", status="queued")
+    st.projects.create(ROLE, "Visible", "human", status="queued")
     html = P._projects_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROLE),
                                 csrf_token="", add=False)
     assert "<a class='card pcard' href='/project?pid=" in html
@@ -153,26 +153,26 @@ def test_kaart_is_link_in_publieke_view(tmp_path):
 
 def test_kaart_is_modal_div_ingelogd(tmp_path):
     dd, st = _st(tmp_path)
-    st.projects.create(ROLE, "Zichtbaar", "human", status="queued")
+    st.projects.create(ROLE, "Visible", "human", status="queued")
     html = P._projects_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROLE),
                                 csrf_token="TOK", add=True)
     assert "<div class='card pcard' data-pid=" in html and "draggable=" in html
 
 
-# ── Individueel Initiatief: project oppakken zonder rol ──────────────────────
+# ── Individual Action: project oppakken zonder rol ──────────────────────
 
 def test_toevoegform_biedt_individueel_initiatief_op_cirkel(tmp_path):
     dd, st = _st(tmp_path)
     html = P._inline_add_project(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(CIRCLE),
                                  "TOK", "/back")
-    assert f"value='ii:{CIRCLE}'" in html and "Individueel Initiatief" in html
+    assert f"value='ii:{CIRCLE}'" in html and "Individual Action" in html
 
 
 def test_toevoegform_geen_ii_op_rol(tmp_path):
     dd, st = _st(tmp_path)
     html = P._inline_add_project(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROLE),
                                  "TOK", "/back")
-    assert "Individueel Initiatief" not in html      # II is een cirkel-begrip, niet op een rol
+    assert "Individual Action" not in html      # II is een cirkel-begrip, niet op een rol
 
 def test_ii_project_aanmaken_en_tonen(tmp_path):
     dd, st = _st(tmp_path)
@@ -184,11 +184,11 @@ def test_ii_project_aanmaken_en_tonen(tmp_path):
     pj = [p for p in cockpit2._Stores(dd).projects.all() if p["owner"] == ii]
     assert len(pj) == 1 and pj[0]["person"] == stefan.id
     page = cockpit2.render_node(cockpit2._Stores(dd), CIRCLE, "projects", csrf_token="TOK", group="rol")
-    assert "Spontane actie" in page and "Individueel Initiatief" in page
+    assert "Spontane actie" in page and "Individual Action" in page
 
 
 def test_trekker_keuze_gescoped_op_owner_rol(tmp_path):
-    """Trekker-scope: de keuze komt uit de VERVULLERS van de owner-rol, niet uit 'wie is ingelogd'.
+    """Owner-scope: de keuze komt uit de VERVULLERS van de owner-rol, niet uit 'wie is ingelogd'.
     Zo kan een trekker nooit iemand zijn die de rol niet bezet.
 
     De inline '+ project'-uitklap waarop dit eerder werd getoetst is 21 jul vervangen door de
@@ -200,7 +200,7 @@ def test_trekker_keuze_gescoped_op_owner_rol(tmp_path):
     pid = st.projects.create(ROLE2, "Scope-check", "human", status="queued")
     page = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="TOK")
     opts = re.search(r"<select name='trekker'[^>]*>(.*?)</select>", page, re.DOTALL).group(1)
-    assert "geen trekker" in opts
+    assert "no owner" in opts
     assert f"person:{me.id}" not in opts     # geen me-default: de gebruiker bezet de rol niet
     # wél de echte vervullers van die rol
     for f in cockpit2._Stores(dd).assign.fillers_of(ROLE2):
@@ -251,13 +251,13 @@ def test_impact_dropdown_in_schrijfmodus_niet_read_only(tmp_path):
     ro = P.render_project(cockpit2._Stores(dd), pid, csrf_token="")
     assert "proj_setimpact" in rw and "<select name='value' onchange=" in rw   # dropdown + auto-opslaan
     assert "value='neutraal' selected" in rw                            # huidige waarde voorgeselecteerd
-    assert "Missie-impact" in rw and "Business-impact" in rw
+    assert "Mission impact" in rw and "Business impact" in rw
     assert "proj_setimpact" not in ro          # read-only: geen bewerk-form
-    assert "neutraal" in ro                    # wel de gekozen waarde als tekst
+    assert "Neutral" in ro                     # wel de gekozen waarde als tekst (display-label)
 
 
 def test_missie_stip_op_bordkaart(tmp_path):
-    """Missie-impact als kleurstip op de bordkaart; business-impact NIET op de kaart, geen pills/tekst."""
+    """Mission impact als kleurstip op de bordkaart; business-impact NIET op de kaart, geen pills/tekst."""
     dd, st = _st(tmp_path)
     pid = st.projects.create(ROLE, "T", "human", status="queued",
                              missie_impact="versterkt", business_impact="hoog")
@@ -276,7 +276,7 @@ def test_missie_stip_op_bordkaart(tmp_path):
 
 
 # ── signaalgedrag bij missie_impact = verzwakt (rode rand + agendeer-spanning, geen blokkade) ─────
-_VZ_TXT = "Missie verzwakt. Jij besluit als rolvervuller."
+_VZ_TXT = "Mission weakened. You decide as role filler."
 
 
 def test_verzwakt_kaart_rode_rand(tmp_path):
@@ -291,7 +291,7 @@ def test_verzwakt_modal_infoblok_en_knop(tmp_path):
     dd, st = _st(tmp_path)
     pid = st.projects.create(ROLE, "T", "human", status="queued", missie_impact="verzwakt")
     modal = P.render_project(st, pid, csrf_token="TOK")
-    assert _VZ_TXT in modal and "Agendeer in werkoverleg" in modal and "proj_agendeer_verzwakt" in modal
+    assert _VZ_TXT in modal and "Add to tactical meeting" in modal and "proj_agendeer_verzwakt" in modal
     # niet-verzwakt → geen infoblok (toets op de bloktekst, niet de CSS-klasse)
     pid2 = st.projects.create(ROLE, "T2", "human", status="queued", missie_impact="versterkt")
     assert _VZ_TXT not in P.render_project(st, pid2, csrf_token="TOK")

@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 def _filler_html(st: _Stores, node_id: str, rec) -> str:
     fillers = st.assign.fillers_of(node_id, record=rec)
     if not fillers:
-        return "<span class='muted'>Nog niet vervuld.</span>"
+        return "<span class='muted'>Not filled yet.</span>"
     out = []
     for f in fillers:
         if f.type == "person":
@@ -94,8 +94,8 @@ def _tree_html(st: _Stores, current_id: str) -> str:
         return (f"<li><details class='tree-c'{op}><summary>{summ}</summary>"
                 f"<ul>{inner}</ul></details></li>")
 
-    body = "".join(node_li(r, 0) for r in org.roots(recs)) or "<li class='muted'>leeg</li>"
-    return f"<div class='tree'><h3>Organisatie</h3><ul>{body}</ul></div>"
+    body = "".join(node_li(r, 0) for r in org.roots(recs)) or "<li class='muted'>empty</li>"
+    return f"<div class='tree'><h3>Organization</h3><ul>{body}</ul></div>"
 
 
 def _ai_chip(st: _Stores, t) -> str:
@@ -108,7 +108,7 @@ def _ai_chip(st: _Stores, t) -> str:
 def _link_chip(t) -> str:
     """Een gekoppeld dorpsmiddel: mensentaal voorop, de technische capability eronder."""
     dom = skill_meta.schrijft_in_domein(t.skill)
-    mark = f" <span class='muted'>· domein {_e(dom)}</span>" if dom else ""
+    mark = f" <span class='muted'>· domain {_e(dom)}</span>" if dom else ""
     return (f"<span class='chip'>🔗 {_e(skill_labels.label(t.skill))}</span>"
             f"<span class='muted'> {_e(t.skill)}</span>{mark}")
 
@@ -125,20 +125,20 @@ def _middel_picker(st: _Stores, rec, role_id: str, acc_id: str, hid) -> str:
     try:
         namen = sorted(shared_registry().names())
     except Exception:                              # fail-closed: liever geen picker dan een lege belofte
-        return "<p class='muted'>De middelen-catalogus is even niet beschikbaar.</p>"
+        return "<p class='muted'>The resources catalog is briefly unavailable.</p>"
     al = {t.skill for t in skill_links.links_for_acc(st.ai, role_id, acc_id)}
     kies = [n for n in namen if n not in al and skill_meta.koppelbaar(n, rec)[0]]
     if not kies:
-        return "<p class='muted'>Er is geen middel meer dat hier nog gekoppeld kan worden.</p>"
+        return "<p class='muted'>No resource left to link here.</p>"
     opts = "".join(
         f"<option value='{_e(n)}'>{_e(skill_labels.label(n))} — {_e(n)}"
-        f"{' (zwaar: grant via governance)' if skill_meta.is_zwaar(n) else ''}</option>"
+        f"{' (heavy: grant via governance)' if skill_meta.is_zwaar(n) else ''}</option>"
         for n in kies)
     return (f"<div class='pf'><form method='post' action='/action'>{hid()}"
-            f"<label class='att-lbl' for='f-skilllink'>Koppel een dorpsmiddel aan deze belofte</label>"
+            f"<label class='att-lbl' for='f-skilllink'>Link a village resource to this commitment</label>"
             f"<select id='f-skilllink' name='skill'>{opts}</select>"
             f"<button class='btn' type='submit' name='action' value='skilllink_add'>"
-            f"Koppel middel</button></form></div>")
+            f"Link resource</button></form></div>")
 
 
 def _suggest_for_acc(st: _Stores, role_id: str, acc_id: str, acc_text: str):
@@ -161,13 +161,13 @@ def _acc_row(st: _Stores, rec, i: int, text: str, csrf_token: str) -> str:
     if tasks:
         if csrf_token:
             marker = (f"<a class='ai-on js-modal' href='{url}' data-href='{url}' "
-                      f"title='AI-empowered — beheren'>🤖</a>")
+                      f"title='AI-empowered — manage'>🤖</a>")
         else:
             marker = "<span class='ai-on' title='AI-empowered'>🤖</span>"
     aff = ""
     if csrf_token and _suggest_for_acc(st, rec.id, aid, text):
         aff = (f"<a class='ai-gift js-modal' href='{url}' data-href='{url}' "
-               f"title='Er is een AI-skill die deze accountability autonoom kan uitvoeren'>🎁</a>")
+               f"title='An AI skill can carry out this accountability autonomously'>🎁</a>")
     # De middelen onder de belofte: mensentaal voorop, de technische capability klein erachter.
     mid = ""
     if links:
@@ -200,11 +200,11 @@ def _role_ai_overview(st: _Stores, rec, csrf_token: str = "") -> str:
         if csrf_token:
             first = acc_ids.acc_id_at(rec.definition, 0)
             url = f"/aitask?role={_e(rec.id)}&acc_id={_e(first)}"
-            manage = f" <a class='flink js-modal' href='{url}' data-href='{url}'>beheren</a>"
+            manage = f" <a class='flink js-modal' href='{url}' data-href='{url}'>manage</a>"
         blocks += (f"<div class='ai-ov'><div class='ai-ov-h'>{_avatar(nm, True)}"
-                   f"<b>{_e(nm)}</b> <span class='muted'>doet autonoom in deze rol:</span>{manage}</div>"
+                   f"<b>{_e(nm)}</b> <span class='muted'>does autonomously in this role:</span>{manage}</div>"
                    f"<ul class='clean ai-ov-list'>{rows}</ul></div>")
-    return f"<div class='c2-sec'><h3>AI in deze rol</h3>{blocks}</div>"
+    return f"<div class='c2-sec'><h3>AI in this role</h3>{blocks}</div>"
 
 
 def _epic_earth_html() -> str:
@@ -213,11 +213,11 @@ def _epic_earth_html() -> str:
     .epic-* klassen, geen inline styles. Fail-closed: geen frames → nette melding."""
     frames = epic.latest_frames()
     if not frames:
-        return "<div class='card muted'>Live aarde-beeld (NASA EPIC) is even niet beschikbaar.</div>"
+        return "<div class='card muted'>Live earth image (NASA EPIC) is briefly unavailable.</div>"
     imgs = "".join(
         f"<img class='epic-frame{' on' if i == len(frames) - 1 else ''}' "
         f"src='/epic/frame?image={_e(f['image'])}&date={_e(f['date'])}' "
-        f"data-cap='{_e(f['caption'])} UTC' alt='Aarde vanaf NASA EPIC (DSCOVR)' loading='lazy'>"
+        f"data-cap='{_e(f['caption'])} UTC' alt='Earth from NASA EPIC (DSCOVR)' loading='lazy'>"
         for i, f in enumerate(frames))
     cap0 = f"{_e(frames[-1]['caption'])} UTC"
     # Wachtindicator: draaiende 🌍 + tekst, zichtbaar tot het beeld binnen is (JS zet .loaded op load).
@@ -251,13 +251,13 @@ def _overview_html(st: _Stores, rec, csrf_token: str = "") -> str:
     if not getattr(rec, "parent", None):     # anchor (Mother Earth) → live aardbol; geen "Geen domein."
         domains_inner = _epic_earth_html() + doms_list
     else:
-        domains_inner = doms_list or "<span class='muted'>Geen domein.</span>"
+        domains_inner = doms_list or "<span class='muted'>No domain.</span>"
     parts.append(f"<div class='c2-sec'><h3>Domains</h3>{domains_inner}</div>")
     accs = d.accountabilities or []
     if not is_c:
         parts.append("<div class='c2-sec'><h3>Accountabilities</h3>"
                      + ("".join(_acc_row(st, rec, i, a, csrf_token) for i, a in enumerate(accs))
-                        if accs else "<span class='muted'>Geen accountabilities.</span>") + "</div>")
+                        if accs else "<span class='muted'>No accountabilities.</span>") + "</div>")
         parts.append(_role_ai_overview(st, rec, csrf_token))
     elif accs:
         parts.append("<div class='c2-sec'><h3>Accountabilities</h3><ul class='clean'>"
@@ -270,7 +270,7 @@ def _overview_html(st: _Stores, rec, csrf_token: str = "") -> str:
 def _fillsummary(st: _Stores, rec) -> str:
     fs = st.assign.fillers_of(rec.id, record=rec)
     if not fs:
-        return "— niet vervuld"
+        return "— not filled"
     names = []
     for f in fs:
         if f.type == "person":
@@ -307,10 +307,10 @@ def _fillers_block(st: _Stores, role) -> str:
             pa = st.personas.get(f.id)
             resolved.append(((pa.name if pa else f.id), True, f.id))
     if not resolved:
-        return "<span class='muted' style='font-size:.8rem'>niet vervuld</span>"
+        return "<span class='muted' style='font-size:.8rem'>not filled</span>"
     if len(resolved) >= 3:
         avs = "".join(f"<span class='stack-av'>{_avatar(n, ai)}</span>" for n, ai, fid in resolved[:3])
-        extra = f"<span class='muted' style='font-size:.82rem'>+ nog {len(resolved)-3}</span>" if len(resolved) > 3 else ""
+        extra = f"<span class='muted' style='font-size:.82rem'>+ {len(resolved)-3} more</span>" if len(resolved) > 3 else ""
         return f"<div class='fillers stack'>{avs}{extra}</div>"
     rows = ""
     for n, ai, fid in resolved:
@@ -329,7 +329,7 @@ def _role_row(st: _Stores, role, csrf_token: str) -> str:
     if csrf_token:
         url = f"/rolefillers?role={_e(role.id)}"
         assign = (f"<a class='manage-ico js-modal' href='{url}' data-href='{url}' "
-                  f"title='rolvervullers beheren'>{_ICON_ADD_PERSON}</a>")
+                  f"title='manage role fillers'>{_ICON_ADD_PERSON}</a>")
     return (f"<div class='rrole'>"
             f"<div class='rrole-info'><a href='/node?id={_e(role.id)}'>{_e(_name(role))}</a>{pur}</div>"
             f"<div class='rrole-fill'>{_fillers_block(st, role)}</div>"
@@ -344,15 +344,15 @@ def _roles_html(st: _Stores, rec, csrf_token: str = "") -> str:
     rest = [r for r in roles if _name(r).strip().lower() not in _CORE_ROLE_NAMES]
     out = []
     if core:
-        out.append("<div class='c2-sec'><h3>Kernrollen</h3>"
+        out.append("<div class='c2-sec'><h3>Core roles</h3>"
                    + "".join(_role_row(st, r, csrf_token) for r in core) + "</div>")
-    out.append("<div class='c2-sec'><h3>Rollen</h3>"
+    out.append("<div class='c2-sec'><h3>Roles</h3>"
                + ("".join(_role_row(st, r, csrf_token) for r in rest)
-                  if rest else "<span class='muted'>Geen rollen.</span>") + "</div>")
+                  if rest else "<span class='muted'>No roles.</span>") + "</div>")
     if subs:
-        out.append("<div class='c2-sec'><h3>Subcirkels</h3><ul class='clean'>"
+        out.append("<div class='c2-sec'><h3>Subcircles</h3><ul class='clean'>"
                    + "".join(f"<li><a href='/node?id={_e(s.id)}'>{_e(_name(s))}</a> "
-                             f"<span class='chip'>cirkel</span></li>" for s in subs) + "</ul></div>")
+                             f"<span class='chip'>circle</span></li>" for s in subs) + "</ul></div>")
     return "".join(out)
 
 
@@ -361,10 +361,10 @@ def _members_html(st: _Stores, rec, csrf_token: str = "") -> str:
     # niet hier. Members toont alleen wie deze cirkel vervullen.
     ppl = _members_of_circle(st, rec.id)
     admin = ("<p class='muted' style='font-size:.8rem;margin-top:.8rem'>"
-             "Deelnemers toevoegen of beheren? → <a href='/admin'>Deelnemers (admin)</a></p>"
+             "Add or manage people? → <a href='/admin'>People (admin)</a></p>"
              if csrf_token else "")
     if not ppl:
-        return ("<div class='c2-sec'><h3>Members</h3><span class='muted'>Geen mensen.</span>"
+        return ("<div class='c2-sec'><h3>Members</h3><span class='muted'>No people.</span>"
                 f"{admin}</div>")
     cells = "".join(
         f"<div class='card'><span class='person'><span class='av'>{_e(_initials(p.name))}</span>"
@@ -381,10 +381,10 @@ def render_admin(st: _Stores, csrf_token: str = "", msg: str = "") -> str:
 
     def _status(p):
         if getattr(p, "last_login", 0):
-            return f"<span class='chip green'>actief</span> <span class='muted'>· {_e(_age(p.last_login))}</span>"
+            return f"<span class='chip green'>active</span> <span class='muted'>· {_e(_age(p.last_login))}</span>"
         if getattr(p, "password_hash", ""):
-            return "<span class='chip outline'>uitgenodigd</span>"
-        return "<span class='chip muted'>geen toegang</span>"
+            return "<span class='chip outline'>invited</span>"
+        return "<span class='chip muted'>no access</span>"
 
     rows = ""
     for p in people:
@@ -395,43 +395,43 @@ def render_admin(st: _Stores, csrf_token: str = "", msg: str = "") -> str:
                 f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                 f"<input type='hidden' name='pid' value='{_e(p.id)}'>"
                 f"<input type='hidden' name='next' value='/admin'>"
-                f"<input type='text' name='name' value='{_e(p.name)}' aria-label='naam'>"
-                f"<input type='email' name='email' value='{_e(p.email)}' aria-label='e-mail'>"
-                f"<button class='btn ok sm' type='submit' name='action' value='person_edit'>opslaan</button>"
+                f"<input type='text' name='name' value='{_e(p.name)}' aria-label='name'>"
+                f"<input type='email' name='email' value='{_e(p.email)}' aria-label='email'>"
+                f"<button class='btn ok sm' type='submit' name='action' value='person_edit'>save</button>"
                 f"</form>")
             pw = (f"<form method='post' action='/action' style='display:inline'>"
                   f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                   f"<input type='hidden' name='pid' value='{_e(p.id)}'>"
                   f"<button class='btn sm' type='submit' name='action' value='person_reset_password'>"
-                  f"wachtwoord resetten</button></form>")
-            warn = (f" — verwijdert ook {nrol} rol-toewijzing(en)" if nrol else "")
+                  f"reset password</button></form>")
+            warn = (f" — also removes {nrol} role assignment(s)" if nrol else "")
             rm = (f"<form method='post' action='/action' style='display:inline'>"
                   f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                   f"<input type='hidden' name='pid' value='{_e(p.id)}'>"
                   f"<input type='hidden' name='next' value='/admin'>"
                   f"<button class='dellink' type='submit' name='action' value='person_remove' "
-                  f"onclick=\"return confirm('{_e(p.name)} verwijderen?{warn}')\">verwijderen</button></form>")
+                  f"onclick=\"return confirm('Delete {_e(p.name)}?{warn}')\">delete</button></form>")
             actions = f"<div class='admin-act'>{pw} {rm}</div>"
         else:
-            edit = f"<b>{_e(p.name)}</b> <span class='muted'>· {_e(p.email) or 'geen e-mail'}</span>"
+            edit = f"<b>{_e(p.name)}</b> <span class='muted'>· {_e(p.email) or 'no email'}</span>"
             actions = ""
         rows += (f"<div class='admin-row'><div class='admin-main'>{edit}</div>"
-                 f"<div class='admin-meta'>{_status(p)} <span class='muted'>· {nrol} rol(len)</span>"
+                 f"<div class='admin-meta'>{_status(p)} <span class='muted'>· {nrol} role(s)</span>"
                  f"{actions}</div></div>")
 
     add = ""
     if rw:
         add = (
             f"<details class='c2-add' open style='margin-bottom:1rem'>"
-            f"<summary style='cursor:pointer;font-weight:600'>+ Deelnemer toevoegen</summary>"
+            f"<summary style='cursor:pointer;font-weight:600'>+ Add person</summary>"
             f"<form method='post' action='/action' style='margin-top:.75rem;display:grid;gap:.5rem;max-width:380px'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='action' value='person_add'>"
             f"<input type='hidden' name='next' value='/admin'>"
-            f"<input type='text' name='voornaam' placeholder='Voornaam' required>"
-            f"<input type='text' name='achternaam' placeholder='Achternaam' required>"
-            f"<input type='email' name='email' placeholder='E-mailadres' required>"
-            f"<button class='btn ok' type='submit'>Toevoegen</button>"
+            f"<input type='text' name='voornaam' placeholder='First name' required>"
+            f"<input type='text' name='achternaam' placeholder='Last name' required>"
+            f"<input type='email' name='email' placeholder='Email address' required>"
+            f"<button class='btn ok' type='submit'>Add</button>"
             f"</form></details>")
 
     css = ("<style>"
@@ -444,24 +444,24 @@ def render_admin(st: _Stores, csrf_token: str = "", msg: str = "") -> str:
            ".admin-act{display:inline-flex;gap:.4rem;margin-left:.4rem}"
            "</style>")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
-            f"<h1>Deelnemers <span class='chip'>admin</span></h1>"
+            f"<h1>People <span class='chip'>admin</span></h1>"
             # Mensen staan hier; de AI-inwoners hebben hun eigen dossier-overzicht.
-            f"<p class='muted'><a href='/inwoners'>→ Inwoners (AI-persona's)</a></p>{_banner(msg)}"
-            f"<p class='muted'>Mensen toevoegen, wijzigen, wachtwoord resetten of verwijderen. "
-            f"Deze pagina vereist login.</p>{add}"
-            f"<div class='c2-sec'><h3>Deelnemers ({len(people)})</h3>{rows or '<span class=muted>Nog niemand.</span>'}</div></div>")
+            f"<p class='muted'><a href='/inwoners'>→ Inhabitants (AI personas)</a></p>{_banner(msg)}"
+            f"<p class='muted'>Add, edit, reset password or remove people. "
+            f"This page requires login.</p>{add}"
+            f"<div class='c2-sec'><h3>People ({len(people)})</h3>{rows or '<span class=muted>No one yet.</span>'}</div></div>")
     inner = (f"{_DS_LINK}{css}"
              f"{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
-    return _page("Deelnemers — admin", inner)
+    return _page("People — admin", inner)
 
 
 def _att_html(st: _Stores, rec, kind: str, leeg: str) -> str:
     items = st.att.list(rec.id, kind)
     if not items:
         return (f"<p class='muted'>{_e(leeg)}</p>"
-                "<p class='muted' style='font-size:.8rem'>De opslag werkt al; het invoeren/"
-                "tonen (en de meeting-koppeling) komt nog.</p>")
+                "<p class='muted' style='font-size:.8rem'>Storage already works; entry/display "
+                "(and the meeting link) is still to come.</p>")
     out = "<ul class='clean'>"
     for a in items:
         meta = ""
@@ -520,48 +520,48 @@ def _domain_field(domains: list) -> str:
     twee of meer → een select. Bron: de écht via governance toegewezen `definition.domains`."""
     if len(domains) == 1:
         d = domains[0]
-        return (f"<label class='att-lbl'>Domein</label>"
+        return (f"<label class='att-lbl'>Domain</label>"
                 f"<div class='muted'>{_e(d)}</div>"
                 f"<input type='hidden' name='domain' value='{_e(d)}'>")
     opts = "".join(f"<option value='{_e(d)}'>{_e(d)}</option>" for d in domains)
-    return f"<label class='att-lbl'>Domein</label><select name='domain'>{opts}</select>"
+    return f"<label class='att-lbl'>Domain</label><select name='domain'>{opts}</select>"
 
 
 def _artefact_add_form(rec, kind: str, csrf_token: str, domains: list | None = None) -> str:
     dom = _domain_field(domains or []) if kind == "policy" else ""
     urlf = (f"<label class='att-lbl'>URL</label>"
             f"<input type='url' name='url' placeholder='https://…'>" if kind == "tool" else "")
-    return (f"<details class='qadd qadd-top'><summary>+ {_e(_KIND_LABEL[kind])} toevoegen</summary>"
+    return (f"<details class='qadd qadd-top'><summary>+ Add {_e(_KIND_LABEL[kind])}</summary>"
             f"<form method='post' action='/action' class='qadd-form'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='owner' value='{_e(rec.id)}'>"
             f"<input type='hidden' name='kind' value='{_e(kind)}'>"
             f"<input type='hidden' name='next' value='/node?id={_e(rec.id)}&tab={_tab_for(kind)}'>"
-            f"<label class='att-lbl'>Titel</label><input name='title' required>"
+            f"<label class='att-lbl'>Title</label><input name='title' required>"
             f"{dom}"
             f"<label class='att-lbl'>Body</label>{md_editor('body')}"
             f"{urlf}"
             f"<div class='qadd-row'>"
-            f"<button class='btn ok' type='submit' name='action' value='artefact_add'>Toevoegen</button>"
+            f"<button class='btn ok' type='submit' name='action' value='artefact_add'>Add</button>"
             f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "
-            f"aria-label='annuleren'>✕</button></div></form></details>")
+            f"aria-label='cancel'>✕</button></div></form></details>")
 
 
 def _artefact_edit_form(a, csrf_token: str) -> str:
     urlf = (f"<label class='att-lbl'>URL</label>"
             f"<input type='url' name='url' value='{_e(a.url)}'>" if a.kind == "tool" else "")
-    return (f"<details class='qadd'><summary class='muted'>bewerken</summary>"
+    return (f"<details class='qadd'><summary class='muted'>edit</summary>"
             f"<form method='post' action='/action' class='qadd-form'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
             f"<input type='hidden' name='next' value='/node?id={_e(a.anchor)}&tab={_tab_for(a.kind)}'>"
-            f"<label class='att-lbl'>Titel</label><input name='title' value='{_e(a.title)}'>"
+            f"<label class='att-lbl'>Title</label><input name='title' value='{_e(a.title)}'>"
             f"<label class='att-lbl'>Body</label>{md_editor('body', a.body)}"
             f"{urlf}"
             f"<div class='qadd-row'>"
-            f"<button class='btn ok sm' type='submit' name='action' value='artefact_edit'>Opslaan</button>"
+            f"<button class='btn ok sm' type='submit' name='action' value='artefact_edit'>Save</button>"
             f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "
-            f"aria-label='annuleren'>✕</button></div></form></details>")
+            f"aria-label='cancel'>✕</button></div></form></details>")
 
 
 def _artefact_archive_form(a, csrf_token: str) -> str:
@@ -570,11 +570,11 @@ def _artefact_archive_form(a, csrf_token: str) -> str:
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
             f"<input type='hidden' name='next' value='/node?id={_e(a.anchor)}&tab={_tab_for(a.kind)}'>"
             f"<button class='dellink' type='submit' name='action' value='artefact_archive' "
-            f"onclick=\"return confirm('{_e(a.title or a.id)} archiveren?')\">archiveren</button></form>")
+            f"onclick=\"return confirm('Archive {_e(a.title or a.id)}?')\">archive</button></form>")
 
 
 def _laatst_gewijzigd(a) -> str:
-    return (f"<div class='muted'>laatst gewijzigd: "
+    return (f"<div class='muted'>last edited: "
             f"{_dt(getattr(a, 'updated_at', 0))}</div>")
 
 
@@ -609,7 +609,7 @@ def _artefact_own_card(a, csrf_token: str, can_edit: bool) -> str:
 def _artefact_inherited_card(it) -> str:
     a = it["artefact"]
     badge = (f" <a class='chip' href='/node?id={_e(it['origin_id'])}&tab={_tab_for(a.kind)}' "
-             f"title='klik = naar de bron-rol'>via {_e(it['origin_name'])}</a>")
+             f"title='click = go to the source role'>via {_e(it['origin_name'])}</a>")
     body = f"<div class='att-body'>{_md(a.body)}</div>" if a.body else ""
     return f"<div class='card'>{_artefact_head(a, extra=badge)}{body}{_laatst_gewijzigd(a)}</div>"
 
@@ -621,8 +621,8 @@ def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: s
 
     # Policies zijn geen verbod maar een voorwaarde, en zijn governance-eigendom: één regel boven de
     # lijst i.p.v. een badge/slotje per item.
-    kop = ("<p class='muted'>Alle policies hieronder zijn "
-           "governance-eigendom.</p>" if kind == "policy" else "")
+    kop = ("<p class='muted'>All policies below are "
+           "governance-owned.</p>" if kind == "policy" else "")
 
     own = "".join(_artefact_own_card(a, csrf_token, can_edit) for a in oi["own"])
     own = own or f"<div class='card muted'>{_e(leeg)}</div>"
@@ -635,17 +635,17 @@ def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: s
             if domains:
                 add = _artefact_add_form(rec, kind, csrf_token, domains)
             else:
-                add = ("<div class='card muted'>Deze rol heeft nog geen domein — wijs er eerst een "
-                       "toe via governance, daarna kun je hier een policy op dat domein maken.</div>")
+                add = ("<div class='card muted'>This role has no domain yet — first assign one "
+                       "via governance, then you can create a policy on that domain here.</div>")
         else:
             add = _artefact_add_form(rec, kind, csrf_token)
-    sec_own = f"<div class='c2-sec'><h3>Van deze rol</h3>{own}{add}</div>"
+    sec_own = f"<div class='c2-sec'><h3>From this role</h3>{own}{add}</div>"
 
     inh = "".join(_artefact_inherited_card(it) for it in oi["inherited"])
-    inh = inh or "<div class='card muted'>Niets dat hier van hogerhand geldt.</div>"
-    sec_inh = (f"<div class='c2-sec'><h3>Geldend hier</h3>"
-               f"<p class='muted'>Overgeërfd van bovenliggende rollen/cirkels "
-               f"(read-only) — wijzig bij de bron.</p>{inh}</div>")
+    inh = inh or "<div class='card muted'>Nothing applies here from above.</div>"
+    sec_inh = (f"<div class='c2-sec'><h3>Applies here</h3>"
+               f"<p class='muted'>Inherited from parent roles/circles "
+               f"(read-only) — edit at the source.</p>{inh}</div>")
     return f"<h2>{_e(titel)}</h2>{kop}{sec_own}{sec_inh}"
 
 
@@ -657,22 +657,22 @@ def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: s
 # ziet dezelfde laag door zijn eigen bril, dus niet vier losse cijferbronnen.
 _ROLE_TOOLS = {
     "mother_earth__nooch__marketing_lead": [
-        ("Linkbuilding", "Linkbuilding-doelwitten pitchen of negeren", "/linkbuilding"),
-        ("Keywords — volume & richting", "Waar maak je content voor", "/keywords?lens=marketing")],
+        ("Linkbuilding", "Pitch or ignore linkbuilding targets", "/linkbuilding"),
+        ("Keywords — volume & direction", "What you make content for", "/keywords?lens=marketing")],
     # De convergentie-check is automatisch (nieuwe woorden dragen 28 dagen een ster op de
     # woordenschat) en signalen zijn ontsloten via de Kennisbank — dus hier alleen nog het
     # ene Library-oppervlak.
     "librarian": [
-        ("Woordenschat", "Goedgekeurde woorden, gerangschikt op kansrijkheid", "/woordenschat"),
-        ("Oracle", "Wat de organisatie weet — signals en geversioneerde inzichten", "/kennisbank")],
+        ("Library", "Approved words, ranked by opportunity", "/woordenschat"),
+        ("Oracle", "What the organization knows — signals and versioned insights", "/kennisbank")],
     "concurrent_scout": [
-        ("Keywords — analyse", "Kansrijkheid + suggesties, gerangschikt", "/keywords?lens=trends")],
+        ("Keywords — analysis", "Opportunity + suggestions, ranked", "/keywords?lens=trends")],
     "harry_hemp": [
-        ("Long-term trends", "Structurele opkomst versus blip (trend-herindexering)", "/keywords?lens=scientist")],
+        ("Long-term trends", "Structural rise versus blip (trend reindexing)", "/keywords?lens=scientist")],
     # De claims-toets hoort bij compliance, niet bij de website-rol: cureren van de
     # claims-database en de wekelijkse site-check zijn compliance-domein (claims-database).
     "compliance": [
-        ("Claims-checker", "EmpCo/ACM-toets op tekst of pagina — rood, oranje, groen", "/claims")],
+        ("Claims-checker", "EmpCo/ACM check on text or page — red, orange, green", "/claims")],
 }
 
 
@@ -686,7 +686,7 @@ def _role_tools_html(rec) -> str:
         f"<a class='card' href='{href}'><b>🛠 {_e(label)}</b>"
         f"<div class='muted'>{_e(desc)}</div></a>"
         for label, desc, href in tools)
-    return (f"<div class='c2-sec'><h3>Tools van deze rol</h3>"
+    return (f"<div class='c2-sec'><h3>This role's tools</h3>"
             f"<div class='tile-grid'>{cards}</div></div>")
 
 
@@ -708,10 +708,10 @@ def _ritme_html(st: _Stores, rec) -> str:
         elif r["laatst"]:
             chip = f"<span class='chip'>{_e(r['laatst'])}</span>"
         else:
-            chip = "<span class='chip muted'>nog niet gedraaid</span>"
+            chip = "<span class='chip muted'>not run yet</span>"
         rijen += (f"<div class='c2-sec'><b>{_e(r['naam'])}</b> {chip}"
                   f"<div class='muted'>{_e(r['uitkomst'])}</div></div>")
-    return f"<div class='c2-sec'><h3>Terugkerend ritme</h3>{rijen}</div>"
+    return f"<div class='c2-sec'><h3>Recurring rhythm</h3>{rijen}</div>"
 
 
 def _radar_verwijzing(st: _Stores, rec) -> str:
@@ -720,9 +720,9 @@ def _radar_verwijzing(st: _Stores, rec) -> str:
     (kennis-eerst). Voor rollen die een feed hadden blijft hier één rustige verwijzing."""
     if not feeds_for_role(rec.id, st.dd):
         return ""
-    return ("<div class='c2-sec'><p class='muted'>🛰 Radar-signalen wonen nu centraal bij "
-            "<a href='/signals'>Signalen (library)</a>; deze rol leest zijn context uit de "
-            "<a href='/kennisbank'>kennisbank</a>.</p></div>")
+    return ("<div class='c2-sec'><p class='muted'>🛰 Radar signals now live centrally at "
+            "<a href='/signals'>Signals (library)</a>; this role reads its context from the "
+            "<a href='/kennisbank'>knowledge base</a>.</p></div>")
 
 
 def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: str = "",
@@ -730,7 +730,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
                 van: str = "", tot: str = "", compare: bool = False) -> str:
     rec = st.records.get(node_id)
     if rec is None:
-        return _page("Niet gevonden", "<p>Node niet gevonden.</p><p><a href='/'>← home</a></p>")
+        return _page("Not found", "<p>Node not found.</p><p><a href='/'>← home</a></p>")
     is_c = org.is_circle(rec)
     tabs = _CIRCLE_TABS if is_c else _ROLE_TABS
     if tab not in tabs:
@@ -739,7 +739,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     crumb = " › ".join(
         f"<a href='/node?id={_e(i)}'>{_e(_name(st.records.get(i)))}</a>"
         for i in org.breadcrumb(recs, node_id))
-    chip = "<span class='chip'>cirkel</span>" if is_c else "<span class='chip'>rol</span>"
+    chip = "<span class='chip'>circle</span>" if is_c else "<span class='chip'>role</span>"
 
     if tab == "overview":
         content = _overview_html(st, rec, csrf_token)
@@ -755,13 +755,13 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
             content = render_backlog_tab(st, rec, csrf_token, username)
         else:
             content = _artefact_tab_html(st, rec, "note", csrf_token, username,
-                                         titel="Notes", leeg="Nog geen notities op deze rol/cirkel.")
+                                         titel="Notes", leeg="No notes on this role/circle yet.")
     elif tab == "tools":
         content = (_role_tools_html(rec)
                    + _ritme_html(st, rec)
                    + _radar_verwijzing(st, rec)
                    + _artefact_tab_html(st, rec, "tool", csrf_token, username,
-                                        titel="Tools", leeg="Nog geen tools op deze rol/cirkel."))
+                                        titel="Tools", leeg="No tools on this role/circle yet."))
     elif tab == "metrics":
         # Het nieuwe metrics-scherm (catalogus + dashboard + segmentatie + vergelijken), ingebed als
         # node-tab. Vervangt het oude _metrics_tab_html; KPI-aanmaken loopt via de rijke composer.
@@ -772,7 +772,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
         content = _projects_tab_html(st, rec, csrf_token, group=group, username=username)
     elif tab == "policies":
         content = _artefact_tab_html(st, rec, "policy", csrf_token, username,
-                                     titel="Policies", leeg="Nog geen policies op deze rol/cirkel.")
+                                     titel="Policies", leeg="No policies on this role/circle yet.")
     else:
         content = ""      # onbekende tab (niet in de tab-lijst) → geen inhoud
 
@@ -811,11 +811,11 @@ def _person_context_tab_html(st: _Stores, filler_type: str, pid: str) -> str:
             total += 1
             sub = (getattr(a, "subtype", "") or "doc")
             icon = "🛠" if sub == "tool" else "📄"
-            title = _e(a.title or (a.body[:60] if a.body else "(zonder titel)"))
+            title = _e(a.title or (a.body[:60] if a.body else "(no title)"))
             rows += (f"<li>{icon} <span class='chip muted'>{_e(sub)}</span> {title} "
                      f"<span class='muted'>· {owner}</span></li>")
     body = (f"<ul class='clean'>{rows}</ul>" if rows
-            else "<span class='muted'>Geen context-notes op de rollen van deze persoon.</span>")
+            else "<span class='muted'>No context notes on this person's roles.</span>")
     return f"<div class='c2-sec'><h3>Context ({total})</h3>{body}</div>"
 
 
@@ -833,8 +833,8 @@ def _person_metrics_tab_html(st: _Stores, filler_type: str, pid: str) -> str:
         out += (f"<h4 class='muted'>{_e(_name(rec))}</h4>"
                 + render_metrics2_person(st, rec, base))
     if not out:
-        return ("<div class='c2-sec'><span class='muted'>Geen metrics op de rollen van "
-                "deze persoon.</span></div>")
+        return ("<div class='c2-sec'><span class='muted'>No metrics on this person's "
+                "roles.</span></div>")
     return out + _METRICS_JS      # één keer de kaart-omdraai-JS voor alle rol-tegels samen
 
 
@@ -854,7 +854,7 @@ def _person_checklists_tab_html(st: _Stores, filler_type: str, pid: str, csrf: s
         sections += f"<h4 class='muted' style='margin:.6rem 0 .2rem'>{owner}</h4>{rows}"
         total += len(items)
     body = (sections if sections
-            else "<span class='muted'>Geen checklist-items op de rollen van deze persoon.</span>")
+            else "<span class='muted'>No checklist items on this person's roles.</span>")
     return f"<div class='c2-sec'><h3>Checklist ({total})</h3>{body}</div>"
 
 
@@ -867,15 +867,15 @@ def render_person(st: _Stores, pid: str, tab: str = "rollen", username: str | No
     niet op 'ben jij deze persoon'. Handelt zowel een mens (people) als een AI-inwoner (personas) af."""
     p = st.people.get(pid)
     if p is not None:
-        filler_type, name, subtitle = "person", p.name, (p.email or "geen e-mail")
+        filler_type, name, subtitle = "person", p.name, (p.email or "no email")
         avatar = f"<span class='av' style='width:28px;height:28px'>{_e(_initials(p.name))}</span>"
         chip = ""
     else:
         pa = st.personas.get(pid)
         if pa is None:
-            return _page("Niet gevonden", "<p>Persoon niet gevonden.</p><p><a href='/'>← home</a></p>")
+            return _page("Not found", "<p>Person not found.</p><p><a href='/'>← home</a></p>")
         filler_type, name = "persona", pa.name
-        subtitle = "AI-inwoner" + (f" · {pa.mbti}" if pa.mbti else "")
+        subtitle = "AI inhabitant" + (f" · {pa.mbti}" if pa.mbti else "")
         avatar = "<span class='av ai' style='width:28px;height:28px'>AI</span>"
         chip = "<span class='chip'>AI</span>"
 
@@ -897,13 +897,13 @@ def render_person(st: _Stores, pid: str, tab: str = "rollen", username: str | No
             crumb_html = f" <span class='muted'>· {crumb}</span>" if crumb else ""
             accs = rec.definition.accountabilities or []
             acc_html = ("<ul class='clean'>" + "".join(f"<li>{_e(a)}</li>" for a in accs) + "</ul>"
-                        if accs else "<span class='muted'>Geen accountabilities.</span>")
+                        if accs else "<span class='muted'>No accountabilities.</span>")
             blocks += (f"<details class='c2-acc'><summary>"
                        f"<a href='/node?id={_e(rid)}'>{_e(_name(rec))}</a>{crumb_html} "
                        f"<span class='muted' style='font-size:.75rem'>· {len(accs)} accountabilities"
                        f"</span></summary>{acc_html}</details>")
-        content = (f"<div class='c2-sec'><h3>Rollen ({len(uniek)})</h3>"
-                   + (blocks if blocks else "<span class='muted'>Geen rollen.</span>") + "</div>")
+        content = (f"<div class='c2-sec'><h3>Roles ({len(uniek)})</h3>"
+                   + (blocks if blocks else "<span class='muted'>No roles.</span>") + "</div>")
     elif tab == "projecten":
         # Hergebruikt de kanban-component (_projects_board), gefilterd op mijn rollen; csrf → drag-drop.
         content = _person_projects_tab_html(st, filler_type, pid, csrf_token)
@@ -912,7 +912,7 @@ def render_person(st: _Stores, pid: str, tab: str = "rollen", username: str | No
         # voor anonieme guests. Drempel op "is er een sessie", niet op "ben jij deze persoon" (geen
         # persoons-gate). "guest" (auth uit) en geen sessie → geen inhoud.
         if not username or username == "guest":
-            content = "<div class='c2-sec'><p class='muted'>Log in om context te zien.</p></div>"
+            content = "<div class='c2-sec'><p class='muted'>Log in to see context.</p></div>"
         else:
             content = _person_context_tab_html(st, filler_type, pid)
     elif tab == "metrics":
@@ -923,8 +923,8 @@ def render_person(st: _Stores, pid: str, tab: str = "rollen", username: str | No
         # Afvink-form alleen met csrf (effective_csrf) — guest/niet-ingelogd → geen knop.
         content = _person_checklists_tab_html(st, filler_type, pid, csrf_token)
     else:
-        content = ("<div class='c2-sec'><p class='muted'>Read-only aggregatie-lens over de rollen "
-                   "die deze persoon vervult. Deze tab volgt in een losse vervolgtaak.</p></div>")
+        content = ("<div class='c2-sec'><p class='muted'>Read-only aggregation lens over the roles "
+                   "this person fills. This tab follows in a separate task.</p></div>")
 
     main = (f"<div class='c2-main'><h1>{avatar} {_e(name)} {chip}</h1>"
             f"<div class='muted'>{_e(subtitle)}</div>"
@@ -942,35 +942,35 @@ def render_patterns(csrf_token: str = "") -> str:
     """Levende styleguide: elk atoom/molecuul één keer. Bron van waarheid; geen losse varianten."""
     def sec(title, body):
         return f"<div class='c2-sec'><h3>{_e(title)}</h3><div style='display:flex;gap:.5rem;flex-wrap:wrap;align-items:center'>{body}</div></div>"
-    buttons = ("<button class='btn ok'>Primair</button>"
-               "<button class='btn'>Neutraal</button>"
-               "<button class='btn no'>Gevaar</button>"
-               "<button class='btn ok sm'>Primair sm</button>"
-               "<button class='btn sm'>Neutraal sm</button>"
+    buttons = ("<button class='btn ok'>Primary</button>"
+               "<button class='btn'>Neutral</button>"
+               "<button class='btn no'>Danger</button>"
+               "<button class='btn ok sm'>Primary sm</button>"
+               "<button class='btn sm'>Neutral sm</button>"
                "<button class='btn ghost sm'>Ghost sm</button>"
-               "<a class='dellink' href='#'>verwijderen</a>")
+               "<a class='dellink' href='#'>delete</a>")
     chips = ("<span class='chip green'>green</span><span class='chip muted'>muted</span>"
              "<span class='chip outline'>outline</span><span class='chip coral'>coral</span>"
              "<span class='chip coral-solid'>Overdue</span><span class='chip'>tint (default)</span>"
              "<span class='badge ro'>read</span><span class='badge rw'>edit</span>")
-    cards = (f"<button class='acard'>{_IC_CLOCK}<span>Datum</span></button>"
+    cards = (f"<button class='acard'>{_IC_CLOCK}<span>Date</span></button>"
              f"<button class='acard'>{_IC_CHECK}<span>Checklist</span></button>"
              f"<button class='acard acard-off' disabled>{_IC_TARGET}<span>Goals</span></button>")
-    att = f"<div class='attcard'><span class='att-ic'>{_IC_LINK}</span><a class='att-name' href='#'>voorbeeld bijlage</a></div>"
-    due = (f"<span class='chip outline'>{_IC_CLOCK}25 jun 2026</span>"
-           f"<span class='chip coral'>{_IC_CLOCK}1 jan 2020</span><span class='chip coral-solid'>Overdue</span>")
+    att = f"<div class='attcard'><span class='att-ic'>{_IC_LINK}</span><a class='att-name' href='#'>example attachment</a></div>"
+    due = (f"<span class='chip outline'>{_IC_CLOCK}25 Jun 2026</span>"
+           f"<span class='chip coral'>{_IC_CLOCK}1 Jan 2020</span><span class='chip coral-solid'>Overdue</span>")
     av = _avatar("Stefan Wobben", False) + _avatar("Codie", True)
-    icons = (f"<span class='manage-ico' title='persoon toevoegen'>{_ICON_ADD_PERSON}</span>"
-             f"<span class='manage-ico' title='reactie toevoegen'>{_ICON_ADD_EMOJI}</span>")
-    body = (sec("Knoppen — atoom: .btn [.ok|.no] [.sm] [.ghost] + .dellink", buttons)
-            + sec("Lijn-iconen (neutraal, currentColor)", icons)
+    icons = (f"<span class='manage-ico' title='add person'>{_ICON_ADD_PERSON}</span>"
+             f"<span class='manage-ico' title='add reply'>{_ICON_ADD_EMOJI}</span>")
+    body = (sec("Buttons — atom: .btn [.ok|.no] [.sm] [.ghost] + .dellink", buttons)
+            + sec("Line icons (neutral, currentColor)", icons)
             + sec("Status & chips & badges", chips)
             + sec("Action-cards (molecule)", cards)
-            + sec("Bijlage-card", att)
+            + sec("Attachment card", att)
             + sec("Deadline-chip", due)
             + sec("Avatar", av))
     main = (f"<div class='c2-main'><h1>Patterns</h1>"
-            f"<p class='muted'>Levende referentie. Gebruik deze atomen en moleculen; verzin geen varianten.</p>{body}</div>")
+            f"<p class='muted'>Living reference. Use these atoms and molecules; don't invent variants.</p>{body}</div>")
     inner = (f"{_DS_LINK}"
              f"{_nav('patterns')}"
              f"<div class='c2-wrap'>{main}</div>")
@@ -982,8 +982,8 @@ def render_patterns(csrf_token: str = "") -> str:
 def render_rolefillers(st: _Stores, role_id: str, csrf_token: str = "", fragment: bool = False) -> str:
     rec = st.records.get(role_id)
     if rec is None:
-        return ("<p class='muted'>Onbekende rol.</p>" if fragment
-                else _page("Niet gevonden", "<p>Onbekend.</p>"))
+        return ("<p class='muted'>Unknown role.</p>" if fragment
+                else _page("Not found", "<p>Unknown.</p>"))
     back = f"/node?id={(rec.parent or rec.id)}&tab=roles"
 
     def hid():
@@ -1007,31 +1007,31 @@ def render_rolefillers(st: _Stores, role_id: str, csrf_token: str = "", fragment
             f"<summary>{_avatar(label, ai)} {name}{prev}</summary>"
             f"<form method='post' action='/action' style='margin:.3rem 0 .2rem 30px'>{hid()}"
             f"<input type='hidden' name='filler' value='{f.type}:{_e(f.id)}'>"
-            f"<input name='focus' value='{_e(f.focus)}' placeholder='Focus (optioneel)' "
+            f"<input name='focus' value='{_e(f.focus)}' placeholder='Focus (optional)' "
             f"style='padding:.3rem .4rem;border:1px solid var(--border);border-radius:var(--radius)'> "
-            f"<button class='btn' type='submit' name='action' value='role_focus'>Focus opslaan</button>"
+            f"<button class='btn' type='submit' name='action' value='role_focus'>Save focus</button>"
             f"</form></details>"
             f"<form method='post' action='/action' style='display:inline'>{hid()}"
             f"<input type='hidden' name='filler' value='{f.type}:{_e(f.id)}'>"
-            f"<button class='dellink' type='submit' name='action' value='role_unassign'>verwijderen</button>"
+            f"<button class='dellink' type='submit' name='action' value='role_unassign'>remove</button>"
             f"</form></div>")
     if not rows:
-        rows = "<p class='muted'>Nog niemand toegewezen.</p>"
+        rows = "<p class='muted'>No one assigned yet.</p>"
     # Alleen mensen vervullen een rol; AI koppel je per accountability (niet hier).
-    opts = "<option value=''>— kies persoon —</option>"
+    opts = "<option value=''>— pick person —</option>"
     opts += "".join(f"<option value='person:{_e(p.id)}'>{_e(p.name)}</option>" for p in st.people.all())
     add = (f"<div class='pf' style='margin-top:.6rem'><form method='post' action='/action'>{hid()}"
-           f"<label>Toevoegen aan {_e(_name(rec))}</label>"
+           f"<label>Add to {_e(_name(rec))}</label>"
            f"<select name='filler'>{opts}</select>"
            f"<button class='btn ok' type='submit' name='action' value='role_assign' "
-           f"style='margin-top:.4rem'>Toewijzen</button></form></div>")
-    frag = (f"<h2 style='margin-top:0'>Rolvervullers beheren — {_e(_name(rec))}</h2>"
+           f"style='margin-top:.4rem'>Assign</button></form></div>")
+    frag = (f"<h2 style='margin-top:0'>Manage role fillers — {_e(_name(rec))}</h2>"
             f"<div>{rows}</div>{add}")
     if fragment:
         return frag
     main = (f"<div class='c2-main' style='max-width:560px'>"
-            f"<div class='c2-bar'><a href='{_e(back)}'>← terug</a></div>{frag}</div>")
-    return _page("Rolvervullers", f"{_DS_LINK}<div class='c2-wrap'>{main}</div>")
+            f"<div class='c2-bar'><a href='{_e(back)}'>← back</a></div>{frag}</div>")
+    return _page("Role fillers", f"{_DS_LINK}<div class='c2-wrap'>{main}</div>")
 
 
 def render_aitask(st: _Stores, role_id: str, acc_id: str, csrf_token: str = "",
@@ -1056,8 +1056,8 @@ def render_aitask(st: _Stores, role_id: str, acc_id: str, csrf_token: str = "",
     sugg_html = ""
     if sugg:
         items = "".join(f"<div class='frow'><span style='flex:1'>🤖 {_e(p.name)} · {_e(sk)}</span>"
-                        f"{pickform(p.id, sk, 'koppel', 'btn ok')}</div>" for p, sk in sugg)
-        sugg_html = (f"<div class='sugg'><div class='sugg-h'>🎁 Voorgesteld</div>{items}</div>")
+                        f"{pickform(p.id, sk, 'link', 'btn ok')}</div>" for p, sk in sugg)
+        sugg_html = (f"<div class='sugg'><div class='sugg-h'>🎁 Suggested</div>{items}</div>")
 
     # 2) Al gekoppeld: verwijderbaar. Autonome AI-taken en dorpsmiddelen delen dezelfde
     #    verwijder-route; het chip-label verschilt.
@@ -1066,7 +1066,7 @@ def render_aitask(st: _Stores, role_id: str, acc_id: str, csrf_token: str = "",
                 f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                 f"<input type='hidden' name='tid' value='{_e(tid)}'>"
                 f"<input type='hidden' name='next' value='{_e(back)}'>"
-                f"<button class='dellink' type='submit' name='action' value='aitask_remove'>verwijderen</button>"
+                f"<button class='dellink' type='submit' name='action' value='aitask_remove'>remove</button>"
                 f"</form>")
 
     rows = ""
@@ -1086,37 +1086,37 @@ def render_aitask(st: _Stores, role_id: str, acc_id: str, csrf_token: str = "",
         opts = "".join(f"<option value='{_e(p.id)}::{_e(sk)}'>🤖 {_e(p.name)} · {_e(sk)}</option>"
                        for p, sk in combos)
         select = (f"<div class='pf'><form method='post' action='/action'>{hid()}"
-                  f"<label>Kies een skill uit het rugzakje van een AI</label>"
+                  f"<label>Pick a skill from an AI's backpack</label>"
                   f"<select name='pick'>{opts}</select>"
                   f"<button class='btn ok' type='submit' name='action' value='aitask_add' "
-                  f"style='margin-top:.4rem'>Koppel</button></form></div>")
+                  f"style='margin-top:.4rem'>Link</button></form></div>")
     elif personas:
-        select = "<p class='muted'>Alle skills van de AI's zijn hier al gekoppeld, of de rugzakjes zijn leeg.</p>"
+        select = "<p class='muted'>All AI skills are already linked here, or the backpacks are empty.</p>"
     else:
-        select = ("<p class='muted'>Er zijn nog geen AI-inwoners. Maak er eerst een aan, "
-                  "dan kun je een skill koppelen.</p>")
+        select = ("<p class='muted'>There are no AI inhabitants yet. Create one first, "
+                  "then you can link a skill.</p>")
 
     # 4) Rugzak uitbreiden (set-up): een nieuwe skill aan een AI toevoegen.
     bag = ""
     if personas:
         popts = "".join(f"<option value='{_e(p.id)}'>🤖 {_e(p.name)}</option>" for p in personas)
-        bag = (f"<details class='bagadd'><summary>Rugzak van een AI uitbreiden</summary>"
+        bag = (f"<details class='bagadd'><summary>Expand an AI's backpack</summary>"
                f"<form method='post' action='/action'>"
                f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                f"<input type='hidden' name='next' value='{_e(back + '&_aitask=' + acc_id)}'>"
-               f"<label>AI-inwoner</label><select name='agent'>{popts}</select>"
-               f"<label>Nieuwe skill</label><input name='skill' placeholder='bijv. schrijft de code'>"
+               f"<label>AI inhabitant</label><select name='agent'>{popts}</select>"
+               f"<label>New skill</label><input name='skill' placeholder='e.g. writes the code'>"
                f"<button class='btn' type='submit' name='action' value='persona_skill_add' "
-               f"style='margin-top:.4rem'>Aan rugzak toevoegen</button></form></details>")
+               f"style='margin-top:.4rem'>Add to backpack</button></form></details>")
 
-    frag = (f"<h2 style='margin-top:0'>AI op deze accountability</h2>"
+    frag = (f"<h2 style='margin-top:0'>AI on this accountability</h2>"
             f"<p class='muted'>Accountability: {_e(acc_text) or '—'}</p>"
-            f"<p style='font-size:.82rem;color:var(--gray)'>De mens blijft verantwoordelijk; de AI "
-            f"voert <b>zelfstandig</b> een skill uit z'n rugzakje uit. Je typt niets, je "
-            f"<b>selecteert</b> een skill.</p>{sugg_html}{rows}{middel}{select}{bag}")
+            f"<p style='font-size:.82rem;color:var(--gray)'>The human stays responsible; the AI "
+            f"autonomously runs a skill from its backpack. You type nothing, you "
+            f"<b>select</b> a skill.</p>{sugg_html}{rows}{middel}{select}{bag}")
     if fragment:
         return frag
     main = (f"<div class='c2-main' style='max-width:560px'>"
-            f"<div class='c2-bar'><a href='{_e(back)}'>← terug</a></div>{frag}</div>")
-    return _page("AI op accountability", f"{_DS_LINK}<div class='c2-wrap'>{main}</div>")
+            f"<div class='c2-bar'><a href='{_e(back)}'>← back</a></div>{frag}</div>")
+    return _page("AI on accountability", f"{_DS_LINK}<div class='c2-wrap'>{main}</div>")
 

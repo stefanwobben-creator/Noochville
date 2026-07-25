@@ -437,7 +437,7 @@ def test_ui_geerfd_readonly_met_herkomst(tmp_path):
     st = _stores(tmp_path)
     st.att.add(CIRCLE, "policy", title="Cirkelbreed", inherit=True)
     html = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
-    assert "Geldend hier" in html and "Cirkelbreed" in html
+    assert "Applies here" in html and "Cirkelbreed" in html
     assert "via Nooch" in html
     assert f"/node?id={CIRCLE}&tab=policies" in html         # herkomst-badge springt naar bron-rol
 
@@ -451,7 +451,7 @@ def test_ui_policy_form_projecten_patroon_titel_body_domein(tmp_path):
         assert weg not in html
     assert "class='qadd-form'" in html and "att-lbl" in html and "class='editor'" in html
     assert "name='title'" in html and "name='body'" in html
-    assert "Domein" in html and "name='domain'" in html
+    assert "Domain" in html and "name='domain'" in html
 
 
 def test_ui_artefact_lijst_gebruikt_card_patroon(tmp_path):
@@ -466,7 +466,7 @@ def test_ui_artefact_lijst_gebruikt_card_patroon(tmp_path):
 def test_ui_policy_geen_domein_toont_melding_geen_form(tmp_path):
     st = _stores(tmp_path)                                   # OWNER heeft geen domein
     html = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
-    assert "nog geen domein" in html
+    assert "no domain yet" in html
     assert "value='artefact_add'" not in html               # geen add-form
 
 
@@ -512,7 +512,7 @@ def test_ui_policies_governance_eigendom_kop_geen_slotje(tmp_path):
     n = st.records.get(CIRCLE); n.definition.domains.append("Money"); st.records.put(n)
     st.att.add(CIRCLE, "policy", title="Geld-regel", domain="Money", inherit=True)
     html = cockpit2.render_node(st, OWNER, "policies", csrf_token="tok", username="guest")
-    assert "Alle policies hieronder zijn governance-eigendom" in html
+    assert "All policies below are governance-owned" in html
     assert "🔒" not in html
     assert "Geld-regel" in html and "via Nooch" in html   # geërfd met domein-id + herkomst
 
@@ -531,7 +531,7 @@ def test_ui_versiehistorie_uitklapper(tmp_path):
 # ── terugdraai fase 2: systeem bakt geen domein/policy voor ──────────────────
 
 def test_bootstrap_bakt_geen_policy_in(tmp_path):
-    """Uitgangspunt: het systeem start leeg. Domeinen worden via governance aan een rol toegewezen;
+    """Uitgangspunt: het systeem start leeg. Domainen worden via governance aan een rol toegewezen;
     de eigenaar-rol maakt zélf de policy via het artefact-mechanisme. Deze test faalt zodra seed/
     bootstrap opnieuw een policy of het voorbak-mechanisme (migrate_anchor_policies) introduceert."""
     dd = str(tmp_path / "poc")

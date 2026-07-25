@@ -121,7 +121,7 @@ def test_d_verzwakt_conditioneel(tmp_path):
 def test_e_dangling_rol_waarschuwing(tmp_path):
     dd, pid, _ = _setup(tmp_path, owner="rol_bestaat_niet_meer_xyz")
     frag = _frag(dd, pid)
-    assert "dangling-warn" in frag and "bestaat niet meer" in frag
+    assert "dangling-warn" in frag and "no longer exists" in frag
 
 
 # f. read-only kijker (guest, geen csrf) ziet weergave zonder bewerk-knoppen

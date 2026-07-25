@@ -58,5 +58,5 @@ def test_wire_checkt_response_ok():
     assert "if(!resp.ok)" in modal                               # de response.ok-poort bestaat
     # de succes-toast staat NIET onvoorwaardelijk vóór de ok-check: de non-ok-tak returnt eerst
     idx_ok = modal.index("if(!resp.ok)")
-    idx_succes = modal.index("opgeslagen')")
+    idx_succes = modal.index("saved')")
     assert idx_ok < idx_succes                                   # eerst ok-check, dan pas 'opgeslagen'

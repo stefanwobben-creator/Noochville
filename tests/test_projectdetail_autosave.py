@@ -1,4 +1,4 @@
-"""Projectdetails-zijbalk: auto-opslaan (onchange/onblur, geen knop) + trekker-ververs bij rol-wissel.
+"""Project details-zijbalk: auto-opslaan (onchange/onblur, geen knop) + trekker-ververs bij rol-wissel.
 
 De vier controls (rol/trekker/missie/business/effort) slaan op bij selectie/blur; de modal vangt de
 submit via wire() → reopen (fragment-re-render) + toast, met een .catch voor het foutpad. De server-side
@@ -39,15 +39,15 @@ def test_autosave_bedrading_geen_knoppen(tmp_path):
 
 
 def test_foutpad_catch_in_wire(tmp_path):
-    # geen stille mislukking: wire() heeft een .catch met een 'niet opgeslagen'-toast (+ reopen = revert)
+    # geen stille mislukking: wire() heeft een .catch met een 'not saved'-toast (+ reopen = revert)
     modal = P._modal_html()
-    assert ".catch(function()" in modal and "niet opgeslagen" in modal
+    assert ".catch(function()" in modal and "not saved" in modal
 
 
 def test_bord_drag_drop_checkt_response_ok(tmp_path):
     # de bord-move-fetch checkt nu óók response.ok → toont nooit '✓ verplaatst' bij een mislukte move
     modal = P._modal_html()
-    assert "niet verplaatst" in modal                   # foutmelding-tak aanwezig
+    assert "not moved" in modal                   # foutmelding-tak aanwezig
     assert modal.count("if(!resp.ok)") >= 2             # zowel de wire()-submit als de move-fetch
 
 
