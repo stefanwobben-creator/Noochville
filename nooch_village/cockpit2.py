@@ -4923,8 +4923,9 @@ def make_handler(data_dir: str, csrf_token: str,
                 st = _Stores(data_dir)
                 try:
                     if path == "/wizard/sharpen":
-                        from nooch_village.wizard import sharpen_outcome
-                        self._send_json({"uitkomst": sharpen_outcome(g1("ruw"))})
+                        from nooch_village.wizard import sharpen_outcome, board_anchors
+                        _ankers = board_anchors(st.projects.all())   # eigen bord = stem van het team
+                        self._send_json({"uitkomst": sharpen_outcome(g1("ruw"), anchors=_ankers)})
                         return
                     if path == "/wizard/plan":
                         from nooch_village.wizard import plan_items
