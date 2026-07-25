@@ -30,7 +30,10 @@ git_nooch(){ sudo -u "$RUN_USER" git -C "$REPO" "$@"; }
 health_ok(){
   local code
   for _ in $(seq 1 "$HEALTH_RETRIES"); do
-    code="$(curl -o /dev/null -s -w '%{http_code}' --max-time 5 "$HEALTH_URL" || echo 000)"
+    # NIET `|| echo 000`: curl print bij connection-refused via -w al "000" én laat de || nóg een
+    # "000" echoën → code werd "000\n000" (weergegeven als "000000"), wat de poort hieronder ten
+    # onrechte als gezond passeerde en de rollback ondermijnde. Vang de exit-code los af.
+    code="$(curl -o /dev/null -s -w '%{http_code}' --max-time 5 "$HEALTH_URL")" || code=000
     if [ "$code" != "000" ] && [ "$code" -lt 500 ]; then
       log "health-check OK (HTTP $code)"; return 0
     fi
