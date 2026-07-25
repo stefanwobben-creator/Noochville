@@ -116,18 +116,24 @@ class ClaimsSiteScanSkill(Skill):
         status-veld: termen, herformuleringen en landenregels blijven compliance-domein.
         Elke automatische wijziging krijgt `status_bron: auto`, zodat een mens altijd kan zien
         wie wat vond."""
+        data_dir = getattr(context, "data_dir", ".")
         voorstellen = claims_verify.verifieer(db, paginateksten)
         if not voorstellen:
             return []
         try:
-            levend = claims_db.load()                    # verse kopie: niet op onze scan-dict schrijven
+            levend = claims_db.load(data_dir=data_dir)   # effectief (seed + overlay), verse kopie
         except claims_db.ClaimsDbError:
             return []
         gewijzigd = claims_verify.pas_toe(levend, voorstellen)
         if not gewijzigd:
             return []
-        claims_db.bump_versie(levend)
-        claims_db.save(levend)
+        # Statuswijzigingen landen in de runtime-overlay, niet in de getrackte seed (machine=True:
+        # de auto-scan mag de AUTO_STATUSSEN zetten). Zo blijft config/claims_database.json schoon.
+        for v in gewijzigd:
+            try:
+                claims_db.overlay_set_status(data_dir, v["nr"], v["naar"], machine=True)
+            except (ValueError, TypeError):
+                continue
         claims_verify.pas_toe(db, voorstellen)           # de scan-dict meetrekken
         for v in gewijzigd:
             if v["naar"] != claims_db.AUTO_REGRESSIE:
@@ -148,7 +154,7 @@ class ClaimsSiteScanSkill(Skill):
             return {"ok": True, "week": week, "skipped": True, "reden": "deze week al gescand"}
 
         try:
-            db = claims_db.load()
+            db = claims_db.load(data_dir=data_dir)
         except claims_db.ClaimsDbError as e:
             return {"ok": False, "week": week, "escalate": {"reason": f"claims-database onleesbaar: {e}"}}
 

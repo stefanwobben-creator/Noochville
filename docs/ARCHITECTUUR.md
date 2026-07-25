@@ -70,46 +70,46 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 
 | Actie | Handler (cockpit2.py:regel) |
 |---|---|
-| `kb_new` | `cockpit2.py:3643` |
-| `kb_intake` | `cockpit2.py:3725` |
-| `kb_intake_url` | `cockpit2.py:3742` |
-| `kb_stage_edit` | `cockpit2.py:3761` |
-| `kb_stage_accept` | `cockpit2.py:3773` |
-| `kb_stage_delete` | `cockpit2.py:3792` |
-| `kb_stage_merge` | `cockpit2.py:3798` |
-| `kb_stage_commit` | `cockpit2.py:3809` |
-| `kb_stage_discard` | `cockpit2.py:3829` |
-| `kb_atoom_subject` | `cockpit2.py:3953` |
-| `kb_atoom_purge` | `cockpit2.py:3937` |
-| `tag_voorstel_besluit` | `cockpit2.py:3905` |
-| `tag_onderhoud_run` | `cockpit2.py:3924` |
-| `kb_blacklist_leeg` | `cockpit2.py:3946` |
-| `kb_atoom_edit` | `cockpit2.py:3835` |
-| `kb_atoom_related` | `cockpit2.py:3842` |
-| `kb_atoom_reference` | `cockpit2.py:3887` |
-| `kb_insight_link` | `cockpit2.py:3854` |
-| `kb_insight_unlink` | `cockpit2.py:3861` |
-| `kb_meta_start` | `cockpit2.py:3867` |
-| `kb_atoom_merge` | `cockpit2.py:3964` |
-| `kb_atoom_archive` | `cockpit2.py:3985` |
-| `kb_atoom_unarchive` | `cockpit2.py:3994` |
-| `kb_atoom_naar_spel` | `cockpit2.py:4000` |
-| `kb_spel_start` | `cockpit2.py:4021` |
-| `kb_spel_add` | `cockpit2.py:4035` |
-| `kb_spel_remove` | `cockpit2.py:4045` |
-| `kb_spel_flip` | `cockpit2.py:4052` |
-| `kb_spel_finish` | `cockpit2.py:4058` |
-| `kb_link` | `cockpit2.py:3652` |
-| `kb_unlink` | `cockpit2.py:3666` |
-| `kb_annotate` | `cockpit2.py:3677` |
-| `kb_evidence` | `cockpit2.py:3683` |
-| `kb_discuss` | `cockpit2.py:3704` |
-| `kb_reformulate` | `cockpit2.py:3710` |
-| `kw_nominate` | `cockpit2.py:4069` |
-| `kw_nom_accept` | `cockpit2.py:4080` |
-| `kw_nom_reject` | `cockpit2.py:4098` |
-| `ws_forbid` | `cockpit2.py:4128` |
-| `ws_approve` | `cockpit2.py:4133` |
+| `kb_new` | `cockpit2.py:3656` |
+| `kb_intake` | `cockpit2.py:3738` |
+| `kb_intake_url` | `cockpit2.py:3755` |
+| `kb_stage_edit` | `cockpit2.py:3774` |
+| `kb_stage_accept` | `cockpit2.py:3786` |
+| `kb_stage_delete` | `cockpit2.py:3805` |
+| `kb_stage_merge` | `cockpit2.py:3811` |
+| `kb_stage_commit` | `cockpit2.py:3822` |
+| `kb_stage_discard` | `cockpit2.py:3842` |
+| `kb_atoom_subject` | `cockpit2.py:3966` |
+| `kb_atoom_purge` | `cockpit2.py:3950` |
+| `tag_voorstel_besluit` | `cockpit2.py:3918` |
+| `tag_onderhoud_run` | `cockpit2.py:3937` |
+| `kb_blacklist_leeg` | `cockpit2.py:3959` |
+| `kb_atoom_edit` | `cockpit2.py:3848` |
+| `kb_atoom_related` | `cockpit2.py:3855` |
+| `kb_atoom_reference` | `cockpit2.py:3900` |
+| `kb_insight_link` | `cockpit2.py:3867` |
+| `kb_insight_unlink` | `cockpit2.py:3874` |
+| `kb_meta_start` | `cockpit2.py:3880` |
+| `kb_atoom_merge` | `cockpit2.py:3977` |
+| `kb_atoom_archive` | `cockpit2.py:3998` |
+| `kb_atoom_unarchive` | `cockpit2.py:4007` |
+| `kb_atoom_naar_spel` | `cockpit2.py:4013` |
+| `kb_spel_start` | `cockpit2.py:4034` |
+| `kb_spel_add` | `cockpit2.py:4048` |
+| `kb_spel_remove` | `cockpit2.py:4058` |
+| `kb_spel_flip` | `cockpit2.py:4065` |
+| `kb_spel_finish` | `cockpit2.py:4071` |
+| `kb_link` | `cockpit2.py:3665` |
+| `kb_unlink` | `cockpit2.py:3679` |
+| `kb_annotate` | `cockpit2.py:3690` |
+| `kb_evidence` | `cockpit2.py:3696` |
+| `kb_discuss` | `cockpit2.py:3717` |
+| `kb_reformulate` | `cockpit2.py:3723` |
+| `kw_nominate` | `cockpit2.py:4082` |
+| `kw_nom_accept` | `cockpit2.py:4093` |
+| `kw_nom_reject` | `cockpit2.py:4111` |
+| `ws_forbid` | `cockpit2.py:4141` |
+| `ws_approve` | `cockpit2.py:4146` |
 | `proj_add` | `cockpit2.py:1130` |
 | `artefact_add` | `cockpit2.py:1165` |
 | `artefact_edit` | `cockpit2.py:1206` |
@@ -231,8 +231,9 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | `person_remove` | `cockpit2.py:3413` |
 | `lk_mute` | `cockpit2.py:3434` |
 | `claims_term_add` | `cockpit2.py:3537` |
-| `claims_work_status` | `cockpit2.py:3560` |
-| `claims_to_board` | `cockpit2.py:3579` |
+| `claims_term_retract` | `cockpit2.py:3574` |
+| `claims_work_status` | `cockpit2.py:3558` |
+| `claims_to_board` | `cockpit2.py:3592` |
 | `persona_edit` | `cockpit2.py:2171` |
 | `persona_llm` | `cockpit2.py:2190` |
 | `persona_finetune` | `cockpit2.py:2207` |
@@ -278,4 +279,4 @@ De stores uit `_Stores.__init__` (cockpit2.py): het attribuut (de handle), de st
 
 
 ---
-_51 routes · 167 dispatch-acties · 30 stores._
+_51 routes · 168 dispatch-acties · 30 stores._

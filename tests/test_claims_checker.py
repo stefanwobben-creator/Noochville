@@ -190,9 +190,12 @@ def test_dispatch_schrijft_naar_de_bron_en_logt(tmp_path, monkeypatch):
                                {"nr": ["3"], "status": ["live"], "next": ["/claims"]}, "guest")
     assert msg.startswith("✓")
 
-    db = claims_db.load(pad)                                     # overleeft een herstart
+    db = claims_db.load(pad, data_dir=dd)                        # effectief (seed + overlay), overleeft herstart
     assert any(t["term"] == "gifvrij" for t in db["termen"])
     assert [w for w in db["werklijst"] if w["nr"] == 3][0]["status"] == "live"
+    # De curatie landt in de overlay, niet in de getrackte seed — die blijft ongemoeid.
+    seed = claims_db.load_seed(pad)
+    assert not any(t["term"] == "gifvrij" for t in seed["termen"])
 
     log = [json.loads(r) for r in open(os.path.join(dd, "system_log.jsonl"), encoding="utf-8")]
     assert {e["event"] for e in log} == {"claims_term_added", "claims_work_status"}

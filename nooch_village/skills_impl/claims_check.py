@@ -33,7 +33,7 @@ class ClaimsCheckSkill(Skill):
         if not tekst:
             return {"ok": False, "error": "geef 'text' of 'terms' mee"}
         try:
-            uitslag = claims_db.check_tekst(tekst)
+            uitslag = claims_db.check_tekst(tekst, data_dir=getattr(context, "data_dir", None))
         except claims_db.ClaimsDbError as e:
             return {"ok": False, "error": str(e)}
         return {"ok": True, **uitslag}
