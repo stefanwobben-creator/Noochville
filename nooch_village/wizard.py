@@ -17,19 +17,62 @@ import re
 from nooch_village.llm import reason
 
 
-def sharpen_outcome(ruw: str, *, reason_fn=reason) -> str:
-    """Zet een ruw idee om in één concrete, toetsbare uitkomst. Fail-soft → het ruwe idee terug."""
+# Werkwoorden die een project als een AFGERONDE uitkomst markeren (Holacracy: verleden tijd). Voor de
+# deterministische selectie van goede voorbeelden van het eigen bord — géén LLM.
+_ANKER_GOED = re.compile(
+    r"\b(created|done|completed|organized|organised|granted|made|implemented|developed|written|"
+    r"published|added|found|prepared|explored|submitted|sent|launched|built|integrated|mapped|"
+    r"finalised|finalized|updated|designed|defined|selected|arranged|scheduled|set up|"
+    r"gemaakt|geregeld|opgesteld|bijgewerkt|opgezet|verbeterd|afgerond|gerealiseerd|opgeleverd)\b",
+    re.I)
+_ANKER_SLECHT = re.compile(
+    r"\b(exceed|can |will |should|to drive|to engage|organize |establish |plan for|guest in|"
+    r"kan |kunnen|onderzoeken|uitzoeken|opzetten)\b", re.I)
+
+
+def board_anchors(projects, n: int = 5) -> list[str]:
+    """Kies (deterministisch, geen LLM) tot `n` GOED geformuleerde projecten van het eigen bord, als
+    voorbeeld voor de sharpen-stap. Zo praat de wizard vanzelf in de taal, toon en het domein van dít
+    team. Goed = kort, een voltooid-deelwoord-uitkomst, geen tegenwoordige tijd/activiteit/archief."""
+    uit, seen = [], set()
+    for p in projects or []:
+        if p.get("archived"):
+            continue
+        s = ((p.get("scope") or p.get("label") or "") or "").strip()
+        k = s.lower()
+        if not s or len(s) > 72 or k in seen:
+            continue
+        if _ANKER_GOED.search(s) and not _ANKER_SLECHT.search(s):
+            seen.add(k)
+            uit.append(s)
+            if len(uit) >= n:
+                break
+    return uit
+
+
+def sharpen_outcome(ruw: str, *, anchors=None, reason_fn=reason) -> str:
+    """Scherp een ruw idee aan tot ÉÉN uitkomst in de verleden tijd (Holacracy). `anchors` = goede
+    voorbeelden van het eigen bord (zie board_anchors) zodat de wizard in de stem van het team praat.
+    Fail-soft → het ruwe idee terug. Output in het Engels (het team stapt over op Engels)."""
     ruw = (ruw or "").strip()
     if not ruw:
         return ""
+    voorbeelden = ""
+    if anchors:
+        voorbeelden = ("\n\nGOOD EXAMPLES FROM THIS TEAM'S OWN BOARD (match this style, tone and "
+                       "language):\n" + "\n".join(f"- {a}" for a in anchors[:5]))
     out = reason_fn(
-        "Je helpt een projectomschrijving scherp te maken voor een zelfsturend team. Zet dit "
-        "ruwe idee om in ÉÉN concrete, TOETSBARE uitkomst. Een uitkomst is geen onderwerp maar "
-        "een resultaat waaraan je ziet dat het klaar is, met een meetbaar 'klaar' erin — inclusief "
-        "de eerlijke nul-uitkomst (bv. 'er ligt een overzicht van 3 materialen met bron, óf "
-        "expliciet: geen enkel materiaal voldoet').\n\n"
-        f"RUW IDEE: {ruw}\n\n"
-        "OUTPUT: alleen de uitkomst-zin in het Nederlands, geen inleiding of aanhalingstekens.",
+        "You sharpen a project description for a self-managing team (Holacracy). Turn the raw idea "
+        "into ONE concrete outcome phrased in the PAST TENSE / done-state, so it is clear what "
+        "'done' looks like (e.g. 'New website launched', not 'New website' and not 'Build a "
+        "website'). Rules: exactly one outcome, plain everyday language, no jargon. Do NOT invent "
+        "deadlines, metrics or scope the person did not give — a small project is fine. If the raw "
+        "idea is ALREADY a clear past-tense outcome, return it essentially unchanged (only strip "
+        "jargon). Keep the honest null-result allowed (e.g. 'A shortlist of 3 materials with sources "
+        "was produced, or explicitly: none qualified'). Always answer in English."
+        + voorbeelden +
+        f"\n\nRAW IDEA: {ruw}\n\n"
+        "OUTPUT: only the outcome sentence, no preamble or quotation marks.",
         max_tokens=140, call_site="wizard_sharpen")
     v = re.sub(r"\s+", " ", (out or "")).strip().strip('"“”‘’ ').strip()
     return v or ruw
