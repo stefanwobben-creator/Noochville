@@ -40,4 +40,4 @@ def test_render_signals_lists_approved(tmp_path):
 
 def test_render_signals_empty(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
-    assert "niets meer te verwerken" in render_signals(st)
+    assert "nothing left to process" in render_signals(st)

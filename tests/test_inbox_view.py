@@ -38,12 +38,12 @@ def test_verwerk_pagina_toont_spanning_en_wizard(tmp_path):
     person = st.people.all()[0]
     _, _, n = _spanning(st, person)
     html = cockpit2.render_verwerk(st, n, csrf_token="t")
-    assert "Spanning" in html and "Wat heb je nodig?" in html
+    assert "Tension" in html and "What do you need?" in html
     # intentie-labels + een diagnostische vraag + de enige sluitknop
-    assert "Zelf iets doen" in html and "Is het resultaat complexer?" in html
+    assert "Do something yourself" in html and "Is the result more complex?" in html
     assert "notif_outcome" in html and "notif_klaar" in html
     assert "Niks nodig" not in html                       # 'Niks nodig'-knop is weg; Klaar regelt het
-    assert "volgt in stap 2" in html                      # werkoverleg-uitkomst nog niet gebouwd
+    assert "coming in step 2" in html                      # werkoverleg-uitkomst nog niet gebouwd
 
 
 def test_verwerk_outcome_stapelt_en_houdt_open(tmp_path):
@@ -114,7 +114,7 @@ def test_klaar_viert_de_zojuist_verwerkte_spanning(tmp_path):
     nxt, _ = cockpit2.dispatch(dd, "notif_klaar", {"nid": [n["id"]], "next": ["/inbox"]}, username="guest")
     assert nxt == f"/inbox?done={n['id']}"                # redirect markeert de zojuist-verwerkte spanning
     html = cockpit2.render_inbox(cockpit2._Stores(dd), [("person", person.id)], csrf_token="t", done=n["id"])
-    assert "rdr-vier" in html and "rdr-kader" in html and "Dit legde je vast" in html
+    assert "rdr-vier" in html and "rdr-kader" in html and "This is what you recorded" in html
 
 
 def test_prullenbak_haalt_uit_wachtrij(tmp_path):
@@ -142,13 +142,13 @@ def test_verwerkt_toont_record_en_archiveer(tmp_path):
 def test_inbox_leeg_toont_uitleg(tmp_path):
     dd = _dd(tmp_path)
     html = cockpit2.render_inbox(cockpit2._Stores(dd), [("person", "niemand")], csrf_token="t")
-    assert "Je inbox is leeg" in html
+    assert "Your inbox is empty" in html
 
 
 def test_verwerk_onbekend_item(tmp_path):
     dd = _dd(tmp_path)
     html = cockpit2.render_verwerk(cockpit2._Stores(dd), None, csrf_token="t")
-    assert "bestaat niet meer" in html
+    assert "no longer exists" in html
 
 
 def test_inbox_chrome_bevat_launcher_drawer_modal(tmp_path):

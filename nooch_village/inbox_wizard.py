@@ -17,35 +17,35 @@ from __future__ import annotations
 INTENTS = [
     {
         "key": "info",
-        "label": "Info delen, halen of vastleggen",
+        "label": "Share, get or record info",
         "options": [
-            {"q": "Even iemand pingen?", "otype": "ping", "label": "Ping iemand", "ready": True},
-            {"q": "Moet het besproken worden?", "otype": "tactical",
-             "label": "Op het werkoverleg zetten", "ready": False},
+            {"q": "Ping someone?", "otype": "ping", "label": "Ping someone", "ready": True},
+            {"q": "Does it need discussing?", "otype": "tactical",
+             "label": "Put on the tactical meeting", "ready": False},
         ],
     },
     {
         "key": "self",
-        "label": "Zelf iets doen",
+        "label": "Do something yourself",
         "options": [
-            {"q": "Is de volgende stap simpel en helder?", "otype": "action",
-             "label": "Actie toevoegen", "ready": True},
-            {"q": "Is het resultaat complexer?", "otype": "project",
-             "label": "Project toevoegen", "ready": True},
-            {"q": "Wil je een rol wijzigen?", "otype": "roloverleg",
-             "label": "Naar roloverleg", "ready": True},
+            {"q": "Is the next step simple and clear?", "otype": "action",
+             "label": "Add action", "ready": True},
+            {"q": "Is the result more complex?", "otype": "project",
+             "label": "Add project", "ready": True},
+            {"q": "Want to change a role?", "otype": "roloverleg",
+             "label": "To governance meeting", "ready": True},
         ],
     },
     {
         "key": "other",
-        "label": "Iemand anders iets laten doen",
+        "label": "Have someone else do something",
         "options": [
-            {"q": "Eenmalig verzoek dat besproken moet worden?", "otype": "tactical",
-             "label": "Op het werkoverleg zetten", "ready": False},
-            {"q": "Een concrete stap voor die rol?", "otype": "action",
-             "label": "Actie voor die rol", "ready": True},
-            {"q": "Verwacht je het structureel?", "otype": "roloverleg",
-             "label": "Naar roloverleg", "ready": True},
+            {"q": "One-off request that needs discussing?", "otype": "tactical",
+             "label": "Put on the tactical meeting", "ready": False},
+            {"q": "A concrete step for that role?", "otype": "action",
+             "label": "Action for that role", "ready": True},
+            {"q": "Do you expect it structurally?", "otype": "roloverleg",
+             "label": "To governance meeting", "ready": True},
         ],
     },
 ]
@@ -54,9 +54,9 @@ INTENTS = [
 # dan legt de handler zelf 'geen uitkomst' vast in het record. Eén sluitmodel.
 
 # Leesbaar label per uitkomst-type (voor het verwerk-record en de historie).
-OTYPE_LABEL = {"ping": "ping", "note": "note", "action": "actie", "project": "project",
-               "roloverleg": "roloverleg-punt", "tactical": "werkoverleg-punt",
-               "none": "afgehandeld zonder uitkomst"}
+OTYPE_LABEL = {"ping": "ping", "note": "note", "action": "action", "project": "project",
+               "roloverleg": "governance meeting item", "tactical": "tactical meeting item",
+               "none": "handled without outcome"}
 
 
 def intent_of(otype: str) -> str:

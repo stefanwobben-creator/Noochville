@@ -446,7 +446,7 @@ def test_signals_heeft_bron_toevoegen_knop(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
     html = __import__("nooch_village.views.signals", fromlist=["render_signals"]) \
         .render_signals(st, csrf_token="tok")
-    assert "Bron toevoegen" in html and "kb_bron_add" in html
+    assert "Add source" in html and "kb_bron_add" in html
     assert "kn-vgbaan" in html                            # voortgangsbalk reist mee
     # read-only: geen intake-formulier
     kaal = __import__("nooch_village.views.signals", fromlist=["render_signals"]) \
