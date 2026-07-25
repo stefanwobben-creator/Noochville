@@ -58,13 +58,13 @@ def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = 
                     .replace("__ROLE__", _e(pre))
     if fragment:
         return _DS_LINK + body
-    return _page("Nieuw project", _DS_LINK + body)
+    return _page("New project", _DS_LINK + body)
 
 
 _WIZ_HTML = r"""
 <div class="wz">
   <div class="wz-top">
-    <a class="wz-x" href="/" title="sluiten" onclick="var x=document.querySelector('.ovl-x');if(x){x.click();return false;}">✕</a>
+    <a class="wz-x" href="/" title="close" onclick="var x=document.querySelector('.ovl-x');if(x){x.click();return false;}">✕</a>
     <div class="wz-track"><div class="wz-fill" id="wzfill"></div></div>
     <span class="wz-who" id="wzwho"></span>
   </div>
@@ -88,89 +88,90 @@ function go(n){S.step=n;render();}
 function restart(){Object.assign(S,{step:0,ruw:"",uitkomst:"",titel:"",checklist:[],tijd:"",missie:"",business:"",role:"",trekker:""});render();}
 
 function start(){card().innerHTML=`
- <div class="wz-k">Nieuw project</div>
- <h2>Laten we samen één goed project op het bord zetten 🌱</h2>
- <p class="wz-hint">In een paar stappen maken we er een scherpe uitkomst en een uitvoerbare checklist van.</p>
- <div class="wz-clab">Voor welke rol?</div><select id="role"><option value="">Kies een rol…</option>${ROLEOPTS}</select>
+ <div class="wz-k">New project</div>
+ <h2>Let's put one good project on the board together 🌱</h2>
+ <p class="wz-hint">In a few steps we'll turn it into a sharp outcome and a workable checklist.</p>
+ <div class="wz-clab">For which role?</div><select id="role"><option value="">Pick a role…</option>${ROLEOPTS}</select>
  <div class="wz-grow"></div>
- <div class="wz-foot"><button class="wz-btn" onclick="S.role=document.getElementById('role').value; if(!S.role){alert('Kies eerst een rol');return;} document.getElementById('wzwho').textContent=document.getElementById('role').selectedOptions[0].text; go(1)">Beginnen</button></div>`;}
+ <div class="wz-foot"><button class="wz-btn" onclick="S.role=document.getElementById('role').value; if(!S.role){alert('Pick a role first');return;} document.getElementById('wzwho').textContent=document.getElementById('role').selectedOptions[0].text; go(1)">Start</button></div>`;}
 
 function idee(){card().innerHTML=`
- <div class="wz-k">Stap 1 · Jouw idee</div>
- <h2>Wat wil je bereiken?</h2>
- <p class="wz-hint">Gewoon in je eigen woorden. Ruw mag, dat maken we zo samen scherp.</p>
- <textarea id="ruw" rows="3" placeholder="bijv. kijken naar afbreekbare zolen">${esc(S.ruw)}</textarea>
+ <div class="wz-k">Step 1 · Your idea</div>
+ <h2>What do you want to achieve?</h2>
+ <p class="wz-hint">Just in your own words. Rough is fine, we'll sharpen it together.</p>
+ <textarea id="ruw" rows="3" placeholder="e.g. look into biodegradable soles">${esc(S.ruw)}</textarea>
  <div class="wz-grow"></div>
- <div class="wz-foot"><button class="wz-btn ghost" onclick="go(0)">Terug</button>
- <button class="wz-btn" onclick="S.ruw=document.getElementById('ruw').value.trim(); if(!S.ruw)return; go(2)">Volgende</button></div>`;}
+ <div class="wz-foot"><button class="wz-btn ghost" onclick="go(0)">Back</button>
+ <button class="wz-btn" onclick="S.ruw=document.getElementById('ruw').value.trim(); if(!S.ruw)return; go(2)">Next</button></div>`;}
 
 async function uitkomst(){
- card().innerHTML=`<div class="wz-k">Stap 2 · ✨ scherpe uitkomst</div><h2>Zo wordt het een échte uitkomst</h2><p class="wz-think">✨ denkt na over je doel…</p>`;
+ card().innerHTML=`<div class="wz-k">Step 2 · ✨ sharp outcome</div><h2>This makes it a real outcome</h2><p class="wz-think">✨ is thinking about your goal…</p>`;
  if(!S.uitkomst){const r=await post('/wizard/sharpen',{ruw:S.ruw}); S.uitkomst=(r&&r.uitkomst)||S.ruw;}
  card().innerHTML=`
-  <div class="wz-k">Stap 2 · ✨ scherpe uitkomst</div><h2>Zo wordt het een échte uitkomst</h2>
-  <div class="wz-was">Jouw idee: <b>"${esc(S.ruw)}"</b> is nog een onderwerp, niet iets waarvan je wéét wanneer het klaar is.</div>
-  <div class="wz-now"><span class="lb">De uitkomst (dit is meteen je 'klaar wanneer')</span>
+  <div class="wz-k">Step 2 · ✨ sharp outcome</div><h2>This makes it a real outcome</h2>
+  <div class="wz-was">Your idea: <b>"${esc(S.ruw)}"</b> is still a topic, not something you'll know is done.</div>
+  <div class="wz-now"><span class="lb">The outcome (this is also your 'done when')</span>
    <div class="tx" contenteditable="true" id="uit">${esc(S.uitkomst)}</div></div>
   <div class="wz-grow"></div>
-  <div class="wz-foot"><button class="wz-btn ghost" onclick="go(1)">Terug</button>
-  <button class="wz-btn" onclick="S.uitkomst=document.getElementById('uit').innerText.trim(); S.checklist=[]; go(3)">Ziet er goed uit</button></div>`;}
+  <div class="wz-foot"><button class="wz-btn ghost" onclick="go(1)">Back</button>
+  <button class="wz-btn" onclick="S.uitkomst=document.getElementById('uit').innerText.trim(); S.checklist=[]; go(3)">Looks good</button></div>`;}
 
 async function checklist(){
- card().innerHTML=`<div class="wz-k">Stap 3 · ✨ de stappen</div><h2>Zo pak je het aan</h2><p class="wz-think">✨ maakt een checklist en toetst tegen je skills…</p>`;
+ card().innerHTML=`<div class="wz-k">Step 3 · ✨ the steps</div><h2>Here's how to tackle it</h2><p class="wz-think">✨ makes a checklist and checks it against your skills…</p>`;
  if(!S.checklist.length){const r=await post('/wizard/plan',{uitkomst:S.uitkomst,role:S.role}); S.checklist=(r&&r.items)||[];}
  draw();}
 function draw(){
  const rows=S.checklist.map((it,i)=>`<div class="wz-item"><div class="wz-itxt">${esc(it.tekst)}</div>
-  ${it.ok?`<span class="wz-badge ok">● ${esc(it.skill)}</span>`:`<span class="wz-badge no">○ ${esc(it.reden||'geen skill → mens')}</span>`}
-  <button class="wz-rm" onclick="S.checklist.splice(${i},1);draw()">✕</button></div>`).join('')||'<p class="wz-hint">Nog geen stappen — voeg er hieronder één toe.</p>';
- card().innerHTML=`<div class="wz-k">Stap 3 · ✨ de stappen</div><h2>Zo pak je het aan</h2>
-  <p class="wz-hint">Groen = een skill kan dit. Rood = menselijke taak. Voeg toe of gooi weg.</p>
+  ${it.ok?`<span class="wz-badge ok">● ${esc(it.skill)}</span>`:`<span class="wz-badge no">○ ${esc(it.reden||'no skill → human')}</span>`}
+  <button class="wz-rm" onclick="S.checklist.splice(${i},1);draw()">✕</button></div>`).join('')||'<p class="wz-hint">No steps yet — add one below.</p>';
+ card().innerHTML=`<div class="wz-k">Step 3 · ✨ the steps</div><h2>Here's how to tackle it</h2>
+  <p class="wz-hint">Green = a skill can do this. Red = human task. Add or remove.</p>
   <div>${rows}</div>
-  <div class="wz-add"><input id="ni" placeholder="stap toevoegen…" onkeydown="if(event.key==='Enter')addI()"><button onclick="addI()">+ toevoegen</button></div>
+  <div class="wz-add"><input id="ni" placeholder="add step…" onkeydown="if(event.key==='Enter')addI()"><button onclick="addI()">+ add</button></div>
   <div class="wz-grow"></div>
-  <div class="wz-foot"><button class="wz-btn ghost" onclick="go(2)">Terug</button>
-  <button class="wz-btn" onclick="go(4)">Volgende</button></div>`;}
-function addI(){const v=document.getElementById('ni').value.trim();if(!v)return;S.checklist.push({tekst:v,skill:null,ok:false,reden:'handmatig toegevoegd'});draw();}
+  <div class="wz-foot"><button class="wz-btn ghost" onclick="go(2)">Back</button>
+  <button class="wz-btn" onclick="go(4)">Next</button></div>`;}
+function addI(){const v=document.getElementById('ni').value.trim();if(!v)return;S.checklist.push({tekst:v,skill:null,ok:false,reden:'added manually'});draw();}
 
 function impact(){
  const chip=(g,val,cur)=>`<span class="wz-chip ${S[g]===val?'on':''}" onclick="S['${g}']=(S['${g}']==='${val}'?'':'${val}');impact()">${cur}</span>`;
- card().innerHTML=`<div class="wz-k">Stap 4 · Inschatting (optioneel)</div><h2>Hoe groot en hoe belangrijk?</h2>
-  <p class="wz-hint">Handig voor het bord, maar je mag dit overslaan.</p>
-  <div class="wz-clab">Tijd</div><div class="wz-chips">${chip('tijd','1u','1 uur')}${chip('tijd','1d','1 dag')}${chip('tijd','1w','1 week')}</div>
-  <div class="wz-clab">Missie-impact</div><div class="wz-chips">${chip('missie','versterkt','versterkt')}${chip('missie','neutraal','neutraal')}${chip('missie','verzwakt','verzwakt')}</div>
-  <div class="wz-clab">Business-impact</div><div class="wz-chips">${chip('business','hoog','hoog')}${chip('business','medium','medium')}${chip('business','laag','laag')}</div>
+ card().innerHTML=`<div class="wz-k">Step 4 · Estimate (optional)</div><h2>How big and how important?</h2>
+  <p class="wz-hint">Handy for the board, but you can skip this.</p>
+  <div class="wz-clab">Time</div><div class="wz-chips">${chip('tijd','1u','1 hour')}${chip('tijd','1d','1 day')}${chip('tijd','1w','1 week')}</div>
+  <div class="wz-clab">Mission impact</div><div class="wz-chips">${chip('missie','versterkt','Strengthens')}${chip('missie','neutraal','Neutral')}${chip('missie','verzwakt','Weakens')}</div>
+  <div class="wz-clab">Business impact</div><div class="wz-chips">${chip('business','hoog','High')}${chip('business','medium','Medium')}${chip('business','laag','Low')}</div>
   <div class="wz-grow"></div>
-  <div class="wz-foot"><button class="wz-btn ghost" onclick="go(3)">Terug</button>
-  <button class="wz-btn" onclick="go(5)">Volgende</button>
-  <button class="wz-skip" onclick="S.tijd=S.missie=S.business='';go(5)">sla over</button></div>`;}
+  <div class="wz-foot"><button class="wz-btn ghost" onclick="go(3)">Back</button>
+  <button class="wz-btn" onclick="go(5)">Next</button>
+  <button class="wz-skip" onclick="S.tijd=S.missie=S.business='';go(5)">skip</button></div>`;}
 
 function bemens(){card().innerHTML=`
- <div class="wz-k">Stap 5 · Op het bord</div><h2>Wie trekt het?</h2>
- <p class="wz-hint">Het project komt op het bord bij <b>${esc(document.getElementById('wzwho').textContent)}</b>.</p>
- <div class="wz-clab">Trekker</div><select id="trek">${TREKOPTS}</select>
+ <div class="wz-k">Step 5 · On the board</div><h2>Who owns it?</h2>
+ <p class="wz-hint">The project lands on the board of <b>${esc(document.getElementById('wzwho').textContent)}</b>.</p>
+ <div class="wz-clab">Owner</div><select id="trek">${TREKOPTS}</select>
  <div class="wz-grow"></div>
- <div class="wz-foot"><button class="wz-btn ghost" onclick="go(4)">Terug</button>
- <button class="wz-btn" id="mk" onclick="maak()">Op het bord zetten</button></div>`;}
+ <div class="wz-foot"><button class="wz-btn ghost" onclick="go(4)">Back</button>
+ <button class="wz-btn" id="mk" onclick="maak()">Put on the board</button></div>`;}
 
 async function maak(){
  S.trekker=document.getElementById('trek').value;
- document.getElementById('mk').disabled=true;document.getElementById('mk').textContent='Bezig…';
+ document.getElementById('mk').disabled=true;document.getElementById('mk').textContent='Working…';
  const r=await post('/wizard/create',{uitkomst:S.uitkomst,items:JSON.stringify(S.checklist),
    tijd:S.tijd,missie:S.missie,business:S.business,role:S.role,trekker:S.trekker});
- if(r&&r.url){S.url=r.url;S.titel=(r&&r.titel)||'';if(window.__ovlDirty)window.__ovlDirty();go(6);}else{alert((r&&r.error)||'Er ging iets mis');document.getElementById('mk').disabled=false;document.getElementById('mk').textContent='Op het bord zetten';}}
+ if(r&&r.url){S.url=r.url;S.titel=(r&&r.titel)||'';if(window.__ovlDirty)window.__ovlDirty();go(6);}else{alert((r&&r.error)||'Something went wrong');document.getElementById('mk').disabled=false;document.getElementById('mk').textContent='Put on the board';}}
 
 function klaar(){
  const done=S.checklist.filter(i=>i.ok).length,mens=S.checklist.length-done;
- const meta=[S.tijd&&('⏱ '+S.tijd),S.missie&&('missie: '+S.missie),S.business&&('business: '+S.business)].filter(Boolean).join(' · ')||'geen inschatting';
- card().innerHTML=`<div class="wz-cheer"><div class="big">🎉</div><h2>Op het bord!</h2><p class="wz-hint">${esc(document.getElementById('wzwho').textContent)} pakt het op.</p></div>
-  ${S.titel?`<div class="wz-srow"><span class="wz-sk">Titel</span><span class="wz-sv">${esc(S.titel)}</span></div>`:''}
-  <div class="wz-srow"><span class="wz-sk">Klaar wanneer</span><span class="wz-sv">${esc(S.uitkomst)}</span></div>
-  <div class="wz-srow"><span class="wz-sk">Checklist</span><span class="wz-sv">${S.checklist.length} stappen · ${done} met skill, ${mens} mens-taak</span></div>
-  <div class="wz-srow"><span class="wz-sk">Inschatting</span><span class="wz-sv">${esc(meta)}</span></div>
+ const LBL={versterkt:'Strengthens',neutraal:'Neutral',verzwakt:'Weakens',hoog:'High',medium:'Medium',laag:'Low','1u':'1 hour','1d':'1 day','1w':'1 week'};
+ const meta=[S.tijd&&('⏱ '+(LBL[S.tijd]||S.tijd)),S.missie&&('mission: '+(LBL[S.missie]||S.missie)),S.business&&('business: '+(LBL[S.business]||S.business))].filter(Boolean).join(' · ')||'no estimate';
+ card().innerHTML=`<div class="wz-cheer"><div class="big">🎉</div><h2>On the board!</h2><p class="wz-hint">${esc(document.getElementById('wzwho').textContent)} takes it on.</p></div>
+  ${S.titel?`<div class="wz-srow"><span class="wz-sk">Title</span><span class="wz-sv">${esc(S.titel)}</span></div>`:''}
+  <div class="wz-srow"><span class="wz-sk">Done when</span><span class="wz-sv">${esc(S.uitkomst)}</span></div>
+  <div class="wz-srow"><span class="wz-sk">Checklist</span><span class="wz-sv">${S.checklist.length} steps · ${done} with skill, ${mens} human task</span></div>
+  <div class="wz-srow"><span class="wz-sk">Estimate</span><span class="wz-sv">${esc(meta)}</span></div>
   <div class="wz-grow"></div>
-  <div class="wz-foot"><a class="wz-btn ghost" href="${esc(S.url||'/')}">Bekijk op het bord</a>
-  <button class="wz-btn" onclick="restart()">Nog een project</button></div>`;}
+  <div class="wz-foot"><a class="wz-btn ghost" href="${esc(S.url||'/')}">View on the board</a>
+  <button class="wz-btn" onclick="restart()">Another project</button></div>`;}
 // Inline onclick-handlers in de gegenereerde HTML draaien in global scope; die functies moeten
 // dus op window staan. De rest blijft in deze IIFE (zo botst een tweede modal-open niet op const).
 window.S=S;window.go=go;window.draw=draw;window.addI=addI;window.impact=impact;window.maak=maak;window.restart=restart;

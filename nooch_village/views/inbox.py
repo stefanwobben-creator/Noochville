@@ -18,8 +18,8 @@ from nooch_village.web_base import _e, _page, _field
 from nooch_village.cockpit2_util import _name, _BUILD, _stamp, _DS_LINK, _nav
 from nooch_village.inbox_wizard import INTENTS, OTYPE_LABEL
 
-_STATUS = {"nieuw": ("● nieuw", "chip ok"), "gelezen": ("bezig", "chip muted"),
-           "verwerkt": ("✓ verwerkt", "chip outline")}
+_STATUS = {"nieuw": ("● new", "chip ok"), "gelezen": ("busy", "chip muted"),
+           "verwerkt": ("✓ handled", "chip outline")}
 
 
 def _source_link(st, n: dict) -> str:
@@ -28,18 +28,18 @@ def _source_link(st, n: dict) -> str:
     if p is not None:
         scope = str(p.get("scope") or "project")[:60]
         return f"<a href='/project?pid={_e(pid)}'>{_e(scope)}</a>"
-    return _e(n.get("by") or "onbekende bron")
+    return _e(n.get("by") or "unknown source")
 
 
 def _who(st, n: dict) -> str:
     by = (n.get("by") or "").strip()
     rec = st.records.get(by) if by else None
-    return _name(rec) if rec is not None else (by or "iemand")
+    return _name(rec) if rec is not None else (by or "someone")
 
 
 def _one_line(text: str, cap: int = 90) -> str:
     t = " ".join((text or "").split())
-    return (t[:cap] + "…") if len(t) > cap else (t or "(geen samenvatting)")
+    return (t[:cap] + "…") if len(t) > cap else (t or "(no summary)")
 
 
 def _hid(csrf: str, nid: str, nxt: str = "/inbox") -> str:
@@ -66,19 +66,19 @@ def _inbox_row(st, n: dict, csrf: str, done_nid: str = "") -> str:
 
     if status == "verwerkt":
         vs = st.notif.verwerkingen_of(n)
-        chips = " ".join(f"<span class='chip outline'>{_e(v.get('label') or 'uitkomst')}</span>" for v in vs) \
-            or "<span class='chip outline'>verwerkt</span>"
+        chips = " ".join(f"<span class='chip outline'>{_e(v.get('label') or 'outcome')}</span>" for v in vs) \
+            or "<span class='chip outline'>handled</span>"
         body = f"{meta}{title}<div class='ffoot-l'>{chips}</div>"
-        act = f"<div class='rdr-act'>{_btn(csrf, nid, 'notif_archive', 'archiveren')}</div>"
+        act = f"<div class='rdr-act'>{_btn(csrf, nid, 'notif_archive', 'archive')}</div>"
         # Viermoment: de zojuist afgeronde spanning krijgt een groene rand + een kader met wat je vastlegde.
         if nid and nid == done_nid:
-            regels = "".join(f"<li>{_e(v.get('label') or v.get('otype') or 'uitkomst')}</li>" for v in vs) \
-                or "<li>geen uitkomst</li>"
-            body += f"<div class='rdr-kader'>✓ Verwerkt. Dit legde je vast:<ul>{regels}</ul></div>"
+            regels = "".join(f"<li>{_e(v.get('label') or v.get('otype') or 'outcome')}</li>" for v in vs) \
+                or "<li>no outcome</li>"
+            body += f"<div class='rdr-kader'>✓ Handled. This is what you recorded:<ul>{regels}</ul></div>"
             return f"<div class='rdr-row rdr-vier'><div class='rdr-body'>{body}</div>{act}</div>"
         return f"<div class='rdr-row'><div class='rdr-body'>{body}</div>{act}</div>"
 
-    verwerk = f"<a class='btn ok sm' href='/inbox/verwerk?nid={_e(nid)}'>Verwerk</a>"
+    verwerk = f"<a class='btn ok sm' href='/inbox/verwerk?nid={_e(nid)}'>Process</a>"
     prullenbak = _btn(csrf, nid, "notif_delete", "🗑", cls="flink")
     act = f"<div class='rdr-act'>{verwerk}{prullenbak}</div>"
     return f"<div class='rdr-row'><div class='rdr-body'>{meta}{title}</div>{act}</div>"
@@ -88,11 +88,11 @@ def render_inbox(st, targets, csrf_token: str = "", naam: str = "", done: str = 
     items = st.notif.open_for_targets(targets)
     nieuw = sum(1 for n in items if st.notif.status_of(n) == "nieuw")
     body = ("".join(_inbox_row(st, n, csrf_token, done_nid=done) for n in items) if items
-            else "<p class='muted'>Je inbox is leeg. Zodra een rol of het overleg je @-mentiont, "
-                 "verschijnt het hier.</p>")
+            else "<p class='muted'>Your inbox is empty. As soon as a role or the meeting @-mentions you, "
+                 "it appears here.</p>")
     kop = f"Inbox{(' — ' + _e(naam)) if naam else ''}"
-    telling = (f"<p class='muted'>{len(items)} open, waarvan {nieuw} nieuw. Klik Verwerk om een "
-               f"spanning af te handelen, of gooi 'm weg.</p>")
+    telling = (f"<p class='muted'>{len(items)} open, of which {nieuw} new. Click Process to handle "
+               f"a tension, or throw it away.</p>")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
             f"<h1>{kop} <span class='chip'>{len(items)}</span></h1>{telling}"
             f"<div class='rdr-tool'>{body}</div></div>")
@@ -107,7 +107,7 @@ def _spanning_pane(st, n: dict) -> str:
     sep = "<span class='fsep'>·</span>"
     meta = (f"<div class='rdr-meta'><span class='muted'>via {_e(_who(st, n))}</span> {sep} "
             f"{_source_link(st, n)} {sep} <span class='muted'>{_e(_stamp(n.get('at')))}</span></div>")
-    body = _e(n.get("snippet") or "(geen inhoud)").replace("\n", "<br>")
+    body = _e(n.get("snippet") or "(no content)").replace("\n", "<br>")
     # De volledige vraag van de bewoner (founder, 19 jul): de snippet is maar 160 tekens,
     # het échte voorstel staat in de bron-feed-entry waar de notificatie naar wijst.
     # Zonder die tekst kan de mens niet beslissen ("er staat 2 besluiten maar niet welke").
@@ -119,18 +119,18 @@ def _spanning_pane(st, n: dict) -> str:
             e = next((x for x in ((p or {}).get("log") or []) if x.get("id") == src_eid), None)
             tekst = (e or {}).get("text") or ""
             if tekst and tekst.strip() != (n.get("snippet") or "").strip():
-                volledig = (f"<div class='box rdr-rec'><strong>De volledige vraag</strong>"
+                volledig = (f"<div class='box rdr-rec'><strong>The full question</strong>"
                             f"<div class='fbubble'>{_e(tekst).replace(chr(10), '<br>')}</div></div>")
         except Exception:
             volledig = ""                       # fail-soft: geen bron = gewoon de snippet
     vs = st.notif.verwerkingen_of(n)
     record = ""
     if vs:
-        rows = "".join(f"<li>{_e(v.get('label') or v.get('otype') or 'uitkomst')}"
+        rows = "".join(f"<li>{_e(v.get('label') or v.get('otype') or 'outcome')}"
                        f"{(' — ' + _e(v.get('by'))) if v.get('by') else ''}</li>" for v in vs)
-        record = (f"<div class='box rdr-rec'><strong>Al vastgelegd "
+        record = (f"<div class='box rdr-rec'><strong>Already recorded "
                   f"({len(vs)})</strong><ul>{rows}</ul></div>")
-    return (f"<div class='rdr-pane'><h3>Spanning</h3>{meta}"
+    return (f"<div class='rdr-pane'><h3>Tension</h3>{meta}"
             f"<div class='fbubble rdr-rec'>{body}</div>{volledig}{record}</div>")
 
 
@@ -146,26 +146,26 @@ def _outcome_form(otype: str, nid: str, csrf: str, prefill: str, role_opts: str,
            f"<input type='hidden' name='next' value='{_e(nxt)}'>")
     if otype == "ping":
         sid = f"sel-{uid}"
-        tgt = (f"<label class='att-lbl' for='{sid}'>Aan welke rol?</label>"
+        tgt = (f"<label class='att-lbl' for='{sid}'>To which role?</label>"
                f"<select id='{sid}' name='ping_role'>{role_opts}</select>")
     elif otype == "project":
         sid = f"sel-{uid}"
-        tgt = (f"<label class='att-lbl' for='{sid}'>Op welke rol?</label>"
+        tgt = (f"<label class='att-lbl' for='{sid}'>On which role?</label>"
                f"<select id='{sid}' name='owner'>{role_opts}</select>")
     elif otype == "action":
         sid = f"sel-{uid}"
-        tgt = (f"<label class='att-lbl' for='{sid}'>Aan welk project?</label>"
+        tgt = (f"<label class='att-lbl' for='{sid}'>To which project?</label>"
                f"<select id='{sid}' name='pid_link'>{pj_opts}</select>")
     elif otype == "note":
         sid = f"sel-{uid}"
-        tgt = (f"<label class='att-lbl' for='{sid}'>Note bij welke rol?</label>"
+        tgt = (f"<label class='att-lbl' for='{sid}'>Note on which role?</label>"
                f"<select id='{sid}' name='note_role'>{role_opts}</select>")
     else:  # roloverleg — gebruikt de cirkel van de bron
-        tgt = "<span class='muted'>Wordt een voorstel op de roloverleg-agenda (mens-route).</span>"
-    inhoud = _field("Inhoud (bewerkbaar)", "content", kind="textarea", value=prefill, fid=f"ct-{uid}")
+        tgt = "<span class='muted'>Becomes a proposal on the governance meeting agenda (human route).</span>"
+    inhoud = _field("Content (editable)", "content", kind="textarea", value=prefill, fid=f"ct-{uid}")
     return (f"<form method='post' action='/action' class='wo-oc'>{hid}"
             f"{inhoud}{tgt}"
-            f"<button class='btn sm' name='action' value='notif_outcome'>Vastleggen</button></form>")
+            f"<button class='btn sm' name='action' value='notif_outcome'>Record</button></form>")
 
 
 def _wizard_pane(n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
@@ -182,7 +182,7 @@ def _wizard_pane(n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
             uid = f"{intent['key']}-{otype}"
             if not ready:
                 opts.append(f"<div class='wo-ocd rdr-dim'><span class='muted'>{_e(q)}</span> → "
-                            f"<strong>{_e(label)}</strong> <em>(volgt in stap 2)</em></div>")
+                            f"<strong>{_e(label)}</strong> <em>(coming in step 2)</em></div>")
             else:
                 form = _outcome_form(otype, nid, csrf, prefill, role_opts, pj_opts, nxt, uid)
                 opts.append(f"<details class='wo-ocd box-details'><summary>{_e(q)} → "
@@ -193,7 +193,7 @@ def _wizard_pane(n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
              f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
              f"<input type='hidden' name='nid' value='{_e(nid)}'>"
              f"<input type='hidden' name='next' value='/inbox'>"
-             f"<button class='btn ok sm' name='action' value='notif_klaar'>Klaar met deze spanning</button></form>")
+             f"<button class='btn ok sm' name='action' value='notif_klaar'>Done with this tension</button></form>")
     # Beslis direct (founder, 19 jul): op een vraag van een bewoner wil de mens gewoon ja,
     # nee of een suggestie kunnen zeggen — het antwoord landt als reactie op de bron-feed
     # (@rol, de bewoner pakt het zelf op) en de spanning sluit. Alleen als er een
@@ -209,31 +209,31 @@ def _wizard_pane(n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
                     f"<input type='hidden' name='besluit' value='{keuze}'>"
                     f"<input type='hidden' name='next' value='/inbox'>"
                     f"<textarea name='toelichting' rows='2' placeholder='{_e(hint)}' "
-                    f"aria-label='toelichting'{req}></textarea>"
+                    f"aria-label='note'{req}></textarea>"
                     f"<button class='btn {cls}sm' name='action' value='notif_besluit'>{label}</button>"
                     f"</form></details>")
-        besluit = (f"<details class='box-details' open><summary><strong>Beslis direct</strong>"
-                   f"</summary><p class='muted'>Je antwoord landt als reactie bij de bewoner, "
-                   f"die er zelf mee verder kan — zo leert het dorp spanningen oplossen. "
-                   f"De spanning sluit meteen.</p>"
-                   + _bf("ja", "✓ Ja", "ok ", "optioneel: toelichting bij je ja", False)
-                   + _bf("nee", "✗ Nee", "", "optioneel: waarom niet — daar leert de bewoner van", False)
-                   + _bf("suggestie", "💬 Suggestie", "", "jouw suggestie of tegenvraag", True)
+        besluit = (f"<details class='box-details' open><summary><strong>Decide now</strong>"
+                   f"</summary><p class='muted'>Your answer lands as a reply to the inhabitant, "
+                   f"who can take it further — that's how the village learns to resolve tensions. "
+                   f"The tension closes immediately.</p>"
+                   + _bf("ja", "✓ Yes", "ok ", "optional: note with your yes", False)
+                   + _bf("nee", "✗ No", "", "optional: why not — the inhabitant learns from it", False)
+                   + _bf("suggestie", "💬 Suggestion", "", "your suggestion or counter-question", True)
                    + "</details>")
-    return (f"<div class='rdr-pane'><h3>Wat heb je nodig?</h3>{besluit}{''.join(groups)}{klaar}</div>")
+    return (f"<div class='rdr-pane'><h3>What do you need?</h3>{besluit}{''.join(groups)}{klaar}</div>")
 
 
 def render_verwerk(st, n: dict, csrf_token: str = "", role_opts: str = "", pj_opts: str = "") -> str:
     """De verwerk-pagina voor één inbox-item: links de spanning, rechts de intentie-wizard."""
     if n is None:
         inner = (f"{_DS_LINK}<div class='c2-wrap'><div class='c2-main'><a href='/inbox'>← inbox</a>"
-                 "<p class='muted'>Deze spanning bestaat niet meer.</p></div></div>")
-        return _page("Verwerk", inner)
+                 "<p class='muted'>This tension no longer exists.</p></div></div>")
+        return _page("Process", inner)
     split = (f"<div class='rdr-split'>"
              f"{_spanning_pane(st, n)}{_wizard_pane(n, csrf_token, role_opts, pj_opts)}</div>")
-    main = (f"<div class='c2-main'><h1>Verwerk spanning</h1>{split}</div>")
+    main = (f"<div class='c2-main'><h1>Process tension</h1>{split}</div>")
     inner = (f"{_DS_LINK}<div class='c2-wrap'>{main}</div>")
-    return _page("Verwerk", inner)
+    return _page("Process", inner)
 
 
 # ── de globale inbox-drawer (chrome op elke pagina) + het lijst-fragment ──────────
@@ -246,16 +246,16 @@ def _ibx_row(st, n: dict) -> str:
     who = _e(_who(st, n))
     if status == "verwerkt":
         vs = st.notif.verwerkingen_of(n)
-        kader = "".join(f"<div class='ibx-kader'>✓ {_e(v.get('label') or 'uitkomst')}</div>" for v in vs)
+        kader = "".join(f"<div class='ibx-kader'>✓ {_e(v.get('label') or 'outcome')}</div>" for v in vs)
         return (f"<div class='ibx-row done' data-nid='{_e(nid)}'><span class='ibx-dot read'></span>"
                 f"<div class='ibx-rb'><div class='ibx-title'>{title}</div>"
-                f"<div class='ibx-meta'>verwerkt · {who}</div>{kader}</div>"
-                f"<span class='ibx-swipe'>sleep &rarr; archiveer</span></div>")
+                f"<div class='ibx-meta'>processed · {who}</div>{kader}</div>"
+                f"<span class='ibx-swipe'>swipe &rarr; archive</span></div>")
     dot = "ibx-dot read" if status == "gelezen" else "ibx-dot"
     return (f"<div class='ibx-row' data-nid='{_e(nid)}' onclick=\"ibxOpen('{_e(nid)}')\">"
             f"<span class='{dot}'></span><div class='ibx-rb'><div class='ibx-title'>{title}</div>"
             f"<div class='ibx-meta'>via {who} &middot; {_e(_stamp(n.get('at')))}</div></div>"
-            f"<button class='ibx-trash' title='weggooien' "
+            f"<button class='ibx-trash' title='delete' "
             f"onclick=\"event.stopPropagation();ibxTrash('{_e(nid)}')\">&#128465;</button></div>")
 
 
@@ -265,15 +265,15 @@ def render_inbox_frag(st, targets, csrf_token: str = "") -> str:
     items = st.notif.open_for_targets(targets)
     nieuw = sum(1 for n in items if st.notif.status_of(n) == "nieuw")
     rows = "".join(_ibx_row(st, n) for n in items) or \
-        "<div class='ibx-empty'><div class='ibx-party'>&#127881;</div>Je inbox is leeg.</div>"
-    sub = f"{len(items)} open, waarvan {nieuw} nieuw" if items else "Alles verwerkt — geniet ervan."
+        "<div class='ibx-empty'><div class='ibx-party'>&#127881;</div>Your inbox is empty.</div>"
+    sub = f"{len(items)} open, of which {nieuw} new" if items else "All processed — enjoy it."
     return f"<div data-count='{len(items)}' data-sub='{_e(sub)}'>{rows}</div>"
 
 
 def _person_role_options(st, targets) -> str:
     """Opties voor 'vanuit welke rol voel je het' bij zelf een spanning toevoegen: de rollen die de
     ingelogde persoon vervult, plus 'als mezelf'."""
-    opts = ["<option value=''>als mezelf</option>"]
+    opts = ["<option value=''>as myself</option>"]
     for ty, tid in targets:
         if ty == "role":
             rec = st.records.get(tid)
@@ -336,21 +336,21 @@ def render_inbox_chrome(csrf_token: str = "", role_opts: str = "") -> str:
     launch = ("<button class='ibx-launch' id='ibx-launch' title='Inbox' onclick='ibxToggle()'>"
               "<span id='ibx-icon'>&#128229;</span><span class='ibx-ct hide' id='ibx-badge'>0</span></button>")
     add = ("<div class='ibx-add' id='ibx-add'>"
-           "<label for='ibx-addtext'>Wat voel je?</label>"
-           "<textarea id='ibx-addtext' placeholder='een spanning, vraag of losse gedachte…'></textarea>"
-           "<label for='ibx-addrole'>Vanuit welke rol?</label>"
+           "<label for='ibx-addtext'>What do you feel?</label>"
+           "<textarea id='ibx-addtext' placeholder='a tension, question or loose thought…'></textarea>"
+           "<label for='ibx-addrole'>From which role?</label>"
            f"<select id='ibx-addrole'>{role_opts}</select>"
-           "<div class='rdr-rec'><button class='btn ok sm' onclick='ibxAddSubmit()'>Toevoegen</button> "
-           "<button class='btn sm' onclick='ibxAddToggle()'>Annuleer</button></div></div>")
+           "<div class='rdr-rec'><button class='btn ok sm' onclick='ibxAddSubmit()'>Add</button> "
+           "<button class='btn sm' onclick='ibxAddToggle()'>Cancel</button></div></div>")
     drawer = ("<aside class='ibx-drawer' id='ibx-drawer'>"
               "<div class='ibx-head'><h2>Inbox</h2><span class='ibx-hct' id='ibx-hct'>0</span>"
-              "<button class='ibx-plus' title='Spanning toevoegen' onclick='ibxAddToggle()'>+</button>"
-              "<button class='ibx-x' title='sluiten' onclick='ibxToggle()'>&times;</button></div>"
+              "<button class='ibx-plus' title='Add tension' onclick='ibxAddToggle()'>+</button>"
+              "<button class='ibx-x' title='close' onclick='ibxToggle()'>&times;</button></div>"
               "<div class='ibx-sub' id='ibx-sub'></div>" + add +
               "<div class='ibx-list' id='ibx-list'></div></aside>")
     modal = ("<div class='ibx-scrim' id='ibx-scrim'><div class='ibx-modal'>"
-             "<button class='ibx-mx' title='sluiten' onclick='ibxCloseModal()'>&times;</button>"
-             "<iframe class='ibx-iframe' id='ibx-frame' title='Verwerk spanning'></iframe></div></div>"
+             "<button class='ibx-mx' title='close' onclick='ibxCloseModal()'>&times;</button>"
+             "<iframe class='ibx-iframe' id='ibx-frame' title='Process tension'></iframe></div></div>"
              "<div class='ibx-thumb' id='ibx-thumb'>&#128077;</div>")
     return (launch + drawer + modal + "<script>"
             + _IBX_JS.replace("__IBX_CSRF__", json.dumps(csrf_token)) + "</script>")

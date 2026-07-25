@@ -262,7 +262,7 @@ def test_signals_chips_uit_configuratie(tmp_path):
                   "Industry Watch"):
         assert label in html, label
     # inbox-framing: te verwerken + nul-doel, en een ✗ op elk te-verwerken item
-    assert "Te verwerken" in html and "nul" in html
+    assert "To process" in html and "nul" in html
     assert "rdr-wegform" in html
 
 

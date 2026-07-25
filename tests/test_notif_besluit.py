@@ -66,5 +66,5 @@ def test_wizard_toont_de_volledige_vraag(tmp_path):
     c, st, pj, pid, n = _ctx(tmp_path)
     st.notif.verwerkingen_of = lambda x: []                    # view-afhankelijkheid
     html = _spanning_pane(st, st.notif._find(n["id"]))
-    assert "De volledige vraag" in html
+    assert "The full question" in html
     assert "WAT IK NODIG HEB" in html                          # de échte tekst, niet de snippet
