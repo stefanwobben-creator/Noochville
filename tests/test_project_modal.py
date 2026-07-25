@@ -118,7 +118,7 @@ def test_datum_card_datepicker(tmp_path):
     # datum zetten -> de header-chip past zich aan; en weer wissen
     cockpit2.dispatch(dd, "proj_setdue", {"pid": [pid], "due": ["2026-06-25"], "next": ["/"]}, username="guest")
     f2 = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    assert "25 jun 2026" in f2 and "datum wissen" in f2
+    assert "25 Jun 2026" in f2 and "datum wissen" in f2
     cockpit2.dispatch(dd, "proj_setdue", {"pid": [pid], "due": [""], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["due"] is None
 

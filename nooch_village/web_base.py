@@ -167,7 +167,7 @@ def _page(title: str, inner: str) -> str:
     # <main> als landmark om de pagina-inhoud: screenreaders en toetsenbord-gebruikers kunnen
     # direct naar de inhoud springen. De chrome (Noochie-rail, call bar) wordt door _send ná
     # </main> geïnjecteerd en blijft zo buiten de hoofdinhoud.
-    return (f'<!doctype html><html lang="nl"><head><meta charset="utf-8">'
+    return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>{_e(title)}</title>{_FONTS}<style>{_CSS}</style></head>'
             f'<body><main>{inner}</main>{_KONAMI_TRIGGER}</body></html>')

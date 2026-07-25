@@ -374,8 +374,8 @@ def test_co2_bron_en_verificatie(tmp_path):
     assert cur["bron_url"] == "/carbon-footprint-of-shoes" and "−65%" in cur["benchmark"]
     # catalogus toont verificatie-chip + bron-link + filter
     page = cockpit2.render_catalog(st, csrf_token="t")
-    # intern pad → _bron_html toont "(nog niet live)" i.p.v. een dode externe link
-    assert "voorlopig" in page and "nog niet live" in page and "data-ver='voorlopig'" in page
+    # intern pad → _bron_html toont "(not live yet)" i.p.v. een dode externe link
+    assert "voorlopig" in page and "not live yet" in page and "data-ver='voorlopig'" in page
     # velden stromen mee naar een KPI uit de catalogus, en de tegel toont 'voorlopig'
     rid = "mother_earth__nooch__marketing_lead"
     cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [st.defs.by_name("CO2 per paar")["id"]], "next": ["/"]}, username="guest")

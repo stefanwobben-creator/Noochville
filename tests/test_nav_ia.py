@@ -23,11 +23,11 @@ def test_topbar_is_logo_plus_zoek_zonder_meta_links():
 
 
 def test_meta_links_staan_in_de_footer():
-    """Metrics en Deelnemers blijven bereikbaar — één bron (_NAV_ITEMS), gerenderd in de footer
+    """Metrics en People blijven bereikbaar — één bron (_NAV_ITEMS), gerenderd in de footer
     die _send op elke pagina injecteert."""
     f = _footer()
     assert "<a href='/metrics2'>Metrics</a>" in f
-    assert "<a href='/admin'>Deelnemers</a>" in f
+    assert "<a href='/admin'>People</a>" in f
 
 
 def test_context_label_wordt_niet_meer_getoond():
