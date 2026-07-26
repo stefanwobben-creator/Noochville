@@ -36,10 +36,26 @@ def test_mention_triage_enum_blijft_bij_zijn_parser():
 
 
 def test_project_worker_markers_blijven_bij_hun_regex():
-    """project_worker.work_one parseert de regelmarkers KAN NIET:/LEVER: uit het antwoord."""
+    """project_worker.work_one is Engels proza (mini-2C) maar VRAAGT onverkort de Nederlandse
+    markers KAN NIET:/LEVER: — dat is het contract met _CANT. De prompt zegt er expliciet bij dat
+    ze letterlijk overgenomen moeten worden."""
     s = _src("project_worker.py")
-    assert "KAN NIET:" in s and "LEVER:" in s
-    assert 'startswith("KAN NIET")' in s
+    assert "KAN NIET: <what is needed for that>" in s
+    assert "LEVER: <your concrete outcome or next step>" in s
+    assert "are Dutch ON PURPOSE" in s
+
+
+def test_project_worker_parser_is_tolerant_voor_afdwaling():
+    """De prompt is Engels, dus een model kan naar CANNOT:/DELIVER: afdwalen. Dat mag nooit STIL
+    als deliverable landen (geblokkeerd project dat er afgerond uitziet), dus de parser herkent de
+    Engelse variant óók — zonder 'm voor te schrijven."""
+    from nooch_village.project_worker import work_one
+    assert work_one("x", "r", "p", llm_reason=lambda _p: "KAN NIET: een sleutel") == {
+        "ok": False, "needs": "een sleutel"}
+    assert work_one("x", "r", "p", llm_reason=lambda _p: "CANNOT: a key") == {
+        "ok": False, "needs": "a key"}
+    assert work_one("x", "r", "p", llm_reason=lambda _p: "LEVER: af")["outcome"] == "af"
+    assert work_one("x", "r", "p", llm_reason=lambda _p: "DELIVER: done")["outcome"] == "done"
 
 
 def test_opportunity_reflex_velden_blijven_bij_hun_parser():

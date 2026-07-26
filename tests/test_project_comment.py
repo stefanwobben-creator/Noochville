@@ -27,13 +27,13 @@ def test_steer_komt_in_de_prompt():
     led.add_comment(pid, "focus op natuurlijke elastaan-vervanger")
     seen = {}
     work_projects(led, llm_reason=lambda pr: (seen.__setitem__("p", pr) or "LEVER: ok"))
-    assert "STURING" in seen["p"] and "elastaan-vervanger" in seen["p"]
+    assert "STEERING" in seen["p"] and "elastaan-vervanger" in seen["p"]
 
 
 def test_work_one_zonder_steer_geen_sturingsregel():
     seen = {}
     work_one("doe iets", "scout", "p", llm_reason=lambda pr: (seen.__setitem__("p", pr) or "LEVER: ok"))
-    assert "STURING" not in seen["p"]
+    assert "STEERING" not in seen["p"]
 
 
 def test_cockpit_proj_comment_dispatch(tmp_path):

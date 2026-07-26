@@ -21,13 +21,13 @@ def test_work_one_zet_persona_vooraan():
     assert res["ok"] and res["outcome"] == "klaar"
     # de persona staat vóór de rol-instructie
     assert seen["p"].startswith("Je bent Sam (INTJ).")
-    assert seen["p"].index("Sam") < seen["p"].index("Jouw purpose")
+    assert seen["p"].index("Sam") < seen["p"].index("Your purpose")
 
 
 def test_work_one_zonder_persona_ongewijzigd():
     seen = {}
     work_one("x", "trends", "p", persona="", llm_reason=lambda pr: seen.update(p=pr) or "LEVER: ok")
-    assert seen["p"].startswith("Je bent de rol 'trends'")    # geen lege preamble-ruis
+    assert seen["p"].startswith("You are the role 'trends'")    # geen lege preamble-ruis
 
 
 def test_persona_for_resolved_uit_store():
