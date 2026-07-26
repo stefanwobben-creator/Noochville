@@ -158,7 +158,7 @@ _CALLBAR_JS = r"""
 
   // connect wordt UITSLUITEND vanuit joinCall aangeroepen (nooit meer op page-load)
   function connect(after){
-    var C=LK();if(!C){toast('videolaag nog niet geladen, probeer zo weer');return;}
+    var C=LK();if(!C){toast('video layer not loaded yet, try again shortly');return;}
     var ev=C.RoomEvent;
     room=new C.Room({adaptiveStream:true,dynacast:true});
     [ev.ParticipantConnected,ev.ParticipantDisconnected,ev.TrackSubscribed,ev.TrackUnsubscribed,
@@ -173,7 +173,7 @@ _CALLBAR_JS = r"""
     room.on(ev.DataReceived,function(payload,participant,kind,topic){
       if(topic!=='mute')return;
       try{var m=JSON.parse(new TextDecoder().decode(payload));
-        toast(esc(m.by)+' heeft '+esc(m.who)+(m.muted?' gemute':' ge-unmute'));}catch(e){}
+        toast(esc(m.by)+(m.muted?' muted ':' unmuted ')+esc(m.who));}catch(e){}
     });
     try{room.prepareConnection&&room.prepareConnection(LKURL,TOKEN);}catch(e){}
     // Timeout-vangnet: zonder dit blijft een onbereikbare wss-server eeuwig 'verbinden…' zonder melding.
@@ -183,10 +183,10 @@ _CALLBAR_JS = r"""
       if(e)console.error('[callbar] '+msg,e);else console.error('[callbar] '+msg);
       toast(msg);var r=room;try{r&&r.disconnect();}catch(_){}cleanupRoom();
     };
-    var to=setTimeout(function(){faal('verbinden duurde te lang');},10000);
+    var to=setTimeout(function(){faal('connecting took too long');},10000);
     room.connect(LKURL,TOKEN,{autoSubscribe:true}).then(function(){
         if(settled)return;settled=true;clearTimeout(to);if(after)after();render();})
-      .catch(function(e){faal('verbinden niet gelukt',e);});
+      .catch(function(e){faal('could not connect',e);});
   }
 
   // volledig loskoppelen → terug naar poll-only (en de minuten stoppen)
@@ -227,8 +227,8 @@ _CALLBAR_JS = r"""
     if(camOn){var v=camPub.track.attach();v.className='cb-face';v.muted=true;v.setAttribute('playsinline','');el.appendChild(v);}
     else{var d=document.createElement('div');d.className='cb-initials';d.textContent=initials(pName(rep));el.appendChild(d);}
     if(micMuted){var b=document.createElement('div');b.className='cb-mute-badge';b.textContent='🔇';el.appendChild(b);}
-    var nm=esc(pName(rep))+(isSelf?' (jij)':'');
-    el.title=nm+(joined&&!isSelf?' · klik om te '+(micMuted?'unmuten':'muten'):'');
+    var nm=esc(pName(rep))+(isSelf?' (you)':'');
+    el.title=nm+(joined&&!isSelf?' · click to '+(micMuted?'unmute':'mute'):'');
     var hn=document.createElement('div');hn.className='cb-hovername';hn.textContent=nm;el.appendChild(hn);
     if(joined){el.addEventListener('click',function(){
       if(isSelf){toggleSelfMic();}else{muteOther(rep,!micMuted);}});}
@@ -243,7 +243,7 @@ _CALLBAR_JS = r"""
     } else {
       tilesEl.innerHTML='';
       hintEl.textContent=presence.count>0
-        ? '🟢 '+presence.count+(presence.count===1?' iemand in gesprek':' mensen in gesprek')
+        ? '🟢 '+presence.count+(presence.count===1?' person in the call':' people in the call')
         : '';
     }
     updateControls();
@@ -256,28 +256,28 @@ _CALLBAR_JS = r"""
       if(otherTab){
         // Subtiele status-hint, GEEN uitgegrijsde knop: zodra de andere tab sluit (leave) of z'n
         // heartbeat 15s wegblijft, vervalt otherTab en keert Join vanzelf terug.
-        h+='<span class="cb-hint cb-elsewhere" title="De Join-knop komt terug zodra dat tabblad sluit">🎧 je neemt deel in een ander tabblad</span>';
+        h+='<span class="cb-hint cb-elsewhere" title="The Join button returns as soon as that tab closes">🎧 you are joined in another tab</span>';
       } else {
-        h+='<button type="button" class="switch-field cb-camtoggle" title="Kies of je met camera joint">'
-          +'<span>🎥 met camera</span><span class="switch'+(camPref?' on':'')+'"></span></button>';
-        h+='<button type="button" class="btn ok cb-join">'+(presence.count>0?'Join gesprek':'Start gesprek')+'</button>';
+        h+='<button type="button" class="switch-field cb-camtoggle" title="Choose whether you join with camera">'
+          +'<span>🎥 with camera</span><span class="switch'+(camPref?' on':'')+'"></span></button>';
+        h+='<button type="button" class="btn ok cb-join">'+(presence.count>0?'Join call':'Start call')+'</button>';
       }
     } else if(!room){
       // joinCall zet joined=true en rendert vóórdat connect() de room aanmaakt: laat een
       // 'verbinden…'-status zien i.p.v. room.localParticipant te lezen (dat crashte de join).
-      h+='<span class="cb-hint">🔄 verbinden…</span>';
-      h+='<button type="button" class="btn cb-icon cb-leave" title="Annuleren">✕</button>';
+      h+='<span class="cb-hint">🔄 connecting…</span>';
+      h+='<button type="button" class="btn cb-icon cb-leave" title="Cancel">✕</button>';
     } else {
       var mic=room.localParticipant.isMicrophoneEnabled;
       var cam=room.localParticipant.isCameraEnabled;
       h+='<button type="button" class="btn'+(mic?'':' no')+' cb-mic" title="'
-        +(mic?'Je mic staat aan · klik om te muten':'Je staat op mute · klik om te unmuten')+'">'
+        +(mic?'Your mic is on · click to mute':'You are muted · click to unmute')+'">'
         +(mic?'🎙️ Mute':'🔇 Unmute')+'</button>';
-      h+='<button type="button" class="btn cb-icon cb-cam" title="'+(cam?'Camera uitzetten':'Camera aanzetten')+'">'
+      h+='<button type="button" class="btn cb-icon cb-cam" title="'+(cam?'Turn camera off':'Turn camera on')+'">'
         +(cam?'🎥':'🚫')+'</button>';
-      h+='<button type="button" class="btn cb-icon cb-leave" title="Gesprek verlaten">✕</button>';
+      h+='<button type="button" class="btn cb-icon cb-leave" title="Leave call">✕</button>';
       if(room.canPlaybackAudio===false){
-        h+='<button type="button" class="btn no cb-audio-on">🔈 klik om geluid aan te zetten</button>';
+        h+='<button type="button" class="btn no cb-audio-on">🔈 click to turn on sound</button>';
       }
     }
     ctlEl.innerHTML=h;wireControls();
@@ -305,7 +305,7 @@ _CALLBAR_JS = r"""
       if(camPref){room.localParticipant.setCameraEnabled(true).then(render).catch(function(){});}
       renderAudio();
       if(room.canPlaybackAudio===false){room.startAudio().catch(function(){});}       // bug #2
-      toast('Je doet mee met het gesprek'+(camPref?'':' · camera uit'));render();
+      toast('You joined the call'+(camPref?'':' · camera off'));render();
     };
     if(room){publish();}else{connect(publish);}            // verbind pas op deze gesture
   }
@@ -315,20 +315,20 @@ _CALLBAR_JS = r"""
     var r=room;joined=false;bcSend('leave');
     try{r&&r.disconnect();}catch(e){}                       // Disconnected-event → cleanupRoom
     cleanupRoom();
-    toast('Je bent uit het gesprek · verbinding gesloten');
+    toast('You left the call · connection closed');
   }
 
   function toggleSelfMic(){
     if(!joined||!room)return;
     var on=room.localParticipant.isMicrophoneEnabled;
     room.localParticipant.setMicrophoneEnabled(!on).then(render).catch(function(){});
-    toast(on?'Je hebt jezelf gemute':'Je microfoon staat aan');
+    toast(on?'You muted yourself':'Your microphone is on');
   }
   function toggleSelfCam(){
     if(!joined||!room)return;
     var on=room.localParticipant.isCameraEnabled;
     room.localParticipant.setCameraEnabled(!on).then(render).catch(function(){});
-    toast(on?'Camera uit':'Camera aan');
+    toast(on?'Camera off':'Camera on');
   }
 
   function muteOther(rep,mute){
@@ -337,12 +337,12 @@ _CALLBAR_JS = r"""
     body.set('action','lk_mute');body.set('csrf',CSRF);body.set('identity',rep.identity);body.set('muted',mute?'1':'0');
     fetch('/action',{method:'POST',body:body}).then(function(r){return r.text();}).then(function(){
       publishMute(pName(rep),mute);
-      toast('Je hebt '+esc(pName(rep))+(mute?' gemute':' ge-unmute'));
-    }).catch(function(){toast('muten niet gelukt');});
+      toast('You '+(mute?'muted ':'unmuted ')+esc(pName(rep)));
+    }).catch(function(){toast('could not mute');});
   }
   function publishMute(who,mute){
     if(!room||!joined)return;
-    try{var payload=new TextEncoder().encode(JSON.stringify({by:room.localParticipant.name||'Iemand',who:who,muted:mute}));
+    try{var payload=new TextEncoder().encode(JSON.stringify({by:room.localParticipant.name||'Someone',who:who,muted:mute}));
       room.localParticipant.publishData(payload,{reliable:true,topic:'mute'});}catch(e){}
   }
 })();
@@ -352,7 +352,7 @@ _CALLBAR_JS = r"""
 def render_callbar(csrf_token: str = "") -> str:
     """Standalone `/callbar`-pagina (de body van de iframe): eigen <html>, eigen tokens (via web_base._CSS),
     transparante achtergrond. Bevat de bar-markup + de LiveKit-IIFE. csrf ingebed voor de mute-POST."""
-    head = (f'<!doctype html><html lang="nl"><head><meta charset="utf-8">'
+    head = (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>call bar</title>{_FONTS}<style>{_CSS}{_CALLBAR_CSS}</style></head>')
     body = ("<body>"

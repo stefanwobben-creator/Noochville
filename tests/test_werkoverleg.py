@@ -26,7 +26,7 @@ def test_store_open_close(tmp_path):
 def test_startscherm_secretaris_gate(tmp_path):
     dd = _dd(tmp_path)
     frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
-    assert "Werkoverleg" in frag and "Alleen de secretaris" in frag and "wo_open" in frag
+    assert "Tactical meeting" in frag and "Only the secretary" in frag and "wo_open" in frag
     assert "wo-step" not in frag                      # nog niet gestart -> geen stappen
 
 
@@ -43,9 +43,9 @@ def test_open_toont_stappen_en_checkin_members(tmp_path):
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
     frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "checkin", csrf_token="t", fragment=True)
     # vaste volgorde van 7 stappen
-    for lbl in ("Check-in", "Checklist", "Metrics", "Projecten", "Agenda", "Check-out", "Sluiten"):
+    for lbl in ("Check-in", "Checklist", "Metrics", "Projects", "Agenda", "Check-out", "Close"):
         assert lbl in frag
-    assert "wo-step on" in frag and "Volgende" in frag            # per-stap actie, geen onderbalk
+    assert "wo-step on" in frag and "Next" in frag            # per-stap actie, geen onderbalk
     assert "Sluit overleg" not in frag and "rov-foot" not in frag  # afronden alleen op stap 7
     assert "wo-grid" in frag and "id='wo-video'" not in frag      # 2 kolommen; video verhuisde naar de call bar
     assert "Check-in" in frag                          # stap 1 = check-in (members-basis)
@@ -56,7 +56,7 @@ def test_stappen_hergebruiken_bestaande_schermen(tmp_path):
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
     cl = cockpit2.render_werkoverleg(st, C, "checklist", csrf_token="t", fragment=True)
-    assert "Checklists" in cl and "+ Checklist-item" in cl          # echte checklist-scherm
+    assert "Checklists" in cl and "+ Checklist item" in cl          # echte checklist-scherm
     me = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "metrics", csrf_token="t", fragment=True)
     assert "+ KPI maken" in me and "Periode:" in me                 # echte metrics-scherm
     pr = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "projecten", csrf_token="t", fragment=True)
@@ -80,7 +80,7 @@ def test_checkin_presence(tmp_path):
     cockpit2.dispatch(dd, "wo_presence", {"circle": [C], "pid": [p.id], "present": ["0"], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).werk.is_present(C, p.id) is False
     frag2 = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "checkin", csrf_token="t", fragment=True)
-    assert "op verlof" in frag2
+    assert "on leave" in frag2
 
 
 def test_checklist_numerieke_waarde(tmp_path):
@@ -91,7 +91,7 @@ def test_checklist_numerieke_waarde(tmp_path):
     cid = cockpit2._Stores(dd).checklists.for_node(C)[0]["id"]
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
     frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "checklist", csrf_token="t", fragment=True)
-    assert "cl-check" in frag and "Rapporteren" in frag        # U5: V/X-knoppen + wie rapporteert
+    assert "cl-check" in frag and "Reporting" in frag        # U5: V/X-knoppen + wie rapporteert
     assert "cl-num" not in frag                                # numeriek invoerveld vervallen
     # opslag-compat: een meegestuurde waarde wordt nog bewaard, ook al biedt de UI het veld niet meer
     cockpit2.dispatch(dd, "cl_report", {"cid": [cid], "ok": ["1"], "value": ["12"], "next": ["/"]}, username="guest")
@@ -141,7 +141,7 @@ def test_triage_geen_need_veld_en_info_richting(tmp_path):
     iid = cockpit2._Stores(dd).werk.agenda(C)[0]["id"]
     frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "agenda", csrf_token="t", fragment=True, iid=iid)
     assert "Wat heb je nodig" not in frag                     # need-veld is weg
-    assert "wo-spanning" in frag and "Spanning" in frag       # spanning als eigen blok
+    assert "wo-spanning" in frag and "tension" in frag       # spanning als eigen blok
     # info met richting (delen/nodig); detail krijgt richting + doelgroep
     cockpit2.dispatch(dd, "wo_ag_resolve", {"circle": [C], "iid": [iid], "otype": ["info"],
                                             "dir": ["delen"], "detail": ["losdoc"], "next": ["/"]}, username="guest")
@@ -178,8 +178,8 @@ def test_checkout_en_samenvatting(tmp_path):
     cockpit2.dispatch(dd, "wo_checkout", {"circle": [C], "pid": [p.id], "score": ["8"], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).werk.checkout(C)[p.id] == 8
     frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "sluiten", csrf_token="t", fragment=True)
-    assert "Samenvatting" in frag and "Gemiddelde tevredenheid" in frag and "8" in frag
-    assert "Sluit overleg" in frag and "Volgende" not in frag     # stap 7 = centrale sluit-actie
+    assert "Summary" in frag and "Average satisfaction" in frag and "8" in frag
+    assert "Close meeting" in frag and "Next" not in frag     # stap 7 = centrale sluit-actie
 
 
 def test_checkout_toont_vorige_score(tmp_path):
@@ -193,7 +193,7 @@ def test_checkout_toont_vorige_score(tmp_path):
     # overleg 2: nog niet gescoord -> de 7 verschijnt als ghost (class prev)
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
     frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "checkout", csrf_token="t", fragment=True)
-    assert "wo-sc prev" in frag and "vorige keer" in frag
+    assert "wo-sc prev" in frag and "last time" in frag
 
 
 def test_noochie_hulp_context_opener(tmp_path):

@@ -39,7 +39,7 @@ def test_feed_render_auteur_en_soort(tmp_path):
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     # AI-update toont AI-naam + @rolnaam; menselijke reactie toont 'Jij' (geen update-badge meer)
     assert "Codie" in frag and "eerste versie staat klaar" in frag
-    assert "frole" in frag and "Jij" in frag
+    assert "frole" in frag and "You" in frag
     # composer = directe textarea + verborgen auteur 'human:' (een reactie is van jou)
     assert "comp-form" in frag and "value='human:'" in frag
 
@@ -51,7 +51,7 @@ def test_eigen_comment_wijzigen_verwijderen(tmp_path):
                                         "text": ["AI update"], "next": ["/"]}, username="guest")
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
     # eigen comment: edit/delete; AI-update: niet (dus precies 1 keer feed_remove)
-    assert "Wijzigen" in frag and frag.count("feed_remove") == 1
+    assert "Edit" in frag and frag.count("feed_remove") == 1
     eid = cockpit2._Stores(dd).projects.get(pid)["log"][0]["id"]
     cockpit2.dispatch(dd, "feed_edit", {"pid": [pid], "item": [eid], "text": ["aangepast"], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).projects.get(pid)["log"][0]["text"] == "aangepast"

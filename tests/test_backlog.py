@@ -108,7 +108,7 @@ def test_notes_tab_is_backlog_op_website_developer(tmp_path):
     dev = st.people.add("Dev", "dev@nooch.earth"); st.assign.assign(WD, "person", dev.id)
     # WD-rolvervuller ziet beheer + indien-formulier
     page = cockpit2.render_node(cockpit2._Stores(dd), WD, "notes", csrf_token="TOK", username="dev@nooch.earth")
-    assert "Backlog Builder" in page and "Beheer — alle items per staat" in page and "backlog_add" in page
+    assert "Backlog Builder" in page and "Manage — all items by state" in page and "backlog_add" in page
     # buitenstaander ziet wel indienen, niet beheer
     page2 = cockpit2.render_node(cockpit2._Stores(dd), WD, "notes", csrf_token="TOK", username="anon@nooch.earth")
     assert "backlog_add" in page2 and "Beheer — alle items per staat" not in page2

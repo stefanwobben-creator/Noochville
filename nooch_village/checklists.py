@@ -18,8 +18,8 @@ from datetime import datetime, timezone
 from nooch_village.util import atomic_write_json, read_json
 
 CADENCES = ("dag", "week", "maand", "kwartaal")
-CADENCE_LABEL = {"dag": "Dagelijks", "week": "Wekelijks", "maand": "Maandelijks",
-                 "kwartaal": "Per kwartaal"}
+CADENCE_LABEL = {"dag": "Daily", "week": "Weekly", "maand": "Monthly",
+                 "kwartaal": "Quarterly"}
 
 # Waar een checklist-verplichting aan hangt. BEWUST alleen cirkel-breed ("all") of rol-gebonden
 # ("role") — NOOIT per individu. Een "all"-item afgevinkt door één lid telt voor de hele cirkel;
