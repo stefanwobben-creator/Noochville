@@ -16,7 +16,13 @@ Grenzen die hier hard bewaakt worden:
 from __future__ import annotations
 import re
 
-_CANT = re.compile(r"KAN\s*NIET\s*:?\s*(.+)", re.IGNORECASE | re.DOTALL)
+# Het CONTRACT met de prompt is de Nederlandse marker "KAN NIET:" — die blijft letterlijk staan
+# (i18n mini-2C: proza Engels, machine-tokens ongemoeid). De Engelse varianten staan er defensief
+# naast: de prompt is nu Engels, dus een model kan afdwalen naar "CANNOT:". Zonder die tolerantie
+# zou zo'n antwoord STIL als deliverable landen — een geblokkeerd project dat er afgerond uitziet.
+# Alleen herkennen, nooit voorschrijven: de prompt vraagt onverkort om KAN NIET:.
+_CANT = re.compile(r"(?:KAN\s*NIET|CAN\s*_?NOT|CANNOT)\s*:?\s*(.+)", re.IGNORECASE | re.DOTALL)
+_CANT_START = ("KAN NIET", "CANNOT", "CAN NOT")
 
 
 def _scope_text(scope) -> str:
@@ -39,27 +45,29 @@ def work_one(scope, role_id: str, role_purpose: str, *, steer: str = "", persona
         llm_reason = functools.partial(_reason, call_site="project_work_one")
     prompt = (
         (persona.strip() + "\n\n" if persona and persona.strip() else "")
-        + f"Je bent de rol '{role_id}' in NoochVille (duurzaam, vegan schoenenmerk Nooch.earth). "
-        f"Jouw purpose: {role_purpose or '-'}.\n\n"
-        f"Pak dit project op: {_scope_text(scope)}\n\n"
+        + f"You are the role '{role_id}' in NoochVille (sustainable, vegan shoe brand Nooch.earth). "
+        f"Your purpose: {role_purpose or '-'}.\n\n"
+        f"Take on this project: {_scope_text(scope)}\n\n"
         + (kennis.strip() + "\n\n" if kennis and kennis.strip() else "")
-        + (f"STURING van de mens (volg dit nadrukkelijk): {steer}\n\n" if steer else "")
-        + "Lever wat je NU concreet kunt met je eigen kennis: een afgeronde tekst-uitkomst, een eerste "
-        "draft, een analyse, of de concrete eerstvolgende stap. Regels: alleen tekst (omkeerbaar), "
-        "geen externe systemen aanroepen, niets publiceren/versturen/kopen/verwijderen, geen nieuwe "
-        "tools. Gewone taal, geen jargon.\n\n"
-        "Kun je dit NIET met tekst alleen (vereist een websitewijziging, een externe tool, geld "
-        "uitgeven, iets versturen, of een vaardigheid die je niet hebt)? Antwoord dan met:\n"
-        "KAN NIET: <wat is daarvoor nodig>\n\n"
-        "Anders antwoord met:\n"
-        "LEVER: <je concrete uitkomst of eerstvolgende stap>")
+        + (f"STEERING from the human (follow this explicitly): {steer}\n\n" if steer else "")
+        + "Deliver what you can concretely do NOW with your own knowledge: a finished text outcome, a "
+        "first draft, an analysis, or the concrete next step. Rules: text only (reversible), do not "
+        "call external systems, do not publish/send/buy/delete anything, no new tools. Plain "
+        "language, no jargon. Write in English.\n\n"
+        "The two line markers below are Dutch ON PURPOSE — the system reads them literally. "
+        "Reproduce the marker exactly as written; everything after it is English.\n\n"
+        "Can you NOT do this with text alone (it needs a website change, an external tool, spending "
+        "money, sending something, or a skill you do not have)? Then answer with:\n"
+        "KAN NIET: <what is needed for that>\n\n"
+        "Otherwise answer with:\n"
+        "LEVER: <your concrete outcome or next step>")
     out = (llm_reason(prompt) or "").strip()
     if not out:
         return {"ok": False, "needs": None}
     m = _CANT.search(out)
-    if m and out.upper().lstrip().startswith("KAN NIET"):
+    if m and out.upper().lstrip().startswith(_CANT_START):
         return {"ok": False, "needs": m.group(1).strip()[:200]}
-    body = re.sub(r"^\s*LEVER\s*:?\s*", "", out, flags=re.IGNORECASE).strip()
+    body = re.sub(r"^\s*(?:LEVER|DELIVER)\s*:?\s*", "", out, flags=re.IGNORECASE).strip()
     return {"ok": True, "outcome": body[:1500]} if body else {"ok": False, "needs": None}
 
 
