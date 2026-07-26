@@ -80,4 +80,4 @@ def test_dispatch_kb_atoom_reference_propageert_en_telt_in_banner(tmp_path):
     _, msg2 = dispatch(dd, "kb_atoom_reference",
                        {"atom_id": ["c1"], "url": ["https://wur.nl/rapport"],
                         "next": ["/kennisbank"]}, username="guest")
-    assert msg2 == "🔗 bronlink gekoppeld"
+    assert msg2 == "🔗 source link attached"

@@ -125,7 +125,7 @@ def test_koppelknop_uit_de_gate_legt_een_echte_link(tmp_path):
     _, msg = cockpit2.dispatch(dd, "skilllink_add",
                                {"role": [rec.id], "acc_id": [aid], "skill": ["site_health"],
                                 "next": ["/x"]}, username="guest")
-    assert "gekoppeld" in msg
+    assert "linked" in msg
     st2 = cockpit2._Stores(dd)
     assert [t.skill for t in st2.ai.links_for_role(rec.id)] == ["site_health"]
     # …en het stoplicht springt daarmee op groen.
@@ -140,7 +140,7 @@ def test_meld_als_means_gap_landt_in_de_inbox(tmp_path):
     _, msg = cockpit2.dispatch(dd, "means_gap_add",
                                {"role": [rec.id], "acc": ["kantoorplanten water geven"],
                                 "next": ["/x"]}, username="guest")
-    assert "means-gap" in msg
+    assert "means gap" in msg
     hi = HumanInbox(f"{dd}/human_inbox.json")
     gaps = [i for i in hi.pending() if i["type"] == "means_gap"]
     assert len(gaps) == 1 and "kantoorplanten" in gaps[0]["context"]["description"]

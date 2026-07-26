@@ -66,7 +66,7 @@ def test_activeren_maakt_tegel_en_logt_wie_wat_wanneer(tmp_path):
 def test_activeren_zonder_keuze_geen_tegel(tmp_path):
     dd = _dd(tmp_path)
     nxt, msg = cockpit2.dispatch(dd, "indicator_activate", {"did": [], "node": [C]}, username="x")
-    assert "kies" in msg.lower()
+    assert "pick" in msg.lower()
 
 
 def test_activeer_form_toont_alleen_indicatoren_met_data(tmp_path):

@@ -38,7 +38,7 @@ def test_project_lands_op_owner_met_herkomst(tmp_path):
     _, msg = cockpit2.dispatch(dd, "wall_outcome",
         _form(otype="project", pid=src_pid, item=eid, owner=_OWNER,
               content="Nieuw project titel", toelichting="want nodig"), username="guest")
-    assert "aangemaakt" in msg
+    assert "created" in msg
     st = cockpit2._Stores(dd)
     assert len(st.projects.all()) == before + 1
     new = next(p for p in st.projects.all() if p["id"] != src_pid and p.get("scope") == "Nieuw project titel")
@@ -46,7 +46,7 @@ def test_project_lands_op_owner_met_herkomst(tmp_path):
     # herkomst als eerste systeem-entry op het NIEUWE project (bron-pid)
     assert any(e.get("kind") == "system" and src_pid in e.get("text", "") for e in new.get("log", []))
     # systeem-entry op de BRON-wall (audittrail)
-    assert any(e.get("kind") == "system" and "project aangemaakt" in e.get("text", "")
+    assert any(e.get("kind") == "system" and "project created" in e.get("text", "")
                for e in _log(dd, src_pid))
 
 
@@ -139,7 +139,7 @@ def test_note_te_lang_weigert_zonder_truncatie(tmp_path):
     _, msg = cockpit2.dispatch(dd, "wall_outcome",
         _form(otype="note", pid=src_pid, item=eid, note_role=_OWNER,
               content=body, toelichting="te lang"), username="guest")
-    assert "te lang" in msg and "4000" in msg
+    assert "too long" in msg and "4000" in msg
     # geen note aangemaakt (geen stille afkap naar 4000)
     assert cockpit2._Stores(dd).att.list(_OWNER, kind="note") == []
 
@@ -154,7 +154,7 @@ def test_gate_project_op_andermans_rol_geweigerd(tmp_path):
     _, msg = cockpit2.dispatch(dd, "wall_outcome",
         _form(otype="project", pid=src_pid, item=eid, owner=_OWNER,
               content="Sneak project", toelichting="mag niet"), username="buiten@x.nl")
-    assert "Geen toegang" in msg
+    assert "No access" in msg
     assert len(cockpit2._Stores(dd).projects.all()) == before   # niets aangemaakt
 
 
@@ -165,7 +165,7 @@ def test_herkomst_verplicht_onbekende_bron(tmp_path):
     _, msg = cockpit2.dispatch(dd, "wall_outcome",
         _form(otype="note", pid=src_pid, item="bestaat-niet", note_role=_OWNER,
               content="x", toelichting="y"), username="guest")
-    assert "herkomst" in msg
+    assert "provenance" in msg
     assert cockpit2._Stores(dd).att.list(_OWNER, kind="note") == []
 
 
@@ -176,4 +176,4 @@ def test_systeem_entry_op_de_wall(tmp_path):
     cockpit2.dispatch(dd, "wall_outcome",
         _form(otype="note", pid=src_pid, item=eid, note_role=_OWNER, content="body"), username="guest")
     sys_entries = [e for e in _log(dd, src_pid) if e.get("kind") == "system"]
-    assert any("note aangemaakt" in e["text"] for e in sys_entries)
+    assert any("note created" in e["text"] for e in sys_entries)

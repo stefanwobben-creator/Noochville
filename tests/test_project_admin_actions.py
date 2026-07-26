@@ -49,7 +49,7 @@ def test_proj_setowner_weigert_cirkel(tmp_path):
     dd, st = _st(tmp_path)
     pid = st.projects.create(ROLE, "Test", "human", status="queued")
     _, msg = cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": [CIRCLE], "next": ["/"]}, username="guest")
-    assert "cirkel" in msg
+    assert "circle" in msg
     assert cockpit2._Stores(dd).projects.get(pid)["owner"] == ROLE   # ongewijzigd
 
 
@@ -57,7 +57,7 @@ def test_proj_setowner_weigert_onbekende_rol(tmp_path):
     dd, st = _st(tmp_path)
     pid = st.projects.create(ROLE, "Test", "human", status="queued")
     _, msg = cockpit2.dispatch(dd, "proj_setowner", {"pid": [pid], "owner": ["nietbestaand"], "next": ["/"]}, username="guest")
-    assert "onbekende" in msg
+    assert "unknown" in msg
     assert cockpit2._Stores(dd).projects.get(pid)["owner"] == ROLE
 
 

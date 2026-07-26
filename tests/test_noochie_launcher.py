@@ -30,7 +30,7 @@ def test_geleide_triage_spanning_dan_behoefte_dan_suggestie(tmp_path):
     cockpit2.dispatch(dd, "noochie_send", {"text": ["bezoekers dalen"], "next": ["/"]})
     s = cockpit2._Stores(dd).noochie
     assert s.phase == "ask_need" and s.state()["spanning"] == "bezoekers dalen"
-    assert any("nodig" in m["text"].lower() for m in s.messages)   # tweede vraag gesteld
+    assert any("need" in m["text"].lower() for m in s.messages)   # tweede vraag gesteld
     cockpit2.dispatch(dd, "noochie_send", {"text": ["meer content"], "next": ["/"]})
     s2 = cockpit2._Stores(dd).noochie
     assert s2.phase == "free" and s2.state()["need"] == "meer content"
