@@ -33,7 +33,7 @@ def test_status_split_met_en_zonder_data(tmp_path):
     zonder = [i for i in inds if not i["heeft_data"]]
     assert zonder and all(i["reden"][0] in ("veld", "hapert") for i in zonder)   # elke reden geclassificeerd
     html = _status_section(st)
-    assert "Status · met data" in html and "Status · zonder data" in html
+    assert "Status · with data" in html and "Status · without data" in html
     assert "Bezoekers (Plausible)" in html and "style=" not in html              # UI-regel: geen inline styles
 
 
@@ -79,4 +79,4 @@ def test_activeer_form_toont_alleen_indicatoren_met_data(tmp_path):
 def test_formulier_hulp_per_bron(tmp_path):
     dd = _dd(tmp_path)
     html = _koppel_section(cockpit2._Stores(dd), "t", "semanticscholar")   # nog ongekoppeld → hulp toont
-    assert "Voorbeeld" in html and "Semantic Scholar citaties" in html           # concrete invul-hulp (quotes ge-escaped)
+    assert "Example" in html and "Semantic Scholar citations" in html           # concrete invul-hulp (quotes ge-escaped)

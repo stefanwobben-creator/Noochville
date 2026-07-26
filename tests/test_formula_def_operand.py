@@ -87,7 +87,7 @@ def test_onresolvebare_operand_warning_en_hint(tmp_path, caplog):
     assert any(i["operand"] == "A" and i["code"] == "unresolved" for i in issues)
     assert any("FORMULA_OPERAND_UNRESOLVED" in r.getMessage() for r in caplog.records)
     html = _render_formula_tile(cockpit2._Stores(dd), st.records.get(C), tile, csrf="t")
-    assert "bron onbekend" in html                         # zichtbare hint, niet stil leeg
+    assert "source unknown" in html                         # zichtbare hint, niet stil leeg
 
 
 def test_lege_operand_warning_en_hint(tmp_path, caplog):
@@ -103,7 +103,7 @@ def test_lege_operand_warning_en_hint(tmp_path, caplog):
     assert any(i["operand"] == "A" and i["code"] == "empty" for i in issues)
     assert any("FORMULA_OPERAND_EMPTY" in r.getMessage() for r in caplog.records)
     html = _render_formula_tile(cockpit2._Stores(dd), st.records.get(C), tile, csrf="t")
-    assert "bron levert geen data" in html
+    assert "source delivers no data" in html
 
 
 # ── 4. def-resolutie identiek in tegel en formule ───────────────────────────────────

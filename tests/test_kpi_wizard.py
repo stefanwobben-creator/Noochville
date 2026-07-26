@@ -28,9 +28,9 @@ def test_wizard_indicators_categorie_en_heeft_data(tmp_path):
 def test_composer_structuur_en_geen_inline_style(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
     h = cockpit2.render_kpi_composer(st, C, csrf_token="t")
-    assert "kc-mode-btn" in h and "Formule maken" in h             # modus-toggle
+    assert "kc-mode-btn" in h and "Create formula" in h             # modus-toggle
     assert "kc-cat" in h and "kc-metric" in h                      # categorie-chips + metric-lijst
-    assert "title=" in h and "nog geen data" in h                  # ⓘ-tooltips + grijs
+    assert "title=" in h and "no data yet" in h                  # ⓘ-tooltips + grijs
     assert "f_agg" in h and "f_op" in h                            # formule-modus met aggregatie
     assert "data-aard='reeks'" in h                                # vorm gefilterd op aard
     assert "name='node' value='mother_earth__nooch'" in h          # plaats context-afgeleid (vast)
@@ -40,7 +40,7 @@ def test_composer_structuur_en_geen_inline_style(tmp_path):
 def test_composer_losstaand_geeft_plaats_keuze(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
     h = cockpit2.render_kpi_composer(st, "", csrf_token="t")        # geen node → losstaande start
-    assert "<select name='node'>" in h and "Losstaande start" in h
+    assert "<select name='node'>" in h and "Standalone start" in h
 
 
 def test_formule_verplichte_aggregatie(tmp_path):
@@ -89,8 +89,8 @@ def test_composer_categorie_eerst_lege_staat_en_placeholder(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
     h = cockpit2.render_kpi_composer(st, C, csrf_token="t")
     assert "kc-empty" in h and "kc-picked" in h                          # lege-staat + picked-blok
-    assert "Kies eerst een categorie" in h and "chip outline" in h       # categorie-prompt + aard-tag
-    assert "Standaard weergave" in h and "<select name='form'>" in h     # stap 3 = vorm-keuze (Tufte-tabel)
+    assert "Pick a category first" in h and "chip outline" in h       # categorie-prompt + aard-tag
+    assert "Default display" in h and "<select name='form'>" in h     # stap 3 = vorm-keuze (Tufte-tabel)
 
 
 def test_wizard_werk_tegel_maakt_en_rendert(tmp_path):
@@ -123,7 +123,7 @@ def test_nieuwe_svg_renderers_en_geen_data(tmp_path):
     assert "barchart" in _bar_chart_svg(pts) and "stackbar" in _stacked_bar_svg(rows) and "hbar" in _hbar_svg(rows)
     assert "style=" not in _bar_chart_svg(pts) + _stacked_bar_svg(rows) + _hbar_svg(rows)   # SVG-attributen, geen inline
     for r in (_bar_chart_svg([]), _stacked_bar_svg([]), _hbar_svg([])):
-        assert "geen data in deze periode" in r                         # zelfde geen-data als het lijndiagram
+        assert "no data in this period" in r                         # zelfde geen-data als het lijndiagram
 
 
 def test_staaf_tegel_rendert_end_to_end(tmp_path):

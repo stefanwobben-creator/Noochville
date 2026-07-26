@@ -54,7 +54,7 @@ def test_render_markeert_no_data_in_grafiek_en_tabel(tmp_path):
     st.metrics.add_sample(a, 100, at=D1); st.metrics.add_sample(a, 200, at=D2)
     st.metrics.add_sample(b, 10, at=D1)                 # dag 2 ontbreekt bij B
     html = _render_formula_tile(cockpit2._Stores(dd), st.records.get(C), _tile(a, b), "t", None, None)
-    assert "geen data" in html                          # tabel markeert de ontbrekende dag
+    assert "no data" in html                          # tabel markeert de ontbrekende dag
     # de grafiek plot maar één punt (dag 1) → geen lijn, en zeker geen 0 of doorgerekende waarde
     assert html.count("<polyline") == 0 and "kpi-val" in html
 
@@ -69,4 +69,4 @@ def test_dispatch_formule_dan_render_faalt_closed(tmp_path):
                                        "f_b": [f"kpi:{b}|value|none"], "f_name": ["Conversie"],
                                        "f_agg": ["gemiddelde"], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t", mw="jaar")
-    assert "Conversie" in page and "geen data" in page   # tegel toont de fail-closed dag
+    assert "Conversie" in page and "no data" in page   # tegel toont de fail-closed dag
