@@ -25,7 +25,7 @@ MEETTYPE = ("snapshot", "venster", "cumulatief")
 #   handmatig = je voert de waarde zelf in
 #   enquete   = resultaat van een enquête (handmatig ingevoerd, maar apart gelabeld)
 MEETWIJZE = ("systeem", "handmatig", "enquete")
-MEETWIJZE_LABEL = {"systeem": "systeem", "handmatig": "handmatig", "enquete": "enquête"}
+MEETWIJZE_LABEL = {"systeem": "system", "handmatig": "manual", "enquete": "survey"}
 # diagnostische metavelden (Lean Analytics): voorlopend/achterlopend en stuurbaar/ijdel
 TIJD = ("leading", "lagging")
 BRUIKBAAR = ("actionable", "vanity")
@@ -33,17 +33,17 @@ TIJD_LABEL = {"leading": "leading", "lagging": "lagging"}
 BRUIKBAAR_LABEL = {"actionable": "actionable", "vanity": "vanity"}
 # verificatiestatus van de WAARDE (los van de gronding van de methode): is het cijfer getoetst?
 VERIFICATIE = ("geverifieerd", "voorlopig")
-VERIFICATIE_LABEL = {"geverifieerd": "geverifieerd", "voorlopig": "voorlopig"}
+VERIFICATIE_LABEL = {"geverifieerd": "verified", "voorlopig": "provisional"}
 # AARD = de fundamentele vorm van de indicator (los van meettype):
 #   reeks     = een waarde over tijd (dagreeks bezoekers, maandomzet)
 #   moment    = een momentopname/snapshot (huidige cashpositie, voorraad nu)
 #   categorie = een uitsplitsing over categorieën (bezoekers per land)
 AARD = ("reeks", "moment", "categorie")
-AARD_LABEL = {"reeks": "reeks (over tijd)", "moment": "moment (snapshot)",
-              "categorie": "categorie (uitsplitsing)"}
+AARD_LABEL = {"reeks": "series (over time)", "moment": "moment (snapshot)",
+              "categorie": "category (breakdown)"}
 # AGGREGATIE = hoe losse datapunten tot één waarde komen; alleen verplicht bij een formule-indicator
 AGGREGATIE = ("som", "gemiddelde", "laatste_waarde")
-AGGREGATIE_LABEL = {"som": "som", "gemiddelde": "gemiddelde", "laatste_waarde": "laatste waarde"}
+AGGREGATIE_LABEL = {"som": "sum", "gemiddelde": "average", "laatste_waarde": "last value"}
 # DIM_AGGREGATIE = canonieke vertaling van een werkoverleg-tegel-dim naar de aggregatie op de
 # geconsolideerde def. `over_tijd` is GEEN aggregatie maar de reeks zelf (aard=reeks) → dat is een
 # weergave-keuze in de wizard/tegel, geen datamigratie-zaak. Eén bron voor deze vertaling.
@@ -56,11 +56,11 @@ def aard_from_meettype(meettype: str) -> str:
     afgeleid; die ken je bewust toe.)"""
     return "moment" if meettype == "snapshot" else "reeks"
 
-CADANS_LABEL = {"continu": "continu", "uur": "per uur", "dag": "per dag", "week": "per week",
-                "maand": "per maand", "kwartaal": "per kwartaal", "jaar": "per jaar",
-                "ad-hoc": "ad-hoc"}
-MEETTYPE_LABEL = {"snapshot": "momentopname", "venster": "over een venster",
-                  "cumulatief": "cumulatief"}
+CADANS_LABEL = {"continu": "continuous", "uur": "hourly", "dag": "daily", "week": "weekly",
+                "maand": "monthly", "kwartaal": "quarterly", "jaar": "yearly",
+                "ad-hoc": "ad hoc"}
+MEETTYPE_LABEL = {"snapshot": "snapshot", "venster": "over a window",
+                  "cumulatief": "cumulative"}
 
 
 class IndicatorDefinition(BaseModel):

@@ -47,7 +47,7 @@ def test_bron_kpi_pulse_visitors(tmp_path):
     # bron-KPI uit data toevoegen (pulse_visitors), bestaande data van het dorp
     cockpit2.dispatch(dd, "m_add_kpi", {"node": [MKT], "pick": ["source:pulse_visitors"], "next": ["/"]}, username="guest")
     it = [i for i in cockpit2._Stores(dd).metrics.for_node(MKT) if i["kind"] == "kpi"][0]
-    assert it["source"] == "pulse_visitors" and it["unit"] == "bezoekers"
+    assert it["source"] == "pulse_visitors" and it["unit"] == "visitors"
     # bron-KPI's accepteren geen handmatige meting
     assert cockpit2._Stores(dd).metrics.add_sample(it["id"], 5) is False
 
@@ -60,8 +60,8 @@ def test_rol_tab_eigen_kpi_en_meting(tmp_path):
     cockpit2.dispatch(dd, "m_sample", {"mid": [mid], "value": ["4.2"], "next": ["/"]}, username="guest")
     page = _mtab(dd, RID)
     # mini-Looker: focus-flow CTA + eigen KPI's + periode
-    assert "Conversie" in page and "+ KPI maken" in page and "Periode:" in page
-    assert "Eigen KPI's" in page and "+ Link" in page
+    assert "Conversie" in page and "+ Create KPI" in page and "Period:" in page
+    assert "Own KPIs" in page and "+ Link" in page
 
 
 def test_kpi_composer_combos(tmp_path):
@@ -71,7 +71,7 @@ def test_kpi_composer_combos(tmp_path):
     # deelopdracht 3: één regel per metric (def-namen), geen dim-combos
     assert "Paren verkocht (Shopify)" in page and "Bezoekers (Plausible)" in page
     assert "· per land" not in page and "(per dag) · over tijd" not in page
-    assert "tile_add" in page and "Referentie" in page and "benchmark" in page and "doel" in page
+    assert "tile_add" in page and "Reference" in page and "benchmark" in page and "goal" in page
 
 
 def test_kpi_referentie_op_tegel(tmp_path):
@@ -136,13 +136,13 @@ def test_grondslag_en_doelkoppeling(tmp_path):
     t = cockpit2._Stores(dd).metrics.tiles_of(RID)[0]
     assert t["goal_pid"] == pid and t["target"] == 1000.0
     page = cockpit2.render_node(cockpit2._Stores(dd), RID, "metrics", csrf_token="t")
-    assert "js-flip" in page and "naar doel:" in page and "1000 paar in Q4" in page   # grondslag (kaart-omdraaien) + doel zichtbaar
+    assert "js-flip" in page and "towards goal:" in page and "1000 paar in Q4" in page   # grondslag (kaart-omdraaien) + doel zichtbaar
 
 
 def test_built_in_grondslag(tmp_path):
     dd = _dd(tmp_path)
     g = cockpit2._grondslag(cockpit2._Stores(dd), "shopify", "pairs_sold")
-    assert "paren" in g["eenheid"] and g["bron"] == "Shopify" and g["richting"] == "up"
+    assert "pairs" in g["eenheid"] and g["bron"] == "Shopify" and g["richting"] == "up"
 
 
 def test_handmatige_kpi_wordt_bron_in_wizard(tmp_path):
@@ -151,7 +151,7 @@ def test_handmatige_kpi_wordt_bron_in_wizard(tmp_path):
                                         "unit": ["score"], "next": ["/"]}, username="guest")
     # op de cirkel verschijnt de handmatige KPI als indicator (categorie 'Eigen KPI's'), één regel
     page = cockpit2.render_kpi_composer(cockpit2._Stores(dd), C, csrf_token="t")
-    assert "NPS" in page and "Eigen KPI" in page
+    assert "NPS" in page and "Own KPI" in page
 
 
 def test_meetmoment_schema_normalisatie(tmp_path):
@@ -190,7 +190,7 @@ def test_kpi_export_csv(tmp_path):
     res = cockpit2._metric_csv(cockpit2._Stores(dd), mid)
     assert res is not None
     fname, body = res
-    assert fname == "Conversie.csv" and "datum,waarde,eenheid" in body and "4.2" in body
+    assert fname == "Conversie.csv" and "date,value,unit" in body and "4.2" in body
     # volledig indicator-schema in de export, ook lege velden (definition, cadence, meettype...)
     assert "indicator-schema" in body
     for f in ("name", "definition", "direction", "cadence", "meettype", "window"):
@@ -203,7 +203,7 @@ def test_verwijderen_vraagt_bevestiging(tmp_path):
     cockpit2.dispatch(dd, "m_add_kpi", {"node": [RID], "pick": ["manual"], "name": ["NPS"], "next": ["/"]}, username="guest")
     page = _mtab(dd, RID)
     # delete heeft data-confirm + er is een exportlink
-    assert "data-confirm=" in page and "verwijderen?" in page and "/metric_export?mid=" in page
+    assert "data-confirm=" in page and "Remove " in page and "/metric_export?mid=" in page
 
 
 def test_bullet_vervangt_doelmeter(tmp_path):
@@ -247,7 +247,7 @@ def test_tufte_datatabel_en_delta_bij_grafiek(tmp_path):
     page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
     # Tufte: inklapbare datatabel onder de grafiek. De dag-op-dag-delta is verwijderd: een delta
     # verschijnt alleen nog bij 'Vergelijk met vorige periode' (zie test_delta_alleen_bij_compare).
-    assert "<details class='tile-data'>" in page and "datum" in page and "waarde" in page
+    assert "<details class='tile-data'>" in page and "date" in page and "value" in page
     assert "▲" not in page and "▼" not in page
 
 
@@ -285,7 +285,7 @@ def test_burnup_doeltempo(tmp_path):
     assert t["form"] == "burnup" and t["goal_pid"] == pid
     # render met een periode die de 20-dagen-oude metingen omvat (default is nu 7 dagen, scope 6)
     page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t", mw="kwartaal")
-    assert "burnup" in page and "/dag" in page and "benodigd" in page and "prognose" in page
+    assert "burnup" in page and "/day" in page and "needed" in page and "forecast" in page
 
 
 def test_burnup_zonder_doel_vraagt_koppeling(tmp_path):
@@ -295,7 +295,7 @@ def test_burnup_zonder_doel_vraagt_koppeling(tmp_path):
     cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": [f"kpi:{k['id']}|value|none"],
                                        "form": ["burnup"], "target": [""], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", csrf_token="t")
-    assert "Koppel een doel" in page
+    assert "Link a goal" in page
 
 
 def test_link_metric(tmp_path):
@@ -380,13 +380,13 @@ def test_bezoekers_lijndiagram_geen_data_status(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
     res = _fetch(st, "pulse_visitors", "visitors", "time", None)
     assert res["points"] == []
-    assert "geen data" in _line_chart_svg(res["points"], "bezoekers")   # nette status, geen vlakke lijn
+    assert "no data" in _line_chart_svg(res["points"], "bezoekers")   # nette status, geen vlakke lijn
 
 
 def test_bezoekers_lijndiagram_een_punt_geen_lijn(tmp_path):
     from nooch_village.views.metrics import _line_chart_svg
     svg = _line_chart_svg([(1000.0, 42)], "bezoekers")   # één datapunt
-    assert "te weinig" in svg and "<polyline" not in svg  # geen lijn, geen interpolatie
+    assert "too few" in svg and "<polyline" not in svg  # geen lijn, geen interpolatie
 
 
 def test_source_samples_ontdubbelt_dagreeks_vs_7d(tmp_path):

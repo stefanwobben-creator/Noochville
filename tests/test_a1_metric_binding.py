@@ -91,9 +91,9 @@ def test_systeem_kpi_niet_in_invoer_sectie(tmp_path):
                        categorie="Website", aard="reeks", meetwijze="systeem", auto=True)
     st.metrics.add_kpi(C, "Handmatige conversie", "%")                 # echte handmatige KPI
     page = vm._metrics_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(C), "t")
-    inv = page.split("Eigen KPI's (data invoeren)")[1].split("Systeem-KPI's")[0]
+    inv = page.split("Own KPIs (enter data)")[1].split("System KPIs")[0]
     assert "Handmatige conversie" in inv and "Systeem paginaweergaven" not in inv
-    assert "Systeem paginaweergaven" in page.split("Systeem-KPI's")[1]
+    assert "Systeem paginaweergaven" in page.split("System KPIs")[1]
 
 
 def test_systeem_lijst_toont_alleen_niet_getegelde(tmp_path):
@@ -107,7 +107,7 @@ def test_systeem_lijst_toont_alleen_niet_getegelde(tmp_path):
                        categorie="Website", aard="reeks", meetwijze="systeem", auto=True)
     st.metrics.add_tile(C, f"kpi:{tiled['id']}", "value", "time", "trend")   # de eerste staat al als tegel
     page = vm._metrics_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(C), "t")
-    lijst = page.split("Systeem-KPI's")[1]
+    lijst = page.split("System KPIs")[1]
     assert "Beschikbaar paginaweergaven" in lijst          # nog niet getegeld → wél in de lijst
     assert "Vertoningen (GSC)" not in lijst                 # al als tegel → niet herhaald in de lijst
     assert any(t["source"] == f"kpi:{tiled['id']}"         # de tegel staat er wél (bovenaan), niet weg-gefilterd
