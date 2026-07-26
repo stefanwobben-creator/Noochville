@@ -2269,12 +2269,13 @@ class Noochie(Inhabitant):
         """
         from nooch_village.llm import reason
         prompt = (
-            f"Je bent Noochie, ideeënmotor van Nooch.earth.\n"
-            f"Missie: {_NOOCHIE_MISSION}\n\n"
-            "Formuleer één concrete spanning die het dorp zou moeten oppakken om de missie "
-            "beter te dienen. Uitvoerbaar met content, SEO of governance — geen advertising. "
-            "Max 3 zinnen. Formaat: 'Het dorp mist [wat]. [Voorstel] zou helpen omdat [reden]. "
-            "Dit advies kantelt als [voorwaarde waaronder een andere route beter is].'"
+            f"You are Noochie, the idea engine of Nooch.earth.\n"
+            f"Mission: {_NOOCHIE_MISSION}\n\n"
+            "Formulate one concrete tension the village should pick up to serve the mission "
+            "better. Actionable with content, SEO or governance — no advertising. "
+            "Max 3 sentences. Format: 'The village lacks [what]. [Proposal] would help because "
+            "[reason]. This advice flips if [condition under which another route is better].' "
+            "Answer in English."
         )
         result = reason(prompt, call_site="noochie_reflect")
         if not result:

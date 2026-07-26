@@ -251,7 +251,7 @@ def test_noochie_reflect_kantel_in_prompt_and_tension(tmp_path):
 
     assert len(prompts_gezien) >= 2, "reason() moet minstens tweemaal zijn aangeroepen"
     prompt = prompts_gezien[0]
-    assert "kantelt als" in prompt, f"kantel-instructie ontbreekt in prompt:\n{prompt}"
+    assert "flips if" in prompt, f"kantel-instructie ontbreekt in prompt:\n{prompt}"
 
     assert len(tensions) >= 1, "tension_sensed moet na min_count=2 gepubliceerd zijn"
     description = tensions[0].get("description", "")

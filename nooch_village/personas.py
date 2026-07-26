@@ -62,15 +62,30 @@ def persona_prompt(p: Persona | dict | None) -> str:
     extra = (p.get("prompt_extra", "") if isinstance(p, dict) else getattr(p, "prompt_extra", "")) or ""
     if not (name or mbti or instr or extra.strip()):
         return ""
-    wie = name or "deze inwoner"
-    kop = f"Je bent {wie}" + (f" ({mbti})" if mbti else "") + "."
+    wie = name or "this inhabitant"
+    kop = f"You are {wie}" + (f" ({mbti})" if mbti else "") + "."
     staart = (f" {instr.strip()}" if instr.strip() else "")
     # prompt_extra komt ACHTER de instructies, op een eigen regel: de mens kan zo een scherpe
     # werkafspraak toevoegen zonder de karakterbeschrijving te herschrijven.
     aanvulling = f"\n{extra.strip()}" if extra.strip() else ""
+    # Taal-instructie ALTIJD als laatste regel, ná prompt_extra: hij mag niet wegvallen doordat een
+    # mens er een eigen instructie achteraan zet. De cockpit is Engels (i18n fase 1), dus de output
+    # van een inwoner hoort dat ook te zijn — ook als zijn `instructions` nog Nederlands zijn.
+    #
+    # De tweede zin is GEEN franje maar een harde vangrail. Deze preamble gaat vóór prompts die een
+    # NEDERLANDS antwoord-token parsen en fail-closed zijn als het niet matcht:
+    #   - cockpit2._ai_reply  → {"fit": "ja|deels|nee"}  (_parse_triage weigert al het andere)
+    #   - project_worker.work_one → de markers "KAN NIET:" / "LEVER:"
+    # Zonder deze zin zou "Always respond in English" die tokens vertalen en de triage stil uitzetten.
+    # De prompts én hun parsers gaan samen om in fase 2C; tot die tijd blijft dit de scheidslijn:
+    # proza Engels, machine-waarden letterlijk zoals de omringende instructie ze voorschrijft.
     return (kop + staart +
-            " Laat je karakter doorklinken in toon en aanpak, niet in wat je inhoudelijk kunt."
-            + aanvulling)
+            " Let your character show in tone and approach, not in what you are able to do."
+            + aanvulling
+            + "\nAlways respond in English."
+            + " Exception: if the instruction below prescribes literal field values or line markers"
+            + " (for example a JSON enum or a line prefix), reproduce those EXACTLY as given, even"
+            + " when they are not English — only the prose around them is English.")
 
 
 class PersonaStore:

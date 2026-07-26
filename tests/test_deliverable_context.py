@@ -118,7 +118,7 @@ def test_injectie_met_context_toont_sectie(tmp_path):
                "📎 studie — via openalex_evidence: barefoot loopschoenen bevindingen")
     inh = _inhabitant(tmp_path, ledger)                     # enabled default "1"
     prompt = _capture_prompt(inh, "barefoot loopschoenen onderzoek", keyword="barefoot", exclude_pid="ander")
-    assert "Eerder afgerond onderzoek in het dorp" in prompt
+    assert "Research already completed in the village" in prompt
     assert "barefoot loopschoenen bevindingen" in prompt
 
 

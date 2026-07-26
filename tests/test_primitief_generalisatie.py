@@ -156,7 +156,7 @@ def test_f_geen_schema_fail_soft(tmp_path, ledger, monkeypatch):
     inh = _inhabitant(tmp_path, ledger, [_NoSchema()], ["mystery"])
     pid = ledger.create("rol", "doel", "human", status="future")
     inh.prepare_project(pid)                                                      # mag niet crashen
-    assert "geen schema" in seen["prompt"]                                        # fallback-tekst in catalogus
+    assert "no schema" in seen["prompt"]                                        # fallback-tekst in catalogus
     assert inh._project_checklist(ledger.get(pid)) is not None
 
 
