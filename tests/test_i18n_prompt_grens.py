@@ -35,27 +35,27 @@ def test_mention_triage_enum_blijft_bij_zijn_parser():
     assert 'if fit not in ("ja", "deels", "nee")' in s
 
 
-def test_project_worker_markers_blijven_bij_hun_regex():
-    """project_worker.work_one is Engels proza (mini-2C) maar VRAAGT onverkort de Nederlandse
-    markers KAN NIET:/LEVER: — dat is het contract met _CANT. De prompt zegt er expliciet bij dat
-    ze letterlijk overgenomen moeten worden."""
+def test_project_worker_contract_is_engels():
+    """work_one is volledig om (2C): prompt Engels ÉN markers Engels. Dat mag hier, want de markers
+    zijn vluchtige parse-tokens — ze worden gestript vóór het returnen, staan nergens opgeslagen en
+    niets vergelijkt erop. Zo vecht de prompt niet meer tegen z'n eigen taal."""
     s = _src("project_worker.py")
-    assert "KAN NIET: <what is needed for that>" in s
-    assert "LEVER: <your concrete outcome or next step>" in s
-    assert "are Dutch ON PURPOSE" in s
+    assert "CANNOT: <what is needed for that>" in s
+    assert "DELIVER: <your concrete outcome or next step>" in s
+    assert "KAN NIET:" not in s.split("def work_one")[1]     # niet meer voorgeschreven in de prompt
 
 
-def test_project_worker_parser_is_tolerant_voor_afdwaling():
-    """De prompt is Engels, dus een model kan naar CANNOT:/DELIVER: afdwalen. Dat mag nooit STIL
-    als deliverable landen (geblokkeerd project dat er afgerond uitziet), dus de parser herkent de
-    Engelse variant óók — zonder 'm voor te schrijven."""
+def test_project_worker_parser_blijft_liberaal():
+    """Beide talen worden herkend. De Engelse is het contract; de Nederlandse is overgangs-
+    tolerantie. Missen we een marker, dan valt het antwoord STIL door naar de deliverable-tak en
+    wordt een geblokkeerd project als afgerond weggeschreven — daarom liberaal parsen."""
     from nooch_village.project_worker import work_one
-    assert work_one("x", "r", "p", llm_reason=lambda _p: "KAN NIET: een sleutel") == {
-        "ok": False, "needs": "een sleutel"}
     assert work_one("x", "r", "p", llm_reason=lambda _p: "CANNOT: a key") == {
         "ok": False, "needs": "a key"}
-    assert work_one("x", "r", "p", llm_reason=lambda _p: "LEVER: af")["outcome"] == "af"
+    assert work_one("x", "r", "p", llm_reason=lambda _p: "KAN NIET: een sleutel") == {
+        "ok": False, "needs": "een sleutel"}
     assert work_one("x", "r", "p", llm_reason=lambda _p: "DELIVER: done")["outcome"] == "done"
+    assert work_one("x", "r", "p", llm_reason=lambda _p: "LEVER: af")["outcome"] == "af"
 
 
 def test_opportunity_reflex_velden_blijven_bij_hun_parser():
