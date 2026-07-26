@@ -49,7 +49,7 @@ def test_formule_verplichte_aggregatie(tmp_path):
         "node": [C], "mode": ["formule"], "f_a": ["pulse_visitors|visitors|time"], "f_op": ["÷"],
         "f_b": ["shopify|pairs_sold|none"], "f_name": ["Conversie"], "f_agg": [""], "next": ["/"]},
         username="guest")
-    assert "aggregatie" in msg.lower()                              # zonder aggregatie → geweigerd
+    assert "aggregation" in msg.lower()                              # zonder aggregatie → geweigerd
     assert not [t for t in cockpit2._Stores(dd).metrics.tiles_of(C) if t.get("form") == "formule"]
 
 

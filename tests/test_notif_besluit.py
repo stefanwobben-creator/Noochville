@@ -59,7 +59,7 @@ def test_zonder_bron_project_fail_closed(tmp_path):
     c, st, pj, pid, n = _ctx(tmp_path)
     st.notif._find(n["id"])["project_id"] = ""                 # spanning zonder bron
     _, msg = _act_notif_besluit(c)
-    assert "geen bron-project" in msg
+    assert "no source project" in msg
 
 
 def test_wizard_toont_de_volledige_vraag(tmp_path):

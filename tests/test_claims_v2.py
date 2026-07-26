@@ -101,7 +101,7 @@ def test_defecte_database_geeft_zichtbare_fout(monkeypatch, tmp_path):
 def test_scan_van_tekst():
     uitslag, bron = cockpit2._claims_scan({"tekst": ["zero waste en klimaatneutraal"]})
     assert uitslag["rood"] >= 2
-    assert bron == "geplakte tekst"
+    assert bron == "pasted text"
 
 
 def test_scan_weigert_interne_url():
@@ -228,7 +228,7 @@ def test_dispatch_bord_weigert_andere_rollen(tmp_path):
     _, msg = cockpit2.dispatch(str(tmp_path), "claims_to_board",
                                {"bevindingen": [payload], "next": ["/claims"]},
                                "niemand@nergens.nl")
-    assert "Geen toegang" in msg
+    assert "No access" in msg
 
 
 def test_dispatch_bord_maakt_taken(tmp_path, monkeypatch):
@@ -238,7 +238,7 @@ def test_dispatch_bord_maakt_taken(tmp_path, monkeypatch):
     _, msg = cockpit2.dispatch(str(dd), "claims_to_board",
                                {"bevindingen": [payload], "bron": ["https://nooch.earth/"],
                                 "next": ["/claims"]}, "guest")
-    assert msg.startswith("✓ 1 taak")
+    assert msg.startswith("✓ 1 task")
     assert len(ProjectLedger(str(dd / "projects.json")).all()) == 1
 
 

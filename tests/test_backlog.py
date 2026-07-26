@@ -68,7 +68,7 @@ def test_add_iedereen_ingelogd(tmp_path):
     _, msg = cockpit2.dispatch(dd, "backlog_add",
                                _form(titel="Bug A", beschrijving="x", type="bug", domein="website"),
                                username="iemand@nooch.earth")
-    assert "ingediend" in msg
+    assert "submitted" in msg
     items = cockpit2._Stores(dd).backlog.all()
     assert len(items) == 1 and items[0].inbrenger_id == p.id
 
@@ -82,12 +82,12 @@ def test_update_staat_alleen_website_developer(tmp_path):
     # buitenstaander geweigerd
     _, deny = cockpit2.dispatch(dd, "backlog_update_staat", _form(bid=bid, staat="geformuleerd"),
                                 username="buiten@nooch.earth")
-    assert "Geen toegang" in deny and "Website Developer" in deny
+    assert "No access" in deny and "Website Developer" in deny
     assert cockpit2._Stores(dd).backlog.get(bid).staat == "ruw"
     # rolvervuller mag
     _, ok = cockpit2.dispatch(dd, "backlog_update_staat", _form(bid=bid, staat="geformuleerd"),
                               username="dev@nooch.earth")
-    assert "bijgewerkt" in ok
+    assert "updated" in ok
     assert cockpit2._Stores(dd).backlog.get(bid).staat == "geformuleerd"
 
 
@@ -98,7 +98,7 @@ def test_update_prioriteit_alleen_website_developer(tmp_path):
     bid = cockpit2._Stores(dd).backlog.add("T", "", "wens", "village", "").id
     _, deny = cockpit2.dispatch(dd, "backlog_update_prioriteit", _form(bid=bid, impact="hoog", effort="1d"),
                                 username="buiten@nooch.earth")
-    assert "Geen toegang" in deny
+    assert "No access" in deny
     assert cockpit2._Stores(dd).backlog.get(bid).impact is None
 
 

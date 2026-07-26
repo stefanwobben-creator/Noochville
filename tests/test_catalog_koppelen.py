@@ -67,7 +67,7 @@ def test_publiceren_maakt_item_volgens_scope3(tmp_path):
     _, msg = cockpit2.dispatch(dd, "catalog_publish", {
         "source": ["shopify"], "veld": ["cart_abandon_rate"], "naam": ["X"],
         "categorie": ["Verkoop"], "aard": ["moment"], "next": ["/"]}, username="guest")
-    assert "al in de catalogus" in msg
+    assert "already in the catalogue" in msg
 
 
 def test_publiceren_verplicht_naam_categorie_aard(tmp_path):
@@ -75,7 +75,7 @@ def test_publiceren_verplicht_naam_categorie_aard(tmp_path):
     _, msg = cockpit2.dispatch(dd, "catalog_publish", {
         "source": ["shopify"], "veld": ["x"], "naam": [""], "categorie": [""], "aard": [""],
         "next": ["/"]}, username="guest")
-    assert "verplicht" in msg
+    assert "required" in msg
 
 
 def test_ongepubliceerd_veld_onzichtbaar_in_wizard_gepubliceerd_wel(tmp_path):
@@ -96,4 +96,4 @@ def test_authz_niet_anchor_lead_geweigerd(tmp_path):
     _, msg = cockpit2.dispatch(dd, "catalog_publish", {
         "source": ["shopify"], "veld": ["y"], "naam": ["N"], "categorie": ["Verkoop"],
         "aard": ["moment"], "next": ["/"]}, username="iemand@x.nl")
-    assert "Geen toegang" in msg
+    assert "No access" in msg

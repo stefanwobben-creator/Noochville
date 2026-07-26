@@ -104,7 +104,7 @@ def test_koppelen_via_dispatch_logt_in_de_kroniek(tmp_path):
     _, msg = cockpit2.dispatch(dd, "skilllink_add",
                                {"role": [_ROLE], "acc_id": [aid], "skill": ["site_health"],
                                 "next": ["/x"]}, username="guest")
-    assert "gekoppeld" in msg
+    assert "linked" in msg
 
     st2 = cockpit2._Stores(dd)
     assert [t.skill for t in st2.ai.links_for_role(_ROLE)] == ["site_health"]
@@ -119,7 +119,7 @@ def test_dispatch_weigert_beslisskill_bij_niet_domeinhouder(tmp_path):
     _, msg = cockpit2.dispatch(dd, "skilllink_add",
                                {"role": [_ROLE], "acc_id": [_first_acc(st)],
                                 "skill": ["keyword_review"], "next": ["/x"]}, username="guest")
-    assert "Niet gekoppeld" in msg and "domeinhouder" in msg
+    assert "Not linked" in msg and "domeinhouder" in msg
     assert cockpit2._Stores(dd).ai.links_for_role(_ROLE) == []
 
 
@@ -132,7 +132,7 @@ def test_ontkoppelen_logt_ook(tmp_path):
     st2 = cockpit2._Stores(dd)
     tid = st2.ai.links_for_role(_ROLE)[0].id
     _, msg = cockpit2.dispatch(dd, "aitask_remove", {"tid": [tid], "next": ["/x"]}, username="guest")
-    assert "verwijderd" in msg
+    assert ("removed" in msg or "Removed" in msg)
 
     st3 = cockpit2._Stores(dd)
     assert st3.ai.links_for_role(_ROLE) == []
@@ -147,7 +147,7 @@ def test_koppelen_geweigerd_voor_niet_circle_lead(tmp_path):
                                {"role": [_ROLE], "acc_id": [_first_acc(st)],
                                 "skill": ["site_health"], "next": ["/x"]},
                                username="buiten@nooch.earth")
-    assert "Geen toegang" in msg and "Circle Lead" in msg
+    assert "No access" in msg and "Circle Lead" in msg
     assert cockpit2._Stores(dd).ai.links_for_role(_ROLE) == []
 
 

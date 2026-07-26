@@ -308,7 +308,7 @@ def test_terugkoppeling_noemt_de_rollen(tmp_path):
                               {"owner": "compliance", "stoplicht": "red", "pid": "3", "titel": "t"}],
                "overgeslagen": 4, "lopend": []}
     melding = cockpit2._bord_melding(verslag)
-    assert "3 taak/taken" in melding
+    assert "3 task(s)" in melding
     assert "@copywriter (2)" in melding and "@compliance (1)" in melding
     assert "4 liepen al" in melding
 

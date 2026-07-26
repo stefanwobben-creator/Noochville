@@ -60,7 +60,7 @@ def test_reject_zonder_reden_geweigerd(tmp_path):
     nxt, msg = dispatch(dd, "kw_nom_reject",
                         _form(term="mycelium shoes", reason="n.v.t.", next="/keywords?lens=library"),
                         username="guest")
-    assert "een echte reden" in msg
+    assert "a real reason" in msg
     st = _Stores(dd)
     assert st.nominations.has("mycelium shoes")           # niet verwijderd
     assert st.nom_kroniek.all_records() == []             # niets geborgd
@@ -101,7 +101,7 @@ def test_beslissen_gated_onbekende_gebruiker_geweigerd(tmp_path):
     nxt, msg = dispatch(dd, "kw_nom_accept",
                         _form(term="mycelium shoes", status="approved", next="/keywords?lens=library"),
                         username="onbekend@nergens.nl")
-    assert "Geen toegang" in msg
+    assert "No access" in msg
     st = _Stores(dd)
     assert st.nominations.has("mycelium shoes")           # niets gebeurd
     assert st.library.status("mycelium shoes") is None

@@ -63,7 +63,7 @@ def test_toevoegen_vereist_naam_en_email(tmp_path):
     dd, st = _st(tmp_path)
     html, _ = cockpit2._handle_person_add(dd, {"voornaam": [""], "achternaam": [""], "email": [""], "next": ["/admin"]},
                                           username="guest")
-    assert "verplicht" in html
+    assert "required" in html
 
 
 # ── wijzigen ─────────────────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ def test_reset_password_zet_nieuw_werkend_wachtwoord(tmp_path):
 def test_reset_onbekende_persoon(tmp_path):
     dd, st = _st(tmp_path)
     html, _ = cockpit2._handle_person_reset(dd, {"pid": ["nietbestaand"], "next": ["/admin"]}, username="guest")
-    assert "niet gevonden" in html
+    assert "not found" in html
 
 
 # ── verwijderen ──────────────────────────────────────────────────────────────
@@ -109,7 +109,7 @@ def test_person_remove_verwijdert_en_ruimt_rollen_op(tmp_path):
 def test_person_remove_onbekend(tmp_path):
     dd, st = _st(tmp_path)
     _, msg = cockpit2.dispatch(dd, "person_remove", {"pid": ["nietbestaand"], "next": ["/admin"]}, username="guest")
-    assert "niet gevonden" in msg
+    assert "not found" in msg
 
 
 def test_is_circle_lead(tmp_path):
@@ -170,7 +170,7 @@ def test_gate_niet_lead_wordt_geweigerd(tmp_path):
     outsider = st.people.add("Buiten", "buiten@nooch.earth")  # ingelogd, maar geen lead
     target = st.people.add("Doel", "doel@nooch.earth")
     _, msg = cockpit2.dispatch(dd, "role_assign", _assign_form(target.id), username="buiten@nooch.earth")
-    assert "Geen toegang" in msg and "Circle Lead" in msg
+    assert "No access" in msg and "Circle Lead" in msg
     assert _GATE_ROLE not in cockpit2._Stores(dd).assign.roles_of("person", target.id)
 
 
@@ -178,7 +178,7 @@ def test_gate_onbekende_gebruiker_wordt_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     target = st.people.add("Doel", "doel@nooch.earth")
     _, msg = cockpit2.dispatch(dd, "role_assign", _assign_form(target.id), username="niemand@nergens.nl")
-    assert "niet herkend" in msg
+    assert "not recognised" in msg
     assert _GATE_ROLE not in cockpit2._Stores(dd).assign.roles_of("person", target.id)
 
 
@@ -191,7 +191,7 @@ def _aitask_form():
 def test_gate_aitask_guest_mag(tmp_path):
     dd, st = _st(tmp_path)
     _, msg = cockpit2.dispatch(dd, "aitask_add", _aitask_form(), username="guest")
-    assert "gekoppeld" in msg
+    assert "linked" in msg
 
 
 def test_gate_aitask_circle_lead_mag(tmp_path):
@@ -199,20 +199,20 @@ def test_gate_aitask_circle_lead_mag(tmp_path):
     lead = st.people.add("Lead", "lead@nooch.earth")
     st.assign.assign(_GATE_LEAD, "person", lead.id)           # lead van mother_earth__nooch
     _, msg = cockpit2.dispatch(dd, "aitask_add", _aitask_form(), username="lead@nooch.earth")
-    assert "gekoppeld" in msg
+    assert "linked" in msg
 
 
 def test_gate_aitask_niet_lead_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     st.people.add("Buiten", "buiten@nooch.earth")             # ingelogd, geen lead
     _, msg = cockpit2.dispatch(dd, "aitask_add", _aitask_form(), username="buiten@nooch.earth")
-    assert "Geen toegang" in msg and "Circle Lead" in msg
+    assert "No access" in msg and "Circle Lead" in msg
 
 
 def test_gate_aitask_onbekende_gebruiker_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     _, msg = cockpit2.dispatch(dd, "aitask_add", _aitask_form(), username="niemand@nergens.nl")
-    assert "niet herkend" in msg
+    assert "not recognised" in msg
 
 
 # ── autorisatie-poort op persona_skill_add (anchor-lead: mother_earth) ────────
@@ -226,7 +226,7 @@ def test_gate_persona_skill_guest_mag(tmp_path):
     dd, st = _st(tmp_path)
     pid, form = _persona_skill_form(dd)
     _, msg = cockpit2.dispatch(dd, "persona_skill_add", form, username="guest")
-    assert "rugzak" in msg
+    assert "backpack" in msg
     assert "nieuwe_skill" in cockpit2._Stores(dd).personas.get(pid).skills
 
 
@@ -236,7 +236,7 @@ def test_gate_persona_skill_anchor_lead_mag(tmp_path):
     st.assign.assign("mother_earth__circle_lead", "person", lead.id)   # anchor-lead
     pid, form = _persona_skill_form(dd)
     _, msg = cockpit2.dispatch(dd, "persona_skill_add", form, username="anchor@nooch.earth")
-    assert "rugzak" in msg
+    assert "backpack" in msg
     assert "nieuwe_skill" in cockpit2._Stores(dd).personas.get(pid).skills
 
 
@@ -247,7 +247,7 @@ def test_gate_persona_skill_niet_anchor_lead_geweigerd(tmp_path):
     st.assign.assign(_GATE_LEAD, "person", subly.id)          # mother_earth__nooch-lead, niet anchor
     pid, form = _persona_skill_form(dd)
     _, msg = cockpit2.dispatch(dd, "persona_skill_add", form, username="sub@nooch.earth")
-    assert "Geen toegang" in msg and "anchor-lead" in msg
+    assert "No access" in msg and "anchor lead" in msg
     assert "nieuwe_skill" not in cockpit2._Stores(dd).personas.get(pid).skills
 
 
@@ -255,7 +255,7 @@ def test_gate_persona_skill_onbekende_gebruiker_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     pid, form = _persona_skill_form(dd)
     _, msg = cockpit2.dispatch(dd, "persona_skill_add", form, username="niemand@nergens.nl")
-    assert "niet herkend" in msg
+    assert "not recognised" in msg
     assert "nieuwe_skill" not in cockpit2._Stores(dd).personas.get(pid).skills
 
 
@@ -271,7 +271,7 @@ def test_gate_anchor_guest_mag_verwijderen(tmp_path):
     dd, st = _st(tmp_path)
     target = st.people.add("Doel", "doel@nooch.earth")
     _, msg = cockpit2.dispatch(dd, "person_remove", {"pid": [target.id], "next": ["/x"]}, username="guest")
-    assert "verwijderd" in msg
+    assert ("removed" in msg or "Removed" in msg)
     assert cockpit2._Stores(dd).people.get(target.id) is None
 
 
@@ -281,7 +281,7 @@ def test_gate_anchor_lead_mag_verwijderen(tmp_path):
     st.assign.assign(_ANCHOR_LEAD, "person", lead.id)
     target = st.people.add("Doel", "doel@nooch.earth")
     _, msg = cockpit2.dispatch(dd, "person_remove", {"pid": [target.id], "next": ["/x"]}, username="anchor@nooch.earth")
-    assert "verwijderd" in msg
+    assert ("removed" in msg or "Removed" in msg)
     assert cockpit2._Stores(dd).people.get(target.id) is None
 
 
@@ -291,7 +291,7 @@ def test_gate_anchor_subcirkel_lead_geweigerd(tmp_path):
     st.assign.assign(_GATE_LEAD, "person", subly.id)          # lead van mother_earth__nooch, niet anchor
     target = st.people.add("Doel", "doel@nooch.earth")
     _, msg = cockpit2.dispatch(dd, "person_remove", {"pid": [target.id], "next": ["/x"]}, username="sub@nooch.earth")
-    assert "Geen toegang" in msg and "anchor-lead" in msg
+    assert "No access" in msg and "anchor lead" in msg
     assert cockpit2._Stores(dd).people.get(target.id) is not None
 
 
@@ -299,7 +299,7 @@ def test_gate_anchor_onbekende_gebruiker_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     target = st.people.add("Doel", "doel@nooch.earth")
     _, msg = cockpit2.dispatch(dd, "person_remove", {"pid": [target.id], "next": ["/x"]}, username="niemand@nergens.nl")
-    assert "niet herkend" in msg
+    assert "not recognised" in msg
     assert cockpit2._Stores(dd).people.get(target.id) is not None
 
 
@@ -317,7 +317,7 @@ def test_gate_projdelete_guest_mag(tmp_path):
     dd, st = _st(tmp_path)
     pid = _make_project(dd)
     _, msg = cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/x"]}, username="guest")
-    assert "verwijderd" in msg
+    assert ("removed" in msg or "Removed" in msg)
     assert cockpit2._Stores(dd).projects.get(pid) is None
 
 
@@ -327,7 +327,7 @@ def test_gate_projdelete_circle_lead_mag(tmp_path):
     st.assign.assign(_GATE_LEAD, "person", lead.id)           # lead van mother_earth__nooch (parent van de rol)
     pid = _make_project(dd)
     _, msg = cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/x"]}, username="lead@nooch.earth")
-    assert "verwijderd" in msg
+    assert ("removed" in msg or "Removed" in msg)
     assert cockpit2._Stores(dd).projects.get(pid) is None
 
 
@@ -336,7 +336,7 @@ def test_gate_projdelete_niet_lead_geweigerd(tmp_path):
     st.people.add("Buiten", "buiten@nooch.earth")
     pid = _make_project(dd)
     _, msg = cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/x"]}, username="buiten@nooch.earth")
-    assert "Geen toegang" in msg and "Circle Lead" in msg
+    assert "No access" in msg and "Circle Lead" in msg
     assert cockpit2._Stores(dd).projects.get(pid) is not None
 
 
@@ -344,7 +344,7 @@ def test_gate_projdelete_onbekende_gebruiker_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     pid = _make_project(dd)
     _, msg = cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/x"]}, username="niemand@nergens.nl")
-    assert "niet herkend" in msg
+    assert "not recognised" in msg
     assert cockpit2._Stores(dd).projects.get(pid) is not None
 
 
@@ -356,7 +356,7 @@ def test_gate_projdelete_individueel_initiatief_lead_van_ii_cirkel(tmp_path):
     st.assign.assign(f"{circle}__circle_lead", "person", lead.id)
     pid = _make_project(dd, owner=f"{cockpit2._II_PREFIX}{circle}")
     _, msg = cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/x"]}, username="lead@nooch.earth")
-    assert "verwijderd" in msg
+    assert ("removed" in msg or "Removed" in msg)
     assert cockpit2._Stores(dd).projects.get(pid) is None
 
 
@@ -366,7 +366,7 @@ def test_gate_projdelete_individueel_initiatief_niet_lead_geweigerd(tmp_path):
     st.people.add("Buiten", "buiten@nooch.earth")
     pid = _make_project(dd, owner=f"{cockpit2._II_PREFIX}{circle}")
     _, msg = cockpit2.dispatch(dd, "proj_delete", {"pid": [pid], "next": ["/x"]}, username="buiten@nooch.earth")
-    assert "Geen toegang" in msg
+    assert "No access" in msg
     assert cockpit2._Stores(dd).projects.get(pid) is not None
 
 
@@ -383,7 +383,7 @@ def test_gate_aitaskremove_circle_lead_mag(tmp_path):
     st.assign.assign(_GATE_LEAD, "person", lead.id)
     t = _make_aitask(dd)
     _, msg = cockpit2.dispatch(dd, "aitask_remove", {"tid": [t.id], "next": ["/x"]}, username="lead@nooch.earth")
-    assert "verwijderd" in msg
+    assert ("removed" in msg or "Removed" in msg)
 
 
 def test_gate_aitaskremove_niet_lead_geweigerd(tmp_path):
@@ -391,7 +391,7 @@ def test_gate_aitaskremove_niet_lead_geweigerd(tmp_path):
     st.people.add("Buiten", "buiten@nooch.earth")
     t = _make_aitask(dd)
     _, msg = cockpit2.dispatch(dd, "aitask_remove", {"tid": [t.id], "next": ["/x"]}, username="buiten@nooch.earth")
-    assert "Geen toegang" in msg and "Circle Lead" in msg
+    assert "No access" in msg and "Circle Lead" in msg
     assert any(x.id == t.id for x in cockpit2._Stores(dd).ai.all())   # niet verwijderd
 
 
@@ -407,7 +407,7 @@ def _rov_remove_form(circle="mother_earth__nooch"):
 def test_gate_rov_guest_mag(tmp_path):
     dd, st = _st(tmp_path)
     _, msg = cockpit2.dispatch(dd, "rov2_remove", _rov_remove_form(), username="guest")
-    assert "verwijderd" in msg
+    assert ("removed" in msg or "Removed" in msg)
 
 
 def test_gate_rov_circle_lead_mag(tmp_path):
@@ -415,20 +415,20 @@ def test_gate_rov_circle_lead_mag(tmp_path):
     lead = st.people.add("Lead", "lead@nooch.earth")
     st.assign.assign(_GATE_LEAD, "person", lead.id)           # lead van mother_earth__nooch
     _, msg = cockpit2.dispatch(dd, "rov2_remove", _rov_remove_form(), username="lead@nooch.earth")
-    assert "verwijderd" in msg
+    assert ("removed" in msg or "Removed" in msg)
 
 
 def test_gate_rov_niet_lead_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     st.people.add("Buiten", "buiten@nooch.earth")
     _, msg = cockpit2.dispatch(dd, "rov2_remove", _rov_remove_form(), username="buiten@nooch.earth")
-    assert "Geen toegang" in msg and "Circle Lead" in msg
+    assert "No access" in msg and "Circle Lead" in msg
 
 
 def test_gate_rov_onbekende_gebruiker_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     _, msg = cockpit2.dispatch(dd, "rov2_remove", _rov_remove_form(), username="niemand@nergens.nl")
-    assert "niet herkend" in msg
+    assert "not recognised" in msg
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -459,7 +459,7 @@ def _kpi_form():
 def test_gate_op_guest_mag(tmp_path):
     dd, st = _st(tmp_path)
     _, msg = cockpit2.dispatch(dd, "m_add_kpi", _kpi_form(), username="guest")
-    assert "toegevoegd" in msg
+    assert ("added" in msg or "Added" in msg)
 
 
 def test_gate_op_rolvervuller_mag(tmp_path):
@@ -468,7 +468,7 @@ def test_gate_op_rolvervuller_mag(tmp_path):
     filler = st.people.add("Vervuller", "vervuller@nooch.earth")
     st.assign.assign(_GATE_ROLE, "person", filler.id)
     _, msg = cockpit2.dispatch(dd, "m_add_kpi", _kpi_form(), username="vervuller@nooch.earth")
-    assert "toegevoegd" in msg
+    assert ("added" in msg or "Added" in msg)
 
 
 def test_gate_op_circle_lead_mag(tmp_path):
@@ -476,20 +476,20 @@ def test_gate_op_circle_lead_mag(tmp_path):
     lead = st.people.add("Lead", "lead@nooch.earth")
     st.assign.assign(_GATE_LEAD, "person", lead.id)           # lead van de ouder-cirkel, niet de rol
     _, msg = cockpit2.dispatch(dd, "m_add_kpi", _kpi_form(), username="lead@nooch.earth")
-    assert "toegevoegd" in msg
+    assert ("added" in msg or "Added" in msg)
 
 
 def test_gate_op_buitenstaander_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     st.people.add("Buiten", "buiten@nooch.earth")             # geen rol, geen lead
     _, msg = cockpit2.dispatch(dd, "m_add_kpi", _kpi_form(), username="buiten@nooch.earth")
-    assert "Geen toegang" in msg and "rolvervuller" in msg
+    assert "No access" in msg and "role filler" in msg
 
 
 def test_gate_op_onbekende_gebruiker_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     _, msg = cockpit2.dispatch(dd, "m_add_kpi", _kpi_form(), username="niemand@nergens.nl")
-    assert "niet herkend" in msg
+    assert "not recognised" in msg
 
 
 # ── Categorie 2: role_id afgeleid via pid (proj_status) en cid (cl_report) ────
@@ -506,7 +506,7 @@ def test_gate_op_projstatus_afgeleid_via_pid(tmp_path):
     assert "verplaatst" in ok
     _, deny = cockpit2.dispatch(dd, "proj_status", {"pid": [pid], "to": ["wacht"], "next": ["/x"]},
                                 username="buiten@nooch.earth")
-    assert "Geen toegang" in deny
+    assert "No access" in deny
 
 
 def test_gate_op_clreport_afgeleid_via_cid(tmp_path):
@@ -520,7 +520,7 @@ def test_gate_op_clreport_afgeleid_via_cid(tmp_path):
     _, ok = cockpit2.dispatch(dd, "cl_report", {"cid": [cid], "ok": ["1"], "next": ["/x"]}, username="lead@nooch.earth")
     assert "genoteerd" in ok
     _, deny = cockpit2.dispatch(dd, "cl_report", {"cid": [cid], "ok": ["1"], "next": ["/x"]}, username="buiten@nooch.earth")
-    assert "Geen toegang" in deny
+    assert "No access" in deny
 
 
 # ── Punt 1: collaboratie-takken ongated — elke ingelogde gebruiker mag ────────
@@ -558,14 +558,14 @@ def test_ii_proj_add_cirkellid_mag(tmp_path):
     member = st.people.add("Lid", "lid@nooch.earth")
     st.assign.assign(_GATE_ROLE, "person", member.id)         # vervult een rol in mother_earth__nooch
     _, msg = cockpit2.dispatch(dd, "proj_add", _ii_add_form(), username="lid@nooch.earth")
-    assert "toegevoegd" in msg
+    assert ("added" in msg or "Added" in msg)
 
 
 def test_ii_proj_add_niet_lid_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     st.people.add("Buiten", "buiten@nooch.earth")             # geen rol in de cirkel, geen lead
     _, msg = cockpit2.dispatch(dd, "proj_add", _ii_add_form(), username="buiten@nooch.earth")
-    assert "Geen toegang" in msg and "cirkel" in msg
+    assert "No access" in msg and "circle" in msg
 
 
 def test_normale_proj_add_blijft_rolvervuller_of_lead(tmp_path):
@@ -574,7 +574,7 @@ def test_normale_proj_add_blijft_rolvervuller_of_lead(tmp_path):
     st.people.add("Buiten", "buiten@nooch.earth")
     form = {"owner": [_GATE_ROLE], "scope": ["Werk"], "done_when": ["af bij oplevering"], "next": ["/x"]}
     _, deny = cockpit2.dispatch(dd, "proj_add", form, username="buiten@nooch.earth")
-    assert "Geen toegang" in deny and "rolvervuller" in deny
+    assert "No access" in deny and "role filler" in deny
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -592,7 +592,7 @@ def _add_form():
 def test_person_add_gate_guest_mag(tmp_path):
     dd, st = _st(tmp_path)
     body, code = cockpit2._handle_person_add(dd, _add_form(), username="guest")
-    assert code == 200 and "toegevoegd" in body
+    assert code == 200 and "added" in body
 
 
 def test_person_add_gate_anchor_lead_mag(tmp_path):
@@ -600,7 +600,7 @@ def test_person_add_gate_anchor_lead_mag(tmp_path):
     lead = st.people.add("Anchor", "anchor@nooch.earth")
     st.assign.assign(_ANCHOR, "person", lead.id)
     body, code = cockpit2._handle_person_add(dd, _add_form(), username="anchor@nooch.earth")
-    assert code == 200 and "toegevoegd" in body
+    assert code == 200 and "added" in body
 
 
 def test_person_add_gate_niet_lead_geweigerd(tmp_path):
@@ -608,14 +608,14 @@ def test_person_add_gate_niet_lead_geweigerd(tmp_path):
     subly = st.people.add("Sub", "sub@nooch.earth")
     st.assign.assign(_GATE_LEAD, "person", subly.id)          # subcirkel-lead, geen anchor
     body, code = cockpit2._handle_person_add(dd, _add_form(), username="sub@nooch.earth")
-    assert code == 403 and "anchor-lead" in body
+    assert code == 403 and "anchor lead" in body
     assert cockpit2._Stores(dd).people.by_email("nieuw@nooch.earth") is None
 
 
 def test_person_add_gate_onbekende_gebruiker_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     body, code = cockpit2._handle_person_add(dd, _add_form(), username="niemand@nergens.nl")
-    assert code == 403 and "niet herkend" in body
+    assert code == 403 and "not recognised" in body
     assert cockpit2._Stores(dd).people.by_email("nieuw@nooch.earth") is None
 
 
@@ -641,14 +641,14 @@ def test_person_reset_gate_niet_lead_geweigerd(tmp_path):
     st.assign.assign(_GATE_LEAD, "person", subly.id)
     p = st.people.add("Doel", "doel@nooch.earth")
     body, code = cockpit2._handle_person_reset(dd, {"pid": [p.id], "next": ["/admin"]}, username="sub@nooch.earth")
-    assert code == 403 and "anchor-lead" in body
+    assert code == 403 and "anchor lead" in body
 
 
 def test_person_reset_gate_onbekende_gebruiker_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     p = st.people.add("Doel", "doel@nooch.earth")
     body, code = cockpit2._handle_person_reset(dd, {"pid": [p.id], "next": ["/admin"]}, username="niemand@nergens.nl")
-    assert code == 403 and "niet herkend" in body
+    assert code == 403 and "not recognised" in body
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -666,7 +666,7 @@ def _rov_add_form(circle=_ROV_CIRCLE):
 def test_rov_add_guest_mag(tmp_path):
     dd, st = _st(tmp_path)
     _, msg = cockpit2.dispatch(dd, "rov2_add", _rov_add_form(), username="guest")
-    assert "toegevoegd" in msg
+    assert ("added" in msg or "Added" in msg)
 
 
 def test_rov_add_cirkellid_mag(tmp_path):
@@ -675,7 +675,7 @@ def test_rov_add_cirkellid_mag(tmp_path):
     member = st.people.add("Lid", "lid@nooch.earth")
     st.assign.assign(_GATE_ROLE, "person", member.id)
     _, msg = cockpit2.dispatch(dd, "rov2_add", _rov_add_form(), username="lid@nooch.earth")
-    assert "toegevoegd" in msg
+    assert ("added" in msg or "Added" in msg)
 
 
 def test_rov_add_circle_lead_mag(tmp_path):
@@ -683,20 +683,20 @@ def test_rov_add_circle_lead_mag(tmp_path):
     lead = st.people.add("Lead", "lead@nooch.earth")
     st.assign.assign(_GATE_LEAD, "person", lead.id)
     _, msg = cockpit2.dispatch(dd, "rov2_add", _rov_add_form(), username="lead@nooch.earth")
-    assert "toegevoegd" in msg
+    assert ("added" in msg or "Added" in msg)
 
 
 def test_rov_add_niet_lid_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     st.people.add("Buiten", "buiten@nooch.earth")             # geen rol in de cirkel, geen lead
     _, msg = cockpit2.dispatch(dd, "rov2_add", _rov_add_form(), username="buiten@nooch.earth")
-    assert "Geen toegang" in msg and "cirkel" in msg
+    assert "No access" in msg and "circle" in msg
 
 
 def test_rov_add_onbekende_gebruiker_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     _, msg = cockpit2.dispatch(dd, "rov2_add", _rov_add_form(), username="niemand@nergens.nl")
-    assert "niet herkend" in msg
+    assert "not recognised" in msg
 
 
 def test_rov_set_combined_ook_gegated_via_circle(tmp_path):
@@ -705,7 +705,7 @@ def test_rov_set_combined_ook_gegated_via_circle(tmp_path):
     st.people.add("Buiten", "buiten@nooch.earth")
     form = {"iid": ["willekeurig"], "circle": [_ROV_CIRCLE], "field": ["name"], "value": ["X"], "next": ["/x"]}
     _, deny = cockpit2.dispatch(dd, "rov2_set", form, username="buiten@nooch.earth")
-    assert "Geen toegang" in deny
+    assert "No access" in deny
     # cirkellid komt door de gate (geen toegang-melding)
     member = st.people.add("Lid", "lid@nooch.earth")
     st.assign.assign(_GATE_ROLE, "person", member.id)
@@ -745,13 +745,13 @@ def test_wo_open_lead_gate_gewoon_lid_geweigerd(tmp_path):
     member = st.people.add("Lid", "lid@nooch.earth")
     st.assign.assign(_GATE_ROLE, "person", member.id)
     _, msg = cockpit2.dispatch(dd, "wo_open", _wo_open_form(), username="lid@nooch.earth")
-    assert "Geen toegang" in msg and "Circle Lead" in msg
+    assert "No access" in msg and "Circle Lead" in msg
 
 
 def test_wo_open_lead_gate_onbekende_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     _, msg = cockpit2.dispatch(dd, "wo_open", _wo_open_form(), username="niemand@nergens.nl")
-    assert "niet herkend" in msg
+    assert "not recognised" in msg
 
 
 def _wo_ag_add_form():
@@ -771,13 +771,13 @@ def test_wo_ag_add_member_gate_niet_lid_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     st.people.add("Buiten", "buiten@nooch.earth")
     _, msg = cockpit2.dispatch(dd, "wo_ag_add", _wo_ag_add_form(), username="buiten@nooch.earth")
-    assert "Geen toegang" in msg and "cirkel" in msg
+    assert "No access" in msg and "circle" in msg
 
 
 def test_wo_ag_add_member_gate_onbekende_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     _, msg = cockpit2.dispatch(dd, "wo_ag_add", _wo_ag_add_form(), username="niemand@nergens.nl")
-    assert "niet herkend" in msg
+    assert "not recognised" in msg
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -791,7 +791,7 @@ def _pin_form():
 def test_m_pin_lead_gate_guest_mag(tmp_path):
     dd, st = _st(tmp_path)
     _, msg = cockpit2.dispatch(dd, "m_pin", _pin_form(), username="guest")
-    assert "cirkeldashboard" in msg
+    assert "circle dashboard" in msg
 
 
 def test_m_pin_lead_gate_circle_lead_mag(tmp_path):
@@ -799,7 +799,7 @@ def test_m_pin_lead_gate_circle_lead_mag(tmp_path):
     lead = st.people.add("Lead", "lead@nooch.earth")
     st.assign.assign(_GATE_LEAD, "person", lead.id)
     _, msg = cockpit2.dispatch(dd, "m_pin", _pin_form(), username="lead@nooch.earth")
-    assert "cirkeldashboard" in msg
+    assert "circle dashboard" in msg
 
 
 def test_m_pin_lead_gate_gewoon_lid_geweigerd(tmp_path):
@@ -808,10 +808,10 @@ def test_m_pin_lead_gate_gewoon_lid_geweigerd(tmp_path):
     member = st.people.add("Lid", "lid@nooch.earth")
     st.assign.assign(_GATE_ROLE, "person", member.id)
     _, msg = cockpit2.dispatch(dd, "m_pin", _pin_form(), username="lid@nooch.earth")
-    assert "Geen toegang" in msg and "Circle Lead" in msg
+    assert "No access" in msg and "Circle Lead" in msg
 
 
 def test_m_unpin_lead_gate_onbekende_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     _, msg = cockpit2.dispatch(dd, "m_unpin", _pin_form(), username="niemand@nergens.nl")
-    assert "niet herkend" in msg
+    assert "not recognised" in msg
