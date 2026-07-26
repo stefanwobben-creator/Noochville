@@ -17,15 +17,15 @@ def _cl_target_label(st: _Stores, item: dict) -> str:
     if item.get("target_type") == "role" and item.get("target_id"):
         r = st.records.get(item["target_id"])
         return _name(r) if r else item["target_id"]
-    return "Alle leden"
+    return "All members"
 
 
 def _cl_spark(item: dict) -> str:
     h = ChecklistStore.history(item, 6)
     if not h:
-        return "<span class='cl-spark muted' title='nog geen historie'>—</span>"
+        return "<span class='cl-spark muted' title='no history yet'>—</span>"
     dots = "".join(f"<i class='{'ok' if b else 'no'}'>{'✓' if b else '✗'}</i>" for b in h)
-    return f"<span class='cl-spark' title='laatste {len(h)} keer'>{dots}</span>"
+    return f"<span class='cl-spark' title='last {len(h)} times'>{dots}</span>"
 
 
 def _cl_row(st: _Stores, item: dict, csrf: str) -> str:
@@ -40,12 +40,12 @@ def _cl_row(st: _Stores, item: dict, csrf: str) -> str:
                f"<input type='hidden' name='action' value='cl_report'>"
                f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=checklists'>"
                f"<button class='cl-check ok{(' on' if status is True else '')}' type='submit' name='ok' value='1' title='check'>✓</button>"
-               f"<button class='cl-check no{(' on' if status is False else '')}' type='submit' name='ok' value='0' title='geen check'>✗</button></form>")
+               f"<button class='cl-check no{(' on' if status is False else '')}' type='submit' name='ok' value='0' title='no check'>✗</button></form>")
         rm = (f"<form method='post' action='/action' style='display:inline'>"
               f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
               f"<input type='hidden' name='cid' value='{_e(cid)}'>"
               f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=checklists'>"
-              f"<button class='dellink' type='submit' name='action' value='cl_remove' title='verwijderen'>✕</button></form>")
+              f"<button class='dellink' type='submit' name='action' value='cl_remove' title='remove'>✕</button></form>")
     else:
         rep = "" if status is None else (f"<span class='cl-check {'ok' if status else 'no'} on'>"
                                          f"{'✓' if status else '✗'}</span>")
@@ -82,36 +82,36 @@ def _checklists_tab_html(st: _Stores, rec, csrf: str = "", flt: str = "due", nav
         groups += (f"<div class='cl-group'><h4>{_e(CADENCE_LABEL[cad])}</h4>"
                    + "".join(_cl_row(st, i, csrf) for i in sub) + "</div>")
     if not groups:
-        groups = "<p class='muted'>Nog geen checklist-items.</p>"
+        groups = "<p class='muted'>No checklist items yet.</p>"
 
     # toevoegen (governance-poort: alleen een al bestaande terugkerende actie)
     add = ""
     if csrf:
         if is_c:
             roles = sorted(org.roles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
-            opts = "<option value='all'>Alle cirkelleden</option>" + "".join(
+            opts = "<option value='all'>All circle members</option>" + "".join(
                 f"<option value='role:{_e(r.id)}'>{_e(_name(r))}</option>" for r in roles)
-            doel = (f"<label class='att-lbl'>Doel</label><select name='doel'>{opts}</select>")
+            doel = (f"<label class='att-lbl'>Target</label><select name='doel'>{opts}</select>")
         else:
             doel = "<input type='hidden' name='doel' value='all'>"
         cadopts = "".join(f"<option value='{c}'>{_e(CADENCE_LABEL[c])}</option>" for c in CADENCES)
-        add = (f"<details class='cl-add'><summary class='btn ok sm'>+ Checklist-item</summary>"
+        add = (f"<details class='cl-add'><summary class='btn ok sm'>+ Checklist item</summary>"
                f"<form method='post' action='/action' class='cl-addform'>"
                f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
                f"<input type='hidden' name='node' value='{_e(rec.id)}'>"
                f"<input type='hidden' name='next' value='{base}'>"
-               f"<label class='att-lbl'>Beschrijving</label>"
-               f"<input name='description' placeholder='Bijv. Facturen verstuurd' autocomplete='off'>"
-               f"<label class='att-lbl'>Cadans</label><select name='cadence'>{cadopts}</select>"
+               f"<label class='att-lbl'>Description</label>"
+               f"<input name='description' placeholder='E.g. Invoices sent' autocomplete='off'>"
+               f"<label class='att-lbl'>Cadence</label><select name='cadence'>{cadopts}</select>"
                f"{doel}"
                f"<label class='cl-gate'><input type='checkbox' name='bestaand' value='1'> "
-               f"Dit is een al <b>bestaande</b> terugkerende actie (geen nieuwe verwachting).</label>"
-               f"<button class='btn ok sm' type='submit' name='action' value='cl_add'>Toevoegen</button>"
+               f"This is an <b>existing</b> recurring action (not a new expectation).</label>"
+               f"<button class='btn ok sm' type='submit' name='action' value='cl_add'>Add</button>"
                f"</form></details>")
 
     head = (f"<div class='cl-head'><h3>Checklists</h3>{add}</div>"
-            f"<p class='muted' style='font-size:.8rem'>Transparantie over terugkerend werk (pre-flight): "
-            f"✓ of ✗ per periode. Nieuwe verwachtingen lopen via het roloverleg.</p>")
+            f"<p class='muted' style='font-size:.8rem'>Transparency about recurring work (pre-flight): "
+            f"✓ or ✗ per period. New expectations go through the governance meeting.</p>")
     return f"<div class='c2-sec'>{head}</div>{groups}"
 
 
@@ -160,9 +160,9 @@ def _cl_item_meta(state: str, skill, it: dict) -> str:
         if pl:
             parts.append(f"<span class='ck-payload'>{_e(pl)}</span>")
     if state == "warn":
-        parts.append(f"<span class='ck-warn'>⚠ payload onvolledig{': ' + _e(reason) if reason else ''}</span>")
+        parts.append(f"<span class='ck-warn'>⚠ payload incomplete{': ' + _e(reason) if reason else ''}</span>")
     elif state == "noskill":
-        parts.append(f"<span class='ck-noskill'>○ geen skill{' · ' + _e(reason) if reason else ' · vereist mens'}</span>")
+        parts.append(f"<span class='ck-noskill'>○ no skill{' · ' + _e(reason) if reason else ' · needs a human'}</span>")
     return f"<span class='ck-meta'>{' '.join(parts)}</span>" if parts else ""
 
 
@@ -201,18 +201,18 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool) -> str:
             offer = it.get("offer") if not skill else None
             offer_html = (f"<form method='post' action='/action'>{hid()}{clitem}"
                           f"<button class='btn ghost sm' type='submit' name='action' value='check_accept' "
-                          f"title='skill: {_e(str((offer or {}).get('skill','')))}'>🤖 kan dit oppakken</button>"
+                          f"title='skill: {_e(str((offer or {}).get('skill','')))}'>🤖 can pick this up</button>"
                           f"</form>") if (rw and offer) else ""
             rows += f"<li class='ck-item'>{chk}{txt}{offer_html}{rm}</li>"
         add = (f"<form method='post' action='/action' class='ckadd'>{hid()}"
                f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
-               f"<input name='text' placeholder='item toevoegen…'>"
+               f"<input name='text' placeholder='add item…'>"
                f"<button class='btn ok' type='submit' name='action' value='check_add'>+ item</button></form>") if rw else ""
         delc = (f"<form method='post' action='/action' style='display:inline'>{hid()}"
                 f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
                 f"<button class='dellink cl-del' type='submit' name='action' value='checklist_remove' "
-                f"onclick=\"return confirm('Checklist verwijderen?')\">verwijderen</button></form>") if rw else ""
+                f"onclick=\"return confirm('Remove checklist?')\">remove</button></form>") if rw else ""
         out += (f"<div class='checklist'><div class='cl-head'>{_IC_CHECK}"
                 f"<span class='cl-title'>{_e(cl.get('title', 'Checklist'))}</span>{delc}</div>"
-                f"{bar}<ul class='clean ck-list'>{rows or '<li class=muted>nog geen items</li>'}</ul>{add}</div>")
+                f"{bar}<ul class='clean ck-list'>{rows or '<li class=muted>no items yet</li>'}</ul>{add}</div>")
     return out

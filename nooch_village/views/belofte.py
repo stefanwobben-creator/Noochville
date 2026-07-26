@@ -17,16 +17,17 @@ from nooch_village.web_base import _e, _page
 from nooch_village.cockpit2_util import _DS_LINK, _nav
 from nooch_village.belofte_graaf import Oordeel, Sterkte, weeg_belofte
 
+# Display-mapping: de sleutels blijven de opgeslagen enum-waarden, alleen het label is Engels.
 _OORDEEL_CHIP = {
-    Oordeel.HOUDT.value: ("chip green", "houdt"),
-    Oordeel.HOUDT_NIET.value: ("chip coral", "houdt niet"),
-    Oordeel.ONBEKEND.value: ("chip outline", "onbekend"),
+    Oordeel.HOUDT.value: ("chip green", "holds"),
+    Oordeel.HOUDT_NIET.value: ("chip coral", "does not hold"),
+    Oordeel.ONBEKEND.value: ("chip outline", "unknown"),
 }
 _STERKTE_CHIP = {
-    Sterkte.VERDEDIGBAAR.value: ("chip green", "verdedigbaar"),
-    Sterkte.ONBEWEZEN.value: ("chip amber", "onbewezen"),
-    Sterkte.GEBROKEN.value: ("chip coral", "gebroken"),
-    Sterkte.LEEG.value: ("chip outline", "leeg"),
+    Sterkte.VERDEDIGBAAR.value: ("chip green", "defensible"),
+    Sterkte.ONBEWEZEN.value: ("chip amber", "unproven"),
+    Sterkte.GEBROKEN.value: ("chip coral", "broken"),
+    Sterkte.LEEG.value: ("chip outline", "empty"),
 }
 
 
@@ -65,15 +66,15 @@ def _lijst(data: dict) -> str:
         weging = weeg_belofte(_oordelen(entry))
         gegrond, totaal = _rijpheid(entry)
         bottleneck = weging.bottleneck
-        bn = (f"<p class='muted'>Bottleneck: {len(bottleneck)} onderdeel(en), "
-              f"o.a. {_e(', '.join(bottleneck[:3]))}</p>") if bottleneck else \
-             "<p class='muted'>Geen bottleneck: elke constituent houdt.</p>"
+        bn = (f"<p class='muted'>Bottleneck: {len(bottleneck)} component(s), "
+              f"incl. {_e(', '.join(bottleneck[:3]))}</p>") if bottleneck else \
+             "<p class='muted'>No bottleneck: every constituent holds.</p>"
         kaarten.append(
             f"<div class='card'><h3><a href='/belofte?id={_e(bid)}'>{_e(entry.get('belofte') or bid)}</a></h3>"
             f"<p>{_sterkte_chip(weging.sterkte)} "
-            f"<span class='muted'>{gegrond}/{totaal} gegrond</span></p>{bn}</div>")
+            f"<span class='muted'>{gegrond}/{totaal} grounded</span></p>{bn}</div>")
     if not kaarten:
-        return "<p class='muted'>Nog geen belofte-grafen. De BOM-seed vult de schoen-graaf bij het opstarten.</p>"
+        return "<p class='muted'>No promise graphs yet. The BOM seed fills the shoe graph at startup.</p>"
     return "".join(kaarten)
 
 
@@ -83,7 +84,7 @@ def _detail(bid: str, entry: dict) -> str:
     bottleneck = set(weging.bottleneck)
     rijen = []
     for r in entry.get("constituenten", []):
-        cls, label = _OORDEEL_CHIP.get(r.get("oordeel"), ("chip outline", "onbekend"))
+        cls, label = _OORDEEL_CHIP.get(r.get("oordeel"), ("chip outline", "unknown"))
         alt = ", ".join(r.get("alternatieven") or []) or "—"
         merk = " ◀ bottleneck" if r["naam"] in bottleneck else ""
         rijen.append(
@@ -91,18 +92,18 @@ def _detail(bid: str, entry: dict) -> str:
             f"<td>{_e(r.get('realisatie') or '—')}</td>"
             f"<td>{_e(alt)}</td>"
             f"<td><span class='{cls}'>{_e(label)}</span></td></tr>")
-    tabel = (f"<table class='mtab'><tr><th>Onderdeel</th><th>Realisatie</th>"
-             f"<th>Duurzaam alternatief</th><th>Oordeel</th></tr>{''.join(rijen)}</table>")
-    bn = (f"<p class='muted'>De belofte breekt of gapt op: "
+    tabel = (f"<table class='mtab'><tr><th>Component</th><th>Realisation</th>"
+             f"<th>Sustainable alternative</th><th>Verdict</th></tr>{''.join(rijen)}</table>")
+    bn = (f"<p class='muted'>The promise breaks or gaps on: "
           f"<b>{_e(', '.join(weging.bottleneck))}</b>.</p>") if weging.bottleneck else \
-         "<p class='muted'>Elke constituent houdt: de belofte is in theorie verdedigbaar.</p>"
-    return (f"<div class='c2-main'><div class='c2-bar'><a href='/belofte'>← alle beloftes</a></div>"
+         "<p class='muted'>Every constituent holds: the promise is defensible in theory.</p>"
+    return (f"<div class='c2-main'><div class='c2-bar'><a href='/belofte'>← all promises</a></div>"
             f"<h1>{_e(entry.get('belofte') or bid)}</h1>"
             f"<p>{_sterkte_chip(weging.sterkte)} "
-            f"<span class='muted'>rijpheid {gegrond}/{totaal} constituenten gegrond</span></p>{bn}"
-            f"<p class='muted'>Eerste-principes: de belofte valt uiteen in haar onderdelen; elk "
-            f"onderdeel wordt apart gegrond; de belofte is zo sterk als het zwakste onderdeel. "
-            f"Zolang een onderdeel onbekend is, is de belofte onbewezen, niet gebroken.</p>{tabel}</div>")
+            f"<span class='muted'>maturity {gegrond}/{totaal} constituents grounded</span></p>{bn}"
+            f"<p class='muted'>First principles: the promise breaks down into its components; each "
+            f"component is grounded separately; the promise is only as strong as its weakest component. "
+            f"As long as a component is unknown, the promise is unproven, not broken.</p>{tabel}</div>")
 
 
 def render_belofte(data_dir: str, belofte_id: str = "") -> str:
@@ -110,12 +111,12 @@ def render_belofte(data_dir: str, belofte_id: str = "") -> str:
     if belofte_id and belofte_id in data:
         main = _detail(belofte_id, data[belofte_id])
     elif belofte_id:
-        main = ("<div class='c2-main'><div class='c2-bar'><a href='/belofte'>← alle beloftes</a></div>"
-                "<p class='muted'>Onbekende belofte.</p></div>")
+        main = ("<div class='c2-main'><div class='c2-bar'><a href='/belofte'>← all promises</a></div>"
+                "<p class='muted'>Unknown promise.</p></div>")
     else:
-        main = (f"<div class='c2-main'><h1>Beloftes &amp; eerste principes</h1>"
-                f"<p class='muted'>Elke belofte ontleed in haar constituenten en gewogen op het "
-                f"zwakste onderdeel. Klik door voor de graaf per belofte.</p>{_lijst(data)}</div>")
+        main = (f"<div class='c2-main'><h1>Promises &amp; first principles</h1>"
+                f"<p class='muted'>Every promise broken down into its constituents and weighed on the "
+                f"weakest component. Click through for the graph per promise.</p>{_lijst(data)}</div>")
     inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
-    return _page("Beloftes", inner)
+    return _page("Promises", inner)

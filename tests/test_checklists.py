@@ -64,12 +64,12 @@ def test_tab_render_groepen_geen_filter(tmp_path):
     cockpit2.dispatch(dd, "cl_add", {"node": [C], "description": ["Weekcheck"], "cadence": ["week"],
                                      "doel": ["all"], "bestaand": ["1"], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), C, "checklists", csrf_token="t")
-    assert "Dagelijks" in page and "Wekelijks" in page          # groepering per cadans
+    assert "Daily" in page and "Weekly" in page          # groepering per cadans
     assert "cl_report" in page                                   # rapporteer-knoppen
     # U4: geen filter-toggle meer; te-doen items worden gehighlight met .cl-todo
     assert "Nu te doen" not in page and "class='cl-filter" not in page
     assert "cl-row cl-todo" in page                              # twee due items -> highlight aanwezig
-    assert "bestaande" in page                                   # governance-poort in het formulier
+    assert "existing" in page                                   # governance-poort in het formulier
     assert "visibility" not in page.lower() and "(optional)" not in page.lower()
 
 

@@ -5,21 +5,21 @@ from nooch_village.web_base import _e
 from nooch_village.cockpit2_util import _stamp, _md, _avatar, _name, _ICON_ADD_EMOJI, _person_name, md_editor
 from nooch_village import org
 
-# Gecureerde set standaard emoji's met zoekwoorden (NL/EN) voor de picker.
+# Gecureerde set standaard emoji's met zoekwoorden voor de picker.
 _EMOJIS_FULL = [
-    ("👍", "duim like goed prima"), ("👎", "duim slecht nee"), ("🙏", "dank bedankt please"),
-    ("👏", "applaus klap"), ("🙌", "hoera yes"), ("💪", "sterk kracht power"), ("🤝", "deal akkoord hand"),
-    ("😀", "blij lach happy"), ("😂", "lachen lol"), ("😉", "knipoog wink"), ("😍", "liefde hart love"),
-    ("😎", "cool stoer"), ("🤔", "denken hmm"), ("😮", "wow verbaasd"), ("😢", "verdrietig sad"),
-    ("😡", "boos angry"), ("🥳", "feest party"), ("😴", "slaap moe"),
-    ("❤️", "hart liefde love rood"), ("💚", "hart groen"), ("💙", "hart blauw"),
-    ("🔥", "vuur top fire"), ("⭐", "ster top star"), ("✨", "sprankel magie"),
-    ("🎉", "feest party hoera"), ("🎊", "confetti"), ("✅", "check klaar done ok"), ("❌", "kruis fout nee"),
-    ("⚠️", "waarschuwing let op warning"), ("❓", "vraag question"), ("❗", "uitroep belangrijk"),
-    ("💡", "idee lamp insight"), ("🚀", "raket snel launch"), ("📈", "omhoog groei up"),
-    ("📉", "omlaag daling down"), ("💰", "geld money"), ("⏰", "tijd klok deadline"), ("📌", "pin belangrijk"),
-    ("🌱", "groei plant duurzaam"), ("🌍", "aarde wereld earth"), ("♻️", "recycle duurzaam"),
-    ("👀", "kijk ogen"), ("🤖", "ai robot"), ("🙂", "glimlach"),
+    ("👍", "thumb like good fine"), ("👎", "thumb bad no"), ("🙏", "thanks please"),
+    ("👏", "applause clap"), ("🙌", "hooray yes"), ("💪", "strong power"), ("🤝", "deal agreed hand"),
+    ("😀", "glad smile happy"), ("😂", "laugh lol"), ("😉", "wink"), ("😍", "love heart"),
+    ("😎", "cool"), ("🤔", "thinking hmm"), ("😮", "wow surprised"), ("😢", "sad"),
+    ("😡", "angry"), ("🥳", "party celebrate"), ("😴", "sleep tired"),
+    ("❤️", "heart love red"), ("💚", "heart green"), ("💙", "heart blue"),
+    ("🔥", "fire top"), ("⭐", "star top"), ("✨", "sparkle magic"),
+    ("🎉", "party hooray"), ("🎊", "confetti"), ("✅", "check done ok"), ("❌", "cross wrong no"),
+    ("⚠️", "warning caution"), ("❓", "question"), ("❗", "exclamation important"),
+    ("💡", "idea lamp insight"), ("🚀", "rocket fast launch"), ("📈", "up growth"),
+    ("📉", "down decline"), ("💰", "money"), ("⏰", "time clock deadline"), ("📌", "pin important"),
+    ("🌱", "growth plant sustainable"), ("🌍", "earth world"), ("♻️", "recycle sustainable"),
+    ("👀", "look eyes"), ("🤖", "ai robot"), ("🙂", "smile"),
 ]
 
 
@@ -37,7 +37,7 @@ def _feed_norm(entry: dict):
 def _feed_who(st, atype: str, aid: str):
     """(avatar-html, naam) voor een feed-auteur."""
     if atype == "person":
-        nm = _person_name(st, aid) or "Iemand"
+        nm = _person_name(st, aid) or "Someone"
         return _avatar(nm, False), nm
     if atype == "persona":
         pa = st.personas.get(aid)
@@ -45,8 +45,8 @@ def _feed_who(st, atype: str, aid: str):
         return _avatar(nm, True), nm
     if atype == "role":
         r = st.records.get(aid)
-        return "<span class='av role'>R</span>", (_name(r) if r else "Rol")
-    return "<span class='av'>🙋</span>", "Jij"
+        return "<span class='av role'>R</span>", (_name(r) if r else "Role")
+    return "<span class='av'>🙋</span>", "You"
 
 
 def _mentionables(st):
@@ -110,7 +110,7 @@ def _wall_outcome_opts(st):
     for pp in st.projects.all():
         if not pp.get("archived") and pp.get("owner"):
             by_role.setdefault(pp["owner"], []).append(pp)
-    pj_opts = "<option value=''>— kies project —</option>"
+    pj_opts = "<option value=''>— pick project —</option>"
     for rid in sorted(by_role, key=lambda x: (_name(st.records.get(x)) if st.records.get(x) else str(x)).lower()):
         rn = _name(st.records.get(rid)) if st.records.get(rid) else str(rid)
         opts = "".join(f"<option value='{_e(pp['id'])}'>{_e(str(pp.get('scope') or pp['id'])[:60])}</option>"
@@ -120,7 +120,7 @@ def _wall_outcome_opts(st):
 
 
 def _wall_outcome_form(pid: str, eid: str, csrf: str, prefill: str, role_opts: str, pj_opts: str,
-                       *, extra_hid: str = "", summary: str = "→ uitkomst") -> str:
+                       *, extra_hid: str = "", summary: str = "→ outcome") -> str:
     """Discrete '→ uitkomst'-actie bij een bron-comment: route 'm naar één van de vijf bestaande
     uitkomsten. Progressive disclosure per type (mirror van het werkoverleg oc_details). De inhoud is
     bewerkbaar en voorgevuld met de comment-tekst (voor project/action kort je 'm typisch in tot een
@@ -139,22 +139,22 @@ def _wall_outcome_form(pid: str, eid: str, csrf: str, prefill: str, role_opts: s
         return (f"<details class='wo-ocd box-details'><summary>{summary}</summary>"
                 f"<form method='post' action='/action' class='wo-oc'>{hid}"
                 f"<input type='hidden' name='otype' value='{otype}'>"
-                f"<label class='att-lbl'>Inhoud (bewerkbaar)</label>"
+                f"<label class='att-lbl'>Content (editable)</label>"
                 f"<textarea name='content' rows='2'>{_e(prefill)}</textarea>"
                 f"{target_field}"
-                f"<button class='btn sm' type='submit' name='action' value='wall_outcome'>Vastleggen</button>"
+                f"<button class='btn sm' type='submit' name='action' value='wall_outcome'>Record</button>"
                 f"</form></details>")
 
     info = oc("info", "Info",
-              "<span class='muted'>Gebruik @naam of @rol in de inhoud voor gericht; anders iedereen.</span>")
+              "<span class='muted'>Use @name or @role in the content to target it; otherwise everyone.</span>")
     proj = oc("project", "Project",
-              f"<label class='att-lbl'>Op welke rol?</label><select name='owner'>{role_opts}</select>")
-    act = oc("action", "Actie",
-             f"<label class='att-lbl'>Aan welk project?</label><select name='pid_link'>{pj_opts}</select>")
+              f"<label class='att-lbl'>On which role?</label><select name='owner'>{role_opts}</select>")
+    act = oc("action", "Action",
+             f"<label class='att-lbl'>To which project?</label><select name='pid_link'>{pj_opts}</select>")
     note = oc("note", "Note",
-              f"<label class='att-lbl'>Note bij welke rol?</label><select name='note_role'>{role_opts}</select>")
-    rov = oc("roloverleg", "Roloverleg",
-             "<span class='muted'>Wordt een add_role-voorstel op de roloverleg-agenda (mens-route).</span>")
+              f"<label class='att-lbl'>Note on which role?</label><select name='note_role'>{role_opts}</select>")
+    rov = oc("roloverleg", "Governance meeting",
+             "<span class='muted'>Becomes an add_role proposal on the governance-meeting agenda (human route).</span>")
     return (f"<details class='fedit'><summary class='flink'>{_e(summary)}</summary>"
             f"{info}{proj}{act}{note}{rov}</details>")
 
@@ -182,10 +182,10 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
             f"<input type='hidden' name='emoji' value='{emo}'>"
             f"<button class='emo' type='submit' name='action' value='react_add' title='{_e(kw)}'>{emo}</button></form>"
             for emo, kw in _EMOJIS_FULL)
-        picker = (f"<details class='emoji-pick'><summary class='emoji-add' title='reactie' "
-                  f"aria-label='reactie toevoegen'>{_ICON_ADD_EMOJI}</summary>"
+        picker = (f"<details class='emoji-pick'><summary class='emoji-add' title='reaction' "
+                  f"aria-label='add reaction'>{_ICON_ADD_EMOJI}</summary>"
                   f"<div class='emoji-pop'>"
-                  f"<input class='emo-search' type='text' placeholder='Zoek emoji…' oninput='emoFilter(this)'>"
+                  f"<input class='emo-search' type='text' placeholder='Search emoji…' oninput='emoFilter(this)'>"
                   f"<div class='emo-grid'>{btns}</div></div></details>")
     bubble = _md(entry.get("text", ""))
     if mention_names:
@@ -196,14 +196,14 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
         hidf = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                 f"<input type='hidden' name='pid' value='{_e(pid)}'>"
                 f"<input type='hidden' name='item' value='{_e(eid)}'>")
-        editd = (f"<details class='fedit'><summary class='flink'>Wijzigen</summary>"
+        editd = (f"<details class='fedit'><summary class='flink'>Edit</summary>"
                  f"<form method='post' action='/action' class='pf' style='margin-top:.3rem'>{hidf}"
-                 f"{md_editor('text', entry.get('text', ''), rows=3, placeholder='Bewerk je reactie…')}"
+                 f"{md_editor('text', entry.get('text', ''), rows=3, placeholder='Edit your reply…')}"
                  f"<button class='btn ok sm' type='submit' name='action' value='feed_edit' "
-                 f"style='margin-top:.3rem'>Opslaan</button></form></details>")
+                 f"style='margin-top:.3rem'>Save</button></form></details>")
         deld = (f"<form method='post' action='/action' style='display:inline'>{hidf}"
                 f"<button class='flink' type='submit' name='action' value='feed_remove' "
-                f"onclick=\"return confirm('Comment verwijderen?')\">Verwijderen</button></form>")
+                f"onclick=\"return confirm('Remove comment?')\">Remove</button></form>")
         tools = f"<span class='fsep'>·</span>{editd}<span class='fsep'>·</span>{deld}"
     # → uitkomst: elke comment (mens én persona) mag de mens naar een uitkomst routeren; niet op
     # de neutrale system-audit-entry (die is zelf al de uitkomst-trail).
@@ -223,7 +223,7 @@ def _feed_entry_html(st, entry: dict, role_name: str = "",
 
 def _feed_author_options(st, p: dict) -> str:
     """Namens-keuze voor de composer: jij (reactie) + de rolvervullers van de eigenaar-rol (update)."""
-    opts = ["<option value='human:'>🙋 Jij (reactie)</option>"]
+    opts = ["<option value='human:'>🙋 You (reply)</option>"]
     orec = st.records.get(p.get("owner"))
     if orec is not None:
         for f in st.assign.fillers_of(orec.id, record=orec):

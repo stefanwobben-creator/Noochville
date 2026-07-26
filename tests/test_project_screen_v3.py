@@ -76,7 +76,7 @@ def test_b_checklist_states_onderscheidbaar(tmp_path):
     # het uitvoerbare item (query=barefoot) staat NIET als ⚠ gemarkeerd
     assert "uitvoerbaar-item" in frag
     # ontbrekend payload_ok telt niet als ongeldig: precies één ⚠-blok (het warn-item), niet meer
-    assert frag.count("payload onvolledig") == 1
+    assert frag.count("payload incomplete") == 1
 
 
 # b2. item met ONTBREKEND payload_ok-veld → uitvoerbaar, niet ⚠ (legacy vóór PR #136)

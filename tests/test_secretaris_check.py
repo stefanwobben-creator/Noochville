@@ -111,8 +111,8 @@ def test_gate_toont_stoplicht_en_blokkeert_niet(tmp_path):
     item = _agendapunt(st, rec)
 
     html, hard = _rov_member_block(st, item, csrf="t", back="/x")
-    assert "middel bestaat, niet gekoppeld" in html      # oranje
-    assert "geen middel" in html                          # rood
+    assert "means exists, not linked" in html      # oranje
+    assert "no means" in html                          # rood
     assert "skilllink_add" in html and "means_gap_add" in html
     # Puur informatief: het stoplicht voegt geen enkele harde blokkade toe.
     assert _rov_hard(st, item) == []
@@ -168,7 +168,7 @@ def test_gate_waarschuwt_bij_verweesde_koppelingen(tmp_path):
 
     item = _amend_item(st, rec, remove=["site monitoren"])
     msgs = " ".join(s["msg"] for s in _rov_signals(st, item))
-    assert "1 koppeling(en) wees" in msgs and "site_health" in msgs
+    assert "orphans 1 link(s)" in msgs and "site_health" in msgs
 
 
 def test_gate_waarschuwt_niet_bij_herformulering(tmp_path):
@@ -202,4 +202,4 @@ def test_gate_waarschuwing_telt_ook_autonome_ai_taken(tmp_path):
 
     item = _amend_item(st, rec, remove=["site monitoren"])
     msgs = " ".join(s["msg"] for s in _rov_signals(st, item))
-    assert "1 koppeling(en) wees" in msgs and "Codie" in msgs
+    assert "orphans 1 link(s)" in msgs and "Codie" in msgs

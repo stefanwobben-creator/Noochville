@@ -39,7 +39,7 @@ def test_editor_prefil_en_change_diff(tmp_path):
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
     # editor prefilt de huidige rol
-    assert "rov-editor" in frag and "Naam" in frag and "Building new features" in frag
+    assert "rov-editor" in frag and "Name" in frag and "Building new features" in frag
     # naam wijzigen -> rename in change; accountability toevoegen -> add_accountabilities
     cockpit2.dispatch(dd, "rov2_set", {"iid": [iid], "field": ["name"], "value": ["Web Developer"], "next": ["/"]}, username="guest")
     cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Bewaken van performance"], "next": ["/"]}, username="guest")
@@ -73,7 +73,7 @@ def test_layout_toevoegen_boven_en_groene_knop(tmp_path):
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
     assert "Welke spanning" not in frag                    # spanning-veld weg
     assert frag.find("rov-add") < frag.find("rov-list")    # toevoegen boven de lijst
-    assert "rov-grid" in frag and "rov-foot" in frag and "Vergadering sluiten" in frag
+    assert "rov-grid" in frag and "rov-foot" in frag and "Close meeting" in frag
 
 
 def test_sluiten_voert_consented_door(tmp_path):
@@ -96,7 +96,7 @@ def test_agenda_initialen_en_geen_kindlabel(tmp_path):
     it = cockpit2._Stores(dd).agenda.open()[0]
     assert it["title"] == "Website Developer" and it.get("by") == "SW"
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
-    assert "door SW" in frag and ">SW<" in frag                  # initialen-avatar
+    assert "by SW" in frag and ">SW<" in frag                  # initialen-avatar
     assert "rov-kind" not in frag and "chip muted'>open" not in frag   # geen kind-label/open-chip
     assert "list='rov-roles'" in frag and "<datalist" in frag    # smart-search
     assert "name='by'" not in frag                               # los initialen-veld weg
@@ -117,7 +117,7 @@ def test_consent_geblokkeerd_zonder_purpose(tmp_path):
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Data Analist"], "next": ["/"]}, username="guest")
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
-    assert "disabled>Neem voorstel aan" in frag and "rov2_consent" not in frag
+    assert "disabled>Adopt proposal" in frag and "rov2_consent" not in frag
     # consent-actie weigert ook serverside
     cockpit2.dispatch(dd, "rov2_consent", {"iid": [iid], "circle": [C], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).agenda.get(iid)["status"] == "open"
@@ -152,11 +152,11 @@ def test_rol_verwijderen_via_overleg(tmp_path):
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]}, username="guest")
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
     f = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
-    assert "rov-delrole" in f and "Rol verwijderen" in f
+    assert "rov-delrole" in f and "Remove role" in f
     # maak er een verwijder-voorstel van
     cockpit2.dispatch(dd, "rov2_setkind", {"iid": [iid], "kind": ["remove_role"], "next": ["/"]}, username="guest")
     f2 = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
-    assert "wordt <b>verwijderd</b>" in f2 and "terug naar wijzigen" in f2 and "Neem voorstel aan" in f2
+    assert "is <b>removed</b>" in f2 and "back to amend" in f2 and "Adopt proposal" in f2
     # consent + sluiten -> rol gearchiveerd (verweesd werk = advies, geen blok)
     cockpit2.dispatch(dd, "rov2_consent", {"iid": [iid], "circle": [C], "next": ["/"]}, username="guest")
     cockpit2.dispatch(dd, "rov2_end", {"circle": [C], "next": ["/"]}, username="guest")
@@ -168,15 +168,15 @@ def test_secretaris_gate_en_bevestiging_bij_sluiten(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]}, username="guest")
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
-    assert "Alleen de secretaris opent en sluit" in frag        # secretaris-gate (notitie)
+    assert "Only the secretary opens and closes" in frag        # secretaris-gate (notitie)
     assert "data-confirm=" in frag and "rov2_end" in frag        # bevestiging bij sluiten
-    assert "geen aangenomen voorstellen" in frag                 # 0 consented -> melding
+    assert "no adopted proposals" in frag                 # 0 consented -> melding
     # met een aangenomen voorstel telt de bevestiging mee
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
     cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Bewaken van iets"], "next": ["/"]}, username="guest")
     cockpit2.dispatch(dd, "rov2_consent", {"iid": [iid], "circle": [C], "next": ["/"]}, username="guest")
     f2 = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, csrf_token="t", fragment=True)
-    assert "1 aangenomen voorstel(len) worden doorgevoerd" in f2
+    assert "1 adopted proposal(s) will be written" in f2
 
 
 def test_diff_weergave_verwijderd_en_nieuw(tmp_path):
@@ -190,8 +190,8 @@ def test_diff_weergave_verwijderd_en_nieuw(tmp_path):
     # nieuwe accountability toevoegen -> als 'nieuw' gemarkeerd (is-new)
     cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": ["Bewaken van performance"], "next": ["/"]}, username="guest")
     frag = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
-    assert "is-del" in frag and "<s>" in frag and "herstel" in frag    # verwijderd = doorgestreept + herstel
-    assert "is-new" in frag and "chip green'>nieuw" in frag             # toegevoegd = nieuw
+    assert "is-del" in frag and "<s>" in frag and "restore" in frag    # verwijderd = doorgestreept + herstel
+    assert "is-new" in frag and "chip green'>new" in frag             # toegevoegd = nieuw
     # herstel zet 'm terug
     cockpit2.dispatch(dd, "rov2_acc_add", {"iid": [iid], "text": [bestaand], "next": ["/"]}, username="guest")
     ch = cockpit2._Stores(dd).agenda.get(iid)["change"]
@@ -213,7 +213,7 @@ def test_voorstel_meerdere_rollen(tmp_path):
     assert "rov-more" in frag                                          # '+1' in de agenda-rij
     assert frag.count("class='rovm") >= 2                              # twee wijziging-blokken
     # 'toevoegen aan voorstel' met bestaande/nieuwe rol
-    assert "Toevoegen aan voorstel" in frag and "rov2_add_to_group" in frag
+    assert "Add to proposal" in frag and "rov2_add_to_group" in frag
 
 
 def test_groep_consent_en_verwijderen(tmp_path):
@@ -239,6 +239,6 @@ def test_select_en_verwijderen(tmp_path):
     cockpit2.dispatch(dd, "rov2_add", {"circle": [C], "naam": ["Website Developer"], "next": ["/"]}, username="guest")
     iid = cockpit2._Stores(dd).agenda.open()[0]["id"]
     sel = cockpit2.render_roloverleg2(cockpit2._Stores(dd), C, iid=iid, csrf_token="t", fragment=True)
-    assert "rov-item on" in sel and "Toevoegen aan voorstel" in sel
+    assert "rov-item on" in sel and "Add to proposal" in sel
     cockpit2.dispatch(dd, "rov2_remove", {"iid": [iid], "circle": [C], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).agenda.open() == []

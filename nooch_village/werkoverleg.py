@@ -15,8 +15,8 @@ import time
 from nooch_village.util import atomic_write_json, read_json, synchronized, refuse
 
 STEPS = [("checkin", "Check-in"), ("checklist", "Checklist"), ("metrics", "Metrics"),
-         ("projecten", "Projecten"), ("agenda", "Agenda"), ("checkout", "Check-out"),
-         ("sluiten", "Sluiten")]
+         ("projecten", "Projects"), ("agenda", "Agenda"), ("checkout", "Check-out"),
+         ("sluiten", "Close")]
 
 
 class WerkoverlegStore:

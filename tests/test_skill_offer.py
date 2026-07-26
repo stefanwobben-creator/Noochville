@@ -130,7 +130,7 @@ def test_render_toont_aanbod_knop(tmp_path):
     st.projects.set_item_offer(pid, clid, item["id"],
                                {"skill": "openalex_evidence", "payload": {}, "payload_ok": True})
     frag = cockpit2.render_project(cockpit2._Stores(dd), pid, csrf_token="t", fragment=True)
-    assert "🤖 kan dit oppakken" in frag and "value='check_accept'" in frag
+    assert "🤖 can pick this up" in frag and "value='check_accept'" in frag
 
 
 # ── observability: elke stille fail-closed logt nu een STABIELE refuse-code ──────
