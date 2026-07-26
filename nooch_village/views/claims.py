@@ -18,15 +18,15 @@ from nooch_village.web_base import _banner, _e, _field, _page
 
 # Stoplicht → designsysteem-chip. Het prototype had een eigen rood/oranje/groen-palet;
 # de chip-varianten dekken exact dezelfde drie betekenissen.
-_CHIP = {"red": ("chip coral", "🔴 verboden"),
-         "orange": ("chip amber", "🟠 risico"),
-         "green": ("chip", "🟢 veilig"),
+_CHIP = {"red": ("chip coral", "🔴 forbidden"),
+         "orange": ("chip amber", "🟠 risk"),
+         "green": ("chip", "🟢 safe"),
          # Escaleren is geen kleur maar een weigering te oordelen: neutrale outline, zodat het
          # visueel niet meedoet in de rood-oranje-groen-schaal waar het ook inhoudelijk buiten valt.
-         "escaleren": ("chip outline", "⚖️ compliance beslist")}
+         "escaleren": ("chip outline", "⚖️ compliance decides")}
 
-_TABS = [("check", "Claim check"), ("werklijst", "Werklijst site-audit"),
-         ("database", "Termendatabase"), ("landen", "Per land")]
+_TABS = [("check", "Claim check"), ("werklijst", "Site-audit worklist"),
+         ("database", "Term database"), ("landen", "By country")]
 
 _MARKTEN = ("NL", "DE", "BE")
 
@@ -40,7 +40,7 @@ def bron_badge(bevinding: dict) -> str:
         return ""
     detail = bevinding.get("bron_detail") or ""
     titel = f" title='{_e(detail)}'" if detail else ""
-    return f"<span class='chip muted'{titel}>bron {_e(letter)}</span>"
+    return f"<span class='chip muted'{titel}>source {_e(letter)}</span>"
 
 
 def rol_voor(categorie: str) -> str:
@@ -73,62 +73,62 @@ def render_rapport(uitslag: dict, markten: list[str] | None = None,
     """De bevindingen van één scan. Los renderbaar, zodat de live scan hetzelfde
     HTML terugkrijgt als een gewone paginavernieuwing — één opmaak, geen kopie in JS."""
     if uitslag.get("error"):
-        return f"<div class='card'><b>De scan lukte niet</b><p class='muted'>{_e(uitslag['error'])}</p></div>"
+        return f"<div class='card'><b>The scan failed</b><p class='muted'>{_e(uitslag['error'])}</p></div>"
 
     bevindingen = uitslag.get("bevindingen", [])
     rood, oranje, groen = uitslag.get("rood", 0), uitslag.get("oranje", 0), uitslag.get("groen", 0)
     escaleren = uitslag.get("escaleren", 0)
     score = uitslag.get("score", 100)
-    oordeel = ("niet publiceerbaar — vervang de verboden termen" if rood else
-               "publiceerbaar zolang het genoemde bewijs erbij staat" if oranje else
-               "publiceerbaar (na de gebruikelijke legal-eindcheck)")
+    oordeel = ("not publishable — replace the forbidden terms" if rood else
+               "publishable as long as the stated evidence is included" if oranje else
+               "publishable (after the usual legal final check)")
     if escaleren:
-        oordeel += f" · {escaleren} punt(en) wachten op een oordeel van compliance"
+        oordeel += f" · {escaleren} item(s) awaiting a verdict from compliance"
 
     kop = (f"<div class='kpi-card'><div class='kpi-body'>"
            f"<span class='kpi-val'>{score}<span class='kpi-unit'>/100</span></span> "
-           f"<span class='{_CHIP['red'][0]}'>{rood} verboden</span> "
-           f"<span class='{_CHIP['orange'][0]}'>{oranje} risico</span> "
-           f"<span class='{_CHIP['green'][0]}'>{groen} veilig</span>"
-           + (f" <span class='{_CHIP['escaleren'][0]}'>{escaleren} te beoordelen</span>"
+           f"<span class='{_CHIP['red'][0]}'>{rood} forbidden</span> "
+           f"<span class='{_CHIP['orange'][0]}'>{oranje} risk</span> "
+           f"<span class='{_CHIP['green'][0]}'>{groen} safe</span>"
+           + (f" <span class='{_CHIP['escaleren'][0]}'>{escaleren} to be judged</span>"
               if escaleren else "")
-           + f"</div><div class='muted'>compliance-score — escaleren telt niet mee, daar heeft "
-             f"de tool geen oordeel over{_e(' · ' + bron if bron else '')}</div></div>")
+           + f"</div><div class='muted'>compliance score — escalations do not count, the tool "
+             f"has no verdict on those{_e(' · ' + bron if bron else '')}</div></div>")
 
     landen = _landnotities(uitslag, markten or [], db)
 
     if not bevindingen:
-        lijst = ("<div class='card'><p>Geen vlagwoorden gevonden.</p>"
-                 "<p class='muted'>Let op: dit toetst alleen bekende termen. Nieuwe of creatieve "
-                 "formuleringen gaan altijd langs compliance.</p></div>")
+        lijst = ("<div class='card'><p>No flagged words found.</p>"
+                 "<p class='muted'>Note: this only checks known terms. New or creative "
+                 "wordings always go past compliance.</p></div>")
     else:
         volgorde = {"red": 0, "escaleren": 1, "orange": 2, "green": 3}
         rijen = ""
         for b in sorted(bevindingen, key=lambda x: volgorde.get(x["stoplicht"], 9)):
             cls, label = _CHIP.get(b["stoplicht"], _CHIP["green"])
-            alt = (f"<div class='muted'><b>Alternatief:</b> {_e(b['alternatief'])}</div>"
+            alt = (f"<div class='muted'><b>Alternative:</b> {_e(b['alternatief'])}</div>"
                    if b["stoplicht"] != "green" else "")
-            advies = (f"<div class='muted'>Advies als je tóch moet kiezen: "
+            advies = (f"<div class='muted'>Advice if you must choose anyway: "
                       f"{_e(b.get('stoplicht_advies', ''))}</div>"
                       if b.get("stoplicht_advies") else "")
             rijen += (f"<div class='c2-sec'>"
                       f"<span class='{cls}'>{label}</span> <b>{_e(b['term'])}</b>"
                       f"<span class='pill'>{_e(b['categorie'])}</span>"
-                      f"<span class='pill'>rol: {_e(_rol_label(b))}</span>"
+                      f"<span class='pill'>role: {_e(_rol_label(b))}</span>"
                       f"{bron_badge(b)}"
-                      f"<div>Gevonden: <i>{_e(', '.join(b['gevonden']))}</i> — {_e(b['waarom'])}</div>"
+                      f"<div>Found: <i>{_e(', '.join(b['gevonden']))}</i> — {_e(b['waarom'])}</div>"
                       f"{alt}{advies}</div>")
-        lijst = f"<div class='card'><h3>Bevindingen</h3>{rijen}</div>"
+        lijst = f"<div class='card'><h3>Findings</h3>{rijen}</div>"
 
     incontext_html = _in_context(uitslag.get("in_context", []))
     ctx_noot = ""
     if (rood or oranje) and not uitslag.get("context_beoordeeld", False):
-        ctx_noot = ("<p class='muted'>⚠ Context niet automatisch beoordeeld (geen LLM beschikbaar) — "
-                    "elke gevlagde term telt mee, ook waar hij alleen wordt besproken.</p>")
+        ctx_noot = ("<p class='muted'>⚠ Context not judged automatically (no LLM available) — "
+                    "every flagged term counts, including where it is only discussed.</p>")
 
     preview = _preview(uitslag.get("tekst", ""), bevindingen)
     acties = _rapport_acties(uitslag, csrf_token, kan_bord, bron)
-    return (f"<div class='card'>{kop}<p class='muted'>Eindoordeel: {_e(oordeel)}</p>{ctx_noot}{acties}</div>"
+    return (f"<div class='card'>{kop}<p class='muted'>Final verdict: {_e(oordeel)}</p>{ctx_noot}{acties}</div>"
             f"{landen}{lijst}{incontext_html}{preview}")
 
 
@@ -143,14 +143,14 @@ def _in_context(incontext: list[dict]) -> str:
         rijen += (f"<div class='c2-sec'>"
                   f"<span class='{cls}'>{label}</span> <b>{_e(b.get('term', ''))}</b>"
                   f"<span class='pill'>{_e(b.get('categorie', ''))}</span>"
-                  f"<div>Gevonden: <i>{_e(', '.join(b.get('gevonden', [])))}</i></div>"
-                  + (f"<div class='muted'><b>In context, geen claim:</b> {_e(b.get('context_reden', ''))}</div>"
+                  f"<div>Found: <i>{_e(', '.join(b.get('gevonden', [])))}</i></div>"
+                  + (f"<div class='muted'><b>In context, no claim:</b> {_e(b.get('context_reden', ''))}</div>"
                      if b.get("context_reden") else "")
                   + "</div>")
-    return (f"<div class='card'><h3>In context — geen claim ({len(incontext)})</h3>"
-            f"<p class='muted'>Deze termen komen wel voor, maar er wordt geen claim mee gedaan "
-            f"(kritiek, ontkenning, citaat of uitleg). Ze tellen niet mee in de score. Loop ze "
-            f"steekproefsgewijs na als je twijfelt.</p>{rijen}</div>")
+    return (f"<div class='card'><h3>In context — no claim ({len(incontext)})</h3>"
+            f"<p class='muted'>These terms do occur, but no claim is being made with them "
+            f"(criticism, denial, quote or explanation). They do not count towards the score. Spot-check "
+            f"them if you have doubts.</p>{rijen}</div>")
 
 
 def _rol_label(bevinding: dict) -> str:
@@ -165,7 +165,7 @@ def _rapport_acties(uitslag: dict, csrf_token: str, kan_bord: bool, bron: str) -
     if not (uitslag.get("rood") or uitslag.get("oranje") or uitslag.get("escaleren")):
         return ""
     knoppen = ("<button class='btn sm ghost' type='button' data-claims-kopieer='1'>"
-               "Kopieer rapport</button>")
+               "Copy report</button>")
     if kan_bord and csrf_token:
         payload = urllib.parse.quote(_bord_payload(uitslag, bron))
         knoppen += (f"<form method='post' action='/action' class='qadd-row'>"
@@ -174,7 +174,7 @@ def _rapport_acties(uitslag: dict, csrf_token: str, kan_bord: bool, bron: str) -
                     f"<input type='hidden' name='bron' value='{_e(bron)}'>"
                     f"<input type='hidden' name='bevindingen' value='{_e(payload)}'>"
                     f"<button class='btn sm ok' name='action' value='claims_to_board'>"
-                    f"Zet op het bord</button></form>")
+                    f"Put on the board</button></form>")
     return f"<div class='qadd-row'>{knoppen}</div>"
 
 
@@ -203,7 +203,7 @@ def _landnotities(uitslag: dict, markten: list[str], db: dict | None) -> str:
             regels.append(f"<div class='c2-sec'><b>{_e(code)}</b> — {_e(tekst)}</div>")
     if not regels:
         return ""
-    return f"<div class='card'><h3>Marktspecifiek</h3>{''.join(regels)}</div>"
+    return f"<div class='card'><h3>Market-specific</h3>{''.join(regels)}</div>"
 
 
 def _preview(tekst: str, bevindingen: list[dict]) -> str:
@@ -223,8 +223,8 @@ def _preview(tekst: str, bevindingen: list[dict]) -> str:
     stukken = _e(tekst[:8000])
     for gevonden, teken in sorted(merk.items(), key=lambda kv: -len(kv[0])):
         stukken = stukken.replace(_e(gevonden), f"<mark>{teken} {_e(gevonden)}</mark>")
-    afgekapt = "<p class='muted'>(tekst afgekapt op 8000 tekens)</p>" if len(tekst) > 8000 else ""
-    return (f"<div class='card'><h3>Tekst met markeringen</h3>"
+    afgekapt = "<p class='muted'>(text truncated at 8000 characters)</p>" if len(tekst) > 8000 else ""
+    return (f"<div class='card'><h3>Text with markings</h3>"
             f"<div class='editor'><p>{stukken}</p></div>{afgekapt}</div>")
 
 
@@ -246,23 +246,23 @@ def render_bordresultaat(rapport: dict) -> str:
             f"<span class='pill'>@{_e(t['owner'].split('__')[-1])}</span></div>"
             for t in aangemaakt)
         totaal = rapport.get("totaal", len(aangemaakt))
-        meer = (f"<p class='muted'>{totaal - len(aangemaakt)} verder aangemaakt, "
-                f"zichtbaar op het bord.</p>" if totaal > len(aangemaakt) else "")
-        kop = f"<h3>{totaal} taak/taken aangemaakt → {per}</h3>{meer}"
+        meer = (f"<p class='muted'>{totaal - len(aangemaakt)} more created, "
+                f"visible on the board.</p>" if totaal > len(aangemaakt) else "")
+        kop = f"<h3>{totaal} task(s) created → {per}</h3>{meer}"
     else:
         rijen = ""
-        kop = (f"<h3>0 nieuw</h3><p class='muted'>Alle "
-               f"{rapport.get('overgeslagen', 0)} bevinding(en) staan al als taak of "
-               f"werklijst-item.</p>")
+        kop = (f"<h3>0 new</h3><p class='muted'>All "
+               f"{rapport.get('overgeslagen', 0)} finding(s) already exist as a task or "
+               f"worklist item.</p>")
     if lopend:
         bestaand = "".join(
             (f"<div class='c2-sec'><a href='/project?pid={_e(x['pid'])}'>{_e(x['titel'])}</a>"
-             f"<span class='pill'>bestaande taak</span></div>")
+             f"<span class='pill'>existing task</span></div>")
             if x.get("soort") == "taak" else
             (f"<div class='c2-sec'><a href='/claims?tab=werklijst'>#{_e(str(x.get('nr')))} "
-             f"{_e(x['titel'])}</a><span class='pill'>werklijst</span></div>")
+             f"{_e(x['titel'])}</a><span class='pill'>worklist</span></div>")
             for x in lopend)
-        rijen += f"<h3>Loopt al</h3>{bestaand}"
+        rijen += f"<h3>Already running</h3>{bestaand}"
     return f"<div class='card'>{kop}{rijen}</div>"
 
 
@@ -278,18 +278,18 @@ def _tab_check(csrf_token: str, url: str, tekst: str, markten: list[str], rappor
         f"{' checked' if m in markten else ''}> {m}</label>"
         for m in _MARKTEN)
     return (f"<div class='card'>"
-            f"<h3>Check een pagina of een stuk tekst</h3>"
+            f"<h3>Check a page or a piece of text</h3>"
             f"<form method='post' action='/claims/scan' class='qadd-form' id='claims-form'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-            f"{_field('URL (optioneel)', 'url', kind='url', value=url, fid='f-claims-url', placeholder='https://nooch.earth/')}"
-            f"{_field('Of plak de tekst', 'tekst', kind='textarea', value=tekst, fid='f-claims-tekst', placeholder='Copy, social post, productbeschrijving…')}"
-            f"<span class='att-lbl'>Markt</span><div class='chip-wrap'>{vinkjes}</div>"
+            f"{_field('URL (optional)', 'url', kind='url', value=url, fid='f-claims-url', placeholder='https://nooch.earth/')}"
+            f"{_field('Or paste the text', 'tekst', kind='textarea', value=tekst, fid='f-claims-tekst', placeholder='Copy, social post, product description…')}"
+            f"<span class='att-lbl'>Market</span><div class='chip-wrap'>{vinkjes}</div>"
             f"<div class='qadd-row'>"
             f"<button class='btn ok' type='submit' id='claims-knop'>Check claims</button>"
             f"<span class='muted' id='claims-status'></span></div>"
             f"</form>"
-            f"<p class='muted'>Een URL wordt door de server opgehaald, niet door je browser — "
-            f"interne adressen worden geweigerd.</p></div>"
+            f"<p class='muted'>A URL is fetched by the server, not by your browser — "
+            f"internal addresses are refused.</p></div>"
             f"<div id='claims-rapport'>{rapport}</div>")
 
 
@@ -307,16 +307,16 @@ def _tab_werklijst(db: dict, csrf_token: str, kan_cureren: bool) -> str:
                    f"<input type='hidden' name='nr' value='{w['nr']}'>"
                    f"<label class='att-lbl' for='f-st-{w['nr']}'>Status #{w['nr']}</label>"
                    f"<select id='f-st-{w['nr']}' name='status'>{opties}</select>"
-                   f"<button class='btn sm' name='action' value='claims_work_status'>Zet</button>"
+                   f"<button class='btn sm' name='action' value='claims_work_status'>Set</button>"
                    f"</form>")
         else:
             cel = f"<span class='chip muted'>{_e(w.get('status', 'open'))}</span>"
         rijen += (f"<tr><td class='num'>{w['nr']}</td>"
                   f"<td>{_e(w.get('claim', ''))}<div class='muted'>{_e(w.get('herformulering', ''))}</div></td>"
                   f"<td><span class='{cls}'>{label}</span></td><td>{cel}</td></tr>")
-    return (f"<div class='card'><h3>Site-audit nooch.earth</h3>"
-            f"<p class='muted'>Statuswijzigingen zijn compliance-domein en worden in de "
-            f"claims-database opgeslagen — ze overleven een herstart.</p>"
+    return (f"<div class='card'><h3>Site audit nooch.earth</h3>"
+            f"<p class='muted'>Status changes are compliance domain and are stored in the "
+            f"claims database — they survive a restart.</p>"
             f"<table class='mtab'>{rijen}</table></div>")
 
 
@@ -328,7 +328,7 @@ def _intrek_knop(patroon: str, csrf_token: str) -> str:
             f"<input type='hidden' name='next' value='/claims?tab=database'>"
             f"<input type='hidden' name='patroon' value='{_e(patroon)}'>"
             f"<button class='btn' name='action' value='claims_term_retract' "
-            f"title='Trek deze term in (een in-git seed-term blijft staan)'>Intrekken</button></form>")
+            f"title='Retract this term (an in-git seed term stays)'>Retract</button></form>")
 
 
 def _tab_database(db: dict, zoek: str, csrf_token: str = "", kan_cureren: bool = False) -> str:
@@ -348,15 +348,15 @@ def _tab_database(db: dict, zoek: str, csrf_token: str = "", kan_cureren: bool =
                   f"<td><span class='{cls}'>{label}</span></td>"
                   f"<td>{_e(t.get('categorie',''))}</td>"
                   f"<td class='muted'>{_e(t.get('alternatief',''))}</td>{actie}</tr>")
-    leeg = "<p class='muted'>Geen term gevonden.</p>" if not getoond else ""
-    return (f"<div class='card'><h3>Termendatabase</h3>"
+    leeg = "<p class='muted'>No term found.</p>" if not getoond else ""
+    return (f"<div class='card'><h3>Term database</h3>"
             f"<form method='get' action='/claims'>"
             f"<input type='hidden' name='tab' value='database'>"
-            f"<label class='att-lbl' for='f-claims-zoek'>Zoeken</label>"
+            f"<label class='att-lbl' for='f-claims-zoek'>Search</label>"
             f"<input class='kn-searchbox' type='search' id='f-claims-zoek' name='q' "
             f"value='{_e(zoek)}' placeholder='duurzaam, carbon, recycled…'>"
             f"</form>"
-            f"<p class='muted'>{getoond} van {len(db.get('termen', []))} termen</p>"
+            f"<p class='muted'>{getoond} of {len(db.get('termen', []))} terms</p>"
             f"<table class='mtab'>{rijen}</table>{leeg}</div>")
 
 
@@ -368,11 +368,11 @@ def _tab_landen(db: dict) -> str:
         punten = "".join(f"<li>{_e(p)}</li>" for p in land.get("punten", []))
         kaarten += (f"<div class='card'><h3>{_e(land.get('name', code))}</h3>"
                     f"<ul>{punten}</ul></div>")
-    kaarten += ("<div class='card'><h3>Concurrenten checken</h3>"
-                "<p>Mag, voor intern marktinzicht en onderbouwing van "
-                "\"voor zover wij weten\"-claims. Nooit publiek maken als \"merk X pleegt "
-                "greenwashing\": dat is zelf een vergelijkende claim en in Duitsland een "
-                "uitnodiging voor een tegen-Abmahnung.</p></div>")
+    kaarten += ("<div class='card'><h3>Checking competitors</h3>"
+                "<p>Allowed, for internal market insight and to substantiate "
+                "\"as far as we know\" claims. Never publish it as \"brand X commits "
+                "greenwashing\": that is itself a comparative claim and in Germany an "
+                "invitation for a counter-Abmahnung.</p></div>")
     return kaarten
 
 
@@ -382,23 +382,23 @@ def _blok_beheer(db: dict, csrf_token: str) -> str:
     opties = "".join(f"<option>{_e(c)}</option>" for c in categorieen)
     stoplichten = "".join(f"<option value='{_e(s)}'>{_e(_CHIP[s][1])}</option>"
                           for s in claims_db.STOPLICHTEN)
-    return (f"<div class='card'><h3>Term toevoegen aan de database</h3>"
-            f"<p class='muted'>Je schrijft in de claims-database: de bron voor deze checker én "
-            f"voor de <code>claims_check</code>-skill. De wijziging bumpt de versie en komt in "
-            f"de audit-trail.</p>"
+    return (f"<div class='card'><h3>Add a term to the database</h3>"
+            f"<p class='muted'>You are writing into the claims database: the source for this checker and "
+            f"for the <code>claims_check</code> skill. The change bumps the version and lands in "
+            f"the audit trail.</p>"
             f"<form method='post' action='/action' class='qadd-form'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='next' value='/claims?tab=werklijst'>"
             f"{_field('Term', 'term', fid='f-nt-term', required=True, placeholder='gifvrij / toxin-free')}"
-            f"{_field('Zoekpatroon (regex)', 'patroon', fid='f-nt-patroon', required=True, placeholder='gifvrij|toxin.?free')}"
-            f"<label class='att-lbl' for='f-nt-stoplicht'>Stoplicht</label>"
+            f"{_field('Search pattern (regex)', 'patroon', fid='f-nt-patroon', required=True, placeholder='gifvrij|toxin.?free')}"
+            f"<label class='att-lbl' for='f-nt-stoplicht'>Traffic light</label>"
             f"<select id='f-nt-stoplicht' name='stoplicht'>{stoplichten}</select>"
-            f"<label class='att-lbl' for='f-nt-categorie'>Categorie</label>"
+            f"<label class='att-lbl' for='f-nt-categorie'>Category</label>"
             f"<select id='f-nt-categorie' name='categorie'>{opties}</select>"
-            f"{_field('Waarom (regelgeving/bron)', 'waarom', fid='f-nt-waarom')}"
-            f"{_field('Veilig alternatief', 'alternatief', fid='f-nt-alternatief')}"
+            f"{_field('Why (regulation/source)', 'waarom', fid='f-nt-waarom')}"
+            f"{_field('Safe alternative', 'alternatief', fid='f-nt-alternatief')}"
             f"<div class='qadd-row'><button class='btn ok' name='action' value='claims_term_add'>"
-            f"Voeg toe</button></div></form></div>")
+            f"Add</button></div></form></div>")
 
 
 # ── De pagina ───────────────────────────────────────────────────────────────
@@ -414,11 +414,11 @@ def render_claims(csrf_token: str = "", msg: str = "", tab: str = "check",
     except claims_db.ClaimsDbError as e:
         # Fail-closed: zonder database geen toets. Liever een zichtbare fout dan een stille 0.
         inner = (f"{_DS_LINK}{_nav()}<div class='c2-wrap'><div class='c2-main'>"
-                 f"<h1>Claims-checker</h1>"
-                 f"<div class='card'><b>De claims-database kon niet geladen worden</b>"
-                 f"<p class='muted'>{_e(str(e))} — de checker doet bewust niets zonder database.</p>"
+                 f"<h1>Claims checker</h1>"
+                 f"<div class='card'><b>The claims database could not be loaded</b>"
+                 f"<p class='muted'>{_e(str(e))} — the checker deliberately does nothing without a database.</p>"
                  f"</div></div></div>")
-        return _page("Claims-checker", inner)
+        return _page("Claims checker", inner)
 
     markten = markten if markten is not None else ["NL"]
     if tab == "check":
@@ -437,19 +437,19 @@ def render_claims(csrf_token: str = "", msg: str = "", tab: str = "check",
     # genegeerd — aanwezigheid wint, zodat een juridische term nooit stil verdwijnt.
     conflict = ""
     for c in (db.get("_conflicten") or []):
-        conflict += (f"<div class='card'><b>Intrekking genegeerd</b>"
-                     f"<p class='muted'>“{_e(c)}” staat in de seed (via git) en blijft daarom staan; "
-                     f"een runtime-intrekking kan een in-git term niet wegdrukken. Trek 'm zo nodig "
-                     f"via een PR op de seed in.</p></div>")
+        conflict += (f"<div class='card'><b>Retraction ignored</b>"
+                     f"<p class='muted'>“{_e(c)}” is in the seed (via git) and therefore stays; "
+                     f"a runtime retraction cannot override an in-git term. Retract it via a PR "
+                     f"on the seed if you need to.</p></div>")
 
     versie = (db.get("meta") or {}).get("versie", "?")
     kader = " · ".join((db.get("meta") or {}).get("regelgeving", {}).values())
-    main = (f"<div class='c2-main'><h1>Claims-checker</h1>"
-            f"<p class='muted'>EU EmpCo 2024/825 + ACM-leidraad · database v{_e(versie)} · "
-            f"beheer: compliance · geen juridisch advies</p>"
+    main = (f"<div class='c2-main'><h1>Claims checker</h1>"
+            f"<p class='muted'>EU EmpCo 2024/825 + ACM guidance · database v{_e(versie)} · "
+            f"owner: compliance · not legal advice</p>"
             f"{_banner(msg)}{conflict}{_tabbalk(tab)}{body}"
             f"<p class='muted'>{_e(kader)}</p></div>")
-    return _page("Claims-checker", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>{_SCAN_JS}")
+    return _page("Claims checker", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>{_SCAN_JS}")
 
 
 # Voortgang zonder full-page-wachtscherm: de scan gaat via fetch, de knop gaat op slot en de
@@ -466,21 +466,21 @@ _SCAN_JS = """<script>(function(){
    if(!window.fetch)return;                      // geen fetch → gewone POST, server rendert alles
    e.preventDefault();bezig=true;if(knop)knop.disabled=true;
    var heeftUrl=(f.elements['url']&&f.elements['url'].value.trim())!=='';
-   fase(heeftUrl?'Pagina ophalen…':'Scannen…');
-   if(heeftUrl){timers.push(setTimeout(function(){fase('Scannen…');},1200));}
-   timers.push(setTimeout(function(){fase('Rapport opmaken…');},2600));
+   fase(heeftUrl?'Fetching page…':'Scanning…');
+   if(heeftUrl){timers.push(setTimeout(function(){fase('Scanning…');},1200));}
+   timers.push(setTimeout(function(){fase('Building report…');},2600));
    var body=new FormData(f);body.set('frag','1');
    fetch('/claims/scan',{method:'POST',body:new URLSearchParams(body),credentials:'same-origin'})
     .then(function(r){return r.text();})
     .then(function(h){doel.innerHTML=h;klaar();doel.scrollIntoView({block:'nearest'});})
-    .catch(function(){doel.innerHTML="<div class='card'><b>De scan lukte niet</b>"+
-      "<p class='muted'>Geen verbinding met de server. Plak de tekst handmatig en probeer opnieuw.</p></div>";
+    .catch(function(){doel.innerHTML="<div class='card'><b>The scan failed</b>"+
+      "<p class='muted'>No connection to the server. Paste the text manually and try again.</p></div>";
       klaar();});
  });
  document.addEventListener('click',function(e){
    var k=e.target.closest&&e.target.closest('[data-claims-kopieer]');if(!k)return;
    var r=document.getElementById('claims-rapport');if(!r||!navigator.clipboard)return;
    navigator.clipboard.writeText(r.innerText).then(function(){
-     k.textContent='Gekopieerd';setTimeout(function(){k.textContent='Kopieer rapport';},1600);});
+     k.textContent='Copied';setTimeout(function(){k.textContent='Copy report';},1600);});
  });
 })();</script>"""

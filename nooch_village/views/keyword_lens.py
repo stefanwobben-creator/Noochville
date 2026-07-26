@@ -22,17 +22,18 @@ from nooch_village.cockpit2_util import _DS_LINK, _nav
 from nooch_village.keyword_layer import build_keyword_layer, converges
 
 _LENSES = [
-    ("marketing", "Marketing", "volume + richting — waar maak je content voor"),
-    ("scientist", "Scientist", "nieuwe signalen — opkomst vs. blip"),
-    ("trends", "Trends & Competition", "kansrijkheid + suggesties"),
-    ("library", "Library", "convergentie + nominatie-wachtrij"),
-    ("kroniek", "Kroniek", "beslissingsgeschiedenis — wie, woord, accept/reject, reden"),
+    ("marketing", "Marketing", "volume + direction — what do you make content for"),
+    ("scientist", "Scientist", "new signals — emergence vs. blip"),
+    ("trends", "Trends & Competition", "opportunity + suggestions"),
+    ("library", "Library", "convergence + nomination queue"),
+    ("kroniek", "Chronicle", "decision history — who, word, accept/reject, reason"),
 ]
 _LENS_KEYS = {k for k, _l, _d in _LENSES}
 
+# Display-mapping: de sleutels blijven de opgeslagen signaal-/statuswaarden.
 _STATUS_CHIP = {"approved": "chip green", "escalated": "chip amber",
                 "forbidden": "chip coral"}
-_SIGNAL_LABEL = {"emergence": "opkomst", "trend": "stijgend", "peak": "blip", "flat": "vlak"}
+_SIGNAL_LABEL = {"emergence": "emerging", "trend": "rising", "peak": "blip", "flat": "flat"}
 _SIGNAL_CHIP = {"emergence": "chip green", "trend": "chip green",
                 "peak": "chip amber", "flat": "chip muted"}
 _SIGNAL_ORDER = {"emergence": 0, "trend": 1, "peak": 2, "flat": 3}
@@ -83,15 +84,15 @@ def _lens_marketing(rows: list) -> str:
              (r.get("status") == "approved" and r.get("function") == "doelwit")]
     items.sort(key=lambda r: -(r.get("volume") or 0))
     if not items:
-        return _leeg("Nog geen woorden met volume. Zet de verrijking aan (Keywords Everywhere, GSC) "
-                     "zodat volume en richting binnenkomen.")
+        return _leeg("No words with volume yet. Switch the enrichment on (Keywords Everywhere, GSC) "
+                     "so volume and direction come in.")
     body = "".join(
         f"<tr><td>{_e(r['term'])}</td><td>{_status_chip(r['status'])}</td>"
         f"<td class='num'>{_num(r.get('volume'))}</td>"
         f"<td>{_e(r.get('direction') or '—')}</td>"
         f"<td class='num'>{_num(r.get('opportunity'))}</td></tr>" for r in items)
-    return _table("<th>Woord</th><th>Status</th><th class='num'>Volume</th><th>Richting</th>"
-                  "<th class='num'>Kansrijkheid</th>", body)
+    return _table("<th>Word</th><th>Status</th><th class='num'>Volume</th><th>Direction</th>"
+                  "<th class='num'>Opportunity</th>", body)
 
 
 def _lens_scientist(rows: list) -> str:
@@ -100,24 +101,24 @@ def _lens_scientist(rows: list) -> str:
                               -(r.get("recent_sustained") or 0)))
     signalen = [r for r in items if r.get("is_signal")]
     if not items:
-        return _leeg("Nog geen trend-observaties. De dagelijkse trend-herindexering (Sid) vult de laag.")
-    tel = (f"<p class='muted'><b>{len(signalen)}</b> van {len(items)} termen zijn een écht signaal "
-           f"(opkomst of stijgend, geen blip).</p>")
+        return _leeg("No trend observations yet. The daily trend reindex (Sid) fills the layer.")
+    tel = (f"<p class='muted'><b>{len(signalen)}</b> of {len(items)} terms are a real signal "
+           f"(emerging or rising, not a blip).</p>")
     body = "".join(
         f"<tr><td>{_e(r['term'])}</td><td>{_signal_chip(r.get('signal_type'))}</td>"
         f"<td class='num'>{_num(r.get('recent_sustained'))}</td>"
         f"<td class='num'>{_num(r.get('peak'))}</td>"
         f"<td>{_e(_window(r))}</td>"
         f"<td class='num'>{'✓' if r.get('is_signal') else '—'}</td></tr>" for r in items)
-    return tel + _table("<th>Term</th><th>Signaal</th><th class='num'>Recent</th>"
-                        "<th class='num'>Piek</th><th>Venster</th><th class='num'>Signaal?</th>", body)
+    return tel + _table("<th>Term</th><th>Signal</th><th class='num'>Recent</th>"
+                        "<th class='num'>Peak</th><th>Window</th><th class='num'>Signal?</th>", body)
 
 
 def _lens_trends(rows: list) -> str:
     items = [r for r in rows if r.get("in_library")]
     items.sort(key=lambda r: -(r.get("opportunity") or 0))
     if not items:
-        return _leeg("Nog geen geëvalueerde keywords. De bronnen (Trends, GSC, KE) voeden de bibliotheek.")
+        return _leeg("No evaluated keywords yet. The sources (Trends, GSC, KE) feed the library.")
     body = "".join(
         f"<tr><td>{_e(r['term'])}</td><td>{_status_chip(r.get('status'))}</td>"
         f"<td class='num'>{_num(r.get('volume'))}</td>"
@@ -125,13 +126,13 @@ def _lens_trends(rows: list) -> str:
         f"<td class='num'><b>{_num(r.get('opportunity'))}</b></td>"
         f"<td>{_e(r.get('source') or '—')}</td></tr>" for r in items)
     tabel = _table("<th>Keyword</th><th>Status</th><th class='num'>Volume</th>"
-                   "<th class='num'>Concurrentie</th><th class='num'>Kansrijkheid</th><th>Bron</th>", body)
+                   "<th class='num'>Competition</th><th class='num'>Opportunity</th><th>Source</th>", body)
     sugg = [r for r in items if r.get("status") == "approved"][:8]
     if sugg:
         chips = "".join(f"<span class='chip green'>{_e(r['term'])} "
                         f"<span class='muted'>· {_num(r.get('opportunity'))}</span></span> " for r in sugg)
-        tabel += (f"<div class='c2-sec'><h2>Suggesties</h2><p class='muted'>Goedgekeurde, kansrijke "
-                  f"keywords om op te sturen (content of linkbuilding).</p>{chips}</div>")
+        tabel += (f"<div class='c2-sec'><h2>Suggestions</h2><p class='muted'>Approved, promising "
+                  f"keywords to steer on (content or link building).</p>{chips}</div>")
     return tabel
 
 
@@ -145,12 +146,12 @@ def _lens_library(rows: list, pending: list, csrf: str, nxt: str, can_decide: bo
             f"<td>{_signal_chip(r.get('signal_type'))}</td>"
             f"<td class='num'>{_num(r.get('volume'))}</td>"
             f"<td>{_e(r.get('direction') or '—')}</td></tr>" for r in conv)
-        conv_html = ("<p class='muted'>Termen waar signaal, volume en status samenkomen — hier loont "
-                     "curatie het meest.</p>" + _table("<th>Term</th><th>Status</th><th>Signaal</th>"
-                     "<th class='num'>Volume</th><th>Richting</th>", body))
+        conv_html = ("<p class='muted'>Terms where signal, volume and status converge — this is where "
+                     "curation pays off most.</p>" + _table("<th>Term</th><th>Status</th><th>Signal</th>"
+                     "<th class='num'>Volume</th><th>Direction</th>", body))
     else:
-        conv_html = _leeg("Nog geen convergentie: geen term waar een écht signaal én meetbaar "
-                          "volume/open status samenkomen.")
+        conv_html = _leeg("No convergence yet: no term where a real signal and measurable "
+                          "volume/open status come together.")
 
     # daaronder: de pending nominatie-wachtrij — alleen Lara beslist (accept/reject)
     if pending:
@@ -161,46 +162,46 @@ def _lens_library(rows: list, pending: list, csrf: str, nxt: str, can_decide: bo
                 acties = (
                     f"<form method='post' action='/action' class='qadd-row'>"
                     f"{_hid(csrf, 'kw_nom_accept', nxt, {'term': term, 'status': 'approved'})}"
-                    f"<button class='btn ok'>✓ neem aan</button></form>"
+                    f"<button class='btn ok'>✓ accept</button></form>"
                     f"<form method='post' action='/action' class='qadd-row'>"
                     f"{_hid(csrf, 'kw_nom_reject', nxt, {'term': term})}"
-                    f"<input type='text' name='reason' placeholder='reden voor afwijzing (verplicht)'>"
-                    f"<button class='btn no'>✗ wijs af</button></form>")
+                    f"<input type='text' name='reason' placeholder='reason for rejection (required)'>"
+                    f"<button class='btn no'>✗ reject</button></form>")
             else:
-                acties = "<span class='muted'>alleen Lara beslist</span>"
+                acties = "<span class='muted'>only Lara decides</span>"
             rijen += (f"<div class='card'><b>{_e(term)}</b> "
-                      f"<span class='muted'>genomineerd door {_e(it.get('by') or '—')} · "
+                      f"<span class='muted'>nominated by {_e(it.get('by') or '—')} · "
                       f"{_e(it.get('created_at') or '')}</span><div class='qadd-row'>{acties}</div></div>")
-        queue = (f"<div class='c2-sec'><h2>Nominatie-wachtrij ({len(pending)})</h2>"
-                 f"<p class='muted'>Genomineerde keywords wachten op Lara's oordeel. Aannemen schrijft "
-                 f"naar de woordenschat; afwijzen vereist een reden. Beide worden in de Kroniek geborgd.</p>"
+        queue = (f"<div class='c2-sec'><h2>Nomination queue ({len(pending)})</h2>"
+                 f"<p class='muted'>Nominated keywords await Lara's verdict. Accepting writes "
+                 f"to the library; rejecting requires a reason. Both are recorded in the Chronicle.</p>"
                  f"{rijen}</div>")
     else:
-        queue = ("<div class='c2-sec'><h2>Nominatie-wachtrij</h2>"
-                 "<p class='muted'>Geen openstaande nominaties.</p></div>")
+        queue = ("<div class='c2-sec'><h2>Nomination queue</h2>"
+                 "<p class='muted'>No open nominations.</p></div>")
     return conv_html + queue
 
 
 def _lens_kroniek(kroniek: list) -> str:
     if not kroniek:
-        return _leeg("Nog geen beslissingen geborgd. Zodra Lara een nominatie aanneemt of afwijst, "
-                     "verschijnt hier de geschiedenis.")
+        return _leeg("No decisions recorded yet. As soon as Lara accepts or rejects a nomination, "
+                     "the history appears here.")
     import time as _t
     rows = sorted(kroniek, key=lambda r: -(r.get("ts") or 0))
     body = ""
     for r in rows:
         dec = r.get("decision")
         chip = "chip green" if dec == "accept" else "chip coral"
-        lbl = "aangenomen" if dec == "accept" else "afgewezen"
+        lbl = "accepted" if dec == "accept" else "rejected"
         when = _t.strftime("%Y-%m-%d %H:%M", _t.localtime(r.get("ts"))) if r.get("ts") else "—"
         body += (f"<tr><td>{_e(r.get('term') or '—')}</td>"
                  f"<td><span class='{chip}'>{lbl}</span></td>"
                  f"<td>{_e(r.get('reason') or '—')}</td>"
                  f"<td>{_e(r.get('role_id') or '—')}</td>"
                  f"<td>{_e(when)}</td></tr>")
-    return ("<p class='muted'>Elke nominatie-beslissing, append-only geborgd. Dit is het geheugen "
-            "van de woordenschat-curatie.</p>" + _table(
-                "<th>Woord</th><th>Beslissing</th><th>Reden</th><th>Door</th><th>Wanneer</th>", body))
+    return ("<p class='muted'>Every nomination decision, recorded append-only. This is the memory "
+            "of the library curation.</p>" + _table(
+                "<th>Word</th><th>Decision</th><th>Reason</th><th>By</th><th>When</th>", body))
 
 
 def _switcher(active: str) -> str:
@@ -213,8 +214,8 @@ def _switcher(active: str) -> str:
 def _nominate_form(csrf: str, nxt: str) -> str:
     return (f"<form method='post' action='/action' class='qadd-row'>"
             f"{_hid(csrf, 'kw_nominate', nxt)}"
-            f"<input type='text' name='term' placeholder='nomineer een keyword…'>"
-            f"<button class='btn'>🗳 Nomineer</button></form>")
+            f"<input type='text' name='term' placeholder='nominate a keyword…'>"
+            f"<button class='btn'>🗳 Nominate</button></form>")
 
 
 def render_keyword_lens(st, lens: str = "trends", csrf_token: str = "",
@@ -241,7 +242,7 @@ def render_keyword_lens(st, lens: str = "trends", csrf_token: str = "",
     nom = _nominate_form(csrf_token, nxt) if (csrf_token and lens != "kroniek") else ""
 
     main = (f"<div class='c2-main'><h1>Keywords <span class='chip'>{_e(_label.lower())}</span></h1>"
-            f"<p class='muted'>Eén keyword-datalaag ({len(rows)} termen), vijf lenzen. "
-            f"Deze lens: {_e(_desc)}.</p>{_switcher(lens)}{nom}{body}</div>")
+            f"<p class='muted'>One keyword data layer ({len(rows)} terms), five lenses. "
+            f"This lens: {_e(_desc)}.</p>{_switcher(lens)}{nom}{body}</div>")
     inner = (f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
     return _page(f"Keywords — {_label}", inner)

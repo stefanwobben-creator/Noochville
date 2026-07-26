@@ -53,7 +53,7 @@ def test_actueel_toont_laatste_dagwaarde_en_grijs(tmp_path):
     # een bron zonder dag-observaties → 'geen live data'
     st.metrics.add_tile(C, "kpi:none", "value", "none", "getal")
     h2 = _metrics_tab_html(cockpit2._Stores(dd), st.records.get(C), csrf="t", win="actueel")
-    assert "geen live data" in h2
+    assert "no live data" in h2
 
 
 def test_werk_over_tijd_fallback_dan_dagreeks(tmp_path):
@@ -92,11 +92,11 @@ def test_dagreeks_render_geen_data_1_punt_2_punten(tmp_path):
     # zorg dat de log óók leeg is zodat de fallback niets teruggeeft
     st.werk._m.setdefault(C, {})["log"] = []; st.werk._save()
     r0 = _fetch(cockpit2._Stores(dd), "shopify", "aov", "over_tijd", None, None)
-    assert "geen data" in _render_form(r0, "trend")
+    assert "no data" in _render_form(r0, "trend")
     # 1 punt → 'te weinig voor een lijn'
     st.observations.record_daily("shopify", "shopify_aov_day", 48, bron="shopify", datum="2026-07-01", ts=now - 86400)
     r1 = _fetch(cockpit2._Stores(dd), "shopify", "aov", "over_tijd", None, None)
-    assert "te weinig" in _render_form(r1, "trend")
+    assert "too few" in _render_form(r1, "trend")
     # ≥2 punten → een lijn
     st.observations.record_daily("shopify", "shopify_aov_day", 52, bron="shopify", datum="2026-07-02", ts=now)
     r2 = _fetch(cockpit2._Stores(dd), "shopify", "aov", "over_tijd", None, None)

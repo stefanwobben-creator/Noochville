@@ -122,10 +122,10 @@ def test_pagina_rendert_met_echte_data(tmp_path):
     hi.add_means_gap("gap_meten", "pairs_sold is niet meetbaar", role_id="analyst")
 
     page = render_skills(cockpit2._Stores(dd), hi)
-    assert "Skills — wat kan het dorp al?" in page
-    assert "Uitvoerbaar" in page and "Genoemd maar niet gedekt" in page and "Gewenst" in page
+    assert "Skills — what can the village already do?" in page
+    assert "Executable" in page and "Named but not covered" in page and "Wanted" in page
     assert "site_health" in page                    # blok 1 + gebruikersregel
-    assert "domein: bibliotheek" in page            # domeinmarkering op keyword_review
+    assert "domain: bibliotheek" in page            # domeinmarkering op keyword_review
     assert "pairs_sold" in page                     # blok 3
     assert "<!doctype" in page.lower()
 

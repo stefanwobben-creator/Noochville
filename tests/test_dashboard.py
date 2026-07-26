@@ -28,9 +28,9 @@ def test_window_range():
 def test_periode_picker_en_actueel_liveness(tmp_path):
     dd = _dd(tmp_path); st = cockpit2._Stores(dd); rec = st.records.get(C)
     h = _metrics_tab_html(st, rec, csrf="t", win="7d")
-    assert all(p in h for p in ("Vandaag", "Gisteren", "Actueel", "7 dagen", "28 dagen",
-                                "Kwartaal", "Jaar", "Aangepast"))   # alle 8 opties in de dropdown
-    assert "muted' title='alleen beschikbaar bij een live-capabele bron'>Actueel" in h  # grijs zonder live-bron
+    assert all(p in h for p in ("Today", "Yesterday", "Current", "7 days", "28 days",
+                                "Quarter", "Year", "Custom"))   # alle 8 opties in de dropdown
+    assert "muted' title='only available with a live-capable source'>Current" in h  # grijs zonder live-bron
     st.metrics.add_tile(C, "pulse_visitors", "visitors", "time", "verdeling")
     h2 = _metrics_tab_html(cockpit2._Stores(dd), rec, csrf="t", win="7d")
     assert "mw=actueel" in h2                                  # met live-bron → klikbaar
@@ -56,7 +56,7 @@ def test_compare_moment_delta(tmp_path):
     st.werk._save()
     st.metrics.add_tile(C, f"werk:{C}", "tevredenheid", "gemiddeld", "getal")
     h = _metrics_tab_html(cockpit2._Stores(dd), st.records.get(C), csrf="t", win="7d", compare=True)
-    assert "vs vorige periode" in h                           # delta-badge naast het getal
+    assert "vs previous period" in h                           # delta-badge naast het getal
 
 
 def test_uitklap_ruwe_data_met_bron(tmp_path):
@@ -65,7 +65,7 @@ def test_uitklap_ruwe_data_met_bron(tmp_path):
     st.observations.record_daily("ww", "plausible_visitors_day", 55, bron="plausible", datum="b", ts=now - 2 * 86400)
     st.metrics.add_tile(C, "pulse_visitors", "visitors", "time", "verdeling")
     h = _metrics_tab_html(cockpit2._Stores(dd), st.records.get(C), csrf="t", win="7d")
-    assert "ruwe data" in h and "<th>bron</th>" in h
+    assert "raw data" in h and "<th>source</th>" in h
 
 
 def test_flip_voor_en_achterkant(tmp_path):

@@ -170,7 +170,7 @@ def test_dispatch_weigert_onbekende_gebruiker(tmp_path):
     for actie, form in (("claims_term_add", {"term": ["x"], "patroon": ["x"], "stoplicht": ["red"]}),
                         ("claims_work_status", {"nr": ["1"], "status": ["live"]})):
         _, msg = cockpit2.dispatch(dd, actie, {**form, "next": ["/claims"]}, "niemand@nergens.nl")
-        assert "Geen toegang" in msg
+        assert "No access" in msg
 
 
 def test_dispatch_schrijft_naar_de_bron_en_logt(tmp_path, monkeypatch):

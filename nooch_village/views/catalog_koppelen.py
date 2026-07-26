@@ -21,15 +21,15 @@ if TYPE_CHECKING:
     from nooch_village.cockpit2 import _Stores
 
 # Groeperings-categorieën die de curator per veld kan kiezen (vrij uitbreidbaar).
-_CATEGORIEEN = ("Website", "Verkoop", "Zoekprestaties", "Content", "Werkoverleg", "Impact", "Financieel")
+_CATEGORIEEN = ("Website", "Sales", "Search performance", "Content", "Tactical meeting", "Impact", "Financial")
 
 # Formulier-hulp: concrete invul-voorbeelden per bron (stand vs reeks, eenheid, uitleg) zodat de curator
 # weet wat een veld betekent. Toont als muted regel op de ongekoppelde kaart.
 _FIELD_HELP = {
-    "openalex": "Voorbeeld — naam 'OpenAlex werken', eenheid 'n', aard 'stand' (cumulatieve teller), "
-                "uitleg 'Totaal aantal werken in OpenAlex voor deze term.'",
-    "semanticscholar": "Voorbeeld — naam 'Semantic Scholar citaties', eenheid 'n', aard 'stand', "
-                       "uitleg 'Citatie-telling van het meest geciteerde paper.'",
+    "openalex": "Example — name 'OpenAlex works', unit 'n', nature 'level' (cumulative counter), "
+                "explanation 'Total number of works in OpenAlex for this term.'",
+    "semanticscholar": "Example — name 'Semantic Scholar citations', unit 'n', nature 'level', "
+                       "explanation 'Citation count of the most cited paper.'",
 }
 
 
@@ -135,7 +135,7 @@ def _koppel_section(st: _Stores, csrf_token: str = "", source: str = "") -> str:
 
     titel = _e(t("catalogus.koppelen.titel"))
     return (f"<div class='c2-sec'><div class='cl-head'><h3>{titel}</h3>"
-            f"<a class='btn sm' href='/catalog'>← sluiten</a></div>{intro}{bar}</div>"
+            f"<a class='btn sm' href='/catalog'>← close</a></div>{intro}{bar}</div>"
             f"<div class='c2-sec'>{fields_html}</div>")
 
 
@@ -159,12 +159,12 @@ def _geen_data_reden(fresh: str, source: str, veld: str, produces: dict, active:
       - 'hapert' = bron levert het wél en is actief, maar gaf (nog) niets terug → tijdelijk (fail-closed
                    gat, bijv. rate-limit 429)."""
     if fresh == "unconfigured":
-        return ("veld", "bron levert dit veld niet — niet geconfigureerd (creds ontbreken)")
+        return ("veld", "source does not deliver this field — not configured (creds missing)")
     levert = veld in produces.get(source, set())
     is_active = bool((active.get(source) or {}).get("active"))
     if levert and is_active:
-        return ("hapert", "bron hapert — fail-closed gaten (tijdelijk, bijv. rate-limit 429)")
-    return ("veld", "bron levert dit veld niet (nog niet geïmplementeerd of veld onbekend)")
+        return ("hapert", "source is stuttering — fail-closed gaps (temporary, e.g. rate limit 429)")
+    return ("veld", "source does not deliver this field (not implemented yet or field unknown)")
 
 
 def _bron_indicators(st: _Stores) -> list[dict]:
@@ -199,13 +199,13 @@ def _status_section(st: _Stores) -> str:
         kind, txt = i["reden"]
         chip = "coral" if kind == "veld" else "outline"      # config/bug = rood; tijdelijk = neutraal
         return (f"<div class='card'><div class='ptitle'><span class='chip'>{_e(i['name'])}</span> "
-                f"<span class='chip {chip}'>geen data</span></div>"
+                f"<span class='chip {chip}'>no data</span></div>"
                 f"<div class='muted'>{_e(txt)}</div></div>")
 
-    met_html = "".join(met_kaart(i) for i in met) or "<p class='muted'>— nog geen indicator met data —</p>"
-    zon_html = "".join(zonder_kaart(i) for i in zonder) or "<p class='muted'>— alle bronnen leveren —</p>"
-    return (f"<div class='c2-sec'><div class='cl-head'><h3>Status · met data ({len(met)})</h3></div>{met_html}</div>"
-            f"<div class='c2-sec'><div class='cl-head'><h3>Status · zonder data ({len(zonder)})</h3></div>{zon_html}</div>")
+    met_html = "".join(met_kaart(i) for i in met) or "<p class='muted'>— no indicator with data yet —</p>"
+    zon_html = "".join(zonder_kaart(i) for i in zonder) or "<p class='muted'>— all sources deliver —</p>"
+    return (f"<div class='c2-sec'><div class='cl-head'><h3>Status · with data ({len(met)})</h3></div>{met_html}</div>"
+            f"<div class='c2-sec'><div class='cl-head'><h3>Status · without data ({len(zonder)})</h3></div>{zon_html}</div>")
 
 
 def _node_options(st: _Stores) -> str:
@@ -217,16 +217,16 @@ def _activate_section(st: _Stores, csrf: str) -> str:
     """Stap 3: kies indicatoren MÉT data (checkbox) → rol/cirkel → toevoegen aan dat dashboard."""
     met = [i for i in _bron_indicators(st) if i["heeft_data"]]
     if not met:
-        return ("<div class='c2-sec'><div class='cl-head'><h3>Activeren op een dashboard</h3></div>"
-                "<p class='muted'>Nog geen indicatoren met data om te activeren.</p></div>")
+        return ("<div class='c2-sec'><div class='cl-head'><h3>Activate on a dashboard</h3></div>"
+                "<p class='muted'>No indicators with data to activate yet.</p></div>")
     checks = "".join(
         f"<div class='card'><label class='att-lbl'><input type='checkbox' name='did' value='{_e(i['did'])}'> "
         f"{_e(i['name'])}</label></div>" for i in met)
-    return (f"<div class='c2-sec'><div class='cl-head'><h3>Activeren op een dashboard</h3></div>"
+    return (f"<div class='c2-sec'><div class='cl-head'><h3>Activate on a dashboard</h3></div>"
             f"<form method='post' action='/action'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='next' value='/catalog'>"
             f"{checks}"
-            f"<label class='att-lbl'>Dashboard (rol of cirkel)</label>"
+            f"<label class='att-lbl'>Dashboard (role or circle)</label>"
             f"<select name='node'>{_node_options(st)}</select> "
             f"<button class='btn ok' type='submit' name='action' value='indicator_activate'>"
-            f"+ Toevoegen aan dashboard</button></form></div>")
+            f"+ Add to dashboard</button></form></div>")

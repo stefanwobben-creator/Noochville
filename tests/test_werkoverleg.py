@@ -58,7 +58,7 @@ def test_stappen_hergebruiken_bestaande_schermen(tmp_path):
     cl = cockpit2.render_werkoverleg(st, C, "checklist", csrf_token="t", fragment=True)
     assert "Checklists" in cl and "+ Checklist item" in cl          # echte checklist-scherm
     me = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "metrics", csrf_token="t", fragment=True)
-    assert "+ KPI maken" in me and "Periode:" in me                 # echte metrics-scherm
+    assert "+ Create KPI" in me and "Period:" in me                 # echte metrics-scherm
     pr = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "projecten", csrf_token="t", fragment=True)
     assert "proj" in pr.lower()                                     # echte projecten-scherm
 
@@ -200,7 +200,7 @@ def test_noochie_hulp_context_opener(tmp_path):
     dd = _dd(tmp_path)
     # render_noochie met schermcontext (de spanning) opent met 'Heb je hulp nodig bij ...'
     frag = cockpit2.render_noochie(cockpit2._Stores(dd), csrf="t", screen_ctx="Checkout hapert")
-    assert "Heb je hulp nodig bij Checkout hapert?" in frag
+    assert "Do you need help with Checkout hapert?" in frag
 
 
 def test_projecten_stap_geen_losse_add(tmp_path):

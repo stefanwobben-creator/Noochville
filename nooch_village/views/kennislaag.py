@@ -15,18 +15,18 @@ from nooch_village.cockpit2_util import _DS_LINK, _nav
 
 def _card(c: dict) -> str:
     # Leest ruwe dicts (niet het Insight-model) zodat schema-drift het scherm nooit laat crashen.
-    word = c.get("word") or c.get("concept_id") or "inzicht"
+    word = c.get("word") or c.get("concept_id") or "insight"
     claim = c.get("claim") or ""
     src = c.get("source") or ""
     date = c.get("source_date") or ""
     gc = c.get("grounding_count") or 1
     ref = c.get("reference") or ""
     if isinstance(ref, str) and ref.startswith("http"):
-        reflink = f" · <a href='{_e(ref)}' target='_blank' rel='noopener'>bron</a>"
+        reflink = f" · <a href='{_e(ref)}' target='_blank' rel='noopener'>source</a>"
     else:
         reflink = f" · {_e(str(ref))}" if ref else ""
     tags = "".join(f"<span class='chip outline'>{_e(str(t))}</span>" for t in (c.get("tags") or [])[:5])
-    meta = f"{_e(str(src))}{(' · ' + _e(str(date))) if date else ''} · {gc}× gegrond{reflink}"
+    meta = f"{_e(str(src))}{(' · ' + _e(str(date))) if date else ''} · grounded {gc}×{reflink}"
     return (f"<div class='card'><div class='rdr-sig'>{_e(str(word))}</div>"
             f"<div>{_e(str(claim))}</div>"
             f"<div class='rdr-meta'><span class='muted'>{meta}</span> {tags}</div></div>")
@@ -46,11 +46,11 @@ def render_kennislaag(data_dir: str) -> str:
              if isinstance(n, dict) and n.get("claim") and (n.get("word") or n.get("concept_id"))]
     cards.sort(key=lambda n: (-(n.get("grounding_count") or 1), str(n.get("word") or "")))
     rows = "".join(_card(n) for n in cards) or (
-        "<p class='muted'>Nog geen inzichten. De Librarian schrijft een kaart zodra er gegrond bewijs "
-        "binnenkomt (via harry_hemp). Draait de dorp-puls?</p>")
-    main = (f"<div class='c2-main'><h1>Inzichten</h1>"
-            f"<p class='muted'>De kennislaag: gegronde inzicht-kaarten die de Librarian ving uit bewijs. "
-            f"{len(cards)} kaart(en), gesorteerd op hoe vaak ze gegrond zijn.</p>{rows}</div>")
+        "<p class='muted'>No insights yet. The Librarian writes a card as soon as grounded evidence "
+        "comes in (via harry_hemp). Is the village pulse running?</p>")
+    main = (f"<div class='c2-main'><h1>Insights</h1>"
+            f"<p class='muted'>The knowledge layer: grounded insight cards the Librarian caught from evidence. "
+            f"{len(cards)} card(s), sorted by how often they are grounded.</p>{rows}</div>")
     inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
-    return _page("Inzichten", inner)
+    return _page("Insights", inner)

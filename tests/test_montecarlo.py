@@ -42,7 +42,7 @@ def test_g3_blokkeert_verwijderen_van_cirkel_met_kinderen():
                     definition=RoleDefinition(purpose="Z", accountabilities=["Werk doen"]), source="seed"))
     p = Proposal(change=GovernanceChange(kind=ChangeKind.REMOVE_ROLE, role_id="lege_cirkel"), **_META)
     passed, gate_name, reason = gate.check(p, recs, None)
-    assert passed is False and gate_name == "G3" and "wees" in reason
+    assert passed is False and gate_name == "G3" and "orphan" in reason
     # en als we het (ondanks de blokkade) níét adopteren, blijven de records valide
     assert check_invariants(recs) == []
 

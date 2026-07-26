@@ -56,11 +56,11 @@ def test_scherm_en_actie(tmp_path):
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     html = cockpit2.render_accountabilities(st, dd, csrf_token="t")
-    assert "Accountability-check" in html and "acc_check" in html
-    assert "Alle accountabilities per rol" in html
+    assert "Accountability check" in html and "acc_check" in html
+    assert "All accountabilities per role" in html
     # schrijf een nep-resultaat en render opnieuw → toont bevindingen
     with open(os.path.join(dd, "accountability_check.json"), "w") as f:
         f.write(_FAKE)
     html2 = cockpit2.render_accountabilities(st, dd, csrf_token="t")
-    assert "Dubbelingen (1)" in html2 and "Formulering (1)" in html2
+    assert "Duplicates (1)" in html2 and "Wording (1)" in html2
     assert "site monitoren" in html2

@@ -23,29 +23,29 @@ def _catalog_edit_form(st: _Stores, did: str, cur: dict, csrf: str) -> str:
               f"<input type='hidden' name='def_id' value='{_e(did)}'>"
               f"<input type='hidden' name='next' value='{base}'>")
     thr = "" if cur.get("threshold") is None else _num(cur.get("threshold"))
-    mig = ("<select name='migration' title='wat gebeurt er met de historie?'>"
-           "<option value='auto'>migratie: automatisch bepalen</option>"
-           "<option value='clarify'>verduidelijking (reeks intact)</option>"
-           "<option value='backcast'>back-cast (historie hergebruiken)</option>"
-           "<option value='break'>reeksbreuk (nieuwe versie)</option></select>")
-    return (f"<details class='m-add'><summary class='att-lbl' style='cursor:pointer'>✎ wijzig definitie</summary>"
+    mig = ("<select name='migration' title='what happens to the history?'>"
+           "<option value='auto'>migration: determine automatically</option>"
+           "<option value='clarify'>clarification (series intact)</option>"
+           "<option value='backcast'>back-cast (reuse history)</option>"
+           "<option value='break'>series break (new version)</option></select>")
+    return (f"<details class='m-add'><summary class='att-lbl' style='cursor:pointer'>✎ amend definition</summary>"
             f"<form method='post' action='/action' class='m-addform'>{hidden}"
-            f"<input name='definition' value=\"{_e(cur.get('definition', ''))}\" placeholder='Definitie: wat telt mee?' autocomplete='off'>"
-            f"<input name='unit' value=\"{_e(cur.get('unit', ''))}\" placeholder='Eenheid' autocomplete='off'>"
+            f"<input name='definition' value=\"{_e(cur.get('definition', ''))}\" placeholder='Definition: what counts?' autocomplete='off'>"
+            f"<input name='unit' value=\"{_e(cur.get('unit', ''))}\" placeholder='Unit' autocomplete='off'>"
             f"{_dir_select('direction', cur.get('direction', ''))}"
-            f"<input name='threshold' value=\"{_e(str(thr))}\" inputmode='decimal' placeholder='Drempel (optioneel)' autocomplete='off'>"
+            f"<input name='threshold' value=\"{_e(str(thr))}\" inputmode='decimal' placeholder='Threshold (optional)' autocomplete='off'>"
             f"{_cad_select('cadence', cur.get('cadence', 'ad-hoc'))}{_mt_select('meettype', cur.get('meettype', 'snapshot'))}"
-            f"<input name='window' value=\"{_e(cur.get('window', ''))}\" placeholder='Venster (bijv. 7d)' autocomplete='off'>"
+            f"<input name='window' value=\"{_e(cur.get('window', ''))}\" placeholder='Window (e.g. 7d)' autocomplete='off'>"
             f"{_mw_select('meetwijze', cur.get('meetwijze', 'handmatig'))}"
             f"{_opt_select('tijd', TIJD_LABEL, cur.get('tijd', ''), 'leading/lagging?')}"
             f"{_opt_select('bruikbaar', BRUIKBAAR_LABEL, cur.get('bruikbaar', ''), 'actionable/vanity?')}"
-            f"<input name='standaard' value=\"{_e(cur.get('standaard', ''))}\" placeholder='Grondslag/bron (bijv. DORA, IRIS+)' autocomplete='off'>"
-            f"<input name='benchmark' value=\"{_e(cur.get('benchmark', ''))}\" placeholder='Benchmark/referentiewaarde' autocomplete='off'>"
-            f"<input name='bron_url' value=\"{_e(cur.get('bron_url', ''))}\" placeholder='Bron-link (kenniskaart / LCA-rapport, http of /pad)' autocomplete='off'>"
+            f"<input name='standaard' value=\"{_e(cur.get('standaard', ''))}\" placeholder='Basis/standard (e.g. DORA, IRIS+)' autocomplete='off'>"
+            f"<input name='benchmark' value=\"{_e(cur.get('benchmark', ''))}\" placeholder='Benchmark/reference value' autocomplete='off'>"
+            f"<input name='bron_url' value=\"{_e(cur.get('bron_url', ''))}\" placeholder='Source link (knowledge card / LCA report, http or /path)' autocomplete='off'>"
             f"{_opt_select('verificatie', VERIFICATIE_LABEL, cur.get('verificatie', ''), 'verificatie?')}"
-            f"<input name='waarde' value=\"{_e('' if cur.get('waarde') is None else _num(cur.get('waarde')))}\" inputmode='decimal' placeholder='Canonieke waarde (vaste constante, optioneel)' autocomplete='off'>"
+            f"<input name='waarde' value=\"{_e('' if cur.get('waarde') is None else _num(cur.get('waarde')))}\" inputmode='decimal' placeholder='Canonical value (fixed constant, optional)' autocomplete='off'>"
             f"{mig}"
-            f"<button class='btn ok sm' type='submit' name='action' value='def_amend'>Doorvoeren</button></form></details>")
+            f"<button class='btn ok sm' type='submit' name='action' value='def_amend'>Apply</button></form></details>")
 
 
 def _catalog_card(st: _Stores, d: dict, cur: dict, csrf: str) -> str:
@@ -55,35 +55,35 @@ def _catalog_card(st: _Stores, d: dict, cur: dict, csrf: str) -> str:
                                  MEETTYPE_LABEL.get(cur.get("meettype"), "")) if x)
     if cur.get("window"):
         meet = f"{meet} ({cur['window']})" if meet else cur["window"]
-    body = (rij("Definitie", cur.get("definition") or "— (nog niet vastgelegd)")
-            + rij("Eenheid", cur.get("unit")) + rij("Richting", _RICHTING.get(cur.get("direction"), "—"))
-            + (rij("Waarde", _num(cur.get("waarde"))) if cur.get("waarde") is not None else "")
-            + (rij("Drempel", _num(cur.get("threshold"))) if cur.get("threshold") is not None else "")
-            + rij("Meetmoment", meet)
-            + rij("Grondslag", cur.get("standaard"))
+    body = (rij("Definition", cur.get("definition") or "— (not recorded yet)")
+            + rij("Unit", cur.get("unit")) + rij("Direction", _RICHTING.get(cur.get("direction"), "—"))
+            + (rij("Value", _num(cur.get("waarde"))) if cur.get("waarde") is not None else "")
+            + (rij("Threshold", _num(cur.get("threshold"))) if cur.get("threshold") is not None else "")
+            + rij("Measured", meet)
+            + rij("Basis", cur.get("standaard"))
             + rij("Benchmark", cur.get("benchmark"))
-            + (f"<div class='gr-row'><span class='gr-k'>Bron</span>{_bron_html(cur['bron_url'])}</div>"
+            + (f"<div class='gr-row'><span class='gr-k'>Source</span>{_bron_html(cur['bron_url'])}</div>"
                if cur.get("bron_url") else ""))
     ks = st.metrics.kpis_for_def(did)
     users = sorted({_name(st.records.get(k["node"])) for k in ks if st.records.get(k["node"])})
-    usage = (f"{len(ks)}× in gebruik" + (": " + ", ".join(users) if users else "")) if ks else "nog niet in gebruik"
+    usage = (f"in use {len(ks)}×" + (": " + ", ".join(users) if users else "")) if ks else "not in use yet"
     # Tweede signaal naast 'in gebruik': haalt het systeem er ook data voor op? (gedeelde helper, 3 staten)
     vers = freshness_chip(indicator_freshness(st, cur.get("source", ""), cur.get("veld", "")))
     nver = len(d.get("versions", []))
     vhist = ""
     if nver > 1:
-        items = "".join(f"<li>v{v['version']}: {_e({'': 'aangemaakt', 'clarify': 'verduidelijking', 'backcast': 'back-cast', 'break': 'reeksbreuk'}.get(v.get('migration', ''), v.get('migration', '')))}</li>"
+        items = "".join(f"<li>v{v['version']}: {_e({'': 'created', 'clarify': 'clarification', 'backcast': 'back-cast', 'break': 'series break'}.get(v.get('migration', ''), v.get('migration', '')))}</li>"
                         for v in d["versions"])
-        vhist = f"<details class='cat-hist'><summary class='muted'>historie ({nver} versies)</summary><ul>{items}</ul></details>"
+        vhist = f"<details class='cat-hist'><summary class='muted'>history ({nver} versions)</summary><ul>{items}</ul></details>"
     edit = _catalog_edit_form(st, did, cur, csrf) if csrf else ""
     mw = cur.get("meetwijze", "handmatig")
-    label = _ORIGIN_LABEL.get(cur.get("source", ""), cur.get("source", "") or "eigen")
+    label = _ORIGIN_LABEL.get(cur.get("source", ""), cur.get("source", "") or "own")
     txt = _e(f"{cur.get('name','')} {cur.get('definition','')} {label}".lower())
     grounded = "0" if (cur.get("standaard", "") in ("", "interne aanname")) else "1"
     ver = cur.get("verificatie", "")
     vchip = ""
     if ver:
-        vchip = f"<span class='chip {'green' if ver == 'geverifieerd' else 'coral'}' title='verificatiestatus'>{_e(VERIFICATIE_LABEL.get(ver, ver))}</span>"
+        vchip = f"<span class='chip {'green' if ver == 'geverifieerd' else 'coral'}' title='verification status'>{_e(VERIFICATIE_LABEL.get(ver, ver))}</span>"
     return (f"<div class='cat-card' data-mw='{_e(mw)}' data-tijd='{_e(cur.get('tijd',''))}' "
             f"data-bruikbaar='{_e(cur.get('bruikbaar',''))}' data-grounded='{grounded}' "
             f"data-ver='{_e(ver)}' data-text=\"{txt}\">"
@@ -94,28 +94,28 @@ def _catalog_card(st: _Stores, d: dict, cur: dict, csrf: str) -> str:
 
 
 def _catalog_add_form(st: _Stores, csrf: str) -> str:
-    origin_opts = "<option value=''>(handmatig / eigen meting)</option>" + "".join(
+    origin_opts = "<option value=''>(manual / own measurement)</option>" + "".join(
         f"<option value='{k}'>{_e(v)}</option>" for k, v in _ORIGIN_LABEL.items())
-    return (f"<details class='m-add'><summary class='btn sm'>+ Nieuwe definitie</summary>"
+    return (f"<details class='m-add'><summary class='btn sm'>+ New definition</summary>"
             f"<form method='post' action='/action' class='m-addform'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='next' value='/catalog'>"
-            f"<input name='name' placeholder='Naam (bijv. NPS)' autocomplete='off'>"
-            f"<input name='unit' placeholder='Eenheid (%, score, EUR)' autocomplete='off'>"
-            f"<input name='definition' placeholder='Definitie: wat telt mee? (grondslag)' autocomplete='off'>"
-            f"<select name='csource' title='bron/herkomst'>{origin_opts}</select>"
+            f"<input name='name' placeholder='Name (e.g. NPS)' autocomplete='off'>"
+            f"<input name='unit' placeholder='Unit (%, score, EUR)' autocomplete='off'>"
+            f"<input name='definition' placeholder='Definition: what counts? (basis)' autocomplete='off'>"
+            f"<select name='csource' title='source/origin'>{origin_opts}</select>"
             f"{_dir_select('direction', '')}"
-            f"<input name='threshold' inputmode='decimal' placeholder='Drempel (optioneel)' autocomplete='off'>"
+            f"<input name='threshold' inputmode='decimal' placeholder='Threshold (optional)' autocomplete='off'>"
             f"{_cad_select('cadence', 'ad-hoc')}{_mt_select('meettype', 'snapshot')}"
-            f"<input name='window' placeholder='Venster (bijv. 7d, optioneel)' autocomplete='off'>"
+            f"<input name='window' placeholder='Window (e.g. 7d, optional)' autocomplete='off'>"
             f"{_mw_select('meetwijze', 'handmatig')}"
             f"{_opt_select('tijd', TIJD_LABEL, '', 'leading/lagging?')}"
             f"{_opt_select('bruikbaar', BRUIKBAAR_LABEL, '', 'actionable/vanity?')}"
-            f"<input name='standaard' placeholder='Grondslag/bron (bijv. DORA, IRIS+)' autocomplete='off'>"
-            f"<input name='benchmark' placeholder='Benchmark/referentiewaarde (optioneel)' autocomplete='off'>"
-            f"<input name='bron_url' placeholder='Bron-link (kenniskaart / rapport, optioneel)' autocomplete='off'>"
+            f"<input name='standaard' placeholder='Basis/standard (e.g. DORA, IRIS+)' autocomplete='off'>"
+            f"<input name='benchmark' placeholder='Benchmark/reference value (optional)' autocomplete='off'>"
+            f"<input name='bron_url' placeholder='Source link (knowledge card / report, optional)' autocomplete='off'>"
             f"{_opt_select('verificatie', VERIFICATIE_LABEL, '', 'verificatie?')}"
-            f"<input name='waarde' inputmode='decimal' placeholder='Canonieke waarde (vaste constante, optioneel)' autocomplete='off'>"
-            f"<button class='btn ok sm' type='submit' name='action' value='def_add'>Definitie toevoegen</button></form></details>")
+            f"<input name='waarde' inputmode='decimal' placeholder='Canonical value (fixed constant, optional)' autocomplete='off'>"
+            f"<button class='btn ok sm' type='submit' name='action' value='def_add'>Add definition</button></form></details>")
 
 
 _CATALOG_JS = """<script>
@@ -133,7 +133,7 @@ _CATALOG_JS = """<script>
      var any=s.querySelectorAll('.cat-card:not(.hide)').length;
      s.style.display=any?'':'none'; if(any&&active)s.open=true;
    });
-   if(cnt)cnt.textContent=shown+' definities';
+   if(cnt)cnt.textContent=shown+' definitions';
  }
  q&&q.addEventListener('input',apply);
  document.querySelectorAll('.cat-f').forEach(function(b){b.addEventListener('click',function(){
@@ -162,7 +162,7 @@ def render_catalog(st: _Stores, csrf_token: str = "", msg: str = "",
     for s in sorted(bysrc, key=lambda x: _ORIGIN_LABEL.get(x, "zzz" + (x or "zzz"))):
         cards = "".join(_catalog_card(st, d, cur, csrf_token)
                         for d, cur in sorted(bysrc[s], key=lambda t: t[1].get("name", "")))
-        label = _ORIGIN_LABEL.get(s, s or "Eigen / handmatig")
+        label = _ORIGIN_LABEL.get(s, s or "Own / manual")
         sections += (f"<details class='cat-sec' open><summary><b>{_e(label)}</b> "
                      f"<span class='muted'>({len(bysrc[s])})</span></summary>"
                      f"<div class='cat-grid'>{cards}</div></details>")
@@ -171,12 +171,12 @@ def render_catalog(st: _Stores, csrf_token: str = "", msg: str = "",
                      if (st.defs.current(d["id"]) or {}).get("standaard", "") in ("", "interne aanname"))
     bf = lambda facet, val, lbl: f"<button type='button' class='cat-f' data-facet='{facet}' data-val='{val}'>{_e(lbl)}</button>"
     nav = ("<div class='cat-nav'>"
-           "<input id='cat-q' class='cat-q' placeholder='Zoek een indicator…' autocomplete='off'>"
-           "<span class='cat-fg'><span class='muted'>toon:</span>"
+           "<input id='cat-q' class='cat-q' placeholder='Search an indicator…' autocomplete='off'>"
+           "<span class='cat-fg'><span class='muted'>show:</span>"
            + bf("bruikbaar", "actionable", "actionable") + bf("tijd", "leading", "leading")
-           + bf("grounded", "0", "ongegrond") + bf("ver", "voorlopig", "voorlopig")
-           + "<button type='button' class='cat-f cat-f-x on' data-facet='' data-val=''>alle</button></span>"
-           f"<span class='muted cat-count' id='cat-count'>{total} definities · {ungrounded} ongegrond</span></div>")
+           + bf("grounded", "0", "ungrounded") + bf("ver", "voorlopig", "provisional")
+           + "<button type='button' class='cat-f cat-f-x on' data-facet='' data-val=''>all</button></span>"
+           f"<span class='muted cat-count' id='cat-count'>{total} definitions · {ungrounded} ungrounded</span></div>")
     # Koppel-flow (ruw bron-veld → indicator) is hier geïntegreerd, curator-only: dicht = een ingang,
     # open (?koppel=<source>) = de sectie inline. Niet-curators zien niets hiervan.
     koppel_ui = ""
@@ -188,18 +188,18 @@ def render_catalog(st: _Stores, csrf_token: str = "", msg: str = "",
             srcs = catalog_sources()
             first = _e(srcs[0][0]) if srcs else ""
             koppel_ui = (f"<div class='c2-sec'><a class='btn ok' href='/catalog?koppel={first}'>"
-                         f"+ Koppel nieuw veld</a> <span class='muted'>— promoveer een ruw bron-veld tot indicator</span></div>")
+                         f"+ Link new field</a> <span class='muted'>— promote a raw source field to an indicator</span></div>")
     # Stap 2 (STATUS) + stap 3 (ACTIVEREN): open voor iedereen met catalogus-toegang (open books).
     from nooch_village.views.catalog_koppelen import _status_section, _activate_section
     status_ui = _status_section(st)
     activate_ui = _activate_section(st, csrf_token) if csrf_token else ""
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
-            f"<h1>Metrics-catalogus <span class='chip'>Librarian</span></h1>{_banner(msg)}"
-            f"<p class='muted'>Eén bron voor indicator-definities: rollen kiezen hieruit. Een definitie "
-            f"wijzigen versioneert nooit in-place, maar als verduidelijking, back-cast of reeksbreuk.</p>"
+            f"<h1>Metrics catalogue <span class='chip'>Librarian</span></h1>{_banner(msg)}"
+            f"<p class='muted'>One source for indicator definitions: roles pick from here. Amending a "
+            f"definition never versions in place, but as a clarification, back-cast or series break.</p>"
             f"{koppel_ui}{status_ui}{activate_ui}"
             f"<div class='c2-sec'>{addform}</div>{nav}{sections}</div>")
     inner = (f"{_DS_LINK}"
              f"{_nav()}"
              f"<div class='c2-wrap'>{main}</div>{_CATALOG_JS}")
-    return _page("Metrics-catalogus", inner)
+    return _page("Metrics catalogue", inner)

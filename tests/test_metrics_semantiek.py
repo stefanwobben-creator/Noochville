@@ -56,7 +56,7 @@ def test_headline_is_som_aggregaat(tmp_path):
                                        "form": ["trend"], "target": [""], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", "t")
     assert "class='kpi-val'>66" in page         # 11+22+33 = som als kaart-headline, NIET de laatste 33
-    assert "totaal 7d" in page                  # aggregatielabel bij de headline
+    assert "total 7d" in page                  # aggregatielabel bij de headline
     assert "class='linechart'" in page          # kaart toont het lijn-diagram met assen (geen sparkline)
 
 
@@ -83,7 +83,7 @@ def test_delta_alleen_bij_compare(tmp_path):
     off = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", "t")
     assert "class='delta" not in off            # geen delta-badge zonder de vergelijk-toggle
     on = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", "t", compare=True)
-    assert "class='delta" in on and "vs vorige periode" in on   # aggregaat huidig vs. vorig venster
+    assert "class='delta" in on and "vs previous period" in on   # aggregaat huidig vs. vorig venster
 
 
 # ── PR 2 — last-standen pakken vandaag mee ('stand per nu'); som/gemiddelde niet ─────────────────
@@ -95,7 +95,7 @@ def test_laatste_waarde_pakt_vandaag_mee(tmp_path):
     cockpit2.dispatch(dd, "tile_add", {"node": [C], "combo": [f"kpi:{k['id']}|value|none"],
                                        "form": ["getal"], "target": [""], "next": ["/"]}, username="guest")
     page = cockpit2.render_node(cockpit2._Stores(dd), C, "metrics", "t")
-    assert "stand per nu" in page               # last-stand pakt vandaag WÉL mee
+    assert "level as of now" in page               # last-stand pakt vandaag WÉL mee
     assert "class='kpi-val'>7" in page          # de vandaag gemeten stand is de headline
 
 
@@ -105,5 +105,5 @@ def test_dropdown_toont_actieve_periode(tmp_path):
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     h = metrics._metrics_tab_html(st, st.records.get(C), csrf="t", win="28d")
-    assert "class='cardmenu'" in h and "28 dagen <span class='caret'>" in h   # actieve optie in de summary
+    assert "class='cardmenu'" in h and "28 days <span class='caret'>" in h   # actieve optie in de summary
     assert "class='menuitem on'" in h                                         # actieve optie gemarkeerd

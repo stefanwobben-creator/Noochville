@@ -9,7 +9,8 @@ from __future__ import annotations
 from nooch_village.web_base import _e, _page, _banner
 from nooch_village.cockpit2_util import _DS_LINK, _nav
 
-_ACTIE = {"merge": "🧩 samenvoegen", "weg": "🗑 weg", "abstractie": "🪁 abstraheren"}
+# Display-mapping: de sleutels blijven de opgeslagen actie-waarden.
+_ACTIE = {"merge": "🧩 merge", "weg": "🗑 drop", "abstractie": "🪁 abstract"}
 
 
 def _hid(csrf: str, action: str, nxt: str, extra: dict | None = None) -> str:
@@ -30,11 +31,11 @@ def _voorstel_rij(v: dict, telling: dict, csrf: str, nxt: str) -> str:
         knoppen = (
             f"<form method='post' action='/action'>"
             f"{_hid(csrf, 'tag_voorstel_besluit', nxt, {'vid': v['id'], 'keuze': 'doorvoeren'})}"
-            f"<button class='btn ok' title='voer door op alle kaartjes'>✓ doorvoeren</button>"
+            f"<button class='btn ok' title='apply to all cards'>✓ apply</button>"
             f"</form>"
             f"<form method='post' action='/action'>"
             f"{_hid(csrf, 'tag_voorstel_besluit', nxt, {'vid': v['id'], 'keuze': 'afgewezen'})}"
-            f"<button class='btn' title='afwijzen — komt niet opnieuw terug'>✗</button></form>")
+            f"<button class='btn' title='reject — will not come back'>✗</button></form>")
     return (f"<div class='kn-lrow kn-tagvoorstel'>"
             f"<div class='kn-lt'><span class='chip muted'>{_ACTIE.get(v.get('actie'), v.get('actie'))}"
             f"</span> {van}{naar}"
@@ -49,17 +50,17 @@ def render_tag_onderhoud(st, csrf_token: str = "", msg: str = "") -> str:
     open_vs = store.open_voorstellen()
     nxt = "/kennisbank/tags"
     rijen = ("".join(_voorstel_rij(v, telling, csrf_token, nxt) for v in open_vs)
-             or "<p class='muted'>Geen open voorstellen. De Library kijkt wekelijks naar de "
-                "taglijst; je kunt de ronde ook nu draaien.</p>")
+             or "<p class='muted'>No open proposals. The Library reviews the tag list weekly; "
+                "you can also run the round right now.</p>")
     draai = ""
     if csrf_token:
         draai = (f"<form method='post' action='/action' class='kn-lrow'>"
                  f"{_hid(csrf_token, 'tag_onderhoud_run', nxt)}"
-                 f"<button class='btn'>▶ draai de onderhoudsronde nu</button></form>")
+                 f"<button class='btn'>▶ run the maintenance round now</button></form>")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/kennisbank'>← Oracle</a></div>"
-            f"<h1>🏷 Tag-onderhoud</h1>"
-            f"<p class='muted'>De Library houdt de taglijst wekelijks schoon: samenvoegen, "
-            f"opschonen, abstraheren. Jij keurt; ✓ werkt meteen alle kaartjes bij.</p>"
+            f"<h1>🏷 Tag maintenance</h1>"
+            f"<p class='muted'>The Library keeps the tag list clean every week: merging, "
+            f"pruning, abstracting. You decide; ✓ updates all cards immediately.</p>"
             f"{_banner(msg)}{draai}{rijen}</div>")
     inner = f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>"
-    return _page("Tag-onderhoud", inner)
+    return _page("Tag maintenance", inner)

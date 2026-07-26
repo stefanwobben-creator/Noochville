@@ -25,11 +25,12 @@ from nooch_village.views.metrics import (
 )
 
 # Korte weergave-labels voor de segment-knoppen (prototype-stijl); de lange labels blijven elders.
-_FORM_SHORT = {"trend": "lijn", "staaf": "staaf", "getal": "getal", "gestapeld": "gestapeld",
-               "horizontaal": "balk", "bullet": "bullet", "doelmeter": "meter", "burnup": "burn-up"}
+# Display-mapping: de sleutels blijven de opgeslagen vorm-waarden.
+_FORM_SHORT = {"trend": "line", "staaf": "bars", "getal": "number", "gestapeld": "stacked",
+               "horizontaal": "hbars", "bullet": "bullet", "doelmeter": "meter", "burnup": "burn-up"}
 # Tijdvenster als segment-balk (prototype had 4-5 pillen i.p.v. een lange dropdown).
-_M2_PERIODS = [("vandaag", "Vandaag"), ("7d", "7 dagen"), ("28d", "28 dagen"),
-               ("kwartaal", "Kwartaal"), ("jaar", "Jaar")]
+_M2_PERIODS = [("vandaag", "Today"), ("7d", "7 days"), ("28d", "28 days"),
+               ("kwartaal", "Quarter"), ("jaar", "Year")]
 # Sub-tabs (Mijn dashboard / Catalogus) togglen + segment-selects submitten hun formulier.
 _M2_JS = ("<script>(function(){"
           "var t=document.querySelectorAll('.js-m2');"
@@ -57,7 +58,7 @@ def _star(action: str, node: str, csrf: str, nxt: str, faved: bool, **fields) ->
     De kleur draagt de staat (goud = favoriet), zodat de catalogus visueel rustig blijft."""
     glyph = "★" if faved else "☆"
     cls = "star on" if faved else "star"
-    title = "van je dashboard halen" if faved else "op je dashboard zetten"
+    title = "remove from your dashboard" if faved else "put on your dashboard"
     hid = (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
            f"<input type='hidden' name='node' value='{_e(node)}'>"
            f"<input type='hidden' name='next' value='{_e(nxt)}'>")
@@ -65,7 +66,7 @@ def _star(action: str, node: str, csrf: str, nxt: str, faved: bool, **fields) ->
         hid += f"<input type='hidden' name='{_e(k)}' value='{_e(str(v))}'>"
     return (f"<form method='post' action='/action' class='emo-f'>{hid}"
             f"<button class='{cls}' name='action' value='{action}' "
-            f"aria-pressed='{'true' if faved else 'false'}' aria-label='favoriet' "
+            f"aria-pressed='{'true' if faved else 'false'}' aria-label='favourite' "
             f"title='{title}'>{glyph}</button></form>")
 
 
@@ -74,9 +75,9 @@ def _star(action: str, node: str, csrf: str, nxt: str, faved: bool, **fields) ->
 # moment (één getal) → alleen getal. Één plek, spiegelt de Tufte-beslistabel uit het KPI-scherm.
 _SERIES_DIMS = {"time", "over_tijd"}
 _CAT_DIMS = {"country", "product", "keyword", "land", "kw", "path", "per_status", "per_type"}
-_FORM_LABEL = {"trend": "Trend (lijn)", "staaf": "Staaf", "getal": "Getal",
-               "gestapeld": "Gestapelde staaf", "horizontaal": "Horizontale balk",
-               "bullet": "Bullet (waarde vs doel)", "doelmeter": "Doelmeter", "burnup": "Burn-up"}
+_FORM_LABEL = {"trend": "Trend (line)", "staaf": "Bars", "getal": "Number",
+               "gestapeld": "Stacked bar", "horizontaal": "Horizontal bars",
+               "bullet": "Bullet (value vs goal)", "doelmeter": "Goal meter", "burnup": "Burn-up"}
 
 
 def _forms_for(dim: str) -> list[str]:
@@ -117,7 +118,7 @@ def _segment_menu(st, rec, node: str, tile: dict, csrf: str, nxt: str) -> str:
         items.append(_post("metrics2_dim", node, dl, f"menuitem{on}", csrf, nxt,
                            tid=tile.get("id", ""), dim=did, form=_default_form(did)))
     cur_lbl = dict(dims).get(cur, cur)
-    return (f"<details class='cardmenu'><summary class='statustrigger' aria-label='segment kiezen'>"
+    return (f"<details class='cardmenu'><summary class='statustrigger' aria-label='choose segment'>"
             f"↔ {_e(cur_lbl)} <span class='caret'>▾</span></summary>"
             f"<div class='cardmenu-b'><div class='menu-h'>Segment</div>{''.join(items)}</div></details>")
 
@@ -128,7 +129,7 @@ def _compare_menu(st, rec, node: str, tile: dict, csrf: str, nxt: str) -> str:
     if tile.get("dim") not in _SERIES_DIMS:
         return ""
     cur = tile.get("cmp_measure") or ""
-    items = [_post("metrics2_compare", node, "— geen —", "menuitem" + ("" if cur else " on"), csrf, nxt,
+    items = [_post("metrics2_compare", node, "— none —", "menuitem" + ("" if cur else " on"), csrf, nxt,
                    tid=tile.get("id", ""), cmp_source="", cmp_measure="", cmp_dim="")]
     for s in _sources_for(st, rec):
         sdim = _series_dim(s)
@@ -142,10 +143,10 @@ def _compare_menu(st, rec, node: str, tile: dict, csrf: str, nxt: str) -> str:
                                tid=tile.get("id", ""), cmp_source=s["id"], cmp_measure=mid, cmp_dim=sdim))
     if len(items) < 2:
         return ""
-    lbl = "vergelijk" if not cur else f"vs {_e(cur)}"
-    return (f"<details class='cardmenu'><summary class='statustrigger' aria-label='meting vergelijken'>"
+    lbl = "compare" if not cur else f"vs {_e(cur)}"
+    return (f"<details class='cardmenu'><summary class='statustrigger' aria-label='compare measure'>"
             f"⇄ {lbl} <span class='caret'>▾</span></summary>"
-            f"<div class='cardmenu-b'><div class='menu-h'>Vergelijk met</div>{''.join(items)}</div></details>")
+            f"<div class='cardmenu-b'><div class='menu-h'>Compare with</div>{''.join(items)}</div></details>")
 
 
 def _weergave_menu(node: str, tile: dict, csrf: str, nxt: str) -> str:
@@ -182,18 +183,18 @@ def _formula_form(rec, csrf: str, nxt: str, opts: list) -> str:
         return ""
     o = "".join(f"<option value='{_e(v)}'>{_e(l)}</option>" for v, l in opts)
     ops = "".join(f"<option>{x}</option>" for x in ("÷", "×", "+", "−"))
-    return (f"<details class='m-add'><summary class='btn sm'>+ Formule</summary>"
+    return (f"<details class='m-add'><summary class='btn sm'>+ Formula</summary>"
             f"<form method='post' action='/action' class='m-addform'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
             f"<input type='hidden' name='node' value='{_e(rec.id)}'>"
             f"<input type='hidden' name='next' value='{_e(nxt)}'>"
             f"<input type='hidden' name='f_agg' value='gemiddelde'>"
-            f"<select name='f_a' aria-label='meting A'>{o}</select>"
-            f"<select name='f_op' aria-label='bewerking'>{ops}</select>"
-            f"<select name='f_b' aria-label='meting B'>{o}</select>"
-            f"<input name='f_name' placeholder='Naam (bijv. Conversie)' autocomplete='off'>"
+            f"<select name='f_a' aria-label='measure A'>{o}</select>"
+            f"<select name='f_op' aria-label='operation'>{ops}</select>"
+            f"<select name='f_b' aria-label='measure B'>{o}</select>"
+            f"<input name='f_name' placeholder='Name (e.g. Conversion)' autocomplete='off'>"
             f"<button class='btn ok sm' type='submit' name='action' value='metrics2_formula'>"
-            f"Formule maken</button></form></details>")
+            f"Create formula</button></form></details>")
 
 
 def _spark(st, rec, s: dict, mid: str) -> str:
@@ -231,7 +232,7 @@ def _catalog(st, rec, tiles, csrf: str, nxt: str) -> str:
                          f"<div class='spark'>{_spark(st, rec, s, mid)}</div></div>")
         groups.append(f"<div class='catgroup'><h3>{_e(s['label'])}</h3>"
                       f"<div class='catgrid'>{''.join(cards)}</div></div>")
-    return "".join(groups) or "<p class='muted'>Nog geen bronnen voor deze node.</p>"
+    return "".join(groups) or "<p class='muted'>No sources for this node yet.</p>"
 
 
 def _window_bar(node: str, win: str, compare: bool, live: bool, base: str) -> str:
@@ -243,10 +244,10 @@ def _window_bar(node: str, win: str, compare: bool, live: bool, base: str) -> st
     seg = f"<span class='seg'>{pills}</span>"
     ct = " on" if compare else ""
     ct_url = f"{base}&mw={_e(win)}" + ("" if compare else "&compare=1")
-    sw = (f"<span class='switch-field'>Vergelijk "
+    sw = (f"<span class='switch-field'>Compare "
           f"<a class='switch{ct}' href='{ct_url}' role='switch' "
-          f"aria-checked='{'true' if compare else 'false'}' title='vergelijk met de vorige periode'></a></span>")
-    return f"<div class='cl-bar'><span class='muted'>Periode:</span> {seg}{sw}</div>"
+          f"aria-checked='{'true' if compare else 'false'}' title='compare with the previous period'></a></span>")
+    return f"<div class='cl-bar'><span class='muted'>Period:</span> {seg}{sw}</div>"
 
 
 def _favorites(st, rec, tiles, csrf: str, win: str, compare: bool, van: str, tot: str,
@@ -254,9 +255,9 @@ def _favorites(st, rec, tiles, csrf: str, win: str, compare: bool, van: str, tot
     node = rec.id
     if not tiles:
         if not editable:
-            return "<p class='muted'>Nog geen metrieken op deze node.</p>"
-        return ("<div class='m2empty'><span class='big'>☆</span>Nog niks op je dashboard.<br>"
-                "Zet een ster in de catalogus.</div>")
+            return "<p class='muted'>No metrics on this node yet.</p>"
+        return ("<div class='m2empty'><span class='big'>☆</span>Nothing on your dashboard yet.<br>"
+                "Star something in the catalogue.</div>")
     now = _time.time()
     start, end = window_range(win, now, van, tot)
     prev_win = None
@@ -276,7 +277,7 @@ def _favorites(st, rec, tiles, csrf: str, win: str, compare: bool, van: str, tot
         # combo of formule bepaalt zelf de visual → geen losse weergave-keuze
         weergave = "" if (t.get("cmp_measure") or is_formule) else _weergave_menu(node, t, csrf, nxt)
         vergelijk = "" if is_formule else _compare_menu(st, rec, node, t, csrf, nxt)
-        rm = _post("metrics2_unfav", node, "verwijderen", "dellink", csrf, nxt, tid=t.get("id", ""))
+        rm = _post("metrics2_unfav", node, "remove", "dellink", csrf, nxt, tid=t.get("id", ""))
         ctrls = f"<div class='tile-foot-l'>{segment}{weergave}{vergelijk}</div>"
         foot = f"<div class='tile-foot'>{ctrls}<div class='tile-foot-r'>{rm}</div></div>"
         cells.append(f"<div class='tile-wrap'>{chart}{foot}</div>")
@@ -297,18 +298,18 @@ def _metrics2_body(st, rec, csrf: str, win: str = "7d", compare: bool = False,
         return _favorites(st, rec, tiles, "", win, compare, van, tot, nxt, editable=False)
     live = any((t.get("source") in _LIVE_TILE_SOURCES) or t.get("source", "").startswith("shopify")
                or t.get("source", "").startswith("werk:") for t in tiles)
-    maak = (f"<a class='btn ok sm' href='/kpi_new?node={_e(node)}'>+ KPI maken</a>"
+    maak = (f"<a class='btn ok sm' href='/kpi_new?node={_e(node)}'>+ Create KPI</a>"
             f"{_formula_form(rec, csrf, nxt, _formula_operand_opts(st, rec))}")
     # Twee sub-tabs zoals in het prototype: 'Mijn dashboard' (met telling) en 'Catalogus'. Standaard
     # open je op je dashboard; heb je nog niks, dan opent de catalogus zodat je meteen kunt kiezen.
     show_dash = bool(tiles)
     subtabs = (f"<div class='subtabs'>"
                f"<button type='button' class='subtab js-m2{' on' if show_dash else ''}' data-m2='dash'>"
-               f"Mijn dashboard <span class='chip'>{len(tiles)}</span></button>"
+               f"My dashboard <span class='chip'>{len(tiles)}</span></button>"
                f"<button type='button' class='subtab js-m2{'' if show_dash else ' on'}' data-m2='cat'>"
-               f"Catalogus</button></div>")
+               f"Catalogue</button></div>")
     dash = (f"<div data-m2v='dash'{'' if show_dash else ' hidden'}>"
-            f"<div class='cl-head'><span class='muted'>Je dashboard</span>"
+            f"<div class='cl-head'><span class='muted'>Your dashboard</span>"
             f"<span class='kc-actions'>{maak}</span></div>"
             f"{_window_bar(node, win, compare, live, base)}"
             f"{_favorites(st, rec, tiles, csrf, win, compare, van, tot, nxt, editable=True)}</div>")
@@ -335,13 +336,13 @@ def render_metrics2(st, rec, csrf_token: str = "", win: str = "7d",
     """De losse volledige pagina (`/metrics2?node=…`): dezelfde body met eigen pagina-chrome."""
     if rec is None:
         inner = (f"{_DS_LINK}<div class='c2-wrap'><div class='c2-main'>"
-                 "<p class='muted'>Kies een cirkel of rol om metrieken voor te bekijken.</p></div></div>")
-        return _page("Metrieken", inner)
+                 "<p class='muted'>Pick a circle or role to view metrics for.</p></div></div>")
+        return _page("Metrics", inner)
     body = _metrics2_body(st, rec, csrf_token, win, compare, van, tot,
                           base=f"/metrics2?node={_e(rec.id)}")
-    main = (f"<div class='c2-main'><h1>Metrieken — {_e(_name(rec))}</h1>"
-            f"<p class='muted'>Scan de catalogus en zet een ster bij wat je wilt volgen. "
-            f"Je hoeft niet te weten wat interessant is; het overzicht staat er.</p>{body}</div>")
+    main = (f"<div class='c2-main'><h1>Metrics — {_e(_name(rec))}</h1>"
+            f"<p class='muted'>Scan the catalogue and star what you want to follow. "
+            f"You do not need to know what is interesting; the overview is there.</p>{body}</div>")
     inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
-    return _page("Metrieken", inner)
+    return _page("Metrics", inner)

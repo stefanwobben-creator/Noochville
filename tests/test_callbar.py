@@ -34,7 +34,7 @@ def test_lk_mute_dispatch_tak(tmp_path, monkeypatch):
     nxt, msg = cockpit2.dispatch(dd, "lk_mute", {"identity": [""], "next": ["/"]}, username="guest")
     assert msg == ""                                                    # lege identity → no-op
     _, msg2 = cockpit2.dispatch(dd, "lk_mute", {"identity": ["x"], "muted": ["1"], "next": ["/"]}, username="guest")
-    assert "niet gelukt" in msg2                                        # geen creds → fail-soft-melding
+    assert "failed" in msg2                                        # geen creds → fail-soft-melding
     assert "lk_mute" in cockpit2.ACTIONS
 
 

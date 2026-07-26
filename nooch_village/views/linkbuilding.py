@@ -12,7 +12,9 @@ import os
 from nooch_village.web_base import _e, _page
 from nooch_village.cockpit2_util import _DS_LINK, _nav
 
+# Display-mapping: de sleutels blijven de opgeslagen prioriteit-waarden.
 _PRIO_CHIP = {"hoog": "chip amber", "midden": "chip", "laag": "chip outline", "onbekend": "chip outline"}
+_PRIO_LABEL = {"hoog": "high", "midden": "medium", "laag": "low", "onbekend": "unknown"}
 
 
 def _decide(action: str, link: str, label: str, cls: str, csrf: str) -> str:
@@ -25,18 +27,18 @@ def _decide(action: str, link: str, label: str, cls: str, csrf: str) -> str:
 
 def _cand_card(c: dict, csrf: str) -> str:
     link = c.get("link", "")
-    title = c.get("title") or link or "(zonder titel)"
+    title = c.get("title") or link or "(untitled)"
     src = c.get("source") or ""
     prio = c.get("priority") or "onbekend"
     seen = c.get("first_seen") or ""
     disp = (f"<a href='{_e(link)}' target='_blank' rel='noopener'>{_e(str(title))}</a>"
             if isinstance(link, str) and link.startswith("http") else _e(str(title)))
-    chip = f"<span class='{_PRIO_CHIP.get(prio, 'chip outline')}'>{_e(prio)}</span>"
-    meta = f"{_e(src)}{(' · sinds ' + _e(seen)) if seen else ''}"
+    chip = f"<span class='{_PRIO_CHIP.get(prio, 'chip outline')}'>{_e(_PRIO_LABEL.get(prio, prio))}</span>"
+    meta = f"{_e(src)}{(' · since ' + _e(seen)) if seen else ''}"
     acties = ""
     if csrf:
-        acties = (_decide("link_pursue", link, "Ga pitchen", "btn ok sm", csrf)
-                  + _decide("link_ignore", link, "Negeer", "btn sm", csrf))
+        acties = (_decide("link_pursue", link, "Go pitch", "btn ok sm", csrf)
+                  + _decide("link_ignore", link, "Ignore", "btn sm", csrf))
     return (f"<div class='card'><div class='cl-head'><div class='rdr-sig'>{disp}</div>"
             f"<span class='kc-actions'>{chip}</span></div>"
             f"<div class='rdr-meta'><span class='muted'>{meta}</span></div>"
@@ -62,15 +64,15 @@ def render_linkbuilding(data_dir: str, csrf_token: str = "") -> str:
     cands = store.candidates()
     purs = store.pursued()
     cand_html = "".join(_cand_card(c, csrf_token) for c in cands) or (
-        "<p class='muted'>Nog geen doelwitten om te beoordelen. De radar vult deze lijst elke puls.</p>")
+        "<p class='muted'>No targets to review yet. The radar fills this list every pulse.</p>")
     pursued_block = ""
     if purs:
         prows = "".join(_pursued_row(p) for p in purs)
-        pursued_block = f"<h2>Wordt gepitcht ({len(purs)})</h2><div class='rdr-tool'>{prows}</div>"
-    main = (f"<div class='c2-main'><h1>Linkbuilding</h1>"
-            f"<p class='muted'>Gidsen en lijstjes waar Nooch in vermeld wil worden. Beslis per doelwit: "
-            f"ga je pitchen of negeer je het. {len(cands)} te beoordelen.</p>"
-            f"<h2>Te beoordelen</h2>{cand_html}{pursued_block}</div>")
+        pursued_block = f"<h2>Being pitched ({len(purs)})</h2><div class='rdr-tool'>{prows}</div>"
+    main = (f"<div class='c2-main'><h1>Link building</h1>"
+            f"<p class='muted'>Guides and listicles Nooch wants to be mentioned in. Decide per target: "
+            f"do you pitch it or ignore it. {len(cands)} to review.</p>"
+            f"<h2>To review</h2>{cand_html}{pursued_block}</div>")
     inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
-    return _page("Linkbuilding", inner)
+    return _page("Link building", inner)

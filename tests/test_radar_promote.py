@@ -190,7 +190,7 @@ def test_auto_promote_vlag_default_uit(tmp_path):
     rid = st.radar.add(role=_ROLE, feed="f", kind="kaart", content="Alleen goedkeuren")
     _, msg = cockpit2.dispatch(dd, "radar_approve",
                                {"rid": [rid], "next": ["/"]}, username="guest")
-    assert "archief" in msg and "Oracle" not in msg
+    assert "archive" in msg and "Oracle" not in msg
     st2 = cockpit2._Stores(dd)
     assert st2.notes.all() == []                                   # default-gedrag onveranderd
     assert "promoted_atom_id" not in st2.radar.get(rid)
@@ -208,7 +208,7 @@ def test_auto_promote_vlag_aan_promoveert_bij_approve(tmp_path):
                        published_at="2026-05-11T00:00:00Z")
     _, msg = cockpit2.dispatch(dd, "radar_approve",
                                {"rid": [rid], "next": ["/"]}, username="guest")
-    assert "archief" in msg and "Oracle" in msg                    # zelfde codepad
+    assert "archive" in msg and "Oracle" in msg                    # zelfde codepad
     st2 = cockpit2._Stores(dd)
     aid = st2.radar.get(rid)["promoted_atom_id"]
     assert st2.notes.get(aid).reference == _LINK
