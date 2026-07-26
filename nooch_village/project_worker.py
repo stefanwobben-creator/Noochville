@@ -10,19 +10,23 @@ Grenzen die hier hard bewaakt worden:
   capaciteit (LLM-redenering). Geen externe write-API's, geen code, geen nieuwe skills, niets
   onomkeerbaars — dat blijft mens-gated (geboren-vs-bemenst).
 - Vraagt het project tóch nieuwe capaciteit of een onomkeerbare handeling? Dan levert de rol niet,
-  maar zegt 'KAN NIET' met wat er nodig is → het project wordt geblokkeerd voor jouw oordeel.
+  maar zegt 'CANNOT' met wat er nodig is → het project wordt geblokkeerd voor jouw oordeel.
 - De mens sluit projecten af (de rol markeert hooguit voortgang), zodat de onafhankelijke check blijft.
 """
 from __future__ import annotations
 import re
 
-# Het CONTRACT met de prompt is de Nederlandse marker "KAN NIET:" — die blijft letterlijk staan
-# (i18n mini-2C: proza Engels, machine-tokens ongemoeid). De Engelse varianten staan er defensief
-# naast: de prompt is nu Engels, dus een model kan afdwalen naar "CANNOT:". Zonder die tolerantie
-# zou zo'n antwoord STIL als deliverable landen — een geblokkeerd project dat er afgerond uitziet.
-# Alleen herkennen, nooit voorschrijven: de prompt vraagt onverkort om KAN NIET:.
-_CANT = re.compile(r"(?:KAN\s*NIET|CAN\s*_?NOT|CANNOT)\s*:?\s*(.+)", re.IGNORECASE | re.DOTALL)
-_CANT_START = ("KAN NIET", "CANNOT", "CAN NOT")
+# Het CONTRACT met de prompt is nu de Engelse marker "CANNOT:" — de prompt is Engels, dus vecht je
+# niet langer tegen het model (i18n 2C). De markers zijn puur vluchtige parse-tokens: `work_one`
+# stript ze vóór het returnen, ze staan nergens opgeslagen en niets vergelijkt erop (geverifieerd
+# op de prod-data: 0 treffers in projects.json/deliverables.json).
+#
+# De Nederlandse variant blijft herkend als OVERGANGS-tolerantie, niet als contract. Reden om
+# liberaal te parsen: matcht de marker niet, dan valt het antwoord STIL door naar de deliverable-tak
+# en wordt een geblokkeerd project als afgerond weggeschreven — met "KAN NIET: …" als eerste regel
+# van het "opgeleverde" document. Een datafout die niemand ziet. Herkennen is gratis; missen niet.
+_CANT = re.compile(r"(?:CANNOT|CAN\s*_?NOT|KAN\s*NIET)\s*:?\s*(.+)", re.IGNORECASE | re.DOTALL)
+_CANT_START = ("CANNOT", "CAN NOT", "KAN NIET")
 
 
 def _scope_text(scope) -> str:
@@ -54,20 +58,20 @@ def work_one(scope, role_id: str, role_purpose: str, *, steer: str = "", persona
         "first draft, an analysis, or the concrete next step. Rules: text only (reversible), do not "
         "call external systems, do not publish/send/buy/delete anything, no new tools. Plain "
         "language, no jargon. Write in English.\n\n"
-        "The two line markers below are Dutch ON PURPOSE — the system reads them literally. "
-        "Reproduce the marker exactly as written; everything after it is English.\n\n"
+        "Start your answer with one of the two line markers below, exactly as written — the system "
+        "reads them literally.\n\n"
         "Can you NOT do this with text alone (it needs a website change, an external tool, spending "
         "money, sending something, or a skill you do not have)? Then answer with:\n"
-        "KAN NIET: <what is needed for that>\n\n"
+        "CANNOT: <what is needed for that>\n\n"
         "Otherwise answer with:\n"
-        "LEVER: <your concrete outcome or next step>")
+        "DELIVER: <your concrete outcome or next step>")
     out = (llm_reason(prompt) or "").strip()
     if not out:
         return {"ok": False, "needs": None}
     m = _CANT.search(out)
     if m and out.upper().lstrip().startswith(_CANT_START):
         return {"ok": False, "needs": m.group(1).strip()[:200]}
-    body = re.sub(r"^\s*(?:LEVER|DELIVER)\s*:?\s*", "", out, flags=re.IGNORECASE).strip()
+    body = re.sub(r"^\s*(?:DELIVER|LEVER)\s*:?\s*", "", out, flags=re.IGNORECASE).strip()
     return {"ok": True, "outcome": body[:1500]} if body else {"ok": False, "needs": None}
 
 

@@ -75,7 +75,8 @@ def persona_prompt(p: Persona | dict | None) -> str:
     # De tweede zin is GEEN franje maar een harde vangrail. Deze preamble gaat vóór prompts die een
     # NEDERLANDS antwoord-token parsen en fail-closed zijn als het niet matcht:
     #   - cockpit2._ai_reply  → {"fit": "ja|deels|nee"}  (_parse_triage weigert al het andere)
-    #   - project_worker.work_one → de markers "KAN NIET:" / "LEVER:"
+    # (project_worker.work_one stond hier ook, tot z'n markers in 2C Engels werden — die vecht niet
+    #  meer tegen de taal en heeft de vangrail niet meer nodig.)
     # Zonder deze zin zou "Always respond in English" die tokens vertalen en de triage stil uitzetten.
     # De prompts én hun parsers gaan samen om in fase 2C; tot die tijd blijft dit de scheidslijn:
     # proza Engels, machine-waarden letterlijk zoals de omringende instructie ze voorschrijft.
