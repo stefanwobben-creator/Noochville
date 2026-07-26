@@ -25,13 +25,13 @@ def _noochie_suggest(st: _Stores, ask=None):
         from nooch_village.skills_impl.voorstel import VoorstelSchrijvenSkill
         res = VoorstelSchrijvenSkill().run({"tension": tension})
         if res.get("ok"):
-            return ("Hier is mijn voorstel:\n\n" + res["voorstel"]
-                    + "\n\nWil je dit als roloverleg-voorstel zetten?")
+            return ("Here is my proposal:\n\n" + res["voorstel"]
+                    + "\n\nDo you want to put this on the governance-meeting agenda?")
     except Exception:
         pass
-    return ("Concrete tip (even zonder AI-verbinding): zet dit als agendapunt op het roloverleg en "
-            "beleg je behoefte als accountability bij de best passende rol. Houd het klein: één rol, "
-            "één heldere verantwoordelijkheid.")
+    return ("Concrete tip (without an AI connection for now): put this on the governance-meeting agenda "
+            "and place your need as an accountability on the best-fitting role. Keep it small: one role, "
+            "one clear responsibility.")
 
 
 def _noochie_reply(st: _Stores, text: str, ask=None):
@@ -60,24 +60,24 @@ def render_noochie(st: _Stores, csrf: str, screen_ctx: str = "") -> str:
     s = st.noochie
     if not s.messages:                                  # zaai de opening (één vraag tegelijk)
         if screen_ctx:                                  # vanuit een spanning aangeroepen (werkoverleg)
-            s.add("noochie", f"Heb je hulp nodig bij {screen_ctx}? Vertel: wat voel je precies?")
+            s.add("noochie", f"Do you need help with {screen_ctx}? Tell me: what exactly do you feel?")
         else:
-            s.add("noochie", "Hoi, ik ben Noochie, de missiestem van Nooch. Welke spanning voel je?")
+            s.add("noochie", "Hi, I'm Noochie, the mission voice of Nooch. Which tension do you feel?")
 
     def hid():
         return (f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
                 f"<input type='hidden' name='next' value='/'>")
 
     if s.ctx:
-        ctxrow = (f"<div class='noo-ctx'><span class='chip green'>leest: {_e(s.ctx)}</span>"
+        ctxrow = (f"<div class='noo-ctx'><span class='chip green'>reading: {_e(s.ctx)}</span>"
                   f"<form method='post' action='/action' style='display:inline'>{hid()}"
                   f"<input type='hidden' name='ctx' value=''>"
-                  f"<button class='flink' type='submit' name='action' value='noochie_ctx'>verwijderen</button></form></div>")
+                  f"<button class='flink' type='submit' name='action' value='noochie_ctx'>remove</button></form></div>")
     elif screen_ctx:
-        ctxrow = (f"<div class='noo-ctx'><span class='muted'>Dit scherm: {_e(screen_ctx)}</span>"
+        ctxrow = (f"<div class='noo-ctx'><span class='muted'>This screen: {_e(screen_ctx)}</span>"
                   f"<form method='post' action='/action' style='display:inline'>{hid()}"
                   f"<input type='hidden' name='ctx' value='{_e(screen_ctx)}'>"
-                  f"<button class='flink' type='submit' name='action' value='noochie_ctx'>neem dit scherm mee</button></form></div>")
+                  f"<button class='flink' type='submit' name='action' value='noochie_ctx'>include this screen</button></form></div>")
     else:
         ctxrow = ""
 
@@ -85,25 +85,25 @@ def render_noochie(st: _Stores, csrf: str, screen_ctx: str = "") -> str:
     for m in s.messages:
         jij = m.get("who") == "jij"
         cls = "jij" if jij else "noochie"
-        lbl = "🙋 jij" if jij else "🐸 Noochie"
+        lbl = "🙋 you" if jij else "🐸 Noochie"
         msgs += (f"<div class='kb-msg {cls}'><span class='kb-who'>{lbl}</span>"
                  f"<div class='kb-text'>{_md(m.get('text', ''))}</div></div>")
 
-    ph = {"ask_spanning": "Wat is je spanning?", "ask_need": "Wat heb je nodig?"}.get(s.phase, "Typ je bericht…")
+    ph = {"ask_spanning": "What is your tension?", "ask_need": "What do you need?"}.get(s.phase, "Type your message…")
     comp = (f"<form method='post' action='/action' class='kb-form'>{hid()}"
             f"<textarea name='text' rows='2' placeholder='{_e(ph)}'></textarea>"
             f"<button class='btn ok sm' type='submit' name='action' value='noochie_send' "
-            f"style='margin-top:.3rem'>Stuur</button></form>")
+            f"style='margin-top:.3rem'>Send</button></form>")
     reset = (f"<form method='post' action='/action' style='display:inline'>{hid()}"
-             f"<button class='flink' type='submit' name='action' value='noochie_reset'>↺ opnieuw</button></form>")
-    return (f"<div class='noo-win'><div class='noo-sub'><span>Snelle hulp · ik stel alleen voor</span>{reset}</div>"
+             f"<button class='flink' type='submit' name='action' value='noochie_reset'>↺ restart</button></form>")
+    return (f"<div class='noo-win'><div class='noo-sub'><span>Quick help · I only suggest</span>{reset}</div>"
             f"{ctxrow}<div class='kb-body noo-feed'>{msgs}</div>{comp}</div>")
 
 
 def _noochie_chrome() -> str:
     """Globale chrome (op elke pagina): dunne linkerbalk met de Noochie-CTA onderaan + het venster.
     Later komt de inbox in deze balk. Reuse: het venster gebruikt dezelfde chat-atomen (kb-msg)."""
-    rail = ("<div class='noo-rail'><div class='noo-rail-top' title='Inbox — binnenkort'></div>"
+    rail = ("<div class='noo-rail'><div class='noo-rail-top' title='Inbox — coming soon'></div>"
             "<button class='noo-cta' type='button'><span class='noo-cta-tx'>Noochie</span></button></div>")
     overlay = ("<div id='novl' class='noo-ovl' style='display:none'><div class='noo-box'>"
                "<div class='noo-head'><span>🐸 Noochie</span><button type='button' class='noo-x'>✕</button></div>"

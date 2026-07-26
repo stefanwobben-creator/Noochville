@@ -46,7 +46,7 @@ def test_elk_tabblad_rendert_in_het_designsysteem(tab):
     assert "/static/nooch.css" in html                  # designsysteem, geen eigen opmaak
     assert "<style>" not in html.split("</head>")[1]    # geen eigen stylesheet in de body
     assert "style=" not in html
-    assert "Claims-checker" in html
+    assert "Claims checker" in html
 
 
 def test_beheerblok_alleen_voor_wie_mag_cureren():
@@ -69,16 +69,16 @@ def test_rapport_toont_score_stoplicht_en_rolroutering():
     html = render_rapport(uitslag, markten=["NL"], bron="geplakte tekst", db=claims_db.load())
     assert "kpi-val" in html                             # score als groot getal
     assert "chip coral" in html                          # rood stoplicht
-    assert "rol: copywriter" in html                     # rol-routing per bevinding
+    assert "role: copywriter" in html                     # rol-routing per bevinding
     assert "<mark>" in html                              # gemarkeerde tekst-preview
-    assert "Marktspecifiek" in html                      # landnotitie NL
+    assert "Market-specific" in html                      # landnotitie NL
     assert "style=" not in html
 
 
 def test_rapport_zonder_bevindingen_is_geen_lege_pagina():
     uitslag = claims_db.check_tekst("Handgemaakt in Portugal.")
     html = render_rapport(uitslag, db=claims_db.load())
-    assert "Geen vlagwoorden gevonden" in html
+    assert "No flagged words found" in html
     assert "claims_to_board" not in html                 # niets om op het bord te zetten
 
 
@@ -93,7 +93,7 @@ def test_bordknop_alleen_voor_compliance():
 def test_defecte_database_geeft_zichtbare_fout(monkeypatch, tmp_path):
     monkeypatch.setattr(claims_db, "DB_PATH", str(tmp_path / "weg.json"))
     html = render_claims()
-    assert "kon niet geladen worden" in html             # fail-closed, geen lege checker
+    assert "could not be loaded" in html             # fail-closed, geen lege checker
 
 
 # ── Taak 3: de server-side scan ─────────────────────────────────────────────

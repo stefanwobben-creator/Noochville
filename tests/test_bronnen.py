@@ -16,14 +16,14 @@ def test_bronnen_toont_bronnen_met_status(tmp_path):
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     html = cockpit2.render_bronnen(st, os.path.dirname(dd), csrf_token="t")
-    assert "Bronnen aansluiten" in html
+    assert "Connect sources" in html
     # elke bron staat er, met een aan/uit-knop
     assert "source_activate" in html
     assert "Shopify" in html and "Plausible" in html
     # zonder sleutels (lege testomgeving) → 'sleutel nodig' voor bronnen die sleutels vragen
-    assert "sleutel nodig" in html
+    assert "key needed" in html
     # keyless bron toont dat expliciet
-    assert "Geen sleutel nodig" in html
+    assert "No key needed" in html
 
 
 def test_activeren_en_deactiveren_zet_status(tmp_path):

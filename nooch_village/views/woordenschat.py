@@ -80,8 +80,8 @@ def _gsc_sparks(data_dir: str) -> dict:
 def _spark_cell(word: str, sparks: dict) -> str:
     pts = sparks.get(word.lower())
     if not pts or len(pts) < 2:
-        return "<span class='muted' title='nog geen GSC-reeks'>—</span>"
-    titel = f"GSC-impressies {pts[0][0]} → {pts[-1][0]}"
+        return "<span class='muted' title='no GSC series yet'>—</span>"
+    titel = f"GSC impressions {pts[0][0]} → {pts[-1][0]}"
     return f"<span title='{_e(titel)}'>{_spark_svg(pts)}</span>"
 
 
@@ -95,7 +95,7 @@ def _nieuw_ster(e: dict) -> str:
         return ""
     if date.today() - d > timedelta(days=_STER_DAGEN):
         return ""
-    return f" <span class='chip amber' title='nieuw in de Library sinds {_e(fs)}'>★ nieuw</span>"
+    return f" <span class='chip amber' title='new in the Library since {_e(fs)}'>★ new</span>"
 
 
 def _rows(words: list, sparks: dict, csrf: str) -> str:
@@ -105,7 +105,7 @@ def _rows(words: list, sparks: dict, csrf: str) -> str:
         # Toggle i.p.v. verbied-emoji: 'aan' = actief in discovery; klik zet het woord op de
         # no-follow list (ws_forbid). Reuse van de bestaande .switch-stijl.
         verbied = (f"<td><span class='kc-actions'>"
-                   f"{_mini_form(csrf, 'ws_forbid', w, '', cls='switch on', title='actief in discovery — klik om op de no-follow list te zetten')}"
+                   f"{_mini_form(csrf, 'ws_forbid', w, '', cls='switch on', title='active in discovery — click to move it to the no-follow list')}"
                    f"</span></td>") if csrf else ""
         out.append(
             f"<tr><td>{_e(w)}{_nieuw_ster(e)}</td>"
@@ -163,31 +163,31 @@ def _nominaties(data_dir: str, csrf: str, can_decide: bool) -> str:
                 f"<input type='hidden' name='next' value='/woordenschat'>"
                 f"<input type='hidden' name='term' value='{_e(term)}'>"
                 f"<input type='hidden' name='status' value='approved'>"
-                f"<button class='btn ok'>✓ neem aan</button></form>"
+                f"<button class='btn ok'>✓ accept</button></form>"
                 f"<form method='post' action='/action' class='qadd-row'>"
                 f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
                 f"<input type='hidden' name='action' value='kw_nom_reject'>"
                 f"<input type='hidden' name='next' value='/woordenschat'>"
                 f"<input type='hidden' name='term' value='{_e(term)}'>"
-                f"<input type='text' name='reason' placeholder='reden voor afwijzing (verplicht)'>"
-                f"<button class='btn no'>✗ wijs af</button></form>")
+                f"<input type='text' name='reason' placeholder='reason for rejection (required)'>"
+                f"<button class='btn no'>✗ reject</button></form>")
         else:
-            acties = "<span class='muted'>alleen de Librarian-vervuller beslist</span>"
+            acties = "<span class='muted'>only the Librarian role filler decides</span>"
         rijen += (f"<div class='rdr-row'><div class='rdr-body'>"
                   f"<div class='rdr-sig'>{_e(term)}</div>"
-                  f"<div class='rdr-meta'><span class='muted'>genomineerd door "
+                  f"<div class='rdr-meta'><span class='muted'>nominated by "
                   f"{_e(it.get('by') or '—')} · {_e(it.get('created_at') or '')}</span></div>"
                   f"<div class='ffoot-l'>{acties}</div></div></div>")
-    return (f"<h2>Genomineerd (wacht op jouw oordeel) ({len(pending)})</h2>"
+    return (f"<h2>Nominated (awaiting your verdict) ({len(pending)})</h2>"
             f"<div class='rdr-tool'>{rijen}</div>")
 
 
 def _esc_knoppen(n: int, word: str, csrf: str) -> str:
     """Geëscaleerd: goedkeuren of verbieden mét klein reden-veld (unieke fid per rij)."""
-    reden = _field("Reden", "reason", fid=f"ws-reden-{n}", placeholder="reden (anders default)")
-    return (_mini_form(csrf, "ws_approve", word, "✓ keur goed", "btn ok sm")
+    reden = _field("Reason", "reason", fid=f"ws-reden-{n}", placeholder="reason (default otherwise)")
+    return (_mini_form(csrf, "ws_approve", word, "✓ approve", "btn ok sm")
             + _mini_form(csrf, "ws_forbid", word, "🚫", "btn sm", extra=reden,
-                         title="naar de no-follow list — komt niet meer terug in discovery"))
+                         title="to the no-follow list — never returns in discovery"))
 
 
 def render_woordenschat(data_dir: str, csrf_token: str = "", msg: str = "",
@@ -205,13 +205,13 @@ def render_woordenschat(data_dir: str, csrf_token: str = "", msg: str = "",
     scored = sorted(((w, e, kansrijkheid(e)) for w, e in approved), key=lambda r: -r[2])
     if scored:
         sparks = _gsc_sparks(data_dir)
-        acties_kop = "<th>Acties</th>" if csrf_token else ""
-        tabel = (f"<table class='mtab'><tr><th>Woord</th><th>Trend</th><th class='num'>Volume</th>"
-                 f"<th class='num'>Concurrentie</th><th class='num'>GSC-positie</th>"
-                 f"<th class='num'>Kansrijkheid</th>{acties_kop}</tr>{_rows(scored, sparks, csrf_token)}</table>")
+        acties_kop = "<th>Actions</th>" if csrf_token else ""
+        tabel = (f"<table class='mtab'><tr><th>Word</th><th>Trend</th><th class='num'>Volume</th>"
+                 f"<th class='num'>Competition</th><th class='num'>GSC position</th>"
+                 f"<th class='num'>Opportunity</th>{acties_kop}</tr>{_rows(scored, sparks, csrf_token)}</table>")
     else:
-        tabel = ("<p class='muted'>Nog geen goedgekeurde woorden met verrijking. Rollen voeden de Library; "
-                 "zet de bronnen aan (Keywords Everywhere, GSC) zodat volume en positie binnenkomen.</p>")
+        tabel = ("<p class='muted'>No approved words with enrichment yet. Roles feed the Library; "
+                 "switch the sources on (Keywords Everywhere, GSC) so volume and position come in.</p>")
     beheer = ""
     if csrf_token:
         # Beheer-secties alleen op het ingelogde (schrijf-)oppervlak: zonder csrf-token blijft
@@ -219,23 +219,23 @@ def render_woordenschat(data_dir: str, csrf_token: str = "", msg: str = "",
         esc = [_status_row(w, e, _esc_knoppen(n, w, csrf_token))
                for n, (w, e) in enumerate(x for x in entries if x[1].get("status") == "escalated")]
         heractiveer = lambda w: _mini_form(csrf_token, "ws_approve", w, "✅", "star",
-                                           title="heractiveer — terug naar de woordenschat")
+                                           title="reactivate — back into the library")
         avoid = [_status_row(w, e, heractiveer(w))
                  for w, e in entries if e.get("status") == "avoid"]
         forb = [_status_row(w, e, heractiveer(w))
                 for w, e in entries if e.get("status") == "forbidden"]
         beheer = (_nominaties(data_dir, csrf_token, can_decide)
-                  + _sectie("Geëscaleerd (wacht op jouw oordeel)", esc)
-                  + _sectie("Gepauzeerd (avoid)", avoid)
+                  + _sectie("Escalated (awaiting your verdict)", esc)
+                  + _sectie("Paused (avoid)", avoid)
                   + _sectie_inklap("No-follow list", forb))
-    main = (f"<div class='c2-main'><h1>Woordenschat &amp; kansen</h1>{_banner(msg)}"
-            f"<p class='muted'>De goedgekeurde woorden van de Library, gerangschikt op kansrijkheid zodat "
-            f"het meest kansrijke woord bovenaan staat. Rollen leveren de verrijking aan; Library cureert. "
-            f"De Trend-kolom is de GSC-impressies-reeks van de laatste {_SPARK_DAGEN} dagen.</p>"
-            f"<p class='muted'>Formule: <b>kansrijkheid = volume × fit ÷ concurrentie</b> "
-            f"(fit: rank-doel 1,0 · brede seed 0,3, automatisch bepaald; concurrentie 0-1 uit "
+    main = (f"<div class='c2-main'><h1>Library &amp; opportunities</h1>{_banner(msg)}"
+            f"<p class='muted'>The approved words of the Library, ranked by opportunity so that "
+            f"the most promising word is on top. Roles deliver the enrichment; Library curates. "
+            f"The Trend column is the GSC impressions series of the last {_SPARK_DAGEN} days.</p>"
+            f"<p class='muted'>Formula: <b>opportunity = volume × fit ÷ competition</b> "
+            f"(fit: rank target 1.0 · broad seed 0.3, determined automatically; competition 0-1 from "
             f"Keywords Everywhere).</p>"
             f"{tabel}{beheer}</div>")
     inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
-    return _page("Woordenschat", inner)
+    return _page("Library", inner)

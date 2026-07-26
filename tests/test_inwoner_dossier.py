@@ -198,8 +198,8 @@ def test_dossier_toont_alle_secties(tmp_path):
     from nooch_village.views.inwoners import render_inwoner
     st, p = _st(tmp_path)
     html = render_inwoner(st, p.id, csrf_token="t")
-    for sectie in ("Personality", "LLM-voorkeuren", "Skills", "Tools", "Zetels",
-                   "Recente activiteit", "Finetune met AI"):
+    for sectie in ("Personality", "LLM preferences", "Skills", "Tools", "Seats",
+                   "Recent activity", "Finetune with AI"):
         assert sectie in html, f"sectie ontbreekt: {sectie}"
     assert "style=" not in html
 
@@ -228,7 +228,7 @@ def test_onbekende_inwoner_geeft_nette_pagina(tmp_path):
     from nooch_village.views.inwoners import render_inwoner
     st, _ = _st(tmp_path)
     html = render_inwoner(st, "bestaat-niet")
-    assert "bestaat niet" in html
+    assert "does not exist" in html
 
 
 def test_motor_krijgt_geen_llm_blok(tmp_path):
@@ -240,7 +240,7 @@ def test_motor_krijgt_geen_llm_blok(tmp_path):
     st.personas = store
     html = render_inwoner(st, p.id, csrf_token="t")
     assert "LLM-voorkeuren" not in html
-    assert "Geen LLM" in html
+    assert "No LLM" in html
 
 
 def test_ui_ratchets_blijven_groen():
