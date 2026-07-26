@@ -45,6 +45,8 @@ def test_persona_prompt():
     assert persona_prompt(Persona(id="x", name="", mbti="", instructions="")) == ""
     pr = persona_prompt(Persona(id="x", name="Sam", mbti="INTJ", instructions="droog en kort"))
     assert "Sam" in pr and "INTJ" in pr and "droog en kort" in pr
-    assert "toon en aanpak" in pr                               # kleurt stem, niet capaciteit
+    assert "tone and approach" in pr                            # kleurt stem, niet capaciteit
+    assert "Always respond in English." in pr                    # taal-instructie staat altijd achteraan
+    assert "reproduce those EXACTLY as given" in pr             # vangrail: enum/marker-tokens niet vertalen
     # werkt ook met dict
     assert "Bo" in persona_prompt({"name": "Bo", "mbti": "", "instructions": ""})

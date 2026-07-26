@@ -13,7 +13,7 @@ from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.event_bus import EventBus
 from nooch_village.skills import SkillRegistry
 
-_HEADER = "Opdracht van de mens (de checklist moet hieraan voldoen):"
+_HEADER = "Assignment from the human (the checklist must satisfy this):"
 
 
 def _inhabitant(tmp_path, **settings):
@@ -43,7 +43,7 @@ def test_1_opdracht_in_prompt_op_juiste_plek(tmp_path):
     assert _HEADER in prompt
     assert "De tekst moet in het Engels en vegan benadrukken" in prompt
     # positie: ná Projectdoel, vóór de skill-catalogus (stuurt de planning)
-    assert prompt.index("Projectdoel") < prompt.index(_HEADER) < prompt.index("Jouw skills")
+    assert prompt.index("Project goal") < prompt.index(_HEADER) < prompt.index("Your skills")
 
 
 # 2. Zonder description → geen sectie (geen lege kop)

@@ -1,16 +1,20 @@
 """Canonieke missietekst van Nooch.earth — één bron voor het hele dorp.
 
+De tekst is Engels (i18n fase 2A): hij voedt UITSLUITEND LLM-prompts en de purpose van een
+VERS geseede wortelcirkel. Een bestaande root-purpose in de records wordt nooit overschreven
+(seeds.py vult alleen als hij leeg is) — die wijzigen is founder-werk via G4.
+
 Importeer ANCHOR_PURPOSE overal waar de missie nodig is:
 governance (G4 LLM-prompt), roles (Noochie), village (wortelcirkel).
 """
 import re
 
 ANCHOR_PURPOSE = (
-    "Nooch.earth is het duurzaamste schoenenmerk ter wereld — om een industrie vol "
-    "menselijk, dierlijk en planetair leed te inspireren dat meliorisme (altijd beter kunnen) "
-    "echt kan, en om klanten en anderen te inspireren iets positiefs op gang te brengen. "
-    "Kernwaarden: geen plastic, geen leer, in Europa geproduceerd, op bestelling, eerlijke prijs, "
-    "transparantie. Groei via missie-gedreven organische content op nooch.earth."
+    "Nooch.earth is the most sustainable shoe brand in the world — to show an industry full of "
+    "human, animal and planetary suffering that meliorism (always being able to do better) "
+    "is real, and to inspire customers and others to set something positive in motion. "
+    "Core values: no plastic, no leather, made in Europe, made to order, fair price, "
+    "transparency. Growth through mission-driven organic content on nooch.earth."
 )
 
 # ── Strategie-thema's: de kernwaarden uit ANCHOR_PURPOSE, uitgeschreven naar trefwoorden zodat we

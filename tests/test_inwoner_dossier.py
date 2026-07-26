@@ -56,11 +56,16 @@ def test_onbekende_sleutel_uit_een_nieuwere_versie_klapt_niet(tmp_path):
 
 
 def test_prompt_extra_komt_achter_de_instructies():
+    _TAAL = persona_prompt(Persona(id="x", name="Billy"))
+    _TAAL = _TAAL[_TAAL.index("\nAlways respond in English."):]   # taalregel staat sinds 2A achteraan
     zonder = persona_prompt(Persona(id="x", name="Billy", instructions="Droog."))
     met = persona_prompt(Persona(id="x", name="Billy", instructions="Droog.",
                                  prompt_extra="Nooit duiden zonder 3 bronnen."))
-    assert met.startswith(zonder)                       # de basis blijft ongemoeid
-    assert met.rstrip().endswith("Nooit duiden zonder 3 bronnen.")
+    assert zonder.endswith(_TAAL) and met.endswith(_TAAL)
+    # de basis (karakter + instructies) blijft ongemoeid; prompt_extra komt eráchter, vóór de taalregel
+    basis = zonder[: -len(_TAAL)]
+    assert met.startswith(basis)
+    assert met[: -len(_TAAL)].rstrip().endswith("Nooit duiden zonder 3 bronnen.")
 
 
 def test_lege_persona_geeft_geen_preamble():

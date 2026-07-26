@@ -1091,7 +1091,7 @@ class Inhabitant(threading.Thread):
             if len(d) > limit:
                 cut = d[:limit].rsplit(" ", 1)[0]
                 d = (cut or d[:limit]) + "…"
-            return f"Opdracht van de mens (de checklist moet hieraan voldoen):\n{d}\n\n"
+            return f"Assignment from the human (the checklist must satisfy this):\n{d}\n\n"
         except Exception:
             return ""
 
@@ -1113,8 +1113,8 @@ class Inhabitant(threading.Thread):
             desc = (getattr(obj, "description", "") or "").strip() if obj else ""
             insch = (getattr(obj, "input_schema", "") or "").strip() if obj else ""
             catalog_lines.append(f"- {name}: {desc[:160]}\n    input: " +
-                                 (insch or "(geen schema — leid af uit naam/omschrijving)"))
-        catalog = "\n".join(catalog_lines) or "(geen skills)"
+                                 (insch or "(no schema — infer it from the name/description)"))
+        catalog = "\n".join(catalog_lines) or "(no skills)"
         # Geheugen-laag (fase 1): bestaande deliverables als context. Config-geschakeld, fail-closed —
         # een leeg blok laat de sectie volledig weg (geen lege kop in de prompt).
         memory_section = ""
@@ -1126,8 +1126,8 @@ class Inhabitant(threading.Thread):
                 max_chars=int(self.context.settings.get("deliverable_context_max_chars", "2000")),
                 exclude_pid=exclude_pid, store=getattr(self.context, "deliverables", None))
             if blok:
-                memory_section = ("Eerder afgerond onderzoek in het dorp (gebruik dit; plan geen items "
-                                  f"die dit al beantwoordt):\n{blok}\n\n")
+                memory_section = ("Research already completed in the village (use it; do not plan items "
+                                  f"that this already answers):\n{blok}\n\n")
         opdracht_section = self._opdracht_section(description)   # mens-opdracht: stuurt de planning
         # Kennis-eerst: het (al gecapte) 'REEDS BEKEND'-blok uit de kennislaag — vul aan, herhaal niet.
         kennis_section = (kennis.strip() + "\n\n") if kennis and kennis.strip() else ""
@@ -1147,27 +1147,28 @@ class Inhabitant(threading.Thread):
                     lijnen.append(f"- {r.id}: {', '.join(accs) or (getattr(d, 'purpose', '') or '')[:70]}")
                 if lijnen:
                     roster_section = (
-                        "ANDERE ROLLEN (voor 'projectverzoek'): hoort een deel-item duidelijk bij één van "
-                        "deze rollen en kan geen van jouw skills het? Gebruik dan skill 'projectverzoek' met "
-                        'payload {"naar_rol":"<rol-id hieronder>","titel":"...","done_criterium":"..."} i.p.v. '
-                        "skill=null — zo loopt het project niet dood.\n" + "\n".join(lijnen[:18]) + "\n\n")
+                        "OTHER ROLES (for 'projectverzoek'): does a sub-item clearly belong to one of "
+                        "these roles and can none of your skills do it? Then use skill 'projectverzoek' with "
+                        'payload {"naar_rol":"<role id below>","titel":"...","done_criterium":"..."} instead of '
+                        "skill=null — that keeps the project from dying.\n" + "\n".join(lijnen[:18]) + "\n\n")
             except Exception:
                 roster_section = ""
         prompt = (
-            f"Je bent {self.name}, een autonome rol. Projectdoel:\n\"{goal}\"\n\n"
+            f"You are {self.name}, an autonomous role. Project goal:\n\"{goal}\"\n\n"
             f"{opdracht_section}"
-            f"Jouw skills (de ENIGE tools die je hebt), met hun INPUT-vorm:\n{catalog}\n\n"
-            f"Jouw accountabilities: {list(self.dna.accountabilities) or '(geen)'}\n\n"
+            f"Your skills (the ONLY tools you have), with their INPUT shape:\n{catalog}\n\n"
+            f"Your accountabilities: {list(self.dna.accountabilities) or '(none)'}\n\n"
             f"{memory_section}"
             f"{kennis_section}"
             f"{roster_section}"
-            "Breek het doel op in 2 tot 5 concrete deel-items. Voor ELK item: als één van jouw skills het "
-            "kan uitvoeren, geef de exacte skill-naam ÉN een 'payload'-object dat EXACT voldoet aan de "
-            "'input'-vorm van die skill (bv. een term-skill wil {\"term\": \"...\"}, keywords_everywhere wil "
-            "{\"kw\": [\"...\"]}, een merken-skill wil {\"brands\": [\"...\"]}). Kan geen enkele skill het item "
-            "uitvoeren, zet \"skill\": null, \"payload\": {} en geef een korte reden (bv. \"geen patent-skill\"). "
-            "Bepaal ook welke accountability het doel raakt en welke deliverable erbij hoort. "
-            "Antwoord UITSLUITEND met JSON, exact dit schema:\n"
+            "Break the goal down into 2 to 5 concrete sub-items. For EVERY item: if one of your skills can "
+            "carry it out, give the exact skill name AND a 'payload' object that EXACTLY matches the "
+            "'input' shape of that skill (e.g. a term skill wants {\"term\": \"...\"}, keywords_everywhere wants "
+            "{\"kw\": [\"...\"]}, a brands skill wants {\"brands\": [\"...\"]}). If no skill can carry out the "
+            "item, set \"skill\": null, \"payload\": {} and give a short reason (e.g. \"no patent skill\"). "
+            "Also determine which accountability the goal touches and which deliverable belongs to it. "
+            "Write all free text in English. "
+            "Answer ONLY with JSON, exactly this schema:\n"
             "{\"deliverable\": \"...\", \"accountability\": \"...\", \"items\": [{\"text\": \"...\", "
             "\"skill\": \"skillnaam of null\", \"payload\": {}, \"reason\": \"...\"}]}"
         )
@@ -1467,10 +1468,10 @@ class Inhabitant(threading.Thread):
                     f"een andere bron, een scherpere query, of jouw feedback?")
         try:
             from nooch_village.llm import reason
-            prompt = (f"Je bent {self.name}, een autonome rol. Je project '{project.get('scope','')}' loopt vast "
-                      f"op deze item(s), met de echte fout erbij: {detail}. Formuleer ÉÉN concrete, "
-                      f"beantwoordbare hulpvraag (aan een mens of een andere rol) waarmee je verder kunt. "
-                      f"Wees specifiek over wat je nodig hebt; max 2 zinnen, geen omhaal.")
+            prompt = (f"You are {self.name}, an autonomous role. Your project '{project.get('scope','')}' is "
+                      f"stuck on these item(s), with the actual error: {detail}. Formulate ONE concrete, "
+                      f"answerable question for help (to a human or another role) that gets you moving again. "
+                      f"Be specific about what you need; max 2 sentences, no padding. Answer in English.")
             out = reason(prompt, call_site="stuck_question")
             return (out or "").strip() or fallback
         except Exception:
