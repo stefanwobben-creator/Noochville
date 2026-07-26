@@ -253,7 +253,7 @@ def test_mece_hint_en_koppel_actie(tmp_path):
                         username="guest",
                         g=lambda k, _m={"bid": bid, "sid": sid, "doel": "atom_meceB"}: _m.get(k, ""))
     nxt, msg = cockpit2._act_kb_stage_koppel(c)
-    assert "extra bron" in msg
+    assert "extra source" in msg
     kaart = st.notes.get("atom_meceB")
     assert kaart.grounding_count == 2 and "vivobarefoot.com" in kaart.source
     assert st.radar.get(rid)["promoted_atom_id"] == "atom_meceB"
@@ -381,7 +381,7 @@ def test_radar_koppel_actie(tmp_path):
     c = SimpleNamespace(nxt="/signals", st=st, data_dir=dd, username="guest",
                         g=lambda k, _m={"rid": rid, "doel": "atom_dekkend"}: _m.get(k, ""))
     nxt, msg = cockpit2._act_radar_koppel(c)
-    assert "gekoppeld" in msg
+    assert "linked" in msg
     kaart = st.notes.get("atom_dekkend")
     assert "vivobarefoot.com" in kaart.source and kaart.grounding_count == 2
     assert st.radar.get(rid)["promoted_atom_id"] == "atom_dekkend"

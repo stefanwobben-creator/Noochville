@@ -37,7 +37,7 @@ def test_scherm_rankt_op_kansrijkheid(tmp_path):
     with open(os.path.join(dd, "library.json"), "w") as f:
         json.dump(lib, f)
     html = cockpit2.render_woordenschat(dd)
-    assert "Woordenschat" in html and "kansrijkheid = volume" in html
+    assert "Library" in html and "opportunity = volume" in html
     assert "earth shoes" in html and "compostable shoes" in html
     assert "verboden woord" not in html                     # alleen approved
     # hoogste volume/score bovenaan

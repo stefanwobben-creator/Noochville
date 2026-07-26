@@ -17,7 +17,7 @@ def _dd(tmp_path):
 def test_lege_kennislaag_toont_uitleg(tmp_path):
     dd = _dd(tmp_path)
     html = cockpit2.render_kennislaag(dd)
-    assert "Inzichten" in html and "Nog geen inzichten" in html
+    assert "Insights" in html and "No insights yet" in html
 
 
 def test_kennislaag_toont_kaarten(tmp_path):
@@ -30,6 +30,6 @@ def test_kennislaag_toont_kaarten(tmp_path):
     html = cockpit2.render_kennislaag(dd)
     assert "microplastics" in html and "biobased" in html
     assert "milieu-impact" in html
-    assert "2 kaart" in html
+    assert "2 card" in html
     # meest-gegronde kaart staat bovenaan
     assert html.index("microplastics") < html.index("biobased")

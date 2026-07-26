@@ -135,7 +135,7 @@ def test_systeem_kpi_blokkeert_handmatige_invoer(tmp_path):
     # UI toont geen invoerveld maar wel het 'systeem'-label (beheer-blok, nu via _metrics_tab_html)
     from nooch_village.views.metrics import _metrics_tab_html
     page = _metrics_tab_html(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(rid), "t")
-    assert "systeem" in page
+    assert "system" in page
     # een losse handmatige KPI mag wél
     cockpit2.dispatch(dd, "m_add_kpi", {"node": [rid], "pick": ["manual"], "name": ["Eigen telling"], "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
@@ -230,13 +230,13 @@ def test_catalogus_pagina_rendert(tmp_path):
     dd = str(tmp_path / "poc"); cockpit2._bootstrap(dd)
     st = cockpit2._Stores(dd)
     page = cockpit2.render_catalog(st, csrf_token="t")
-    assert "Metrics-catalogus" in page and "Librarian" in page
-    assert "+ Nieuwe definitie" in page
+    assert "Metrics catalogue" in page and "Librarian" in page
+    assert "+ New definition" in page
     assert "Bezoekers (Plausible)" in page and "Tevredenheid werkoverleg" in page
     # bron-secties met leesbare labels
-    assert "Shopify" in page and "Werkoverleg-archief" in page
+    assert "Shopify" in page and "Tactical-meeting archive" in page
     # gebruik + wijzig-actie aanwezig
-    assert "in gebruik" in page and "wijzig definitie" in page
+    assert "in use" in page and "amend definition" in page
 
 
 def test_def_add_via_dispatch(tmp_path):
@@ -261,7 +261,7 @@ def test_catalogus_usage_telt_gebruik(tmp_path):
     d = st.defs.by_name("Omzet (Shopify)")
     cockpit2.dispatch(dd, "m_add_from_def", {"node": [rid], "def_id": [d["id"]], "next": ["/"]}, username="guest")
     page = cockpit2.render_catalog(cockpit2._Stores(dd), csrf_token="t")
-    assert "1× in gebruik" in page
+    assert "in use 1×" in page
 
 
 def test_meetwijze_per_bron_en_invoer(tmp_path):
@@ -310,7 +310,7 @@ def test_catalogus_navigatie(tmp_path):
     # zoekveld + filters (meetwijze-groep verwijderd; Lean-filters blijven) + inklapbare secties
     assert "id='cat-q'" in page and "class='cat-f'" in page and "data-val='actionable'" in page
     assert "class='cat-sec'" in page and "data-text=" in page
-    assert "toon:" in page
+    assert "show:" in page
 
 
 def test_metavelden_grondslag_en_aard(tmp_path):
@@ -332,7 +332,7 @@ def test_metavelden_grondslag_en_aard(tmp_path):
     # filter-attributen + Lean/grounded-filters op de pagina
     page = cockpit2.render_catalog(cockpit2._Stores(dd), csrf_token="t")
     assert "data-facet='bruikbaar'" in page and "data-val='actionable'" in page
-    assert "data-val='0'" in page and "ongegrond" in page
+    assert "data-val='0'" in page and "ungrounded" in page
     assert "data-bruikbaar='actionable'" in page and "DORA" in page
 
 

@@ -15,12 +15,12 @@ from nooch_village.cockpit2_util import _DS_LINK, _nav
 
 # Leesbare labels voor bronnen zonder CATALOG_LABEL (fallback = de bron-id).
 _SRC_LABEL = {
-    "plausible": "Website-analytics (Plausible)", "shopify": "Verkoop (Shopify)",
-    "gsc": "Zoekverkeer (Google Search Console)", "trends": "Zoekinteresse (Google Trends)",
-    "trends_categorie": "Categorie-interesse (Google Trends)",
-    "keywordseverywhere": "Zoekvolume (Keywords Everywhere)", "alphavantage": "Marktindex (AlphaVantage)",
-    "openalex": "Wetenschap (OpenAlex)", "semanticscholar": "Wetenschap (Semantic Scholar)",
-    "gdelt_tone": "Nieuwstoon (GDELT)", "co2_village": "LLM-gebruik & CO₂ (intern)",
+    "plausible": "Website analytics (Plausible)", "shopify": "Sales (Shopify)",
+    "gsc": "Search traffic (Google Search Console)", "trends": "Search interest (Google Trends)",
+    "trends_categorie": "Category interest (Google Trends)",
+    "keywordseverywhere": "Search volume (Keywords Everywhere)", "alphavantage": "Market index (AlphaVantage)",
+    "openalex": "Science (OpenAlex)", "semanticscholar": "Science (Semantic Scholar)",
+    "gdelt_tone": "News tone (GDELT)", "co2_village": "LLM usage & CO₂ (internal)",
 }
 
 
@@ -50,27 +50,27 @@ def _bron_sources(st, ctx):
 
 def _status_chip(it) -> str:
     if it["active"] and it["configured"]:
-        return "<span class='chip'>● aan · verbonden</span>"
+        return "<span class='chip'>● on · connected</span>"
     if it["active"] and not it["configured"]:
-        return "<span class='chip amber'>● aan · sleutel ontbreekt</span>"
+        return "<span class='chip amber'>● on · key missing</span>"
     if it["configured"]:
-        return "<span class='chip amber'>○ klaar om aan te zetten</span>"
-    return "<span class='chip muted'>○ sleutel nodig</span>"
+        return "<span class='chip amber'>○ ready to switch on</span>"
+    return "<span class='chip muted'>○ key needed</span>"
 
 
 def _keys_line(it) -> str:
     if not it["req"]:
-        return "<div class='muted'>Geen sleutel nodig.</div>"
+        return "<div class='muted'>No key needed.</div>"
     parts = []
     for k in it["req"]:
         ok = k not in it["missing"]
-        parts.append(f"<code>{_e(k)}</code> {'✓' if ok else '✗ ontbreekt'}")
-    return "<div class='muted'>Sleutels: " + ", ".join(parts) + "</div>"
+        parts.append(f"<code>{_e(k)}</code> {'✓' if ok else '✗ missing'}")
+    return "<div class='muted'>Keys: " + ", ".join(parts) + "</div>"
 
 
 def _bron_row(it, csrf: str) -> str:
     act = "source_deactivate" if it["active"] else "source_activate"
-    lbl = "Zet uit" if it["active"] else "Zet aan"
+    lbl = "Switch off" if it["active"] else "Switch on"
     cls = "btn sm" if it["active"] else "btn ok sm"
     btn = ""
     if csrf:
@@ -81,7 +81,7 @@ def _bron_row(it, csrf: str) -> str:
                f"<button class='{cls}' name='action' value='{act}'>{lbl}</button></form>")
     return (f"<div class='card'><div class='cl-head'><h3>{_e(it['label'])}</h3>"
             f"<span class='kc-actions'>{_status_chip(it)}{btn}</span></div>"
-            f"<div class='muted'>bron-id: <code>{_e(it['src'])}</code></div>{_keys_line(it)}</div>")
+            f"<div class='muted'>source id: <code>{_e(it['src'])}</code></div>{_keys_line(it)}</div>")
 
 
 def render_bronnen(st, base_dir: str, csrf_token: str = "") -> str:
@@ -89,12 +89,12 @@ def render_bronnen(st, base_dir: str, csrf_token: str = "") -> str:
     ctx = load_context(base_dir)
     items = _bron_sources(st, ctx)
     aan = sum(1 for i in items if i["active"])
-    rows = "".join(_bron_row(i, csrf_token) for i in items) or "<p class='muted'>Geen bronnen gevonden.</p>"
-    main = (f"<div class='c2-main'><h1>Bronnen aansluiten</h1>"
-            f"<p class='muted'>{aan} van {len(items)} bronnen staan aan. Zet de sleutels in "
-            f"<code>.env</code> of <code>config/settings.ini</code> op de server; zodra ze er staan zie "
-            f"je hier ‘verbonden’ en kun je de bron aanzetten. Een bron haalt pas bij de volgende "
-            f"dagelijkse pulse data op.</p>{rows}</div>")
+    rows = "".join(_bron_row(i, csrf_token) for i in items) or "<p class='muted'>No sources found.</p>"
+    main = (f"<div class='c2-main'><h1>Connect sources</h1>"
+            f"<p class='muted'>{aan} of {len(items)} sources are on. Put the keys in "
+            f"<code>.env</code> or <code>config/settings.ini</code> on the server; once they are there you "
+            f"see ‘connected’ here and you can switch the source on. A source only fetches data at the next "
+            f"daily pulse.</p>{rows}</div>")
     inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
-    return _page("Bronnen", inner)
+    return _page("Sources", inner)

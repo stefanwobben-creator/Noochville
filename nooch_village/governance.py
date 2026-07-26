@@ -112,16 +112,16 @@ class Gate:
     # G0: structurele geldigheid — verplichte velden + kind binnen scope
     def _g0(self, p: Proposal, _records, _ctx) -> tuple[bool, str]:
         if not all([p.proposer_role, p.tension, p.trigger_example, p.rationale]):
-            return False, "verplichte velden ontbreken (proposer_role, tension, trigger_example, rationale)"
+            return False, "required fields missing (proposer_role, tension, trigger_example, rationale)"
         c = p.change
         try:
             ChangeKind(c.kind)
         except ValueError:
-            return False, f"ongeldig change.kind: '{c.kind}'"
+            return False, f"invalid change.kind: '{c.kind}'"
         if c.kind in (ChangeKind.AMEND_ROLE, ChangeKind.REMOVE_ROLE) and not c.role_id:
-            return False, f"{c.kind.value} vereist role_id"
+            return False, f"{c.kind.value} requires role_id"
         if c.kind == ChangeKind.ADD_ROLE and not (c.role_id and c.purpose):
-            return False, "add_role vereist role_id en purpose"
+            return False, "add_role requires role_id and purpose"
         if c.kind == ChangeKind.ADD_ROLE:
             # Herhalingsbewijs moet in de TRIGGER staan (de waargenomen feiten uit
             # het logboek), niet in de rationale. De rationale is de zelfgeschreven
@@ -130,20 +130,20 @@ class Gate:
             trigger = p.trigger_example.lower()
             if not any(kw in trigger for kw in _REPETITION_KW):
                 return False, (
-                    "add_role vereist herhalingsbewijs in trigger_example "
-                    "(bijv. 'meermaals', 'terugkerend', 'structureel', 'wekelijks'); "
-                    "één incident is onvoldoende grond voor een nieuwe rol"
+                    "add_role requires evidence of repetition in trigger_example "
+                    "(e.g. 'meermaals', 'terugkerend', 'structureel', 'wekelijks'); "
+                    "one incident is not enough ground for a new role"
                 )
             # Weiger mechanische term-smurrie als purpose ("Beheert en bewaakt X, Y").
             # Een rol-purpose hoort een betekenisvolle functie te beschrijven.
             if c.purpose.strip().lower().startswith("beheert en bewaakt "):
                 return False, (
-                    "add_role-purpose is een mechanische term-opsomming "
-                    f"('{c.purpose[:50]}…'); beschrijf een echte functie, geen woordcluster"
+                    "add_role purpose is a mechanical list of terms "
+                    f"('{c.purpose[:50]}…'); describe a real function, not a word cluster"
                 )
         if c.kind in (ChangeKind.ADD_POLICY, ChangeKind.AMEND_POLICY,
                       ChangeKind.REMOVE_POLICY) and not c.policy_id:
-            return False, f"{c.kind.value} vereist policy_id"
+            return False, f"{c.kind.value} requires policy_id"
         return True, ""
 
     # G1: domein-botsing
@@ -156,7 +156,7 @@ class Gate:
                 continue
             overlap = new & {d.lower() for d in rec.definition.domains}
             if overlap:
-                return False, f"domein {overlap} overlapt met domeinen van rol '{rec.id}'"
+                return False, f"domain {overlap} overlaps with domains of role '{rec.id}'"
         return True, ""
 
     # G2: accountability-duplicaat bij een andere rol
@@ -171,7 +171,7 @@ class Gate:
                 el = existing.lower()
                 for na in new:
                     if el == na or na in el or el in na:
-                        return False, (f"accountability '{na}' overlapt met die van "
+                        return False, (f"accountability '{na}' overlaps with that of "
                                        f"'{rec.id}': '{existing}'")
         return True, ""
 
@@ -185,14 +185,14 @@ class Gate:
                 kids = [m for m in rec.members
                         if (k := records.get(m)) and not k.archived]
                 if kids:
-                    return False, (f"rol '{c.role_id}' is een cirkel met onderliggende rollen "
-                                   f"({kids[:3]} …); verwijderen zou die tot wees maken — "
-                                   f"herbeleg de kinderen eerst (menselijke beoordeling vereist)")
+                    return False, (f"role '{c.role_id}' is a circle with roles under it "
+                                   f"({kids[:3]} …); removing it would orphan them — "
+                                   f"re-place the children first (human judgement required)")
             if rec and rec.definition.accountabilities:
                 accs = rec.definition.accountabilities[:2]
-                return False, (f"rol '{c.role_id}' heeft accountabilities ({accs} …); "
-                               f"de gate kan niet vaststellen of dit werk elders belegd is — "
-                               f"menselijke beoordeling vereist")
+                return False, (f"role '{c.role_id}' has accountabilities ({accs} …); "
+                               f"the gate cannot establish whether this work is placed elsewhere — "
+                               f"human judgement required")
         # Verwijderde accountabilities zonder ze elders te beleggen = mogelijk verweesd werk.
         # MAAR: voegt dezelfde wijziging óók accountabilities toe aan de rol, dan is dit een
         # HERSCHRIJVING/HERSCHIKKING binnen de rol (geen orphaning) — die laten we door. De
@@ -209,7 +209,7 @@ class Gate:
                             covered.add(rm)
             orphaned = removed - covered
             if orphaned:
-                return False, f"accountabilities {orphaned} worden verwijderd maar nergens belegd"
+                return False, f"accountabilities {orphaned} are removed but placed nowhere"
         return True, ""
 
     # G4: missie-poort — deterministisch + optioneel LLM bij twijfel
@@ -224,8 +224,8 @@ class Gate:
             root = records.root() if records else None
             if root and c.role_id == root.id:
                 return False, (
-                    "Anchor Circle purpose is mens-eigendom (founder-only); "
-                    "structuurwijzigingen van de wortelcirkel escaleren altijd naar de mens"
+                    "Anchor Circle purpose is human-owned (founder-only); "
+                    "structural changes to the root circle always escalate to the human"
                 )
         return True, ""
 

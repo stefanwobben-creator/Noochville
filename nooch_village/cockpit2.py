@@ -341,7 +341,7 @@ def _scoped_project_opts(st: _Stores, n) -> str:
         if not rid and n.get("project_id"):
             p = st.projects.get(n.get("project_id"))
             rid = (p or {}).get("owner") or ""
-    opts = ["<option value=''>— kies project —</option>"]
+    opts = ["<option value=''>— pick project —</option>"]
     if rid:
         for p in st.projects.all():
             if p.get("owner") == rid and not p.get("archived"):
@@ -516,9 +516,9 @@ def _apply_triage(st: _Stores, pid: str, role, persona, tri: dict, prefix: str) 
 
     # 1. Past niet bij de rol → korte afwijzing; item is afgehandeld (met reden), geen skill/geen project.
     if fit == "nee":
-        txt = reactie or ("Dit past niet bij mijn rol." + (f" Wel oppakbaar: {welk}" if welk else ""))
+        txt = reactie or ("This does not fit my role." + (f" Could pick up: {welk}" if welk else ""))
         entry = st.projects.add_feed_entry(pid, txt, kind="comment", author_type="persona", author_id=persona.id)
-        reden = "past niet bij mijn rol" + (f" — wel: {welk}" if welk else "")
+        reden = "does not fit my role" + (f" — but: {welk}" if welk else "")
         _settle_inbox(st, role, pid, (entry or {}).get("id", ""), ask, processed=True, reason=reden)
         return True
 
@@ -530,11 +530,11 @@ def _apply_triage(st: _Stores, pid: str, role, persona, tri: dict, prefix: str) 
     if not skill_needed and tri.get("kan_direct") and reactie:
         entry = st.projects.add_feed_entry(pid, reactie, kind="comment", author_type="persona", author_id=persona.id)
         _settle_inbox(st, role, pid, (entry or {}).get("id", ""), ask, processed=True,
-                      reason="direct beantwoord op de wall")
+                      reason="answered directly on the wall")
         return True
 
     # 3. Skill/meerdere stappen nodig → 'ik verwerk dit via mijn inbox'.
-    ack = reactie or "Ik pak dit op en verwerk het via mijn inbox."
+    ack = reactie or "I am picking this up and processing it via my inbox."
     entry = st.projects.add_feed_entry(pid, ack, kind="comment", author_type="persona", author_id=persona.id)
     eid = (entry or {}).get("id", "")
 
@@ -622,7 +622,7 @@ def _create_task_from_voorstel(st, orec, vst) -> str | None:
             ok = _payload_ok(sk, payload, shared_registry())
         except Exception:
             ok = True
-    cl = st.projects.checklist_add(new_pid, "Uit dialoog")
+    cl = st.projects.checklist_add(new_pid, "From dialogue")
     if cl:
         st.projects.check_add(new_pid, cl["id"], titel, skill=sk, payload=payload, payload_ok=ok)
     return new_pid
@@ -717,9 +717,9 @@ def _handle_person_add(data_dir: str, form: dict, username: str | None = None) -
     st = _Stores(data_dir)
     actor = st.people.by_email(username) if username != "guest" else None
     if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
-        return "Geen toegang — alleen anchor-lead mag dit", 403
+        return "No access — only the anchor lead may do this", 403
     if actor is None and username != "guest":
-        return "Geen toegang — gebruiker niet herkend", 403
+        return "No access — user not recognised", 403
     g = lambda k: (form.get(k) or [""])[0].strip()
     voornaam, achternaam, email = g("voornaam"), g("achternaam"), g("email")
     back = g("next") or "/"
@@ -728,7 +728,7 @@ def _handle_person_add(data_dir: str, form: dict, username: str | None = None) -
     naam = " ".join(p for p in (voornaam, achternaam) if p)
     if not naam or not email:
         body = ("<div class='c2-sec'><h3>Persoon toevoegen</h3>"
-                "<p style='color:#c0392b'>Voornaam, achternaam én e-mailadres zijn verplicht.</p>"
+                "<p style='color:#c0392b'>First name, last name and email address are required.</p>"
                 f"<p><a href='{_e(back)}'>← terug</a></p></div>")
         return _page("Persoon toevoegen", body), 200
 
@@ -743,14 +743,14 @@ def _handle_person_add(data_dir: str, form: dict, username: str | None = None) -
     st.people.set_password(person.id, _auth.hash_password(temp))
 
     body = (
-        "<div class='c2-sec'><h3>✓ Persoon toegevoegd</h3>"
+        "<div class='c2-sec'><h3>✓ Person added</h3>"
         f"<p><b>{_e(person.name)}</b> — {_e(email)}</p>"
-        "<p class='muted'>Geef dit tijdelijke wachtwoord door. Het wordt maar één keer getoond:</p>"
+        "<p class='muted'>Pass on this temporary password. It is shown only once:</p>"
         f"<p style='font-size:1.4rem;font-family:monospace;background:#f4f1ec;"
         f"padding:.6rem 1rem;border-radius:6px;display:inline-block'>{_e(temp)}</p>"
         f"<p style='margin-top:1rem'><a href='{_e(back)}'>← terug</a></p></div>"
     )
-    return _page("Persoon toegevoegd", body), 200
+    return _page("Person added", body), 200
 
 
 def _handle_person_reset(data_dir: str, form: dict, username: str | None = None) -> tuple[str, int]:
@@ -760,9 +760,9 @@ def _handle_person_reset(data_dir: str, form: dict, username: str | None = None)
     st = _Stores(data_dir)
     actor = st.people.by_email(username) if username != "guest" else None
     if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
-        return "Geen toegang — alleen anchor-lead mag dit", 403
+        return "No access — only the anchor lead may do this", 403
     if actor is None and username != "guest":
-        return "Geen toegang — gebruiker niet herkend", 403
+        return "No access — user not recognised", 403
     g = lambda k: (form.get(k) or [""])[0].strip()
     pid = g("pid")
     back = g("next") or "/admin"
@@ -771,7 +771,7 @@ def _handle_person_reset(data_dir: str, form: dict, username: str | None = None)
     person = st.people.get(pid)
     if person is None:
         body = ("<div class='c2-sec'><h3>Wachtwoord resetten</h3>"
-                "<p style='color:#c0392b'>Deelnemer niet gevonden.</p>"
+                "<p style='color:#c0392b'>Person not found.</p>"
                 f"<p><a href='{_e(back)}'>← terug</a></p></div>")
         return _page("Wachtwoord resetten", body), 200
     temp = _auth.generate_temp_password()
@@ -779,7 +779,7 @@ def _handle_person_reset(data_dir: str, form: dict, username: str | None = None)
     body = (
         "<div class='c2-sec'><h3>✓ Wachtwoord gereset</h3>"
         f"<p><b>{_e(person.name)}</b> — {_e(person.email)}</p>"
-        "<p class='muted'>Geef dit tijdelijke wachtwoord door. Het wordt maar één keer getoond:</p>"
+        "<p class='muted'>Pass on this temporary password. It is shown only once:</p>"
         f"<p style='font-size:1.4rem;font-family:monospace;background:#f4f1ec;"
         f"padding:.6rem 1rem;border-radius:6px;display:inline-block'>{_e(temp)}</p>"
         f"<p style='margin-top:1rem'><a href='{_e(back)}'>← terug</a></p></div>"
@@ -805,18 +805,18 @@ def _password_change(data_dir: str, form: dict, username: str | None):
         return False, _auth.password_change_page(error=msg, forced=forced)
 
     if person is None:
-        return fail("Gebruiker niet herkend.")
+        return fail("User not recognised.")
     # Een VRIJWILLIGE wijziging vraagt het huidige wachtwoord; een VERPLICHTE (temp na eerste login/reset)
     # NIET — de gebruiker is net via login geauthenticeerd (die verifieerde het temp al). Het huidig-veld
     # lokt daar bovendien browser-autofill van het OUDE wachtwoord uit → een onmogelijk-op-te-lossen loop.
     if not forced and not us.verify_by_email(username or "", current):
-        return fail("Huidig wachtwoord onjuist.")
+        return fail("Current password is incorrect.")
     if new != confirm:
-        return fail("De nieuwe wachtwoorden komen niet overeen.")
+        return fail("The new passwords do not match.")
     if len(new) < _MIN_PASSWORD_LEN:
-        return fail(f"Kies minimaal {_MIN_PASSWORD_LEN} tekens.")
+        return fail(f"Choose at least {_MIN_PASSWORD_LEN} characters.")
     if us.verify_by_email(username or "", new):      # nieuw ≠ het huidige/temp wachtwoord (zonder typen)
-        return fail("Kies een ander wachtwoord dan je huidige.")
+        return fail("Choose a different password from your current one.")
     st.people.set_own_password(person.id, _auth.hash_password(new))
     return True, None
 
@@ -874,11 +874,11 @@ def _role_gate(target: str, username: str | None, st) -> str | None:
         return None
     actor = st.people.by_email(username)
     if actor is None:
-        return "Geen toegang — gebruiker niet herkend"
+        return "No access — user not recognised"
     if (is_role_filler(actor.id, target, st.assign)
             or is_circle_lead(actor.id, resolve_circle_id(target, st.records), st.assign)):
         return None
-    return "Geen toegang — alleen de rolvervuller of Circle Lead mag dit"
+    return "No access — only the role filler or Circle Lead may do this"
 
 
 def _member_gate(circle_id: str, username: str | None, st) -> str | None:
@@ -889,10 +889,10 @@ def _member_gate(circle_id: str, username: str | None, st) -> str | None:
         return None
     actor = st.people.by_email(username)
     if actor is None:
-        return "Geen toegang — gebruiker niet herkend"
+        return "No access — user not recognised"
     if is_circle_member(actor.id, circle_id, st.records, st.assign):
         return None
-    return "Geen toegang — alleen leden van deze cirkel mogen dit"
+    return "No access — only members of this circle may do this"
 
 
 def _wd_gate(username: str | None, st) -> str | None:
@@ -902,10 +902,10 @@ def _wd_gate(username: str | None, st) -> str | None:
         return None
     actor = st.people.by_email(username)
     if actor is None:
-        return "Geen toegang — gebruiker niet herkend"
+        return "No access — user not recognised"
     if is_role_filler(actor.id, WEBSITE_DEVELOPER_ROLE, st.assign):
         return None
-    return "Geen toegang — alleen de Website Developer mag de backlog beheren"
+    return "No access — only the Website Developer may manage the backlog"
 
 
 class Forbidden(Exception):
@@ -930,10 +930,10 @@ def _artefact_gate(owner_role_id: str, username: str | None, st) -> str | None:
         return None
     actor = st.people.by_email(username)
     if actor is None:
-        return "Geen toegang — gebruiker niet herkend"
+        return "No access — user not recognised"
     if can_write_artefact("person", actor.id, owner_role_id, st.records, st.assign):
         return None
-    return "Geen toegang — alleen de rolvervuller of Circle Lead mag artefacten beheren"
+    return "No access — only the role filler or Circle Lead may manage artefacts"
 
 
 def _lead_gate(circle_id: str, username: str | None, st) -> str | None:
@@ -944,10 +944,10 @@ def _lead_gate(circle_id: str, username: str | None, st) -> str | None:
         return None
     actor = st.people.by_email(username)
     if actor is None:
-        return "Geen toegang — gebruiker niet herkend"
+        return "No access — user not recognised"
     if is_circle_lead(actor.id, circle_id, st.assign):
         return None
-    return "Geen toegang — alleen Circle Lead mag dit"
+    return "No access — only the Circle Lead may do this"
 
 
 # ── LiveKit-video: token-uitgifte ───────────────────────────────────────────
@@ -987,7 +987,7 @@ def issue_livekit_token(st, username: str | None, tab: str | None = None):
     # gespreksdaad, geen structuurdaad. Een niet-herkende sessie krijgt geen token (fail-closed).
     server_url = os.getenv("LIVEKIT_URL", "").strip()
     if not server_url:
-        return 503, {"error": "LiveKit niet geconfigureerd"}
+        return 503, {"error": "LiveKit not configured"}
     # IDENTITY-BASE: de ingelogde actor. Guest = de lokale sessie bij auth-uit → één vaste base.
     if username and username != "guest":
         actor = st.people.by_email(username)
@@ -1110,7 +1110,7 @@ def role_context(st, role_id: str, fmt: str = "json"):
     """Serialiseer de volledige rol-context als (status, content_type, body).
     `fmt="markdown"` = de systeemprompt-bron voor AI-vervullers; anders JSON."""
     if not st.records.get(role_id):
-        return 404, "text/plain; charset=utf-8", "Onbekende rol."
+        return 404, "text/plain; charset=utf-8", "Unknown role."
     ctx = artefacts.serialize_context(role_id, st.records, st.att)
     if fmt == "markdown":
         return 200, "text/markdown; charset=utf-8", artefacts.render_context_markdown(ctx)
@@ -1145,20 +1145,20 @@ def _act_proj_add(c):
         orec = st.records.get(owner)
         if orec is not None and org.is_circle(orec):
             # Een cirkel doet geen uitvoerend werk: projecten horen bij een rol of Individueel Initiatief.
-            return nxt, "✗ een cirkel kan geen project bevatten — kies een rol of Individueel Initiatief"
+            return nxt, "✗ a circle cannot contain a project — pick a role or Individual Action"
         # Vang de vage intake bij de bron (founder, 19 jul): een mens-project vereist één
         # zin done_when — "waar herken je aan dat dit klaar is?" De reparatie die de rol
         # anders stilletjes in zijn checklist doet, gebeurt zo vooraf, samen met de mens.
         done_when = (g("done_when") or "").strip()
         if owner and scope and not done_when:
-            return nxt, "✗ vul ook in waar je aan herkent dat dit klaar is (done-when)"
+            return nxt, "✗ also fill in how you recognise this is done (done-when)"
         if owner and scope:
             pid = pj.create(owner, scope[:200], "human", status=create_status,
                             done_when=done_when[:200],
                             person=person or None, agent=agent or None, private=(g("private") == "1"))
             if col == "wacht":
                 pj.block(pid, "—")
-            msg = "➕ project toegevoegd"
+            msg = "➕ project added"
         return nxt, msg
 
 
@@ -1181,13 +1181,13 @@ def _act_artefact_add(c):
             rec = st.records.get(owner)
             owner_domains = list(getattr(rec.definition, "domains", None) or []) if rec else []
             if not owner_domains:
-                return nxt, ("✗ deze rol heeft nog geen domein; wijs er eerst een toe via governance, "
-                             "daarna kun je er een policy op maken")
+                return nxt, ("✗ this role has no domain yet; assign one via governance first, "
+                             "then you can put a policy on it")
             chosen = g("domain").strip()
             if not chosen and len(owner_domains) == 1:
                 chosen = owner_domains[0]            # één domein → vaste keuze (form stuurt 'm mee)
             if chosen not in owner_domains:
-                return nxt, "✗ kies een domein dat deze rol daadwerkelijk bezit"
+                return nxt, "✗ pick a domain this role actually owns"
             domain = chosen
         gref = f"domain:{domain}" if domain else f"role:{owner}"
         actor_id = _web_actor_id(username, st)
@@ -1196,10 +1196,10 @@ def _act_artefact_add(c):
                        actor_id=actor_id, actor_type="person",
                        governance_ref=gref, change_note="aangemaakt")
         if a is None:
-            return nxt, "✗ artefact niet aangemaakt"
+            return nxt, "✗ artefact not created"
         artefacts.log_change(data_dir, action="add", artefact=a, records=st.records,
                              actor_id=actor_id, actor_type="person", governance_ref=gref)
-        msg = f"➕ {kind} toegevoegd ({a.id})"
+        msg = f"➕ {kind} added ({a.id})"
         return nxt, msg
 
 
@@ -1209,7 +1209,7 @@ def _act_artefact_edit(c):
         # AUTHZ: rolvervuller of Circle Lead — bewerken mag alleen wie de eigenaar-rol vervult.
         cur = st.att.get(g("aid"))
         if cur is None:
-            return nxt, "✗ artefact niet gevonden"
+            return nxt, "✗ artefact not found"
         _deny = _artefact_gate(cur.anchor, username, st)      # check vóór de mutatie
         if _deny:
             raise Forbidden(_deny)
@@ -1223,7 +1223,7 @@ def _act_artefact_edit(c):
                             governance_ref=gref, change_note="bewerkt")
         artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
                              actor_id=actor_id, actor_type="person", governance_ref=gref)
-        msg = f"✏️ {upd.kind} bijgewerkt ({upd.id})"
+        msg = f"✏️ {upd.kind} updated ({upd.id})"
         return nxt, msg
 
 
@@ -1233,7 +1233,7 @@ def _act_artefact_archive(c):
         # AUTHZ: rolvervuller of Circle Lead — archiveren (nooit hard delete) mag alleen de vervuller.
         cur = st.att.get(g("aid"))
         if cur is None:
-            return nxt, "✗ artefact niet gevonden"
+            return nxt, "✗ artefact not found"
         _deny = _artefact_gate(cur.anchor, username, st)      # check vóór de mutatie
         if _deny:
             raise Forbidden(_deny)
@@ -1319,8 +1319,8 @@ def _act_proj_dod(c):
         if veld not in ("done_when", "dod_outcome"):
             return nxt, "✗ onbekend DoD-veld"
         if not pj.set_dod(g("pid"), veld, g("tekst")):
-            return nxt, "✗ project bestaat niet"
-        return nxt, "✓ opgeslagen"
+            return nxt, "✗ project does not exist"
+        return nxt, "✓ saved"
 
 
 def _act_proj_archive(c):
@@ -1339,7 +1339,7 @@ def _act_proj_archive(c):
             p = pj.get(g("pid"))
             if (p is not None and p.get("status") == "done"
                     and signal_from_project(st.radar, p)):
-                msg += " · 📡 als signal op /signals gezet"
+                msg += " · 📡 placed as a signal on /signals"
         except Exception:
             logging.getLogger("cockpit2.signals").exception(
                 "project→signaal bij archiveren mislukt (pid=%s)", g("pid"))
@@ -1363,9 +1363,9 @@ def _act_proj_delete(c):
         actor = st.people.by_email(username) if username != "guest" else None
         circle_id = resolve_circle_id((pj.get(g("pid")) or {}).get("owner") or "", st.records)
         if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
-            return nxt, "Geen toegang — alleen Circle Lead mag dit"
+            return nxt, "No access — only the Circle Lead may do this"
         if actor is None and username != "guest":
-            return nxt, "Geen toegang — gebruiker niet herkend"
+            return nxt, "No access — user not recognised"
         # ── einde autorisatie ──
         pid = g("pid")
         pj.remove(pid)
@@ -1379,7 +1379,7 @@ def _act_proj_delete(c):
         if docstore is not None and docstore.delete_for(pid):
             logging.getLogger("village.project_docs").info(
                 "cascade: einddocument verwijderd bij project-delete %s", pid)
-        msg = "🗑 verwijderd"
+        msg = "🗑 removed"
         return nxt, msg
 
 
@@ -1392,7 +1392,7 @@ def _act_proj_edit(c):
         person, agent = _parse_trekker(g("trekker"))
         pj.edit(g("pid"), scope=g("scope"), person=person, agent=agent,
                 private=(g("private") == "1"), description=g("description"), label=g("label"))
-        msg = "💾 opgeslagen"
+        msg = "💾 saved"
         return nxt, msg
 
 
@@ -1413,7 +1413,7 @@ def _act_proj_rename(c):
         if _deny:
             return nxt, _deny
         if pj.edit(g("pid"), scope=g("scope"), allow_done=True):
-            msg = "✓ titel opgeslagen"
+            msg = "✓ title saved"
         return nxt, msg
 
 
@@ -1424,7 +1424,7 @@ def _act_proj_describe(c):
         if _deny:
             return nxt, _deny
         if pj.edit(g("pid"), description=g("description"), allow_done=True):
-            msg = "✓ omschrijving opgeslagen"
+            msg = "✓ description saved"
         return nxt, msg
 
 
@@ -1434,7 +1434,7 @@ def _act_proj_regen_doc(c):
         nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
         p = pj.get(g("pid"))
         if p is None:
-            return nxt, "✗ project niet gevonden"
+            return nxt, "✗ project not found"
         _deny = _role_gate(p.get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
@@ -1447,7 +1447,7 @@ def _act_proj_regen_doc(c):
             personas=st.personas, record=rec, settings={}, project=p, force_final=True,
             log=logging.getLogger("village.cockpit_regen"))
         return nxt, ("📄 rapport opnieuw gegenereerd" if ok
-                     else "geen rapport gegenereerd (geen deliverables of geen LLM-key)")
+                     else "no report generated (no deliverables or no LLM key)")
 
 
 def _act_proj_doc_edit(c):
@@ -1460,7 +1460,7 @@ def _act_proj_doc_edit(c):
         store = getattr(st, "project_docs", None)
         if store is not None:                              # atomic write; last-writer wint (v1, geen merge)
             store.write(g("pid"), g("doc"))
-        return nxt, "📄 einddocument opgeslagen"
+        return nxt, "📄 end document saved"
 
 
 def _act_proj_settrekker(c):
@@ -1471,7 +1471,7 @@ def _act_proj_settrekker(c):
             return nxt, _deny
         person, agent = _parse_trekker(g("trekker"))
         if pj.edit(g("pid"), person=person, agent=agent, allow_done=True):
-            msg = "✓ trekker opgeslagen"
+            msg = "✓ owner saved"
         return nxt, msg
 
 
@@ -1509,13 +1509,13 @@ def _act_proj_setowner(c):
         owner = g("owner")
         orec = st.records.get(owner)
         if orec is None:
-            msg = "✗ onbekende rol"
+            msg = "✗ unknown role"
         elif org.is_circle(orec):
             # Een cirkel doet geen uitvoerend werk: een project hoort bij een rol.
-            msg = "✗ een cirkel kan geen project bevatten — kies een rol"
+            msg = "✗ a circle cannot contain a project — pick a role"
         elif pj.edit(g("pid"), owner=owner, allow_done=True):
             _resync_trekker(pj, st, g("pid"), owner, orec)     # geen verweesde trekker laten staan
-            msg = "✓ rol verplaatst"
+            msg = "✓ role moved"
         return nxt, msg
 
 
@@ -1526,7 +1526,7 @@ def _act_proj_approve(c):
         if _deny:
             return nxt, _deny
         if pj.approve(g("pid")):
-            msg = "✓ concept goedgekeurd — staat nu op het bord"
+            msg = "✓ draft approved — it is on the board now"
         return nxt, msg
 
 
@@ -1548,7 +1548,7 @@ def _act_proj_setlabel(c):
         if _deny:
             return nxt, _deny
         if pj.edit(g("pid"), label=g("label"), allow_done=True):
-            msg = "✓ label opgeslagen"
+            msg = "✓ label saved"
         return nxt, msg
 
 
@@ -1571,7 +1571,7 @@ def _act_proj_setimpact(c):
         if value and value not in allowed:
             return nxt, "ongeldige impact-waarde"
         if pj.edit(g("pid"), allow_done=True, **{field: value}):
-            return nxt, ("✓ impact opgeslagen" if value else "✓ impact leeggemaakt")
+            return nxt, ("✓ impact saved" if value else "✓ impact leeggemaakt")
         return nxt, ""
 
 
@@ -1595,7 +1595,7 @@ def _act_proj_seteffort(c):
             pj.edit(g("pid"), allow_done=True, effort="")
             return nxt, "✓ effort leeggemaakt"
         pj.edit(g("pid"), allow_done=True, effort={"hours": hours})
-        return nxt, "✓ effort opgeslagen"
+        return nxt, "✓ effort saved"
 
 
 def _act_proj_agendeer_verzwakt(c):
@@ -1604,10 +1604,10 @@ def _act_proj_agendeer_verzwakt(c):
         nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
         p = pj.get(g("pid"))
         if p is None:
-            return nxt, "project niet gevonden"
+            return nxt, "project not found"
         circle = resolve_circle_id(p.get("owner") or "", st.records)
         if not circle:
-            return nxt, "geen cirkel voor dit project"
+            return nxt, "no circle for this project"
         _deny = _member_gate(circle, username, st)
         if _deny:
             return nxt, _deny
@@ -1618,7 +1618,7 @@ def _act_proj_agendeer_verzwakt(c):
         # In de PERSISTENTE werkoverleg-backlog van de cirkel — opent géén overleg; komt bij het
         # eerstvolgende overleg vanzelf op de agenda.
         if st.werk.backlog_add(circle, f"Missie verzwakt: {titel}"[:140], by=(actor.name if actor else "")):
-            return nxt, "✓ als spanning in de werkoverleg-backlog van de cirkel gezet"
+            return nxt, "✓ placed as a tension in the circle's tactical-meeting backlog"
         return nxt, ""
 
 
@@ -1629,7 +1629,7 @@ def _act_proj_setprivate(c):
         if _deny:
             return nxt, _deny
         if pj.edit(g("pid"), private=(g("private") == "1"), allow_done=True):
-            msg = "✓ zichtbaarheid opgeslagen"
+            msg = "✓ visibility saved"
         return nxt, msg
 
 
@@ -1640,7 +1640,7 @@ def _act_proj_setdue(c):
         if _deny:
             return nxt, _deny
         if pj.set_due(g("pid"), g("due")):
-            msg = "📅 datum opgeslagen" if g("due") else "✓ datum verwijderd"
+            msg = "📅 date saved" if g("due") else "✓ date removed"
         return nxt, msg
 
 
@@ -1651,7 +1651,7 @@ def _act_attach_add(c):
         if _deny:
             return nxt, _deny
         if pj.attach_add(g("pid"), url=g("url"), title=g("title")):
-            msg = "🔗 bijlage toegevoegd"
+            msg = "🔗 attachment added"
         return nxt, msg
 
 
@@ -1661,7 +1661,7 @@ def _act_attach_remove(c):
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
-        pj.attach_remove(g("pid"), g("aid")); msg = "🗑 bijlage verwijderd"
+        pj.attach_remove(g("pid"), g("aid")); msg = "🗑 attachment removed"
         return nxt, msg
 
 
@@ -1681,7 +1681,7 @@ def _act_feed_edit(c):
         # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
         # (de sessie-check in do_POST dekt "ingelogd = mag").
         if pj.feed_edit(g("pid"), g("item"), g("text")):
-            msg = "✓ comment gewijzigd"
+            msg = "✓ comment edited"
         return nxt, msg
 
 
@@ -1690,7 +1690,7 @@ def _act_feed_remove(c):
         msg = ""
         # Collaboratie: geen rol-gate — elke ingelogde gebruiker mag reageren/bijdragen
         # (de sessie-check in do_POST dekt "ingelogd = mag").
-        pj.feed_remove(g("pid"), g("item")); msg = "🗑 comment verwijderd"
+        pj.feed_remove(g("pid"), g("item")); msg = "🗑 comment removed"
         return nxt, msg
 
 
@@ -1701,7 +1701,7 @@ def _act_ai_reply(c):
         # (de sessie-check in do_POST dekt "ingelogd = mag").
         _load_env()
         msg = ("🤖 AI heeft meegedacht" if _ai_reply(st, g("pid"))
-               else "geen AI-antwoord (geen AI-inwoner op de rol of geen LLM-key)")
+               else "no AI reply (no AI inhabitant on the role or no LLM key)")
         return nxt, msg
 
 
@@ -1742,7 +1742,7 @@ def _act_checklist_add(c):
         if _deny:
             return nxt, _deny
         if pj.checklist_add(g("pid"), g("title")):
-            msg = "✓ checklist toegevoegd"
+            msg = "✓ checklist added"
         return nxt, msg
 
 
@@ -1752,7 +1752,7 @@ def _act_checklist_remove(c):
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
-        pj.checklist_remove(g("pid"), g("clid")); msg = "🗑 checklist verwijderd"
+        pj.checklist_remove(g("pid"), g("clid")); msg = "🗑 checklist removed"
         return nxt, msg
 
 
@@ -1801,7 +1801,7 @@ def _act_check_add(c):
         if _deny:
             return nxt, _deny
         if pj.check_add(g("pid"), g("clid"), g("text")):
-            msg = "✓ item toegevoegd"
+            msg = "✓ item added"
             try:                                         # skill-aanbod is bijzaak: mag de toevoeging nooit breken
                 if _offer_skill(st, pj, g("pid"), g("clid")):
                     msg += " · 🤖 aanbod"
@@ -1817,7 +1817,7 @@ def _act_check_accept(c):
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
-        msg = "🤖 opgepakt door de rol" if pj.accept_item_offer(g("pid"), g("clid"), g("item")) else ""
+        msg = "🤖 picked up by the role" if pj.accept_item_offer(g("pid"), g("clid"), g("item")) else ""
         return nxt, msg
 
 
@@ -1837,7 +1837,7 @@ def _act_check_remove(c):
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
-        pj.check_remove(g("pid"), g("clid"), g("item")); msg = "🗑 item verwijderd"
+        pj.check_remove(g("pid"), g("clid"), g("item")); msg = "🗑 item removed"
         return nxt, msg
 
 
@@ -1848,9 +1848,9 @@ def _act_role_assign(c):
         rec = st.records.get(g("role"))
         circle_id = rec.parent if rec else None
         if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
-            return nxt, "Geen toegang — alleen Circle Lead mag dit"
+            return nxt, "No access — only the Circle Lead may do this"
         if actor is None and username != "guest":
-            return nxt, "Geen toegang — gebruiker niet herkend"
+            return nxt, "No access — user not recognised"
         person, agent = _parse_trekker(g("filler"))
         if person and st.assign.assign(g("role"), "person", person):
             msg = "✓ toegewezen"
@@ -1866,15 +1866,15 @@ def _act_role_unassign(c):
         rec = st.records.get(g("role"))
         circle_id = rec.parent if rec else None
         if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
-            return nxt, "Geen toegang — alleen Circle Lead mag dit"
+            return nxt, "No access — only the Circle Lead may do this"
         if actor is None and username != "guest":
-            return nxt, "Geen toegang — gebruiker niet herkend"
+            return nxt, "No access — user not recognised"
         person, agent = _parse_trekker(g("filler"))
         if person:
             st.assign.unassign(g("role"), "person", person)
         elif agent:
             st.assign.unassign(g("role"), "persona", agent)
-        msg = "✓ verwijderd"
+        msg = "✓ removed"
         return nxt, msg
 
 
@@ -1885,15 +1885,15 @@ def _act_role_focus(c):
         rec = st.records.get(g("role"))
         circle_id = rec.parent if rec else None
         if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
-            return nxt, "Geen toegang — alleen Circle Lead mag dit"
+            return nxt, "No access — only the Circle Lead may do this"
         if actor is None and username != "guest":
-            return nxt, "Geen toegang — gebruiker niet herkend"
+            return nxt, "No access — user not recognised"
         person, agent = _parse_trekker(g("filler"))
         if person:
             st.assign.set_focus(g("role"), "person", person, g("focus"))
         elif agent:
             st.assign.set_focus(g("role"), "persona", agent, g("focus"))
-        msg = "✓ focus opgeslagen"
+        msg = "✓ focus saved"
         return nxt, msg
 
 
@@ -1912,10 +1912,10 @@ def _act_radar_set(c, status: str, ok_msg: str):
 
 
 def _act_radar_approve(c):
-        nxt, msg = _act_radar_set(c, "goedgekeurd", "✓ aan het archief toegevoegd")
+        nxt, msg = _act_radar_set(c, "goedgekeurd", "✓ added to the archive")
         # Config-vlag radar_auto_promote (default uit): goedkeuren promoveert dan meteen
         # door naar de kennisbank — hetzelfde codepad als de knop, dus dezelfde dedup/marker.
-        if msg == "✓ aan het archief toegevoegd" and radar_promote.auto_promote_enabled(c.data_dir):
+        if msg == "✓ added to the archive" and radar_promote.auto_promote_enabled(c.data_dir):
             _aid, pmsg = radar_promote.promote_signal(c.st, c.g("rid"))
             msg = f"{msg} · {pmsg}"
         return nxt, msg
@@ -1957,8 +1957,8 @@ def _act_radar_merge(c):
             if _deny:
                 return nxt, _deny
         ok = st.radar.merge_signals(g("target_rid"), g("source_rid"), g("tekst"))
-        return nxt, ("🧩 signalen samengevoegd — de herkomst van allebei reist mee"
-                     if ok else "✗ samenvoegen niet gelukt")
+        return nxt, ("🧩 signals merged — the provenance of both travels along"
+                     if ok else "✗ merging failed")
 
 
 def _act_radar_koppel(c):
@@ -1973,10 +1973,10 @@ def _act_radar_koppel(c):
         if _deny:
             return nxt, _deny
         if it.get("promoted_atom_id"):
-            return nxt, "Al verwerkt — dit signaal is al gekoppeld"
+            return nxt, "Already handled — this signal is already linked"
         doel = g("doel")
         if not doel or st.notes.get(doel) is None:
-            return nxt, "✗ doelkaartje niet gevonden"
+            return nxt, "✗ target card not found"
         source = ((it.get("source") or "").strip() or (it.get("feed") or "").strip() or "radar")
         st.notes.stack_provenance(doel, source=source, reference=(it.get("link") or "").strip())
         st.notes.add_tags(doel, ["signal"])
@@ -1985,7 +1985,7 @@ def _act_radar_koppel(c):
                 st.notes.stack_provenance(doel, source=m.get("source") or "",
                                           reference=m.get("link") or "")
         st.radar.mark_promoted(g("rid"), doel)
-        return nxt, "🔗 herkomst gekoppeld aan het bestaande signal — verwerkt"
+        return nxt, "🔗 provenance linked to the existing signal — handled"
 
 
 def _act_kb_stage_koppel(c):
@@ -1997,7 +1997,7 @@ def _act_kb_stage_koppel(c):
         a = next((x for x in (b or {}).get("atoms", []) if x["sid"] == c.g("sid")), None)
         doel = c.g("doel")
         if a is None or not doel or st.notes.get(doel) is None:
-            return c.nxt, "✗ voorstel of doelkaartje niet gevonden"
+            return c.nxt, "✗ proposal or target card not found"
         st.notes.stack_provenance(doel, source=a.get("source") or "",
                                   reference=(a.get("reference") or ""))
         if a.get("radar_rids"):
@@ -2007,7 +2007,7 @@ def _act_kb_stage_koppel(c):
                 if al is not None and not al.get("promoted_atom_id"):
                     st.radar.mark_promoted(rid, doel)
         st.staging.remove_atom(c.g("bid"), c.g("sid"))
-        return c.nxt, "🔗 gekoppeld als extra bron aan het bestaande signal"
+        return c.nxt, "🔗 linked as an extra source to the existing signal"
 
 
 def _acc_id_param(st, role_id: str, qs) -> str:
@@ -2034,9 +2034,9 @@ def _act_aitask_add(c):
         rec = st.records.get(g("role"))
         circle_id = rec.parent if rec else None
         if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
-            return nxt, "Geen toegang — alleen Circle Lead mag AI-taken koppelen"
+            return nxt, "No access — only the Circle Lead may link AI tasks"
         if actor is None and username != "guest":
-            return nxt, "Geen toegang — gebruiker niet herkend"
+            return nxt, "No access — user not recognised"
         # ── einde autorisatie ──
         # Stabiel acc_id (fail-soft terugval op de oude index, zie _acc_id_param).
         aid = g("acc_id")
@@ -2053,7 +2053,7 @@ def _act_aitask_add(c):
         else:
             agent, skill = g("agent"), g("wat")   # fallback (legacy)
         if agent and aid and st.ai.add(g("role"), aid, agent, skill, gelegd_door=username):
-            msg = "🤖 AI gekoppeld aan accountability"
+            msg = "🤖 AI linked to accountability"
         return nxt, msg
 
 
@@ -2066,14 +2066,14 @@ def _act_aitask_remove(c):
         _rec = st.records.get(_task.role) if _task else None
         circle_id = _rec.parent if _rec else None
         if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
-            return nxt, "Geen toegang — alleen Circle Lead mag dit"
+            return nxt, "No access — only the Circle Lead may do this"
         if actor is None and username != "guest":
-            return nxt, "Geen toegang — gebruiker niet herkend"
+            return nxt, "No access — user not recognised"
         # ── einde autorisatie ──
         if _task is not None and _task.kind == KIND_MIDDEL:
             st.link_kroniek.record(action="verwijderd", role_id=_task.role, acc_id=_task.acc_id,
                                    skill=_task.skill, door=username)
-        st.ai.remove(g("tid")); msg = "✓ verwijderd"
+        st.ai.remove(g("tid")); msg = "✓ removed"
         return nxt, msg
 
 
@@ -2093,23 +2093,23 @@ def _act_skilllink_add(c):
         actor = st.people.by_email(username) if username != "guest" else None
         circle_id = rec.parent if rec else None
         if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
-            return nxt, "Geen toegang — alleen Circle Lead mag middelen koppelen"
+            return nxt, "No access — only the Circle Lead may link means"
         if actor is None and username != "guest":
-            return nxt, "Geen toegang — gebruiker niet herkend"
+            return nxt, "No access — user not recognised"
         # ── einde autorisatie ──
         aid = _acc_id_param(st, role_id, {"acc_id": [g("acc_id")], "acc": [g("acc")]})
         if not rec or not aid:
-            return nxt, "Onbekende rol of accountability"
+            return nxt, "Unknown role or accountability"
         # Domeinpoort — absoluut, geen policy-omweg. Een beslis-skill kan alleen bij de
         # domeinhouder; de picker biedt hem elders niet eens aan, dit is de tweede sleutel.
         mag, reden = skill_meta.koppelbaar(skill, rec)
         if not mag:
-            return nxt, f"Niet gekoppeld — {reden}"
+            return nxt, f"Not linked — {reden}"
         if st.ai.add_link(role_id, aid, skill, gelegd_door=username) is None:
-            return nxt, "Niet gekoppeld — onvolledige gegevens"
+            return nxt, "Not linked — incomplete data"
         st.link_kroniek.record(action="gelegd", role_id=role_id, acc_id=aid,
                                skill=skill, door=username)
-        return nxt, f"🔗 {skill_labels.label(skill)} gekoppeld aan deze accountability"
+        return nxt, f"🔗 {skill_labels.label(skill)} linked to this accountability"
 
 
 # AUTHZ: circle-member of iedereen-ingelogd — een means-gap melden is signaleren, geen mutatie
@@ -2118,10 +2118,10 @@ def _act_skilllink_add(c):
 def _act_means_gap_add(c):
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
         if username != "guest" and st.people.by_email(username) is None:
-            return nxt, "Geen toegang — gebruiker niet herkend"
+            return nxt, "No access — user not recognised"
         acc = (g("acc") or "").strip()
         if not acc:
-            return nxt, "Geen accountability opgegeven"
+            return nxt, "No accountability given"
         try:
             from nooch_village.human_inbox import HumanInbox
             hi = HumanInbox(os.path.join(st.dd, "human_inbox.json"))
@@ -2129,8 +2129,8 @@ def _act_means_gap_add(c):
                              role_id=g("role") or None, sensed_by=username)
         except Exception as exc:
             logging.getLogger("cockpit2.means_gap").warning("means_gap_add faalde: %s", exc)
-            return nxt, "Melden lukte niet — zie de logs"
-        return nxt, "📥 als means-gap gemeld; beoordeel via de human inbox"
+            return nxt, "Reporting failed — see the logs"
+        return nxt, "📥 reported as a means gap; review it via the human inbox"
 
 
 # ── Inwoner-dossier: de persona als drager ──────────────────────────────────
@@ -2151,9 +2151,9 @@ def _anchor_gate(st, username: str | None) -> str | None:
         return None
     actor = st.people.by_email(username)
     if actor is None:
-        return "Geen toegang — gebruiker niet herkend"
+        return "No access — user not recognised"
     if not is_circle_lead(actor.id, "mother_earth", st.assign):
-        return "Geen toegang — alleen de anchor-lead beheert inwoners"
+        return "No access — only the anchor lead manages inhabitants"
     return None
 
 
@@ -2177,14 +2177,14 @@ def _act_persona_edit(c):
         pid = g("pid")
         oud = st.personas.get(pid)
         if oud is None:
-            return nxt, "⛔ onbekende inwoner"
+            return nxt, "⛔ unknown inhabitant"
         st.personas.update(pid, mbti=g("mbti"), instructions=g("instructions"),
                            avatar=g("avatar"), prompt_extra=g("prompt_extra"))
         for veld, was in (("instructions", oud.instructions), ("prompt_extra", oud.prompt_extra),
                           ("mbti", oud.mbti)):
             if g(veld) != was:
                 _persona_kroniek(st, pid, veld, was, g(veld), username)
-        return nxt, "✓ personality bijgewerkt"
+        return nxt, "✓ personality updated"
 
 
 def _act_persona_llm(c):
@@ -2200,8 +2200,8 @@ def _act_persona_llm(c):
                 if sleutel.strip() and waarde.strip():
                     per_taak[sleutel.strip()] = waarde.strip()
         if st.personas.update(g("pid"), llm={"default": g("llm_default"), "per_taak": per_taak}) is None:
-            return nxt, "⛔ onbekende inwoner"
-        return nxt, f"✓ modelvoorkeur opgeslagen ({len(per_taak)} taak-override(s))"
+            return nxt, "⛔ unknown inhabitant"
+        return nxt, f"✓ model preference saved ({len(per_taak)} task override(s))"
 
 
 def _act_persona_finetune(c):
@@ -2213,13 +2213,13 @@ def _act_persona_finetune(c):
         pid = g("pid")
         persona = st.personas.get(pid)
         if persona is None:
-            return nxt, "⛔ onbekende inwoner"
+            return nxt, "⛔ unknown inhabitant"
         voorstellen = _finetune_voorstellen(persona)
         if not voorstellen:
             # Fail-closed: geen LLM-antwoord → geen voorstellen, en zeker geen lege overschrijving.
-            return nxt, "⛔ de AI gaf geen bruikbaar voorstel — probeer het later opnieuw"
+            return nxt, "⛔ the AI gave no usable proposal — try again later"
         _finetune_cache[pid] = voorstellen
-        return nxt, f"✨ {len(voorstellen)} voorstel(len) — kies er een"
+        return nxt, f"✨ {len(voorstellen)} proposal(s) — pick one"
 
 
 def _act_persona_finetune_apply(c):
@@ -2231,20 +2231,20 @@ def _act_persona_finetune_apply(c):
         pid, keuze = g("pid"), g("keuze")
         persona = st.personas.get(pid)
         if persona is None:
-            return nxt, "⛔ onbekende inwoner"
+            return nxt, "⛔ unknown inhabitant"
         if not keuze.strip() or keuze.strip() == "(nu leeg)":
             _finetune_cache.pop(pid, None)
-            return nxt, "✓ niets gewijzigd"
+            return nxt, "✓ nothing changed"
         _persona_kroniek(st, pid, "prompt_extra", persona.prompt_extra, keuze, username)
         st.personas.update(pid, prompt_extra=keuze)
         _finetune_cache.pop(pid, None)
-        return nxt, "✓ prompt-extra bijgewerkt"
+        return nxt, "✓ prompt extra updated"
 
 
 def _finetune_voorstellen(persona) -> list:
     """Twee alternatieven voor de prompt-extra: strakker en ruimer. Fail-closed: bij een
     onbruikbaar antwoord een lege lijst, nooit een half voorstel."""
-    huidig = (persona.prompt_extra or "").strip() or "(nog geen prompt-extra)"
+    huidig = (persona.prompt_extra or "").strip() or "(no prompt extra yet)"
     prompt = (f"Je helpt bij het finetunen van een werkinstructie voor een AI-inwoner.\n"
               f"Inwoner: {persona.name} ({persona.mbti}). Karakter: {persona.instructions}\n"
               f"Huidige werkinstructie: {huidig}\n\n"
@@ -2275,12 +2275,12 @@ def _act_persona_skill_add(c):
         # ── Autorisatie: alleen anchor-lead (mother_earth) ──
         actor = st.people.by_email(username) if username != "guest" else None
         if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
-            return nxt, "Geen toegang — alleen anchor-lead mag persona-skills toevoegen"
+            return nxt, "No access — only the anchor lead may add persona skills"
         if actor is None and username != "guest":
-            return nxt, "Geen toegang — gebruiker niet herkend"
+            return nxt, "No access — user not recognised"
         # ── einde autorisatie ──
         if st.personas.add_skill(g("agent"), g("skill")):
-            msg = "✓ skill aan rugzak toegevoegd"
+            msg = "✓ skill added to the backpack"
         return nxt, msg
 
 
@@ -2292,7 +2292,7 @@ def _act_rov2_add(c):
         if _deny:
             return nxt, _deny
         if _rov_add_item(st, g("circle"), g("naam")):
-            msg = "✓ agendapunt toegevoegd"
+            msg = "✓ agenda item added"
         return nxt, msg
 
 
@@ -2304,7 +2304,7 @@ def _act_rov2_add_to_group(c):
         if _deny:
             return nxt, _deny
         if _rov_add_item(st, g("circle"), g("naam"), group=g("group")):
-            msg = "✓ toegevoegd aan voorstel"
+            msg = "✓ added to the proposal"
         return nxt, msg
 
 
@@ -2315,11 +2315,11 @@ def _act_rov2_remove(c):
         actor = st.people.by_email(username) if username != "guest" else None
         circle_id = g("circle")
         if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
-            return nxt, "Geen toegang — alleen Circle Lead mag dit"
+            return nxt, "No access — only the Circle Lead may do this"
         if actor is None and username != "guest":
-            return nxt, "Geen toegang — gebruiker niet herkend"
+            return nxt, "No access — user not recognised"
         # ── einde autorisatie ──
-        st.agenda.remove(g("iid")); msg = "🗑 uit voorstel verwijderd"
+        st.agenda.remove(g("iid")); msg = "🗑 removed from the proposal"
         return nxt, msg
 
 
@@ -2330,14 +2330,14 @@ def _act_rov2_remove_group(c):
         actor = st.people.by_email(username) if username != "guest" else None
         circle_id = g("circle")
         if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
-            return nxt, "Geen toegang — alleen Circle Lead mag dit"
+            return nxt, "No access — only the Circle Lead may do this"
         if actor is None and username != "guest":
-            return nxt, "Geen toegang — gebruiker niet herkend"
+            return nxt, "No access — user not recognised"
         # ── einde autorisatie ──
         gid = st.agenda.group_of(g("iid"))
         for m in st.agenda.members_of_group(gid):
             st.agenda.remove(m["id"])
-        msg = "🗑 voorstel verwijderd"
+        msg = "🗑 proposal removed"
         return nxt, msg
 
 
@@ -2350,7 +2350,7 @@ def _act_rov2_setkind(c):
             return nxt, _deny
         if g("kind") in ("amend_role", "remove_role"):
             st.agenda.update_fields(g("iid"), kind=g("kind"))
-            msg = "voorstel: rol verwijderen" if g("kind") == "remove_role" else "voorstel: rol wijzigen"
+            msg = "proposal: remove role" if g("kind") == "remove_role" else "proposal: amend role"
         return nxt, msg
 
 
@@ -2361,9 +2361,9 @@ def _act_rov2_consent(c):
         actor = st.people.by_email(username) if username != "guest" else None
         circle_id = g("circle")
         if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
-            return nxt, "Geen toegang — alleen Circle Lead mag dit"
+            return nxt, "No access — only the Circle Lead may do this"
         if actor is None and username != "guest":
-            return nxt, "Geen toegang — gebruiker niet herkend"
+            return nxt, "No access — user not recognised"
         # ── einde autorisatie ──
         gid = st.agenda.group_of(g("iid"))
         members = st.agenda.members_of_group(gid)
@@ -2372,7 +2372,7 @@ def _act_rov2_consent(c):
                 st.agenda.set_status(m["id"], "consented")
             msg = "✓ consent — voorstel aangenomen"
         else:
-            msg = "⛔ consent geblokkeerd — los de blokkade(s) op"
+            msg = "⛔ consent blocked — resolve the blocker(s)"
         return nxt, msg
 
 
@@ -2383,9 +2383,9 @@ def _act_rov2_end(c):
         actor = st.people.by_email(username) if username != "guest" else None
         circle_id = g("circle")
         if actor is not None and not is_circle_lead(actor.id, circle_id, st.assign):
-            return nxt, "Geen toegang — alleen Circle Lead mag dit"
+            return nxt, "No access — only the Circle Lead may do this"
         if actor is None and username != "guest":
-            return nxt, "Geen toegang — gebruiker niet herkend"
+            return nxt, "No access — user not recognised"
         # ── einde autorisatie ──
         done = _rov_apply(st)
         # Sluiten = de vergadering écht afronden: haal de resterende (onbehandelde) agendapunten van
@@ -2433,7 +2433,7 @@ def _act_wo_presence(c):
         if _deny:
             return nxt, _deny
         st.werk.set_presence(g("circle"), g("pid"), g("present") == "1")
-        msg = "✓ aanwezig" if g("present") == "1" else "✗ afwezig (taken gepauzeerd)"
+        msg = "✓ aanwezig" if g("present") == "1" else "✗ absent (tasks paused)"
         return nxt, msg
 
 
@@ -2457,7 +2457,7 @@ def _act_wo_ag_add(c):
             return nxt, _deny
         naam, by = _rov_initials(g("naam"))
         if st.werk.agenda_add(g("circle"), naam, by=by):
-            msg = "✓ spanning op de agenda"
+            msg = "✓ tension on the agenda"
         return nxt, msg
 
 
@@ -2467,7 +2467,7 @@ def _act_wo_ag_remove(c):
         _deny = _lead_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
-        st.werk.agenda_remove(g("circle"), g("iid")); msg = "🗑 verwijderd"
+        st.werk.agenda_remove(g("circle"), g("iid")); msg = "🗑 removed"
         return nxt, msg
 
 
@@ -2599,14 +2599,14 @@ def _act_wall_outcome(c):
         src_p = pj.get(src_pid)
         src_entry = next((e for e in (src_p or {}).get("log", []) if e.get("id") == src_eid), None) if src_p else None
         if src_p is None or src_entry is None:
-            return nxt, "✗ bron-comment niet gevonden — een uitkomst vereist herkomst"
+            return nxt, "✗ source comment not found — an outcome requires provenance"
         if not content:
-            return nxt, "✗ inhoud is verplicht"
+            return nxt, "✗ content is required"
         actor = st.people.by_email(username)
         aid = actor.id if actor else ""
         prov = f"↳ uit wall-comment op {src_pid}#{src_eid}"   # herkomst (geen verplichte rationale)
         title = content[:60]
-        _LBL = {"info": "info gedeeld", "project": "project", "action": "actie",
+        _LBL = {"info": "info shared", "project": "project", "action": "action",
                 "note": "note", "roloverleg": "roloverleg-punt"}
 
         if otype == "info":
@@ -2621,14 +2621,14 @@ def _act_wall_outcome(c):
             # AUTHZ: rolvervuller of Circle Lead — een project aanmaken raakt de rol/cirkel van de eigenaar
             owner = g("owner")
             if not owner:
-                return nxt, "✗ kies een rol-eigenaar voor het project"
+                return nxt, "✗ pick a role owner for the project"
             _deny = (_member_gate(resolve_circle_id(owner, st.records), username, st)
                      if owner.startswith(_II_PREFIX) else _role_gate(owner, username, st))
             if _deny:
                 return nxt, _deny
             orec = st.records.get(owner)
             if orec is not None and org.is_circle(orec):
-                return nxt, "✗ een cirkel kan geen project bevatten — kies een rol of Individueel Initiatief"
+                return nxt, "✗ a circle cannot contain a project — pick a role or Individual Action"
             _outcome_project(st, owner, content, provenance=prov, actor_id=aid)
 
         elif otype == "action":
@@ -2636,7 +2636,7 @@ def _act_wall_outcome(c):
             pid_link = g("pid_link")
             tgt = pj.get(pid_link)
             if tgt is None:
-                return nxt, "✗ doel-project niet gevonden"
+                return nxt, "✗ target project not found"
             _deny = _role_gate(tgt.get("owner") or "", username, st)
             if _deny:
                 return nxt, _deny
@@ -2652,13 +2652,13 @@ def _act_wall_outcome(c):
             # AUTHZ: rolvervuller of Circle Lead — een note is een artefact bij de rol (_artefact_gate)
             note_role = g("note_role")
             if not note_role:
-                return nxt, "✗ kies een rol voor de note"
+                return nxt, "✗ pick a role for the note"
             _deny = _artefact_gate(note_role, username, st)
             if _deny:
                 return nxt, _deny
             # HARDE RAND note: >4000 tekens → weigeren met melding, geen stille truncatie.
             if len(content) > 4000:
-                return nxt, f"✗ note te lang ({len(content)}/4000 tekens) — kort in; geen automatische afkap"
+                return nxt, f"✗ note too long ({len(content)}/4000 characters) — shorten it; no automatic truncation"
             _outcome_note(st, note_role, content, actor_id=aid, change_note=prov)
 
         elif otype == "roloverleg":
@@ -2670,22 +2670,22 @@ def _act_wall_outcome(c):
             _outcome_roloverleg(st, circle, title, title, content, by=f"wall:{src_pid}", provenance=prov)
 
         else:
-            return nxt, "✗ onbekende uitkomst"
+            return nxt, "✗ unknown outcome"
 
         # Systeem-entry op de BRON-wall: de audittrail (met herkomst) leeft op de wall.
-        pj.add_feed_entry(src_pid, f"→ {_LBL[otype]} aangemaakt: {title}",
+        pj.add_feed_entry(src_pid, f"→ {_LBL[otype]} created: {title}",
                           kind="system", author_type="human", author_id=aid)
         # Kwam dit uit de inbox (nid meegegeven)? Dan is die mention nu verwerkt: leg de uitkomst + reden
         # vast als historie en haal 'm uit de nieuw/gelezen-wachtrij. Eén klik: uitkomst maken én afvinken.
         nid = (g("nid") or "").strip()
         if nid:
             st.notif.mark_item_processed(nid, outcome=f"{_LBL[otype]}: {title}", by=_person_name(st, aid))
-        return nxt, f"✓ {_LBL[otype]} aangemaakt"
+        return nxt, f"✓ {_LBL[otype]} created"
 
 
 def _act_notif_read(c):
         c.st.notif.mark_item_read(c.g("nid"))
-        return c.nxt, "✓ gemarkeerd als gelezen"
+        return c.nxt, "✓ marked as read"
 
 
 def _act_notif_processed(c):
@@ -2696,7 +2696,7 @@ def _act_notif_processed(c):
 def _act_notif_delete(c):
         # Prullenbak: ruis die je niet wilt verwerken uit de wachtrij halen (zacht, dismissed-vlag).
         ok = c.st.notif.delete_item(c.g("nid"))
-        return c.nxt, ("🗑 weggegooid" if ok else "✗ item niet gevonden")
+        return c.nxt, ("🗑 weggegooid" if ok else "✗ item not found")
 
 
 def _act_metrics2_fav(c):
@@ -2706,25 +2706,25 @@ def _act_metrics2_fav(c):
         if _deny:
             return nxt, _deny
         tile = st.metrics.add_tile(g("node"), g("source"), g("measure"), g("dim") or "none", g("form") or "getal")
-        return nxt, ("★ op je dashboard" if tile else "✗ kon niet toevoegen")
+        return nxt, ("★ on your dashboard" if tile else "✗ could not add")
 
 
 def _act_metrics2_unfav(c):
         ok = c.st.metrics.remove_tile(c.g("node"), c.g("tid"))
-        return c.nxt, ("verwijderd van je dashboard" if ok else "✗ niet gevonden")
+        return c.nxt, ("removed from your dashboard" if ok else "✗ not found")
 
 
 def _act_metrics2_form(c):
         # Weergave-schakelaar: de vorm van een tegel wisselen (view losgekoppeld van data).
         ok = c.st.metrics.set_tile_form(c.g("node"), c.g("tid"), c.g("form"))
-        return c.nxt, ("weergave gewijzigd" if ok else "✗ niet gevonden")
+        return c.nxt, ("display changed" if ok else "✗ not found")
 
 
 def _act_metrics2_dim(c):
         # Segmentatie: de dimensie van een tegel wisselen (bv. per land / per product / over tijd).
         # De view stuurt een passende vorm mee (segmentatie bepaalt welke weergaves kloppen).
         ok = c.st.metrics.set_tile_dim(c.g("node"), c.g("tid"), c.g("dim"), c.g("form"))
-        return c.nxt, ("gesegmenteerd" if ok else "✗ niet gevonden")
+        return c.nxt, ("gesegmenteerd" if ok else "✗ not found")
 
 
 def _act_metrics2_compare(c):
@@ -2732,13 +2732,13 @@ def _act_metrics2_compare(c):
         g = c.g
         ok = c.st.metrics.set_tile_compare(g("node"), g("tid"), g("cmp_source"),
                                            g("cmp_measure"), g("cmp_dim") or "over_tijd")
-        return c.nxt, ("vergelijking ingesteld" if ok else "✗ niet gevonden")
+        return c.nxt, ("vergelijking ingesteld" if ok else "✗ not found")
 
 
 def _act_acc_check(c):
         # Dorpsbrede accountability-check (dubbelingen + formulering) via één LLM-call; bewaart de uitkomst.
         if c.username in (None, "guest"):
-            return c.nxt, "✗ niet toegestaan"
+            return c.nxt, "✗ not allowed"
         from nooch_village.skills_impl.accountability_check import check_accountabilities
         from nooch_village.views.accountabilities import roles_with_accountabilities
         from nooch_village import llm
@@ -2757,27 +2757,27 @@ def _act_acc_check(c):
 def _act_link_pursue(c):
         # Linkbuilding-doelwit op 'pitchen' zetten (geborgd in cockpit 2).
         if c.username in (None, "guest"):
-            return c.nxt, "✗ niet toegestaan"
+            return c.nxt, "✗ not allowed"
         from nooch_village.link_targets import LinkTargets
         store = LinkTargets(os.path.join(c.data_dir, "linkbuilding_targets.json"))
         ok = store.pursue((c.g("link") or "").strip())
-        return c.nxt, ("→ wordt gepitcht" if ok else "✗ niet gevonden")
+        return c.nxt, ("→ being pitched" if ok else "✗ not found")
 
 
 def _act_link_ignore(c):
         if c.username in (None, "guest"):
-            return c.nxt, "✗ niet toegestaan"
+            return c.nxt, "✗ not allowed"
         from nooch_village.link_targets import LinkTargets
         store = LinkTargets(os.path.join(c.data_dir, "linkbuilding_targets.json"))
         ok = store.ignore((c.g("link") or "").strip())
-        return c.nxt, ("genegeerd" if ok else "✗ niet gevonden")
+        return c.nxt, ("genegeerd" if ok else "✗ not found")
 
 
 def _act_source_activate(c):
         # Externe bron aanzetten (mens-gated). Haalt pas bij de volgende pulse data op.
         src = (c.g("source") or "").strip()
         if not src or c.username in (None, "guest"):
-            return c.nxt, "✗ niet toegestaan"
+            return c.nxt, "✗ not allowed"
         c.st.sources.set_active(src, True)
         return c.nxt, f"✓ {src} staat aan (data volgt bij de volgende pulse)"
 
@@ -2785,7 +2785,7 @@ def _act_source_activate(c):
 def _act_source_deactivate(c):
         src = (c.g("source") or "").strip()
         if not src or c.username in (None, "guest"):
-            return c.nxt, "✗ niet toegestaan"
+            return c.nxt, "✗ not allowed"
         c.st.sources.set_active(src, False)
         return c.nxt, f"○ {src} staat uit"
 
@@ -2799,10 +2799,10 @@ def _act_metrics2_formula(c):
         f_a, f_b, f_op = g("f_a"), g("f_b"), g("f_op") or "÷"
         f_name, f_agg = g("f_name").strip(), g("f_agg") or "gemiddelde"
         if not (f_a and f_b and f_name):
-            return c.nxt, "Formule: kies meting A, meting B en een naam"
+            return c.nxt, "Formula: pick measure A, measure B and a name"
         t = st.metrics.add_tile(g("node"), "formule", f_name, "none", "formule",
                                 extra={"f_a": f_a, "f_op": f_op, "f_b": f_b, "aggregatie": f_agg})
-        return c.nxt, ("✓ formule op je dashboard" if t else "⛔ kon formule niet maken")
+        return c.nxt, ("✓ formula on your dashboard" if t else "⛔ could not create the formula")
 
 
 def _act_notif_add(c):
@@ -2812,13 +2812,13 @@ def _act_notif_add(c):
         text = (g("text") or "").strip()
         role = (g("role") or "").strip()
         if not text:
-            return c.nxt, "✗ lege spanning"
+            return c.nxt, "✗ empty tension"
         if role and st.records.get(role) is not None:
             st.notif.add("role", role, "", by="zelf", snippet=text)
         else:
             actor = st.people.by_email(username) if username and username != "guest" else None
             st.notif.add("person", actor.id if actor else "guest", "", by="zelf", snippet=text)
-        return c.nxt, "✓ spanning toegevoegd"
+        return c.nxt, "✓ tension added"
 
 
 def _act_notif_klaar(c):
@@ -2832,7 +2832,7 @@ def _act_notif_klaar(c):
         actor = st.people.by_email(c.username) if c.username and c.username != "guest" else None
         by = _person_name(st, actor.id) if actor else ""
         st.notif.mark_done(nid, by=by)
-        return f"/inbox?done={nid}", "✓ klaar met deze spanning 🎉"
+        return f"/inbox?done={nid}", "✓ done with this tension 🎉"
 
 
 def _act_notif_outcome(c):
@@ -2844,11 +2844,11 @@ def _act_notif_outcome(c):
         nid = g("nid")
         n = st.notif._find(nid)
         if n is None:
-            return nxt, "✗ spanning niet gevonden"
+            return nxt, "✗ tension not found"
         otype = g("otype")
         content = (g("content") or "").strip()
         if not content:
-            return nxt, "✗ inhoud is verplicht"
+            return nxt, "✗ content is required"
         src_pid, src_eid = n.get("project_id", ""), n.get("entry_id", "")
         src_p = pj.get(src_pid) if src_pid else None
         actor = st.people.by_email(username) if username and username != "guest" else None
@@ -2863,27 +2863,27 @@ def _act_notif_outcome(c):
             ping_role = g("ping_role")
             prec = st.records.get(ping_role) if ping_role else None
             if prec is None:
-                return nxt, "✗ kies een rol om te pingen"
+                return nxt, "✗ pick a role to ping"
             st.notif.add("role", ping_role, src_pid, src_eid, by=(by_name or "inbox"), snippet=content)
             made = f"{label} naar {_name(prec)}: {content[:50]}"
         elif otype == "project":
             owner = g("owner")
             if not owner:
-                return nxt, "✗ kies een rol-eigenaar voor het project"
+                return nxt, "✗ pick a role owner for the project"
             _deny = (_member_gate(resolve_circle_id(owner, st.records), username, st)
                      if owner.startswith(_II_PREFIX) else _role_gate(owner, username, st))
             if _deny:
                 return nxt, _deny
             orec = st.records.get(owner)
             if orec is not None and org.is_circle(orec):
-                return nxt, "✗ een cirkel kan geen project bevatten — kies een rol"
+                return nxt, "✗ a circle cannot contain a project — pick a role"
             _outcome_project(st, owner, content, provenance=prov, actor_id=aid)
             made = f"{label}: {content[:60]}"
         elif otype == "action":
             pid_link = g("pid_link")
             tgt = pj.get(pid_link)
             if tgt is None:
-                return nxt, "✗ doel-project niet gevonden"
+                return nxt, "✗ target project not found"
             _deny = _role_gate(tgt.get("owner") or "", username, st)
             if _deny:
                 return nxt, _deny
@@ -2894,7 +2894,7 @@ def _act_notif_outcome(c):
         elif otype == "note":
             note_role = g("note_role")
             if not note_role:
-                return nxt, "✗ kies een rol voor de note"
+                return nxt, "✗ pick a role for the note"
             _deny = _artefact_gate(note_role, username, st)
             if _deny:
                 return nxt, _deny
@@ -2904,7 +2904,7 @@ def _act_notif_outcome(c):
             made = f"{label} bij {_name(st.records.get(note_role))}"
         elif otype == "roloverleg":
             if src_p is None:
-                return nxt, "✗ geen bron-cirkel voor een roloverleg-punt"
+                return nxt, "✗ no source circle for a governance-meeting item"
             circle = resolve_circle_id(src_p.get("owner") or "", st.records)
             _deny = _member_gate(circle, username, st)
             if _deny:
@@ -2913,10 +2913,10 @@ def _act_notif_outcome(c):
                                 by=f"inbox:{nid}", provenance=prov)
             made = f"{label}: {content[:60]}"
         else:
-            return nxt, "✗ onbekende uitkomst"
+            return nxt, "✗ unknown outcome"
         # Audittrail op de bron-wall (als er een bron is) + de uitkomst in het verwerk-record.
         if src_pid:
-            pj.add_feed_entry(src_pid, f"→ {label} aangemaakt uit inbox: {content[:60]}",
+            pj.add_feed_entry(src_pid, f"→ {label} created from the inbox: {content[:60]}",
                               kind="system", author_type="human", author_id=aid)
         st.notif.add_outcome(nid, intent=intent_of(otype), otype=otype, label=made, by=by_name)
         return nxt, f"✓ {label} vastgelegd — nog een uitkomst, of klik Klaar."
@@ -2932,17 +2932,17 @@ def _act_notif_besluit(c):
         nid = g("nid")
         n = st.notif._find(nid)
         if n is None:
-            return nxt, "✗ spanning niet gevonden"
+            return nxt, "✗ tension not found"
         keuze = g("besluit")
         if keuze not in ("ja", "nee", "suggestie"):
             return nxt, "✗ onbekend besluit"
         toel = (g("toelichting") or "").strip()
         if keuze == "suggestie" and not toel:
-            return nxt, "✗ een suggestie zonder inhoud helpt de bewoner niet — vul de tekst in"
+            return nxt, "✗ a suggestion without content does not help the inhabitant — fill in the text"
         src_pid = n.get("project_id") or ""
         p = pj.get(src_pid) if src_pid else None
         if p is None:
-            return nxt, "✗ deze spanning heeft geen bron-project om op te antwoorden — gebruik een ping"
+            return nxt, "✗ this tension has no source project to reply on — use a ping"
         owner = p.get("owner") or ""
         orec = st.records.get(owner)
         rolnaam = _name(orec) if orec else (owner or "rol")
@@ -2966,7 +2966,7 @@ def _act_notif_besluit(c):
 
 def _act_notif_archive(c):
         ok = c.st.notif.archive_item(c.g("nid"))
-        return c.nxt, ("🗄 gearchiveerd" if ok else "⛔ alleen verwerkte items kunnen worden gearchiveerd")
+        return c.nxt, ("🗄 gearchiveerd" if ok else "⛔ only processed items can be archived")
 
 
 def _act_wo_checkout(c):
@@ -2977,7 +2977,7 @@ def _act_wo_checkout(c):
             return nxt, _deny
         if g("score"):
             ok = st.werk.set_checkout(g("circle"), g("pid"), g("score"))
-            msg = "✓ score genoteerd" if ok else "⛔ score geweigerd — het overleg is niet (meer) open"
+            msg = "✓ score genoteerd" if ok else "⛔ score refused — the meeting is not (or no longer) open"
         return nxt, msg
 
 
@@ -2993,7 +2993,7 @@ def _act_noochie_send(c):
             _load_env()
             if ph == "ask_spanning":
                 s.set_field("spanning", g("text")); s.set_phase("ask_need")
-                s.add("noochie", "Top! En wat heb je nodig om dit op te lossen?")
+                s.add("noochie", "Great! And what do you need to solve this?")
                 msg = "💬"
             elif ph == "ask_need":
                 s.set_field("need", g("text")); s.set_phase("free")
@@ -3001,8 +3001,8 @@ def _act_noochie_send(c):
                 msg = "💡 suggestie"
             else:
                 rep = _noochie_reply(st, g("text"))
-                s.add("noochie", (rep or "Even geen AI-verbinding — denk aan een klein "
-                                  "roloverleg-voorstel als vervolgstap.").strip())
+                s.add("noochie", (rep or "No AI connection right now — think of a small "
+                                  "governance-meeting proposal as a next step.").strip())
                 msg = "💬"
         return nxt, msg
 
@@ -3017,7 +3017,7 @@ def _act_noochie_reset(c):
 def _act_noochie_ctx(c):
         nxt, st, g = c.nxt, c.st, c.g
         msg = ""
-        st.noochie.set_field("ctx", g("ctx")); msg = "✓ context bijgewerkt"
+        st.noochie.set_field("ctx", g("ctx")); msg = "✓ context updated"
         return nxt, msg
 
 
@@ -3029,13 +3029,13 @@ def _act_cl_add(c):
             return nxt, _deny
         # Governance-poort: alleen een al bestaande terugkerende actie (geen nieuwe verwachting).
         if g("bestaand") != "1":
-            msg = "⛔ alleen bestaande terugkerende acties — nieuwe verwachting? via het roloverleg"
+            msg = "⛔ only existing recurring actions — a new expectation? via the governance meeting"
         else:
             doel = g("doel") or "all"
             tt, tid = ("role", doel[5:]) if doel.startswith("role:") else ("all", "")
             it = st.checklists.add(g("node"), g("description"), g("cadence"),
                                    target_type=tt, target_id=tid, by="founder")
-            msg = "✓ checklist-item toegevoegd" if it else "⛔ geef een beschrijving"
+            msg = "✓ checklist item added" if it else "⛔ give a description"
         return nxt, msg
 
 
@@ -3060,7 +3060,7 @@ def _act_cl_remove(c):
         _deny = _role_gate((st.checklists.get(g("cid")) or {}).get("node") or "", username, st)
         if _deny:
             return nxt, _deny
-        st.checklists.remove(g("cid")); msg = "🗑 checklist-item verwijderd"
+        st.checklists.remove(g("cid")); msg = "🗑 checklist item removed"
         return nxt, msg
 
 
@@ -3076,7 +3076,7 @@ def _act_m_add_kpi(c):
             cat = _SOURCE_KPIS.get(src)
             it = st.metrics.add_kpi(g("node"), (cat or {}).get("name", src),
                                     (cat or {}).get("unit", ""), source=src) if cat else None
-            msg = "✓ KPI uit data toegevoegd" if it else "⛔ onbekende bron-KPI"
+            msg = "✓ KPI from data added" if it else "⛔ unknown source KPI"
         else:
             # losse KPI; optioneel 'deel in catalogus' → maak eerst een gedeelde definitie aan
             def_id, def_version = "", 0
@@ -3091,8 +3091,8 @@ def _act_m_add_kpi(c):
                                     direction=g("direction"), threshold=g("threshold"),
                                     cadence=g("cadence") or "ad-hoc", meettype=g("meettype") or "snapshot",
                                     window=g("window"), def_id=def_id, def_version=def_version)
-            msg = ("✓ KPI + catalogus-definitie toegevoegd" if (it and def_id)
-                   else "✓ KPI toegevoegd" if it else "⛔ geef een naam")
+            msg = ("✓ KPI + catalogue definition added" if (it and def_id)
+                   else "✓ KPI added" if it else "⛔ give a name")
         return nxt, msg
 
 
@@ -3107,7 +3107,7 @@ def _act_m_add_from_def(c):
             d = st.defs.by_name(g("def_name"))
             did = d["id"] if d else ""
         kid = _kpi_id_from_def(st, g("node"), did)
-        msg = "✓ KPI uit catalogus toegevoegd" if kid else "⛔ kies een bestaande definitie uit de catalogus"
+        msg = "✓ KPI from the catalogue added" if kid else "⛔ pick an existing definition from the catalogue"
         return nxt, msg
 
 
@@ -3117,9 +3117,9 @@ def _act_def_add(c):
         # ── Autorisatie: alleen anchor-lead (mother_earth) ──
         actor = st.people.by_email(username) if username != "guest" else None
         if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
-            return nxt, "Geen toegang — alleen anchor-lead mag dit"
+            return nxt, "No access — only the anchor lead may do this"
         if actor is None and username != "guest":
-            return nxt, "Geen toegang — gebruiker niet herkend"
+            return nxt, "No access — user not recognised"
         # ── einde autorisatie ──
         d = st.defs.add(g("name"), owner="librarian", provenance="sensed",
                         unit=g("unit"), definition=g("definition"), direction=g("direction"),
@@ -3129,7 +3129,7 @@ def _act_def_add(c):
                         tijd=g("tijd"), bruikbaar=g("bruikbaar"),
                         standaard=g("standaard"), benchmark=g("benchmark"),
                         bron_url=g("bron_url"), verificatie=g("verificatie"), waarde=g("waarde"))
-        msg = "✓ definitie toegevoegd aan de catalogus" if d else "⛔ geef een naam"
+        msg = "✓ definition added to the catalogue" if d else "⛔ give a name"
         return nxt, msg
 
 
@@ -3139,18 +3139,18 @@ def _act_catalog_publish(c):
         # AUTHZ: anchor-lead — cureert welke ruwe velden een gebruiker als indicator mag kiezen
         actor = st.people.by_email(username) if username != "guest" else None
         if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
-            return nxt, "Geen toegang — alleen anchor-lead mag de catalogus koppelen"
+            return nxt, "No access — only the anchor lead may link the catalogue"
         if actor is None and username != "guest":
-            return nxt, "Geen toegang — gebruiker niet herkend"
+            return nxt, "No access — user not recognised"
         # ── einde autorisatie ──
         naam, categorie, aard = g("naam").strip(), g("categorie").strip(), g("aard").strip()
         source, veld = g("source").strip(), g("veld").strip()
         if not (naam and categorie and aard):
-            return nxt, "Naam, categorie en aard zijn verplicht"
+            return nxt, "Name, category and nature are required"
         already = any((st.defs.current(d["id"]) or {}).get("source") == source
                       and (st.defs.current(d["id"]) or {}).get("veld") == veld for d in st.defs.all())
         if already:
-            return nxt, "Dit veld staat al in de catalogus"
+            return nxt, "This field is already in the catalogue"
         # Scope-3-schema: aard expliciet; aggregatie leeg + formule=False (geen formule-veld hier).
         d = st.defs.add(naam, owner="anchor-lead", provenance="curated",
                         source=source, veld=veld, categorie=categorie, aard=aard,
@@ -3165,9 +3165,9 @@ def _act_def_amend(c):
         # ── Autorisatie: alleen anchor-lead (mother_earth) ──
         actor = st.people.by_email(username) if username != "guest" else None
         if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
-            return nxt, "Geen toegang — alleen anchor-lead mag dit"
+            return nxt, "No access — only the anchor lead may do this"
         if actor is None and username != "guest":
-            return nxt, "Geen toegang — gebruiker niet herkend"
+            return nxt, "No access — user not recognised"
         # ── einde autorisatie ──
         # wijzig een gedeelde catalogus-definitie; migratie bepaalt wat met de historie gebeurt
         did = g("def_id")
@@ -3208,7 +3208,7 @@ def _act_m_add_link(c):
         if _deny:
             return nxt, _deny
         it = st.metrics.add_link(g("node"), g("name"), g("url"))
-        msg = "✓ link toegevoegd" if it else "⛔ geef naam en URL"
+        msg = "✓ link added" if it else "⛔ give a name and URL"
         return nxt, msg
 
 
@@ -3228,7 +3228,7 @@ def _act_m_remove(c):
         _deny = _role_gate((st.metrics.get(g("mid")) or {}).get("node") or "", username, st)
         if _deny:
             return nxt, _deny
-        st.metrics.remove(g("mid")); msg = "🗑 metric verwijderd"
+        st.metrics.remove(g("mid")); msg = "🗑 metric removed"
         return nxt, msg
 
 
@@ -3239,7 +3239,7 @@ def _act_m_pin(c):
         _deny = _lead_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
-        st.metrics.pin(g("circle"), g("mid")); msg = "✓ op cirkeldashboard"
+        st.metrics.pin(g("circle"), g("mid")); msg = "✓ on the circle dashboard"
         return nxt, msg
 
 
@@ -3249,7 +3249,7 @@ def _act_m_unpin(c):
         _deny = _lead_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
-        st.metrics.unpin(g("circle"), g("mid")); msg = "✓ van dashboard gehaald"
+        st.metrics.unpin(g("circle"), g("mid")); msg = "✓ removed from the dashboard"
         return nxt, msg
 
 
@@ -3261,7 +3261,7 @@ def _act_indicator_activate(c):
         node = c.g("node")
         dids = [d for d in (c.form.get("did") or []) if d]
         if not node or not dids:
-            return nxt, "⛔ kies minstens één indicator en een dashboard"
+            return nxt, "⛔ pick at least one indicator and a dashboard"
         added = 0
         for did in dids:
             kid = _kpi_id_from_def(st, node, did)
@@ -3291,10 +3291,10 @@ def _act_tile_add(c):
             f_a, f_op, f_b = g("f_a"), g("f_op"), g("f_b")
             f_name, f_agg = g("f_name").strip(), g("f_agg")
             if not (f_a and f_b and f_name and f_agg):
-                return nxt, "Formule: kies metric A, metric B, een naam én een aggregatie"
+                return nxt, "Formula: pick metric A, metric B, a name and an aggregation"
             t = st.metrics.add_tile(g("node"), "formule", f_name, "none", "formule",
                                     extra={"f_a": f_a, "f_op": f_op, "f_b": f_b, "aggregatie": f_agg})
-            msg = "✓ formule-KPI op dashboard (berekening volgt)" if t else "⛔ kon formule niet maken"
+            msg = "✓ formula KPI on the dashboard (calculation follows)" if t else "⛔ could not create the formula"
         else:
             combo = g("combo") or ""
             if combo.startswith("def:"):     # indicator direct uit de catalogus → zet als KPI op de node
@@ -3309,9 +3309,9 @@ def _act_tile_add(c):
                 t = st.metrics.add_tile(g("node"), parts[0], parts[1], parts[2], g("form"),
                                         target=g("target"), goal_pid=("" if ref == "benchmark" else g("goal_pid")),
                                         ref_kind=ref)
-                msg = "✓ KPI op dashboard" if t else "⛔ kon KPI niet maken"
+                msg = "✓ KPI on the dashboard" if t else "⛔ could not create the KPI"
             else:
-                msg = "⛔ kies wat je wilt zien"
+                msg = "⛔ pick what you want to see"
         return nxt, msg
 
 
@@ -3321,7 +3321,7 @@ def _act_tile_remove(c):
         _deny = _role_gate(g("node"), username, st)
         if _deny:
             return nxt, _deny
-        st.metrics.remove_tile(g("node"), g("tid")); msg = "🗑 tegel verwijderd"
+        st.metrics.remove_tile(g("node"), g("tid")); msg = "🗑 tile removed"
         return nxt, msg
 
 
@@ -3353,7 +3353,7 @@ def _act_rov2_set(c):   # + rov2_acc_add, rov2_acc_remove, rov2_dom_add, rov2_do
                     except (ValueError, IndexError):
                         pass
             _rov_save_draft(st, g("iid"), draft)
-            msg = "✓ voorstel bijgewerkt"
+            msg = "✓ proposal updated"
         return nxt, msg
 
 
@@ -3365,7 +3365,7 @@ def _act_backlog_add(c):
         actor = st.people.by_email(username) if username != "guest" else None
         if st.backlog.add(g("titel"), g("beschrijving"), g("type"), g("domein"),
                           actor.id if actor else ""):
-            msg = "✓ ingediend in de backlog"
+            msg = "✓ submitted to the backlog"
         return nxt, msg
 
 
@@ -3377,7 +3377,7 @@ def _act_backlog_update_staat(c):
         if _deny:
             return nxt, _deny
         if st.backlog.update_staat(g("bid"), g("staat")):
-            msg = "✓ staat bijgewerkt"
+            msg = "✓ state updated"
         return nxt, msg
 
 
@@ -3389,7 +3389,7 @@ def _act_backlog_update_prioriteit(c):
         if _deny:
             return nxt, _deny
         if st.backlog.update_prioriteit(g("bid"), g("impact"), g("effort")):
-            msg = "✓ prioriteit bijgewerkt"
+            msg = "✓ priority updated"
         return nxt, msg
 
 
@@ -3399,14 +3399,14 @@ def _act_person_edit(c):
         # ── Autorisatie: alleen anchor-lead (mother_earth) ──
         actor = st.people.by_email(username) if username != "guest" else None
         if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
-            return nxt, "Geen toegang — alleen anchor-lead mag dit"
+            return nxt, "No access — only the anchor lead may do this"
         if actor is None and username != "guest":
-            return nxt, "Geen toegang — gebruiker niet herkend"
+            return nxt, "No access — user not recognised"
         # ── einde autorisatie ──
         if st.people.update(g("pid"), name=g("name"), email=g("email")):
-            msg = "✓ deelnemer opgeslagen"
+            msg = "✓ person saved"
         else:
-            msg = "✗ deelnemer niet gevonden"
+            msg = "✗ person not found"
         return nxt, msg
 
 
@@ -3416,18 +3416,18 @@ def _act_person_remove(c):
         # ── Autorisatie: alleen anchor-lead (mother_earth) ──
         actor = st.people.by_email(username) if username != "guest" else None
         if actor is not None and not is_circle_lead(actor.id, "mother_earth", st.assign):
-            return nxt, "Geen toegang — alleen anchor-lead mag dit"
+            return nxt, "No access — only the anchor lead may do this"
         if actor is None and username != "guest":
-            return nxt, "Geen toegang — gebruiker niet herkend"
+            return nxt, "No access — user not recognised"
         # ── einde autorisatie ──
         pid = g("pid")
         # ruim ook de rol-toewijzingen op, anders blijven die als wees achter
         for rid in list(st.assign.roles_of("person", pid)):
             st.assign.unassign(rid, "person", pid)
         if st.people.remove(pid):
-            msg = "🗑 deelnemer verwijderd"
+            msg = "🗑 person removed"
         else:
-            msg = "✗ deelnemer niet gevonden"
+            msg = "✗ person not found"
         return nxt, msg
 
 
@@ -3442,7 +3442,7 @@ def _act_lk_mute(c):
         muted = g("muted") != "0"                 # muted=0 → unmute; anders mute
         ok = livekit_mute_participant(target, muted)
         verb = "gemute" if muted else "ge-unmute"
-        return nxt, (f"✓ {verb}" if ok else "muten niet gelukt")
+        return nxt, (f"✓ {verb}" if ok else "muting failed")
 
 
 # ── Claims-checker: cureren van de claims-database ───────────────────────────
@@ -3493,11 +3493,11 @@ def _claims_scan(form: dict, data_dir: str | None = None) -> tuple[dict, str]:
         tekst = opgehaald["tekst"]
         bron = opgehaald["url"]
         if not tekst.strip():
-            return {"error": "de pagina gaf geen leesbare tekst — plak de tekst handmatig."}, bron
+            return {"error": "the page gave no readable text — paste the text manually."}, bron
     elif not tekst.strip():
-        return {"error": "geef een URL of plak een tekst."}, ""
+        return {"error": "give a URL or paste some text."}, ""
     else:
-        bron = "geplakte tekst"
+        bron = "pasted text"
     try:
         uitslag = _claims_db.check_tekst(tekst, data_dir=data_dir)
     except _claims_db.ClaimsDbError as e:
@@ -3552,7 +3552,7 @@ def _act_claims_term_add(c):
             return nxt, f"⛔ {e}"
         _claims_audit(st, username, "claims_term_added", term=nieuw["term"],
                       stoplicht=nieuw["stoplicht"], versie=versie)
-        return nxt, f"✓ term toegevoegd — database v{versie}"
+        return nxt, f"✓ term added — database v{versie}"
 
 
 def _act_claims_work_status(c):
@@ -3602,7 +3602,7 @@ def _act_claims_to_board(c):
             return nxt, "⛔ onleesbare bevindingen"
         bevindingen = rauw.get("bevindingen") or []
         if not bevindingen:
-            return nxt, "⛔ geen bevindingen om op het bord te zetten"
+            return nxt, "⛔ no findings to put on the board"
         verslag = _claims_board.zet_op_bord(
             st, _claims_db_stil(c.data_dir), bevindingen,
             g("bron") or rauw.get("bron", ""), rol_voor, trigger="human")
@@ -3628,7 +3628,7 @@ def _bord_melding(verslag: dict) -> str:
                 f"taak of werklijst-item")
     rollen = ", ".join(f"@{naam} ({aantal})" for naam, aantal in _claims_board.per_rol(verslag["aangemaakt"]))
     staart = f" · {verslag['overgeslagen']} liepen al" if verslag["overgeslagen"] else ""
-    return f"✓ {n} taak/taken aangemaakt → {rollen}{staart}"
+    return f"✓ {n} task(s) created → {rollen}{staart}"
 
 
 # ── Kennisbank (laag 2): inzichten, bewijs-links, gesprek en versies ─────────
@@ -3657,23 +3657,23 @@ def _act_kb_new(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok
     title = c.g("title").strip()
     if not title:
-        return c.nxt, "✗ typ eerst een claim"
+        return c.nxt, "✗ type a claim first"
     iid = c.st.kennisbank.add(title, why=c.g("why"), by=_kb_actor(c))
-    return f"/kennisbank?id={iid}", "➕ inzicht gemaakt (v1.0) — koppel bewijs en kijk hoe zeker het wordt"
+    return f"/kennisbank?id={iid}", "➕ insight created (v1.0) — link evidence and watch how certain it becomes"
 
 
 def _act_kb_link(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok
     iid, atom_id = c.g("iid"), c.g("atom_id")
     if atom_id not in kb_load_atoms(c.data_dir):
-        return c.nxt, "✗ kaart niet gevonden in de bibliotheek"
+        return c.nxt, "✗ card not found in the library"
     voor = _kb_word(c, iid)
     ok = c.st.kennisbank.link(iid, atom_id, c.g("stance"),
                               annotation=c.g("annotation"), by=_kb_actor(c))
     if not ok:
-        return c.nxt, "✗ koppelen niet gelukt"
+        return c.nxt, "✗ linking failed"
     na = _kb_word(c, iid)
-    return c.nxt, ("🔗 gekoppeld. " + (f"Zekerheid nu: {na}" if na != voor else "Zekerheid herberekend."))
+    return c.nxt, ("🔗 linked. " + (f"Zekerheid nu: {na}" if na != voor else "Zekerheid herberekend."))
 
 
 def _act_kb_unlink(c):
@@ -3681,16 +3681,16 @@ def _act_kb_unlink(c):
     iid = c.g("iid")
     voor = _kb_word(c, iid)
     if not c.st.kennisbank.unlink(iid, c.g("atom_id")):
-        return c.nxt, "✗ loskoppelen niet gelukt"
+        return c.nxt, "✗ unlinking failed"
     na = _kb_word(c, iid)
-    return c.nxt, ("Losgekoppeld (kaart blijft in de bibliotheek). "
+    return c.nxt, ("Unlinked (the card stays in the library). "
                    + (f"Zekerheid nu: {na}" if na != voor else "Zekerheid herberekend."))
 
 
 def _act_kb_annotate(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok
     ok = c.st.kennisbank.annotate(c.g("iid"), c.g("atom_id"), c.g("text"))
-    return c.nxt, ("💬 notitie opgeslagen" if ok else "✗ notitie niet opgeslagen")
+    return c.nxt, ("💬 note saved" if ok else "✗ note not saved")
 
 
 def _act_kb_evidence(c):
@@ -3709,15 +3709,15 @@ def _act_kb_evidence(c):
     voor = _kb_word(c, iid)
     ok = c.st.kennisbank.link(iid, atom_id, c.g("stance") or "support", by=actor)
     if not ok:
-        return c.nxt, "✗ kaart gemaakt maar koppelen niet gelukt"
+        return c.nxt, "✗ card created but linking failed"
     na = _kb_word(c, iid)
-    return c.nxt, ("➕ toegevoegd. " + (f"Zekerheid nu: {na}" if na != voor else "Zekerheid herberekend."))
+    return c.nxt, ("➕ added. " + (f"Zekerheid nu: {na}" if na != voor else "Zekerheid herberekend."))
 
 
 def _act_kb_discuss(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok
     ok = c.st.kennisbank.discuss(c.g("iid"), c.g("text"), _kb_actor(c))
-    return c.nxt, ("💬 kanttekening geplaatst" if ok else "✗ typ eerst een kanttekening")
+    return c.nxt, ("💬 kanttekening geplaatst" if ok else "✗ type an annotation first")
 
 
 def _act_kb_reformulate(c):
@@ -3726,12 +3726,12 @@ def _act_kb_reformulate(c):
     iid = c.g("iid")
     parsed = parse_blok(c.g("blok"))
     if not parsed["claim"]:
-        return c.nxt, "✗ kon het blok niet lezen — zorg voor een CLAIM:-regel"
+        return c.nxt, "✗ could not read the block — make sure there is a CLAIM: line"
     nieuwe = c.st.kennisbank.reformulate(iid, title=parsed["claim"],
                                          reframe=parsed["reframe"],
                                          falsifier=parsed["falsifier"], by=_kb_actor(c))
     if nieuwe is None:
-        return c.nxt, "✗ herformuleren niet gelukt"
+        return c.nxt, "✗ rewording failed"
     return c.nxt, f"↻ geherformuleerd → v{nieuwe} (vorige versie bewaard)"
 
 
@@ -3741,7 +3741,7 @@ def _act_kb_intake(c):
     # Laag 1 blijft dom: geen oordeel, geen veld; trust wordt pas in laag 2 afgeleid.
     uitkomst = kb_intake(c.g("raw"), c.g("source_hint"), c.data_dir)
     if uitkomst is None:
-        return c.nxt, "✗ de noteer-hulp gaf geen bruikbaar antwoord — probeer het zo nog eens"
+        return c.nxt, "✗ the note helper gave no usable answer — try again in a moment"
     nieuw, dubbel = uitkomst
     if not nieuw and not dubbel:
         return c.nxt, "✗ typ eerst iets om te noteren"
@@ -3758,11 +3758,11 @@ def _act_kb_intake_url(c):
     from nooch_village.kennisbank_sources import van_url
     uit = van_url(c.g("url"))
     if uit is None:
-        return c.nxt, "✗ kon deze pagina niet ophalen of er geen leesbare tekst uit halen"
+        return c.nxt, "✗ could not fetch this page or extract readable text from it"
     raw, label = uit
     uitkomst = kb_intake(raw, label, c.data_dir)
     if uitkomst is None:
-        return c.nxt, "✗ de noteer-hulp gaf geen bruikbaar antwoord — probeer het zo nog eens"
+        return c.nxt, "✗ the note helper gave no usable answer — try again in a moment"
     nieuw, dubbel = uitkomst
     if not nieuw:
         return c.nxt, f"Al bekend: {dubbel} notitie(s) stonden er al (niets gedupliceerd)"
@@ -3780,7 +3780,7 @@ def _act_kb_stage_edit(c):
     provenance = (c.form.get("provenance") or [None])[0]
     ok = c.st.staging.edit_atom(c.g("bid"), c.g("sid"), content=c.g("content"),
                                 subject=subject, provenance=provenance)
-    return c.nxt, ("✏️ bijgewerkt" if ok else "✗ niet gevonden")
+    return c.nxt, ("✏️ updated" if ok else "✗ not found")
 
 
 def _act_kb_stage_accept(c):
@@ -3793,10 +3793,10 @@ def _act_kb_stage_accept(c):
         c.st.staging.edit_atom(c.g("bid"), c.g("sid"), content=content)
     res = commit_atom(c.st.staging, c.g("bid"), c.g("sid"), c.data_dir, radar=c.st.radar)
     if res is None:
-        return c.nxt, "✗ voorstel niet gevonden"
+        return c.nxt, "✗ proposal not found"
     msg = {"nieuw": "✓ in Oracle",
            "bekend": "Al bekend — niets gedupliceerd",
-           "gekoppeld": "🔗 samengevoegd met een bestaand signal"}[res["uitkomst"]]
+           "gekoppeld": "🔗 merged with an existing signal"}[res["uitkomst"]]
     if res["leeg"]:
         return "/kennisbank", f"🎉 set verwerkt · laatste voorstel: {msg}"
     return c.nxt, msg
@@ -3805,18 +3805,18 @@ def _act_kb_stage_accept(c):
 def _act_kb_stage_delete(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
     ok = c.st.staging.remove_atom(c.g("bid"), c.g("sid"))
-    return c.nxt, ("🗑 weggegooid" if ok else "✗ niet gevonden")
+    return c.nxt, ("🗑 weggegooid" if ok else "✗ not found")
 
 
 def _act_kb_stage_merge(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
     sids = [s for s in (c.form.get("sid") or []) if s]
     if len(sids) < 2:
-        return c.nxt, "✗ vink minstens twee voorstellen aan"
+        return c.nxt, "✗ tick at least two proposals"
     if not c.g("kop").strip():
-        return c.nxt, "✗ geef de samengestelde kaart een kop"
+        return c.nxt, "✗ give the composed card a heading"
     ok = c.st.staging.merge_atoms(c.g("bid"), sids, c.g("kop"))
-    return c.nxt, ("🧩 samengevoegd" if ok else "✗ samenvoegen niet gelukt")
+    return c.nxt, ("🧩 samengevoegd" if ok else "✗ merging failed")
 
 
 def _act_kb_stage_commit(c):
@@ -3824,16 +3824,16 @@ def _act_kb_stage_commit(c):
     # nagekeken atomen append-only in de bibliotheek (idempotent op hash content+bron).
     res = commit_batch(c.st.staging, c.g("bid"), c.data_dir, radar=c.st.radar)
     if res is None:
-        return c.nxt, "✗ deze set bestaat niet meer"
+        return c.nxt, "✗ this set no longer exists"
     nieuw, dubbel, gekoppeld = res
     if not nieuw and not gekoppeld:
         return "/kennisbank", (f"Al bekend: {dubbel} notitie(s) stonden er al" if dubbel
-                               else "Niets toegevoegd — de set was leeg")
+                               else "Nothing added — the set was empty")
     delen = []
     if nieuw:
-        delen.append(f"✅ {nieuw} notities toegevoegd aan de bibliotheek")
+        delen.append(f"✅ {nieuw} notes added to the library")
     if gekoppeld:
-        delen.append(f"🔗 {gekoppeld} signal(s) samengevoegd met een bestaand signal in Oracle")
+        delen.append(f"🔗 {gekoppeld} signal(s) merged with an existing signal in Oracle")
     if dubbel:
         delen.append(f"{dubbel} al bekend")
     return "/kennisbank", " · ".join(delen)
@@ -3842,14 +3842,14 @@ def _act_kb_stage_commit(c):
 def _act_kb_stage_discard(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
     ok = c.st.staging.discard(c.g("bid"))
-    return "/kennisbank", ("Set weggegooid — niets in de bibliotheek" if ok else "✗ set niet gevonden")
+    return "/kennisbank", ("Set discarded — nothing in the library" if ok else "✗ set not found")
 
 
 def _act_kb_atoom_edit(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Bewerken-met-historie
     # (PR-2): de vorige claim blijft bewaard in edit_history (append-only, extractie-fouten).
     res = c.st.notes.edit_note(c.g("atom_id"), claim=c.g("claim"))
-    return c.nxt, ("✏️ bijgewerkt (vorige versie bewaard)" if res else "✗ bewerken niet gelukt")
+    return c.nxt, ("✏️ updated (previous version kept)" if res else "✗ editing failed")
 
 
 def _act_kb_atoom_related(c):
@@ -3860,21 +3860,21 @@ def _act_kb_atoom_related(c):
     prov = "internal_judgment" if bron == actor else "unknown"
     res = c.st.notes.add_related(c.g("atom_id"), c.g("content"), bron, provenance=prov)
     if res is None:
-        return c.nxt, "✗ kon geen gerelateerd feit toevoegen (leeg, of bestaat al)"
-    return c.nxt, "➕ gerelateerd feit toegevoegd en gelinkt"
+        return c.nxt, "✗ could not add a related fact (empty, or it already exists)"
+    return c.nxt, "➕ related fact added and linked"
 
 
 def _act_kb_insight_link(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. B1: koppel een ander INZICHT
     # als steun/tegen aan het geopende inzicht (de Zettelkasten-ladder → meta-inzicht).
     ok = c.st.kennisbank.link_insight(c.g("iid"), c.g("other_id"), c.g("stance"), by=_kb_actor(c))
-    return c.nxt, ("🔗 inzicht gekoppeld" if ok else "✗ koppelen niet gelukt")
+    return c.nxt, ("🔗 insight linked" if ok else "✗ linking failed")
 
 
 def _act_kb_insight_unlink(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
     ok = c.st.kennisbank.unlink_insight(c.g("iid"), c.g("other_id"))
-    return c.nxt, ("ontkoppeld" if ok else "✗ ontkoppelen niet gelukt")
+    return c.nxt, ("unlinked" if ok else "✗ unlinking failed")
 
 
 def _act_kb_meta_start(c):
@@ -3882,10 +3882,10 @@ def _act_kb_meta_start(c):
     # de gekoppelde inzichten van dit inzicht als input aan dezelfde copy-paste-spel-flow.
     src = c.st.kennisbank.get(c.g("iid"))
     if src is None:
-        return c.nxt, "✗ inzicht niet gevonden"
+        return c.nxt, "✗ insight not found"
     related = src.get("related") or []
     if len(related) < 2:
-        return c.nxt, "✗ koppel eerst ≥2 inzichten (steun/tegen) om een meta-inzicht te spelen"
+        return c.nxt, "✗ link ≥2 insights first (supporting/contradicting) to play a meta-insight"
     kaarten = []
     for r in related:
         other = c.st.kennisbank.get(r["insight_id"])
@@ -3894,7 +3894,7 @@ def _act_kb_meta_start(c):
                             "label": other.get("title") or ""})
     sid = c.st.spel.start(f"Meta-inzicht over: {src.get('title') or ''}", kaarten,
                           by=_kb_actor(c), meta=True)
-    return f"/kennisbank/spel?sid={sid}", "🎲 meta-spel gestart — de gekoppelde inzichten zijn de hand"
+    return f"/kennisbank/spel?sid={sid}", "🎲 meta-game started — the linked insights are the hand"
 
 
 def _act_kb_atoom_reference(c):
@@ -3905,14 +3905,14 @@ def _act_kb_atoom_reference(c):
     # genormaliseerde bron die er nog geen hebben (nooit een bestaande overschrijven).
     url = c.g("url").strip()
     if not re.match(r"^https?://", url):
-        return c.nxt, "✗ plak een geldige URL (https://…)"
+        return c.nxt, "✗ paste a valid URL (https://…)"
     if not c.st.notes.set_reference(c.g("atom_id"), url):
-        return c.nxt, "✗ notitie niet gevonden"
+        return c.nxt, "✗ note not found"
     extra = c.st.notes.propagate_reference(c.g("atom_id"))
     if extra:
-        return c.nxt, (f"🔗 bronlink gekoppeld — ook gezet op {extra} ander(e) "
+        return c.nxt, (f"🔗 source link attached — also set on {extra} other "
                        f"kaartje(s) met dezelfde bron")
-    return c.nxt, "🔗 bronlink gekoppeld"
+    return c.nxt, "🔗 source link attached"
 
 
 def _act_tag_voorstel_besluit(c):
@@ -3925,13 +3925,13 @@ def _act_tag_voorstel_besluit(c):
         vs = {v["id"]: v for v in store.open_voorstellen()}
         v = vs.get(c.g("vid"))
         if v is None:
-            return c.nxt, "✗ voorstel niet gevonden of al besloten"
+            return c.nxt, "✗ proposal not found or already decided"
         n = voer_voorstel_uit(c.st.notes, v)
         store.besluit(c.g("vid"), "doorgevoerd")
         return c.nxt, f"✓ doorgevoerd op {n} signal(s)"
     v = store.besluit(c.g("vid"), "afgewezen")
-    return c.nxt, ("✗ afgewezen — komt niet opnieuw terug" if v
-                   else "✗ voorstel niet gevonden of al besloten")
+    return c.nxt, ("✗ rejected — it will not come back" if v
+                   else "✗ proposal not found or already decided")
 
 
 def _act_tag_onderhoud_run(c):
@@ -3940,9 +3940,9 @@ def _act_tag_onderhoud_run(c):
     from nooch_village.tag_onderhoud import draai_onderhoud
     res = draai_onderhoud(c.data_dir, force=True)
     if not res.get("gedraaid"):
-        return c.nxt, "Geen tags om te beoordelen"
+        return c.nxt, "No tags to review"
     if not res.get("voorstellen"):
-        return c.nxt, "🏷 ronde gedraaid — de LLM zag niets om op te schonen (of was niet beschikbaar)"
+        return c.nxt, "🏷 round run — the LLM saw nothing to clean up (or was unavailable)"
     return c.nxt, (f"🏷 ronde gedraaid: {res['nieuw']} nieuw voorstel(len) "
                    f"({res['voorstellen'] - res['nieuw']} al bekend/afgewezen)")
 
@@ -3953,14 +3953,14 @@ def _act_kb_atoom_purge(c):
     # de mens: na een purge kan dezelfde tekst in principe opnieuw binnenkomen.
     ok = c.st.notes.purge(c.g("atom_id"))
     return c.nxt, ("🔥 definitief weggegooid" if ok
-                   else "✗ niet gevonden of nog niet verwijderd")
+                   else "✗ not found or not deleted yet")
 
 
 def _act_kb_blacklist_leeg(c):
     # AUTHZ: iedereen-ingelogd — ⚙-actie: de hele black-list in één keer definitief legen.
     n = c.st.notes.purge_archived()
     return c.nxt, (f"🔥 black-list geleegd: {n} definitief weggegooid" if n
-                   else "De black-list was al leeg")
+                   else "The blacklist was already empty")
 
 
 def _act_kb_atoom_subject(c):
@@ -3968,9 +3968,9 @@ def _act_kb_atoom_subject(c):
     # ongesorteerd-bakje: een mens hangt een subject-loze notitie aan een hub.
     subject = c.g("subject")
     if subject not in KB_SUBJECTS:
-        return c.nxt, "✗ kies een onderwerp uit de lijst"
+        return c.nxt, "✗ pick a subject from the list"
     if not c.st.notes.add_tags(c.g("atom_id"), [subject]):
-        return c.nxt, "✗ notitie niet gevonden"
+        return c.nxt, "✗ note not found"
     return c.nxt, f"📥 gesorteerd naar '{subject}'"
 
 
@@ -3985,14 +3985,14 @@ def _act_kb_atoom_merge(c):
     # die interactie is in het herontwerp opgegaan in het slepen.
     target_id, source_id = c.g("target_id"), c.g("source_id")
     if not target_id or not source_id:
-        return c.nxt, "✗ merge: sleep het ene statement op het andere"
+        return c.nxt, "✗ merge: drag one statement onto the other"
     if target_id == source_id:
-        return c.nxt, "✗ merge met zichzelf doet niets — sleep op een ánder statement"
+        return c.nxt, "✗ merging with itself does nothing — drag onto a different statement"
     kaart = c.st.notes.merge_into(target_id, source_id, c.g("tekst"), by=_kb_actor(c))
     if kaart is None:
-        return c.nxt, "✗ merge niet gelukt — statement niet (meer) gevonden of tekst leeg"
+        return c.nxt, "✗ merge failed — statement not found (any more) or text empty"
     c.st.kennisbank.rewire_atom(source_id, target_id)
-    return c.nxt, f"🧩 samengevoegd → v{kaart.version} (herkomst van beide bewaard)"
+    return c.nxt, f"🧩 merged → v{kaart.version} (provenance of both kept)"
 
 
 def _act_kb_atoom_archive(c):
@@ -4000,14 +4000,14 @@ def _act_kb_atoom_archive(c):
     ids = [a for a in (c.form.get("atoom") or []) if a] or [c.g("atom_id")]
     ok = sum(1 for aid in ids if aid and c.st.notes.archive(aid))
     if not ok:
-        return c.nxt, "✗ selecteer eerst een notitie"
+        return c.nxt, "✗ select a note first"
     return c.nxt, f"📦 {ok} notitie(s) gearchiveerd — terug te zetten via 'Gearchiveerd'"
 
 
 def _act_kb_atoom_unarchive(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
     ok = c.st.notes.archive(c.g("atom_id"), archived=False)
-    return c.nxt, ("↩ teruggezet in de bibliotheek" if ok else "✗ terugzetten niet gelukt")
+    return c.nxt, ("↩ restored to the library" if ok else "✗ restoring failed")
 
 
 def _act_kb_atoom_naar_spel(c):
@@ -4017,11 +4017,11 @@ def _act_kb_atoom_naar_spel(c):
     ids = [a for a in (c.form.get("atoom") or []) if a]
     sid = c.g("sid")
     if not ids:
-        return c.nxt, "✗ selecteer eerst een notitie"
+        return c.nxt, "✗ select a note first"
     if not sid or c.st.spel.get(sid) is None:
-        return c.nxt, "✗ kies een open spel"
+        return c.nxt, "✗ pick an open game"
     ok = sum(1 for aid in ids if c.st.spel.add_kaart(sid, aid, "support"))
-    return f"/kennisbank/spel?sid={sid}", f"🔗 {ok} kaart(en) aan je hand gekoppeld"
+    return f"/kennisbank/spel?sid={sid}", f"🔗 {ok} card(s) linked to your hand"
 
 
 def _kb_spel_set(c) -> list[dict]:
@@ -4039,33 +4039,33 @@ def _act_kb_spel_start(c):
     if not hunch:
         return c.nxt, "✗ typ eerst je vermoeden"
     if not kaarten:
-        return c.nxt, "✗ vink minstens één kaart aan"
+        return c.nxt, "✗ tick at least one card"
     sid = c.st.spel.start(hunch, kaarten, reformulate_of=c.g("reformulate_of"),
                           by=_kb_actor(c))
-    return f"/kennisbank/spel?sid={sid}", "🎲 spel gestart — de denkpartner opent"
+    return f"/kennisbank/spel?sid={sid}", "🎲 game started — the thinking partner opens"
 
 
 def _act_kb_spel_add(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. De hand uitbreiden
     # (taak 2): idempotent, kaart moet in de bibliotheek bestaan.
     if c.g("atom_id") not in kb_load_atoms(c.data_dir):
-        return c.nxt, "✗ kaart niet gevonden in de bibliotheek"
+        return c.nxt, "✗ card not found in the library"
     ok = c.st.spel.add_kaart(c.g("sid"), c.g("atom_id"), c.g("stance") or "support",
                              annotation=c.g("annotation"))
-    return c.nxt, ("🔗 gekoppeld aan je hand" if ok else "✗ koppelen niet gelukt")
+    return c.nxt, ("🔗 linked to your hand" if ok else "✗ linking failed")
 
 
 def _act_kb_spel_remove(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok.
     ok = c.st.spel.remove_kaart(c.g("sid"), c.g("atom_id"))
-    return c.nxt, ("Verwijderd uit je hand (kaart blijft in de bibliotheek)" if ok
-                   else "✗ verwijderen niet gelukt")
+    return c.nxt, ("Removed from your hand (the card stays in the library)" if ok
+                   else "✗ removing failed")
 
 
 def _act_kb_spel_flip(c):
     # AUTHZ: iedereen-ingelogd — zie het kop-comment van dit blok. Richting in één klik.
     ok = c.st.spel.flip_kaart(c.g("sid"), c.g("atom_id"))
-    return c.nxt, ("↔ richting gedraaid" if ok else "✗ draaien niet gelukt")
+    return c.nxt, ("↔ richting gedraaid" if ok else "✗ flipping failed")
 
 
 def _act_kb_spel_finish(c):
@@ -4073,9 +4073,9 @@ def _act_kb_spel_finish(c):
     # het teruggeplakte blok (copy-paste-spel): v1.0, of versie-bump bij herformuleren.
     res = spel_finish(c.st.spel, c.g("sid"), c.st.kennisbank, c.g("blok"))
     if res is None:
-        return c.nxt, "✗ kon het blok niet lezen — zorg voor een CLAIM:-regel"
+        return c.nxt, "✗ could not read the block — make sure there is a CLAIM: line"
     iid, versie = res
-    woord = ("nieuwe versie v" + versie) if versie != "1.0" else "inzicht gemaakt (v1.0)"
+    woord = ("new version v" + versie) if versie != "1.0" else "inzicht gemaakt (v1.0)"
     return f"/kennisbank?id={iid}", f"✓ {woord} — de zekerheid rekent live mee"
 
 
@@ -4084,7 +4084,7 @@ def _act_kw_nominate(c):
     # schrijven naar de beschermde woordenschat blijft voorbehouden aan Lara (kw_nom_accept).
     term = c.g("term").strip()
     if not term:
-        return c.nxt, "✗ geen keyword opgegeven"
+        return c.nxt, "✗ no keyword given"
     ok = c.st.nominations.nominate(term, by=_kb_actor(c))
     return c.nxt, (f"🗳 “{term}” genomineerd — Lara beslist" if ok
                    else f"“{term}” staat al in de wachtrij")
@@ -4099,7 +4099,7 @@ def _act_kw_nom_accept(c):
     term = c.g("term").strip()
     status = c.g("status") or "approved"          # approved | forbidden
     if status not in ("approved", "forbidden"):
-        return c.nxt, "✗ ongeldige status"
+        return c.nxt, "✗ invalid status"
     reason = c.g("reason").strip()
     c.st.library.curate(term, status, rationale=reason, by=_kb_actor(c))
     c.st.nom_kroniek.record(role_id=_kb_actor(c), term=term, decision="accept",
@@ -4117,7 +4117,7 @@ def _act_kw_nom_reject(c):
     term = c.g("term").strip()
     reason = c.g("reason").strip()
     if not valid_reason(reason):
-        return c.nxt, "✗ een afwijzing vereist een echte reden (niet leeg of “n.v.t.”)"
+        return c.nxt, "✗ a rejection requires a real reason (not empty or “n/a”)"
     c.st.nom_kroniek.record(role_id=_kb_actor(c), term=term, decision="reject", reason=reason)
     c.st.nominations.remove(term)
     return c.nxt, f"✗ “{term}” afgewezen — geborgd in de Kroniek"
@@ -4519,7 +4519,7 @@ def make_handler(data_dir: str, csrf_token: str,
                     self.send_header("Location", f"/node?id={default_id}")
                     self.end_headers()
                     return
-                self._send(_page("Leeg", "<p>Nog geen organisatie geladen.</p>"))
+                self._send(_page("Empty", "<p>No organisation loaded yet.</p>"))
                 return
             if path == "/node":
                 nid = (qs.get("id") or [""])[0]
@@ -4552,7 +4552,7 @@ def make_handler(data_dir: str, csrf_token: str,
                 fr = (qs.get("fragment") or [""])[0] == "1"
                 # Accepteer ?id= als alias voor ?pid= (founder 20 jul): de projectsignalen linken
                 # historisch met ?id= (tevens de dedup-sleutel in `seen`), maar de route las alleen
-                # ?pid= → "Project niet gevonden". Alias ipv linkformaat wijzigen houdt de dedup stabiel.
+                # ?pid= → "Project not found". Alias ipv linkformaat wijzigen houdt de dedup stabiel.
                 _pid = (qs.get("pid") or qs.get("id") or [""])[0]
                 self._send(_frag(render_project(st, _pid, csrf_token=effective_csrf,
                                                 msg=(qs.get("msg") or [""])[0],
@@ -4840,12 +4840,12 @@ def make_handler(data_dir: str, csrf_token: str,
                 name = path[len("/static/"):]
                 ct = _STATIC_TYPES.get(name)                 # whitelist → geen path-traversal
                 if ct is None:
-                    self._send("Niet gevonden", 404); return
+                    self._send("Not found", 404); return
                 try:
                     with open(os.path.join(os.path.dirname(__file__), "static", name), "rb") as _f:
                         _data = _f.read()
                 except OSError:
-                    self._send("Niet gevonden", 404); return
+                    self._send("Not found", 404); return
                 # Alle whitelisted statics zijn versieloos-of-gehasht → dag-cache is veilig
                 # (nooch.css draagt een inhoud-hash in de URL, zie _DS_LINK).
                 self._send_bytes(_data, ct, cache_secs=86400); return
@@ -4858,7 +4858,7 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/metric_export":
                 res = _metric_csv(st, (qs.get("mid") or [""])[0])
                 if res is None:
-                    self._send("<p>KPI niet gevonden</p>", 404); return
+                    self._send("<p>KPI not found</p>", 404); return
                 fname, body = res
                 self._send_bytes(body.encode("utf-8"), "text/csv; charset=utf-8", fname)
                 return
@@ -4868,7 +4868,7 @@ def make_handler(data_dir: str, csrf_token: str,
                 fname = os.path.basename(urllib.parse.unquote(path[len("/kbref/"):]))
                 full = os.path.join(data_dir, "kbref", fname)
                 if not (fname.lower().endswith(".pdf") and os.path.exists(full)):
-                    self._send("<p>Bestand niet gevonden</p>", 404); return
+                    self._send("<p>File not found</p>", 404); return
                 with open(full, "rb") as fh:
                     self._send_bytes(fh.read(), "application/pdf")
                 return
@@ -4879,7 +4879,7 @@ def make_handler(data_dir: str, csrf_token: str,
                             if a.get("id") == aid and a.get("kind") == "file"), None) if p else None
                 full = os.path.join(data_dir, att["stored"]) if att else None
                 if not (full and os.path.exists(full)):
-                    self._send("<p>Bestand niet gevonden</p>", 404); return
+                    self._send("<p>File not found</p>", 404); return
                 with open(full, "rb") as fh:
                     data = fh.read()
                 mt = mimetypes.guess_type(att.get("name", ""))[0] or "application/octet-stream"
@@ -4910,7 +4910,7 @@ def make_handler(data_dir: str, csrf_token: str,
                     token = sessions.create(email) if sessions else ""
                     self._redirect_to(next_url or "/", _auth.set_cookie(token))
                 else:
-                    self._send(_auth.login_page(next_url, error="E-mailadres of wachtwoord onjuist."))
+                    self._send(_auth.login_page(next_url, error="Email address or password is incorrect."))
                 return
 
             if path == "/snake/score":
@@ -4918,11 +4918,11 @@ def make_handler(data_dir: str, csrf_token: str,
                 # geschreven (nooit een meegestuurde naam), en alleen als hij hoger is dan het record.
                 username = self._session_username()
                 if sessions is not None and username is None:
-                    self._send("Niet ingelogd", 403); return
+                    self._send("Not logged in", 403); return
                 raw = self.rfile.read(length).decode("utf-8") if length else ""
                 form = urllib.parse.parse_qs(raw)
                 if not secrets.compare_digest((form.get("csrf") or [""])[0], csrf_token):
-                    self._send("CSRF-token ongeldig", 403); return
+                    self._send("CSRF token invalid", 403); return
                 self._send_json(snake.handle_score(_Stores(data_dir), username, (form.get("score") or ["0"])[0]))
                 return
 
@@ -4930,7 +4930,7 @@ def make_handler(data_dir: str, csrf_token: str,
             if path in ("/wizard/sharpen", "/wizard/plan", "/wizard/create"):
                 username = self._session_username()
                 if sessions is not None and username is None:
-                    self._send_json({"error": "niet ingelogd"}, 403); return
+                    self._send_json({"error": "not logged in"}, 403); return
                 raw = self.rfile.read(length).decode("utf-8") if length else ""
                 form = urllib.parse.parse_qs(raw)
                 if not secrets.compare_digest((form.get("csrf") or [""])[0], csrf_token):
@@ -4988,7 +4988,7 @@ def make_handler(data_dir: str, csrf_token: str,
                     role = g1("role")
                     orec = st.records.get(role)
                     if not role or (orec is not None and org.is_circle(orec)):
-                        self._send_json({"error": "kies een geldige rol (geen cirkel)"}, 400); return
+                        self._send_json({"error": "pick a valid role (not a circle)"}, 400); return
                     _deny = _role_gate(role, username, st)
                     if _deny:
                         self._send_json({"error": _deny}, 403); return
@@ -5043,11 +5043,11 @@ def make_handler(data_dir: str, csrf_token: str,
                 # browser via een publieke proxy — die proxies zijn rate-limited of betaald.
                 username = self._session_username()
                 if sessions is not None and username is None:
-                    self._send("Niet ingelogd", 403); return
+                    self._send("Not logged in", 403); return
                 raw = self.rfile.read(length).decode("utf-8") if length else ""
                 form = urllib.parse.parse_qs(raw)
                 if not secrets.compare_digest((form.get("csrf") or [""])[0], csrf_token):
-                    self._send("CSRF-token ongeldig", 403); return
+                    self._send("CSRF token invalid", 403); return
                 st = _Stores(data_dir)
                 uitslag, bron = _claims_scan(form, data_dir)
                 markten = [m for m in (form.get("markt") or []) if m]
@@ -5087,7 +5087,7 @@ def make_handler(data_dir: str, csrf_token: str,
             # ── Sessie-check voor alle /action POSTs ────────────────────────
             username = self._session_username()
             if sessions is not None and username is None:
-                self._send("Niet ingelogd", 403); return
+                self._send("Not logged in", 403); return
             # Bestand-upload (multipart): apart afhandelen; bestand wegschrijven + registreren.
             if ctype.startswith("multipart/form-data") and "boundary=" in ctype:
                 # nginx capt de body op 25M (413 vóór de app); de app-limiet ligt bewust lager (20M) zodat
@@ -5096,7 +5096,7 @@ def make_handler(data_dir: str, csrf_token: str,
                 boundary = ctype.split("boundary=", 1)[1].strip().strip('"')
                 fields, files = _parse_multipart(raw, boundary)
                 if not secrets.compare_digest(fields.get("csrf", ""), csrf_token):
-                    self._send("CSRF-token ongeldig", 403); return
+                    self._send("CSRF token invalid", 403); return
                 if fields.get("action") == "attach_file":
                     err = _upload_error(files, _upload_max_bytes())
                     if err:                                  # te groot / geen bestand → expliciete fout, geen no-op
@@ -5128,9 +5128,9 @@ def make_handler(data_dir: str, csrf_token: str,
                     # Bron-propagatie (founder dd 2026-07-18): zelfde genormaliseerde
                     # bron zonder reference → krijgt dezelfde PDF-link mee.
                     extra = _notes.propagate_reference(fields.get("atom_id", "")) if ok else 0
-                    msg = ("🔗 PDF als bronlink gekoppeld"
-                           + (f" — ook gezet op {extra} ander(e) kaartje(s) met dezelfde bron"
-                              if extra else "")) if ok else "✗ notitie niet gevonden"
+                    msg = ("🔗 PDF linked as a source link"
+                           + (f" — also set on {extra} other card(s) with the same source"
+                              if extra else "")) if ok else "✗ note not found"
                     self._redirect(nxt, msg)
                     return
                 if fields.get("action") == "kb_intake_pdf":
@@ -5146,8 +5146,8 @@ def make_handler(data_dir: str, csrf_token: str,
                     chunks = van_pdf(blob, os.path.basename(fname))
                     if chunks is None:
                         self._redirect(fields.get("next", "/kennisbank"),
-                                       "✗ geen tekstlaag gevonden in deze PDF (scan? "
-                                       "OCR valt buiten v1)"); return
+                                       "✗ no text layer found in this PDF (a scan? "
+                                       "OCR is out of scope for v1)"); return
                     nieuw_alles: list[str] = []
                     dubbel_alles = mislukt = 0
                     for chunk_raw, label in chunks:
@@ -5200,7 +5200,7 @@ def make_handler(data_dir: str, csrf_token: str,
                             break
                     if not atoms:
                         self._redirect("/kennisbank?open=bron",
-                                       "✗ de atomiser gaf niets bruikbaars"); return
+                                       "✗ the atomiser returned nothing usable"); return
                     # Founder 19 jul: de link of PDF die bij het aanmaken is GEBRUIKT wordt
                     # de reference van alle kaartjes — een geplakte URL, of de bewaarde
                     # bron-PDF (data/kbref/, zelfde recept als kb_atoom_ref_pdf). Die wint
@@ -5225,7 +5225,7 @@ def make_handler(data_dir: str, csrf_token: str,
             form = urllib.parse.parse_qs(raw)
             token = (form.get("csrf") or [""])[0]
             if not secrets.compare_digest(token, csrf_token):
-                self._send("CSRF-token ongeldig", 403); return
+                self._send("CSRF token invalid", 403); return
             action = (form.get("action") or [""])[0]
             # person_add: rendert een pagina die het tijdelijke wachtwoord éénmalig toont
             # (niet via redirect, zodat het wachtwoord niet in de URL/history belandt).
@@ -5264,12 +5264,12 @@ def serve(host: str = "127.0.0.1", port: int = 8766, data_dir: str | None = None
     _Stores(dd).people.backfill_must_change()   # markeer uitstaande temps 'moet wijzigen' (idempotent)
     httpd = ThreadingHTTPServer((host, port), make_handler(dd, csrf_token, sessions, users))
     httpd.daemon_threads = True
-    print(f"Cockpit 2 (GlassFrog-vorm, PoC) op http://{host}:{port}  —  Ctrl-C om te stoppen")
+    print(f"Cockpit 2 (GlassFrog shape, PoC) at http://{host}:{port}  —  Ctrl-C to stop")
     print(f"Dataset: {dd}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\nCockpit 2 gestopt.")
+        print("\nCockpit 2 stopped.")
     finally:
         httpd.server_close()
 
@@ -5316,7 +5316,7 @@ def _upload_error(files: dict, limit: int):
     levert nu een expliciete fout i.p.v. een lege redirect."""
     fname, blob = (files.get("file") or ("", b""))
     if not (fname and blob):
-        return ("Geen bestand geselecteerd", 400)
+        return ("No file selected", 400)
     if len(blob) > limit:
         return (f"Bestand te groot (max {limit // (1024 * 1024)} MB)", 413)
     return None
@@ -5400,18 +5400,18 @@ def main(argv=None) -> None:
         except Exception:
             has_key = False
         if not has_key:
-            print("Geen werkende LLM-key gevonden. De matcher draait al op lexicaal + concept "
-                  "(code ~ feature, bug ~ testscript); de semantische laag voegt pas iets toe "
-                  "met een Anthropic- of Gemini-key in .env. Niets te doen.")
+            print("No working LLM key found. The matcher already runs on lexical + concept "
+                  "(code ~ feature, bug ~ testscript); the semantic layer only adds something "
+                  "with an Anthropic or Gemini key in .env. Nothing to do.")
             return
 
         def progress(i, total, acc, skill):
             print(f"  [{i}/{total}] {acc[:40]} ↔ {skill[:30]}", flush=True)
 
-        print("Semantische matcher: oordelen ophalen (al-gecachete paren worden overgeslagen)…",
+        print("Semantic matcher: fetching verdicts (already-cached pairs are skipped)…",
               flush=True)
         n = refresh_matches(a.data_dir, progress=progress)
-        print(f"Klaar: {n} nieuwe paren bepaald en gecachet.")
+        print(f"Done: {n} new pairs determined and cached.")
         return
     serve(host=a.host, port=a.port, data_dir=a.data_dir)
 

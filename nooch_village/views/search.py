@@ -52,7 +52,7 @@ def _vervuller_namen(st, role) -> list:
 
 
 def _wie_snip(namen: list) -> str:
-    return ("vervuld door " + ", ".join(namen[:3])) if namen else "niet vervuld"
+    return ("filled by " + ", ".join(namen[:3])) if namen else "not filled"
 
 
 def _roles(st, termen):
@@ -71,7 +71,7 @@ def _roles(st, termen):
             namen = _vervuller_namen(st, r)
             snip = purpose
             if namen:
-                snip = (snip + " · " if snip else "") + "vervuld door " + ", ".join(namen[:3])
+                snip = (snip + " · " if snip else "") + "filled by " + ", ".join(namen[:3])
             uit.append({"url": f"/node?id={r.id}", "kind": kind, "titel": naam, "snip": snip})
     return uit
 
@@ -94,7 +94,7 @@ def _people(st, termen):
         for p in st.people.all():
             if _match(p.name, termen):
                 rollen = rollen_van.get(p.id, [])
-                snip = ", ".join(rollen[:5]) if rollen else (p.email or "nog geen rol")
+                snip = ", ".join(rollen[:5]) if rollen else (p.email or "no role yet")
                 uit.append({"url": f"/person?id={p.id}", "kind": "person",
                             "titel": p.name, "snip": snip})
     except Exception:
@@ -180,7 +180,7 @@ def _words(st, termen):
 # Volgorde en labels van de groepen. Mensen eerst (wie werkt er?), dan rollen en de losse
 # accountabilities (waar is iets belegd?), daarna de kennis-lagen. (founder 23 jul: signal =
 # kenniskaartje, insight = laag 2, word = library-zoekwoord.)
-_GROEPEN = (("Mensen", _people), ("Roles", _roles), ("Accountabilities", _accountabilities),
+_GROEPEN = (("People", _people), ("Roles", _roles), ("Accountabilities", _accountabilities),
             ("Projects", _projects), ("Insights", _insights), ("Signals", _signals), ("Words", _words))
 
 
@@ -229,7 +229,7 @@ def _suggestie(st, q: str, totaal: int) -> str:
 def _suggestie_html(sug: str) -> str:
     if not sug:
         return ""
-    return (f"<div class='gs-didyoumean'>Bedoelde u: "
+    return (f"<div class='gs-didyoumean'>Did you mean: "
             f"<a href='/search?q={quote(sug)}'>{_e(sug)}</a>?</div>")
 
 
@@ -251,12 +251,12 @@ def render_search_fragment(st, q: str = "") -> str:
     for label, hits in resultaten:
         if hits:
             rijen = "".join(_hit_html(h) for h in hits[:4])
-            meer = (f"<span class='gs-more'>+{len(hits) - 4} meer</span>" if len(hits) > 4 else "")
+            meer = (f"<span class='gs-more'>+{len(hits) - 4} more</span>" if len(hits) > 4 else "")
             blokken.append(f"<div class='gs-group'><h2>{_e(label)} ({len(hits)}){meer}</h2>{rijen}</div>")
     sug = _suggestie_html(_suggestie(st, q, totaal))
     if not blokken:
-        return sug + "<div class='gs-empty'>geen treffers</div>" if sug else "<div class='gs-empty'>geen treffers</div>"
-    alle = f"<a class='gs-all' href='/search?q={quote(q)}'>Alle resultaten →</a>"
+        return sug + "<div class='gs-empty'>no hits</div>" if sug else "<div class='gs-empty'>no hits</div>"
+    alle = f"<a class='gs-all' href='/search?q={quote(q)}'>All results →</a>"
     return sug + "".join(blokken) + alle
 
 
@@ -264,10 +264,10 @@ def render_search(st, q: str = "") -> str:
     q = (q or "").strip()
     termen = [t for t in q.lower().split() if t]
     if not termen:
-        main = ("<div class='c2-main'><h1>Zoeken</h1>"
-                "<p class='muted'>Typ in de zoekbalk hierboven om in één keer door mensen, rollen, "
-                "accountabilities, projecten en de kennisbank te zoeken.</p></div>")
-        return _page("Zoeken", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
+        main = ("<div class='c2-main'><h1>Search</h1>"
+                "<p class='muted'>Type in the search bar above to search people, roles, "
+                "accountabilities, projects and the knowledge base in one go.</p></div>")
+        return _page("Search", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 
     resultaten = _zoek(st, termen)
     totaal = sum(len(h) for _, h in resultaten)
@@ -277,11 +277,11 @@ def render_search(st, q: str = "") -> str:
             rijen = "".join(_hit_html(h) for h in hits[:25])
             blokken.append(f"<div class='gs-group'><h2>{_e(label)} ({len(hits)})</h2>{rijen}</div>")
     if not blokken:
-        blokken.append("<p class='muted'>Niets gevonden. Probeer een ander woord.</p>")
+        blokken.append("<p class='muted'>Nothing found. Try another word.</p>")
     sug = _suggestie_html(_suggestie(st, q, totaal))
 
-    main = (f"<div class='c2-main'><h1>Zoeken naar “{_e(q)}”</h1>"
-            f"<p class='muted'>{totaal} treffer(s) in mensen, rollen, accountabilities, projecten "
-            f"en de kennisbank.</p>"
+    main = (f"<div class='c2-main'><h1>Search for “{_e(q)}”</h1>"
+            f"<p class='muted'>{totaal} hit(s) in people, roles, accountabilities, projects "
+            f"and the knowledge base.</p>"
             f"{sug}{''.join(blokken)}</div>")
-    return _page("Zoeken", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
+    return _page("Search", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")

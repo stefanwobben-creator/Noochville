@@ -294,8 +294,8 @@ def secretary_check(item: dict, records) -> list[dict]:
         if not friction_evidence(item.get("title", ""), item.get("reason", ""),
                                  " ".join(r.get("text", "") for r in item.get("reactions", []))):
             issues.append({"level": "let op",
-                           "msg": "nog niet gestold: geen bewijs van terugkerende frictie. "
-                                  "Overweeg dit eerst als project (experiment) te doen."})
+                           "msg": "not settled yet: no evidence of recurring friction. "
+                                  "Consider doing this as a project (experiment) first."})
     # Dubbel binnen DEZELFDE rol: Gate's G2 slaat de eigen rol over, dus die check doen we hier.
     rec = records.get(item.get("role_id"))
     if rec is not None:
@@ -305,11 +305,13 @@ def secretary_check(item: dict, records) -> list[dict]:
                 el = ex.lower()
                 if el == nl or nl in el or el in nl:
                     issues.append({"level": "let op",
-                                   "msg": f"de rol heeft al een vergelijkbare accountability: '{ex[:60]}'"})
+                                   "msg": f"the role already has a similar accountability: '{ex[:60]}'"})
                     break
     for a in new_accs:
         first = (a.strip().split(" ", 1)[0] if a.strip() else "").lower()
         if not first.endswith("en"):
+            # BEWUST NL: deze check toetst de Nederlandse -en-werkwoordsvorm van de
+            # accountability-formulering; de melding benoemt die regel dus in het Nederlands.
             issues.append({"level": "let op",
                            "msg": f"accountability begint niet met de -en-vorm: '{a[:50]}'"})
     return issues

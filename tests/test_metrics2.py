@@ -17,10 +17,10 @@ def test_catalogus_rendert_met_leesbare_labels(tmp_path):
     st = cockpit2._Stores(dd)
     rec = st.records.get(_NODE)
     html = cockpit2.render_metrics2(st, rec, csrf_token="t")
-    assert "Catalogus" in html and "Mijn dashboard" in html
-    assert "Websitebezoekers" in html and "Bezoekers" in html      # leesbaar label, niet technisch
+    assert "Catalogue" in html and "My dashboard" in html
+    assert "Website visitors" in html and "Visitors" in html      # leesbaar label, niet technisch
     assert "metrics2_fav" in html                                  # favoriet-knop
-    assert "Nog niks op je dashboard" in html                      # leeg dashboard-startstaat
+    assert "Nothing on your dashboard yet" in html                      # leeg dashboard-startstaat
 
 
 def test_favoriet_zet_tegel_op_node_en_toont_op_dashboard(tmp_path):
@@ -60,8 +60,8 @@ def test_favoriet_wordt_echte_tegel_met_venster_en_vergelijken(tmp_path):
     html = cockpit2.render_metrics2(st, st.records.get(_NODE), csrf_token="t", win="28d", compare=True)
     assert "class='tile'" in html                          # de favoriet rendert als grafiek-tegel
     assert "tile-wrap" in html and "tile-foot" in html     # met eigen bediening eronder
-    assert "Vergelijk" in html and "Periode" in html       # tijdvenster + vergelijk-schakelaar
-    assert "28 dagen" in html                              # actieve periode zichtbaar
+    assert "Compare" in html and "Period" in html       # tijdvenster + vergelijk-schakelaar
+    assert "28 days" in html                              # actieve periode zichtbaar
     assert "js-flip" in html                               # kaart-omdraaien (ⓘ → definitie/bron)
 
 
@@ -73,7 +73,7 @@ def test_weergave_schakelaar_wisselt_de_vorm(tmp_path):
     st = cockpit2._Stores(dd)
     tid = st.metrics.tiles_of(_NODE)[0]["id"]
     html = cockpit2.render_metrics2(st, st.records.get(_NODE), csrf_token="t")
-    assert "metrics2_form" in html and ">staaf<" in html    # reeks → lijn/staaf/getal segment-knoppen
+    assert "metrics2_form" in html and ">bars<" in html    # reeks → lijn/staaf/getal segment-knoppen
     cockpit2.dispatch(dd, "metrics2_form",
                       {"node": [_NODE], "tid": [tid], "form": ["staaf"], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).metrics.tiles_of(_NODE)[0]["form"] == "staaf"
@@ -101,7 +101,7 @@ def test_segment_schakelaar_wisselt_de_dimensie(tmp_path):
     st = cockpit2._Stores(dd)
     tid = st.metrics.tiles_of(_NODE)[0]["id"]
     html = cockpit2.render_metrics2(st, st.records.get(_NODE), csrf_token="t")
-    assert "metrics2_dim" in html and "per land" in html and "per product" in html
+    assert "metrics2_dim" in html and "by country" in html and "by product" in html
     cockpit2.dispatch(dd, "metrics2_dim",
                       {"node": [_NODE], "tid": [tid], "dim": ["country"], "form": ["horizontaal"],
                        "next": ["/"]}, username="guest")
@@ -136,9 +136,9 @@ def test_compare_koppelt_tweede_meting_en_rendert_combo(tmp_path):
 
 def test_combo_svg_faalt_luid_zonder_twee_reeksen(tmp_path):
     from nooch_village.views.metrics import _combo_svg
-    assert "geen twee reeksen" in _combo_svg([], [(1, 2)], "a", "b")
+    assert "no two series" in _combo_svg([], [(1, 2)], "a", "b")
     out = _combo_svg([(1, 5), (2, 7)], [(1, 3), (2, 4)], "Bezoekers", "Orders")
-    assert "combochart" in out and "staaf" in out and "lijn" in out
+    assert "combochart" in out and "bars" in out and "line" in out
 
 
 # ── vervanging: metrics-node-tab toont het nieuwe scherm + KPI-maken ────────────
@@ -150,7 +150,7 @@ def test_metrics_node_tab_toont_nieuw_scherm_met_kpi_maken(tmp_path):
     from nooch_village.views.overview import render_node
     html = render_node(st, _NODE, "metrics", csrf_token="t")
     # het nieuwe scherm (catalogus + dashboard), niet het oude
-    assert "Catalogus" in html and "Mijn dashboard" in html
+    assert "Catalogue" in html and "My dashboard" in html
     # KPI aanmaken via de juiste, rijke composer
     assert "/kpi_new?node=" in html
     # de tijdvenster/terugkeer blijft op de node-tab (niet wegspringen naar /metrics2)

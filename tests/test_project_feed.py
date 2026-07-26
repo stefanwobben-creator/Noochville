@@ -149,7 +149,7 @@ def test_triage_fit_nee_wijst_kort_af_en_verwerkt_item(tmp_path):
     assert last["author"]["type"] == "persona" and "niet mijn rol" in last["text"]
     assert not [p for p in st2.projects._projects.values() if p.get("owner") == rid and p.get("id") != pid]
     n = [x for x in st2.notif.for_targets([("role", rid)]) if x.get("project_id") == pid]
-    assert n and st2.notif.status_of(n[0]) == "verwerkt" and "past niet" in (n[0].get("outcome") or "")
+    assert n and st2.notif.status_of(n[0]) == "verwerkt" and "does not fit" in (n[0].get("outcome") or "")
 
 
 def test_triage_direct_antwoord_op_de_wall(tmp_path):
@@ -163,7 +163,7 @@ def test_triage_direct_antwoord_op_de_wall(tmp_path):
     assert "Kort antwoord" in last["text"]
     assert not [p for p in st2.projects._projects.values() if p.get("owner") == rid and p.get("id") != pid]
     n = [x for x in st2.notif.for_targets([("role", rid)]) if x.get("project_id") == pid]
-    assert n and st2.notif.status_of(n[0]) == "verwerkt" and "direct beantwoord" in (n[0].get("outcome") or "")
+    assert n and st2.notif.status_of(n[0]) == "verwerkt" and "answered directly" in (n[0].get("outcome") or "")
 
 
 def test_create_task_from_voorstel_maakt_project_met_skill(tmp_path):

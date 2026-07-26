@@ -16,7 +16,7 @@ def _dd(tmp_path):
 def test_lege_linkbuilding(tmp_path):
     dd = _dd(tmp_path)
     html = cockpit2.render_linkbuilding(dd, csrf_token="t")
-    assert "Linkbuilding" in html and "Nog geen doelwitten" in html
+    assert "Link building" in html and "No targets to review yet" in html
 
 
 def test_toont_kandidaten_en_pitch_ignore(tmp_path):
@@ -27,7 +27,7 @@ def test_toont_kandidaten_en_pitch_ignore(tmp_path):
     html = cockpit2.render_linkbuilding(dd, csrf_token="t")
     assert "Beste barefoot gids" in html and "Vegan blog" in html
     assert "link_pursue" in html and "link_ignore" in html
-    assert "2 te beoordelen" in html
+    assert "2 to review" in html
     # hoog staat boven laag (prioriteit-sortering)
     assert html.index("Beste barefoot gids") < html.index("Vegan blog")
     # pitchen verplaatst naar 'pursued'
@@ -37,7 +37,7 @@ def test_toont_kandidaten_en_pitch_ignore(tmp_path):
     st = LinkTargets(os.path.join(dd, "linkbuilding_targets.json"))
     assert st.status("https://gids.nl/beste-barefoot") == "pursued"
     html2 = cockpit2.render_linkbuilding(dd, csrf_token="t")
-    assert "Wordt gepitcht (1)" in html2
+    assert "Being pitched (1)" in html2
 
 
 def test_gast_mag_niet_beslissen(tmp_path):

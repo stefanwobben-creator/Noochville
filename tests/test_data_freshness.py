@@ -27,7 +27,7 @@ def test_drie_staten_plus_geen_bronveld(tmp_path):
     assert indicator_freshness(st, "gsc", "impressions", today=TODAY) == "none"       # bron-veld, niet gevoed
     assert indicator_freshness(st, "plausible", "pageviews", today=TODAY) == "none"
     assert indicator_freshness(st, "handmatig", "x", today=TODAY) is None             # geen bron-veld → geen chip
-    assert freshness_chip(None) == "" and "recente data" in freshness_chip("fresh")
+    assert freshness_chip(None) == "" and "recent data" in freshness_chip("fresh")
 
 
 def test_drempel_zeven_dagen(tmp_path):
@@ -42,10 +42,10 @@ def test_koppel_all_coupled_boodschap_en_vers(tmp_path):
     # plausible is in de seed volledig gekoppeld → banner + geen publiceer-formulier
     st.observations.record_daily("x", "plausible_visitors_day", 9, bron="plausible", datum=datetime.date.today().isoformat())
     h = _koppel_section(st, "t", "plausible")
-    assert "Alle velden van deze bron staan in de catalogus" in h
+    assert "All fields of this source are in the catalogue" in h
     assert "Publiceer naar catalogus" not in h                 # niets te koppelen → geen formulier
-    assert "recente data" in h                                 # visitors vult
-    assert "geen data" in h                                    # pageviews/visit_duration niet gevoed
+    assert "recent data" in h                                 # visitors vult
+    assert "no data" in h                                    # pageviews/visit_duration niet gevoed
 
 
 def test_koppel_mixed_toont_formulier_en_vers(tmp_path):
@@ -53,16 +53,16 @@ def test_koppel_mixed_toont_formulier_en_vers(tmp_path):
     st.defs._d.clear(); st.defs._save()                        # niets gekoppeld → alle shopify-velden ongekoppeld
     h = _koppel_section(st, "t", "shopify")
     assert "Alle velden van deze bron" not in h                # niet all-coupled
-    assert h.count("Publiceer naar catalogus") == 4            # 4 ongekoppelde velden met formulier
-    assert "geen data" in h                                    # shopify wordt niet gevoed → geen data
+    assert h.count("Publish to catalogue") == 4            # 4 ongekoppelde velden met formulier
+    assert "no data" in h                                    # shopify wordt niet gevoed → geen data
 
 
 def test_wizard_toont_vers_signaal(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
     st.observations.record_daily("x", "plausible_visitors_day", 7, bron="plausible", datum=datetime.date.today().isoformat())
     w = cockpit2.render_kpi_composer(st, C, csrf_token="t")
-    assert "recente data" in w                                 # visitors-indicator vult
-    assert "geen data" in w                                    # de niet-gevoede bron-indicatoren
+    assert "recent data" in w                                 # visitors-indicator vult
+    assert "no data" in w                                    # de niet-gevoede bron-indicatoren
 
 
 def test_catalog_toont_vers_signaal(tmp_path):
@@ -71,5 +71,5 @@ def test_catalog_toont_vers_signaal(tmp_path):
     st = cockpit2._Stores(_dd(tmp_path))
     st.observations.record_daily("x", "plausible_visitors_day", 8, bron="plausible", datum=datetime.date.today().isoformat())
     h = cockpit2.render_catalog(st, csrf_token="t")
-    assert "recente data" in h        # de plausible-visitors-definitie vult
-    assert "geen data" in h           # niet-gevoede bron-definities (shopify/gsc/pageviews)
+    assert "recent data" in h        # de plausible-visitors-definitie vult
+    assert "no data" in h           # niet-gevoede bron-definities (shopify/gsc/pageviews)

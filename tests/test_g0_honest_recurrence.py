@@ -47,7 +47,7 @@ def test_gefabriceerde_rationale_wordt_geweigerd(records_with_root):
     passed, gate_name, reason = gate.check(p, records_with_root)
     assert not passed
     assert gate_name == "G0"
-    assert "herhalingsbewijs" in reason
+    assert "evidence of repetition" in reason
 
 
 def test_echt_bewijs_in_trigger_passeert_g0(records_with_root):
@@ -70,7 +70,7 @@ def test_slug_purpose_wordt_geweigerd(records_with_root):
     passed, gate_name, reason = gate.check(p, records_with_root)
     assert not passed
     assert gate_name == "G0"
-    assert "woordcluster" in reason or "term-opsomming" in reason
+    assert "word cluster" in reason or "list of terms" in reason
 
 
 # ── Integratie: _sense_gap-bewijs landt als echte telling in de trigger ───────

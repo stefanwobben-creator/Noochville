@@ -246,7 +246,7 @@ def test_route_vervuller_mag_toevoegen(tmp_path):
         {"owner": [OWNER], "kind": ["policy"], "title": ["Merkstem"],
          "body": ["Altijd 'burger', nooit 'consument'."], "next": ["/"]},
         username="alice@nooch.earth")
-    assert "toegevoegd" in msg
+    assert ("added" in msg or "Added" in msg)
     stored = cockpit2._Stores(dd).att.list(OWNER, "policy")
     assert [a.title for a in stored] == ["Merkstem"]
     # changelog-entry met timestamp + erfketen weggeschreven
@@ -287,7 +287,7 @@ def test_route_governance_ref_afgeleid_uit_domein(tmp_path):
     nxt, msg = cockpit2.dispatch(dd, "artefact_add",
         {"owner": [CIRCLE], "kind": ["policy"], "title": ["Geld-regel"], "next": ["/"]},
         username="guest")
-    assert "toegevoegd" in msg
+    assert ("added" in msg or "Added" in msg)
     added = [a for a in cockpit2._Stores(dd).att.list(CIRCLE, "policy") if a.title == "Geld-regel"]
     assert added and added[0].domain == "Money"
     assert added[0].versions[-1]["governance_ref"] == "domain:Money"   # afgeleid uit het domein
@@ -487,12 +487,12 @@ def test_route_policy_domein_server_side_gevalideerd(tmp_path):
     bad = cockpit2.dispatch(dd, "artefact_add",
         {"owner": [CIRCLE], "kind": ["policy"], "title": ["X"], "domain": ["Verzonnen"], "next": ["/"]},
         username="guest")[1]
-    assert "kies een domein" in bad
+    assert "pick a domain" in bad
     assert cockpit2._Stores(dd).att.list(CIRCLE, "policy") == []
     ok = cockpit2.dispatch(dd, "artefact_add",
         {"owner": [CIRCLE], "kind": ["policy"], "title": ["Geld-regel"], "domain": ["Money"], "next": ["/"]},
         username="guest")[1]
-    assert "toegevoegd" in ok
+    assert "added" in ok
     assert cockpit2._Stores(dd).att.list(CIRCLE, "policy")[0].domain == "Money"
 
 
@@ -552,13 +552,13 @@ def test_policy_alleen_op_governance_domein(tmp_path):
     # OWNER (creator_of_shoes) heeft géén governance-domein → policy geweigerd
     nxt, msg = cockpit2.dispatch(dd, "artefact_add",
         {"owner": [OWNER], "kind": ["policy"], "title": ["X"], "next": ["/"]}, username="guest")
-    assert "geen domein" in msg
+    assert "no domain" in msg
     assert cockpit2._Stores(dd).att.list(OWNER, "policy") == []
     # ná een governance-domein-toewijzing mag het wél, met dat domein
     _give_domain(dd, CIRCLE, "Money")
     nxt, msg = cockpit2.dispatch(dd, "artefact_add",
         {"owner": [CIRCLE], "kind": ["policy"], "title": ["Geld-regel"], "next": ["/"]}, username="guest")
-    assert "toegevoegd" in msg
+    assert ("added" in msg or "Added" in msg)
     p = cockpit2._Stores(dd).att.list(CIRCLE, "policy")[0]
     assert p.domain == "Money"                              # het écht toegewezen domein
 

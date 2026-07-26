@@ -35,7 +35,7 @@ def test_rijpheidspoort_in_secretary_check():
             "change": {"add_accountabilities": ["Bewaken van sociale kanalen"]},
             "reason": "lijkt me nuttig", "title": "Social", "reactions": []}
     issues = secretary_check(item, recs)
-    assert any("nog niet gestold" in i["msg"] for i in issues)
+    assert any("not settled yet" in i["msg"] for i in issues)
     # mét frictie-bewijs → geen rijpheids-let-op
     item2 = dict(item, reason="dit komt elke week terug, anderen wachten erop")
     assert not any("nog niet gestold" in i["msg"] for i in secretary_check(item2, recs))

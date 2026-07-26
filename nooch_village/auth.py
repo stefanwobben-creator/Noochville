@@ -104,9 +104,9 @@ def clear_cookie() -> str:
 def login_page(next_url: str = "/", error: str = "") -> str:
     err = f'<p style="color:#c0392b;margin:0 0 1rem">{error}</p>' if error else ""
     nxt = next_url.replace('"', '%22')
-    return f"""<!doctype html><html lang="nl"><head>
+    return f"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Inloggen — NoochVille</title>
+<title>Sign in — NoochVille</title>
 <style>
 :root{{--bg:#f8f6f2;--card:#fff;--border:#d4cfc8;--accent:#2d6a4f;--text:#1a1a1a}}
 *{{box-sizing:border-box;margin:0;padding:0}}
@@ -125,15 +125,15 @@ button{{width:100%;padding:.7rem;background:var(--accent);color:#fff;border:none
 button:hover{{opacity:.9}}
 </style></head><body>
 <div class="card">
-  <h1>NoochVille — inloggen</h1>
+  <h1>NoochVille — sign in</h1>
   {err}
   <form method="post" action="/login">
     <input type="hidden" name="next" value="{nxt}">
-    <label for="u">E-mailadres</label>
+    <label for="u">Email address</label>
     <input type="email" id="u" name="email" autocomplete="email" autofocus required>
-    <label for="p">Wachtwoord</label>
+    <label for="p">Password</label>
     <input type="password" id="p" name="password" autocomplete="current-password" required>
-    <button type="submit">Inloggen</button>
+    <button type="submit">Sign in</button>
   </form>
 </div></body></html>"""
 
@@ -142,19 +142,19 @@ def password_change_page(next_url: str = "/", error: str = "", forced: bool = Fa
     """Self-service wachtwoord-wijzigen (dezelfde auth-interstitial-stijl als login_page). `forced=True`
     bij een verplichte eerste-login-wijziging (temp-wachtwoord)."""
     err = f'<p style="color:#c0392b;margin:0 0 1rem">{error}</p>' if error else ""
-    intro = ('<p style="color:#5a5a5a;font-size:.9rem;margin:-.75rem 0 1.5rem">Je gebruikt een tijdelijk '
-             'wachtwoord. Kies nu een eigen wachtwoord om verder te gaan.</p>') if forced else ""
+    intro = ('<p style="color:#5a5a5a;font-size:.9rem;margin:-.75rem 0 1.5rem">You are using a temporary '
+             'password. Choose your own password now to continue.</p>') if forced else ""
     nxt = next_url.replace('"', '%22')
     # Bij een VERPLICHTE wijziging geen 'huidig wachtwoord'-veld: de gebruiker is net via login
     # geauthenticeerd (die verifieerde het temp al), en het veld lokt browser-autofill van het OUDE
     # wachtwoord uit → een onmogelijk-op-te-lossen loop. Voor een vrijwillige wijziging blijft het staan.
     current_field = "" if forced else (
-        '<label for="c">Huidig wachtwoord</label>'
+        '<label for="c">Current password</label>'
         '<input type="password" id="c" name="current" autocomplete="current-password" autofocus required>')
     new_focus = " autofocus" if forced else ""
-    return f"""<!doctype html><html lang="nl"><head>
+    return f"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Wachtwoord wijzigen — NoochVille</title>
+<title>Change password — NoochVille</title>
 <style>
 :root{{--bg:#f8f6f2;--card:#fff;--border:#d4cfc8;--accent:#2d6a4f;--text:#1a1a1a}}
 *{{box-sizing:border-box;margin:0;padding:0}}
@@ -173,15 +173,15 @@ button{{width:100%;padding:.7rem;background:var(--accent);color:#fff;border:none
 button:hover{{opacity:.9}}
 </style></head><body>
 <div class="card">
-  <h1>Wachtwoord wijzigen</h1>
+  <h1>Change password</h1>
   {intro}{err}
   <form method="post" action="/wachtwoord">
     <input type="hidden" name="next" value="{nxt}">
     {current_field}
-    <label for="n">Nieuw wachtwoord</label>
+    <label for="n">New password</label>
     <input type="password" id="n" name="new" autocomplete="new-password"{new_focus} required>
-    <label for="n2">Nieuw wachtwoord (bevestig)</label>
+    <label for="n2">New password (confirm)</label>
     <input type="password" id="n2" name="confirm" autocomplete="new-password" required>
-    <button type="submit">Opslaan</button>
+    <button type="submit">Save</button>
   </form>
 </div></body></html>"""

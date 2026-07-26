@@ -28,7 +28,7 @@ def test_meetings_alleen_op_cirkels(tmp_path):
 def test_root_overview(tmp_path):
     st = _st(tmp_path)
     page = cockpit2.render_node(st, "mother_earth", "overview")
-    assert "Mother Earth" in page and "cirkel" in page
+    assert "Mother Earth" in page and "circle" in page
     assert "support and protect all forms of life" in page
     # tabs aanwezig met status-stippen
     assert "Overview" in page and "Members" in page and "Metrics" in page
@@ -144,7 +144,7 @@ def test_dispatch_geeft_bevestiging(tmp_path):
         "owner": ["mother_earth__nooch__website_developer"], "scope": ["X"],
         "done_when": ["af bij oplevering"], "col": ["actief"],
         "next": ["/"]}, username="guest")
-    assert "toegevoegd" in msg
+    assert ("added" in msg or "Added" in msg)
 
 
 def test_proj_add_eist_done_when(tmp_path):
@@ -262,7 +262,7 @@ def test_persoonspagina_checklist_afvink_alleen_filler(tmp_path):
     # niet-filler → geweigerd, geen rapport geschreven
     _, deny = cockpit2.dispatch(dd, "cl_report", {"cid": [cid], "ok": ["1"], "next": ["/"]},
                                 username="buiten@nooch.earth")
-    assert "Geen toegang" in deny
+    assert "No access" in deny
     assert not cockpit2._Stores(dd).checklists.get(cid).get("reports")
     # filler → gelukt, by = de afvinker (mens), met timestamp
     _, ok = cockpit2.dispatch(dd, "cl_report", {"cid": [cid], "ok": ["1"], "next": ["/"]},
@@ -290,7 +290,7 @@ def test_cirkel_kan_geen_project_bevatten(tmp_path):
     nxt, msg = cockpit2.dispatch(dd, "proj_add", {
         "owner": ["mother_earth__nooch"], "scope": ["Jaarplan 2027"],
         "done_when": ["af bij oplevering"], "trekker": [""], "next": ["/"]}, username="guest")
-    assert "cirkel kan geen project" in msg.lower()
+    assert "circle cannot contain a project" in msg.lower()
     assert cockpit2._Stores(dd).projects.all() == []        # niets aangemaakt
 
 

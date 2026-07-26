@@ -69,7 +69,7 @@ def test_geflagde_gebruiker_wordt_overal_naar_wachtwoord_gestuurd(tmp_path):
         assert r2.status == 303 and (r2.getheader("Location") or "") == "/wachtwoord"
         # /wachtwoord zelf mag wél (anders redirect-lus)
         r3, body = _req(port, "GET", "/wachtwoord", cookie=tok)
-        assert r3.status == 200 and "Wachtwoord wijzigen" in body and "tijdelijk wachtwoord" in body
+        assert r3.status == 200 and "Change password" in body and "temporary password" in body
     finally:
         httpd.shutdown()
 
@@ -109,9 +109,9 @@ def test_forced_beleid_blokkeert_zonder_huidig_wachtwoord_check(tmp_path):
     httpd, port = _server(dd, sessions)
     try:
         cases = [
-            ("new=MijnNieuwe99&confirm=Anders99xx", "komen niet overeen"),
-            ("new=kort&confirm=kort", "minimaal 10"),
-            (f"new={TEMP}&confirm={TEMP}", "ander wachtwoord"),      # nieuw ≠ het temp (via verify, niet getypt)
+            ("new=MijnNieuwe99&confirm=Anders99xx", "do not match"),
+            ("new=kort&confirm=kort", "at least 10"),
+            (f"new={TEMP}&confirm={TEMP}", "different password"),      # nieuw ≠ het temp (via verify, niet getypt)
         ]
         for body, needle in cases:
             r, txt = _req(port, "POST", "/wachtwoord", cookie=tok, body=body)
@@ -128,10 +128,10 @@ def test_vrijwillige_wijziging_vraagt_wel_huidig_wachtwoord(tmp_path):
     httpd, port = _server(dd, sessions)
     try:
         _, page = _req(port, "GET", "/wachtwoord", cookie=tok)
-        assert "Huidig wachtwoord" in page and 'name="current"' in page
+        assert "Current password" in page and 'name="current"' in page
         r1, t1 = _req(port, "POST", "/wachtwoord", cookie=tok,
                       body="current=FOUT&new=MijnNieuwe99&confirm=MijnNieuwe99")
-        assert r1.status == 200 and "Huidig wachtwoord onjuist" in t1   # fout huidig → geblokkeerd
+        assert r1.status == 200 and "Current password is incorrect" in t1   # fout huidig → geblokkeerd
         r2, _ = _req(port, "POST", "/wachtwoord", cookie=tok,
                      body=f"current={TEMP}&new=MijnNieuwe99&confirm=MijnNieuwe99")
         assert r2.status == 303                                      # juist huidig → slaagt
@@ -177,10 +177,10 @@ def test_backfill_flagt_uitstaande_temps_en_spaart_gewijzigde(tmp_path):
 # ── auth-eenheden ───────────────────────────────────────────────────────────────────────────────
 def test_password_change_page_forced_verbergt_huidig_veld():
     forced = _auth.password_change_page(forced=True)
-    assert "tijdelijk wachtwoord" in forced and 'action="/wachtwoord"' in forced
+    assert "temporary password" in forced and 'action="/wachtwoord"' in forced
     assert "Huidig wachtwoord" not in forced and 'name="current"' not in forced   # geen autofill-val
     vrij = _auth.password_change_page(forced=False)
-    assert "Huidig wachtwoord" in vrij and 'name="current"' in vrij                # vrijwillig: wél
+    assert "Current password" in vrij and 'name="current"' in vrij                # vrijwillig: wél
     assert "onjuist" in _auth.password_change_page(error="onjuist")
 
 

@@ -30,16 +30,16 @@ log = logging.getLogger(__name__)
 
 # Centrale periode-picker (scope 6/PR2). Dropdown in Plausible-stijl met single-key sneltoetsen.
 # 'actueel' = laatste waarde, alleen bij een live-capabele bron.
-_MW = [("vandaag", "Vandaag"), ("gisteren", "Gisteren"), ("actueel", "Actueel"),
-       ("7d", "7 dagen"), ("28d", "28 dagen"), ("kwartaal", "Kwartaal"),
-       ("jaar", "Jaar"), ("aangepast", "Aangepast")]
+_MW = [("vandaag", "Today"), ("gisteren", "Yesterday"), ("actueel", "Current"),
+       ("7d", "7 days"), ("28d", "28 days"), ("kwartaal", "Quarter"),
+       ("jaar", "Year"), ("aangepast", "Custom")]
 # Single-key sneltoets per periode-optie (zoals Plausible): V/G/A/W/M/K/J/C.
 _MW_KEYS = {"vandaag": "V", "gisteren": "G", "actueel": "A", "7d": "W",
             "28d": "M", "kwartaal": "K", "jaar": "J", "aangepast": "C"}
 # Bronnen die 'live' bevraagd kunnen worden → 'Actueel' beschikbaar (anders uitgegrijsd).
 _LIVE_TILE_SOURCES = {"pulse_visitors", "shopify"}
 # Bron-KPI's: meetbaar uit bestaande dorpsdata (AI/agents schrijven hier al naartoe).
-_SOURCE_KPIS = {"pulse_visitors": {"name": "Websitebezoekers (per dag)", "unit": "bezoekers"}}
+_SOURCE_KPIS = {"pulse_visitors": {"name": "Website visitors (per day)", "unit": "visitors"}}
 
 
 def _row_at(r) -> float:
@@ -185,7 +185,7 @@ def _line_chart_svg(points, unit: str = "", prev=None) -> str:
     import datetime as _dt
     vals = [p[1] for p in points]
     if len(points) < 2:
-        return "<div class='muted kc-hint'>1 meetpunt — te weinig voor een lijn</div>"
+        return "<div class='muted kc-hint'>1 data point — too few for a line</div>"
     prev = prev or []
     W, H = 300.0, 140.0
     ml, mr, mt, mb = 36.0, 8.0, 10.0, 20.0            # marges: links y-labels, onder x-labels
@@ -229,7 +229,7 @@ def _bar_chart_svg(points, unit: str = "") -> str:
     import datetime as _dt
     vals = [p[1] for p in points]
     if len(points) < 2:
-        return "<div class='muted kc-hint'>1 meetpunt</div>"
+        return "<div class='muted kc-hint'>1 data point</div>"
     W, H = 300.0, 140.0
     ml, mr, mt, mb = 36.0, 8.0, 10.0, 20.0
     iw, ih = W - ml - mr, H - mt - mb
@@ -260,7 +260,7 @@ def _combo_svg(a_points, b_points, a_label: str = "", b_label: str = "") -> str:
     a = [(p[0], p[1]) for p in (a_points or []) if isinstance(p[1], (int, float))]
     b = [(p[0], p[1]) for p in (b_points or []) if isinstance(p[1], (int, float))]
     if not a or not b:
-        return "<div class='muted kc-hint'>geen twee reeksen om te combineren in dit venster</div>"
+        return "<div class='muted kc-hint'>no two series to combine in this window</div>"
     import datetime as _dt
     W, H = 300.0, 140.0
     ml, mr, mt, mb = 34.0, 32.0, 10.0, 20.0
@@ -291,8 +291,8 @@ def _combo_svg(a_points, b_points, a_label: str = "", b_label: str = "") -> str:
             f"<text x='{ml+iw:.1f}' y='{H-5:.1f}' text-anchor='end' font-size='9' fill='var(--muted)'>{_e(fmt(x1))}</text>")
     svg = (f"<svg class='combochart' viewBox='0 0 {W:.0f} {H:.0f}' width='100%' height='140' "
            f"preserveAspectRatio='xMidYMid meet'>{axis}{ylab}{xlab}{bars}{line}{dots}</svg>")
-    legend = (f"<div class='muted'><span class='chip'>{_e(a_label)} (staaf)</span> "
-              f"<span class='chip amber'>{_e(b_label)} (lijn)</span></div>")
+    legend = (f"<div class='muted'><span class='chip'>{_e(a_label)} (bars)</span> "
+              f"<span class='chip amber'>{_e(b_label)} (line)</span></div>")
     return f"{svg}{legend}"
 
 
@@ -344,7 +344,7 @@ def _kpi_card(st: _Stores, item: dict, cutoff, csrf: str, *, provider=False, cir
     prov = ""
     if provider:
         r = st.records.get(item["node"])
-        prov = f"<div class='kpi-prov muted'>levert: {_e(_name(r) if r else item['node'])}</div>"
+        prov = f"<div class='kpi-prov muted'>delivers: {_e(_name(r) if r else item['node'])}</div>"
     src = " <span class='chip muted'>auto</span>" if item.get("source") else ""
     # handmatige meting toevoegen (alleen niet-bron KPI's, met csrf)
     add = ""
@@ -353,13 +353,13 @@ def _kpi_card(st: _Stores, item: dict, cutoff, csrf: str, *, provider=False, cir
                f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
                f"<input type='hidden' name='mid' value='{_e(item['id'])}'>"
                f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=metrics'>"
-               f"<input name='value' inputmode='decimal' placeholder='meting' size='6'>"
+               f"<input name='value' inputmode='decimal' placeholder='reading' size='6'>"
                f"<button class='btn ok sm' type='submit' name='action' value='m_sample'>+</button></form>")
     pin = ""
     if csrf and circle:
         pinned = st.metrics.is_pinned(circle, item["id"])
         act = "m_unpin" if pinned else "m_pin"
-        lbl = "losmaken" if pinned else "+ dashboard"
+        lbl = "unpin" if pinned else "+ dashboard"
         pin = (f"<form method='post' action='/action' style='display:inline'>"
                f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
                f"<input type='hidden' name='mid' value='{_e(item['id'])}'>"
@@ -392,23 +392,23 @@ def _link_card(item: dict, csrf: str) -> str:
 
 def _metric_add_forms(st: _Stores, rec, csrf: str) -> str:
     base = f"/node?id={_e(rec.id)}&tab=metrics"
-    src_opts = "".join(f"<option value='source:{k}'>{_e(v['name'])} (uit data)</option>"
+    src_opts = "".join(f"<option value='source:{k}'>{_e(v['name'])} (from data)</option>"
                        for k, v in _SOURCE_KPIS.items())
     kpi = (f"<form method='post' action='/action' class='m-addform'>"
            f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='node' value='{_e(rec.id)}'>"
            f"<input type='hidden' name='next' value='{base}'>"
-           f"<label class='att-lbl'>KPI uit lijst of nieuw</label>"
-           f"<select name='pick'><option value='manual'>Nieuwe KPI (handmatig)</option>{src_opts}</select>"
-           f"<input name='name' placeholder='Naam (bij handmatig)' autocomplete='off'>"
-           f"<input name='unit' placeholder='Eenheid (bijv. €, %, stuks)' autocomplete='off'>"
-           f"<button class='btn ok sm' type='submit' name='action' value='m_add_kpi'>KPI toevoegen</button></form>")
+           f"<label class='att-lbl'>KPI from list or new</label>"
+           f"<select name='pick'><option value='manual'>New KPI (manual)</option>{src_opts}</select>"
+           f"<input name='name' placeholder='Name (if manual)' autocomplete='off'>"
+           f"<input name='unit' placeholder='Unit (e.g. €, %, items)' autocomplete='off'>"
+           f"<button class='btn ok sm' type='submit' name='action' value='m_add_kpi'>Add KPI</button></form>")
     link = (f"<form method='post' action='/action' class='m-addform'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='node' value='{_e(rec.id)}'>"
             f"<input type='hidden' name='next' value='{base}'>"
-            f"<label class='att-lbl'>Link naar extern bestand</label>"
-            f"<input name='name' placeholder='Naam' autocomplete='off'>"
+            f"<label class='att-lbl'>Link to external file</label>"
+            f"<input name='name' placeholder='Name' autocomplete='off'>"
             f"<input name='url' placeholder='https://…' autocomplete='off'>"
-            f"<button class='btn sm' type='submit' name='action' value='m_add_link'>Link toevoegen</button></form>")
+            f"<button class='btn sm' type='submit' name='action' value='m_add_link'>Add link</button></form>")
     return (f"<details class='m-add'><summary class='btn ok sm'>+ Metric</summary>"
             f"<div class='m-addgrid'>{kpi}{link}</div></details>")
 
@@ -433,47 +433,47 @@ def _sources_for(st: _Stores, rec):
     Op een cirkel tellen ook de handmatige KPI's van de onderliggende rollen mee."""
     is_c = org.is_circle(rec)
     srcs = [
-        {"id": "pulse_visitors", "label": "Websitebezoekers",
-         "measures": [("visitors", "Bezoekers (per dag)")], "dims": [("time", "over tijd")]},
-        {"id": "shopify", "label": "Verkoop",
-         "measures": [("pairs_sold", "Paren verkocht"), ("orders", "Orders"),
-                      ("revenue", "Omzet"), ("aov", "Gem. orderwaarde")],
-         "dims": [("none", "totaal"), ("over_tijd", "over tijd"),
-                  ("country", "per land"), ("product", "per product")]},
+        {"id": "pulse_visitors", "label": "Website visitors",
+         "measures": [("visitors", "Visitors (per day)")], "dims": [("time", "over time")]},
+        {"id": "shopify", "label": "Sales",
+         "measures": [("pairs_sold", "Pairs sold"), ("orders", "Orders"),
+                      ("revenue", "Revenue"), ("aov", "Avg. order value")],
+         "dims": [("none", "total"), ("over_tijd", "over time"),
+                  ("country", "by country"), ("product", "by product")]},
     ]
     # Werkoverleg-gezondheid (facilitator): leest het archief van de cirkel waar deze node onder valt.
     circle = rec.id if is_c else getattr(rec, "parent", None)
     if circle:
-        srcs.append({"id": f"werk:{circle}", "label": "Werkoverleg",
-                     "measures": [("tevredenheid", "Tevredenheid"), ("spanningen", "Spanningen verwerkt"),
-                                  ("informatie", "Informatie verwerkt"), ("projecten", "Projecten"),
-                                  ("acties", "Acties"), ("duur", "Duur (min)"),
-                                  ("roloverleg", "Naar roloverleg"), ("nevermind", "Laat maar"),
-                                  ("afwezigheid", "Afwezigheid")],
-                     "dims": [("gemiddeld", "gemiddeld per overleg"), ("totaal", "totaal"),
-                              ("over_tijd", "over tijd")]})
+        srcs.append({"id": f"werk:{circle}", "label": "Tactical meeting",
+                     "measures": [("tevredenheid", "Satisfaction"), ("spanningen", "Tensions processed"),
+                                  ("informatie", "Information processed"), ("projecten", "Projects"),
+                                  ("acties", "Actions"), ("duur", "Duration (min)"),
+                                  ("roloverleg", "To governance meeting"), ("nevermind", "Never mind"),
+                                  ("afwezigheid", "Absence")],
+                     "dims": [("gemiddeld", "average per meeting"), ("totaal", "total"),
+                              ("over_tijd", "over time")]})
     # Interne bronnen die live uit de stores rekenen (geen sleutel nodig, meteen data).
-    srcs.append({"id": f"projects:{rec.id}", "label": "Projecten",
-                 "measures": [("afgerond", "Afgerond"), ("lopend", "In uitvoering"),
-                              ("doorlooptijd", "Doorlooptijd (dagen)")],
-                 "dims": [("over_tijd", "over tijd"), ("totaal", "totaal"), ("per_status", "per status")]})
-    srcs.append({"id": f"inbox:{rec.id}", "label": "Inbox / spanningen",
-                 "measures": [("verwerkt", "Verwerkt"), ("open", "Open")],
-                 "dims": [("over_tijd", "over tijd"), ("totaal", "totaal"), ("per_type", "per uitkomst")]})
-    srcs.append({"id": "co2", "label": "LLM-gebruik & CO₂",
-                 "measures": [("gram_co2e", "CO₂ (gram)"), ("calls", "LLM-calls"),
-                              ("ongeschat_calls", "Calls zonder telling")],
-                 "dims": [("over_tijd", "over tijd"), ("totaal", "totaal")]})
+    srcs.append({"id": f"projects:{rec.id}", "label": "Projects",
+                 "measures": [("afgerond", "Completed"), ("lopend", "Running"),
+                              ("doorlooptijd", "Lead time (days)")],
+                 "dims": [("over_tijd", "over time"), ("totaal", "total"), ("per_status", "by status")]})
+    srcs.append({"id": f"inbox:{rec.id}", "label": "Inbox / tensions",
+                 "measures": [("verwerkt", "Processed"), ("open", "Open")],
+                 "dims": [("over_tijd", "over time"), ("totaal", "total"), ("per_type", "by outcome")]})
+    srcs.append({"id": "co2", "label": "LLM usage & CO₂",
+                 "measures": [("gram_co2e", "CO₂ (grams)"), ("calls", "LLM calls"),
+                              ("ongeschat_calls", "Calls without a count")],
+                 "dims": [("over_tijd", "over time"), ("totaal", "total")]})
     nodes = [rec.id] + ([r.id for r in org.roles_of(st.records.all(), rec.id)] if is_c else [])
     for k in st.metrics.kpis_for_nodes(nodes):
         if k.get("source"):
             continue                                  # bron-KPI's al gedekt door built-ins
-        dims = [("time", "over tijd"), ("none", "laatste waarde")]        # 'none' → geen "· NONE"
+        dims = [("time", "over time"), ("none", "last value")]           # 'none' → geen "· NONE"
         dimension = _source_dimensions().get(k.get("origin") or k.get("source"))
         if dimension and k.get("veld") and dimension in _DIM_LABEL:        # scope 2/4: bron mét DIMENSION
             dims.append(_DIM_LABEL[dimension])                             # 'per keyword' (GSC) / 'per land' (Plausible)
         srcs.append({"id": f"kpi:{k['id']}", "label": k["name"],
-                     "measures": [("value", "waarde")],                    # niet de KPI-naam → geen dubbele naam
+                     "measures": [("value", "value")],                     # niet de KPI-naam → geen dubbele naam
                      "dims": dims})
     return srcs
 
@@ -509,8 +509,9 @@ def _werk_fetch(st: _Stores, circle: str, measure: str, dim: str, cutoff, end=No
 # ── Interne bronnen: projecten-doorstroom, inbox/spanningen, LLM-gebruik & CO₂ ──────────────────
 # Deze rekenen LIVE uit de stores (geen aparte observatie-schrijf nodig), dus ze hebben meteen data.
 # Fail-loud: geen data in het venster → lege reeks (→ 'geen data'), nooit een verzonnen nul.
-_PROJ_STATUS_LABEL = {"draft": "concept", "queued": "wachtrij", "running": "in uitvoering",
-                      "blocked": "geblokkeerd", "future": "toekomst", "done": "afgerond"}
+# Display-mapping: de sleutels blijven de opgeslagen projectstatussen.
+_PROJ_STATUS_LABEL = {"draft": "draft", "queued": "queued", "running": "running",
+                      "blocked": "blocked", "future": "future", "done": "done"}
 
 
 def _project_scope(st: _Stores, node: str) -> set:
@@ -534,10 +535,10 @@ def _project_fetch(st: _Stores, node: str, measure: str, dim: str, cutoff, end=N
             counts[p.get("status", "")] = counts.get(p.get("status", ""), 0) + 1
         rows = sorted(((_PROJ_STATUS_LABEL.get(s, s or "?"), n) for s, n in counts.items()),
                       key=lambda x: -x[1])
-        return {"kind": "breakdown", "rows": rows, "unit": "projecten"}
+        return {"kind": "breakdown", "rows": rows, "unit": "projects"}
     if measure == "lopend":
         return {"kind": "number", "value": sum(1 for p in projs if p.get("status") == "running"),
-                "unit": "projecten"}
+                "unit": "projects"}
     if measure == "doorlooptijd":                    # gemiddelde doorlooptijd (dagen) van afgeronde projecten
         samples = []
         for p in projs:
@@ -546,10 +547,10 @@ def _project_fetch(st: _Stores, node: str, measure: str, dim: str, cutoff, end=N
                 samples.append({"at": up, "value": max(0.0, (up - cr)) / 86400.0, "datum": _day_key(up)})
         pts = filter_samples(samples, cutoff, end)
         if dim == "over_tijd":
-            return {"kind": "series", "points": pts, "unit": "dagen", "chart": "line"}
+            return {"kind": "series", "points": pts, "unit": "days", "chart": "line"}
         vals = [v for _a, v, _d in pts]
         return {"kind": "number", "value": (round(sum(vals) / len(vals), 1) if vals else None),
-                "unit": "dagen"}
+                "unit": "days"}
     # measure == "afgerond": doorstroom — afgeronde projecten per dag (updated_at = afrondmoment)
     by_day: dict = {}
     for p in projs:
@@ -561,8 +562,8 @@ def _project_fetch(st: _Stores, node: str, measure: str, dim: str, cutoff, end=N
     samples = [{"at": at, "value": c, "datum": d} for d, (c, at) in by_day.items()]
     pts = filter_samples(samples, cutoff, end)
     if dim == "over_tijd":
-        return {"kind": "series", "points": pts, "unit": "projecten", "chart": "line"}
-    return {"kind": "number", "value": (sum(v for _a, v, _d in pts) if pts else 0), "unit": "projecten"}
+        return {"kind": "series", "points": pts, "unit": "projects", "chart": "line"}
+    return {"kind": "number", "value": (sum(v for _a, v, _d in pts) if pts else 0), "unit": "projects"}
 
 
 def _inbox_targets(st: _Stores, node: str) -> set:
@@ -580,7 +581,7 @@ def _inbox_fetch(st: _Stores, node: str, measure: str, dim: str, cutoff, end=Non
         counts: dict = {}
         for n in items:
             for v in st.notif.verwerkingen_of(n):
-                counts[v.get("otype") or "onbekend"] = counts.get(v.get("otype") or "onbekend", 0) + 1
+                counts[v.get("otype") or "unknown"] = counts.get(v.get("otype") or "unknown", 0) + 1
         rows = sorted(((k, v) for k, v in counts.items()), key=lambda x: -x[1])
         return {"kind": "breakdown", "rows": rows, "unit": ""}
     if measure == "open":
@@ -645,13 +646,13 @@ def _tile_meta(st: _Stores, rec, tile) -> str:
 
 def _measure_unit(source: str, measure: str) -> str:
     if source == "pulse_visitors":
-        return "bezoekers"
+        return "visitors"
     if source.startswith("werk:"):
         return "/10" if measure == "tevredenheid" else ("min" if measure == "duur" else "")
     if source == "shopify":
-        return "EUR" if measure in ("revenue", "aov") else ("paren" if measure == "pairs_sold" else "")
+        return "EUR" if measure in ("revenue", "aov") else ("pairs" if measure == "pairs_sold" else "")
     if source.startswith("projects:"):
-        return "dagen" if measure == "doorlooptijd" else "projecten"
+        return "days" if measure == "doorlooptijd" else "projects"
     if source == "co2":
         return "g CO₂e" if measure == "gram_co2e" else "calls"
     return ""
@@ -855,7 +856,7 @@ def _data_table(res, bron: str = "") -> str:
         # géén afkapping: de tabel toont exact dezelfde dataset als de grafiek (zelfde venster, alle punten).
         rows = "".join(f"<tr><td>{_pt_datum_label(p)}</td>"
                        f"<td class='num'>{_num(p[1])}</td><td>{b}</td></tr>" for p in pts)
-        return (f"<table class='mtab'><tr><th>datum</th><th class='num'>waarde</th><th>bron</th></tr>"
+        return (f"<table class='mtab'><tr><th>date</th><th class='num'>value</th><th>source</th></tr>"
                 f"{rows}</table>")
     if kind == "breakdown":
         rows = res.get("rows") or []
@@ -863,9 +864,9 @@ def _data_table(res, bron: str = "") -> str:
             return ""
         body = "".join(f"<tr><td>{_e(str(l))}</td><td class='num'>{_num(n)}</td><td>{b}</td></tr>"
                        for l, n in rows[:12])
-        return f"<table class='mtab'><tr><th>categorie</th><th class='num'>waarde</th><th>bron</th></tr>{body}</table>"
+        return f"<table class='mtab'><tr><th>category</th><th class='num'>value</th><th>source</th></tr>{body}</table>"
     v = _agg(res)
-    return (f"<table class='mtab'><tr><th>waarde</th><th>bron</th></tr>"
+    return (f"<table class='mtab'><tr><th>value</th><th>source</th></tr>"
             f"<tr><td class='num'>{_num(v)}</td><td>{b}</td></tr></table>") if v is not None else ""
 
 
@@ -880,12 +881,12 @@ def _render_burnup(res, target, project) -> str:
         tgt = 0.0
     due = (project or {}).get("due")
     if not (project and due and tgt > 0):
-        return "<p class='muted'>Koppel een doel (project met deadline) én een streefwaarde.</p>"
+        return "<p class='muted'>Link a goal (project with a deadline) and a target value.</p>"
     try:
         d = _dt.date.fromisoformat(str(due)[:10])
         deadline = _dt.datetime(d.year, d.month, d.day).timestamp()
     except Exception:
-        return "<p class='muted'>Het gekoppelde doel heeft geen geldige deadline.</p>"
+        return "<p class='muted'>The linked goal has no valid deadline.</p>"
     day, now = 86400.0, _t.time()
     pts = list(res.get("points") or [])
     if not pts:
@@ -916,14 +917,14 @@ def _render_burnup(res, target, project) -> str:
     if len(pts) >= 2 and (pts[-1][0] - pts[0][0]) > 0:
         pace = (pts[-1][1] - pts[0][1]) / ((pts[-1][0] - pts[0][0]) / day)
     if pace is None:
-        tempo = "<span class='muted'>nog te weinig metingen voor een tempo</span>"
+        tempo = "<span class='muted'>too few readings for a pace</span>"
     else:
         ontrack = pace >= req
         proj = latest + pace * days_left
         cls = "bu-ok" if ontrack else "bu-no"
-        tempo = (f"<div class='bu-tempo'><span class='{cls}'>{pace:.1f}/dag</span> "
-                 f"<span class='muted'>benodigd {req:.1f}/dag</span></div>"
-                 f"<div class='muted bu-proj'>prognose: {proj:.0f} van {tgt:.0f} op de deadline</div>")
+        tempo = (f"<div class='bu-tempo'><span class='{cls}'>{pace:.1f}/day</span> "
+                 f"<span class='muted'>needed {req:.1f}/day</span></div>"
+                 f"<div class='muted bu-proj'>forecast: {proj:.0f} of {tgt:.0f} at the deadline</div>")
     head = f"<div class='bu-head'><b>{latest:.0f}</b> <span class='muted'>/ {tgt:.0f}</span></div>"
     return f"<div class='burnup-wrap'>{head}{svg}{tempo}</div>"
 
@@ -944,7 +945,7 @@ def _render_form(res, form, target=None, prev=None, agg=DEFAULT_AGGREGATIE):
     if form in ("verdeling", "tabel"):
         rows = res.get("rows") or []
         if not rows:
-            return "<p class='muted'>geen uitsplitsing</p>"
+            return "<p class='muted'>no breakdown</p>"
         if form == "tabel":
             body = "".join(f"<tr><td>{_e(str(l))}</td><td class='num'>{_num(n)}</td></tr>" for l, n in rows[:12])
             return f"<table class='mtab'>{body}</table>"
@@ -961,7 +962,7 @@ def _render_form(res, form, target=None, prev=None, agg=DEFAULT_AGGREGATIE):
         t = target or 0
         pct = int(min(100, v / t * 100)) if t else 0
         return (f"<div class='goal'><span class='bar-t'><span class='bar-f' style='width:{pct}%'></span></span>"
-                f"<span class='muted'>doel {_num(t)}</span></div>")
+                f"<span class='muted'>goal {_num(t)}</span></div>")
     # getal — de headline in het kaart-skelet toont de waarde; hier geen dubbel getal. Bij geen data
     # (None) toont het skelet niets, dus tonen we hier de 'geen data'-melding (één keer, geen dubbel).
     return _geen_data_html() if _agg(res, agg) is None else ""
@@ -969,40 +970,40 @@ def _render_form(res, form, target=None, prev=None, agg=DEFAULT_AGGREGATIE):
 
 # Grondslag-laag (GAAP/IRIS): definitie, eenheid, bron, richting per bron-measure.
 _SOURCE_GRONDSLAG = {
-    "pulse_visitors|visitors": ("Unieke websitebezoekers per dag (dagreeks uit de observaties).",
-                                "bezoekers", "observations (Plausible-dagwaarde)", "up"),
-    "shopify|pairs_sold": ("Verkochte paren uit betaalde orders.", "paren", "Shopify", "up"),
-    "shopify|orders": ("Aantal betaalde orders.", "orders", "Shopify", "up"),
-    "shopify|revenue": ("Omzet uit betaalde orders.", "EUR", "Shopify", "up"),
-    "shopify|aov": ("Gemiddelde orderwaarde (omzet ÷ orders).", "EUR", "Shopify", "up"),
-    "co2|gram_co2e": ("Geschatte CO₂-uitstoot van alle LLM-calls in het dorp.", "g CO₂e",
+    "pulse_visitors|visitors": ("Unique website visitors per day (daily series from the observations).",
+                                "visitors", "observations (Plausible daily value)", "up"),
+    "shopify|pairs_sold": ("Pairs sold from paid orders.", "pairs", "Shopify", "up"),
+    "shopify|orders": ("Number of paid orders.", "orders", "Shopify", "up"),
+    "shopify|revenue": ("Revenue from paid orders.", "EUR", "Shopify", "up"),
+    "shopify|aov": ("Average order value (revenue ÷ orders).", "EUR", "Shopify", "up"),
+    "co2|gram_co2e": ("Estimated CO₂ emissions of all LLM calls in the village.", "g CO₂e",
                       "co2_village (llm_usage.jsonl)", "down"),
-    "co2|calls": ("Aantal LLM-calls in het dorp.", "calls", "co2_village (llm_usage.jsonl)", ""),
-    "co2|ongeschat_calls": ("LLM-calls zonder tokentelling (schatting).", "calls",
+    "co2|calls": ("Number of LLM calls in the village.", "calls", "co2_village (llm_usage.jsonl)", ""),
+    "co2|ongeschat_calls": ("LLM calls without a token count (estimate).", "calls",
                             "co2_village (llm_usage.jsonl)", "down"),
 }
 _PROJECT_GRONDSLAG = {
-    "afgerond": ("Afgeronde projecten (status 'done') per periode.", "projecten", "up"),
-    "lopend": ("Projecten die nu in uitvoering zijn (status 'running').", "projecten", ""),
-    "doorlooptijd": ("Gemiddelde doorlooptijd (aangemaakt → afgerond) van afgeronde projecten.",
-                     "dagen", "down"),
+    "afgerond": ("Completed projects (status 'done') per period.", "projects", "up"),
+    "lopend": ("Projects currently running (status 'running').", "projects", ""),
+    "doorlooptijd": ("Average lead time (created → completed) of completed projects.",
+                     "days", "down"),
 }
 _INBOX_GRONDSLAG = {
-    "verwerkt": ("Verwerkte spanningen/berichten per periode.", "", "up"),
-    "open": ("Nog openstaande (onverwerkte) items in de inbox.", "", "down"),
+    "verwerkt": ("Processed tensions/messages per period.", "", "up"),
+    "open": ("Items still open (unprocessed) in the inbox.", "", "down"),
 }
 _WERK_GRONDSLAG = {
-    "tevredenheid": ("Gemiddelde check-out-score (0-10) per overleg.", "0-10", "up"),
-    "spanningen": ("Aantal behandelde spanningen per overleg.", "", ""),
-    "informatie": ("Aantal info-uitkomsten per overleg.", "", ""),
-    "projecten": ("Aantal als project verwerkte uitkomsten.", "", ""),
-    "acties": ("Aantal als actie verwerkte uitkomsten.", "", ""),
-    "duur": ("Duur van het overleg in minuten.", "min", ""),
-    "roloverleg": ("Aantal naar roloverleg doorgezette uitkomsten.", "", ""),
-    "nevermind": ("Aantal ingetrokken punten per overleg.", "", ""),
-    "afwezigheid": ("Aantal afwezigen per overleg.", "", ""),
+    "tevredenheid": ("Average check-out score (0-10) per meeting.", "0-10", "up"),
+    "spanningen": ("Number of tensions handled per meeting.", "", ""),
+    "informatie": ("Number of info outcomes per meeting.", "", ""),
+    "projecten": ("Number of outcomes processed as a project.", "", ""),
+    "acties": ("Number of outcomes processed as an action.", "", ""),
+    "duur": ("Duration of the meeting in minutes.", "min", ""),
+    "roloverleg": ("Number of outcomes pushed to the governance meeting.", "", ""),
+    "nevermind": ("Number of items withdrawn per meeting.", "", ""),
+    "afwezigheid": ("Number of absentees per meeting.", "", ""),
 }
-_RICHTING = {"up": "hoger = beter", "down": "lager = beter", "": "—"}
+_RICHTING = {"up": "higher = better", "down": "lower = better", "": "—"}
 
 
 def _grondslag(st: _Stores, source: str, measure: str) -> dict:
@@ -1010,9 +1011,9 @@ def _grondslag(st: _Stores, source: str, measure: str) -> dict:
         it = st.metrics.get(source[4:]) or {}
         origin = it.get("origin", "")
         bron = (_ORIGIN_LABEL.get(origin, origin) if origin
-                else "Bron-KPI" if it.get("source") else "Handmatig (jij voert in)")
+                else "Source KPI" if it.get("source") else "Manual (you enter it)")
         if it.get("def_id"):
-            bron += f" · catalogus v{it.get('def_version', 1)}"
+            bron += f" · catalogue v{it.get('def_version', 1)}"
         return {"definitie": it.get("definition", ""), "eenheid": it.get("unit", ""),
                 "bron": bron, "richting": it.get("direction", ""), "drempel": it.get("threshold"),
                 "cadans": it.get("cadence", ""), "meettype": it.get("meettype", ""),
@@ -1021,15 +1022,15 @@ def _grondslag(st: _Stores, source: str, measure: str) -> dict:
                 "verificatie": it.get("verificatie", "")}
     if source.startswith("werk:"):
         d, u, r = _WERK_GRONDSLAG.get(measure, ("", "", ""))
-        return {"definitie": d, "eenheid": u, "bron": "Werkoverleg-archief", "richting": r,
+        return {"definitie": d, "eenheid": u, "bron": "Tactical-meeting archive", "richting": r,
                 "drempel": None, "cadans": "maand", "meettype": "snapshot", "venster": ""}
     if source.startswith("projects:"):
         d, u, r = _PROJECT_GRONDSLAG.get(measure, ("", "", ""))
-        return {"definitie": d, "eenheid": u, "bron": "Projectenboek", "richting": r,
+        return {"definitie": d, "eenheid": u, "bron": "Project book", "richting": r,
                 "drempel": None, "cadans": "", "meettype": "", "venster": ""}
     if source.startswith("inbox:"):
         d, u, r = _INBOX_GRONDSLAG.get(measure, ("", "", ""))
-        return {"definitie": d, "eenheid": u, "bron": "Inbox / notificaties", "richting": r,
+        return {"definitie": d, "eenheid": u, "bron": "Inbox / notifications", "richting": r,
                 "drempel": None, "cadans": "", "meettype": "", "venster": ""}
     d, u, b, r = _SOURCE_GRONDSLAG.get(f"{source}|{measure}", ("", "", "", ""))
     return {"definitie": d, "eenheid": u, "bron": b, "richting": r, "drempel": None,
@@ -1044,16 +1045,16 @@ def _grondslag_popover(g: dict) -> str:
     meet = ", ".join(x for x in (cad, mt) if x)
     if g.get("venster"):
         meet = f"{meet} ({g['venster']})" if meet else g["venster"]
-    body = (rij("Definitie", g.get("definitie") or "— (nog niet vastgelegd)")
-            + rij("Eenheid", g.get("eenheid")) + rij("Bron", g.get("bron"))
-            + rij("Richting", _RICHTING.get(g.get("richting"), "—"))
-            + (rij("Drempel", g.get("drempel")) if g.get("drempel") is not None else "")
-            + rij("Meetmoment", meet)
-            + rij("Meetwijze", MEETWIJZE_LABEL.get(g.get("meetwijze"), ""))
-            + rij("Verificatie", VERIFICATIE_LABEL.get(g.get("verificatie"), ""))
-            + (f"<div class='gr-row'><span class='gr-k'>Bron</span>{_bron_html(g['bron_url'])}</div>"
+    body = (rij("Definition", g.get("definitie") or "— (not recorded yet)")
+            + rij("Unit", g.get("eenheid")) + rij("Source", g.get("bron"))
+            + rij("Direction", _RICHTING.get(g.get("richting"), "—"))
+            + (rij("Threshold", g.get("drempel")) if g.get("drempel") is not None else "")
+            + rij("Measured", meet)
+            + rij("Method", MEETWIJZE_LABEL.get(g.get("meetwijze"), ""))
+            + rij("Verification", VERIFICATIE_LABEL.get(g.get("verificatie"), ""))
+            + (f"<div class='gr-row'><span class='gr-k'>Source</span>{_bron_html(g['bron_url'])}</div>"
                if g.get("bron_url") else ""))
-    return (f"<details class='tile-info'><summary title='grondslag'>{_IC_INFO}</summary>"
+    return (f"<details class='tile-info'><summary title='basis'>{_IC_INFO}</summary>"
             f"<div class='gr-pop'>{body}</div></details>")
 
 
@@ -1083,9 +1084,9 @@ def _compare_delta(res, prev_res, agg=DEFAULT_AGGREGATIE) -> str:
         return ""
     d = cur - prv
     if d == 0:
-        return "<span class='delta flat'>±0 vs vorige periode</span>"
+        return "<span class='delta flat'>±0 vs previous period</span>"
     arrow, cls = ("▲", "up") if d > 0 else ("▼", "down")
-    return f"<span class='delta {cls}'>{arrow} {abs(d):g} vs vorige periode</span>"
+    return f"<span class='delta {cls}'>{arrow} {abs(d):g} vs previous period</span>"
 
 
 def _daily_obs_key(source: str, measure: str):
@@ -1122,8 +1123,8 @@ def _source_dimensions() -> dict:
 
 # DIMENSION → (tegel-dim-sleutel, label in de composer). De dim-sleutel is wat de tegel opslaat; _fetch
 # behandelt elke dim-sleutel hieruit als een breakdown per dimensie-waarde.
-_DIM_LABEL = {"query": ("keyword", "per keyword"), "country": ("country", "per land"),
-              "concept": ("concept", "per concept")}
+_DIM_LABEL = {"query": ("keyword", "by keyword"), "country": ("country", "by country"),
+              "concept": ("concept", "by concept")}
 _DIM_KEYS = {k for k, _l in _DIM_LABEL.values()}
 
 
@@ -1275,8 +1276,9 @@ def freshness_chip(state) -> str:
             f"{_e(t('data.vers.' + state))}</span>")
 
 
-_WIN_LABEL = {"7d": "7d", "28d": "28d", "kwartaal": "kwartaal", "jaar": "jaar",
-              "gisteren": "gisteren", "vandaag": "vandaag", "actueel": "actueel", "aangepast": "periode"}
+# Display-mapping: de sleutels blijven de opgeslagen venster-waarden.
+_WIN_LABEL = {"7d": "7d", "28d": "28d", "kwartaal": "quarter", "jaar": "year",
+              "gisteren": "yesterday", "vandaag": "today", "actueel": "current", "aangepast": "period"}
 
 
 def _agg_label(agg: str, win: str, res, end, now: float | None = None) -> str:
@@ -1286,9 +1288,9 @@ def _agg_label(agg: str, win: str, res, end, now: float | None = None) -> str:
     if res.get("kind") not in ("series", "number", "breakdown"):
         return ""
     if agg == "som":
-        return f"<div class='muted'>totaal {_e(_WIN_LABEL.get(win, 'periode'))}</div>"
+        return f"<div class='muted'>total {_e(_WIN_LABEL.get(win, 'period'))}</div>"
     if agg == "gemiddelde":
-        return "<div class='muted'>Ø per dag</div>"
+        return "<div class='muted'>Ø per day</div>"
     # laatste_waarde: 'stand per nu' als de laatste meetdag vandaag is, anders 'stand per <datum>'.
     import datetime as _dt
     today = _dt.datetime.fromtimestamp(now).strftime('%Y-%m-%d') if now else None
@@ -1297,11 +1299,11 @@ def _agg_label(agg: str, win: str, res, end, now: float | None = None) -> str:
         last = pts[-1]
         ld = last[2] if len(last) > 2 and last[2] else _dt.datetime.fromtimestamp(last[0]).strftime('%Y-%m-%d')
         if today and ld == today:
-            return "<div class='muted'>stand per nu</div>"
-        return f"<div class='muted'>stand per {_e(_pt_datum_label(last))}</div>"
+            return "<div class='muted'>level as of now</div>"
+        return f"<div class='muted'>level as of {_e(_pt_datum_label(last))}</div>"
     if end:
         d = _dt.datetime.fromtimestamp(end - 1).strftime('%d-%m-%y')   # end exclusief → laatste dag = end-1
-        return f"<div class='muted'>stand per {_e(d)}</div>"
+        return f"<div class='muted'>level as of {_e(d)}</div>"
     return ""
 
 
@@ -1312,7 +1314,7 @@ def _range_label(cutoff, end) -> str:
     import datetime as _dt
     a = _dt.datetime.fromtimestamp(cutoff).strftime('%d-%m')
     b = _dt.datetime.fromtimestamp(end - 1).strftime('%d-%m')          # end exclusief → laatste dag = end-1
-    return f"<div class='muted'>{a} t/m {b}</div>"
+    return f"<div class='muted'>{a} to {b}</div>"
 
 
 def _tile_headline(res, agg: str, win: str, cutoff, end, now: float | None = None) -> str:
@@ -1359,7 +1361,7 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
         data = ""
         if pts:
             dt = _data_table({"kind": "series", "points": pts}, bron=ak_bron)
-            data = f"<details class='tile-data'><summary>ruwe data</summary>{dt}</details>"
+            data = f"<details class='tile-data'><summary>{_e(t('dashboard.ruwe_data'))}</summary>{dt}</details>"
     else:
         res = _fetch(st, tile["source"], tile["measure"], tile.get("dim", "none"), cutoff, end_eff)
         prev_res = None
@@ -1396,10 +1398,10 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
         if form in ("trend", "staaf", "verdeling", "horizontaal", "gestapeld", "doelmeter", "bullet", "burnup"):
             dt = _data_table(res, bron=g.get("bron", tile["source"]))
             if dt:
-                data = f"<details class='tile-data'><summary>ruwe data</summary>{dt}</details>"
+                data = f"<details class='tile-data'><summary>{_e(t('dashboard.ruwe_data'))}</summary>{dt}</details>"
     if gp is not None:
         due = _fmt_due(gp.get("due")) if gp.get("due") else ""
-        goal = (f"<div class='tile-goal muted'>naar doel: <b>{_e(str(gp.get('scope') or gp['id'])[:50])}</b>"
+        goal = (f"<div class='tile-goal muted'>towards goal: <b>{_e(str(gp.get('scope') or gp['id'])[:50])}</b>"
                 f"{(' · ' + _e(due)) if due else ''}</div>")
     # Drempel-signaal (Kaizen 'aandacht nodig'): waarde de verkeerde kant op t.o.v. de drempel.
     warn = ""
@@ -1407,9 +1409,9 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
     if thr is not None and isinstance(val, (int, float)):
         bad = (val < thr) if g.get("richting") == "up" else (val > thr) if g.get("richting") == "down" else False
         if bad:
-            warn = f"<span class='tile-warn' title='onder/over de drempel ({thr:g})'>⚠</span>"
+            warn = f"<span class='tile-warn' title='below/above the threshold ({thr:g})'>⚠</span>"
     if g.get("verificatie") == "voorlopig":
-        warn += "<span class='tile-prov' title='voorlopige waarde, nog niet geverifieerd'>voorlopig</span>"
+        warn += "<span class='tile-prov' title='provisional value, not verified yet'>provisional</span>"
     rm = ""
     if csrf:
         rm = (f"<form method='post' action='/action' class='tile-rm'>"
@@ -1417,13 +1419,13 @@ def _render_tile(st: _Stores, rec, tile, cutoff, csrf: str, end=None, compare=Fa
               f"<input type='hidden' name='tid' value='{_e(tile['id'])}'>"
               f"<input type='hidden' name='next' value='/node?id={_e(rec.id)}&tab=metrics'>"
               f"<button class='dellink' type='submit' name='action' value='tile_remove'>✕</button></form>")
-    flip = "<button class='dellink js-flip' type='button' title='betekenis / formule'>ⓘ</button>"
+    flip = "<button class='dellink js-flip' type='button' title='meaning / formula'>ⓘ</button>"
     # ⓘ-achterkant: de betekenis uit het catalogus-item (grondslag)
-    std = f" · standaard: {_e(g['standaard'])}" if g.get("standaard") else ""
+    std = f" · standard: {_e(g['standaard'])}" if g.get("standaard") else ""
     back = (f"<div class='tile-back' hidden><b>{_e(_tile_meta(st, rec, tile))}</b>"
-            f"<div class='muted'>{_e(g.get('definitie') or 'Geen definitie in het catalogus-item.')}</div>"
-            f"<div class='muted'>Bron: {_e(g.get('bron') or tile['source'])}{std}</div>"
-            f"<button class='dellink js-flipback' type='button'>↩ terug</button></div>")
+            f"<div class='muted'>{_e(g.get('definitie') or 'No definition in the catalogue item.')}</div>"
+            f"<div class='muted'>Source: {_e(g.get('bron') or tile['source'])}{std}</div>"
+            f"<button class='dellink js-flipback' type='button'>↩ back</button></div>")
     front = (f"<div class='tile-front'><div class='tile-h'><span class='tile-t'>{_e(_tile_meta(st, rec, tile))}{warn}</span>"
              f"<span class='tile-h-r'>{flip}{rm}</span></div>"
              f"<div class='tile-b'>{body}</div>{data}{goal}</div>")
@@ -1458,7 +1460,7 @@ def _goal_options(st: _Stores, rec) -> str:
     """Projecten onder deze node als koppelbare doelen (= outcome + deadline)."""
     is_c = org.is_circle(rec)
     nodes = {rec.id} | ({r.id for r in org.roles_of(st.records.all(), rec.id)} if is_c else set())
-    out = "<option value=''>— geen doel —</option>"
+    out = "<option value=''>— no goal —</option>"
     for p in st.projects.all():
         if p.get("owner") in nodes and not p.get("archived"):
             out += f"<option value='{_e(p['id'])}'>{_e(str(p.get('scope') or p['id'])[:50])}</option>"
@@ -1485,7 +1487,7 @@ def _metric_csv(st: _Stores, mid: str) -> tuple[str, str] | None:
         w.writerow([f, "" if v is None else v])
     w.writerow([])
     # 2. de metingen
-    w.writerow(["datum", "waarde", "eenheid"])
+    w.writerow(["date", "value", "unit"])
     for p in pts:
         d = p[2] if len(p) > 2 and p[2] else _dt.datetime.fromtimestamp(p[0]).strftime("%Y-%m-%d")
         w.writerow([d, p[1], it.get("unit", "")])
@@ -1500,23 +1502,23 @@ def _kpi_data_row(st: _Stores, item: dict, csrf: str) -> str:
     unit = f" {_e(item.get('unit', ''))}" if item.get("unit") else ""
     # systeem-gemeten KPI (bron/auto/meetwijze): geen handmatige invoer
     is_sys = _is_system_kpi(item)
-    src = " <span class='chip muted'>systeem</span>" if is_sys else ""
+    src = " <span class='chip muted'>system</span>" if is_sys else ""
     add = ""
     if csrf and not is_sys:
         add = (f"<form method='post' action='/action' class='kpi-add'>"
                f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='mid' value='{_e(item['id'])}'>"
                f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=metrics'>"
-               f"<input name='value' inputmode='decimal' placeholder='meting' size='6'>"
+               f"<input name='value' inputmode='decimal' placeholder='reading' size='6'>"
                f"<button class='btn ok sm' type='submit' name='action' value='m_sample'>+</button></form>")
     # grondslag (definitie + meetmoment) op de rij zelf, naast de naam (klik op de ⓘ)
     info = _grondslag_popover(_grondslag(st, f"kpi:{item['id']}", "value"))
     exp = (f"<a class='kpi-exp' href='/metric_export?mid={_e(item['id'])}' "
-           f"title='Metingen exporteren (CSV)'>{_IC_DL}</a>")
+           f"title='Export readings (CSV)'>{_IC_DL}</a>")
     rm = ""
     if csrf:
         # destructief: vraagt bevestiging (en wijst op export) — een KPI met historie is niet terug te halen
-        conf = (f"&#39;{_e(item['name'])}&#39; en alle metingen verwijderen? "
-                "Dit kan niet ongedaan worden. Exporteer eventueel eerst de data.")
+        conf = (f"Remove &#39;{_e(item['name'])}&#39; and all its readings? "
+                "This cannot be undone. Export the data first if you want to keep it.")
         rm = (f"<form method='post' action='/action' style='display:inline' data-confirm='{conf}'>"
               f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='mid' value='{_e(item['id'])}'>"
               f"<input type='hidden' name='next' value='/node?id={_e(item['node'])}&tab=metrics'>"
@@ -1531,11 +1533,11 @@ _ORIGIN_LABEL = {
     "gsc": "Google Search Console", "plausible": "Plausible", "shopify": "Shopify",
     "trends": "Google Trends", "keywords_everywhere": "Keywords Everywhere", "ngram": "Google Ngram",
     "openalex": "OpenAlex", "semantic_scholar": "Semantic Scholar", "site_health": "Site health",
-    "competitor_news": "Nieuws-monitor", "linkbuilding": "Linkbuilding", "budget": "Budget",
-    "werkoverleg": "Werkoverleg-archief",
+    "competitor_news": "News monitor", "linkbuilding": "Link building", "budget": "Budget",
+    "werkoverleg": "Tactical-meeting archive",
     # cross-domein bronnen (nog geen live-koppeling; handmatig in te voeren tot we ze koppelen)
-    "erp": "ERP / voorraad", "monitoring": "IT-monitoring", "support": "Klantenservice",
-    "survey": "Enquête", "hris": "HR-systeem", "impact": "Impact / LCA", "finance": "Boekhouding",
+    "erp": "ERP / stock", "monitoring": "IT monitoring", "support": "Customer service",
+    "survey": "Survey", "hris": "HR system", "impact": "Impact / LCA", "finance": "Accounting",
 }
 # lichte bron→functie-affiniteit bovenop tekstoverlap (zodat de juiste rol de juiste bron ziet)
 _SOURCE_AFFINITY = {
@@ -1612,10 +1614,10 @@ def _metrics_manage_html(st: _Stores, rec, csrf: str = "") -> str:
     systeem = [i for i in kpis if _is_system_kpi(i) and i["id"] not in tiled_kids]
     if handmatig:
         rows = "".join(_kpi_data_row(st, i, csrf) for i in handmatig)
-        out += f"<div class='c2-sec'><div class='cl-head'><h3>Eigen KPI's (data invoeren)</h3></div>{rows}</div>"
+        out += f"<div class='c2-sec'><div class='cl-head'><h3>Own KPIs (enter data)</h3></div>{rows}</div>"
     if systeem:
         rows = "".join(_kpi_data_row(st, i, csrf) for i in systeem)
-        out += f"<div class='c2-sec'><div class='cl-head'><h3>Systeem-KPI's (automatisch gevoed)</h3></div>{rows}</div>"
+        out += f"<div class='c2-sec'><div class='cl-head'><h3>System KPIs (fed automatically)</h3></div>{rows}</div>"
     links = st.metrics.links_for(rec.id)
     if links:
         lc = "".join(_link_card(i, csrf) for i in links)
@@ -1629,9 +1631,9 @@ def _add_link_details(rec, csrf: str, nxt: str) -> str:
             f"<form method='post' action='/action' class='m-addform'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='node' value='{_e(rec.id)}'>"
             f"<input type='hidden' name='next' value='{_e(nxt)}'>"
-            f"<input name='name' placeholder='Naam' autocomplete='off'>"
+            f"<input name='name' placeholder='Name' autocomplete='off'>"
             f"<input name='url' placeholder='https://…' autocomplete='off'>"
-            f"<button class='btn ok sm' type='submit' name='action' value='m_add_link'>Link toevoegen</button></form></details>")
+            f"<button class='btn ok sm' type='submit' name='action' value='m_add_link'>Add link</button></form></details>")
 
 
 def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: str = "",
@@ -1656,14 +1658,14 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: st
         key = _MW_KEYS.get(k, "")
         kbd = f" <kbd>{_e(key)}</kbd>" if key else ""
         if k == "actueel" and not live:               # alleen bij een live-capabele bron
-            return f"<span class='menuitem muted' title='alleen beschikbaar bij een live-capabele bron'>{_e(lbl)}{kbd}</span>"
+            return f"<span class='menuitem muted' title='only available with a live-capable source'>{_e(lbl)}{kbd}</span>"
         u = f"{nav}&mw={k}" if nav else f"{base}&mw={k}{cmp_q}"
         cls = "menuitem js-modal" if nav else "menuitem"
         dh = f" data-href='{u}'" if nav else ""
         return f"<a class='{cls}{on}' href='{u}'{dh}>{_e(lbl)}{kbd}</a>"
-    active_lbl = dict(_MW).get(win, "Periode")
+    active_lbl = dict(_MW).get(win, "Period")
     periode_lbl = _e(t('dashboard.periode'))
-    dd = (f"<details class='cardmenu'><summary class='statustrigger' aria-label='periode kiezen'>"
+    dd = (f"<details class='cardmenu'><summary class='statustrigger' aria-label='choose period'>"
           f"{_e(active_lbl)} <span class='caret'>▾</span></summary><div class='cardmenu-b'>"
           f"<div class='menu-h'>{periode_lbl}</div>" + "".join(opt(k, lbl) for k, lbl in _MW) + "</div></details>")
     wbar = f"<div class='cl-bar'><span class='muted'>{periode_lbl}</span> {dd}"
@@ -1672,16 +1674,16 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: st
         ct_url = f"{base}&mw={_e(win)}" + ("" if compare else "&compare=1")
         wbar += (f"<span class='switch-field'>{_e(t('dashboard.vergelijk'))} "
                  f"<a class='switch{ct}' href='{ct_url}' role='switch' "
-                 f"aria-checked='{'true' if compare else 'false'}' title='vergelijk met de vorige periode'></a></span>")
+                 f"aria-checked='{'true' if compare else 'false'}' title='compare with the previous period'></a></span>")
     wbar += "</div>"
     if win == "aangepast" and not nav:                 # van/tot-formulier
         wbar += (f"<form method='get' action='/node' class='cl-bar'>"
                  f"<input type='hidden' name='id' value='{_e(rec.id)}'>"
                  f"<input type='hidden' name='tab' value='metrics'><input type='hidden' name='mw' value='aangepast'>"
                  + ("<input type='hidden' name='compare' value='1'>" if compare else "")
-                 + f"<input type='date' name='van' value='{_e(van)}'> <span class='muted'>tot</span> "
+                 + f"<input type='date' name='van' value='{_e(van)}'> <span class='muted'>to</span> "
                  f"<input type='date' name='tot' value='{_e(tot)}'> "
-                 f"<button class='btn sm' type='submit'>Toon</button></form>")
+                 f"<button class='btn sm' type='submit'>Show</button></form>")
     # In het werkoverleg (nav gezet) selecteer/bekijk je KPI's, je maakt ze daar niet aan.
     creating = bool(csrf) and not nav
     addlink = ""
@@ -1690,10 +1692,10 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: st
                    f"<form method='post' action='/action' class='m-addform'>"
                    f"<input type='hidden' name='csrf' value='{_e(csrf)}'><input type='hidden' name='node' value='{_e(rec.id)}'>"
                    f"<input type='hidden' name='next' value='{base}'>"
-                   f"<input name='name' placeholder='Naam' autocomplete='off'>"
+                   f"<input name='name' placeholder='Name' autocomplete='off'>"
                    f"<input name='url' placeholder='https://…' autocomplete='off'>"
-                   f"<button class='btn ok sm' type='submit' name='action' value='m_add_link'>Link toevoegen</button></form></details>")
-    mk = (f"<a class='btn ok sm' href='/kpi_new?node={_e(rec.id)}'>+ KPI maken</a>" if creating else "")
+                   f"<button class='btn ok sm' type='submit' name='action' value='m_add_link'>Add link</button></form></details>")
+    mk = (f"<a class='btn ok sm' href='/kpi_new?node={_e(rec.id)}'>+ Create KPI</a>" if creating else "")
     head = f"<div class='cl-head'><h3>Metrics</h3><span class='kc-actions'>{mk}{addlink}</span></div>{wbar}"
     # Single-key sneltoetsen voor de periode-dropdown (alleen op de hoofdpagina, niet in de modal).
     # Vuurt niet in invoervelden of met modifier-toetsen; navigeert naar &mw=<optie>.
@@ -1712,7 +1714,7 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: st
     # 1. Dashboard van tegels (de KPI's) — één centrale periode voor alle tegels
     dash = ("".join(_render_tile(st, rec, t, start, csrf, end=end, compare=compare, prev_win=prev_win,
                                  actueel=(win == "actueel"), win=win, now=now) for t in tiles) if tiles
-            else "<p class='muted'>Nog geen KPI's op het dashboard. Maak er een met “+ KPI maken”.</p>")
+            else "<p class='muted'>No KPIs on the dashboard yet. Create one with “+ Create KPI”.</p>")
     out = f"<div class='c2-sec'>{head}</div><div class='c2-sec'><div class='tile-grid'>{dash}</div></div>{_METRICS_JS}{keys_js}"
 
     # 2/3. Het beheer-blok (eigen KPI's om data in te voeren, systeem-KPI's, links) — gedeeld met het
@@ -1722,7 +1724,7 @@ def _metrics_tab_html(st: _Stores, rec, csrf: str = "", win: str = "7d", nav: st
 
 
 def _dir_select(name: str, cur: str) -> str:
-    opt = [("", "Richting (geen)"), ("up", "hoger = beter"), ("down", "lager = beter")]
+    opt = [("", "Direction (none)"), ("up", "higher = better"), ("down", "lower = better")]
     return (f"<select name='{name}'>"
             + "".join(f"<option value='{v}'{' selected' if v == (cur or '') else ''}>{_e(l)}</option>"
                       for v, l in opt) + "</select>")
@@ -1730,7 +1732,7 @@ def _dir_select(name: str, cur: str) -> str:
 
 def _cad_select(name: str, cur: str) -> str:
     return (f"<select name='{name}'>"
-            + "".join(f"<option value='{k}'{' selected' if k == cur else ''}>meet: {_e(v)}</option>"
+            + "".join(f"<option value='{k}'{' selected' if k == cur else ''}>measure: {_e(v)}</option>"
                       for k, v in CADANS_LABEL.items()) + "</select>")
 
 
@@ -1757,21 +1759,21 @@ def _aard_chips(cur: dict) -> str:
 
 
 def _mw_select(name: str, cur: str) -> str:
-    return (f"<select name='{name}' title='meetwijze: hoe komt de waarde tot stand?'>"
-            + "".join(f"<option value='{k}'{' selected' if k == cur else ''}>meetwijze: {_e(v)}</option>"
+    return (f"<select name='{name}' title='method: how does the value come about?'>"
+            + "".join(f"<option value='{k}'{' selected' if k == cur else ''}>method: {_e(v)}</option>"
                       for k, v in MEETWIJZE_LABEL.items()) + "</select>")
 
 
 def _mw_chip(mw: str) -> str:
     cls = {"systeem": "chip muted", "handmatig": "chip outline", "enquete": "chip coral"}.get(mw, "chip muted")
-    return f"<span class='{cls}'>{_e(MEETWIJZE_LABEL.get(mw, mw or 'handmatig'))}</span>"
+    return f"<span class='{cls}'>{_e(MEETWIJZE_LABEL.get(mw, mw or 'handmatig'))}</span>"   # sleutel blijft NL
 
 
 
 # Bronnen die actief data leveren → indicatoren daaruit zijn klikbaar; de rest staat grijs (nog geen
 # data). Combos (source|measure|dim) zijn zelf altijd echte data-paden.
 _LIVE_DEF_SOURCES = {"plausible", "shopify", "gsc", "werkoverleg", "library"}
-_COMBO_CATEGORIE = {"pulse_visitors": "Website", "shopify": "Verkoop"}
+_COMBO_CATEGORIE = {"pulse_visitors": "Website", "shopify": "Sales"}
 _FORM_AARD = {"trend": "reeks", "getal": "moment", "verdeling": "categorie"}
 
 
@@ -1802,7 +1804,7 @@ def _wizard_indicators(st: _Stores, rec) -> list[dict]:
         if not name:
             continue
         value, live = _def_value(st, c, d["id"], circle)
-        out.append({"value": value, "name": name, "categorie": c.get("categorie") or "Overig",
+        out.append({"value": value, "name": name, "categorie": c.get("categorie") or "Other",
                     "aard": c.get("aard") or "moment", "has_data": live,
                     "bron": c.get("source", ""), "veld": c.get("veld", ""),
                     "uitleg": c.get("definition", "")})
@@ -1812,7 +1814,7 @@ def _wizard_indicators(st: _Stores, rec) -> list[dict]:
             if not s["id"].startswith("kpi:"):
                 continue
             for mid, ml in s["measures"]:
-                out.append({"value": f"{s['id']}|{mid}|time", "name": ml, "categorie": "Eigen KPI's",
+                out.append({"value": f"{s['id']}|{mid}|time", "name": ml, "categorie": "Own KPIs",
                             "aard": "reeks", "has_data": True, "bron": "handmatig", "uitleg": ""})
     return out
 
@@ -1891,19 +1893,19 @@ def _render_formula_tile(st: _Stores, rec, tile, csrf: str, cutoff=None, end=Non
     elif head is not None:
         body = f"<div class='kpi-val'>{_num(head)}</div>"
     else:
-        body = "<div class='kpi-val'><span class='muted'>geen data</span></div>"
+        body = "<div class='kpi-val'><span class='muted'>no data</span></div>"
     # fail-loud: een operand die niet resolvet of geen rijen levert → zichtbare hint (nooit stil leeg)
     if issues:
-        _lbl = {"unresolved": "bron onbekend", "empty": "bron levert geen data"}
+        _lbl = {"unresolved": "source unknown", "empty": "source delivers no data"}
         _txt = "; ".join(f"operand {i['operand']}: {_lbl.get(i['code'], i['code'])}" for i in issues)
         body += f"<div class='muted'>⚠ {_e(_txt)}</div>"
     import datetime as _dt
     trows = "".join(
         f"<tr><td>{_dt.datetime.fromtimestamp(r['at']).strftime('%d-%m-%y')}</td>"
         f"<td class='num'>{'—' if r['no_data'] else _num(r['value'])}</td>"
-        f"<td>{'geen data' if r['no_data'] else 'formule'}</td></tr>" for r in rows)
-    data = (f"<details class='tile-data'><summary>ruwe data</summary>"
-            f"<table class='mtab'><tr><th>datum</th><th class='num'>waarde</th><th>bron</th></tr>"
+        f"<td>{'no data' if r['no_data'] else 'formula'}</td></tr>" for r in rows)
+    data = (f"<details class='tile-data'><summary>{_e(t('dashboard.ruwe_data'))}</summary>"
+            f"<table class='mtab'><tr><th>date</th><th class='num'>value</th><th>source</th></tr>"
             f"{trows}</table></details>") if rows else ""
     rm = ""
     if csrf:
@@ -1912,14 +1914,14 @@ def _render_formula_tile(st: _Stores, rec, tile, csrf: str, cutoff=None, end=Non
               f"<input type='hidden' name='tid' value='{_e(tile['id'])}'>"
               f"<input type='hidden' name='next' value='/node?id={_e(rec.id)}&tab=metrics'>"
               f"<button class='dellink' type='submit' name='action' value='tile_remove'>✕</button></form>")
-    flip = "<button class='dellink js-flip' type='button' title='betekenis / formule'>ⓘ</button>"
+    flip = "<button class='dellink js-flip' type='button' title='meaning / formula'>ⓘ</button>"
     op = tile.get("f_op", "÷")
-    back = (f"<div class='tile-back' hidden><b>{_e(tile.get('measure', 'formule'))}</b>"
-            f"<div class='muted'>Formule: A {_e(op)} B, per dag berekend en dan geaggregeerd "
-            f"({_e(agg or 'gemiddelde')}). Mist één bron een dag, dan telt die dag niet mee (fail-closed).</div>"
-            f"<button class='dellink js-flipback' type='button'>↩ terug</button></div>")
+    back = (f"<div class='tile-back' hidden><b>{_e(tile.get('measure', 'formula'))}</b>"
+            f"<div class='muted'>Formula: A {_e(op)} B, computed per day and then aggregated "
+            f"({_e(AGGREGATIE_LABEL.get(agg, 'average'))}). If one source misses a day, that day does not count (fail-closed).</div>"
+            f"<button class='dellink js-flipback' type='button'>↩ back</button></div>")
     front = (f"<div class='tile-front'><div class='tile-h'>"
-             f"<span class='tile-t'>{_e(tile.get('measure', 'formule'))} <span class='chip muted'>formule</span></span>"
+             f"<span class='tile-t'>{_e(tile.get('measure', 'formula'))} <span class='chip muted'>formula</span></span>"
              f"<span class='tile-h-r'>{flip}{rm}</span></div>"
              f"<div class='tile-b'>{body}</div>{data}</div>")
     return f"<div class='tile'>{front}{back}</div>"
@@ -1931,7 +1933,7 @@ def render_kpi_composer(st: _Stores, node_id: str = "", csrf_token: str = "", ms
     (of een keuze bij een losstaande start). Vorm biedt alleen weergaves die bij de aard passen."""
     rec = st.records.get(node_id) if node_id else None
     if node_id and rec is None:
-        return _page("Niet gevonden", "<p>Node niet gevonden.</p>")
+        return _page("Not found", "<p>Node not found.</p>")
     standalone = rec is None
     back = "/" if standalone else f"/node?id={_e(node_id)}&tab=metrics"
 
@@ -1946,17 +1948,17 @@ def render_kpi_composer(st: _Stores, node_id: str = "", csrf_token: str = "", ms
     def _radio(i: dict) -> str:
         dis = "" if i["has_data"] else " disabled"
         mut = "" if i["has_data"] else " muted"
-        tip = "Bron: " + (i["bron"] or "—") + (f" · {i['uitleg']}" if i["uitleg"] else "")
+        tip = "Source: " + (i["bron"] or "—") + (f" · {i['uitleg']}" if i["uitleg"] else "")
         # één regel per metric: de aard als tag (reeks/moment/categorie), of grijs 'nog geen data'
         tag = (f"<span class='chip outline'>{_e(AARD_LABEL.get(i['aard'], i['aard']))}</span>"
-               if i["has_data"] else "<span class='chip muted'>nog geen data</span>")
+               if i["has_data"] else "<span class='chip muted'>no data yet</span>")
         # tweede signaal naast de aard-tag: levert de bron recente data? (gedeelde helper, 3 staten)
         vers = freshness_chip(indicator_freshness(st, i["bron"], i.get("veld", "")))
         return (f"<label class='kc-radio kc-metric{mut}' data-cat='{_e(i['categorie'])}' "
                 f"data-aard='{_e(i['aard'])}' data-name='{_e(i['name'].lower())}' hidden>"
                 f"<input type='radio' name='combo' value='{_e(i['value'])}'{dis}> "
                 f"<span class='kc-mname' title='{_e(tip)}'>{_e(i['name'])}</span> {tag}{vers}</label>")
-    metrics_html = "".join(_radio(i) for i in inds) or "<p class='muted'>Geen indicatoren beschikbaar.</p>"
+    metrics_html = "".join(_radio(i) for i in inds) or "<p class='muted'>No indicators available.</p>"
     metric_opts = "".join(f"<option value='{_e(i['value'])}'>{_e(i['categorie'])} — {_e(i['name'])}</option>"
                           for i in inds if i["has_data"])
     agg_opts = "".join(f"<option value='{a}'>{_e(AGGREGATIE_LABEL[a])}</option>" for a in AGGREGATIE)
@@ -1971,60 +1973,60 @@ def render_kpi_composer(st: _Stores, node_id: str = "", csrf_token: str = "", ms
         f"<button type='button' class='cl-filter kc-mode-btn' data-mode='formule'>{_e(t('wizard.modus.formule'))}</button></div>"
         "<input type='hidden' name='mode' value='indicator'>"
         "<div class='kc-mode' data-mode='indicator'>"
-        "<p class='muted kc-hint'>Kies eerst een categorie</p>"
+        "<p class='muted kc-hint'>Pick a category first</p>"
         f"<div class='chip-wrap kc-cats'>{cat_chips}</div>"
         "<div class='kc-picked' hidden>"
         "<p class='muted kc-hint kc-picked-label'></p>"
-        "<input class='kc-search' type='text' placeholder='Zoek binnen deze categorie…' autocomplete='off' hidden>"
+        "<input class='kc-search' type='text' placeholder='Search within this category…' autocomplete='off' hidden>"
         f"<div class='kc-metrics'>{metrics_html}</div></div>"
-        "<p class='muted kc-hint kc-empty'>Kies hierboven een categorie om de indicatoren te zien. "
-        "Metrics zonder data staan grijs; wijs de naam aan voor uitleg.</p></div>"
+        "<p class='muted kc-hint kc-empty'>Pick a category above to see the indicators. "
+        "Metrics without data are greyed out; hover the name for an explanation.</p></div>"
         "<div class='kc-mode' data-mode='formule' hidden>"
         f"<label class='att-lbl'>Metric A</label><select name='f_a'>{metric_opts}</select>"
-        "<label class='att-lbl'>Bewerking</label>"
+        "<label class='att-lbl'>Operation</label>"
         "<select name='f_op'><option>÷</option><option>+</option><option>−</option><option>%</option></select>"
         f"<label class='att-lbl'>Metric B</label><select name='f_b'>{metric_opts}</select>"
-        "<label class='att-lbl'>Naam van de formule</label>"
-        "<input name='f_name' placeholder='bijv. Conversie' autocomplete='off'>"
-        f"<label class='att-lbl'>Aggregatie (verplicht)</label><select name='f_agg'>"
-        f"<option value=''>— kies —</option>{agg_opts}</select>"
-        "<p class='muted kc-hint'>Een formule rekent live over de twee indicatoren (berekening volgt).</p></div>")
+        "<label class='att-lbl'>Name of the formula</label>"
+        "<input name='f_name' placeholder='e.g. Conversion' autocomplete='off'>"
+        f"<label class='att-lbl'>Aggregation (required)</label><select name='f_agg'>"
+        f"<option value=''>{_e(t('catalogus.koppelen.kies'))}</option>{agg_opts}</select>"
+        "<p class='muted kc-hint'>A formula computes live over the two indicators (calculation follows).</p></div>")
 
     step4_inner = (f"<input type='hidden' name='node' value='{_e(node_id)}'>") if not standalone else (
         "<select name='node'>" + "".join(
             f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>"
             for r in st.records.all() if not getattr(r, "archived", False)) + "</select>"
-        "<p class='muted kc-hint'>Losstaande start — kies waar de KPI komt.</p>")
+        "<p class='muted kc-hint'>Standalone start — pick where the KPI goes.</p>")
 
     form = (f"<form method='post' action='/action' class='kc-form'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='next' value='{back}'>"
             f"<input type='hidden' name='target' value=''>"
-            + step("1", "Wat je meet", step1)
-            + step("2", "Referentie (de vergelijking)",
-                   "<label class='kc-radio'><input type='radio' name='ref_kind' value='' checked> geen — alleen volgen</label>"
+            + step("1", "What you measure", step1)
+            + step("2", "Reference (the comparison)",
+                   "<label class='kc-radio'><input type='radio' name='ref_kind' value='' checked> none — just follow it</label>"
                    "<label class='kc-radio'><input type='radio' name='ref_kind' value='benchmark'> benchmark</label>"
                    "<div class='kc-cond' data-for='benchmark' hidden>"
-                   "<input name='bench_target' inputmode='decimal' placeholder='benchmark-waarde (bijv. 13.6)' autocomplete='off'>"
-                   "<p class='muted kc-hint'>Later koppelbaar aan de kennisbank. Nu de vergelijkwaarde.</p></div>"
-                   "<label class='kc-radio'><input type='radio' name='ref_kind' value='doel'> doel (project)</label>"
+                   "<input name='bench_target' inputmode='decimal' placeholder='benchmark value (e.g. 13.6)' autocomplete='off'>"
+                   "<p class='muted kc-hint'>Linkable to the knowledge base later. For now the comparison value.</p></div>"
+                   "<label class='kc-radio'><input type='radio' name='ref_kind' value='doel'> goal (project)</label>"
                    f"<div class='kc-cond' data-for='doel' hidden><select name='goal_pid'>{proj_opts}</select>"
-                   "<input name='doel_target' inputmode='decimal' placeholder='streefwaarde (bijv. 1000)' autocomplete='off'></div>")
-            + step("3", "Standaard weergave (volgt de aard, niet bindend)",
+                   "<input name='doel_target' inputmode='decimal' placeholder='target value (e.g. 1000)' autocomplete='off'></div>")
+            + step("3", "Default display (follows the nature, not binding)",
                    "<select name='form'><option value=''>—</option></select>"
-                   "<p class='muted kc-hint kc-tufte'>Kies eerst een indicator; de weergaves die bij de "
-                   "aard passen verschijnen dan.</p>")
+                   "<p class='muted kc-hint kc-tufte'>Pick an indicator first; the displays that fit its "
+                   "nature appear then.</p>")
             + step4_inner
-            + "<button class='btn ok' type='submit' name='action' value='tile_add' disabled>Kies eerst een indicator</button></form>")
-    main = (f"<div class='c2-main'><div class='c2-bar'><a href='{back}'>← terug</a></div>"
-            f"<h1>KPI maken <span class='chip'>focus</span></h1>{_banner(msg)}"
-            f"<p class='muted'>Een KPI is alleen de definitie van wat je meet. Periode en weergave kies "
-            f"je op het dashboard.</p>"
+            + "<button class='btn ok' type='submit' name='action' value='tile_add' disabled>Pick an indicator first</button></form>")
+    main = (f"<div class='c2-main'><div class='c2-bar'><a href='{back}'>← back</a></div>"
+            f"<h1>Create KPI <span class='chip'>focus</span></h1>{_banner(msg)}"
+            f"<p class='muted'>A KPI is only the definition of what you measure. Period and display you "
+            f"choose on the dashboard.</p>"
             f"<div class='c2-sec'>{form}</div></div>")
     inner = (f"{_DS_LINK}"
              f"{_nav()}"
              f"<div class='c2-wrap'>{main}</div>{_KPI_COMPOSER_JS}")
-    return _page("KPI maken", inner)
+    return _page("Create KPI", inner)
 
 
 _KPI_COMPOSER_JS = """<script>
@@ -2040,18 +2042,18 @@ _KPI_COMPOSER_JS = """<script>
  // stap 3 — Tufte-beslistabel: de passende vormen per aard × referentie. De eerste is de aanbevolen
  // (voorgeselecteerd), met de reden als microcopy. Dit is de ENIGE plek die de vorm van een tegel bepaalt.
  var VORMEN={
-  'reeks|0':[{v:'trend',l:'Trend (lijn)',t:'een reeks over tijd lees je het snelst als één lijn.'},
-             {v:'staaf',l:'Staaf',t:'losse periodes naast elkaar zetten? staven.'},
-             {v:'getal',l:'Getal',t:'alleen de samengevatte waarde, zonder ruis.'}],
-  'reeks|1':[{v:'bullet',l:'Bullet (waarde vs doel)',t:'waarde tegen de doellijn in één balk (Few).'},
-             {v:'trend',l:'Trend (lijn)',t:'de reeks over tijd als lijn.'},
-             {v:'getal',l:'Getal',t:'de samengevatte waarde.'}],
-  'moment|0':[{v:'getal',l:'Getal',t:'een momentopname is per definitie één getal.'}],
-  'moment|1':[{v:'getal',l:'Getal',t:'een momentopname is per definitie één getal.'}],
-  'categorie|0':[{v:'gestapeld',l:'Gestapelde staaf',t:'deel-op-geheel in één gestapelde staaf.'},
-                 {v:'horizontaal',l:'Horizontale balk',t:'veel categorieën? horizontale balken, gesorteerd.'}],
-  'categorie|1':[{v:'gestapeld',l:'Gestapelde staaf',t:'deel-op-geheel in één gestapelde staaf.'},
-                 {v:'horizontaal',l:'Horizontale balk',t:'veel categorieën? horizontale balken, gesorteerd.'}]
+  'reeks|0':[{v:'trend',l:'Trend (line)',t:'a series over time reads fastest as one line.'},
+             {v:'staaf',l:'Bars',t:'putting separate periods side by side? bars.'},
+             {v:'getal',l:'Number',t:'just the summarised value, no noise.'}],
+  'reeks|1':[{v:'bullet',l:'Bullet (value vs goal)',t:'value against the goal line in one bar (Few).'},
+             {v:'trend',l:'Trend (line)',t:'the series over time as a line.'},
+             {v:'getal',l:'Number',t:'the summarised value.'}],
+  'moment|0':[{v:'getal',l:'Number',t:'a snapshot is by definition one number.'}],
+  'moment|1':[{v:'getal',l:'Number',t:'a snapshot is by definition one number.'}],
+  'categorie|0':[{v:'gestapeld',l:'Stacked bar',t:'part-to-whole in one stacked bar.'},
+                 {v:'horizontaal',l:'Horizontal bars',t:'many categories? horizontal bars, sorted.'}],
+  'categorie|1':[{v:'gestapeld',l:'Stacked bar',t:'part-to-whole in one stacked bar.'},
+                 {v:'horizontaal',l:'Horizontal bars',t:'many categories? horizontal bars, sorted.'}]
  };
  var curAard='';
  function ref(){var r=f.querySelector('[name=ref_kind]:checked'); return r?r.value:'';}
@@ -2079,7 +2081,7 @@ _KPI_COMPOSER_JS = """<script>
    var cat=c.dataset.cat;
    if(empty) empty.hidden=true;
    if(picked) picked.hidden=false;
-   if(pickLbl) pickLbl.textContent=cat+' — kies een indicator';
+   if(pickLbl) pickLbl.textContent=cat+' — pick an indicator';
    if(search){ search.hidden=(countCat(cat)<=8); search.value=''; }
    filter(cat,'');
  });});
@@ -2096,9 +2098,9 @@ _KPI_COMPOSER_JS = """<script>
  }
 
  function syncBtn(){
-   if(modeInp.value==='formule'){ btn.disabled=false; btn.textContent='Maak KPI — formule'; return; }
+   if(modeInp.value==='formule'){ btn.disabled=false; btn.textContent='Create KPI — formula'; return; }
    var r=f.querySelector('.kc-metric input:checked');
-   btn.disabled=!r; btn.textContent = r ? 'Maak KPI' : 'Kies eerst een indicator';
+   btn.disabled=!r; btn.textContent = r ? 'Create KPI' : 'Pick an indicator first';
  }
 
  // stap 3: herbereken de vorm-opties zodra aard (gekozen indicator) of referentie wijzigt.
@@ -2108,14 +2110,14 @@ _KPI_COMPOSER_JS = """<script>
  }
  function syncVorm(){
    if(!curAard){ formSel.innerHTML="<option value=''>—</option>";
-     if(tufteEl) tufteEl.textContent='Kies eerst een indicator; de weergaves die bij de aard passen verschijnen dan.';
+     if(tufteEl) tufteEl.textContent='Pick an indicator first; the displays that fit its nature appear then.';
      return; }
    var list=VORMEN[curAard+'|'+(ref()?1:0)]||VORMEN['reeks|0'];
    var keep=formSel.value, has=false;
    formSel.innerHTML='';
    list.forEach(function(o,i){
      var opt=document.createElement('option');
-     opt.value=o.v; opt.textContent=o.l+(i===0?' — aanbevolen':''); opt.dataset.t=o.t;
+     opt.value=o.v; opt.textContent=o.l+(i===0?' — recommended':''); opt.dataset.t=o.t;
      formSel.appendChild(opt); if(o.v===keep) has=true;
    });
    formSel.value = has ? keep : list[0].v;      // behoud een nog-geldige keuze, anders de aanbevolen

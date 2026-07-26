@@ -55,7 +55,7 @@ def test_secretary_check_dubbel_in_dezelfde_rol(tmp_path):
             "change": {"add_accountabilities": ["Volgen van de markt en trends"]},
             "reason": "t", "by": "founder", "title": "t"}
     issues = secretary_check(item, recs)
-    assert any("heeft al een vergelijkbare accountability" in i["msg"] for i in issues)
+    assert any("already has a similar accountability" in i["msg"] for i in issues)
 
 
 def test_amend_with_reaction_hele_rol_diff_en_failclosed():

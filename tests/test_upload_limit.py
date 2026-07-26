@@ -42,7 +42,7 @@ def test_te_groot_bestand_geeft_413(monkeypatch):
 
 def test_leeg_of_ontbrekend_bestand_geeft_400():
     limit = _upload_max_bytes()
-    assert _upload_error({}, limit) == ("Geen bestand geselecteerd", 400)          # geen file-veld
+    assert _upload_error({}, limit) == ("No file selected", 400)          # geen file-veld
     assert _upload_error({"file": ("", b"")}, limit)[1] == 400                     # lege filename+blob
     assert _upload_error({"file": ("naam.pdf", b"")}, limit)[1] == 400             # filename maar lege blob
 
