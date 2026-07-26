@@ -333,7 +333,7 @@ def test_bordresultaat_bij_nul_toont_waar_het_al_ligt():
     html = render_bordresultaat({"aangemaakt": [], "overgeslagen": 2,
                                  "lopend": [{"soort": "werklijst", "nr": 1, "titel": "planet-safe"},
                                             {"soort": "taak", "pid": "p9", "titel": "oude taak"}]})
-    assert "0 nieuw" in html
+    assert "0 new" in html
     assert "/claims?tab=werklijst" in html and "/project?pid=p9" in html
 
 
@@ -505,16 +505,16 @@ def test_rapport_toont_escaleren_apart_en_met_bron():
     uitslag = claims_db.check_tekst("Onze pure schoenen")
     html = render_rapport(uitslag, db=claims_db.load())
     assert "chip outline" in html                                   # eigen, kleurloze weergave
-    assert "te beoordelen" in html
-    assert "telt niet mee" in html                                  # de score wordt uitgelegd
-    assert "bron C" in html
+    assert "to be judged" in html
+    assert "do not count" in html                                  # de score wordt uitgelegd
+    assert "source C" in html
     assert "style=" not in html
 
 
 def test_bron_badge_draagt_de_onderbouwing_als_tooltip():
     from nooch_village.views.claims import bron_badge
     badge = bron_badge({"bron": "A", "bron_detail": "Bijlage I punt 4a"})
-    assert "bron A" in badge and "Bijlage I punt 4a" in badge
+    assert "source A" in badge and "Bijlage I punt 4a" in badge
     assert bron_badge({"bron": ""}) == ""
 
 

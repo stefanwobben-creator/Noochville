@@ -161,4 +161,4 @@ def test_database_tab_toont_intrek_knop_alleen_voor_curator(tmp_path, monkeypatc
     zonder = render_claims(csrf_token="t", tab="database", kan_cureren=False, data_dir=dd)
     assert "claims_term_retract" not in zonder
     met = render_claims(csrf_token="t", tab="database", kan_cureren=True, data_dir=dd)
-    assert "claims_term_retract" in met and "Intrekken" in met
+    assert "claims_term_retract" in met and "Retract" in met

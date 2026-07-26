@@ -28,7 +28,7 @@ def test_meetings_alleen_op_cirkels(tmp_path):
 def test_root_overview(tmp_path):
     st = _st(tmp_path)
     page = cockpit2.render_node(st, "mother_earth", "overview")
-    assert "Mother Earth" in page and "cirkel" in page
+    assert "Mother Earth" in page and "circle" in page
     assert "support and protect all forms of life" in page
     # tabs aanwezig met status-stippen
     assert "Overview" in page and "Members" in page and "Metrics" in page

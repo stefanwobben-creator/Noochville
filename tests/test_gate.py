@@ -53,7 +53,7 @@ class TestG0:
         passed, gate_name, reason = gate.check(p, records_with_root)
         assert not passed
         assert gate_name == "G0"
-        assert "herhalingsbewijs" in reason
+        assert "evidence of repetition" in reason
 
     def test_add_role_met_herhalingsbewijs_passeert_g0(self, records_with_root):
         p = _make_proposal(
@@ -73,7 +73,7 @@ class TestG0:
         passed, gate_name, reason = gate.check(p, records_with_root)
         assert not passed
         assert gate_name == "G0"
-        assert "verplichte velden" in reason
+        assert "required fields" in reason
 
     def test_amend_role_zonder_role_id_faalt(self, records_with_root):
         p = _make_proposal(
@@ -205,7 +205,7 @@ class TestG3:
         # De gate claimt niet dat het werk nergens belegd is; dat zou een leugen zijn.
         assert "nergens elders belegd zijn" not in reason
         # De gate geeft wél aan waarom menselijk oordeel nodig is.
-        assert "menselijke beoordeling" in reason
+        assert "human judgement" in reason
 
     def test_remove_role_zonder_accountabilities_passeert_g3(self, records_with_root):
         """REMOVE_ROLE van een rol zonder accountabilities brengt geen verweesd werk mee."""

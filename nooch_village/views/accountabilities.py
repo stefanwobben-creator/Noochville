@@ -26,7 +26,7 @@ def roles_with_accountabilities(st) -> list[dict]:
 
 def _dup_block(dups: list) -> str:
     if not dups:
-        return "<p class='muted'>Geen dubbelingen gevonden.</p>"
+        return "<p class='muted'>No duplicates found.</p>"
     rows = []
     for d in dups:
         roles = "".join(f"<span class='chip amber'>{_e(str(r))}</span>" for r in (d.get("roles") or []))
@@ -38,11 +38,11 @@ def _dup_block(dups: list) -> str:
 
 def _weak_block(weak: list) -> str:
     if not weak:
-        return "<p class='muted'>Geen zwak geformuleerde accountabilities gevonden.</p>"
+        return "<p class='muted'>No weakly worded accountabilities found.</p>"
     rows = []
     for w in weak:
         rows.append(f"<div class='card'><div class='rdr-meta'><span class='chip'>{_e(str(w.get('role', '')))}</span></div>"
-                    f"<div class='muted'>nu: {_e(str(w.get('accountability', '')))}</div>"
+                    f"<div class='muted'>now: {_e(str(w.get('accountability', '')))}</div>"
                     f"<div class='rdr-sig'>→ {_e(str(w.get('herformulering', '')))}</div>"
                     f"<div class='muted'>{_e(str(w.get('waarom', '')))}</div></div>")
     return "".join(rows)
@@ -71,17 +71,17 @@ def render_accountabilities(st, data_dir: str, csrf_token: str = "") -> str:
         knop = (f"<form method='post' action='/action' class='emo-f'>"
                 f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
                 f"<input type='hidden' name='next' value='/accountabilities'>"
-                f"<button class='btn ok sm' name='action' value='acc_check'>Check uitvoeren</button></form>")
+                f"<button class='btn ok sm' name='action' value='acc_check'>Run check</button></form>")
     result_block = ""
     if res:
-        result_block = (f"<h2>Dubbelingen ({len(res.get('duplicates') or [])})</h2>{_dup_block(res.get('duplicates') or [])}"
-                        f"<h2>Formulering ({len(res.get('weak') or [])})</h2>{_weak_block(res.get('weak') or [])}")
-    main = (f"<div class='c2-main'><div class='cl-head'><h1>Accountability-check</h1>"
+        result_block = (f"<h2>Duplicates ({len(res.get('duplicates') or [])})</h2>{_dup_block(res.get('duplicates') or [])}"
+                        f"<h2>Wording ({len(res.get('weak') or [])})</h2>{_weak_block(res.get('weak') or [])}")
+    main = (f"<div class='c2-main'><div class='cl-head'><h1>Accountability check</h1>"
             f"<span class='kc-actions'>{knop}</span></div>"
-            f"<p class='muted'>Controleert alle {len(roles)} rollen met accountabilities op dubbele "
-            f"verantwoordelijkheden en zwakke formulering. Draai de check om een verse analyse te maken.</p>"
+            f"<p class='muted'>Checks all {len(roles)} roles with accountabilities for duplicate "
+            f"responsibilities and weak wording. Run the check for a fresh analysis.</p>"
             f"{result_block}"
-            f"<h2>Alle accountabilities per rol</h2>{_roles_overview(roles)}</div>")
+            f"<h2>All accountabilities per role</h2>{_roles_overview(roles)}</div>")
     inner = (f"{_DS_LINK}{_nav()}"
              f"<div class='c2-wrap'>{main}</div>")
-    return _page("Accountability-check", inner)
+    return _page("Accountability check", inner)

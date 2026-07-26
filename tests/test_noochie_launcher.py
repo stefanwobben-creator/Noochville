@@ -21,7 +21,7 @@ def test_venster_opent_met_eerste_vraag(tmp_path):
     dd = _dd(tmp_path)
     frag = cockpit2.render_noochie(cockpit2._Stores(dd), csrf="t")
     # opent met de eerste triage-vraag (spanning), niet een open 'hoe kan ik helpen'
-    assert "noo-win" in frag and "Noochie" in frag and "welke spanning" in frag.lower()
+    assert "noo-win" in frag and "Noochie" in frag and "which tension" in frag.lower()
     assert "noochie_send" in frag
 
 
@@ -53,11 +53,11 @@ def test_context_chip_human_gated(tmp_path):
     dd = _dd(tmp_path)
     # zonder committed context: aanbod om het scherm mee te nemen
     frag = cockpit2.render_noochie(cockpit2._Stores(dd), csrf="t", screen_ctx="Voorstel X")
-    assert "neem dit scherm mee" in frag and "Voorstel X" in frag
+    assert "include this screen" in frag and "Voorstel X" in frag
     # human zet context aan -> chip 'leest: X'
     cockpit2.dispatch(dd, "noochie_ctx", {"ctx": ["Voorstel X"], "next": ["/"]})
     frag2 = cockpit2.render_noochie(cockpit2._Stores(dd), csrf="t")
-    assert "leest: Voorstel X" in frag2
+    assert "reading: Voorstel X" in frag2
     # en weer weghalen
     cockpit2.dispatch(dd, "noochie_ctx", {"ctx": [""], "next": ["/"]})
     assert cockpit2._Stores(dd).noochie.ctx == ""

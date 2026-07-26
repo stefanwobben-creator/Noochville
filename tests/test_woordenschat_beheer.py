@@ -72,12 +72,12 @@ def _render(tmp_path, csrf="", observaties=None):
 
 def test_render_met_csrf_toont_secties_en_knoppen(tmp_path):
     html = _render(tmp_path, csrf="tok123")
-    assert "Geëscaleerd (wacht op jouw oordeel)" in html and "No-follow list" in html
+    assert "Escalated (awaiting your verdict)" in html and "No-follow list" in html
     assert "animal sneakers" in html and "verboden woord" in html
     assert "past niet bij de missie" in html and "2026-07-03" in html   # rationale + datum
     for actie in ("ws_forbid", "ws_approve"):                # knoppen posten /action
         assert f"value='{actie}'" in html
-    assert "heractiveer" in html and "tok123" in html   # via de button-title
+    assert "reactivate" in html and "tok123" in html   # via de button-title
     # bewust GEEN toggle- of pauzeerknoppen meer (versimpeling)
     assert "ws_func" not in html and "ws_pause" not in html
 
@@ -97,12 +97,12 @@ def test_trend_sparkline_uit_gsc_reeks(tmp_path):
     html = _render(tmp_path, csrf="tok123", observaties=obs)
     assert "Trend" in html
     assert "class='spark'" in html                        # sparkline-SVG voor earth shoes
-    assert "GSC-impressies 2026-07-10" in html            # tooltip met datumbereik
+    assert "GSC impressions 2026-07-10" in html            # tooltip met datumbereik
 
 
 def test_trend_zonder_reeks_toont_streepje(tmp_path):
     html = _render(tmp_path, csrf="tok123")
-    assert "nog geen GSC-reeks" in html
+    assert "no GSC series yet" in html
 
 
 # ── nieuw-ster, ingeklapte verboden-lijst en nominatie-wachtrij ──────────────
@@ -116,7 +116,7 @@ def test_nieuw_woord_krijgt_first_seen_en_ster(tmp_path):
     curate_library_term(lib, "vegan sneakers dames", "approved", reason="opnieuw")
     assert lib.status("vegan sneakers dames")["first_seen"] == e["first_seen"]
     html = render_woordenschat(str(tmp_path), csrf_token="tok")
-    assert "★ nieuw" in html and "nieuw in de Library sinds" in html
+    assert "★ new" in html and "new in the Library since" in html
     # ouder dan 28 dagen → geen ster
     import json as _json, os as _os
     path = _os.path.join(str(tmp_path), "library.json")
@@ -142,9 +142,9 @@ def test_nominatie_wachtrij_op_woordenschat(tmp_path):
     with open(_os.path.join(str(tmp_path), "library.json"), "w", encoding="utf-8") as f:
         _json.dump(_LIB, f)
     html = render_woordenschat(str(tmp_path), csrf_token="tok", can_decide=True)
-    assert "Genomineerd (wacht op jouw oordeel)" in html and "hemp sneakers" in html
+    assert "Nominated (awaiting your verdict)" in html and "hemp sneakers" in html
     assert "value='kw_nom_accept'" in html and "value='kw_nom_reject'" in html
     # zonder beslisrecht: wachtrij zichtbaar, geen knoppen
     html_ro = render_woordenschat(str(tmp_path), csrf_token="tok", can_decide=False)
-    assert "alleen de Librarian-vervuller beslist" in html_ro
+    assert "only the Librarian role filler decides" in html_ro
     assert "kw_nom_accept" not in html_ro

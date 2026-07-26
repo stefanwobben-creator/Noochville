@@ -20,7 +20,7 @@ def test_strategie_bullets_onder_kop_strategie(tmp_path):
         "**Adapt or Exit:** Evolve with changes or fail.",
     ]})
     html = _strategy_tab_html(st, st.records.get("mother_earth"), with_purpose_chain=False)
-    assert "<h3>Strategie</h3>" in html
+    assert "<h3>Strategy</h3>" in html
     assert "<strong>Recycle Everything:</strong> Close all loops" in html   # titel bold, uitleg gewoon
     assert "Adapt or Exit" in html
     # geen eigen sub-koppen (Principles/Beliefs) en geen placeholders bij een bullets-only entry

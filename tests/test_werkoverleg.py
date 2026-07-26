@@ -200,7 +200,7 @@ def test_noochie_hulp_context_opener(tmp_path):
     dd = _dd(tmp_path)
     # render_noochie met schermcontext (de spanning) opent met 'Heb je hulp nodig bij ...'
     frag = cockpit2.render_noochie(cockpit2._Stores(dd), csrf="t", screen_ctx="Checkout hapert")
-    assert "Heb je hulp nodig bij Checkout hapert?" in frag
+    assert "Do you need help with Checkout hapert?" in frag
 
 
 def test_projecten_stap_geen_losse_add(tmp_path):

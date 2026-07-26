@@ -72,10 +72,10 @@ def _purpose_chain(st: "_Stores", rec) -> str:
         c = by_id.get(cid)
         if c is None or not org.is_circle(c):
             continue
-        purpose = getattr(c.definition, "purpose", "") or "(geen purpose)"
+        purpose = getattr(c.definition, "purpose", "") or "(no purpose)"
         rows += (f"<div style='margin:.4rem 0;padding-left:.7rem;border-left:2px solid var(--border)'>"
                  f"<b>{_e(_name(c))}</b><div class='muted' style='white-space:pre-wrap'>{_e(purpose)}</div></div>")
-    return _sec("Purpose (geërfde keten)", rows)
+    return _sec("Purpose (inherited chain)", rows)
 
 
 def _tone_of_voice(tov: dict) -> str:
@@ -112,13 +112,13 @@ def _honest_constraints(hc: dict) -> str:
 def _strategy_tab_html(st: "_Stores", rec, with_purpose_chain: bool = True) -> str:
     strat = st.strategies.get(rec.id)
     if not strat:
-        return ("<div class='c2-sec'><h3>Strategie</h3>"
-                "<p class='muted'>Geen strategie gedefinieerd voor deze cirkel.</p></div>")
+        return ("<div class='c2-sec'><h3>Strategy</h3>"
+                "<p class='muted'>No strategy defined for this circle.</p></div>")
 
     # In de overview-tab staat de Purpose er al boven → chain overslaan (geen dubbeling).
     out = _purpose_chain(st, rec) if with_purpose_chain else ""
     # Simpele strategie-bullets onder de gewone kop "Strategie" (bv. de Mother-Earth-principes).
-    out += _sec("Strategie", _bullets(strat.get("strategy")))
+    out += _sec("Strategy", _bullets(strat.get("strategy")))
     out += _sec("Core sentence", _text(strat.get("core_sentence")))
     out += _sec("Vision", _text(strat.get("vision")))
     out += _sec("Mission", _text(strat.get("mission")))
@@ -135,8 +135,8 @@ def _strategy_tab_html(st: "_Stores", rec, with_purpose_chain: bool = True) -> s
     if _rich:
         # Placeholder (dynamisch blok 2a): woordkeuze-bewijs leeft in de kennisbank
         out += _sec("Words that require evidence",
-                    "<p class='muted'>Deze lijst wordt onderhouden in de kennisbank door "
-                    "Lara the Librarian. Integratie komt later.</p>")
+                    "<p class='muted'>This list is maintained in the knowledge base by "
+                    "Lara the Librarian. Integration comes later.</p>")
     out += _honest_constraints(strat.get("honest_constraints"))
     out += _sec("Non-negotiables", _named_items(strat.get("non_negotiables")))
     out += _sec("Do", _grouped(strat.get("do_list"), _DO_LABELS))
@@ -144,10 +144,10 @@ def _strategy_tab_html(st: "_Stores", rec, with_purpose_chain: bool = True) -> s
     if _rich:
         # Placeholder (dynamisch blok 2b): kwartaaldoelen leven op het projectbord
         out += _sec("Current focus",
-                    "<p class='muted'>Quarterly goals worden beheerd in NoochVille projectbord. "
-                    "Zie de projects-tab van deze cirkel.</p>")
+                    "<p class='muted'>Quarterly goals are managed on the NoochVille project board. "
+                    "See the projects tab of this circle.</p>")
     ver, upd = strat.get("version"), strat.get("updated_at")
     if ver is not None or upd:
         out += (f"<p class='muted' style='font-size:.78rem;margin-top:.8rem'>"
-                f"versie {_e(str(ver))} · bijgewerkt {_e(str(upd))}</p>")
+                f"version {_e(str(ver))} · updated {_e(str(upd))}</p>")
     return out
