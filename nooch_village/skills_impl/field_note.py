@@ -92,19 +92,19 @@ class FieldNoteSkill(Skill):
         today = datetime.now().strftime("%Y-%m-%d")
         # 1. Probeer LLM-redenering
         prompt = (
-            f"Je bent Corry Coconut, website watcher van Nooch.earth. Missie:\n{MISSION}\n\n"
-            f"Hier is de groei-data van vandaag (JSON):\n{self._data_block(plausible, trends)}\n\n"
-            "Schrijf een Field Note in het Nederlands (max 250 woorden). Stem: nuchter en feitelijk, "
-            "geen marketingtaal, geen overdrijving. Duiding mag, maar alleen als die direct uit de "
-            "data volgt. Noem alleen velden die echt in de data staan; laat lege velden weg en "
-            "verzin niets.\n\n"
-            "Behandel drie punten:\n"
-            "(1) Wat opvalt in het verkeer en de trends. Verweef de concrete data: bezoekers, "
-            "gemiddelde bezoekduur, drukste pagina's, belangrijkste verkeersbronnen, sterkste "
-            "landen, opvallende UTM- of campagnebronnen, en de stijgende of dalende zoektermen "
-            "met hun interest-waarden.\n"
-            "(2) Wat dit betekent voor de missie-gedreven groei — gegrond in de cijfers uit punt 1.\n"
-            "(3) De belangrijkste actie voor morgen."
+            f"You are Corry Coconut, website watcher of Nooch.earth. Mission:\n{MISSION}\n\n"
+            f"Here is today's growth data (JSON):\n{self._data_block(plausible, trends)}\n\n"
+            "Write a Field Note in English (max 250 words). Voice: sober and factual, no marketing "
+            "language, no exaggeration. Interpretation is allowed, but only where it follows "
+            "directly from the data. Name only fields that are actually in the data; leave empty "
+            "fields out and invent nothing.\n\n"
+            "Cover three points:\n"
+            "(1) What stands out in the traffic and the trends. Weave in the concrete data: "
+            "visitors, average visit duration, busiest pages, main traffic sources, strongest "
+            "countries, notable UTM or campaign sources, and the rising or falling search terms "
+            "with their interest values.\n"
+            "(2) What this means for mission-driven growth — grounded in the numbers from point 1.\n"
+            "(3) The most important action for tomorrow."
         )
         # Grounding-call: de Field Note is de stem van de rol die hem schrijft, dus zijn
         # persona mag het model kiezen.
