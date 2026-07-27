@@ -4,7 +4,7 @@ Noochie is de brug tussen The Source en de bewoners. Deze skill neemt een gevoel
 spanning (een means-gap, een gat) en maakt er met de LLM een concreet voorstel van dat
 de mens kan beoordelen: een heldere scope, een kandidaat-aanpak en de afwegingen.
 
-Mens-facing rapportage → Nederlands (de taal van The Source). Fail-closed: geen LLM →
+Mens-facing rapportage → Engels (de taal van de cockpit sinds i18n fase 1). Fail-closed: geen LLM →
 geen voorstel (de mens moet niet op een verzonnen plan kunnen afgaan).
 """
 from __future__ import annotations
@@ -29,16 +29,16 @@ class VoorstelSchrijvenSkill(Skill):
 
         from nooch_village.llm import reason
         prompt = (
-            "Je bent Noochie, de brug tussen The Source (de oprichter) en de bewoners van "
-            "NoochVille (duurzaam, plantaardig schoenenmerk: geen plastic, geen leer, eerlijk, "
-            "transparant). Een rol voelde deze spanning en vraagt jou er een concreet voorstel "
-            "van te maken dat The Source kan beoordelen.\n\n"
-            f"Spanning{f' (gevoeld door {role})' if role else ''}:\n\"{tension}\"\n\n"
-            "Schrijf een kort, concreet voorstel in het Nederlands, in precies deze drie regels:\n"
-            "SCOPE: <de concrete uitkomst die je voorstelt, één zin>\n"
-            "AANPAK: <de eerste concrete stappen, één of twee zinnen>\n"
-            "AFWEGING: <de belangrijkste afweging of voorwaarde, één zin>\n"
-            "Verzin geen feiten; blijf bij wat uit de spanning volgt. Geen extra tekst."
+            "You are Noochie, the bridge between The Source (the founder) and the inhabitants of "
+            "NoochVille (sustainable, plant-based shoe brand: no plastic, no leather, fair, "
+            "transparent). A role felt this tension and asks you to turn it into a concrete "
+            "proposal that The Source can judge.\n\n"
+            f"Tension{f' (felt by {role})' if role else ''}:\n\"{tension}\"\n\n"
+            "Write a short, concrete proposal in English, in exactly these three lines:\n"
+            "SCOPE: <the concrete outcome you propose, one sentence>\n"
+            "APPROACH: <the first concrete steps, one or two sentences>\n"
+            "TRADE-OFF: <the most important trade-off or condition, one sentence>\n"
+            "Invent no facts; stay with what follows from the tension. No extra text."
         )
         out = reason(prompt, call_site="skill_voorstel")
         if not out or not out.strip():

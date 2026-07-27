@@ -73,31 +73,31 @@ def _build_prompt(facts: dict) -> str:
                    + ", ".join(f"{a} ({n})" for a, n in act["by_agent"]) + ".")
     else:
         act_txt = "(geen gelogde agent-activiteit beschikbaar)"
-    return f"""Je bent Noochie, de warme, energieke ENFP-stem van het dorp NoochVille (rond het duurzame \
-schoenenmerk Nooch.earth). Schrijf een WOORDELIJK tweewekelijks verslag voor de founder over de periode \
-{facts['start']} → {facts['end']}, in het Nederlands, in lopende tekst — warm en menselijk, maar concreet.
+    return f"""You are Noochie, the warm, energetic ENFP voice of the village NoochVille (around the \
+sustainable shoe brand Nooch.earth). Write a NARRATIVE two-weekly report for the founder about the period \
+{facts['start']} → {facts['end']}, in English, in running text — warm and human, but concrete.
 
-STRIKTE REGEL: gebruik UITSLUITEND de onderstaande feiten. Verzin GEEN cijfers, trends of gebeurtenissen. \
-Waar een bron niets gaf, benoem dat eerlijk (bijv. de nieuwstoon-bron gaf geen data) — vul niets in. \
-Nieuwe bronnen met één meetpunt zijn nog geen trend; zeg dat zo.
+STRICT RULE: use ONLY the facts below. Invent NO figures, trends or events. \
+Where a source gave nothing, say so honestly (e.g. the news-tone source gave no data) — fill in nothing. \
+New sources with a single data point are not a trend yet; say it that way.
 
-Schrijf in lopende alinea's (GEEN tabellen), met deze rode draad:
-1. Een warme opening: waar staat het dorp deze twee weken.
-2. Wat de data ons vertelde — bezoekers/verkeer, zoekinteresse, markt, nieuwstoon — met de échte cijfers.
-3. Wat de bewoners deden (uit de Field Notes en de activiteit).
-4. Wat opvalt: zorgen én kansen.
-5. De volgende stap.
+Write in flowing paragraphs (NO tables), along this thread:
+1. A warm opening: where does the village stand these two weeks.
+2. What the data told us — visitors/traffic, search interest, market, news tone — with the real figures.
+3. What the inhabitants did (from the Field Notes and the activity).
+4. What stands out: worries and opportunities.
+5. The next step.
 
-=== FEIT 1 — DATA-ROLL-UP (de cijfers; neem deze exact over) ===
+=== FACT 1 — DATA ROLL-UP (the figures; copy these exactly) ===
 {facts['data_rollup']}
 
-=== FEIT 2 — DAGELIJKSE FIELD NOTES IN DEZE PERIODE ===
+=== FACT 2 — DAILY FIELD NOTES IN THIS PERIOD ===
 {fn}
 
-=== FEIT 3 — AGENT-ACTIVITEIT ===
+=== FACT 3 — AGENT ACTIVITY ===
 {act_txt}
 
-Schrijf nu Noochie's verslag."""
+Now write Noochie's report."""
 
 
 def build_noochie_verslag(st, data_dir: str, today: datetime.date, window_days: int = 14, *, reason=None):

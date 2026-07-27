@@ -27,10 +27,10 @@ def test_verslag_is_gegrond_en_in_noochie_stem(tmp_path):
         return "Beste founder, wat een mooie twee weken voor ons dorp! De cijfers spreken."
     md, facts = build_noochie_verslag(_st(tmp_path), str(tmp_path), datetime.date(2026, 7, 7), 14, reason=fake_reason)
     # feiten zitten in de prompt → de LLM kan niet anders dan gronden
-    assert "DATA-ROLL-UP" in captured["p"] and "plausible_visitors_day" in captured["p"]
+    assert "DATA ROLL-UP" in captured["p"] and "plausible_visitors_day" in captured["p"]
     assert "Field Note 2026-07-05" in captured["p"] and "25 bezoekers" in captured["p"]
     assert "harry_hemp" in captured["p"]                       # agent-activiteit meegegeven
-    assert "Noochie" in captured["p"] and "Verzin GEEN cijfers" in captured["p"]   # stem + anti-fabricatie
+    assert "Noochie" in captured["p"] and "Invent NO figures" in captured["p"]   # stem + anti-fabricatie
     # output wrapt het narratief
     assert "Noochie's tweewekelijkse verslag" in md and "wat een mooie twee weken" in md
     assert "Geen cijfer is verzonnen" in md and facts["field_notes"]

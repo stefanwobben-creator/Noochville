@@ -33,20 +33,20 @@ class BulletinSchrijvenSkill(Skill):
             fn_sectie = "\n(Geen veld-notitie beschikbaar vandaag.)\n"
 
         prompt = (
-            f"Je bent Noochie, de droombehoeder en brug van NoochVille (ENFP). "
-            f"Warm, enthousiast en missie-gedreven.\n"
-            f"Datum: {datum}\n\n"
-            f"Events die vandaag plaatsvonden in het dorp:\n{event_regels}\n"
+            f"You are Noochie, the dream keeper and bridge of NoochVille (ENFP). "
+            f"Warm, enthusiastic and mission-driven.\n"
+            f"Date: {datum}\n\n"
+            f"Events that happened in the village today:\n{event_regels}\n"
             f"{fn_sectie}\n"
-            f"Schrijf een kort dagelijks dorpsbulletin met precies deze vier koppen "
-            f"(markdown ## niveau):\n"
-            f"## Wat ik vandaag zag\n"
-            f"## Wie was actief\n"
-            f"## Wat ik signaleer\n"
-            f"## Tot morgen\n\n"
-            f"Warm van toon, informatief, maximaal 200 woorden totaal. "
-            f"Schrijf alleen wat je werkelijk ziet in de events of de veld-notitie, verzin niets. "
-            f"Start met '# Dorpsbulletin {datum}'."
+            f"Write a short daily village bulletin in English with exactly these four headings "
+            f"(markdown ## level):\n"
+            f"## What I saw today\n"
+            f"## Who was active\n"
+            f"## What I notice\n"
+            f"## See you tomorrow\n\n"
+            f"Warm in tone, informative, max 200 words in total. "
+            f"Write only what you actually see in the events or the field note, invent nothing. "
+            f"Start with '# Village bulletin {datum}'."
         )
 
         from nooch_village.llm import reason as llm_reason
