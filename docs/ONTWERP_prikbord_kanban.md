@@ -127,3 +127,30 @@ afwezigheid), en een `board_pulse_completed`-event op de bus → `system_log.jso
 mens-gestuurd. Gevolg per 28 juli 2026: op productie heeft geen enkel project een `parent`, dus de
 puls beweegt daar nog niets. Dat is geen storing maar een lege invoerkant — de scheduler wacht op
 cluster-projecten (zoals `discovery_board.py` ze maakt).
+
+## 11. Signaal → projectvoorstel (hefboom 2, `project_proposals.py`)
+
+Het dorp mag voorstellen; de mens beslist. Een voorstel komt **nooit** vanzelf op het actieve bord.
+
+**Bronnen.** (1) Radar-signalen met status `goedgekeurd` die nog geen voorstel opleverden — het
+approve is de relevantie-poort die al gepasseerd is, dit is de lichtere tweede vraag *verdient dit
+een project?*. (2) Kroniek-gaten: de `leeg`-lijst uit `evidence_ledger.interpret()` per lopend
+onderwerp. Bron 2 staat **default uit** (`project_proposals_kroniek = 1` zet 'm aan): anders dan een
+radar-item is een kennisgat door niemand op relevantie beoordeeld, en ruis is duur.
+
+**Status `proposed`.** Buiten élke autonome lus: `activate_pulse` kijkt naar future/blocked,
+`_tend_projects` naar future/queued/running, `project_worker._eligible` naar queued/running. Het is
+ook een standalone project (`parent` leeg), wat het al buiten de puls houdt — maar de garantie is
+expliciet gemaakt en bevroren in `tests/test_proposed_veiligheid.py`, niet impliciet gelaten.
+
+**Drie ruis-remmers.** *Dedup*: elke bron-referentie die ooit een voorstel opleverde staat in de
+overlay `data/project_proposals.json`, ongeacht de afloop — ook een afgewezen (en dus verwijderd)
+voorstel komt niet terug. *Cap*: max `project_proposals_cap` (default 10) openstaande voorstellen;
+zit de baan vol, dan wordt gelogd wát is overgeslagen — nooit stil afkappen. *Formulering*:
+`wizard.sharpen_outcome` maakt er één Holacracy-uitkomst in de verleden tijd van, in het Engels.
+
+**De mens-poort** zit in de cockpit, op de projecten-tab van de rol: de baan *💡 Proposals — awaiting
+your judgement*, met per voorstel `accept` (→ root-project in TOEKOMST, normale flow, de mens
+activeert zelf) en `reject` (→ weg én onthouden). Handmatig draaien:
+`python -m nooch_village.village propose_projects`; in de daemon draait één ronde per `dag_begint`,
+naast (en na) de bord-puls uit §10.

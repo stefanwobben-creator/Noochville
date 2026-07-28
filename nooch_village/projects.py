@@ -70,7 +70,7 @@ class ProjectLedger:
                keyword: str = "") -> str:
         if trigger not in _VALID_TRIGGERS:
             raise ValueError(f"ongeldig trigger: '{trigger}'")
-        if status not in ("queued", "draft", "future"):
+        if status not in ("queued", "draft", "future", "proposed"):
             raise ValueError(f"ongeldige start-status: '{status}'")
         if missie_impact and missie_impact not in _MISSIE_IMPACT:
             raise ValueError(f"ongeldige missie_impact: '{missie_impact}'")
@@ -539,6 +539,45 @@ class ProjectLedger:
         self._maybe_reload()
         return [p for p in self._projects.values() if p.get("status") == "draft"]
 
+    # ── de voorstel-baan (status 'proposed') ───────────────────────────────────
+    # Een voorstel is GEEN project op het bord: het is een vraag aan de mens. De status staat
+    # daarom bewust buiten élke autonome lus — `activate_pulse` kijkt alleen naar future/blocked,
+    # `_tend_projects` naar future/queued/running en `project_worker._eligible` naar queued/running.
+    # Zo kan een voorstel niet stilletjes uitgevoerd, voorbereid of geactiveerd worden. De mens is
+    # de enige poort. (tests/test_proposed_veiligheid.py bevriest die garantie.)
+
+    def proposals(self) -> list[dict]:
+        """Openstaande projectvoorstellen (status proposed), nieuwste eerst."""
+        self._maybe_reload()
+        return sorted((p for p in self._projects.values()
+                       if p.get("status") == "proposed" and not p.get("archived")),
+                      key=lambda p: p.get("created_at", 0), reverse=True)
+
+    def accept_proposal(self, pid: str, *, person: str = "") -> bool:
+        """De mens neemt een voorstel aan → het wordt een gewoon standalone root-project in
+        TOEKOMST en gaat vanaf daar de normale flow in (de mens activeert het zelf; de bord-puls
+        raakt root-projecten bewust niet aan). `person` = de mens die het aanneemt (de trekker)."""
+        p = self._projects.get(pid)
+        if p is None or p.get("status") != "proposed":
+            return False
+        p["status"] = "future"
+        if person:
+            p["person"] = person
+        self._touch(p)
+        self._save()
+        return True
+
+    def reject_proposal(self, pid: str) -> bool:
+        """De mens wijst een voorstel af → weg van het bord. Dat het is afgewezen wordt onthouden
+        in de voorstel-overlay (project_proposals.py), niet hier: het project verdwijnt, de
+        herinnering blijft, zodat dezelfde bron nooit opnieuw hetzelfde voorstelt."""
+        p = self._projects.get(pid)
+        if p is None or p.get("status") != "proposed":
+            return False
+        del self._projects[pid]
+        self._save()
+        return True
+
     def record_progress(self, pid: str, note: str) -> bool:
         """Leg autonome voortgang vast: een rol heeft (omkeerbaar, met eigen skills) aan dit
         project gewerkt. Zet status queued→running, bewaart de uitkomst en markeert 'worked'
@@ -802,7 +841,8 @@ _WRITE_METHODS = (
     "create", "start", "set_due", "set_dod", "add_reaction", "attach_add", "attach_file", "attach_remove",
     "reopen", "block", "unblock", "complete", "mark_awaiting_review", "checklist_add", "checklist_remove", "check_add",
     "check_toggle", "check_remove", "set_item_offer", "accept_item_offer", "edit", "approve",
-    "discard", "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
+    "discard", "accept_proposal", "reject_proposal",
+    "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
     "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",
     "mark_formalized", "to_future", "mark_scope_nudge", "note_item_fail", "reset_item_fails",
 )

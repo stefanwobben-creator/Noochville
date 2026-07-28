@@ -1004,6 +1004,29 @@ def main() -> None:
             print("   (niets bewogen — de puls raakt alleen cluster-leden met een ACTIEVE root, "
                   "binnen de WIP-limiet. Standalone projecten blijven mens-gestuurd.)")
 
+    elif mode == "propose_projects":
+        # Signaal → projectVOORSTEL. Zet niets op het actieve bord: elk voorstel krijgt status
+        # 'proposed' en wacht op jouw oordeel in de review-baan van de cockpit.
+        import os
+        from nooch_village.config import load_context
+        from nooch_village.governance import Records
+        from nooch_village.project_proposals import generate_proposals
+        from nooch_village.projects import ProjectLedger
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        ctx.projects = ProjectLedger(os.path.join(ctx.data_dir, "projects.json"))
+        recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
+        res = generate_proposals(ctx, records=recs)
+        print(f"💡 Voorstel-ronde: {len(res['created'])} nieuw voorgesteld "
+              f"({res['open_before']} stonden er al open, cap {res['cap']}), "
+              f"{res['skipped_dedup']} al eerder beoordeeld.")
+        for c in res["created"]:
+            print(f"   · [{c['owner']}] {c['title'][:80]}")
+        for s in res["skipped_cap"]:
+            print(f"   ⏭ overgeslagen (baan vol): [{s['owner']}] {s['raw'][:70]}")
+        if res["created"]:
+            print("   Beoordeel ze in de cockpit bij de rol → Projects → 💡 Proposals.")
+
     elif mode in ("inwoner_new", "inwoner_list", "inwoner_assign"):
         # Inwoners (persona's): The Source maakt karakters aan en koppelt ze aan rollen.
         # Skills/rugzak blijven van de rol; de inwoner kleurt alleen de toon.
@@ -1326,7 +1349,7 @@ def main() -> None:
               "measure_propose | rereview | ingest | notes_remove | recurate | "
               "ground | harry_run | roster | keys | competitor | community_listening | formalize | answer_questions | "
               "ingest_governance | review_roles | teleology_review | teleology_to_roloverleg | shopify | work_projects | "
-              "board_pulse | "
+              "board_pulse | propose_projects | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde",
               file=sys.stderr)

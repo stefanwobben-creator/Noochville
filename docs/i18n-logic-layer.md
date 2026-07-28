@@ -33,7 +33,11 @@ Radar (`radar.json`, `radar_store._STATUSES`):
 | samengevoegd | merged |
 
 Project (`projects.json`) — de nog-Nederlandse waarden, naast de al-Engelse (`future`/`running`/
-`blocked`/`done`/`open`/`pending`/`queued`/`waiting`/`approved`/`rejected`):
+`blocked`/`done`/`draft`/`proposed`/`open`/`pending`/`queued`/`waiting`/`approved`/`rejected`):
+
+> `proposed` (toegevoegd 28 juli 2026) is de review-baan: het dorp stelt een project voor, de mens
+> accepteert (→ `future`) of wijst af (→ weg, en onthouden in `data/project_proposals.json`). De
+> status staat bewust buiten élke autonome lus; zie `nooch_village/project_proposals.py`.
 
 `wacht`, `aangenomen`, `bevestigd`, `agendeerd`, `gelukt`, `gemonitord`, `genegeerd`, `geëscaleerd`,
 `leeg`, `ongeldig` → kies consistente Engelse termen (bv. waiting, accepted, confirmed, scheduled,
