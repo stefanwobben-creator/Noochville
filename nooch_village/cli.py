@@ -979,6 +979,31 @@ def main() -> None:
         print(f"✅ {res['worked']} uitgevoerd, {res['blocked']} geblokkeerd (vragen jouw oordeel), "
               f"{res['skipped']} wachten op een volgende ronde. Zie het projectbord in de cockpit.")
 
+    elif mode == "board_pulse":
+        # De autonome pull-scheduler één keer draaien (dezelfde functie die de daemon op dag_begint
+        # draait). Deterministisch en WIP-gated: herhaald draaien is veilig. Standalone/root-projecten
+        # blijven mens-gestuurd — die activeert de puls bewust niet.
+        import os
+        from nooch_village.board_loop import run_board_pulse
+        from nooch_village.config import load_context
+        from nooch_village.governance import Records
+        from nooch_village.projects import ProjectLedger
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        ctx.projects = ProjectLedger(os.path.join(ctx.data_dir, "projects.json"))
+        recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
+        res = run_board_pulse(ctx, records=recs)
+        print(f"🔁 Bord-puls: {len(res['activated'])} geactiveerd, {len(res['resumed'])} hervat, "
+              f"{len(res['escalated'])} geëscaleerd naar jou "
+              f"({len(res['available_roles'])} bemenste rollen, WIP board={res['wip'].get('board')}).")
+        for k, kop in (("activated", "geactiveerd"), ("resumed", "hervat"), ("escalated", "escalatie")):
+            for pid in res[k]:
+                p = ctx.projects.get(pid) or {}
+                print(f"   · {kop}: {pid} [{p.get('owner', '?')}] {str(p.get('scope') or '')[:60]}")
+        if not (res["activated"] or res["resumed"] or res["escalated"]):
+            print("   (niets bewogen — de puls raakt alleen cluster-leden met een ACTIEVE root, "
+                  "binnen de WIP-limiet. Standalone projecten blijven mens-gestuurd.)")
+
     elif mode in ("inwoner_new", "inwoner_list", "inwoner_assign"):
         # Inwoners (persona's): The Source maakt karakters aan en koppelt ze aan rollen.
         # Skills/rugzak blijven van de rol; de inwoner kleurt alleen de toon.
@@ -1301,6 +1326,7 @@ def main() -> None:
               "measure_propose | rereview | ingest | notes_remove | recurate | "
               "ground | harry_run | roster | keys | competitor | community_listening | formalize | answer_questions | "
               "ingest_governance | review_roles | teleology_review | teleology_to_roloverleg | shopify | work_projects | "
+              "board_pulse | "
               "inwoner_new | inwoner_list | inwoner_assign | kennis_migrate | sources | shopify | backfill | backfill_dim | "
               "projects_to_signals | projects_resignal | projects_to_staging | rapport | verslag | healthcheck | sluitronde",
               file=sys.stderr)

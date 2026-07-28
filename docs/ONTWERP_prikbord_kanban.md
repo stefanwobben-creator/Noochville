@@ -100,4 +100,30 @@ projecten (één seed → één deliverable) waarvan de uitkomst automatisch de 
    review, spaced repetition, seeds-op → verzoek aan Harry. CLI: `python -m nooch_village.village
    discovery [aan]`. (`tests/test_discovery_board.py`)
 
+5. ✅ **De puls bedraad** (`board_loop.run_board_pulse`) — de scheduler hing tot 28 juli 2026 aan
+   niets: `activate_pulse` werd nergens aangeroepen. Hij hangt nu aan de BESTAANDE dagcadans
+   (`dag_begint` → `Village._on_board_pulse`), plus `python -m nooch_village.village board_pulse`
+   voor een handmatige of cron-run. Geen tweede timer. (`tests/test_board_pulse_wiring.py`)
+
 Reproduceerbaarheid: `python tools/prikbord_sim.py` (de dynamiek-stresstest).
+
+## 10. De puls: wie is beschikbaar, en waar zie je hem
+
+`available_role_ids(records, data_dir, unmanned=...)` levert de bemenste, beschikbare rol-ids:
+een niet-gearchiveerde ROL (geen cirkel — die heeft geen handen), niet onbemand volgens de
+Reconciler, met minstens één vervuller volgens `Assignments.fillers_of` (die telt de toegewezen
+lijst plus legacy `held_by`/`persona_id` mee). **Mens-vervulde rollen tellen mee als beschikbaar**:
+anders zou guardrail 3 hun future-leden wegzetten als "rol is onbemand", wat feitelijk onwaar is en
+alleen ruis oplevert. Alleen een rol zónder énige vervuller escaleert naar de mens.
+
+De WIP-limieten komen uit `config/strategy.json` (`read_wip` → `{board, roles}`) — de tempo-knop
+van de mens, niet van het dorp.
+
+Elke puls is op drie plekken zichtbaar: een systeem-regel in de feed van het geraakte project, een
+regel in `data/board_pulse.jsonl` (**ook bij 0/0/0** — stilte hoort een waarneming te zijn, geen
+afwezigheid), en een `board_pulse_completed`-event op de bus → `system_log.jsonl`.
+
+**Wat de puls bewust NIET doet:** een standalone/root-project (`parent` leeg) activeren. Dat blijft
+mens-gestuurd. Gevolg per 28 juli 2026: op productie heeft geen enkel project een `parent`, dus de
+puls beweegt daar nog niets. Dat is geen storing maar een lege invoerkant — de scheduler wacht op
+cluster-projecten (zoals `discovery_board.py` ze maakt).

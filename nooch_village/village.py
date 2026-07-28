@@ -169,12 +169,29 @@ class Village:
         self.bus.subscribe("bulletin_geschreven",         self._observe)
         self.bus.subscribe("noochie_weighed_in",          self._observe)
         self.bus.subscribe("kennis_geraadpleegd",         self._observe)   # kennis-eerst zichtbaar in system_log
+        self.bus.subscribe("board_pulse_completed",       self._observe)
+        # De bord-puls hangt aan de BESTAANDE dagcadans (dag_begint) — geen tweede timer erbij, en
+        # dus geen tweede plek waar het ritme kan verlopen. Infra-subscribe (zoals Matchmaker en
+        # Reconciler): de handler is deterministisch, doet geen netwerk-I/O en publiceert niet terug
+        # de keten in. De activaties zelf worden binnen seconden door `_poll_board` opgepakt als
+        # project_activated, zodat de eigenaar-rol in dezelfde puls aan het werk gaat.
+        self.bus.subscribe("dag_begint",                  self._on_board_pulse)
         self.coherence_observer = CoherenceObserver(self.bus)
         self.root = self.reconciler.build()
 
     def _observe(self, e: Event) -> None:
         with open(os.path.join(self.context.data_dir, "system_log.jsonl"), "a") as f:
             f.write(json.dumps({"event": e.name, **e.data}, ensure_ascii=False, default=str) + "\n")
+
+    def _on_board_pulse(self, e: Event) -> None:
+        """De autonome pull-scheduler, één keer per dagcadans. Fail-soft: een fout hier mag de
+        dagpuls (Field Note, rolwerk) nooit omvertrekken — daarom vangen we breed en loggen we."""
+        try:
+            from nooch_village.board_loop import run_board_pulse
+            run_board_pulse(self.context, records=self.records, bus=self.bus,
+                            unmanned=set(self.reconciler.unmanned))
+        except Exception as exc:      # noqa: BLE001 — de cadans is belangrijker dan deze puls
+            logging.getLogger("village.board").warning("bord-puls overgeslagen: %s", exc)
 
     def _on_escalation(self, e: Event) -> None:
         proposal_dict = e.data.get("proposal", {})
