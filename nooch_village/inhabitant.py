@@ -1365,8 +1365,8 @@ class Inhabitant(threading.Thread):
         succeeded = 0                                            # geslaagde items deze puls → één synthese-pass
         fail_reasons: dict = {}                                  # item_id → laatste foutreden (voor de hulpvraag)
         for pos, item in enumerate(cl["items"]):
-            if item.get("done"):
-                continue                                         # idempotent: reeds afgevinkt
+            if item.get("done") or item.get("skipped"):
+                continue                                         # idempotent: afgevinkt of bewust overgeslagen
             skill = item.get("skill")
             if not skill:
                 continue                                         # geen-skill-item blijft open (reden in item)
@@ -1407,8 +1407,8 @@ class Inhabitant(threading.Thread):
         ledger.mark_tended(pid, today)
         fresh_cl = self._project_checklist(ledger.get(pid)) or {}
         items = fresh_cl.get("items", [])
-        done = sum(1 for it in items if it.get("done"))
-        total = len(items)
+        from nooch_village.projects import checklist_progress
+        done, total = checklist_progress(fresh_cl)       # overgeslagen items tellen niet mee
         if total and done == total:
             # Review-gate: checklist volledig af → status 'wacht' (blocked, blocked_on='review'), NIET done.
             # De outcome-marker wordt pas bij Done-toekenning (mens sleept wacht→done) gezet. Alleen op een
@@ -1417,32 +1417,53 @@ class Inhabitant(threading.Thread):
             if not (ledger.get(pid) or {}).get("review_raised"):
                 ledger.mark_awaiting_review(pid)
                 self._synthesize_einddocument(ledger.get(pid), done, total, force_final=True)
-                ledger.add_role_message(pid, "✅ Checklist voltooid — klaar voor review.")
+                from nooch_village.projects import skipped_note
+                weg = skipped_note(fresh_cl)          # 4/4 mag niet lezen als "alles gedaan"
+                ledger.add_role_message(pid, "✅ Checklist voltooid — klaar voor review."
+                                        + (f"\n⤳ LET OP: {weg}. Dit deel van het projectdoel is "
+                                           f"NIET beantwoord." if weg else ""))
                 self.bus.publish(Event("project_awaiting_review",
                                        {"project_id": pid, "owner": self.id}, self.id))
                 self.log.info("✅ project '%s' checklist voltooid (%d/%d) — wacht op review", pid, done, total)
             return None                                          # geen autonome DONE meer
-        # Vastloop-klep: items die de retry-grens raakten → project naar WAITING (blocked) met de blokkade
-        # bovenaan, i.p.v. eeuwig op ACTIEF blijven herproberen. Zo verdwijnt het uit de actieve lane en
-        # ziet de mens wat op hem wacht; na feedback sleept hij het terug naar ACTIEF (verse pogingen, want
-        # de fail-tellers worden hier gereset — dus geen stuck-vlag nodig om herblokkeren te voorkomen).
+        # Vastloop-klep: het project gaat naar WAITING (blocked) zodra er open items zijn en GEEN ENKELE
+        # daarvan nog vooruit kan. Zo verdwijnt het uit de actieve lane (en uit de WIP-telling) en ziet de
+        # mens wat op hém wacht; na zijn antwoord sleept hij het terug naar ACTIEF (verse pogingen, want de
+        # fail-tellers worden hier gereset — dus geen stuck-vlag nodig om herblokkeren te voorkomen).
+        #
+        # De klep keek hiervóór alleen naar skill-items die hun retry-grens raakten. Een item ZONDER skill
+        # (een mens- of externe taak) kon daardoor nooit de klep halen én nooit vanzelf done worden: het
+        # project haalde done == total nooit en viel elke puls opnieuw door naar "blijft in ACTIEF" —
+        # eeuwig ACTIEF, en de belangrijkste bron van de dichtgeslibde WIP. Zolang er nog één item met
+        # resterende pogingen is blijft het project gewoon actief; pas als álles vastzit, parkeren we.
         limit = self._item_fail_limit()
-        stuck = [it for it in items
-                 if not it.get("done") and it.get("skill") and int(it.get("fails") or 0) >= limit] \
-            if limit > 0 else []
-        if stuck:
-            vraag = self._formulate_stuck_question(project, stuck, fail_reasons, limit)
+        open_items = [it for it in items if not it.get("done") and not it.get("skipped")]
+        blokkades = {it["id"]: self._blocking_reason(it, limit) for it in open_items}
+        if open_items and all(blokkades.values()):           # niemand kan nog vooruit → parkeren
+            if succeeded:
+                # Eerst de winst van déze puls vastleggen: er is echt werk opgeleverd, dat hoort in het
+                # einddocument te staan vóórdat het project op de plank gaat. Anders verliest een project
+                # dat in dezelfde puls iets afmaakt ÉN vastloopt zijn voortgang uit het document.
+                self._synthesize_einddocument(ledger.get(pid), done, total, force_final=False)
+            stuck = list(open_items)
+            mens = [it for it in stuck if blokkades[it["id"]] != "fails"]
+            faal = [it for it in stuck if blokkades[it["id"]] == "fails"]
+            vraag = self._formulate_stuck_question(project, faal, mens, fail_reasons, limit)
             ledger.add_role_message(pid, f"⏸️ {vraag}")          # de rol zet zijn concrete hulpvraag neer
-            ledger.reset_item_fails(pid, clid, [it["id"] for it in stuck])   # verse pogingen na reactivering
-            ledger.block(pid, f"vastgelopen op {len(stuck)} item(s) — wacht op antwoord")
+            ledger.reset_item_fails(pid, clid, [it["id"] for it in faal])    # verse pogingen na reactivering
+            waarop = ("wacht op een mens of externe partij" if mens and not faal
+                      else "wacht op antwoord")
+            ledger.block(pid, f"vastgelopen op {len(stuck)} item(s) — {waarop}")
             # Taak 2: zichtbaar escaleren naar de founder (heads-up, geen approve-knop). Een geblokkeerd
             # project stond tot nu toe alleen als wall-note op het bord; de founder zag het niet.
             self._notify_founder(pid, f"⏸️ Project van {self.display_name} vastgelopen op "
                                  f"{len(stuck)} item(s): {vraag}")
             self.bus.publish(Event("project_stuck",
                                    {"project_id": pid, "owner": self.id, "items": len(stuck),
+                                    "human_items": len(mens), "failed_items": len(faal),
                                     "vraag": vraag}, self.id))
-            self.log.info("⏸️ project '%s' → WAITING: %d item(s) vastgelopen na %d pogingen", pid, len(stuck), limit)
+            self.log.info("⏸️ project '%s' → WAITING: %d item(s) vast (%d mens/extern, %d bron-fout)",
+                          pid, len(stuck), len(mens), len(faal))
             return None
         if succeeded:                                            # ≥1 item geslaagd deze puls → één reguliere pass
             self._synthesize_einddocument(ledger.get(pid), done, total, force_final=False)
@@ -1450,26 +1471,68 @@ class Inhabitant(threading.Thread):
         return None
 
     def _item_fail_limit(self) -> int:
-        """Aantal mislukte pogingen op één item voordat het project naar WAITING gaat (config
-        `item_fail_limit`, default 3). ≤0 zet de klep uit (ongewijzigd, eeuwig herproberen)."""
+        """Aantal mislukte pogingen op één SKILL-item voordat het niet meer vooruit kan (config
+        `item_fail_limit`, default 3).
+
+        LET OP — de betekenis van ≤0 is per 29 juli 2026 versmald: het zet alleen de RETRY-dimensie
+        uit (skill-items blijven dan eeuwig herproberen, zoals voorheen). Het zet de vastloop-klep
+        NIET meer helemaal uit: een item dat geen enkele skill ooit kan draaien (geen skill, of een
+        onvolledige payload) blijft het project parkeren. Anders is de zombie terug die deze klep
+        juist weghaalt — eeuwig 'herproberen' van werk dat nooit wordt uitgevoerd. Zie
+        `_blocking_reason` voor de drie blokkade-redenen."""
         try:
             return int(getattr(self.context, "settings", {}).get("item_fail_limit", "3"))
         except (TypeError, ValueError):
             return 3
 
-    def _formulate_stuck_question(self, project: dict, stuck: list, reasons: dict, limit: int) -> str:
-        """De rol formuleert ÉÉN concrete, beantwoordbare hulpvraag om de blokkade op te heffen, GEGROND
-        in de echte foutredenen (niet 'het lukte niet' maar 'bron X bleef leeg op query Y'). Een mens óf
-        een andere rol kan 'm beantwoorden; het antwoord in het project brengt het weer naar ACTIEF.
-        Fail-soft: geen LLM/fout → een gegronde sjabloon-vraag met item + reden."""
+    def _blocking_reason(self, item: dict, limit: int) -> str | None:
+        """Waarom kan dit open item niet vooruit? None = het kan nog wél vooruit.
+
+          "human"  — geen skill: alleen een mens of externe partij kan dit doen;
+          "payload" — wél een skill, maar de payload is onvolledig (`payload_ok is False`), dus de
+                      uitvoer slaat 'm elke puls over: zonder mens komt hier niets van;
+          "fails"  — skill-item dat de retry-grens raakte.
+
+        `limit <= 0` zet alleen de RETRY-dimensie uit (skill-items herproberen dan eeuwig, ongewijzigd
+        gedrag). Het zet de klep niet helemaal uit: een item dat geen enkele skill ooit kan draaien
+        blijft blokkeren, want eeuwig herproberen van iets dat niemand uitvoert is precies de zombie
+        die we hier weghalen."""
+        if not item.get("skill"):
+            return "human"
+        if item.get("payload_ok") is False:
+            return "payload"
+        if limit > 0 and int(item.get("fails") or 0) >= limit:
+            return "fails"
+        return None
+
+    def _formulate_stuck_question(self, project: dict, faal: list, mens: list,
+                                  reasons: dict, limit: int) -> str:
+        """De rol formuleert ÉÉN concrete, beantwoordbare hulpvraag om de blokkade op te heffen.
+
+        Twee soorten blokkade vragen om verschillende taal, dus die worden apart geformuleerd:
+        een gefaald skill-item is GEGROND in de echte foutreden ('bron X bleef leeg op query Y'),
+        maar een item zonder skill is geen bronprobleem — daar is niets misgegaan, het vráágt gewoon
+        een mens of externe partij. Dat als 'bron bleef leeg' presenteren stuurt de mens het verkeerde
+        bos in. Fail-soft: geen LLM/fout → een gegronde sjabloon-vraag met item + reden."""
         detail = "; ".join(f"'{str(it.get('text',''))[:60]}' ({str(reasons.get(it['id'],'onbekende fout'))[:90]})"
-                           for it in stuck[:3])
-        fallback = (f"Vastgelopen na {limit} pogingen op: {detail}. Wat heb ik nodig om verder te kunnen — "
-                    f"een andere bron, een scherpere query, of jouw feedback?")
+                           for it in faal[:3])
+        mens_detail = "; ".join(f"'{str(it.get('text',''))[:80]}'" for it in mens[:3])
+        delen = []
+        if mens:
+            delen.append(f"Deze taak vereist een mens of externe partij: {mens_detail}. "
+                         f"Kun jij dit doen, is het niet meer nodig, of hoort het bij een andere rol?")
+        if faal:
+            delen.append(f"Vastgelopen na {limit} pogingen op: {detail}. Wat heb ik nodig om verder te "
+                         f"kunnen — een andere bron, een scherpere query, of jouw feedback?")
+        fallback = " ".join(delen) or "Ik kan hier niet verder; wat heb je van mij nodig?"
+        if not faal:
+            return fallback          # zuivere mens-taak: geen LLM nodig, de vraag IS de itemtekst
         try:
             from nooch_village.llm import reason
+            extra = (f" It also has item(s) that only a human or external party can do: {mens_detail}."
+                     if mens else "")
             prompt = (f"You are {self.name}, an autonomous role. Your project '{project.get('scope','')}' is "
-                      f"stuck on these item(s), with the actual error: {detail}. Formulate ONE concrete, "
+                      f"stuck on these item(s), with the actual error: {detail}.{extra} Formulate ONE concrete, "
                       f"answerable question for help (to a human or another role) that gets you moving again. "
                       f"Be specific about what you need; max 2 sentences, no padding. Answer in English.")
             out = reason(prompt, call_site="stuck_question")
@@ -1824,14 +1887,34 @@ def _ungrounded_tasks(project: dict, deliverables) -> list:
     """De checklist-taken ZONDER gegrond deliverable. Alleen geslaagde items krijgen een deliverable
     (zie _store_deliverable), dus een taak wiens item-id niet in de deliverable-records voorkomt heeft
     geen data — daarover mag de synthese NIETS beweren. Conservatief: een item zonder id telt als
-    ongegrond (liever een gegronde taak dubbel laten checken dan een ongegronde laten fabriceren)."""
+    ongegrond (liever een gegronde taak dubbel laten checken dan een ongegronde laten fabriceren).
+
+    Overgeslagen items staan hier NIET bij: die krijgen hun eigen, stelligere behandeling via
+    `_skipped_tasks` — 'niet onderzocht' en 'bewust laten vallen' zijn twee verschillende dingen
+    voor wie het rapport leest."""
     covered = {r.get("checklist_item") for r in (deliverables or []) if r.get("checklist_item")}
     out = []
     for cl in (project.get("checklists") or []):
         for it in (cl.get("items") or []):
             text = (it.get("text") or "").strip()
-            if text and it.get("id") not in covered:
+            if text and not it.get("skipped") and it.get("id") not in covered:
                 out.append(text)
+    return out
+
+
+def _skipped_tasks(project: dict) -> list[tuple[str, str]]:
+    """De bewust overgeslagen taken als (tekst, reden) — een mens-besluit, geen uitkomst.
+
+    Waarom apart: een project dat afrondt ZONDER zijn kernitem (bijv. de materiaal-analyse) mag
+    nooit lezen als volledig beantwoord. De teller zegt dan 4/4, maar het projectdoel is niet
+    helemaal gehaald — en dat hoort in het rapport te staan waar de mens de review doet, niet
+    alleen als chip op een checklist-item."""
+    out = []
+    for cl in (project.get("checklists") or []):
+        for it in (cl.get("items") or []):
+            if it.get("skipped") and (it.get("text") or "").strip():
+                out.append(((it.get("text") or "").strip(),
+                            (it.get("skip_reason") or "").strip() or "geen reden opgegeven"))
     return out
 
 
@@ -1919,6 +2002,19 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
                           "gegrond resultaat.' Verzin voor deze taken GEEN getallen, prijzen, percentages, "
                           "tabellen of bronnen, en claim NOOIT een herkomst zoals 'op basis van handmatig "
                           "onderzoek'.\n\n")
+        # Overgeslagen taken zijn een mens-BESLUIT, geen kennisgat: ze krijgen hun eigen, stelligere
+        # instructie zodat een rapport nooit als volledig-beantwoord leest terwijl een kernitem
+        # bewust is laten vallen. Dit is de rem op valse voltooiing.
+        overgeslagen = _skipped_tasks(project)
+        if overgeslagen:
+            gap_rule += ("BEWUST OVERGESLAGEN TAKEN (besluit van de mens, NIET uitgevoerd — dit deel van "
+                         "het projectdoel is dus NIET beantwoord):\n"
+                         + "\n".join(f"- {t} (reden: {r})" for t, r in overgeslagen)
+                         + "\nSchrijf onder de kop van ELK van deze taken EXACT: 'Overgeslagen op besluit "
+                           "van de mens — reden: <de reden>. Dit deel van het projectdoel is niet "
+                           "beantwoord.' Verzin er geen bevindingen bij. Benoem in de conclusie "
+                           "EXPLICIET dat dit project afrondt zonder deze ta(a)k(en), zodat de lezer "
+                           "niet denkt dat de vraag volledig beantwoord is.\n\n")
         prompt = (
             (persona.strip() + "\n\n" if persona and persona.strip() else "")
             + f"Je werkt aan het lopende einddocument van dit project in NoochVille (Nooch.earth). "

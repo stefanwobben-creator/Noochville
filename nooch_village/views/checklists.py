@@ -128,6 +128,8 @@ def _cl_item_state(it: dict, done, skill) -> tuple[str, str]:
     NIET ongeldig. Alleen expliciet payload_ok is False → ⚠. Zo staat een oud item (geprepareerd vóór
     PR #136, zonder het veld) niet ten onrechte als onvolledig gemarkeerd — consistent met hoe het
     primitief fail-soft is op skills zonder required_payload."""
+    if it.get("skipped"):                        # bewust overgeslagen: telt niet meer mee (n.v.t./elders)
+        return "skipped", " b-skip"
     if done:
         return "done", ""
     if not skill:
@@ -152,6 +154,10 @@ def _cl_item_meta(state: str, skill, it: dict) -> str:
     ⚠ (coral) en ○ (grijs) verschillen bewust visueel — ze vragen om verschillende actie."""
     if state == "done":
         return ""                                # afgerond → geen ruis; het resultaat staat in de wall
+    if state == "skipped":
+        why = (it.get("skip_reason") or "").strip()
+        return (f"<span class='ck-meta'><span class='ck-skip'>⤳ skipped — does not count"
+                f"{' · ' + _e(why) if why else ''}</span></span>")
     reason = (it.get("reason") or "").strip()
     parts = []
     if skill:
@@ -166,7 +172,25 @@ def _cl_item_meta(state: str, skill, it: dict) -> str:
     return f"<span class='ck-meta'>{' '.join(parts)}</span>" if parts else ""
 
 
-def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool) -> str:
+def _cl_resolve_row(it: dict, hid: str, clitem: str, role_opts: str) -> str:
+    """De drie mens-uitkomsten op een item dat alleen een mens kan oplossen (geen skill, of een
+    onvolledige payload). Zonder deze knoppen sluit de mens wel de spanning maar blijft het item open
+    en het project geparkeerd — de herhaal-lus. 'Gedaan' zit al op het ✓-vakje ernaast (dat loopt via
+    dezelfde resolutie-route), hier staan 'overslaan' en 'overdragen'."""
+    skip = (f"<form method='post' action='/action' class='emo-f'>{hid}{clitem}"
+            f"<button class='btn ghost sm' type='submit' name='action' value='check_skip' "
+            f"title='This does not need doing (any more) — it stops counting towards done'>"
+            f"⤳ skip (n/a)</button></form>")
+    hand = (f"<details class='fedit'><summary class='flink'>📤 hand off</summary>"
+            f"<form method='post' action='/action'>{hid}{clitem}"
+            f"<select name='naar_rol'>{role_opts}</select>"
+            f"<input name='reason' placeholder='done when…'>"
+            f"<button class='btn sm' type='submit' name='action' value='check_handoff'>"
+            f"hand off</button></form></details>") if role_opts else ""
+    return f"<span class='ck-resolve'>{skip}{hand}</span>"
+
+
+def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Stores = None) -> str:
     """Named checklists (Trello-stijl): titel + voortgangsbalk + items + verwijderen."""
     def hid():
         nxt = f"/project?pid={pid}&back=" + urllib.parse.quote(back, safe="")
@@ -174,11 +198,19 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool) -> str:
                 f"<input type='hidden' name='pid' value='{_e(pid)}'>"
                 f"<input type='hidden' name='next' value='{_e(nxt)}'>")
 
+    from nooch_village.projects import checklist_progress
+    # Rol-opties voor de overdracht: dezelfde bron als het wall-outcome-formulier (reference, don't copy).
+    role_opts = ""
+    if rw and st is not None:
+        try:
+            from nooch_village.views.feed import _wall_outcome_opts
+            role_opts = _wall_outcome_opts(st)[0]
+        except Exception:
+            role_opts = ""
     out = ""
     for cl in (p.get("checklists") or []):
         items = cl.get("items", [])
-        done = sum(1 for it in items if it.get("done"))
-        tot = len(items)
+        done, tot = checklist_progress(cl)          # overgeslagen items tellen niet mee in de noemer
         pct = round(100 * done / tot) if tot else 0
         bar = (f"<div class='ck-prog'><div class='pbar' style='flex:1'><div style='width:{pct}%'></div></div>"
                f"<span class='muted'>{pct}% ({done}/{tot})</span></div>") if tot else ""
@@ -203,7 +235,14 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool) -> str:
                           f"<button class='btn ghost sm' type='submit' name='action' value='check_accept' "
                           f"title='skill: {_e(str((offer or {}).get('skill','')))}'>🤖 can pick this up</button>"
                           f"</form>") if (rw and offer) else ""
-            rows += f"<li class='ck-item'>{chk}{txt}{offer_html}{rm}</li>"
+            # Een item dat geen enkele skill kan draaien blijft anders eeuwig open en houdt het project
+            # geparkeerd. Geef de mens hier de twee uitkomsten die dat doorbreken (✓ = de derde).
+            resolve = (_cl_resolve_row(it, hid(), clitem, role_opts)
+                       if (rw and state in ("noskill", "warn")) else "")
+            unskip = (f"<form method='post' action='/action' class='emo-f'>{hid()}{clitem}"
+                      f"<button class='flink' type='submit' name='action' value='check_unskip'>"
+                      f"undo skip</button></form>") if (rw and state == "skipped") else ""
+            rows += f"<li class='ck-item'>{chk}{txt}{offer_html}{resolve}{unskip}{rm}</li>"
         add = (f"<form method='post' action='/action' class='ckadd'>{hid()}"
                f"<input type='hidden' name='clid' value='{_e(cl['id'])}'>"
                f"<input name='text' placeholder='add item…'>"

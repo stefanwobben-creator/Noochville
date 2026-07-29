@@ -1285,9 +1285,14 @@ def _act_proj_done(c):
         p = pj.get(pid) or {}
         cl = next((c for c in p.get("checklists", []) if c.get("title") == PREP_CHECKLIST_TITLE), None)
         if cl is not None:
-            items = cl.get("items", [])
-            done = sum(1 for it in items if it.get("done"))
-            outcome = f"checklist voltooid ({done}/{len(items)}) — goedgekeurd na review"
+            # De uitkomst is wat er later over dit project wordt teruggelezen: overgeslagen taken
+            # horen daar expliciet in, anders leest een project dat afrondde zonder zijn kernitem
+            # als volledig beantwoord (valse voltooiing).
+            from nooch_village.projects import checklist_progress, skipped_note
+            done, telbaar = checklist_progress(cl)
+            weg = skipped_note(cl)
+            outcome = (f"checklist voltooid ({done}/{telbaar}) — goedgekeurd na review"
+                       + (f" · {weg} — dit deel is NIET beantwoord" if weg else ""))
         else:
             outcome = "goedgekeurd na review"
         pj.complete(pid, outcome); msg = "✓ afgerond"
@@ -1848,12 +1853,62 @@ def _act_check_accept(c):
 
 
 def _act_check_toggle(c):
+        # AUTHZ: rolvervuller of Circle Lead — operationeel werk binnen een rol (een item af/aanvinken)
         nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
         msg = ""
         _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
         if _deny:
             return nxt, _deny
-        pj.check_toggle(g("pid"), g("clid"), g("item"))
+        from nooch_village import project_items
+        pid, clid, item = g("pid"), g("clid"), g("item")
+        p = pj.get(pid) or {}
+        it = next((x for cl in p.get("checklists", []) if cl.get("id") == clid
+                   for x in cl.get("items", []) if x.get("id") == item), None)
+        if it is not None and not it.get("done"):
+            # Afvinken loopt via de resolutie-route: die kijkt daarna of de checklist compleet is en
+            # zet het project dan op wacht-op-review. Anders sluit de mens het laatste item terwijl het
+            # project geparkeerd blijft staan — een geblokkeerd project wordt immers niet meer getend.
+            _ok, msg = project_items.resolve_item(pj, pid, clid, item, "done", by=username or "")
+        else:
+            pj.check_toggle(pid, clid, item)          # uitvinken: gewone toggle, geen review-gevolg
+        return nxt, msg
+
+
+def _act_check_skip(c):
+        # AUTHZ: rolvervuller of Circle Lead — operationeel oordeel binnen een rol ("dit hoeft niet")
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
+        from nooch_village import project_items
+        _ok, msg = project_items.resolve_item(pj, g("pid"), g("clid"), g("item"), "skip",
+                                              reason=g("reason"), by=username or "")
+        return nxt, msg
+
+
+def _act_check_unskip(c):
+        # AUTHZ: rolvervuller of Circle Lead — spiegel van check_skip (vergissing terugdraaien)
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
+        from nooch_village import project_items
+        _ok, msg = project_items.resolve_item(pj, g("pid"), g("clid"), g("item"), "unskip",
+                                              by=username or "")
+        return nxt, msg
+
+
+def _act_check_handoff(c):
+        # AUTHZ: rolvervuller of Circle Lead — werk uit het EIGEN project doorgeven; de ontvangende rol
+        # krijgt een gewoon queued project op haar bord (zelfde poort als de projectverzoek-skill).
+        nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
+        _deny = _role_gate((pj.get(g("pid")) or {}).get("owner") or "", username, st)
+        if _deny:
+            return nxt, _deny
+        from nooch_village import project_items
+        _ok, msg = project_items.resolve_item(pj, g("pid"), g("clid"), g("item"), "handoff",
+                                              reason=g("reason"), by=username or "",
+                                              naar_rol=g("naar_rol"), records=st.records)
         return nxt, msg
 
 
@@ -4276,6 +4331,9 @@ ACTIONS = {
     "check_add": _act_check_add,
     "check_accept": _act_check_accept,
     "check_toggle": _act_check_toggle,
+    "check_skip": _act_check_skip,
+    "check_unskip": _act_check_unskip,
+    "check_handoff": _act_check_handoff,
     "check_remove": _act_check_remove,
     "role_assign": _act_role_assign,
     "role_unassign": _act_role_unassign,
