@@ -779,6 +779,8 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .ck-box.b-warn{border-color:var(--coral)}
 .ck-box.b-noskill{border-color:var(--subtle);border-style:dashed}
 .ck-box.b-skip{border-style:dotted;opacity:.6}
+.ck-human{font-size:.68rem;color:var(--gray);background:var(--green-tint);padding:.02rem .35rem;border-radius:5px}
+.ck-box.b-human{border-color:var(--green);border-style:dashed}
 .ck-resolve{display:inline-flex;align-items:center;gap:.4rem;flex:0 0 auto}
 .ck-item form{display:contents}
 .attcard{display:flex;align-items:center;gap:.55rem;background:var(--cream-2);border:1px solid var(--border);border-radius:var(--radius);padding:.45rem .6rem;margin-bottom:.4rem}

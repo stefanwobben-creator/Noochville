@@ -1288,9 +1288,9 @@ def _act_proj_done(c):
             # De uitkomst is wat er later over dit project wordt teruggelezen: overgeslagen taken
             # horen daar expliciet in, anders leest een project dat afrondde zonder zijn kernitem
             # als volledig beantwoord (valse voltooiing).
-            from nooch_village.projects import checklist_progress, skipped_note
+            from nooch_village.projects import checklist_progress, not_answered_note
             done, telbaar = checklist_progress(cl)
-            weg = skipped_note(cl)
+            weg = not_answered_note(cl)
             outcome = (f"checklist voltooid ({done}/{telbaar}) — goedgekeurd na review"
                        + (f" · {weg} — dit deel is NIET beantwoord" if weg else ""))
         else:

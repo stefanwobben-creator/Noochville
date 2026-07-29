@@ -122,7 +122,9 @@ def _cl_item_state(it: dict, done, skill) -> tuple[str, str]:
       done     ✓  afgevinkt
       exec     ·  uitvoerbaar (skill + payload in orde, nog niet gedraaid)
       warn     ⚠  payload onvolledig (payload_ok=False) — de checklist deugt niet
-      noskill  ○  geen skill (skill=None) — een mens moet dit doen
+      noskill  ○  geen skill (skill=None) — er is (nog) geen software voor
+      human    🙋 expliciete mens-taak (planner zag vooraf: fysiek/offline) — telt niet mee
+      skipped  ⤳  bewust overgeslagen door de mens — telt niet mee
 
     Fail-soft (afgesproken): een ONTBREKEND payload_ok = 'niet gevalideerd' = gewoon uitvoerbaar (·),
     NIET ongeldig. Alleen expliciet payload_ok is False → ⚠. Zo staat een oud item (geprepareerd vóór
@@ -132,6 +134,8 @@ def _cl_item_state(it: dict, done, skill) -> tuple[str, str]:
         return "skipped", " b-skip"
     if done:
         return "done", ""
+    if it.get("human_task"):                     # planner zag vooraf: alleen een mens/externe partij
+        return "human", " b-human"
     if not skill:
         return "noskill", " b-noskill"
     if it.get("payload_ok") is False:            # expliciet False; None/afwezig telt NIET als ongeldig
@@ -158,6 +162,10 @@ def _cl_item_meta(state: str, skill, it: dict) -> str:
         why = (it.get("skip_reason") or "").strip()
         return (f"<span class='ck-meta'><span class='ck-skip'>⤳ skipped — does not count"
                 f"{' · ' + _e(why) if why else ''}</span></span>")
+    if state == "human":
+        why = (it.get("reason") or "").strip()
+        return (f"<span class='ck-meta'><span class='ck-human'>🙋 human task — does not count towards "
+                f"done{' · ' + _e(why) if why else ''}</span></span>")
     reason = (it.get("reason") or "").strip()
     parts = []
     if skill:
@@ -238,7 +246,7 @@ def _checklists_html(p: dict, csrf: str, pid: str, back: str, rw: bool, st: _Sto
             # Een item dat geen enkele skill kan draaien blijft anders eeuwig open en houdt het project
             # geparkeerd. Geef de mens hier de twee uitkomsten die dat doorbreken (✓ = de derde).
             resolve = (_cl_resolve_row(it, hid(), clitem, role_opts)
-                       if (rw and state in ("noskill", "warn")) else "")
+                       if (rw and state in ("noskill", "warn", "human")) else "")
             unskip = (f"<form method='post' action='/action' class='emo-f'>{hid()}{clitem}"
                       f"<button class='flink' type='submit' name='action' value='check_unskip'>"
                       f"undo skip</button></form>") if (rw and state == "skipped") else ""

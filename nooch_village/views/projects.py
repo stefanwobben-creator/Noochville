@@ -265,8 +265,8 @@ def _progress_badge(p: dict) -> str:
     done, total, pct = pr
     # 100% mag niet lezen als "alles gedaan" wanneer er iets is overgeslagen: de ⤳ en de tooltip
     # maken het besluit zichtbaar op de kaart zelf, zonder doorklikken.
-    from nooch_village.projects import skipped_note
-    weg = skipped_note(p)
+    from nooch_village.projects import not_answered_note
+    weg = not_answered_note(p)
     return (f"<div class='pbadge' title='{done}/{total}"
             f"{' · ' + _e(weg) if weg else ''}'>"
             f"<div class='pbar'><div style='width:{pct}%'></div></div>"
