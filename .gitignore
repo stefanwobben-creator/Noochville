@@ -43,3 +43,7 @@ _to_delete/
 # Runtime-cache op de server (pip/HF e.d.). Puur voor de netheid — de deploy-guard
 # negeert untracked bestanden sowieso (scripts/deploy.sh, --untracked-files=no).
 .cache/
+
+# Stage-0 eval-set: productiedata (radar-curatie), reproduceerbaar via build_evalset.py
+experiments/stage0/evalset.jsonl
+evalset.jsonl
