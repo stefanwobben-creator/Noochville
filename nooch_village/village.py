@@ -170,12 +170,18 @@ class Village:
         self.bus.subscribe("noochie_weighed_in",          self._observe)
         self.bus.subscribe("kennis_geraadpleegd",         self._observe)   # kennis-eerst zichtbaar in system_log
         self.bus.subscribe("board_pulse_completed",       self._observe)
-        # De bord-puls hangt aan de BESTAANDE dagcadans (dag_begint) — geen tweede timer erbij, en
+        self.bus.subscribe("project_proposals_generated", self._observe)
+        # Twee autonome rondes aan de BESTAANDE dagcadans (dag_begint) — geen tweede timer erbij, en
         # dus geen tweede plek waar het ritme kan verlopen. Infra-subscribe (zoals Matchmaker en
-        # Reconciler): de handler is deterministisch, doet geen netwerk-I/O en publiceert niet terug
-        # de keten in. De activaties zelf worden binnen seconden door `_poll_board` opgepakt als
-        # project_activated, zodat de eigenaar-rol in dezelfde puls aan het werk gaat.
+        # Reconciler): beide handlers zijn deterministisch, doen geen netwerk-I/O en publiceren niet
+        # terug de keten in. Eerst het ritme, dan de voorstellen; de volgorde is voor de veiligheid
+        # niet kritisch (een vers voorstel heeft status 'proposed' en valt sowieso buiten de puls).
+        #   1. de bord-puls: activaties worden binnen seconden door `_poll_board` opgepakt als
+        #      project_activated, zodat de eigenaar-rol in dezelfde puls aan het werk gaat;
+        #   2. de voorstel-ronde: zet niets op het bord, elk voorstel wacht op de mens (cap + dedup
+        #      remmen de ruis).
         self.bus.subscribe("dag_begint",                  self._on_board_pulse)
+        self.bus.subscribe("dag_begint",                  self._on_propose_projects)
         self.coherence_observer = CoherenceObserver(self.bus)
         self.root = self.reconciler.build()
 
@@ -192,6 +198,15 @@ class Village:
                             unmanned=set(self.reconciler.unmanned))
         except Exception as exc:      # noqa: BLE001 — de cadans is belangrijker dan deze puls
             logging.getLogger("village.board").warning("bord-puls overgeslagen: %s", exc)
+
+    def _on_propose_projects(self, e: Event) -> None:
+        """De voorstel-generator, één ronde per dagcadans. Fail-soft: een fout hier mag de dagpuls
+        nooit omvertrekken."""
+        try:
+            from nooch_village.project_proposals import generate_proposals
+            generate_proposals(self.context, records=self.records, bus=self.bus)
+        except Exception as exc:      # noqa: BLE001 — de cadans is belangrijker dan deze ronde
+            logging.getLogger("village.proposals").warning("voorstel-ronde overgeslagen: %s", exc)
 
     def _on_escalation(self, e: Event) -> None:
         proposal_dict = e.data.get("proposal", {})

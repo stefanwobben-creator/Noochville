@@ -25,8 +25,14 @@ _PROJ_CHIP = {   # opgeslagen status-sleutel -> (Engels label, chip-kleur-modifi
     "future": ("Future", "muted"),
     "blocked": ("Waiting", "coral"),
     "draft": ("Draft", "muted"),
+    "proposed": ("Proposed", "muted"),
     "done": ("Done", "green"),
 }
+
+# Statussen die NIET op het bord horen: ze wachten op een mens-oordeel in een eigen baan. Ze zitten
+# ook in geen enkele kolom van _PROJ_COLS — deze constante maakt dat expliciet in plaats van
+# impliciet, zodat de telling "Projects (N)" eerlijk blijft.
+_OFF_BOARD = ("draft", "proposed")
 
 
 def _proj_chip(status: str) -> str:
@@ -621,6 +627,43 @@ def _drafts_html(st: _Stores, drafts: list, csrf_token: str, back: str) -> str:
             f"({len(drafts)})</summary><ul class='clean'>{rows}</ul></details>")
 
 
+_PROPOSAL_SOURCE = {"proposal:radar": "approved signal", "proposal:kroniek": "gap in the Chronicle"}
+
+
+def _proposals_html(st: _Stores, proposals: list, csrf_token: str, back: str) -> str:
+    """De review-baan (status proposed): het dorp stelt voor, de mens beslist. Accepteren zet het
+    voorstel als root-project in TOEKOMST (normale flow); afwijzen haalt het weg én wordt onthouden,
+    zodat dezelfde bron het niet opnieuw voorstelt. Onzichtbaar als er niets voorgesteld is.
+    Zelfde patroon en klassen als de Drafts-baan hierboven — geen eigen variant."""
+    if not proposals:
+        return ""
+    rows = ""
+    for p in proposals:
+        bron = _PROPOSAL_SOURCE.get(p.get("origin", ""), "the village")
+        ctrl = ""
+        if csrf_token:
+            base = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+                    f"<input type='hidden' name='pid' value='{_e(p['id'])}'>"
+                    f"<input type='hidden' name='next' value='{_e(back)}'>")
+            ctrl = (
+                f" <form method='post' action='/action' class='emo-f'>{base}"
+                f"<button class='btn ok sm' type='submit' name='action' "
+                f"value='proj_proposal_accept'>accept</button>"
+                f"</form> <form method='post' action='/action' class='emo-f'>{base}"
+                f"<button class='dellink' type='submit' name='action' value='proj_proposal_reject' "
+                f"onclick=\"return confirm('Reject this proposal? It will not come back.')\">"
+                f"reject</button></form>")
+        rows += (f"<li><a href='/project?pid={_e(p['id'])}'>{_e(_scope_text(p) or '—')}</a> "
+                 f"<span class='chip muted'>{_e(bron)}</span>"
+                 f"<span class='muted'> · {_e(_name(st.records.get(p.get('owner'))) if st.records.get(p.get('owner')) else p.get('owner') or '?')}</span>"
+                 f"{ctrl}</li>")
+    return (f"<details class='box-details' open><summary>💡 Proposals — awaiting your judgement "
+            f"({len(proposals)})</summary>"
+            f"<p class='muted'>The village proposes; you decide. Nothing here is on the board or "
+            f"being worked on. Open a proposal to read where it came from.</p>"
+            f"<ul class='clean'>{rows}</ul></details>")
+
+
 def _orphans_html(st: _Stores, orphans: list, csrf_token: str, back: str) -> str:
     """Wees-projecten: hun eigenaar-rol bestaat niet meer, dus ze vallen door alle bordfilters
     en zijn anders onzichtbaar. Hier kun je ze opnieuw aan een rol koppelen, archiveren of wissen."""
@@ -663,8 +706,9 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
     if not org.is_circle(rec):
         # ROL: eigen projecten, gegroepeerd per persoon (de doener). Lege lanes tonen we niet.
         mine = [p for p in allp if p.get("owner") == rec.id and not p.get("archived")]
-        projs = [p for p in mine if p.get("status") != "draft"]
+        projs = [p for p in mine if p.get("status") not in _OFF_BOARD]
         drafts = [p for p in mine if p.get("status") == "draft"]
+        proposals = [p for p in mine if p.get("status") == "proposed"]
         archived = [p for p in allp if p.get("owner") == rec.id and p.get("archived")]
         board = _projects_board(st, projs, rec.id, csrf_token, back_base, "persoon", quickadd=add)
         if not board:
@@ -673,6 +717,7 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
         head = (f"<div style='margin-bottom:1rem'>"
                 f"<h3 style='margin:0;display:inline'>Projects ({len(projs)})</h3> &nbsp; {addlink}</div>")
         return (f"<div class='c2-sec'>{head}{_drafts_html(st, drafts, csrf_token, back_base)}"
+                f"{_proposals_html(st, proposals, csrf_token, back_base)}"
                 f"{board}{_archived_html(st, archived, csrf_token, back_base)}</div>")
 
     # CIRKEL: doet zelf geen uitvoerend werk. Toont projecten van haar DIRECTE rollen +
@@ -682,8 +727,9 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
     rids = {r.id for r in direct}
     ii = f"{_II_PREFIX}{rec.id}"
     mine = [p for p in allp if (p.get("owner") in rids or p.get("owner") == ii) and not p.get("archived")]
-    projs = [p for p in mine if p.get("status") != "draft"]
+    projs = [p for p in mine if p.get("status") not in _OFF_BOARD]
     drafts = [p for p in mine if p.get("status") == "draft"]
+    proposals = [p for p in mine if p.get("status") == "proposed"]
     back = f"{back_base}&group={g}"
     board = _projects_board(st, projs, rec.id, csrf_token, back, g, quickadd=add)
     if not board:
@@ -714,6 +760,7 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
                    and st.records.get(o) is None]
         orphans_html = _orphans_html(st, orphans, csrf_token, back_base)
     return (f"<div class='c2-sec'>{head}{_drafts_html(st, drafts, csrf_token, back)}"
+            f"{_proposals_html(st, proposals, csrf_token, back)}"
             f"{board}{sub_html}</div>{orphans_html}")
 
 
@@ -725,7 +772,8 @@ def _person_projects_tab_html(st: _Stores, filler_type: str, pid: str, csrf_toke
     → de lens voegt niet toe (dat blijft op rol-niveau)."""
     role_ids = set(st.assign.roles_of(filler_type, pid))
     mine = [p for p in st.projects.all()
-            if p.get("owner") in role_ids and not p.get("archived") and p.get("status") != "draft"]
+            if p.get("owner") in role_ids and not p.get("archived")
+            and p.get("status") not in _OFF_BOARD]
     back = f"/person?id={pid}&tab=projecten"
     board = _projects_board(st, mine, "", csrf_token, back, "rol", quickadd=False)
     if not board:
