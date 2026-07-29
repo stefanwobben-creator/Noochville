@@ -411,3 +411,78 @@ def test_al_gescand_deze_week_is_stil(tmp_path):
     inw = _inwoner(tmp_path, skills=["claims_site_scan"], resultaat={"ok": True, "skipped": True})
     inw._run_pulse_skills(None)
     assert _meldingen(tmp_path) == []
+
+
+# ── de rode heads-up noemt de vondst, niet alleen een getal ─────────────────────
+
+def _rood(term, pagina, stoplicht="red"):
+    return {"pid": "p", "owner": "o", "titel": "t", "stoplicht": stoplicht,
+            "term": term, "pagina": pagina, "doelen": []}
+
+
+def test_headsup_noemt_term_en_pagina(tmp_path):
+    """Een telling dwingt de founder door te klikken vóór hij weet of het spoed heeft; de term en
+    de vindplaats zijn in één oogopslag te wegen."""
+    from nooch_village.skills_impl.claims_site_scan import _rode_headsup
+    tekst = _rode_headsup({"aangemaakt": [_rood("plastic free", "faq")], "rood": 1})
+    assert "'plastic free'" in tekst and "faq" in tekst
+    assert "1 nieuwe verboden claim(s)" in tekst          # de telling blijft, achteraan
+
+
+def test_headsup_noemt_er_twee_en_telt_de_rest(tmp_path):
+    from nooch_village.skills_impl.claims_site_scan import _rode_headsup
+    tekst = _rode_headsup({"aangemaakt": [_rood("plastic free", "faq"),
+                                          _rood("100% biodegradable", "home"),
+                                          _rood("zero waste", "mission"),
+                                          _rood("climate neutral", "impact")], "rood": 4})
+    assert "'plastic free' op faq" in tekst and "'100% biodegradable' op home" in tekst
+    assert "(+2 andere)" in tekst                          # geen stille truncatie
+    assert "zero waste" not in tekst
+
+
+def test_headsup_telt_alleen_rode_bevindingen(tmp_path):
+    """Oranje is werk voor de rol, geen alarm voor de founder — dus ook niet in de opsomming."""
+    from nooch_village.skills_impl.claims_site_scan import _rode_headsup
+    tekst = _rode_headsup({"aangemaakt": [_rood("plastic free", "faq"),
+                                          _rood("natural", "home", stoplicht="orange")], "rood": 1})
+    assert "'plastic free'" in tekst and "natural" not in tekst
+    assert "(+" not in tekst
+
+
+def test_headsup_past_binnen_de_notificatie_snippet(tmp_path):
+    """De founder-notificatie kapt op 160 tekens af; de identifiers staan daarom vooraan en de
+    hele regel moet er sowieso binnen passen."""
+    from nooch_village.skills_impl.claims_site_scan import _rode_headsup
+    tekst = _rode_headsup({"aangemaakt": [_rood("100% plastic free and fully biodegradable", "faq"),
+                                          _rood("completely climate neutral", "mission")], "rood": 9})
+    assert len(tekst) <= 160
+    assert tekst.index("100% plastic free") < 60           # vondst vóór de telling
+
+
+def test_headsup_valt_terug_op_de_telling_zonder_detail(tmp_path):
+    """Fail-soft: een scanresultaat zonder term/pagina (oud formaat) geeft de kale telling terug."""
+    from nooch_village.skills_impl.claims_site_scan import _rode_headsup
+    tekst = _rode_headsup({"aangemaakt": [{"pid": "p", "owner": "o", "stoplicht": "red"}], "rood": 1})
+    assert tekst == ("🔴 Claim-scan: 1 nieuwe verboden claim(s) op nooch.earth "
+                     "(1 taak/taken op het bord)")
+
+
+def test_zet_op_bord_geeft_term_en_pagina_mee(tmp_path):
+    """De heads-up leest de vondst uit het scanresultaat; die moet er dus in zitten. De letterlijke
+    vondst (waar de mens naar zoekt op de pagina), niet de databaseterm."""
+    led = _ledger(tmp_path)
+    bev = _bev(term="gifvrij", gevonden=["volstrekt gifvrij"], pagina="faq")
+    verslag = claims_board.zet_op_bord(_omg(tmp_path, led), claims_db.load(), [bev], "x", rol_voor)
+    taak = verslag["aangemaakt"][0]
+    assert taak["term"] == "volstrekt gifvrij" and taak["pagina"] == "faq"
+
+
+def test_headsup_kort_zichtbaar_in_plaats_van_stil_af_te_kappen(tmp_path):
+    """Een absurd lange claim mag de staart (+N andere, de telling) niet ongemerkt opeten: liever
+    één vondst minder of een zichtbaar ingekorte term."""
+    from nooch_village.skills_impl.claims_site_scan import _rode_headsup
+    lang = "a claim so absurdly long that it would blow the entire snippet budget by itself"
+    tekst = _rode_headsup({"aangemaakt": [_rood(lang, "faq")], "rood": 1})
+    assert len(tekst) <= 160
+    assert "…" in tekst                                   # zichtbaar ingekort
+    assert "1 taak/taken op het bord" in tekst            # de staart staat er nog

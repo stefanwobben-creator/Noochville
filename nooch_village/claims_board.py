@@ -250,8 +250,13 @@ def zet_op_bord(omgeving, db: dict, bevindingen: list[dict], bron: str,
                             done_when="de herformulering is live en door legal gezien",
                             goes_to="compliance")
         doelen = bericht_aan_rol(omgeving, eigenaar, f"{titel} — {b.get('alternatief', '')}", pid)
+        # `term` en `pagina` reizen mee zodat een heads-up de vondst kan noemen zonder de bevinding
+        # opnieuw op te zoeken: de letterlijke vondst (waar de mens naar zoekt op de pagina), niet de
+        # databaseterm, en de vindplaats zoals compliance die labelde.
         aangemaakt.append({"pid": pid, "owner": eigenaar, "titel": titel,
-                           "stoplicht": b.get("stoplicht"), "doelen": doelen})
+                           "stoplicht": b.get("stoplicht"), "doelen": doelen,
+                           "term": (b.get("gevonden") or [b.get("term", "")])[0],
+                           "pagina": b.get("pagina") or b.get("url") or ""})
         bestaand.add(sleutel)                          # binnen één run niet dubbel
         bestaand.update(_zoektermen(b))
     return {"aangemaakt": aangemaakt, "overgeslagen": overgeslagen, "lopend": lopend,

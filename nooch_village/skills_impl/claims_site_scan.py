@@ -87,6 +87,49 @@ def verzamel(paginas: list[dict], db: dict, _fetch=None) -> tuple[list[dict], li
     return bevindingen, fouten, teksten
 
 
+SNIPPET_CAP = 160          # de founder-notificatie kapt de snippet hierop af (human_inbox/NotifStore)
+
+
+def _rode_headsup(verslag: dict, toon: int = 2, cap: int = SNIPPET_CAP) -> str:
+    """De heads-up bij nieuwe RODE claims: noem de term én de vindplaats, niet alleen een telling.
+
+    Een getal ('3 nieuwe verboden claim(s)') dwingt de founder door te klikken voordat hij weet of
+    het spoedeisend is; "verboden term 'X' op faq" is meteen te wegen. Spiegelt de regressie-tak,
+    die ook de nummers (#12, #14) meegeeft in plaats van alleen 'er zijn er 2'.
+
+    De regel moet binnen `cap` blijven, want de notificatie kapt hem daar hard af. In plaats van de
+    staart te laten sneuvelen (dan verdwijnen '+N andere' en de telling ongemerkt) noemen we één
+    vondst minder, en pas als laatste redmiddel korten we de term in met een zichtbare '…'.
+    Zo is elke verkorting af te lezen aan de regel zelf."""
+    def _vondst(t: dict, kort: int = 0) -> str:
+        term, pagina = (t.get("term") or "").strip(), (t.get("pagina") or "").strip()
+        if not term:
+            return ""                   # niets te noemen → deze telt alleen mee in '+N andere'
+        if kort and len(term) > kort:
+            term = term[:kort - 1].rstrip() + "…"
+        return f"'{term}' op {pagina}" if pagina else f"'{term}'"
+
+    rood = [t for t in verslag["aangemaakt"] if t.get("stoplicht") == "red"]
+    n, taken = verslag["rood"], len(verslag["aangemaakt"])
+    kaal = (f"🔴 Claim-scan: {n} nieuwe verboden claim(s) op nooch.earth "
+            f"({taken} taak/taken op het bord)")
+
+    def _regel(hoeveel: int, kort: int) -> str:
+        vondsten = [v for v in (_vondst(t, kort) for t in rood) if v][:hoeveel]
+        if not vondsten:
+            return ""
+        rest = len(rood) - len(vondsten)
+        kop = ", ".join(vondsten) + (f" (+{rest} andere)" if rest > 0 else "")
+        return (f"🔴 Claim-scan: verboden term {kop} — {n} nieuwe verboden claim(s), "
+                f"{taken} taak/taken op het bord")
+
+    for hoeveel, kort in [(t, 0) for t in range(toon, 0, -1)] + [(1, 40), (1, 24)]:
+        regel = _regel(hoeveel, kort)
+        if regel and len(regel) <= cap:
+            return regel
+    return _regel(1, 24) or kaal        # geen detail beschikbaar → de oude, kale telling
+
+
 def _wie_fixte(ledger, nr: int) -> str | None:
     """De rol die aan dit werklijst-item gewerkt heeft — die moet een regressie als eerste weten."""
     try:
@@ -191,8 +234,7 @@ class ClaimsSiteScanSkill(Skill):
             headsup = (f"↩️ Claim-regressie: {len(regressies)} eerder opgeloste claim(s) staan "
                        f"weer op de site (#{', #'.join(str(r['nr']) for r in regressies)})")
         elif verslag["rood"]:
-            headsup = (f"🔴 Claim-scan: {verslag['rood']} nieuwe verboden claim(s) op nooch.earth "
-                       f"({len(verslag['aangemaakt'])} taak/taken op het bord)")
+            headsup = _rode_headsup(verslag)
         return {"ok": True, "week": week, "skipped": False, "headsup": headsup,
                 "statussen": statussen,
                 "gescand": len(paginas) - len(fouten), "fouten": fouten,
