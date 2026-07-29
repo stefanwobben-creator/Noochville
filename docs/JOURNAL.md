@@ -1561,6 +1561,18 @@ projectverzoek-patroon, gedeelde `project_items.handoff`). `checklist_progress`
 is de enige definitie van "af", zodat worker, voortgangsbalk en kaart-badge
 hetzelfde getal gebruiken.
 
+**[beslissing]** `item_fail_limit <= 0` betekent niet langer "de klep staat uit".
+Het zet nu alleen de retry-dimensie uit (skill-items herproberen eeuwig, zoals
+voorheen); een item dat geen enkele skill ooit kan draaien blijft het project
+parkeren. Anders zou die schakelaar de zombie in één config-regel terugzetten.
+
+**[les]** Overslaan mag nooit als afronden lezen. Een project dat afrondt zonder
+zijn kernitem (de materiaal-analyse) toont 4/4 — dus draagt de overgeslagen taak
+zich mee tot in het einddocument ("Overgeslagen op besluit van de mens — reden:
+… Dit deel van het projectdoel is niet beantwoord"), de review-melding, de
+afrond-uitkomst en de voortgangsbadge (⤳ naast de 100%). Valse voltooiing is
+erger dan zichtbaar onaffe voortgang.
+
 **[open]** Preventie (aparte, kleinere PR): laat de planner een outcome die op
 een fysieke/technische mens-taak leunt niet als AI-project mét dat item in de
 klaar-telling aanmaken — splits de mens-taak eruit of geef het project een

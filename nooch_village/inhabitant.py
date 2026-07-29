@@ -1417,7 +1417,11 @@ class Inhabitant(threading.Thread):
             if not (ledger.get(pid) or {}).get("review_raised"):
                 ledger.mark_awaiting_review(pid)
                 self._synthesize_einddocument(ledger.get(pid), done, total, force_final=True)
-                ledger.add_role_message(pid, "✅ Checklist voltooid — klaar voor review.")
+                from nooch_village.projects import skipped_note
+                weg = skipped_note(fresh_cl)          # 4/4 mag niet lezen als "alles gedaan"
+                ledger.add_role_message(pid, "✅ Checklist voltooid — klaar voor review."
+                                        + (f"\n⤳ LET OP: {weg}. Dit deel van het projectdoel is "
+                                           f"NIET beantwoord." if weg else ""))
                 self.bus.publish(Event("project_awaiting_review",
                                        {"project_id": pid, "owner": self.id}, self.id))
                 self.log.info("✅ project '%s' checklist voltooid (%d/%d) — wacht op review", pid, done, total)
@@ -1467,8 +1471,15 @@ class Inhabitant(threading.Thread):
         return None
 
     def _item_fail_limit(self) -> int:
-        """Aantal mislukte pogingen op één item voordat het project naar WAITING gaat (config
-        `item_fail_limit`, default 3). ≤0 zet de klep uit (ongewijzigd, eeuwig herproberen)."""
+        """Aantal mislukte pogingen op één SKILL-item voordat het niet meer vooruit kan (config
+        `item_fail_limit`, default 3).
+
+        LET OP — de betekenis van ≤0 is per 29 juli 2026 versmald: het zet alleen de RETRY-dimensie
+        uit (skill-items blijven dan eeuwig herproberen, zoals voorheen). Het zet de vastloop-klep
+        NIET meer helemaal uit: een item dat geen enkele skill ooit kan draaien (geen skill, of een
+        onvolledige payload) blijft het project parkeren. Anders is de zombie terug die deze klep
+        juist weghaalt — eeuwig 'herproberen' van werk dat nooit wordt uitgevoerd. Zie
+        `_blocking_reason` voor de drie blokkade-redenen."""
         try:
             return int(getattr(self.context, "settings", {}).get("item_fail_limit", "3"))
         except (TypeError, ValueError):
@@ -1876,14 +1887,34 @@ def _ungrounded_tasks(project: dict, deliverables) -> list:
     """De checklist-taken ZONDER gegrond deliverable. Alleen geslaagde items krijgen een deliverable
     (zie _store_deliverable), dus een taak wiens item-id niet in de deliverable-records voorkomt heeft
     geen data — daarover mag de synthese NIETS beweren. Conservatief: een item zonder id telt als
-    ongegrond (liever een gegronde taak dubbel laten checken dan een ongegronde laten fabriceren)."""
+    ongegrond (liever een gegronde taak dubbel laten checken dan een ongegronde laten fabriceren).
+
+    Overgeslagen items staan hier NIET bij: die krijgen hun eigen, stelligere behandeling via
+    `_skipped_tasks` — 'niet onderzocht' en 'bewust laten vallen' zijn twee verschillende dingen
+    voor wie het rapport leest."""
     covered = {r.get("checklist_item") for r in (deliverables or []) if r.get("checklist_item")}
     out = []
     for cl in (project.get("checklists") or []):
         for it in (cl.get("items") or []):
             text = (it.get("text") or "").strip()
-            if text and it.get("id") not in covered:
+            if text and not it.get("skipped") and it.get("id") not in covered:
                 out.append(text)
+    return out
+
+
+def _skipped_tasks(project: dict) -> list[tuple[str, str]]:
+    """De bewust overgeslagen taken als (tekst, reden) — een mens-besluit, geen uitkomst.
+
+    Waarom apart: een project dat afrondt ZONDER zijn kernitem (bijv. de materiaal-analyse) mag
+    nooit lezen als volledig beantwoord. De teller zegt dan 4/4, maar het projectdoel is niet
+    helemaal gehaald — en dat hoort in het rapport te staan waar de mens de review doet, niet
+    alleen als chip op een checklist-item."""
+    out = []
+    for cl in (project.get("checklists") or []):
+        for it in (cl.get("items") or []):
+            if it.get("skipped") and (it.get("text") or "").strip():
+                out.append(((it.get("text") or "").strip(),
+                            (it.get("skip_reason") or "").strip() or "geen reden opgegeven"))
     return out
 
 
@@ -1971,6 +2002,19 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
                           "gegrond resultaat.' Verzin voor deze taken GEEN getallen, prijzen, percentages, "
                           "tabellen of bronnen, en claim NOOIT een herkomst zoals 'op basis van handmatig "
                           "onderzoek'.\n\n")
+        # Overgeslagen taken zijn een mens-BESLUIT, geen kennisgat: ze krijgen hun eigen, stelligere
+        # instructie zodat een rapport nooit als volledig-beantwoord leest terwijl een kernitem
+        # bewust is laten vallen. Dit is de rem op valse voltooiing.
+        overgeslagen = _skipped_tasks(project)
+        if overgeslagen:
+            gap_rule += ("BEWUST OVERGESLAGEN TAKEN (besluit van de mens, NIET uitgevoerd — dit deel van "
+                         "het projectdoel is dus NIET beantwoord):\n"
+                         + "\n".join(f"- {t} (reden: {r})" for t, r in overgeslagen)
+                         + "\nSchrijf onder de kop van ELK van deze taken EXACT: 'Overgeslagen op besluit "
+                           "van de mens — reden: <de reden>. Dit deel van het projectdoel is niet "
+                           "beantwoord.' Verzin er geen bevindingen bij. Benoem in de conclusie "
+                           "EXPLICIET dat dit project afrondt zonder deze ta(a)k(en), zodat de lezer "
+                           "niet denkt dat de vraag volledig beantwoord is.\n\n")
         prompt = (
             (persona.strip() + "\n\n" if persona and persona.strip() else "")
             + f"Je werkt aan het lopende einddocument van dit project in NoochVille (Nooch.earth). "

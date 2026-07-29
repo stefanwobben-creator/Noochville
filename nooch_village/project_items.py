@@ -18,7 +18,7 @@ project wordt niet getend). Dát is de brug die ontbrak.
 """
 from __future__ import annotations
 
-from nooch_village.projects import checklist_progress
+from nooch_village.projects import checklist_progress, skipped_note
 
 _ACTIES = ("done", "skip", "unskip", "handoff")
 
@@ -55,7 +55,12 @@ def maybe_finish(ledger, pid: str, clid: str) -> bool:
     # geduwd — dat is werk dat nog niet eens begonnen is.
     if p.get("status") not in ("running", "queued", "blocked"):
         return False
-    ledger.add_role_message(pid, f"✅ Checklist voltooid ({done}/{telbaar}) — klaar voor review.")
+    # De review-melding draagt de overgeslagen taken mee: 4/4 mag nooit lezen als "alles gedaan"
+    # wanneer een kernitem bewust is laten vallen. Valse voltooiing is erger dan onaffe voortgang.
+    weg = skipped_note(cl)
+    ledger.add_role_message(pid, f"✅ Checklist voltooid ({done}/{telbaar}) — klaar voor review."
+                            + (f"\n⤳ LET OP: {weg}. Dit deel van het projectdoel is NIET beantwoord."
+                               if weg else ""))
     return ledger.mark_awaiting_review(pid)
 
 

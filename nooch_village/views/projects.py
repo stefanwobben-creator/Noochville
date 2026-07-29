@@ -263,9 +263,14 @@ def _progress_badge(p: dict) -> str:
     if not pr:
         return ""
     done, total, pct = pr
-    return (f"<div class='pbadge' title='{done}/{total}'>"
+    # 100% mag niet lezen als "alles gedaan" wanneer er iets is overgeslagen: de ⤳ en de tooltip
+    # maken het besluit zichtbaar op de kaart zelf, zonder doorklikken.
+    from nooch_village.projects import skipped_note
+    weg = skipped_note(p)
+    return (f"<div class='pbadge' title='{done}/{total}"
+            f"{' · ' + _e(weg) if weg else ''}'>"
             f"<div class='pbar'><div style='width:{pct}%'></div></div>"
-            f"<span>{pct}%</span></div>")
+            f"<span>{pct}%{' ⤳' if weg else ''}</span></div>")
 
 
 def _scope_text(p) -> str:

@@ -821,6 +821,29 @@ class ProjectLedger:
         return [p for p in self._projects.values() if p["status"] not in _TERMINAL]
 
 
+def skipped_items(project_or_cl) -> list[dict]:
+    """De bewust overgeslagen items (mens-besluit). Eén bron, want de badge, het einddocument, de
+    afrond-uitkomst en de review-melding moeten alle vier hetzelfde zeggen: dit project rondt af
+    zónder deze ta(a)k(en)."""
+    cls = ([project_or_cl] if "items" in (project_or_cl or {})
+           else (project_or_cl or {}).get("checklists") or [])
+    return [it for cl in cls for it in (cl.get("items") or []) if it.get("skipped")]
+
+
+def skipped_note(project_or_cl, max_toon: int = 2) -> str:
+    """Één leesbare regel over wat is overgeslagen, of "" als er niets is overgeslagen."""
+    weg = skipped_items(project_or_cl)
+    if not weg:
+        return ""
+    stukken = []
+    for it in weg[:max_toon]:
+        reden = (it.get("skip_reason") or "").strip()
+        stukken.append(f"'{(it.get('text') or '?')[:60]}'" + (f" ({reden[:80]})" if reden else ""))
+    rest = len(weg) - len(stukken)
+    return (f"{len(weg)} taak/taken overgeslagen: " + ", ".join(stukken)
+            + (f" (+{rest} andere)" if rest > 0 else ""))
+
+
 def checklist_progress(cl_or_items) -> tuple[int, int]:
     """(afgevinkt, telbaar) voor één checklist of een lijst items — DE bron van waarheid voor
     "is deze checklist af?".

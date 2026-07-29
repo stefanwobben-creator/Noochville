@@ -12,6 +12,7 @@ Twee garanties, en dit bestand bevriest ze allebei:
 """
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 
 from nooch_village.event_bus import EventBus
@@ -334,3 +335,79 @@ def test_laatste_vinkje_via_dispatch_brengt_het_project_naar_review(tmp_path):
                                            "next": ["/"]}, username="guest")
 
     assert cockpit2._Stores(dd).projects.get(pid)["blocked_on"] == "review"
+
+
+# ── valse voltooiing: overslaan mag nooit lezen als afronden ────────────────────
+
+def test_overgeslagen_taak_staat_apart_in_de_einddocument_opdracht(tmp_path):
+    """Een overgeslagen item is een BESLUIT, geen kennisgat: het krijgt een eigen, stelligere
+    instructie ('niet beantwoord') en valt niet in de generieke 'niet onderzocht'-bak."""
+    from unittest.mock import patch
+    from nooch_village.inhabitant import _skipped_tasks, _ungrounded_tasks, synthesize_einddocument
+    from nooch_village.project_doc_store import ProjectDocStore
+    ledger = ProjectLedger(str(tmp_path / "projects.json"))
+    pid, clid = _project(ledger, [("doe de claim", "claims_check"), ("mens-taak", None)])
+    item = _cl(ledger.get(pid), clid)["items"][-1]
+    resolve_item(ledger, pid, clid, item["id"], "skip", reason="valt buiten scope")
+    p = ledger.get(pid)
+
+    assert _skipped_tasks(p) == [("mens-taak", "valt buiten scope")]
+    assert "mens-taak" not in _ungrounded_tasks(p, [])       # niet in de generieke bak
+
+    with patch("nooch_village.llm.reason", return_value="# doc") as m:
+        synthesize_einddocument(project_docs=ProjectDocStore(str(tmp_path)), deliverables=None,
+                                projects=ledger, personas=None, record=None, settings={},
+                                project=p, force_final=True, log=logging.getLogger("t"))
+    prompt = m.call_args[0][0]
+    assert "BEWUST OVERGESLAGEN TAKEN" in prompt
+    assert "valt buiten scope" in prompt
+    assert "NIET beantwoord" in prompt
+    assert "conclusie" in prompt.lower()                     # moet in de conclusie benoemd worden
+
+
+def test_review_melding_benoemt_de_overgeslagen_taak(tmp_path):
+    """Op het review-moment moet de mens zien dat 4/4 niet 'alles gedaan' betekent."""
+    ledger = ProjectLedger(str(tmp_path / "projects.json"))
+    pid, clid = _project(ledger, [("doe de claim", "claims_check"), ("materiaal-analyse", None)])
+    inh = _inh(tmp_path, ledger)
+    inh._execute_checklist(ledger.get(pid), TODAY)
+    item = _cl(ledger.get(pid), clid)["items"][-1]
+
+    resolve_item(ledger, pid, clid, item["id"], "skip", reason="geen labcapaciteit")
+
+    melding = [e["text"] for e in ledger.get(pid).get("log", []) if "klaar voor review" in e["text"]][-1]
+    assert "materiaal-analyse" in melding and "geen labcapaciteit" in melding
+    assert "NIET beantwoord" in melding
+
+
+def test_afrond_uitkomst_draagt_de_overgeslagen_taak_mee(tmp_path):
+    """De uitkomst is wat later over dit project wordt teruggelezen — daar hoort het besluit in."""
+    from nooch_village import cockpit2
+    cockpit2_, dd, st = _cockpit(tmp_path)
+    pid, clid = _mensproject(st)
+    item = _cl(st.projects.get(pid), clid)["items"][-1]
+    cockpit2_.dispatch(dd, "check_skip", {"pid": [pid], "clid": [clid], "item": [item["id"]],
+                                          "reason": ["niet meer nodig"], "next": ["/"]},
+                       username="guest")
+    st2 = cockpit2._Stores(dd)
+    st2.project_docs.write(pid, "# Rapport\n\nEcht antwoord op de vraag, met bevindingen.")
+
+    cockpit2_.dispatch(dd, "proj_done", {"pid": [pid], "next": ["/"]}, username="guest")
+
+    uitkomst = cockpit2._Stores(dd).projects.get(pid)["outcome"]
+    assert "overgeslagen" in uitkomst and "NIET beantwoord" in uitkomst
+
+
+def test_voortgangsbadge_markeert_een_overgeslagen_taak(tmp_path):
+    """100% zonder markering leest als 'alles gedaan'; de ⤳ en de tooltip voorkomen dat."""
+    from nooch_village.views import projects as P
+    ledger = ProjectLedger(str(tmp_path / "projects.json"))
+    pid, clid = _project(ledger, [("doe de claim", "claims_check"), ("materiaal-analyse", None)])
+    items = _cl(ledger.get(pid), clid)["items"]
+    ledger.check_toggle(pid, clid, items[0]["id"])
+    resolve_item(ledger, pid, clid, items[1]["id"], "skip", reason="geen labcapaciteit")
+
+    badge = P._progress_badge(ledger.get(pid))
+
+    assert "100%" in badge and "⤳" in badge
+    assert "materiaal-analyse" in badge and "geen labcapaciteit" in badge   # in de tooltip
