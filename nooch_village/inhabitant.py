@@ -996,10 +996,15 @@ class Inhabitant(threading.Thread):
         cl = ledger.checklist_add(pid, title=self._PREP_CHECKLIST_TITLE)
         if cl is None:
             return
-        n_skill = n_open = n_invalid = 0
+        n_skill = n_open = n_invalid = n_mens = 0
         opens = []
         for it in plan["items"]:
             skill = it.get("skill")
+            # Preventie (deel 3): een item dat alleen een MENS of externe partij kan doen — een
+            # fabrieksbezoek, een foto, een telefoontje — komt als expliciete mens-taak op de lijst
+            # en telt NIET mee in de klaar-telling. Zonder dat onderscheid ontstaat de zombie al bij
+            # het plannen: de rol kan het nooit afvinken, dus het project haalt done==total nooit.
+            mens_taak = (not skill) and str(it.get("kind") or "").strip().lower() == "human_external"
             payload = it.get("payload") if isinstance(it.get("payload"), dict) else None
             reason = it.get("reason", "")
             payload_ok = True
@@ -1013,9 +1018,15 @@ class Inhabitant(threading.Thread):
                     if issues:
                         payload_ok = False
                         reason = "; ".join(issues)
+            if mens_taak and not reason:
+                reason = "mens/extern: geen software kan dit doen"
             ledger.check_add(pid, cl["id"], it.get("text", ""), skill=skill, payload=payload,
-                             query=it.get("query", ""), reason=reason, payload_ok=payload_ok)
-            if not skill:
+                             query=it.get("query", ""), reason=reason, payload_ok=payload_ok,
+                             human_task=mens_taak)
+            if mens_taak:
+                n_mens += 1
+                opens.append(f"{it.get('text','')}: mens-taak ({reason})")
+            elif not skill:
                 n_open += 1
                 opens.append(f"{it.get('text','')}: {reason or 'geen skill'}")
             elif not payload_ok:
@@ -1025,10 +1036,22 @@ class Inhabitant(threading.Thread):
                 n_skill += 1
         ledger.add_role_message(pid, (
             f"📋 Uitvoerplan voor '{goal}'. Deliverable: {plan.get('deliverable','')}. "
-            f"{n_skill} item(s) uitvoerbaar, {n_open} zonder skill, {n_invalid} met onvolledige payload"
+            f"{n_skill} item(s) uitvoerbaar, {n_open} zonder skill, {n_mens} mens-taak/taken "
+            f"(tellen niet mee in de klaar-telling), {n_invalid} met onvolledige payload"
             + (": " + "; ".join(opens) if opens else "") + "."))
-        self.log.info("📋 project '%s' voorbereid: %d uitvoerbaar, %d zonder skill, %d onvolledige payload",
-                      pid, n_skill, n_open, n_invalid)
+        self.log.info("📋 project '%s' voorbereid: %d uitvoerbaar, %d zonder skill, %d mens-taak, "
+                      "%d onvolledige payload", pid, n_skill, n_open, n_mens, n_invalid)
+        # Is het HELE plan mens-werk, dan is dit geen AI-project. Het als AI-project laten staan
+        # levert precies de projecten op die 0/5 op het bord bleven staan (a14e21e6970d,
+        # abedbc1aa448): niemand kan er ooit iets aan afvinken. Meteen zichtbaar bij de mens neerleggen.
+        if n_mens and not (n_skill or n_open or n_invalid):
+            ledger.add_role_message(pid, (
+                "🙋 Dit hele uitvoerplan is mens- of extern werk — ik kan hier niets van uitvoeren. "
+                "Dit hoort een mens-project te zijn (of het doel moet kleiner: welk stuk kan ík doen?)."))
+            ledger.block(pid, "mens-project: geen enkel item is door een rol uit te voeren")
+            self._notify_founder(pid, f"🙋 Project van {self.display_name} is volledig mens-werk: "
+                                      f"'{goal[:80]}' — geen AI-project, wacht op jou.")
+            self.log.info("🙋 project '%s' is volledig mens-werk → naar de mens", pid)
 
     def _raadpleeg_kennis(self, pid: str, goal: str, ledger) -> str:
         """Kennis-eerst: raadpleeg vóór het plannen Lara's kennislaag (kaartjes + inzichten +
@@ -1166,11 +1189,20 @@ class Inhabitant(threading.Thread):
             "'input' shape of that skill (e.g. a term skill wants {\"term\": \"...\"}, keywords_everywhere wants "
             "{\"kw\": [\"...\"]}, a brands skill wants {\"brands\": [\"...\"]}). If no skill can carry out the "
             "item, set \"skill\": null, \"payload\": {} and give a short reason (e.g. \"no patent skill\"). "
+            "For EVERY item with \"skill\": null also set \"kind\":\n"
+            "  - \"human_external\" if NO software could ever do it because it needs a person or an "
+            "outside party in the physical world (visiting a factory, filming, phoning a supplier, "
+            "signing, shipping, taking a photo, negotiating a price);\n"
+            "  - \"missing_capability\" if software COULD do it but this role has no such skill yet "
+            "(querying an API, scraping a page, analysing a dataset).\n"
+            "Be strict: \"someone should decide\" is not human_external if the deciding is really "
+            "just research. "
             "Also determine which accountability the goal touches and which deliverable belongs to it. "
             "Write all free text in English. "
             "Answer ONLY with JSON, exactly this schema:\n"
             "{\"deliverable\": \"...\", \"accountability\": \"...\", \"items\": [{\"text\": \"...\", "
-            "\"skill\": \"skillnaam of null\", \"payload\": {}, \"reason\": \"...\"}]}"
+            "\"skill\": \"skillnaam of null\", \"payload\": {}, \"reason\": \"...\", "
+            "\"kind\": \"human_external|missing_capability (alleen als skill null is)\"}]}"
         )
         # Ruim token-budget: een verbose trede (bv. mistral) kapt het plan-JSON anders middenin af →
         # onparsebaar. 1500 tokens is genoeg voor 2-5 items met payloads en langere velden.
@@ -1365,8 +1397,8 @@ class Inhabitant(threading.Thread):
         succeeded = 0                                            # geslaagde items deze puls → één synthese-pass
         fail_reasons: dict = {}                                  # item_id → laatste foutreden (voor de hulpvraag)
         for pos, item in enumerate(cl["items"]):
-            if item.get("done") or item.get("skipped"):
-                continue                                         # idempotent: afgevinkt of bewust overgeslagen
+            if item.get("done") or item.get("skipped") or item.get("human_task"):
+                continue                    # afgevinkt, overgeslagen, of expliciet mens-werk (niet van mij)
             skill = item.get("skill")
             if not skill:
                 continue                                         # geen-skill-item blijft open (reden in item)
@@ -1417,8 +1449,8 @@ class Inhabitant(threading.Thread):
             if not (ledger.get(pid) or {}).get("review_raised"):
                 ledger.mark_awaiting_review(pid)
                 self._synthesize_einddocument(ledger.get(pid), done, total, force_final=True)
-                from nooch_village.projects import skipped_note
-                weg = skipped_note(fresh_cl)          # 4/4 mag niet lezen als "alles gedaan"
+                from nooch_village.projects import not_answered_note
+                weg = not_answered_note(fresh_cl)     # 4/4 mag niet lezen als "alles gedaan"
                 ledger.add_role_message(pid, "✅ Checklist voltooid — klaar voor review."
                                         + (f"\n⤳ LET OP: {weg}. Dit deel van het projectdoel is "
                                            f"NIET beantwoord." if weg else ""))
@@ -1437,7 +1469,11 @@ class Inhabitant(threading.Thread):
         # eeuwig ACTIEF, en de belangrijkste bron van de dichtgeslibde WIP. Zolang er nog één item met
         # resterende pogingen is blijft het project gewoon actief; pas als álles vastzit, parkeren we.
         limit = self._item_fail_limit()
-        open_items = [it for it in items if not it.get("done") and not it.get("skipped")]
+        # Mens-taken tellen hier NIET als open: ze zijn bij het plannen al uit de klaar-telling
+        # gehaald en horen bij de mens, niet bij deze rol. Zouden ze wel meetellen, dan parkeert het
+        # project op de eerste mens-taak — precies de zombie die deel 3 juist voorkomt.
+        open_items = [it for it in items
+                      if not it.get("done") and not it.get("skipped") and not it.get("human_task")]
         blokkades = {it["id"]: self._blocking_reason(it, limit) for it in open_items}
         if open_items and all(blokkades.values()):           # niemand kan nog vooruit → parkeren
             if succeeded:
@@ -1897,24 +1933,30 @@ def _ungrounded_tasks(project: dict, deliverables) -> list:
     for cl in (project.get("checklists") or []):
         for it in (cl.get("items") or []):
             text = (it.get("text") or "").strip()
-            if text and not it.get("skipped") and it.get("id") not in covered:
+            if text and not it.get("skipped") and not it.get("human_task") and it.get("id") not in covered:
                 out.append(text)
     return out
 
 
 def _skipped_tasks(project: dict) -> list[tuple[str, str]]:
-    """De bewust overgeslagen taken als (tekst, reden) — een mens-besluit, geen uitkomst.
+    """De taken die dit project NIET beantwoordt, als (tekst, reden): bewust overgeslagen (mens-besluit
+    achteraf) plus nog openstaande mens-taken (planner-besluit vooraf).
 
-    Waarom apart: een project dat afrondt ZONDER zijn kernitem (bijv. de materiaal-analyse) mag
-    nooit lezen als volledig beantwoord. De teller zegt dan 4/4, maar het projectdoel is niet
-    helemaal gehaald — en dat hoort in het rapport te staan waar de mens de review doet, niet
-    alleen als chip op een checklist-item."""
+    Waarom apart van _ungrounded_tasks: een project dat afrondt ZONDER zijn kernitem (bijv. de
+    materiaal-analyse) mag nooit lezen als volledig beantwoord. De teller zegt dan 4/4, maar het
+    projectdoel is niet helemaal gehaald — en dat hoort in het rapport te staan waar de mens de
+    review doet, niet alleen als chip op een checklist-item."""
     out = []
     for cl in (project.get("checklists") or []):
         for it in (cl.get("items") or []):
-            if it.get("skipped") and (it.get("text") or "").strip():
-                out.append(((it.get("text") or "").strip(),
-                            (it.get("skip_reason") or "").strip() or "geen reden opgegeven"))
+            tekst = (it.get("text") or "").strip()
+            if not tekst:
+                continue
+            if it.get("skipped"):
+                out.append((tekst, (it.get("skip_reason") or "").strip() or "geen reden opgegeven"))
+            elif it.get("human_task") and not it.get("done"):
+                out.append((tekst, "mens- of extern werk, nog niet gedaan: "
+                            + ((it.get("reason") or "").strip() or "geen software kan dit doen")))
     return out
 
 
@@ -2007,8 +2049,8 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
         # bewust is laten vallen. Dit is de rem op valse voltooiing.
         overgeslagen = _skipped_tasks(project)
         if overgeslagen:
-            gap_rule += ("BEWUST OVERGESLAGEN TAKEN (besluit van de mens, NIET uitgevoerd — dit deel van "
-                         "het projectdoel is dus NIET beantwoord):\n"
+            gap_rule += ("NIET BEANTWOORDE TAKEN (bewust overgeslagen, of mens-/extern werk dat nog "
+                         "open staat — dit deel van het projectdoel is dus NIET beantwoord):\n"
                          + "\n".join(f"- {t} (reden: {r})" for t, r in overgeslagen)
                          + "\nSchrijf onder de kop van ELK van deze taken EXACT: 'Overgeslagen op besluit "
                            "van de mens — reden: <de reden>. Dit deel van het projectdoel is niet "

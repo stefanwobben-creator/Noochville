@@ -359,7 +359,7 @@ def test_overgeslagen_taak_staat_apart_in_de_einddocument_opdracht(tmp_path):
                                 projects=ledger, personas=None, record=None, settings={},
                                 project=p, force_final=True, log=logging.getLogger("t"))
     prompt = m.call_args[0][0]
-    assert "BEWUST OVERGESLAGEN TAKEN" in prompt
+    assert "NIET BEANTWOORDE TAKEN" in prompt
     assert "valt buiten scope" in prompt
     assert "NIET beantwoord" in prompt
     assert "conclusie" in prompt.lower()                     # moet in de conclusie benoemd worden
