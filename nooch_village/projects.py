@@ -428,6 +428,34 @@ class ProjectLedger:
                 return True
         return False
 
+    def mark_item_routed(self, pid: str, clid: str, item_id: str) -> bool:
+        """Markeer dat de escalatie-router dit item heeft beoordeeld. De garantie dat hij één keer
+        per item vuurt: zonder deze vlag doet elke reactivering dezelfde LLM-call opnieuw op
+        hetzelfde vastgelopen item."""
+        p = self._projects.get(pid)
+        cl = self._checklist(p, clid) if p else None
+        if cl is None:
+            return False
+        for it in cl.get("items", []):
+            if it["id"] == item_id:
+                it["routed"] = True
+                self._touch(p); self._save()
+                return True
+        return False
+
+    def set_handoff_trail(self, pid: str, trail) -> bool:
+        """Zet het handoff-spoor op een project: welke rollen dit werk al zagen.
+
+        Op het PROJECT en niet op het item, want bij een overdracht krijgt de ontvangende rol een
+        vers uitvoerplan met nieuwe item-id's — het spoor moet die herplanning overleven, anders is
+        de hop-teller na één overdracht weer nul en kan het werk alsnog rondjes gaan draaien."""
+        p = self._projects.get(pid)
+        if p is None:
+            return False
+        p["handoff_trail"] = [r for r in (trail or []) if r]
+        self._touch(p); self._save()
+        return True
+
     def check_remove(self, pid: str, clid: str, item_id: str) -> bool:
         p = self._projects.get(pid)
         cl = self._checklist(p, clid) if p else None
@@ -937,7 +965,8 @@ def dod_poort(project: dict | None, doc_text: str = "") -> str | None:
 _WRITE_METHODS = (
     "create", "start", "set_due", "set_dod", "add_reaction", "attach_add", "attach_file", "attach_remove",
     "reopen", "block", "unblock", "complete", "mark_awaiting_review", "checklist_add", "checklist_remove", "check_add",
-    "check_toggle", "check_remove", "set_item_skipped", "set_item_offer", "accept_item_offer",
+    "check_toggle", "check_remove", "set_item_skipped", "mark_item_routed", "set_handoff_trail",
+    "set_item_offer", "accept_item_offer",
     "edit", "approve", "discard", "accept_proposal", "reject_proposal",
     "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
     "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",

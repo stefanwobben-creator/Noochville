@@ -1578,3 +1578,33 @@ een fysieke/technische mens-taak leunt niet als AI-project mét dat item in de
 klaar-telling aanmaken — splits de mens-taak eruit of geef het project een
 mens-owner. Twee prod-projecten (a14e21e6970d, abedbc1aa448) zijn 0/5 en volledig
 mens-werk: die hadden nooit als AI-project mogen ontstaan.
+
+## 2026-07-29 — deel 4: rollen die samenwerken, en een oogst van wat we niet kunnen
+
+**[beslissing]** Elk "ik kan niet verder" ging rechtstreeks naar de founder. Dat
+maakt de mens de bottleneck voor werk dat een ándere rol gewoon bezit. De
+escalatie-router zet er een beslisvolgorde voor: bezit een andere rol dit
+(match op **accountability**, niet op skill) → overdragen; niemand, en het is
+fysiek → mens; van deze rol maar de capaciteit ontbreekt → parkeren + gat-record.
+
+**[les]** Eigenaarschap gaat vóór gereedschap. Een handoff naar een rol zónder de
+skill is expliciet toegestaan — daar hóórt het gat te landen, bij de rol die het
+werk bezit, niet bij degene die er toevallig als eerste tegenaan liep. Het item
+mag daar doodlopen; dat is precies het signaal dat de backlog voedt.
+
+**[beslissing]** Geen goedkeuringsstap op het routeren zelf. De slechtst mogelijke
+uitkomst is een zichtbaar geparkeerd item op het verkeerde bureau: intern,
+omkeerbaar en begrensd door de hop-teller. Een poort daar verstikt de flow zonder
+risico weg te nemen. De enige poort zit op het pad van gat naar code-wijziging
+(Codie-backlog → mens → implementatie).
+
+**[fix]** #249. Twee harde guards, elk met een test: de **hop-teller** (spoor op
+het PROJECT, zodat hij de herplanning bij de ontvanger overleeft; max 2 hops,
+nooit terug naar een rol die het al zag → daarna de mens) en **zichtbaar
+doodlopen** (een doorverwezen item dat bij B strandt parkeert daar via dezelfde
+klep, mét gat-record). De router vuurt één keer per item (`routed`-vlag), anders
+doet elke reactivering dezelfde LLM-call opnieuw.
+
+**[ontdekking]** De frequentie in de backlog telt **projecten**, niet records.
+Anders bepaalt de puls-frequentie de prioriteit in plaats van de impact: zes keer
+vastlopen op hetzelfde project is één geblokkeerd project.

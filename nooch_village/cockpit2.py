@@ -268,6 +268,7 @@ from nooch_village.views.search import render_search, render_search_fragment
 from nooch_village.views.claims import render_claims, render_rapport, rol_voor
 from nooch_village.views.inwoners import render_inwoner, render_inwoners
 from nooch_village.views.kennislaag import render_kennislaag
+from nooch_village.views.codie import render_codie
 from nooch_village.views.kennisbank import render_kennisbank, render_kennisbank_search
 from nooch_village.views.kennisbank_spel import (render_kennisbank_spel,
                                                  render_kennisbank_spel_search)
@@ -4710,6 +4711,12 @@ def make_handler(data_dir: str, csrf_token: str,
             if path == "/bronnen":
                 # Aansluit-scherm voor externe databronnen (status + aan/uit).
                 self._send(render_bronnen(st, os.path.dirname(data_dir), csrf_token=effective_csrf))
+                return
+            if path == "/codie":
+                # Codie-backlog: de capaciteit-gaten die de escalatie-router oogstte, geclusterd
+                # per ontbrekende capaciteit. Read-only — de mens-poort zit op het pad van gat naar
+                # code-wijziging, niet op dit scherm.
+                self._send(render_codie(data_dir))
                 return
             if path == "/inzichten":
                 # Kennislaag: de inzicht-kaarten die de Librarian ving (read-only).

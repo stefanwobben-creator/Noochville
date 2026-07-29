@@ -1481,6 +1481,21 @@ class Inhabitant(threading.Thread):
                 # einddocument te staan vóórdat het project op de plank gaat. Anders verliest een project
                 # dat in dezelfde puls iets afmaakt ÉN vastloopt zijn voortgang uit het document.
                 self._synthesize_einddocument(ledger.get(pid), done, total, force_final=False)
+            # Deel 4 — de escalatie-router vóór de mens. Eerst de vraag "bezit een ANDERE rol dit?"
+            # (match op accountability, niet op skill); pas als niemand het bezit komt de mens in
+            # beeld. Wat wél kan worden doorgegeven verlaat dit project; wat blijft, parkeert
+            # hieronder gewoon — zo sterft een doodgelopen doorverwijzing nooit stil.
+            open_items = self._route_stuck_items(project, clid, open_items)
+            if not open_items:
+                # Alles doorgegeven. Misschien is dit project daarmee klaar voor review.
+                from nooch_village.project_items import maybe_finish
+                if maybe_finish(ledger, pid, clid):
+                    self.log.info("📤 project '%s': alle vastgelopen items doorgegeven → review", pid)
+                else:
+                    self.log.info("📤 project '%s': alle vastgelopen items doorgegeven", pid)
+                return None
+            blokkades = {it["id"]: blokkades.get(it["id"]) or self._blocking_reason(it, limit)
+                         for it in open_items}
             stuck = list(open_items)
             mens = [it for it in stuck if blokkades[it["id"]] != "fails"]
             faal = [it for it in stuck if blokkades[it["id"]] == "fails"]
@@ -1520,6 +1535,33 @@ class Inhabitant(threading.Thread):
             return int(getattr(self.context, "settings", {}).get("item_fail_limit", "3"))
         except (TypeError, ValueError):
             return 3
+
+    def _route_stuck_items(self, project: dict, clid: str, open_items: list) -> list:
+        """Laat de escalatie-router één keer over de vastgelopen items lopen; geef terug wat hier
+        blijft. Fail-soft: gaat er iets mis, dan blijft alles staan en parkeert de klep zoals altijd
+        — routeren mag nooit werk laten verdwijnen."""
+        try:
+            from nooch_village.escalation_router import escaleer
+            uit = escaleer(ledger=self.context.projects,
+                           records=getattr(self.context, "records", None),
+                           data_dir=self.context.data_dir, project=project, clid=clid,
+                           items=open_items, from_role=self.id,
+                           settings=getattr(self.context, "settings", {}),
+                           notify=self._notify_founder)
+        except Exception as e:                   # noqa: BLE001 — de klep is belangrijker dan de router
+            self.log.warning("router overgeslagen (%s) — items blijven hier", e)
+            return open_items
+        for h in uit["handoffs"]:
+            self.bus.publish(Event("work_handed_off",
+                                   {"project_id": project["id"], "from_role": self.id,
+                                    "to_role": h["naar_rol"], "new_project_id": h.get("pid"),
+                                    "trail": h.get("trail", [])}, self.id))
+        for g in uit["gaps"]:
+            self.bus.publish(Event("capability_gap_sensed",
+                                   {"project_id": project["id"], "role": self.id,
+                                    "reason": g.get("reason"), "capability": g.get("capability"),
+                                    "item": g.get("item_text")}, self.id))
+        return uit["resterend"]
 
     def _blocking_reason(self, item: dict, limit: int) -> str | None:
         """Waarom kan dit open item niet vooruit? None = het kan nog wél vooruit.
