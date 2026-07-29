@@ -1365,8 +1365,8 @@ class Inhabitant(threading.Thread):
         succeeded = 0                                            # geslaagde items deze puls → één synthese-pass
         fail_reasons: dict = {}                                  # item_id → laatste foutreden (voor de hulpvraag)
         for pos, item in enumerate(cl["items"]):
-            if item.get("done"):
-                continue                                         # idempotent: reeds afgevinkt
+            if item.get("done") or item.get("skipped"):
+                continue                                         # idempotent: afgevinkt of bewust overgeslagen
             skill = item.get("skill")
             if not skill:
                 continue                                         # geen-skill-item blijft open (reden in item)
@@ -1407,8 +1407,8 @@ class Inhabitant(threading.Thread):
         ledger.mark_tended(pid, today)
         fresh_cl = self._project_checklist(ledger.get(pid)) or {}
         items = fresh_cl.get("items", [])
-        done = sum(1 for it in items if it.get("done"))
-        total = len(items)
+        from nooch_village.projects import checklist_progress
+        done, total = checklist_progress(fresh_cl)       # overgeslagen items tellen niet mee
         if total and done == total:
             # Review-gate: checklist volledig af → status 'wacht' (blocked, blocked_on='review'), NIET done.
             # De outcome-marker wordt pas bij Done-toekenning (mens sleept wacht→done) gezet. Alleen op een
@@ -1422,27 +1422,44 @@ class Inhabitant(threading.Thread):
                                        {"project_id": pid, "owner": self.id}, self.id))
                 self.log.info("✅ project '%s' checklist voltooid (%d/%d) — wacht op review", pid, done, total)
             return None                                          # geen autonome DONE meer
-        # Vastloop-klep: items die de retry-grens raakten → project naar WAITING (blocked) met de blokkade
-        # bovenaan, i.p.v. eeuwig op ACTIEF blijven herproberen. Zo verdwijnt het uit de actieve lane en
-        # ziet de mens wat op hem wacht; na feedback sleept hij het terug naar ACTIEF (verse pogingen, want
-        # de fail-tellers worden hier gereset — dus geen stuck-vlag nodig om herblokkeren te voorkomen).
+        # Vastloop-klep: het project gaat naar WAITING (blocked) zodra er open items zijn en GEEN ENKELE
+        # daarvan nog vooruit kan. Zo verdwijnt het uit de actieve lane (en uit de WIP-telling) en ziet de
+        # mens wat op hém wacht; na zijn antwoord sleept hij het terug naar ACTIEF (verse pogingen, want de
+        # fail-tellers worden hier gereset — dus geen stuck-vlag nodig om herblokkeren te voorkomen).
+        #
+        # De klep keek hiervóór alleen naar skill-items die hun retry-grens raakten. Een item ZONDER skill
+        # (een mens- of externe taak) kon daardoor nooit de klep halen én nooit vanzelf done worden: het
+        # project haalde done == total nooit en viel elke puls opnieuw door naar "blijft in ACTIEF" —
+        # eeuwig ACTIEF, en de belangrijkste bron van de dichtgeslibde WIP. Zolang er nog één item met
+        # resterende pogingen is blijft het project gewoon actief; pas als álles vastzit, parkeren we.
         limit = self._item_fail_limit()
-        stuck = [it for it in items
-                 if not it.get("done") and it.get("skill") and int(it.get("fails") or 0) >= limit] \
-            if limit > 0 else []
-        if stuck:
-            vraag = self._formulate_stuck_question(project, stuck, fail_reasons, limit)
+        open_items = [it for it in items if not it.get("done") and not it.get("skipped")]
+        blokkades = {it["id"]: self._blocking_reason(it, limit) for it in open_items}
+        if open_items and all(blokkades.values()):           # niemand kan nog vooruit → parkeren
+            if succeeded:
+                # Eerst de winst van déze puls vastleggen: er is echt werk opgeleverd, dat hoort in het
+                # einddocument te staan vóórdat het project op de plank gaat. Anders verliest een project
+                # dat in dezelfde puls iets afmaakt ÉN vastloopt zijn voortgang uit het document.
+                self._synthesize_einddocument(ledger.get(pid), done, total, force_final=False)
+            stuck = list(open_items)
+            mens = [it for it in stuck if blokkades[it["id"]] != "fails"]
+            faal = [it for it in stuck if blokkades[it["id"]] == "fails"]
+            vraag = self._formulate_stuck_question(project, faal, mens, fail_reasons, limit)
             ledger.add_role_message(pid, f"⏸️ {vraag}")          # de rol zet zijn concrete hulpvraag neer
-            ledger.reset_item_fails(pid, clid, [it["id"] for it in stuck])   # verse pogingen na reactivering
-            ledger.block(pid, f"vastgelopen op {len(stuck)} item(s) — wacht op antwoord")
+            ledger.reset_item_fails(pid, clid, [it["id"] for it in faal])    # verse pogingen na reactivering
+            waarop = ("wacht op een mens of externe partij" if mens and not faal
+                      else "wacht op antwoord")
+            ledger.block(pid, f"vastgelopen op {len(stuck)} item(s) — {waarop}")
             # Taak 2: zichtbaar escaleren naar de founder (heads-up, geen approve-knop). Een geblokkeerd
             # project stond tot nu toe alleen als wall-note op het bord; de founder zag het niet.
             self._notify_founder(pid, f"⏸️ Project van {self.display_name} vastgelopen op "
                                  f"{len(stuck)} item(s): {vraag}")
             self.bus.publish(Event("project_stuck",
                                    {"project_id": pid, "owner": self.id, "items": len(stuck),
+                                    "human_items": len(mens), "failed_items": len(faal),
                                     "vraag": vraag}, self.id))
-            self.log.info("⏸️ project '%s' → WAITING: %d item(s) vastgelopen na %d pogingen", pid, len(stuck), limit)
+            self.log.info("⏸️ project '%s' → WAITING: %d item(s) vast (%d mens/extern, %d bron-fout)",
+                          pid, len(stuck), len(mens), len(faal))
             return None
         if succeeded:                                            # ≥1 item geslaagd deze puls → één reguliere pass
             self._synthesize_einddocument(ledger.get(pid), done, total, force_final=False)
@@ -1457,19 +1474,54 @@ class Inhabitant(threading.Thread):
         except (TypeError, ValueError):
             return 3
 
-    def _formulate_stuck_question(self, project: dict, stuck: list, reasons: dict, limit: int) -> str:
-        """De rol formuleert ÉÉN concrete, beantwoordbare hulpvraag om de blokkade op te heffen, GEGROND
-        in de echte foutredenen (niet 'het lukte niet' maar 'bron X bleef leeg op query Y'). Een mens óf
-        een andere rol kan 'm beantwoorden; het antwoord in het project brengt het weer naar ACTIEF.
-        Fail-soft: geen LLM/fout → een gegronde sjabloon-vraag met item + reden."""
+    def _blocking_reason(self, item: dict, limit: int) -> str | None:
+        """Waarom kan dit open item niet vooruit? None = het kan nog wél vooruit.
+
+          "human"  — geen skill: alleen een mens of externe partij kan dit doen;
+          "payload" — wél een skill, maar de payload is onvolledig (`payload_ok is False`), dus de
+                      uitvoer slaat 'm elke puls over: zonder mens komt hier niets van;
+          "fails"  — skill-item dat de retry-grens raakte.
+
+        `limit <= 0` zet alleen de RETRY-dimensie uit (skill-items herproberen dan eeuwig, ongewijzigd
+        gedrag). Het zet de klep niet helemaal uit: een item dat geen enkele skill ooit kan draaien
+        blijft blokkeren, want eeuwig herproberen van iets dat niemand uitvoert is precies de zombie
+        die we hier weghalen."""
+        if not item.get("skill"):
+            return "human"
+        if item.get("payload_ok") is False:
+            return "payload"
+        if limit > 0 and int(item.get("fails") or 0) >= limit:
+            return "fails"
+        return None
+
+    def _formulate_stuck_question(self, project: dict, faal: list, mens: list,
+                                  reasons: dict, limit: int) -> str:
+        """De rol formuleert ÉÉN concrete, beantwoordbare hulpvraag om de blokkade op te heffen.
+
+        Twee soorten blokkade vragen om verschillende taal, dus die worden apart geformuleerd:
+        een gefaald skill-item is GEGROND in de echte foutreden ('bron X bleef leeg op query Y'),
+        maar een item zonder skill is geen bronprobleem — daar is niets misgegaan, het vráágt gewoon
+        een mens of externe partij. Dat als 'bron bleef leeg' presenteren stuurt de mens het verkeerde
+        bos in. Fail-soft: geen LLM/fout → een gegronde sjabloon-vraag met item + reden."""
         detail = "; ".join(f"'{str(it.get('text',''))[:60]}' ({str(reasons.get(it['id'],'onbekende fout'))[:90]})"
-                           for it in stuck[:3])
-        fallback = (f"Vastgelopen na {limit} pogingen op: {detail}. Wat heb ik nodig om verder te kunnen — "
-                    f"een andere bron, een scherpere query, of jouw feedback?")
+                           for it in faal[:3])
+        mens_detail = "; ".join(f"'{str(it.get('text',''))[:80]}'" for it in mens[:3])
+        delen = []
+        if mens:
+            delen.append(f"Deze taak vereist een mens of externe partij: {mens_detail}. "
+                         f"Kun jij dit doen, is het niet meer nodig, of hoort het bij een andere rol?")
+        if faal:
+            delen.append(f"Vastgelopen na {limit} pogingen op: {detail}. Wat heb ik nodig om verder te "
+                         f"kunnen — een andere bron, een scherpere query, of jouw feedback?")
+        fallback = " ".join(delen) or "Ik kan hier niet verder; wat heb je van mij nodig?"
+        if not faal:
+            return fallback          # zuivere mens-taak: geen LLM nodig, de vraag IS de itemtekst
         try:
             from nooch_village.llm import reason
+            extra = (f" It also has item(s) that only a human or external party can do: {mens_detail}."
+                     if mens else "")
             prompt = (f"You are {self.name}, an autonomous role. Your project '{project.get('scope','')}' is "
-                      f"stuck on these item(s), with the actual error: {detail}. Formulate ONE concrete, "
+                      f"stuck on these item(s), with the actual error: {detail}.{extra} Formulate ONE concrete, "
                       f"answerable question for help (to a human or another role) that gets you moving again. "
                       f"Be specific about what you need; max 2 sentences, no padding. Answer in English.")
             out = reason(prompt, call_site="stuck_question")

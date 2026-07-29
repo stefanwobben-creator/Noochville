@@ -396,6 +396,32 @@ class ProjectLedger:
         if changed:
             self._touch(p); self._save()
 
+    def set_item_skipped(self, pid: str, clid: str, item_id: str, skipped: bool = True,
+                         reason: str = "") -> bool:
+        """Zet (of wis) 'overgeslagen' op een checklist-item: n.v.t., vervalt, of elders belegd.
+
+        Een overgeslagen item telt NIET meer mee in de klaar-telling (`checklist_progress`), zodat
+        done == telbaar weer haalbaar wordt en het project kan afronden. Het item blijft wél staan
+        met zijn reden — dit is een besluit met audittrail, geen verwijdering. Onderscheid met `done`:
+        done = gedaan; skipped = hoeft niet (meer) gedaan te worden."""
+        p = self._projects.get(pid)
+        cl = self._checklist(p, clid) if p else None
+        if cl is None:
+            return False
+        for it in cl.get("items", []):
+            if it["id"] == item_id:
+                if skipped:
+                    it["skipped"] = True
+                    if reason:
+                        it["skip_reason"] = reason[:300]
+                else:
+                    it.pop("skipped", None)
+                    it.pop("skip_reason", None)
+                p.pop("review_raised", None)          # checklist-mutatie → review-vlag wissen (Q2)
+                self._touch(p); self._save()
+                return True
+        return False
+
     def check_remove(self, pid: str, clid: str, item_id: str) -> bool:
         p = self._projects.get(pid)
         cl = self._checklist(p, clid) if p else None
@@ -795,6 +821,19 @@ class ProjectLedger:
         return [p for p in self._projects.values() if p["status"] not in _TERMINAL]
 
 
+def checklist_progress(cl_or_items) -> tuple[int, int]:
+    """(afgevinkt, telbaar) voor één checklist of een lijst items — DE bron van waarheid voor
+    "is deze checklist af?".
+
+    Overgeslagen items (`skipped`) tellen niet mee in de noemer: het besluit "dit hoeft niet (meer)"
+    mag een project niet eeuwig onafgerond houden. Eén definitie, want de worker (review-gate), de
+    voortgangsbalk en de kaart-badge moeten het per se over hetzelfde getal hebben — anders zegt de
+    UI 4/5 terwijl de rol het project al als af beschouwt."""
+    items = cl_or_items.get("items", []) if isinstance(cl_or_items, dict) else (cl_or_items or [])
+    telbaar = [it for it in items if not it.get("skipped")]
+    return sum(1 for it in telbaar if it.get("done")), len(telbaar)
+
+
 def seed_document(dod: str) -> str:
     """De start van het levende einddocument: de 'klaar wanneer' (de uitgebreide DoD) als kop.
     De inwoner schrijft hieronder naar het antwoord toe; zodra het document van deze seed afwijkt
@@ -840,8 +879,8 @@ def dod_poort(project: dict | None, doc_text: str = "") -> str | None:
 _WRITE_METHODS = (
     "create", "start", "set_due", "set_dod", "add_reaction", "attach_add", "attach_file", "attach_remove",
     "reopen", "block", "unblock", "complete", "mark_awaiting_review", "checklist_add", "checklist_remove", "check_add",
-    "check_toggle", "check_remove", "set_item_offer", "accept_item_offer", "edit", "approve",
-    "discard", "accept_proposal", "reject_proposal",
+    "check_toggle", "check_remove", "set_item_skipped", "set_item_offer", "accept_item_offer",
+    "edit", "approve", "discard", "accept_proposal", "reject_proposal",
     "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
     "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",
     "mark_formalized", "to_future", "mark_scope_nudge", "note_item_fail", "reset_item_fails",

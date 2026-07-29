@@ -235,11 +235,16 @@ def _verzwakt_block(p, hid, rw: bool) -> str:
 
 
 def _proj_progress(p: dict):
+    """(done, telbaar, pct) over alle checklists. Telt via de gedeelde `checklist_progress`, zodat de
+    kaart-badge exact hetzelfde getal toont als waar de worker zijn review-gate op baseert."""
+    from nooch_village.projects import checklist_progress
     items = [it for cl in (p.get("checklists") or []) for it in cl.get("items", [])]
     if not items:
         return None
-    done = sum(1 for it in items if it.get("done"))
-    return done, len(items), round(100 * done / len(items))
+    done, telbaar = checklist_progress(items)
+    if not telbaar:                                   # alles overgeslagen → geen zinnig percentage
+        return None
+    return done, telbaar, round(100 * done / telbaar)
 
 
 def _due_overdue(due: str) -> bool:
@@ -982,7 +987,7 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     # doc-gedreven (projects.dod_poort leest het einddocument). Zie _einddocument_html.
 
     # 2) Checklist — vier onderscheidbare states + skill/payload (zie _checklists_html)
-    checklists_html = _checklists_html(p, csrf_token, pid, back, rw)
+    checklists_html = _checklists_html(p, csrf_token, pid, back, rw, st=st)
     cl_new = ""
     if rw:
         cl_new = (f"<details class='acard-d cl-newlist'><summary class='flink'>+ new checklist</summary>"

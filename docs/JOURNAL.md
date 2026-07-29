@@ -1533,3 +1533,36 @@ niet per store onthouden.
 **[open]** Fase 4-migratie: batch 0 (projects/attachments/werkoverleg naar
 JsonStore), batch 1 (governance_records + human_inbox — de waarheid en het
 approval-oppervlak), batch 2 (de _Stores-familie).
+
+## 2026-07-29 — zombie-projecten: eeuwig ACTIEF op een taak die geen skill kan doen
+
+**[faalmodus/systemisch]** Een uitvoerplan met vier skill-items en één item
+zonder skill ("zorg dat de QR-code op de schoen komt") kwam nooit meer van het
+bord af. De uitvoerlus slaat een skill-loos item over (terecht — geen enkele
+skill kan het draaien), maar de vastloop-klep eiste `it.get("skill")` en zag het
+dus óók niet. Gevolg: `done == total` werd nooit gehaald, en elke puls opnieuw
+"⏳ voortgang 4/5 — blijft in ACTIEF". Op productie bleken **18 van de 34
+running-projecten** exact deze zombie (16× een mens-taak, 1× een onuitvoerbare
+payload, waaronder de gemelde e39f1c2feabb en e327ccac08b0) — de hoofdmoot van
+de dichtgeslibde WIP tegen een bordlimiet van 3.
+
+**[les]** Een klep die alleen naar de bekende faalvorm kijkt, laat de onbekende
+vorm eeuwig door. De juiste vraag is niet "welke items zijn stukgelopen?" maar
+"kan er nog íets vooruit?". Twee: het is niet genoeg dat de mens de spanning
+sluit — als het antwoord niet terugschrijft naar het project blijft het item
+open en loopt de volgende reactivering tegen dezelfde muur (de herhaal-lus).
+
+**[fix]** #245. De klep parkeert nu op "geen enkel open item kan nog vooruit"
+(geen skill / onvolledige payload / retry-grens bereikt), met een aparte
+mens-vraag voor werk dat een mens of externe partij vereist — geen bron-taal
+waar geen bron faalde. Drie uitkomsten schrijven terug naar het project: gedaan
+(→ review), overslaan (uit de klaar-telling, mét reden) en overdragen (via het
+projectverzoek-patroon, gedeelde `project_items.handoff`). `checklist_progress`
+is de enige definitie van "af", zodat worker, voortgangsbalk en kaart-badge
+hetzelfde getal gebruiken.
+
+**[open]** Preventie (aparte, kleinere PR): laat de planner een outcome die op
+een fysieke/technische mens-taak leunt niet als AI-project mét dat item in de
+klaar-telling aanmaken — splits de mens-taak eruit of geef het project een
+mens-owner. Twee prod-projecten (a14e21e6970d, abedbc1aa448) zijn 0/5 en volledig
+mens-werk: die hadden nooit als AI-project mogen ontstaan.

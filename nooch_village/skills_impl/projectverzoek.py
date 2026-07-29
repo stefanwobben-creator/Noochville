@@ -30,29 +30,14 @@ class ProjectverzoekSkill(Skill):
     output_schema = "ok, pid, naar_rol, titel | error"
 
     def run(self, payload: dict, context=None) -> dict:
-        naar = ((payload or {}).get("naar_rol") or "").strip()
-        titel = ((payload or {}).get("titel") or "").strip()
-        if not naar or not titel:
-            return {"error": "ontbrekende parameter: 'naar_rol' en 'titel' zijn beide verplicht"}
-        projects = getattr(context, "projects", None)
-        if projects is None:
-            return {"error": "geen projectledger in context — kan geen projectverzoek plaatsen"}
-        records = getattr(context, "records", None)
-        if records is not None and records.get(naar) is None:
-            return {"error": f"onbekende doelrol: '{naar}'"}
-        done = (((payload or {}).get("done_criterium") or "").strip() or titel)
-        try:
-            pid = projects.create(naar, titel[:200], "tension", status="queued",
-                                  done_when=done[:200], origin="projectverzoek")
-        except Exception as e:
-            return {"error": f"kon projectverzoek niet plaatsen: {e}"}
-        try:                        # terugverwijzing op het nieuwe project (fail-soft)
-            projects.add_feed_entry(
-                pid, f"📥 Binnengekomen als projectverzoek (overdracht van werk dat hier hoort). "
-                     f"Klaar wanneer: {done[:160]}", kind="system", author_type="role")
-        except Exception:
-            pass
-        return {"ok": True, "pid": pid, "naar_rol": naar, "titel": titel[:200]}
+        # De overdracht zelf leeft in project_items.handoff — gedeeld met de mens-knop in de cockpit,
+        # zodat een projectverzoek er altijd hetzelfde uitziet, ongeacht wie 'm plaatst.
+        from nooch_village.project_items import handoff
+        return handoff(getattr(context, "projects", None),
+                       ((payload or {}).get("naar_rol") or ""),
+                       ((payload or {}).get("titel") or ""),
+                       done_criterium=((payload or {}).get("done_criterium") or ""),
+                       records=getattr(context, "records", None))
 
     def evidence_records(self, result: dict, *, role_id: str) -> list:
         """Een geplaatst projectverzoek is een Kroniek-feit: 'bevestigd' (de overdracht is gedaan).
