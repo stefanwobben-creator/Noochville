@@ -3671,6 +3671,41 @@ def _act_claims_term_retract(c):
         return nxt, f"✓ term ingetrokken — database v{versie}"
 
 
+def _claims_kroniek(data_dir: str):
+    """De Kroniek voor het claims-scherm. Eén plek, zodat de lees- en de schrijfkant nooit naar
+    twee verschillende bestanden kijken."""
+    return EvidenceLedger(os.path.join(data_dir, "evidence_ledger.jsonl"))
+
+
+def _claims_bewijzen(data_dir: str) -> list[dict]:
+    from nooch_village import claims_substantiatie
+    return claims_substantiatie.vastgelegd(_claims_kroniek(data_dir))
+
+
+def _act_claims_bewijs_link(c):
+        # AUTHZ: rolvervuller of Circle Lead — vaststellen dát een claim onderbouwd is, is een
+        # compliance-oordeel met juridisch gevolg; het is dezelfde poort als termen cureren.
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _role_gate("compliance", username, st)
+        if _deny:
+            return nxt, _deny
+        from nooch_village import claims_substantiatie
+        try:
+            db = _claims_db_stil(c.data_dir)
+            merken = sorted(claims_substantiatie.eigen_merken(db))
+            record = claims_substantiatie.leg_bewijs_vast(
+                _claims_kroniek(c.data_dir), claim=g("claim"), bron=g("bron"), citaat=g("citaat"),
+                merk=(merken[0] if merken else ""), door=username or "compliance")
+        except ValueError as e:
+            return nxt, f"⛔ {e}"
+        except Exception as e:                       # noqa: BLE001 — schrijffout zichtbaar maken
+            logging.getLogger("cockpit2.claims").exception("bewijs vastleggen faalde")
+            return nxt, f"⛔ evidence not recorded: {e}"
+        _claims_audit(st, username, "claims_bewijs_vastgelegd", claim=g("claim").strip(),
+                      bron=g("bron").strip(), record=record["id"])
+        return nxt, f"✓ evidence recorded ({record['id']}) — the next scan reads it as substantiation"
+
+
 def _act_claims_to_board(c):
         # AUTHZ: rolvervuller of Circle Lead — compliance zet bevindingen om in werk; andere
         # rollen zien de knop niet (en de poort weigert ze hier alsnog).
@@ -4400,6 +4435,7 @@ ACTIONS = {
     "claims_term_add": _act_claims_term_add,
     "claims_term_retract": _act_claims_term_retract,
     "claims_work_status": _act_claims_work_status,
+    "claims_bewijs_link": _act_claims_bewijs_link,
     "claims_to_board": _act_claims_to_board,
     "persona_edit": _act_persona_edit,
     "persona_llm": _act_persona_llm,
@@ -4913,6 +4949,7 @@ def make_handler(data_dir: str, csrf_token: str,
                     kan_cureren=_claims_gate_open(_Stores(data_dir), username),
                     zoek=(qs.get("q") or [""])[0],
                     data_dir=data_dir,
+                    bewijzen=_claims_bewijzen(data_dir),
                     bordresultaat=_claims_bordresultaat(qs)))
                 return
             if path == "/inwoners":

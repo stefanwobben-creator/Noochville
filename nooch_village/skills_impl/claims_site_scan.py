@@ -4,23 +4,38 @@ Verschil met `claims_check`: die skill is puur lokaal en toetst tekst die je hem
 skill haalt zélf de vaste pagina-set op (server-side, via `safe_fetch` met SSRF-guardrail) en
 levert alleen NIEUWE bevindingen — wat al in de werklijst staat of al als taak loopt, telt niet.
 
-Drie regels:
+Vier regels:
 1. **Idempotent per week.** Een tweede puls in dezelfde ISO-week doet niets. De weekmarker
    wordt pas ná een geslaagde run gezet, zodat een mislukte run volgende puls opnieuw mag.
+   Een run die niet ALLE pagina's kon halen door een tijdelijke fout sluit de week niet af.
 2. **Fail-closed.** Alle pagina's onbereikbaar of de database corrupt → `escalate`, nooit een
    stille nul. "Geen bevindingen" moet betekenen dat er niets was, niet dat er niets werkte.
-3. **Geen bord-ruis.** Niets nieuws → één logregel, geen taken, geen heads-up.
+3. **Bewijs-eerst.** Een milieuclaim is alleen groen als de Kroniek hem onderbouwt; zonder
+   bevestigd record wordt hij oranje "onderbouwing ontbreekt" (`claims_substantiatie`).
+4. **Geen bord-ruis.** Niets nieuws → één logregel, geen taken, geen heads-up.
 """
 from __future__ import annotations
 
 import os
 import time
 
-from nooch_village import claims_board, claims_db, claims_verify, safe_fetch
+from nooch_village import (
+    claims_board,
+    claims_db,
+    claims_substantiatie,
+    claims_verify,
+    safe_fetch,
+)
 from nooch_village.checklists import period_key
 from nooch_village.skills import Skill
 
 MARKER = "claims_site_scan_last_week.json"
+
+# Beleefdheid tussen twee pagina's van dezelfde host. Zonder pauze antwoordt Shopify op de tweede
+# pagina met een 429 en scande de wekelijkse run in de praktijk 2 van de 5 pagina's — terwijl hij
+# 'ok' meldde. Een scan die driekwart van de site niet ziet is gevaarlijker dan een scan die traag is.
+PAUZE_SECONDEN = 1.5
+POGINGEN_PER_PAGINA = 3
 
 
 def _rol_voor(categorie: str) -> str:
@@ -31,11 +46,16 @@ def _rol_voor(categorie: str) -> str:
 
 
 def week_gedaan(data_dir: str, week: str) -> bool:
-    """Is deze ISO-week al gescand?"""
+    """Is deze ISO-week VOLLEDIG gescand?
+
+    Een run die pagina's miste door een tijdelijke fout (429, timeout) schrijft `volledig: False` en
+    sluit de week dus niet af — de volgende puls pakt de rest. Zonder die voorwaarde zet één 429 de
+    site een hele week in de blinde vlek. Oudere markers zonder het veld gelden als volledig."""
     import json
     try:
         with open(os.path.join(data_dir, MARKER), encoding="utf-8") as f:
-            return json.load(f).get("last_week") == week
+            marker = json.load(f)
+        return marker.get("last_week") == week and marker.get("volledig", True) is not False
     except Exception:
         return False
 
@@ -67,24 +87,54 @@ def scan_paginas(db: dict) -> list[dict]:
             if isinstance(p, dict) and p.get("url")]
 
 
-def verzamel(paginas: list[dict], db: dict, _fetch=None) -> tuple[list[dict], list[str], dict]:
+def verzamel(paginas: list[dict], db: dict, _fetch=None, ledger=None,
+             _sleep=None) -> tuple[list[dict], list[dict], dict]:
     """Scan elke pagina en geef (bevindingen, fouten, paginateksten) terug. Elke bevinding draagt
     de pagina waar hij vandaan komt, zodat de taak een vindplaats heeft; de teksten gaan mee
-    zodat de werklijst-verificatie tegen dezelfde waarneming kan toetsen."""
+    zodat de werklijst-verificatie tegen dezelfde waarneming kan toetsen.
+
+    Elke fout draagt zijn soort (`tijdelijk`), zodat de caller een 429 anders kan behandelen dan een
+    404: het eerste is 'kom later terug', het tweede is een kapotte scan-lijst.
+
+    `ledger` is de Kroniek. Vóór het wegfilteren van groen stelt `claims_substantiatie` de bewijs-vraag:
+    een claim zonder bevestigd record wordt oranje en blijft dus staan. Zonder ledger geldt niets als
+    onderbouwd — fail-closed, nooit stil groen."""
+    # Beleefdheid geldt tegen een échte host. Een geïnjecteerde `_fetch` (test, demo) raakt geen
+    # netwerk, dus daar wachten we niet — anders koopt elke test de backoff in echte seconden.
+    if _sleep is not None:
+        slaap = _sleep
+    elif _fetch is not None:
+        def slaap(_seconden):
+            return None
+    else:
+        slaap = time.sleep
     bevindingen, fouten, teksten = [], [], {}
-    for pagina in paginas:
+    for nummer, pagina in enumerate(paginas):
+        if nummer:
+            slaap(PAUZE_SECONDEN)                        # beleefd tegen de host, en het voorkomt 429's
+        label = pagina.get("label") or pagina["url"]
         try:
-            opgehaald = safe_fetch.haal_tekst(pagina["url"], _fetch=_fetch)
+            opgehaald = safe_fetch.haal_tekst_geduldig(
+                pagina["url"], pogingen=POGINGEN_PER_PAGINA, _fetch=_fetch, _sleep=slaap)
         except (safe_fetch.FetchGeweigerd, safe_fetch.FetchMislukt) as e:
-            fouten.append(f"{pagina.get('label', pagina['url'])}: {e}")
+            fouten.append({"label": label, "url": pagina["url"], "reden": str(e),
+                           "tijdelijk": safe_fetch.is_tijdelijk(e)})
             continue
-        teksten[pagina.get("label", pagina["url"])] = opgehaald["tekst"]
+        teksten[label] = opgehaald["tekst"]
         uitslag = claims_db.check_tekst(opgehaald["tekst"], db)
-        for b in uitslag["bevindingen"]:
+        van_pagina = [{**b, "pagina": pagina.get("label", ""), "url": pagina["url"]}
+                      for b in uitslag["bevindingen"]]
+        claims_substantiatie.pas_toe(van_pagina, ledger=ledger, db=db)
+        for b in van_pagina:
             if b["stoplicht"] == "green":
                 continue                                 # escaleren telt wél: compliance beslist
-            bevindingen.append({**b, "pagina": pagina.get("label", ""), "url": pagina["url"]})
+            bevindingen.append(b)
     return bevindingen, fouten, teksten
+
+
+def fout_tekst(fouten: list[dict], maximaal: int = 3) -> str:
+    """De fouten als één leesbare regel, voor een escalatie of een heads-up."""
+    return "; ".join(f"{f['label']}: {f['reden']}" for f in fouten[:maximaal])
 
 
 def _wie_fixte(ledger, nr: int) -> str | None:
@@ -107,7 +157,8 @@ class ClaimsSiteScanSkill(Skill):
                    "alleen NIEUWE rode/oranje bevindingen als taak bij de juiste rol. Eén keer "
                    "per ISO-week; wat al in de werklijst of op het bord staat wordt overgeslagen.")
     input_schema = "geen (optioneel: force: bool om de week-gate over te slaan)"
-    output_schema = "ok, week, skipped, gescand, nieuw, aangemaakt[], overgeslagen, escalate"
+    output_schema = ("ok, week, skipped, gescand, paginas, volledig, nieuw, aangemaakt[], "
+                     "overgeslagen, fouten[{label,url,reden,tijdelijk}], headsup, escalate")
 
     def _verifieer_werklijst(self, context, db: dict, paginateksten: dict) -> list[dict]:
         """Toets de werklijst tegen wat we net zagen en sla de uitkomst op.
@@ -146,6 +197,20 @@ class ClaimsSiteScanSkill(Skill):
             claims_board.bericht_aan_rol(context, "compliance", tekst)
         return gewijzigd
 
+    def _kroniek(self, context):
+        """De Kroniek waartegen de bewijs-vraag wordt gesteld. Zelfde resolutie-idioom als
+        `weten_we_dit_al`: een injectie uit de context wint, anders het bestand naast de stores.
+        Lukt zelfs dat niet, dan is er geen bewijs — en dan is niets onderbouwd (fail-closed)."""
+        ledger = getattr(context, "evidence_ledger", None) or getattr(context, "evidence", None)
+        if ledger is not None:
+            return ledger
+        try:
+            from nooch_village.evidence_ledger import EvidenceLedger
+            return EvidenceLedger(os.path.join(getattr(context, "data_dir", "."),
+                                               "evidence_ledger.jsonl"))
+        except Exception:                                # noqa: BLE001
+            return None
+
     def run(self, payload: dict, context=None) -> dict:
         payload = payload or {}
         data_dir = getattr(context, "data_dir", ".")
@@ -163,12 +228,14 @@ class ClaimsSiteScanSkill(Skill):
             return {"ok": False, "week": week,
                     "escalate": {"reason": "geen scan-paginas in de claims-database (meta.scan_paginas)"}}
 
-        bevindingen, fouten, paginateksten = verzamel(paginas, db, _fetch=payload.get("_fetch"))
+        bevindingen, fouten, paginateksten = verzamel(
+            paginas, db, _fetch=payload.get("_fetch"), ledger=self._kroniek(context),
+            _sleep=payload.get("_sleep"))
         if len(fouten) == len(paginas):
             # Alle pagina's onbereikbaar: dat is geen 'schone site', dat is een kapotte scan.
-            return {"ok": False, "week": week, "gescand": 0,
+            return {"ok": False, "week": week, "gescand": 0, "fouten": fouten,
                     "escalate": {"reason": "geen enkele pagina kon worden opgehaald: "
-                                           + "; ".join(fouten[:3])}}
+                                           + fout_tekst(fouten)}}
 
         if getattr(context, "projects", None) is None:
             return {"ok": False, "week": week,
@@ -178,24 +245,62 @@ class ClaimsSiteScanSkill(Skill):
             bron=f"wekelijkse site-scan {week}", rol_voor=_rol_voor, trigger="role")
         statussen = self._verifieer_werklijst(context, db, paginateksten)
 
+        # Tijdelijk versus permanent (de reden dat 4 van 5 pagina's stil wegvielen):
+        #   tijdelijk (429/5xx/timeout) → de week NIET afsluiten; de volgende puls pakt de rest op.
+        #   permanent (404/410/geweigerd) → de week mág dicht, anders zet één dode pagina in de
+        #   scan-lijst de wekelijkse scan voor altijd vast. Het is dan een lijst-probleem, en dat is
+        #   compliance-domein: het gaat als bericht naar de eigenaar van `meta.scan_paginas`.
+        tijdelijk = [f for f in fouten if f["tijdelijk"]]
+        permanent = [f for f in fouten if not f["tijdelijk"]]
         markeer_week(data_dir, week, {"nieuw": len(verslag["aangemaakt"]),
                                       "overgeslagen": verslag["overgeslagen"],
                                       "gescand": len(paginas) - len(fouten),
-                                      "statussen": len(statussen)})
-        # `headsup` is wat de mens moet zien; de generieke pulslaag stuurt het door naar de
-        # founder. Alleen bij ROOD — oranje is werk voor de rol, geen alarm voor de founder.
-        regressies = [s for s in statussen if s["naar"] == claims_db.AUTO_REGRESSIE]
-        headsup = None
-        if regressies:
-            # Een teruggekeerde claim weegt zwaarder dan een nieuwe: iemand dacht dat dit af was.
-            headsup = (f"↩️ Claim-regressie: {len(regressies)} eerder opgeloste claim(s) staan "
-                       f"weer op de site (#{', #'.join(str(r['nr']) for r in regressies)})")
-        elif verslag["rood"]:
-            headsup = (f"🔴 Claim-scan: {verslag['rood']} nieuwe verboden claim(s) op nooch.earth "
-                       f"({len(verslag['aangemaakt'])} taak/taken op het bord)")
+                                      "paginas": len(paginas),
+                                      "statussen": len(statussen),
+                                      "volledig": not tijdelijk,
+                                      "fouten": fout_tekst(fouten, 5)})
+        for f in permanent:
+            claims_board.bericht_aan_rol(
+                context, "compliance",
+                f"🧭 Scan-lijst: '{f['label']}' is niet meer op te halen ({f['reden']}) — "
+                f"werk meta.scan_paginas bij ({f['url']})")
+
+        headsup = self._headsup(verslag, statussen, tijdelijk, permanent)
         return {"ok": True, "week": week, "skipped": False, "headsup": headsup,
                 "statussen": statussen,
-                "gescand": len(paginas) - len(fouten), "fouten": fouten,
+                "gescand": len(paginas) - len(fouten), "paginas": len(paginas), "fouten": fouten,
+                "volledig": not tijdelijk,
                 "nieuw": len(verslag["aangemaakt"]), "aangemaakt": verslag["aangemaakt"],
                 "overgeslagen": verslag["overgeslagen"], "rood": verslag["rood"],
                 "escalate": None}
+
+    def _headsup(self, verslag: dict, statussen: list[dict],
+                 tijdelijk: list[dict], permanent: list[dict]) -> str | None:
+        """Wat de mens moet zien. De generieke pulslaag stuurt dit door naar de founder.
+
+        Alleen bij ROOD (oranje is werk voor de rol, geen alarm voor de founder) of bij een
+        regressie — plus altijd een regel als de scan pagina's niet zag: een onvolledige scan die
+        'niets gevonden' meldt is precies de stille fout die dit ritme moet uitsluiten."""
+        regressies = [s for s in statussen if s["naar"] == claims_db.AUTO_REGRESSIE]
+        kern = None
+        if regressies:
+            # Een teruggekeerde claim weegt zwaarder dan een nieuwe: iemand dacht dat dit af was.
+            kern = (f"↩️ Claim-regressie: {len(regressies)} eerder opgeloste claim(s) staan "
+                    f"weer op de site (#{', #'.join(str(r['nr']) for r in regressies)})")
+        elif verslag["rood"]:
+            # Spiegel van de regressie-tak: mét identifiers. Een telling alleen dwingt de mens de
+            # cockpit te openen om te weten of dit erg is; term + pagina zegt dat meteen.
+            kern = (f"🔴 Claim-scan: {verslag['rood']} nieuwe verboden claim(s) op nooch.earth "
+                    f"— {claims_board.vindplaatsen(verslag['aangemaakt'], stoplicht='red')} "
+                    f"({len(verslag['aangemaakt'])} taak/taken op het bord)")
+        gemist = []
+        if tijdelijk:
+            gemist.append(f"{len(tijdelijk)} pagina('s) tijdelijk niet op te halen "
+                          f"({fout_tekst(tijdelijk, 2)}) — de volgende puls pakt ze opnieuw")
+        if permanent:
+            gemist.append(f"{len(permanent)} pagina('s) bestaan niet meer "
+                          f"({fout_tekst(permanent, 2)}) — scan-lijst bijwerken")
+        if not gemist:
+            return kern
+        staart = "⚠️ Scan onvolledig: " + "; ".join(gemist)
+        return f"{kern} · {staart}" if kern else staart

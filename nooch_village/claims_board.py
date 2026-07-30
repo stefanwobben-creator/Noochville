@@ -190,6 +190,7 @@ def taak_tekst(bevinding: dict, bron: str) -> tuple[str, str]:
         f"Oordeel: {'GEEN tooloordeel — geen harde bron, compliance beslist' if escaleren else 'verboden — niet publiceren' if rood else 'risico — alleen met genoemd bewijs'}"
         f" · categorie {bevinding.get('categorie', '')}\n"
         f"Bron: {bevinding.get('bron', '?')} — {bevinding.get('bron_detail', 'geen onderbouwing vastgelegd')}\n"
+        + _onderbouwing_regel(bevinding)
         + (f"Advies van de database als je tóch moet kiezen: {bevinding.get('stoplicht_advies')}\n"
            if bevinding.get("stoplicht_advies") else "")
         + f"Waarom: {bevinding.get('waarom', '')}\n"
@@ -197,6 +198,22 @@ def taak_tekst(bevinding: dict, bron: str) -> tuple[str, str]:
         f"Nacheck na aanpassing: tov + legal."
     )
     return titel[:200], beschrijving
+
+
+def _onderbouwing_regel(bevinding: dict) -> str:
+    """Wat de Kroniek over deze claim zegt — de tweede vraag naast 'mag dit woord'.
+
+    Zonder deze regel weet de rol niet of hij moet herformuleren of alleen bewijs moet aanleveren;
+    dat is precies het verschil tussen 'oranje' en 'oranje'. Een bevinding zonder bewijs-oordeel
+    (bijv. een handmatige checker-run) krijgt geen regel — niets verzinnen."""
+    stand = bevinding.get("onderbouwing")
+    if not stand:
+        return ""
+    reden = bevinding.get("onderbouwing_reden", "")
+    if bevinding.get("onderbouwing_verhoogd"):
+        return (f"Onderbouwing: ONTBREEKT — {reden}. Deze claim stond op groen in de termen-database "
+                f"en is oranje geworden omdat er geen bevestigd bewijs voor is.\n")
+    return f"Onderbouwing: {str(stand).upper()} — {reden}\n"
 
 
 def _al_lopend(ledger, bevinding: dict, db: dict) -> dict | None:
@@ -250,12 +267,33 @@ def zet_op_bord(omgeving, db: dict, bevindingen: list[dict], bron: str,
                             done_when="de herformulering is live en door legal gezien",
                             goes_to="compliance")
         doelen = bericht_aan_rol(omgeving, eigenaar, f"{titel} — {b.get('alternatief', '')}", pid)
+        # `gevonden` + `pagina` gaan mee zodat een terugkoppeling (heads-up, bordresultaat) kan
+        # zeggen WÁT er gevonden is en WAAR — een telling alleen dwingt de lezer de cockpit te openen.
         aangemaakt.append({"pid": pid, "owner": eigenaar, "titel": titel,
-                           "stoplicht": b.get("stoplicht"), "doelen": doelen})
+                           "stoplicht": b.get("stoplicht"), "doelen": doelen,
+                           "gevonden": (b.get("gevonden") or [""])[0],
+                           "pagina": b.get("pagina") or "",
+                           "onderbouwing": b.get("onderbouwing", "")})
         bestaand.add(sleutel)                          # binnen één run niet dubbel
         bestaand.update(_zoektermen(b))
     return {"aangemaakt": aangemaakt, "overgeslagen": overgeslagen, "lopend": lopend,
             "rood": sum(1 for t in aangemaakt if t["stoplicht"] == "red")}
+
+
+def vindplaatsen(aangemaakt: list[dict], stoplicht: str = "", maximaal: int = 3) -> str:
+    """De aangemaakte taken als leesbare vindplaats-opsomming: «"eco-friendly" (home), "vegan" (faq)».
+
+    Spiegelt de regressie-melding, die al identifiers meegeeft (#4, #7). Wat niet past wordt als
+    "+n meer" geteld — nooit stil weggelaten, want dan lijkt de melding compleet terwijl hij dat niet is."""
+    rijen = [t for t in aangemaakt if not stoplicht or t.get("stoplicht") == stoplicht]
+    stukken = []
+    for t in rijen[:maximaal]:
+        wat = t.get("gevonden") or t.get("titel", "")
+        waar = t.get("pagina") or ""
+        stukken.append(f'"{wat}" ({waar})' if waar else f'"{wat}"')
+    tekst = ", ".join(stukken)
+    rest = len(rijen) - len(stukken)
+    return f"{tekst} +{rest} meer" if rest > 0 else tekst
 
 
 def per_rol(aangemaakt: list[dict]) -> list[tuple[str, int]]:
