@@ -37,14 +37,19 @@ MARKER = "claims_site_scan_last_week.json"
 # Beleefdheid tussen twee pagina's van dezelfde host. Zonder pauze antwoordt Shopify op de tweede
 # pagina met een 429 en scande de wekelijkse run in de praktijk 2 van de 5 pagina's — terwijl hij
 # 'ok' meldde. Een scan die driekwart van de site niet ziet is gevaarlijker dan een scan die traag is.
-PAUZE_SECONDEN = 1.5
+# De pauze tussen twee pagina's van dezelfde host. Dit getal is GEMETEN, niet gegokt: vanaf de
+# productieserver antwoordt Cloudflare (Shopify's edge) met `local_rate_limited` + `Retry-After: 60`,
+# en een herhaalmeting op 30 juli 2026 gaf 0s → 429, 20s → 429, 40s → 429, **70s → 200**. De bucket
+# laat dus ruwweg één verzoek per minuut per IP door. Met 1,5s ertussen scande de wekelijkse run in
+# de praktijk 2 van de 5 pagina's; met deze pauze duurt een run ~4,5 minuut en ziet hij de hele site.
+# Dat is de goede ruil voor een wekelijkse achtergrondtaak.
+PAUZE_SECONDEN = 65.0
 POGINGEN_PER_PAGINA = 3
 
-# Totale wachttijd die één scan mag opsouperen. Shopify vraagt bij een 429 om 60 seconden per
-# pagina; met vijf pagina's en drie pogingen zou een run tien minuten kunnen hangen. Dit budget is
-# de middenweg: wacht zolang het zin heeft en laat de rest als TIJDELIJKE fout vallen — die pagina's
-# sluiten de week niet af en worden bij de volgende puls opnieuw geprobeerd.
-WACHTBUDGET_SECONDEN = 240.0
+# Totale EXTRA wachttijd (bovenop de pauzes) die één scan mag opsouperen aan retries. Budget op → de
+# rest valt als TIJDELIJKE fout, dus de week sluit niet en de volgende puls pakt die pagina's op.
+# Wachten zolang het zin heeft, zonder de puls tien minuten te laten hangen.
+WACHTBUDGET_SECONDEN = 180.0
 
 
 def _rol_voor(categorie: str) -> str:
