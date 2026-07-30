@@ -53,6 +53,10 @@ def _site_scan(data_dir: str) -> dict | None:
         uitkomst = "draait bij de eerstvolgende dagpuls"
     if run.get("statussen"):
         uitkomst += f" · {run['statussen']} werklijst-status(sen) automatisch bijgewerkt"
+    if run.get("volledig") is False:
+        # Een onvolledige scan die "niets nieuws" meldt is een blinde vlek die op vertrouwen lijkt.
+        uitkomst += (f" · ⚠️ onvolledig: {run.get('gescand', 0)} van {run.get('paginas', '?')} "
+                     f"pagina's gehaald, de volgende puls pakt de rest")
     return {"naam": "Wekelijkse site-scan", "cadans": "week",
             "laatst": f"laatste run {_stempel(run.get('at'))}" if run.get("at") else "",
             "uitkomst": uitkomst,

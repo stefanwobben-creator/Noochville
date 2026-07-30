@@ -43,6 +43,23 @@ def bron_badge(bevinding: dict) -> str:
     return f"<span class='chip muted'{titel}>source {_e(letter)}</span>"
 
 
+def onderbouwing_badge(bevinding: dict) -> str:
+    """Is deze claim onderbouwd? Chip met de reden als tooltip.
+
+    Alleen zichtbaar als het bewijs-oordeel er is (de wekelijkse site-scan zet het; een losse
+    tekst-check zonder site-context niet) — nooit een chip die iets belooft wat niet getoetst is."""
+    from nooch_village.claims_substantiatie import AMBIGU, ONDERBOUWD, ONTBREEKT
+    stand = bevinding.get("onderbouwing")
+    if stand not in (ONDERBOUWD, ONTBREEKT, AMBIGU):
+        return ""
+    klasse, tekst = (("chip", "🧾 substantiated") if stand == ONDERBOUWD else
+                     ("chip amber", "🧾 evidence unclear") if stand == AMBIGU else
+                     ("chip coral", "🧾 no evidence"))
+    reden = bevinding.get("onderbouwing_reden") or ""
+    titel = f" title='{_e(reden)}'" if reden else ""
+    return f"<span class='{klasse}'{titel}>{tekst}</span>"
+
+
 def rol_voor(categorie: str) -> str:
     """Welke rol pakt deze bevinding op? Eén definitie, gedeeld door de view, de
     taak-koppeling en de wekelijkse scan — de routing mag nooit uiteenlopen."""
@@ -115,7 +132,7 @@ def render_rapport(uitslag: dict, markten: list[str] | None = None,
                       f"<span class='{cls}'>{label}</span> <b>{_e(b['term'])}</b>"
                       f"<span class='pill'>{_e(b['categorie'])}</span>"
                       f"<span class='pill'>role: {_e(_rol_label(b))}</span>"
-                      f"{bron_badge(b)}"
+                      f"{bron_badge(b)}{onderbouwing_badge(b)}"
                       f"<div>Found: <i>{_e(', '.join(b['gevonden']))}</i> — {_e(b['waarom'])}</div>"
                       f"{alt}{advies}</div>")
         lijst = f"<div class='card'><h3>Findings</h3>{rijen}</div>"
@@ -401,13 +418,45 @@ def _blok_beheer(db: dict, csrf_token: str) -> str:
             f"Add</button></div></form></div>")
 
 
+def _blok_bewijs(csrf_token: str, bewijzen: list[dict] | None) -> str:
+    """Onderbouwing vastleggen — het schrijfpad naar de Kroniek.
+
+    Hergebruikt exact het patroon van `_blok_beheer` (card + qadd-form + `_field` + qadd-row/btn) en
+    de `mtab`-tabel van de werklijst; geen nieuwe klasse-familie, geen inline styles. Bestaat omdat de
+    wekelijkse scan sinds deze versie bewijs eist: zonder schrijfpad blijft elke claim eeuwig oranje."""
+    bewijzen = bewijzen or []
+    rijen = "".join(
+        f"<tr><td>{_e(str((r.get('meta') or {}).get('claim') or r.get('query', '')))}</td>"
+        f"<td class='muted'>{_e(str(r.get('result_ref', ''))[:120])}</td>"
+        f"<td><a href='{_e(str(r.get('source', '')))}'>source</a></td></tr>"
+        for r in bewijzen)
+    tabel = (f"<p class='muted'>Recorded so far ({len(bewijzen)} most recent):</p>"
+             f"<table class='mtab'>{rijen}</table>" if rijen else
+             "<p class='muted'>Nothing recorded yet — so every environmental claim on the site "
+             "currently counts as unsubstantiated and comes out orange. That is the evidence gap, "
+             "not a bug in the scan.</p>")
+    return (f"<div class='card'><h3>Record evidence for a claim</h3>"
+            f"<p class='muted'>You are writing a confirmed record into the Kroniek (the evidence "
+            f"ledger). The weekly site scan reads it: a claim with a confirmed record is substantiated, "
+            f"anything else comes out orange. Append-only — a correction is a new record, and the quote "
+            f"must be literal so a later reader can check it.</p>"
+            f"<form method='post' action='/action' class='qadd-form'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='next' value='/claims?tab=werklijst'>"
+            f"{_field('Claim (as it appears on the site)', 'claim', fid='f-bw-claim', required=True, placeholder='plastic-free / plasticvrij')}"
+            f"{_field('Source (URL or where the proof lives)', 'bron', fid='f-bw-bron', required=True, placeholder='https://… certificate, lab report, standard')}"
+            f"{_field('Literal quote from that source', 'citaat', kind='textarea', fid='f-bw-citaat', required=True, placeholder='Paste the sentence that actually proves it — at least 20 characters.')}"
+            f"<div class='qadd-row'><button class='btn ok' name='action' value='claims_bewijs_link'>"
+            f"Record evidence</button></div></form>{tabel}</div>")
+
+
 # ── De pagina ───────────────────────────────────────────────────────────────
 
 def render_claims(csrf_token: str = "", msg: str = "", tab: str = "check",
                   kan_cureren: bool = False, zoek: str = "", url: str = "",
                   tekst: str = "", markten: list[str] | None = None,
                   rapport: str = "", bordresultaat: dict | None = None,
-                  data_dir: str | None = None) -> str:
+                  data_dir: str | None = None, bewijzen: list[dict] | None = None) -> str:
     """De hele checker als één governeerd scherm."""
     try:
         db = claims_db.load(data_dir=data_dir)
@@ -427,7 +476,7 @@ def render_claims(csrf_token: str = "", msg: str = "", tab: str = "check",
     elif tab == "werklijst":
         body = _tab_werklijst(db, csrf_token, kan_cureren)
         if kan_cureren and csrf_token:
-            body += _blok_beheer(db, csrf_token)
+            body += _blok_beheer(db, csrf_token) + _blok_bewijs(csrf_token, bewijzen)
     elif tab == "database":
         body = _tab_database(db, zoek, csrf_token, kan_cureren)
     else:

@@ -11,13 +11,22 @@ from __future__ import annotations
 
 import html as html_module
 import ipaddress
+import logging
 import re
 import socket
+import time
 import urllib.parse
+
+log = logging.getLogger("village.fetch")
 
 USER_AGENT = "NoochVillage/1.0 (+https://nooch.earth; claims-checker)"
 TIMEOUT_SECONDS = 15
 MAX_BYTES = 3_000_000          # ~3 MB: ruim voor een webpagina, klein genoeg om niet te verstikken
+
+# Statuscodes die betekenen "kom later terug", niet "dit bestaat niet". De host praat met ons, hij
+# heeft nu even geen zin. Onderscheiden loont: een 429 mag een scan nooit als 'gedaan' afsluiten,
+# een 404 mag een scan nooit voor altijd vastzetten.
+TIJDELIJKE_STATUS = (408, 425, 429, 500, 502, 503, 504)
 
 
 class FetchGeweigerd(ValueError):
@@ -25,7 +34,27 @@ class FetchGeweigerd(ValueError):
 
 
 class FetchMislukt(RuntimeError):
-    """De URL mocht wel, maar ophalen lukte niet (timeout, DNS, HTTP-fout)."""
+    """De URL mocht wel, maar ophalen lukte niet (timeout, DNS, HTTP-fout).
+
+    `status` draagt de HTTP-code als er één was, en None bij een netwerk-/timeout-fout. De caller
+    heeft die nodig om tijdelijk (opnieuw proberen) van permanent (de pagina is weg) te scheiden;
+    zonder dat onderscheid is elke fout ofwel een eeuwige retry ofwel een stille blinde vlek."""
+
+    def __init__(self, bericht: str, status: int | None = None):
+        super().__init__(bericht)
+        self.status = status
+
+
+def is_tijdelijk(fout: Exception) -> bool:
+    """Mag deze fout opnieuw geprobeerd worden?
+
+    Ja bij een netwerk-/timeoutfout (geen status) en bij de TIJDELIJKE_STATUS-codes. Nee bij elke
+    andere HTTP-fout (404/410/403: de pagina bestaat niet of mag niet) en bij FetchGeweigerd — dat
+    is een configuratieprobleem dat door retryen niet overgaat."""
+    if isinstance(fout, FetchGeweigerd):
+        return False
+    status = getattr(fout, "status", None)
+    return status is None or status in TIJDELIJKE_STATUS
 
 
 def _is_privaat(ip: str) -> bool:
@@ -84,9 +113,34 @@ def haal_tekst(url: str, _fetch=None) -> dict:
         except Exception as e:                       # requests-fouten zijn een familie; één vangnet
             raise FetchMislukt(f"ophalen mislukt: {e}") from e
     if status >= 400:
-        raise FetchMislukt(f"de pagina gaf HTTP {status}")
+        raise FetchMislukt(f"de pagina gaf HTTP {status}", status=status)
     titel, tekst = naar_tekst(html)
     return {"url": veilig, "status": status, "titel": titel, "tekst": tekst}
+
+
+def haal_tekst_geduldig(url: str, *, pogingen: int = 3, pauze: float = 2.0,
+                        _fetch=None, _sleep=None) -> dict:
+    """`haal_tekst`, maar met backoff op een TIJDELIJKE fout. Permanente fouten vliegen direct door.
+
+    Waarom dit bestaat: een pagina-set achter elkaar ophalen levert bij Shopify (en de meeste CDN's)
+    een 429 op de tweede of derde pagina. Zonder retry wordt zo'n pagina stil overgeslagen en meldt
+    de scan dat de site schoon is. Dat is de duurste fout die deze module kan maken.
+
+    Eén poging = huidig gedrag; de pauze verdubbelt per poging (2s, 4s). `_sleep` is injecteerbaar
+    zodat een test de backoff kan bewijzen zonder te wachten."""
+    slaap = _sleep if _sleep is not None else time.sleep
+    laatste: Exception | None = None
+    for poging in range(1, max(1, pogingen) + 1):
+        try:
+            return haal_tekst(url, _fetch=_fetch)
+        except (FetchGeweigerd, FetchMislukt) as e:
+            laatste = e
+            if not is_tijdelijk(e) or poging >= max(1, pogingen):
+                raise
+            wacht = pauze * (2 ** (poging - 1))
+            log.info("fetch %s: %s — poging %d/%d, %.1fs wachten", url, e, poging, pogingen, wacht)
+            slaap(wacht)
+    raise laatste                                    # pragma: no cover — de lus raakt dit niet
 
 
 def haal_ruw(url: str, _fetch=None) -> dict:
@@ -110,7 +164,7 @@ def haal_ruw(url: str, _fetch=None) -> dict:
         except Exception as e:
             raise FetchMislukt(f"ophalen mislukt: {e}") from e
     if status >= 400:
-        raise FetchMislukt(f"de bron gaf HTTP {status}")
+        raise FetchMislukt(f"de bron gaf HTTP {status}", status=status)
     return {"url": veilig, "status": status, "content_type": ctype or "", "ruw": body}
 
 
