@@ -55,8 +55,13 @@ def _site_scan(data_dir: str) -> dict | None:
         uitkomst += f" · {run['statussen']} werklijst-status(sen) automatisch bijgewerkt"
     if run.get("volledig") is False:
         # Een onvolledige scan die "niets nieuws" meldt is een blinde vlek die op vertrouwen lijkt.
-        uitkomst += (f" · ⚠️ onvolledig: {run.get('gescand', 0)} van {run.get('paginas', '?')} "
-                     f"pagina's gehaald, de volgende puls pakt de rest")
+        # De dekking (cumulatief deze week) is wat de lezer moet zien, niet alleen deze ene run.
+        uitkomst += (f" · ⚠️ onvolledig: {len(run.get('gedekt') or [])} van "
+                     f"{run.get('paginas', '?')} pagina's deze week gedekt, de volgende puls pakt "
+                     f"de rest ({', '.join(run.get('onbereikbaar') or []) or 'onbekend'})")
+    elif run.get("vastgelopen"):
+        uitkomst += (f" · 🚧 vastgelopen op {', '.join(run.get('onbereikbaar') or [])}: "
+                     f"{len(run.get('gedekt') or [])} van {run.get('paginas', '?')} pagina's gedekt")
     return {"naam": "Wekelijkse site-scan", "cadans": "week",
             "laatst": f"laatste run {_stempel(run.get('at'))}" if run.get("at") else "",
             "uitkomst": uitkomst,

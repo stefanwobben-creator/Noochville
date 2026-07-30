@@ -5,14 +5,19 @@ skill haalt zélf de vaste pagina-set op (server-side, via `safe_fetch` met SSRF
 levert alleen NIEUWE bevindingen — wat al in de werklijst staat of al als taak loopt, telt niet.
 
 Vier regels:
-1. **Idempotent per week.** Een tweede puls in dezelfde ISO-week doet niets. De weekmarker
-   wordt pas ná een geslaagde run gezet, zodat een mislukte run volgende puls opnieuw mag.
-   Een run die niet ALLE pagina's kon halen door een tijdelijke fout sluit de week niet af.
+1. **Volledige dekking per week, desnoods over meerdere pulsen.** De week is pas gedaan als ELKE
+   pagina uit de set een keer gelukt is. Lukte een pagina niet, dan scant de volgende puls precies
+   de pagina's die nog missen — nooit weer de hele lijst vanaf pagina 1. Zonder dat geheugen haalde
+   de scan elke dag dezelfde eerste pagina's en bleven de laatste structureel ongezien.
 2. **Fail-closed.** Alle pagina's onbereikbaar of de database corrupt → `escalate`, nooit een
    stille nul. "Geen bevindingen" moet betekenen dat er niets was, niet dat er niets werkte.
 3. **Bewijs-eerst.** Een milieuclaim is alleen groen als de Kroniek hem onderbouwt; zonder
    bevestigd record wordt hij oranje "onderbouwing ontbreekt" (`claims_substantiatie`).
 4. **Geen bord-ruis.** Niets nieuws → één logregel, geen taken, geen heads-up.
+
+Twee handmatige duwtjes, met verschillende betekenis: `force` slaat de week-poort over maar
+respecteert de dekking (hij helpt de scan vooruit), `herstart` gooit de dekking weg en doet de
+hele week opnieuw.
 """
 from __future__ import annotations
 
@@ -37,19 +42,27 @@ MARKER = "claims_site_scan_last_week.json"
 # Beleefdheid tussen twee pagina's van dezelfde host. Zonder pauze antwoordt Shopify op de tweede
 # pagina met een 429 en scande de wekelijkse run in de praktijk 2 van de 5 pagina's — terwijl hij
 # 'ok' meldde. Een scan die driekwart van de site niet ziet is gevaarlijker dan een scan die traag is.
-# De pauze tussen twee pagina's van dezelfde host. Dit getal is GEMETEN, niet gegokt: vanaf de
-# productieserver antwoordt Cloudflare (Shopify's edge) met `local_rate_limited` + `Retry-After: 60`,
-# en een herhaalmeting op 30 juli 2026 gaf 0s → 429, 20s → 429, 40s → 429, **70s → 200**. De bucket
-# laat dus ruwweg één verzoek per minuut per IP door. Met 1,5s ertussen scande de wekelijkse run in
-# de praktijk 2 van de 5 pagina's; met deze pauze duurt een run ~4,5 minuut en ziet hij de hele site.
-# Dat is de goede ruil voor een wekelijkse achtergrondtaak.
-PAUZE_SECONDEN = 65.0
-POGINGEN_PER_PAGINA = 3
+# Pacing, op basis van twee gemeten productie-runs. Cloudflare (Shopify's edge) antwoordt vanaf de
+# server met `local_rate_limited` + `Retry-After: 60`, maar de bucket blijkt niet "één per minuut" te
+# zijn: zowel met 1,5s als met 65s pauze kwamen er precies TWEE pagina's door. Het is een kleine
+# bucket met trage refill, en een mislukt verzoek verbruikt hem net zo goed als een geslaagd verzoek.
+#
+# Daarom: ÉÉN poging per pagina per puls. Retryen binnen een run verbrandt de bucket voor de pagina's
+# die daarna komen — het maakt de dekking kleiner in plaats van groter. De dekking komt van de
+# volgende puls (zie DEKKING hieronder), niet van harder aandringen.
+PAUZE_SECONDEN = 10.0
+POGINGEN_PER_PAGINA = 1
 
-# Totale EXTRA wachttijd (bovenop de pauzes) die één scan mag opsouperen aan retries. Budget op → de
-# rest valt als TIJDELIJKE fout, dus de week sluit niet en de volgende puls pakt die pagina's op.
-# Wachten zolang het zin heeft, zonder de puls tien minuten te laten hangen.
-WACHTBUDGET_SECONDEN = 180.0
+# DEKKING PER WEEK — de bug die dit oplost: elke puls begon weer bij pagina 1, dus haalde hij elke
+# dag dezelfde eerste twee pagina's en kwamen de laatste drie NOOIT aan de beurt, hoe vaak het ritme
+# ook hervatte. De weekmarker houdt nu bij welke pagina's deze week al gelukt zijn; de volgende puls
+# scant alleen de rest. Vijf pagina's bij twee per puls = binnen drie dagpulsen een volledige week.
+#
+# De bovengrens hangt niet aan het aantal pogingen maar aan VOORTGANG: twee pulsen op rij zonder één
+# nieuwe pagina betekent dat hervatten niets meer oplevert. Dan sluit de week, hoort compliance het,
+# en ligt er een capaciteitsgat. Zo blijft "morgen weer" nooit een stil abonnement op een blinde vlek,
+# en wordt een langzame-maar-vorderende scan niet ten onrechte als vastgelopen afgeschreven.
+MAX_PULSEN_ZONDER_VOORTGANG = 2
 
 
 def _rol_voor(categorie: str) -> str:
@@ -60,33 +73,43 @@ def _rol_voor(categorie: str) -> str:
 
 
 def week_gedaan(data_dir: str, week: str) -> bool:
-    """Is deze ISO-week VOLLEDIG gescand?
+    """Is deze ISO-week VOLLEDIG gedekt?
 
-    Een run die pagina's miste door een tijdelijke fout (429, timeout) schrijft `volledig: False` en
-    sluit de week dus niet af — de volgende puls pakt de rest. Zonder die voorwaarde zet één 429 de
-    site een hele week in de blinde vlek. Oudere markers zonder het veld gelden als volledig."""
-    import json
-    try:
-        with open(os.path.join(data_dir, MARKER), encoding="utf-8") as f:
-            marker = json.load(f)
-        return marker.get("last_week") == week and marker.get("volledig", True) is not False
-    except Exception:
-        return False
+    Volledig = elke pagina uit de scan-set is deze week minstens één keer gelukt, eventueel verdeeld
+    over meerdere pulsen. Een run die pagina's miste door een tijdelijke fout (429, timeout) schrijft
+    `volledig: False` en sluit de week dus niet af. Zonder die voorwaarde zet één 429 de site een hele
+    week in de blinde vlek. Oudere markers zonder het veld gelden als volledig."""
+    marker = laatste_run(data_dir)
+    return marker.get("last_week") == week and marker.get("volledig", True) is not False
 
 
-# Hoeveel pulsen mag een week onvolledig blijven voordat de mens het hoort? Het hervatten is de
-# kracht van de tijdelijke-fout-regel, maar zonder bovengrens wordt "we proberen het morgen weer"
-# een stil abonnement op een blinde vlek. Drie dagpulsen: één slechte dag mag, drie is een probleem
-# dat een mens moet weten.
-MAX_ONVOLLEDIGE_POGINGEN = 3
+def gedekt_deze_week(data_dir: str, week: str) -> list[str]:
+    """De labels die deze week al met succes zijn opgehaald (leeg bij een nieuwe week).
+
+    Dit is het geheugen dat de scan miste: zonder deze lijst begint elke puls bij pagina 1 en blijven
+    de laatste pagina's van de set structureel ongezien."""
+    marker = laatste_run(data_dir)
+    if marker.get("last_week") != week:
+        return []
+    return [str(x) for x in (marker.get("gedekt") or []) if x]
+
+
+def resterend(paginas: list[dict], gedekt) -> list[dict]:
+    """De pagina's die deze week nog NIET gelukt zijn, in de volgorde van de scan-set.
+
+    Bewust alleen de resterende en niet 'ongedekte eerst, daarna de rest': elk verzoek kost een token
+    uit de rate-limit-bucket, en een token besteden aan een pagina die we deze week al zagen gaat
+    rechtstreeks ten koste van een pagina die we nog niet zagen."""
+    al_gezien = {str(g) for g in (gedekt or [])}
+    return [p for p in paginas if (p.get("label") or p.get("url")) not in al_gezien]
 
 
 def markeer_week(data_dir: str, week: str, uitkomst: dict | None = None) -> None:
     """Zet de weekmarker. Naast `last_week` gaat de uitkomst mee, zodat de rolpagina kan tonen
     wanneer de scan draaide en wat hij vond — zonder een tweede opslagplek.
 
-    `pogingen` telt hoeveel keer deze week al een ONVOLLEDIGE run draaide. Die teller leeft in de
-    marker en niet in het geheugen, want de daemon herstart en de puls draait één keer per dag."""
+    `pogingen` telt de pulsen in deze week. Die teller leeft in de marker en niet in het geheugen,
+    want de daemon herstart en de puls draait één keer per dag."""
     from nooch_village.util import atomic_write_json
     vorige = laatste_run(data_dir)
     pogingen = int(vorige.get("pogingen", 0) or 0) if vorige.get("last_week") == week else 0
@@ -98,12 +121,15 @@ def markeer_week(data_dir: str, week: str, uitkomst: dict | None = None) -> None
         pass                      # markeren mislukt = hooguit een dubbele scan, nooit een crash
 
 
-def onvolledige_pogingen(data_dir: str, week: str) -> int:
-    """Hoe vaak deze week al een onvolledige run draaide (0 als de week nog niet begon)."""
+def pulsen_zonder_voortgang(data_dir: str, week: str) -> int:
+    """Hoeveel pulsen op rij deze week geen enkele NIEUWE pagina opleverden.
+
+    Voortgang, niet pogingen, is het juiste signaal: een scan die elke puls één pagina toevoegt is
+    langzaam maar gezond; een scan die twee pulsen niets toevoegt loopt vast en moet dat zeggen."""
     marker = laatste_run(data_dir)
-    if marker.get("last_week") != week or marker.get("volledig", True) is not False:
+    if marker.get("last_week") != week:
         return 0
-    return int(marker.get("pogingen", 0) or 0)
+    return int(marker.get("zonder_voortgang", 0) or 0)
 
 
 def laatste_run(data_dir: str) -> dict:
@@ -153,15 +179,15 @@ def verzamel(paginas: list[dict], db: dict, _fetch=None, ledger=None, _sleep=Non
     bevindingen, fouten, teksten = [], [], {}
     signalen = {"gewhitelist": [], "onzeker": [], "ambigu": [], "model_gevonden": 0,
                 "modelpas_ok": 0, "modelpas_mislukt": 0, "modelpas_reden": ""}
-    budget = safe_fetch.Wachtbudget(WACHTBUDGET_SECONDEN)
     for nummer, pagina in enumerate(paginas):
         if nummer:
             slaap(PAUZE_SECONDEN)                        # beleefd tegen de host, en het voorkomt 429's
         label = pagina.get("label") or pagina["url"]
         try:
+            # Eén poging (POGINGEN_PER_PAGINA=1): een mislukt verzoek verbruikt de rate-limit-bucket
+            # net zo goed als een geslaagd, dus retryen kost dekking bij de volgende pagina's.
             opgehaald = safe_fetch.haal_tekst_geduldig(
-                pagina["url"], pogingen=POGINGEN_PER_PAGINA, budget=budget, _fetch=_fetch,
-                _sleep=slaap)
+                pagina["url"], pogingen=POGINGEN_PER_PAGINA, _fetch=_fetch, _sleep=slaap)
         except (safe_fetch.FetchGeweigerd, safe_fetch.FetchMislukt) as e:
             fouten.append({"label": label, "url": pagina["url"], "reden": str(e),
                            "tijdelijk": safe_fetch.is_tijdelijk(e)})
@@ -222,14 +248,18 @@ class ClaimsSiteScanSkill(Skill):
     side_effect_free = False           # maakt taken aan op het bord
     required_env = ()
     description = ("Scant de vaste pagina-set van nooch.earth tegen de claims-database en zet "
-                   "alleen NIEUWE rode/oranje bevindingen als taak bij de juiste rol. Eén keer "
-                   "per ISO-week; wat al in de werklijst of op het bord staat wordt overgeslagen.")
-    input_schema = "geen (optioneel: force: bool om de week-gate over te slaan)"
-    output_schema = ("ok, week, skipped, gescand, paginas, volledig, nieuw, aangemaakt[], "
+                   "alleen NIEUWE rode/oranje bevindingen als taak bij de juiste rol. Eén volledige "
+                   "dekking per ISO-week, desnoods verdeeld over meerdere pulsen als de host "
+                   "pagina's tijdelijk weigert; wat al in de werklijst of op het bord staat wordt "
+                   "overgeslagen.")
+    input_schema = ("geen (optioneel: force: bool om de week-poort over te slaan met behoud van de "
+                    "dekking · herstart: bool om de dekking van deze week weg te gooien)")
+    output_schema = ("ok, week, skipped, gescand, gedekt[], paginas, volledig, nieuw, aangemaakt[], "
                      "overgeslagen, fouten[{label,url,reden,tijdelijk}], model_gevonden, "
                      "modelpas_ok, modelpas_mislukt, gewhitelist[], gaten[], headsup, escalate")
 
-    def _verifieer_werklijst(self, context, db: dict, paginateksten: dict) -> list[dict]:
+    def _verifieer_werklijst(self, context, db: dict, paginateksten: dict,
+                             volledig: bool = True) -> list[dict]:
         """Toets de werklijst tegen wat we net zagen en sla de uitkomst op.
 
         Dit is de enige plek waar een skill de claims-database schrijft, en alleen het
@@ -237,7 +267,7 @@ class ClaimsSiteScanSkill(Skill):
         Elke automatische wijziging krijgt `status_bron: auto`, zodat een mens altijd kan zien
         wie wat vond."""
         data_dir = getattr(context, "data_dir", ".")
-        voorstellen = claims_verify.verifieer(db, paginateksten)
+        voorstellen = claims_verify.verifieer(db, paginateksten, volledig=volledig)
         if not voorstellen:
             return []
         try:
@@ -284,7 +314,7 @@ class ClaimsSiteScanSkill(Skill):
         payload = payload or {}
         data_dir = getattr(context, "data_dir", ".")
         week = period_key("week")
-        if not payload.get("force") and week_gedaan(data_dir, week):
+        if not (payload.get("force") or payload.get("herstart")) and week_gedaan(data_dir, week):
             return {"ok": True, "week": week, "skipped": True, "reden": "deze week al gescand"}
 
         try:
@@ -297,13 +327,25 @@ class ClaimsSiteScanSkill(Skill):
             return {"ok": False, "week": week,
                     "escalate": {"reason": "geen scan-paginas in de claims-database (meta.scan_paginas)"}}
 
+        # `herstart` gooit de dekking van deze week weg en begint opnieuw bij pagina 1 — de expliciete
+        # weg om een week over te doen. `force` slaat alléén de week-poort over en respecteert de
+        # dekking, zodat een handmatige duw de scan vooruit helpt in plaats van dezelfde eerste
+        # pagina's nog eens te halen (precies de fout die deze versie repareert).
+        gedekt = [] if payload.get("herstart") else gedekt_deze_week(data_dir, week)
+        te_doen = resterend(paginas, gedekt)
+        if not te_doen:
+            markeer_week(data_dir, week, {"gedekt": [p.get("label") or p["url"] for p in paginas],
+                                          "paginas": len(paginas), "volledig": True})
+            return {"ok": True, "week": week, "skipped": True,
+                    "reden": "alle pagina's zijn deze week al gedekt"}
+
         bevindingen, fouten, paginateksten, signalen = verzamel(
-            paginas, db, _fetch=payload.get("_fetch"), ledger=self._kroniek(context),
+            te_doen, db, _fetch=payload.get("_fetch"), ledger=self._kroniek(context),
             _sleep=payload.get("_sleep"), reason_fn=payload.get("_reason"),
             negatieven=claims_labels.negatieven(data_dir),
             modelpas=payload.get("modelpas", True))
-        if len(fouten) == len(paginas):
-            # Alle pagina's onbereikbaar: dat is geen 'schone site', dat is een kapotte scan.
+        if len(fouten) == len(te_doen) and not gedekt:
+            # Niets gelukt én niets eerder gedekt: dat is geen 'schone site', dat is een kapotte scan.
             return {"ok": False, "week": week, "gescand": 0, "fouten": fouten,
                     "escalate": {"reason": "geen enkele pagina kon worden opgehaald: "
                                            + fout_tekst(fouten)}}
@@ -314,26 +356,37 @@ class ClaimsSiteScanSkill(Skill):
         verslag = claims_board.zet_op_bord(
             context, db, bevindingen,
             bron=f"wekelijkse site-scan {week}", rol_voor=_rol_voor, trigger="role")
-        statussen = self._verifieer_werklijst(context, db, paginateksten)
 
-        # Tijdelijk versus permanent (de reden dat 4 van 5 pagina's stil wegvielen):
+        # Tijdelijk versus permanent:
         #   tijdelijk (429/5xx/timeout) → de week NIET afsluiten; de volgende puls pakt de rest op.
-        #   permanent (404/410/geweigerd) → de week mág dicht, anders zet één dode pagina in de
-        #   scan-lijst de wekelijkse scan voor altijd vast. Het is dan een lijst-probleem, en dat is
-        #   compliance-domein: het gaat als bericht naar de eigenaar van `meta.scan_paginas`.
+        #   permanent (404/410/geweigerd) → die pagina blokkeert de week niet, anders zet één dode
+        #   pagina in de scan-lijst de wekelijkse scan voor altijd vast. Het is dan een lijst-probleem,
+        #   en dat is compliance-domein: het gaat als bericht naar de eigenaar van `meta.scan_paginas`.
         tijdelijk = [f for f in fouten if f["tijdelijk"]]
         permanent = [f for f in fouten if not f["tijdelijk"]]
-        # Hervatten heeft een bovengrens. Blijft een pagina MAX_ONVOLLEDIGE_POGINGEN pulsen op slot,
-        # dan is 'morgen weer' een stil abonnement op een blinde vlek geworden: dan sluit de week
-        # (anders draait de scan elke dag opnieuw voor niets) en hoort de mens het expliciet.
-        vastgelopen = bool(tijdelijk) and onvolledige_pogingen(data_dir, week) + 1 >= MAX_ONVOLLEDIGE_POGINGEN
+        nieuw_gedekt = sorted(set(gedekt) | set(paginateksten))
+        # Een permanent dode pagina telt als 'afgehandeld' voor de dekking: hij komt nooit meer,
+        # en de mens is erover geïnformeerd. Anders houdt hij de week eeuwig open.
+        afgeschreven = {f["label"] for f in permanent}
+        alle_labels = {p.get("label") or p["url"] for p in paginas}
+        dekking_compleet = alle_labels <= set(nieuw_gedekt) | afgeschreven
+        # Bovengrens op VOORTGANG, niet op pogingen: leverde deze puls geen enkele nieuwe pagina op?
+        zonder_voortgang = (0 if set(paginateksten) - set(gedekt)
+                            else pulsen_zonder_voortgang(data_dir, week) + 1)
+        vastgelopen = not dekking_compleet and zonder_voortgang >= MAX_PULSEN_ZONDER_VOORTGANG
+        # De werklijst-verificatie mag alleen 'opgelost' concluderen als de hele set gezien is: een
+        # claim die 'sitewide' staat kan op een pagina zitten die deze week nog niet gehaald is.
+        statussen = self._verifieer_werklijst(context, db, paginateksten,
+                                              volledig=dekking_compleet)
         markeer_week(data_dir, week, {"nieuw": len(verslag["aangemaakt"]),
                                       "overgeslagen": verslag["overgeslagen"],
-                                      "gescand": len(paginas) - len(fouten),
+                                      "gescand": len(paginateksten),
+                                      "gedekt": nieuw_gedekt,
                                       "paginas": len(paginas),
                                       "statussen": len(statussen),
-                                      "volledig": not tijdelijk or vastgelopen,
+                                      "volledig": dekking_compleet or vastgelopen,
                                       "vastgelopen": vastgelopen,
+                                      "zonder_voortgang": zonder_voortgang,
                                       "onbereikbaar": [f["label"] for f in tijdelijk],
                                       "fouten": fout_tekst(fouten, 5)})
         for f in permanent:
@@ -349,13 +402,15 @@ class ClaimsSiteScanSkill(Skill):
                 context, "compliance",
                 f"🚧 Site-scan blijft blind op {len(tijdelijk)} pagina('s): "
                 f"{', '.join(f['label'] for f in tijdelijk)} — {fout_tekst(tijdelijk, 1)}. "
-                f"Al {MAX_ONVOLLEDIGE_POGINGEN} pulsen niet op te halen vanaf de server.")
+                f"Al {MAX_PULSEN_ZONDER_VOORTGANG} pulsen geen enkele nieuwe pagina erbij.")
         gaten = self._oogst_gaten(data_dir, signalen, verslag, bevindingen, tijdelijk, vastgelopen)
-        headsup = self._headsup(verslag, statussen, tijdelijk, permanent, signalen, vastgelopen)
+        headsup = self._headsup(verslag, statussen, tijdelijk, permanent, signalen, vastgelopen,
+                                len(nieuw_gedekt), len(paginas))
         return {"ok": True, "week": week, "skipped": False, "headsup": headsup,
                 "statussen": statussen,
-                "gescand": len(paginas) - len(fouten), "paginas": len(paginas), "fouten": fouten,
-                "volledig": not tijdelijk or vastgelopen, "vastgelopen": vastgelopen,
+                "gescand": len(paginateksten), "gedekt": nieuw_gedekt, "paginas": len(paginas),
+                "fouten": fouten,
+                "volledig": dekking_compleet or vastgelopen, "vastgelopen": vastgelopen,
                 "nieuw": len(verslag["aangemaakt"]), "aangemaakt": verslag["aangemaakt"],
                 "overgeslagen": verslag["overgeslagen"], "rood": verslag["rood"],
                 "model_gevonden": signalen["model_gevonden"],
@@ -410,8 +465,8 @@ class ClaimsSiteScanSkill(Skill):
             # Dat is een bouwbaar probleem (andere route of andere bron), dus het hoort in de backlog.
             gaten.append(leg_vast(
                 self.GAT_ONLEESBARE_PAGINA,
-                f"{len(tijdelijk or [])} eigen pagina('s) al {MAX_ONVOLLEDIGE_POGINGEN} pulsen niet "
-                f"op te halen vanaf de server: "
+                f"{len(tijdelijk or [])} eigen pagina('s) na {MAX_PULSEN_ZONDER_VOORTGANG} pulsen "
+                f"zonder voortgang nog niet op te halen vanaf de server: "
                 f"{', '.join(f['label'] for f in (tijdelijk or []))} — {fout_tekst(tijdelijk or [], 1)}"))
         for b in signalen["ambigu"]:
             gaten.append(leg_vast(
@@ -423,7 +478,7 @@ class ClaimsSiteScanSkill(Skill):
 
     def _headsup(self, verslag: dict, statussen: list[dict], tijdelijk: list[dict],
                  permanent: list[dict], signalen: dict | None = None,
-                 vastgelopen: bool = False) -> str | None:
+                 vastgelopen: bool = False, gedekt: int = 0, totaal: int = 0) -> str | None:
         """Wat de mens moet zien. De generieke pulslaag stuurt dit door naar de founder.
 
         Alleen bij ROOD (oranje is werk voor de rol, geen alarm voor de founder) of bij een
@@ -453,12 +508,14 @@ class ClaimsSiteScanSkill(Skill):
             # Hervatten is geen oplossing meer: dit is een structureel probleem tussen de server en
             # de site (bv. een edge die dit IP throttelt). De mens moet dat weten in plaats van elke
             # dag opnieuw 'we proberen het morgen' te lezen.
-            gemist.append(f"{len(tijdelijk)} pagina('s) al {MAX_ONVOLLEDIGE_POGINGEN} pulsen niet "
-                          f"op te halen vanaf de server ({fout_tekst(tijdelijk, 2)}) — dit lost "
-                          f"zichzelf niet op, de scan blijft hier blind")
+            gemist.append(f"{gedekt} van {totaal} pagina's gedekt en al "
+                          f"{MAX_PULSEN_ZONDER_VOORTGANG} pulsen geen nieuwe erbij "
+                          f"({fout_tekst(tijdelijk, 2)}) — dit lost zichzelf niet op, de scan "
+                          f"blijft blind op {', '.join(f['label'] for f in tijdelijk)}")
         elif tijdelijk:
-            gemist.append(f"{len(tijdelijk)} pagina('s) tijdelijk niet op te halen "
-                          f"({fout_tekst(tijdelijk, 2)}) — de volgende puls pakt ze opnieuw")
+            gemist.append(f"{gedekt} van {totaal} pagina's deze week gedekt; "
+                          f"{', '.join(f['label'] for f in tijdelijk)} volgt bij de volgende puls "
+                          f"({fout_tekst(tijdelijk, 1)})")
         if permanent:
             gemist.append(f"{len(permanent)} pagina('s) bestaan niet meer "
                           f"({fout_tekst(permanent, 2)}) — scan-lijst bijwerken")
