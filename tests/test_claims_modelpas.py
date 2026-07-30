@@ -69,8 +69,31 @@ def test_zonder_llm_is_de_scan_exact_het_regex_pad(tmp_path):
     zonder_pas, _, _, _ = css.verzamel(paginas, db, _fetch=_fetch, modelpas=False)
     met_stille_pas, _, _, signalen = css.verzamel(paginas, db, _fetch=_fetch, reason_fn=_stil)
     assert met_stille_pas == zonder_pas                       # byte-voor-byte hetzelfde
-    assert signalen["modelpas_gedraaid"] is False
+    assert signalen["modelpas_ok"] == 0
+    assert signalen["modelpas_mislukt"] == len(paginas)
     assert signalen["model_gevonden"] == 0
+
+
+def test_pas_die_op_een_pagina_klapt_wordt_niet_als_heel_mislukt_gerapporteerd(tmp_path,
+                                                                               monkeypatch):
+    """Prod-observatie: de pas draaide op de ene pagina en stuitte op de andere op een rate-limit;
+    één vlag maakte daar 'niet gedraaid' van terwijl er wél kandidaten uitkwamen. Nu wordt er per
+    pagina geteld, en het gat benoemt hoeveel pagina's blind bleven."""
+    beurten = {"n": 0}
+
+    def wisselvallig(*a, **k):
+        beurten["n"] += 1
+        if beurten["n"] % 2:
+            return None                                       # deze pagina: geen LLM-antwoord
+        return json.dumps({"kandidaten": [{"fragment": _ZIN_ZONDER_TERM, "waarom": "claim",
+                                           "categorie": "Framing", "zeker": True}]})
+    ctx = _ctx(tmp_path, monkeypatch)
+    uit = ClaimsSiteScanSkill().run({"_fetch": _fetch, "_reason": wisselvallig}, ctx)
+    assert uit["modelpas_ok"] and uit["modelpas_mislukt"]      # beide kanten eerlijk geteld
+    assert uit["model_gevonden"] >= 1
+    gat = [g for g in gap_ledger.alle(str(tmp_path))
+           if g["capability"] == ClaimsSiteScanSkill.GAT_GEEN_MODELPAS][0]
+    assert f"op {uit['modelpas_mislukt']} van" in gat["item_text"]
 
 
 def test_kapot_llm_antwoord_is_ook_fail_soft(tmp_path):
@@ -87,7 +110,7 @@ def test_llm_die_klapt_breekt_de_scan_niet(tmp_path):
     bevindingen, _, _, signalen = css.verzamel(css.scan_paginas(db), db, _fetch=_fetch,
                                                reason_fn=boem)
     assert bevindingen                                        # het regex-pad draait door
-    assert signalen["modelpas_gedraaid"] is False
+    assert signalen["modelpas_ok"] == 0
 
 
 # ── Guard 2: gegrond, en nooit rood ──────────────────────────────────────────────────────────

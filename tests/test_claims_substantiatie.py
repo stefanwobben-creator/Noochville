@@ -258,6 +258,36 @@ def test_permanente_fout_zet_de_scan_niet_voor_altijd_vast(tmp_path, monkeypatch
     assert "Scan-lijst" in tekst and "mission" in tekst
 
 
+def test_hervatten_heeft_een_bovengrens(tmp_path, monkeypatch):
+    """'De volgende puls pakt het op' mag geen stil abonnement op een blinde vlek worden. Na drie
+    onvolledige pulsen sluit de week en hoort de mens het expliciet — mét een capaciteitsgat."""
+    from nooch_village import gap_ledger
+    ctx = _ctx(tmp_path, monkeypatch)
+    fetch = _fetch_met_429({"mission"})
+    for poging in range(1, css.MAX_ONVOLLEDIGE_POGINGEN + 1):
+        uit = ClaimsSiteScanSkill().run({"force": True, "_fetch": fetch, "_sleep": lambda s: None},
+                                        ctx)
+        laatste = poging == css.MAX_ONVOLLEDIGE_POGINGEN
+        assert uit["vastgelopen"] is laatste
+        assert uit["volledig"] is laatste          # pas op het eind sluit de week
+    assert css.week_gedaan(str(tmp_path), css.period_key("week"))
+    assert "lost zichzelf niet op" in uit["headsup"]
+    labels = [g["capability"] for g in gap_ledger.alle(str(tmp_path))]
+    assert ClaimsSiteScanSkill.GAT_ONLEESBARE_PAGINA in labels
+    tekst = (tmp_path / "notifications.json").read_text(encoding="utf-8")
+    assert "blijft blind" in tekst and "mission" in tekst
+
+
+def test_een_slechte_dag_sluit_de_week_niet(tmp_path, monkeypatch):
+    """De keerzijde van de bovengrens: één mislukte poging moet gewoon hervatbaar blijven."""
+    ctx = _ctx(tmp_path, monkeypatch)
+    uit = ClaimsSiteScanSkill().run(
+        {"_fetch": _fetch_met_429({"mission"}), "_sleep": lambda s: None}, ctx)
+    assert uit["vastgelopen"] is False and uit["volledig"] is False
+    assert not css.week_gedaan(str(tmp_path), css.period_key("week"))
+    assert "de volgende puls pakt ze opnieuw" in uit["headsup"]
+
+
 def test_tijdelijke_fout_wordt_opnieuw_geprobeerd(tmp_path):
     """De 429 die 4 van 5 pagina's stil wegdrukte: één retry lost hem op."""
     pogingen = {"n": 0}
@@ -272,6 +302,52 @@ def test_tijdelijke_fout_wordt_opnieuw_geprobeerd(tmp_path):
                                          _sleep=gewacht.append)
     assert "plastic-free" in uit["tekst"]
     assert gewacht == [2.0]                                    # één backoff, geen stille opgave
+
+
+def test_de_host_bepaalt_de_wachttijd_niet_wij(tmp_path):
+    """Shopify vraagt bij een 429 om 60 seconden. Wie zelf 2 seconden verzint, krijgt gewoon een
+    tweede 429 en concludeert onterecht dat de pagina onbereikbaar is — 60% van de site onzichtbaar."""
+    pogingen = {"n": 0}
+
+    def throttled(url):
+        pogingen["n"] += 1
+        if pogingen["n"] == 1:
+            raise safe_fetch.FetchMislukt("de pagina gaf HTTP 429", status=429, retry_after=60)
+        return (200, _PAGINA)
+    gewacht = []
+    safe_fetch.haal_tekst_geduldig("https://nooch.earth/", _fetch=throttled, _sleep=gewacht.append)
+    assert gewacht == [60.0]                                   # niet onze 2 seconden
+
+
+def test_wachttijd_wordt_begrensd(tmp_path):
+    def onbeschoft(url):
+        raise safe_fetch.FetchMislukt("429", status=429, retry_after=9999)
+    gewacht = []
+    with pytest.raises(safe_fetch.FetchMislukt):
+        safe_fetch.haal_tekst_geduldig("https://nooch.earth/", _fetch=onbeschoft,
+                                       _sleep=gewacht.append)
+    assert all(w <= safe_fetch.MAX_PAUZE for w in gewacht)     # honoreer de host, hang niet eeuwig
+
+
+def test_wachtbudget_stopt_het_retryen_maar_niet_de_hervatting(tmp_path):
+    """Het budget is op → deze pagina faalt als TIJDELIJK, dus de week sluit niet en de volgende
+    puls probeert opnieuw. Nooit stil opgeven, nooit eeuwig hangen."""
+    def throttled(url):
+        raise safe_fetch.FetchMislukt("429", status=429, retry_after=60)
+    budget = safe_fetch.Wachtbudget(60)
+    gewacht = []
+    with pytest.raises(safe_fetch.FetchMislukt) as fout:
+        safe_fetch.haal_tekst_geduldig("https://nooch.earth/", budget=budget, _fetch=throttled,
+                                       _sleep=gewacht.append)
+    assert gewacht == [60.0]                                   # één keer gewacht, toen was het op
+    assert safe_fetch.is_tijdelijk(fout.value)                  # dus: hervatbaar
+
+
+def test_retry_after_header_wordt_gelezen():
+    assert safe_fetch._retry_after({"Retry-After": "60"}) == 60.0
+    assert safe_fetch._retry_after({"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}) is None
+    assert safe_fetch._retry_after({}) is None
+    assert safe_fetch._retry_after(None) is None
 
 
 def test_permanente_fout_wordt_niet_geprobeerd(tmp_path):
