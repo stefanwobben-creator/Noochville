@@ -38,11 +38,32 @@ class FetchMislukt(RuntimeError):
 
     `status` draagt de HTTP-code als er één was, en None bij een netwerk-/timeout-fout. De caller
     heeft die nodig om tijdelijk (opnieuw proberen) van permanent (de pagina is weg) te scheiden;
-    zonder dat onderscheid is elke fout ofwel een eeuwige retry ofwel een stille blinde vlek."""
+    zonder dat onderscheid is elke fout ofwel een eeuwige retry ofwel een stille blinde vlek.
 
-    def __init__(self, bericht: str, status: int | None = None):
+    `retry_after` is wat de hóst zegt te willen wachten (seconden). Shopify vraagt bij een 429 om
+    60 seconden; wie zelf 2 seconden verzint, krijgt gewoon opnieuw een 429 en concludeert onterecht
+    dat de pagina onbereikbaar is. De bron weet dit beter dan wij."""
+
+    def __init__(self, bericht: str, status: int | None = None, retry_after: float | None = None):
         super().__init__(bericht)
         self.status = status
+        self.retry_after = retry_after
+
+
+def _retry_after(headers) -> float | None:
+    """De Retry-After-header als seconden, of None. Alleen de delta-seconds-vorm (wat Shopify en de
+    meeste CDN's sturen); een HTTP-datum negeren we liever dan verkeerd te parsen."""
+    try:
+        ruw = (headers or {}).get("Retry-After")
+    except Exception:                                # noqa: BLE001 — een rare header mag niets breken
+        return None
+    if ruw is None:
+        return None
+    try:
+        wacht = float(str(ruw).strip())
+    except ValueError:
+        return None
+    return wacht if wacht >= 0 else None
 
 
 def is_tijdelijk(fout: Exception) -> bool:
@@ -100,6 +121,7 @@ def haal_tekst(url: str, _fetch=None) -> dict:
     Zonder injectie wordt `requests` gebruikt — en dan pas, zodat de import geen
     netwerkafhankelijkheid oplegt aan wie alleen de guardrail nodig heeft."""
     veilig = controleer_url(url)
+    wacht = None
     if _fetch is not None:
         status, html = _fetch(veilig)
     else:
@@ -110,37 +132,67 @@ def haal_tekst(url: str, _fetch=None) -> dict:
             html = r.raw.read(MAX_BYTES, decode_content=True).decode(r.encoding or "utf-8",
                                                                     errors="replace")
             status = r.status_code
+            wacht = _retry_after(r.headers)
         except Exception as e:                       # requests-fouten zijn een familie; één vangnet
             raise FetchMislukt(f"ophalen mislukt: {e}") from e
     if status >= 400:
-        raise FetchMislukt(f"de pagina gaf HTTP {status}", status=status)
+        raise FetchMislukt(f"de pagina gaf HTTP {status}", status=status, retry_after=wacht)
     titel, tekst = naar_tekst(html)
     return {"url": veilig, "status": status, "titel": titel, "tekst": tekst}
 
 
+MAX_PAUZE = 90.0               # bovengrens per wachtbeurt: honoreer de host, maar hang niet eeuwig
+
+
+class Wachtbudget:
+    """Hoeveel seconden mag een reeks fetches in totaal wachten?
+
+    Zonder budget kan een host met `Retry-After: 60` een scan van vijf pagina's tien minuten laten
+    hangen. Zonder retry mist die scan 60% van de site. Het budget is de derde weg: wacht zolang het
+    zin heeft, en laat de rest als TIJDELIJKE fout terugvallen — die pagina's worden bij de volgende
+    puls opnieuw geprobeerd, want een tijdelijke fout sluit de week niet af."""
+
+    def __init__(self, seconden: float):
+        self.over = max(0.0, float(seconden))
+
+    def neem(self, seconden: float) -> bool:
+        """Reserveer wachttijd. False = het budget is op; de caller stopt met retryen."""
+        if seconden > self.over:
+            return False
+        self.over -= seconden
+        return True
+
+
 def haal_tekst_geduldig(url: str, *, pogingen: int = 3, pauze: float = 2.0,
-                        _fetch=None, _sleep=None) -> dict:
+                        budget: "Wachtbudget | None" = None, _fetch=None, _sleep=None) -> dict:
     """`haal_tekst`, maar met backoff op een TIJDELIJKE fout. Permanente fouten vliegen direct door.
 
     Waarom dit bestaat: een pagina-set achter elkaar ophalen levert bij Shopify (en de meeste CDN's)
     een 429 op de tweede of derde pagina. Zonder retry wordt zo'n pagina stil overgeslagen en meldt
     de scan dat de site schoon is. Dat is de duurste fout die deze module kan maken.
 
-    Eén poging = huidig gedrag; de pauze verdubbelt per poging (2s, 4s). `_sleep` is injecteerbaar
-    zodat een test de backoff kan bewijzen zonder te wachten."""
+    De wachttijd komt van de HÓST als die het zegt (`Retry-After`), anders van een verdubbelende
+    backoff (2s, 4s). Zelf 2 seconden verzinnen terwijl de host 60 vraagt levert gewoon een tweede
+    429 en de onterechte conclusie dat de pagina onbereikbaar is. `budget` begrenst de totale
+    wachttijd over een hele pagina-set; `_sleep` is injecteerbaar zodat een test de backoff kan
+    bewijzen zonder te wachten."""
     slaap = _sleep if _sleep is not None else time.sleep
-    laatste: Exception | None = None
     for poging in range(1, max(1, pogingen) + 1):
         try:
             return haal_tekst(url, _fetch=_fetch)
         except (FetchGeweigerd, FetchMislukt) as e:
-            laatste = e
             if not is_tijdelijk(e) or poging >= max(1, pogingen):
                 raise
-            wacht = pauze * (2 ** (poging - 1))
-            log.info("fetch %s: %s — poging %d/%d, %.1fs wachten", url, e, poging, pogingen, wacht)
+            gevraagd = getattr(e, "retry_after", None)
+            wacht = min(float(gevraagd) if gevraagd else pauze * (2 ** (poging - 1)), MAX_PAUZE)
+            if budget is not None and not budget.neem(wacht):
+                log.info("fetch %s: %s — wachtbudget op (%.0fs nodig), volgende keer opnieuw",
+                         url, e, wacht)
+                raise
+            log.info("fetch %s: %s — poging %d/%d, %.1fs wachten%s", url, e, poging, pogingen,
+                     wacht, " (door de host gevraagd)" if gevraagd else "")
             slaap(wacht)
-    raise laatste                                    # pragma: no cover — de lus raakt dit niet
+    raise AssertionError("onbereikbaar")             # pragma: no cover — de lus raakt dit niet
 
 
 def haal_ruw(url: str, _fetch=None) -> dict:
