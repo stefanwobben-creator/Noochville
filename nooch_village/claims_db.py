@@ -226,7 +226,8 @@ def _overlay_pad(data_dir: str) -> str:
 
 
 def _leeg_overlay() -> dict:
-    return {"toegevoegd": [], "ingetrokken": [], "werklijst": {}, "meta_versie": ""}
+    return {"toegevoegd": [], "ingetrokken": [], "werklijst": {}, "uitzonderingen": [],
+            "meta_versie": ""}
 
 
 def _lees_overlay(data_dir: str) -> dict:
@@ -247,6 +248,7 @@ def _lees_overlay(data_dir: str) -> dict:
         basis["toegevoegd"] = [t for t in (ov.get("toegevoegd") or []) if isinstance(t, dict)]
         basis["ingetrokken"] = [str(p) for p in (ov.get("ingetrokken") or [])]
         basis["werklijst"] = {str(k): str(v) for k, v in (ov.get("werklijst") or {}).items()}
+        basis["uitzonderingen"] = [u for u in (ov.get("uitzonderingen") or []) if isinstance(u, dict)]
         basis["meta_versie"] = str(ov.get("meta_versie") or "")
     return basis
 
@@ -294,7 +296,8 @@ def _pas_overlay_toe(seed: dict, ov: dict) -> dict:
     meta = dict(seed.get("meta") or {})
     if ov.get("meta_versie"):
         meta["versie"] = ov["meta_versie"]
-    eff = {**seed, "termen": termen, "werklijst": werklijst, "meta": meta}
+    eff = {**seed, "termen": termen, "werklijst": werklijst, "meta": meta,
+           "uitzonderingen": list(ov.get("uitzonderingen") or [])}
     if conflicten:
         eff["_conflicten"] = conflicten
         for c in conflicten:
@@ -347,6 +350,68 @@ def overlay_retract(data_dir: str, patroon: str) -> str:
     versie = _bump_overlay_versie(ov)
     _schrijf_overlay(data_dir, ov)
     return versie
+
+
+# ── Uitzonderingen: de over-vlag die een mens heeft weggewuifd ──────────────────────────────────
+# Een uitzondering VERWIJDERT nooit een bevinding. Hij zegt alleen: maak hier geen taak van, en toon
+# hem apart met de naam van wie dat besloot. Zo blijft een verkeerd oordeel terugvindbaar in plaats
+# van stil te verdwijnen — dezelfde regel als de 'in context, geen claim'-groep van de checker.
+
+_FRAGMENT_NIET_WOORD = re.compile(r"[^a-z0-9]+")
+_MIN_UITZONDERING = 12             # korter fragment zou halve site wegfilteren
+
+
+def _norm_fragment(tekst: str) -> str:
+    return _FRAGMENT_NIET_WOORD.sub(" ", (tekst or "").lower()).strip()
+
+
+def uitzonderingen(db: dict) -> list[dict]:
+    """De vastgelegde uitzonderingen uit de effectieve database (leeg zonder overlay)."""
+    return [u for u in (db.get("uitzonderingen") or []) if isinstance(u, dict)]
+
+
+def is_uitgezonderd(bevinding: dict, db: dict) -> dict | None:
+    """Heeft een mens deze bevinding op deze pagina eerder weggewuifd? Geeft de uitzondering terug.
+
+    Match op fragment-insluiting in beide richtingen (de scan vindt soms de hele zin, soms de frase)
+    en op pagina: een uitzondering geldt per vindplaats, niet sitebreed — dezelfde claim op een
+    andere pagina is een nieuwe beslissing. Een uitzondering zonder pagina geldt overal (bewuste
+    ontsnapping voor een sitewide element als een footer)."""
+    kandidaten = [_norm_fragment(g) for g in (bevinding.get("gevonden") or [])]
+    kandidaten += [_norm_fragment(bevinding.get("term", ""))]
+    kandidaten = [k for k in kandidaten if k]
+    pagina = _norm_fragment(bevinding.get("pagina", ""))
+    for u in uitzonderingen(db):
+        frag = _norm_fragment(u.get("fragment", ""))
+        if len(frag) < _MIN_UITZONDERING:
+            continue
+        upagina = _norm_fragment(u.get("pagina", ""))
+        if upagina and pagina and upagina != pagina:
+            continue
+        if any(frag in k or k in frag for k in kandidaten):
+            return u
+    return None
+
+
+def overlay_uitzondering(data_dir: str, fragment: str, pagina: str = "", waarom: str = "",
+                         door: str = "") -> tuple[dict, str]:
+    """Leg een uitzondering vast via de overlay. Geeft (uitzondering, versie).
+
+    Het fragment moet lang genoeg zijn om één vindplaats aan te wijzen: een uitzondering op 'eco'
+    zou de halve site blind maken, en dat is precies de fout die deze tool moet uitsluiten."""
+    fragment = (fragment or "").strip()
+    if len(_norm_fragment(fragment)) < _MIN_UITZONDERING:
+        raise ValueError(f"fragment is te kort of te generiek (minimaal {_MIN_UITZONDERING} tekens "
+                         f"aan letters/cijfers) — een uitzondering moet één vindplaats aanwijzen")
+    nieuw = {"fragment": fragment[:300], "pagina": (pagina or "").strip()[:80],
+             "waarom": (waarom or "").strip()[:200], "door": door or "?", "at": time.time()}
+    ov = _lees_overlay(data_dir)
+    ov["uitzonderingen"] = [u for u in ov["uitzonderingen"]
+                            if _norm_fragment(u.get("fragment", "")) != _norm_fragment(fragment)
+                            or (u.get("pagina") or "") != nieuw["pagina"]] + [nieuw]
+    versie = _bump_overlay_versie(ov)
+    _schrijf_overlay(data_dir, ov)
+    return nieuw, versie
 
 
 def overlay_set_status(data_dir: str, nr: int, status: str, seed_path: str | None = None,

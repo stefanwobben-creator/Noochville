@@ -26,6 +26,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from nooch_village import auth as _auth
 from nooch_village import claims_db as _claims_db
 from nooch_village import claims_board as _claims_board
+from nooch_village import claims_labels as _claims_labels
 from nooch_village.web_base import _e, _page, _banner     # zelfde design system
 from nooch_village.cockpit2_util import (
     _name, _initials, _tabbar, _avatar, _age, _fmt_due,
@@ -3706,6 +3707,64 @@ def _act_claims_bewijs_link(c):
         return nxt, f"✓ evidence recorded ({record['id']}) — the next scan reads it as substantiation"
 
 
+def _act_claims_vondst_whitelist(c):
+        # AUTHZ: rolvervuller of Circle Lead — een vlag wegwuiven is een compliance-oordeel; dezelfde
+        # poort als termen cureren. Een verkeerde uitzondering maakt de site stil blind.
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _role_gate("compliance", username, st)
+        if _deny:
+            return nxt, _deny
+        from nooch_village import claims_labels
+        fragment, pagina = g("fragment").strip(), g("pagina").strip()
+        try:
+            _, versie = _claims_db.overlay_uitzondering(
+                c.data_dir, fragment, pagina=pagina, waarom=g("waarom").strip(),
+                door=username or "compliance")
+        except ValueError as e:
+            return nxt, f"⛔ {e}"
+        # Het label is de opbrengst: de modelpas krijgt dit als negatief voorbeeld mee, zodat
+        # dezelfde over-vlag volgende week niet terugkomt.
+        claims_labels.leg_vast(c.data_dir, fragment=fragment, label=claims_labels.GEEN_CLAIM,
+                               pagina=pagina, door=username or "compliance",
+                               reden=g("waarom").strip())
+        _claims_audit(st, username, "claims_vondst_whitelist", fragment=fragment[:120],
+                      pagina=pagina, versie=versie)
+        return nxt, (f"✓ marked as 'no claim' — no task, still visible in the scan report, "
+                     f"and recorded as a label (v{versie})")
+
+
+def _act_claims_regel_uit_vondst(c):
+        # AUTHZ: rolvervuller of Circle Lead — een nieuwe regel in de claims-database is curatie van
+        # het compliance-domein, ook als hij hier met één veld ontstaat.
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _role_gate("compliance", username, st)
+        if _deny:
+            return nxt, _deny
+        from nooch_village import claims_labels
+        fragment = " ".join(g("fragment").split())
+        if len(fragment) < 4:
+            return nxt, "⛔ paste the wording itself (at least 4 characters)"
+        # Het patroon wordt AFGELEID uit de zin: letterlijk, maar buigzaam op witruimte, zodat een
+        # regelafbreking in de HTML de match niet breekt. De mens hoeft geen regex te schrijven —
+        # dat is de drempel waardoor regelboeken normaal niet groeien.
+        patroon = r"\s+".join(re.escape(w) for w in fragment.split())
+        try:
+            nieuw, versie = _claims_db.overlay_add_term(
+                c.data_dir, term=fragment[:120], patroon=patroon, stoplicht="escaleren",
+                categorie="Framing",
+                waarom=(f"handmatig gevangen claim (door {username or 'compliance'}); de tool had "
+                        f"hier geen term voor. Geen harde bron → compliance beoordeelt."),
+                alternatief="(compliance bepaalt de veilige formulering)")
+        except ValueError as e:
+            return nxt, f"⛔ {e}"
+        claims_labels.leg_vast(c.data_dir, fragment=fragment, label=claims_labels.CLAIM,
+                               pagina=g("pagina").strip(), door=username or "compliance",
+                               herkomst="handmatig")
+        _claims_audit(st, username, "claims_regel_uit_vondst", term=nieuw["term"], versie=versie)
+        return nxt, (f"✓ rule added as 'compliance decides' — the scan catches this wording from now "
+                     f"on (database v{versie}). Set a traffic light on it in the term database.")
+
+
 def _act_claims_to_board(c):
         # AUTHZ: rolvervuller of Circle Lead — compliance zet bevindingen om in werk; andere
         # rollen zien de knop niet (en de poort weigert ze hier alsnog).
@@ -4436,6 +4495,8 @@ ACTIONS = {
     "claims_term_retract": _act_claims_term_retract,
     "claims_work_status": _act_claims_work_status,
     "claims_bewijs_link": _act_claims_bewijs_link,
+    "claims_vondst_whitelist": _act_claims_vondst_whitelist,
+    "claims_regel_uit_vondst": _act_claims_regel_uit_vondst,
     "claims_to_board": _act_claims_to_board,
     "persona_edit": _act_persona_edit,
     "persona_llm": _act_persona_llm,
@@ -4950,6 +5011,7 @@ def make_handler(data_dir: str, csrf_token: str,
                     zoek=(qs.get("q") or [""])[0],
                     data_dir=data_dir,
                     bewijzen=_claims_bewijzen(data_dir),
+                    labels=_claims_labels.telling(data_dir),
                     bordresultaat=_claims_bordresultaat(qs)))
                 return
             if path == "/inwoners":
