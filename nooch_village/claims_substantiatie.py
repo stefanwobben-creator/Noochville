@@ -121,6 +121,28 @@ def _van_ons(rij: dict, merken: set[str]) -> bool:
     return any(m in rij["subject"] for m in merken)
 
 
+def _match(varianten: list[str], rij: dict) -> str | None:
+    """Hoe goed dekt dit record de claim? `vol`, `deel` of None.
+
+    Bewust op HELE tokens en niet op substring: 'plasticvrij' zit letterlijk in 'plasticvrije
+    verpakking', en dan zou bewijs over de vérpakking een claim over de zóól onderbouwen. Dat is
+    precies de stille fout die recall-eerst niet mag maken.
+
+    `deel` is de morfologische of gedeeltelijke bijna-match (plasticvrij ↔ plasticvrije, of één van
+    twee woorden). Die geldt NIET als bewijs — hij wordt `ambigu`: een mens moet ernaar kijken."""
+    tokens = rij["onderwerp_tokens"]
+    kandidaten = [t for t in (_tokens(v) for v in varianten) if t]
+    for vt in kandidaten:
+        if vt <= tokens:
+            return "vol"
+    for vt in kandidaten:
+        if vt & tokens:
+            return "deel"                                # sommige woorden kloppen, niet alle
+        if any(q.startswith(t) or t.startswith(q) for t in vt for q in tokens):
+            return "deel"                                # zelfde stam, andere buiging
+    return None
+
+
 def bewijs_voor(bevinding: dict, index: list[dict], merken: set[str]) -> dict:
     """De bewijs-vraag voor één bevinding: `{onderbouwing, reden, records}`.
 
@@ -138,9 +160,10 @@ def bewijs_voor(bevinding: dict, index: list[dict], merken: set[str]) -> dict:
             continue                                 # bewijs over een ánder merk zegt niets over ons
         if rij["status"] != "bevestigd":
             continue                                 # leeg/fout is onderzocht-en-niets, geen bewijs
-        if any(v in rij["onderwerp"] for v in varianten):
+        dekking = _match(varianten, rij)
+        if dekking == "vol":
             volledig.append(rij["record"])
-        elif any(_tokens(v) & rij["onderwerp_tokens"] for v in varianten):
+        elif dekking == "deel":
             gedeeltelijk.append(rij["record"])
 
     if volledig:

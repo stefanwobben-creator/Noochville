@@ -156,6 +156,18 @@ def test_leeg_of_fout_record_is_geen_bewijs(tmp_path):
     assert bevindingen[0]["onderbouwing"] == claims_substantiatie.ONTBREEKT
 
 
+def test_bewijs_over_een_ander_onderdeel_onderbouwt_de_claim_niet(tmp_path):
+    """'plasticvrij' zit letterlijk in 'plasticvrije verpakking'. Zou de match op substring gaan, dan
+    onderbouwde bewijs over de VERPAKKING een claim over de ZOOL. Daarom matcht hij op hele woorden."""
+    led = _kroniek(tmp_path)
+    claims_substantiatie.leg_bewijs_vast(
+        led, claim="plasticvrije verpakking", bron="https://nooch.earth/pack", merk="nooch",
+        citaat="De verpakking is aantoonbaar plasticvrij, getest volgens de norm.")
+    bevindingen = [_bev(term="plasticvrij", gevonden=["plasticvrij"])]
+    claims_substantiatie.pas_toe(bevindingen, ledger=led, db=_db())
+    assert bevindingen[0]["onderbouwing"] != claims_substantiatie.ONDERBOUWD
+
+
 def test_halve_match_is_ambigu_en_gedraagt_zich_als_ontbreekt(tmp_path):
     led = _kroniek(tmp_path)
     led.record(role_id="compliance", skill=claims_substantiatie.SKILL,
