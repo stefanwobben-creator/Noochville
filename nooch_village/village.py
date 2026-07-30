@@ -109,6 +109,13 @@ class Village:
         self.context._autonomous_done = set()
         from nooch_village.project_doc_store import ProjectDocStore
         self.context.project_docs = ProjectDocStore(self.context.data_dir)   # levend einddocument per project
+        from nooch_village.personas import PersonaStore
+        # De inwoners in de rugzak: `llm_keuze` leest hier de modelvoorkeur van de persona die op een
+        # rol zit (`context.personas`). Zonder deze regel is dat attribuut None en valt ELK daemon-pad
+        # stil terug op de dorpsladder — de puls-einddocumenten en de Field Note draaiden daardoor op
+        # de goedkoopste trede terwijl de persona iets anders vroeg. De cockpit had de bedrading al.
+        self.context.personas = PersonaStore(
+            os.path.join(self.context.data_dir, "personas.json"))
         # Board-watch: de cockpit draait in een LOS proces met een eigen in-memory bus; een bord-drag
         # naar ACTIEF schrijft alleen projects.json. Deze village-poll herleest dat bestand en vertaalt
         # een verse naar-'running'-overgang naar een in-memory project_activated-event, zodat de
