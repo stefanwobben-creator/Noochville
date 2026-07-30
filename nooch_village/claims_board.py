@@ -100,7 +100,7 @@ def normaliseer(tekst: str) -> str:
     return _NIET_WOORD.sub(" ", (tekst or "").lower()).strip()
 
 
-def rol_id_voor(rol_label: str, records=None, stoplicht: str = "") -> str:
+def rol_id_voor(rol_label: str, records=None, stoplicht: str = "", herkomst: str = "") -> str:
     """De record-id van de rol die deze bevinding oppakt.
 
     Escaleren gaat ALTIJD naar compliance, ongeacht de categorie: er is geen harde bron, dus er
@@ -108,10 +108,13 @@ def rol_id_voor(rol_label: str, records=None, stoplicht: str = "") -> str:
     zo'n bevinding naar de copywriter, dan vraag je iemand een knoop door te hakken die hij niet
     mag doorhakken.
 
+    Een model-gevonden kandidaat gaat om dezelfde reden naar compliance: er zit geen lijstterm en
+    geen wetsartikel achter, dus het eerste werk is een oordeel, geen herformulering.
+
     Bestaat de rol niet (meer) in de records, dan gaat het werk naar compliance in plaats van
     naar een dood id."""
     from nooch_village.claims_db import ESCALEREN
-    if stoplicht == ESCALEREN:
+    if stoplicht == ESCALEREN or herkomst == "model":
         return FALLBACK_ROL
     kandidaat = ROL_IDS.get(rol_label, FALLBACK_ROL)
     if records is not None and records.get(kandidaat) is None:
@@ -260,7 +263,8 @@ def zet_op_bord(omgeving, db: dict, bevindingen: list[dict], bron: str,
             continue
         sleutel = taak_sleutel(b)
         titel, beschrijving = taak_tekst(b, b.get("url") or bron)
-        eigenaar = rol_id_voor(rol_voor(b.get("categorie", "")), records, b.get("stoplicht", ""))
+        eigenaar = rol_id_voor(rol_voor(b.get("categorie", "")), records, b.get("stoplicht", ""),
+                               b.get("herkomst", ""))
         pid = ledger.create(eigenaar, titel, trigger, status="future", origin=ORIGIN,
                             keyword=sleutel, description=beschrijving,
                             dod_outcome="de claim staat compliant op de site",
@@ -273,7 +277,8 @@ def zet_op_bord(omgeving, db: dict, bevindingen: list[dict], bron: str,
                            "stoplicht": b.get("stoplicht"), "doelen": doelen,
                            "gevonden": (b.get("gevonden") or [""])[0],
                            "pagina": b.get("pagina") or "",
-                           "onderbouwing": b.get("onderbouwing", "")})
+                           "onderbouwing": b.get("onderbouwing", ""),
+                           "herkomst": b.get("herkomst", "")})
         bestaand.add(sleutel)                          # binnen één run niet dubbel
         bestaand.update(_zoektermen(b))
     return {"aangemaakt": aangemaakt, "overgeslagen": overgeslagen, "lopend": lopend,

@@ -22,8 +22,11 @@ import time
 from nooch_village import (
     claims_board,
     claims_db,
+    claims_labels,
+    claims_modelpas,
     claims_substantiatie,
     claims_verify,
+    gap_ledger,
     safe_fetch,
 )
 from nooch_village.checklists import period_key
@@ -87,8 +90,9 @@ def scan_paginas(db: dict) -> list[dict]:
             if isinstance(p, dict) and p.get("url")]
 
 
-def verzamel(paginas: list[dict], db: dict, _fetch=None, ledger=None,
-             _sleep=None) -> tuple[list[dict], list[dict], dict]:
+def verzamel(paginas: list[dict], db: dict, _fetch=None, ledger=None, _sleep=None,
+             reason_fn=None, negatieven=None,
+             modelpas: bool = True) -> tuple[list[dict], list[dict], dict, dict]:
     """Scan elke pagina en geef (bevindingen, fouten, paginateksten) terug. Elke bevinding draagt
     de pagina waar hij vandaan komt, zodat de taak een vindplaats heeft; de teksten gaan mee
     zodat de werklijst-verificatie tegen dezelfde waarneming kan toetsen.
@@ -98,7 +102,13 @@ def verzamel(paginas: list[dict], db: dict, _fetch=None, ledger=None,
 
     `ledger` is de Kroniek. Vóór het wegfilteren van groen stelt `claims_substantiatie` de bewijs-vraag:
     een claim zonder bevestigd record wordt oranje en blijft dus staan. Zonder ledger geldt niets als
-    onderbouwd — fail-closed, nooit stil groen."""
+    onderbouwd — fail-closed, nooit stil groen.
+
+    `modelpas` laat daarnaast `claims_modelpas` zoeken naar claims die GEEN lijstterm raken. Fail-soft:
+    zonder LLM levert die pas niets en is het resultaat exact het regex-pad.
+
+    Het vierde element (`signalen`) draagt wat de caller nodig heeft voor de terugkoppeling en de
+    gat-oogst: weggewuifde vlaggen, onzekere modelvondsten, ambigu bewijs en of de modelpas draaide."""
     # Beleefdheid geldt tegen een échte host. Een geïnjecteerde `_fetch` (test, demo) raakt geen
     # netwerk, dus daar wachten we niet — anders koopt elke test de backoff in echte seconden.
     if _sleep is not None:
@@ -109,6 +119,8 @@ def verzamel(paginas: list[dict], db: dict, _fetch=None, ledger=None,
     else:
         slaap = time.sleep
     bevindingen, fouten, teksten = [], [], {}
+    signalen = {"gewhitelist": [], "onzeker": [], "ambigu": [], "model_gevonden": 0,
+                "modelpas_gedraaid": None, "modelpas_reden": ""}
     for nummer, pagina in enumerate(paginas):
         if nummer:
             slaap(PAUZE_SECONDEN)                        # beleefd tegen de host, en het voorkomt 429's
@@ -124,12 +136,32 @@ def verzamel(paginas: list[dict], db: dict, _fetch=None, ledger=None,
         uitslag = claims_db.check_tekst(opgehaald["tekst"], db)
         van_pagina = [{**b, "pagina": pagina.get("label", ""), "url": pagina["url"]}
                       for b in uitslag["bevindingen"]]
-        claims_substantiatie.pas_toe(van_pagina, ledger=ledger, db=db)
+
+        # De recall-pas: kandidaten die GEEN lijstterm raken. Voegt toe, filtert nooit weg.
+        if modelpas:
+            pas = claims_modelpas.extra_kandidaten(
+                opgehaald["tekst"], db, van_pagina, reason_fn=reason_fn,
+                pagina=pagina.get("label", ""), url=pagina["url"], negatieven=negatieven)
+            if signalen["modelpas_gedraaid"] is not False:   # één keer 'niet gedraaid' is genoeg
+                signalen["modelpas_gedraaid"] = pas["gedraaid"]
+            if not pas["gedraaid"] and pas["reden"]:
+                signalen["modelpas_reden"] = pas["reden"]
+            van_pagina.extend(pas["kandidaten"])
+            signalen["onzeker"].extend(pas["onzeker"])
+            signalen["model_gevonden"] += len(pas["kandidaten"])
+
+        signalen["ambigu"].extend(claims_substantiatie.pas_toe(van_pagina, ledger=ledger, db=db))
+        claims_modelpas.weeg_bewijs(van_pagina)          # bewijs → oranje of escaleren, nooit rood
         for b in van_pagina:
             if b["stoplicht"] == "green":
                 continue                                 # escaleren telt wél: compliance beslist
+            uitzondering = claims_db.is_uitgezonderd(b, db)
+            if uitzondering is not None:
+                # Weggewuifd door een mens: geen taak, maar wél zichtbaar mét wie dat besloot.
+                signalen["gewhitelist"].append({**b, "uitzondering": uitzondering})
+                continue
             bevindingen.append(b)
-    return bevindingen, fouten, teksten
+    return bevindingen, fouten, teksten, signalen
 
 
 def fout_tekst(fouten: list[dict], maximaal: int = 3) -> str:
@@ -228,9 +260,11 @@ class ClaimsSiteScanSkill(Skill):
             return {"ok": False, "week": week,
                     "escalate": {"reason": "geen scan-paginas in de claims-database (meta.scan_paginas)"}}
 
-        bevindingen, fouten, paginateksten = verzamel(
+        bevindingen, fouten, paginateksten, signalen = verzamel(
             paginas, db, _fetch=payload.get("_fetch"), ledger=self._kroniek(context),
-            _sleep=payload.get("_sleep"))
+            _sleep=payload.get("_sleep"), reason_fn=payload.get("_reason"),
+            negatieven=claims_labels.negatieven(data_dir),
+            modelpas=payload.get("modelpas", True))
         if len(fouten) == len(paginas):
             # Alle pagina's onbereikbaar: dat is geen 'schone site', dat is een kapotte scan.
             return {"ok": False, "week": week, "gescand": 0, "fouten": fouten,
@@ -265,17 +299,65 @@ class ClaimsSiteScanSkill(Skill):
                 f"🧭 Scan-lijst: '{f['label']}' is niet meer op te halen ({f['reden']}) — "
                 f"werk meta.scan_paginas bij ({f['url']})")
 
-        headsup = self._headsup(verslag, statussen, tijdelijk, permanent)
+        gaten = self._oogst_gaten(data_dir, signalen, verslag, bevindingen)
+        headsup = self._headsup(verslag, statussen, tijdelijk, permanent, signalen)
         return {"ok": True, "week": week, "skipped": False, "headsup": headsup,
                 "statussen": statussen,
                 "gescand": len(paginas) - len(fouten), "paginas": len(paginas), "fouten": fouten,
                 "volledig": not tijdelijk,
                 "nieuw": len(verslag["aangemaakt"]), "aangemaakt": verslag["aangemaakt"],
                 "overgeslagen": verslag["overgeslagen"], "rood": verslag["rood"],
+                "model_gevonden": signalen["model_gevonden"],
+                "modelpas_gedraaid": signalen["modelpas_gedraaid"],
+                "gewhitelist": signalen["gewhitelist"], "gaten": gaten,
                 "escalate": None}
 
-    def _headsup(self, verslag: dict, statussen: list[dict],
-                 tijdelijk: list[dict], permanent: list[dict]) -> str | None:
+    # ── De gat-oogst: opschrijven waar de tool zwak is, op het moment dat het pijn doet ──────────
+    # Drie soorten onvermogen, alle drie `missing_capability` (software zou dit kunnen). De bevinding
+    # wordt in ALLE gevallen gewoon gevlagd — het gat is een aantekening, geen excuus om te zwijgen.
+    GAT_GEEN_MODELPAS = "LLM-pas voor claims zonder lijstterm"
+    GAT_CLASSIFICATIE = "claim-classificatie zonder wettelijke bron"
+    GAT_SUBSTANTIATIE = "claim-substantiatie niet machinaal vast te stellen"
+
+    def _oogst_gaten(self, data_dir: str, signalen: dict, verslag: dict,
+                     bevindingen: list[dict]) -> list[dict]:
+        """Leg per onbeslisbaar geval één capaciteitsgat vast in de gat-ledger van de Codie-backlog.
+
+        Het project-id van de taak die uit de bevinding kwam gaat mee waar dat kan: `gap_ledger`
+        rangschikt clusters op het aantal GEBLOKKEERDE PROJECTEN, dus zonder die koppeling zou een
+        echt terugkerend gat onderaan de backlog blijven staan."""
+        pid_van = {claims_board.normaliseer(t.get("gevonden", "")): t["pid"]
+                   for t in verslag["aangemaakt"] if t.get("gevonden")}
+
+        def leg_vast(capability: str, tekst: str, gevonden: str = "") -> dict | None:
+            return gap_ledger.record(
+                data_dir, role="compliance", item_text=tekst,
+                project_id=pid_van.get(claims_board.normaliseer(gevonden), ""),
+                reason=gap_ledger.MISSING_CAPABILITY, capability=capability)
+
+        gaten = []
+        if signalen["modelpas_gedraaid"] is False and bevindingen:
+            # Geen LLM terwijl er wél te toetsen was: de scan zag deze week alleen lijsttermen.
+            gaten.append(leg_vast(
+                self.GAT_GEEN_MODELPAS,
+                f"de site-scan kon geen claims zonder lijstterm zoeken "
+                f"({signalen['modelpas_reden'] or 'geen LLM beschikbaar'}); "
+                f"{len(bevindingen)} bevinding(en) alleen via regex gevonden"))
+        for b in signalen["onzeker"]:
+            gaten.append(leg_vast(
+                self.GAT_CLASSIFICATIE,
+                f"kon niet vaststellen of dit een claim is: '{(b.get('gevonden') or [''])[0][:120]}' "
+                f"({b.get('pagina', '')})", (b.get("gevonden") or [""])[0]))
+        for b in signalen["ambigu"]:
+            gaten.append(leg_vast(
+                self.GAT_SUBSTANTIATIE,
+                f"bewijs raakt de claim maar gedeeltelijk: '{(b.get('gevonden') or [''])[0][:120]}' "
+                f"({b.get('pagina', '')}) — {b.get('onderbouwing_reden', '')[:120]}",
+                (b.get("gevonden") or [""])[0]))
+        return [g for g in gaten if g]
+
+    def _headsup(self, verslag: dict, statussen: list[dict], tijdelijk: list[dict],
+                 permanent: list[dict], signalen: dict | None = None) -> str | None:
         """Wat de mens moet zien. De generieke pulslaag stuurt dit door naar de founder.
 
         Alleen bij ROOD (oranje is werk voor de rol, geen alarm voor de founder) of bij een
@@ -293,6 +375,13 @@ class ClaimsSiteScanSkill(Skill):
             kern = (f"🔴 Claim-scan: {verslag['rood']} nieuwe verboden claim(s) op nooch.earth "
                     f"— {claims_board.vindplaatsen(verslag['aangemaakt'], stoplicht='red')} "
                     f"({len(verslag['aangemaakt'])} taak/taken op het bord)")
+        # Modelvondsten die tot een taak leidden: die verdienen een eigen regel, want een claim die
+        # geen lijstterm raakt is precies wat de scan tot nu toe miste.
+        model = [t for t in verslag["aangemaakt"] if t.get("herkomst") == claims_modelpas.HERKOMST]
+        if model:
+            regel = (f"{len(model)} model-gevonden claim(s) zonder lijstterm "
+                     f"— {claims_board.vindplaatsen(model)} (vermoeden, geen wet)")
+            kern = f"{kern} · {regel}" if kern else f"🟠 Claim-scan: {regel}"
         gemist = []
         if tijdelijk:
             gemist.append(f"{len(tijdelijk)} pagina('s) tijdelijk niet op te halen "

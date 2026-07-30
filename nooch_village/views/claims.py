@@ -43,6 +43,17 @@ def bron_badge(bevinding: dict) -> str:
     return f"<span class='chip muted'{titel}>source {_e(letter)}</span>"
 
 
+def herkomst_badge(bevinding: dict) -> str:
+    """Waar kwam deze bevinding vandaan? Een modelvondst raakt geen lijstterm en geen wetsartikel;
+    dat moet de lezer zien vóór hij er iets mee doet — anders leest een vermoeden als een verbod."""
+    if bevinding.get("herkomst") != "model":
+        return ""
+    twijfel = "" if bevinding.get("model_zeker", True) else " · model unsure"
+    return (f"<span class='chip outline' title='Found by the language model, not by the term list: "
+            f"a suspicion for compliance to judge, not a legal verdict'>"
+            f"🤖 model-found (no listed term){_e(twijfel)}</span>")
+
+
 def onderbouwing_badge(bevinding: dict) -> str:
     """Is deze claim onderbouwd? Chip met de reden als tooltip.
 
@@ -132,9 +143,9 @@ def render_rapport(uitslag: dict, markten: list[str] | None = None,
                       f"<span class='{cls}'>{label}</span> <b>{_e(b['term'])}</b>"
                       f"<span class='pill'>{_e(b['categorie'])}</span>"
                       f"<span class='pill'>role: {_e(_rol_label(b))}</span>"
-                      f"{bron_badge(b)}{onderbouwing_badge(b)}"
+                      f"{bron_badge(b)}{herkomst_badge(b)}{onderbouwing_badge(b)}"
                       f"<div>Found: <i>{_e(', '.join(b['gevonden']))}</i> — {_e(b['waarom'])}</div>"
-                      f"{alt}{advies}</div>")
+                      f"{alt}{advies}{_vondst_acties(b, csrf_token, kan_bord, bron)}</div>")
         lijst = f"<div class='card'><h3>Findings</h3>{rijen}</div>"
 
     incontext_html = _in_context(uitslag.get("in_context", []))
@@ -418,6 +429,53 @@ def _blok_beheer(db: dict, csrf_token: str) -> str:
             f"Add</button></div></form></div>")
 
 
+def _vondst_acties(bevinding: dict, csrf_token: str, kan_cureren: bool, bron: str) -> str:
+    """Twee lichte acties per bevinding: 'geen claim' (uitzondering) en 'maak hier een regel van'.
+
+    Hergebruikt `qadd-row` + `btn` + verborgen velden, exact als de bord-actie erboven; geen nieuwe
+    klasse-familie. Elke klik legt óók een label vast — zo groeit het regelboek terwijl compliance
+    gewoon zijn werk doet, in plaats van in een apart beheerscherm."""
+    if not (kan_cureren and csrf_token):
+        return ""
+    fragment = (bevinding.get("gevonden") or [bevinding.get("term", "")])[0]
+    if not fragment:
+        return ""
+    velden = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+              f"<input type='hidden' name='next' value='/claims'>"
+              f"<input type='hidden' name='fragment' value='{_e(fragment)}'>"
+              f"<input type='hidden' name='pagina' value='{_e(bevinding.get('pagina') or bron)}'>")
+    return (f"<div class='qadd-row'>"
+            f"<form method='post' action='/action'>{velden}"
+            f"<button class='btn sm ghost' name='action' value='claims_vondst_whitelist' "
+            f"title='Not a claim here — no task, stays visible, and the model learns from it'>"
+            f"Not a claim</button></form>"
+            f"<form method='post' action='/action'>{velden}"
+            f"<button class='btn sm' name='action' value='claims_regel_uit_vondst' "
+            f"title='Turn this wording into a rule the regex scan catches from now on'>"
+            f"Make this a rule</button></form></div>")
+
+
+def _blok_gemiste_claim(csrf_token: str, labels: dict | None) -> str:
+    """Een claim die de checker MISTE, met de hand ingevoerd → regel. De andere kant van de labels-motor.
+
+    Bewust één veld: de zin. Het patroon wordt eruit afgeleid, want een mens die een miss ziet moet
+    geen regex hoeven schrijven — die drempel is precies waarom regelboeken niet groeien."""
+    tel = labels or {}
+    stand = (f"<p class='muted'>{tel.get('claim', 0)} caught misses · "
+             f"{tel.get('geen-claim', 0)} dismissed flags recorded as labels — the model pass uses "
+             f"the dismissals so the same wrong flag does not come back.</p>" if tel.get("totaal") else "")
+    return (f"<div class='card'><h3>Caught a claim the checker missed?</h3>"
+            f"<p class='muted'>Paste the sentence. It becomes a rule in the term database, so the "
+            f"regex scan catches this wording from now on — and it is recorded as a label.</p>"
+            f"<form method='post' action='/action' class='qadd-form'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='next' value='/claims?tab=database'>"
+            f"{_field('The wording, literally as it appears', 'fragment', kind='textarea', fid='f-miss-frag', required=True, placeholder='our soles simply return to the soil')}"
+            f"{_field('Where you saw it (optional)', 'pagina', fid='f-miss-pagina', placeholder='product page')}"
+            f"<div class='qadd-row'><button class='btn ok' name='action' value='claims_regel_uit_vondst'>"
+            f"Add as rule</button></div></form>{stand}</div>")
+
+
 def _blok_bewijs(csrf_token: str, bewijzen: list[dict] | None) -> str:
     """Onderbouwing vastleggen — het schrijfpad naar de Kroniek.
 
@@ -456,7 +514,8 @@ def render_claims(csrf_token: str = "", msg: str = "", tab: str = "check",
                   kan_cureren: bool = False, zoek: str = "", url: str = "",
                   tekst: str = "", markten: list[str] | None = None,
                   rapport: str = "", bordresultaat: dict | None = None,
-                  data_dir: str | None = None, bewijzen: list[dict] | None = None) -> str:
+                  data_dir: str | None = None, bewijzen: list[dict] | None = None,
+                  labels: dict | None = None) -> str:
     """De hele checker als één governeerd scherm."""
     try:
         db = claims_db.load(data_dir=data_dir)
@@ -473,6 +532,8 @@ def render_claims(csrf_token: str = "", msg: str = "", tab: str = "check",
     if tab == "check":
         body = render_bordresultaat(bordresultaat or {}) + _tab_check(
             csrf_token, url, tekst, markten, rapport)
+        if kan_cureren and csrf_token:
+            body += _blok_gemiste_claim(csrf_token, labels)
     elif tab == "werklijst":
         body = _tab_werklijst(db, csrf_token, kan_cureren)
         if kan_cureren and csrf_token:
