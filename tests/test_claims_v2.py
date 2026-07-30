@@ -306,12 +306,25 @@ def test_mislukte_scan_markeert_de_week_niet(tmp_path):
     assert not css.week_gedaan(str(tmp_path), css.period_key("week"))
 
 
-def test_force_slaat_de_weekpoort_over(tmp_path, monkeypatch):
+def test_force_slaat_de_weekpoort_over_maar_respecteert_de_dekking(tmp_path, monkeypatch):
+    """`force` duwt de scan VOORUIT; hij doet de week niet over.
+
+    Bewuste wijziging sinds de dekking-per-week: elk verzoek kost een token uit de rate-limit-bucket
+    van de host, dus een geforceerde run mag die niet verspillen aan pagina's die deze week al gelukt
+    zijn — dat ging rechtstreeks ten koste van de pagina's die nog niet gezien waren. Een week
+    overdoen kan expliciet met `herstart`."""
     ctx = _ctx(tmp_path, monkeypatch)
-    ClaimsSiteScanSkill().run({"_fetch": lambda u: (200, _PAGINA)}, ctx)
-    tweede = ClaimsSiteScanSkill().run({"force": True, "_fetch": lambda u: (200, _PAGINA)}, ctx)
-    assert tweede["skipped"] is False
-    assert tweede["nieuw"] == 0                                   # alles loopt inmiddels
+    fetch = lambda u: (200, _PAGINA)                              # noqa: E731
+    eerste = ClaimsSiteScanSkill().run({"_fetch": fetch}, ctx)
+    assert eerste["volledig"] is True                             # alles in één keer gelukt
+
+    tweede = ClaimsSiteScanSkill().run({"force": True, "_fetch": fetch}, ctx)
+    assert tweede["skipped"] is True                              # niets meer te dekken deze week
+    assert "gedekt" in tweede["reden"]
+
+    derde = ClaimsSiteScanSkill().run({"herstart": True, "_fetch": fetch}, ctx)
+    assert derde["skipped"] is False
+    assert derde["nieuw"] == 0                                    # alles loopt inmiddels
 
 
 def test_scan_paginas_komen_uit_de_database():

@@ -241,7 +241,7 @@ def test_tijdelijke_fout_sluit_de_week_niet_af(tmp_path, monkeypatch):
         {"_fetch": _fetch_met_429({"mission"}), "_sleep": lambda s: None}, ctx)
     assert uit["ok"] and uit["volledig"] is False
     assert not css.week_gedaan(str(tmp_path), css.period_key("week"))   # volgende puls pakt de rest
-    assert "onvolledig" in uit["headsup"]
+    assert "gedekt" in uit["headsup"]
     assert "mission" in uit["headsup"]
 
 
@@ -258,18 +258,18 @@ def test_permanente_fout_zet_de_scan_niet_voor_altijd_vast(tmp_path, monkeypatch
     assert "Scan-lijst" in tekst and "mission" in tekst
 
 
-def test_hervatten_heeft_een_bovengrens(tmp_path, monkeypatch):
-    """'De volgende puls pakt het op' mag geen stil abonnement op een blinde vlek worden. Na drie
-    onvolledige pulsen sluit de week en hoort de mens het expliciet — mét een capaciteitsgat."""
+def test_hervatten_heeft_een_bovengrens_op_voortgang(tmp_path, monkeypatch):
+    """'De volgende puls pakt het op' mag geen stil abonnement op een blinde vlek worden. Twee pulsen
+    zonder één nieuwe pagina → de week sluit, de mens hoort het, en er ligt een capaciteitsgat."""
     from nooch_village import gap_ledger
     ctx = _ctx(tmp_path, monkeypatch)
     fetch = _fetch_met_429({"mission"})
-    for poging in range(1, css.MAX_ONVOLLEDIGE_POGINGEN + 1):
+    for puls in range(1, css.MAX_PULSEN_ZONDER_VOORTGANG + 2):
         uit = ClaimsSiteScanSkill().run({"force": True, "_fetch": fetch, "_sleep": lambda s: None},
                                         ctx)
-        laatste = poging == css.MAX_ONVOLLEDIGE_POGINGEN
-        assert uit["vastgelopen"] is laatste
-        assert uit["volledig"] is laatste          # pas op het eind sluit de week
+        if puls == 1:
+            assert uit["vastgelopen"] is False      # eerste puls boekte juist voortgang
+    assert uit["vastgelopen"] is True
     assert css.week_gedaan(str(tmp_path), css.period_key("week"))
     assert "lost zichzelf niet op" in uit["headsup"]
     labels = [g["capability"] for g in gap_ledger.alle(str(tmp_path))]
@@ -285,7 +285,108 @@ def test_een_slechte_dag_sluit_de_week_niet(tmp_path, monkeypatch):
         {"_fetch": _fetch_met_429({"mission"}), "_sleep": lambda s: None}, ctx)
     assert uit["vastgelopen"] is False and uit["volledig"] is False
     assert not css.week_gedaan(str(tmp_path), css.period_key("week"))
-    assert "de volgende puls pakt ze opnieuw" in uit["headsup"]
+    assert "volgt bij de volgende puls" in uit["headsup"]
+
+
+# ── Dekking over pulsen: de bug dat elke puls weer bij pagina 1 begon ────────────────────────
+
+def _fetch_met_bucket(per_run: int = 2):
+    """Een host die per run maar `per_run` verzoeken toestaat en daarna 429't — de gemeten
+    productiesituatie (kleine bucket, trage refill). Elke run een verse bucket, zoals een puls
+    een dag later een verse bucket krijgt."""
+    staat = {"over": per_run}
+
+    def fetch(url):
+        if staat["over"] <= 0:
+            raise safe_fetch.FetchMislukt("de pagina gaf HTTP 429", status=429, retry_after=60)
+        staat["over"] -= 1
+        return (200, _PAGINA)
+    fetch.reset = lambda: staat.update(over=per_run)
+    return fetch
+
+
+def test_dekking_schuift_op_over_pulsen_tot_de_week_rond_is(tmp_path, monkeypatch):
+    """De kern van deze versie: twee pagina's per puls, en de volgende puls pakt de VOLGENDE twee —
+    niet weer dezelfde. Zonder dit geheugen werden pagina 3-5 structureel nooit gescand."""
+    ctx = _ctx(tmp_path, monkeypatch)
+    fetch = _fetch_met_bucket(2)
+    totaal = len(css.scan_paginas(claims_db.load(data_dir=str(tmp_path))))
+    gezien: list[str] = []
+    for puls in range(1, 4):
+        fetch.reset()
+        uit = ClaimsSiteScanSkill().run({"force": True, "_fetch": fetch, "_sleep": lambda s: None},
+                                        ctx)
+        nieuw = [g for g in uit["gedekt"] if g not in gezien]
+        assert nieuw, f"puls {puls} moet nieuwe pagina's dekken, geen herhaling"
+        gezien = list(uit["gedekt"])
+    assert len(gezien) == totaal                        # 5 van 5, verdeeld over drie pulsen
+    assert uit["volledig"] is True
+    assert css.week_gedaan(str(tmp_path), css.period_key("week"))
+
+
+def test_een_gedekte_pagina_wordt_niet_nog_eens_opgehaald(tmp_path, monkeypatch):
+    """Elk verzoek kost een token uit de bucket; een token besteden aan een pagina die we deze week
+    al zagen gaat rechtstreeks ten koste van een pagina die we nog niet zagen."""
+    ctx = _ctx(tmp_path, monkeypatch)
+    opgehaald: list[str] = []
+
+    def fetch(url):
+        opgehaald.append(url)
+        if len(opgehaald) > 2:
+            raise safe_fetch.FetchMislukt("429", status=429)
+        return (200, _PAGINA)
+    ClaimsSiteScanSkill().run({"force": True, "_fetch": fetch, "_sleep": lambda s: None}, ctx)
+    eerste_ronde = list(opgehaald)
+    opgehaald.clear()
+    ClaimsSiteScanSkill().run({"force": True, "_fetch": fetch, "_sleep": lambda s: None}, ctx)
+    assert opgehaald and not (set(opgehaald) & {eerste_ronde[0]})   # niet nog eens pagina 1
+
+
+def test_alles_gedekt_slaat_de_scan_over(tmp_path, monkeypatch):
+    ctx = _ctx(tmp_path, monkeypatch)
+    ClaimsSiteScanSkill().run({"_fetch": lambda u: (200, _PAGINA), "_sleep": lambda s: None}, ctx)
+    tweede = ClaimsSiteScanSkill().run(
+        {"force": True, "_fetch": lambda u: (200, _PAGINA), "_sleep": lambda s: None}, ctx)
+    assert tweede["skipped"] is True
+    assert "al gedekt" in tweede["reden"]
+
+
+def test_herstart_dekt_de_week_opnieuw(tmp_path, monkeypatch):
+    """De expliciete weg om een week over te doen — `force` alleen schuift de dekking vooruit."""
+    ctx = _ctx(tmp_path, monkeypatch)
+    fetch = lambda u: (200, _PAGINA)                                    # noqa: E731
+    ClaimsSiteScanSkill().run({"_fetch": fetch, "_sleep": lambda s: None}, ctx)
+    opnieuw = ClaimsSiteScanSkill().run(
+        {"herstart": True, "_fetch": fetch, "_sleep": lambda s: None}, ctx)
+    assert opnieuw["skipped"] is False
+    assert len(opnieuw["gedekt"]) == len(css.scan_paginas(claims_db.load(data_dir=str(tmp_path))))
+
+
+def test_een_pagina_wordt_niet_geretryd_binnen_een_run(tmp_path):
+    """Retryen verbrandt de bucket voor de pagina's die daarna komen: één poging per pagina."""
+    pogingen: list[str] = []
+
+    def fetch(url):
+        pogingen.append(url)
+        raise safe_fetch.FetchMislukt("429", status=429, retry_after=60)
+    db = claims_db.load()
+    css.verzamel(css.scan_paginas(db)[:2], db, _fetch=fetch, _sleep=lambda s: None)
+    assert len(pogingen) == 2                       # twee pagina's, twee pogingen, geen retries
+    assert css.POGINGEN_PER_PAGINA == 1
+
+
+def test_sitewide_item_wordt_niet_afgevinkt_op_halve_dekking():
+    """Een 'sitewide' claim kan op een pagina staan die deze puls niet gehaald is; hem dan op
+    'opgelost' zetten is een valse afmelding."""
+    from nooch_village import claims_verify
+    db = {"werklijst": [{"nr": 1, "claim": '"100% Planet-Safe" — homepage, sitewide',
+                         "status": "open"}]}
+    teksten = {"home": "Wij maken schoenen op aanvraag."}
+    half = claims_verify.verifieer(db, teksten, volledig=False)
+    heel = claims_verify.verifieer(db, teksten, volledig=True)
+    assert half[0]["naar"] == claims_db.NIET_VERIFIEERBAAR
+    assert "sitewide" in half[0]["reden"]
+    assert heel[0]["naar"].startswith("opgelost (auto")
 
 
 def test_tijdelijke_fout_wordt_opnieuw_geprobeerd(tmp_path):

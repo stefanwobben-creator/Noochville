@@ -33,12 +33,18 @@ def claim_frases(item: dict) -> list[str]:
     return [normaliseer(f) for f in frases if normaliseer(f)]
 
 
-def verifieer(db: dict, paginateksten: dict[str, str], nu: float | None = None) -> list[dict]:
+def verifieer(db: dict, paginateksten: dict[str, str], nu: float | None = None,
+              volledig: bool = True) -> list[dict]:
     """Bepaal per werklijst-item wat de gescande pagina's laten zien.
 
     `paginateksten` is {label: tekst} van de pagina's die deze run gelukt zijn. Geeft een lijst
     voorstellen terug: `{nr, van, naar, reden, frase}` — alleen voor items die écht veranderen.
-    Schrijft zelf niets; de aanroeper beslist en slaat op."""
+    Schrijft zelf niets; de aanroeper beslist en slaat op.
+
+    `volledig` zegt of de HELE scan-set deze week gezien is. Bij een onvolledige dekking mag een
+    SITEWIDE item nooit op 'opgelost' komen: die claim kan op een pagina staan die deze puls niet
+    gehaald is, en een valse afmelding is precies de fout die dit ritme moet uitsluiten. Een regressie
+    (de claim staat er wél) mag altijd — dat is een waarneming, geen afwezigheidsbewijs."""
     nu = nu or time.time()
     datum = time.strftime("%Y-%m-%d", time.localtime(nu))
     alles = normaliseer(" ".join(paginateksten.values()))
@@ -72,6 +78,15 @@ def verifieer(db: dict, paginateksten: dict[str, str], nu: float | None = None) 
                                     "reden": "de vindplaats valt buiten de vaste scan-set",
                                     "frase": frases[0]})
             continue
+        if not volledig and _is_sitewide(item):
+            # 'Sitewide' betekent: overal. Dan is één gescande pagina geen bewijs van afwezigheid.
+            if huidig == "open":
+                voorstellen.append({"nr": item.get("nr"), "van": huidig,
+                                    "naar": claims_db.NIET_VERIFIEERBAAR,
+                                    "reden": "sitewide claim en de scan-set is deze week nog niet "
+                                             "volledig gedekt",
+                                    "frase": frases[0]})
+            continue
         if huidig in (claims_db.AUTO_OPGELOST,) or huidig in _MENS_OPGELOST:
             continue                                    # al opgelost, niets te melden
         voorstellen.append({"nr": item.get("nr"), "van": huidig,
@@ -79,6 +94,12 @@ def verifieer(db: dict, paginateksten: dict[str, str], nu: float | None = None) 
                             "reden": "de claim is niet meer aanwezig op de gescande pagina",
                             "frase": frases[0]})
     return voorstellen
+
+
+def _is_sitewide(item: dict) -> bool:
+    """Zegt de werklijst dat deze claim overal staat? Dan geldt één pagina niet als bewijs."""
+    plek = normaliseer(item.get("claim") or "")
+    return any(w in plek for w in ("sitewide", "site wide", "overal", "footer", "header"))
 
 
 def _staat_op_gescande_pagina(item: dict, paginateksten: dict[str, str]) -> bool:
