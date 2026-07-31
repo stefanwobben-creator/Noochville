@@ -318,14 +318,17 @@ def test_terugval_is_zichtbaar_op_de_projectpagina(tmp_path):
     pid, docs = _cockpit_project(dd)
     st = cockpit2._Stores(dd)
 
+    # Asserteer op de CHIP-opmaak, niet op het losse woord: de projectmuur bevat ook regels als
+    # "via semscholar_tldr (fallback voor openalex_evidence)". Een guard die daarop kan slagen
+    # bewijst niets over de markering.
     docs.write(pid, "# Rapport\nInhoud.", tier="anthropic:sonnet", terugval=False)
     html = render_project(st, pid)
-    assert "anthropic:sonnet" in html and "fallback" not in html
+    assert "<span class='chip outline' title='Model that wrote this document'>anthropic:sonnet</span>" in html
+    assert "chip amber" not in html
 
     docs.write(pid, "# Rapport\nInhoud.", tier="mistral:m1", terugval=True)
     html = render_project(st, pid)
-    assert "fallback" in html and "mistral:m1" in html
-    assert "chip amber" in html                       # zichtbaar gemarkeerd, niet als gewone chip
+    assert "class='chip amber'" in html and "⚠ fallback: mistral:m1</span>" in html
 
 
 def test_zonder_herkomst_geen_chip(tmp_path):
