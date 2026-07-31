@@ -5,7 +5,7 @@ Geen importlib.reload nodig: llm.py importeert anthropic en google.genai lazy
 volstaat. os.getenv() werkt direct met monkeypatched env-vars.
 
 Vijf invarianten:
-  1. Anthropic-client wordt aangemaakt met timeout=30.0.
+  1. Anthropic-client wordt aangemaakt met een ruime timeout en streamt zijn antwoord.
   2. Exception in Anthropic-aanroep → warning gelogd (geen bare swallow).
   3. Gemini-aanroep gebruikt HttpOptions(timeout=30000) — milliseconden, niet seconden.
   4. Exception in Gemini-aanroep → warning gelogd.
@@ -24,16 +24,26 @@ def _fake_message(text: str):
     return SimpleNamespace(content=[block])
 
 
+def _fake_stream(msg=None, exc=None):
+    """De context-manager die `client.messages.stream(...)` teruggeeft."""
+    ctx = MagicMock()
+    ctx.__enter__.return_value = MagicMock(get_final_message=MagicMock(return_value=msg))
+    if exc is not None:
+        ctx.__enter__.side_effect = exc
+    return MagicMock(return_value=ctx)
+
+
 # ── 1. Anthropic timeout ──────────────────────────────────────────────────────
 
 def test_anthropic_timeout_is_set(monkeypatch):
-    """Anthropic client wordt aangemaakt met timeout=30.0."""
+    """Ruime timeout én streaming. Met de oude 30s haalde een einddocument-call (max_tokens=4000,
+    gemeten ~56s op Sonnet) de streep nooit: retries, lege respons, ongewijzigd document."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
 
     mock_client = MagicMock()
-    mock_client.messages.create.return_value = _fake_message("ok")
+    mock_client.messages.stream = _fake_stream(msg=_fake_message("ok"))
     mock_anthropic_cls = MagicMock(return_value=mock_client)
 
     with patch.dict("sys.modules", {"anthropic": MagicMock(Anthropic=mock_anthropic_cls)}):
@@ -41,7 +51,9 @@ def test_anthropic_timeout_is_set(monkeypatch):
 
     mock_anthropic_cls.assert_called_once()
     _, kwargs = mock_anthropic_cls.call_args
-    assert kwargs.get("timeout") == 30.0, f"Verwacht timeout=30.0, gekregen: {kwargs}"
+    assert kwargs.get("timeout") == 180.0, f"Verwacht timeout=180.0, gekregen: {kwargs}"
+    mock_client.messages.stream.assert_called_once()          # streamen, niet create()
+    mock_client.messages.create.assert_not_called()
 
 
 # ── 2. Anthropic failure is logged ───────────────────────────────────────────
@@ -53,7 +65,7 @@ def test_anthropic_failure_is_logged(monkeypatch, caplog):
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
 
     mock_client = MagicMock()
-    mock_client.messages.create.side_effect = RuntimeError("verbinding verbroken")
+    mock_client.messages.stream = _fake_stream(exc=RuntimeError("verbinding verbroken"))
     mock_anthropic_cls = MagicMock(return_value=mock_client)
 
     with patch.dict("sys.modules", {"anthropic": MagicMock(Anthropic=mock_anthropic_cls)}):
@@ -145,3 +157,18 @@ def test_reason_returns_none_when_no_key(monkeypatch):
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
 
     assert reason("test prompt") is None
+
+
+# ── 6. De premium-trede heeft tijd nodig ─────────────────────────────────────
+
+def test_premium_trede_heeft_ruimte_voor_een_lang_antwoord():
+    """De 30s van de goedkope tredes is te krap voor waar de premium-trede juist voor wordt gevraagd.
+
+    Gemeten op prod: een einddocument-call op Sonnet (max_tokens=4000) deed er 56s over. Met de oude
+    gedeelde timeout sneuvelde die stil — een lege respons is in de ladder geen fout maar 'volgende
+    trede', dus je ziet alleen een document dat niet bijwerkt. Ruimte voor 2x de gemeten duur."""
+    from nooch_village.llm import _ANTHROPIC_TIMEOUT_S, _HTTP_TIMEOUT_S
+
+    GEMETEN_EINDDOCUMENT_S = 56
+    assert _ANTHROPIC_TIMEOUT_S >= 2 * GEMETEN_EINDDOCUMENT_S
+    assert _ANTHROPIC_TIMEOUT_S > _HTTP_TIMEOUT_S

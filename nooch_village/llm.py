@@ -68,7 +68,13 @@ _DEFAULT_LADDER = (
 # LET OP: de google-genai SDK verwacht de timeout in MILLISECONDEN, niet seconden.
 # 30 (ms) liet elke call direct timeouten op de TLS-handshake ("SSL timeout").
 _GEMINI_TIMEOUT_MS = 30_000  # 30 seconden
-_HTTP_TIMEOUT_S = 30.0       # Mistral/Anthropic in seconden
+_HTTP_TIMEOUT_S = 30.0       # Mistral in seconden
+# Anthropic krijgt een eigen, veel ruimere timeout. 30s was gekalibreerd op de goedkope tredes:
+# klein model, kort antwoord, klaar binnen een paar seconden. De premium-trede wordt juist gevraagd
+# voor het lange werk — een einddocument vraagt max_tokens=4000, en een gemeten Sonnet-call van die
+# omvang duurde 56s. Met 30s haalde ELKE einddocument-call de streep niet: twee SDK-retries, dan een
+# lege respons, dan een ongewijzigd document. De 30s hoort bij de snelle tredes, niet bij deze.
+_ANTHROPIC_TIMEOUT_S = 180.0
 
 # Tempo: het dorp smeert zijn LLM-werk uit zodat het onder de gratis limiet blijft
 # (geen 429-muur). Instelbaar via LLM_MAX_PER_MINUTE (0 = geen limiet).
@@ -289,10 +295,15 @@ def _try_anthropic(prompt: str, *, model: str | None = None, max_tokens: int = 7
     model = model or os.getenv("ANTHROPIC_MODEL", _DEFAULT_ANTHROPIC_MODEL)
     try:
         import anthropic
-        client = anthropic.Anthropic(api_key=key, timeout=_HTTP_TIMEOUT_S)
-        msg = client.messages.create(
-            model=model, max_tokens=max_tokens,
-            messages=[{"role": "user", "content": prompt}])
+        client = anthropic.Anthropic(api_key=key, timeout=_ANTHROPIC_TIMEOUT_S)
+        # Streamen, niet wachten op één blok. Dit is de leverancier-aanbeveling voor elke call met
+        # een lange invoer of een hoge max_tokens: bij een niet-streamende call kan de verbinding
+        # stilvallen vóórdat het antwoord af is. We consumeren de stream niet zelf — de SDK stelt
+        # het bericht samen en `get_final_message()` geeft hetzelfde object als `create()`.
+        with client.messages.stream(
+                model=model, max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}]) as stream:
+            msg = stream.get_final_message()
         text = "".join(b.text for b in msg.content
                        if getattr(b, "type", "") == "text").strip()
         if text:
