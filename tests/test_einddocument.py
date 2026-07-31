@@ -27,6 +27,15 @@ TODAY = "2026-07-11"
 _REASON = "nooch_village.llm.reason"
 
 
+def _reason_mock(tekst, tier="mistral:mistral-small-latest"):
+    """`reason()` geeft `(tekst, trede)` terug zodra de aanroeper `return_tier=True` vraagt — de
+    einddocument-synthese doet dat, om te kunnen markeren welk model schreef. Andere call-sites in
+    dezelfde flow vragen gewoon de tekst. Eén mock die beide vormen bedient."""
+    def _fake(prompt, *, return_tier=False, **kw):
+        return (tekst, tier if tekst else None) if return_tier else tekst
+    return _fake
+
+
 class _ResearchSkill(Skill):
     name = "openalex_evidence"
     description = "fake research skill"
@@ -71,7 +80,7 @@ def test_item_slaagt_document_bijgewerkt(tmp_path):
     inh = _inh(tmp_path, ledger, ds, docs)
     pid = ledger.create("sid", "doel", "human", status="queued")
     _prep(ledger, pid, [("s", "openalex_evidence", "barefoot"), ("mens-taak", None, "")])   # 2e blijft open
-    with patch(_REASON, return_value="# Einddocument\nEerste bevindingen.") as m:
+    with patch(_REASON, side_effect=_reason_mock("# Einddocument\nEerste bevindingen.")) as m:
         inh._execute_checklist(ledger.get(pid), TODAY)
     assert m.call_count == 1                                     # reguliere pass, één call
     assert docs.read(pid) == "# Einddocument\nEerste bevindingen."
@@ -84,7 +93,7 @@ def test_twee_items_zelfde_puls_een_call(tmp_path):
     pid = ledger.create("sid", "doel", "human", status="queued")
     _prep(ledger, pid, [("a", "openalex_evidence", "x"), ("b", "openalex_evidence", "y"),
                         ("open", None, "")])                     # 2 slagen, 1 blijft open → niet all-done
-    with patch(_REASON, return_value="doc") as m:
+    with patch(_REASON, side_effect=_reason_mock("doc")) as m:
         inh._execute_checklist(ledger.get(pid), TODAY)
     assert m.call_count == 1                                     # één synthese, niet twee
 
@@ -98,7 +107,7 @@ def test_llm_faalt_document_intact(tmp_path, caplog):
     # gebruik hetzelfde pid als het voorgeschreven document
     docs.write(pid, "OUD DOCUMENT")
     _prep(ledger, pid, [("s", "openalex_evidence", "x"), ("open", None, "")])
-    with caplog.at_level(logging.INFO), patch(_REASON, return_value=None):
+    with caplog.at_level(logging.INFO), patch(_REASON, side_effect=_reason_mock(None)):
         inh._execute_checklist(ledger.get(pid), TODAY)
     assert docs.read(pid) == "OUD DOCUMENT"                     # ongewijzigd
     assert "document ongewijzigd" in caplog.text                # logregel
@@ -110,7 +119,7 @@ def test_awaiting_review_finale_pass_en_note(tmp_path):
     inh = _inh(tmp_path, ledger, ds, docs)
     pid = ledger.create("sid", "doel", "human", status="queued")
     _prep(ledger, pid, [("s", "openalex_evidence", "barefoot")])   # één item → all-done
-    with patch(_REASON, return_value="# Afgerond\nKlaar.") as m:
+    with patch(_REASON, side_effect=_reason_mock("# Afgerond\nKlaar.")) as m:
         inh._execute_checklist(ledger.get(pid), TODAY)
     assert m.call_count == 1
     assert docs.read(pid) == "# Afgerond\nKlaar."
@@ -127,7 +136,7 @@ def test_cap_fail_loud(tmp_path, caplog):
     pid = ledger.create("sid", "doel", "human", status="queued")
     docs.write(pid, docs_pid_seed)                             # groot huidig document → input > 50
     _prep(ledger, pid, [("s", "openalex_evidence", "x"), ("open", None, "")])
-    with caplog.at_level(logging.WARNING), patch(_REASON, return_value="doc"):
+    with caplog.at_level(logging.WARNING), patch(_REASON, side_effect=_reason_mock("doc")):
         inh._execute_checklist(ledger.get(pid), TODAY)
     assert "DOC_INPUT_CAP" in caplog.text
 
@@ -140,7 +149,7 @@ def test_persona_stem_in_prompt(tmp_path):
     inh = _inh(tmp_path, ledger, ds, docs, persona_id=sid.id, personas=personas)
     pid = ledger.create("sid", "doel", "human", status="queued")
     _prep(ledger, pid, [("s", "openalex_evidence", "x"), ("open", None, "")])
-    with patch(_REASON, return_value="doc") as m:
+    with patch(_REASON, side_effect=_reason_mock("doc")) as m:
         inh._execute_checklist(ledger.get(pid), TODAY)
     prompt = m.call_args[0][0]
     assert "Sid" in prompt and m.call_args[1]["call_site"] == "einddocument"
@@ -156,7 +165,7 @@ def test_volledige_inhoud_en_structuur_en_hogere_cap(tmp_path):
     ds.add(project_id=pid, role="sid", skill="openalex_evidence", checklist_item="i1",
            title="Zoek X", content={"detail": big},
            summary="📎 Zoek X — via openalex_evidence: 1 resultaat")
-    with patch(_REASON, return_value="doc") as m:
+    with patch(_REASON, side_effect=_reason_mock("doc")) as m:
         inh._synthesize_einddocument(ledger.get(pid), done=1, total=1, force_final=True)
     prompt = m.call_args[0][0]
     assert big in prompt                                          # volledige inhoud, niet op 500 afgekapt
@@ -181,7 +190,7 @@ def test_task_in_documenttekst_geen_parsing(tmp_path):
     pid = ledger.create("sid", "doel", "human", status="queued")
     docs.write(pid, "# Doc\n#task herschrijf de intro")        # #task in het document, GEEN comment
     _prep(ledger, pid, [("s", "openalex_evidence", "x"), ("open", None, "")])
-    with patch(_REASON, return_value="doc") as m:
+    with patch(_REASON, side_effect=_reason_mock("doc")) as m:
         inh._execute_checklist(ledger.get(pid), TODAY)
     prompt = m.call_args[0][0]
     assert "#task herschrijf de intro" in prompt               # verschijnt als HUIDIG DOCUMENT
@@ -232,6 +241,98 @@ def test_regen_doc_action(tmp_path):
     from nooch_village import cockpit2
     dd = str(tmp_path / "poc")
     pid, docs = _cockpit_project(dd)
-    with patch("nooch_village.llm.reason", return_value="## Conclusie\nAlles klaar."):
+    with patch("nooch_village.llm.reason", side_effect=_reason_mock("## Conclusie\nAlles klaar.")):
         cockpit2.dispatch(dd, "proj_regen_doc", {"pid": [pid], "next": ["/"]}, username="guest")
     assert "Conclusie" in docs.read(pid)            # verse synthese geschreven via de herbruikbare functie
+
+
+# ── De terugval-markering: nooit stil doorgaan voor een premium exemplaar ────
+# Een persona-voorkeur is sinds de zachte staart een KOP met de dorpsladder erachter. Valt de dure
+# trede weg, dan komt er alsnog een document — van een goedkoper model. Dat mag zichtbaar zijn,
+# anders leest zo'n document bij review als een premium exemplaar.
+
+def _sid_met_voorkeur(tmp_path, ladder="anthropic:sonnet"):
+    personas = PersonaStore(str(tmp_path / "personas.json"))
+    sid = personas.add("Sid", mbti="INTP")
+    personas.update(sid.id, llm={"default": "", "per_taak": {"einddocument": ladder}})
+    return personas, sid
+
+
+def _synth(tmp_path, ledger, ds, docs, personas, sid, pid, tier):
+    """Draai één synthese waarbij `reason()` antwoordt vanaf trede `tier`."""
+    from nooch_village.inhabitant import synthesize_einddocument
+    rec = Record(id="sid", type=RecordType.ROLE, parent="noochville",
+                 definition=RoleDefinition(purpose="p"), persona_id=sid.id)
+    with patch(_REASON, side_effect=_reason_mock("## Conclusie\nKlaar.", tier)):
+        return synthesize_einddocument(
+            project_docs=docs, deliverables=ds, projects=ledger, personas=personas, record=rec,
+            settings={}, project=ledger.get(pid), force_final=True,
+            log=logging.getLogger("test.synth"))
+
+
+def test_terugval_wordt_vastgelegd_als_herkomst(tmp_path, caplog):
+    """Antwoord van de goedkope staart terwijl de persona iets duurders vroeg → gemarkeerd."""
+    ledger, ds, docs = _stores(tmp_path)
+    personas, sid = _sid_met_voorkeur(tmp_path)
+    pid = ledger.create("sid", "doel", "human", status="queued")
+    with caplog.at_level(logging.WARNING):
+        assert _synth(tmp_path, ledger, ds, docs, personas, sid, pid, "mistral:m1") is True
+    assert docs.meta(pid) == {"tier": "mistral:m1", "terugval": True}
+    assert "DOC_TERUGVAL" in caplog.text
+    muur = " ".join(m.get("text", "") for m in ledger.get(pid).get("log", []))
+    assert "terugval" in muur and "mistral:m1" in muur      # de reviewer ziet het op de muur
+
+
+def test_gevraagd_model_is_geen_terugval(tmp_path):
+    ledger, ds, docs = _stores(tmp_path)
+    personas, sid = _sid_met_voorkeur(tmp_path)
+    pid = ledger.create("sid", "doel", "human", status="queued")
+    _synth(tmp_path, ledger, ds, docs, personas, sid, pid, "anthropic:sonnet")
+    assert docs.meta(pid) == {"tier": "anthropic:sonnet", "terugval": False}
+
+
+def test_zonder_voorkeur_is_niets_een_terugval(tmp_path):
+    """Geen eigen voorkeur = niets om van terug te vallen; de trede wordt wel vastgelegd."""
+    ledger, ds, docs = _stores(tmp_path)
+    personas = PersonaStore(str(tmp_path / "personas.json"))
+    sid = personas.add("Sid")
+    pid = ledger.create("sid", "doel", "human", status="queued")
+    _synth(tmp_path, ledger, ds, docs, personas, sid, pid, "mistral:m1")
+    assert docs.meta(pid) == {"tier": "mistral:m1", "terugval": False}
+
+
+def test_mens_edit_wist_de_herkomst(tmp_path):
+    """Na een mens-edit is er geen model meer verantwoordelijk — dan hoort er ook geen model-chip
+    te staan die suggereert dat dit nog het gegenereerde document is."""
+    _, _, docs = _stores(tmp_path)
+    docs.write("p1", "door het model", tier="mistral:m1", terugval=True)
+    docs.write("p1", "door de mens")
+    assert docs.meta("p1") == {}
+
+
+# GUARD: de markering moet ook ECHT te zien zijn op de projectpagina (en dus bij review).
+def test_terugval_is_zichtbaar_op_de_projectpagina(tmp_path):
+    from nooch_village import cockpit2
+    from nooch_village.views.projects import render_project
+    dd = str(tmp_path / "poc")
+    pid, docs = _cockpit_project(dd)
+    st = cockpit2._Stores(dd)
+
+    docs.write(pid, "# Rapport\nInhoud.", tier="anthropic:sonnet", terugval=False)
+    html = render_project(st, pid)
+    assert "anthropic:sonnet" in html and "fallback" not in html
+
+    docs.write(pid, "# Rapport\nInhoud.", tier="mistral:m1", terugval=True)
+    html = render_project(st, pid)
+    assert "fallback" in html and "mistral:m1" in html
+    assert "chip amber" in html                       # zichtbaar gemarkeerd, niet als gewone chip
+
+
+def test_zonder_herkomst_geen_chip(tmp_path):
+    """Documenten van vóór deze markering (en mens-edits) leveren geen lege of misleidende chip."""
+    from nooch_village import cockpit2
+    from nooch_village.views.projects import render_project
+    dd = str(tmp_path / "poc")
+    pid, docs = _cockpit_project(dd)
+    docs.write(pid, "# Rapport\nInhoud.")
+    assert "chip amber" not in render_project(cockpit2._Stores(dd), pid)

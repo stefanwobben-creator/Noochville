@@ -14,6 +14,7 @@ is acceptabel voor v1 (de AI schrijft het hele document; mens-edits zijn input v
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import tempfile
@@ -39,9 +40,15 @@ class ProjectDocStore:
             log.warning("DOC_READ_FAIL: %s onleesbaar: %s", self._path(pid), e)
             return ""
 
-    def write(self, pid: str, md: str) -> None:
+    def write(self, pid: str, md: str, *, tier: str | None = None,
+              terugval: bool = False) -> None:
         """Overschrijf het document atomisch (temp + os.replace) — nooit een half bestand leesbaar.
-        Write-write-race (daemon-synthese ↔ cockpit-edit): laatste schrijver wint (v1, geen merge)."""
+        Write-write-race (daemon-synthese ↔ cockpit-edit): laatste schrijver wint (v1, geen merge).
+
+        `tier`/`terugval` leggen vast WELK model dit document schreef en of dat de goedkope staart
+        was in plaats van de gevraagde premium-trede. Dat hoort bij het document, niet bij de
+        bord-kaart, dus het gaat naar een sidecar naast de .md. Een mens-edit geeft geen tier mee:
+        dan is er geen model meer verantwoordelijk en verdwijnt de markering met het oude document."""
         os.makedirs(self.dir, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=self.dir, suffix=".tmp")
         try:
@@ -54,9 +61,46 @@ class ProjectDocStore:
             except OSError:
                 pass
             raise
+        self._write_meta(pid, {"tier": tier, "terugval": bool(terugval)} if tier else None)
+
+    # ── herkomst van het document (sidecar) ─────────────────────────────────
+    def _meta_path(self, pid: str) -> str:
+        return os.path.join(self.dir, f"{pid}.herkomst.json")
+
+    def _write_meta(self, pid: str, meta: dict | None) -> None:
+        """Schrijf of wis de herkomst. Fail-soft: het document is de waarheid, de herkomst is
+        toelichting — een onschrijfbare sidecar mag een geslaagde synthese nooit ongedaan maken."""
+        pad = self._meta_path(pid)
+        try:
+            if meta is None:
+                try:
+                    os.remove(pad)
+                except FileNotFoundError:
+                    pass
+                return
+            fd, tmp = tempfile.mkstemp(dir=self.dir, suffix=".tmp")
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(meta, fh, ensure_ascii=False)
+            os.replace(tmp, pad)
+        except OSError as e:
+            log.warning("DOC_META_FAIL: herkomst van %s niet vastgelegd: %s", pid, e)
+
+    def meta(self, pid: str) -> dict:
+        """De herkomst van het huidige document: `{"tier": str, "terugval": bool}`, of {} als het
+        document met de hand is geschreven of van vóór deze markering stamt."""
+        try:
+            with open(self._meta_path(pid), encoding="utf-8") as fh:
+                d = json.load(fh)
+            return d if isinstance(d, dict) else {}
+        except (FileNotFoundError, ValueError):
+            return {}
+        except OSError as e:
+            log.warning("DOC_META_READ_FAIL: herkomst van %s onleesbaar: %s", pid, e)
+            return {}
 
     def delete_for(self, pid: str) -> bool:
         """Cascade bij DEFINITIEVE project-delete. Geeft True als er een document verwijderd is."""
+        self._write_meta(pid, None)                     # herkomst hoort bij het document, dus mee weg
         try:
             os.remove(self._path(pid))
             return True

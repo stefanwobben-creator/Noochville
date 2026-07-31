@@ -45,9 +45,11 @@ def test_suspects_negeert_data_onder_gegronde_taak():
 # ── mocks voor de end-to-end ──────────────────────────────────────────────────
 
 class _DocStore:
-    def __init__(self): self.docs = {}
+    def __init__(self): self.docs, self.herkomst = {}, {}
     def read(self, pid): return self.docs.get(pid)
-    def write(self, pid, text): self.docs[pid] = text
+    def write(self, pid, text, *, tier=None, terugval=False):   # zelfde vorm als ProjectDocStore
+        self.docs[pid] = text
+        self.herkomst[pid] = {"tier": tier, "terugval": terugval}
 
 
 class _DelivStore:
@@ -70,12 +72,13 @@ def test_synthese_geeft_ongegronde_taken_mee_en_vangt_fabricage(caplog):
                          {"d1": "Veja, Xero"})
     docstore, projects, captured = _DocStore(), _Projects(), {}
 
-    def fake_reason(prompt, **kw):
+    def fake_reason(prompt, *, return_tier=False, **kw):
         captured["prompt"] = prompt
         # de LLM fabriceert een prijstabel onder de ongegronde taak
-        return ("## Identificeer merken\nVeja, Xero\n\n"
-                "## Prijsanalyse van merken\n| Merk | Prijs |\n| --- | --- |\n| Veja | €120 |\n\n"
-                "## Conclusie\nx\n\n## Aanbevelingen\n- y")
+        uit = ("## Identificeer merken\nVeja, Xero\n\n"
+               "## Prijsanalyse van merken\n| Merk | Prijs |\n| --- | --- |\n| Veja | €120 |\n\n"
+               "## Conclusie\nx\n\n## Aanbevelingen\n- y")
+        return (uit, "mistral:m1") if return_tier else uit
 
     with caplog.at_level(logging.WARNING), patch("nooch_village.llm.reason", fake_reason):
         ok = synthesize_einddocument(
@@ -101,11 +104,12 @@ def test_synthese_geen_valse_alarm_bij_schoon_document():
     dstore = _DelivStore([{"id": "d1", "checklist_item": "a", "summary": "merken"}], {"d1": "Veja"})
     docstore, projects = _DocStore(), _Projects()
 
-    def fake_reason(prompt, **kw):
+    def fake_reason(prompt, *, return_tier=False, **kw):
         # de LLM gehoorzaamt: ongegronde taak → 'niet onderzocht', geen verzonnen tabel
-        return ("## Identificeer merken\nVeja\n\n"
-                "## Prijsanalyse van merken\nNiet onderzocht — geen gegrond resultaat.\n\n"
-                "## Conclusie\nx\n\n## Aanbevelingen\n- y")
+        uit = ("## Identificeer merken\nVeja\n\n"
+               "## Prijsanalyse van merken\nNiet onderzocht — geen gegrond resultaat.\n\n"
+               "## Conclusie\nx\n\n## Aanbevelingen\n- y")
+        return (uit, "mistral:m1") if return_tier else uit
 
     with patch("nooch_village.llm.reason", fake_reason):
         ok = synthesize_einddocument(

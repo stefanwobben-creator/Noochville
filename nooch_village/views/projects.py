@@ -828,6 +828,24 @@ def _attach_post(a: dict, pid: str, hid, rw: bool) -> str:
             f"<div class='fbubble'>{card}<div class='ffoot'><div class='ffoot-l'>{rm}</div></div></div></div>")
 
 
+def _herkomst_chip(st: _Stores, pid: str) -> str:
+    """Welk model schreef dit einddocument — en was dat het gevraagde model?
+
+    Een persona-voorkeur is een kop met de dorpsladder als staart: valt de dure trede weg, dan komt
+    er alsnog een document, maar van een goedkoper model. Zonder deze markering leest zo'n document
+    als een premium exemplaar, en dat is precies de stille verwisseling die een reviewer niet kan
+    zien. Geen herkomst (mens-edit, of van vóór de markering) → geen chip, geen ruis."""
+    store = getattr(st, "project_docs", None)
+    meta = store.meta(pid) if store is not None else {}
+    tier = (meta or {}).get("tier")
+    if not tier:
+        return ""
+    if meta.get("terugval"):
+        return (f"<span class='chip amber' title='The requested model was unavailable; this document "
+                f"came from the cheaper fallback rung.'>⚠ fallback: {_e(tier)}</span>")
+    return f"<span class='chip outline' title='Model that wrote this document'>{_e(tier)}</span>"
+
+
 def _einddocument_html(st: _Stores, pid: str, rw: bool, hid) -> str:
     """Het levende einddocument: in-/uitklapbare, leesbaar-gerenderde weergave (📄, via `_md_doc`) +
     edit-form (mens redigeert bij review). De weergave zit in een <details open> met een eigen
@@ -842,7 +860,8 @@ def _einddocument_html(st: _Stores, pid: str, rw: bool, hid) -> str:
         body = ("<div class='fentry'><div class='fbubble'><span class='muted'>No end document yet — "
                 "the assigned inhabitant writes it on every successful pulse.</span></div></div>")
     view = (f"<details class='einddoc-d' open><summary class='wall-head einddoc-sum'>"
-            f"<h2>📄 End document</h2><span class='einddoc-toggle'>expand/collapse</span></summary>"
+            f"<h2>📄 End document</h2>{_herkomst_chip(st, pid)}"
+            f"<span class='einddoc-toggle'>expand/collapse</span></summary>"
             f"{body}</details>")
     if not rw:
         return view
@@ -933,8 +952,10 @@ def render_project(st: _Stores, pid: str, csrf_token: str = "", msg: str = "", b
     else:
         due_head = (f"<span class='chip {'coral' if over else 'outline'}'>{_IC_CLOCK}{_e(due_lbl)}</span>{due_badge}"
                     if p.get("due") else "")
+    # De herkomst-chip staat naast de status: bij review kijk je hier, niet pas onderin het document.
     head = (f"<div class='pcard-head'>{title}"
-            f"<div class='pcard-head-r'>{due_head}{menu or _proj_chip(status)}</div></div>")
+            f"<div class='pcard-head-r'>{_herkomst_chip(st, pid)}{due_head}"
+            f"{menu or _proj_chip(status)}</div></div>")
 
     # ═══ RECHTS: STRUCTUUR (sticky kantlijn) ═══════════════════════════════════════════
     # 1) Projectdetails (rol+dangling, trekker, aangemaakt, zichtbaar, impacts, effort-buckets)

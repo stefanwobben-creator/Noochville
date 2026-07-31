@@ -113,9 +113,13 @@ def _omg(persona, tmp_path=None):
     ({}, None),
 ])
 def test_resolutie_volgorde(llm, verwacht):
-    """per_taak > default > globaal. De laatste is None: dan doet reason() wat hij altijd deed."""
+    """per_taak > default > globaal. De laatste is None: dan doet reason() wat hij altijd deed.
+
+    Asserteert op de KOP: sinds de zachte staart krijgt elke voorkeur de dorpsladder erachter, maar
+    welke trede als eerste wordt geprobeerd is nog steeds precies deze volgorde."""
     p = Persona(id="x", name="Billy", llm=llm)
-    assert llm_keuze.llm_voorkeur(_omg(p), "rol", "einddocument") == verwacht
+    uit = llm_keuze.llm_voorkeur(_omg(p), "rol", "einddocument")
+    assert (uit.split(",")[0] if uit else None) == verwacht
 
 
 def test_zonder_persona_geen_voorkeur():
@@ -407,7 +411,7 @@ def test_daemon_context_draagt_de_inwoners(tmp_path):
     v.context.personas.update(p.id, llm={"default": "", "per_taak": {"einddocument": "anthropic:x"}})
     v.records.set_persona("librarian", p.id)
 
-    assert llm_keuze.llm_voorkeur(v.context, "librarian", "einddocument") == "anthropic:x"
+    assert llm_keuze.llm_voorkeur(v.context, "librarian", "einddocument").startswith("anthropic:x,")
     assert llm_keuze.llm_voorkeur(v.context, "librarian", "andere_taak") is None   # lege default
 
 
@@ -431,4 +435,38 @@ def test_store_ziet_een_wijziging_van_een_ander_proces(tmp_path):
     ander_proces.update(p.id, llm={"default": "", "per_taak": {"einddocument": "anthropic:x"}})
     os.utime(pad, (os.path.getmtime(pad) + 1, os.path.getmtime(pad) + 1))   # mtime-granulariteit
 
-    assert llm_keuze.voorkeur_van(store.get(p.id), "einddocument") == "anthropic:x"
+    assert llm_keuze.voorkeur_van(store.get(p.id), "einddocument").startswith("anthropic:x,")
+
+
+# ── De zachte staart: een voorkeur vult aan, hij vervangt niet ───────────────
+
+def test_voorkeur_krijgt_de_dorpsladder_als_staart(monkeypatch):
+    """Valt Anthropic weg, dan volgt alsnog mistral/gemini. Zonder staart betekende één wegvallende
+    leverancier GEEN document — bij een einddocument is dat geen goedkoper resultaat maar geen."""
+    monkeypatch.setenv("LLM_LADDER", "gemini:g1,mistral:m1")
+    p = Persona(id="x", name="Sid", llm={"per_taak": {"einddocument": "anthropic:sonnet"}})
+    assert llm_keuze.voorkeur_van(p, "einddocument") == "anthropic:sonnet,gemini:g1,mistral:m1"
+
+
+def test_premium_only_call_site_houdt_de_harde_kop(monkeypatch):
+    """Het luik voor oordeel-sites (critic): daar is 'geen antwoord' eerlijker dan een goedkoop
+    oordeel dat als premium wordt gelezen. Leeg by default — de zachte staart is de norm."""
+    monkeypatch.setenv("LLM_LADDER", "gemini:g1")
+    monkeypatch.setattr(llm_keuze, "PREMIUM_ONLY", frozenset({"critic"}))
+    p = Persona(id="x", name="Sid", llm={"default": "anthropic:sonnet"})
+    assert llm_keuze.voorkeur_van(p, "critic") == "anthropic:sonnet"          # hard
+    assert llm_keuze.voorkeur_van(p, "einddocument").endswith("gemini:g1")    # zacht
+
+
+def test_zonder_voorkeur_geen_staart_maar_none():
+    """None blijft None: geen persona-voorkeur = de dorpsladder zoals reason() hem zelf al pakt.
+    Zou dit de dorpsladder als string teruggeven, dan was het gedrag stilletjes anders."""
+    assert llm_keuze.voorkeur_van(Persona(id="x", name="Sid"), "einddocument") is None
+
+
+def test_eigen_tredes_is_de_kop_zonder_staart(monkeypatch):
+    """De maatstaf voor 'is dit nog wat er gevraagd werd': alleen de eigen tredes tellen."""
+    monkeypatch.setenv("LLM_LADDER", "gemini:g1,mistral:m1")
+    p = Persona(id="x", name="Sid", llm={"per_taak": {"einddocument": "anthropic:sonnet,anthropic"}})
+    assert llm_keuze.eigen_tredes(p, "einddocument") == {"anthropic:sonnet", "anthropic:default"}
+    assert llm_keuze.eigen_tredes(Persona(id="y", name="Leeg"), "einddocument") == set()

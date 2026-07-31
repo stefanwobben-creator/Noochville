@@ -2114,15 +2114,20 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
             "opgeleverd) en '## Aanbevelingen' (concrete vervolgstappen als '- '-opsomming)"
             + (". Vermeld in de conclusie expliciet dat het project klaar is voor review" if force_final else "")
             + ". Geef alleen het document terug, geen meta-uitleg.")
-        # De persona van de schrijvende rol mag het model kiezen; None = de dorpsladder.
+        # De persona van de schrijvende rol mag het model kiezen; None = de dorpsladder. De voorkeur
+        # is een KOP met de dorpsladder als staart, dus een wegvallende leverancier levert alsnog een
+        # document — `_eigen` legt vast wat de persona zelf vroeg, zodat we hieronder kunnen zien of
+        # dit document van die kop kwam of van de goedkope staart.
+        _eigen: set[str] = set()
         try:
-            from nooch_village.llm_keuze import voorkeur_van
-            _ladder = voorkeur_van(personas.get(getattr(record, "persona_id", None))
-                                   if personas is not None else None, "einddocument")
+            from nooch_village.llm_keuze import eigen_tredes, voorkeur_van
+            _p = personas.get(getattr(record, "persona_id", None)) if personas is not None else None
+            _ladder = voorkeur_van(_p, "einddocument")
+            _eigen = eigen_tredes(_p, "einddocument")
         except Exception:
             _ladder = None
-        out = reason(prompt, call_site="einddocument", ladder=_ladder,
-                     max_tokens=int(settings.get("einddocument_max_tokens", "4000")))
+        out, _tier = reason(prompt, call_site="einddocument", ladder=_ladder, return_tier=True,
+                            max_tokens=int(settings.get("einddocument_max_tokens", "4000")))
     except Exception as e:
         log.warning("einddocument-synthese overgeslagen (document intact): %s", e)
         return False
@@ -2139,7 +2144,18 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
                                            "zonder deliverable): " + "; ".join(suspects)
                                            + ". Controleer dit handmatig — de synthese hoort hier 'niet "
                                              "onderzocht' te schrijven.")
-    store.write(pid, out.strip())
+    # Terugval = er wás een eigen voorkeur, maar het antwoord kwam van de goedkope staart. Dat mag
+    # nooit stil doorgaan voor een premium exemplaar: het gaat mee als herkomst naar de sidecar (de
+    # projectpagina toont het) én als role-message op de muur, zodat de reviewer het ziet.
+    terugval = bool(_eigen) and _tier is not None and _tier not in _eigen
+    store.write(pid, out.strip(), tier=_tier, terugval=terugval)
+    if terugval:
+        log.warning("DOC_TERUGVAL: project=%s einddocument geschreven door %s i.p.v. de gevraagde "
+                    "trede(s) %s", pid, _tier, ", ".join(sorted(_eigen)))
+        if projects is not None:
+            projects.add_role_message(pid, f"⚠️ Einddocument geschreven door de goedkope terugval "
+                                           f"({_tier}) — niet door het gevraagde model. Lees het als "
+                                           f"een concept en genereer opnieuw als de voorkeur weer werkt.")
     if force_final:
         projects.add_role_message(pid, "📄 Einddocument bijgewerkt — klaar voor review.")
     return True

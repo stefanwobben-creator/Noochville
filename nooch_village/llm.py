@@ -375,6 +375,38 @@ def _ladder() -> list[tuple[str, str | None]]:
     return _parse_ladder(raw) if raw else _parse_ladder(",".join(_DEFAULT_LADDER))
 
 
+def dorpsladder() -> str:
+    """De ladder-string van het dorp (env `LLM_LADDER` of de default). Publiek, want een eigen
+    ladder wordt hier standaard mee aangevuld — zie `met_dorpsstaart`."""
+    raw = os.getenv("LLM_LADDER", "").strip()
+    return raw if raw else ",".join(_DEFAULT_LADDER)
+
+
+def tier_namen(ladder: str) -> list[str]:
+    """De trede-labels zoals `reason()` ze rapporteert (`vendor:model`), voor een ladder-string.
+
+    Nodig om een gerapporteerde trede te kunnen vergelijken met wat er in een ladder stond: 'anthropic'
+    en 'anthropic:default' zijn dezelfde trede, en alleen na deze normalisatie zie je dat."""
+    return [f"{vendor}:{model or 'default'}" for vendor, model in _parse_ladder(ladder)]
+
+
+def met_dorpsstaart(ladder: str) -> str:
+    """`ladder` met de dorpsladder erachter, zonder een trede dubbel te noemen.
+
+    De zachte staart: een eigen (premium) ladder AANVULLEN in plaats van vervangen. Zonder staart
+    betekent één wegvallende leverancier geen antwoord — en dat is bij een einddocument geen
+    'goedkoper resultaat' maar géén resultaat. De kop blijft de kop: de staart komt pas aan bod als
+    alle eigen tredes zijn uitgeput. De ORIGINELE spec-tekst blijft staan (niet het genormaliseerde
+    label), want 'anthropic:default' als spec zou 'default' als modelnaam doorsturen."""
+    eigen = [s.strip() for s in (ladder or "").split(",") if s.strip()]
+    if not eigen:
+        return dorpsladder()
+    gehad = set(tier_namen(ladder))
+    staart = [s.strip() for s in dorpsladder().split(",")
+              if s.strip() and tier_namen(s)[0] not in gehad]
+    return ",".join(eigen + staart)
+
+
 def reason(prompt: str, *, ladder: str | None = None, max_tokens: int = 700,
            json_mode: bool = False, return_tier: bool = False, call_site: str = "onbekend"):
     """Optionele LLM-redenering via de getrapte ladder (goedkoop → duur).
