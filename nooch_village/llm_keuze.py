@@ -45,14 +45,47 @@ def persona_van_rol(omgeving, role_id: str):
         return None
 
 
-def voorkeur_van(persona, call_site: str) -> str | None:
-    """De ladder-string van een al-opgehaalde persona. Los van `llm_voorkeur` omdat sommige
-    aanroepers de persona al in handen hebben en geen stores kunnen doorgeven."""
+# Call-sites waar een persona-voorkeur HARD is: alleen de eigen tredes, geen goedkope staart.
+# Leeg by default — de zachte staart is de norm. Bedoeld voor oordeel-sites (een critic die een
+# goedkoop oordeel liever niet geeft dan wel): daar is 'geen antwoord' een eerlijker uitkomst dan
+# een goedkoop antwoord dat als premium oordeel wordt gelezen. Zet een call_site hier neer en de
+# staart vervalt voor precies die site.
+PREMIUM_ONLY: frozenset[str] = frozenset()
+
+
+def eigen_keuze(persona, call_site: str) -> str | None:
+    """De ladder-string zoals de persona hem ZELF opschreef, zonder staart. Dit is de maatstaf voor
+    'is dit document nog wat er gevraagd werd?' — zie `eigen_tredes`."""
     if persona is None:
         return None
     llm = getattr(persona, "llm", None) or {}
     keuze = ((llm.get("per_taak") or {}).get(call_site) or llm.get("default") or "").strip()
     return keuze or None
+
+
+def eigen_tredes(persona, call_site: str) -> set[str]:
+    """De trede-labels die als de EIGEN keuze van deze persona tellen (de kop, zonder staart).
+
+    Een `reason()`-trede die hier niet in zit, is een terugval: het antwoord kwam van de goedkope
+    staart. Leeg = deze persona vroeg niets bijzonders, dus is er ook niets om van terug te vallen."""
+    from nooch_village import llm as _llm
+    keuze = eigen_keuze(persona, call_site)
+    return set(_llm.tier_namen(keuze)) if keuze else set()
+
+
+def voorkeur_van(persona, call_site: str) -> str | None:
+    """De ladder-string van een al-opgehaalde persona. Los van `llm_voorkeur` omdat sommige
+    aanroepers de persona al in handen hebben en geen stores kunnen doorgeven.
+
+    De uitkomst is de eigen keuze MET de dorpsladder als staart: een voorkeur vult de goedkope
+    tredes aan, hij vervangt ze niet. Valt de dure leverancier weg, dan volgt alsnog een goedkoop
+    antwoord — zichtbaar gemarkeerd als terugval, nooit stil doorgaand voor een premium exemplaar.
+    Uitzondering: `PREMIUM_ONLY`-sites houden de harde kop."""
+    from nooch_village import llm as _llm
+    keuze = eigen_keuze(persona, call_site)
+    if not keuze:
+        return None
+    return keuze if call_site in PREMIUM_ONLY else _llm.met_dorpsstaart(keuze)
 
 
 def llm_voorkeur(omgeving, role_id: str, call_site: str) -> str | None:

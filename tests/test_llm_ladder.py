@@ -91,3 +91,36 @@ def test_custom_ladder_voor_premium_skill(monkeypatch):
     out = llm.reason("hoi", ladder="anthropic:claude-sonnet-4-6")
     assert out == "SONNET"
     assert calls == ["a"]                       # alleen de premium-trede, Gemini niet geraakt
+
+
+# ── de zachte staart: een eigen ladder AANVULLEN, niet vervangen ────────────
+
+def test_dorpsstaart_komt_achter_de_eigen_tredes(monkeypatch):
+    """De kop blijft de kop; de goedkope staart komt er ACHTER, niet ervoor."""
+    monkeypatch.setenv("LLM_LADDER", "gemini:g1,mistral:m1")
+    assert llm.met_dorpsstaart("anthropic:sonnet") == "anthropic:sonnet,gemini:g1,mistral:m1"
+
+
+def test_dorpsstaart_noemt_een_trede_nooit_twee_keer(monkeypatch):
+    """Staat een dorpstrede al in de eigen ladder, dan blijft hij op zijn EIGEN plek staan —
+    anders zou dezelfde trede twee keer geprobeerd worden (dubbele wachttijd bij een storing)."""
+    monkeypatch.setenv("LLM_LADDER", "gemini:g1,mistral:m1")
+    assert llm.met_dorpsstaart("mistral:m1,anthropic:sonnet") == "mistral:m1,anthropic:sonnet,gemini:g1"
+
+
+def test_dorpsstaart_zonder_eigen_ladder_is_de_dorpsladder(monkeypatch):
+    monkeypatch.setenv("LLM_LADDER", "gemini:g1")
+    assert llm.met_dorpsstaart("") == "gemini:g1"
+
+
+def test_tier_namen_normaliseert_een_kale_vendor():
+    """'anthropic' en 'anthropic:default' zijn dezelfde trede; zonder normalisatie zou een
+    gerapporteerde trede nooit matchen met wat er in de ladder stond."""
+    assert llm.tier_namen("anthropic,gemini:g1") == ["anthropic:default", "gemini:g1"]
+
+
+def test_staart_bewaart_de_originele_spec_niet_het_label(monkeypatch):
+    """De samengestelde ladder moet uitvoerbaar blijven: 'anthropic' mag geen 'anthropic:default'
+    worden, want dan reist 'default' als MODELNAAM mee naar de leverancier."""
+    monkeypatch.setenv("LLM_LADDER", "anthropic")
+    assert llm._parse_ladder(llm.met_dorpsstaart("gemini:g1")) == [("gemini", "g1"), ("anthropic", None)]
