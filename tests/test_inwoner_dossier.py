@@ -391,3 +391,44 @@ def test_tail_filtert_op_rol(tmp_path):
 def test_tail_zonder_bestand_is_leeg(tmp_path):
     from nooch_village.activiteit import laatste_events
     assert laatste_events(str(tmp_path), {"x"}, 10) == []
+
+
+# ── De bedrading naar de daemon ─────────────────────────────────────────────
+# De resolutie hierboven werkte al; wat ontbrak was de rugzak. `context.personas` werd alleen in
+# de cockpit gezet, dus in de daemon viel élk persona-pad terug op de dorpsladder — de puls schreef
+# 52 van de 52 einddocumenten op de goedkoopste trede terwijl de persona iets anders vroeg.
+
+def test_daemon_context_draagt_de_inwoners(tmp_path):
+    """Een Village zet `context.personas`, zodat llm_voorkeur de persona op een rol vindt."""
+    from nooch_village.village import Village
+
+    v = Village(heartbeat_seconds=86400, data_dir=str(tmp_path / "dorp"))
+    p = v.context.personas.add("Sid", mbti="INTP")
+    v.context.personas.update(p.id, llm={"default": "", "per_taak": {"einddocument": "anthropic:x"}})
+    v.records.set_persona("librarian", p.id)
+
+    assert llm_keuze.llm_voorkeur(v.context, "librarian", "einddocument") == "anthropic:x"
+    assert llm_keuze.llm_voorkeur(v.context, "librarian", "andere_taak") is None   # lege default
+
+
+def test_daemon_zonder_voorkeur_blijft_op_de_dorpsladder(tmp_path):
+    """De terugval blijft intact: geen persona op de rol → None, precies zoals vóór de bedrading."""
+    from nooch_village.village import Village
+
+    v = Village(heartbeat_seconds=86400, data_dir=str(tmp_path / "dorp"))
+    assert llm_keuze.llm_voorkeur(v.context, "librarian", "einddocument") is None
+
+
+def test_store_ziet_een_wijziging_van_een_ander_proces(tmp_path):
+    """De daemon houdt zijn store dagenlang vast; de cockpit schrijft ondertussen. Zonder mtime-check
+    zou een modelvoorkeur uit de cockpit pas na een herstart doorwerken in de puls."""
+    pad = tmp_path / "personas.json"
+    store = PersonaStore(str(pad))
+    p = store.add("Billy")
+    assert store.get(p.id).llm == {}
+
+    ander_proces = PersonaStore(str(pad))                 # zoals de cockpit: verse store per request
+    ander_proces.update(p.id, llm={"default": "", "per_taak": {"einddocument": "anthropic:x"}})
+    os.utime(pad, (os.path.getmtime(pad) + 1, os.path.getmtime(pad) + 1))   # mtime-granulariteit
+
+    assert llm_keuze.voorkeur_van(store.get(p.id), "einddocument") == "anthropic:x"

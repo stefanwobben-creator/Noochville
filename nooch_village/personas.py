@@ -95,11 +95,32 @@ class PersonaStore:
 
     def __init__(self, path: str):
         self.path = path
-        self._items: dict[str, dict] = read_json(path, {})
+        self._items: dict[str, dict] = {}
+        self._mtime: float = 0.0
+        self._load()
+
+    def _load(self) -> None:
+        self._items = read_json(self.path, {})
+        if os.path.exists(self.path):
+            self._mtime = os.path.getmtime(self.path)
+
+    def _maybe_reload(self) -> None:
+        """Herlaad van schijf als het bestand door een extern proces is gewijzigd.
+
+        Zelfde reden als bij `ProjectLedger`: de cockpit draait in een LOS proces en bouwt zijn
+        stores per request, maar de daemon houdt deze store dagenlang vast. Zonder deze check zou
+        een modelvoorkeur die je in de cockpit zet pas na een herstart doorwerken in de puls."""
+        try:
+            if os.path.exists(self.path) and os.path.getmtime(self.path) > self._mtime:
+                self._load()
+        except Exception:
+            pass
 
     def _save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
         atomic_write_json(self.path, self._items)
+        if os.path.exists(self.path):
+            self._mtime = os.path.getmtime(self.path)   # eigen schrijf → geen spurious _maybe_reload
 
     def _lees(self, d: dict) -> Persona:
         """Persona uit een opgeslagen dict. Onbekende sleutels worden genegeerd in plaats van
@@ -148,10 +169,12 @@ class PersonaStore:
     def get(self, pid: str | None) -> Persona | None:
         if not pid:
             return None
+        self._maybe_reload()
         d = self._items.get(pid)
         return self._lees(d) if d else None
 
     def all(self) -> list[Persona]:
+        self._maybe_reload()
         return [self._lees(d) for d in sorted(self._items.values(), key=lambda x: x.get("name", ""))]
 
     def update(self, pid: str, *, name: str | None = None, mbti: str | None = None,
