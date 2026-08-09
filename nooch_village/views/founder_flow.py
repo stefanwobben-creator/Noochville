@@ -85,10 +85,14 @@ def _onthulling(onthuld: str, csrf_token: str, ritme: str) -> str:
 # ── De kop van een taak: niveau, meting, promotie ────────────────────────────
 
 def _meterkaart(data_dir: str, taak: str, niveau: str, labels: list[dict], cfg: dict,
-                csrf_token: str, ritme: str) -> str:
+                csrf_token: str, ritme: str, niveaus: "ff.NiveauStore | None" = None,
+                audit_open: int = 0) -> str:
     meting = ff.overeenstemming(labels, taak, cfg["venster"])
     kan, reden = ff.promoveerbaar(labels, taak, niveau, cfg)
-    afwijking = ff.drift(labels, taak, niveau, cfg)
+    # Dezelfde vensterbegrenzing als de demotie-poort, anders waarschuwt het scherm over iets
+    # anders dan waarop het systeem terugvalt.
+    sinds = ff.laatste_wissel(niveaus, taak) if niveaus is not None else 0.0
+    afwijking = ff.drift(labels, taak, niveau, cfg, sinds=sinds)
 
     meetregel = (
         f"agreement <b>{_pct(meting['ratio'])}</b> "
@@ -118,8 +122,41 @@ def _meterkaart(data_dir: str, taak: str, niveau: str, labels: list[dict], cfg: 
             f"<div class='ptitle'>Level {_e(niveau)} "
             f"<span class='pill'>{_e(ff.NIVEAU_UITLEG[niveau])}</span></div>"
             f"<p class='muted'>{meetregel}</p>"
-            f"{waarschuwing}{poort}{knoppen}"
+            f"{waarschuwing}{_terugvalregel(taak, niveau, cfg, labels, sinds, audit_open)}"
+            f"{poort}{knoppen}"
+            f"{_laatste_wissel_regel(niveaus, taak)}"
             f"{_weekregel(labels, taak)}</div>")
+
+
+def _terugvalregel(taak: str, niveau: str, cfg: dict, labels: list[dict], sinds: float,
+                   audit_open: int) -> str:
+    """Wat de terugval-poort nu ziet, en waar hij op wacht.
+
+    De auditsteekproef is de enige schone meetreeks zodra de AI zelf werkt; blijft die liggen,
+    dan stopt drift met zichtbaar zijn. Dat mag geen stille toestand zijn, dus het scherm zegt
+    hoeveel er wacht en hoeveel oordelen de poort nog nodig heeft."""
+    if niveau not in ("C", "D"):
+        return ""
+    drempel = int(cfg["min_n"])
+    gedaan = ff.overeenstemming(labels, taak, cfg["venster"], sinds=sinds)["n"]
+    wachtend = (f" · {audit_open} audit item(s) waiting for you" if audit_open else "")
+    return (f"<p class='muted'>Automatic step-back is armed: this task drops a level as soon as "
+            f"the blind audit sample would no longer earn it — same bar ({_pct(cfg['lat'])}) and "
+            f"same evidence as promotion. Judged since the last level change: "
+            f"{gedaan}/{drempel} needed{wachtend}.</p>")
+
+
+def _laatste_wissel_regel(niveaus, taak: str) -> str:
+    """De laatste tree-wissel met zijn reden — een automatische terugval mag niet stil gebeuren."""
+    if niveaus is None:
+        return ""
+    rijen = niveaus.historie(taak)
+    if not rijen:
+        return ""
+    r = rijen[-1]
+    hoe = "automatically" if r.get("door") == "auto" else f"by {r.get('door', '?')}"
+    return (f"<p class='muted'>Last change: {_e(r.get('van', ''))} → {_e(r.get('naar', ''))} "
+            f"{_e(hoe)} — {_e(r.get('reden', ''))}</p>")
 
 
 def _weekregel(labels: list[dict], taak: str) -> str:
@@ -222,11 +259,18 @@ def _ai_gedaan(labels: list[dict], taak: str, niveau: str, csrf_token: str, ritm
 # ── Eén taak ─────────────────────────────────────────────────────────────────
 
 def _taaksectie(st, data_dir: str, taak: str, niveau: str, labels: list[dict], cfg: dict,
-                csrf_token: str, ritme: str) -> str:
+                csrf_token: str, ritme: str, niveaus=None) -> str:
     from nooch_village import founder_taken
 
     items = founder_taken.wachtrij(st, data_dir, taak, labels)
     cap = int(cfg.get("dag_cap", 5)) if ritme == "dag" else len(items)
+    # De auditsteekproef staat vooraan in de dagronde: dat zijn de items die de terugval-poort
+    # voeden, en een korte ronde die ze achteraan laat liggen maakt drift onmeetbaar.
+    if niveau in ("C", "D"):
+        items.sort(key=lambda i: not ff.in_auditsteekproef(taak, i["item"],
+                                                           cfg.get("audit_pct", 0)))
+    audit_open = sum(1 for i in items
+                     if ff.in_auditsteekproef(taak, i["item"], cfg.get("audit_pct", 0)))
     getoond, rest = items[:cap], max(0, len(items) - cap)
 
     kaarten = ""
@@ -246,7 +290,7 @@ def _taaksectie(st, data_dir: str, taak: str, niveau: str, labels: list[dict], c
                f"let the AI work through the queue</button></form>")
 
     return (f"<div class='c2-sec'><h3>{_e(ff.TAAK_LABEL[taak])}</h3>"
-            f"{_meterkaart(data_dir, taak, niveau, labels, cfg, csrf_token, ritme)}"
+            f"{_meterkaart(data_dir, taak, niveau, labels, cfg, csrf_token, ritme, niveaus, audit_open)}"
             f"{run}{kaarten}{staart}</div>"
             f"{_ai_gedaan(labels, taak, niveau, csrf_token, ritme)}")
 
@@ -265,7 +309,8 @@ def render_founder_flow(st, data_dir: str, *, csrf_token: str = "", msg: str = "
         f"{_e(_RITME_LABEL[r])}</a>" for r in RITMES)
 
     secties = "".join(
-        _taaksectie(st, data_dir, taak, niveaus.niveau(taak), labels, cfg[taak], csrf_token, ritme)
+        _taaksectie(st, data_dir, taak, niveaus.niveau(taak), labels, cfg[taak], csrf_token,
+                    ritme, niveaus)
         for taak in ff.TAKEN)
 
     main = (

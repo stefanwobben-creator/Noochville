@@ -272,13 +272,20 @@ def held_out(labels: list[dict], taak: str) -> list[dict]:
             and not r.get("correctie")]
 
 
-def overeenstemming(labels: list[dict], taak: str, venster: int = 60) -> dict:
+def overeenstemming(labels: list[dict], taak: str, venster: int = 60,
+                    sinds: float = 0.0) -> dict:
     """Overeenstemming tussen AI-voorstel en menselijk oordeel op de held-out steekproef.
 
     Geeft {n, akkoord, ratio, lo, hi}: het aantal meetbare labels in het venster, hoeveel
     daarvan overeenkwamen, de puntschatting, en het Wilson-95%-interval. `lo` is de waarde
-    waarop de promotiepoort beslist — nooit `ratio`."""
-    rijen = sorted(held_out(labels, taak), key=lambda r: r.get("ts", 0))
+    waarop de promotiepoort beslist — nooit `ratio`.
+
+    `sinds` begrenst de reeks aan de onderkant (alleen labels ná dat tijdstip). De demotie-poort
+    zet daar het moment van de laatste tree-wissel in: na een terugval hoor je het nieuwe niveau
+    op nieuw bewijs te beoordelen, niet op de metingen die de terugval veroorzaakten. Zonder die
+    grens zou één slechte reeks een taak in opeenvolgende klikken helemaal naar beneden trappen."""
+    rijen = sorted((r for r in held_out(labels, taak) if r.get("ts", 0) > sinds),
+                   key=lambda r: r.get("ts", 0))
     rijen = rijen[-max(1, int(venster)):] if rijen else []
     n = len(rijen)
     akkoord = sum(1 for r in rijen if r["mens"] == r["ai"])
@@ -307,21 +314,102 @@ def promoveerbaar(labels: list[dict], taak: str, niveau: str, cfg: dict) -> tupl
                   f"lower bound {meting['lo'] * 100:.0f}% ≥ bar {lat * 100:.0f}%")
 
 
-def drift(labels: list[dict], taak: str, niveau: str, cfg: dict) -> str:
-    """Zakt een taak die al autonoom draait onder zijn eigen lat? Lege string = geen drift.
+def drift_drempel(cfg: dict) -> int:
+    """Vanaf hoeveel blinde audit-labels de WAARSCHUWING iets mag beweren.
 
-    Bewust géén automatische demotie: het systeem meet en waarschuwt, de mens beslist. Dat is
-    dezelfde grens als bij promotie — draaiende autonomie wijzigt niet zonder handtekening."""
+    De helft van de promotie-eis, vloer 5. Bewust lager dan de demotie-drempel: eerder zien mag
+    goedkoop zijn, want kijken kost niets; eerder ingrijpen is dat niet."""
+    return max(5, int(cfg["min_n"]) // 2)
+
+
+def demoveerbaar(labels: list[dict], taak: str, niveau: str, cfg: dict,
+                 sinds: float = 0.0) -> tuple[bool, str]:
+    """Moet deze taak een trede terug? Geeft (ja/nee, leesbare reden).
+
+    De regel: **een trede blijft precies zolang staan als het bewijs hem zou toekennen.** Deze
+    poort is dus de letterlijke negatie van `promoveerbaar` — dezelfde lat, dezelfde `min_n`,
+    dezelfde Wilson-ondergrens — maar op de labels sinds de laatste tree-wissel.
+
+    Waarom niet "ondergrens onder de lat" bij een lagere drempel, wat de directe formulering zou
+    zijn: dan degradeert een FOUTLOZE reeks. De ondergrens van 21/21 goed is 84,5% en dus onder
+    een lat van 85%; een taak zou terugvallen op perfect werk, puur omdat de steekproef klein is.
+    Een ondergrens meet "hoe zeker weten we dat het góéd is" — dat is iets anders dan bewijs dat
+    het slecht is, en dat verschil is precies wat er misgaat als je de drempel verlaagt maar de
+    toets gelijk houdt. Door dezelfde `min_n` te eisen als bij promotie valt die val weg: bij
+    n≥30 heeft een foutloze reeks een ondergrens van 88,6%, ruim boven de lat.
+
+    De prijs is dat een terugval bewijs nodig heeft en dus niet bij de eerste misser komt. Dat
+    gat vult `drift()`: die waarschuwt al vanaf de halve drempel, en de founder kan altijd zelf
+    in één klik terugzetten.
+
+    Alleen op C/D, want alleen daar voert de AI zelf uit: demotie trekt draaiende autonomie in.
+    Nooit onder B — daar stelt de AI alleen voor en valt er niets in te trekken; A is een keuze
+    van de founder, geen uitkomst van een meting."""
+    if niveau not in ("C", "D"):
+        return False, ""
+    meting = overeenstemming(labels, taak, cfg["venster"], sinds=sinds)
+    min_n, lat = int(cfg["min_n"]), float(cfg["lat"])
+    if meting["n"] < min_n:
+        return False, (f"{meting['n']}/{min_n} blind audit decisions since the last level "
+                       f"change — not enough to withdraw the level")
+    if meting["lo"] >= lat:
+        return False, (f"agreement {_pctstr(meting['ratio'])} in the audit sample, lower bound "
+                       f"{_pctstr(meting['lo'])} ≥ bar {_pctstr(lat)}")
+    return True, (f"agreement in the audit sample dropped to {_pctstr(meting['ratio'])} "
+                  f"(95% lower bound {_pctstr(meting['lo'])}) over {meting['n']} blind "
+                  f"decisions, below the bar of {_pctstr(lat)} — this level would no longer "
+                  f"be granted on this evidence")
+
+
+def _pctstr(x: float) -> str:
+    return f"{x * 100:.0f}%"
+
+
+def drift(labels: list[dict], taak: str, niveau: str, cfg: dict, sinds: float = 0.0) -> str:
+    """De vroege waarschuwing, vóór de poort dicht kan. Lege string = niets aan de hand.
+
+    Kijkt naar de PUNTSCHATTING vanaf de halve drempel: "de overeenstemming ligt onder je lat".
+    Dat is bewust een zwakkere uitspraak dan de demotie-poort doet — hij mag ook aangaan als het
+    nog ruis kan zijn, want hij verandert niets. Hij bestaat om de founder te laten ingrijpen
+    (één klik terug) vóórdat er genoeg bewijs is om het systeem het te laten doen."""
     if niveau not in ("C", "D"):
         return ""
-    meting = overeenstemming(labels, taak, cfg["venster"])
-    if meting["n"] < max(5, int(cfg["min_n"]) // 2):
-        return ""                                    # te weinig audit-labels om iets te beweren
-    if meting["lo"] < float(cfg["lat"]):
-        return (f"drift: agreement in the audit sample is {meting['ratio'] * 100:.0f}% "
-                f"(lower bound {meting['lo'] * 100:.0f}%), below the bar of "
-                f"{float(cfg['lat']) * 100:.0f}%")
-    return ""
+    meting = overeenstemming(labels, taak, cfg["venster"], sinds=sinds)
+    lat = float(cfg["lat"])
+    if meting["n"] < drift_drempel(cfg) or meting["ratio"] >= lat:
+        return ""
+    return (f"drift: agreement in the audit sample is {_pctstr(meting['ratio'])} over "
+            f"{meting['n']} blind decisions, below the bar of {_pctstr(lat)}. The automatic "
+            f"step-back needs {int(cfg['min_n'])} decisions before it can act — you can step "
+            f"back yourself in one click.")
+
+
+def laatste_wissel(niveaus: "NiveauStore", taak: str) -> float:
+    """Wanneer wisselde deze taak voor het laatst van trede? 0.0 = nooit."""
+    rijen = niveaus.historie(taak)
+    return float(rijen[-1].get("ts", 0.0)) if rijen else 0.0
+
+
+def pas_demotie_toe(niveaus: "NiveauStore", labels: list[dict], taak: str, cfg: dict,
+                    door: str = "auto") -> str:
+    """Zet de taak een trede terug als de audit-meting daarom vraagt. Geeft de melding, of "".
+
+    Dit is de enige plek waar een niveau ZONDER menselijke klik verandert, en dat is met opzet
+    asymmetrisch: omhoog vereist een handtekening (autonomie uitbreiden is onomkeerbaar genoeg om
+    een mens te vragen), omlaag gebeurt vanzelf (autonomie intrekken is de veilige kant, en
+    wachten op een mens betekent dat een afwijkend model ondertussen doorwerkt).
+
+    Aanroepen ná het vastleggen van een label: een nieuw blind audit-oordeel is precies het
+    moment waarop het bewijs verandert."""
+    niveau = niveaus.niveau(taak)
+    moet, reden = demoveerbaar(labels, taak, niveau, cfg, sinds=laatste_wissel(niveaus, taak))
+    if not moet:
+        return ""
+    nieuw = vorige(niveau)
+    if not niveaus.zet(taak, nieuw, door=door, reden=f"auto-demotion — {reden}"):
+        return ""
+    log.warning("⤓ auto-demotie %s: %s → %s (%s)", taak, niveau, nieuw, reden)
+    return f"⤓ {TAAK_LABEL[taak]} stepped back to level {nieuw} automatically — {reden}"
 
 
 def volgende(niveau: str) -> str:

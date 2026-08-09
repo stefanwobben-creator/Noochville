@@ -10,6 +10,10 @@ lus op staat of valt:
   2. **De meting telt alleen schone labels.** Een oordeel dat ná een zichtbaar voorstel viel, mag
      de promotiepoort niet openen. De poort beslist bovendien op de Wilson-ondergrens, zodat een
      handvol toevallige treffers geen trede oplevert.
+  3. **Een trede blijft precies zolang staan als het bewijs hem zou toekennen.** De demotie-poort
+     is de letterlijke negatie van de promotie-poort. Eén test bevriest de valkuil die daaronder
+     ligt: met een lágere drempel maar dezelfde ondergrens-toets degradeert een FOUTLOZE reeks,
+     omdat de ondergrens van 21/21 goed onder een lat van 85% ligt.
 """
 from __future__ import annotations
 
@@ -240,6 +244,123 @@ def test_drift_wordt_zichtbaar_op_c_en_d():
     assert ff.drift(goed, ff.RADAR, "D", cfg) == ""
 
 
+# ── 3b. Automatische demotie — de spiegel van de promotiepoort ───────────────
+
+def test_demotiepoort_is_de_letterlijke_negatie_van_de_promotiepoort():
+    """Een trede blijft precies zolang staan als het bewijs hem zou toekennen. Dezelfde lat,
+    dezelfde min_n, dezelfde ondergrens — anders krijg je twee onverenigbare oordelen over één
+    reeks labels."""
+    cfg = dict(ff._DEFAULTS[ff.RADAR])
+    for paren in ([("keep", "keep")] * 40,                       # ruim boven
+                  [("keep", "keep")] * 27 + [("keep", "dismiss")] * 3,   # 90%, ondergrens eronder
+                  [("keep", "dismiss")] * 30):                   # ver eronder
+        labels = _labels(ff.RADAR, paren)
+        promoveert = ff.promoveerbaar(labels, ff.RADAR, "C", cfg)[0]
+        demoveert = ff.demoveerbaar(labels, ff.RADAR, "D", cfg)[0]
+        assert promoveert != demoveert, paren[:1]
+
+
+def test_foutloze_reeks_degradeert_nooit():
+    """De val in de directe formulering ('ondergrens onder de lat' bij een lagere drempel): de
+    Wilson-ondergrens van 21/21 goed is 84,5% en dus onder een lat van 85%. Een taak zou dan
+    terugvallen op perfect werk, puur omdat de steekproef klein is. Deze test bevriest dat dit
+    niet kan gebeuren — bij géén enkele steekproefgrootte."""
+    cfg = dict(ff._DEFAULTS[ff.RADAR])
+    for n in range(1, 80):
+        labels = _labels(ff.RADAR, [("keep", "keep")] * n)
+        moet, reden = ff.demoveerbaar(labels, ff.RADAR, "D", cfg)
+        assert not moet, f"{n}/{n} goed degradeerde: {reden}"
+
+
+def test_demotie_eist_hetzelfde_bewijs_als_promotie():
+    cfg = dict(ff._DEFAULTS[ff.RADAR])
+    min_n = int(cfg["min_n"])
+    # Te weinig blinde audit-oordelen → geen intrekking, ook niet als alles fout is.
+    weinig = _labels(ff.RADAR, [("keep", "dismiss")] * (min_n - 1))
+    moet, reden = ff.demoveerbaar(weinig, ff.RADAR, "D", cfg)
+    assert not moet and "not enough to withdraw the level" in reden
+    # Genoeg en onder de lat → terug.
+    slecht = _labels(ff.RADAR, [("keep", "dismiss")] * min_n)
+    moet, reden = ff.demoveerbaar(slecht, ff.RADAR, "D", cfg)
+    assert moet and "would no longer be granted" in reden
+    # Op A/B valt er geen autonomie in te trekken: de poort doet daar niets.
+    for niveau in ("A", "B"):
+        assert ff.demoveerbaar(slecht, ff.RADAR, niveau, cfg)[0] is False
+
+
+def test_waarschuwing_gaat_eerder_af_dan_de_poort():
+    """De waarschuwing dekt het gat dat de bewijs-eis openlaat: hij mag al aan op de halve
+    drempel, want hij verandert niets — hij laat de founder zelf ingrijpen."""
+    cfg = dict(ff._DEFAULTS[ff.RADAR])
+    half = ff.drift_drempel(cfg)
+    slecht = _labels(ff.RADAR, [("keep", "dismiss")] * half)
+    assert ff.demoveerbaar(slecht, ff.RADAR, "D", cfg)[0] is False    # poort nog dicht
+    melding = ff.drift(slecht, ff.RADAR, "D", cfg)                    # waarschuwing wel aan
+    assert "drift" in melding and "one click" in melding
+    # Te weinig, of gewoon goed → stil.
+    assert ff.drift(_labels(ff.RADAR, [("keep", "dismiss")] * 3), ff.RADAR, "D", cfg) == ""
+    assert ff.drift(_labels(ff.RADAR, [("keep", "keep")] * 40), ff.RADAR, "D", cfg) == ""
+
+
+def test_besmette_labels_veroorzaken_geen_demotie():
+    """Een correctie ná een zichtbaar voorstel is geen drift-bewijs — anders zou elke correctie
+    op C (waar het voorstel juist zichtbaar hoort te zijn) het niveau omlaag trekken."""
+    cfg = dict(ff._DEFAULTS[ff.RADAR])
+    besmet = _labels(ff.RADAR, [("keep", "dismiss")] * 40, ai_getoond=True)
+    assert ff.demoveerbaar(besmet, ff.RADAR, "D", cfg)[0] is False
+
+
+def test_demotie_verlaagt_een_trede_en_legt_de_reden_vast(dd):
+    niveaus = _niveaus(dd)
+    niveaus.zet(ff.RADAR, "D", door="founder", reden="meting groen")
+    for n in range(30):
+        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="keep", ai="dismiss", niveau="D")
+    melding = ff.pas_demotie_toe(niveaus, ff.alle(dd), ff.RADAR, ff.instellingen(dd, ff.RADAR))
+    assert "stepped back to level C" in melding
+    assert _niveaus(dd).niveau(ff.RADAR) == "C"
+    laatste = _niveaus(dd).historie(ff.RADAR)[-1]
+    assert laatste["door"] == "auto" and laatste["reden"].startswith("auto-demotion")
+
+
+def test_demotie_valt_niet_door_op_stil_bewijs(dd):
+    """Na een terugval telt alleen NIEUW bewijs. Zonder die grens trapt één slechte reeks de
+    taak in opeenvolgende klikken van D helemaal naar beneden."""
+    niveaus = _niveaus(dd)
+    niveaus.zet(ff.RADAR, "D", door="founder", reden="meting groen")
+    for n in range(30):
+        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="keep", ai="dismiss", niveau="D")
+    assert ff.pas_demotie_toe(niveaus, ff.alle(dd), ff.RADAR, ff.instellingen(dd, ff.RADAR))
+    assert niveaus.niveau(ff.RADAR) == "C"
+    # Tweede aanroep op exact dezelfde labels: die zijn allemaal van vóór de wissel.
+    assert ff.pas_demotie_toe(niveaus, ff.alle(dd), ff.RADAR, ff.instellingen(dd, ff.RADAR)) == ""
+    assert niveaus.niveau(ff.RADAR) == "C"
+
+
+def test_demotie_stopt_bij_b(dd):
+    """Onder B valt er niets in te trekken — daar stelt de AI alleen voor. A is een keuze."""
+    niveaus = _niveaus(dd)
+    niveaus.zet(ff.RADAR, "C", door="founder", reden="test")
+    for n in range(30):
+        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="keep", ai="dismiss", niveau="C")
+    assert ff.pas_demotie_toe(niveaus, ff.alle(dd), ff.RADAR, ff.instellingen(dd, ff.RADAR))
+    assert niveaus.niveau(ff.RADAR) == "B"
+    for n in range(30, 70):
+        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="keep", ai="dismiss", niveau="B")
+    assert ff.pas_demotie_toe(niveaus, ff.alle(dd), ff.RADAR, ff.instellingen(dd, ff.RADAR)) == ""
+    assert niveaus.niveau(ff.RADAR) == "B"
+
+
+def test_demotie_raakt_alleen_de_eigen_taak(dd):
+    niveaus = _niveaus(dd)
+    for taak in (ff.RADAR, ff.CLAIM):
+        niveaus.zet(taak, "D", door="founder", reden="test")
+    for n in range(30):
+        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="keep", ai="dismiss", niveau="D")
+    ff.pas_demotie_toe(niveaus, ff.alle(dd), ff.RADAR, ff.instellingen(dd, ff.RADAR))
+    assert _niveaus(dd).niveau(ff.RADAR) == "C"
+    assert _niveaus(dd).niveau(ff.CLAIM) == "D"
+
+
 # ── 4. De niveaus klimmen los van elkaar ─────────────────────────────────────
 
 def test_niveaus_klimmen_per_taak(dd):
@@ -340,6 +461,48 @@ def test_demotie_kan_altijd(dd):
     assert "level B" in msg and _niveaus(dd).niveau(ff.RADAR) == "B"
 
 
+def test_audit_beslissing_trekt_de_trede_vanzelf_terug(dd, monkeypatch):
+    """De hele lus: een blind audit-oordeel dat de meting onder de lat duwt, degradeert de taak
+    zonder dat de founder iets extra's hoeft te doen. Promotie vraagt een handtekening, terugval
+    niet — anders draait een afwijkend model door tot iemand toevallig kijkt."""
+    st = _st(dd)
+    _niveaus(dd).zet(ff.RADAR, "D", door="founder", reden="meting groen")
+    # 29 eerdere blinde audit-oordelen die het niet eens waren: één onder de bewijs-eis van 30.
+    for n in range(29):
+        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="keep", ai="dismiss",
+                    niveau="D", audit=True)
+    assert _niveaus(dd).niveau(ff.RADAR) == "D"                  # nog geen conclusie
+
+    monkeypatch.setattr(ff, "in_auditsteekproef", lambda taak, item, pct: True)
+    rid = _radar_signaal(st, content="beursbericht over kantoorpanden")   # voorstel: dismiss
+    _, msg = _beslis(dd, ff.RADAR, rid, "keep")                  # de 30e afwijking
+    assert "stepped back to level C" in msg
+    assert _niveaus(dd).niveau(ff.RADAR) == "C"
+
+
+def test_goede_audit_beslissing_laat_de_trede_staan(dd, monkeypatch):
+    st = _st(dd)
+    _niveaus(dd).zet(ff.RADAR, "D", door="founder", reden="meting groen")
+    for n in range(20):
+        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="keep", ai="keep",
+                    niveau="D", audit=True)
+    monkeypatch.setattr(ff, "in_auditsteekproef", lambda taak, item, pct: True)
+    rid = _radar_signaal(st, content="composteerbare hemp sneaker")       # voorstel: keep
+    _, msg = _beslis(dd, ff.RADAR, rid, "keep")
+    assert "stepped back" not in msg
+    assert _niveaus(dd).niveau(ff.RADAR) == "D"
+
+
+def test_terugval_staat_op_het_scherm(dd):
+    _niveaus(dd).zet(ff.RADAR, "C", door="founder", reden="meting groen")
+    pagina = render_founder_flow(_st(dd), dd, csrf_token="tok")
+    assert "Automatic step-back is armed" in pagina              # de poort is zichtbaar...
+    assert "0/30 needed" in pagina                               # ...inclusief waar hij op wacht
+    assert "Last change: A → C by founder" in pagina
+    # Op A is er geen autonomie om in te trekken, dus ook geen belofte erover.
+    assert pagina.count("Automatic step-back is armed") == 1
+
+
 def test_ai_werkt_de_wachtrij_alleen_af_vanaf_c(dd):
     st = _st(dd)
     _radar_signaal(st, content="hemp sneaker composteerbaar")
@@ -394,6 +557,31 @@ def test_radar_voorstel_gebruikt_het_bestaande_strategie_filter(dd):
     rijen = {i["item"]: i for i in founder_taken.wachtrij(_st(dd), dd, ff.RADAR)}
     assert rijen[raak]["ai"] == "keep" and "strategy theme" in rijen[raak]["ai_waarom"]
     assert rijen[mis]["ai"] == "dismiss"
+
+
+def test_claim_wachtrij_bevat_wat_de_scan_niet_kon_afdoen():
+    """Op productie stond de hele werklijst in een auto-status en was de wachtrij dus leeg: de
+    flow wachtte op 'open' terwijl de wekelijkse scan dat woord al lang niet meer gebruikte.
+    'Niet auto-verifieerbaar' is juist hét geval waarin een mens moet oordelen."""
+    from nooch_village import claims_db
+    assert founder_taken._wacht_op_mens("open")
+    assert founder_taken._wacht_op_mens(claims_db.NIET_VERIFIEERBAAR)
+    assert founder_taken._wacht_op_mens(claims_db.AUTO_REGRESSIE)
+    assert not founder_taken._wacht_op_mens(claims_db.AUTO_OPGELOST)
+    assert not founder_taken._wacht_op_mens("in behandeling")
+    assert not founder_taken._wacht_op_mens("live")
+
+
+def test_claim_wachtrij_leest_de_auto_statussen_uit_de_overlay(dd):
+    from nooch_village import claims_db
+    eerst = {r["item"] for r in founder_taken.wachtrij(_st(dd), dd, ff.CLAIM)}
+    assert "claim:1" in eerst
+    # De scan zet #1 op 'niet auto-verifieerbaar' → moet in de wachtrij BLIJVEN.
+    claims_db.overlay_set_status(dd, 1, claims_db.NIET_VERIFIEERBAAR, machine=True)
+    # ...en #2 op auto-opgelost → moet eruit.
+    claims_db.overlay_set_status(dd, 2, claims_db.AUTO_OPGELOST, machine=True)
+    daarna = {r["item"] for r in founder_taken.wachtrij(_st(dd), dd, ff.CLAIM)}
+    assert "claim:1" in daarna and "claim:2" not in daarna
 
 
 def test_claim_voorstel_volgt_het_stoplicht_van_de_database(dd):
