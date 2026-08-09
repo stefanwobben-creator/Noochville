@@ -85,6 +85,23 @@ def _radar_effect(st, data_dir: str, item: str, oordeel: str) -> str:
 _STOPLICHT_ROUTE = {"red": "fix", "orange": "bewijs", "escaleren": "scientist"}
 
 
+def _wacht_op_mens(status: str) -> bool:
+    """Welke werklijst-statussen horen in de wachtrij van de founder?
+
+    Niet alleen `open`. De wekelijkse scan zet zélf statussen (`claims_db.AUTO_STATUSSEN`), en
+    twee daarvan betekenen letterlijk "hier moet een mens naar kijken":
+      - `niet auto-verifieerbaar` — de byte-vergelijking kon niets vaststellen; dat is precies
+        het geval waarin een oordeel nodig is, niet het geval waarin je niets hoeft te doen.
+      - `open (regressie)` — een eerder opgeloste claim staat weer op de site.
+    Op productie stond de hele werklijst in die twee statussen, waardoor de claim-taak een lege
+    wachtrij had: de flow wachtte op 'open' terwijl de scan dat woord al lang niet meer gebruikt.
+
+    Buiten de wachtrij blijven: `in behandeling` en `live` (werk loopt of is klaar) en
+    `opgelost (auto-geverifieerd)` (de scan zag de claim van de site verdwijnen)."""
+    s = str(status or "open").strip().lower()
+    return s == "open" or s.startswith(("open (", "niet auto"))
+
+
 def _claim_items(st, data_dir: str) -> list[dict]:
     from nooch_village import claims_db
     try:
@@ -94,7 +111,7 @@ def _claim_items(st, data_dir: str) -> list[dict]:
         return []
     uit = []
     for w in db.get("werklijst", []):
-        if str(w.get("status", "open")).lower() != "open":
+        if not _wacht_op_mens(w.get("status")):
             continue
         oordeel = str(w.get("oordeel", "")).lower()
         voorstel = _STOPLICHT_ROUTE.get(oordeel)

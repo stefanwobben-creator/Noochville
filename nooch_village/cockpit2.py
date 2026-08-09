@@ -4377,6 +4377,14 @@ def _act_ff_beslis(c):
                     niveau=niveau, door=username or "?", seconden=seconden,
                     correctie=correctie, audit=audit, titel=titel)
 
+        # Een nieuw blind audit-oordeel is precies het moment waarop het bewijs verandert, dus
+        # hier wordt de demotie-poort gerekend. Omhoog vraagt een handtekening, omlaag gebeurt
+        # vanzelf: wachten op een mens betekent dat een afwijkend model ondertussen doorwerkt.
+        terugval = ff.pas_demotie_toe(niveaus, ff.alle(c.data_dir), taak,
+                                      ff.instellingen(c.data_dir, taak))
+        if terugval:
+            melding = f"{melding} · {terugval}"
+
         # Blind beslist → de onthulling hoort erbij, anders leert de founder niets van de
         # vergelijking. Hij reist als query-parameter mee; de view rendert 'm bovenaan.
         if not correctie and not ff.toont_voorstel_vooraf(niveau, audit):

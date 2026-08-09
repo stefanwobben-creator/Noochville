@@ -73,9 +73,9 @@ De POST-acties uit de `ACTIONS`-registry (cockpit2.py). Elke actie wijst naar zi
 | Actie | Handler (cockpit2.py:regel) |
 |---|---|
 | `ff_beslis` | `cockpit2.py:4339` |
-| `ff_promote` | `cockpit2.py:4389` |
-| `ff_demote` | `cockpit2.py:4413` |
-| `ff_run` | `cockpit2.py:4432` |
+| `ff_promote` | `cockpit2.py:4397` |
+| `ff_demote` | `cockpit2.py:4421` |
+| `ff_run` | `cockpit2.py:4440` |
 | `kb_new` | `cockpit2.py:3833` |
 | `kb_intake` | `cockpit2.py:3915` |
 | `kb_intake_url` | `cockpit2.py:3932` |
