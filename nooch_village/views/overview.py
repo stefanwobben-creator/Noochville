@@ -446,7 +446,8 @@ def render_admin(st: _Stores, csrf_token: str = "", msg: str = "") -> str:
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
             f"<h1>People <span class='chip'>admin</span></h1>"
             # Mensen staan hier; de AI-inwoners hebben hun eigen dossier-overzicht.
-            f"<p class='muted'><a href='/inwoners'>→ Inhabitants (AI personas)</a></p>{_banner(msg)}"
+            f"<p class='muted'><a href='/inwoners'>→ Inhabitants (AI personas)</a> · "
+            f"<a href='/founder'>→ Founder Flow (autonomy training loop)</a></p>{_banner(msg)}"
             f"<p class='muted'>Add, edit, reset password or remove people. "
             f"This page requires login.</p>{add}"
             f"<div class='c2-sec'><h3>People ({len(people)})</h3>{rows or '<span class=muted>No one yet.</span>'}</div></div>")

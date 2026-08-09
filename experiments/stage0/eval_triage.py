@@ -32,7 +32,6 @@ anders valt het script terug op `data/live_radar.json` — goedgekeurd=keep, afg
 from __future__ import annotations
 
 import json
-import math
 import os
 import re
 import sys
@@ -46,13 +45,15 @@ if _REPO not in sys.path:
 # Reference, don't copy: de missietekst leeft op één gezaghebbende plek (mission.py) en wordt
 # hier geïmporteerd, niet overgetypt. Verandert de missie, dan verandert deze prompt mee.
 from nooch_village.mission import ANCHOR_PURPOSE, strategie_relevantie  # noqa: E402
+# Het Wilson-interval leeft op één plek (nooch_village/stats.py) — dezelfde poort-statistiek die
+# de Founder Flow gebruikt om een taak te promoveren. Reference, don't copy.
+from nooch_village.stats import Z95 as Z, wilson  # noqa: E402,F401
 
 EVALSET = os.environ.get("EVALSET", os.path.join(os.path.dirname(os.path.abspath(__file__)), "evalset.jsonl"))
 RADAR = os.environ.get("RADAR", os.path.join(_REPO, "data", "live_radar.json"))
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
 MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:3b-instruct")
 OFFLOAD_POINTS = [float(x) for x in os.environ.get("OFFLOADS", "0.10,0.20,0.30").split(",")]
-Z = 1.959963984540054  # 95%
 
 # ── De prompt is bewust NEUTRAAL. Geen "when in doubt, keep" — dat duwde het model naar keep
 # terwijl we offload eisen, en dat is tegen elkaar in optimaliseren. Het model rangschikt; de
@@ -133,17 +134,6 @@ def gemini_score(prompt: str) -> float | None:
 
 
 # ── Statistiek ────────────────────────────────────────────────────────────────────────────────
-def wilson(successes: float, n: int) -> tuple[float, float]:
-    """Wilson score-interval (95%) voor een proportie. Robuust bij kleine n, anders dan normaal-benadering."""
-    if n <= 0:
-        return (0.0, 0.0)
-    p = successes / n
-    denom = 1 + Z * Z / n
-    center = (p + Z * Z / (2 * n)) / denom
-    half = (Z / denom) * math.sqrt(p * (1 - p) / n + Z * Z / (4 * n * n))
-    return (max(0.0, center - half), min(1.0, center + half))
-
-
 def dismiss_precision_at_k(scores: list[float], labels: list[int], k: int) -> tuple[float, int]:
     """Veeg de k laagst-scorende items weg; geef (verwacht aantal terecht weggeveegd, k).
 

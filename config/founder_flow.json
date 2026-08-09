@@ -1,0 +1,34 @@
+{
+  "_over": "De lat per taak van de Founder Flow. Mens-bewerkbaar, net als strategy.json — dit is een instelling van de founder over zijn eigen werk, geen governance-object. Ontbrekende of onleesbare waarden vallen terug op de defaults in nooch_village/founder_flow.py; een kapot bestand kan de lat dus nooit stiekem verlagen.",
+  "_velden": {
+    "lat": "Vereiste ondergrens (Wilson-95%) van de overeenstemming vóór promotie. Zelfde poort-statistiek als de Stage-0-dismiss-precision: er wordt op de ondergrens beslist, niet op het punt.",
+    "min_n": "Minimaal aantal held-out (blind tot stand gekomen) labels. Daaronder zegt een percentage niets.",
+    "venster": "Hoeveel van de recentste held-out labels meetellen. Kleiner venster = drift sneller zichtbaar, meting ruiziger.",
+    "audit_pct": "Welk deel van de items op niveau C/D blind aan de mens wordt voorgelegd. Nooit 0: dit is de enige schone meetreeks zodra de AI zelf werkt.",
+    "dag_cap": "Hoeveel items de dagelijkse (korte) ronde per taak toont. De weekronde toont alles.",
+    "drempel": "Alleen radar_triage: vanaf hoeveel geraakte strategie-thema's het lexicale filter 'keep' voorstelt."
+  },
+
+  "radar_triage": {
+    "lat": 0.85,
+    "min_n": 30,
+    "venster": 60,
+    "audit_pct": 20,
+    "dag_cap": 5,
+    "drempel": 1
+  },
+  "claim_oordeel": {
+    "lat": 0.90,
+    "min_n": 20,
+    "venster": 60,
+    "audit_pct": 25,
+    "dag_cap": 3
+  },
+  "content_goedkeuring": {
+    "lat": 0.90,
+    "min_n": 15,
+    "venster": 60,
+    "audit_pct": 30,
+    "dag_cap": 3
+  }
+}

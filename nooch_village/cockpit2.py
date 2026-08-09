@@ -267,6 +267,7 @@ from nooch_village.views.bronnen import render_bronnen
 from nooch_village.views.skills import render_skills
 from nooch_village.views.search import render_search, render_search_fragment
 from nooch_village.views.claims import render_claims, render_rapport, rol_voor
+from nooch_village.views.founder_flow import render_founder_flow
 from nooch_village.views.inwoners import render_inwoner, render_inwoners
 from nooch_village.views.kennislaag import render_kennislaag
 from nooch_village.views.codie import render_codie
@@ -4324,7 +4325,142 @@ def _act_ws_approve(c):
     return _act_ws_curate(c, "approved", "✓ “{word}” geactiveerd (approved)")
 
 
+# ── Founder Flow: de graduele-autonomie-trainingslus ─────────────────────────────────────────
+# Alle takken hieronder: AUTHZ: anchor-lead — de flow bepaalt hoeveel de AI zelfstandig mag doen
+# aan radar-triage, claim-oordelen en content-goedkeuring. Dat is een org-brede bevoegdheid (het
+# raakt drie domeinen tegelijk) en het is de founder-rol die hem uitoefent, dus dezelfde poort als
+# persona-beheer. Fail-closed via _anchor_gate; guest (auth uit) mag alles.
+
+def _ff_niveaus(c):
+    from nooch_village.founder_flow import NIVEAU_BESTAND, NiveauStore
+    return NiveauStore(os.path.join(c.data_dir, NIVEAU_BESTAND))
+
+
+def _act_ff_beslis(c):
+        # AUTHZ: anchor-lead — zie het blok-comment hierboven.
+        from nooch_village import founder_flow as ff
+        from nooch_village import founder_taken
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _anchor_gate(st, username)
+        if _deny:
+            return nxt, _deny
+        taak, item, oordeel = g("taak"), g("item"), g("oordeel")
+        if taak not in ff.TAKEN or oordeel not in ff.OORDELEN.get(taak, ()):
+            return nxt, "✗ unknown task or judgement"
+        niveaus = _ff_niveaus(c)
+        niveau = niveaus.niveau(taak)
+        correctie = g("correctie") == "1"
+        cfg = ff.instellingen(c.data_dir, taak)
+        audit = ff.in_auditsteekproef(taak, item, cfg.get("audit_pct", 0))
+
+        # Het AI-voorstel komt ALTIJD van de server, nooit uit het formulier. Een voorstel dat de
+        # client meestuurt is een voorstel dat de client kan zetten, en dan meet de promotiepoort
+        # niets. Bij een eerste beslissing rekent de wachtrij het opnieuw uit; bij een correctie
+        # staat het al in de log (het item is dan uit de wachtrij verdwenen).
+        labels = ff.alle(c.data_dir)
+        if correctie:
+            eerder = ff.laatste_per_item(labels, taak).get(item, {})
+            ai, titel = eerder.get("ai"), eerder.get("titel", "")
+        else:
+            bron = founder_taken.item_van(st, c.data_dir, taak, item)
+            if bron is None:
+                return nxt, "✗ this item is no longer in the queue"
+            ai, titel = bron.get("ai"), bron.get("titel", "")
+
+        melding = founder_taken.voer_uit(st, c.data_dir, taak, item, oordeel)
+        try:
+            seconden = max(0.0, time.time() - float(g("getoond") or 0))
+        except (TypeError, ValueError):
+            seconden = 0.0
+        ff.leg_vast(c.data_dir, taak=taak, item=item, mens=oordeel, ai=ai,
+                    ai_getoond=ff.toont_voorstel_vooraf(niveau, audit) or correctie,
+                    niveau=niveau, door=username or "?", seconden=seconden,
+                    correctie=correctie, audit=audit, titel=titel)
+
+        # Blind beslist → de onthulling hoort erbij, anders leert de founder niets van de
+        # vergelijking. Hij reist als query-parameter mee; de view rendert 'm bovenaan.
+        if not correctie and not ff.toont_voorstel_vooraf(niveau, audit):
+            sleutel = urllib.parse.quote(f"{taak}|{item}|{oordeel}|{ai or ''}|{niveau}")
+            scheiding = "&" if "?" in nxt else "?"
+            return f"{nxt}{scheiding}onthuld={sleutel}", melding
+        return nxt, melding
+
+
+def _act_ff_promote(c):
+        # AUTHZ: anchor-lead — een trede omhoog breidt uit wat de AI zonder mens mag doen; die
+        # handtekening is mensenwerk, ook als de meting groen staat.
+        from nooch_village import founder_flow as ff
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _anchor_gate(st, username)
+        if _deny:
+            return nxt, _deny
+        taak = g("taak")
+        if taak not in ff.TAKEN:
+            return nxt, "✗ unknown task"
+        niveaus = _ff_niveaus(c)
+        niveau = niveaus.niveau(taak)
+        cfg = ff.instellingen(c.data_dir, taak)
+        # Fail-closed: de poort wordt hier opnieuw gerekend. Dat de knop zichtbaar was, is geen
+        # bewijs dat hij dat nog steeds mag zijn — de meting kan tussen render en klik gezakt zijn.
+        kan, reden = ff.promoveerbaar(ff.alle(c.data_dir), taak, niveau, cfg)
+        if not kan:
+            return nxt, f"✗ promotion blocked: {reden}"
+        nieuw = ff.volgende(niveau)
+        niveaus.zet(taak, nieuw, door=username or "?", reden=reden)
+        return nxt, f"✓ {ff.TAAK_LABEL[taak]} → level {nieuw} ({reden})"
+
+
+def _act_ff_demote(c):
+        # AUTHZ: anchor-lead — een trede terug is de rem op drift; altijd toegestaan, nooit gemeten.
+        from nooch_village import founder_flow as ff
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _anchor_gate(st, username)
+        if _deny:
+            return nxt, _deny
+        taak = g("taak")
+        if taak not in ff.TAKEN:
+            return nxt, "✗ unknown task"
+        niveaus = _ff_niveaus(c)
+        niveau = niveaus.niveau(taak)
+        if niveau == "A":
+            return nxt, "already at A"
+        nieuw = ff.vorige(niveau)
+        niveaus.zet(taak, nieuw, door=username or "?", reden=g("reden") or "stepped back by the founder")
+        return nxt, f"↩ {ff.TAAK_LABEL[taak]} → level {nieuw}"
+
+
+def _act_ff_run(c):
+        # AUTHZ: anchor-lead — dit past AI-voorstellen echt toe (radar wegvegen, bordtaken,
+        # @rol-berichten). Alleen op niveau C/D, en nooit op de auditsteekproef.
+        from nooch_village import founder_flow as ff
+        from nooch_village import founder_taken
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _anchor_gate(st, username)
+        if _deny:
+            return nxt, _deny
+        taak = g("taak")
+        if taak not in ff.TAKEN:
+            return nxt, "✗ unknown task"
+        niveau = _ff_niveaus(c).niveau(taak)
+        if niveau not in ("C", "D"):
+            return nxt, "✗ the AI only works through the queue from level C"
+        cfg = ff.instellingen(c.data_dir, taak)
+        verslag = founder_taken.verwerk_automatisch(st, c.data_dir, taak, niveau, cfg)
+        # Wat is blijven liggen wordt genoemd, niet stil weggelaten: een melding die alleen het
+        # aantal verwerkte items geeft, leest als "alles gedaan" terwijl dat niet zo is.
+        staart = ""
+        if verslag["audit"]:
+            staart += f" · {verslag['audit']} held back for your audit"
+        if verslag["zonder_voorstel"]:
+            staart += f" · {verslag['zonder_voorstel']} skipped (no proposal)"
+        return nxt, f"🤖 the AI handled {verslag['verwerkt']} item(s){staart}"
+
+
 ACTIONS = {
+    "ff_beslis": _act_ff_beslis,
+    "ff_promote": _act_ff_promote,
+    "ff_demote": _act_ff_demote,
+    "ff_run": _act_ff_run,
     "kb_new": _act_kb_new,
     "kb_intake": _act_kb_intake,
     "kb_intake_url": _act_kb_intake_url,
@@ -4761,6 +4897,14 @@ def make_handler(data_dir: str, csrf_token: str,
                 return
             if path == "/admin":
                 self._send(render_admin(st, csrf_token=effective_csrf, msg=(qs.get("msg") or [""])[0]))
+                return
+            if path == "/founder":
+                # De trainingslus van de founder: drie taken, elk met een eigen rijpheidsniveau.
+                # Achter dezelfde sessie-auth als de rest; de schrijfacties gaan door _anchor_gate.
+                self._send(render_founder_flow(
+                    st, data_dir, csrf_token=effective_csrf,
+                    msg=(qs.get("msg") or [""])[0], ritme=(qs.get("ritme") or ["dag"])[0],
+                    onthuld=(qs.get("onthuld") or [""])[0]))
                 return
             if path == "/_patterns":
                 self._send(render_patterns(effective_csrf))
