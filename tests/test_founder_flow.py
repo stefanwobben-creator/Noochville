@@ -14,6 +14,7 @@ lus op staat of valt:
 from __future__ import annotations
 
 import time
+import urllib.parse
 
 import pytest
 
@@ -130,6 +131,44 @@ def test_auditsteekproef_blijft_blind_op_d(dd, monkeypatch):
     pagina = render_founder_flow(_st(dd), dd, csrf_token="tok")
     assert "audit sample" in pagina
     assert "The AI proposes" not in pagina
+
+
+def test_onthulling_komt_pas_na_de_beslissing(dd):
+    """De tegenhanger van blind-eerst: het voorstel is er wél, maar pas ná de klik.
+
+    Zonder deze onthulling leert de founder niets van de vergelijking en is blind-eerst alleen
+    maar een handicap. De 'neem het antwoord van de AI' -knop is de correctie op één klik."""
+    st = _st(dd)
+    rid = _radar_signaal(st, content="hemp sneaker composteerbaar")
+    nxt, _ = _beslis(dd, ff.RADAR, rid, "dismiss")
+    onthuld = urllib.parse.unquote(
+        urllib.parse.parse_qs(nxt.split("?", 1)[1])["onthuld"][0])
+    assert onthuld.startswith(f"{ff.RADAR}|{rid}|dismiss|keep|")
+
+    pagina = render_founder_flow(_st(dd), dd, csrf_token="tok", onthuld=onthuld)
+    assert "You: dismiss · AI: keep" in pagina
+    assert "disagreed" in pagina
+    # Op A beslist de mens en niemand anders: geen overname-knop.
+    assert "take the AI&#x27;s answer instead" not in pagina
+
+    _niveaus(dd).zet(ff.RADAR, "B", door="t", reden="test")
+    op_b = render_founder_flow(_st(dd), dd, csrf_token="tok",
+                               onthuld=f"{ff.RADAR}|{rid}|dismiss|keep|B")
+    assert "answer instead" in op_b and "ff_beslis" in op_b
+
+
+def test_onthulling_bij_eensgezindheid_en_bij_rommel(dd):
+    eens = render_founder_flow(_st(dd), dd, csrf_token="tok",
+                               onthuld=f"{ff.RADAR}|x|keep|keep|B")
+    assert "agreed" in eens and "answer instead" not in eens
+    # Zonder voorstel is er niets te vergelijken — dat wordt gezegd, niet verzwegen.
+    geen = render_founder_flow(_st(dd), dd, csrf_token="tok",
+                               onthuld=f"{ff.RADAR}|x|keep||B")
+    assert "no proposal for this item" in geen
+    # Onleesbare of gemanipuleerde parameter → geen kaart, geen crash.
+    for rommel in ("", "rommel", f"{ff.RADAR}|x|verzonnen|keep|B", "verzonnen|x|keep|keep|B"):
+        pagina = render_founder_flow(_st(dd), dd, csrf_token="tok", onthuld=rommel)
+        assert "You:" not in pagina
 
 
 def test_auditsteekproef_is_deterministisch():
