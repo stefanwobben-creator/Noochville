@@ -121,75 +121,28 @@ def tijdstip(item: dict) -> float:
 
 # ── Vectoren ─────────────────────────────────────────────────────────────────────────────────
 
-# De embed-API neemt geen willekeurig grote batch aan — de kennisbank-backfill werkt daarom in
-# groepjes van 20 onder een verzoeklimiet. Eén call met 414 teksten faalt, en omdat `embed_many`
-# fail-soft is zou dat STIL neerkomen op lexicaal clusteren terwijl het scherm semantisch belooft.
-_BATCH = 20
-# Hoeveel NIEUWE signalen één render hoogstens embedt. Een page-load mag geen lange API-sessie
-# worden; de bulk hoort uit `python -m nooch_village.village radar_embed` te komen. In de dagelijkse
-# situatie (een handvol verse signalen) is deze cap nooit in beeld.
+# Batchen, de cap per render en het slot bij het schrijven leven sinds de kennislaag-grounding in
+# `kennis_embeddings.vectors_for` — één route voor beide corpora (radar-signalen en de kennislaag),
+# met dezelfde lessen erin. Hier staat alleen nog wat radar-specifiek is: welke tekst en welke index.
 STANDAARD_EMBED_CAP = 60
 
 
 def _vectoren(items: list[dict], data_dir: str, embed_fn=None,
-              cap: int = STANDAARD_EMBED_CAP, batch: int = _BATCH) -> dict[str, list[float]]:
-    """Vector per signaal-id, met een eigen index naast de radar (hergebruikt `EmbeddingStore`).
-
-    Alleen wat ontbreekt of veranderde wordt geëmbed, in batches en met een plafond per aanroep.
-    Fail-soft: geen sleutel, geen SDK of een API-fout → de vectoren die er al waren, en de caller
-    beslist wat hij daarmee doet. `cap=0` betekent: niets nieuws embedden, alleen lezen."""
+              cap: int = STANDAARD_EMBED_CAP, batch: int = 20) -> dict[str, list[float]]:
+    """Vector per signaal-id, met een eigen index naast de radar. Fail-soft: geen sleutel, geen SDK
+    of een API-fout → de vectoren die er al waren, en de caller clustert lexicaal."""
     try:
-        from nooch_village.kennis_embeddings import EmbeddingStore, _hash
-        from nooch_village.kennis_embeddings import embed_many as _standaard
+        from nooch_village.kennis_embeddings import vectors_for
     except Exception as e:                           # noqa: BLE001 — geen SDK is een geldige toestand
         log.info("geen embedding-laag beschikbaar (%s) — radar clustert lexicaal", e)
         return {}
-    embed_fn = embed_fn or _standaard
-    pad = os.path.join(data_dir, INDEX_BESTAND)
-    try:
-        store = EmbeddingStore(pad)
-    except Exception as e:                           # noqa: BLE001
-        log.warning("radar-embedding-index onleesbaar: %s", e)
-        return {}
-
-    ontbreekt = [i for i in items if store.hash_of(i["id"]) != _hash(signaaltekst(i))]
-    todo = ontbreekt[:max(0, int(cap))]
-    verzameld: list[tuple[dict, list[float]]] = []
-    for start in range(0, len(todo), max(1, int(batch))):
-        groep = todo[start:start + max(1, int(batch))]
-        try:
-            verse = embed_fn([signaaltekst(i) for i in groep])
-        except Exception as e:                       # noqa: BLE001 — nooit fataal
-            log.warning("radar-embeddings mislukt (batch %d): %s", start // batch, e)
-            break                                    # verder proberen kost quota zonder uitzicht
-        verzameld += [(it, vec) for it, vec in zip(groep, verse) if vec]
-
-    if verzameld:
-        # Deze index heeft TWEE schrijvers: de render (die per page-load bijwerkt) en de bulk-vuller
-        # `vul_index`. `EmbeddingStore.save()` schrijft naar een vaste `.tmp` en doet dan os.replace,
-        # zonder slot — twee processen tegelijk laten elkaars tmp verdwijnen (waargenomen op prod:
-        # "No such file or directory: radar_embeddings.json.tmp") en overschrijven elkaars vectoren.
-        # Daarom: embedden buiten het slot (dat duurt seconden), en het lezen-muteren-schrijven
-        # eronder, met een VERSE store zodat de ander zijn werk niet kwijtraakt. Zelfde discipline
-        # als `util.JsonStore`, met de primitieven die er al zijn.
-        from nooch_village.util import file_lock
-        try:
-            with file_lock(pad):
-                vers = EmbeddingStore(pad)
-                for it, vec in verzameld:
-                    vers.upsert(it["id"], signaaltekst(it), vec)
-                vers.save()
-                store = vers
-        except Exception as e:                       # noqa: BLE001
-            log.warning("radar-embedding-index niet weggeschreven: %s", e)
-    if len(ontbreekt) > len(todo):
+    uit = vectors_for(items, os.path.join(data_dir, INDEX_BESTAND), signaaltekst,
+                      cap=cap, batch=batch, embed_fn=embed_fn)
+    if len(uit) < len(items):
         log.info("radar-embeddings: %d van de %d nog niet geïndexeerd (cap %d per render) — "
                  "draai `village radar_embed` om de index in één keer te vullen",
-                 len(ontbreekt) - len(todo), len(items), cap)
-
-    ruw = dict(store.items())
-    return {i["id"]: ruw[i["id"]]["v"] for i in items
-            if i["id"] in ruw and ruw[i["id"]].get("v")}
+                 len(items) - len(uit), len(items), cap)
+    return uit
 
 
 # ── Clusteren ────────────────────────────────────────────────────────────────────────────────
@@ -337,7 +290,7 @@ class ClusterBesluitStore(JsonStore):
         return True
 
 
-def vul_index(items: list[dict], data_dir: str, *, batch: int = _BATCH, per_min: int = 90,
+def vul_index(items: list[dict], data_dir: str, *, batch: int = 20, per_min: int = 90,
               sleep_fn=None, log_fn=print, embed_fn=None) -> dict:
     """Vul de radar-embedding-index in één keer, getemporiseerd — de tegenhanger van de
     kennisbank-backfill (`kennis_embeddings.index_backfill`), voor radar-signalen.

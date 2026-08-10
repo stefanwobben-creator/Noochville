@@ -1457,7 +1457,7 @@ def _act_proj_regen_doc(c):
         ok = synthesize_einddocument(
             project_docs=st.project_docs, deliverables=st.deliverables, projects=st.projects,
             personas=st.personas, record=rec, settings={}, project=p, force_final=True,
-            log=logging.getLogger("village.cockpit_regen"))
+            log=logging.getLogger("village.cockpit_regen"), data_dir=c.data_dir)
         return nxt, ("📄 rapport opnieuw gegenereerd" if ok
                      else "no report generated (no deliverables or no LLM key)")
 

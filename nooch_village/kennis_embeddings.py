@@ -249,3 +249,88 @@ def index_backfill(notes, store, *, batch: int = 20, per_min: int = 90,
             sleep_fn(pauze)
     return {"actief": len(actief), "geindexeerd": gedaan, "mislukt": mislukt,
             "verwijderd": len(weg), "index_omvang": len(store)}
+
+
+# ── Generieke index-vulling + semantische rangschikking ──────────────────────────────────────
+# Geëxtraheerd uit radar_clusters._vectoren (dat was de eerste gebruiker). Nu twee corpora deze
+# route nodig hebben — radar-signalen en de kennislaag — hoort hij op één plek te staan, met de
+# lessen die de radar-uitrol opleverde erin: batchen (één call met honderden teksten faalt), een
+# cap per aanroep (een page-load is geen API-sessie) en schrijven onder een slot (twee schrijvers
+# wisten elkaars vectoren).
+
+BATCH = 20
+EMBED_CAP = 60
+
+
+def vectors_for(items, index_path: str, tekst_fn, *, id_fn=None, cap: int = EMBED_CAP,
+                batch: int = BATCH, embed_fn=None) -> dict:
+    """Vector per item-id, met een index op `index_path`. Embedt alleen wat ontbreekt of veranderde.
+
+    `tekst_fn(item) -> str` levert de te embedden tekst, `id_fn(item) -> str` de sleutel (default:
+    `item["id"]`). Fail-soft: geen sleutel, geen SDK of een API-fout → de vectoren die er al waren.
+    `cap=0` = niets nieuws embedden, alleen lezen."""
+    id_fn = id_fn or (lambda i: i["id"])
+    try:
+        store = EmbeddingStore(index_path)
+    except Exception as e:                               # noqa: BLE001
+        log.warning("embedding-index onleesbaar (%s): %s", index_path, e)
+        return {}
+    embed_fn = embed_fn or embed_many
+
+    ontbreekt = [i for i in items if store.hash_of(id_fn(i)) != _hash(tekst_fn(i))]
+    todo = ontbreekt[:max(0, int(cap))]
+    verzameld = []
+    for start in range(0, len(todo), max(1, int(batch))):
+        groep = todo[start:start + max(1, int(batch))]
+        try:
+            verse = embed_fn([tekst_fn(i) for i in groep])
+        except Exception as e:                           # noqa: BLE001 — nooit fataal
+            log.warning("embeddings mislukt (batch %d, %s): %s", start // batch, index_path, e)
+            break                                        # doorgaan kost quota zonder uitzicht
+        verzameld += [(i, v) for i, v in zip(groep, verse) if v]
+
+    if verzameld:
+        # Schrijven onder het slot met een VERSE store: er kan een tweede schrijver zijn (render
+        # naast bulk-vuller), en `EmbeddingStore.save()` heeft zelf geen slot.
+        from nooch_village.util import file_lock
+        try:
+            with file_lock(index_path):
+                vers = EmbeddingStore(index_path)
+                for i, v in verzameld:
+                    vers.upsert(id_fn(i), tekst_fn(i), v)
+                vers.save()
+                store = vers
+        except Exception as e:                           # noqa: BLE001
+            log.warning("embedding-index niet weggeschreven (%s): %s", index_path, e)
+
+    ruw = dict(store.items())
+    return {id_fn(i): ruw[id_fn(i)]["v"] for i in items
+            if id_fn(i) in ruw and ruw[id_fn(i)].get("v")}
+
+
+def rank_semantisch(zoektekst: str, items, index_path: str, tekst_fn, *, limit: int = 5,
+                    drempel: float = 0.55, id_fn=None, cap: int = EMBED_CAP,
+                    embed_fn=None, embed_one=None) -> list | None:
+    """De `limit` items die qua BETEKENIS het dichtst bij `zoektekst` liggen, sterkste eerst.
+
+    Geeft **None** als semantisch rangschikken niet kon (geen sleutel, geen index, of niet elk item
+    heeft een vector) — dan hoort de aanroeper terug te vallen op zijn lexicale weg. Bewust None en
+    niet een lege lijst: "geen semantiek beschikbaar" is iets anders dan "niets gevonden", en dat
+    verschil bepaalt of je een terugval nodig hebt.
+
+    Waarom volledigheid geëist wordt: een item zonder vector scoort 0 tegen alles en zou stelselmatig
+    onderaan belanden — dan is de ranglijst stil bevooroordeeld richting wat toevallig geïndexeerd is."""
+    items = list(items or [])
+    if not items or not (zoektekst or "").strip():
+        return None
+    vecs = vectors_for(items, index_path, tekst_fn, id_fn=id_fn, cap=cap, embed_fn=embed_fn)
+    id_fn = id_fn or (lambda i: i["id"])
+    if len(vecs) != len(items):
+        return None
+    q = (embed_one or embed)(zoektekst)
+    if not q:
+        return None
+    gescoord = [(cosine(q, vecs[id_fn(i)]), i) for i in items]
+    gescoord = [(s, i) for s, i in gescoord if s >= drempel]
+    gescoord.sort(key=lambda t: -t[0])
+    return [i for _, i in gescoord[:limit]]
