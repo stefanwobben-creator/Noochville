@@ -6,9 +6,15 @@ die er al was, en elk effect loopt via een pad dat er al was. Wat hier bijkomt i
 
 | Taak                | Wachtrij                                  | Voorstel komt uit                        |
 |---------------------|-------------------------------------------|------------------------------------------|
-| radar_triage        | `RadarStore.all_pending()`                | `mission.strategie_relevantie` (de lexicale Stage-0-baseline) |
-| claim_oordeel       | werklijst-items met status `open`         | het stoplicht dat de claims-database zelf al aan de claim gaf |
+| radar_triage        | de individueel opgekomen NIEUWE signalen uit `RadarStore.all_pending()` | `radar_nieuwheid` (bovenop `weten_we_dit_al`) |
+| claim_oordeel       | werklijst-items die op een mens wachten   | het stoplicht dat de claims-database zelf al aan de claim gaf |
 | content_goedkeuring | Field Notes + vastgelegde bewijs-records  | `grounding.ground_field_note` resp. `claims_db.check_tekst`   |
+
+De radar-taak draait sinds de clustering-omslag op NIEUWHEID, niet op relevantie. De relevantie-
+vraag is overgenomen door iets dat geen oordeel nodig heeft: een onderwerp dat uit zeven
+verschillende bronnen komt is aantoonbaar in beweging. Wat overblijft voor de mens is de vraag die
+hij feitelijk stelt bij elk signaal — "hebben we dit al?" — en dat is precies het label dat de AI
+leert. Zie `radar_clusters` (de berekening) en `radar_nieuwheid` (het oordeel).
 
 Het voorstel is dus nergens een nieuw model, een nieuwe prompt of een nieuwe API-aanroep. Dat is
 opzet: de lus meet of het OORDEEL dat we al hebben de founder kan vervangen. Blijkt van niet, dan
@@ -21,6 +27,7 @@ import glob
 import json
 import logging
 import os
+import time
 
 from nooch_village import founder_flow as ff
 
@@ -35,44 +42,101 @@ FIELD_NOTE_ROL = "website_watcher"            # schrijft de dagelijkse Field Not
 
 # ── 1. Radar-triage ──────────────────────────────────────────────────────────────────────────
 
-def _radar_items(st, data_dir: str) -> list[dict]:
-    drempel = int(ff.instellingen(data_dir, ff.RADAR).get("drempel", 1))
+def _radar_items(st, data_dir: str, niveau: str = "A") -> list[dict]:
+    """De NIEUWHEIDS-wachtrij: de openstaande signalen waarover de founder oordeelt.
+
+    Twee mechanismen, strikt gescheiden en in deze volgorde:
+      1. `radar_clusters` groept de openstaande signalen per onderwerp (berekend, geen oordeel).
+      2. `radar_nieuwheid` beoordeelt per signaal of de INHOUD nieuw is, bínnen dat cluster.
+
+    De harde regel zit in stap 2: een nieuw feit in een bekend onderwerp komt hier altijd boven,
+    want de check kijkt naar inhoud en niet naar onderwerp.
+
+    **Blind-eerst bepaalt WELKE signalen in de wachtrij staan.** Op A/B staan ze er allemaal, ook
+    de signalen die de AI als bekend beoordeelde. Dat is geen slordigheid maar een eis: zou de
+    wachtrij daar al gefilterd zijn op het AI-oordeel, dan verraadt het lidmaatschap van de
+    wachtrij het voorstel, en zou élk blind label per constructie instemmen. De meting zou dan
+    100% overeenstemming tonen zonder ooit iets gemeten te hebben.
+
+    Pas op C/D vouwt de AI echt in — daar is zijn oordeel de default en mag het zichtbaar zijn.
+    Wat invouwt is niet weg: het staat onder zijn cluster in de trend-view, blijft opvraagbaar en
+    telt gewoon mee in de bronnen-teller."""
+    beeld = radar_beeld(st, data_dir)
+    kandidaten = beeld["nieuw"] if niveau in ("C", "D") else beeld["open"]
     uit = []
-    for it in st.radar.all_pending():
-        tekst = f"{it.get('content', '')} {it.get('rationale', '')}"
-        voorstel, waarom = _radar_voorstel(tekst, drempel)
+    for it in kandidaten:
+        oordeel = beeld["nieuwheid"].get(it["id"], {})
         uit.append({
             "item": it["id"],
             "titel": it.get("content", "")[:160],
             "detail": it.get("rationale", "")[:240],
-            "context": it.get("feed", "") or it.get("source", ""),
+            "context": (f"{it.get('source') or it.get('feed') or ''}"
+                        f" · topic: {beeld['cluster_van'].get(it['id'], '')[:60]}"),
             "link": it.get("link", ""),
-            "ai": voorstel,
-            "ai_waarom": waarom,
+            "ai": ("nieuw" if oordeel.get("nieuw", True) else "bekend"),
+            "ai_waarom": oordeel.get("reden", ""),
         })
     return uit
 
 
-def _radar_voorstel(tekst: str, drempel: int) -> tuple[str, str]:
-    """Het lexicale strategie-filter uit `mission.py` — exact de baseline waartegen Stage-0 elk
-    model afzet. Raakt het signaal minstens `drempel` strategie-thema's, dan is het bewaren waard.
+def radar_beeld(st, data_dir: str) -> dict:
+    """Het gedeelde radar-beeld: clusters met trend, plus de nieuwheid per signaal.
 
-    Bewust deterministisch: dit draait op elke page-load, en een voorstel dat per keer verschilt
-    is geen voorstel maar een dobbelsteen."""
-    from nooch_village.mission import strategie_relevantie
-    score, labels = strategie_relevantie(tekst or "")
-    if score >= max(1, drempel):
-        return "keep", f"touches {score} strategy theme(s): {', '.join(labels[:3])}"
-    return "dismiss", "touches no strategy theme in the mission lexicon"
+    Eén plek, want de trend-view en de nieuwheids-wachtrij moeten hetzelfde zien — twee losse
+    berekeningen zouden uit elkaar kunnen lopen en dan wijst het scherm naar een cluster dat in de
+    andere view niet bestaat.
+
+    Fail-soft over de hele linie: geen embeddings → lexicale clustering; geen geheugen → alles
+    nieuw. Een signaal verdwijnt nooit doordat een laag faalde."""
+    from nooch_village import radar_clusters, radar_nieuwheid
+
+    cfg = ff.instellingen(data_dir, ff.RADAR)
+    venster = int(cfg.get("cluster_venster_dagen") or radar_clusters.STANDAARD_VENSTER_DAGEN)
+    drempel = float(cfg.get("cluster_drempel") or 0.0) or None
+
+    open_items = st.radar.all_pending()
+    # De trend leest de HELE radar binnen twee vensters, niet alleen de openstaande signalen: een
+    # onderwerp dat vorige maand al vijf keer langskwam en nu weer is pas als trend te zien als de
+    # afgehandelde signalen meetellen. De kaarten blijven wél alleen de openstaande.
+    nu = time.time()
+    breedte = max(1, venster) * 86400 * 2
+    historie = [i for i in st.radar.all_items()
+                if nu - radar_clusters.tijdstip(i) < breedte]
+    open_ids = {i["id"] for i in open_items}
+    alles = list(open_items) + [i for i in historie if i["id"] not in open_ids]
+
+    clusters = radar_clusters.cluster_signalen(alles, data_dir=data_dir, drempel=drempel)
+    clusters = radar_clusters.met_trend(clusters, nu=nu, venster_dagen=venster)
+
+    nieuwheid = radar_nieuwheid.beoordeel_items(open_items, data_dir=data_dir)
+    cluster_van: dict[str, str] = {}
+    nieuw: list[dict] = []
+    for c in clusters:
+        c["open"] = [i for i in c["leden"] if i["id"] in open_ids]
+        for lid in c["leden"]:
+            cluster_van[lid["id"]] = c["onderwerp"]
+        c["nieuw"] = [i for i in c["open"] if nieuwheid.get(i["id"], {}).get("nieuw", True)]
+        c["ingevouwen"] = [i for i in c["open"] if i not in c["nieuw"]]
+        nieuw.extend(c["nieuw"])
+    nieuw.sort(key=lambda i: radar_clusters.tijdstip(i), reverse=True)
+    open_gesorteerd = sorted(open_items, key=lambda i: radar_clusters.tijdstip(i), reverse=True)
+    return {"clusters": clusters, "nieuw": nieuw, "open": open_gesorteerd,
+            "nieuwheid": nieuwheid, "cluster_van": cluster_van, "venster": venster,
+            "modus": clusters[0]["modus"] if clusters else "lexicaal"}
 
 
 def _radar_effect(st, data_dir: str, item: str, oordeel: str) -> str:
-    """Keep/dismiss via dezelfde statuswissel die de radar-knoppen op /signals doen."""
+    """Het oordeel gaat over nieuwheid; het effect blijft de bestaande statuswissel van de radar.
+
+    nieuw   → goedgekeurd: het signaal gaat het archief in en kan naar de kennisbank.
+    bekend  → afgewezen: het vouwt in zijn cluster. Niet weg — `RadarStore` bewaart het, de
+              bronnen-teller telt het mee en de trend-view klapt het open."""
     it = st.radar.get(item)
     if it is None:
         return "✗ unknown radar signal"
-    st.radar.set_status(item, "goedgekeurd" if oordeel == "keep" else "afgewezen")
-    return "✓ kept — in the archive" if oordeel == "keep" else "🗑 dismissed"
+    st.radar.set_status(item, "goedgekeurd" if oordeel == "nieuw" else "afgewezen")
+    return ("✓ new — kept in the archive" if oordeel == "nieuw"
+            else "↳ folded into its topic cluster (still visible there)")
 
 
 # ── 2. Claim-oordeel ─────────────────────────────────────────────────────────────────────────
@@ -102,7 +166,7 @@ def _wacht_op_mens(status: str) -> bool:
     return s == "open" or s.startswith(("open (", "niet auto"))
 
 
-def _claim_items(st, data_dir: str) -> list[dict]:
+def _claim_items(st, data_dir: str, niveau: str = "A") -> list[dict]:
     from nooch_village import claims_db
     try:
         db = claims_db.load(data_dir=data_dir)
@@ -301,7 +365,7 @@ def _bewijs_entries(st, data_dir: str, maximaal: int = 10) -> list[dict]:
     return uit
 
 
-def _content_items(st, data_dir: str) -> list[dict]:
+def _content_items(st, data_dir: str, niveau: str = "A") -> list[dict]:
     return _field_notes(data_dir) + _bewijs_entries(st, data_dir)
 
 
@@ -325,7 +389,8 @@ _WACHTRIJEN = {ff.RADAR: _radar_items, ff.CLAIM: _claim_items, ff.CONTENT: _cont
 _EFFECTEN = {ff.RADAR: _radar_effect, ff.CLAIM: _claim_effect, ff.CONTENT: _content_effect}
 
 
-def wachtrij(st, data_dir: str, taak: str, labels: list[dict] | None = None) -> list[dict]:
+def wachtrij(st, data_dir: str, taak: str, labels: list[dict] | None = None,
+             niveau: str = "A") -> list[dict]:
     """De open items van één taak: alles wat nog niet is beoordeeld (door mens óf AI).
 
     Elk item draagt zijn AI-voorstel al mee. Dat is bewust: het voorstel wordt ALTIJD berekend,
@@ -335,10 +400,10 @@ def wachtrij(st, data_dir: str, taak: str, labels: list[dict] | None = None) -> 
         return []
     labels = ff.alle(data_dir) if labels is None else labels
     gedaan = ff.beoordeelde_items(labels, taak)
-    return [i for i in _WACHTRIJEN[taak](st, data_dir) if i["item"] not in gedaan]
+    return [i for i in _WACHTRIJEN[taak](st, data_dir, niveau) if i["item"] not in gedaan]
 
 
-def item_van(st, data_dir: str, taak: str, item: str) -> dict | None:
+def item_van(st, data_dir: str, taak: str, item: str, niveau: str = "A") -> dict | None:
     """Eén item opnieuw ophalen — inclusief zijn voorstel — ook als het al beoordeeld is.
 
     Nodig bij het vastleggen: de POST mag het voorstel niet uit het formulier geloven. Een
@@ -346,7 +411,7 @@ def item_van(st, data_dir: str, taak: str, item: str) -> dict | None:
     de hele overeenstemmings-meting waardeloos."""
     if taak not in _WACHTRIJEN:
         return None
-    return next((i for i in _WACHTRIJEN[taak](st, data_dir) if i["item"] == item), None)
+    return next((i for i in _WACHTRIJEN[taak](st, data_dir, niveau) if i["item"] == item), None)
 
 
 def voer_uit(st, data_dir: str, taak: str, item: str, oordeel: str) -> str:
@@ -377,7 +442,7 @@ def verwerk_automatisch(st, data_dir: str, taak: str, niveau: str, cfg: dict,
     if niveau not in ("C", "D"):
         return verslag
     labels = ff.alle(data_dir) if labels is None else labels
-    for it in wachtrij(st, data_dir, taak, labels):
+    for it in wachtrij(st, data_dir, taak, labels, niveau):
         audit = ff.in_auditsteekproef(taak, it["item"], cfg.get("audit_pct", 0))
         if not ff.ai_handelt_zelf(niveau, audit):
             verslag["audit"] += 1

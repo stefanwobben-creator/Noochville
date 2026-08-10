@@ -81,14 +81,25 @@ TAAK_LABEL = {
 
 # Per taak de toegestane oordelen. Dit is tegelijk de sleutelruimte van de labels: een oordeel
 # buiten deze set wordt geweigerd, zodat de meting nooit op typefouten telt.
+#
+# De radar-as is bewust veranderd van relevantie (keep/dismiss) naar NIEUWHEID. Reden: relevantie
+# is een smaakoordeel dat per week verschuift, nieuwheid is een uitspraak over de wereld die je kunt
+# nakijken — en het is het oordeel dat de founder feitelijk maakt als hij een signaal bekijkt
+# ("hebben we dit al?"). De clustering en de bronnen-teller nemen de relevantie-vraag over: een
+# onderwerp dat uit zeven bronnen komt is aantoonbaar relevant zonder dat iemand dat hoefde te vinden.
+#
+# Gevolg voor de meting, en dat is met opzet: labels van vóór deze omslag dragen 'keep'/'dismiss',
+# vallen dus buiten `OORDELEN[RADAR]` en tellen NIET meer mee in de overeenstemming. Ze blijven in de
+# append-only log staan (er wordt niets herschreven), maar het zou onzin zijn om een relevantie-
+# oordeel af te zetten tegen een nieuwheids-voorstel. De radar-teller begint dus opnieuw bij nul.
 OORDELEN = {
-    RADAR: ("keep", "dismiss"),
+    RADAR: ("nieuw", "bekend"),
     CLAIM: ("bewijs", "fix", "scientist"),
     CONTENT: ("publiceer", "corrigeer"),
 }
 
 OORDEEL_LABEL = {
-    "keep": "keep", "dismiss": "dismiss",
+    "nieuw": "new to us", "bekend": "we already have this",
     "bewijs": "bank evidence", "fix": "fix copy", "scientist": "to Scientist",
     "publiceer": "approve", "corrigeer": "correct",
 }
@@ -111,8 +122,13 @@ NIVEAU_UITLEG = {
 # De claim- en content-lat liggen hoger dan de radar-lat: een verkeerd weggeveegd radar-signaal
 # kost een gemiste kans, een verkeerd beoordeelde claim of gepubliceerde tekst kost een
 # handhavingsrisico. De prijs van een fout hoort in de lat te zitten, niet in goede bedoelingen.
+# `cluster_drempel` en `cluster_venster_dagen` horen bij de radar-taak maar zijn GEEN poort: de
+# clustering en de bronnen-teller zijn een berekening, geen oordeel, en klimmen dus geen tredes.
+# Ze staan hier omdat de founder ze op één plek wil kunnen bijstellen. 0.0 = de default van
+# `radar_clusters` (die kent het verschil tussen de semantische en de lexicale drempel).
 _DEFAULTS = {
-    RADAR: {"lat": 0.85, "min_n": 30, "venster": 60, "audit_pct": 20, "dag_cap": 5, "drempel": 1},
+    RADAR: {"lat": 0.85, "min_n": 30, "venster": 60, "audit_pct": 20, "dag_cap": 5,
+            "cluster_drempel": 0.0, "cluster_venster_dagen": 30},
     CLAIM: {"lat": 0.90, "min_n": 20, "venster": 60, "audit_pct": 25, "dag_cap": 3},
     CONTENT: {"lat": 0.90, "min_n": 15, "venster": 60, "audit_pct": 30, "dag_cap": 3},
 }
