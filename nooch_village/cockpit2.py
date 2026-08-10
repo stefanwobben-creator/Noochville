@@ -126,6 +126,13 @@ class _Stores:
         # Eenmalig, idempotent: koppelingen die nog aan een index hangen krijgen het stabiele
         # acc_id van de accountability die nú op die positie staat.
         self.ai.migrate_acc_ids(self.records)
+        # Legacy record.persona_id → assignments-store: één bron van waarheid voor bemensing.
+        # Idempotent; zie assignments.migrate_persona_bindings voor het waarom.
+        try:
+            from nooch_village.assignments import migrate_persona_bindings
+            migrate_persona_bindings(self.records, self.assign)
+        except Exception:                                # noqa: BLE001 — nooit een pagina blokkeren
+            pass
         self.match = ai_match.MatchCache(os.path.join(dd, "ai_match_cache.json"))
         self.notif = NotifStore(os.path.join(dd, "notifications.json"))
         self.agenda = Agenda(os.path.join(dd, "roloverleg_agenda.json"))

@@ -101,3 +101,71 @@ class Assignments:
 
     def all(self) -> dict[str, list[dict]]:
         return {k: list(v) for k, v in self._by_role.items()}
+
+
+# ── Bemensing: één definitie, één bron van waarheid ─────────────────────────────────────────
+
+def bemand(role_id: str, assignments, records=None) -> bool:
+    """Is deze rol bemand — door een MENS of door een PERSONA?
+
+    Bestond niet, en dat heeft twee keer gebeten. `claims_board._mensen_op` vroeg naar type
+    "person" en las de assignments-store zónder `record=`. Gevolg: elke AI-bemande rol las als
+    onbemand, en `compliance` — die alleen in de legacy `record.persona_id`-laag zat — als dubbel
+    onbemand. Elk bericht kreeg daardoor een kopie naar de Circle Lead met "[rol X onbemand]",
+    ook al draaide de rol gewoon.
+
+    Deze functie is DE plek waar die vraag beantwoord wordt. Hij leest beide lagen; dat is geen
+    besluiteloosheid maar een vangnet ná de migratie (`migrate_persona_bindings`): de data is
+    uitgelijnd, en mocht er ooit tóch een legacy-binding opduiken, dan ziet precies deze ene
+    functie 'm — niet elke aanroeper apart, want dát was de val."""
+    try:
+        rec = records.get(role_id) if records is not None else None
+    except Exception:                                    # noqa: BLE001 — een kapotte store ≠ onbemand-oordeel
+        rec = None
+    try:
+        return bool(assignments.fillers_of(role_id, record=rec))
+    except Exception:                                    # noqa: BLE001
+        return False
+
+
+def door_mens_bemand(role_id: str, assignments, records=None) -> bool:
+    """Vervult een MENS deze rol? Voor de paar plekken waar dat écht de vraag is (een mens-inbox
+    heeft een mens nodig). Onderscheiden van `bemand`, want die twee zijn niet hetzelfde en het
+    door elkaar halen is precies wat misging."""
+    try:
+        rec = records.get(role_id) if records is not None else None
+    except Exception:                                    # noqa: BLE001
+        rec = None
+    try:
+        return any(f.type == "person" for f in assignments.fillers_of(role_id, record=rec))
+    except Exception:                                    # noqa: BLE001
+        return False
+
+
+def migrate_persona_bindings(records, assignments) -> int:
+    """Legacy `record.persona_id` → de assignments-store. Geeft het aantal verplaatste bindingen.
+
+    DE keuze tegen de twee-lagen-divergentie: de assignments-store wordt de bron van waarheid, en
+    `fillers_of(rol)` zónder `record=` klopt daarna. De legacy velden blijven op het record staan
+    (andere code leest ze nog, bv. de WIP-limiet), maar ze zijn geen tweede waarheid meer — ze zijn
+    een kopie die meeloopt.
+
+    Idempotent: een binding die er al staat wordt niet gedupliceerd. Fail-soft per record."""
+    verplaatst = 0
+    try:
+        alle = records.all()
+    except Exception:                                    # noqa: BLE001
+        return 0
+    for rec in alle:
+        pid = getattr(rec, "persona_id", None)
+        if not pid:
+            continue
+        try:
+            if any(f.type == "persona" and f.id == pid
+                   for f in assignments.fillers_of(rec.id)):
+                continue                                 # al in de store
+            assignments.assign(rec.id, "persona", pid)
+            verplaatst += 1
+        except Exception:                                # noqa: BLE001 — één kapot record blokkeert niet
+            continue
+    return verplaatst
