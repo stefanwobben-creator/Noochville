@@ -15,7 +15,7 @@ def _should_fire_daily(now, last_day, fire_hh: int, fire_mm: int) -> bool:
         return False
     return (now.hour, now.minute) >= (fire_hh, fire_mm)
 from nooch_village.mission import ANCHOR_PURPOSE as _NOOCHIE_MISSION
-from nooch_village.inhabitant import Inhabitant
+from nooch_village.inhabitant import _persona_ladder, Inhabitant
 from nooch_village.event_bus import Event
 from nooch_village.governance import Gate, proposal_from_dict, proposal_to_dict
 from nooch_village.insight import Insight
@@ -2215,7 +2215,9 @@ class Noochie(Inhabitant):
             "REASON: <één zin>\n\n"
             "(gebruik VERDICT: niet_ok als de aanbevolen richting botst met of de missie mist)"
         )
-        result = reason(prompt, call_site="noochie_weigh_in") or "(geen LLM beschikbaar)"
+        result = reason(prompt, call_site="noochie_weigh_in",
+                        ladder=_persona_ladder(self.context, self.id, "noochie_weigh_in")
+                        ) or "(geen LLM beschikbaar)"
         verdict, reason_text = parse_verdict_reason(result, frozenset({"ok", "niet_ok"}))
         findings, question = _parse_noochie_report(result)
 

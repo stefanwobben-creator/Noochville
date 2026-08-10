@@ -110,21 +110,34 @@ def _omg(persona, tmp_path=None):
     ({"default": "gemini", "per_taak": {"einddocument": "anthropic"}}, "anthropic"),
     ({"default": "gemini", "per_taak": {"iets_anders": "x"}}, "gemini"),
     ({"default": "gemini"}, "gemini"),
-    ({}, None),
+    # Geen eigen keuze → de DORPSBREDE hoog-inzet-kop (einddocument is zo'n site). Vóór de
+    # premium-uitrol was dit None; nu is 'geen persona-voorkeur' niet meer hetzelfde als 'geen kop'.
+    ({}, None),   # None = "de dorpsbrede kop"; hieronder afgeleid, niet overgetypt
 ])
 def test_resolutie_volgorde(llm, verwacht):
-    """per_taak > default > globaal. De laatste is None: dan doet reason() wat hij altijd deed.
+    """per_taak > default > dorpsbrede hoog-inzet-kop.
 
     Asserteert op de KOP: sinds de zachte staart krijgt elke voorkeur de dorpsladder erachter, maar
     welke trede als eerste wordt geprobeerd is nog steeds precies deze volgorde."""
     p = Persona(id="x", name="Billy", llm=llm)
     uit = llm_keuze.llm_voorkeur(_omg(p), "rol", "einddocument")
-    assert (uit.split(",")[0] if uit else None) == verwacht
+    kop = uit.split(",")[0] if uit else None
+    # `verwacht=None` betekent: geen EIGEN keuze, dus de dorpsbrede hoog-inzet-kop. Die leiden we
+    # af uit llm_keuze zelf — een overgetypte modelnaam hier zou bij elke modelwissel breken.
+    if verwacht is None:
+        assert kop == llm_keuze.hoog_inzet_ladder()
+    else:
+        # De persona-keuzes noteren alleen de vendor ('anthropic'); de dorpsbrede kop noteert
+        # vendor:model. Vergelijk daarom op prefix, niet op gelijkheid.
+        assert (kop or "").startswith(verwacht)
 
 
-def test_zonder_persona_geen_voorkeur():
-    assert llm_keuze.llm_voorkeur(_omg(None), "rol", "einddocument") is None
-    assert llm_keuze.llm_voorkeur(SimpleNamespace(), "rol", "einddocument") is None
+def test_zonder_persona_valt_terug_op_de_dorpsbrede_keuze():
+    """Zonder persona is er geen EIGEN voorkeur — maar wel een dorpsbrede. Een hoog-inzet-site
+    krijgt de Sonnet-kop, een triage-site houdt de dorpsladder (None)."""
+    for omg in (_omg(None), SimpleNamespace()):
+        assert llm_keuze.llm_voorkeur(omg, "rol", "einddocument").startswith("anthropic:claude-sonnet")
+        assert llm_keuze.llm_voorkeur(omg, "rol", "classify_tension") is None
 
 
 def test_kapotte_omgeving_breekt_de_aanroep_niet():
@@ -416,11 +429,13 @@ def test_daemon_context_draagt_de_inwoners(tmp_path):
 
 
 def test_daemon_zonder_voorkeur_blijft_op_de_dorpsladder(tmp_path):
-    """De terugval blijft intact: geen persona op de rol → None, precies zoals vóór de bedrading."""
+    """De terugval blijft intact voor TRIAGE: geen persona → de dorpsladder, precies zoals vóór de
+    bedrading. Voor een hoog-inzet-site geldt sinds de premium-uitrol de dorpsbrede Sonnet-kop."""
     from nooch_village.village import Village
 
     v = Village(heartbeat_seconds=86400, data_dir=str(tmp_path / "dorp"))
-    assert llm_keuze.llm_voorkeur(v.context, "librarian", "einddocument") is None
+    assert llm_keuze.llm_voorkeur(v.context, "librarian", "classify_tension") is None
+    assert llm_keuze.llm_voorkeur(v.context, "librarian", "einddocument").startswith("anthropic:")
 
 
 def test_store_ziet_een_wijziging_van_een_ander_proces(tmp_path):

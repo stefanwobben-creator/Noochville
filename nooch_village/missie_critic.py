@@ -66,7 +66,11 @@ MIN_STRATEGIE_THEMAS = 1
 # oordeel-site is "geen antwoord" een eerlijker uitkomst dan een goedkoop antwoord dat als premium
 # oordeel wordt gelezen. De dorpsstaart blijft eronder hangen (zachte staart), zodat een wegvallende
 # leverancier geen projecten blokkeert — maar de kop is bewust duur.
-PREMIUM_LADDER = "anthropic:claude-sonnet-4-5"
+def premium_ladder() -> str:
+    """De hoog-inzet-ladder van het dorp. Eén bron (`llm_keuze.hoog_inzet_ladder`), niet hier
+    overgetypt: verandert de dorpsbrede kop, dan verandert de critic mee."""
+    from nooch_village.llm_keuze import hoog_inzet_ladder
+    return hoog_inzet_ladder()
 
 def pad(data_dir: str) -> str:
     return os.path.join(data_dir, BESTAND)
@@ -145,7 +149,7 @@ def _gegrond(document: str, deliverables: list, project: dict, *, skill=None,
             from nooch_village.skills_impl.tegenspraak import TegenspraakSkill
             skill = TegenspraakSkill()
         uit = skill.run({"tekst": (document or "")[:6000], "bewijs": bewijs, "doel": doel,
-                         "ladder": PREMIUM_LADDER}, context)
+                         "ladder": premium_ladder()}, context)
     except Exception as e:                               # noqa: BLE001
         log.warning("grondings-toets faalde fail-soft: %s", e)
         return None, "de grondings-toets kon niet draaien"

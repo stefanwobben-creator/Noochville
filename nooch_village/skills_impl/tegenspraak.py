@@ -43,7 +43,8 @@ class TegenspraakSkill(Skill):
         # Een eigen ladder mag: als deze skill als CRITIC draait (missie_critic) hoort het oordeel
         # van de premium-trede te komen. Een goedkoop oordeel dat als premium oordeel wordt gelezen
         # is precies de stille verwisseling die een reviewer niet kan zien.
-        ladder = ((payload or {}).get("ladder") or "").strip() or None
+        ladder = (((payload or {}).get("ladder") or "").strip()
+                  or _hoog_inzet_ladder("skill_tegenspraak"))
         from nooch_village.llm import reason
         prompt = (
             "Je bent een strenge, eerlijke reviewer voor Nooch (duurzame veganistische schoenen). Spreek "
@@ -101,4 +102,19 @@ def _extract(raw):
     try:
         return json.loads(s[s.find("{"):s.rfind("}") + 1])
     except (ValueError, IndexError):
+        return None
+
+
+def _hoog_inzet_ladder(call_site: str):
+    """De dorpsbrede hoog-inzet-ladder voor deze call-site.
+
+    Bewust ZONDER persona-override: een skill kent zijn rol niet (de context die hij krijgt draagt
+    geen role_id), dus die keuze is hier niet te maken. De persona-override werkt wél op de
+    rol-gebonden sites (plan_checklist, einddocument, noochie_weigh_in) via `_persona_ladder`.
+
+    Fail-soft: gaat de keuze stuk, dan de dorpsladder — een ladder mag een call nooit blokkeren."""
+    try:
+        from nooch_village.llm_keuze import ladder_voor
+        return ladder_voor(call_site)
+    except Exception:                                # noqa: BLE001
         return None
