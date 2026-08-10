@@ -172,9 +172,14 @@ def _telbare_items(checklist: dict | None) -> list:
 
 
 def _lege_items(checklist: dict | None) -> list:
-    """Items die zijn uitgevoerd maar niets opleverden. Zie `Inhabitant._execute_checklist`: die
-    zet `leeg` op zo'n item, zodat het afgevinkt kan zijn zónder als antwoord te tellen."""
-    return [it for it in _telbare_items(checklist) if it.get("leeg")]
+    """Items die zijn uitgevoerd maar niets opleverden ÉN waar dat een gat is, geen antwoord.
+
+    `leeg_bron == "gemeld"` betekent dat de skill zelf `no_data` zei: een schone site, een tekst
+    zonder claim-problemen, een stille week. Dat is een gerapporteerde uitkomst en telt hier NIET
+    als ontbrekende kennis — anders zakt een project op de substantieel-as juist omdat alles in
+    orde bleek. Alleen `geen_inhoud` (de skill gaf iets terug waar niets in zat) is een gat."""
+    return [it for it in _telbare_items(checklist)
+            if it.get("leeg") and it.get("leeg_bron", "geen_inhoud") != "gemeld"]
 
 
 def _woorden(tekst: str) -> set:

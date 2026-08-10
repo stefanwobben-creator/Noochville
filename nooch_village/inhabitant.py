@@ -1423,19 +1423,24 @@ class Inhabitant(threading.Thread):
                 self._store_deliverable(project, item, pos, used_source, result, summary, wall_note_id)
                 ledger.check_toggle(pid, clid, item["id"])
                 succeeded += 1
-                self.log.info("✅ project '%s': item '%s' via %s afgerond", pid, item.get("text", "")[:40], src_label)
+                self.log.info("✅ project '%s': item '%s' via %s afgerond (inhoud uit '%s')", pid,
+                              item.get("text", "")[:40], src_label,
+                              (archetype[1] if archetype else "?"))
             elif status == "leeg":
                 # Actie UITGEVOERD, geen resultaat — eersteklas no-data-uitkomst (De Kroniek B3), géén
                 # mislukking: schrijf 't naar de wall ÉN vink af, zodat het project de review-gate haalt en
                 # de mens kan beoordelen of het klaar is (i.p.v. eeuwig een lege bron te herproberen).
+                bron = self._leeg_bron(result)
                 why = result.get("reason") or "onderzocht, niets gevonden"
-                ledger.add_role_message(pid, f"📭 '{item.get('text','')}' via {src_label}: geen resultaat — {why}")
+                merk = "📭" if bron == "gemeld" else "🕳"
+                ledger.add_role_message(pid, f"{merk} '{item.get('text','')}' via {src_label}: "
+                                             f"{'gerapporteerd, niets gevonden' if bron == 'gemeld' else 'geen resultaat'} — {why}")
                 # Afvinken MOET (anders haalt het project de review-gate nooit en herprobeert het
                 # eeuwig een lege bron), maar niet SCHOON: `leeg` markeert dat dit item is
                 # uitgevoerd zonder antwoord. Zonder die markering leest 4/4 als "alles
                 # beantwoord" terwijl er vier kennisgaten staan, en dat is precies de valse
                 # voltooiing waar de review-melding tegen bestaat.
-                ledger.set_item_leeg(pid, clid, item["id"], why)
+                ledger.set_item_leeg(pid, clid, item["id"], why, bron=bron)
                 ledger.check_toggle(pid, clid, item["id"])
                 self.log.info("📭 project '%s': item '%s' via %s afgerond zonder resultaat", pid,
                               item.get("text", "")[:40], src_label)
@@ -1734,36 +1739,101 @@ class Inhabitant(threading.Thread):
             project=project, force_final=force_final, log=self.log,
             data_dir=getattr(self.context, "data_dir", "") or "")
 
-    # Container-keys per archetype — de note-opmaak volgt de VORM van de output, niet de skill-naam.
-    _LIST_KEYS = ("hits", "rows", "candidates", "items", "targets", "cards", "keywords", "patents")
-    _TEXT_KEYS = ("text", "vraag", "voorstel", "titel")
-    _METRIC_KEYS = ("values", "value", "results", "series", "pid")
+    # ── Wat telt als resultaat? ──────────────────────────────────────────────────────────────
+    # Hiervóór stonden hier drie allowlists (_LIST_KEYS/_TEXT_KEYS/_METRIC_KEYS): een skill moest
+    # zijn uitvoer in een sleutel stoppen die toevallig in die lijsten stond, anders las een
+    # geslaagde run als "leeg". Dat is drie keer misgegaan — projectverzoek (pid/titel),
+    # claims_check (bevindingen) en content_check — en kostte 87 weggegooide resultaten. Een
+    # allowlist die elke nieuwe skill een gezegende sleutelnaam laat raden, is stille koppeling.
+    #
+    # Nu andersom: alles wat GEEN metadata is en substantie draagt, telt. Zo hoeft geen enkele
+    # nieuwe skill nog iets te raden.
+
+    # Sleutels die over de RUN gaan, niet over de UITKOMST. Een resultaat dat alleen deze bevat is
+    # geen resultaat. Bewust ruim: liever een sleutel te veel als metadata dan een lege deliverable
+    # die als "gelukt" boekt — dat is de fout aan de andere kant, en die is even duur.
+    _META_KEYS = frozenset({
+        "ok", "error", "no_data", "reason", "redenen", "status", "skipped", "escalate", "headsup",
+        "week", "at", "ts", "datum", "day", "maand", "versie", "version", "id", "skill", "source",
+        "bron", "locale", "corpus", "query", "term", "vraag_id", "role_id", "project_id",
+        "gescand", "overgeslagen", "nieuw", "volledig", "vastgelopen", "force", "estimated",
+    })
+    # Sleutelnamen die per definitie een TELLER zijn: een getal daarin is geen bevinding maar een
+    # samenvatting van bevindingen die elders staan.
+    _TELLER_KEYS = frozenset({
+        "total", "totaal", "count", "counts", "aantal", "n", "treffers", "calls", "tokens",
+        "rood", "oranje", "groen", "escaleren", "gedekt", "evaluated",
+    })
+    _TRIVIALE_TEKST = frozenset({"", "-", "n/a", "geen", "none", "null", "ok"})
+    # Alleen voor de OPMAAK van de note, niet voor de detectie: een dict onder deze sleutels is een
+    # meetreeks (datum → waarde) en leest beter als metriek dan als lijstje. Dit is geen allowlist
+    # in de oude zin — een skill die hier niet in staat wordt nog steeds gewoon herkend, hij krijgt
+    # alleen de generieke opmaak.
+    _METRIC_HINTS = frozenset({"values", "value", "series", "results", "reeks", "metingen"})
+
+    @classmethod
+    def _draagt_inhoud(cls, sleutel: str, waarde) -> bool:
+        """Draagt deze (sleutel, waarde) substantiële inhoud, of is het run-administratie?"""
+        if sleutel in cls._META_KEYS or sleutel.startswith("_"):
+            return False
+        if isinstance(waarde, bool) or waarde is None:
+            return False                                  # een vlag is een status, geen uitkomst
+        if isinstance(waarde, (list, tuple, set, dict)):
+            return len(waarde) > 0
+        if isinstance(waarde, str):
+            return waarde.strip().lower() not in cls._TRIVIALE_TEKST
+        if isinstance(waarde, (int, float)):
+            return sleutel not in cls._TELLER_KEYS        # score: 88 telt, total: 5 niet
+        return True                                       # onbekend type met een waarde: inhoud
 
     @classmethod
     def _classify_result(cls, result):
-        """Normaliseer de twee fail-conventies ({error}/{no_data} en {ok:False,error}) naar één uitkomst:
-        ('gelukt'|'leeg'|'fout', archetype). archetype = ('list'|'dictlist'|'text'|'metric', container_key)
-        bij succes, anders None. Hierop vinkt het primitief af (gelukt) of laat open (leeg/fout)."""
+        """Normaliseer de fail-conventies naar één uitkomst: ('gelukt'|'leeg'|'fout', archetype).
+
+        `archetype` = (vorm, sleutel) bij succes — de sleutel is AUDITEERBAAR: hij staat in de
+        logregel en in de deliverable-note, zodat je bij twijfel kunt zien wélke inhoud geteld is
+        (zelfde gedachte als de Kroniek: laat zien waar iets vandaan komt).
+
+        Expliciete signalen blijven leidend: `error`/`ok:False` → fout, `no_data` → leeg. Dat is de
+        manier waarop een skill zélf zegt wat er is gebeurd, en die wint van elke heuristiek."""
         if not isinstance(result, dict):
             return "fout", None
         if result.get("error") or result.get("ok") is False:
             return "fout", None
         if result.get("no_data"):
             return "leeg", None
-        for k in cls._LIST_KEYS:
-            v = result.get(k)
-            if isinstance(v, list):
-                return ("gelukt" if v else "leeg"), ("list", k)
-            if isinstance(v, dict):                              # bv. keywords_everywhere: {keyword: {...}}
-                return ("gelukt" if v else "leeg"), ("dictlist", k)
-        for k in cls._TEXT_KEYS:
-            v = result.get(k)
-            if isinstance(v, str) and v.strip():
-                return "gelukt", ("text", k)
-        for k in cls._METRIC_KEYS:
-            if result.get(k) not in (None, "", [], {}):
-                return "gelukt", ("metric", k)
-        return "leeg", None                                     # geen herkende inhoud → leeg
+        # De rijkste inhoud wint: een lijst met tien records zegt meer dan een los getal, en bij
+        # gelijke vorm de grootste (anders wint 'pid' van 'titel' puur op sleutelvolgorde). Bij
+        # écht gelijk de eerste in sleutelvolgorde, zodat de keuze reproduceerbaar blijft.
+        beste, beste_score = None, (-1, -1)
+        for sleutel, waarde in result.items():
+            if not cls._draagt_inhoud(sleutel, waarde):
+                continue
+            if isinstance(waarde, dict):
+                vorm = "metric" if sleutel in cls._METRIC_HINTS else "dictlist"
+                rang, omvang = 3, len(waarde)
+            elif isinstance(waarde, (list, tuple, set)):
+                vorm, rang, omvang = "list", 3, len(waarde)
+            elif isinstance(waarde, str):
+                vorm, rang, omvang = "text", 2, len(waarde)
+            else:
+                vorm, rang, omvang = "metric", 1, 0
+            if (rang, omvang) > beste_score:
+                beste, beste_score = (vorm, sleutel), (rang, omvang)
+        if beste is None:
+            return "leeg", None                           # niets substantieels → eerlijk leeg
+        return "gelukt", beste
+
+    @classmethod
+    def _leeg_bron(cls, result) -> str:
+        """Waarom is dit leeg? 'gemeld' = de skill zei zelf `no_data` (een geldig antwoord:
+        onderzocht, niets gevonden). 'geen_inhoud' = hij gaf iets terug waar niets in zat.
+
+        Het verschil telt: een schone site of 'niks nieuws' is een ANTWOORD, geen kennisgat. De
+        missie-critic mag alleen het tweede geval als ontbrekende kennis rekenen."""
+        if isinstance(result, dict) and result.get("no_data"):
+            return "gemeld"
+        return "geen_inhoud"
 
     def _store_deliverable(self, project: dict, item: dict, position: int, skill: str, result,
                            summary: str, wall_note_id) -> None:
