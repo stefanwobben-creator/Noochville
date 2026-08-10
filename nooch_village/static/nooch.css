@@ -815,11 +815,10 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 /* Expliciete width: een <iframe> is een replaced element — met alleen left+right (width:auto) rekt
    Firefox 'm wel maar valt Chrome terug op ~intrinsieke breedte (negeert right). calc dwingt beide
    naar volle breedte naast de .noo-rail (2.6rem). */
-.cb-frame{position:fixed;left:2.6rem;bottom:0;width:calc(100% - 2.6rem);height:76px;z-index:45;border:0;background:transparent}
-.cb-frame[hidden]{display:none}
+/* De parent-shell-strook is 11 aug 2026 verwijderd: de call bar werkte niet betrouwbaar en hangt
+   niet meer in de app-shell. De bar-eigen markup in de /callbar-pagina blijft bestaan; terugzetten
+   vraagt naast de injectie in `_send` ook deze regels terug. */
 /* vangnet tegen occlusie: alleen op pagina's mét bar; en de toast zweeft erboven */
-body.has-callbar .c2-main{padding-bottom:90px}
-body.has-callbar .c2-toast{bottom:calc(76px + 1rem)}
 
 /* ── Kennisbank (/kennisbank): "Wat Nooch weet" — de kn-*-familie. Expliciet vocabulaire-
    besluit (prototype nooch-kb, drawer + 4-punts meter; zie tests/test_ui_ratchets.py).

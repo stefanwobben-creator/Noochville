@@ -77,8 +77,8 @@ def test_konami_trigger_opent_overlay_niet_navigatie():
     assert "openSnake()" in _KONAMI_TRIGGER and "snake-overlay" in _KONAMI_TRIGGER
     assert "overlay-open" in _KONAMI_TRIGGER
     assert "location.href='/snake'" not in _KONAMI_TRIGGER   # geen full-page navigatie meer
-    # de bar wordt verborgen zolang een overlay open is (generiek, geen snake-specifieke hack)
-    assert "body.overlay-open .cb-frame{display:none}" in _CSS
+    # De overlay-aanpak blijft ook nu de call bar weg is: een navigatie voor een easter-egg zou
+    # de hele pagina weggooien, en dat is nog steeds zonde.
     assert ".snake-overlay{" in _CSS and ".snake-frame{" in _CSS
 
 

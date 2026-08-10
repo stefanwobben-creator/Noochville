@@ -88,12 +88,11 @@ details>summary{cursor:pointer;font-family:var(--font-display);font-weight:700;p
  border-radius:var(--radius);padding:.5rem .8rem;margin:.4rem 0 1rem;font-weight:600}
 .flash.err{background:var(--error-tint);border-color:var(--coral);color:#A8322A}
 /* Fullscreen-overlay (bv. de Snake-easter-egg): draait als iframe OP de huidige pagina i.p.v. een
-   navigatie, zodat de call bar-iframe niet wordt weggegooid (verbinding + audio lopen door). Zolang
-   een overlay open is, verbergen we de bar — generiek via body.overlay-open, geen easter-egg-specifieke
-   hack. .cb-frame leeft in _EXTRA_CSS; deze regel matcht 'm ook als die elders is gedefinieerd. */
+   navigatie. Dat patroon ontstond om de call bar niet weg te gooien; die is 11 aug 2026 uit de
+   shell gehaald en de bijbehorende verberg-regel hier met 'm mee. De overlay-aanpak zelf blijft —
+   een navigatie voor een easter-egg is nog steeds zonde. */
 .snake-overlay{position:fixed;inset:0;z-index:1000;border:0;background:transparent}
 .snake-frame{width:100%;height:100%;border:0;background:transparent}
-body.overlay-open .cb-frame{display:none}
 """
 
 
