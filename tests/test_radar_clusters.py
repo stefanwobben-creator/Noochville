@@ -104,6 +104,74 @@ def test_geen_embeddings_valt_terug_op_lexicaal_en_valt_niet_stil(monkeypatch):
     assert clusters[0]["modus"] == "lexicaal"
 
 
+def test_embedden_gaat_in_batches_niet_in_een_reuzencall(dd):
+    """De embed-API neemt geen willekeurig grote batch aan — de kennisbank-backfill werkt niet
+    voor niets in groepjes van 20. Eén call met honderden teksten faalt, en omdat `embed_many`
+    fail-soft is zou dat STIL neerkomen op lexicaal clusteren terwijl het scherm semantisch belooft."""
+    groottes = []
+
+    def _embed(texts):
+        groottes.append(len(texts))
+        return [[1.0, 0.0, 0.0] for _ in texts]
+
+    items = [_sig(f"s{n}", f"Signaal {n}", source=f"b{n}.com") for n in range(45)]
+    radar_clusters._vectoren(items, dd, embed_fn=_embed, cap=100, batch=20)
+    assert groottes == [20, 20, 5]
+    assert max(groottes) <= 20
+
+
+def test_render_embedt_hoogstens_de_cap(dd):
+    """Een page-load mag geen lange API-sessie worden; de bulk hoort uit `radar_embed` te komen."""
+    geteld = []
+
+    def _embed(texts):
+        geteld.extend(texts)
+        return [[1.0, 0.0, 0.0] for _ in texts]
+
+    items = [_sig(f"s{n}", f"Signaal {n}", source=f"b{n}.com") for n in range(200)]
+    radar_clusters._vectoren(items, dd, embed_fn=_embed, cap=60, batch=20)
+    assert len(geteld) == 60
+
+
+def test_halve_index_clustert_eerlijk_lexicaal(dd):
+    """Bij een gedeeltelijke index zou een signaal zonder vector cosinus 0 scoren tegen alles en
+    dus altijd een eigen cluster worden — dat leest als 'apart onderwerp' terwijl het 'nog niet
+    geïndexeerd' betekent. Dan liever eerlijk lexicaal voor de hele render."""
+    items = [_sig(f"s{n}", f"Mycelium kweken variant {n}", source=f"b{n}.com") for n in range(6)]
+    # Slechts de helft krijgt een vector.
+    radar_clusters._vectoren(items[:3], dd, embed_fn=lambda t: [[1.0, 0.0] for _ in t],
+                             cap=10, batch=20)
+    clusters = radar_clusters.cluster_signalen(items, data_dir=dd,
+                                               embed_fn=lambda t: [None for _ in t])
+    assert all(c["modus"] == "lexicaal" for c in clusters)
+    assert sum(len(c["leden"]) for c in clusters) == 6          # niets kwijt
+
+
+def test_volledige_index_clustert_semantisch(dd):
+    items = [_sig(f"s{n}", f"Mycelium kweken variant {n}", source=f"b{n}.com") for n in range(4)]
+    clusters = radar_clusters.cluster_signalen(
+        items, data_dir=dd, embed_fn=lambda t: [[1.0, 0.0, 0.0] for _ in t])
+    assert all(c["modus"] == "semantisch" for c in clusters)
+    assert len(clusters) == 1                                   # identieke vectoren → één onderwerp
+
+
+def test_vul_index_is_idempotent(dd):
+    calls = []
+
+    def _embed(texts):
+        calls.append(len(texts))
+        return [[1.0, 0.0, 0.0] for _ in texts]
+
+    items = [_sig(f"s{n}", f"Signaal {n}", source=f"b{n}.com") for n in range(25)]
+    eerst = radar_clusters.vul_index(items, dd, embed_fn=_embed, per_min=0,
+                                     sleep_fn=lambda *_: None, log_fn=lambda *_: None)
+    assert eerst["todo"] == 25 and eerst["gedaan"] == 25
+    calls.clear()
+    weer = radar_clusters.vul_index(items, dd, embed_fn=_embed, per_min=0,
+                                    sleep_fn=lambda *_: None, log_fn=lambda *_: None)
+    assert weer["todo"] == 0 and calls == []                    # tweede run kost niets
+
+
 def test_clusterdrempel_is_configureerbaar():
     leden = [_sig("a", "Mycelium leer kweken", source="x.com"),
              _sig("b", "Mycelium leer productie", source="y.com")]

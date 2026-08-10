@@ -547,6 +547,30 @@ def main() -> None:
         v = Village(heartbeat_seconds=86400)
         print(v.report_keys())
 
+    elif mode == "radar_embed":
+        # Vult de radar-embedding-index in één getemporiseerde run, zodat de clustering op /founder
+        # semantisch draait i.p.v. lexicaal. Een page-load is geen plek om honderden embeddings op
+        # te halen — daarom staat de bulk hier en houdt de render zich met een cap bij.
+        # Idempotent en herstartbaar: al geïndexeerde signalen kosten niets.
+        #   python -m nooch_village.village radar_embed [dagen]
+        import os as _os
+
+        import time as _time
+
+        from nooch_village.config import load_context
+        from nooch_village.radar_clusters import tijdstip, vul_index
+        from nooch_village.radar_store import RadarStore
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        dagen = int(sys.argv[2]) if len(sys.argv) > 2 else 60
+        radar = RadarStore(_os.path.join(ctx.data_dir, "radar.json"))
+        nu = _time.time()
+        items = [i for i in radar.all_items() if nu - tijdstip(i) < dagen * 86400]
+        print(f"radar-embeddings: {len(items)} signalen binnen {dagen} dagen")
+        uit = vul_index(items, ctx.data_dir)
+        print(f"klaar — {uit['gedaan']} geïndexeerd, {uit['mislukt']} mislukt "
+              f"(van {uit['todo']} te doen)")
+
     elif mode == "competitor":
         import os
         from nooch_village.config import load_context
