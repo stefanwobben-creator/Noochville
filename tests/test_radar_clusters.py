@@ -155,6 +155,32 @@ def test_volledige_index_clustert_semantisch(dd):
     assert len(clusters) == 1                                   # identieke vectoren → één onderwerp
 
 
+def test_index_verliest_het_werk_van_een_andere_schrijver_niet(dd):
+    """De index heeft twee schrijvers: de render (bijwerken per page-load) en de bulk-vuller.
+    Op prod gaf dat een echte race — 'No such file or directory: radar_embeddings.json.tmp'.
+    Wie zijn in-memory kopie wegschrijft, wist het werk van de ander. Daarom leest de schrijfkant
+    onder het slot opnieuw in."""
+    import os
+
+    from nooch_village.kennis_embeddings import EmbeddingStore
+
+    pad = os.path.join(dd, radar_clusters.INDEX_BESTAND)
+    eigen = [_sig("mijn", "Mijn signaal")]
+
+    # Een andere schrijver vult de index terwijl wij aan het embedden zijn: we simuleren dat door
+    # 'm weg te schrijven ná het moment waarop `_vectoren` de store voor het eerst inlas.
+    def _embed(texts):
+        ander = EmbeddingStore(pad)
+        ander.upsert("van-de-ander", "Ander signaal", [0.5, 0.5])
+        ander.save()
+        return [[1.0, 0.0] for _ in texts]
+
+    radar_clusters._vectoren(eigen, dd, embed_fn=_embed, cap=10, batch=20)
+    na = dict(EmbeddingStore(pad).items())
+    assert "mijn" in na                              # ons eigen werk staat er...
+    assert "van-de-ander" in na                      # ...en dat van de ander is niet gewist
+
+
 def test_vul_index_is_idempotent(dd):
     calls = []
 

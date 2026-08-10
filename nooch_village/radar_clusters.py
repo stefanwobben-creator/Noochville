@@ -154,7 +154,7 @@ def _vectoren(items: list[dict], data_dir: str, embed_fn=None,
 
     ontbreekt = [i for i in items if store.hash_of(i["id"]) != _hash(signaaltekst(i))]
     todo = ontbreekt[:max(0, int(cap))]
-    geschreven = False
+    verzameld: list[tuple[dict, list[float]]] = []
     for start in range(0, len(todo), max(1, int(batch))):
         groep = todo[start:start + max(1, int(batch))]
         try:
@@ -162,13 +162,24 @@ def _vectoren(items: list[dict], data_dir: str, embed_fn=None,
         except Exception as e:                       # noqa: BLE001 — nooit fataal
             log.warning("radar-embeddings mislukt (batch %d): %s", start // batch, e)
             break                                    # verder proberen kost quota zonder uitzicht
-        for it, vec in zip(groep, verse):
-            if vec:
-                store.upsert(it["id"], signaaltekst(it), vec)
-                geschreven = True
-    if geschreven:
+        verzameld += [(it, vec) for it, vec in zip(groep, verse) if vec]
+
+    if verzameld:
+        # Deze index heeft TWEE schrijvers: de render (die per page-load bijwerkt) en de bulk-vuller
+        # `vul_index`. `EmbeddingStore.save()` schrijft naar een vaste `.tmp` en doet dan os.replace,
+        # zonder slot — twee processen tegelijk laten elkaars tmp verdwijnen (waargenomen op prod:
+        # "No such file or directory: radar_embeddings.json.tmp") en overschrijven elkaars vectoren.
+        # Daarom: embedden buiten het slot (dat duurt seconden), en het lezen-muteren-schrijven
+        # eronder, met een VERSE store zodat de ander zijn werk niet kwijtraakt. Zelfde discipline
+        # als `util.JsonStore`, met de primitieven die er al zijn.
+        from nooch_village.util import file_lock
         try:
-            store.save()
+            with file_lock(pad):
+                vers = EmbeddingStore(pad)
+                for it, vec in verzameld:
+                    vers.upsert(it["id"], signaaltekst(it), vec)
+                vers.save()
+                store = vers
         except Exception as e:                       # noqa: BLE001
             log.warning("radar-embedding-index niet weggeschreven: %s", e)
     if len(ontbreekt) > len(todo):
