@@ -1061,11 +1061,13 @@ class Inhabitant(threading.Thread):
         (of "" bij niets gevonden). Puur deterministisch (geen LLM) en volledig fail-soft: een
         kapotte/ontbrekende store mag de voorbereiding nooit blokkeren."""
         try:
-            from nooch_village.kennis_context import kennis_blok, kennis_voor, meld_raadpleging
-            kennis = kennis_voor(getattr(self.context, "data_dir", None), goal)
+            from nooch_village.kennis_context import (kennis_blok, kennis_voor,
+                                          meld_raadpleging, totaal)
+            kennis = kennis_voor(getattr(self.context, "data_dir", None), goal, exclude_pid=pid)
             meld_raadpleging(self.bus, project_id=pid, rol=self.id, kennis=kennis)
             blok = kennis_blok(kennis)
-            if blok:
+            # Zie project_worker: gate op een echte vondst, niet op een niet-leeg blok.
+            if totaal(kennis):
                 try:
                     ledger.add_feed_entry(pid, "📚 raadpleegde de kennisbank: "
                                           + kennis["samenvatting"], kind="system",
@@ -1630,7 +1632,8 @@ class Inhabitant(threading.Thread):
             personas=getattr(self.context, "personas", None),
             record=self.record,
             settings=self.context.settings,
-            project=project, force_final=force_final, log=self.log)
+            project=project, force_final=force_final, log=self.log,
+            data_dir=getattr(self.context, "data_dir", "") or "")
 
     # Container-keys per archetype — de note-opmaak volgt de VORM van de output, niet de skill-naam.
     _LIST_KEYS = ("hits", "rows", "candidates", "items", "targets", "cards", "keywords", "patents")
@@ -2028,7 +2031,7 @@ def _fabrication_suspects(document: str, ungrounded: list) -> list:
 
 
 def synthesize_einddocument(*, project_docs, deliverables, projects, personas, record,
-                            settings, project, force_final, log) -> bool:
+                            settings, project, force_final, log, data_dir: str = "") -> bool:
     """Herbruikbare einddocument-synthese, los van de Inhabitant-instance: schrijft het VOLLEDIGE
     document opnieuw op basis van de deliverables + mens-sturing. Aangeroepen door de puls
     (Inhabitant._synthesize_einddocument) én door de cockpit-actie 'rapport opnieuw genereren'.
@@ -2099,8 +2102,21 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
                            "beantwoord.' Verzin er geen bevindingen bij. Benoem in de conclusie "
                            "EXPLICIET dat dit project afrondt zonder deze ta(a)k(en), zodat de lezer "
                            "niet denkt dat de vraag volledig beantwoord is.\n\n")
+        # Grounding vóór de synthese: grondwet, Kroniek, inzichten mét falsifier, eerdere
+        # projecten. Het einddocument is het stuk dat de mens leest en waarop hij beslist — als
+        # ergens een verzonnen zekerheid binnenkomt, dan hier. De grondings-regel hieronder verbood
+        # al het verzinnen van getallen; deze sectie geeft de LLM waaraan hij zich moet houden.
+        # Fail-soft: geen data_dir of een kapotte store → leeg blok, prompt als voorheen.
+        grond = ""
+        try:
+            from nooch_village.kennis_context import kennis_blok, kennis_voor
+            if data_dir:
+                grond = kennis_blok(kennis_voor(data_dir, scope_txt, exclude_pid=pid))
+        except Exception as e:                              # noqa: BLE001 — document gaat vóór
+            log.warning("grounding voor einddocument overgeslagen: %s", e)
         prompt = (
             (persona.strip() + "\n\n" if persona and persona.strip() else "")
+            + (grond + "\n\n" if grond else "")
             + f"Je werkt aan het lopende einddocument van dit project in NoochVille (Nooch.earth). "
             f"Projectdoel: {scope_txt}\n\n" + variable + gap_rule
             + "Schrijf het VOLLEDIGE, bijgewerkte einddocument in markdown. STRUCTUUR (verplicht, voor "

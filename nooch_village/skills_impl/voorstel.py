@@ -27,9 +27,21 @@ class VoorstelSchrijvenSkill(Skill):
         if not tension:
             return {"ok": False, "error": "geen spanning meegegeven"}
 
+        # Grounding: dezelfde sectie die de productie-prompts krijgen — grondwet, Kroniek,
+        # inzichten mét falsifier, eerdere projecten. Een voorstel dat de mens moet beoordelen is
+        # juist de plek waar een verzonnen aanname het duurst is. Fail-soft: geen data_dir of een
+        # kapotte store → leeg blok, prompt ongewijzigd.
+        grond = ""
+        try:
+            from nooch_village.kennis_context import kennis_blok, kennis_voor
+            grond = kennis_blok(kennis_voor(getattr(context, "data_dir", None) or "", tension))
+        except Exception:                                # noqa: BLE001 — nooit een voorstel blokkeren
+            grond = ""
+
         from nooch_village.llm import reason
         prompt = (
-            "You are Noochie, the bridge between The Source (the founder) and the inhabitants of "
+            (grond + "\n\n" if grond else "")
+            + "You are Noochie, the bridge between The Source (the founder) and the inhabitants of "
             "NoochVille (sustainable, plant-based shoe brand: no plastic, no leather, fair, "
             "transparent). A role felt this tension and asks you to turn it into a concrete "
             "proposal that The Source can judge.\n\n"
@@ -38,7 +50,9 @@ class VoorstelSchrijvenSkill(Skill):
             "SCOPE: <the concrete outcome you propose, one sentence>\n"
             "APPROACH: <the first concrete steps, one or two sentences>\n"
             "TRADE-OFF: <the most important trade-off or condition, one sentence>\n"
-            "Invent no facts; stay with what follows from the tension. No extra text."
+            "Invent no facts; stay with what follows from the tension. Stay inside the CONSTITUTION "
+            "above, do not re-investigate what THE CHRONICLE already confirms, and do not present a "
+            "knowledge gap as a finding. No extra text."
         )
         out = reason(prompt, call_site="skill_voorstel")
         if not out or not out.strip():

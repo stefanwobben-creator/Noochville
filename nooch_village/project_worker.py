@@ -105,11 +105,16 @@ def _raadpleeg_kennis(ledger, p: dict, owner: str, data_dir, bus) -> str:
     if data_dir is None:
         return ""
     try:
-        from nooch_village.kennis_context import kennis_blok, kennis_voor, meld_raadpleging
-        kennis = kennis_voor(data_dir, _scope_text(p.get("scope")))
+        from nooch_village.kennis_context import (kennis_blok, kennis_voor,
+                                          meld_raadpleging, totaal)
+        # exclude_pid: zonder dit vindt elk project zichzelf terug als "eerder project" —
+        # dan is er altijd een treffer en zegt de sectie niets.
+        kennis = kennis_voor(data_dir, _scope_text(p.get("scope")), exclude_pid=p.get("id", ""))
         meld_raadpleging(bus, project_id=p.get("id", ""), rol=owner, kennis=kennis)
         blok = kennis_blok(kennis)
-        if blok:
+        # Gate op een ECHTE vondst, niet op een niet-leeg blok: het blok draagt sinds de
+        # grounding altijd minstens de grondwet, en 'geraadpleegd: 0/0/0' op de kaart is ruis.
+        if totaal(kennis):
             try:                                       # feed-regel: zichtbaar op de projectkaart
                 ledger.add_feed_entry(p["id"], "📚 raadpleegde de kennisbank: "
                                       + kennis["samenvatting"], kind="system",

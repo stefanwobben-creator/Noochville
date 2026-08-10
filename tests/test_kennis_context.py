@@ -13,7 +13,8 @@ from unittest.mock import patch
 from nooch_village.event_bus import EventBus
 from nooch_village.governance import Records
 from nooch_village.insight import Insight
-from nooch_village.kennis_context import kennis_blok, kennis_voor, meld_raadpleging, totaal
+from nooch_village.kennis_context import (MAX_BLOK_CHARS, kennis_blok, kennis_voor,
+                                          meld_raadpleging, totaal)
 from nooch_village.kennisbank import KennisbankStore
 from nooch_village.models import Record, RecordType, RoleDefinition
 from nooch_village.notes_store import NotesStore
@@ -61,7 +62,7 @@ def test_helper_vindt_kaartjes_inzichten_en_signalen(tmp_path):
     assert [x["id"] for x in k["kaartjes"]] == [ids["atom"]]
     assert [x["id"] for x in k["inzichten"]] == [ids["inzicht"]]
     assert [x["id"] for x in k["signalen"]] == [ids["signaal"]]      # gepromoveerd + wacht eruit
-    assert k["samenvatting"] == "1 kaartjes, 1 inzichten, 1 signalen"
+    assert k["samenvatting"].startswith("1 kaartjes, 1 inzichten, 1 signalen")
     assert k["kaartjes"][0]["bron"] == "OpenAlex"                    # per item: id + regel + bron
     assert k["inzichten"][0]["verdict"] == "dun"                     # live verdict (geen evidence)
     assert totaal(k) == 3
@@ -71,7 +72,7 @@ def test_helper_niets_bij_geen_overlap(tmp_path):
     _seed_kennislaag(str(tmp_path))
     k = kennis_voor(str(tmp_path), "vergaderruimte reserveren kantoortuin")
     assert k["kaartjes"] == [] and k["inzichten"] == [] and k["signalen"] == []
-    assert k["samenvatting"] == "0 kaartjes, 0 inzichten, 0 signalen"
+    assert k["samenvatting"].startswith("0 kaartjes, 0 inzichten, 0 signalen")
 
 
 def test_helper_failsoft_zonder_stores_en_met_contextobject(tmp_path):
@@ -89,16 +90,20 @@ def test_helper_failsoft_zonder_stores_en_met_contextobject(tmp_path):
 def test_kennis_blok_rendert_en_capt(tmp_path):
     _seed_kennislaag(str(tmp_path))
     blok = kennis_blok(kennis_voor(str(tmp_path), ZOEK))
-    assert blok.startswith("REEDS BEKEND (kennisbank — vul aan, herhaal niet):")
+    assert blok.startswith("GRONDWET (waaraan dit werk moet voldoen):")
+    assert "REEDS BEKEND (kennisbank — vul aan, herhaal niet):" in blok
     assert "Barefoot schoenen versterken de voetspieren" in blok
-    assert len(blok) <= 1500
-    assert kennis_blok({"kaartjes": [], "inzichten": [], "signalen": []}) == ""   # niets → geen blok
+    assert len(blok) <= MAX_BLOK_CHARS
+    # Niets gevonden → alleen de grondwet, geen lege "REEDS BEKEND"-kop. De grondwet gaat altijd
+    # mee: een tekst die zonder de missie geschreven wordt, moet je achteraf tegen de missie leggen.
+    kaal = kennis_blok({"kaartjes": [], "inzichten": [], "signalen": []})
+    assert kaal.startswith("GRONDWET") and "REEDS BEKEND" not in kaal
 
 
 def test_kennis_blok_harde_cap():
     veel = {"kaartjes": [{"id": f"a{i}", "tekst": "x" * 150, "bron": "b"} for i in range(30)],
             "inzichten": [], "signalen": []}
-    assert len(kennis_blok(veel)) <= 1500                            # default-cap houdt stand
+    assert len(kennis_blok(veel)) <= MAX_BLOK_CHARS                  # default-cap houdt stand
     assert len(kennis_blok(veel, max_chars=80)) <= 80                # ook een krappe cap is hard
 
 
