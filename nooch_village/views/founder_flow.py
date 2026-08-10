@@ -403,10 +403,77 @@ def _radar_wachtrij(st, data_dir: str, taak: str, niveau: str, labels: list[dict
             f"{_ai_gedaan(labels, taak, niveau, csrf_token, ritme)}")
 
 
+# ── Projectvoorstellen: het dorp stelt voor, jij beslist ─────────────────────
+
+# Herkomst → leesbaar label. Verhuisd uit views/projects.py toen de review-baan hierheen kwam.
+_VOORSTEL_BRON = {"proposal:radar": "approved signal", "proposal:kroniek": "gap in the Chronicle"}
+
+
+def _voorstellen_sectie(st, csrf_token: str, ritme: str, username: str | None) -> str:
+    """De voorstellen die op jouw oordeel wachten, dorpsbreed.
+
+    Stond tot 11 aug 2026 op de projecten-tab, in twee smaken (rol én cirkel). Daar moest je per
+    rol en per cirkel langs om te zien wat er lag, en zag je nooit het totaal — terwijl dit precies
+    het soort beslissing is waar deze flow voor bestaat.
+
+    BEWUST GEEN rijpheidsniveau. De andere flow-taken meten of de AI het menselijke oordeel
+    reproduceert; hier is geen AI-voorstel om tegen af te zetten (het dorp stelt het project vóór,
+    het beoordeelt het niet). Een trede erop plakken zou een meting suggereren die er niet is —
+    zelfde reden als bij de cluster-actie in de trend-view.
+
+    De knoppen verschijnen alleen als deze kijker ook echt mag beslissen: de dispatch-tak poort op
+    rolvervuller-of-Circle-Lead, en een knop mag nooit iets beloven wat de dispatch weigert."""
+    from nooch_village.cockpit2 import _role_gate
+
+    voorstellen = [p for p in st.projects.all()
+                   if p.get("status") == "proposed" and not p.get("archived")]
+    if not voorstellen:
+        return (f"<div class='c2-sec'><h3>Proposals</h3>"
+                f"<p class='muted'>Nothing awaiting your judgement.</p></div>")
+
+    kaarten = ""
+    for p in sorted(voorstellen, key=lambda x: x.get("created_at") or 0, reverse=True):
+        eigenaar = p.get("owner") or "?"
+        rec = st.records.get(eigenaar)
+        naam = getattr(getattr(rec, "definition", None), "name", "") or eigenaar
+        bron = _VOORSTEL_BRON.get(p.get("origin", ""), "the village")
+        mag = csrf_token and _role_gate(eigenaar, username, st) is None
+        if mag:
+            velden = _hidden(csrf_token, ritme, pid=p["id"])
+            knoppen = (f"<form method='post' action='/action'>{velden}"
+                       f"<button class='btn ok sm' type='submit' name='action' "
+                       f"value='proj_proposal_accept'>accept</button>"
+                       f"<button class='btn sm' type='submit' name='action' "
+                       f"value='proj_proposal_reject' "
+                       f"onclick=\"return confirm('Reject this proposal? It will not come back.')\">"
+                       f"reject</button></form>")
+        else:
+            knoppen = ("<p class='muted'>Only the role filler or Circle Lead of this role can "
+                       "decide on this one.</p>")
+        kaarten += (f"<div class='card'>"
+                    f"<span class='ptitle'>"
+                    f"<a href='/project?pid={_e(p['id'])}'>{_e(_scope(p) or '—')}</a></span> "
+                    f"<span class='pill'>{_e(bron)}</span> "
+                    f"<span class='pill'>{_e(naam)}</span>{knoppen}</div>")
+    return (f"<div class='c2-sec'><h3>Proposals — awaiting your judgement "
+            f"({len(voorstellen)})</h3>"
+            f"<p class='muted'>The village proposes; you decide. Nothing here is on the board or "
+            f"being worked on. Accepting puts it in Future on the role's board; rejecting is "
+            f"remembered, so the same source will not propose it again.</p>{kaarten}</div>")
+
+
+def _scope(p: dict) -> str:
+    sc = p.get("scope")
+    if isinstance(sc, dict):
+        return " · ".join(f"{k}: {v}" for k, v in sc.items())
+    return str(sc or "")
+
+
 # ── De pagina ────────────────────────────────────────────────────────────────
 
 def render_founder_flow(st, data_dir: str, *, csrf_token: str = "", msg: str = "",
-                        ritme: str = "dag", onthuld: str = "", radar_view: str = "trend") -> str:
+                        ritme: str = "dag", onthuld: str = "", radar_view: str = "trend",
+                        username: str | None = None) -> str:
     ritme = ritme if ritme in RITMES else "dag"
     radar_view = radar_view if radar_view in _RADAR_VIEWS else "trend"
     niveaus = ff.NiveauStore(f"{data_dir}/{ff.NIVEAU_BESTAND}")
@@ -431,5 +498,6 @@ def render_founder_flow(st, data_dir: str, *, csrf_token: str = "", msg: str = "
         f"proposal and your judgement clears the bar on a held-out sample.</p>"
         f"<div class='cl-bar'>Rhythm: {picker}</div>"
         f"{_onthulling(onthuld, csrf_token, ritme)}"
-        f"{secties}</div>")
+        f"{secties}"
+        f"{_voorstellen_sectie(st, csrf_token, ritme, username)}</div>")
     return _page("Founder Flow", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
