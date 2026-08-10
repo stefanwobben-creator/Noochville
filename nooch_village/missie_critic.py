@@ -21,6 +21,12 @@ weggevallen leverancier mag geen projecten blokkeren. Maar "onbekend" is ook gee
 reist mee in de notitie, zodat de mens ziet dat die toets niet gedraaid heeft. De drie
 deterministische toetsen draaien altijd, dus er is nooit een puls zonder oordeel.
 
+Wat hier BEWUST niet in zit: cross-rol-review. Een rapport automatisch langs compliance, de
+Librarian en Noochie sturen klinkt goed, maar zet bij elke afwijzing drie andere rollen aan het
+werk — en dat is geen review meer maar een lawine. Selectief routeren (wélk rapport, wélke rol,
+hoe vaak) is een eigen ontwerpvraag; die komt later, als de critic-cijfers laten zien waar de
+tweede blik echt nodig is.
+
 **Nooit stil doorlaten.** Zakt de critic, dan volgt precies één herkans-pas (het einddocument wordt
 opnieuw gesynthetiseerd, mét de kritiek erin). Blijft het zakken, dan gaat het project alsnog naar
 review — maar niet SCHOON: het oordeel staat op het project, in een role-message en in het event.
@@ -61,15 +67,6 @@ MIN_STRATEGIE_THEMAS = 1
 # oordeel wordt gelezen. De dorpsstaart blijft eronder hangen (zachte staart), zodat een wegvallende
 # leverancier geen projecten blokkeert — maar de kop is bewust duur.
 PREMIUM_LADDER = "anthropic:claude-sonnet-4-5"
-
-# Welke rol welke as toetst bij de cross-rol-review. Eén plek, zodat de routing niet uiteenloopt
-# met wat de critic afwees.
-REVIEWERS = {
-    "gegrond": ("librarian", "grounding toetsen"),
-    "missie": ("noochie", "toetsen of dit de missie dient"),
-    "claims": ("compliance", "claims toetsen"),
-}
-
 
 def pad(data_dir: str) -> str:
     return os.path.join(data_dir, BESTAND)
@@ -292,55 +289,3 @@ def alle(data_dir: str) -> list[dict]:
         log.warning("critic-labelbestand onleesbaar: %s", e)
         return []
     return uit
-
-
-# ── Cross-rol-review ─────────────────────────────────────────────────────────────────────────
-
-def vraag_cross_rol_review(vrager, project: dict, oordeel: dict, document: str = "") -> list[str]:
-    """Routeer het rapport naar de ándere rollen die er iets over te zeggen hebben.
-
-    Niet omdat de critic het niet weet, maar omdat een rol zijn eigen werk beoordeelt — en dat is
-    de zwakste vorm van review die er is. Compliance kijkt naar claims, de Librarian naar grounding,
-    Noochie (de brug naar The Source, met 'toetsen of een field note bij de missie past' in zijn
-    accountabilities) naar strategische relevantie.
-
-    Loopt via het bestaande `ask_accountability`: een VRAAG, geen commando — de andere rol beslist
-    zelf of hij het oppakt of er een spanning van maakt. Geeft de aangesproken rollen terug.
-
-    Fail-soft: geen bus of een kapotte publish → een lege lijst, nooit een geblokkeerd project."""
-    gevraagd: list[str] = []
-    oordelen = oordeel.get("oordelen") or {}
-    wil = set()
-    if oordelen.get("gegrond") is not True:
-        wil.add("gegrond")
-    if oordelen.get("missie") is not True:
-        wil.add("missie")
-    # Claims worden ALTIJD door compliance getoetst als het rapport iets beweert wat op de site zou
-    # kunnen landen. De critic kan dat niet zelf beoordelen — dat is compliance-domein.
-    if _bevat_claimtaal(document):
-        wil.add("claims")
-    for as_naam in sorted(wil):
-        rol, acc = REVIEWERS.get(as_naam, ("", ""))
-        if not rol:
-            continue
-        try:
-            vrager.ask_accountability(rol, acc, {
-                "project_id": project.get("id", ""), "as": as_naam,
-                "reden": " | ".join(oordeel.get("redenen") or [])[:400],
-                "vraag": f"Toets dit rapport op {as_naam}. Zie het einddocument van dit project."})
-            gevraagd.append(rol)
-        except Exception as e:                           # noqa: BLE001
-            log.warning("cross-rol-review naar %s mislukte: %s", rol, e)
-    return gevraagd
-
-
-_CLAIMTAAL = re.compile(
-    r"\b(100\s*%|co2|klimaatneutraal|klimaatpositief|biologisch afbreekbaar|composteerbaar|"
-    r"duurzaam|duurzame|circulair|recycl\w*|plasticvrij|plantaardig|eco-?friendly|"
-    r"carbon.?neutral|biodegradable|compostable|sustainab\w+|circular)\b", re.I)
-
-
-def _bevat_claimtaal(document: str) -> bool:
-    """Bevat het rapport taal die als milieuclaim op de site kan landen? Ruim aan de kant van
-    'ja': een onnodige review bij compliance kost een vraag, een gemiste claim kost een boete."""
-    return bool(_CLAIMTAAL.search(document or ""))

@@ -8,6 +8,10 @@ De guards die de opdracht vraagt staan onderaan:
   - een rapport dat de done-when niet beantwoordt of off-mission is, bereikt geen SCHONE review;
   - een leeg project wordt gevlagd.
 
+Cross-rol-review zit hier BEWUST niet in: dat zette bij elke afwijzing drie andere rollen aan het
+werk, en dat is geen review meer maar een lawine. Selectief routeren komt later, als de
+critic-cijfers laten zien waar een tweede blik echt nodig is.
+
 En de regel die eronder ligt: nooit stil doorlaten, maar ook nooit stil vastzetten. Een project
 eeuwig tegenhouden is erger dan een gemarkeerd project — dan verdwijnt het uit beeld.
 """
@@ -209,47 +213,6 @@ def test_ook_geslaagde_oordelen_worden_vastgelegd(tmp_path):
     mc.leg_vast(str(tmp_path), project_id="p", rol="r", fase="eerste",
                 oordeel={"geslaagd": True, "oordelen": {}, "redenen": []})
     assert mc.alle(str(tmp_path))[0]["geslaagd"] is True
-
-
-# ── Cross-rol-review ─────────────────────────────────────────────────────────
-
-class _Vrager:
-    def __init__(self):
-        self.gevraagd = []
-
-    def ask_accountability(self, target_role, accountability_key, payload=None):
-        self.gevraagd.append((target_role, accountability_key, payload))
-
-
-def test_cross_rol_review_routeert_naar_de_juiste_rollen():
-    v = _Vrager()
-    oordeel = {"oordelen": {"gegrond": False, "missie": False}, "redenen": ["x"]}
-    rollen = mc.vraag_cross_rol_review(v, {"id": "p1"}, oordeel, "Dit is 100% composteerbaar.")
-    assert set(rollen) == {"librarian", "noochie", "compliance"}
-    assert all(p["project_id"] == "p1" for _, _, p in v.gevraagd)
-
-
-def test_compliance_wordt_gevraagd_zodra_er_claimtaal_in_staat():
-    """Claims kan de critic niet zelf beoordelen — dat is compliance-domein. Ruim aan de kant van
-    'ja': een onnodige review kost een vraag, een gemiste claim kost een boete."""
-    v = _Vrager()
-    oordeel = {"oordelen": {"gegrond": True, "missie": True}, "redenen": []}
-    rollen = mc.vraag_cross_rol_review(v, {"id": "p"}, oordeel, "De zool is biologisch afbreekbaar.")
-    assert rollen == ["compliance"]
-
-
-def test_geen_cross_rol_review_zonder_reden():
-    v = _Vrager()
-    oordeel = {"oordelen": {"gegrond": True, "missie": True}, "redenen": []}
-    assert mc.vraag_cross_rol_review(v, {"id": "p"}, oordeel, "Een neutrale tekst over zolen.") == []
-
-
-def test_cross_rol_review_valt_zacht_bij_een_kapotte_bus():
-    class _Stuk:
-        def ask_accountability(self, *a, **k):
-            raise RuntimeError("bus weg")
-    oordeel = {"oordelen": {"gegrond": False}, "redenen": []}
-    assert mc.vraag_cross_rol_review(_Stuk(), {"id": "p"}, oordeel, "") == []
 
 
 # ── GUARDS: de review-gate end-to-end ────────────────────────────────────────
