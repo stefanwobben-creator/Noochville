@@ -174,7 +174,7 @@ def test_volledige_inhoud_en_structuur_en_hogere_cap(tmp_path):
     prompt = m.call_args[0][0]
     assert big in prompt                                          # volledige inhoud, niet op 500 afgekapt
     assert "FEITELIJKE BEVINDINGEN" in prompt and "elke taak" in prompt.lower()   # taak/bevindingen-structuur
-    assert m.call_args[1]["max_tokens"] == 4000                   # hogere output-cap (default)
+    assert m.call_args[1]["max_tokens"] == 8000                   # ruimere output-cap (default)
 
 
 # 7. Atomic write: nooit een half bestand leesbaar; geen achtergebleven .tmp
