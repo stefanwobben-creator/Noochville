@@ -1209,7 +1209,8 @@ class Inhabitant(threading.Thread):
         # Ruim token-budget: een verbose trede (bv. mistral) kapt het plan-JSON anders middenin af →
         # onparsebaar. 1500 tokens is genoeg voor 2-5 items met payloads en langere velden.
         raw, tier = llm_reason(prompt, json_mode=True, return_tier=True, max_tokens=1500,
-                               call_site="plan_checklist")
+                               call_site="plan_checklist",
+                               ladder=_persona_ladder(self.context, self.id, "plan_checklist"))
         if raw is None:                                          # onderscheid: LLM gaf niets terug…
             self.log.warning("📋 plan: LLM leverde geen antwoord (alle tredes uitgeput)")
             return None
@@ -1219,7 +1220,9 @@ class Inhabitant(threading.Thread):
             strak = prompt + ("\n\nBELANGRIJK: antwoord met ALLEEN het JSON-object — geen ``` fences, "
                               "geen uitleg ervoor of erna. Houd de tekst-, reason- en deliverable-velden kort.")
             raw2, tier2 = llm_reason(strak, json_mode=True, return_tier=True, max_tokens=1500,
-                                     call_site="plan_checklist_retry")
+                                     call_site="plan_checklist_retry",
+                                     ladder=_persona_ladder(self.context, self.id,
+                                                            "plan_checklist_retry"))
             data = self._extract_json(raw2) if raw2 is not None else None
             if not self._is_valid_plan(data):
                 self.log.warning("📋 plan: LLM-antwoord NIET PARSEBAAR (via %s). Rauw (afgekapt): %r",
@@ -2232,14 +2235,14 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
         # dit document van die kop kwam of van de goedkope staart.
         _eigen: set[str] = set()
         try:
-            from nooch_village.llm_keuze import eigen_tredes, voorkeur_van
+            from nooch_village.llm_keuze import eigen_tredes, ladder_voor
             _p = personas.get(getattr(record, "persona_id", None)) if personas is not None else None
-            _ladder = voorkeur_van(_p, "einddocument")
+            _ladder = ladder_voor("einddocument", _p)
             _eigen = eigen_tredes(_p, "einddocument")
         except Exception:
             _ladder = None
         out, _tier = reason(prompt, call_site="einddocument", ladder=_ladder, return_tier=True,
-                            max_tokens=int(settings.get("einddocument_max_tokens", "4000")))
+                            max_tokens=int(settings.get("einddocument_max_tokens", "8000")))
     except Exception as e:
         log.warning("einddocument-synthese overgeslagen (document intact): %s", e)
         return False

@@ -68,5 +68,20 @@ class ContentSchrijvenSkill(Skill):
             + "van het succes).\n"
             + instruction(locale)
         )
-        out = reason(prompt, call_site="skill_content_schrijven")
+        out = reason(prompt, call_site="skill_content_schrijven", ladder=_hoog_inzet_ladder("skill_content_schrijven"))
         return out.strip() if out else None
+
+
+def _hoog_inzet_ladder(call_site: str):
+    """De dorpsbrede hoog-inzet-ladder voor deze call-site.
+
+    Bewust ZONDER persona-override: een skill kent zijn rol niet (de context die hij krijgt draagt
+    geen role_id), dus die keuze is hier niet te maken. De persona-override werkt wél op de
+    rol-gebonden sites (plan_checklist, einddocument, noochie_weigh_in) via `_persona_ladder`.
+
+    Fail-soft: gaat de keuze stuk, dan de dorpsladder — een ladder mag een call nooit blokkeren."""
+    try:
+        from nooch_village.llm_keuze import ladder_voor
+        return ladder_voor(call_site)
+    except Exception:                                # noqa: BLE001
+        return None
