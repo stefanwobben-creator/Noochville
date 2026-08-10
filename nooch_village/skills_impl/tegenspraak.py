@@ -28,7 +28,8 @@ class TegenspraakSkill(Skill):
                    "concrete revisie of verplichte nuance. Voor elke rol, op elke output.")
     input_schema = ("tekst: str (verplicht — de deliverable/claim die getoetst wordt); "
                     "bewijs: str (optioneel — de onderbouwing waarop het zou moeten rusten); "
-                    "doel: str (optioneel — de uitkomst die de output dient)")
+                    "doel: str (optioneel — de uitkomst die de output dient); "
+                    "ladder: str (optioneel — eigen LLM-ladder, bv. premium voor een critic)")
     required_payload = ("tekst",)
     output_schema = ("ok, oordeel ('houdt stand'|'moet bij'), zwakste_claim, ongegrond (list), "
                      "tegenargument, revisie, samenvatting | error")
@@ -39,6 +40,10 @@ class TegenspraakSkill(Skill):
             return {"error": "ontbrekende parameter: 'tekst' is verplicht"}
         bewijs = ((payload or {}).get("bewijs") or "").strip()
         doel = ((payload or {}).get("doel") or "").strip()
+        # Een eigen ladder mag: als deze skill als CRITIC draait (missie_critic) hoort het oordeel
+        # van de premium-trede te komen. Een goedkoop oordeel dat als premium oordeel wordt gelezen
+        # is precies de stille verwisseling die een reviewer niet kan zien.
+        ladder = ((payload or {}).get("ladder") or "").strip() or None
         from nooch_village.llm import reason
         prompt = (
             "Je bent een strenge, eerlijke reviewer voor Nooch (duurzame veganistische schoenen). Spreek "
@@ -60,7 +65,7 @@ class TegenspraakSkill(Skill):
             "Antwoord UITSLUITEND met JSON:\n"
             '{"oordeel":"houdt stand of moet bij","zwakste_claim":"...","ongegrond":["..."],'
             '"tegenargument":"...","revisie":"..."}')
-        raw = reason(prompt, call_site="skill_tegenspraak", json_mode=True, max_tokens=700)
+        raw = reason(prompt, call_site="skill_tegenspraak", ladder=ladder, json_mode=True, max_tokens=700)
         data = _extract(raw)
         if not isinstance(data, dict):
             return {"ok": False, "error": "geen bruikbaar oordeel (LLM weg) — toets handmatig"}

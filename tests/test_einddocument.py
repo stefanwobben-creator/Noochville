@@ -121,11 +121,15 @@ def test_awaiting_review_finale_pass_en_note(tmp_path):
     _prep(ledger, pid, [("s", "openalex_evidence", "barefoot")])   # één item → all-done
     with patch(_REASON, side_effect=_reason_mock("# Afgerond\nKlaar.")) as m:
         inh._execute_checklist(ledger.get(pid), TODAY)
-    assert m.call_count == 1
+    # Twee syntheses, niet één: dit document is 18 tekens, dus de missie-critic zakt erop en geeft
+    # één herkans-pas in dezelfde puls (zie Inhabitant._critic_gate). Zonder critic was dit er één.
+    assert m.call_count == 2
     assert docs.read(pid) == "# Afgerond\nKlaar."
     p = ledger.get(pid)
     assert p["status"] == "blocked" and p["blocked_on"] == "review"
+    assert p.get("critic_verdict") == "afgewezen"          # geen SCHONE review
     assert any(e.get("text", "").startswith("📄 Einddocument bijgewerkt") for e in p.get("log", []))
+    assert any("Missie-critic" in e.get("text", "") for e in p.get("log", []))
 
 
 # 5. Input-cap fail-loud: kleine cap → DOC_INPUT_CAP-logregel, geen stille truncatie
