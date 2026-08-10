@@ -249,3 +249,35 @@ def test_critic_gebruikt_dezelfde_kop_niet_een_kopie():
     assert missie_critic.premium_ladder() == lk.hoog_inzet_ladder()
     src = open("nooch_village/missie_critic.py", encoding="utf-8").read()
     assert "claude-sonnet" not in src                 # geen tweede exemplaar van de modelnaam
+
+
+# ── Prijsloze tredes zijn zichtbaar, niet stil ───────────────────────────────
+
+def test_prijsloze_trede_wordt_herkend():
+    """Op productie liepen drie Sonnet-ids naast elkaar (4-5, 4-6, 'anthropic:default'), geen
+    enkele met een prijs — vijftig calls die nergens meetelden en de cap dus blind maakten."""
+    assert lk.prijsloze_tredes(lk.hoog_inzet_ladder()) == []
+    assert lk.prijsloze_tredes("anthropic:claude-sonnet-4-6") == ["anthropic:claude-sonnet-4-6"]
+    assert lk.prijsloze_tredes("anthropic:default") == ["anthropic:default"]
+
+
+def test_prijsloze_persona_voorkeur_wordt_gemeld(caplog):
+    """Fail-loud: een ladder die de cap niet kan zien is geen detail."""
+    from nooch_village.personas import Persona
+    lk._gemeld_prijsloos.clear()
+    p = Persona(id="x", name="Wendy", llm={"default": "anthropic:claude-sonnet-4-6"})
+    with caplog.at_level("WARNING"):
+        lk.ladder_voor("einddocument", p)
+    assert "PRIJSLOZE_TREDE" in caplog.text
+    assert "claude-sonnet-4-6" in caplog.text
+
+
+def test_prijsloze_melding_is_eenmalig(caplog):
+    """Fail-loud mag geen logspam worden: één regel per onbekende trede, niet per call."""
+    from nooch_village.personas import Persona
+    lk._gemeld_prijsloos.clear()
+    p = Persona(id="x", name="W", llm={"default": "anthropic:claude-sonnet-4-6"})
+    with caplog.at_level("WARNING"):
+        for _ in range(5):
+            lk.ladder_voor("einddocument", p)
+    assert caplog.text.count("PRIJSLOZE_TREDE") == 1

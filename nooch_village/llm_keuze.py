@@ -112,6 +112,7 @@ def ladder_voor(call_site: str, persona=None) -> str | None:
     dorp stil legt is erger dan een cap die hem goedkoper laat werken."""
     eigen = voorkeur_van(persona, call_site) if persona is not None else None
     if eigen:
+        _meld_prijsloos(eigen, f"persona-voorkeur voor {call_site}")
         return eigen
     if call_site in GOEDKOOP or call_site not in HOOG_INZET:
         return None
@@ -120,6 +121,7 @@ def ladder_voor(call_site: str, persona=None) -> str | None:
         return None
     if premium_op():
         return None
+    _meld_prijsloos(kop, "dorpsbrede hoog-inzet-kop")
     from nooch_village import llm as _llm
     return kop if call_site in PREMIUM_ONLY else _llm.met_dorpsstaart(kop)
 
@@ -210,6 +212,37 @@ def premium_op(nu: float | None = None) -> bool:
                      "vallen terug op de dorpsladder tot de volgende maand.", eur, cap)
     _cap_cache.update({"tot": nu, "op": op, "eur": eur})
     return op
+
+
+def prijsloze_tredes(ladder: str) -> list[str]:
+    """De tredes in deze ladder waarvoor `config/llm_prijzen.json` geen prijs kent.
+
+    Bestaat omdat een prijsloze trede de maandcap BLIND maakt: die calls tellen voor €0,00 en de
+    zekering gaat nooit om. Op productie liepen er drie verschillende Sonnet-ids naast elkaar
+    (4-5, 4-6, en 'anthropic:default'), geen enkele met een prijs — 50 calls die nergens meetelden."""
+    prijzen = _prijzen()
+    uit = []
+    for trede in (ladder or "").split(","):
+        trede = trede.strip()
+        if trede and kosten_eur(trede, 1000, 1000, prijzen) is None:
+            uit.append(trede)
+    return uit
+
+
+_gemeld_prijsloos: set = set()
+
+
+def _meld_prijsloos(ladder: str, herkomst: str) -> None:
+    """Waarschuw ÉÉN keer per onbekende trede. Fail-loud, niet fail-silent: een ladder die de cap
+    niet kan zien is geen detail, maar hij mag ook geen logspam worden."""
+    for trede in prijsloze_tredes(ladder):
+        if trede in _gemeld_prijsloos:
+            continue
+        _gemeld_prijsloos.add(trede)
+        _log.warning("PRIJSLOZE_TREDE: '%s' (%s) staat niet in config/llm_prijzen.json — deze "
+                     "calls tellen voor EUR 0,00 en zijn dus onzichtbaar voor de maandcap. "
+                     "Zet er een prijs bij of lijn de trede uit met de dorpskop (%s).",
+                     trede, herkomst, hoog_inzet_ladder())
 
 
 def premium_stand() -> dict:
