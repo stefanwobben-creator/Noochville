@@ -371,6 +371,42 @@ class ProjectLedger:
                 return True
         return False
 
+    def mark_critic(self, pid: str, veld: str, waarde) -> bool:
+        """Zet een critic-vlag op het project (`critic_herkansing`, `critic_verdict`).
+
+        Eigen methode i.p.v. een generieke setter: een vrije set-any-field op de ledger is precies
+        hoe een store zijn schema kwijtraakt. Deze twee velden zijn het contract van de
+        missie-critic met de review-gate, en verder niets."""
+        if veld not in ("critic_herkansing", "critic_verdict"):
+            return False
+        p = self._projects.get(pid)
+        if p is None:
+            return False
+        p[veld] = waarde
+        self._touch(p)
+        self._save()
+        return True
+
+    def set_item_leeg(self, pid: str, clid: str, item_id: str, reden: str = "") -> bool:
+        """Markeer een item als UITGEVOERD-MAAR-LEEG: de skill draaide, er kwam niets uit.
+
+        Zo'n item wordt wél afgevinkt (anders zou het project de review-gate nooit halen en eeuwig
+        een lege bron herproberen), maar het is geen antwoord. Zonder deze markering leest 4/4 als
+        'alles beantwoord' terwijl er vier kennisgaten staan — precies de valse voltooiing waar
+        `not_answered_note` tegen bestaat."""
+        p = self._projects.get(pid)
+        cl = self._checklist(p, clid) if p else None
+        if cl is None:
+            return False
+        for it in cl.get("items", []):
+            if it["id"] == item_id:
+                it["leeg"] = True
+                if reden:
+                    it["leeg_reden"] = str(reden)[:200]
+                self._touch(p); self._save()
+                return True
+        return False
+
     def note_item_fail(self, pid: str, clid: str, item_id: str) -> int:
         """Tel een mislukte poging (skill-fout) op een checklist-item; returnt de nieuwe teller. De
         autonome worker gebruikt dit om na een grens níét eindeloos te herproberen maar het project op
@@ -883,6 +919,17 @@ def human_task_items(project_or_cl, alleen_open: bool = True) -> list[dict]:
             and not (alleen_open and it.get("done"))]
 
 
+def empty_items(project_or_cl) -> list:
+    """Items die zijn uitgevoerd maar niets opleverden (`leeg`). Afgevinkt, maar geen antwoord."""
+    items = (project_or_cl.get("items", []) if isinstance(project_or_cl, dict)
+             and "items" in project_or_cl else None)
+    if items is None:
+        items = []
+        for cl in (project_or_cl.get("checklists") or []):
+            items += cl.get("items") or []
+    return [it for it in items if it.get("leeg") and not it.get("skipped")]
+
+
 def not_answered_note(project_or_cl, max_toon: int = 2) -> str:
     """Één leesbare regel over wat dit project NIET beantwoordt: overgeslagen taken plus nog
     openstaande mens-taken. Leeg als er niets uitstaat.
@@ -893,8 +940,13 @@ def not_answered_note(project_or_cl, max_toon: int = 2) -> str:
     delen = []
     weg = skipped_items(project_or_cl)
     mens = human_task_items(project_or_cl)
+    # Uitgevoerd-maar-leeg hoort in dezelfde regel: het is afgevinkt, maar het beantwoordt niets.
+    # Zonder deze groep is een project waarin élke taak leegliep niet van een afgerond project te
+    # onderscheiden — de duurste vorm van valse voltooiing.
+    leeg = empty_items(project_or_cl)
     for groep, label, redenveld in ((weg, "overgeslagen", "skip_reason"),
-                                    (mens, "mens-taak/taken open", "reason")):
+                                    (mens, "mens-taak/taken open", "reason"),
+                                    (leeg, "uitgevoerd zonder resultaat", "leeg_reden")):
         if not groep:
             continue
         stukken = []
@@ -971,6 +1023,7 @@ _WRITE_METHODS = (
     "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
     "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",
     "mark_formalized", "to_future", "mark_scope_nudge", "note_item_fail", "reset_item_fails",
+    "set_item_leeg", "mark_critic",
 )
 for _m in _WRITE_METHODS:
     setattr(ProjectLedger, _m, _synchronized(getattr(ProjectLedger, _m)))

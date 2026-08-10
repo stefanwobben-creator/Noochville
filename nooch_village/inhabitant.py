@@ -1427,6 +1427,12 @@ class Inhabitant(threading.Thread):
                 # de mens kan beoordelen of het klaar is (i.p.v. eeuwig een lege bron te herproberen).
                 why = result.get("reason") or "onderzocht, niets gevonden"
                 ledger.add_role_message(pid, f"📭 '{item.get('text','')}' via {src_label}: geen resultaat — {why}")
+                # Afvinken MOET (anders haalt het project de review-gate nooit en herprobeert het
+                # eeuwig een lege bron), maar niet SCHOON: `leeg` markeert dat dit item is
+                # uitgevoerd zonder antwoord. Zonder die markering leest 4/4 als "alles
+                # beantwoord" terwijl er vier kennisgaten staan, en dat is precies de valse
+                # voltooiing waar de review-melding tegen bestaat.
+                ledger.set_item_leeg(pid, clid, item["id"], why)
                 ledger.check_toggle(pid, clid, item["id"])
                 self.log.info("📭 project '%s': item '%s' via %s afgerond zonder resultaat", pid,
                               item.get("text", "")[:40], src_label)
@@ -1449,15 +1455,20 @@ class Inhabitant(threading.Thread):
             # VERSE all-done-overgang (review_raised nog niet gezet) — zo herblokkeert een afgewezen-en-
             # teruggesleept project niet elke puls (Q2).
             if not (ledger.get(pid) or {}).get("review_raised"):
-                ledger.mark_awaiting_review(pid)
                 self._synthesize_einddocument(ledger.get(pid), done, total, force_final=True)
+                # De missie-critic vóór de gate. Vier assen; zakt er één, dan is dit geen schone
+                # review. Zie missie_critic — de gate telde tot nu toe alleen vakjes af.
+                self._critic_gate(pid, clid, fresh_cl, done, total)
+                ledger.mark_awaiting_review(pid)
                 from nooch_village.projects import not_answered_note
                 weg = not_answered_note(fresh_cl)     # 4/4 mag niet lezen als "alles gedaan"
                 ledger.add_role_message(pid, "✅ Checklist voltooid — klaar voor review."
                                         + (f"\n⤳ LET OP: {weg}. Dit deel van het projectdoel is "
                                            f"NIET beantwoord." if weg else ""))
                 self.bus.publish(Event("project_awaiting_review",
-                                       {"project_id": pid, "owner": self.id}, self.id))
+                                       {"project_id": pid, "owner": self.id,
+                                        "critic": (ledger.get(pid) or {}).get("critic_verdict", "geslaagd")},
+                                       self.id))
                 self.log.info("✅ project '%s' checklist voltooid (%d/%d) — wacht op review", pid, done, total)
             return None                                          # geen autonome DONE meer
         # Vastloop-klep: het project gaat naar WAITING (blocked) zodra er open items zijn en GEEN ENKELE
@@ -1537,6 +1548,97 @@ class Inhabitant(threading.Thread):
             return int(getattr(self.context, "settings", {}).get("item_fail_limit", "3"))
         except (TypeError, ValueError):
             return 3
+
+    def _critic_gate(self, pid: str, clid: str, checklist: dict, done: int, total: int) -> None:
+        """De missie-critic vóór 'klaar voor review'. Zet het oordeel op het project.
+
+        De herkans-pas gebeurt in DEZELFDE puls, niet de volgende. Een puls is hier een dag: het
+        project een dag laten wachten op een tweede synthese kost een dag en levert niets op wat
+        nu al kan. Dus: zakt de critic, dan schrijft hij zijn kritiek op de kaart (waar de synthese
+        hem leest), synthetiseert het einddocument opnieuw, en oordeelt nog één keer.
+
+        Drie uitkomsten:
+          - geslaagd (meteen of na herstel) → schone review, niets extra's op de kaart;
+          - gezakt, hersteld               → schone review; de herkansing staat in de labels;
+          - gezakt, blijft zakken          → tóch naar review, maar NIET schoon: `critic_verdict`
+                                             op het project, een role-message, en het oordeel in
+                                             het awaiting_review-event.
+
+        Waarom die laatste dóórlaat: een project eeuwig tegenhouden is erger dan een gemarkeerd
+        project — dan verdwijnt het uit beeld en ziet niemand meer dát er iets mis was. Nooit stil
+        doorlaten, maar ook nooit stil vastzetten.
+
+        Fail-soft: gaat de critic zelf stuk, dan gaat het project door zoals voorheen. De poort mag
+        de oplevering niet gijzelen."""
+        from nooch_village import missie_critic
+        ledger = self.context.projects
+        data_dir = getattr(self.context, "data_dir", "") or "."
+
+        oordeel = self._critic_oordeel(pid, checklist)
+        if oordeel is None:
+            return                                       # critic kapot → door zoals voorheen
+        missie_critic.leg_vast(data_dir, project_id=pid, rol=self.id, oordeel=oordeel,
+                               fase="eerste")
+        if oordeel["geslaagd"]:
+            self.log.info("🔎 critic: project '%s' staat — %s", pid, oordeel["samenvatting"])
+            return
+
+        project = ledger.get(pid) or {}
+        document = self._critic_document(pid)
+        # De kritiek op de kaart ZETTEN vóór de herkansing: de einddocument-synthese leest de
+        # projectfeed, dus zo werkt de tweede pas met de bezwaren in de hand.
+        ledger.add_role_message(pid, missie_critic.notitie(oordeel, herkansing=True))
+        gevraagd = missie_critic.vraag_cross_rol_review(self, project, oordeel, document)
+        if gevraagd:
+            ledger.add_role_message(pid, "👥 Cross-rol-review gevraagd aan: " + ", ".join(gevraagd)
+                                    + ". Zij beoordelen dit op hun eigen accountability.")
+        self.bus.publish(Event("critic_rejected",
+                               {"project_id": pid, "owner": self.id, "fase": "eerste",
+                                "oordelen": oordeel["oordelen"],
+                                "redenen": oordeel["redenen"][:3]}, self.id))
+
+        # Eén herkans-pas: opnieuw synthetiseren, opnieuw oordelen.
+        ledger.mark_critic(pid, "critic_herkansing", True)
+        self._synthesize_einddocument(ledger.get(pid), done, total, force_final=True)
+        tweede = self._critic_oordeel(pid, checklist)
+        if tweede is None:
+            return
+        missie_critic.leg_vast(data_dir, project_id=pid, rol=self.id, oordeel=tweede,
+                               fase="herkansing")
+        if tweede["geslaagd"]:
+            ledger.add_role_message(pid, "🔎 Missie-critic: na herstel haalt dit rapport de lat.")
+            self.log.info("🔎 critic: project '%s' hersteld na herkansing", pid)
+            return
+        ledger.mark_critic(pid, "critic_verdict", "afgewezen")
+        ledger.add_role_message(pid, missie_critic.notitie(tweede, herkansing=False))
+        self.bus.publish(Event("critic_rejected",
+                               {"project_id": pid, "owner": self.id, "fase": "herkansing",
+                                "oordelen": tweede["oordelen"],
+                                "redenen": tweede["redenen"][:3]}, self.id))
+        self.log.warning("🔎 critic: project '%s' blijft zakken — %s", pid, tweede["samenvatting"])
+
+    def _critic_document(self, pid: str) -> str:
+        docs = getattr(self.context, "project_docs", None)
+        try:
+            return (docs.read(pid) or "") if docs is not None else ""
+        except Exception:                                # noqa: BLE001
+            return ""
+
+    def _critic_oordeel(self, pid: str, checklist: dict):
+        """Eén critic-oordeel over de huidige stand. None = de critic kon niet draaien."""
+        from nooch_village import missie_critic
+        ledger = self.context.projects
+        try:
+            dstore = getattr(self.context, "deliverables", None)
+            leveringen = [str(d.get("summary") or d.get("result") or "")
+                          for d in (dstore.for_project(pid) if dstore is not None else [])]
+            return missie_critic.beoordeel(project=ledger.get(pid) or {},
+                                           document=self._critic_document(pid),
+                                           deliverables=leveringen, checklist=checklist,
+                                           context=self.context)
+        except Exception as e:                           # noqa: BLE001 — de oplevering gaat vóór
+            self.log.warning("missie-critic overgeslagen (project gaat door): %s", e)
+            return None
 
     def _route_stuck_items(self, project: dict, clid: str, open_items: list) -> list:
         """Laat de escalatie-router één keer over de vastgelopen items lopen; geef terug wat hier
