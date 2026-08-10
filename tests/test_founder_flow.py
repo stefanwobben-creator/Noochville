@@ -62,31 +62,31 @@ def _labels(taak, paren, *, ai_getoond=False, correctie=False, niveau="A"):
 # ── 1. De labels zelf ────────────────────────────────────────────────────────
 
 def test_label_roundtrip_en_validatie(dd):
-    assert ff.leg_vast(dd, taak=ff.RADAR, item="a1", mens="keep", ai="dismiss", niveau="B")
+    assert ff.leg_vast(dd, taak=ff.RADAR, item="a1", mens="nieuw", ai="bekend", niveau="B")
     # Onbekende taak en onbekend oordeel worden geweigerd: de meting mag nooit op typefouten tellen.
-    assert ff.leg_vast(dd, taak="verzonnen", item="a2", mens="keep") is None
+    assert ff.leg_vast(dd, taak="verzonnen", item="a2", mens="nieuw") is None
     assert ff.leg_vast(dd, taak=ff.RADAR, item="a3", mens="misschien") is None
-    assert ff.leg_vast(dd, taak=ff.RADAR, item="", mens="keep") is None
+    assert ff.leg_vast(dd, taak=ff.RADAR, item="", mens="nieuw") is None
     # Een onbekend AI-voorstel wordt stil tot "geen voorstel" — het label blijft, de meting niet.
-    rij = ff.leg_vast(dd, taak=ff.RADAR, item="a4", mens="keep", ai="onzin")
+    rij = ff.leg_vast(dd, taak=ff.RADAR, item="a4", mens="nieuw", ai="onzin")
     assert rij is not None and rij["ai"] is None
 
     rijen = ff.alle(dd)
     assert [r["item"] for r in rijen] == ["a1", "a4"]
-    assert rijen[0]["mens"] == "keep" and rijen[0]["ai"] == "dismiss"
+    assert rijen[0]["mens"] == "nieuw" and rijen[0]["ai"] == "bekend"
 
 
 def test_label_is_append_only(dd):
-    ff.leg_vast(dd, taak=ff.RADAR, item="a1", mens="keep", ai="keep")
-    ff.leg_vast(dd, taak=ff.RADAR, item="a1", mens="dismiss", ai="keep", correctie=True)
+    ff.leg_vast(dd, taak=ff.RADAR, item="a1", mens="nieuw", ai="nieuw")
+    ff.leg_vast(dd, taak=ff.RADAR, item="a1", mens="bekend", ai="nieuw", correctie=True)
     rijen = ff.alle(dd)
     assert len(rijen) == 2                                     # niets overschreven
-    assert ff.laatste_per_item(rijen, ff.RADAR)["a1"]["mens"] == "dismiss"
+    assert ff.laatste_per_item(rijen, ff.RADAR)["a1"]["mens"] == "bekend"
 
 
 def test_ai_regel_draagt_geen_mensoordeel(dd):
     """Een item dat de AI zelf afhandelde staat in dezelfde stroom, maar is geen menselijk label."""
-    ff.leg_vast(dd, taak=ff.RADAR, item="a1", mens=None, ai="dismiss", niveau="D", door="ai")
+    ff.leg_vast(dd, taak=ff.RADAR, item="a1", mens=None, ai="bekend", niveau="D", door="ai")
     rij = ff.alle(dd)[0]
     assert rij["mens"] is None and rij["door"] == "ai"
     assert ff.held_out(ff.alle(dd), ff.RADAR) == []             # telt niet mee in de meting
@@ -109,7 +109,7 @@ def test_voorstel_staat_niet_in_de_html_op_a_en_b(dd):
     _radar_signaal(st, content="hemp sneaker composteerbaar")
     for niveau in ("A", "B"):
         _niveaus(dd).zet(ff.RADAR, niveau, door="t", reden="test")
-        pagina = render_founder_flow(_st(dd), dd, csrf_token="tok")
+        pagina = render_founder_flow(_st(dd), dd, csrf_token="tok", radar_view="nieuw")
         assert "hemp sneaker composteerbaar" in pagina          # het item staat er wel
         assert "The AI proposes" not in pagina                  # het voorstel niet
         assert "You decide first" in pagina
@@ -122,7 +122,7 @@ def test_voorstel_staat_wel_in_de_html_op_c(dd, monkeypatch):
     monkeypatch.setattr(ff, "instellingen", lambda d, t="": dict(ff._DEFAULTS[t], audit_pct=0)
                         if t else {k: dict(v, audit_pct=0) for k, v in ff._DEFAULTS.items()})
     _niveaus(dd).zet(ff.RADAR, "C", door="t", reden="test")
-    pagina = render_founder_flow(_st(dd), dd, csrf_token="tok")
+    pagina = render_founder_flow(_st(dd), dd, csrf_token="tok", radar_view="nieuw")
     assert "The AI proposes" in pagina
 
 
@@ -132,7 +132,7 @@ def test_auditsteekproef_blijft_blind_op_d(dd, monkeypatch):
     # Alles in de steekproef → ook op D moet de pagina blind blijven.
     monkeypatch.setattr(ff, "in_auditsteekproef", lambda taak, item, pct: True)
     _niveaus(dd).zet(ff.RADAR, "D", door="t", reden="test")
-    pagina = render_founder_flow(_st(dd), dd, csrf_token="tok")
+    pagina = render_founder_flow(_st(dd), dd, csrf_token="tok", radar_view="nieuw")
     assert "audit sample" in pagina
     assert "The AI proposes" not in pagina
 
@@ -144,33 +144,33 @@ def test_onthulling_komt_pas_na_de_beslissing(dd):
     maar een handicap. De 'neem het antwoord van de AI' -knop is de correctie op één klik."""
     st = _st(dd)
     rid = _radar_signaal(st, content="hemp sneaker composteerbaar")
-    nxt, _ = _beslis(dd, ff.RADAR, rid, "dismiss")
+    nxt, _ = _beslis(dd, ff.RADAR, rid, "bekend")
     onthuld = urllib.parse.unquote(
         urllib.parse.parse_qs(nxt.split("?", 1)[1])["onthuld"][0])
-    assert onthuld.startswith(f"{ff.RADAR}|{rid}|dismiss|keep|")
+    assert onthuld.startswith(f"{ff.RADAR}|{rid}|bekend|nieuw|")
 
     pagina = render_founder_flow(_st(dd), dd, csrf_token="tok", onthuld=onthuld)
-    assert "You: dismiss · AI: keep" in pagina
+    assert "You: we already have this · AI: new to us" in pagina
     assert "disagreed" in pagina
     # Op A beslist de mens en niemand anders: geen overname-knop.
     assert "take the AI&#x27;s answer instead" not in pagina
 
     _niveaus(dd).zet(ff.RADAR, "B", door="t", reden="test")
     op_b = render_founder_flow(_st(dd), dd, csrf_token="tok",
-                               onthuld=f"{ff.RADAR}|{rid}|dismiss|keep|B")
+                               onthuld=f"{ff.RADAR}|{rid}|bekend|nieuw|B")
     assert "answer instead" in op_b and "ff_beslis" in op_b
 
 
 def test_onthulling_bij_eensgezindheid_en_bij_rommel(dd):
     eens = render_founder_flow(_st(dd), dd, csrf_token="tok",
-                               onthuld=f"{ff.RADAR}|x|keep|keep|B")
+                               onthuld=f"{ff.RADAR}|x|nieuw|nieuw|B")
     assert "agreed" in eens and "answer instead" not in eens
     # Zonder voorstel is er niets te vergelijken — dat wordt gezegd, niet verzwegen.
     geen = render_founder_flow(_st(dd), dd, csrf_token="tok",
-                               onthuld=f"{ff.RADAR}|x|keep||B")
+                               onthuld=f"{ff.RADAR}|x|nieuw||B")
     assert "no proposal for this item" in geen
     # Onleesbare of gemanipuleerde parameter → geen kaart, geen crash.
-    for rommel in ("", "rommel", f"{ff.RADAR}|x|verzonnen|keep|B", "verzonnen|x|keep|keep|B"):
+    for rommel in ("", "rommel", f"{ff.RADAR}|x|verzonnen|nieuw|B", "verzonnen|x|nieuw|nieuw|B"):
         pagina = render_founder_flow(_st(dd), dd, csrf_token="tok", onthuld=rommel)
         assert "You:" not in pagina
 
@@ -186,16 +186,16 @@ def test_auditsteekproef_is_deterministisch():
 # ── 3. De meting ─────────────────────────────────────────────────────────────
 
 def test_held_out_negeert_besmette_labels():
-    schoon = _labels(ff.RADAR, [("keep", "keep")] * 3)
-    besmet = _labels(ff.RADAR, [("keep", "keep")] * 3, ai_getoond=True)
-    gecorrigeerd = _labels(ff.RADAR, [("keep", "keep")] * 3, correctie=True)
-    zonder_ai = [{**r, "ai": None} for r in _labels(ff.RADAR, [("keep", "keep")] * 3)]
+    schoon = _labels(ff.RADAR, [("nieuw", "nieuw")] * 3)
+    besmet = _labels(ff.RADAR, [("nieuw", "nieuw")] * 3, ai_getoond=True)
+    gecorrigeerd = _labels(ff.RADAR, [("nieuw", "nieuw")] * 3, correctie=True)
+    zonder_ai = [{**r, "ai": None} for r in _labels(ff.RADAR, [("nieuw", "nieuw")] * 3)]
     alles = schoon + besmet + gecorrigeerd + zonder_ai
     assert len(ff.held_out(alles, ff.RADAR)) == 3
 
 
 def test_overeenstemming_en_wilson_ondergrens():
-    labels = _labels(ff.RADAR, [("keep", "keep")] * 27 + [("keep", "dismiss")] * 3)
+    labels = _labels(ff.RADAR, [("nieuw", "nieuw")] * 27 + [("nieuw", "bekend")] * 3)
     meting = ff.overeenstemming(labels, ff.RADAR, venster=60)
     assert meting["n"] == 30 and meting["akkoord"] == 27
     assert meting["ratio"] == pytest.approx(0.9)
@@ -205,42 +205,42 @@ def test_overeenstemming_en_wilson_ondergrens():
 
 
 def test_venster_houdt_alleen_de_recentste_labels():
-    labels = (_labels(ff.RADAR, [("keep", "dismiss")] * 40)          # oud en fout
-              + [{**r, "ts": r["ts"] + 10_000} for r in _labels(ff.RADAR, [("keep", "keep")] * 40)])
+    labels = (_labels(ff.RADAR, [("nieuw", "bekend")] * 40)          # oud en fout
+              + [{**r, "ts": r["ts"] + 10_000} for r in _labels(ff.RADAR, [("nieuw", "nieuw")] * 40)])
     assert ff.overeenstemming(labels, ff.RADAR, venster=40)["ratio"] == pytest.approx(1.0)
 
 
 def test_promotie_poort_eist_genoeg_voorbeelden_en_de_lat():
     cfg = dict(ff._DEFAULTS[ff.RADAR])
     # Te weinig voorbeelden, ook al is alles goed.
-    kan, reden = ff.promoveerbaar(_labels(ff.RADAR, [("keep", "keep")] * 5), ff.RADAR, "A", cfg)
+    kan, reden = ff.promoveerbaar(_labels(ff.RADAR, [("nieuw", "nieuw")] * 5), ff.RADAR, "A", cfg)
     assert not kan and "blind examples" in reden
     # Genoeg voorbeelden, maar de ondergrens haalt de lat niet (punt 90%, ondergrens ~74%).
-    labels = _labels(ff.RADAR, [("keep", "keep")] * 27 + [("keep", "dismiss")] * 3)
+    labels = _labels(ff.RADAR, [("nieuw", "nieuw")] * 27 + [("nieuw", "bekend")] * 3)
     kan, reden = ff.promoveerbaar(labels, ff.RADAR, "A", cfg)
     assert not kan and "below the bar" in reden
     # Ruim boven de lat over een grotere reeks → wel.
-    kan, reden = ff.promoveerbaar(_labels(ff.RADAR, [("keep", "keep")] * 40), ff.RADAR, "A", cfg)
+    kan, reden = ff.promoveerbaar(_labels(ff.RADAR, [("nieuw", "nieuw")] * 40), ff.RADAR, "A", cfg)
     assert kan and "lower bound" in reden
     # D is het eindpunt.
-    assert ff.promoveerbaar(_labels(ff.RADAR, [("keep", "keep")] * 40), ff.RADAR, "D", cfg)[0] is False
+    assert ff.promoveerbaar(_labels(ff.RADAR, [("nieuw", "nieuw")] * 40), ff.RADAR, "D", cfg)[0] is False
 
 
 def test_besmette_labels_openen_de_poort_niet():
     """Honderd instemmingen ná een zichtbaar voorstel zijn geen bewijs — de poort blijft dicht."""
     cfg = dict(ff._DEFAULTS[ff.RADAR])
-    labels = _labels(ff.RADAR, [("keep", "keep")] * 100, ai_getoond=True)
+    labels = _labels(ff.RADAR, [("nieuw", "nieuw")] * 100, ai_getoond=True)
     kan, reden = ff.promoveerbaar(labels, ff.RADAR, "A", cfg)
     assert not kan and "0/30 blind examples" in reden
 
 
 def test_drift_wordt_zichtbaar_op_c_en_d():
     cfg = dict(ff._DEFAULTS[ff.RADAR])
-    slecht = _labels(ff.RADAR, [("keep", "dismiss")] * 20)
+    slecht = _labels(ff.RADAR, [("nieuw", "bekend")] * 20)
     assert ff.drift(slecht, ff.RADAR, "A", cfg) == ""            # op A zegt drift niets
     assert "drift" in ff.drift(slecht, ff.RADAR, "C", cfg)
     assert "drift" in ff.drift(slecht, ff.RADAR, "D", cfg)
-    goed = _labels(ff.RADAR, [("keep", "keep")] * 40)
+    goed = _labels(ff.RADAR, [("nieuw", "nieuw")] * 40)
     assert ff.drift(goed, ff.RADAR, "D", cfg) == ""
 
 
@@ -251,9 +251,9 @@ def test_demotiepoort_is_de_letterlijke_negatie_van_de_promotiepoort():
     dezelfde min_n, dezelfde ondergrens — anders krijg je twee onverenigbare oordelen over één
     reeks labels."""
     cfg = dict(ff._DEFAULTS[ff.RADAR])
-    for paren in ([("keep", "keep")] * 40,                       # ruim boven
-                  [("keep", "keep")] * 27 + [("keep", "dismiss")] * 3,   # 90%, ondergrens eronder
-                  [("keep", "dismiss")] * 30):                   # ver eronder
+    for paren in ([("nieuw", "nieuw")] * 40,                       # ruim boven
+                  [("nieuw", "nieuw")] * 27 + [("nieuw", "bekend")] * 3,   # 90%, ondergrens eronder
+                  [("nieuw", "bekend")] * 30):                   # ver eronder
         labels = _labels(ff.RADAR, paren)
         promoveert = ff.promoveerbaar(labels, ff.RADAR, "C", cfg)[0]
         demoveert = ff.demoveerbaar(labels, ff.RADAR, "D", cfg)[0]
@@ -267,7 +267,7 @@ def test_foutloze_reeks_degradeert_nooit():
     niet kan gebeuren — bij géén enkele steekproefgrootte."""
     cfg = dict(ff._DEFAULTS[ff.RADAR])
     for n in range(1, 80):
-        labels = _labels(ff.RADAR, [("keep", "keep")] * n)
+        labels = _labels(ff.RADAR, [("nieuw", "nieuw")] * n)
         moet, reden = ff.demoveerbaar(labels, ff.RADAR, "D", cfg)
         assert not moet, f"{n}/{n} goed degradeerde: {reden}"
 
@@ -276,11 +276,11 @@ def test_demotie_eist_hetzelfde_bewijs_als_promotie():
     cfg = dict(ff._DEFAULTS[ff.RADAR])
     min_n = int(cfg["min_n"])
     # Te weinig blinde audit-oordelen → geen intrekking, ook niet als alles fout is.
-    weinig = _labels(ff.RADAR, [("keep", "dismiss")] * (min_n - 1))
+    weinig = _labels(ff.RADAR, [("nieuw", "bekend")] * (min_n - 1))
     moet, reden = ff.demoveerbaar(weinig, ff.RADAR, "D", cfg)
     assert not moet and "not enough to withdraw the level" in reden
     # Genoeg en onder de lat → terug.
-    slecht = _labels(ff.RADAR, [("keep", "dismiss")] * min_n)
+    slecht = _labels(ff.RADAR, [("nieuw", "bekend")] * min_n)
     moet, reden = ff.demoveerbaar(slecht, ff.RADAR, "D", cfg)
     assert moet and "would no longer be granted" in reden
     # Op A/B valt er geen autonomie in te trekken: de poort doet daar niets.
@@ -293,20 +293,20 @@ def test_waarschuwing_gaat_eerder_af_dan_de_poort():
     drempel, want hij verandert niets — hij laat de founder zelf ingrijpen."""
     cfg = dict(ff._DEFAULTS[ff.RADAR])
     half = ff.drift_drempel(cfg)
-    slecht = _labels(ff.RADAR, [("keep", "dismiss")] * half)
+    slecht = _labels(ff.RADAR, [("nieuw", "bekend")] * half)
     assert ff.demoveerbaar(slecht, ff.RADAR, "D", cfg)[0] is False    # poort nog dicht
     melding = ff.drift(slecht, ff.RADAR, "D", cfg)                    # waarschuwing wel aan
     assert "drift" in melding and "one click" in melding
     # Te weinig, of gewoon goed → stil.
-    assert ff.drift(_labels(ff.RADAR, [("keep", "dismiss")] * 3), ff.RADAR, "D", cfg) == ""
-    assert ff.drift(_labels(ff.RADAR, [("keep", "keep")] * 40), ff.RADAR, "D", cfg) == ""
+    assert ff.drift(_labels(ff.RADAR, [("nieuw", "bekend")] * 3), ff.RADAR, "D", cfg) == ""
+    assert ff.drift(_labels(ff.RADAR, [("nieuw", "nieuw")] * 40), ff.RADAR, "D", cfg) == ""
 
 
 def test_besmette_labels_veroorzaken_geen_demotie():
     """Een correctie ná een zichtbaar voorstel is geen drift-bewijs — anders zou elke correctie
     op C (waar het voorstel juist zichtbaar hoort te zijn) het niveau omlaag trekken."""
     cfg = dict(ff._DEFAULTS[ff.RADAR])
-    besmet = _labels(ff.RADAR, [("keep", "dismiss")] * 40, ai_getoond=True)
+    besmet = _labels(ff.RADAR, [("nieuw", "bekend")] * 40, ai_getoond=True)
     assert ff.demoveerbaar(besmet, ff.RADAR, "D", cfg)[0] is False
 
 
@@ -314,7 +314,7 @@ def test_demotie_verlaagt_een_trede_en_legt_de_reden_vast(dd):
     niveaus = _niveaus(dd)
     niveaus.zet(ff.RADAR, "D", door="founder", reden="meting groen")
     for n in range(30):
-        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="keep", ai="dismiss", niveau="D")
+        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="nieuw", ai="bekend", niveau="D")
     melding = ff.pas_demotie_toe(niveaus, ff.alle(dd), ff.RADAR, ff.instellingen(dd, ff.RADAR))
     assert "stepped back to level C" in melding
     assert _niveaus(dd).niveau(ff.RADAR) == "C"
@@ -328,7 +328,7 @@ def test_demotie_valt_niet_door_op_stil_bewijs(dd):
     niveaus = _niveaus(dd)
     niveaus.zet(ff.RADAR, "D", door="founder", reden="meting groen")
     for n in range(30):
-        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="keep", ai="dismiss", niveau="D")
+        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="nieuw", ai="bekend", niveau="D")
     assert ff.pas_demotie_toe(niveaus, ff.alle(dd), ff.RADAR, ff.instellingen(dd, ff.RADAR))
     assert niveaus.niveau(ff.RADAR) == "C"
     # Tweede aanroep op exact dezelfde labels: die zijn allemaal van vóór de wissel.
@@ -341,11 +341,11 @@ def test_demotie_stopt_bij_b(dd):
     niveaus = _niveaus(dd)
     niveaus.zet(ff.RADAR, "C", door="founder", reden="test")
     for n in range(30):
-        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="keep", ai="dismiss", niveau="C")
+        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="nieuw", ai="bekend", niveau="C")
     assert ff.pas_demotie_toe(niveaus, ff.alle(dd), ff.RADAR, ff.instellingen(dd, ff.RADAR))
     assert niveaus.niveau(ff.RADAR) == "B"
     for n in range(30, 70):
-        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="keep", ai="dismiss", niveau="B")
+        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="nieuw", ai="bekend", niveau="B")
     assert ff.pas_demotie_toe(niveaus, ff.alle(dd), ff.RADAR, ff.instellingen(dd, ff.RADAR)) == ""
     assert niveaus.niveau(ff.RADAR) == "B"
 
@@ -355,7 +355,7 @@ def test_demotie_raakt_alleen_de_eigen_taak(dd):
     for taak in (ff.RADAR, ff.CLAIM):
         niveaus.zet(taak, "D", door="founder", reden="test")
     for n in range(30):
-        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="keep", ai="dismiss", niveau="D")
+        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="nieuw", ai="bekend", niveau="D")
     ff.pas_demotie_toe(niveaus, ff.alle(dd), ff.RADAR, ff.instellingen(dd, ff.RADAR))
     assert _niveaus(dd).niveau(ff.RADAR) == "C"
     assert _niveaus(dd).niveau(ff.CLAIM) == "D"
@@ -391,11 +391,12 @@ def _beslis(dd, taak, item, oordeel, **extra):
 def test_beslissing_voert_uit_en_legt_vast(dd):
     st = _st(dd)
     rid = _radar_signaal(st, content="hemp sneaker composteerbaar")
-    nxt, msg = _beslis(dd, ff.RADAR, rid, "dismiss")
-    assert "dismissed" in msg
+    nxt, msg = _beslis(dd, ff.RADAR, rid, "bekend")
+    assert "folded into its topic cluster" in msg
     assert _st(dd).radar.get(rid)["status"] == "afgewezen"       # het bestaande pad is echt gelopen
     rij = ff.alle(dd)[0]
-    assert rij["mens"] == "dismiss" and rij["ai"] == "keep"      # voorstel door de server berekend
+    # Een leeg dorp kent nog niets, dus het voorstel is 'nieuw'; de mens zei 'bekend'.
+    assert rij["mens"] == "bekend" and rij["ai"] == "nieuw"      # voorstel door de server berekend
     assert rij["ai_getoond"] is False and rij["niveau"] == "A"
     assert 0 < rij["seconden"] < 60                             # founder-minuten gemeten
     assert "onthuld=" in nxt                                    # blind → onthulling volgt
@@ -404,17 +405,14 @@ def test_beslissing_voert_uit_en_legt_vast(dd):
 def test_voorstel_komt_van_de_server_niet_uit_het_formulier(dd):
     """Een meegestuurd 'ai'-veld wordt genegeerd; anders kan de client de meting zetten."""
     st = _st(dd)
-    rid = _radar_signaal(st, content="willekeurig nieuws zonder thema")
-    _beslis(dd, ff.RADAR, rid, "dismiss", ai="dismiss")
-    assert ff.alle(dd)[0]["ai"] == "dismiss"                    # toevallig gelijk...
-    st2 = _st(dd)
-    rid2 = _radar_signaal(st2, content="hemp sneaker composteerbaar plasticvrij")
-    _beslis(dd, ff.RADAR, rid2, "dismiss", ai="dismiss")
-    assert ff.alle(dd)[1]["ai"] == "keep"                       # ...maar hier wint de server
+    rid = _radar_signaal(st, content="hemp sneaker composteerbaar plasticvrij")
+    _beslis(dd, ff.RADAR, rid, "bekend", ai="bekend")
+    # De client stuurde 'bekend' mee; de server rekende 'nieuw' en dát staat in het label.
+    assert ff.alle(dd)[0]["ai"] == "nieuw"
 
 
 def test_onbekende_taak_of_oordeel_wordt_geweigerd(dd):
-    _, msg = _beslis(dd, "verzonnen", "x", "keep")
+    _, msg = _beslis(dd, "verzonnen", "x", "nieuw")
     assert msg.startswith("✗")
     _, msg = _beslis(dd, ff.RADAR, "x", "misschien")
     assert msg.startswith("✗")
@@ -422,20 +420,20 @@ def test_onbekende_taak_of_oordeel_wordt_geweigerd(dd):
 
 
 def test_item_buiten_de_wachtrij_wordt_geweigerd(dd):
-    _, msg = _beslis(dd, ff.RADAR, "bestaat-niet", "keep")
+    _, msg = _beslis(dd, ff.RADAR, "bestaat-niet", "nieuw")
     assert "no longer in the queue" in msg
 
 
 def test_correctie_is_een_klik_en_telt_niet_mee(dd):
     st = _st(dd)
     rid = _radar_signaal(st, content="hemp sneaker composteerbaar")
-    _beslis(dd, ff.RADAR, rid, "dismiss")
-    _, msg = _beslis(dd, ff.RADAR, rid, "keep", correctie="1")
-    assert "kept" in msg
+    _beslis(dd, ff.RADAR, rid, "bekend")
+    _, msg = _beslis(dd, ff.RADAR, rid, "nieuw", correctie="1")
+    assert "new — kept in the archive" in msg
     assert _st(dd).radar.get(rid)["status"] == "goedgekeurd"     # de correctie draait het echt om
     rijen = ff.alle(dd)
     assert len(rijen) == 2 and rijen[1]["correctie"] is True
-    assert rijen[1]["ai"] == "keep"                             # voorstel uit de log, niet uit de form
+    assert rijen[1]["ai"] == "nieuw"                            # voorstel uit de log, niet uit de form
     assert len(ff.held_out(rijen, ff.RADAR)) == 1               # alleen het blinde label meet mee
 
 
@@ -447,7 +445,7 @@ def test_promotie_is_fail_closed(dd):
     assert _niveaus(dd).niveau(ff.RADAR) == "A"
 
     for n in range(40):
-        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="keep", ai="keep", niveau="A")
+        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="nieuw", ai="nieuw", niveau="A")
     _, msg = cockpit2.dispatch(dd, "ff_promote", {"taak": [ff.RADAR], "next": ["/founder"]},
                                username=GUEST)
     assert "level B" in msg and _niveaus(dd).niveau(ff.RADAR) == "B"
@@ -469,13 +467,13 @@ def test_audit_beslissing_trekt_de_trede_vanzelf_terug(dd, monkeypatch):
     _niveaus(dd).zet(ff.RADAR, "D", door="founder", reden="meting groen")
     # 29 eerdere blinde audit-oordelen die het niet eens waren: één onder de bewijs-eis van 30.
     for n in range(29):
-        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="keep", ai="dismiss",
+        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="nieuw", ai="bekend",
                     niveau="D", audit=True)
     assert _niveaus(dd).niveau(ff.RADAR) == "D"                  # nog geen conclusie
 
     monkeypatch.setattr(ff, "in_auditsteekproef", lambda taak, item, pct: True)
     rid = _radar_signaal(st, content="beursbericht over kantoorpanden")   # voorstel: dismiss
-    _, msg = _beslis(dd, ff.RADAR, rid, "keep")                  # de 30e afwijking
+    _, msg = _beslis(dd, ff.RADAR, rid, "nieuw")                  # de 30e afwijking
     assert "stepped back to level C" in msg
     assert _niveaus(dd).niveau(ff.RADAR) == "C"
 
@@ -484,11 +482,11 @@ def test_goede_audit_beslissing_laat_de_trede_staan(dd, monkeypatch):
     st = _st(dd)
     _niveaus(dd).zet(ff.RADAR, "D", door="founder", reden="meting groen")
     for n in range(20):
-        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="keep", ai="keep",
+        ff.leg_vast(dd, taak=ff.RADAR, item=f"m{n}", mens="nieuw", ai="nieuw",
                     niveau="D", audit=True)
     monkeypatch.setattr(ff, "in_auditsteekproef", lambda taak, item, pct: True)
     rid = _radar_signaal(st, content="composteerbare hemp sneaker")       # voorstel: keep
-    _, msg = _beslis(dd, ff.RADAR, rid, "keep")
+    _, msg = _beslis(dd, ff.RADAR, rid, "nieuw")
     assert "stepped back" not in msg
     assert _niveaus(dd).niveau(ff.RADAR) == "D"
 
@@ -550,13 +548,15 @@ def test_verwerkte_items_verdwijnen_uit_de_wachtrij(dd, monkeypatch):
 
 # ── 7. De wachtrijen en hun voorstellen ──────────────────────────────────────
 
-def test_radar_voorstel_gebruikt_het_bestaande_strategie_filter(dd):
+def test_radar_voorstel_is_de_nieuwheidscheck(dd):
+    """Het radar-voorstel komt sinds de clustering-omslag uit `radar_nieuwheid`, niet uit een
+    relevantie-heuristiek. Op een leeg dorp is alles nieuw — en dat is de juiste uitkomst."""
     st = _st(dd)
-    raak = _radar_signaal(st, content="composteerbare hemp sneaker", rationale="materiaal")
-    mis = _radar_signaal(st, content="beursbericht over kantoorpanden", rationale="")
-    rijen = {i["item"]: i for i in founder_taken.wachtrij(_st(dd), dd, ff.RADAR)}
-    assert rijen[raak]["ai"] == "keep" and "strategy theme" in rijen[raak]["ai_waarom"]
-    assert rijen[mis]["ai"] == "dismiss"
+    rid = _radar_signaal(st, content="composteerbare hemp sneaker")
+    rij = {i["item"]: i for i in founder_taken.wachtrij(_st(dd), dd, ff.RADAR)}[rid]
+    assert rij["ai"] == "nieuw"
+    assert "nothing on this yet" in rij["ai_waarom"]
+    assert "strategy theme" not in rij["ai_waarom"]
 
 
 def test_claim_wachtrij_bevat_wat_de_scan_niet_kon_afdoen():
@@ -637,14 +637,14 @@ def test_weekcijfers_tellen_minuten_en_ai_aandeel(dd):
     week = 7 * 86400
     nu = time.time()
     rijen = [
-        {"taak": ff.RADAR, "item": "a", "mens": "keep", "ai": "keep", "seconden": 120.0,
+        {"taak": ff.RADAR, "item": "a", "mens": "nieuw", "ai": "nieuw", "seconden": 120.0,
          "ai_getoond": False, "correctie": False, "ts": nu - week},
-        {"taak": ff.RADAR, "item": "b", "mens": "keep", "ai": "keep", "seconden": 60.0,
+        {"taak": ff.RADAR, "item": "b", "mens": "nieuw", "ai": "nieuw", "seconden": 60.0,
          "ai_getoond": False, "correctie": False, "ts": nu - week},
-        {"taak": ff.RADAR, "item": "c", "mens": "keep", "ai": "keep", "seconden": 30.0,
+        {"taak": ff.RADAR, "item": "c", "mens": "nieuw", "ai": "nieuw", "seconden": 30.0,
          "ai_getoond": False, "correctie": False, "ts": nu},
-        {"taak": ff.RADAR, "item": "d", "mens": None, "ai": "keep", "ts": nu},
-        {"taak": ff.RADAR, "item": "e", "mens": None, "ai": "keep", "ts": nu},
+        {"taak": ff.RADAR, "item": "d", "mens": None, "ai": "bekend", "ts": nu},
+        {"taak": ff.RADAR, "item": "e", "mens": None, "ai": "bekend", "ts": nu},
     ]
     cijfers = ff.weekcijfers(rijen, ff.RADAR)
     assert len(cijfers) == 2
@@ -655,7 +655,7 @@ def test_weekcijfers_tellen_minuten_en_ai_aandeel(dd):
 
 def test_seconden_worden_geplafonneerd(dd):
     """Eén vergeten tabblad mag de founder-minuten van een week niet onleesbaar maken."""
-    rij = ff.leg_vast(dd, taak=ff.RADAR, item="a", mens="keep", ai="keep", seconden=99_999)
+    rij = ff.leg_vast(dd, taak=ff.RADAR, item="a", mens="nieuw", ai="nieuw", seconden=99_999)
     assert rij["seconden"] == 300.0
 
 

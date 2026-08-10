@@ -6,7 +6,8 @@
     "venster": "Hoeveel van de recentste held-out labels meetellen. Kleiner venster = drift sneller zichtbaar, meting ruiziger.",
     "audit_pct": "Welk deel van de items op niveau C/D blind aan de mens wordt voorgelegd. Nooit 0: dit is de enige schone meetreeks zodra de AI zelf werkt.",
     "dag_cap": "Hoeveel items de dagelijkse (korte) ronde per taak toont. De weekronde toont alles.",
-    "drempel": "Alleen radar_triage: vanaf hoeveel geraakte strategie-thema's het lexicale filter 'keep' voorstelt."
+    "cluster_drempel": "Alleen radar_triage: gelijkenis-drempel voor het clusteren van signalen per onderwerp. 0 = de default van radar_clusters (0.72 cosinus met embeddings, 0.22 Jaccard zonder). Hoger = strakkere, kleinere clusters.",
+    "cluster_venster_dagen": "Alleen radar_triage: het venster waarover de bronnen-teller telt, en waarmee de vorige periode wordt vergeleken om stijgend/stabiel/dalend te bepalen."
   },
 
   "radar_triage": {
@@ -15,7 +16,8 @@
     "venster": 60,
     "audit_pct": 20,
     "dag_cap": 5,
-    "drempel": 1
+    "cluster_drempel": 0.0,
+    "cluster_venster_dagen": 30
   },
   "claim_oordeel": {
     "lat": 0.90,

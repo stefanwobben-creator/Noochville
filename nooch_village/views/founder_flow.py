@@ -258,11 +258,111 @@ def _ai_gedaan(labels: list[dict], taak: str, niveau: str, csrf_token: str, ritm
 
 # ── Eén taak ─────────────────────────────────────────────────────────────────
 
-def _taaksectie(st, data_dir: str, taak: str, niveau: str, labels: list[dict], cfg: dict,
-                csrf_token: str, ritme: str, niveaus=None) -> str:
+_RADAR_VIEWS = ("trend", "nieuw")
+_RADAR_VIEW_LABEL = {"trend": "Trends — topics by distinct sources",
+                     "nieuw": "New content — one judgement each"}
+
+
+def _trendkaart(c: dict, besluit: dict | None, niveau: str, venster: int,
+                csrf_token: str, ritme: str) -> str:
+    """Eén onderwerp: wat het is, uit hoeveel VERSCHILLENDE bronnen het komt, en of dat stijgt.
+
+    Het aantal bronnen staat vooraan omdat dat het getal is dat iets betekent; het aantal signalen
+    staat er als context naast. Acht vermeldingen uit één feed lezen hier als "1 source", en dat
+    is precies de bedoeling."""
+    t = c["trend"]
+    chip = {"stijgend": "<span class='chip green'>rising</span>",
+            "dalend": "<span class='chip muted'>falling</span>",
+            "stabiel": "<span class='chip outline'>steady</span>"}.get(t["richting"], "")
+    open_n = len(c.get("open") or [])
+    regel = (f"<b>{t['bronnen']} source(s)</b> · {t['signalen']} signal(s) in the last "
+             f"{venster} days (previous period: {t['eerder_bronnen']} source(s), "
+             f"{t['eerder_signalen']} signal(s))")
+    staart = f" · {open_n} still open" if open_n else " · nothing open"
+
+    knoppen = ""
+    if besluit:
+        keuze = "made into a project" if besluit.get("keuze") == "project" else "on the watch list"
+        knoppen = f"<p class='muted'>You already put this {_e(keuze)}.</p>"
+    elif csrf_token:
+        rol = (c["leden"][0].get("role") or "") if c.get("leden") else ""
+        bewijs = " · ".join(sorted(set(
+            str(i.get("source") or i.get("feed") or "") for i in c["leden"]))[:8])
+        velden = _hidden(csrf_token, ritme, sleutel=c["sleutel"], onderwerp=c["onderwerp"],
+                         rol=rol, bewijs=f"{t['bronnen']} sources: {bewijs}")
+        knoppen = (f"<form method='post' action='/action'>{velden}"
+                   f"<input type='hidden' name='action' value='ff_cluster'>"
+                   f"<button class='btn sm' type='submit' name='keuze' value='project'>"
+                   f"make it a project</button>"
+                   f"<button class='btn sm' type='submit' name='keuze' value='watch'>"
+                   f"watch</button></form>")
+
+    # Invouwen is zichtbaar en omkeerbaar: de bekende signalen staan er, uitklapbaar, nooit weg.
+    # Alleen vanaf C — op A/B zou dit het AI-oordeel verraden vóór de founder blind besloot.
+    gevouwen = ""
+    if niveau in ("C", "D") and c.get("ingevouwen"):
+        rijen = "".join(f"<li>{_e(i.get('content', '')[:140])} "
+                        f"<span class='pill'>{_e(i.get('source') or i.get('feed') or '')}</span></li>"
+                        for i in c["ingevouwen"])
+        gevouwen = (f"<details><summary>{len(c['ingevouwen'])} folded — already known to us"
+                    f"</summary><ul class='clean'>{rijen}</ul>"
+                    f"<p class='muted'>Folded means counted, not deleted: these still feed the "
+                    f"source counter and stay in the radar.</p></details>")
+
+    return (f"<div class='card'>{chip} <span class='ptitle'>{_e(c['onderwerp'])}</span>"
+            f"<p class='muted'>{regel}{staart}</p>{knoppen}{gevouwen}</div>")
+
+
+def _radar_trendview(st, data_dir: str, niveau: str, csrf_token: str, ritme: str) -> str:
     from nooch_village import founder_taken
 
-    items = founder_taken.wachtrij(st, data_dir, taak, labels)
+    beeld = founder_taken.radar_beeld(st, data_dir)
+    if not beeld["clusters"]:
+        return "<p class='muted'>No signals in the window yet.</p>"
+    besluiten = st.radar_besluiten.alles()
+    kaarten = "".join(_trendkaart(c, besluiten.get(c["sleutel"]), niveau, beeld["venster"],
+                                  csrf_token, ritme)
+                      for c in beeld["clusters"][:12])
+    # Eerlijk over welke laag het deed: 'lexicaal' betekent dat er woorden zijn geteld, geen
+    # betekenis vergeleken. Dat verandert wat je uit een cluster mag afleiden.
+    uitleg = ("grouped by meaning (embeddings)" if beeld["modus"] == "semantisch"
+              else "grouped by word overlap — no embeddings available, so topics are coarser")
+    return (f"<p class='muted'>{len(beeld['clusters'])} topic(s), {uitleg}. "
+            f"A topic rises when it reaches more distinct sources than in the previous "
+            f"{beeld['venster']} days — repeats from one feed do not count twice.</p>{kaarten}")
+
+
+def _taaksectie(st, data_dir: str, taak: str, niveau: str, labels: list[dict], cfg: dict,
+                csrf_token: str, ritme: str, niveaus=None, radar_view: str = "trend") -> str:
+    from nooch_village import founder_taken
+
+    if taak == ff.RADAR:
+        picker = "".join(
+            f"<a class='cl-filter{' on' if v == radar_view else ''}' "
+            f"href='/founder?ritme={ritme}&radar={v}'>{_e(_RADAR_VIEW_LABEL[v])}</a>"
+            for v in _RADAR_VIEWS)
+        kop = (f"<div class='c2-sec'><h3>{_e(ff.TAAK_LABEL[taak])}</h3>"
+               f"{_meterkaart(data_dir, taak, niveau, labels, cfg, csrf_token, ritme, niveaus, 0)}"
+               f"<div class='cl-bar'>{picker}</div>")
+        if radar_view == "trend":
+            # De trend is berekend, geen oordeel: geen trede, geen label, alleen tonen.
+            return kop + _radar_trendview(st, data_dir, niveau, csrf_token, ritme) + "</div>"
+        return kop + "</div>" + _radar_wachtrij(st, data_dir, taak, niveau, labels, cfg,
+                                                csrf_token, ritme)
+
+    blok = _wachtrijblok(st, data_dir, taak, niveau, labels, cfg, csrf_token, ritme)
+    return (f"<div class='c2-sec'><h3>{_e(ff.TAAK_LABEL[taak])}</h3>"
+            f"{_meterkaart(data_dir, taak, niveau, labels, cfg, csrf_token, ritme, niveaus, blok['audit_open'])}"
+            f"{blok['run']}{blok['kaarten']}{blok['staart']}</div>"
+            f"{_ai_gedaan(labels, taak, niveau, csrf_token, ritme)}")
+
+
+def _wachtrijblok(st, data_dir: str, taak: str, niveau: str, labels: list[dict], cfg: dict,
+                  csrf_token: str, ritme: str) -> dict:
+    """De wachtrij van één taak: kaarten, staart, de run-knop en hoeveel audit-items er wachten."""
+    from nooch_village import founder_taken
+
+    items = founder_taken.wachtrij(st, data_dir, taak, labels, niveau)
     cap = int(cfg.get("dag_cap", 5)) if ritme == "dag" else len(items)
     # De auditsteekproef staat vooraan in de dagronde: dat zijn de items die de terugval-poort
     # voeden, en een korte ronde die ze achteraan laat liggen maakt drift onmeetbaar.
@@ -281,25 +381,34 @@ def _taaksectie(st, data_dir: str, taak: str, niveau: str, labels: list[dict], c
         kaarten = "<p class='muted'>Nothing waiting.</p>"
     staart = (f"<p class='muted'>{rest} more waiting — the weekly round shows them all.</p>"
               if rest else "")
-
     run = ""
     if niveau in ("C", "D") and items and csrf_token:
         run = (f"<form method='post' action='/action'>"
                f"{_hidden(csrf_token, ritme, taak=taak)}"
                f"<button class='btn sm' type='submit' name='action' value='ff_run'>"
                f"let the AI work through the queue</button></form>")
+    return {"kaarten": kaarten, "staart": staart, "run": run, "audit_open": audit_open}
 
-    return (f"<div class='c2-sec'><h3>{_e(ff.TAAK_LABEL[taak])}</h3>"
-            f"{_meterkaart(data_dir, taak, niveau, labels, cfg, csrf_token, ritme, niveaus, audit_open)}"
-            f"{run}{kaarten}{staart}</div>"
+
+def _radar_wachtrij(st, data_dir: str, taak: str, niveau: str, labels: list[dict], cfg: dict,
+                    csrf_token: str, ritme: str) -> str:
+    """De nieuwheids-wachtrij: één oordeel per signaal — is dit nieuwe inhoud?"""
+    blok = _wachtrijblok(st, data_dir, taak, niveau, labels, cfg, csrf_token, ritme)
+    uitleg = ("<p class='muted'>Every open signal is here — the AI's novelty call stays hidden "
+              "until you have judged, so the queue itself gives nothing away.</p>"
+              if niveau in ("A", "B") else
+              "<p class='muted'>Only the signals the AI reads as new content. What it folded "
+              "sits under its topic in the trend view, counted and reversible.</p>")
+    return (f"<div class='c2-sec'>{uitleg}{blok['run']}{blok['kaarten']}{blok['staart']}</div>"
             f"{_ai_gedaan(labels, taak, niveau, csrf_token, ritme)}")
 
 
 # ── De pagina ────────────────────────────────────────────────────────────────
 
 def render_founder_flow(st, data_dir: str, *, csrf_token: str = "", msg: str = "",
-                        ritme: str = "dag", onthuld: str = "") -> str:
+                        ritme: str = "dag", onthuld: str = "", radar_view: str = "trend") -> str:
     ritme = ritme if ritme in RITMES else "dag"
+    radar_view = radar_view if radar_view in _RADAR_VIEWS else "trend"
     niveaus = ff.NiveauStore(f"{data_dir}/{ff.NIVEAU_BESTAND}")
     labels = ff.alle(data_dir)
     cfg = ff.instellingen(data_dir)
@@ -310,7 +419,7 @@ def render_founder_flow(st, data_dir: str, *, csrf_token: str = "", msg: str = "
 
     secties = "".join(
         _taaksectie(st, data_dir, taak, niveaus.niveau(taak), labels, cfg[taak], csrf_token,
-                    ritme, niveaus)
+                    ritme, niveaus, radar_view)
         for taak in ff.TAKEN)
 
     main = (

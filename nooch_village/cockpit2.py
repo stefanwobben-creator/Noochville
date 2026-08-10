@@ -60,6 +60,7 @@ from nooch_village.projects import (ProjectLedger, PREP_CHECKLIST_TITLE, _MISSIE
                                     _BUSINESS_IMPACT, _EFFORT)
 from nooch_village.deliverable_store import DeliverableStore
 from nooch_village.project_doc_store import ProjectDocStore
+from nooch_village.radar_clusters import ClusterBesluitStore
 from nooch_village.radar_store import RadarStore
 from nooch_village import radar_promote
 from nooch_village.registry_factory import shared_registry
@@ -136,6 +137,9 @@ class _Stores:
         self.strategies = StrategyStore(os.path.join(dd, "strategies.json"))
         self.backlog = BacklogStore(os.path.join(dd, "backlog.json"))
         self.radar = RadarStore(os.path.join(dd, "radar.json"))   # Radar-tool: gecureerde Inoreader-signalen per rol
+        # Wat de founder met een opkomend onderwerp deed (project of watch). Geen oordeel-label:
+        # clustering is berekend, de projectkeuze is strategie — zie radar_clusters.
+        self.radar_besluiten = ClusterBesluitStore(os.path.join(dd, "radar_clusters.json"))
         self.kennisbank = KennisbankStore(os.path.join(dd, "kennisbank.json"))   # laag 2: geversioneerde inzichten
         self.notes = NotesStore(os.path.join(dd, "notes.json"))   # laag 1: de atomen-bibliotheek (kennislaag)
         self.spel = SpelStore(os.path.join(dd, "kennisbank_spel.json"))   # fase 3: inzicht-dialogen
@@ -4362,7 +4366,7 @@ def _act_ff_beslis(c):
             eerder = ff.laatste_per_item(labels, taak).get(item, {})
             ai, titel = eerder.get("ai"), eerder.get("titel", "")
         else:
-            bron = founder_taken.item_van(st, c.data_dir, taak, item)
+            bron = founder_taken.item_van(st, c.data_dir, taak, item, niveau)
             if bron is None:
                 return nxt, "✗ this item is no longer in the queue"
             ai, titel = bron.get("ai"), bron.get("titel", "")
@@ -4464,8 +4468,42 @@ def _act_ff_run(c):
         return nxt, f"🤖 the AI handled {verslag['verwerkt']} item(s){staart}"
 
 
+def _act_ff_cluster(c):
+        """Een opkomend onderwerp promoveren naar een project, of parkeren als 'watch'.
+
+        Bewust GEEN label en geen trede. De clustering en de bronnen-teller zijn berekend, en de
+        vraag of een stijgend onderwerp een project waard is, is een strategische keuze die niet
+        uit een steekproef te leren valt — die hoort niet in de graduele-autonomie-machinerie.
+        Wat hier wordt vastgelegd is alleen wat de founder besloot, zodat een afgehandeld
+        onderwerp niet elke week opnieuw om aandacht vraagt."""
+        # AUTHZ: anchor-lead — zie het blok-comment boven de Founder Flow-takken.
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _anchor_gate(st, username)
+        if _deny:
+            return nxt, _deny
+        sleutel, keuze = g("sleutel"), g("keuze")
+        onderwerp = g("onderwerp").strip()
+        if not sleutel or keuze not in ("project", "watch"):
+            return nxt, "✗ unknown topic or choice"
+        ref = ""
+        if keuze == "project":
+            rol = g("rol") or "harry_hemp"
+            if st.records.get(rol) is None:
+                return nxt, "✗ the role behind this topic no longer exists"
+            # Hetzelfde aanmaakpad als het projectenbord: een radar-onderwerp levert een echt
+            # project op, geen aparte soort werk.
+            ref = st.projects.create(rol, f"Onderzoek opkomend onderwerp: {onderwerp[:160]}",
+                                     "founder_flow", status="queued", origin="radar_cluster",
+                                     done_when="we weten of dit onderwerp iets voor Nooch betekent",
+                                     description=g("bewijs")[:600])
+        st.radar_besluiten.zet(sleutel, keuze, onderwerp=onderwerp, door=username or "?", ref=ref)
+        return nxt, (f"📌 project created for “{onderwerp[:60]}”" if keuze == "project"
+                     else f"👁 watching “{onderwerp[:60]}” — it stays in the trend view")
+
+
 ACTIONS = {
     "ff_beslis": _act_ff_beslis,
+    "ff_cluster": _act_ff_cluster,
     "ff_promote": _act_ff_promote,
     "ff_demote": _act_ff_demote,
     "ff_run": _act_ff_run,
@@ -4912,7 +4950,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(render_founder_flow(
                     st, data_dir, csrf_token=effective_csrf,
                     msg=(qs.get("msg") or [""])[0], ritme=(qs.get("ritme") or ["dag"])[0],
-                    onthuld=(qs.get("onthuld") or [""])[0]))
+                    onthuld=(qs.get("onthuld") or [""])[0],
+                    radar_view=(qs.get("radar") or ["trend"])[0]))
                 return
             if path == "/_patterns":
                 self._send(render_patterns(effective_csrf))
