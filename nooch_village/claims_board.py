@@ -43,7 +43,8 @@ ORIGIN_BERICHT = "rol_bericht"
 
 
 def bericht_aan_rol(context_of_stores, rol_id: str, tekst: str, project_id: str = "",
-                    door: str = "claims-checker", werk: bool | None = None) -> list[str]:
+                    door: str = "claims-checker", werk: bool | None = None,
+                    done_when: str = "") -> list[str]:
     """Geef werk of een seintje door aan een rol. Geeft de bereikte doelen terug.
 
     Twee kanalen, en het verschil is niet cosmetisch:
@@ -57,6 +58,9 @@ def bericht_aan_rol(context_of_stores, rol_id: str, tekst: str, project_id: str 
 
     `werk`: None = afleiden uit `project_id` (leeg → werk, gevuld → FYI over bestaand werk).
     Expliciet True/False overrulet dat, voor een aanroeper die het beter weet.
+
+    `done_when`: de concrete uitkomst waaraan je ziet dat dit af is. Leeg → afgeleid uit `tekst`
+    (zie `_done_when_uit`). Een aanroeper die de vraag beter kent mag 'm meegeven.
 
     Het vangnet naar de Circle Lead blijft, maar nu op de JUISTE vraag: alleen een rol die door
     niemand is ingevuld valt aan de Circle Lead toe (Holacracy 1.4.2). Een rol met een persona is
@@ -88,7 +92,7 @@ def bericht_aan_rol(context_of_stores, rol_id: str, tekst: str, project_id: str 
 
         pid = ""
         if is_werk and ai and ledger is not None:
-            pid = _werk_project(ledger, rol_id, tekst, door)
+            pid = _werk_project(ledger, rol_id, tekst, door, done_when)
         # De notificatie blijft óók staan: hij is de audittrail van "dit is doorgegeven", en voor
         # een mens-bemande rol is hij het hele kanaal.
         snippet = tekst if not pid else f"📥 Als project op je bord gezet: {tekst}"
@@ -106,7 +110,46 @@ def bericht_aan_rol(context_of_stores, rol_id: str, tekst: str, project_id: str 
     return doelen
 
 
-def _werk_project(ledger, rol_id: str, tekst: str, door: str) -> str:
+def _done_when_uit(tekst: str) -> str:
+    """Een done-when die de missie-critic kan tóétsen, afgeleid uit het verzoek zelf.
+
+    Waarom dit bestaat: de eerste versie gaf elk kanaalproject de sjabloonzin "het gevraagde is
+    uitgevoerd of expliciet afgewezen". De critic toetst op de `beantwoordt`-as of het rapport de
+    done-when raakt (woordoverlap), en tegen die zin kán geen rapport scoren — de woorden
+    'gevraagde', 'uitgevoerd' en 'afgewezen' komen in geen enkel claim-rapport voor. Elk project
+    uit dit kanaal zakte dus per constructie. Dat is geen strenge critic, dat is een kapotte
+    done-when.
+
+    De truc is niet mooier formuleren maar de WOORDEN VAN HET VERZOEK meenemen: een rapport over
+    '100% Planet-Safe' bevat die woorden, dus een done-when die ze draagt is toetsbaar.
+
+    "Bank the evidence for: X — record source + literal quote" → "vastgesteld of X houdbaar is,
+    met bron en citaat of een correctievoorstel"."""
+    kern = (tekst or "").strip()
+    kop, sep, rest = kern.partition(":")
+    if sep and len(kop) <= 60:                   # "Bank the evidence for: <kern>" → de kern
+        kern = rest.strip()
+    # Afkappen bij de eerste gedachtestreep: daarvóór staat het ONDERWERP, daarna de instructie
+    # ("— record source + literal quote in the Chronicle"). Die instructie hoort in de opdracht,
+    # niet in de done-when: hij voegt woorden toe die het rapport niet hoeft te bevatten en
+    # verdunt daarmee precies de overlap waarop de critic toetst.
+    for streep in (" — ", " – ", " -- "):
+        if streep in kern:
+            kern = kern.split(streep, 1)[0]
+            break
+    kern = kern.strip(" —–-.")
+    if not kern:
+        return "de gestelde vraag is beantwoord of expliciet afgewezen"
+    # Een geciteerde kern is een CLAIM ("100% Planet-Safe") — daar is de vraag of hij houdbaar is.
+    # Al het andere is een taak ("scan-lijst is niet op te halen"); die formulering erop plakken
+    # levert onleesbare zinnen op ("vastgesteld of X niet op te halen is houdbaar is"). De
+    # toetsbaarheid zit in de WOORDEN van de kern, niet in de formulering eromheen.
+    if any(q in kern for q in ("“", "\"", "'")):
+        return f"vastgesteld of {kern} houdbaar is, met bron of een concreet correctievoorstel"[:200]
+    return f"afgehandeld en vastgelegd: {kern}"[:200]
+
+
+def _werk_project(ledger, rol_id: str, tekst: str, door: str, done_when: str = "") -> str:
     """Zet het gevraagde werk als project op het bord van de rol. Geeft het pid, of "" bij een
     duplicaat of een fout.
 
@@ -121,7 +164,7 @@ def _werk_project(ledger, rol_id: str, tekst: str, door: str) -> str:
         return ledger.create(rol_id, tekst[:200], "role", status="queued",
                              origin=ORIGIN_BERICHT, keyword=sleutel,
                              description=f"Doorgegeven door {door}. {tekst}",
-                             done_when="het gevraagde is uitgevoerd of expliciet afgewezen")
+                             done_when=(done_when or _done_when_uit(tekst))[:200])
     except Exception:                                    # noqa: BLE001 — het bericht gaat sowieso door
         return ""
 

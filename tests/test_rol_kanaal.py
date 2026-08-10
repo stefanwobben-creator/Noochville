@@ -178,3 +178,71 @@ def test_notificatie_blijft_de_audittrail(tmp_path):
     claims_board.bericht_aan_rol(omg, "rolx", "Bank the evidence")
     snips = _snippets(omg)
     assert snips and "Als project op je bord gezet" in snips[0]
+
+
+# ── De done-when moet TOETSBAAR zijn, niet netjes ───────────────────────────
+
+def test_done_when_draagt_de_woorden_van_het_verzoek():
+    """De eerste versie gaf elk kanaalproject de sjabloonzin "het gevraagde is uitgevoerd of
+    expliciet afgewezen". De missie-critic toetst op de `beantwoordt`-as of het rapport de
+    done-when raakt (woordoverlap), en tegen die zin kán geen rapport scoren — 'gevraagde',
+    'uitgevoerd' en 'afgewezen' komen in geen enkel claim-rapport voor. Elk kanaalproject zakte
+    dus per constructie. De fix is niet mooier formuleren maar de WOORDEN VAN HET VERZOEK meenemen."""
+    dw = claims_board._done_when_uit(
+        'Bank the evidence for: “100% Planet-Safe” — homepage — record source + literal quote.')
+    assert "100% Planet-Safe" in dw
+    assert "houdbaar" in dw
+    assert "gevraagde" not in dw and "uitgevoerd" not in dw          # de kapotte sjabloonzin
+
+
+def test_done_when_laat_de_instructie_staart_weg():
+    """Wat na de gedachtestreep staat is de opdracht, niet het onderwerp. Meenemen verdunt precies
+    de overlap waarop de critic toetst."""
+    dw = claims_board._done_when_uit(
+        'Bank the evidence for: “X” — record source + literal quote in the Chronicle.')
+    assert "Chronicle" not in dw and "literal quote" not in dw
+
+
+def test_done_when_is_leesbaar_voor_een_taak_die_geen_claim_is():
+    """Een geciteerde kern is een claim ('is hij houdbaar?'); de rest is een taak. Dezelfde
+    formulering erop plakken levert onleesbare zinnen op."""
+    dw = claims_board._done_when_uit("🧭 Scan-lijst: FAQ is niet op te halen (404) — werk de lijst bij")
+    assert dw.startswith("afgehandeld en vastgelegd:")
+    assert "FAQ" in dw and "houdbaar" not in dw
+
+
+def test_lege_tekst_valt_terug_op_iets_zinnigs():
+    assert claims_board._done_when_uit("") 
+    assert claims_board._done_when_uit("   —  ")
+
+
+def test_project_uit_het_kanaal_krijgt_de_afgeleide_done_when(tmp_path):
+    omg = _omg(tmp_path, fillers=[("persona", "a1")])
+    claims_board.bericht_aan_rol(omg, "rolx", 'Bank the evidence for: “100% Plant-Based” — sitewide')
+    p = ProjectLedger(os.path.join(str(tmp_path), "projects.json")).all()[0]
+    assert "100% Plant-Based" in p["done_when"]
+
+
+def test_aanroeper_mag_een_eigen_done_when_meegeven(tmp_path):
+    """Wie de vraag beter kent (de founder-flow weet of het bewijs of een fix betreft) wint van
+    de afleiding."""
+    omg = _omg(tmp_path, fillers=[("persona", "a1")])
+    claims_board.bericht_aan_rol(omg, "rolx", "Doe iets", done_when="de zool is plasticvrij getest")
+    p = ProjectLedger(os.path.join(str(tmp_path), "projects.json")).all()[0]
+    assert p["done_when"] == "de zool is plasticvrij getest"
+
+
+def test_de_critic_kan_de_nieuwe_done_when_daadwerkelijk_halen():
+    """De toets die telt: haalt een rapport óver de claim de `beantwoordt`-as? Met de oude
+    sjabloonzin was dat onmogelijk, met de nieuwe hoort het te lukken."""
+    from nooch_village import missie_critic as mc
+    claim = '“100% Planet-Safe”'
+    doc = ("# Rapport\n\n## Onderzoek de claim 100% Planet-Safe\n"
+           "De claim '100% Planet-Safe' is niet houdbaar: er is geen bron die dekt dat het "
+           "product volledig planeetveilig is. Correctievoorstel: 'gemaakt zonder plastic'. " * 4)
+    cl = {"id": "c", "items": [{"id": "i", "text": "Onderzoek de claim 100% Planet-Safe",
+                                "done": True}]}
+    oud = {"done_when": "het gevraagde is uitgevoerd of expliciet afgewezen"}
+    nieuw = {"done_when": claims_board._done_when_uit(f"Bank the evidence for: {claim} — x")}
+    assert mc._beantwoordt(doc, oud, cl)[0] is False       # zoals het was: onmogelijk
+    assert mc._beantwoordt(doc, nieuw, cl)[0] is True      # zoals het nu is: haalbaar
