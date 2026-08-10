@@ -291,7 +291,7 @@ from nooch_village.views.noochie import (
     _noochie_suggest, _noochie_reply,
     render_noochie, _noochie_chrome,
 )
-from nooch_village.views.callbar import _callbar_frame, render_callbar
+from nooch_village.views.callbar import render_callbar
 
 from nooch_village.views.werkoverleg import (
     _wo_hid, _wo_checkin, _wo_checklist, _wo_metrics,
@@ -4780,9 +4780,13 @@ def make_handler(data_dir: str, csrf_token: str,
                                 f"<span class='c2-greet' id='c2-greet'>Hoi {_naam}</span>", 1)
                     except Exception:
                         pass
+                # De LiveKit-callbar is 11 aug 2026 uit de app-shell gehaald: hij werkte niet
+                # betrouwbaar, en een strook die het soms doet is erger dan geen strook. De
+                # /callbar-route en de LiveKit-helpers blijven bestaan (dood maar intact), zodat
+                # terugzetten één regel is en er nu geen halve opruiming in de weg zit.
                 body = body.replace(
                     "</body>",
-                    render_inbox_chrome(csrf_token, _ro) + _callbar_frame() + _footer() + "</body>", 1)
+                    render_inbox_chrome(csrf_token, _ro) + _footer() + "</body>", 1)
             b = body.encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "text/html; charset=utf-8")

@@ -60,9 +60,9 @@ def test_login_pagina_zonder_noochie_chrome(tmp_path):
         httpd.shutdown()
 
 
-def test_ingelogde_pagina_zonder_noochie_rail_maar_met_callbar(tmp_path):
-    # De Noochie-rail is uit de cockpit gehaald en blijft weg; de dorp-brede call bar is bewust
-    # teruggekomen (72de897) en hoort dus juist WEL op een gewone pagina te staan.
+def test_ingelogde_pagina_zonder_noochie_rail_en_zonder_callbar(tmp_path):
+    # De Noochie-rail is uit de cockpit gehaald en blijft weg. De call bar kwam ooit terug
+    # (72de897) maar is 11 aug 2026 definitief uit de shell gehaald: hij werkte niet betrouwbaar.
     dd = _bootstrap(tmp_path)
     sessions = _auth.SessionStore()
     token = sessions.create("dev@nooch.earth")
@@ -71,7 +71,7 @@ def test_ingelogde_pagina_zonder_noochie_rail_maar_met_callbar(tmp_path):
         r, body = _get(port, f"/node?id={ROOT}", cookie=token)
         # markers van de geïnjecteerde chrome (niet de CSS-klassen, die blijven in de stylesheet):
         assert r.status == 200 and "noochie?fragment" not in body      # rail weg
-        assert "src='/callbar'" in body                                # call bar terug
+        assert "src='/callbar'" not in body                            # call bar weg
     finally:
         httpd.shutdown()
 
@@ -82,6 +82,6 @@ def test_guest_auth_uit_zonder_noochie_rail(tmp_path):
     try:
         r, body = _get(port, f"/node?id={ROOT}")
         assert r.status == 200 and "noochie?fragment" not in body      # rail weg
-        assert "src='/callbar'" in body                                # call bar ook voor guest
+        assert "src='/callbar'" not in body                            # ook voor guest geen bar
     finally:
         httpd.shutdown()
