@@ -1634,8 +1634,8 @@ class Inhabitant(threading.Thread):
 
     # Container-keys per archetype — de note-opmaak volgt de VORM van de output, niet de skill-naam.
     _LIST_KEYS = ("hits", "rows", "candidates", "items", "targets", "cards", "keywords", "patents")
-    _TEXT_KEYS = ("text", "vraag", "voorstel")
-    _METRIC_KEYS = ("values", "value", "results", "series")
+    _TEXT_KEYS = ("text", "vraag", "voorstel", "titel")
+    _METRIC_KEYS = ("values", "value", "results", "series", "pid")
 
     @classmethod
     def _classify_result(cls, result):
