@@ -1583,15 +1583,9 @@ class Inhabitant(threading.Thread):
             self.log.info("🔎 critic: project '%s' staat — %s", pid, oordeel["samenvatting"])
             return
 
-        project = ledger.get(pid) or {}
-        document = self._critic_document(pid)
         # De kritiek op de kaart ZETTEN vóór de herkansing: de einddocument-synthese leest de
         # projectfeed, dus zo werkt de tweede pas met de bezwaren in de hand.
         ledger.add_role_message(pid, missie_critic.notitie(oordeel, herkansing=True))
-        gevraagd = missie_critic.vraag_cross_rol_review(self, project, oordeel, document)
-        if gevraagd:
-            ledger.add_role_message(pid, "👥 Cross-rol-review gevraagd aan: " + ", ".join(gevraagd)
-                                    + ". Zij beoordelen dit op hun eigen accountability.")
         self.bus.publish(Event("critic_rejected",
                                {"project_id": pid, "owner": self.id, "fase": "eerste",
                                 "oordelen": oordeel["oordelen"],
