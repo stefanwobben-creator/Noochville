@@ -637,41 +637,12 @@ def _drafts_html(st: _Stores, drafts: list, csrf_token: str, back: str) -> str:
             f"({len(drafts)})</summary><ul class='clean'>{rows}</ul></details>")
 
 
-_PROPOSAL_SOURCE = {"proposal:radar": "approved signal", "proposal:kroniek": "gap in the Chronicle"}
-
-
-def _proposals_html(st: _Stores, proposals: list, csrf_token: str, back: str) -> str:
-    """De review-baan (status proposed): het dorp stelt voor, de mens beslist. Accepteren zet het
-    voorstel als root-project in TOEKOMST (normale flow); afwijzen haalt het weg én wordt onthouden,
-    zodat dezelfde bron het niet opnieuw voorstelt. Onzichtbaar als er niets voorgesteld is.
-    Zelfde patroon en klassen als de Drafts-baan hierboven — geen eigen variant."""
-    if not proposals:
-        return ""
-    rows = ""
-    for p in proposals:
-        bron = _PROPOSAL_SOURCE.get(p.get("origin", ""), "the village")
-        ctrl = ""
-        if csrf_token:
-            base = (f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-                    f"<input type='hidden' name='pid' value='{_e(p['id'])}'>"
-                    f"<input type='hidden' name='next' value='{_e(back)}'>")
-            ctrl = (
-                f" <form method='post' action='/action' class='emo-f'>{base}"
-                f"<button class='btn ok sm' type='submit' name='action' "
-                f"value='proj_proposal_accept'>accept</button>"
-                f"</form> <form method='post' action='/action' class='emo-f'>{base}"
-                f"<button class='dellink' type='submit' name='action' value='proj_proposal_reject' "
-                f"onclick=\"return confirm('Reject this proposal? It will not come back.')\">"
-                f"reject</button></form>")
-        rows += (f"<li><a href='/project?pid={_e(p['id'])}'>{_e(_scope_text(p) or '—')}</a> "
-                 f"<span class='chip muted'>{_e(bron)}</span>"
-                 f"<span class='muted'> · {_e(_name(st.records.get(p.get('owner'))) if st.records.get(p.get('owner')) else p.get('owner') or '?')}</span>"
-                 f"{ctrl}</li>")
-    return (f"<details class='box-details' open><summary>💡 Proposals — awaiting your judgement "
-            f"({len(proposals)})</summary>"
-            f"<p class='muted'>The village proposes; you decide. Nothing here is on the board or "
-            f"being worked on. Open a proposal to read where it came from.</p>"
-            f"<ul class='clean'>{rows}</ul></details>")
+# De review-baan voor voorstellen (status `proposed`) stond hier, in twee smaken: op de rol-tab en
+# op de cirkel-tab. Hij is 11 aug 2026 verhuisd naar de Founder Flow (/founder). Reden: adjudicatie
+# hoort op één plek. Verspreid over het projectenbord moest je per rol en per cirkel langs om te
+# zien wat op je oordeel wachtte, en zag je nooit hoeveel er in totaal lag.
+# De rendering leeft nu in `views/founder_flow._voorstellen_sectie`; de dispatch-takken
+# (proj_proposal_accept/reject) en `project_proposals` zijn ongewijzigd.
 
 
 def _orphans_html(st: _Stores, orphans: list, csrf_token: str, back: str) -> str:
@@ -718,7 +689,6 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
         mine = [p for p in allp if p.get("owner") == rec.id and not p.get("archived")]
         projs = [p for p in mine if p.get("status") not in _OFF_BOARD]
         drafts = [p for p in mine if p.get("status") == "draft"]
-        proposals = [p for p in mine if p.get("status") == "proposed"]
         archived = [p for p in allp if p.get("owner") == rec.id and p.get("archived")]
         board = _projects_board(st, projs, rec.id, csrf_token, back_base, "persoon", quickadd=add)
         if not board:
@@ -727,7 +697,6 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
         head = (f"<div style='margin-bottom:1rem'>"
                 f"<h3 style='margin:0;display:inline'>Projects ({len(projs)})</h3> &nbsp; {addlink}</div>")
         return (f"<div class='c2-sec'>{head}{_drafts_html(st, drafts, csrf_token, back_base)}"
-                f"{_proposals_html(st, proposals, csrf_token, back_base)}"
                 f"{board}{_archived_html(st, archived, csrf_token, back_base)}</div>")
 
     # CIRKEL: doet zelf geen uitvoerend werk. Toont projecten van haar DIRECTE rollen +
@@ -739,7 +708,6 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
     mine = [p for p in allp if (p.get("owner") in rids or p.get("owner") == ii) and not p.get("archived")]
     projs = [p for p in mine if p.get("status") not in _OFF_BOARD]
     drafts = [p for p in mine if p.get("status") == "draft"]
-    proposals = [p for p in mine if p.get("status") == "proposed"]
     back = f"{back_base}&group={g}"
     board = _projects_board(st, projs, rec.id, csrf_token, back, g, quickadd=add)
     if not board:
@@ -770,7 +738,6 @@ def _projects_tab_html(st: _Stores, rec, csrf_token: str, group: str = "", add: 
                    and st.records.get(o) is None]
         orphans_html = _orphans_html(st, orphans, csrf_token, back_base)
     return (f"<div class='c2-sec'>{head}{_drafts_html(st, drafts, csrf_token, back)}"
-            f"{_proposals_html(st, proposals, csrf_token, back)}"
             f"{board}{sub_html}</div>{orphans_html}")
 
 

@@ -4955,7 +4955,7 @@ def make_handler(data_dir: str, csrf_token: str,
                     st, data_dir, csrf_token=effective_csrf,
                     msg=(qs.get("msg") or [""])[0], ritme=(qs.get("ritme") or ["dag"])[0],
                     onthuld=(qs.get("onthuld") or [""])[0],
-                    radar_view=(qs.get("radar") or ["trend"])[0]))
+                    radar_view=(qs.get("radar") or ["trend"])[0], username=username))
                 return
             if path == "/_patterns":
                 self._send(render_patterns(effective_csrf))
