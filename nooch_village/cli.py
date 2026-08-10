@@ -1097,14 +1097,24 @@ def main() -> None:
             recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
             if recs.get(role_id) is None:
                 print(f"Rol '{role_id}' bestaat niet.", file=sys.stderr); sys.exit(1)
+            # Schrijf BEIDE lagen. De assignments-store is de bron van waarheid (zie
+            # assignments.migrate_persona_bindings); het record-veld blijft meelopen omdat andere
+            # code het nog leest (bv. de WIP-limiet). Alleen het record schrijven was precies de
+            # divergentie die compliance als onbemand liet lezen.
+            from nooch_village.assignments import Assignments
+            _asg = Assignments(os.path.join(ctx.data_dir, "assignments.json"))
             if pid == "-":
+                oud = getattr(recs.get(role_id), "persona_id", None)
                 recs.set_persona(role_id, None)
+                if oud:
+                    _asg.unassign(role_id, "persona", oud)
                 print(f"🔌 Rol '{role_id}' ontkoppeld van zijn inwoner.")
             elif personas.get(pid) is None:
                 print(f"Inwoner '{pid}' bestaat niet (zie: village inwoner_list).", file=sys.stderr)
                 sys.exit(1)
             else:
                 recs.set_persona(role_id, pid)
+                _asg.assign(role_id, "persona", pid)
                 p = personas.get(pid)
                 print(f"🪑 {p.name} ({p.mbti or 'geen MBTI'}) zit nu in de rol '{role_id}'. "
                       f"De rugzak (skills) blijft van de rol; {p.name} kleurt de toon.")

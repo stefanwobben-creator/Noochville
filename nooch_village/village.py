@@ -397,10 +397,27 @@ class Village:
     def start(self):
         self.human_inbox.sync_unmanned(self.records.all(), CLASS_MAP)
         self.human_inbox.withdraw_archived_activations(self.records.all())
+        self._migrate_persona_bindings()
         self._audit_role_provenance()
         self._write_role_status()
         self._prime_board_watch()          # bestaande 'running'-projecten niet als nieuwe activatie vuren
         self.root.start()
+
+    def _migrate_persona_bindings(self) -> None:
+        """Legacy `record.persona_id` → de assignments-store: één bron van waarheid voor bemensing.
+
+        Idempotent, dus gratis zodra hij een keer geland is. Zonder deze migratie las een rol die
+        alléén in de legacy-laag zat (compliance) als onbemand, en kopieerde elk bericht naar de
+        Circle Lead. Fail-soft: een mislukte migratie mag het dorp niet tegenhouden."""
+        try:
+            from nooch_village.assignments import Assignments, migrate_persona_bindings
+            pad = os.path.join(self.context.data_dir, "assignments.json")
+            n = migrate_persona_bindings(self.records, Assignments(pad))
+            if n:
+                logging.getLogger("village").info(
+                    "🔗 %d legacy persona-binding(en) naar de assignments-store gemigreerd", n)
+        except Exception as e:                           # noqa: BLE001
+            logging.getLogger("village").warning("persona-migratie overgeslagen: %s", e)
 
     def _write_role_status(self) -> None:
         """Schrijf de bemenst/onbemand-status (de laatste reconcile) weg zodat de read-only cockpit

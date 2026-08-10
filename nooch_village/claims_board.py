@@ -31,30 +31,45 @@ _NIET_WOORD = re.compile(r"[^a-z0-9]+")
 _SNIPPET_MAX = 160
 
 
-def _mensen_op(rol_id: str, assignments) -> bool:
-    """Vervult een MENS deze rol? Een rol die alleen door een persona wordt gedragen levert
-    geen inbox-doel op — dan komt een bericht bij niemand aan."""
-    try:
-        return any(getattr(f, "type", None) == "person" for f in assignments.fillers_of(rol_id))
-    except Exception:
-        return False
+# Werk-bedoeld of FYI? Het onderscheid zat er al in: een aanroeper die een `project_id` meegeeft
+# heeft het werk NET op het bord gezet en gebruikt dit bericht om de rol wakker te maken. Wie geen
+# project_id meegeeft, vraagt om werk dat nog nergens staat. Alleen dat tweede geval verdient een
+# project — anders vervuil je het bord met meldingen over werk dat er al is.
+#
+# Gemeten op de acht aanroepplekken (11 aug 2026): 2 dragen een project_id (zet_op_bord,
+# regulation_watch → FYI), 6 niet (site-scan-regressie, scan-lijst kapot, scan blind, en de drie
+# founder-flow-routes → werk).
+ORIGIN_BERICHT = "rol_bericht"
 
 
 def bericht_aan_rol(context_of_stores, rol_id: str, tekst: str, project_id: str = "",
-                    door: str = "claims-checker") -> list[str]:
-    """Stuur een @rol-bericht naar de inbox van een rol. Geeft de bereikte doelen terug.
+                    door: str = "claims-checker", werk: bool | None = None) -> list[str]:
+    """Geef werk of een seintje door aan een rol. Geeft de bereikte doelen terug.
 
-    Vangnet voor onbemande rollen: heeft de rol geen menselijke vervuller, dan gaat het bericht
-    óók naar de Circle Lead van zijn cirkel. Dat is geen noodgreep maar het model — de
-    accountabilities van een onbemande rol vallen aan de Circle Lead (Holacracy 1.4.2). Zonder
-    dit vangnet zou een bericht aan compliance (nu onbemand) bij niemand aankomen.
+    Twee kanalen, en het verschil is niet cosmetisch:
+
+    **Een MENS-bemande rol** krijgt een notificatie: die leest zijn inbox in de cockpit.
+
+    **Een AI-bemande rol krijgt een PROJECT.** Een `Inhabitant` leest NotifStore nooit — hij
+    schrijft er alleen naar. Een notificatie aan een AI-rol was dus een dead letter: op productie
+    stonden er 74 aan `compliance`, allemaal ongelezen, terwijl de founder dacht dat hij werk had
+    doorgegeven. Werk bij een AI-rol krijg je via het bord, want dáár kijkt hij.
+
+    `werk`: None = afleiden uit `project_id` (leeg → werk, gevuld → FYI over bestaand werk).
+    Expliciet True/False overrulet dat, voor een aanroeper die het beter weet.
+
+    Het vangnet naar de Circle Lead blijft, maar nu op de JUISTE vraag: alleen een rol die door
+    niemand is ingevuld valt aan de Circle Lead toe (Holacracy 1.4.2). Een rol met een persona is
+    bemand — die las eerder onterecht als onbemand, en kopieerde alles naar de founder.
 
     Fail-soft: berichten mogen een puls of een klik nooit laten klappen."""
     doelen: list[str] = []
     try:
+        from nooch_village.assignments import bemand, door_mens_bemand
         notif = getattr(context_of_stores, "notif", None)
         records = getattr(context_of_stores, "records", None)
         assignments = getattr(context_of_stores, "assign", None)
+        ledger = getattr(context_of_stores, "projects", None)
         data_dir = getattr(context_of_stores, "data_dir", None) or getattr(context_of_stores, "dd", ".")
         if notif is None:
             import os
@@ -66,18 +81,49 @@ def bericht_aan_rol(context_of_stores, rol_id: str, tekst: str, project_id: str 
 
             from nooch_village.assignments import Assignments
             assignments = Assignments(os.path.join(data_dir, "assignments.json"))
-        notif.add("role", rol_id, project_id, by=door, snippet=tekst[:_SNIPPET_MAX])
+
+        is_werk = (not project_id) if werk is None else bool(werk)
+        mens = door_mens_bemand(rol_id, assignments, records)
+        ai = (not mens) and bemand(rol_id, assignments, records)
+
+        pid = ""
+        if is_werk and ai and ledger is not None:
+            pid = _werk_project(ledger, rol_id, tekst, door)
+        # De notificatie blijft óók staan: hij is de audittrail van "dit is doorgegeven", en voor
+        # een mens-bemande rol is hij het hele kanaal.
+        snippet = tekst if not pid else f"📥 Als project op je bord gezet: {tekst}"
+        notif.add("role", rol_id, project_id or pid, by=door, snippet=snippet[:_SNIPPET_MAX])
         doelen.append(rol_id)
 
-        if assignments is not None and not _mensen_op(rol_id, assignments):
+        if not bemand(rol_id, assignments, records):
             lead = _circle_lead_van(rol_id, records)
             if lead and lead != rol_id:
-                notif.add("role", lead, project_id, by=door,
+                notif.add("role", lead, project_id or pid, by=door,
                           snippet=f"[rol {rol_id.split('__')[-1]} onbemand] {tekst}"[:_SNIPPET_MAX])
                 doelen.append(lead)
     except Exception:
         pass
     return doelen
+
+
+def _werk_project(ledger, rol_id: str, tekst: str, door: str) -> str:
+    """Zet het gevraagde werk als project op het bord van de rol. Geeft het pid, of "" bij een
+    duplicaat of een fout.
+
+    Dedup op de tekst: dezelfde vraag twee keer stellen mag geen twee projecten opleveren — de
+    site-scan en de founder-flow herhalen zich per puls. `keyword` draagt de sleutel, zoals
+    `zet_op_bord` dat ook doet."""
+    sleutel = f"{ORIGIN_BERICHT}:{normaliseer(tekst)[:120]}"
+    try:
+        for p in ledger.all():
+            if p.get("keyword") == sleutel and p.get("status") != "done" and not p.get("archived"):
+                return ""                                # loopt al
+        return ledger.create(rol_id, tekst[:200], "role", status="queued",
+                             origin=ORIGIN_BERICHT, keyword=sleutel,
+                             description=f"Doorgegeven door {door}. {tekst}",
+                             done_when="het gevraagde is uitgevoerd of expliciet afgewezen")
+    except Exception:                                    # noqa: BLE001 — het bericht gaat sowieso door
+        return ""
 
 
 def _circle_lead_van(rol_id: str, records) -> str | None:

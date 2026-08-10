@@ -2,7 +2,8 @@
 
 De harde grenzen die hier bewaakt worden:
 - `regulation_watch` DETECTEERT en duidt nooit; hij raakt de claims-database niet aan.
-- een @rol-bericht aan een onbemande rol komt tóch bij een mens aan (Circle Lead-vangnet).
+- een @rol-bericht aan een ONBEMANDE rol komt tóch bij een mens aan (Circle Lead-vangnet);
+  een rol met een persona IS bemand en krijgt zijn werk als project op zijn bord.
 - een automatisch gezette status is altijd als automatisch herkenbaar.
 - alles wat terugkeert leeft in de repo — geen externe scheduler.
 """
@@ -278,9 +279,20 @@ def test_onbemande_rol_bereikt_toch_de_circle_lead(tmp_path):
     assert any("onbemand" in s for s in snippets)
 
 
-def test_persona_telt_niet_als_mens(tmp_path):
-    """Een rol die alleen een AI-persona draagt heeft geen menselijke ontvanger."""
+def test_persona_bemande_rol_leest_niet_meer_onbemand(tmp_path):
+    """Een rol met een persona IS bemand. Hij las eerder onterecht als onbemand (de check vroeg
+    naar type 'person'), waardoor élk bericht een kopie naar de Circle Lead kreeg — 47 stuks op
+    productie, allemaal terug bij de founder."""
     omg = _omg(tmp_path, {"rolx": [SimpleNamespace(type="persona", id="a1")]})
+    doelen = claims_board.bericht_aan_rol(omg, "rolx", "x")
+    assert doelen == ["rolx"]
+    assert "cirkel__circle_lead" not in doelen
+
+
+def test_rol_zonder_enige_filler_valt_wel_aan_de_circle_lead(tmp_path):
+    """Het vangnet blijft — maar op de JUISTE vraag: alleen een rol die door niemand is ingevuld
+    valt aan de Circle Lead toe (Holacracy 1.4.2)."""
+    omg = _omg(tmp_path, {})
     doelen = claims_board.bericht_aan_rol(omg, "rolx", "x")
     assert "cirkel__circle_lead" in doelen
 
