@@ -249,13 +249,17 @@ def _claim_effect(st, data_dir: str, item: str, oordeel: str) -> str:
         claims_board.bericht_aan_rol(
             st, COMPLIANCE_ROL,
             f"Bank the evidence for: {claim} — record source + literal quote in the Chronicle.",
-            door="founder-flow")
+            door="founder-flow",
+            done_when=f"vastgesteld of de claim {claim} houdbaar is, met bron en citaat in de "
+                      f"Kroniek of een concreet correctievoorstel")
         melding = "✓ handed to compliance to bank the evidence"
     elif oordeel == "scientist":
         claims_board.bericht_aan_rol(
             st, SCIENTIST_ROL,
             f"Ground this claim scientifically: {claim} — no hard source in the database yet.",
-            door="founder-flow")
+            door="founder-flow",
+            done_when=f"wetenschappelijke onderbouwing voor de claim {claim} gevonden, of "
+                      f"vastgesteld dat die er niet is")
         melding = "✓ handed to the Scientist"
     else:
         return "✗ unknown judgement"
@@ -379,7 +383,8 @@ def _content_effect(st, data_dir: str, item: str, oordeel: str) -> str:
     rol = FIELD_NOTE_ROL if soort == "fieldnote" else COMPLIANCE_ROL
     wat = f"Field Note {sleutel}" if soort == "fieldnote" else f"proof entry {sleutel}"
     claims_board.bericht_aan_rol(
-        st, rol, f"The founder asks for a correction on {wat}.", door="founder-flow")
+        st, rol, f"The founder asks for a correction on {wat}.", door="founder-flow",
+        done_when=f"{wat} is gecorrigeerd, of onderbouwd waarom correctie niet nodig is")
     return f"✎ correction requested from {rol}"
 
 
