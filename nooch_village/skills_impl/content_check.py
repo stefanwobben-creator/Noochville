@@ -41,13 +41,21 @@ class ContentCheckSkill(Skill):
             getattr(context, "copy_rules", "") if context is not None else "",
             payload.get("locale"),
         )
-        return {
+        uit = {
             "gate_ok": report.ok,
             "forbidden_words": list(report.forbidden_words),
             "claim_issues": [{"insight_id": ci.insight_id, "reason": ci.reason}
                              for ci in report.claim_issues],
             "suggestions": suggestions,
         }
+        # Schone tekst = een ANTWOORD, geen kennisgat. Zonder deze regel leest een geslaagde
+        # controle die niets vond als "er ontbreekt kennis" — en sinds de missie-critic telt dat
+        # mee op de substantieel-as. `no_data` zegt: onderzocht, niets te melden.
+        if not (uit["forbidden_words"] or uit["claim_issues"] or uit["suggestions"]):
+            uit["no_data"] = True
+            uit["reason"] = ("tekst getoetst aan de copy-regels en de claim-poort: geen verboden "
+                             "woorden, geen claim-problemen, geen suggesties")
+        return uit
 
     def _llm_check(self, text: str, rules: str, locale: str | None = None) -> str | None:
         from nooch_village.llm import reason

@@ -387,7 +387,8 @@ class ProjectLedger:
         self._save()
         return True
 
-    def set_item_leeg(self, pid: str, clid: str, item_id: str, reden: str = "") -> bool:
+    def set_item_leeg(self, pid: str, clid: str, item_id: str, reden: str = "",
+                      bron: str = "geen_inhoud") -> bool:
         """Markeer een item als UITGEVOERD-MAAR-LEEG: de skill draaide, er kwam niets uit.
 
         Zo'n item wordt wél afgevinkt (anders zou het project de review-gate nooit halen en eeuwig
@@ -401,6 +402,10 @@ class ProjectLedger:
         for it in cl.get("items", []):
             if it["id"] == item_id:
                 it["leeg"] = True
+                # `bron` scheidt een ANTWOORD van een GAT: 'gemeld' = de skill zei zelf no_data
+                # (onderzocht, niets gevonden — een geldige uitkomst); 'geen_inhoud' = hij gaf iets
+                # terug waar niets in zat. Alleen het tweede is ontbrekende kennis.
+                it["leeg_bron"] = "gemeld" if bron == "gemeld" else "geen_inhoud"
                 if reden:
                     it["leeg_reden"] = str(reden)[:200]
                 self._touch(p); self._save()

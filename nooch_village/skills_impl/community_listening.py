@@ -211,6 +211,8 @@ class CommunityListeningSkill(Skill):
 
         summary_str = " / ".join(summary)
         log.info("🎧 community_listening '%s': %s", set_id, summary_str)
+        # `summary` draagt altijd het antwoord — ook "het was stil". Daarmee landt een lege ronde
+        # als een gerapporteerd resultaat en niet als kennisgat; er is hier dus geen no_data nodig.
         out = {"ok": True, "count": total_new, "new": total_new, "counts": counts,
                "summary": summary_str, "query_set_id": set_id}
         if first_refuse:

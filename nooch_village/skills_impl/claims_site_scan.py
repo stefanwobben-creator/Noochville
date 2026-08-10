@@ -406,7 +406,16 @@ class ClaimsSiteScanSkill(Skill):
         gaten = self._oogst_gaten(data_dir, signalen, verslag, bevindingen, tijdelijk, vastgelopen)
         headsup = self._headsup(verslag, statussen, tijdelijk, permanent, signalen, vastgelopen,
                                 len(nieuw_gedekt), len(paginas))
-        return {"ok": True, "week": week, "skipped": False, "headsup": headsup,
+        # Een schone scan is een ANTWOORD ("de site is compliant"), geen kennisgat. Zonder dit
+        # leest een geslaagde scan zonder bevindingen als ontbrekende kennis — en dat is precies
+        # het soort valse gat waar de missie-critic op zakt.
+        schoon = (not verslag["aangemaakt"] and not bevindingen and not fouten
+                  and not tijdelijk and not permanent)
+        extra = ({"no_data": True,
+                  "reason": (f"{len(paginateksten)} pagina('s) gescand, geen enkele claim-bevinding "
+                             f"en geen bronfout — de site is op deze punten schoon")}
+                 if schoon else {})
+        return {"ok": True, "week": week, "skipped": False, "headsup": headsup, **extra,
                 "statussen": statussen,
                 "gescand": len(paginateksten), "gedekt": nieuw_gedekt, "paginas": len(paginas),
                 "fouten": fouten,
