@@ -1421,6 +1421,10 @@ class Inhabitant(threading.Thread):
                 summary = self._deliverable_note(item, result, archetype, source=used_source)
                 wall_note_id = ledger.add_role_message(pid, summary)
                 self._store_deliverable(project, item, pos, used_source, result, summary, wall_note_id)
+                # Een geslaagde (her)draai wist de leeg-markering van een eerdere ronde: anders
+                # blijft een item dat NU inhoud opleverde als kennisgat meetellen bij de critic.
+                if item.get("leeg"):
+                    ledger.clear_item_leeg(pid, clid, item["id"])
                 ledger.check_toggle(pid, clid, item["id"])
                 succeeded += 1
                 self.log.info("✅ project '%s': item '%s' via %s afgerond (inhoud uit '%s')", pid,
@@ -1753,7 +1757,8 @@ class Inhabitant(threading.Thread):
     # geen resultaat. Bewust ruim: liever een sleutel te veel als metadata dan een lege deliverable
     # die als "gelukt" boekt — dat is de fout aan de andere kant, en die is even duur.
     _META_KEYS = frozenset({
-        "ok", "error", "no_data", "reason", "redenen", "status", "skipped", "escalate", "headsup",
+        "ok", "error", "no_data", "reason", "reden", "redenen", "status", "skipped", "escalate",
+        "headsup", "refuse", "toelichting",
         "week", "at", "ts", "datum", "day", "maand", "versie", "version", "id", "skill", "source",
         "bron", "locale", "corpus", "query", "term", "vraag_id", "role_id", "project_id",
         "gescand", "overgeslagen", "nieuw", "volledig", "vastgelopen", "force", "estimated",

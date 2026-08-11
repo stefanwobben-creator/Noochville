@@ -371,6 +371,21 @@ class ProjectLedger:
                 return True
         return False
 
+    def clear_item_leeg(self, pid: str, clid: str, item_id: str) -> bool:
+        """Haal de leeg-markering van een item af. Nodig bij een geslaagde HERdraai: het item
+        leverde eerst niets op en nu wel, en zonder deze wis blijft het als kennisgat meetellen
+        bij de missie-critic — een gat dat inmiddels gedicht is."""
+        p = self._projects.get(pid)
+        cl = self._checklist(p, clid) if p else None
+        if cl is None:
+            return False
+        for it in cl.get("items", []):
+            if it["id"] == item_id and it.get("leeg"):
+                it.pop("leeg", None); it.pop("leeg_reden", None); it.pop("leeg_bron", None)
+                self._touch(p); self._save()
+                return True
+        return False
+
     def mark_critic(self, pid: str, veld: str, waarde) -> bool:
         """Zet een critic-vlag op het project (`critic_herkansing`, `critic_verdict`).
 
@@ -1028,7 +1043,7 @@ _WRITE_METHODS = (
     "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
     "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",
     "mark_formalized", "to_future", "mark_scope_nudge", "note_item_fail", "reset_item_fails",
-    "set_item_leeg", "mark_critic",
+    "set_item_leeg", "clear_item_leeg", "mark_critic",
 )
 for _m in _WRITE_METHODS:
     setattr(ProjectLedger, _m, _synchronized(getattr(ProjectLedger, _m)))

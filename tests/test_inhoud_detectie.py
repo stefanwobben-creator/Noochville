@@ -175,3 +175,29 @@ def test_de_drie_skills_die_het_kostten_landen_nu_als_gelukt():
     handoff = {"ok": True, "pid": "abc123", "naar_rol": "copywriter",
                "titel": "Compliant kopregel schrijven"}
     assert c(handoff)[0] == "gelukt"
+
+
+# ── 7. Nasleep uit de eerste productiedraai ─────────────────────────────────
+
+def test_nederlandse_metadata_sleutels_tellen_niet():
+    """Op prod las een week-gated skip als geslaagd: 'reden' stond niet in de metadata-set, alleen
+    het Engelse 'reason'. Precies de over-acceptatie waar de allowlist-fix voor moest oppassen."""
+    assert c({"ok": True, "week": "2026-32", "skipped": True,
+              "reden": "deze week al gescand"})[0] == "leeg"
+    assert c({"ok": True, "refuse": "geen key", "toelichting": "x"})[0] == "leeg"
+
+
+def test_geslaagde_herdraai_wist_de_oude_leeg_markering(tmp_path):
+    """Een item dat eerst niets opleverde en nu wél, mag niet als kennisgat blijven meetellen —
+    dat is een gat dat inmiddels gedicht is."""
+    from nooch_village.projects import ProjectLedger
+    led = ProjectLedger(str(tmp_path / "p.json"))
+    pid = led.create("rol", "doel", "human", status="queued")
+    cl = led.checklist_add(pid, title="t")
+    led.check_add(pid, cl["id"], "taak", skill="x")
+    iid = led.get(pid)["checklists"][0]["items"][0]["id"]
+    led.set_item_leeg(pid, cl["id"], iid, "niets gevonden", bron="geen_inhoud")
+    assert led.get(pid)["checklists"][0]["items"][0]["leeg"] is True
+    assert led.clear_item_leeg(pid, cl["id"], iid) is True
+    it = led.get(pid)["checklists"][0]["items"][0]
+    assert "leeg" not in it and "leeg_bron" not in it and "leeg_reden" not in it
