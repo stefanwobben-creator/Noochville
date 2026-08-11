@@ -108,14 +108,18 @@ def _omg(persona, tmp_path=None):
 
 @pytest.mark.parametrize("llm,verwacht", [
     ({"default": "gemini", "per_taak": {"einddocument": "anthropic"}}, "anthropic"),
-    ({"default": "gemini", "per_taak": {"iets_anders": "x"}}, "gemini"),
-    ({"default": "gemini"}, "gemini"),
+    # Een blanket `default` overstemt de hoog-inzet-kop NIET meer. Op productie stond bij compliance
+    # `default: haiku`, en daarmee draaide het einddocument — het stuk dat de mens leest — op het
+    # zwakste model terwijl de critic die het beoordeelde op het sterkste draaide. Een standaard is
+    # geen keuze: hij vult aan waar het dorp geen mening heeft, en hangt hier dus ONDER de kop.
+    ({"default": "gemini", "per_taak": {"iets_anders": "x"}}, None),
+    ({"default": "gemini"}, None),
     # Geen eigen keuze → de DORPSBREDE hoog-inzet-kop (einddocument is zo'n site). Vóór de
     # premium-uitrol was dit None; nu is 'geen persona-voorkeur' niet meer hetzelfde als 'geen kop'.
     ({}, None),   # None = "de dorpsbrede kop"; hieronder afgeleid, niet overgetypt
 ])
 def test_resolutie_volgorde(llm, verwacht):
-    """per_taak > default > dorpsbrede hoog-inzet-kop.
+    """per_taak > dorpsbrede hoog-inzet-kop > blanket default.
 
     Asserteert op de KOP: sinds de zachte staart krijgt elke voorkeur de dorpsladder erachter, maar
     welke trede als eerste wordt geprobeerd is nog steeds precies deze volgorde."""
@@ -130,6 +134,23 @@ def test_resolutie_volgorde(llm, verwacht):
         # De persona-keuzes noteren alleen de vendor ('anthropic'); de dorpsbrede kop noteert
         # vendor:model. Vergelijk daarom op prefix, niet op gelijkheid.
         assert (kop or "").startswith(verwacht)
+
+
+def test_een_blanket_default_blijft_wel_als_terugval_staan():
+    """De standaard verdwijnt niet, hij zakt. Zo houdt de persona zijn eigen brein als de dure
+    trede wegvalt, zonder dat hij bepaalt waar het oordeel vandaan komt."""
+    p = Persona(id="x", name="Billy", llm={"default": "gemini"})
+    uit = llm_keuze.llm_voorkeur(_omg(p), "rol", "einddocument")
+    tredes = uit.split(",")
+    assert tredes[0] == llm_keuze.hoog_inzet_ladder()
+    assert any(t.startswith("gemini") for t in tredes[1:])
+
+
+def test_een_blanket_default_is_wel_leidend_op_een_goedkope_site():
+    """De andere helft van dezelfde regel: waar het dorp geen kop heeft, wint de persona-standaard."""
+    p = Persona(id="x", name="Billy", llm={"default": "gemini"})
+    uit = llm_keuze.llm_voorkeur(_omg(p), "rol", "classify_tension")
+    assert (uit or "").startswith("gemini")
 
 
 def test_zonder_persona_valt_terug_op_de_dorpsbrede_keuze():

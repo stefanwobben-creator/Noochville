@@ -74,10 +74,41 @@ def test_onbekende_site_krijgt_de_dorpsladder():
     assert lk.ladder_voor("een_nieuwe_site_die_niemand_registreerde") is None
 
 
-def test_persona_wint_van_de_dorpsbrede_kop():
+def test_een_expliciete_per_taak_keuze_wint_van_de_dorpsbrede_kop():
+    """Dit was en blijft de bedoeling van `per_taak`: voor DIT werk wil ik DAT model."""
     from nooch_village.personas import Persona
     p = Persona(id="x", name="Billy", llm={"per_taak": {"einddocument": "mistral"}})
     assert lk.ladder_voor("einddocument", p).startswith("mistral")
+
+
+def test_een_blanket_standaard_overstemt_de_hoog_inzet_kop_niet():
+    """DE correctie. Op productie stond bij compliance `default: anthropic:claude-haiku-4-5`, en
+    `eigen_keuze` viel voor élke call-site op die default terug. Daarmee overstemde een standaard
+    stilzwijgend de Sonnet-kop op alle negen sites: het einddocument — het stuk dat de mens leest —
+    draaide op het zwakste model terwijl de critic die het beoordeelde op het sterkste draaide.
+
+    Een standaard is geen keuze. Hij vult aan waar het dorp geen mening heeft."""
+    from nooch_village.personas import Persona
+    p = Persona(id="candy", name="Candy", llm={"default": "anthropic:claude-haiku-4-5"})
+    ladder = lk.ladder_voor("einddocument", p)
+    assert ladder.startswith("anthropic:claude-sonnet-5")          # de kop wint
+    assert "anthropic:claude-haiku-4-5" in ladder                  # maar de standaard blijft eronder
+    tredes = llm.tier_namen(ladder)
+    assert tredes.index("anthropic:claude-sonnet-5") < tredes.index("anthropic:claude-haiku-4-5")
+
+
+def test_een_blanket_standaard_geldt_wel_waar_het_dorp_geen_mening_heeft():
+    """De andere helft van dezelfde regel: op een site zonder hoog-inzet-kop is de persona-standaard
+    juist wél leidend. Anders zou de correctie een persona zijn eigen brein afnemen."""
+    from nooch_village.personas import Persona
+    p = Persona(id="candy", name="Candy", llm={"default": "anthropic:claude-haiku-4-5"})
+    assert lk.ladder_voor("classify_tension", p).startswith("anthropic:claude-haiku-4-5")
+    assert lk.ladder_voor("een_onbekende_site", p).startswith("anthropic:claude-haiku-4-5")
+
+
+def test_zonder_persona_verandert_er_niets():
+    assert lk.ladder_voor("einddocument").startswith("anthropic:claude-sonnet-5")
+    assert lk.ladder_voor("classify_tension") is None
 
 
 def test_kop_is_env_instelbaar(monkeypatch):
@@ -128,6 +159,34 @@ def test_cap_bereikt_laat_de_dure_kop_vervallen(monkeypatch):
     assert lk.premium_op() is True
     assert lk.ladder_voor("einddocument") is None          # terug naar de dorpsladder
     assert lk.ladder_voor("classify_tension") is None      # triage was al goedkoop
+
+
+def test_de_cap_geldt_ook_voor_een_persona_ladder(monkeypatch):
+    """Een persona-voorkeur ontsnapte volledig aan de cap: die tak checkte `premium_op()` niet. Een
+    inwoner mag zijn eigen brein kiezen, maar niet buiten het budget om."""
+    from nooch_village.personas import Persona
+    monkeypatch.setenv(lk._CAP_ENV, "1.0")
+    monkeypatch.setattr(lk, "premium_uitgaven_deze_maand", lambda *a, **k: 2.5)
+    p = Persona(id="x", name="W", llm={"per_taak": {"einddocument": "anthropic:claude-sonnet-5"}})
+    ladder = lk.ladder_voor("einddocument", p)
+    assert ladder is None or "sonnet" not in ladder
+
+
+def test_de_cap_verlaagt_niet_stil(monkeypatch, caplog):
+    """Een cap mag begrenzen, maar niet stil — een onzichtbare verlaging leest later als
+    kwaliteitsverlies zonder oorzaak, precies zoals een tekstloos Anthropic-antwoord dat deed."""
+    import logging
+    monkeypatch.setenv(lk._CAP_ENV, "1.0")
+    monkeypatch.setattr(lk, "premium_uitgaven_deze_maand", lambda *a, **k: 2.5)
+    monkeypatch.setattr(lk, "_gemeld_cap_verlaging", set())
+    with caplog.at_level(logging.WARNING):
+        lk.ladder_voor("einddocument")
+        lk.ladder_voor("einddocument")                     # tweede keer: geen extra regel
+        lk.ladder_voor("skill_voorstel")                   # andere site: wél een eigen regel
+    regels = [r.getMessage() for r in caplog.records if "PREMIUM_CAP_VERLAGING" in r.getMessage()]
+    assert len(regels) == 2
+    assert "einddocument" in regels[0] and "claude-sonnet-5" in regels[0]
+    assert "skill_voorstel" in regels[1]
 
 
 def test_cap_nul_is_geen_cap(monkeypatch):
