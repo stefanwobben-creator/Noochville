@@ -90,6 +90,29 @@ def pad(data_dir: str) -> str:
     return os.path.join(data_dir, BESTAND)
 
 
+# Hoeveel van het RAPPORT de grondings-toets te zien krijgt. Ruim: een einddocument is een paar
+# duizend woorden en de toets moet het geheel kunnen beoordelen, inclusief de conclusie.
+MAX_RAPPORT_CHARS = 24000
+
+
+def _te_toetsen(document: str) -> str:
+    """Het rapport zoals de grondings-toets het leest — en als er iets af moet, dan zegt hij dat.
+
+    Stond op `[:6000]`. Een rapport van 8872 tekens kwam daardoor halverwege een zin binnen, en de
+    critic vlagde dat als gebrek: "de conclusie is afgekapt ('Wat we zek...') waardoor het
+    eindoordeel niet toetsbaar is". Hij beoordeelde zijn eigen venster. Dat is dezelfde stille
+    grens als `[:8]`/`[:600]` op het bewijs, en dezelfde fix: ruimer, en nooit stil."""
+    doc = document or ""
+    if len(doc) <= MAX_RAPPORT_CHARS:
+        return doc
+    log.warning("CRITIC_RAPPORT_CAP: rapport van %d tekens ingekort tot %d voor de grondings-toets "
+                "— dat staat ook in de prompt.", len(doc), MAX_RAPPORT_CHARS)
+    return (doc[:MAX_RAPPORT_CHARS]
+            + f"\n\n[LET OP: dit rapport is {len(doc)} tekens en is hier afgekapt op "
+              f"{MAX_RAPPORT_CHARS}. De afkapping is van de TOETS, niet van het rapport — reken "
+              f"het niet aan als onvolledigheid.]")
+
+
 def _bewijs(deliverables: list, content_for=None) -> str:
     """De onderbouwing die de grondings-toets te zien krijgt.
 
@@ -187,7 +210,11 @@ _KADER = (
     "BEVINDING van het rapport, geen gebrek eraan: reken die niet als ongegronde bewering.\n"
     "Concludeert het rapport iets dat de onderbouwing niet dekt, dan is dat WEL ongegrond — ook "
     "als het plausibel klinkt, en ook als de conclusie luidt dat iets niet deugt. De vraag blijft: "
-    "dekt wat de skills ophaalden het oordeel dat het rapport velt?"
+    "dekt wat de skills ophaalden het oordeel dat het rapport velt?\n"
+    "De lijst 'ongegrond' is ALLEEN voor beweringen die de onderbouwing niet dekt. Een opmerking "
+    "over vorm, stijl, volgorde of een nuance die je wilt toevoegen hoort NIET in die lijst — zet "
+    "die in 'revisie'. Constateer je dat iets juist wél klopt met de onderbouwing, noem het dan "
+    "niet ongegrond."
 )
 
 
@@ -208,7 +235,7 @@ def _gegrond(document: str, deliverables: list, project: dict, *, skill=None,
         if skill is None:
             from nooch_village.skills_impl.tegenspraak import TegenspraakSkill
             skill = TegenspraakSkill()
-        uit = skill.run({"tekst": (document or "")[:6000], "bewijs": bewijs, "doel": doel,
+        uit = skill.run({"tekst": _te_toetsen(document), "bewijs": bewijs, "doel": doel,
                          "kader": _KADER, "ladder": premium_ladder(),
                          "max_tokens": MAX_OORDEEL_TOKENS}, context)
     except Exception as e:                               # noqa: BLE001

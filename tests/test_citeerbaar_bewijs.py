@@ -191,3 +191,27 @@ def test_migratie_ontdubbelt_bestaande_stapels_zonder_te_wissen(tmp_path):
     assert len(geldend) == 1 and geldend[0]["id"] == ids[-1]
     assert len(st.for_project("p", inclusief_vervangen=True)) == 4
     assert all(st.content_for(i) is not None for i in ids)   # geen sidecar gewist
+
+
+# ── 6. De critic beoordeelt het rapport, niet zijn eigen venster ────────────
+
+def test_het_rapport_wordt_niet_stil_op_6000_tekens_afgekapt():
+    """`[:6000]` liet een rapport van 8872 tekens halverwege een zin binnenkomen, en de critic
+    vlagde dat als gebrek: "de conclusie is afgekapt ('Wat we zek...') waardoor het eindoordeel
+    niet toetsbaar is". Hij beoordeelde zijn eigen venster."""
+    doc = "x" * 8872
+    assert mc._te_toetsen(doc) == doc
+
+
+def test_moet_het_toch_afgekapt_dan_staat_dat_in_de_prompt(caplog):
+    with caplog.at_level(logging.WARNING):
+        uit = mc._te_toetsen("y" * (mc.MAX_RAPPORT_CHARS + 500))
+    assert "afkapping is van de TOETS, niet van het rapport" in uit
+    assert "CRITIC_RAPPORT_CAP" in caplog.text
+
+
+def test_de_ongegrond_lijst_is_alleen_voor_ongegronde_beweringen():
+    """De critic zette er ook vorm-gebreken en nuances in ("dit klopt met de onderbouwing, maar…"),
+    waardoor de grond-as zakte op iets dat geen grondingsprobleem is."""
+    assert "ALLEEN voor beweringen die de onderbouwing niet dekt" in mc._KADER
+    assert "zet die in 'revisie'" in mc._KADER.replace("\n", " ")
