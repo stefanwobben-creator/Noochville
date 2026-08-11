@@ -30,7 +30,8 @@ class TegenspraakSkill(Skill):
                     "bewijs: str (optioneel — de onderbouwing waarop het zou moeten rusten); "
                     "doel: str (optioneel — de uitkomst die de output dient); "
                     "ladder: str (optioneel — eigen LLM-ladder, bv. premium voor een critic); "
-                    "kader: str (optioneel — wat er precies getoetst wordt; zie missie_critic)")
+                    "kader: str (optioneel — wat er precies getoetst wordt; zie missie_critic); "
+                    "max_tokens: int (optioneel — antwoordbudget; default 700)")
     required_payload = ("tekst",)
     output_schema = ("ok, oordeel ('houdt stand'|'moet bij'), zwakste_claim, ongegrond (list), "
                      "tegenargument, revisie, samenvatting | error")
@@ -51,6 +52,12 @@ class TegenspraakSkill(Skill):
         # onderzoeksobject is, niet de bewering van de schrijver. Zonder kader gedraagt de skill
         # zich exact als voorheen — de losse aanroepen door rollen veranderen niet.
         kader = ((payload or {}).get("kader") or "").strip()
+        # Antwoordbudget. 700 volstaat voor een losse claim; een viervoudig JSON-oordeel over een
+        # rapport van 6000 tekens niet — dat wordt halverwege afgekapt en is dan onparseerbaar.
+        try:
+            budget = max(200, int((payload or {}).get("max_tokens") or _DEFAULT_MAX_TOKENS))
+        except (TypeError, ValueError):
+            budget = _DEFAULT_MAX_TOKENS
         from nooch_village.llm import reason
         prompt = (
             "Je bent een strenge, eerlijke reviewer voor Nooch (duurzame veganistische schoenen). Spreek "
@@ -73,9 +80,16 @@ class TegenspraakSkill(Skill):
             "Antwoord UITSLUITEND met JSON:\n"
             '{"oordeel":"houdt stand of moet bij","zwakste_claim":"...","ongegrond":["..."],'
             '"tegenargument":"...","revisie":"..."}')
-        raw = reason(prompt, call_site="skill_tegenspraak", ladder=ladder, json_mode=True, max_tokens=700)
+        raw = reason(prompt, call_site="skill_tegenspraak", ladder=ladder, json_mode=True,
+                     max_tokens=budget)
         data = _extract(raw)
         if not isinstance(data, dict):
+            # Onderscheid de twee oorzaken. "LLM weg" op een antwoord dát er is stuurt de lezer de
+            # verkeerde kant op: dan ligt het aan het budget of het formaat, niet aan de leverancier.
+            if raw:
+                return {"ok": False, "error": (f"antwoord van {len(str(raw))} tekens is geen bruikbare "
+                                               f"JSON (afgekapt op max_tokens={budget}?) — toets handmatig"),
+                        "raw_lengte": len(str(raw))}
             return {"ok": False, "error": "geen bruikbaar oordeel (LLM weg) — toets handmatig"}
         oordeel = "houdt stand" if str(data.get("oordeel", "")).lower().startswith("houdt") else "moet bij"
         ongegrond = [str(x)[:200] for x in (data.get("ongegrond") or []) if str(x).strip()][:8]
@@ -100,6 +114,9 @@ class TegenspraakSkill(Skill):
                  "source": "tegenspraak", "status": "bevestigd", "result_ref": "",
                  "meta": {"oordeel": result.get("oordeel"),
                           "ongegrond": len(result.get("ongegrond") or [])}}]
+
+
+_DEFAULT_MAX_TOKENS = 700
 
 
 def _extract(raw):
