@@ -1089,10 +1089,10 @@ class Inhabitant(threading.Thread):
     def _missing_required(self, skill: str, payload: dict) -> list[str]:
         """Verplichte payload-velden (skill.required_payload) die ontbreken of leeg zijn. Leeg = geen
         validatie mogelijk (skill onbekend of geen required_payload) → fail-soft (item blijft uitvoerbaar)."""
+        from nooch_village.skills import ontbrekende_velden
         obj = self.registry.get(skill) if self.registry else None
         req = tuple(getattr(obj, "required_payload", ()) or ()) if obj is not None else ()
-        pl = payload if isinstance(payload, dict) else {}
-        return [f for f in req if not pl.get(f)]                  # ontbreekt of leeg (None/""/[]/{})
+        return ontbrekende_velden(req, payload)                   # begrijpt ook de of-of-vorm
 
     def _payload_issues(self, skill: str, payload: dict) -> list[str]:
         """Grondings-poort op de payload: laat de skill (indien ze dat kan via validate_payload) haar

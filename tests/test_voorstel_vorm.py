@@ -233,3 +233,14 @@ def test_een_bondig_voorstel_zakt_niet_op_lengte():
     assert mc._substantieel(kort, [{"x": 1}], None, op.MIN_VOORSTEL_CHARS)[0] is True
     assert mc._substantieel(kort, [{"x": 1}], None)[0] is False        # met de rapport-lat wél
     assert mc._substantieel("kort", [{"x": 1}], None, op.MIN_VOORSTEL_CHARS)[0] is False
+
+
+def test_de_synthese_krijgt_de_grond_boven_indruk_regel():
+    """Op de tweede herdraai zakte het voorstel terecht: het noemde 'bio-based of gerecyclede
+    materialen' als alternatief terwijl geen enkele bron zei welke materialen Nooch gebruikt. Als
+    die interne kennis nergens in een skill zit, is het gegronde voorstel niet een verzonnen
+    richting maar 'verwijder de term' of 'geef me de concrete invulling, dan verifieer ik hem'."""
+    src = open("nooch_village/onderzoekspas.py", encoding="utf-8").read()
+    assert "GROND VERSLAAT INDRUK" in src
+    assert "schrappen" in src and "niet te onderbouwen" in src
+    assert "hoe redelijk het ook klinkt" in src

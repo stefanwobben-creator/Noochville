@@ -50,10 +50,10 @@ def _catalog(skills, registry) -> str:
 def _payload_ok(skill_name: str, payload: dict, registry) -> bool:
     """Verplichte payload-velden (skill.required_payload) aanwezig? Onbekende skill / geen required →
     fail-soft True (identiek aan Inhabitant._missing_required)."""
+    from nooch_village.skills import ontbrekende_velden
     obj = registry.get(skill_name) if registry else None
     req = tuple(getattr(obj, "required_payload", ()) or ()) if obj is not None else ()
-    pl = payload if isinstance(payload, dict) else {}
-    return not [f for f in req if not pl.get(f)]
+    return not ontbrekende_velden(req, payload)
 
 
 def plan_offers(owner_record, texts, registry, *, name: str = "") -> list:

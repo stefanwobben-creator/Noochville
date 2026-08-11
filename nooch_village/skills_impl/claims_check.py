@@ -22,7 +22,11 @@ class ClaimsCheckSkill(Skill):
                    "veilig alternatief, plus een compliance-score. Puur lokaal, geen netwerk.")
     input_schema = "text: str  OF  terms: list[str] (de termen worden dan als één tekst getoetst)"
     output_schema = "ok, score, rood, oranje, groen, bevindingen[], versie"
-    required_payload = ()
+    # "text OF terms" — een disjunctie, geen platte lijst. Als ("text","terms") zou de poort BEIDE
+    # eisen en de skill op de andere manier breken; de skill accepteert er één. Zonder declaratie gaf
+    # de poort groen en weigerde de skill alsnog bij het draaien, en dat kostte de onderzoekspas zijn
+    # tweede bron. Zie `skills.ontbrekende_velden`.
+    required_payload = (("text", "terms"),)
 
     def run(self, payload: dict, context=None) -> dict:
         payload = payload or {}

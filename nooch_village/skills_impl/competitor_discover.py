@@ -73,8 +73,25 @@ class CompetitorDiscoverSkill(Skill):
     # heeft een config-fallback (discover_query). run() weigert bij de bron zichtbaar als noch onderwerp
     # noch config een categorie geeft (resolve_source_scope), dus die grens ligt op de uitvoer, niet in een
     # payload-precheck die de config-fallback toch niet kan zien.
+    # Geen `required_payload`: de eis is VOORWAARDELIJK. Het onderwerp mag uit de payload komen
+    # (topic of query) óf uit de staande config (`discover_query`) — een platte verplichting zou een
+    # geldige config-only-aanroep blokkeren. Daarom bewaakt `validate_payload` het, met de config
+    # erbij; dat is dezelfde route die `community_listening` voor zijn of-of-eis gebruikt.
     required_payload = ()
     output_schema = "ok: bool, candidates: list[{brand, article, link}], query: str | error"
+
+    def validate_payload(self, payload: dict, context) -> list:
+        """Is er een onderwerp? Uit de payload of uit de config — anders is dit item niet uitvoerbaar.
+
+        Zonder deze poort gaf de planner het item groen en weigerde de skill pas bij het draaien
+        ("geen onderwerp (topic)"), waarna het project parkeerde op een fout die vóór de aanroep
+        te zien was."""
+        payload = payload or {}
+        topic = (payload.get("topic") or payload.get("query") or "").strip()
+        config_scope = str((getattr(context, "settings", {}) or {}).get("discover_query", "")).strip()
+        _scope, err = resolve_source_scope(topic, config_scope, veld="onderwerp (topic)",
+                                           config_key="discover_query")
+        return [err] if err else []
 
     def run(self, payload: dict, context=None) -> dict:
         payload = payload or {}
