@@ -129,3 +129,46 @@ def test_de_puls_legt_de_reden_vast_voordat_hij_reset():
     vast die al gewist is."""
     src = open("nooch_village/inhabitant.py", encoding="utf-8").read()
     assert src.index("ledger.park(pid,") < src.index("ledger.reset_item_fails(pid, clid,")
+
+
+# ── Halve mens-taken: markeren i.p.v. het hele project verplaatsen ───────────
+
+def test_een_item_kan_alsnog_als_mens_werk_gemarkeerd_worden(tmp_path):
+    """`check_add` kon dit alleen bij het aanmaken, en de planner ziet het niet altijd goed. Een
+    checklist met "ontwerp een testprotocol" naast "voer 5 testrondes uit" is half rol-werk, half
+    labwerk. Zonder deze setter is de enige uitweg het hele project naar de backlog schuiven — en
+    dan verdwijnt ook het deel dat een rol wél kan oppakken."""
+    led = ProjectLedger(str(tmp_path / "p.json"))
+    pid = led.create("rol", "doel", "human", status="queued")
+    cl = led.checklist_add(pid, title="Uitvoerplan")
+    led.check_add(pid, cl["id"], "ontwerp een testprotocol")
+    led.check_add(pid, cl["id"], "voer 5 testrondes uit")
+    items = led.get(pid)["checklists"][0]["items"]
+
+    assert led.set_item_human(pid, cl["id"], items[1]["id"]) is True
+    vers = led.get(pid)["checklists"][0]["items"]
+    assert vers[1]["human_task"] is True
+    assert "human_task" not in vers[0]                  # het rol-deel blijft gewoon werk
+
+    assert led.set_item_human(pid, cl["id"], items[1]["id"], human=False) is True
+    assert "human_task" not in led.get(pid)["checklists"][0]["items"][1]
+    assert led.set_item_human(pid, cl["id"], "bestaat-niet") is False
+
+
+def test_een_mens_taak_telt_niet_mee_in_de_klaar_telling(tmp_path):
+    """Anders houdt hij het project eeuwig onaf — precies de zombie die de klep moet voorkomen."""
+    from nooch_village.projects import checklist_progress
+    led = ProjectLedger(str(tmp_path / "p.json"))
+    pid = led.create("rol", "doel", "human", status="queued")
+    cl = led.checklist_add(pid, title="Uitvoerplan")
+    led.check_add(pid, cl["id"], "rol-werk", skill="x")
+    led.check_add(pid, cl["id"], "labwerk")
+    items = led.get(pid)["checklists"][0]["items"]
+    led.check_toggle(pid, cl["id"], items[0]["id"])
+    led.set_item_human(pid, cl["id"], items[1]["id"])
+    assert checklist_progress(led.get(pid)["checklists"][0]) == (1, 1)
+
+
+def test_set_item_human_is_een_schrijfmethode_onder_het_slot():
+    from nooch_village.projects import _WRITE_METHODS
+    assert "set_item_human" in _WRITE_METHODS
