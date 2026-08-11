@@ -386,3 +386,13 @@ def test_zonder_gegeven_verandert_er_niets_voor_het_einddocument():
     mc.beoordeel(project={}, document=doc, deliverables=[{"id": "", "summary": "x"}],
                  checklist=None, skill=_Vangt())
     assert "GEGEVEN IN DE OPDRACHT" not in gezien["bewijs"]
+
+
+def test_de_synthese_krijgt_de_discipline_regel():
+    """De degradaties kwamen niet van verzonnen acties — die waren in alle vier bewijs-getrouw — maar
+    van toegevoegde interpretatie, oorzaak en implicatie: wat score=100 betekent, waarom een bron
+    leeg bleef, een zijstap naar 'gerecycled' terwijl de opdracht over 'plastic free' ging."""
+    src = open("nooch_village/onderzoekspas.py", encoding="utf-8").read()
+    assert "leg niets uit, veronderstel niets en impliceer niets" in src
+    assert "Bij twijfel: laat het weg" in src
+    assert "Leaner en volledig" in src and "verslaat rijk en gedegradeerd" in src
