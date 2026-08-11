@@ -157,16 +157,48 @@ def test_premium_grens_is_afgeleid_van_de_dorpsladder():
         assert lk._is_premium(trede.strip()) is False
 
 
-def test_elke_trede_in_de_kop_heeft_een_prijs():
-    """Anders is de maandcap blind: alle premium-calls tellen voor €0,00 en de zekering gaat nooit
-    om. Dat is precies het scenario dat je pas op de rekening ziet."""
-    prijzen = lk._prijzen()
-    for trede in lk.hoog_inzet_ladder().split(","):
-        trede = trede.strip()
-        if not trede:
-            continue
-        assert lk.kosten_eur(trede, 1000, 1000, prijzen) is not None, (
-            f"{trede} staat niet in config/llm_prijzen.json — de cap kan hem niet zien")
+def test_elke_trede_in_elke_ladderbron_heeft_een_prijs():
+    """Anders is de maandcap blind: die calls tellen voor €0,00 en de zekering gaat nooit om.
+
+    Keek eerst alleen naar de hoog-inzet-kop, en miste daardoor precies wat hem in de praktijk
+    brak: `openrouter:openai/gpt-5.6-luna` stond in de DORPSSTAART, hing via `met_dorpsstaart`
+    onder elke persona-voorkeur, en telde maandenlang voor niets. Nu over álle bronnen."""
+    prijsloos = lk.prijsloze_bronnen()
+    assert prijsloos == {}, (
+        "geen prijs in config/llm_prijzen.json: "
+        + "; ".join(f"{t} (uit {h})" for t, h in sorted(prijsloos.items())))
+
+
+def test_ook_een_persona_voorkeur_valt_onder_de_prijs_guard():
+    """Een persona mag zijn eigen brein kiezen, maar niet buiten het zicht van de cap. Dit is de
+    bron die de oude guard structureel niet kon zien — hij leeft in data, niet in code."""
+    class _P:
+        id = "candy"
+        llm = {"default": "anthropic:claude-haiku-4-5",
+               "per_taak": {"einddocument": "anthropic:verzonnen-model-9"}}
+
+    bronnen = lk.ladder_bronnen([_P()])
+    assert "persona candy: default" in bronnen.values()
+    assert bronnen.get("anthropic:verzonnen-model-9") == "persona candy: per_taak[einddocument]"
+    assert lk.prijsloze_bronnen([_P()]) == {
+        "anthropic:verzonnen-model-9": "persona candy: per_taak[einddocument]"}
+
+
+def test_de_sweep_meldt_elke_prijsloze_trede_een_keer(monkeypatch, caplog):
+    """Bij het opstarten, niet pas als er toevallig een premium-call langskomt: `_meld_prijsloos`
+    waarschuwt lui, en daarom viel luna pas halverwege een puls op."""
+    import logging
+
+    class _P:
+        id = "candy"
+        llm = {"default": "anthropic:verzonnen-model-9", "per_taak": {}}
+
+    monkeypatch.setattr(lk, "_gemeld_prijsloos", set())
+    with caplog.at_level(logging.WARNING):
+        gevonden = lk.meld_prijsloze_bronnen([_P()])
+    assert gevonden == ["anthropic:verzonnen-model-9"]
+    gelogd = " ".join(r.getMessage() for r in caplog.records)
+    assert "PRIJSLOZE_TREDE" in gelogd and "persona candy: default" in gelogd
 
 
 def test_premium_stand_leest_zonder_te_muteren():
