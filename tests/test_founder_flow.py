@@ -374,9 +374,35 @@ def test_niveaus_klimmen_per_taak(dd):
     assert store.zet(ff.RADAR, "Z") is False
 
 
-def test_er_zijn_precies_drie_taken():
-    assert ff.TAKEN == ("radar_triage", "claim_oordeel", "content_goedkeuring")
+def test_er_zijn_precies_vier_taken():
+    """Waren er drie ("strikt deze drie, geen vierde zonder expliciet besluit"). De onderzoekspas
+    is dat besluit, 11 aug: een rol onderzoekt zelf en legt een gegrond voorstel voor, en dat
+    oordeel hoort in dezelfde meetstroom als de andere drie — niet in een eigen inbox."""
+    assert ff.TAKEN == ("radar_triage", "claim_oordeel", "content_goedkeuring", "voorstel_oordeel")
     assert set(ff.OORDELEN) == set(ff.TAKEN)
+    assert set(ff.instellingen("/nonexistent")) == set(ff.TAKEN)
+
+
+def test_hoog_inzet_graduatiet_nooit_automatisch():
+    """Een rol die 95% van de tijd gelijk heeft over een juridische claim is nog steeds geen jurist.
+    Meten blijft, automatiseren niet — ook niet als de cijfers het zouden dragen."""
+    cfg = ff.instellingen("/nonexistent", ff.VOORSTEL)
+    perfect = [{"taak": ff.VOORSTEL, "item": f"i{n}", "mens": "bevestig", "ai": "bevestig",
+                "ai_getoond": False, "correctie": False, "ts": 1000.0 + n} for n in range(200)]
+    meting = ff.overeenstemming(perfect, ff.VOORSTEL, cfg["venster"])
+    assert meting["lo"] > cfg["lat"]                       # de cijfers zouden het dragen…
+    mag, waarom = ff.promoveerbaar(perfect, ff.VOORSTEL, "A", cfg)
+    assert mag is False and "high-stakes" in waarom        # …en toch niet
+
+
+def test_de_diff_bij_aanpassen_wordt_vastgelegd(tmp_path):
+    """Het rijkste leersignaal van de lus: een verworpen voorstel zegt 'fout', een aangepast
+    voorstel zegt 'fout op DEZE manier'."""
+    rij = ff.leg_vast(str(tmp_path), taak=ff.VOORSTEL, item="p1", mens="aanpassen",
+                      ai="bevestig", diff="rol: vervang door X | founder: vervang door Y")
+    assert rij["diff"].startswith("rol: vervang door X")
+    zonder = ff.leg_vast(str(tmp_path), taak=ff.VOORSTEL, item="p2", mens="verwerp", ai="bevestig")
+    assert "diff" not in zonder
 
 
 # ── 5. De dispatch-takken ────────────────────────────────────────────────────
@@ -687,3 +713,15 @@ def test_kapotte_config_verlaagt_de_lat_niet(dd):
     os.makedirs(cfgdir, exist_ok=True)
     open(os.path.join(cfgdir, ff.CONFIG_BESTAND), "w").write("{ dit is geen json")
     assert ff.instellingen(dd, ff.RADAR)["lat"] == ff._DEFAULTS[ff.RADAR]["lat"]
+
+
+def test_geen_enkele_lat_is_onhaalbaar_bij_een_foutloze_reeks():
+    """Een lat boven de Wilson-ondergrens van een perfecte reeks is stil kapot: hij leest als
+    'extra streng' en betekent 'nooit'. Bij venster 60 is die ondergrens 0.940, dus een lat van
+    0.95 haalt zelfs 60/60 niet. Zelfde val als de demotie-poort die perfect werk degradeerde."""
+    from nooch_village.stats import wilson
+    for taak, cfg in ff.instellingen("/nonexistent").items():
+        lo, _hi = wilson(int(cfg["venster"]), int(cfg["venster"]))
+        assert cfg["lat"] <= lo, (
+            f"{taak}: lat {cfg['lat']} is onhaalbaar — een foutloze reeks van {cfg['venster']} "
+            f"geeft ondergrens {lo:.3f}")
