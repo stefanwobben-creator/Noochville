@@ -297,7 +297,7 @@ def _overlap(a: str, b: str) -> float:
 
 def beoordeel(*, project: dict, document: str, deliverables: list, checklist: dict | None = None,
               skill=None, context=None, content_for=None,
-              min_chars: int = MIN_DOCUMENT_CHARS) -> dict:
+              min_chars: int = MIN_DOCUMENT_CHARS, grond_document: str = "") -> dict:
     """Toets een rapport op de vier assen. Geeft
     {geslaagd, oordelen: {as: True|False|None}, redenen: [...], samenvatting}.
 
@@ -322,8 +322,13 @@ def beoordeel(*, project: dict, document: str, deliverables: list, checklist: di
     # De dure toets pas als de goedkope niet al gezakt zijn: een leeg rapport hoeft geen premium
     # LLM-call om afgekeurd te worden.
     if all(oordelen.get(a) is not False for a in ("substantieel", "beantwoordt", "missie")):
-        ok, waarom = _gegrond(document, deliverables, project, skill=skill, context=context,
-                              content_for=content_for)
+        # De grond-as mag een ANDER (kleiner) document krijgen dan de goedkope assen. Een
+        # rol-voorstel bevat velden die per constructie geen feitelijke bewering zijn (risico =
+        # hypothese, onzeker = expliciete niet-bewering); die op gegrondheid toetsen is een
+        # categoriefout, geen strengheid. Default: hetzelfde document, dus voor een einddocument
+        # verandert er niets.
+        ok, waarom = _gegrond(grond_document or document, deliverables, project, skill=skill,
+                              context=context, content_for=content_for)
         oordelen["gegrond"] = ok
         # Ook een NIET-getoetste as krijgt zijn reden mee. Stond die er niet, dan las de notitie
         # alleen "(niet getoetst: gegrond)" en was de oorzaak — afgekapt antwoord, wegvallende

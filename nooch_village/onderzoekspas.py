@@ -174,10 +174,13 @@ def synthetiseer(inhabitant, vraag: str, onderzoek_uit: dict, *, doel: str = "")
           "is een bewering over de werkelijkheid die je niet kunt onderbouwen, en de critic keurt "
           "hem terecht af. Geen vraag, geen keuzemenu.\n"
           "- bewijs: laat leeg, die vul ik zelf met de bronnen hierboven.\n"
-          "- risico: wat dit kost of kan misgaan. Kort.\n"
+          "- risico: wat dit kost of kán misgaan. Kort, en in VOORWAARDELIJKE vorm ('als X, dan "
+          "kan Y') — geen stellige uitspraak over hoe de wereld is. Een feit dat je voorstel "
+          "DRAAGT hoort in de actie of in het bewijs, niet hier.\n"
           "- nodig_van_jou: LEEG LATEN tenzij je echt iets van de founder nodig hebt dat je zelf "
           "niet kunt halen. Dan specifiek: wélk gegeven, en waarom jij er niet bij kunt.\n"
-          "- onzeker: wat je niet hebt kunnen vaststellen, met wat het zou weerleggen.\n\n"
+          "- onzeker: wat je NIET hebt kunnen vaststellen, met wat het zou weerleggen. Negatieve "
+          "vorm: dit veld zegt wat je niet weet, niet wat waar is.\n\n"
           "Verzin geen cijfer, status, percentage of wetsartikel dat niet in het bewijs staat. "
           "Heb je het specifieke niet, zeg dan wát je wél hebt.\n\n"
           "GROND VERSLAAT INDRUK. Reik niet naar een indrukwekkend alternatief dat het bewijs niet "
@@ -245,7 +248,8 @@ def poort(voorstel: dict, *, project: dict, skill=None, context=None) -> tuple[d
     toets_project.pop("dod_outcome", None)               # anders lekt het uitvoeringsdoel alsnog
     oordeel = mc.beoordeel(project=toets_project, document=document, deliverables=deliverables,
                            checklist=None, skill=skill, context=context,
-                           min_chars=MIN_VOORSTEL_CHARS)
+                           min_chars=MIN_VOORSTEL_CHARS,
+                           grond_document=vv.feitelijke_kern(voorstel))
     if oordeel["oordelen"].get("gegrond") is True:
         return voorstel, oordeel
     reden = next((r for r in (oordeel.get("redenen") or []) if r.startswith("gegrond")),
