@@ -2485,14 +2485,16 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
             + ". Geef alleen het document terug, geen meta-uitleg.")
         # De persona van de schrijvende rol mag het model kiezen; None = de dorpsladder. De voorkeur
         # is een KOP met de dorpsladder als staart, dus een wegvallende leverancier levert alsnog een
-        # document — `_eigen` legt vast wat de persona zelf vroeg, zodat we hieronder kunnen zien of
-        # dit document van die kop kwam of van de goedkope staart.
-        _eigen: set[str] = set()
+        # document — `_gevraagd` legt de KOP van de opgeloste ladder vast, zodat we hieronder kunnen
+        # zien of dit document van die kop kwam of van de goedkope staart.
+        _gevraagd = ""                                   # de KOP van de opgeloste ladder
         try:
-            from nooch_village.llm_keuze import eigen_tredes, ladder_voor
+            from nooch_village.llm import tier_namen
+            from nooch_village.llm_keuze import ladder_voor
             _p = personas.get(getattr(record, "persona_id", None)) if personas is not None else None
             _ladder = ladder_voor("einddocument", _p)
-            _eigen = eigen_tredes(_p, "einddocument")
+            _tredes = tier_namen(_ladder) if _ladder else []
+            _gevraagd = _tredes[0] if _tredes else ""
         except Exception:
             _ladder = None
         out, _tier = reason(prompt, call_site="einddocument", ladder=_ladder, return_tier=True,
@@ -2513,14 +2515,19 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
                                            "zonder deliverable): " + "; ".join(suspects)
                                            + ". Controleer dit handmatig — de synthese hoort hier 'niet "
                                              "onderzocht' te schrijven.")
-    # Terugval = er wás een eigen voorkeur, maar het antwoord kwam van de goedkope staart. Dat mag
-    # nooit stil doorgaan voor een premium exemplaar: het gaat mee als herkomst naar de sidecar (de
+    # Terugval = er WAS een kop gevraagd, maar het antwoord kwam van iets eronder. Dat mag nooit
+    # stil doorgaan voor een premium exemplaar: het gaat mee als herkomst naar de sidecar (de
     # projectpagina toont het) én als role-message op de muur, zodat de reviewer het ziet.
-    terugval = bool(_eigen) and _tier is not None and _tier not in _eigen
+    #
+    # Vergelijkt tegen de OPGELOSTE ladder, niet tegen de persona-voorkeur. Sinds #281 hangt een
+    # blanket persona-standaard ONDER de dorpsbrede hoog-inzet-kop; met de oude vergelijking las een
+    # antwoord van Sonnet als terugval omdat de persona haiku had opgeschreven. Een upgrade die als
+    # degradatie logt maskeert de volgende echte terugval — dezelfde reden als overal in deze reeks.
+    terugval = bool(_gevraagd) and _tier is not None and _tier != _gevraagd
     store.write(pid, out.strip(), tier=_tier, terugval=terugval)
     if terugval:
         log.warning("DOC_TERUGVAL: project=%s einddocument geschreven door %s i.p.v. de gevraagde "
-                    "trede(s) %s", pid, _tier, ", ".join(sorted(_eigen)))
+                    "kop %s", pid, _tier, _gevraagd)
         if projects is not None:
             projects.add_role_message(pid, f"⚠️ Einddocument geschreven door de goedkope terugval "
                                            f"({_tier}) — niet door het gevraagde model. Lees het als "
