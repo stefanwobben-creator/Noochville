@@ -217,6 +217,13 @@ _KADER = (
     "Concludeert het rapport iets dat de onderbouwing niet dekt, dan is dat WEL ongegrond — ook "
     "als het plausibel klinkt, en ook als de conclusie luidt dat iets niet deugt. De vraag blijft: "
     "dekt wat de skills ophaalden het oordeel dat het rapport velt?\n"
+    "AFWEZIGHEID VAN BEWIJS IS GEEN BEWERING. Schrijft het stuk dat het iets NIET heeft kunnen "
+    "vaststellen, dat een bron niets opleverde, of dat een gegeven ontbreekt en van iemand anders "
+    "moet komen — dan is dat een eerlijke niet-bevinding, gegrond in het simpele feit dat geen "
+    "deliverable het opleverde. Reken dat NIET als ongegronde claim, en vraag er geen bewijs voor: "
+    "'ik kon X niet vaststellen' is iets anders dan 'X bestaat niet'. Alleen als het stuk de "
+    "afwezigheid omzet in een STELLIGE uitspraak over de wereld ('er bestaat geen X', 'niemand "
+    "gebruikt X') heb je een bewering die onderbouwing nodig heeft.\n"
     "De lijst 'ongegrond' is ALLEEN voor beweringen die de onderbouwing niet dekt. Een opmerking "
     "over vorm, stijl, volgorde of een nuance die je wilt toevoegen hoort NIET in die lijst — zet "
     "die in 'revisie'. Constateer je dat iets juist wél klopt met de onderbouwing, noem het dan "
@@ -265,7 +272,15 @@ def _gegrond(document: str, deliverables: list, project: dict, *, skill=None,
     if ongegrond:
         return False, ("niet gegrond in de deliverables: " + "; ".join(ongegrond[:3])[:400])
     if str(uit.get("oordeel") or "").strip().lower() == "moet bij":
-        return False, f"de tegenspraak-toets zegt 'moet bij': {str(uit.get('revisie') or '')[:200]}"
+        # ...maar alleen als er ook écht iets ongegronds is. Een 'moet bij' met een LEGE
+        # ongegrond-lijst is een verbetersuggestie ("voeg een zin toe die…"), geen grondingsfout, en
+        # daarop degraderen straft een volledig gegrond voorstel voor een stilistische wens.
+        # Gemeten: 549f8e98404f zakte hierop terwijl de lijst leeg was.
+        revisie = str(uit.get("revisie") or "")[:200]
+        log.info("grondings-toets: 'moet bij' zonder ongegronde bewering — telt als gegrond, "
+                 "de suggestie reist mee: %s", revisie[:120])
+        return True, (f"gegrond; de toets suggereert nog wel: {revisie}" if revisie
+                      else "gegrond (de toets had een verbetersuggestie zonder ongegronde bewering)")
     return True, str(uit.get("samenvatting") or "houdt stand")
 
 
