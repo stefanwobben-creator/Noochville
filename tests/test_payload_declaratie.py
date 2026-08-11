@@ -121,3 +121,32 @@ def test_de_drie_consumenten_delen_een_lezer():
     for pad in ("nooch_village/inhabitant.py", "nooch_village/skill_match.py"):
         src = open(pad, encoding="utf-8").read()
         assert "ontbrekende_velden" in src, f"{pad} leest required_payload nog zelf"
+
+
+def test_de_pas_geeft_de_disjunctie_leesbaar_door_aan_de_afleiding():
+    """`_payload_opnieuw` joint de ontbrekende velden tot tekst voor de prompt. De rauwe
+    `required_payload` doorgeven gaf "expected str instance, tuple found" zodra er een tuple-element
+    in zat — en dus draaide claims_check opnieuw niet. De gedeelde lezer moest dat voorkomen; hem
+    niet gebruiken bracht de fout gewoon terug."""
+    from types import SimpleNamespace
+    from nooch_village import onderzoekspas as op
+    gezien = {}
+
+    class _Inh:
+        registry = SimpleNamespace(get=lambda naam: SimpleNamespace(
+            input_schema="text: str OF terms: list", required_payload=(("text", "terms"),)))
+
+        def _payload_opnieuw(self, skill, tekst, schema, mist, huidig):
+            gezien["mist"] = list(mist)
+            ", ".join(mist)                          # exact wat de echte doet — moet niet knallen
+            return {"text": tekst}
+
+        def _missing_required(self, skill, payload):
+            return ontbrekende_velden((("text", "terms"),), payload)
+
+        def _payload_issues(self, skill, payload):
+            return []
+
+    payload, waarom = op._payload_voor(_Inh(), "claims_check", "is 'conscious' onderbouwd?")
+    assert gezien["mist"] == ["text|terms"]          # leesbaar, geen rauwe tuple
+    assert payload == {"text": "is 'conscious' onderbouwd?"} and waarom == ""

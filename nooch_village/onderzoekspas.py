@@ -46,9 +46,14 @@ def _payload_voor(inhabitant, skill: str, vraag: str) -> tuple[dict | None, str]
     de bron níet die de concrete actie had kunnen leveren — en het voorstel rustte op één bron.
     Precies de zonde die `_herstel_payloads` repareert, dus hergebruiken we die machinerie hier
     meteen in plaats van hem een tweede keer te maken."""
+    from nooch_village.skills import ontbrekende_velden
     obj = inhabitant.registry.get(skill) if inhabitant.registry else None
     schema = (getattr(obj, "input_schema", "") or "").strip() if obj else ""
-    verplicht = list(getattr(obj, "required_payload", ()) or ()) if obj else []
+    # Via de gedeelde lezer, niet de rauwe tuple: sinds de disjunctie kan `required_payload` een
+    # tuple-element bevatten (("text","terms")), en `_payload_opnieuw` joint deze lijst tot tekst.
+    # De rauwe vorm doorgeven gaf "expected str instance, tuple found" — en dus draaide claims_check
+    # opnieuw niet. Precies de fout die de gedeelde lezer moest voorkomen, door hem niet te gebruiken.
+    verplicht = ontbrekende_velden(getattr(obj, "required_payload", ()) if obj else (), {})
     try:
         payload = inhabitant._payload_opnieuw(skill, vraag, schema, verplicht, {})
     except Exception as e:                                   # noqa: BLE001
