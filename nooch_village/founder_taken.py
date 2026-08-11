@@ -38,6 +38,10 @@ log = logging.getLogger("village.founder_taken")
 SCIENTIST_ROL = "harry_hemp"                  # "grounded in undeniable scientific truth"
 COMPLIANCE_ROL = "compliance"
 FIELD_NOTE_ROL = "website_watcher"            # schrijft de dagelijkse Field Note (seeds.py)
+# De rol die een goedgekeurd voorstel UITVOERT. De onderzoekende rol (compliance) stelt de gegronde
+# substantie en richting voor; de copy schrijft hij niet. Die rolgrens is de reden dat er na
+# goedkeuring een handoff staat en niet gewoon een uitvoering.
+UITVOERDER_ROL = "mother_earth__nooch__noochville__copywriter"
 
 
 # ── 1. Radar-triage ──────────────────────────────────────────────────────────────────────────
@@ -388,10 +392,70 @@ def _content_effect(st, data_dir: str, item: str, oordeel: str) -> str:
     return f"✎ correction requested from {rol}"
 
 
+# ── voorstel_oordeel: de onderzoekspas ───────────────────────────────────────────────────────
+
+def _voorstel_items(st, data_dir: str, niveau: str = "A") -> list[dict]:
+    """De voorstellen die een rol zelf heeft onderzocht en gesynthetiseerd.
+
+    Het AI-"voorstel" op de founder-as is hier ALTIJD `bevestig`: de rol legt voor wat hij zou
+    doen, dus zijn impliciete oordeel is "doe dit". De founder bevestigt, past aan of verwerpt —
+    en dat verschil is precies wat we meten. Een gedegradeerd voorstel draagt geen aanbeveling
+    meer, dus daar is er ook geen AI-oordeel om tegen af te zetten.
+    """
+    from nooch_village import onderzoekspas, voorstel_vorm as vv
+    uit = []
+    for rij in onderzoekspas.alle(data_dir):
+        v = rij.get("voorstel") or {}
+        soort = v.get("soort") or vv.SOORT_VOORSTEL
+        gedegradeerd = soort == vv.SOORT_BEVINDING
+        assen = (rij.get("critic") or {}).get("oordelen") or {}
+        gezakt = [a for a, w in assen.items() if w is not True]
+        uit.append({
+            "item": f"voorstel:{rij.get('id')}",
+            "titel": (f"⚠️ {rij.get('rol')}: bevinding zonder aanbeveling" if gedegradeerd
+                      else f"{rij.get('rol')}: {str(v.get('actie', ''))[:120]}"),
+            "detail": vv.render(v)[:1200],
+            "context": (f"critic: {'clean' if not gezakt else 'failed on ' + ', '.join(gezakt)}"
+                        + (f" · {len(v.get('bewijs') or [])} source(s)")),
+            "link": f"/project?pid={rij.get('project')}" if rij.get("project") else "",
+            "ai": None if gedegradeerd else "bevestig",
+            "ai_waarom": ("degraded — the evidence did not carry a recommendation, so there is "
+                          "nothing to confirm" if gedegradeerd else
+                          "the role researched this itself and proposes to go ahead"),
+        })
+    return uit
+
+
+def _voorstel_effect(st, data_dir: str, item: str, oordeel: str) -> str:
+    """Bevestigen zet het werk door naar de UITVOERENDE rol; de onderzoekende rol schrijft geen copy.
+
+    Dat is de rolgrens van de onderzoekspas: compliance stelt de gegronde substantie en richting
+    voor, de copywriter schrijft de tekst. Bij goedkeuring gaat het dus via het bestaande
+    projectverzoek-pad naar de uitvoerder — geen nieuw kanaal."""
+    from nooch_village import claims_board, onderzoekspas
+    _, _, vid = item.partition(":")
+    rij = next((r for r in onderzoekspas.alle(data_dir) if str(r.get("id")) == vid), None)
+    if rij is None:
+        return "✗ proposal not found"
+    v = rij.get("voorstel") or {}
+    if oordeel == "verwerp":
+        return "✗ rejected — recorded as a label"
+    if oordeel == "aanpassen":
+        return "✎ adjusted — your version is recorded as the diff"
+    claims_board.bericht_aan_rol(
+        st, UITVOERDER_ROL, f"Approved proposal from {rij.get('rol')}: {str(v.get('actie', ''))[:400]}",
+        project_id=str(rij.get("project") or ""), door="founder-flow",
+        done_when=f"de voorgestelde wijziging is doorgevoerd: {str(v.get('actie', ''))[:120]}")
+    return f"✓ confirmed — handed to {UITVOERDER_ROL}"
+
+
+
 # ── De gedeelde ingang ───────────────────────────────────────────────────────────────────────
 
-_WACHTRIJEN = {ff.RADAR: _radar_items, ff.CLAIM: _claim_items, ff.CONTENT: _content_items}
-_EFFECTEN = {ff.RADAR: _radar_effect, ff.CLAIM: _claim_effect, ff.CONTENT: _content_effect}
+_WACHTRIJEN = {ff.RADAR: _radar_items, ff.CLAIM: _claim_items, ff.CONTENT: _content_items,
+               ff.VOORSTEL: _voorstel_items}
+_EFFECTEN = {ff.RADAR: _radar_effect, ff.CLAIM: _claim_effect, ff.CONTENT: _content_effect,
+             ff.VOORSTEL: _voorstel_effect}
 
 
 def wachtrij(st, data_dir: str, taak: str, labels: list[dict] | None = None,

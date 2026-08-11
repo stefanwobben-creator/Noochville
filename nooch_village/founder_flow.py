@@ -71,13 +71,24 @@ CONFIG_BESTAND = "founder_flow.json"
 RADAR = "radar_triage"
 CLAIM = "claim_oordeel"
 CONTENT = "content_goedkeuring"
-TAKEN = (RADAR, CLAIM, CONTENT)
+# Vierde taak, 11 aug, op expliciet besluit van de founder — de regel hierboven ("strikt deze drie")
+# gold tot dat besluit. De onderzoekspas laat een rol zélf onderzoeken en een gegrond voorstel
+# voorleggen; de founder bevestigt, past aan of verwerpt. Dat oordeel hoort in dezelfde meetstroom
+# als de andere drie, niet in een eigen inbox.
+VOORSTEL = "voorstel_oordeel"
+TAKEN = (RADAR, CLAIM, CONTENT, VOORSTEL)
 
 TAAK_LABEL = {
     RADAR: "Radar triage",
     CLAIM: "Claim judgement",
     CONTENT: "Content approval",
+    VOORSTEL: "Role proposals",
 }
+
+# Klassen die ALTIJD bij de founder blijven, ook na graduatie. Hoog-inzet: juridisch, compliance,
+# materiaalbeslissing. De Wilson-poort mag hier niets automatiseren — een rol die 95% van de tijd
+# gelijk heeft over een juridische claim is nog steeds geen jurist.
+HOOG_INZET_TAKEN = frozenset({VOORSTEL})
 
 # Per taak de toegestane oordelen. Dit is tegelijk de sleutelruimte van de labels: een oordeel
 # buiten deze set wordt geweigerd, zodat de meting nooit op typefouten telt.
@@ -96,12 +107,16 @@ OORDELEN = {
     RADAR: ("nieuw", "bekend"),
     CLAIM: ("bewijs", "fix", "scientist"),
     CONTENT: ("publiceer", "corrigeer"),
+    # "aanpassen" is bewust eersteklas en geen variant van bevestigen: de diff tussen wat de rol
+    # voorstelde en wat de founder ervan maakte is het rijkste leersignaal dat deze lus heeft.
+    VOORSTEL: ("bevestig", "aanpassen", "verwerp"),
 }
 
 OORDEEL_LABEL = {
     "nieuw": "new to us", "bekend": "we already have this",
     "bewijs": "bank evidence", "fix": "fix copy", "scientist": "to Scientist",
     "publiceer": "approve", "corrigeer": "correct",
+    "bevestig": "confirm", "aanpassen": "adjust", "verwerp": "reject",
 }
 
 NIVEAUS = ("A", "B", "C", "D")
@@ -131,6 +146,16 @@ _DEFAULTS = {
             "cluster_drempel": 0.0, "cluster_venster_dagen": 30},
     CLAIM: {"lat": 0.90, "min_n": 20, "venster": 60, "audit_pct": 25, "dag_cap": 3},
     CONTENT: {"lat": 0.90, "min_n": 15, "venster": 60, "audit_pct": 30, "dag_cap": 3},
+    # Hoog-inzet: de lat staat er wel (we blijven meten), maar `HOOG_INZET_TAKEN` blokkeert de
+    # promotie hoe goed de cijfers ook worden. audit_pct 100: elk voorstel is een auditvoorbeeld,
+    # want elk voorstel gaat sowieso naar de founder.
+    #
+    # Lat 0.90 en niet 0.95, ook al automatiseren we hier niets. Bij venster 60 is de Wilson-
+    # ondergrens van een FOUTLOZE reeks 0.940 — een lat van 0.95 is dus onhaalbaar, ook bij 60/60.
+    # Zo'n lat is stil kapot: hij leest als "extra streng" en betekent "nooit". Dezelfde val als de
+    # demotie-poort die perfect werk degradeerde. Wie hier later een laag-inzet-klasse van
+    # afleidt, kopieert dan geen landmijn.
+    VOORSTEL: {"lat": 0.90, "min_n": 25, "venster": 60, "audit_pct": 100, "dag_cap": 3},
 }
 
 # Een item dat langer dan dit open stond telt niet als "besteed" — dan lag het tabblad open.
@@ -173,7 +198,8 @@ def pad(data_dir: str) -> str:
 
 
 def leg_vast(data_dir: str, *, taak: str, item: str, mens: str | None, ai: str | None = None,
-             ai_getoond: bool = False, niveau: str = "A", door: str = "", seconden: float = 0.0,
+             ai_getoond: bool = False, diff: str = "",
+             niveau: str = "A", door: str = "", seconden: float = 0.0,
              correctie: bool = False, audit: bool = False, titel: str = "") -> dict | None:
     """Leg één gebeurtenis vast. Geeft het record terug, of None bij een ongeldige invoer.
 
@@ -196,6 +222,11 @@ def leg_vast(data_dir: str, *, taak: str, item: str, mens: str | None, ai: str |
            "door": door or ("ai" if mens is None else "?"),
            "seconden": round(max(0.0, min(float(seconden or 0.0), _MAX_SECONDEN)), 1),
            "titel": (titel or "")[:160], "ts": time.time()}
+    if diff:
+        # De diff bij "aanpassen": wat stelde de rol voor, en wat maakte de founder ervan. Dit is
+        # het rijkste leersignaal van de hele lus — een verworpen voorstel zegt "fout", een
+        # aangepast voorstel zegt "fout op DEZE manier".
+        rij["diff"] = str(diff)[:2000]
     try:
         os.makedirs(data_dir, exist_ok=True)
         with open(pad(data_dir), "a", encoding="utf-8") as f:
@@ -316,6 +347,12 @@ def promoveerbaar(labels: list[dict], taak: str, niveau: str, cfg: dict) -> tupl
     of betere overeenstemming), zodat een geblokkeerde promotie geen raadsel is."""
     if niveau not in NIVEAUS:
         return False, "unknown level"
+    if taak in HOOG_INZET_TAKEN:
+        # Geen Wilson-poort op hoog-inzet. Een rol die 95% van de tijd gelijk heeft over een
+        # juridische claim is nog steeds geen jurist, en de fout die de resterende 5% maakt is niet
+        # van dezelfde orde als een gemiste radar-triage. Wél meten (de labels lopen gewoon door),
+        # niet automatiseren.
+        return False, "high-stakes — stays with the founder, also once the numbers would allow it"
     if niveau == "D":
         return False, "already at D — the AI handles this on its own"
     meting = overeenstemming(labels, taak, cfg["venster"])
