@@ -103,27 +103,80 @@ def ladder_voor(call_site: str, persona=None) -> str | None:
     """DE ladder-keuze voor één call-site. None = de dorpsladder (geen eigen kop).
 
     Volgorde, en die is niet willekeurig:
-      1. de persona-voorkeur wint altijd — een inwoner mag zijn eigen brein kiezen;
-      2. anders: is dit een hoog-inzet-site, dan de dorpsbrede Sonnet-kop met de dorpsstaart;
-      3. anders (triage, routing, alles wat niet in HOOG_INZET staat): de dorpsladder.
+      1. een EXPLICIETE per-taak-voorkeur van de persona wint — een inwoner mag voor zijn eigen
+         taak zijn eigen brein kiezen, en dat was de hele bedoeling van `per_taak`;
+      2. anders: is dit een hoog-inzet-site, dan de dorpsbrede Sonnet-kop, met een eventuele
+         persona-standaard eronder en daarna de dorpsstaart;
+      3. anders (triage, routing, alles wat niet in HOOG_INZET staat): de persona-standaard als
+         die er is, anders de dorpsladder.
 
-    En daaroverheen de maandcap: is het premium-budget van deze maand op, dan vervalt de dure kop
-    en blijft de dorpsladder over. Een goedkoper antwoord, geen géén antwoord — een cap die het
-    dorp stil legt is erger dan een cap die hem goedkoper laat werken."""
-    eigen = voorkeur_van(persona, call_site) if persona is not None else None
-    if eigen:
-        _meld_prijsloos(eigen, f"persona-voorkeur voor {call_site}")
-        return eigen
-    if call_site in GOEDKOOP or call_site not in HOOG_INZET:
-        return None
-    kop = hoog_inzet_ladder()
-    if not kop:
-        return None
-    if premium_op():
-        return None
-    _meld_prijsloos(kop, "dorpsbrede hoog-inzet-kop")
+    Punt 2 is de correctie. Eerst won élke persona-voorkeur, óók een blanket `llm.default` — en dat
+    is iets anders dan een keuze: het is de standaard die de persona bij gebrek aan beter opschreef.
+    Op productie stond bij compliance `default: anthropic:claude-haiku-4-5`, en die overstemde
+    stilzwijgend de Sonnet-kop op alle negen hoog-inzet-sites. Het einddocument — het stuk dat de
+    mens leest en waarop hij beslist — draaide dus op het zwakste model terwijl de critic die het
+    beoordeelde op het sterkste draaide. Een standaard vult aan waar het dorp geen mening heeft;
+    hij overstemt geen dorpsbeleid.
+
+    En daaroverheen de maandcap: is het premium-budget op, dan vervallen de dure tredes uit ELKE
+    ladder — ook uit een persona-ladder, die er eerst helemaal aan ontsnapte. Een goedkoper
+    antwoord, geen géén antwoord: blijft er niets over, dan de dorpsladder."""
     from nooch_village import llm as _llm
-    return kop if call_site in PREMIUM_ONLY else _llm.met_dorpsstaart(kop)
+    taak = _taak_keuze(persona, call_site)
+    if taak:
+        eigen = taak if call_site in PREMIUM_ONLY else _llm.met_dorpsstaart(taak)
+        _meld_prijsloos(eigen, f"persona-voorkeur voor {call_site}")
+        return _binnen_cap(eigen, call_site, f"persona-voorkeur voor {call_site}")
+    standaard = _standaard_keuze(persona)
+    if call_site in GOEDKOOP or call_site not in HOOG_INZET:
+        if not standaard:
+            return None
+        eigen = _llm.met_dorpsstaart(standaard)
+        _meld_prijsloos(eigen, f"persona-standaard voor {call_site}")
+        return _binnen_cap(eigen, call_site, f"persona-standaard voor {call_site}")
+    kop = hoog_inzet_ladder()
+    if standaard:
+        _meld_prijsloos(standaard, f"persona-standaard voor {call_site}")
+    if not kop:
+        return _binnen_cap(_llm.met_dorpsstaart(standaard), call_site,
+                           f"persona-standaard voor {call_site}") if standaard else None
+    _meld_prijsloos(kop, "dorpsbrede hoog-inzet-kop")
+    if call_site in PREMIUM_ONLY:
+        return _binnen_cap(kop, call_site, "dorpsbrede hoog-inzet-kop")
+    # De persona-standaard hangt ONDER de kop: hij blijft een echte terugval-trede, maar hij
+    # bepaalt niet meer waar het oordeel vandaan komt.
+    onder = f"{kop},{standaard}" if standaard else kop
+    return _binnen_cap(_llm.met_dorpsstaart(onder), call_site, "dorpsbrede hoog-inzet-kop")
+
+
+_gemeld_cap_verlaging: set = set()
+
+
+def _binnen_cap(ladder: str, call_site: str, herkomst: str) -> str | None:
+    """Schrap de dure tredes zodra de maandcap bereikt is — en zeg dat hardop.
+
+    Een cap mag begrenzen, maar niet stil: een onzichtbare verlaging leest later als
+    kwaliteitsverlies zonder oorzaak, precies zoals een tekstloos Anthropic-antwoord dat deed
+    (#277). Eén regel per call-site, zodat elke geraakte site zichtbaar is zonder logspam."""
+    if not ladder or not premium_op():
+        return ladder or None
+    from nooch_village import llm as _llm
+    over = [t for t in _llm.tier_namen(ladder) if not _is_premium(t)]
+    weg = [t for t in _llm.tier_namen(ladder) if _is_premium(t)]
+    if not weg:
+        return ladder
+    if call_site not in _gemeld_cap_verlaging:
+        _gemeld_cap_verlaging.add(call_site)
+        _log.warning("PREMIUM_CAP_VERLAGING: '%s' (%s) verliest %s — het premium-budget van deze "
+                     "maand is op (€%.2f van €%.2f). Deze call-site draait tot de volgende maand "
+                     "op %s.", call_site, herkomst, ", ".join(weg),
+                     _cap_cache.get("eur") or 0.0, premium_maand_cap(),
+                     ", ".join(over) or "de dorpsladder")
+    # Blijft precies de dorpsladder over, geef dan None terug: dat IS de afspraak voor "gebruik de
+    # dorpsladder", en een aanroeper die op None test hoort niet ineens een string te krijgen.
+    if not over or set(over) == set(_llm.tier_namen(_llm.dorpsladder())):
+        return None
+    return ",".join(over)
 
 
 # ── De maandcap op premium ───────────────────────────────────────────────────────────────────
@@ -301,14 +354,37 @@ def premium_stand() -> dict:
             "op": premium_op()}
 
 
-def eigen_keuze(persona, call_site: str) -> str | None:
-    """De ladder-string zoals de persona hem ZELF opschreef, zonder staart. Dit is de maatstaf voor
-    'is dit document nog wat er gevraagd werd?' — zie `eigen_tredes`."""
+def _taak_keuze(persona, call_site: str) -> str | None:
+    """Alleen de EXPLICIETE keuze voor déze taak (`per_taak[call_site]`).
+
+    Losgetrokken van `llm.default`, want ze betekenen iets anders: dit is "voor dit werk wil ik dat
+    model", en dat mag het dorpsbeleid overstemmen. Zie `_standaard_keuze` voor de andere helft."""
     if persona is None:
         return None
     llm = getattr(persona, "llm", None) or {}
-    keuze = ((llm.get("per_taak") or {}).get(call_site) or llm.get("default") or "").strip()
-    return keuze or None
+    return (((llm.get("per_taak") or {}).get(call_site) or "").strip()) or None
+
+
+def _standaard_keuze(persona) -> str | None:
+    """Alleen de blanket `llm.default` — de standaard die de persona bij gebrek aan beter opschreef.
+
+    Vult aan waar het dorp geen mening heeft; overstemt geen hoog-inzet-kop. Zie `ladder_voor`."""
+    if persona is None:
+        return None
+    llm = getattr(persona, "llm", None) or {}
+    return ((llm.get("default") or "").strip()) or None
+
+
+def eigen_keuze(persona, call_site: str) -> str | None:
+    """De ladder-string zoals de persona hem ZELF opschreef, zonder staart. Dit is de maatstaf voor
+    'is dit document nog wat er gevraagd werd?' — zie `eigen_tredes`.
+
+    Bewust nog steeds inclusief `llm.default`: voor de vraag "kwam dit antwoord van wat de persona
+    vroeg of van de goedkope staart?" telt een standaard net zo goed als een keuze. Alleen voor de
+    RANGORDE maakt het verschil (`_taak_keuze` vs `_standaard_keuze`)."""
+    if persona is None:
+        return None
+    return _taak_keuze(persona, call_site) or _standaard_keuze(persona)
 
 
 def eigen_tredes(persona, call_site: str) -> set[str]:
