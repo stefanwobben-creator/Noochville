@@ -29,7 +29,8 @@ class TegenspraakSkill(Skill):
     input_schema = ("tekst: str (verplicht — de deliverable/claim die getoetst wordt); "
                     "bewijs: str (optioneel — de onderbouwing waarop het zou moeten rusten); "
                     "doel: str (optioneel — de uitkomst die de output dient); "
-                    "ladder: str (optioneel — eigen LLM-ladder, bv. premium voor een critic)")
+                    "ladder: str (optioneel — eigen LLM-ladder, bv. premium voor een critic); "
+                    "kader: str (optioneel — wat er precies getoetst wordt; zie missie_critic)")
     required_payload = ("tekst",)
     output_schema = ("ok, oordeel ('houdt stand'|'moet bij'), zwakste_claim, ongegrond (list), "
                      "tegenargument, revisie, samenvatting | error")
@@ -45,6 +46,11 @@ class TegenspraakSkill(Skill):
         # is precies de stille verwisseling die een reviewer niet kan zien.
         ladder = (((payload or {}).get("ladder") or "").strip()
                   or _hoog_inzet_ladder("skill_tegenspraak"))
+        # Optioneel kader: WAT er precies getoetst wordt. Een aanroeper die een rapport ÓVER
+        # materiaal toetst (de missie-critic) moet kunnen zeggen dat het aangehaalde materiaal het
+        # onderzoeksobject is, niet de bewering van de schrijver. Zonder kader gedraagt de skill
+        # zich exact als voorheen — de losse aanroepen door rollen veranderen niet.
+        kader = ((payload or {}).get("kader") or "").strip()
         from nooch_village.llm import reason
         prompt = (
             "Je bent een strenge, eerlijke reviewer voor Nooch (duurzame veganistische schoenen). Spreek "
@@ -56,7 +62,8 @@ class TegenspraakSkill(Skill):
                "LET OP: er is geen onderbouwing meegegeven. Behandel elk getal, elke prijs en elke "
                "stellige bewering als potentieel ongegrond.\n\n")
             + f"OUTPUT OM TE TOETSEN:\n{tekst}\n\n"
-            "Doe vier dingen:\n"
+            + (f"KADER VOOR DEZE TOETS:\n{kader}\n\n" if kader else "")
+            + "Doe vier dingen:\n"
             "1. Noem de ZWAKSTE of meest overdreven claim (één zin).\n"
             "2. Lijst de beweringen die NIET gegrond zijn in de onderbouwing, of stellig zijn zonder "
             "bewijs. Is alles gegrond, geef een lege lijst.\n"
