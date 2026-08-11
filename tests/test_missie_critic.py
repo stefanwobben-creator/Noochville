@@ -183,14 +183,16 @@ def test_andere_rapportsoorten_glippen_er_niet_makkelijker_door(soort, ongegrond
     assert ok is False and ongegrond[0][:20] in waarom
 
 
-def test_moet_bij_zonder_lijst_zakt_nog_steeds():
-    """De tweede afwijsroute blijft intact: 'moet bij' met een revisie maar zonder expliciete lijst
-    is nog altijd geen schone grond-as."""
+def test_moet_bij_zonder_lijst_zakt_niet_meer():
+    """DEZE test codeerde de bug. Hij hield vol dat 'moet bij' zonder ongegronde bewering een
+    grondingsfout is; op productie liet dat een volledig gegrond voorstel degraderen op een
+    stilistische wens ("voeg een zin toe die…"). Een verbetersuggestie is geen ongegrondheid.
+    De suggestie zelf gaat niet verloren — hij reist mee in de reden."""
     class _MoetBij:
         def run(self, payload, context=None):
             return {"ok": True, "oordeel": "moet bij", "ongegrond": [], "revisie": "noem de bron"}
     ok, waarom = mc._gegrond("doc", ["d1"], {}, skill=_MoetBij())
-    assert ok is False and "noem de bron" in waarom
+    assert ok is True and "noem de bron" in waarom
 
 
 def test_losse_tegenspraak_aanroepen_veranderen_niet():
@@ -459,3 +461,38 @@ def test_kapotte_critic_blokkeert_de_oplevering_niet(tmp_path, monkeypatch):
     p = ledger.get(pid)
     assert p["status"] == "blocked" and p["blocked_on"] == "review"
     assert p.get("critic_verdict") is None
+
+
+# ── De twee gegrond-as-bugs, in één heropening gerepareerd ──────────────────
+
+def test_afwezigheid_van_bewijs_is_geen_bewering():
+    """De critic las "ik kon X niet vaststellen" als "X bestaat niet" en eiste daar bewijs voor.
+    Gemeten: 7 van de 7 runs op hetzelfde voorstel wezen af op precies die zin, in de actie —
+    dus elk bescheiden, eerlijk voorstel degradeerde. Afwezigheid van bewijs is geen bewering."""
+    assert "AFWEZIGHEID VAN BEWIJS IS GEEN BEWERING" in mc._KADER
+    assert "is iets anders dan" in mc._KADER
+    # ...maar de omzetting naar een stellige uitspraak blijft wél een bewering:
+    assert "STELLIGE uitspraak over de wereld" in mc._KADER
+    assert "er bestaat geen X" in mc._KADER
+
+
+def test_moet_bij_zonder_ongegronde_bewering_degradeert_niet():
+    """Een verbetersuggestie ('voeg een zin toe die…') is geen grondingsfout. Daarop degraderen
+    straft een volledig gegrond voorstel voor een stilistische wens."""
+    class _Suggestie:
+        def run(self, payload, context=None):
+            return {"ok": True, "oordeel": "moet bij", "ongegrond": [],
+                    "revisie": "Voeg een zin toe die expliciet maakt dat de taak al draaide."}
+    ok, waarom = mc._gegrond("doc", ["d1"], {}, skill=_Suggestie())
+    assert ok is True
+    assert "Voeg een zin toe" in waarom          # de suggestie gaat niet verloren
+
+
+def test_moet_bij_met_een_ongegronde_bewering_degradeert_wel():
+    """De andere kant: is er wél iets ongegronds, dan blijft het een grondingsfout."""
+    class _Echt:
+        def run(self, payload, context=None):
+            return {"ok": True, "oordeel": "moet bij", "ongegrond": ["45% besparing"],
+                    "revisie": "noem de bron"}
+    ok, waarom = mc._gegrond("doc", ["d1"], {}, skill=_Echt())
+    assert ok is False and "45% besparing" in waarom
