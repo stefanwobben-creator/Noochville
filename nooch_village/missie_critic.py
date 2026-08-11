@@ -140,13 +140,39 @@ def _missie(document: str) -> tuple[bool, str]:
     return True, f"raakt {score} strategie-thema('s): {', '.join(labels[:3])}"
 
 
+# Het kader waarin de critic de tegenspraak-skill laat oordelen.
+#
+# Zonder dit kader keurde de skill een compliance-rapport af op de claim die het rapport JUIST
+# afkeurt: "100% Planet-Safe is ongegrond (geen LCA, geen certificering)" — precies de bevinding.
+# Een rapport dat een claim onhoudbaar verklaart zakte zo op de grond-as omdát het zijn werk deed.
+#
+# De grens ligt NIET bij "conclusie versus bewijs" en niet bij aanhalingstekens. Hij ligt bij wat
+# het rapport zelf op tafel legt (conclusies, aanbevelingen, cijfers, én voorgestelde copy — dat
+# draagt het rapport aan, dus dat telt mee) versus wat het als onderzoeksobject aanhaalt. Een
+# conclusie die de onderbouwing niet dekt zakt nog steeds, ook als die conclusie luidt dat iets
+# niet deugt. Anders zou "beoordeel de eigen conclusie" een vrijbrief worden.
+_KADER = (
+    "Je toetst een RAPPORT. Onderscheid twee soorten tekst erin:\n"
+    "(a) wat het rapport ZELF beweert of aandraagt — de conclusies, aanbevelingen, cijfers en "
+    "oordelen, en ook copy of formuleringen die het rapport voorstelt om te gaan gebruiken;\n"
+    "(b) materiaal dat het rapport als ONDERZOEKSOBJECT aanhaalt — een claim die het toetst, een "
+    "bron die het beoordeelt, een uitspraak die het bespreekt.\n"
+    "Toets uitsluitend (a) tegen de onderbouwing. Dat materiaal uit (b) ongegrond blijkt is een "
+    "BEVINDING van het rapport, geen gebrek eraan: reken die niet als ongegronde bewering.\n"
+    "Concludeert het rapport iets dat de onderbouwing niet dekt, dan is dat WEL ongegrond — ook "
+    "als het plausibel klinkt, en ook als de conclusie luidt dat iets niet deugt. De vraag blijft: "
+    "dekt wat de skills ophaalden het oordeel dat het rapport velt?"
+)
+
+
 def _gegrond(document: str, deliverables: list, project: dict, *, skill=None,
              context=None) -> tuple[bool | None, str]:
-    """Is elke bewering gegrond in een deliverable of Kroniek-record?
+    """Is elke bewering VAN HET RAPPORT gegrond in een deliverable of Kroniek-record?
 
     Via de bestaande `tegenspraak`-skill: die zoekt de zwakste claim en levert een lijst beweringen
     die NIET in de meegegeven onderbouwing staan. Precies deze toets, en hij bestond al — hier
-    draait hij automatisch in plaats van op verzoek.
+    draait hij automatisch in plaats van op verzoek, met `_KADER` erbij zodat hij het rapport toetst
+    en niet het materiaal dat het rapport onderzoekt.
 
     Geeft None bij "kon niet toetsen" (geen LLM, geen skill). Dat is bewust geen False: een
     weggevallen leverancier mag geen rapporten afkeuren. Het reist wél mee als onbekend."""
@@ -157,7 +183,7 @@ def _gegrond(document: str, deliverables: list, project: dict, *, skill=None,
             from nooch_village.skills_impl.tegenspraak import TegenspraakSkill
             skill = TegenspraakSkill()
         uit = skill.run({"tekst": (document or "")[:6000], "bewijs": bewijs, "doel": doel,
-                         "ladder": premium_ladder()}, context)
+                         "kader": _KADER, "ladder": premium_ladder()}, context)
     except Exception as e:                               # noqa: BLE001
         log.warning("grondings-toets faalde fail-soft: %s", e)
         return None, "de grondings-toets kon niet draaien"

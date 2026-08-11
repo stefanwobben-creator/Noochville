@@ -141,6 +141,75 @@ def test_gegrond_leunt_op_de_bestaande_tegenspraak_skill():
     assert ok is False and "45% CO2-besparing" in waarom
 
 
+def test_de_critic_toetst_het_rapport_niet_het_onderzochte_materiaal():
+    """Op prod zakte een compliance-rapport op de grond-as omdát het zijn werk deed: de skill las
+    "'100% Planet-Safe' is ongegrond (geen LCA, geen certificering)" als een ongegronde bewering
+    van de SCHRIJVER, terwijl dat de bevinding was. Het kader maakt dat onderscheid expliciet."""
+    gezien = {}
+
+    class _Vangt:
+        def run(self, payload, context=None):
+            gezien.update(payload)
+            return {"ok": True, "oordeel": "houdt stand", "ongegrond": []}
+
+    mc._gegrond("doc", ["d1"], {}, skill=_Vangt())
+    kader = gezien["kader"]
+    assert "ONDERZOEKSOBJECT" in kader and "BEVINDING van het rapport" in kader
+
+
+def test_het_kader_houdt_de_andere_kant_ook_dicht():
+    """De regel mag geen vrijbrief worden. "Beoordeel de eigen conclusie" zonder de tegenhanger zou
+    élke conclusie gegrond maken; en voorgestelde copy is iets dat het rapport AANDRAAGT, geen
+    aangehaald materiaal — anders glipt een content-rapport met een overdreven kopregel erdoor."""
+    assert "dekt wat de skills ophaalden het oordeel dat het rapport velt" in mc._KADER
+    assert "ook als de conclusie luidt dat iets niet deugt" in mc._KADER
+    assert "copy of formuleringen die het rapport voorstelt" in mc._KADER
+
+
+@pytest.mark.parametrize("soort,ongegrond", [
+    ("content", ["de kopregel belooft 'de duurzaamste schoen ter wereld'"]),
+    ("research", ["45% CO2-besparing staat in geen enkele deliverable"]),
+    ("bulletin", ["'onze klanten zijn unaniem positief' — geen bron"]),
+])
+def test_andere_rapportsoorten_glippen_er_niet_makkelijker_door(soort, ongegrond):
+    """Het kader is soort-onafhankelijk: de critic kent geen compliance-uitzondering. Een rapport
+    waarvan de EIGEN beweringen niet gedekt zijn, zakt na de wijziging nog steeds — of het nu
+    content, research of een bulletin is."""
+    class _Neg:
+        def run(self, payload, context=None):
+            return {"ok": True, "oordeel": "moet bij", "ongegrond": ongegrond}
+
+    ok, waarom = mc._gegrond("doc", ["d1"], {"soort": soort}, skill=_Neg())
+    assert ok is False and ongegrond[0][:20] in waarom
+
+
+def test_moet_bij_zonder_lijst_zakt_nog_steeds():
+    """De tweede afwijsroute blijft intact: 'moet bij' met een revisie maar zonder expliciete lijst
+    is nog altijd geen schone grond-as."""
+    class _MoetBij:
+        def run(self, payload, context=None):
+            return {"ok": True, "oordeel": "moet bij", "ongegrond": [], "revisie": "noem de bron"}
+    ok, waarom = mc._gegrond("doc", ["d1"], {}, skill=_MoetBij())
+    assert ok is False and "noem de bron" in waarom
+
+
+def test_losse_tegenspraak_aanroepen_veranderen_niet():
+    """Het kader is een optie van de critic, geen nieuwe regel van de skill. Een rol die tegenspraak
+    los aanroept krijgt exact de prompt van voorheen."""
+    from nooch_village.skills_impl.tegenspraak import TegenspraakSkill
+    prompts = []
+
+    def _vang(prompt, **kw):
+        prompts.append(prompt)
+        return '{"oordeel":"houdt stand","ongegrond":[]}'
+
+    with patch(_REASON, _vang):
+        TegenspraakSkill().run({"tekst": "een deliverable"}, None)
+        TegenspraakSkill().run({"tekst": "een deliverable", "kader": "TOETS ZO"}, None)
+    assert "KADER VOOR DEZE TOETS" not in prompts[0]
+    assert "KADER VOOR DEZE TOETS:\nTOETS ZO" in prompts[1]
+
+
 def test_gegrond_zonder_llm_is_onbekend_niet_afgekeurd():
     """Een weggevallen leverancier mag geen rapporten afkeuren — maar 'onbekend' is ook geen
     'geslaagd', en dat verschil moet zichtbaar blijven."""
