@@ -174,7 +174,15 @@ def synthetiseer(inhabitant, vraag: str, onderzoek_uit: dict, *, doel: str = "")
           "niet kunt halen. Dan specifiek: wélk gegeven, en waarom jij er niet bij kunt.\n"
           "- onzeker: wat je niet hebt kunnen vaststellen, met wat het zou weerleggen.\n\n"
           "Verzin geen cijfer, status, percentage of wetsartikel dat niet in het bewijs staat. "
-          "Heb je het specifieke niet, zeg dan wát je wél hebt.\n"
+          "Heb je het specifieke niet, zeg dan wát je wél hebt.\n\n"
+          "GROND VERSLAAT INDRUK. Reik niet naar een indrukwekkend alternatief dat het bewijs niet "
+          "draagt. Weet je uit het bewijs dát een term vaag of onhoudbaar is, maar niet wélke "
+          "concrete invulling erachter zit — bijvoorbeeld omdat dat interne kennis is die in geen "
+          "enkele bron staat — stel dan het BESCHEIDEN voorstel voor dat wél gegrond is: de term "
+          "schrappen, of de term laten staan totdat de founder je de concrete invulling geeft die "
+          "jij dan verifieert. Een voorstel 'verwijder deze term, want hij is niet te onderbouwen' "
+          "is een goed voorstel. Een voorstel dat een materiaal, proces of richting noemt die "
+          "nergens in het bewijs staat, is dat niet — hoe redelijk het ook klinkt.\n"
           'Antwoord UITSLUITEND met JSON: {"actie":"...","risico":"...","nodig_van_jou":"","onzeker":"..."}')
     raw = reason(prompt, call_site="voorstel_synthese", ladder=ladder_voor("skill_voorstel"),
                  json_mode=True, max_tokens=1500)

@@ -71,11 +71,16 @@ class Skill(ABC):
     Zie run()-docstring voor details.
     """
 
-    required_payload: tuple[str, ...] = ()
+    required_payload: tuple = ()
     """De payload-sleutels die VERPLICHT (aanwezig én niet-leeg) moeten zijn om zinvol te draaien —
     machine-leesbaar, zodat het uitvoer-primitief een onvolledige checklist-payload fail-fast herkent bij
     het opstellen (i.p.v. de skill leeg te laten draaien). Optionele velden (limit, days, country) staan
-    hier NIET in. Leeg = geen validatie mogelijk (fail-soft: item blijft uitvoerbaar)."""
+    hier NIET in. Leeg = geen validatie mogelijk (fail-soft: item blijft uitvoerbaar).
+
+    Een element mag zelf een tuple/lijst zijn: dan is het een DISJUNCTIE — minstens één van die
+    sleutels moet aanwezig zijn. `claims_check` eist "text OF terms", niet allebei; als plat
+    lijstje uitgedrukt zou je beide eisen en de skill op de andere manier breken. Gebruik
+    `ontbrekende_velden()` om dit uit te lezen, niet een eigen lus."""
 
     def validate_payload(self, payload: dict, context) -> list:
         """Grondings-poort op de payload (opt-in). Geeft REDENEN terug waarom deze payload niet kan
@@ -201,3 +206,24 @@ class SkillRegistry:
 
     def all(self) -> list[Skill]:
         return list(self._skills.values())
+
+
+def ontbrekende_velden(required, payload: dict) -> list[str]:
+    """Welke verplichte payload-velden ontbreken? Begrijpt de disjunctie-vorm.
+
+    Eén gedeelde lezer voor alle drie de consumenten (`Inhabitant._missing_required`,
+    `skill_match._payload_ok`, `onderzoekspas._payload_voor`). Zou elk zijn eigen lus houden, dan
+    kent de ene de of-of-vorm wel en de andere niet — en dat is precies de klasse fout die we drie
+    keer op rij hebben gehad: een declaratie die op twee plekken anders wordt gelezen.
+
+    Een ontbrekende disjunctie leest als "text|terms", zodat de foutmelding de keuze toont."""
+    pl = payload if isinstance(payload, dict) else {}
+    uit: list[str] = []
+    for veld in tuple(required or ()):
+        if isinstance(veld, (tuple, list, set, frozenset)):
+            opties = [str(v) for v in veld]
+            if not any(pl.get(v) for v in opties):
+                uit.append("|".join(opties))
+        elif not pl.get(veld):
+            uit.append(str(veld))
+    return uit
