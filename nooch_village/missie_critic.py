@@ -261,7 +261,7 @@ def beoordeel(*, project: dict, document: str, deliverables: list, checklist: di
             log.warning("critic-toets '%s' faalde fail-soft: %s", naam, e)
             ok, waarom = None, f"de toets '{naam}' kon niet draaien"
         oordelen[naam] = ok
-        if ok is False and waarom:
+        if ok is not True and waarom:
             redenen.append(f"{naam}: {waarom}")
 
     # De dure toets pas als de goedkope niet al gezakt zijn: een leeg rapport hoeft geen premium
@@ -269,7 +269,11 @@ def beoordeel(*, project: dict, document: str, deliverables: list, checklist: di
     if all(oordelen.get(a) is not False for a in ("substantieel", "beantwoordt", "missie")):
         ok, waarom = _gegrond(document, deliverables, project, skill=skill, context=context)
         oordelen["gegrond"] = ok
-        if ok is False and waarom:
+        # Ook een NIET-getoetste as krijgt zijn reden mee. Stond die er niet, dan las de notitie
+        # alleen "(niet getoetst: gegrond)" en was de oorzaak — afgekapt antwoord, wegvallende
+        # leverancier, kapotte skill — nergens meer terug te vinden. Dezelfde regel als één laag
+        # lager: nooit gokken en nooit zwijgen over waarom een oordeel ontbreekt.
+        if ok is not True and waarom:
             redenen.append(f"gegrond: {waarom}")
     else:
         oordelen["gegrond"] = None
