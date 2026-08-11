@@ -59,6 +59,7 @@ De GET-routes uit `do_GET` (cockpit2.py) en de view die ze renderen. `(inline)` 
 | `/livekit-presence` | `(inline)` | `cockpit2.py` |
 | `/claims/db.json` | `(inline)` | `cockpit2.py` |
 | `/claims` | `render_claims` | `nooch_village/views/claims.py` |
+| `/copy-prompt` | `render_copy_prompt` | `nooch_village/views/copy_prompt.py` |
 | `/inwoners` | `render_inwoners` | `nooch_village/views/inwoners.py` |
 | `/inwoner` | `render_inwoner` | `nooch_village/views/inwoners.py` |
 | `/roloverleg2` | `render_roloverleg2` | `nooch_village/views/roloverleg.py` |

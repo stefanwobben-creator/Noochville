@@ -278,6 +278,7 @@ from nooch_village.views.bronnen import render_bronnen
 from nooch_village.views.skills import render_skills
 from nooch_village.views.search import render_search, render_search_fragment
 from nooch_village.views.claims import render_claims, render_rapport, rol_voor
+from nooch_village.views.copy_prompt import render_copy_prompt
 from nooch_village.views.founder_flow import render_founder_flow
 from nooch_village.views.inwoners import render_inwoner, render_inwoners
 from nooch_village.views.kennislaag import render_kennislaag
@@ -5215,6 +5216,20 @@ def make_handler(data_dir: str, csrf_token: str,
                     bewijzen=_claims_bewijzen(data_dir),
                     labels=_claims_labels.telling(data_dir),
                     bordresultaat=_claims_bordresultaat(qs)))
+                return
+            if path == "/copy-prompt":
+                # AUTHZ: iedereen-ingelogd — dezelfde read-scope als /node?tab=policies en
+                # /context: de pagina toont policies die die routes ook al tonen, en schrijft
+                # niets. Wijzigen blijft bij de domein-eigenaar via de artefact-routes.
+                # De segmented picker verstuurt zijn keuze als `set_<naam>`; het hidden veld draagt
+                # de vorige keuze. Een klik op de picker wint dus van wat er stond.
+                _soort = (qs.get("set_soort") or qs.get("soort") or [""])[-1]
+                _register = (qs.get("set_register") or qs.get("register") or [""])[-1]
+                self._send(render_copy_prompt(st,
+                                              rol=(qs.get("rol") or [""])[0],
+                                              soort=_soort,
+                                              register=_register,
+                                              brief=(qs.get("brief") or [""])[0]))
                 return
             if path == "/inwoners":
                 # AUTHZ: iedereen-ingelogd — het dorp mag zien wie er woont; bewerken zit achter
