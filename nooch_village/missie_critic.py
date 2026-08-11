@@ -225,7 +225,7 @@ _KADER = (
 
 
 def _gegrond(document: str, deliverables: list, project: dict, *, skill=None,
-             context=None, content_for=None) -> tuple[bool | None, str]:
+             context=None, content_for=None, kader_extra: str = "") -> tuple[bool | None, str]:
     """Is elke bewering VAN HET RAPPORT gegrond in een deliverable of Kroniek-record?
 
     Via de bestaande `tegenspraak`-skill: die zoekt de zwakste claim en levert een lijst beweringen
@@ -241,8 +241,9 @@ def _gegrond(document: str, deliverables: list, project: dict, *, skill=None,
         if skill is None:
             from nooch_village.skills_impl.tegenspraak import TegenspraakSkill
             skill = TegenspraakSkill()
+        kader = _KADER + ("\n" + kader_extra.strip() if kader_extra and kader_extra.strip() else "")
         uit = skill.run({"tekst": _te_toetsen(document), "bewijs": bewijs, "doel": doel,
-                         "kader": _KADER, "ladder": premium_ladder(),
+                         "kader": kader, "ladder": premium_ladder(),
                          "max_tokens": MAX_OORDEEL_TOKENS}, context)
     except Exception as e:                               # noqa: BLE001
         log.warning("grondings-toets faalde fail-soft: %s", e)
@@ -297,7 +298,7 @@ def _overlap(a: str, b: str) -> float:
 
 def beoordeel(*, project: dict, document: str, deliverables: list, checklist: dict | None = None,
               skill=None, context=None, content_for=None,
-              min_chars: int = MIN_DOCUMENT_CHARS, grond_document: str = "") -> dict:
+              min_chars: int = MIN_DOCUMENT_CHARS, kader_extra: str = "") -> dict:
     """Toets een rapport op de vier assen. Geeft
     {geslaagd, oordelen: {as: True|False|None}, redenen: [...], samenvatting}.
 
@@ -322,13 +323,13 @@ def beoordeel(*, project: dict, document: str, deliverables: list, checklist: di
     # De dure toets pas als de goedkope niet al gezakt zijn: een leeg rapport hoeft geen premium
     # LLM-call om afgekeurd te worden.
     if all(oordelen.get(a) is not False for a in ("substantieel", "beantwoordt", "missie")):
-        # De grond-as mag een ANDER (kleiner) document krijgen dan de goedkope assen. Een
-        # rol-voorstel bevat velden die per constructie geen feitelijke bewering zijn (risico =
-        # hypothese, onzeker = expliciete niet-bewering); die op gegrondheid toetsen is een
-        # categoriefout, geen strengheid. Default: hetzelfde document, dus voor een einddocument
-        # verandert er niets.
-        ok, waarom = _gegrond(grond_document or document, deliverables, project, skill=skill,
-                              context=context, content_for=content_for)
+        # `kader_extra` verruimt het beoordelingskader van de grond-as voor een specifieke soort
+        # document. Het document zelf gaat ALTIJD volledig mee — een kleiner document meegeven leek
+        # eerst de nette oplossing, maar dan mist de toets context en vráágt hij om wat je zojuist
+        # verborg ("voeg een risicoparagraaf toe" terwijl die er stond). Zien, maar niet beoordelen:
+        # dat is precies wat `_KADER` al doet voor aangehaald materiaal.
+        ok, waarom = _gegrond(document, deliverables, project, skill=skill, context=context,
+                              content_for=content_for, kader_extra=kader_extra)
         oordelen["gegrond"] = ok
         # Ook een NIET-getoetste as krijgt zijn reden mee. Stond die er niet, dan las de notitie
         # alleen "(niet getoetst: gegrond)" en was de oorzaak — afgekapt antwoord, wegvallende

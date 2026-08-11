@@ -249,7 +249,7 @@ def poort(voorstel: dict, *, project: dict, skill=None, context=None) -> tuple[d
     oordeel = mc.beoordeel(project=toets_project, document=document, deliverables=deliverables,
                            checklist=None, skill=skill, context=context,
                            min_chars=MIN_VOORSTEL_CHARS,
-                           grond_document=vv.feitelijke_kern(voorstel))
+                           kader_extra=vv.KADER_VOORSTEL)
     if oordeel["oordelen"].get("gegrond") is True:
         return voorstel, oordeel
     reden = next((r for r in (oordeel.get("redenen") or []) if r.startswith("gegrond")),

@@ -169,12 +169,31 @@ def render(voorstel: dict) -> str:
     return "\n\n".join(regels)
 
 
-def feitelijke_kern(voorstel: dict) -> str:
-    """Het voorstel zoals de GROND-AS het hoort te lezen: alleen de velden die beweringen dragen.
+# Het kader waarin de grond-as een VOORSTEL beoordeelt. Zien, niet beoordelen.
+#
+# Eerst gaf ik de as een kleiner document (alleen actie + bewijs). Dat leek net, maar de toets miste
+# daardoor context en vróég om wat ik zojuist had verborgen: "voeg een expliciete risicoparagraaf
+# toe" — terwijl die er stond. Eén categoriefout ingeruild voor een andere.
+#
+# Dus dezelfde vorm als `_KADER` zelf gebruikt voor aangehaald materiaal: het hele stuk gaat mee, en
+# het kader zegt wat er wél en niet als bewering telt.
+KADER_VOORSTEL = (
+    "Dit stuk is een VOORSTEL van een rol aan de founder, in een vaste vorm met vijf velden.\n"
+    "Alleen 'Wat ik wil doen' (de actie) en 'Waarom, met bewijs' dragen beweringen over de wereld. "
+    "Toets die tegen de onderbouwing.\n"
+    "'Risico of kosten' en 'Wat nog onzeker is' zijn per constructie GEEN feitelijke beweringen: een "
+    "risico is een hypothese over wat kán gebeuren, en het onzeker-veld bestaat om te zeggen wat de "
+    "rol NIET weet. Reken ze niet als ongegronde bewering. Vraag er ook niet om — ze staan er al, en "
+    "je ziet ze hierboven.\n"
+    "Zou een van die twee velden een dragend FEIT bevatten (een stellige uitspraak over hoe de "
+    "wereld is, waar het voorstel op leunt), noem dat dan wél: zo'n feit hoort in de actie of het "
+    "bewijs, waar het toetsbaar is."
+)
 
-    Zie `DRAAGT_BEWERINGEN`. Dit is een scope-correctie, geen versoepeling: wat hier wegvalt is
-    per constructie niet toetsbaar op feitelijke gegrondheid. Een load-bearing feit dat iemand in
-    `risico` of `onzeker` parkeert ontsnapt hiermee aan de toets — daarom zegt de synthese-prompt
-    expliciet dat die twee velden voorwaardelijk/negatief moeten blijven en dat een dragend feit in
-    de actie of het bewijs hoort."""
+
+def feitelijke_kern(voorstel: dict) -> str:
+    """Alleen de velden die beweringen dragen — voor wie wil zien wat de grond-as beoordeelt.
+
+    NIET meer wat de critic te lezen krijgt: die krijgt het hele voorstel plus `KADER_VOORSTEL`.
+    Zie de toelichting daar. Blijft bestaan omdat het de scope expliciet en testbaar maakt."""
     return render({v: voorstel.get(v) for v in DRAAGT_BEWERINGEN} | {"soort": voorstel.get("soort")})
