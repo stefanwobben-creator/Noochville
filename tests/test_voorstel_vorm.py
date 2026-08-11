@@ -258,38 +258,41 @@ def test_de_grond_as_ziet_alleen_de_velden_die_beweringen_dragen():
     assert vv.DRAAGT_BEWERINGEN == ("actie", "bewijs")
 
 
-def test_de_andere_drie_assen_zien_wel_het_hele_voorstel():
-    """Alleen de grond-as krijgt de kern. substantieel/beantwoordt/missie blijven het geheel zien,
-    anders zou een voorstel zonder risico-veld ineens even substantieel heten als een compleet."""
+def test_de_grond_as_ziet_alles_maar_beoordeelt_de_kern():
+    """Zien, niet beoordelen. Een kleiner document meegeven leek net, maar dan mist de toets context
+    en vráágt hij om wat je zojuist verborg: "voeg een expliciete risicoparagraaf toe" — terwijl die
+    er stond. Gemeten op prod. Eén categoriefout ingeruild voor een andere."""
     from nooch_village import onderzoekspas as op
     gezien = {}
 
     class _Vangt:
         def run(self, payload, context=None):
-            gezien["tekst"] = payload.get("tekst")
+            gezien.update(payload)
             return {"ok": True, "oordeel": "houdt stand", "ongegrond": []}
 
     op.poort(dict(GEGROND), project={"id": "p"}, skill=_Vangt())
-    assert "Risico of kosten" not in gezien["tekst"]          # de grond-as: alleen de kern
-    src = open("nooch_village/missie_critic.py", encoding="utf-8").read()
-    assert "grond_document or document" in src                # default = ongewijzigd gedrag
+    assert "Risico of kosten" in gezien["tekst"]              # het hele voorstel gaat mee…
+    assert "Reken ze niet als ongegronde bewering" in gezien["kader"]     # …met de leesregel
+    assert "Vraag er ook niet om" in gezien["kader"]
+    assert "hoort in de actie of het bewijs" in gezien["kader"]           # geen dumpplek
 
 
 def test_een_einddocument_merkt_niets_van_deze_optie():
-    """De parameter is default-transparant: zonder `grond_document` toetst de as het hele stuk,
-    precies zoals op het einddocument."""
+    """De parameter is default-transparant: zonder `kader_extra` leest de as precies zoals op het
+    einddocument."""
     from nooch_village import missie_critic as mc
     gezien = {}
 
     class _Vangt:
         def run(self, payload, context=None):
-            gezien["tekst"] = payload.get("tekst")
+            gezien.update(payload)
             return {"ok": True, "oordeel": "houdt stand", "ongegrond": []}
 
     doc = "# R\n\n## Onderzoek plasticvrije materialen\n" + "plasticvrij vegan transparantie. " * 30
     mc.beoordeel(project={}, document=doc, deliverables=[{"id": "", "summary": "x"}],
                  checklist=None, skill=_Vangt())
     assert gezien["tekst"] == doc
+    assert "VOORSTEL van een rol" not in gezien["kader"]
 
 
 # ── DE acceptatietest: doel gecorrigeerd, lat niet verlaagd ────────────────
