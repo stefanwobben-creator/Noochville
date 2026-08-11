@@ -90,6 +90,26 @@ def pad(data_dir: str) -> str:
     return os.path.join(data_dir, BESTAND)
 
 
+def _bewijs(deliverables: list, content_for=None) -> str:
+    """De onderbouwing die de grondings-toets te zien krijgt.
+
+    Was: `[:8]` records van `[:600]` tekens. Twee stille grenzen die samen precies het bewijs
+    wegsneden waar het om ging — `score: 88` van claims_check stond er niet in, en de critic noemde
+    "Compliance Score 88/100" daarom ongegrond. Met de ontdubbeling (deliverable_store: een herdraai
+    vervangt zijn voorganger) zijn het er 2 tot 6 per project, dus "alle" is goedkoop.
+
+    Zonder `content_for` valt hij terug op de oude vorm — maar dan wél over álle deliverables en
+    zonder de 600-tekens-knip, zodat een aanroeper die de sidecars niet kan lezen nooit stilzwijgend
+    minder bewijs krijgt dan hij denkt."""
+    if content_for is not None:
+        from nooch_village.citeerbaar import bewijsblok
+        blok = bewijsblok(deliverables, content_for, bron="missie-critic")
+        if blok:
+            return blok
+    return "\n".join(str(d.get("summary") or d) if isinstance(d, dict) else str(d)
+                     for d in (deliverables or []))
+
+
 # ── De vier toetsen ──────────────────────────────────────────────────────────────────────────
 
 def _substantieel(document: str, deliverables: list, checklist: dict | None) -> tuple[bool, str]:
@@ -172,7 +192,7 @@ _KADER = (
 
 
 def _gegrond(document: str, deliverables: list, project: dict, *, skill=None,
-             context=None) -> tuple[bool | None, str]:
+             context=None, content_for=None) -> tuple[bool | None, str]:
     """Is elke bewering VAN HET RAPPORT gegrond in een deliverable of Kroniek-record?
 
     Via de bestaande `tegenspraak`-skill: die zoekt de zwakste claim en levert een lijst beweringen
@@ -182,7 +202,7 @@ def _gegrond(document: str, deliverables: list, project: dict, *, skill=None,
 
     Geeft None bij "kon niet toetsen" (geen LLM, geen skill). Dat is bewust geen False: een
     weggevallen leverancier mag geen rapporten afkeuren. Het reist wél mee als onbekend."""
-    bewijs = "\n".join(str(d)[:600] for d in (deliverables or [])[:8])
+    bewijs = _bewijs(deliverables, content_for)
     doel = str(project.get("done_when") or project.get("dod_outcome") or "").strip()
     try:
         if skill is None:
@@ -243,7 +263,7 @@ def _overlap(a: str, b: str) -> float:
 # ── Het oordeel ──────────────────────────────────────────────────────────────────────────────
 
 def beoordeel(*, project: dict, document: str, deliverables: list, checklist: dict | None = None,
-              skill=None, context=None) -> dict:
+              skill=None, context=None, content_for=None) -> dict:
     """Toets een rapport op de vier assen. Geeft
     {geslaagd, oordelen: {as: True|False|None}, redenen: [...], samenvatting}.
 
@@ -267,7 +287,8 @@ def beoordeel(*, project: dict, document: str, deliverables: list, checklist: di
     # De dure toets pas als de goedkope niet al gezakt zijn: een leeg rapport hoeft geen premium
     # LLM-call om afgekeurd te worden.
     if all(oordelen.get(a) is not False for a in ("substantieel", "beantwoordt", "missie")):
-        ok, waarom = _gegrond(document, deliverables, project, skill=skill, context=context)
+        ok, waarom = _gegrond(document, deliverables, project, skill=skill, context=context,
+                              content_for=content_for)
         oordelen["gegrond"] = ok
         # Ook een NIET-getoetste as krijgt zijn reden mee. Stond die er niet, dan las de notitie
         # alleen "(niet getoetst: gegrond)" en was de oorzaak — afgekapt antwoord, wegvallende

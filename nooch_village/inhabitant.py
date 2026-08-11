@@ -1635,13 +1635,17 @@ class Inhabitant(threading.Thread):
         from nooch_village import missie_critic
         ledger = self.context.projects
         try:
+            # De RECORDS, niet alleen hun samenvatting: de grondings-toets leest via `content_for`
+            # de volledige skill-uitvoer uit de sidecar en maakt daar citeerbare velden van. Met
+            # alleen de summary-tekst stond `score: 88` nergens in het bewijs, en verklaarde de
+            # critic "Compliance Score 88/100" ongegrond terwijl claims_check het teruggaf.
             dstore = getattr(self.context, "deliverables", None)
-            leveringen = [str(d.get("summary") or d.get("result") or "")
-                          for d in (dstore.for_project(pid) if dstore is not None else [])]
+            leveringen = list(dstore.for_project(pid)) if dstore is not None else []
             return missie_critic.beoordeel(project=ledger.get(pid) or {},
                                            document=self._critic_document(pid),
                                            deliverables=leveringen, checklist=checklist,
-                                           context=self.context)
+                                           context=self.context,
+                                           content_for=getattr(dstore, "content_for", None))
         except Exception as e:                           # noqa: BLE001 — de oplevering gaat vóór
             self.log.warning("missie-critic overgeslagen (project gaat door): %s", e)
             return None
@@ -2240,8 +2244,20 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
         scope = project.get("scope")
         scope_txt = (" · ".join(f"{k}: {v}" for k, v in scope.items())
                      if isinstance(scope, dict) else str(scope or ""))
+        # Citeerbare velden: elk cijfer, stoplicht en categorie uit de skill-uitvoer apart
+        # aanhaalbaar, mét zijn herkomst. Zo hoeft een getal niet in proza te overleven — het
+        # rapport kan het citeren, en de critic vindt het terug op dezelfde plek.
+        cite = ""
+        try:
+            from nooch_village.citeerbaar import bewijsblok
+            cite = bewijsblok(recs, dstore.content_for, bron=f"einddocument {pid}") if dstore else ""
+        except Exception as e:                              # noqa: BLE001 — document gaat vóór
+            log.warning("citeerbare velden overgeslagen: %s", e)
         head = ("HUIDIG DOCUMENT:\n" + (current or "(nog geen document)") + "\n\n"
                 + (f"STURING VAN DE MENS (#task-comments, volg dit): {steer}\n\n" if steer else "")
+                + (f"CITEERBARE FEITEN UIT DE SKILL-UITVOER (skill | veld = waarde). Dit is de enige "
+                   f"plek waar cijfers, stoplichten, statussen en categorieën vandaan mogen komen:\n"
+                   f"{cite}\n\n" if cite else "")
                 + "OPGELEVERDE DELIVERABLES (per taak):\n")
         cap = int(settings.get("einddocument_input_max_chars", "40000"))
         kept, used, dropped = [], len(head), 0
@@ -2298,7 +2314,16 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
             "daaronder de FEITELIJKE BEVINDINGEN uit de deliverables die die taak beantwoorden. HARDE "
             "GRONDINGS-REGEL: elk getal, elke prijs en elke tabel MOET letterlijk uit een deliverable komen; "
             "staat het daar niet, dan bestaat het niet — schrijf dan 'Niet onderzocht — geen gegrond "
-            "resultaat' en verzin niets, ook geen herkomst. Beantwoord elke taak expliciet; is er niets "
+            "resultaat' en verzin niets, ook geen herkomst. Dat geldt ÓÓK voor een score, een status, "
+            "een percentage, een certificering en een wetsartikel of bepaling: noem er geen die niet "
+            "letterlijk bij de CITEERBARE FEITEN of in een deliverable staat. Zo verscheen op "
+            "productie 'Annex I 2a' als specifieke bepaling in een rapport terwijl geen enkele skill "
+            "dat teruggaf. MAAR: precies zijn is juist de bedoeling, vaag worden niet. Heb je het "
+            "specifieke niet, zeg dan wát je wél hebt, mét bron — 'claims_check vlagt planet-safe "
+            "rood (categorie Generiek); claim_evidence vond geen LCA of certificering; conclusie: "
+            "niet houdbaar' is goed en gegrond. Terugvallen op 'er zijn mogelijk zorgen' is FOUT: "
+            "dat is geen grondering maar ontwijken. Verbied jezelf het verzinnen, niet het concreet "
+            "zijn. Beantwoord elke taak expliciet; is er niets "
             "gevonden, schrijf dat expliciet. Sluit ALTIJD af met twee aparte secties, elk met een "
             "'## '-kop: '## Conclusie' (een korte synthese in gewone taal van wat dit project heeft "
             "opgeleverd) en '## Aanbevelingen' (concrete vervolgstappen als '- '-opsomming)"
