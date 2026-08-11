@@ -38,6 +38,30 @@ BESTAND = "voorstellen.jsonl"
 ONDERZOEK_SKILLS = ("claims_check", "claim_evidence")
 
 
+def _payload_voor(inhabitant, skill: str, vraag: str) -> tuple[dict | None, str]:
+    """Leid de payload AF uit het `input_schema` van de skill. Geen geraden dict.
+
+    De eerste versie gaf een vaste `{text, term, claim, query}` mee en hoopte dat het paste. Bij
+    `claim_evidence` paste het niet ("geef brands (niet-leeg) en een claim op"), dus draaide juist
+    de bron níet die de concrete actie had kunnen leveren — en het voorstel rustte op één bron.
+    Precies de zonde die `_herstel_payloads` repareert, dus hergebruiken we die machinerie hier
+    meteen in plaats van hem een tweede keer te maken."""
+    obj = inhabitant.registry.get(skill) if inhabitant.registry else None
+    schema = (getattr(obj, "input_schema", "") or "").strip() if obj else ""
+    verplicht = list(getattr(obj, "required_payload", ()) or ()) if obj else []
+    try:
+        payload = inhabitant._payload_opnieuw(skill, vraag, schema, verplicht, {})
+    except Exception as e:                                   # noqa: BLE001
+        return None, f"'{skill}': payload afleiden faalde ({e})"
+    if not isinstance(payload, dict) or not payload:
+        return None, f"'{skill}': geen payload af te leiden uit de vraag"
+    mist = inhabitant._missing_required(skill, payload)
+    issues = inhabitant._payload_issues(skill, payload)
+    if mist or issues:
+        return None, f"'{skill}': payload haalt de poort niet ({'; '.join(mist + issues)[:120]})"
+    return payload, ""
+
+
 def _skill_uitvoer(inhabitant, skill: str, payload: dict) -> tuple[dict | None, str]:
     """Draai één onderzoeks-skill. (resultaat, reden-als-overgeslagen)."""
     if skill not in (inhabitant.dna.skills or []):
@@ -62,7 +86,10 @@ def onderzoek(inhabitant, vraag: str, *, term: str = "") -> dict:
     from nooch_village.citeerbaar import velden_van
 
     for skill in ONDERZOEK_SKILLS:
-        payload = {"text": vraag, "term": term or vraag, "claim": vraag, "query": vraag}
+        payload, waarom = _payload_voor(inhabitant, skill, vraag)
+        if payload is None:
+            uit["overgeslagen"].append(waarom)
+            continue
         res, waarom = _skill_uitvoer(inhabitant, skill, payload)
         if res is None:
             uit["overgeslagen"].append(waarom)
@@ -136,7 +163,11 @@ def synthetiseer(inhabitant, vraag: str, onderzoek_uit: dict, *, doel: str = "")
           "eindcopy — dat doet de copywriter na goedkeuring. Beschrijf dus wát er moet veranderen "
           "en waarom, niet de definitieve zin.\n\n"
           "Vul deze vijf velden:\n"
-          "- actie: één concrete stap die IK ga doen of laat doen. Geen vraag, geen keuzemenu.\n"
+          "- actie: één concrete stap, geformuleerd als AANBEVELING die op de founder wacht. Begin "
+          "met 'Mijn voorstel: ' en beschrijf wat er moet gebeuren. Schrijf het NIET als een "
+          "handeling die je al doet of gedaan hebt ('ik geef opdracht', 'ik heb vervangen') — dat "
+          "is een bewering over de werkelijkheid die je niet kunt onderbouwen, en de critic keurt "
+          "hem terecht af. Geen vraag, geen keuzemenu.\n"
           "- bewijs: laat leeg, die vul ik zelf met de bronnen hierboven.\n"
           "- risico: wat dit kost of kan misgaan. Kort.\n"
           "- nodig_van_jou: LEEG LATEN tenzij je echt iets van de founder nodig hebt dat je zelf "
@@ -164,6 +195,28 @@ def synthetiseer(inhabitant, vraag: str, onderzoek_uit: dict, *, doel: str = "")
             "overgeslagen": list(onderzoek_uit.get("overgeslagen") or [])}
 
 
+# Het doel waartegen de critic een VOORSTEL toetst. Niet het uitvoeringsdoel van het project.
+#
+# Gemeten op het debuut: `done_when` van 549f8e98404f is "de herformulering is live en door legal
+# gezien", en de grond-as rekende het niet-bereikt-zijn daarvan aan als ongegronde bewering —
+# "impliciete claim dat de herformulering al live staat". Voor een einddocument klopt die toets: dat
+# hóórt het doel te halen. Voor een voorstel is het doel per definitie nog niet bereikt; dat is
+# waarom het een voorstel is.
+#
+# Leegmaken is óók fout: dan slaagt de beantwoordt-as leeg (`_overlap` geeft 1.0 bij een lege
+# done-when) en meet die niets meer. Dus een eigen doel dat wél toetsbaar is.
+# Bewust in de woorden van de VASTE VORM. `_beantwoordt` meet woord-overlap, dus een doel dat
+# abstract beschrijft wat een voorstel is ("onderbouwd", "welke wijziging") haalt die overlap nooit
+# en laat de as op élk voorstel zakken — gemeten toen ik het eerst zo formuleerde. Met deze woorden
+# toetst de as iets echts: zijn de velden van de vorm daadwerkelijk gevuld?
+VOORSTEL_DOEL = ("een concreet voorstel voor deze claim, met bewijs, risico en wat nog onzeker is")
+
+# Een voorstel is bondig — vijf velden, geen rapport. De einddocument-drempel van 400 tekens zou een
+# goed voorstel op LENGTE laten zakken, nog vóór de grond-as draait. 150 vangt nog steeds het lege
+# voorstel (een actiezin plus één bron haalt dat ruim) zonder bondigheid af te straffen.
+MIN_VOORSTEL_CHARS = 150
+
+
 def poort(voorstel: dict, *, project: dict, skill=None, context=None) -> tuple[dict, dict]:
     """De critic-poort. Geeft (voorstel-zoals-het-uitgaat, critic-oordeel).
 
@@ -174,8 +227,12 @@ def poort(voorstel: dict, *, project: dict, skill=None, context=None) -> tuple[d
     document = vv.render(voorstel)
     deliverables = [{"id": "", "skill": b.get("bron"), "summary": b.get("citaat")}
                     for b in (voorstel.get("bewijs") or [])]
-    oordeel = mc.beoordeel(project=project or {}, document=document, deliverables=deliverables,
-                           checklist=None, skill=skill, context=context)
+    toets_project = dict(project or {})
+    toets_project["done_when"] = VOORSTEL_DOEL
+    toets_project.pop("dod_outcome", None)               # anders lekt het uitvoeringsdoel alsnog
+    oordeel = mc.beoordeel(project=toets_project, document=document, deliverables=deliverables,
+                           checklist=None, skill=skill, context=context,
+                           min_chars=MIN_VOORSTEL_CHARS)
     if oordeel["oordelen"].get("gegrond") is True:
         return voorstel, oordeel
     reden = next((r for r in (oordeel.get("redenen") or []) if r.startswith("gegrond")),

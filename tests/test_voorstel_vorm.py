@@ -123,3 +123,113 @@ def test_een_leeg_nodig_van_jou_valt_weg():
     assert "Wat ik van je nodig heb" not in vv.render(GEGROND)
     met = vv.render({**GEGROND, "nodig_van_jou": "toegang tot het leverancierscontract"})
     assert "Wat ik van je nodig heb" in met
+
+
+# ── 5. De drie bedradingsfixes uit het debuut ───────────────────────────────
+
+def test_de_payload_komt_uit_het_schema_niet_uit_een_gok():
+    """Op het debuut gaf de pas een vaste {text, term, claim, query} mee. Bij `claim_evidence`
+    paste dat niet ("geef brands (niet-leeg) en een claim op"), dus draaide juist de bron níet die
+    de concrete actie had kunnen leveren — en het voorstel rustte op één bron."""
+    from unittest.mock import patch
+    from types import SimpleNamespace
+    from nooch_village import onderzoekspas as op
+
+    class _Skill:
+        input_schema = "brands: list (verplicht); claim: str (verplicht)"
+        required_payload = ("brands", "claim")
+
+    gezien = {}
+
+    class _Inh:
+        registry = SimpleNamespace(get=lambda naam: _Skill())
+
+        def _payload_opnieuw(self, skill, tekst, schema, mist, huidig):
+            gezien.update({"schema": schema, "mist": list(mist)})
+            return {"brands": ["nooch"], "claim": tekst}
+
+        def _missing_required(self, skill, payload):
+            return [f for f in _Skill.required_payload if not payload.get(f)]
+
+        def _payload_issues(self, skill, payload):
+            return []
+
+    payload, waarom = op._payload_voor(_Inh(), "claim_evidence", "is 'conscious' onderbouwd?")
+    assert payload == {"brands": ["nooch"], "claim": "is 'conscious' onderbouwd?"}
+    assert waarom == ""
+    assert gezien["schema"].startswith("brands:")          # het schema stuurt, niet een gok
+    assert gezien["mist"] == ["brands", "claim"]
+
+
+def test_een_payload_die_de_poort_niet_haalt_wordt_gemeld_niet_gedraaid():
+    """Fail-closed én niet stil: wat wegvalt staat in `overgeslagen` en reist mee naar het voorstel."""
+    from types import SimpleNamespace
+    from nooch_village import onderzoekspas as op
+
+    class _Inh:
+        registry = SimpleNamespace(get=lambda naam: SimpleNamespace(
+            input_schema="brands: list", required_payload=("brands",)))
+
+        def _payload_opnieuw(self, *a):
+            return {"iets_anders": 1}
+
+        def _missing_required(self, skill, payload):
+            return ["brands"]
+
+        def _payload_issues(self, skill, payload):
+            return []
+
+    payload, waarom = op._payload_voor(_Inh(), "claim_evidence", "vraag")
+    assert payload is None and "haalt de poort niet" in waarom and "brands" in waarom
+
+
+def test_de_critic_krijgt_een_voorstel_eigen_doel():
+    """`done_when` van het project ("de herformulering is live en door legal gezien") is het
+    UITVOERINGSdoel. De grond-as rekende het niet-bereikt-zijn daarvan aan als ongegronde bewering.
+    Leegmaken mag ook niet: dan slaagt de beantwoordt-as leeg."""
+    from nooch_village import onderzoekspas as op
+    gezien = {}
+
+    class _Vangt:
+        def run(self, payload, context=None):
+            gezien["doel"] = payload.get("doel")
+            return {"ok": True, "oordeel": "houdt stand", "ongegrond": []}
+
+    project = {"id": "p", "done_when": "de herformulering is live en door legal gezien",
+               "dod_outcome": "live"}
+    op.poort({**GEGROND}, project=project, skill=_Vangt())
+    assert gezien["doel"] == op.VOORSTEL_DOEL
+    assert "live" not in gezien["doel"]
+    assert op.VOORSTEL_DOEL.strip() != ""                  # niet leeg: anders meet de as niets
+    assert project["done_when"] == "de herformulering is live en door legal gezien"   # origineel heel
+
+
+def test_de_synthese_vraagt_om_een_aanbeveling_geen_voltooide_handeling():
+    """De tweede critic-reden was terecht: "Ik geef opdracht aan copywriter" stelt de actie als
+    genomen — een bewering over de werkelijkheid die geen bewijs draagt."""
+    src = open("nooch_village/onderzoekspas.py", encoding="utf-8").read()
+    assert "Mijn voorstel: " in src
+    assert "ik geef opdracht" in src and "ik heb vervangen" in src
+
+
+def test_het_voorstel_doel_is_toetsbaar_op_de_vaste_vorm():
+    """`_beantwoordt` meet woord-overlap. Een doel dat abstract beschrijft wát een voorstel is
+    ("onderbouwd", "welke wijziging") haalt die overlap nooit en laat de as op ELK voorstel zakken
+    — gemeten toen ik het eerst zo formuleerde. In de woorden van de vorm toetst de as iets echts:
+    zijn de velden gevuld?"""
+    from nooch_village import missie_critic as mc, onderzoekspas as op
+    doc = vv.render(GEGROND)
+    assert mc._beantwoordt(doc, {"done_when": op.VOORSTEL_DOEL}, None)[0] is True
+    kaal = vv.render({**GEGROND, "risico": "", "onzeker": "", "bewijs": []})
+    assert mc._beantwoordt(kaal, {"done_when": op.VOORSTEL_DOEL}, None)[0] is False
+
+
+def test_een_bondig_voorstel_zakt_niet_op_lengte():
+    """`MIN_DOCUMENT_CHARS` (400) is op een einddocument gekalibreerd. Een voorstel is vijf velden,
+    geen rapport; daarop afrekenen is een stille cap van precies de soort die we hebben weggehaald."""
+    from nooch_village import missie_critic as mc, onderzoekspas as op
+    assert op.MIN_VOORSTEL_CHARS < mc.MIN_DOCUMENT_CHARS
+    kort = vv.render(GEGROND)[:200]
+    assert mc._substantieel(kort, [{"x": 1}], None, op.MIN_VOORSTEL_CHARS)[0] is True
+    assert mc._substantieel(kort, [{"x": 1}], None)[0] is False        # met de rapport-lat wél
+    assert mc._substantieel("kort", [{"x": 1}], None, op.MIN_VOORSTEL_CHARS)[0] is False
