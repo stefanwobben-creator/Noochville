@@ -104,6 +104,13 @@ class Village:
         from nooch_village.deliverable_store import DeliverableStore
         self.context.deliverables = DeliverableStore(       # skill-resultaten overleven het project
             os.path.join(self.context.data_dir, "deliverables.json"))
+        # Eenmalig (idempotent): bestaande duplicaat-stapels markeren. Elke retry legde er een naast
+        # in plaats van te vervangen; zonder deze migratie houdt elk project dat nooit meer
+        # herdraait zijn stapel, en blijft het bewijsvenster van de critic gevuld met duplicaten.
+        try:
+            self.context.deliverables.migrate_vervangen()
+        except Exception as e:                              # noqa: BLE001
+            log.warning("deliverable-ontdubbeling overgeslagen: %s", e)
         # Gedeelde set (daemon-intern): pids die _claim_run_complete AL inline als route="autonoom"
         # aankondigde. De board-watch skipt die zodat een autonome afronding niet dubbel vuurt.
         self.context._autonomous_done = set()

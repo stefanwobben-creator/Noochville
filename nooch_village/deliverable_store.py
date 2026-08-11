@@ -84,9 +84,51 @@ class DeliverableStore(JsonStore):
                "checklist_item": checklist_item, "title": (title or "")[:300],
                "summary": summary, "wall_note_id": wall_note_id or "",
                "created_at": time.time()}
+        # Een herdraai van HETZELFDE checklist-item vervangt zijn voorganger. Zonder dit stapelde
+        # elke retry een nieuwe set: op productie stonden er 30 deliverables bij één project waarvan
+        # 5 uniek. De synthese betaalde daardoor zeven keer voor dezelfde bevinding en zag er nog
+        # zes van de dertig, en het bewijsvenster van de critic zat vol duplicaten — precies waarom
+        # hij 'Compliance Score 88/100' ongegrond noemde terwijl claims_check dat cijfer teruggaf.
+        #
+        # VERVANGEN, NIET WISSEN. De Kroniek (evidence_ledger.jsonl) verwijst via `result_ref` naar
+        # een deliverable-id; dat weggooien maakt de audit-trail kapot. Het oude record blijft dus
+        # staan mét zijn sidecar, gemarkeerd als vervangen, en verdwijnt alleen uit de leesweg die
+        # "wat geldt er nu?" vraagt.
+        if checklist_item:
+            for oud in self._items.values():
+                if (oud.get("project_id") == project_id
+                        and oud.get("checklist_item") == checklist_item
+                        and not oud.get("vervangen_door")):
+                    oud["vervangen_door"] = rid
         self._items[rid] = rec
         self._save()
         return rec
+
+    def migrate_vervangen(self) -> int:
+        """Markeer bestaande duplicaat-stapels alsnog: per (project, checklist_item) blijft de
+        jongste gelden, de rest krijgt `vervangen_door`.
+
+        Zonder deze migratie geldt de ontdubbeling alleen voor NIEUWE runs, en houdt elk project dat
+        nooit meer herdraait zijn stapel — op productie stond er één met 30 records waarvan 5 uniek.
+        Idempotent, en wist niets: de records en hun sidecars blijven staan voor de Kroniek."""
+        per: dict[tuple, list] = {}
+        for r in self._items.values():
+            if r.get("checklist_item"):
+                per.setdefault((r.get("project_id"), r.get("checklist_item")), []).append(r)
+        n = 0
+        for groep in per.values():
+            if len(groep) < 2:
+                continue
+            groep.sort(key=lambda r: r.get("created_at") or 0)
+            jongste = groep[-1]["id"]
+            for oud in groep[:-1]:
+                if not oud.get("vervangen_door"):
+                    oud["vervangen_door"] = jongste
+                    n += 1
+        if n:
+            self._save()
+            log.info("deliverables ontdubbeld: %d records gemarkeerd als vervangen (niets gewist)", n)
+        return n
 
     def delete_for_project(self, project_id: str) -> int:
         """Cascade bij DEFINITIEVE project-delete: verwijder index-records ÉN sidecars van dit project,
@@ -111,8 +153,15 @@ class DeliverableStore(JsonStore):
         return len(ids)
 
     # ── lezen (lock-vrij) ──────────────────────────────────────────────────────
-    def for_project(self, project_id: str) -> list[dict]:
-        return [r for r in self._items.values() if r.get("project_id") == project_id]
+    def for_project(self, project_id: str, *, inclusief_vervangen: bool = False) -> list[dict]:
+        """De deliverables van dit project — standaard alleen de GELDENDE.
+
+        Een herdraai van hetzelfde checklist-item markeert zijn voorganger als vervangen. Die blijft
+        bestaan (de Kroniek verwijst ernaar), maar hoort niet in de synthese of het critic-venster:
+        daar is de vraag "wat geldt er nu?". `inclusief_vervangen=True` geeft de volle historie,
+        voor audit."""
+        uit = [r for r in self._items.values() if r.get("project_id") == project_id]
+        return uit if inclusief_vervangen else [r for r in uit if not r.get("vervangen_door")]
 
     def by_ids(self, ids) -> list[dict]:
         want = set(ids or [])

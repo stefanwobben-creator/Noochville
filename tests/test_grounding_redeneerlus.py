@@ -232,7 +232,7 @@ def test_alle_drie_de_prompts_injecteren_het_blok():
 
     inh = open("nooch_village/inhabitant.py", encoding="utf-8").read()
     i = inh.index("def synthesize_einddocument")
-    body = inh[i:i + 6000]
+    body = inh[i:i + 9000]                      # ruim genomen: de functie groeide met het bewijsblok
     assert "kennis_blok(kennis_voor(" in body
     assert '(grond + "\\n\\n" if grond else "")' in body
 
