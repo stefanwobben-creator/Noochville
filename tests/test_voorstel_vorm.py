@@ -338,3 +338,51 @@ def test_een_dragend_feit_in_risico_ontsnapt_en_de_prompt_verbiedt_dat():
     assert "VOORWAARDELIJKE vorm" in src
     assert "hoort in de actie of in het bewijs, niet hier" in src
     assert "Negatieve " in src and "niet wat waar is" in src
+
+
+# ── 7. De opdracht is toelaatbaar bewijs — context, geen vrijbrief ──────────
+
+def test_de_gegeven_feiten_van_de_opdracht_gaan_mee_als_bewijs():
+    """`ec4e5e0b0fc0` zakte op "de onderbouwing noemt geen paginalocatie of FAQ" terwijl de FAQ-URL
+    letterlijk in de opdracht staat. De opdracht is een gegeven; hem uitsluiten is toetsen met te
+    weinig materiaal — dezelfde soort fout als [:8]/[:600] op het bewijsvenster."""
+    from nooch_village import onderzoekspas as op
+    project = {"id": "p", "scope": "🔴 Vervang: good for the planet", "done_when": "live en gezien",
+               "checklists": [{"items": [{"text": "Onderzoek de tekst op https://nooch.earth/pages/faq"}]}]}
+    gegeven = op.gegeven_van(project)
+    assert "good for the planet" in gegeven and "nooch.earth/pages/faq" in gegeven
+
+    gezien = {}
+
+    class _Vangt:
+        def run(self, payload, context=None):
+            gezien.update(payload)
+            return {"ok": True, "oordeel": "houdt stand", "ongegrond": []}
+
+    op.poort(dict(GEGROND), project=project, skill=_Vangt())
+    assert "GEGEVEN IN DE OPDRACHT" in gezien["bewijs"]
+    assert "nooch.earth/pages/faq" in gezien["bewijs"]
+
+
+def test_de_opdracht_is_context_geen_vrijbrief():
+    """De strakke afbakening. 'De claim staat op de FAQ-pagina' is gegrond als de opdracht die
+    pagina noemt; 'de FAQ-pagina zegt X' heeft nog steeds een deliverable nodig die dat ophaalde."""
+    assert "de opdracht is een feit" in vv.KADER_VOORSTEL
+    assert "maakt BEWERINGEN OVER die gegevens niet gegrond" in vv.KADER_VOORSTEL
+    assert "heeft een deliverable nodig" in vv.KADER_VOORSTEL
+    assert "Context, geen vrijbrief" in vv.KADER_VOORSTEL
+
+
+def test_zonder_gegeven_verandert_er_niets_voor_het_einddocument():
+    from nooch_village import missie_critic as mc
+    gezien = {}
+
+    class _Vangt:
+        def run(self, payload, context=None):
+            gezien.update(payload)
+            return {"ok": True, "oordeel": "houdt stand", "ongegrond": []}
+
+    doc = "# R\n\n## Onderzoek plasticvrije materialen\n" + "plasticvrij vegan transparantie. " * 30
+    mc.beoordeel(project={}, document=doc, deliverables=[{"id": "", "summary": "x"}],
+                 checklist=None, skill=_Vangt())
+    assert "GEGEVEN IN DE OPDRACHT" not in gezien["bewijs"]

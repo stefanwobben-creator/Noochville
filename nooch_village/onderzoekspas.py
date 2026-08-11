@@ -233,6 +233,29 @@ VOORSTEL_DOEL = ("een concreet voorstel voor deze claim, met bewijs, risico en w
 MIN_VOORSTEL_CHARS = 150
 
 
+def gegeven_van(project: dict) -> str:
+    """De feiten die de OPDRACHT zelf vaststelt — toelaatbaar bewijs voor de grond-as.
+
+    Een voorstel dat verwijst naar de pagina uit zijn eigen taak zakte hierop ("de onderbouwing
+    noemt geen paginalocatie of FAQ") terwijl die URL letterlijk in de opdracht staat. De opdracht
+    is een gegeven; hem uitsluiten is toetsen met te weinig materiaal.
+
+    Strak begrensd: alleen wat de taak vaststelt, en geen enkele bewering die iemand daarover doet.
+    De kader-tekst maakt dat onderscheid expliciet."""
+    regels = []
+    for veld, label in (("scope", "onderzochte claim/opdracht"), ("description", "toelichting"),
+                        ("done_when", "gevraagde uitkomst"), ("goes_to", "gaat naar")):
+        waarde = str((project or {}).get(veld) or "").strip()
+        if waarde:
+            regels.append(f"- {label}: {waarde[:300]}")
+    for cl in ((project or {}).get("checklists") or []):
+        for it in (cl.get("items") or []):
+            tekst = str(it.get("text") or "").strip()
+            if tekst:
+                regels.append(f"- taak: {tekst[:200]}")
+    return "\n".join(regels[:14])
+
+
 def poort(voorstel: dict, *, project: dict, skill=None, context=None) -> tuple[dict, dict]:
     """De critic-poort. Geeft (voorstel-zoals-het-uitgaat, critic-oordeel).
 
@@ -249,7 +272,8 @@ def poort(voorstel: dict, *, project: dict, skill=None, context=None) -> tuple[d
     oordeel = mc.beoordeel(project=toets_project, document=document, deliverables=deliverables,
                            checklist=None, skill=skill, context=context,
                            min_chars=MIN_VOORSTEL_CHARS,
-                           kader_extra=vv.KADER_VOORSTEL)
+                           kader_extra=vv.KADER_VOORSTEL,
+                           gegeven=gegeven_van(project))
     if oordeel["oordelen"].get("gegrond") is True:
         return voorstel, oordeel
     reden = next((r for r in (oordeel.get("redenen") or []) if r.startswith("gegrond")),
