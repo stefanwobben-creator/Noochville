@@ -32,6 +32,20 @@ log = logging.getLogger("village.voorstel")
 # De vaste vorm. Volgorde = leesvolgorde op /founder.
 VELDEN = ("actie", "bewijs", "risico", "nodig_van_jou", "onzeker")
 
+# Welke velden DRAGEN BEWERINGEN over de wereld, en welke niet.
+#
+# De grond-as toetst "is elke bewering gedekt door het bewijs". Dat is de juiste vraag voor de actie
+# (wat ik ga doen, en dus impliciet: wat waar is) en voor de bewijs-regels (wat de skills vonden).
+# Het is een CATEGORIEFOUT voor de andere twee: een risico is een hypothese over wat kán gebeuren,
+# en `onzeker` is per constructie een niet-bewering — het bestaat om te zeggen wat je níet weet.
+# Ze op feitelijke gegrondheid toetsen laat élk voorstel zakken, ongeacht kwaliteit. Dat is geen
+# strenge poort maar een kapotte, en gemeten: het debuut zakte er drie keer op.
+#
+# `risico` en `onzeker` blijven wél zichtbaar voor substantieel, beantwoordt en missie — die zien
+# het hele voorstel. Alleen de grond-as krijgt de feitelijke kern.
+DRAAGT_BEWERINGEN = ("actie", "bewijs")
+NIET_FEITELIJK = ("risico", "onzeker", "nodig_van_jou")
+
 VELD_LABEL = {
     "actie": "Wat ik wil doen",
     "bewijs": "Waarom, met bewijs",
@@ -153,3 +167,14 @@ def render(voorstel: dict) -> str:
             continue                                 # leeg veld valt weg; 'nodig_van_jou' mag leeg
         regels.append(f"## {VELD_LABEL[veld]}\n{tekst}")
     return "\n\n".join(regels)
+
+
+def feitelijke_kern(voorstel: dict) -> str:
+    """Het voorstel zoals de GROND-AS het hoort te lezen: alleen de velden die beweringen dragen.
+
+    Zie `DRAAGT_BEWERINGEN`. Dit is een scope-correctie, geen versoepeling: wat hier wegvalt is
+    per constructie niet toetsbaar op feitelijke gegrondheid. Een load-bearing feit dat iemand in
+    `risico` of `onzeker` parkeert ontsnapt hiermee aan de toets — daarom zegt de synthese-prompt
+    expliciet dat die twee velden voorwaardelijk/negatief moeten blijven en dat een dragend feit in
+    de actie of het bewijs hoort."""
+    return render({v: voorstel.get(v) for v in DRAAGT_BEWERINGEN} | {"soort": voorstel.get("soort")})

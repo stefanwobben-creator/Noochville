@@ -244,3 +244,94 @@ def test_de_synthese_krijgt_de_grond_boven_indruk_regel():
     assert "GROND VERSLAAT INDRUK" in src
     assert "schrappen" in src and "niet te onderbouwen" in src
     assert "hoe redelijk het ook klinkt" in src
+
+
+# ── 6. De gereduceerde grond-toets: scope-correctie, geen versoepeling ──────
+
+def test_de_grond_as_ziet_alleen_de_velden_die_beweringen_dragen():
+    """Een risico is een hypothese, `onzeker` is per constructie een niet-bewering. Ze op
+    feitelijke gegrondheid toetsen laat élk voorstel zakken ongeacht kwaliteit — geen strenge
+    poort maar een kapotte. Gemeten: het debuut zakte er drie keer op."""
+    kern = vv.feitelijke_kern(GEGROND)
+    assert "Wat ik wil doen" in kern and "Waarom, met bewijs" in kern
+    assert "Risico of kosten" not in kern and "Wat nog onzeker is" not in kern
+    assert vv.DRAAGT_BEWERINGEN == ("actie", "bewijs")
+
+
+def test_de_andere_drie_assen_zien_wel_het_hele_voorstel():
+    """Alleen de grond-as krijgt de kern. substantieel/beantwoordt/missie blijven het geheel zien,
+    anders zou een voorstel zonder risico-veld ineens even substantieel heten als een compleet."""
+    from nooch_village import onderzoekspas as op
+    gezien = {}
+
+    class _Vangt:
+        def run(self, payload, context=None):
+            gezien["tekst"] = payload.get("tekst")
+            return {"ok": True, "oordeel": "houdt stand", "ongegrond": []}
+
+    op.poort(dict(GEGROND), project={"id": "p"}, skill=_Vangt())
+    assert "Risico of kosten" not in gezien["tekst"]          # de grond-as: alleen de kern
+    src = open("nooch_village/missie_critic.py", encoding="utf-8").read()
+    assert "grond_document or document" in src                # default = ongewijzigd gedrag
+
+
+def test_een_einddocument_merkt_niets_van_deze_optie():
+    """De parameter is default-transparant: zonder `grond_document` toetst de as het hele stuk,
+    precies zoals op het einddocument."""
+    from nooch_village import missie_critic as mc
+    gezien = {}
+
+    class _Vangt:
+        def run(self, payload, context=None):
+            gezien["tekst"] = payload.get("tekst")
+            return {"ok": True, "oordeel": "houdt stand", "ongegrond": []}
+
+    doc = "# R\n\n## Onderzoek plasticvrije materialen\n" + "plasticvrij vegan transparantie. " * 30
+    mc.beoordeel(project={}, document=doc, deliverables=[{"id": "", "summary": "x"}],
+                 checklist=None, skill=_Vangt())
+    assert gezien["tekst"] == doc
+
+
+# ── DE acceptatietest: doel gecorrigeerd, lat niet verlaagd ────────────────
+
+_EERLIJK = {
+    "soort": vv.SOORT_VOORSTEL,
+    "actie": "Mijn voorstel: verwijder de term 'conscious/bewust' uit de live tekst totdat er een "
+             "concrete onderbouwing is.",
+    "bewijs": [{"bron": "claims_check", "citaat": "bevindingen[0].stoplicht = orange", "kroniek": "a1"},
+               {"bron": "claims_check", "citaat": "bevindingen[0].waarom = Modejargon zonder inhoud.",
+                "kroniek": "a1"}],
+    "risico": "Schrappen zonder vervangtekst kan de copy tijdelijk minder krachtig maken.",
+    "nodig_van_jou": "",
+    "onzeker": "Ik heb geen concrete invulling kunnen vaststellen — claim_evidence gaf counts.leeg=1.",
+}
+
+_OVERREACH = {**_EERLIJK,
+              "actie": "Mijn voorstel: vervang 'conscious' door een verwijzing naar de bio-based en "
+                       "gerecyclede materialen die Nooch gebruikt."}
+
+
+def test_het_eerlijke_voorstel_houdt_zijn_risico_buiten_de_grond_toets():
+    """Kant 1: het risico-veld dat de as drie keer liet zakken komt er niet meer in."""
+    kern = vv.feitelijke_kern(_EERLIJK)
+    assert "minder krachtig" not in kern
+    assert "verwijder de term" in kern
+
+
+def test_de_overreach_blijft_wel_in_de_grond_toets():
+    """Kant 2, en dit is waar het om draait: de verzonnen materiaalrichting staat in de ACTIE, dus
+    die blijft de grond-as passeren. Zou hij hier wegvallen, dan was de poort gebroken in plaats van
+    gecorrigeerd."""
+    kern = vv.feitelijke_kern(_OVERREACH)
+    assert "bio-based en gerecyclede materialen die Nooch gebruikt" in kern
+
+
+def test_een_dragend_feit_in_risico_ontsnapt_en_de_prompt_verbiedt_dat():
+    """De sluiproute, expliciet benoemd. De reductie kan niet afdwingen dat een feit op de juiste
+    plek staat; de synthese-prompt moet dat doen, en die instructie hoort er hard in te staan."""
+    sluip = {**_EERLIJK, "risico": "Nooch gebruikt uitsluitend mycelium en gerecycled PET."}
+    assert "mycelium" not in vv.feitelijke_kern(sluip)         # ontsnapt inderdaad
+    src = open("nooch_village/onderzoekspas.py", encoding="utf-8").read()
+    assert "VOORWAARDELIJKE vorm" in src
+    assert "hoort in de actie of in het bewijs, niet hier" in src
+    assert "Negatieve " in src and "niet wat waar is" in src
