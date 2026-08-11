@@ -1526,6 +1526,14 @@ class Inhabitant(threading.Thread):
             faal = [it for it in stuck if blokkades[it["id"]] == "fails"]
             vraag = self._formulate_stuck_question(project, faal, mens, fail_reasons, limit)
             ledger.add_role_message(pid, f"⏸️ {vraag}")          # de rol zet zijn concrete hulpvraag neer
+            # EERST de park-reden vastleggen, DAN pas de tellers resetten. `reset_item_fails` wist
+            # precies het bewijs waaruit je achteraf zou moeten afleiden waarom dit project stilstaat:
+            # een item dat drie keer faalde en toen gereset werd is daarna niet te onderscheiden van
+            # een item dat nooit draaide. De park-reden is daarom een FEIT op het project — geen
+            # afleiding uit item-state — en geen item-operatie raakt hem aan.
+            ledger.park(pid, "", [{"id": it["id"], "text": it.get("text", ""),
+                                   "reden": blokkades[it["id"]] or "onbekend"} for it in stuck],
+                        door=self.id)
             ledger.reset_item_fails(pid, clid, [it["id"] for it in faal])    # verse pogingen na reactivering
             waarop = ("wacht op een mens of externe partij" if mens and not faal
                       else "wacht op antwoord")

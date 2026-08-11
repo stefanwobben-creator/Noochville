@@ -268,9 +268,49 @@ class ProjectLedger:
             return False
         p["status"] = "running"
         p["blocked_on"] = None
+        p.pop("park", None)                             # de blokkade is opgeheven; de reden vervalt mee
         self._touch(p)
         self._save()
         return True
+
+    # ── de duurzame park-reden ───────────────────────────────────────────────
+    # Waaróm een project geparkeerd staat was tot nu toe alleen af te leiden uit de fail-teller van
+    # de items — en juist bij het parkeren zet `reset_item_fails` die op nul. Daardoor is een item
+    # dat drie keer faalde en toen gereset werd niet te onderscheiden van een item dat nooit draaide.
+    # Zolang dat verschil weg is, is elke heropening en elke melding aan de mens een gok.
+    #
+    # Daarom een FEIT op het project, niet een afleiding uit item-state: wie het parkeerde, wanneer,
+    # om welke reden, en om welke items. Het leeft op projectniveau, dus geen enkele item-operatie
+    # (reset_item_fails voorop) raakt het aan.
+    PARK_REDENEN = ("human", "payload", "fails", "gemengd")
+
+    def park(self, pid: str, reden: str, items: list, *, door: str = "") -> bool:
+        """Leg vast waaróm dit project geparkeerd is. `items` = [{id, text, reden}].
+
+        `reden` is de zwaarste noemer over de items: 'gemengd' als er meer dan één soort in zit.
+        Overschrijft een eerdere park-reden — de laatste parkering is de geldende."""
+        p = self._projects.get(pid)
+        if p is None or p["status"] in _TERMINAL:
+            return False
+        soorten = {str(i.get("reden") or "") for i in (items or [])} - {""}
+        if reden not in self.PARK_REDENEN:
+            reden = soorten.pop() if len(soorten) == 1 else "gemengd"
+        p["park"] = {
+            "reden": reden,
+            "at": time.time(),
+            "door": door or "",
+            "items": [{"id": str(i.get("id") or ""), "text": str(i.get("text") or "")[:200],
+                       "reden": str(i.get("reden") or "")} for i in (items or [])],
+        }
+        self._touch(p)
+        self._save()
+        return True
+
+    def park_reden(self, pid: str) -> dict:
+        """De vastgelegde park-reden, of {} als dit project niet (zo) geparkeerd is."""
+        p = self._projects.get(pid)
+        park = (p or {}).get("park")
+        return dict(park) if isinstance(park, dict) else {}
 
     def complete(self, pid: str, outcome: str | None = None) -> bool:
         p = self._projects.get(pid)
@@ -1043,7 +1083,7 @@ _WRITE_METHODS = (
     "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
     "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",
     "mark_formalized", "to_future", "mark_scope_nudge", "note_item_fail", "reset_item_fails",
-    "set_item_leeg", "clear_item_leeg", "mark_critic",
+    "set_item_leeg", "clear_item_leeg", "mark_critic", "park",
 )
 for _m in _WRITE_METHODS:
     setattr(ProjectLedger, _m, _synchronized(getattr(ProjectLedger, _m)))
