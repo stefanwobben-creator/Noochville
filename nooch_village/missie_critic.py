@@ -67,10 +67,18 @@ MIN_STRATEGIE_THEMAS = 1
 # oordeel wordt gelezen. De dorpsstaart blijft eronder hangen (zachte staart), zodat een wegvallende
 # leverancier geen projecten blokkeert — maar de kop is bewust duur.
 def premium_ladder() -> str:
-    """De hoog-inzet-ladder van het dorp. Eén bron (`llm_keuze.hoog_inzet_ladder`), niet hier
-    overgetypt: verandert de dorpsbrede kop, dan verandert de critic mee."""
-    from nooch_village.llm_keuze import hoog_inzet_ladder
-    return hoog_inzet_ladder()
+    """De hoog-inzet-ladder van het dorp, MET de dorpsstaart eronder.
+
+    Eerst gaf dit de kale kop (`hoog_inzet_ladder`). Daarmee had de grondings-toets precies één
+    trede: één lege respons van Sonnet en de critic kon niets zeggen — `gegrond=None`, en omdat
+    onbekend niet als geslaagd telt, kwam het rapport nooit door de poort. Waargenomen op
+    productie: "alle 1 trede(s) uitgeput".
+
+    De zachte staart is juist voor dit geval bedacht: een wegvallende leverancier levert een
+    goedkoper oordeel, geen géén oordeel. `ladder_voor` hangt hem er standaard onder — die is dus
+    de juiste ingang, niet de kale kop."""
+    from nooch_village.llm_keuze import ladder_voor
+    return ladder_voor("skill_tegenspraak") or ""
 
 def pad(data_dir: str) -> str:
     return os.path.join(data_dir, BESTAND)
