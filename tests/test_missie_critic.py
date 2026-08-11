@@ -220,6 +220,19 @@ def test_gegrond_zonder_llm_is_onbekend_niet_afgekeurd():
     assert ok is None
 
 
+def test_een_niet_getoetste_as_vertelt_ook_waarom():
+    """Zonder deze regel las de notitie alleen "(niet getoetst: gegrond)" en was de oorzaak nergens
+    meer te vinden. Gezien op prod bij ccc4c33dccf2: lege redenen-lijst, geen spoor."""
+    class _Stuk:
+        def run(self, payload, context=None):
+            return {"ok": False, "error": "antwoord van 1623 tekens is geen bruikbare JSON"}
+    cl = _cl([("Onderzoek plasticvrije materialen voor de zool", {})])
+    oordeel = mc.beoordeel(project={"done_when": "de zool kan plasticvrij"}, document=GOED_DOC,
+                           deliverables=["bewijs"], checklist=cl, skill=_Stuk())
+    assert oordeel["oordelen"]["gegrond"] is None
+    assert any("1623 tekens" in r for r in oordeel["redenen"]), oordeel["redenen"]
+
+
 def test_het_oordeel_krijgt_ruimte_voor_een_viervoudig_antwoord():
     """De skill-default (700) is gekalibreerd op een losse claim. Over een rapport van 6000 tekens
     brak het antwoord op prod af na 1623 tekens, midden in een zin — onparseerbare JSON, `gegrond`
