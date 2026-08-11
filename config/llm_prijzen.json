@@ -1,6 +1,6 @@
 {
  "_": "Prijs per miljoen tokens (USD) per ladder-trede. Sleutel = de tier-string zoals llm.py hem logt: 'vendor:model'. Eén gezaghebbende plek; code hardcodeert nooit een prijs. Onbekend (null) blijft null: een schatting van nul liegt harder dan 'onbekend'.",
- "_bron": "Anthropic-prijzen geverifieerd via de claude-api-skill (2026-06-24). Gemini geverifieerd via ai.google.dev/gemini-api/docs/pricing (2026-07-24). Mistral geverifieerd via mistral.ai/pricing/api (2026-07-24, 'Mistral Small 4' = mistral-small-latest).",
+ "_bron": "Anthropic-prijzen geverifieerd via de claude-api-skill (2026-06-24). Gemini geverifieerd via ai.google.dev/gemini-api/docs/pricing (2026-07-24). Mistral geverifieerd via mistral.ai/pricing/api (2026-07-24, 'Mistral Small 4' = mistral-small-latest). OpenRouter geverifieerd via api/v1/models (2026-08-11): openai/gpt-5.6-luna prompt 1e-7, completion 6e-7 per token = 0.10/0.60 per miljoen.",
  "_eenheid": "USD per 1.000.000 tokens",
  "valuta": "USD",
  "usd_per_eur": 0.92,
@@ -11,6 +11,7 @@
   "anthropic:claude-opus-4-8": {"in": 5.0, "uit": 25.0},
   "gemini:gemini-2.5-flash-lite": {"in": 0.10, "uit": 0.40},
   "gemini:gemini-2.5-flash": {"in": 0.30, "uit": 2.50},
-  "mistral:mistral-small-latest": {"in": 0.15, "uit": 0.60}
+  "mistral:mistral-small-latest": {"in": 0.15, "uit": 0.60},
+  "openrouter:openai/gpt-5.6-luna": {"in": 0.10, "uit": 0.60}
  }
 }

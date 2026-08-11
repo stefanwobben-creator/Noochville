@@ -229,6 +229,56 @@ def prijsloze_tredes(ladder: str) -> list[str]:
     return uit
 
 
+def ladder_bronnen(personas=None) -> dict[str, str]:
+    """Elke ladder-string die dit dorp kan gebruiken → waar hij vandaan komt.
+
+    De prijs-guard keek alleen naar de hoog-inzet-kop. Daarmee bleef precies datgene ongezien wat
+    hem in de praktijk brak: `openrouter:openai/gpt-5.6-luna` stond in de DORPSSTAART (env
+    LLM_LADDER), hing via `met_dorpsstaart` onder elke persona-voorkeur, en telde dus maandenlang
+    voor EUR 0,00. Een guard die één bron controleert bewaakt niet "de prijzen kloppen" maar "de
+    prijzen van dit ene lijstje kloppen".
+
+    Vier bronnen, en samen zijn ze uitputtend: een trede kan nergens anders vandaan een ladder in
+    komen. `personas` is optioneel — een itereerbare van persona-objecten; laat weg als je alleen
+    de dorpsbrede configuratie wilt toetsen (dat is wat een test zonder productiedata kan zien)."""
+    from nooch_village import llm as _llm
+    uit: dict[str, str] = {}
+    for ladder, herkomst in ((_llm.dorpsladder(), "dorpsladder (LLM_LADDER)"),
+                             (hoog_inzet_ladder(), "hoog-inzet-kop (LLM_HOOG_INZET_LADDER)")):
+        if ladder:
+            uit[ladder] = herkomst
+    for p in (personas or []):
+        llm = getattr(p, "llm", None) or {}
+        pid = getattr(p, "id", None) or getattr(p, "naam", None) or "?"
+        if (llm.get("default") or "").strip():
+            uit[llm["default"].strip()] = f"persona {pid}: default"
+        for site, keuze in (llm.get("per_taak") or {}).items():
+            if (keuze or "").strip():
+                uit[keuze.strip()] = f"persona {pid}: per_taak[{site}]"
+    return uit
+
+
+def prijsloze_bronnen(personas=None) -> dict[str, str]:
+    """{trede zonder prijs: waar hij vandaan komt}. Leeg = de maandcap ziet alles."""
+    uit: dict[str, str] = {}
+    for ladder, herkomst in ladder_bronnen(personas).items():
+        for trede in prijsloze_tredes(ladder):
+            uit.setdefault(trede, herkomst)
+    return uit
+
+
+def meld_prijsloze_bronnen(personas=None) -> list[str]:
+    """Sweep bij het opstarten: waarschuw voor elke prijsloze trede in élke bron, en geef ze terug.
+
+    Bestond niet, en dat is waarom luna pas opviel toen er toevallig een premium-call langskwam:
+    `_meld_prijsloos` waarschuwt lui, op het moment van gebruik. Een blinde cap hoor je te weten
+    bij het opstarten, niet halverwege een puls."""
+    gevonden = prijsloze_bronnen(personas)
+    for trede, herkomst in gevonden.items():
+        _meld_prijsloos(trede, herkomst)
+    return sorted(gevonden)
+
+
 _gemeld_prijsloos: set = set()
 
 

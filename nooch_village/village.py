@@ -116,6 +116,15 @@ class Village:
         # de goedkoopste trede terwijl de persona iets anders vroeg. De cockpit had de bedrading al.
         self.context.personas = PersonaStore(
             os.path.join(self.context.data_dir, "personas.json"))
+        # Prijs-sweep bij het opstarten: een trede zonder prijs telt voor EUR 0,00 en maakt de
+        # maandcap blind. Dat hoor je te weten bij het opstarten, niet pas als er toevallig een
+        # premium-call langskomt — zo bleef `openrouter:openai/gpt-5.6-luna` in de dorpsstaart
+        # maandenlang onzichtbaar. Fail-soft: een sweep mag het dorp nooit tegenhouden.
+        try:
+            from nooch_village import llm_keuze as _lk
+            _lk.meld_prijsloze_bronnen(self.context.personas.all())
+        except Exception as e:                       # noqa: BLE001
+            log.warning("prijs-sweep overgeslagen: %s", e)
         # Board-watch: de cockpit draait in een LOS proces met een eigen in-memory bus; een bord-drag
         # naar ACTIEF schrijft alleen projects.json. Deze village-poll herleest dat bestand en vertaalt
         # een verse naar-'running'-overgang naar een in-memory project_activated-event, zodat de
