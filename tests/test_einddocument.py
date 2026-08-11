@@ -302,14 +302,36 @@ def test_gevraagd_model_is_geen_terugval(tmp_path):
     assert _herkomst(docs, pid) == {"tier": "anthropic:sonnet", "terugval": False}
 
 
-def test_zonder_voorkeur_is_niets_een_terugval(tmp_path):
-    """Geen eigen voorkeur = niets om van terug te vallen; de trede wordt wel vastgelegd."""
+def test_zonder_persona_voorkeur_geldt_de_dorpsbrede_kop(tmp_path):
+    """De betekenis van 'terugval' is verschoven, en dat is de bedoeling.
+
+    Vroeger was het "de persona vroeg X en kreeg Y". Maar `einddocument` is een hoog-inzet-site: ook
+    zonder persona-voorkeur is er een dorpsbrede kop (Sonnet), en een antwoord van mistral IS dan
+    een echte terugval. De oude meting noemde dat 'geen voorkeur, dus niets om van terug te vallen'
+    — en verzweeg zo precies het geval waarvoor de melding bedoeld is.
+
+    Andersom net zo belangrijk: sinds #281 hangt een blanket persona-standaard ÓNDER die kop, en met
+    de oude vergelijking las een antwoord van Sonnet als terugval omdat de persona haiku had
+    opgeschreven. Een upgrade die als degradatie logt maskeert de volgende echte terugval."""
     ledger, ds, docs = _stores(tmp_path)
     personas = PersonaStore(str(tmp_path / "personas.json"))
     sid = personas.add("Sid")
     pid = ledger.create("sid", "doel", "human", status="queued")
     _synth(tmp_path, ledger, ds, docs, personas, sid, pid, "mistral:m1")
-    assert _herkomst(docs, pid) == {"tier": "mistral:m1", "terugval": False}
+    assert _herkomst(docs, pid) == {"tier": "mistral:m1", "terugval": True}
+
+
+def test_de_kop_zelf_is_nooit_een_terugval(tmp_path):
+    """Het false-alarm uit productie: `DOC_TERUGVAL … geschreven door claude-sonnet-5 i.p.v. de
+    gevraagde trede anthropic:claude-haiku-4-5` — de rangorde-fix gelezen als degradatie."""
+    from nooch_village.llm_keuze import hoog_inzet_ladder
+    ledger, ds, docs = _stores(tmp_path)
+    personas = PersonaStore(str(tmp_path / "personas.json"))
+    sid = personas.add("Candy")
+    personas.update(sid.id, llm={"default": "anthropic:claude-haiku-4-5", "per_taak": {}})
+    pid = ledger.create("sid", "doel", "human", status="queued")
+    _synth(tmp_path, ledger, ds, docs, personas, sid, pid, hoog_inzet_ladder())
+    assert _herkomst(docs, pid)["terugval"] is False
 
 
 def test_mens_edit_wist_de_herkomst(tmp_path):

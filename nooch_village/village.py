@@ -110,7 +110,8 @@ class Village:
         try:
             self.context.deliverables.migrate_vervangen()
         except Exception as e:                              # noqa: BLE001
-            log.warning("deliverable-ontdubbeling overgeslagen: %s", e)
+            logging.getLogger("village.deliverables").warning(
+                "deliverable-ontdubbeling overgeslagen: %s", e)
         # Gedeelde set (daemon-intern): pids die _claim_run_complete AL inline als route="autonoom"
         # aankondigde. De board-watch skipt die zodat een autonome afronding niet dubbel vuurt.
         self.context._autonomous_done = set()
@@ -131,7 +132,7 @@ class Village:
             from nooch_village import llm_keuze as _lk
             _lk.meld_prijsloze_bronnen(self.context.personas.all())
         except Exception as e:                       # noqa: BLE001
-            log.warning("prijs-sweep overgeslagen: %s", e)
+            logging.getLogger("village.prijzen").warning("prijs-sweep overgeslagen: %s", e)
         # Board-watch: de cockpit draait in een LOS proces met een eigen in-memory bus; een bord-drag
         # naar ACTIEF schrijft alleen projects.json. Deze village-poll herleest dat bestand en vertaalt
         # een verse naar-'running'-overgang naar een in-memory project_activated-event, zodat de
@@ -149,6 +150,16 @@ class Village:
         self.human_inbox = HumanInbox(os.path.join(self.context.data_dir, "human_inbox.json"))
         self.registry = build_skill_registry()                            # gedeelde factory (ook cockpit-match)
         self.records = Records(os.path.join(self.context.data_dir, "governance_records.json"))
+        # Domein-sweep, zelfde gedachte als de prijs-sweep: een bewaakt domein zonder houder zet
+        # stilzwijgend skills uit. De Librarian hield `library` waar de code `bibliotheek` bedoelt,
+        # en `keyword_review` weigerde daardoor vijftien dagen elke aanroep zonder dat iets zich
+        # meldde. Een pytest-guard ziet alleen seeds.py; dit ziet de LEVENDE records.
+        try:
+            from nooch_village import skill_meta as _sm
+            for _gat in _sm.domein_gaten(self.records.all()):
+                logging.getLogger("village.domeinen").warning("DOMEIN_GAT: %s", _gat)
+        except Exception as _e:                      # noqa: BLE001
+            logging.getLogger("village.domeinen").warning("domein-sweep overgeslagen: %s", _e)
         seed_records(self.records)
         migrate_records(self.records)
         self.context.records = self.records

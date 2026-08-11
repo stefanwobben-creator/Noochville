@@ -90,6 +90,37 @@ def koppelbaar(skill: str, rec) -> tuple[bool, str]:
                    f"dat middel voeren.{extra}")
 
 
+def domein_gaten(records) -> list[str]:
+    """Stille domein-gaten in de LEVENDE records: bewaakte domeinen zonder houder, en rollen die een
+    domein-skill bezitten die ze niet mogen voeren.
+
+    Bestaat omdat een pytest-guard alleen `seeds.py` ziet. Op productie hield de Librarian het
+    domein `library` terwijl seeds en deze module `bibliotheek` bedoelen — het record was afgedreven,
+    de code niet. Gevolg: `keyword_review` weigerde elke aanroep en de curatie-lijn stond stil,
+    vijftien dagen lang, zonder dat iets zich meldde.
+
+    Een uitgezette domein-skill meldt zichzelf niet: dat is het hele probleem. Dus melden wij."""
+    uit: list[str] = []
+    recs = list(records or [])
+    for skill, meta in META.items():
+        domein = meta.get("schrijft_in_domein")
+        if not domein or domeinhouders(skill, recs):
+            continue
+        bezitters = [r.id for r in recs
+                     if skill in (getattr(getattr(r, "definition", None), "skills", None) or [])]
+        uit.append(f"domein '{domein}' heeft geen houder; '{skill}' is daardoor onbruikbaar"
+                   + (f" voor {', '.join(bezitters)}" if bezitters else " (niemand bezit hem)"))
+    for rec in recs:
+        d = getattr(rec, "definition", None)
+        for skill in (getattr(d, "skills", None) or []):
+            if not schrijft_in_domein(skill):
+                continue
+            ok, waarom = koppelbaar(skill, rec)
+            if not ok:
+                uit.append(f"{rec.id}: {waarom} (eigen domeinen: {list(d.domains or []) or 'geen'})")
+    return uit
+
+
 def domeinhouders(skill: str, records) -> list[str]:
     """Welke rollen houden het domein waarin deze skill beslist? Leeg = vrij koppelbaar."""
     domein = schrijft_in_domein(skill)
