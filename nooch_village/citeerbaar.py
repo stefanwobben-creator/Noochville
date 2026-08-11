@@ -35,19 +35,26 @@ log = logging.getLogger("village.citeerbaar")
 _MAX_WAARDE = 240                                           # per waarde; langer wordt afgekapt mét markering
 
 
-def _meta_keys() -> frozenset:
-    """Boekhouding van de run, geen bevinding.
+# Boekhouding van de RUN, en niets meer.
+#
+# Eerst leende deze laag `inhabitant._META_KEYS` — "reference, don't copy". Dat was verkeerd
+# toegepast: die regel gaat over hetzelfde feit op één plek, en dit zijn twee VERSCHILLENDE vragen.
+# `_classify_result` vraagt "draagt dit resultaat inhoud?" en mag `term`, `query` en `bron` negeren,
+# want een skill die alleen zijn invoer terugkaatst heeft niets opgeleverd. Deze laag vraagt "wat
+# mag een rapport hieruit aanhalen?" — en dáár is `term` juist de bevinding.
+#
+# Gemeten gevolg van de verwisseling: `bevindingen[0].term = planet-safe / planet-friendly /
+# planet-loving` viel uit het bewijsvenster terwijl het rapport die termenlijst wél citeerde. Precies
+# het gat dat deze module moest dichten, opnieuw gemaakt door zijn eigen filter.
+_RUN_ADMIN = frozenset({
+    "ok", "error", "status", "skipped", "escalate", "headsup", "refuse",
+    "week", "at", "ts", "datum", "day", "maand", "versie", "version", "id",
+    "project_id", "role_id", "vraag_id", "force", "estimated",
+})
 
-    Bewust DEZELFDE set als `inhabitant._META_KEYS`: die grens is één keer doordacht en hoort niet
-    twee keer te bestaan (reference, don't copy). Lui geïmporteerd, want `inhabitant` importeert
-    zwaar en dit is de bodem van de keten — een import bovenin gaf een lege set en dan telde
-    `versie` ineens als citeerbaar feit."""
-    try:
-        from nooch_village.inhabitant import Inhabitant
-        return Inhabitant._META_KEYS
-    except Exception:                                       # noqa: BLE001
-        log.warning("citeerbaar: _META_KEYS niet leesbaar — run-administratie telt nu mee als feit")
-        return frozenset()
+
+def _meta_keys() -> frozenset:
+    return _RUN_ADMIN
 
 
 def _plat(waarde, prefix: str = "", meta: frozenset | None = None) -> list[tuple[str, str]]:

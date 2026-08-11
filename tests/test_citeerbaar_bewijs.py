@@ -41,10 +41,25 @@ def test_het_cijfer_dat_de_critic_niet_zag_is_nu_citeerbaar():
 
 
 def test_run_administratie_telt_niet_als_citeerbaar_feit():
-    """Zelfde grens als `_classify_result`: een weeknummer of versiestring is geen bevinding.
-    Anders vult het bewijsvenster zich met boekhouding in plaats van met feiten."""
+    """Een weeknummer of versiestring is geen bevinding: anders vult het bewijsvenster zich met
+    boekhouding in plaats van met feiten."""
     plat = {veld for _s, veld, _w in velden_van("claims_check", CLAIMS_CHECK)}
     assert "versie" not in plat and "ok" not in plat
+
+
+def test_een_domeinveld_is_geen_run_administratie():
+    """Deze laag leende eerst `inhabitant._META_KEYS`, en dat was reference-don't-copy verkeerd
+    toegepast: dat zijn twee verschillende vragen. `_classify_result` vraagt "draagt dit resultaat
+    inhoud?" en mag `term` negeren; hier is `term` juist DE bevinding.
+
+    Gemeten gevolg: `bevindingen[0].term = planet-safe / planet-friendly / planet-loving` viel uit
+    het bewijsvenster terwijl het rapport die lijst wél citeerde — precies het gat dat deze module
+    moest dichten, opnieuw gemaakt door zijn eigen filter."""
+    plat = {veld: w for _s, veld, w in velden_van("claims_check", CLAIMS_CHECK)}
+    assert plat["bevindingen[0].term"] == "planet-safe / planet-friendly"
+    for domein in ("term", "query", "bron", "locale", "corpus", "reden", "reason", "waarom"):
+        uit = velden_van("x", {domein: "een echte waarde"})
+        assert uit and uit[0][1] == domein, f"{domein} hoort citeerbaar te zijn"
 
 
 def test_een_lange_waarde_wordt_gemarkeerd_afgekapt():
