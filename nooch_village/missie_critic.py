@@ -225,7 +225,8 @@ _KADER = (
 
 
 def _gegrond(document: str, deliverables: list, project: dict, *, skill=None,
-             context=None, content_for=None, kader_extra: str = "") -> tuple[bool | None, str]:
+             context=None, content_for=None, kader_extra: str = "",
+             gegeven: str = "") -> tuple[bool | None, str]:
     """Is elke bewering VAN HET RAPPORT gegrond in een deliverable of Kroniek-record?
 
     Via de bestaande `tegenspraak`-skill: die zoekt de zwakste claim en levert een lijst beweringen
@@ -236,6 +237,12 @@ def _gegrond(document: str, deliverables: list, project: dict, *, skill=None,
     Geeft None bij "kon niet toetsen" (geen LLM, geen skill). Dat is bewust geen False: een
     weggevallen leverancier mag geen rapporten afkeuren. Het reist wél mee als onbekend."""
     bewijs = _bewijs(deliverables, content_for)
+    if gegeven and gegeven.strip():
+        # De gegeven feiten van de OPDRACHT zijn ook onderbouwing. Ze stonden er niet in, en daardoor
+        # zakte een voorstel dat naar zijn eigen taak verwees: "de onderbouwing noemt geen
+        # paginalocatie of FAQ" — terwijl de FAQ-URL letterlijk in de opdracht stond. Toetsen met te
+        # weinig materiaal, dezelfde soort fout als [:8]/[:600] op het bewijsvenster.
+        bewijs = f"GEGEVEN IN DE OPDRACHT (dit staat vast):\n{gegeven.strip()}\n\n{bewijs}"
     doel = str(project.get("done_when") or project.get("dod_outcome") or "").strip()
     try:
         if skill is None:
@@ -298,7 +305,8 @@ def _overlap(a: str, b: str) -> float:
 
 def beoordeel(*, project: dict, document: str, deliverables: list, checklist: dict | None = None,
               skill=None, context=None, content_for=None,
-              min_chars: int = MIN_DOCUMENT_CHARS, kader_extra: str = "") -> dict:
+              min_chars: int = MIN_DOCUMENT_CHARS, kader_extra: str = "",
+              gegeven: str = "") -> dict:
     """Toets een rapport op de vier assen. Geeft
     {geslaagd, oordelen: {as: True|False|None}, redenen: [...], samenvatting}.
 
@@ -329,7 +337,7 @@ def beoordeel(*, project: dict, document: str, deliverables: list, checklist: di
         # verborg ("voeg een risicoparagraaf toe" terwijl die er stond). Zien, maar niet beoordelen:
         # dat is precies wat `_KADER` al doet voor aangehaald materiaal.
         ok, waarom = _gegrond(document, deliverables, project, skill=skill, context=context,
-                              content_for=content_for, kader_extra=kader_extra)
+                              content_for=content_for, kader_extra=kader_extra, gegeven=gegeven)
         oordelen["gegrond"] = ok
         # Ook een NIET-getoetste as krijgt zijn reden mee. Stond die er niet, dan las de notitie
         # alleen "(niet getoetst: gegrond)" en was de oorzaak — afgekapt antwoord, wegvallende
