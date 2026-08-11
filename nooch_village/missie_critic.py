@@ -135,16 +135,22 @@ def _bewijs(deliverables: list, content_for=None) -> str:
 
 # ── De vier toetsen ──────────────────────────────────────────────────────────────────────────
 
-def _substantieel(document: str, deliverables: list, checklist: dict | None) -> tuple[bool, str]:
+def _substantieel(document: str, deliverables: list, checklist: dict | None,
+                  min_chars: int = MIN_DOCUMENT_CHARS) -> tuple[bool, str]:
     """Is er iets opgeleverd? Vangt het lege project — de duurste vorm van valse voltooiing, want
-    hij ziet er van buiten uit als een afgerond project."""
+    hij ziet er van buiten uit als een afgerond project.
+
+    `min_chars` is instelbaar omdat de default op een EINDDOCUMENT is gekalibreerd. Een rol-voorstel
+    is bewust bondig (vijf velden, geen rapport); dat op 400 tekens afrekenen zou een goed voorstel
+    laten zakken op lengte, nog vóór de grond-as ook maar draait — een stille cap van precies de
+    soort die we deze week overal hebben weggehaald."""
     doc = (document or "").strip()
     echte = [d for d in (deliverables or []) if d]
     leeg_items = _lege_items(checklist)
     telbaar = _telbare_items(checklist)
-    if len(doc) < MIN_DOCUMENT_CHARS:
+    if len(doc) < min_chars:
         return False, (f"het rapport is {len(doc)} tekens — dat is geen rapport "
-                       f"(minimaal {MIN_DOCUMENT_CHARS})")
+                       f"(minimaal {min_chars})")
     if not echte and telbaar:
         return False, "geen enkele taak leverde een deliverable op; het rapport rust nergens op"
     if telbaar and len(leeg_items) == len(telbaar):
@@ -290,7 +296,8 @@ def _overlap(a: str, b: str) -> float:
 # ── Het oordeel ──────────────────────────────────────────────────────────────────────────────
 
 def beoordeel(*, project: dict, document: str, deliverables: list, checklist: dict | None = None,
-              skill=None, context=None, content_for=None) -> dict:
+              skill=None, context=None, content_for=None,
+              min_chars: int = MIN_DOCUMENT_CHARS) -> dict:
     """Toets een rapport op de vier assen. Geeft
     {geslaagd, oordelen: {as: True|False|None}, redenen: [...], samenvatting}.
 
@@ -299,7 +306,8 @@ def beoordeel(*, project: dict, document: str, deliverables: list, checklist: di
     oordelen: dict = {}
     redenen: list[str] = []
 
-    for naam, fn in (("substantieel", lambda: _substantieel(document, deliverables, checklist)),
+    for naam, fn in (("substantieel", lambda: _substantieel(document, deliverables, checklist,
+                                                            min_chars)),
                      ("beantwoordt", lambda: _beantwoordt(document, project, checklist)),
                      ("missie", lambda: _missie(document))):
         try:
