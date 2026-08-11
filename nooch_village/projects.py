@@ -482,6 +482,31 @@ class ProjectLedger:
                 return it["fails"]
         return 0
 
+    def set_item_human(self, pid: str, clid: str, item_id: str, human: bool = True) -> bool:
+        """Markeer één item alsnog als mens-/extern werk (of haal die markering weg).
+
+        `check_add` kon dit alleen bij het aanmaken, en de planner ziet het niet altijd goed: een
+        checklist waarin "ontwerp een testprotocol" en "voer 5 testrondes uit" naast elkaar staan is
+        half rol-werk en half labwerk. Zonder deze setter is de enige uitweg het hele project naar
+        de backlog schuiven, en dan verdwijnt ook het deel dat een rol wél kan oppakken.
+
+        Een mens-taak telt niet mee in de klaar-telling (`_NIET_TELBAAR`) maar blijft zichtbaar
+        openstaan — zo houdt het project geen zombie-status en raakt het werk niet zoek."""
+        p = self._projects.get(pid)
+        cl = self._checklist(p, clid) if p else None
+        if cl is None:
+            return False
+        for it in cl.get("items", []):
+            if it["id"] == item_id:
+                if human:
+                    it["human_task"] = True
+                else:
+                    it.pop("human_task", None)
+                self._touch(p)
+                self._save()
+                return True
+        return False
+
     def reset_item_fails(self, pid: str, clid: str, item_ids) -> None:
         """Zet de fail-teller van deze items terug op 0 — bij het naar-WAITING-zetten, zodat een
         reactivering door de mens (waiting → actief) weer een verse reeks pogingen krijgt."""
@@ -1083,7 +1108,7 @@ _WRITE_METHODS = (
     "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
     "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",
     "mark_formalized", "to_future", "mark_scope_nudge", "note_item_fail", "reset_item_fails",
-    "set_item_leeg", "clear_item_leeg", "mark_critic", "park",
+    "set_item_leeg", "clear_item_leeg", "mark_critic", "park", "set_item_human",
 )
 for _m in _WRITE_METHODS:
     setattr(ProjectLedger, _m, _synchronized(getattr(ProjectLedger, _m)))
