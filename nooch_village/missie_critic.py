@@ -62,6 +62,12 @@ MIN_TAAK_DEKKING = 0.6
 # strategischer gekund".
 MIN_STRATEGIE_THEMAS = 1
 
+# Antwoordbudget voor de grondings-toets. De skill-default (700) is gekalibreerd op een losse claim;
+# een viervoudig JSON-oordeel over een rapport van 6000 tekens is er ruim overheen. Gemeten op
+# productie: het antwoord brak af op 1623 tekens, midden in een zin, waarna de JSON onparseerbaar
+# was en `gegrond` op None viel. Dat las als "geen LLM" terwijl de premium-trede keurig antwoordde.
+MAX_OORDEEL_TOKENS = 3000
+
 # De grondings-toets draait op de PREMIUM-trede. Reden staat in llm_keuze.PREMIUM_ONLY: bij een
 # oordeel-site is "geen antwoord" een eerlijker uitkomst dan een goedkoop antwoord dat als premium
 # oordeel wordt gelezen. De dorpsstaart blijft eronder hangen (zachte staart), zodat een wegvallende
@@ -183,12 +189,17 @@ def _gegrond(document: str, deliverables: list, project: dict, *, skill=None,
             from nooch_village.skills_impl.tegenspraak import TegenspraakSkill
             skill = TegenspraakSkill()
         uit = skill.run({"tekst": (document or "")[:6000], "bewijs": bewijs, "doel": doel,
-                         "kader": _KADER, "ladder": premium_ladder()}, context)
+                         "kader": _KADER, "ladder": premium_ladder(),
+                         "max_tokens": MAX_OORDEEL_TOKENS}, context)
     except Exception as e:                               # noqa: BLE001
         log.warning("grondings-toets faalde fail-soft: %s", e)
         return None, "de grondings-toets kon niet draaien"
     if not isinstance(uit, dict) or uit.get("error") or uit.get("ok") is False:
-        return None, "de grondings-toets gaf geen oordeel (geen LLM?)"
+        # Neem de reden van de skill over. "(geen LLM?)" was een gok, en hij wees de verkeerde kant
+        # op toen de premium-trede wél antwoordde maar het antwoord werd afgekapt.
+        waarom = str((uit or {}).get("error") or "").strip() if isinstance(uit, dict) else ""
+        return None, f"de grondings-toets gaf geen oordeel: {waarom}" if waarom else \
+                     "de grondings-toets gaf geen oordeel"
     ongegrond = [str(x) for x in (uit.get("ongegrond") or []) if str(x).strip()]
     if ongegrond:
         return False, ("niet gegrond in de deliverables: " + "; ".join(ongegrond[:3])[:400])

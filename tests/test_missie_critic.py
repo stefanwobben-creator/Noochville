@@ -220,6 +220,59 @@ def test_gegrond_zonder_llm_is_onbekend_niet_afgekeurd():
     assert ok is None
 
 
+def test_het_oordeel_krijgt_ruimte_voor_een_viervoudig_antwoord():
+    """De skill-default (700) is gekalibreerd op een losse claim. Over een rapport van 6000 tekens
+    brak het antwoord op prod af na 1623 tekens, midden in een zin — onparseerbare JSON, `gegrond`
+    op None, en dat las als 'geen LLM' terwijl de premium-trede keurig antwoordde."""
+    gezien = {}
+
+    class _Vangt:
+        def run(self, payload, context=None):
+            gezien.update(payload)
+            return {"ok": True, "oordeel": "houdt stand", "ongegrond": []}
+
+    mc._gegrond("doc", ["d1"], {}, skill=_Vangt())
+    assert gezien["max_tokens"] == mc.MAX_OORDEEL_TOKENS >= 2000
+
+
+def test_een_afgekapt_antwoord_wordt_niet_als_weggevallen_llm_gemeld():
+    """De reden van de skill reist mee. Een gok ('geen LLM?') stuurt de lezer naar de leverancier
+    terwijl het aan het budget lag — dezelfde verkeerde diagnose als bij het thinking-budget."""
+    class _Afgekapt:
+        def run(self, payload, context=None):
+            return {"ok": False, "raw_lengte": 1623,
+                    "error": "antwoord van 1623 tekens is geen bruikbare JSON "
+                             "(afgekapt op max_tokens=3000?) — toets handmatig"}
+    ok, waarom = mc._gegrond("doc", ["d1"], {}, skill=_Afgekapt())
+    assert ok is None
+    assert "1623 tekens" in waarom and "geen LLM" not in waarom
+
+
+def test_de_skill_scheidt_een_afgekapt_antwoord_van_een_stille_leverancier():
+    from nooch_village.skills_impl.tegenspraak import TegenspraakSkill
+    with patch(_REASON, lambda p, **kw: "hier begint {\"oordeel\": \"moet bij\", \"ongegr"):
+        afgekapt = TegenspraakSkill().run({"tekst": "iets"}, None)
+    with patch(_REASON, lambda p, **kw: None):
+        stil = TegenspraakSkill().run({"tekst": "iets"}, None)
+    assert "geen bruikbare JSON" in afgekapt["error"] and afgekapt["raw_lengte"] > 0
+    assert "LLM weg" in stil["error"]
+
+
+def test_het_budget_van_de_skill_is_instelbaar_maar_blijft_700_zonder_opgave():
+    from nooch_village.skills_impl.tegenspraak import TegenspraakSkill
+    gezien = []
+
+    def _vang(prompt, **kw):
+        gezien.append(kw.get("max_tokens"))
+        return '{"oordeel":"houdt stand","ongegrond":[]}'
+
+    with patch(_REASON, _vang):
+        TegenspraakSkill().run({"tekst": "iets"}, None)
+        TegenspraakSkill().run({"tekst": "iets", "max_tokens": 3000}, None)
+        TegenspraakSkill().run({"tekst": "iets", "max_tokens": "onzin"}, None)
+    assert gezien == [700, 3000, 700]
+
+
 # ── Het samengestelde oordeel ────────────────────────────────────────────────
 
 class _Positief:
