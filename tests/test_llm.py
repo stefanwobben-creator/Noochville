@@ -56,6 +56,48 @@ def test_anthropic_timeout_is_set(monkeypatch):
     mock_client.messages.create.assert_not_called()
 
 
+def test_anthropic_denkt_niet_binnen_het_antwoordbudget(monkeypatch):
+    """`claude-sonnet-5` denkt standaard, en Anthropic rekent denken en antwoord uit HETZELFDE
+    max_tokens. Bij de dorpsstandaard van 700 ging het hele budget op aan een thinking-blok: nul
+    tekst terug, en de ladder las dat als "lege respons" en zakte door naar mistral-small. Gemeten
+    op productie: 1 van de 55 calls landde op de premium-kop terwijl de maandcap Sonnet aannam.
+
+    Zolang `max_tokens` elders in de ladder het ANTWOORD betekent, moet de premium-trede zich
+    hetzelfde gedragen — `_try_gemini` zet om dezelfde reden `thinking_budget=0`."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+
+    mock_client = MagicMock()
+    mock_client.messages.stream = _fake_stream(msg=_fake_message("ok"))
+    with patch.dict("sys.modules", {"anthropic": MagicMock(Anthropic=MagicMock(return_value=mock_client))}):
+        reason("test prompt", max_tokens=700)
+
+    _, kwargs = mock_client.messages.stream.call_args
+    assert kwargs.get("thinking") == {"type": "disabled"}
+    assert kwargs.get("max_tokens") == 700
+
+
+def test_een_opgebruikt_budget_is_geen_stil_leeg_antwoord(monkeypatch, caplog):
+    """Nul tekst mag nooit als "het model had niets te zeggen" doorgaan. Zonder deze regel is een
+    tekstloos antwoord niet te onderscheiden van een oordeel, en verdwijnt de oorzaak in de ladder."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+
+    denk_op = SimpleNamespace(content=[SimpleNamespace(type="thinking", thinking="...")],
+                              stop_reason="max_tokens")
+    mock_client = MagicMock()
+    mock_client.messages.stream = _fake_stream(msg=denk_op)
+    with patch.dict("sys.modules", {"anthropic": MagicMock(Anthropic=MagicMock(return_value=mock_client))}):
+        with caplog.at_level(logging.WARNING):
+            assert reason("test prompt") is None
+
+    gelogd = " ".join(r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING)
+    assert "stop_reason=max_tokens" in gelogd and "thinking" in gelogd
+    assert "budget op vóór het antwoord" in gelogd
+
+
 # ── 2. Anthropic failure is logged ───────────────────────────────────────────
 
 def test_anthropic_failure_is_logged(monkeypatch, caplog):

@@ -76,6 +76,22 @@ _HTTP_TIMEOUT_S = 30.0       # Mistral in seconden
 # lege respons, dan een ongewijzigd document. De 30s hoort bij de snelle tredes, niet bij deze.
 _ANTHROPIC_TIMEOUT_S = 180.0
 
+# Extended thinking UIT op de Anthropic-tredes.
+#
+# `claude-sonnet-5` denkt standaard. Anthropic's `max_tokens` is het budget voor denken ÉN antwoord
+# samen, dus bij de dorpsstandaard van 700 ging het hele budget op aan een thinking-blok en kwam er
+# nul tekst terug: `stop_reason=max_tokens`, `content=['thinking']`. De ladder las dat als "lege
+# respons" en zakte door naar mistral-small. Gemeten op productie: van 55 calls landde er ÉÉN op de
+# premium-kop; de missie-critic oordeelde in 9 van de 10 gevallen op mistral-small terwijl de code,
+# de logging en de maandcap allemaal Sonnet aannamen. Precies de stille verwisseling waar
+# `llm_keuze.PREMIUM_ONLY` voor gebouwd is.
+#
+# Uit, niet "meer budget": elders in de ladder betekent `max_tokens` het ANTWOORD. Zolang dat de
+# betekenis is, moet de premium-trede zich hetzelfde gedragen — `_try_gemini` zet om dezelfde reden
+# al `thinking_budget=0`. Denken aanzetten is een eigen ontwerpkeuze met een eigen budget-parameter,
+# geen bijwerking van een modelnaam.
+_DENK_UIT = {"type": "disabled"}
+
 # Tempo: het dorp smeert zijn LLM-werk uit zodat het onder de gratis limiet blijft
 # (geen 429-muur). Instelbaar via LLM_MAX_PER_MINUTE (0 = geen limiet).
 _DEFAULT_MAX_PER_MINUTE = 5
@@ -301,7 +317,7 @@ def _try_anthropic(prompt: str, *, model: str | None = None, max_tokens: int = 7
         # stilvallen vóórdat het antwoord af is. We consumeren de stream niet zelf — de SDK stelt
         # het bericht samen en `get_final_message()` geeft hetzelfde object als `create()`.
         with client.messages.stream(
-                model=model, max_tokens=max_tokens,
+                model=model, max_tokens=max_tokens, thinking=_DENK_UIT,
                 messages=[{"role": "user", "content": prompt}]) as stream:
             msg = stream.get_final_message()
         text = "".join(b.text for b in msg.content
@@ -309,6 +325,13 @@ def _try_anthropic(prompt: str, *, model: str | None = None, max_tokens: int = 7
         if text:
             log.debug("LLM via Anthropic (%s)", model)
             return text
+        # Geen tekst is niet vanzelf "het model had niets te zeggen". Zeg WAAROM, anders leest een
+        # opgebruikt budget als een leeg oordeel — precies hoe deze bug een maand onzichtbaar bleef.
+        soorten = sorted({str(getattr(b, "type", "?")) for b in msg.content}) or ["niets"]
+        log.warning("LLM Anthropic (%s) gaf geen tekst: stop_reason=%s, blokken=%s, "
+                    "max_tokens=%s — %s", model, msg.stop_reason, ",".join(soorten), max_tokens,
+                    "budget op vóór het antwoord" if msg.stop_reason == "max_tokens"
+                    else "leeg antwoord")
         return None
     except Exception as exc:
         log.warning("LLM Anthropic (%s) faalde: %s", model, exc)
