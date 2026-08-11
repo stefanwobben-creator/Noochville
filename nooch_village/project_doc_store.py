@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import tempfile
+import time
 
 log = logging.getLogger("village.project_docs")
 
@@ -61,7 +62,8 @@ class ProjectDocStore:
             except OSError:
                 pass
             raise
-        self._write_meta(pid, {"tier": tier, "terugval": bool(terugval)} if tier else None)
+        self._write_meta(pid, {"tier": tier, "terugval": bool(terugval),
+                               "ts": time.time()} if tier else None)
 
     # ── herkomst van het document (sidecar) ─────────────────────────────────
     def _meta_path(self, pid: str) -> str:
