@@ -482,6 +482,26 @@ class ProjectLedger:
                 return it["fails"]
         return 0
 
+    def set_item_payload(self, pid: str, clid: str, item_id: str, payload: dict) -> bool:
+        """Schrijf een herstelde payload terug en maak het item weer uitvoerbaar.
+
+        Hoort bij de reparatiepas (`Inhabitant._herstel_payloads`): een onvolledige payload is een
+        planfout van de rol, geen mens-werk. De aanroeper valideert vóór hij hier komt — deze
+        methode schrijft alleen, ze oordeelt niet."""
+        p = self._projects.get(pid)
+        cl = self._checklist(p, clid) if p else None
+        if cl is None or not isinstance(payload, dict) or not payload:
+            return False
+        for it in cl.get("items", []):
+            if it["id"] == item_id:
+                it["payload"] = payload
+                it.pop("payload_ok", None)               # weer uitvoerbaar
+                it.pop("reason", None)                   # de oude klacht is opgelost
+                self._touch(p)
+                self._save()
+                return True
+        return False
+
     def set_item_human(self, pid: str, clid: str, item_id: str, human: bool = True) -> bool:
         """Markeer één item alsnog als mens-/extern werk (of haal die markering weg).
 
@@ -1108,7 +1128,7 @@ _WRITE_METHODS = (
     "archive", "unarchive", "remove", "record_progress", "mark_tended", "add_comment",
     "add_role_message", "add_feed_entry", "feed_edit", "feed_remove", "wait_for", "link",
     "mark_formalized", "to_future", "mark_scope_nudge", "note_item_fail", "reset_item_fails",
-    "set_item_leeg", "clear_item_leeg", "mark_critic", "park", "set_item_human",
+    "set_item_leeg", "clear_item_leeg", "mark_critic", "park", "set_item_human", "set_item_payload",
 )
 for _m in _WRITE_METHODS:
     setattr(ProjectLedger, _m, _synchronized(getattr(ProjectLedger, _m)))

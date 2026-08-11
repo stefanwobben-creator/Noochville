@@ -928,6 +928,13 @@ class Inhabitant(threading.Thread):
             to_prepare = unprepared[:slots]                      # de rest WACHT tot een plek vrijkomt
         for p in to_prepare:
             self.prepare_project(p["id"])
+        # De parkeer-klep (DEEL A2): een geparkeerd project werd nooit meer bekeken, want deze lus
+        # las alleen queued/running. Nu keert het terug zodra de VASTGELEGDE blokkade weg is — niet
+        # zodra de items er runnable uitzien, want die schijn ontstaat door `reset_item_fails`.
+        from nooch_village.park_klep import heropen
+        for p in ledger.by_status("blocked"):
+            if p.get("owner") == self.id and heropen(ledger, p):
+                self._claim_run_complete(p["id"])
         for status in ("queued", "running"):                     # ACTIEF → uitvoeren (DEEL B)
             for p in ledger.by_status(status):
                 if p.get("owner") != self.id:
@@ -1521,8 +1528,23 @@ class Inhabitant(threading.Thread):
                 return None
             blokkades = {it["id"]: blokkades.get(it["id"]) or self._blocking_reason(it, limit)
                          for it in open_items}
+            # Reparatiepas vóór het parkeren: een 'payload'-item is GEEN mens-werk. De rol schreef
+            # zelf een onvolledige payload voor zijn eigen skill; dat is een planfout die hij zelf
+            # kan herstellen. Lukt het, dan ziet de mens dit nooit.
+            hersteld = self._herstel_payloads(pid, clid, [it for it in open_items
+                                                          if blokkades[it["id"]] == "payload"])
+            if hersteld:
+                open_items = [it for it in open_items if it["id"] not in hersteld]
+                if not open_items:
+                    self.log.info("🔧 project '%s': %d payload(s) hersteld — niet geparkeerd",
+                                  pid, len(hersteld))
+                    return None
+                blokkades = {k: v for k, v in blokkades.items() if k not in hersteld}
             stuck = list(open_items)
-            mens = [it for it in stuck if blokkades[it["id"]] != "fails"]
+            # DRIE redenen, niet twee. `!= "fails"` lumpte een payload-gebrek bij het mens-werk, en
+            # dan komt een planfout van de rol bij de mens binnen als "wacht op een externe partij".
+            mens = [it for it in stuck if blokkades[it["id"]] == "human"]
+            payload = [it for it in stuck if blokkades[it["id"]] == "payload"]
             faal = [it for it in stuck if blokkades[it["id"]] == "fails"]
             vraag = self._formulate_stuck_question(project, faal, mens, fail_reasons, limit)
             ledger.add_role_message(pid, f"⏸️ {vraag}")          # de rol zet zijn concrete hulpvraag neer
@@ -1535,8 +1557,15 @@ class Inhabitant(threading.Thread):
                                    "reden": blokkades[it["id"]] or "onbekend"} for it in stuck],
                         door=self.id)
             ledger.reset_item_fails(pid, clid, [it["id"] for it in faal])    # verse pogingen na reactivering
-            waarop = ("wacht op een mens of externe partij" if mens and not faal
-                      else "wacht op antwoord")
+            # Alleen ECHT mens-werk heet zo. Een resterend payload-gebrek is een technisch defect
+            # dat de reparatiepas niet kon oplossen; dat vraagt een fix, geen fabrieksbezoek.
+            if mens and not faal and not payload:
+                waarop = "wacht op een mens of externe partij"
+            elif payload and not mens and not faal:
+                waarop = (f"payload onvolledig na herstelpoging: "
+                          f"{str(payload[0].get('reason') or 'onbekend veld')[:80]}")
+            else:
+                waarop = "wacht op antwoord"
             ledger.block(pid, f"vastgelopen op {len(stuck)} item(s) — {waarop}")
             # Taak 2: zichtbaar escaleren naar de founder (heads-up, geen approve-knop). Een geblokkeerd
             # project stond tot nu toe alleen als wall-note op het bord; de founder zag het niet.
@@ -1684,6 +1713,74 @@ class Inhabitant(threading.Thread):
                                     "reason": g.get("reason"), "capability": g.get("capability"),
                                     "item": g.get("item_text")}, self.id))
         return uit["resterend"]
+
+    def _herstel_payloads(self, pid: str, clid: str, items: list) -> set:
+        """Probeer onvolledige payloads zelf te repareren. Geeft de ids terug die weer uitvoerbaar zijn.
+
+        Een payload-gebrek is geen mens-werk: de rol schreef zélf een onvolledige payload voor zijn
+        eigen skill, op basis van de item-tekst en het `input_schema`. Dat is een planfout, en die
+        kan hij opnieuw maken — met de ontbrekende velden er expliciet bij, wat de eerste poging niet
+        had. Lukt het, dan ziet de mens dit nooit; lukt het niet, dan escaleert het met het CONCRETE
+        gebrek ("payload mist veld X") in plaats van als "wacht op een mens of externe partij".
+
+        Fail-closed op de uitkomst: een gerepareerde payload moet dezelfde poort door als de eerste
+        (`_missing_required` + `_payload_issues`). Een LLM die iets verzint komt er dus niet mee weg,
+        en daarom mag deze call op de goedkope ladder — de validatie doet het zware werk, niet het
+        model. Fail-soft op het proces: gaat de reparatie stuk, dan parkeert het item gewoon zoals
+        voorheen."""
+        ledger = self.context.projects
+        gelukt: set = set()
+        for it in (items or []):
+            skill = str(it.get("skill") or "")
+            tekst = str(it.get("text") or "")
+            if not skill or not tekst:
+                continue
+            obj = self.registry.get(skill) if self.registry else None
+            schema = (getattr(obj, "input_schema", "") or "").strip() if obj else ""
+            mist = self._missing_required(skill, it.get("payload") or {})
+            try:
+                nieuw = self._payload_opnieuw(skill, tekst, schema, mist, it.get("payload") or {})
+            except Exception as e:                       # noqa: BLE001 — herstel mag nooit blokkeren
+                self.log.warning("payload-herstel faalde voor item '%s': %s", tekst[:40], e)
+                continue
+            if not isinstance(nieuw, dict) or not nieuw:
+                continue
+            rest = self._missing_required(skill, nieuw)
+            issues = self._payload_issues(skill, nieuw)
+            if rest or issues:
+                self.log.info("🔧 payload-herstel voor '%s' haalde de poort niet: %s",
+                              tekst[:40], "; ".join(rest + issues)[:120])
+                continue
+            if ledger.set_item_payload(pid, clid, it["id"], nieuw):
+                gelukt.add(it["id"])
+                ledger.add_role_message(pid, f"🔧 payload van '{tekst[:60]}' zelf hersteld "
+                                             f"(miste: {', '.join(mist) or 'onbekend'}) — opnieuw uitvoerbaar")
+                self.log.info("🔧 project '%s': payload van '%s' hersteld", pid, tekst[:40])
+        return gelukt
+
+    def _payload_opnieuw(self, skill: str, tekst: str, schema: str, mist: list, huidig: dict):
+        """Leid de payload opnieuw af uit de item-tekst + het input_schema van de skill."""
+        from nooch_village.llm import reason as llm_reason
+        import json as _json
+        prompt = (
+            "Je vult de invoer (payload) voor één skill-aanroep in NoochVille (Nooch.earth, duurzame "
+            "veganistische schoenen). Een eerdere poging was onvolledig.\n\n"
+            f"SKILL: {skill}\n"
+            f"INPUT-VORM (input_schema): {schema or '(geen schema — leid af uit de taak)'}\n"
+            f"DE TAAK: {tekst}\n"
+            f"HUIDIGE PAYLOAD: {_json.dumps(huidig, ensure_ascii=False)[:500]}\n"
+            f"ONTBREEKT: {', '.join(mist) or '(onbekend — vul de hele payload opnieuw)'}\n\n"
+            "Vul de ontbrekende velden uit de taaktekst. Verzin GEEN identifiers, URL's, merknamen of "
+            "id's die niet in de taak staan — laat een veld liever leeg dan het te raden.\n"
+            "Antwoord UITSLUITEND met het JSON-object van de payload.")
+        raw = llm_reason(prompt, call_site="payload_herstel", json_mode=True, max_tokens=700)
+        if not raw:
+            return None
+        s = str(raw)
+        try:
+            return _json.loads(s[s.find("{"):s.rfind("}") + 1])
+        except (ValueError, IndexError):
+            return None
 
     def _blocking_reason(self, item: dict, limit: int) -> str | None:
         """Waarom kan dit open item niet vooruit? None = het kan nog wél vooruit.
