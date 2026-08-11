@@ -2208,6 +2208,50 @@ def _fabrication_suspects(document: str, ungrounded: list) -> list:
     return suspects
 
 
+def _vorige_versie(store, pid: str, current: str, recs: list, log) -> str:
+    """Wat de synthese van de VORIGE versie te zien krijgt — en dat is bewust bijna niets.
+
+    Eerst ging het lopende document integraal mee als `HUIDIG DOCUMENT`. Daarmee schreef het model
+    zijn eigen eerdere proza over, en overleefde een verzinsel elke herschrijving: op c0641e032729
+    stond `Term | planet-safe / planet-friendly / planet-loving` in het rapport terwijl de huidige
+    claims_check-uitvoer dat veld niet meer heeft — die lijst kwam uit een oudere versie van de
+    skill en lekte terug via de vorige draft. De critic vlagde het terecht, maar de fabricage was
+    inmiddels drie herschrijvingen oud en werd elke keer bevestigd door zichzelf.
+
+    De regel: **een herschrijving ziet zijn eigen vorige proza niet.** Het bewijs stuurt het
+    document, niet de vorige draft. In plaats van de tekst gaat er een compacte melding mee van wat
+    er sinds die versie aan bewijs bij kwam.
+
+    De uitzondering is geen uitzondering op de regel maar de reden ervoor: is het huidige document
+    door een MENS geschreven (de cockpit-edit-route), dan is het geen eigen proza maar invoer — net
+    als de #task-comments — en gaat het wél mee. Het gevaar is zelf-witwassen, niet tekst op zich.
+    Herkenning via de herkomst-sidecar: die draagt een `tier` als een model schreef, en wordt gewist
+    bij een mens-edit."""
+    if not (current or "").strip():
+        return "Er is nog geen eerdere versie van dit document.\n\n"
+    try:
+        meta = store.meta(pid) or {}
+    except Exception as e:                                  # noqa: BLE001
+        # Fail-closed op de kant die telt: weten we niet wie het schreef, dan nemen we aan dat het
+        # model het was. Andersom zou een verzinsel er stilzwijgend weer in glippen.
+        log.warning("herkomst van %s onleesbaar — de vorige versie wordt NIET meegestuurd: %s",
+                    pid, e)
+        return ("Er is een vorige versie van dit document, maar niet te achterhalen wie hem schreef. "
+                "Je krijgt die tekst daarom niet te zien: schrijf opnieuw vanuit het bewijs.\n\n")
+    if not meta.get("tier"):
+        # Geen tier = met de hand geschreven (of van vóór deze markering). Behandel als mens-invoer.
+        return ("DOOR DE MENS GEREDIGEERDE VERSIE (dit is invoer, geen eigen tekst — respecteer wat "
+                "de mens hier schreef):\n" + current + "\n\n")
+    sinds = float(meta.get("ts") or 0)
+    nieuw = [r for r in (recs or []) if float(r.get("created_at") or 0) > sinds] if sinds else []
+    regels = "\n".join(f"- {r.get('skill')}: {str(r.get('title') or '')[:120]}" for r in nieuw[:20])
+    return ("Er is een vorige versie van dit document, geschreven door "
+            f"{meta.get('tier')}. Je krijgt die tekst BEWUST niet te zien: schrijf dit document "
+            "opnieuw vanuit het bewijs hieronder, niet vanuit je eigen eerdere formuleringen.\n"
+            + (f"Nieuw bewijs sinds die versie ({len(nieuw)} deliverable(s)):\n{regels}\n"
+               if nieuw else "Er is sindsdien geen nieuw bewijs bijgekomen.\n") + "\n")
+
+
 def synthesize_einddocument(*, project_docs, deliverables, projects, personas, record,
                             settings, project, force_final, log, data_dir: str = "") -> bool:
     """Herbruikbare einddocument-synthese, los van de Inhabitant-instance: schrijft het VOLLEDIGE
@@ -2253,7 +2297,7 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
             cite = bewijsblok(recs, dstore.content_for, bron=f"einddocument {pid}") if dstore else ""
         except Exception as e:                              # noqa: BLE001 — document gaat vóór
             log.warning("citeerbare velden overgeslagen: %s", e)
-        head = ("HUIDIG DOCUMENT:\n" + (current or "(nog geen document)") + "\n\n"
+        head = (_vorige_versie(store, pid, current, recs, log)
                 + (f"STURING VAN DE MENS (#task-comments, volg dit): {steer}\n\n" if steer else "")
                 + (f"CITEERBARE FEITEN UIT DE SKILL-UITVOER (skill | veld = waarde). Dit is de enige "
                    f"plek waar cijfers, stoplichten, statussen en categorieën vandaan mogen komen:\n"
@@ -2323,7 +2367,12 @@ def synthesize_einddocument(*, project_docs, deliverables, projects, personas, r
             "rood (categorie Generiek); claim_evidence vond geen LCA of certificering; conclusie: "
             "niet houdbaar' is goed en gegrond. Terugvallen op 'er zijn mogelijk zorgen' is FOUT: "
             "dat is geen grondering maar ontwijken. Verbied jezelf het verzinnen, niet het concreet "
-            "zijn. Beantwoord elke taak expliciet; is er niets "
+            "zijn. WAT EEN SIGNAAL BETEKENT: een stoplicht uit een term-scan is een SIGNAAL, geen "
+            "juridisch of veiligheidsoordeel. 'green' betekent 'geen gevlagde term gevonden' — niet "
+            "'veilig te gebruiken', niet 'mag zonder wijziging blijven staan', niet 'goedgekeurd'. "
+            "Schrijf het signaal op als wat het is, met de bron erbij, en trek er geen vrijwaring "
+            "uit. Voor compliance is die categoriefout gevaarlijker dan een gemist signaal. "
+            "Beantwoord elke taak expliciet; is er niets "
             "gevonden, schrijf dat expliciet. Sluit ALTIJD af met twee aparte secties, elk met een "
             "'## '-kop: '## Conclusie' (een korte synthese in gewone taal van wat dit project heeft "
             "opgeleverd) en '## Aanbevelingen' (concrete vervolgstappen als '- '-opsomming)"

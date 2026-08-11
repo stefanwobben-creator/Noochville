@@ -271,7 +271,10 @@ def test_de_skill_scheidt_een_afgekapt_antwoord_van_een_stille_leverancier():
     assert "LLM weg" in stil["error"]
 
 
-def test_het_budget_van_de_skill_is_instelbaar_maar_blijft_700_zonder_opgave():
+def test_het_budget_is_instelbaar_en_de_default_is_gelijkgetrokken():
+    """De losse aanroep door een rol stond nog op 700 terwijl de critic er 3000 vroeg — en kapte
+    daar af (gezien op prod: "antwoord van 1578 tekens is geen bruikbare JSON"). Eén getal, één
+    betekenis; een onbruikbare waarde valt terug op de default in plaats van te crashen."""
     from nooch_village.skills_impl.tegenspraak import TegenspraakSkill
     gezien = []
 
@@ -280,10 +283,11 @@ def test_het_budget_van_de_skill_is_instelbaar_maar_blijft_700_zonder_opgave():
         return '{"oordeel":"houdt stand","ongegrond":[]}'
 
     with patch(_REASON, _vang):
-        TegenspraakSkill().run({"tekst": "iets"}, None)
-        TegenspraakSkill().run({"tekst": "iets", "max_tokens": 3000}, None)
-        TegenspraakSkill().run({"tekst": "iets", "max_tokens": "onzin"}, None)
-    assert gezien == [700, 3000, 700]
+        TegenspraakSkill().run({"tekst": "iets"}, None)                       # default
+        TegenspraakSkill().run({"tekst": "iets", "max_tokens": 5000}, None)   # eigen keuze
+        TegenspraakSkill().run({"tekst": "iets", "max_tokens": "onzin"}, None)  # onbruikbaar
+    assert gezien == [3000, 5000, 3000]
+    assert mc.MAX_OORDEEL_TOKENS == 3000                                      # critic en skill gelijk
 
 
 # ── Het samengestelde oordeel ────────────────────────────────────────────────

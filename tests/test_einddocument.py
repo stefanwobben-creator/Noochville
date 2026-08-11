@@ -47,6 +47,13 @@ class _ResearchSkill(Skill):
         return {"term": term, "total": 1, "hits": [{"title": f"Study on {term}"}]}
 
 
+
+def _herkomst(docs, pid) -> dict:
+    """De herkomst zonder het tijdstempel. `ts` kwam erbij toen de synthese moest weten wélk bewijs
+    er sinds de vorige versie bij kwam (ze ziet haar eigen vorige proza niet meer) — dat is geen
+    onderdeel van wat deze tests toetsen: wélk model schreef, en was dat een terugval."""
+    return {k: v for k, v in (docs.meta(pid) or {}).items() if k != "ts"}
+
 def _stores(tmp_path):
     return (ProjectLedger(str(tmp_path / "projects.json")),
             DeliverableStore(str(tmp_path / "deliverables.json")),
@@ -281,7 +288,7 @@ def test_terugval_wordt_vastgelegd_als_herkomst(tmp_path, caplog):
     pid = ledger.create("sid", "doel", "human", status="queued")
     with caplog.at_level(logging.WARNING):
         assert _synth(tmp_path, ledger, ds, docs, personas, sid, pid, "mistral:m1") is True
-    assert docs.meta(pid) == {"tier": "mistral:m1", "terugval": True}
+    assert _herkomst(docs, pid) == {"tier": "mistral:m1", "terugval": True}
     assert "DOC_TERUGVAL" in caplog.text
     muur = " ".join(m.get("text", "") for m in ledger.get(pid).get("log", []))
     assert "terugval" in muur and "mistral:m1" in muur      # de reviewer ziet het op de muur
@@ -292,7 +299,7 @@ def test_gevraagd_model_is_geen_terugval(tmp_path):
     personas, sid = _sid_met_voorkeur(tmp_path)
     pid = ledger.create("sid", "doel", "human", status="queued")
     _synth(tmp_path, ledger, ds, docs, personas, sid, pid, "anthropic:sonnet")
-    assert docs.meta(pid) == {"tier": "anthropic:sonnet", "terugval": False}
+    assert _herkomst(docs, pid) == {"tier": "anthropic:sonnet", "terugval": False}
 
 
 def test_zonder_voorkeur_is_niets_een_terugval(tmp_path):
@@ -302,7 +309,7 @@ def test_zonder_voorkeur_is_niets_een_terugval(tmp_path):
     sid = personas.add("Sid")
     pid = ledger.create("sid", "doel", "human", status="queued")
     _synth(tmp_path, ledger, ds, docs, personas, sid, pid, "mistral:m1")
-    assert docs.meta(pid) == {"tier": "mistral:m1", "terugval": False}
+    assert _herkomst(docs, pid) == {"tier": "mistral:m1", "terugval": False}
 
 
 def test_mens_edit_wist_de_herkomst(tmp_path):

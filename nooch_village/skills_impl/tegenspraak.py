@@ -116,7 +116,15 @@ class TegenspraakSkill(Skill):
                           "ongegrond": len(result.get("ongegrond") or [])}}]
 
 
-_DEFAULT_MAX_TOKENS = 700
+# Antwoordbudget als geen aanroeper iets anders vraagt.
+#
+# Stond op 700, gekalibreerd op "toets één losse claim". De echte aanroep is een viervoudig
+# JSON-oordeel (zwakste claim + ongegronde beweringen + tegenargument + revisie) over een deliverable
+# van duizenden tekens, en die past er niet in: op productie brak het antwoord af op 1578 tekens en
+# was de JSON onparseerbaar. De missie-critic loste dat voor zichzelf op met een eigen budget (#278);
+# de losse aanroep door een rol bleef achter en kapte stil af — tot de eerlijke foutmelding uit #278
+# het zichtbaar maakte. Eén getal, één betekenis: gelijkgetrokken.
+_DEFAULT_MAX_TOKENS = 3000
 
 
 def _extract(raw):

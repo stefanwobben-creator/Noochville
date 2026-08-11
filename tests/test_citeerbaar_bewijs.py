@@ -215,3 +215,77 @@ def test_de_ongegrond_lijst_is_alleen_voor_ongegronde_beweringen():
     waardoor de grond-as zakte op iets dat geen grondingsprobleem is."""
     assert "ALLEEN voor beweringen die de onderbouwing niet dekt" in mc._KADER
     assert "zet die in 'revisie'" in mc._KADER.replace("\n", " ")
+
+
+# ── 7. Een herschrijving leest zijn eigen proza niet ────────────────────────
+
+class _DocStore:
+    def __init__(self, tier=None, ts=0.0, doc=""):
+        self._meta = {"tier": tier, "ts": ts} if tier else {}
+        self._doc = doc
+
+    def meta(self, pid):
+        return dict(self._meta)
+
+
+def _vv(store, recs=(), doc="tekst", log=logging.getLogger("t")):
+    from nooch_village.inhabitant import _vorige_versie
+    return _vorige_versie(store, "p", doc, list(recs), log)
+
+
+def test_de_synthese_krijgt_zijn_eigen_vorige_draft_niet_te_zien():
+    """Het witwas-mechanisme: op c0641e032729 stond 'Term | planet-safe / planet-friendly /
+    planet-loving' in het rapport terwijl de huidige claims_check-uitvoer dat veld niet meer heeft.
+    Die lijst kwam uit een oudere skill-versie en overleefde drie herschrijvingen via de vorige
+    draft — elke keer door zichzelf bevestigd."""
+    uit = _vv(_DocStore(tier="anthropic:claude-sonnet-5"), doc="OUD PROZA MET EEN VERZINSEL")
+    assert "OUD PROZA" not in uit
+    assert "BEWUST niet te zien" in uit
+
+
+def test_in_plaats_daarvan_komt_er_een_compacte_melding_van_nieuw_bewijs():
+    recs = [{"skill": "claims_check", "title": "Toets de claim", "created_at": 200},
+            {"skill": "claim_evidence", "title": "Zoek onderbouwing", "created_at": 50}]
+    uit = _vv(_DocStore(tier="x", ts=100), recs=recs)
+    assert "1 deliverable(s)" in uit
+    assert "claims_check: Toets de claim" in uit
+    assert "claim_evidence" not in uit                      # ouder dan de vorige versie
+
+
+def test_zonder_nieuw_bewijs_zegt_hij_dat_ook():
+    assert "geen nieuw bewijs bijgekomen" in _vv(_DocStore(tier="x", ts=100), recs=[])
+
+
+def test_een_mens_geredigeerde_versie_gaat_wel_mee():
+    """Het gevaar is ZELF-witwassen, niet tekst op zich. Een mens-edit is invoer, net als de
+    #task-comments — die stilzwijgend weggooien zou erger zijn dan wat we repareren. Herkenning via
+    de herkomst-sidecar: geen tier = geen model verantwoordelijk."""
+    uit = _vv(_DocStore(tier=None), doc="DE MENS SCHREEF DIT ZELF")
+    assert "DE MENS SCHREEF DIT ZELF" in uit
+    assert "dit is invoer, geen eigen tekst" in uit
+
+
+def test_zonder_document_geen_gedoe():
+    assert "nog geen eerdere versie" in _vv(_DocStore(tier="x"), doc="")
+
+
+def test_onleesbare_herkomst_houdt_de_draft_buiten_de_prompt(caplog):
+    """Fail-closed op de kant die telt: weten we niet wie het schreef, dan gaan we ervan uit dat het
+    model het was. Andersom zou een verzinsel er stilzwijgend weer in glippen."""
+    class _Stuk:
+        def meta(self, pid):
+            raise OSError("sidecar weg")
+    with caplog.at_level(logging.WARNING):
+        uit = _vv(_Stuk(), doc="OUD PROZA")
+    assert "OUD PROZA" not in uit and "NIET meegestuurd" in caplog.text
+
+
+# ── 8. Een stoplicht is een signaal, geen vrijwaring ────────────────────────
+
+def test_de_schrijver_leest_een_groen_stoplicht_niet_als_goedkeuring():
+    """De 7c1e576-klasse: 'vegan | stoplicht = green' werd '100% Vegan: Status Groen (Safe to Use)'
+    en 'kan zonder wijziging blijven staan'. Een term-scan die niets vlagt is geen juridisch
+    oordeel, en voor compliance is die categoriefout gevaarlijker dan een gemist signaal."""
+    src = open("nooch_village/inhabitant.py", encoding="utf-8").read()
+    assert "een SIGNAAL, geen" in src and "juridisch of veiligheidsoordeel" in src
+    assert "veilig te gebruiken" in src and "mag zonder wijziging blijven staan" in src
