@@ -210,3 +210,18 @@ def test_de_drie_redenen_blijven_gescheiden_in_de_melding():
     assert 'payload = [it for it in stuck if blokkades[it["id"]] == "payload"]' in src
     assert "if mens and not faal and not payload:" in src
     assert "payload onvolledig na herstelpoging" in src
+
+
+# ── De founder-ping: alleen als de park-reden hem nodig heeft ───────────────
+
+def test_alleen_een_mens_blokkade_pingt_de_founder():
+    """Dit vuurde ongeacht de reden: 79 van de 98 founder-notificaties waren "Project van X
+    vastgelopen". Een payload- of fails-blokkade is rolwerk — de rol herstelt zijn payload of de
+    bron moet gefixt worden, en het project draagt sinds #287 zijn eigen park-reden waarmee de klep
+    het afhandelt. Zonder deze poort is de inbox een logbestand met een badge erop."""
+    src = open("nooch_village/inhabitant.py", encoding="utf-8").read()
+    i = src.index("ledger.block(pid, f\"vastgelopen op")
+    blok = src[i:i + 1500]
+    assert "if mens and not payload and not faal:" in blok
+    assert "_notify_founder" in blok
+    assert "geparkeerd zonder founder-ping" in blok        # de andere tak is zichtbaar, niet stil
