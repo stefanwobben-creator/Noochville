@@ -1567,10 +1567,21 @@ class Inhabitant(threading.Thread):
             else:
                 waarop = "wacht op antwoord"
             ledger.block(pid, f"vastgelopen op {len(stuck)} item(s) — {waarop}")
-            # Taak 2: zichtbaar escaleren naar de founder (heads-up, geen approve-knop). Een geblokkeerd
-            # project stond tot nu toe alleen als wall-note op het bord; de founder zag het niet.
-            self._notify_founder(pid, f"⏸️ Project van {self.display_name} vastgelopen op "
-                                 f"{len(stuck)} item(s): {vraag}")
+            # Alleen de founder pingen als de PARK-REDEN hem nodig heeft.
+            #
+            # Dit vuurde ongeacht de reden, en dat leverde 79 van de 98 founder-notificaties op:
+            # "Project van X vastgelopen op N item(s)". Een `fails`- of `payload`-blokkade is rolwerk
+            # — de rol herstelt zijn payload of de bron moet gefixt worden; daar kan de founder niets
+            # mee, en het project draagt sinds #287 zijn eigen park-reden waarmee de klep het afhandelt.
+            #
+            # `human` is de enige reden die wél bij hem ligt: een mens- of extern item dat niemand
+            # anders kan doen. Zonder deze poort is de inbox een logbestand met een badge erop.
+            if mens and not payload and not faal:
+                self._notify_founder(pid, f"⏸️ Project van {self.display_name} vastgelopen op "
+                                     f"{len(stuck)} mens-/extern item(s): {vraag}")
+            else:
+                self.log.info("⏸️ project '%s' geparkeerd zonder founder-ping (rolwerk: "
+                              "%d payload, %d fails)", pid, len(payload), len(faal))
             self.bus.publish(Event("project_stuck",
                                    {"project_id": pid, "owner": self.id, "items": len(stuck),
                                     "human_items": len(mens), "failed_items": len(faal),
