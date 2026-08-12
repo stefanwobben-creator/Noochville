@@ -403,8 +403,16 @@ def _voorstel_items(st, data_dir: str, niveau: str = "A") -> list[dict]:
     meer, dus daar is er ook geen AI-oordeel om tegen af te zetten.
     """
     from nooch_village import onderzoekspas, voorstel_vorm as vv
-    uit = []
+    # Alleen de LAATSTE meting per project. `voorstellen.jsonl` is append-only en dat blijft zo — de
+    # historie is de meetreeks, en die wil je kunnen naleggen. Maar een wachtrij hoort te tonen wat
+    # GELDT, niet elke poging: na de tuning-rondes stonden er 46 regels voor 30 claims, met een
+    # gedegradeerde versie van `conscious` naast de versie die er wél doorheen kwam. Zelfde vorm als
+    # `vervangen_door` bij de deliverables: niets wissen, alleen de leesweg corrigeren.
+    geldend = {}
     for rij in onderzoekspas.alle(data_dir):
+        geldend[str(rij.get("project") or rij.get("id"))] = rij
+    uit = []
+    for rij in geldend.values():
         v = rij.get("voorstel") or {}
         soort = v.get("soort") or vv.SOORT_VOORSTEL
         gedegradeerd = soort == vv.SOORT_BEVINDING

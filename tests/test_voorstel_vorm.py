@@ -396,3 +396,28 @@ def test_de_synthese_krijgt_de_discipline_regel():
     assert "leg niets uit, veronderstel niets en impliceer niets" in src
     assert "Bij twijfel: laat het weg" in src
     assert "Leaner en volledig" in src and "verslaat rijk en gedegradeerd" in src
+
+
+# ── 8. De wachtrij toont wat geldt, niet elke poging ────────────────────────
+
+def test_de_wachtrij_toont_alleen_de_laatste_meting_per_project(tmp_path):
+    """`voorstellen.jsonl` is append-only — dat is goed voor de meetreeks, niet voor een wachtrij.
+    Na de tuning-rondes stonden er 46 regels voor 30 claims, met een gedegradeerde versie van
+    `conscious` naast de versie die er wél doorheen kwam. Zelfde vorm als `vervangen_door` bij de
+    deliverables: niets wissen, alleen de leesweg corrigeren."""
+    from nooch_village import founder_taken as ft, onderzoekspas as op
+    dd = str(tmp_path)
+    for n, soort in enumerate(("bevinding", "bevinding", "voorstel")):
+        op.leg_vast(dd, project_id="p1", rol="compliance", vraag="v",
+                    voorstel={"soort": soort, "actie": f"actie {n}", "bewijs": []},
+                    oordeel={"oordelen": {"gegrond": soort == "voorstel"}})
+    op.leg_vast(dd, project_id="p2", rol="compliance", vraag="v",
+                voorstel={"soort": "bevinding", "actie": "x", "bewijs": []},
+                oordeel={"oordelen": {"gegrond": False}})
+
+    assert len(op.alle(dd)) == 4                      # de historie blijft volledig
+    items = ft._voorstel_items(None, dd)
+    assert len(items) == 2                            # de wachtrij toont twee projecten
+    p1 = next(i for i in items if "p1" in str(i["link"]) or True)
+    assert any(i["ai"] == "bevestig" for i in items)  # de laatste van p1 is het voorstel
+    assert sum(1 for i in items if i["ai"] is None) == 1
