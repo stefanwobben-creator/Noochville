@@ -40,4 +40,67 @@ class ClaimsCheckSkill(Skill):
             uitslag = claims_db.check_tekst(tekst, data_dir=getattr(context, "data_dir", None))
         except claims_db.ClaimsDbError as e:
             return {"ok": False, "error": str(e)}
-        return {"ok": True, **uitslag}
+        uit = {"ok": True, **uitslag}
+        uit["betekenis"] = betekenis_van(uit, tekst)
+        return uit
+
+
+# ── Wat de cijfers NIET vaststellen ──────────────────────────────────────────
+#
+# Deze skill gaf rauwe velden terug: `score=100`, `rood=0`, `bevindingen=[]`. Een lezer moet dan zelf
+# invullen wat dat betekent, en dat ging structureel mis: 16 van 28 gedegradeerde voorstellen rustten
+# op een claims_check die niets vond en dat als "score 100" rapporteerde. De synthese las dat als
+# "compliant", de critic zag een ongegronde gevolgtrekking, en beide hadden gelijk — de betekenis
+# stond nergens.
+#
+# Dus levert de bron zijn eigen betekenis mee. REGEL-GEBASEERD: elke string volgt uit een
+# vergelijking op de data, nooit uit een model dat interpreteert — een geraden betekenis zou
+# confabulatie bij de bron zijn, en dat is erger dan geen betekenis.
+#
+# De strings zeggen wat de data NIET vaststelt. Liever te terughoudend dan te toeschietelijk: een te
+# sterke string ("de claim is compliant") is precies de fout die we hier weghalen, alleen dan met
+# gezag van de bron erachter.
+
+def betekenis_van(uitslag: dict, onderzochte_claim: str = "") -> list[str]:
+    """Deterministische betekenis-regels bij deze uitslag. Leeg = niets bijzonders te melden."""
+    uit: list[str] = []
+    bevindingen = list(uitslag.get("bevindingen") or [])
+    tellers = [int(uitslag.get(k) or 0) for k in ("rood", "oranje", "groen", "escaleren")]
+    score = uitslag.get("score")
+
+    if not bevindingen and not any(tellers):
+        if str(score) == "100":
+            uit.append("score=100 met alle tellers op 0 en geen bevindingen betekent dat er geen "
+                       "enkele claim inhoudelijk is getoetst — dit is een lege run, GEEN goedkeuring "
+                       "en geen uitspraak over of de claim houdbaar is")
+        else:
+            uit.append("geen gevlagde term gevonden — dat is niet hetzelfde als compliant; deze scan "
+                       "toetst alleen tegen de termenlijst en zegt niets over de inhoud van de claim")
+    elif not bevindingen:
+        uit.append("geen gevlagde term gevonden — dat is niet hetzelfde als compliant; deze scan "
+                   "toetst alleen tegen de termenlijst en zegt niets over de inhoud van de claim")
+
+    claim = _norm(onderzochte_claim)
+    for n, b in enumerate(bevindingen):
+        term = str(b.get("term") or "")
+        if claim and term and not _raakt(term, claim):
+            uit.append(f"bevindingen[{n}] gaat over de term '{term}', niet over de onderzochte "
+                       f"claim — deze bevinding zegt niets over die claim")
+        if str(b.get("alternatief") or "").strip():
+            uit.append(f"bevindingen[{n}].alternatief is een VOORGESTELD alternatief uit de "
+                       f"claims-database, geen goedgekeurde vervangtekst — het is niet getoetst op "
+                       f"deze context en niet door legal gezien")
+    return uit
+
+
+def _norm(tekst: str) -> set:
+    import re as _re
+    return {w for w in _re.split(r"[^\w]+", (tekst or "").lower()) if len(w) >= 4}
+
+
+def _raakt(term: str, claim_woorden: set) -> bool:
+    """Deelt deze term een betekenisdragend woord met de onderzochte claim?
+
+    Bewust ruim: bij twijfel géén melding. Een onterechte "gaat over een andere term" zou een
+    correcte bevinding wegduwen, en dat is de duurdere fout."""
+    return bool(_norm(term) & claim_woorden) if claim_woorden else True
