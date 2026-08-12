@@ -38,6 +38,48 @@ BESTAND = "voorstellen.jsonl"
 ONDERZOEK_SKILLS = ("claims_check", "claim_evidence")
 
 
+def _paginacheck(inhabitant, term: str) -> tuple[list, str]:
+    """Staat de term op de site, en op welke pagina? ([bewijsregels], reden-als-overgeslagen).
+
+    Gebruikt de LEES-kant van `claims_site_scan` (`scan_paginas` + `verzamel`), niet de skill zelf.
+    Die maakt in zijn volle vorm bordtaken aan, schrijft een weekmarker en heeft een week-poort — al
+    die bijwerkingen horen bij de wekelijkse scan, niet bij het beantwoorden van één vraag. De pas
+    heeft alleen de waarneming nodig.
+
+    Gemeten belang: drie van de 28 degradaties gingen over "staat deze term wel op die pagina" —
+    een vraag die geen enkele gedraaide bron beantwoordde."""
+    try:
+        from nooch_village import claims_db
+        from nooch_village.skills_impl.claims_site_scan import scan_paginas, verzamel
+        db = claims_db.load(data_dir=getattr(inhabitant.context, "data_dir", None))
+        paginas = scan_paginas(db)
+        if not paginas:
+            return [], "paginacheck: de claims-database heeft geen scan_paginas"
+        # modelpas uit: dat is de LLM-recall-pas, en die raadt kandidaten. Hier willen we alleen de
+        # deterministische waarneming — staat de term er, op welke pagina.
+        bevindingen, fouten, teksten, _sig = verzamel(paginas, db, modelpas=False)
+    except Exception as e:                                   # noqa: BLE001 — één dode bron ≠ dode pas
+        log.warning("onderzoekspas: paginacheck faalde: %s", e)
+        return [], f"paginacheck faalde: {e}"
+
+    naald = (term or "").strip().lower()
+    regels = []
+    for label, tekst in (teksten or {}).items():
+        if naald and naald in str(tekst).lower():
+            regels.append({"bron": "paginacheck", "kroniek": "",
+                           "citaat": f"de term '{term}' staat op pagina '{label}'"})
+    if naald and not regels and teksten:
+        regels.append({"bron": "paginacheck", "kroniek": "",
+                       "citaat": f"de term '{term}' is op geen van de {len(teksten)} gescande "
+                                 f"pagina's aangetroffen"})
+    for b in (bevindingen or [])[:4]:
+        regels.append({"bron": "paginacheck", "kroniek": "",
+                       "citaat": f"pagina '{b.get('pagina')}' bevat '{b.get('term')}' "
+                                 f"(stoplicht {b.get('stoplicht')})"})
+    weg = f"paginacheck: {len(fouten)} pagina('s) niet opgehaald" if fouten else ""
+    return regels, weg
+
+
 def _payload_voor(inhabitant, skill: str, vraag: str) -> tuple[dict | None, str]:
     """Leid de payload AF uit het `input_schema` van de skill. Geen geraden dict.
 
@@ -110,13 +152,33 @@ def onderzoek(inhabitant, vraag: str, *, term: str = "") -> dict:
             continue
         kroniek_id = _naar_kroniek(inhabitant, skill, vraag, res)
         for _s, veld, waarde in velden_van(skill, res)[:6]:
+            if veld.startswith("betekenis"):
+                continue                                     # apart, hieronder, mét label
             uit["bewijs"].append({"bron": skill, "citaat": f"{veld} = {waarde}", "kroniek": kroniek_id})
+        # De bron levert zijn eigen betekenis: wat deze cijfers NIET vaststellen. Regel-gebaseerd
+        # (zie claims_check.betekenis_van) — geen model dat interpreteert.
+        for regel in (res.get("betekenis") or []):
+            uit["bewijs"].append({"bron": f"{skill} (betekenis)", "citaat": str(regel),
+                                  "kroniek": kroniek_id})
+
+    paginaregels, paginaweg = _paginacheck(inhabitant, term or vraag)
+    uit["bewijs"].extend(paginaregels)
+    if paginaweg:
+        uit["overgeslagen"].append(paginaweg)
 
     try:
         from nooch_village.kennis_context import kennis_blok, kennis_voor
         uit["kennis"] = kennis_blok(kennis_voor(inhabitant.context.data_dir, vraag))
     except Exception as e:                                   # noqa: BLE001
         uit["overgeslagen"].append(f"kennislaag: {e}")
+
+    # Wat NIET gedraaid heeft is zelf een citeerbaar feit. De pas verzamelde die lijst al en gooide
+    # 'm weg voordat hij bewijs werd, zodat de synthese moest AFLEIDEN dat een bron ontbrak — en
+    # daarop degradeerde ("de impliciete aanname dat claim_evidence niet gedraaid is"). Nu staat het
+    # er gewoon, en kan het rapport het citeren in plaats van veronderstellen.
+    for reden in uit["overgeslagen"]:
+        uit["bewijs"].append({"bron": "onderzoekspas", "kroniek": "",
+                              "citaat": f"niet gedraaid — {reden}"})
     if uit["overgeslagen"]:
         log.info("onderzoekspas '%s': %d bron(nen) overgeslagen — %s",
                  vraag[:40], len(uit["overgeslagen"]), "; ".join(uit["overgeslagen"])[:200])
