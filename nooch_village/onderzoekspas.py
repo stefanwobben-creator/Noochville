@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 
 from nooch_village import voorstel_vorm as vv
@@ -69,12 +70,24 @@ def _paginacheck(inhabitant, term: str) -> tuple[list, str]:
             regels.append({"bron": "paginacheck", "kroniek": "",
                            "citaat": f"de term '{term}' staat op pagina '{label}'"})
     if naald and not regels and teksten:
+        # Het negatieve feit is zelf signaal: "hij staat er niet" is even bruikbaar als "hij staat
+        # op pagina X", en zonder deze regel moet de synthese de afwezigheid weer afleiden.
         regels.append({"bron": "paginacheck", "kroniek": "",
                        "citaat": f"de term '{term}' is op geen van de {len(teksten)} gescande "
                                  f"pagina's aangetroffen"})
-    for b in (bevindingen or [])[:4]:
+    # ALLEEN bevindingen die over DEZE claim gaan. Eerst nam ik de eerste vier van de hele site, en
+    # dan kreeg elk voorstel dezelfde home-page-bevindingen mee ('planet-safe' rood, 'zero waste'
+    # rood) ongeacht wat er onderzocht werd. Gemeten gevolg: bak B ging van 7 kandidaten naar 0 —
+    # de relevante regel stond er wél, maar verdronk in ruis die de critic terecht als scope-drift
+    # las. Zelf toegevoegde ruis is duurder dan een ontbrekende bron.
+    claimwoorden = {w for w in re.split(r"[^\w]+", naald) if len(w) >= 4}
+    for b in (bevindingen or []):
+        bterm = str(b.get("term") or "")
+        raakt = bool(claimwoorden & {w for w in re.split(r"[^\w]+", bterm.lower()) if len(w) >= 4})
+        if not (raakt or (naald and naald in bterm.lower())):
+            continue
         regels.append({"bron": "paginacheck", "kroniek": "",
-                       "citaat": f"pagina '{b.get('pagina')}' bevat '{b.get('term')}' "
+                       "citaat": f"pagina '{b.get('pagina')}' bevat '{bterm}' "
                                  f"(stoplicht {b.get('stoplicht')})"})
     weg = f"paginacheck: {len(fouten)} pagina('s) niet opgehaald" if fouten else ""
     return regels, weg

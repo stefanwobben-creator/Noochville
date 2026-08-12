@@ -155,8 +155,57 @@ def test_de_paginacheck_maakt_van_de_waarneming_bewijsregels(monkeypatch):
     regels, weg = op._paginacheck(inh, "plasticvrij")
     citaten = [r["citaat"] for r in regels]
     assert any("staat op pagina 'faq'" in c for c in citaten)
-    assert any("bevat 'duurzaam'" in c and "red" in c for c in citaten)
     assert weg == ""
 
     afwezig, _ = op._paginacheck(inh, "mycelium")
     assert any("is op geen van de 1 gescande pagina's aangetroffen" in r["citaat"] for r in afwezig)
+
+
+
+# ── De ruis die ik zelf toevoegde ───────────────────────────────────────────
+
+def test_de_paginacheck_neemt_alleen_bevindingen_over_DEZE_claim_mee(monkeypatch):
+    """Eerst nam ik de eerste vier bevindingen van de hele site. Elk voorstel kreeg daardoor dezelfde
+    home-page-bevindingen mee ('planet-safe' rood, 'zero waste' rood) ongeacht wat er onderzocht
+    werd. Gemeten: bak B ging van 7 kandidaten naar 0 — de relevante regel stond er wél maar
+    verdronk in ruis die de critic terecht als scope-drift las.
+
+    Zelf toegevoegde ruis is duurder dan een ontbrekende bron: de bron laat een gat achter dat de
+    synthese kan benoemen, de ruis laat een voorstel zakken op iets dat er niet toe doet."""
+    from types import SimpleNamespace
+    from nooch_village import onderzoekspas as op
+
+    monkeypatch.setattr("nooch_village.skills_impl.claims_site_scan.scan_paginas",
+                        lambda db: [{"url": "https://x/p", "label": "product"}])
+    monkeypatch.setattr(
+        "nooch_village.skills_impl.claims_site_scan.verzamel",
+        lambda paginas, db, **k: (
+            [{"pagina": "home", "term": "planet-safe / planet-friendly", "stoplicht": "red"},
+             {"pagina": "home", "term": "zero waste", "stoplicht": "red"},
+             {"pagina": "product", "term": "plasticvrij / plastic free", "stoplicht": "orange"}],
+            [], {"product": "onze schoenen zijn plasticvrij"}, {}))
+    inh = SimpleNamespace(context=SimpleNamespace(data_dir="."), id="x")
+
+    citaten = [r["citaat"] for r in op._paginacheck(inh, "plasticvrij")[0]]
+    assert any("staat op pagina 'product'" in c for c in citaten)
+    assert any("plasticvrij / plastic free" in c for c in citaten)     # raakt de claim
+    assert not any("planet-safe" in c for c in citaten)                # andere claim, andere pagina
+    assert not any("zero waste" in c for c in citaten)
+
+
+def test_het_negatieve_feit_blijft_ook_zonder_relevante_bevindingen(monkeypatch):
+    """'de term staat er niet' is zelf signaal en mag niet met de ruis mee weggefilterd worden."""
+    from types import SimpleNamespace
+    from nooch_village import onderzoekspas as op
+
+    monkeypatch.setattr("nooch_village.skills_impl.claims_site_scan.scan_paginas",
+                        lambda db: [{"url": "https://x/p", "label": "product"}])
+    monkeypatch.setattr(
+        "nooch_village.skills_impl.claims_site_scan.verzamel",
+        lambda paginas, db, **k: ([{"pagina": "home", "term": "zero waste", "stoplicht": "red"}],
+                                  [], {"product": "geen enkele match hier"}, {}))
+    inh = SimpleNamespace(context=SimpleNamespace(data_dir="."), id="x")
+
+    citaten = [r["citaat"] for r in op._paginacheck(inh, "mycelium")[0]]
+    assert any("is op geen van de 1 gescande pagina's aangetroffen" in c for c in citaten)
+    assert not any("zero waste" in c for c in citaten)
