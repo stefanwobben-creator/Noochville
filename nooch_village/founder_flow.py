@@ -76,19 +76,24 @@ CONTENT = "content_goedkeuring"
 # voorleggen; de founder bevestigt, past aan of verwerpt. Dat oordeel hoort in dezelfde meetstroom
 # als de andere drie, niet in een eigen inbox.
 VOORSTEL = "voorstel_oordeel"
-TAKEN = (RADAR, CLAIM, CONTENT, VOORSTEL)
+# Vijfde taak: de audit op zelf-weggelegde radar-signalen. Een rol mag off-strategy signalen zelf
+# wegleggen, maar niet in stilte — een steekproef komt langs de founder, zodat een te streng filter
+# niet begraaft wat hij wél had willen zien. Overrulet hij een dismiss, dan is dat het herijk-label.
+DISMISS = "dismiss_audit"
+TAKEN = (RADAR, CLAIM, CONTENT, VOORSTEL, DISMISS)
 
 TAAK_LABEL = {
     RADAR: "Radar triage",
     CLAIM: "Claim judgement",
     CONTENT: "Content approval",
     VOORSTEL: "Role proposals",
+    DISMISS: "Dismissed signals (audit)",
 }
 
 # Klassen die ALTIJD bij de founder blijven, ook na graduatie. Hoog-inzet: juridisch, compliance,
 # materiaalbeslissing. De Wilson-poort mag hier niets automatiseren — een rol die 95% van de tijd
 # gelijk heeft over een juridische claim is nog steeds geen jurist.
-HOOG_INZET_TAKEN = frozenset({VOORSTEL})
+HOOG_INZET_TAKEN = frozenset({VOORSTEL, DISMISS})
 
 # Per taak de toegestane oordelen. Dit is tegelijk de sleutelruimte van de labels: een oordeel
 # buiten deze set wordt geweigerd, zodat de meting nooit op typefouten telt.
@@ -110,6 +115,9 @@ OORDELEN = {
     # "aanpassen" is bewust eersteklas en geen variant van bevestigen: de diff tussen wat de rol
     # voorstelde en wat de founder ervan maakte is het rijkste leersignaal dat deze lus heeft.
     VOORSTEL: ("bevestig", "aanpassen", "verwerp"),
+    # "wilde_zien" is het herijk-label: de rol legde weg, de founder wilde het wél zien. Dat is het
+    # signaal dat de relevantie-drempel te streng staat.
+    DISMISS: ("terecht", "wilde_zien"),
 }
 
 OORDEEL_LABEL = {
@@ -117,6 +125,7 @@ OORDEEL_LABEL = {
     "bewijs": "bank evidence", "fix": "fix copy", "scientist": "to Scientist",
     "publiceer": "approve", "corrigeer": "correct",
     "bevestig": "confirm", "aanpassen": "adjust", "verwerp": "reject",
+    "terecht": "rightly dismissed", "wilde_zien": "I wanted to see this",
 }
 
 NIVEAUS = ("A", "B", "C", "D")
@@ -156,6 +165,9 @@ _DEFAULTS = {
     # demotie-poort die perfect werk degradeerde. Wie hier later een laag-inzet-klasse van
     # afleidt, kopieert dan geen landmijn.
     VOORSTEL: {"lat": 0.90, "min_n": 25, "venster": 60, "audit_pct": 100, "dag_cap": 3},
+    # De audit MEET of het filter klopt; hij automatiseert niets. audit_pct 100 want elk item dat
+    # hier verschijnt IS al de steekproef (radar_beoordeling.AUDIT_PCT doet de weging per as).
+    DISMISS: {"lat": 0.90, "min_n": 20, "venster": 60, "audit_pct": 100, "dag_cap": 5},
 }
 
 # Een item dat langer dan dit open stond telt niet als "besteed" — dan lag het tabblad open.

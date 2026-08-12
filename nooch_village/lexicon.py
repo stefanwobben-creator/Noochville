@@ -108,13 +108,19 @@ class Lexicon:
     def add_concept(self, concept_id: str, words: dict[str, str],
                     status: str, rationale: str = "",
                     evidence: dict | None = None,
-                    by: str = "Librarian") -> dict:
+                    by: str = "Librarian", schendt: str = "") -> dict:
         """Voeg een concept toe of overschrijf het volledig.
-        Status geldt symmetrisch voor alle taalvarianten."""
+        Status geldt symmetrisch voor alle taalvarianten.
+
+        `schendt` = het GRONDWET-PRINCIPE dat dit concept schendt (bijv. "geen leer" voor bijenwas).
+        Alleen zinvol bij status `avoid`/`forbidden`. Zonder dit veld kan een rol die een signaal
+        wegwuift alleen zeggen "stond op een lijst"; mét dit veld citeert hij het principe, en is
+        de dismiss herleidbaar tot de grondwet in plaats van tot een tabel."""
         entry = {
             "words": words,
             "status": status,
             "rationale": rationale,
+            "schendt": schendt,
             "evidence": evidence or {},
             "by": by,
             "date": datetime.now().strftime("%Y-%m-%d"),
@@ -143,6 +149,7 @@ class Lexicon:
                     "words":    c["words"],
                     "status":   c["status"],
                     "rationale": c.get("rationale", ""),
+                    "schendt":  c.get("schendt", ""),
                     "evidence": c.get("evidence", {}),
                     "by":       c.get("by", "seed"),
                     "date":     c.get("date", datetime.now().strftime("%Y-%m-%d")),
@@ -151,3 +158,19 @@ class Lexicon:
         if added:
             self._save()
         return added
+
+
+    def schendt_principe(self, word: str, lang: str | None = None) -> tuple[str, str, str] | None:
+        """Schendt dit woord een grondwet-principe? → (concept_id, principe, rationale) of None.
+
+        Alleen voor `avoid`/`forbidden` mét een `schendt`-veld. Een avoid-concept zonder principe
+        geeft None: dan is er niets te citeren, en een dismiss zonder citeerbaar principe is precies
+        de black-box die we niet willen."""
+        cid = self.concept_for_word(word, lang)
+        if not cid:
+            return None
+        entry = self._data.get(cid) or {}
+        if entry.get("status") not in ("avoid", "forbidden"):
+            return None
+        principe = str(entry.get("schendt") or "").strip()
+        return (cid, principe, str(entry.get("rationale") or "")) if principe else None
