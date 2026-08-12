@@ -554,6 +554,45 @@ Haalt approved lexicon-termen op (max 3 NL + 3 EN) en toont per term:
 - OpenLibrary voltekst (`openlibrary_search_inside`) toevoegen aan KennisScout DNA
 - Approval via human inbox; daarna handmatige registratie in `activate_kennis_scout()`
 
+## Tension-verwerking — agenda voor de volgende sessie (nog niet gebouwd)
+
+Vastgelegd 13 aug 2026. Twee verbeteringen plus de meetmethode die ze moet voeden. Dit is een
+AGENDA, geen bestaande code.
+
+### 1. Goedkeuring-framing
+Een goedkeurings-tension moet renderen als een concreet **"ik wil X, mag dat"** met
+**ja / nee / suggestie**, mét vermelding van **welke founder-accountability** wordt aangesproken.
+
+Niet het "What do you need?"-menu, en niet een dubbele "wil je x of y". De Decide-now-vorm
+(Yes/No/Suggestion) bestaat al — hij wordt alleen op de verkeerde tension-soort toegepast.
+
+### 2. Purpose-routing vóór founder-escalatie
+Een rol met een behoefte checkt eerst of er een rol is wiens **purpose of accountabilities** passen,
+niet alleen skill-eigenaarschap. Past er een:
+- het wordt een concreet `projectverzoek` aan die rol;
+- de founder krijgt hooguit een ja/nee op de **routering**, niet op het werk.
+
+Pas als écht geen enkele rol past, komt het als founder-taak.
+
+Dit is dezelfde geparkeerde router-vraag als bij de radar-migratie: **match op purpose + skill, niet
+alleen skill**. `radar_beoordeling.rol_voor` doet nu alleen de skill-helft, met een comment dat de
+domein-helft ontbreekt omdat `concurrent_scout` en `harry_hemp` geen domeinen houden. Eén fix dient
+beide: de radar-migratie én deze rol-tensions.
+
+### 3. De founder-doorloop als input
+Stefan loopt Founder Flow en inbox item voor item door en noteert per item:
+
+1. zijn beslissing;
+2. **waarom, in één regel**;
+3. had dit bij hem moeten komen, hoort het bij rol X, of was het verkeerd gebracht?
+
+Die notities vertalen naar: purpose-routing-regels, goedkeuring-framing, filter- en dismiss-regels,
+en Founder Flow-labels.
+
+**De "waarom"-reden per item is het leersignaal** — niet de beslissing zelf. Een beslissing zegt
+"fout"; een reden zegt "fout op DEZE manier", en alleen dat laatste is een regel waard. Zelfde
+gedachte als de diff bij `aanpassen` in `voorstel_oordeel`.
+
 ## Certificaten in de village (architectuurbeslissing, nog niet gebouwd)
 
 Vastgelegd 12 aug 2026. Dit is een BESLISSING, geen bestaande code — hij staat hier zodat hij een
