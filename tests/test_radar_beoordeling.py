@@ -14,6 +14,7 @@ import os
 import tempfile
 
 import pytest
+from unittest.mock import patch
 
 from nooch_village import radar_beoordeling as rb
 from nooch_village.lexicon import Lexicon
@@ -32,64 +33,119 @@ def _sig(content, rationale="", feed="Material Innovation", sid="s1"):
             "role": "harry_hemp", "source": "biorxiv.org"}
 
 
-# ── De strijdigheids-as: citeert de grondwet, geen lijst ────────────────────
+# ── De strijdigheids-as: classificatie, gegrond en geauditeerd ─────────────
 
-def test_een_strijdig_signaal_citeert_het_geschonden_principe(lex):
-    """Niet "stond op een lijst" maar "schendt 'geen leer'". Daarmee is de dismiss herleidbaar tot
-    de grondwet, en dat is de eis: nooit een black-box dismiss."""
-    uit = rb.beoordeel(_sig("Bijenwas-coating voor waterafstotende schoenen",
-                            "biobased en volledig afbreekbaar"), lex)
+_REASON = "nooch_village.llm.reason"
+
+
+def _classificeert(categorie, materiaal, citaat):
+    """Stub voor de materiaal-classificatie."""
+    import json as _j
+    return lambda p, **kw: _j.dumps({"categorie": categorie, "materiaal": materiaal,
+                                     "citaat": citaat})
+
+
+def test_een_samenstelling_wordt_nu_wel_gevangen(lex):
+    """DE reden voor deze herijking. Het lexicon kent 'wol', maar 'schapenwol' is één token en
+    matchte niet — en dát is de normale vorm waarin een materiaal in een signaal staat. Gemeten:
+    nul strijdig-dismisses over 21 materiaalsignalen terwijl er minstens één echte in zat, met een
+    rationale die het nota bene aanprees als afbreekbaar alternatief."""
+    sig = _sig("Hergebruik van ongewenste schapenwol voor textieltoepassingen",
+               "Wol is een natuurlijke, biologisch afbreekbare vezel")
+    with patch(_REASON, _classificeert("dierlijk", "schapenwol", "ongewenste schapenwol")):
+        uit = rb.beoordeel(sig, lex)
     assert uit["besluit"] == rb.DISMISS_STRIJDIG
     assert uit["principe"] == "geen leer"
-    assert "'bijenwas' schendt het principe 'geen leer'" in uit["citaat"]
-    assert "dierlijk product" in uit["citaat"]
+    assert "schapenwol" in uit["citaat"] and "geen leer" in uit["citaat"]
 
 
-def test_strijdigheid_werkt_in_beide_talen(lex):
-    """Het Lexicon is meertalig en status geldt symmetrisch — een EN-signaal hoort dezelfde dismiss
-    te krijgen als zijn NL-tegenhanger."""
-    nl = rb.beoordeel(_sig("Bijenwas als coating"), lex)
-    en = rb.beoordeel(_sig("Beeswax as a coating"), lex)
-    assert nl["besluit"] == en["besluit"] == rb.DISMISS_STRIJDIG
-    assert nl["principe"] == en["principe"]
+def test_de_categorie_bepaalt_het_principe_deterministisch(lex):
+    """De classificatie kiest de categorie; de PRINCIPE-toewijzing is een tabel. Zo blijft de reden
+    herleidbaar tot de grondwet, ook als het materiaal nergens in een lijst staat."""
+    for cat, principe in (("dierlijk", "geen leer"), ("plastic", "geen plastic"),
+                          ("niet_eu", "in europa geproduceerd")):
+        with patch(_REASON, _classificeert(cat, "iets", "een materiaal")):
+            uit = rb.beoordeel(_sig("een materiaal in de tekst"), lex)
+        assert uit["principe"] == principe, cat
 
 
-def test_een_samenstelling_wordt_herkend(lex):
-    """`[\\w-]` maakte van 'bijenwas-coating' één token en miste het lexicon-woord — terwijl een
-    samenstelling juist de normale vorm is waarin zo'n materiaal in een signaal staat."""
-    assert rb.beoordeel(_sig("bijenwas-coating"), lex)["besluit"] == rb.DISMISS_STRIJDIG
-    assert rb.beoordeel(_sig("wol/zijde-mengsel"), lex)["besluit"] == rb.DISMISS_STRIJDIG
+def test_zonder_citaat_geen_dismiss(lex):
+    """Ongegrond = geen dismiss. Dezelfde regel als overal: een oordeel zonder aanwijsbare grond
+    gaat niet door."""
+    with patch(_REASON, _classificeert("dierlijk", "wol", "")):
+        assert rb.beoordeel(_sig("wol in de tekst"), lex)["besluit"] != rb.DISMISS_STRIJDIG
+
+
+def test_een_verzonnen_citaat_wordt_verworpen(lex):
+    """Het citaat moet ECHT in het signaal staan. Zonder die controle is de grondslag een bewering
+    van het model over zichzelf — dezelfde fout als een verzonnen bron."""
+    with patch(_REASON, _classificeert("dierlijk", "wol", "dit staat er helemaal niet")):
+        assert rb.beoordeel(_sig("iets over textiel"), lex)["besluit"] != rb.DISMISS_STRIJDIG
+
+
+def test_geen_of_onbekende_categorie_dismisst_niet(lex):
+    for cat in ("geen", "", "verzonnen_categorie"):
+        with patch(_REASON, _classificeert(cat, "mycelium", "mycelium")):
+            assert rb.beoordeel(_sig("mycelium uit Europa"), lex)["besluit"] != rb.DISMISS_STRIJDIG
+
+
+def test_een_kapotte_classificatie_legt_niets_weg(lex):
+    """Fail-OPEN. Een as die stilletjes wegwuift is erger dan een as die niets doet: het eerste is
+    onzichtbaar, het tweede staat gewoon in de wachtrij."""
+    for antwoord in (None, "", "geen json", '{"kapot":'):
+        with patch(_REASON, lambda p, **kw: antwoord):
+            assert rb.beoordeel(_sig("wol"), lex)["besluit"] != rb.DISMISS_STRIJDIG
 
 
 def test_strijdigheid_gaat_voor_relevantie(lex):
-    """Bijenwas scoort positief op 'afbreekbaar & biobased' en zou als relevant doorgaan. De
+    """Wol scoort positief op 'afbreekbaar & biobased' en zou als relevant doorgaan. De
     strijdigheid is de hardere uitspraak en moet dus eerst."""
     from nooch_village.mission import strategie_relevantie
-    score, _ = strategie_relevantie("Bijenwas-coating, biobased en afbreekbaar")
-    assert score >= 1                                        # het scoort écht relevant…
-    assert rb.beoordeel(_sig("Bijenwas-coating, biobased en afbreekbaar"),
-                        lex)["besluit"] == rb.DISMISS_STRIJDIG      # …en zakt toch
+    assert strategie_relevantie("schapenwol, biologisch afbreekbaar")[0] >= 1
+    with patch(_REASON, _classificeert("dierlijk", "wol", "schapenwol")):
+        uit = rb.beoordeel(_sig("schapenwol, biologisch afbreekbaar"), lex)
+    assert uit["besluit"] == rb.DISMISS_STRIJDIG
 
 
-def test_een_avoid_zonder_principe_dismisst_niet(tmp_path):
-    """Een `avoid`-concept zonder `schendt` levert niets citeerbaars op — en een dismiss zonder
-    citeerbaar principe is precies de black box die we niet willen."""
-    lx = Lexicon(str(tmp_path / "l.json"))
-    lx.add_concept("iets", {"nl": "onzinwoord"}, status="avoid", rationale="omdat het kan")
-    assert lx.schendt_principe("onzinwoord") is None
-    assert rb.beoordeel(_sig("een onzinwoord in de tekst"), lx)["besluit"] != rb.DISMISS_STRIJDIG
+def test_elke_strijdig_dismiss_gaat_langs_de_founder():
+    """De prijs van een classificatie in plaats van een regel: 100% audit tot Stefan er genoeg heeft
+    gezien om te verlagen. Geen classificatie zonder controle."""
+    assert rb.AUDIT_PCT[rb.DISMISS_STRIJDIG] == 100
+    assert all(rb.in_audit(f"s{i}", rb.DISMISS_STRIJDIG) for i in range(50))
 
 
 # ── De relevantie-as ────────────────────────────────────────────────────────
 
-def test_een_off_strategie_signaal_wordt_weggelegd_met_reden(lex):
-    uit = rb.beoordeel(_sig("Nieuwe blockchain-standaard voor NFT-ticketing"), lex)
+def test_de_relevantie_as_legt_niets_meer_weg_op_de_materiaal_feed(lex):
+    """Gemeten op de 21: 18 door, 3 af, en geen enkele echte strijdigheid gevangen. De reden is
+    structureel — de feed is al materiaal-selectief, dus vrijwel elk signaal raakt 'afbreekbaar &
+    biobased' of 'geen plastic'. Een filter dat op zijn eigen invoerselectie meet, discrimineert
+    niet."""
+    with patch(_REASON, _classificeert("geen", "", "")):
+        uit = rb.beoordeel(_sig("Nieuwe blockchain-standaard voor NFT-ticketing"), lex)
+    assert uit["besluit"] == rb.NAAR_VOORSTEL
+    assert "Material Innovation" not in rb.RELEVANTIE_DISMIST_OP
+
+
+def test_de_relevantie_as_dismisst_wel_op_een_brede_feed(lex):
+    """Op een feed die niet vooraf op onderwerp geselecteerd is, discrimineert hij wél."""
+    with patch(_REASON, _classificeert("geen", "", "")):
+        uit = rb.beoordeel(_sig("Nieuwe blockchain-standaard voor NFT-ticketing",
+                                feed="Competitor Watch"), lex)
     assert uit["besluit"] == rb.DISMISS_OFF_STRATEGIE
     assert "raakt geen enkel strategie-thema" in uit["citaat"]
 
 
+def test_de_score_reist_mee_als_zwak_signaal(lex):
+    """Retireren als dismiss-criterium is niet hetzelfde als weggooien."""
+    with patch(_REASON, _classificeert("geen", "", "")):
+        uit = rb.beoordeel(_sig("Mycelium-leer uit Europa, composteerbaar"), lex)
+    assert uit["besluit"] == rb.NAAR_VOORSTEL and uit["themas"]
+
+
 def test_een_relevant_signaal_gaat_naar_een_voorstel(lex):
-    uit = rb.beoordeel(_sig("Mycelium-leer uit Europa, composteerbaar"), lex)
+    with patch(_REASON, _classificeert("geen", "", "")):
+        uit = rb.beoordeel(_sig("Mycelium-leer uit Europa, composteerbaar"), lex)
     assert uit["besluit"] == rb.NAAR_VOORSTEL
     assert "afbreekbaar & biobased" in uit["themas"]
 
@@ -100,19 +156,17 @@ def test_een_kapotte_strategietoets_legt_niets_weg(monkeypatch, lex):
     def _stuk(_t):
         raise RuntimeError("mission-module weg")
     monkeypatch.setattr("nooch_village.mission.strategie_relevantie", _stuk)
-    assert rb.beoordeel(_sig("wat dan ook"), lex)["besluit"] == rb.NAAR_VOORSTEL
+    with patch(_REASON, _classificeert("geen", "", "")):
+        assert rb.beoordeel(_sig("wat dan ook"), lex)["besluit"] == rb.NAAR_VOORSTEL
 
 
 # ── De audit: ongelijk gewogen, en niet-optioneel ──────────────────────────
 
-def test_off_strategie_wordt_zwaarder_bemonsterd_dan_strijdig():
-    """Het risico verschilt: een off-strategie-dismiss kan een goed nieuw signaal begraven dat nog
-    geen bestaand thema raakt; een vegan-strijdigheid is bijna zeker terecht."""
-    assert rb.AUDIT_PCT[rb.DISMISS_OFF_STRATEGIE] > rb.AUDIT_PCT[rb.DISMISS_STRIJDIG]
+def test_de_off_strategie_steekproef_is_een_deelverzameling():
+    """Blijft bemonsterd, niet volledig: die as is regel-gebaseerd en verandert niet."""
     n = 400
     off = sum(rb.in_audit(f"s{i}", rb.DISMISS_OFF_STRATEGIE) for i in range(n))
-    con = sum(rb.in_audit(f"s{i}", rb.DISMISS_STRIJDIG) for i in range(n))
-    assert off > con * 2                                     # ~40% vs ~10%
+    assert 0 < off < n
 
 
 def test_de_steekproef_is_deterministisch():
@@ -126,8 +180,10 @@ def test_elke_dismiss_wordt_vastgelegd_ook_buiten_de_steekproef(tmp_path, lex):
     Anders is 'de audit staat uit' één config-regel van een stille drop verwijderd."""
     dd = str(tmp_path)
     for i in range(30):
-        s = _sig("Nieuwe blockchain-standaard voor NFT-ticketing", sid=f"sig{i}")
-        rb.leg_vast(dd, signaal=s, oordeel=rb.beoordeel(s, lex), rol="harry_hemp")
+        s = _sig("Nieuwe blockchain-standaard voor NFT-ticketing", sid=f"sig{i}",
+                 feed="Competitor Watch")
+        with patch(_REASON, _classificeert("geen", "", "")):
+            rb.leg_vast(dd, signaal=s, oordeel=rb.beoordeel(s, lex), rol="harry_hemp")
     rijen = rb.alle(dd)
     assert len(rijen) == 30                                  # alles vastgelegd…
     assert 0 < len(rb.audit_wachtrij(dd)) < 30               # …een deel op het scherm
@@ -135,7 +191,8 @@ def test_elke_dismiss_wordt_vastgelegd_ook_buiten_de_steekproef(tmp_path, lex):
 
 def test_de_vastlegging_draagt_het_principe_en_de_bron(tmp_path, lex):
     s = _sig("Bijenwas-coating")
-    rij = rb.leg_vast(str(tmp_path), signaal=s, oordeel=rb.beoordeel(s, lex), rol="harry_hemp")
+    with patch(_REASON, _classificeert("dierlijk", "bijenwas", "Bijenwas-coating")):
+        rij = rb.leg_vast(str(tmp_path), signaal=s, oordeel=rb.beoordeel(s, lex), rol="harry_hemp")
     assert rij["as"] == rb.DISMISS_STRIJDIG and rij["principe"] == "geen leer"
     assert rij["bron"] == "biorxiv.org" and rij["rol"] == "harry_hemp"
 

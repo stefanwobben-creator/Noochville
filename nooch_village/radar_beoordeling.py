@@ -45,33 +45,100 @@ DISMISS_STRIJDIG = "strijdig"
 DISMISS_OFF_STRATEGIE = "off_strategie"
 NAAR_VOORSTEL = "voorstel"
 
-# Audit-percentage per dismiss-as. Ongelijk met opzet: zie de moduledocstring.
-AUDIT_PCT = {DISMISS_OFF_STRATEGIE: 40, DISMISS_STRIJDIG: 10}
+# Audit-percentage per dismiss-as.
+#
+# `strijdig` staat op 100 zolang de materiaal-classificatie nieuw is. Die as is niet meer
+# regel-gebaseerd maar een CLASSIFICATIE, en dat is een bewuste afwijking van "nooit een model dat
+# raadt": een woordenlijst kon `schapenwol` niet als wol herkennen, en dat is precies de vorm waarin
+# materialen in signalen staan. De prijs van die afwijking is dat elke dismiss langs de founder gaat,
+# tot hij er genoeg heeft gezien om te verlagen. Geen classificatie zonder controle.
+AUDIT_PCT = {DISMISS_OFF_STRATEGIE: 40, DISMISS_STRIJDIG: 100}
+
+# Op welke feeds de RELEVANTIE-as mag wegleggen.
+#
+# Gemeten op de 21 materiaalsignalen: 18 gingen door, 3 vielen af, en de as ving geen enkele echte
+# strijdigheid. De reden is structureel — de feed is al materiaal-selectief, dus vrijwel elk signaal
+# raakt "afbreekbaar & biobased" of "geen plastic". Een filter dat op zijn eigen invoerselectie
+# meet, discrimineert niet.
+#
+# De score blijft wél meereizen als zwak secundair signaal (in `themas`), maar hij legt hier niets
+# meer weg. Op feeds die niet vooraf op onderwerp geselecteerd zijn kan hij dat wel.
+RELEVANTIE_DISMIST_OP = frozenset({"Competitor Watch", "Legal & Green Claims"})
+
+# Materiaal-categorie → het grondwet-principe dat hij schendt. Deterministisch: de CLASSIFICATIE
+# bepaalt de categorie, deze tabel bepaalt het principe. Zo blijft de dismiss-reden herleidbaar tot
+# de grondwet ook als het materiaal zelf nergens in een lijst staat.
+MATERIAAL_CATEGORIE = {
+    "dierlijk": "geen leer",
+    "plastic": "geen plastic",
+    "niet_eu": "in europa geproduceerd",
+}
 
 
 def _tekst_van(signaal: dict) -> str:
     return " ".join(str(signaal.get(v) or "") for v in ("content", "rationale", "feed"))
 
 
-def strijdig_met_grondwet(signaal: dict, lexicon) -> tuple[str, str, str] | None:
-    """Botst dit signaal met een grondwet-principe? → (woord, principe, waarom) of None.
+def strijdig_met_grondwet(signaal: dict, lexicon=None) -> tuple[str, str, str] | None:
+    """Botst het MATERIAAL in dit signaal met een grondwet-principe? → (materiaal, principe, waarom).
 
-    Deterministisch: woord-voor-woord tegen het Lexicon, dat per `avoid`-concept het geschonden
-    principe draagt. Geen model dat 'strijdigheid' inschat — een dismiss moet citeerbaar zijn."""
-    if lexicon is None:
+    Vervangt de lexicale match. Die kon `schapenwol` niet als wol herkennen — het lexicon kent 'wol',
+    maar een samenstelling is één token, en dát is de normale vorm waarin een materiaal in een
+    signaal staat. Gemeten: nul strijdig-dismisses over 21 materiaalsignalen terwijl er minstens
+    één echte in zat, met een rationale die het nota bene aanprees als afbreekbaar alternatief.
+
+    Nu een SMALLE classificatie: precies drie vragen, gesloten antwoordruimte, en de classificatie
+    moet het materiaal noemen én uit de signaaltekst citeren. Kan hij dat niet, dan geen dismiss.
+
+    Dit is een bewuste afwijking van "nooit een model dat raadt", en de prijs staat ernaast:
+    `AUDIT_PCT[strijdig] = 100`. Elke dismiss langs de founder tot hij er genoeg heeft gezien.
+
+    Fail-OPEN: geen classificatie, geen dismiss. Een as die stilletjes wegwuift is erger dan een as
+    die niets doet — het eerste is onzichtbaar, het tweede staat gewoon in de wachtrij."""
+    tekst = _tekst_van(signaal).strip()
+    if not tekst:
         return None
-    # Splitsen op ELK niet-woordteken, koppeltekens incluis. Met `[\w-]` werd "bijenwas-coating"
-    # één token en matchte het lexicon-woord "bijenwas" niet — precies het geval dat deze as moet
-    # vangen. Een samenstelling is de normale vorm waarin zo'n materiaal in een signaal staat.
-    for woord in re.findall(r"[a-zà-ÿ0-9]{4,}", _tekst_van(signaal).lower()):
-        try:
-            treffer = lexicon.schendt_principe(woord)
-        except Exception:                                # noqa: BLE001 — een kapot lexicon dismisst niets
-            return None
-        if treffer:
-            _cid, principe, waarom = treffer
-            return woord, principe, waarom
-    return None
+    from nooch_village.llm import reason
+    from nooch_village.llm_keuze import ladder_voor
+    prompt = (
+        "Je bent materiaalkundige bij Nooch (veganistische, plasticvrije schoenen uit Europa). "
+        "Beantwoord over het MATERIAAL in dit signaal precies drie gesloten vragen. Beoordeel het "
+        "materiaal zelf, niet of het onderwerp interessant is.\n\n"
+        f"SIGNAAL:\n{tekst[:1200]}\n\n"
+        "1. Is het materiaal van dierlijke oorsprong (wol, zijde, leer, bijenwas, caseïne, "
+        "chitine uit schaaldieren, …)? → 'dierlijk'\n"
+        "2. Is het een petrochemische kunststof (polyester, PU, PVC, nylon, PLA uit fossiele bron, "
+        "…)? → 'plastic'\n"
+        "3. Is het aantoonbaar NIET in Europa produceerbaar (palmolie, tropische gewassen, "
+        "grondstoffen die alleen buiten Europa groeien)? → 'niet_eu'\n"
+        "Geldt geen van drieën, of weet je het niet zeker → 'geen'.\n\n"
+        "Bij twijfel kies je 'geen'. Een onterechte 'dierlijk' wuift echt onderzoek weg.\n"
+        "Citeer LETTERLIJK het stuk uit het signaal waarop je oordeel steunt; kun je niets citeren, "
+        "dan is het antwoord 'geen'.\n"
+        'Antwoord UITSLUITEND met JSON: {"categorie":"dierlijk|plastic|niet_eu|geen",'
+        '"materiaal":"...","citaat":"..."}')
+    try:
+        rauw = reason(prompt, call_site="materiaal_identiteit",
+                      ladder=ladder_voor("materiaal_identiteit"), json_mode=True, max_tokens=400)
+        data = json.loads(str(rauw)[str(rauw).find("{"):str(rauw).rfind("}") + 1]) if rauw else None
+    except Exception as e:                               # noqa: BLE001 — fail-open
+        log.warning("materiaal-classificatie faalde, geen dismiss: %s", e)
+        return None
+    if not isinstance(data, dict):
+        return None
+    categorie = str(data.get("categorie") or "").strip().lower()
+    principe = MATERIAAL_CATEGORIE.get(categorie)
+    materiaal = str(data.get("materiaal") or "").strip()
+    citaat = str(data.get("citaat") or "").strip()
+    if not principe or not materiaal or not citaat:
+        return None                                      # ongegrond = geen dismiss
+    if citaat.lower() not in tekst.lower():
+        # Het citaat moet ECHT in het signaal staan. Zonder deze controle is de grondslag een
+        # bewering van het model over zichzelf — dezelfde fout als een verzonnen bron.
+        log.info("materiaal-classificatie verworpen: citaat staat niet in het signaal (%s)",
+                 citaat[:60])
+        return None
+    return materiaal, principe, f"{categorie}: \"{citaat[:160]}\""
 
 
 def beoordeel(signaal: dict, lexicon=None) -> dict:
@@ -83,9 +150,9 @@ def beoordeel(signaal: dict, lexicon=None) -> dict:
     tekst = _tekst_van(signaal)
     botsing = strijdig_met_grondwet(signaal, lexicon)
     if botsing:
-        woord, principe, waarom = botsing
+        materiaal, principe, waarom = botsing
         return {"besluit": DISMISS_STRIJDIG, "as": DISMISS_STRIJDIG, "principe": principe,
-                "citaat": f"'{woord}' schendt het principe '{principe}': {waarom}",
+                "citaat": f"'{materiaal}' schendt het principe '{principe}' — {waarom}",
                 "themas": []}
     try:
         from nooch_village.mission import strategie_relevantie
@@ -93,6 +160,11 @@ def beoordeel(signaal: dict, lexicon=None) -> dict:
     except Exception as e:                               # noqa: BLE001 — fail-open: niet wegleggen
         log.warning("strategie-toets faalde, signaal blijft staan: %s", e)
         return {"besluit": NAAR_VOORSTEL, "as": "", "principe": "", "citaat": "", "themas": []}
+    # De score reist altijd mee als zwak secundair signaal, maar legt alleen weg op feeds waar hij
+    # discrimineert. Zie RELEVANTIE_DISMIST_OP.
+    if str(signaal.get("feed") or "") not in RELEVANTIE_DISMIST_OP:
+        return {"besluit": NAAR_VOORSTEL, "as": "", "principe": "", "citaat": "",
+                "themas": list(themas)}
     if score < 1:
         return {"besluit": DISMISS_OFF_STRATEGIE, "as": DISMISS_OFF_STRATEGIE, "principe": "",
                 "citaat": ("raakt geen enkel strategie-thema uit de grondwet (geen plastic, geen "
