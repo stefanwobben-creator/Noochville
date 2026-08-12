@@ -175,3 +175,47 @@ def test_route_is_bereikbaar():
     assert cockpit2.render_copy_prompt is cp.render_copy_prompt
     bron = open(cockpit2.__file__.replace(".pyc", ".py"), encoding="utf-8").read()
     assert '"/copy-prompt"' in bron
+
+
+# ── Het OUTPUT-contract vraagt twee versies, niet één en niet drie ─────────────
+
+def _output_blok(prompt: str) -> str:
+    return prompt.split("=== OUTPUT ===", 1)[1]
+
+
+@pytest.mark.smoke
+def test_prompt_vraagt_twee_versies(dorp):
+    prompt = cp.bouw_prompt(_ctx(dorp), soort="Email", register="ANNOY", brief="Welkomstmail")
+    blok = _output_blok(prompt)
+    assert "Write two versions" in blok
+    assert "VERSION A" in blok
+    assert "VERSION B" in blok
+    assert "VERSION C" not in blok
+
+
+def test_beide_versie_instructies_noemen_het_gekozen_register(dorp):
+    """Zonder de registernaam in béide instructies weet het model niet waarvan A de grens
+    opzoekt en waarvan B de tegenpool is."""
+    blok = _output_blok(cp.bouw_prompt(_ctx(dorp), register="ANNOY"))
+    assert blok.count("ANNOY") >= 2
+
+
+def test_zonder_register_geen_kaal_gat_in_de_instructie(dorp):
+    """Fail-soft: geen register gekozen mag geen zin opleveren die halverwege ophoudt."""
+    blok = _output_blok(cp.bouw_prompt(_ctx(dorp)))
+    assert "VERSION A" in blok
+    assert " — , at the limit" not in blok
+    assert "the policy's dominant register" in blok
+
+
+def test_checktabel_verbiedt_verzonnen_checks(dorp):
+    """Het model vulde de tabel eerder aan met checks die in geen policy staan."""
+    assert "Do not invent checks the policies do not name." in _output_blok(
+        cp.bouw_prompt(_ctx(dorp)))
+
+
+def test_de_grens_verwijst_naar_de_calibratietekst_niet_naar_het_model(dorp):
+    """'Tegen de grens' mag geen vrijbrief zijn: de policy bepaalt hoe ver, niet het model."""
+    blok = _output_blok(cp.bouw_prompt(_ctx(dorp), register="LAUGH"))
+    assert "calibration text named in the policies" in blok
+    assert "not your own instinct" in blok

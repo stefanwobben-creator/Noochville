@@ -118,14 +118,35 @@ def bouw_prompt(ctx: dict, *, soort: str = "", register: str = "", register_uitl
         L.append(f"Register: {register}" + (f" — {register_uitleg}" if register_uitleg else ""))
     L += ["Brief:", (brief or "(no brief given)").strip()]
 
+    # Twee versies in plaats van één. Reden: elke check in de policies is een verbod, dus één
+    # versie convergeert naar de vlakste tekst die niets overtreedt en het register verdampt.
+    # Twee polen op dezelfde feiten maken de spanwijdte zichtbaar en laten de mens kiezen of
+    # monteren. Géén derde "normale" versie: die is de vlakke tekst waar de klacht over ging, en
+    # het ijkpunt staat al in de policies (de calibratietekst).
+    reg = register or "the policy's dominant register"
     L += ["", "=== OUTPUT ===",
-          "1. Write the copy. Start with it. No preamble, no explanation of your approach.",
-          "2. Then a line containing only ---",
-          "3. Then a check table. Read the policies above, find every named check in them, and "
-          "list each one with PASS or FAIL. For every FAIL, quote the offending sentence and give "
-          "a rewrite.",
-          "4. If the brief and a policy contradict each other, follow the policy and say so in "
-          "one line under the table."]
+          "Write two versions of the same text. Same brief, same facts, same claims. Only the "
+          "emotional charge differs. Both obey every policy above, including every hard limit. A "
+          "version that breaks a hard limit is not a bolder version, it is a rejected one.",
+          "",
+          f"1. VERSION A — {reg}, at the limit.",
+          "   The chosen register at the highest intensity that still passes every check. Walk up "
+          "to the fence the hard limits set and stop there. Not louder: sharper. The reference for "
+          "how far is the calibration text named in the policies, not your own instinct.",
+          "",
+          "2. VERSION B — opposite charge.",
+          f"   The same facts with the emotional charge inverted. Where {reg} makes the reader "
+          "bristle, this one makes them grin at the same absurdity, or the other way round. On its "
+          "first line, name which of the policy's registers this version landed in.",
+          "",
+          "Then a line containing only ---",
+          "",
+          "Then one check table for both versions: one row per check that is actually named in "
+          "the policies, with PASS or FAIL per version (A, B). For every FAIL, quote the sentence "
+          "and give a rewrite. Do not invent checks the policies do not name.",
+          "",
+          "If the brief and a policy contradict each other, follow the policy and say so in one "
+          "line under the table."]
     return "\n".join(L)
 
 
