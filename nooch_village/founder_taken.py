@@ -85,7 +85,11 @@ def _radar_items(st, data_dir: str, niveau: str = "A") -> list[dict]:
     # anders nergens meer landen, en dat is de stille drop die we overal hebben weggehaald.
     try:
         from nooch_village import radar_beoordeling as rb
-        recs = list(getattr(st, "records", None) or [])
+        # `st.records` is een Records-STORE, geen lijst. `list(...)` erop gaf "'Records' object is
+        # not iterable", de fail-soft ving het op, en de weergaveregel deed stilletjes niets —
+        # precies het patroon dat we deze week overal hebben weggehaald.
+        _reg = getattr(st, "records", None)
+        recs = list(_reg.all()) if hasattr(_reg, "all") else list(_reg or [])
         beoordeeld = {r.get("signaal") for r in rb.alle(data_dir)}
         kandidaten = [it for it in kandidaten
                       if it["id"] not in beoordeeld and not _heeft_beoordelaar(it, recs)]
