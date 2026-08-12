@@ -458,12 +458,52 @@ def _voorstel_effect(st, data_dir: str, item: str, oordeel: str) -> str:
 
 
 
+# ── dismiss_audit: klopt het filter van de rol? ──────────────────────────────────────────────
+
+def _dismiss_items(st, data_dir: str, niveau: str = "A") -> list[dict]:
+    """De zelf-weggelegde radar-signalen die in de auditsteekproef vielen.
+
+    Het AI-"voorstel" is hier altijd `terecht`: de rol legde weg, dus zijn impliciete oordeel is
+    "dit hoefde je niet te zien". De founder bevestigt dat of zegt `wilde_zien` — en dat laatste is
+    het herijk-label voor de relevantie-drempel."""
+    from nooch_village import radar_beoordeling as rb
+    uit = []
+    for r in rb.audit_wachtrij(data_dir):
+        soort = "conflicts with the constitution" if r.get("as") == rb.DISMISS_STRIJDIG \
+            else "off-strategy"
+        uit.append({
+            "item": f"dismiss:{r.get('signaal')}",
+            "titel": f"{r.get('rol')} dismissed: {str(r.get('inhoud'))[:110]}",
+            "detail": str(r.get("citaat"))[:400],
+            "context": f"{soort} · source: {r.get('bron') or 'unknown'}",
+            "link": "/signals",
+            "ai": "terecht",
+            "ai_waarom": str(r.get("citaat"))[:200],
+        })
+    return uit
+
+
+def _dismiss_effect(st, data_dir: str, item: str, oordeel: str) -> str:
+    """`terecht` is de vastlegging zelf. `wilde_zien` zet het signaal terug in de wachtrij én is het
+    label waarop de relevantie-drempel geijkt wordt — het mag dus nooit alleen een klik zijn."""
+    _, _, sid = item.partition(":")
+    if oordeel == "terecht":
+        return "✓ dismissal confirmed — recorded as a label"
+    store = getattr(st, "radar", None)
+    if store is not None and hasattr(store, "reopen"):
+        try:
+            store.reopen(sid)
+        except Exception as e:                       # noqa: BLE001 — het label is al waardevol
+            return f"⛔ recorded, but reopening failed: {e}"
+    return "↩ back in the queue — recorded as a recalibration label"
+
+
 # ── De gedeelde ingang ───────────────────────────────────────────────────────────────────────
 
 _WACHTRIJEN = {ff.RADAR: _radar_items, ff.CLAIM: _claim_items, ff.CONTENT: _content_items,
-               ff.VOORSTEL: _voorstel_items}
+               ff.VOORSTEL: _voorstel_items, ff.DISMISS: _dismiss_items}
 _EFFECTEN = {ff.RADAR: _radar_effect, ff.CLAIM: _claim_effect, ff.CONTENT: _content_effect,
-             ff.VOORSTEL: _voorstel_effect}
+             ff.VOORSTEL: _voorstel_effect, ff.DISMISS: _dismiss_effect}
 
 
 def wachtrij(st, data_dir: str, taak: str, labels: list[dict] | None = None,

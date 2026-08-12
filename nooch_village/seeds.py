@@ -33,7 +33,33 @@ def role_provenance_violations(records: "Records") -> list[str]:
 
 # ── Lexicon-zaad ──────────────────────────────────────────────────────────────
 
-_LEXICON_SEED = [
+# Concepten die een GRONDWET-PRINCIPE schenden. `schendt` verwijst naar een sleutel uit
+# `mission.STRATEGIE_THEMAS`, zodat een rol die een radar-signaal wegwuift het principe kan CITEREN
+# ("bijenwas schendt 'geen leer': dierlijk product") in plaats van te zeggen dat iets op een lijst
+# stond. Zonder die verwijzing is een dismiss een black box, en dat is precies wat de audit moet
+# voorkomen. Uitbreidbaar door de Librarian via `add_concept(..., schendt=...)`.
+_STRIJDIG_SEED = [
+    {"concept_id": "bijenwas", "words": {"nl": "bijenwas", "en": "beeswax"}, "status": "avoid",
+     "schendt": "geen leer",
+     "rationale": "Bijenwas is een dierlijk product. Nooch is volledig vegan; een materiaal dat "
+                  "van dieren komt kan geen onderdeel van de schoen zijn, hoe biobased ook."},
+    {"concept_id": "wol", "words": {"nl": "wol", "en": "wool"}, "status": "avoid",
+     "schendt": "geen leer",
+     "rationale": "Wol is een dierlijk product en daarmee niet vegan, ook niet als hij natuurlijk "
+                  "afbreekbaar is."},
+    {"concept_id": "zijde", "words": {"nl": "zijde", "en": "silk"}, "status": "avoid",
+     "schendt": "geen leer",
+     "rationale": "Zijde komt van zijderupsen — dierlijk, dus niet vegan."},
+    {"concept_id": "chroomlooien", "words": {"nl": "chroomlooien", "en": "chrome tanning"},
+     "status": "avoid", "schendt": "geen leer",
+     "rationale": "Looien veronderstelt dierenhuid; het proces is per definitie leer-gebonden."},
+    {"concept_id": "polyurethaan", "words": {"nl": "polyurethaan", "en": "polyurethane"},
+     "status": "avoid", "schendt": "geen plastic",
+     "rationale": "Polyurethaan is een petrochemische kunststof. Vaak aangeprezen als vegan "
+                  "leeralternatief, maar het botst met 'geen plastic'."},
+]
+
+_LEXICON_SEED = _STRIJDIG_SEED + [
     {
         "concept_id": "burger_frame",
         "words": {"nl": "burger", "en": "citizen"},

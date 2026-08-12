@@ -374,11 +374,13 @@ def test_niveaus_klimmen_per_taak(dd):
     assert store.zet(ff.RADAR, "Z") is False
 
 
-def test_er_zijn_precies_vier_taken():
-    """Waren er drie ("strikt deze drie, geen vierde zonder expliciet besluit"). De onderzoekspas
-    is dat besluit, 11 aug: een rol onderzoekt zelf en legt een gegrond voorstel voor, en dat
-    oordeel hoort in dezelfde meetstroom als de andere drie — niet in een eigen inbox."""
-    assert ff.TAKEN == ("radar_triage", "claim_oordeel", "content_goedkeuring", "voorstel_oordeel")
+def test_er_zijn_precies_vijf_taken():
+    """Waren er drie ("strikt deze drie, geen vierde zonder expliciet besluit"). De onderzoekspas is
+    dat besluit (11 aug), de dismiss-audit hoort er onlosmakelijk bij (12 aug): een rol mag een
+    radar-signaal zelf wegleggen, maar niet in stilte — anders is dit de stille-drop-ziekte met een
+    nette naam."""
+    assert ff.TAKEN == ("radar_triage", "claim_oordeel", "content_goedkeuring", "voorstel_oordeel",
+                        "dismiss_audit")
     assert set(ff.OORDELEN) == set(ff.TAKEN)
     assert set(ff.instellingen("/nonexistent")) == set(ff.TAKEN)
 
