@@ -554,6 +554,47 @@ Haalt approved lexicon-termen op (max 3 NL + 3 EN) en toont per term:
 - OpenLibrary voltekst (`openlibrary_search_inside`) toevoegen aan KennisScout DNA
 - Approval via human inbox; daarna handmatige registratie in `activate_kennis_scout()`
 
+## Certificaten in de village (architectuurbeslissing, nog niet gebouwd)
+
+Vastgelegd 12 aug 2026. Dit is een BESLISSING, geen bestaande code — hij staat hier zodat hij een
+sessie overleeft, naast `no_data ≠ nul` en de bron-guards.
+
+### 1. Het gezag ligt bij compliance
+Het certificaten-register is **compliance-domein**. Elk certificaat wordt één gestructureerd feit:
+
+| veld | wat |
+|------|-----|
+| `certificeert` | wát er gecertificeerd is (de eigenschap/claim) |
+| `materiaal` | welk materiaal |
+| `leverancier` | welke leverancier |
+| `niveau` | `component` of `eindproduct` — die twee zijn niet inwisselbaar |
+| `instantie` | de uitgevende instantie |
+| `geldig_tot` | einddatum, als datum |
+| `bron_pdf` | de gekoppelde bron-PDF |
+
+Een toekomstige `cert_evidence`-skill leest hieruit; de onderzoekspas citeert het met een
+Kroniek-id, precies zoals hij nu `claims_check` en `claim_evidence` citeert.
+
+### 2. Vindbaarheid mag bij de library, uitleg niet
+De Librarian mag een certificaat indexeren voor semantische vindbaarheid, maar **als verwijzing naar
+het compliance-feit** — nooit als eigen heruitleg. Zelfde domein-eigenaarschapsregel als voor de
+Library: lezen is vrij, cureren is exclusief.
+
+### 3. De scope wordt nooit twee keer geïnterpreteerd
+Eén bron van waarheid (compliance); al het andere wijst ernaar, zoals de Kroniek dat met
+`result_ref` doet. Dit is de `reference, don't copy`-regel toegepast op een domein in plaats van op
+een getal — en de reden is dezelfde als bij luna, het bibliotheek-domein en `required_payload`: een
+feit dat op twee plekken wordt uitgelegd, drijft uiteen zonder dat iets zich meldt.
+
+### 4. Een verlopen certificaat stopt automatisch met gronden
+`geldig_tot` is een **hard veld**, geen tekst die iemand uit de PDF haalt. Een verlopen certificaat
+hoort geen enkele claim meer te dragen, en dat moet een vergelijking zijn, geen oordeel.
+
+### 5. De component-naar-cert-koppeling levert de founder
+Welk Nooch-onderdeel welk materiaal bevat weet **alleen de founder**. Parsen, structureren en
+ontsluiten doet het dorp. Dit is dezelfde grens als bij `conscious`: het dorp kan een claim toetsen
+maar niet weten wat er intern achter zit — die invulling is mens-input, geen skill-uitvoer.
+
 ## Schaal-naden (grenzen die je later kunt opentrekken, nu niet schenden)
 
 Dit zijn de vier plekken waar de architectuur later kan groeien zonder bestaande code te herschrijven:
