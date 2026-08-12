@@ -112,3 +112,12 @@ def test_een_signaal_zonder_beoordelaar_blijft_staan():
 
     assert ft._heeft_beoordelaar({"feed": "Onbekende Feed", "role": "niemand"}, []) is False
     assert ft._heeft_beoordelaar({"feed": "Competitor Watch", "role": "weg"}, [_Rec()]) is False
+
+
+def test_de_records_store_wordt_uitgepakt_niet_geitereerd():
+    """`st.records` is een Records-STORE. `list(...)` erop gaf "'Records' object is not iterable";
+    de fail-soft ving dat op en de weergaveregel deed stilletjes niets — precies het patroon dat
+    deze week overal is weggehaald."""
+    src = open("nooch_village/founder_taken.py", encoding="utf-8").read()
+    assert 'hasattr(_reg, "all")' in src and "_reg.all()" in src
+    assert 'list(getattr(st, "records", None) or [])' not in src
