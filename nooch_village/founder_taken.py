@@ -44,6 +44,15 @@ FIELD_NOTE_ROL = "website_watcher"            # schrijft de dagelijkse Field Not
 UITVOERDER_ROL = "mother_earth__nooch__noochville__copywriter"
 
 
+def _heeft_beoordelaar(signaal: dict, records) -> bool:
+    """Is er een rol die dit signaal kan beoordelen? Zo ja, dan is het geen founderwerk."""
+    if not records:
+        return False
+    from nooch_village import radar_beoordeling as rb
+    rol, _waarom = rb.rol_voor(signaal, records)
+    return bool(rol) and any(getattr(r, "id", "") == rol for r in records)
+
+
 # ── 1. Radar-triage ──────────────────────────────────────────────────────────────────────────
 
 def _radar_items(st, data_dir: str, niveau: str = "A") -> list[dict]:
@@ -67,6 +76,21 @@ def _radar_items(st, data_dir: str, niveau: str = "A") -> list[dict]:
     telt gewoon mee in de bronnen-teller."""
     beeld = radar_beeld(st, data_dir)
     kandidaten = beeld["nieuw"] if niveau in ("C", "D") else beeld["open"]
+    # EINDTOESTAND VAN DE OMKERING, alvast als weergaveregel: de founder ziet voorstellen, geen
+    # signalen. Een rauw signaal dat nog door geen rol beoordeeld is, is geen founderwerk — het
+    # wacht in de radar tot zijn rol het oppakt, en komt daarna terug als `voorstel_oordeel` of als
+    # dismiss in de auditsteekproef. Zo stopt de stapel bij de bron in plaats van op dit scherm.
+    #
+    # Alleen signalen waarvoor GEEN rol de beoordeling kan doen blijven hier staan: die zouden
+    # anders nergens meer landen, en dat is de stille drop die we overal hebben weggehaald.
+    try:
+        from nooch_village import radar_beoordeling as rb
+        recs = list(getattr(st, "records", None) or [])
+        beoordeeld = {r.get("signaal") for r in rb.alle(data_dir)}
+        kandidaten = [it for it in kandidaten
+                      if it["id"] not in beoordeeld and not _heeft_beoordelaar(it, recs)]
+    except Exception as e:                               # noqa: BLE001 — weergave mag nooit breken
+        log.warning("radar-filter overgeslagen (alle signalen blijven zichtbaar): %s", e)
     uit = []
     for it in kandidaten:
         oordeel = beeld["nieuwheid"].get(it["id"], {})
@@ -517,7 +541,12 @@ def wachtrij(st, data_dir: str, taak: str, labels: list[dict] | None = None,
         return []
     labels = ff.alle(data_dir) if labels is None else labels
     gedaan = ff.beoordeelde_items(labels, taak)
-    return [i for i in _WACHTRIJEN[taak](st, data_dir, niveau) if i["item"] not in gedaan]
+    # Geparkeerd is GEEN oordeel: het staat in een eigen store en telt nergens in de meting mee.
+    # Zie founder_park — een parkering wegschrijven als label zou de overeenstemming, de
+    # Wilson-poort en de drift stilletjes vervuilen.
+    from nooch_village.founder_park import geparkeerd
+    weg = gedaan | geparkeerd(data_dir, taak)
+    return [i for i in _WACHTRIJEN[taak](st, data_dir, niveau) if i["item"] not in weg]
 
 
 def item_van(st, data_dir: str, taak: str, item: str, niveau: str = "A") -> dict | None:
