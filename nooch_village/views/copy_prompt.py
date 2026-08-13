@@ -254,7 +254,7 @@ def _cl_knoppen(naam: str, opties: list[tuple[str, str]], huidig: str) -> str:
     uit = "<div class='cl-bar'>"
     for waarde, label in opties:
         aan = " on" if waarde == huidig else ""
-        uit += (f"<button class='cl-filter{aan}' type='submit' name='set_{_e(naam)}' "
+        uit += (f"<button class='cl-filter pill{aan}' type='submit' name='set_{_e(naam)}' "
                 f"value='{_e(waarde)}'>{_e(label)}</button>")
     return uit + "</div>"
 
@@ -323,11 +323,16 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", brief: str = "", uit:
                        attrs="rows='8'")
     formulier += "<p class='ptitle'>4. The brief</p>" + briefveld
 
-    formulier += "<button class='btn ok' type='submit'>Generate prompt</button></form>"
+    # Geen "Generate" meer als hoofdhandeling: elke chip is een submit en herbouwt de prompt
+    # meteen. Deze knop is er alleen nog voor de brief, want een textarea verstuurt zichzelf niet.
+    formulier += ("<button class='btn' type='submit'>Update with this brief</button></form>")
 
     # De stack, per laag, met een schakelaar per policy. Een uitgezette policy verdwijnt uit de
     # PROMPT — de knop is geen filter op de weergave maar op wat het model te lezen krijgt.
-    stack = ["<div class='card'><b>Policy stack</b>"
+    # Instellen-en-vergeten, dus dichtgevouwen: governance hoort niet visueel te concurreren met
+    # de schrijftaak. Wie de bronnen wil bijstellen klapt hem open; de rest ziet één regel.
+    stack = [f"<details class='card'><summary><b>Sources</b> "
+             f"<span class='muted'>· {len(aan)} of {len(items)} policies on</span></summary>"
              "<p class='muted'>Always on: what Nooch is for, plus the strategy. Everything below "
              "is a choice — switch one off and it leaves the prompt.</p>"]
     for laag in (LAAG_ROL, LAAG_MERK, LAAG_KADER):
@@ -347,30 +352,35 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", brief: str = "", uit:
                 f"<a class='cl-filter{" on" if aan_nu else ""}' href='/copy-prompt?{q}'>"
                 f"{"✓" if aan_nu else "○"} {_e(a.get("title") or pid)}</a>")
         stack.append("<div class='cl-filters'>" + "".join(knoppen) + "</div>")
-    stack.append("</div>")
+    stack.append("</details>")
 
     herkomst = "".join(
         f"<span class='chip'>{_e(a.get('id', ''))}{_e(' ' + a['herkomst'] if a.get('herkomst') else '')}</span>"
         for a in aan)
     prompt = bouw_prompt(ctx, soort=soort, brief=brief, items=items, doel=doel,
                          awareness=awareness)
+    # Het eindproduct, dus het krijgt de plek van een eindproduct: breed, leesbaar en BEWERKBAAR.
+    # Niet readonly — wie een zin wil bijschaven voor hij plakt, moet dat hier kunnen doen.
     uitvoer = (
         "<div class='card'>"
-        "<b>Your prompt</b> <button class='btn sm' type='button' data-cp-kopieer>Copy prompt</button>"
-        f"<p class='muted'>Built from {len(aan)} live policies: {herkomst or '—'}. "
-        "Paste it into ChatGPT, Gemini or Claude. Change a policy in the cockpit and the next "
-        "prompt carries the change.</p>"
+        "<p class='ptitle'>Your prompt</p>"
+        "<button class='btn ok' type='button' data-cp-kopieer>Copy the whole prompt</button>"
+        f"<p class='muted'>Built live from {len(aan)} policies: {herkomst or '—'}. "
+        "Every choice above rewrites it immediately. Edit it here if you want, then paste it into "
+        "ChatGPT, Gemini or Claude. Change a policy in the cockpit and the next prompt carries "
+        "the change.</p>"
         + _field("Prompt", "prompt", kind="textarea", value=prompt, fid="cp-prompt",
-                 attrs="readonly rows='24'")
+                 attrs="rows='30' class='editor mono'")
         + "</div>")
 
+    # Volgorde = de flow: eerst de taak (1-4), dan het eindproduct, en de bronnen als voetnoot.
+    # Stond de stack bovenaan, dan concurreerde governance visueel met de schrijftaak en won het.
     hoofd = (f"<h1 class='ptitle'>Copy prompt</h1>"
-             f"<p class='muted'>Policies of {_e(_name(st.records.get(rol)))}. "
-             f"<a href='/node?id={_e(urllib.parse.quote(rol))}&tab=policies'>Read or change them</a> "
-             f"(governance-owned: not everyone may edit).</p>"
-             f"{''.join(stack)}{formulier}{uitvoer}")
+             f"<p class='muted'>Writing as {_e(_name(st.records.get(rol)))}. "
+             f"Pick, and the prompt below rewrites itself.</p>"
+             f"{formulier}{uitvoer}{''.join(stack)}")
     return _page("Copy prompt",
-                 f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{hoofd}</div>{_KOPIEER_JS}")
+                 f"{_DS_LINK}{_nav()}<div class='c2-wrap roomy'>{hoofd}</div>{_KOPIEER_JS}")
 
 
 # Kopiëren via de clipboard-API, identiek aan het patroon in views/claims.py. Zonder JS blijft de
@@ -383,3 +393,35 @@ _KOPIEER_JS = """<script>(function(){
      k.textContent='Copied';setTimeout(function(){k.textContent='Copy prompt';},1600);});
  });
 })();</script>"""
+
+
+# ── De tool als artefact op de rol ───────────────────────────────────────────────────────────
+
+TOOL_TITEL = "Copy prompt generator"
+TOOL_BODY = (
+    "Builds a prompt for an external model out of this role's live policy stack, plus the "
+    "mission and strategy. Pick a goal, a reader and a format; the prompt rewrites itself.\n\n"
+    "The policies are read at the moment you open it — change one in the cockpit and the next "
+    "prompt carries the change. Nothing about the voice lives in the tool itself."
+)
+
+
+def zorg_voor_tool(records, store, rol_id: str) -> str:
+    """Zet de copy-prompt-generator als tool-artefact op deze rol. Idempotent.
+
+    Een tool die alleen als losse pagina bestaat, hangt nergens aan: je moet weten dat hij er is.
+    Als artefact op de rol volgt hij het bezit-model dat er al staat — wie de rol bekijkt ziet zijn
+    gereedschap — en is hij gescoped op precies de policy-stack waarmee hij werkt.
+
+    Geeft het artefact-id terug, of "" als de rol niet bestaat of de schrijf faalt."""
+    if records.get(rol_id) is None:
+        return ""
+    for a in store.list(rol_id, "tool"):
+        if (a.title or "").strip().lower() == TOOL_TITEL.lower():
+            return a.id                                   # bestaat al
+    art = store.add(rol_id, "tool", title=TOOL_TITEL, body=TOOL_BODY,
+                    url=f"/copy-prompt?rol={urllib.parse.quote(rol_id)}",
+                    inherit=False,                        # rol-eigen capaciteit, niet erfelijk
+                    actor_id="system", actor_type="persona",
+                    change_note="copy-prompt-generator ontsloten op de rol die hem gebruikt")
+    return getattr(art, "id", "") or ""

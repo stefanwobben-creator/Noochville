@@ -204,6 +204,14 @@ def _bootstrap(dd: str) -> None:
     _reground_seed(st.defs)       # bestaande definities bijwerken met nieuwe grondingen (idempotent)
     _migrate_definitions(st.defs)  # nieuwe verplichte velden (aard/aggregatie/formule) retroactief (idempotent)
     st.att.migrate()              # attachments → artefact-model (legacy tool-notes, defaults; idempotent)
+    # De copy-prompt-generator hoort als gereedschap bij de rol die hem gebruikt, niet als losse
+    # pagina die nergens aan hangt. Idempotent; fail-soft — een tool mag de cockpit nooit ophouden.
+    try:
+        from nooch_village.views.copy_prompt import zorg_voor_tool
+        for _rid in _COPY_PROMPT_ROLLEN:
+            zorg_voor_tool(st.records, st.att, _rid)
+    except Exception as _e:                              # noqa: BLE001
+        logging.getLogger("village.cockpit").warning("copy-prompt-tool niet gekoppeld: %s", _e)
     migrate_data_sources(dd)      # legacy visitors_day → plausible_visitors_day + Plausible actief (idempotent)
     st.metrics.migrate_metric_bindings(st.defs)   # wees-KPI's: veld/categorie uit de def + reeks-tegel-dim (idempotent)
     # OpenAlex: alle oude CUMULATIEVE concept-reeksen (openalex_works_day/citations_day, incl. ::concept)
@@ -935,6 +943,12 @@ def _web_actor_id(username: str | None, st) -> str:
         return ""
     actor = st.people.by_email(username)
     return actor.id if actor else ""
+
+
+# De rollen die de copy-prompt-generator als gereedschap krijgen. Data, geen if-boom: een rol
+# erbij is één regel. Bewust een lijst en niet "elke rol met policies" — het is een SCHRIJF-tool,
+# en een rol die toevallig policies heeft is daarmee nog geen copywriter.
+_COPY_PROMPT_ROLLEN = ("mother_earth__nooch__community_and_email",)
 
 
 def _artefact_gate(owner_role_id: str, username: str | None, st) -> str | None:
