@@ -226,6 +226,32 @@ def _print_item_full(item: dict) -> None:
         print(f"  reject  <id> [reden]   → afwijzen, geen credits uitgegeven")
         print(f"  defer   <id> [reden]   → uitstellen, blijft geregistreerd")
 
+    elif item["type"] == "voorstel":
+        from nooch_village import voorstel_mutatie as vm
+        print(f"\n── Voorstel van {ctx.get('by') or '?'} ──")
+        if ctx.get("origin"):
+            print(f"Herkomst  : {ctx['origin']}")
+        print(f"\n{ctx.get('voorstel', '(leeg)')}\n")
+        print(f"── Wat approve uitvoert ──")
+        print(f"{vm.beschrijf(ctx.get('mutatie'))}")
+        print(f"\n── Acties ──")
+        print(f"  approve <id> [reden]   → beslissing vastleggen + de mutatie hierboven uitvoeren")
+        print(f"  reject  <id> [reden]   → afgewezen, gesloten, niets uitgevoerd")
+        print(f"  defer   <id> [reden]   → uitstellen, blijft geregistreerd")
+
+    else:
+        # VANGNET. Een type zonder eigen tak printte alleen de kop, en dan tekent de founder op een
+        # titel terwijl het hele voorstel in `context` zat. Liever een ruwe dump dan blind tekenen:
+        # dit is de enige tak die per definitie ook voor toekomstige types blijft kloppen.
+        overig = {k: v for k, v in ctx.items() if v not in (None, "", [], {})}
+        if overig:
+            print(f"\n── Context ({item['type']}) ──")
+            for k, v in overig.items():
+                tekst = str(v)
+                print(f"{k}:")
+                for regel in tekst.splitlines() or [""]:
+                    print(f"  {regel}")
+
     res = item.get("resolution")
     if res:
         print(f"\n── Beslissing ──")
@@ -623,11 +649,37 @@ def main(argv: list[str]) -> None:
             print(f"✅ Suggestie '{item['subject']}' geaccepteerd [{iid}].")
             print("   (Een nieuwe rol/means hiervoor loopt via het governance-proces.)")
 
+        elif item["type"] == "voorstel":
+            # Een voorstel viel hiervóór in het vangnet: item dicht, "goedgekeurd", en de bron
+            # waar het over ging bleef ongewijzigd. Approved-terwijl-de-bron-ongewijzigd-is mag
+            # geen stille toestand zijn. Dus: uitvoeren als het voorstel zegt wát het muteert,
+            # en anders expliciet melden dat er alleen is vastgelegd.
+            from nooch_village import voorstel_mutatie as vm
+            mutatie = (item.get("context") or {}).get("mutatie")
+            if mutatie:
+                ok, bericht = vm.voer_uit(mutatie, _data_dir())
+                if not ok:
+                    # NIET sluiten. Een mislukte uitvoering die als 'approved' in de boeken komt is
+                    # precies de divergentie die deze tak moet wegnemen.
+                    print(f"✘ Uitvoering mislukt — item blijft pending: {bericht}")
+                    sys.exit(1)
+                inbox.resolve(iid, "approved", reason=reason)
+                print(f"✅ Voorstel '{item['subject']}' goedgekeurd [{iid}] en UITGEVOERD.")
+                print(f"   {bericht}")
+            else:
+                inbox.resolve(iid, "approved", reason=reason)
+                print(f"✅ Beslissing vastgelegd voor '{item['subject']}' [{iid}].")
+                print(f"\n⚠  NIET UITGEVOERD — dit voorstel declareert geen mutatie, dus er is niets")
+                print(f"   geschreven. De wijziging vergt een handmatige stap; het voorstel hierboven")
+                print(f"   ('inbox show {iid}') beschrijft welke.")
+
         else:
             # Vangnet: geen type-specifieke afhandeling → toch sluiten met reden, zodat geen
-            # enkel item-type stil blijft hangen bij approve.
+            # enkel item-type stil blijft hangen bij approve. Wel eerlijk over wat het IS: een
+            # vastgelegde beslissing, geen uitgevoerde mutatie.
             inbox.resolve(iid, "approved", reason=reason)
             print(f"✅ Item '{item['subject']}' [{iid}] goedgekeurd (type: {item['type']}).")
+            print(f"⚠  Beslissing vastgelegd, niets uitgevoerd — dit type kent geen schrijfactie.")
 
     elif cmd == "check":
         if len(argv) < 3:

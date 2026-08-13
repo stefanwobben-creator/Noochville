@@ -250,10 +250,15 @@ class HumanInbox:
         return iid
 
     def add_voorstel(self, gap_key: str, voorstel: str, *, by: str = "noochie",
-                     origin: str = "") -> str:
+                     origin: str = "", mutatie: dict | None = None) -> str:
         """Voeg een door een rol (Noochie) uitgewerkt voorstel toe voor de mens om te
         beoordelen. Dedup op gap_key (subject) ongeacht status: per spanning één voorstel
-        open. Retourneert het item-id."""
+        open. Retourneert het item-id.
+
+        `mutatie` zegt in machine-vorm WAT dit voorstel wijzigt (zie voorstel_mutatie.py). Staat
+        hij er, dan voert `inbox approve` hem echt uit; staat hij er niet, dan meldt approve
+        expliciet dat er alleen is vastgelegd. Zonder dit veld bestond er een stille toestand
+        waarin het item 'approved' heette terwijl de bron ongewijzigd was."""
         for item in self._items.values():
             if (item["type"] == "voorstel" and item.get("subject") == gap_key
                     and item["status"] == "pending"):
@@ -263,7 +268,8 @@ class HumanInbox:
             "id":      iid,
             "type":    "voorstel",
             "subject": gap_key,
-            "context": {"gap_key": gap_key, "voorstel": voorstel, "by": by, "origin": origin},
+            "context": {"gap_key": gap_key, "voorstel": voorstel, "by": by, "origin": origin,
+                        "mutatie": mutatie or None},
             "status":     "pending",
             "created_at": time.time(),
             "resolved_at": None,

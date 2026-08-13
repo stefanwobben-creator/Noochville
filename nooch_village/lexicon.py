@@ -138,6 +138,27 @@ class Lexicon:
         self._save()
         return True
 
+    def annoteer(self, concept_id: str, regel: str) -> bool:
+        """Vul de rationale van een bestaand concept aan met één regel. Idempotent.
+
+        Bestaat naast `add_concept` omdat die het concept VOLLEDIG overschrijft: wie alleen de
+        rationale wil laten groeien moet daar woorden, status, evidence en `by` ongewijzigd
+        meegeven, en één vergeten veld wist stilletjes wat een ander heeft vastgelegd. Een
+        annotatie is een andere handeling dan een herdefinitie, dus krijgt ze haar eigen ingang.
+
+        Retourneert False als het concept niet bestaat of de regel er al staat — in beide gevallen
+        is er niets geschreven, en dat verschil moet de aanroeper kunnen zien."""
+        regel = (regel or "").strip()
+        entry = self._data.get(concept_id)
+        if entry is None or not regel:
+            return False
+        huidig = str(entry.get("rationale") or "").strip()
+        if regel in huidig:
+            return False
+        entry["rationale"] = f"{huidig} {regel}".strip() if huidig else regel
+        self._save()
+        return True
+
     def seed(self, concepts: list[dict]) -> int:
         """Seed het lexicon idempotent — bestaande entries worden niet overschreven.
         Retourneert het aantal nieuw toegevoegde concepten."""
