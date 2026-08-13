@@ -5229,7 +5229,8 @@ def make_handler(data_dir: str, csrf_token: str,
                                               rol=(qs.get("rol") or [""])[0],
                                               soort=_soort,
                                               register=_register,
-                                              brief=(qs.get("brief") or [""])[0]))
+                                              brief=(qs.get("brief") or [""])[0],
+                                              uit=(qs.get("uit") or [""])[0]))
                 return
             if path == "/inwoners":
                 # AUTHZ: iedereen-ingelogd — het dorp mag zien wie er woont; bewerken zit achter

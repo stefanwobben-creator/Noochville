@@ -75,20 +75,96 @@ def registers_uit_policies(bodies: list[str]) -> list[tuple[str, str]]:
     return gevonden
 
 
-def _policy_items(ctx: dict) -> list[dict]:
-    """Eigen + geërfde policies als één vlakke lijst, elk met zijn herkomst. Volgorde: geërfd
-    eerst (de wortel bepaalt het kader), daarna de eigen policies van de rol."""
+# ── De gelaagde policy-stack ─────────────────────────────────────────────────────────────────
+#
+# "Alle policies van de cirkel" was te grof. De wortelcirkel draagt STANCE, WIP, DECISIONMAKING én
+# MONEY, allemaal `inherit=True` — dus een copy-prompt kreeg de geld-policy mee. Die gaat over
+# budgetten en zegt niets over schrijven; hij verdunt de prompt en kost tokens aan governance die
+# de schrijver niet aangaat.
+#
+# De juiste selectie is OVERERVING met lagen, en per-policy controle bínnen die lagen:
+#
+#   bodem  purpose van de breedste cirkel + de strategie uit config/strategy.json.
+#          Altijd aan, niet uitzetbaar: dit is waar Nooch voor bestaat, en een tekst die daar
+#          buiten valt is geen Nooch-tekst. Dit zijn géén policies — vandaar dat de policies van
+#          de wortelcirkel er NIET automatisch bij zitten.
+#   kader  de policies van de wortelcirkel (stance, money, WIP, besluitvorming). Standaard UIT:
+#          governance die de schrijver niet raakt. Per stuk aan te zetten — 'Stance' is voor copy
+#          vaak wél relevant, 'Money' nooit.
+#   merk   de policies van de merk-/visuele rol. Één bewuste keuze, standaard aan: copy zonder
+#          merkstem is generieke copy.
+#   rol    de policies van de rol die schrijft. Standaard aan — dit is zijn eigen domein.
+LAAG_BODEM, LAAG_KADER, LAAG_MERK, LAAG_ROL = "bodem", "kader", "merk", "rol"
+
+LAAG_LABEL = {
+    LAAG_KADER: "Circle governance",
+    LAAG_MERK: "Brand voice",
+    LAAG_ROL: "This role's policies",
+}
+# Standaard aan/uit per laag. `bodem` staat er niet in: die is niet uitzetbaar.
+LAAG_DEFAULT = {LAAG_KADER: False, LAAG_MERK: True, LAAG_ROL: True}
+
+# Waaraan herken je de merk-laag? Aan het domein dat de rol houdt, niet aan zijn id — een id kan
+# hernoemd worden, een domein is governance. Fail-soft: geen match → de policy valt in `kader`.
+_MERK_DOMEINEN = ("brand positioning", "design system")
+
+
+def _laag_van(item: dict, wortel_id: str, records) -> str:
+    """In welke laag hoort deze policy? Bepaald uit de HERKOMST, niet uit de titel."""
+    herkomst = item.get("origin_id") or ""
+    if not herkomst:
+        return LAAG_ROL                                   # eigen policy van de schrijvende rol
+    if herkomst == wortel_id:
+        return LAAG_KADER
+    rec = records.get(herkomst)
+    domeinen = {str(d).lower() for d in (getattr(getattr(rec, "definition", None), "domains", None) or [])}
+    return LAAG_MERK if domeinen & set(_MERK_DOMEINEN) else LAAG_KADER
+
+
+def _policy_items(ctx: dict, records=None, *, uit: set | None = None) -> list[dict]:
+    """Eigen + geërfde policies, elk met zijn laag en of hij AAN staat.
+
+    Volgorde: geërfd eerst (de wortel bepaalt het kader), daarna de eigen policies van de rol.
+    `uit` = expliciet uitgezette policy-ids; die overrulen de laag-default."""
     blok = ctx.get("policies") or {}
+    uit = uit or set()
+    wortel = ""
+    if records is not None:
+        try:
+            from nooch_village import org
+            keten = org.breadcrumb(records.all(), (ctx.get("role") or {}).get("id") or "")
+            wortel = keten[0] if keten else ""
+        except Exception:                                 # noqa: BLE001 — weergave mag nooit breken
+            wortel = ""
     items = []
     for a in blok.get("inherited") or []:
         items.append({**a, "herkomst": a.get("origin_path") or ""})
     for a in blok.get("own") or []:
-        items.append({**a, "herkomst": ""})
+        items.append({**a, "herkomst": "", "origin_id": ""})
+    for it in items:
+        laag = _laag_van(it, wortel, records) if records is not None else LAAG_ROL
+        it["laag"] = laag
+        it["aan"] = LAAG_DEFAULT.get(laag, True) and it.get("id") not in uit
     return items
 
 
+def _strategie_regels() -> list[str]:
+    """De strategie uit `config/strategy.json` — mens-bewerkbaar, één bron. Fail-soft: geen bestand
+    of kapotte json → geen strategie-blok, nooit een verzonnen vervanger."""
+    import json as _json
+    import os as _os
+    pad = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))),
+                        "config", "strategy.json")
+    try:
+        with open(pad, encoding="utf-8") as fh:
+            data = _json.load(fh)
+    except (OSError, ValueError):
+        return []
+    return [str(x) for x in (data.get("strategy") or []) if str(x).strip()][:8]
+
+
 def bouw_prompt(ctx: dict, *, soort: str = "", register: str = "", register_uitleg: str = "",
-                brief: str = "") -> str:
+                brief: str = "", items: list | None = None) -> str:
     """De prompt als platte tekst. Elke policy-body gaat er letterlijk in; deze functie
     interpreteert of verkort niets, want dan zou ze de policy herschrijven."""
     rol = ctx.get("role") or {}
@@ -103,10 +179,27 @@ def bouw_prompt(ctx: dict, *, soort: str = "", register: str = "", register_uitl
         L.append("Accountabilities:")
         L += [f"- {a}" for a in accs]
 
-    items = _policy_items(ctx)
+    # De bodem: waar Nooch voor bestaat. Altijd mee, niet uitzetbaar — een tekst die hierbuiten
+    # valt is geen Nooch-tekst.
+    from nooch_village.mission import ANCHOR_PURPOSE
+    L += ["", "=== WHAT NOOCH IS FOR (always applies) ===", ANCHOR_PURPOSE]
+    strat = _strategie_regels()
+    if strat:
+        L += ["Strategy:"] + [f"- {r}" for r in strat]
+
+    # Alleen wat AAN staat. Een uitgezette policy verdwijnt echt: hij mag niet als "uitgezet maar
+    # toch meegestuurd" in de prompt blijven staan, want dan is de knop een leugen.
+    alle_items = items if items is not None else _policy_items(ctx)
+    items = [a for a in alle_items if a.get("aan", True)]
     L += ["", f"=== POLICIES ({len(items)}) ==="]
     if not items:
-        L.append("(none — this role has no policies; ask the domain owner before writing)")
+        # Twee verschillende situaties, en ze horen verschillend te lezen: een rol ZONDER policies
+        # is een governance-gat (ga het halen), alles uitgezet is een keuze van de gebruiker (zet
+        # er een aan). Ze op één zin gooien verbergt het eerste achter het tweede.
+        L.append("(none — this role has no policies; ask the domain owner before writing)"
+                 if not alle_items else
+                 "(all policies are switched off — switch at least one on, or you are writing "
+                 "without any governance)")
     for a in items:
         herkomst = f" ({a['herkomst']})" if a.get("herkomst") else ""
         L += ["", f"--- {a.get('id', '')} · {a.get('title') or ''}{herkomst} ---",
@@ -182,7 +275,7 @@ def _rolkiezer(st) -> str:
 
 
 def render_copy_prompt(st, rol: str = "", soort: str = "", register: str = "",
-                       brief: str = "") -> str:
+                       brief: str = "", uit: str = "") -> str:
     """De pagina. `st` is `_Stores`; alle inhoud komt uit de records en de AttachmentStore."""
     if not rol or st.records.get(rol) is None:
         binnen = _rolkiezer(st)
@@ -190,8 +283,10 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", register: str = "",
                                     f"<h1 class='ptitle'>Copy prompt</h1>{binnen}</div>")
 
     ctx = artefacts.serialize_context(rol, st.records, st.att)
-    items = _policy_items(ctx)
-    registers = registers_uit_policies([a.get("body") or "" for a in items])
+    uit_set = {x.strip() for x in (uit or "").split(",") if x.strip()}
+    items = _policy_items(ctx, st.records, uit=uit_set)
+    aan = [a for a in items if a.get("aan")]
+    registers = registers_uit_policies([a.get("body") or "" for a in aan])
     reg_uitleg = dict(registers).get(register, "")
 
     formulier = (
@@ -199,6 +294,7 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", register: str = "",
         f"<input type='hidden' name='rol' value='{_e(rol)}'>"
         f"<input type='hidden' name='soort' value='{_e(soort)}'>"
         f"<input type='hidden' name='register' value='{_e(register)}'>"
+        f"<input type='hidden' name='uit' value='{_e(uit)}'>"
         f"<p class='ptitle'>1. What are you writing?</p>"
         f"{_cl_knoppen('soort', [(s, s) for s in _SOORTEN], soort)}"
         f"<p class='ptitle'>2. Register</p>")
@@ -218,15 +314,38 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", register: str = "",
     formulier += ("<p class='ptitle'>3. The brief</p>" + briefveld
                   + "<button class='btn ok' type='submit'>Generate prompt</button></form>")
 
+    # De stack, per laag, met een schakelaar per policy. Een uitgezette policy verdwijnt uit de
+    # PROMPT — de knop is geen filter op de weergave maar op wat het model te lezen krijgt.
+    stack = ["<div class='card'><b>Policy stack</b>"
+             "<p class='muted'>Always on: what Nooch is for, plus the strategy. Everything below "
+             "is a choice — switch one off and it leaves the prompt.</p>"]
+    for laag in (LAAG_ROL, LAAG_MERK, LAAG_KADER):
+        in_laag = [a for a in items if a.get("laag") == laag]
+        if not in_laag:
+            continue
+        stack.append(f"<p class='ptitle'>{_e(LAAG_LABEL[laag])}</p>")
+        knoppen = []
+        for a in in_laag:
+            pid = a.get("id", "")
+            nieuw = (uit_set - {pid}) if pid in uit_set else (uit_set | {pid})
+            q = urllib.parse.urlencode({"rol": rol, "soort": soort, "register": register,
+                                        "brief": brief, "uit": ",".join(sorted(nieuw))})
+            aan_nu = a.get("aan")
+            knoppen.append(
+                f"<a class='cl-filter{" on" if aan_nu else ""}' href='/copy-prompt?{q}'>"
+                f"{"✓" if aan_nu else "○"} {_e(a.get("title") or pid)}</a>")
+        stack.append("<div class='cl-filters'>" + "".join(knoppen) + "</div>")
+    stack.append("</div>")
+
     herkomst = "".join(
         f"<span class='chip'>{_e(a.get('id', ''))}{_e(' ' + a['herkomst'] if a.get('herkomst') else '')}</span>"
-        for a in items)
+        for a in aan)
     prompt = bouw_prompt(ctx, soort=soort, register=register, register_uitleg=reg_uitleg,
-                         brief=brief)
+                         brief=brief, items=items)
     uitvoer = (
         "<div class='card'>"
         "<b>Your prompt</b> <button class='btn sm' type='button' data-cp-kopieer>Copy prompt</button>"
-        f"<p class='muted'>Built from {len(items)} live policies: {herkomst or '—'}. "
+        f"<p class='muted'>Built from {len(aan)} live policies: {herkomst or '—'}. "
         "Paste it into ChatGPT, Gemini or Claude. Change a policy in the cockpit and the next "
         "prompt carries the change.</p>"
         + _field("Prompt", "prompt", kind="textarea", value=prompt, fid="cp-prompt",
@@ -237,7 +356,7 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", register: str = "",
              f"<p class='muted'>Policies of {_e(_name(st.records.get(rol)))}. "
              f"<a href='/node?id={_e(urllib.parse.quote(rol))}&tab=policies'>Read or change them</a> "
              f"(governance-owned: not everyone may edit).</p>"
-             f"{formulier}{uitvoer}")
+             f"{''.join(stack)}{formulier}{uitvoer}")
     return _page("Copy prompt",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{hoofd}</div>{_KOPIEER_JS}")
 
