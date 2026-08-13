@@ -5225,12 +5225,15 @@ def make_handler(data_dir: str, csrf_token: str,
                 # de vorige keuze. Een klik op de picker wint dus van wat er stond.
                 _soort = (qs.get("set_soort") or qs.get("soort") or [""])[-1]
                 _register = (qs.get("set_register") or qs.get("register") or [""])[-1]
+                _doel = (qs.get("set_doel") or qs.get("doel") or [""])[-1]
+                _aware = (qs.get("set_awareness") or qs.get("awareness") or [""])[-1]
                 self._send(render_copy_prompt(st,
                                               rol=(qs.get("rol") or [""])[0],
                                               soort=_soort,
                                               register=_register,
                                               brief=(qs.get("brief") or [""])[0],
-                                              uit=(qs.get("uit") or [""])[0]))
+                                              uit=(qs.get("uit") or [""])[0],
+                                              doel=_doel, awareness=_aware))
                 return
             if path == "/inwoners":
                 # AUTHZ: iedereen-ingelogd — het dorp mag zien wie er woont; bewerken zit achter
