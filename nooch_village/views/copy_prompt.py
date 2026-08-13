@@ -37,9 +37,9 @@ from nooch_village.web_base import _e, _field, _page
 # 1. DOEL — gegrond in de Open Door-pillar: informeer, overtuig niet, laat de lezer concluderen.
 # Er staat bewust geen 'hard sell' in de lijst: een optie die er staat, wordt gekozen.
 DOELEN = [
-    ("informeren", "The reader knows something afterwards they did not know before. No ask."),
-    ("nieuwsgierig maken", "The reader wants to read on. Curiosity, not a purchase."),
-    ("zacht overtuigen", "Two worlds side by side; the logic does the work. Never a hard sell."),
+    ("inform", "The reader knows something afterwards they did not know before. No ask."),
+    ("spark curiosity", "The reader wants to read on. Curiosity, not a purchase."),
+    ("gently persuade", "Two worlds side by side; the logic does the work. Never a hard sell."),
 ]
 
 # 2. AWARENESS — hoe ver de lezer is. De standaard-Nooch-lezer vond Nooch zonder te zoeken: geen
@@ -284,8 +284,15 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", brief: str = "", uit:
     """De pagina. `st` is `_Stores`; alle inhoud komt uit de records en de AttachmentStore."""
     if not rol or st.records.get(rol) is None:
         binnen = _rolkiezer(st)
-        return _page("Copy prompt", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>"
-                                    f"<h1 class='ptitle'>Copy prompt</h1>{binnen}</div>")
+        return _page("Copy prompt", f"{_DS_LINK}{_nav()}<div class='c2-wrap'><div class='c2-main'>"
+                                    f"<h1 class='ptitle'>Copy prompt</h1>{binnen}</div></div>")
+
+    # De standaardkeuze is een echte keuze, geen leegte: informeren, de lezer die Nooch zonder
+    # zoeken vond, en de merkstem. Zonder dit staat elke chip uit en toont de prompt een doel dat
+    # nergens op de pagina zichtbaar is aangeklikt.
+    doel = doel or DOELEN[0][0]
+    awareness = awareness or AWARENESS[0][0]
+    soort = soort or FORMATEN[0][0]
 
     ctx = artefacts.serialize_context(rol, st.records, st.att)
     uit_set = {x.strip() for x in (uit or "").split(",") if x.strip()}
@@ -380,7 +387,8 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", brief: str = "", uit:
              f"Pick, and the prompt below rewrites itself.</p>"
              f"{formulier}{uitvoer}{''.join(stack)}")
     return _page("Copy prompt",
-                 f"{_DS_LINK}{_nav()}<div class='c2-wrap roomy'>{hoofd}</div>{_KOPIEER_JS}")
+                 f"{_DS_LINK}{_nav()}<div class='c2-wrap'>"
+                 f"<div class='c2-main roomy'>{hoofd}</div></div>{_KOPIEER_JS}")
 
 
 # Kopiëren via de clipboard-API, identiek aan het patroon in views/claims.py. Zonder JS blijft de

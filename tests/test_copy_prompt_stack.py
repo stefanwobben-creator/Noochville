@@ -187,7 +187,7 @@ def test_de_vier_blokken_staan_in_leesvolgorde():
     stonden eerst vóór de lezer, en dan leest het model de constraints zonder te weten voor wie."""
     import re
     p = cp.bouw_prompt(_ctx(), items=cp._policy_items(_ctx(), RECS),
-                       doel="informeren", awareness="just browsing", soort="email")
+                       doel="inform", awareness="just browsing", soort="email")
     koppen = [k for k in re.findall(r"^=== (.+?) ===$", p, re.M)]
     assert koppen == ["ROLE", "WHAT NOOCH IS FOR (always applies)", "READER", "ASSIGNMENT",
                       "POLICIES (2)", "OUTPUT"]
@@ -196,7 +196,7 @@ def test_de_vier_blokken_staan_in_leesvolgorde():
 def test_hard_sell_is_geen_optie():
     """Een optie die er staat, wordt gekozen. De Open Door-pillar zegt: informeer, overtuig niet."""
     labels = [n for n, _ in cp.DOELEN]
-    assert labels == ["informeren", "nieuwsgierig maken", "zacht overtuigen"]
+    assert labels == ["inform", "spark curiosity", "gently persuade"]
     assert not any("sell" in u.lower() and "never" not in u.lower() for _n, u in cp.DOELEN)
 
 
@@ -237,7 +237,7 @@ def test_het_register_is_overal_weg():
     assert "register" not in inspect.signature(cp.bouw_prompt).parameters
     assert "register" not in inspect.signature(cp.render_copy_prompt).parameters
     assert not hasattr(cp, "registers_uit_policies")
-    p = cp.bouw_prompt(_ctx(), items=[], doel="informeren", soort="email")
+    p = cp.bouw_prompt(_ctx(), items=[], doel="inform", soort="email")
     assert "Register" not in p
 
 

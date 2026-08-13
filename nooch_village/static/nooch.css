@@ -468,7 +468,7 @@ ul.clean li:last-child{border-bottom:none}
   line-height:1.55;min-height:30rem;padding:.9rem}
 /* Ruimte onderaan zodat de zwevende inbox-knop (links-onder, position:fixed) nooit over de inhoud
    valt. Padding i.p.v. de knop weghalen: hij is app-brede navigatie, geen page-element. */
-.c2-wrap.roomy{padding-bottom:5.5rem}
+.c2-main.roomy{padding-bottom:5.5rem}
 button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .cl-group{margin:.2rem 0 1rem}
 .cl-group h4{margin:.6rem 0 .3rem;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle)}
