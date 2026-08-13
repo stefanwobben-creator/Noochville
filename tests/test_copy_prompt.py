@@ -59,7 +59,7 @@ def dorp(tmp_path):
     ])
     att = AttachmentStore(os.path.join(str(tmp_path), "attachments.json"))
     att.add("nooch__email", "policy", title="Tone of Voice",
-            body="We are the better option.\n\n**Register**\n\nOne dominant register.\n\n"
+            body="We are the better option.\n\n**Voice**\n\nOne dominant voice.\n\n"
                  "* THINK: never thought about shoes like that\n"
                  "* LAUGH: dry observation\n\nIn a series: no two in a row.\n",
             domain="Tone of voice")
@@ -113,44 +113,16 @@ def test_rol_zonder_policies_zegt_dat_hardop(dorp):
     assert "no policies" in prompt
 
 
-# ── De registers komen uit de policy, niet uit de code ─────────────────────────
-
-@pytest.mark.smoke
-def test_registers_uit_policy_gelezen(dorp):
-    items = cp._policy_items(_ctx(dorp))
-    regs = cp.registers_uit_policies([a["body"] for a in items])
-    assert [n for n, _ in regs] == ["THINK", "LAUGH"]
-    assert dict(regs)["LAUGH"] == "dry observation"
-
-
-def test_register_lijst_volgt_de_policy_wijziging(dorp):
-    pol = next(p for p in dorp.att.list("nooch__email", "policy") if p.title == "Tone of Voice")
-    dorp.att.update(pol.id, body="**Register**\n\n* ANNOY: the reader gets annoyed\n")
-    items = cp._policy_items(_ctx(dorp))
-    assert [n for n, _ in cp.registers_uit_policies([a["body"] for a in items])] == ["ANNOY"]
-
-
-def test_do_en_dont_bullets_zijn_geen_registers():
-    body = ("**Do**\n\n* We grow shoes: because oil is weird\n\n"
-            "**Register**\n\n* THINK: huh\n\nIn a series: nope.\n\n"
-            "**Don't**\n\n* Stop wearing plastic: too aggressive\n")
-    assert cp.registers_uit_policies([body]) == [("THINK", "huh")]
-
-
-def test_geen_registerblok_faalt_zacht():
-    assert cp.registers_uit_policies(["Geen kop, geen bullets."]) == []
-
-
 # ── De pagina zelf ─────────────────────────────────────────────────────────────
 
 @pytest.mark.smoke
 def test_pagina_rendert_en_toont_de_prompt(dorp):
-    html = cp.render_copy_prompt(dorp, rol="nooch__email", soort="Email", register="LAUGH",
+    html = cp.render_copy_prompt(dorp, rol="nooch__email", soort="email",
                                  brief="Welkomstmail voor batch 5")
     assert "Copy prompt" in html
     assert "cp-prompt" in html
     assert "Welkomstmail voor batch 5" in html
-    assert "dry observation" in html          # de uitleg bij het gekozen register
+    assert "Stefan and Lotte" in html         # de uitleg bij de gekozen stem
     assert "cl-filter on" in html             # de actieve keuze in de picker
 
 
@@ -185,7 +157,7 @@ def _output_blok(prompt: str) -> str:
 
 @pytest.mark.smoke
 def test_prompt_vraagt_twee_versies(dorp):
-    prompt = cp.bouw_prompt(_ctx(dorp), soort="Email", register="ANNOY", brief="Welkomstmail")
+    prompt = cp.bouw_prompt(_ctx(dorp), soort="email", brief="Welkomstmail")
     blok = _output_blok(prompt)
     assert "Write two versions" in blok
     assert "VERSION A" in blok
@@ -193,29 +165,23 @@ def test_prompt_vraagt_twee_versies(dorp):
     assert "VERSION C" not in blok
 
 
-def test_beide_versie_instructies_noemen_het_gekozen_register(dorp):
-    """Zonder de registernaam in béide instructies weet het model niet waarvan A de grens
-    opzoekt en waarvan B de tegenpool is."""
-    blok = _output_blok(cp.bouw_prompt(_ctx(dorp), register="ANNOY"))
-    assert blok.count("ANNOY") >= 2
+def test_beide_versie_instructies_hangen_aan_dezelfde_stem(dorp):
+    """A en B moeten dezelfde stem delen, anders vergelijk je twee teksten die niets gemeen hebben.
+    Dit hing eerst aan het register; dat is vervangen door doel × doelgroep × stem."""
+    blok = _output_blok(cp.bouw_prompt(_ctx(dorp), soort="email"))
+    assert "Stefan and Lotte" in blok                  # de stem staat in VERSION A
+    assert "Same voice, same goal" in blok             # en B deelt hem expliciet
 
 
-def test_zonder_register_geen_kaal_gat_in_de_instructie(dorp):
-    """Fail-soft: geen register gekozen mag geen zin opleveren die halverwege ophoudt."""
+def test_zonder_stem_geen_kaal_gat_in_de_instructie(dorp):
+    """Fail-soft: geen formaat gekozen mag geen zin opleveren die halverwege ophoudt."""
     blok = _output_blok(cp.bouw_prompt(_ctx(dorp)))
-    assert "VERSION A" in blok
-    assert " — , at the limit" not in blok
-    assert "the policy's dominant register" in blok
-
-
-def test_checktabel_verbiedt_verzonnen_checks(dorp):
-    """Het model vulde de tabel eerder aan met checks die in geen policy staan."""
-    assert "Do not invent checks the policies do not name." in _output_blok(
-        cp.bouw_prompt(_ctx(dorp)))
+    assert "VERSION A —" in blok
+    assert "the voice the policies describe" in blok
 
 
 def test_de_grens_verwijst_naar_de_calibratietekst_niet_naar_het_model(dorp):
     """'Tegen de grens' mag geen vrijbrief zijn: de policy bepaalt hoe ver, niet het model."""
-    blok = _output_blok(cp.bouw_prompt(_ctx(dorp), register="LAUGH"))
+    blok = _output_blok(cp.bouw_prompt(_ctx(dorp), soort="email"))
     assert "calibration text named in the policies" in blok
     assert "not your own instinct" in blok

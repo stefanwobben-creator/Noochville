@@ -6,7 +6,7 @@ iemand die tekst handmatig, en dan drijft de kopie af van het origineel. Deze pa
 prompt bij elke lading opnieuw uit de AttachmentStore, zodat er precies één waarheid blijft
 (CLAUDE.md, reference-don't-copy).
 
-Er staat hier daarom GEEN policy-tekst, geen policy-id en geen lijst met registers. Alles komt uit
+Er staat hier daarom GEEN policy-tekst en geen policy-id. Alles komt uit
 `artefacts.serialize_context()` — dezelfde bron als `/context`, de systeemprompt voor AI-vervullers.
 Wijzig een policy in de UI en de volgende prompt draagt de nieuwe tekst; archiveer hem en hij
 verdwijnt.
@@ -24,76 +24,6 @@ from nooch_village import artefacts
 from nooch_village.cockpit2_util import _DS_LINK, _nav, _name
 from nooch_village.web_base import _e, _field, _page
 
-# Contenttypes zijn een keuze van deze view, geen feit dat elders woont: ze staan in geen enkele
-# policy en in geen enkele store. Vandaar wél een literal (anders dan de registers hieronder).
-_SOORTEN = ["Email", "Social post", "Product page", "Pillar page", "FAQ", "Field Note"]
-
-# Een register-bullet in een policy-body: "* THINK: huh, ik had er nog nooit zo naar gekeken".
-# De naam is ALL-CAPS zodat een gewone Do/Don't-bullet er nooit per ongeluk in valt.
-_REGISTER_BULLET = re.compile(r"^\s*[*-]\s*([A-Z][A-Z0-9 ]{1,15}?)\s*:\s*(.*)$")
-
-
-def _kopregel(regel: str) -> str:
-    """Genormaliseerde kop van een policy-regel: markdown-opmaak eraf, kleingeschreven.
-    "**Register**" en "## Register:" worden allebei "register"."""
-    return regel.strip().strip("*#").strip().rstrip(":").strip().lower()
-
-
-def registers_uit_policies(bodies: list[str]) -> list[tuple[str, str]]:
-    """De registers zoals ze in de policy-tekst staan, niet zoals deze view ze zou verzinnen.
-
-    Contract met de policy-schrijver: onder een kop `Register` staan bullets in de vorm
-    `* NAAM: omschrijving`, met NAAM in hoofdletters. Verandert de policy de registers, dan
-    verandert de picker mee. Vindt de parser niets, dan valt de UI terug op een vrij tekstveld —
-    fail-soft, want een tool die breekt bij een policy-wijziging is erger dan een tool zonder
-    knopjes.
-    """
-    gevonden: list[tuple[str, str]] = []
-    gezien: set[str] = set()
-    for body in bodies:
-        regels = (body or "").splitlines()
-        i = 0
-        while i < len(regels):
-            if _kopregel(regels[i]) != "register":
-                i += 1
-                continue
-            aantal_in_blok = 0
-            j = i + 1
-            while j < len(regels):
-                m = _REGISTER_BULLET.match(regels[j])
-                if m:
-                    naam = m.group(1).strip()
-                    if naam.isupper():
-                        aantal_in_blok += 1
-                        if naam not in gezien:
-                            gezien.add(naam)
-                            gevonden.append((naam, m.group(2).strip()))
-                elif regels[j].strip() and aantal_in_blok:
-                    break          # eerste gewone regel ná de bullets sluit het blok
-                j += 1
-            i = j + 1
-    return gevonden
-
-
-# ── De gelaagde policy-stack ─────────────────────────────────────────────────────────────────
-#
-# "Alle policies van de cirkel" was te grof. De wortelcirkel draagt STANCE, WIP, DECISIONMAKING én
-# MONEY, allemaal `inherit=True` — dus een copy-prompt kreeg de geld-policy mee. Die gaat over
-# budgetten en zegt niets over schrijven; hij verdunt de prompt en kost tokens aan governance die
-# de schrijver niet aangaat.
-#
-# De juiste selectie is OVERERVING met lagen, en per-policy controle bínnen die lagen:
-#
-#   bodem  purpose van de breedste cirkel + de strategie uit config/strategy.json.
-#          Altijd aan, niet uitzetbaar: dit is waar Nooch voor bestaat, en een tekst die daar
-#          buiten valt is geen Nooch-tekst. Dit zijn géén policies — vandaar dat de policies van
-#          de wortelcirkel er NIET automatisch bij zitten.
-#   kader  de policies van de wortelcirkel (stance, money, WIP, besluitvorming). Standaard UIT:
-#          governance die de schrijver niet raakt. Per stuk aan te zetten — 'Stance' is voor copy
-#          vaak wél relevant, 'Money' nooit.
-#   merk   de policies van de merk-/visuele rol. Één bewuste keuze, standaard aan: copy zonder
-#          merkstem is generieke copy.
-#   rol    de policies van de rol die schrijft. Standaard aan — dit is zijn eigen domein.
 # ── De drie selectors ────────────────────────────────────────────────────────────────────────
 #
 # Formaat was de verkeerde hoofdas: email/social/product verschilt in VORM, nauwelijks in inhoud.
@@ -218,8 +148,7 @@ def _uitleg(opties: list, keuze: str) -> str:
     return dict(opties).get(keuze, "")
 
 
-def bouw_prompt(ctx: dict, *, soort: str = "", register: str = "", register_uitleg: str = "",
-                brief: str = "", items: list | None = None,
+def bouw_prompt(ctx: dict, *, soort: str = "", brief: str = "", items: list | None = None,
                 doel: str = "", awareness: str = "") -> str:
     """De prompt als platte tekst. Elke policy-body gaat er letterlijk in; deze functie
     interpreteert of verkort niets, want dan zou ze de policy herschrijven."""
@@ -263,10 +192,6 @@ def bouw_prompt(ctx: dict, *, soort: str = "", register: str = "", register_uitl
         L.append(f"Goal: {doel} — {_uitleg(DOELEN, doel)}")
     L.append(f"Format and voice: {soort or '(not specified)'}"
              + (f" — {_uitleg(FORMATEN, soort)}" if _uitleg(FORMATEN, soort) else ""))
-    if register:
-        # Het register is gedegradeerd tot optionele override: doel × stem doet dit werk nu, maar
-        # wie een specifiek register uit de policy wil forceren kan dat.
-        L.append(f"Register override: {register}" + (f" — {register_uitleg}" if register_uitleg else ""))
     L += ["Brief:", (brief or "(no brief given)").strip()]
 
     # Alleen wat AAN staat. Een uitgezette policy verdwijnt echt: hij mag niet als "uitgezet maar
@@ -289,25 +214,28 @@ def bouw_prompt(ctx: dict, *, soort: str = "", register: str = "", register_uitl
 
 
     # Twee versies in plaats van één. Reden: elke check in de policies is een verbod, dus één
-    # versie convergeert naar de vlakste tekst die niets overtreedt en het register verdampt.
+    # versie convergeert naar de vlakste tekst die niets overtreedt en de stem verdampt.
     # Twee polen op dezelfde feiten maken de spanwijdte zichtbaar en laten de mens kiezen of
     # monteren. Géén derde "normale" versie: die is de vlakke tekst waar de klacht over ging, en
     # het ijkpunt staat al in de policies (de calibratietekst).
-    reg = register or "the policy's dominant register"
+    # De twee polen hangen nu aan de STEM (het formaat) en het DOEL, niet aan een los register:
+    # die twee zetten de toon al, en een derde as ernaast liet de schrijver kiezen tussen twee
+    # dingen die hetzelfde bedoelden.
+    stem = _uitleg(FORMATEN, soort) or "the voice the policies describe"
     L += ["", "=== OUTPUT ===",
           "Write two versions of the same text. Same brief, same facts, same claims. Only the "
           "emotional charge differs. Both obey every policy above, including every hard limit. A "
           "version that breaks a hard limit is not a bolder version, it is a rejected one.",
           "",
-          f"1. VERSION A — {reg}, at the limit.",
-          "   The chosen register at the highest intensity that still passes every check. Walk up "
-          "to the fence the hard limits set and stop there. Not louder: sharper. The reference for "
-          "how far is the calibration text named in the policies, not your own instinct.",
+          f"1. VERSION A — {stem} at the limit.",
+          "   That voice at the highest intensity that still passes every check. Walk up to the "
+          "fence the hard limits set and stop there. Not louder: sharper. The reference for how "
+          "far is the calibration text named in the policies, not your own instinct.",
           "",
           "2. VERSION B — opposite charge.",
-          f"   The same facts with the emotional charge inverted. Where {reg} makes the reader "
-          "bristle, this one makes them grin at the same absurdity, or the other way round. On its "
-          "first line, name which of the policy's registers this version landed in.",
+          "   The same facts with the emotional charge inverted. Where A makes the reader bristle, "
+          "this one makes them grin at the same absurdity, or the other way round. Same voice, "
+          "same goal — only the charge flips.",
           "",
           "Then a line containing only ---",
           "",
@@ -351,9 +279,8 @@ def _rolkiezer(st) -> str:
             "them live, including everything that role inherits.</p>" + rijen)
 
 
-def render_copy_prompt(st, rol: str = "", soort: str = "", register: str = "",
-                       brief: str = "", uit: str = "", doel: str = "",
-                       awareness: str = "") -> str:
+def render_copy_prompt(st, rol: str = "", soort: str = "", brief: str = "", uit: str = "",
+                       doel: str = "", awareness: str = "") -> str:
     """De pagina. `st` is `_Stores`; alle inhoud komt uit de records en de AttachmentStore."""
     if not rol or st.records.get(rol) is None:
         binnen = _rolkiezer(st)
@@ -364,8 +291,6 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", register: str = "",
     uit_set = {x.strip() for x in (uit or "").split(",") if x.strip()}
     items = _policy_items(ctx, st.records, uit=uit_set)
     aan = [a for a in items if a.get("aan")]
-    registers = registers_uit_policies([a.get("body") or "" for a in aan])
-    reg_uitleg = dict(registers).get(register, "")
 
     # De flow: drie stappen, dan de prompt. Elke stap is één vraag met uitleg onder de knoppen —
     # de gebruiker moet kunnen zien wát hij kiest, niet alleen een label.
@@ -385,7 +310,6 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", register: str = "",
         f"<input type='hidden' name='doel' value='{_e(doel)}'>"
         f"<input type='hidden' name='awareness' value='{_e(awareness)}'>"
         f"<input type='hidden' name='soort' value='{_e(soort)}'>"
-        f"<input type='hidden' name='register' value='{_e(register)}'>"
         f"<input type='hidden' name='uit' value='{_e(uit)}'>"
         + _stap(1, "What should this text do?", "doel", DOELEN, doel,
                 "Inform, don't convert — the reader draws their own conclusion.")
@@ -399,16 +323,6 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", register: str = "",
                        attrs="rows='8'")
     formulier += "<p class='ptitle'>4. The brief</p>" + briefveld
 
-    # Het register is gedegradeerd: doel × stem doet dit werk nu. Wie tóch een specifiek register
-    # uit de policy wil forceren kan dat, maar het staat niet meer in de hoofdflow.
-    if registers:
-        reg_knoppen = _cl_knoppen("register", [("", "auto")] + [(n, n) for n, _ in registers], register)
-        formulier += ("<details><summary>Advanced: force a register</summary>"
-                      "<p class='muted'>Goal and voice already set the register. Only override this "
-                      "if the policy names one you specifically need.</p>"
-                      + reg_knoppen
-                      + (f"<p class='muted'>{_e(reg_uitleg)}</p>" if reg_uitleg else "")
-                      + "</details>")
     formulier += "<button class='btn ok' type='submit'>Generate prompt</button></form>"
 
     # De stack, per laag, met een schakelaar per policy. Een uitgezette policy verdwijnt uit de
@@ -425,8 +339,9 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", register: str = "",
         for a in in_laag:
             pid = a.get("id", "")
             nieuw = (uit_set - {pid}) if pid in uit_set else (uit_set | {pid})
-            q = urllib.parse.urlencode({"rol": rol, "soort": soort, "register": register,
-                                        "brief": brief, "uit": ",".join(sorted(nieuw))})
+            q = urllib.parse.urlencode({"rol": rol, "doel": doel, "awareness": awareness,
+                                        "soort": soort, "brief": brief,
+                                        "uit": ",".join(sorted(nieuw))})
             aan_nu = a.get("aan")
             knoppen.append(
                 f"<a class='cl-filter{" on" if aan_nu else ""}' href='/copy-prompt?{q}'>"
@@ -437,8 +352,8 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", register: str = "",
     herkomst = "".join(
         f"<span class='chip'>{_e(a.get('id', ''))}{_e(' ' + a['herkomst'] if a.get('herkomst') else '')}</span>"
         for a in aan)
-    prompt = bouw_prompt(ctx, soort=soort, register=register, register_uitleg=reg_uitleg,
-                         brief=brief, items=items, doel=doel, awareness=awareness)
+    prompt = bouw_prompt(ctx, soort=soort, brief=brief, items=items, doel=doel,
+                         awareness=awareness)
     uitvoer = (
         "<div class='card'>"
         "<b>Your prompt</b> <button class='btn sm' type='button' data-cp-kopieer>Copy prompt</button>"

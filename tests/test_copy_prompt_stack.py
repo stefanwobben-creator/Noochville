@@ -230,13 +230,15 @@ def test_formaat_zet_de_stem_en_is_geen_lege_tab():
         assert f"Format and voice: {naam}" in p and uitleg in p
 
 
-def test_het_register_is_gedegradeerd_tot_override():
-    """Doel × stem doet dit werk nu. Het register verdwijnt niet — wie een specifiek register uit
-    de policy nodig heeft kan het forceren — maar het stuurt niet meer de hoofdflow."""
-    zonder = cp.bouw_prompt(_ctx(), items=[], doel="informeren", soort="email")
-    assert "Register" not in zonder
-    met = cp.bouw_prompt(_ctx(), items=[], register="THINK", register_uitleg="huh")
-    assert "Register override: THINK" in met
+def test_het_register_is_overal_weg():
+    """Doel, doelgroep en stem hebben het overgenomen. Een derde as ernaast liet de schrijver
+    kiezen tussen twee dingen die hetzelfde bedoelden."""
+    import inspect
+    assert "register" not in inspect.signature(cp.bouw_prompt).parameters
+    assert "register" not in inspect.signature(cp.render_copy_prompt).parameters
+    assert not hasattr(cp, "registers_uit_policies")
+    p = cp.bouw_prompt(_ctx(), items=[], doel="informeren", soort="email")
+    assert "Register" not in p
 
 
 def test_de_craft_regels_staan_niet_in_de_code():
