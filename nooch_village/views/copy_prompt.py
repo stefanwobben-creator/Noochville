@@ -94,6 +94,57 @@ def registers_uit_policies(bodies: list[str]) -> list[tuple[str, str]]:
 #   merk   de policies van de merk-/visuele rol. Één bewuste keuze, standaard aan: copy zonder
 #          merkstem is generieke copy.
 #   rol    de policies van de rol die schrijft. Standaard aan — dit is zijn eigen domein.
+# ── De drie selectors ────────────────────────────────────────────────────────────────────────
+#
+# Formaat was de verkeerde hoofdas: email/social/product verschilt in VORM, nauwelijks in inhoud.
+# De as die de tekst wél stuurt is doel × lezer × formaat-als-stem.
+#
+# Alles hieronder is een KEUZELIJST met uitleg, geen schrijfregel. De schrijfregels staan in de
+# policies (COPYCHECK-001, TONEOFVOICE-001, POSITIONSTAT-001) en worden daar gelezen — hier staat
+# alleen wat de gebruiker kiest en hoe die keuze in de prompt landt. Zou de craft-tekst hier staan,
+# dan drijft hij af van de policy zodra iemand er een bijwerkt.
+
+# 1. DOEL — gegrond in de Open Door-pillar: informeer, overtuig niet, laat de lezer concluderen.
+# Er staat bewust geen 'hard sell' in de lijst: een optie die er staat, wordt gekozen.
+DOELEN = [
+    ("informeren", "The reader knows something afterwards they did not know before. No ask."),
+    ("nieuwsgierig maken", "The reader wants to read on. Curiosity, not a purchase."),
+    ("zacht overtuigen", "Two worlds side by side; the logic does the work. Never a hard sell."),
+]
+
+# 2. AWARENESS — hoe ver de lezer is. De standaard-Nooch-lezer vond Nooch zonder te zoeken: geen
+# activist, geen insider, nieuwsgierig maar niet overtuigd. Het ONWETENDE uiteinde staat rijk
+# beschreven; verderop laat je de bruggen weg en veronderstel je meer.
+AWARENESS = [
+    ("just browsing",
+     "Found Nooch without looking for it. Does NOT know that sneakers are made from oil, what a "
+     "batch is, that vegan is not the same as plastic-free, that a minimum order quantity exists, "
+     "or that 'biodegradable' is a regulated claim. Build every bridge; assume nothing."),
+    ("knows approximately",
+     "Knows the problem (plastic, throwaway shoes) but not the details. Skip the basic bridges; "
+     "still answer the four questions explicitly."),
+    ("knows exactly",
+     "Existing customer. Do not explain the problem again. Explain what is NEW, and be concrete."),
+]
+
+# De vier vragen die deze lezer heeft. Ze zijn de doel-ankers van elke tekst: een tekst die er geen
+# enkele beantwoordt, informeert niet — hij vult ruimte.
+LEZERSVRAGEN = [
+    "What makes this different?",
+    "Why do I have to wait?",
+    "Is this for me?",
+    "Is it real?",
+]
+
+# 3. FORMAAT → STEM. Formaat is niet dood, maar het is een jasje: elke keuze zet de STEM, en de
+# stem doet het werk dat het losse register eerst deed.
+FORMATEN = [
+    ("homepage / product", "Brand voice. Short, factual, no build-up."),
+    ("email", "Stefan and Lotte, personally. Warm, direct, never PR."),
+    ("character social", "A dry one-liner. The observation carries it, not a joke."),
+    ("field note", "Stefan, honest — including the bad news. No polish over a setback."),
+]
+
 LAAG_BODEM, LAAG_KADER, LAAG_MERK, LAAG_ROL = "bodem", "kader", "merk", "rol"
 
 LAAG_LABEL = {
@@ -163,8 +214,13 @@ def _strategie_regels() -> list[str]:
     return [str(x) for x in (data.get("strategy") or []) if str(x).strip()][:8]
 
 
+def _uitleg(opties: list, keuze: str) -> str:
+    return dict(opties).get(keuze, "")
+
+
 def bouw_prompt(ctx: dict, *, soort: str = "", register: str = "", register_uitleg: str = "",
-                brief: str = "", items: list | None = None) -> str:
+                brief: str = "", items: list | None = None,
+                doel: str = "", awareness: str = "") -> str:
     """De prompt als platte tekst. Elke policy-body gaat er letterlijk in; deze functie
     interpreteert of verkort niets, want dan zou ze de policy herschrijven."""
     rol = ctx.get("role") or {}
@@ -187,6 +243,32 @@ def bouw_prompt(ctx: dict, *, soort: str = "", register: str = "", register_uitl
     if strat:
         L += ["Strategy:"] + [f"- {r}" for r in strat]
 
+    # === READER === — wie leest dit, en wat weet hij niet. Dit blok bepaalt hoeveel je uitlegt;
+    # zonder hem schrijft het model voor een insider die niet bestaat.
+    aw_uitleg = _uitleg(AWARENESS, awareness)
+    L += ["", "=== READER ==="]
+    if awareness:
+        L += [f"Where they are: {awareness}", aw_uitleg]
+    else:
+        L.append("Not specified — assume the default Nooch reader: found us without looking, "
+                 "curious but not convinced, no insider knowledge.")
+    L += ["The four questions this reader has, in this order:"] + [f"- {v}" for v in LEZERSVRAGEN]
+    if awareness == AWARENESS[0][0]:
+        L.append("Answer all four explicitly. Build every bridge — assume no prior knowledge.")
+    elif awareness == AWARENESS[-1][0]:
+        L.append("Do not re-explain the problem. Focus on what is new and be concrete.")
+
+    L += ["", "=== ASSIGNMENT ==="]
+    if doel:
+        L.append(f"Goal: {doel} — {_uitleg(DOELEN, doel)}")
+    L.append(f"Format and voice: {soort or '(not specified)'}"
+             + (f" — {_uitleg(FORMATEN, soort)}" if _uitleg(FORMATEN, soort) else ""))
+    if register:
+        # Het register is gedegradeerd tot optionele override: doel × stem doet dit werk nu, maar
+        # wie een specifiek register uit de policy wil forceren kan dat.
+        L.append(f"Register override: {register}" + (f" — {register_uitleg}" if register_uitleg else ""))
+    L += ["Brief:", (brief or "(no brief given)").strip()]
+
     # Alleen wat AAN staat. Een uitgezette policy verdwijnt echt: hij mag niet als "uitgezet maar
     # toch meegestuurd" in de prompt blijven staan, want dan is de knop een leugen.
     alle_items = items if items is not None else _policy_items(ctx)
@@ -205,11 +287,6 @@ def bouw_prompt(ctx: dict, *, soort: str = "", register: str = "", register_uitl
         L += ["", f"--- {a.get('id', '')} · {a.get('title') or ''}{herkomst} ---",
               (a.get("body") or "").strip()]
 
-    L += ["", "=== ASSIGNMENT ==="]
-    L.append(f"Content type: {soort or '(not specified)'}")
-    if register:
-        L.append(f"Register: {register}" + (f" — {register_uitleg}" if register_uitleg else ""))
-    L += ["Brief:", (brief or "(no brief given)").strip()]
 
     # Twee versies in plaats van één. Reden: elke check in de policies is een verbod, dus één
     # versie convergeert naar de vlakste tekst die niets overtreedt en het register verdampt.
@@ -275,7 +352,8 @@ def _rolkiezer(st) -> str:
 
 
 def render_copy_prompt(st, rol: str = "", soort: str = "", register: str = "",
-                       brief: str = "", uit: str = "") -> str:
+                       brief: str = "", uit: str = "", doel: str = "",
+                       awareness: str = "") -> str:
     """De pagina. `st` is `_Stores`; alle inhoud komt uit de records en de AttachmentStore."""
     if not rol or st.records.get(rol) is None:
         binnen = _rolkiezer(st)
@@ -289,30 +367,49 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", register: str = "",
     registers = registers_uit_policies([a.get("body") or "" for a in aan])
     reg_uitleg = dict(registers).get(register, "")
 
+    # De flow: drie stappen, dan de prompt. Elke stap is één vraag met uitleg onder de knoppen —
+    # de gebruiker moet kunnen zien wát hij kiest, niet alleen een label.
+    def _stap(nr, titel, naam, opties, huidig, hulp=""):
+        knoppen = _cl_knoppen(naam, [(n, n) for n, _ in opties], huidig)
+        uitleg = _uitleg(opties, huidig)
+        blok = f"<p class='ptitle'>{nr}. {_e(titel)}</p>{knoppen}"
+        if uitleg:
+            blok += f"<p class='muted'>{_e(uitleg)}</p>"
+        elif hulp:
+            blok += f"<p class='muted'>{_e(hulp)}</p>"
+        return blok
+
     formulier = (
         f"<form class='qadd-form' method='get' action='/copy-prompt'>"
         f"<input type='hidden' name='rol' value='{_e(rol)}'>"
+        f"<input type='hidden' name='doel' value='{_e(doel)}'>"
+        f"<input type='hidden' name='awareness' value='{_e(awareness)}'>"
         f"<input type='hidden' name='soort' value='{_e(soort)}'>"
         f"<input type='hidden' name='register' value='{_e(register)}'>"
         f"<input type='hidden' name='uit' value='{_e(uit)}'>"
-        f"<p class='ptitle'>1. What are you writing?</p>"
-        f"{_cl_knoppen('soort', [(s, s) for s in _SOORTEN], soort)}"
-        f"<p class='ptitle'>2. Register</p>")
-    if registers:
-        formulier += (_cl_knoppen("register", [(n, n) for n, _ in registers], register)
-                      + (f"<p class='muted'>{_e(reg_uitleg)}</p>" if reg_uitleg else ""))
-    else:
-        # Fail-soft: geen register-blok in de policies gevonden → vrij veld in plaats van niets.
-        formulier += (_field("Register", "register", value=register, fid="cp-reg",
-                             placeholder="no register block found in the policies")
-                      + "<p class='muted'>No register list in the policies. Add a "
-                        "<b>Register</b> heading with <b>* NAME: description</b> bullets and this "
-                        "picker fills itself.</p>")
+        + _stap(1, "What should this text do?", "doel", DOELEN, doel,
+                "Inform, don't convert — the reader draws their own conclusion.")
+        + _stap(2, "Who is reading it?", "awareness", AWARENESS, awareness,
+                "The default Nooch reader found us without looking, and knows none of the jargon.")
+        + _stap(3, "Where does it go?", "soort", FORMATEN, soort,
+                "Format is a jacket: it sets the voice, not the content."))
+
     briefveld = _field("What is this text about? What must the reader know or do afterwards?",
                        "brief", kind="textarea", value=brief, fid="cp-brief",
                        attrs="rows='8'")
-    formulier += ("<p class='ptitle'>3. The brief</p>" + briefveld
-                  + "<button class='btn ok' type='submit'>Generate prompt</button></form>")
+    formulier += "<p class='ptitle'>4. The brief</p>" + briefveld
+
+    # Het register is gedegradeerd: doel × stem doet dit werk nu. Wie tóch een specifiek register
+    # uit de policy wil forceren kan dat, maar het staat niet meer in de hoofdflow.
+    if registers:
+        reg_knoppen = _cl_knoppen("register", [("", "auto")] + [(n, n) for n, _ in registers], register)
+        formulier += ("<details><summary>Advanced: force a register</summary>"
+                      "<p class='muted'>Goal and voice already set the register. Only override this "
+                      "if the policy names one you specifically need.</p>"
+                      + reg_knoppen
+                      + (f"<p class='muted'>{_e(reg_uitleg)}</p>" if reg_uitleg else "")
+                      + "</details>")
+    formulier += "<button class='btn ok' type='submit'>Generate prompt</button></form>"
 
     # De stack, per laag, met een schakelaar per policy. Een uitgezette policy verdwijnt uit de
     # PROMPT — de knop is geen filter op de weergave maar op wat het model te lezen krijgt.
@@ -341,7 +438,7 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", register: str = "",
         f"<span class='chip'>{_e(a.get('id', ''))}{_e(' ' + a['herkomst'] if a.get('herkomst') else '')}</span>"
         for a in aan)
     prompt = bouw_prompt(ctx, soort=soort, register=register, register_uitleg=reg_uitleg,
-                         brief=brief, items=items)
+                         brief=brief, items=items, doel=doel, awareness=awareness)
     uitvoer = (
         "<div class='card'>"
         "<b>Your prompt</b> <button class='btn sm' type='button' data-cp-kopieer>Copy prompt</button>"
