@@ -178,3 +178,76 @@ def test_zonder_records_valt_niets_om():
     """Fail-soft: de view mag nooit breken omdat de records-store ontbreekt."""
     items = cp._policy_items(_ctx())
     assert len(items) == 4 and all(a["aan"] for a in items)
+
+
+# ── De drie selectors: doel × lezer × formaat-als-stem ─────────────────────
+
+def test_de_vier_blokken_staan_in_leesvolgorde():
+    """Waarom we bestaan → voor wie → wat je schrijft → de regels → wat je oplevert. De policies
+    stonden eerst vóór de lezer, en dan leest het model de constraints zonder te weten voor wie."""
+    import re
+    p = cp.bouw_prompt(_ctx(), items=cp._policy_items(_ctx(), RECS),
+                       doel="informeren", awareness="just browsing", soort="email")
+    koppen = [k for k in re.findall(r"^=== (.+?) ===$", p, re.M)]
+    assert koppen == ["ROLE", "WHAT NOOCH IS FOR (always applies)", "READER", "ASSIGNMENT",
+                      "POLICIES (2)", "OUTPUT"]
+
+
+def test_hard_sell_is_geen_optie():
+    """Een optie die er staat, wordt gekozen. De Open Door-pillar zegt: informeer, overtuig niet."""
+    labels = [n for n, _ in cp.DOELEN]
+    assert labels == ["informeren", "nieuwsgierig maken", "zacht overtuigen"]
+    assert not any("sell" in u.lower() and "never" not in u.lower() for _n, u in cp.DOELEN)
+
+
+def test_de_onwetende_lezer_staat_rijk_beschreven():
+    """De standaard-Nooch-lezer vond Nooch zonder te zoeken. Wat hij NIET weet is de kern van dit
+    blok — zonder die opsomming schrijft het model voor een insider die niet bestaat."""
+    p = cp.bouw_prompt(_ctx(), items=[], awareness="just browsing")
+    for onbekend in ("made from oil", "what a batch is", "vegan is not the same as plastic-free",
+                     "minimum order quantity", "regulated claim"):
+        assert onbekend in p
+    assert "Build every bridge" in p
+
+
+def test_verder_op_de_schaal_vallen_de_bruggen_weg():
+    kort = cp.bouw_prompt(_ctx(), items=[], awareness="knows exactly")
+    assert "Do not re-explain the problem" in kort
+    assert "Build every bridge" not in kort
+
+
+def test_de_vier_lezersvragen_staan_er_altijd():
+    """Ook zonder awareness-keuze: het zijn de doel-ankers van elke tekst."""
+    p = cp.bouw_prompt(_ctx(), items=[])
+    for vraag in cp.LEZERSVRAGEN:
+        assert vraag in p
+    assert "found us without looking" in p               # de default-lezer, expliciet
+
+
+def test_formaat_zet_de_stem_en_is_geen_lege_tab():
+    for naam, uitleg in cp.FORMATEN:
+        p = cp.bouw_prompt(_ctx(), items=[], soort=naam)
+        assert f"Format and voice: {naam}" in p and uitleg in p
+
+
+def test_het_register_is_gedegradeerd_tot_override():
+    """Doel × stem doet dit werk nu. Het register verdwijnt niet — wie een specifiek register uit
+    de policy nodig heeft kan het forceren — maar het stuurt niet meer de hoofdflow."""
+    zonder = cp.bouw_prompt(_ctx(), items=[], doel="informeren", soort="email")
+    assert "Register" not in zonder
+    met = cp.bouw_prompt(_ctx(), items=[], register="THINK", register_uitleg="huh")
+    assert "Register override: THINK" in met
+
+
+def test_de_craft_regels_staan_niet_in_de_code():
+    """A-route: de craft-laag verdwijnt IN de policy. Zou hij hier ook staan, dan drijft hij af
+    zodra iemand COPYCHECK-001 bijwerkt — luna, het bibliotheek-domein, required_payload."""
+    src = open("nooch_village/views/copy_prompt.py", encoding="utf-8").read()
+    # De namen van de checks en de verboden woorden: die staan in COPYCHECK-001/TONEOFVOICE-001.
+    for uit_de_policy in ("conscious consumer", "Smirk", "Try-Hard", "Mainstream",
+                          "exclamation mark", "em-dash", "eco-warrior", "join the movement"):
+        assert uit_de_policy not in src, f"'{uit_de_policy}' hoort in de policy, niet in de view"
+    # `biodegradable` mag hier WEL staan — maar alleen als feit over wat de lezer niet weet, nooit
+    # als schrijfregel. Het onderscheid is het hele punt van de A-route.
+    assert "regulated claim" in src                       # lezerskennis
+    assert "Never \"biodegradable\"" not in src            # dat is de policy-regel
