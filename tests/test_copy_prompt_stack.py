@@ -253,3 +253,35 @@ def test_de_craft_regels_staan_niet_in_de_code():
     # als schrijfregel. Het onderscheid is het hele punt van de A-route.
     assert "regulated claim" in src                       # lezerskennis
     assert "Never \"biodegradable\"" not in src            # dat is de policy-regel
+
+
+# ── De tool hangt aan de rol, niet in het luchtledige ──────────────────────
+
+def test_de_tool_wordt_als_artefact_op_de_rol_gezet(tmp_path):
+    """Een tool die alleen als losse pagina bestaat hangt nergens aan: je moet wéten dat hij er is.
+    Als artefact volgt hij het bezit-model dat er al staat — wie de rol bekijkt ziet zijn
+    gereedschap — en is hij gescoped op precies de policy-stack waarmee hij werkt."""
+    from nooch_village.attachments import AttachmentStore
+    store = AttachmentStore(str(tmp_path / "att.json"))
+    aid = cp.zorg_voor_tool(RECS, store, ROL)
+    assert aid
+    tools = store.list(ROL, "tool")
+    assert len(tools) == 1
+    t = tools[0]
+    assert t.title == cp.TOOL_TITEL
+    assert t.url == f"/copy-prompt?rol={ROL}"
+    assert t.inherit is False                            # rol-eigen capaciteit, niet erfelijk
+
+
+def test_de_tool_wordt_niet_dubbel_aangemaakt(tmp_path):
+    from nooch_village.attachments import AttachmentStore
+    store = AttachmentStore(str(tmp_path / "att.json"))
+    eerste = cp.zorg_voor_tool(RECS, store, ROL)
+    tweede = cp.zorg_voor_tool(RECS, store, ROL)
+    assert eerste == tweede and len(store.list(ROL, "tool")) == 1
+
+
+def test_een_onbekende_rol_krijgt_geen_tool(tmp_path):
+    from nooch_village.attachments import AttachmentStore
+    store = AttachmentStore(str(tmp_path / "att.json"))
+    assert cp.zorg_voor_tool(RECS, store, "bestaat-niet") == ""
