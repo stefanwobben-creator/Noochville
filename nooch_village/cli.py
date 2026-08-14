@@ -1190,10 +1190,10 @@ def main() -> None:
         from nooch_village.village import BASE_DIR
         ctx = load_context(BASE_DIR)
         st = _Stores(ctx.data_dir)
-        mail = next((a for a in argv[1:] if "@" in a), "")
+        mail = next((a for a in sys.argv[2:] if "@" in a), "")
         if not mail:
             print("Gebruik: village poort <e-mail-van-de-mens> [--live]"); sys.exit(1)
-        live = "--live" in argv
+        live = "--live" in sys.argv
         targets = _person_targets(st, mail)
         uit = tpoort.draai(notif=st.notif, projects=st.projects, records=st.records,
                            targets=targets, dry_run=not live)
