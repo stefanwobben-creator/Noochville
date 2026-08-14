@@ -382,3 +382,18 @@ def test_opruiming_is_idempotent():
     assert no.archiveer_stale_onbemand(nf, RECS, _Ass())["gearchiveerd"] == 1
     assert no.archiveer_stale_onbemand(nf, RECS, _Ass())["gearchiveerd"] == 0
     assert "gefixte bug" in nf._i[0]["outcome"]
+
+
+def test_het_oordeel_van_de_match_bepaalt_de_skill_deur():
+    """De match zegt 'geen rol, maar software zou het kunnen'. Dat IS de skill-deur; dat oordeel
+    weggooien en terugvallen op tekstpatronen legde het item op de onbeslist-stapel."""
+    antwoord = '{"role": "NONE", "kind": "missing_capability", "capability": "page fetch"}'
+    b = tp.poort(_n("Scrape/fetch the live FAQ page content"), projects=_Projects(),
+                 records=RECS, reason_fn=_llm(antwoord))
+    assert b.deur == tp.DEUR_SKILL
+
+
+def test_een_uitgevallen_match_leest_anders_dan_onclassificeerbaar():
+    """Andere oorzaak, andere fix — ze op één hoop gooien verbergt een storing achter 'onbekend'."""
+    b = tp.poort(_n("iets"), projects=_Projects(), records=RECS, reason_fn=_llm(None))
+    assert b.deur == tp.ONBESLIST and "niet beschikbaar" in b.reden

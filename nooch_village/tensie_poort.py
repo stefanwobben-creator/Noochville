@@ -216,7 +216,8 @@ def volhardend(klasse: str, batch: list[dict], *, dagen: int = OPS_VOLHARDING_DA
                 if ops_klasse(str(n.get("snippet") or "")) == klasse} - {""}) >= dagen
 
 
-def deur(notif: dict, *, batch: list[dict] | None = None) -> Besluit:
+def deur(notif: dict, *, batch: list[dict] | None = None, kind: str = "",
+         waarom: str = "") -> Besluit:
     tekst = str(notif.get("snippet") or "")
     batch = batch or [notif]
 
@@ -236,6 +237,14 @@ def deur(notif: dict, *, batch: list[dict] | None = None) -> Besluit:
         return Besluit(DEUR_SKILL, f"capaciteit bestaat niet ({m.group(0)!r})", bewijs=tekst[:80],
                        sleutel="skill:pagina niet op te halen", klasse="pagina niet op te halen")
 
+    # De match heeft al geoordeeld dat software dit KAN maar geen rol de capaciteit heeft. Dat is
+    # de skill-deur, letterlijk. Dat oordeel hier weggooien en terugvallen op tekstpatronen was een
+    # gat: het signaal was er al en belandde als 'onbeslist' op de verkeerde stapel.
+    if kind == "missing_capability" and not _VRAAGT_BESLUIT.search(tekst):
+        return Besluit(DEUR_SKILL, f"geen rol bezit dit en software zou het kunnen ({waarom})",
+                       bewijs=tekst[:80], sleutel=f"skill:{_onderwerp(tekst)}",
+                       klasse="capaciteit ontbreekt")
+
     if _VRAAGT_BESLUIT.search(tekst):
         for naam, pat in _BESLUIT_DOMEIN.items():
             if pat.search(tekst):
@@ -244,6 +253,11 @@ def deur(notif: dict, *, batch: list[dict] | None = None) -> Besluit:
         return Besluit(ONBESLIST, "vraagt een besluit maar raakt geen voorbehouden domein",
                        bewijs=tekst[:80], sleutel=f"?:{_onderwerp(tekst)}")
 
+    if waarom.startswith("geen LLM-antwoord"):
+        # Andere oorzaak, andere fix: dit is geen onclassificeerbaar item maar een uitgevallen
+        # match. Ze op één hoop gooien verbergt een storing achter 'onbekend'.
+        return Besluit(ONBESLIST, "de eigenaars-match was niet beschikbaar — niet geclassificeerd",
+                       bewijs=tekst[:80], sleutel=f"?:llm-uit:{_onderwerp(tekst)}")
     return Besluit(ONBESLIST, "geen regel pakte dit — expliciet onbeslist, niet stil weggefilterd",
                    bewijs=tekst[:80], sleutel=f"?:{_onderwerp(tekst)}")
 
@@ -278,7 +292,7 @@ def poort(notif: dict, *, projects, records, batch: list[dict] | None = None,
         return Besluit(MENS_WERK, f"geen rol bezit dit en het is fysiek/extern ({waarom})",
                        bewijs=tekst[:80], sleutel=f"mens:{_onderwerp(tekst)}")
 
-    return deur(notif, batch=batch)
+    return deur(notif, batch=batch, kind=kind, waarom=waarom)
 
 
 def rapport(besluiten: list[Besluit]) -> dict:
