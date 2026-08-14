@@ -268,10 +268,13 @@ class _Ledger(_Projects):
     def by_status(self, status):
         return [p for p in self._p.values() if p.get("status") == status]
 
-    def create(self, owner, scope, trigger):
+    def create(self, owner, scope, trigger, origin=""):
+        # De echte ledger valideert `trigger` tegen een vaste set; 'tensie-poort' werd geweigerd en
+        # dat kwam pas op prod boven. Het dubbel toetst het nu ook.
+        assert trigger in {"clock", "human", "noochie", "tension", "role"}, trigger
         pid = f"new{len(self.gemaakt)}"
         self._p[pid] = {"id": pid, "owner": owner, "scope": scope, "status": "queued"}
-        self.gemaakt.append((owner, scope, trigger))
+        self.gemaakt.append((owner, scope, trigger, origin))
         return pid
 
 
