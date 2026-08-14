@@ -174,3 +174,42 @@ def test_herformuleren_zonder_clausule_is_geen_oordeel(db, monkeypatch):
             "rood": 0, "oranje": 1, "groen": 0, "escaleren": 0, "score": 95}
     o = co.oordeel_voor("iets", db=kaal)
     assert o["oordeel"] == co.GEEN_OORDEEL and o["gegrond"] is False
+
+
+# ── Anti-drift: een goedkeuring mag zijn bewijs niet overleven ──────────────
+
+def _cert_bewijs(geldig_tot):
+    from nooch_village import cert_register as cr
+    from nooch_village import claims_substantiatie as subst
+    return {"onderbouwing": subst.ONDERBOUWD,
+            "records": [{"id": "K9", "source": cr.EXTERN,
+                         "meta": {"geldig_tot": geldig_tot, "feit": "70% gerecycled PET"}}],
+            "reden": "1 bevestigd certificaat"}
+
+
+def test_een_geldig_certificaat_draagt_wel(db, monkeypatch):
+    from nooch_village import claims_substantiatie as subst
+    monkeypatch.setattr(subst, "_index", lambda ledger: [{"x": 1}])
+    monkeypatch.setattr(subst, "bewijs_voor", lambda b, i, m: _cert_bewijs("2099-01-01"))
+    o = co.oordeel_voor("Made with recycled materials.", db=db, ledger=_Ledger([]), merken={"n"})
+    assert o["oordeel"] == co.COMPLIANT and o["bewijs_id"] == "K9"
+
+
+def test_een_verlopen_certificaat_klapt_de_claim_terug(db, monkeypatch, caplog):
+    """Een levende vergelijking, geen eenmalige stempel — anders overleeft de goedkeuring het bewijs."""
+    from nooch_village import claims_substantiatie as subst
+    monkeypatch.setattr(subst, "_index", lambda ledger: [{"x": 1}])
+    monkeypatch.setattr(subst, "bewijs_voor", lambda b, i, m: _cert_bewijs("2020-01-01"))
+    with caplog.at_level("INFO"):
+        o = co.oordeel_voor("Made with recycled materials.", db=db, ledger=_Ledger([]), merken={"n"})
+    assert o["oordeel"] != co.COMPLIANT
+    assert "verlopen" in caplog.text
+
+
+def test_een_certificaat_zonder_datum_draagt_niet(db, monkeypatch):
+    """Onbekend ≠ geldig: niemand kan zeggen tot wanneer het draagt."""
+    from nooch_village import claims_substantiatie as subst
+    monkeypatch.setattr(subst, "_index", lambda ledger: [{"x": 1}])
+    monkeypatch.setattr(subst, "bewijs_voor", lambda b, i, m: _cert_bewijs(""))
+    o = co.oordeel_voor("Made with recycled materials.", db=db, ledger=_Ledger([]), merken={"n"})
+    assert o["oordeel"] != co.COMPLIANT

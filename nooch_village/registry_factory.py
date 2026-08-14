@@ -44,6 +44,7 @@ from nooch_village.skills_impl.curate import CurateSkill
 from nooch_village.skills_impl.voorstel import VoorstelSchrijvenSkill
 from nooch_village.skills_impl.shopify_sales import ShopifySalesSkill
 from nooch_village.skills_impl.claim_evidence import ClaimEvidenceSkill
+from nooch_village.skills_impl.cert_evidence import CertEvidenceSkill
 from nooch_village.skills_impl.claims_check import ClaimsCheckSkill
 from nooch_village.skills_impl.claims_site_scan import ClaimsSiteScanSkill
 from nooch_village.skills_impl.regulation_watch import RegulationWatchSkill
@@ -86,7 +87,7 @@ def build_skill_registry() -> SkillRegistry:
         CurateSkill(),
         VoorstelSchrijvenSkill(),
         ShopifySalesSkill(),
-        ClaimEvidenceSkill(), ClaimsCheckSkill(), ClaimsSiteScanSkill(), RegulationWatchSkill(),
+        CertEvidenceSkill(), ClaimEvidenceSkill(), ClaimsCheckSkill(), ClaimsSiteScanSkill(), RegulationWatchSkill(),
         KroniekInterpretSkill(),
         WetenWeDitAlSkill(),
         RuisCheckSkill(),
