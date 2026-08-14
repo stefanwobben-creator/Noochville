@@ -593,6 +593,31 @@ en Founder Flow-labels.
 "fout"; een reden zegt "fout op DEZE manier", en alleen dat laatste is een regel waard. Zelfde
 gedachte als de diff bij `aanpassen` in `voorstel_oordeel`.
 
+## Een fix hoort zijn eigen notificaties in te trekken (les, mechanisme ontbreekt)
+
+Vastgelegd 14 aug 2026. Dit is een LES met een openstaand gat, geen bestaande code.
+
+Twee keer op rij moest een gefixte bug handmatig worden nageveegd:
+
+| veeg | wat | omvang |
+|------|-----|--------|
+| 1 | vastgelopen-project-notificaties die de founder pingden zonder dat er iets te beslissen viel | 135 |
+| 2 | `[rol X onbemand]`-kopieën terwijl de rol gewoon bemand was (bug gefixt in #271) | 37 |
+
+Het patroon: **code repareren haalt de emissies van die code niet weg.** De fix stopt de instroom;
+de al verstuurde berichten blijven staan als werk dat er niet meer is, en die stapel is niet van
+echte tensies te onderscheiden zonder er met de hand doorheen te gaan.
+
+Wat ontbreekt is een mechanisme dat een emissie herroepbaar maakt: een notificatie die weet uit
+welke regel/bug hij voortkwam (een emissie-tag), zodat een fix zijn eigen uitstoot kan intrekken in
+plaats van dat een mens hem later herkent aan de tekst. `notif_opruiming.py` doet dat nu per geval,
+met twee guards (alleen van vóór de fix — een item van ná de fix is een REGRESSIE en moet zichtbaar
+blijven; en alleen als de bewering nú aantoonbaar onwaar is). Dat is de pleister; de emissie-tag is
+de structurele fix.
+
+Zelfde familie als `reference, don't copy`: een feit dat op twee plekken leeft (hier: "deze rol is
+onbemand", in de code én in een verstuurd bericht) drijft uiteen zonder dat iets zich meldt.
+
 ## Certificaten in de village (architectuurbeslissing, nog niet gebouwd)
 
 Vastgelegd 12 aug 2026. Dit is een BESLISSING, geen bestaande code — hij staat hier zodat hij een

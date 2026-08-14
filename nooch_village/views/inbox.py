@@ -84,10 +84,55 @@ def _inbox_row(st, n: dict, csrf: str, done_nid: str = "") -> str:
     return f"<div class='rdr-row'><div class='rdr-body'>{meta}{title}</div>{act}</div>"
 
 
+def _poort_secties(st, items, csrf_token, done) -> str:
+    """Groepeer op het oordeel van de tensie-poort: beslissingen bovenaan, mens-todo apart.
+
+    De groepering is een INBOX-REGEL, geen beslissing. Bij de compliance-claims is dat het punt:
+    veertien claims onder één kop, maar elke claim houdt zijn eigen regel en zijn eigen oordeel —
+    een blanket-approve mag niet kunnen bestaan."""
+    from nooch_village import tensie_poort as tp
+
+    def _deur(n):
+        return str((n.get("poort") or {}).get("deur") or "")
+
+    groepen: dict[str, list] = {}
+    ongetagd = []
+    for n in items:
+        d = _deur(n)
+        if not d:
+            ongetagd.append(n)
+        else:
+            sleutel = str((n.get("poort") or {}).get("sleutel") or d)
+            groepen.setdefault(f"{d}|{sleutel}", []).append(n)
+
+    KOP = {tp.DEUR_BESLUIT: "Decisions for you", tp.DEUR_ROL: "A role is missing",
+           tp.DEUR_SKILL: "A capability is missing", tp.MENS_WERK: "Only you can do this",
+           tp.ONBESLIST: "The gate could not classify these"}
+    volgorde = [tp.DEUR_BESLUIT, tp.DEUR_ROL, tp.DEUR_SKILL, tp.MENS_WERK, tp.ONBESLIST]
+
+    uit = []
+    for deur in volgorde:
+        mijn = {k: v for k, v in groepen.items() if k.split("|")[0] == deur}
+        if not mijn:
+            continue
+        uit.append(f"<h2 class='ptitle'>{_e(KOP.get(deur, deur))}</h2>")
+        for _, ns in sorted(mijn.items(), key=lambda kv: -len(kv[1])):
+            eerste = (ns[0].get("poort") or {})
+            kop = eerste.get("klasse") or eerste.get("sleutel") or deur
+            if len(ns) > 1:
+                uit.append(f"<p class='muted'>{_e(kop)} — {len(ns)} meldingen. Elke regel houdt "
+                           f"zijn eigen beslissing.</p>")
+            uit.append("".join(_inbox_row(st, n, csrf_token, done_nid=done) for n in ns))
+    if ongetagd:
+        uit.append("<h2 class='ptitle'>Not yet through the gate</h2>")
+        uit.append("".join(_inbox_row(st, n, csrf_token, done_nid=done) for n in ongetagd))
+    return "".join(uit)
+
+
 def render_inbox(st, targets, csrf_token: str = "", naam: str = "", done: str = "") -> str:
     items = st.notif.open_for_targets(targets)
     nieuw = sum(1 for n in items if st.notif.status_of(n) == "nieuw")
-    body = ("".join(_inbox_row(st, n, csrf_token, done_nid=done) for n in items) if items
+    body = (_poort_secties(st, items, csrf_token, done) if items
             else "<p class='muted'>Your inbox is empty. As soon as a role or the meeting @-mentions you, "
                  "it appears here.</p>")
     kop = f"Inbox{(' — ' + _e(naam)) if naam else ''}"

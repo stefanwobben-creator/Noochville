@@ -1180,6 +1180,39 @@ def main() -> None:
         print(f"✅ {res['routed']} rollen op de roloverleg-agenda gezet, {res['skipped']} overgeslagen. "
               f"Verwerk ze in het roloverleg-scherm van de cockpit, 1 voor 1.")
 
+    elif mode == "poort":
+        # De tensie-poort over de founder-inbox. Default DRY-RUN: meten mag nooit per ongeluk
+        # opruimen. `--live` voert uit (routeren als project, filteren archiveren).
+        import os
+        from nooch_village.cockpit2 import _Stores, _person_targets
+        from nooch_village import tensie_poort as tpoort
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        mail = next((a for a in argv[1:] if "@" in a), "")
+        if not mail:
+            print("Gebruik: village poort <e-mail-van-de-mens> [--live]"); sys.exit(1)
+        live = "--live" in argv
+        targets = _person_targets(st, mail)
+        uit = tpoort.draai(notif=st.notif, projects=st.projects, records=st.records,
+                           targets=targets, dry_run=not live)
+        r = uit["rapport"]
+        print(f"\n{'LIVE' if live else 'DRY-RUN'} — {r['in']} open item(s) door de poort")
+        for deur, n in sorted(uit["per_deur"].items(), key=lambda kv: -kv[1]):
+            print(f"   {n:>3}  {deur}")
+        print(f"\n   weggefilterd: {r['weggefilterd']}  |  mens-todo: {r['mens_todo']}  |  "
+              f"zichtbaar: {r['zichtbaar_voor_mens']} → {r['na_dedup']} na dedup")
+        if uit["projecten"]:
+            print(f"\n   werk afgeleverd als project:")
+            for pr in uit["projecten"]:
+                print(f"     → {pr['rol']}  ({pr['project']})")
+        print("\n== wat de founder overhoudt ==")
+        for g in uit["bundels"]:
+            print(f"   [{g['deur']}] {g['klasse'] or g['sleutel']} — {g['aantal']} melding(en)")
+            for m in g["meldingen"][:20]:
+                print(f"       · {m['tekst'][:88]}")
+
     elif mode == "healthcheck":
         import os
         from nooch_village.config import load_context

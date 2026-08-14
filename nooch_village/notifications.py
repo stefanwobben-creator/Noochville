@@ -94,6 +94,19 @@ class NotifStore:
         self._save()
         return True
 
+    def set_poort(self, notif_id: str, verdict: dict) -> bool:
+        """Leg het oordeel van de tensie-poort op het item vast.
+
+        Op het item en niet in een aparte store, om dezelfde reden als `result_ref` bij de Kroniek:
+        het oordeel hoort bij het ding waarover het gaat. Zo kan de weergave groeperen zonder de
+        poort (en dus een LLM-call) opnieuw te draaien bij elke pageload."""
+        n = self._find(notif_id)
+        if n is None:
+            return False
+        n["poort"] = dict(verdict or {})
+        self._save()
+        return True
+
     def archive_item(self, notif_id: str) -> bool:
         """Verwerkt item uit de wachtrij halen. Alleen wat verwerkt is mag weg (schone regie)."""
         n = self._find(notif_id)
