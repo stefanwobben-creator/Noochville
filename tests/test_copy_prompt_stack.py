@@ -43,6 +43,60 @@ class _Records:
 WORTEL, MERK, ROL = "mother_earth__nooch", "mother_earth__nooch__brand", "mother_earth__nooch__copy"
 RECS = _Records([_Rec(WORTEL), _Rec(MERK, ["Brand positioning", "Design system"]), _Rec(ROL)])
 
+# MERK is een ZUSTERROL van ROL: zijn policies komen nooit vanzelf mee. In het oude model deed de
+# ctx alsof ze geërfd werden, en dat verborg juist het gat dat de compositie oplost. Hier arriveren
+# ze zoals ze echt arriveren — via een inclusie die iemand heeft gezet.
+_POLICIES = {
+    ROL:    [{"id": "TONEOFVOICE-001", "title": "Tone of Voice", "body": "wees warm"}],
+    MERK:   [{"id": "BRANDPOSITIO-001", "title": "Brand positioning", "body": "merkstem"}],
+    WORTEL: [{"id": "MONEY-001", "title": "Money", "body": "budget-regels"},
+             {"id": "STANCE-001", "title": "Stance", "body": "wij vinden X"}],
+}
+
+
+class _Art:
+    def __init__(self, d):
+        self.__dict__.update(d)
+        self.status = "active"
+
+
+class _Att:
+    def list(self, rid, kind):
+        return [_Art(a) for a in _POLICIES.get(rid, [])] if kind == "policy" else []
+
+
+class _Cfg:
+    """StackConfig-dubbel: alleen wat componeer() nodig heeft."""
+    def __init__(self, incl=None):
+        self._i = dict(incl or {})
+
+    def inclusies(self, rol):
+        return list(self._i.get(rol, []))
+
+    def door(self, rol, bron):
+        return "test"
+
+
+def _stack(uit=None, incl=(MERK,), monkeypatch=None):
+    """De samengestelde stack voor ROL. serialize_context wordt gevoed uit _POLICIES, zodat
+    erfenis (wortel) en eigen bezit uit dezelfde bron komen als in productie."""
+    from nooch_village import artefacts, copy_stack
+
+    def _fake_ctx(role_id, records, store):
+        eigen = [dict(a) for a in _POLICIES.get(role_id, [])]
+        geerfd = ([dict(a, origin_id=WORTEL, origin_path="via Mother Earth")
+                   for a in _POLICIES[WORTEL]] if role_id != WORTEL else [])
+        return {"role": {"id": role_id, "name": "Copywriter", "purpose": "schrijft",
+                         "accountabilities": []},
+                "policies": {"own": eigen, "inherited": geerfd}}
+
+    import unittest.mock as _m
+    with _m.patch.object(artefacts, "serialize_context", _fake_ctx), \
+         _m.patch.object(copy_stack, "_own_policies",
+                         lambda rol, records, att: [dict(a) for a in _POLICIES.get(rol, [])]):
+        return copy_stack.componeer(ROL, RECS, _Att(), _Cfg({ROL: list(incl)}),
+                                    uit=set(uit or ()))
+
 
 def _ctx():
     return {
@@ -69,7 +123,7 @@ def _laag(items, pid):
 
 def test_elke_policy_landt_in_de_juiste_laag():
     """De laag volgt uit de HERKOMST, niet uit de titel — een titel kan iedereen wijzigen."""
-    items = cp._policy_items(_ctx(), RECS)
+    items = _stack()
     assert _laag(items, "TONEOFVOICE-001") == cp.LAAG_ROL
     assert _laag(items, "BRANDPOSITIO-001") == cp.LAAG_MERK
     assert _laag(items, "MONEY-001") == cp.LAAG_KADER
@@ -77,15 +131,21 @@ def test_elke_policy_landt_in_de_juiste_laag():
 
 
 def test_de_merk_laag_wordt_aan_het_domein_herkend_niet_aan_de_rol_id():
-    """Een id kan hernoemd worden, een domein is governance."""
-    zonder_domein = _Records([_Rec(WORTEL), _Rec(MERK), _Rec(ROL)])
-    items = cp._policy_items(_ctx(), zonder_domein)
-    assert _laag(items, "BRANDPOSITIO-001") == cp.LAAG_KADER   # geen domein → geen merk-laag
+    """Een id kan hernoemd worden, een domein is governance.
+
+    Zonder merk-domein blijft de ingesloten bron wél ingesloten — hij landt alleen in de neutrale
+    inclusie-laag in plaats van de merk-laag. Nooit stilzwijgend bij 'eigen': dan zou de schrijver
+    denken dat zíjn rol die regel cureert."""
+    from nooch_village import copy_stack
+    assert copy_stack.laag_van_domeinen(["Brand positioning"]) == cp.LAAG_MERK
+    assert copy_stack.laag_van_domeinen(["Copycheck"]) == cp.LAAG_STEM
+    assert copy_stack.laag_van_domeinen([]) == cp.LAAG_OVERIG
+    assert copy_stack.laag_van_domeinen(["iets anders"]) == cp.LAAG_OVERIG
 
 
 def test_governance_van_de_wortelcirkel_staat_standaard_uit():
     """DE klacht: de geld-policy zat in een copy-prompt. Budgetten zeggen niets over schrijven."""
-    items = cp._policy_items(_ctx(), RECS)
+    items = _stack()
     aan = {a["id"] for a in items if a["aan"]}
     assert "MONEY-001" not in aan and "STANCE-001" not in aan
     assert {"TONEOFVOICE-001", "BRANDPOSITIO-001"} <= aan
@@ -94,14 +154,14 @@ def test_governance_van_de_wortelcirkel_staat_standaard_uit():
 def test_een_kader_policy_is_per_stuk_aan_te_zetten():
     """Per-policy controle bínnen de laag, niet alles-of-niets per cirkel: 'Stance' is voor copy
     vaak wél relevant, 'Money' nooit."""
-    items = cp._policy_items(_ctx(), RECS, uit={"STANCE-001"})
+    items = _stack(uit={"STANCE-001"})
     # 'uit' zet uit; om iets aan te zetten dat standaard uit staat gebruikt de UI dezelfde set
     # omgekeerd — hier toetsen we dat de expliciete set de default overruled voor wat aan stond.
     assert not any(a["aan"] for a in items if a["id"] == "MONEY-001")
 
 
 def test_een_expliciet_uitgezette_policy_valt_uit():
-    items = cp._policy_items(_ctx(), RECS, uit={"TONEOFVOICE-001"})
+    items = _stack(uit={"TONEOFVOICE-001"})
     assert not any(a["aan"] for a in items if a["id"] == "TONEOFVOICE-001")
     assert any(a["aan"] for a in items if a["id"] == "BRANDPOSITIO-001")
 
@@ -112,7 +172,7 @@ def test_een_uitgezette_policy_staat_niet_in_de_prompt_tekst():
     """Een knop die iets uitzet moet het ook echt uitzetten. Een policy die als 'uit' op het scherm
     staat maar toch in de prompt zit, laat de gebruiker denken dat hij zonder die regel werkt."""
     ctx = _ctx()
-    items = cp._policy_items(ctx, RECS)
+    items = _stack()
     prompt = cp.bouw_prompt(ctx, items=items)
     assert "budget-regels" not in prompt                  # MONEY-body weg
     assert "MONEY-001" not in prompt
@@ -122,20 +182,20 @@ def test_een_uitgezette_policy_staat_niet_in_de_prompt_tekst():
 
 def test_uitzetten_haalt_ook_de_body_weg():
     ctx = _ctx()
-    zonder = cp.bouw_prompt(ctx, items=cp._policy_items(ctx, RECS, uit={"BRANDPOSITIO-001"}))
+    zonder = cp.bouw_prompt(ctx, items=_stack(uit={"BRANDPOSITIO-001"}))
     assert "merkstem" not in zonder and "BRANDPOSITIO-001" not in zonder
 
 
 def test_de_teller_telt_alleen_wat_aan_staat():
     ctx = _ctx()
-    prompt = cp.bouw_prompt(ctx, items=cp._policy_items(ctx, RECS))
+    prompt = cp.bouw_prompt(ctx, items=_stack())
     assert "=== POLICIES (2) ===" in prompt               # tone of voice + brand, niet de 4
 
 
 def test_alles_uit_zegt_dat_eerlijk():
     ctx = _ctx()
-    uit = {a["id"] for a in cp._policy_items(ctx, RECS)}
-    prompt = cp.bouw_prompt(ctx, items=cp._policy_items(ctx, RECS, uit=uit))
+    uit = {a["id"] for a in _stack()}
+    prompt = cp.bouw_prompt(ctx, items=_stack(uit=uit))
     assert "=== POLICIES (0) ===" in prompt
     assert "all policies are switched off" in prompt
 
@@ -147,8 +207,8 @@ def test_geen_policies_leest_anders_dan_alles_uitgezet():
             "policies": {"own": [], "inherited": []}}
     assert "this role has no policies" in cp.bouw_prompt(leeg, items=[])
     ctx = _ctx()
-    uit = {a["id"] for a in cp._policy_items(ctx, RECS)}
-    assert "switched off" in cp.bouw_prompt(ctx, items=cp._policy_items(ctx, RECS, uit=uit))
+    uit = {a["id"] for a in _stack()}
+    assert "switched off" in cp.bouw_prompt(ctx, items=_stack(uit=uit))
 
 
 # ── De bodem: altijd mee, niet uitzetbaar ──────────────────────────────────
@@ -158,8 +218,8 @@ def test_de_missie_staat_altijd_in_de_prompt():
     Nooch-tekst."""
     from nooch_village.mission import ANCHOR_PURPOSE
     ctx = _ctx()
-    uit = {a["id"] for a in cp._policy_items(ctx, RECS)}
-    prompt = cp.bouw_prompt(ctx, items=cp._policy_items(ctx, RECS, uit=uit))
+    uit = {a["id"] for a in _stack()}
+    prompt = cp.bouw_prompt(ctx, items=_stack(uit=uit))
     assert ANCHOR_PURPOSE in prompt
     assert "always applies" in prompt
 
@@ -169,15 +229,18 @@ def test_de_strategie_komt_uit_config_niet_uit_de_view():
     verzonnen vervanger."""
     regels = cp._strategie_regels()
     assert isinstance(regels, list)
-    prompt = cp.bouw_prompt(_ctx(), items=cp._policy_items(_ctx(), RECS))
+    prompt = cp.bouw_prompt(_ctx(), items=_stack())
     for r in regels:
         assert r in prompt
 
 
-def test_zonder_records_valt_niets_om():
-    """Fail-soft: de view mag nooit breken omdat de records-store ontbreekt."""
-    items = cp._policy_items(_ctx())
-    assert len(items) == 4 and all(a["aan"] for a in items)
+def test_zonder_inclusies_blijft_de_eigen_stack_staan():
+    """Geen inclusie = geen merk-laag, maar wel gewoon eigen + geërfd. Een rol zonder inclusies
+    hoort een werkende (zij het smallere) stack te houden, niet een lege."""
+    items = _stack(incl=())
+    assert {a["id"] for a in items} == {"TONEOFVOICE-001", "MONEY-001", "STANCE-001"}
+    assert all(a["bron"] in ("eigen", "erfenis") for a in items)
+    assert [a["id"] for a in items if a["aan"]] == ["TONEOFVOICE-001"]   # kader staat uit
 
 
 # ── De drie selectors: doel × lezer × formaat-als-stem ─────────────────────
@@ -186,7 +249,7 @@ def test_de_vier_blokken_staan_in_leesvolgorde():
     """Waarom we bestaan → voor wie → wat je schrijft → de regels → wat je oplevert. De policies
     stonden eerst vóór de lezer, en dan leest het model de constraints zonder te weten voor wie."""
     import re
-    p = cp.bouw_prompt(_ctx(), items=cp._policy_items(_ctx(), RECS),
+    p = cp.bouw_prompt(_ctx(), items=_stack(),
                        doel="inform", awareness="just browsing", soort="email")
     koppen = [k for k in re.findall(r"^=== (.+?) ===$", p, re.M)]
     assert koppen == ["ROLE", "WHAT NOOCH IS FOR (always applies)", "READER", "ASSIGNMENT",

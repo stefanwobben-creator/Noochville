@@ -143,6 +143,9 @@ class _Stores:
         self.werk = WerkoverlegStore(os.path.join(dd, "werkoverleg.json"))
         self.strategies = StrategyStore(os.path.join(dd, "strategies.json"))
         self.backlog = BacklogStore(os.path.join(dd, "backlog.json"))
+        # Welke rollen bewust meetellen in de copy-prompt-stack van een andere rol. Erfenis loopt
+        # omhoog; een zusterrol insluiten is een besluit en staat daarom vastgelegd.
+        self.copy_stack = CopyStackConfig(os.path.join(dd, "copy_stack.json"))
         self.radar = RadarStore(os.path.join(dd, "radar.json"))   # Radar-tool: gecureerde Inoreader-signalen per rol
         # Wat de founder met een opkomend onderwerp deed (project of watch). Geen oordeel-label:
         # clustering is berekend, de projectkeuze is strategie — zie radar_clusters.
@@ -210,6 +213,10 @@ def _bootstrap(dd: str) -> None:
         from nooch_village.views.copy_prompt import zorg_voor_tool
         for _rid in _COPY_PROMPT_ROLLEN:
             zorg_voor_tool(st.records, st.att, _rid)
+        for _rid, _bronnen in _COPY_STACK_ZAAD.items():
+            if st.records.get(_rid) is not None:
+                st.copy_stack.zaad(_rid, [b for b in _bronnen if st.records.get(b) is not None],
+                                   door="system (zaad)")
     except Exception as _e:                              # noqa: BLE001
         logging.getLogger("village.cockpit").warning("copy-prompt-tool niet gekoppeld: %s", _e)
     migrate_data_sources(dd)      # legacy visitors_day → plausible_visitors_day + Plausible actief (idempotent)
@@ -286,6 +293,7 @@ from nooch_village.views.bronnen import render_bronnen
 from nooch_village.views.skills import render_skills
 from nooch_village.views.search import render_search, render_search_fragment
 from nooch_village.views.claims import render_claims, render_rapport, rol_voor
+from nooch_village.copy_stack import StackConfig as CopyStackConfig
 from nooch_village.views.copy_prompt import render_copy_prompt
 from nooch_village.views.founder_flow import render_founder_flow
 from nooch_village.views.inwoners import render_inwoner, render_inwoners
@@ -948,7 +956,21 @@ def _web_actor_id(username: str | None, st) -> str:
 # De rollen die de copy-prompt-generator als gereedschap krijgen. Data, geen if-boom: een rol
 # erbij is één regel. Bewust een lijst en niet "elke rol met policies" — het is een SCHRIJF-tool,
 # en een rol die toevallig policies heeft is daarmee nog geen copywriter.
-_COPY_PROMPT_ROLLEN = ("mother_earth__nooch__community_and_email",)
+_COPY_PROMPT_ROLLEN = ("mother_earth__nooch__community_and_email",
+                       "mother_earth__nooch__noochville__copywriter")
+
+# Welke bronnen een schrijvende rol bij oprichting bewust meekrijgt. Rol-ids in code zijn hier
+# onvermijdelijk: een inclusie IS een besluit, en een besluit dat je afleidt uit een regel is geen
+# besluit meer. Alleen een zaad — zodra een mens de compositie aanraakt, wint die (zie StackConfig).
+_COPY_STACK_ZAAD = {
+    "mother_earth__nooch__noochville__copywriter": (
+        "mother_earth__nooch__community_and_email",      # copy-governance blijft daar wonen
+        "mother_earth__nooch__brand_visual_designer",    # merkstem, zusterrol
+    ),
+    "mother_earth__nooch__community_and_email": (
+        "mother_earth__nooch__brand_visual_designer",
+    ),
+}
 
 
 def _artefact_gate(owner_role_id: str, username: str | None, st) -> str | None:
@@ -4137,6 +4159,24 @@ def _act_tag_voorstel_besluit(c):
                    else "✗ proposal not found or already decided")
 
 
+def _act_copy_stack_inclusie(c):
+    # AUTHZ: anchor-lead — org-brede configuratie. Welke rol meetelt in de schrijf-stack van een
+    # andere rol raakt hoe elke tekst van die rol klinkt; dat is geen keuze van de schrijver.
+    fout = _anchor_gate(c.st, c.username)
+    if fout:
+        return c.nxt, fout
+    rol, bron = c.g("rol"), c.g("bron")
+    aan = c.g("aan") == "1"
+    if c.st.records.get(rol) is None or c.st.records.get(bron) is None:
+        return c.nxt, "Unknown role"
+    door = (c.username or "onbekend")
+    if not c.st.copy_stack.zet(rol, bron, aan, door=door):
+        return c.nxt, "No change"
+    naam = _name(c.st.records.get(bron))
+    return c.nxt, (f"✓ {naam} included in this role's stack" if aan
+                   else f"✗ {naam} removed from this role's stack")
+
+
 def _act_tag_onderhoud_run(c):
     # AUTHZ: iedereen-ingelogd — de ronde nu draaien (buiten het weekritme om). Fail-closed:
     # zonder LLM komen er simpelweg geen voorstellen.
@@ -4542,6 +4582,7 @@ ACTIONS = {
     "kb_atoom_purge": _act_kb_atoom_purge,
     "tag_voorstel_besluit": _act_tag_voorstel_besluit,
     "tag_onderhoud_run": _act_tag_onderhoud_run,
+    "copy_stack_inclusie": _act_copy_stack_inclusie,
     "kb_blacklist_leeg": _act_kb_blacklist_leeg,
     "kb_atoom_edit": _act_kb_atoom_edit,
     "kb_atoom_related": _act_kb_atoom_related,
@@ -5240,12 +5281,15 @@ def make_handler(data_dir: str, csrf_token: str,
                 _soort = (qs.get("set_soort") or qs.get("soort") or [""])[-1]
                 _doel = (qs.get("set_doel") or qs.get("doel") or [""])[-1]
                 _aware = (qs.get("set_awareness") or qs.get("awareness") or [""])[-1]
+                # De schakelaars en de compositie zijn org-configuratie, geen schrijfkeuze: alleen
+                # de anchor-lead ziet ze. Fail-closed — geen vlag is de lees-versie.
+                _admin = _anchor_gate(st, self._session_username()) is None
                 self._send(render_copy_prompt(st,
                                               rol=(qs.get("rol") or [""])[0],
                                               soort=_soort,
                                               brief=(qs.get("brief") or [""])[0],
                                               uit=(qs.get("uit") or [""])[0],
-                                              doel=_doel, awareness=_aware))
+                                              doel=_doel, awareness=_aware, admin=_admin))
                 return
             if path == "/inwoners":
                 # AUTHZ: iedereen-ingelogd — het dorp mag zien wie er woont; bewerken zit achter

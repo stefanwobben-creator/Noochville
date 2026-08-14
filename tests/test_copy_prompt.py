@@ -43,9 +43,14 @@ class _NepRecords:
 
 
 class _NepStores:
-    def __init__(self, records, att):
+    def __init__(self, records, att, dd=""):
         self.records = records
         self.att = att
+        self.dd = str(dd)
+        # Zoals de echte _Stores: de compositie-config hoort erbij. De view bouwt hem bewust NIET
+        # zelf — zie de opmerking in render_copy_prompt.
+        from nooch_village.copy_stack import StackConfig
+        self.copy_stack = StackConfig(os.path.join(self.dd or ".", "copy_stack.json"))
 
 
 @pytest.fixture()
@@ -65,7 +70,7 @@ def dorp(tmp_path):
             domain="Tone of voice")
     att.add("nooch__email", "policy", title="Copy Check",
             body="**Smirk Check.** Does it raise an eyebrow?", domain="Tone of voice")
-    return _NepStores(records, att)
+    return _NepStores(records, att, tmp_path)
 
 
 def _ctx(dorp, rol="nooch__email"):
@@ -127,13 +132,15 @@ def test_pagina_rendert_en_toont_de_prompt(dorp):
 
 
 def test_zonder_rol_verschijnt_de_kiezer(dorp):
+    """Niet meer "wiens policies draagt de prompt": de stack is samengesteld uit eigen bezit,
+    erfenis en bewuste inclusies, dus die vraag heeft geen enkelvoudig antwoord meer."""
     html = cp.render_copy_prompt(dorp)
-    assert "Whose policies" in html
+    assert "Who are you writing as?" in html
     assert "nooch__email" in html
 
 
 def test_onbekende_rol_valt_terug_op_de_kiezer(dorp):
-    assert "Whose policies" in cp.render_copy_prompt(dorp, rol="bestaat_niet")
+    assert "Who are you writing as?" in cp.render_copy_prompt(dorp, rol="bestaat_niet")
 
 
 def test_geen_inline_styles_in_de_view(dorp):
