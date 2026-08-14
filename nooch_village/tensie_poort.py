@@ -384,7 +384,10 @@ def draai(*, notif, projects, records, targets, reason_fn=None, dry_run: bool = 
             pid = _bestaand_project(projects, b.naar_rol, tekst)
             if not pid:
                 try:
-                    pid = projects.create(b.naar_rol, tekst, "tensie-poort")
+                    # 'tension' is de bestaande trigger-waarde; de ledger valideert tegen een
+                    # vaste set en weigerde 'tensie-poort'. Herkomst hoort in `origin`, niet in een
+                    # trigger-waarde die het model van de ledger oprekt.
+                    pid = projects.create(b.naar_rol, tekst, "tension", origin="tensie-poort")
                     uit["projecten"].append({"rol": b.naar_rol, "project": pid})
                 except Exception as e:                 # noqa: BLE001 — nooit stil verliezen
                     log.warning("poort: kon werk niet afleveren bij %s (%s) — item blijft open",
