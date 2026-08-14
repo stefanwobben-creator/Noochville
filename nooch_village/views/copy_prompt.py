@@ -17,6 +17,7 @@ styles, geen eigen klasse-familie.
 """
 from __future__ import annotations
 
+import os
 import re
 import urllib.parse
 
@@ -75,58 +76,16 @@ FORMATEN = [
     ("field note", "Stefan, honest — including the bad news. No polish over a setback."),
 ]
 
-LAAG_BODEM, LAAG_KADER, LAAG_MERK, LAAG_ROL = "bodem", "kader", "merk", "rol"
+# De lagen en de compositie leven in `copy_stack`: erfenis loopt omhoog door de cirkelketen,
+# maar de copy- en merk-policies wonen bij ZUSTERROLLEN en komen binnen via een bewuste inclusie.
+# Die twee relaties uit elkaar houden is het hele punt van deze view — zie copy_stack.py.
+from nooch_village.copy_stack import (           # noqa: E402  (na de constanten, bewust)
+    LAAG_KADER, LAAG_MERK, LAAG_STEM, LAAG_ROL, LAAG_OVERIG, LAAG_LABEL, StackConfig,
+    componeer, kandidaten)
 
-LAAG_LABEL = {
-    LAAG_KADER: "Circle governance",
-    LAAG_MERK: "Brand voice",
-    LAAG_ROL: "This role's policies",
-}
-# Standaard aan/uit per laag. `bodem` staat er niet in: die is niet uitzetbaar.
-LAAG_DEFAULT = {LAAG_KADER: False, LAAG_MERK: True, LAAG_ROL: True}
-
-# Waaraan herken je de merk-laag? Aan het domein dat de rol houdt, niet aan zijn id — een id kan
-# hernoemd worden, een domein is governance. Fail-soft: geen match → de policy valt in `kader`.
-_MERK_DOMEINEN = ("brand positioning", "design system")
-
-
-def _laag_van(item: dict, wortel_id: str, records) -> str:
-    """In welke laag hoort deze policy? Bepaald uit de HERKOMST, niet uit de titel."""
-    herkomst = item.get("origin_id") or ""
-    if not herkomst:
-        return LAAG_ROL                                   # eigen policy van de schrijvende rol
-    if herkomst == wortel_id:
-        return LAAG_KADER
-    rec = records.get(herkomst)
-    domeinen = {str(d).lower() for d in (getattr(getattr(rec, "definition", None), "domains", None) or [])}
-    return LAAG_MERK if domeinen & set(_MERK_DOMEINEN) else LAAG_KADER
-
-
-def _policy_items(ctx: dict, records=None, *, uit: set | None = None) -> list[dict]:
-    """Eigen + geërfde policies, elk met zijn laag en of hij AAN staat.
-
-    Volgorde: geërfd eerst (de wortel bepaalt het kader), daarna de eigen policies van de rol.
-    `uit` = expliciet uitgezette policy-ids; die overrulen de laag-default."""
-    blok = ctx.get("policies") or {}
-    uit = uit or set()
-    wortel = ""
-    if records is not None:
-        try:
-            from nooch_village import org
-            keten = org.breadcrumb(records.all(), (ctx.get("role") or {}).get("id") or "")
-            wortel = keten[0] if keten else ""
-        except Exception:                                 # noqa: BLE001 — weergave mag nooit breken
-            wortel = ""
-    items = []
-    for a in blok.get("inherited") or []:
-        items.append({**a, "herkomst": a.get("origin_path") or ""})
-    for a in blok.get("own") or []:
-        items.append({**a, "herkomst": "", "origin_id": ""})
-    for it in items:
-        laag = _laag_van(it, wortel, records) if records is not None else LAAG_ROL
-        it["laag"] = laag
-        it["aan"] = LAAG_DEFAULT.get(laag, True) and it.get("id") not in uit
-    return items
+# Volgorde waarin de lagen op de pagina staan: eerst wat de rol zelf bezit, dan wat bewust is
+# ingesloten, dan het kader. Zelfde volgorde als in de prompt.
+LAAG_VOLGORDE = (LAAG_ROL, LAAG_STEM, LAAG_MERK, LAAG_OVERIG, LAAG_KADER)
 
 
 def _strategie_regels() -> list[str]:
@@ -196,7 +155,11 @@ def bouw_prompt(ctx: dict, *, soort: str = "", brief: str = "", items: list | No
 
     # Alleen wat AAN staat. Een uitgezette policy verdwijnt echt: hij mag niet als "uitgezet maar
     # toch meegestuurd" in de prompt blijven staan, want dan is de knop een leugen.
-    alle_items = items if items is not None else _policy_items(ctx)
+    # Geen items meegegeven? Dan bouwen we ze uit de context zelf — zonder inclusies, want die
+    # kent een kale ctx niet. Bewust geen lege lijst: dat zou "deze rol heeft geen policies"
+    # printen terwijl de aanroeper ze wél had, en dat is een leugen met een geruststellend gezicht.
+    from nooch_village.copy_stack import uit_context
+    alle_items = list(items) if items is not None else uit_context(ctx)
     items = [a for a in alle_items if a.get("aan", True)]
     L += ["", f"=== POLICIES ({len(items)}) ==="]
     if not items:
@@ -208,7 +171,10 @@ def bouw_prompt(ctx: dict, *, soort: str = "", brief: str = "", items: list | No
                  "(all policies are switched off — switch at least one on, or you are writing "
                  "without any governance)")
     for a in items:
-        herkomst = f" ({a['herkomst']})" if a.get("herkomst") else ""
+        if a.get("bron") == "inclusie":
+            herkomst = f" (included from {a.get('herkomst') or '?'})"
+        else:
+            herkomst = f" ({a['herkomst']})" if a.get("herkomst") else ""
         L += ["", f"--- {a.get('id', '')} · {a.get('title') or ''}{herkomst} ---",
               (a.get("body") or "").strip()]
 
@@ -260,28 +226,70 @@ def _cl_knoppen(naam: str, opties: list[tuple[str, str]], huidig: str) -> str:
 
 
 def _rolkiezer(st) -> str:
-    """Geen rol meegegeven: toon de rollen en cirkels die zelf policies hebben. Zo hoeft er nergens
-    een rol-id in de code te staan — de organisatie bepaalt de lijst."""
+    """Geen rol meegegeven: als wie schrijf je? Niet meer "wiens policies draagt de prompt" — de
+    stack is samengesteld, dus die vraag heeft geen enkelvoudig antwoord meer. Getoond wordt wat
+    de rol OPLEVERT (eigen + ingesloten), zodat een lege stack meteen zichtbaar is."""
+    cfg = st.copy_stack
     rijen = ""
     for rec in st.records.all():
-        pols = st.att.list(rec.id, "policy")
-        if not pols:
+        if getattr(rec, "archived", False):
             continue
+        eigen = [p for p in st.att.list(rec.id, "policy") if getattr(p, "status", "active") == "active"]
+        incl = cfg.inclusies(rec.id)
+        if not eigen and not incl:
+            continue
+        n = len(componeer(rec.id, st.records, st.att, cfg))
         q = urllib.parse.urlencode({"rol": rec.id})
+        bron = f"{len(eigen)} own"
+        if incl:
+            bron += f" · included from {len(incl)} role" + ("s" if len(incl) > 1 else "")
         rijen += (f"<div class='card'><b>{_e(_name(rec))}</b> "
-                  f"<span class='pill'>{len(pols)}</span>"
-                  f"<p class='muted'>{_e(', '.join(p.id for p in pols))}</p>"
-                  f"<a class='btn sm' href='/copy-prompt?{q}'>Use these policies</a></div>")
+                  f"<span class='pill'>{n}</span>"
+                  f"<p class='muted'>{_e(bron)}</p>"
+                  f"<a class='btn sm' href='/copy-prompt?{q}'>Write as this role</a></div>")
     if not rijen:
         rijen = "<div class='card'><p class='muted'>No role has policies yet.</p></div>"
-    return ("<p class='ptitle'>Whose policies should the prompt carry?</p>"
-            "<p class='muted'>Pick the role that owns the copy policies. The generator reads "
-            "them live, including everything that role inherits.</p>" + rijen)
+    return ("<p class='ptitle'>Who are you writing as?</p>"
+            "<p class='muted'>The prompt carries that role's own policies, what it inherits from "
+            "the circles above it, and whatever was deliberately included from another role. The "
+            "number is the composed total.</p>" + rijen)
+
+
+def _inclusie_paneel(st, rol: str, cfg) -> str:
+    """Admin-only: welke andere rollen tellen mee voor deze schrijvende rol.
+
+    Bewust een POST via de dispatch en geen link: dit is persistente org-configuratie, geen
+    weergavekeuze. Een GET die iets blijvends verandert hoort niet te bestaan (prefetch, geen CSRF).
+    """
+    incl = set(cfg.inclusies(rol))
+    rijen = []
+    for k in kandidaten(st.records, st.att, behalve=rol):
+        aan = k["id"] in incl
+        door = cfg.door(rol, k["id"]) if aan else ""
+        rijen.append(
+            f"<form class='qadd-row' method='post' action='/do'>"
+            f"<input type='hidden' name='action' value='copy_stack_inclusie'>"
+            f"<input type='hidden' name='rol' value='{_e(rol)}'>"
+            f"<input type='hidden' name='bron' value='{_e(k['id'])}'>"
+            f"<input type='hidden' name='aan' value='{'0' if aan else '1'}'>"
+            f"<input type='hidden' name='next' value='/copy-prompt?rol={urllib.parse.quote(rol)}'>"
+            f"<button class='btn sm{' ok' if aan else ''}' type='submit'>"
+            f"{'✓ included' if aan else '+ include'}</button> "
+            f"<span class='att-lbl'>{_e(k['naam'])}</span> "
+            f"<span class='muted'>{k['aantal']} policies · {_e(', '.join(k['domeinen']) or 'no domain')}"
+            f"{_e(' · by ' + door) if door else ''}</span></form>")
+    return ("<p class='ptitle'>Composition (admin)</p>"
+            "<p class='muted'>Inheritance runs up the circle chain only. A sister role's policies "
+            "never arrive on their own — including one is a decision, and it is recorded here.</p>"
+            + "".join(rijen))
 
 
 def render_copy_prompt(st, rol: str = "", soort: str = "", brief: str = "", uit: str = "",
-                       doel: str = "", awareness: str = "") -> str:
-    """De pagina. `st` is `_Stores`; alle inhoud komt uit de records en de AttachmentStore."""
+                       doel: str = "", awareness: str = "", admin: bool = False) -> str:
+    """De pagina. `st` is `_Stores`; alle inhoud komt uit de records en de AttachmentStore.
+
+    `admin` opent de schakelaars en het compositie-paneel. Fail-closed: wie hem niet meegeeft
+    krijgt de lees-versie, want een schrijver hoort de merkstem niet te kunnen uitzetten."""
     if not rol or st.records.get(rol) is None:
         binnen = _rolkiezer(st)
         return _page("Copy prompt", f"{_DS_LINK}{_nav()}<div class='c2-wrap'><div class='c2-main'>"
@@ -296,7 +304,11 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", brief: str = "", uit:
 
     ctx = artefacts.serialize_context(rol, st.records, st.att)
     uit_set = {x.strip() for x in (uit or "").split(",") if x.strip()}
-    items = _policy_items(ctx, st.records, uit=uit_set)
+    # Bewust `st.copy_stack` en geen zelf-gebouwde fallback: een view die stilletjes een lege
+    # config verzint zou de inclusies laten verdampen zonder dat iets zich meldt — en dan lijkt de
+    # merkstem "gewoon weg". Ontbreekt de store, dan hoort dat te knallen bij het bedraden.
+    cfg = st.copy_stack
+    items = componeer(rol, st.records, st.att, cfg, uit=uit_set)
     aan = [a for a in items if a.get("aan")]
 
     # De flow: drie stappen, dan de prompt. Elke stap is één vraag met uitleg onder de knoppen —
@@ -334,15 +346,20 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", brief: str = "", uit:
     # meteen. Deze knop is er alleen nog voor de brief, want een textarea verstuurt zichzelf niet.
     formulier += ("<button class='btn' type='submit'>Update with this brief</button></form>")
 
-    # De stack, per laag, met een schakelaar per policy. Een uitgezette policy verdwijnt uit de
-    # PROMPT — de knop is geen filter op de weergave maar op wat het model te lezen krijgt.
-    # Instellen-en-vergeten, dus dichtgevouwen: governance hoort niet visueel te concurreren met
-    # de schrijftaak. Wie de bronnen wil bijstellen klapt hem open; de rest ziet één regel.
+    # De bronnen. Twee lezers, twee behoeften:
+    #
+    #   de schrijver wil ZIEN waar zijn regels vandaan komen — dat is transparantie, geen knop;
+    #   de admin wil de compositie BEPALEN — en dat is een org-breed besluit, geen schrijfkeuze.
+    #
+    # Vandaar: iedereen ziet de samengestelde stack per laag, alleen de admin ziet schakelaars en
+    # het inclusie-paneel. Een schrijver die per ongeluk de merkstem uitzet is precies wat we
+    # hiermee voorkomen; hij hoeft die keuze niet te kunnen maken.
     stack = [f"<details class='card'><summary><b>Sources</b> "
              f"<span class='muted'>· {len(aan)} of {len(items)} policies on</span></summary>"
-             "<p class='muted'>Always on: what Nooch is for, plus the strategy. Everything below "
-             "is a choice — switch one off and it leaves the prompt.</p>"]
-    for laag in (LAAG_ROL, LAAG_MERK, LAAG_KADER):
+             "<p class='muted'>Always on: what Nooch is for, plus the strategy. Inherited rules "
+             "come down the circle chain; brand and copy governance live with sister roles and are "
+             "here because someone deliberately included them.</p>"]
+    for laag in LAAG_VOLGORDE:
         in_laag = [a for a in items if a.get("laag") == laag]
         if not in_laag:
             continue
@@ -350,15 +367,25 @@ def render_copy_prompt(st, rol: str = "", soort: str = "", brief: str = "", uit:
         knoppen = []
         for a in in_laag:
             pid = a.get("id", "")
+            aan_nu = a.get("aan")
+            merk = "✓" if aan_nu else "○"
+            label = _e(a.get("title") or pid)
+            bij = f" · {_e(a['herkomst'])}" if a.get("herkomst") else ""
+            if not admin:
+                # Geen link: dit is een lijst, geen bedieningspaneel.
+                knoppen.append(f"<span class='cl-filter{" on" if aan_nu else ""}'>"
+                               f"{merk} {label}{bij}</span>")
+                continue
             nieuw = (uit_set - {pid}) if pid in uit_set else (uit_set | {pid})
             q = urllib.parse.urlencode({"rol": rol, "doel": doel, "awareness": awareness,
                                         "soort": soort, "brief": brief,
                                         "uit": ",".join(sorted(nieuw))})
-            aan_nu = a.get("aan")
             knoppen.append(
                 f"<a class='cl-filter{" on" if aan_nu else ""}' href='/copy-prompt?{q}'>"
-                f"{"✓" if aan_nu else "○"} {_e(a.get("title") or pid)}</a>")
+                f"{merk} {label}{bij}</a>")
         stack.append("<div class='cl-filters'>" + "".join(knoppen) + "</div>")
+    if admin:
+        stack.append(_inclusie_paneel(st, rol, cfg))
     stack.append("</details>")
 
     herkomst = "".join(
