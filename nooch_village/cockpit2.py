@@ -219,6 +219,17 @@ def _bootstrap(dd: str) -> None:
                                    door="system (zaad)")
     except Exception as _e:                              # noqa: BLE001
         logging.getLogger("village.cockpit").warning("copy-prompt-tool niet gekoppeld: %s", _e)
+    # Grafstenen van #271 intrekken: notificaties die de bug "[rol X onbemand]" uitzond terwijl de
+    # rol gewoon bemand was. Idempotent; items van ná de fix blijven staan (dat zou een regressie
+    # zijn, geen grafsteen). Fail-soft — opruimen mag de cockpit nooit ophouden.
+    try:
+        from nooch_village.notif_opruiming import archiveer_stale_onbemand
+        _op = archiveer_stale_onbemand(st.notif, st.records, st.assign)
+        if _op.get("gearchiveerd"):
+            logging.getLogger("village.cockpit").info(
+                "opruiming: %d stale onbemand-notificatie(s) ingetrokken", _op["gearchiveerd"])
+    except Exception as _e:                              # noqa: BLE001
+        logging.getLogger("village.cockpit").warning("opruiming overgeslagen: %s", _e)
     migrate_data_sources(dd)      # legacy visitors_day → plausible_visitors_day + Plausible actief (idempotent)
     st.metrics.migrate_metric_bindings(st.defs)   # wees-KPI's: veld/categorie uit de def + reeks-tegel-dim (idempotent)
     # OpenAlex: alle oude CUMULATIEVE concept-reeksen (openalex_works_day/citations_day, incl. ::concept)
