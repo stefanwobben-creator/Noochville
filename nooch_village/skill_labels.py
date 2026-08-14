@@ -31,6 +31,7 @@ LABELS: dict[str, str] = {
     "epo_patents": "Doorzoekt het Europese patentregister",
     "google_patents": "Doorzoekt patenten wereldwijd",
     "claim_evidence": "Controleert of een merk zijn duurzaamheidsclaim kan waarmaken",
+    "cert_evidence": "Leest een certificaat en legt het als extern bewijs vast",
     "kroniek_interpret": "Leest terug wat we eerder onderzochten en wat dat opleverde",
 
     # ── Zoekwoorden en vindbaarheid ──────────────────────────────────────

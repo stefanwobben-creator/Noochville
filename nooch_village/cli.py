@@ -1180,6 +1180,44 @@ def main() -> None:
         print(f"✅ {res['routed']} rollen op de roloverleg-agenda gezet, {res['skipped']} overgeslagen. "
               f"Verwerk ze in het roloverleg-scherm van de cockpit, 1 voor 1.")
 
+    elif mode == "certs":
+        # De cert-wachtlijst: welke claim is onderbouwd en welke wacht nog op een certificaat.
+        # Leest alleen. `--ingest` leest nieuwe certificaten uit data/certificaten/ in.
+        import os
+        from nooch_village import cert_register as cr, claim_oordeel as co
+        from nooch_village.config import load_context
+        from nooch_village.evidence_ledger import EvidenceLedger
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        led = EvidenceLedger(os.path.join(ctx.data_dir, "evidence_ledger.jsonl"))
+        map_ = cr.pad(ctx.data_dir)
+        os.makedirs(map_, exist_ok=True)
+        if "--ingest" in sys.argv:
+            from nooch_village.skills_impl.cert_evidence import CertEvidenceSkill
+            skill = CertEvidenceSkill()
+            bestanden = sorted(f for f in os.listdir(map_)
+                               if not f.startswith(".") and not f.endswith(".json"))
+            print(f"certificaten in {map_}: {len(bestanden)}")
+            for f in bestanden:
+                uit = skill.run({"bestand": f}, ctx)
+                staat = "✓ record " + uit.get("record_id", "") if uit.get("geschreven") else \
+                        "✘ " + str(uit.get("reason") or uit.get("error") or "?")
+                print(f"   {f:<44} {staat}")
+                for w in uit.get("let_op") or []:
+                    print(f"      ⚠ {w}")
+        certs = cr.certs_uit_kroniek(led)
+        print(f"\nexterne certificaten in de Kroniek: {len(certs)}")
+        for c in certs:
+            print(f"   · {str(c.get('feit'))[:70]:<70} geldig tot {c.get('geldig_tot') or '?'}")
+        claims = [a for a in sys.argv[2:] if not a.startswith("--")]
+        if claims:
+            print("\nwachtlijst:")
+            for rij in cr.wachtlijst(claims, led):
+                merk = "✓" if rij["status"] == "onderbouwd" else "○"
+                print(f"   {merk} {rij['claim'][:46]:<46} {rij['status']:<12} {rij['reden'][:60]}")
+                if rij["status"] == "pending":
+                    print(f"      → {cr.opdracht(rij)}")
+
     elif mode == "poort":
         # De tensie-poort over de founder-inbox. Default DRY-RUN: meten mag nooit per ongeluk
         # opruimen. `--live` voert uit (routeren als project, filteren archiveren).

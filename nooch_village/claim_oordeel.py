@@ -77,13 +77,26 @@ EIGEN_RUNS = frozenset({"claims_check", "claims_site_scan", "escaleer", "project
                         "tegenspraak", "kroniek_interpret", "onderzoekspas", "claim_evidence"})
 
 
-def externe_records(bewijs: dict) -> list[dict]:
-    """De bewijs-records die NIET uit een eigen skill-run komen."""
+def externe_records(bewijs: dict, *, vandaag: str = "") -> list[dict]:
+    """De bewijs-records die NIET uit een eigen skill-run komen ÉN nog geldig zijn.
+
+    De geldigheid wordt hier ELKE keer opnieuw vergeleken, niet ooit één keer gestempeld: een
+    goedkeuring mag zijn bewijs niet overleven. Verloopt het certificaat, dan valt de claim vanzelf
+    terug naar niet-onderbouwd — zonder dat iemand daar een taak voor hoeft te onthouden."""
+    from nooch_village import cert_register as cr
+
     uit = []
     for r in bewijs.get("records") or []:
         bron = str(r.get("source") or r.get("bron") or "").strip().lower()
-        if bron and bron not in EIGEN_RUNS:
-            uit.append(r)
+        if not bron or bron in EIGEN_RUNS:
+            continue
+        if bron == cr.EXTERN:
+            cert = dict(r.get("meta") or {})
+            if cr.verlopen(cert, vandaag=vandaag) is not False:
+                log.info("claim-oordeel: certificaat %s verlopen of ongedateerd (geldig_tot=%r) — "
+                         "telt niet meer als onderbouwing", r.get("id"), cert.get("geldig_tot"))
+                continue
+        uit.append(r)
     return uit
 
 
