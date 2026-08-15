@@ -53,7 +53,13 @@ _PATRONEN = (
                                       r"scrape|fetch (?:the )?(?:live )?page|pagina.{0,12}ophalen",
                                       re.I)),
     ("citaat van de site", re.compile(r"literal quote|letterlijk citaat|exacte? (?:quote|citaat)|"
-                                      r"\bFAQ\b", re.I)),
+                                      r"\bFAQ\b|"
+                                      # 'Locate and screenshot the exact claim as it currently
+                                      # appears' — lokaliseren of vastleggen van een claim ZOALS
+                                      # die nu op de site staat. Ontsnapte aan de eerste ronde en
+                                      # hoort onmiskenbaar in dit cluster.
+                                      r"locate\b[^.]{0,60}\bclaim|screenshot|"
+                                      r"as it currently (?:appears|stands)", re.I)),
 )
 
 
