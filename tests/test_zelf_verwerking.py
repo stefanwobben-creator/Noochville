@@ -104,3 +104,27 @@ def test_het_spoor_is_append_only(tmp_path):
     zv.leg_vast(str(tmp_path), {"rol": "harry_hemp", "uitkomst": zv.INFO, "tensie": "y"})
     rijen = zv.alle(str(tmp_path))
     assert len(rijen) == 2 and all("ts" in r for r in rijen)
+
+
+def test_werk_op_je_eigen_bord_doe_je_gewoon():
+    """Uit de eerste meting: 101 van de 172 vielen terug op 'info gedeeld' omdat de woorden niet
+    netjes overlapten met een accountability-tekst. Maar het stond al op hún bord — dan is het van
+    hen. Het dorp zou anders 101 keer iets gaan delen in plaats van het werk te doen."""
+    antwoord = '{"role": "NONE", "kind": "missing_capability", "capability": ""}'
+    r = zv.verwerk("een taak die op mijn bord staat maar nergens netjes op matcht",
+                   rol="harry_hemp", records=RECS, reason_fn=_llm(antwoord), van_eigen_bord=True)
+    assert r["uitkomst"] == zv.ZELF and "eigen bord" in r["reden"]
+
+
+def test_de_behoefte_regel_leest_als_een_zin():
+    """Stond als 'om een claim vrijgeven vrij te geven' op de kaart."""
+    r = zv.verwerk("⤴ beslissing gevraagd: mag deze claim live volgens EmpCo?", rol="compliance",
+                   records=RECS, gebruik_llm=False)
+    assert r["behoefte"] == ("ik heb jou nodig om een claim vrij te geven — dat is een "
+                             "bevoegdheid die alleen jij hebt")
+
+
+def test_een_ontbrekend_certificaat_is_een_bewijs_gat():
+    r = zv.verwerk("⤴ beslissing gevraagd: de FAQ claimt circular economy maar mist certificering",
+                   rol="compliance", records=RECS, gebruik_llm=False)
+    assert r["uitkomst"] != zv.FOUNDER

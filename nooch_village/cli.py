@@ -1216,7 +1216,7 @@ def main() -> None:
             if not tekst or tekst[:70] in gezien:
                 continue
             gezien.add(tekst[:70])
-            r = zv.verwerk(tekst, rol=rol, records=st.records)
+            r = zv.verwerk(tekst, rol=rol, records=st.records, van_eigen_bord=True)
             rijen.append(r)
             if live:
                 zv.leg_vast(ctx.data_dir, r)

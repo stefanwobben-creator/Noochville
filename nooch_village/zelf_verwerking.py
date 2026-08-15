@@ -46,11 +46,11 @@ LABEL = {ZELF: "zelf opgelost", INFO: "info gedeeld", NAAR_ROL: "aan rol gegeven
 # staan al in de poort; hier telt bovendien dat er om een besluit gevraagd wordt — anders is
 # "het gaat over compliance" genoeg om iemand anders zijn werk op het bureau van de mens te leggen.
 _BEVOEGDHEID = {
-    "merk":       "het merk en de missie",
-    "strategie":  "de koers",
-    "geld":       "geld boven de grens",
-    "governance": "de structuur (rollen, mandaten)",
-    "compliance": "een claim vrijgeven",
+    "merk":       "een uitspraak over het merk en de missie",
+    "strategie":  "een koerskeuze",
+    "geld":       "een uitgave boven de grens",
+    "governance": "een wijziging in de structuur (rollen, mandaten)",
+    "compliance": "een claim",
 }
 
 
@@ -88,7 +88,8 @@ def founder_behoefte(tekst: str) -> tuple[str, str]:
     return "", ""
 
 
-def verwerk(tekst: str, *, rol: str, records, reason_fn=None, gebruik_llm: bool = True) -> dict:
+def verwerk(tekst: str, *, rol: str, records, reason_fn=None, gebruik_llm: bool = True,
+            van_eigen_bord: bool = False) -> dict:
     """De eerste handeling van de rol die de spanning voelt.
 
     Volgorde: is dit een bevoegdheidsvraag → founder; kan ik het zelf → zelf; bezit een ander het
@@ -118,6 +119,14 @@ def verwerk(tekst: str, *, rol: str, records, reason_fn=None, gebruik_llm: bool 
     if ander:
         return {"uitkomst": NAAR_ROL, "rol": rol, "naar_rol": ander, "domein": "", "behoefte": "",
                 "tensie": kern, "reden": f"{ander} bezit dit werk ({waarom})"}
+
+    if van_eigen_bord:
+        # Het staat al op MIJN bord. Dan is het van mij, ook als de woorden niet netjes overlappen
+        # met een accountability-tekst. In de eerste meting viel 101 van de 172 hierop terug als
+        # 'info gedeeld' — het dorp zou 101 keer iets gaan delen in plaats van het werk te doen.
+        return {"uitkomst": ZELF, "rol": rol, "naar_rol": "", "domein": "", "behoefte": "",
+                "tensie": kern, "eigen_accountability": "",
+                "reden": "dit staat op mijn eigen bord en niemand anders bezit het — dus doe ik het"}
 
     return {"uitkomst": INFO, "rol": rol, "naar_rol": "", "domein": "", "behoefte": "",
             "tensie": kern,
