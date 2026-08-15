@@ -83,6 +83,16 @@ def geraakte_accountability(domein: str, records, rol_id: str = FOUNDER_ROL) -> 
     return ""
 
 
+def eigen_accountability(rol_id: str, tekst: str, records) -> str:
+    """Vanuit WELKE eigen verantwoordelijkheid werpt deze rol dit op?
+
+    Dit staat op de kaart in plaats van een founder-label. De reden dat het bij de founder ligt
+    hoort in de behoefte-regel ("ik heb jou nodig om X vrij te geven"), niet in een etiket op de
+    rol van de ander — anders leest de kaart alsof de founder de spanning voelde."""
+    from nooch_village.zelf_verwerking import eigen_domein
+    return eigen_domein(tekst, rol_id, records) if rol_id else ""
+
+
 def kaart(notif: dict, *, besluit=None, projects=None, records=None, voorstel: dict | None = None,
           bewijs: str = "") -> dict:
     """De volledige kaart. `besluit` is het poort-oordeel, `voorstel` het inhoudelijke voorstel."""
@@ -91,9 +101,12 @@ def kaart(notif: dict, *, besluit=None, projects=None, records=None, voorstel: d
         "klasse": getattr(besluit, "klasse", ""), "sleutel": getattr(besluit, "sleutel", "")}
     domein = str(poort.get("klasse") or "").replace("-besluit", "")
     rol_id, rol_naam = opwerper(notif, projects, records)
-    acc = geraakte_accountability(domein, records)
     tekst = " ".join(str(notif.get("snippet") or "").split())
     v = dict(voorstel or {})
+    # De accountability van de OPWERPER, niet die van de founder. Waarom het bij de founder ligt
+    # staat in de behoefte-regel.
+    eigen = eigen_accountability(rol_id, tekst, records)
+    acc = geraakte_accountability(domein, records)
 
     if not acc:
         # Geen bevoegdheid geraakt = het ligt hier verkeerd. Dat hardop zeggen is het hele punt.
@@ -103,9 +116,11 @@ def kaart(notif: dict, *, besluit=None, projects=None, records=None, voorstel: d
     return {
         "rol":            rol_naam,
         "rol_id":         rol_id,
+        "vanuit":         eigen,
         "accountability": acc or ("geen founder-verantwoordelijkheid raakt dit — dit hoort "
                                   "waarschijnlijk terug naar de routering"),
         "hoort_hier":     bool(acc),
+        "behoefte":       v.get("behoefte") or "",
         "gevonden":       v.get("gevonden") or tekst,
         "voorstel":       v.get("voorstel") or "",
         "ja":             v.get("ja") or "",
@@ -118,11 +133,14 @@ def kaart(notif: dict, *, besluit=None, projects=None, records=None, voorstel: d
 def render(k: dict) -> str:
     """De kaart als platte tekst — dezelfde volgorde als op het scherm, zodat CLI en UI hetzelfde
     verhaal vertellen."""
-    regels = [
-        f"opgeworpen door : {k['rol']}",
-        f"jouw rol hierin : {k['accountability']}",
-        f"gevonden        : {k['gevonden'][:300]}",
-    ]
+    kop = f"opgeworpen door : {k['rol']}"
+    if k.get("vanuit"):
+        kop += f", vanuit accountability “{k['vanuit'][:70]}”"
+    regels = [kop]
+    if k.get("behoefte"):
+        # Waaróm het bij de founder ligt: als BEHOEFTE van de opwerpende rol, niet als etiket.
+        regels.append(f"waarom bij jou   : {k['behoefte']}")
+    regels.append(f"gevonden        : {k['gevonden'][:300]}")
     if k.get("voorstel"):
         regels.append(f"voorstel        : {k['voorstel']}")
     if k.get("ja"):

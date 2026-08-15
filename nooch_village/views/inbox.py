@@ -124,8 +124,10 @@ def _poort_secties(st, items, csrf_token, done) -> str:
                     k = fkaart.kaart(n_, projects=getattr(st, "projects", None),
                                      records=getattr(st, "records", None))
                     merk = "" if k["hoort_hier"] else " ⚠"
-                    uit.append(f"<p class='muted'>{_e(k['rol'])} werpt dit op · jouw rol hierin: "
-                               f"{_e(k['accountability'])}{merk}</p>")
+                    vanuit = (f" vanuit “{_e(k['vanuit'][:70])}”" if k.get("vanuit") else "")
+                    waarom = (f" · {_e(k['behoefte'])}" if k.get("behoefte") else "")
+                    uit.append(f"<p class='muted'>{_e(k['rol'])} werpt dit op{vanuit}"
+                               f"{waarom}{merk}</p>")
         for _, ns in sorted(mijn.items(), key=lambda kv: -len(kv[1])):
             eerste = (ns[0].get("poort") or {})
             kop = eerste.get("klasse") or eerste.get("sleutel") or deur

@@ -1180,6 +1180,60 @@ def main() -> None:
         print(f"✅ {res['routed']} rollen op de roloverleg-agenda gezet, {res['skipped']} overgeslagen. "
               f"Verwerk ze in het roloverleg-scherm van de cockpit, 1 voor 1.")
 
+    elif mode == "verwerking":
+        # De zelf-verwerking: de rol handelt zijn eigen spanning af. DRY-RUN by default.
+        # Dit is tegelijk de statusweergave — read-only, geen wachtrij, geen knoppen.
+        import os
+        from nooch_village import zelf_verwerking as zv
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        if len(sys.argv) > 2 and sys.argv[2] == "status":
+            rijen = zv.alle(ctx.data_dir)
+            v = zv.verdeling(rijen)
+            print(f"\nSYSTEEMSTATUS — {v['totaal']} verwerkte spanning(en)")
+            print(f"   {v['onder_de_rollen']}% loste onder de rollen op · "
+                  f"{v['naar_de_founder']} bereikte(n) de founder\n")
+            for r in rijen[-40:]:
+                naar = f" → {r.get('naar_rol')}" if r.get("naar_rol") else ""
+                print(f"   {str(r.get('rol'))[:22]:<22} {zv.LABEL.get(r.get('uitkomst'), '?'):<18}"
+                      f"{naar}")
+                print(f"      {str(r.get('tensie'))[:88]}")
+                print(f"      ↳ {str(r.get('reden'))[:88]}")
+            sys.exit(0)
+
+        live = "--live" in sys.argv
+        # De recente spanningen: wat er op de borden staat plus wat er in de inbox binnenkwam.
+        bron = []
+        for status in ("queued", "running", "blocked"):
+            for p_ in st.projects.by_status(status):
+                if p_.get("owner"):
+                    bron.append((p_["owner"], " ".join(str(p_.get("scope") or "").split())))
+        gezien, rijen = set(), []
+        for rol, tekst in bron:
+            if not tekst or tekst[:70] in gezien:
+                continue
+            gezien.add(tekst[:70])
+            r = zv.verwerk(tekst, rol=rol, records=st.records)
+            rijen.append(r)
+            if live:
+                zv.leg_vast(ctx.data_dir, r)
+        v = zv.verdeling(rijen)
+        print(f"\n{'LIVE' if live else 'DRY-RUN'} — {v['totaal']} spanning(en) door de "
+              f"zelf-verwerking")
+        for k, n in sorted(v["per_uitkomst"].items(), key=lambda kv: -kv[1]):
+            print(f"   {n:>3}  {zv.LABEL.get(k, k)}")
+        print(f"\n   {v['onder_de_rollen']}% lost onder de rollen op · "
+              f"{v['naar_de_founder']} bereikt de founder")
+        founder = [r for r in rijen if r["uitkomst"] == zv.FOUNDER]
+        if founder:
+            print("\n== wat de founder bereikt ==")
+            for r in founder:
+                print(f"   [{r['rol']}] {r['tensie'][:80]}")
+                print(f"      {r['behoefte']}")
+
     elif mode == "relaunch":
         # Bulk-parkering op één verklaard feit (de site wordt herbouwd) en één trigger terug.
         # Default DRY-RUN; `--live` voert uit. `open` haalt alles in één keer terug.
