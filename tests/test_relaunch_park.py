@@ -195,3 +195,27 @@ def test_heropenen_is_append_only(tmp_path):
     rp.heropen(str(tmp_path), projects=projects)
     regels = rp.alle(str(tmp_path))
     assert len(regels) == 6 and sum(1 for r in regels if r.get("terug")) == 3
+
+
+# ── De valse positieven uit de eerste prod-dry-run ──────────────────────────
+
+@pytest.mark.parametrize("scope", [
+    "Carbon footprint van alle Nooch-producten jaarlijks met minimaal 10% reduceren en meetbaar "
+    "rapporteren op nooch.earth.",
+    "Elke week een gefilmd, nieuw schoenprototype met alternatieve materialen maken en delen op "
+    "Nooch.earth, met directe feedbackloop naar productontwikkeling.",
+])
+def test_een_doel_dat_de_site_alleen_noemt_wordt_niet_geparkeerd(scope):
+    """Beide kwamen in de eerste prod-dry-run als 'live claim-check' mee, puur omdat het domein er
+    stond. Het zijn doelen die de site als publicatieplek noemen; ze parkeren zou echt werk
+    stilzetten op een woordvondst."""
+    assert rp.soort(scope) == ""
+
+
+@pytest.mark.parametrize("scope", [
+    "Verify if the FAQ page (https://nooch.earth/pages/faq) contains the claim",
+    "🔴 Claim-scan: 1 nieuwe verboden claim(s) op nooch.earth",
+    "Controleer de tekst op de website tegen de claims-database",
+])
+def test_werk_dat_de_site_echt_moet_lezen_valt_er_wel_onder(scope):
+    assert rp.soort(scope) == "live claim-check"

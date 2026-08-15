@@ -41,8 +41,14 @@ VOORWAARDE = "komt terug als de nieuwe site live is en compliance opnieuw scant"
 _PATRONEN = (
     ("footer-inspectie",   re.compile(r"footer", re.I)),
     ("logo op de site",    re.compile(r"\blogo\b|plant based treaty|peta approved", re.I)),
-    ("live claim-check",   re.compile(r"nooch\.earth|op de (?:site|website)|live claim|"
-                                      r"claim-scan|site-scan", re.I)),
+    # Let op de tweede voorwaarde. Een kale vermelding van het domein is GEEN site-afhankelijkheid:
+    # "meetbaar rapporteren op nooch.earth" en "prototypes delen op Nooch.earth" zijn doelen die de
+    # site als publicatieplek noemen. Die parkeren zou echt werk stilzetten op een woordvondst.
+    # Gezien in de eerste prod-dry-run, vóór het live ging.
+    ("live claim-check",   re.compile(r"claim-scan|site-scan|live claim", re.I)),
+    ("live claim-check",   (re.compile(r"nooch\.earth|op de (?:site|website)", re.I),
+                            re.compile(r"\b(?:check|scan|verify|verif|controleer|inspect|"
+                                       r"lees|toets|claim)\w*", re.I))),
     ("pagina-fetch",       re.compile(r"blijft blind|gaf HTTP|scan onvolledig|"
                                       r"scrape|fetch (?:the )?(?:live )?page|pagina.{0,12}ophalen",
                                       re.I)),
@@ -52,9 +58,16 @@ _PATRONEN = (
 
 
 def soort(tekst: str) -> str:
-    """Onder welke noemer valt dit item, of "" als het niet site-afhankelijk is."""
+    """Onder welke noemer valt dit item, of "" als het niet site-afhankelijk is.
+
+    Een entry is één patroon, of een PAAR dat allebei moet raken. Dat paar bestaat omdat een
+    verwijzing naar de site nog geen afhankelijkheid ván de site is."""
+    tekst = tekst or ""
     for naam, pat in _PATRONEN:
-        if pat.search(tekst or ""):
+        if isinstance(pat, tuple):
+            if all(p.search(tekst) for p in pat):
+                return naam
+        elif pat.search(tekst):
             return naam
     return ""
 
