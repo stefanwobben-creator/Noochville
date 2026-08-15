@@ -1,0 +1,173 @@
+"""De rol verwerkt zijn spanning zelf — de founder is de laatste optie, niet de eerste.
+
+De "What do you need?"-boom stond als founder-menu op Stefans bureau: hij mocht kiezen wat er met
+andermans spanning moest gebeuren. Dat is de verkeerde volgorde. Diezelfde boom is de EERSTE
+handeling van de rol die de spanning voelt:
+
+    zelf        ik los het op in mijn eigen domein
+    info        ik heb niets nodig, ik deel wat ik vond
+    naar rol    ik heb rol Y nodig, en ik zeg waarvoor
+    founder     ik heb de founder nodig, voor een bevoegdheid die alleen hij heeft
+
+De eerste drie bereiken de beslis-inbox niet. Rol-naar-rol lost onderling op; dat is wat een
+zelfsturende organisatie doet. Alleen de vierde wordt een kaart, en dan met de behoefte erbij: niet
+"hier is een probleem" maar "ik heb jou nodig voor X".
+
+De boom is niet nieuw. `inbox_wizard.INTENTS` bestaat al als gedeelde beslisboom voor mens én
+"straks de autonome AI-triage" — dat is deze laag. Hier wordt hij toegepast vanuit het perspectief
+van de rol, en elke verwerking landt in hetzelfde verwerk-record, zodat mens en AI hetzelfde spoor
+achterlaten.
+
+**Founder-bevoegdheid is smal.** Niet "het gaat over compliance" maar "hier moet iemand tekenen die
+als enige mag tekenen". Een claim voorbereiden, onderbouwen en herschrijven is rolwerk; alleen het
+uiteindelijke ja/nee op iets dat de missie, het merk, het geld of de structuur raakt is van hem.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import re
+import time
+
+log = logging.getLogger("village.zelf_verwerking")
+
+BESTAND = "verwerkingen.jsonl"
+
+ZELF     = "zelf"        # opgelost in eigen domein
+INFO     = "info"        # niets nodig, gedeeld wat er gevonden is
+NAAR_ROL = "naar_rol"    # een andere rol is nodig, mét de vraag erbij
+FOUNDER  = "founder"     # een bevoegdheid die alleen de founder heeft
+
+LABEL = {ZELF: "zelf opgelost", INFO: "info gedeeld", NAAR_ROL: "aan rol gegeven",
+         FOUNDER: "naar de founder"}
+
+# Wanneer is het écht van de founder? Een besluit-vraag ÉN een voorbehouden domein. De domeinen
+# staan al in de poort; hier telt bovendien dat er om een besluit gevraagd wordt — anders is
+# "het gaat over compliance" genoeg om iemand anders zijn werk op het bureau van de mens te leggen.
+_BEVOEGDHEID = {
+    "merk":       "het merk en de missie",
+    "strategie":  "de koers",
+    "geld":       "geld boven de grens",
+    "governance": "de structuur (rollen, mandaten)",
+    "compliance": "een claim vrijgeven",
+}
+
+
+def _woorden(tekst: str) -> set[str]:
+    return {w for w in re.findall(r"[a-zA-Z][a-zA-Z\-]{4,}", (tekst or "").lower())}
+
+
+def eigen_domein(tekst: str, rol: str, records, *, drempel: int = 2) -> str:
+    """Welke eigen accountability raakt deze spanning? "" als geen enkele."""
+    rec = records.get(rol) if records is not None else None
+    if rec is None:
+        return ""
+    doel = _woorden(tekst)
+    beste, score = "", 0
+    for acc in getattr(rec.definition, "accountabilities", None) or []:
+        overlap = len(doel & _woorden(acc))
+        if overlap > score:
+            beste, score = acc, overlap
+    return beste if score >= drempel else ""
+
+
+def founder_behoefte(tekst: str) -> tuple[str, str]:
+    """Vraagt dit om een bevoegdheid die alleen de founder heeft? → (domein, behoefte-regel)."""
+    from nooch_village import tensie_poort as tp
+
+    if not tp._VRAAGT_BESLUIT.search(tekst or ""):
+        return "", ""
+    if tp._GEEN_BEWIJS.search(tekst or ""):
+        # Geen bewijs is geen bevoegdheidsvraag maar een bewijs-gat; dat spoor bestaat al.
+        return "", ""
+    for naam, pat in tp._BESLUIT_DOMEIN.items():
+        if pat.search(tekst or ""):
+            return naam, (f"ik heb jou nodig om {_BEVOEGDHEID.get(naam, naam)} vrij te geven — "
+                          f"dat is een bevoegdheid die alleen jij hebt")
+    return "", ""
+
+
+def verwerk(tekst: str, *, rol: str, records, reason_fn=None, gebruik_llm: bool = True) -> dict:
+    """De eerste handeling van de rol die de spanning voelt.
+
+    Volgorde: is dit een bevoegdheidsvraag → founder; kan ik het zelf → zelf; bezit een ander het
+    → naar die rol; anders deel ik wat ik vond. De founder staat vooraan omdat het de smalste
+    categorie is, niet omdat hij de eerste keuze is: valt hij af, dan probeert de rol álles zelf."""
+    from nooch_village import tensie_poort as tp
+
+    kern = tp.kern(tekst)
+    domein, behoefte = founder_behoefte(tekst)
+    if domein:
+        return {"uitkomst": FOUNDER, "rol": rol, "naar_rol": "", "domein": domein,
+                "behoefte": behoefte, "tensie": kern,
+                "reden": f"dit vraagt een besluit in een voorbehouden domein ({domein})"}
+
+    eigen = eigen_domein(kern, rol, records)
+    if eigen:
+        return {"uitkomst": ZELF, "rol": rol, "naar_rol": "", "domein": "", "behoefte": "",
+                "tensie": kern, "eigen_accountability": eigen,
+                "reden": f"dit valt onder mijn eigen accountability: {eigen[:80]}"}
+
+    ander, kind, waarom = ("", "", "")
+    if gebruik_llm:
+        try:
+            ander, kind, waarom = tp.match(kern, records, van_rol=rol, reason_fn=reason_fn)
+        except Exception as e:                            # noqa: BLE001 — fail-soft, luid
+            log.warning("zelf-verwerking: match faalde (%s) — ik deel wat ik vond", e)
+    if ander:
+        return {"uitkomst": NAAR_ROL, "rol": rol, "naar_rol": ander, "domein": "", "behoefte": "",
+                "tensie": kern, "reden": f"{ander} bezit dit werk ({waarom})"}
+
+    return {"uitkomst": INFO, "rol": rol, "naar_rol": "", "domein": "", "behoefte": "",
+            "tensie": kern,
+            "reden": "niemand anders bezit dit en het valt buiten mijn accountabilities — "
+                     "ik deel wat ik vond in plaats van het door te schuiven"}
+
+
+# ── Het spoor: de bron van de statusweergave ────────────────────────────────
+
+def pad(data_dir: str) -> str:
+    return os.path.join(data_dir, BESTAND)
+
+
+def leg_vast(data_dir: str, verwerking: dict) -> bool:
+    """Append-only. Dit is systeemstatus, geen wachtrij: er wordt niets afgevinkt."""
+    try:
+        os.makedirs(data_dir, exist_ok=True)
+        with open(pad(data_dir), "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({**verwerking, "ts": time.time()}, ensure_ascii=False) + "\n")
+        return True
+    except OSError as e:
+        log.warning("verwerking niet vastgelegd: %s", e)
+        return False
+
+
+def alle(data_dir: str) -> list[dict]:
+    uit = []
+    try:
+        with open(pad(data_dir), encoding="utf-8") as fh:
+            for regel in fh:
+                regel = regel.strip()
+                if regel:
+                    try:
+                        uit.append(json.loads(regel))
+                    except ValueError:
+                        continue
+    except FileNotFoundError:
+        return []
+    except OSError as e:
+        log.warning("verwerkingen onleesbaar: %s", e)
+    return uit
+
+
+def verdeling(rijen: list[dict]) -> dict:
+    """Hoeveel loste in-rol op, hoeveel ging rol-naar-rol, hoeveel bereikte de founder."""
+    uit: dict = {}
+    for r in rijen:
+        uit[r.get("uitkomst", "?")] = uit.get(r.get("uitkomst", "?"), 0) + 1
+    totaal = sum(uit.values()) or 1
+    return {"per_uitkomst": uit, "totaal": sum(uit.values()),
+            "onder_de_rollen": round(100 * sum(uit.get(k, 0) for k in (ZELF, INFO, NAAR_ROL))
+                                     / totaal),
+            "naar_de_founder": uit.get(FOUNDER, 0)}

@@ -84,20 +84,36 @@ def test_geen_geraakte_accountability_is_zelf_het_antwoord():
     assert "terug naar de routering" in k["accountability"]
 
 
-def test_de_kaart_draagt_alle_zes_de_velden():
+def test_de_kaart_draagt_alle_velden():
     n = {"id": "n4", "by": "compliance", "snippet": "de claim X is herschreven",
          "poort": {"deur": "deur_besluit", "klasse": "compliance-besluit"}}
     k = fk.kaart(n, records=RECS, voorstel={
         "voorstel": "keur de herschreven claim goed",
-        "ja": "de nieuwe tekst gaat live", "nee": "de claim blijft offline"},
+        "ja": "de nieuwe tekst gaat live", "nee": "de claim blijft offline",
+        "behoefte": "ik heb jou nodig om een claim vrij te geven — dat mag alleen jij"},
         bewijs="EmpCo Bijlage I 4c + Kroniek-record K1")
-    for veld in ("rol", "accountability", "gevonden", "voorstel", "ja", "nee", "bewijs"):
+    for veld in ("rol", "gevonden", "voorstel", "ja", "nee", "bewijs", "behoefte"):
         assert k[veld], f"{veld} ontbreekt op de kaart"
     tekst = fk.render(k)
     assert "opgeworpen door : Compliance" in tekst
-    assert "Guarding mission" in tekst
     assert "Ja betekent" in tekst and "Nee betekent" in tekst
     assert "EmpCo" in tekst
+
+
+def test_de_kaart_toont_de_eigen_accountability_van_de_opwerper():
+    """Niet 'jouw rol hierin: <founder-accountability>' — dan leest het alsof de founder de
+    spanning voelde. De reden dat het bij hem ligt hoort in de behoefte-regel."""
+    recs = _Records([_Rec(fk.FOUNDER_ROL, "Founder", ["Guarding mission, values and principles"]),
+                     _Rec("compliance", "Compliance",
+                          ["Checking every public claim against EmpCo and ACM"])])
+    n = {"id": "n6", "by": "compliance",
+         "snippet": "checking this public claim against EmpCo requires a decision",
+         "poort": {"deur": "deur_besluit", "klasse": "compliance-besluit"}}
+    k = fk.kaart(n, records=recs, voorstel={"behoefte": "ik heb jou nodig om dit vrij te geven"})
+    assert "claim" in k["vanuit"].lower()
+    tekst = fk.render(k)
+    assert "vanuit accountability" in tekst
+    assert "waarom bij jou" in tekst
 
 
 def test_een_kaart_zonder_bewijsregel_zegt_dat_ook():
