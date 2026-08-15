@@ -219,3 +219,10 @@ def test_een_doel_dat_de_site_alleen_noemt_wordt_niet_geparkeerd(scope):
 ])
 def test_werk_dat_de_site_echt_moet_lezen_valt_er_wel_onder(scope):
     assert rp.soort(scope) == "live claim-check"
+
+
+def test_een_claim_lokaliseren_op_de_huidige_site_valt_er_ook_onder():
+    """Ontsnapte aan de eerste live-ronde: 'Locate and screenshot/quote the exact natural claim as
+    it currently appears'. Onmiskenbaar site-afhankelijk — de claim staat straks ergens anders."""
+    assert rp.soort("Locate and screenshot/quote the exact 'natural' claim as it currently "
+                    "appears on the site") == "citaat van de site"
