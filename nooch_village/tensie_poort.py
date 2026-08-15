@@ -132,6 +132,19 @@ _SJABLOON = (
 )
 
 
+# Wat 'fysiek of extern' ECHT betekent. De router omschrijft het zo: iets wat geen software ooit kan
+# omdat er een mens of buitenpartij in de fysieke wereld nodig is. "Decide whether to exclude this
+# overlap" is dat niet — dat is een methode-keuze. Zegt de match tóch human_external zonder dat er
+# één fysieke handeling in de tekst staat, dan geloven we dat oordeel niet.
+_FYSIEK = re.compile(r"\blab\b|TÜV|SGS|monster|sample|opsturen|ship|courier|bezoek|visit|"
+                     r"film|foto|bellen|phone|call\b|tekenen|sign\b|handtekening|afspraak|"
+                     r"meeting|inspect|ter plaatse|winkel|beurs|post\b|verzend", re.I)
+
+
+def fysiek(tekst: str) -> bool:
+    return bool(_FYSIEK.search(tekst or ""))
+
+
 def kern(tekst: str) -> str:
     """De tekst zonder sjabloon: wát moet er gebeuren, los van hoe het is ingepakt."""
     uit = " ".join((tekst or "").split())
@@ -330,8 +343,26 @@ def poort(notif: dict, *, projects, records, batch: list[dict] | None = None,
     # Mens-werk — pas NA de routering, en alleen op het oordeel van de match. Het park-label
     # `human` telt hier bewust niet mee: dat zat in 4 van de 11 gevallen fout.
     if kind == "human_external":
-        return Besluit(MENS_WERK, f"geen rol bezit dit en het is fysiek/extern ({waarom})",
-                       bewijs=tekst[:80], sleutel=f"mens:{_onderwerp(tekst)}")
+        if fysiek(inhoud):
+            return Besluit(MENS_WERK, f"geen rol bezit dit en het is fysiek/extern ({waarom})",
+                           bewijs=tekst[:80], sleutel=f"mens:{_onderwerp(tekst)}")
+        # De match zei 'mens' maar er staat geen enkele fysieke handeling in. Niet geloven — dit is
+        # de inhoudelijke herbeoordeling die het sjabloon-label ook al niet kreeg.
+        log.info("poort: 'human_external' zonder fysieke handeling in %r — oordeel niet gevolgd",
+                 inhoud[:70])
+        kind, waarom = "", waarom + " (afgewezen: geen fysieke handeling in de tekst)"
+
+    # Niemand anders bezit het, het is niet fysiek, en het hangt aan een project: dan is het werk
+    # van de EIGENAAR van dat project. Een vastgelopen item op je eigen bord wordt geen
+    # founder-besluit omdat het vastliep — het blijft van jou.
+    pid = str(notif.get("project_id") or "")
+    p = projects.get(pid) if pid else None
+    eig = str((p or {}).get("owner") or "")
+    if eig:
+        return Besluit(GEROUTEERD,
+                       "geen andere rol bezit dit en het is geen fysieke handeling — terug naar de "
+                       f"eigenaar van het project ({eig})",
+                       bewijs=eig, naar_rol=eig, sleutel=f"rol:{eig}:{_onderwerp(tekst)}")
 
     return deur(notif, batch=batch, kind=kind, waarom=waarom)
 

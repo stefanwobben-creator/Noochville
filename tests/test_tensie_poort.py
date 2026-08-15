@@ -441,3 +441,36 @@ def test_een_echte_compliance_vraag_blijft_wel_een_besluit():
 
 def test_het_bewijs_wachtspoor_bereikt_de_founder_niet():
     assert tp.BEWIJS_WACHT in tp.STIL
+
+
+def test_mens_oordeel_zonder_fysieke_handeling_wordt_niet_gevolgd():
+    """De router omschrijft human_external als 'kan geen software, er moet een mens de fysieke
+    wereld in'. 'Decide whether to exclude this overlap' is een methode-keuze. Zegt de match tóch
+    mens, zonder één fysieke handeling in de tekst, dan geloven we dat oordeel niet."""
+    antwoord = '{"role": "NONE", "kind": "human_external", "capability": ""}'
+    b = tp.poort(_n("Decide whether to permanently exclude this overlap", "p1"),
+                 projects=_Projects({"p1": {"status": "blocked", "owner": "harry_hemp",
+                                            "park": {"reden": "human"}}}),
+                 records=RECS, reason_fn=_llm(antwoord))
+    assert b.deur != tp.MENS_WERK
+    assert b.naar_rol == "harry_hemp"          # terug naar de eigenaar, niet naar de founder
+
+
+def test_echt_fysiek_werk_blijft_wel_mens_werk_na_de_check():
+    antwoord = '{"role": "NONE", "kind": "human_external", "capability": ""}'
+    b = tp.poort(_n("Laat de samples testen in een erkend lab (TÜV)", "p1"),
+                 projects=_Projects({"p1": {"status": "blocked", "owner": "harry_hemp",
+                                            "park": {"reden": "human"}}}),
+                 records=RECS, reason_fn=_llm(antwoord))
+    assert b.deur == tp.MENS_WERK
+
+
+def test_een_vastgelopen_item_blijft_van_de_eigenaar():
+    """Een item wordt geen founder-besluit omdat het vastliep. Zonder andere eigenaar en zonder
+    fysieke handeling gaat het terug naar wie het project bezit."""
+    antwoord = '{"role": "NONE", "kind": "missing_capability", "capability": "iets"}'
+    b = tp.poort(_n("iets wat software zou kunnen", "p1"),
+                 projects=_Projects({"p1": {"status": "running", "owner": "compliance",
+                                            "park": {"reden": "human"}}}),
+                 records=RECS, reason_fn=_llm(antwoord))
+    assert b.deur == tp.GEROUTEERD and b.naar_rol == "compliance"
