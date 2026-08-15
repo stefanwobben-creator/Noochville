@@ -229,7 +229,8 @@ _BESLUIT_DOMEIN = {
 _GEEN_BEWIJS = re.compile(r"mist (?:harde? )?bewij(?:s|zen)|mist onderbouwing|"
                           r"zonder (?:definitie|onderbouwing|validatie)|geen (?:hard[e]? )?bewij(?:s|zen)|"
                           r"aanvullende bewijsvoering|ontbreek\w*.{0,20}bewij(?:s|zen)|"
-                          r"niet onderbouwd", re.I)
+                          r"niet onderbouwd|mist certifice\w*|zonder certifice\w*|"
+                          r"mist bron|zonder bron", re.I)
 
 _VRAAGT_BESLUIT = re.compile(r"beslissing gevraagd|goedkeuring|escalatie|approval|"
                              r"vereist .*(goedkeuring|akkoord)|herformulering", re.I)
