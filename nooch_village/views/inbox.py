@@ -116,6 +116,16 @@ def _poort_secties(st, items, csrf_token, done) -> str:
         if not mijn:
             continue
         uit.append(f"<h2 class='ptitle'>{_e(KOP.get(deur, deur))}</h2>")
+        if deur == tp.DEUR_BESLUIT:
+            # Waarom ligt dit bij jou? Zonder de aangesproken accountability is tekenen een vinkje.
+            from nooch_village import founder_kaart as fkaart
+            for ns_ in mijn.values():
+                for n_ in ns_:
+                    k = fkaart.kaart(n_, projects=getattr(st, "projects", None),
+                                     records=getattr(st, "records", None))
+                    merk = "" if k["hoort_hier"] else " ⚠"
+                    uit.append(f"<p class='muted'>{_e(k['rol'])} werpt dit op · jouw rol hierin: "
+                               f"{_e(k['accountability'])}{merk}</p>")
         for _, ns in sorted(mijn.items(), key=lambda kv: -len(kv[1])):
             eerste = (ns[0].get("poort") or {})
             kop = eerste.get("klasse") or eerste.get("sleutel") or deur

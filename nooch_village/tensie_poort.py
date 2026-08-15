@@ -48,13 +48,14 @@ AFGEHANDELD  = "afgehandeld"    # het project is al klaar
 GEROUTEERD   = "gerouteerd"     # een rol bezit dit → dorp-intern
 MENS_WERK    = "mens_werk"      # fysiek/extern én geen rol → mens-todo
 OPS          = "ops"            # kapotte bestaande capaciteit → systeem-health, niet de inbox
+BEWIJS_WACHT = "bewijs_wacht"   # claim zonder onderbouwing → bewijs-wachtspoor, geen besluit
 DEUR_ROL     = "deur_rol"       # geen rol dekt dit werk → rol aanmaken
 DEUR_SKILL   = "deur_skill"     # capaciteit bestaat niet → skill bouwen
 DEUR_BESLUIT = "deur_besluit"   # voorbehouden domein → besluit voor de founder
 ONBESLIST    = "onbeslist"      # geen regel pakte dit — expliciet, nooit stil
 
 DEUREN = (DEUR_ROL, DEUR_SKILL, DEUR_BESLUIT)
-STIL   = (GEBORGD, AFGEHANDELD, GEROUTEERD, OPS)
+STIL   = (GEBORGD, AFGEHANDELD, GEROUTEERD, OPS, BEWIJS_WACHT)
 
 # Hoeveel verschillende DAGEN een storing moet terugkomen voor hij een founder-vraag wordt.
 # Eén dag is een hik; drie dagen is een bron die dood is en waar een keuze onder ligt.
@@ -115,6 +116,28 @@ _ROL_MARKERS = (
     re.compile(r"\[rol ([a-z0-9_]+) onbemand\]", re.I),
     re.compile(r"🙋\s*([a-z0-9_]+)\s*:", re.I),
 )
+
+
+# Sjabloonzinnen die om het echte werk heen zitten. Ze domineren de tekst en duwen elke match
+# richting 'human_external', terwijl de taak eronder gewoon van een rol is: "Decide whether to
+# permanently exclude this overlap" is een onderzoeksmethode-keuze, geen fysieke handeling.
+# Het label wordt dus niet geloofd én de verpakking wordt weggehaald voordat er geoordeeld wordt.
+_SJABLOON = (
+    re.compile(r"^⏸️?\s*Project van .{0,60}? vastgelopen op \d+ [^:]*:\s*", re.I),
+    re.compile(r"Deze taak vereist een mens of externe partij:\s*", re.I),
+    re.compile(r"^🙋\s*[a-z0-9_]+:\s*", re.I),
+    re.compile(r"^⤴\s*(?:escalatie|beslissing gevraagd):\s*", re.I),
+    re.compile(r"^\[rol [a-z0-9_]+ onbemand\]\s*", re.I),
+    re.compile(r"—\s*de hop-limiet is bereikt.*$", re.I),
+)
+
+
+def kern(tekst: str) -> str:
+    """De tekst zonder sjabloon: wát moet er gebeuren, los van hoe het is ingepakt."""
+    uit = " ".join((tekst or "").split())
+    for pat in _SJABLOON:
+        uit = pat.sub("", uit).strip()
+    return uit.strip(" '\"“”")
 
 
 def _genoemde_rol(tekst: str, records) -> str:
@@ -189,6 +212,12 @@ _BESLUIT_DOMEIN = {
     "geld":       re.compile(r"budget|kosten|prijs|betaal|investering|€", re.I),
     "governance": re.compile(r"governance|nieuwe rol|rol aanmaken|skill toekennen|mandaat", re.I),
 }
+# "mist harde bewijzen", "zonder onderbouwing", "heeft nog aanvullende bewijsvoering nodig".
+_GEEN_BEWIJS = re.compile(r"mist (?:harde? )?bewij(?:s|zen)|mist onderbouwing|"
+                          r"zonder (?:definitie|onderbouwing|validatie)|geen (?:hard[e]? )?bewij(?:s|zen)|"
+                          r"aanvullende bewijsvoering|ontbreek\w*.{0,20}bewij(?:s|zen)|"
+                          r"niet onderbouwd", re.I)
+
 _VRAAGT_BESLUIT = re.compile(r"beslissing gevraagd|goedkeuring|escalatie|approval|"
                              r"vereist .*(goedkeuring|akkoord)|herformulering", re.I)
 
@@ -245,6 +274,15 @@ def deur(notif: dict, *, batch: list[dict] | None = None, kind: str = "",
                        bewijs=tekst[:80], sleutel=f"skill:{_onderwerp(tekst)}",
                        klasse="capaciteit ontbreekt")
 
+    # Een claim die "harde bewijzen mist" is geen beslissing maar een bewijs-gat, en het antwoord
+    # ligt al bij de bewijslaag: zonder onderbouwing is de claim niet claimbaar. De founder beslist
+    # waar bewijs dubbelzinnig is — niet handmatig claims afvinken die géén bewijs hebben.
+    if _GEEN_BEWIJS.search(tekst) and _BESLUIT_DOMEIN["compliance"].search(tekst):
+        return Besluit(BEWIJS_WACHT,
+                       "de claim mist onderbouwing — dat is een bewijs-gat, geen founder-besluit; "
+                       "het item wacht in het bewijs-wachtspoor tot er een certificaat ligt",
+                       bewijs=tekst[:80], sleutel="bewijs:claim", klasse="bewijs-wachtspoor")
+
     if _VRAAGT_BESLUIT.search(tekst):
         for naam, pat in _BESLUIT_DOMEIN.items():
             if pat.search(tekst):
@@ -274,11 +312,14 @@ def poort(notif: dict, *, projects, records, batch: list[dict] | None = None,
         return b
 
     # Routering. Een letterlijk genoemde rol is geen gok; anders de LLM-match.
+    inhoud = kern(tekst)
     rol = _genoemde_rol(tekst, records)
     kind, waarom = "", "de tensie noemt de rol letterlijk"
     if not rol and gebruik_llm:
         try:
-            rol, kind, waarom = match(tekst, records, reason_fn=reason_fn)
+            # De KERN gaat de match in, niet de verpakking. Met het sjabloon erbij oordeelde de
+            # match op "vereist een mens of externe partij" in plaats van op het werk zelf.
+            rol, kind, waarom = match(inhoud, records, reason_fn=reason_fn)
         except Exception as e:                        # noqa: BLE001 — fail-soft, luid
             log.warning("poort: routering faalde (%s) — item gaat door naar de deuren", e)
             rol, kind, waarom = "", "", f"routering faalde: {e}"

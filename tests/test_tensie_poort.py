@@ -400,3 +400,44 @@ def test_een_uitgevallen_match_leest_anders_dan_onclassificeerbaar():
     """Andere oorzaak, andere fix — ze op één hoop gooien verbergt een storing achter 'onbekend'."""
     b = tp.poort(_n("iets"), projects=_Projects(), records=RECS, reason_fn=_llm(None))
     assert b.deur == tp.ONBESLIST and "niet beschikbaar" in b.reden
+
+
+# ── 8. Herbeoordelen: het sjabloon en het bewijs-gat ────────────────────────
+
+def test_het_sjabloon_wordt_weggehaald_voor_de_match():
+    """"Deze taak vereist een mens of externe partij" domineerde de tekst en duwde elke match naar
+    human_external, terwijl het werk eronder gewoon van een rol is."""
+    t = ("⏸️ Project van Harry Hemp vastgelopen op 1 mens-/extern item(s): Deze taak vereist een "
+         "mens of externe partij: 'Decide whether to permanently exclude this overlap'")
+    assert tp.kern(t) == "Decide whether to permanently exclude this overlap"
+
+
+def test_een_methode_keuze_gaat_naar_de_rol_die_hem_bezit():
+    """De harry_hemp/OpenAlex-overlap is een onderzoeksmethode-keuze, geen founder-besluit."""
+    antwoord = '{"role": "harry_hemp", "kind": "missing_capability", "capability": ""}'
+    b = tp.poort(_n("⏸️ Project van X vastgelopen op 1 mens-/extern item(s): Deze taak vereist een "
+                    "mens of externe partij: 'Decide whether to exclude this overlap'"),
+                 projects=_Projects(), records=RECS, reason_fn=_llm(antwoord))
+    assert b.deur == tp.GEROUTEERD and b.naar_rol == "harry_hemp"
+
+
+@pytest.mark.parametrize("tekst", [
+    "⤴ beslissing gevraagd: De claim mist harde bewijzen voor de nieuwe versie",
+    "⤴ beslissing gevraagd: De FAQ-pagina claimt 'clean' zonder definitie of validatie",
+    "⤴ beslissing gevraagd: de claim is niet onderbouwd en vraagt aanvullende bewijsvoering",
+])
+def test_een_claim_zonder_bewijs_is_een_bewijs_gat_geen_besluit(tekst):
+    """Het antwoord ligt al bij de bewijslaag: geen onderbouwing = niet claimbaar. De founder
+    beslist waar bewijs dubbelzinnig is, niet waar het ontbreekt."""
+    b = tp.deur(_n(tekst))
+    assert b.deur == tp.BEWIJS_WACHT and b.klasse == "bewijs-wachtspoor"
+
+
+def test_een_echte_compliance_vraag_blijft_wel_een_besluit():
+    """De grens: mét bewijs en een inhoudelijke vraag hoort het wél bij de founder."""
+    b = tp.deur(_n("⤴ beslissing gevraagd: is de geherformuleerde claim compliant met EmpCo?"))
+    assert b.deur == tp.DEUR_BESLUIT
+
+
+def test_het_bewijs_wachtspoor_bereikt_de_founder_niet():
+    assert tp.BEWIJS_WACHT in tp.STIL
