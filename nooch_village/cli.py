@@ -1281,10 +1281,16 @@ def main() -> None:
             for pr in uit["projecten"]:
                 print(f"     → {pr['rol']}  ({pr['project']})")
         print("\n== wat de founder overhoudt ==")
+        from nooch_village import founder_kaart as fkaart
         for g in uit["bundels"]:
-            print(f"   [{g['deur']}] {g['klasse'] or g['sleutel']} — {g['aantal']} melding(en)")
+            print(f"\n[{g['deur']}] {g['klasse'] or g['sleutel']} — {g['aantal']} melding(en)")
             for m in g["meldingen"][:20]:
-                print(f"       · {m['tekst'][:88]}")
+                n = next((x for x in st.notif.all() if x.get("id") == m["id"]), None) or {}
+                k = fkaart.kaart(n or {"snippet": m["tekst"], "by": ""},
+                                 projects=st.projects, records=st.records)
+                print("   " + fkaart.render(k).replace("\n", "\n   "))
+                if not k["hoort_hier"]:
+                    print("   ⚠ dit raakt geen founder-bevoegdheid — kandidaat voor herroutering")
 
     elif mode == "healthcheck":
         import os
