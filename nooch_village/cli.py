@@ -1180,6 +1180,41 @@ def main() -> None:
         print(f"✅ {res['routed']} rollen op de roloverleg-agenda gezet, {res['skipped']} overgeslagen. "
               f"Verwerk ze in het roloverleg-scherm van de cockpit, 1 voor 1.")
 
+    elif mode == "relaunch":
+        # Bulk-parkering op één verklaard feit (de site wordt herbouwd) en één trigger terug.
+        # Default DRY-RUN; `--live` voert uit. `open` haalt alles in één keer terug.
+        import os
+        from nooch_village import relaunch_park as rp
+        from nooch_village.cockpit2 import _Stores, _person_targets
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        sub = sys.argv[2] if len(sys.argv) > 2 else "park"
+        mail = next((a for a in sys.argv[2:] if "@" in a), "")
+        if sub == "open":
+            uit = rp.heropen(ctx.data_dir, projects=st.projects)
+            print(f"↩ {uit['teruggehaald']} item(s) terug voor herbeoordeling na relaunch:")
+            for r in uit["items"]:
+                print(f"   [{r.get('soort')}] {str(r.get('tekst'))[:88]}")
+        elif sub == "lijst":
+            staand = rp.geparkeerd(ctx.data_dir)
+            print(f"geparkeerd op '{rp.REDEN}': {len(staand)} item(s) — {rp.VOORWAARDE}")
+            for r in staand:
+                print(f"   [{r.get('soort'):<18}] {str(r.get('tekst'))[:84]}")
+        else:
+            live = "--live" in sys.argv
+            targets = _person_targets(st, mail) if mail else None
+            uit = rp.park(ctx.data_dir, projects=st.projects, notif=st.notif if mail else None,
+                          targets=targets, dry_run=not live)
+            print(f"{'LIVE' if live else 'DRY-RUN'} — {uit['projecten']} project(en), "
+                  f"{uit['notificaties']} notificatie(s)")
+            for s_, n in sorted(uit["per_soort"].items(), key=lambda kv: -kv[1]):
+                print(f"   {n:>3}  {s_}")
+            print(f"\nreden: {rp.REDEN} — {rp.VOORWAARDE}")
+            for r in uit["items"][:40]:
+                print(f"   [{r['soort']:<18}] {r['tekst'][:80]}")
+
     elif mode == "certs":
         # De cert-wachtlijst: welke claim is onderbouwd en welke wacht nog op een certificaat.
         # Leest alleen. `--ingest` leest nieuwe certificaten uit data/certificaten/ in.
