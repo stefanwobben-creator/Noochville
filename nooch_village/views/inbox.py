@@ -169,7 +169,13 @@ def _kaart_html(st, n: dict) -> str:
 
         tekst = str(n.get("snippet") or "")
         kern = tp.kern(tekst)
-        _, behoefte = zv.founder_behoefte(tekst)
+        domein, behoefte = zv.founder_behoefte(tekst)
+        # Een VERSE spanning heeft nog geen poort-oordeel, dus geen klasse — en dan vond de kaart
+        # geen founder-accountability en zette hij de ⚠ eronder terwijl er wél een behoefte stond.
+        # Twee tegengestelde zinnen op één scherm. Het domein komt hier uit de tekst zelf.
+        n = dict(n)
+        if domein and not (n.get("poort") or {}).get("klasse"):
+            n["poort"] = {**(n.get("poort") or {}), "klasse": f"{domein}-besluit"}
         k = fkaart.kaart(n, projects=getattr(st, "projects", None),
                          records=getattr(st, "records", None),
                          voorstel={"behoefte": behoefte})

@@ -103,3 +103,13 @@ def test_zonder_kaart_gegevens_valt_het_terug_op_de_tekst():
     n = {"id": "n4", "by": "", "snippet": "iets zonder herkomst"}
     html = _spanning_pane(_St(), n)
     assert "iets zonder herkomst" in html
+
+
+def test_een_verse_spanning_spreekt_zichzelf_niet_tegen():
+    """Gezien op het echte scherm: "Wat ik van jou nodig heb: … dat mag alleen jij" mét daaronder
+    "⚠ raakt geen founder-bevoegdheid". Een verse spanning is nog niet door de poort, dus had hij
+    geen klasse en vond de kaart geen founder-accountability. Het domein komt nu uit de tekst."""
+    n = {"id": "vers", "by": "compliance", "project_id": "p1", "snippet": BESLUIT}   # géén poort
+    html = _kaart_html(_St(), n)
+    assert "Wat ik van jou nodig heb" in html
+    assert "raakt geen founder-bevoegdheid" not in html
