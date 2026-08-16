@@ -59,7 +59,8 @@ DE RUWE SIGNALERING: {tekst}
 
 Schrijf twee dingen.
 
-1. "spanning" — wat er aan de hand is. Volledige zinnen, geen afgekapte gedachte. Schrijf zo dat
+1. "spanning" — wat er aan de hand is, in HOOGSTENS VIER ZINNEN. Volledige zinnen, geen afgekapte
+   gedachte, en liever korter dan langer: dit moet in één blik te lezen zijn. Schrijf zo dat
    een veertienjarige het hardop kan voorlezen en snapt: geen vakjargon, geen Engelse technische
    termen, geen interne systeemwoorden. Als de ruwe tekst een verwijzing bevat die je niet kunt
    uitleggen, laat hem dan weg in plaats van hem over te nemen. Noem geen bestandsnamen of id's.
@@ -139,7 +140,10 @@ def herschrijf(tekst: str, *, rol: str, records=None, reason_fn=None,
     prompt = _PROMPT.format(rol=rol or "onbekend", tekst=ruw[:1200],
                             accountabilities=_accountabilities(records, rol))
     try:
-        rauw = reason_fn(prompt, json_mode=True, max_tokens=700, call_site=CALL_SITE,
+        # 700 tokens kapte lange antwoorden af, en de afkap-poort weigerde ze dan terecht — maar
+        # de oorzaak lag bij mij, niet bij het model. Ruimer, plus een lengte-instructie in de
+        # prompt zodat het antwoord kort blijft in plaats van alleen te passen.
+        rauw = reason_fn(prompt, json_mode=True, max_tokens=1400, call_site=CALL_SITE,
                          **({"ladder": ladder} if ladder else {}))
     except Exception as e:                                         # noqa: BLE001
         log.warning("bevinding: herschrijven faalde (%s) — ruwe tekst blijft staan", e)

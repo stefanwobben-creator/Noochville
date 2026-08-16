@@ -81,3 +81,14 @@ def test_zonder_antwoord_blijft_de_ruwe_tekst_staan():
                         reason_fn=lambda p, **kw: None)
     assert uit["ok"] is False
     assert uit["ruw"] == "Decide whether to exclude this overlap"
+
+
+def test_de_prompt_vraagt_om_een_korte_bevinding():
+    """Drie van de veertien in de eerste dry-run werden geweigerd op afkapping, en de oorzaak was
+    de token-limiet — niet het model. Ruimer budget én een lengte-instructie, want alleen ruimer
+    maken nodigt uit tot langere antwoorden die opnieuw net niet passen."""
+    gezien = {}
+    bv.herschrijf("iets", rol="x",
+                  reason_fn=lambda p, **kw: gezien.update(prompt=p, kw=kw) or '{"spanning":"","voorstel":""}')
+    assert "HOOGSTENS VIER ZINNEN" in gezien["prompt"]
+    assert gezien["kw"]["max_tokens"] >= 1200
