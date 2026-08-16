@@ -159,6 +159,34 @@ def render_inbox(st, targets, csrf_token: str = "", naam: str = "", done: str = 
 
 
 # ── de verwerk-pagina (twee panelen) ─────────────────────────────────────────────
+# Wat elk type als LIJF en als ACTIE toont. De kop is voor alle vier gelijk (wie, vanuit welke
+# accountability, de bevinding, het voorstel); daaronder verschilt wat er van de lezer gevraagd wordt.
+_TYPE_LIJF = {
+    "naar_rol":   ("Operationeel verzoek",
+                   "Past dit bij jouw rol? Accepteer, pas de formulering aan, of weiger met reden. "
+                   "Bij accepteren verschijnt het als project op je bord."),
+    "governance": ("Governance-voorstel",
+                   "Dit vraagt om een wijziging in wie waarvoor staat. De vraag is niet of je het "
+                   "een goed idee vindt, maar of het schaadt of ons achteruit zet — en het loopt "
+                   "langs de poort (G0-G4) met de botsingscheck."),
+    "founder":    ("Besluit voor jou",
+                   "Dit raakt een bevoegdheid die alleen jij hebt. Bevestig, pas aan, of verwerp."),
+}
+
+
+def _type_van(n: dict) -> str:
+    """Het type van dit item: uit het poort-oordeel, anders uit de tekst zelf (verse spanning)."""
+    from nooch_village import tensie_poort as tp, zelf_verwerking as zv
+
+    deur = str((n.get("poort") or {}).get("deur") or "")
+    if deur == tp.DEUR_BESLUIT:
+        return zv.FOUNDER
+    if deur == tp.GEROUTEERD:
+        return zv.NAAR_ROL
+    domein, _ = zv.founder_behoefte(str(n.get("snippet") or ""))
+    return zv.FOUNDER if domein else ""
+
+
 def _kaart_html(st, n: dict) -> str:
     """De vier-regel-kaart voor een spanning die de founder bereikt. "" als het geen kaart-item is.
 
@@ -184,10 +212,30 @@ def _kaart_html(st, n: dict) -> str:
         regels = [f"<p class='ptitle'>{_e(k['rol'])} werpt dit op</p>"]
         if k.get("vanuit"):
             regels.append(f"<p class='muted'>vanuit accountability “{_e(k['vanuit'][:120])}”</p>")
-        regels.append(f"<div class='fbubble'>{_e(kern or tekst)}</div>")
+        herschreven = dict(n.get("bevinding") or {})
+        if herschreven.get("ok"):
+            # De herschreven bevinding is de tekst die de founder leest; de ruwe blijft eronder
+            # staan als herkomst, niet als hoofdtekst.
+            regels.append(f"<div class='fbubble'>{_e(herschreven['spanning'])}</div>")
+            if herschreven.get("voorstel"):
+                regels.append(f"<p><strong>Voorstel:</strong> {_e(herschreven['voorstel'])}</p>")
+            regels.append(f"<details class='box-details'><summary class='muted'>ruwe signalering"
+                          f"</summary><p class='muted'>{_e(kern or tekst)}</p></details>")
+        elif herschreven and not herschreven.get("ok"):
+            regels.append(f"<div class='fbubble'>{_e(kern or tekst)}</div>")
+            regels.append(f"<p class='muted'>⚠ moet herschreven: {_e(herschreven.get('reden'))}</p>")
+        else:
+            regels.append(f"<div class='fbubble'>{_e(kern or tekst)}</div>")
         if behoefte:
             regels.append(f"<p><strong>Wat ik van jou nodig heb:</strong> {_e(behoefte)}</p>")
-        if not k.get("hoort_hier"):
+        # Het LIJF: per type een andere uitleg van wat er van de lezer gevraagd wordt.
+        soort = _type_van(n)
+        kop_lijf = _TYPE_LIJF.get(soort)
+        if kop_lijf:
+            titel, uitleg = kop_lijf
+            regels.insert(0, f"<p class='chip'>{_e(titel)}</p>")
+            regels.append(f"<p class='muted'>{_e(uitleg)}</p>")
+        if soort == "founder" and not k.get("hoort_hier"):
             regels.append("<p class='muted'>⚠ dit raakt geen founder-bevoegdheid — kandidaat voor "
                           "herroutering</p>")
         return "".join(regels)

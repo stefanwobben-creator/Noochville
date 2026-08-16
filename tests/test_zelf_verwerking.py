@@ -260,3 +260,25 @@ def test_meervoud_telt_als_hetzelfde_woord():
     recs = _domein_recs()
     acc = zv.eigen_domein("toets de claims aan de EmpCo-richtlijn", "compliance", recs)
     assert acc == "Toetsen aan EmpCo"
+
+
+# ── Het vierde type: governance ─────────────────────────────────────────────
+
+def test_terugkerend_werk_zonder_eigenaar_is_een_governance_voorstel():
+    """Het antwoord is geen handeling maar een wijziging in wie waarvoor staat."""
+    r = zv.verwerk("dit komt wekelijks terug en geen enkele rol heeft hier een accountability voor",
+                   rol="compliance", records=RECS, gebruik_llm=False)
+    assert r["uitkomst"] == zv.GOVERNANCE
+
+
+def test_een_klacht_zonder_structuur_object_is_geen_governance():
+    """"Dit gebeurt vaker" zonder object is een klacht, geen structuurvoorstel."""
+    r = zv.verwerk("dit gebeurt telkens weer en het kost me veel tijd", rol="compliance",
+                   records=RECS, gebruik_llm=False)
+    assert r["uitkomst"] != zv.GOVERNANCE
+
+
+def test_een_rol_noemen_zonder_herhaling_is_gewoon_werk():
+    r = zv.verwerk("de rol van compliance moet deze claim beoordelen", rol="compliance",
+                   records=RECS, gebruik_llm=False)
+    assert r["uitkomst"] != zv.GOVERNANCE
