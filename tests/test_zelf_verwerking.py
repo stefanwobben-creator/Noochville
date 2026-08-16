@@ -128,3 +128,120 @@ def test_een_ontbrekend_certificaat_is_een_bewijs_gat():
     r = zv.verwerk("⤴ beslissing gevraagd: de FAQ claimt circular economy maar mist certificering",
                    rol="compliance", records=RECS, gebruik_llm=False)
     assert r["uitkomst"] != zv.FOUNDER
+
+
+# ── Wat de handmatige steekproef op 17 overdrachten blootlegde ──────────────
+
+def test_de_rol_zelf_staat_in_de_kandidatenlijst():
+    """De grootste misser-oorzaak: `match(van_rol=rol)` gaf de rol door als EXCLUDE aan de
+    router-roster, dus stond hij niet in zijn eigen kandidatenlijst en kon de match nooit "dit is
+    van jou" antwoorden. Gevolg: de copywriter gaf het herschrijven van een claim weg, compliance
+    stuurde zijn eigen juridische oordeel naar de Librarian."""
+    antwoord = '{"role": "compliance", "kind": "missing_capability", "capability": ""}'
+    r = zv.verwerk("toets deze publieke claim aan de EmpCo-richtlijn", rol="compliance",
+                   records=RECS, reason_fn=_llm(antwoord))
+    assert r["uitkomst"] == zv.ZELF and "wijst mij zelf aan" in r["reden"]
+
+
+def test_werk_gaat_nooit_via_een_overdracht_naar_de_founder_rol():
+    """Uit de steekproef: de financial controller schoof het jaarverslag naar de founder-rol. Dat
+    omzeilt de hele poort — de founder bereik je via de bevoegdheidsvraag, niet via een handover."""
+    from nooch_village.founder_kaart import FOUNDER_ROL
+    recs = _Records([_Rec("financial_controller", ["Bookkeeping"]),
+                     _Rec(FOUNDER_ROL, ["Leading fundraising and financial strategy"])])
+    antwoord = ('{"role": "' + FOUNDER_ROL + '", "kind": "missing_capability", "capability": ""}')
+    r = zv.verwerk("2025 annual report completed and submitted", rol="financial_controller",
+                   records=recs, reason_fn=_llm(antwoord))
+    assert r["uitkomst"] != zv.NAAR_ROL
+
+
+def test_een_cirkel_kan_geen_werk_ontvangen():
+    """Een cirkel heeft geen handen (harde regel 7): werk erheen schuiven laat het verdwijnen in
+    een niveau in plaats van bij iemand."""
+    from nooch_village import org
+    import unittest.mock as m
+    antwoord = '{"role": "librarian", "kind": "missing_capability", "capability": ""}'
+    with m.patch.object(org, "is_circle", lambda rec: True):
+        r = zv.verwerk("iets", rol="compliance", records=RECS, reason_fn=_llm(antwoord))
+    assert r["uitkomst"] != zv.NAAR_ROL
+
+
+# ── De Librarian-grens: route op DOEL, niet op trefwoord ────────────────────
+#
+# Dezelfde soort guard als op de founder-poort, en om dezelfde reden: dit lek komt terug zodra
+# niemand oplet. De Librarian bezit alleen het lexicon als artefact — welke termen approved of
+# avoid zijn en waarom. Dat er een woord, term of claim in de tekst staat is geen routeersignaal
+# maar juist de val.
+
+def _domein_recs():
+    class _D:
+        def __init__(self, dom, accs=()):
+            self.domains = list(dom)
+            self.accountabilities = list(accs)
+            self.purpose = ""
+            self.name = ""
+
+    class _R:
+        def __init__(self, rid, dom, accs=()):
+            self.id = rid
+            self.definition = _D(dom, accs)
+            self.archived = False
+
+    class _Recs:
+        def __init__(self, r):
+            self._r = {x.id: x for x in r}
+
+        def get(self, i):
+            return self._r.get(i)
+
+        def all(self):
+            return list(self._r.values())
+
+    return _Recs([_R("librarian", ["bibliotheek"], ["Guarding the approved vocabulary"]),
+                  _R("compliance", ["claim-verification"], ["Toetsen aan EmpCo"]),
+                  _R("harry_hemp", [], ["Gathering scientific evidence"])])
+
+
+def test_een_claim_scan_gaat_naar_compliance_niet_naar_de_librarian():
+    """Uit de steekproef: twee claim-scans landden bij de Librarian omdat er 'term' in stond."""
+    recs = _domein_recs()
+    rol, waarom = zv.domein_grens("librarian",
+                                  "Claim-scan: 4 model-gevonden claim(s) zonder lijstterm", recs)
+    assert rol == "compliance" and "claim-domein" in waarom
+
+
+def test_een_te_brede_query_is_onderzoeksmethode_geen_lexicon():
+    recs = _domein_recs()
+    rol, waarom = zv.domein_grens("librarian",
+                                  "Flag if the searches return an excessively broad result set", recs)
+    assert rol != "librarian" and "onderzoeksmethode" in waarom
+
+
+def test_echte_lexicon_curatie_blijft_bij_de_librarian():
+    """De grens mag niet doorschieten: het lexicon is wél van de Librarian."""
+    recs = _domein_recs()
+    rol, waarom = zv.domein_grens("librarian",
+                                  "Evalueer of het woord 'regenerative' in het lexicon mag", recs)
+    assert rol == "librarian" and waarom == ""
+
+
+def test_een_term_in_de_tekst_is_geen_routeersignaal():
+    """De val, expliciet: geen lexicon-doel, geen claim-doel, geen methode-doel → geen overdracht."""
+    recs = _domein_recs()
+    rol, waarom = zv.domein_grens("librarian", "de term staat op de verpakking van batch 3", recs)
+    assert rol == "" and "geen routeersignaal" in waarom
+
+
+def test_de_grens_geldt_alleen_voor_de_lexicon_houder():
+    """Andere ontvangers worden niet aangeraakt — dit is een grens, geen algemene herrouteerder."""
+    recs = _domein_recs()
+    rol, waarom = zv.domein_grens("compliance", "Claim-scan: iets", recs)
+    assert rol == "compliance" and waarom == ""
+
+
+def test_de_rollen_komen_uit_hun_domein_niet_uit_hun_id():
+    """Een id kan hernoemd worden; een domein dragen is een governance-besluit."""
+    recs = _domein_recs()
+    assert zv._rol_met_domein(recs, zv._LEXICON_DOMEIN) == "librarian"
+    assert zv._rol_met_domein(recs, zv._CLAIM_DOMEIN) == "compliance"
+    assert zv._rol_met_domein(recs, zv._METHODE_DOMEIN) == ""      # governance-gat, geen gok

@@ -88,6 +88,98 @@ def founder_behoefte(tekst: str) -> tuple[str, str]:
     return "", ""
 
 
+# ── De domein-grens: routeren op DOEL, niet op trefwoord ────────────────────
+#
+# De val, letterlijk uit de steekproef: staat er een woord, term of claim in de tekst, dan wijst de
+# match de Librarian aan. Maar de Librarian bezit alleen het LEXICON als artefact — welke termen
+# approved of avoid zijn, en waarom. Content scannen om claims te toetsen is Compliance; een te
+# brede of ruizige query is onderzoeksmethode, dus Scientist.
+#
+# Dat een term in de zin voorkomt is dus geen routeersignaal maar juist de valkuil. De vraag is wat
+# er GEVRAAGD wordt.
+#
+# De rollen worden herkend aan hun DOMEIN (bibliotheek / claim-verification), niet aan hun id: een
+# id kan hernoemd worden, een domein dragen is een governance-besluit.
+_LEXICON_DOMEIN = ("bibliotheek", "lexicon", "vocabulary")
+_CLAIM_DOMEIN   = ("claim-verification", "claims-database")
+# Onderzoeksmethode hoort bij de Scientist — maar die rol houdt vandaag GEEN domein, dus er is
+# langs governance geen weg om hem aan te wijzen. Zodra hij er een krijgt, werkt deze route vanzelf.
+# Tot dan: geen overdracht (fail-closed) en een logregel, want een gok op een rol-id is precies de
+# trefwoord-val die we hier weghalen.
+_METHODE_DOMEIN = ("onderzoeksmethode", "research", "science", "wetenschap")
+
+# Wat er gevraagd wordt, per doel.
+_DOEL_LEXICON = re.compile(r"\b(?:approve|goedkeur|afkeur|toevoeg\w*|opnemen)\b[^.]{0,40}"
+                           r"\b(?:woord|term|lexicon|vocabulaire|vocabulary)|"
+                           r"\b(?:lexicon|vocabulaire|woordenlijst)\b", re.I)
+_DOEL_CLAIM   = re.compile(r"claim[- ]?scan|toets\w*|beoordeel|substantiat|onderboud|onderbouw\w*|"
+                           r"EmpCo|ACM|juridisch|greenwash|verboden claim|claim\b", re.I)
+_DOEL_METHODE = re.compile(r"\bquer\w+|zoekopdracht|result set|resultaten\b|noisy|ruis|"
+                           r"te breed|broad|search\w*|steekproef|methode", re.I)
+
+
+def _rol_met_domein(records, domeinen) -> str:
+    """De rol die een van deze domeinen houdt, of "". Governance bepaalt wie dat is, niet deze code."""
+    for rec in (records.all() if records is not None else []):
+        for d in getattr(getattr(rec, "definition", None), "domains", None) or []:
+            if str(d).strip().lower() in domeinen:
+                return rec.id
+    return ""
+
+
+def domein_grens(naar_rol: str, tekst: str, records) -> tuple[str, str]:
+    """Corrigeer een overdracht die op een trefwoord is aangewezen in plaats van op het doel.
+
+    Geeft (rol, waarom-gecorrigeerd). Rol == `naar_rol` betekent: de overdracht blijft staan.
+    Kan de juiste rol niet gevonden worden, dan geeft hij "" terug — liever geen overdracht dan een
+    naar het verkeerde bureau, want die kost een hop en levert een vals gat-record op."""
+    lexicon_rol = _rol_met_domein(records, _LEXICON_DOMEIN)
+    if not naar_rol or naar_rol != lexicon_rol:
+        return naar_rol, ""
+    # De ontvanger is de lexicon-houder. Is dit écht lexicon-curatie?
+    if _DOEL_LEXICON.search(tekst or ""):
+        return naar_rol, ""
+    if _DOEL_CLAIM.search(tekst or ""):
+        claim_rol = _rol_met_domein(records, _CLAIM_DOMEIN)
+        return claim_rol, (f"dit toetst een claim; dat is het claim-domein, niet het lexicon"
+                           if claim_rol else
+                           "dit toetst een claim, maar er is geen rol met het claim-domein")
+    if _DOEL_METHODE.search(tekst or ""):
+        methode_rol = _rol_met_domein(records, _METHODE_DOMEIN)
+        if methode_rol:
+            return methode_rol, "dit gaat over onderzoeksmethode, niet over het lexicon"
+        log.info("zelf-verwerking: methode-werk hoort bij de Scientist, maar geen rol houdt een "
+                 "onderzoeksmethode-domein — geen overdracht (governance-gat)")
+        return "", ("dit gaat over onderzoeksmethode, niet over het lexicon — en geen rol houdt "
+                    "een onderzoeksmethode-domein")
+    return "", "dit raakt het lexicon-domein niet — een term in de tekst is geen routeersignaal"
+
+
+def _mag_ontvangen(rol_id: str, records) -> bool:
+    """Mag deze rol werk ONTVANGEN via een rol-naar-rol-overdracht?
+
+    Twee weigeringen, allebei uit de steekproef:
+
+      de FOUNDER-rol — die bereik je via de bevoegdheidsvraag, niet via een handover. Anders
+      omzeilt een overdracht de hele poort: in de steekproef schoof de financial controller het
+      jaarverslag naar de founder-rol, en dat is gewoon zijn eigen werk;
+      een CIRKEL — die heeft geen handen (harde regel 7), dus werk erheen schuiven is het laten
+      verdwijnen in een niveau in plaats van bij iemand.
+    """
+    from nooch_village import org
+    from nooch_village.founder_kaart import FOUNDER_ROL
+
+    if not rol_id or rol_id == FOUNDER_ROL:
+        return False
+    rec = records.get(rol_id) if records is not None else None
+    if rec is None or getattr(rec, "archived", False):
+        return False
+    try:
+        return not org.is_circle(rec)
+    except Exception:                                    # noqa: BLE001 — geen org-info = niet blokkeren
+        return True
+
+
 def verwerk(tekst: str, *, rol: str, records, reason_fn=None, gebruik_llm: bool = True,
             van_eigen_bord: bool = False) -> dict:
     """De eerste handeling van de rol die de spanning voelt.
@@ -113,9 +205,32 @@ def verwerk(tekst: str, *, rol: str, records, reason_fn=None, gebruik_llm: bool 
     ander, kind, waarom = ("", "", "")
     if gebruik_llm:
         try:
-            ander, kind, waarom = tp.match(kern, records, van_rol=rol, reason_fn=reason_fn)
+            # GEEN van_rol hier. `match` geeft dat door aan de router-roster als EXCLUDE, en dan
+            # staat de rol zelf niet in de kandidatenlijst — de match kán dus nooit "dit is van
+            # jou" antwoorden en wijst altijd iemand anders aan. In de steekproef gaf dat vier
+            # duidelijke missers: de copywriter die het herschrijven van een claim weggaf, en
+            # compliance dat zijn eigen juridische oordeel naar de Librarian stuurde.
+            ander, kind, waarom = tp.match(kern, records, reason_fn=reason_fn)
+            if ander == rol:
+                return {"uitkomst": ZELF, "rol": rol, "naar_rol": "", "domein": "",
+                        "behoefte": "", "tensie": kern, "eigen_accountability": "",
+                        "reden": f"de match wijst mij zelf aan als eigenaar ({waarom})"}
         except Exception as e:                            # noqa: BLE001 — fail-soft, luid
             log.warning("zelf-verwerking: match faalde (%s) — ik deel wat ik vond", e)
+    if ander:
+        gecorrigeerd, waarom_grens = domein_grens(ander, kern, records)
+        if gecorrigeerd != ander:
+            log.info("zelf-verwerking: overdracht %s → %s gecorrigeerd naar %r (%s)",
+                     rol, ander, gecorrigeerd or "geen", waarom_grens)
+            ander = gecorrigeerd
+            waarom = waarom_grens or waarom
+            if ander == rol:
+                return {"uitkomst": ZELF, "rol": rol, "naar_rol": "", "domein": "", "behoefte": "",
+                        "tensie": kern, "eigen_accountability": "",
+                        "reden": f"de domein-grens wijst dit terug naar mij: {waarom_grens}"}
+    if ander and not _mag_ontvangen(ander, records):
+        log.info("zelf-verwerking: overdracht naar %r geweigerd — geen geldige ontvanger", ander)
+        ander = ""
     if ander:
         return {"uitkomst": NAAR_ROL, "rol": rol, "naar_rol": ander, "domein": "", "behoefte": "",
                 "tensie": kern, "reden": f"{ander} bezit dit werk ({waarom})"}
