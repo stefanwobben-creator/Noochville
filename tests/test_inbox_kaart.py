@@ -153,3 +153,14 @@ def test_een_afgekeurde_bevinding_zegt_dat_hij_herschreven_moet():
          "bevinding": {"ok": False, "reden": "geen concreet voorstel"}}
     html = _kaart_html(_St(), n)
     assert "moet herschreven" in html and "geen concreet voorstel" in html
+
+
+def test_een_governance_spanning_krijgt_ook_een_type_en_een_lijf():
+    """Op het echte scherm had de governance-kaart geen chip en geen actie-uitleg: de poort kent
+    geen governance-deur, dus viel het type terug op leeg."""
+    n = {"id": "g", "by": "compliance", "project_id": "p1",
+         "snippet": "Dit komt wekelijks terug: geen enkele rol heeft een accountability voor het "
+                    "bewaken van de onderzoeksmethode."}
+    html = _kaart_html(_St(), n)
+    assert "Governance-voorstel" in html
+    assert "schaadt of ons achteruit zet" in html
