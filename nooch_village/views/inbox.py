@@ -183,8 +183,17 @@ def _type_van(n: dict) -> str:
         return zv.FOUNDER
     if deur == tp.GEROUTEERD:
         return zv.NAAR_ROL
-    domein, _ = zv.founder_behoefte(str(n.get("snippet") or ""))
-    return zv.FOUNDER if domein else ""
+    tekst = str(n.get("snippet") or "")
+    domein, _ = zv.founder_behoefte(tekst)
+    if domein:
+        return zv.FOUNDER
+    # Governance heeft geen eigen poort-deur (de poort kent hem niet), dus wordt hij hier herkend
+    # aan dezelfde twee signalen als in de zelf-verwerking. Zonder dit kreeg een
+    # governance-spanning geen type-chip en geen lijf — dan is de kaart weer typeloos.
+    kern_t = tp.kern(tekst)
+    if zv._STRUCTUREEL.search(kern_t) and zv._STRUCTUUR_OBJECT.search(kern_t):
+        return zv.GOVERNANCE
+    return ""
 
 
 def _kaart_html(st, n: dict) -> str:

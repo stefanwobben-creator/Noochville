@@ -85,7 +85,11 @@ def afgekapt(tekst: str) -> bool:
         return True
     if not _EIND.search(t):
         return True
-    return t.count("'") % 2 == 1 or t.count('"') % 2 == 1
+    # ALLEEN dubbele aanhalingstekens tellen. De enkele is in gewone tekst meestal een apostrof
+    # ("Nooch's", "'t"), en die pariteit-check wees een correcte bevinding af omdat er één keer
+    # een term werd aangehaald. Een valse afwijzing kost een leesbare kaart; dat weegt zwaarder
+    # dan het zeldzame geval van een echt ongesloten enkel citaat.
+    return t.count('"') % 2 == 1 or (t.count("“") != t.count("”"))
 
 
 def jargon_in(tekst: str) -> list[str]:

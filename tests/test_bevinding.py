@@ -92,3 +92,11 @@ def test_de_prompt_vraagt_om_een_korte_bevinding():
                   reason_fn=lambda p, **kw: gezien.update(prompt=p, kw=kw) or '{"spanning":"","voorstel":""}')
     assert "HOOGSTENS VIER ZINNEN" in gezien["prompt"]
     assert gezien["kw"]["max_tokens"] >= 1200
+
+
+def test_een_aangehaalde_term_is_geen_afgekapte_zin():
+    """Vals alarm op het echte scherm: "de claim 'compensated' mag pas online…" werd geweigerd
+    omdat de enkele aanhalingstekens oneven uitkwamen. In gewone tekst is die vaker een apostrof
+    ("Nooch's") dan een citaat; een valse afwijzing kost een leesbare kaart."""
+    assert bv.afgekapt("De claim 'compensated' mag pas online als het certificaat er is.") is False
+    assert bv.afgekapt('Hij zei "dit mag niet.') is True          # dubbele telt wel
