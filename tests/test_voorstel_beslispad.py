@@ -193,3 +193,43 @@ def test_geen_enkel_approve_pad_meldt_stil_succes():
     vangnet = tak.split("        else:", 1)[1]
     assert "niets uitgevoerd" in vangnet.lower(), (
         "de vangnet-tak van approve sluit een item zonder te melden dat er niets is uitgevoerd")
+
+
+# ── Een domein toekennen loopt langs de echte governance-poort ──────────────
+
+def test_rol_domein_gaat_via_g0_g4_en_niet_via_een_record_edit(monkeypatch):
+    """Een domein toewijzen is een structuurwijziging. De botsingscheck van G1 hoort erbij: houdt
+    een ander die al, dan moet dit struikelen in plaats van stilletjes een tweede eigenaar maken."""
+    gezien = {}
+
+    def _nep(voorstel):
+        gezien["kind"] = voorstel.change.kind.value
+        gezien["rol"] = voorstel.change.role_id
+        gezien["domeinen"] = list(voorstel.change.add_domains)
+        return {"status": "aangenomen"}
+
+    import nooch_village.role_proposals as rp
+    monkeypatch.setattr(rp, "_submit_proposal_sync", _nep)
+    ok, bericht = vm.voer_uit({"soort": "rol_domein", "rol_id": "harry_hemp",
+                               "domeinen": ["onderzoeksmethode"], "tension": "t",
+                               "trigger_example": "e", "rationale": "r"}, "/tmp")
+    assert ok and "aangenomen" in bericht
+    assert gezien == {"kind": "amend_role", "rol": "harry_hemp",
+                      "domeinen": ["onderzoeksmethode"]}
+
+
+def test_een_geweigerd_governance_voorstel_sluit_het_item_niet(monkeypatch):
+    """De poort heeft iets te zeggen (bijvoorbeeld een domein-botsing) en dat hoort zichtbaar."""
+    import nooch_village.role_proposals as rp
+    monkeypatch.setattr(rp, "_submit_proposal_sync",
+                        lambda v: {"status": "geëscaleerd", "gate": "G1",
+                                   "reason": "domein botst met librarian"})
+    ok, bericht = vm.voer_uit({"soort": "rol_domein", "rol_id": "x", "domeinen": ["bibliotheek"],
+                               "tension": "t", "trigger_example": "e", "rationale": "r"}, "/tmp")
+    assert ok is False and "G1" in bericht and "botst" in bericht
+
+
+def test_de_beschrijving_zegt_dat_het_langs_governance_gaat():
+    tekst = vm.beschrijf({"soort": "rol_domein", "rol_id": "harry_hemp",
+                          "domeinen": ["onderzoeksmethode"]})
+    assert "amend_role" in tekst and "G0-G4" in tekst
