@@ -88,6 +88,31 @@ def founder_behoefte(tekst: str) -> tuple[str, str]:
     return "", ""
 
 
+def _mag_ontvangen(rol_id: str, records) -> bool:
+    """Mag deze rol werk ONTVANGEN via een rol-naar-rol-overdracht?
+
+    Twee weigeringen, allebei uit de steekproef:
+
+      de FOUNDER-rol — die bereik je via de bevoegdheidsvraag, niet via een handover. Anders
+      omzeilt een overdracht de hele poort: in de steekproef schoof de financial controller het
+      jaarverslag naar de founder-rol, en dat is gewoon zijn eigen werk;
+      een CIRKEL — die heeft geen handen (harde regel 7), dus werk erheen schuiven is het laten
+      verdwijnen in een niveau in plaats van bij iemand.
+    """
+    from nooch_village import org
+    from nooch_village.founder_kaart import FOUNDER_ROL
+
+    if not rol_id or rol_id == FOUNDER_ROL:
+        return False
+    rec = records.get(rol_id) if records is not None else None
+    if rec is None or getattr(rec, "archived", False):
+        return False
+    try:
+        return not org.is_circle(rec)
+    except Exception:                                    # noqa: BLE001 — geen org-info = niet blokkeren
+        return True
+
+
 def verwerk(tekst: str, *, rol: str, records, reason_fn=None, gebruik_llm: bool = True,
             van_eigen_bord: bool = False) -> dict:
     """De eerste handeling van de rol die de spanning voelt.
@@ -113,9 +138,21 @@ def verwerk(tekst: str, *, rol: str, records, reason_fn=None, gebruik_llm: bool 
     ander, kind, waarom = ("", "", "")
     if gebruik_llm:
         try:
-            ander, kind, waarom = tp.match(kern, records, van_rol=rol, reason_fn=reason_fn)
+            # GEEN van_rol hier. `match` geeft dat door aan de router-roster als EXCLUDE, en dan
+            # staat de rol zelf niet in de kandidatenlijst — de match kán dus nooit "dit is van
+            # jou" antwoorden en wijst altijd iemand anders aan. In de steekproef gaf dat vier
+            # duidelijke missers: de copywriter die het herschrijven van een claim weggaf, en
+            # compliance dat zijn eigen juridische oordeel naar de Librarian stuurde.
+            ander, kind, waarom = tp.match(kern, records, reason_fn=reason_fn)
+            if ander == rol:
+                return {"uitkomst": ZELF, "rol": rol, "naar_rol": "", "domein": "",
+                        "behoefte": "", "tensie": kern, "eigen_accountability": "",
+                        "reden": f"de match wijst mij zelf aan als eigenaar ({waarom})"}
         except Exception as e:                            # noqa: BLE001 — fail-soft, luid
             log.warning("zelf-verwerking: match faalde (%s) — ik deel wat ik vond", e)
+    if ander and not _mag_ontvangen(ander, records):
+        log.info("zelf-verwerking: overdracht naar %r geweigerd — geen geldige ontvanger", ander)
+        ander = ""
     if ander:
         return {"uitkomst": NAAR_ROL, "rol": rol, "naar_rol": ander, "domein": "", "behoefte": "",
                 "tensie": kern, "reden": f"{ander} bezit dit werk ({waarom})"}

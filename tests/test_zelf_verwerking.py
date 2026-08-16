@@ -128,3 +128,39 @@ def test_een_ontbrekend_certificaat_is_een_bewijs_gat():
     r = zv.verwerk("⤴ beslissing gevraagd: de FAQ claimt circular economy maar mist certificering",
                    rol="compliance", records=RECS, gebruik_llm=False)
     assert r["uitkomst"] != zv.FOUNDER
+
+
+# ── Wat de handmatige steekproef op 17 overdrachten blootlegde ──────────────
+
+def test_de_rol_zelf_staat_in_de_kandidatenlijst():
+    """De grootste misser-oorzaak: `match(van_rol=rol)` gaf de rol door als EXCLUDE aan de
+    router-roster, dus stond hij niet in zijn eigen kandidatenlijst en kon de match nooit "dit is
+    van jou" antwoorden. Gevolg: de copywriter gaf het herschrijven van een claim weg, compliance
+    stuurde zijn eigen juridische oordeel naar de Librarian."""
+    antwoord = '{"role": "compliance", "kind": "missing_capability", "capability": ""}'
+    r = zv.verwerk("toets deze publieke claim aan de EmpCo-richtlijn", rol="compliance",
+                   records=RECS, reason_fn=_llm(antwoord))
+    assert r["uitkomst"] == zv.ZELF and "wijst mij zelf aan" in r["reden"]
+
+
+def test_werk_gaat_nooit_via_een_overdracht_naar_de_founder_rol():
+    """Uit de steekproef: de financial controller schoof het jaarverslag naar de founder-rol. Dat
+    omzeilt de hele poort — de founder bereik je via de bevoegdheidsvraag, niet via een handover."""
+    from nooch_village.founder_kaart import FOUNDER_ROL
+    recs = _Records([_Rec("financial_controller", ["Bookkeeping"]),
+                     _Rec(FOUNDER_ROL, ["Leading fundraising and financial strategy"])])
+    antwoord = ('{"role": "' + FOUNDER_ROL + '", "kind": "missing_capability", "capability": ""}')
+    r = zv.verwerk("2025 annual report completed and submitted", rol="financial_controller",
+                   records=recs, reason_fn=_llm(antwoord))
+    assert r["uitkomst"] != zv.NAAR_ROL
+
+
+def test_een_cirkel_kan_geen_werk_ontvangen():
+    """Een cirkel heeft geen handen (harde regel 7): werk erheen schuiven laat het verdwijnen in
+    een niveau in plaats van bij iemand."""
+    from nooch_village import org
+    import unittest.mock as m
+    antwoord = '{"role": "librarian", "kind": "missing_capability", "capability": ""}'
+    with m.patch.object(org, "is_circle", lambda rec: True):
+        r = zv.verwerk("iets", rol="compliance", records=RECS, reason_fn=_llm(antwoord))
+    assert r["uitkomst"] != zv.NAAR_ROL
