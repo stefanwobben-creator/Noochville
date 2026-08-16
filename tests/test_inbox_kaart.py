@@ -113,3 +113,43 @@ def test_een_verse_spanning_spreekt_zichzelf_niet_tegen():
     html = _kaart_html(_St(), n)
     assert "Wat ik van jou nodig heb" in html
     assert "raakt geen founder-bevoegdheid" not in html
+
+
+# ── Eén kop, per type een ander lijf ────────────────────────────────────────
+
+def test_een_founder_besluit_toont_de_besluit_actie():
+    n = {"id": "f", "by": "compliance", "project_id": "p1", "snippet": BESLUIT,
+         "poort": {"deur": "deur_besluit", "klasse": "compliance-besluit"}}
+    html = _kaart_html(_St(), n)
+    assert "Besluit voor jou" in html and "Bevestig, pas aan, of verwerp" in html
+
+
+def test_een_operationeel_verzoek_toont_de_accepteer_actie():
+    n = {"id": "o", "by": "compliance", "project_id": "p1", "snippet": "doe dit even",
+         "poort": {"deur": "gerouteerd", "klasse": ""}}
+    html = _kaart_html(_St(), n)
+    assert "Operationeel verzoek" in html
+    assert "Accepteer" in html and "verschijnt het als project op je bord" in html
+
+
+def test_de_herschreven_bevinding_is_de_hoofdtekst():
+    """De ruwe signalering blijft als herkomst, niet als wat je leest."""
+    n = {"id": "b", "by": "compliance", "project_id": "p1", "snippet": BESLUIT,
+         "poort": {"deur": "deur_besluit", "klasse": "compliance-besluit"},
+         "bevinding": {"ok": True,
+                       "spanning": "Op de veelgestelde-vragenpagina staat dat onze schoenen schoon "
+                                   "zijn, zonder dat ergens staat wat we daarmee bedoelen.",
+                       "voorstel": "De zin vervangen door wat we kunnen aantonen."}}
+    html = _kaart_html(_St(), n)
+    assert "zonder dat ergens staat wat we daarmee bedoelen" in html
+    assert "Voorstel:" in html
+    assert "ruwe signalering" in html          # wel bewaard, weggevouwen
+
+
+def test_een_afgekeurde_bevinding_zegt_dat_hij_herschreven_moet():
+    """Liever zichtbaar onaf dan een lege kaart."""
+    n = {"id": "x", "by": "compliance", "project_id": "p1", "snippet": BESLUIT,
+         "poort": {"deur": "deur_besluit", "klasse": "compliance-besluit"},
+         "bevinding": {"ok": False, "reden": "geen concreet voorstel"}}
+    html = _kaart_html(_St(), n)
+    assert "moet herschreven" in html and "geen concreet voorstel" in html

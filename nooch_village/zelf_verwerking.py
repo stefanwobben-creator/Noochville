@@ -34,13 +34,28 @@ log = logging.getLogger("village.zelf_verwerking")
 
 BESTAND = "verwerkingen.jsonl"
 
-ZELF     = "zelf"        # opgelost in eigen domein
-INFO     = "info"        # niets nodig, gedeeld wat er gevonden is
-NAAR_ROL = "naar_rol"    # een andere rol is nodig, mét de vraag erbij
-FOUNDER  = "founder"     # een bevoegdheid die alleen de founder heeft
+ZELF       = "zelf"        # licht: opgelost in eigen domein
+INFO       = "info"        # licht: niets nodig, gedeeld wat er gevonden is
+NAAR_ROL   = "naar_rol"    # operationeel verzoek aan een andere rol
+GOVERNANCE = "governance"  # de STRUCTUUR moet mee: een rol, accountability, domein of policy
+FOUNDER    = "founder"     # een bevoegdheid die alleen de founder heeft
 
-LABEL = {ZELF: "zelf opgelost", INFO: "info gedeeld", NAAR_ROL: "aan rol gegeven",
-         FOUNDER: "naar de founder"}
+LABEL = {ZELF: "zelf opgelost", INFO: "info gedeeld", NAAR_ROL: "operationeel verzoek",
+         GOVERNANCE: "governance-voorstel", FOUNDER: "founder-besluit"}
+
+# De vier typen zoals ze op een kaart staan. `licht` is geen kaart: die verlaat de rol niet.
+TYPE_LABEL = {NAAR_ROL: "operationeel verzoek", GOVERNANCE: "governance-voorstel",
+              FOUNDER: "founder-besluit", ZELF: "licht", INFO: "licht"}
+
+# Wanneer is een spanning STRUCTUREEL? Als het antwoord niet één handeling is maar een wijziging in
+# wie waarvoor staat. Twee signalen samen: iets structureels/terugkerends, én een structuur-object
+# (rol, accountability, domein, policy, mandaat). Eén van de twee is niet genoeg — "dit gebeurt
+# vaker" zonder object is een klacht, en "de rol van X" zonder herhaling is gewoon werk.
+_STRUCTUREEL = re.compile(r"structure\w*|terugkeren\w*|meermaals|telkens|elke week|wekelijks|"
+                          r"steeds opnieuw|systematisch|niemand (?:is|voelt zich) verantwoordelijk|"
+                          r"hoort bij niemand|geen enkele rol", re.I)
+_STRUCTUUR_OBJECT = re.compile(r"\brol\b|\brollen\b|accountabilit|verantwoordelijkheid|"
+                               r"\bdomein\b|\bpolicy\b|beleidsregel|mandaat|governance", re.I)
 
 # Wanneer is het écht van de founder? Een besluit-vraag ÉN een voorbehouden domein. De domeinen
 # staan al in de poort; hier telt bovendien dat er om een besluit gevraagd wordt — anders is
@@ -201,6 +216,14 @@ def verwerk(tekst: str, *, rol: str, records, reason_fn=None, gebruik_llm: bool 
         return {"uitkomst": FOUNDER, "rol": rol, "naar_rol": "", "domein": domein,
                 "behoefte": behoefte, "tensie": kern,
                 "reden": f"dit vraagt een besluit in een voorbehouden domein ({domein})"}
+
+    # Structureel? Dan is het antwoord geen handeling maar een wijziging in wie waarvoor staat.
+    # Dat gaat langs governance (G0-G4 + Secretary), niet langs een bord.
+    if _STRUCTUREEL.search(kern) and _STRUCTUUR_OBJECT.search(kern):
+        return {"uitkomst": GOVERNANCE, "rol": rol, "naar_rol": "", "domein": "", "behoefte": "",
+                "tensie": kern,
+                "reden": ("dit is terugkerend én raakt wie waarvoor staat — dan is het antwoord "
+                          "een structuurwijziging, geen handeling")}
 
     eigen = eigen_domein(kern, rol, records)
     if eigen:
