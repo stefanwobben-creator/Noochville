@@ -1227,6 +1227,21 @@ def main() -> None:
             print(f"   {n:>3}  {zv.LABEL.get(k, k)}")
         print(f"\n   {v['onder_de_rollen']}% lost onder de rollen op · "
               f"{v['naar_de_founder']} bereikt de founder")
+        # MAGNEET-CHECK. Eén rol die opvallend veel ontvangt is een signaal dat de matcher op een
+        # trefwoord routeert in plaats van op het doel — precies hoe de Librarian term-achtig werk
+        # naar zich toe trok. Dit hoort in de meting te staan, niet in een oog dat toevallig kijkt.
+        naar = {}
+        for r in rijen:
+            if r.get("naar_rol"):
+                naar[r["naar_rol"]] = naar.get(r["naar_rol"], 0) + 1
+        if naar:
+            n_over = sum(naar.values())
+            print("\n== ontvangers (magneet-check) ==")
+            for k, n in sorted(naar.items(), key=lambda kv: -kv[1]):
+                aandeel = round(100 * n / n_over)
+                vlag = "  ⚠ magneet?" if aandeel >= 30 and n >= 5 else ""
+                print(f"   {n:>3}  ({aandeel:>2}%)  {k}{vlag}")
+
         founder = [r for r in rijen if r["uitkomst"] == zv.FOUNDER]
         if founder:
             print("\n== wat de founder bereikt ==")
