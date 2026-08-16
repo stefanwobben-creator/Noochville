@@ -33,6 +33,7 @@ log = logging.getLogger("village.voorstel_mutatie")
 # vóór hij iets aanraakt — dezelfde fail-closed-lijn als `required_payload` bij skills.
 VELDEN = {
     "lexicon_rationale": ("concept_id", "regel"),
+    "rol_domein": ("rol_id", "domeinen", "tension", "trigger_example", "rationale"),
 }
 
 
@@ -52,8 +53,41 @@ def _lexicon_rationale(mutatie: dict, data_dir: str) -> tuple[bool, str]:
     return True, f"lexicon-concept '{cid}' geannoteerd. Rationale nu: {nieuw}"
 
 
+def _rol_domein(mutatie: dict, data_dir: str) -> tuple[bool, str]:
+    """Ken een domein toe aan een rol — via de ECHTE governance-route, niet met een record-edit.
+
+    Een domein toewijzen is een structuurwijziging: het hoort door G0-G4 en langs de Secretary, met
+    de botsingscheck van G1 erbij. Dat is precies wat we hier willen — als een ander al dat domein
+    houdt, moet dit voorstel struikelen en niet stilletjes een tweede eigenaar aanmaken.
+
+    De mens tekent op het geauthenticeerde oppervlak; deze uitvoerder zet daarna de governance-stap.
+    Dat is één handtekening op één plek, niet twee poorten achter elkaar."""
+    from nooch_village.models import ChangeKind, GovernanceChange, Proposal
+    from nooch_village.role_proposals import _submit_proposal_sync
+
+    rol = str(mutatie.get("rol_id") or "")
+    domeinen = [str(d).strip() for d in (mutatie.get("domeinen") or []) if str(d).strip()]
+    if not domeinen:
+        return False, "geen domeinen opgegeven"
+    voorstel = Proposal(
+        proposer_role=str(mutatie.get("proposer_role") or "facilitator"),
+        change=GovernanceChange(kind=ChangeKind.AMEND_ROLE, role_id=rol, add_domains=domeinen),
+        tension=str(mutatie.get("tension") or ""),
+        trigger_example=str(mutatie.get("trigger_example") or ""),
+        rationale=str(mutatie.get("rationale") or ""))
+    uit = _submit_proposal_sync(voorstel)
+    status = uit.get("status")
+    if status == "aangenomen":
+        return True, (f"governance-voorstel aangenomen: '{rol}' houdt nu het domein "
+                      f"{', '.join(domeinen)}")
+    # Ongeldig of geëscaleerd: NIET sluiten. De poort heeft iets te zeggen en dat hoort zichtbaar.
+    return False, (f"de governance-poort liet dit niet door ({status}, gate={uit.get('gate')}): "
+                   f"{uit.get('reason')}")
+
+
 _UITVOERDERS = {
     "lexicon_rationale": _lexicon_rationale,
+    "rol_domein": _rol_domein,
 }
 
 
@@ -66,6 +100,9 @@ def beschrijf(mutatie: dict | None) -> str:
     if soort == "lexicon_rationale":
         return (f"lexicon-concept '{mutatie.get('concept_id')}': rationale aanvullen met "
                 f"\"{str(mutatie.get('regel') or '')[:80]}\"")
+    if soort == "rol_domein":
+        return (f"governance-voorstel (amend_role): rol '{mutatie.get('rol_id')}' krijgt het domein "
+                f"{', '.join(mutatie.get('domeinen') or [])} — langs G0-G4 en de Secretary")
     return f"{soort} ({', '.join(f'{k}={v}' for k, v in mutatie.items() if k != 'soort')})"
 
 
