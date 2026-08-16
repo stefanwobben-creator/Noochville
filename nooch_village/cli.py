@@ -1337,8 +1337,11 @@ def main() -> None:
             print("Gebruik: village poort <e-mail-van-de-mens> [--live]"); sys.exit(1)
         live = "--live" in sys.argv
         targets = _person_targets(st, mail)
+        # --lever-af schuift werk naar andere borden; dat is de risicovolle helft en staat UIT
+        # tot de steekproef schoon is. Zonder die vlag wordt er alleen getrieerd en vastgehouden.
         uit = tpoort.draai(notif=st.notif, projects=st.projects, records=st.records,
-                           targets=targets, dry_run=not live)
+                           targets=targets, dry_run=not live,
+                           lever_af="--lever-af" in sys.argv)
         r = uit["rapport"]
         print(f"\n{'LIVE' if live else 'DRY-RUN'} — {r['in']} open item(s) door de poort")
         for deur, n in sorted(uit["per_deur"].items(), key=lambda kv: -kv[1]):
