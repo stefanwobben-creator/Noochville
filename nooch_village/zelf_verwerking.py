@@ -55,7 +55,13 @@ _BEVOEGDHEID = {
 
 
 def _woorden(tekst: str) -> set[str]:
-    return {w for w in re.findall(r"[a-zA-Z][a-zA-Z\-]{4,}", (tekst or "").lower())}
+    """Betekenisdragende woorden, vergeleken op hun eerste vijf letters.
+
+    Exacte tokenmatch was te streng: "claim" en "claims", "evidence" en "evidences" telden als
+    verschillende woorden, waardoor de eigen-accountability-check vrijwel nooit aansloeg en werk
+    dat een rol duidelijk bezit toch als "niet van mij" las. Vijf letters is geen stemmer, maar
+    het vangt meervoud en verbuiging zonder losse woorden aan elkaar te plakken."""
+    return {w[:5] for w in re.findall(r"[a-zA-Z][a-zA-Z\-]{4,}", (tekst or "").lower())}
 
 
 def eigen_domein(tekst: str, rol: str, records, *, drempel: int = 2) -> str:

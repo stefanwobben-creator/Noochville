@@ -423,7 +423,7 @@ def _bestaand_project(projects, rol: str, tekst: str) -> str:
 
 
 def draai(*, notif, projects, records, targets, reason_fn=None, dry_run: bool = True,
-          gebruik_llm: bool = True) -> dict:
+          gebruik_llm: bool = True, lever_af: bool = True) -> dict:
     """Draai de poort over de open founder-notificaties en handel af wat het dorp zelf bezit.
 
     Wat er gebeurt per uitkomst:
@@ -452,7 +452,19 @@ def draai(*, notif, projects, records, targets, reason_fn=None, dry_run: bool = 
         notif.set_poort(n.get("id"), {"deur": b.deur, "reden": b.reden, "bewijs": b.bewijs,
                                       "naar_rol": b.naar_rol, "sleutel": b.sleutel,
                                       "klasse": b.klasse})
-        if b.deur == GEROUTEERD:
+        if b.deur == GEROUTEERD and not lever_af:
+            # VASTHOUDEN, niet afleveren. Werk naar een ander bord schuiven is de risicovolle helft
+            # en die wacht op een schone steekproef; uit de founder-inbox halen is dat niet. Het
+            # oordeel staat op het item, dus het spoor blijft en de aflevering kan later alsnog.
+            notif.mark_item_processed(n.get("id"),
+                                      outcome=f"getrieerd en vastgehouden voor {b.naar_rol} "
+                                              f"(nog niet afgeleverd) — {b.reden}",
+                                      by="tensie-poort")
+            notif.archive_item(n.get("id"))
+            uit["gearchiveerd"] += 1
+            uit.setdefault("vastgehouden", []).append({"rol": b.naar_rol,
+                                                       "tensie": str(n.get("snippet") or "")[:160]})
+        elif b.deur == GEROUTEERD:
             tekst = str(n.get("snippet") or "")
             pid = _bestaand_project(projects, b.naar_rol, tekst)
             if not pid:

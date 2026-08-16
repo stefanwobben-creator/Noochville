@@ -159,12 +159,46 @@ def render_inbox(st, targets, csrf_token: str = "", naam: str = "", done: str = 
 
 
 # ── de verwerk-pagina (twee panelen) ─────────────────────────────────────────────
+def _kaart_html(st, n: dict) -> str:
+    """De vier-regel-kaart voor een spanning die de founder bereikt. "" als het geen kaart-item is.
+
+    Fail-soft: valt hier iets om, dan valt de pagina terug op de rauwe tekst — een leeg scherm is
+    erger dan een lelijke regel."""
+    try:
+        from nooch_village import founder_kaart as fkaart, tensie_poort as tp, zelf_verwerking as zv
+
+        tekst = str(n.get("snippet") or "")
+        kern = tp.kern(tekst)
+        _, behoefte = zv.founder_behoefte(tekst)
+        k = fkaart.kaart(n, projects=getattr(st, "projects", None),
+                         records=getattr(st, "records", None),
+                         voorstel={"behoefte": behoefte})
+        if not k.get("rol") and not behoefte:
+            return ""                                   # niets te vertellen → gewoon de tekst
+        regels = [f"<p class='ptitle'>{_e(k['rol'])} werpt dit op</p>"]
+        if k.get("vanuit"):
+            regels.append(f"<p class='muted'>vanuit accountability “{_e(k['vanuit'][:120])}”</p>")
+        regels.append(f"<div class='fbubble'>{_e(kern or tekst)}</div>")
+        if behoefte:
+            regels.append(f"<p><strong>Wat ik van jou nodig heb:</strong> {_e(behoefte)}</p>")
+        if not k.get("hoort_hier"):
+            regels.append("<p class='muted'>⚠ dit raakt geen founder-bevoegdheid — kandidaat voor "
+                          "herroutering</p>")
+        return "".join(regels)
+    except Exception:                                   # noqa: BLE001 — nooit het scherm breken
+        return ""
+
+
 def _spanning_pane(st, n: dict) -> str:
     """Links: de volledige spanning met wie/rol, bron en leeftijd, plus het verwerk-record tot nu toe."""
     sep = "<span class='fsep'>·</span>"
     meta = (f"<div class='rdr-meta'><span class='muted'>via {_e(_who(st, n))}</span> {sep} "
             f"{_source_link(st, n)} {sep} <span class='muted'>{_e(_stamp(n.get('at')))}</span></div>")
-    body = _e(n.get("snippet") or "(no content)").replace("\n", "<br>")
+    # DE KAART, en niet de rauwe snippet. Dit is het scherm dat de founder echt opent: stond hier de
+    # dump ("Project van X vastgelopen op 1 mens-/extern item: 'Deze taak vereist…'"), dan is alle
+    # herformulering in de CLI voor hem onzichtbaar geweest. Vier regels: wie werpt het op, vanuit
+    # welke eigen verantwoordelijkheid, wat de spanning is, en wat hij van de founder nodig heeft.
+    body = _kaart_html(st, n) or _e(n.get("snippet") or "(no content)").replace("\n", "<br>")
     # De volledige vraag van de bewoner (founder, 19 jul): de snippet is maar 160 tekens,
     # het échte voorstel staat in de bron-feed-entry waar de notificatie naar wijst.
     # Zonder die tekst kan de mens niet beslissen ("er staat 2 besluiten maar niet welke").

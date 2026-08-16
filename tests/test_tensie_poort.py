@@ -474,3 +474,27 @@ def test_een_vastgelopen_item_blijft_van_de_eigenaar():
                                             "park": {"reden": "human"}}}),
                  records=RECS, reason_fn=_llm(antwoord))
     assert b.deur == tp.GEROUTEERD and b.naar_rol == "compliance"
+
+
+# ── 9. De veilige helft: triëren zonder werk te verplaatsen ─────────────────
+
+def test_vasthouden_levert_geen_werk_af_maar_haalt_het_wel_weg():
+    """Triage uit de inbox is laag risico; werk naar een ander bord schuiven niet. Zonder
+    `lever_af` gebeurt alleen het eerste — met het oordeel op het item, zodat de aflevering later
+    alsnog kan."""
+    nf = _Notif(_items("[rol compliance onbemand] beoordeel claim X"))
+    led = _Ledger()
+    r = tp.draai(notif=nf, projects=led, records=RECS, targets=[("role", "x")],
+                 dry_run=False, lever_af=False)
+    assert led.gemaakt == []                                   # niets naar een ander bord
+    assert nf._i[0]["archived"]                                # wel uit de founder-inbox
+    assert "vastgehouden" in nf._i[0]["outcome"]
+    assert r["vastgehouden"] and r["vastgehouden"][0]["rol"] == "compliance"
+
+
+def test_met_lever_af_wordt_het_wel_afgeleverd():
+    nf = _Notif(_items("[rol compliance onbemand] beoordeel claim X"))
+    led = _Ledger()
+    tp.draai(notif=nf, projects=led, records=RECS, targets=[("role", "x")],
+             dry_run=False, lever_af=True)
+    assert led.gemaakt and led.gemaakt[0][0] == "compliance"

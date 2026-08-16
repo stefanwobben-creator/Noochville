@@ -140,7 +140,9 @@ def test_de_rol_zelf_staat_in_de_kandidatenlijst():
     antwoord = '{"role": "compliance", "kind": "missing_capability", "capability": ""}'
     r = zv.verwerk("toets deze publieke claim aan de EmpCo-richtlijn", rol="compliance",
                    records=RECS, reason_fn=_llm(antwoord))
-    assert r["uitkomst"] == zv.ZELF and "wijst mij zelf aan" in r["reden"]
+    # ZELF via de eigen-accountability-check of via de match maakt niet uit; het gaat erom dat het
+    # werk NIET wordt weggegeven aan een ander bureau.
+    assert r["uitkomst"] == zv.ZELF and r["naar_rol"] == ""
 
 
 def test_werk_gaat_nooit_via_een_overdracht_naar_de_founder_rol():
@@ -245,3 +247,16 @@ def test_de_rollen_komen_uit_hun_domein_niet_uit_hun_id():
     assert zv._rol_met_domein(recs, zv._LEXICON_DOMEIN) == "librarian"
     assert zv._rol_met_domein(recs, zv._CLAIM_DOMEIN) == "compliance"
     assert zv._rol_met_domein(recs, zv._METHODE_DOMEIN) == ""      # governance-gat, geen gok
+
+
+def test_meervoud_telt_als_hetzelfde_woord():
+    """Exacte tokenmatch liet 'claim' en 'claims' als verschillende woorden gelden, waardoor de
+    eigen-accountability-check vrijwel nooit aansloeg — en dan leest werk dat een rol duidelijk
+    bezit als 'niet van mij'. Zichtbaar geworden op het scherm: de kaart toonde geen 'vanuit
+    accountability'-regel bij een claim-item van compliance."""
+    # Twee woorden moeten aansluiten: 'claim(s)' en 'EmpCo'. Zonder prefix-vergelijking telde
+    # alleen 'EmpCo' en bleef de check onder de drempel.
+    assert zv._woorden("de claims toetsen") & zv._woorden("een claim beoordelen") == {"claim"}
+    recs = _domein_recs()
+    acc = zv.eigen_domein("toets de claims aan de EmpCo-richtlijn", "compliance", recs)
+    assert acc == "Toetsen aan EmpCo"
