@@ -64,13 +64,36 @@ def maybe_finish(ledger, pid: str, clid: str) -> bool:
     return ledger.mark_awaiting_review(pid)
 
 
+def verzoekkaart(*, van_rol: str, van_accountability: str, spanning: str, vraag: str,
+                 done: str, naam=lambda r: r) -> str:
+    """De symmetrische van-aan-kaart. Wie vraagt, vanuit welke verantwoordelijkheid, wat hij tegenkwam,
+    en wat hij concreet van jou nodig heeft.
+
+    Zonder deze vier is een overdracht een dump: de ontvanger ziet werk verschijnen zonder te weten
+    van wie, waarom het bij hém ligt of wat er precies gevraagd wordt — en dan is de eerste handeling
+    van elke ontvanger het uitzoeken van iets wat de gever al wist."""
+    regels = [f"📥 Verzoek van {naam(van_rol) if van_rol else 'een rol'}"]
+    if van_accountability:
+        regels.append(f"vanuit accountability: {van_accountability[:120]}")
+    if spanning:
+        regels.append(f"wat zij tegenkwamen: {spanning[:300]}")
+    regels.append(f"wat zij van jou vragen: {(vraag or done)[:300]}")
+    regels.append(f"klaar wanneer: {done[:160]}")
+    return "\n".join(regels)
+
+
 def handoff(ledger, naar_rol: str, titel: str, *, done_criterium: str = "",
-            records=None, van_pid: str = "") -> dict:
+            records=None, van_pid: str = "", van_rol: str = "", van_accountability: str = "",
+            spanning: str = "", vraag: str = "") -> dict:
     """Draag werk over aan een andere rol: een queued project op háár bord, met terugverwijzing.
 
     Dit is de gedeelde kern van het projectverzoek-patroon: de `projectverzoek`-skill (de rol doet het
     zelf) en de mens-knop in de cockpit lopen allebei hierlangs, zodat een overdracht er altijd
-    hetzelfde uitziet — reference, don't copy. Fail-soft: onbekende rol of ontbrekende store → error."""
+    hetzelfde uitziet — reference, don't copy. Fail-soft: onbekende rol of ontbrekende store → error.
+
+    `van_rol`, `van_accountability`, `spanning` en `vraag` maken de kaart SYMMETRISCH. Ze zijn
+    optioneel omdat bestaande aanroepers ze nog niet meegeven; ontbreken ze, dan zegt de kaart dat
+    ("een rol") in plaats van te doen alsof er niets te weten viel."""
     naar = (naar_rol or "").strip()
     titel = (titel or "").strip()
     if not naar or not titel:
@@ -86,13 +109,18 @@ def handoff(ledger, naar_rol: str, titel: str, *, done_criterium: str = "",
                             links=[van_pid] if van_pid else None)
     except Exception as e:                     # noqa: BLE001 — nette fout terug, geen stacktrace omhoog
         return {"error": f"kon projectverzoek niet plaatsen: {e}"}
-    try:                                       # terugverwijzing op het nieuwe project (fail-soft)
-        ledger.add_feed_entry(
-            pid, f"📥 Binnengekomen als projectverzoek (overdracht van werk dat hier hoort). "
-                 f"Klaar wanneer: {done[:160]}", kind="system", author_type="role")
+    def _naam(rid):
+        rec = records.get(rid) if records is not None else None
+        return (getattr(getattr(rec, "definition", None), "name", "") or rid) if rec else rid
+
+    kaart = verzoekkaart(van_rol=van_rol, van_accountability=van_accountability,
+                         spanning=spanning or titel, vraag=vraag, done=done, naam=_naam)
+    try:                                       # de verzoekkaart op het nieuwe project (fail-soft)
+        ledger.add_feed_entry(pid, kaart, kind="system", author_type="role",
+                              author_id=van_rol or "")
     except Exception:
         pass
-    return {"ok": True, "pid": pid, "naar_rol": naar, "titel": titel[:200]}
+    return {"ok": True, "pid": pid, "naar_rol": naar, "titel": titel[:200], "kaart": kaart}
 
 
 def resolve_item(ledger, pid: str, clid: str, item_id: str, actie: str, *,
