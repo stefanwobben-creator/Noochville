@@ -230,6 +230,15 @@ def _bootstrap(dd: str) -> None:
                 "opruiming: %d stale onbemand-notificatie(s) ingetrokken", _op["gearchiveerd"])
     except Exception as _e:                              # noqa: BLE001
         logging.getLogger("village.cockpit").warning("opruiming overgeslagen: %s", _e)
+    # De haak bij het ONTSTAAN: elke nieuwe spanning voor een mens-bemande rol krijgt meteen zijn
+    # bevinding (in gewone taal) en zijn type. Eén call per spanning, niet in een batch — wie hem
+    # later opent leest de al-geschreven tekst. Fail-soft: valt dit om, dan blijft de rauwe
+    # notificatie staan, want een niet-verrijkte spanning is nog steeds een spanning.
+    try:
+        from nooch_village.spanning_ontstaat import maak_verrijker
+        st.notif.set_verrijker(maak_verrijker(st.records, st.assign, dd))
+    except Exception as _e:                              # noqa: BLE001
+        logging.getLogger("village.cockpit").warning("spanning-verrijker niet gezet: %s", _e)
     migrate_data_sources(dd)      # legacy visitors_day → plausible_visitors_day + Plausible actief (idempotent)
     st.metrics.migrate_metric_bindings(st.defs)   # wees-KPI's: veld/categorie uit de def + reeks-tegel-dim (idempotent)
     # OpenAlex: alle oude CUMULATIEVE concept-reeksen (openalex_works_day/citations_day, incl. ::concept)
@@ -304,6 +313,7 @@ from nooch_village.views.bronnen import render_bronnen
 from nooch_village.views.skills import render_skills
 from nooch_village.views.search import render_search, render_search_fragment
 from nooch_village.views.claims import render_claims, render_rapport, rol_voor
+from nooch_village import founder_kaart as _founder_kaart
 from nooch_village.copy_stack import StackConfig as CopyStackConfig
 from nooch_village.views.copy_prompt import render_copy_prompt
 from nooch_village.views.founder_flow import render_founder_flow
@@ -4170,6 +4180,67 @@ def _act_tag_voorstel_besluit(c):
                    else "✗ proposal not found or already decided")
 
 
+def _act_verzoek_besluit(c):
+    # AUTHZ: rolvervuller of Circle Lead — beslissen over een verzoek AAN jouw rol is operationeel
+    # werk binnen die rol. Wie de rol niet vervult, beslist niet over haar bord.
+    #
+    # Drie uitkomsten, en alle drie sluiten de spanning: accepteren zet het als project op het bord
+    # (dát is de handeling waar de kaart om vraagt), aanpassen stuurt een herformulering terug naar
+    # de vrager, weigeren sluit met een reden. Een verzoek dat blijft hangen is precies wat de
+    # kaart moest wegnemen.
+    nxt, st, g, username = c.nxt, c.st, c.g, c.username
+    nid, keuze, tekst = g("nid"), g("keuze"), g("tekst")
+    n = st.notif.get(nid) if hasattr(st.notif, "get") else None
+    n = n or next((x for x in st.notif.all() if x.get("id") == nid), None)
+    if n is None:
+        return nxt, "✗ deze spanning bestaat niet meer"
+    rol = str(n.get("target_id") or "")
+    fout = _role_gate(rol, username, st)
+    if fout:
+        return nxt, fout
+    bev = dict(n.get("bevinding") or {})
+    titel = (bev.get("voorstel") or bev.get("spanning") or n.get("snippet") or "")[:200]
+
+    if keuze == "accepteer":
+        from nooch_village.project_items import handoff
+        van = str(n.get("by") or "")
+        uit = handoff(st.projects, rol, titel, records=st.records, van_rol=van,
+                      van_accountability=_founder_kaart.eigen_accountability(
+                          van, str(n.get("snippet") or ""), st.records),
+                      spanning=bev.get("spanning") or str(n.get("snippet") or ""),
+                      vraag=bev.get("voorstel") or "")
+        if uit.get("error"):
+            return nxt, f"✗ {uit['error']}"
+        st.notif.mark_item_processed(nid, outcome=f"geaccepteerd → project {uit['pid']}",
+                                     by=username or "")
+        st.notif.archive_item(nid)
+        return nxt, f"✓ geaccepteerd — staat als project op het bord van {_name(st.records.get(rol))}"
+
+    if keuze == "aanpassen":
+        if not tekst.strip():
+            return nxt, "✗ schrijf op hoe het verzoek wél zou kloppen"
+        st.notif.add_outcome(nid, intent="aanpassen", otype="note", label=tekst[:200],
+                             by=username or "")
+        van = str(n.get("by") or "")
+        if van:
+            st.notif.add("role", van, n.get("project_id") or "", by=rol,
+                         snippet=f"↩ herformulering gevraagd op je verzoek: {tekst[:120]}")
+        return nxt, "✓ herformulering teruggestuurd naar de vrager"
+
+    if keuze == "weiger":
+        if not tekst.strip():
+            return nxt, "✗ een weigering zonder reden leert de vrager niets"
+        st.notif.mark_item_processed(nid, outcome=f"geweigerd: {tekst[:160]}", by=username or "")
+        st.notif.archive_item(nid)
+        van = str(n.get("by") or "")
+        if van:
+            st.notif.add("role", van, n.get("project_id") or "", by=rol,
+                         snippet=f"✗ je verzoek is geweigerd: {tekst[:120]}")
+        return nxt, "✓ geweigerd, met reden terug naar de vrager"
+
+    return nxt, "✗ onbekende keuze"
+
+
 def _act_copy_stack_inclusie(c):
     # AUTHZ: anchor-lead — org-brede configuratie. Welke rol meetelt in de schrijf-stack van een
     # andere rol raakt hoe elke tekst van die rol klinkt; dat is geen keuze van de schrijver.
@@ -4594,6 +4665,7 @@ ACTIONS = {
     "tag_voorstel_besluit": _act_tag_voorstel_besluit,
     "tag_onderhoud_run": _act_tag_onderhoud_run,
     "copy_stack_inclusie": _act_copy_stack_inclusie,
+    "verzoek_besluit": _act_verzoek_besluit,
     "kb_blacklist_leeg": _act_kb_blacklist_leeg,
     "kb_atoom_edit": _act_kb_atoom_edit,
     "kb_atoom_related": _act_kb_atoom_related,

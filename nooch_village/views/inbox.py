@@ -352,7 +352,32 @@ def _wizard_pane(n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
     # nee of een suggestie kunnen zeggen — het antwoord landt als reactie op de bron-feed
     # (@rol, de bewoner pakt het zelf op) en de spanning sluit. Alleen als er een
     # bron-project is; de triage-intenties hieronder blijven voor al het andere.
+    # DE DRIE KNOPPEN op een operationeel verzoek: accepteren, aanpassen, weigeren. Dat is het
+    # "in één handeling" waar de kaart om vraagt — een uitleg zonder knop laat de lezer alsnog
+    # zoeken waar hij ja moet zeggen.
     besluit = ""
+    if _type_van(n) == "naar_rol":
+        def _vf(keuze: str, label: str, cls: str, hint: str, verplicht: bool) -> str:
+            req = " required" if verplicht else ""
+            return (f"<details class='wo-ocd box-details'><summary><strong>{label}</strong></summary>"
+                    f"<form method='post' action='/action' class='wo-oc'>"
+                    f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+                    f"<input type='hidden' name='nid' value='{_e(nid)}'>"
+                    f"<input type='hidden' name='keuze' value='{keuze}'>"
+                    f"<input type='hidden' name='next' value='/inbox'>"
+                    f"<textarea name='tekst' rows='2' placeholder='{_e(hint)}' "
+                    f"aria-label='note'{req}></textarea>"
+                    f"<button class='btn {cls}sm' name='action' value='verzoek_besluit'>{label}"
+                    f"</button></form></details>")
+        return ("<div class='rdr-pane'><h3>Wat doe je met dit verzoek?</h3>"
+                + _vf("accepteer", "✓ Accepteren", "ok ",
+                      "optioneel: een notitie bij je ja", False)
+                + _vf("aanpassen", "✎ Formulering aanpassen", "",
+                      "hoe zou het verzoek wél kloppen? gaat terug naar de vrager", True)
+                + _vf("weiger", "✗ Weigeren", "",
+                      "waarom niet — de vrager leert hiervan", True)
+                + "<p class='muted'>Bij accepteren verschijnt dit als project op je bord.</p></div>")
+
     if n.get("project_id"):
         def _bf(keuze: str, label: str, cls: str, hint: str, verplicht: bool) -> str:
             req = " required" if verplicht else ""

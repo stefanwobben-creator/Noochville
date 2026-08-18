@@ -7,6 +7,8 @@ compliance" maar "hier moet iemand tekenen die als enige mag tekenen".
 """
 from __future__ import annotations
 
+import pytest
+
 from nooch_village import zelf_verwerking as zv
 
 
@@ -282,3 +284,58 @@ def test_een_rol_noemen_zonder_herhaling_is_gewoon_werk():
     r = zv.verwerk("de rol van compliance moet deze claim beoordelen", rol="compliance",
                    records=RECS, gebruik_llm=False)
     assert r["uitkomst"] != zv.GOVERNANCE
+
+
+# ── Toestemming vragen is geen zelf-doen ───────────────────────────────────
+#
+# Uit de bevinding-dry-run: meerdere `licht`-items schreven "Geef mij de ruimte om onderzoek te
+# doen". Het type zei "doe het zelf", de tekst vroeg toestemming. Die twee kunnen niet allebei waar
+# zijn: zelf-doen vereist niemand-anders-nodig ÉN de autoriteit hebben.
+
+@pytest.mark.parametrize("voorstel", [
+    "Geef mij de ruimte om onderzoek te doen naar drie alternatieven.",
+    "Geef toestemming om te onderzoeken of lokale productie haalbaar is.",
+    "Mag ik deze drie leveranciers benaderen?",
+    "Goedkeuring nodig voor het benaderen van de leverancier.",
+    "May I proceed with this analysis?",
+])
+def test_een_voorstel_dat_toestemming_vraagt_is_geen_zelf_doen(voorstel, tmp_path):
+    r = zv.verwerk("onderzoek naar alternatieve materialen voor de zolen", rol="harry_hemp",
+                   records=RECS, gebruik_llm=False, voorstel=voorstel, data_dir=str(tmp_path))
+    assert r["uitkomst"] != zv.ZELF
+    assert r["autonomie_signaal"]
+
+
+def test_een_voorstel_zonder_toestemmingsvraag_blijft_zelf_doen(tmp_path):
+    r = zv.verwerk("Gathering scientific evidence by searching OpenAlex for new studies",
+                   rol="harry_hemp", records=RECS, gebruik_llm=False,
+                   voorstel="Ik breng de drie meest geciteerde studies in kaart.",
+                   data_dir=str(tmp_path))
+    assert r["uitkomst"] == zv.ZELF
+
+
+def test_het_autonomie_signaal_wordt_per_rol_geteld(tmp_path):
+    """Een rol die binnen zijn domein steeds toestemming vraagt legt een governance-gat bloot. Dat
+    patroon zie je alleen als je het telt."""
+    for _ in range(3):
+        zv.verwerk("onderzoek naar materialen", rol="harry_hemp", records=RECS, gebruik_llm=False,
+                   voorstel="Geef mij de ruimte om dit te onderzoeken.", data_dir=str(tmp_path))
+    zv.verwerk("iets anders", rol="librarian", records=RECS, gebruik_llm=False,
+               voorstel="Mag ik dit woord toevoegen?", data_dir=str(tmp_path))
+    assert zv.autonomie_per_rol(str(tmp_path)) == {"harry_hemp": 3, "librarian": 1}
+
+
+def test_het_signaal_zegt_welke_zinsnede_het_was(tmp_path):
+    """Niet stil wegschrijven: de zinsnede staat erbij, zodat de latere governance-vraag te
+    onderbouwen is met wat er letterlijk stond."""
+    zv.verwerk("onderzoek", rol="harry_hemp", records=RECS, gebruik_llm=False,
+               voorstel="Geef toestemming om dit te doen.", data_dir=str(tmp_path))
+    rij = zv._lees(str(tmp_path), "autonomie_signaal.jsonl")[0]
+    assert rij["rol"] == "harry_hemp" and "toestemming" in rij["zinsnede"].lower()
+    assert rij["voorstel"].startswith("Geef toestemming")
+
+
+def test_ook_werk_van_het_eigen_bord_valt_onder_de_regel(tmp_path):
+    r = zv.verwerk("een taak op mijn bord", rol="harry_hemp", records=RECS, gebruik_llm=False,
+                   voorstel="Mag ik hiermee verder?", van_eigen_bord=True, data_dir=str(tmp_path))
+    assert r["uitkomst"] == zv.GOVERNANCE and r["autonomie_signaal"]

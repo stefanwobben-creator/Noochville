@@ -4,16 +4,31 @@ Lichtgewicht store (data/notifications.json). Een notificatie heeft een doel (ro
 verwijst naar het project + de feed-entry, en draagt een snippet voor de weergave.
 """
 from __future__ import annotations
+import logging
 import os
 import time
 import uuid
 
 from nooch_village.util import atomic_write_json, read_json
 
+log = logging.getLogger("village.notificaties")
+
 
 class NotifStore:
-    def __init__(self, path: str):
+    """Notificaties, plus de haak bij het ONTSTAAN.
+
+    Elke nieuwe spanning gaat door `add`: de enige trechter waar ze allemaal doorheen komen. De
+    store blijft dom — hij roept alleen een haak aan die de aanroeper zet — zodat hier geen
+    model-aanroep in de opslaglaag belandt.
+
+    De haak zit op de INSTANTIE en niet op de module. Een globale versie lekte naar elke test die
+    de cockpit opstartte: die zette hem, en daarna deed elke `add` in elke andere test stilletjes
+    een model-aanroep. Een haak die verder reikt dan het object dat hem draagt, is geen haak maar
+    een verrassing."""
+
+    def __init__(self, path: str, verrijker=None):
         self.path = path
+        self._verrijker = verrijker
         self._items: list[dict] = read_json(path, [], expect=list)
 
     def _save(self) -> None:
@@ -31,7 +46,19 @@ class NotifStore:
         }
         self._items.append(n)
         self._save()
+        if self._verrijker is not None:
+            try:
+                extra = self._verrijker(dict(n)) or {}
+                if extra:
+                    n.update(extra)
+                    self._save()
+            except Exception as e:                   # noqa: BLE001 — verrijken mag nooit een
+                log.warning("verrijken van notificatie %s faalde: %s", n.get("id"), e)
         return n
+
+    def set_verrijker(self, fn) -> None:
+        """Zet (of wis) de haak op déze store."""
+        self._verrijker = fn
 
     def for_targets(self, targets) -> list[dict]:
         """Notificaties voor een set (type, id)-doelen, nieuwste eerst."""
