@@ -164,3 +164,27 @@ def test_een_governance_spanning_krijgt_ook_een_type_en_een_lijf():
     html = _kaart_html(_St(), n)
     assert "Governance-voorstel" in html
     assert "schaadt of ons achteruit zet" in html
+
+
+# ── De drie knoppen op een operationeel verzoek ─────────────────────────────
+
+def test_een_operationeel_verzoek_krijgt_drie_echte_knoppen():
+    """Het eerlijke restant van "in één handeling": een uitleg zonder knop laat de lezer alsnog
+    zoeken waar hij ja moet zeggen."""
+    from nooch_village.views.inbox import _wizard_pane
+    n = {"id": "o", "by": "compliance", "project_id": "p1", "snippet": "zet die zin op de pagina",
+         "poort": {"deur": "gerouteerd", "klasse": ""}}
+    html = _wizard_pane(n, "csrf-token", "", "")
+    assert "verzoek_besluit" in html
+    for label in ("Accepteren", "Formulering aanpassen", "Weigeren"):
+        assert label in html
+    assert "als project op je bord" in html
+
+
+def test_een_founder_besluit_houdt_zijn_eigen_wizard():
+    """De drie knoppen zijn voor verzoeken; een besluit heeft zijn eigen vorm."""
+    from nooch_village.views.inbox import _wizard_pane
+    n = {"id": "f", "by": "compliance", "project_id": "p1", "snippet": BESLUIT,
+         "poort": {"deur": "deur_besluit", "klasse": "compliance-besluit"}}
+    html = _wizard_pane(n, "csrf-token", "", "")
+    assert "verzoek_besluit" not in html
