@@ -176,6 +176,48 @@ def domein_grens(naar_rol: str, tekst: str, records) -> tuple[str, str]:
     return "", "dit raakt het lexicon-domein niet — een term in de tekst is geen routeersignaal"
 
 
+# ── Toestemming vragen is geen zelf-doen ───────────────────────────────────
+#
+# In de eerste bevinding-dry-run schreven meerdere `licht`-items een voorstel als "Geef mij de
+# ruimte om onderzoek te doen" of "Geef toestemming om te onderzoeken". Het type zei "doe het
+# zelf", de tekst vroeg toestemming. Die twee kunnen niet allebei waar zijn.
+#
+# Zelf-doen vereist TWEE dingen: niemand anders nodig, ÉN de rol heeft de autoriteit. Ontbreekt het
+# tweede, dan is het geen licht werk maar een gat: of iemand moet het geven (verzoek), of het hoort
+# in de structuur geborgd te worden (governance).
+_VRAAGT_TOESTEMMING = re.compile(
+    r"geef (?:mij |me )?(?:de )?(?:ruimte|toestemming|akkoord|groen licht)|"
+    r"toestemming (?:om|voor|nodig)|\bmag ik\b|\bmogen wij\b|"
+    r"goedkeuring (?:nodig|vragen)|met (?:jouw|je) akkoord|als (?:jij|je) akkoord|"
+    r"\bpermission\b|\bapproval\b|\bmay I\b|are we allowed", re.I)
+
+
+def vraagt_toestemming(tekst: str) -> str:
+    """De zinsnede waarmee om toestemming wordt gevraagd, of "". """
+    m = _VRAAGT_TOESTEMMING.search(tekst or "")
+    return m.group(0) if m else ""
+
+
+def autonomie_signaal(data_dir: str, *, rol: str, tensie: str, voorstel: str, zinsnede: str,
+                      eigen_accountability: str = "") -> bool:
+    """Leg vast dat een rol toestemming vraagt voor iets wat binnen zijn eigen werk lijkt te vallen.
+
+    Niet stil wegschrijven: een rol die binnen zijn domein steeds toestemming vraagt, legt een
+    governance-gat bloot dat later een voorstel wordt ("deze rol mist mandaat, of denkt dat te
+    missen"). Dat patroon zie je alleen als je het per rol telt."""
+    return _append(data_dir, "autonomie_signaal.jsonl",
+                   {"rol": rol, "tensie": tensie[:300], "voorstel": voorstel[:300],
+                    "zinsnede": zinsnede, "eigen_accountability": eigen_accountability[:160]})
+
+
+def autonomie_per_rol(data_dir: str) -> dict:
+    """Hoe vaak vroeg elke rol toestemming? De teller die het gat zichtbaar maakt."""
+    uit: dict = {}
+    for r in _lees(data_dir, "autonomie_signaal.jsonl"):
+        uit[r.get("rol", "?")] = uit.get(r.get("rol", "?"), 0) + 1
+    return dict(sorted(uit.items(), key=lambda kv: -kv[1]))
+
+
 def _mag_ontvangen(rol_id: str, records) -> bool:
     """Mag deze rol werk ONTVANGEN via een rol-naar-rol-overdracht?
 
@@ -202,7 +244,7 @@ def _mag_ontvangen(rol_id: str, records) -> bool:
 
 
 def verwerk(tekst: str, *, rol: str, records, reason_fn=None, gebruik_llm: bool = True,
-            van_eigen_bord: bool = False) -> dict:
+            van_eigen_bord: bool = False, voorstel: str = "", data_dir: str = "") -> dict:
     """De eerste handeling van de rol die de spanning voelt.
 
     Volgorde: is dit een bevoegdheidsvraag → founder; kan ik het zelf → zelf; bezit een ander het
@@ -216,6 +258,23 @@ def verwerk(tekst: str, *, rol: str, records, reason_fn=None, gebruik_llm: bool 
         return {"uitkomst": FOUNDER, "rol": rol, "naar_rol": "", "domein": domein,
                 "behoefte": behoefte, "tensie": kern,
                 "reden": f"dit vraagt een besluit in een voorbehouden domein ({domein})"}
+
+    # TOESTEMMING VRAGEN IS GEEN ZELF-DOEN. Zelf-doen vereist twee dingen: niemand anders nodig ÉN
+    # de autoriteit hebben. Vraagt het voorstel om toestemming, dan ontbreekt het tweede — en dan is
+    # het per definitie geen licht werk, ongeacht of het op het eigen bord staat of in de eigen
+    # accountability valt. Eén plek, vóór álle licht-paden, want in twee losse checks lekte hij weg.
+    zin = vraagt_toestemming(voorstel or kern)
+    if zin:
+        eigen_acc = eigen_domein(kern, rol, records)
+        if data_dir:
+            autonomie_signaal(data_dir, rol=rol, tensie=kern, voorstel=voorstel or "",
+                              zinsnede=zin, eigen_accountability=eigen_acc)
+        waarom = (f"dit valt onder mijn eigen accountability ({eigen_acc[:60]}) maar het voorstel "
+                  f"vraagt toestemming" if eigen_acc else "het voorstel vraagt toestemming")
+        return {"uitkomst": GOVERNANCE, "rol": rol, "naar_rol": "", "domein": "", "behoefte": "",
+                "tensie": kern, "eigen_accountability": eigen_acc, "autonomie_signaal": zin,
+                "reden": (f"{waarom} (\"{zin}\") — óf ik heb het mandaat en hoef niet te vragen, "
+                          f"óf het mandaat ontbreekt en dat hoort geborgd")}
 
     # Structureel? Dan is het antwoord geen handeling maar een wijziging in wie waarvoor staat.
     # Dat gaat langs governance (G0-G4 + Secretary), niet langs een bord.
@@ -284,22 +343,21 @@ def pad(data_dir: str) -> str:
     return os.path.join(data_dir, BESTAND)
 
 
-def leg_vast(data_dir: str, verwerking: dict) -> bool:
-    """Append-only. Dit is systeemstatus, geen wachtrij: er wordt niets afgevinkt."""
+def _append(data_dir: str, bestand: str, rij: dict) -> bool:
     try:
         os.makedirs(data_dir, exist_ok=True)
-        with open(pad(data_dir), "a", encoding="utf-8") as fh:
-            fh.write(json.dumps({**verwerking, "ts": time.time()}, ensure_ascii=False) + "\n")
+        with open(os.path.join(data_dir, bestand), "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({**rij, "ts": time.time()}, ensure_ascii=False) + "\n")
         return True
     except OSError as e:
-        log.warning("verwerking niet vastgelegd: %s", e)
+        log.warning("%s niet vastgelegd: %s", bestand, e)
         return False
 
 
-def alle(data_dir: str) -> list[dict]:
+def _lees(data_dir: str, bestand: str) -> list[dict]:
     uit = []
     try:
-        with open(pad(data_dir), encoding="utf-8") as fh:
+        with open(os.path.join(data_dir, bestand), encoding="utf-8") as fh:
             for regel in fh:
                 regel = regel.strip()
                 if regel:
@@ -310,8 +368,17 @@ def alle(data_dir: str) -> list[dict]:
     except FileNotFoundError:
         return []
     except OSError as e:
-        log.warning("verwerkingen onleesbaar: %s", e)
+        log.warning("%s onleesbaar: %s", bestand, e)
     return uit
+
+
+def leg_vast(data_dir: str, verwerking: dict) -> bool:
+    """Append-only. Dit is systeemstatus, geen wachtrij: er wordt niets afgevinkt."""
+    return _append(data_dir, BESTAND, verwerking)
+
+
+def alle(data_dir: str) -> list[dict]:
+    return _lees(data_dir, BESTAND)
 
 
 def verdeling(rijen: list[dict]) -> dict:

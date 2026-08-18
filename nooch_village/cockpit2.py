@@ -230,6 +230,15 @@ def _bootstrap(dd: str) -> None:
                 "opruiming: %d stale onbemand-notificatie(s) ingetrokken", _op["gearchiveerd"])
     except Exception as _e:                              # noqa: BLE001
         logging.getLogger("village.cockpit").warning("opruiming overgeslagen: %s", _e)
+    # De haak bij het ONTSTAAN: elke nieuwe spanning voor een mens-bemande rol krijgt meteen zijn
+    # bevinding (in gewone taal) en zijn type. Eén call per spanning, niet in een batch — wie hem
+    # later opent leest de al-geschreven tekst. Fail-soft: valt dit om, dan blijft de rauwe
+    # notificatie staan, want een niet-verrijkte spanning is nog steeds een spanning.
+    try:
+        from nooch_village.spanning_ontstaat import maak_verrijker
+        st.notif.set_verrijker(maak_verrijker(st.records, st.assign, dd))
+    except Exception as _e:                              # noqa: BLE001
+        logging.getLogger("village.cockpit").warning("spanning-verrijker niet gezet: %s", _e)
     migrate_data_sources(dd)      # legacy visitors_day → plausible_visitors_day + Plausible actief (idempotent)
     st.metrics.migrate_metric_bindings(st.defs)   # wees-KPI's: veld/categorie uit de def + reeks-tegel-dim (idempotent)
     # OpenAlex: alle oude CUMULATIEVE concept-reeksen (openalex_works_day/citations_day, incl. ::concept)
