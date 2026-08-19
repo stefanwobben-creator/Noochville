@@ -178,6 +178,12 @@ def _type_van(n: dict) -> str:
     """Het type van dit item: uit het poort-oordeel, anders uit de tekst zelf (verse spanning)."""
     from nooch_village import tensie_poort as tp, zelf_verwerking as zv
 
+    # Het type dat bij het ONTSTAAN is bepaald wint: dat is de bron, de poort komt later. Zonder
+    # deze regel toonde een verse spanning wél de kaart maar niet de bijbehorende knoppen — de
+    # linkerkant wist zijn type en de rechterkant niet.
+    eigen = str(n.get("type") or "")
+    if eigen in (zv.NAAR_ROL, zv.GOVERNANCE, zv.FOUNDER):
+        return eigen
     deur = str((n.get("poort") or {}).get("deur") or "")
     if deur == tp.DEUR_BESLUIT:
         return zv.FOUNDER
