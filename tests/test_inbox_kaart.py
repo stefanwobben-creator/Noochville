@@ -188,3 +188,14 @@ def test_een_founder_besluit_houdt_zijn_eigen_wizard():
          "poort": {"deur": "deur_besluit", "klasse": "compliance-besluit"}}
     html = _wizard_pane(n, "csrf-token", "", "")
     assert "verzoek_besluit" not in html
+
+
+def test_het_type_van_de_haak_bepaalt_ook_de_knoppen():
+    """Gezien op het echte scherm: een verse spanning toonde wél de kaart maar niet de knoppen. De
+    linkerkant las het type van de haak, de rechterkant alleen het poort-oordeel dat er nog niet
+    was."""
+    from nooch_village.views.inbox import _wizard_pane
+    n = {"id": "v", "by": "compliance", "project_id": "", "type": "naar_rol",
+         "snippet": "pas de zin op de productpagina aan"}
+    assert "verzoek_besluit" in _wizard_pane(n, "csrf", "", "")
+    assert "Operationeel verzoek" in _kaart_html(_St(), n)
