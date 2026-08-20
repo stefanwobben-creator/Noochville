@@ -1395,6 +1395,36 @@ def _act_pagina_feit_del(c):
     return nxt, "🗑 fact removed"
 
 
+def _act_pagina_voorstel(c):
+    # AUTHZ: iedereen-ingelogd — een voorstel is géén mutatie. Je vraagt de eigenaar-rol iets; die
+    # beslist via het bestaande verzoekmechanisme (verzoek_besluit) en pas dán wordt er geschreven.
+    # Precies daarom mag dit ongated: het schrijfrecht verschuift geen millimeter.
+    from nooch_village import wiki
+    nxt, st, g, username = c.nxt, c.st, c.g, c.username
+    cur = st.att.get(g("aid"))
+    if cur is None or cur.kind != wiki.PAGINA_KIND:
+        return nxt, "✗ page not found"
+    voorstel = g("voorstel")
+    te_lang = _body_te_lang(voorstel, cur.kind)
+    if te_lang:
+        return nxt, te_lang
+    if not wiki.is_wijziging(cur, voorstel):
+        return nxt, "✗ this is the text that is already there"
+    if not g("waarom").strip():
+        return nxt, "✗ say in one line what is wrong now — that is what the owner decides on"
+    ontv = wiki.ontvanger(cur.anchor, st.records, st.assign)
+    van_id = _web_actor_id(username, st)
+    van = st.people.get(van_id) if van_id else None
+    snippet, extra = wiki.voorstel_velden(
+        cur, voorstel=voorstel, waarom=g("waarom"),
+        van_naam=(getattr(van, "name", "") or username or "someone"), van_id=van_id or "",
+        reden=ontv.get("reden") or "")
+    st.notif.add("role", ontv["rol"], "", by=van_id or (username or ""),
+                 snippet=snippet, extra=extra)
+    naar = _name(st.records.get(ontv["rol"])) or ontv["rol"]
+    return nxt, f"✓ proposal sent to {naar}"
+
+
 def _act_proj_status(c):
         nxt, st, g, pj, username = c.nxt, c.st, c.g, c.pj, c.username
         msg = ""
@@ -4277,6 +4307,47 @@ def _act_verzoek_besluit(c):
     bev = dict(n.get("bevinding") or {})
     titel = (bev.get("voorstel") or bev.get("spanning") or n.get("snippet") or "")[:200]
 
+    pag = dict(n.get("pagina") or {})
+
+    def _terug(bericht: str) -> None:
+        """Antwoord aan de vrager. Een rol-verzoek gaat terug naar de ROL; een pagina-voorstel komt
+        van een MENS, en die leest zijn persoon-inbox — een 'rol' met een persoon-id erin zou een
+        dead letter zijn (zelfde val als @rol-berichten aan AI-rollen)."""
+        if pag:
+            wie = str(pag.get("van_id") or "")
+            if wie:
+                st.notif.add("person", wie, "", by=rol, snippet=bericht)
+            return
+        van = str(n.get("by") or "")
+        if van:
+            st.notif.add("role", van, n.get("project_id") or "", by=rol, snippet=bericht)
+
+    if keuze == "accepteer" and pag:
+        # Een PAGINA-voorstel is al concreet: de tekst ís de vraag, dus accepteren is de handeling
+        # zelf (een nieuwe versie) en niet een project dat het nog een keer moet gaan doen.
+        # De artefact-poort geldt onverkort — schrijven mag alleen de vervuller van de eigenaar-rol
+        # of de Circle Lead van de omvattende cirkel, precies zoals bij artefact_edit.
+        cur = st.att.get(pag.get("aid") or "")
+        if cur is None or cur.kind != "note":
+            return nxt, "✗ deze pagina bestaat niet meer"
+        _deny = _artefact_gate(cur.anchor, username, st)
+        if _deny:
+            return nxt, _deny
+        nieuw = str(pag.get("body") or "")
+        te_lang = _body_te_lang(nieuw, cur.kind)
+        if te_lang:
+            return nxt, te_lang
+        actor_id = _web_actor_id(username, st)
+        gref = f"role:{cur.anchor}"
+        upd = st.att.update(cur.id, body=nieuw, actor_id=actor_id, actor_type="person",
+                            governance_ref=gref,
+                            change_note=f"voorstel van {pag.get('van_naam') or 'iemand'} aangenomen")
+        artefacts.log_change(c.data_dir, action="edit", artefact=upd, records=st.records,
+                             actor_id=actor_id, actor_type="person", governance_ref=gref)
+        st.notif.mark_item_processed(nid, outcome=f"toegepast op {cur.id}", by=username or "")
+        st.notif.archive_item(nid)
+        return nxt, f"✓ accepted — new version of {cur.id} saved"
+
     if keuze == "accepteer":
         from nooch_village.project_items import handoff
         van = str(n.get("by") or "")
@@ -4297,10 +4368,7 @@ def _act_verzoek_besluit(c):
             return nxt, "✗ schrijf op hoe het verzoek wél zou kloppen"
         st.notif.add_outcome(nid, intent="aanpassen", otype="note", label=tekst[:200],
                              by=username or "")
-        van = str(n.get("by") or "")
-        if van:
-            st.notif.add("role", van, n.get("project_id") or "", by=rol,
-                         snippet=f"↩ herformulering gevraagd op je verzoek: {tekst[:120]}")
+        _terug(f"↩ herformulering gevraagd op je verzoek: {tekst[:120]}")
         return nxt, "✓ herformulering teruggestuurd naar de vrager"
 
     if keuze == "weiger":
@@ -4308,10 +4376,7 @@ def _act_verzoek_besluit(c):
             return nxt, "✗ een weigering zonder reden leert de vrager niets"
         st.notif.mark_item_processed(nid, outcome=f"geweigerd: {tekst[:160]}", by=username or "")
         st.notif.archive_item(nid)
-        van = str(n.get("by") or "")
-        if van:
-            st.notif.add("role", van, n.get("project_id") or "", by=rol,
-                         snippet=f"✗ je verzoek is geweigerd: {tekst[:120]}")
+        _terug(f"✗ je verzoek is geweigerd: {tekst[:120]}")
         return nxt, "✓ geweigerd, met reden terug naar de vrager"
 
     return nxt, "✗ onbekende keuze"
@@ -4775,6 +4840,7 @@ ACTIONS = {
     "artefact_archive": _act_artefact_archive,
     "pagina_feit_add": _act_pagina_feit_add,
     "pagina_feit_del": _act_pagina_feit_del,
+    "pagina_voorstel": _act_pagina_voorstel,
     "proj_status": _act_proj_status,
     "proj_done": _act_proj_done,
     "proj_dod": _act_proj_dod,

@@ -13,6 +13,10 @@ from nooch_village.util import atomic_write_json, read_json
 
 log = logging.getLogger("village.notificaties")
 
+# Sleutels die de identiteit van een item vormen: die mag `extra` nooit overschrijven, anders kan
+# een aanroeper een item op een ander doel of een andere tijd laten lijken dan het is.
+_BESCHERMD = ("id", "target_type", "target_id", "at", "read", "by")
+
 
 class NotifStore:
     """Notificaties, plus de haak bij het ONTSTAAN.
@@ -36,7 +40,10 @@ class NotifStore:
         atomic_write_json(self.path, self._items)
 
     def add(self, target_type: str, target_id: str, project_id: str, entry_id: str = "",
-            by: str = "", snippet: str = "") -> dict:
+            by: str = "", snippet: str = "", *, extra: dict | None = None) -> dict:
+        """Voeg een item toe. `extra` zijn velden die bij het ONTSTAAN al bekend zijn (type,
+        bevinding, en bv. de pagina waar een voorstel over gaat). Beschermde sleutels blijven
+        onaanraakbaar; wie iets al weet, mag het niet stiekem over de identiteit heen schrijven."""
         n = {
             "id": uuid.uuid4().hex[:10],
             "target_type": target_type, "target_id": target_id,
@@ -44,9 +51,13 @@ class NotifStore:
             "by": by, "snippet": (snippet or "")[:160],
             "at": time.time(), "read": False,
         }
+        n.update({k: v for k, v in (extra or {}).items() if k not in _BESCHERMD})
         self._items.append(n)
         self._save()
-        if self._verrijker is not None:
+        # Een item dat zijn type al bij het ontstaan kent (een pagina-voorstel weet exact wat het
+        # vraagt) gaat NIET langs de herschrijf-haak: die is er om een rauwe signalering te typeren,
+        # en een dure LLM-call zou hier alleen een al bekend antwoord kunnen overschrijven.
+        if self._verrijker is not None and not n.get("type"):
             try:
                 extra = self._verrijker(dict(n)) or {}
                 if extra:
