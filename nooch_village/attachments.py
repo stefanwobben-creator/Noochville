@@ -51,6 +51,17 @@ ARTEFACT_KINDS = ("note", "policy", "tool")
 # Geldige statussen voor een artefact.
 STATUSES = ("draft", "active", "archived")
 
+# Body-cap per soort. Een rol-note is de wiki-pagina (zie `nooch_village.wiki`) en dus een document,
+# geen briefje: 4000 tekens is daar te krap. De andere soorten blijven ongewijzigd. De store kapt af
+# als backstop; de schrijf-routes weigeren een te lange body nét, zodat niemand stil tekst verliest.
+BODY_CAP = {"note": 40_000}
+BODY_CAP_DEFAULT = 4000
+
+
+def body_cap(kind: str) -> int:
+    return BODY_CAP.get(kind, BODY_CAP_DEFAULT)
+
+
 # id-prefix voor note/tool → {TYPE}-{ROLSLUG}-{NNN}. Policies zijn domein-gescopeerd (zie _mint_id):
 # {DOMEINSLUG}-{NNN} (bv. MISSION-001), want een policy hoort bij een domein, niet bij een rol.
 _TYPE_PREFIX = {"note": "NOTE", "tool": "TOOL"}
@@ -159,7 +170,7 @@ class AttachmentStore:
         subtype = subtype if (kind == "note" and subtype in ("tool", "doc")) else ""
         url = (url or "").strip()[:500] if kind == "tool" else ""
         domain = (domain or "").strip()[:60] if kind == "policy" else ""
-        body = (body or "").strip()[:4000]
+        body = (body or "").strip()[:body_cap(kind)]
         with file_lock(self.path):
             self._items = read_json(self.path, {})   # verse toestand onder slot → uniek NNN
             aid = self._mint_id(kind, anchor, domain)
@@ -188,6 +199,16 @@ class AttachmentStore:
                and (include_archived or d.get("status", "active") != "archived")]
         return sorted(out, key=lambda a: a.created_at, reverse=True)
 
+    def by_kind(self, kind: str, *, include_archived: bool = False) -> list[Attachment]:
+        """Alle attachments van één soort, over álle anchors heen. Nieuwste eerst.
+
+        Nodig voor de wiki: een `[[link]]` kent geen rolgrens — je verwijst naar een pagina, niet
+        naar 'de note van rol X'. Wie hem mag wijzigen blijft onveranderd de eigenaar-rol."""
+        out = [Attachment(**d) for d in self._items.values()
+               if d.get("kind") == kind
+               and (include_archived or d.get("status", "active") != "archived")]
+        return sorted(out, key=lambda a: a.created_at, reverse=True)
+
     def counts(self, anchor: str) -> dict:
         """Aantal per soort voor een anchor (handig voor de tab-badges). Telt geen archief."""
         c = {k: 0 for k in KINDS}
@@ -212,7 +233,7 @@ class AttachmentStore:
             if title is not None:
                 d["title"] = title.strip()[:200]
             if body is not None:
-                d["body"] = body.strip()[:4000]
+                d["body"] = body.strip()[:body_cap(d.get("kind", ""))]
             if meta is not None:
                 d["meta"] = dict(meta)
             if scope is not None:

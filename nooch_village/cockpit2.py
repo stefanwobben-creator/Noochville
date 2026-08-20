@@ -45,7 +45,7 @@ from nooch_village import acc_ids, skill_meta, skill_links
 from nooch_village.skill_links import SkillLinkKroniek
 from nooch_village.people import PeopleStore
 from nooch_village.assignments import Assignments
-from nooch_village.attachments import AttachmentStore, ARTEFACT_KINDS
+from nooch_village.attachments import AttachmentStore, ARTEFACT_KINDS, body_cap
 from nooch_village.observations import ObservationStore
 from nooch_village import observations
 from nooch_village.evidence_ledger import EvidenceLedger
@@ -319,6 +319,7 @@ from nooch_village.views.copy_prompt import render_copy_prompt
 from nooch_village.views.founder_flow import render_founder_flow
 from nooch_village.views.inwoners import render_inwoner, render_inwoners
 from nooch_village.views.kennislaag import render_kennislaag
+from nooch_village.views.wiki import render_pagina
 from nooch_village.views.codie import render_codie
 from nooch_village.views.kennisbank import render_kennisbank, render_kennisbank_search
 from nooch_village.views.kennisbank_spel import (render_kennisbank_spel,
@@ -1234,6 +1235,15 @@ def _act_proj_add(c):
         return nxt, msg
 
 
+def _body_te_lang(body: str, kind: str) -> str:
+    """Nette weigering i.p.v. stille afkapping. De store kapt af als backstop; wie een lange
+    wiki-pagina plakt hoort te horen dát hij niet past, niet later te ontdekken dat de staart weg is."""
+    cap = body_cap(kind)
+    if len(body or "") > cap:
+        return f"✗ text too long ({len(body)}/{cap} characters) — nothing saved"
+    return ""
+
+
 def _act_artefact_add(c):
         nxt, st, g, form, username, action, data_dir = c.nxt, c.st, c.g, c.form, c.username, c.action, c.data_dir
         msg = ""
@@ -1261,6 +1271,9 @@ def _act_artefact_add(c):
             if chosen not in owner_domains:
                 return nxt, "✗ pick a domain this role actually owns"
             domain = chosen
+        te_lang = _body_te_lang(g("body"), kind)
+        if te_lang:
+            return nxt, te_lang
         gref = f"domain:{domain}" if domain else f"role:{owner}"
         actor_id = _web_actor_id(username, st)
         a = st.att.add(owner, kind, title=g("title"), body=g("body"),
@@ -1285,6 +1298,9 @@ def _act_artefact_edit(c):
         _deny = _artefact_gate(cur.anchor, username, st)      # check vóór de mutatie
         if _deny:
             raise Forbidden(_deny)
+        te_lang = _body_te_lang(g("body"), cur.kind) if "body" in form else ""
+        if te_lang:
+            return nxt, te_lang
         gref = f"domain:{cur.domain}" if getattr(cur, 'domain', '') else f"role:{cur.anchor}"
         actor_id = _web_actor_id(username, st)
         upd = st.att.update(cur.id,
@@ -1317,6 +1333,66 @@ def _act_artefact_archive(c):
                              actor_id=actor_id, actor_type="person", governance_ref=gref)
         msg = f"🗄️ {arch.kind} gearchiveerd ({arch.id})"
         return nxt, msg
+
+
+def _act_pagina_feit_add(c):
+    # AUTHZ: rolvervuller of Circle Lead — een feit is inhoud van de pagina, en een pagina is een
+    # note binnen het domein van de eigenaar-rol. Zelfde poort als artefact_edit, geen tweede regel.
+    from nooch_village import wiki
+    nxt, st, g, username, data_dir = c.nxt, c.st, c.g, c.username, c.data_dir
+    cur = st.att.get(g("aid"))
+    if cur is None or cur.kind != wiki.PAGINA_KIND:
+        return nxt, "✗ page not found"
+    _deny = _artefact_gate(cur.anchor, username, st)          # check vóór de mutatie
+    if _deny:
+        raise Forbidden(_deny)
+    feit = wiki.maak_feit(g("tekst"), soort=g("soort"), ref=g("ref"),
+                          citaat=g("citaat"), url=g("url"))
+    if feit is None:
+        return nxt, "✗ a fact needs text"
+    # Feiten leven in meta van dezelfde note: geen tweede opslag, dus ze reizen mee in de versie-
+    # historie, in het erven en in /context. Verse lees vlak vóór de update (de store her-leest
+    # onder het slot, maar de meta-lijst bouwen we hier op).
+    meta = dict(getattr(cur, "meta", None) or {})
+    meta["feiten"] = list(wiki.feiten(cur)) + [feit]
+    actor_id = _web_actor_id(username, st)
+    gref = f"role:{cur.anchor}"
+    upd = st.att.update(cur.id, meta=meta, actor_id=actor_id, actor_type="person",
+                        governance_ref=gref, change_note="feit toegevoegd")
+    artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
+                         actor_id=actor_id, actor_type="person", governance_ref=gref)
+    return nxt, f"➕ fact added ({upd.id})"
+
+
+def _act_pagina_feit_del(c):
+    # AUTHZ: rolvervuller of Circle Lead — zie pagina_feit_add. Verwijderen laat een versie-entry
+    # achter, zodat de historie laat zien dát er een feit weg is (nooit een stille verdwijning).
+    from nooch_village import wiki
+    nxt, st, g, username, data_dir = c.nxt, c.st, c.g, c.username, c.data_dir
+    cur = st.att.get(g("aid"))
+    if cur is None or cur.kind != wiki.PAGINA_KIND:
+        return nxt, "✗ page not found"
+    _deny = _artefact_gate(cur.anchor, username, st)
+    if _deny:
+        raise Forbidden(_deny)
+    huidig = list(wiki.feiten(cur))
+    try:
+        i = int(g("i"))
+    except (TypeError, ValueError):
+        return nxt, "✗ unknown fact"
+    if not 0 <= i < len(huidig):
+        return nxt, "✗ unknown fact"
+    weg = huidig.pop(i)
+    meta = dict(getattr(cur, "meta", None) or {})
+    meta["feiten"] = huidig
+    actor_id = _web_actor_id(username, st)
+    gref = f"role:{cur.anchor}"
+    upd = st.att.update(cur.id, meta=meta, actor_id=actor_id, actor_type="person",
+                        governance_ref=gref,
+                        change_note=f"feit verwijderd: {str(weg.get('tekst') or '')[:80]}")
+    artefacts.log_change(data_dir, action="edit", artefact=upd, records=st.records,
+                         actor_id=actor_id, actor_type="person", governance_ref=gref)
+    return nxt, "🗑 fact removed"
 
 
 def _act_proj_status(c):
@@ -4697,6 +4773,8 @@ ACTIONS = {
     "artefact_add": _act_artefact_add,
     "artefact_edit": _act_artefact_edit,
     "artefact_archive": _act_artefact_archive,
+    "pagina_feit_add": _act_pagina_feit_add,
+    "pagina_feit_del": _act_pagina_feit_del,
     "proj_status": _act_proj_status,
     "proj_done": _act_proj_done,
     "proj_dod": _act_proj_dod,
@@ -5049,6 +5127,14 @@ def make_handler(data_dir: str, csrf_token: str,
                                        tot=(qs.get("tot") or [""])[0],
                                        compare=(qs.get("compare") or [""])[0] == "1",
                                        username=username))
+                return
+            if path == "/pagina":
+                # AUTHZ: iedereen-ingelogd — een wiki-pagina IS een rol-note, dus exact dezelfde
+                # read-scope als /node?tab=notes (lezen is vrij, cureren is van de eigenaar-rol).
+                # Schrijven zit achter de artefact-poort in de dispatch-acties, niet hier.
+                self._send(render_pagina(st, (qs.get("id") or [""])[0],
+                                         csrf_token=effective_csrf, username=username,
+                                         msg=(qs.get("msg") or [""])[0]))
                 return
             # Modal-fragmenten krijgen hun eigen <style> mee, zodat ze altijd verse CSS tonen
             # (de overlay hergebruikt anders de stylesheet van de eerste pagina-load).
