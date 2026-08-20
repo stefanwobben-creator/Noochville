@@ -31,7 +31,7 @@ def _name(rec) -> str:
     return (getattr(d, "name", "") or "").strip() or getattr(rec, "id", "")
 
 
-def _circle_of(owner_role_id: str, records) -> str | None:
+def circle_of(owner_role_id: str, records) -> str | None:
     """De omvattende cirkel van een eigenaar: een cirkel → zichzelf; een rol → zijn ouder.
     Spiegelt `resolve_circle_id` maar zonder de "ii:"-prefix (een artefact-eigenaar is altijd
     een echt rol-/cirkel-record)."""
@@ -64,7 +64,7 @@ def can_write_artefact(actor_type: str, actor_id: str, owner_role_id: str,
     if any(f.type == actor_type and f.id == actor_id
            for f in assignments.fillers_of(owner_role_id, rec)):
         return True
-    circle_id = _circle_of(owner_role_id, records)
+    circle_id = circle_of(owner_role_id, records)
     if circle_id:
         lead_role = f"{circle_id}__circle_lead"
         if any(f.type == actor_type and f.id == actor_id

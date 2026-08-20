@@ -28,13 +28,29 @@ def _source_link(st, n: dict) -> str:
     if p is not None:
         scope = str(p.get("scope") or "project")[:60]
         return f"<a href='/project?pid={_e(pid)}'>{_e(scope)}</a>"
-    return _e(n.get("by") or "unknown source")
+    pag = dict(n.get("pagina") or {})
+    if pag.get("aid"):
+        # De bron van een pagina-voorstel is de pagina zelf, niet de afzender: dat is waar de lezer
+        # heen wil om te zien wat er nu staat.
+        from nooch_village import wiki
+        return (f"<a href='{_e(wiki.pagina_url(str(pag['aid'])))}'>"
+                f"{_e(str(pag.get('titel') or pag['aid']))}</a>")
+    return _e(_who(st, n))
 
 
 def _who(st, n: dict) -> str:
     by = (n.get("by") or "").strip()
     rec = st.records.get(by) if by else None
-    return _name(rec) if rec is not None else (by or "someone")
+    if rec is not None:
+        return _name(rec)
+    # Niet elke afzender is een rol: een pagina-voorstel komt van een MENS. Zonder deze regel stond
+    # er een kaal persoon-id op het scherm, dat eruitziet als een rol-id die niemand kent.
+    # Defensief opgehaald: een weergave mag nooit omvallen omdat een store net iets anders is.
+    lookup = getattr(getattr(st, "people", None), "get", None)
+    p = lookup(by) if (by and callable(lookup)) else None
+    if p is not None:
+        return getattr(p, "name", "") or by
+    return by or "someone"
 
 
 def _one_line(text: str, cap: int = 90) -> str:
@@ -207,6 +223,13 @@ def _kaart_html(st, n: dict) -> str:
 
     Fail-soft: valt hier iets om, dan valt de pagina terug op de rauwe tekst — een leeg scherm is
     erger dan een lelijke regel."""
+    if n.get("pagina"):
+        # Een pagina-voorstel heeft zijn eigen, concrete blok (`_pagina_blok`): welke pagina, van
+        # wie, wat er zou komen te staan en wat er nu staat. De generieke founder-kaart zou daar een
+        # tweede, vagere versie van vertellen — inclusief de zin "dan verschijnt het als project op
+        # je bord", die hier juist NIET klopt. Twee tegengestelde zinnen op één scherm is precies
+        # wat deze kaart moest wegnemen.
+        return ""
     try:
         from nooch_village import founder_kaart as fkaart, tensie_poort as tp, zelf_verwerking as zv
 
@@ -258,6 +281,29 @@ def _kaart_html(st, n: dict) -> str:
         return ""
 
 
+def _pagina_blok(st, n: dict) -> str:
+    """Een pagina-voorstel is al concreet: wélke pagina, waarom, en wat er precies zou komen te
+    staan. De generieke spanningskaart is voor een rauw signaal van een rol; hier is de vraag exact
+    bekend, dus tonen we hem exact — inclusief wat er nu staat, want dat is het verschil waar de
+    eigenaar ja of nee op zegt."""
+    pag = dict(n.get("pagina") or {})
+    if not pag:
+        return ""
+    from nooch_village import wiki
+    titel = str(pag.get("titel") or pag.get("aid") or "")
+    link = f"<a href='{_e(wiki.pagina_url(str(pag.get('aid') or '')))}'>{_e(titel)}</a>"
+    reden = f"<p class='muted'>{_e(pag.get('reden'))}</p>" if pag.get("reden") else ""
+
+    def _blok(kop: str, tekst: str) -> str:
+        return (f"<details class='box-details'><summary class='muted'>{_e(kop)}</summary>"
+                f"<div class='fbubble'>{_e(tekst).replace(chr(10), '<br>')}</div></details>")
+
+    return (f"<div class='box rdr-rec'><strong>Proposal for page {link}</strong>"
+            f"<p class='muted'>from {_e(pag.get('van_naam') or 'someone')}</p>{reden}"
+            f"{_blok('proposed text', str(pag.get('body') or '(empty)'))}"
+            f"{_blok('what it says now', str(pag.get('was') or '(empty)'))}</div>")
+
+
 def _spanning_pane(st, n: dict) -> str:
     """Links: de volledige spanning met wie/rol, bron en leeftijd, plus het verwerk-record tot nu toe."""
     sep = "<span class='fsep'>·</span>"
@@ -291,7 +337,8 @@ def _spanning_pane(st, n: dict) -> str:
         record = (f"<div class='box rdr-rec'><strong>Already recorded "
                   f"({len(vs)})</strong><ul>{rows}</ul></div>")
     return (f"<div class='rdr-pane'><h3>Tension</h3>{meta}"
-            f"<div class='fbubble rdr-rec'>{body}</div>{volledig}{record}</div>")
+            f"<div class='fbubble rdr-rec'>{body}</div>{_pagina_blok(st, n)}"
+            f"{volledig}{record}</div>")
 
 
 def _outcome_form(otype: str, nid: str, csrf: str, prefill: str, role_opts: str, pj_opts: str,
@@ -382,7 +429,13 @@ def _wizard_pane(n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
                       "hoe zou het verzoek wél kloppen? gaat terug naar de vrager", True)
                 + _vf("weiger", "✗ Weigeren", "",
                       "waarom niet — de vrager leert hiervan", True)
-                + "<p class='muted'>Bij accepteren verschijnt dit als project op je bord.</p></div>")
+                # Bij een pagina-voorstel is accepteren de handeling zélf (nieuwe versie), niet een
+                # project dat het nog moet gaan doen. Eén zin, maar hij bepaalt wat de lezer denkt
+                # te tekenen.
+                + ("<p class='muted'>Accepting saves the proposed text as a new version of the "
+                   "page — no project.</p>" if n.get("pagina") else
+                   "<p class='muted'>Bij accepteren verschijnt dit als project op je bord.</p>")
+                + "</div>")
 
     if n.get("project_id"):
         def _bf(keuze: str, label: str, cls: str, hint: str, verplicht: bool) -> str:

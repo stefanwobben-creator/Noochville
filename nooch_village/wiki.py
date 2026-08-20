@@ -221,6 +221,60 @@ def grond_status(feit: dict, *, ledger=None, store=None, vandaag: str = "") -> d
     return _uit(grond, GEGROND, f"chronicle — {detail}", r.get("id") or "")
 
 
+# ── Een voorstel op een pagina ("ik vind dat pagina X moet zeggen Y") ───────
+# Bewerken is van de eigenaar. Wie dat niet is, kan wél een voorstel doen — en dat loopt langs het
+# BESTAANDE verzoekmechanisme (een `naar_rol`-item in de inbox met accepteren / aanpassen /
+# weigeren). Geen nieuw scherm en geen tweede beslis-logica; alleen de accepteer-handeling is hier
+# concreter dan bij een gewoon verzoek: de tekst ís het voorstel, dus accepteren schrijft hem.
+
+def is_wijziging(pagina, voorstel: str) -> bool:
+    """Verschilt het voorstel écht van wat er staat? Een identiek 'voorstel' is geen verzoek maar
+    ruis in de inbox van de eigenaar."""
+    return (voorstel or "").strip() != (getattr(pagina, "body", "") or "").strip()
+
+
+def ontvanger(anchor: str, records, assignments) -> dict:
+    """Wie beslist over een voorstel op deze pagina? `{"rol": id, "reden": str}`.
+
+    Normaal de eigenaar-rol zelf. Maar een AI-vervulde (of onbemande) rol leest de mens-inbox
+    nooit — daar zou het verzoek doodstil blijven liggen. Dan gaat het naar de Circle Lead van de
+    omvattende cirkel, die via dezelfde artefact-poort ook mág schrijven. Het verzoek verandert niet
+    van inhoud, alleen van postbus, en de reden staat erbij zodat niemand hoeft te raden."""
+    from nooch_village import artefacts
+    from nooch_village.assignments import door_mens_bemand
+
+    if door_mens_bemand(anchor, assignments, records):
+        return {"rol": anchor, "reden": ""}
+    cirkel = artefacts.circle_of(anchor, records)
+    lead = f"{cirkel}__circle_lead" if cirkel else ""
+    if lead and records.get(lead) is not None:
+        return {"rol": lead, "reden": "the owner role has no human filler"}
+    # Geen Circle Lead: liever bij de eigenaar laten liggen mét reden dan naar een willekeurige
+    # andere postbus sturen. Fail-closed op routering, niet op de inhoud.
+    return {"rol": anchor, "reden": "no Circle Lead found — stays with the owner role"}
+
+
+def voorstel_velden(pagina, *, voorstel: str, waarom: str, van_naam: str, van_id: str,
+                    reden: str = "") -> tuple[str, dict]:
+    """(snippet, extra) voor `NotifStore.add`. Het type staat er meteen op: dit item weet bij zijn
+    ontstaan precies wat het vraagt, dus het hoeft niet door de herschrijf-haak."""
+    from nooch_village import zelf_verwerking as zv
+
+    titel = getattr(pagina, "title", "") or getattr(pagina, "id", "")
+    spanning = waarom.strip() or f"“{titel}” zegt volgens {van_naam or 'iemand'} niet het juiste"
+    snippet = f"voorstel voor pagina {titel}: {spanning}"[:160]
+    extra = {
+        "type": zv.NAAR_ROL,
+        "bevinding": {"ok": True, "spanning": spanning,
+                      "voorstel": f"pas de tekst van “{titel}” aan zoals voorgesteld"},
+        "pagina": {"aid": getattr(pagina, "id", ""), "titel": titel,
+                   "eigenaar": getattr(pagina, "anchor", ""), "body": voorstel,
+                   "was": getattr(pagina, "body", "") or "",
+                   "van_naam": van_naam, "van_id": van_id, "reden": reden},
+    }
+    return snippet, extra
+
+
 def telling(a, *, ledger=None, store=None, vandaag: str = "") -> dict:
     """{status: aantal} over de feiten van een pagina — voor een kop die niet liegt."""
     uit: dict[str, int] = {}

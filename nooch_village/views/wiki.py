@@ -126,6 +126,31 @@ def _backlink_sectie(a, pags: list) -> str:
     return f"<div class='c2-sec'><h3>Links here</h3>{kaarten}{wens}</div>"
 
 
+def _voorstel_form(st, a, csrf_token: str) -> str:
+    """"Ik vind dat deze pagina Y moet zeggen" — voor wie de pagina niet bezit.
+
+    Het loopt langs het bestaande verzoekmechanisme: het wordt een `naar_rol`-item in de inbox van
+    de beslisser, met dezelfde drie knoppen (accepteren / aanpassen / weigeren). Hier staat alleen
+    wie het krijgt en waarom, zodat niemand een verzoek de leegte in stuurt."""
+    ontv = wiki.ontvanger(a.anchor, st.records, st.assign)
+    rec = st.records.get(ontv["rol"])
+    naar = _name(rec) if rec is not None else ontv["rol"]
+    reden = f" ({_e(ontv['reden'])})" if ontv.get("reden") else ""
+    return (f"<details class='qadd'><summary>✎ Suggest a change</summary>"
+            f"<form method='post' action='/action' class='qadd-form'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
+            f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
+            f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(a.id))}'>"
+            f"<p class='muted'>Goes to <strong>{_e(naar)}</strong>{reden}. "
+            f"They accept, reshape or refuse — accepting saves your text as a new version.</p>"
+            f"{_field('Why', 'waarom', fid='vst-waarom', required=True, placeholder='one line: what is wrong now')}"
+            f"{_field('Proposed text', 'voorstel', kind='textarea', value=a.body, fid='vst-body')}"
+            f"<div class='qadd-row'>"
+            f"<button class='btn ok' type='submit' name='action' value='pagina_voorstel'>Send</button>"
+            f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "
+            f"aria-label='cancel'>✕</button></div></form></details>")
+
+
 def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = None,
                   msg: str = "") -> str:
     """Eén wiki-pagina. Onbekende id of een ander artefact-soort → nette melding, geen lege pagina."""
@@ -155,8 +180,10 @@ def render_pagina(st, aid: str, csrf_token: str = "", username: str | None = Non
 
     body = (f"<div class='card'><div class='att-body'>{_body_html(a.body, pags)}</div></div>"
             if a.body else "<div class='card muted'>This page has no text yet.</div>")
+    # Eigenaar bewerkt; ieder ander doet een voorstel. Geen csrf-token = geen schrijf-sessie
+    # (publieke view), dan ook geen voorstelknop.
     bewerk = (_artefact_edit_form(a, csrf_token, next_url=wiki.pagina_url(a.id))
-              if can_edit else "")
+              if can_edit else (_voorstel_form(st, a, csrf_token) if csrf_token else ""))
     hist = _artefact_versions_html(a)
 
     main = (f"<div class='c2-main'>{kop}{_banner(msg)}{body}{bewerk}{hist}"
