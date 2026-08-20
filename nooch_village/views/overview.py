@@ -21,7 +21,7 @@ from nooch_village.views.backlog import render_backlog_tab
 from nooch_village.views.projects import (
     _projects_tab_html, _scope_text, _person_projects_tab_html, _modal_html,
 )
-from nooch_village import org, ai_match, artefacts, epic, acc_ids, skill_meta, skill_links, skill_labels
+from nooch_village import org, ai_match, artefacts, epic, acc_ids, skill_meta, skill_links, skill_labels, wiki
 from nooch_village.ai_tasks import KIND_AUTONOOM, KIND_MIDDEL
 from nooch_village.registry_factory import shared_registry
 from nooch_village.radar_store import feeds_for_role
@@ -548,14 +548,17 @@ def _artefact_add_form(rec, kind: str, csrf_token: str, domains: list | None = N
             f"aria-label='cancel'>✕</button></div></form></details>")
 
 
-def _artefact_edit_form(a, csrf_token: str) -> str:
+def _artefact_edit_form(a, csrf_token: str, *, next_url: str = "") -> str:
+    # `next_url` parametriseert waar je na opslaan landt (default: de tab van de eigenaar-rol).
+    # De pagina-view (/pagina) geeft zijn eigen permalink mee — zelfde formulier, zelfde poort.
+    nxt = next_url or f"/node?id={a.anchor}&tab={_tab_for(a.kind)}"
     urlf = (f"<label class='att-lbl'>URL</label>"
             f"<input type='url' name='url' value='{_e(a.url)}'>" if a.kind == "tool" else "")
     return (f"<details class='qadd'><summary class='muted'>edit</summary>"
             f"<form method='post' action='/action' class='qadd-form'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
-            f"<input type='hidden' name='next' value='/node?id={_e(a.anchor)}&tab={_tab_for(a.kind)}'>"
+            f"<input type='hidden' name='next' value='{_e(nxt)}'>"
             f"<label class='att-lbl'>Title</label><input name='title' value='{_e(a.title)}'>"
             f"<label class='att-lbl'>Body</label>{md_editor('body', a.body)}"
             f"{urlf}"
@@ -588,6 +591,10 @@ def _artefact_head(a, *, extra: str = "") -> str:
     icon = _KIND_ICON.get(a.kind, "")
     dom = (f" <span class='chip muted'>{_e(a.domain)}</span>"
            if a.kind == "policy" and getattr(a, "domain", "") else "")
+    # Een note IS een wiki-pagina (nooch_village/wiki.py): deze tab is de index per rol, de
+    # permalink draagt de feiten en de backlinks. Ook op een geërfde note (lezen mag altijd).
+    if a.kind == wiki.PAGINA_KIND:
+        extra += f" <a class='chip' href='{_e(wiki.pagina_url(a.id))}'>open page</a>"
     head = f"<div class='ptitle'>{icon} {_artefact_id_chip(a)} {_e(a.title) or _e(a.id)}{dom}{extra}</div>"
     if a.kind == "tool" and a.url:
         head += (f"<div class='muted'>"
