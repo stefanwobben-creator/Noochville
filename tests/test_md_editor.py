@@ -5,7 +5,7 @@ from __future__ import annotations
 from nooch_village import cockpit2
 from nooch_village.cockpit2_util import md_editor
 from nooch_village.views.projects import _modal_html
-from nooch_village.views.backlog import render_backlog_tab, _item_beheer
+from nooch_village.views.backlog import render_backlog, _item_beheer
 
 CIRCLE = "mother_earth__nooch"
 
@@ -29,10 +29,9 @@ def test_md_editor_rendert_en_escapet_value():
 
 
 def test_editor_werkt_op_pagina_zonder_modal_html(tmp_path):
-    """De backlog-tab laadt _modal_html NIET; toch werkt de editor er (wrapSel reist mee)."""
+    """Het backlog-scherm laadt _modal_html NIET; toch werkt de editor er (wrapSel reist mee)."""
     st = cockpit2._Stores(_dd(tmp_path))
-    rec = st.records.get(CIRCLE)
-    tab = render_backlog_tab(st, rec, csrf="t", username="x@y.nl")
+    tab = render_backlog(st, csrf="t", username="x@y.nl")
     assert "class='editor'" in tab and "if(!window.wrapSel)" in tab
     # de modal definieert wrapSel nu WÉL (guarded): een <script> in een fragment draait niet bij
     # innerHTML, dus zonder deze definitie deden de WYSIWYG-knoppen in de modal niets.
@@ -55,6 +54,6 @@ def test_geconverteerd_veld_toont_markdown_veilig(tmp_path):
                        "type": ["taak"], "domein": ["algemeen"], "next": ["/"]}, "guest")
     st = cockpit2._Stores(dd)
     it = st.backlog.all()[0]
-    html = _item_beheer(st.records.get(CIRCLE), it, "t")
+    html = _item_beheer(it, "t")
     assert "<strong>vet</strong>" in html and "**vet**" not in html     # markdown gerenderd
     assert "&lt;script&gt;" in html and "<script>x" not in html          # HTML ge-escaped (veilig)

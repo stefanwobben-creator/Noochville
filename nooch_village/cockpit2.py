@@ -320,6 +320,7 @@ from nooch_village.views.founder_flow import render_founder_flow
 from nooch_village.views.inwoners import render_inwoner, render_inwoners
 from nooch_village.views.kennislaag import render_kennislaag
 from nooch_village.views.wiki import render_pagina
+from nooch_village.views.backlog import render_backlog
 from nooch_village.views.codie import render_codie
 from nooch_village.views.kennisbank import render_kennisbank, render_kennisbank_search
 from nooch_village.views.kennisbank_spel import (render_kennisbank_spel,
@@ -5194,6 +5195,13 @@ def make_handler(data_dir: str, csrf_token: str,
                                        tot=(qs.get("tot") or [""])[0],
                                        compare=(qs.get("compare") or [""])[0] == "1",
                                        username=username))
+                return
+            if path == "/backlog":
+                # AUTHZ: iedereen-ingelogd — inbrengen mag iedereen (dat is het punt van een
+                # backlog). Beheren (staat, prioriteit) zit achter `_wd_gate` in de dispatch-takken,
+                # niet hier; deze route toont alleen wat je mag zien.
+                self._send(render_backlog(st, csrf=effective_csrf, username=username,
+                                          msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/pagina":
                 # AUTHZ: iedereen-ingelogd — een wiki-pagina IS een rol-note, dus exact dezelfde

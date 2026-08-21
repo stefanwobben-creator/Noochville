@@ -17,7 +17,6 @@ from nooch_village.views.checklists import _checklists_tab_html, _cl_row
 from nooch_village.views.metrics import _metrics_tab_html, _METRICS_JS
 from nooch_village.views.metrics2 import render_metrics2_tab, render_metrics2_person
 from nooch_village.views.strategy import _strategy_tab_html
-from nooch_village.views.backlog import render_backlog_tab
 from nooch_village.views.projects import (
     _projects_tab_html, _scope_text, _person_projects_tab_html, _modal_html,
 )
@@ -681,6 +680,10 @@ _ROLE_TOOLS = {
     # claims-database en de wekelijkse site-check zijn compliance-domein (claims-database).
     "compliance": [
         ("Claims-checker", "EmpCo/ACM check on text or page — red, orange, green", "/claims")],
+    # De Backlog Builder stond op de Notes-tab van deze rol. Een gereedschap hoort onder Tools,
+    # naast de andere rol-tools — en zo houdt de rol zijn eigen notes/wiki-pagina's.
+    WEBSITE_DEVELOPER_ROLE: [
+        ("Backlog Builder", "Bugs, wishes and ideas → a prioritised backlog", "/backlog")],
 }
 
 
@@ -758,12 +761,11 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
     elif tab == "members":
         content = _members_html(st, rec, csrf_token)
     elif tab == "notes":
-        if rec.id == WEBSITE_DEVELOPER_ROLE:
-            # De Notes-tab van de Website Developer is de Backlog Builder.
-            content = render_backlog_tab(st, rec, csrf_token, username)
-        else:
-            content = _artefact_tab_html(st, rec, "note", csrf_token, username,
-                                         titel="Notes", leeg="No notes on this role/circle yet.")
+        # De Website Developer had hier gÉÉn notes maar de Backlog Builder. Die is een gereedschap
+        # en woont nu onder Tools (/backlog, zie _ROLE_TOOLS); daardoor heeft ook deze rol gewoon
+        # notes — en dus wiki-pagina's, waar hij als enige rol van uitgesloten was.
+        content = _artefact_tab_html(st, rec, "note", csrf_token, username,
+                                     titel="Notes", leeg="No notes on this role/circle yet.")
     elif tab == "tools":
         content = (_role_tools_html(rec)
                    + _ritme_html(st, rec)

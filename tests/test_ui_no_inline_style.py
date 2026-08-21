@@ -29,7 +29,6 @@ _STYLE_WHITELIST = {
     "views/metrics.py": 8,
     "views/roloverleg.py": 7,
     "views/checklists.py": 5,
-    "views/backlog.py": 7,
     "cockpit2.py": 7,
     "views/noochie.py": 5,
     "views/feed.py": 4,
