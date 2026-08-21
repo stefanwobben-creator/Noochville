@@ -49,6 +49,10 @@ class Constituent:
     realisatie: str = ""
     alternatieven: tuple[str, ...] = ()
     bron: str = ""
+    # De vrije opmerking uit de snede ("Might be linen thread, please check"): géén kandidaat, maar
+    # wél de openstaande vraag erbij. De graaf doet er niets mee; de wiki toont hem op de
+    # materiaal-pagina, zodat een check niet verdwijnt tussen de parse en het scherm.
+    opmerking: str = ""
 
 
 @dataclass(frozen=True)

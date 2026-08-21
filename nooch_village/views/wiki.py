@@ -57,7 +57,9 @@ def _body_html(body: str, pags: list) -> str:
 def _grond_chip(g: dict) -> str:
     icon = _STATUS_ICON.get(g["status"], "—")
     label = f"{icon} {_e(g['label'])}"
-    if g["status"] == wiki.ONGECONTROLEERD and g["soort"] == "bron" and g["url"]:
+    # Een geciteerde bron is altijd klikbaar, ongeacht de uitkomst van de laatste check: juist bij
+    # "citaat niet meer gevonden" wil de lezer meteen kunnen kijken wat er dan wél staat.
+    if g["soort"] == "bron" and g["url"]:
         label = (f"{icon} <a href='{_e(g['url'])}' target='_blank' rel='noopener'>"
                  f"{_e(g['label'])}</a>")
     detail = f" <span class='muted'>{_e(g['detail'])}</span>" if g["detail"] else ""

@@ -251,6 +251,22 @@ class AttachmentStore:
             self._save()
             return Attachment(**d)
 
+    def set_meta(self, aid: str, meta: dict) -> Attachment | None:
+        """Schrijf alleen `meta`, ZONDER versie-entry en ZONDER `updated_at` te bumpen.
+
+        Voor machine-onderhoud dat de inhoud niet verandert: de periodieke 'zegt de bron dit nog'-
+        check legt zijn waarneming bij het feit neer. Zou die door `update` lopen, dan groeide de
+        versiehistorie elke ronde met een niet-wijziging én stond de pagina er bewerkt bij terwijl
+        niemand hem aanraakte. Inhoudelijke mutaties gaan ALTIJD via `update`."""
+        with file_lock(self.path):
+            self._items = read_json(self.path, {})
+            d = self._items.get(aid)
+            if d is None:
+                return None
+            d["meta"] = dict(meta)
+            self._save()
+            return Attachment(**d)
+
     def archive(self, aid: str, *, actor_id: str = "", actor_type: str = "",
                 governance_ref: str = "", change_note: str = "") -> Attachment | None:
         """Zet status op "archived" (nooit hard verwijderen). Legt een versie-entry vast zodat

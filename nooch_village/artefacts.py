@@ -115,7 +115,26 @@ def log_change(data_dir: str, *, action: str, artefact, records,
     return entry
 
 
-def _art_item(a, *, editable: bool) -> dict:
+def _feiten_van(a, store, ledger) -> list[dict]:
+    """De feiten van een wiki-pagina (kind="note") mét hun grond, LIVE bepaald.
+
+    Een AI-vervuller leest deze context als systeemprompt. Zonder de grond erbij zou hij een feit
+    citeren zonder te kunnen zeggen waar het vandaan komt — en zonder te zien dat het certificaat
+    eronder verlopen is. Daarom reist de uitkomst mee, niet het oordeel van gisteren."""
+    from nooch_village import wiki
+
+    if a.kind != wiki.PAGINA_KIND:
+        return []
+    uit = []
+    for f in wiki.feiten(a):
+        g = wiki.grond_status(f, ledger=ledger, store=store)
+        uit.append({"tekst": f.get("tekst") or "", "grond": g["status"],
+                    "grond_label": g["label"], "grond_detail": g["detail"],
+                    "bron": g.get("url") or "", "citaat": g.get("citaat") or ""})
+    return uit
+
+
+def _art_item(a, *, editable: bool, store=None, ledger=None) -> dict:
     """Eén artefact als serialisatie-dict. `editable` = mag deze rol het bewerken (eigen=True,
     geërfd=False). `mutation_path="artefact"`: te wijzigen via de artefact-routes (bij de eigenaar)."""
     d = {"id": a.id, "kind": a.kind, "title": a.title, "body": a.body,
@@ -125,17 +144,19 @@ def _art_item(a, *, editable: bool) -> dict:
         d["domain"] = getattr(a, "domain", "")
     if a.kind == "tool":
         d["url"] = a.url
+    if a.kind == "note":
+        d["feiten"] = _feiten_van(a, store, ledger)
     return d
 
 
-def _art_block(role_id: str, kind: str, records, store) -> dict:
+def _art_block(role_id: str, kind: str, records, store, ledger=None) -> dict:
     """{"own": [...], "inherited": [...]} voor één artefact-soort; geërfde items dragen het
     herkomst-pad ("via <naam>")."""
     oi = own_and_inherited(role_id, kind, records, store)
-    own = [_art_item(a, editable=True) for a in oi["own"]]
+    own = [_art_item(a, editable=True, store=store, ledger=ledger) for a in oi["own"]]
     inherited = []
     for it in oi["inherited"]:
-        item = _art_item(it["artefact"], editable=False)
+        item = _art_item(it["artefact"], editable=False, store=store, ledger=ledger)
         item["origin_id"] = it["origin_id"]
         item["origin_name"] = it["origin_name"]
         item["origin_path"] = f"via {it['origin_name']}"
@@ -143,10 +164,14 @@ def _art_block(role_id: str, kind: str, records, store) -> dict:
     return {"own": own, "inherited": inherited}
 
 
-def serialize_context(role_id: str, records, store) -> dict:
+def serialize_context(role_id: str, records, store, ledger=None) -> dict:
     """De volledige rol-context als structuur: overview (purpose/domains/accountabilities) +
     policies (eigen + geërfd; alle domein-gescopeerd en governance-eigendom) + notes + tools.
-    Bron voor het /context-endpoint (json en markdown)."""
+    Bron voor het /context-endpoint (json en markdown).
+
+    `ledger` (de Kroniek) is optioneel: zónder ledger kunnen feiten die naar een Kroniek-record of
+    certificaat wijzen niet gecontroleerd worden, en heten ze `ontbreekt` in plaats van dat ze er
+    goed uitzien. Aanroepers die de Kroniek hebben, geven hem mee."""
     rec = records.get(role_id)
     if rec is None:
         return {}
@@ -159,28 +184,58 @@ def serialize_context(role_id: str, records, store) -> dict:
     return {
         "role": role,
         "policies": _art_block(role_id, "policy", records, store),
-        "notes": _art_block(role_id, "note", records, store),
+        "notes": _art_block(role_id, "note", records, store, ledger),
         "tools": _art_block(role_id, "tool", records, store),
     }
 
 
+# Grond-status → een teken dat in één blik het verschil laat zien tussen bewijs en herkomst.
+# Zelfde vocabulaire als op het scherm; een AI-vervuller leest hetzelfde als de mens.
+_GROND_TEKEN = {"gegrond": "✓", "ongecontroleerd": "◌", "vervallen": "⌛",
+                "ontbreekt": "✗", "ongegrond": "—"}
+
+
+def _feit_regels(a: dict) -> list[str]:
+    """De feiten van een pagina als ingesprongen regels, elk met zijn grond. Een feit zonder bewijs
+    zegt dat ook: wie hieruit citeert moet kunnen zien wat hij citeert."""
+    regels = []
+    for f in a.get("feiten") or []:
+        teken = _GROND_TEKEN.get(f.get("grond") or "", "—")
+        grond = f.get("grond_label") or f.get("grond") or ""
+        detail = f" ({f['grond_detail']})" if f.get("grond_detail") else ""
+        bron = f" <{f['bron']}>" if f.get("bron") else ""
+        regels.append(f"  - {teken} {f.get('tekst') or ''} — {grond}{detail}{bron}")
+    return regels
+
+
 def _md_section(block: dict, *, tool: bool = False) -> list[str]:
     """Markdown voor 'Van deze rol' + 'Geldend hier (geërfd)' van één artefact-soort."""
-    def line(a: dict, inherited: bool) -> str:
+    def line(a: dict, inherited: bool) -> list[str]:
+        pagina = a.get("kind") == "note"
         if tool and a.get("url"):
             extra = f" — {a['url']}"
-        elif a.get("body"):
+        elif a.get("body") and not pagina:
             extra = f" — {a['body']}"
         else:
             extra = ""
-        prefix = f"`{a['id']}` " if a.get("kind") == "policy" else ""
+        # Ook een pagina (note) draagt zijn id: daarmee kan een AI-vervuller ernaar verwijzen
+        # ([[NOTE-…]]) in plaats van de tekst over te schrijven.
+        prefix = f"`{a['id']}` " if a.get("kind") in ("policy", "note") else ""
         tag = f" _({a['origin_path']})_" if inherited else ""
-        return f"- {prefix}**{a.get('title') or a['id']}**{extra}{tag}"
+        regels = [f"- {prefix}**{a.get('title') or a['id']}**{extra}{tag}"]
+        if pagina and a.get("body"):
+            # De body van een pagina is een DOCUMENT (met eigen koppen en lijstjes). Inline achter
+            # een streepje zou die koppen in de structuur van dit document laten vallen — dan
+            # concurreert '## Gebruikt in' met '## Notes'. Als blok eronder blijft beide leesbaar.
+            regels += [f"  > {r}" for r in str(a["body"]).splitlines()]
+        return regels + _feit_regels(a)
 
     out = ["### Van deze rol"]
-    out += [line(a, False) for a in block["own"]] or ["- —"]
+    eigen = [r for a in block["own"] for r in line(a, False)]
+    out += eigen or ["- —"]
     out.append("### Geldend hier (geërfd)")
-    out += [line(a, True) for a in block["inherited"]] or ["- —"]
+    geerfd = [r for a in block["inherited"] for r in line(a, True)]
+    out += geerfd or ["- —"]
     return out
 
 
@@ -197,7 +252,10 @@ def render_context_markdown(ctx: dict) -> str:
     L += ["", "## Policies", "_Alle policies zijn governance-eigendom (domein-voorwaarden): "
           "volg ze, stel wijzigingen alleen voor via de domein-eigenaar._"]
     L += _md_section(ctx["policies"])
-    L += ["", "## Notes"]
+    L += ["", "## Notes (wiki-pagina's)",
+          "_Elke note is een pagina: verwijs ernaar met [[titel]] of [[id]] in plaats van de tekst "
+          "over te schrijven. Feiten staan eronder met hun grond — ✓ bewijs, ◌ herkomst maar niet "
+          "gecontroleerd, ⌛ vervallen, ✗ grond niet gevonden, — geen bron._"]
     L += _md_section(ctx["notes"])
     L += ["", "## Tools"]
     L += _md_section(ctx["tools"], tool=True)

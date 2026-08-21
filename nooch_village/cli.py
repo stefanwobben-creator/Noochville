@@ -1180,6 +1180,43 @@ def main() -> None:
         print(f"✅ {res['routed']} rollen op de roloverleg-agenda gezet, {res['skipped']} overgeslagen. "
               f"Verwerk ze in het roloverleg-scherm van de cockpit, 1 voor 1.")
 
+    elif mode == "wiki_zaad":
+        # De eerste wiki-pagina's uit bestaande bronnen (stuklijst + claims-werklijst).
+        # DRY-RUN by default: eerst het rapport, pas met --apply wordt er geschreven.
+        from nooch_village import wiki_seed
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        MATERIAAL_ROL = "mother_earth__nooch__creator_of_shoes"
+        CLAIM_ROL = "compliance"
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        apply = "--apply" in sys.argv
+        rapport = wiki_seed.zaai_alles(st.att, st.records, st.evidence,
+                                       eigenaar_materiaal=MATERIAAL_ROL,
+                                       eigenaar_claims=CLAIM_ROL, apply=apply)
+        print(wiki_seed.rapport_tekst(rapport))
+        if not apply:
+            print("\nDRY-RUN — er is niets geschreven. Draai opnieuw met --apply om te zaaien.")
+
+    elif mode == "wiki_broncheck":
+        # "Zegt de bron dit nog?" — de periodieke check op geciteerde bronnen van wiki-feiten.
+        # Haalt op (read-only) en toont het rapport; pas met --apply wordt de waarneming
+        # bij het feit opgeslagen.
+        from nooch_village import wiki_bronnen
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        apply = "--apply" in sys.argv
+        rapport = wiki_bronnen.check_alles(st.att, apply=apply)
+        print(wiki_bronnen.rapport_tekst(rapport))
+        if rapport and not apply:
+            print("\nDRY-RUN — de uitkomst is niet opgeslagen. Draai opnieuw met --apply.")
+
     elif mode == "verwerking":
         # De zelf-verwerking: de rol handelt zijn eigen spanning af. DRY-RUN by default.
         # Dit is tegelijk de statusweergave — read-only, geen wachtrij, geen knoppen.

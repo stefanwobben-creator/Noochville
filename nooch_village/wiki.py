@@ -177,12 +177,26 @@ def grond_status(feit: dict, *, ledger=None, store=None, vandaag: str = "") -> d
         return _uit(grond, ONGEGROND, "ungrounded", "this fact carries no source")
 
     if soort == "bron":
-        # Een geciteerde bron is herkomst, geen bewijs: hij zegt waar het vandaan komt, niet dat
-        # het nu nog klopt. De luie 'zegt de bron dit nog'-check is een aparte brok.
+        # Een geciteerde bron is herkomst, geen bewijs — tótdat iemand kijkt of hij het nog zegt.
+        # Die check draait NIET tijdens het lezen (dat zou elke pageload een netwerk-call maken);
+        # `wiki_bronnen` doet hem periodiek en legt de uitkomst hier neer. Wat we tonen is dus
+        # altijd een gedateerde waarneming, met de datum erbij.
         url = str(grond.get("url") or "")
         if not url:
             return _uit(grond, ONTBREEKT, "source missing", "no URL with this citation")
-        return _uit(grond, ONGECONTROLEERD, "cited source", "not verified")
+        check = grond.get("check") or {}
+        wanneer = str(check.get("op") or "")
+        if not check:
+            return _uit(grond, ONGECONTROLEERD, "cited source", "not verified")
+        if check.get("gevonden") is True:
+            return _uit(grond, GEGROND, "cited source — quote still present",
+                        f"checked {wanneer}" if wanneer else "checked")
+        if check.get("gevonden") is False:
+            return _uit(grond, VERVALLEN, "cited source — quote no longer found",
+                        f"checked {wanneer}" if wanneer else "checked")
+        # Niet gelukt om te kijken (netwerk, HTTP-fout): dat is géén oordeel over de bron.
+        return _uit(grond, ONGECONTROLEERD, "cited source",
+                    f"could not check{': ' + str(check.get('reden')) if check.get('reden') else ''}")
 
     if soort == "policy":
         a = store.get(str(grond.get("ref") or "")) if store is not None else None
@@ -273,6 +287,32 @@ def voorstel_velden(pagina, *, voorstel: str, waarom: str, van_naam: str, van_id
                    "van_naam": van_naam, "van_id": van_id, "reden": reden},
     }
     return snippet, extra
+
+
+def _plat(s: str) -> str:
+    """Tekst voor een citaat-vergelijking: kleine letters, één spatie, typografische aanhalings-
+    en koppeltekens genormaliseerd. Zonder dit zou een pagina die alleen ’ in ' verandert al
+    'de bron zegt dit niet meer' opleveren."""
+    t = (s or "").lower()
+    for teken, vlak in (("’", "'"), ("‘", "'"), ("“", '"'), ("”", '"'),
+                        ("–", "-"), ("—", "-"), (" ", " ")):
+        t = t.replace(teken, vlak)
+    return " ".join(t.split())
+
+
+def controleer_citaat(feit: dict, tekst: str) -> dict:
+    """Staat het citaat nog in de opgehaalde brontekst? `{gevonden, reden}` — puur, geen netwerk.
+
+    Fail-closed op het randgeval: zonder citaat valt er niets te toetsen, en dan is 'gevonden' niet
+    True maar None — anders zou een feit met alleen een URL zichzelf tot bewijs promoveren."""
+    citaat = _plat(str((feit.get("grond") or {}).get("citaat") or ""))
+    if not citaat:
+        return {"gevonden": None, "reden": "no quote to check"}
+    if len(citaat) < 12:
+        # Een heel kort 'citaat' matcht overal; dat is geen toets maar toeval.
+        return {"gevonden": None, "reden": "quote too short to check"}
+    return ({"gevonden": True, "reden": ""} if citaat in _plat(tekst)
+            else {"gevonden": False, "reden": "quote not found in the source text"})
 
 
 def telling(a, *, ledger=None, store=None, vandaag: str = "") -> dict:
