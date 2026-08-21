@@ -102,13 +102,36 @@ def test_update_prioriteit_alleen_website_developer(tmp_path):
     assert cockpit2._Stores(dd).backlog.get(bid).impact is None
 
 
-def test_notes_tab_is_backlog_op_website_developer(tmp_path):
+def test_backlog_scherm_beheerder_versus_inbrenger(tmp_path):
+    from nooch_village.views.backlog import render_backlog
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     dev = st.people.add("Dev", "dev@nooch.earth"); st.assign.assign(WD, "person", dev.id)
+    st.people.add("Anon", "anon@nooch.earth")
     # WD-rolvervuller ziet beheer + indien-formulier
-    page = cockpit2.render_node(cockpit2._Stores(dd), WD, "notes", csrf_token="TOK", username="dev@nooch.earth")
+    page = render_backlog(cockpit2._Stores(dd), csrf="TOK", username="dev@nooch.earth")
     assert "Backlog Builder" in page and "Manage — all items by state" in page and "backlog_add" in page
     # buitenstaander ziet wel indienen, niet beheer
-    page2 = cockpit2.render_node(cockpit2._Stores(dd), WD, "notes", csrf_token="TOK", username="anon@nooch.earth")
-    assert "backlog_add" in page2 and "Beheer — alle items per staat" not in page2
+    page2 = render_backlog(cockpit2._Stores(dd), csrf="TOK", username="anon@nooch.earth")
+    assert "backlog_add" in page2 and "Manage — all items by state" not in page2
+
+
+def test_website_developer_heeft_weer_een_gewone_notes_tab(tmp_path):
+    # De Backlog Builder verving hier de notes; daardoor was dit de enige rol zonder notes — en
+    # sinds de wiki-laag dus ook zonder pagina's.
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    dev = st.people.add("Dev", "dev@nooch.earth"); st.assign.assign(WD, "person", dev.id)
+    a = cockpit2._Stores(dd).att.add(WD, "note", title="Deploy-notities")
+    page = cockpit2.render_node(cockpit2._Stores(dd), WD, "notes", csrf_token="TOK",
+                                username="dev@nooch.earth")
+    assert "Deploy-notities" in page and "artefact_add" in page      # gewone notes-tab
+    assert f"/pagina?id={a.id}" in page                              # en dus een wiki-pagina
+    assert "Manage — all items by state" not in page                 # geen backlog meer hier
+
+
+def test_backlog_woont_onder_tools_van_de_rol(tmp_path):
+    dd = _dd(tmp_path)
+    page = cockpit2.render_node(cockpit2._Stores(dd), WD, "tools", csrf_token="TOK",
+                                username="guest")
+    assert "Backlog Builder" in page and "/backlog" in page

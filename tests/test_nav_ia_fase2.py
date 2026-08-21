@@ -32,9 +32,16 @@ def test_role_tools_leeg_voor_niet_eigenaar():
 
 
 def test_registry_dekt_de_eigenaar_rollen():
+    # website_developer erbij: de Backlog Builder stond op zijn Notes-tab en woont nu onder Tools,
+    # zoals elk ander rol-gereedschap.
     assert set(_ROLE_TOOLS) == {
         "mother_earth__nooch__marketing_lead", "librarian", "concurrent_scout", "harry_hemp",
-        "compliance"}
+        "compliance", "mother_earth__nooch__website_developer"}
+
+
+def test_backlog_builder_hangt_onder_de_website_rol():
+    sid = _role_tools_html(_rec("mother_earth__nooch__website_developer"))
+    assert "Backlog Builder" in sid and "/backlog" in sid
 
 
 def test_claims_checker_hangt_onder_compliance_en_niet_onder_de_website_rol():

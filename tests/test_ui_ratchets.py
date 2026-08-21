@@ -36,7 +36,6 @@ def _governed_files():
 # Audit dd 2026-07-14, totaal 55. Verlaag een getal zodra je een view opruimt
 # (vervang losse <label>/<input>-paren door web_base._field()).
 _LABEL_WHITELIST = {
-    "views/backlog.py": 2,
     "views/catalog_koppelen.py": 7,
     "views/checklists.py": 4,
     "views/feed.py": 4,
