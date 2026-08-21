@@ -659,6 +659,37 @@ Welk Nooch-onderdeel welk materiaal bevat weet **alleen de founder**. Parsen, st
 ontsluiten doet het dorp. Dit is dezelfde grens als bij `conscious`: het dorp kan een claim toetsen
 maar niet weten wat er intern achter zit — die invulling is mens-input, geen skill-uitvoer.
 
+## Wiki — de rol-note ÍS de pagina
+
+Native kennis in het dorp, want kennis die extern leeft (Drive, sheet) kan een inwoner niet gronden,
+niet linken en niet als werkgeheugen lezen-en-schrijven. **Geen nieuw artefact-type en geen tweede
+store:** een pagina is de bestaande note (`kind="note"`, AttachmentStore), die eigenaar-rol/domein,
+versiehistorie, erven en `/context` al heeft. `nooch_village/wiki.py` voegt alleen de wiki-laag toe.
+
+| onderdeel | waar | regel |
+|---|---|---|
+| permalink | `/pagina?id=NOTE-…` (`views/wiki.py`) | lezen = zelfde scope als `?tab=notes` |
+| `[[links]]` | `wiki.resolve` | op id, of op een **unieke** titel; dubbele titel lost bewust NIET op |
+| backlinks | `wiki.backlinks` | afgeleid uit de bodies, nooit opgeslagen |
+| feiten | `meta["feiten"]` van dezelfde note | reizen mee in versies, erven en `/context` |
+| grond | `wiki.grond_status` | `kroniek` · `cert` · `policy` · `bron`; **bij het LEZEN vergeleken**, nooit als oordeel opgeslagen |
+| voorstel | `pagina_voorstel` → `verzoek_besluit` | bestaand verzoekmechanisme; accepteren schrijft de tekst als nieuwe versie |
+| bron-check | `wiki_bronnen.py` + `village wiki_broncheck [--apply]` | periodiek, niet tijdens een pageload; uitkomst is een **gedateerde waarneming** |
+| zaad | `wiki_seed.py` + `village wiki_zaad [--apply]` | dry-run default, idempotent, fail-closed op ontbrekende eigenaar-rol |
+
+**Vier regels die je niet mag omdraaien:**
+1. **Grond is een vergelijking, geen stempel.** Een verlopen certificaat verliest vanzelf zijn grond;
+   een niet-bevestigd Kroniek-record is herkomst (`ongecontroleerd`), geen bewijs; geen bron =
+   `ongegrond`, zichtbaar op het scherm én in de systeemprompt.
+2. **Een netwerkfout is geen oordeel.** De bron-check zegt dan `niet te controleren`, nooit "weg".
+3. **Nooit automatisch een pagina aanmaken.** Een `[[link]]` naar iets dat niet bestaat is een
+   verlanglijst-item; een pagina krijgt een eigenaar, en dat is een besluit.
+4. **Machine-onderhoud versiont niet.** De bron-check schrijft via `AttachmentStore.set_meta`
+   (geen versie-entry, geen `updated_at`-bump) — er verandert niets aan de pagina.
+
+Een AI-vervulde eigenaar-rol leest de NotifStore niet: `wiki.ontvanger()` stuurt een voorstel dan
+naar de Circle Lead van de omvattende cirkel, mét de reden op het formulier.
+
 ## Schaal-naden (grenzen die je later kunt opentrekken, nu niet schenden)
 
 Dit zijn de vier plekken waar de architectuur later kan groeien zonder bestaande code te herschrijven:

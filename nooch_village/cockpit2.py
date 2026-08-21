@@ -1184,7 +1184,8 @@ def role_context(st, role_id: str, fmt: str = "json"):
     `fmt="markdown"` = de systeemprompt-bron voor AI-vervullers; anders JSON."""
     if not st.records.get(role_id):
         return 404, "text/plain; charset=utf-8", "Unknown role."
-    ctx = artefacts.serialize_context(role_id, st.records, st.att)
+    # De Kroniek mee: alleen daarmee kan een feit op een pagina zeggen of zijn grond nú nog draagt.
+    ctx = artefacts.serialize_context(role_id, st.records, st.att, st.evidence)
     if fmt == "markdown":
         return 200, "text/markdown; charset=utf-8", artefacts.render_context_markdown(ctx)
     return 200, "application/json; charset=utf-8", json.dumps(ctx, ensure_ascii=False, indent=2)

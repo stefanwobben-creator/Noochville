@@ -63,6 +63,7 @@ def ontleed_bom(tekst: str, bron: str = "BOM") -> list[Constituent]:
             realisatie=material,
             alternatieven=_alternatieven(comment),
             bron=bron,
+            opmerking=comment.strip().lstrip("<").strip(),
         ))
     return uit
 

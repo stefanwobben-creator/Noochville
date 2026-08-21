@@ -138,6 +138,34 @@ def _projects(st, termen):
     return uit
 
 
+def _snip(body: str) -> str:
+    """Eén leesbare regel uit een pagina-body: markdown-tekens weg, koppen weg. In de trefferlijst
+    staat anders '## Gebruikt in - Lining' waar een zin hoort te staan."""
+    regels = [r.strip() for r in (body or "").splitlines()]
+    zinnen = [r.lstrip("-* ").strip() for r in regels if r and not r.startswith("#")]
+    return " ".join(" ".join(zinnen).replace("**", "").split())[:150]
+
+
+def _pages(st, termen):
+    """Wiki-pagina's (de rol-notes): titel, tekst én de feiten die erop staan.
+
+    De feiten meenemen is het punt: je zoekt zelden op de titel van een pagina, maar wel op iets
+    dat érin staat ("Ecovative", "geldig tot 2030"). Zonder dat blijft de pagina onvindbaar totdat
+    je al weet dat hij bestaat."""
+    uit = []
+    try:
+        from nooch_village import wiki
+        for a in wiki.paginas(st.att):
+            feiten = " ".join(str(f.get("tekst") or "") for f in wiki.feiten(a))
+            if _match(f"{a.title} {a.body} {feiten}", termen):
+                uit.append({"url": wiki.pagina_url(a.id), "kind": "page",
+                            "titel": a.title or a.id,
+                            "snip": _snip(a.body or feiten)})
+    except Exception:
+        pass
+    return uit
+
+
 def _insights(st, termen):
     uit = []
     try:
@@ -181,7 +209,8 @@ def _words(st, termen):
 # accountabilities (waar is iets belegd?), daarna de kennis-lagen. (founder 23 jul: signal =
 # kenniskaartje, insight = laag 2, word = library-zoekwoord.)
 _GROEPEN = (("People", _people), ("Roles", _roles), ("Accountabilities", _accountabilities),
-            ("Projects", _projects), ("Insights", _insights), ("Signals", _signals), ("Words", _words))
+            ("Projects", _projects), ("Pages", _pages), ("Insights", _insights),
+            ("Signals", _signals), ("Words", _words))
 
 
 def _zoek(st, termen):
