@@ -518,8 +518,13 @@ def rapport_tekst(r: dict) -> str:
         uit.append("")
         for k, n in sorted(v["per_uitkomst"].items(), key=lambda kv: -kv[1]):
             uit.append(f"- **{n}× {zv.LABEL.get(k, k)}**")
-        uit += ["", f"{v['onder_de_rollen']}% loste onder de rollen op; "
-                    f"{v['naar_de_founder']} bereikte(n) de founder.", ""]
+        # `verdeling.naar_de_founder` telt alleen het type 'founder'. Een governance-voorstel
+        # komt óók op het bureau van de founder terecht, dus die twee bij elkaar optellen — anders
+        # staat er "0 bereikte(n) de founder" bóven een kaart die voor hem is.
+        gov = v["per_uitkomst"].get(zv.GOVERNANCE, 0)
+        uit += ["", f"{v['onder_de_rollen']}% loste onder de rollen op. Op het bureau van de "
+                    f"founder komen {v['naar_de_founder']} besluit(en) en {gov} "
+                    f"governance-voorstel(len).", ""]
 
         stroomt = [x for x in r["rijen"] if x["verzendbaar"] and x["naar"]]
         uit += ["**Wat stroomt.** " + (
