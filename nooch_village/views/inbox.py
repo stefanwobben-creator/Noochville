@@ -70,15 +70,56 @@ def _btn(csrf: str, nid: str, action: str, label: str, cls: str = "flink", nxt: 
 
 
 # ── de lijst ────────────────────────────────────────────────────────────────────
+# Wat een regel MOET tonen om scanbaar te zijn: waar het over gaat (de bevinding, niet de rauwe
+# dump), en wat er van je gevraagd wordt (het type). Zonder dat tweede zien veertien regels er
+# hetzelfde uit en moet je ze één voor één openen om te weten welke een besluit is.
+_TYPE_CHIP = {"founder": "besluit", "naar_rol": "verzoek", "governance": "governance"}
+
+
+def _een_regel(n: dict) -> str:
+    """De bevinding als hij er is, anders de rauwe signalering.
+
+    De bevinding is de zin die voor een mens is geschreven; de snippet is de interne verpakking van
+    160 tekens. Stond de snippet hier, dan is alle herformulering onzichtbaar precies op het scherm
+    waar je kiest wat je opent."""
+    b = dict(n.get("bevinding") or {})
+    if b.get("ok") and b.get("spanning"):
+        return _one_line(b["spanning"])
+    return _one_line(n.get("snippet"))
+
+
+def _inline_actie(st, n: dict, csrf: str) -> str:
+    """De hoofdactie in de regel zelf. De modal blijft voor de diepte.
+
+    Dezelfde knoppen als op de verwerk-pagina — letterlijk dezelfde bouwers, niet een tweede set.
+    Is er voor dit type geen knop die in één handeling klopt (een governance-voorstel weegt de poort,
+    dat doe je niet vanuit een lijst), dan staat er geen uitklap: een lege accordeon is erger dan
+    geen accordeon."""
+    soort = _type_van(n)
+    if soort == "naar_rol":
+        binnen = _verzoek_knoppen(n, csrf)
+    elif n.get("project_id"):
+        binnen = _besluit_knoppen(n, csrf)
+    else:
+        return ""
+    if not binnen:
+        return ""
+    return (f"<details class='wo-ocd box-details'><summary>handle here</summary>"
+            f"{binnen}{_klaar_knop(n.get('id', ''), csrf)}</details>")
+
+
 def _inbox_row(st, n: dict, csrf: str, done_nid: str = "") -> str:
     status = st.notif.status_of(n)
     lbl, chip = _STATUS.get(status, _STATUS["nieuw"])
     nid = n.get("id", "")
     sep = "<span class='fsep'>·</span>"
-    meta = (f"<div class='rdr-meta'><span class='{chip}'>{_e(lbl)}</span> "
+    soort = _type_van(n)
+    tchip = (f"<span class='chip outline'>{_e(_TYPE_CHIP[soort])}</span> "
+             if soort in _TYPE_CHIP else "")
+    meta = (f"<div class='rdr-meta'><span class='{chip}'>{_e(lbl)}</span> {tchip}"
             f"<span class='muted'>via {_e(_who(st, n))}</span> {sep} {_source_link(st, n)} {sep} "
             f"<span class='muted'>{_e(_stamp(n.get('at')))}</span></div>")
-    title = f"<div class='rdr-sig'>{_e(_one_line(n.get('snippet')))}</div>"
+    title = f"<div class='rdr-sig'>{_e(_een_regel(n))}</div>"
 
     if status == "verwerkt":
         vs = st.notif.verwerkingen_of(n)
@@ -94,10 +135,13 @@ def _inbox_row(st, n: dict, csrf: str, done_nid: str = "") -> str:
             return f"<div class='rdr-row rdr-vier'><div class='rdr-body'>{body}</div>{act}</div>"
         return f"<div class='rdr-row'><div class='rdr-body'>{body}</div>{act}</div>"
 
-    verwerk = f"<a class='btn ok sm' href='/inbox/verwerk?nid={_e(nid)}'>Process</a>"
+    # 'Process' is niet meer de enige weg: de hoofdactie zit in de regel, de modal is voor de
+    # diepte (meerdere uitkomsten stapelen, de volle vraag, het verwerk-record).
+    verwerk = f"<a class='btn sm' href='/inbox/verwerk?nid={_e(nid)}'>More…</a>"
     prullenbak = _btn(csrf, nid, "notif_delete", "🗑", cls="flink")
     act = f"<div class='rdr-act'>{verwerk}{prullenbak}</div>"
-    return f"<div class='rdr-row'><div class='rdr-body'>{meta}{title}</div>{act}</div>"
+    inline = _inline_actie(st, n, csrf) if csrf else ""
+    return (f"<div class='rdr-row'><div class='rdr-body'>{meta}{title}{inline}</div>{act}</div>")
 
 
 def _poort_secties(st, items, csrf_token, done) -> str:
@@ -164,8 +208,8 @@ def render_inbox(st, targets, csrf_token: str = "", naam: str = "", done: str = 
             else "<p class='muted'>Your inbox is empty. As soon as a role or the meeting @-mentions you, "
                  "it appears here.</p>")
     kop = f"Inbox{(' — ' + _e(naam)) if naam else ''}"
-    telling = (f"<p class='muted'>{len(items)} open, of which {nieuw} new. Click Process to handle "
-               f"a tension, or throw it away.</p>")
+    telling = (f"<p class='muted'>{len(items)} open, of which {nieuw} new. Handle one right here, "
+               f"open More… for the full picture, or throw it away.</p>")
     main = (f"<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
             f"<h1>{kop} <span class='chip'>{len(items)}</span></h1>{telling}"
             f"<div class='rdr-tool'>{body}</div></div>")
@@ -375,6 +419,73 @@ def _outcome_form(otype: str, nid: str, csrf: str, prefill: str, role_opts: str,
             f"<button class='btn sm' name='action' value='notif_outcome'>Record</button></form>")
 
 
+# ── De hoofdactie, één keer geschreven ───────────────────────────────────────
+#
+# Deze drie bouwers stonden als geneste functies in `_wizard_pane`, en dat was prima zolang de
+# verwerk-pagina de enige plek was waar je iets kon afhandelen. Nu de lijst hetzelfde inline aanbiedt
+# zouden het twee kopieën worden: dezelfde drie knoppen, met de kans dat er over een maand één set
+# een veld erbij krijgt en de andere niet. Eén bouwer, twee plekken die hem aanroepen.
+
+def _keuze_form(nid: str, csrf: str, *, actie: str, veld: str, keuze: str, label: str, cls: str,
+                hint: str, verplicht: bool, tekstveld: str, nxt: str = "/inbox") -> str:
+    req = " required" if verplicht else ""
+    return (f"<details class='wo-ocd box-details'><summary><strong>{label}</strong></summary>"
+            f"<form method='post' action='/action' class='wo-oc'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+            f"<input type='hidden' name='nid' value='{_e(nid)}'>"
+            f"<input type='hidden' name='{_e(veld)}' value='{_e(keuze)}'>"
+            f"<input type='hidden' name='next' value='{_e(nxt)}'>"
+            f"<textarea name='{_e(tekstveld)}' rows='2' placeholder='{_e(hint)}' "
+            f"aria-label='note'{req}></textarea>"
+            f"<button class='btn {cls}sm' name='action' value='{_e(actie)}'>{label}"
+            f"</button></form></details>")
+
+
+def _verzoek_knoppen(n: dict, csrf: str, nxt: str = "/inbox") -> str:
+    """Accepteren / aanpassen / weigeren op een operationeel verzoek."""
+    nid = n.get("id", "")
+
+    def _f(keuze, label, cls, hint, verplicht):
+        return _keuze_form(nid, csrf, actie="verzoek_besluit", veld="keuze", keuze=keuze,
+                           label=label, cls=cls, hint=hint, verplicht=verplicht,
+                           tekstveld="tekst", nxt=nxt)
+    return (_f("accepteer", "✓ Accepteren", "ok ", "optioneel: een notitie bij je ja", False)
+            + _f("aanpassen", "✎ Formulering aanpassen", "",
+                 "hoe zou het verzoek wél kloppen? gaat terug naar de vrager", True)
+            + _f("weiger", "✗ Weigeren", "", "waarom niet — de vrager leert hiervan", True)
+            # Bij een pagina-voorstel is accepteren de handeling zélf (nieuwe versie), niet een
+            # project dat het nog moet gaan doen. Eén zin, maar hij bepaalt wat de lezer denkt
+            # te tekenen.
+            + ("<p class='muted'>Accepting saves the proposed text as a new version of the "
+               "page — no project.</p>" if n.get("pagina") else
+               "<p class='muted'>Bij accepteren verschijnt dit als project op je bord.</p>"))
+
+
+def _besluit_knoppen(n: dict, csrf: str, nxt: str = "/inbox") -> str:
+    """Ja / nee / suggestie op een vraag van een bewoner. Alleen met een bron-project: het antwoord
+    landt als reactie in die feed, en zonder bron is er niets om op te antwoorden."""
+    if not n.get("project_id"):
+        return ""
+    nid = n.get("id", "")
+
+    def _f(keuze, label, cls, hint, verplicht):
+        return _keuze_form(nid, csrf, actie="notif_besluit", veld="besluit", keuze=keuze,
+                           label=label, cls=cls, hint=hint, verplicht=verplicht,
+                           tekstveld="toelichting", nxt=nxt)
+    return (_f("ja", "✓ Yes", "ok ", "optional: note with your yes", False)
+            + _f("nee", "✗ No", "", "optional: why not — the inhabitant learns from it", False)
+            + _f("suggestie", "💬 Suggestion", "", "your suggestion or counter-question", True))
+
+
+def _klaar_knop(nid: str, csrf: str, nxt: str = "/inbox") -> str:
+    return (f"<form method='post' action='/action' class='emo-f rdr-rec'>"
+            f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
+            f"<input type='hidden' name='nid' value='{_e(nid)}'>"
+            f"<input type='hidden' name='next' value='{_e(nxt)}'>"
+            f"<button class='btn ok sm' name='action' value='notif_klaar'>Done with this tension"
+            f"</button></form>")
+
+
 def _wizard_pane(n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
     """Rechts: Wat heb je nodig? Per intentie een accordeon; per uitkomst een vraag + knop die het
     compacte formulier uitklapt. 'Niks nodig' sluit het item direct (FYI-klep)."""
@@ -396,11 +507,7 @@ def _wizard_pane(n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
                             f"<strong>{_e(label)}</strong></summary>{form}</details>")
         groups.append(f"<details class='box-details'><summary><strong>{_e(intent['label'])}"
                       f"</strong></summary>{''.join(opts)}</details>")
-    klaar = (f"<form method='post' action='/action' class='emo-f rdr-rec'>"
-             f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
-             f"<input type='hidden' name='nid' value='{_e(nid)}'>"
-             f"<input type='hidden' name='next' value='/inbox'>"
-             f"<button class='btn ok sm' name='action' value='notif_klaar'>Done with this tension</button></form>")
+    klaar = _klaar_knop(nid, csrf)
     # Beslis direct (founder, 19 jul): op een vraag van een bewoner wil de mens gewoon ja,
     # nee of een suggestie kunnen zeggen — het antwoord landt als reactie op de bron-feed
     # (@rol, de bewoner pakt het zelf op) en de spanning sluit. Alleen als er een
@@ -410,54 +517,15 @@ def _wizard_pane(n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
     # zoeken waar hij ja moet zeggen.
     besluit = ""
     if _type_van(n) == "naar_rol":
-        def _vf(keuze: str, label: str, cls: str, hint: str, verplicht: bool) -> str:
-            req = " required" if verplicht else ""
-            return (f"<details class='wo-ocd box-details'><summary><strong>{label}</strong></summary>"
-                    f"<form method='post' action='/action' class='wo-oc'>"
-                    f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
-                    f"<input type='hidden' name='nid' value='{_e(nid)}'>"
-                    f"<input type='hidden' name='keuze' value='{keuze}'>"
-                    f"<input type='hidden' name='next' value='/inbox'>"
-                    f"<textarea name='tekst' rows='2' placeholder='{_e(hint)}' "
-                    f"aria-label='note'{req}></textarea>"
-                    f"<button class='btn {cls}sm' name='action' value='verzoek_besluit'>{label}"
-                    f"</button></form></details>")
         return ("<div class='rdr-pane'><h3>Wat doe je met dit verzoek?</h3>"
-                + _vf("accepteer", "✓ Accepteren", "ok ",
-                      "optioneel: een notitie bij je ja", False)
-                + _vf("aanpassen", "✎ Formulering aanpassen", "",
-                      "hoe zou het verzoek wél kloppen? gaat terug naar de vrager", True)
-                + _vf("weiger", "✗ Weigeren", "",
-                      "waarom niet — de vrager leert hiervan", True)
-                # Bij een pagina-voorstel is accepteren de handeling zélf (nieuwe versie), niet een
-                # project dat het nog moet gaan doen. Eén zin, maar hij bepaalt wat de lezer denkt
-                # te tekenen.
-                + ("<p class='muted'>Accepting saves the proposed text as a new version of the "
-                   "page — no project.</p>" if n.get("pagina") else
-                   "<p class='muted'>Bij accepteren verschijnt dit als project op je bord.</p>")
-                + "</div>")
+                + _verzoek_knoppen(n, csrf) + "</div>")
 
     if n.get("project_id"):
-        def _bf(keuze: str, label: str, cls: str, hint: str, verplicht: bool) -> str:
-            req = " required" if verplicht else ""
-            return (f"<details class='wo-ocd box-details'><summary><strong>{label}</strong></summary>"
-                    f"<form method='post' action='/action' class='wo-oc'>"
-                    f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
-                    f"<input type='hidden' name='nid' value='{_e(nid)}'>"
-                    f"<input type='hidden' name='besluit' value='{keuze}'>"
-                    f"<input type='hidden' name='next' value='/inbox'>"
-                    f"<textarea name='toelichting' rows='2' placeholder='{_e(hint)}' "
-                    f"aria-label='note'{req}></textarea>"
-                    f"<button class='btn {cls}sm' name='action' value='notif_besluit'>{label}</button>"
-                    f"</form></details>")
         besluit = (f"<details class='box-details' open><summary><strong>Decide now</strong>"
                    f"</summary><p class='muted'>Your answer lands as a reply to the inhabitant, "
                    f"who can take it further — that's how the village learns to resolve tensions. "
                    f"The tension closes immediately.</p>"
-                   + _bf("ja", "✓ Yes", "ok ", "optional: note with your yes", False)
-                   + _bf("nee", "✗ No", "", "optional: why not — the inhabitant learns from it", False)
-                   + _bf("suggestie", "💬 Suggestion", "", "your suggestion or counter-question", True)
-                   + "</details>")
+                   + _besluit_knoppen(n, csrf) + "</details>")
     return (f"<div class='rdr-pane'><h3>What do you need?</h3>{besluit}{''.join(groups)}{klaar}</div>")
 
 
