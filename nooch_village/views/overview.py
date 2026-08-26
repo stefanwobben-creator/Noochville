@@ -793,9 +793,14 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
         open_cls = "btn ok" if _rov_items(st, node_id) else "btn"   # groen = lopend roloverleg
         wo_url = f"/werkoverleg?circle={_e(node_id)}"
         wo_cls = "btn ok" if st.werk.is_open(node_id) else "btn"    # groen = lopend werkoverleg
+        # Quick capture staat BEWUST niet als js-modal: het scherm bestaat om in één toets-flow te
+        # kunnen typen, en een overlay die zich boven de pagina legt haalt de focus uit het veld.
+        vang_url = f"/vangst?circle={_e(node_id)}"
+        vang_cls = "btn ok" if any(p.get("status") != "done" for p in st.werk.punten(node_id)) else "btn"
         meet = (f"<div class='c2-meet'>"
                 f"<a class='{open_cls} js-modal' href='{rov_url}' data-href='{rov_url}'>Governance meeting</a>"
-                f"<a class='{wo_cls} js-modal' href='{wo_url}' data-href='{wo_url}'>Tactical meeting</a></div>")
+                f"<a class='{wo_cls} js-modal' href='{wo_url}' data-href='{wo_url}'>Tactical meeting</a>"
+                f"<a class='{vang_cls}' href='{vang_url}'>Quick capture</a></div>")
     else:
         meet = ""
     # Breadcrumb weggehaald (founder 23 jul): de hiërarchie staat al in de organisatieboom-rail rechts.

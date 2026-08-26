@@ -345,6 +345,7 @@ from nooch_village.views.werkoverleg import (
     _wo_spanning_add, _wo_spanning_items, _wo_triage,
     _wo_checkout, _wo_summary, render_werkoverleg,
 )
+from nooch_village.views.vangst import render_vangst, render_vangst_frag
 
 
 _IC_GEAR = _ic("<circle cx='12' cy='12' r='3'/><path d='M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.4 1a7 7 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7 7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6a7 7 0 0 0 .1-1z'/>")
@@ -2710,6 +2711,118 @@ def _act_wo_present_all(c):
         return nxt, msg
 
 
+def _act_vangst_add(c):
+        # AUTHZ: circle-member — een punt vangen is dezelfde laag als een spanning inbrengen in het
+        # werkoverleg (_act_wo_ag_add). Vangen schrijft niets buiten de eigen cirkel.
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _member_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
+        tekst = (g("punt") or "").strip()
+        if not tekst:
+            return nxt, ""                       # lege Enter is geen fout, alleen niets
+        actor = st.people.by_email(username) if username and username != "guest" else None
+        # De vangst gaat naar de PERSISTENTE backlog: er hoeft geen overleg open te staan, en bij het
+        # eerstvolgende overleg komt het punt vanzelf op de agenda. Géén typering, géén model — dat
+        # is precies het verschil tussen vangen en verwerken.
+        st.werk.backlog_add(g("circle"), tekst, by=(actor.name if actor else ""),
+                            by_id=(actor.id if actor else ""))
+        return nxt, ""                           # geen banner: hij zou de cursor van het veld halen
+
+
+def _act_vangst_remove(c):
+        # AUTHZ: circle-member — je eigen gevangen punt weggooien blijft binnen de cirkel.
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _member_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
+        return nxt, ("🗑 removed" if st.werk.punt_remove(g("circle"), g("iid")) else "")
+
+
+def _act_vangst_verwerk(c):
+        # AUTHZ: rolvervuller of Circle Lead — verwerken raakt de rol of het project van een ander
+        # (een project op zijn bord, een spanning in zijn postbus). Vangen mag elk lid; verwerken
+        # niet: dat legt werk bij iemand neer.
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        circle, iid, otype = g("circle"), g("iid"), g("otype")
+        it = st.werk.punt_get(circle, iid)
+        if it is None:
+            return nxt, "✗ this point no longer exists"
+        if it.get("status") == "done":
+            return nxt, "✗ already processed"
+        actor = st.people.by_email(username) if username and username != "guest" else None
+        tekst = (g("tekst") or it.get("title") or "").strip()
+        if not tekst:
+            return nxt, "✗ content is required"
+
+        if otype == "spanning":
+            from nooch_village import wiki
+            rol = g("rol")
+            if not rol or st.records.get(rol) is None:
+                return nxt, "✗ pick a role"
+            _deny = _role_gate(rol, username, st)
+            if _deny:
+                return nxt, _deny
+            # DE BESTAANDE PIJPLIJN, letterlijk: `add` zonder `type` betekent dat de haak van
+            # `spanning_ontstaat` de bevinding schrijft en de typering doet. Hier wordt dus niets
+            # getypeerd; hier wordt alleen doorgegeven wie het inbracht, zodat het bij het verwerken
+            # zíjn spanning wordt en niet die van het overleg.
+            #
+            # De haak wordt hier EXPLICIET op deze store gezet. `_bootstrap` zet hem ook, maar op een
+            # `_Stores` die daarna wordt weggegooid, en elke request bouwt een verse — dus in het
+            # web-pad draaide hij nergens. Hem procesbreed aanzetten zou van élke notificatie in de
+            # cockpit een model-aanroep in de request maken; dat is een eigen besluit, geen bijvangst
+            # van dit scherm. Daarom precies hier, op de ene plek die erom vraagt.
+            try:
+                from nooch_village.spanning_ontstaat import maak_verrijker
+                st.notif.set_verrijker(maak_verrijker(st.records, st.assign, c.data_dir))
+            except Exception as e:                       # noqa: BLE001 — fail-soft, luid
+                logging.getLogger("village.cockpit").warning(
+                    "vangst: verrijk-haak niet gezet (%s) — de spanning gaat rauw door", e)
+            doel = wiki.ontvanger(rol, st.records, st.assign)
+            if not doel.get("rol"):
+                return nxt, "✗ no mailbox found for this role"
+            n = st.notif.add("role", doel["rol"], "", by=(it.get("by_id") or (actor.id if actor else "")),
+                             snippet=tekst)
+            naam = _name(st.records.get(doel["rol"])) if st.records.get(doel["rol"]) else doel["rol"]
+            waarom = f" ({doel['reden']})" if doel.get("reden") else ""
+            detail = f"tension for {naam}{waarom}"
+            st.werk.punt_resolve(circle, iid, otype, detail)
+            return nxt, f"✓ tension sent to {naam}" + (f" — {n.get('type') or 'not yet typed'}"
+                                                      if n.get("type") else "")
+
+        if otype == "project":
+            owner = g("owner")
+            orec = st.records.get(owner) if owner else None
+            if orec is None:
+                return nxt, "✗ pick a role owner for the project"
+            if org.is_circle(orec):
+                return nxt, "✗ a circle cannot hold a project — pick a role"
+            _deny = _role_gate(owner, username, st)
+            if _deny:
+                return nxt, _deny
+            _outcome_project(st, owner, tekst,
+                             provenance=f"↳ captured in the tactical meeting of {circle}",
+                             actor_id=(actor.id if actor else ""))
+            st.werk.punt_resolve(circle, iid, otype, f"{tekst} → {_name(orec)}")
+            return nxt, f"✓ project on {_name(orec)}"
+
+        if otype == "actie":
+            pid_link = g("pid_link")
+            tgt = st.projects.get(pid_link) if pid_link else None
+            if tgt is None:
+                return nxt, "✗ target project not found"
+            _deny = _role_gate(tgt.get("owner") or "", username, st)
+            if _deny:
+                return nxt, _deny
+            if _outcome_action(st, pid_link, tekst) is None:
+                return nxt, "✗ could not add the action"
+            st.werk.punt_resolve(circle, iid, otype, f"{tekst} → project")
+            return nxt, "✓ action added to the project"
+
+        return nxt, "✗ unknown outcome"
+
+
 def _act_wo_ag_add(c):
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
         msg = ""
@@ -4929,6 +5042,9 @@ ACTIONS = {
     "wo_close": _act_wo_close,
     "wo_presence": _act_wo_presence,
     "wo_present_all": _act_wo_present_all,
+    "vangst_add": _act_vangst_add,
+    "vangst_remove": _act_vangst_remove,
+    "vangst_verwerk": _act_vangst_verwerk,
     "wo_ag_add": _act_wo_ag_add,
     "wo_ag_remove": _act_wo_ag_remove,
     "wo_ag_note": _act_wo_ag_note,
@@ -5464,6 +5580,18 @@ def make_handler(data_dir: str, csrf_token: str,
                 return
             if path == "/noochie":
                 self._send(render_noochie(st, effective_csrf, (qs.get("ctx") or [""])[0]))
+                return
+            if path == "/vangst":
+                # Quick capture: vangen scheiden van verwerken. Geen modal (js-modal zou het
+                # altijd-zichtbare veld in een overlay stoppen, en dan is de één-toets-flow weg).
+                _c = (qs.get("circle") or [""])[0] or _home_node(st.records)
+                if (qs.get("frag") or [""])[0]:
+                    # Alleen de lijst — het veld blijft staan waar het staat, met de cursor erin.
+                    self._send(render_vangst_frag(st, _c, csrf_token=effective_csrf),
+                               chrome=False)
+                    return
+                self._send(render_vangst(st, _c, csrf_token=effective_csrf,
+                                         msg=(qs.get("msg") or [""])[0]))
                 return
             if path == "/werkoverleg":
                 fr = (qs.get("fragment") or [""])[0] == "1"
