@@ -100,3 +100,27 @@ def test_een_aangehaalde_term_is_geen_afgekapte_zin():
     ("Nooch's") dan een citaat; een valse afwijzing kost een leesbare kaart."""
     assert bv.afgekapt("De claim 'compensated' mag pas online als het certificaat er is.") is False
     assert bv.afgekapt('Hij zei "dit mag niet.') is True          # dubbele telt wel
+
+
+def test_de_hoog_inzet_kop_houdt_de_dorpsstaart(monkeypatch):
+    """De premium-kop bepaalt waar het oordeel vandaan komt; de staart bepaalt DAT er een oordeel is.
+
+    Zonder staart betekent één wegvallende leverancier (geen krediet, storing) geen antwoord — en
+    dan degradeert élke verse spanning naar 'moet herschreven' en bereikt er niets meer een bureau.
+    """
+    from nooch_village import bevinding as bv, llm
+
+    gezien = {}
+
+    def _reason(prompt, **kw):
+        gezien.update(kw)
+        return '{"spanning": "Er is iets aan de hand dat ik netjes kan uitleggen in gewone taal.", '\
+               '"voorstel": "Ik zoek een tweede weg naar deze gegevens."}'
+
+    monkeypatch.setattr(llm, "dorpsladder", lambda: "gemini:gemini-2.5-flash")
+    monkeypatch.setenv("LLM_HOOG_INZET_LADDER", "anthropic:claude-sonnet-5")
+    uit = bv.herschrijf("de bron antwoordt niet meer", rol="librarian", reason_fn=_reason)
+    assert uit["ok"], uit["reden"]
+    tredes = [t.strip() for t in gezien["ladder"].split(",")]
+    assert tredes[0] == "anthropic:claude-sonnet-5"          # de kop blijft de kop
+    assert "gemini:gemini-2.5-flash" in tredes               # en de staart vangt hem op
