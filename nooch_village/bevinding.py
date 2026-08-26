@@ -136,8 +136,16 @@ def herschrijf(tekst: str, *, rol: str, records=None, reason_fn=None,
         from nooch_village.llm import reason as reason_fn         # noqa: PLC0415
     if not ladder:
         try:
+            # MET de dorpsstaart, zoals `ladder_voor` hem voor elke andere hoog-inzet-site
+            # samenstelt. Dit was de enige plek die de kop kaal doorgaf, en dat is precies het
+            # geval waar `met_dorpsstaart` voor bestaat: valt de premium-leverancier weg (geen
+            # krediet, storing), dan is het resultaat niet 'een goedkoper antwoord' maar GEEN
+            # antwoord — en dan degradeert élke verse spanning naar 'moet herschreven' en bereikt
+            # er niets meer een bureau. Gemeten op prod 26-08: 13 van de 13 bevindingen leeg omdat
+            # anthropic geen krediet had, terwijl de dorpsladder gewoon stond te draaien.
+            from nooch_village.llm import met_dorpsstaart
             from nooch_village.llm_keuze import hoog_inzet_ladder
-            ladder = hoog_inzet_ladder()
+            ladder = met_dorpsstaart(hoog_inzet_ladder())
         except Exception:                                          # noqa: BLE001
             ladder = ""
 
