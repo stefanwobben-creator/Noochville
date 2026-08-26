@@ -128,7 +128,7 @@ def _backlink_sectie(a, pags: list) -> str:
     return f"<div class='c2-sec'><h3>Links here</h3>{kaarten}{wens}</div>"
 
 
-def _voorstel_form(st, a, csrf_token: str) -> str:
+def _voorstel_form(st, a, csrf_token: str, *, next_url: str = "") -> str:
     """"Ik vind dat deze pagina Y moet zeggen" — voor wie de pagina niet bezit.
 
     Het loopt langs het bestaande verzoekmechanisme: het wordt een `naar_rol`-item in de inbox van
@@ -142,11 +142,15 @@ def _voorstel_form(st, a, csrf_token: str) -> str:
             f"<form method='post' action='/action' class='qadd-form'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
             f"<input type='hidden' name='aid' value='{_e(a.id)}'>"
-            f"<input type='hidden' name='next' value='{_e(wiki.pagina_url(a.id))}'>"
+            # Terug naar waar je vandaan kwam: vanaf de Notes-tab is dat de tab, niet de
+            # permalink. Je wordt niet verplaatst omdat je iets voorstelde.
+            f"<input type='hidden' name='next' value='{_e(next_url or wiki.pagina_url(a.id))}'>"
             f"<p class='muted'>Goes to <strong>{_e(naar)}</strong>{reden}. "
             f"They accept, reshape or refuse — accepting saves your text as a new version.</p>"
-            f"{_field('Why', 'waarom', fid='vst-waarom', required=True, placeholder='one line: what is wrong now')}"
-            f"{_field('Proposed text', 'voorstel', kind='textarea', value=a.body, fid='vst-body')}"
+            # De veld-ids dragen de artefact-id: op de Notes-tab staan meerdere pagina's onder
+            # elkaar, en twee velden met dezelfde id laten elk gekoppeld label naar de eerste wijzen.
+            f"{_field('Why', 'waarom', fid=f'vst-waarom-{a.id}', required=True, placeholder='one line: what is wrong now')}"
+            f"{_field('Proposed text', 'voorstel', kind='textarea', value=a.body, fid=f'vst-body-{a.id}')}"
             f"<div class='qadd-row'>"
             f"<button class='btn ok' type='submit' name='action' value='pagina_voorstel'>Send</button>"
             f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "

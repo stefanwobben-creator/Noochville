@@ -601,9 +601,13 @@ def _artefact_head(a, *, extra: str = "") -> str:
     return head
 
 
-def _artefact_own_card(a, csrf_token: str, can_edit: bool) -> str:
+def _artefact_own_card(a, csrf_token: str, can_edit: bool, *, anders: str = "") -> str:
+    """`anders` is wat iemand mag die NIET de eigenaar is — op een note het voorstelpad.
+
+    De keuze is exclusief: wie mag bewerken krijgt geen voorstelknop (hij zou zijn eigen voorstel
+    moeten goedkeuren), wie niet mag bewerken krijgt geen bewerkknop die toch afketst op de poort."""
     body = f"<div class='att-body'>{_md(a.body)}</div>" if a.body else ""
-    actions = ""
+    actions = anders
     if can_edit:
         # Bewerk-formulier op volledige kaartbreedte (eigen blok, NIET als smal flex-item in een .qadd-row
         # náást 'archiveren'); 'archiveren' als losse actie eronder.
@@ -631,7 +635,18 @@ def _artefact_tab_html(st: _Stores, rec, kind: str, csrf_token: str, username: s
     kop = ("<p class='muted'>All policies below are "
            "governance-owned.</p>" if kind == "policy" else "")
 
-    own = "".join(_artefact_own_card(a, csrf_token, can_edit) for a in oi["own"])
+    # Een note IS een wiki-pagina, en op de permalink kan wie hem niet bezit al een wijziging
+    # voorstellen. Op déze tab kon dat niet: een niet-eigenaar zag alleen tekst, zonder enige weg om
+    # te zeggen dat er iets niet klopt. Zelfde formulier, zelfde verzoekpad — niet een tweede vorm.
+    def _anders(a) -> str:
+        if kind != wiki.PAGINA_KIND or can_edit or not csrf_token:
+            return ""
+        from nooch_village.views.wiki import _voorstel_form
+        return _voorstel_form(st, a, csrf_token,
+                              next_url=f"/node?id={rec.id}&tab={_tab_for(kind)}")
+
+    own = "".join(_artefact_own_card(a, csrf_token, can_edit, anders=_anders(a))
+                  for a in oi["own"])
     own = own or f"<div class='card muted'>{_e(leeg)}</div>"
 
     add = ""
