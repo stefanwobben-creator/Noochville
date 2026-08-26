@@ -72,19 +72,71 @@ class WerkoverlegStore:
         """Openstaande spanningen die (nog) niet op een lopend overleg staan."""
         return (self._m.get(circle) or {}).get("backlog", [])
 
-    def backlog_add(self, circle: str, title: str, by: str = "") -> dict | None:
+    def backlog_add(self, circle: str, title: str, by: str = "", by_id: str = "") -> dict | None:
         """Leg een spanning in de PERSISTENTE per-cirkel backlog — zónder een overleg te openen. Bij het
-        eerstvolgende `open()` komt hij op de agenda. Zelfde item-vorm als een agendapunt (herbruikbaar)."""
+        eerstvolgende `open()` komt hij op de agenda. Zelfde item-vorm als een agendapunt (herbruikbaar).
+
+        `by_id` is de id van wie het inbracht (persoon of rol). De naam (`by`) is voor het scherm; het
+        id is wat er bij het VERWERKEN nodig is, want daar wordt het punt zíjn spanning. Een naam is
+        geen adres: twee mensen kunnen dezelfde initialen hebben, en een naam verandert."""
         if not (title or "").strip():
             return None
         import uuid
         st = self._m.setdefault(circle, {"status": "closed", "log": [], "agenda": [], "backlog": []})
         it = {"id": uuid.uuid4().hex[:10], "title": title.strip()[:140], "by": by or "",
+              "by_id": by_id or "",
               "status": "open", "note": {"spanning": "", "role": "", "need": ""},
               "outcome": None, "created_at": time.time()}
         st.setdefault("backlog", []).append(it)
         self._save()
         return it
+
+    # ── de vangst: één lopende lijst over backlog én agenda heen ──────────────
+    #
+    # Vangen en verwerken zijn gescheiden, maar de LIJST is dat niet: een punt dat je gisteren ving
+    # en dat vanochtend door `open()` op de agenda is beland, is voor wie het scherm leest hetzelfde
+    # punt. Zou de vangst alleen de backlog tonen, dan zou hij bij het openen van een overleg stil
+    # leeglopen — en dan lijkt vastgelegd werk verdwenen.
+
+    def punten(self, circle: str) -> list:
+        """Alle gevangen punten van deze cirkel, nieuwste eerst. Backlog én lopende agenda."""
+        st = self._m.get(circle) or {}
+        uit = [{**i, "bron": "agenda"} for i in st.get("agenda", [])]
+        uit += [{**i, "bron": "backlog"} for i in st.get("backlog", [])]
+        return sorted(uit, key=lambda i: -(i.get("created_at") or 0))
+
+    def punt_get(self, circle: str, iid: str) -> dict | None:
+        """Eén punt, waar het ook staat. Geeft het LEVENDE item terug (niet de kopie uit `punten`)."""
+        st = self._m.get(circle) or {}
+        for sleutel in ("agenda", "backlog"):
+            for i in st.get(sleutel, []):
+                if i.get("id") == iid:
+                    return i
+        return None
+
+    def punt_resolve(self, circle: str, iid: str, otype: str, detail: str = "") -> bool:
+        """Sluit een gevangen punt af met een uitkomst. Zelfde vorm als `agenda_resolve`, maar hij
+        vindt het punt ook in de backlog — daar landt de vangst immers."""
+        it = self.punt_get(circle, iid)
+        if it is None:
+            return False
+        it["outcome"] = {"type": otype, "detail": (detail or "").strip()}
+        it["status"] = "done"
+        self._save()
+        return True
+
+    def punt_remove(self, circle: str, iid: str) -> bool:
+        st = self._m.get(circle)
+        if st is None:
+            return False
+        weg = False
+        for sleutel in ("agenda", "backlog"):
+            over = [i for i in st.get(sleutel, []) if i.get("id") != iid]
+            if len(over) != len(st.get(sleutel, [])):
+                st[sleutel], weg = over, True
+        if weg:
+            self._save()
+        return weg
 
     def close(self, circle: str) -> dict | None:
         st = self._m.get(circle)
@@ -222,6 +274,7 @@ class WerkoverlegStore:
 _WRITE_METHODS = (
     "open", "close", "set_checkout", "set_presence", "mark_visited",
     "agenda_add", "agenda_remove", "agenda_set_note", "agenda_resolve", "backlog_add",
+    "punt_resolve", "punt_remove",
 )
 for _wm in _WRITE_METHODS:
     setattr(WerkoverlegStore, _wm, synchronized(getattr(WerkoverlegStore, _wm)))
