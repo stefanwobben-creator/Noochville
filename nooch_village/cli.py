@@ -1418,6 +1418,27 @@ def main() -> None:
                 print("   -", s)
             sys.exit(1)
 
+    elif mode == "waarde_audit":
+        # Wat bracht elke rol en elke skill voort dat een mens echt raakte? Deterministisch,
+        # read-only, geen LLM. Schrijft alleen het verslag.
+        import os, time
+        from nooch_village import waarde_audit as wa
+        from nooch_village.cockpit2 import _Stores
+        from nooch_village.config import load_context
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        st = _Stores(ctx.data_dir)
+        rapport = wa.audit(ctx.data_dir, st.records, base_dir=BASE_DIR)
+        tekst = wa.rapport_tekst(rapport)
+        datum = time.strftime("%Y-%m-%d", time.localtime(rapport["nu"]))
+        uit = os.path.join(ctx.data_dir, "output", f"waarde_audit_{datum}.md")
+        os.makedirs(os.path.dirname(uit), exist_ok=True)
+        with open(uit, "w", encoding="utf-8") as fh:
+            fh.write(tekst + "\n")
+        print(tekst)
+        print(f"\n\u2192 verslag: {uit}")
+
     elif mode == "villageraad":
         # De council-pass: elke rol leest de Kroniek en zijn eigen wiki-pagina's vanuit purpose en
         # accountabilities, en werpt alleen spanningen op die aan een record of pagina vastzitten.
