@@ -255,7 +255,8 @@ class Records:
                 held_by=r.get("held_by"),
                 slaapt=r.get("slaapt", False),
                 slaap_reden=r.get("slaap_reden"),
-                slaap_sinds=r.get("slaap_sinds"))
+                slaap_sinds=r.get("slaap_sinds"),
+                ingetrokken_skills=list(r.get("ingetrokken_skills") or []))
             # Fail-soft migratie: elke accountability krijgt een stabiel id. Idempotent —
             # een tweede load muteert niets en schrijft dus ook niets.
             if ensure_acc_ids(self._data[rid].definition):
