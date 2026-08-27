@@ -3476,9 +3476,12 @@ def _act_wo_checkout(c):
         _deny = _member_gate(g("circle"), username, st)
         if _deny:
             return nxt, _deny
-        if g("score"):
-            ok = st.werk.set_checkout(g("circle"), g("pid"), g("score"))
-            msg = "✓ score genoteerd" if ok else "⛔ score refused — the meeting is not (or no longer) open"
+        # De check-out is ja/nee (`ok=1|0`), niet meer een cijfer. Een oud formulier met `score`
+        # wordt bewust NIET meer geaccepteerd: dat zou een 7 als nieuwe waarde binnenlaten in een
+        # veld dat nu iets anders betekent. Bestaande cijfers in archieven blijven leesbaar.
+        if g("ok") in ("0", "1"):
+            ok = st.werk.set_checkout(g("circle"), g("pid"), g("ok"))
+            msg = "✓ genoteerd" if ok else "⛔ refused — the meeting is not (or no longer) open"
         return nxt, msg
 
 

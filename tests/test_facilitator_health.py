@@ -54,7 +54,10 @@ def _run_meeting(dd, person_id, satisfaction, resolve=("project", "info")):
                            "rol": [rolnaam], "tekst": ["x"], "next": ["/"]}, username="guest")
         cockpit2.dispatch(dd, "vangst_klaar", {"circle": [C], "iid": [it["id"]], "klaar": ["1"],
                                                "next": ["/"]}, username="guest")
-    cockpit2.dispatch(dd, "wo_checkout", {"circle": [C], "pid": [person_id], "score": [str(satisfaction)], "next": ["/"]}, username="guest")
+    # De check-out is ja/nee. `satisfaction` is hier het ANTWOORD (True/False), geen cijfer meer.
+    cockpit2.dispatch(dd, "wo_checkout",
+                      {"circle": [C], "pid": [person_id], "ok": ["1" if satisfaction else "0"],
+                       "next": ["/"]}, username="guest")
     cockpit2.dispatch(dd, "wo_close", {"circle": [C], "next": ["/"]}, username="guest")
 
 
@@ -63,13 +66,14 @@ def test_werkoverleg_metrics_aggregeren_over_log(tmp_path):
     st = cockpit2._Stores(dd)
     p = st.people.all()[0]
     st.assign.assign(FAC, "person", p.id)
-    _run_meeting(dd, p.id, 8, resolve=("project", "info"))
-    _run_meeting(dd, p.id, 6, resolve=("project", "project"))
+    _run_meeting(dd, p.id, True, resolve=("project", "info"))
+    _run_meeting(dd, p.id, False, resolve=("project", "project"))
     st = cockpit2._Stores(dd)
     assert len(st.werk.log(C)) == 2
-    # tevredenheid gemiddeld over 2 overleggen = (8+6)/2 = 7
+    # De tevredenheidsreeks vult niet meer sinds de check-out ja/nee is; hij wordt ook niet
+    # stiekem uit ja/nee afgeleid. De andere overleg-metrics aggregeren gewoon door.
     r = cockpit2._werk_fetch(st, C, "tevredenheid", "gemiddeld", None)
-    assert r["value"] == 7.0
+    assert r["value"] is None
     # projecten totaal: meeting1 = 1, meeting2 = 2 -> 3
     r2 = cockpit2._werk_fetch(st, C, "projecten", "totaal", None)
     assert r2["value"] == 3

@@ -993,7 +993,10 @@ _INBOX_GRONDSLAG = {
     "open": ("Items still open (unprocessed) in the inbox.", "", "down"),
 }
 _WERK_GRONDSLAG = {
-    "tevredenheid": ("Average check-out score (0-10) per meeting.", "0-10", "up"),
+    # Historische reeks: de check-out is sinds 27-08-2026 ja/nee, dus hier komt geen nieuwe waarde
+    # meer bij. Oude cijfers blijven leesbaar; ze zijn niet omgezet naar ja/nee.
+    "tevredenheid": ("Average check-out score (0-10) per meeting — historical: check-out is now "
+                     "yes/no, so this series no longer fills.", "0-10", "up"),
     "spanningen": ("Number of tensions handled per meeting.", "", ""),
     "informatie": ("Number of info outcomes per meeting.", "", ""),
     "projecten": ("Number of outcomes processed as a project.", "", ""),

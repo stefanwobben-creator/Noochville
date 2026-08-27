@@ -26,9 +26,12 @@ def test_record_werk_daily_idempotent(tmp_path):
 
 
 def test_wo_close_schrijft_dagwaarde(tmp_path):
+    """De dagwaarde `werk_tevredenheid_day` komt uit een CIJFER. Sinds de check-out ja/nee is,
+    kan alleen een record van vóór die wijziging er nog een leveren — hier nagebootst door het
+    cijfer rechtstreeks in de store te zetten, want de schrijfweg accepteert het niet meer."""
     dd = _dd(tmp_path); st = cockpit2._Stores(dd)
     st.werk.open(C)
-    st.werk.set_checkout(C, "p1", 8)
+    st.werk._m[C].setdefault("checkout", {})["p1"] = 8      # oud record, niet omgezet
     st.werk._save()
     cockpit2.dispatch(dd, "wo_close", {"circle": [C], "next": ["/"]}, username="guest")
     obs = cockpit2._Stores(dd).observations
@@ -101,3 +104,17 @@ def test_dagreeks_render_geen_data_1_punt_2_punten(tmp_path):
     st.observations.record_daily("shopify", "shopify_aov_day", 52, bron="shopify", datum="2026-07-02", ts=now)
     r2 = _fetch(cockpit2._Stores(dd), "shopify", "aov", "over_tijd", None, None)
     assert "<polyline" in _render_form(r2, "trend")
+
+
+def test_een_ja_nee_checkout_vult_de_oude_reeks_niet(tmp_path):
+    """Geen stille vertaling: een ja/nee-check-out levert geen getal voor `werk_tevredenheid_day`.
+    De reeks houdt op met vullen; hij krijgt niet stiekem een ander soort getal."""
+    dd = _dd(tmp_path); st = cockpit2._Stores(dd)
+    st.werk.open(C)
+    st.werk.set_checkout(C, "p1", True)
+    st.werk.set_checkout(C, "p2", False)
+    assert st.werk.summary(C)["tevredenheid"] is None
+    assert (st.werk.summary(C)["checkout_ja"], st.werk.summary(C)["checkout_nee"]) == (1, 1)
+    cockpit2.dispatch(dd, "wo_close", {"circle": [C], "next": ["/"]}, username="guest")
+    obs = cockpit2._Stores(dd).observations
+    assert obs.daily_series("werk_tevredenheid_day", bron="werkoverleg") == []
