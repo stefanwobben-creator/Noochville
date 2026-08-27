@@ -513,9 +513,9 @@ def test_het_uitkomst_formulier_is_waar_de_secretaris_werkt(tmp_path):
     assert "— Kies persoon —" in html and "Elk cirkellid" in html
     assert "Individuele actie" in html          # eerste rol-optie, rol is niet verplicht
     assert "Alleen zichtbaar voor de cirkel" in html
-    # Volgende / In afwachting als radio's naast elkaar, niet als dropdown.
-    assert html.count("type='radio' id='vst") == 2
-    assert "Volgende" in html and "In afwachting" in html
+    # GEEN staat-keuze meer: de wachtstatus leeft op projectniveau.
+    assert "name='staat'" not in html
+    assert "In afwachting" not in html
     # en het twee-koloms raster van de referentie
     assert "rov-addgrid" in html
 
@@ -527,13 +527,13 @@ def test_de_uitkomsten_staan_in_een_tabel_met_kolomkoppen(tmp_path):
     it = st.werk.backlog_add(CIRCLE, "Iets", by_id="p1")
     naam = cockpit2._name(st.records.get(ROL))
     _post(dd, "vangst_uitkomst", circle=CIRCLE, iid=it["id"], otype="actie", rol=naam,
-          tekst="Leverancier bellen", persoon="", staat="wachtend", next="/vangst")
+          tekst="Leverancier bellen", persoon="", next="/vangst")
     html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
     assert "<table class='mtab'>" in html
     for kop in ("<strong>Wat</strong>", "<strong>Rol</strong>", "<strong>Persoon</strong>",
-                "<strong>Staat</strong>", "<strong>Herkomst</strong>"):
+                "<strong>Herkomst</strong>"):
         assert kop in html, kop
-    assert "Leverancier bellen" in html and "In afwachting" in html
+    assert "Leverancier bellen" in html
 
 
 def test_de_herkomst_staat_er_ook_zonder_uitkomsten(tmp_path):
@@ -587,3 +587,31 @@ def test_elk_cirkellid_is_een_echte_keuze(tmp_path):
           persoon=ELK_LID_WAARDE, tekst="x", next="/vangst")
     u = cockpit2._Stores(dd).werk.punt_get(CIRCLE, it["id"])["uitkomsten"][0]
     assert u["persoon"] == ""                    # opgeslagen als 'nog niemand', bewust gekozen
+
+
+def test_een_oude_staat_blijft_leesbaar(tmp_path):
+    """Geen stille drop: het INVULVELD is weg, de vastgelegde waarde niet. Een uitkomst van vóór
+    deze wijziging die 'in afwachting' zei, zegt dat nog steeds."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    it = st.werk.backlog_add(CIRCLE, "x", by_id="p1")
+    st.werk.punt_uitkomst_add(CIRCLE, it["id"], {"type": "actie", "rol": ROL, "tekst": "oud werk",
+                                                 "staat": "wachtend"})
+    html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
+    assert "In afwachting" in html               # de oude waarde staat er nog
+    assert "<strong>Staat</strong>" in html      # met zijn kolom
+    assert "name='staat'" not in html            # maar je kunt hem nergens meer invullen
+
+
+def test_zonder_oude_records_verdwijnt_de_staat_kolom(tmp_path):
+    """Een kolom die bij elke nieuwe uitkomst leeg blijft is ruis. Hij komt alleen terug zodra er
+    nog een record ligt dat hem draagt."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    naam = cockpit2._name(st.records.get(ROL))
+    it = st.werk.backlog_add(CIRCLE, "x", by_id="p1")
+    _post(dd, "vangst_uitkomst", circle=CIRCLE, iid=it["id"], otype="actie", rol=naam,
+          tekst="nieuw werk", next="/vangst")
+    html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
+    assert "nieuw werk" in html
+    assert "<strong>Staat</strong>" not in html

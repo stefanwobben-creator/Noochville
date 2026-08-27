@@ -2784,7 +2784,6 @@ def _act_vangst_uitkomst_edit(c):
         # AUTHZ: circle-member — de TEKST, persoon of staat van een al vastgelegde uitkomst
         # bijstellen. Het werk zelf (het project, het bericht) is al aangemaakt en verandert hier
         # niet: dit corrigeert de regel in het overlegverslag, niet wat er elders staat.
-        from nooch_village.views.vangst import VOLGENDE, WACHTEND
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
         _deny = _member_gate(g("circle"), username, st)
         if _deny:
@@ -2801,7 +2800,7 @@ def _act_vangst_uitkomst_edit(c):
             return nxt, "✗ een uitkomst zonder tekst is geen uitkomst"
         u["tekst"] = tekst
         u["persoon"] = persoon
-        u["staat"] = g("staat") if g("staat") in (VOLGENDE, WACHTEND) else u.get("staat")
+        # `staat` blijft staan zoals hij was: het veld is uit de flow, de waarde niet uit de data.
         st.werk._save()
         return nxt, "✓ uitkomst bijgewerkt"
 
@@ -2831,14 +2830,14 @@ def _act_vangst_uitkomst(c):
         if not tekst:
             return nxt, "✗ zeg wat de uitkomst is"
 
-        from nooch_village.views.vangst import (ELK_LID_WAARDE, INDIVIDUELE_ACTIE, VOLGENDE,
-                                                 WACHTEND)
+        from nooch_village.views.vangst import ELK_LID_WAARDE, INDIVIDUELE_ACTIE
         persoon = (g("persoon") or "").strip()
         if persoon == ELK_LID_WAARDE:
             persoon = ""                             # expliciet "elk cirkellid"
         elif persoon and st.people.get(persoon) is None:
             return nxt, "✗ die persoon bestaat niet"
-        staat = g("staat") if g("staat") in (VOLGENDE, WACHTEND) else VOLGENDE
+        # GEEN staat meer op een nieuwe uitkomst: de wachtstatus leeft op projectniveau. Oude
+        # uitkomsten houden hun waarde — dit stopt alleen de aanwas, het wist niets.
         prive = g("prive") == "1"
         rol, reden = rol_uit_naam(st, g("rol"))
         ruw_rol = g("rol").strip()
@@ -2924,8 +2923,7 @@ def _act_vangst_uitkomst(c):
 
         st.werk.punt_uitkomst_add(circle, iid, {"type": otype, "rol": rol, "tekst": tekst,
                                                 "ref": ref, "door": aid, "persoon": persoon,
-                                                "staat": staat, "kroniek": kroniek_id,
-                                                "prive": prive})
+                                                "kroniek": kroniek_id, "prive": prive})
         naam = (_name(st.records.get(rol)) if rol and st.records.get(rol)
                 else f"{INDIVIDUELE_ACTIE}: {_person_name(st, persoon)}")
         return nxt, f"✓ {otype} → {naam}"

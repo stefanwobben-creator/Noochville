@@ -157,9 +157,10 @@ UITKOMST_SOORTEN = (
 UITKOMST_LABEL = {k: lbl for k, lbl, _ in UITKOMST_SOORTEN}
 UITKOMST_VELD = {k: veld for k, _, veld in UITKOMST_SOORTEN}
 
-# "Volgende" = een eerstvolgende actie waar iemand mee aan de slag kan; "In afwachting" = het
-# wacht op iets of iemand anders. GlassFrog onderscheidt die twee omdat een wachtend item geen
-# werk is dat je vandaag kunt oppakken, en het dus ook niet op je lijstje van vandaag hoort.
+# LEES-ONLY. De staat-keuze is uit het invulformulier gehaald: de wachtstatus vangen we al op
+# projectniveau, en twee plekken die hetzelfde bijhouden lopen uit de pas. Deze constanten blijven
+# bestaan omdat OUDE uitkomsten hem nog dragen en gewoon leesbaar moeten blijven — een stille drop
+# zou betekenen dat een vastgelegde "in afwachting" ineens niets meer zegt.
 VOLGENDE, WACHTEND = "volgende", "wachtend"
 
 # Wie de uitkomst uitvoert. Leeg = "elk cirkellid": de rol is toegewezen, de persoon nog niet.
@@ -225,14 +226,19 @@ def _leeftijd(ts) -> str:
     return f"{d} dag{'en' if d != 1 else ''} oud"
 
 
-def _uitkomst_rij(st, circle: str, it: dict, u: dict, csrf: str, nxt: str) -> str:
+def _uitkomst_rij(st, circle: str, it: dict, u: dict, csrf: str, nxt: str,
+                  toon_staat: bool = False) -> str:
     """Eén rij in de uitkomsten-tabel: WAT · wat precies · ROL · PERSOON · STAAT, met potlood en
     prullenbak. Plus onze toevoeging op GlassFrog: het Kroniek-record waaraan de herkomst hangt."""
     uid = u.get("id", "")
     soort = UITKOMST_LABEL.get(u.get("type"), u.get("type"))
     naar = rol_namen(st).get(u.get("rol") or "", u.get("rol") or "")
     wie = _persoon_naam(st, u.get("persoon") or "")
-    staat = "In afwachting" if u.get("staat") == WACHTEND else "Volgende"
+    # De staat-KOLOM verschijnt alleen als er in deze lijst nog een oud record staat dat hem
+    # draagt. Zo blijft de vastgelegde waarde leesbaar zonder dat er een lege kolom overblijft
+    # zodra het laatste oude record weg is.
+    staat = ({WACHTEND: "In afwachting", VOLGENDE: "Volgende"}.get(u.get("staat"), "—")
+             if toon_staat else None)
     bron = (f"<code class='pill' title='Kroniek-record'>{_e(u['kroniek'])}</code>"
             if u.get("kroniek") else "<span class='muted'>—</span>")
     acties = ""
@@ -244,12 +250,6 @@ def _uitkomst_rij(st, circle: str, it: dict, u: dict, csrf: str, nxt: str) -> st
                   f"<label class='att-lbl' for='up-{_e(uid)}'>Persoon</label>"
                   f"<select id='up-{_e(uid)}' name='persoon'>"
                   f"{_persoon_opties(st, circle, u.get('persoon') or '')}</select>"
-                  f"<label class='att-lbl' for='us-{_e(uid)}'>Staat</label>"
-                  f"<select id='us-{_e(uid)}' name='staat'>"
-                  f"<option value='{VOLGENDE}'{'' if u.get('staat') == WACHTEND else ' selected'}>"
-                  f"Volgende</option>"
-                  f"<option value='{WACHTEND}'{' selected' if u.get('staat') == WACHTEND else ''}>"
-                  f"In afwachting</option></select>"
                   f"<button class='btn sm' type='submit' name='action' value='vangst_uitkomst_edit'>"
                   f"Opslaan</button></form></details>"
                   f"<form method='post' action='/action' class='emo-f'>"
@@ -257,8 +257,9 @@ def _uitkomst_rij(st, circle: str, it: dict, u: dict, csrf: str, nxt: str) -> st
                   f"<button class='flink' type='submit' name='action' value='vangst_uitkomst_weg' "
                   f"title='verwijderen'>🗑</button></form>")
     slot = " 🔒" if u.get("prive") else ""
+    staat_cel = f"<td>{_e(staat)}</td>" if staat is not None else ""
     return (f"<tr><td>{_e(soort)}{slot}</td><td>{_e(u.get('tekst') or '')}</td>"
-            f"<td>{_e(naar)}</td><td>{_e(wie)}</td><td>{_e(staat)}</td>"
+            f"<td>{_e(naar)}</td><td>{_e(wie)}</td>{staat_cel}"
             f"<td>{bron}</td><td>{acties}</td></tr>")
 
 
@@ -282,11 +283,13 @@ def _uitkomsten_tabel(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
         body = ("<p class='muted'>Er zijn (nog) geen uitkomsten vastgelegd. Vul het formulier "
                 "hierboven in — zo vaak als nodig, er mogen er meerdere zijn.</p>")
     else:
+        toon_staat = any(u.get("staat") for u in rijen)      # alleen voor oude records
+        staat_kop = "<td><strong>Staat</strong></td>" if toon_staat else ""
         body = ("<table class='mtab'><tr><td><strong>Wat</strong></td>"
                 "<td><strong>Wat precies</strong></td><td><strong>Rol</strong></td>"
-                "<td><strong>Persoon</strong></td><td><strong>Staat</strong></td>"
+                f"<td><strong>Persoon</strong></td>{staat_kop}"
                 "<td><strong>Herkomst</strong></td><td></td></tr>"
-                + "".join(_uitkomst_rij(st, circle, it, u, csrf, nxt) for u in rijen)
+                + "".join(_uitkomst_rij(st, circle, it, u, csrf, nxt, toon_staat) for u in rijen)
                 + "</table>")
     return (f"<div class='c2-sec'><h3>Uitkomsten van het overleg "
             f"<span class='chip'>{len(rijen)}</span></h3>{kop}{body}</div>")
@@ -330,25 +333,17 @@ def _uitkomst_formulier(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
             f"<select id='vp-{_e(iid)}' name='persoon'>{_persoon_opties(st, circle)}</select></div>")
     # Volgende / In afwachting als twee radio's naast elkaar, zoals in de referentie — niet als
     # dropdown. Twee opties die je in één blik ziet zijn geen keuzelijst.
-    # Twee regels, zoals de referentie: eerst de staat, dan zichtbaarheid + Opslaan. Alles op één
-    # rij proppen laat "In afwachting" over twee regels breken zodra het zichtbaarheids-label
-    # ernaast staat.
-    staat = (f"<div class='qadd-row'>"
-             f"<label class='kc-radio' for='vst1-{_e(iid)}'>"
-             f"<input type='radio' id='vst1-{_e(iid)}' name='staat' value='{VOLGENDE}' checked>"
-             f"Volgende</label>"
-             f"<label class='kc-radio' for='vst2-{_e(iid)}'>"
-             f"<input type='radio' id='vst2-{_e(iid)}' name='staat' value='{WACHTEND}'>"
-             f"In afwachting</label></div>"
-             f"<div class='qadd-row'>"
-             f"<label class='kc-radio' for='vpr-{_e(iid)}'>"
-             f"<input type='checkbox' id='vpr-{_e(iid)}' name='prive' value='1'>"
-             f"Alleen zichtbaar voor de cirkel</label>"
-             f"<button class='btn ok sm' type='submit' name='action' value='vangst_uitkomst'>"
-             f"Opslaan</button></div>")
+    # GEEN staat-keuze meer. De wachtstatus leeft op projectniveau; hem hier óók vragen levert
+    # twee plekken op die hetzelfde bijhouden en na een week uit de pas lopen.
+    afsluit = (f"<div class='qadd-row'>"
+               f"<label class='kc-radio' for='vpr-{_e(iid)}'>"
+               f"<input type='checkbox' id='vpr-{_e(iid)}' name='prive' value='1'>"
+               f"Alleen zichtbaar voor de cirkel</label>"
+               f"<button class='btn ok sm' type='submit' name='action' value='vangst_uitkomst'>"
+               f"Opslaan</button></div>")
     return (f"<form method='post' action='/action' class='wo-oc'>"
             f"{_hid(csrf, circle, _open_nxt(nxt, iid), iid=iid)}"
-            f"<div class='rov-addgrid'>{rij1}{rij2}</div>{staat}</form>")
+            f"<div class='rov-addgrid'>{rij1}{rij2}</div>{afsluit}</form>")
 
 
 def _herkomst_regel(st, it: dict) -> str:
