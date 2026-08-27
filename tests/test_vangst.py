@@ -429,3 +429,87 @@ def test_vangst_zonder_cirkel_valt_terug_op_de_thuiscirkel(tmp_path):
     thuis = _home_node(st.records.all())               # zo roept de route hem aan
     assert thuis and st.records.get(thuis) is not None
     assert "Vangen" in render_vangst(st, thuis, csrf_token="t")
+
+
+# ── de live-vorm: niets forceren dat toch leeg blijft ───────────────────────
+
+def test_een_kaal_agendapunt_toont_geen_groot_spanningsvak(tmp_path):
+    """Het normale live-geval. Er is geen tijd om een spanning uit te schrijven, dus het scherm
+    vraagt er niet om: één klein '⚡ Geen' en meteen door naar het uitkomst-formulier."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    it = st.werk.backlog_add(CIRCLE, "Checkout hapert", by_id="p1")
+    html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
+    assert "⚡ Geen" in html
+    assert "beschrijf hier wat er speelt" not in html        # het oude, dwingende blok is weg
+    # en het uitkomst-formulier staat vóór de uitkomstenlijst
+    assert html.index("name='otype'") < html.index("Uitkomsten van het overleg")
+
+
+def test_een_vooraf_ingevoerde_spanning_staat_er_gewoon(tmp_path):
+    """Het enige geval waarin de tekst zinnig is: iemand voerde hem vooraf in. Dan lees je hem
+    meteen, zonder te hoeven klikken."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    it = st.werk.backlog_add(CIRCLE, "Checkout hapert", by="Stefan Wobben", by_id="p1")
+    st.werk.punt_tekst(CIRCLE, it["id"], "Klanten haken af bij de betaalstap sinds de nieuwe flow.")
+    html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
+    assert "Klanten haken af bij de betaalstap" in html
+    assert "⚡ Geen" not in html
+
+
+def test_de_herkomst_is_automatisch_geen_invulveld(tmp_path):
+    """'Welke rol voelt het' is herkomst, geen toewijzing — en de secretaris tikt het niet in."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    naam = cockpit2._name(st.records.get(ROL))
+    _post(dd, "vangst_add", circle=CIRCLE, punt=f"Checkout hapert @{naam}", next="/vangst")
+    it = cockpit2._Stores(dd).werk.punten(CIRCLE)[0]
+    html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
+    assert "gevoeld vanuit" in html and naam in html
+    # geen invulveld ervoor
+    assert "voelt het" not in html and "feels it" not in html
+
+
+def test_het_uitkomst_formulier_is_waar_de_secretaris_werkt(tmp_path):
+    """ROL is de ONTVANGER van het werk, niet 'wie het voelt' — en er staat een PERSOON naast."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    it = st.werk.backlog_add(CIRCLE, "Iets", by_id="p1")
+    html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
+    for veld in (">Wat</label>", ">Rol</label>", ">Persoon</label>"):
+        assert veld in html, veld
+    assert "elk cirkellid" in html
+    # Volgende / In afwachting als radio's naast elkaar, niet als dropdown.
+    assert html.count("type='radio' id='vst") == 2
+    assert "Volgende" in html and "In afwachting" in html
+    # en het twee-koloms raster van de referentie
+    assert "rov-addgrid" in html
+
+
+def test_de_uitkomsten_staan_in_een_tabel_met_kolomkoppen(tmp_path):
+    """Zoals de referentie: WAT · wat precies · ROL · PERSOON · STAAT, met potlood en prullenbak."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    it = st.werk.backlog_add(CIRCLE, "Iets", by_id="p1")
+    naam = cockpit2._name(st.records.get(ROL))
+    _post(dd, "vangst_uitkomst", circle=CIRCLE, iid=it["id"], otype="actie", rol=naam,
+          tekst="Leverancier bellen", persoon="", staat="wachtend", next="/vangst")
+    html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
+    assert "<table class='mtab'>" in html
+    for kop in ("<strong>Wat</strong>", "<strong>Rol</strong>", "<strong>Persoon</strong>",
+                "<strong>Staat</strong>", "<strong>Herkomst</strong>"):
+        assert kop in html, kop
+    assert "Leverancier bellen" in html and "In afwachting" in html
+
+
+def test_de_herkomst_staat_er_ook_zonder_uitkomsten(tmp_path):
+    """Het geval waarvoor herkomst bestaat: een vooraf ingevoerde spanning die je nu behandelt."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    naam = cockpit2._name(st.records.get(ROL))
+    _post(dd, "vangst_add", circle=CIRCLE, punt=f"Checkout hapert @{naam}", next="/vangst")
+    it = cockpit2._Stores(dd).werk.punten(CIRCLE)[0]
+    html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
+    assert "gevoeld vanuit" in html
+    assert "Er zijn (nog) geen uitkomsten vastgelegd" in html
