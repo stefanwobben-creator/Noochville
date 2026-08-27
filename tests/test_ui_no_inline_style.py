@@ -25,7 +25,7 @@ _STYLE_WHITELIST = {
     "views/overview.py": 33,
     "views/projects.py": 19,
     "views/strategy.py": 14,
-    "views/werkoverleg.py": 13,
+    "views/werkoverleg.py": 10,   # -3: de oude triage is weg (gedeelde vangst-component)
     "views/metrics.py": 8,
     "views/roloverleg.py": 7,
     "views/checklists.py": 5,

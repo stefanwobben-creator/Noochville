@@ -37,15 +37,23 @@ def test_werkoverleg_bron_in_wizard(tmp_path):
 
 
 def _run_meeting(dd, person_id, satisfaction, resolve=("project", "info")):
+    """Eén overleg, via de GEDEELDE vang-en-verwerk (dezelfde component als /vangst)."""
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
-    for i, otype in enumerate(resolve):
-        cockpit2.dispatch(dd, "wo_ag_add", {"circle": [C], "naam": [f"Spanning {i}"], "next": ["/"]}, username="guest")
+    # De UNIEKE weergavenaam, zoals de autocomplete hem toont: er zijn twee rollen die
+    # "Facilitator" heten, en de rol-resolutie weigert terecht te gokken.
+    from nooch_village.views.vangst import rol_namen
+    rolnaam = rol_namen(cockpit2._Stores(dd))[FAC]
+    for i, _ in enumerate(resolve):
+        cockpit2.dispatch(dd, "vangst_add", {"circle": [C], "punt": [f"Spanning {i}"],
+                                             "next": ["/"]}, username="guest")
     st = cockpit2._Stores(dd)
     for it in st.werk.agenda(C):
-        idx = int(it["title"].split()[-1])
-        otype = resolve[idx]
-        extra = {"owner": [FAC], "detail": ["x"]} if otype == "project" else {"detail": ["x"]}
-        cockpit2.dispatch(dd, "wo_ag_resolve", {"circle": [C], "iid": [it["id"]], "otype": [otype], **extra, "next": ["/"]}, username="guest")
+        otype = resolve[int(it["title"].split()[-1])]
+        cockpit2.dispatch(dd, "vangst_uitkomst",
+                          {"circle": [C], "iid": [it["id"]], "otype": [otype],
+                           "rol": [rolnaam], "tekst": ["x"], "next": ["/"]}, username="guest")
+        cockpit2.dispatch(dd, "vangst_klaar", {"circle": [C], "iid": [it["id"]], "klaar": ["1"],
+                                               "next": ["/"]}, username="guest")
     cockpit2.dispatch(dd, "wo_checkout", {"circle": [C], "pid": [person_id], "score": [str(satisfaction)], "next": ["/"]}, username="guest")
     cockpit2.dispatch(dd, "wo_close", {"circle": [C], "next": ["/"]}, username="guest")
 

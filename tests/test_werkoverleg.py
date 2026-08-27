@@ -99,54 +99,102 @@ def test_checklist_numerieke_waarde(tmp_path):
     assert ChecklistStore.current_value(cockpit2._Stores(dd).checklists.get(cid)) == 12.0
 
 
-def test_agenda_en_triage_project(tmp_path):
+def _punt(dd, label: str) -> str:
+    """Vang één punt via de GEDEELDE vangkant en geef zijn id."""
+    cockpit2.dispatch(dd, "vangst_add", {"circle": [C], "punt": [label], "next": ["/"]},
+                      username="guest")
+    return [p for p in cockpit2._Stores(dd).werk.punten(C) if p["title"] == label][0]["id"]
+
+
+def _uitkomst(dd, iid: str, **velden):
+    vorm = {"circle": [C], "iid": [iid], "next": ["/"]}
+    vorm.update({k: [v] for k, v in velden.items()})
+    return cockpit2.dispatch(dd, "vangst_uitkomst", vorm, username="guest")
+
+
+def _rolnaam(dd, rid: str) -> str:
+    return cockpit2._name(cockpit2._Stores(dd).records.get(rid))
+
+
+def test_agenda_stap_deelt_de_vang_en_verwerk_van_vangst(tmp_path):
+    """De agenda-stap rendert DEZELFDE component als /vangst — geen tweede triage-scherm."""
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
-    cockpit2.dispatch(dd, "wo_ag_add", {"circle": [C], "naam": ["Checkout hapert -SW"], "next": ["/"]}, username="guest")
-    it = cockpit2._Stores(dd).werk.agenda(C)[0]
-    assert it["title"] == "Checkout hapert" and it["by"] == "SW"
-    # triage -> add project voor een rol
-    cockpit2.dispatch(dd, "wo_ag_resolve", {"circle": [C], "iid": [it["id"]], "otype": ["project"],
-                                            "owner": [RID], "detail": ["Checkout flow fixen"], "next": ["/"]}, username="guest")
-    assert cockpit2._Stores(dd).werk.agenda_get(C, it["id"])["status"] == "done"
-    projs = [p for p in cockpit2._Stores(dd).projects.all() if p.get("owner") == RID]
-    assert any("Checkout flow fixen" in str(p.get("scope")) for p in projs)
+    iid = _punt(dd, "Checkout hapert")
+    frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "agenda", csrf_token="t",
+                                       fragment=True, iid=iid)
+    assert "Punten behandelen" in frag
+    assert "vang-form" in frag and "vang-lijst" in frag       # de gedeelde vangkant
+    assert "Uitkomsten van het overleg" in frag              # de gedeelde verwerkkant
+    assert "Checkout hapert" in frag
+    # De oude triage is weg: geen 'Process tension'-paneel en geen wo_ag_*-actie meer.
+    assert "wo_ag_" not in frag
 
 
-def test_triage_actie_los_en_aan_project(tmp_path):
+def test_drie_uitkomsten_onder_een_spanning_naar_verschillende_rollen(tmp_path):
+    """Waar het oude scherm faalde: het dwong één uitkomst per spanning af."""
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
-    # losse actie
-    cockpit2.dispatch(dd, "wo_ag_add", {"circle": [C], "naam": ["Meeting plannen met Lotte"], "next": ["/"]}, username="guest")
-    iid = cockpit2._Stores(dd).werk.agenda(C)[0]["id"]
-    cockpit2.dispatch(dd, "wo_ag_resolve", {"circle": [C], "iid": [iid], "otype": ["action"],
-                                            "detail": ["Lotte bellen"], "pid_link": [""], "next": ["/"]}, username="guest")
-    it = cockpit2._Stores(dd).werk.agenda_get(C, iid)
-    assert it["status"] == "done" and it["outcome"]["type"] == "action"
-    # actie gekoppeld aan een project -> checklist-item op dat project
-    pid = cockpit2._Stores(dd).projects.create(RID, "Website", "human")
-    cockpit2.dispatch(dd, "wo_ag_add", {"circle": [C], "naam": ["Login doorsturen"], "next": ["/"]}, username="guest")
-    iid2 = [i["id"] for i in cockpit2._Stores(dd).werk.agenda(C) if i["status"] != "done"][0]
-    cockpit2.dispatch(dd, "wo_ag_resolve", {"circle": [C], "iid": [iid2], "otype": ["action"],
-                                            "detail": ["Cosh login sturen"], "pid_link": [pid], "next": ["/"]}, username="guest")
-    p = cockpit2._Stores(dd).projects.get(pid)
-    items = [t for cl in p.get("checklists", []) for t in cl.get("items", [])]
-    assert any("Cosh login" in t.get("text", "") for t in items)
+    iid = _punt(dd, "De FSC-verklaring verloopt in november")
+    rol = _rolnaam(dd, RID)
+    for otype, tekst in (("actie", "Leverancier bellen"),
+                         ("project", "Certificering vernieuwen"),
+                         ("governance", "Wie bewaakt certificaten?")):
+        _nxt, msg = _uitkomst(dd, iid, otype=otype, rol=rol, tekst=tekst)
+        assert msg.startswith("✓"), (otype, msg)
+    punt = cockpit2._Stores(dd).werk.punt_get(C, iid)
+    assert [u["type"] for u in punt["uitkomsten"]] == ["actie", "project", "governance"]
+    # en ze doen elk hun echte werk
+    projs = cockpit2._Stores(dd).projects.all()
+    assert any("Certificering vernieuwen" in str(p.get("scope")) for p in projs)
+    assert cockpit2._Stores(dd).agenda.open()                 # roloverleg-punt staat er
 
 
-def test_triage_geen_need_veld_en_info_richting(tmp_path):
+def test_een_uitkomst_draagt_rol_persoon_staat_en_kroniek_herkomst(tmp_path):
+    dd = _dd(tmp_path)
+    p = _with_member(dd)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
+    iid = _punt(dd, "Iets")
+    from nooch_village.views.vangst import WACHTEND
+    _uitkomst(dd, iid, otype="actie", rol=_rolnaam(dd, RID), tekst="Lotte bellen",
+              persoon=p.id, staat=WACHTEND)
+    u = cockpit2._Stores(dd).werk.punt_get(C, iid)["uitkomsten"][0]
+    assert u["rol"] == RID and u["persoon"] == p.id and u["staat"] == WACHTEND
+    # HERKOMST: een echt Kroniek-record, geen rolnaam
+    assert u["kroniek"]
+    kr = [r for r in cockpit2._Stores(dd).evidence.all_records() if r["id"] == u["kroniek"]]
+    assert kr and kr[0]["skill"] == "werkoverleg" and kr[0]["status"] == "bevestigd"
+
+
+def test_een_uitkomst_is_bewerkbaar_en_verwijderbaar(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
-    cockpit2.dispatch(dd, "wo_ag_add", {"circle": [C], "naam": ["Iets"], "next": ["/"]}, username="guest")
-    iid = cockpit2._Stores(dd).werk.agenda(C)[0]["id"]
-    frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "agenda", csrf_token="t", fragment=True, iid=iid)
-    assert "Wat heb je nodig" not in frag                     # need-veld is weg
-    assert "wo-spanning" in frag and "tension" in frag       # spanning als eigen blok
-    # info met richting (delen/nodig); detail krijgt richting + doelgroep
-    cockpit2.dispatch(dd, "wo_ag_resolve", {"circle": [C], "iid": [iid], "otype": ["info"],
-                                            "dir": ["delen"], "detail": ["losdoc"], "next": ["/"]}, username="guest")
-    oc = cockpit2._Stores(dd).werk.agenda_get(C, iid)["outcome"]
-    assert oc["type"] == "info" and oc["detail"].startswith("delen (iedereen):")
+    iid = _punt(dd, "Iets")
+    _uitkomst(dd, iid, otype="info", rol=_rolnaam(dd, RID), tekst="eerste tekst")
+    uid = cockpit2._Stores(dd).werk.punt_get(C, iid)["uitkomsten"][0]["id"]
+    cockpit2.dispatch(dd, "vangst_uitkomst_edit",
+                      {"circle": [C], "iid": [iid], "uid": [uid], "tekst": ["bijgesteld"],
+                       "persoon": [""], "staat": ["wachtend"], "next": ["/"]}, username="guest")
+    u = cockpit2._Stores(dd).werk.punt_get(C, iid)["uitkomsten"][0]
+    assert u["tekst"] == "bijgesteld" and u["staat"] == "wachtend"
+    cockpit2.dispatch(dd, "vangst_uitkomst_weg",
+                      {"circle": [C], "iid": [iid], "uid": [uid], "next": ["/"]}, username="guest")
+    assert cockpit2._Stores(dd).werk.punt_get(C, iid)["uitkomsten"] == []
+
+
+def test_een_actie_zonder_lopend_project_wordt_geen_zwart_gat(tmp_path):
+    """Een actie hangt aan een lopend project van die rol. Heeft de rol er geen, dan wordt het een
+    project — anders verdwijnt de actie in het niets."""
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
+    iid = _punt(dd, "Login doorsturen")
+    _nxt, msg = _uitkomst(dd, iid, otype="actie", rol=_rolnaam(dd, RID), tekst="Cosh login sturen")
+    assert msg.startswith("✓")
+    st = cockpit2._Stores(dd)
+    items = [t for p in st.projects.all() for cl in p.get("checklists", []) for t in cl.get("items", [])]
+    scopes = [str(p.get("scope")) for p in st.projects.all()]
+    assert any("Cosh login" in t.get("text", "") for t in items) or \
+           any("Cosh login" in sc for sc in scopes)
 
 
 def test_transparantie_checklist_op_breedste_cirkel(tmp_path):
@@ -159,16 +207,15 @@ def test_transparantie_checklist_op_breedste_cirkel(tmp_path):
     assert any(i["description"] == cockpit2._TRANSP_CHECK for i in st.checklists.for_node(root.id))
 
 
-def test_triage_roloverleg_punt(tmp_path):
+def test_een_governance_punt_belandt_op_de_roloverleg_agenda(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
-    cockpit2.dispatch(dd, "wo_ag_add", {"circle": [C], "naam": ["Nieuwe rol nodig"], "next": ["/"]}, username="guest")
-    iid = cockpit2._Stores(dd).werk.agenda(C)[0]["id"]
-    cockpit2.dispatch(dd, "wo_ag_resolve", {"circle": [C], "iid": [iid], "otype": ["roloverleg"],
-                                            "detail": ["kans: groei; nodig: een SEO-rol"], "next": ["/"]}, username="guest")
-    # belandt op de roloverleg-agenda
+    iid = _punt(dd, "Nieuwe rol nodig")
+    _uitkomst(dd, iid, otype="governance", rol=_rolnaam(dd, RID),
+              tekst="kans: groei; nodig: een SEO-rol")
     assert cockpit2._Stores(dd).agenda.open()
-    assert cockpit2._Stores(dd).werk.agenda_get(C, iid)["outcome"]["type"] == "roloverleg"
+    u = cockpit2._Stores(dd).werk.punt_get(C, iid)["uitkomsten"][0]
+    assert u["type"] == "governance"
 
 
 def test_checkout_en_samenvatting(tmp_path):
@@ -220,3 +267,15 @@ def test_sluiten(tmp_path):
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
     cockpit2.dispatch(dd, "wo_close", {"circle": [C], "next": ["/"]}, username="guest")
     assert not cockpit2._Stores(dd).werk.is_open(C)
+
+
+def test_de_agenda_stap_gooit_je_niet_het_overleg_uit(tmp_path):
+    """De gedeelde component werkte, maar nam je mee naar zijn eigen huis: na elke uitkomst stond
+    je op /vangst in plaats van in het overleg."""
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
+    iid = _punt(dd, "Iets")
+    frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "agenda", csrf_token="t",
+                                       fragment=True, iid=iid)
+    assert "/werkoverleg?circle=" in frag
+    assert "value='/vangst?circle=" not in frag        # geen terug-URL naar het vangscherm

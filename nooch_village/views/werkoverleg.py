@@ -102,125 +102,27 @@ def _wo_metrics(st: _Stores, crec, csrf: str, kpi: str = "", win: str = "maand")
     return focus + tabrow + _metrics_tab_html(st, crec, csrf, win, nav=base)
 
 
-def _wo_spanning_add(st: _Stores, crec, csrf: str) -> str:
-    """Spanning toevoegen — staat bovenaan de linkerkolom (boven de stappen), altijd bereikbaar."""
-    if not csrf:
-        return "<span class='muted'>—</span>"
-    base = f"/werkoverleg?circle={crec.id}&step=agenda"
-    return (f"<form method='post' action='/action' class='rov-add wo-sp-add'>{_wo_hid(csrf, crec.id, base)}"
-            f"<input name='naam' placeholder='Tension… (-SW for initials)' autocomplete='off'>"
-            f"<button class='btn ok sm' type='submit' name='action' value='wo_ag_add'>+</button></form>")
+def _wo_agenda(st, crec, csrf: str, iid: str = "") -> str:
+    """De agenda-stap: DEZELFDE vang-en-verwerk als `/vangst`, niet een tweede versie ervan.
 
+    Hier stond een eigen triage-scherm met één uitkomst per spanning, een rollenlijst die tot deze
+    cirkel beperkt was, en een aparte notitie-vorm. Dat was een kopie die uit de pas liep zodra
+    /vangst iets leerde. Nu roept deze stap de componenten aan die het vangscherm ook gebruikt:
+    één plek waar de vorm wordt bepaald.
 
-def _wo_spanning_items(st: _Stores, crec, csrf: str, active_iid: str = "") -> str:
-    """Ingebrachte spanningen — genest onder de Agenda-stap in het linkermenu (geen microcopy)."""
-    base = f"/werkoverleg?circle={crec.id}&step=agenda"
-    rows = ""
-    for it in st.werk.agenda(crec.id):
-        done = it["status"] == "done"
-        on = " on" if it["id"] == active_iid else ""
-        url = f"{base}&iid={it['id']}"
-        by = (it.get("by") or "").strip()
-        av = f"<span class='av rov-by' title='by {_e(by)}'>{_e(by)}</span>" if by else ""
-        rm = (f"<form method='post' action='/action' style='display:inline'>{_wo_hid(csrf, crec.id, base)}"
-              f"<input type='hidden' name='iid' value='{_e(it['id'])}'>"
-              f"<button class='flink' type='submit' name='action' value='wo_ag_remove'>✕</button></form>") if csrf else ""
-        rows += (f"<div class='rov-item{on}{(' done' if done else '')}'>"
-                 f"<a class='js-modal rov-link' href='{url}' data-href='{url}'><span class='rov-title'>{_e(it['title'])}</span></a>"
-                 f"{av}{rm}</div>")
-    return rows
+    Het formulier post via `fetch`: op de volle pagina door `_VANG_JS`, hier door de
+    modal-controller die élk formulier in de overlay onderschept. Daarom hoeft er geen script mee —
+    een `<script>` in een fragment draait toch niet als de modal het via `innerHTML` invoegt."""
+    from nooch_village.views.vangst import render_vangst_frag, _vang_form
 
-
-def _wo_triage(st: _Stores, crec, csrf: str, item: dict) -> str:
-    """Stap 5b: een spanning verwerken. Noteer spanning/rol/behoefte en kies een uitkomst:
-    info delen, project toevoegen, punt voor roloverleg, of nevermind."""
-    iid = item["id"]
-    base = f"/werkoverleg?circle={crec.id}&step=agenda"
-    back = f"{base}&iid={iid}"
-    note = item.get("note", {})
-    done = item["status"] == "done"
-    roles = sorted(org.roles_of(st.records.all(), crec.id), key=lambda r: _name(r).lower())
-    keep = f"data-reopen='{_e(back)}'"
-    sub = "this.form.requestSubmit?this.form.requestSubmit():this.form.submit()"
-
-    def setf(field, label, value, ta=False):
-        inp = (f"<textarea name='value' rows='2' onchange='{sub}'>{_e(value)}</textarea>" if ta
-               else f"<input name='value' value='{_e(value)}' onchange='{sub}'>")
-        return (f"<div class='rovm-field'><label class='att-lbl'>{label}</label>"
-                f"<form method='post' action='/action' {keep}>{_wo_hid(csrf, crec.id, back)}"
-                f"<input type='hidden' name='iid' value='{_e(iid)}'><input type='hidden' name='field' value='{field}'>"
-                f"<input type='hidden' name='action' value='wo_ag_note'>{inp}</form></div>")
-
-    ropts = "".join(f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>" for r in roles)
-    cur_role = note.get("role", "")
-    ropts_role = "".join(f"<option value='{_e(r.id)}'{' selected' if r.id == cur_role else ''}>{_e(_name(r))}</option>"
-                         for r in roles)
-    head = f"<div class='cl-head'><h3>Process tension</h3><a class='flink js-modal' href='{base}' data-href='{base}'>← agenda</a></div>"
-    if done:
-        oc = item.get("outcome", {})
-        return (f"<div class='c2-sec'>{head}<p><b>{_e(item['title'])}</b></p>"
-                f"<div class='sec-issue let'>Handled as <b>{_e(oc.get('type', ''))}</b>"
-                f"{(': ' + _e(oc.get('detail', ''))) if oc.get('detail') else ''}</div>"
-                f"<form method='post' action='/action' {keep} style='margin-top:.5rem'>{_wo_hid(csrf, crec.id, back)}"
-                f"<input type='hidden' name='iid' value='{_e(iid)}'>"
-                f"<button class='flink' type='submit' name='action' value='wo_ag_reopen'>↺ reopen</button></form></div>")
-
-    # Spanning + rol (optioneel) als eigen blok, los van de uitkomsten. 'Wat heb je nodig' is weg:
-    # dat is altijd de uitkomst zelf.
-    fields = (f"<div class='wo-spanning'>"
-              + setf("spanning", "What is the tension?", note.get("spanning", ""), ta=True)
-              + f"<div class='rovm-field'><label class='att-lbl'>Which role feels it? (optional)</label>"
-                f"<form method='post' action='/action' {keep}>{_wo_hid(csrf, crec.id, back)}"
-                f"<input type='hidden' name='iid' value='{_e(iid)}'><input type='hidden' name='field' value='role'>"
-                f"<input type='hidden' name='action' value='wo_ag_note'>"
-                f"<select name='value' onchange='{sub}'><option value=''>—</option>{ropts_role}</select></form></div></div>")
-
-    # Progressive disclosure: kies eerst het type, dan verschijnt het juiste veld. Gelijkwaardig
-    # (geen primary-kleur die naar één uitkomst stuurt).
-    def oc_details(otype, summary, inner):
-        return (f"<details class='wo-ocd box-details'><summary>{summary}</summary>"
-                f"<form method='post' action='/action' {keep} class='wo-oc'>{_wo_hid(csrf, crec.id, base)}"
-                f"<input type='hidden' name='iid' value='{_e(iid)}'><input type='hidden' name='otype' value='{otype}'>"
-                f"{inner}<button class='btn sm' type='submit' name='action' value='wo_ag_resolve'>Record</button></form></details>")
-
-    # projecten onder deze cirkel (om een actie optioneel aan te koppelen = checklist-item),
-    # gegroepeerd per rol zodat het ook bij veel projecten navigeerbaar blijft (+ type-ahead).
-    circle_nodes = {crec.id} | {r.id for r in roles}
-    by_role: dict = {}
-    for p in st.projects.all():
-        if p.get("owner") in circle_nodes and not p.get("archived"):
-            by_role.setdefault(p["owner"], []).append(p)
-    pj_opts = "<option value=''>— standalone (no project) —</option>"
-    for rid in sorted(by_role, key=lambda x: _name(st.records.get(x) or crec).lower()):
-        rn = _name(st.records.get(rid)) if st.records.get(rid) else rid
-        opts = "".join(f"<option value='{_e(p['id'])}'>{_e(str(p.get('scope') or p['id'])[:60])}</option>"
-                       for p in by_role[rid])
-        pj_opts += f"<optgroup label='{_e(rn)}'>{opts}</optgroup>"
-
-    info = oc_details("info", "Information",
-                      "<select name='dir'><option value='delen'>sharing</option>"
-                      "<option value='nodig'>needed</option></select>"
-                      "<textarea name='detail' rows='2' placeholder='What? Use @name or @role to "
-                      "target it; otherwise it applies to everyone'></textarea>")
-    proj = oc_details("project", "Add project",
-                      f"<select name='owner'>{ropts}</select>"
-                      f"<input name='detail' placeholder='wording of the project' autocomplete='off'>")
-    act = oc_details("action", "Action",
-                     "<input name='detail' placeholder='what will you do? (e.g. schedule a meeting, forward an email)' autocomplete='off'>"
-                     f"<select name='pid_link'>{pj_opts}</select>"
-                     "<span class='muted' style='font-size:.74rem'>Always goes ahead. Linked to a project "
-                     "= checklist item; standalone = loose action. Recurring work? Consider the governance meeting.</span>")
-    rov = oc_details("roloverleg", "Item for governance meeting",
-                     "<textarea name='detail' rows='2' placeholder='opportunity / problem / need / first role sketch'></textarea>")
-    nm = (f"<form method='post' action='/action' {keep} class='wo-oc'>{_wo_hid(csrf, crec.id, base)}"
-          f"<input type='hidden' name='iid' value='{_e(iid)}'><input type='hidden' name='otype' value='nevermind'>"
-          f"<button class='flink' type='submit' name='action' value='wo_ag_resolve'>Not needed</button></form>")
-    # secretaris-signaal (licht): mis je info/scope? (Noochie zit al in de balk; geen losse knop.)
-    hint = ""
-    if not (note.get("spanning") or "").strip():
-        hint = "<div class='sec-issue let'>📋 Secretary: jot the tension down briefly so it can be processed.</div>"
-    return (f"<div class='c2-sec'>{head}<p><b>{_e(item['title'])}</b></p>{hint}{fields}"
-            f"<div class='wo-outcomes'><div class='sec-kop'>Choose outcome</div>{info}{proj}{act}{rov}{nm}</div></div>")
+    nxt = f"/werkoverleg?circle={crec.id}&step=agenda"
+    vang = _vang_form(crec.id, csrf, nxt) if csrf else ""
+    lijst = render_vangst_frag(st, crec.id, csrf, open_iid=iid, nxt=nxt)
+    return (f"<div class='c2-sec'><h3>Punten behandelen</h3>"
+            f"<p class='muted'>Typ een punt en druk Enter — dat is de hele handeling. Klik "
+            f"<em>verwerken</em> onder een punt om er uitkomsten onder te leggen; er mogen er "
+            f"meerdere zijn, elk naar een andere rol.</p>{vang}</div>"
+            f"<div class='rdr-tool' id='vang-lijst'>{lijst}</div>")
 
 
 def _wo_checkout(st: _Stores, crec, csrf: str) -> str:
@@ -322,13 +224,9 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
         cls = "wo-step" + (" on" if k == cur else "") + (" done" if done else "")
         nav += (f"<a class='{cls} js-modal' href='{url}' data-href='{url}'>"
                 f"<span class='wo-num'>{num}</span>{_e(lbl)}</a>")
-        if k == "agenda":   # ingebrachte spanningen genest onder de Agenda-stap
-            items = _wo_spanning_items(st, crec, csrf_token, iid)
-            if items:
-                nav += f"<div class='wo-substeps'>{items}</div>"
-    # Spanning toevoegen staat bovenaan (boven Check-in); de stappen eronder.
-    left = (_psec(_IC_INFO, "Tensions", _wo_spanning_add(st, crec, csrf_token))
-            + _psec(_IC_CHECK, "Meeting", f"<div class='wo-nav'>{nav}</div>"))
+    # Het vangveld en de puntenlijst stonden hier als tweede kopie in de linkerkolom. Ze wonen nu
+    # in de Agenda-stap zelf, want dat is waar je ze gebruikt — en het is één component.
+    left = _psec(_IC_CHECK, "Meeting", f"<div class='wo-nav'>{nav}</div>")
 
     if cur == "checkin":
         content = _wo_checkin(st, crec, csrf_token)
@@ -340,10 +238,7 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
         # In het overleg worden projecten via de triage (agenda) toegevoegd, niet hier los.
         content = _projects_tab_html(st, crec, csrf_token, group="", add=False)
     elif cur == "agenda":
-        item = st.werk.agenda_get(crec.id, iid) if iid else None
-        content = (_wo_triage(st, crec, csrf_token, item) if item is not None
-                   else "<div class='c2-sec'><h3>Process tension</h3>"
-                        "<p class='muted'>Pick a tension on the left to process, or add one.</p></div>")
+        content = _wo_agenda(st, crec, csrf_token, iid)
     elif cur == "checkout":
         content = _wo_checkout(st, crec, csrf_token)
     else:

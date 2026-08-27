@@ -297,18 +297,30 @@ class WerkoverlegStore:
 
     # ── stap 7: samenvatting ───────────────────────────────────────────────────
     def summary(self, circle: str) -> dict:
+        """De samenvatting die in het archief belandt — en die de facilitator-metriek leest.
+
+        Telt de UITKOMSTEN-lijst, niet het oude enkelvoudige `outcome`. Eén spanning kan er
+        meerdere hebben, en de oude vorm zou er hoogstens één van tellen. De typenamen zijn
+        meeverhuisd (`actie` was `action`, `governance` was `roloverleg`); de oude namen blijven
+        meetellen zodat archieven van vóór deze wijziging leesbaar blijven."""
         st = self._m.get(circle) or {}
         ag = st.get("agenda", [])
         done = [i for i in ag if i.get("status") == "done"]
-        out = [i.get("outcome", {}).get("type") for i in done]
+        out = []
+        for i in done:
+            rijen = i.get("uitkomsten") or []
+            if rijen:
+                out += [u.get("type") for u in rijen]
+            elif i.get("outcome"):                       # archief van vóór de multi-uitkomst
+                out.append(i["outcome"].get("type"))
         scores = list(st.get("checkout", {}).values())
         pres = st.get("presence", {})
         return {
             "behandeld": len(done),
             "info": out.count("info"),
             "projecten": out.count("project"),
-            "acties": out.count("action"),
-            "roloverleg": out.count("roloverleg"),
+            "acties": out.count("actie") + out.count("action"),
+            "roloverleg": out.count("governance") + out.count("roloverleg"),
             "nevermind": out.count("nevermind"),
             "afwezig": [p for p, v in pres.items() if v is False],
             "tevredenheid": round(sum(scores) / len(scores), 1) if scores else None,

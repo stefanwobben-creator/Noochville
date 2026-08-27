@@ -43,7 +43,7 @@ _LABEL_WHITELIST = {
     "views/overview.py": 12,
     "views/projects.py": 8,
     "views/roloverleg.py": 4,
-    "views/werkoverleg.py": 2,
+    "views/werkoverleg.py": 0,   # de oude triage is weg (gedeelde vangst-component)
 }
 
 
