@@ -32,6 +32,11 @@ from nooch_village.web_base import _banner, _e, _field, _page
 UITKOMSTEN = ("spanning", "project", "actie")
 
 
+def _open_nxt(nxt: str, iid: str) -> str:
+    """De terug-URL met dit punt open. Zonder dit klapt het blok na elke uitkomst dicht."""
+    return f"{nxt}{'&' if '?' in nxt else '?'}open={iid}"
+
+
 def _hid(csrf: str, circle: str, nxt: str, **velden) -> str:
     rijen = [f"<input type='hidden' name='csrf' value='{_e(csrf)}'>",
              f"<input type='hidden' name='circle' value='{_e(circle)}'>",
@@ -42,6 +47,56 @@ def _hid(csrf: str, circle: str, nxt: str, **velden) -> str:
 
 def _rollen(st, circle: str) -> list:
     return sorted(org.roles_of(st.records.all(), circle), key=lambda r: _name(r).lower())
+
+
+# ── ELKE rol, niet alleen deze cirkel ───────────────────────────────────────
+#
+# Dit is de kernfunctie van fase 2: het punt van persoon X wordt werk voor rol Y. Beperken tot de
+# rollen van déze cirkel maakt precies de overdracht onmogelijk waar het overleg voor bestaat —
+# iemand brengt iets in dat ergens anders thuishoort. Slapende en gearchiveerde rollen vallen af:
+# daar werk neerleggen is het laten verdwijnen bij iemand die niet draait.
+
+def alle_rollen(st) -> list:
+    from nooch_village.villageraad import rollen as levende_rollen
+    return sorted((r for r in levende_rollen(st.records) if not getattr(r, "slaapt", False)),
+                  key=lambda r: _name(r).lower())
+
+
+def rol_namen(st) -> dict:
+    """{rol_id: unieke weergavenaam}. Dezelfde helper als de villageraad — drie rollen die
+    allemaal 'Circle Lead' heten zijn in een autocomplete niet uit elkaar te houden."""
+    from nooch_village.villageraad import labels
+    return labels(alle_rollen(st), st.records)
+
+
+def rol_uit_naam(st, naam: str) -> tuple:
+    """(rol_id, reden). Leeg id = niet opgelost, en dan gebeurt er niets.
+
+    Fail-closed op dubbelzinnigheid: twee rollen die op dezelfde naam matchen leveren géén keuze
+    op. Werk bij de verkeerde rol neerleggen kost een hop en levert een vals gat-record op — een
+    zichtbare 'niet gevonden' is eerlijker dan een gok."""
+    gezocht = " ".join((naam or "").split()).lower()
+    if not gezocht:
+        return "", ""
+    namen = rol_namen(st)
+    exact = [rid for rid, n in namen.items() if n.lower() == gezocht]
+    if len(exact) == 1:
+        return exact[0], ""
+    if len(exact) > 1:
+        return "", f"meerdere rollen heten “{naam}”"
+    if gezocht in namen:                       # iemand plakte een rol-id
+        return gezocht, ""
+    deel = [rid for rid, n in namen.items() if gezocht in n.lower()]
+    if len(deel) == 1:
+        return deel[0], ""
+    if len(deel) > 1:
+        return "", f"“{naam}” past op {len(deel)} rollen — wees specifieker"
+    return "", f"geen rol gevonden voor “{naam}”"
+
+
+def _rol_datalist(st, dl_id: str) -> str:
+    opts = "".join(f"<option value='{_e(n)}'>" for n in sorted(rol_namen(st).values()))
+    return f"<datalist id='{_e(dl_id)}'>{opts}</datalist>"
 
 
 def _rol_opties(st, circle: str, selected: str = "") -> str:
@@ -75,76 +130,125 @@ def _vang_form(circle: str, csrf: str, nxt: str) -> str:
     return (f"<form method='post' action='/action' class='rov-add' id='vang-form' "
             f"data-frag='/vangst?circle={_e(circle)}&frag=1'>"
             f"{_hid(csrf, circle, nxt)}"
-            f"<input id='vang-input' name='punt' placeholder='+ point — type and press Enter' "
-            f"autocomplete='off' autofocus aria-label='new point' maxlength='140'>"
+            f"<input id='vang-input' name='punt' "
+            f"placeholder='punt in één regel (optioneel @rol) — Enter' "
+            f"autocomplete='off' autofocus aria-label='punt' maxlength='140'>"
             f"<button class='btn ok sm' type='submit' name='action' value='vangst_add'>+</button>"
             f"</form>")
 
 
-def _verwerk_blok(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
-    """De lichte verwerk-actie: uitklappen, één keuze, klaar. Geen modal, geen tweede pagina.
+# De vier vormen die een uitkomst kan hebben. Alle vier bestaan al elders in het dorp; hier worden
+# ze alleen naast elkaar gezet zodat één spanning er meerdere tegelijk kan opleveren.
+UITKOMST_SOORTEN = (
+    ("info", "Info-melding", "landt als bericht bij de rol"),
+    ("project", "Project", "komt op het bord van de rol"),
+    ("actie", "Actie", "checklist-item op een lopend project van die rol"),
+    ("governance", "Governance-punt", "gaat naar de roloverleg-agenda van de cirkel"),
+)
 
-    Drie routes, alle drie bestaand. De eerste is de getypeerde-kaart-pijplijn: het punt gaat als
-    verse spanning naar een rol, en dáár schrijft de bestaande haak de bevinding en bepaalt de
-    bestaande typer of het een verzoek, een governance-voorstel of een besluit is. De andere twee
-    zijn de directe uitkomsten die het werkoverleg ook al kent."""
+
+def _uitkomst_regel(st, circle: str, it: dict, u: dict, csrf: str, nxt: str) -> str:
+    """Eén al toegevoegde uitkomst. Blijft staan, ook nadat het punt is afgevinkt."""
+    namen = rol_namen(st)
+    soort = dict((k, lbl) for k, lbl, _ in UITKOMST_SOORTEN).get(u.get("type"), u.get("type"))
+    naar = namen.get(u.get("rol") or "", u.get("rol") or "")
+    doel = f" → <strong>{_e(naar)}</strong>" if naar else ""
+    ref = f" <span class='muted'>{_e(u.get('ref') or '')}</span>" if u.get("ref") else ""
+    weg = (f"<form method='post' action='/action' class='emo-f'>"
+           f"{_hid(csrf, circle, _open_nxt(nxt, it['id']), iid=it['id'], uid=u.get('id', ''))}"
+           f"<button class='flink' type='submit' name='action' value='vangst_uitkomst_weg' "
+           f"title='remove'>✕</button></form>") if csrf else ""
+    return (f"<div class='rdr-meta'><span class='chip outline'>{_e(soort)}</span>{doel} "
+            f"<span class='muted'>{_e(u.get('tekst') or '')}</span>{ref} {weg}</div>")
+
+
+def _verwerk_blok(st, circle: str, it: dict, csrf: str, nxt: str, open_iid: str = "") -> str:
+    """FASE 2 — verwerken. Pas hier de volledige spanningstekst en de uitkomsten.
+
+    Drie dingen die deze fase anders maken dan het oude werkoverleg-scherm:
+
+    1. **Meerdere uitkomsten per spanning.** Eén punt levert zelden één ding op; een radio-knop
+       dwingt je te kiezen wélke van de drie je opschrijft en de andere twee raak je kwijt.
+    2. **Elke rol, niet alleen deze cirkel.** Het punt van persoon X wordt werk voor rol Y — dat is
+       waar een overleg voor bestaat. Beperken tot de eigen cirkel maakt precies die overdracht
+       onmogelijk.
+    3. **Geen modal.** Uitklappen in de lijst, zoals de inbox: je houdt zicht op de rest van de
+       agenda terwijl je er één verwerkt.
+    """
     iid = it["id"]
-    lead = f"{circle}__circle_lead"
-    default = lead if st.records.get(lead) is not None else ""
+    if not csrf:
+        return ""
+    dl = f"vr-dl-{iid}"
+    sub = "this.form.requestSubmit?this.form.requestSubmit():this.form.submit()"
 
-    def _blok(otype: str, samenvatting: str, binnenin: str, uitleg: str = "") -> str:
-        return (f"<details class='wo-ocd box-details'><summary>{samenvatting}</summary>"
-                f"<form method='post' action='/action' class='wo-oc'>"
-                f"{_hid(csrf, circle, nxt, iid=iid, otype=otype)}"
-                f"{('<p class=' + chr(39) + 'muted' + chr(39) + '>' + _e(uitleg) + '</p>') if uitleg else ''}"
-                f"{binnenin}"
-                f"<button class='btn sm' type='submit' name='action' value='vangst_verwerk'>"
-                f"Record</button></form></details>")
+    tekst = (it.get("note") or {}).get("spanning") or ""
+    veld = _field("De volledige spanning", "tekst", kind="textarea", value=tekst,
+                  fid=f"vs-{iid}", attrs=f'onchange="{sub}"')
+    tekstveld = (f"<form method='post' action='/action' class='wo-oc'>"
+                 f"{_hid(csrf, circle, _open_nxt(nxt, iid), iid=iid)}{veld}"
+                 f"<input type='hidden' name='action' value='vangst_tekst'></form>")
 
-    spanning = _blok(
-        "spanning", "→ tension for a role",
-        (f"<label class='att-lbl' for='vr-{_e(iid)}'>Which role?</label>"
-         f"<select id='vr-{_e(iid)}' name='rol'>{_rol_opties(st, circle, default)}</select>"),
-        "It lands as a fresh tension: the finding is written and typed by the existing pipeline, "
-        "so it becomes a request, a governance proposal or a decision on its own.")
-    project = _blok(
-        "project", "→ project on a role",
-        (f"<label class='att-lbl' for='vp-{_e(iid)}'>On which role?</label>"
-         f"<select id='vp-{_e(iid)}' name='owner'>{_rol_opties(st, circle)}</select>"
-         + _field("Scope (editable)", "tekst", value=it.get("title", ""), fid=f"vt-{iid}",
-                  required=True)))
-    opts = _project_opties(st, circle)
-    actie = _blok(
-        "actie", "→ action on a project",
-        (f"<label class='att-lbl' for='va-{_e(iid)}'>Which project?</label>"
-         f"<select id='va-{_e(iid)}' name='pid_link'>{opts}</select>"
-         + _field("Action (editable)", "tekst", value=it.get("title", ""), fid=f"va-t-{iid}",
-                  required=True))) if opts else ""
-    return f"<div class='ffoot-l'>{spanning}{project}{actie}</div>"
+    regels = "".join(_uitkomst_regel(st, circle, it, u, csrf, nxt)
+                     for u in (it.get("uitkomsten") or []))
+    regels = regels or "<p class='muted'>Nog geen uitkomst. Voeg er hieronder één toe — meerdere mag.</p>"
+
+    opts = "".join(f"<option value='{k}'>{_e(lbl)} — {_e(hint)}</option>"
+                   for k, lbl, hint in UITKOMST_SOORTEN)
+    toevoegen = (f"<form method='post' action='/action' class='wo-oc'>"
+                 f"{_hid(csrf, circle, _open_nxt(nxt, iid), iid=iid)}"
+                 f"<label class='att-lbl' for='vu-{_e(iid)}'>Wat levert dit op?</label>"
+                 f"<select id='vu-{_e(iid)}' name='otype'>{opts}</select>"
+                 f"<label class='att-lbl' for='vw-{_e(iid)}'>Voor welke rol?</label>"
+                 f"<input id='vw-{_e(iid)}' name='rol' list='{_e(dl)}' autocomplete='off' "
+                 f"placeholder='typ een rolnaam…'>"
+                 f"{_rol_datalist(st, dl)}"
+                 f"{_field('Wat precies', 'tekst', value=it.get('title', ''), fid=f'vut-{iid}')}"
+                 f"<button class='btn sm' type='submit' name='action' value='vangst_uitkomst'>"
+                 f"+ uitkomst</button></form>")
+
+    klaar = it.get("status") == "done"
+    vink = (f"<form method='post' action='/action' class='emo-f'>"
+            f"{_hid(csrf, circle, _open_nxt(nxt, iid), iid=iid, klaar='0' if klaar else '1')}"
+            f"<button class='btn {'' if klaar else 'ok '}sm' type='submit' name='action' "
+            f"value='vangst_klaar'>{'↺ heropen' if klaar else '✓ verwerkt'}</button></form>")
+
+    # Het blok blijft open na een toevoeging. Eén spanning levert meerdere uitkomsten op; elke keer
+    # opnieuw moeten uitklappen maakt van "meerdere mag" alsnog een drempel per regel.
+    op = " open" if open_iid and open_iid == iid else ""
+    return (f"<details class='wo-ocd box-details'{op}><summary>verwerken</summary>"
+            f"{tekstveld}<div class='ffoot-l'>{regels}</div>{toevoegen}{vink}</details>")
 
 
-def _punt_rij(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
+def _punt_rij(st, circle: str, it: dict, csrf: str, nxt: str, open_iid: str = "") -> str:
     door = (it.get("by") or "").strip()
-    wie = f"<span class='muted'>by {_e(door)}</span>" if door else "<span class='muted'>by —</span>"
+    wie = f"<span class='muted'>door {_e(door)}</span>" if door else "<span class='muted'>door —</span>"
     sep = "<span class='fsep'>·</span>"
-    bron = ("<span class='chip outline'>on the agenda</span>"
-            if it.get("bron") == "agenda" else "")
+    klaar = it.get("status") == "done"
+    n_uit = len(it.get("uitkomsten") or [])
+    chips = ""
+    if it.get("bron") == "agenda":
+        chips += "<span class='chip outline'>op de agenda</span> "
+    if n_uit:
+        chips += f"<span class='chip outline'>{n_uit} uitkomst{'en' if n_uit != 1 else ''}</span> "
+    if it.get("rol_hint"):
+        naam = rol_namen(st).get(it["rol_hint"], it["rol_hint"])
+        chips += f"<span class='chip muted'>@{_e(naam)}</span> "
     meta = (f"<div class='rdr-meta'>{wie} {sep} "
-            f"<span class='muted'>{_e(_stamp(it.get('created_at')))}</span> {bron}</div>")
-    titel = f"<div class='rdr-sig'>{_e(it.get('title') or '')}</div>"
+            f"<span class='muted'>{_e(_stamp(it.get('created_at')))}</span> {chips}</div>")
+    # Afgevinkt verdwijnt niet: doorgestreept blijven staan. Wie het overleg terugleest moet kunnen
+    # zien wát er langskwam, niet alleen wat er nog open is.
+    titel = (f"<div class='rdr-sig{' ck-done' if klaar else ''}'>"
+             f"{_e(it.get('title') or '')}</div>")
 
-    if it.get("status") == "done":
-        oc = it.get("outcome") or {}
-        kader = (f"<div class='ffoot-l'><span class='chip outline'>✓ "
-                 f"{_e(oc.get('type') or 'handled')}</span> "
-                 f"<span class='muted'>{_e(oc.get('detail') or '')}</span></div>")
-        return f"<div class='rdr-row'><div class='rdr-body'>{meta}{titel}{kader}</div></div>"
-
-    weg = (f"<form method='post' action='/action' class='emo-f'>{_hid(csrf, circle, nxt, iid=it['id'])}"
-           f"<button class='flink' type='submit' name='action' value='vangst_remove' "
-           f"title='delete'>🗑</button></form>")
-    return (f"<div class='rdr-row' data-open='1'><div class='rdr-body'>{meta}{titel}"
-            f"{_verwerk_blok(st, circle, it, csrf, nxt)}</div>"
+    weg = ""
+    if csrf and not klaar:
+        weg = (f"<form method='post' action='/action' class='emo-f'>"
+               f"{_hid(csrf, circle, nxt, iid=it['id'])}"
+               f"<button class='flink' type='submit' name='action' value='vangst_remove' "
+               f"title='weggooien'>🗑</button></form>")
+    return (f"<div class='rdr-row'{'' if klaar else " data-open='1'"}>"
+            f"<div class='rdr-body'>{meta}{titel}"
+            f"{_verwerk_blok(st, circle, it, csrf, nxt, open_iid)}</div>"
             f"<div class='rdr-act'>{weg}</div></div>")
 
 
@@ -194,16 +298,17 @@ _VANG_JS = """<script>(function(){
 })();</script>"""
 
 
-def render_vangst_frag(st, circle: str, csrf_token: str = "") -> str:
+def render_vangst_frag(st, circle: str, csrf_token: str = "", open_iid: str = "") -> str:
     """Alleen de lijst. Dezelfde rijen als de volle pagina — één bron, geen tweede vorm."""
     nxt = f"/vangst?circle={circle}"
-    rijen = "".join(_punt_rij(st, circle, p, csrf_token, nxt)
+    rijen = "".join(_punt_rij(st, circle, p, csrf_token, nxt, open_iid)
                     for p in st.werk.punten(circle))
-    return rijen or ("<div class='card muted'>Nothing captured yet. Type a sentence above and "
-                     "press Enter — that is the whole action.</div>")
+    return rijen or ("<div class='card muted'>Nog niets gevangen. Typ hierboven een regel en "
+                     "druk op Enter — dat is de hele handeling.</div>")
 
 
-def render_vangst(st, circle: str, csrf_token: str = "", msg: str = "") -> str:
+def render_vangst(st, circle: str, csrf_token: str = "", msg: str = "",
+                  open_iid: str = "") -> str:
     crec = st.records.get(circle)
     if crec is None or not org.is_circle(crec):
         main = ("<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
@@ -214,14 +319,14 @@ def render_vangst(st, circle: str, csrf_token: str = "", msg: str = "") -> str:
     punten = st.werk.punten(circle)
     open_n = sum(1 for p in punten if p.get("status") != "done")
     vang = _vang_form(circle, csrf_token, f"/vangst?circle={circle}") if csrf_token else ""
-    rijen = render_vangst_frag(st, circle, csrf_token)
+    rijen = render_vangst_frag(st, circle, csrf_token, open_iid)
     kop = (f"<div class='c2-bar'><a href='/node?id={_e(circle)}'>← {_e(_name(crec))}</a>"
            f" <span class='fsep'>·</span> "
            f"<a href='/werkoverleg?circle={_e(circle)}'>tactical meeting</a></div>"
-           f"<h1>Quick capture <span class='chip' id='vang-n'>{open_n}</span></h1>"
-           f"<p class='muted'>Catch first, sort later. Typing a point records nothing but the "
-           f"sentence, who raised it and when — the finding and the typing happen when you "
-           f"process it.</p>")
+           f"<h1>Vangen <span class='chip' id='vang-n'>{open_n}</span></h1>"
+           f"<p class='muted'>Eerst vangen, later sorteren. Typ een regel en druk Enter — meer "
+           f"gebeurt er niet. Wát het oplevert en voor welke rol bepaal je pas bij "
+           f"<em>verwerken</em>, en dan mogen het er meerdere zijn.</p>")
     main = (f"<div class='c2-main'>{kop}{_banner(msg)}"
             f"<div class='c2-sec'>{vang}</div>"
             f"<div class='rdr-tool' id='vang-lijst'>{rijen}</div></div>")
