@@ -252,7 +252,10 @@ class Records:
                 source=r.get("source", "sensed"),
                 persona=r.get("persona"),
                 persona_id=r.get("persona_id"),
-                held_by=r.get("held_by"))
+                held_by=r.get("held_by"),
+                slaapt=r.get("slaapt", False),
+                slaap_reden=r.get("slaap_reden"),
+                slaap_sinds=r.get("slaap_sinds"))
             # Fail-soft migratie: elke accountability krijgt een stabiel id. Idempotent —
             # een tweede load muteert niets en schrijft dus ook niets.
             if ensure_acc_ids(self._data[rid].definition):
@@ -508,6 +511,14 @@ class Reconciler:
                         self.matchmaker.register(member)
             self.matchmaker.register(circle)
             return circle
+        # SLAPEND: geen thread. Dat is precies wat slapen betekent — de rol blijft in het
+        # register staan (hij is niet gearchiveerd), maar hij tickt niet, reageert niet op events
+        # en oordeelt niet. Terugzetten is één veld, en dan bouwt de Reconciler hem gewoon weer.
+        if getattr(record, "slaapt", False):
+            log.info("rol %s slaapt — geen thread (reden: %s)", record.id,
+                     getattr(record, "slaap_reden", "") or "niet vastgelegd")
+            self.unmanned[record.id] = record
+            return None
         # Rol: bestaat er een implementatie (CLASS_MAP) of een actieve skill?
         inh_cls = self.class_map.get(record.id)
         if inh_cls is None:

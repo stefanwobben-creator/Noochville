@@ -39,6 +39,14 @@ class Record:
     persona_id: Optional[str] = None  # toegewezen inwoner (data/personas.json) — het karakter
     held_by: Optional[str] = None  # mens die deze rol bezet (bv. de founder in the_source):
     #                                een door-mens-bemenste rol, geen code-thread
+    # SLAPEN IS GEEN VERWIJDEREN. Een slapende rol blijft volledig in het register staan — met zijn
+    # purpose, accountabilities, domeinen en historie — maar krijgt geen thread, geen oordeel en
+    # geen nieuw werk. Eén commando zet hem terug. `archived` is het onomkeerbare broertje: dat
+    # haalt de rol uit de organisatie. Wie die twee door elkaar haalt, gooit iets weg dat alleen
+    # gepauzeerd had moeten worden.
+    slaapt: bool = False
+    slaap_reden: Optional[str] = None      # waarom, en waarop dat rust (bewijs-id uit de audit)
+    slaap_sinds: Optional[float] = None
 
 
 @dataclass

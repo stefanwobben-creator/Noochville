@@ -67,7 +67,11 @@ def roster(records, *, exclude: set[str]) -> list[dict]:
     from nooch_village import org
     uit = []
     for r in (records.all() if records is not None else []):
-        if getattr(r, "archived", False) or org.is_circle(r) or r.id in exclude:
+        # Een slapende rol staat niet op de roster: werk erheen routeren zou het laten
+        # verdwijnen bij iemand die niet draait. Gearchiveerd = weg, slapend = gepauzeerd; voor
+        # de routering is de uitkomst dezelfde, en dat is de bedoeling.
+        if (getattr(r, "archived", False) or getattr(r, "slaapt", False)
+                or org.is_circle(r) or r.id in exclude):
             continue
         d = getattr(r, "definition", None)
         uit.append({"id": r.id,

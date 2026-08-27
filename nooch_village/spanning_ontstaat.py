@@ -36,6 +36,14 @@ def maak_verrijker(records, assignments, data_dir: str = "", reason_fn=None):
         tekst = str(n.get("snippet") or "")
         if not tekst.strip():
             return {}
+        # SLAPENDE ROL: geen oordeel. Een spanning van een slapende rol wordt niet herschreven en
+        # niet getypeerd — dat is de dure kant van het dorp, en die hoort stil te staan zodra een
+        # rol slaapt. De spanning zelf blijft gewoon bestaan: slapen dempt het oordeel, het gooit
+        # geen signaal weg.
+        rec = records.get(rol) if (records is not None and rol) else None
+        if rec is not None and getattr(rec, "slaapt", False):
+            log.info("spanning van %s niet beoordeeld — die rol slaapt", rol)
+            return {}
         b = bv.herschrijf(tekst, rol=rol, records=records, reason_fn=reason_fn)
         t = zv.verwerk(tekst, rol=rol, records=records, reason_fn=reason_fn,
                        voorstel=b.get("voorstel") or "", data_dir=data_dir)

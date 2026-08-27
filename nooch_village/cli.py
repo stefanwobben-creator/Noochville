@@ -1418,6 +1418,59 @@ def main() -> None:
                 print("   -", s)
             sys.exit(1)
 
+    elif mode == "afslanken":
+        # Het dorp afslanken op basis van het waarde-audit-verslag. DRY-RUN by default: er wordt
+        # niets geschreven zonder --apply. `wek <rol_id>` is de terugweg.
+        import glob, os
+        from nooch_village import afslanken as af
+        from nooch_village.config import load_context
+        from nooch_village.governance import Records
+        from nooch_village.village import BASE_DIR
+
+        ctx = load_context(BASE_DIR)
+        recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
+
+        if len(sys.argv) > 2 and sys.argv[2] == "wek":
+            if len(sys.argv) < 4:
+                print("gebruik: village afslanken wek <rol_id>"); sys.exit(2)
+            rid = sys.argv[3]
+            if af.wekken(recs, rid, data_dir=ctx.data_dir):
+                recs.save()
+                print(f"\u2600\ufe0f  {rid} is wakker — bij de volgende start bouwt de Reconciler "
+                      f"hem gewoon weer op.")
+            else:
+                print(f"\u2717 {rid} sliep niet (of bestaat niet) — er is niets gewijzigd.")
+            sys.exit(0)
+
+        # Welk verslag? Expliciet meegegeven, anders het nieuwste.
+        pad = next((a for a in sys.argv[2:] if a.endswith(".md")), "")
+        if not pad:
+            kandidaten = sorted(glob.glob(os.path.join(ctx.data_dir, "output",
+                                                       "waarde_audit_*.md")))
+            pad = kandidaten[-1] if kandidaten else ""
+        if not pad:
+            print("\u2717 geen waarde-audit-verslag gevonden — draai eerst 'village waarde_audit'.")
+            sys.exit(1)
+
+        # Expliciete menselijke besluiten die boven de audit gaan.
+        kill = tuple(a.split("=", 1)[1].split(",") for a in sys.argv[2:] if a.startswith("kill="))
+        kill = tuple(x.strip() for groep in kill for x in groep if x.strip())
+        uitgov = tuple(a.split("=", 1)[1].split(",") for a in sys.argv[2:]
+                       if a.startswith("uit_governance="))
+        uitgov = tuple(x.strip() for groep in uitgov for x in groep if x.strip())
+
+        audit = af.lees_audit(pad)
+        plan = af.plan(audit, recs, kill_skills=kill, uit_governance=uitgov)
+        apply = "--apply" in sys.argv
+        print(af.rapport_tekst(plan, apply=apply))
+        if apply:
+            gedaan = af.voer_uit(plan, recs, data_dir=ctx.data_dir)
+            print(f"\n\u2713 {len(gedaan['slaap'])} rol(len) slapen, "
+                  f"{len(gedaan['archiveer_rol'])} gearchiveerd, "
+                  f"{len(gedaan['skill_intrekken'])} skill(s) ingetrokken.")
+        else:
+            print("\nDRY-RUN \u2014 er is niets geschreven. Draai opnieuw met --apply.")
+
     elif mode == "waarde_audit":
         # Wat bracht elke rol en elke skill voort dat een mens echt raakte? Deterministisch,
         # read-only, geen LLM. Schrijft alleen het verslag.
