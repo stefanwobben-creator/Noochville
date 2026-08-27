@@ -150,16 +150,15 @@ def test_drie_uitkomsten_onder_een_spanning_naar_verschillende_rollen(tmp_path):
     assert cockpit2._Stores(dd).agenda.open()                 # roloverleg-punt staat er
 
 
-def test_een_uitkomst_draagt_rol_persoon_staat_en_kroniek_herkomst(tmp_path):
+def test_een_uitkomst_draagt_rol_persoon_en_kroniek_herkomst(tmp_path):
     dd = _dd(tmp_path)
     p = _with_member(dd)
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
     iid = _punt(dd, "Iets")
-    from nooch_village.views.vangst import WACHTEND
-    _uitkomst(dd, iid, otype="actie", rol=_rolnaam(dd, RID), tekst="Lotte bellen",
-              persoon=p.id, staat=WACHTEND)
+    _uitkomst(dd, iid, otype="actie", rol=_rolnaam(dd, RID), tekst="Lotte bellen", persoon=p.id)
     u = cockpit2._Stores(dd).werk.punt_get(C, iid)["uitkomsten"][0]
-    assert u["rol"] == RID and u["persoon"] == p.id and u["staat"] == WACHTEND
+    assert u["rol"] == RID and u["persoon"] == p.id
+    assert "staat" not in u                       # de staat-keuze is uit de flow
     # HERKOMST: een echt Kroniek-record, geen rolnaam
     assert u["kroniek"]
     kr = [r for r in cockpit2._Stores(dd).evidence.all_records() if r["id"] == u["kroniek"]]
@@ -174,9 +173,9 @@ def test_een_uitkomst_is_bewerkbaar_en_verwijderbaar(tmp_path):
     uid = cockpit2._Stores(dd).werk.punt_get(C, iid)["uitkomsten"][0]["id"]
     cockpit2.dispatch(dd, "vangst_uitkomst_edit",
                       {"circle": [C], "iid": [iid], "uid": [uid], "tekst": ["bijgesteld"],
-                       "persoon": [""], "staat": ["wachtend"], "next": ["/"]}, username="guest")
+                       "persoon": [""], "next": ["/"]}, username="guest")
     u = cockpit2._Stores(dd).werk.punt_get(C, iid)["uitkomsten"][0]
-    assert u["tekst"] == "bijgesteld" and u["staat"] == "wachtend"
+    assert u["tekst"] == "bijgesteld"
     cockpit2.dispatch(dd, "vangst_uitkomst_weg",
                       {"circle": [C], "iid": [iid], "uid": [uid], "next": ["/"]}, username="guest")
     assert cockpit2._Stores(dd).werk.punt_get(C, iid)["uitkomsten"] == []
