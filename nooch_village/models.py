@@ -47,6 +47,11 @@ class Record:
     slaapt: bool = False
     slaap_reden: Optional[str] = None      # waarom, en waarop dat rust (bewijs-id uit de audit)
     slaap_sinds: Optional[float] = None
+    # Skills die BEWUST bij deze rol zijn weggehaald. Zonder dit veld voegt de seeding ze bij de
+    # eerstvolgende start gewoon weer toe — "idempotent zorgen dat rol X skill Y heeft" overrulet
+    # dan stilzwijgend een governance-besluit, en niemand ziet dat gebeuren. De seed vult aan wat
+    # nooit is besloten; hij overrulet niet wat wél is besloten.
+    ingetrokken_skills: list[str] = field(default_factory=list)
 
 
 @dataclass

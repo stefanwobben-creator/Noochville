@@ -9,6 +9,31 @@ from nooch_village.models import Record, RoleDefinition, RecordType
 from nooch_village.mission import ANCHOR_PURPOSE as _ANCHOR_PURPOSE
 # (fase 2) anchor-policies leven als domein-artefacten, niet meer als strings in de seed.
 
+import logging
+
+log = logging.getLogger("village.seeds")
+
+
+def _zorg_skill(records, rec, skill: str) -> bool:
+    """Geef een rol een skill — TENZIJ hij bewust is ingetrokken.
+
+    "Idempotent zorgen dat rol X skill Y heeft" leest als onschuldig onderhoud, maar het is een
+    schrijfactie op het DNA die bij ÉLKE start opnieuw draait. Zonder de intrekkings-check zet hij
+    een governance-besluit stil terug, en dat merk je pas als je het toevallig narekent — precies
+    wat er gebeurde toen `bulletin_schrijven` na het afslanken weer bij Noochie stond.
+
+    De seed vult aan wat nooit is besloten; hij overrulet niet wat wél is besloten."""
+    if rec is None or skill in rec.definition.skills:
+        return False
+    if skill in (getattr(rec, "ingetrokken_skills", None) or []):
+        log.info("seed: '%s' niet teruggezet bij %s — bewust ingetrokken", skill, rec.id)
+        return False
+    rec.definition.skills.append(skill)
+    rec.version = int(getattr(rec, "version", 1)) + 1
+    records.put(rec)
+    return True
+
+
 # ── Herkomst-wachter ──────────────────────────────────────────────────────────
 # De founding-bootstrap: de enige rollen die geseed mogen zijn. Elke andere rol hoort via
 # governance geboren te zijn (source="sensed"), niet seed-gehardcodeerd. Dit is de
@@ -281,27 +306,17 @@ def migrate_records(records: Records) -> None:
             records.put(rec)
             changed = True
     # Zorg dat trends de gsc_report-skill heeft (idempotent)
-    trends = records.get("trends")
-    if trends is not None and "gsc_report" not in trends.definition.skills:
-        trends.definition.skills.append("gsc_report")
-        records.put(trends)
+    if _zorg_skill(records, records.get("trends"), "gsc_report"):
         changed = True
     # NB: concurrent_scout wordt NIET meer via migratie geseed (was een afwijking van
     # 'rolwijziging alleen via governance'). Hij wordt via de gate geboren — zie
     # role_proposals.formalize_session_governance en role_provenance_violations.
     # Zorg dat de Librarian KeywordsEverywhere heeft: hij verrijkt elke kandidaat centraal
     # met echt zoekvolume vóór de beoordeling (idempotent).
-    librarian = records.get("librarian")
-    if librarian is not None and "keywords_everywhere" not in librarian.definition.skills:
-        librarian.definition.skills.append("keywords_everywhere")
-        librarian.version += 1
-        records.put(librarian)
+    if _zorg_skill(records, records.get("librarian"), "keywords_everywhere"):
         changed = True
     # Zorg dat Harry de onderzoeksvraag-skill heeft voor de verdiep-lus (idempotent)
-    harry = records.get("harry_hemp")
-    if harry is not None and "onderzoeksvraag" not in harry.definition.skills:
-        harry.definition.skills.append("onderzoeksvraag")
-        records.put(harry)
+    if _zorg_skill(records, records.get("harry_hemp"), "onderzoeksvraag"):
         changed = True
     # ── Noochie absorbeert Ronnie's bulletin-mandaat ──────────────────────────
     noochie = records.get("noochie")
@@ -325,9 +340,8 @@ def migrate_records(records: Records) -> None:
         if not noochie.definition.accountabilities:
             noochie.definition.accountabilities = _NOOCHIE_ACCOUNTABILITIES
             noochie_changed = True
-        if "bulletin_schrijven" not in noochie.definition.skills:
-            noochie.definition.skills.append("bulletin_schrijven")
-            noochie_changed = True
+        if _zorg_skill(records, noochie, "bulletin_schrijven"):
+            changed = True
         if noochie_changed:
             records.put(noochie)
             changed = True

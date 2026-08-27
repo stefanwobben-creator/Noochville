@@ -248,3 +248,54 @@ def test_onvindbaar_verslag_stelt_niets_voor(tmp_path):
     assert a["rollen"] == [] and a["skills"] == []
     p = af.plan(a, _recs(_dd(tmp_path)))
     assert p["slapen"] == [] and p["opruimen"] == []
+
+
+# ── 6. een seed mag een governance-besluit niet terugdraaien ────────────────
+
+def test_seed_zet_een_ingetrokken_skill_niet_terug(tmp_path):
+    """Op prod stond `bulletin_schrijven` na het afslanken gewoon weer bij Noochie: de seeding
+    'zorgt idempotent' dat een rol een skill heeft, en draaide daarmee stil een besluit terug."""
+    from nooch_village import seeds
+    dd = _dd(tmp_path)
+    recs = _recs(dd)
+    rec = recs.get(ROL)
+    rec.definition.skills = ["bulletin_schrijven"]
+    recs.put(rec)
+
+    af.skill_intrekken(recs, "bulletin_schrijven", reden="founder", data_dir=dd)
+    assert recs.get(ROL).definition.skills == []
+    assert "bulletin_schrijven" in recs.get(ROL).ingetrokken_skills
+
+    # De seed draait opnieuw (elke Village-start) en moet hem NIET terugzetten.
+    assert seeds._zorg_skill(recs, recs.get(ROL), "bulletin_schrijven") is False
+    assert recs.get(ROL).definition.skills == []
+
+
+def test_seed_vult_wel_aan_wat_nooit_besloten_is(tmp_path):
+    """De poort mag niet zo streng worden dat een verse rol zijn skill nooit krijgt."""
+    from nooch_village import seeds
+    dd = _dd(tmp_path)
+    recs = _recs(dd)
+    rec = recs.get(ROL)
+    rec.definition.skills = []
+    recs.put(rec)
+    assert seeds._zorg_skill(recs, recs.get(ROL), "gsc_report") is True
+    assert "gsc_report" in recs.get(ROL).definition.skills
+
+
+def test_de_intrekking_is_terug_te_draaien(tmp_path):
+    dd = _dd(tmp_path)
+    recs = _recs(dd)
+    rec = recs.get(ROL)
+    rec.definition.skills = ["tegenspraak"]
+    recs.put(rec)
+    af.skill_intrekken(recs, "tegenspraak", reden="founder", data_dir=dd)
+    assert af.skill_herstellen(recs, "tegenspraak", ROL, data_dir=dd) is True
+    na = recs.get(ROL)
+    assert "tegenspraak" in na.definition.skills
+    assert na.ingetrokken_skills == []
+    # En dan mag de seed hem weer gewoon aanvullen.
+    from nooch_village import seeds
+    na.definition.skills = []
+    recs.put(na)
+    assert seeds._zorg_skill(recs, recs.get(ROL), "tegenspraak") is True

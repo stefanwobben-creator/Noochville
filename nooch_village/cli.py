@@ -1430,6 +1430,17 @@ def main() -> None:
         ctx = load_context(BASE_DIR)
         recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
 
+        if len(sys.argv) > 2 and sys.argv[2] == "herstel_skill":
+            if len(sys.argv) < 5:
+                print("gebruik: village afslanken herstel_skill <skill> <rol_id>"); sys.exit(2)
+            skill, rid = sys.argv[3], sys.argv[4]
+            if af.skill_herstellen(recs, skill, rid, data_dir=ctx.data_dir):
+                recs.save()
+                print(f"\u21ba '{skill}' staat weer bij {rid}.")
+            else:
+                print(f"\u2717 '{skill}' was niet ingetrokken bij {rid} — niets gewijzigd.")
+            sys.exit(0)
+
         if len(sys.argv) > 2 and sys.argv[2] == "wek":
             if len(sys.argv) < 4:
                 print("gebruik: village afslanken wek <rol_id>"); sys.exit(2)

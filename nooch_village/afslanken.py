@@ -220,6 +220,21 @@ def wekken(records, rol_id: str, *, data_dir: str = "") -> bool:
     return True
 
 
+def skill_herstellen(records, skill: str, rol_id: str, *, data_dir: str = "") -> bool:
+    """De terugweg voor een ingetrokken skill: markering weg én de skill terug in het DNA."""
+    rec = records.get(rol_id)
+    if rec is None or skill not in (rec.ingetrokken_skills or []):
+        return False
+    rec.ingetrokken_skills = [s for s in rec.ingetrokken_skills if s != skill]
+    if skill not in rec.definition.skills:
+        rec.definition.skills = list(rec.definition.skills) + [skill]
+    rec.version = int(getattr(rec, "version", 1)) + 1
+    records.put(rec)
+    if data_dir:
+        _log_regel(data_dir, {"actie": "skill_herstel", "skill": skill, "id": rol_id})
+    return True
+
+
 def rol_opruimen(records, rol_id: str, *, reden: str, data_dir: str = "") -> bool:
     """Een rol die nooit iets voortbracht: archiveren. Ook dit is een record-mutatie, geen delete —
     de historie blijft, hij verdwijnt alleen uit de levende organisatie."""
@@ -246,6 +261,11 @@ def skill_intrekken(records, skill: str, *, reden: str, data_dir: str = "") -> l
         if skill not in skills:
             continue
         rec.definition.skills = [s for s in skills if s != skill]
+        # Vastleggen DÁT het is ingetrokken, niet alleen dat het weg is. De seeding voegt
+        # "idempotent" skills terug toe; zonder deze markering staat de skill er na de eerstvolgende
+        # herstart gewoon weer, en dan heeft een start-routine een governance-besluit overruled.
+        if skill not in (rec.ingetrokken_skills or []):
+            rec.ingetrokken_skills = list(rec.ingetrokken_skills or []) + [skill]
         rec.version = int(getattr(rec, "version", 1)) + 1     # DNA-wijziging = versie omhoog
         records.put(rec)
         geraakt.append(rec.id)
