@@ -325,11 +325,12 @@ def test_de_teller_is_de_terugkoppeling_buiten_de_agenda_stap(tmp_path):
 
 def test_de_vangwachtrij_reist_mee_naar_elke_stap(tmp_path):
     """Zonder de wachtrij vervangt het scherm zich na elk punt en verdwijnt het punt dat je al aan
-    het typen was. Dat was op /vangst al opgelost; de balk moet dezelfde oplossing meenemen."""
+    het typen was. De balk vraagt de GEDEELDE mechaniek aan met attributen; er reist geen kopie
+    van het script mee."""
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
     for stap in ("checkin", "agenda"):
         frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, stap, csrf_token="t",
                                            fragment=True)
-        assert "data-modal-run" in frag, stap        # anders draait het script niet in de modal
-        assert "vang-form" in frag and "wacht.push" in frag, stap
+        assert "data-qa-frag=" in frag and "data-qa-input" in frag, stap
+        assert "<script" not in frag, stap           # geen kopie van de mechaniek per scherm

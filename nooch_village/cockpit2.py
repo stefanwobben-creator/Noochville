@@ -1175,6 +1175,8 @@ _STATIC_TYPES = {
     # Design-systeem-CSS (component-laag). URL draagt ?v=<inhoud-hash> (_DS_LINK),
     # dus de browser mag lang cachen: nieuwe CSS = nieuwe URL.
     "nooch.css": "text/css; charset=utf-8",
+    # De gedeelde fragment-mechaniek. URL draagt ?v=<inhoud-hash> (web_base._JS_LINK).
+    "nooch.js": "application/javascript; charset=utf-8",
     "nooch-logo.svg": "image/svg+xml; charset=utf-8",
     "nooch-logo.png": "image/png",
 }

@@ -112,7 +112,7 @@ def _wo_vangbar(st, crec, csrf: str, step: str) -> str:
 
     De teller is de terugkoppeling op de andere zes stappen: daar staat de lijst niet, dus moet
     het getal laten zien dat het punt geland is."""
-    from nooch_village.views.vangst import _VANG_JS, _vang_form
+    from nooch_village.views.vangst import _vang_form
 
     punten = st.werk.punten(crec.id)
     open_n = sum(1 for p in punten if p.get("status") != "done")
@@ -124,12 +124,13 @@ def _wo_vangbar(st, crec, csrf: str, step: str) -> str:
             "andere rol." if step == "agenda" else
             "Typ een punt en druk Enter — hij komt op de agenda te staan. Behandelen doe je bij "
             "stap 5; je hoeft daar nu niet heen.")
-    # `_VANG_JS` reist mee: het is dezelfde wachtrij als op /vangst, en zonder die wachtrij vervangt
-    # het scherm zich na élk punt — waarna het punt dat je al aan het typen was verdwijnt.
+    # De tellers worden na een vangst bijgewerkt door de gedeelde mechaniek: het lijst-fragment
+    # draagt ze mee als `data-nv-mirror`-bron, dus ze kloppen ook op de zes stappen waar de lijst
+    # zelf niet op het scherm staat.
     return (f"<div class='c2-sec'><h3>Punten behandelen <span class='muted'>("
             f"<span id='vang-tot'>{onderw}</span>, "
             f"<span id='vang-n'>{open_n}</span> te doen)</span></h3>"
-            f"<p class='muted'>{hint}</p>{vang}</div>{_VANG_JS if vang else ''}")
+            f"<p class='muted'>{hint}</p>{vang}</div>")
 
 
 def _wo_agenda(st, crec, csrf: str, iid: str = "") -> str:
@@ -143,9 +144,11 @@ def _wo_agenda(st, crec, csrf: str, iid: str = "") -> str:
     Het vangveld zelf staat niet meer hier maar in `_wo_vangbar`, boven de inhoud van elke stap.
     Deze functie levert alleen de puntenlijst, die daar direct onder komt te hangen.
 
-    De formulieren posten via `fetch`: op de volle pagina door `_VANG_JS`, hier door de
-    modal-controller die elk formulier in de overlay onderschept. Daarom hoeft er geen script mee —
-    een `<script>` in een fragment draait toch niet als de modal het via `innerHTML` invoegt."""
+    De formulieren posten via `fetch`: het vangveld via de gedeelde mechaniek
+    (`static/nooch.js`), de rest via de modal-controller die elk formulier in de overlay
+    onderschept. Er reist geen script mee — een `<script>` in een fragment draait toch niet als de
+    modal het via `innerHTML` invoegt, en dát is precies waarom de mechaniek in een echt
+    bestand hoort dat de pagina al geladen heeft."""
     from nooch_village.views.vangst import render_vangst_frag
 
     nxt = f"/werkoverleg?circle={crec.id}&step=agenda"

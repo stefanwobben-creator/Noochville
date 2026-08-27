@@ -486,9 +486,12 @@ def _modal_html(mentions_json: str = "[]") -> str:
         # wordt vervangen (de puntenlijst na een vangst) alsnog bedraad kan worden zonder de al
         # bedrade formulieren een tweede listener te geven — die zou elke actie dubbel posten.
         "function wireForm(f){if(f.getAttribute('data-wired'))return;f.setAttribute('data-wired','1');"
-        # Vangen heeft zijn eigen wachtrij (`_VANG_JS`): drie punten achter elkaar typen mag het
-        # fragment niet onder je vingers vandaan vervangen. Daarom hier overslaan.
-        "if(f.classList.contains('rov-add'))return;"
+        # Formulieren van de gedeelde mechaniek (`static/nooch.js`) slaan we over: die hebben hun
+        # eigen wachtrij, want drie regels achter elkaar typen mag het fragment niet onder je
+        # vingers vandaan vervangen. Op het ATTRIBUUT selecteren, niet op de klasse: `.rov-add`
+        # zit ook op het agenda-veld van het roloverleg, en dat heeft de generieke afhandeling
+        # wél nodig — anders post het formulier gewoon en navigeert het de overlay uit.
+        "if(f.getAttribute('data-qa-frag'))return;"
         "f.addEventListener('submit',function(e){"
         "e.preventDefault();dirty=true;var act=(e.submitter&&e.submitter.value)||'';var opts;"
         "if(f.classList.contains('filepost')){opts={method:'POST',body:new FormData(f)};}"
@@ -505,6 +508,10 @@ def _modal_html(mentions_json: str = "[]") -> str:
         ".catch(function(){reopen();toast('\\u26a0 not saved');});});}"
         "window.__ovlWireForms=function(root){(root||bd).querySelectorAll('form').forEach(wireForm);};"
         "function wire(){bd.querySelectorAll('form').forEach(wireForm);"
+        # De gedeelde mechaniek kent de overlay niet; de overlay roept hem aan zodra hij een
+        # fragment heeft ingevoegd. Zo krijgt élk toekomstig typ-en-Enter-veld in een modal de
+        # wachtrij zonder dat de modal er iets van hoeft te weten.
+        "if(window.NV)NV.wire(bd);"
         "bd.querySelectorAll('textarea').forEach(mentionWire);"
         # wall scrollt naar het laatste bericht: bij openen én na elke actie (reopen()→wire()), scoped op bd
         "var ws=bd.querySelector('.wall-scroll');if(ws){requestAnimationFrame(function(){ws.scrollTop=0;});}"
