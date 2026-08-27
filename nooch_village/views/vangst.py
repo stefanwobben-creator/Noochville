@@ -198,86 +198,165 @@ def _leeftijd(ts) -> str:
     return f"{dagen} dag{'en' if dagen != 1 else ''} oud"
 
 
-def _uitkomst_regel(st, circle: str, it: dict, u: dict, csrf: str, nxt: str) -> str:
-    """Eén regel in "Uitkomsten van het overleg": wat het is, voor wie, waar het vandaan komt en
-    hoe oud het is. Bewerkbaar en verwijderbaar — een uitkomst die je niet meer kunt bijstellen
-    dwingt je hem weg te gooien en opnieuw te typen."""
+def _uitkomst_rij(st, circle: str, it: dict, u: dict, csrf: str, nxt: str) -> str:
+    """Eén rij in de uitkomsten-tabel: WAT · wat precies · ROL · PERSOON · STAAT, met potlood en
+    prullenbak. Plus onze toevoeging op GlassFrog: het Kroniek-record waaraan de herkomst hangt."""
     uid = u.get("id", "")
     soort = UITKOMST_LABEL.get(u.get("type"), u.get("type"))
     naar = rol_namen(st).get(u.get("rol") or "", u.get("rol") or "")
     wie = _persoon_naam(st, u.get("persoon") or "")
-    wacht = " <span class='chip muted'>in afwachting</span>" if u.get("staat") == WACHTEND else ""
-    # HERKOMST: het Kroniek-record, niet alleen de rolnaam. Zo is elke uitkomst van het overleg
-    # net zo natrekbaar als elk ander feit in het dorp — je kunt teruglopen naar wat er gezegd is.
-    bron = (f"<span class='muted'>herkomst <code class='pill'>{_e(u['kroniek'])}</code></span>"
-            if u.get("kroniek") else "<span class='muted'>herkomst niet vastgelegd</span>")
-    oud = f" · {_e(_leeftijd(u.get('at')))}" if u.get("at") else ""
-    ref = f" · {_e(u.get('ref') or '')}" if u.get("ref") else ""
+    staat = "In afwachting" if u.get("staat") == WACHTEND else "Volgende"
+    bron = (f"<code class='pill' title='Kroniek-record'>{_e(u['kroniek'])}</code>"
+            if u.get("kroniek") else "<span class='muted'>—</span>")
+    acties = ""
+    if csrf:
+        acties = (f"<details class='wo-ocd box-details'><summary>✎</summary>"
+                  f"<form method='post' action='/action' class='wo-oc'>"
+                  f"{_hid(csrf, circle, _open_nxt(nxt, it['id']), iid=it['id'], uid=uid)}"
+                  f"{_field('Tekst', 'tekst', value=u.get('tekst') or '', fid=f'ue-{uid}')}"
+                  f"<label class='att-lbl' for='up-{_e(uid)}'>Persoon</label>"
+                  f"<select id='up-{_e(uid)}' name='persoon'>"
+                  f"{_persoon_opties(st, circle, u.get('persoon') or '')}</select>"
+                  f"<label class='att-lbl' for='us-{_e(uid)}'>Staat</label>"
+                  f"<select id='us-{_e(uid)}' name='staat'>"
+                  f"<option value='{VOLGENDE}'{'' if u.get('staat') == WACHTEND else ' selected'}>"
+                  f"Volgende</option>"
+                  f"<option value='{WACHTEND}'{' selected' if u.get('staat') == WACHTEND else ''}>"
+                  f"In afwachting</option></select>"
+                  f"<button class='btn sm' type='submit' name='action' value='vangst_uitkomst_edit'>"
+                  f"Opslaan</button></form></details>"
+                  f"<form method='post' action='/action' class='emo-f'>"
+                  f"{_hid(csrf, circle, _open_nxt(nxt, it['id']), iid=it['id'], uid=uid)}"
+                  f"<button class='flink' type='submit' name='action' value='vangst_uitkomst_weg' "
+                  f"title='verwijderen'>🗑</button></form>")
+    return (f"<tr><td>{_e(soort)}</td><td>{_e(u.get('tekst') or '')}</td>"
+            f"<td>{_e(naar)}</td><td>{_e(wie)}</td><td>{_e(staat)}</td>"
+            f"<td>{bron}</td><td>{acties}</td></tr>")
 
-    kop = (f"<div class='rdr-meta'><span class='chip outline'>{_e(soort)}</span> "
-           f"→ <strong>{_e(naar)}</strong> <span class='muted'>({_e(wie)})</span>{wacht} "
-           f"{bron}{oud}{ref}</div>"
-           f"<div class='rdr-sig'>{_e(u.get('tekst') or '')}</div>")
-    if not csrf:
-        return f"<div class='rdr-row'><div class='rdr-body'>{kop}</div></div>"
 
-    weg = (f"<form method='post' action='/action' class='emo-f'>"
-           f"{_hid(csrf, circle, _open_nxt(nxt, it['id']), iid=it['id'], uid=uid)}"
-           f"<button class='flink' type='submit' name='action' value='vangst_uitkomst_weg' "
-           f"title='verwijderen'>✕</button></form>")
-    bewerk = (f"<details class='wo-ocd box-details'><summary>bewerken</summary>"
-              f"<form method='post' action='/action' class='wo-oc'>"
-              f"{_hid(csrf, circle, _open_nxt(nxt, it['id']), iid=it['id'], uid=uid)}"
-              f"{_field('Tekst', 'tekst', value=u.get('tekst') or '', fid=f'ue-{uid}')}"
-              f"<label class='att-lbl' for='up-{_e(uid)}'>Persoon</label>"
-              f"<select id='up-{_e(uid)}' name='persoon'>"
-              f"{_persoon_opties(st, circle, u.get('persoon') or '')}</select>"
-              f"<label class='att-lbl' for='us-{_e(uid)}'>Staat</label>"
-              f"<select id='us-{_e(uid)}' name='staat'>"
-              f"<option value='{VOLGENDE}'{'' if u.get('staat') == WACHTEND else ' selected'}>"
-              f"Volgende</option>"
-              f"<option value='{WACHTEND}'{' selected' if u.get('staat') == WACHTEND else ''}>"
-              f"In afwachting</option></select>"
-              f"<button class='btn sm' type='submit' name='action' value='vangst_uitkomst_edit'>"
-              f"Opslaan</button></form></details>")
-    return (f"<div class='rdr-row'><div class='rdr-body'>{kop}{bewerk}</div>"
-            f"<div class='rdr-act'>{weg}</div></div>")
+def _uitkomsten_tabel(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
+    """"Uitkomsten van het overleg" — de tabel waarin ze zich opstapelen.
+
+    In de referentie staan leeftijd en herkomst op de KOP van de spanning, niet per regel: het is
+    de spanning die oud is, niet elk gevolg ervan. Per regel houden we wél het Kroniek-record, want
+    dat is waaraan je later kunt terugtrekken."""
+    rijen = it.get("uitkomsten") or []
+    # De HERKOMST staat er zodra hij bekend is — ook als er nog geen uitkomst is. Dat is juist het
+    # geval waarvoor hij bestaat: een vooraf ingevoerde spanning die je nu gaat behandelen.
+    # De leeftijd komt er pas bij als er iets ligt om oud te zijn.
+    delen = [d for d in (_herkomst_regel(st, it),) if d]
+    if rijen:
+        oudste = min((u.get("at") or 0) for u in rijen) or None
+        if _leeftijd(oudste):
+            delen.insert(0, _leeftijd(oudste))
+    kop = f"<div class='rdr-meta'>{' · '.join(delen)}</div>" if delen else ""
+    if not rijen:
+        body = ("<p class='muted'>Er zijn (nog) geen uitkomsten vastgelegd. Vul het formulier "
+                "hierboven in — zo vaak als nodig, er mogen er meerdere zijn.</p>")
+    else:
+        body = ("<table class='mtab'><tr><td><strong>Wat</strong></td>"
+                "<td><strong>Wat precies</strong></td><td><strong>Rol</strong></td>"
+                "<td><strong>Persoon</strong></td><td><strong>Staat</strong></td>"
+                "<td><strong>Herkomst</strong></td><td></td></tr>"
+                + "".join(_uitkomst_rij(st, circle, it, u, csrf, nxt) for u in rijen)
+                + "</table>")
+    return (f"<div class='c2-sec'><h3>Uitkomsten van het overleg "
+            f"<span class='chip'>{len(rijen)}</span></h3>{kop}{body}</div>")
 
 
 def _uitkomst_formulier(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
-    """HET uitkomst-formulier. Eén formulier, zo vaak in te vullen als nodig — na Opslaan reset het
-    en zakt de uitkomst in de lijst eronder. Geen radio-knop die je dwingt te kiezen wélke van de
-    drie dingen die deze spanning oplevert je opschrijft."""
+    """HET uitkomst-formulier, uitgelijnd naar het GlassFrog-raster: twee kolommen, twee rijen.
+
+        WAT  | TE NEMEN ACTIE        (label verandert mee met het type)
+        ROL  | PERSOON
+        ( ) Volgende  ( ) In afwachting                          [Opslaan]
+
+    Eén formulier, zo vaak in te vullen als nodig — na Opslaan reset het en zakt de uitkomst in de
+    tabel eronder. Geen radio-knop die je dwingt te kiezen wélke van de dingen die deze spanning
+    oplevert je opschrijft.
+
+    `.rov-addgrid` is het bestaande twee-koloms formulierraster (stapelt onder 560px); er komt geen
+    nieuwe klasse bij."""
     iid = it["id"]
     dl = f"vr-dl-{iid}"
     lbl_id = f"vl-{iid}"
     # De labeltekst verandert mee met het type. Dat gebeurt met een inline `onchange`-attribuut en
     # niet met een <script>-blok: een script in een fragment draait niet als de modal het via
-    # innerHTML invoegt, een attribuut-handler wél. Zo werkt dit scherm in het werkoverleg net zo
-    # goed als op zichzelf.
+    # innerHTML invoegt, een attribuut-handler wél.
     veldnamen = ";".join(f"{k}:{v}" for k, v in UITKOMST_VELD.items())
     swap = (f"var m='{veldnamen}'.split(';'),l=document.getElementById('{lbl_id}');"
             f"for(var i=0;i&lt;m.length;i++){{var p=m[i].split(':');"
             f"if(p[0]===this.value&amp;&amp;l)l.textContent=p[1];}}")
     opts = "".join(f"<option value='{k}'>{_e(lbl)}</option>" for k, lbl, _ in UITKOMST_SOORTEN)
     eerste_veld = UITKOMST_SOORTEN[0][2]
+
+    rij1 = (f"<div><label class='att-lbl' for='vu-{_e(iid)}'>Wat</label>"
+            f"<select id='vu-{_e(iid)}' name='otype' onchange=\"{swap}\">{opts}</select></div>"
+            f"<div><label class='att-lbl' id='{lbl_id}' for='vut-{_e(iid)}'>{_e(eerste_veld)}</label>"
+            f"<input id='vut-{_e(iid)}' name='tekst' value='{_e(it.get('title') or '')}'></div>")
+    rij2 = (f"<div><label class='att-lbl' for='vw-{_e(iid)}'>Rol</label>"
+            f"<input id='vw-{_e(iid)}' name='rol' list='{_e(dl)}' autocomplete='off' "
+            f"placeholder='typ een rolnaam…'>{_rol_datalist(st, dl)}</div>"
+            f"<div><label class='att-lbl' for='vp-{_e(iid)}'>Persoon</label>"
+            f"<select id='vp-{_e(iid)}' name='persoon'>{_persoon_opties(st, circle)}</select></div>")
+    # Volgende / In afwachting als twee radio's naast elkaar, zoals in de referentie — niet als
+    # dropdown. Twee opties die je in één blik ziet zijn geen keuzelijst.
+    staat = (f"<div class='qadd-row'>"
+             f"<label class='kc-radio' for='vst1-{_e(iid)}'>"
+             f"<input type='radio' id='vst1-{_e(iid)}' name='staat' value='{VOLGENDE}' checked>"
+             f"Volgende</label>"
+             f"<label class='kc-radio' for='vst2-{_e(iid)}'>"
+             f"<input type='radio' id='vst2-{_e(iid)}' name='staat' value='{WACHTEND}'>"
+             f"In afwachting</label>"
+             f"<button class='btn ok sm' type='submit' name='action' value='vangst_uitkomst'>"
+             f"Opslaan</button></div>")
     return (f"<form method='post' action='/action' class='wo-oc'>"
             f"{_hid(csrf, circle, _open_nxt(nxt, iid), iid=iid)}"
-            f"<label class='att-lbl' for='vu-{_e(iid)}'>Wat</label>"
-            f"<select id='vu-{_e(iid)}' name='otype' onchange=\"{swap}\">{opts}</select>"
-            f"<label class='att-lbl' id='{lbl_id}' for='vut-{_e(iid)}'>{_e(eerste_veld)}</label>"
-            f"<input id='vut-{_e(iid)}' name='tekst' value='{_e(it.get('title') or '')}'>"
-            f"<label class='att-lbl' for='vw-{_e(iid)}'>Rol</label>"
-            f"<input id='vw-{_e(iid)}' name='rol' list='{_e(dl)}' autocomplete='off' "
-            f"placeholder='typ een rolnaam…'>{_rol_datalist(st, dl)}"
-            f"<label class='att-lbl' for='vp-{_e(iid)}'>Persoon</label>"
-            f"<select id='vp-{_e(iid)}' name='persoon'>{_persoon_opties(st, circle)}</select>"
-            f"<label class='att-lbl' for='vst-{_e(iid)}'>Staat</label>"
-            f"<select id='vst-{_e(iid)}' name='staat'>"
-            f"<option value='{VOLGENDE}'>Volgende</option>"
-            f"<option value='{WACHTEND}'>In afwachting</option></select>"
-            f"<button class='btn ok sm' type='submit' name='action' value='vangst_uitkomst'>"
-            f"Opslaan</button></form>")
+            f"<div class='rov-addgrid'>{rij1}{rij2}</div>{staat}</form>")
+
+
+def _herkomst_regel(st, it: dict) -> str:
+    """Wie dit punt opwierp, en vanuit welke rol — AUTOMATISCH, geen invulveld.
+
+    In een live overleg tikt de secretaris dit niet per punt in; daar is geen tijd voor en het
+    gesprek ís de verwerking. Bij een vooraf ingevoerde spanning is het al bekend (wie hem ving,
+    en de `@rol` die hij erbij zette), en dan hoort het gewoon te staan — zoals GlassFrog
+    "gevoeld vanuit rol X" toont."""
+    door = (it.get("by") or "").strip()
+    rol = it.get("rol_hint") or ""
+    delen = []
+    if rol:
+        delen.append(f"gevoeld vanuit <strong>{_e(rol_namen(st).get(rol, rol))}</strong>")
+    if door:
+        delen.append(f"ingebracht door {_e(door)}")
+    return f"<span class='muted'>{' · '.join(delen)}</span>" if delen else ""
+
+
+def _spanning_titel(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
+    """De spanningstekst als KLEINE bewerkbare titel, niet als blok dat om invulling vraagt.
+
+    Het grote tekstvak stond bovenaan en bleef in de praktijk leeg: in een live overleg is er geen
+    tijd om een spanning uit te schrijven. Alleen wie een punt VOORAF invoert vult hem, en dan moet
+    hij er gewoon staan. Daarom: ingevuld → je leest hem meteen; leeg → één klein "⚡ Geen" dat je
+    kunt openklappen als je hem tóch wilt vullen, en dat verder niets van je vraagt."""
+    iid = it["id"]
+    sub = "this.form.requestSubmit?this.form.requestSubmit():this.form.submit()"
+    tekst = (it.get("note") or {}).get("spanning") or ""
+    herkomst = _herkomst_regel(st, it)
+
+    kort = " ".join(tekst.split())
+    samenvatting = (f"⚡ {_e(kort[:110])}{'…' if len(kort) > 110 else ''}" if kort
+                    else "<span class='muted'>⚡ Geen</span>")
+    veld = _field("Spanning", "tekst", kind="textarea", value=tekst, fid=f"vs-{iid}",
+                  placeholder="optioneel — meestal vul je dit vooraf in, niet tijdens het overleg",
+                  attrs=f'onchange="{sub}"')
+    bewerk = (f"<details class='wo-ocd box-details'><summary>{samenvatting}</summary>"
+              f"<form method='post' action='/action' class='wo-oc'>"
+              f"{_hid(csrf, circle, _open_nxt(nxt, iid), iid=iid)}{veld}"
+              f"<input type='hidden' name='action' value='vangst_tekst'></form></details>")
+    # De herkomst staat op de kop van de uitkomsten-tabel (zoals in de referentie), NIET hier —
+    # anders lees je hem twee keer op één scherm.
+    return bewerk
 
 
 def _verwerk_blok(st, circle: str, it: dict, csrf: str, nxt: str, open_iid: str = "") -> str:
@@ -294,24 +373,9 @@ def _verwerk_blok(st, circle: str, it: dict, csrf: str, nxt: str, open_iid: str 
     iid = it["id"]
     if not csrf:
         return ""
-    sub = "this.form.requestSubmit?this.form.requestSubmit():this.form.submit()"
+    kop = _spanning_titel(st, circle, it, csrf, nxt)
 
-    # De spanningstekst bovenaan. Leeg is een geldige toestand — GlassFrog toont dan "⚡ Geen" —
-    # want bij het vangen typ je een label, geen spanning.
-    tekst = (it.get("note") or {}).get("spanning") or ""
-    veld = _field("Spanning", "tekst", kind="textarea", value=tekst, fid=f"vs-{iid}",
-                  placeholder="⚡ Geen — beschrijf hier wat er speelt",
-                  attrs=f'onchange="{sub}"')
-    kop = (f"<form method='post' action='/action' class='wo-oc'>"
-           f"{_hid(csrf, circle, _open_nxt(nxt, iid), iid=iid)}{veld}"
-           f"<input type='hidden' name='action' value='vangst_tekst'></form>")
-
-    uitkomsten = it.get("uitkomsten") or []
-    regels = "".join(_uitkomst_regel(st, circle, it, u, csrf, nxt) for u in uitkomsten)
-    lijst = (f"<div class='c2-sec'><h3>Uitkomsten van het overleg "
-             f"<span class='chip'>{len(uitkomsten)}</span></h3>"
-             + (regels or "<p class='muted'>Nog geen uitkomst. Vul het formulier hierboven in — "
-                          "zo vaak als nodig, er mogen er meerdere zijn.</p>") + "</div>")
+    lijst = _uitkomsten_tabel(st, circle, it, csrf, nxt)
 
     klaar = it.get("status") == "done"
     vink = (f"<form method='post' action='/action' class='emo-f'>"
@@ -320,6 +384,8 @@ def _verwerk_blok(st, circle: str, it: dict, csrf: str, nxt: str, open_iid: str 
             f"value='vangst_klaar'>{'↺ heropen' if klaar else '✓ afgetikt'}</button></form>")
 
     op = " open" if open_iid and open_iid == iid else ""
+    # HET UITKOMST-FORMULIER STAAT VOOROP. Daar werkt de secretaris live in; de spanningstekst is
+    # één regel erboven en vraagt nergens om.
     return (f"<details class='wo-ocd box-details'{op}><summary>verwerken</summary>"
             f"{kop}{_uitkomst_formulier(st, circle, it, csrf, nxt)}{lijst}{vink}</details>")
 
