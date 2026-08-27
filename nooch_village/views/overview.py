@@ -490,6 +490,21 @@ def _dt(ts) -> str:
         return "—"
 
 
+def _slaap_blok(rec) -> str:
+    """Waarom deze rol slaapt en hoe je hem wakker maakt. Eén regel, geen nieuw patroon.
+
+    De terugweg staat er letterlijk bij: slapen is omkeerbaar, en dat is alleen waar als je kunt
+    zien hóe. Een status zonder de weg terug leest als een verwijdering."""
+    if not getattr(rec, "slaapt", False):
+        return ""
+    reden = str(getattr(rec, "slaap_reden", "") or "geen reden vastgelegd")
+    return (f"<div class='card muted'><strong>💤 Deze rol slaapt.</strong> Hij staat volledig in het "
+            f"register — purpose, accountabilities en historie zijn ongewijzigd — maar hij draait "
+            f"niet, oordeelt niet en krijgt geen nieuw werk toegewezen.<br>"
+            f"<span class='muted'>{_e(reden)}</span><br>"
+            f"Weer wakker: <code>village afslanken wek {_e(getattr(rec, 'id', ''))}</code></div>")
+
+
 def _can_edit_artefacts(st: _Stores, rec, csrf_token: str, username: str | None) -> bool:
     """Mag de huidige kijker artefacten van deze rol bewerken? Vereist een schrijf-sessie
     (csrf_token) én — via can_write_artefact — vervuller of Circle Lead zijn. "guest" (auth uit)
@@ -766,6 +781,12 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
         f"<a href='/node?id={_e(i)}'>{_e(_name(st.records.get(i)))}</a>"
         for i in org.breadcrumb(recs, node_id))
     chip = "<span class='chip'>circle</span>" if is_c else "<span class='chip'>role</span>"
+    # SLAPEND: zichtbaar, want een slapende rol ziet er verder uit als elke andere. Het record is
+    # compleet — purpose, accountabilities, vervuller staan er allemaal nog — en juist daarom moet
+    # er iets zeggen dat hij niet draait, anders lees je een rol die er is als een rol die werkt.
+    if getattr(rec, "slaapt", False):
+        reden = str(getattr(rec, "slaap_reden", "") or "geen reden vastgelegd")
+        chip += (f" <span class='chip muted' title='{_e(reden)}'>💤 slaapt</span>")
 
     if tab == "overview":
         content = _overview_html(st, rec, csrf_token)
@@ -820,7 +841,7 @@ def render_node(st: _Stores, node_id: str, tab: str, csrf_token: str = "", msg: 
         meet = ""
     # Breadcrumb weggehaald (founder 23 jul): de hiërarchie staat al in de organisatieboom-rail rechts.
     main = (f"<div class='c2-main'>"
-            f"<h1>{_e(_name(rec))} {chip}</h1>{_banner(msg)}{meet}"
+            f"<h1>{_e(_name(rec))} {chip}</h1>{_banner(msg)}{_slaap_blok(rec)}{meet}"
             f"{_tabbar(node_id, tabs, tab)}{content}</div>")
     rail = f"<div class='c2-rail'>{_tree_html(st, node_id)}</div>"
     modal = _modal_html(json.dumps(_mentionables(st)[0])) if csrf_token else ""
