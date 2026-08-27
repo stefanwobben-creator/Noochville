@@ -102,27 +102,55 @@ def _wo_metrics(st: _Stores, crec, csrf: str, kpi: str = "", win: str = "maand")
     return focus + tabrow + _metrics_tab_html(st, crec, csrf, win, nav=base)
 
 
+def _wo_vangbar(st, crec, csrf: str, step: str) -> str:
+    """De vangbalk — op ELKE stap, niet alleen op de agenda-stap.
+
+    Wie tijdens de check-in of bij de projecten iets hoort, moet het daar kunnen opschrijven.
+    Stond het veld alleen op stap 5, dan was de handeling in de praktijk "onthouden tot stap 5",
+    en dat is precies wat vangen moet vervangen. Vangen is een regel typen; behandelen is een
+    andere handeling, en die blijft onder de agenda-stap hangen.
+
+    De teller is de terugkoppeling op de andere zes stappen: daar staat de lijst niet, dus moet
+    het getal laten zien dat het punt geland is."""
+    from nooch_village.views.vangst import _VANG_JS, _vang_form
+
+    punten = st.werk.punten(crec.id)
+    open_n = sum(1 for p in punten if p.get("status") != "done")
+    onderw = f"{len(punten)} onderwerp" + ("" if len(punten) == 1 else "en")
+    nxt = f"/werkoverleg?circle={crec.id}&step={step}"
+    vang = _vang_form(crec.id, csrf, nxt) if csrf else ""
+    hint = ("Typ een punt en druk Enter — dat is de hele handeling. Klik <em>verwerken</em> onder "
+            "een punt om er uitkomsten onder te leggen; er mogen er meerdere zijn, elk naar een "
+            "andere rol." if step == "agenda" else
+            "Typ een punt en druk Enter — hij komt op de agenda te staan. Behandelen doe je bij "
+            "stap 5; je hoeft daar nu niet heen.")
+    # `_VANG_JS` reist mee: het is dezelfde wachtrij als op /vangst, en zonder die wachtrij vervangt
+    # het scherm zich na élk punt — waarna het punt dat je al aan het typen was verdwijnt.
+    return (f"<div class='c2-sec'><h3>Punten behandelen <span class='muted'>("
+            f"<span id='vang-tot'>{onderw}</span>, "
+            f"<span id='vang-n'>{open_n}</span> te doen)</span></h3>"
+            f"<p class='muted'>{hint}</p>{vang}</div>{_VANG_JS if vang else ''}")
+
+
 def _wo_agenda(st, crec, csrf: str, iid: str = "") -> str:
     """De agenda-stap: DEZELFDE vang-en-verwerk als `/vangst`, niet een tweede versie ervan.
 
-    Hier stond een eigen triage-scherm met één uitkomst per spanning, een rollenlijst die tot deze
+    Hier stond een eigen triage-scherm met een uitkomst per spanning, een rollenlijst die tot deze
     cirkel beperkt was, en een aparte notitie-vorm. Dat was een kopie die uit de pas liep zodra
     /vangst iets leerde. Nu roept deze stap de componenten aan die het vangscherm ook gebruikt:
-    één plek waar de vorm wordt bepaald.
+    een plek waar de vorm wordt bepaald.
 
-    Het formulier post via `fetch`: op de volle pagina door `_VANG_JS`, hier door de
-    modal-controller die élk formulier in de overlay onderschept. Daarom hoeft er geen script mee —
+    Het vangveld zelf staat niet meer hier maar in `_wo_vangbar`, boven de inhoud van elke stap.
+    Deze functie levert alleen de puntenlijst, die daar direct onder komt te hangen.
+
+    De formulieren posten via `fetch`: op de volle pagina door `_VANG_JS`, hier door de
+    modal-controller die elk formulier in de overlay onderschept. Daarom hoeft er geen script mee —
     een `<script>` in een fragment draait toch niet als de modal het via `innerHTML` invoegt."""
-    from nooch_village.views.vangst import render_vangst_frag, _vang_form
+    from nooch_village.views.vangst import render_vangst_frag
 
     nxt = f"/werkoverleg?circle={crec.id}&step=agenda"
-    vang = _vang_form(crec.id, csrf, nxt) if csrf else ""
     lijst = render_vangst_frag(st, crec.id, csrf, open_iid=iid, nxt=nxt)
-    return (f"<div class='c2-sec'><h3>Punten behandelen</h3>"
-            f"<p class='muted'>Typ een punt en druk Enter — dat is de hele handeling. Klik "
-            f"<em>verwerken</em> onder een punt om er uitkomsten onder te leggen; er mogen er "
-            f"meerdere zijn, elk naar een andere rol.</p>{vang}</div>"
-            f"<div class='rdr-tool' id='vang-lijst'>{lijst}</div>")
+    return f"<div class='rdr-tool' id='vang-lijst'>{lijst}</div>"
 
 
 def _wo_checkout(st: _Stores, crec, csrf: str) -> str:
@@ -243,6 +271,10 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
         content = _wo_checkout(st, crec, csrf_token)
     else:
         content = _wo_summary(st, crec, csrf_token)
+
+    # De vangbalk hoort bij het OVERLEG, niet bij stap 5. Hij staat daarom boven de inhoud van
+    # elke stap; alleen de puntenlijst blijft onder de agenda-stap hangen.
+    content = _wo_vangbar(st, crec, csrf_token, cur) + content
 
     # Per-stap actie i.p.v. de oude vaste onderbalk: stap 1-6 = "Volgende", stap 7 = centrale
     # "Sluit overleg" onder de samenvatting (die samenvatting is zelf de bevestiging).

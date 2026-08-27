@@ -278,3 +278,58 @@ def test_de_agenda_stap_gooit_je_niet_het_overleg_uit(tmp_path):
                                        fragment=True, iid=iid)
     assert "/werkoverleg?circle=" in frag
     assert "value='/vangst?circle=" not in frag        # geen terug-URL naar het vangscherm
+
+
+def test_een_punt_toevoegen_kan_op_elke_stap(tmp_path):
+    """Wie tijdens de check-in iets hoort moet het daar kunnen opschrijven. Stond het veld alleen
+    op stap 5, dan was de handeling in de praktijk 'onthouden tot stap 5'."""
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
+    for stap in ("checkin", "checklist", "metrics", "projecten", "agenda", "checkout", "sluiten"):
+        frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, stap, csrf_token="t",
+                                           fragment=True)
+        assert "vang-form" in frag, stap
+        assert "Punten behandelen" in frag, stap
+        # en hij komt terug op de stap waar je stond, niet op de agenda-stap
+        assert f"value='/werkoverleg?circle={C}&amp;step={stap}'" in frag, stap
+
+
+def test_de_puntenlijst_blijft_onder_de_agenda_stap(tmp_path):
+    """Vangen is overal; behandelen is stap 5. Anders staat dezelfde lijst zeven keer op het
+    scherm en is 'de agenda-stap' geen stap meer."""
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
+    _punt(dd, "Checkout hapert")
+    ag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "agenda", csrf_token="t",
+                                     fragment=True)
+    ci = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "checkin", csrf_token="t",
+                                     fragment=True)
+    doos = "<div class='rdr-tool' id='vang-lijst'>"      # de lijst zelf, niet de scriptregel
+    assert doos in ag and "Checkout hapert" in ag
+    assert doos not in ci and "Checkout hapert" not in ci
+
+
+def test_de_teller_is_de_terugkoppeling_buiten_de_agenda_stap(tmp_path):
+    """Op de andere zes stappen zie je de lijst niet. Dan moet het getal laten zien dat je punt
+    geland is — anders typ je in het duister."""
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
+    leeg = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "checkin", csrf_token="t",
+                                       fragment=True)
+    assert "<span id='vang-tot'>0 onderwerpen</span>, <span id='vang-n'>0</span> te doen" in leeg
+    _punt(dd, "Eén punt")
+    een = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "checkin", csrf_token="t",
+                                      fragment=True)
+    assert "<span id='vang-tot'>1 onderwerp</span>, <span id='vang-n'>1</span> te doen" in een
+
+
+def test_de_vangwachtrij_reist_mee_naar_elke_stap(tmp_path):
+    """Zonder de wachtrij vervangt het scherm zich na elk punt en verdwijnt het punt dat je al aan
+    het typen was. Dat was op /vangst al opgelost; de balk moet dezelfde oplossing meenemen."""
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
+    for stap in ("checkin", "agenda"):
+        frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, stap, csrf_token="t",
+                                           fragment=True)
+        assert "data-modal-run" in frag, stap        # anders draait het script niet in de modal
+        assert "vang-form" in frag and "wacht.push" in frag, stap
