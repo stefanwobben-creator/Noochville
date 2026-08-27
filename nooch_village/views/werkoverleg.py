@@ -111,7 +111,12 @@ def _wo_vangbar(st, crec, csrf: str, step: str) -> str:
     andere handeling, en die blijft onder de agenda-stap hangen.
 
     De teller is de terugkoppeling op de andere zes stappen: daar staat de lijst niet, dus moet
-    het getal laten zien dat het punt geland is."""
+    het getal laten zien dat het punt geland is.
+
+    Hij hoort in de LINKERKOLOM, boven het stappenmenu — zoals GlassFrog "Item aan agenda
+    toevoegen" bovenaan de linkerbalk zet. Stond hij bovenaan het rechter inhoudsvlak, dan duwde
+    hij op elke stap de eigenlijke stap-inhoud omlaag: een veld dat je zelden gebruikt kreeg de
+    plek van het scherm waar je wél naar kijkt."""
     from nooch_village.views.vangst import _vang_form
 
     punten = st.werk.punten(crec.id)
@@ -119,18 +124,16 @@ def _wo_vangbar(st, crec, csrf: str, step: str) -> str:
     onderw = f"{len(punten)} onderwerp" + ("" if len(punten) == 1 else "en")
     nxt = f"/werkoverleg?circle={crec.id}&step={step}"
     vang = _vang_form(crec.id, csrf, nxt) if csrf else ""
-    hint = ("Typ een punt en druk Enter — dat is de hele handeling. Klik <em>verwerken</em> onder "
-            "een punt om er uitkomsten onder te leggen; er mogen er meerdere zijn, elk naar een "
-            "andere rol." if step == "agenda" else
-            "Typ een punt en druk Enter — hij komt op de agenda te staan. Behandelen doe je bij "
-            "stap 5; je hoeft daar nu niet heen.")
+    # Teller + veld, verder niets. In de smalle linkerkolom duwt elke uitleg-zin het veld omlaag,
+    # en de placeholder zegt het al ("punt in één regel — Enter"). De uitleg over `verwerken` hoort
+    # bij de lijst, en die staat op de agenda-stap.
+    #
     # De tellers worden na een vangst bijgewerkt door de gedeelde mechaniek: het lijst-fragment
     # draagt ze mee als `data-nv-mirror`-bron, dus ze kloppen ook op de zes stappen waar de lijst
     # zelf niet op het scherm staat.
     return (f"<div class='c2-sec'><h3>Punten behandelen <span class='muted'>("
             f"<span id='vang-tot'>{onderw}</span>, "
-            f"<span id='vang-n'>{open_n}</span> te doen)</span></h3>"
-            f"<p class='muted'>{hint}</p>{vang}</div>")
+            f"<span id='vang-n'>{open_n}</span> te doen)</span></h3>{vang}</div>")
 
 
 def _wo_agenda(st, crec, csrf: str, iid: str = "") -> str:
@@ -153,7 +156,9 @@ def _wo_agenda(st, crec, csrf: str, iid: str = "") -> str:
 
     nxt = f"/werkoverleg?circle={crec.id}&step=agenda"
     lijst = render_vangst_frag(st, crec.id, csrf, open_iid=iid, nxt=nxt)
-    return f"<div class='rdr-tool' id='vang-lijst'>{lijst}</div>"
+    return (f"<div class='c2-sec'><p class='muted'>Klik <em>verwerken</em> onder een punt om er "
+            f"uitkomsten onder te leggen; er mogen er meerdere zijn, elk naar een andere rol.</p>"
+            f"</div><div class='rdr-tool' id='vang-lijst'>{lijst}</div>")
 
 
 def _wo_checkout(st: _Stores, crec, csrf: str) -> str:
@@ -283,7 +288,11 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
                 f"<span class='wo-num'>{num}</span>{_e(lbl)}</a>")
     # Het vangveld en de puntenlijst stonden hier als tweede kopie in de linkerkolom. Ze wonen nu
     # in de Agenda-stap zelf, want dat is waar je ze gebruikt — en het is één component.
-    left = _psec(_IC_CHECK, "Meeting", f"<div class='wo-nav'>{nav}</div>")
+    # Vangen staat BOVEN het stappenmenu: het hoort bij het overleg, niet bij een stap. Eén
+    # instantie, dus hij verhuist niet mee en het veld wordt bij het wisselen van stap niet
+    # opnieuw opgebouwd.
+    left = (_wo_vangbar(st, crec, csrf_token, cur)
+            + _psec(_IC_CHECK, "Meeting", f"<div class='wo-nav'>{nav}</div>"))
 
     if cur == "checkin":
         content = _wo_checkin(st, crec, csrf_token)
@@ -300,10 +309,6 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
         content = _wo_checkout(st, crec, csrf_token)
     else:
         content = _wo_summary(st, crec, csrf_token)
-
-    # De vangbalk hoort bij het OVERLEG, niet bij stap 5. Hij staat daarom boven de inhoud van
-    # elke stap; alleen de puntenlijst blijft onder de agenda-stap hangen.
-    content = _wo_vangbar(st, crec, csrf_token, cur) + content
 
     # Per-stap actie i.p.v. de oude vaste onderbalk: stap 1-6 = "Volgende", stap 7 = centrale
     # "Sluit overleg" onder de samenvatting (die samenvatting is zelf de bevestiging).
