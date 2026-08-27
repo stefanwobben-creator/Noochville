@@ -342,7 +342,6 @@ from nooch_village.views.callbar import render_callbar
 
 from nooch_village.views.werkoverleg import (
     _wo_hid, _wo_checkin, _wo_checklist, _wo_metrics,
-    _wo_spanning_add, _wo_spanning_items, _wo_triage,
     _wo_checkout, _wo_summary, render_werkoverleg,
 )
 from nooch_village.views.vangst import render_vangst, render_vangst_frag
@@ -2713,7 +2712,7 @@ def _act_wo_present_all(c):
 
 def _act_vangst_add(c):
         # AUTHZ: circle-member — een punt vangen is dezelfde laag als een spanning inbrengen in het
-        # werkoverleg (_act_wo_ag_add). Vangen schrijft niets buiten de eigen cirkel.
+        # werkoverleg. Vangen schrijft niets buiten de eigen cirkel.
         nxt, st, g, username = c.nxt, c.st, c.g, c.username
         _deny = _member_gate(g("circle"), username, st)
         if _deny:
@@ -2725,8 +2724,17 @@ def _act_vangst_add(c):
         # De vangst gaat naar de PERSISTENTE backlog: er hoeft geen overleg open te staan, en bij het
         # eerstvolgende overleg komt het punt vanzelf op de agenda. Géén typering, géén model — dat
         # is precies het verschil tussen vangen en verwerken.
-        it = st.werk.backlog_add(g("circle"), tekst, by=(actor.name if actor else ""),
-                                 by_id=(actor.id if actor else ""))
+        # Loopt er een overleg? Dan hoort het punt op de agenda van DAT overleg — het is daar
+        # ingebracht, en de samenvatting die straks in het archief belandt moet het bevatten.
+        # Anders in de persistente backlog, die bij het eerstvolgende overleg vanzelf agenda wordt.
+        if st.werk.is_open(g("circle")):
+            it = st.werk.agenda_add(g("circle"), tekst, by=(actor.name if actor else ""))
+            if it is not None:
+                it["by_id"] = actor.id if actor else ""
+                st.werk._save()
+        else:
+            it = st.werk.backlog_add(g("circle"), tekst, by=(actor.name if actor else ""),
+                                     by_id=(actor.id if actor else ""))
         # OPTIONEEL en NIET BLOKKEREND: een `@rolnaam` in dezelfde regel wordt een hint. Lost hij
         # niet op, dan gebeurt er niets — de tekst is al vastgelegd. Een tweede veld zou de flow
         # van één veld plus Enter kapotmaken, en dát is de hele functie van dit scherm.
@@ -2772,6 +2780,32 @@ def _act_vangst_klaar(c):
         return nxt, ("✓ verwerkt" if klaar else "↺ heropend")
 
 
+def _act_vangst_uitkomst_edit(c):
+        # AUTHZ: circle-member — de TEKST, persoon of staat van een al vastgelegde uitkomst
+        # bijstellen. Het werk zelf (het project, het bericht) is al aangemaakt en verandert hier
+        # niet: dit corrigeert de regel in het overlegverslag, niet wat er elders staat.
+        from nooch_village.views.vangst import VOLGENDE, WACHTEND
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _member_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
+        it = st.werk.punt_get(g("circle"), g("iid"))
+        u = next((x for x in ((it or {}).get("uitkomsten") or []) if x.get("id") == g("uid")), None)
+        if u is None:
+            return nxt, "✗ die uitkomst bestaat niet meer"
+        persoon = (g("persoon") or "").strip()
+        if persoon and st.people.get(persoon) is None:
+            return nxt, "✗ die persoon bestaat niet"
+        tekst = (g("tekst") or "").strip()
+        if not tekst:
+            return nxt, "✗ een uitkomst zonder tekst is geen uitkomst"
+        u["tekst"] = tekst
+        u["persoon"] = persoon
+        u["staat"] = g("staat") if g("staat") in (VOLGENDE, WACHTEND) else u.get("staat")
+        st.werk._save()
+        return nxt, "✓ uitkomst bijgewerkt"
+
+
 def _act_vangst_uitkomst_weg(c):
         # AUTHZ: circle-member — een uitkomst-REGEL weghalen. Wat die uitkomst al aanrichtte (een
         # project, een bericht) blijft bestaan: dat is elders vastgelegd en heeft zijn eigen weg terug.
@@ -2797,6 +2831,11 @@ def _act_vangst_uitkomst(c):
         if not tekst:
             return nxt, "✗ zeg wat de uitkomst is"
 
+        from nooch_village.views.vangst import VOLGENDE, WACHTEND
+        persoon = (g("persoon") or "").strip()       # leeg = elk cirkellid, een geldige keuze
+        if persoon and st.people.get(persoon) is None:
+            return nxt, "✗ die persoon bestaat niet"
+        staat = g("staat") if g("staat") in (VOLGENDE, WACHTEND) else VOLGENDE
         rol, reden = rol_uit_naam(st, g("rol"))
         if g("rol").strip() and not rol:
             return nxt, f"✗ {reden}"             # fail-closed: liever niets dan het verkeerde bureau
@@ -2841,8 +2880,25 @@ def _act_vangst_uitkomst(c):
         else:
             return nxt, "✗ onbekende uitkomst"
 
+        # HERKOMST IN DE KRONIEK. Elke uitkomst van een overleg krijgt zijn eigen bewijsregel,
+        # net als elke andere waarneming in het dorp. Zonder dat is "gevoeld vanuit rol X" het
+        # enige spoor, en dat is een naam — geen id waarop je later kunt terugvallen.
+        kroniek_id = ""
+        try:
+            kr = st.evidence.record(role_id=rol or circle, skill="werkoverleg",
+                                    query=(it.get("title") or tekst)[:200],
+                                    source="werkoverleg", status="bevestigd",
+                                    result_ref=f"{otype}: {tekst[:120]}",
+                                    meta={"circle": circle, "punt": iid,
+                                          "door": it.get("by") or "", "persoon": persoon})
+            kroniek_id = kr.get("id", "")
+        except Exception as e:                       # noqa: BLE001 — fail-soft, luid
+            logging.getLogger("village.cockpit").warning(
+                "werkoverleg-uitkomst niet in de Kroniek vastgelegd: %s", e)
+
         st.werk.punt_uitkomst_add(circle, iid, {"type": otype, "rol": rol, "tekst": tekst,
-                                                "ref": ref, "door": aid})
+                                                "ref": ref, "door": aid, "persoon": persoon,
+                                                "staat": staat, "kroniek": kroniek_id})
         naam = _name(st.records.get(rol)) if rol and st.records.get(rol) else rol
         return nxt, f"✓ {otype}{(' → ' + naam) if naam else ''}"
 
@@ -2931,56 +2987,13 @@ def _act_vangst_verwerk(c):
         return nxt, "✗ unknown outcome"
 
 
-def _act_wo_ag_add(c):
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        msg = ""
-        _deny = _member_gate(g("circle"), username, st)
-        if _deny:
-            return nxt, _deny
-        naam, by = _rov_initials(g("naam"))
-        if st.werk.agenda_add(g("circle"), naam, by=by):
-            msg = "✓ tension on the agenda"
-        return nxt, msg
 
 
-def _act_wo_ag_remove(c):
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        msg = ""
-        _deny = _lead_gate(g("circle"), username, st)
-        if _deny:
-            return nxt, _deny
-        st.werk.agenda_remove(g("circle"), g("iid")); msg = "🗑 removed"
-        return nxt, msg
-
-
-def _act_wo_ag_note(c):
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        msg = ""
-        _deny = _member_gate(g("circle"), username, st)
-        if _deny:
-            return nxt, _deny
-        if g("field") in ("spanning", "role", "need"):
-            st.werk.agenda_set_note(g("circle"), g("iid"), **{g("field"): g("value")})
-            msg = "✓ genoteerd"
-        return nxt, msg
-
-
-def _act_wo_ag_reopen(c):
-        nxt, st, g, username = c.nxt, c.st, c.g, c.username
-        msg = ""
-        _deny = _lead_gate(g("circle"), username, st)
-        if _deny:
-            return nxt, _deny
-        it = st.werk.agenda_get(g("circle"), g("iid"))
-        if it is not None:
-            it["status"] = "open"; it["outcome"] = None; st.werk._save()
-            msg = "↺ heropend"
-        return nxt, msg
 
 
 # ── Gedeelde uitkomst-routes (reference, don't copy) ───────────────────────────────
 # Eén plek waar een uitkomst naar de BESTAANDE stores schrijft. Gebruikt door zowel het
-# werkoverleg (_act_wo_ag_resolve) als de wall-outcome-flow (_act_wall_outcome). `provenance`
+# werkoverleg (via de vangst-uitkomsten) als de wall-outcome-flow (_act_wall_outcome). `provenance`
 # (herkomst) reist mee waar de bron een wall-comment is; het werkoverleg heeft zijn eigen audit
 # (de agenda) en laat 'm leeg. Zo dupliceren we de routing-logica niet.
 
@@ -3040,31 +3053,6 @@ def _outcome_roloverleg(st, circle: str, name: str, title: str, detail: str,
                          detail, by=by or "werkoverleg", title=title or (detail or "")[:60],
                          example=provenance)
 
-
-def _act_wo_ag_resolve(c):
-        nxt, st, g, username, action = c.nxt, c.st, c.g, c.username, c.action
-        _deny = _lead_gate(g("circle"), username, st)
-        if _deny:
-            return nxt, _deny
-        otype, detail = g("otype"), g("detail")
-        it = st.werk.agenda_get(g("circle"), g("iid"))
-        if otype == "info":
-            # richting (delen/nodig) + @-targeting: gericht aan rol/persoon, anders iedereen
-            dr = g("dir") or "delen"
-            tgt, _ment = _outcome_info(st, detail, by="werkoverleg")
-            detail = f"{dr} ({tgt}): {detail.strip()}"
-        elif otype == "project" and g("owner") and detail.strip():
-            _outcome_project(st, g("owner"), detail.strip())
-            detail = f"{detail.strip()} → {_name(st.records.get(g('owner')))}"
-        elif otype == "action" and g("pid_link") and detail.strip():
-            if _outcome_action(st, g("pid_link"), detail.strip()) is not None:
-                detail = f"{detail.strip()} → project"
-        elif otype == "roloverleg" and detail.strip():
-            by = (it or {}).get("by") or "werkoverleg"   # ingebracht door de indiener van de spanning
-            _outcome_roloverleg(st, g("circle"), (it or {}).get("title", "Nieuwe rol"),
-                                (it or {}).get("title", detail[:60]), detail.strip(), by=by)
-        st.werk.agenda_resolve(g("circle"), g("iid"), otype, detail)
-        return nxt, f"✓ verwerkt als {otype}"
 
 
 def _act_wall_outcome(c):
@@ -5155,13 +5143,9 @@ ACTIONS = {
     "vangst_klaar": _act_vangst_klaar,
     "vangst_uitkomst": _act_vangst_uitkomst,
     "vangst_uitkomst_weg": _act_vangst_uitkomst_weg,
+    "vangst_uitkomst_edit": _act_vangst_uitkomst_edit,
     "vangst_remove": _act_vangst_remove,
     "vangst_verwerk": _act_vangst_verwerk,
-    "wo_ag_add": _act_wo_ag_add,
-    "wo_ag_remove": _act_wo_ag_remove,
-    "wo_ag_note": _act_wo_ag_note,
-    "wo_ag_reopen": _act_wo_ag_reopen,
-    "wo_ag_resolve": _act_wo_ag_resolve,
     "wo_checkout": _act_wo_checkout,
     "noochie_send": _act_noochie_send,
     "noochie_reset": _act_noochie_reset,
@@ -5704,7 +5688,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 if (qs.get("frag") or [""])[0]:
                     # Alleen de lijst — het veld blijft staan waar het staat, met de cursor erin.
                     self._send(render_vangst_frag(st, _c, csrf_token=effective_csrf,
-                                                  open_iid=_open), chrome=False)
+                                                  open_iid=_open,
+                                                  nxt=f"/vangst?circle={_c}"), chrome=False)
                     return
                 self._send(render_vangst(st, _c, csrf_token=effective_csrf,
                                          msg=(qs.get("msg") or [""])[0], open_iid=_open))
@@ -5714,7 +5699,11 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(_frag(render_werkoverleg(st, (qs.get("circle") or [""])[0],
                                                     (qs.get("step") or ["checkin"])[0],
                                                     csrf_token=effective_csrf, fragment=fr,
-                                                    iid=(qs.get("iid") or [""])[0],
+                                                    # `open` is wat de gedeelde vangst-component
+                                                    # terugstuurt; `iid` is de oudere naam. Beide
+                                                    # accepteren houdt het blok open na een uitkomst.
+                                                    iid=((qs.get("iid") or [""])[0]
+                                                         or (qs.get("open") or [""])[0]),
                                                     kpi=(qs.get("kpi") or [""])[0],
                                                     mw=(qs.get("mw") or ["maand"])[0]), fr))
                 return

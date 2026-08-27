@@ -755,28 +755,30 @@ def test_wo_open_lead_gate_onbekende_geweigerd(tmp_path):
 
 
 def _wo_ag_add_form():
-    return {"circle": [_WO_CIRCLE], "naam": ["Er speelt iets"], "next": ["/x"]}
+    # `punt`, niet `naam`: het vangen loopt sinds de gedeelde vang-en-verwerk via `vangst_add`.
+    # De AUTHZ-poort (_member_gate op de cirkel) is dezelfde gebleven.
+    return {"circle": [_WO_CIRCLE], "punt": ["Er speelt iets"], "next": ["/x"]}
 
 
-def test_wo_ag_add_member_gate_lid_mag(tmp_path):
+def test_vangst_add_member_gate_lid_mag(tmp_path):
     # wo_ag_add is member-gated: een gewoon cirkellid mag een spanning agenderen
     dd, st = _st(tmp_path)
     member = st.people.add("Lid", "lid@nooch.earth")
     st.assign.assign(_GATE_ROLE, "person", member.id)
-    _, msg = cockpit2.dispatch(dd, "wo_ag_add", _wo_ag_add_form(), username="lid@nooch.earth")
+    _, msg = cockpit2.dispatch(dd, "vangst_add", _wo_ag_add_form(), username="lid@nooch.earth")
     assert "Geen toegang" not in msg
 
 
-def test_wo_ag_add_member_gate_niet_lid_geweigerd(tmp_path):
+def test_vangst_add_member_gate_niet_lid_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
     st.people.add("Buiten", "buiten@nooch.earth")
-    _, msg = cockpit2.dispatch(dd, "wo_ag_add", _wo_ag_add_form(), username="buiten@nooch.earth")
+    _, msg = cockpit2.dispatch(dd, "vangst_add", _wo_ag_add_form(), username="buiten@nooch.earth")
     assert "No access" in msg and "circle" in msg
 
 
-def test_wo_ag_add_member_gate_onbekende_geweigerd(tmp_path):
+def test_vangst_add_member_gate_onbekende_geweigerd(tmp_path):
     dd, st = _st(tmp_path)
-    _, msg = cockpit2.dispatch(dd, "wo_ag_add", _wo_ag_add_form(), username="niemand@nergens.nl")
+    _, msg = cockpit2.dispatch(dd, "vangst_add", _wo_ag_add_form(), username="niemand@nergens.nl")
     assert "not recognised" in msg
 
 
