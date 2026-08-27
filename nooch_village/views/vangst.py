@@ -464,21 +464,31 @@ def _punt_rij(st, circle: str, it: dict, csrf: str, nxt: str, open_iid: str = ""
 # Daarom stuurt het formulier zichzelf op met `fetch` en ververst alleen de lijst. Het veld verliest
 # nooit de focus, dus er valt geen gat om iets in te verliezen. Zonder JavaScript blijft het een
 # gewoon formulier dat post en herlaadt — de vangst werkt dan trager, niet minder.
-_VANG_JS = """<script>(function(){
+_VANG_JS = """<script data-modal-run>(function(){
  var f=document.getElementById('vang-form'), inp=document.getElementById('vang-input'),
      lijst=document.getElementById('vang-lijst');
- if(!f||!inp||!lijst||f.dataset.wired)return; f.dataset.wired='1';
+ // De LIJST is optioneel: in het werkoverleg staat het vangveld op elke stap, en op zes van de
+ // zeven staat de lijst er niet. De wachtrij moet daar net zo goed werken — zonder deze versoepeling
+ // viel het formulier terug op een gewone submit, en dan navigeer je de modal uit.
+ if(!f||!inp||f.dataset.wired)return; f.dataset.wired='1';
  var wacht=[], bezig=false;
  function ververs(){
    fetch(f.dataset.frag,{credentials:'same-origin'})
      .then(function(r){return r.text();})
      .then(function(h){
-       lijst.innerHTML=h;
-       // De teller staat in de kop en zou anders op zijn server-waarde blijven staan — een 0 boven
-       // een lijst met drie punten is een leugen op het scherm. Hij wordt uit de lijst zelf geteld,
-       // dus er is maar één bron.
-       var n=document.getElementById('vang-n');
-       if(n)n.textContent=lijst.querySelectorAll('.rdr-row[data-open]').length;
+       // Eén bron voor de tellers: de lijst zelf. Staat hij niet op het scherm, dan wordt hij in
+       // een losse div geteld — een 0 boven een lijst met drie punten is een leugen op het scherm,
+       // en op de andere stappen IS de teller de enige terugkoppeling dat het punt geland is.
+       var box=lijst; if(!box){box=document.createElement('div');}
+       box.innerHTML=h;
+       var tot=box.querySelectorAll('.rdr-row').length,
+           op=box.querySelectorAll('.rdr-row[data-open]').length;
+       var n=document.getElementById('vang-n'); if(n)n.textContent=op;
+       var t=document.getElementById('vang-tot');
+       if(t)t.textContent=tot+(tot===1?' onderwerp':' onderwerpen');
+       // De verse rijen dragen hun eigen formulieren. In de modal moeten die opnieuw bedraad
+       // worden, anders posten ze straks gewoon en navigeer je de overlay uit.
+       if(lijst&&window.__ovlWireForms)window.__ovlWireForms(lijst);
      }).catch(function(){});
  }
  function stuur(tekst){

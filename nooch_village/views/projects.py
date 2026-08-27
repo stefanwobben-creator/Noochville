@@ -482,7 +482,14 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "function toast(t){var d=document.createElement('div');d.className='c2-toast';d.textContent=t;"
         "document.body.appendChild(d);setTimeout(function(){d.classList.add('show');},10);"
         "setTimeout(function(){d.classList.remove('show');},1600);setTimeout(function(){d.remove();},2000);}"
-        "function wire(){bd.querySelectorAll('form').forEach(function(f){f.addEventListener('submit',function(e){"
+        # Formulieren worden per stuk bedraad en gemarkeerd, zodat een fragment dat NA het openen
+        # wordt vervangen (de puntenlijst na een vangst) alsnog bedraad kan worden zonder de al
+        # bedrade formulieren een tweede listener te geven — die zou elke actie dubbel posten.
+        "function wireForm(f){if(f.getAttribute('data-wired'))return;f.setAttribute('data-wired','1');"
+        # Vangen heeft zijn eigen wachtrij (`_VANG_JS`): drie punten achter elkaar typen mag het
+        # fragment niet onder je vingers vandaan vervangen. Daarom hier overslaan.
+        "if(f.classList.contains('rov-add'))return;"
+        "f.addEventListener('submit',function(e){"
         "e.preventDefault();dirty=true;var act=(e.submitter&&e.submitter.value)||'';var opts;"
         "if(f.classList.contains('filepost')){opts={method:'POST',body:new FormData(f)};}"
         "else{var data=new URLSearchParams(new FormData(f));"
@@ -495,7 +502,9 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "else if(act==='proj_delete'||act==='proj_archive'||act==='proj_add'){shut();}"
         "else{var dr=f.getAttribute('data-reopen');if(dr){last=dr;}reopen();toast('\\u2713 saved');}})"
         # netwerk-foutpad (geen response): melding + best-effort revert door het fragment te herladen.
-        ".catch(function(){reopen();toast('\\u26a0 not saved');});});});"
+        ".catch(function(){reopen();toast('\\u26a0 not saved');});});}"
+        "window.__ovlWireForms=function(root){(root||bd).querySelectorAll('form').forEach(wireForm);};"
+        "function wire(){bd.querySelectorAll('form').forEach(wireForm);"
         "bd.querySelectorAll('textarea').forEach(mentionWire);"
         # wall scrollt naar het laatste bericht: bij openen én na elke actie (reopen()→wire()), scoped op bd
         "var ws=bd.querySelector('.wall-scroll');if(ws){requestAnimationFrame(function(){ws.scrollTop=0;});}"
