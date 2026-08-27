@@ -8,7 +8,9 @@ BEWUST geen afhankelijkheid op andere nooch_village-modules — alleen stdlib `h
 nooit een circulaire import kan ontstaan (dit is de bodem van de import-graaf).
 """
 from __future__ import annotations
+import hashlib as _hashlib
 import html
+import os as _os
 
 
 def _e(x) -> str:
@@ -162,6 +164,18 @@ _KONAMI_TRIGGER = """<script>(function(){
 })();</script>"""
 
 
+# ── De gedeelde fragment-mechaniek (static/nooch.js) ─────────────────────────
+# Eén script voor de klasse "een stuk pagina vervangt zichzelf": wachtrij voor typ-en-Enter-velden,
+# opnieuw bedraden van verse formulieren (idempotent), cursor-herstel en tellers. Elke volle pagina
+# krijgt hem; modal-fragmenten erven hem van de pagina waarin ze geopend worden. Zelfde recept als
+# _DS_LINK: echt bestand + inhoud-hash in de URL, dus lang cachebaar en toch nooit stale.
+_JS_PATH = _os.path.join(_os.path.dirname(__file__), "static", "nooch.js")
+with open(_JS_PATH, encoding="utf-8") as _js_f:
+    _JS_SRC = _js_f.read()
+_JS_VERSION = _hashlib.md5(_JS_SRC.encode("utf-8")).hexdigest()[:10]
+_JS_LINK = f'<script src="/static/nooch.js?v={_JS_VERSION}" defer></script>'
+
+
 def _page(title: str, inner: str) -> str:
     # <main> als landmark om de pagina-inhoud: screenreaders en toetsenbord-gebruikers kunnen
     # direct naar de inhoud springen. De chrome (Noochie-rail, call bar) wordt door _send ná
@@ -169,4 +183,4 @@ def _page(title: str, inner: str) -> str:
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>{_e(title)}</title>{_FONTS}<style>{_CSS}</style></head>'
-            f'<body><main>{inner}</main>{_KONAMI_TRIGGER}</body></html>')
+            f'<body><main>{inner}</main>{_KONAMI_TRIGGER}{_JS_LINK}</body></html>')

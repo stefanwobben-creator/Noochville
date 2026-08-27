@@ -191,12 +191,18 @@ def test_de_flow_stuurt_de_actienaam_mee(tmp_path):
 
     Zonder een expliciete `set('action', …)` komt de POST als naamloze actie binnen, en die doet de
     dispatch stil niets — 200, en weg. Precies dat gebeurde in de eerste meting op het scherm: drie
-    punten getypt, nul aangekomen, geen enkele foutmelding."""
+    punten getypt, nul aangekomen, geen enkele foutmelding.
+
+    De naam reist nu als `data-qa-action` mee naar de gedeelde mechaniek; de `set` zelf staat in
+    `static/nooch.js`, zodat een volgend typ-en-Enter-veld hem niet opnieuw hoeft te bedenken."""
     dd = _dd(tmp_path)
     html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t")
-    assert "d.set('action','vangst_add')" in html
+    assert "data-qa-action='vangst_add'" in html
+    from nooch_village import web_base
+    assert 'd.set("action", f.dataset.qaAction || "");' in web_base._JS_SRC
     # En het veld dat de flow draagt moet er zijn, met de lijst die ververst wordt.
-    assert "id='vang-form'" in html and "id='vang-lijst'" in html and "data-frag=" in html
+    assert "id='vang-form'" in html and "id='vang-lijst'" in html and "data-qa-frag=" in html
+    assert "/static/nooch.js" in html                     # de mechaniek wordt ook echt geladen
 
 
 def test_fragment_toont_dezelfde_rijen_als_de_pagina(tmp_path):

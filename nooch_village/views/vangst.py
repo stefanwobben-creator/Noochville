@@ -128,13 +128,18 @@ def _project_opties(st, circle: str) -> str:
 def _vang_form(circle: str, csrf: str, nxt: str) -> str:
     """Het altijd-zichtbare veld. Eén regel, één toets.
 
-    `autofocus` is hier geen sier maar de hele functie: na het opslaan herlaadt de pagina, en zonder
-    autofocus zou je voor élk volgend punt de muis moeten pakken. Drie punten achter elkaar typen
-    moet kunnen zonder je handen van het toetsenbord te halen."""
+    De `data-qa-*`-attributen zetten de GEDEELDE mechaniek aan (`static/nooch.js`): de inzendingen
+    lopen door een wachtrij, het veld zelf wordt nooit vervangen, en na de laatste inzending wordt
+    het lijst-fragment één keer ververst — met cursor-herstel en opnieuw bedrade formulieren. Dat
+    is geen eigenschap van dít scherm: elk formulier met deze attributen krijgt hetzelfde.
+
+    `autofocus` blijft voor het pad zónder javascript: dan herlaadt de pagina en zou je voor elk
+    volgend punt de muis moeten pakken."""
     return (f"<form method='post' action='/action' class='rov-add' id='vang-form' "
-            f"data-frag='/vangst?circle={_e(circle)}&frag=1'>"
+            f"data-qa-frag='/vangst?circle={_e(circle)}&frag=1' "
+            f"data-qa-action='vangst_add' data-qa-target='#vang-lijst'>"
             f"{_hid(csrf, circle, nxt)}"
-            f"<input id='vang-input' name='punt' "
+            f"<input id='vang-input' name='punt' data-qa-input "
             f"placeholder='punt in één regel (optioneel @rol) — Enter' "
             f"autocomplete='off' autofocus aria-label='punt' maxlength='140'>"
             f"<button class='btn ok sm' type='submit' name='action' value='vangst_add'>+</button>"
@@ -464,52 +469,6 @@ def _punt_rij(st, circle: str, it: dict, csrf: str, nxt: str, open_iid: str = ""
 # Daarom stuurt het formulier zichzelf op met `fetch` en ververst alleen de lijst. Het veld verliest
 # nooit de focus, dus er valt geen gat om iets in te verliezen. Zonder JavaScript blijft het een
 # gewoon formulier dat post en herlaadt — de vangst werkt dan trager, niet minder.
-_VANG_JS = """<script data-modal-run>(function(){
- var f=document.getElementById('vang-form'), inp=document.getElementById('vang-input'),
-     lijst=document.getElementById('vang-lijst');
- // De LIJST is optioneel: in het werkoverleg staat het vangveld op elke stap, en op zes van de
- // zeven staat de lijst er niet. De wachtrij moet daar net zo goed werken — zonder deze versoepeling
- // viel het formulier terug op een gewone submit, en dan navigeer je de modal uit.
- if(!f||!inp||f.dataset.wired)return; f.dataset.wired='1';
- var wacht=[], bezig=false;
- function ververs(){
-   fetch(f.dataset.frag,{credentials:'same-origin'})
-     .then(function(r){return r.text();})
-     .then(function(h){
-       // Eén bron voor de tellers: de lijst zelf. Staat hij niet op het scherm, dan wordt hij in
-       // een losse div geteld — een 0 boven een lijst met drie punten is een leugen op het scherm,
-       // en op de andere stappen IS de teller de enige terugkoppeling dat het punt geland is.
-       var box=lijst; if(!box){box=document.createElement('div');}
-       box.innerHTML=h;
-       var tot=box.querySelectorAll('.rdr-row').length,
-           op=box.querySelectorAll('.rdr-row[data-open]').length;
-       var n=document.getElementById('vang-n'); if(n)n.textContent=op;
-       var t=document.getElementById('vang-tot');
-       if(t)t.textContent=tot+(tot===1?' onderwerp':' onderwerpen');
-       // De verse rijen dragen hun eigen formulieren. In de modal moeten die opnieuw bedraad
-       // worden, anders posten ze straks gewoon en navigeer je de overlay uit.
-       if(lijst&&window.__ovlWireForms)window.__ovlWireForms(lijst);
-     }).catch(function(){});
- }
- function stuur(tekst){
-   // `action` zit op de submit-KNOP, en new FormData(form) neemt knopwaarden niet mee. Zonder deze
-   // regel komt de POST als naamloze actie binnen en doet de dispatch stil niets — 200, en weg.
-   var d=new FormData(f); d.set('punt',tekst); d.set('action','vangst_add');
-   return fetch('/action',{method:'POST',body:new URLSearchParams(d),credentials:'same-origin'});
- }
- function volgende(){
-   if(bezig||!wacht.length)return; bezig=true;
-   stuur(wacht.shift()).then(function(){bezig=false; volgende(); if(!wacht.length)ververs();})
-     .catch(function(){bezig=false; f.submit();});
- }
- f.addEventListener('submit',function(e){
-   var t=inp.value.trim(); if(!t)  {e.preventDefault(); return;}
-   e.preventDefault(); inp.value=''; inp.focus();      // veld meteen vrij voor het volgende punt
-   wacht.push(t); volgende();
- });
-})();</script>"""
-
-
 def render_vangst_frag(st, circle: str, csrf_token: str = "", open_iid: str = "",
                        nxt: str = "") -> str:
     """Alleen de lijst. Dezelfde rijen als de volle pagina — één bron, geen tweede vorm.
@@ -518,10 +477,24 @@ def render_vangst_frag(st, circle: str, csrf_token: str = "", open_iid: str = ""
     is dat de agenda-stap, niet /vangst. Zonder deze parameter werd je na elke uitkomst het overleg
     uit gegooid — de component werkte, maar hij nam je mee naar zijn eigen huis."""
     nxt = nxt or f"/vangst?circle={circle}"
-    rijen = "".join(_punt_rij(st, circle, p, csrf_token, nxt, open_iid)
-                    for p in st.werk.punten(circle))
-    return rijen or ("<div class='card muted'>Nog niets gevangen. Typ hierboven een regel en "
-                     "druk op Enter — dat is de hele handeling.</div>")
+    punten = st.werk.punten(circle)
+    rijen = "".join(_punt_rij(st, circle, p, csrf_token, nxt, open_iid) for p in punten)
+    return (tellers(punten) + rijen) if rijen else (
+        tellers(punten) + "<div class='card muted'>Nog niets gevangen. Typ hierboven een regel en "
+        "druk op Enter — dat is de hele handeling.</div>")
+
+
+def tellers(punten: list) -> str:
+    """De tellers reizen MET het lijst-fragment mee, als spiegel-bron voor `static/nooch.js`.
+
+    Zo staat de tekst (enkelvoud/meervoud, taal) op één plek — hier, server-side — en klopt de
+    teller ook op de zes werkoverleg-stappen waar de lijst zelf niet op het scherm staat: de
+    gedeelde mechaniek leest dan hetzelfde fragment zonder het te tonen."""
+    tot = len(punten)
+    open_n = sum(1 for p in punten if p.get("status") != "done")
+    return (f"<span data-nv-mirror='#vang-n' hidden>{open_n}</span>"
+            f"<span data-nv-mirror='#vang-tot' hidden>{tot} "
+            f"onderwerp{'' if tot == 1 else 'en'}</span>")
 
 
 def render_vangst(st, circle: str, csrf_token: str = "", msg: str = "",
@@ -549,4 +522,4 @@ def render_vangst(st, circle: str, csrf_token: str = "", msg: str = "",
             f"<div class='c2-sec'>{vang}</div>"
             f"<div class='rdr-tool' id='vang-lijst'>{rijen}</div></div>")
     return _page("Vangen",
-                 f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>{_VANG_JS if vang else ''}")
+                 f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
