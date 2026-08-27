@@ -183,7 +183,7 @@ def test_punt_van_de_agenda_blijft_zichtbaar_in_de_vangst(tmp_path):
 def test_geen_cirkel_geen_vangst(tmp_path):
     dd = _dd(tmp_path)
     html = render_vangst(cockpit2._Stores(dd), ROL, csrf_token="t")
-    assert "Capture belongs to a circle" in html
+    assert "Vangen hoort bij een cirkel" in html
 
 
 def test_de_flow_stuurt_de_actienaam_mee(tmp_path):
@@ -207,3 +207,225 @@ def test_fragment_toont_dezelfde_rijen_als_de_pagina(tmp_path):
     frag = render_vangst_frag(cockpit2._Stores(dd), CIRCLE, csrf_token="t")
     assert "een gevangen punt" in frag and "data-open='1'" in frag
     assert frag in render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t")
+
+
+# ── fase 2: meerdere uitkomsten, elke rol ───────────────────────────────────
+
+ANDERE_CIRKEL_ROL = "mother_earth__shareholder"
+
+
+def test_een_spanning_kan_meerdere_uitkomsten_hebben(tmp_path):
+    """Eén punt levert zelden één ding op. Een radio-knop dwingt je te kiezen wélke van de drie je
+    opschrijft, en de andere twee raak je kwijt."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    it = st.werk.backlog_add(CIRCLE, "de leverancier reageert niet", by_id="p1")
+    naam = cockpit2._name(st.records.get(ROL))
+    for otype in ("info", "project", "governance"):
+        _nxt, msg = _post(dd, "vangst_uitkomst", circle=CIRCLE, iid=it["id"], otype=otype,
+                          rol=naam, tekst="zool-leverancier vergelijken", next="/vangst")
+        assert msg.startswith("✓"), (otype, msg)
+    punt = cockpit2._Stores(dd).werk.punt_get(CIRCLE, it["id"])
+    assert [u["type"] for u in punt["uitkomsten"]] == ["info", "project", "governance"]
+
+
+def test_een_punt_kan_naar_twee_verschillende_rollen(tmp_path):
+    """De kernfunctie: het punt van persoon X wordt werk voor rol Y — en soms ook voor rol Z."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    it = st.werk.backlog_add(CIRCLE, "de maatvoering klopt niet", by_id="p1")
+    a, b = ROL, "mother_earth__nooch__marketing_lead"
+    for rol in (a, b):
+        naam = cockpit2._name(st.records.get(rol))
+        _nxt, msg = _post(dd, "vangst_uitkomst", circle=CIRCLE, iid=it["id"], otype="project",
+                          rol=naam, tekst="maatvoering nakijken", next="/vangst")
+        assert msg.startswith("✓"), msg
+    punt = cockpit2._Stores(dd).werk.punt_get(CIRCLE, it["id"])
+    assert {u["rol"] for u in punt["uitkomsten"]} == {a, b}
+    eigenaars = {p["owner"] for p in cockpit2._Stores(dd).projects.all()
+                 if "maatvoering" in str(p.get("scope"))}
+    assert eigenaars == {a, b}
+
+
+def test_elke_rol_mag_ontvangen_niet_alleen_deze_cirkel(tmp_path):
+    """Beperken tot de eigen cirkel maakt precies de overdracht onmogelijk waar een overleg voor
+    bestaat: iemand brengt iets in dat ergens anders thuishoort."""
+    from nooch_village.views.vangst import alle_rollen
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    ids = {r.id for r in alle_rollen(st)}
+    assert ROL in ids and ANDERE_CIRKEL_ROL in ids     # andere cirkel, wel beschikbaar
+    assert CIRCLE not in ids                            # een cirkel heeft geen handen
+
+
+def test_een_slapende_rol_staat_niet_in_de_autocomplete(tmp_path):
+    from nooch_village import afslanken as af
+    from nooch_village.views.vangst import alle_rollen
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    af.slaap_leggen(st.records, ROL, reden="test")
+    st.records.save()
+    assert ROL not in {r.id for r in alle_rollen(cockpit2._Stores(dd))}
+
+
+def test_een_dubbelzinnige_rolnaam_levert_geen_gok_op(tmp_path):
+    """Werk bij het verkeerde bureau kost een hop en levert een vals gat-record op. Een zichtbare
+    'niet gevonden' is eerlijker."""
+    from nooch_village.views.vangst import rol_uit_naam
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    rid, reden = rol_uit_naam(st, "bestaat echt niet")
+    assert rid == "" and "geen rol gevonden" in reden
+    _nxt, msg = _post(dd, "vangst_uitkomst", circle=CIRCLE,
+                      iid=(st.werk.backlog_add(CIRCLE, "x", by_id="p1") or {}).get("id"),
+                      otype="project", rol="bestaat echt niet", tekst="x", next="/vangst")
+    assert msg.startswith("✗")
+    assert cockpit2._Stores(dd).projects.all() == [] or not any(
+        p.get("scope") == "x" for p in cockpit2._Stores(dd).projects.all())
+
+
+def test_een_uitkomst_zonder_rol_wordt_geweigerd(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    it = st.werk.backlog_add(CIRCLE, "x", by_id="p1")
+    _nxt, msg = _post(dd, "vangst_uitkomst", circle=CIRCLE, iid=it["id"], otype="project",
+                      rol="", tekst="x", next="/vangst")
+    assert "kies een rol" in msg
+
+
+def test_afgevinkt_blijft_zichtbaar_en_doorgestreept(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    it = st.werk.backlog_add(CIRCLE, "een afgehandeld punt", by_id="p1")
+    _post(dd, "vangst_klaar", circle=CIRCLE, iid=it["id"], klaar="1", next="/vangst")
+    html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t")
+    assert "een afgehandeld punt" in html               # niet weg
+    assert "ck-done" in html                            # doorgestreept
+    assert cockpit2._Stores(dd).werk.punt_get(CIRCLE, it["id"])["status"] == "done"
+
+
+def test_afvinken_is_omkeerbaar(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    it = st.werk.backlog_add(CIRCLE, "x", by_id="p1")
+    _post(dd, "vangst_klaar", circle=CIRCLE, iid=it["id"], klaar="1", next="/vangst")
+    _post(dd, "vangst_klaar", circle=CIRCLE, iid=it["id"], klaar="0", next="/vangst")
+    assert cockpit2._Stores(dd).werk.punt_get(CIRCLE, it["id"])["status"] == "open"
+
+
+def test_uitkomsten_overleven_het_afvinken(tmp_path):
+    """Afvinken sluit het punt, het wist niet wat eruit kwam."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    it = st.werk.backlog_add(CIRCLE, "x", by_id="p1")
+    st.werk.punt_uitkomst_add(CIRCLE, it["id"], {"type": "info", "rol": ROL, "tekst": "x"})
+    _post(dd, "vangst_klaar", circle=CIRCLE, iid=it["id"], klaar="1", next="/vangst")
+    assert len(cockpit2._Stores(dd).werk.punt_get(CIRCLE, it["id"])["uitkomsten"]) == 1
+
+
+def test_optionele_rol_bij_het_vangen_blokkeert_niets(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    naam = cockpit2._name(st.records.get(ROL))
+    _post(dd, "vangst_add", circle=CIRCLE, punt=f"zolen nakijken @{naam}", next="/vangst")
+    _post(dd, "vangst_add", circle=CIRCLE, punt="iets @nietbestaandrol", next="/vangst")
+    punten = cockpit2._Stores(dd).werk.punten(CIRCLE)
+    per_titel = {p["title"]: p for p in punten}
+    assert per_titel[f"zolen nakijken @{naam}"].get("rol_hint") == ROL
+    # Een niet-oplosbare @rol gooit het punt NIET weg — de tekst staat er gewoon.
+    assert "iets @nietbestaandrol" in per_titel
+    assert per_titel["iets @nietbestaandrol"].get("rol_hint") in (None, "")
+
+
+def test_vangen_kost_een_veld_en_een_enter(tmp_path):
+    """De meting uit de opdracht: hoeveel velden kost het om één punt te vangen in fase 1?
+
+    Precies één zichtbaar invoerveld in het vangformulier, en geen enkele uitkomst-keuze."""
+    import re
+    dd = _dd(tmp_path)
+    html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t")
+    form = re.search(r"<form[^>]*id='vang-form'.*?</form>", html, re.S).group(0)
+    zichtbaar = [m for m in re.findall(r"<(?:input|select|textarea)[^>]*>", form)
+                 if "type='hidden'" not in m]
+    assert len(zichtbaar) == 1, zichtbaar
+    for woord in ("otype", "vangst_uitkomst", "Wat levert dit op"):
+        assert woord not in form                        # geen uitkomst-keuze in fase 1
+
+
+def test_het_verwerkblok_blijft_open_na_een_uitkomst(tmp_path):
+    """Eén spanning levert meerdere uitkomsten op; elke keer opnieuw moeten uitklappen maakt van
+    'meerdere mag' alsnog een drempel per regel."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    it = st.werk.backlog_add(CIRCLE, "een punt", by_id="p1")
+    html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
+    assert "<details class='wo-ocd box-details' open>" in html
+    # En de formulieren sturen je terug mét dat punt open.
+    assert f"open={it['id']}" in html
+    # Een ander punt blijft dicht.
+    ander = st.werk.backlog_add(CIRCLE, "tweede punt", by_id="p1")
+    html2 = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
+    assert html2.count("<details class='wo-ocd box-details' open>") == 1
+    assert ander["id"] != it["id"]
+
+
+# ── de twee vang-ingangen naast elkaar ──────────────────────────────────────
+
+def test_de_header_biedt_geen_tweede_vang_ingang_meer(tmp_path):
+    """Twee ingangen naar dezelfde functie maken geen van beide de vanzelfsprekende. De ROUTE
+    blijft: de agenda-stap leunt erop en directe links mogen niet breken."""
+    from nooch_village.views.overview import render_node
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    html = render_node(st, CIRCLE, "overview", csrf_token="t", username="guest")
+    assert "Governance meeting" in html and "Tactical meeting" in html
+    assert "Quick capture" not in html
+    assert "/vangst" not in html
+    # …maar de route zelf leeft nog.
+    assert "Vangen" in render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t")
+
+
+def test_de_inbox_vangt_een_los_punt_in_een_regel(tmp_path):
+    """De vervangende ingang moet het minimum kunnen: één regel, zonder uitkomst-keuze."""
+    dd = _dd(tmp_path)
+    _nxt, msg = _post(dd, "notif_add", text="de zolen komen te laat", role="", next="/inbox")
+    assert msg.startswith("✓")
+    items = cockpit2._Stores(dd).notif.all()
+    assert len(items) == 1
+    assert items[0]["snippet"] == "de zolen komen te laat"
+    assert items[0]["at"]                                   # wanneer: ja
+    assert not items[0].get("type")                         # geen uitkomst-keuze bij het noteren
+
+
+def test_de_inbox_vang_legt_de_opwerper_NIET_vast(tmp_path):
+    """Het verschil dat gemeld moet worden: /vangst bewaart wie het punt inbracht (naam én id),
+    de inbox-vangst schrijft de letterlijke tekst 'zelf'. Voor een persoonlijke inbox is dat
+    genoeg — voor een overleg met vijf mensen aan tafel niet."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    _post(dd, "notif_add", text="een punt", role="", next="/inbox")
+    assert cockpit2._Stores(dd).notif.all()[0]["by"] == "zelf"
+
+    st.werk.backlog_add(CIRCLE, "een punt", by="Stefan Wobben", by_id="p-stefan")
+    punt = cockpit2._Stores(dd).werk.punten(CIRCLE)[0]
+    assert punt["by"] == "Stefan Wobben" and punt["by_id"] == "p-stefan"
+
+
+def test_de_inbox_vang_kent_geen_gedeelde_lijst_per_cirkel(tmp_path):
+    """Een inbox-punt landt in je EIGEN inbox; het komt niet op de agenda van het eerstvolgende
+    werkoverleg en niemand anders ziet het. Dat is het tweede verschil."""
+    dd = _dd(tmp_path)
+    _post(dd, "notif_add", text="een los punt", role="", next="/inbox")
+    assert cockpit2._Stores(dd).werk.punten(CIRCLE) == []
+
+
+def test_vangst_zonder_cirkel_valt_terug_op_de_thuiscirkel(tmp_path):
+    """`/vangst` zonder `?circle=` gaf een 502: de route gaf de Records-STORE door aan `org.roots`,
+    dat over records itereert. Onzichtbaar voor elke test die wél een cirkel meegeeft — en precies
+    de URL die je intikt als je het scherm zoekt."""
+    from nooch_village.cockpit2 import _home_node
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    thuis = _home_node(st.records.all())               # zo roept de route hem aan
+    assert thuis and st.records.get(thuis) is not None
+    assert "Vangen" in render_vangst(st, thuis, csrf_token="t")

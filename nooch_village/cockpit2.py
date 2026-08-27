@@ -2725,8 +2725,19 @@ def _act_vangst_add(c):
         # De vangst gaat naar de PERSISTENTE backlog: er hoeft geen overleg open te staan, en bij het
         # eerstvolgende overleg komt het punt vanzelf op de agenda. Géén typering, géén model — dat
         # is precies het verschil tussen vangen en verwerken.
-        st.werk.backlog_add(g("circle"), tekst, by=(actor.name if actor else ""),
-                            by_id=(actor.id if actor else ""))
+        it = st.werk.backlog_add(g("circle"), tekst, by=(actor.name if actor else ""),
+                                 by_id=(actor.id if actor else ""))
+        # OPTIONEEL en NIET BLOKKEREND: een `@rolnaam` in dezelfde regel wordt een hint. Lost hij
+        # niet op, dan gebeurt er niets — de tekst is al vastgelegd. Een tweede veld zou de flow
+        # van één veld plus Enter kapotmaken, en dát is de hele functie van dit scherm.
+        if it is not None:
+            from nooch_village.views.vangst import rol_uit_naam
+            m = re.search(r"@([\w .&-]{2,40})", tekst)
+            if m:
+                rol, _reden = rol_uit_naam(st, m.group(1).strip())
+                if rol:
+                    it["rol_hint"] = rol
+                    st.werk._save()
         return nxt, ""                           # geen banner: hij zou de cursor van het veld halen
 
 
@@ -2737,6 +2748,103 @@ def _act_vangst_remove(c):
         if _deny:
             return nxt, _deny
         return nxt, ("🗑 removed" if st.werk.punt_remove(g("circle"), g("iid")) else "")
+
+
+def _act_vangst_tekst(c):
+        # AUTHZ: circle-member — de volledige spanningstekst noteren is dezelfde laag als vangen.
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _member_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
+        st.werk.punt_tekst(g("circle"), g("iid"), g("tekst"))
+        return nxt, ""                           # geen banner: je typt door
+
+
+def _act_vangst_klaar(c):
+        # AUTHZ: circle-member — afvinken sluit je eigen agenda-punt, het verplaatst geen werk.
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _member_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
+        klaar = g("klaar") != "0"
+        if not st.werk.punt_afvinken(g("circle"), g("iid"), klaar):
+            return nxt, "✗ dit punt bestaat niet meer"
+        return nxt, ("✓ verwerkt" if klaar else "↺ heropend")
+
+
+def _act_vangst_uitkomst_weg(c):
+        # AUTHZ: circle-member — een uitkomst-REGEL weghalen. Wat die uitkomst al aanrichtte (een
+        # project, een bericht) blijft bestaan: dat is elders vastgelegd en heeft zijn eigen weg terug.
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        _deny = _member_gate(g("circle"), username, st)
+        if _deny:
+            return nxt, _deny
+        if st.werk.punt_uitkomst_remove(g("circle"), g("iid"), g("uid")):
+            return nxt, "🗑 regel weg — wat er al van gemaakt is blijft bestaan"
+        return nxt, ""
+
+
+def _act_vangst_uitkomst(c):
+        # AUTHZ: rolvervuller of Circle Lead van de ONTVANGENDE rol — hier wordt werk bij iemand
+        # anders neergelegd, en dat is een zwaardere handeling dan het punt noteren.
+        from nooch_village.views.vangst import rol_uit_naam
+        nxt, st, g, username = c.nxt, c.st, c.g, c.username
+        circle, iid, otype = g("circle"), g("iid"), g("otype")
+        it = st.werk.punt_get(circle, iid)
+        if it is None:
+            return nxt, "✗ dit punt bestaat niet meer"
+        tekst = (g("tekst") or it.get("title") or "").strip()
+        if not tekst:
+            return nxt, "✗ zeg wat de uitkomst is"
+
+        rol, reden = rol_uit_naam(st, g("rol"))
+        if g("rol").strip() and not rol:
+            return nxt, f"✗ {reden}"             # fail-closed: liever niets dan het verkeerde bureau
+        if otype in ("project", "actie", "info") and not rol:
+            return nxt, "✗ kies een rol — een uitkomst zonder bureau blijft liggen"
+        if rol:
+            orec = st.records.get(rol)
+            if orec is not None and org.is_circle(orec):
+                return nxt, "✗ een cirkel heeft geen handen — kies een rol"
+            _deny = _role_gate(rol, username, st)
+            if _deny:
+                return nxt, _deny
+
+        actor = st.people.by_email(username) if username and username != "guest" else None
+        aid = actor.id if actor else ""
+        prov = f"↳ uit het werkoverleg van {circle}"
+        ref = ""
+
+        if otype == "project":
+            _outcome_project(st, rol, tekst, provenance=prov, actor_id=aid)
+            ref = "project aangemaakt"
+        elif otype == "actie":
+            # De actie hangt aan een lopend project van díe rol; heeft die er geen, dan wordt het
+            # een project — anders verdwijnt de actie in het niets.
+            doel = next((p for p in st.projects.all()
+                         if p.get("owner") == rol and not p.get("archived")
+                         and p.get("status") in ("queued", "running", "blocked")), None)
+            if doel is None:
+                _outcome_project(st, rol, tekst, provenance=prov, actor_id=aid)
+                ref = "geen lopend project — als project neergezet"
+            else:
+                _outcome_action(st, doel["id"], tekst)
+                ref = f"actie op {str(doel.get('scope') or doel['id'])[:40]}"
+        elif otype == "info":
+            st.notif.add("role", rol, "", by=(it.get("by_id") or aid or "werkoverleg"),
+                         snippet=tekst[:160])
+            ref = "bericht verstuurd"
+        elif otype == "governance":
+            _outcome_roloverleg(st, circle, tekst[:60], tekst[:60], tekst,
+                                by=(it.get("by") or "werkoverleg"), provenance=prov)
+            ref = "op de roloverleg-agenda"
+        else:
+            return nxt, "✗ onbekende uitkomst"
+
+        st.werk.punt_uitkomst_add(circle, iid, {"type": otype, "rol": rol, "tekst": tekst,
+                                                "ref": ref, "door": aid})
+        naam = _name(st.records.get(rol)) if rol and st.records.get(rol) else rol
+        return nxt, f"✓ {otype}{(' → ' + naam) if naam else ''}"
 
 
 def _act_vangst_verwerk(c):
@@ -5043,6 +5151,10 @@ ACTIONS = {
     "wo_presence": _act_wo_presence,
     "wo_present_all": _act_wo_present_all,
     "vangst_add": _act_vangst_add,
+    "vangst_tekst": _act_vangst_tekst,
+    "vangst_klaar": _act_vangst_klaar,
+    "vangst_uitkomst": _act_vangst_uitkomst,
+    "vangst_uitkomst_weg": _act_vangst_uitkomst_weg,
     "vangst_remove": _act_vangst_remove,
     "vangst_verwerk": _act_vangst_verwerk,
     "wo_ag_add": _act_wo_ag_add,
@@ -5582,16 +5694,20 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(render_noochie(st, effective_csrf, (qs.get("ctx") or [""])[0]))
                 return
             if path == "/vangst":
-                # Quick capture: vangen scheiden van verwerken. Geen modal (js-modal zou het
+                # Vangen scheiden van verwerken. Geen modal (js-modal zou het
                 # altijd-zichtbare veld in een overlay stoppen, en dan is de één-toets-flow weg).
-                _c = (qs.get("circle") or [""])[0] or _home_node(st.records)
+                # `.all()`, niet de store zelf: `org.roots` itereert over records. Zonder dit
+                # gaf /vangst zonder ?circle= een 502 — onzichtbaar voor elke test die wél een
+                # cirkel meegeeft, en precies de URL die je intikt als je het scherm zoekt.
+                _c = (qs.get("circle") or [""])[0] or _home_node(st.records.all())
+                _open = (qs.get("open") or [""])[0]
                 if (qs.get("frag") or [""])[0]:
                     # Alleen de lijst — het veld blijft staan waar het staat, met de cursor erin.
-                    self._send(render_vangst_frag(st, _c, csrf_token=effective_csrf),
-                               chrome=False)
+                    self._send(render_vangst_frag(st, _c, csrf_token=effective_csrf,
+                                                  open_iid=_open), chrome=False)
                     return
                 self._send(render_vangst(st, _c, csrf_token=effective_csrf,
-                                         msg=(qs.get("msg") or [""])[0]))
+                                         msg=(qs.get("msg") or [""])[0], open_iid=_open))
                 return
             if path == "/werkoverleg":
                 fr = (qs.get("fragment") or [""])[0] == "1"

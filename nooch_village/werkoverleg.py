@@ -125,6 +125,55 @@ class WerkoverlegStore:
         self._save()
         return True
 
+    # ── fase 2: meerdere uitkomsten per punt ──────────────────────────────────
+    #
+    # Eén spanning levert zelden één ding op. "De leverancier reageert niet" is tegelijk een
+    # info-melding aan de cirkel, een project bij inkoop en een actie op een lopend project. Een
+    # radio-knop dwingt je te kiezen welke van die drie je opschrijft, en de andere twee raak je
+    # kwijt — dus is dit een lijst waar je regels aan toevoegt, geen keuze.
+
+    def punt_tekst(self, circle: str, iid: str, tekst: str) -> bool:
+        """De volledige spanningstekst. Hoort bij fase 2: bij het VANGEN is één regel genoeg."""
+        it = self.punt_get(circle, iid)
+        if it is None:
+            return False
+        it.setdefault("note", {})["spanning"] = (tekst or "").strip()[:4000]
+        self._save()
+        return True
+
+    def punt_uitkomst_add(self, circle: str, iid: str, uitkomst: dict) -> dict | None:
+        """Voeg één uitkomst toe. Append-only: verwijderen doe je expliciet, nooit door te
+        overschrijven."""
+        import uuid
+        it = self.punt_get(circle, iid)
+        if it is None or not (uitkomst.get("type") or "").strip():
+            return None
+        rij = {"id": uuid.uuid4().hex[:10], "at": time.time(), **uitkomst}
+        it.setdefault("uitkomsten", []).append(rij)
+        self._save()
+        return rij
+
+    def punt_uitkomst_remove(self, circle: str, iid: str, uid: str) -> bool:
+        it = self.punt_get(circle, iid)
+        if it is None:
+            return False
+        over = [u for u in (it.get("uitkomsten") or []) if u.get("id") != uid]
+        if len(over) == len(it.get("uitkomsten") or []):
+            return False
+        it["uitkomsten"] = over
+        self._save()
+        return True
+
+    def punt_afvinken(self, circle: str, iid: str, klaar: bool = True) -> bool:
+        """Afvinken verbergt niets: het punt blijft in de lijst staan, doorgestreept. Wie het
+        overleg terugleest moet kunnen zien wát er langskwam, niet alleen wat er nog open is."""
+        it = self.punt_get(circle, iid)
+        if it is None:
+            return False
+        it["status"] = "done" if klaar else "open"
+        self._save()
+        return True
+
     def punt_remove(self, circle: str, iid: str) -> bool:
         st = self._m.get(circle)
         if st is None:
@@ -274,7 +323,8 @@ class WerkoverlegStore:
 _WRITE_METHODS = (
     "open", "close", "set_checkout", "set_presence", "mark_visited",
     "agenda_add", "agenda_remove", "agenda_set_note", "agenda_resolve", "backlog_add",
-    "punt_resolve", "punt_remove",
+    "punt_resolve", "punt_remove", "punt_tekst", "punt_uitkomst_add",
+    "punt_uitkomst_remove", "punt_afvinken",
 )
 for _wm in _WRITE_METHODS:
     setattr(WerkoverlegStore, _wm, synchronized(getattr(WerkoverlegStore, _wm)))
