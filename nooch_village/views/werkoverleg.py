@@ -157,38 +157,60 @@ def _wo_agenda(st, crec, csrf: str, iid: str = "") -> str:
 
 
 def _wo_checkout(st: _Stores, crec, csrf: str) -> str:
-    """Stap 6: check-out. Per persoon een tevredenheidsscore 0-10."""
+    """Stap 6: check-out. Ja of nee per deelnemer — dezelfde vorm als de check-in.
+
+    Hier stond een schaal van 0 tot 10 met een gemiddelde erboven. Een cijfer geven over een
+    overleg is een oordeel dat niemand kan onderbouwen, en het gemiddelde poetste het verschil
+    tussen vier tevreden mensen en één die niets kreeg netjes weg. De vraag die ertoe doet is of
+    je hebt gekregen wat je nodig had, en dat is ja of nee.
+
+    De ghost van het vorige overleg toont alleen een ja/nee. Een oude score van 7 is geen "ja" —
+    dat is een vertaling die niemand kan verantwoorden, en dus doen we hem niet."""
     ppl = _members_of_circle(st, crec.id)
     nxt = f"/werkoverleg?circle={crec.id}&step=checkout"
-    scores = st.werk.checkout(crec.id)
+    antw = st.werk.checkout(crec.id)
     if not ppl:
         return "<div class='c2-sec'><h3>Check-out</h3><p class='muted'>No members.</p></div>"
-    prev = st.werk.prev_checkout(crec.id)               # scores van het vorige overleg (ghost)
-    vals = [v for v in scores.values() if isinstance(v, int)]
-    avg = f"{round(sum(vals) / len(vals), 1)}/10" if vals else "—"
+    prev = st.werk.prev_checkout(crec.id)               # vorige overleg (ghost)
+    ja = sum(1 for p in ppl if antw.get(p.id) is True)
+    nee = sum(1 for p in ppl if antw.get(p.id) is False)
     rows = ""
+    oud_gezien = False
     for p in ppl:
-        cur = scores.get(p.id)
+        cur = antw.get(p.id)
         pv = prev.get(p.id)
+        pv = pv if isinstance(pv, bool) else None       # oude cijfers vertalen we niet
+        if not isinstance(cur, bool) and cur is not None:
+            oud_gezien = True                           # een cijfer uit een eerder overleg-record
         if csrf:
-            cells = ""
-            for n in range(0, 11):
-                cls = "wo-sc" + (" on" if cur == n else (" prev" if cur is None and pv == n else ""))
-                title = " title='last time'" if (pv == n and cur != n) else ""
-                cells += (f"<form method='post' action='/action' style='display:inline'>{_wo_hid(csrf, crec.id, nxt)}"
-                          f"<input type='hidden' name='pid' value='{_e(p.id)}'><input type='hidden' name='score' value='{n}'>"
-                          f"<button class='{cls}'{title} type='submit' name='action' value='wo_checkout'>{n}</button></form>")
-            sel = f"<span class='wo-scale'>{cells}</span>"
+            def b(val, lbl, c, _cur=cur, _pv=pv, _p=p):
+                on = " on" if _cur is val else (" prev" if _cur is None and _pv is val else "")
+                title = " title='last time'" if (_pv is val and _cur is not val) else f" title='{lbl}'"
+                return (f"<form method='post' action='/action' style='display:inline'>"
+                        f"{_wo_hid(csrf, crec.id, nxt)}"
+                        f"<input type='hidden' name='pid' value='{_e(_p.id)}'>"
+                        f"<input type='hidden' name='ok' value='{'1' if val else '0'}'>"
+                        f"<button class='cl-check {c}{on}'{title} type='submit' name='action' "
+                        f"value='wo_checkout'>{'✓' if val else '✗'}</button></form>")
+            ctrl = b(True, "yes", "ok") + b(False, "no", "no")
         else:
-            sel = f"<span class='kpidata-v'>{cur if cur is not None else '—'}</span>"
+            merk = "—" if not isinstance(cur, bool) else ("✓" if cur else "✗")
+            ctrl = f"<span class='kpidata-v'>{merk}</span>"
         rows += (f"<div class='wo-mem'><span class='av'>{_e(_initials(p.name))}</span>"
-                 f"<span class='wo-mem-n'>{_e(p.name)}</span>{sel}</div>")
-    legend = ("<span class='muted' style='font-size:.74rem'>lighter = last time</span>"
-              if prev else "")
+                 f"<span class='wo-mem-n'>{_e(p.name)}</span>"
+                 f"<span class='cl-checks'>{ctrl}</span></div>")
+    # De legenda alleen als er ook echt een ghost te zien is. Een vorig overleg met alleen oude
+    # cijfers levert er geen — die vertalen we niet — en dan is "lighter = last time" een uitleg
+    # bij iets wat niet op het scherm staat.
+    ghost = any(isinstance(v, bool) for v in prev.values())
+    legend = "<span class='muted'>lighter = last time</span>" if ghost else ""
+    oud = ("<p class='muted'>An earlier score from this circle is kept as written — old 0-10 "
+           "scores are not converted.</p>" if oud_gezien else "")
     return (f"<div class='c2-sec'><div class='cl-head'><h3>Check-out</h3>"
-            f"<span class='muted'>average: <span class='wo-avg'>{avg}</span></span></div>"
-            f"<p class='muted' style='font-size:.8rem'>On a scale of 0-10: how satisfied are you with "
-            f"the outcome of this meeting? {legend}</p>{rows}</div>")
+            f"<span class='muted'>{ja} yes · {nee} no</span></div>"
+            f"<p class='muted'>Did this meeting give you what you needed? "
+            f"<b>✓</b> yes / <b>✗</b> no. {legend}</p>{oud}"
+            f"<div class='wo-mems' tabindex='0'>{rows}</div></div>")
 
 
 def _wo_summary(st: _Stores, crec, csrf: str) -> str:
@@ -198,7 +220,9 @@ def _wo_summary(st: _Stores, crec, csrf: str) -> str:
     ppl = _members_of_circle(st, crec.id)
     aanwezig = [p.name for p in ppl if pres.get(p.id, True)]
     afwezig = [p.name for p in ppl if pres.get(p.id) is False]
-    tev = f"{s['tevredenheid']}/10" if s["tevredenheid"] is not None else "n/a"
+    # De check-out is ja/nee. `tevredenheid` bestaat alleen nog voor archieven van vóór die
+    # wijziging; is hij er, dan tonen we hem erbij in plaats van hem stilzwijgend te laten vallen.
+    uit = f"{s.get('checkout_ja', 0)} yes · {s.get('checkout_nee', 0)} no"
     rij = lambda k, v: f"<div class='wo-sumrow'><span>{k}</span><b>{v}</b></div>"
     body = (rij("Present", ", ".join(aanwezig) or "—")
             + rij("Absent", ", ".join(afwezig) or "—")
@@ -207,7 +231,9 @@ def _wo_summary(st: _Stores, crec, csrf: str) -> str:
             + rij("Projects added", s["projecten"])
             + rij("Actions", s.get("acties", 0))
             + rij("Items for governance meeting", s["roloverleg"])
-            + rij("Average satisfaction", tev)
+            + rij("Check-out", uit)
+            + (rij("Average satisfaction (old scale)", f"{s['tevredenheid']}/10")
+               if s.get("tevredenheid") is not None else "")
             + rij("Duration", f"{s['duur_min']} min"))
     return (f"<div class='c2-sec'><h3>Summary</h3><div class='wo-sum'>{body}</div>"
             f"<p class='muted' style='font-size:.8rem;margin-top:.6rem'>Click “Close meeting” below: "

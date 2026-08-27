@@ -221,25 +221,58 @@ def test_checkout_en_samenvatting(tmp_path):
     dd = _dd(tmp_path)
     p = _with_member(dd)
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
-    cockpit2.dispatch(dd, "wo_checkout", {"circle": [C], "pid": [p.id], "score": ["8"], "next": ["/"]}, username="guest")
-    assert cockpit2._Stores(dd).werk.checkout(C)[p.id] == 8
+    cockpit2.dispatch(dd, "wo_checkout", {"circle": [C], "pid": [p.id], "ok": ["1"], "next": ["/"]},
+                      username="guest")
+    assert cockpit2._Stores(dd).werk.checkout(C)[p.id] is True
     frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "sluiten", csrf_token="t", fragment=True)
-    assert "Summary" in frag and "Average satisfaction" in frag and "8" in frag
+    assert "Summary" in frag and "Check-out" in frag and "1 yes · 0 no" in frag
+    assert "Average satisfaction" not in frag                 # de schaal is weg
     assert "Close meeting" in frag and "Next" not in frag     # stap 7 = centrale sluit-actie
 
 
-def test_checkout_toont_vorige_score(tmp_path):
+def test_de_checkout_is_ja_nee_zoals_de_check_in(tmp_path):
+    """Geen schaal en geen gemiddelde meer: dezelfde twee knoppen als bij de check-in."""
+    dd = _dd(tmp_path)
+    _with_member(dd)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
+    frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "checkout", csrf_token="t",
+                                       fragment=True)
+    assert "cl-check ok" in frag and "cl-check no" in frag    # zelfde knoppen als de check-in
+    assert "wo-scale" not in frag and "wo-avg" not in frag    # schaal én gemiddelde weg
+    assert "Did this meeting give you what you needed?" in frag
+    assert "name='ok'" in frag and "name='score'" not in frag
+
+
+def test_een_oud_cijfer_wordt_niet_vertaald_naar_ja(tmp_path):
+    """Een 7 uit een archief is geen 'ja'. Er is geen grens die dat eerlijk vertaalt, dus toont
+    het scherm hem niet als ghost — en de oude waarde blijft staan zoals hij is opgeschreven."""
     dd = _dd(tmp_path)
     p = _with_member(dd)
-    # overleg 1: score 7, sluiten -> wordt 'vorige keer'
-    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
-    cockpit2.dispatch(dd, "wo_checkout", {"circle": [C], "pid": [p.id], "score": ["7"], "next": ["/"]}, username="guest")
+    st = cockpit2._Stores(dd)
+    st.werk.open(C)
+    st.werk._m[C].setdefault("checkout", {})[p.id] = 7        # record van vóór de wijziging
+    st.werk._save()
     cockpit2.dispatch(dd, "wo_close", {"circle": [C], "next": ["/"]}, username="guest")
-    assert cockpit2._Stores(dd).werk.prev_checkout(C).get(p.id) == 7
-    # overleg 2: nog niet gescoord -> de 7 verschijnt als ghost (class prev)
+    assert cockpit2._Stores(dd).werk.prev_checkout(C).get(p.id) == 7   # ongewijzigd bewaard
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
+    frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "checkout", csrf_token="t",
+                                       fragment=True)
+    assert "last time" not in frag                            # geen ghost, ook geen legenda
+
+
+def test_checkout_toont_het_vorige_antwoord(tmp_path):
+    dd = _dd(tmp_path)
+    p = _with_member(dd)
+    # overleg 1: ja, sluiten -> wordt 'vorige keer'
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
+    cockpit2.dispatch(dd, "wo_checkout", {"circle": [C], "pid": [p.id], "ok": ["1"], "next": ["/"]},
+                      username="guest")
+    cockpit2.dispatch(dd, "wo_close", {"circle": [C], "next": ["/"]}, username="guest")
+    assert cockpit2._Stores(dd).werk.prev_checkout(C).get(p.id) is True
+    # overleg 2: nog niets ingevuld -> het ja verschijnt als ghost (class prev)
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
     frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "checkout", csrf_token="t", fragment=True)
-    assert "wo-sc prev" in frag and "last time" in frag
+    assert "cl-check ok prev" in frag and "last time" in frag
 
 
 def test_noochie_hulp_context_opener(tmp_path):

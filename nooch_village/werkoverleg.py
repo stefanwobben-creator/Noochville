@@ -273,22 +273,32 @@ class WerkoverlegStore:
         it["status"] = "done"
         self._save()
 
-    # ── stap 6: check-out (tevredenheid 0-10) ──────────────────────────────────
-    def set_checkout(self, circle: str, pid: str, score) -> bool:
-        """Check-out-score (0-10) van een deelnemer. Alleen op een OPEN overleg: een score op een
-        gesloten overleg valt buiten elke snapshot en verdween vroeger stil — nu fail-loud geweigerd."""
+    # ── stap 6: check-out (ja/nee, zoals de check-in) ──────────────────────────
+    #
+    # Dit was een schaal van 0 tot 10 met een gemiddelde eronder. Een cijfer geven over een overleg
+    # is een oordeel dat niemand kan onderbouwen en dat het gemiddelde daarna wegpoetst; de vraag
+    # die er wél toe doet is of je hebt gekregen wat je nodig had. Dat is ja of nee.
+    #
+    # OUDE SCORES WORDEN NIET OMGEZET. Een 7 uit een archief is geen "ja" — hij betekende iets
+    # anders, en er is geen grens die dat eerlijk vertaalt. Ze blijven staan zoals ze zijn
+    # opgeschreven; alleen nieuwe check-outs zijn ja/nee.
+    def set_checkout(self, circle: str, pid: str, ok) -> bool:
+        """Check-out van een deelnemer: ja of nee. Alleen op een OPEN overleg — een antwoord op een
+        gesloten overleg valt buiten elke snapshot en verdween vroeger stil, nu fail-loud."""
         st = self._m.get(circle)
         if st is None:
             return False
         if st.get("status") != "open":
             return refuse("WERK_CHECKOUT_ON_CLOSED",
-                          "check-out-score op een niet-open overleg geweigerd",
+                          "check-out op een niet-open overleg geweigerd",
                           circle=circle, pid=pid, status=st.get("status"))
-        try:
-            s = max(0, min(10, int(score)))
-        except (TypeError, ValueError):
+        if isinstance(ok, str):
+            if ok not in ("0", "1"):
+                return False
+            ok = ok == "1"
+        elif not isinstance(ok, bool):
             return False
-        st.setdefault("checkout", {})[pid] = s
+        st.setdefault("checkout", {})[pid] = ok
         self._save()
         return True
 
@@ -313,7 +323,12 @@ class WerkoverlegStore:
                 out += [u.get("type") for u in rijen]
             elif i.get("outcome"):                       # archief van vóór de multi-uitkomst
                 out.append(i["outcome"].get("type"))
-        scores = list(st.get("checkout", {}).values())
+        antwoorden = list(st.get("checkout", {}).values())
+        # `tevredenheid` telt ALLEEN nog de oude cijfers. Een overleg met ja/nee-check-outs geeft
+        # hier None, en dan schrijft `record_werk_daily` er geen dagwaarde meer weg: de reeks
+        # `werk_tevredenheid_day` houdt op met vullen in plaats van dat er stilletjes een ander
+        # getal in dezelfde reeks belandt. De historie blijft leesbaar.
+        scores = [v for v in antwoorden if isinstance(v, (int, float)) and not isinstance(v, bool)]
         pres = st.get("presence", {})
         return {
             "behandeld": len(done),
@@ -323,6 +338,8 @@ class WerkoverlegStore:
             "roloverleg": out.count("governance") + out.count("roloverleg"),
             "nevermind": out.count("nevermind"),
             "afwezig": [p for p, v in pres.items() if v is False],
+            "checkout_ja": sum(1 for v in antwoorden if v is True),
+            "checkout_nee": sum(1 for v in antwoorden if v is False),
             "tevredenheid": round(sum(scores) / len(scores), 1) if scores else None,
             "duur_min": self.duration_min(circle),
         }

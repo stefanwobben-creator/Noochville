@@ -21,7 +21,7 @@ _CHECKOUTS = (
     "from nooch_village.werkoverleg import WerkoverlegStore\n"
     "W = WerkoverlegStore(sys.argv[1]); c = sys.argv[2]; tag = sys.argv[3]; n = int(sys.argv[4])\n"
     "for i in range(n):\n"
-    "    W.set_checkout(c, 'p_%s%d' % (tag, i), 8)\n"
+    "    W.set_checkout(c, 'p_%s%d' % (tag, i), True)\n"
 )
 _CLOSE = (
     "import sys\n"
@@ -62,7 +62,7 @@ def test_set_checkout_op_closed_geweigerd(tmp_path, caplog):
     path = str(tmp_path / "werkoverleg.json")
     W = WerkoverlegStore(path); W.open(C); W.close(C)   # gesloten, met snapshot; checkout leeg
     with caplog.at_level("WARNING", logger="nooch.refuse"):
-        ok = W.set_checkout(C, "p1", 9)
+        ok = W.set_checkout(C, "p1", True)
     assert ok is False
     st = WerkoverlegStore(path).get(C)                  # verse read van schijf
     assert st.get("checkout", {}) == {}                 # geen stille mutatie
@@ -73,5 +73,8 @@ def test_set_checkout_op_open_lukt(tmp_path):
     """Sanity: op een open overleg lukt de score wél (True) en landt hij."""
     path = str(tmp_path / "werkoverleg.json")
     W = WerkoverlegStore(path); W.open(C)
-    assert W.set_checkout(C, "p1", 7) is True
-    assert WerkoverlegStore(path).get(C)["checkout"]["p1"] == 7
+    assert W.set_checkout(C, "p1", True) is True
+    # een cijfer is geen antwoord meer: de check-out is ja/nee, en 7 zou als nieuwe
+    # waarde binnenkomen in een veld dat nu iets anders betekent.
+    assert W.set_checkout(C, "p2", 7) is False
+    assert WerkoverlegStore(path).get(C)["checkout"]["p1"] is True

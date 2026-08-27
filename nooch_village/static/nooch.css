@@ -701,11 +701,6 @@ button.cl-filter{border:none;background:none;font:inherit;cursor:pointer}
 .wo-ocd>summary:hover{background:var(--cream-2)}
 .wo-ocd[open]>summary{border-bottom:1px solid var(--border)}
 .wo-ocd .wo-oc{padding:.5rem .6rem}
-.wo-scale{display:inline-flex;flex-wrap:wrap;gap:.2rem}
-.wo-sc{width:1.7rem;height:1.7rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);cursor:pointer;font-size:.78rem;color:var(--gray)}
-.wo-sc.on{background:var(--green);color:#fff;border-color:var(--green)}
-.wo-sc.prev{background:var(--green-tint);color:var(--green-dark);border-color:var(--green-tint)}
-.wo-avg{font-weight:700;color:var(--green-dark)}
 .wo-oc{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
 .wo-oc input,.wo-oc textarea,.wo-oc select{flex:1 1 12rem;min-width:0;border:1px solid var(--border);border-radius:var(--radius);padding:.3rem .45rem}
 .wo-oc button{flex:0 0 auto}
