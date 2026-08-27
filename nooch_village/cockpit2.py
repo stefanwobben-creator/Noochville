@@ -2831,21 +2831,39 @@ def _act_vangst_uitkomst(c):
         if not tekst:
             return nxt, "✗ zeg wat de uitkomst is"
 
-        from nooch_village.views.vangst import VOLGENDE, WACHTEND
-        persoon = (g("persoon") or "").strip()       # leeg = elk cirkellid, een geldige keuze
-        if persoon and st.people.get(persoon) is None:
+        from nooch_village.views.vangst import (ELK_LID_WAARDE, INDIVIDUELE_ACTIE, VOLGENDE,
+                                                 WACHTEND)
+        persoon = (g("persoon") or "").strip()
+        if persoon == ELK_LID_WAARDE:
+            persoon = ""                             # expliciet "elk cirkellid"
+        elif persoon and st.people.get(persoon) is None:
             return nxt, "✗ die persoon bestaat niet"
         staat = g("staat") if g("staat") in (VOLGENDE, WACHTEND) else VOLGENDE
+        prive = g("prive") == "1"
         rol, reden = rol_uit_naam(st, g("rol"))
-        if g("rol").strip() and not rol:
+        ruw_rol = g("rol").strip()
+        individueel = (not ruw_rol) or ruw_rol.lower() == INDIVIDUELE_ACTIE.lower()
+        if ruw_rol and not rol and not individueel:
             return nxt, f"✗ {reden}"             # fail-closed: liever niets dan het verkeerde bureau
-        if otype in ("project", "actie", "info") and not rol:
-            return nxt, "✗ kies een rol — een uitkomst zonder bureau blijft liggen"
+        # ROL IS HIER NIET VERPLICHT — zie `views.vangst.INDIVIDUELE_ACTIE`. Werk uit een overleg mag
+        # aan een PERSOON hangen zonder mandaat: "Lotte belt de leverancier even" hoort bij Lotte.
+        # Dit geldt UITSLUITEND voor deze live-verwerking. De AI-spanningen die getypeerd in de inbox
+        # belanden lopen via `_act_vangst_verwerk` hieronder en houden hun rol-borging; verruim die
+        # kant niet "voor de consistentie".
+        if individueel and not persoon:
+            return nxt, ("✗ kies een persoon — zonder rol én zonder persoon hangt het werk nergens")
         if rol:
             orec = st.records.get(rol)
             if orec is not None and org.is_circle(orec):
                 return nxt, "✗ een cirkel heeft geen handen — kies een rol"
             _deny = _role_gate(rol, username, st)
+            if _deny:
+                return nxt, _deny
+        else:
+            # Individuele actie: het bestaande Individueel-Initiatief-eigenaarschap van deze cirkel
+            # (`ii:<circle>`), niet een verzonnen pseudo-rol. AUTHZ: circle-member — je legt werk bij
+            # een persoon, niet in het mandaat van een rol.
+            _deny = _member_gate(circle, username, st)
             if _deny:
                 return nxt, _deny
 
@@ -2854,23 +2872,31 @@ def _act_vangst_uitkomst(c):
         prov = f"↳ uit het werkoverleg van {circle}"
         ref = ""
 
+        eigenaar = rol or f"{_II_PREFIX}{circle}"
+
         if otype == "project":
-            _outcome_project(st, rol, tekst, provenance=prov, actor_id=aid)
+            pid = _outcome_project(st, eigenaar, tekst, provenance=prov, actor_id=aid)
+            if prive:
+                st.projects.edit(pid, private=True, allow_done=True)
             ref = "project aangemaakt"
         elif otype == "actie":
             # De actie hangt aan een lopend project van díe rol; heeft die er geen, dan wordt het
             # een project — anders verdwijnt de actie in het niets.
             doel = next((p for p in st.projects.all()
-                         if p.get("owner") == rol and not p.get("archived")
+                         if p.get("owner") == eigenaar and not p.get("archived")
                          and p.get("status") in ("queued", "running", "blocked")), None)
             if doel is None:
-                _outcome_project(st, rol, tekst, provenance=prov, actor_id=aid)
+                pid = _outcome_project(st, eigenaar, tekst, provenance=prov, actor_id=aid)
+                if prive:
+                    st.projects.edit(pid, private=True, allow_done=True)
                 ref = "geen lopend project — als project neergezet"
             else:
                 _outcome_action(st, doel["id"], tekst)
                 ref = f"actie op {str(doel.get('scope') or doel['id'])[:40]}"
         elif otype == "info":
-            st.notif.add("role", rol, "", by=(it.get("by_id") or aid or "werkoverleg"),
+            # Zonder rol gaat het bericht naar de PERSOON; met rol naar de rol.
+            doel_type, doel_id = ("role", rol) if rol else ("person", persoon)
+            st.notif.add(doel_type, doel_id, "", by=(it.get("by_id") or aid or "werkoverleg"),
                          snippet=tekst[:160])
             ref = "bericht verstuurd"
         elif otype == "governance":
@@ -2898,9 +2924,11 @@ def _act_vangst_uitkomst(c):
 
         st.werk.punt_uitkomst_add(circle, iid, {"type": otype, "rol": rol, "tekst": tekst,
                                                 "ref": ref, "door": aid, "persoon": persoon,
-                                                "staat": staat, "kroniek": kroniek_id})
-        naam = _name(st.records.get(rol)) if rol and st.records.get(rol) else rol
-        return nxt, f"✓ {otype}{(' → ' + naam) if naam else ''}"
+                                                "staat": staat, "kroniek": kroniek_id,
+                                                "prive": prive})
+        naam = (_name(st.records.get(rol)) if rol and st.records.get(rol)
+                else f"{INDIVIDUELE_ACTIE}: {_person_name(st, persoon)}")
+        return nxt, f"✓ {otype} → {naam}"
 
 
 def _act_vangst_verwerk(c):
@@ -2927,6 +2955,9 @@ def _act_vangst_verwerk(c):
             _deny = _role_gate(rol, username, st)
             if _deny:
                 return nxt, _deny
+            # HIER BLIJFT ROL WÉL VERPLICHT (zie hierboven, `_act_vangst_uitkomst`). Dit is de
+            # AI-route: de spanning wordt getypeerd en beoordeeld, en dat oordeel rust op de
+            # accountabilities van een rol. Zonder rol is er niets om aan te toetsen.
             # DE BESTAANDE PIJPLIJN, letterlijk: `add` zonder `type` betekent dat de haak van
             # `spanning_ontstaat` de bevinding schrijft en de typering doet. Hier wordt dus niets
             # getypeerd; hier wordt alleen doorgegeven wie het inbracht, zodat het bij het verwerken

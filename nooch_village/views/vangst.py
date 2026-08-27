@@ -78,8 +78,8 @@ def rol_uit_naam(st, naam: str) -> tuple:
     op. Werk bij de verkeerde rol neerleggen kost een hop en levert een vals gat-record op — een
     zichtbare 'niet gevonden' is eerlijker dan een gok."""
     gezocht = " ".join((naam or "").split()).lower()
-    if not gezocht:
-        return "", ""
+    if not gezocht or gezocht == INDIVIDUELE_ACTIE.lower():
+        return "", ""                          # geen rol — en dat mag, zie INDIVIDUELE_ACTIE
     namen = rol_namen(st)
     exact = [rid for rid, n in namen.items() if n.lower() == gezocht]
     if len(exact) == 1:
@@ -97,7 +97,9 @@ def rol_uit_naam(st, naam: str) -> tuple:
 
 
 def _rol_datalist(st, dl_id: str) -> str:
-    opts = "".join(f"<option value='{_e(n)}'>" for n in sorted(rol_namen(st).values()))
+    """De rollen, met "Individuele actie" bovenaan: werk dat aan een persoon hangt en aan geen rol."""
+    opts = f"<option value='{_e(INDIVIDUELE_ACTIE)}'>"
+    opts += "".join(f"<option value='{_e(n)}'>" for n in sorted(rol_namen(st).values()))
     return f"<datalist id='{_e(dl_id)}'>{opts}</datalist>"
 
 
@@ -162,6 +164,17 @@ VOLGENDE, WACHTEND = "volgende", "wachtend"
 
 # Wie de uitkomst uitvoert. Leeg = "elk cirkellid": de rol is toegewezen, de persoon nog niet.
 ELK_LID = ""
+ELK_LID_WAARDE = "*"      # expliciete keuze "elk cirkellid" — te onderscheiden van "nog niets gekozen"
+
+# ROL is in de LIVE VERWERKING niet verplicht. "Individuele actie" is de eerste keuze: werk dat aan
+# een PERSOON hangt en aan geen enkele rol. Dat is geen slordigheid maar de werkelijkheid van een
+# overleg — "Lotte belt de leverancier even" hoort bij Lotte, niet bij een mandaat.
+#
+# LET OP, DIT GELDT ALLEEN HIER. De AI-spanningen die getypeerd in de inbox belanden
+# (`vangst_verwerk` → `spanning_ontstaat` → `zelf_verwerking`) houden hun rol-borging: daar is de
+# rol de grond waarop een oordeel rust, en zonder rol is er geen accountability om aan te toetsen.
+# Verruim die kant dus niet "voor de consistentie" — het zijn twee verschillende dingen.
+INDIVIDUELE_ACTIE = "Individuele actie"
 
 
 def _personen(st, circle: str) -> list:
@@ -170,10 +183,14 @@ def _personen(st, circle: str) -> list:
 
 
 def _persoon_opties(st, circle: str, gekozen: str = "") -> str:
-    """De persoon-keuze. "Elk cirkellid" staat vooraan en is de default: de rol is toegewezen, wie
-    het doet mag later blijken. Een verplichte persoon zou het overleg ophouden met een vraag die
-    niet altijd te beantwoorden is."""
-    uit = (f"<option value=''{' selected' if not gekozen else ''}>elk cirkellid</option>")
+    """De persoon-keuze, met bovenaan een LEGE "— Kies persoon —".
+
+    Die lege eerste optie is er zodat "elk cirkellid" een echte keuze is en niet iets waar je in
+    rolt omdat het toevallig bovenaan stond. Bij een individuele actie moet je wél iemand kiezen —
+    zonder rol én zonder persoon hangt het werk nergens."""
+    leeg = " selected" if not gekozen else ""
+    uit = f"<option value=''{leeg}>— Kies persoon —</option>"
+    uit += f"<option value='{ELK_LID_WAARDE}'{' selected' if gekozen == ELK_LID_WAARDE else ''}>Elk cirkellid</option>"
     for p in _personen(st, circle):
         sel = " selected" if p.id == gekozen else ""
         uit += f"<option value='{_e(p.id)}'{sel}>{_e(p.name)}</option>"
@@ -181,21 +198,31 @@ def _persoon_opties(st, circle: str, gekozen: str = "") -> str:
 
 
 def _persoon_naam(st, pid: str) -> str:
-    if not pid:
+    if not pid or pid == ELK_LID_WAARDE:
         return "elk cirkellid"
     p = st.people.get(pid)
     return getattr(p, "name", "") or pid
 
 
 def _leeftijd(ts) -> str:
-    """Hoe oud is deze uitkomst? GlassFrog toont dat, en met reden: een actie van drie weken oud
-    die er nog staat zegt iets anders dan een van vanochtend."""
+    """Hoe oud is dit? Fijn aan de korte kant, grof aan de lange.
+
+    In een overleg is "42 seconden oud" informatie — je ziet dat iets net is vastgelegd. "Vandaag"
+    zegt daar niets; dat is alles wat je die ochtend deed. Andersom: bij drie weken maakt het uur
+    niet meer uit."""
     if not ts:
         return ""
-    dagen = int((time.time() - float(ts)) // 86400)
-    if dagen <= 0:
-        return "vandaag"
-    return f"{dagen} dag{'en' if dagen != 1 else ''} oud"
+    sec = int(time.time() - float(ts))
+    if sec < 60:
+        return f"{max(sec, 0)} seconde{'n' if sec != 1 else ''} oud"
+    if sec < 3600:
+        m = sec // 60
+        return f"{m} minu{'ut' if m == 1 else 'ten'} oud"
+    if sec < 86400:
+        u = sec // 3600
+        return f"{u} u{'ur' if u == 1 else 'ur'} oud"
+    d = sec // 86400
+    return f"{d} dag{'en' if d != 1 else ''} oud"
 
 
 def _uitkomst_rij(st, circle: str, it: dict, u: dict, csrf: str, nxt: str) -> str:
@@ -229,7 +256,8 @@ def _uitkomst_rij(st, circle: str, it: dict, u: dict, csrf: str, nxt: str) -> st
                   f"{_hid(csrf, circle, _open_nxt(nxt, it['id']), iid=it['id'], uid=uid)}"
                   f"<button class='flink' type='submit' name='action' value='vangst_uitkomst_weg' "
                   f"title='verwijderen'>🗑</button></form>")
-    return (f"<tr><td>{_e(soort)}</td><td>{_e(u.get('tekst') or '')}</td>"
+    slot = " 🔒" if u.get("prive") else ""
+    return (f"<tr><td>{_e(soort)}{slot}</td><td>{_e(u.get('tekst') or '')}</td>"
             f"<td>{_e(naar)}</td><td>{_e(wie)}</td><td>{_e(staat)}</td>"
             f"<td>{bron}</td><td>{acties}</td></tr>")
 
@@ -296,18 +324,26 @@ def _uitkomst_formulier(st, circle: str, it: dict, csrf: str, nxt: str) -> str:
             f"<input id='vut-{_e(iid)}' name='tekst' value='{_e(it.get('title') or '')}'></div>")
     rij2 = (f"<div><label class='att-lbl' for='vw-{_e(iid)}'>Rol</label>"
             f"<input id='vw-{_e(iid)}' name='rol' list='{_e(dl)}' autocomplete='off' "
-            f"placeholder='typ een rolnaam…'>{_rol_datalist(st, dl)}</div>"
+            f"placeholder='{_e(INDIVIDUELE_ACTIE)} — of typ een rolnaam'>"
+            f"{_rol_datalist(st, dl)}</div>"
             f"<div><label class='att-lbl' for='vp-{_e(iid)}'>Persoon</label>"
             f"<select id='vp-{_e(iid)}' name='persoon'>{_persoon_opties(st, circle)}</select></div>")
     # Volgende / In afwachting als twee radio's naast elkaar, zoals in de referentie — niet als
     # dropdown. Twee opties die je in één blik ziet zijn geen keuzelijst.
+    # Twee regels, zoals de referentie: eerst de staat, dan zichtbaarheid + Opslaan. Alles op één
+    # rij proppen laat "In afwachting" over twee regels breken zodra het zichtbaarheids-label
+    # ernaast staat.
     staat = (f"<div class='qadd-row'>"
              f"<label class='kc-radio' for='vst1-{_e(iid)}'>"
              f"<input type='radio' id='vst1-{_e(iid)}' name='staat' value='{VOLGENDE}' checked>"
              f"Volgende</label>"
              f"<label class='kc-radio' for='vst2-{_e(iid)}'>"
              f"<input type='radio' id='vst2-{_e(iid)}' name='staat' value='{WACHTEND}'>"
-             f"In afwachting</label>"
+             f"In afwachting</label></div>"
+             f"<div class='qadd-row'>"
+             f"<label class='kc-radio' for='vpr-{_e(iid)}'>"
+             f"<input type='checkbox' id='vpr-{_e(iid)}' name='prive' value='1'>"
+             f"Alleen zichtbaar voor de cirkel</label>"
              f"<button class='btn ok sm' type='submit' name='action' value='vangst_uitkomst'>"
              f"Opslaan</button></div>")
     return (f"<form method='post' action='/action' class='wo-oc'>"

@@ -284,13 +284,44 @@ def test_een_dubbelzinnige_rolnaam_levert_geen_gok_op(tmp_path):
         p.get("scope") == "x" for p in cockpit2._Stores(dd).projects.all())
 
 
-def test_een_uitkomst_zonder_rol_wordt_geweigerd(tmp_path):
+def test_zonder_rol_en_zonder_persoon_hangt_het_werk_nergens(tmp_path):
+    """Rol is niet meer verplicht in de LIVE verwerking — maar één van beide moet er zijn."""
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     it = st.werk.backlog_add(CIRCLE, "x", by_id="p1")
     _nxt, msg = _post(dd, "vangst_uitkomst", circle=CIRCLE, iid=it["id"], otype="project",
-                      rol="", tekst="x", next="/vangst")
-    assert "kies een rol" in msg
+                      rol="", persoon="", tekst="x", next="/vangst")
+    assert "kies een persoon" in msg
+
+
+def test_een_individuele_actie_mag_zonder_rol(tmp_path):
+    """"Lotte belt de leverancier even" hoort bij Lotte, niet bij een mandaat. Het werk landt op
+    het bestaande Individueel Initiatief van de cirkel, niet op een verzonnen pseudo-rol."""
+    from nooch_village.views.vangst import INDIVIDUELE_ACTIE
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    p = st.people.all()[0]
+    it = st.werk.backlog_add(CIRCLE, "x", by_id="p1")
+    _nxt, msg = _post(dd, "vangst_uitkomst", circle=CIRCLE, iid=it["id"], otype="project",
+                      rol=INDIVIDUELE_ACTIE, persoon=p.id, tekst="Leverancier bellen",
+                      next="/vangst")
+    assert msg.startswith("✓"), msg
+    st2 = cockpit2._Stores(dd)
+    u = st2.werk.punt_get(CIRCLE, it["id"])["uitkomsten"][0]
+    assert u["rol"] == "" and u["persoon"] == p.id
+    pr = [x for x in st2.projects.all() if "Leverancier bellen" in str(x.get("scope"))]
+    assert pr and pr[0]["owner"] == f"ii:{CIRCLE}"
+
+
+def test_de_ai_route_houdt_zijn_rol_borging(tmp_path):
+    """Het onderscheid dat niet mag doorlekken: de getypeerde AI-spanning eist nog steeds een rol,
+    want dat oordeel rust op de accountabilities van die rol."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    it = st.werk.backlog_add(CIRCLE, "x", by_id="p1")
+    _nxt, msg = _post(dd, "vangst_verwerk", circle=CIRCLE, iid=it["id"], otype="spanning",
+                      rol="", next="/vangst")
+    assert "pick a role" in msg
 
 
 def test_afgevinkt_blijft_zichtbaar_en_doorgestreept(tmp_path):
@@ -479,7 +510,9 @@ def test_het_uitkomst_formulier_is_waar_de_secretaris_werkt(tmp_path):
     html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
     for veld in (">Wat</label>", ">Rol</label>", ">Persoon</label>"):
         assert veld in html, veld
-    assert "elk cirkellid" in html
+    assert "— Kies persoon —" in html and "Elk cirkellid" in html
+    assert "Individuele actie" in html          # eerste rol-optie, rol is niet verplicht
+    assert "Alleen zichtbaar voor de cirkel" in html
     # Volgende / In afwachting als radio's naast elkaar, niet als dropdown.
     assert html.count("type='radio' id='vst") == 2
     assert "Volgende" in html and "In afwachting" in html
@@ -513,3 +546,44 @@ def test_de_herkomst_staat_er_ook_zonder_uitkomsten(tmp_path):
     html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
     assert "gevoeld vanuit" in html
     assert "Er zijn (nog) geen uitkomsten vastgelegd" in html
+
+
+def test_de_leeftijd_is_fijn_aan_de_korte_kant(tmp_path):
+    """"42 seconden oud" is informatie in een overleg; "vandaag" is alles wat je die ochtend deed."""
+    import time as _t
+    from nooch_village.views.vangst import _leeftijd
+    nu = _t.time()
+    assert _leeftijd(nu - 42) == "42 seconden oud"
+    assert _leeftijd(nu - 1) == "1 seconde oud"
+    assert _leeftijd(nu - 300) == "5 minuten oud"
+    assert _leeftijd(nu - 7200) == "2 uur oud"
+    assert _leeftijd(nu - 3 * 86400) == "3 dagen oud"
+    assert _leeftijd(0) == ""
+
+
+def test_alleen_zichtbaar_voor_de_cirkel_maakt_het_project_prive(tmp_path):
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    naam = cockpit2._name(st.records.get(ROL))
+    it = st.werk.backlog_add(CIRCLE, "x", by_id="p1")
+    _post(dd, "vangst_uitkomst", circle=CIRCLE, iid=it["id"], otype="project", rol=naam,
+          tekst="Stil project", prive="1", next="/vangst")
+    st2 = cockpit2._Stores(dd)
+    pr = [x for x in st2.projects.all() if "Stil project" in str(x.get("scope"))]
+    assert pr and pr[0].get("private") is True
+    u = st2.werk.punt_get(CIRCLE, it["id"])["uitkomsten"][0]
+    assert u["prive"] is True
+    assert "🔒" in render_vangst(st2, CIRCLE, csrf_token="t", open_iid=it["id"])
+
+
+def test_elk_cirkellid_is_een_echte_keuze(tmp_path):
+    """De lege '— Kies persoon —' staat bovenaan zodat je niet in 'elk cirkellid' rolt."""
+    from nooch_village.views.vangst import ELK_LID_WAARDE
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    naam = cockpit2._name(st.records.get(ROL))
+    it = st.werk.backlog_add(CIRCLE, "x", by_id="p1")
+    _post(dd, "vangst_uitkomst", circle=CIRCLE, iid=it["id"], otype="project", rol=naam,
+          persoon=ELK_LID_WAARDE, tekst="x", next="/vangst")
+    u = cockpit2._Stores(dd).werk.punt_get(CIRCLE, it["id"])["uitkomsten"][0]
+    assert u["persoon"] == ""                    # opgeslagen als 'nog niemand', bewust gekozen
