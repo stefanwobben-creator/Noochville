@@ -5694,9 +5694,12 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(render_noochie(st, effective_csrf, (qs.get("ctx") or [""])[0]))
                 return
             if path == "/vangst":
-                # Quick capture: vangen scheiden van verwerken. Geen modal (js-modal zou het
+                # Vangen scheiden van verwerken. Geen modal (js-modal zou het
                 # altijd-zichtbare veld in een overlay stoppen, en dan is de één-toets-flow weg).
-                _c = (qs.get("circle") or [""])[0] or _home_node(st.records)
+                # `.all()`, niet de store zelf: `org.roots` itereert over records. Zonder dit
+                # gaf /vangst zonder ?circle= een 502 — onzichtbaar voor elke test die wél een
+                # cirkel meegeeft, en precies de URL die je intikt als je het scherm zoekt.
+                _c = (qs.get("circle") or [""])[0] or _home_node(st.records.all())
                 _open = (qs.get("open") or [""])[0]
                 if (qs.get("frag") or [""])[0]:
                     # Alleen de lijst — het veld blijft staan waar het staat, met de cursor erin.

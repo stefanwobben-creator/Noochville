@@ -312,9 +312,10 @@ def render_vangst(st, circle: str, csrf_token: str = "", msg: str = "",
     crec = st.records.get(circle)
     if crec is None or not org.is_circle(crec):
         main = ("<div class='c2-main'><div class='c2-bar'><a href='/'>← home</a></div>"
-                "<h1>Quick capture</h1><p class='muted'>Capture belongs to a circle. Open a circle "
-                "and use its Quick capture button.</p></div>")
-        return _page("Quick capture", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
+                "<h1>Vangen</h1><p class='muted'>Vangen hoort bij een cirkel. Open het "
+                "werkoverleg van een cirkel, of gebruik het +-je in je inbox voor een los "
+                "punt.</p></div>")
+        return _page("Vangen", f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>")
 
     punten = st.werk.punten(circle)
     open_n = sum(1 for p in punten if p.get("status") != "done")
@@ -330,5 +331,5 @@ def render_vangst(st, circle: str, csrf_token: str = "", msg: str = "",
     main = (f"<div class='c2-main'>{kop}{_banner(msg)}"
             f"<div class='c2-sec'>{vang}</div>"
             f"<div class='rdr-tool' id='vang-lijst'>{rijen}</div></div>")
-    return _page("Quick capture",
+    return _page("Vangen",
                  f"{_DS_LINK}{_nav()}<div class='c2-wrap'>{main}</div>{_VANG_JS if vang else ''}")

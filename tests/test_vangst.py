@@ -183,7 +183,7 @@ def test_punt_van_de_agenda_blijft_zichtbaar_in_de_vangst(tmp_path):
 def test_geen_cirkel_geen_vangst(tmp_path):
     dd = _dd(tmp_path)
     html = render_vangst(cockpit2._Stores(dd), ROL, csrf_token="t")
-    assert "Capture belongs to a circle" in html
+    assert "Vangen hoort bij een cirkel" in html
 
 
 def test_de_flow_stuurt_de_actienaam_mee(tmp_path):
@@ -367,3 +367,65 @@ def test_het_verwerkblok_blijft_open_na_een_uitkomst(tmp_path):
     html2 = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
     assert html2.count("<details class='wo-ocd box-details' open>") == 1
     assert ander["id"] != it["id"]
+
+
+# ── de twee vang-ingangen naast elkaar ──────────────────────────────────────
+
+def test_de_header_biedt_geen_tweede_vang_ingang_meer(tmp_path):
+    """Twee ingangen naar dezelfde functie maken geen van beide de vanzelfsprekende. De ROUTE
+    blijft: de agenda-stap leunt erop en directe links mogen niet breken."""
+    from nooch_village.views.overview import render_node
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    html = render_node(st, CIRCLE, "overview", csrf_token="t", username="guest")
+    assert "Governance meeting" in html and "Tactical meeting" in html
+    assert "Quick capture" not in html
+    assert "/vangst" not in html
+    # …maar de route zelf leeft nog.
+    assert "Vangen" in render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t")
+
+
+def test_de_inbox_vangt_een_los_punt_in_een_regel(tmp_path):
+    """De vervangende ingang moet het minimum kunnen: één regel, zonder uitkomst-keuze."""
+    dd = _dd(tmp_path)
+    _nxt, msg = _post(dd, "notif_add", text="de zolen komen te laat", role="", next="/inbox")
+    assert msg.startswith("✓")
+    items = cockpit2._Stores(dd).notif.all()
+    assert len(items) == 1
+    assert items[0]["snippet"] == "de zolen komen te laat"
+    assert items[0]["at"]                                   # wanneer: ja
+    assert not items[0].get("type")                         # geen uitkomst-keuze bij het noteren
+
+
+def test_de_inbox_vang_legt_de_opwerper_NIET_vast(tmp_path):
+    """Het verschil dat gemeld moet worden: /vangst bewaart wie het punt inbracht (naam én id),
+    de inbox-vangst schrijft de letterlijke tekst 'zelf'. Voor een persoonlijke inbox is dat
+    genoeg — voor een overleg met vijf mensen aan tafel niet."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    _post(dd, "notif_add", text="een punt", role="", next="/inbox")
+    assert cockpit2._Stores(dd).notif.all()[0]["by"] == "zelf"
+
+    st.werk.backlog_add(CIRCLE, "een punt", by="Stefan Wobben", by_id="p-stefan")
+    punt = cockpit2._Stores(dd).werk.punten(CIRCLE)[0]
+    assert punt["by"] == "Stefan Wobben" and punt["by_id"] == "p-stefan"
+
+
+def test_de_inbox_vang_kent_geen_gedeelde_lijst_per_cirkel(tmp_path):
+    """Een inbox-punt landt in je EIGEN inbox; het komt niet op de agenda van het eerstvolgende
+    werkoverleg en niemand anders ziet het. Dat is het tweede verschil."""
+    dd = _dd(tmp_path)
+    _post(dd, "notif_add", text="een los punt", role="", next="/inbox")
+    assert cockpit2._Stores(dd).werk.punten(CIRCLE) == []
+
+
+def test_vangst_zonder_cirkel_valt_terug_op_de_thuiscirkel(tmp_path):
+    """`/vangst` zonder `?circle=` gaf een 502: de route gaf de Records-STORE door aan `org.roots`,
+    dat over records itereert. Onzichtbaar voor elke test die wél een cirkel meegeeft — en precies
+    de URL die je intikt als je het scherm zoekt."""
+    from nooch_village.cockpit2 import _home_node
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    thuis = _home_node(st.records.all())               # zo roept de route hem aan
+    assert thuis and st.records.get(thuis) is not None
+    assert "Vangen" in render_vangst(st, thuis, csrf_token="t")
