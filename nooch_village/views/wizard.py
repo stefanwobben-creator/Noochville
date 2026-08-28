@@ -7,6 +7,8 @@ verwacht dat de AI meedenkt, precies zoals spelvraag. Fail-soft overal.
 """
 from __future__ import annotations
 
+import json
+
 from nooch_village import org
 from nooch_village.cockpit2_util import _DS_LINK
 from nooch_village.web_base import _e, _page
@@ -41,10 +43,25 @@ def _trekker_options(st) -> str:
     return "".join(opts)
 
 
-def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = False) -> str:
+def _js(tekst: str) -> str:
+    """Een string veilig in een JS-literal zetten. `_e` is voor HTML-attributen; hier staat de
+    waarde IN een script, en daar is een aanhalingsteken of een regeleinde het probleem."""
+    return json.dumps(tekst or "")[1:-1]
+
+
+def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = False,
+                  ruw: str = "", uitkomst: str = "") -> str:
     """De geleide project-wizard. `role` voorselecteert een rol (dan start de flow bij stap 1).
     `fragment=True` levert alleen de wizard-body (voor de modal-overlay); het inline <script> is
     gemarkeerd met data-modal-run zodat de overlay het opnieuw uitvoert na innerHTML-injectie.
+
+    `ruw` en `uitkomst` zijn VOORVULLING uit de plek waar je vandaan komt: het bord geeft de titel
+    en de done-when mee, een inbox-spanning geeft zijn tekst als zaad. Wat de mens al heeft
+    ingetypt hoort hij niet over te tikken — dat is de reden dat die kale formulieren bestonden.
+
+    De startstap volgt daaruit: is er al een uitkomst, dan begin je bij het aanscherpen; is er
+    alleen een zaadtekst, bij het idee; is er niets, bij de rolkeuze. Zonder rol altijd bij stap 0,
+    want de wizard heeft een eigenaar nodig.
 
     De wz-CSS staat in static/nooch.css, dus beide paden dragen `_DS_LINK` — als volle pagina
     (`_page` linkt de component-CSS niet zelf) én als fragment (de overlay kan in een host
@@ -52,9 +69,21 @@ def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = 
     role_opts = _role_options(st)
     trek_opts = _trekker_options(st)
     pre = role if role and st.records.get(role) is not None and not org.is_circle(st.records.get(role)) else ""
+    ruw, uitkomst = (ruw or "").strip(), (uitkomst or "").strip()
+    if not pre:
+        stap = 0
+    elif uitkomst:
+        stap = 2
+    elif ruw:
+        stap = 1
+    else:
+        stap = 1
     body = _WIZ_HTML.replace("__CSRF__", _e(csrf_token)) \
                     .replace("__ROLES__", role_opts) \
                     .replace("__TREK__", trek_opts) \
+                    .replace("__RUW__", _js(ruw)) \
+                    .replace("__UIT__", _js(uitkomst)) \
+                    .replace("__STAP__", str(stap)) \
                     .replace("__ROLE__", _e(pre))
     if fragment:
         return _DS_LINK + body
@@ -74,7 +103,7 @@ _WIZ_HTML = r"""
 (function(){
 const CSRF="__CSRF__";
 const ROLEOPTS="__ROLES__", TREKOPTS="__TREK__", PREROLE="__ROLE__";
-const S={step:0,ruw:"",uitkomst:"",titel:"",checklist:[],tijd:"",missie:"",business:"",role:"",trekker:""};
+const S={step:__STAP__,ruw:"__RUW__",uitkomst:"__UIT__",titel:"",checklist:[],tijd:"",missie:"",business:"",role:PREROLE,trekker:""};
 const NST=6, card=()=>document.getElementById('wzcard');
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function prog(){document.getElementById('wzfill').style.width=(S.step/(NST-1)*100)+'%';}
@@ -116,20 +145,57 @@ async function uitkomst(){
   <div class="wz-foot"><button class="wz-btn ghost" onclick="go(1)">Back</button>
   <button class="wz-btn" onclick="S.uitkomst=document.getElementById('uit').innerText.trim(); S.checklist=[]; go(3)">Looks good</button></div>`;}
 
+// DE CHECKLIST IS EEN BONUS, GEEN POORT.
+//
+// Deze stap wachtte zonder uitweg op de AI: geen overslaan-knop en geen timeout, dus een trage of
+// ontbrekende LLM hield de mens vast bij iets kernachtigs — een project op het bord zetten. Nu
+// route élke projectcreatie hierlangs, en dan is dat geen ongemak meer maar een gesloten deur.
+//
+// Drie dingen: de overslaan-knop staat er METEEN (ook tijdens het wachten), de call heeft een
+// timeout, en mislukken levert een lege lijst met een nette melding in plaats van een hangend
+// scherm. Je kunt altijd verder, met of zonder AI.
+const PLAN_TIMEOUT_MS=12000;
+async function planItems(){
+ const ctl=new AbortController();
+ const t=setTimeout(()=>ctl.abort(), PLAN_TIMEOUT_MS);
+ try{
+   const b=new URLSearchParams({csrf:CSRF,uitkomst:S.uitkomst,role:S.role});
+   const r=await fetch('/wizard/plan',{method:'POST',signal:ctl.signal,
+     headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b});
+   if(!r.ok)return {items:[],fout:'the assistant could not be reached'};
+   const j=await r.json();
+   return {items:(j&&j.items)||[],fout:(j&&j.error)?'the assistant could not help here':''};
+ }catch(e){
+   return {items:[],fout:(e&&e.name==='AbortError')?'the assistant took too long':'the assistant could not be reached'};
+ }finally{clearTimeout(t);}
+}
+function wachtkaart(){card().innerHTML=`<div class="wz-k">Step 3 · ✨ the steps (optional)</div>
+ <h2>Here's how to tackle it</h2>
+ <p class="wz-think">✨ makes a checklist and checks it against your skills…</p>
+ <div class="wz-grow"></div>
+ <div class="wz-foot"><button class="wz-btn ghost" onclick="go(2)">Back</button>
+ <button class="wz-btn ghost" onclick="S.checklist=[];go(4)">Skip this step</button></div>`;}
 async function checklist(){
- card().innerHTML=`<div class="wz-k">Step 3 · ✨ the steps</div><h2>Here's how to tackle it</h2><p class="wz-think">✨ makes a checklist and checks it against your skills…</p>`;
- if(!S.checklist.length){const r=await post('/wizard/plan',{uitkomst:S.uitkomst,role:S.role}); S.checklist=(r&&r.items)||[];}
+ wachtkaart();
+ if(!S.checklist.length){
+   const r=await planItems();
+   if(S.step!==3)return;                       // al doorgeklikt terwijl de AI nog bezig was
+   S.checklist=r.items; S.planfout=r.fout;
+ }
  draw();}
 function draw(){
  const rows=S.checklist.map((it,i)=>`<div class="wz-item"><div class="wz-itxt">${esc(it.tekst)}</div>
   ${it.ok?`<span class="wz-badge ok">● ${esc(it.skill)}</span>`:`<span class="wz-badge no">○ ${esc(it.reden||'no skill → human')}</span>`}
   <button class="wz-rm" onclick="S.checklist.splice(${i},1);draw()">✕</button></div>`).join('')||'<p class="wz-hint">No steps yet — add one below.</p>';
- card().innerHTML=`<div class="wz-k">Step 3 · ✨ the steps</div><h2>Here's how to tackle it</h2>
+ const melding=S.planfout?`<p class="wz-hint">✨ ${esc(S.planfout)} — add steps yourself, or skip this step. Your project will be created either way.</p>`:'';
+ card().innerHTML=`<div class="wz-k">Step 3 · ✨ the steps (optional)</div><h2>Here's how to tackle it</h2>
   <p class="wz-hint">Green = a skill can do this. Red = human task. Add or remove.</p>
+  ${melding}
   <div>${rows}</div>
   <div class="wz-add"><input id="ni" placeholder="add step…" onkeydown="if(event.key==='Enter')addI()"><button onclick="addI()">+ add</button></div>
   <div class="wz-grow"></div>
   <div class="wz-foot"><button class="wz-btn ghost" onclick="go(2)">Back</button>
+  <button class="wz-btn ghost" onclick="S.checklist=[];go(4)">Skip this step</button>
   <button class="wz-btn" onclick="go(4)">Next</button></div>`;}
 function addI(){const v=document.getElementById('ni').value.trim();if(!v)return;S.checklist.push({tekst:v,skill:null,ok:false,reden:'added manually'});draw();}
 
@@ -176,12 +242,14 @@ function klaar(){
 // dus op window staan. De rest blijft in deze IIFE (zo botst een tweede modal-open niet op const).
 window.S=S;window.go=go;window.draw=draw;window.addI=addI;window.impact=impact;window.maak=maak;window.restart=restart;
 if(PREROLE){
-  S.role=PREROLE;
   var _t=document.createElement('select');_t.innerHTML=ROLEOPTS;
   var _o=_t.querySelector("option[value='"+PREROLE+"']");
   document.getElementById('wzwho').textContent=_o?_o.textContent:'';
-  go(1);
-}else{render();}
+}
+// De startstap komt van de server (`__STAP__`): die weet of er een uitkomst is meegekomen en dus
+// of je bij het aanscherpen of bij het idee begint. Hier hem overschrijven zou de voorvulling
+// weer in de eerste stap laten belanden.
+render();
 })();
 </script>
 """

@@ -404,6 +404,15 @@ def _spanning_pane(st, n: dict) -> str:
             f"{volledig}{record}</div>")
 
 
+_WIZ_OPEN = (
+    "var f=this.closest('form');"
+    "var q=new URLSearchParams({role:(f.owner?f.owner.value:''),"
+    "ruw:(f.content?f.content.value:'')});"
+    "var u='/project/nieuw?'+q.toString();"
+    "if(window.__ovlOpen){window.__ovlOpen(u);}else{location.href=u;}"
+)
+
+
 def _outcome_form(otype: str, nid: str, csrf: str, prefill: str, role_opts: str, pj_opts: str,
                   nxt: str, uid: str) -> str:
     """Het compacte formulier achter een uitkomst-knop. Alleen relevante velden, met gekoppelde labels
@@ -433,9 +442,17 @@ def _outcome_form(otype: str, nid: str, csrf: str, prefill: str, role_opts: str,
     else:  # roloverleg — gebruikt de cirkel van de bron
         tgt = "<span class='muted'>Becomes a proposal on the governance meeting agenda (human route).</span>"
     inhoud = _field("Content (editable)", "content", kind="textarea", value=prefill, fid=f"ct-{uid}")
+    # EEN PROJECT MAAK JE IN DE WIZARD, ook vanuit een spanning. Dit formulier maakte er zelf een
+    # (content + rol) en was daarmee de derde manier om hetzelfde te doen. De velden blijven —
+    # de spanningstekst en de gekozen rol reizen mee als zaad — maar de knop opent de wizard.
+    # Zonder javascript navigeert hij gewoon; de wizard is ook een volle pagina.
+    if otype == "project":
+        knop = (f"<button class='btn sm' type='button' onclick=\"{_WIZ_OPEN}\">"
+                f"Open the project wizard</button>")
+    else:
+        knop = "<button class='btn sm' name='action' value='notif_outcome'>Record</button>"
     return (f"<form method='post' action='/action' class='wo-oc'>{hid}"
-            f"{inhoud}{tgt}"
-            f"<button class='btn sm' name='action' value='notif_outcome'>Record</button></form>")
+            f"{inhoud}{tgt}{knop}</form>")
 
 
 # ── De hoofdactie, één keer geschreven ───────────────────────────────────────

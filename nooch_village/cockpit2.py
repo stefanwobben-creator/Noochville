@@ -5497,8 +5497,12 @@ def make_handler(data_dir: str, csrf_token: str,
                 # De geleide project-wizard (founder 20 jul). Standalone = vol scherm (geen Noochie-rail);
                 # in de modal-overlay (?fragment=1) alleen de body, met een voorgeselecteerde rol.
                 fr = (qs.get("fragment") or [""])[0] == "1"
+                # `ruw`/`uitkomst` zijn de voorvulling uit de plek waar je vandaan komt (het bord
+                # of een inbox-spanning). Wat de mens al intypte hoort hij niet over te tikken.
                 self._send(render_wizard(st, effective_csrf,
-                                         role=(qs.get("role") or [""])[0], fragment=fr),
+                                         role=(qs.get("role") or [""])[0], fragment=fr,
+                                         ruw=(qs.get("ruw") or [""])[0],
+                                         uitkomst=(qs.get("uitkomst") or [""])[0]),
                            chrome=False)
                 return
 
