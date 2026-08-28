@@ -5556,7 +5556,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 self._send(render_wizard(st, effective_csrf,
                                          role=(qs.get("role") or [""])[0], fragment=fr,
                                          ruw=(qs.get("ruw") or [""])[0],
-                                         uitkomst=(qs.get("uitkomst") or [""])[0]),
+                                         uitkomst=(qs.get("uitkomst") or [""])[0],
+                                         trekker=(qs.get("trekker") or [""])[0]),
                            chrome=False)
                 return
 

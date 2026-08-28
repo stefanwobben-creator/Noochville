@@ -77,7 +77,7 @@ def _js(tekst: str) -> str:
 
 
 def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = False,
-                  ruw: str = "", uitkomst: str = "") -> str:
+                  ruw: str = "", uitkomst: str = "", trekker: str = "") -> str:
     """De geleide project-wizard. `role` voorselecteert een rol (dan start de flow bij stap 1).
     `fragment=True` levert alleen de wizard-body (voor de modal-overlay); het inline <script> is
     gemarkeerd met data-modal-run zodat de overlay het opnieuw uitvoert na innerHTML-injectie.
@@ -103,6 +103,7 @@ def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = 
                     .replace("__TREK__", trek_opts) \
                     .replace("__RUW__", _js(ruw)) \
                     .replace("__UIT__", _js(uitkomst)) \
+                    .replace("__TREKKER__", _js(trekker)) \
                     .replace("__ROLE__", _e(pre))
     if fragment:
         return _DS_LINK + body
@@ -127,7 +128,8 @@ const ROLEOPTS="__ROLES__", TREKOPTS="__TREK__", PREROLE="__ROLE__";
 // en optioneel. Twee tikken: typ je idee, klik op het bord.
 const S={ruw:"__RUW__",uitkomst:"__UIT__",titel:"",checklist:[],planfout:"",tijd:"",missie:"",
          business:"",waarom:"",geschat:false,suggesties:[],sugBezig:false,checkInit:false,
-         rollen:[],rollenInit:false,rollenfout:"",taken:[],role:PREROLE,trekker:"",bezig:false,klaar:null};
+         rollen:[],rollenInit:false,rollenfout:"",taken:[],role:PREROLE,
+         trekker:"__TREKKER__",bezig:false,klaar:null};
 const card=()=>document.getElementById('wzcard');
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 async function post(url,obj,ms){
