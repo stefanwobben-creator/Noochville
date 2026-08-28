@@ -10,6 +10,7 @@ samenvatting). De rest leeft in de bestaande stores. Opslag: data/werkoverleg.js
 from __future__ import annotations
 import json
 import os
+import copy
 import time
 
 from nooch_village.util import atomic_write_json, read_json, synchronized, refuse
@@ -17,6 +18,56 @@ from nooch_village.util import atomic_write_json, read_json, synchronized, refus
 STEPS = [("checkin", "Check-in"), ("checklist", "Checklist"), ("metrics", "Metrics"),
          ("projecten", "Projects"), ("agenda", "Agenda"), ("checkout", "Check-out"),
          ("sluiten", "Close")]
+
+
+def _snapshot(st: dict) -> dict:
+    """Het archiefrecord van één overleg: de tellingen ÉN de punten zelf.
+
+    Stonden hier alleen tellingen, dan is het verslag na afloop een rij getallen: je leest dat er
+    acht acties waren maar niet welke, voor wie, of waar ze vandaan kwamen. De punten reizen
+    daarom mee, inclusief hun uitkomsten met persoon en Kroniek-id — dat is de enige plek waar de
+    herkomst van een afspraak na afloop nog te vinden is."""
+    snap = WerkoverlegStore._tel(st)
+    snap["at"] = st.get("ended_at") or time.time()
+    # natuurlijke overleg-identiteit → event_id voor de dag-observatie, en de sleutel waarop een
+    # gered overleg aan zijn eigen archiefrecord te herkennen is.
+    snap["started_at"] = st.get("started_at")
+    snap["checkout"] = dict(st.get("checkout", {}))
+    snap["punten"] = copy.deepcopy(list(st.get("agenda") or []))
+    return snap
+
+
+def _red_punten(prev: dict, log: list) -> None:
+    """Zorg dat de punten van het vorige overleg in het archief staan vóór de agenda wordt vervangen.
+
+    Drie gevallen:
+      * het vorige overleg had geen punten           → niets te doen;
+      * er staat al een archiefrecord MET punten     → niets te doen (idempotent);
+      * er is geen record, of een record zonder punten (van vóór deze fix) → aanvullen of erbij.
+
+    Een aangevuld record draagt `hersteld_bij_openen`: het is niet bij het sluiten geschreven, en
+    dat hoort zichtbaar te zijn in plaats van te doen alsof het er altijd stond."""
+    punten = list(prev.get("agenda") or [])
+    if not punten:
+        return
+    start = prev.get("started_at")
+    eigen = next((e for e in reversed(log) if e.get("started_at") == start), None) if start else None
+    if eigen is not None and eigen.get("punten"):
+        return                                         # al veilig
+    if eigen is not None:
+        # Record van vóór deze fix: vul de punten aan én hertel, want de oude telling kan nul zijn.
+        eigen.update({k: v for k, v in WerkoverlegStore._tel(prev).items()})
+        eigen["punten"] = copy.deepcopy(punten)
+        eigen["hersteld_bij_openen"] = True
+        return
+    snap = _snapshot(prev)
+    snap["hersteld_bij_openen"] = True                 # nooit netjes afgesloten
+    log.append(snap)
+
+
+def _duur_min(st: dict) -> int:
+    start, end = st.get("started_at"), st.get("ended_at") or time.time()
+    return int((end - start) / 60) if start else 0
 
 
 class WerkoverlegStore:
@@ -61,6 +112,15 @@ class WerkoverlegStore:
             prev = st or {}
             log = prev.get("log", [])
             backlog = prev.get("backlog", [])
+            # EEN NIEUW OVERLEG WIST HET VORIGE. Deze regel bouwde een verse state met
+            # `agenda: list(backlog)`, en daarmee verdwenen de punten van het vorige overleg —
+            # met hun uitkomsten, personen en Kroniek-ids. Het archief hield alleen tellingen
+            # over. Gemeten op prod 28-08-2026: negen punten en negen uitkomsten weg zodra er
+            # een volgend overleg werd geopend, en het archiefrecord stond op 0/0.
+            #
+            # Redden gaat vóór openen, en het geldt ook voor een overleg dat NOOIT netjes is
+            # afgesloten: juist dat is het geval waarin niemand het archief schreef.
+            _red_punten(prev, log)
             st = {"status": "open", "started_at": time.time(), "ended_at": None,
                   "presence": {}, "agenda": list(backlog), "checkout": {}, "visited": [], "log": log,
                   "backlog": []}
@@ -193,13 +253,7 @@ class WerkoverlegStore:
             return None
         st["status"] = "closed"
         st["ended_at"] = time.time()
-        # archiveer een samenvatting (incl. per-persoon check-out) zodat de facilitator kan
-        # rapporteren én het volgende overleg de vorige scores kan tonen.
-        snap = self.summary(circle)
-        snap["at"] = st["ended_at"]
-        snap["started_at"] = st.get("started_at")   # natuurlijke overleg-identiteit → event_id voor de dag-observatie
-        snap["checkout"] = dict(st.get("checkout", {}))
-        st.setdefault("log", []).append(snap)
+        st.setdefault("log", []).append(_snapshot(st))
         self._save()
         return st
 
@@ -212,9 +266,7 @@ class WerkoverlegStore:
         return dict(lg[-1].get("checkout", {})) if lg else {}
 
     def duration_min(self, circle: str) -> int:
-        st = self._m.get(circle) or {}
-        start, end = st.get("started_at"), st.get("ended_at") or time.time()
-        return int((end - start) / 60) if start else 0
+        return _duur_min(self._m.get(circle) or {})
 
     # ── stap 1: aanwezigheid (✗ = op verlof; taken pauzeren) ───────────────────
     def set_presence(self, circle: str, pid: str, present: bool) -> None:
@@ -307,13 +359,18 @@ class WerkoverlegStore:
 
     # ── stap 7: samenvatting ───────────────────────────────────────────────────
     def summary(self, circle: str) -> dict:
-        """De samenvatting die in het archief belandt — en die de facilitator-metriek leest.
+        """De samenvatting die in het archief belandt — en die de facilitator-metriek leest."""
+        return self._tel(self._m.get(circle) or {})
+
+    @staticmethod
+    def _tel(st: dict) -> dict:
+        """Tel een overleg-state. Losse functie omdat ook een overleg dat NOOIT netjes werd
+        afgesloten geteld moet kunnen worden — anders is redden hetzelfde als raden.
 
         Telt de UITKOMSTEN-lijst, niet het oude enkelvoudige `outcome`. Eén spanning kan er
         meerdere hebben, en de oude vorm zou er hoogstens één van tellen. De typenamen zijn
         meeverhuisd (`actie` was `action`, `governance` was `roloverleg`); de oude namen blijven
         meetellen zodat archieven van vóór deze wijziging leesbaar blijven."""
-        st = self._m.get(circle) or {}
         ag = st.get("agenda", [])
         # BEHANDELD = afgevinkt OF er ligt een uitkomst onder. Alleen op de status afgaan telde
         # negen uitkomsten als nul, want niets zette die status. De tweede helft is er voor
@@ -346,7 +403,7 @@ class WerkoverlegStore:
             "checkout_ja": sum(1 for v in antwoorden if v is True),
             "checkout_nee": sum(1 for v in antwoorden if v is False),
             "tevredenheid": round(sum(scores) / len(scores), 1) if scores else None,
-            "duur_min": self.duration_min(circle),
+            "duur_min": _duur_min(st),
         }
 
 
