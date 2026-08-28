@@ -2949,6 +2949,14 @@ def _act_vangst_uitkomst(c):
         st.werk.punt_uitkomst_add(circle, iid, {"type": otype, "rol": rol, "tekst": tekst,
                                                 "ref": ref, "door": aid, "persoon": persoon,
                                                 "kroniek": kroniek_id, "prive": prive})
+        # VERWERKEN IS BEHANDELEN. `summary()` telt alleen punten met status "done", en niets zette
+        # die status — dus stond er na een overleg met negen uitkomsten "Items handled 0, Actions 0"
+        # en "9 te doen". Het werk was er, de telling niet.
+        #
+        # Het punt blijft zichtbaar en je kunt er meer uitkomsten onder leggen; de knop wordt
+        # "↺ heropen". Een uitkomst weghalen zet hem NIET terug op open: dat is een oordeel van de
+        # mens, en die knop staat er.
+        st.werk.punt_afvinken(circle, iid, True)
         naam = (_name(st.records.get(rol)) if rol and st.records.get(rol)
                 else f"{INDIVIDUELE_ACTIE}: {_person_name(st, persoon)}")
         return nxt, f"✓ {otype} → {naam}"
