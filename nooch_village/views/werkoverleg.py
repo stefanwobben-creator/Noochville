@@ -102,6 +102,30 @@ def _wo_metrics(st: _Stores, crec, csrf: str, kpi: str = "", win: str = "maand")
     return focus + tabrow + _metrics_tab_html(st, crec, csrf, win, nav=base)
 
 
+def _agenda_substeps(st, crec, open_iid: str = "") -> str:
+    """De gevangen punten als steekwoorden, genest onder de Agenda-stap in het linkermenu.
+
+    Deze lijst verdween bij #355 toen de agenda-stap de GlassFrog-triage kreeg, en is nooit
+    teruggekomen: een punt dat je boven typte kwam nergens in het menu te staan. Zonder deze
+    lijst zie je alleen een teller, en een getal vertelt niet WÁT er op de agenda staat.
+
+    Geen microcopy, geen knoppen — dit is een inhoudsopgave. Weghalen en verwerken doe je op de
+    stap zelf. De klassen (`wo-substeps`, `rov-item`, `rov-title`) stonden nog in het
+    designsysteem; alleen de markup was weg."""
+    from nooch_village.views.vangst import _open_nxt
+
+    base = f"/werkoverleg?circle={crec.id}&step=agenda"
+    rijen = ""
+    for it in st.werk.punten(crec.id):
+        klaar = it.get("status") == "done"
+        aan = " on" if it.get("id") == open_iid else ""
+        url = _open_nxt(base, str(it.get("id") or ""))
+        rijen += (f"<div class='rov-item{aan}{' done' if klaar else ''}'>"
+                  f"<a class='js-modal rov-link' href='{url}' data-href='{url}'>"
+                  f"<span class='rov-title'>{_e(it.get('title') or '')}</span></a></div>")
+    return f"<div class='wo-substeps'>{rijen}</div>" if rijen else ""
+
+
 def _wo_vangbar(st, crec, csrf: str, step: str) -> str:
     """De vangbalk — op ELKE stap, niet alleen op de agenda-stap.
 
@@ -119,11 +143,12 @@ def _wo_vangbar(st, crec, csrf: str, step: str) -> str:
     plek van het scherm waar je wél naar kijkt."""
     from nooch_village.views.vangst import _vang_form
 
+
     punten = st.werk.punten(crec.id)
     open_n = sum(1 for p in punten if p.get("status") != "done")
     onderw = f"{len(punten)} onderwerp" + ("" if len(punten) == 1 else "en")
     nxt = f"/werkoverleg?circle={crec.id}&step={step}"
-    vang = _vang_form(crec.id, csrf, nxt) if csrf else ""
+    vang = _vang_form(crec.id, csrf, nxt, sub="wo") if csrf else ""
     # Teller + veld, verder niets. In de smalle linkerkolom duwt elke uitleg-zin het veld omlaag,
     # en de placeholder zegt het al ("punt in één regel — Enter"). De uitleg over `verwerken` hoort
     # bij de lijst, en die staat op de agenda-stap.
@@ -286,6 +311,12 @@ def render_werkoverleg(st: _Stores, circle_id: str, step: str = "checkin", csrf_
         cls = "wo-step" + (" on" if k == cur else "") + (" done" if done else "")
         nav += (f"<a class='{cls} js-modal' href='{url}' data-href='{url}'>"
                 f"<span class='wo-num'>{num}</span>{_e(lbl)}</a>")
+        if k == "agenda":
+            # De punten genest onder de Agenda-stap. Het `id` is het doelwit van de gedeelde
+            # mechaniek: het lijst-fragment draagt deze markup mee, dus na een vangst ververst
+            # hij zonder herladen — net als de teller.
+            nav += (f"<div id='wo-agenda-sub'>"
+                    f"{_agenda_substeps(st, crec, iid)}</div>")
     # Het vangveld en de puntenlijst stonden hier als tweede kopie in de linkerkolom. Ze wonen nu
     # in de Agenda-stap zelf, want dat is waar je ze gebruikt — en het is één component.
     # Vangen staat BOVEN het stappenmenu: het hoort bij het overleg, niet bij een stap. Eén
