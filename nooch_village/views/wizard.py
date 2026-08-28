@@ -22,6 +22,12 @@ def _name(rec) -> str:
 II_PREFIX = "ii:"          # Individueel Initiatief: werk onder de cirkel, zonder rol
 
 
+def ii_cirkel(role: str) -> str:
+    """De cirkel uit een `ii:<circle>`-eigenaar, of "" als het er geen is."""
+    r = (role or "").strip()
+    return r[len(II_PREFIX):] if r.startswith(II_PREFIX) else ""
+
+
 def _role_options(st, circle: str = "") -> str:
     """Alleen rollen die je vandaag werk kunt geven: WAKKER en niet gearchiveerd.
 
@@ -36,23 +42,36 @@ def _role_options(st, circle: str = "") -> str:
         if getattr(r, "archived", False) or getattr(r, "slaapt", False) or org.is_circle(r):
             continue
         opts.append(f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>")
-    cid = circle or _thuis_cirkel(st)
-    if cid:
-        opts.append(f"<option value='{II_PREFIX}{_e(cid)}'>Individual action (no role)</option>")
+    # INDIVIDUELE ACTIE HANGT ONDER EEN CIRKEL, en welke dat is mag niet stilzwijgend gekozen
+    # worden. Kwam je van een `ii:<cirkel>`-baan, dan is het díe cirkel. Anders bieden we ze
+    # allemaal aan met de naam erbij — één stil kiezen is precies de aanname die vandaag negen
+    # acties op een vreemd project liet belanden.
+    for cid in ([circle] if circle else _cirkels(st)):
+        if not cid:
+            continue
+        naam = _name_of(st, cid)
+        label = "Individual action (no role)" if len(_cirkels(st)) <= 1 and not circle \
+            else f"Individual action in {naam}"
+        opts.append(f"<option value='{II_PREFIX}{_e(cid)}'>{_e(label)}</option>")
     return "".join(opts)
 
 
-def _thuis_cirkel(st) -> str:
-    """De cirkel waar een individuele actie onder hangt als er geen is meegegeven."""
+def _cirkels(st) -> list:
+    """Alle cirkels waar een individuele actie onder kan hangen, van binnen naar buiten."""
     try:
         recs = st.records.all()
         roots = org.roots(recs)
         if not roots:
-            return ""
-        subs = [k for k in org.children_of(recs, roots[0].id) if org.is_circle(k)]
-        return (subs[0].id if subs else roots[0].id)
+            return []
+        subs = [k.id for k in org.children_of(recs, roots[0].id) if org.is_circle(k)]
+        return subs or [roots[0].id]
     except Exception:                                    # noqa: BLE001 — een lijst mag nooit omvallen
-        return ""
+        return []
+
+
+def _name_of(st, cid: str) -> str:
+    rec = st.records.get(cid)
+    return _name(rec) if rec is not None else cid
 
 
 def _trekker_options(st) -> str:
@@ -92,9 +111,17 @@ def render_wizard(st, csrf_token: str = "", *, role: str = "", fragment: bool = 
     De wz-CSS staat in static/nooch.css, dus beide paden dragen `_DS_LINK` — als volle pagina
     (`_page` linkt de component-CSS niet zelf) én als fragment (de overlay kan in een host
     hangen die het stylesheet nog niet had). Dezelfde URL = één download, geen dubbele kost."""
-    role_opts = _role_options(st)
+    role_opts = _role_options(st, circle=ii_cirkel(role))
     trek_opts = _trekker_options(st)
-    pre = role if role and st.records.get(role) is not None and not org.is_circle(st.records.get(role)) else ""
+    # EEN `ii:<cirkel>`-EIGENAAR IS EEN GELDIGE VOORSELECTIE. Hij staat niet in de records (het is
+    # geen rol), dus de check hieronder wees hem af en je viel terug op "Pick a role…" — precies de
+    # context die het bord al wist, weggegooid bij de klik.
+    ii = ii_cirkel(role)
+    if ii and st.records.get(ii) is not None:
+        pre = role
+    else:
+        pre = role if role and st.records.get(role) is not None \
+            and not org.is_circle(st.records.get(role)) else ""
     ruw, uitkomst = (ruw or "").strip(), (uitkomst or "").strip()
     # Geen startstap meer: het is ÉÉN form. De voorvulling landt gewoon in de velden, en de
     # opslaan-knop staat er meteen — dat is het verschil met de zes stappen die je moest doorlopen.
