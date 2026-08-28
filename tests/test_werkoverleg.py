@@ -416,3 +416,52 @@ def test_de_vangbalk_staat_linksboven_niet_boven_de_stap_inhoud(tmp_path):
         assert frag.count("id='vang-form'") == 1, stap          # één instantie
         assert frag.index("vang-form") < frag.index("wo-nav"), stap      # boven het stappenmenu
         assert frag.index("vang-form") < frag.index("wo-mid"), stap      # dus links, niet rechts
+
+
+def test_verwerken_markeert_het_punt_als_behandeld(tmp_path):
+    """Na een overleg met negen uitkomsten stond er "Items handled 0, Actions 0" en "9 te doen".
+    `summary()` telde alleen punten met status "done", en niets zette die status."""
+    dd = _dd(tmp_path)
+    p = _with_member(dd)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
+    iid = _punt(dd, "Klacht")
+    st = cockpit2._Stores(dd)
+    assert st.werk.punt_get(C, iid)["status"] == "open"
+    assert st.werk.summary(C)["behandeld"] == 0
+    _uitkomst(dd, iid, otype="actie", persoon=p.id, tekst="reply to complaint")
+    st = cockpit2._Stores(dd)
+    assert st.werk.punt_get(C, iid)["status"] == "done"
+    s = st.werk.summary(C)
+    assert s["behandeld"] == 1 and s["acties"] == 1
+
+
+def test_de_teller_zakt_zodra_een_punt_verwerkt_is(tmp_path):
+    """"9 onderwerpen, 9 te doen" terwijl er negen uitkomsten lagen: de teller telde hetzelfde
+    verkeerde signaal als de samenvatting."""
+    dd = _dd(tmp_path)
+    p = _with_member(dd)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
+    iid = _punt(dd, "Klacht")
+    _punt(dd, "Nog een punt")
+    frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "checkin", csrf_token="t",
+                                       fragment=True)
+    assert "<span id='vang-tot'>2 onderwerpen</span>, <span id='vang-n'>2</span> te doen" in frag
+    _uitkomst(dd, iid, otype="actie", persoon=p.id, tekst="reply to complaint")
+    frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "checkin", csrf_token="t",
+                                       fragment=True)
+    assert "<span id='vang-tot'>2 onderwerpen</span>, <span id='vang-n'>1</span> te doen" in frag
+
+
+def test_een_ouder_archief_zonder_status_telt_alsnog_mee(tmp_path):
+    """Records van vóór deze fix dragen uitkomsten maar geen status. Die zijn behandeld, wat de
+    vlag ook zegt — anders blijft het archief van 28 aug voor altijd op nul staan."""
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
+    iid = _punt(dd, "Oud punt")
+    st = cockpit2._Stores(dd)
+    it = st.werk.punt_get(C, iid)
+    it["uitkomsten"] = [{"type": "actie", "tekst": "iets"}]      # zoals het archief het draagt
+    it["status"] = "open"
+    st.werk._save()
+    s = cockpit2._Stores(dd).werk.summary(C)
+    assert s["behandeld"] == 1 and s["acties"] == 1

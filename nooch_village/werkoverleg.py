@@ -315,7 +315,12 @@ class WerkoverlegStore:
         meetellen zodat archieven van vóór deze wijziging leesbaar blijven."""
         st = self._m.get(circle) or {}
         ag = st.get("agenda", [])
-        done = [i for i in ag if i.get("status") == "done"]
+        # BEHANDELD = afgevinkt OF er ligt een uitkomst onder. Alleen op de status afgaan telde
+        # negen uitkomsten als nul, want niets zette die status. De tweede helft is er voor
+        # archieven van vóór die fix, en voor een punt dat je bewust weer opende maar dat wél
+        # iets heeft opgeleverd — dat is behandeld, wat de vlag ook zegt.
+        done = [i for i in ag if i.get("status") == "done" or (i.get("uitkomsten") or [])
+                or i.get("outcome")]
         out = []
         for i in done:
             rijen = i.get("uitkomsten") or []
