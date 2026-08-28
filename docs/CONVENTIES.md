@@ -51,10 +51,29 @@ lege uitkomst met een nette melding in plaats van een hangend scherm. Zie `views
 
 | test | valt om bij |
 |---|---|
-| `tests/test_conventies_ratchet.py` | een tweede store (dus ook een tweede checklist-store of meldingskanaal), of een tweede projectcreatie-formulier |
+| `tests/test_conventies_ratchet.py` | een tweede store (dus ook een tweede checklist-store of meldingskanaal), of een tweede projectcreatie-**vorm** |
 | `tests/test_ui_fragment_mechaniek.py` | een tweede fragment-swap of een eigen kopie van de vang-wachtrij |
 | `tests/test_actie_routing_ratchet.py` | werk uit een overleg dat weer op een geraden project belandt |
 | `tests/test_overleg_archief_ratchet.py` | een overleg-archief dat de punten niet bewaart |
+
+### Een poort bewaakt alleen wat hij telt
+
+De projectcreatie-ratchet telde eerst één actienaam (`proj_add`). Daarna bleef er een formulier op
+het projectenbord staan dat de wizard opende maar er precies uitzag als een tweede creatie-vorm:
+twee tekstvelden en een groene knop. De telling zei nul; het scherm zei iets anders, en een lezer
+concludeerde terecht dat er nog een tweede deur was.
+
+Twee lessen, allebei duurder dan ze klinken:
+
+1. **Tel de vorm, niet de naam.** De ratchet telt nu het veld waarmee je een project beschrijft bij
+   het aanmaken (`done_when`), niet alleen de oude actie. Een volgende poging met andere veldnamen
+   valt daarmee alsnog op.
+2. **Een ingang is een deur, geen formulier.** Velden die er als een creatie-vorm uitzien maar
+   stiekem doorsturen zijn erger dan geen velden: ze beloven iets anders dan ze doen. Typen doe je
+   in de wizard, in het veld dat het project ook echt aanmaakt.
+
+Zelfde familie als de postbus-blinde-vlek hierboven: de aanname was "er zijn er twee", de telling
+wees de derde aan.
 
 Elke ratchet is **monotoon dalend**: het plafond mag omlaag als je schuld opruimt, nooit omhoog.
 Een nieuwe mechaniek toevoegen mag — maar dan met een expliciete regel in de lijst en een reden,

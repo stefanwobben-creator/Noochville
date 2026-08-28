@@ -300,40 +300,29 @@ def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
             f"{inner}</div>")
 
 
-# EEN INGANG, EEN FLOW. Dit formulier maakte zelf een project (titel + done-when) en stond
-# daarmee náást de wizard: drie manieren om hetzelfde te doen, met verschillende uitkomsten. De
-# velden blijven staan — wat je al typte hoef je niet over te tikken — maar de knop opent nu de
-# wizard, voorgevuld. Zonder javascript navigeert hij gewoon; de wizard is ook een volle pagina.
-_WIZ_OPEN = (
-    "var f=this.closest('form');"
-    "var q=new URLSearchParams({role:(f.owner?f.owner.value:''),"
-    "ruw:(f.scope?f.scope.value:''),uitkomst:(f.done_when?f.done_when.value:'')});"
-    "var u='/project/nieuw?'+q.toString();"
-    "if(window.__ovlOpen){window.__ovlOpen(u);}else{location.href=u;}"
-)
-
-
 def _quickadd(owner: str, col: str, csrf_token: str, back: str, trekker: str = "") -> str:
-    """Trello-stijl '+ kaart toevoegen': klap open → vol-breed invoerveld bovenaan, knop eronder.
-    `trekker` (person:<id>/persona:<id>) wordt voorgevuld bij groeperen per persoon."""
+    """'+ add project' per kolom — een DEUR, geen formulier.
+
+    Hier stonden tot 28-08-2026 twee tekstvelden (titel + done-when). Bij B1 werd de knop al naar
+    de wizard geleid, maar de velden bleven staan "zodat je niets hoeft over te tikken". Gevolg:
+    het bord toonde iets dat er precies uitzag als een tweede projectcreatie-formulier. Een lezer
+    die het zag concludeerde terecht dat er nog een tweede deur was — en dat is bij een vorm die
+    er zo uitziet geen misverstand maar een ontwerpfout.
+
+    Nu is het één link naar de wizard, met de context die deze kolom al weet: de rol, en de
+    trekker als er per persoon gegroepeerd wordt. Typen doe je in de wizard, in het veld dat het
+    project ook echt aanmaakt.
+
+    Zonder javascript navigeert de link gewoon; de wizard is ook een volle pagina."""
     if not csrf_token or col == "done":
         return ""
-    trek = f"<input type='hidden' name='trekker' value='{_e(trekker)}'>" if trekker else ""
-    return (
-        f"<details class='qadd'><summary>+ add project</summary>"
-        f"<form method='post' action='/action' class='qadd-form'>"
-        f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-        f"<input type='hidden' name='owner' value='{_e(owner)}'>"
-        f"<input type='hidden' name='col' value='{_e(col)}'>"
-        f"<input type='hidden' name='next' value='{_e(back)}'>{trek}"
-        f"<textarea name='scope' rows='2' placeholder='Project title…' aria-label='new project'></textarea>"
-        f"<textarea name='done_when' rows='2' required "
-        f"placeholder='How will you know this is done?' aria-label='done-when'></textarea>"
-        f"<div class='qadd-row'>"
-        f"<button class='btn ok' type='button' onclick=\"{_WIZ_OPEN}\">Add project</button>"
-        f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "
-        f"aria-label='cancel'>✕</button></div>"
-        f"</form></details>")
+    from urllib.parse import urlencode
+    vraag = {"role": owner}
+    if trekker:
+        vraag["trekker"] = trekker
+    href = "/project/nieuw?" + urlencode(vraag)
+    return (f"<a class='addlink js-modal' href='{_e(href)}' data-href='{_e(href)}'>"
+            f"+ add project</a>")
 
 
 def _wizard_addlink(rec, csrf_token: str) -> str:

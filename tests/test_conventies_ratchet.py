@@ -76,33 +76,55 @@ def test_er_komt_geen_vierde_postbus_bij():
 
 # ── 2. projectcreatie ───────────────────────────────────────────────────────
 #
-# Een mens maakt een project via de WIZARD. `proj_add` was de oude directe route; het laatste
-# formulier (`_inline_add_project`, dat nergens meer gerenderd werd) is weg bij B1. NUL is nu het
-# plafond: elk nieuw `proj_add`-formulier is per definitie de tweede vorm.
-PROJ_ADD_PLAFOND: dict[str, int] = {}
+# Een mens maakt een project via de WIZARD.
+#
+# DE POORT BEWAAKT ALLEEN WAT HIJ TELT. Deze telde eerst één actienaam (`proj_add`), en toen bleef
+# er een formulier op het bord staan dat de wizard opende maar er precies uitzag als een tweede
+# creatie-vorm: twee tekstvelden en een groene knop. De telling zei nul, het scherm zei anders.
+# Daarom telt hij nu de VORM: elk veld waarmee je een project zou beschrijven bij het aanmaken.
+# Een volgende poging met andere veldnamen valt dan alsnog op.
+PROJ_FORM_PLAFOND: dict[str, int] = {}
 
-_FORM_ACTIE = re.compile(r"value='proj_add'")
+# `done_when` als formulierveld = de creatie-vorm: alleen bij het AANMAKEN vraag je vooraf "hoe
+# weet je dat dit klaar is". `proj_add` = de oude directe actie.
+#
+# `scope` staat er bewust NIET bij: dat veld zit ook op het bewerk-formulier van een bestaand
+# project (de titel wijzigen), en dat is iets anders dan een project aanmaken. Een patroon dat
+# beide vangt zou de ratchet permanent rood zetten, en een rode ratchet die je moet negeren is
+# geen poort meer.
+_VORMEN = (re.compile(r"value='proj_add'"),
+           re.compile(r"name='done_when'"))
 
 
-def _proj_add_formulieren() -> dict[str, int]:
+def _creatie_vormen() -> dict[str, int]:
     uit: dict[str, int] = {}
     for f in sorted(ROOT.rglob("*.py")):
-        n = len(_FORM_ACTIE.findall(f.read_text(encoding="utf-8")))
+        tekst = f.read_text(encoding="utf-8")
+        n = sum(len(r.findall(tekst)) for r in _VORMEN)
         if n:
             uit[str(f.relative_to(ROOT))] = n
     return uit
 
 
-def test_geen_tweede_projectcreatie_formulier():
-    nu = _proj_add_formulieren()
-    nieuw = {k: v for k, v in nu.items() if k not in PROJ_ADD_PLAFOND}
+def test_geen_tweede_projectcreatie_vorm():
+    nu = _creatie_vormen()
+    nieuw = {k: v for k, v in nu.items() if k not in PROJ_FORM_PLAFOND}
     assert nieuw == {}, (
-        f"nieuw projectcreatie-formulier in {sorted(nieuw)} — een mens maakt een project via de "
-        "wizard (/project/nieuw), zodat rol, uitkomst en checklist één vorm hebben")
-    te_hoog = {k: (v, PROJ_ADD_PLAFOND[k]) for k, v in nu.items() if v > PROJ_ADD_PLAFOND[k]}
+        f"nieuwe projectcreatie-vorm in {sorted(nieuw)} — een mens maakt een project via de wizard "
+        "(/project/nieuw), zodat rol, uitkomst, impact, checklist en toewijzing één vorm hebben. "
+        "Een ingang mag een DEUR zijn (een link met voorvulling), geen tweede formulier.")
+    te_hoog = {k: (v, PROJ_FORM_PLAFOND[k]) for k, v in nu.items() if v > PROJ_FORM_PLAFOND[k]}
     assert te_hoog == {}, f"plafond overschreden (nu, max): {te_hoog}"
-    gedaald = {k: (nu.get(k, 0), v) for k, v in PROJ_ADD_PLAFOND.items() if nu.get(k, 0) < v}
-    assert gedaald == {}, f"schuld opgeruimd — verlaag PROJ_ADD_PLAFOND: {gedaald}"
+    gedaald = {k: (nu.get(k, 0), v) for k, v in PROJ_FORM_PLAFOND.items() if nu.get(k, 0) < v}
+    assert gedaald == {}, f"schuld opgeruimd — verlaag PROJ_FORM_PLAFOND: {gedaald}"
+
+
+def test_het_bord_toont_zelf_geen_formulier():
+    """Gedrag naast de telling: de kolomingang is een link naar de wizard, geen invulvelden."""
+    from nooch_village.views.projects import _quickadd
+    q = _quickadd("mother_earth__nooch__website_developer", "actief", "t", "/node?id=x")
+    assert "/project/nieuw?" in q and "role=" in q
+    assert "<textarea" not in q and "<form" not in q
 
 
 def test_de_bekende_ingangen_wijzen_naar_de_wizard():

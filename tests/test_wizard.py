@@ -100,7 +100,9 @@ def test_de_bordknop_en_de_inbox_knop_openen_dezelfde_wizard(tmp_path):
     from nooch_village.views.inbox import _outcome_form
     bord = _quickadd("mother_earth__nooch__website_developer", "actief", "t", "/node?id=x")
     assert "/project/nieuw?" in bord and "proj_add" not in bord
-    assert "ruw:" in bord and "uitkomst:" in bord        # titel én done-when reizen mee
+    # Het bord heeft geen eigen velden meer: het is een DEUR met de context die de kolom al weet.
+    # Velden die eruitzien als een creatie-vorm maar doorsturen beloven iets anders dan ze doen.
+    assert "role=" in bord and "<textarea" not in bord
     inbox = _outcome_form("project", "nid", "t", "de spanningstekst", "<option>r</option>", "",
                           "/inbox", "u1")
     assert "/project/nieuw?" in inbox and "notif_outcome" not in inbox
