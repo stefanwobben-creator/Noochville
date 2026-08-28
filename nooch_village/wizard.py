@@ -84,6 +84,43 @@ def sharpen_outcome(ruw: str, *, anchors=None, reason_fn=reason) -> str:
 _ASSEN = {"tijd": _EFFORT, "missie": _MISSIE_IMPACT, "business": _BUSINESS_IMPACT}
 
 
+def roles_for(items: list, *, records, ai, skills_of) -> list[dict]:
+    """Welke WAKKERE rollen kunnen een stuk van dit plan oppakken?
+
+    GEGROND, niet geraden: de match komt uit de effectieve skillset van een rol (DNA-grants plus
+    gekoppelde middelen) tegen de skill die de planner al aan een checklist-item hing. Daarom werkt
+    dit óók zonder model — er valt hier niets te fantaseren, alleen op te zoeken.
+
+    Slapende en gearchiveerde rollen doen niet mee: die staan stil, en werk beloven aan een rol
+    waar niemand zit is precies wat we bij de afslanking wilden voorkomen.
+
+    Geeft per rol: id, naam, en welke stappen hij kan doen."""
+    from nooch_village import org
+
+    nodig: dict[str, list[str]] = {}
+    for it in (items or []):
+        sk = (it or {}).get("skill")
+        tekst = ((it or {}).get("tekst") or "").strip()
+        if sk and tekst:
+            nodig.setdefault(str(sk), []).append(tekst)
+    if not nodig:
+        return []
+    uit = []
+    for rec in sorted(records.all(), key=lambda r: _rolnaam(r).lower()):
+        if org.is_circle(rec) or getattr(rec, "archived", False) or getattr(rec, "slaapt", False):
+            continue
+        kan = skills_of(rec, ai) or set()
+        stappen = [t for sk, ts in nodig.items() if sk in kan for t in ts]
+        if stappen:
+            uit.append({"rol": rec.id, "naam": _rolnaam(rec), "stappen": stappen})
+    return uit
+
+
+def _rolnaam(rec) -> str:
+    d = getattr(rec, "definition", None)
+    return (getattr(d, "name", None) or getattr(rec, "id", "") or "").strip() or getattr(rec, "id", "")
+
+
 def guess_impact(idee: str, *, rol: str = "", reason_fn=reason) -> dict:
     """Een GOK voor moeite en impact — bedoeld om in één tik bij te stellen, niet om te geloven.
 

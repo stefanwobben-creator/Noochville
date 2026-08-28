@@ -127,7 +127,7 @@ const ROLEOPTS="__ROLES__", TREKOPTS="__TREK__", PREROLE="__ROLE__";
 // en optioneel. Twee tikken: typ je idee, klik op het bord.
 const S={ruw:"__RUW__",uitkomst:"__UIT__",titel:"",checklist:[],planfout:"",tijd:"",missie:"",
          business:"",waarom:"",geschat:false,suggesties:[],sugBezig:false,checkInit:false,
-         role:PREROLE,trekker:"",bezig:false,klaar:null};
+         rollen:[],rollenInit:false,rollenfout:"",taken:[],role:PREROLE,trekker:"",bezig:false,klaar:null};
 const card=()=>document.getElementById('wzcard');
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 async function post(url,obj,ms){
@@ -192,6 +192,8 @@ function form(){
     <div id="wz-impact"></div></details>
   <details class="box-details" ontoggle="if(this.open)checklist()"><summary>Checklist <span class="wz-hint">(optional)</span></summary>
     <div id="wz-check"><p class="wz-hint">Open this to write steps. ✨ suggests some while you type; leaving it empty is fine.</p></div></details>
+  <details class="box-details" ontoggle="if(this.open)rollen()"><summary>Who could pick this up <span class="wz-hint">(optional)</span></summary>
+    <div id="wz-rollen"></div></details>
   `;
   const sel=document.getElementById('wz-role');
   if(S.role){sel.value=S.role;}
@@ -287,6 +289,49 @@ function addI(){const i=document.getElementById('wz-ni');const v=i.value.trim();
   S.checklist.push({tekst:v,skill:null,ok:false,reden:'added manually'});
   i.value=''; draw();}
 
+// WIE KAN DIT OPPAKKEN. Gegrond, niet geraden: de match komt van de skills die een rol écht
+// heeft, tegen de stap die de planner al een skill gaf. Er valt hier niets te fantaseren, dus
+// werkt het ook zonder model — en zonder stappen-met-skill is de sectie gewoon leeg.
+//
+// Toewijzen gebruikt dezelfde routing als het werkoverleg (`route_werk`): een mens-vervulde rol
+// krijgt het in zijn inbox, een AI-vervulde rol krijgt een project. Een AI-rol leest de NotifStore
+// nooit, dus een bericht daarheen zou "verstuurd is kwijt" betekenen.
+async function rollen(){
+  const el=document.getElementById('wz-rollen'); if(!el)return;
+  if(!S.rollenInit){
+    S.rollenInit=true;
+    el.innerHTML='<p class="wz-hint">✨ looking who has the skills…</p>';
+    const r=await post('/wizard/rollen',{items:JSON.stringify(S.checklist)},AI_TIMEOUT_MS);
+    S.rollen=(r&&r.rollen)||[]; S.rollenfout=(r&&r.__fout)||'';
+  }
+  drawRollen();
+}
+function drawRollen(){
+  const el=document.getElementById('wz-rollen'); if(!el)return;
+  const kaarten=S.rollen.map((r,i)=>`<div class="wz-item">
+    <div class="wz-itxt"><strong>${esc(r.naam)}</strong>
+      <span class="wz-hint">can do: ${esc((r.stappen||[]).join(' · '))}</span></div>
+    <button type="button" class="wz-chip" onclick="taak(${i})">＋ add as task</button></div>`).join('');
+  const leeg=S.rollen.length?'':`<p class="wz-hint">${S.rollenfout?('✨ '+esc(S.rollenfout)+' — ')
+    :'No role has a matching skill for these steps — '}assign one yourself below.</p>`;
+  const gekozen=S.taken.map((t,i)=>`<div class="wz-item"><div class="wz-itxt">→ ${esc(t.naam)}: ${esc(t.tekst)}</div>
+    <button class="wz-rm" onclick="S.taken.splice(${i},1);drawRollen()">✕</button></div>`).join('');
+  el.innerHTML=`${leeg}${kaarten}
+   <div class="wz-clab">Or assign a step yourself</div>
+   <input id="wz-tt" placeholder="what should they do?">
+   <div class="wz-add"><select id="wz-tr">${ROLEOPTS}</select>
+     <button onclick="taakZelf()">＋ add</button></div>
+   ${gekozen?`<div class="wz-clab">Tasks to hand out when you save</div>${gekozen}`:''}`;
+}
+function taak(i){const r=S.rollen[i]; if(!r)return;
+  S.taken.push({rol:r.rol,naam:r.naam,tekst:(r.stappen||[])[0]||''}); drawRollen();}
+function taakZelf(){
+  const t=document.getElementById('wz-tt'), sel=document.getElementById('wz-tr');
+  const tekst=(t.value||'').trim(), rol=sel.value;
+  if(!tekst||!rol||rol.indexOf('ii:')===0)return;      // een taak hoort bij een ROL, niet bij "geen rol"
+  S.taken.push({rol:rol,naam:sel.selectedOptions[0].text,tekst:tekst});
+  t.value=''; drawRollen();}
+
 async function maak(){
   lees();
   if(!kanOpslaan())return;
@@ -295,7 +340,7 @@ async function maak(){
   // GEEN UITKOMST IS GEEN BLOKKADE: dan is je idee de uitkomst, en scherp je hem later aan.
   const r=await post('/wizard/create',{role:S.role,uitkomst:(S.uitkomst||S.ruw),
     trekker:S.trekker,tijd:S.tijd,missie:S.missie,business:S.business,
-    items:JSON.stringify(S.checklist)});
+    items:JSON.stringify(S.checklist),taken:JSON.stringify(S.taken)});
   S.bezig=false;
   if(r&&r.url){S.klaar=r; if(window.__ovlDirty)window.__ovlDirty(); gereed();return;}
   if(b){b.disabled=false;b.textContent='Put on the board';}
@@ -304,18 +349,21 @@ async function maak(){
 }
 function gereed(){
   const r=S.klaar;
+  const taken=(r.taken||[]).map(t=>`<div class="wz-item"><div class="wz-itxt">${esc(t.ref)}</div></div>`).join('');
   card().innerHTML=`<div class="wz-cheer"><div class="big">🎉</div><h2>On the board!</h2>
    <p class="wz-hint">${esc(r.titel||'')}</p></div>
+   ${taken?`<div class="wz-clab">Handed out</div>${taken}`:''}
    <div class="wz-foot"><a class="wz-btn ghost" href="${esc(r.url)}">View on the board</a>
    <button class="wz-btn" onclick="restart()">Another project</button></div>`;
 }
 function restart(){Object.assign(S,{ruw:"",uitkomst:"",titel:"",checklist:[],planfout:"",tijd:"",
   missie:"",business:"",waarom:"",geschat:false,suggesties:[],sugBezig:false,checkInit:false,
-  trekker:"",bezig:false,klaar:null}); form();}
+  rollen:[],rollenInit:false,rollenfout:"",taken:[],trekker:"",bezig:false,klaar:null}); form();}
 
 window.S=S;window.scherp=scherp;window.maak=maak;window.impact=impact;window.draw=draw;
 window.addI=addI;window.restart=restart;window.stelKnop=stelKnop;window.checklist=checklist;
 window.schat=schat;window.neem=neem;window.drawSug=drawSug;
+window.rollen=rollen;window.drawRollen=drawRollen;window.taak=taak;window.taakZelf=taakZelf;
 form();
 })();
 </script>
