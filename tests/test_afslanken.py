@@ -382,3 +382,18 @@ def test_een_teruggedraaide_intrekking_krijgt_geen_guard(tmp_path):
     recs.put(rec)
     af._log_regel(dd, {"actie": "skill_intrekken", "skill": "google_trends", "rollen": [ROL]})
     assert af.herstel_guards(recs, dd, apply=True) == []
+
+
+def test_de_geboorte_definitie_volgt_het_oordeel(tmp_path):
+    """Een vers dorp declareert geen skill die is opgeruimd. Zolang de seed hem nog noemde,
+    spraken twee bronnen elkaar tegen en hing de juistheid op een herbouwde store aan het afvuren
+    van de guard — precies de divergentie die `ingetrokken_skills` moest wegnemen."""
+    from nooch_village.governance import Records
+    from nooch_village.seeds import seed_records
+
+    recs = Records(str(tmp_path / "verse_records.json"))
+    seed_records(recs)
+    ww = recs.get("website_watcher")
+    assert ww is not None                                   # de rol wordt wel degelijk geboren
+    assert "google_trends" not in (getattr(ww.definition, "skills", None) or [])
+    assert "site_health" in ww.definition.skills            # de rest van zijn DNA blijft heel
