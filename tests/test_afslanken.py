@@ -299,3 +299,86 @@ def test_de_intrekking_is_terug_te_draaien(tmp_path):
     na.definition.skills = []
     recs.put(na)
     assert seeds._zorg_skill(recs, recs.get(ROL), "tegenspraak") is True
+
+
+# ── 6. al gedaan is geen voorstel meer ──────────────────────────────────────
+
+def test_een_gearchiveerde_rol_wordt_niet_opnieuw_voorgesteld(tmp_path):
+    """Een plan dat afgerond werk blijft opsommen is een plan dat je stopt te lezen."""
+    dd = _dd(tmp_path)
+    recs = _recs(dd)
+    audit = _audit(rollen=[_rol("Marketing", ROL, af.OPRUIMEN)])
+    assert af.plan(audit, recs)["opruimen"]                    # eerst wél voorgesteld
+    af.rol_opruimen(recs, ROL, reden="test", data_dir=dd)
+    p = af.plan(audit, _recs(dd))
+    assert p["opruimen"] == []
+    assert any("al gearchiveerd" in o["waarom"] for o in p["overgeslagen"])
+
+
+def test_een_ingetrokken_skill_wordt_niet_opnieuw_voorgesteld(tmp_path):
+    """Grond op het SPOOR, niet op afwezigheid: een skill die geen enkele rol declareert kan net zo
+    goed nooit uitgedeeld zijn, en dat verschil zie je niet aan de records."""
+    dd = _dd(tmp_path)
+    audit = _audit(skills=[_skill("bulletin_schrijven", af.OPRUIMEN)])
+    # zonder spoor blijft hij gewoon in het plan staan — fail-closed
+    assert af.plan(audit, _recs(dd))["opruimen"]
+    gedaan = frozenset({"bulletin_schrijven"})
+    p = af.plan(audit, _recs(dd), gedaan_skills=gedaan)
+    assert p["opruimen"] == []
+    assert any("al ingetrokken" in o["waarom"] for o in p["overgeslagen"])
+
+
+def test_afwezigheid_alleen_is_geen_bewijs_dat_het_al_gedaan_is(tmp_path):
+    """Een skill die nergens staat en niet in het spoor voorkomt blijft een voorstel."""
+    dd = _dd(tmp_path)
+    audit = _audit(skills=[_skill("nooit_uitgedeeld", af.OPRUIMEN)])
+    p = af.plan(audit, _recs(dd), gedaan_skills=frozenset({"iets_anders"}))
+    assert [x["naam"] for x in p["opruimen"]] == ["nooit_uitgedeeld"]
+
+
+def test_reeds_ingetrokken_leest_het_spoor(tmp_path):
+    dd = _dd(tmp_path)
+    assert af.reeds_ingetrokken(dd) == frozenset()             # geen spoor → leeg, fail-closed
+    af._log_regel(dd, {"actie": "skill_intrekken", "skill": "google_trends"})
+    af._log_regel(dd, {"actie": "slaap", "id": ROL})
+    af._log_regel(dd, {"actie": "skill_intrekken", "skill": "serpapi_trends"})
+    assert af.reeds_ingetrokken(dd) == frozenset({"google_trends", "serpapi_trends"})
+
+
+def test_een_hersteld_besluit_komt_gewoon_terug_in_het_plan(tmp_path):
+    """`herstel_skill` draait een intrekking terug. Dan is het spoor achterhaald en moet het plan
+    hem weer voorstellen — anders zet één regel in een logbestand de operatie permanent stil."""
+    dd = _dd(tmp_path)
+    recs = _recs(dd)
+    rec = recs.get(ROL)
+    rec.definition.skills = ["bulletin_schrijven"]
+    recs.put(rec)
+    p = af.plan(_audit(skills=[_skill("bulletin_schrijven", af.OPRUIMEN)]), recs,
+                gedaan_skills=frozenset({"bulletin_schrijven"}))
+    assert [x["naam"] for x in p["opruimen"]] == ["bulletin_schrijven"]
+
+
+def test_guard_wordt_alsnog_gezet_op_wat_eerder_werd_ingetrokken(tmp_path):
+    """Zonder `ingetrokken_skills` mag een seed de skill zo weer toevoegen — de stille terugdraai
+    waarvoor `seeds._zorg_skill` bestaat. De guard wordt uit het spoor hersteld, niet gegokt."""
+    dd = _dd(tmp_path)
+    recs = _recs(dd)
+    af._log_regel(dd, {"actie": "skill_intrekken", "skill": "google_trends", "rollen": [ROL]})
+    paren = af.herstel_guards(recs, dd)                       # dry-run
+    assert paren == [("google_trends", ROL)]
+    assert not (getattr(recs.get(ROL), "ingetrokken_skills", None) or [])
+    assert af.herstel_guards(recs, dd, apply=True) == [("google_trends", ROL)]
+    assert "google_trends" in recs.get(ROL).ingetrokken_skills
+    assert af.herstel_guards(recs, dd) == []                  # idempotent
+
+
+def test_een_teruggedraaide_intrekking_krijgt_geen_guard(tmp_path):
+    """Staat de skill weer in het DNA, dan is de intrekking herroepen. Een guard erop zou het
+    besluit van de mens omkeren via een oude logregel."""
+    dd = _dd(tmp_path)
+    recs = _recs(dd)
+    rec = recs.get(ROL)
+    rec.definition.skills = ["google_trends"]
+    recs.put(rec)
+    af._log_regel(dd, {"actie": "skill_intrekken", "skill": "google_trends", "rollen": [ROL]})
+    assert af.herstel_guards(recs, dd, apply=True) == []

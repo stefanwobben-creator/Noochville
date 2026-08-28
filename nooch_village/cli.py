@@ -1430,6 +1430,23 @@ def main() -> None:
         ctx = load_context(BASE_DIR)
         recs = Records(os.path.join(ctx.data_dir, "governance_records.json"))
 
+        if len(sys.argv) > 2 and sys.argv[2] == "guards":
+            # Dry-run by default, net als het plan zelf.
+            toepassen = "--apply" in sys.argv[3:]
+            paren = af.herstel_guards(recs, ctx.data_dir, apply=toepassen)
+            if not paren:
+                print("\u2713 elke ingetrokken skill draagt zijn guard — niets te doen.")
+                sys.exit(0)
+            for skill, rid in paren:
+                print(f"  {skill} \u2192 {rid}")
+            if toepassen:
+                recs.save()
+                print(f"\u2713 {len(paren)} guard(s) gezet; een seed kan ze niet meer stil "
+                      f"terugzetten.")
+            else:
+                print(f"\nDRY-RUN — {len(paren)} guard(s) ontbreken. Draai opnieuw met --apply.")
+            sys.exit(0)
+
         if len(sys.argv) > 2 and sys.argv[2] == "herstel_skill":
             if len(sys.argv) < 5:
                 print("gebruik: village afslanken herstel_skill <skill> <rol_id>"); sys.exit(2)
@@ -1471,7 +1488,9 @@ def main() -> None:
         uitgov = tuple(x.strip() for groep in uitgov for x in groep if x.strip())
 
         audit = af.lees_audit(pad)
-        plan = af.plan(audit, recs, kill_skills=kill, uit_governance=uitgov)
+        # Het spoor mee: zonder dat stelt het plan werk voor dat al gedaan is.
+        plan = af.plan(audit, recs, kill_skills=kill, uit_governance=uitgov,
+                       gedaan_skills=af.reeds_ingetrokken(ctx.data_dir))
         apply = "--apply" in sys.argv
         print(af.rapport_tekst(plan, apply=apply))
         if apply:

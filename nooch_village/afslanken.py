@@ -116,14 +116,31 @@ def skills_van_wakkere_rollen(audit: dict, records) -> dict:
     return uit
 
 
+def houders_van(records, skill: str) -> list[str]:
+    """Elke rol die deze skill NU nog in zijn DNA heeft — slapend of wakker.
+
+    Nodig om te zien of een skill al ingetrokken is. `skills_van_wakkere_rollen` kan dat niet
+    beantwoorden: die kent alleen de wakkere houders, dus een skill die alleen bij een slapende
+    rol stond ziet er daar hetzelfde uit als een skill die nergens meer staat."""
+    if records is None:
+        return []
+    return sorted(r.id for r in records.all()
+                  if skill in (getattr(getattr(r, "definition", None), "skills", None) or []))
+
+
 # ── het plan ────────────────────────────────────────────────────────────────
 
-def plan(audit: dict, records, *, kill_skills: tuple = (), uit_governance: tuple = ()) -> dict:
+def plan(audit: dict, records, *, kill_skills: tuple = (), uit_governance: tuple = (),
+         gedaan_skills: frozenset = frozenset()) -> dict:
     """Wat er zou gebeuren. Schrijft niets.
 
     `kill_skills` en `uit_governance` zijn EXPLICIETE menselijke besluiten die boven de audit gaan
     (de founder mag een skill killen die de audit alleen wilde laten slapen). Ze lopen wél langs
-    dezelfde poorten: ook een menselijk besluit raakt geen grondwettelijke rol."""
+    dezelfde poorten: ook een menselijk besluit raakt geen grondwettelijke rol.
+
+    `gedaan_skills` komt uit `reeds_ingetrokken()` — het spoor van wat al is uitgevoerd. Zonder dat
+    blijft het plan afgerond werk voorstellen, en een plan dat je iedere keer dezelfde vier regels
+    voorhoudt is een plan dat je stopt te lezen."""
     beschermd = skills_van_wakkere_rollen(audit, records)
     slapen, opruimen, overgeslagen, geweigerd = [], [], [], []
 
@@ -145,6 +162,11 @@ def plan(audit: dict, records, *, kill_skills: tuple = (), uit_governance: tuple
         if getattr(rec, "slaapt", False):
             overgeslagen.append({**r, "waarom": "slaapt al"})
             continue
+        # Al gedaan is geen voorstel meer. Een plan dat afgerond werk blijft opsommen is een plan
+        # dat je stopt te lezen — en dan mis je de regel die er wél toe doet.
+        if getattr(rec, "archived", False):
+            overgeslagen.append({**r, "waarom": "al gearchiveerd"})
+            continue
         if r["advies"] == SLAPEN:
             slapen.append({**r, "soort": "rol"})
         elif r["advies"] == OPRUIMEN:
@@ -154,6 +176,13 @@ def plan(audit: dict, records, *, kill_skills: tuple = (), uit_governance: tuple
         naam = s["naam"]
         expliciet = naam in kill_skills or naam in uit_governance
         if s["advies"] not in (SLAPEN, OPRUIMEN) and not expliciet:
+            continue
+        # AL GEDAAN IS GEEN VOORSTEL MEER — maar afwezigheid alleen bewijst dat niet. Een skill die
+        # geen enkele rol declareert kan net zo goed nooit uitgedeeld zijn; dat verschil zie je niet
+        # aan de records. Daarom komt dit uit het SPOOR: alleen wat aantoonbaar is ingetrokken en
+        # nu ook echt nergens meer staat, geldt als afgerond werk.
+        if naam in gedaan_skills and not expliciet and not houders_van(records, naam):
+            overgeslagen.append({**s, "waarom": "al ingetrokken — staat zo in het afslank-spoor"})
             continue
         houders = beschermd.get(naam) or []
         if houders and not expliciet:
@@ -186,6 +215,71 @@ def _log_regel(data_dir: str, rij: dict) -> None:
             fh.write(json.dumps({**rij, "ts": time.time()}, ensure_ascii=False) + "\n")
     except OSError as e:                                  # noqa: BLE001
         log.warning("afslank-spoor niet weggeschreven: %s", e)
+
+
+def reeds_ingetrokken(data_dir: str) -> frozenset:
+    """De skills die het spoor als ingetrokken kent. Leeg bij een ontbrekend of onleesbaar spoor —
+    fail-closed: liever een keer te veel voorstellen dan iets stilzwijgend overslaan."""
+    uit = set()
+    try:
+        with open(os.path.join(data_dir, BESTAND), encoding="utf-8") as fh:
+            for regel in fh:
+                regel = regel.strip()
+                if not regel:
+                    continue
+                try:
+                    rij = json.loads(regel)
+                except ValueError:
+                    continue
+                if rij.get("actie") == "skill_intrekken" and rij.get("skill"):
+                    uit.add(str(rij["skill"]))
+    except OSError:
+        return frozenset()
+    return frozenset(uit)
+
+
+def herstel_guards(records, data_dir: str, *, apply: bool = False) -> list[tuple]:
+    """Zet de intrek-guard alsnog op skills die zijn ingetrokken vóór `ingetrokken_skills` bestond.
+
+    Zonder die guard mag een seed de skill zo weer toevoegen aan een bestaande rol — precies de
+    stille terugdraai waarvoor `seeds._zorg_skill` gebouwd is. `bulletin_schrijven` kreeg hem bij
+    de her-toepassing; `google_trends` en `serpapi_trends` gingen eerder en misten hem.
+
+    Grond is het SPOOR (welke rol hield hem toen), niet een gok. Een skill die de rol NU weer
+    declareert wordt overgeslagen: dan is de intrekking teruggedraaid en hoort er geen guard.
+    Geeft de paren terug die (zouden) worden gezet."""
+    uit = []
+    try:
+        with open(os.path.join(data_dir, BESTAND), encoding="utf-8") as fh:
+            regels = [r.strip() for r in fh if r.strip()]
+    except OSError:
+        return uit
+    for regel in regels:
+        try:
+            rij = json.loads(regel)
+        except ValueError:
+            continue
+        if rij.get("actie") != "skill_intrekken":
+            continue
+        skill = str(rij.get("skill") or "")
+        for rid in (rij.get("rollen") or []):
+            rec = records.get(str(rid)) if records is not None else None
+            if rec is None or not skill:
+                continue
+            if skill in (getattr(rec.definition, "skills", None) or []):
+                continue                       # weer toegekend — intrekking is teruggedraaid
+            al = list(getattr(rec, "ingetrokken_skills", None) or [])
+            if skill in al:
+                continue
+            uit.append((skill, rec.id))
+            if apply:
+                rec.ingetrokken_skills = al + [skill]
+                records.put(rec)
+                _log_regel(data_dir, {
+                    "actie": "guard_gezet", "skill": skill, "rollen": [rec.id],
+                    "reden": "intrek-guard ontbrak — ingetrokken vóór ingetrokken_skills bestond",
+                    "terug": f"haal '{skill}' uit ingetrokken_skills van {rec.id}"})
+    return uit
 
 
 def slaap_leggen(records, rol_id: str, *, reden: str, data_dir: str = "") -> bool:
