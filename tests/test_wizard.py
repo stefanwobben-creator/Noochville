@@ -295,3 +295,45 @@ def test_zonder_opdrachtgever_geen_melding(tmp_path):
     assert c2.meld_opdrachtgever(st, opdrachtgever="", wat="x") == ""
     assert c2.meld_opdrachtgever(st, opdrachtgever="bestaat-niet", wat="x") == ""
     assert len(st.notif.all()) == voor
+
+
+# ── B5: individuele actie hangt onder een cirkel, en die kies je niet stilzwijgend ──
+
+def test_de_wizard_herkent_een_ii_eigenaar_als_voorselectie(tmp_path):
+    """Klik je vanaf een Individueel-Initiatief-baan op '+ add project', dan wist de wizard de
+    context die het bord al had: `ii:<cirkel>` staat niet in de records, dus viel hij terug op
+    'Pick a role…'."""
+    import re
+    from nooch_village.views.wizard import render_wizard
+    st = _st(tmp_path)
+    h = render_wizard(st, "t", role="ii:mother_earth__nooch")
+    assert re.search(r'PREROLE="ii:mother_earth__nooch"', h)
+    assert "value='ii:mother_earth__nooch'" in h
+
+
+def test_een_onbekende_ii_cirkel_wordt_niet_geslikt(tmp_path):
+    """Fail-closed: een cirkel die niet bestaat is geen geldige eigenaar."""
+    import re
+    from nooch_village.views.wizard import render_wizard
+    h = render_wizard(_st(tmp_path), "t", role="ii:bestaat-niet")
+    assert re.search(r'PREROLE=""', h)
+
+
+def test_de_cirkel_van_een_individuele_actie_wordt_niet_stilzwijgend_gekozen(tmp_path):
+    """`_thuis_cirkel` koos de EERSTE subcirkel. Met één cirkel klopt dat toevallig; met twee zou
+    'Individual action' er stilzwijgend één kiezen — dezelfde soort aanname als 'het eerste lopende
+    project van deze eigenaar', die vandaag negen acties liet begraven."""
+    from nooch_village import org
+    from nooch_village.models import Record, RecordType, RoleDefinition
+    from nooch_village.views.wizard import _role_options
+    st = _st(tmp_path)
+    tweede = Record(id="mother_earth__tweede", type=RecordType.CIRCLE, parent="mother_earth",
+                    definition=RoleDefinition(purpose="tweede cirkel", accountabilities=[]))
+    st.records.put(tweede)
+    opts = _role_options(st)
+    # beide cirkels worden aangeboden, elk met zijn naam — niet één stil gekozen
+    assert opts.count("Individual action in ") == 2
+    assert "value='ii:mother_earth__nooch'" in opts and "value='ii:mother_earth__tweede'" in opts
+    # mét context is het er precies één: die van de baan waar je vandaan komt
+    met = _role_options(st, circle="mother_earth__tweede")
+    assert met.count("Individual action") == 1 and "value='ii:mother_earth__tweede'" in met
