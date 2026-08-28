@@ -399,7 +399,7 @@ def _spanning_pane(st, n: dict) -> str:
                        f"{(' — ' + _e(v.get('by'))) if v.get('by') else ''}</li>" for v in vs)
         record = (f"<div class='box rdr-rec'><strong>Already recorded "
                   f"({len(vs)})</strong><ul>{rows}</ul></div>")
-    return (f"<div class='rdr-pane'><h3>Tension</h3>{meta}"
+    return (f"<div class='rdr-pane'><h3>{_e(_woorden(n)['paneel'])}</h3>{meta}"
             f"<div class='fbubble rdr-rec'>{body}</div>{_pagina_blok(st, n)}"
             f"{volledig}{record}</div>")
 
@@ -496,13 +496,29 @@ def _besluit_knoppen(n: dict, csrf: str, nxt: str = "/inbox") -> str:
             + _f("suggestie", "💬 Suggestion", "", "your suggestion or counter-question", True))
 
 
-def _klaar_knop(nid: str, csrf: str, nxt: str = "/inbox") -> str:
+# De kop, de knop en de paginatitel volgen het TYPE. Eén neutrale term zou voor alles half goed
+# zijn: "spanning" klopt voor een gesensd signaal maar niet voor een afspraak uit een overleg, en
+# "item" klopt nergens echt. De kaart weet zijn type al (`_type_van`), dus laat de woorden dat
+# volgen. Alleen de ACTIE wijkt af; verzoek, governance en besluit houden hun eigen vocabulaire, en
+# alles zonder eigen type blijft "tension".
+_TYPE_WOORDEN = {
+    "actie": {"kop": "Actie afronden", "paneel": "Actie", "klaar": "Actie afgerond"},
+}
+_STANDAARD_WOORDEN = {"kop": "Process tension", "paneel": "Tension",
+                      "klaar": "Done with this tension"}
+
+
+def _woorden(n: dict | None) -> dict:
+    return _TYPE_WOORDEN.get(_type_van(n or {}), _STANDAARD_WOORDEN)
+
+
+def _klaar_knop(nid: str, csrf: str, nxt: str = "/inbox", n: dict | None = None) -> str:
     return (f"<form method='post' action='/action' class='emo-f rdr-rec'>"
             f"<input type='hidden' name='csrf' value='{_e(csrf)}'>"
             f"<input type='hidden' name='nid' value='{_e(nid)}'>"
             f"<input type='hidden' name='next' value='{_e(nxt)}'>"
-            f"<button class='btn ok sm' name='action' value='notif_klaar'>Done with this tension"
-            f"</button></form>")
+            f"<button class='btn ok sm' name='action' value='notif_klaar'>"
+            f"{_e(_woorden(n)['klaar'])}</button></form>")
 
 
 def _wizard_pane(n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
@@ -528,7 +544,7 @@ def _wizard_pane(n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
                             f"<strong>{_e(label)}</strong></summary>{form}</details>")
         groups.append(f"<details class='box-details'><summary><strong>{_e(intent['label'])}"
                       f"</strong></summary>{''.join(opts)}</details>")
-    klaar = _klaar_knop(nid, csrf)
+    klaar = _klaar_knop(nid, csrf, n=n)
     # Beslis direct (founder, 19 jul): op een vraag van een bewoner wil de mens gewoon ja,
     # nee of een suggestie kunnen zeggen — het antwoord landt als reactie op de bron-feed
     # (@rol, de bewoner pakt het zelf op) en de spanning sluit. Alleen als er een
@@ -568,7 +584,7 @@ def render_verwerk(st, n: dict, csrf_token: str = "", role_opts: str = "", pj_op
         return _page("Process", inner)
     split = (f"<div class='rdr-split'>"
              f"{_spanning_pane(st, n)}{_wizard_pane(n, csrf_token, role_opts, pj_opts)}</div>")
-    main = (f"<div class='c2-main'><h1>Process tension</h1>{split}</div>")
+    main = (f"<div class='c2-main'><h1>{_e(_woorden(n)['kop'])}</h1>{split}</div>")
     inner = (f"{_DS_LINK}<div class='c2-wrap'>{main}</div>")
     return _page("Process", inner)
 
