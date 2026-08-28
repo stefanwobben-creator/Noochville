@@ -367,3 +367,16 @@ def test_de_vangwachtrij_reist_mee_naar_elke_stap(tmp_path):
                                            fragment=True)
         assert "data-qa-frag=" in frag and "data-qa-input" in frag, stap
         assert "<script" not in frag, stap           # geen kopie van de mechaniek per scherm
+
+
+def test_de_vangbalk_staat_linksboven_niet_boven_de_stap_inhoud(tmp_path):
+    """Bovenaan het rechter inhoudsvlak duwde hij op elke stap de eigenlijke stap-inhoud omlaag.
+    Hij hoort in de linkerkolom, bóven het stappenmenu — zoals GlassFrog het zet."""
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
+    for stap in ("checkin", "checklist", "metrics", "projecten", "agenda", "checkout", "sluiten"):
+        frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, stap, csrf_token="t",
+                                           fragment=True)
+        assert frag.count("id='vang-form'") == 1, stap          # één instantie
+        assert frag.index("vang-form") < frag.index("wo-nav"), stap      # boven het stappenmenu
+        assert frag.index("vang-form") < frag.index("wo-mid"), stap      # dus links, niet rechts
