@@ -215,7 +215,14 @@ def seed_records(records: Records) -> None:
                          purpose="Bewaakt de online gezondheid en groei van Nooch.earth",
                          accountabilities=["site monitoren", "bezoekersdata duiden",
                                            "dagelijkse Field Note schrijven"],
-                         skills=["site_health", "plausible_stats", "google_trends", "field_note"]),
+                         # `google_trends` stond hier tot 28-08-2026. De waarde-audit oordeelde
+                         # "opruimen — niets", en het besluit staat als intrekking in het spoor én
+                         # als guard in `ingetrokken_skills`. Zolang de seed hem nog declareerde
+                         # spraken twee bronnen elkaar tegen: op een herbouwde store hing de
+                         # juistheid dan aan het afvuren van de guard. Eén bron van waarheid, dus
+                         # de geboorte-definitie volgt het oordeel. `serpapi_trends` stond hier
+                         # nooit in — die kwam via een latere toekenning.
+                         skills=["site_health", "plausible_stats", "field_note"]),
                      persona="Corry Coconut")
     librarian = Record(id="librarian", type=RecordType.ROLE, parent="noochville",
                        definition=RoleDefinition(
