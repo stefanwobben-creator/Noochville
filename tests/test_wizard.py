@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import json
 
+from nooch_village import cockpit2
 from nooch_village.wizard import plan_items, sharpen_outcome
+
+
+def _st(tmp_path):
+    dd = str(tmp_path / "poc")
+    cockpit2._bootstrap(dd)
+    return cockpit2._Stores(dd)
 
 
 def test_sharpen_fail_soft():
@@ -47,3 +54,47 @@ def test_plan_items_toetst_skills_en_payload():
 def test_plan_items_fail_soft():
     assert plan_items("doel", CATALOG, reason_fn=lambda *a, **k: None) == []
     assert plan_items("", CATALOG, reason_fn=_fake_plan) == []
+
+
+# ── één ingang: beide knoppen openen de wizard, voorgevuld ──────────────────
+
+def test_de_wizard_neemt_voorvulling_mee_en_begint_op_de_juiste_stap(tmp_path):
+    """Wat de mens al intypte hoort hij niet over te tikken — dat is precies waarom die kale
+    formulieren bestonden."""
+    import re
+    from nooch_village.views.wizard import render_wizard
+    st = _st(tmp_path)
+    rid = "mother_earth__nooch__website_developer"
+    h = render_wizard(st, "t", role=rid, ruw="doos scheurt", uitkomst="geen klachten meer")
+    assert re.search(r"step:2", h)                      # met uitkomst → aanscherpen
+    assert 'ruw:"doos scheurt"' in h and 'uitkomst:"geen klachten meer"' in h
+    h2 = render_wizard(st, "t", role=rid, ruw="alleen een zaadje")
+    assert re.search(r"step:1", h2)                     # alleen zaad → het idee
+    assert re.search(r"step:0", render_wizard(st, "t"))  # niets → rolkeuze
+
+
+def test_de_bordknop_en_de_inbox_knop_openen_dezelfde_wizard(tmp_path):
+    """Drie manieren om een project te maken werd er één. Beide knoppen bouwen dezelfde URL."""
+    from nooch_village.views.projects import _quickadd
+    from nooch_village.views.inbox import _outcome_form
+    bord = _quickadd("mother_earth__nooch__website_developer", "actief", "t", "/node?id=x")
+    assert "/project/nieuw?" in bord and "proj_add" not in bord
+    assert "ruw:" in bord and "uitkomst:" in bord        # titel én done-when reizen mee
+    inbox = _outcome_form("project", "nid", "t", "de spanningstekst", "<option>r</option>", "",
+                          "/inbox", "u1")
+    assert "/project/nieuw?" in inbox and "notif_outcome" not in inbox
+    assert "ruw:" in inbox and "role:" in inbox          # content als zaad, rol mee
+    # de andere uitkomsttypen blijven gewoon opnemen
+    ping = _outcome_form("ping", "nid", "t", "x", "<option>r</option>", "", "/inbox", "u2")
+    assert "notif_outcome" in ping and "/project/nieuw" not in ping
+
+
+def test_de_checklist_stap_is_overslaanbaar_en_faalt_open(tmp_path):
+    """De AI-checklist is een bonus, geen poort: een trage of ontbrekende LLM mag niemand
+    vasthouden bij een project op het bord zetten."""
+    from nooch_village.views.wizard import render_wizard
+    h = render_wizard(_st(tmp_path), "t")
+    assert "Skip this step" in h                        # en wel METEEN, ook tijdens het wachten
+    assert h.count("Skip this step") >= 2               # op de wachtkaart én op de lijst
+    assert "AbortController" in h and "PLAN_TIMEOUT_MS" in h
+    assert "Your project will be created either way" in h

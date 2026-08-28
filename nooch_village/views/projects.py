@@ -300,6 +300,19 @@ def _proj_card(st: _Stores, p: dict, csrf_token: str, back: str) -> str:
             f"{inner}</div>")
 
 
+# EEN INGANG, EEN FLOW. Dit formulier maakte zelf een project (titel + done-when) en stond
+# daarmee náást de wizard: drie manieren om hetzelfde te doen, met verschillende uitkomsten. De
+# velden blijven staan — wat je al typte hoef je niet over te tikken — maar de knop opent nu de
+# wizard, voorgevuld. Zonder javascript navigeert hij gewoon; de wizard is ook een volle pagina.
+_WIZ_OPEN = (
+    "var f=this.closest('form');"
+    "var q=new URLSearchParams({role:(f.owner?f.owner.value:''),"
+    "ruw:(f.scope?f.scope.value:''),uitkomst:(f.done_when?f.done_when.value:'')});"
+    "var u='/project/nieuw?'+q.toString();"
+    "if(window.__ovlOpen){window.__ovlOpen(u);}else{location.href=u;}"
+)
+
+
 def _quickadd(owner: str, col: str, csrf_token: str, back: str, trekker: str = "") -> str:
     """Trello-stijl '+ kaart toevoegen': klap open → vol-breed invoerveld bovenaan, knop eronder.
     `trekker` (person:<id>/persona:<id>) wordt voorgevuld bij groeperen per persoon."""
@@ -317,7 +330,7 @@ def _quickadd(owner: str, col: str, csrf_token: str, back: str, trekker: str = "
         f"<textarea name='done_when' rows='2' required "
         f"placeholder='How will you know this is done?' aria-label='done-when'></textarea>"
         f"<div class='qadd-row'>"
-        f"<button class='btn ok' type='submit' name='action' value='proj_add'>Add project</button>"
+        f"<button class='btn ok' type='button' onclick=\"{_WIZ_OPEN}\">Add project</button>"
         f"<button type='button' class='qadd-x' onclick=\"this.closest('details').open=false\" "
         f"aria-label='cancel'>✕</button></div>"
         f"</form></details>")
@@ -522,6 +535,10 @@ def _modal_html(mentions_json: str = "[]") -> str:
         ".forEach(function(a){if(a.getAttribute('data-wired'))return;a.setAttribute('data-wired','1');"
         "a.addEventListener('click',function(e){e.preventDefault();openCard(a.getAttribute('data-href'));});});};"
         "window.__ovlWireLinks(bd);"
+        # Publieke ingang: een knop die zijn doel-URL pas bij het klikken samenstelt (de wizard,
+        # voorgevuld met wat de mens net intypte) kan geen data-href dragen. Zonder deze hook zou
+        # zo'n knop de pagina uit navigeren in plaats van de overlay te openen.
+        "window.__ovlOpen=function(u){openCard(u);};"
         "var mems=bd.querySelector('.wo-mems');if(mems){var rows=[].slice.call(mems.querySelectorAll('.wo-mem')),sel=0;"
         "function paint(){rows.forEach(function(r,i){r.classList.toggle('sel',i===sel);});}if(rows.length)paint();"
         "mems.addEventListener('keydown',function(e){if(e.key==='ArrowDown'){sel=Math.min(rows.length-1,sel+1);paint();e.preventDefault();}"
