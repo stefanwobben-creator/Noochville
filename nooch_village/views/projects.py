@@ -515,8 +515,13 @@ def _modal_html(mentions_json: str = "[]") -> str:
         "bd.querySelectorAll('textarea').forEach(mentionWire);"
         # wall scrollt naar het laatste bericht: bij openen én na elke actie (reopen()→wire()), scoped op bd
         "var ws=bd.querySelector('.wall-scroll');if(ws){requestAnimationFrame(function(){ws.scrollTop=0;});}"
-        "bd.querySelectorAll('a.js-modal[data-href]').forEach(function(a){"
-        "a.addEventListener('click',function(e){e.preventDefault();openCard(a.getAttribute('data-href'));});});"
+        # Per link markeren en via één hook, zodat een blok dat NA het openen wordt vervangen
+        # (de puntenlijst in het stappenmenu) alsnog bedraad wordt zonder de al bedrade links een
+        # tweede listener te geven — die zou de kaart twee keer openen.
+        "window.__ovlWireLinks=function(root){(root||bd).querySelectorAll('a.js-modal[data-href]')"
+        ".forEach(function(a){if(a.getAttribute('data-wired'))return;a.setAttribute('data-wired','1');"
+        "a.addEventListener('click',function(e){e.preventDefault();openCard(a.getAttribute('data-href'));});});};"
+        "window.__ovlWireLinks(bd);"
         "var mems=bd.querySelector('.wo-mems');if(mems){var rows=[].slice.call(mems.querySelectorAll('.wo-mem')),sel=0;"
         "function paint(){rows.forEach(function(r,i){r.classList.toggle('sel',i===sel);});}if(rows.length)paint();"
         "mems.addEventListener('keydown',function(e){if(e.key==='ArrowDown'){sel=Math.min(rows.length-1,sel+1);paint();e.preventDefault();}"

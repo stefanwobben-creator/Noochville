@@ -5761,8 +5761,17 @@ def make_handler(data_dir: str, csrf_token: str,
                     # hem aanriep. Gemeten op 28-08-2026 tijdens de scherm-check.
                     from nooch_village.views.vangst import veilige_nxt
                     _nxt = veilige_nxt((qs.get("nxt") or [""])[0], _c)
-                    self._send(render_vangst_frag(st, _c, csrf_token=effective_csrf,
-                                                  open_iid=_open, nxt=_nxt), chrome=False)
+                    _frag = render_vangst_frag(st, _c, csrf_token=effective_csrf,
+                                               open_iid=_open, nxt=_nxt)
+                    # Op verzoek van de aanroeper reist het stappenmenu-blok mee, zodat de
+                    # geneste puntenlijst na een vangst óók ververst en niet alleen de teller.
+                    if (qs.get("sub") or [""])[0] == "wo":
+                        from nooch_village.views.werkoverleg import _agenda_substeps
+                        _crec = st.records.get(_c)
+                        if _crec is not None:
+                            _frag += (f"<template data-nv-mirror-html='#wo-agenda-sub'>"
+                                      f"{_agenda_substeps(st, _crec, _open)}</template>")
+                    self._send(_frag, chrome=False)
                     return
                 self._send(render_vangst(st, _c, csrf_token=effective_csrf,
                                          msg=(qs.get("msg") or [""])[0], open_iid=_open))

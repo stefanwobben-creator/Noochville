@@ -373,9 +373,13 @@ def test_de_puntenlijst_blijft_onder_de_agenda_stap(tmp_path):
                                      fragment=True)
     ci = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "checkin", csrf_token="t",
                                      fragment=True)
-    doos = "<div class='rdr-tool' id='vang-lijst'>"      # de lijst zelf, niet de scriptregel
+    doos = "<div class='rdr-tool' id='vang-lijst'>"      # de VERWERK-lijst, niet het menu
     assert doos in ag and "Checkout hapert" in ag
-    assert doos not in ci and "Checkout hapert" not in ci
+    assert doos not in ci
+    # In het linkermenu staat het punt wél als steekwoord — dat is een inhoudsopgave, geen
+    # tweede verwerk-scherm: geen verwerken-knop, geen uitkomst-formulier.
+    assert "wo-substeps" in ci and "Checkout hapert" in ci
+    assert "vangst_uitkomst" not in ci
 
 
 def test_de_teller_is_de_terugkoppeling_buiten_de_agenda_stap(tmp_path):
@@ -465,3 +469,48 @@ def test_een_ouder_archief_zonder_status_telt_alsnog_mee(tmp_path):
     st.werk._save()
     s = cockpit2._Stores(dd).werk.summary(C)
     assert s["behandeld"] == 1 and s["acties"] == 1
+def test_een_gevangen_punt_verschijnt_als_steekwoord_onder_stap_5(tmp_path):
+    """De geneste lijst verdween bij #355 en kwam nooit terug: je zag alleen een teller, en een
+    getal vertelt niet WÁT er op de agenda staat."""
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
+    _punt(dd, "Retourdoos scheurt")
+    for stap in ("checkin", "agenda", "checkout"):
+        frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, stap, csrf_token="t",
+                                           fragment=True)
+        assert "wo-substeps" in frag, stap
+        assert "Retourdoos scheurt" in frag, stap
+        # het steekwoord staat in het MENU, dus vóór de stap-inhoud
+        assert frag.index("wo-substeps") < frag.index("wo-mid"), stap
+
+
+def test_de_geneste_lijst_ververst_mee_met_de_teller(tmp_path):
+    """De teller liep op maar de lijst niet: de toevoeging ververste alleen het rechter fragment.
+    Nu draagt datzelfde fragment het menu-blok mee als spiegelbron."""
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
+    _punt(dd, "Retourdoos scheurt")
+    frag = cockpit2.render_werkoverleg(cockpit2._Stores(dd), C, "checkin", csrf_token="t",
+                                       fragment=True)
+    assert "sub=wo" in frag                                # de balk vraagt het blok op
+
+    # ...en het endpoint levert het ook echt. Via een ECHTE request, want de vraag is juist of de
+    # route de vlag leest — een test die de renderfunctie rechtstreeks aanroept slaat precies de
+    # regel over die stuk kan gaan.
+    import threading, urllib.request
+    from http.server import HTTPServer
+
+    srv = HTTPServer(("127.0.0.1", 0), cockpit2.make_handler(dd, "t"))
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    try:
+        url = (f"http://127.0.0.1:{srv.server_port}/vangst?circle={C}&frag=1&sub=wo"
+               f"&nxt=/werkoverleg%3Fcircle%3D{C}%26step%3Dagenda")
+        with urllib.request.urlopen(url, timeout=5) as r:
+            body = r.read().decode("utf-8")
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    assert "data-nv-mirror-html='#wo-agenda-sub'" in body
+    assert "Retourdoos scheurt" in body
+    assert "value='/werkoverleg?circle=" in body           # en de terug-URL van de aanroeper

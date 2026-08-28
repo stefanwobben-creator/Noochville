@@ -39,6 +39,16 @@
       var doel = document.querySelector(src.getAttribute("data-nv-mirror"));
       if (doel) doel.textContent = src.textContent;
     });
+    // Sommige plekken zijn geen getal maar een blokje opmaak — de puntenlijst genest onder de
+    // Agenda-stap bijvoorbeeld. De bron is ons eigen server-fragment, dus geen vreemde markup.
+    root.querySelectorAll("[data-nv-mirror-html]").forEach(function (src) {
+      var doel = document.querySelector(src.getAttribute("data-nv-mirror-html"));
+      if (!doel) return;
+      doel.innerHTML = src.innerHTML;
+      // Verse links in het menu moeten weer door de modal-controller: anders navigeert een klik
+      // de overlay uit in plaats van de stap te openen.
+      if (window.__ovlWireLinks) window.__ovlWireLinks(doel);
+    });
   }
 
   // Cursor + tekst van het veld waarin je stond. Zonder dit verliest elke swap je halve zin.

@@ -139,7 +139,7 @@ def veilige_nxt(nxt: str, circle: str) -> str:
     return f"/vangst?circle={circle}"
 
 
-def _vang_form(circle: str, csrf: str, nxt: str) -> str:
+def _vang_form(circle: str, csrf: str, nxt: str, sub: str = "") -> str:
     """Het altijd-zichtbare veld. Eén regel, één toets.
 
     De `data-qa-*`-attributen zetten de GEDEELDE mechaniek aan (`static/nooch.js`): de inzendingen
@@ -151,7 +151,11 @@ def _vang_form(circle: str, csrf: str, nxt: str) -> str:
     volgend punt de muis moeten pakken."""
     # De terug-URL reist MEE naar het fragment-endpoint. Zonder dat rendert de ververste lijst met
     # /vangst als terug-URL, en gooit de eerstvolgende uitkomst je het werkoverleg uit.
-    frag = f"/vangst?circle={_e(circle)}&frag=1&nxt={_e(_q(nxt))}"
+    # `sub` vraagt het fragment om een blok voor een ANDERE plek op de pagina mee te sturen (de
+    # puntenlijst in het stappenmenu van het werkoverleg). Expliciete vlag, geen URL-snuffelen:
+    # het fragment hoort niet te raden wie hem aanroept.
+    frag = (f"/vangst?circle={_e(circle)}&frag=1&nxt={_e(_q(nxt))}"
+            + (f"&sub={_e(sub)}" if sub else ""))
     return (f"<form method='post' action='/action' class='rov-add' id='vang-form' "
             f"data-qa-frag='{frag}' "
             f"data-qa-action='vangst_add' data-qa-target='#vang-lijst'>"
