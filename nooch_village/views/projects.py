@@ -336,40 +336,6 @@ def _quickadd(owner: str, col: str, csrf_token: str, back: str, trekker: str = "
         f"</form></details>")
 
 
-def _inline_add_project(st: _Stores, rec, csrf_token: str, back: str, username: str | None = None) -> str:
-    """Universele inline '+ project' (één patroon, geen aparte modal). Op een cirkel kies je de rol;
-    op een rol staat de eigenaar vast. Dekt ook lege rollen/cirkels die per-kolom-quickadd mist."""
-    if not csrf_token:
-        return ""
-    # standaard-trekker = de ingelogde gebruiker (guest/onbekend → geen voorselectie)
-    me = st.people.by_email(username) if username and username != "guest" else None
-    if org.is_circle(rec):
-        roles = sorted(org.roles_of(st.records.all(), rec.id), key=lambda r: _name(r).lower())
-        ro = "".join(f"<option value='{_e(r.id)}'>{_e(_name(r))}</option>" for r in roles)
-        # Individueel Initiatief: een project oppakken zónder rol, direct onder de cirkel.
-        ii_opt = f"<option value='{_II_PREFIX}{_e(rec.id)}'>Individual Action (no role)</option>"
-        owner_field = (f"<label class='att-lbl'>Role</label>"
-                       f"<select name='owner'>{ro}{ii_opt}</select>")
-    else:
-        owner_field = f"<input type='hidden' name='owner' value='{_e(rec.id)}'>"
-    return (
-        f"<details class='qadd qadd-top'><summary>+ project</summary>"
-        f"<form method='post' action='/action' class='qadd-form'>"
-        f"<input type='hidden' name='csrf' value='{_e(csrf_token)}'>"
-        f"<input type='hidden' name='next' value='{_e(back)}'>"
-        f"<textarea name='scope' rows='2' placeholder='Outcome to reach…' aria-label='new project'></textarea>"
-        f"<textarea name='done_when' rows='2' required "
-        f"placeholder='How will you know this is done?' aria-label='done-when'></textarea>"
-        f"{owner_field}"
-        f"<label class='att-lbl'>Status</label><select name='col'>"
-        f"<option value='actief'>Active</option><option value='wacht'>Waiting</option>"
-        f"<option value='toekomst'>Future</option></select>"
-        f"<label class='att-lbl'>Owner (person or AI)</label><select name='trekker'>"
-        f"{_trekker_options(st, '' if org.is_circle(rec) else rec.id)}</select>"
-        f"<div class='qadd-row'><button class='btn ok' type='submit' name='action' value='proj_add'>"
-        f"Add project</button></div></form></details>")
-
-
 def _wizard_addlink(rec, csrf_token: str) -> str:
     """De enige 'project toevoegen'-ingang: opent de geleide wizard in de modal-overlay (js-modal),
     net als de projectkaarten. Op een rol wordt die rol voorgeselecteerd; op een cirkel kiest de

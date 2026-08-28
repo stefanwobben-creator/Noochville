@@ -41,7 +41,7 @@ _LABEL_WHITELIST = {
     "views/feed.py": 4,
     "views/metrics.py": 11,
     "views/overview.py": 12,
-    "views/projects.py": 8,
+    "views/projects.py": 5,    # -3: het losse toevoegformulier is weg (één form = de wizard)
     "views/roloverleg.py": 4,
     "views/werkoverleg.py": 0,   # de oude triage is weg (gedeelde vangst-component)
 }

@@ -161,18 +161,30 @@ def test_kaart_is_modal_div_ingelogd(tmp_path):
 
 # ── Individual Action: project oppakken zonder rol ──────────────────────
 
-def test_toevoegform_biedt_individueel_initiatief_op_cirkel(tmp_path):
+def test_de_wizard_biedt_individueel_initiatief_aan(tmp_path):
+    """Het losse toevoegformulier is weg — er is één form, de wizard. Individueel Initiatief is
+    daar een KEUZE IN DE ROLLIJST: niet elk project hoort bij een mandaat.
+
+    Anders dan bij het oude formulier hangt die keuze niet meer af van waar je hem opende. Er is
+    één form, en de rollijst is de plek waar je "geen rol" kiest."""
     dd, st = _st(tmp_path)
-    html = P._inline_add_project(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(CIRCLE),
-                                 "TOK", "/back")
-    assert f"value='ii:{CIRCLE}'" in html and "Individual Action" in html
+    from nooch_village.views.wizard import _role_options
+    opts = _role_options(cockpit2._Stores(dd), circle=CIRCLE)
+    assert f"value='ii:{CIRCLE}'" in opts and "Individual action" in opts
 
 
-def test_toevoegform_geen_ii_op_rol(tmp_path):
+def test_de_wizard_biedt_geen_slapende_of_gearchiveerde_rol(tmp_path):
+    """Een slapende rol staat stil: geen thread, geen oordeel, geen nieuw werk. Hem aanbieden is
+    werk beloven dat blijft liggen."""
     dd, st = _st(tmp_path)
-    html = P._inline_add_project(cockpit2._Stores(dd), cockpit2._Stores(dd).records.get(ROLE),
-                                 "TOK", "/back")
-    assert "Individual Action" not in html      # II is een cirkel-begrip, niet op een rol
+    from nooch_village.views.wizard import _role_options
+    recs = cockpit2._Stores(dd).records
+    rec = recs.get(ROLE)
+    rec.slaapt = True
+    recs.put(rec)
+    opts = _role_options(cockpit2._Stores(dd), circle=CIRCLE)
+    assert f"value='{ROLE}'" not in opts
+    assert "Individual action" in opts          # de rest van de lijst blijft heel
 
 def test_ii_project_aanmaken_en_tonen(tmp_path):
     dd, st = _st(tmp_path)

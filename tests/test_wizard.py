@@ -58,19 +58,40 @@ def test_plan_items_fail_soft():
 
 # ── één ingang: beide knoppen openen de wizard, voorgevuld ──────────────────
 
-def test_de_wizard_neemt_voorvulling_mee_en_begint_op_de_juiste_stap(tmp_path):
+def test_de_wizard_neemt_voorvulling_mee(tmp_path):
     """Wat de mens al intypte hoort hij niet over te tikken — dat is precies waarom die kale
-    formulieren bestonden."""
-    import re
+    formulieren bestonden. Sinds B1 zijn er geen stappen meer: de voorvulling landt in de velden
+    van hetzelfde form, en opslaan kan meteen."""
     from nooch_village.views.wizard import render_wizard
     st = _st(tmp_path)
     rid = "mother_earth__nooch__website_developer"
     h = render_wizard(st, "t", role=rid, ruw="doos scheurt", uitkomst="geen klachten meer")
-    assert re.search(r"step:2", h)                      # met uitkomst → aanscherpen
     assert 'ruw:"doos scheurt"' in h and 'uitkomst:"geen klachten meer"' in h
-    h2 = render_wizard(st, "t", role=rid, ruw="alleen een zaadje")
-    assert re.search(r"step:1", h2)                     # alleen zaad → het idee
-    assert re.search(r"step:0", render_wizard(st, "t"))  # niets → rolkeuze
+    assert f'__ROLE__' not in h and rid in h             # de rol is ingevuld, niet de placeholder
+    assert "step:" not in h                              # geen stappen meer
+
+
+def test_de_snelle_route_is_twee_tikken(tmp_path):
+    """Idee typen en opslaan. De uitkomst is optioneel: staat hij leeg, dan is je idee de
+    uitkomst — anders houdt een leeg veld je tegen bij iets kernachtigs."""
+    from nooch_village.views.wizard import render_wizard
+    h = render_wizard(_st(tmp_path), "t")
+    assert 'id="wz-ruw"' in h and 'id="wz-save"' in h
+    assert "Put on the board" in h
+    # de opslaan-knop staat BOVEN de opgevouwen verrijking, niet erachter
+    assert h.index('id="wz-save"') < h.index("Impact and effort")
+    assert h.index('id="wz-save"') < h.index("Checklist")
+    assert "(S.uitkomst||S.ruw)" in h                    # geen uitkomst → het idee telt
+
+
+def test_alleen_wakkere_rollen_plus_individuele_actie(tmp_path):
+    from nooch_village.views.wizard import _role_options
+    st = _st(tmp_path)
+    rid = "mother_earth__nooch__website_developer"
+    rec = st.records.get(rid); rec.slaapt = True; st.records.put(rec)
+    opts = _role_options(st)
+    assert f"value='{rid}'" not in opts
+    assert "Individual action" in opts
 
 
 def test_de_bordknop_en_de_inbox_knop_openen_dezelfde_wizard(tmp_path):
@@ -89,12 +110,12 @@ def test_de_bordknop_en_de_inbox_knop_openen_dezelfde_wizard(tmp_path):
     assert "notif_outcome" in ping and "/project/nieuw" not in ping
 
 
-def test_de_checklist_stap_is_overslaanbaar_en_faalt_open(tmp_path):
-    """De AI-checklist is een bonus, geen poort: een trage of ontbrekende LLM mag niemand
-    vasthouden bij een project op het bord zetten."""
+def test_de_ai_is_een_bonus_geen_poort(tmp_path):
+    """Sterker dan een overslaan-knop: de AI-stappen zitten OPGEVOUWEN en laden pas als je ze
+    opent. Wie ze nooit opent, merkt niets van een traag of ontbrekend model."""
     from nooch_village.views.wizard import render_wizard
     h = render_wizard(_st(tmp_path), "t")
-    assert "Skip this step" in h                        # en wel METEEN, ook tijdens het wachten
-    assert h.count("Skip this step") >= 2               # op de wachtkaart én op de lijst
-    assert "AbortController" in h and "PLAN_TIMEOUT_MS" in h
+    assert "<details" in h and "(optional)" in h
+    assert "AbortController" in h and "AI_TIMEOUT_MS" in h        # timeout op élke AI-call
     assert "Your project will be created either way" in h
+    assert "type it yourself, saving still works" in h            # ook bij het aanscherpen
