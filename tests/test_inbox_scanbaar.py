@@ -147,3 +147,33 @@ def test_de_actiekaart_toont_geen_kaal_persoons_id(tmp_path):
     assert "werpt dit op" not in html                     # en niet de rol-kaart
     assert "Actie uit het werkoverleg" in html
     assert "↳ uit het werkoverleg van nooch" in html
+
+
+# ── 5. de woorden volgen het type ───────────────────────────────────────────
+
+def test_een_actie_heet_geen_spanning(tmp_path):
+    """Eén neutrale term is voor alles half goed: "spanning" klopt voor een gesensd signaal maar
+    niet voor een afspraak uit een overleg. De kaart weet zijn type al."""
+    dd, st = _st(tmp_path)
+    mens = st.people.all()[0]
+    n = st.notif.add("person", mens.id, "", by=mens.id, snippet="reply to complaint",
+                     extra={"type": "actie"})
+    html = render_verwerk(st, n, csrf_token="t")
+    assert "<h1>Actie afronden</h1>" in html
+    assert "<h3>Actie</h3>" in html
+    assert "Actie afgerond" in html
+    # niet op het losse woord toetsen: dat staat ook in een CSS-klassenaam. De ZICHTBARE koppen.
+    for spanningswoord in ("Process tension", "<h3>Tension</h3>", "Done with this tension"):
+        assert spanningswoord not in html, spanningswoord
+
+
+def test_de_andere_soorten_houden_hun_eigen_woorden(tmp_path):
+    """Verzoek houdt zijn vocabulaire, governance en besluit blijven ongewijzigd, en alles zonder
+    eigen type blijft 'tension' — anders verandert dit label-werk stilletjes vier schermen."""
+    dd, st = _st(tmp_path)
+    for soort in ("naar_rol", "governance", "founder", ""):
+        st.notif._items = []
+        n = _item(st, **({"type": soort} if soort else {}))
+        html = render_verwerk(st, n, csrf_token="t")
+        assert "<h1>Process tension</h1>" in html, soort or "(typeloos)"
+        assert "Actie afronden" not in html, soort or "(typeloos)"
