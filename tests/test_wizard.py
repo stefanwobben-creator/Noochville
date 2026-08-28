@@ -119,3 +119,52 @@ def test_de_ai_is_een_bonus_geen_poort(tmp_path):
     assert "AbortController" in h and "AI_TIMEOUT_MS" in h        # timeout op élke AI-call
     assert "Your project will be created either way" in h
     assert "type it yourself, saving still works" in h            # ook bij het aanscherpen
+
+
+# ── B2: impact en moeite ────────────────────────────────────────────────────
+
+def test_de_gok_valt_per_as_dicht_bij_onzin():
+    """Een verzonnen as is erger dan een lege: hij stuurt later de prioritering. Wat niet in de
+    toegestane waarden zit valt weg, niet 'onbekend'."""
+    from nooch_village.wizard import guess_impact
+    goed = guess_impact("doos verstevigen", reason_fn=lambda *a, **k:
+                        '{"tijd":"1d","missie":"neutraal","business":"medium","waarom":"klein"}')
+    assert goed == {"tijd": "1d", "missie": "neutraal", "business": "medium", "waarom": "klein"}
+    # onzin per as valt weg, de bruikbare as blijft
+    half = guess_impact("x", reason_fn=lambda *a, **k:
+                        '{"tijd":"3 weken","missie":"neutraal","business":"heel hoog"}')
+    assert half == {"missie": "neutraal"}
+    # geen model, kapotte json of leeg idee → niets, en dus lege chips
+    for kapot in (None, "geen json", "{}"):
+        assert guess_impact("x", reason_fn=lambda *a, **k: kapot) == {}
+    assert guess_impact("", reason_fn=lambda *a, **k: '{"tijd":"1d"}') == {}
+
+
+def test_de_assen_komen_uit_de_projectstore():
+    """Eén bron. Een tweede lijst in de wizard zou na één wijziging uit de pas lopen, en dan raadt
+    hij iets wat het project weigert."""
+    from nooch_village import wizard
+    from nooch_village.projects import _BUSINESS_IMPACT, _EFFORT, _MISSIE_IMPACT
+    assert wizard._ASSEN == {"tijd": _EFFORT, "missie": _MISSIE_IMPACT,
+                             "business": _BUSINESS_IMPACT}
+
+
+def test_impact_laadt_pas_als_je_de_sectie_opent(tmp_path):
+    """Zelfde discipline als de checklist: de AI draait niet tenzij gevraagd."""
+    from nooch_village.views.wizard import render_wizard
+    h = render_wizard(_st(tmp_path), "t")
+    assert 'ontoggle="if(this.open)schat()"' in h
+    assert "/wizard/impact" in h and "AI_TIMEOUT_MS" in h
+    assert "set it yourself, or leave it empty" in h          # fail-open, met een uitweg
+    assert "a gok mag geen keuze overschrijven" not in h      # (commentaar hoort niet in de body)
+    assert "if(!S[k]&&r&&r[k])S[k]=r[k]" in h                 # een gok overschrijft geen keuze
+
+
+def test_het_label_is_afgeleid_en_wordt_niet_opgeslagen(tmp_path):
+    """'Quick win' is een gevolg van moeite en business-impact. Zou het een veld zijn, dan klopt
+    het niet meer zodra iemand een chip verzet."""
+    from nooch_village.views.wizard import render_wizard
+    h = render_wizard(_st(tmp_path), "t")
+    assert "function label()" in h and "Quick win" in h
+    assert "label:" not in h                                  # geen state-veld
+    assert "items:JSON.stringify" in h and "label" not in h.split("post('/wizard/create'")[1][:200]

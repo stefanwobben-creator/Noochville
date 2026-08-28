@@ -15,6 +15,7 @@ import json
 import re
 
 from nooch_village.llm import reason
+from nooch_village.projects import _BUSINESS_IMPACT, _EFFORT, _MISSIE_IMPACT
 
 
 # Werkwoorden die een project als een AFGERONDE uitkomst markeren (Holacracy: verleden tijd). Voor de
@@ -76,6 +77,51 @@ def sharpen_outcome(ruw: str, *, anchors=None, reason_fn=reason) -> str:
         max_tokens=140, call_site="wizard_sharpen")
     v = re.sub(r"\s+", " ", (out or "")).strip().strip('"“”‘’ ').strip()
     return v or ruw
+
+
+# De drie assen zoals het project ze opslaat. Één bron: `projects._EFFORT` c.s. — een tweede lijst
+# hier zou na één wijziging uit de pas lopen, en dan raadt de wizard iets wat het project weigert.
+_ASSEN = {"tijd": _EFFORT, "missie": _MISSIE_IMPACT, "business": _BUSINESS_IMPACT}
+
+
+def guess_impact(idee: str, *, rol: str = "", reason_fn=reason) -> dict:
+    """Een GOK voor moeite en impact — bedoeld om in één tik bij te stellen, niet om te geloven.
+
+    Fail-soft en fail-CLOSED per as: alles wat niet in de toegestane waarden zit valt weg in plaats
+    van als 'onbekend' te worden opgeslagen. Een verzonnen as is erger dan een lege: hij stuurt
+    later de prioritering.
+
+    Geeft {} terug als er niets bruikbaars uitkomt — dan blijven de chips gewoon leeg."""
+    idee = (idee or "").strip()
+    if not idee:
+        return {}
+    out = reason_fn(
+        "You estimate effort and impact for one project in a small mission-driven shoe company "
+        "(Nooch: sustainable footwear, organic growth, no advertising). Answer with JSON only.\n"
+        "Fields:\n"
+        '  "tijd":     one of "1u" (about an hour), "1d" (a day), "2d", "1w" (a week or more)\n'
+        '  "missie":   one of "versterkt", "neutraal", "verzwakt" — does this strengthen the '
+        "mission (durability, transparency, less harm)?\n"
+        '  "business": one of "hoog", "medium", "laag" — commercial weight\n'
+        '  "waarom":   ONE short sentence, plain language, why you guessed this\n'
+        "Be honest: most small projects are 'neutraal' and 'medium'. Do not inflate.\n\n'"
+        f"PROJECT: {idee[:400]}\n"
+        + (f"ROLE: {rol}\n" if rol else "")
+        + '\nOUTPUT: only JSON, e.g. {"tijd":"1d","missie":"neutraal","business":"medium",'
+          '"waarom":"..."}',
+        json_mode=True, max_tokens=200, call_site="wizard_impact")
+    data = _extract(out) or {}
+    if not isinstance(data, dict):
+        return {}
+    uit = {}
+    for as_, toegestaan in _ASSEN.items():
+        v = str(data.get(as_) or "").strip()
+        if v in toegestaan:
+            uit[as_] = v
+    waarom = re.sub(r"\s+", " ", str(data.get("waarom") or "")).strip()
+    if waarom:
+        uit["waarom"] = waarom[:160]
+    return uit
 
 
 def title_from(dod: str, *, reason_fn=reason) -> str:

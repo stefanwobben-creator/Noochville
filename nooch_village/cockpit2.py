@@ -5959,7 +5959,7 @@ def make_handler(data_dir: str, csrf_token: str,
                 return
 
             # ── Project-wizard (JSON fetch-endpoints; csrf + sessie, zoals snake) ──────────
-            if path in ("/wizard/sharpen", "/wizard/plan", "/wizard/create"):
+            if path in ("/wizard/sharpen", "/wizard/plan", "/wizard/impact", "/wizard/create"):
                 username = self._session_username()
                 if sessions is not None and username is None:
                     self._send_json({"error": "not logged in"}, 403); return
@@ -5974,6 +5974,12 @@ def make_handler(data_dir: str, csrf_token: str,
                         from nooch_village.wizard import sharpen_outcome, board_anchors
                         _ankers = board_anchors(st.projects.all())   # eigen bord = stem van het team
                         self._send_json({"uitkomst": sharpen_outcome(g1("ruw"), anchors=_ankers)})
+                        return
+                    if path == "/wizard/impact":
+                        # Een GOK voor moeite en impact, bedoeld om in één tik bij te stellen.
+                        # Fail-soft: geen model = een leeg antwoord, en de chips blijven leeg.
+                        from nooch_village.wizard import guess_impact
+                        self._send_json(guess_impact(g1("idee"), rol=g1("role")))
                         return
                     if path == "/wizard/plan":
                         from nooch_village.wizard import plan_items

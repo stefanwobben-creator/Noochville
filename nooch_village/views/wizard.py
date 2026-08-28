@@ -126,7 +126,7 @@ const ROLEOPTS="__ROLES__", TREKOPTS="__TREK__", PREROLE="__ROLE__";
 // hele snelle route bovenaan — idee, uitkomst, rol, opslaan — en is alles daaronder opgevouwen
 // en optioneel. Twee tikken: typ je idee, klik op het bord.
 const S={ruw:"__RUW__",uitkomst:"__UIT__",titel:"",checklist:[],planfout:"",tijd:"",missie:"",
-         business:"",role:PREROLE,trekker:"",bezig:false,klaar:null};
+         business:"",waarom:"",geschat:false,role:PREROLE,trekker:"",bezig:false,klaar:null};
 const card=()=>document.getElementById('wzcard');
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 async function post(url,obj,ms){
@@ -187,7 +187,7 @@ function form(){
 
   <div class="wz-foot"><button class="wz-btn" id="wz-save" onclick="maak()">Put on the board</button></div>
 
-  <details class="box-details"><summary>Impact and effort <span class="wz-hint">(optional)</span></summary>
+  <details class="box-details" ontoggle="if(this.open)schat()"><summary>Impact and effort <span class="wz-hint">(optional)</span></summary>
     <div id="wz-impact"></div></details>
   <details class="box-details" ontoggle="if(this.open)checklist()"><summary>Checklist <span class="wz-hint">(optional)</span></summary>
     <div id="wz-check"><p class="wz-hint">Open this and ✨ suggests steps. Skipping is fine — the project is created either way.</p></div></details>
@@ -202,10 +202,35 @@ function toonWie(){
   if(sel&&w)w.textContent=(sel.selectedOptions[0]&&sel.value)?sel.selectedOptions[0].text:'';
 }
 
-function impact(){
+// De GOK laadt pas als je de sectie opent — net als de checklist. Geen model betekent lege chips
+// en een regel tekst; opslaan werkt de hele tijd door, de knop staat erboven.
+async function schat(){
+  if(S.geschat)return; S.geschat=true;
+  lees();
+  const idee=(S.uitkomst||S.ruw); if(!idee){impact('Type your idea first.');return;}
+  impact('✨ estimating…');
+  const r=await post('/wizard/impact',{idee:idee,role:S.role},AI_TIMEOUT_MS);
+  if(r&&r.__fout){impact('✨ '+r.__fout+' — set it yourself, or leave it empty.');return;}
+  // Alleen overnemen wat de mens nog niet zelf koos: een gok mag geen keuze overschrijven.
+  ['tijd','missie','business'].forEach(k=>{if(!S[k]&&r&&r[k])S[k]=r[k];});
+  S.waarom=(r&&r.waarom)||'';
+  impact();
+}
+function label(){
+  // Afgeleid, nooit opgeslagen: als het getal verandert verandert het label vanzelf mee.
+  if((S.tijd==='1u'||S.tijd==='1d')&&S.business==='hoog')return 'Quick win';
+  if(S.tijd==='1w'&&S.business==='laag')return 'Slow burner';
+  return '';
+}
+function impact(melding){
   const el=document.getElementById('wz-impact'); if(!el)return;
   const chip=(g,val,lbl)=>`<span class="wz-chip ${S[g]===val?'on':''}" onclick="S['${g}']=(S['${g}']==='${val}'?'':'${val}');impact()">${lbl}</span>`;
-  el.innerHTML=`<div class="wz-clab">Time</div><div class="wz-chips">${chip('tijd','1u','1 hour')}${chip('tijd','1d','1 day')}${chip('tijd','1w','1 week')}</div>
+  const lbl=label(), kop=lbl?`<span class="wz-badge ok">${esc(lbl)}</span> `:'';
+  const uitleg=melding?`<p class="wz-hint">${esc(melding)}</p>`
+    :(S.waarom?`<p class="wz-hint">${kop}✨ guessed: ${esc(S.waarom)} — one tap to change.</p>`
+              :(lbl?`<p class="wz-hint">${kop}</p>`:''));
+  el.innerHTML=`${uitleg}
+   <div class="wz-clab">Time</div><div class="wz-chips">${chip('tijd','1u','1 hour')}${chip('tijd','1d','1 day')}${chip('tijd','2d','2 days')}${chip('tijd','1w','1 week')}</div>
    <div class="wz-clab">Mission impact</div><div class="wz-chips">${chip('missie','versterkt','Strengthens')}${chip('missie','neutraal','Neutral')}${chip('missie','verzwakt','Weakens')}</div>
    <div class="wz-clab">Business impact</div><div class="wz-chips">${chip('business','hoog','High')}${chip('business','medium','Medium')}${chip('business','laag','Low')}</div>`;
 }
@@ -257,10 +282,11 @@ function gereed(){
    <button class="wz-btn" onclick="restart()">Another project</button></div>`;
 }
 function restart(){Object.assign(S,{ruw:"",uitkomst:"",titel:"",checklist:[],planfout:"",tijd:"",
-  missie:"",business:"",trekker:"",bezig:false,klaar:null}); form();}
+  missie:"",business:"",waarom:"",geschat:false,trekker:"",bezig:false,klaar:null}); form();}
 
 window.S=S;window.scherp=scherp;window.maak=maak;window.impact=impact;window.draw=draw;
 window.addI=addI;window.restart=restart;window.stelKnop=stelKnop;window.checklist=checklist;
+window.schat=schat;
 form();
 })();
 </script>
