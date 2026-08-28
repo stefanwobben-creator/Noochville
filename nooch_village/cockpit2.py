@@ -2832,6 +2832,7 @@ def _act_vangst_uitkomst(c):
         if not tekst:
             return nxt, "✗ zeg wat de uitkomst is"
 
+        from nooch_village import zelf_verwerking as zv
         from nooch_village.views.vangst import ELK_LID_WAARDE, INDIVIDUELE_ACTIE
         persoon = (g("persoon") or "").strip()
         if persoon == ELK_LID_WAARDE:
@@ -2881,19 +2882,41 @@ def _act_vangst_uitkomst(c):
                 st.projects.edit(pid, private=True, allow_done=True)
             ref = "project aangemaakt"
         elif otype == "actie":
-            # De actie hangt aan een lopend project van díe rol; heeft die er geen, dan wordt het
-            # een project — anders verdwijnt de actie in het niets.
-            doel = next((p for p in st.projects.all()
-                         if p.get("owner") == eigenaar and not p.get("archived")
-                         and p.get("status") in ("queued", "running", "blocked")), None)
-            if doel is None:
+            # EEN ACTIE KOMT TERUG VIA DE INBOX, bij de persoon die hem kreeg.
+            #
+            # Hier hing hij aan "het eerste lopende project van deze eigenaar" — letterlijk de
+            # eerste die de store toevallig teruggaf. Gemeten op 28-08-2026: vier ongerelateerde
+            # acties (klantupdate, maat 39, Portugal, klacht) belandden zo als checklist-items op
+            # "Establish Network of footwear factories", waar ze niets mee te maken hebben. De
+            # gekozen PERSOON werd bij de bestemming helemaal niet gebruikt. Het werk was niet weg,
+            # het was begraven — en dat is voor de lezer hetzelfde.
+            #
+            # Een project uit het overleg staat al op het bord; dat blijft zo. Een actie is geen
+            # project en hoort daar ook niet als vreemd checklist-item in.
+            doel_type, doel_id = ("person", persoon) if persoon else ("role", rol)
+            # FAIL-CLOSED OP DE DEAD LETTER: een AI-vervulde rol leest de NotifStore nooit. Werk daar
+            # neerleggen als bericht is het stil verliezen; dan blijft de projectroute de eerlijke.
+            if doel_type == "role":
+                from nooch_village.assignments import door_mens_bemand
+                try:
+                    leest_mee = bool(door_mens_bemand(doel_id, st.assign, st.records))
+                except Exception:                     # noqa: BLE001
+                    leest_mee = False
+            else:
+                leest_mee = st.people.get(doel_id) is not None
+            if not leest_mee:
                 pid = _outcome_project(st, eigenaar, tekst, provenance=prov, actor_id=aid)
                 if prive:
                     st.projects.edit(pid, private=True, allow_done=True)
-                ref = "geen lopend project — als project neergezet"
+                ref = "niemand leest daar een postbus — als project neergezet"
             else:
-                _outcome_action(st, doel["id"], tekst)
-                ref = f"actie op {str(doel.get('scope') or doel['id'])[:40]}"
+                st.notif.add(doel_type, doel_id, "", by=(aid or it.get("by_id") or "werkoverleg"),
+                             snippet=tekst[:160],
+                             extra={"type": zv.ACTIE, "circle": circle, "punt": iid,
+                                    "rol": rol, "prive": prive,
+                                    "herkomst": prov})
+                ref = ("in de inbox van " + _person_name(st, persoon) if persoon
+                       else "in de inbox van de rol " + (_name(st.records.get(rol)) or rol))
         elif otype == "info":
             # Zonder rol gaat het bericht naar de PERSOON; met rol naar de rol.
             doel_type, doel_id = ("role", rol) if rol else ("person", persoon)
@@ -5721,9 +5744,17 @@ def make_handler(data_dir: str, csrf_token: str,
                 _open = (qs.get("open") or [""])[0]
                 if (qs.get("frag") or [""])[0]:
                     # Alleen de lijst — het veld blijft staan waar het staat, met de cursor erin.
+                    #
+                    # `nxt` MOET van de aanroeper komen. Stond hier de vaste /vangst-URL, dan
+                    # droegen alle formulieren in de ververste lijst die terug-URL — en werd je bij
+                    # de eerstvolgende uitkomst het werkoverleg uit gegooid, naar het vangscherm.
+                    # Precies de bug die `render_vangst_frag(nxt=...)` al oploste voor de
+                    # server-render, maar niet voor de live verversing: het fragment wist niet wie
+                    # hem aanriep. Gemeten op 28-08-2026 tijdens de scherm-check.
+                    from nooch_village.views.vangst import veilige_nxt
+                    _nxt = veilige_nxt((qs.get("nxt") or [""])[0], _c)
                     self._send(render_vangst_frag(st, _c, csrf_token=effective_csrf,
-                                                  open_iid=_open,
-                                                  nxt=f"/vangst?circle={_c}"), chrome=False)
+                                                  open_iid=_open, nxt=_nxt), chrome=False)
                     return
                 self._send(render_vangst(st, _c, csrf_token=effective_csrf,
                                          msg=(qs.get("msg") or [""])[0], open_iid=_open))
