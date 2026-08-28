@@ -23,6 +23,8 @@ werkoverleg) en de pagina-frame-klassen (`.c2-wrap`, `.c2-main`, `.c2-bar`, `.c2
 """
 from __future__ import annotations
 
+from urllib.parse import quote as _q
+
 import time
 
 from nooch_village import org
@@ -125,6 +127,18 @@ def _project_opties(st, circle: str) -> str:
     return uit
 
 
+def veilige_nxt(nxt: str, circle: str) -> str:
+    """De terug-URL uit de query, of een lokale val-terug. FAIL-CLOSED.
+
+    Een terug-URL die van buiten komt en straks in een redirect belandt is een open redirect als je
+    hem gelooft. Alleen een pad dat met één `/` begint telt; `//host` is protocol-relatief (dus
+    extern) en `https://…` spreekt voor zich."""
+    n = (nxt or "").strip()
+    if n.startswith("/") and not n.startswith("//"):
+        return n
+    return f"/vangst?circle={circle}"
+
+
 def _vang_form(circle: str, csrf: str, nxt: str) -> str:
     """Het altijd-zichtbare veld. Eén regel, één toets.
 
@@ -135,8 +149,11 @@ def _vang_form(circle: str, csrf: str, nxt: str) -> str:
 
     `autofocus` blijft voor het pad zónder javascript: dan herlaadt de pagina en zou je voor elk
     volgend punt de muis moeten pakken."""
+    # De terug-URL reist MEE naar het fragment-endpoint. Zonder dat rendert de ververste lijst met
+    # /vangst als terug-URL, en gooit de eerstvolgende uitkomst je het werkoverleg uit.
+    frag = f"/vangst?circle={_e(circle)}&frag=1&nxt={_e(_q(nxt))}"
     return (f"<form method='post' action='/action' class='rov-add' id='vang-form' "
-            f"data-qa-frag='/vangst?circle={_e(circle)}&frag=1' "
+            f"data-qa-frag='{frag}' "
             f"data-qa-action='vangst_add' data-qa-target='#vang-lijst'>"
             f"{_hid(csrf, circle, nxt)}"
             f"<input id='vang-input' name='punt' data-qa-input "

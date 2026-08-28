@@ -39,6 +39,10 @@ INFO       = "info"        # licht: niets nodig, gedeeld wat er gevonden is
 NAAR_ROL   = "naar_rol"    # operationeel verzoek aan een andere rol
 GOVERNANCE = "governance"  # de STRUCTUUR moet mee: een rol, accountability, domein of policy
 FOUNDER    = "founder"     # een bevoegdheid die alleen de founder heeft
+# Afgesproken werk uit een werkoverleg. GEEN vraag ("past dit bij jouw rol?") maar een afspraak die
+# al gemaakt is: het overleg besloot dat jij dit doet. Daarom een eigen type — een actie die als
+# `naar_rol` binnenkomt vraagt je opnieuw of je hem wilt, en dat gesprek is al gevoerd.
+ACTIE      = "actie"       # concrete taak, afgesproken in een overleg
 
 LABEL = {ZELF: "zelf opgelost", INFO: "info gedeeld", NAAR_ROL: "operationeel verzoek",
          GOVERNANCE: "governance-voorstel", FOUNDER: "founder-besluit"}

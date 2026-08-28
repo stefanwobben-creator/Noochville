@@ -108,3 +108,42 @@ def test_zonder_schrijfsessie_geen_knoppen(tmp_path):
     _item(st, type="naar_rol")
     html = render_inbox(st, [("role", ROL)], csrf_token="")
     assert "handle here" not in html
+
+
+# ── 4. een actie uit het werkoverleg ────────────────────────────────────────
+
+def test_een_actie_krijgt_zijn_eigen_chip(tmp_path):
+    """Als 'verzoek' zou de kaart vragen of het bij je rol past. Dat gesprek is in het overleg al
+    gevoerd — de afspraak staat, alleen de uitvoering niet."""
+    dd, st = _st(tmp_path)
+    _item(st, type="actie")
+    html = render_inbox(st, [("role", ROL)], csrf_token="t")
+    assert "<span class='chip outline'>actie</span>" in html
+
+
+def test_de_actiekaart_vraagt_niet_opnieuw_om_akkoord(tmp_path):
+    """Twee handelingen, geen intentie-wizard: afvinken, of er een project van maken."""
+    dd, st = _st(tmp_path)
+    n = _item(st, type="actie")
+    html = render_verwerk(st, n, csrf_token="t")
+    assert "Wat doe je met deze actie?" in html
+    assert "notif_klaar" in html                      # afvinken
+    assert "maak er een project van" in html
+    assert "Wat doe je met dit verzoek?" not in html  # niet de verzoek-kaart
+    assert "What do you need?" not in html            # en niet de volle wizard
+
+
+def test_de_actiekaart_toont_geen_kaal_persoons_id(tmp_path):
+    """De founder-kaart vertelt "<rol> werpt dit op" en zoekt die rol op in de records. Bij een
+    actie staat er een PERSOON in `by` — die vindt hij niet, en dan stond er een kaal id op het
+    scherm. De herkomst van een actie is het overleg."""
+    dd, st = _st(tmp_path)
+    mens = st.people.all()[0]
+    n = st.notif.add("person", mens.id, "", by=mens.id,
+                     snippet="reply to complaint e-mail",
+                     extra={"type": "actie", "herkomst": "↳ uit het werkoverleg van nooch"})
+    html = render_verwerk(st, n, csrf_token="t")
+    assert mens.id not in html                            # nergens een kaal id
+    assert "werpt dit op" not in html                     # en niet de rol-kaart
+    assert "Actie uit het werkoverleg" in html
+    assert "↳ uit het werkoverleg van nooch" in html

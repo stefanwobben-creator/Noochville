@@ -73,7 +73,8 @@ def _btn(csrf: str, nid: str, action: str, label: str, cls: str = "flink", nxt: 
 # Wat een regel MOET tonen om scanbaar te zijn: waar het over gaat (de bevinding, niet de rauwe
 # dump), en wat er van je gevraagd wordt (het type). Zonder dat tweede zien veertien regels er
 # hetzelfde uit en moet je ze één voor één openen om te weten welke een besluit is.
-_TYPE_CHIP = {"founder": "besluit", "naar_rol": "verzoek", "governance": "governance"}
+_TYPE_CHIP = {"founder": "besluit", "naar_rol": "verzoek", "governance": "governance",
+              "actie": "actie"}
 
 
 def _een_regel(n: dict) -> str:
@@ -231,6 +232,11 @@ _TYPE_LIJF = {
                    "langs de poort (G0-G4) met de botsingscheck."),
     "founder":    ("Besluit voor jou",
                    "Dit raakt een bevoegdheid die alleen jij hebt. Bevestig, pas aan, of verwerp."),
+    # GEEN vraag maar een afspraak: het overleg heeft al besloten dat jij dit doet. Daarom staat
+    # er niet "past dit bij jou?" — dat gesprek is gevoerd.
+    "actie":      ("Actie uit het werkoverleg",
+                   "Afgesproken in het overleg. Doe hem en vink af, of maak er een project van "
+                   "als het meer werk blijkt dan één handeling."),
 }
 
 
@@ -242,7 +248,7 @@ def _type_van(n: dict) -> str:
     # deze regel toonde een verse spanning wél de kaart maar niet de bijbehorende knoppen — de
     # linkerkant wist zijn type en de rechterkant niet.
     eigen = str(n.get("type") or "")
-    if eigen in (zv.NAAR_ROL, zv.GOVERNANCE, zv.FOUNDER):
+    if eigen in (zv.NAAR_ROL, zv.GOVERNANCE, zv.FOUNDER, zv.ACTIE):
         return eigen
     deur = str((n.get("poort") or {}).get("deur") or "")
     if deur == tp.DEUR_BESLUIT:
@@ -276,6 +282,19 @@ def _kaart_html(st, n: dict) -> str:
         return ""
     try:
         from nooch_village import founder_kaart as fkaart, tensie_poort as tp, zelf_verwerking as zv
+
+        # EEN ACTIE WORDT NIET DOOR EEN ROL OPGEWORPEN. De founder-kaart vertelt "<rol> werpt dit
+        # op" en zoekt die rol op in de records; bij een actie uit het overleg staat er een PERSOON
+        # in `by`, en die vindt hij niet — dan stond er een kaal id op het scherm. De herkomst van
+        # een actie is het overleg, en die dragen we al mee.
+        if _type_van(n) == zv.ACTIE:
+            regels = [f"<div class='fbubble'>{_e(n.get('snippet') or '')}</div>"]
+            if n.get("herkomst"):
+                regels.append(f"<p class='muted'>{_e(n['herkomst'])}</p>")
+            titel, uitleg = _TYPE_LIJF["actie"]
+            regels.insert(0, f"<p class='chip'>{_e(titel)}</p>")
+            regels.append(f"<p class='muted'>{_e(uitleg)}</p>")
+            return "".join(regels)
 
         tekst = str(n.get("snippet") or "")
         kern = tp.kern(tekst)
@@ -489,6 +508,8 @@ def _klaar_knop(nid: str, csrf: str, nxt: str = "/inbox") -> str:
 def _wizard_pane(n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
     """Rechts: Wat heb je nodig? Per intentie een accordeon; per uitkomst een vraag + knop die het
     compacte formulier uitklapt. 'Niks nodig' sluit het item direct (FYI-klep)."""
+    from nooch_village import zelf_verwerking as zv
+
     nid = n.get("id", "")
     prefill = n.get("snippet") or ""
     nxt = f"/inbox/verwerk?nid={nid}"
@@ -519,6 +540,16 @@ def _wizard_pane(n: dict, csrf: str, role_opts: str, pj_opts: str) -> str:
     if _type_van(n) == "naar_rol":
         return ("<div class='rdr-pane'><h3>Wat doe je met dit verzoek?</h3>"
                 + _verzoek_knoppen(n, csrf) + "</div>")
+
+    # EEN ACTIE IS AL AFGESPROKEN. De volle intentie-wizard vraagt "wat heb je nodig?" en dat is
+    # hier de verkeerde vraag: het overleg heeft het besluit al genomen. Twee handelingen blijven
+    # over — afvinken, of erkennen dat het meer is dan één handeling en er een project van maken.
+    if _type_van(n) == zv.ACTIE:
+        pj = _outcome_form("project", nid, csrf, prefill, role_opts, pj_opts, nxt, "actie-project")
+        return ("<div class='rdr-pane'><h3>Wat doe je met deze actie?</h3>"
+                f"{klaar}"
+                f"<details class='wo-ocd box-details'><summary>Meer dan één handeling? → "
+                f"<strong>maak er een project van</strong></summary>{pj}</details></div>")
 
     if n.get("project_id"):
         besluit = (f"<details class='box-details' open><summary><strong>Decide now</strong>"

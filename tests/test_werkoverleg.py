@@ -181,19 +181,55 @@ def test_een_uitkomst_is_bewerkbaar_en_verwijderbaar(tmp_path):
     assert cockpit2._Stores(dd).werk.punt_get(C, iid)["uitkomsten"] == []
 
 
-def test_een_actie_zonder_lopend_project_wordt_geen_zwart_gat(tmp_path):
-    """Een actie hangt aan een lopend project van die rol. Heeft de rol er geen, dan wordt het een
-    project — anders verdwijnt de actie in het niets."""
+def test_een_actie_komt_terug_via_de_inbox(tmp_path):
+    """Een actie hing aan "het eerste lopende project van deze eigenaar" — letterlijk de eerste die
+    de store toevallig teruggaf. Op prod belandden zo vier ongerelateerde acties als checklist-items
+    op een project waar ze niets mee te maken hadden. Ze waren niet weg, ze waren begraven."""
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
     iid = _punt(dd, "Login doorsturen")
     _nxt, msg = _uitkomst(dd, iid, otype="actie", rol=_rolnaam(dd, RID), tekst="Cosh login sturen")
     assert msg.startswith("✓")
     st = cockpit2._Stores(dd)
-    items = [t for p in st.projects.all() for cl in p.get("checklists", []) for t in cl.get("items", [])]
+    items = [n for n in st.notif.all() if "Cosh login" in (n.get("snippet") or "")]
+    assert len(items) == 1
+    assert items[0]["type"] == "actie"                    # eigen type, geen verzoek
+    assert items[0]["target_id"] == RID
+    # en NIET meer als vreemd checklist-item op een willekeurig lopend project
+    los = [t for p in st.projects.all() for cl in p.get("checklists", [])
+           for t in cl.get("items", []) if "Cosh login" in t.get("text", "")]
+    assert los == []
+
+
+def test_een_actie_bij_een_persoon_gaat_naar_die_persoon(tmp_path):
+    """Het formulier vraagt om een PERSOON, en die werd bij de bestemming genegeerd: het werk ging
+    naar het project van de rol. Wie de actie kreeg, kreeg hem niet te zien."""
+    dd = _dd(tmp_path)
+    p = _with_member(dd)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
+    iid = _punt(dd, "Klacht")
+    _nxt, msg = _uitkomst(dd, iid, otype="actie", persoon=p.id, tekst="reply to complaint")
+    assert msg.startswith("✓")
+    st = cockpit2._Stores(dd)
+    n = next(x for x in st.notif.all() if "reply to complaint" in (x.get("snippet") or ""))
+    assert (n["target_type"], n["target_id"]) == ("person", p.id)
+
+
+def test_een_rol_zonder_mens_krijgt_geen_dead_letter(tmp_path):
+    """Een AI-vervulde rol leest de NotifStore nooit. Daar een bericht neerleggen is het stil
+    verliezen — dan blijft de projectroute de eerlijke."""
+    dd = _dd(tmp_path)
+    cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
+    iid = _punt(dd, "Iets voor een AI-rol")
+    st = cockpit2._Stores(dd)
+    for f in list(st.assign.fillers_of(RID)):
+        st.assign.unassign(RID, f.type, f.id)             # niemand van vlees en bloed meer
+    _nxt, msg = _uitkomst(dd, iid, otype="actie", rol=_rolnaam(dd, RID), tekst="Cosh login sturen")
+    assert msg.startswith("✓")
+    st = cockpit2._Stores(dd)
+    assert [n for n in st.notif.all() if "Cosh login" in (n.get("snippet") or "")] == []
     scopes = [str(p.get("scope")) for p in st.projects.all()]
-    assert any("Cosh login" in t.get("text", "") for t in items) or \
-           any("Cosh login" in sc for sc in scopes)
+    assert any("Cosh login" in sc for sc in scopes)       # als project, niet in het niets
 
 
 def test_transparantie_checklist_op_breedste_cirkel(tmp_path):

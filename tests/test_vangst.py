@@ -621,3 +621,30 @@ def test_zonder_oude_records_verdwijnt_de_staat_kolom(tmp_path):
     html = render_vangst(cockpit2._Stores(dd), CIRCLE, csrf_token="t", open_iid=it["id"])
     assert "nieuw werk" in html
     assert "<strong>Staat</strong>" not in html
+
+
+def test_de_ververste_lijst_houdt_de_terug_url_van_de_aanroeper(tmp_path):
+    """De server-render kreeg `nxt` al mee, de LIVE verversing niet: het fragment-endpoint zette er
+    zijn eigen /vangst-URL in. Gevolg: één punt vangen in het werkoverleg, en de eerstvolgende
+    uitkomst gooide je het overleg uit naar het vangscherm."""
+    from nooch_village.views.vangst import _vang_form, render_vangst_frag
+    dd = _dd(tmp_path)
+    nxt = "/werkoverleg?circle=" + CIRCLE + "&step=agenda"
+    form = _vang_form(CIRCLE, "t", nxt)
+    assert "data-qa-frag=" in form
+    assert "nxt=/werkoverleg%3Fcircle" in form             # de aanroeper reist mee, url-veilig
+    # en het endpoint gebruikt hem ook echt
+    cockpit2.dispatch(dd, "vangst_add", {"circle": [CIRCLE], "punt": ["iets"], "next": [nxt]},
+                      username="guest")
+    st = cockpit2._Stores(dd)
+    frag = render_vangst_frag(st, CIRCLE, csrf_token="t", nxt=nxt)
+    assert "value='/werkoverleg?circle=" in frag
+    assert "value='/vangst?circle=" not in frag
+
+
+def test_een_terug_url_van_buiten_wordt_geweigerd():
+    """Fail-closed: een terug-URL uit de query mag geen open redirect worden."""
+    from nooch_village.views.vangst import veilige_nxt
+    assert veilige_nxt("/werkoverleg?circle=x&step=agenda", "c") == "/werkoverleg?circle=x&step=agenda"
+    for kwaad in ("//evil.example", "https://evil.example/x", "javascript:alert(1)", "", "  "):
+        assert veilige_nxt(kwaad, "c") == "/vangst?circle=c", kwaad
