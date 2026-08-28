@@ -1478,6 +1478,12 @@ def _act_proj_done(c):
         else:
             outcome = "goedgekeurd na review"
         pj.complete(pid, outcome); msg = "✓ afgerond"
+        # DE LUS SLUIT. Vroeg iemand dit als taak, dan hoort hij nu dat het klaar is. Zonder deze
+        # regel is werk dat een rol voor je oppakt een eenrichtingsweg: het gebeurt, en jij hoort
+        # er nooit meer iets van. Fail-soft — een melding die niet lukt blokkeert geen afronding.
+        meld_opdrachtgever(st, opdrachtgever=str(p.get("opdrachtgever") or ""),
+                           wat=str(p.get("scope") or pid), bron_project=pid,
+                           door=(p.get("owner") or ""))
         # Geen event vanuit dit proces — de daemon-board-watch (village._poll_board) detecteert de
         # wacht→done-overgang (blocked_on=="review") en vuurt project_completed op de in-memory bus (#10-fix).
         # Done → signaal op /signals (feed 'Projecten'): done is al de mens-poort, dus het signaal
@@ -2882,41 +2888,16 @@ def _act_vangst_uitkomst(c):
                 st.projects.edit(pid, private=True, allow_done=True)
             ref = "project aangemaakt"
         elif otype == "actie":
-            # EEN ACTIE KOMT TERUG VIA DE INBOX, bij de persoon die hem kreeg.
+            # EEN ACTIE KOMT TERUG VIA DE INBOX, bij de persoon die hem kreeg. De regel zelf staat
+            # in `route_werk` — gedeeld met de project-wizard, want twee kopieën van dezelfde
+            # routing lopen na één wijziging uit de pas en dan landt werk stil verkeerd.
             #
-            # Hier hing hij aan "het eerste lopende project van deze eigenaar" — letterlijk de
-            # eerste die de store toevallig teruggaf. Gemeten op 28-08-2026: vier ongerelateerde
-            # acties (klantupdate, maat 39, Portugal, klacht) belandden zo als checklist-items op
-            # "Establish Network of footwear factories", waar ze niets mee te maken hebben. De
-            # gekozen PERSOON werd bij de bestemming helemaal niet gebruikt. Het werk was niet weg,
-            # het was begraven — en dat is voor de lezer hetzelfde.
-            #
-            # Een project uit het overleg staat al op het bord; dat blijft zo. Een actie is geen
-            # project en hoort daar ook niet als vreemd checklist-item in.
-            doel_type, doel_id = ("person", persoon) if persoon else ("role", rol)
-            # FAIL-CLOSED OP DE DEAD LETTER: een AI-vervulde rol leest de NotifStore nooit. Werk daar
-            # neerleggen als bericht is het stil verliezen; dan blijft de projectroute de eerlijke.
-            if doel_type == "role":
-                from nooch_village.assignments import door_mens_bemand
-                try:
-                    leest_mee = bool(door_mens_bemand(doel_id, st.assign, st.records))
-                except Exception:                     # noqa: BLE001
-                    leest_mee = False
-            else:
-                leest_mee = st.people.get(doel_id) is not None
-            if not leest_mee:
-                pid = _outcome_project(st, eigenaar, tekst, provenance=prov, actor_id=aid)
-                if prive:
-                    st.projects.edit(pid, private=True, allow_done=True)
-                ref = "niemand leest daar een postbus — als project neergezet"
-            else:
-                st.notif.add(doel_type, doel_id, "", by=(aid or it.get("by_id") or "werkoverleg"),
-                             snippet=tekst[:160],
-                             extra={"type": zv.ACTIE, "circle": circle, "punt": iid,
-                                    "rol": rol, "prive": prive,
-                                    "herkomst": prov})
-                ref = ("in de inbox van " + _person_name(st, persoon) if persoon
-                       else "in de inbox van de rol " + (_name(st.records.get(rol)) or rol))
+            # Waarom die regel bestaat: dit hing aan "het eerste lopende project van deze eigenaar",
+            # letterlijk de eerste die de store teruggaf. Gemeten op prod 28-08-2026: vier
+            # ongerelateerde acties belandden als checklist-items op één vreemd project, en de
+            # gekozen PERSOON werd bij de bestemming niet eens gebruikt.
+            _soort, ref = route_werk(st, tekst=tekst, rol=rol, persoon=persoon, herkomst=prov,
+                                     door=(aid or it.get("by_id") or "werkoverleg"), prive=prive)
         elif otype == "info":
             # Zonder rol gaat het bericht naar de PERSOON; met rol naar de rol.
             doel_type, doel_id = ("role", rol) if rol else ("person", persoon)
@@ -3082,6 +3063,73 @@ def _outcome_project(st, owner: str, title: str, *, provenance: str = "", actor_
     pid = st.projects.create(owner, (title or "").strip()[:200], "human")
     _prov_feed(st, pid, provenance, actor_id)
     return pid
+
+
+def route_werk(st, *, tekst: str, rol: str = "", persoon: str = "", herkomst: str = "",
+               door: str = "", opdrachtgever: str = "", bron_project: str = "",
+               prive: bool = False) -> tuple[str, str]:
+    """Waar landt een stuk werk? ÉÉN regel, gedeeld door het werkoverleg en de project-wizard.
+
+    Dit stond als losse tak in `_act_vangst_uitkomst` (#364). Hem hier een tweede keer uitschrijven
+    zou precies de fout zijn die `docs/CONVENTIES.md` verbiedt: twee vormen van hetzelfde die na één
+    wijziging uit de pas lopen — en dan landt werk stil op de verkeerde plek.
+
+    De regel:
+      * een PERSOON leest een postbus → inbox;
+      * een MENS-VERVULDE ROL ook → inbox bij de rol;
+      * een AI-VERVULDE ROL leest de NotifStore NOOIT → projectroute. Een bericht daarheen is
+        stil verliezen, en verstuurd mag nooit kwijt betekenen.
+
+    `opdrachtgever` reist mee zodat de lus kan sluiten: rondt de ontvanger het af, dan krijgt de
+    opdrachtgever bericht (`meld_opdrachtgever`).
+
+    Geeft (soort, ref) terug: "inbox"/"project" plus een leesbare verwijzing."""
+    doel_type, doel_id = ("person", persoon) if persoon else ("role", rol)
+    if doel_type == "role":
+        from nooch_village.assignments import door_mens_bemand
+        try:
+            leest_mee = bool(rol and door_mens_bemand(rol, st.assign, st.records))
+        except Exception:                                     # noqa: BLE001
+            leest_mee = False
+    else:
+        leest_mee = bool(persoon) and st.people.get(persoon) is not None
+    if leest_mee:
+        st.notif.add(doel_type, doel_id, bron_project or "", by=(door or "werkoverleg"),
+                     snippet=tekst[:160],
+                     extra={"type": "actie", "rol": rol, "prive": prive, "herkomst": herkomst,
+                            "opdrachtgever": opdrachtgever, "bron_project": bron_project})
+        naam = (_person_name(st, persoon) if persoon
+                else (_name(st.records.get(rol)) or rol))
+        return "inbox", f"in de inbox van {naam}"
+    eigenaar = rol or f"{_II_PREFIX}{bron_project or ''}"
+    pid = st.projects.create(eigenaar, (tekst or "").strip()[:200], "human",
+                             parent=(bron_project or None), opdrachtgever=opdrachtgever or "")
+    _prov_feed(st, pid, herkomst, door)
+    if prive:
+        st.projects.edit(pid, private=True, allow_done=True)
+    return "project", f"als project bij {_name(st.records.get(rol)) or rol}"
+
+
+def meld_opdrachtgever(st, *, opdrachtgever: str, wat: str, bron_project: str = "",
+                       door: str = "") -> str:
+    """Sluit de lus: de opdrachtgever hoort dat wat hij vroeg klaar is.
+
+    Zonder dit is werk dat een rol voor je oppakt een eenrichtingsweg — het gebeurt, en jij hoort
+    er nooit meer iets van. Dat is precies wat een AI-rol tot theater maakt.
+
+    Via de inbox, want de opdrachtgever is een mens die zijn inbox leest. Geen nieuw kanaal.
+    Fail-soft: een melding die niet lukt mag een afronding nooit blokkeren."""
+    if not opdrachtgever or st.people.get(opdrachtgever) is None:
+        return ""
+    try:
+        n = st.notif.add("person", opdrachtgever, bron_project or "", by=(door or "village"),
+                         snippet=f"Klaar: {wat}"[:160],
+                         extra={"type": "actie", "herkomst": "↳ wat je vroeg is afgerond",
+                                "afronding": True, "bron_project": bron_project})
+        return n.get("id", "")
+    except Exception:                                          # noqa: BLE001
+        logging.getLogger("cockpit2.lus").exception("afrondings-melding mislukt")
+        return ""
 
 
 def _outcome_action(st, pid_link: str, title: str):
@@ -3364,6 +3412,12 @@ def _act_notif_klaar(c):
         actor = st.people.by_email(c.username) if c.username and c.username != "guest" else None
         by = _person_name(st, actor.id) if actor else ""
         st.notif.mark_done(nid, by=by)
+        # Zelfde lus als bij een afgerond project: wie erom vroeg hoort dat het klaar is. Een
+        # afrondings-melding meldt zichzelf niet terug — anders pingen twee mensen elkaar eindeloos.
+        if n is not None and not n.get("afronding"):
+            meld_opdrachtgever(st, opdrachtgever=str(n.get("opdrachtgever") or ""),
+                               wat=str(n.get("snippet") or "")[:120],
+                               bron_project=str(n.get("bron_project") or ""), door=by)
         return f"/inbox?done={nid}", "✓ done with this tension 🎉"
 
 
@@ -5959,7 +6013,8 @@ def make_handler(data_dir: str, csrf_token: str,
                 return
 
             # ── Project-wizard (JSON fetch-endpoints; csrf + sessie, zoals snake) ──────────
-            if path in ("/wizard/sharpen", "/wizard/plan", "/wizard/impact", "/wizard/create"):
+            if path in ("/wizard/sharpen", "/wizard/plan", "/wizard/impact",
+                            "/wizard/rollen", "/wizard/create"):
                 username = self._session_username()
                 if sessions is not None and username is None:
                     self._send_json({"error": "not logged in"}, 403); return
@@ -5980,6 +6035,21 @@ def make_handler(data_dir: str, csrf_token: str,
                         # Fail-soft: geen model = een leeg antwoord, en de chips blijven leeg.
                         from nooch_village.wizard import guess_impact
                         self._send_json(guess_impact(g1("idee"), rol=g1("role")))
+                        return
+                    if path == "/wizard/rollen":
+                        # GEGROND, niet geraden: de match komt uit de effectieve skillset van een
+                        # WAKKERE rol tegen de skill die de planner al aan een stap hing. Daarom
+                        # werkt dit ook zonder model — er valt niets te fantaseren, alleen op te
+                        # zoeken. Geen stappen met een skill = een lege sectie, geen blokkade.
+                        from nooch_village import skill_links
+                        from nooch_village.wizard import roles_for
+                        try:
+                            _items = json.loads(g1("items") or "[]")
+                        except ValueError:
+                            _items = []
+                        self._send_json({"rollen": roles_for(
+                            _items if isinstance(_items, list) else [],
+                            records=st.records, ai=st.ai, skills_of=skill_links.effectief)})
                         return
                     if path == "/wizard/plan":
                         from nooch_village.wizard import plan_items
@@ -6068,7 +6138,32 @@ def make_handler(data_dir: str, csrf_token: str,
                                              skill=(it.get("skill") or None),
                                              payload=(it.get("payload") if isinstance(it.get("payload"), dict) else None),
                                              payload_ok=bool(it.get("ok", True)))
-                    self._send_json({"pid": pid, "url": f"/project?pid={pid}", "titel": titel})
+                    # TAKEN NAAR ROLLEN, pas nu — het project moet eerst bestaan, anders heeft
+                    # de taak niets om naar terug te wijzen en kan de lus niet sluiten.
+                    actor = st.people.by_email(username) if username and username != "guest" else None
+                    aid = actor.id if actor else ""
+                    taken_ref = []
+                    try:
+                        taken = json.loads(g1("taken") or "[]")
+                    except ValueError:
+                        taken = []
+                    for t in (taken if isinstance(taken, list) else []):
+                        if not isinstance(t, dict):
+                            continue
+                        t_rol = str(t.get("rol") or "").strip()
+                        t_tekst = str(t.get("tekst") or "").strip()
+                        if not t_rol or not t_tekst:
+                            continue
+                        trec = st.records.get(t_rol)
+                        if trec is None or org.is_circle(trec) or getattr(trec, "slaapt", False) \
+                                or getattr(trec, "archived", False):
+                            continue          # fail-closed: geen werk naar een rol die stilstaat
+                        _s, _ref = route_werk(st, tekst=t_tekst, rol=t_rol,
+                                              herkomst=f"↳ gevraagd bij het aanmaken van {titel}",
+                                              door=aid, opdrachtgever=aid, bron_project=pid)
+                        taken_ref.append({"rol": t_rol, "ref": _ref})
+                    self._send_json({"pid": pid, "url": f"/project?pid={pid}", "titel": titel,
+                                     "taken": taken_ref})
                     return
                 except Exception as e:
                     logging.getLogger("cockpit2.wizard").exception("wizard-endpoint %s faalde", path)

@@ -1195,7 +1195,8 @@ input.wz-itxt:focus{border-color:var(--green);background:var(--surface);outline:
 .wz-badge.no{background:var(--error-tint);color:#b3402f}
 .wz-rm{border:none;background:none;color:var(--muted);cursor:pointer;font-size:1rem;margin-top:.1rem}
 .wz-add{display:flex;gap:.4rem;margin-top:.6rem}
-.wz-add input{flex:1}
+.wz-add input,.wz-add select{flex:1}   /* de rij mag ook een keuzelijst dragen: de
+   handmatige toewijzing is tekst + rol + knop, en dan werd het tekstveld platgedrukt */
 .wz-add button{border:1.5px solid var(--border);background:var(--surface);border-radius:10px;padding:0 .9rem;font-weight:700;color:var(--green-dark);cursor:pointer}
 .wz-chips{display:flex;flex-wrap:wrap;gap:.4rem;margin:.2rem 0 .9rem}
 .wz-chip{border:1.5px solid var(--border);background:var(--surface);border-radius:999px;padding:.35rem .8rem;font-size:.85rem;font-weight:600;color:var(--gray);cursor:pointer}

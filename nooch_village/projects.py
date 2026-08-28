@@ -64,6 +64,7 @@ class ProjectLedger:
                status: str = "queued", origin: str = "",
                dod_outcome: str = "", done_when: str = "", goes_to: str = "",
                links: list[str] | None = None, parent: str | None = None,
+               opdrachtgever: str = "",
                person: str | None = None, agent: str | None = None,
                private: bool = False, description: str = "", label: str = "",
                missie_impact: str = "", business_impact: str = "", effort: str = "",
@@ -121,6 +122,10 @@ class ProjectLedger:
             "attachments": [],                  # verrijking-cards: links/bijlagen (Trello-stijl)
             "due":         None,                # deadline (ISO datum 'YYYY-MM-DD'), optioneel
             "parent":      parent,              # ouder-project (None = root/standalone)
+            # WIE HET VROEG. Zonder dit is een taak die een rol voor je oppakt een eenrichtingsweg:
+            # het werk gebeurt, en de opdrachtgever hoort er nooit meer iets van. Dit veld is de
+            # enige plek waar die lus aan hangt (`_meld_opdrachtgever`).
+            "opdrachtgever": opdrachtgever or "",
             "cluster":     cluster,             # cluster-root id (master-switch werkt hierop)
             "waiting_on":  None,                # project/briefje waarop dit wacht (resume-trigger)
         }

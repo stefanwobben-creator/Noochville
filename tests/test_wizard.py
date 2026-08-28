@@ -215,3 +215,81 @@ def test_de_stappen_zijn_bewerkbaar_en_gaan_naar_de_project_checklist(tmp_path):
     from nooch_village import cockpit2 as c2
     bron = __import__("inspect").getsource(c2.make_handler)
     assert "checklist_add(pid" in bron and "check_add(pid" in bron
+
+
+# ── B4: wie kan dit oppakken, en de lus terug ───────────────────────────────
+
+def test_rolsuggesties_zijn_gegrond_op_skills_niet_geraden(tmp_path):
+    """Er valt hier niets te fantaseren: een rol kan een stap als hij de skill heeft die de planner
+    er al aan hing. Daarom werkt dit ook zonder model."""
+    from nooch_village import skill_links
+    from nooch_village.wizard import roles_for
+    st = _st(tmp_path)
+    rid = "mother_earth__nooch__website_developer"
+    rec = st.records.get(rid); rec.definition.skills = ["site_health"]; st.records.put(rec)
+    items = [{"tekst": "site nakijken", "skill": "site_health"},
+             {"tekst": "iets zonder skill", "skill": None}]
+    uit = roles_for(items, records=st.records, ai=st.ai, skills_of=skill_links.effectief)
+    assert [r["rol"] for r in uit] == [rid]
+    assert uit[0]["stappen"] == ["site nakijken"]
+    # zonder skill-stappen valt er niets te matchen → lege sectie, geen blokkade
+    assert roles_for([{"tekst": "los idee"}], records=st.records, ai=st.ai,
+                     skills_of=skill_links.effectief) == []
+
+
+def test_een_slapende_rol_krijgt_geen_werk_aangeboden(tmp_path):
+    from nooch_village import skill_links
+    from nooch_village.wizard import roles_for
+    st = _st(tmp_path)
+    rid = "mother_earth__nooch__website_developer"
+    rec = st.records.get(rid); rec.definition.skills = ["site_health"]; rec.slaapt = True
+    st.records.put(rec)
+    assert roles_for([{"tekst": "x", "skill": "site_health"}], records=st.records, ai=st.ai,
+                     skills_of=skill_links.effectief) == []
+
+
+def test_toewijzen_gebruikt_dezelfde_routing_als_het_werkoverleg(tmp_path):
+    """Geen tweede routing. Een mens-vervulde rol krijgt het in zijn inbox; een AI-vervulde rol
+    krijgt een project, want die leest de NotifStore nooit."""
+    from nooch_village import cockpit2 as c2
+    st = _st(tmp_path)
+    rid = "mother_earth__nooch__website_developer"
+    p = st.people.all()[0]
+
+    st.assign.assign(rid, "person", p.id)                     # mens vervult de rol
+    soort, ref = c2.route_werk(st, tekst="site nakijken", rol=rid, opdrachtgever=p.id)
+    assert soort == "inbox" and "inbox" in ref
+    n = next(x for x in st.notif.all() if "site nakijken" in (x.get("snippet") or ""))
+    assert n["opdrachtgever"] == p.id                          # de lus kan sluiten
+
+    for f in list(st.assign.fillers_of(rid)):                  # geen mens meer
+        st.assign.unassign(rid, f.type, f.id)
+    soort2, _ref2 = c2.route_werk(st, tekst="ander werk", rol=rid, opdrachtgever=p.id)
+    assert soort2 == "project"
+    pr = next(x for x in st.projects.all() if "ander werk" in str(x.get("scope")))
+    assert pr["opdrachtgever"] == p.id
+
+
+def test_de_lus_sluit_bij_een_afgerond_project(tmp_path):
+    """Zonder deze melding is werk dat een rol voor je oppakt een eenrichtingsweg."""
+    from nooch_village import cockpit2 as c2
+    st = _st(tmp_path)
+    p = st.people.all()[0]
+    pid = st.projects.create("mother_earth__nooch__website_developer", "Iets uitzoeken", "human",
+                             opdrachtgever=p.id)
+    voor = len(st.notif.all())
+    c2.meld_opdrachtgever(st, opdrachtgever=p.id, wat="Iets uitzoeken", bron_project=pid)
+    ns = [x for x in st.notif.all() if (x.get("snippet") or "").startswith("Klaar:")]
+    assert len(st.notif.all()) == voor + 1 and ns
+    assert ns[-1]["target_type"] == "person" and ns[-1]["target_id"] == p.id
+    assert ns[-1]["afronding"] is True                          # meldt zichzelf niet terug
+
+
+def test_zonder_opdrachtgever_geen_melding(tmp_path):
+    """Fail-closed: liever geen bericht dan een bericht aan niemand."""
+    from nooch_village import cockpit2 as c2
+    st = _st(tmp_path)
+    voor = len(st.notif.all())
+    assert c2.meld_opdrachtgever(st, opdrachtgever="", wat="x") == ""
+    assert c2.meld_opdrachtgever(st, opdrachtgever="bestaat-niet", wat="x") == ""
+    assert len(st.notif.all()) == voor
