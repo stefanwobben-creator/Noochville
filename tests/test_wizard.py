@@ -117,8 +117,12 @@ def test_de_ai_is_een_bonus_geen_poort(tmp_path):
     h = render_wizard(_st(tmp_path), "t")
     assert "<details" in h and "(optional)" in h
     assert "AbortController" in h and "AI_TIMEOUT_MS" in h        # timeout op élke AI-call
-    assert "Your project will be created either way" in h
-    assert "type it yourself, saving still works" in h            # ook bij het aanscherpen
+    # Elke AI-plek biedt bij mislukken een WEG VOORUIT, niet alleen een foutmelding. Op de
+    # formulering zelf toetsen we niet — die mag veranderen; de uitweg niet.
+    for uitweg in ("type it yourself, saving still works",         # het aanscherpen
+                   "your own steps work fine",                     # de checklist
+                   "set it yourself, or leave it empty"):          # de impact-gok
+        assert uitweg in h, uitweg
 
 
 # ── B2: impact en moeite ────────────────────────────────────────────────────
@@ -168,3 +172,46 @@ def test_het_label_is_afgeleid_en_wordt_niet_opgeslagen(tmp_path):
     assert "function label()" in h and "Quick win" in h
     assert "label:" not in h                                  # geen state-veld
     assert "items:JSON.stringify" in h and "label" not in h.split("post('/wizard/create'")[1][:200]
+
+
+# ── B3: de checklist is meteen bruikbaar ────────────────────────────────────
+
+def test_de_checklist_opent_als_invoerveld_niet_als_wachtscherm(tmp_path):
+    """Hier stond een spinner van maximaal twaalf seconden vóór je iets kon. Dat is de AI vóór
+    de mens zetten bij een lijstje afvinken. Openen is typen."""
+    from nooch_village.views.wizard import render_wizard
+    h = render_wizard(_st(tmp_path), "t")
+    assert "type a step and press Enter" in h
+    assert "makes a checklist and checks it against your skills" not in h   # het wachtscherm
+    # de suggestie-call wordt NIET ge-await voordat de lijst er staat
+    body = h.split("async function checklist()")[1][:400]
+    assert "draw();" in body and "suggesties();" in body
+    assert "await suggesties" not in body
+
+
+def test_suggesties_komen_erbij_en_blokkeren_niet(tmp_path):
+    """Ze halen je in, of ze halen je niet in. Beide zijn goed."""
+    from nooch_village.views.wizard import render_wizard
+    h = render_wizard(_st(tmp_path), "t")
+    assert "tap to add" in h and "function neem(" in h
+    assert "you can keep typing" in h                    # tijdens het denken blijft de lijst open
+    assert "your own steps work fine" in h               # fail-open, zonder alarm
+    assert "AI_TIMEOUT_MS" in h
+
+
+def test_een_suggestie_die_je_al_hebt_wordt_niet_nog_eens_aangeboden(tmp_path):
+    from nooch_village.views.wizard import render_wizard
+    h = render_wizard(_st(tmp_path), "t")
+    assert "heb.has(x.tekst.trim().toLowerCase())" in h
+
+
+def test_de_stappen_zijn_bewerkbaar_en_gaan_naar_de_project_checklist(tmp_path):
+    """Geen tweede checklist-store: `/wizard/create` schrijft in de checklist die het project
+    zelf al heeft. De conventie-ratchet bewaakt dat er geen tweede bijkomt."""
+    from nooch_village.views.wizard import render_wizard
+    h = render_wizard(_st(tmp_path), "t")
+    assert 'oninput="S.checklist[' in h                   # elke stap is een invoerveld
+    assert "items:JSON.stringify(S.checklist)" in h       # en reist mee naar create
+    from nooch_village import cockpit2 as c2
+    bron = __import__("inspect").getsource(c2.make_handler)
+    assert "checklist_add(pid" in bron and "check_add(pid" in bron

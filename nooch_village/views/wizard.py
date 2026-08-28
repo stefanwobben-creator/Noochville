@@ -126,7 +126,8 @@ const ROLEOPTS="__ROLES__", TREKOPTS="__TREK__", PREROLE="__ROLE__";
 // hele snelle route bovenaan — idee, uitkomst, rol, opslaan — en is alles daaronder opgevouwen
 // en optioneel. Twee tikken: typ je idee, klik op het bord.
 const S={ruw:"__RUW__",uitkomst:"__UIT__",titel:"",checklist:[],planfout:"",tijd:"",missie:"",
-         business:"",waarom:"",geschat:false,role:PREROLE,trekker:"",bezig:false,klaar:null};
+         business:"",waarom:"",geschat:false,suggesties:[],sugBezig:false,checkInit:false,
+         role:PREROLE,trekker:"",bezig:false,klaar:null};
 const card=()=>document.getElementById('wzcard');
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 async function post(url,obj,ms){
@@ -190,7 +191,7 @@ function form(){
   <details class="box-details" ontoggle="if(this.open)schat()"><summary>Impact and effort <span class="wz-hint">(optional)</span></summary>
     <div id="wz-impact"></div></details>
   <details class="box-details" ontoggle="if(this.open)checklist()"><summary>Checklist <span class="wz-hint">(optional)</span></summary>
-    <div id="wz-check"><p class="wz-hint">Open this and ✨ suggests steps. Skipping is fine — the project is created either way.</p></div></details>
+    <div id="wz-check"><p class="wz-hint">Open this to write steps. ✨ suggests some while you type; leaving it empty is fine.</p></div></details>
   `;
   const sel=document.getElementById('wz-role');
   if(S.role){sel.value=S.role;}
@@ -235,29 +236,56 @@ function impact(melding){
    <div class="wz-clab">Business impact</div><div class="wz-chips">${chip('business','hoog','High')}${chip('business','medium','Medium')}${chip('business','laag','Low')}</div>`;
 }
 
-// De checklist is een BONUS, geen poort: hij zit opgevouwen, laadt pas als je hem opent, heeft
-// een timeout en mislukt open. Opslaan kan de hele tijd door — de knop staat erboven.
+// OPENEN IS TYPEN. Hier stond een wachtscherm: "✨ maakt een checklist…" met een spinner van
+// maximaal twaalf seconden, en pas daarna kon je iets. Dat is de AI vóór de mens zetten bij een
+// lijstje afvinken. Nu is de lijst meteen bruikbaar — het invoerveld staat er direct, met de
+// cursor erin — en komen de suggesties er los bij als "tik om toe te voegen".
+//
+// De AI blokkeert dus nooit meer: hij haalt je in, of hij haalt je niet in. Beide zijn goed.
 async function checklist(){
-  const el=document.getElementById('wz-check'); if(!el||S.checklist.length)return;
-  lees();
-  if(!S.uitkomst&&!S.ruw){el.innerHTML='<p class="wz-hint">Type your idea first.</p>';return;}
-  el.innerHTML='<p class="wz-think">✨ makes a checklist and checks it against your skills…</p>';
-  const r=await post('/wizard/plan',{uitkomst:(S.uitkomst||S.ruw),role:S.role},AI_TIMEOUT_MS);
-  S.checklist=(r&&r.items)||[]; S.planfout=(r&&r.__fout)||'';
+  if(S.checkInit)return; S.checkInit=true;
   draw();
+  suggesties();                       // BEWUST niet ge-await: de lijst is al bruikbaar
+}
+async function suggesties(){
+  lees();
+  const idee=(S.uitkomst||S.ruw); if(!idee)return;
+  S.sugBezig=true; drawSug();
+  const r=await post('/wizard/plan',{uitkomst:idee,role:S.role},AI_TIMEOUT_MS);
+  S.sugBezig=false;
+  S.planfout=(r&&r.__fout)||'';
+  const heb=new Set(S.checklist.map(x=>(x.tekst||'').trim().toLowerCase()));
+  S.suggesties=((r&&r.items)||[]).filter(x=>x&&x.tekst&&!heb.has(x.tekst.trim().toLowerCase()));
+  drawSug();
 }
 function draw(){
   const el=document.getElementById('wz-check'); if(!el)return;
-  const rows=S.checklist.map((it,i)=>`<div class="wz-item"><div class="wz-itxt">${esc(it.tekst)}</div>
-   ${it.ok?`<span class="wz-badge ok">● ${esc(it.skill)}</span>`:`<span class="wz-badge no">○ ${esc(it.reden||'no skill → human')}</span>`}
-   <button class="wz-rm" onclick="S.checklist.splice(${i},1);draw()">✕</button></div>`).join('')
-   ||'<p class="wz-hint">No steps yet — add one below, or leave it empty.</p>';
-  const melding=S.planfout?`<p class="wz-hint">✨ ${esc(S.planfout)} — add steps yourself, or leave it empty. Your project will be created either way.</p>`:'';
-  el.innerHTML=`${melding}<div>${rows}</div>
-   <div class="wz-add"><input id="wz-ni" placeholder="add step…" onkeydown="if(event.key==='Enter')addI()"><button onclick="addI()">+ add</button></div>`;
+  const rows=S.checklist.map((it,i)=>`<div class="wz-item">
+   <input class="wz-itxt" value="${esc(it.tekst)}" aria-label="step ${i+1}"
+     oninput="S.checklist[${i}].tekst=this.value">
+   ${it.ok?`<span class="wz-badge ok">● ${esc(it.skill)}</span>`:''}
+   <button class="wz-rm" onclick="S.checklist.splice(${i},1);draw();drawSug()">✕</button></div>`).join('');
+  el.innerHTML=`<div id="wz-rows">${rows}</div>
+   <div class="wz-add"><input id="wz-ni" placeholder="type a step and press Enter…"
+     onkeydown="if(event.key==='Enter'){event.preventDefault();addI();}"><button onclick="addI()">+ add</button></div>
+   <div id="wz-sug"></div>`;
+  const i=document.getElementById('wz-ni'); if(i)i.focus();
+  drawSug();
 }
+function drawSug(){
+  const el=document.getElementById('wz-sug'); if(!el)return;
+  if(S.sugBezig){el.innerHTML='<p class="wz-hint">✨ thinking along — you can keep typing.</p>';return;}
+  if(S.planfout){el.innerHTML=`<p class="wz-hint">✨ ${esc(S.planfout)} — your own steps work fine.</p>`;return;}
+  if(!S.suggesties.length){el.innerHTML='';return;}
+  const chips=S.suggesties.map((it,i)=>`<button type="button" class="wz-chip"
+    onclick="neem(${i})">＋ ${esc(it.tekst)}</button>`).join('');
+  el.innerHTML=`<p class="wz-hint">✨ suggests — tap to add:</p><div class="wz-chips">${chips}</div>`;
+}
+function neem(i){const it=S.suggesties[i]; if(!it)return;
+  S.suggesties.splice(i,1); S.checklist.push(it); draw();}
 function addI(){const i=document.getElementById('wz-ni');const v=i.value.trim();if(!v)return;
-  S.checklist.push({tekst:v,skill:null,ok:false,reden:'added manually'});draw();}
+  S.checklist.push({tekst:v,skill:null,ok:false,reden:'added manually'});
+  i.value=''; draw();}
 
 async function maak(){
   lees();
@@ -282,11 +310,12 @@ function gereed(){
    <button class="wz-btn" onclick="restart()">Another project</button></div>`;
 }
 function restart(){Object.assign(S,{ruw:"",uitkomst:"",titel:"",checklist:[],planfout:"",tijd:"",
-  missie:"",business:"",waarom:"",geschat:false,trekker:"",bezig:false,klaar:null}); form();}
+  missie:"",business:"",waarom:"",geschat:false,suggesties:[],sugBezig:false,checkInit:false,
+  trekker:"",bezig:false,klaar:null}); form();}
 
 window.S=S;window.scherp=scherp;window.maak=maak;window.impact=impact;window.draw=draw;
 window.addI=addI;window.restart=restart;window.stelKnop=stelKnop;window.checklist=checklist;
-window.schat=schat;
+window.schat=schat;window.neem=neem;window.drawSug=drawSug;
 form();
 })();
 </script>

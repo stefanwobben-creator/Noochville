@@ -1184,6 +1184,12 @@ a.wz-btn{text-align:center;text-decoration:none;display:inline-block}
 .wz-item{display:flex;align-items:flex-start;gap:.5rem;padding:.55rem .1rem;border-top:1px solid var(--cream-2)}
 .wz-item:first-child{border-top:none}
 .wz-itxt{flex:1;font-size:.92rem}
+/* De stap is bewerkbaar geworden: dezelfde klasse, nu ook als invoerveld. Geen nieuwe
+   klasse — de regel is dat je de bestaande uitbreidt (docs/UX_PATTERNS.md). */
+input.wz-itxt{border:1px solid transparent;border-radius:var(--radius);background:transparent;
+ padding:.15rem .3rem;font-family:inherit;color:var(--ink);width:100%}
+input.wz-itxt:hover{border-color:var(--border)}
+input.wz-itxt:focus{border-color:var(--green);background:var(--surface);outline:none}
 .wz-badge{font-size:.64rem;font-weight:700;padding:.1rem .45rem;border-radius:999px;white-space:nowrap;margin-top:.1rem}
 .wz-badge.ok{background:var(--green-tint);color:var(--green-dark)}
 .wz-badge.no{background:var(--error-tint);color:#b3402f}
