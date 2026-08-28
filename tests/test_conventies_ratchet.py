@@ -76,10 +76,10 @@ def test_er_komt_geen_vierde_postbus_bij():
 
 # ── 2. projectcreatie ───────────────────────────────────────────────────────
 #
-# Een mens maakt een project via de WIZARD. `proj_add` is de oude directe route; hij zit nog in
-# `views/projects.py::_inline_add_project`, dat nergens meer gerenderd wordt. MONOTOON DALEND:
-# bij de wizard-optimalisatie gaat dit naar 0 en verlaag je het plafond.
-PROJ_ADD_PLAFOND = {"views/projects.py": 1}
+# Een mens maakt een project via de WIZARD. `proj_add` was de oude directe route; het laatste
+# formulier (`_inline_add_project`, dat nergens meer gerenderd werd) is weg bij B1. NUL is nu het
+# plafond: elk nieuw `proj_add`-formulier is per definitie de tweede vorm.
+PROJ_ADD_PLAFOND: dict[str, int] = {}
 
 _FORM_ACTIE = re.compile(r"value='proj_add'")
 

@@ -271,7 +271,7 @@ from nooch_village.views.projects import (
     _proj_chip, _trekker_html, _trekker_options,
     _proj_progress, _due_overdue, _progress_badge,
     _scope_text, _proj_card, _quickadd,
-    _inline_add_project, _columns_html, _drag_script,
+    _columns_html, _drag_script,
     _modal_html, _group_meta, _projects_board,
     _archived_html, _projects_tab_html,
     _person_projects_tab_html, render_project,  # noqa
