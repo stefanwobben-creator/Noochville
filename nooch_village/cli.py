@@ -571,6 +571,19 @@ def main() -> None:
         print(f"klaar — {uit['gedaan']} geïndexeerd, {uit['mislukt']} mislukt "
               f"(van {uit['todo']} te doen)")
 
+    elif mode == "embed_opruimen":
+        # Ruimt de embedding-indexen op: weg met sleutels die nooit meer een treffer kunnen geven.
+        # Nalatenschap van de adres-sleutel (zie embed_opruimen.py). Droge loop is de default.
+        #   python -m nooch_village.village embed_opruimen [--apply]
+        from nooch_village.config import load_context
+        from nooch_village.embed_opruimen import rapport
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        toepassen = "--apply" in sys.argv[2:]
+        print(f"embedding-indexen in {ctx.data_dir}"
+              f"{' — TOEPASSEN' if toepassen else ' — droge loop (voeg --apply toe om te schrijven)'}\n")
+        rapport(ctx.data_dir, apply=toepassen)
+
     elif mode == "competitor":
         import os
         from nooch_village.config import load_context

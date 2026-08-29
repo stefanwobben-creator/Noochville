@@ -79,23 +79,48 @@ def _match(zoek: set[str], docs: list[tuple], limit: int) -> list:
 
 
 def _rangschik(zoek_tekst: str, docs: list[tuple], limit: int, *, index: str = "",
-               data_dir: str = "") -> tuple[list, str]:
+               data_dir: str = "", sleutel_fn=None) -> tuple[list, str]:
     """De items die het dichtst bij `zoek_tekst` liggen, plus de gebruikte modus.
 
     Eerst op BETEKENIS (`kennis_embeddings.rank_semantisch`), want de lexicale weg mist precies wat
     je van een kennislaag wilt: een project over 'paddenstoelvezel' vindt zo geen enkel kaartje over
     'mycelium'. Lukt dat niet — geen sleutel, geen index, of niet elk item is geïndexeerd — dan valt
     hij terug op de bestaande woordoverlap. NOOIT slechter dan het oude gedrag, en de modus reist
-    mee zodat het scherm/log niet suggereert dat er betekenis is vergeleken."""
-    if index and data_dir:
+    mee zodat het scherm/log niet suggereert dat er betekenis is vergeleken.
+
+    `sleutel_fn(item) -> str` levert de STABIELE identiteit van een item, en is verplicht zodra er
+    een index in het spel is.
+
+    WAAROM VERPLICHT, EN WAAROM FAIL-CLOSED. Deze functie sleutelde tot 29 aug 2026 op `str(id(o))`
+    — het geheugenadres van het object. Dat adres is per proces anders en per aanroep anders, dus de
+    index kon per definitie nooit een treffer geven: élk item werd bij élke raadpleging opnieuw
+    geëmbed, en elke nieuwe afval-sleutel bleef permanent staan. Gemeten gevolg op prod:
+    `kennisbank_embeddings.json` 189 MB voor 31 levende inzichten (4464 ids, 100% adressen),
+    `radar_embeddings.json` 287 MB (6357 van 6781 ids adressen), 10-20 quota-fouten per dag, en een
+    raadpleging die 12-17s duurde in plaats van milliseconden.
+
+    Een instabiele sleutel is dus erger dan geen semantiek: hij kost geld en quota en levert nooit
+    iets op. Daarom liever lexicaal dan gokken — en daarom kan een volgende aanroeper deze fout niet
+    per ongeluk herhalen door het argument te vergeten."""
+    if index and data_dir and sleutel_fn is not None:
         try:
             from nooch_village.kennis_embeddings import rank_semantisch
-            paren = {id(o): (o, t) for o, t in docs}
-            wrappers = [{"id": str(id(o)), "_t": t} for o, t in docs]
-            hits = rank_semantisch(zoek_tekst, wrappers, os.path.join(data_dir, index),
-                                   lambda w: w["_t"], limit=limit)
-            if hits is not None:
-                return [paren[int(h["id"])][0] for h in hits], "semantisch"
+            paren, wrappers = {}, []
+            for o, t in docs:
+                sleutel = str(sleutel_fn(o) or "").strip()
+                if not sleutel or sleutel in paren:
+                    paren = {}                            # geen stabiele identiteit voor ELK item
+                    break                                 # → lexicaal, en niets in de index schrijven
+                paren[sleutel] = o
+                wrappers.append({"id": sleutel, "_t": t})
+            if paren:
+                hits = rank_semantisch(zoek_tekst, wrappers, os.path.join(data_dir, index),
+                                       lambda w: w["_t"], limit=limit)
+                if hits is not None:
+                    return [paren[h["id"]] for h in hits], "semantisch"
+            else:
+                log.info("geen stabiele sleutel voor elk item (%s) — lexicaal, index onaangeroerd",
+                         index)
         except Exception as e:                            # noqa: BLE001 — nooit projectwerk blokkeren
             log.warning("semantische rangschikking faalde, terugval op lexicaal: %s", e)
     return _match(_woorden(zoek_tekst), docs, limit), "lexicaal"
@@ -123,7 +148,7 @@ def _inzichten(data_dir: str, tekst: str, limit: int, *, semantisch: bool = True
         return []
     alle = KennisbankStore(pad).all()
     docs = [(ins, f"{ins.get('title', '')} {ins.get('why', '')}") for ins in alle]
-    hits, _modus = _rangschik(tekst, docs, limit,
+    hits, _modus = _rangschik(tekst, docs, limit, sleutel_fn=lambda i: i.get("id"),
                               index=INDEX_INZICHTEN if semantisch else "", data_dir=data_dir)
     if not hits:
         return []
@@ -155,7 +180,7 @@ def _signalen(data_dir: str, tekst: str, limit: int, *, semantisch: bool = True)
     kandidaten = [it for it in RadarStore(pad).all_approved()
                   if not it.get("promoted_atom_id")]      # al gepromoveerd → zit al in de atomen
     docs = [(it, f"{it.get('content', '')} {it.get('rationale', '')}") for it in kandidaten]
-    hits, _modus = _rangschik(tekst, docs, limit,
+    hits, _modus = _rangschik(tekst, docs, limit, sleutel_fn=lambda i: i.get("id"),
                               index=INDEX_SIGNALEN if semantisch else "", data_dir=data_dir)
     return [{"id": it.get("id", ""), "tekst": _regel(it.get("content", "")),
              "bron": _regel(it.get("source") or it.get("feed") or "", 80)} for it in hits]

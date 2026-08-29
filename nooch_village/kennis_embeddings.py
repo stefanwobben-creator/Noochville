@@ -30,8 +30,14 @@ import os
 
 log = logging.getLogger("village.embed")
 
-# Google's stabiele embedding-model (768-dim, ruime gratis tier). Overschrijfbaar via env (geen secret).
-_MODEL = os.getenv("LLM_EMBED_MODEL", "text-embedding-004")
+# Google's embedding-model. Overschrijfbaar via env (geen secret).
+#
+# De vorige default `text-embedding-004` is bij Google verdwenen en geeft nu 404 NOT_FOUND. Dat is
+# de gevaarlijkste soort kapot: `embed()` is fail-soft, dus een 404 geeft gewoon None, de aanroeper
+# valt lexicaal terug en alles blijft werken — alleen zónder semantiek, voor altijd, zonder dat
+# iemand het merkt. Prod ontsnapte er alleen aan omdat daar `LLM_EMBED_MODEL` in .env staat; een
+# verse omgeving zou stil semantiek-loos draaien.
+_MODEL = os.getenv("LLM_EMBED_MODEL", "gemini-embedding-001")
 
 
 def _key() -> str | None:
