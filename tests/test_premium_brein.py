@@ -42,11 +42,18 @@ def test_hoog_inzet_sites_staan_vast():
     `wizard_plan` kwam er 29 aug 2026 bij. Dat was een correctie, geen uitbreiding: de wizard plant
     exact hetzelfde als `plan_checklist` — welk werk er gebeurt — maar heette anders, en draaide
     daardoor stil op de dorpsladder terwijl de daemon-variant de Sonnet-kop kreeg. Eén beslissing,
-    twee namen, twee modellen."""
+    twee namen, twee modellen.
+
+    `escalation_mens` kwam er dezelfde dag bij, op een METING. Drie identieke droge loops over
+    dezelfde 17 vastgelopen stappen gaven drie verschillende verdelingen; op negen vrijwel
+    identieke stappen koos hetzelfde model vier keer wél een rol en vijf keer NONE. Alle 17 kregen
+    antwoord van mistral-small, dus het was geen quota. 'Welke mens doet dit werk' is geen triage
+    maar een oordeel — en het spoor maakt de fout duur: een verkeerde ontvanger vandaag sluit een
+    betere morgen uit."""
     assert lk.HOOG_INZET == {
         "einddocument", "plan_checklist", "plan_checklist_retry", "wizard_plan",
-        "skill_tegenspraak", "skill_synthesize", "skill_content_schrijven", "skill_bulletin",
-        "skill_voorstel", "noochie_weigh_in"}
+        "escalation_mens", "skill_tegenspraak", "skill_synthesize", "skill_content_schrijven",
+        "skill_bulletin", "skill_voorstel", "noochie_weigh_in"}
 
 
 def test_de_twee_plan_sites_krijgen_hetzelfde_brein():
