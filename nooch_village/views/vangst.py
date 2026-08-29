@@ -28,7 +28,7 @@ from urllib.parse import quote as _q
 import time
 
 from nooch_village import org
-from nooch_village.cockpit2_util import _DS_LINK, _name, _nav, _stamp
+from nooch_village.cockpit2_util import _DS_LINK, _name, _nav, _rol_labels, _stamp
 from nooch_village.web_base import _banner, _e, _field, _page
 
 # De drie routes die een gevangen punt uit kan. Alle drie bestaan al; hier wordt er niets nieuws
@@ -106,9 +106,12 @@ def _rol_datalist(st, dl_id: str) -> str:
 
 
 def _rol_opties(st, circle: str, selected: str = "") -> str:
+    rollen = _rollen(st, circle)
+    labels = _rol_labels(rollen, st.records.all())    # Circle Lead ≠ Circle Lead: welke cirkel?
     return "".join(
-        f"<option value='{_e(r.id)}'{' selected' if r.id == selected else ''}>{_e(_name(r))}</option>"
-        for r in _rollen(st, circle))
+        f"<option value='{_e(r.id)}'{' selected' if r.id == selected else ''}>"
+        f"{_e(labels.get(r.id) or _name(r))}</option>"
+        for r in rollen)
 
 
 def _project_opties(st, circle: str) -> str:
