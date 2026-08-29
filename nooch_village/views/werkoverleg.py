@@ -257,7 +257,9 @@ def _wo_summary(st: _Stores, crec, csrf: str) -> str:
     body = (rij("Present", ", ".join(aanwezig) or "—")
             + rij("Absent", ", ".join(afwezig) or "—")
             + rij("Items handled", s["behandeld"])
-            + rij("Information processed", s["info"])
+            # Alleen tonen als een OUD overleg hem draagt: 'info' is als keuze verdwenen, en een
+            # regel die eeuwig 0 toont is ruis. De historie houdt wél zijn getal.
+            + (rij("Information processed", s["info"]) if s.get("info") else "")
             + rij("Projects added", s["projecten"])
             + rij("Actions", s.get("acties", 0))
             + rij("Items for governance meeting", s["roloverleg"])

@@ -181,10 +181,23 @@ UITKOMST_SOORTEN = (
     ("actie", "Actie", "Te nemen actie"),
     ("project", "Project", "Project"),
     ("governance", "Punt voor roloverleg", "Punt voor het roloverleg"),
-    ("info", "Informatie", "Wat je wilt delen"),
 )
-UITKOMST_LABEL = {k: lbl for k, lbl, _ in UITKOMST_SOORTEN}
-UITKOMST_VELD = {k: veld for k, _, veld in UITKOMST_SOORTEN}
+
+# LEES-ONLY, net als VOLGENDE/WACHTEND hieronder: 'info' is als KEUZE verdwenen, maar oude
+# uitkomsten dragen hem nog en moeten leesbaar blijven. Een stille drop zou betekenen dat een
+# vastgelegde uitkomst ineens niets meer zegt.
+#
+# WAAROM WEG (29 aug 2026, gemeten): van alle uitkomsten die ooit in een werkoverleg zijn
+# vastgelegd — negen — was er nul keer 'info'. Acht acties en één project. Tegelijk verdween
+# 'Share, get or record info' uit de inbox. Inbox en werkoverleg delen één verwerk-mechaniek met
+# dezelfde uitkomsten (Actie · Project · Roloverleg); een vierde bak die niemand vult is precies
+# de drift die docs/CONVENTIES.md verbiedt.
+#
+# En hij is niet verloren: een mededeling aan iemand is een ACTIE met `@` — dezelfde landing, maar
+# als werk dat terugkomt in plaats van als los bericht dat nergens meer opduikt.
+HISTORISCH_INFO = ("info", "Informatie", "Wat je wilt delen")
+UITKOMST_LABEL = {k: lbl for k, lbl, _ in (*UITKOMST_SOORTEN, HISTORISCH_INFO)}
+UITKOMST_VELD = {k: veld for k, _, veld in (*UITKOMST_SOORTEN, HISTORISCH_INFO)}
 
 # LEES-ONLY. De staat-keuze is uit het invulformulier gehaald: de wachtstatus vangen we al op
 # projectniveau, en twee plekken die hetzelfde bijhouden lopen uit de pas. Deze constanten blijven
