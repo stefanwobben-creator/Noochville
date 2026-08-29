@@ -145,7 +145,7 @@ def test_de_actiekaart_toont_geen_kaal_persoons_id(tmp_path):
     html = render_verwerk(st, n, csrf_token="t")
     assert mens.id not in html                            # nergens een kaal id
     assert "werpt dit op" not in html                     # en niet de rol-kaart
-    assert "Actie uit het werkoverleg" in html
+    assert "Actie voor jou" in html          # herkomst-neutraal: de bron staat in `herkomst`
     assert "↳ uit het werkoverleg van nooch" in html
 
 

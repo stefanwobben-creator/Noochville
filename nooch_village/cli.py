@@ -584,6 +584,21 @@ def main() -> None:
               f"{' — TOEPASSEN' if toepassen else ' — droge loop (voeg --apply toe om te schrijven)'}\n")
         rapport(ctx.data_dir, apply=toepassen)
 
+    elif mode == "vastgelopen_route":
+        # Eenmalige pas over projecten die vóór de laatste meter al geparkeerd waren. De router
+        # vuurt alleen op het moment van parkeren; deze stapel blijft anders liggen.
+        #   python -m nooch_village.village vastgelopen_route [--apply] [<rol_id>]
+        from nooch_village.config import load_context
+        from nooch_village.vastgelopen_route import rapport
+        from nooch_village.village import BASE_DIR
+        ctx = load_context(BASE_DIR)
+        toepassen = "--apply" in sys.argv[2:]
+        rol = next((a for a in sys.argv[2:] if not a.startswith("--")), "")
+        print(f"vastgelopen projecten in {ctx.data_dir}"
+              f"{' — TOEPASSEN' if toepassen else ' — droge loop (voeg --apply toe)'}"
+              f"{(' · alleen ' + rol) if rol else ''}\n")
+        rapport(ctx.data_dir, apply=toepassen, owner=rol)
+
     elif mode == "competitor":
         import os
         from nooch_village.config import load_context

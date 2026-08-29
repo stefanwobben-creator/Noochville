@@ -218,10 +218,16 @@ def test_alleen_een_mens_blokkade_pingt_de_founder():
     """Dit vuurde ongeacht de reden: 79 van de 98 founder-notificaties waren "Project van X
     vastgelopen". Een payload- of fails-blokkade is rolwerk — de rol herstelt zijn payload of de
     bron moet gefixt worden, en het project draagt sinds #287 zijn eigen park-reden waarmee de klep
-    het afhandelt. Zonder deze poort is de inbox een logbestand met een badge erop."""
+    het afhandelt. Zonder deze poort is de inbox een logbestand met een badge erop.
+
+    Sinds 29 aug 2026 staat er een vierde voorwaarde bij: `not geland`. Landde de stap al
+    wélgevormd bij een mens (de laatste meter, escalation_router.naar_mens), dan zou deze ping een
+    TWEEDE melding over dezelfde gebeurtenis zijn — en dan overschreeuwt de vage ("vastgelopen op N
+    mens-/extern item(s)") de concrete vraag die er net naast kwam te liggen."""
     src = open("nooch_village/inhabitant.py", encoding="utf-8").read()
     i = src.index("ledger.block(pid, f\"vastgelopen op")
-    blok = src[i:i + 1500]
-    assert "if mens and not payload and not faal:" in blok
+    blok = src[i:i + 1800]
+    assert "if mens and not payload and not faal and not geland:" in blok
     assert "_notify_founder" in blok
     assert "geparkeerd zonder founder-ping" in blok        # de andere tak is zichtbaar, niet stil
+    assert "wélgevormd bij een" in blok                    # en de derde tak ook
