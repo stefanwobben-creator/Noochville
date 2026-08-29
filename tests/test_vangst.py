@@ -227,12 +227,14 @@ def test_een_spanning_kan_meerdere_uitkomsten_hebben(tmp_path):
     st = cockpit2._Stores(dd)
     it = st.werk.backlog_add(CIRCLE, "de leverancier reageert niet", by_id="p1")
     naam = cockpit2._name(st.records.get(ROL))
-    for otype in ("info", "project", "governance"):
+    # 'info' is als keuze verdwenen (0 van de 9 keer gebruikt op prod, en een mededeling aan
+    # iemand is een ACTIE met `@` — zie tests/test_verwerk_uitkomsten_bevroren.py).
+    for otype in ("actie", "project", "governance"):
         _nxt, msg = _post(dd, "vangst_uitkomst", circle=CIRCLE, iid=it["id"], otype=otype,
                           rol=naam, tekst="zool-leverancier vergelijken", next="/vangst")
         assert msg.startswith("✓"), (otype, msg)
     punt = cockpit2._Stores(dd).werk.punt_get(CIRCLE, it["id"])
-    assert [u["type"] for u in punt["uitkomsten"]] == ["info", "project", "governance"]
+    assert [u["type"] for u in punt["uitkomsten"]] == ["actie", "project", "governance"]
 
 
 def test_een_punt_kan_naar_twee_verschillende_rollen(tmp_path):

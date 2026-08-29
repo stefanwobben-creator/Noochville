@@ -169,7 +169,7 @@ def test_een_uitkomst_is_bewerkbaar_en_verwijderbaar(tmp_path):
     dd = _dd(tmp_path)
     cockpit2.dispatch(dd, "wo_open", {"circle": [C], "next": ["/"]}, username="guest")
     iid = _punt(dd, "Iets")
-    _uitkomst(dd, iid, otype="info", rol=_rolnaam(dd, RID), tekst="eerste tekst")
+    _uitkomst(dd, iid, otype="actie", rol=_rolnaam(dd, RID), tekst="eerste tekst")
     uid = cockpit2._Stores(dd).werk.punt_get(C, iid)["uitkomsten"][0]["id"]
     cockpit2.dispatch(dd, "vangst_uitkomst_edit",
                       {"circle": [C], "iid": [iid], "uid": [uid], "tekst": ["bijgesteld"],

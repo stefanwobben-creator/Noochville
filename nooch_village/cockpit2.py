@@ -2898,12 +2898,10 @@ def _act_vangst_uitkomst(c):
             # gekozen PERSOON werd bij de bestemming niet eens gebruikt.
             _soort, ref = route_werk(st, tekst=tekst, rol=rol, persoon=persoon, herkomst=prov,
                                      door=(aid or it.get("by_id") or "werkoverleg"), prive=prive)
-        elif otype == "info":
-            # Zonder rol gaat het bericht naar de PERSOON; met rol naar de rol.
-            doel_type, doel_id = ("role", rol) if rol else ("person", persoon)
-            st.notif.add(doel_type, doel_id, "", by=(it.get("by_id") or aid or "werkoverleg"),
-                         snippet=tekst[:160])
-            ref = "bericht verstuurd"
+        # 'info' is hier weg (29 aug 2026). Hij was 0 van de 9 keer gebruikt, en hij dééd iets dat
+        # de actie-route beter doet: een `notif.add` naar een rol of persoon — een los bericht dat
+        # daarna nergens meer opduikt. Een mededeling aan iemand is een ACTIE, en die komt terug.
+        # Een post met otype=info valt nu in de `else` hieronder: fail-closed, geen stille landing.
         elif otype == "governance":
             _outcome_roloverleg(st, circle, tekst[:60], tekst[:60], tekst,
                                 by=(it.get("by") or "werkoverleg"), provenance=prov)
