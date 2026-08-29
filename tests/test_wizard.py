@@ -337,3 +337,84 @@ def test_de_cirkel_van_een_individuele_actie_wordt_niet_stilzwijgend_gekozen(tmp
     # mét context is het er precies één: die van de baan waar je vandaan komt
     met = _role_options(st, circle="mother_earth__tweede")
     assert met.count("Individual action") == 1 and "value='ii:mother_earth__tweede'" in met
+
+
+# ── Het kennis-budget en één modelbeleid (29 aug 2026) ──────────────────────
+
+def _post(dd, pad: str, velden: dict) -> dict:
+    """Eén echte POST naar het endpoint. Via een ECHTE request, want de vraag is juist of de ROUTE
+    de dingen doorgeeft — een test die de hulpfunctie rechtstreeks aanroept slaat precies de regel
+    over die stuk kan gaan."""
+    import json as _json, threading, urllib.parse, urllib.request
+    from http.server import HTTPServer
+    from nooch_village import cockpit2 as c2
+
+    srv = HTTPServer(("127.0.0.1", 0), c2.make_handler(dd, "t"))
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    try:
+        data = urllib.parse.urlencode({**velden, "csrf": "t"}).encode()
+        req = urllib.request.Request(f"http://127.0.0.1:{srv.server_port}{pad}", data=data)
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return _json.loads(r.read().decode("utf-8"))
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_de_wizard_vraagt_de_kennislaag_met_een_budget(tmp_path, monkeypatch):
+    """De MENS wacht. Zijn browser stapt eruit na AI_TIMEOUT_MS, dus de raadpleging vóór het model
+    krijgt een budget mee — anders eet de aanloop het werk op (gemeten op prod: 29,4s aanloop tegen
+    3,3s plannen, waarna de checklist in een dichte verbinding werd geschreven)."""
+    from nooch_village import cockpit2 as c2
+    gezien = {}
+
+    def _nep_kennis(bron, tekst, limit=5, *, exclude_pid="", deadline=None):
+        gezien["deadline"] = deadline
+        return {}
+    monkeypatch.setattr("nooch_village.kennis_context.kennis_voor", _nep_kennis)
+    monkeypatch.setattr("nooch_village.wizard.plan_items", lambda *a, **k: [])
+
+    st = _st(tmp_path)
+    _post(st.dd, "/wizard/plan", {"uitkomst": "iets onderzocht", "role": ""})
+    assert gezien.get("deadline") == c2._WIZARD_KENNIS_BUDGET_S
+    assert 0 < c2._WIZARD_KENNIS_BUDGET_S < 12, "het budget hoort een fractie van AI_TIMEOUT_MS te zijn"
+
+
+def test_de_daemon_houdt_zijn_volle_raadpleging(tmp_path):
+    """Het budget is er voor wie WACHT. De daemon kijkt naar geen enkel scherm en mag de tijd nemen;
+    daar verandert deze PR niets — de default blijft 'geen budget'."""
+    import inspect
+    from nooch_village.kennis_context import kennis_voor
+    assert inspect.signature(kennis_voor).parameters["deadline"].default is None
+
+
+def test_plan_items_geeft_zijn_ladder_door(tmp_path):
+    """Eén modelbeleid: de wizard-planner draait op het brein dat `llm_keuze` kiest, niet op de
+    dorpsladder omdat de call_site toevallig anders heet dan bij de daemon."""
+    from nooch_village.wizard import plan_items
+    gezien = {}
+
+    def _nep(prompt, **kw):
+        gezien.update(kw)
+        return '{"items":[{"tekst":"stap","skill":null,"payload":{}}]}'
+    uit = plan_items("doel", [], reason_fn=_nep, ladder="anthropic:claude-sonnet-5,mistral:x")
+    assert gezien["ladder"] == "anthropic:claude-sonnet-5,mistral:x"
+    assert gezien["call_site"] == "wizard_plan"
+    assert uit and uit[0]["tekst"] == "stap"
+    # en zonder ladder blijft het gedrag exact als vóór deze PR: de dorpsladder
+    plan_items("doel", [], reason_fn=_nep)
+    assert gezien["ladder"] is None
+
+
+def test_de_niet_blokkerende_suggestie_krijgt_een_eigen_budget(tmp_path):
+    """De 12s zit er tegen een BLOKKERENDE wachttijd. De checklist-suggestie blokkeert niets — het
+    invoerveld staat er al met de cursor erin — en draait bovendien op het traagste (beste) model.
+    Met hetzelfde budget zouden we dat model betalen en het antwoord weggooien."""
+    from nooch_village.views.wizard import render_wizard
+    h = render_wizard(_st(tmp_path), "t")
+    assert "const PLAN_TIMEOUT_MS=45000;" in h
+    assert "/wizard/plan',{uitkomst:idee,role:S.role},PLAN_TIMEOUT_MS)" in h
+    # de blokkerende stappen houden hun korte budget
+    assert "/wizard/sharpen',{ruw:S.ruw},AI_TIMEOUT_MS)" in h
+    assert "suggesties();" in h and "await suggesties()" not in h   # nog steeds niet ge-await

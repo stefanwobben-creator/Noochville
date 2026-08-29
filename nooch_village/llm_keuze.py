@@ -56,7 +56,7 @@ def persona_van_rol(omgeving, role_id: str):
 PREMIUM_ONLY: frozenset[str] = frozenset()
 
 
-# ── De negen hoog-inzet-sites ────────────────────────────────────────────────────────────────
+# ── De hoog-inzet-sites ──────────────────────────────────────────────────────────────────────
 # Waar het OORDEEL telt, niet het tempo. Dit zijn de plekken waar een goedkoop antwoord niet
 # "sneller hetzelfde" is maar iets anders: een plan dat de verkeerde taken bedenkt, een rapport dat
 # een verzonnen getal doorlaat, een critic die een zwakke claim niet ziet. Daar hoort het sterkste
@@ -65,6 +65,7 @@ HOOG_INZET: frozenset[str] = frozenset({
     "einddocument",              # het stuk dat de mens leest en waarop hij beslist
     "plan_checklist",            # bepaalt WELK werk er gebeurt — een fout hier plant zich voort
     "plan_checklist_retry",
+    "wizard_plan",               # dezelfde beslissing, maar door de mens gestart (de projectwizard)
     "skill_tegenspraak",         # de missie-critic; een zwak oordeel is erger dan geen oordeel
     "skill_synthesize",
     "skill_content_schrijven",   # gaat richting de site: hier landen claims

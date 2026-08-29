@@ -34,14 +34,25 @@ def _schone_cap_cache(monkeypatch):
     lk._cap_cache.update({"tot": 0.0, "op": False, "eur": 0.0})
 
 
-# ── De negen, en de goedkope tegenhanger ─────────────────────────────────────
+# ── De hoog-inzet-sites, en de goedkope tegenhanger ──────────────────────────
 
-def test_negen_hoog_inzet_sites():
-    assert len(lk.HOOG_INZET) == 9
+def test_hoog_inzet_sites_staan_vast():
+    """Bevroren lijst: eraan toevoegen mag, maar het is een besluit — het verlegt geld én oordeel.
+
+    `wizard_plan` kwam er 29 aug 2026 bij. Dat was een correctie, geen uitbreiding: de wizard plant
+    exact hetzelfde als `plan_checklist` — welk werk er gebeurt — maar heette anders, en draaide
+    daardoor stil op de dorpsladder terwijl de daemon-variant de Sonnet-kop kreeg. Eén beslissing,
+    twee namen, twee modellen."""
     assert lk.HOOG_INZET == {
-        "einddocument", "plan_checklist", "plan_checklist_retry", "skill_tegenspraak",
-        "skill_synthesize", "skill_content_schrijven", "skill_bulletin", "skill_voorstel",
-        "noochie_weigh_in"}
+        "einddocument", "plan_checklist", "plan_checklist_retry", "wizard_plan",
+        "skill_tegenspraak", "skill_synthesize", "skill_content_schrijven", "skill_bulletin",
+        "skill_voorstel", "noochie_weigh_in"}
+
+
+def test_de_twee_plan_sites_krijgen_hetzelfde_brein():
+    """De kern van 'één modelbeleid': plannen door de daemon en plannen door de mens in de wizard
+    is dezelfde beslissing, dus dezelfde ladder — anders bepaalt de toevallige naam het model."""
+    assert lk.ladder_voor("wizard_plan") == lk.ladder_voor("plan_checklist")
 
 
 def test_hoog_inzet_krijgt_sonnet_als_kop():
