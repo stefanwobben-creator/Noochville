@@ -148,7 +148,7 @@ def kies_ontvanger(data: dict | None, kandidaten: list[dict], trail: list[str],
     return kandidaat
 
 
-def route_item(*, ledger, records, data_dir, project, clid, item, from_role,
+def route_item(*, ledger, records, data_dir, project, clid, item, from_role, from_naam="",
                settings=None, reason_fn=None, notify=None) -> dict:
     """Routeer ÉÉN vastgelopen item. Geeft {actie, naar_rol, reason, capability, gap, trail}.
 
@@ -206,13 +206,121 @@ def route_item(*, ledger, records, data_dir, project, clid, item, from_role,
     gap = gap_ledger.record(data_dir, role=from_role, item_text=item_text, project_id=pid,
                             reason=kind, capability=capability, hop_trail=trail, item_id=item_id)
     mens = kind == gap_ledger.HUMAN_EXTERNAL or limiet_bereikt
-    if mens and notify is not None:
+    geland = None
+    if mens:
         waarom = ("de hop-limiet is bereikt — twee rollen konden dit niet oppakken"
                   if limiet_bereikt else "geen enkele rol bezit dit; het vraagt een mens of "
                                          "externe partij")
-        notify(pid, f"🙋 {from_role}: '{item_text[:90]}' — {waarom}.")
+        geland = naar_mens(data_dir=data_dir, project=project, item_text=item_text,
+                           from_role=from_role, from_naam=from_naam or from_role, waarom=waarom,
+                           reason_fn=reason_fn)
+        if geland is None and notify is not None:
+            notify(pid, f"🙋 {from_role}: '{item_text[:90]}' — {waarom}.")
     return {"actie": "human" if mens else "park", "naar_rol": None, "reason": kind,
-            "capability": capability, "gap": gap, "trail": trail}
+            "capability": capability, "gap": gap, "trail": trail, "geland": geland}
+
+
+# ── De laatste meter: van "wacht op een mens" naar werk op een bureau ────────────────────────────
+#
+# GEMETEN OP PROD, 29 aug 2026. De Scientist had 33 geblokkeerde projecten, ALLE 33 met dezelfde
+# park-reden: "vastgelopen op 1 item(s) — wacht op een mens of externe partij". Samen 21 openstaande
+# stappen over 33 projecten — gemiddeld minder dan één per project. De oudste stonden 51 dagen stil.
+# Vijftien logden zelfs "✅ Checklist voltooid — klaar voor review" en stonden alsnog geblokkeerd.
+#
+# De rol dééd zijn werk: 65 van de 88 einddocumenten wijken af van de seed. Wat ontbrak was de
+# laatste meter — één stap die hij niet kon doen, en geen route die die stap bij een mens legde.
+# Wat er wél gebeurde was een ping naar de founder met "vastgelopen op N mens-/extern item(s)": een
+# melding over een toestand, niet een vraag aan iemand die hem kan beantwoorden.
+#
+# Drie dingen zijn hier anders:
+#   1. het landt via `route_werk` in een ÉCHTE inbox — bestaande mechaniek, geen vierde kanaal;
+#   2. de ontvanger wordt GEGROND gekozen (mens-vervulde rol die het bezit → opdrachtgever →
+#      founder), niet standaard de founder;
+#   3. de tekst is wélgevormd: wie vastzit, waar hij op vastzit, en wat hij concreet nodig heeft.
+
+def _kort(tekst: str, n: int) -> str:
+    """Afkappen op een WOORDGRENS. `[:60]` maakte van 'that caused the failure' → 'that cau', en een
+    half woord in een herkomst-regel leest als een defect in plaats van als een titel."""
+    tekst = " ".join(str(tekst or "").split())
+    if len(tekst) <= n:
+        return tekst
+    kort = tekst[:n].rsplit(" ", 1)[0]
+    return (kort or tekst[:n]) + "…"
+
+
+def mens_kandidaten(records, assign, *, exclude: set) -> list[dict]:
+    """De roster, maar alleen de rollen waar een MENS op zit.
+
+    Waarom een aparte verzameling en niet de gewone roster: dit is de vraag ná "geen enkele AI-rol
+    bezit dit". Een tweede AI-rol voorstellen zou het werk opnieuw laten stranden, en precies dat
+    heeft de hop-teller al een keer geprobeerd. Hier telt alleen wie het écht kan oppakken."""
+    from nooch_village.assignments import door_mens_bemand
+    uit = []
+    for k in roster(records, exclude=exclude):
+        try:
+            if door_mens_bemand(k["id"], assign, records):
+                uit.append(k)
+        except Exception:                            # noqa: BLE001 — onbekend = geen kandidaat
+            continue
+    return uit
+
+
+def _mens_ontvanger(st, project: dict, item_text: str, from_role: str, trail: list[str],
+                    reason_fn) -> tuple[str, str, str]:
+    """(rol_id, persoon_id, grond) — wie krijgt dit, en waaróm die.
+
+    De volgorde is van meest naar minst gegrond:
+      1. een MENS-VERVULDE ROL wiens accountability of purpose deze stap dekt. Fail-closed via
+         `kies_ontvanger`: bij twijfel, een verzonnen rol of een rol die dit werk al zag → geen keuze.
+      2. de OPDRACHTGEVER van het project — wie erom vroeg, hoort te horen dat het klem zit. Een
+         zwakkere grond dan 1 (hij vroeg het, hij kan het niet per se) maar wel een echt feit.
+      3. de FOUNDER — het bestaande vangnet, en de eerlijke uitkomst als niets anders gegrond is.
+
+    Fail-OPEN op het model: geen antwoord betekent stap 2 of 3, nooit 'dan maar niet'. Werk dat
+    nergens landt is precies wat we hier weghalen."""
+    kandidaten = mens_kandidaten(st.records, st.assign, exclude={from_role, *trail})
+    if kandidaten:
+        scope = project.get("scope")
+        doel = (" · ".join(f"{k}: {v}" for k, v in scope.items())
+                if isinstance(scope, dict) else str(scope or ""))
+        keuze = kies_ontvanger(_vraag_llm(item_text, doel, kandidaten, from_role, reason_fn),
+                               kandidaten, trail, from_role)
+        if keuze:
+            return keuze, "", "deze rol bezit dit werk"
+    opdrachtgever = str(project.get("opdrachtgever") or "").strip()
+    if opdrachtgever and st.people.get(opdrachtgever) is not None:
+        return "", opdrachtgever, "jij vroeg om dit project"
+    from nooch_village.human_inbox import FOUNDER_ROLE_ID
+    return FOUNDER_ROLE_ID, "", "geen rol bezit dit, en het project heeft geen opdrachtgever"
+
+
+def naar_mens(*, data_dir: str, project: dict, item_text: str, from_role: str, from_naam: str,
+              waarom: str, reason_fn=None) -> dict | None:
+    """Leg één vastgelopen stap wélgevormd op het bureau van een mens. None = niet gelukt.
+
+    Bij None hoort de aanroeper terug te vallen op zijn oude melding: liever een vage ping dan
+    stilte. Dat is de hele fail-open-regel hier — dit pad mag nooit werk laten verdampen."""
+    try:
+        from nooch_village.cockpit2 import _Stores, route_werk      # lui: zware module, geen cyclus
+        st = _Stores(data_dir)
+        pid = project.get("id", "")
+        rol, persoon, grond = _mens_ontvanger(st, project, item_text, from_role,
+                                              trail_of(project), reason_fn)
+        scope = project.get("scope")
+        titel = (scope.get("titel") or scope.get("scope") or "" if isinstance(scope, dict)
+                 else str(scope or ""))
+        # WAT HIJ CONCREET NODIG HEEFT staat vooraan, want dat is wat de lezer moet doen.
+        # WIE + WAAROP volgt als herkomst — de kaart toont die als tweede regel.
+        tekst = f"{from_naam} heeft dit nodig: {item_text}".strip()
+        herkomst = (f"↳ {from_naam} loopt vast in '{_kort(titel, 60)}' — {waarom} "
+                    f"({grond})").strip()
+        soort, ref = route_werk(st, tekst=tekst, rol=rol, persoon=persoon, herkomst=herkomst,
+                                door=from_role, opdrachtgever="", bron_project=pid)
+        _LOG.info("🙋 laatste meter: '%s' → %s (%s)", item_text[:60], ref, grond)
+        return {"soort": soort, "ref": ref, "rol": rol, "persoon": persoon, "grond": grond}
+    except Exception as e:                           # noqa: BLE001 — nooit de puls breken
+        _LOG.warning("laatste meter mislukt (%s) — terugval op de oude melding", e)
+        return None
 
 
 def _markeer_routed(ledger, pid: str, clid: str, item_id: str) -> None:
@@ -232,22 +340,22 @@ def _zet_trail(ledger, pid: str, trail: list[str]) -> None:
         pass
 
 
-def escaleer(*, ledger, records, data_dir, project, clid, items, from_role,
+def escaleer(*, ledger, records, data_dir, project, clid, items, from_role, from_naam="",
              settings=None, reason_fn=None, notify=None) -> dict:
     """Routeer alle vastgelopen items van één park-beslissing.
 
     Geeft {handoffs, gaps, resterend, mens}: `resterend` zijn de items die hier blijven staan — die
     parkeren via de bestaande klep, zodat een doodgelopen doorverwijzing zichtbaar stilvalt bij de
     rol waar hij eindigde in plaats van stil te sterven."""
-    uit = {"handoffs": [], "gaps": [], "resterend": [], "mens": 0}
+    uit = {"handoffs": [], "gaps": [], "resterend": [], "mens": 0, "geland": []}
     for item in items:
         if item.get("routed"):                   # al eerder gerouteerd → niet nog een LLM-call
             uit["resterend"].append(item)
             continue
         try:
             res = route_item(ledger=ledger, records=records, data_dir=data_dir, project=project,
-                             clid=clid, item=item, from_role=from_role, settings=settings,
-                             reason_fn=reason_fn, notify=notify)
+                             clid=clid, item=item, from_role=from_role, from_naam=from_naam,
+                             settings=settings, reason_fn=reason_fn, notify=notify)
         except Exception as e:                   # noqa: BLE001 — routeren mag de puls nooit breken
             _LOG.warning("router: item %s overgeslagen (%s)", item.get("id"), e)
             uit["resterend"].append(item)
@@ -260,4 +368,6 @@ def escaleer(*, ledger, records, data_dir, project, clid, items, from_role,
                 uit["gaps"].append(res["gap"])
             if res["actie"] == "human":
                 uit["mens"] += 1
+                if res.get("geland"):
+                    uit["geland"].append(res["geland"])
     return uit

@@ -1517,7 +1517,7 @@ class Inhabitant(threading.Thread):
             # (match op accountability, niet op skill); pas als niemand het bezit komt de mens in
             # beeld. Wat wél kan worden doorgegeven verlaat dit project; wat blijft, parkeert
             # hieronder gewoon — zo sterft een doodgelopen doorverwijzing nooit stil.
-            open_items = self._route_stuck_items(project, clid, open_items)
+            open_items, geland = self._route_stuck_items(project, clid, open_items)
             if not open_items:
                 # Alles doorgegeven. Misschien is dit project daarmee klaar voor review.
                 from nooch_village.project_items import maybe_finish
@@ -1576,9 +1576,13 @@ class Inhabitant(threading.Thread):
             #
             # `human` is de enige reden die wél bij hem ligt: een mens- of extern item dat niemand
             # anders kan doen. Zonder deze poort is de inbox een logbestand met een badge erop.
-            if mens and not payload and not faal:
+            if mens and not payload and not faal and not geland:
                 self._notify_founder(pid, f"⏸️ Project van {self.display_name} vastgelopen op "
                                      f"{len(stuck)} mens-/extern item(s): {vraag}")
+            elif geland:
+                self.log.info("⏸️ project '%s' geparkeerd; %d stap(pen) liggen wélgevormd bij een "
+                              "mens (%s)", pid, len(geland),
+                              ", ".join(g.get("ref", "") for g in geland))
             else:
                 self.log.info("⏸️ project '%s' geparkeerd zonder founder-ping (rolwerk: "
                               "%d payload, %d fails)", pid, len(payload), len(faal))
@@ -1698,21 +1702,27 @@ class Inhabitant(threading.Thread):
             self.log.warning("missie-critic overgeslagen (project gaat door): %s", e)
             return None
 
-    def _route_stuck_items(self, project: dict, clid: str, open_items: list) -> list:
-        """Laat de escalatie-router één keer over de vastgelopen items lopen; geef terug wat hier
-        blijft. Fail-soft: gaat er iets mis, dan blijft alles staan en parkeert de klep zoals altijd
-        — routeren mag nooit werk laten verdwijnen."""
+    def _route_stuck_items(self, project: dict, clid: str, open_items: list) -> tuple[list, list]:
+        """Laat de escalatie-router één keer over de vastgelopen items lopen.
+
+        Geeft (wat hier blijft, wat wélgevormd bij een mens landde). Dat tweede is nodig omdat de
+        klep hieronder anders nóg een founder-ping stuurt over hetzelfde item: twee meldingen over
+        één gebeurtenis, waarvan de vage ('vastgelopen op N mens-/extern item(s)') de concrete
+        overschreeuwt.
+
+        Fail-soft: gaat er iets mis, dan blijft alles staan en parkeert de klep zoals altijd —
+        routeren mag nooit werk laten verdwijnen."""
         try:
             from nooch_village.escalation_router import escaleer
             uit = escaleer(ledger=self.context.projects,
                            records=getattr(self.context, "records", None),
                            data_dir=self.context.data_dir, project=project, clid=clid,
-                           items=open_items, from_role=self.id,
+                           items=open_items, from_role=self.id, from_naam=self.display_name,
                            settings=getattr(self.context, "settings", {}),
                            notify=self._notify_founder)
         except Exception as e:                   # noqa: BLE001 — de klep is belangrijker dan de router
             self.log.warning("router overgeslagen (%s) — items blijven hier", e)
-            return open_items
+            return open_items, []
         for h in uit["handoffs"]:
             self.bus.publish(Event("work_handed_off",
                                    {"project_id": project["id"], "from_role": self.id,
@@ -1723,7 +1733,12 @@ class Inhabitant(threading.Thread):
                                    {"project_id": project["id"], "role": self.id,
                                     "reason": g.get("reason"), "capability": g.get("capability"),
                                     "item": g.get("item_text")}, self.id))
-        return uit["resterend"]
+        for g in uit["geland"]:
+            self.bus.publish(Event("work_needs_human",
+                                   {"project_id": project["id"], "from_role": self.id,
+                                    "naar_rol": g.get("rol"), "naar_persoon": g.get("persoon"),
+                                    "grond": g.get("grond")}, self.id))
+        return uit["resterend"], uit["geland"]
 
     def _herstel_payloads(self, pid: str, clid: str, items: list) -> set:
         """Probeer onvolledige payloads zelf te repareren. Geeft de ids terug die weer uitvoerbaar zijn.

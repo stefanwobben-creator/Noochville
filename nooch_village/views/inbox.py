@@ -232,11 +232,20 @@ _TYPE_LIJF = {
                    "langs de poort (G0-G4) met de botsingscheck."),
     "founder":    ("Besluit voor jou",
                    "Dit raakt een bevoegdheid die alleen jij hebt. Bevestig, pas aan, of verwerp."),
-    # GEEN vraag maar een afspraak: het overleg heeft al besloten dat jij dit doet. Daarom staat
-    # er niet "past dit bij jou?" — dat gesprek is gevoerd.
-    "actie":      ("Actie uit het werkoverleg",
-                   "Afgesproken in het overleg. Doe hem en vink af, of maak er een project van "
-                   "als het meer werk blijkt dan één handeling."),
+    # GEEN vraag maar toegewezen werk: er staat niet "past dit bij jou?", want dat is al bepaald.
+    #
+    # HERKOMST-NEUTRAAL, en dat is een correctie van 29 aug 2026. Hier stond "Actie uit het
+    # werkoverleg / Afgesproken in het overleg". Toen een tweede bron acties ging leggen (een rol
+    # die vastloopt, escalation_router.naar_mens) stond er op het scherm een kaart die zei dat het
+    # in een overleg was afgesproken terwijl de herkomst-regel er direct boven iets anders zei.
+    # Twee tegengestelde zinnen op één scherm — precies wat deze kaarten moesten wegnemen.
+    #
+    # De herkomst leeft in het `herkomst`-veld en wordt daar al getoond. Hem hier nóg eens in
+    # andere woorden vertellen is `reference, don't copy` overtreden met tekst in plaats van een
+    # getal: één van de twee gaat een keer niet meer kloppen, en dat is deze.
+    "actie":      ("Actie voor jou",
+                   "Waar hij vandaan komt staat hierboven. Doe hem en vink af, of maak er een "
+                   "project van als het meer werk blijkt dan één handeling."),
 }
 
 
