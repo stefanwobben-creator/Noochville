@@ -218,3 +218,71 @@ def test_prepare_project_zonder_kennislaag_failsoft(tmp_path):
 
 def test_meld_raadpleging_zonder_bus_crasht_niet():
     meld_raadpleging(None, project_id="p1", rol="scout", kennis=None)   # alleen de logregel
+
+
+# ── Het kennis-budget: de mens wacht, dus knijp de dure stap af — niet de bron ─
+
+def _telt_semantische_pogingen(monkeypatch) -> list:
+    """Vervangt `rank_semantisch` door een teller die vastlegt welke index werd aangesproken.
+
+    We tellen POGINGEN, niet successen: de vraag is of de dure weg überhaupt ingeslagen werd."""
+    gezien: list[str] = []
+
+    def _nep(zoektekst, items, index_path, tekst_fn, **kw):
+        gezien.append(os.path.basename(index_path))
+        return None                                     # → de aanroeper valt lexicaal terug
+    monkeypatch.setattr("nooch_village.kennis_embeddings.rank_semantisch", _nep)
+    return gezien
+
+
+def test_zonder_budget_wordt_de_semantische_weg_geprobeerd(tmp_path, monkeypatch):
+    """De daemon geeft geen budget mee: die mag de tijd nemen, want niemand kijkt naar een scherm."""
+    _seed_kennislaag(str(tmp_path))
+    gezien = _telt_semantische_pogingen(monkeypatch)
+    kennis_voor(str(tmp_path), ZOEK)
+    assert set(gezien) == {"kennisbank_embeddings.json", "radar_embeddings.json"}
+
+
+def test_een_krap_budget_slaat_de_semantische_stap_over(tmp_path, monkeypatch):
+    """Krap = korter dan wat één semantische stap gemeten kost. Dan begint hij er niet aan."""
+    _seed_kennislaag(str(tmp_path))
+    gezien = _telt_semantische_pogingen(monkeypatch)
+    kennis_voor(str(tmp_path), ZOEK, deadline=2.5)
+    assert gezien == [], f"semantische stap tóch geprobeerd binnen een krap budget: {gezien}"
+
+
+def test_een_ruim_budget_laat_de_semantische_stap_gewoon_door(tmp_path, monkeypatch):
+    """Het budget is een grens op de KOSTEN, geen aan/uit-schakelaar: past de stap, dan mag hij.
+
+    Zo blijft dezelfde regel gelden als de semantische stap ooit weer goedkoop wordt."""
+    _seed_kennislaag(str(tmp_path))
+    gezien = _telt_semantische_pogingen(monkeypatch)
+    kennis_voor(str(tmp_path), ZOEK, deadline=120)
+    assert set(gezien) == {"kennisbank_embeddings.json", "radar_embeddings.json"}
+
+
+def test_het_budget_laat_geen_enkele_bron_vallen(tmp_path):
+    """DE KERN. Een krap budget maakt de match minder scherp, niet afwezig.
+
+    Een weggelaten bron is een gat waar niemand van weet: het blok ziet er compleet uit en mist
+    stilzwijgend de helft. Alle drie de soorten moeten er ook zonder semantiek staan."""
+    ids = _seed_kennislaag(str(tmp_path))
+    krap = kennis_voor(str(tmp_path), ZOEK, deadline=0.001)
+    ruim = kennis_voor(str(tmp_path), ZOEK)
+    for soort in ("kaartjes", "inzichten", "signalen"):
+        assert krap[soort], f"{soort} viel weg onder een krap budget"
+    assert krap["kaartjes"][0]["id"] == ids["atom"]
+    assert krap["inzichten"][0]["id"] == ids["inzicht"]
+    assert krap["signalen"][0]["id"] == ids["signaal"]
+    assert totaal(krap) == totaal(ruim)                 # lexicaal vindt hier hetzelfde
+    assert kennis_blok(krap)                            # en er komt een bruikbaar blok uit
+
+
+def test_de_lexicale_bronnen_kosten_geen_budget(tmp_path, monkeypatch):
+    """Kroniek, projecten en pre-flight hangen aan geen enkele externe API en worden dus nooit
+    afgeknepen — ook niet bij een budget van bijna nul."""
+    _seed_kennislaag(str(tmp_path))
+    _telt_semantische_pogingen(monkeypatch)
+    k = kennis_voor(str(tmp_path), ZOEK, deadline=0.001)
+    for sleutel in ("kroniek", "projecten", "preflight"):
+        assert sleutel in k

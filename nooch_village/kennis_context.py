@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 
 log = logging.getLogger("village.kennis")
 
@@ -35,6 +36,21 @@ _SOORTEN = ("kaartjes", "inzichten", "signalen")
 # Elk corpus zijn eigen embedding-index naast de store waar hij bij hoort.
 INDEX_INZICHTEN = "kennisbank_embeddings.json"
 INDEX_SIGNALEN = "radar_embeddings.json"          # gedeeld met radar_clusters — zelfde signalen
+
+# Wat één semantische stap in het slechtste geval kost, gemeten. Onder deze resterende tijd beginnen
+# we er niet meer aan.
+#
+# De semantische weg is de BETERE weg — hij vindt 'mycelium' bij 'paddenstoelvezel', en de lexicale
+# weg doet dat nooit. Maar hij hangt aan een externe embedding-API plus een index op schijf, en die
+# combinatie kostte op prod (28 aug 2026, gemeten): `_inzichten` 12,4s en `_signalen` 17,3s, terwijl
+# de browser er al na 12s uitstapt. Vandaar een grens die niet optimistisch is maar gemeten: begin
+# geen stap die je niet kunt betalen.
+#
+# Dat maakt dit GEEN verkapte aan/uit-schakelaar. De grens is een feit over de huidige kosten, en hij
+# verandert van betekenis zodra die kosten veranderen: wordt de semantische stap weer een fractie van
+# een seconde (zie de index-bevinding in de PR), dan laat hetzelfde budget hem gewoon weer door,
+# zonder dat hier iets aan hoeft.
+_SEMANTIEK_MINIMUM = 8.0
 
 
 def _woorden(tekst: str) -> set[str]:
@@ -100,14 +116,15 @@ def _kaartjes(data_dir: str, tekst: str, limit: int) -> list[dict]:
             for n in hits if not n.archived]              # gearchiveerd = buiten beeld (curatie)
 
 
-def _inzichten(data_dir: str, tekst: str, limit: int) -> list[dict]:
+def _inzichten(data_dir: str, tekst: str, limit: int, *, semantisch: bool = True) -> list[dict]:
     from nooch_village.kennisbank import KennisbankStore, field, load_atoms, verdict
     pad = os.path.join(data_dir, "kennisbank.json")
     if not os.path.exists(pad):
         return []
     alle = KennisbankStore(pad).all()
     docs = [(ins, f"{ins.get('title', '')} {ins.get('why', '')}") for ins in alle]
-    hits, _modus = _rangschik(tekst, docs, limit, index=INDEX_INZICHTEN, data_dir=data_dir)
+    hits, _modus = _rangschik(tekst, docs, limit,
+                              index=INDEX_INZICHTEN if semantisch else "", data_dir=data_dir)
     if not hits:
         return []
     atoms = load_atoms(data_dir)                          # voor het live verdict-woord
@@ -130,7 +147,7 @@ def _inzichten(data_dir: str, tekst: str, limit: int) -> list[dict]:
     return uit
 
 
-def _signalen(data_dir: str, tekst: str, limit: int) -> list[dict]:
+def _signalen(data_dir: str, tekst: str, limit: int, *, semantisch: bool = True) -> list[dict]:
     from nooch_village.radar_store import RadarStore
     pad = os.path.join(data_dir, "radar.json")
     if not os.path.exists(pad):
@@ -138,7 +155,8 @@ def _signalen(data_dir: str, tekst: str, limit: int) -> list[dict]:
     kandidaten = [it for it in RadarStore(pad).all_approved()
                   if not it.get("promoted_atom_id")]      # al gepromoveerd → zit al in de atomen
     docs = [(it, f"{it.get('content', '')} {it.get('rationale', '')}") for it in kandidaten]
-    hits, _modus = _rangschik(tekst, docs, limit, index=INDEX_SIGNALEN, data_dir=data_dir)
+    hits, _modus = _rangschik(tekst, docs, limit,
+                              index=INDEX_SIGNALEN if semantisch else "", data_dir=data_dir)
     return [{"id": it.get("id", ""), "tekst": _regel(it.get("content", "")),
              "bron": _regel(it.get("source") or it.get("feed") or "", 80)} for it in hits]
 
@@ -259,23 +277,44 @@ def _preflight(data_dir: str, tekst: str) -> dict:
             "samenvatting": _regel(uit.get("samenvatting"), 240)}
 
 
-def kennis_voor(bron, tekst: str, limit: int = 5, *, exclude_pid: str = "") -> dict:
+def kennis_voor(bron, tekst: str, limit: int = 5, *, exclude_pid: str = "",
+                deadline: float | None = None) -> dict:
     """Raadpleeg de kennislaag én de Kroniek voor een project-scope/hypothese.
 
     `bron` = een data_dir-pad (str) óf een Context-achtig object met `.data_dir`. Geeft
     {kaartjes, inzichten, signalen, kroniek, projecten, preflight, samenvatting}. Fail-soft per
     bron: een ontbrekende of kapotte store levert een lege deelverzameling en blokkeert nooit het
-    projectwerk — het blok wordt dan gewoon korter, nooit foutief."""
+    projectwerk — het blok wordt dan gewoon korter, nooit foutief.
+
+    `deadline`: budget in SECONDEN voor deze raadpleging. None (de default, en wat de daemon
+    gebruikt) = geen budget: neem de tijd, de beste kennis wint. Een getal betekent dat er iemand
+    wácht — de mens voor een scherm — en dan knijpt het budget precies één ding af: de semantische
+    stap van `_inzichten` en `_signalen`. Die twee hangen aan een externe embedding-API en zijn de
+    enige bronnen hier die seconden kunnen kosten; de rest is een woordvergelijking van 0,0s.
+    Verloopt het budget, dan antwoorden ze lexicaal. NOOIT overgeslagen: een kortere match is een
+    antwoord, een weggelaten bron is een gat waar niemand van weet.
+
+    Het budget is een BOVENGRENS OP DE POGING, geen garantie op de duur: een semantische stap die
+    net binnen de grens begint mag zelf nog uitlopen. Wil je een harde wandkloktijd, zet die dan
+    bij de aanroeper (de browser doet dat met `AI_TIMEOUT_MS`)."""
     data_dir = bron if isinstance(bron, str) else getattr(bron, "data_dir", None)
     uit: dict = {s: [] for s in _SOORTEN}
     uit["kroniek"] = {"bevestigd": [], "leeg": [], "fout": []}
     uit["projecten"] = []
     uit["preflight"] = {}
+    eind = (time.monotonic() + float(deadline)) if deadline else None
+    def _mag_semantisch() -> bool:
+        return eind is None or (eind - time.monotonic()) > _SEMANTIEK_MINIMUM
+
     if data_dir and (tekst or "").strip():
-        for soort, fn in (("kaartjes", _kaartjes), ("inzichten", _inzichten),
-                          ("signalen", _signalen)):
+        # De derde kolom zegt of deze bron een embedding-index gebruikt. Kaartjes doen dat niet
+        # (NotesStore matcht van nature lexicaal), dus daar valt ook niets af te knijpen.
+        for soort, fn, indexeert in (("kaartjes", _kaartjes, False),
+                                     ("inzichten", _inzichten, True),
+                                     ("signalen", _signalen, True)):
             try:
-                uit[soort] = fn(data_dir, tekst, limit)
+                kw = {"semantisch": _mag_semantisch()} if indexeert else {}
+                uit[soort] = fn(data_dir, tekst, limit, **kw)
             except Exception as e:                        # nooit projectwerk blokkeren
                 log.warning("kennis-raadpleging (%s) faalde fail-soft: %s", soort, e)
                 uit[soort] = []

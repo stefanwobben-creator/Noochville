@@ -5334,6 +5334,19 @@ def dispatch(data_dir: str, action: str, form: dict, username: str | None = None
 _PUBLIC_GET: set[str] = set()
 
 
+# Het kennis-budget van de wizard, in seconden. Er wacht een MENS voor een scherm, en zijn browser
+# stapt eruit na `AI_TIMEOUT_MS` (12s, views/wizard.py). Het budget is met opzet een fractie daarvan:
+# de raadpleging is de aanloop, het model is het werk, en de aanloop mag het werk niet opeten.
+#
+# Gemeten op prod 28 aug 2026: de raadpleging kostte 29,4s en het plannen zelf 3,3s. De server maakte
+# de checklist keurig af en schreef hem in een verbinding die al dicht was — vier keer een
+# BrokenPipeError in het log en vier keer "the assistant could not be reached" op het scherm.
+#
+# Dit knijpt alleen de semantische stap af; alle lexicale bronnen blijven staan (zie
+# `kennis_context.kennis_voor`). Voor de daemon verandert er niets: die geeft geen budget mee.
+_WIZARD_KENNIS_BUDGET_S = 2.5
+
+
 def _home_node(recs) -> str:
     """De node waarop '/' opent: de operationele cirkel (Nooch), niet de anchor (Mother Earth) —
     daar gebeurt het meeste werk. Fallback: eerste sub-cirkel van de root, anders de root zelf,
@@ -5415,7 +5428,31 @@ def make_handler(data_dir: str, csrf_token: str,
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(b)))
             self.end_headers()
-            self.wfile.write(b)
+            self._schrijf(b)
+
+        def _schrijf(self, b: bytes) -> bool:
+            """Het antwoord naar de client schrijven. False = de client was er niet meer.
+
+            EEN VERBROKEN VERBINDING IS GEEN FOUT VAN ONS. De browser breekt af (de gebruiker
+            navigeert weg, of een fetch-timeout zoals `AI_TIMEOUT_MS` in de wizard verloopt), en pas
+            daarna komt ons antwoord aan bij een socket die al dicht is. Dat leverde tot nu toe een
+            grafsteen op: een BrokenPipeError met volledige traceback, doorgegeven aan de
+            `except Exception` van de route, die er dan een HTTP 500 van maakte — een 500 die
+            niemand meer kón ontvangen. In de logs las dat als "het endpoint faalde", terwijl het
+            werk juist AF was; op prod stonden zo vier /wizard/plan-"fouten" die in werkelijkheid
+            vier voltooide checklists waren.
+
+            Daarom hier gevangen en niet doorgegeven: er valt niets meer te doen of te melden aan
+            een verbinding die weg is. Eén rustige INFO-regel met het pad, zodat het zichtbaar
+            blijft dat er iemand vertrok — dat is een signaal over TRAAGHEID, niet over falen."""
+            try:
+                self.wfile.write(b)
+                return True
+            except (BrokenPipeError, ConnectionResetError):
+                logging.getLogger("cockpit2").info(
+                    "client vertrok voordat het antwoord verstuurd was (%s, %d bytes)",
+                    self.path, len(b))
+                return False
 
         def _send_bytes(self, data: bytes, content_type: str, filename: str = "",
                         cache_secs: int = 0):
@@ -5427,7 +5464,7 @@ def make_handler(data_dir: str, csrf_token: str,
                 self.send_header("Cache-Control", f"public, max-age={cache_secs}")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
-            self.wfile.write(data)
+            self._schrijf(data)
 
         def _send_json(self, payload: dict, code: int = 200):
             b = json.dumps(payload).encode("utf-8")
@@ -5435,7 +5472,7 @@ def make_handler(data_dir: str, csrf_token: str,
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(b)))
             self.end_headers()
-            self.wfile.write(b)
+            self._schrijf(b)
 
         def do_GET(self):
             path, _, query = self.path.partition("?")
@@ -5495,7 +5532,7 @@ def make_handler(data_dir: str, csrf_token: str,
                 self.send_header("Content-Type", ctype)
                 self.send_header("Content-Length", str(len(b)))
                 self.end_headers()
-                self.wfile.write(b)
+                self._schrijf(b)
                 return
             if path == "/epic/frame":
                 # NASA EPIC-frame (server-side naar ~512px JPEG geresized) doorserveren; key blijft server-side.
@@ -6084,13 +6121,25 @@ def make_handler(data_dir: str, csrf_token: str,
                             if dblok:
                                 delen.append("Eerder afgerond onderzoek in het dorp (gebruik dit; "
                                              "plan geen items die dit al beantwoordt):\n" + dblok)
-                            kblok = kennis_blok(kennis_voor(st.dd, goal))
+                            kblok = kennis_blok(kennis_voor(st.dd, goal,
+                                                            deadline=_WIZARD_KENNIS_BUDGET_S))
                             if kblok:
                                 delen.append(kblok)
                             kennis = "\n\n".join(delen)
                         except Exception:
                             logging.getLogger("cockpit2.wizard").exception("geheugen-raadpleging faalde")
-                        items = plan_items(goal, catalog, required_of=req, kennis=kennis)
+                        # ÉÉN MODELBELEID. Dit is dezelfde beslissing als `plan_checklist` in de
+                        # daemon — welk werk er gebeurt — en een fout hier plant zich voort in elke
+                        # stap die eruit volgt. Hij hoort dus op hetzelfde brein te draaien, via
+                        # dezelfde ingang (`llm_voorkeur` → `ladder_voor`), niet op de dorpsladder
+                        # omdat hij toevallig anders heet. Fail-soft: None = de dorpsladder.
+                        try:
+                            from nooch_village.llm_keuze import llm_voorkeur
+                            _ladder = llm_voorkeur(st, g1("role"), "wizard_plan")
+                        except Exception:
+                            _ladder = None
+                        items = plan_items(goal, catalog, required_of=req, kennis=kennis,
+                                           ladder=_ladder)
                         self._send_json({"items": items})
                         return
                     # /wizard/create

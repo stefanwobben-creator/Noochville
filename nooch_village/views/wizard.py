@@ -173,6 +173,16 @@ async function post(url,obj,ms){
 // FAIL-OPEN OP DE AI, overal dezelfde vorm als in #369: een timeout, en mislukken levert een
 // nette melding in plaats van een hangend scherm. Geen model betekent: je typt het zelf.
 const AI_TIMEOUT_MS=12000;
+// De checklist-suggestie krijgt langer, en dat is geen uitzondering maar een gevolg: die 12s zit er
+// tegen een BLOKKERENDE wachttijd, en deze call blokkeert niets. Het invoerveld staat er al met de
+// cursor erin (`suggesties()` wordt bewust niet ge-await), dus de enige vraag is hoe lang we willen
+// wachten op een bonus die naast een bruikbaar veld landt.
+//
+// Het verschil is bovendien niet theoretisch: dit is een hoog-inzet-site (llm_keuze.HOOG_INZET), en
+// die draait op het sterkste model dat we hebben — trager dan de goedkope tredes. Met 12s zou de
+// browser er stelselmatig uitstappen zodra dat model wél antwoordt, en dan hebben we het werk
+// betaald en weggegooid. Precies wat er op prod al gebeurde, alleen met een andere oorzaak.
+const PLAN_TIMEOUT_MS=45000;
 
 function lees(){
   const g=id=>{const el=document.getElementById(id);return el?el.value.trim():'';};
@@ -282,7 +292,7 @@ async function suggesties(){
   lees();
   const idee=(S.uitkomst||S.ruw); if(!idee)return;
   S.sugBezig=true; drawSug();
-  const r=await post('/wizard/plan',{uitkomst:idee,role:S.role},AI_TIMEOUT_MS);
+  const r=await post('/wizard/plan',{uitkomst:idee,role:S.role},PLAN_TIMEOUT_MS);
   S.sugBezig=false;
   S.planfout=(r&&r.__fout)||'';
   const heb=new Set(S.checklist.map(x=>(x.tekst||'').trim().toLowerCase()));

@@ -188,13 +188,18 @@ def _catalog_block(catalog: list[dict]) -> str:
 
 
 def plan_items(goal: str, catalog: list[dict], *, reason_fn=reason,
-               required_of=None, max_items: int = 5, kennis: str = "") -> list[dict]:
+               required_of=None, max_items: int = 5, kennis: str = "",
+               ladder: str | None = None) -> list[dict]:
     """Stel een checklist voor bij `goal`, elk item met een skill uit `catalog` (of null = mens-taak)
     en een payload in de vorm van het input_schema. `catalog` = [{name, description, input}] van de
     skills die de ROL heeft. `required_of(skill)` → verplichte payload-velden (voor de uitvoerbaarheid).
 
     Geeft [{tekst, skill, payload, ok, reden}]. ok = een skill van de rol dekt het item én de
     verplichte payload-velden zijn ingevuld; anders ok=False (mens-taak of payload onvolledig).
+    `ladder`: de modelkeuze voor deze call (None = de dorpsladder). Bepalen WELK werk er gebeurt is
+    dezelfde beslissing als `plan_checklist` in de daemon, dus hetzelfde beleid — de aanroeper haalt
+    hem op bij `llm_keuze.llm_voorkeur`, want die kent de persona en het budget; hier weten we dat niet.
+
     Fail-soft: [] bij een onbruikbaar LLM-antwoord."""
     goal = (goal or "").strip()
     if not goal:
@@ -218,7 +223,8 @@ def plan_items(goal: str, catalog: list[dict], *, reason_fn=reason,
         "werkwoord en is één stap.\n"
         "Antwoord UITSLUITEND met JSON:\n"
         '{"items":[{"tekst":"...","skill":"skillnaam of null","payload":{}}]}')
-    raw = reason_fn(prompt, max_tokens=900, json_mode=True, call_site="wizard_plan")
+    raw = reason_fn(prompt, max_tokens=900, json_mode=True, call_site="wizard_plan",
+                    ladder=ladder)
     data = _extract(raw)
     if not isinstance(data, dict) or not isinstance(data.get("items"), list):
         return []
