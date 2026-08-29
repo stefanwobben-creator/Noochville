@@ -6090,9 +6090,19 @@ def make_handler(data_dir: str, csrf_token: str,
                             _items = json.loads(g1("items") or "[]")
                         except ValueError:
                             _items = []
+                        # Twee tredes: eerst de gratis skill-opzoeking, en alleen als die leeg
+                        # is één begrensd modelrondje over de roster. De ladder komt via dezelfde
+                        # ingang als elders (`llm_voorkeur`), zodat er geen tweede modelbeleid
+                        # ontstaat. Fail-open: geen model → lege lijst → 'wijs zelf toe'.
+                        try:
+                            from nooch_village.llm_keuze import llm_voorkeur
+                            _lad = llm_voorkeur(st, g1("role"), "rol_match")
+                        except Exception:
+                            _lad = None
                         self._send_json({"rollen": roles_for(
                             _items if isinstance(_items, list) else [],
-                            records=st.records, ai=st.ai, skills_of=skill_links.effectief)})
+                            records=st.records, ai=st.ai, skills_of=skill_links.effectief,
+                            ladder=_lad)})
                         return
                     if path == "/wizard/plan":
                         from nooch_village.wizard import plan_items
@@ -6144,7 +6154,7 @@ def make_handler(data_dir: str, csrf_token: str,
                         except Exception:
                             _ladder = None
                         items = plan_items(goal, catalog, required_of=req, kennis=kennis,
-                                           ladder=_ladder)
+                                           ladder=_ladder, data_dir=data_dir)
                         self._send_json({"items": items})
                         return
                     # /wizard/create

@@ -88,6 +88,10 @@ GOEDKOOP: frozenset[str] = frozenset({
     "classify_tension", "cockpit_mention_triage", "escalation_route", "escaleer_keuze",
     "escaleer_classify", "scope_nudge_match", "governance_target_pick", "news_driver_pick",
     "cockpit_match_pair", "cockpit_match_keycheck", "wizard_title",
+    # `rol_match` — welke rol pakt deze stap op? Triage: een kleine gesloten kandidatenlijst, het
+    # antwoord wordt machinaal teruggecontroleerd, en een misser kost één klik. Anders dan
+    # `escalation_mens`, waar een verkeerde ontvanger via het spoor blijft plakken.
+    "rol_match",
 })
 
 # De dorpsbrede kop voor hoog-inzet: Sonnet, met de dorpsladder als staart (via `met_dorpsstaart`).

@@ -240,9 +240,10 @@ def test_rolsuggesties_zijn_gegrond_op_skills_niet_geraden(tmp_path):
     uit = roles_for(items, records=st.records, ai=st.ai, skills_of=skill_links.effectief)
     assert [r["rol"] for r in uit] == [rid]
     assert uit[0]["stappen"] == ["site nakijken"]
-    # zonder skill-stappen valt er niets te matchen → lege sectie, geen blokkade
+    # Zonder skill valt hij door naar de purpose-trede (één begrensd modelrondje over de roster).
+    # Geen model → lege sectie, geen blokkade; het scherm zegt dan 'wijs zelf toe'.
     assert roles_for([{"tekst": "los idee"}], records=st.records, ai=st.ai,
-                     skills_of=skill_links.effectief) == []
+                     skills_of=skill_links.effectief, reason_fn=lambda *a, **k: None) == []
 
 
 def test_een_slapende_rol_krijgt_geen_werk_aangeboden(tmp_path):
