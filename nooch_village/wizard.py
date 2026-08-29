@@ -12,10 +12,14 @@ i.p.v. een fout, en kan de mens alsnog handmatig verder.
 from __future__ import annotations
 
 import json
+import logging
 import re
 
+from nooch_village.checklist_vorm import MAX_WOORDEN as _MAX_STAP_WOORDEN, zeef
 from nooch_village.llm import reason
 from nooch_village.projects import _BUSINESS_IMPACT, _EFFORT, _MISSIE_IMPACT
+
+log = logging.getLogger("village.wizard")
 
 
 # Werkwoorden die een project als een AFGERONDE uitkomst markeren (Holacracy: verleden tijd). Voor de
@@ -84,36 +88,198 @@ def sharpen_outcome(ruw: str, *, anchors=None, reason_fn=reason) -> str:
 _ASSEN = {"tijd": _EFFORT, "missie": _MISSIE_IMPACT, "business": _BUSINESS_IMPACT}
 
 
-def roles_for(items: list, *, records, ai, skills_of) -> list[dict]:
-    """Welke WAKKERE rollen kunnen een stuk van dit plan oppakken?
+def _wakkere_rollen(records, ai, skills_of) -> list[dict]:
+    """De rollen die werk kunnen oppakken, met alles waarop je ze kunt herkennen.
 
-    GEGROND, niet geraden: de match komt uit de effectieve skillset van een rol (DNA-grants plus
-    gekoppelde middelen) tegen de skill die de planner al aan een checklist-item hing. Daarom werkt
-    dit óók zonder model — er valt hier niets te fantaseren, alleen op te zoeken.
-
-    Slapende en gearchiveerde rollen doen niet mee: die staan stil, en werk beloven aan een rol
-    waar niemand zit is precies wat we bij de afslanking wilden voorkomen.
-
-    Geeft per rol: id, naam, en welke stappen hij kan doen."""
+    Slapend en gearchiveerd doen niet mee: die staan stil, en werk beloven aan een rol waar niemand
+    zit is precies wat we bij de afslanking wilden voorkomen. Cirkels ook niet — die hebben geen
+    handen (harde regel 7)."""
     from nooch_village import org
-
-    nodig: dict[str, list[str]] = {}
-    for it in (items or []):
-        sk = (it or {}).get("skill")
-        tekst = ((it or {}).get("tekst") or "").strip()
-        if sk and tekst:
-            nodig.setdefault(str(sk), []).append(tekst)
-    if not nodig:
-        return []
     uit = []
     for rec in sorted(records.all(), key=lambda r: _rolnaam(r).lower()):
         if org.is_circle(rec) or getattr(rec, "archived", False) or getattr(rec, "slaapt", False):
             continue
-        kan = skills_of(rec, ai) or set()
-        stappen = [t for sk, ts in nodig.items() if sk in kan for t in ts]
-        if stappen:
-            uit.append({"rol": rec.id, "naam": _rolnaam(rec), "stappen": stappen})
+        d = getattr(rec, "definition", None)
+        uit.append({"rol": rec.id, "naam": _rolnaam(rec),
+                    "skills": sorted(skills_of(rec, ai) or set()),
+                    "purpose": (getattr(d, "purpose", "") or "")[:160],
+                    "accountabilities": list(getattr(d, "accountabilities", None) or [])[:5]})
     return uit
+
+
+def _match_deterministisch(stappen: list[dict], rollen: list[dict]) -> list[dict]:
+    """De gratis weg: een stap draagt al een skill, en die skill zit in de set van een rol.
+
+    Dit is een OPZOEKING, geen gok — daarom staat hij vooraan en kost hij niets.
+
+    EEN SKILL DIE IEDEREEN HEEFT ONDERSCHEIDT NIETS. Gezien op het echte scherm: de stap "escaleer
+    onbevestigde claims naar compliance" stelde alle vijf de rollen-met-skills voor, want `escaleer`
+    en `projectverzoek` zitten in elke skillset. Vijf suggesties waarvan er geen enkele iets zegt is
+    erger dan geen suggestie — dan moet de lezer alsnog zelf kiezen, maar nu uit een lijst die
+    zekerheid uitstraalt. Zo'n skill telt hier dus niet mee; blijft er niets over, dan valt de stap
+    door naar de purpose-trede, waar wél een onderscheid te maken is."""
+    # Pas vanaf TWEE kandidaten heeft 'iedereen heeft hem' betekenis: met één rol is elke skill
+    # per definitie universeel, en dan zou deze regel de enige echte match wegfilteren. Een
+    # testfixture met precies één skill-dragende rol wees dat aan.
+    kandidaten = [r for r in rollen if r["skills"]]
+    breed = (set.intersection(*(set(r["skills"]) for r in kandidaten))
+             if len(kandidaten) >= 2 else set())
+    nodig: dict[str, list[str]] = {}
+    for it in stappen:
+        sk, tekst = (it or {}).get("skill"), ((it or {}).get("tekst") or "").strip()
+        if sk and tekst and str(sk) not in breed:
+            nodig.setdefault(str(sk), []).append(tekst)
+    if not nodig:
+        return []
+    uit = []
+    for r in rollen:
+        kan = set(r["skills"])
+        gedekt = [t for sk, ts in nodig.items() if sk in kan for t in ts]
+        if gedekt:
+            uit.append({"rol": r["rol"], "naam": r["naam"], "stappen": gedekt,
+                        "grond": "heeft de skill die deze stap vraagt"})
+    return uit
+
+
+def _match_model(stappen: list[dict], rollen: list[dict], *, reason_fn=None,
+                 ladder: str | None = None) -> list[dict]:
+    """De tweede weg, ALLEEN als de eerste leeg is: één begrensd rondje over de roster.
+
+    Waarom een model hier verantwoord is: de kandidatenlijst is klein en gesloten (de wakkere rollen,
+    op prod een stuk of twintig), het antwoord wordt machinaal teruggecontroleerd tegen die lijst, en
+    de fout is goedkoop — een verkeerde suggestie kost een klik. Dat is een andere afweging dan
+    `escalation_mens`, waar een misser via het spoor blijft plakken.
+
+    Fail-OPEN: geen model, onbruikbaar antwoord of een verzonnen rol → een lege lijst, en het scherm
+    zegt 'wijs zelf toe'. Nooit een gok die als gronding leest."""
+    if not stappen or not rollen:
+        return []
+    if reason_fn is None:
+        reason_fn = reason
+    lijst = "\n".join(
+        f"- {r['rol']} ({r['naam']}): purpose={r['purpose'] or '(geen)'}; "
+        f"accountabilities={'; '.join(r['accountabilities']) or '(geen)'}; "
+        f"skills={', '.join(r['skills']) or '(geen)'}" for r in rollen)
+    genummerd = "\n".join(f"{i + 1}. {(it.get('tekst') or '').strip()}"
+                          for i, it in enumerate(stappen))
+    prompt = (
+        "Je verdeelt stappen over rollen in een zelfsturende organisatie (Holacracy).\n\n"
+        f"STAPPEN:\n{genummerd}\n\n"
+        f"ROLLEN (id, naam, purpose, accountabilities, skills):\n{lijst}\n\n"
+        "Wijs elke stap toe aan de rol wiens PURPOSE of ACCOUNTABILITY hem dekt. Oordeel over "
+        "eigenaarschap, niet over gereedschap: een rol die dit werk bezit maar de tool nog niet "
+        "heeft, is nog steeds de juiste. Past er voor een stap geen enkele rol duidelijk, laat die "
+        "stap dan weg — liever niets dan een gok.\n"
+        'Antwoord UITSLUITEND met JSON: {"toewijzingen":[{"stap":<nummer>,"rol":"<rol-id>"}]}')
+    try:
+        raw = reason_fn(prompt, json_mode=True, max_tokens=500, call_site="rol_match",
+                        ladder=ladder)
+    except Exception as e:                               # noqa: BLE001 — nooit het scherm breken
+        log.warning("rol-match via model faalde: %s", e)
+        return []
+    data = _extract(raw)
+    rijen = (data or {}).get("toewijzingen")
+    if not isinstance(rijen, list):
+        return []
+    geldig = {r["rol"]: r for r in rollen}
+    per_rol: dict[str, list[str]] = {}
+    for rij in rijen:
+        if not isinstance(rij, dict):
+            continue
+        rol = str(rij.get("rol") or "").strip()
+        if rol not in geldig:                            # verzonnen of uitgesloten rol → weg
+            continue
+        try:
+            i = int(rij.get("stap")) - 1
+        except (TypeError, ValueError):
+            continue
+        if 0 <= i < len(stappen):
+            tekst = (stappen[i].get("tekst") or "").strip()
+            if tekst:
+                per_rol.setdefault(rol, []).append(tekst)
+    return [{"rol": rol, "naam": geldig[rol]["naam"], "stappen": ts,
+             "grond": "purpose of accountability dekt dit"}
+            for rol, ts in per_rol.items()]
+
+
+def roles_for(items: list, *, records, ai, skills_of, reason_fn=None,
+              ladder: str | None = None) -> list[dict]:
+    """Welke WAKKERE rollen kunnen een stuk van dit werk oppakken?
+
+    TWEE TREDES, en de volgorde is de hele truc:
+
+      1. DETERMINISTISCH (gratis): draagt een stap al een skill, dan zoeken we op wélke rol die
+         skill heeft. Een opzoeking, geen gok.
+      2. DE GATEN: één GEBATCHTE modelcall over de stappen die trede 1 niet dekte, met de roster
+         erbij (purpose + accountabilities + skills). Het model vult aan, het overschrijft niets.
+         Eén call per keer dat iemand de sectie opent — een mens die een wizard opent is zeldzaam
+         en bewust, anders dan een autonome lus die elke puls vuurt.
+
+    WAAROM DIE TWEEDE TREDE ER MOEST KOMEN, gemeten op prod 29 aug 2026. Op het doel "technische
+    specs van alle materialen" zei dit scherm "geen rol heeft een passende skill", terwijl Scientist,
+    Library en Copywriter voor de hand liggen. De oorzaak was NIET dat de match te letterlijk was —
+    er werd helemaal geen tekst vergeleken. De planner had aan alle vijf de stappen `skill=null`
+    gehangen (de wizard stond open voor Copywriter, en geen van diens vier skills dekt dit), dus
+    `nodig` was leeg en de functie viel er meteen uit. Er viel niets te matchen.
+
+    Daaronder ligt een tweede feit dat de eerste trede structureel dun maakt: van de 23 wakkere
+    rollen hebben er VIJF een skill (Scientist 12, Library 10, Trends & Competition 7, Compliance 6,
+    Copywriter 4). De andere achttien — Creator of Shoes, Website Developer, Community and Email —
+    hebben er nul. Een skill-match kan die per definitie nooit voorstellen, hoe goed hij ook is.
+    Betere skill-tagging maakt trede 1 sterker, maar niet volledig: purpose en accountability zijn
+    de enige grond die ook een skill-loze rol heeft.
+
+    Fail-open: geen model → een lege lijst, en het scherm zegt 'wijs zelf toe'.
+
+    Geeft per rol: rol, naam, welke stappen, en de GROND (waaróm deze rol)."""
+    stappen = [it for it in (items or []) if isinstance(it, dict) and (it.get("tekst") or "").strip()]
+    if not stappen:
+        return []
+    rollen = _wakkere_rollen(records, ai, skills_of)
+    gevonden = _match_deterministisch(stappen, rollen)
+
+    # HET MODEL VULT DE GATEN, het overschrijft niets. Eerst was dit alles-of-niets: één stap die
+    # toevallig een skill dekte hield het modelrondje tegen, en dan bleven de andere stappen zonder
+    # rol staan terwijl er wél een voor de hand liggende was. Gemeten: van vier stappen dekte er
+    # één een Copywriter-skill, en Scientist en Library kwamen daardoor niet in beeld.
+    #
+    # Eén GEBATCHTE call over de resterende stappen, niet één per stap: de kandidatenlijst is toch
+    # dezelfde, en een mens die een wizard opent is zeldzaam en bewust — heel anders dan een
+    # autonome lus die elke puls vuurt.
+    gedekt = {t for r in gevonden for t in r["stappen"]}
+    open_stappen = [it for it in stappen if (it.get("tekst") or "").strip() not in gedekt]
+    if not open_stappen:
+        return gevonden
+    erbij = _match_model(open_stappen, rollen, reason_fn=reason_fn, ladder=ladder)
+    return _voeg_samen(gevonden, erbij)
+
+
+def _voeg_samen(a: list[dict], b: list[dict]) -> list[dict]:
+    """Twee uitkomstlijsten op rol samenvoegen, zonder een stap dubbel te tonen.
+
+    De GROND van de eerste treffer blijft staan: een skill-match is harder dan een purpose-match,
+    en het label hoort de sterkste grond te noemen die er voor die rol is."""
+    per_rol: dict[str, dict] = {}
+    for rij in [*a, *b]:
+        bestaand = per_rol.get(rij["rol"])
+        if bestaand is None:
+            per_rol[rij["rol"]] = {**rij, "stappen": list(rij["stappen"])}
+            continue
+        for t in rij["stappen"]:
+            if t not in bestaand["stappen"]:
+                bestaand["stappen"].append(t)
+    return list(per_rol.values())
+
+
+def roles_for_tekst(tekst: str, *, records, ai, skills_of, reason_fn=None,
+                    ladder: str | None = None) -> list[dict]:
+    """Dezelfde matcher, maar op één stuk TEKST in plaats van een plan.
+
+    Bestaat zodat 'bij wie hoort deze spanning?' geen tweede matcher wordt: een spanning is hier
+    gewoon een plan van één stap zonder skill, en valt dus meteen door naar de purpose-trede."""
+    return roles_for([{"tekst": (tekst or "").strip(), "skill": None}],
+                     records=records, ai=ai, skills_of=skills_of, reason_fn=reason_fn,
+                     ladder=ladder)
 
 
 def _rolnaam(rec) -> str:
@@ -189,7 +355,7 @@ def _catalog_block(catalog: list[dict]) -> str:
 
 def plan_items(goal: str, catalog: list[dict], *, reason_fn=reason,
                required_of=None, max_items: int = 5, kennis: str = "",
-               ladder: str | None = None) -> list[dict]:
+               ladder: str | None = None, data_dir: str = "") -> list[dict]:
     """Stel een checklist voor bij `goal`, elk item met een skill uit `catalog` (of null = mens-taak)
     en een payload in de vorm van het input_schema. `catalog` = [{name, description, input}] van de
     skills die de ROL heeft. `required_of(skill)` → verplichte payload-velden (voor de uitvoerbaarheid).
@@ -216,11 +382,24 @@ def plan_items(goal: str, catalog: list[dict], *, reason_fn=reason,
         + ("GEHEUGEN-EERST: er staat hierboven al kennis of eerder onderzoek. Bouw daarop VOORT: "
            "herhaal geen bestaand onderzoek en verzamel niet opnieuw wat er al ligt. Begin bij een "
            "SYNTHESE-stap (lees en combineer wat we al weten) en plan daarna alleen het écht "
-           "ontbrekende stuk.\n" if kennis_section else "")
+           "ontbrekende stuk.\n"
+           # DE HERKOMST VAN DAT BLOK MOET ERBIJ. Het is EXTERN onderzoek — patenten, papers,
+           # radar-signalen — en géén inventaris van wat Nooch gebruikt. Zonder deze zin las het
+           # model 'PHA, PBAT, algae-based' onder het kopje 'wat we al weten' en schreef het terug
+           # als ONZE materialen, inclusief 'recycled' — een claim die wij niet zomaar mogen maken.
+           "LET OP: dat blok is EXTERN ONDERZOEK (patenten, papers, marktsignalen), GEEN lijst van "
+           "materialen of leveranciers die wij gebruiken. Schrijf nooit dat een materiaal uit dat "
+           "blok van ons is, en neem er geen materiaalnamen uit over in de stappen.\n"
+           if kennis_section else "")
         + "Voor ELK item: als één van deze skills het kan uitvoeren, geef de exacte skill-naam ÉN een "
         "'payload'-object dat voldoet aan de 'input'-vorm van die skill. Kan geen enkele skill het, "
-        "zet skill=null en payload={} (dan wordt het een menselijke taak). Elk item begint met een "
-        "werkwoord en is één stap.\n"
+        "zet skill=null en payload={} (dan wordt het een menselijke taak).\n"
+        # VORM, expliciet en met een voorbeeld: de gemeten suggesties waren 25-40 woorden lang.
+        f"VORM VAN EEN STAP: begint met een werkwoord, is ÉÉN handeling, en is hoogstens "
+        f"{_MAX_STAP_WOORDEN} woorden. Geen toelichting, geen opsomming tussen haakjes. "
+        "Goed: 'vraag drie leveranciers om technische specs'. "
+        "Fout: 'Synthetiseer de bestaande inzichten en bevestigde bevindingen om de huidige "
+        "kennis over plantaardige zolen te structureren'.\n"
         "Antwoord UITSLUITEND met JSON:\n"
         '{"items":[{"tekst":"...","skill":"skillnaam of null","payload":{}}]}')
     raw = reason_fn(prompt, max_tokens=900, json_mode=True, call_site="wizard_plan",
@@ -247,7 +426,14 @@ def plan_items(goal: str, catalog: list[dict], *, reason_fn=reason,
                 ok, reden = False, f"payload onvolledig: {', '.join(mist)} ontbreekt"
         uit.append({"tekst": tekst[:200], "skill": skill, "payload": payload,
                     "ok": ok, "reden": reden})
-    return uit
+    # DE POORT ONDER DE PROMPT. De prompt vraagt om korte stappen zonder claims; deze zeef
+    # garandeert het. Een prompt is een verzoek, een poort is een garantie — en het model schreef
+    # gemeten stappen van 25-40 woorden met 'recycled polymers' erin.
+    goed, weg = zeef(uit, data_dir=data_dir)
+    if weg:
+        log.info("wizard-plan: %d van de %d voorgestelde stappen geweigerd op vorm/claim",
+                 len(weg), len(uit))
+    return goed
 
 
 def _extract(raw):

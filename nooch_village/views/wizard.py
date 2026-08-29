@@ -304,6 +304,7 @@ async function suggesties(){
   S.planfout=(r&&r.__fout)||'';
   const heb=new Set(S.checklist.map(x=>(x.tekst||'').trim().toLowerCase()));
   S.suggesties=((r&&r.items)||[]).filter(x=>x&&x.tekst&&!heb.has(x.tekst.trim().toLowerCase()));
+  S.sugAan=(S.sugAan||0)+S.suggesties.length; // hoeveel er ooit getoond zijn
   drawSug();
 }
 function draw(){
@@ -330,8 +331,10 @@ function drawSug(){
   el.innerHTML=`<p class="wz-hint">✨ suggests — tap to add:</p><div class="wz-chips">${chips}</div>`;
 }
 function neem(i){const it=S.suggesties[i]; if(!it)return;
+  S.sugOver=(S.sugOver||0)+1;                 // dom tellen: aangetikt
   S.suggesties.splice(i,1); S.checklist.push(it); draw();}
 function addI(){const i=document.getElementById('wz-ni');const v=i.value.trim();if(!v)return;
+  S.sugEigen=(S.sugEigen||0)+1;               // en zelf getypt — de eerlijke noemer
   S.checklist.push({tekst:v,skill:null,ok:false,reden:'added manually'});
   i.value=''; draw();}
 
@@ -386,7 +389,8 @@ async function maak(){
   // GEEN UITKOMST IS GEEN BLOKKADE: dan is je idee de uitkomst, en scherp je hem later aan.
   const r=await post('/wizard/create',{role:S.role,uitkomst:(S.uitkomst||S.ruw),
     trekker:S.trekker,tijd:S.tijd,missie:S.missie,business:S.business,
-    items:JSON.stringify(S.checklist),taken:JSON.stringify(S.taken)});
+    items:JSON.stringify(S.checklist),taken:JSON.stringify(S.taken),
+    sug_aan:String(S.sugAan||0),sug_over:String(S.sugOver||0),sug_eigen:String(S.sugEigen||0)});
   S.bezig=false;
   if(r&&r.url){S.klaar=r; if(window.__ovlDirty)window.__ovlDirty(); gereed();return;}
   if(b){b.disabled=false;b.textContent='Put on the board';}
