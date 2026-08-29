@@ -53,7 +53,21 @@ def audit_keys(registry, context, *, environ=None) -> dict:
             "active": all(r["ok"] for r in req_status),   # alle HARDE sleutels aanwezig
         })
     skills.sort(key=lambda s: s["name"])
-    return {"ladder": ladder, "skills": skills}
+
+    # De semantische laag hoort hier, want hij faalt op precies de manier die dit rapport bestaat om
+    # te voorkomen: STIL. Een sleutel die er is maar een model dat niet meer bestaat, of een quota
+    # die op is, geeft geen foutmelding — alleen lexicale terugval, voor onbepaalde tijd. Een
+    # sleutel-rapport dat zegt "✓ GEMINI_API_KEY" terwijl er niets doorzoekbaar is op betekenis,
+    # vertelt de halve waarheid.
+    semantiek = None
+    try:
+        from nooch_village.kennis_context import semantiek_status
+        dd = getattr(context, "data_dir", None)
+        if dd:
+            semantiek = semantiek_status(dd)
+    except Exception:                                     # noqa: BLE001 — rapport mag nooit breken
+        semantiek = None
+    return {"ladder": ladder, "skills": skills, "semantiek": semantiek}
 
 
 def format_key_report(audit: dict) -> str:
@@ -72,6 +86,19 @@ def format_key_report(audit: dict) -> str:
         parts += [("✓ " if o["ok"] else "✗ ") + o["var"] + " (optioneel)" for o in s["optional"]]
         suffix = "" if s["active"] else "   → faalt closed tot de sleutel er is"
         lines.append(f"    {s['name']:<22} {'  '.join(parts)}{suffix}")
+
+    sem = audit.get("semantiek")
+    if sem:
+        woord = {"actief": "✓ actief", "deels": "◐ aan het opwarmen",
+                 "stil": "✗ STIL — sleutel aanwezig, niets doorzoekbaar op betekenis",
+                 "uit": "· uit (geen sleutel)"}[sem["oordeel"]]
+        lines += ["", f"  Semantische laag ({sem['model']}): {woord}"]
+        for i in sem["indexen"]:
+            lines.append(f"    {i['index']:<30} {i['geindexeerd']}/{i['levend']} geïndexeerd "
+                         f"({i['dekking']}%)")
+        if sem["oordeel"] == "stil":
+            lines.append("    → het dorp rangschikt lexicaal: dat werkt, maar vindt 'mycelium' "
+                         "niet bij 'paddenstoelvezel'. Check het embedding-model en de quota.")
 
     actief = sum(1 for s in audit["skills"] if s["active"])
     treden = sum(1 for t in audit["ladder"] if t["ok"])
