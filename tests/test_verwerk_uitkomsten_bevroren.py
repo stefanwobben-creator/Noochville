@@ -30,6 +30,7 @@ HEROPENEN MAG — maar dan als besluit, met een reden, niet als bijvangst van ee
 from __future__ import annotations
 
 import inspect
+import pathlib
 
 from nooch_village import cockpit2
 from nooch_village.inbox_wizard import FLOWS, GOVERNANCE
@@ -77,13 +78,21 @@ def test_de_wall_biedt_hem_ook_niet_meer():
     assert not hasattr(cockpit2, "_outcome_info")
 
 
-def test_de_wall_heeft_nog_een_vierde_die_de_andere_twee_niet_hebben():
-    """EERLIJK OVER WAT ER NOG VERSCHILT, in plaats van een ratchet die 'drie' beweert en het niet is.
+def test_note_valt_bewust_buiten_de_drie():
+    """`note` blijft, en dat is BESLOTEN (29 aug 2026) — geen vergeten hoekje.
 
-    `note` (een artefact bij een rol) bestaat alleen op de wall. Of dat een vierde verwerk-uitkomst
-    is of een ander concern — het schrijft kennis, het routeert geen werk — is NIET besloten, en een
-    stille opruiming zou precies de fout zijn die we bij de wall-info vermeden. Op prod is er geen
-    enkel spoor van gebruik. Zodra er een besluit ligt hoort deze test mee te veranderen."""
+    De reden is inhoudelijk, niet numeriek: `note` schrijft KENNIS bij een rol, de drie
+    verwerk-uitkomsten routeren WERK uit een spanning. Dat zijn twee concerns — kennisbank versus
+    werkroutering — en die vegen we niet samen.
+
+    Dit is precies de omgekeerde afweging van de wall-info hierboven, en daarom staat hij hier: die
+    LEEK een apart concern en was drift; `note` LIJKT een vierde peer en is een ander concern. Wie
+    alleen naar het aantal kijkt ("drie hier, vier daar, dus die vierde moet weg") trekt de
+    verkeerde conclusie. Zie docs/CONVENTIES.md → 'Verwerken is werk routeren'.
+
+    Open ontwerppunt dat daar ook staat: juist omdat het een kennis-schrijf is, hoort `note`
+    eigenlijk een eigen affordance te zijn en geen vierde peer in dezelfde kiezer. Nul gebruik op
+    prod, dus geen haast — maar wél bewust doen als iemand hem gaat gebruiken."""
     import inspect as _i
 
     from nooch_village.views.feed import _wall_outcome_form
@@ -92,6 +101,11 @@ def test_de_wall_heeft_nog_een_vierde_die_de_andere_twee_niet_hebben():
                   if f"value='{o}'" in html}
     assert aangeboden == {"project", "action", "note", "roloverleg"}
     assert "note" in _i.getsource(cockpit2._act_wall_outcome)
+    # De reden staat opgeschreven waar een refactor hem tegenkomt, niet alleen hier.
+    doc = (pathlib.Path(__file__).resolve().parents[1] / "docs" / "CONVENTIES.md") \
+        .read_text(encoding="utf-8")
+    assert "`note` hoort er NIET bij" in doc
+    assert "kennisbank versus werkroutering" in doc
 
 
 def test_de_telling_houdt_de_historie(tmp_path):

@@ -38,6 +38,45 @@ Er zijn **drie postbussen**, en ze zijn geen variant van elkaar:
 
 Een vierde is wél een tweede postbus: dan mist iemand de helft van zijn werk en merkt niemand het.
 
+## Verwerken is werk routeren — kennis schrijven is iets anders
+
+Drie schermen laten een mens een spanning verwerken: de **inbox**, het **werkoverleg** en de
+**wall**. Ze delen één mechaniek en bieden daarom dezelfde drie uitkomsten:
+
+| uitkomst | waar het landt |
+|---|---|
+| **Actie** | `route_werk` — mens-vervulde rol → inbox, AI-vervulde rol → project |
+| **Project** | de projectwizard |
+| **Roloverleg** | de governance-agenda |
+
+Een vierde bak op één scherm en niet op de andere is drift. Dat is 29 aug 2026 opgeruimd:
+'informatie delen' stond op alle drie en was op alle drie vrijwel ongebruikt (werkoverleg 0 van 9,
+inbox 6 pings van 42, wall 1 in de hele historie). Hij is bovendien niet verloren — een mededeling
+aan iemand is een **actie met `@`**: dezelfde landing, maar als werk dat terugkomt in plaats van een
+los bericht dat daarna nergens meer opduikt.
+
+`tests/test_verwerk_uitkomsten_bevroren.py` bevriest de drie op alle drie de schermen. Heropenen
+mag, maar dan als besluit met een reden — niet als bijvangst van een refactor.
+
+### `note` hoort er NIET bij, en dat is geen vergeten hoekje
+
+De wall heeft daarnaast een `note`-uitkomst. Die blijft, met opzet, en hij hoort **niet** in de
+ratchet en **niet** in de drie:
+
+> `note` schrijft **kennis** bij een rol. De drie verwerk-uitkomsten routeren **werk** uit een
+> spanning. Dat zijn twee concerns — kennisbank versus werkroutering — en die vegen we niet samen.
+
+Dit staat hier omdat de volgende lezer precies de verkeerde conclusie kan trekken: "de wall heeft er
+vier en de andere twee drie, dus die vierde moet weg". Dat is dezelfde redenering die bij
+'informatie delen' wél klopte en hier niet. Het verschil zit niet in het aantal maar in wat het
+ding dóét.
+
+**Open ontwerppunt, nu geen actie.** Juist omdat het een kennis-schrijf is en geen verwerk-uitkomst,
+hoort `note` eigenlijk een eigen affordance te zijn en geen vierde peer in dezelfde kiezer — daar
+suggereert hij gelijkwaardigheid die er niet is. Er is op prod nul gebruik, dus er is niets kapot en
+niets haastigs. Pak dit bewust op zodra iemand `note` gaat gebruiken, niet per ongeluk bij een
+opruiming.
+
 ## Fail-open op AI
 
 Een AI-stap is een **bonus, geen poort**. De mens moet zijn handeling altijd kunnen afmaken zonder
@@ -55,6 +94,7 @@ lege uitkomst met een nette melding in plaats van een hangend scherm. Zie `views
 | `tests/test_ui_fragment_mechaniek.py` | een tweede fragment-swap of een eigen kopie van de vang-wachtrij |
 | `tests/test_actie_routing_ratchet.py` | werk uit een overleg dat weer op een geraden project belandt |
 | `tests/test_overleg_archief_ratchet.py` | een overleg-archief dat de punten niet bewaart |
+| `tests/test_verwerk_uitkomsten_bevroren.py` | een vierde verwerk-uitkomst op één van de drie schermen |
 
 ### Een poort bewaakt alleen wat hij telt
 
