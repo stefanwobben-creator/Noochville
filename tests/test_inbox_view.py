@@ -12,6 +12,16 @@ def _dd(tmp_path):
     return dd
 
 
+def _mens(st):
+    """De eerste persoon, mét e-mail — de dispatch herkent de ingelogde mens daarop, en een actie
+    'voor jezelf' moet ergens kunnen landen."""
+    p = st.people.all()[0]
+    if not getattr(p, "email", ""):
+        st.people.update(p.id, email="stefan@nooch.earth")
+        p = st.people.get(p.id)
+    return p
+
+
 def _spanning(st, person, snippet="@jij kijk hier even naar"):
     """Een inbox-item met een echte bron-comment (project + entry), zoals een @mention 'm maakt."""
     src = st.projects.create(_OWNER, "Bron-project", "human")
@@ -38,42 +48,46 @@ def test_verwerk_pagina_toont_spanning_en_wizard(tmp_path):
     person = st.people.all()[0]
     _, _, n = _spanning(st, person)
     html = cockpit2.render_verwerk(st, n, csrf_token="t")
-    assert "Tension" in html and "What do you need?" in html
-    # intentie-labels + een diagnostische vraag + de enige sluitknop
-    assert "Do something yourself" in html and "Is the result more complex?" in html
+    assert "Tension" in html and "What do you do with this?" in html
+    # TWEE CONCRETE FLOWS, met de één-regel-uitleg naast het label — die uitleg IS de pedagogie:
+    # aan het verschil tussen 'één handeling' en 'werk dat een rol draagt' leer je roldenken.
+    assert "Action" in html and "comes back in the inbox" in html
+    assert "Project" in html and "for a role you fill yourself" in html
     assert "notif_outcome" in html and "notif_klaar" in html
-    assert "Niks nodig" not in html                       # 'Niks nodig'-knop is weg; Klaar regelt het
-    assert "coming in step 2" in html                      # werkoverleg-uitkomst nog niet gebouwd
+    # de oude abstracte bakken zijn weg
+    for oud in ("What do you need?", "Do something yourself", "Have someone else do something",
+                "Share, get or record info", "coming in step 2"):
+        assert oud not in html, oud
 
 
 def test_verwerk_outcome_stapelt_en_houdt_open(tmp_path):
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     person = st.people.all()[0]
+    person = _mens(st)
     src, eid, n = _spanning(st, person)
-    # één uitkomst: een project op de eigenaar-rol (toelichting is optioneel, hier weggelaten)
+    # één uitkomst: een actie voor jezelf (geen doel gekozen → je eigen inbox)
     cockpit2.dispatch(dd, "notif_outcome",
-                      {"csrf": ["t"], "nid": [n["id"]], "otype": ["project"], "owner": [_OWNER],
+                      {"csrf": ["t"], "nid": [n["id"]], "otype": ["action"],
                        "content": ["Onderzoek doen"],
-                       "next": [f"/inbox/verwerk?nid={n['id']}"]}, username="guest")
+                       "next": [f"/inbox/verwerk?nid={n['id']}"]}, username=person.email)
     st2 = cockpit2._Stores(dd)
     nn = st2.notif._find(n["id"])
-    # project bestaat, record heeft één entry, en het item is NIET gesloten (stapelen kan door)
-    assert [p for p in st2.projects._projects.values() if p.get("scope") == "Onderzoek doen"]
     assert len(st2.notif.verwerkingen_of(nn)) == 1
-    assert st2.notif.status_of(nn) == "gelezen"           # open gebleven, niet verwerkt
+    assert st2.notif.status_of(nn) == "gelezen"           # open gebleven, stapelen kan door
 
 
 def test_verwerk_meerdere_uitkomsten_in_record(tmp_path):
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     person = st.people.all()[0]
+    person = _mens(st)
     src, eid, n = _spanning(st, person)
     for _ in range(2):
         cockpit2.dispatch(dd, "notif_outcome",
-                          {"csrf": ["t"], "nid": [n["id"]], "otype": ["note"], "note_role": [_OWNER],
-                           "content": ["Vast te leggen inzicht"], "toelichting": ["want relevant"],
-                           "next": [f"/inbox/verwerk?nid={n['id']}"]}, username="guest")
+                          {"csrf": ["t"], "nid": [n["id"]], "otype": ["action"],
+                           "content": ["Vast te leggen inzicht"],
+                           "next": [f"/inbox/verwerk?nid={n['id']}"]}, username=person.email)
     nn = cockpit2._Stores(dd).notif._find(n["id"])
     assert len(cockpit2._Stores(dd).notif.verwerkingen_of(nn)) == 2   # twee uitkomsten uit één spanning
 
@@ -177,19 +191,36 @@ def test_notif_add_zelf_spanning_toevoegen(tmp_path):
     assert len(hits) == 1 and hits[0]["by"] == "zelf"
 
 
-def test_ping_uitkomst_landt_in_inbox_van_rol(tmp_path):
+def test_actie_naar_een_andere_rol_landt_in_diens_inbox(tmp_path):
+    """FLOW 1 met `@`. Dezelfde routing als het werkoverleg en de wizard (`route_werk`): een
+    mens-vervulde rol krijgt het in zijn inbox. De inbox heeft dus GEEN eigen routing — een tweede
+    kopie van die regel zou na één wijziging uit de pas lopen."""
+    dd = _dd(tmp_path)
+    st = cockpit2._Stores(dd)
+    person = _mens(st)
+    _, _, n = _spanning(st, person)
+    st.assign.assign(_OWNER, "person", person.id)          # mens op de rol → hij leest een inbox
+    cockpit2.dispatch(dd, "notif_outcome",
+                      {"csrf": ["t"], "nid": [n["id"]], "otype": ["action"],
+                       "doel": [f"role:{_OWNER}"], "content": ["wat denk jij?"],
+                       "next": [f"/inbox/verwerk?nid={n['id']}"]}, username=person.email)
+    st2 = cockpit2._Stores(dd)
+    gekregen = [x for x in st2.notif.for_targets([("role", _OWNER)])
+                if x.get("snippet") == "wat denk jij?"]
+    assert len(gekregen) == 1
+    assert (gekregen[0].get("herkomst") or "").startswith("↳")     # wélgevormd: waar komt het vandaan
+
+
+def test_actie_gekoppeld_aan_een_project_wordt_een_checklist_stap(tmp_path):
+    """De project-checklist is de bestaande checklist van dat project — geen tweede lijst."""
     dd = _dd(tmp_path)
     st = cockpit2._Stores(dd)
     person = st.people.all()[0]
-    src, eid, n = _spanning(st, person, "@jij deel dit met Library")
+    src, _eid, n = _spanning(st, person)
     cockpit2.dispatch(dd, "notif_outcome",
-                      {"csrf": ["t"], "nid": [n["id"]], "otype": ["ping"], "ping_role": [_OWNER],
-                       "content": ["wat denk jij?"], "next": [f"/inbox/verwerk?nid={n['id']}"]},
-                      username="guest")
-    st2 = cockpit2._Stores(dd)
-    # de ping landde als mention in de inbox van de gekozen rol
-    pinged = [x for x in st2.notif.for_targets([("role", _OWNER)]) if x.get("snippet") == "wat denk jij?"]
-    assert len(pinged) == 1
-    # en het is vastgelegd in het verwerk-record van de bron-spanning
-    vs = st2.notif.verwerkingen_of(st2.notif._find(n["id"]))
-    assert vs and vs[0]["otype"] == "ping"
+                      {"csrf": ["t"], "nid": [n["id"]], "otype": ["action"], "pid_link": [src],
+                       "content": ["de bron nog even nakijken"],
+                       "next": [f"/inbox/verwerk?nid={n['id']}"]}, username="guest")
+    p = cockpit2._Stores(dd).projects.get(src)
+    stappen = [i.get("text") for cl in (p.get("checklists") or []) for i in (cl.get("items") or [])]
+    assert "de bron nog even nakijken" in stappen
