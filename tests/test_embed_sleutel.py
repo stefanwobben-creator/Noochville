@@ -163,3 +163,113 @@ def test_het_standaard_embedding_model_is_er_een_die_bestaat():
         if was is not None:
             os.environ["LLM_EMBED_MODEL"] = was
         importlib.reload(ke)
+
+
+# ── 5. Fail-soft mag de degradatie niet onzichtbaar maken ───────────────────
+
+def _corpus(tmp_path, n=2):
+    from nooch_village.kennisbank import KennisbankStore
+    kb = KennisbankStore(str(tmp_path / "kennisbank.json"))
+    return [kb.add(f"inzicht {i}", why="omdat") for i in range(n)]
+
+
+def _sleutel(monkeypatch, aanwezig: bool):
+    monkeypatch.setattr("nooch_village.kennis_embeddings._key",
+                        lambda: "sleutel" if aanwezig else None)
+
+
+def test_zonder_sleutel_is_semantiek_uit_en_dat_is_geen_storing(tmp_path, monkeypatch):
+    """Onderscheid dat ertoe doet: bewust uit ≠ stil kapot. Zonder sleutel is lexicaal de bedoeling."""
+    _corpus(tmp_path)
+    _sleutel(monkeypatch, False)
+    st = kc.semantiek_status(str(tmp_path))
+    assert st["oordeel"] == "uit" and st["sleutel"] is False
+
+
+def test_sleutel_maar_niets_geindexeerd_heet_STIL(tmp_path, monkeypatch):
+    """DE TOESTAND DIE MAANDEN ONZICHTBAAR WAS. Het model bestond niet meer, `embed()` gaf netjes
+    None, iedereen viel netjes lexicaal terug, en niets in het systeem zei er iets over."""
+    _corpus(tmp_path)
+    _sleutel(monkeypatch, True)
+    st = kc.semantiek_status(str(tmp_path))
+    assert st["oordeel"] == "stil"
+    assert st["indexen"][0]["geindexeerd"] == 0 and st["indexen"][0]["levend"] == 2
+
+
+def test_volledig_geindexeerd_heet_actief(tmp_path, monkeypatch):
+    from nooch_village.kennis_embeddings import EmbeddingStore
+    from nooch_village.kennisbank import KennisbankStore
+    ids = _corpus(tmp_path)
+    _sleutel(monkeypatch, True)
+    st = EmbeddingStore(str(tmp_path / "kennisbank_embeddings.json"))
+    for ins in KennisbankStore(str(tmp_path / "kennisbank.json")).all():
+        st.upsert(str(ins["id"]), f"{ins.get('title','')} {ins.get('why','')}", [0.1, 0.2])
+    st.save()
+    uit = kc.semantiek_status(str(tmp_path))
+    inz = next(i for i in uit["indexen"] if i["index"] == kc.INDEX_INZICHTEN)
+    assert inz["oordeel"] == "actief" and inz["geindexeerd"] == len(ids)
+
+
+def test_de_dekking_wordt_berekend_niet_opgeslagen(tmp_path, monkeypatch):
+    """Een VERGELIJKING, geen opgeslagen oordeel — zelfde regel als wiki.grond_status. Een nieuw
+    inzicht verlaagt de dekking vanzelf; een bewaarde 'actief' zou blijven liegen."""
+    from nooch_village.kennis_embeddings import EmbeddingStore
+    from nooch_village.kennisbank import KennisbankStore
+    _corpus(tmp_path, 1)
+    _sleutel(monkeypatch, True)
+    kb = KennisbankStore(str(tmp_path / "kennisbank.json"))
+    st = EmbeddingStore(str(tmp_path / "kennisbank_embeddings.json"))
+    for ins in kb.all():
+        st.upsert(str(ins["id"]), f"{ins.get('title','')} {ins.get('why','')}", [0.1])
+    st.save()
+    assert kc.semantiek_status(str(tmp_path))["oordeel"] == "actief"
+    kb.add("splinternieuw inzicht", why="net binnen")     # niet geïndexeerd
+    assert kc.semantiek_status(str(tmp_path))["oordeel"] == "deels"
+
+
+def test_een_terugval_met_sleutel_geeft_een_waarschuwing(tmp_path, monkeypatch, caplog):
+    """Eén regel, de eerste keer per index per proces — zichtbaar zonder een stroom te worden."""
+    import logging
+    _corpus(tmp_path)
+    _sleutel(monkeypatch, True)
+    monkeypatch.setattr("nooch_village.kennis_embeddings.rank_semantisch", lambda *a, **k: None)
+    kc._TERUGVAL_GEMELD.clear()
+    with caplog.at_level(logging.WARNING, logger="village.kennis"):
+        for _ in range(3):
+            kc._rangschik("x", [({"id": "a"}, "t")], 5, index=kc.INDEX_INZICHTEN,
+                          data_dir=str(tmp_path), sleutel_fn=lambda i: i.get("id"))
+    waarschuwingen = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(waarschuwingen) == 1, "geen melding, of een stroom in plaats van een signaal"
+    assert "SEMANTIEK NIET BESCHIKBAAR" in waarschuwingen[0].getMessage()
+    kc._TERUGVAL_GEMELD.clear()
+
+
+def test_zonder_sleutel_is_de_terugval_geen_waarschuwing(tmp_path, monkeypatch, caplog):
+    import logging
+    _corpus(tmp_path)
+    _sleutel(monkeypatch, False)
+    monkeypatch.setattr("nooch_village.kennis_embeddings.rank_semantisch", lambda *a, **k: None)
+    kc._TERUGVAL_GEMELD.clear()
+    with caplog.at_level(logging.INFO, logger="village.kennis"):
+        kc._rangschik("x", [({"id": "a"}, "t")], 5, index=kc.INDEX_INZICHTEN,
+                      data_dir=str(tmp_path), sleutel_fn=lambda i: i.get("id"))
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any("semantiek uit" in r.getMessage() for r in caplog.records)
+    kc._TERUGVAL_GEMELD.clear()
+
+
+def test_het_opstartrapport_toont_de_dekking(tmp_path, monkeypatch):
+    """Waar een mens het tegenkomt: het niet-blokkerende sleutel-rapport bij elke start van de
+    daemon. Een rapport dat '✓ GEMINI_API_KEY' zegt terwijl er niets doorzoekbaar is op betekenis,
+    vertelt de halve waarheid."""
+    from types import SimpleNamespace
+
+    from nooch_village.key_audit import audit_keys, format_key_report
+    _corpus(tmp_path)
+    _sleutel(monkeypatch, True)
+    reg = SimpleNamespace(all=lambda: [])
+    ctx = SimpleNamespace(settings={}, data_dir=str(tmp_path))
+    tekst = format_key_report(audit_keys(reg, ctx, environ={}))
+    assert "Semantische laag" in tekst
+    assert "STIL" in tekst
+    assert "0/2 geïndexeerd" in tekst

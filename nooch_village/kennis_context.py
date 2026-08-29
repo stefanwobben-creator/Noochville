@@ -52,6 +52,11 @@ INDEX_SIGNALEN = "radar_embeddings.json"          # gedeeld met radar_clusters �
 # zonder dat hier iets aan hoeft.
 _SEMANTIEK_MINIMUM = 8.0
 
+# Per index hooguit één melding per proces. Een terugval mag niet ONZICHTBAAR zijn, maar hij mag ook
+# geen stroom worden: tijdens het opwarmen van een verse index is 'nog niet compleet' de normale
+# toestand, en een regel per raadpleging zou het signaal juist begraven.
+_TERUGVAL_GEMELD: set[str] = set()
+
 
 def _woorden(tekst: str) -> set[str]:
     from nooch_village.notes_store import _woorden as w   # één woord-splitser, geen kopie
@@ -76,6 +81,98 @@ def _match(zoek: set[str], docs: list[tuple], limit: int) -> list:
             gescoord.append((score, obj))
     gescoord.sort(key=lambda t: -t[0])                    # stabiel: gelijke score → store-volgorde
     return [obj for _, obj in gescoord[:limit]]
+
+
+def _meld_terugval(index: str, data_dir: str) -> None:
+    """Eén regel, de eerste keer per index per proces, als de semantische weg niet beschikbaar is.
+
+    FAIL-SOFT MAG DE DEGRADATIE NIET ONZICHTBAAR MAKEN. Dat is de les van 29 aug 2026: de default
+    `text-embedding-004` was bij Google verdwenen, `embed()` gaf netjes None, elke aanroeper viel
+    netjes lexicaal terug — en het dorp draaide voor onbepaalde tijd zónder semantiek zonder dat
+    iemand iets zag. Alles 'werkte'.
+
+    Het onderscheid dat deze melding maakt: GEEN SLEUTEL is een geldige toestand (dan is semantiek
+    bewust uit, en zeggen we dat op INFO). WÉL een sleutel en tóch altijd lexicaal is een STORING,
+    en die hoort als waarschuwing te staan waar iemand hem tegenkomt."""
+    if index in _TERUGVAL_GEMELD:
+        return
+    _TERUGVAL_GEMELD.add(index)
+    try:
+        from nooch_village.kennis_embeddings import _MODEL, _key
+        if not _key():
+            log.info("semantiek uit (geen GEMINI_API_KEY) — %s rangschikt lexicaal", index)
+            return
+        st = semantiek_status(data_dir)
+        dek = next((i for i in st["indexen"] if i["index"] == index), {})
+        log.warning(
+            "SEMANTIEK NIET BESCHIKBAAR voor %s terwijl er wél een sleutel is: %d van de %d levende "
+            "items geïndexeerd (model=%s). Zolang dit zo blijft rangschikt het dorp lexicaal — dat "
+            "werkt, maar vindt 'mycelium' niet bij 'paddenstoelvezel'. Check het model en de quota; "
+            "`village keys` toont de dekking.",
+            index, dek.get("geindexeerd", 0), dek.get("levend", 0), _MODEL)
+    except Exception:                                     # noqa: BLE001 — melden mag nooit breken
+        log.warning("semantiek niet beschikbaar voor %s — lexicale terugval", index)
+
+
+def semantiek_status(data_dir: str) -> dict:
+    """Hoeveel van de levende kennis is doorzoekbaar op BETEKENIS? Puur lokaal, geen netwerk.
+
+    Een VERGELIJKING, geen opgeslagen oordeel — zelfde regel als `wiki.grond_status`: de dekking
+    wordt bij het lezen berekend, zodat hij niet kan verjaren. Het oordeel per index:
+
+      uit    geen sleutel — semantiek is bewust niet aan, geen storing
+      actief alles wat leeft is geïndexeerd
+      deels  aan het opwarmen (of een deel mislukt); de rest gaat lexicaal
+      stil   er is een sleutel, maar er is niets geïndexeerd — dit is de stille storing
+
+    `stil` is precies de toestand die op 29 aug 2026 maandenlang onzichtbaar was."""
+    from nooch_village.kennis_embeddings import _MODEL, EmbeddingStore, _hash, _key
+    heeft_sleutel = bool(_key())
+    uit = {"sleutel": heeft_sleutel, "model": _MODEL, "indexen": [], "oordeel": "uit"}
+    bronnen = ((INDEX_INZICHTEN, _corpus_inzichten), (INDEX_SIGNALEN, _corpus_signalen))
+    for index, corpus_fn in bronnen:
+        try:
+            corpus = corpus_fn(data_dir)
+            st = EmbeddingStore(os.path.join(data_dir, index))
+            n = sum(1 for sleutel, tekst in corpus if st.hash_of(str(sleutel)) == _hash(tekst))
+        except Exception as e:                            # noqa: BLE001
+            log.warning("dekking van %s niet te bepalen: %s", index, e)
+            continue
+        levend = len(corpus)
+        # Een LEEG corpus is 'actief', niet 'stil': er valt niets te indexeren, dus er ontbreekt
+        # niets. Zonder deze regel meldt een verse installatie een storing die er niet is — en een
+        # gezondheidssignaal dat vals alarm geeft leert men negeren, precies wanneer het echt moet
+        # opvallen.
+        oordeel = ("uit" if not heeft_sleutel else
+                   "actief" if n == levend else
+                   "stil" if n == 0 else "deels")
+        uit["indexen"].append({"index": index, "levend": levend, "geindexeerd": n,
+                               "dekking": round(100 * n / levend, 1) if levend else 100.0,
+                               "oordeel": oordeel})
+    oordelen = {i["oordeel"] for i in uit["indexen"]}
+    uit["oordeel"] = ("uit" if not heeft_sleutel else "stil" if "stil" in oordelen
+                      else "deels" if "deels" in oordelen else "actief")
+    return uit
+
+
+def _corpus_inzichten(data_dir: str) -> list[tuple[str, str]]:
+    """(id, te-embedden tekst) per levend inzicht — exact wat `_inzichten` de index in stuurt."""
+    from nooch_village.kennisbank import KennisbankStore
+    pad = os.path.join(data_dir, "kennisbank.json")
+    if not os.path.exists(pad):
+        return []
+    return [(str(i.get("id") or ""), f"{i.get('title', '')} {i.get('why', '')}")
+            for i in KennisbankStore(pad).all()]
+
+
+def _corpus_signalen(data_dir: str) -> list[tuple[str, str]]:
+    """Idem voor `_signalen`: goedgekeurd en nog niet gepromoveerd."""
+    from nooch_village.radar_store import RadarStore
+    pad = os.path.join(data_dir, "radar.json")
+    if not os.path.exists(pad):
+        return []
+    return [(str(it.get("id") or ""), f"{it.get('content', '')} {it.get('rationale', '')}")
+            for it in RadarStore(pad).all_approved() if not it.get("promoted_atom_id")]
 
 
 def _rangschik(zoek_tekst: str, docs: list[tuple], limit: int, *, index: str = "",
@@ -117,7 +214,9 @@ def _rangschik(zoek_tekst: str, docs: list[tuple], limit: int, *, index: str = "
                 hits = rank_semantisch(zoek_tekst, wrappers, os.path.join(data_dir, index),
                                        lambda w: w["_t"], limit=limit)
                 if hits is not None:
+                    _TERUGVAL_GEMELD.discard(index)      # weer gezond → volgende terugval telt weer
                     return [paren[h["id"]] for h in hits], "semantisch"
+                _meld_terugval(index, data_dir)
             else:
                 log.info("geen stabiele sleutel voor elk item (%s) — lexicaal, index onaangeroerd",
                          index)
