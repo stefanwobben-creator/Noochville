@@ -89,7 +89,7 @@ def test_een_AI_ROL_is_geen_kandidaat_ook_al_bezit_hij_het(st, tmp_path, monkeyp
     _mens_rol(st, FOUNDER_ROLE_ID, monkeypatch)          # alleen de founder is 'mens'
     gezien = {}
 
-    def _spion(item_text, doel, kandidaten, from_role, reason_fn):
+    def _spion(item_text, doel, kandidaten, from_role, reason_fn, **kw):
         gezien["ids"] = {k["id"] for k in kandidaten}
         return {"role": "harry_hemp", "kind": "human_external"}   # een AI-rol voorstellen
     monkeypatch.setattr(er, "_vraag_llm", _spion)
@@ -201,3 +201,61 @@ def test_de_projecttitel_wordt_op_een_woordgrens_afgekapt():
     assert kort.endswith("…") and not kort.endswith("cau…")
     assert " " not in kort[-2:]                       # geen losse spatie vóór de ellips
     assert _kort("kort genoeg", 60) == "kort genoeg"  # past het, dan geen ellips
+
+
+# ── Twee gesprekken, twee breinen (29 aug 2026) ─────────────────────────────
+
+def test_de_twee_router_vragen_draaien_niet_op_hetzelfde_brein():
+    """Dezelfde prompt, een andere afweging.
+
+    Gesprek 1 ("bezit een andere AI-rol dit?") is TRIAGE: een grove keuze met een goedkope fout,
+    want verkeerd gerouteerd werk komt terug via de hop-teller. Gesprek 2 ("welke MENS doet dit?")
+    is een OORDEEL waarvan de fout blijft plakken — het spoor (`vastgelopen_route.al_geland`) zorgt
+    dat een verkeerde ontvanger vandaag een betere morgen buitensluit.
+
+    Gemeten op prod: drie identieke droge loops over dezelfde 17 stappen gaven drie verschillende
+    verdelingen (5, 2, 4 van de 17 kregen een rol), en op negen vrijwel identieke stappen koos
+    hetzelfde model vier keer wél en vijf keer NONE. Alle 17 kregen antwoord — er was geen
+    quota-probleem. Het goedkope model kán deze vraag niet reproduceerbaar beantwoorden."""
+    from nooch_village import llm_keuze as lk
+    assert er.ROUTE_SITE in lk.GOEDKOOP
+    assert er.MENS_SITE in lk.HOOG_INZET and er.MENS_SITE not in lk.GOEDKOOP
+    assert lk.ladder_voor(er.MENS_SITE) != lk.ladder_voor(er.ROUTE_SITE)
+    assert lk.ladder_voor(er.MENS_SITE).split(",")[0].startswith("anthropic:claude-sonnet")
+
+
+def test_de_mens_vraag_geeft_zijn_ladder_ook_echt_door(st, tmp_path, monkeypatch):
+    """De HOOG_INZET-lijst alleen is niet genoeg: `reason()` kijkt daar niet zelf in. Precies de val
+    waar `wizard_plan` in zat — in de lijst, maar zonder ladder, dus stil op de dorpsladder."""
+    _mens_rol(st, FOUNDER_ROLE_ID, monkeypatch)
+    gezien = {}
+
+    def _vang(prompt, **kw):
+        gezien.update(kw)
+        return '{"role": "NONE"}'
+    monkeypatch.setattr(er, "roster", lambda records, exclude: [{"id": FOUNDER_ROLE_ID,
+                                                                 "purpose": "p",
+                                                                 "accountabilities": []}])
+    er._mens_ontvanger(st, _project(st), "iets", "harry_hemp", [], _vang)
+    assert gezien["call_site"] == er.MENS_SITE
+    assert (gezien["ladder"] or "").split(",")[0].startswith("anthropic:claude-sonnet")
+
+
+def test_het_eerste_gesprek_blijft_goedkoop(st, tmp_path, monkeypatch):
+    """Triage hoort niet duurder te worden omdat de tweede vraag dat wel is."""
+    gezien = {}
+
+    def _vang(prompt, **kw):
+        gezien.update(kw)
+        return '{"role": "NONE", "kind": "missing_capability"}'
+    er._vraag_llm("iets", "doel", [{"id": "x", "purpose": "", "accountabilities": []}],
+                  "harry_hemp", _vang)
+    assert gezien["call_site"] == er.ROUTE_SITE and gezien["ladder"] is None
+
+
+def test_vandaag_verandert_er_niets_aan_de_uitkomst():
+    """Eerlijk over wat deze fix nú doet: de premium-kop is onbetaald, dus `met_dorpsstaart` levert
+    nog steeds de dorpstredes. De verandering werkt zodra het krediet er is — niet eerder."""
+    from nooch_village import llm, llm_keuze as lk
+    tredes = lk.ladder_voor(er.MENS_SITE).split(",")
+    assert tredes[1:] == llm.dorpsladder().split(","), "de goedkope staart is weggevallen"

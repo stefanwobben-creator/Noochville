@@ -45,6 +45,29 @@ _LOG = logging.getLogger("village.router")
 
 DEFAULT_MAX_HOPS = 2
 
+# TWEE GESPREKKEN, TWEE BREINEN. Dezelfde prompt, maar niet dezelfde afweging.
+#
+# `ROUTE_SITE` is het eerste gesprek: bezit een ANDERE AI-ROL dit werk? Dat is triage — een grove
+# keuze uit een bak, met een goedkope fout: verkeerd gerouteerd werk komt terug via de hop-teller,
+# en de rol die het krijgt parkeert het gewoon opnieuw. Die hoort op de goedkope trede (GOEDKOOP),
+# en daar staat hij.
+#
+# `MENS_SITE` is het tweede gesprek: welke MENS doet dit werk? Dat is geen bak kiezen maar een
+# oordeel, en de fout is duur — het spoor zorgt dat een verkeerde ontvanger vandaag een betere
+# morgen buitensluit (`vastgelopen_route.al_geland`).
+#
+# BEWEZEN, niet aangenomen (29 aug 2026, prod): drie identieke droge loops over dezelfde 17
+# stappen gaven drie verschillende verdelingen — 5, dan 2, dan 4 van de 17 kregen een rol. Op negen
+# stappen die vrijwel hetzelfde werk zijn (de live FAQ-pagina ophalen en er een zin uit halen)
+# koos hetzelfde model vier keer wél een rol en vijf keer NONE. Er was geen quota-probleem: alle
+# 17 kregen antwoord van mistral-small. Het model kán deze vraag daar niet reproduceerbaar
+# beantwoorden, en een routering die per run anders uitvalt is een muntworp.
+#
+# Deze splitsing verandert vandaag niets aan de uitkomst: de premium-kop is onbetaald, dus de
+# `met_dorpsstaart`-staart levert nog steeds mistral. Hij werkt zodra het krediet er is.
+ROUTE_SITE = "escalation_route"
+MENS_SITE = "escalation_mens"
+
 
 def max_hops(settings) -> int:
     try:
@@ -81,11 +104,14 @@ def roster(records, *, exclude: set[str]) -> list[dict]:
 
 
 def _vraag_llm(item_text: str, project_goal: str, kandidaten: list[dict], from_role: str,
-               reason_fn) -> dict | None:
+               reason_fn, *, call_site: str = ROUTE_SITE, ladder: str | None = None) -> dict | None:
     """Eén call per vastgelopen item: wie bezit dit, en is het überhaupt software-werk?
 
     Beide vragen in één call, want het is dezelfde overweging en de router mag maar één keer per
-    item vuren. Geeft None als er geen bruikbaar antwoord is (dan geldt fail-closed)."""
+    item vuren. Geeft None als er geen bruikbaar antwoord is (dan geldt fail-closed).
+
+    `call_site` en `ladder` verschillen per GESPREK — zie de twee constanten hierboven. Dezelfde
+    prompt, een andere afweging, dus een ander brein."""
     if reason_fn is None:
         from nooch_village.llm import reason as reason_fn          # noqa: PLC0415
     lijst = "\n".join(
@@ -110,7 +136,8 @@ def _vraag_llm(item_text: str, project_goal: str, kandidaten: list[dict], from_r
         "Answer ONLY with JSON: {\"role\": \"<role id or NONE>\", "
         "\"kind\": \"missing_capability|human_external\", \"capability\": \"...\"}")
     try:
-        raw = reason_fn(prompt, json_mode=True, max_tokens=200, call_site="escalation_route")
+        raw = reason_fn(prompt, json_mode=True, max_tokens=200, call_site=call_site,
+                        ladder=ladder)
     except Exception as e:                       # noqa: BLE001 — LLM weg = geen handoff, geen crash
         _LOG.warning("router: LLM-call faalde (%s) — geen handoff, wel parkeren", e)
         return None
@@ -283,7 +310,13 @@ def _mens_ontvanger(st, project: dict, item_text: str, from_role: str, trail: li
         scope = project.get("scope")
         doel = (" · ".join(f"{k}: {v}" for k, v in scope.items())
                 if isinstance(scope, dict) else str(scope or ""))
-        keuze = kies_ontvanger(_vraag_llm(item_text, doel, kandidaten, from_role, reason_fn),
+        try:                                             # fail-soft: geen keuze-laag → dorpsladder
+            from nooch_village.llm_keuze import llm_voorkeur
+            ladder = llm_voorkeur(st, from_role, MENS_SITE)
+        except Exception:                                # noqa: BLE001
+            ladder = None
+        keuze = kies_ontvanger(_vraag_llm(item_text, doel, kandidaten, from_role, reason_fn,
+                                          call_site=MENS_SITE, ladder=ladder),
                                kandidaten, trail, from_role)
         if keuze:
             return keuze, "", "deze rol bezit dit werk"
