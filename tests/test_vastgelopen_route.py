@@ -96,3 +96,23 @@ def test_filteren_op_één_rol(dd):
     _vastgelopen(dd)
     assert vr.pas(dd)["in_aanmerking"] == 1
     assert vr.pas(dd, owner="iemand_anders")["in_aanmerking"] == 0
+
+
+# ── De droge loop moet de ENIGE beslissing meten die ertoe doet ──────────────
+
+def test_de_droge_loop_toont_waar_het_zou_landen(dd):
+    """Een droge loop die alleen TELT laat de vraag onbeantwoord die het besluit draagt: routeren we,
+    of dumpen we 33 items op één inbox? Dat zijn twee verschillende handelingen."""
+    _vastgelopen(dd)
+    v = vr.pas(dd)
+    assert v["toegepast"] is False
+    assert sum(v["verdeling"].values()) == 1
+    assert list(v["gronden"]) == ["geen rol bezit dit, en het project heeft geen opdrachtgever"]
+    assert not [x for x in cockpit2._Stores(dd).notif.all()          # en nog steeds niets geschreven
+                if x.get("target_id") == FOUNDER_ROLE_ID]
+
+
+def test_de_verdeling_noemt_de_rol_bij_naam_niet_bij_id(dd):
+    """Een id in een verdeling is niet te lezen; de vraag is welke MENS dit krijgt."""
+    _vastgelopen(dd)
+    assert "Strategic Lead" in " ".join(vr.pas(dd)["verdeling"])
