@@ -3045,15 +3045,14 @@ def _prov_feed(st, pid: str, provenance: str, actor_id: str = "") -> None:
         st.projects.add_feed_entry(pid, provenance, kind="system", author_type="human", author_id=actor_id)
 
 
-def _outcome_info(st, detail: str, by: str = "", *, src_pid: str = "", src_eid: str = ""):
-    """Info → notificatie(s), @-gericht (rol/persoon), anders niemand. Herkomst reist mee in de
-    notif-payload (project_id/entry_id). Retourneert (doel-omschrijving, mentions)."""
-    _, by_name = _mentionables(st)
-    ment = _mentions_in(detail, by_name)
-    for ty, tid, _nm in ment:
-        st.notif.add(ty, tid, src_pid, src_eid, by=by or "werkoverleg", snippet=detail)
-    tgt = ", ".join(nm for _, _, nm in ment) if ment else "iedereen"
-    return tgt, ment
+# `_outcome_info` STOND HIER en is verwijderd (29 aug 2026).
+#
+# Hij stuurde een NotifStore-item per `@mention` in de tekst — precies wat een ACTIE met `@` doet,
+# alleen zonder dat het als werk terugkomt. En zonder mention stuurde hij niets, terwijl hij
+# "iedereen" als bestemming meldde. Dat is de reden dat die tekst niet gepatcht is maar weggehaald:
+# je repareert een leugen niet, je haalt weg wat hem uitspreekt.
+#
+# Gemeten voordat hij wegging: één notificatie ooit uit een wall-uitkomst, in de hele historie.
 
 
 def _outcome_project(st, owner: str, title: str, *, provenance: str = "", actor_id: str = "") -> str:
@@ -3184,18 +3183,16 @@ def _act_wall_outcome(c):
         aid = actor.id if actor else ""
         prov = f"↳ uit wall-comment op {src_pid}#{src_eid}"   # herkomst (geen verplichte rationale)
         title = content[:60]
-        _LBL = {"info": "info shared", "project": "project", "action": "action",
+        # 'info' staat er niet meer bij: hij kan niet meer gekozen worden. Oude systeem-entries op
+        # de wall dragen hun tekst al UITGESCHREVEN ("→ info shared created: …"), dus de historie
+        # heeft deze tabel niet nodig om leesbaar te blijven.
+        _LBL = {"project": "project", "action": "action",
                 "note": "note", "roloverleg": "roloverleg-punt"}
 
-        if otype == "info":
-            # AUTHZ: circle-member of iedereen-ingelogd — info delen binnen de cirkel raakt geen structuur
-            circle = resolve_circle_id(src_p.get("owner") or "", st.records)
-            _deny = _member_gate(circle, username, st)
-            if _deny:
-                return nxt, _deny
-            _outcome_info(st, content, by=f"wall:{src_pid}", src_pid=src_pid, src_eid=src_eid)
-
-        elif otype == "project":
+        # 'info' is hier weg (29 aug 2026), net als in de inbox en het werkoverleg: één
+        # verwerk-mechaniek hoort dezelfde uitkomsten te bieden. Een post met otype=info valt nu in
+        # de `else` hieronder — fail-closed, geen stille landing.
+        if otype == "project":
             # AUTHZ: rolvervuller of Circle Lead — een project aanmaken raakt de rol/cirkel van de eigenaar
             owner = g("owner")
             if not owner:

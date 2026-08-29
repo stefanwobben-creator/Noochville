@@ -121,7 +121,7 @@ def _wall_outcome_opts(st):
 
 def _wall_outcome_form(pid: str, eid: str, csrf: str, prefill: str, role_opts: str, pj_opts: str,
                        *, extra_hid: str = "", summary: str = "→ outcome") -> str:
-    """Discrete '→ uitkomst'-actie bij een bron-comment: route 'm naar één van de vijf bestaande
+    """Discrete '→ uitkomst'-actie bij een bron-comment: route 'm naar één van de bestaande
     uitkomsten. Progressive disclosure per type (mirror van het werkoverleg oc_details). De inhoud is
     bewerkbaar en voorgevuld met de comment-tekst (voor project/action kort je 'm typisch in tot een
     titel; voor note/info blijft de volle tekst logisch). Geen toelichting-veld: wil je context, vraag 'm
@@ -145,8 +145,9 @@ def _wall_outcome_form(pid: str, eid: str, csrf: str, prefill: str, role_opts: s
                 f"<button class='btn sm' type='submit' name='action' value='wall_outcome'>Record</button>"
                 f"</form></details>")
 
-    info = oc("info", "Info",
-              "<span class='muted'>Use @name or @role in the content to target it; otherwise everyone.</span>")
+    # 'Info' is hier weg (29 aug 2026), samen met dezelfde keuze in de inbox en het werkoverleg.
+    # Drie schermen, één verwerk-mechaniek, dus dezelfde uitkomsten — zie
+    # tests/test_verwerk_uitkomsten_bevroren.py voor de meting en de grond.
     proj = oc("project", "Project",
               f"<label class='att-lbl'>On which role?</label><select name='owner'>{role_opts}</select>")
     act = oc("action", "Action",
@@ -156,7 +157,7 @@ def _wall_outcome_form(pid: str, eid: str, csrf: str, prefill: str, role_opts: s
     rov = oc("roloverleg", "Governance meeting",
              "<span class='muted'>Becomes an add_role proposal on the governance-meeting agenda (human route).</span>")
     return (f"<details class='fedit'><summary class='flink'>{_e(summary)}</summary>"
-            f"{info}{proj}{act}{note}{rov}</details>")
+            f"{proj}{act}{note}{rov}</details>")
 
 
 def _feed_entry_html(st, entry: dict, role_name: str = "",

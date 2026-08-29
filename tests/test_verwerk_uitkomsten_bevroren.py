@@ -1,16 +1,25 @@
-"""Inbox en werkoverleg delen één verwerk-mechaniek — en dus dezelfde uitkomsten.
+"""Inbox, werkoverleg en wall delen één verwerk-mechaniek — en dus dezelfde uitkomsten.
 
-DRIE, en niet meer: Actie · Project · Roloverleg.
+DRIE werk-uitkomsten, en niet meer: Actie · Project · Roloverleg.
 
-WAAROM DIT EEN POORT IS. Beide schermen hadden een vierde bak voor 'informatie delen', en gemeten
-over de hele historie op prod:
+WAAROM DIT EEN POORT IS. Alle drie de schermen hadden een vierde bak voor 'informatie delen', en
+gemeten over de hele historie op prod:
 
     werkoverleg : 9 uitkomsten — 8x actie, 1x project, **0x info**
     inbox       : 42 uitkomsten — 26x 'niks nodig', 6x ping (de info-intentie), 3x project, 0x action
+    wall        : **1** notificatie ooit uit een info-uitkomst; 5 herkomst-regels van alle vijf de
+                  types samen
 
-Een bak die niemand vult is niet gratis: hij staat op elk scherm, hij kost een keuze, en hij laat
-de twee schermen uit elkaar lopen zodra er één een vijfde krijgt. Dat is de drift die
-docs/CONVENTIES.md verbiedt.
+Een bak die niemand vult is niet gratis: hij staat op elk scherm, hij kost een keuze, en hij laat de
+schermen uit elkaar lopen zodra er één een vijfde krijgt. Dat is de drift die docs/CONVENTIES.md
+verbiedt.
+
+DAT DE WALL DRIFT WAS EN GEEN BROADCAST is nagegaan voor hij meeging, want die twee vragen om het
+tegenovergestelde: drift veeg je mee, een apart concern laat je juist staan. Vier dingen wezen
+dezelfde kant op — de handler noemt zichzelf "dezelfde routes als het werkoverleg", het formulier
+werd letterlijk mét de inbox gedeeld (`extra_hid`), `_outcome_info` stuurde per `@mention` een
+notificatie (precies wat een actie met `@` doet), en zónder mention stuurde hij NIETS terwijl hij
+"iedereen" meldde. Een echt prikbord zou juist daar broadcasten.
 
 EN HIJ IS NIET VERLOREN. Een mededeling aan iemand is een ACTIE met `@`: dezelfde landing, maar als
 werk dat terugkomt in plaats van als los bericht dat daarna nergens meer opduikt. Een ping is een
@@ -53,6 +62,36 @@ def test_oude_uitkomsten_blijven_leesbaar():
     """LEES-ONLY, niet weg. Een stille drop zou betekenen dat een vastgelegde uitkomst uit een
     afgesloten overleg ineens niets meer zegt — de archieven dragen 'info' nog."""
     assert UITKOMST_LABEL.get("info") == "Informatie"
+
+
+def test_de_wall_biedt_hem_ook_niet_meer():
+    """Het derde scherm. Zie de docstring hierboven voor waarom dit drift was en geen broadcast."""
+    import inspect as _i
+
+    from nooch_village.views.feed import _wall_outcome_form
+    html = _wall_outcome_form("p", "e", "t", "tekst", "<option>r</option>", "<option>p</option>")
+    assert "value='info'" not in html and ">Info<" not in html
+    # en de handler kent hem niet meer: fail-closed op een post met otype=info
+    assert 'if otype == "info"' not in _i.getsource(cockpit2._act_wall_outcome)
+    # de helper die "iedereen" uitsprak bestaat niet meer — weggehaald, niet gepatcht
+    assert not hasattr(cockpit2, "_outcome_info")
+
+
+def test_de_wall_heeft_nog_een_vierde_die_de_andere_twee_niet_hebben():
+    """EERLIJK OVER WAT ER NOG VERSCHILT, in plaats van een ratchet die 'drie' beweert en het niet is.
+
+    `note` (een artefact bij een rol) bestaat alleen op de wall. Of dat een vierde verwerk-uitkomst
+    is of een ander concern — het schrijft kennis, het routeert geen werk — is NIET besloten, en een
+    stille opruiming zou precies de fout zijn die we bij de wall-info vermeden. Op prod is er geen
+    enkel spoor van gebruik. Zodra er een besluit ligt hoort deze test mee te veranderen."""
+    import inspect as _i
+
+    from nooch_village.views.feed import _wall_outcome_form
+    html = _wall_outcome_form("p", "e", "t", "tekst", "<option>r</option>", "<option>p</option>")
+    aangeboden = {o for o in ("info", "project", "action", "note", "roloverleg")
+                  if f"value='{o}'" in html}
+    assert aangeboden == {"project", "action", "note", "roloverleg"}
+    assert "note" in _i.getsource(cockpit2._act_wall_outcome)
 
 
 def test_de_telling_houdt_de_historie(tmp_path):

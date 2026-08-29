@@ -83,16 +83,22 @@ def test_roloverleg_add_role_op_agenda(tmp_path):
     assert any(it["kind"] == "add_role" and src_pid in it.get("example", "") for it in items)
 
 
-def test_info_notif_met_bron_in_payload(tmp_path):
+def test_info_is_geen_uitkomst_meer_en_valt_fail_closed(tmp_path):
+    """'Info' is van alle drie de verwerk-schermen verdwenen (29 aug 2026). Op de wall was hij één
+    keer in de hele historie gebruikt.
+
+    Hij dééd bovendien iets dat de actie-route beter doet: een notificatie per `@mention` — en
+    zónder mention stuurde hij niets terwijl hij "iedereen" als bestemming meldde. Die tekst is niet
+    gepatcht maar weggehaald: je repareert een leugen niet, je haalt weg wat hem uitspreekt.
+
+    Een post met `otype=info` moet nu fail-closed afketsen, niet stil landen."""
     dd, src_pid, eid = _setup(tmp_path)
-    from nooch_village.views.feed import _mentionables
-    _, by_name = _mentionables(cockpit2._Stores(dd))
-    name = next(nm for nm in by_name)                       # een bestaande mentionable (rol of persoon)
-    cockpit2.dispatch(dd, "wall_outcome",
+    voor = len(cockpit2._Stores(dd).notif.all())
+    _nxt, msg = cockpit2.dispatch(dd, "wall_outcome",
         _form(otype="info", pid=src_pid, item=eid,
-              content=f"even melden @{name}", toelichting="fyi"), username="guest")
-    notifs = cockpit2._Stores(dd).notif.all()
-    assert any(n.get("project_id") == src_pid and n.get("entry_id") == eid for n in notifs)
+              content="even melden @iemand", toelichting="fyi"), username="guest")
+    assert msg.startswith("✗")
+    assert len(cockpit2._Stores(dd).notif.all()) == voor
 
 
 # ── harde rand 1: action op DONE — item eerst, dán reopen ───────────────────────────
